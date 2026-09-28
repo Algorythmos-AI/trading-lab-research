@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import shutil
 import sys
 import time
 import traceback
@@ -76,6 +77,8 @@ def build(args: argparse.Namespace, cfg: dict, out: Path, deployed: Path) -> int
         if name == "account" and not args.with_account:
             continue
         sources[name] = status.collect(name, fn, ctx)
+    # The refresh loop mirrors the review page's labels into inputs/ before each run; consume them once.
+    shutil.rmtree(safeio.confined(out / "inputs/review_labels", out), ignore_errors=True)
     docs = assemble.build_docs(sources, cfg, now, run_id, time.monotonic() - t0, collector_info())
     redact = safeio.Redactor(safeio.env_secret_values([expand(f) for f in paths.get("env_files", [])]))
     docs = {k: assemble.shrink(redact(v)) for k, v in docs.items()}

@@ -344,8 +344,12 @@ def test_end_to_end_offline_run_writes_valid_documents_and_no_secrets(tmp_path, 
                                old_root=str(tmp_path / "old"), env_files=[str(env)]))
     c = tmp_path / "cfg.yaml"
     c.write_text(yaml.safe_dump(cfg))
+    mirrored = out / "inputs/review_labels/labels"
+    mirrored.mkdir(parents=True)
+    (mirrored / "S2H004.json").write_text(json.dumps({"item_id": "S2H004", "part": "disagreement"}))
     code = sd.main(["--config", str(c), "--out", str(out), "--no-github", "--deadline", "60"])
     assert code == 1                                     # offline and no live checkout: degraded, still written
+    assert not (out / "inputs/review_labels").exists()   # mirrored labels are consumed once
     docs = {p.stem: json.loads(p.read_text()) for p in (out / "docs").glob("*.json")}
     assert set(docs) == set(status.DOC_NAMES) and assemble.validate(docs) == []
     blob = (out / "status.json").read_text() + (out / "index.html").read_text()
