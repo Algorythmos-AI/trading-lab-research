@@ -1,8 +1,8 @@
 # SPEC-0001 — Requirements
 
-_Generated from `traceability.csv` for spec v1.0.0 (draft); spec.yaml sha256 `0de92a9e11d06bc7`. Do not edit by hand: run `scripts/spec_docs.py SPEC-0001`._
+_Generated from `traceability.csv` for spec v1.0.0 (draft); spec.yaml sha256 `cf7886f04b93f2ba`. Do not edit by hand: run `scripts/spec_docs.py SPEC-0001`._
 
-**111 requirements:** INFO 10, MUST 94, SHOULD 7. **Status:** n_a 2, needs_data 1, planned 108.
+**112 requirements:** INFO 10, MUST 95, SHOULD 7. **Status:** n_a 2, needs_data 1, planned 109.
 
 Levels:
 - **MUST:** a hard rule, enforced by code and tested
@@ -21,7 +21,7 @@ Statuses:
 |---|---|---|---|---|---|
 | `POOL-01` | MUST | Universe is selected causally at 09:25 | 1-minute SIP bars 09:00-09:25 for every symbol with split-adjusted prior close $0.95-21; last print <= 09:25 is the price; nothing at/after 09:25 used (D1) | plan D1 | planned |
 | `POOL-02` | MUST | Gap is measured against the split-adjusted prior close | gap = price_0925 / (raw prior close x f(d)/f(prev)) - 1 where f = raw/split-adjusted close (D2) | plan D2 | planned |
-| `POOL-03` | MUST | Suspected unrecorded splits fail closed | close-to-close ratio >=3x or <=1/3 with no split factor change -> symbol-day fails chart filters (D22) | plan D22 | planned |
+| `POOL-03` | MUST | Suspected unrecorded splits fail closed | close-to-close ratio within 3% of a common split ratio (>= 1.45x or its inverse) on a day whose dollar volume is < 5x its prior-20-day median -> symbol-day fails chart musts; genuine runners (dollar-volume surge) are not flagged (D22) | plan D22 | planned |
 | `POOL-04` | MUST | News is point-in-time | headline created_at <= 09:25 (gap scanner) or <= t (HOD) | plan D17 | planned |
 
 ## Scanners
@@ -42,8 +42,8 @@ Statuses:
 | `SCN-GAP-12` | INFO | 500k PM volume to trade pre-market | N/A-01 (no pre-market entries) | spec §1 | n_a |
 | `SCN-HOD-01` | MUST | HOD scanner price $1.00-10.00 | price at t within [1, 10] | spec §2 | planned |
 | `SCN-HOD-02` | MUST | Momentum trades need >= 1M shares | cumulative regular-session volume at t >= 1,000,000 | spec §2 §7; C2; conflicts K-11 | planned |
-| `SCN-HOD-03` | MUST | HOD RVOL >= 2.0 | cumvol_t / (ADV20 x volume_curve(t)) >= 2 | spec §2 | planned |
-| `SCN-HOD-04` | MUST | 5-minute volume surge >= 2000% | volume of last 5 bars / (ADV20 x (curve(t)-curve(t-5))) >= 20 | spec §2; conflicts K-10 | planned |
+| `SCN-HOD-03` | MUST | HOD RVOL >= 2.0 | cumvol_t / (ADV20 x volume_curve(t)) >= 2; curve = mean cumulative share by clock minute from 2019 liquid names (D37) | spec §2 | planned |
+| `SCN-HOD-04` | MUST | 5-minute volume surge >= 2000% | volume of the last 5 bars / (ADV20 x (curve(t) - curve(t-5))) >= 20; curve from 2019 by clock minute (D37) | spec §2; conflicts K-10 | planned |
 | `SCN-HOD-05` | MUST | HOD float <= 20M | known point-in-time shares outstanding <= 20,000,000 | spec §2; conflicts K-12 | planned |
 | `SCN-HOD-06` | MUST | New high of day | bar high >= regular-session high so far | spec §2 | planned |
 | `SCN-HOD-07` | MUST | Spread <= $0.05 | NBBO ask-bid at t <= 0.05; unknown fails | spec §2; C4 §4; C10 | planned |
@@ -105,12 +105,13 @@ Statuses:
 | `PAT-08` | MUST | Breakout needs a new volume spike | breakout bar volume >= 2 x average of the prior 20 bars (same timeframe, pre-market included); else exit next bar open (D32) | C11; C12; conflicts K-14 | planned |
 | `PAT-09` | MUST | Pattern must be obvious and clear | pattern detectors enforce PAT-01..07; no discretionary override | C2 | planned |
 | `PAT-10` | SHOULD | Pre-market bull flag / flat top on 1m-5m pre-market structure | active PM pattern at 09:25 on PM 5m bars; price in upper half of the flag | spec §1 §8; C1 | planned |
+| `PAT-11` | MUST | Intraday bars are clock-aligned | 2- and 5-minute buckets are assigned by ET clock minute; the positional resample drifted on thin stocks with missing minutes (D36) | plan D36 | planned |
 
 ## Entries
 
 | ID | Level | Requirement | Operational definition | Source | Status |
 |---|---|---|---|---|---|
-| `ENT-00` | MUST | Common entry mechanics | stop-limit at trigger +$0.01; stop -$0.01; orders act from the bar after the signal; pending entry cancelled if the stop is touched first (D35) | plan D35 | planned |
+| `ENT-00` | MUST | Common entry mechanics | stop-limit at trigger +$0.01; stop -$0.01; orders act from the bar after the signal until meta expire_idx; a pending entry is cancelled if the stop trades first (already in engine.simulate; the D35 gap was a false alarm) | plan D35 | planned |
 | `ENT-GG-1` | MUST | Pre-market high / pattern-apex break | 09:31-10:00; lowest unbroken of {PM pattern apex, PMH} above the 09:30 bar high; stop = pattern low or 09:30 bar low, max 20c; 1 attempt | spec §5; C11; plan D10 | planned |
 | `ENT-GG-2` | MUST | ORB ladder | 1m ORB only on the 09:31 bar (stop = 1st candle low); else 5m ORB 09:35-09:50 (stop = 1st 5m candle low); 1 attempt | spec §5; C9; C11 | planned |
 | `ENT-GG-3` | MUST | 5-minute continuation | 09:50-11:00; fresh 5m bull flag / flat top / ABCD formed after 09:45; trigger = pattern high; stop = pattern low; 1 attempt | C11; plan D11 | planned |
@@ -127,7 +128,7 @@ Statuses:
 | `EXE-03` | MUST | Minimum 2:1 reward-to-risk before entry | room to nearest overhead (daily levels + PMH above trigger) or to the target >= 2R (D14) | spec §7; C2 | planned |
 | `EXE-04` | MUST | Entry and stop set before the order | EntrySignal carries trigger and stop; the stop never loosens | spec §7; C2 | planned |
 | `EXE-05` | MUST | Never average down | no management style adds shares; qty never increases | spec §7; C2 | planned |
-| `EXE-06` | MUST | Realistic costs | slippage per share = max($0.01, half the NBBO spread); stress 1.5x and 2x (D13) | plan D13 | planned |
+| `EXE-06` | MUST | Realistic costs | slippage per share = max($0.01, half the NBBO spread); stress 1.5x and 2x; an order whose expected fill (trigger + slippage) exceeds the 10%-of-R collar does not fill (D13, D38) | plan D13 | planned |
 | `EXE-07` | MUST | Halts | gap of >= 5 minutes with no prints tagged as a halt; stop fills through the reopen gap | sheet LULD | planned |
 | `EXE-08` | MUST | Technical analysis drives every decision | all entries and exits are defined levels, indicators or time rules (by construction) | spec §7; C2 | planned |
 

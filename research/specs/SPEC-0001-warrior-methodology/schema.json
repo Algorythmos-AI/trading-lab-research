@@ -28,10 +28,10 @@
     "sources": {"type": "object"},
     "candidate_pool": {"type": "object",
       "required": ["snapshot_window", "prefilter_prev_close", "gap_basis", "gap_min_pct_exclusive", "features_asof",
-                   "news_asof_field", "suspect_split_ratio"],
+                   "news_asof_field", "suspect_split"],
       "properties": {"snapshot_window": {"$ref": "#/definitions/window"}, "prefilter_prev_close": {"$ref": "#/definitions/range"},
                      "gap_min_pct_exclusive": {"$ref": "#/definitions/pos"}, "features_asof": {"$ref": "#/definitions/hhmm"},
-                     "suspect_split_ratio": {"type": "number", "minimum": 1.5}}},
+                     "suspect_split": {"type": "object", "required": ["common_ratio_tol", "min_ratio", "max_dollar_volume_surge", "lookback_sessions"]}}},
     "scanners": {"type": "object", "required": ["pre_market_gap", "high_of_day", "reversal_hybrid"],
       "properties": {
         "pre_market_gap": {"type": "object",
