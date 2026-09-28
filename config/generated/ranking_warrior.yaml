@@ -1,4 +1,4 @@
-# GENERATED from SPEC-0001 v1.0.0 (spec.yaml sha256 0de92a9e11d06bc7).
+# GENERATED from SPEC-0001 v1.0.0 (spec.yaml sha256 cf7886f04b93f2ba).
 # Do not edit. Change research/specs/SPEC-0001-warrior-methodology/spec.yaml and run
 #   PYTHONPATH=src .venv/bin/python -m wt.specs.loader SPEC-0001 --write
 candidate_pool:
@@ -12,7 +12,11 @@ candidate_pool:
   snapshot_window:
   - 09:00
   - 09:25
-  suspect_split_ratio: 3.0
+  suspect_split:
+    common_ratio_tol: 0.03
+    lookback_sessions: 250
+    max_dollar_volume_surge: 5.0
+    min_ratio: 1.45
 chart_filters:
   basis: prior_session_close_split_adjusted
   daily_emas_above:
@@ -138,11 +142,15 @@ entries:
     trigger_offset_usd: 0.01
 execution:
   averaging_down: false
+  entry_collar:
+    frac_of_R: 0.1
+    strict: true
   fill_volume_cap_of_bar: 0.1
   gap_and_go_first_minute_volume_min: 100000
   halts:
     detect_gap_minutes: 5
     fill_through_gap: true
+  intraday_bars: clock_aligned
   min_reward_risk: 2.0
   momentum_volume_min: 1000000
   predetermined_entry_and_stop: true

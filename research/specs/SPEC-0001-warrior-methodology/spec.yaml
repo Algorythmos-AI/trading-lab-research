@@ -27,7 +27,11 @@ candidate_pool:                    # causal daily universe (D1, D2, D3)
   gap_min_pct_exclusive: 5.0               # candidates must gap > 5% (C3, routine 8:00 step)
   features_asof: "09:25"                   # nothing at or after 09:25 is used
   news_asof_field: created_at              # headline must be created <= 09:25
-  suspect_split_ratio: 3.0                 # close-to-close ratio >=3x or <=1/3 without a known split -> fail closed (D22)
+  suspect_split:                           # unrecorded split -> fail closed (D22, refined during implementation)
+    common_ratio_tol: 0.03                 # close-to-close ratio within 3% of a common split ratio (or its inverse)
+    min_ratio: 1.45
+    max_dollar_volume_surge: 5.0           # ...on a day WITHOUT a >= 5x dollar-volume surge (genuine runners surge)
+    lookback_sessions: 250
 
 # ---------------------------------------------------------------------------------------------- scanners
 scanners:
@@ -58,6 +62,7 @@ scanners:
     float_must_be_known: true
     spread_max_usd: 0.05
     requires_new_hod: true                 # regular-session high of day at the qualifying bar
+    volume_curve: {source: liquid_universe_2019, index: clock_minute}   # D37: pre-OOS year, no look-ahead
     catalyst_required: true                # news created <= t in the required_any categories
   reversal_hybrid:                         # SCN-REV (spec §3), long side only
     active_window: ["09:35", "15:30"]
@@ -180,6 +185,8 @@ execution:
   averaging_down: false
   slippage: {per_share_min_usd: 0.01, half_spread: true, stress_multipliers: [1.5, 2.0]}   # D13
   fill_volume_cap_of_bar: 0.10
+  entry_collar: {frac_of_R: 0.10, strict: true}   # D38: expected fill beyond the collar = no fill
+  intraday_bars: clock_aligned                    # D36: 2m/5m buckets by clock minute, never by row position
   halts: {detect_gap_minutes: 5, fill_through_gap: true}
 
 # ---------------------------------------------------------------------------------------------- exits
