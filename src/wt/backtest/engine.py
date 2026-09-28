@@ -54,6 +54,7 @@ class Trade:
     exits: list = field(default_factory=list)   # (time, price, qty, reason)
     mfe: float = 0.0
     mae: float = 0.0
+    tags: dict = field(default_factory=dict)
 
     @property
     def risk_per_share(self) -> float:
@@ -87,12 +88,17 @@ def simulate(bars: pd.DataFrame, signal: EntrySignal, mgmt, costs: Costs, symbol
     if R <= 0:
         return None
     limit = signal.trigger + costs.collar_frac_of_R * R
-    # ---- entry: from the bar after the signal, until flatten --------------------------------
-    for i in range(signal.bar_index + 1, flatten_idx):
+    meta = signal.meta or {}
+    last_entry = min(flatten_idx, int(meta["expire_idx"])) if "expire_idx" in meta else flatten_idx   # SPEC-0001 order expiry
+    # ---- entry: from the bar after the signal, until flatten (or the order's expiry) --------------
+    for i in range(signal.bar_index + 1, last_entry):
         if h[i] >= signal.trigger:
             if o[i] > limit:
                 return None                      # gapped through collar -> no fill (same in live)
-            fill = min(max(signal.trigger, o[i]) + costs.slip(), limit)
+            want = max(signal.trigger, o[i]) + costs.slip()
+            if meta.get("strict_collar") and want > limit + 1e-9:
+                return None                      # SPEC-0001 D38: expected fill beyond the collar -> no fill
+            fill = min(want, limit)
             qty = size_position(fill, signal.stop, risk_dollars, cash, max_notional)
             qty = min(qty, int(v[i] * max_bar_volume_frac))
             if qty < 1:
@@ -106,6 +112,11 @@ def simulate(bars: pd.DataFrame, signal: EntrySignal, mgmt, costs: Costs, symbol
     # ---- management loop ----------------------------------------------------------------------
     state = mgmt.init_state(tr, signal)
     pos = qty
+    bv = meta.get("bv")                         # SPEC-0001 PAT-08: breakout bucket must show a volume spike
+    bv_at = int(bv["complete"][i]) if bv is not None and i < len(bv["complete"]) else -1
+    bv_fail = bv is not None and bv_at >= 0 and not bool(bv["ok"][i])
+    if bv is not None:
+        tr.tags["breakout_volume_ok"] = not bv_fail
     # entry bar: only the stop can hit after the fill (assume fill happened at trigger time)
     j = i
     while pos > 0:
@@ -119,6 +130,10 @@ def simulate(bars: pd.DataFrame, signal: EntrySignal, mgmt, costs: Costs, symbol
         if l[j] <= stop:                         # stop first (pessimistic)
             px = min(stop, o[j]) - costs.slip() if j > i else stop - costs.slip()
             tr.exits.append((bars.t.iloc[j], px, pos, state.get("stop_reason", "stop")))
+            pos = 0
+            break
+        if bv_fail and j == bv_at and j + 1 < len(o):   # failed breakout: out at the next bar's open
+            tr.exits.append((bars.t.iloc[j + 1], o[j + 1] - costs.slip(), pos, "breakout_volume_fail"))
             pos = 0
             break
         if j > i:                                # targets / rule exits only on bars after entry bar
@@ -135,4 +150,9 @@ def simulate(bars: pd.DataFrame, signal: EntrySignal, mgmt, costs: Costs, symbol
                     pos = 0
                     break
         j += 1
+    if meta:                                     # SPEC-0001 EXE-07: tag trading halts (>= 5 min without prints)
+        ts = pd.to_datetime(bars.t, utc=True)
+        last = tr.exits[-1][0] if tr.exits else ts.iloc[-1]
+        span = ts[(ts >= tr.entry_time) & (ts <= last)]
+        tr.tags["halt"] = bool(len(span) > 1 and (span.diff().dt.total_seconds().fillna(0) >= 300).any())
     return tr

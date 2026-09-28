@@ -1,0 +1,8 @@
+id: HYP-0007
+strategy: HOD_momentum_intraday
+status: falsified            # DEC-0009 (EXP-0014): walk-forward +0.043R, CI95 spans 0; first pullback negative
+backfilled: 2026-09-28       # written from DEC-0008/DEC-0009; the file was missing from the registry
+statement: "An intraday high-of-day momentum scanner (price $2-30, up >= 10% vs prior close at time t, time-of-day RVOL >= 5x, 09:45-11:30) catches runners that never gapped pre-market (51/200 EXP-0002 winners); entries 5m bull flag or first 1m pullback with ATR stops have positive OOS expectancy."
+evidence: {decision: DEC-0008, experiments: [EXP-0014-r2-intraday-hod]}
+trials: 4
+falsified_if: "G1 gate fails (CI95 lower <= 0 at 1.5x costs, DSR <= 0.95, or random control not beaten)"

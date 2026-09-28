@@ -1,0 +1,8 @@
+id: HYP-0008
+strategy: KB_setups_ATR_stops
+status: falsified            # DEC-0009 (EXP-0013): bull flag ~0, breakout-retest -0.10R
+backfilled: 2026-09-28
+statement: "KB setup failures in G1 came from stops inside noise (LL-0002): bull flag and breakout-retest on the 09:25 watchlist with stop = the wider of the pattern stop and entry - 1.5 x ATR14(1m) have positive OOS expectancy."
+evidence: {decision: DEC-0008, experiments: [EXP-0013-r2-atr-stops], lesson: LL-0002}
+trials: 4
+falsified_if: "G1 gate fails"

@@ -1,0 +1,7 @@
+id: HYP-0017
+trial: "P:GG-4"
+spec: SPEC-0001 v1.0.0         # every rule and number comes from spec.yaml; nothing here overrides it
+status: pre-registered-draft    # effective when DEC-0010 is approved
+statement: "Under SPEC-0001 v1.0.0, red-to-green, Set P has positive fixed-rule out-of-sample expectancy (2020-01-01 -> 2025-09-25) after realistic costs, in a US$600 long-only cash account with day-level admission."
+evidence: {spec: research/specs/SPEC-0001-warrior-methodology, decision: DEC-0010}
+falsified_if: "Any G1 gate fails in scripts/r3_eval.py: CI95 lower <= 0 at 1.5x costs, DSR <= 0.95 at 85 global trials, random-entry control p >= 0.05, PF < 1.2 at 1.5x costs, < 2/3 of years profitable, a month > 25% of profit, or n < 100."
