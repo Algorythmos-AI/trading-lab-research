@@ -159,6 +159,34 @@ def run_day(d: dt.date, names: list[tuple[str, int]], pool: pd.DataFrame, pm_all
     return cands, skips, ctl
 
 
+def gg_day(a: AlpacaREST, d: dt.date, which: str, spec: dict, spread_at: SpreadAt, close: str,
+           relax: set[str] = frozenset()) -> dict[str, tuple[list[PCand], list[dict], list[tuple]]]:
+    """One pool day of set `which`: {trial: (admission candidates, skips, control inputs)} for GG-1..4.
+
+    Empty when the day's pool has no traded names. Shared by the batch runner and the nightly forward test, so
+    both follow exactly the pre-registered path."""
+    pool = pd.read_parquet(POOL_DIR / f"{d}.parquet")
+    pmf = PM_BARS_DIR / f"{d}.parquet"
+    pm_all = pd.read_parquet(pmf) if pmf.exists() else pd.DataFrame()
+    names = set_names(pool, which, spec, relax)
+    if not names:
+        return {}
+    bars_by = minute_bars(a, d, [x for x, _ in names], close_hhmm=close)
+    return {trial: run_day(d, names, pool, pm_all, bars_by, spread_at, trial, close) for trial in GG}
+
+
+def admit(cands: list[PCand], equity: float, spec: dict):
+    """Day-level admission at one account size, with the spec's risk limits."""
+    r = spec["risk"]
+    return admit_day(cands, equity, r["max_consecutive_losers_per_day"], r["max_daily_loss_R"], r["per_trade_risk_pct_of_equity"])
+
+
+def trade_row(d: dt.date, c: PCand, tr, r: float | None) -> dict:
+    return {"date": str(d), "symbol": tr.symbol, "setup": tr.setup, "attempt": c.attempt, "priority": c.priority,
+            "entry_time": str(tr.entry_time), "entry": tr.entry, "stop0": tr.stop0, "qty": tr.qty, "R": r,
+            "exit_reason": tr.exits[-1][3], "exit_time": str(tr.exits[-1][0]), "tags": tr.tags}
+
+
 def control_cands(ctl: list[tuple], trial: str, seed: int, d: dt.date) -> list[PCand]:
     out = []
     for sym, prio, b, sig, costs, flatten in ctl:
@@ -191,29 +219,22 @@ def main(exp: str, start: str, end: str, which: str, counts_only: bool, relax: s
     skipped = {f"{which}:{t}": {} for t in GG}
     ctrl = {f"{which}:{t}": {"sum": np.zeros(n_control), "n": np.zeros(n_control)} for t in GG}
     for n, d in enumerate(days, 1):
-        pool = pd.read_parquet(POOL_DIR / f"{d}.parquet")
-        pmf = PM_BARS_DIR / f"{d}.parquet"
-        pm_all = pd.read_parquet(pmf) if pmf.exists() else pd.DataFrame()
-        names = set_names(pool, which, spec, relax)
-        if not names:
+        per_trial = gg_day(a, d, which, spec, spread_at, closes.get(d, "16:00"), relax)
+        if not per_trial:
             continue
-        close = closes.get(d, "16:00")
-        bars_by = minute_bars(a, d, [x for x, _ in names], close_hhmm=close)
         for trial in GG:
             key = f"{which}:{trial}"
-            cands, skips, ctl = run_day(d, names, pool, pm_all, bars_by, spread_at, trial, close)
+            cands, skips, ctl = per_trial[trial]
             oos = d >= dt.date.fromisoformat(spec["evaluation"]["oos_span"][0])     # controls cover the OOS span only
             for seed in range(n_control if (oos and not counts_only) else 0):
-                cres = admit_day(control_cands(ctl, trial, seed, d), 600.0, spec["risk"]["max_consecutive_losers_per_day"],
-                                 spec["risk"]["max_daily_loss_R"], spec["risk"]["per_trade_risk_pct_of_equity"])
+                cres = admit(control_cands(ctl, trial, seed, d), 600.0, spec)
                 rs = [r for _, _, r in cres.admitted if r is not None]
                 ctrl[key]["sum"][seed] += sum(rs)
                 ctrl[key]["n"][seed] += len(rs)
             for sk in skips:
                 skipped[key][sk["reason"]] = skipped[key].get(sk["reason"], 0) + 1
             for eq in EQUITIES:
-                res = admit_day(cands, eq, spec["risk"]["max_consecutive_losers_per_day"], spec["risk"]["max_daily_loss_R"],
-                                spec["risk"]["per_trade_risk_pct_of_equity"])
+                res = admit(cands, eq, spec)
                 for _, reason in res.skipped:
                     skipped[key][f"{reason}@{int(eq)}"] = skipped[key].get(f"{reason}@{int(eq)}", 0) + 1
                 if eq == 600.0:
@@ -222,10 +243,7 @@ def main(exp: str, start: str, end: str, which: str, counts_only: bool, relax: s
                     for c, tr, r in res.admitted:
                         if tape and eq == 600.0:
                             tr.tags.update(trade_tags(a, tr.symbol, tr.entry_time, tr.tags["trigger"], tr.stop0))
-                        results[key][str(eq)].append({"date": str(d), "symbol": tr.symbol, "setup": tr.setup, "attempt": c.attempt,
-                                                      "priority": c.priority, "entry_time": str(tr.entry_time), "entry": tr.entry,
-                                                      "stop0": tr.stop0, "qty": tr.qty, "R": r, "exit_reason": tr.exits[-1][3],
-                                                      "exit_time": str(tr.exits[-1][0]), "tags": tr.tags})
+                        results[key][str(eq)].append(trade_row(d, c, tr, r))
         if n % 20 == 0:
             spread_at.save()
             print(f"{n}/{len(days)} {d} counts@600 {counts}", flush=True)

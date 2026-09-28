@@ -156,6 +156,15 @@ class AlpacaREST:
 SIP_DELAY_MIN = 16      # the free plan refuses SIP newer than 15 minutes (HTTP 403, verified 2026-09-28); 1 min margin
 
 
+def sip_safe_end(now: pd.Timestamp | None = None) -> str:
+    """The latest request end the free plan accepts for SIP, as UTC ISO: now - SIP_DELAY_MIN.
+
+    Use it instead of a date-only end: an end of today's US date counts as recent and is refused (403, verified
+    2026-09-28), and a date computed from the local Sydney clock is often today's US date."""
+    now = pd.Timestamp.now(tz="UTC") if now is None else pd.Timestamp(now).tz_convert("UTC")
+    return (now - pd.Timedelta(minutes=SIP_DELAY_MIN)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 class HybridFeed:
     """Wraps a client so that bars(feed="hybrid") returns the consolidated SIP tape for everything older than the
     free plan's delay and IEX for the most recent minutes (SPEC-0001 routine.data_live, K-31). IEX has no bars

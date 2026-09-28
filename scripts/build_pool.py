@@ -23,7 +23,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from wt.core.clock import ET  # noqa: E402
 from wt.core.config import DATA_DIR  # noqa: E402
-from wt.data.alpaca import AlpacaREST  # noqa: E402
+from wt.data.alpaca import AlpacaREST, sip_safe_end  # noqa: E402
 from wt.data.corpactions import FACTORS, SplitFactors, factor_series  # noqa: E402
 from wt.data.edgar import SharesOutstanding  # noqa: E402
 from wt.data.universe import ASSETS, load_daily  # noqa: E402
@@ -61,7 +61,7 @@ class SplitStore:
     def refresh(self, symbols: list[str]) -> SplitFactors:
         need = sorted(set(symbols) - self.sf.symbols())
         if need:
-            adj = self.a.bars(need, "1Day", "2018-06-01", (dt.date.today() - dt.timedelta(days=1)).isoformat(), adjustment="split")
+            adj = self.a.bars(need, "1Day", "2018-06-01", sip_safe_end(), adjustment="split")
             if len(adj):
                 adj["date"] = adj.t.dt.tz_convert("America/New_York").dt.date
                 f = factor_series(self.raw[self.raw.symbol.isin(need)], adj)
@@ -85,14 +85,34 @@ def baseline_nonspread_pass(c: pd.DataFrame) -> pd.Series:
             ~c.catalyst_type_v1.isin(["offering_dilution", "buyout_merger"]))
 
 
+def universe_symbols() -> set[str]:
+    assets = pd.read_parquet(ASSETS)
+    return set(assets[~assets.is_fund_like & ~assets.has_dot].symbol)
+
+
+def build_one(a: AlpacaREST, d: dt.date, sessions: list[dt.date], daily: DailyIndex, universe: set[str],
+              splits: SplitStore, cache: PMCache, shares: SharesOutstanding, cfg: PoolConfig):
+    """Build and save the causal pool for one session (the batch build and the nightly forward test)."""
+    i = sessions.index(d)
+    p, prev_sessions = sessions[i - 1], sessions[max(0, i - 25): i]
+    cands, pmb, st = build_day(d, p, a, daily, universe, splits.sf, cache, shares, prev_sessions, cfg,
+                               split_refresh=splits.refresh)
+    if len(cands):
+        mask = baseline_nonspread_pass(cands)
+        q = last_quotes(a, sorted(cands[mask].symbol), d) if mask.any() else {}
+        cands["spread_pct"] = [q.get(x, (float("nan"),) * 2)[0] for x in cands.symbol]
+        cands["spread_abs"] = [q.get(x, (float("nan"),) * 2)[1] for x in cands.symbol]
+    save_day(d, cands, pmb, st)
+    return st
+
+
 def main(start: str, end: str, per_minute: int, limit_days: int | None, min_free_gb: float = MIN_FREE_GB) -> None:
     a = AlpacaREST(per_minute=per_minute, shared=True)
     s, e = dt.date.fromisoformat(start), dt.date.fromisoformat(end)
     cal = a.calendar((s - dt.timedelta(days=60)).isoformat(), max(e, dt.date.today()).isoformat())
     sessions = sorted(cal.date)
     open_days = set(sessions)
-    assets = pd.read_parquet(ASSETS)
-    universe = set(assets[~assets.is_fund_like & ~assets.has_dot].symbol)
+    universe = universe_symbols()
     print("loading daily store ...", flush=True)
     raw = load_daily()
     daily = DailyIndex(raw)
@@ -108,17 +128,8 @@ def main(start: str, end: str, per_minute: int, limit_days: int | None, min_free
             print(f"[abort] free disk {free_gb():.1f} GB < {min_free_gb} GB", flush=True)
             break
         market_guard(open_days)
-        i = sessions.index(d)
-        p, prev_sessions = sessions[i - 1], sessions[max(0, i - 25): i]
         try:
-            cands, pmb, st = build_day(d, p, a, daily, universe, splits.sf, cache, shares, prev_sessions, cfg,
-                                       split_refresh=splits.refresh)
-            if len(cands):
-                mask = baseline_nonspread_pass(cands)
-                q = last_quotes(a, sorted(cands[mask].symbol), d) if mask.any() else {}
-                cands["spread_pct"] = [q.get(x, (float("nan"),) * 2)[0] for x in cands.symbol]
-                cands["spread_abs"] = [q.get(x, (float("nan"),) * 2)[1] for x in cands.symbol]
-            save_day(d, cands, pmb, st)
+            st = build_one(a, d, sessions, daily, universe, splits, cache, shares, cfg)
         except Exception as ex:  # noqa: BLE001 — log and continue; the day is retried on the next run
             print(f"{d} FAILED {ex!r}", flush=True)
             continue

@@ -167,6 +167,24 @@ def rev_day(a, d, p, daily, splits, spread_at, close, skips, syms) -> tuple[list
     return out, signalled
 
 
+def intraday_day(a, d: dt.date, trial: str, sessions: list[dt.date], closes: dict, daily: DailyIndex, splits: SplitStore,
+                 shares, spec: dict, spread_at: SpreadAt, skips: dict) -> list[PCand]:
+    """One session of MP-1 or REV-1: admission candidates. Fills CTL with the day's control inputs.
+
+    Shared by the batch runner and the nightly forward test, so both follow exactly the pre-registered path. MP-1
+    reads Set F's Tier 2 from the day's causal pool, so that pool must exist first."""
+    p, close = sessions[sessions.index(d) - 1], closes.get(d, "16:00")
+    CTL.clear()
+    if trial == "MP-1":
+        today = daily.on(d)
+        splits.refresh(sorted(today[(today.v >= 1_000_000) & (today.l <= 10.0)].index))
+        return mp_day(a, d, p, daily, splits.sf, shares, spec, spread_at, close, skips)
+    syms = rev_superset(daily, d, sessions)
+    splits.refresh(syms)
+    cands, _ = rev_day(a, d, p, daily, splits.sf, spread_at, close, skips, syms)
+    return cands
+
+
 def control_cands(trial: str, seed: int, d: dt.date) -> list[PCand]:
     out = []
     for sym, prio, b, sig, costs, flatten, style in CTL:
@@ -222,16 +240,7 @@ def main(exp: str, start: str, end: str, trial: str, counts_only: bool, recall_d
     oos0 = dt.date.fromisoformat(spec["evaluation"]["oos_span"][0])
     for n, d in enumerate(days, 1):
         market_guard(set(sessions))
-        p, close = sessions[sessions.index(d) - 1], closes.get(d, "16:00")
-        CTL.clear()
-        if trial == "MP-1":
-            today = daily.on(d)
-            splits.refresh(sorted(today[(today.v >= 1_000_000) & (today.l <= 10.0)].index))
-            cands = mp_day(a, d, p, daily, splits.sf, shares, spec, spread_at, close, skips)
-        else:
-            syms = rev_superset(daily, d, sessions)
-            splits.refresh(syms)
-            cands, _ = rev_day(a, d, p, daily, splits.sf, spread_at, close, skips, syms)
+        cands = intraday_day(a, d, trial, sessions, closes, daily, splits, shares, spec, spread_at, skips)
         for seed in range(n_control if (d >= oos0 and not counts_only) else 0):
             cres = admit_day(control_cands(trial, seed, d), 600.0, spec["risk"]["max_consecutive_losers_per_day"],
                              spec["risk"]["max_daily_loss_R"], spec["risk"]["per_trade_risk_pct_of_equity"])
