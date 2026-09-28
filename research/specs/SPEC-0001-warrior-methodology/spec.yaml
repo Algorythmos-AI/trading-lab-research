@@ -1,0 +1,256 @@
+# SPEC-0001 — Warrior-style momentum methodology: machine-readable specification of record.
+# Normalised from the owner's sources in ./source/ (spec text, indicators sheet, schemas v1/v2 and the
+# clarifications C1–C13). Every value here is traced to a requirement in requirements.md, and configs are
+# GENERATED from this file (src/wt/specs/loader.py). Never edit a generated config by hand.
+# Times are US/Eastern, and bars are stamped at their start (the 09:30 1-minute bar closes at 09:31).
+# Prices are in USD.
+
+spec_id: SPEC-0001
+title: Warrior-style momentum methodology (Gap and Go, Micro Pullback, Reversal)
+version: 1.0.0
+status: draft                     # draft -> approved (owner decision record DEC-0010)
+direction: long_only              # cash account; short sides of the spec are out of scope (N/A-02)
+
+sources:
+  spec_text: source/spec_text_2026-09-28.txt
+  indicators_sheet: {file: source/indicators_sheet_2026-09-28.csv,
+                     url: "https://docs.google.com/spreadsheets/d/1d0Ko69EvHUpHtipnRXAaubpoF6EYFzRqdVz43QeWQCc"}
+  schemas: [source/schema_v1.json, source/schema_v2.json]
+  corrections: [source/execution_rules_correction.json, source/former_runner_correction.json]
+  clarifications: source/clarifications_2026-09-28.md
+
+# ---------------------------------------------------------------------------------------------- pool
+candidate_pool:                    # causal daily universe (D1, D2, D3)
+  snapshot_window: ["09:00", "09:25"]      # 1-minute SIP bars for every symbol; last print <= 09:25 = price
+  prefilter_prev_close: [0.95, 21.0]       # split-adjusted prior close; wide enough for a $1.00-20.00 price at 09:25
+  gap_basis: split_adjusted_prior_close
+  gap_min_pct_exclusive: 5.0               # candidates must gap > 5% (C3, routine 8:00 step)
+  features_asof: "09:25"                   # nothing at or after 09:25 is used
+  news_asof_field: created_at              # headline must be created <= 09:25
+  suspect_split_ratio: 3.0                 # close-to-close ratio >=3x or <=1/3 without a known split -> fail closed (D22)
+
+# ---------------------------------------------------------------------------------------------- scanners
+scanners:
+  pre_market_gap:                          # SCN-GAP (spec §1, C7)
+    price_usd: [1.00, 20.00]
+    preferred_price_usd: [1.50, 10.00]     # priority when ordering Tier 2 / primary (U6)
+    gap_min_pct_exclusive: 5.0
+    gap_preferred_pct: 20.0
+    float_max_shares_exclusive: 50000000
+    float_preferred_shares: 20000000
+    float_must_be_known: true              # SEC shares outstanding >= float, so known < 50M guarantees float < 50M (D27 reports exclusions)
+    pm_volume_min_shares: 50000
+    pm_volume_tradeable_shares: 500000     # INFO only: pre-market trading is N/A-01
+    rvol_min: 2.0                          # pre-market time-of-day RVOL (see definitions.rvol_premarket)
+    rvol_preferred: 5.0
+    catalyst:
+      required_any: [earnings_release, fda_approval, clinical_study_results, price_target_upgrade, breaking_news]
+      excluded: [buyout_offer, unconfirmed_rumor]
+      non_qualifying: [offering_dilution, reverse_split, hype_only, none]
+      window: ["prior_session_close", "09:25"]
+  high_of_day:                             # SCN-HOD (spec §2, C6)
+    active_window: ["09:35", "11:30"]
+    price_usd: [1.00, 10.00]
+    volume_today_min_shares: 1000000       # MUST for momentum trades (C2); spec lists 100k as the scanner floor
+    rvol_min: 2.0                          # cumulative volume vs ADV20 x time-of-day share
+    volume_surge_5min_min_ratio: 20.0      # "2,000% 5-minute volume surge" = 5-min volume >= 20x its time-of-day norm
+    float_max_shares: 20000000
+    float_must_be_known: true
+    spread_max_usd: 0.05
+    requires_new_hod: true                 # regular-session high of day at the qualifying bar
+    catalyst_required: true                # news created <= t in the required_any categories
+  reversal_hybrid:                         # SCN-REV (spec §3), long side only
+    active_window: ["09:35", "15:30"]
+    price_usd: [15.00, 250.00]
+    volume_today_min_shares: 500000
+    adv5_min_shares: 300000
+    rvol_min: 1.0
+    consecutive_5m_candles_min: 3          # consecutive red 5-minute candles
+    bollinger: {period: 20, std: 2.0, condition: close_at_or_below_lower}
+    rsi: {period: 14, timeframes: [2m, 5m], oversold_below: 20.0}
+    at_low_of_day: true
+    indicator_warmup: prior_session_rth    # D8
+    target_ema9_5m_min_distance_usd: 0.30
+
+# ---------------------------------------------------------------------------------------------- funnel
+funnel:                                    # U5 / C6
+  tier1_max: 20
+  tier2_max: 4
+  tier3_max: 1
+  weights: {gap: 0.25, rvol: 0.25, low_float: 0.20, catalyst: 0.15, former_runner: 0.15}
+  subscores:
+    gap: {kind: log_saturating, saturates_at_pct: 50.0}
+    rvol: {kind: log10_capped, cap_at: 10.0}
+    low_float: {tiers: [[10000000, 1.0], [20000000, 0.8], [50000000, 0.5]]}
+    catalyst: {fda_approval: 1.0, clinical_study_results: 1.0, earnings_release: 0.9, breaking_news: 0.8, price_target_upgrade: 0.5}
+    former_runner: {kind: binary}
+  tier2_requires: [chart_filters]          # catalyst is already required in Tier 1
+  tier2_order: [preferred_price_band, score, rvol, gap, symbol]     # deterministic (D18)
+  tier3_rule: first_tier2_with_active_pm_pattern_else_rank1
+  cash_priority: [tier3_primary, tier2_rank]                         # coincident signals: the primary is funded first
+
+former_runner:                             # C5: score booster, never a filter
+  lookback_sessions: 250
+  multi_day_window_sessions: 5
+  move_min_ratio: 2.0                      # >=100% (max high / prior min low within the window), or one day's high >= 2x its low
+  split_adjusted: true
+
+# ---------------------------------------------------------------------------------------------- chart filters
+chart_filters:                             # spec §4, C1, C12 (daily chart)
+  daily_emas_above: [20, 50, 200]
+  ema_min_bars: 200
+  basis: prior_session_close_split_adjusted
+  window:
+    atr_period: 14
+    must_exceed: atr14                     # distance 09:25 price -> nearest overhead level > ATR14
+    levels_lookback_sessions: 90           # daily chart shows ~90 days (C12)
+    level_types: [daily_open, daily_close, swing_high]
+    swing_high_bars_each_side: 2
+    add_prior_day_high_and_close: true     # D15
+    blue_sky_passes: true                  # no level above the price within the lookback
+  trigger_clearance: defined_breakout_level_exists
+  pm_consolidation:
+    check_window: ["09:10", "09:24"]       # 1-minute bars starting 09:10..09:24
+    range_window: ["04:00", "09:24"]
+    lows_in_top_fraction_of_range: 0.25    # every low inside the top 25% of the pre-market range
+
+# ---------------------------------------------------------------------------------------------- patterns
+patterns:
+  bull_flag:
+    pole_green_candles: [3, 5]
+    flag_candles: [1, 3]
+    retrace_max_of_pole: 0.25              # price retrace (C4)
+    flag_candle_vol_max_of_pole_peak: 0.50 # each flag candle (C12)
+    flag_candle_vol_high_conviction: 0.30  # tag only
+    holds_ema: 9
+  flat_top:
+    resistance_touches_min: 2
+    resistance_tolerance_usd: 0.01
+    higher_lows: true
+    holds_ema: 9
+  abcd:
+    timeframe: 5m
+    c_must_be_higher_low: true
+    retrace_max_of_ab: 0.618               # sheet Fibonacci row; operational choice (conflicts.md K-09)
+    above_ema: 9
+  breakout_volume:                         # D32: decided at the breakout bar's close
+    min_ratio_vs_20bar_avg: 2.0
+    bars_for_average: 20                   # same timeframe, spanning pre-market bars when needed
+    on_fail: exit_next_bar_open
+    applies_to: [GG-1, GG-3, MP-1]
+  pm_pattern:
+    timeframe: 5m
+    window: ["04:00", "09:25"]
+    kinds: [bull_flag, flat_top]
+    price_in_upper_half_of_flag: true
+
+# ---------------------------------------------------------------------------------------------- entries
+entries:
+  common:
+    trigger_offset_usd: 0.01
+    stop_offset_usd: 0.01
+    invalidate_pending_if_stop_touched: true   # D35
+    orders_from_bar_after_signal: true
+  GG-1:  {name: pm_level_break, set_scope: [F, P], window: ["09:31", "10:00"], attempts: 1,
+          levels: [pm_pattern_apex, pm_high], choose: lowest_unbroken_above_first_bar_high,
+          stop: pattern_low_or_first_bar_low, stop_cap_usd: 0.20}
+  GG-2:  {name: orb_ladder, set_scope: [F, P], attempts: 1,
+          orb_1m: {trigger: first_1m_high, active_bar: "09:31", stop: first_1m_low},
+          orb_5m: {trigger: first_5m_high, window: ["09:35", "09:50"], stop: first_5m_low, only_if_orb_1m_not_triggered: true}}
+  GG-3:  {name: continuation_5m, set_scope: [F, P], window: ["09:50", "11:00"], attempts: 1, timeframe: 5m,
+          patterns: [bull_flag, flat_top, abcd], fresh_after: "09:45",
+          trigger: pattern_high, stop: pattern_low}
+  GG-4:  {name: red_to_green, set_scope: [F, P], window: ["09:31", "10:00"], attempts: 1,
+          requires_close_below_open: true, trigger: max_of_open_and_prior_bar_high, stop: low_of_day}
+  MP-1:  {name: micro_pullback_1m, universe: [tier2_09_31_10_00, scn_hod_09_35_11_30], attempts: 2,
+          pullback_candle: {red_body_max_of_prior_range: 0.5, or_lower_wick_min_body_multiple: 2.0},
+          fresh_hod_within_bars: 3, near_ema: {emas: [9, 20], max_distance_atr1m: 0.5},
+          trigger: pullback_high, stop: pullback_low, entry_expiry_bars: 2,
+          target: next_half_or_whole_dollar, ten_second_view: descriptive_only}
+  REV-1: {name: reversal_long, universe: scn_rev, attempts: 2, timeframe: 5m,
+          trigger: exhaustion_candle_high, entry_expiry_bars_5m: 1, stop: low_of_day, target: ema9_5m_fixed_at_signal}
+
+# ---------------------------------------------------------------------------------------------- execution musts
+execution:
+  gap_and_go_first_minute_volume_min: 100000     # 09:30 bar, applies to GG-1..4 (C2)
+  momentum_volume_min: 1000000                   # MP-1 via SCN-HOD (C2)
+  spread_max_usd: 0.05                            # NBBO at the signal; unknown spread = fail (D28)
+  min_reward_risk: 2.0                            # to nearest overhead (daily levels + PMH above trigger) or target (D14)
+  predetermined_entry_and_stop: true
+  averaging_down: false
+  slippage: {per_share_min_usd: 0.01, half_spread: true, stress_multipliers: [1.5, 2.0]}   # D13
+  fill_volume_cap_of_bar: 0.10
+  halts: {detect_gap_minutes: 5, fill_through_gap: true}
+
+# ---------------------------------------------------------------------------------------------- exits
+exits:
+  WT:                                              # GG-1..4, MP-1
+    partial_pct: 50
+    first_target: {default_R: 2.0, MP-1: entry_target}
+    partial_min_qty: 2                             # qty < 2 exits 100% at the first target (D12)
+    after_partial: stop_to_breakeven
+    runner: {trail: prior_5m_low, exit_on_5m_close_below_ema: 9}
+    stagnation: {time_stop_unresolved_minutes: 5, resolved_if_R_at_least: 0.5, max_trade_duration_minutes: null}
+  REV:
+    target: ema9_5m_fixed_at_signal
+    partial_pct: 0
+    stagnation: {time_stop_unresolved_minutes: 5, resolved_if_R_at_least: 0.5}
+  flatten_minutes_before_close: 10
+
+# ---------------------------------------------------------------------------------------------- risk
+risk:
+  per_trade_risk_pct_of_equity: 1.0
+  account_sizes_usd: [600, 1000, 2000]
+  cash_account_settlement: T+1                     # D4
+  max_consecutive_losers_per_day: 3
+  max_daily_loss_R: 2.0                            # D5: event-driven admission
+  max_attempts_per_stock_per_day: 2
+  scope: per_trial_per_day
+
+# ---------------------------------------------------------------------------------------------- tape
+tape:                                              # U10 / C10: descriptive tags only
+  source: [sip_trades, nbbo_quotes]
+  pre_trigger_seconds: 60
+  post_trigger_seconds: 30
+  features: [tape_speed_ratio, buy_initiated_share, green_print_surge_at_level, ask_size_depletion,
+             bid_stepups, post_entry_freeze, breakout_volume_ratio]
+  trade_side_rule: quote_rule_then_tick
+  ten_second_bars: {built_from: sip_trades, around_signal_minutes: 3, use: descriptive}
+  depth_of_book: needs_data
+
+# ---------------------------------------------------------------------------------------------- routine
+routine:                                           # spec §8, C6, C11 (forward dry run; no broker calls)
+  stages:
+    - {at: "08:00", step: tier1_scan}
+    - {at: "08:30", step: daily_chart_analysis}
+    - {at: "09:00", step: tier2_and_pm_structure}
+    - {at: "09:15", step: primary_and_staged_tickets}
+    - {window: ["09:30", "09:50"], step: orb_log}
+    - {window: ["09:30", "10:00"], step: gap_and_go_log}
+    - {window: ["09:50", "11:00"], step: pattern_log}
+    - {window: ["09:35", "11:30"], step: hod_log}
+  data_live: iex
+  data_reeval: sip_delayed
+  virtual_account: read_only_separate
+
+# ---------------------------------------------------------------------------------------------- evaluation
+evaluation:
+  sets:
+    F: {universe: funnel_tier2, catalyst: required}
+    P: {universe: baseline_ranking_top10_from_pool, catalyst: tagged_only, tier_cap: none}
+  trials: [F:GG-1, F:GG-2, F:GG-3, F:GG-4, P:GG-1, P:GG-2, P:GG-3, P:GG-4, MP-1, REV-1]
+  global_trials_after: 85
+  dev_span: ["2019-01-02", "2025-09-25"]
+  oos_span: ["2020-01-01", "2025-09-25"]        # fixed-rule OOS; 2019 = warm-up (D25)
+  holdout_span: ["2025-09-26", "2026-09-25"]
+  holdout_rule: once_if_oos_ci95_lower_gt_0
+  count_guard: {min_dev_trades_set_P: 60, relax_order: [window, pm_consolidation, emas], mode: counts_only}
+  controls: {kind: random_entry, same_layers: true, stop_distance: bootstrap_from_set}
+
+# ---------------------------------------------------------------------------------------------- not implementable
+not_implementable:
+  - {id: N/A-01, item: "pre-market entries (500k PM volume to trade pre-market)", reason: "stop orders cannot rest in extended hours; violates always-on protective stop"}
+  - {id: N/A-02, item: "short side (bear flag, overbought reversal)", reason: "cash account, long only"}
+  - {id: N/A-03, item: "hotkeys and direct-access routing", reason: "API orders; no manual execution"}
+  - {id: N/A-04, item: "Level 2 depth (ask walls beyond top of book, stacked bids)", reason: "no depth feed; proxied from Level 1 + Time & Sales"}
+  - {id: N/A-05, item: "10-second chart execution for micro pullbacks", reason: "tested on the 1-minute fallback; 10s bars built from ticks for a descriptive comparison"}

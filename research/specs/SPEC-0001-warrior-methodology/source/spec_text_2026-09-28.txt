@@ -1,0 +1,111 @@
+WARRIOR TRADING COMPLETE SCANNER, TECHNICAL & STRATEGY SPECIFICATIONS
+(Owner-supplied spec text, received in chat 2026-09-28; titled "warrior-trading-data.txt" in the owner's Studio panel. Recorded verbatim.)
+
+================================================================================
+1. PRE-MARKET GAP SCANNER CRITERIA (GAP AND GO)
+================================================================================
+- Strategy Focus: Low-float momentum stocks gapping up in pre-market on high relative volume and fundamental news catalysts.
+- Time Frame & Location: Pre-market (8:00 AM - 9:30 AM EST) and Market Open (9:30 AM - 10:00 AM EST) via Trade-Ideas / Warrior Trading Gap Scanner.
+- Gap Percentage: Minimum +4% to +5%; Preferred +20%+ (e.g., +10%, +30%, +50%, +100%+ moves).
+- Share Price: $1.00 minimum ($1.50 - $10.00 preferred range; $2.00 - $20.00 acceptable).
+- Stock Float: Under 50 million shares maximum; Ideally under 10 million to 20 million shares (Extreme low-float setups target under 2 million shares).
+- Pre-Market Volume: Minimum 50,000 shares to watch; 500,000+ shares to trade during pre-market.
+- Relative Volume (RVOL): Minimum 2.0x average volume; Preferred 5.0x+ relative volume.
+- Fundamental Catalyst Requirement: Strong breaking news catalyst required (e.g., earnings releases, FDA approvals, clinical study results, price target upgrades).
+- Mandatory Catalyst Exclusion: Discard any stock gapping due to a buyout offer (fixed price, zero momentum potential).
+- Technical Setup: Price trading above key daily moving averages (20 EMA, 50 EMA, 200 EMA) with open "windows" on the daily chart. Intraday chart showing pre-market consolidation near highs or a pre-market bull flag.
+
+================================================================================
+2. HIGH-OF-DAY MOMENTUM SCANNER CRITERIA
+================================================================================
+- Strategy Focus: Intraday momentum breakouts hitting new intraday highs with heavy volume surges.
+- Share Price: $1.00 - $10.00.
+- Volume Today: Minimum 100,000 shares (at least 1,000,000 shares for active momentum trading).
+- Relative Volume (RVOL): Minimum 2.0x.
+- Volume Surge: Minimum 2,000% 5-minute volume surge or strong 15-minute volume rate of change.
+- Stock Float: Maximum 20 million shares (up to 50 million max).
+- Scanner Alerts: High of Day (HOD), 52-week highs, daily chart breakouts, extreme intraday volume.
+- Execution Conditions: Tight bid-ask spreads ($0.05 or less), clean patterns close to the 9 EMA or 20 EMA, and a minimum 2:1 profit-to-loss ratio.
+
+================================================================================
+3. REVERSAL HYBRID SCANNER CRITERIA (COUNTER-TREND)
+================================================================================
+- Strategy Focus: Counter-trend mean reversion on overextended, high-priced stocks hitting extreme outer Bollinger Bands and RSI levels.
+- Share Price: $15.00 - $250.00.
+- Volume Today: Minimum 500,000 shares.
+- Average Daily Volume (5D): Minimum 300,000 shares/day.
+- Relative Volume (RVOL): Minimum 1.0x.
+- Consecutive Candles: At least 3 to 5+ consecutive 5-minute trending candles.
+- Bollinger Bands: Price trading at or outside the 20-period, 2.0 standard deviation upper/lower Bollinger Bands.
+- RSI (Relative Strength Index): 2-minute and 5-minute RSI below 20 (oversold bottom) or above 80 (overbought top).
+- Chart Location: Stock is at High of Day (HOD) or Low of Day (LOD).
+- Target & Risk: At least $0.30 of distance to the 9 EMA on the 5-minute chart, achieving a 2:1 profit-to-loss ratio.
+
+================================================================================
+4. DAILY CHART & TECHNICAL FILTERS CHECKLIST
+================================================================================
+1. Moving Average Alignment:
+   - Must trade ABOVE daily 20 EMA, 50 EMA, and 200 EMA.
+   - Avoid stocks pinned beneath major daily moving averages due to overhead supply.
+2. Window & ATR Verification:
+   - Identify open space ("windows") created by prior gaps or long-bodied daily candles.
+   - Window height must exceed the stock's 14-day Average True Range (ATR) to ensure sufficient room for profit.
+3. Resistance & Trigger Clearance:
+   - Identify clear breakout trigger levels with unobstructed room above.
+   - Discard charts with tightly stacked overhead resistance (e.g., resistance every $0.10).
+4. Former Runner History:
+   - Verify if the stock has a history of multi-day 100%+ moves ("former runner"). Former runners retain higher liquidity and market participation on new catalysts.
+
+================================================================================
+5. GAP AND GO STRATEGY: ENTRY & STOP RULES
+================================================================================
+- Entry Trigger Variations:
+  1. Pre-Market High / Flat Top Breakout: Buy as/seconds before price breaks pre-market high or flat-top apex. Requires support holding above moving averages, alignment near whole/half dollars, and Level 2 ask absorption.
+  2. 1-Minute Opening Range Breakout (ORB): Enter when the 2nd 1-minute candle breaks above the high of the 1st 1-minute candle.
+  3. First Pullback (Bull Flag / 9 EMA): Enter on the first 1-minute or 5-minute candle making a new high coming out of a bull flag or 9 EMA pullback.
+  4. Red-to-Green Move: Buy the first candle making a new high as price re-claims the market opening price from below.
+- Stop-Loss Placement:
+  - Pre-Market High / Bull Flag: Stop at the low of the pullback/pattern.
+  - 1-Minute ORB: Stop at the low of the first 1-minute candle.
+  - Red-to-Green: Mental or hard stop at Low of Day (LOD).
+  - Typical Stop Distance: $0.10 to $0.20 per share.
+- Profit Targets & Exits:
+  - First Target: Sell 50% at 2:1 R/R or key resistance (whole/half dollars). Adjust stop to breakeven.
+  - Final Exit: Exit remaining position if a 5-minute candle breaks a previous low, price breaks below 9 EMA, or Level 2 buying momentum dries up.
+
+================================================================================
+6. MICRO PULLBACK STRATEGY: ENTRY & STOP RULES
+================================================================================
+- Core Concept: Aggressive entry technique for hyper-strong momentum stocks where 1-min or 5-min pullbacks are too slow.
+- Entry Triggers:
+  - Appears as a single small red candle or bottom wick on 1-min / 5-min charts.
+  - Sub-1-minute execution (10-second chart): Enter as price breaks out of micro-consolidation/flat top on 10-second chart with volume surge.
+  - Aligns near key psychological levels (half and whole dollars).
+- Stop-Loss Placement:
+  - Strict stop at the low of the micro pullback candle/wick.
+  - Immediate exit if setup fails to resolve instantly.
+- Profit Target:
+  - Quick $0.50 move per share toward the next half or whole dollar mark.
+
+================================================================================
+7. MANDATORY WARRIOR TRADING RULES & CONSTRAINTS ("MUSTS")
+================================================================================
+- Disregard Buyouts: Stocks gapping on buyout news MUST be skipped immediately.
+- News Verification: MUST verify fundamental catalyst (press releases) before trading.
+- Pre-Market Consolidation: Contenders MUST consolidate near pre-market highs.
+- Volume at Open: Gap & Go MUST have >=100k shares in first 1 minute; Momentum trades MUST have >=1M shares.
+- RVOL Threshold: Relative volume MUST be >=2.0.
+- Risk/Reward Requirement: Every trade setup MUST support a minimum 2:1 profit-to-loss ratio.
+- Pre-Determined Risk: Entry and stop-loss prices MUST be set before placing orders.
+- 5-Minute Rule ("Breakout or Bailout"): If a trade does not resolve within ~5 minutes, you MUST exit to minimize loss.
+- No Averaging Down: MUST NEVER add shares to a losing position (no dollar-cost averaging).
+- Technical Analysis Driven: Every entry and exit decision MUST be guided by technical indicators and price action.
+
+================================================================================
+8. PRE-MARKET ROUTINE TIMELINE
+================================================================================
+- 8:00 AM - 8:30 AM EST: Fire up Gap Scanner. Identify top gappers (>+5%, <50M float, >50k volume). Check press releases for catalysts. Discard buyouts.
+- 8:30 AM - 9:00 AM EST: Perform daily chart analysis on top candidates. Mark key moving averages (20, 50, 200 EMA), windows, ATR, and trigger levels. Filter for former runners.
+- 9:00 AM - 9:15 AM EST: Narrow watch list to top 2-3 stocks. Monitor intraday 1-min and 5-min pre-market structure for bull flags or flat tops.
+- 9:15 AM - 9:30 AM EST: Finalize primary watch stock. Set entry triggers, stop-loss levels, and position size based on predetermined risk. Pre-stage hotkeys and order windows.
+- 9:30 AM - 10:00 AM EST: Execute trades at/after the open (Gap and Go, 1-min ORB, Micro Pullbacks). Enforce the 5-minute "Breakout or Bailout" rule strictly.

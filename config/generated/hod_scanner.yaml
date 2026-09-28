@@ -1,0 +1,21 @@
+# GENERATED from SPEC-0001 v1.0.0 (spec.yaml sha256 0de92a9e11d06bc7).
+# Do not edit. Change research/specs/SPEC-0001-warrior-methodology/spec.yaml and run
+#   PYTHONPATH=src .venv/bin/python -m wt.specs.loader SPEC-0001 --write
+scanners:
+  high_of_day:
+    active_window:
+    - 09:35
+    - '11:30'
+    catalyst_required: true
+    float_max_shares: 20000000
+    float_must_be_known: true
+    price_usd:
+    - 1.0
+    - 10.0
+    requires_new_hod: true
+    rvol_min: 2.0
+    spread_max_usd: 0.05
+    volume_surge_5min_min_ratio: 20.0
+    volume_today_min_shares: 1000000
+spec_id: SPEC-0001
+spec_version: 1.0.0
