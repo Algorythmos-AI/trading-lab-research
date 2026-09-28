@@ -35,6 +35,7 @@ from wt.backtest.runner import minute_bars  # noqa: E402
 from wt.core.clock import et, to_utc_iso  # noqa: E402
 from wt.core.config import DATA_DIR, ROOT, load_yaml  # noqa: E402
 from wt.data.alpaca import AlpacaREST  # noqa: E402
+from wt.data.tape import trade_tags  # noqa: E402
 from wt.scanner.pool import PM_BARS_DIR, POOL_DIR  # noqa: E402
 from wt.scanner.ranking import Candidate, SpecCandidate, funnel, rank  # noqa: E402
 from wt.signals.musts import spread_ok  # noqa: E402
@@ -140,6 +141,8 @@ def run_day(d: dt.date, names: list[tuple[str, int]], pool: pd.DataFrame, pm_all
             def resim(cash, risk, b=b, sig=sig, costs=costs, flatten=flatten, sym=sym):
                 tr = simulate(b, sig, REGISTRY["WT"](), costs, sym, str(d), risk_dollars=risk, cash=cash,
                               max_notional=cash, flatten_idx=flatten)
+                if tr is not None:
+                    tr.tags.update(trigger=sig.trigger, slip=costs.slippage_per_share)
                 return (tr, tr.r_multiple(costs) if tr else None)
 
             probe = simulate(b, sig, REGISTRY["WT"](), costs, sym, str(d), risk_dollars=1e9, cash=1e9, max_notional=1e9,
@@ -174,7 +177,8 @@ def control_cands(ctl: list[tuple], trial: str, seed: int, d: dt.date) -> list[P
     return out
 
 
-def main(exp: str, start: str, end: str, which: str, counts_only: bool, relax: set[str], n_control: int = 0) -> None:
+def main(exp: str, start: str, end: str, which: str, counts_only: bool, relax: set[str], n_control: int = 0,
+         tape: bool = False) -> None:
     spec = load_spec("SPEC-0001")
     a = AlpacaREST(per_minute=150, shared=True)
     spread_at = SpreadAt(a)
@@ -216,6 +220,8 @@ def main(exp: str, start: str, end: str, which: str, counts_only: bool, relax: s
                     counts[key] += len(res.admitted)
                 if not counts_only:
                     for c, tr, r in res.admitted:
+                        if tape and eq == 600.0:
+                            tr.tags.update(trade_tags(a, tr.symbol, tr.entry_time, tr.tags["trigger"], tr.stop0))
                         results[key][str(eq)].append({"date": str(d), "symbol": tr.symbol, "setup": tr.setup, "attempt": c.attempt,
                                                       "priority": c.priority, "entry_time": str(tr.entry_time), "entry": tr.entry,
                                                       "stop0": tr.stop0, "qty": tr.qty, "R": r, "exit_reason": tr.exits[-1][3],
@@ -246,5 +252,7 @@ if __name__ == "__main__":
     ap.add_argument("--counts-only", action="store_true")
     ap.add_argument("--relax", default="")
     ap.add_argument("--control", type=int, default=0, help="random-entry control seeds (not trials)")
+    ap.add_argument("--tape", action="store_true", help="fetch descriptive tape tags for each admitted trade at US$600")
     args = ap.parse_args()
-    main(args.exp, args.start, args.end, args.which, args.counts_only, {x for x in args.relax.split(",") if x}, args.control)
+    main(args.exp, args.start, args.end, args.which, args.counts_only, {x for x in args.relax.split(",") if x}, args.control,
+         args.tape)

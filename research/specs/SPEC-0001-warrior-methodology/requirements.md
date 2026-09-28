@@ -2,7 +2,7 @@
 
 _Generated from `traceability.csv` for spec v1.0.0 (draft); spec.yaml sha256 `cf7886f04b93f2ba`. Do not edit by hand: run `scripts/spec_docs.py SPEC-0001`._
 
-**112 requirements:** INFO 10, MUST 95, SHOULD 7. **Status:** implemented 97, n_a 2, needs_data 1, planned 12.
+**112 requirements:** INFO 10, MUST 95, SHOULD 7. **Status:** implemented 100, n_a 2, needs_data 1, planned 9.
 
 Levels:
 - **MUST:** a hard rule, enforced by code and tested
@@ -187,7 +187,7 @@ Statuses:
 | ID | Level | Requirement | Operational definition | Source | Status |
 |---|---|---|---|---|---|
 | `EVL-01` | MUST | Ten pre-registered trials | F and P x GG-1..4, MP-1, REV-1; global count 85 | plan U12 | implemented |
-| `EVL-02` | MUST | Fixed-rule out-of-sample test | OOS 2020-01-01 -> 2025-09-25; 2019 warm-up (D25) | plan D25 | planned |
-| `EVL-03` | MUST | One-time holdout | only for a trial with OOS CI95 lower bound > 0 | DEC-0005 | planned |
+| `EVL-02` | MUST | Fixed-rule out-of-sample test | OOS 2020-01-01 -> 2025-09-25; 2019 warm-up (D25) | plan D25 | implemented |
+| `EVL-03` | MUST | One-time holdout | only for a trial with OOS CI95 lower bound > 0 | DEC-0005 | implemented |
 | `EVL-04` | MUST | Counts-only guard | no R written; relax order window -> PM consolidation -> EMAs if a set-P trial has < 60 dev trades (D16) | plan D16 | implemented |
-| `EVL-05` | MUST | Comparable controls | random entries through the same cash, risk and exit layers; stop distance bootstrapped from the set (D26) | plan D26 | planned |
+| `EVL-05` | MUST | Comparable controls | random entries through the same cash, risk and exit layers; stop distance bootstrapped from the set (D26) | plan D26 | implemented |

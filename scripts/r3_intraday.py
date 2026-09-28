@@ -35,6 +35,7 @@ from wt.backtest.portfolio import admit_day  # noqa: E402
 from wt.core.clock import et, to_utc_iso  # noqa: E402
 from wt.core.config import ROOT  # noqa: E402
 from wt.data.alpaca import AlpacaREST  # noqa: E402
+from wt.data.tape import trade_tags  # noqa: E402
 from wt.data.edgar import SharesOutstanding  # noqa: E402
 from wt.data.universe import load_daily  # noqa: E402
 from wt.scanner.catalyst import best_catalyst_spec  # noqa: E402
@@ -82,6 +83,8 @@ def chains(fn, b: pd.DataFrame, ctx: dict, sym: str, prio: int, d: dt.date, spre
 
         def resim(cash, risk, sig=sig, costs=costs):
             tr = simulate(b, sig, REGISTRY[exit_style](), costs, sym, str(d), risk, cash, cash, flatten_idx=flatten)
+            if tr is not None:
+                tr.tags.update(trigger=sig.trigger, slip=costs.slippage_per_share)
             return tr, (tr.r_multiple(costs) if tr else None)
 
         out.append(PCand(sym, att, prio, probe.entry_time, resim))
@@ -182,7 +185,8 @@ def control_cands(trial: str, seed: int, d: dt.date) -> list[PCand]:
     return out
 
 
-def main(exp: str, start: str, end: str, trial: str, counts_only: bool, recall_days: int, n_control: int = 0) -> None:
+def main(exp: str, start: str, end: str, trial: str, counts_only: bool, recall_days: int, n_control: int = 0,
+         tape: bool = False) -> None:
     spec = load_spec("SPEC-0001")
     a = AlpacaREST(per_minute=150, shared=True)
     spread_at = SpreadAt(a)
@@ -241,6 +245,9 @@ def main(exp: str, start: str, end: str, trial: str, counts_only: bool, recall_d
                 count += len(res.admitted)
             for _, reason in res.skipped:
                 skips[f"{reason}@{int(eq)}"] = skips.get(f"{reason}@{int(eq)}", 0) + 1
+            if not counts_only and tape and eq == 600.0:
+                for _, tr, _ in res.admitted:
+                    tr.tags.update(trade_tags(a, tr.symbol, tr.entry_time, tr.tags["trigger"], tr.stop0, ten_second=(trial == "MP-1")))
             if not counts_only:
                 trades[str(eq)] += [{"date": str(d), "symbol": tr.symbol, "setup": tr.setup, "attempt": c.attempt,
                                      "entry_time": str(tr.entry_time), "entry": tr.entry, "stop0": tr.stop0, "qty": tr.qty,
@@ -267,5 +274,6 @@ if __name__ == "__main__":
     ap.add_argument("--counts-only", action="store_true")
     ap.add_argument("--recall-days", type=int, default=0)
     ap.add_argument("--control", type=int, default=0, help="random-entry control seeds (not trials)")
+    ap.add_argument("--tape", action="store_true", help="fetch descriptive tape tags (and MP-1 10-second view) per trade")
     args = ap.parse_args()
-    main(args.exp, args.start, args.end, args.trial, args.counts_only, args.recall_days, args.control)
+    main(args.exp, args.start, args.end, args.trial, args.counts_only, args.recall_days, args.control, args.tape)
