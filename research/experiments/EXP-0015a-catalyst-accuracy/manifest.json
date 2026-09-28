@@ -1,0 +1,32 @@
+{
+ "seed": 15,
+ "days_sampled": 300,
+ "dev_span": [
+  "2019-01-02",
+  "2025-09-25"
+ ],
+ "pool_headlines": 1524,
+ "pool_by_category": {
+  "earnings_release": 283,
+  "none": 853,
+  "breaking_news": 107,
+  "fda_approval": 30,
+  "clinical_study_results": 60,
+  "price_target_upgrade": 153,
+  "hype_only": 32,
+  "unconfirmed_rumor": 6
+ },
+ "sample_size": 100,
+ "sample_by_category": {
+  "earnings_release": 15,
+  "hype_only": 10,
+  "clinical_study_results": 10,
+  "none": 25,
+  "fda_approval": 10,
+  "price_target_upgrade": 13,
+  "unconfirmed_rumor": 6,
+  "breaking_news": 11
+ },
+ "classifier": "config/catalysts_spec.yaml v2",
+ "owner_blind_n": 20
+}

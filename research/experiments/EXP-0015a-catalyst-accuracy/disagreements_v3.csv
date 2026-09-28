@@ -1,0 +1,14 @@
+item_id,symbol,headline,classifier_category,claude_label,claude_note
+H020,ETTX,"The Daily Biotech Pulse: Entasis, Dermata Spike Higher On Positive Readouts, J&J Q3 EPS Beats Estimates, Wave Life Sciences Regains Right To CNS Portfolio",none,clinical_study_results,roundup that names this symbol's positive readout
+H024,PLTR,'Not A Q&A Bot:' Palantir CTO Says AI Platform Saved Construction Firm $10M As He Touts 'Operating System For Enterprise',hype_only,none,executive commentary
+H025,GNS,"Top Reddit Short Squeeze Mentions for Friday January 20, 2022: GNS,	BBBY, APRN, AMC, GME, IBKR, HLBZ, WISA, RAD, TRKA",none,hype_only,social-media short-squeeze list
+H026,PLX,"The Daily Biotech Pulse: Aridis To Study Antibody Cocktail For Coronavirus Variants, Revance & Protalix Data Readouts",none,clinical_study_results,roundup that names this symbol's data readout
+H033,RCAT,Trump Says 'I Don't Know' Who Paused Ukraine Weapon Shipments—Hegseth Did Not Inform The White House: Report,unconfirmed_rumor,none,political news about another subject
+H036,PTON,"Top 10 WallStreetBets Mentions for January 21, 2022 Premarket: GME, NFLX, TSLA, AAPL, AMC, PTON, LCID, MSFT, NVDA, SOFI",none,hype_only,social-media mentions list
+H041,BKKT,Bakkt Reports Hanover Community Bank Joined Co.'s Early Adopter Crypto Program,hype_only,breaking_news,customer adoption (minor)
+H045,RIOT,"DA Davidson Bullish On This Bitcoin Company, Sees Huge Upside",hype_only,price_target_upgrade,bullish analyst note
+H048,DLPN,Dolphin Entertainment Launches Non-Fungible Tokens Creation And Marketing Division; Expects First Partnership In Collectibles,breaking_news,hype_only,NFT theme launch
+H054,INDO,"Indonesia Energy (INDO) Stock Soars Amid Middle East Tensions, Oil Disruption Fears",none,hype_only,macro theme (oil / geopolitics)
+H067,MARA,City A.M. Reported Amazon is Looking to Accept Bitcoin Payments by the End of the Year,hype_only,unconfirmed_rumor,
+H072,APT,"Alpha Pro Tech Maintains Expectations To Fulfil ~$4M Of Currently Booked Orders In Q1, Remaining $18.6M In Early Q3",earnings_release,breaking_news,order-book business update (could be read as guidance)
+H090,CLIR,UPDATE: ClearSign Says Expects To Further Expand Collaboration Partnerships In Coming Months,breaking_news,none,vague forward-looking statement

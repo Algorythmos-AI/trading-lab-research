@@ -1,6 +1,7 @@
 """Headline -> catalyst type classifier (config/catalysts.yaml). Pure function."""
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 
 from wt.core.config import load_yaml
@@ -49,20 +50,30 @@ def _spec_cfg() -> dict:
     return load_yaml("catalysts_spec.yaml")
 
 
+@lru_cache(maxsize=4096)
+def _rx(pattern: str) -> re.Pattern:
+    return re.compile(pattern)
+
+
+def _hit(h: str, kws: list[str]) -> bool:
+    """Substring match, or regex when the entry starts with 're:'."""
+    return any((_rx(k[3:]).search(h) is not None) if k.startswith("re:") else (k in h) for k in kws)
+
+
 def classify_spec(headline: str) -> str:
     """Headline -> one SPEC-0001 category. First matching rule wins, in the order documented in the config."""
     h = f" {headline.lower()} "
     c = _spec_cfg()
 
     def hit(kws) -> bool:
-        return any(k in h for k in kws)
+        return _hit(h, kws)
 
-    if hit(c["generic_list"]):
+    if hit(c["generic_list"]) or hit(c.get("commentary", [])):
         return "none"
     for cat in ("buyout_offer", "unconfirmed_rumor", "offering_dilution", "reverse_split"):
         if hit(c[cat]):
             return cat
-    if hit(c["scheduling"]):
+    if hit(c["scheduling"]) or hit(c.get("analyst_negative", [])):
         return "none"
     for cat in QUALIFYING:
         if hit(c["qualifying"][cat]["kw"]):

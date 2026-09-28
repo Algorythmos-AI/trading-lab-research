@@ -20,6 +20,23 @@ from wt.scanner.catalyst import best_catalyst_spec, classify, classify_spec
     ("12 Health Care Stocks Moving In Monday's Pre-Market Session", "none"),        # movers roundup
     ("Acme Surges on AI Enthusiasm", "hype_only"),
     ("Acme Inc Common Stock", "none"),
+    # v3 rules (category-level; synthetic phrasings)
+    ("BigBank Maintains Buy on Acme, Lowers Price Target to $10", "none"),
+    ("BigBank Maintains Neutral on Acme, Raises Price Target to $19", "price_target_upgrade"),
+    ("BigBank Reiterated Overweight Rating, $14 Price Target On Acme", "none"),
+    ("BigBank Maintains Buy on Acme, Maintains $10.5 Price Target", "none"),
+    ("BigBank Downgrades Acme to Sell", "none"),
+    ("The Daily Biotech Pulse: FDA Approvals For Three Companies", "none"),
+    ("A Peek Into The Markets: US Stock Futures Down Ahead Of Earnings", "none"),
+    ("During Conference Call, Acme CFO Reportedly Says Demand Is Strong", "none"),
+    ("Acme CEO: 'Rumors That We Are Closing Plants Are False'", "none"),
+    ("'BigCo seeks to acquire Acme' -Business Daily Report", "unconfirmed_rumor"),
+    ("Acme Shares Skyrocket Over 200% On BigCo $250M Acquisition Deal", "buyout_offer"),
+    ("Acme Announces $4M Direct Offering Of 1M Shares At A Price Of $4.00/Share", "offering_dilution"),
+    ("Two Banks Announce Receipt Of Regulatory Approvals For Merger", "breaking_news"),
+    ("Earnings Scheduled For February 26, 2025", "none"),
+    ("Acme Announced $15M Equity Investment From BigPharma", "breaking_news"),
+    ("Acme Commenced Trading On Nasdaq Under Ticker 'ACME'", "breaking_news"),
 ])
 def test_classify_spec(headline, expected):
     assert classify_spec(headline) == expected
