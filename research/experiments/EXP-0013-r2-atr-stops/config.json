@@ -1,0 +1,66 @@
+[
+ {
+  "name": "s1_bull_flag_5m_atr|M1|W3",
+  "setup": "s1_bull_flag_5m",
+  "management": "M1",
+  "window": [
+   0,
+   120
+  ],
+  "params": {
+   "atr_stop_mult": 1.5
+  },
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s1_bull_flag_5m_atr|M3|W3",
+  "setup": "s1_bull_flag_5m",
+  "management": "M3",
+  "window": [
+   0,
+   120
+  ],
+  "params": {
+   "atr_stop_mult": 1.5
+  },
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s5_breakout_retest_pmh_atr|M1|W3",
+  "setup": "s5_breakout_retest_pmh",
+  "management": "M1",
+  "window": [
+   0,
+   120
+  ],
+  "params": {
+   "atr_stop_mult": 1.5
+  },
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s5_breakout_retest_pmh_atr|M3|W3",
+  "setup": "s5_breakout_retest_pmh",
+  "management": "M3",
+  "window": [
+   0,
+   120
+  ],
+  "params": {
+   "atr_stop_mult": 1.5
+  },
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ }
+]

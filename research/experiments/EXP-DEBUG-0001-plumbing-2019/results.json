@@ -1,0 +1,1380 @@
+{
+ "sessions": [
+  "2019-01-02",
+  "2019-01-03",
+  "2019-01-04",
+  "2019-01-07",
+  "2019-01-08",
+  "2019-01-09",
+  "2019-01-10",
+  "2019-01-11",
+  "2019-01-14",
+  "2019-01-15"
+ ],
+ "n_trials": 29,
+ "results": {
+  "s1_pm_high_break|M1|W1": {
+   "summary": {
+    "n": 2,
+    "expectancy_R": 0.9735499500244827,
+    "win_rate": 0.5,
+    "avg_win_R": 2.9957591692307894,
+    "avg_loss_R": -1.048659269181824,
+    "profit_factor": 2.8567517183804756,
+    "ci95_expectancy": [
+     -1.048659269181824,
+     2.9957591692307894
+    ],
+    "max_drawdown_R": -1.048659269181824,
+    "per_trade_sharpe": 0.3404216363707048,
+    "skew": 0.0,
+    "kurtosis": 3.0
+   },
+   "trades": [
+    {
+     "date": "2019-01-04",
+     "symbol": "VALE",
+     "setup": "S1_pm_high_break",
+     "mgmt": "M1_half_breakeven",
+     "entry_time": "2019-01-04 14:37:00+00:00",
+     "exit_time": "2019-01-04 17:29:00+00:00",
+     "entry": 13.469999999999999,
+     "stop0": 13.34,
+     "qty": 44,
+     "R": 2.9957591692307894,
+     "mfe_R": 4.653846153846192,
+     "mae_R": -0.2953846153846124,
+     "exit_reason": "runner_ema_break",
+     "rank": 1,
+     "score": 30.422,
+     "rvol": 4.423604766285818,
+     "gap": 4.053000779423233,
+     "float": null,
+     "catalyst": null
+    },
+    {
+     "date": "2019-01-07",
+     "symbol": "INSM",
+     "setup": "S1_pm_high_break",
+     "mgmt": "M1_half_breakeven",
+     "entry_time": "2019-01-07 14:31:00+00:00",
+     "exit_time": "2019-01-07 14:31:00+00:00",
+     "entry": 19.619900000000005,
+     "stop0": 19.3999,
+     "qty": 27,
+     "R": -1.048659269181824,
+     "mfe_R": 3.9549999999998637,
+     "mae_R": -1.9995454545454234,
+     "exit_reason": "stop",
+     "rank": 2,
+     "score": 64.208,
+     "rvol": 108.137,
+     "gap": 28.619528619528634,
+     "float": 77090229.0,
+     "catalyst": "earnings"
+    }
+   ]
+  },
+  "s1_pm_high_break|M1|W2": {
+   "summary": {
+    "n": 2,
+    "expectancy_R": 0.9735499500244827,
+    "win_rate": 0.5,
+    "avg_win_R": 2.9957591692307894,
+    "avg_loss_R": -1.048659269181824,
+    "profit_factor": 2.8567517183804756,
+    "ci95_expectancy": [
+     -1.048659269181824,
+     2.9957591692307894
+    ],
+    "max_drawdown_R": -1.048659269181824,
+    "per_trade_sharpe": 0.3404216363707048,
+    "skew": 0.0,
+    "kurtosis": 3.0
+   },
+   "trades": [
+    {
+     "date": "2019-01-04",
+     "symbol": "VALE",
+     "setup": "S1_pm_high_break",
+     "mgmt": "M1_half_breakeven",
+     "entry_time": "2019-01-04 14:37:00+00:00",
+     "exit_time": "2019-01-04 17:29:00+00:00",
+     "entry": 13.469999999999999,
+     "stop0": 13.34,
+     "qty": 44,
+     "R": 2.9957591692307894,
+     "mfe_R": 4.653846153846192,
+     "mae_R": -0.2953846153846124,
+     "exit_reason": "runner_ema_break",
+     "rank": 1,
+     "score": 30.422,
+     "rvol": 4.423604766285818,
+     "gap": 4.053000779423233,
+     "float": null,
+     "catalyst": null
+    },
+    {
+     "date": "2019-01-07",
+     "symbol": "INSM",
+     "setup": "S1_pm_high_break",
+     "mgmt": "M1_half_breakeven",
+     "entry_time": "2019-01-07 14:31:00+00:00",
+     "exit_time": "2019-01-07 14:31:00+00:00",
+     "entry": 19.619900000000005,
+     "stop0": 19.3999,
+     "qty": 27,
+     "R": -1.048659269181824,
+     "mfe_R": 3.9549999999998637,
+     "mae_R": -1.9995454545454234,
+     "exit_reason": "stop",
+     "rank": 2,
+     "score": 64.208,
+     "rvol": 108.137,
+     "gap": 28.619528619528634,
+     "float": 77090229.0,
+     "catalyst": "earnings"
+    }
+   ]
+  },
+  "s1_pm_high_break|M1|W3": {
+   "summary": {
+    "n": 2,
+    "expectancy_R": 0.9735499500244827,
+    "win_rate": 0.5,
+    "avg_win_R": 2.9957591692307894,
+    "avg_loss_R": -1.048659269181824,
+    "profit_factor": 2.8567517183804756,
+    "ci95_expectancy": [
+     -1.048659269181824,
+     2.9957591692307894
+    ],
+    "max_drawdown_R": -1.048659269181824,
+    "per_trade_sharpe": 0.3404216363707048,
+    "skew": 0.0,
+    "kurtosis": 3.0
+   },
+   "trades": [
+    {
+     "date": "2019-01-04",
+     "symbol": "VALE",
+     "setup": "S1_pm_high_break",
+     "mgmt": "M1_half_breakeven",
+     "entry_time": "2019-01-04 14:37:00+00:00",
+     "exit_time": "2019-01-04 17:29:00+00:00",
+     "entry": 13.469999999999999,
+     "stop0": 13.34,
+     "qty": 44,
+     "R": 2.9957591692307894,
+     "mfe_R": 4.653846153846192,
+     "mae_R": -0.2953846153846124,
+     "exit_reason": "runner_ema_break",
+     "rank": 1,
+     "score": 30.422,
+     "rvol": 4.423604766285818,
+     "gap": 4.053000779423233,
+     "float": null,
+     "catalyst": null
+    },
+    {
+     "date": "2019-01-07",
+     "symbol": "INSM",
+     "setup": "S1_pm_high_break",
+     "mgmt": "M1_half_breakeven",
+     "entry_time": "2019-01-07 14:31:00+00:00",
+     "exit_time": "2019-01-07 14:31:00+00:00",
+     "entry": 19.619900000000005,
+     "stop0": 19.3999,
+     "qty": 27,
+     "R": -1.048659269181824,
+     "mfe_R": 3.9549999999998637,
+     "mae_R": -1.9995454545454234,
+     "exit_reason": "stop",
+     "rank": 2,
+     "score": 64.208,
+     "rvol": 108.137,
+     "gap": 28.619528619528634,
+     "float": 77090229.0,
+     "catalyst": "earnings"
+    }
+   ]
+  },
+  "s1_pm_high_break|M2_2|W1": {
+   "summary": {
+    "n": 2,
+    "expectancy_R": -0.584099053821677,
+    "win_rate": 0.0,
+    "avg_win_R": 0.0,
+    "avg_loss_R": -0.584099053821677,
+    "profit_factor": 0.0,
+    "ci95_expectancy": [
+     -1.048659269181824,
+     -0.11953883846153009
+    ],
+    "max_drawdown_R": -1.168198107643354,
+    "per_trade_sharpe": -0.8890567641952787,
+    "skew": 0.0,
+    "kurtosis": 3.0
+   },
+   "trades": [
+    {
+     "date": "2019-01-04",
+     "symbol": "VALE",
+     "setup": "S1_pm_high_break",
+     "mgmt": "M2_bailout_2m",
+     "entry_time": "2019-01-04 14:37:00+00:00",
+     "exit_time": "2019-01-04 14:40:00+00:00",
+     "entry": 13.469999999999999,
+     "stop0": 13.34,
+     "qty": 44,
+     "R": -0.11953883846153009,
+     "mfe_R": 0.1923076923076965,
+     "mae_R": -0.2953846153846124,
+     "exit_reason": "time_stop_2m",
+     "rank": 1,
+     "score": 30.422,
+     "rvol": 4.423604766285818,
+     "gap": 4.053000779423233,
+     "float": null,
+     "catalyst": null
+    },
+    {
+     "date": "2019-01-07",
+     "symbol": "INSM",
+     "setup": "S1_pm_high_break",
+     "mgmt": "M2_bailout_2m",
+     "entry_time": "2019-01-07 14:31:00+00:00",
+     "exit_time": "2019-01-07 14:31:00+00:00",
+     "entry": 19.619900000000005,
+     "stop0": 19.3999,
+     "qty": 27,
+     "R": -1.048659269181824,
+     "mfe_R": 3.9549999999998637,
+     "mae_R": -1.9995454545454234,
+     "exit_reason": "stop",
+     "rank": 2,
+     "score": 64.208,
+     "rvol": 108.137,
+     "gap": 28.619528619528634,
+     "float": 77090229.0,
+     "catalyst": "earnings"
+    }
+   ]
+  },
+  "s1_pm_high_break|M2_2|W2": {
+   "summary": {
+    "n": 2,
+    "expectancy_R": -0.584099053821677,
+    "win_rate": 0.0,
+    "avg_win_R": 0.0,
+    "avg_loss_R": -0.584099053821677,
+    "profit_factor": 0.0,
+    "ci95_expectancy": [
+     -1.048659269181824,
+     -0.11953883846153009
+    ],
+    "max_drawdown_R": -1.168198107643354,
+    "per_trade_sharpe": -0.8890567641952787,
+    "skew": 0.0,
+    "kurtosis": 3.0
+   },
+   "trades": [
+    {
+     "date": "2019-01-04",
+     "symbol": "VALE",
+     "setup": "S1_pm_high_break",
+     "mgmt": "M2_bailout_2m",
+     "entry_time": "2019-01-04 14:37:00+00:00",
+     "exit_time": "2019-01-04 14:40:00+00:00",
+     "entry": 13.469999999999999,
+     "stop0": 13.34,
+     "qty": 44,
+     "R": -0.11953883846153009,
+     "mfe_R": 0.1923076923076965,
+     "mae_R": -0.2953846153846124,
+     "exit_reason": "time_stop_2m",
+     "rank": 1,
+     "score": 30.422,
+     "rvol": 4.423604766285818,
+     "gap": 4.053000779423233,
+     "float": null,
+     "catalyst": null
+    },
+    {
+     "date": "2019-01-07",
+     "symbol": "INSM",
+     "setup": "S1_pm_high_break",
+     "mgmt": "M2_bailout_2m",
+     "entry_time": "2019-01-07 14:31:00+00:00",
+     "exit_time": "2019-01-07 14:31:00+00:00",
+     "entry": 19.619900000000005,
+     "stop0": 19.3999,
+     "qty": 27,
+     "R": -1.048659269181824,
+     "mfe_R": 3.9549999999998637,
+     "mae_R": -1.9995454545454234,
+     "exit_reason": "stop",
+     "rank": 2,
+     "score": 64.208,
+     "rvol": 108.137,
+     "gap": 28.619528619528634,
+     "float": 77090229.0,
+     "catalyst": "earnings"
+    }
+   ]
+  },
+  "s1_pm_high_break|M2_2|W3": {
+   "summary": {
+    "n": 2,
+    "expectancy_R": -0.584099053821677,
+    "win_rate": 0.0,
+    "avg_win_R": 0.0,
+    "avg_loss_R": -0.584099053821677,
+    "profit_factor": 0.0,
+    "ci95_expectancy": [
+     -1.048659269181824,
+     -0.11953883846153009
+    ],
+    "max_drawdown_R": -1.168198107643354,
+    "per_trade_sharpe": -0.8890567641952787,
+    "skew": 0.0,
+    "kurtosis": 3.0
+   },
+   "trades": [
+    {
+     "date": "2019-01-04",
+     "symbol": "VALE",
+     "setup": "S1_pm_high_break",
+     "mgmt": "M2_bailout_2m",
+     "entry_time": "2019-01-04 14:37:00+00:00",
+     "exit_time": "2019-01-04 14:40:00+00:00",
+     "entry": 13.469999999999999,
+     "stop0": 13.34,
+     "qty": 44,
+     "R": -0.11953883846153009,
+     "mfe_R": 0.1923076923076965,
+     "mae_R": -0.2953846153846124,
+     "exit_reason": "time_stop_2m",
+     "rank": 1,
+     "score": 30.422,
+     "rvol": 4.423604766285818,
+     "gap": 4.053000779423233,
+     "float": null,
+     "catalyst": null
+    },
+    {
+     "date": "2019-01-07",
+     "symbol": "INSM",
+     "setup": "S1_pm_high_break",
+     "mgmt": "M2_bailout_2m",
+     "entry_time": "2019-01-07 14:31:00+00:00",
+     "exit_time": "2019-01-07 14:31:00+00:00",
+     "entry": 19.619900000000005,
+     "stop0": 19.3999,
+     "qty": 27,
+     "R": -1.048659269181824,
+     "mfe_R": 3.9549999999998637,
+     "mae_R": -1.9995454545454234,
+     "exit_reason": "stop",
+     "rank": 2,
+     "score": 64.208,
+     "rvol": 108.137,
+     "gap": 28.619528619528634,
+     "float": 77090229.0,
+     "catalyst": "earnings"
+    }
+   ]
+  },
+  "s1_pm_high_break|M3|W1": {
+   "summary": {
+    "n": 2,
+    "expectancy_R": 0.47356385002447254,
+    "win_rate": 0.5,
+    "avg_win_R": 1.995786969230769,
+    "avg_loss_R": -1.048659269181824,
+    "profit_factor": 1.9031796388810878,
+    "ci95_expectancy": [
+     -1.048659269181824,
+     1.995786969230769
+    ],
+    "max_drawdown_R": -1.048659269181824,
+    "per_trade_sharpe": 0.21998103001596336,
+    "skew": 0.0,
+    "kurtosis": 3.0
+   },
+   "trades": [
+    {
+     "date": "2019-01-04",
+     "symbol": "VALE",
+     "setup": "S1_pm_high_break",
+     "mgmt": "M3_fixed_target",
+     "entry_time": "2019-01-04 14:37:00+00:00",
+     "exit_time": "2019-01-04 15:28:00+00:00",
+     "entry": 13.469999999999999,
+     "stop0": 13.34,
+     "qty": 44,
+     "R": 1.995786969230769,
+     "mfe_R": 2.0000000000000275,
+     "mae_R": -0.2953846153846124,
+     "exit_reason": "target",
+     "rank": 1,
+     "score": 30.422,
+     "rvol": 4.423604766285818,
+     "gap": 4.053000779423233,
+     "float": null,
+     "catalyst": null
+    },
+    {
+     "date": "2019-01-07",
+     "symbol": "INSM",
+     "setup": "S1_pm_high_break",
+     "mgmt": "M3_fixed_target",
+     "entry_time": "2019-01-07 14:31:00+00:00",
+     "exit_time": "2019-01-07 14:31:00+00:00",
+     "entry": 19.619900000000005,
+     "stop0": 19.3999,
+     "qty": 27,
+     "R": -1.048659269181824,
+     "mfe_R": 3.9549999999998637,
+     "mae_R": -1.9995454545454234,
+     "exit_reason": "stop",
+     "rank": 2,
+     "score": 64.208,
+     "rvol": 108.137,
+     "gap": 28.619528619528634,
+     "float": 77090229.0,
+     "catalyst": "earnings"
+    }
+   ]
+  },
+  "s1_pm_high_break|M3|W2": {
+   "summary": {
+    "n": 2,
+    "expectancy_R": 0.47356385002447254,
+    "win_rate": 0.5,
+    "avg_win_R": 1.995786969230769,
+    "avg_loss_R": -1.048659269181824,
+    "profit_factor": 1.9031796388810878,
+    "ci95_expectancy": [
+     -1.048659269181824,
+     1.995786969230769
+    ],
+    "max_drawdown_R": -1.048659269181824,
+    "per_trade_sharpe": 0.21998103001596336,
+    "skew": 0.0,
+    "kurtosis": 3.0
+   },
+   "trades": [
+    {
+     "date": "2019-01-04",
+     "symbol": "VALE",
+     "setup": "S1_pm_high_break",
+     "mgmt": "M3_fixed_target",
+     "entry_time": "2019-01-04 14:37:00+00:00",
+     "exit_time": "2019-01-04 15:28:00+00:00",
+     "entry": 13.469999999999999,
+     "stop0": 13.34,
+     "qty": 44,
+     "R": 1.995786969230769,
+     "mfe_R": 2.0000000000000275,
+     "mae_R": -0.2953846153846124,
+     "exit_reason": "target",
+     "rank": 1,
+     "score": 30.422,
+     "rvol": 4.423604766285818,
+     "gap": 4.053000779423233,
+     "float": null,
+     "catalyst": null
+    },
+    {
+     "date": "2019-01-07",
+     "symbol": "INSM",
+     "setup": "S1_pm_high_break",
+     "mgmt": "M3_fixed_target",
+     "entry_time": "2019-01-07 14:31:00+00:00",
+     "exit_time": "2019-01-07 14:31:00+00:00",
+     "entry": 19.619900000000005,
+     "stop0": 19.3999,
+     "qty": 27,
+     "R": -1.048659269181824,
+     "mfe_R": 3.9549999999998637,
+     "mae_R": -1.9995454545454234,
+     "exit_reason": "stop",
+     "rank": 2,
+     "score": 64.208,
+     "rvol": 108.137,
+     "gap": 28.619528619528634,
+     "float": 77090229.0,
+     "catalyst": "earnings"
+    }
+   ]
+  },
+  "s1_pm_high_break|M3|W3": {
+   "summary": {
+    "n": 2,
+    "expectancy_R": 0.47356385002447254,
+    "win_rate": 0.5,
+    "avg_win_R": 1.995786969230769,
+    "avg_loss_R": -1.048659269181824,
+    "profit_factor": 1.9031796388810878,
+    "ci95_expectancy": [
+     -1.048659269181824,
+     1.995786969230769
+    ],
+    "max_drawdown_R": -1.048659269181824,
+    "per_trade_sharpe": 0.21998103001596336,
+    "skew": 0.0,
+    "kurtosis": 3.0
+   },
+   "trades": [
+    {
+     "date": "2019-01-04",
+     "symbol": "VALE",
+     "setup": "S1_pm_high_break",
+     "mgmt": "M3_fixed_target",
+     "entry_time": "2019-01-04 14:37:00+00:00",
+     "exit_time": "2019-01-04 15:28:00+00:00",
+     "entry": 13.469999999999999,
+     "stop0": 13.34,
+     "qty": 44,
+     "R": 1.995786969230769,
+     "mfe_R": 2.0000000000000275,
+     "mae_R": -0.2953846153846124,
+     "exit_reason": "target",
+     "rank": 1,
+     "score": 30.422,
+     "rvol": 4.423604766285818,
+     "gap": 4.053000779423233,
+     "float": null,
+     "catalyst": null
+    },
+    {
+     "date": "2019-01-07",
+     "symbol": "INSM",
+     "setup": "S1_pm_high_break",
+     "mgmt": "M3_fixed_target",
+     "entry_time": "2019-01-07 14:31:00+00:00",
+     "exit_time": "2019-01-07 14:31:00+00:00",
+     "entry": 19.619900000000005,
+     "stop0": 19.3999,
+     "qty": 27,
+     "R": -1.048659269181824,
+     "mfe_R": 3.9549999999998637,
+     "mae_R": -1.9995454545454234,
+     "exit_reason": "stop",
+     "rank": 2,
+     "score": 64.208,
+     "rvol": 108.137,
+     "gap": 28.619528619528634,
+     "float": 77090229.0,
+     "catalyst": "earnings"
+    }
+   ]
+  },
+  "s1_bull_flag_5m|M1|W1": {
+   "summary": {
+    "n": 0
+   },
+   "trades": []
+  },
+  "s1_bull_flag_5m|M1|W2": {
+   "summary": {
+    "n": 0
+   },
+   "trades": []
+  },
+  "s1_bull_flag_5m|M1|W3": {
+   "summary": {
+    "n": 0
+   },
+   "trades": []
+  },
+  "s1_bull_flag_5m|M1|W4": {
+   "summary": {
+    "n": 0
+   },
+   "trades": []
+  },
+  "s1_bull_flag_5m|M8|W1": {
+   "summary": {
+    "n": 0
+   },
+   "trades": []
+  },
+  "s1_bull_flag_5m|M8|W2": {
+   "summary": {
+    "n": 0
+   },
+   "trades": []
+  },
+  "s1_bull_flag_5m|M8|W3": {
+   "summary": {
+    "n": 0
+   },
+   "trades": []
+  },
+  "s1_bull_flag_5m|M8|W4": {
+   "summary": {
+    "n": 0
+   },
+   "trades": []
+  },
+  "s1_bull_flag_5m|M5|W1": {
+   "summary": {
+    "n": 0
+   },
+   "trades": []
+  },
+  "s1_bull_flag_5m|M5|W2": {
+   "summary": {
+    "n": 0
+   },
+   "trades": []
+  },
+  "s1_bull_flag_5m|M5|W3": {
+   "summary": {
+    "n": 0
+   },
+   "trades": []
+  },
+  "s1_bull_flag_5m|M5|W4": {
+   "summary": {
+    "n": 0
+   },
+   "trades": []
+  },
+  "s5_breakout_retest_pmh|M1|W1": {
+   "summary": {
+    "n": 3,
+    "expectancy_R": 2.7692908251332717,
+    "win_rate": 0.6666666666666666,
+    "avg_win_R": 4.662175322613702,
+    "avg_loss_R": -1.0164781698275884,
+    "profit_factor": 9.17319320965739,
+    "ci95_expectancy": [
+     -1.0164781698275884,
+     5.195134397175451
+    ],
+    "max_drawdown_R": -1.0164781698275887,
+    "per_trade_sharpe": 0.8337199093723342,
+    "skew": -0.6260711639784475,
+    "kurtosis": 3.0,
+    "dsr_prob": 0.35664067927691445
+   },
+   "trades": [
+    {
+     "date": "2019-01-04",
+     "symbol": "VALE",
+     "setup": "S5_breakout_retest",
+     "mgmt": "M1_half_breakeven",
+     "entry_time": "2019-01-04 14:42:00+00:00",
+     "exit_time": "2019-01-04 17:29:00+00:00",
+     "entry": 13.507,
+     "stop0": 13.43,
+     "qty": 44,
+     "R": 4.129216248051953,
+     "mfe_R": 7.3766233766233755,
+     "mae_R": -0.7402597402597456,
+     "exit_reason": "runner_ema_break",
+     "rank": 1,
+     "score": 30.422,
+     "rvol": 4.423604766285818,
+     "gap": 4.053000779423233,
+     "float": null,
+     "catalyst": null
+    },
+    {
+     "date": "2019-01-07",
+     "symbol": "INSM",
+     "setup": "S5_breakout_retest",
+     "mgmt": "M1_half_breakeven",
+     "entry_time": "2019-01-07 14:34:00+00:00",
+     "exit_time": "2019-01-07 14:37:00+00:00",
+     "entry": 20.020000000000003,
+     "stop0": 19.3704,
+     "qty": 9,
+     "R": -1.0164781698275884,
+     "mfe_R": 1.1177647783251106,
+     "mae_R": -1.0314039408866973,
+     "exit_reason": "stop",
+     "rank": 2,
+     "score": 64.208,
+     "rvol": 108.137,
+     "gap": 28.619528619528634,
+     "float": 77090229.0,
+     "catalyst": "earnings"
+    },
+    {
+     "date": "2019-01-14",
+     "symbol": "MBOT",
+     "setup": "S5_breakout_retest",
+     "mgmt": "M1_half_breakeven",
+     "entry_time": "2019-01-14 14:50:00+00:00",
+     "exit_time": "2019-01-14 17:16:00+00:00",
+     "entry": 4.76,
+     "stop0": 4.3918,
+     "qty": 16,
+     "R": 5.195134397175451,
+     "mfe_R": 9.994568169473116,
+     "mae_R": -0.4888647474198799,
+     "exit_reason": "runner_ema_break",
+     "rank": 1,
+     "score": 76.276,
+     "rvol": 623.093,
+     "gap": 81.25,
+     "float": 2975676.0,
+     "catalyst": "hype_theme"
+    }
+   ]
+  },
+  "s5_breakout_retest_pmh|M1|W2": {
+   "summary": {
+    "n": 3,
+    "expectancy_R": 2.7692908251332717,
+    "win_rate": 0.6666666666666666,
+    "avg_win_R": 4.662175322613702,
+    "avg_loss_R": -1.0164781698275884,
+    "profit_factor": 9.17319320965739,
+    "ci95_expectancy": [
+     -1.0164781698275884,
+     5.195134397175451
+    ],
+    "max_drawdown_R": -1.0164781698275887,
+    "per_trade_sharpe": 0.8337199093723342,
+    "skew": -0.6260711639784475,
+    "kurtosis": 3.0,
+    "dsr_prob": 0.35664067927691445
+   },
+   "trades": [
+    {
+     "date": "2019-01-04",
+     "symbol": "VALE",
+     "setup": "S5_breakout_retest",
+     "mgmt": "M1_half_breakeven",
+     "entry_time": "2019-01-04 14:42:00+00:00",
+     "exit_time": "2019-01-04 17:29:00+00:00",
+     "entry": 13.507,
+     "stop0": 13.43,
+     "qty": 44,
+     "R": 4.129216248051953,
+     "mfe_R": 7.3766233766233755,
+     "mae_R": -0.7402597402597456,
+     "exit_reason": "runner_ema_break",
+     "rank": 1,
+     "score": 30.422,
+     "rvol": 4.423604766285818,
+     "gap": 4.053000779423233,
+     "float": null,
+     "catalyst": null
+    },
+    {
+     "date": "2019-01-07",
+     "symbol": "INSM",
+     "setup": "S5_breakout_retest",
+     "mgmt": "M1_half_breakeven",
+     "entry_time": "2019-01-07 14:34:00+00:00",
+     "exit_time": "2019-01-07 14:37:00+00:00",
+     "entry": 20.020000000000003,
+     "stop0": 19.3704,
+     "qty": 9,
+     "R": -1.0164781698275884,
+     "mfe_R": 1.1177647783251106,
+     "mae_R": -1.0314039408866973,
+     "exit_reason": "stop",
+     "rank": 2,
+     "score": 64.208,
+     "rvol": 108.137,
+     "gap": 28.619528619528634,
+     "float": 77090229.0,
+     "catalyst": "earnings"
+    },
+    {
+     "date": "2019-01-14",
+     "symbol": "MBOT",
+     "setup": "S5_breakout_retest",
+     "mgmt": "M1_half_breakeven",
+     "entry_time": "2019-01-14 14:50:00+00:00",
+     "exit_time": "2019-01-14 17:16:00+00:00",
+     "entry": 4.76,
+     "stop0": 4.3918,
+     "qty": 16,
+     "R": 5.195134397175451,
+     "mfe_R": 9.994568169473116,
+     "mae_R": -0.4888647474198799,
+     "exit_reason": "runner_ema_break",
+     "rank": 1,
+     "score": 76.276,
+     "rvol": 623.093,
+     "gap": 81.25,
+     "float": 2975676.0,
+     "catalyst": "hype_theme"
+    }
+   ]
+  },
+  "s5_breakout_retest_pmh|M1|W3": {
+   "summary": {
+    "n": 4,
+    "expectancy_R": 2.3443941323683775,
+    "win_rate": 0.75,
+    "avg_win_R": 3.4646848997670325,
+    "avg_loss_R": -1.0164781698275884,
+    "profit_factor": 10.225556246883395,
+    "ci95_expectancy": [
+     0.026612942123053096,
+     4.662175322613702
+    ],
+    "max_drawdown_R": -1.0164781698275887,
+    "per_trade_sharpe": 0.8248807702265574,
+    "skew": -0.1874589156905847,
+    "kurtosis": 1.406078710312492,
+    "dsr_prob": 0.3742267086151767
+   },
+   "trades": [
+    {
+     "date": "2019-01-04",
+     "symbol": "VALE",
+     "setup": "S5_breakout_retest",
+     "mgmt": "M1_half_breakeven",
+     "entry_time": "2019-01-04 14:42:00+00:00",
+     "exit_time": "2019-01-04 17:29:00+00:00",
+     "entry": 13.507,
+     "stop0": 13.43,
+     "qty": 44,
+     "R": 4.129216248051953,
+     "mfe_R": 7.3766233766233755,
+     "mae_R": -0.7402597402597456,
+     "exit_reason": "runner_ema_break",
+     "rank": 1,
+     "score": 30.422,
+     "rvol": 4.423604766285818,
+     "gap": 4.053000779423233,
+     "float": null,
+     "catalyst": null
+    },
+    {
+     "date": "2019-01-07",
+     "symbol": "INSM",
+     "setup": "S5_breakout_retest",
+     "mgmt": "M1_half_breakeven",
+     "entry_time": "2019-01-07 14:34:00+00:00",
+     "exit_time": "2019-01-07 14:37:00+00:00",
+     "entry": 20.020000000000003,
+     "stop0": 19.3704,
+     "qty": 9,
+     "R": -1.0164781698275884,
+     "mfe_R": 1.1177647783251106,
+     "mae_R": -1.0314039408866973,
+     "exit_reason": "stop",
+     "rank": 2,
+     "score": 64.208,
+     "rvol": 108.137,
+     "gap": 28.619528619528634,
+     "float": 77090229.0,
+     "catalyst": "earnings"
+    },
+    {
+     "date": "2019-01-07",
+     "symbol": "AXSM",
+     "setup": "S5_breakout_retest",
+     "mgmt": "M1_half_breakeven",
+     "entry_time": "2019-01-07 16:11:00+00:00",
+     "exit_time": "2019-01-07 16:53:00+00:00",
+     "entry": 7.99,
+     "stop0": 7.7566,
+     "qty": 25,
+     "R": 1.0697040540736946,
+     "mfe_R": 2.8277634961439535,
+     "mae_R": -0.5998286203941743,
+     "exit_reason": "runner_ema_break",
+     "rank": 1,
+     "score": 87.467,
+     "rvol": 150.27265878685543,
+     "gap": 172.62357414448667,
+     "float": 29813168.0,
+     "catalyst": "fda_clinical"
+    },
+    {
+     "date": "2019-01-14",
+     "symbol": "MBOT",
+     "setup": "S5_breakout_retest",
+     "mgmt": "M1_half_breakeven",
+     "entry_time": "2019-01-14 14:50:00+00:00",
+     "exit_time": "2019-01-14 17:16:00+00:00",
+     "entry": 4.76,
+     "stop0": 4.3918,
+     "qty": 16,
+     "R": 5.195134397175451,
+     "mfe_R": 9.994568169473116,
+     "mae_R": -0.4888647474198799,
+     "exit_reason": "runner_ema_break",
+     "rank": 1,
+     "score": 76.276,
+     "rvol": 623.093,
+     "gap": 81.25,
+     "float": 2975676.0,
+     "catalyst": "hype_theme"
+    }
+   ]
+  },
+  "s5_breakout_retest_pmh|M1|W4": {
+   "summary": {
+    "n": 2,
+    "expectancy_R": -0.1235085416897993,
+    "win_rate": 0.5,
+    "avg_win_R": 0.920376469315493,
+    "avg_loss_R": -1.1673935526950916,
+    "profit_factor": 0.7884029059357703,
+    "ci95_expectancy": [
+     -1.1673935526950916,
+     0.920376469315493
+    ],
+    "max_drawdown_R": -1.1673935526950916,
+    "per_trade_sharpe": -0.08366221034174398,
+    "skew": 0.0,
+    "kurtosis": 3.0
+   },
+   "trades": [
+    {
+     "date": "2019-01-08",
+     "symbol": "AXSM",
+     "setup": "S5_breakout_retest",
+     "mgmt": "M1_half_breakeven",
+     "entry_time": "2019-01-08 17:35:00+00:00",
+     "exit_time": "2019-01-08 17:36:00+00:00",
+     "entry": 8.615649999999999,
+     "stop0": 8.5535,
+     "qty": 69,
+     "R": -1.1673935526950916,
+     "mfe_R": 0.39179404666133943,
+     "mae_R": -1.6999195494770805,
+     "exit_reason": "stop",
+     "rank": 1,
+     "score": 59.105,
+     "rvol": 6.3682013660124595,
+     "gap": 20.087336244541486,
+     "float": 29813168.0,
+     "catalyst": "pr_generic"
+    },
+    {
+     "date": "2019-01-08",
+     "symbol": "AXSM",
+     "setup": "S5_breakout_retest",
+     "mgmt": "M1_half_breakeven",
+     "entry_time": "2019-01-08 17:53:00+00:00",
+     "exit_time": "2019-01-08 18:00:00+00:00",
+     "entry": 8.63765,
+     "stop0": 8.5535,
+     "qty": 69,
+     "R": 0.920376469315493,
+     "mfe_R": 2.166963755199017,
+     "mae_R": -0.566250742721334,
+     "exit_reason": "stop",
+     "rank": 1,
+     "score": 59.105,
+     "rvol": 6.3682013660124595,
+     "gap": 20.087336244541486,
+     "float": 29813168.0,
+     "catalyst": "pr_generic"
+    }
+   ]
+  },
+  "s5_breakout_retest_pmh|M4|W1": {
+   "summary": {
+    "n": 4,
+    "expectancy_R": -0.5126734078452543,
+    "win_rate": 0.0,
+    "avg_win_R": 0.0,
+    "avg_loss_R": -0.5126734078452543,
+    "profit_factor": 0.0,
+    "ci95_expectancy": [
+     -0.6676139838439065,
+     -0.40765547995160367
+    ],
+    "max_drawdown_R": -2.050693631381017,
+    "per_trade_sharpe": -3.1973051543311852,
+    "skew": -0.9047655072459005,
+    "kurtosis": 2.153903689587551,
+    "dsr_prob": 5.245968422063718e-13
+   },
+   "trades": [
+    {
+     "date": "2019-01-04",
+     "symbol": "VALE",
+     "setup": "S5_breakout_retest",
+     "mgmt": "M4_trail_only",
+     "entry_time": "2019-01-04 14:42:00+00:00",
+     "exit_time": "2019-01-04 14:48:00+00:00",
+     "entry": 13.507,
+     "stop0": 13.43,
+     "qty": 44,
+     "R": -0.48753851948050725,
+     "mfe_R": 0.23376623376624275,
+     "mae_R": -0.7402597402597456,
+     "exit_reason": "trail",
+     "rank": 1,
+     "score": 30.422,
+     "rvol": 4.423604766285818,
+     "gap": 4.053000779423233,
+     "float": null,
+     "catalyst": null
+    },
+    {
+     "date": "2019-01-04",
+     "symbol": "VALE",
+     "setup": "S5_breakout_retest",
+     "mgmt": "M4_trail_only",
+     "entry_time": "2019-01-04 14:53:00+00:00",
+     "exit_time": "2019-01-04 15:02:00+00:00",
+     "entry": 13.518,
+     "stop0": 13.43,
+     "qty": 44,
+     "R": -0.4379629999999981,
+     "mfe_R": 0.19318181818180993,
+     "mae_R": -0.43181818181818,
+     "exit_reason": "trail",
+     "rank": 1,
+     "score": 30.422,
+     "rvol": 4.423604766285818,
+     "gap": 4.053000779423233,
+     "float": null,
+     "catalyst": null
+    },
+    {
+     "date": "2019-01-07",
+     "symbol": "INSM",
+     "setup": "S5_breakout_retest",
+     "mgmt": "M4_trail_only",
+     "entry_time": "2019-01-07 14:34:00+00:00",
+     "exit_time": "2019-01-07 14:37:00+00:00",
+     "entry": 20.020000000000003,
+     "stop0": 19.3704,
+     "qty": 9,
+     "R": -0.7441643117918758,
+     "mfe_R": 1.1177647783251106,
+     "mae_R": -1.0314039408866973,
+     "exit_reason": "trail",
+     "rank": 2,
+     "score": 64.208,
+     "rvol": 108.137,
+     "gap": 28.619528619528634,
+     "float": 77090229.0,
+     "catalyst": "earnings"
+    },
+    {
+     "date": "2019-01-14",
+     "symbol": "MBOT",
+     "setup": "S5_breakout_retest",
+     "mgmt": "M4_trail_only",
+     "entry_time": "2019-01-14 14:50:00+00:00",
+     "exit_time": "2019-01-14 14:58:00+00:00",
+     "entry": 4.76,
+     "stop0": 4.3918,
+     "qty": 16,
+     "R": -0.3810278001086359,
+     "mfe_R": 0.380228136882131,
+     "mae_R": -0.4888647474198799,
+     "exit_reason": "trail",
+     "rank": 1,
+     "score": 76.276,
+     "rvol": 623.093,
+     "gap": 81.25,
+     "float": 2975676.0,
+     "catalyst": "hype_theme"
+    }
+   ]
+  },
+  "s5_breakout_retest_pmh|M4|W2": {
+   "summary": {
+    "n": 4,
+    "expectancy_R": -0.5126734078452543,
+    "win_rate": 0.0,
+    "avg_win_R": 0.0,
+    "avg_loss_R": -0.5126734078452543,
+    "profit_factor": 0.0,
+    "ci95_expectancy": [
+     -0.6676139838439065,
+     -0.40765547995160367
+    ],
+    "max_drawdown_R": -2.050693631381017,
+    "per_trade_sharpe": -3.1973051543311852,
+    "skew": -0.9047655072459005,
+    "kurtosis": 2.153903689587551,
+    "dsr_prob": 5.245968422063718e-13
+   },
+   "trades": [
+    {
+     "date": "2019-01-04",
+     "symbol": "VALE",
+     "setup": "S5_breakout_retest",
+     "mgmt": "M4_trail_only",
+     "entry_time": "2019-01-04 14:42:00+00:00",
+     "exit_time": "2019-01-04 14:48:00+00:00",
+     "entry": 13.507,
+     "stop0": 13.43,
+     "qty": 44,
+     "R": -0.48753851948050725,
+     "mfe_R": 0.23376623376624275,
+     "mae_R": -0.7402597402597456,
+     "exit_reason": "trail",
+     "rank": 1,
+     "score": 30.422,
+     "rvol": 4.423604766285818,
+     "gap": 4.053000779423233,
+     "float": null,
+     "catalyst": null
+    },
+    {
+     "date": "2019-01-04",
+     "symbol": "VALE",
+     "setup": "S5_breakout_retest",
+     "mgmt": "M4_trail_only",
+     "entry_time": "2019-01-04 14:53:00+00:00",
+     "exit_time": "2019-01-04 15:02:00+00:00",
+     "entry": 13.518,
+     "stop0": 13.43,
+     "qty": 44,
+     "R": -0.4379629999999981,
+     "mfe_R": 0.19318181818180993,
+     "mae_R": -0.43181818181818,
+     "exit_reason": "trail",
+     "rank": 1,
+     "score": 30.422,
+     "rvol": 4.423604766285818,
+     "gap": 4.053000779423233,
+     "float": null,
+     "catalyst": null
+    },
+    {
+     "date": "2019-01-07",
+     "symbol": "INSM",
+     "setup": "S5_breakout_retest",
+     "mgmt": "M4_trail_only",
+     "entry_time": "2019-01-07 14:34:00+00:00",
+     "exit_time": "2019-01-07 14:37:00+00:00",
+     "entry": 20.020000000000003,
+     "stop0": 19.3704,
+     "qty": 9,
+     "R": -0.7441643117918758,
+     "mfe_R": 1.1177647783251106,
+     "mae_R": -1.0314039408866973,
+     "exit_reason": "trail",
+     "rank": 2,
+     "score": 64.208,
+     "rvol": 108.137,
+     "gap": 28.619528619528634,
+     "float": 77090229.0,
+     "catalyst": "earnings"
+    },
+    {
+     "date": "2019-01-14",
+     "symbol": "MBOT",
+     "setup": "S5_breakout_retest",
+     "mgmt": "M4_trail_only",
+     "entry_time": "2019-01-14 14:50:00+00:00",
+     "exit_time": "2019-01-14 14:58:00+00:00",
+     "entry": 4.76,
+     "stop0": 4.3918,
+     "qty": 16,
+     "R": -0.3810278001086359,
+     "mfe_R": 0.380228136882131,
+     "mae_R": -0.4888647474198799,
+     "exit_reason": "trail",
+     "rank": 1,
+     "score": 76.276,
+     "rvol": 623.093,
+     "gap": 81.25,
+     "float": 2975676.0,
+     "catalyst": "hype_theme"
+    }
+   ]
+  },
+  "s5_breakout_retest_pmh|M4|W3": {
+   "summary": {
+    "n": 5,
+    "expectancy_R": -0.13627156089488415,
+    "win_rate": 0.2,
+    "avg_win_R": 1.3693358269065965,
+    "avg_loss_R": -0.5126734078452543,
+    "profit_factor": 0.6677427607674542,
+    "ci95_expectancy": [
+     -0.6102967470968523,
+     0.636501192247857
+    ],
+    "max_drawdown_R": -1.6696658312723813,
+    "per_trade_sharpe": -0.1597484217927458,
+    "skew": 1.39719029124146,
+    "kurtosis": 3.1292329688136387,
+    "dsr_prob": 0.025973489527661403
+   },
+   "trades": [
+    {
+     "date": "2019-01-04",
+     "symbol": "VALE",
+     "setup": "S5_breakout_retest",
+     "mgmt": "M4_trail_only",
+     "entry_time": "2019-01-04 14:42:00+00:00",
+     "exit_time": "2019-01-04 14:48:00+00:00",
+     "entry": 13.507,
+     "stop0": 13.43,
+     "qty": 44,
+     "R": -0.48753851948050725,
+     "mfe_R": 0.23376623376624275,
+     "mae_R": -0.7402597402597456,
+     "exit_reason": "trail",
+     "rank": 1,
+     "score": 30.422,
+     "rvol": 4.423604766285818,
+     "gap": 4.053000779423233,
+     "float": null,
+     "catalyst": null
+    },
+    {
+     "date": "2019-01-04",
+     "symbol": "VALE",
+     "setup": "S5_breakout_retest",
+     "mgmt": "M4_trail_only",
+     "entry_time": "2019-01-04 14:53:00+00:00",
+     "exit_time": "2019-01-04 15:02:00+00:00",
+     "entry": 13.518,
+     "stop0": 13.43,
+     "qty": 44,
+     "R": -0.4379629999999981,
+     "mfe_R": 0.19318181818180993,
+     "mae_R": -0.43181818181818,
+     "exit_reason": "trail",
+     "rank": 1,
+     "score": 30.422,
+     "rvol": 4.423604766285818,
+     "gap": 4.053000779423233,
+     "float": null,
+     "catalyst": null
+    },
+    {
+     "date": "2019-01-07",
+     "symbol": "INSM",
+     "setup": "S5_breakout_retest",
+     "mgmt": "M4_trail_only",
+     "entry_time": "2019-01-07 14:34:00+00:00",
+     "exit_time": "2019-01-07 14:37:00+00:00",
+     "entry": 20.020000000000003,
+     "stop0": 19.3704,
+     "qty": 9,
+     "R": -0.7441643117918758,
+     "mfe_R": 1.1177647783251106,
+     "mae_R": -1.0314039408866973,
+     "exit_reason": "trail",
+     "rank": 2,
+     "score": 64.208,
+     "rvol": 108.137,
+     "gap": 28.619528619528634,
+     "float": 77090229.0,
+     "catalyst": "earnings"
+    },
+    {
+     "date": "2019-01-07",
+     "symbol": "AXSM",
+     "setup": "S5_breakout_retest",
+     "mgmt": "M4_trail_only",
+     "entry_time": "2019-01-07 16:11:00+00:00",
+     "exit_time": "2019-01-07 16:27:00+00:00",
+     "entry": 7.99,
+     "stop0": 7.7566,
+     "qty": 25,
+     "R": 1.3693358269065965,
+     "mfe_R": 2.356469580119956,
+     "mae_R": -0.5998286203941743,
+     "exit_reason": "trail",
+     "rank": 1,
+     "score": 87.467,
+     "rvol": 150.27265878685543,
+     "gap": 172.62357414448667,
+     "float": 29813168.0,
+     "catalyst": "fda_clinical"
+    },
+    {
+     "date": "2019-01-14",
+     "symbol": "MBOT",
+     "setup": "S5_breakout_retest",
+     "mgmt": "M4_trail_only",
+     "entry_time": "2019-01-14 14:50:00+00:00",
+     "exit_time": "2019-01-14 14:58:00+00:00",
+     "entry": 4.76,
+     "stop0": 4.3918,
+     "qty": 16,
+     "R": -0.3810278001086359,
+     "mfe_R": 0.380228136882131,
+     "mae_R": -0.4888647474198799,
+     "exit_reason": "trail",
+     "rank": 1,
+     "score": 76.276,
+     "rvol": 623.093,
+     "gap": 81.25,
+     "float": 2975676.0,
+     "catalyst": "hype_theme"
+    }
+   ]
+  },
+  "s5_breakout_retest_pmh|M4|W4": {
+   "summary": {
+    "n": 2,
+    "expectancy_R": -0.5127310603641858,
+    "win_rate": 0.5,
+    "avg_win_R": 0.14193143196672,
+    "avg_loss_R": -1.1673935526950916,
+    "profit_factor": 0.12157976343029427,
+    "ci95_expectancy": [
+     -1.1673935526950916,
+     0.14193143196672
+    ],
+    "max_drawdown_R": -1.1673935526950916,
+    "per_trade_sharpe": -0.5538053790398418,
+    "skew": 0.0,
+    "kurtosis": 3.0
+   },
+   "trades": [
+    {
+     "date": "2019-01-08",
+     "symbol": "AXSM",
+     "setup": "S5_breakout_retest",
+     "mgmt": "M4_trail_only",
+     "entry_time": "2019-01-08 17:35:00+00:00",
+     "exit_time": "2019-01-08 17:36:00+00:00",
+     "entry": 8.615649999999999,
+     "stop0": 8.5535,
+     "qty": 69,
+     "R": -1.1673935526950916,
+     "mfe_R": 0.39179404666133943,
+     "mae_R": -1.6999195494770805,
+     "exit_reason": "stop",
+     "rank": 1,
+     "score": 59.105,
+     "rvol": 6.3682013660124595,
+     "gap": 20.087336244541486,
+     "float": 29813168.0,
+     "catalyst": "pr_generic"
+    },
+    {
+     "date": "2019-01-08",
+     "symbol": "AXSM",
+     "setup": "S5_breakout_retest",
+     "mgmt": "M4_trail_only",
+     "entry_time": "2019-01-08 17:53:00+00:00",
+     "exit_time": "2019-01-08 18:00:00+00:00",
+     "entry": 8.63765,
+     "stop0": 8.5535,
+     "qty": 69,
+     "R": 0.14193143196672,
+     "mfe_R": 2.166963755199017,
+     "mae_R": -0.566250742721334,
+     "exit_reason": "trail",
+     "rank": 1,
+     "score": 59.105,
+     "rvol": 6.3682013660124595,
+     "gap": 20.087336244541486,
+     "float": 29813168.0,
+     "catalyst": "pr_generic"
+    }
+   ]
+  }
+ }
+}

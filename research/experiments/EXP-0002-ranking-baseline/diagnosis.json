@@ -1,0 +1,1895 @@
+{
+ "winners_total": 200,
+ "not_in_prefilter_or_no_pm_bars": 51,
+ "drop_reasons": {
+  "liquidity": 47,
+  "rvol": 35,
+  "float": 26,
+  "gap": 16,
+  "spread": 11,
+  "price": 5,
+  "spread_abs": 4,
+  "catalyst:buyout_merger": 3
+ },
+ "winner_features": [
+  {
+   "date": "2026-07-31",
+   "sym": "REPL",
+   "why": [
+    "spread"
+   ],
+   "price": 12.28,
+   "gap": 127.0,
+   "rvol": 20.4,
+   "pm_$vol_M": 75.83,
+   "float_M": 83.9,
+   "cat": "fda_clinical"
+  },
+  {
+   "date": "2026-07-31",
+   "sym": "PWP",
+   "why": [
+    "liquidity"
+   ],
+   "price": 16.6,
+   "gap": 11.3,
+   "rvol": 2.6,
+   "pm_$vol_M": 0.04,
+   "float_M": 0.0,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-03",
+   "sym": "DFNS",
+   "why": [
+    "price",
+    "rvol"
+   ],
+   "price": 44.54,
+   "gap": 60.9,
+   "rvol": 0.1,
+   "pm_$vol_M": 55.3,
+   "float_M": 60.3,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-08-03",
+   "sym": "BIOA",
+   "why": [],
+   "price": 9.5,
+   "gap": 5.1,
+   "rvol": 3.1,
+   "pm_$vol_M": 1.21,
+   "float_M": 44.4,
+   "cat": "analyst_upgrade"
+  },
+  {
+   "date": "2026-08-03",
+   "sym": "TE",
+   "why": [
+    "rvol",
+    "float"
+   ],
+   "price": 4.41,
+   "gap": 5.8,
+   "rvol": 1.4,
+   "pm_$vol_M": 6.82,
+   "float_M": 279.0,
+   "cat": null
+  },
+  {
+   "date": "2026-08-04",
+   "sym": "AMIX",
+   "why": [],
+   "price": 5.34,
+   "gap": 46.3,
+   "rvol": 11.3,
+   "pm_$vol_M": 88.19,
+   "float_M": 11.4,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-08-04",
+   "sym": "IBTA",
+   "why": [
+    "price",
+    "liquidity"
+   ],
+   "price": 30.99,
+   "gap": 26.1,
+   "rvol": 7.1,
+   "pm_$vol_M": 0.21,
+   "float_M": 0.0,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-04",
+   "sym": "XGN",
+   "why": [
+    "liquidity"
+   ],
+   "price": 5.71,
+   "gap": 22.0,
+   "rvol": 94.3,
+   "pm_$vol_M": 0.53,
+   "float_M": 24.2,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-04",
+   "sym": "MOVE",
+   "why": [],
+   "price": 19.18,
+   "gap": 78.2,
+   "rvol": 3411.4,
+   "pm_$vol_M": 70.57,
+   "float_M": 1.2,
+   "cat": "hype_theme"
+  },
+  {
+   "date": "2026-08-05",
+   "sym": "APPS",
+   "why": [
+    "float"
+   ],
+   "price": 11.76,
+   "gap": 23.7,
+   "rvol": 36.7,
+   "pm_$vol_M": 8.49,
+   "float_M": 121.0,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-05",
+   "sym": "GTE",
+   "why": [],
+   "price": 10.17,
+   "gap": 48.9,
+   "rvol": 3764.4,
+   "pm_$vol_M": 65.58,
+   "float_M": 35.4,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-05",
+   "sym": "BLMN",
+   "why": [],
+   "price": 11.93,
+   "gap": 33.7,
+   "rvol": 365.9,
+   "pm_$vol_M": 4.29,
+   "float_M": 85.6,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-05",
+   "sym": "SWIM",
+   "why": [
+    "liquidity",
+    "float"
+   ],
+   "price": 6.6,
+   "gap": 15.8,
+   "rvol": 2.7,
+   "pm_$vol_M": 0.07,
+   "float_M": 117.6,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-05",
+   "sym": "FTK",
+   "why": [
+    "price",
+    "liquidity"
+   ],
+   "price": 32.77,
+   "gap": 16.2,
+   "rvol": 9.9,
+   "pm_$vol_M": 0.39,
+   "float_M": 36.2,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-06",
+   "sym": "CLRO",
+   "why": [],
+   "price": 11.6,
+   "gap": 215.2,
+   "rvol": 3235.1,
+   "pm_$vol_M": 341.97,
+   "float_M": 2.7,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-08-06",
+   "sym": "IOVA",
+   "why": [
+    "float"
+   ],
+   "price": 5.69,
+   "gap": 31.1,
+   "rvol": 35.3,
+   "pm_$vol_M": 19.21,
+   "float_M": 453.0,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-06",
+   "sym": "HNST",
+   "why": [
+    "float"
+   ],
+   "price": 4.67,
+   "gap": 21.3,
+   "rvol": 56.6,
+   "pm_$vol_M": 1.76,
+   "float_M": 107.3,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-06",
+   "sym": "ASPN",
+   "why": [],
+   "price": 6.94,
+   "gap": 38.5,
+   "rvol": 345.8,
+   "pm_$vol_M": 3.95,
+   "float_M": 82.8,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-07",
+   "sym": "RCEL",
+   "why": [
+    "liquidity"
+   ],
+   "price": 5.85,
+   "gap": 23.2,
+   "rvol": 74.7,
+   "pm_$vol_M": 0.44,
+   "float_M": 30.8,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-07",
+   "sym": "VATE",
+   "why": [],
+   "price": 11.4,
+   "gap": 53.8,
+   "rvol": 5897.4,
+   "pm_$vol_M": 72.17,
+   "float_M": 13.6,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-07",
+   "sym": "QNST",
+   "why": [
+    "liquidity"
+   ],
+   "price": 19.69,
+   "gap": 29.4,
+   "rvol": 8.5,
+   "pm_$vol_M": 0.16,
+   "float_M": 57.4,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-07",
+   "sym": "OABI",
+   "why": [
+    "liquidity",
+    "float"
+   ],
+   "price": 2.4,
+   "gap": 7.0,
+   "rvol": 2.6,
+   "pm_$vol_M": 0.01,
+   "float_M": 145.4,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-07",
+   "sym": "SENS",
+   "why": [
+    "liquidity"
+   ],
+   "price": 5.55,
+   "gap": 7.8,
+   "rvol": 10.4,
+   "pm_$vol_M": 0.06,
+   "float_M": 52.9,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-10",
+   "sym": "BWMN",
+   "why": [
+    "price",
+    "catalyst:buyout_merger"
+   ],
+   "price": 42.39,
+   "gap": 55.7,
+   "rvol": 31.4,
+   "pm_$vol_M": 1.33,
+   "float_M": 17.3,
+   "cat": "buyout_merger"
+  },
+  {
+   "date": "2026-08-10",
+   "sym": "XHLD",
+   "why": [],
+   "price": 2.88,
+   "gap": 42.6,
+   "rvol": 158.0,
+   "pm_$vol_M": 19.74,
+   "float_M": 12.0,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-08-10",
+   "sym": "VREX",
+   "why": [],
+   "price": 18.4,
+   "gap": 48.3,
+   "rvol": 1369.0,
+   "pm_$vol_M": 25.27,
+   "float_M": 42.1,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-10",
+   "sym": "STDN",
+   "why": [
+    "gap",
+    "liquidity"
+   ],
+   "price": 8.77,
+   "gap": 3.9,
+   "rvol": 3.0,
+   "pm_$vol_M": 0.17,
+   "float_M": 0.0,
+   "cat": "analyst_upgrade"
+  },
+  {
+   "date": "2026-08-11",
+   "sym": "QMCO",
+   "why": [],
+   "price": 14.15,
+   "gap": 20.1,
+   "rvol": 16.0,
+   "pm_$vol_M": 1.52,
+   "float_M": 39.4,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-11",
+   "sym": "AIFA",
+   "why": [
+    "rvol",
+    "liquidity"
+   ],
+   "price": 2.29,
+   "gap": 8.5,
+   "rvol": 1.4,
+   "pm_$vol_M": 0.07,
+   "float_M": 6.4,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-08-11",
+   "sym": "STIM",
+   "why": [],
+   "price": 2.7,
+   "gap": 24.3,
+   "rvol": 126.5,
+   "pm_$vol_M": 6.47,
+   "float_M": 76.2,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-11",
+   "sym": "NIQ",
+   "why": [
+    "liquidity",
+    "float"
+   ],
+   "price": 13.44,
+   "gap": 15.1,
+   "rvol": 11.1,
+   "pm_$vol_M": 0.15,
+   "float_M": 295.0,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-12",
+   "sym": "BOXL",
+   "why": [],
+   "price": 4.79,
+   "gap": 63.5,
+   "rvol": 17321.3,
+   "pm_$vol_M": 99.19,
+   "float_M": 3.4,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-08-12",
+   "sym": "XHLD",
+   "why": [],
+   "price": 3.79,
+   "gap": 6.2,
+   "rvol": 2.3,
+   "pm_$vol_M": 3.81,
+   "float_M": 12.0,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-08-12",
+   "sym": "EROC",
+   "why": [
+    "spread"
+   ],
+   "price": 13.15,
+   "gap": 16.9,
+   "rvol": 19.6,
+   "pm_$vol_M": 1.49,
+   "float_M": 0.0,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-13",
+   "sym": "ARX",
+   "why": [],
+   "price": 19.6,
+   "gap": 44.0,
+   "rvol": 17991.9,
+   "pm_$vol_M": 353.86,
+   "float_M": 0.0,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-13",
+   "sym": "CURI",
+   "why": [],
+   "price": 3.47,
+   "gap": 23.9,
+   "rvol": 666.7,
+   "pm_$vol_M": 11.61,
+   "float_M": 59.3,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-13",
+   "sym": "LNSR",
+   "why": [],
+   "price": 7.36,
+   "gap": 17.0,
+   "rvol": 755.2,
+   "pm_$vol_M": 5.64,
+   "float_M": 12.3,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-13",
+   "sym": "OMER",
+   "why": [],
+   "price": 17.0,
+   "gap": 24.0,
+   "rvol": 26.8,
+   "pm_$vol_M": 6.05,
+   "float_M": 72.4,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-14",
+   "sym": "CAPR",
+   "why": [],
+   "price": 7.87,
+   "gap": 86.9,
+   "rvol": 41.9,
+   "pm_$vol_M": 181.59,
+   "float_M": 57.5,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-14",
+   "sym": "HHS",
+   "why": [],
+   "price": 4.34,
+   "gap": 54.4,
+   "rvol": 1889.8,
+   "pm_$vol_M": 9.68,
+   "float_M": 7.5,
+   "cat": "pr_generic"
+  },
+  {
+   "date": "2026-08-14",
+   "sym": "EMAT",
+   "why": [
+    "liquidity",
+    "float"
+   ],
+   "price": 2.4,
+   "gap": 6.2,
+   "rvol": 3.3,
+   "pm_$vol_M": 0.02,
+   "float_M": 593.3,
+   "cat": null
+  },
+  {
+   "date": "2026-08-14",
+   "sym": "DFSC",
+   "why": [],
+   "price": 2.69,
+   "gap": 16.5,
+   "rvol": 7.5,
+   "pm_$vol_M": 16.8,
+   "float_M": 1.6,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-08-17",
+   "sym": "IPST",
+   "why": [],
+   "price": 7.95,
+   "gap": 261.3,
+   "rvol": 47702.5,
+   "pm_$vol_M": 326.72,
+   "float_M": 0.7,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-08-17",
+   "sym": "SLE",
+   "why": [],
+   "price": 2.91,
+   "gap": 28.2,
+   "rvol": 1060.6,
+   "pm_$vol_M": 44.41,
+   "float_M": 1.7,
+   "cat": null
+  },
+  {
+   "date": "2026-08-17",
+   "sym": "XPON",
+   "why": [],
+   "price": 4.47,
+   "gap": 22.7,
+   "rvol": 1123.6,
+   "pm_$vol_M": 19.29,
+   "float_M": 1.0,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-08-18",
+   "sym": "PFSA",
+   "why": [],
+   "price": 8.81,
+   "gap": 94.5,
+   "rvol": 39.2,
+   "pm_$vol_M": 106.2,
+   "float_M": 4.4,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-08-18",
+   "sym": "XOS",
+   "why": [],
+   "price": 4.66,
+   "gap": 123.0,
+   "rvol": 1696.3,
+   "pm_$vol_M": 247.19,
+   "float_M": 14.2,
+   "cat": "contract_partnership"
+  },
+  {
+   "date": "2026-08-18",
+   "sym": "SLE",
+   "why": [],
+   "price": 6.3,
+   "gap": 108.6,
+   "rvol": 30.6,
+   "pm_$vol_M": 111.65,
+   "float_M": 1.7,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-18",
+   "sym": "AMLX",
+   "why": [
+    "float"
+   ],
+   "price": 29.34,
+   "gap": 36.9,
+   "rvol": 1538.2,
+   "pm_$vol_M": 116.69,
+   "float_M": 111.4,
+   "cat": "fda_clinical"
+  },
+  {
+   "date": "2026-08-19",
+   "sym": "TNON",
+   "why": [],
+   "price": 11.43,
+   "gap": 109.7,
+   "rvol": 34.3,
+   "pm_$vol_M": 171.45,
+   "float_M": 0.7,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-08-19",
+   "sym": "MRVI",
+   "why": [
+    "spread"
+   ],
+   "price": 6.71,
+   "gap": 16.9,
+   "rvol": 238.3,
+   "pm_$vol_M": 2.28,
+   "float_M": 0.0,
+   "cat": null
+  },
+  {
+   "date": "2026-08-19",
+   "sym": "ARCT",
+   "why": [],
+   "price": 9.59,
+   "gap": 16.8,
+   "rvol": 1223.1,
+   "pm_$vol_M": 15.84,
+   "float_M": 28.4,
+   "cat": null
+  },
+  {
+   "date": "2026-08-19",
+   "sym": "FEMY",
+   "why": [],
+   "price": 2.95,
+   "gap": 34.1,
+   "rvol": 1775.8,
+   "pm_$vol_M": 17.03,
+   "float_M": 8.4,
+   "cat": "fda_clinical"
+  },
+  {
+   "date": "2026-08-20",
+   "sym": "USDE",
+   "why": [
+    "spread",
+    "spread_abs"
+   ],
+   "price": 3.39,
+   "gap": 9.7,
+   "rvol": 13.1,
+   "pm_$vol_M": 1.53,
+   "float_M": 0.0,
+   "cat": null
+  },
+  {
+   "date": "2026-08-20",
+   "sym": "XOS",
+   "why": [
+    "gap",
+    "rvol",
+    "liquidity"
+   ],
+   "price": 2.96,
+   "gap": 2.0,
+   "rvol": 0.1,
+   "pm_$vol_M": 0.48,
+   "float_M": 14.2,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-08-20",
+   "sym": "IPST",
+   "why": [
+    "gap",
+    "rvol"
+   ],
+   "price": 8.61,
+   "gap": 1.9,
+   "rvol": 0.2,
+   "pm_$vol_M": 4.38,
+   "float_M": 0.7,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-08-21",
+   "sym": "USDE",
+   "why": [],
+   "price": 5.28,
+   "gap": 32.0,
+   "rvol": 176.5,
+   "pm_$vol_M": 46.37,
+   "float_M": 0.0,
+   "cat": null
+  },
+  {
+   "date": "2026-08-21",
+   "sym": "AIAI",
+   "why": [
+    "gap",
+    "rvol",
+    "liquidity"
+   ],
+   "price": 4.65,
+   "gap": 2.6,
+   "rvol": 0.2,
+   "pm_$vol_M": 0.0,
+   "float_M": 70.3,
+   "cat": null
+  },
+  {
+   "date": "2026-08-24",
+   "sym": "XPON",
+   "why": [
+    "spread"
+   ],
+   "price": 8.35,
+   "gap": 143.1,
+   "rvol": 125.0,
+   "pm_$vol_M": 196.71,
+   "float_M": 1.0,
+   "cat": "pr_generic"
+  },
+  {
+   "date": "2026-08-24",
+   "sym": "SDOT",
+   "why": [
+    "spread"
+   ],
+   "price": 21.16,
+   "gap": 60.5,
+   "rvol": 568.5,
+   "pm_$vol_M": 187.64,
+   "float_M": 1.3,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-08-24",
+   "sym": "PMI",
+   "why": [],
+   "price": 4.46,
+   "gap": 38.9,
+   "rvol": 34.6,
+   "pm_$vol_M": 30.13,
+   "float_M": 2.3,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-24",
+   "sym": "FWDI",
+   "why": [
+    "liquidity"
+   ],
+   "price": 5.55,
+   "gap": 8.0,
+   "rvol": 3.1,
+   "pm_$vol_M": 0.63,
+   "float_M": 73.8,
+   "cat": null
+  },
+  {
+   "date": "2026-08-25",
+   "sym": "REAX",
+   "why": [
+    "rvol",
+    "liquidity"
+   ],
+   "price": 26.3,
+   "gap": 995.8,
+   "rvol": 0.0,
+   "pm_$vol_M": 0.05,
+   "float_M": 0.0,
+   "cat": "pr_generic"
+  },
+  {
+   "date": "2026-08-25",
+   "sym": "PMI",
+   "why": [
+    "rvol"
+   ],
+   "price": 5.93,
+   "gap": 15.6,
+   "rvol": 1.7,
+   "pm_$vol_M": 5.17,
+   "float_M": 2.3,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-08-25",
+   "sym": "EXYN",
+   "why": [
+    "gap",
+    "liquidity"
+   ],
+   "price": 2.32,
+   "gap": 0.9,
+   "rvol": 3.2,
+   "pm_$vol_M": 0.08,
+   "float_M": 8.0,
+   "cat": null
+  },
+  {
+   "date": "2026-08-25",
+   "sym": "AMIX",
+   "why": [],
+   "price": 8.0,
+   "gap": 49.0,
+   "rvol": 4.5,
+   "pm_$vol_M": 66.18,
+   "float_M": 11.4,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-08-25",
+   "sym": "CAPR",
+   "why": [
+    "rvol"
+   ],
+   "price": 7.16,
+   "gap": 5.3,
+   "rvol": 0.5,
+   "pm_$vol_M": 5.18,
+   "float_M": 58.1,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-08-26",
+   "sym": "XPON",
+   "why": [
+    "rvol"
+   ],
+   "price": 6.24,
+   "gap": 18.3,
+   "rvol": 1.2,
+   "pm_$vol_M": 12.28,
+   "float_M": 1.0,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-08-26",
+   "sym": "RDIB",
+   "why": [],
+   "price": 12.2,
+   "gap": 28.4,
+   "rvol": 3787.6,
+   "pm_$vol_M": 56.85,
+   "float_M": 0.0,
+   "cat": null
+  },
+  {
+   "date": "2026-08-26",
+   "sym": "DAIC",
+   "why": [],
+   "price": 6.17,
+   "gap": 59.0,
+   "rvol": 8.9,
+   "pm_$vol_M": 110.12,
+   "float_M": 29.3,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-08-26",
+   "sym": "EXYN",
+   "why": [
+    "liquidity"
+   ],
+   "price": 3.4,
+   "gap": 5.6,
+   "rvol": 3.5,
+   "pm_$vol_M": 0.15,
+   "float_M": 8.0,
+   "cat": null
+  },
+  {
+   "date": "2026-08-27",
+   "sym": "USDE",
+   "why": [
+    "rvol"
+   ],
+   "price": 6.39,
+   "gap": 6.8,
+   "rvol": 1.3,
+   "pm_$vol_M": 7.15,
+   "float_M": 0.0,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-08-27",
+   "sym": "DFDV",
+   "why": [
+    "liquidity"
+   ],
+   "price": 4.87,
+   "gap": 8.2,
+   "rvol": 4.2,
+   "pm_$vol_M": 0.74,
+   "float_M": 30.1,
+   "cat": "pr_generic"
+  },
+  {
+   "date": "2026-08-28",
+   "sym": "PSQL",
+   "why": [],
+   "price": 17.5,
+   "gap": 78.8,
+   "rvol": 98.7,
+   "pm_$vol_M": 33.16,
+   "float_M": 0.0,
+   "cat": null
+  },
+  {
+   "date": "2026-08-28",
+   "sym": "AEMD",
+   "why": [],
+   "price": 2.88,
+   "gap": 32.7,
+   "rvol": 5651.8,
+   "pm_$vol_M": 52.89,
+   "float_M": 2.4,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-08-28",
+   "sym": "GAP",
+   "why": [
+    "float"
+   ],
+   "price": 24.18,
+   "gap": 16.3,
+   "rvol": 61.0,
+   "pm_$vol_M": 31.09,
+   "float_M": 351.3,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-08-31",
+   "sym": "NEOV",
+   "why": [
+    "spread",
+    "spread_abs"
+   ],
+   "price": 3.88,
+   "gap": 16.3,
+   "rvol": 27.9,
+   "pm_$vol_M": 3.06,
+   "float_M": 42.7,
+   "cat": "contract_partnership"
+  },
+  {
+   "date": "2026-08-31",
+   "sym": "GPRK",
+   "why": [
+    "liquidity"
+   ],
+   "price": 10.31,
+   "gap": 4.9,
+   "rvol": 40.1,
+   "pm_$vol_M": 0.41,
+   "float_M": 51.7,
+   "cat": null
+  },
+  {
+   "date": "2026-09-01",
+   "sym": "BIAF",
+   "why": [],
+   "price": 7.21,
+   "gap": 58.1,
+   "rvol": 2.8,
+   "pm_$vol_M": 109.6,
+   "float_M": 8.1,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-09-01",
+   "sym": "FRVO",
+   "why": [
+    "spread"
+   ],
+   "price": 16.77,
+   "gap": 9.0,
+   "rvol": 155.5,
+   "pm_$vol_M": 53.39,
+   "float_M": 0.0,
+   "cat": null
+  },
+  {
+   "date": "2026-09-01",
+   "sym": "SST",
+   "why": [
+    "liquidity"
+   ],
+   "price": 2.41,
+   "gap": 7.6,
+   "rvol": 33.3,
+   "pm_$vol_M": 0.39,
+   "float_M": 91.5,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-09-01",
+   "sym": "PXS",
+   "why": [
+    "liquidity"
+   ],
+   "price": 5.85,
+   "gap": 9.1,
+   "rvol": 127.0,
+   "pm_$vol_M": 0.75,
+   "float_M": 10.4,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-09-02",
+   "sym": "BIAF",
+   "why": [
+    "rvol"
+   ],
+   "price": 7.55,
+   "gap": 14.6,
+   "rvol": 0.1,
+   "pm_$vol_M": 3.77,
+   "float_M": 8.1,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-09-02",
+   "sym": "EOSE",
+   "why": [
+    "float"
+   ],
+   "price": 3.48,
+   "gap": 14.5,
+   "rvol": 11.8,
+   "pm_$vol_M": 34.85,
+   "float_M": 364.2,
+   "cat": null
+  },
+  {
+   "date": "2026-09-03",
+   "sym": "CHPT",
+   "why": [
+    "spread"
+   ],
+   "price": 6.65,
+   "gap": 28.1,
+   "rvol": 406.2,
+   "pm_$vol_M": 5.47,
+   "float_M": 26.9,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-09-03",
+   "sym": "BIAF",
+   "why": [
+    "rvol"
+   ],
+   "price": 13.15,
+   "gap": 34.9,
+   "rvol": 1.0,
+   "pm_$vol_M": 78.96,
+   "float_M": 8.1,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-09-03",
+   "sym": "SST",
+   "why": [
+    "rvol",
+    "liquidity"
+   ],
+   "price": 3.15,
+   "gap": 4.6,
+   "rvol": 1.5,
+   "pm_$vol_M": 0.08,
+   "float_M": 91.5,
+   "cat": null
+  },
+  {
+   "date": "2026-09-03",
+   "sym": "DLTH",
+   "why": [
+    "spread_abs"
+   ],
+   "price": 4.09,
+   "gap": 13.0,
+   "rvol": 1802.5,
+   "pm_$vol_M": 7.51,
+   "float_M": 0.0,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-09-03",
+   "sym": "ABTC",
+   "why": [
+    "gap",
+    "rvol",
+    "liquidity"
+   ],
+   "price": 8.15,
+   "gap": 3.6,
+   "rvol": 0.7,
+   "pm_$vol_M": 0.26,
+   "float_M": 82.8,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-09-04",
+   "sym": "AOUT",
+   "why": [],
+   "price": 12.72,
+   "gap": 27.1,
+   "rvol": 142.8,
+   "pm_$vol_M": 1.8,
+   "float_M": 12.5,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-09-04",
+   "sym": "GRI",
+   "why": [
+    "gap",
+    "rvol",
+    "liquidity"
+   ],
+   "price": 2.32,
+   "gap": 1.3,
+   "rvol": 0.5,
+   "pm_$vol_M": 0.02,
+   "float_M": 2.2,
+   "cat": null
+  },
+  {
+   "date": "2026-09-04",
+   "sym": "NX",
+   "why": [
+    "rvol",
+    "liquidity"
+   ],
+   "price": 19.58,
+   "gap": 4.4,
+   "rvol": 1.0,
+   "pm_$vol_M": 0.02,
+   "float_M": 45.8,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-09-08",
+   "sym": "BNC",
+   "why": [],
+   "price": 5.56,
+   "gap": 59.3,
+   "rvol": 1563.9,
+   "pm_$vol_M": 191.3,
+   "float_M": 41.3,
+   "cat": null
+  },
+  {
+   "date": "2026-09-08",
+   "sym": "SST",
+   "why": [
+    "gap",
+    "rvol",
+    "liquidity"
+   ],
+   "price": 3.97,
+   "gap": 3.7,
+   "rvol": 1.4,
+   "pm_$vol_M": 0.11,
+   "float_M": 91.5,
+   "cat": null
+  },
+  {
+   "date": "2026-09-08",
+   "sym": "NUAI",
+   "why": [
+    "gap",
+    "rvol",
+    "liquidity",
+    "float"
+   ],
+   "price": 5.54,
+   "gap": 2.4,
+   "rvol": 1.4,
+   "pm_$vol_M": 0.55,
+   "float_M": 106.6,
+   "cat": null
+  },
+  {
+   "date": "2026-09-08",
+   "sym": "SLE",
+   "why": [
+    "rvol",
+    "liquidity"
+   ],
+   "price": 4.49,
+   "gap": 14.5,
+   "rvol": 0.1,
+   "pm_$vol_M": 0.94,
+   "float_M": 1.7,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-09-09",
+   "sym": "SUNE",
+   "why": [],
+   "price": 3.07,
+   "gap": 29.5,
+   "rvol": 2227.7,
+   "pm_$vol_M": 38.03,
+   "float_M": 6.5,
+   "cat": "pr_generic"
+  },
+  {
+   "date": "2026-09-09",
+   "sym": "IRD",
+   "why": [],
+   "price": 5.21,
+   "gap": 20.0,
+   "rvol": 661.0,
+   "pm_$vol_M": 15.11,
+   "float_M": 83.2,
+   "cat": "fda_clinical"
+  },
+  {
+   "date": "2026-09-09",
+   "sym": "BIAF",
+   "why": [
+    "rvol"
+   ],
+   "price": 10.68,
+   "gap": 19.6,
+   "rvol": 0.5,
+   "pm_$vol_M": 33.23,
+   "float_M": 8.1,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-09-09",
+   "sym": "XHLD",
+   "why": [
+    "gap",
+    "rvol",
+    "liquidity"
+   ],
+   "price": 9.47,
+   "gap": 1.0,
+   "rvol": 0.4,
+   "pm_$vol_M": 0.46,
+   "float_M": 12.0,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-09-10",
+   "sym": "TNON",
+   "why": [],
+   "price": 4.16,
+   "gap": 70.5,
+   "rvol": 17.3,
+   "pm_$vol_M": 104.28,
+   "float_M": 0.7,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-09-10",
+   "sym": "SKYQ",
+   "why": [],
+   "price": 3.2,
+   "gap": 19.9,
+   "rvol": 32.4,
+   "pm_$vol_M": 10.48,
+   "float_M": 8.8,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-09-10",
+   "sym": "CMRC",
+   "why": [
+    "liquidity"
+   ],
+   "price": 2.81,
+   "gap": 8.1,
+   "rvol": 270.4,
+   "pm_$vol_M": 0.77,
+   "float_M": 82.9,
+   "cat": "pr_generic"
+  },
+  {
+   "date": "2026-09-11",
+   "sym": "MKDW",
+   "why": [
+    "liquidity",
+    "float"
+   ],
+   "price": 5.4,
+   "gap": 5.9,
+   "rvol": 36.8,
+   "pm_$vol_M": 0.2,
+   "float_M": 141.0,
+   "cat": null
+  },
+  {
+   "date": "2026-09-11",
+   "sym": "ACVA",
+   "why": [
+    "float",
+    "catalyst:buyout_merger"
+   ],
+   "price": 10.45,
+   "gap": 44.7,
+   "rvol": 20557.7,
+   "pm_$vol_M": 388.4,
+   "float_M": 169.8,
+   "cat": "buyout_merger"
+  },
+  {
+   "date": "2026-09-11",
+   "sym": "FTFT",
+   "why": [],
+   "price": 2.7,
+   "gap": 31.7,
+   "rvol": 22.4,
+   "pm_$vol_M": 24.14,
+   "float_M": 32.2,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-09-11",
+   "sym": "SWRD",
+   "why": [
+    "gap",
+    "liquidity",
+    "float"
+   ],
+   "price": 2.05,
+   "gap": -8.1,
+   "rvol": 47.5,
+   "pm_$vol_M": 0.25,
+   "float_M": 211.1,
+   "cat": null
+  },
+  {
+   "date": "2026-09-11",
+   "sym": "ATEC",
+   "why": [
+    "liquidity",
+    "float"
+   ],
+   "price": 9.45,
+   "gap": 6.9,
+   "rvol": 16.8,
+   "pm_$vol_M": 0.21,
+   "float_M": 154.5,
+   "cat": null
+  },
+  {
+   "date": "2026-09-14",
+   "sym": "FTFT",
+   "why": [],
+   "price": 3.26,
+   "gap": 13.2,
+   "rvol": 5.1,
+   "pm_$vol_M": 14.63,
+   "float_M": 32.2,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-09-14",
+   "sym": "VNCE",
+   "why": [
+    "gap",
+    "rvol",
+    "liquidity"
+   ],
+   "price": 5.39,
+   "gap": 2.9,
+   "rvol": 1.5,
+   "pm_$vol_M": 0.07,
+   "float_M": 12.9,
+   "cat": null
+  },
+  {
+   "date": "2026-09-14",
+   "sym": "ELMT",
+   "why": [],
+   "price": 23.06,
+   "gap": 42.4,
+   "rvol": 1279.2,
+   "pm_$vol_M": 82.53,
+   "float_M": 30.0,
+   "cat": null
+  },
+  {
+   "date": "2026-09-14",
+   "sym": "RPD",
+   "why": [
+    "gap",
+    "liquidity"
+   ],
+   "price": 10.57,
+   "gap": 2.5,
+   "rvol": 4.1,
+   "pm_$vol_M": 0.35,
+   "float_M": 67.4,
+   "cat": null
+  },
+  {
+   "date": "2026-09-14",
+   "sym": "NTSK",
+   "why": [
+    "gap",
+    "rvol",
+    "liquidity"
+   ],
+   "price": 15.2,
+   "gap": 3.4,
+   "rvol": 1.2,
+   "pm_$vol_M": 0.43,
+   "float_M": 0.0,
+   "cat": null
+  },
+  {
+   "date": "2026-09-15",
+   "sym": "VEEA",
+   "why": [],
+   "price": 4.27,
+   "gap": 86.5,
+   "rvol": 31.1,
+   "pm_$vol_M": 170.19,
+   "float_M": 62.2,
+   "cat": "pr_generic"
+  },
+  {
+   "date": "2026-09-15",
+   "sym": "VRA",
+   "why": [],
+   "price": 3.56,
+   "gap": 17.0,
+   "rvol": 3774.2,
+   "pm_$vol_M": 13.58,
+   "float_M": 28.7,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-09-15",
+   "sym": "RLGT",
+   "why": [
+    "spread"
+   ],
+   "price": 9.32,
+   "gap": 13.5,
+   "rvol": 169.7,
+   "pm_$vol_M": 1.59,
+   "float_M": 46.9,
+   "cat": "earnings"
+  },
+  {
+   "date": "2026-09-15",
+   "sym": "INDP",
+   "why": [
+    "liquidity",
+    "float"
+   ],
+   "price": 3.28,
+   "gap": 4.5,
+   "rvol": 3.7,
+   "pm_$vol_M": 0.33,
+   "float_M": 133.2,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-09-16",
+   "sym": "MNOV",
+   "why": [
+    "liquidity"
+   ],
+   "price": 2.17,
+   "gap": 7.7,
+   "rvol": 12.6,
+   "pm_$vol_M": 0.03,
+   "float_M": 49.2,
+   "cat": null
+  },
+  {
+   "date": "2026-09-16",
+   "sym": "FTFT",
+   "why": [
+    "rvol"
+   ],
+   "price": 7.03,
+   "gap": 22.4,
+   "rvol": 1.4,
+   "pm_$vol_M": 11.96,
+   "float_M": 32.2,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-09-16",
+   "sym": "NRXS",
+   "why": [
+    "liquidity"
+   ],
+   "price": 6.33,
+   "gap": 11.1,
+   "rvol": 30.4,
+   "pm_$vol_M": 0.19,
+   "float_M": 12.6,
+   "cat": "pr_generic"
+  },
+  {
+   "date": "2026-09-17",
+   "sym": "DAIC",
+   "why": [],
+   "price": 4.05,
+   "gap": 101.5,
+   "rvol": 7.5,
+   "pm_$vol_M": 106.87,
+   "float_M": 29.3,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-09-17",
+   "sym": "BIAF",
+   "why": [],
+   "price": 6.93,
+   "gap": 29.5,
+   "rvol": 4.5,
+   "pm_$vol_M": 45.05,
+   "float_M": 8.1,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-09-17",
+   "sym": "MNOV",
+   "why": [
+    "liquidity"
+   ],
+   "price": 2.88,
+   "gap": 14.3,
+   "rvol": 48.8,
+   "pm_$vol_M": 0.19,
+   "float_M": 49.2,
+   "cat": "analyst_upgrade"
+  },
+  {
+   "date": "2026-09-17",
+   "sym": "CYPH",
+   "why": [
+    "rvol",
+    "float"
+   ],
+   "price": 2.71,
+   "gap": 11.1,
+   "rvol": 1.4,
+   "pm_$vol_M": 3.36,
+   "float_M": 107.8,
+   "cat": null
+  },
+  {
+   "date": "2026-09-18",
+   "sym": "USDE",
+   "why": [],
+   "price": 9.55,
+   "gap": 23.9,
+   "rvol": 2.9,
+   "pm_$vol_M": 31.81,
+   "float_M": 0.0,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-09-18",
+   "sym": "GEMI",
+   "why": [
+    "gap",
+    "rvol",
+    "liquidity"
+   ],
+   "price": 4.53,
+   "gap": 2.3,
+   "rvol": 1.2,
+   "pm_$vol_M": 0.23,
+   "float_M": 0.0,
+   "cat": null
+  },
+  {
+   "date": "2026-09-18",
+   "sym": "FWDI",
+   "why": [
+    "rvol",
+    "liquidity"
+   ],
+   "price": 6.6,
+   "gap": 6.5,
+   "rvol": 0.7,
+   "pm_$vol_M": 0.34,
+   "float_M": 73.8,
+   "cat": null
+  },
+  {
+   "date": "2026-09-18",
+   "sym": "CANG",
+   "why": [
+    "gap",
+    "rvol",
+    "liquidity"
+   ],
+   "price": 2.2,
+   "gap": 1.4,
+   "rvol": 1.4,
+   "pm_$vol_M": 0.03,
+   "float_M": 0.0,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-09-18",
+   "sym": "SECZ",
+   "why": [
+    "float"
+   ],
+   "price": 9.35,
+   "gap": 4.7,
+   "rvol": 7.3,
+   "pm_$vol_M": 3.4,
+   "float_M": 163.3,
+   "cat": "analyst_upgrade"
+  },
+  {
+   "date": "2026-09-21",
+   "sym": "GRML",
+   "why": [
+    "float"
+   ],
+   "price": 7.15,
+   "gap": 150.9,
+   "rvol": 593.6,
+   "pm_$vol_M": 342.71,
+   "float_M": 158.9,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-09-21",
+   "sym": "VEEE",
+   "why": [],
+   "price": 14.6,
+   "gap": 70.2,
+   "rvol": 4708.2,
+   "pm_$vol_M": 64.4,
+   "float_M": 0.6,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-09-21",
+   "sym": "PRTH",
+   "why": [
+    "catalyst:buyout_merger"
+   ],
+   "price": 7.81,
+   "gap": 34.0,
+   "rvol": 579.0,
+   "pm_$vol_M": 16.76,
+   "float_M": 82.4,
+   "cat": "buyout_merger"
+  },
+  {
+   "date": "2026-09-21",
+   "sym": "NUAI",
+   "why": [
+    "float"
+   ],
+   "price": 6.89,
+   "gap": 17.6,
+   "rvol": 33.3,
+   "pm_$vol_M": 21.0,
+   "float_M": 106.6,
+   "cat": "fda_clinical"
+  },
+  {
+   "date": "2026-09-21",
+   "sym": "SECZ",
+   "why": [
+    "float"
+   ],
+   "price": 11.67,
+   "gap": 7.5,
+   "rvol": 7.4,
+   "pm_$vol_M": 5.41,
+   "float_M": 163.3,
+   "cat": "analyst_upgrade"
+  },
+  {
+   "date": "2026-09-22",
+   "sym": "JAGX",
+   "why": [
+    "rvol",
+    "liquidity",
+    "float"
+   ],
+   "price": 2.93,
+   "gap": 9.7,
+   "rvol": 0.4,
+   "pm_$vol_M": 0.03,
+   "float_M": 168.3,
+   "cat": "fda_clinical"
+  },
+  {
+   "date": "2026-09-22",
+   "sym": "GRML",
+   "why": [
+    "float"
+   ],
+   "price": 13.03,
+   "gap": 38.3,
+   "rvol": 7.9,
+   "pm_$vol_M": 280.61,
+   "float_M": 158.9,
+   "cat": "pr_generic"
+  },
+  {
+   "date": "2026-09-22",
+   "sym": "MAZE",
+   "why": [
+    "liquidity"
+   ],
+   "price": 24.5,
+   "gap": 9.4,
+   "rvol": 2.7,
+   "pm_$vol_M": 0.06,
+   "float_M": 55.5,
+   "cat": null
+  },
+  {
+   "date": "2026-09-22",
+   "sym": "BFLY",
+   "why": [
+    "spread"
+   ],
+   "price": 8.61,
+   "gap": 5.8,
+   "rvol": 9.1,
+   "pm_$vol_M": 1.53,
+   "float_M": 0.0,
+   "cat": "analyst_upgrade"
+  },
+  {
+   "date": "2026-09-23",
+   "sym": "IPDN",
+   "why": [
+    "rvol"
+   ],
+   "price": 7.01,
+   "gap": 79.8,
+   "rvol": 1.5,
+   "pm_$vol_M": 144.5,
+   "float_M": 14.5,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-09-23",
+   "sym": "DCOY",
+   "why": [
+    "spread_abs"
+   ],
+   "price": 4.47,
+   "gap": 44.2,
+   "rvol": 8.6,
+   "pm_$vol_M": 72.56,
+   "float_M": 0.7,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-09-23",
+   "sym": "GLND",
+   "why": [
+    "rvol"
+   ],
+   "price": 2.7,
+   "gap": 7.6,
+   "rvol": 1.2,
+   "pm_$vol_M": 10.1,
+   "float_M": 43.7,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-09-24",
+   "sym": "APUS",
+   "why": [],
+   "price": 7.12,
+   "gap": 210.9,
+   "rvol": 632.0,
+   "pm_$vol_M": 170.84,
+   "float_M": 15.1,
+   "cat": "contract_partnership"
+  },
+  {
+   "date": "2026-09-24",
+   "sym": "SRZN",
+   "why": [
+    "price"
+   ],
+   "price": 30.16,
+   "gap": 86.6,
+   "rvol": 3366.0,
+   "pm_$vol_M": 91.24,
+   "float_M": 11.8,
+   "cat": null
+  },
+  {
+   "date": "2026-09-24",
+   "sym": "GLND",
+   "why": [
+    "rvol"
+   ],
+   "price": 3.22,
+   "gap": 10.6,
+   "rvol": 1.3,
+   "pm_$vol_M": 13.6,
+   "float_M": 43.7,
+   "cat": "contract_partnership"
+  },
+  {
+   "date": "2026-09-24",
+   "sym": "PFSA",
+   "why": [],
+   "price": 3.56,
+   "gap": 73.7,
+   "rvol": 588.8,
+   "pm_$vol_M": 156.83,
+   "float_M": 0.6,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-09-24",
+   "sym": "GRML",
+   "why": [
+    "rvol",
+    "float"
+   ],
+   "price": 12.75,
+   "gap": 13.9,
+   "rvol": 1.3,
+   "pm_$vol_M": 82.6,
+   "float_M": 158.9,
+   "cat": "contract_partnership"
+  },
+  {
+   "date": "2026-09-25",
+   "sym": "APUS",
+   "why": [],
+   "price": 7.76,
+   "gap": 57.7,
+   "rvol": 8.1,
+   "pm_$vol_M": 87.05,
+   "float_M": 15.1,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-09-25",
+   "sym": "USDE",
+   "why": [
+    "rvol"
+   ],
+   "price": 15.45,
+   "gap": 8.6,
+   "rvol": 1.1,
+   "pm_$vol_M": 14.22,
+   "float_M": 0.0,
+   "cat": "former_runner"
+  },
+  {
+   "date": "2026-09-25",
+   "sym": "AESI",
+   "why": [
+    "float"
+   ],
+   "price": 12.35,
+   "gap": 12.4,
+   "rvol": 26.6,
+   "pm_$vol_M": 1.82,
+   "float_M": 125.0,
+   "cat": "contract_partnership"
+  }
+ ]
+}

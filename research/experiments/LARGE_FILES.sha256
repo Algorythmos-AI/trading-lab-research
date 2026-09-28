@@ -1,0 +1,2 @@
+# sha256 of experiment artefacts kept out of git (> 10 MB). Verify: shasum -a 256 -c research/experiments/LARGE_FILES.sha256
+a9f920affab5e905ddb5115199de0dc3ea185279faacc2a9412e892267410dd5  research/experiments/EXP-0007-g1-liquid-dev/results.json

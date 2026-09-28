@@ -1,0 +1,294 @@
+{
+ "HOD_bull_flag": {
+  "stats": {
+   "n": 277,
+   "expectancy_R": 0.04290094092342015,
+   "win_rate": 0.37184115523465705,
+   "avg_win_R": 1.9174955189860863,
+   "avg_loss_R": -1.0667728610332157,
+   "profit_factor": 1.0640214313540775,
+   "ci95_expectancy": [
+    -0.13261877888297652,
+    0.23134685371081765
+   ],
+   "max_drawdown_R": -14.81008486059709,
+   "per_trade_sharpe": 0.028117010026570716,
+   "skew": 0.8899806182446239,
+   "kurtosis": 2.5511875462501252,
+   "dsr_prob": 0.023806464292646087,
+   "years_profitable": "4/6",
+   "max_month_share_of_profit": 0.10788199902002783,
+   "G1_pass_so_far": false
+  },
+  "gate": {
+   "ci_lower_gt_0": false,
+   "dsr_gt_0.95": false,
+   "pf_ge_1.2": false,
+   "random_control_p_lt_0.05": false,
+   "n_ge_100": true
+  },
+  "fold_picks": [
+   [
+    "2020-01-01",
+    "HOD_bull_flag|M1",
+    0.87
+   ],
+   [
+    "2020-04-01",
+    "HOD_bull_flag|M1",
+    0.51
+   ],
+   [
+    "2020-07-01",
+    "HOD_bull_flag|M3",
+    0.361
+   ],
+   [
+    "2020-10-01",
+    "HOD_bull_flag|M3",
+    0.269
+   ],
+   [
+    "2021-01-01",
+    "HOD_bull_flag|M3",
+    -0.161
+   ],
+   [
+    "2021-04-01",
+    "HOD_bull_flag|M3",
+    -0.051
+   ],
+   [
+    "2021-07-01",
+    "HOD_bull_flag|M1",
+    -0.036
+   ],
+   [
+    "2021-10-01",
+    "HOD_bull_flag|M3",
+    -0.023
+   ],
+   [
+    "2022-01-01",
+    "HOD_bull_flag|M1",
+    0.039
+   ],
+   [
+    "2022-04-01",
+    "HOD_bull_flag|M1",
+    0.014
+   ],
+   [
+    "2022-07-01",
+    "HOD_bull_flag|M3",
+    -0.071
+   ],
+   [
+    "2022-10-01",
+    "HOD_bull_flag|M3",
+    -0.092
+   ],
+   [
+    "2023-01-01",
+    "HOD_bull_flag|M1",
+    0.232
+   ],
+   [
+    "2023-04-01",
+    "HOD_bull_flag|M3",
+    0.149
+   ],
+   [
+    "2023-07-01",
+    "HOD_bull_flag|M3",
+    0.133
+   ],
+   [
+    "2023-10-01",
+    "HOD_bull_flag|M3",
+    0.147
+   ],
+   [
+    "2024-01-01",
+    "HOD_bull_flag|M3",
+    -0.001
+   ],
+   [
+    "2024-04-01",
+    "HOD_bull_flag|M3",
+    0.014
+   ],
+   [
+    "2024-07-01",
+    "HOD_bull_flag|M3",
+    0.161
+   ],
+   [
+    "2024-10-01",
+    "HOD_bull_flag|M1",
+    0.096
+   ],
+   [
+    "2025-01-01",
+    "HOD_bull_flag|M1",
+    0.118
+   ],
+   [
+    "2025-04-01",
+    "HOD_bull_flag|M1",
+    0.126
+   ],
+   [
+    "2025-07-01",
+    "HOD_bull_flag|M1",
+    0.064
+   ]
+  ]
+ },
+ "HOD_first_pullback": {
+  "stats": {
+   "n": 4173,
+   "expectancy_R": -0.04600915583283675,
+   "win_rate": 0.34243949197220225,
+   "avg_win_R": 1.8776167983237133,
+   "avg_loss_R": -1.0477808353115943,
+   "profit_factor": 0.9332212797369469,
+   "ci95_expectancy": [
+    -0.08978089206462982,
+    -0.0022712979962260333
+   ],
+   "max_drawdown_R": -236.785821679709,
+   "per_trade_sharpe": -0.032184756106270584,
+   "skew": 0.8442678039511783,
+   "kurtosis": 2.3071919771825984,
+   "dsr_prob": 4.384487163750508e-06,
+   "years_profitable": "2/6",
+   "max_month_share_of_profit": 0.12132305672932261,
+   "G1_pass_so_far": false
+  },
+  "gate": {
+   "ci_lower_gt_0": false,
+   "dsr_gt_0.95": false,
+   "pf_ge_1.2": false,
+   "random_control_p_lt_0.05": false,
+   "n_ge_100": true
+  },
+  "fold_picks": [
+   [
+    "2020-01-01",
+    "HOD_first_pullback|M3",
+    0.011
+   ],
+   [
+    "2020-04-01",
+    "HOD_first_pullback|M3",
+    -0.06
+   ],
+   [
+    "2020-07-01",
+    "HOD_first_pullback|M3",
+    -0.014
+   ],
+   [
+    "2020-10-01",
+    "HOD_first_pullback|M3",
+    -0.034
+   ],
+   [
+    "2021-01-01",
+    "HOD_first_pullback|M3",
+    -0.042
+   ],
+   [
+    "2021-04-01",
+    "HOD_first_pullback|M3",
+    -0.068
+   ],
+   [
+    "2021-07-01",
+    "HOD_first_pullback|M3",
+    -0.093
+   ],
+   [
+    "2021-10-01",
+    "HOD_first_pullback|M3",
+    -0.098
+   ],
+   [
+    "2022-01-01",
+    "HOD_first_pullback|M3",
+    -0.122
+   ],
+   [
+    "2022-04-01",
+    "HOD_first_pullback|M3",
+    -0.097
+   ],
+   [
+    "2022-07-01",
+    "HOD_first_pullback|M3",
+    -0.082
+   ],
+   [
+    "2022-10-01",
+    "HOD_first_pullback|M3",
+    -0.085
+   ],
+   [
+    "2023-01-01",
+    "HOD_first_pullback|M1",
+    -0.048
+   ],
+   [
+    "2023-04-01",
+    "HOD_first_pullback|M1",
+    0.008
+   ],
+   [
+    "2023-07-01",
+    "HOD_first_pullback|M1",
+    -0.022
+   ],
+   [
+    "2023-10-01",
+    "HOD_first_pullback|M3",
+    -0.031
+   ],
+   [
+    "2024-01-01",
+    "HOD_first_pullback|M3",
+    0.002
+   ],
+   [
+    "2024-04-01",
+    "HOD_first_pullback|M3",
+    0.005
+   ],
+   [
+    "2024-07-01",
+    "HOD_first_pullback|M3",
+    0.001
+   ],
+   [
+    "2024-10-01",
+    "HOD_first_pullback|M1",
+    0.021
+   ],
+   [
+    "2025-01-01",
+    "HOD_first_pullback|M3",
+    0.034
+   ],
+   [
+    "2025-04-01",
+    "HOD_first_pullback|M3",
+    0.004
+   ],
+   [
+    "2025-07-01",
+    "HOD_first_pullback|M3",
+    0.031
+   ]
+  ]
+ }
+}

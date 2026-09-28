@@ -1,0 +1,26 @@
+{
+ "SPY traded-ETF-equivalent slip 0.07x1.0": [
+  474,
+  0.0487
+ ],
+ "SPY traded-ETF-equivalent slip 0.07x1.5": [
+  474,
+  0.0068
+ ],
+ "SPY traded-ETF-equivalent slip 0.07x2.0": [
+  474,
+  -0.0288
+ ],
+ "QQQ traded-ETF-equivalent slip 0.022x1.0": [
+  479,
+  0.1151
+ ],
+ "QQQ traded-ETF-equivalent slip 0.022x1.5": [
+  479,
+  0.1009
+ ],
+ "QQQ traded-ETF-equivalent slip 0.022x2.0": [
+  479,
+  0.0873
+ ]
+}

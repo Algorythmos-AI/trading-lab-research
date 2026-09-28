@@ -1,0 +1,408 @@
+[
+ {
+  "name": "s1_pm_high_break|M1|W1",
+  "setup": "s1_pm_high_break",
+  "management": "M1",
+  "window": [
+   0,
+   30
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s1_pm_high_break|M1|W2",
+  "setup": "s1_pm_high_break",
+  "management": "M1",
+  "window": [
+   0,
+   60
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s1_pm_high_break|M1|W3",
+  "setup": "s1_pm_high_break",
+  "management": "M1",
+  "window": [
+   0,
+   120
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s1_pm_high_break|M2_2|W1",
+  "setup": "s1_pm_high_break",
+  "management": "M2_2",
+  "window": [
+   0,
+   30
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s1_pm_high_break|M2_2|W2",
+  "setup": "s1_pm_high_break",
+  "management": "M2_2",
+  "window": [
+   0,
+   60
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s1_pm_high_break|M2_2|W3",
+  "setup": "s1_pm_high_break",
+  "management": "M2_2",
+  "window": [
+   0,
+   120
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s1_pm_high_break|M3|W1",
+  "setup": "s1_pm_high_break",
+  "management": "M3",
+  "window": [
+   0,
+   30
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s1_pm_high_break|M3|W2",
+  "setup": "s1_pm_high_break",
+  "management": "M3",
+  "window": [
+   0,
+   60
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s1_pm_high_break|M3|W3",
+  "setup": "s1_pm_high_break",
+  "management": "M3",
+  "window": [
+   0,
+   120
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s1_bull_flag_5m|M1|W1",
+  "setup": "s1_bull_flag_5m",
+  "management": "M1",
+  "window": [
+   0,
+   30
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s1_bull_flag_5m|M1|W2",
+  "setup": "s1_bull_flag_5m",
+  "management": "M1",
+  "window": [
+   0,
+   60
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s1_bull_flag_5m|M1|W3",
+  "setup": "s1_bull_flag_5m",
+  "management": "M1",
+  "window": [
+   0,
+   120
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s1_bull_flag_5m|M1|W4",
+  "setup": "s1_bull_flag_5m",
+  "management": "M1",
+  "window": [
+   120,
+   240
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s1_bull_flag_5m|M8|W1",
+  "setup": "s1_bull_flag_5m",
+  "management": "M8",
+  "window": [
+   0,
+   30
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s1_bull_flag_5m|M8|W2",
+  "setup": "s1_bull_flag_5m",
+  "management": "M8",
+  "window": [
+   0,
+   60
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s1_bull_flag_5m|M8|W3",
+  "setup": "s1_bull_flag_5m",
+  "management": "M8",
+  "window": [
+   0,
+   120
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s1_bull_flag_5m|M8|W4",
+  "setup": "s1_bull_flag_5m",
+  "management": "M8",
+  "window": [
+   120,
+   240
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s1_bull_flag_5m|M5|W1",
+  "setup": "s1_bull_flag_5m",
+  "management": "M5",
+  "window": [
+   0,
+   30
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s1_bull_flag_5m|M5|W2",
+  "setup": "s1_bull_flag_5m",
+  "management": "M5",
+  "window": [
+   0,
+   60
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s1_bull_flag_5m|M5|W3",
+  "setup": "s1_bull_flag_5m",
+  "management": "M5",
+  "window": [
+   0,
+   120
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s1_bull_flag_5m|M5|W4",
+  "setup": "s1_bull_flag_5m",
+  "management": "M5",
+  "window": [
+   120,
+   240
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s5_breakout_retest_pmh|M1|W1",
+  "setup": "s5_breakout_retest_pmh",
+  "management": "M1",
+  "window": [
+   0,
+   30
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s5_breakout_retest_pmh|M1|W2",
+  "setup": "s5_breakout_retest_pmh",
+  "management": "M1",
+  "window": [
+   0,
+   60
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s5_breakout_retest_pmh|M1|W3",
+  "setup": "s5_breakout_retest_pmh",
+  "management": "M1",
+  "window": [
+   0,
+   120
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s5_breakout_retest_pmh|M1|W4",
+  "setup": "s5_breakout_retest_pmh",
+  "management": "M1",
+  "window": [
+   120,
+   240
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s5_breakout_retest_pmh|M4|W1",
+  "setup": "s5_breakout_retest_pmh",
+  "management": "M4",
+  "window": [
+   0,
+   30
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s5_breakout_retest_pmh|M4|W2",
+  "setup": "s5_breakout_retest_pmh",
+  "management": "M4",
+  "window": [
+   0,
+   60
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s5_breakout_retest_pmh|M4|W3",
+  "setup": "s5_breakout_retest_pmh",
+  "management": "M4",
+  "window": [
+   0,
+   120
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "s5_breakout_retest_pmh|M4|W4",
+  "setup": "s5_breakout_retest_pmh",
+  "management": "M4",
+  "window": [
+   120,
+   240
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ }
+]

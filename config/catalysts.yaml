@@ -1,0 +1,15 @@
+# Headline keyword classifier -> catalyst type. Order matters: first match wins (exclusions first).
+# Scores per ranking_engine_spec.md. Accuracy target in G0: >=85% on a 100-headline hand-check.
+exclude:
+  offering_dilution: ['public offering', 'registered direct', 'private placement', 'priced offering', 'pricing of', 'at-the-market', 'atm offering', 'shelf registration', 'warrants to purchase', 'dilut', 'proposed offering', 'underwritten offering']
+  buyout_merger: ['to be acquired', 'definitive agreement to be acquired', 'agrees to be acquired', 'acquire all outstanding', 'take-private', 'take private', 'go-private', 'tender offer for all', 'per share in cash']
+types:
+  fda_clinical: {score: 1.0, kw: ['fda', 'pdufa', 'phase 1', 'phase 2', 'phase 3', 'phase i', 'phase ii', 'phase iii', 'clinical trial', 'topline', 'top-line', 'breakthrough therapy', 'fast track', 'orphan drug', 'clearance', '510(k)', 'nda ', 'bla ', 'ema ']}
+  earnings: {score: 0.9, kw: ['earnings', 'quarterly results', 'q1 ', 'q2 ', 'q3 ', 'q4 ', 'first quarter', 'second quarter', 'third quarter', 'fourth quarter', 'fiscal year', 'raises guidance', 'raises outlook', 'revenue of', 'eps ']}
+  contract_partnership: {score: 0.8, kw: ['contract', 'partnership', 'partners with', 'collaboration', 'agreement with', 'awarded', 'order from', 'purchase order', 'selected by', 'license agreement', 'strategic alliance', 'supply agreement', 'mou']}
+  short_squeeze: {score: 0.7, kw: ['short squeeze', 'short interest', 'heavily shorted']}
+  analyst_upgrade: {score: 0.5, kw: ['upgrade', 'initiates coverage', 'price target', 'raised to buy', 'outperform', 'overweight']}
+  hype_theme: {score: 0.4, kw: [' ai ', 'artificial intelligence', 'bitcoin', 'crypto', 'blockchain', 'quantum', 'nuclear', 'drone', 'robot', 'ev ', 'electric vehicle']}
+  reverse_split: {score: 0.2, kw: ['reverse stock split', 'reverse split']}
+  pr_generic: {score: 0.5, kw: ['announces', 'launches', 'unveils', 'reports', 'update', 'completes']}
+former_runner_score: 0.3

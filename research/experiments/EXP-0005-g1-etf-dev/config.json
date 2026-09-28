@@ -1,0 +1,170 @@
+[
+ {
+  "name": "A|SPY|range_low|M3",
+  "setup": "A",
+  "management": "M3",
+  "window": [
+   0,
+   390
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "A|SPY|range_low|M4",
+  "setup": "A",
+  "management": "M4",
+  "window": [
+   0,
+   390
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "A|SPY|atr10|M4",
+  "setup": "A",
+  "management": "M4",
+  "window": [
+   0,
+   390
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "A|SPY|range_low|M1",
+  "setup": "A",
+  "management": "M1",
+  "window": [
+   0,
+   390
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "B|SPY|noise|M4",
+  "setup": "B",
+  "management": "M4",
+  "window": [
+   0,
+   390
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "B|SPY|noise|M3",
+  "setup": "B",
+  "management": "M3",
+  "window": [
+   0,
+   390
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "A|QQQ|range_low|M3",
+  "setup": "A",
+  "management": "M3",
+  "window": [
+   0,
+   390
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "A|QQQ|range_low|M4",
+  "setup": "A",
+  "management": "M4",
+  "window": [
+   0,
+   390
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "A|QQQ|atr10|M4",
+  "setup": "A",
+  "management": "M4",
+  "window": [
+   0,
+   390
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "A|QQQ|range_low|M1",
+  "setup": "A",
+  "management": "M1",
+  "window": [
+   0,
+   390
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "B|QQQ|noise|M4",
+  "setup": "B",
+  "management": "M4",
+  "window": [
+   0,
+   390
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "B|QQQ|noise|M3",
+  "setup": "B",
+  "management": "M3",
+  "window": [
+   0,
+   390
+  ],
+  "params": null,
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ }
+]

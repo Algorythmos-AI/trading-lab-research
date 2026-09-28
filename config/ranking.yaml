@@ -1,0 +1,18 @@
+# Pre-market ranking engine parameters — frozen before G1 (changes = logged experiment + trial).
+# See knowledge/ranking_engine_spec.md for the evidence behind each number.
+scan_time_et: "09:25"
+hard_filters:
+  price_min: 2.0
+  price_max: 30.0
+  gap_min_pct: 4.0          # G1 variant: 10.0
+  rvol_tod_min: 2.0         # G1 variant: 5.0
+  pm_dollar_vol_min: 1000000
+  spread_max_pct: 1.0
+  spread_max_abs_below_5: 0.03
+  float_max: 100000000
+  exclude_catalysts: [offering_dilution, buyout_merger]
+rvol_lookback_sessions: 20
+weights: {catalyst: 25, rvol: 20, float: 15, gap: 10, price: 10, liquidity: 8, spread: 7, float_rotation: 5}
+float_tiers: [[10000000, 1.0], [20000000, 0.8], [50000000, 0.5], [100000000, 0.2]]
+price_tiers: [[2, 10, 1.0], [10, 20, 0.7], [20, 30, 0.3]]
+top_n: 10

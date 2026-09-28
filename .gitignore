@@ -1,0 +1,20 @@
+# secrets
+.env
+.env.*
+!.env.example
+# private / large data
+knowledge/
+data/
+logs/
+*.db
+*.sqlite
+*.parquet
+# python
+__pycache__/
+.venv/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+# research artefacts over 10 MB stay out of git; their sha256 is recorded in research/experiments/LARGE_FILES.sha256 (D21)
+research/experiments/EXP-0007-g1-liquid-dev/results.json

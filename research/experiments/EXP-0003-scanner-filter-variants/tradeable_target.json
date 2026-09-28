@@ -1,0 +1,20 @@
+{
+ "V0_baseline": {
+  "hits_of_200": 34,
+  "mean_open_to_high_pct": 19.33,
+  "median_open_to_high_pct": 7.97,
+  "n_watched": 176
+ },
+ "V3_liq250k_no_float_cap": {
+  "hits_of_200": 40,
+  "mean_open_to_high_pct": 14.3,
+  "median_open_to_high_pct": 4.52,
+  "n_watched": 320
+ },
+ "naive": {
+  "hits_of_200": 55,
+  "mean_open_to_high_pct": 18.88,
+  "median_open_to_high_pct": 7.1,
+  "n_watched": 400
+ }
+}

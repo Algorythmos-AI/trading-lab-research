@@ -1,0 +1,439 @@
+{
+ "s1_pm_high_break": {
+  "stats": {
+   "n": 345,
+   "expectancy_R": -0.4042000546904617,
+   "win_rate": 0.2144927536231884,
+   "avg_win_R": 1.5110260389910166,
+   "avg_loss_R": -0.9271769215997955,
+   "profit_factor": 0.44501204316423376,
+   "ci95_expectancy": [
+    -0.531690312215311,
+    -0.2741810041298773
+   ],
+   "max_drawdown_R": -139.44901886820927,
+   "per_trade_sharpe": -0.3291969076855002,
+   "skew": 2.7639241676869704,
+   "kurtosis": 13.22948267129191,
+   "dsr_prob": 7.451829040594388e-09,
+   "years_profitable": "1/6",
+   "max_month_share_of_profit": 0.26660622511044607,
+   "G1_pass_so_far": false
+  },
+  "gate": {
+   "ci_lower_gt_0": false,
+   "dsr_gt_0.95": false,
+   "pf_ge_1.2": false,
+   "random_control_p_lt_0.05": false,
+   "n_ge_100": true
+  },
+  "fold_picks": [
+   [
+    "2020-01-01",
+    "s1_pm_high_break|M2_2|W1",
+    -0.386
+   ],
+   [
+    "2020-04-01",
+    "s1_pm_high_break|M2_2|W1",
+    -0.549
+   ],
+   [
+    "2020-07-01",
+    "s1_pm_high_break|M2_2|W1",
+    -0.513
+   ],
+   [
+    "2020-10-01",
+    "s1_pm_high_break|M2_2|W1",
+    -0.534
+   ],
+   [
+    "2021-01-01",
+    "s1_pm_high_break|M2_2|W1",
+    -0.547
+   ],
+   [
+    "2021-04-01",
+    "s1_pm_high_break|M3|W1",
+    -0.525
+   ],
+   [
+    "2021-07-01",
+    "s1_pm_high_break|M3|W1",
+    -0.382
+   ],
+   [
+    "2021-10-01",
+    "s1_pm_high_break|M3|W1",
+    -0.413
+   ],
+   [
+    "2022-01-01",
+    "s1_pm_high_break|M3|W1",
+    -0.348
+   ],
+   [
+    "2022-04-01",
+    "s1_pm_high_break|M3|W1",
+    -0.316
+   ],
+   [
+    "2022-07-01",
+    "s1_pm_high_break|M2_2|W1",
+    -0.502
+   ],
+   [
+    "2022-10-01",
+    "s1_pm_high_break|M2_2|W1",
+    -0.474
+   ],
+   [
+    "2023-01-01",
+    "s1_pm_high_break|M2_2|W1",
+    -0.527
+   ],
+   [
+    "2023-04-01",
+    "s1_pm_high_break|M2_2|W1",
+    -0.417
+   ],
+   [
+    "2023-07-01",
+    "s1_pm_high_break|M2_2|W1",
+    -0.344
+   ],
+   [
+    "2023-10-01",
+    "s1_pm_high_break|M2_2|W1",
+    -0.288
+   ],
+   [
+    "2024-01-01",
+    "s1_pm_high_break|M2_2|W1",
+    0.118
+   ],
+   [
+    "2024-04-01",
+    "s1_pm_high_break|M2_2|W1",
+    0.037
+   ],
+   [
+    "2024-07-01",
+    "s1_pm_high_break|M2_2|W1",
+    -0.134
+   ],
+   [
+    "2024-10-01",
+    "s1_pm_high_break|M1|W1",
+    -0.022
+   ],
+   [
+    "2025-01-01",
+    "s1_pm_high_break|M1|W1",
+    -0.411
+   ],
+   [
+    "2025-04-01",
+    "s1_pm_high_break|M3|W1",
+    -0.459
+   ],
+   [
+    "2025-07-01",
+    "s1_pm_high_break|M1|W1",
+    -0.469
+   ]
+  ]
+ },
+ "s1_bull_flag_5m": {
+  "stats": {
+   "n": 131,
+   "expectancy_R": 0.08430038541726996,
+   "win_rate": 0.4351145038167939,
+   "avg_win_R": 1.6146896355695892,
+   "avg_loss_R": -1.0945129559162734,
+   "profit_factor": 1.13634782966236,
+   "ci95_expectancy": [
+    -0.16907884612977475,
+    0.3353100267189219
+   ],
+   "max_drawdown_R": -22.446466469106294,
+   "per_trade_sharpe": 0.05743161576251711,
+   "skew": 0.7074830717815525,
+   "kurtosis": 2.0584621387118074,
+   "dsr_prob": 0.04037938885340354,
+   "years_profitable": "4/6",
+   "max_month_share_of_profit": 0.1196204532689782,
+   "G1_pass_so_far": false
+  },
+  "gate": {
+   "ci_lower_gt_0": false,
+   "dsr_gt_0.95": false,
+   "pf_ge_1.2": false,
+   "random_control_p_lt_0.05": false,
+   "n_ge_100": true
+  },
+  "fold_picks": [
+   [
+    "2020-10-01",
+    "s1_bull_flag_5m|M5|W4",
+    -0.512
+   ],
+   [
+    "2021-01-01",
+    "s1_bull_flag_5m|M8|W3",
+    0.131
+   ],
+   [
+    "2021-04-01",
+    "s1_bull_flag_5m|M1|W3",
+    0.45
+   ],
+   [
+    "2021-07-01",
+    "s1_bull_flag_5m|M1|W3",
+    0.474
+   ],
+   [
+    "2021-10-01",
+    "s1_bull_flag_5m|M1|W3",
+    0.418
+   ],
+   [
+    "2022-01-01",
+    "s1_bull_flag_5m|M1|W3",
+    0.457
+   ],
+   [
+    "2022-04-01",
+    "s1_bull_flag_5m|M1|W3",
+    0.329
+   ],
+   [
+    "2022-07-01",
+    "s1_bull_flag_5m|M1|W4",
+    0.359
+   ],
+   [
+    "2022-10-01",
+    "s1_bull_flag_5m|M1|W4",
+    0.437
+   ],
+   [
+    "2023-01-01",
+    "s1_bull_flag_5m|M1|W4",
+    0.408
+   ],
+   [
+    "2023-04-01",
+    "s1_bull_flag_5m|M1|W4",
+    0.088
+   ],
+   [
+    "2023-07-01",
+    "s1_bull_flag_5m|M1|W4",
+    -0.146
+   ],
+   [
+    "2023-10-01",
+    "s1_bull_flag_5m|M8|W4",
+    -0.246
+   ],
+   [
+    "2024-01-01",
+    "s1_bull_flag_5m|M5|W4",
+    -0.393
+   ],
+   [
+    "2024-04-01",
+    "s1_bull_flag_5m|M5|W4",
+    -0.247
+   ],
+   [
+    "2024-07-01",
+    "s1_bull_flag_5m|M5|W4",
+    -0.05
+   ],
+   [
+    "2024-10-01",
+    "s1_bull_flag_5m|M1|W4",
+    0.618
+   ],
+   [
+    "2025-01-01",
+    "s1_bull_flag_5m|M1|W4",
+    0.628
+   ],
+   [
+    "2025-04-01",
+    "s1_bull_flag_5m|M1|W4",
+    0.444
+   ],
+   [
+    "2025-07-01",
+    "s1_bull_flag_5m|M1|W4",
+    0.315
+   ]
+  ]
+ },
+ "s5_breakout_retest_pmh": {
+  "stats": {
+   "n": 1069,
+   "expectancy_R": -0.14023711261262142,
+   "win_rate": 0.3049579045837231,
+   "avg_win_R": 1.6433878579999137,
+   "avg_loss_R": -0.9228235734735722,
+   "profit_factor": 0.7813582107295799,
+   "ci95_expectancy": [
+    -0.22148849438931745,
+    -0.05289307033128789
+   ],
+   "max_drawdown_R": -152.6715916463669,
+   "per_trade_sharpe": -0.09942273164522669,
+   "skew": 2.0885757014345145,
+   "kurtosis": 9.373809089650607,
+   "dsr_prob": 1.9510714179210533e-07,
+   "years_profitable": "0/6",
+   "max_month_share_of_profit": 0.1387492244966277,
+   "G1_pass_so_far": false
+  },
+  "gate": {
+   "ci_lower_gt_0": false,
+   "dsr_gt_0.95": false,
+   "pf_ge_1.2": false,
+   "random_control_p_lt_0.05": false,
+   "n_ge_100": true
+  },
+  "fold_picks": [
+   [
+    "2020-01-01",
+    "s5_breakout_retest_pmh|M1|W4",
+    0.596
+   ],
+   [
+    "2020-04-01",
+    "s5_breakout_retest_pmh|M1|W4",
+    0.719
+   ],
+   [
+    "2020-07-01",
+    "s5_breakout_retest_pmh|M1|W3",
+    -0.003
+   ],
+   [
+    "2020-10-01",
+    "s5_breakout_retest_pmh|M1|W2",
+    0.056
+   ],
+   [
+    "2021-01-01",
+    "s5_breakout_retest_pmh|M1|W2",
+    0.045
+   ],
+   [
+    "2021-04-01",
+    "s5_breakout_retest_pmh|M4|W3",
+    -0.048
+   ],
+   [
+    "2021-07-01",
+    "s5_breakout_retest_pmh|M4|W3",
+    -0.03
+   ],
+   [
+    "2021-10-01",
+    "s5_breakout_retest_pmh|M4|W1",
+    -0.059
+   ],
+   [
+    "2022-01-01",
+    "s5_breakout_retest_pmh|M4|W4",
+    -0.02
+   ],
+   [
+    "2022-04-01",
+    "s5_breakout_retest_pmh|M4|W4",
+    0.081
+   ],
+   [
+    "2022-07-01",
+    "s5_breakout_retest_pmh|M4|W4",
+    0.046
+   ],
+   [
+    "2022-10-01",
+    "s5_breakout_retest_pmh|M1|W4",
+    0.083
+   ],
+   [
+    "2023-01-01",
+    "s5_breakout_retest_pmh|M1|W4",
+    -0.052
+   ],
+   [
+    "2023-04-01",
+    "s5_breakout_retest_pmh|M1|W2",
+    -0.134
+   ],
+   [
+    "2023-07-01",
+    "s5_breakout_retest_pmh|M4|W3",
+    -0.032
+   ],
+   [
+    "2023-10-01",
+    "s5_breakout_retest_pmh|M4|W3",
+    0.061
+   ],
+   [
+    "2024-01-01",
+    "s5_breakout_retest_pmh|M4|W3",
+    -0.024
+   ],
+   [
+    "2024-04-01",
+    "s5_breakout_retest_pmh|M1|W2",
+    0.019
+   ],
+   [
+    "2024-07-01",
+    "s5_breakout_retest_pmh|M4|W1",
+    0.079
+   ],
+   [
+    "2024-10-01",
+    "s5_breakout_retest_pmh|M1|W1",
+    0.037
+   ],
+   [
+    "2025-01-01",
+    "s5_breakout_retest_pmh|M1|W2",
+    0.102
+   ],
+   [
+    "2025-04-01",
+    "s5_breakout_retest_pmh|M1|W2",
+    0.074
+   ],
+   [
+    "2025-07-01",
+    "s5_breakout_retest_pmh|M1|W2",
+    0.036
+   ]
+  ]
+ },
+ "s2_extreme_reversal": {
+  "stats": {
+   "n": 0,
+   "G1_pass_so_far": false
+  },
+  "gate": {
+   "ci_lower_gt_0": false,
+   "dsr_gt_0.95": false,
+   "pf_ge_1.2": false,
+   "random_control_p_lt_0.05": false,
+   "n_ge_100": false
+  },
+  "fold_picks": []
+ }
+}

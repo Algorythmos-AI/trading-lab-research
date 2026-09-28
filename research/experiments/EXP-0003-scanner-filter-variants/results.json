@@ -1,0 +1,104 @@
+{
+ "sessions": 40,
+ "winners_total": 200,
+ "naive_top10_hits": 108,
+ "variants": {
+  "V0_baseline": {
+   "hits": 56,
+   "days_hit": 31,
+   "avg_top": 4.4
+  },
+  "V1_liq250k": {
+   "hits": 61,
+   "days_hit": 32,
+   "avg_top": 6.025
+  },
+  "V2_no_float_cap": {
+   "hits": 67,
+   "days_hit": 33,
+   "avg_top": 6.774999999999999
+  },
+  "V3_liq250k_no_float_cap": {
+   "hits": 73,
+   "days_hit": 34,
+   "avg_top": 8.0
+  },
+  "V4_V3_price_1_5_to_40": {
+   "hits": 74,
+   "days_hit": 34,
+   "avg_top": 8.325000000000001
+  }
+ },
+ "configs": {
+  "V0_baseline": {
+   "price_min": 2.0,
+   "price_max": 30.0,
+   "gap_min_pct": 4.0,
+   "rvol_tod_min": 2.0,
+   "pm_dollar_vol_min": 1000000,
+   "spread_max_pct": 1.0,
+   "spread_max_abs_below_5": 0.03,
+   "float_max": 100000000,
+   "exclude_catalysts": [
+    "offering_dilution",
+    "buyout_merger"
+   ]
+  },
+  "V1_liq250k": {
+   "price_min": 2.0,
+   "price_max": 30.0,
+   "gap_min_pct": 4.0,
+   "rvol_tod_min": 2.0,
+   "pm_dollar_vol_min": 250000,
+   "spread_max_pct": 1.0,
+   "spread_max_abs_below_5": 0.03,
+   "float_max": 100000000,
+   "exclude_catalysts": [
+    "offering_dilution",
+    "buyout_merger"
+   ]
+  },
+  "V2_no_float_cap": {
+   "price_min": 2.0,
+   "price_max": 30.0,
+   "gap_min_pct": 4.0,
+   "rvol_tod_min": 2.0,
+   "pm_dollar_vol_min": 1000000,
+   "spread_max_pct": 1.0,
+   "spread_max_abs_below_5": 0.03,
+   "float_max": 1000000000000,
+   "exclude_catalysts": [
+    "offering_dilution",
+    "buyout_merger"
+   ]
+  },
+  "V3_liq250k_no_float_cap": {
+   "price_min": 2.0,
+   "price_max": 30.0,
+   "gap_min_pct": 4.0,
+   "rvol_tod_min": 2.0,
+   "pm_dollar_vol_min": 250000,
+   "spread_max_pct": 1.0,
+   "spread_max_abs_below_5": 0.03,
+   "float_max": 1000000000000,
+   "exclude_catalysts": [
+    "offering_dilution",
+    "buyout_merger"
+   ]
+  },
+  "V4_V3_price_1_5_to_40": {
+   "price_min": 1.5,
+   "price_max": 40,
+   "gap_min_pct": 4.0,
+   "rvol_tod_min": 2.0,
+   "pm_dollar_vol_min": 250000,
+   "spread_max_pct": 1.0,
+   "spread_max_abs_below_5": 0.03,
+   "float_max": 1000000000000,
+   "exclude_catalysts": [
+    "offering_dilution",
+    "buyout_merger"
+   ]
+  }
+ }
+}

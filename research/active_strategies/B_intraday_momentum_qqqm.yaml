@@ -1,0 +1,17 @@
+strategy: B_intraday_momentum
+strategy_version: 1
+frozen: 2026-09-28
+signal_symbol: QQQ
+traded_symbol: QQQM
+direction: long_only
+setup: {noise_area_sigma: "mean |close(:59/:29 marks)/open - 1| over prior 14 sessions (causal)",
+        upper: "max(open, prev_close) * (1 + sigma)", check_marks: "every 30 min from 10:00 ET",
+        entry: "close > upper AND close > session VWAP -> stop-limit trigger = close + 1c (collar 10% R)",
+        stop: "min(VWAP, close*(1-sigma)) - 1c"}
+management: M3_fixed_target_2R
+flatten: close - 10 min
+costs: {slippage: "1c per QQQM share (2.2c in QQQ units)", commission: 0, sec_taf: modelled}
+risk: {per_trade_pct: 1.0, max_trades_per_day: 1}
+evidence: {dev_walkforward: "EXP-0005b: OOS n=415, E=+0.117R, CI95 [+0.038,+0.194], PF 1.44, 5/6 yrs",
+           dsr_global_trials_65: 0.707, g1_status: "FAIL (DSR only)"}
+decision: DEC-0007

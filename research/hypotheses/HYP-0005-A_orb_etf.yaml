@@ -1,0 +1,6 @@
+id: HYP-0005
+strategy: A_orb_etf
+status: pre-registered
+statement: "A_orb_etf has positive out-of-sample expectancy after realistic costs, at a US$600-2,000 cash account, long-only."
+evidence: {kb: "knowledge/strategy_components_catalog.md", decision: DEC-0002}
+falsified_if: "G1 gate fails: lower 95% CI of expectancy <= 0 at 1.5x costs, or DSR prob <= 0.95, or random-entry control not beaten at p<0.05"

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.wt.paper-b</string>
+  <key>ProgramArguments</key><array><string>/Users/samkalaliya/trading/deploy/run_paper_b.sh</string></array>
+  <key>StartCalendarInterval</key><dict><key>Hour</key><integer>22</integer><key>Minute</key><integer>30</integer></dict>
+  <key>StandardOutPath</key><string>/Users/samkalaliya/trading/logs/launchd_paper_b.out</string>
+  <key>StandardErrorPath</key><string>/Users/samkalaliya/trading/logs/launchd_paper_b.err</string>
+  <key>RunAtLoad</key><false/>
+</dict>
+</plist>

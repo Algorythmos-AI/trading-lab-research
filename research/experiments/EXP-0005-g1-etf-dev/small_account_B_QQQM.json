@@ -1,0 +1,26 @@
+{
+ "600": {
+  "trades": 483,
+  "skipped_qty_lt1_or_nofill": 11,
+  "E_R": 0.1115,
+  "median_realized_risk_vs_intended": 0.52,
+  "total_pnl_usd_simulated": 163.0,
+  "avg_pnl_per_trade_usd": 0.337
+ },
+ "1000": {
+  "trades": 483,
+  "skipped_qty_lt1_or_nofill": 11,
+  "E_R": 0.1115,
+  "median_realized_risk_vs_intended": 0.57,
+  "total_pnl_usd_simulated": 282.4,
+  "avg_pnl_per_trade_usd": 0.585
+ },
+ "2000": {
+  "trades": 483,
+  "skipped_qty_lt1_or_nofill": 11,
+  "E_R": 0.1115,
+  "median_realized_risk_vs_intended": 0.58,
+  "total_pnl_usd_simulated": 578.5,
+  "avg_pnl_per_trade_usd": 1.198
+ }
+}

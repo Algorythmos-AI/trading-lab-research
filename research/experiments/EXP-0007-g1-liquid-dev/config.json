@@ -1,0 +1,98 @@
+[
+ {
+  "name": "S3|touch_tol0.001|M1",
+  "setup": "S3",
+  "management": "M1",
+  "window": [
+   0,
+   120
+  ],
+  "params": {
+   "touch_tol": 0.001
+  },
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "S3|touch_tol0.001|M3",
+  "setup": "S3",
+  "management": "M3",
+  "window": [
+   0,
+   120
+  ],
+  "params": {
+   "touch_tol": 0.001
+  },
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "S3|touch_tol0.001|M4",
+  "setup": "S3",
+  "management": "M4",
+  "window": [
+   0,
+   120
+  ],
+  "params": {
+   "touch_tol": 0.001
+  },
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "S3|touch_tol0.002|M1",
+  "setup": "S3",
+  "management": "M1",
+  "window": [
+   0,
+   120
+  ],
+  "params": {
+   "touch_tol": 0.002
+  },
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "S3|touch_tol0.002|M3",
+  "setup": "S3",
+  "management": "M3",
+  "window": [
+   0,
+   120
+  ],
+  "params": {
+   "touch_tol": 0.002
+  },
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ },
+ {
+  "name": "S3|touch_tol0.002|M4",
+  "setup": "S3",
+  "management": "M4",
+  "window": [
+   0,
+   120
+  ],
+  "params": {
+   "touch_tol": 0.002
+  },
+  "equity": 600.0,
+  "risk_pct": 1.0,
+  "max_trades_per_day": null,
+  "cost_multiplier": 1.0
+ }
+]

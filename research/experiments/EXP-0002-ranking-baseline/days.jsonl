@@ -1,0 +1,40 @@
+{"date": "2026-07-31", "n_candidates": 188, "n_top": 3, "winners": ["REPL", "SCYX", "SHPH", "PWP", "SOC"], "top10": ["FCUV", "ALOY", "FLNC"], "hit_rank": 0, "hit_naive": 2, "secs": 4.7}
+{"date": "2026-08-03", "n_candidates": 207, "n_top": 3, "winners": ["DFNS", "AIRJ", "BIOA", "FOSL", "TE"], "top10": ["EZRA", "FCUV", "BIOA"], "hit_rank": 1, "hit_naive": 0, "secs": 4.7}
+{"date": "2026-08-04", "n_candidates": 277, "n_top": 10, "winners": ["AMIX", "IBTA", "XGN", "MOVE", "ORIC"], "top10": ["MOVE", "GENI", "AMIX", "NUWE", "BLZE", "SNAP", "MRAM", "LUNR", "VELO", "FLNC"], "hit_rank": 2, "hit_naive": 3, "secs": 657.7}
+{"date": "2026-08-05", "n_candidates": 198, "n_top": 4, "winners": ["APPS", "GTE", "BLMN", "SWIM", "FTK"], "top10": ["GTE", "BLMN", "XOS", "HYMC"], "hit_rank": 2, "hit_naive": 4, "secs": 4.4}
+{"date": "2026-08-06", "n_candidates": 163, "n_top": 5, "winners": ["CLRO", "WLDS", "IOVA", "HNST", "ASPN"], "top10": ["SOUN", "CLRO", "ASPN", "AEVA", "CHYM"], "hit_rank": 2, "hit_naive": 4, "secs": 4.5}
+{"date": "2026-08-07", "n_candidates": 360, "n_top": 6, "winners": ["RCEL", "VATE", "QNST", "OABI", "SENS"], "top10": ["VATE", "NRXP", "INDI", "RKT", "DKNG", "HYMC"], "hit_rank": 1, "hit_naive": 3, "secs": 7.1}
+{"date": "2026-08-10", "n_candidates": 123, "n_top": 5, "winners": ["BWMN", "XHLD", "VREX", "STDN", "ARTW"], "top10": ["VREX", "XHLD", "IPHA", "AIFA", "ALOY"], "hit_rank": 2, "hit_naive": 2, "secs": 4.2}
+{"date": "2026-08-11", "n_candidates": 152, "n_top": 4, "winners": ["QMCO", "AIFA", "STIM", "NIQ", "ALMR"], "top10": ["STIM", "QMCO", "NCRA", "GENK"], "hit_rank": 2, "hit_naive": 3, "secs": 4.1}
+{"date": "2026-08-12", "n_candidates": 250, "n_top": 10, "winners": ["BOXL", "XHLD", "MVIS", "EROC", "SION"], "top10": ["BOXL", "VELO", "PESI", "SMWB", "XHLD", "MRAM", "BRUN", "FCEL", "HYMC", "GLXY"], "hit_rank": 2, "hit_naive": 2, "secs": 6.9}
+{"date": "2026-08-13", "n_candidates": 115, "n_top": 5, "winners": ["INHD", "ARX", "CURI", "LNSR", "OMER"], "top10": ["LNSR", "ARX", "CURI", "OMER", "AIRO"], "hit_rank": 4, "hit_naive": 4, "secs": 4.1}
+{"date": "2026-08-14", "n_candidates": 142, "n_top": 7, "winners": ["CAPR", "HHS", "SPAI", "EMAT", "DFSC"], "top10": ["HHS", "CAPR", "DFSC", "NU", "BOXL", "IMXI", "LPTH"], "hit_rank": 3, "hit_naive": 3, "secs": 5.2}
+{"date": "2026-08-17", "n_candidates": 103, "n_top": 8, "winners": ["IPST", "SLE", "AGPU", "XHLD", "XPON"], "top10": ["FIEE", "IPST", "XPON", "SLE", "SERV", "DUOT", "LUNR", "EROC"], "hit_rank": 3, "hit_naive": 3, "secs": 4.1}
+{"date": "2026-08-18", "n_candidates": 62, "n_top": 7, "winners": ["PFSA", "IPST", "XOS", "SLE", "AMLX"], "top10": ["SLE", "XOS", "PFSA", "SGLY", "WEAV", "ASYS", "VOGX"], "hit_rank": 3, "hit_naive": 4, "secs": 3.7}
+{"date": "2026-08-19", "n_candidates": 299, "n_top": 5, "winners": ["TNON", "PURR", "MRVI", "ARCT", "FEMY"], "top10": ["FEMY", "TNON", "MSS", "ARCT", "KURA"], "hit_rank": 3, "hit_naive": 4, "secs": 5.3}
+{"date": "2026-08-20", "n_candidates": 88, "n_top": 4, "winners": ["USDE", "XOS", "IPST", "EMAT", "ZSTK"], "top10": ["SGLY", "FWDI", "ASST", "GLXY"], "hit_rank": 0, "hit_naive": 1, "secs": 3.4}
+{"date": "2026-08-21", "n_candidates": 216, "n_top": 8, "winners": ["USDE", "SDOT", "AIAI", "DTCX", "ARCT"], "top10": ["JUNS", "JXG", "BIVI", "USDE", "ASST", "BKKT", "HYMC", "GLXY"], "hit_rank": 1, "hit_naive": 1, "secs": 4.6}
+{"date": "2026-08-24", "n_candidates": 93, "n_top": 2, "winners": ["XPON", "SDOT", "PMI", "SUJA", "FWDI"], "top10": ["PMI", "OLOX"], "hit_rank": 1, "hit_naive": 4, "secs": 3.5}
+{"date": "2026-08-25", "n_candidates": 154, "n_top": 5, "winners": ["REAX", "PMI", "EXYN", "AMIX", "CAPR"], "top10": ["DAIC", "AMIX", "DFNS", "FLNC", "KURA"], "hit_rank": 1, "hit_naive": 3, "secs": 3.6}
+{"date": "2026-08-26", "n_candidates": 63, "n_top": 4, "winners": ["XPON", "RDIB", "DAIC", "EXYN", "BHVN"], "top10": ["VCIG", "DAIC", "TH", "RDIB"], "hit_rank": 2, "hit_naive": 3, "secs": 2.6}
+{"date": "2026-08-27", "n_candidates": 170, "n_top": 2, "winners": ["USDE", "HSDT", "DFDV", "BIRD", "XAIR"], "top10": ["ASST", "S"], "hit_rank": 0, "hit_naive": 1, "secs": 2.7}
+{"date": "2026-08-28", "n_candidates": 47, "n_top": 3, "winners": ["PSQL", "JELD", "AEMD", "GAP", "XHLD"], "top10": ["AEMD", "XLAB", "PSQL"], "hit_rank": 2, "hit_naive": 3, "secs": 2.3}
+{"date": "2026-08-31", "n_candidates": 106, "n_top": 1, "winners": ["USDE", "NEOV", "EMAT", "STDN", "GPRK"], "top10": ["NCRA"], "hit_rank": 0, "hit_naive": 1, "secs": 2.3}
+{"date": "2026-09-01", "n_candidates": 36, "n_top": 2, "winners": ["BIAF", "FRVO", "SST", "PXS", "AMOD"], "top10": ["BIAF", "LABT"], "hit_rank": 1, "hit_naive": 4, "secs": 2.1}
+{"date": "2026-09-02", "n_candidates": 94, "n_top": 1, "winners": ["BIAF", "RNXT", "EOSE", "IRD", "MLYS"], "top10": ["ALMS"], "hit_rank": 0, "hit_naive": 2, "secs": 1.9}
+{"date": "2026-09-03", "n_candidates": 204, "n_top": 6, "winners": ["CHPT", "BIAF", "SST", "DLTH", "ABTC"], "top10": ["TLYS", "WOOF", "NTSK", "GYGY", "GPRK", "ASST"], "hit_rank": 0, "hit_naive": 3, "secs": 13.9}
+{"date": "2026-09-04", "n_candidates": 58, "n_top": 2, "winners": ["AOUT", "GRI", "XTND", "NX", "BIAF"], "top10": ["AOUT", "PL"], "hit_rank": 1, "hit_naive": 1, "secs": 9.1}
+{"date": "2026-09-08", "n_candidates": 132, "n_top": 3, "winners": ["BNC", "SST", "NUAI", "SLE", "FCEL"], "top10": ["BNC", "SG", "LPTH"], "hit_rank": 1, "hit_naive": 2, "secs": 10.1}
+{"date": "2026-09-09", "n_candidates": 92, "n_top": 5, "winners": ["SUNE", "IRD", "BIAF", "XHLD", "HELP"], "top10": ["SUNE", "IRD", "JILL", "JMKE", "SSL"], "hit_rank": 2, "hit_naive": 3, "secs": 10.2}
+{"date": "2026-09-10", "n_candidates": 68, "n_top": 5, "winners": ["TNON", "DBGI", "INDP", "SKYQ", "CMRC"], "top10": ["TNON", "TPET", "CULP", "SKYQ", "FTFT"], "hit_rank": 2, "hit_naive": 3, "secs": 10.0}
+{"date": "2026-09-11", "n_candidates": 191, "n_top": 3, "winners": ["MKDW", "ACVA", "FTFT", "SWRD", "ATEC"], "top10": ["TNON", "AENT", "FTFT"], "hit_rank": 1, "hit_naive": 2, "secs": 14.1}
+{"date": "2026-09-14", "n_candidates": 110, "n_top": 6, "winners": ["FTFT", "VNCE", "ELMT", "RPD", "NTSK"], "top10": ["ARMP", "SKYQ", "FTFT", "ELMT", "RUM", "S"], "hit_rank": 2, "hit_naive": 2, "secs": 10.6}
+{"date": "2026-09-15", "n_candidates": 44, "n_top": 3, "winners": ["VEEA", "VRA", "RLGT", "INDP", "BBNX"], "top10": ["VRA", "MYSZ", "VEEA"], "hit_rank": 2, "hit_naive": 3, "secs": 9.3}
+{"date": "2026-09-16", "n_candidates": 117, "n_top": 1, "winners": ["MNOV", "GLOO", "FTFT", "NRXS", "TGL"], "top10": ["MEDS"], "hit_rank": 0, "hit_naive": 3, "secs": 9.0}
+{"date": "2026-09-17", "n_candidates": 519, "n_top": 4, "winners": ["DAIC", "BIAF", "MNOV", "SDGR", "CYPH"], "top10": ["DAIC", "BIAF", "LPTH", "ALOY"], "hit_rank": 2, "hit_naive": 4, "secs": 27.1}
+{"date": "2026-09-18", "n_candidates": 117, "n_top": 3, "winners": ["USDE", "GEMI", "FWDI", "CANG", "SECZ"], "top10": ["MEDS", "USDE", "STUB"], "hit_rank": 1, "hit_naive": 1, "secs": 12.6}
+{"date": "2026-09-21", "n_candidates": 262, "n_top": 8, "winners": ["GRML", "VEEE", "PRTH", "NUAI", "SECZ"], "top10": ["VEEE", "DFDV", "MX", "USDE", "ALOY", "XXI", "BKKT", "ABTC"], "hit_rank": 1, "hit_naive": 4, "secs": 16.6}
+{"date": "2026-09-22", "n_candidates": 166, "n_top": 1, "winners": ["JAGX", "GRML", "INDP", "MAZE", "BFLY"], "top10": ["STI"], "hit_rank": 0, "hit_naive": 3, "secs": 11.4}
+{"date": "2026-09-23", "n_candidates": 69, "n_top": 3, "winners": ["ARTL", "IPDN", "DCOY", "DBGI", "GLND"], "top10": ["MSS", "TLSI", "GNPX"], "hit_rank": 0, "hit_naive": 3, "secs": 8.6}
+{"date": "2026-09-24", "n_candidates": 50, "n_top": 7, "winners": ["APUS", "SRZN", "GLND", "PFSA", "GRML"], "top10": ["APUS", "PFSA", "SKYQ", "GCTK", "KYTX", "TSSI", "FRVO"], "hit_rank": 2, "hit_naive": 4, "secs": 9.5}
+{"date": "2026-09-25", "n_candidates": 80, "n_top": 2, "winners": ["APUS", "IPST", "USDE", "AESI", "WNC"], "top10": ["APUS", "GLND"], "hit_rank": 1, "hit_naive": 3, "secs": 3.8}
