@@ -1,6 +1,6 @@
 # SPEC-0001 — Requirements
 
-_Generated from `traceability.csv` for spec v1.0.0 (draft); spec.yaml sha256 `cf7886f04b93f2ba`. Do not edit by hand: run `scripts/spec_docs.py SPEC-0001`._
+_Generated from `traceability.csv` for spec v1.0.0 (approved); spec.yaml sha256 `85bd20ebbecf7507`. Do not edit by hand: run `scripts/spec_docs.py SPEC-0001`._
 
 **112 requirements:** INFO 10, MUST 95, SHOULD 7. **Status:** implemented 106, n_a 2, needs_data 1, planned 3.
 

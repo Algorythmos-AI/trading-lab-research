@@ -8,7 +8,7 @@
 spec_id: SPEC-0001
 title: Warrior-style momentum methodology (Gap and Go, Micro Pullback, Reversal)
 version: 1.0.0
-status: draft                     # draft -> approved (owner decision record DEC-0010)
+status: approved                  # owner approved v1.0.0 in chat on 2026-09-28 (DEC-0010)
 direction: long_only              # cash account; short sides of the spec are out of scope (N/A-02)
 
 sources:
