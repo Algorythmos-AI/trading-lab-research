@@ -166,8 +166,60 @@ class M8SellIntoStrength(M1HalfBreakeven):
         return super().on_bar_close(s, bars, j, tr)
 
 
+class WT(M1HalfBreakeven):
+    """SPEC-0001 EXT-01..06 (exit style "WT"): sell floor(qty/2) at the first target (2R, or the setup's target)
+    and move the stop to breakeven; a position under 2 shares exits in full there (D12). The runner's stop
+    trails the low of the last completed clock-aligned 5-minute candle, and a 5-minute close below EMA9 exits at
+    the next bar's open. Before the first target, the stagnation stop applies: under +0.5R at minute 5 -> exit.
+    Runners have no time cap (C8)."""
+    name = "WT"
+
+    def __init__(self, minutes: int = 5, resolved_R: float = 0.5):
+        super().__init__(time_stop_min=minutes, time_stop_min_R=resolved_R)
+
+    def init_state(self, tr, sig):
+        s = super().init_state(tr, sig)
+        s["qty0"] = tr.qty
+        s["warm_c5"] = list((sig.meta or {}).get("pm_c5", []))
+        return s
+
+    def limit_exits(self, s):
+        if s["partial_done"]:
+            return []
+        q = s["qty0"]
+        frac = 1.0 if q < 2 else (q // 2) / q
+        return [(s["t1"], frac, "partial_t1" if frac < 1 else "target_all")]
+
+    def on_bar_close(self, s, bars, j, tr):
+        if not s["partial_done"]:
+            return self._time_stop(s, bars, j, tr)
+        if "b5" not in s:
+            from wt.signals.bars import resample_clock
+            b5, done = resample_clock(bars, 5)
+            warm = np.asarray(s["warm_c5"], float)
+            s.update(b5=b5, done5=done, e5=ema(np.r_[warm, b5.c.to_numpy(float)], 9)[len(warm):], last_k=-1)
+        k = int(s["done5"][j])
+        if k >= 0 and k != s["last_k"]:
+            s["last_k"] = k
+            s["stop"] = max(s["stop"], float(s["b5"].l.iloc[k]))
+            s["stop_reason"] = "runner_prior_5m_low"
+            if s["b5"].c.iloc[k] < s["e5"][k]:
+                s["exit_reason"] = "runner_5m_close_below_ema9"
+                return "exit_market"
+        return None
+
+
+class MeanRevert5(Base):
+    """SPEC-0001 EXT-08: reversal exits 100% at the EMA9(5m) target fixed at the signal; the stagnation stop applies."""
+    name = "REV_ema9"
+
+    def __init__(self, minutes: int = 5, resolved_R: float = 0.5):
+        super().__init__(time_stop_min=minutes, time_stop_min_R=resolved_R)
+
+
 REGISTRY = {
     "M1": lambda: M1HalfBreakeven(), "M2_2": lambda: M2BreakoutOrBailout(2), "M2_5": lambda: M2BreakoutOrBailout(5),
     "M3": lambda: M3FixedTarget(), "M4": lambda: M4TrailOnly(), "M5": lambda: M5Ladder(),
     "M7": lambda: M7MeanReversion(), "M8": lambda: M8SellIntoStrength(),
+    "WT": lambda: WT(), "REV5": lambda: MeanRevert5(),
 }
