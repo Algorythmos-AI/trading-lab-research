@@ -1,0 +1,10 @@
+{
+  "technical_filters": {
+    "above_daily_emas": true,
+    "has_clean_window": true,
+    "former_runner_history": {
+      "required": false,
+      "description": "Verification of prior 100%+ multi-day moves. Used to boost watchlist priority score rather than hard-reject candidates."
+    }
+  }
+}

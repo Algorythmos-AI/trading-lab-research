@@ -1,0 +1,7 @@
+{
+  "execution_rules": {
+    "time_stop_unresolved_minutes": 5,
+    "max_trade_duration_minutes": null,
+    "exit_on_stagnation": true
+  }
+}

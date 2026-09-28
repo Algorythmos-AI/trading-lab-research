@@ -1,0 +1,321 @@
+# GENERATED from SPEC-0001 v1.0.0 (spec.yaml sha256 cf7886f04b93f2ba).
+# Do not edit. Change research/specs/SPEC-0001-warrior-methodology/spec.yaml and run
+#   PYTHONPATH=src .venv/bin/python -m wt.specs.loader SPEC-0001 --write
+candidate_pool:
+  features_asof: 09:25
+  gap_basis: split_adjusted_prior_close
+  gap_min_pct_exclusive: 5.0
+  news_asof_field: created_at
+  prefilter_prev_close:
+  - 0.95
+  - 21.0
+  snapshot_window:
+  - 09:00
+  - 09:25
+  suspect_split:
+    common_ratio_tol: 0.03
+    lookback_sessions: 250
+    max_dollar_volume_surge: 5.0
+    min_ratio: 1.45
+chart_filters:
+  basis: prior_session_close_split_adjusted
+  daily_emas_above:
+  - 20
+  - 50
+  - 200
+  ema_min_bars: 200
+  pm_consolidation:
+    check_window:
+    - 09:10
+    - 09:24
+    lows_in_top_fraction_of_range: 0.25
+    range_window:
+    - 04:00
+    - 09:24
+  trigger_clearance: defined_breakout_level_exists
+  window:
+    add_prior_day_high_and_close: true
+    atr_period: 14
+    blue_sky_passes: true
+    level_types:
+    - daily_open
+    - daily_close
+    - swing_high
+    levels_lookback_sessions: 90
+    must_exceed: atr14
+    swing_high_bars_each_side: 2
+entries:
+  GG-1:
+    attempts: 1
+    choose: lowest_unbroken_above_first_bar_high
+    levels:
+    - pm_pattern_apex
+    - pm_high
+    name: pm_level_break
+    set_scope:
+    - F
+    - P
+    stop: pattern_low_or_first_bar_low
+    stop_cap_usd: 0.2
+    window:
+    - 09:31
+    - '10:00'
+  GG-2:
+    attempts: 1
+    name: orb_ladder
+    orb_1m:
+      active_bar: 09:31
+      stop: first_1m_low
+      trigger: first_1m_high
+    orb_5m:
+      only_if_orb_1m_not_triggered: true
+      stop: first_5m_low
+      trigger: first_5m_high
+      window:
+      - 09:35
+      - 09:50
+    set_scope:
+    - F
+    - P
+  GG-3:
+    attempts: 1
+    fresh_after: 09:45
+    name: continuation_5m
+    patterns:
+    - bull_flag
+    - flat_top
+    - abcd
+    set_scope:
+    - F
+    - P
+    stop: pattern_low
+    timeframe: 5m
+    trigger: pattern_high
+    window:
+    - 09:50
+    - '11:00'
+  GG-4:
+    attempts: 1
+    name: red_to_green
+    requires_close_below_open: true
+    set_scope:
+    - F
+    - P
+    stop: low_of_day
+    trigger: max_of_open_and_prior_bar_high
+    window:
+    - 09:31
+    - '10:00'
+  MP-1:
+    attempts: 2
+    entry_expiry_bars: 2
+    fresh_hod_within_bars: 3
+    name: micro_pullback_1m
+    near_ema:
+      emas:
+      - 9
+      - 20
+      max_distance_atr1m: 0.5
+    pullback_candle:
+      or_lower_wick_min_body_multiple: 2.0
+      red_body_max_of_prior_range: 0.5
+    stop: pullback_low
+    target: next_half_or_whole_dollar
+    ten_second_view: descriptive_only
+    trigger: pullback_high
+    universe:
+    - tier2_09_31_10_00
+    - scn_hod_09_35_11_30
+  REV-1:
+    attempts: 2
+    entry_expiry_bars_5m: 1
+    name: reversal_long
+    stop: low_of_day
+    target: ema9_5m_fixed_at_signal
+    timeframe: 5m
+    trigger: exhaustion_candle_high
+    universe: scn_rev
+  common:
+    invalidate_pending_if_stop_touched: true
+    orders_from_bar_after_signal: true
+    stop_offset_usd: 0.01
+    trigger_offset_usd: 0.01
+execution:
+  averaging_down: false
+  entry_collar:
+    frac_of_R: 0.1
+    strict: true
+  fill_volume_cap_of_bar: 0.1
+  gap_and_go_first_minute_volume_min: 100000
+  halts:
+    detect_gap_minutes: 5
+    fill_through_gap: true
+  intraday_bars: clock_aligned
+  min_reward_risk: 2.0
+  momentum_volume_min: 1000000
+  predetermined_entry_and_stop: true
+  slippage:
+    half_spread: true
+    per_share_min_usd: 0.01
+    stress_multipliers:
+    - 1.5
+    - 2.0
+  spread_max_usd: 0.05
+exits:
+  REV:
+    partial_pct: 0
+    stagnation:
+      resolved_if_R_at_least: 0.5
+      time_stop_unresolved_minutes: 5
+    target: ema9_5m_fixed_at_signal
+  WT:
+    after_partial: stop_to_breakeven
+    first_target:
+      MP-1: entry_target
+      default_R: 2.0
+    partial_min_qty: 2
+    partial_pct: 50
+    runner:
+      exit_on_5m_close_below_ema: 9
+      trail: prior_5m_low
+    stagnation:
+      max_trade_duration_minutes: null
+      resolved_if_R_at_least: 0.5
+      time_stop_unresolved_minutes: 5
+  flatten_minutes_before_close: 10
+former_runner:
+  lookback_sessions: 250
+  move_min_ratio: 2.0
+  multi_day_window_sessions: 5
+  split_adjusted: true
+funnel:
+  cash_priority:
+  - tier3_primary
+  - tier2_rank
+  subscores:
+    catalyst:
+      breaking_news: 0.8
+      clinical_study_results: 1.0
+      earnings_release: 0.9
+      fda_approval: 1.0
+      price_target_upgrade: 0.5
+    former_runner:
+      kind: binary
+    gap:
+      kind: log_saturating
+      saturates_at_pct: 50.0
+    low_float:
+      tiers:
+      - - 10000000
+        - 1.0
+      - - 20000000
+        - 0.8
+      - - 50000000
+        - 0.5
+    rvol:
+      cap_at: 10.0
+      kind: log10_capped
+  tier1_max: 20
+  tier2_max: 4
+  tier2_order:
+  - preferred_price_band
+  - score
+  - rvol
+  - gap
+  - symbol
+  tier2_requires:
+  - chart_filters
+  tier3_max: 1
+  tier3_rule: first_tier2_with_active_pm_pattern_else_rank1
+  weights:
+    catalyst: 0.15
+    former_runner: 0.15
+    gap: 0.25
+    low_float: 0.2
+    rvol: 0.25
+patterns:
+  abcd:
+    above_ema: 9
+    c_must_be_higher_low: true
+    retrace_max_of_ab: 0.618
+    timeframe: 5m
+  breakout_volume:
+    applies_to:
+    - GG-1
+    - GG-3
+    - MP-1
+    bars_for_average: 20
+    min_ratio_vs_20bar_avg: 2.0
+    on_fail: exit_next_bar_open
+  bull_flag:
+    flag_candle_vol_high_conviction: 0.3
+    flag_candle_vol_max_of_pole_peak: 0.5
+    flag_candles:
+    - 1
+    - 3
+    holds_ema: 9
+    pole_green_candles:
+    - 3
+    - 5
+    retrace_max_of_pole: 0.25
+  flat_top:
+    higher_lows: true
+    holds_ema: 9
+    resistance_tolerance_usd: 0.01
+    resistance_touches_min: 2
+  pm_pattern:
+    kinds:
+    - bull_flag
+    - flat_top
+    price_in_upper_half_of_flag: true
+    timeframe: 5m
+    window:
+    - 04:00
+    - 09:25
+risk:
+  account_sizes_usd:
+  - 600
+  - 1000
+  - 2000
+  cash_account_settlement: T+1
+  max_attempts_per_stock_per_day: 2
+  max_consecutive_losers_per_day: 3
+  max_daily_loss_R: 2.0
+  per_trade_risk_pct_of_equity: 1.0
+  scope: per_trial_per_day
+scanner:
+  catalyst:
+    excluded:
+    - buyout_offer
+    - unconfirmed_rumor
+    non_qualifying:
+    - offering_dilution
+    - reverse_split
+    - hype_only
+    - none
+    required_any:
+    - earnings_release
+    - fda_approval
+    - clinical_study_results
+    - price_target_upgrade
+    - breaking_news
+    window:
+    - prior_session_close
+    - 09:25
+  float_max_shares_exclusive: 50000000
+  float_must_be_known: true
+  float_preferred_shares: 20000000
+  gap_min_pct_exclusive: 5.0
+  gap_preferred_pct: 20.0
+  pm_volume_min_shares: 50000
+  pm_volume_tradeable_shares: 500000
+  preferred_price_usd:
+  - 1.5
+  - 10.0
+  price_usd:
+  - 1.0
+  - 20.0
+  rvol_min: 2.0
+  rvol_preferred: 5.0
+spec_id: SPEC-0001
+spec_version: 1.0.0

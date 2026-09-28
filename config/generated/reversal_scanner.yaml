@@ -1,0 +1,30 @@
+# GENERATED from SPEC-0001 v1.0.0 (spec.yaml sha256 cf7886f04b93f2ba).
+# Do not edit. Change research/specs/SPEC-0001-warrior-methodology/spec.yaml and run
+#   PYTHONPATH=src .venv/bin/python -m wt.specs.loader SPEC-0001 --write
+scanners:
+  reversal_hybrid:
+    active_window:
+    - 09:35
+    - '15:30'
+    adv5_min_shares: 300000
+    at_low_of_day: true
+    bollinger:
+      condition: close_at_or_below_lower
+      period: 20
+      std: 2.0
+    consecutive_5m_candles_min: 3
+    indicator_warmup: prior_session_rth
+    price_usd:
+    - 15.0
+    - 250.0
+    rsi:
+      oversold_below: 20.0
+      period: 14
+      timeframes:
+      - 2m
+      - 5m
+    rvol_min: 1.0
+    target_ema9_5m_min_distance_usd: 0.3
+    volume_today_min_shares: 500000
+spec_id: SPEC-0001
+spec_version: 1.0.0

@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WarriorTradingStrategyConfig",
+  "type": "object",
+  "properties": {
+    "scanners": {
+      "type": "object",
+      "properties": {
+        "pre_market_gap_scanner": {
+          "type": "object",
+          "properties": {
+            "price_range_usd": { "type": "array", "items": { "type": "number" }, "example": [1.00, 20.00] },
+            "preferred_price_range_usd": { "type": "array", "items": { "type": "number" }, "example": [1.50, 10.00] },
+            "min_gap_percentage": { "type": "number", "default": 4.0 },
+            "preferred_gap_percentage": { "type": "number", "default": 20.0 },
+            "max_float_shares": { "type": "number", "default": 50000000 },
+            "preferred_float_shares": { "type": "number", "default": 20000000 },
+            "min_premarket_volume": { "type": "number", "default": 50000 },
+            "tradeable_premarket_volume": { "type": "number", "default": 500000 },
+            "min_relative_volume": { "type": "number", "default": 2.0 },
+            "preferred_relative_volume": { "type": "number", "default": 5.0 },
+            "required_catalyst_types": {
+              "type": "array",
+              "items": { "type": "string" },
+              "enum": ["earnings_release", "fda_approval", "clinical_study_results", "price_target_upgrade", "breaking_news"]
+            },
+            "excluded_catalyst_types": {
+              "type": "array",
+              "items": { "type": "string" },
+              "enum": ["buyout_offer", "unconfirmed_rumor"]
+            }
+          },
+          "required": ["min_gap_percentage", "max_float_shares", "min_relative_volume", "required_catalyst_types"]
+        },
+        "high_of_day_momentum_scanner": {
+          "type": "object",
+          "properties": {
+            "price_range_usd": { "type": "array", "items": { "type": "number" }, "example": [1.00, 10.00] },
+            "min_volume_today": { "type": "number", "default": 100000 },
+            "active_trading_volume_today": { "type": "number", "default": 1000000 },
+            "min_relative_volume": { "type": "number", "default": 2.0 },
+            "min_5min_volume_surge_pct": { "type": "number", "default": 2000.0 },
+            "max_float_shares": { "type": "number", "default": 20000000 },
+            "max_bid_ask_spread_usd": { "type": "number", "default": 0.05 }
+          }
+        },
+        "reversal_hybrid_scanner": {
+          "type": "object",
+          "properties": {
+            "price_range_usd": { "type": "array", "items": { "type": "number" }, "example": [15.00, 250.00] },
+            "min_volume_today": { "type": "number", "default": 500000 },
+            "min_avg_daily_volume_5d": { "type": "number", "default": 300000 },
+            "min_relative_volume": { "type": "number", "default": 1.0 },
+            "min_consecutive_5min_candles": { "type": "integer", "default": 3 },
+            "bollinger_band_std_dev": { "type": "number", "default": 2.0 },
+            "rsi_oversold_threshold": { "type": "number", "default": 20.0 },
+            "rsi_overbought_threshold": { "type": "number", "default": 80.0 },
+            "min_ema9_distance_usd": { "type": "number", "default": 0.30 }
+          }
+        }
+      }
+    },
+    "technical_filters": {
+      "type": "object",
+      "properties": {
+        "required_above_daily_emas": { "type": "array", "items": { "type": "integer" }, "default": [20, 50, 200] },
+        "window_height_must_exceed_atr14": { "type": "boolean", "default": true },
+        "former_runner_history_required": { "type": "boolean", "default": true }
+      }
+    },
+    "execution_rules": {
+      "type": "object",
+      "properties": {
+        "min_risk_reward_ratio": { "type": "number", "default": 2.0 },
+        "max_trade_duration_minutes": { "type": "integer", "default": 5 },
+        "allow_averaging_down": { "type": "boolean", "default": false },
+        "partial_profit_take_pct": { "type": "number", "default": 50.0 }
+      }
+    }
+  }
+}
