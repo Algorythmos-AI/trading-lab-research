@@ -1,0 +1,8 @@
+id: HYP-0009
+strategy: B_intraday_momentum_other_etfs
+status: falsified            # DEC-0009 (EXP-0012): IWM -0.034R, DIA +0.028R; B may be QQQ/regime specific
+backfilled: 2026-09-28
+statement: "Strategy B (frozen rules) generalises to other liquid index ETFs at realistic cost: IWM (traded directly) and DIA."
+evidence: {decision: DEC-0008, experiments: [EXP-0012-r2-B-iwm-dia]}
+trials: 2
+falsified_if: "OOS expectancy CI95 lower bound <= 0"
