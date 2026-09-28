@@ -26,6 +26,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from wt.backtest.controls import control_signal  # noqa: E402
 from wt.backtest.engine import Costs, EntrySignal, simulate  # noqa: E402
 from wt.backtest.management import REGISTRY  # noqa: E402
 from wt.backtest.portfolio import Candidate as PCand  # noqa: E402
@@ -107,12 +108,13 @@ def ctx_for(row, pm: pd.DataFrame) -> dict:
 
 
 def run_day(d: dt.date, names: list[tuple[str, int]], pool: pd.DataFrame, pm_all: pd.DataFrame, bars_by: dict,
-            spread_at: SpreadAt, trial: str, close_hhmm: str) -> tuple[list[PCand], list[dict]]:
-    """Pass 1 for one GG trial: signal chains per name -> admission candidates (+ skip log)."""
+            spread_at: SpreadAt, trial: str, close_hhmm: str) -> tuple[list[PCand], list[dict], list[tuple]]:
+    """Pass 1 for one GG trial: signal chains per name -> admission candidates, skip log, and control inputs
+    (the first signal of each chain that passed the spread must)."""
     rows = pool.set_index("symbol")
     fn, max_att = SETUPS[trial], ATTEMPTS[trial]
     hh, mm = map(int, close_hhmm.split(":"))
-    cands, skips = [], []
+    cands, skips, ctl = [], [], []
     for sym, prio in names:
         b = bars_by.get(sym)
         if b is None or len(b) < 30:
@@ -132,6 +134,8 @@ def run_day(d: dt.date, names: list[tuple[str, int]], pool: pd.DataFrame, pm_all
                 skips.append({"symbol": sym, "reason": "spread", "spread": spr})
                 break
             costs = Costs(slippage_per_share=max(0.01, (spr or 0) / 2))
+            if att == 1:
+                ctl.append((sym, prio, b, sig, costs, flatten))
 
             def resim(cash, risk, b=b, sig=sig, costs=costs, flatten=flatten, sym=sym):
                 tr = simulate(b, sig, REGISTRY["WT"](), costs, sym, str(d), risk_dollars=risk, cash=cash,
@@ -149,10 +153,28 @@ def run_day(d: dt.date, names: list[tuple[str, int]], pool: pd.DataFrame, pm_all
             if not len(nxt):
                 break
             start = int(nxt[0])
-    return cands, skips
+    return cands, skips, ctl
 
 
-def main(exp: str, start: str, end: str, which: str, counts_only: bool, relax: set[str]) -> None:
+def control_cands(ctl: list[tuple], trial: str, seed: int, d: dt.date) -> list[PCand]:
+    out = []
+    for sym, prio, b, sig, costs, flatten in ctl:
+        cs = control_signal(b, sig, trial, seed)
+        if cs is None:
+            continue
+        probe = simulate(b, cs, REGISTRY["WT"](), costs, sym, str(d), 1e9, 1e9, 1e9, flatten_idx=flatten)
+        if probe is None:
+            continue
+
+        def resim(cash, risk, b=b, cs=cs, costs=costs, flatten=flatten, sym=sym):
+            tr = simulate(b, cs, REGISTRY["WT"](), costs, sym, str(d), risk, cash, cash, flatten_idx=flatten)
+            return tr, (tr.r_multiple(costs) if tr else None)
+
+        out.append(PCand(sym, 1, prio, probe.entry_time, resim))
+    return out
+
+
+def main(exp: str, start: str, end: str, which: str, counts_only: bool, relax: set[str], n_control: int = 0) -> None:
     spec = load_spec("SPEC-0001")
     a = AlpacaREST(per_minute=150, shared=True)
     spread_at = SpreadAt(a)
@@ -163,6 +185,7 @@ def main(exp: str, start: str, end: str, which: str, counts_only: bool, relax: s
     results = {f"{which}:{t}": {str(eq): [] for eq in EQUITIES} for t in GG}
     counts = {f"{which}:{t}": 0 for t in GG}
     skipped = {f"{which}:{t}": {} for t in GG}
+    ctrl = {f"{which}:{t}": {"sum": np.zeros(n_control), "n": np.zeros(n_control)} for t in GG}
     for n, d in enumerate(days, 1):
         pool = pd.read_parquet(POOL_DIR / f"{d}.parquet")
         pmf = PM_BARS_DIR / f"{d}.parquet"
@@ -174,7 +197,14 @@ def main(exp: str, start: str, end: str, which: str, counts_only: bool, relax: s
         bars_by = minute_bars(a, d, [x for x, _ in names], close_hhmm=close)
         for trial in GG:
             key = f"{which}:{trial}"
-            cands, skips = run_day(d, names, pool, pm_all, bars_by, spread_at, trial, close)
+            cands, skips, ctl = run_day(d, names, pool, pm_all, bars_by, spread_at, trial, close)
+            oos = d >= dt.date.fromisoformat(spec["evaluation"]["oos_span"][0])     # controls cover the OOS span only
+            for seed in range(n_control if (oos and not counts_only) else 0):
+                cres = admit_day(control_cands(ctl, trial, seed, d), 600.0, spec["risk"]["max_consecutive_losers_per_day"],
+                                 spec["risk"]["max_daily_loss_R"], spec["risk"]["per_trade_risk_pct_of_equity"])
+                rs = [r for _, _, r in cres.admitted if r is not None]
+                ctrl[key]["sum"][seed] += sum(rs)
+                ctrl[key]["n"][seed] += len(rs)
             for sk in skips:
                 skipped[key][sk["reason"]] = skipped[key].get(sk["reason"], 0) + 1
             for eq in EQUITIES:
@@ -202,7 +232,8 @@ def main(exp: str, start: str, end: str, which: str, counts_only: bool, relax: s
         (out / f"counts_{which}.json").write_text(json.dumps(meta, indent=1, default=str))
         print(json.dumps({"counts_at_600": counts}, indent=1))
     else:
-        (out / f"results_{which}.json").write_text(json.dumps({**meta, "trades": results}, default=str))
+        control_means = {k: [float(s / n) for s, n in zip(v["sum"], v["n"]) if n > 0] for k, v in ctrl.items()}
+        (out / f"results_{which}.json").write_text(json.dumps({**meta, "trades": results, "control_means": control_means}, default=str))
         print(json.dumps({"counts_at_600": counts}, indent=1))
 
 
@@ -214,5 +245,6 @@ if __name__ == "__main__":
     ap.add_argument("--set", dest="which", choices=["F", "P"], required=True)
     ap.add_argument("--counts-only", action="store_true")
     ap.add_argument("--relax", default="")
+    ap.add_argument("--control", type=int, default=0, help="random-entry control seeds (not trials)")
     args = ap.parse_args()
-    main(args.exp, args.start, args.end, args.which, args.counts_only, {x for x in args.relax.split(",") if x})
+    main(args.exp, args.start, args.end, args.which, args.counts_only, {x for x in args.relax.split(",") if x}, args.control)

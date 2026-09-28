@@ -27,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_pool import SplitStore, market_guard  # noqa: E402
 from r3_run import EQUITIES, SpreadAt, ctx_for, set_names  # noqa: E402
 
+from wt.backtest.controls import control_signal  # noqa: E402
 from wt.backtest.engine import Costs, simulate  # noqa: E402
 from wt.backtest.management import REGISTRY  # noqa: E402
 from wt.backtest.portfolio import Candidate as PCand  # noqa: E402
@@ -57,6 +58,9 @@ def adv(daily: DailyIndex, splits, sym: str, d: dt.date, n: int) -> float:
     return float(h.v.mean()) if len(h) else 0.0
 
 
+CTL: list = []           # control inputs of the current day: (sym, prio, bars, signal, costs, flatten, exit_style)
+
+
 def chains(fn, b: pd.DataFrame, ctx: dict, sym: str, prio: int, d: dt.date, spread_at: SpreadAt, exit_style: str,
            flatten: int, skips: dict) -> list[PCand]:
     out, start = [], 0
@@ -69,6 +73,8 @@ def chains(fn, b: pd.DataFrame, ctx: dict, sym: str, prio: int, d: dt.date, spre
             skips["spread"] = skips.get("spread", 0) + 1
             break
         costs = Costs(slippage_per_share=max(0.01, spr / 2))
+        if att == 1:
+            CTL.append((sym, prio, b, sig, costs, flatten, exit_style))
         probe = simulate(b, sig, REGISTRY[exit_style](), costs, sym, str(d), 1e9, 1e9, 1e9, flatten_idx=flatten)
         if probe is None:
             skips["no_fill"] = skips.get("no_fill", 0) + 1
@@ -158,7 +164,25 @@ def rev_day(a, d, p, daily, splits, spread_at, close, skips, syms) -> tuple[list
     return out, signalled
 
 
-def main(exp: str, start: str, end: str, trial: str, counts_only: bool, recall_days: int) -> None:
+def control_cands(trial: str, seed: int, d: dt.date) -> list[PCand]:
+    out = []
+    for sym, prio, b, sig, costs, flatten, style in CTL:
+        cs = control_signal(b, sig, trial, seed)
+        if cs is None:
+            continue
+        probe = simulate(b, cs, REGISTRY[style](), costs, sym, str(d), 1e9, 1e9, 1e9, flatten_idx=flatten)
+        if probe is None:
+            continue
+
+        def resim(cash, risk, b=b, cs=cs, costs=costs, flatten=flatten, sym=sym, style=style):
+            tr = simulate(b, cs, REGISTRY[style](), costs, sym, str(d), risk, cash, cash, flatten_idx=flatten)
+            return tr, (tr.r_multiple(costs) if tr else None)
+
+        out.append(PCand(sym, 1, prio, probe.entry_time, resim))
+    return out
+
+
+def main(exp: str, start: str, end: str, trial: str, counts_only: bool, recall_days: int, n_control: int = 0) -> None:
     spec = load_spec("SPEC-0001")
     a = AlpacaREST(per_minute=150, shared=True)
     spread_at = SpreadAt(a)
@@ -190,9 +214,12 @@ def main(exp: str, start: str, end: str, trial: str, counts_only: bool, recall_d
         return
     trades = {str(eq): [] for eq in EQUITIES}
     count, skips = 0, {}
+    csum, cn = np.zeros(n_control), np.zeros(n_control)
+    oos0 = dt.date.fromisoformat(spec["evaluation"]["oos_span"][0])
     for n, d in enumerate(days, 1):
         market_guard(set(sessions))
         p, close = sessions[sessions.index(d) - 1], closes.get(d, "16:00")
+        CTL.clear()
         if trial == "MP-1":
             today = daily.on(d)
             splits.refresh(sorted(today[(today.v >= 1_000_000) & (today.l <= 10.0)].index))
@@ -201,6 +228,12 @@ def main(exp: str, start: str, end: str, trial: str, counts_only: bool, recall_d
             syms = rev_superset(daily, d, sessions)
             splits.refresh(syms)
             cands, _ = rev_day(a, d, p, daily, splits.sf, spread_at, close, skips, syms)
+        for seed in range(n_control if (d >= oos0 and not counts_only) else 0):
+            cres = admit_day(control_cands(trial, seed, d), 600.0, spec["risk"]["max_consecutive_losers_per_day"],
+                             spec["risk"]["max_daily_loss_R"], spec["risk"]["per_trade_risk_pct_of_equity"])
+            rs = [r for _, _, r in cres.admitted if r is not None]
+            csum[seed] += sum(rs)
+            cn[seed] += len(rs)
         for eq in EQUITIES:
             res = admit_day(cands, eq, spec["risk"]["max_consecutive_losers_per_day"], spec["risk"]["max_daily_loss_R"],
                             spec["risk"]["per_trade_risk_pct_of_equity"])
@@ -219,7 +252,9 @@ def main(exp: str, start: str, end: str, trial: str, counts_only: bool, recall_d
     spread_at.save()
     meta = {"spec": "SPEC-0001", "trial": trial, "span": [start, end], "days": len(days), "count_at_600": count, "skips": skips}
     name = f"{'counts' if counts_only else 'results'}_{trial}.json"
-    (out / name).write_text(json.dumps(meta if counts_only else {**meta, "trades": trades}, default=str, indent=None if not counts_only else 1))
+    body = meta if counts_only else {**meta, "trades": trades,
+                                     "control_means": {trial: [float(s / n) for s, n in zip(csum, cn) if n > 0]}}
+    (out / name).write_text(json.dumps(body, default=str, indent=None if not counts_only else 1))
     print(json.dumps({"count_at_600": count}))
 
 
@@ -231,5 +266,6 @@ if __name__ == "__main__":
     ap.add_argument("--trial", choices=["MP-1", "REV-1"], required=True)
     ap.add_argument("--counts-only", action="store_true")
     ap.add_argument("--recall-days", type=int, default=0)
+    ap.add_argument("--control", type=int, default=0, help="random-entry control seeds (not trials)")
     args = ap.parse_args()
-    main(args.exp, args.start, args.end, args.trial, args.counts_only, args.recall_days)
+    main(args.exp, args.start, args.end, args.trial, args.counts_only, args.recall_days, args.control)
