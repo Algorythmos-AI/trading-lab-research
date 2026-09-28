@@ -2,7 +2,7 @@
 
 _Generated from `traceability.csv` for spec v1.0.0 (draft); spec.yaml sha256 `cf7886f04b93f2ba`. Do not edit by hand: run `scripts/spec_docs.py SPEC-0001`._
 
-**112 requirements:** INFO 10, MUST 95, SHOULD 7. **Status:** implemented 100, n_a 2, needs_data 1, planned 9.
+**112 requirements:** INFO 10, MUST 95, SHOULD 7. **Status:** implemented 106, n_a 2, needs_data 1, planned 3.
 
 Levels:
 - **MUST:** a hard rule, enforced by code and tested
@@ -174,13 +174,13 @@ Statuses:
 
 | ID | Level | Requirement | Operational definition | Source | Status |
 |---|---|---|---|---|---|
-| `RTN-01` | MUST | 08:00 Tier-1 scan | routine writes tier1.json at 08:00 | spec §8 | planned |
-| `RTN-02` | MUST | 08:30 daily chart analysis | EMAs, windows, ATR, triggers, former runners | spec §8 | planned |
-| `RTN-03` | MUST | 09:00 Tier 2 and pre-market structure | <= 4 names; PM flag / flat top | spec §8; C6 | planned |
-| `RTN-04` | MUST | 09:15 primary and staged tickets | trigger, stop, 2R target, size from a read-only US$600 virtual account (D31) | spec §8; C6 | planned |
-| `RTN-05` | MUST | Opening-window logs | ORB 09:30-09:50, Gap and Go 09:30-10:00, patterns 09:50-11:00, HOD 09:35-11:30 | spec §8; C6; C11 | planned |
+| `RTN-01` | MUST | 08:00 Tier-1 scan | routine writes tier1.json at 08:00 | spec §8 | implemented |
+| `RTN-02` | MUST | 08:30 daily chart analysis | EMAs, windows, ATR, triggers, former runners | spec §8 | implemented |
+| `RTN-03` | MUST | 09:00 Tier 2 and pre-market structure | <= 4 names; PM flag / flat top | spec §8; C6 | implemented |
+| `RTN-04` | MUST | 09:15 primary and staged tickets | trigger, stop, 2R target, size from a read-only US$600 virtual account (D31) | spec §8; C6 | implemented |
+| `RTN-05` | MUST | Opening-window logs | ORB 09:30-09:50, Gap and Go 09:30-10:00, patterns 09:50-11:00, HOD 09:35-11:30 | spec §8; C6; C11 | implemented |
 | `RTN-06` | MUST | No broker calls; data-source agreement | dry run only; IEX live view plus SIP re-evaluation, agreement reported (D23) | plan D23 | planned |
-| `RTN-07` | MUST | Sessions only | calendar check; exits on non-sessions; half-day aware (D29) | plan D29 | planned |
+| `RTN-07` | MUST | Sessions only | calendar check; exits on non-sessions; half-day aware (D29) | plan D29 | implemented |
 
 ## Evaluation
 

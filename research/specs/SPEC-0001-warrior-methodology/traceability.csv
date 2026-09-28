@@ -99,13 +99,13 @@ TAP-04,INFO,tape,Stepping-up bids,count of NBBO bid increases in the 60 s before
 TAP-05,INFO,tape,Tape freeze after entry,trades/s in the 30 s after entry vs the 60 s before,C4 §5,tape.features,wt.data.tape.features,tests/unit/test_tape.py,all,implemented
 TAP-06,INFO,tape,10-second bars,built from SIP trades for 3 minutes either side of MP-1 signals; descriptive entry comparison,C10; C12; plan D33,tape.ten_second_bars,wt.data.tape.ten_second_bars,tests/unit/test_tape.py,MP-1,implemented
 TAP-07,INFO,tape,Level 2 depth,N/A-04 needs a depth feed,C4; C10,tape.depth_of_book,,,,needs_data
-RTN-01,MUST,routine,08:00 Tier-1 scan,routine writes tier1.json at 08:00,spec §8,routine.stages,scripts.premarket_routine,tests/unit/test_routine.py,forward,planned
-RTN-02,MUST,routine,08:30 daily chart analysis,"EMAs, windows, ATR, triggers, former runners",spec §8,routine.stages,scripts.premarket_routine,tests/unit/test_routine.py,forward,planned
-RTN-03,MUST,routine,09:00 Tier 2 and pre-market structure,<= 4 names; PM flag / flat top,spec §8; C6,routine.stages,scripts.premarket_routine,tests/unit/test_routine.py,forward,planned
-RTN-04,MUST,routine,09:15 primary and staged tickets,"trigger, stop, 2R target, size from a read-only US$600 virtual account (D31)",spec §8; C6,routine.stages,scripts.premarket_routine,tests/unit/test_routine.py,forward,planned
-RTN-05,MUST,routine,Opening-window logs,"ORB 09:30-09:50, Gap and Go 09:30-10:00, patterns 09:50-11:00, HOD 09:35-11:30",spec §8; C6; C11,routine.stages,scripts.premarket_routine,tests/unit/test_routine.py,forward,planned
+RTN-01,MUST,routine,08:00 Tier-1 scan,routine writes tier1.json at 08:00,spec §8,routine.stages,scripts.premarket_routine,tests/unit/test_routine.py,forward,implemented
+RTN-02,MUST,routine,08:30 daily chart analysis,"EMAs, windows, ATR, triggers, former runners",spec §8,routine.stages,scripts.premarket_routine,tests/unit/test_routine.py,forward,implemented
+RTN-03,MUST,routine,09:00 Tier 2 and pre-market structure,<= 4 names; PM flag / flat top,spec §8; C6,routine.stages,scripts.premarket_routine,tests/unit/test_routine.py,forward,implemented
+RTN-04,MUST,routine,09:15 primary and staged tickets,"trigger, stop, 2R target, size from a read-only US$600 virtual account (D31)",spec §8; C6,routine.stages,scripts.premarket_routine,tests/unit/test_routine.py,forward,implemented
+RTN-05,MUST,routine,Opening-window logs,"ORB 09:30-09:50, Gap and Go 09:30-10:00, patterns 09:50-11:00, HOD 09:35-11:30",spec §8; C6; C11,routine.stages,scripts.premarket_routine,tests/unit/test_routine.py,forward,implemented
 RTN-06,MUST,routine,No broker calls; data-source agreement,"dry run only; IEX live view plus SIP re-evaluation, agreement reported (D23)",plan D23,routine,scripts.premarket_routine,tests/unit/test_routine.py,forward,planned
-RTN-07,MUST,routine,Sessions only,calendar check; exits on non-sessions; half-day aware (D29),plan D29,routine,scripts.premarket_routine,tests/unit/test_routine.py,forward,planned
+RTN-07,MUST,routine,Sessions only,calendar check; exits on non-sessions; half-day aware (D29),plan D29,routine,scripts.premarket_routine,tests/unit/test_routine.py,forward,implemented
 EVL-01,MUST,evaluation,Ten pre-registered trials,"F and P x GG-1..4, MP-1, REV-1; global count 85",plan U12,evaluation.trials,scripts.r3_run,tests/unit/test_spec_traceability.py,all,implemented
 EVL-02,MUST,evaluation,Fixed-rule out-of-sample test,OOS 2020-01-01 -> 2025-09-25; 2019 warm-up (D25),plan D25,evaluation.oos_span,scripts.r3_eval,tests/unit/test_r3_eval.py,all,implemented
 EVL-03,MUST,evaluation,One-time holdout,only for a trial with OOS CI95 lower bound > 0,DEC-0005,evaluation.holdout_rule,scripts.r3_eval,tests/unit/test_r3_eval.py,all,implemented

@@ -62,7 +62,8 @@ class PoolConfig:
     price_band: tuple = (1.00, 30.00)
     gap_min_pct: float = 4.0
     prefilter_prev_close: tuple = (0.05, 1000.0)
-    snapshot: tuple = ("09:00", "09:25")
+    snapshot: tuple = ("09:00", "09:25")          # the routine uses (stage - 25 min, stage) with feed="iex"
+    feed: str = "sip"
     rvol_lookback: int = 20
     daily_lookback: int = 300
 
@@ -95,7 +96,8 @@ def build_day(d: dt.date, p: dt.date, client, daily: "DailyIndex", universe: set
     prev = prev[prev.index.isin(universe)]
     prev = prev[prev.c.between(*cfg.prefilter_prev_close)]
     st.universe = len(prev)
-    snap = client.bars(sorted(prev.index), "1Min", to_utc_iso(et(d, cfg.snapshot[0])), to_utc_iso(et(d, cfg.snapshot[1])))
+    snap = client.bars(sorted(prev.index), "1Min", to_utc_iso(et(d, cfg.snapshot[0])), to_utc_iso(et(d, cfg.snapshot[1])),
+                       feed=cfg.feed)
     snap = snap[snap.t < pd.Timestamp(et(d, cfg.snapshot[1]))] if len(snap) else snap
     px = last_print(snap)
     st.snapshot_symbols = len(px)
@@ -112,14 +114,15 @@ def build_day(d: dt.date, p: dt.date, client, daily: "DailyIndex", universe: set
     if not keep:
         return pd.DataFrame(), pd.DataFrame(), st
     # ---- pre-market bars (full window) and RVOL baselines --------------------------------------------------
-    pmb = client.bars(keep, "1Min", to_utc_iso(et(d, "04:00")), to_utc_iso(et(d, "09:25")))
-    pmb = pmb[pmb.t < pd.Timestamp(et(d, "09:25"))] if len(pmb) else pmb
+    cut = cfg.snapshot[1]
+    pmb = client.bars(keep, "1Min", to_utc_iso(et(d, "04:00")), to_utc_iso(et(d, cut)), feed=cfg.feed)
+    pmb = pmb[pmb.t < pd.Timestamp(et(d, cut))] if len(pmb) else pmb
     base_days = prev_sessions[-cfg.rvol_lookback:]
     from wt.scanner.features import fetch_pm
     fetch_pm(client, pm_cache, keep, base_days)
     base = pm_cache.get(keep, base_days)
     # ---- news ----------------------------------------------------------------------------------------------
-    news = client.news(keep, to_utc_iso(et(p, "16:00")), to_utc_iso(et(d, "09:25")))
+    news = client.news(keep, to_utc_iso(et(p, "16:00")), to_utc_iso(et(d, cut)))
     heads: dict[str, list[tuple]] = {s: [] for s in keep}
     for n in news:
         for s in n.get("symbols", []):

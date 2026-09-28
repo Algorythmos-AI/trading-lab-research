@@ -53,8 +53,8 @@ def market_guard(open_days: set[dt.date]) -> None:
 class SplitStore:
     """Split-factor change points, fetched lazily and cached."""
 
-    def __init__(self, a: AlpacaREST, daily_raw: pd.DataFrame):
-        self.a, self.raw = a, daily_raw
+    def __init__(self, a: AlpacaREST, daily_raw: pd.DataFrame, persist: bool = True):
+        self.a, self.raw, self.persist = a, daily_raw, persist
         self.table = pd.read_parquet(FACTORS) if FACTORS.exists() else pd.DataFrame(columns=["symbol", "date", "f"])
         self.sf = SplitFactors(self.table)
 
@@ -71,8 +71,9 @@ class SplitStore:
             else:
                 f = pd.DataFrame({"symbol": need, "date": dt.date(2018, 6, 1), "f": 1.0})
             self.table = pd.concat([self.table, f], ignore_index=True)
-            FACTORS.parent.mkdir(parents=True, exist_ok=True)
-            self.table.to_parquet(FACTORS)
+            if self.persist:                                   # the live routine never writes shared caches
+                FACTORS.parent.mkdir(parents=True, exist_ok=True)
+                self.table.to_parquet(FACTORS)
             self.sf = SplitFactors(self.table)
         return self.sf
 

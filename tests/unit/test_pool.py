@@ -30,7 +30,7 @@ class FakeClient:
         self.calls = []
 
     def bars(self, symbols, timeframe, start, end, feed="sip", adjustment="raw"):
-        self.calls.append((tuple(symbols), start, end))
+        self.calls.append((tuple(symbols), start, end, feed))
         out = []
         prices = {"GAPR": 4.0 * 1.52 * 1.20, "FLAT": 10.0 * 1.52 * 1.01, "SPLT": 3.30, "PENY": 0.55}
         t0, t1 = pd.Timestamp(start), pd.Timestamp(end)
