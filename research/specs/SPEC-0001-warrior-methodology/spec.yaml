@@ -7,8 +7,8 @@
 
 spec_id: SPEC-0001
 title: Warrior-style momentum methodology (Gap and Go, Micro Pullback, Reversal)
-version: 1.0.0
-status: approved                  # owner approved v1.0.0 in chat on 2026-09-28 (DEC-0010)
+version: 1.0.1
+status: approved                  # owner approved v1.0.0 in chat on 2026-09-28 (DEC-0010); v1.0.1 = routine live-data amendment (K-31), owner-approved the same day
 direction: long_only              # cash account; short sides of the spec are out of scope (N/A-02)
 
 sources:
@@ -236,7 +236,7 @@ routine:                                           # spec §8, C6, C11 (forward 
     - {window: ["09:30", "10:00"], step: gap_and_go_log}
     - {window: ["09:50", "11:00"], step: pattern_log}
     - {window: ["09:35", "11:30"], step: hod_log}
-  data_live: iex
+  data_live: sip_delayed_plus_iex_tail          # K-31: SIP older than the free plan's 15-min delay + IEX for the latest minutes
   data_reeval: sip_delayed
   virtual_account: read_only_separate
 

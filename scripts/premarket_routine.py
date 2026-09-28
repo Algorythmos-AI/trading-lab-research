@@ -10,11 +10,12 @@ For each session:
                          patterns 09:50-11:00, micro pullback 09:31-11:30); same causal code as the backtest
 Stage files go to research/forward/routine/<date>/.
 
-Live data is IEX (free, thin for small caps). The nightly forward test re-evaluates the day on SIP, and the
-scorecard reports the agreement (D23).
+Live data is "hybrid" (SPEC-0001 routine.data_live, K-31): the SIP tape up to the free plan's 15-minute delay plus IEX for
+the latest minutes. IEX alone has no bars before 08:00 ET and few for small caps. The nightly forward test re-evaluates
+the day on full SIP, and the scorecard reports the agreement (D23). Each stage logs `sip_through_et`.
 Exits quietly on non-sessions (RTN-07). --replay YYYY-MM-DD runs every stage at once on historical data.
 
-Usage: PYTHONPATH=src .venv/bin/python scripts/premarket_routine.py [--replay 2018-12-20] [--feed iex]
+Usage: PYTHONPATH=src .venv/bin/python scripts/premarket_routine.py [--replay 2018-12-20] [--feed hybrid|sip|iex]
 """
 from __future__ import annotations
 
@@ -32,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from wt.core.clock import ET, et, to_utc_iso  # noqa: E402
 from wt.core.config import DATA_DIR, ROOT  # noqa: E402
-from wt.data.alpaca import AlpacaREST  # noqa: E402
+from wt.data.alpaca import AlpacaREST, HybridFeed  # noqa: E402
 from wt.data.edgar import SharesOutstanding  # noqa: E402
 from wt.data.universe import ASSETS, load_daily  # noqa: E402
 from wt.risk.virtual_account import VirtualAccount  # noqa: E402
@@ -68,6 +69,11 @@ def spec_cands(pool: pd.DataFrame) -> list[SpecCandidate]:
                           pm_pattern=isinstance(r.pm_pattern, str)) for r in pool.itertuples()]
 
 
+def sip_through(a) -> str | None:
+    t = getattr(a, "sip_through", None)
+    return None if t is None else t.tz_convert(ET).strftime("%H:%M")
+
+
 def write(folder: Path, name: str, body) -> None:
     folder.mkdir(parents=True, exist_ok=True)
     (folder / f"{name}.json").write_text(json.dumps(body, indent=1, default=str))
@@ -75,7 +81,7 @@ def write(folder: Path, name: str, body) -> None:
 
 def run(d: dt.date, feed: str, replay: bool) -> Path | None:
     spec = load_spec("SPEC-0001")
-    a = AlpacaREST(per_minute=30, shared=True)                     # small budget next to the paper runner (D6)
+    a = HybridFeed(AlpacaREST(per_minute=30, shared=True))         # small budget next to the paper runner (D6)
     cal = a.calendar((d - dt.timedelta(days=60)).isoformat(), d.isoformat())
     sessions = sorted(cal.date)
     if d not in sessions:
@@ -98,7 +104,8 @@ def run(d: dt.date, feed: str, replay: bool) -> Path | None:
         pool, pmb, stats = build_day(d, p, a, daily, universe, splits.sf, cache, shares, prev_sessions, cfg,
                                      split_refresh=splits.refresh)
         f = funnel(spec_cands(pool), spec) if len(pool) else {"tier1": [], "tier2": [], "primary": None, "dropped": []}
-        body = {"stage": name, "as_of_et": hhmm, "feed": feed, "stats": vars(stats), "tier1": f["tier1"]}
+        body = {"stage": name, "as_of_et": hhmm, "feed": feed, "sip_through_et": sip_through(a), "stats": vars(stats),
+                "tier1": f["tier1"]}
         if name in ("charts", "tier2", "tickets") and len(pool):
             cols = ["symbol", "price_0925", "gap_pct", "trend_ok", "window_ok", "window_room", "atr14", "pm_consolidation",
                     "pm_pattern", "former_runner", "suspect_split", "chart_ok", "catalyst_category"]
@@ -109,7 +116,7 @@ def run(d: dt.date, feed: str, replay: bool) -> Path | None:
             body["tickets"] = tickets(pool, f, spec)
         write(folder, f"{hhmm.replace(':', '')}_{name}", body)
     wait_until(d, "11:31", replay)
-    write(folder, "1131_signals", signals(a, d, pool, pmb, f, feed))
+    write(folder, "1131_signals", {**signals(a, d, pool, pmb, f, feed), "sip_through_et": sip_through(a)})
     return folder
 
 
@@ -179,7 +186,7 @@ if __name__ == "__main__":
     if args.replay:
         day, feed, replay = dt.date.fromisoformat(args.replay), args.feed or "sip", True
     else:
-        day, feed, replay = dt.datetime.now(ET).date(), args.feed or "iex", False
+        day, feed, replay = dt.datetime.now(ET).date(), args.feed or "hybrid", False
         wait_until(day, "07:55", False)
     folder = run(day, feed, replay)
     print("wrote", folder)

@@ -1,4 +1,4 @@
-# GENERATED from SPEC-0001 v1.0.0 (spec.yaml sha256 85bd20ebbecf7507).
+# GENERATED from SPEC-0001 v1.0.1 (spec.yaml sha256 ccf1eb586ab62374).
 # Do not edit. Change research/specs/SPEC-0001-warrior-methodology/spec.yaml and run
 #   PYTHONPATH=src .venv/bin/python -m wt.specs.loader SPEC-0001 --write
 candidate_pool:
@@ -318,4 +318,4 @@ scanner:
   rvol_min: 2.0
   rvol_preferred: 5.0
 spec_id: SPEC-0001
-spec_version: 1.0.0
+spec_version: 1.0.1
