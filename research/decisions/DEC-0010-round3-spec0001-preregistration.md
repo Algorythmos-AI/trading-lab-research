@@ -1,10 +1,10 @@
 # DEC-0010 — Round 3 pre-registration: SPEC-0001 (Warrior methodology)
 
-- **Status: APPROVED, not yet in effect.** It takes effect when both conditions are met:
+- **Status: IN EFFECT from 2026-09-29.** Both conditions are met:
   1. ~~The owner approves SPEC-0001 v1.0.0.~~ **Met:** approved in chat on 2026-09-28; `spec.yaml` now says `status: approved`.
-  2. The catalyst accuracy verdict (EXP-0015a, CAT-01) is recorded. **Open:** the owner's 20 blind labels are in, but the 19 disagreement verdicts are not. Interim result: sample 2 is at 84% decision level against a target of 85% (see `research/experiments/EXP-0015a-catalyst-accuracy/README.md`).
+  2. ~~The catalyst accuracy verdict (EXP-0015a, CAT-01) is recorded.~~ **Met 2026-09-29:** all 19 owner verdicts are in. CAT-01 is recorded as a **fail**: classifier v3 scores 84% decision level (42/50) on the fresh sample 2 against the 85% target, and each of the 8 misses is judged against the owner's own labels. The owner decided in chat on 2026-09-29 to proceed as written, because this record lists the classifier's accuracy as an accepted limitation (below). See `research/experiments/EXP-0015a-catalyst-accuracy/README.md`.
 
-  Until it takes effect, no round-3 P&L may be computed or viewed. Counts-only runs are allowed (see the count guard below).
+  Round-3 P&L may now be computed, subject to the count guard below.
 - **Date drafted:** 2026-09-28
 - **Approved by:** owner, 2026-09-28 (in chat)
 - **Specification:** `research/specs/SPEC-0001-warrior-methodology/spec.yaml` v1.0.0, amended to v1.0.1 on 2026-09-28 (owner decision in chat). The amendment only changes the forward dry run's live data source (K-31, RTN-06); no trial rule, threshold or trial count changed, so HYP-0010..0019 stand as written. Every rule and threshold comes from it; this record only freezes it. Configs are generated from it, and tests pin code defaults to it.
@@ -82,6 +82,6 @@ G1 results are not re-run. Their conclusions stand with these caveats.
 - **K-24:** orders act from 09:31, so a break inside the first minute is caught only by the ORB or level break that follows.
 - **Level 2 depth is `needs_data`.** Tape features are descriptive.
 - **10-second execution is proxied** by the 1-minute fallback.
-- **The catalyst classifier's final accuracy** is set by EXP-0015a.
+- **The catalyst classifier's final accuracy** is set by EXP-0015a: 84% decision level on the fresh sample (n = 50, 95% CI roughly 71–93%), below the 85% CAT-01 target, which stays open. Set F filters on the catalyst, so its results carry this error rate; Set P only tags it. The misses lean two ways: company announcements the classifier calls `none`, and SPAC commentary it calls `unconfirmed_rumor`. Any fix is a new pre-registered change, not part of round 3.
 - **Survivorship:** Alpaca's inactive-asset list is incomplete (DEC-0003).
 - **Small Set F:** the whole checklist is strict, so Set F n is expected to be small (the 2025-09-22/23 pools had 0 Tier-2 names).

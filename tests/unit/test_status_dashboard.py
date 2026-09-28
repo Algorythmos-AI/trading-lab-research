@@ -223,7 +223,9 @@ def test_research_sources_read_the_real_registry(tmp_path):
     assert b["n"] == 415 and b["expectancy_r"] == pytest.approx(0.1173, abs=1e-3) and b["dsr"] == pytest.approx(0.707, abs=1e-3)
     assert board["S1 · Pre-market high break (gap-and-go)"]["expectancy_r"] == pytest.approx(-0.404, abs=1e-3)
     assert all(r["error"] is None for r in res["scoreboard"])
-    assert len(res["round3"]) == 10 and {h["id"] for h in res["hypotheses"] if h["stale"]} >= {"HYP-0001", "HYP-0010"}
+    stale = {h["id"] for h in res["hypotheses"] if h["stale"]}
+    assert len(res["round3"]) == 10 and "HYP-0001" in stale              # closed by DEC-0007 but still "pre-registered"
+    assert all(("draft" in h["status"]) == (h["id"] in stale) for h in res["hypotheses"] if h["id"] >= "HYP-0010")
     sp = status.src_spec(c)
     assert sp["total"] == 112 and sp["by_status"]["implemented"] >= 106
     cat = status.src_cat01(c)
@@ -238,7 +240,8 @@ def test_cat01_counts_verdicts_mirrored_from_the_review_page(tmp_path):
     (d / "S2H004.json").write_text(json.dumps({"id": "S2H004", "data": {"item_id": "S2H004", "part": "disagreement", "owner_verdict": "x"}}))
     (d / "broken.json").write_text("{")
     cat = status.src_cat01(c)
-    assert cat["verdicts_on_page"] == 1 and cat["verdicts_done"] == 1
+    assert cat["verdicts_on_page"] == 1                                    # only the non-blind file counts
+    assert cat["verdicts_done"] == max(cat["verdicts_in_repo"], 1)
 
 
 def test_collect_falls_back_to_the_last_good_result_marked_stale(tmp_path):

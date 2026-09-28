@@ -26,6 +26,11 @@ def _src_status(sources: dict, names: list[str]) -> dict:
     return {n: {k: (sources.get(n) or {}).get(k) for k in ("ok", "stale", "as_of", "error")} for n in names}
 
 
+def _in_effect(status: str | None) -> bool:
+    s = (status or "").lower()
+    return "in effect" in s and "not yet" not in s
+
+
 def _fmt_r(x: float | None) -> str:
     return "n/a" if x is None else f"{x:+.3f}R"
 
@@ -116,6 +121,10 @@ def build_overview(sources: dict, cfg: dict, now: dt.datetime) -> dict:
         headline += f" Round 3 is waiting on {left} catalyst verdict{'s' if left != 1 else ''} from you."
     elif cat and cat.get("passed"):
         headline += " CAT-01 passes, so round 3 can run."
+    elif _in_effect((res or {}).get("dec0010_status")):
+        acc = (cat or {}).get("accuracy_pct")
+        headline += " Round 3 is cleared to run (DEC-0010 in effect)" + (
+            f"; CAT-01 was recorded below target at {acc:.0f}%." if cat and acc is not None else ".")
     sub = []
     if best:
         sub.append(f"Best candidate: {best['label']}, {_fmt_r(best['expectancy_r'])} over {best['n']} trades"

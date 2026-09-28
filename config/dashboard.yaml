@@ -38,7 +38,7 @@ gates:
   - {id: K0, name: "Knowledge extraction", criteria: "8 deliverables approved; feasibility choices made", status: done, evidence: DEC-0001}
   - {id: G0, name: "Data readiness", criteria: "Universe frozen and hashed; data sources, fees and account type recorded", status: done, evidence: DEC-0003}
   - {id: G1, name: "Backtest proof of edge", criteria: "CI95 lower bound > 0 at 1.5x costs; DSR > 0.95 over all trials; beats random p < 0.05; PF >= 1.2; profitable in >= 2/3 of years; no month > 25% of profit",
-     status: failed, evidence: "DEC-0007, DEC-0009 (75 trials, none pass)", next: "Round 3 (DEC-0010) once CAT-01 is recorded"}
+     status: failed, evidence: "DEC-0007, DEC-0009 (75 trials, none pass)", next: "Round 3 under DEC-0010 (in effect 2026-09-29)"}
   - {id: G2, name: "Forward and paper evidence", criteria: ">= 50 trades, >= 30 sessions, >= 90% replay match, 20 incident-free sessions", status: in_progress, evidence: "Weekly scorecard"}
   - {id: G3, name: "Broker acceptance", criteria: "Webull UAT contract suite, production read-only checks, owner canary order", status: not_started}
   - {id: G4, name: "Live tiny", criteria: "0.5% risk (~US$3), >= 50 live trades, about 3 months", status: not_started}
@@ -102,19 +102,16 @@ capabilities:
   - {name: "CI on every change", research: none, org: partial, note: "Research repo has no CI. Org repo runs security scans only"}
 
 roadmap:
-  - {rank: 1, priority: P0, title: "Record the 19 CAT-01 verdicts", why: "Puts DEC-0010 in effect and unblocks all round-3 P&L", owner: you}
-  - {rank: 2, priority: P0, title: "Bring ~/trading up to GitHub main (after 06:40 Sydney)", why: "Tonight's jobs run without the duplicate-rows fix (#5) and the hybrid feed (#6)", owner: you}
-  - {rank: 3, priority: P0, title: "Free at least 3 GB of disk", why: "The causal pool build needs it", owner: you}
-  - {rank: 4, priority: P0, title: "Add a weekday wake at 21:25", why: "Nothing wakes the Mac for the 21:30 routine", owner: you}
-  - {rank: 5, priority: P1, title: "Run round 3: counts-only guard, dev runs, r3_eval at 85 trials, DEC-0011", why: "The only open route to G1", owner: claude}
-  - {rank: 6, priority: P1, title: "Run live jobs from a pinned worktree", why: "Branch work can then never touch what launchd runs", owner: claude}
-  - {rank: 7, priority: P1, title: "Forward test: D7 catch-up and the round-3 trials nightly", why: "DEC-0010 says they run nightly from approval", owner: claude}
-  - {rank: 8, priority: P1, title: "RTN-06 feed-agreement report (IEX/hybrid vs SIP)", why: "Last open MUST requirement besides CAT-01", owner: claude}
-  - {rank: 9, priority: P1, title: "Re-scope org milestones M2-M5", why: "They harden the gap-and-go pipeline, which lost -0.40R per trade", owner: you}
-  - {rank: 10, priority: P1, title: "Registry tidy-up: stale HYP statuses, missing EXP-0009/0010 controls", why: "The registry must match the decisions", owner: claude}
-  - {rank: 11, priority: P2, title: "Accumulate G2 evidence: 50 trades, 30 sessions", why: "Gate before any broker work", owner: both}
-  - {rank: 12, priority: P2, title: "CI for the research repo; audit ledger; human-approval mode", why: "Required before live trading", owner: claude}
-  - {rank: 13, priority: Later, title: "G3 Webull adapter, then G4 live tiny and G5 scale", why: "Only after an edge is proven", owner: both}
+  - {rank: 1, priority: P0, title: "Run round 3: counts-only guard, dev runs, r3_eval at 85 trials, DEC-0011", why: "DEC-0010 is in effect; this is the only open route to G1", owner: claude}
+  - {rank: 2, priority: P0, title: "Forward test: run the round-3 trials nightly, with D7 catch-up and per-strategy markers", why: "DEC-0010 requires every round-3 trial to run nightly from approval; forward_test.py doesn't yet", owner: claude}
+  - {rank: 3, priority: P1, title: "Run live jobs from a pinned worktree", why: "Branch work can then never touch what launchd runs", owner: claude}
+  - {rank: 4, priority: P1, title: "RTN-06 feed-agreement report (IEX/hybrid vs SIP)", why: "Last open MUST requirement besides CAT-01", owner: claude}
+  - {rank: 5, priority: P1, title: "Re-scope org milestones M2-M5", why: "They harden the gap-and-go pipeline, which lost -0.40R per trade", owner: you}
+  - {rank: 6, priority: P1, title: "Registry tidy-up: HYP-0001..0006 statuses, missing EXP-0009/0010 controls", why: "The registry must match the decisions", owner: claude}
+  - {rank: 7, priority: P2, title: "Pre-register a catalyst classifier v4 (announcements, SPAC commentary, acquirer vs target)", why: "CAT-01 failed at 84%; only a new pre-registered change on a fresh sample can close it", owner: both}
+  - {rank: 8, priority: P2, title: "Accumulate G2 evidence: 50 trades, 30 sessions", why: "Gate before any broker work", owner: both}
+  - {rank: 9, priority: P2, title: "CI for the research repo; audit ledger; human-approval mode", why: "Required before live trading", owner: claude}
+  - {rank: 10, priority: Later, title: "G3 Webull adapter, then G4 live tiny and G5 scale", why: "Only after an edge is proven", owner: both}
 
 # Owner actions that no file or API can detect. Set done: true when finished.
 manual_actions:
