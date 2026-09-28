@@ -20,7 +20,7 @@ from wt.backtest.management import REGISTRY  # noqa: E402
 from wt.backtest.runner import minute_bars  # noqa: E402
 from wt.core.clock import ET, et, to_utc_iso  # noqa: E402
 from wt.core.config import DATA_DIR, ROOT, load_yaml  # noqa: E402
-from wt.data.alpaca import AlpacaREST  # noqa: E402
+from wt.data.alpaca import SIP_DELAY_MIN, AlpacaREST  # noqa: E402
 from wt.data.edgar import SharesOutstanding  # noqa: E402
 from wt.data.universe import DAILY, load_daily  # noqa: E402
 from wt.scanner.features import PMCache, build_candidates  # noqa: E402
@@ -43,13 +43,22 @@ def append(rec: dict) -> None:
         f.write(json.dumps(rec, default=str) + "\n")
 
 
-def update_daily(a: AlpacaREST, d: dt.date) -> None:
+def daily_end(d: dt.date, now: dt.datetime) -> str:
+    """End of the daily-bar request for session d: the next midnight ET, capped at now - SIP_DELAY_MIN.
+
+    The free plan refuses any SIP request that reaches into the last 15 minutes (HTTP 403, DEC-0003), and an
+    end of tomorrow's date does, so the nightly run ~20 minutes after the close failed on 2026-09-28.
+    """
+    return to_utc_iso(min(et(d + dt.timedelta(days=1), "00:00"), now - dt.timedelta(minutes=SIP_DELAY_MIN)))
+
+
+def update_daily(a: AlpacaREST, d: dt.date, now: dt.datetime | None = None) -> None:
     f = DAILY.parent / "chunks" / f"chunk_zupd_{d}.parquet"
     if f.exists():
         return
-    assets = pd.read_parquet(DAILY.parent / "assets.parquet")
+    end = daily_end(d, now or dt.datetime.now(ET))
     syms = sorted(set(pd.concat([pd.read_parquet(x, columns=["symbol"]) for x in (DAILY.parent / "chunks").glob("chunk_0*.parquet")]).symbol))
-    parts = [a.bars(syms[i:i + 200], "1Day", d.isoformat(), (d + dt.timedelta(days=1)).isoformat()) for i in range(0, len(syms), 200)]
+    parts = [a.bars(syms[i:i + 200], "1Day", d.isoformat(), end) for i in range(0, len(syms), 200)]
     pd.concat(parts, ignore_index=True).to_parquet(f)
 
 
@@ -127,7 +136,7 @@ def main(day: str | None = None) -> None:
     if str(d) in done_days():
         print("already done", d)
         return
-    update_daily(a, d)
+    update_daily(a, d, now)
     daily = load_daily()
     trades = []
     for fn in (lambda: run_B(a, d, sessions), lambda: run_watchlist_flag(a, d, sessions, daily), lambda: run_hod_flag(a, d, daily)):
