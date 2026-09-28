@@ -76,6 +76,9 @@ def load_daily() -> pd.DataFrame:
     daily = pd.concat([pd.read_parquet(f, columns=cols) for f in sorted(chunk_dir.glob("chunk_*.parquet"))],
                       ignore_index=True)
     daily["date"] = daily["t"].dt.tz_convert("America/New_York").dt.date
+    # A nightly update chunk (chunk_zupd_<date>) can repeat a session that a later base rebuild already holds;
+    # keep one row per symbol-day, preferring the later file (chunks are read in name order, zupd last).
+    daily = daily.drop_duplicates(["symbol", "date"], keep="last")
     return daily.drop(columns=["t"]).sort_values(["symbol", "date"], ignore_index=True)
 
 
