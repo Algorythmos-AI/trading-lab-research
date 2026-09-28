@@ -15,7 +15,7 @@ def ts(m):
 
 
 def cand(chain, t_in, t_out, r, qty=40, px=5.0, attempt=1, priority=5):
-    def resim(cash, qty=qty, px=px):
+    def resim(cash, risk, qty=qty, px=px):
         q = min(qty, int(cash // px))
         return (T(ts(t_in), ts(t_out), q, px), r) if q >= 1 else (None, None)
     return Candidate(chain, attempt, priority, ts(t_in), resim)

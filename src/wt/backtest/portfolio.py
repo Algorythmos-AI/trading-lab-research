@@ -24,7 +24,7 @@ class Candidate:
     attempt: int                        # 1, 2
     priority: int                       # lower = funded first when entries coincide (tier-3 primary = 0)
     entry_time: object                  # comparable timestamp from pass 1
-    resim: Callable[[float], tuple]     # cash -> (Trade | None, R | None)
+    resim: Callable[[float, float], tuple]   # (cash, risk_dollars) -> (Trade | None, R | None)
 
 
 @dataclass
@@ -34,7 +34,7 @@ class DayResult:
 
 
 def admit_day(cands: list[Candidate], equity: float, max_consecutive_losers: int = 3,
-              max_daily_loss_R: float = 2.0) -> DayResult:
+              max_daily_loss_R: float = 2.0, risk_pct: float = 1.0) -> DayResult:
     res = DayResult()
     cash_used = 0.0
     admitted_chains: dict[str, int] = {}
@@ -58,7 +58,7 @@ def admit_day(cands: list[Candidate], equity: float, max_consecutive_losers: int
             res.skipped.append((cand, "day_stop_loss_R"))
             continue
         avail = equity - cash_used
-        tr, r = cand.resim(avail)
+        tr, r = cand.resim(avail, equity * risk_pct / 100)
         if tr is None:
             res.skipped.append((cand, "unfunded"))
             continue
