@@ -3,9 +3,9 @@
 .env.*
 !.env.example
 # private / large data
-knowledge/
-data/
-logs/
+/knowledge/
+/data/
+/logs/
 *.db
 *.sqlite
 *.parquet
