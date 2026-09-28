@@ -11,7 +11,7 @@ The research and paper-trading engine behind Trading Lab. It holds:
 | **Owner**       | [@Algorythmos-AI/maintainers](https://github.com/orgs/Algorythmos-AI/teams/maintainers)                                      |
 | **Runs at**     | Locally on the maintainer's machine (launchd) against an Alpaca **paper** account. No deployed service.                     |
 | **Run locally** | `uv venv --python 3.12 && uv pip install -r requirements.lock.txt`, then `PYTHONPATH=src .venv/bin/python -m pytest -q`         |
-| **Context**     | [Research registry](research/README.md) · [G1 summary](research/G1_SUMMARY.md) · [Notice](NOTICE.md) · [Licence](LICENSE)   |
+| **Context**     | [Research registry](research/README.md) · [G1 summary](research/G1_SUMMARY.md) · [Status dashboard](https://claude.ai/artifact/HPff5mp4iyZLLoqDChWoFm) · [Notice](NOTICE.md) · [Licence](LICENSE)   |
 
 ---
 
@@ -25,7 +25,7 @@ The research and paper-trading engine behind Trading Lab. It holds:
 
 ```
 src/wt/          data · scanner · signals · backtest · risk · oms · brokers · live · knowledge
-scripts/         research drivers (g1_run, g1_eval, forward_test, weekly_scorecard, …)
+scripts/         research drivers (g1_run, g1_eval, forward_test, weekly_scorecard, status_dashboard, …)
 research/        hypotheses/ experiments/ decisions/ active_strategies/ lessons_learned/ specs/ forward/
 config/          ranking and catalyst configs, macro-event calendar
 deploy/          launchd agents for the nightly paper and forward-test jobs
@@ -38,6 +38,24 @@ These folders are git-ignored:
 - `data/`: bar caches
 - `logs/`
 - `.env`
+
+## Status dashboard
+
+A private page shows research results, SPEC-0001 coverage, tonight's jobs, the org backlog and what needs the owner:
+https://claude.ai/artifact/HPff5mp4iyZLLoqDChWoFm (owner access only).
+
+`scripts/status_dashboard.py` builds it. It is read-only: it never writes to the live checkout (`~/trading`) and refuses
+an output directory inside it. It writes `build/dashboard/` (git-ignored): seven section documents, a self-contained
+`index.html` that opens without network, and a per-source cache so one failing source shows stale data instead of none.
+
+```
+PYTHONDONTWRITEBYTECODE=1 ~/trading/.venv/bin/python scripts/status_dashboard.py [--no-github] [--with-account]
+```
+
+Exit codes: 0 all sources fresh · 1 some sources stale or failed, documents still written · 2 nothing written ·
+3 another run holds the lock. Locations, gate definitions, the review checklist, the roadmap and owner actions that
+no file records live in `config/dashboard.yaml`. A Claude session pushes the documents to the page's database every
+15 minutes while it runs; the page marks itself late after 35 minutes and stopped after 90.
 
 ## Rules
 

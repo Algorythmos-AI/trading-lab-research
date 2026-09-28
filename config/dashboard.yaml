@@ -1,0 +1,134 @@
+# Status dashboard configuration (scripts/status_dashboard.py).
+# Numbers shown on the page are read from the research files, git, GitHub and the host at build time.
+# This file holds only what no file records: where things live, gate definitions, verdict labels,
+# the review checklist mapping, the roadmap and owner actions that cannot be detected.
+
+schema_version: 1
+refresh_minutes: 15
+
+paths:
+  research_root: "."                      # this checkout (registry, spec, experiments: up-to-date main)
+  deployed_root: "~/trading"              # the checkout launchd runs; READ ONLY, never written
+  org_root: "~/Code/trading-lab"
+  old_root: "~/Documents/trading"         # rev-3 plan step 0.12 renames it to trading.pre-migration
+  env_files: ["~/trading/.env", "~/Code/trading-lab/.env", ".env"]   # values used only to scrub output
+
+repos:
+  research: Algorythmos-AI/trading-lab-research
+  org: Algorythmos-AI/trading-lab
+  source: Algorythmos-AI/trading-lab-source
+  registration_pr: {repo: Algorythmos-AI/.github-private, number: 4, title: "catalog registration for trading-lab-research"}
+project: {owner: Algorythmos-AI, number: 2}
+
+host:
+  disk_floor_gb: 3.0                       # the causal pool build needs 3 GB+ free
+  jobs:
+    - {label: com.wt.routine, local_time: "21:30", tz: Australia/Sydney, must_start_before_et: "07:55",
+       name: "Pre-market routine", what: "SPEC-0001 dry run; waits until 07:55 ET, stages at 08:00 / 08:30 / 09:00 / 09:15"}
+    - {label: com.wt.paper-b, local_time: "22:30", tz: Australia/Sydney, must_start_before_et: "09:30",
+       name: "Paper B + forward test", what: "Strategy B paper session, then the nightly forward test ~20 min after the close"}
+  wake_needed: ["21:25"]                   # one wake before the first job; the routine keeps the Mac awake until paper B
+  swap_warn_pct: 85                        # swap files live on the same disk; high swap use eats free space
+
+closed_hypotheses: [HYP-0001, HYP-0002, HYP-0003, HYP-0004, HYP-0005, HYP-0006]   # judged by DEC-0007
+
+trials: {used: 75, budget_if_round3: 85, source: "DEC-0009 (global 75); DEC-0010 pre-registers 10 more"}
+
+gates:
+  - {id: K0, name: "Knowledge extraction", criteria: "8 deliverables approved; feasibility choices made", status: done, evidence: DEC-0001}
+  - {id: G0, name: "Data readiness", criteria: "Universe frozen and hashed; data sources, fees and account type recorded", status: done, evidence: DEC-0003}
+  - {id: G1, name: "Backtest proof of edge", criteria: "CI95 lower bound > 0 at 1.5x costs; DSR > 0.95 over all trials; beats random p < 0.05; PF >= 1.2; profitable in >= 2/3 of years; no month > 25% of profit",
+     status: failed, evidence: "DEC-0007, DEC-0009 (75 trials, none pass)", next: "Round 3 (DEC-0010) once CAT-01 is recorded"}
+  - {id: G2, name: "Forward and paper evidence", criteria: ">= 50 trades, >= 30 sessions, >= 90% replay match, 20 incident-free sessions", status: in_progress, evidence: "Weekly scorecard"}
+  - {id: G3, name: "Broker acceptance", criteria: "Webull UAT contract suite, production read-only checks, owner canary order", status: not_started}
+  - {id: G4, name: "Live tiny", criteria: "0.5% risk (~US$3), >= 50 live trades, about 3 months", status: not_started}
+  - {id: G5, name: "Scale", criteria: "Risk 0.5% -> 0.75% -> 1.0%; capital capped at A$1,000", status: not_started}
+
+# Scoreboard rows. Stats come from the file; the verdict is the research decision that judged it.
+scoreboard:
+  - {label: "B · QQQ signals, QQQM orders", file: research/experiments/G1-combined.json, keys: ["B|QQQ", stats], span: development, verdict: candidate, ref: "EXP-0005b · DEC-0007", note: "Best result. Fails only the deflated-Sharpe test"}
+  - {label: "B · QQQM holdout", file: research/experiments/EXP-0011-holdout-B-qqqm/results.json, keys: [summary], span: holdout, verdict: candidate, ref: "EXP-0011", note: "Run once, 2025-09-26 to 2026-09-25"}
+  - {label: "B · SPY signals, SPYM orders", file: research/experiments/G1-combined.json, keys: ["B|SPY", stats], span: development, verdict: rejected, ref: "DEC-0007", note: "Costs erase the edge"}
+  - {label: "A · 5-min ORB, SPY", file: research/experiments/G1-combined.json, keys: ["A|SPY", stats], span: development, verdict: rejected, ref: "DEC-0007"}
+  - {label: "A · 5-min ORB, QQQ", file: research/experiments/G1-combined.json, keys: ["A|QQQ", stats], span: development, verdict: rejected, ref: "DEC-0007"}
+  - {label: "S1 · Pre-market high break (gap-and-go)", file: research/experiments/G1-combined.json, keys: [s1_pm_high_break, stats], span: development, verdict: rejected, ref: "DEC-0007", note: "Round 3 re-tests gap-and-go as GG-1..4 under SPEC-0001"}
+  - {label: "S1 · 5-min bull flag", file: research/experiments/G1-combined.json, keys: [s1_bull_flag_5m, stats], span: development, verdict: inconclusive, ref: "DEC-0007"}
+  - {label: "S5 · Breakout-retest", file: research/experiments/G1-combined.json, keys: [s5_breakout_retest_pmh, stats], span: development, verdict: rejected, ref: "DEC-0007"}
+  - {label: "S3 · VWAP trend pullback", file: research/experiments/G1-combined.json, keys: [S3, stats], span: development, verdict: rejected, ref: "DEC-0007"}
+  - {label: "B on IWM", file: research/experiments/EXP-0012-r2-B-iwm-dia/results.json, keys: [results, IWM, summary], span: development, verdict: falsified, ref: "EXP-0012 · HYP-0009"}
+  - {label: "B on DIA", file: research/experiments/EXP-0012-r2-B-iwm-dia/results.json, keys: [results, DIA, summary], span: development, verdict: falsified, ref: "EXP-0012 · HYP-0009"}
+  - {label: "Bull flag, ATR stops", file: research/experiments/EXP-0013-r2-atr-stops/results.json, keys: [results, "s1_bull_flag_5m_atr|M1|W3", summary], span: development, verdict: falsified, ref: "EXP-0013 · HYP-0008"}
+  - {label: "Breakout-retest, ATR stops", file: research/experiments/EXP-0013-r2-atr-stops/results.json, keys: [results, "s5_breakout_retest_pmh_atr|M1|W3", summary], span: development, verdict: falsified, ref: "EXP-0013 · HYP-0008"}
+  - {label: "HOD bull flag (walk-forward)", file: research/experiments/EXP-0014-r2-intraday-hod/g1_eval.json, keys: [HOD_bull_flag, stats], span: walk-forward, verdict: falsified, ref: "EXP-0014 · HYP-0007"}
+  - {label: "HOD first pullback", file: research/experiments/EXP-0014-r2-intraday-hod/results.json, keys: [results, "HOD_first_pullback|M1", summary], span: development, verdict: falsified, ref: "EXP-0014 · HYP-0007"}
+  - {label: "S2 · Extreme reversal", file: research/experiments/G1-combined.json, keys: [s2_extreme_reversal, stats], span: development, verdict: not_applicable, ref: "DEC-0006", note: "Never triggers on liquid stocks"}
+
+round3_trials:
+  - {id: HYP-0010, name: "GG-1 pre-market high / apex break", set: F}
+  - {id: HYP-0011, name: "GG-2 ORB ladder", set: F}
+  - {id: HYP-0012, name: "GG-3 5-minute continuation", set: F}
+  - {id: HYP-0013, name: "GG-4 red-to-green", set: F}
+  - {id: HYP-0014, name: "GG-1 pre-market high / apex break", set: P}
+  - {id: HYP-0015, name: "GG-2 ORB ladder", set: P}
+  - {id: HYP-0016, name: "GG-3 5-minute continuation", set: P}
+  - {id: HYP-0017, name: "GG-4 red-to-green", set: P}
+  - {id: HYP-0018, name: "MP-1 micro pullback", set: HOD}
+  - {id: HYP-0019, name: "REV-1 reversal long", set: REV}
+
+# The architectural review's checklist, mapped to SPEC-0001 requirement ids.
+review_checklist:
+  - {item: "Price preferences", reqs: [SCN-GAP-01, SCN-GAP-02, SCN-HOD-01, SCN-REV-01]}
+  - {item: "Float", reqs: [SCN-GAP-05, SCN-GAP-06, SCN-HOD-05]}
+  - {item: "Catalyst quality", reqs: [POOL-04, SCN-GAP-09, SCN-GAP-10, SCN-GAP-11, SCN-HOD-09, CAT-01]}
+  - {item: "Relative volume", reqs: [SCN-GAP-07, SCN-GAP-08, SCN-HOD-02, SCN-HOD-03, SCN-HOD-04, SCN-REV-02, SCN-REV-03, SCN-REV-04]}
+  - {item: "Time of day", reqs: [SCN-HOD-08, ENT-GG-2, RTN-01, RTN-02, RTN-03, RTN-04, RTN-05]}
+  - {item: "Scanner logic", reqs: [POOL-01, POOL-02, POOL-03, SCN-GAP-03, SCN-GAP-04, SCN-HOD-06, SCN-HOD-07, FUN-01, FUN-02, FUN-03, FUN-04, FUN-05, FUN-06, FUN-07]}
+  - {item: "Trade management", reqs: [EXE-01, EXE-02, EXE-05, EXE-06, EXE-07, EXE-08, EXT-06, EXT-09]}
+  - {item: "Stop-loss", reqs: [EXE-04, EXT-01, EXT-03, EXT-04, EXT-05]}
+  - {item: "Profit-taking", reqs: [EXE-03, EXT-01, EXT-02, EXT-07, EXT-08]}
+  - {item: "Risk controls", reqs: [RSK-01, RSK-02, RSK-03, RSK-04, RSK-05, RSK-06, RSK-07]}
+
+# Capability matrix: what each repo supports today. research = trading-lab-research, org = trading-lab.
+capabilities:
+  - {name: "Backtesting", research: done, org: none, note: "wt.backtest: 1-minute simulator, controls, G1 statistics"}
+  - {name: "Experiment tracking", research: done, org: none, note: "HYP / EXP / DEC registry with a global trial count"}
+  - {name: "Versioned strategy specs", research: done, org: none, note: "SPEC-0001 with a traceability matrix; configs generated from the spec"}
+  - {name: "Paper trading", research: partial, org: partial, note: "Paper B runs nightly on a $600 virtual account; the org pipeline is frozen (ADR-0001)"}
+  - {name: "Risk controls in code", research: partial, org: partial, note: "Research: RSK-01..07 and loss latches. Org: order guard only; M2 not started"}
+  - {name: "Auditability", research: partial, org: partial, note: "Decision records and journals; no hash-chained ledger yet (org M3)"}
+  - {name: "Observability", research: partial, org: none, note: "Logs, weekly scorecard and this dashboard; no alerting"}
+  - {name: "Human approval mode", research: none, org: none, note: "Not built anywhere yet"}
+  - {name: "Live trading", research: none, org: none, note: "By design: waits for G1-G3. Webull adapter not started"}
+  - {name: "CI on every change", research: none, org: partial, note: "Research repo has no CI. Org repo runs security scans only"}
+
+roadmap:
+  - {rank: 1, priority: P0, title: "Record the 19 CAT-01 verdicts", why: "Puts DEC-0010 in effect and unblocks all round-3 P&L", owner: you}
+  - {rank: 2, priority: P0, title: "Bring ~/trading up to GitHub main (after 06:40 Sydney)", why: "Tonight's jobs run without the duplicate-rows fix (#5) and the hybrid feed (#6)", owner: you}
+  - {rank: 3, priority: P0, title: "Free at least 3 GB of disk", why: "The causal pool build needs it", owner: you}
+  - {rank: 4, priority: P0, title: "Add a weekday wake at 21:25", why: "Nothing wakes the Mac for the 21:30 routine", owner: you}
+  - {rank: 5, priority: P1, title: "Run round 3: counts-only guard, dev runs, r3_eval at 85 trials, DEC-0011", why: "The only open route to G1", owner: claude}
+  - {rank: 6, priority: P1, title: "Run live jobs from a pinned worktree", why: "Branch work can then never touch what launchd runs", owner: claude}
+  - {rank: 7, priority: P1, title: "Forward test: D7 catch-up and the round-3 trials nightly", why: "DEC-0010 says they run nightly from approval", owner: claude}
+  - {rank: 8, priority: P1, title: "RTN-06 feed-agreement report (IEX/hybrid vs SIP)", why: "Last open MUST requirement besides CAT-01", owner: claude}
+  - {rank: 9, priority: P1, title: "Re-scope org milestones M2-M5", why: "They harden the gap-and-go pipeline, which lost -0.40R per trade", owner: you}
+  - {rank: 10, priority: P1, title: "Registry tidy-up: stale HYP statuses, missing EXP-0009/0010 controls", why: "The registry must match the decisions", owner: claude}
+  - {rank: 11, priority: P2, title: "Accumulate G2 evidence: 50 trades, 30 sessions", why: "Gate before any broker work", owner: both}
+  - {rank: 12, priority: P2, title: "CI for the research repo; audit ledger; human-approval mode", why: "Required before live trading", owner: claude}
+  - {rank: 13, priority: Later, title: "G3 Webull adapter, then G4 live tiny and G5 scale", why: "Only after an edge is proven", owner: both}
+
+# Owner actions that no file or API can detect. Set done: true when finished.
+manual_actions:
+  - {id: webull-key, title: "Reset the Webull API key", why: "It was exposed in a screenshot", blocks: "G4 live trading", done: false}
+  - {id: maintainers-role, title: "Confirm the maintainers team role on the trading repos", why: "Never confirmed after the migration", blocks: "Nothing yet", done: false}
+  - {id: utc-offsets, title: "Decide whether to normalise UTC offsets in the public decision logs", why: "The offsets hint at travel", blocks: "Nothing", done: false}
+  - {id: sip-subscription, title: "Decide on a SIP data subscription", why: "Free IEX has no pre-market bars before 08:00 ET (DEC-0001)", blocks: "Better live data", done: false}
+  - {id: m2-rescope, title: "Decide the fate of org milestones M2-M5", why: "They target the rejected gap-and-go pipeline", blocks: "Org backlog planning", done: false}
+
+timeline:
+  - {date: "2026-04-16", event: "First scheduled gap-and-go run (legacy pipeline)"}
+  - {date: "2026-07-09", event: "Last legacy run; trading freeze since"}
+  - {date: "2026-09-27", event: "K0 approved; G1 candidate set fixed; org repo PRs #1-#11"}
+  - {date: "2026-09-28", event: "G1 round 1 and 2: 75 trials, no pass; strategy B frozen"}
+  - {date: "2026-09-28", event: "trading-lab v0.1.0 released (M0 complete)"}
+  - {date: "2026-09-28", event: "SPEC-0001 approved (v1.0.1); research PRs #1-#6 merged"}
+  - {date: "2026-09-28", event: "Paper B armed; pre-market routine launched"}
