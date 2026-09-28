@@ -1,0 +1,61 @@
+# SPEC-0001 catalyst classifier (v2). Headline -> category, keyed to the spec's categories (spec.yaml
+# scanners.pre_market_gap.catalyst). This file is separate from catalysts.yaml (v1), which the frozen
+# G1/baseline scanner keeps using.
+#
+# Matching is case-insensitive on " <headline> " (padded, so ' ai ' matches whole words). Rules are checked
+# in this order, and the first match wins:
+#   1. generic_list      -> none (market-wide "movers"/"gainers" roundups name many tickers and aren't a
+#                            catalyst for any one of them)
+#   2. buyout_offer      -> excluded (price pinned; spec §1, §7)
+#   3. unconfirmed_rumor -> excluded (C1)
+#   4. offering_dilution, reverse_split -> non-qualifying
+#   4b. scheduling       -> none (date announcements such as "to report Q3 results on ..." aren't results)
+#   5. qualifying, highest priority first: fda_approval, clinical_study_results, earnings_release,
+#      price_target_upgrade, breaking_news
+#   6. generic_pr        -> none (conferences, webinars, meetings: not material, K-23)
+#   7. hype_only         -> non-qualifying
+#   8. otherwise         -> none
+# Written before any EXP-0015a sample headline was read (no tuning on the test sample).
+version: 2
+generic_list: ['stocks moving in', 'stocks moving', 'movers', 'mid-day gainers', 'mid-day losers', 'top gainers',
+               'biggest movers', 'stocks that are', "pre-market session", 'premarket session', 'stocks trading higher',
+               'stocks trading lower', 'why these stocks', 'stocks to watch', 'most active', 'leading gainers',
+               'trending stocks', 'on the move', 'stocks hitting']
+buyout_offer: ['to be acquired', 'definitive agreement to be acquired', 'agrees to be acquired', 'acquire all outstanding',
+               'take-private', 'take private', 'go-private', 'go private', 'tender offer for all', 'per share in cash',
+               'buyout', 'to be bought', 'all-cash transaction', 'all-cash deal', 'acquisition by',
+               'agreement to be acquired', 'receives unsolicited', 'non-binding proposal to acquire', 'proposal to acquire']
+unconfirmed_rumor: ['reportedly', 'rumor', 'rumour', 'sources say', 'people familiar', 'according to sources',
+                    'said to be', 'in talks', 'exploring a sale', 'exploring sale', 'weighing a sale', 'considering a sale',
+                    'unconfirmed', 'speculation', 'chatter', 'report says', 'citing sources']
+offering_dilution: ['public offering', 'registered direct', 'private placement', 'priced offering', 'pricing of',
+                    'at-the-market', 'atm offering', 'shelf registration', 'warrants to purchase', 'dilut',
+                    'proposed offering', 'underwritten offering', 'securities purchase agreement', 'equity line']
+reverse_split: ['reverse stock split', 'reverse split', 'share consolidation']
+qualifying:
+  fda_approval: {score: 1.0, kw: ['fda approv', 'fda clear', 'receives fda', 'fda grants', 'fda accept', 'approval from the fda',
+                                  '510(k)', 'breakthrough therapy', 'breakthrough device', 'fast track', 'orphan drug',
+                                  'emergency use authorization', ' eua ', 'ema approv', 'ce mark', 'marketing authorization',
+                                  'receives approval', 'regulatory approval', 'pdufa', 'nda ', 'bla ', 'rare pediatric']}
+  clinical_study_results: {score: 1.0, kw: ['topline', 'top-line', 'phase 1', 'phase 2', 'phase 3', 'phase i', 'phase ii',
+                                            'phase iii', 'clinical trial', 'trial results', 'study results', 'primary endpoint',
+                                            'positive data', 'positive results', 'data from', 'efficacy', 'interim analysis',
+                                            'preclinical', 'clinical data', 'pivotal']}
+  earnings_release: {score: 0.9, kw: ['earnings', 'quarterly results', 'q1 ', 'q2 ', 'q3 ', 'q4 ', 'first quarter',
+                                      'second quarter', 'third quarter', 'fourth quarter', 'fiscal year', 'full year',
+                                      'full-year', 'raises guidance', 'raises outlook', 'revenue of', 'eps ', 'record revenue',
+                                      'preliminary revenue', 'financial results', 'guidance', 'beats estimates']}
+  price_target_upgrade: {score: 0.5, kw: ['upgrade', 'raises price target', 'price target', ' pt ', 'initiates coverage',
+                                          'initiated with', 'raised to buy', 'outperform', 'overweight', 'buy rating']}
+  breaking_news: {score: 0.8, kw: ['contract', 'awarded', 'partnership', 'partners with', 'collaboration', 'agreement with',
+                                   'purchase order', 'order from', 'selected by', 'license agreement', 'licensing agreement',
+                                   'strategic alliance', 'supply agreement', 'distribution agreement', 'mou', 'letter of intent',
+                                   'acquires', 'to acquire', 'acquisition of', 'completes acquisition', 'patent', 'grant from',
+                                   'wins', 'secures', 'launches', 'unveils', 'joint venture', 'deal with',
+                                   'nasdaq listing', 'uplist', 'nasa', 'pentagon']}
+scheduling: ['to report', 'will report', 'to release', 'will release', 'schedules', 'announces date', 'to announce',
+             'to host conference call', 'conference call to discuss', 'date for', 'earnings call on', 'results on']
+generic_pr: ['to present at', 'presentation at', 'conference', 'webinar', 'annual meeting', 'fireside chat',
+             'to participate', 'participation in', 'investor day', 'shareholder letter', 'to host']
+hype_only: [' ai ', 'artificial intelligence', 'bitcoin', 'crypto', 'blockchain', 'quantum', 'nuclear', 'drone', 'robot',
+            ' ev ', 'electric vehicle', 'meme', 'short squeeze', 'short interest', 'heavily shorted']
