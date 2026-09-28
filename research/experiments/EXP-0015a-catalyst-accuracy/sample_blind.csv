@@ -1,0 +1,101 @@
+item_id,date,symbol,headline
+H001,2025-07-11,LEVI,Levi Strauss Raises FY2025 Adj EPS Guidance from $1.20-$1.25 to $1.25-$1.30 vs $1.23 Est
+H002,2021-10-01,RIOT,Why Bitcoin-Related And Ethereum-Related Stocks Are Rising
+H003,2024-05-22,RZLT,Rezolute Reports Topline Results From Phase 2 Proof Of Concept Study Of RZ402 In Patients With Diabetic Macular Edema; Met Primary Study Endpoints
+H004,2021-01-29,AMC,101 Biggest Movers From Yesterday
+H005,2025-01-16,DOYU,Why Taiwan Semiconductor Shares Are Trading Higher By Around 5%; Here Are 20 Stocks Moving Premarket
+H006,2021-09-23,RNAZ,TransCode Therapeutics Highlights Publication In Cancer Nanotechnology Of Preclinical Data Supporting Therapeutic Potential Of TTX-MC138 In Metastatic Breast Cancer
+H007,2021-11-18,CRDF,Cardiff Oncology Announced $15M Equity Investment from Pfizer through its Pfizer Breakthrough Growth Initiative
+H008,2022-03-30,DRCT,"Direct Digital Holdings Sees Q1 Sales $11M-$11.5M vs $8.42M Est., Sees FY22 Sales $48M-$52M vs $49.24M Est."
+H009,2024-10-07,SRRK,"Scholar Rock Announced Topline Results From Phase 3 Sapphire Trial Of Apitegromab For Spinal Muscular Atrophy, Meeting Primary Endpoint With Statistically Significant And Clinically Meaningful Improvement In Motor Function, Plans To Submit FDA And European Marketing Applications In Q1 2025"
+H010,2021-03-23,ORMP,"The Daily Biotech Pulse: FDA Approvals For Merck, Pacira And Zealand, Roche-Regeneron Ace Late-Stage COVID-19 Study, AlloVir Appoints Gilead Virology Chief As CEO"
+H011,2023-03-29,EBS,FDA Approves First Over-The-Counter Naloxone Nasal Spray
+H012,2021-09-09,RKLB,"Canaccord Genuity Initiates Coverage On Rocket Lab USA with Buy Rating, Announces Price Target of $30"
+H013,2021-11-15,COCO,"Credit Suisse Initiates Coverage On Vita Coco with Outperform Rating, Announces Price Target of $18"
+H014,2023-05-10,TCRX,"TScan Therapeutics Q1 EPS $(0.93) Misses $(0.74) Estimate, Sales $6.80M Beat $4.40M Estimate"
+H015,2025-07-11,RCAT,"Drone Stocks Fly As Defense Secretary Fast-Tracks Drone Production, Deployment"
+H016,2024-11-20,ZIM,"ZIM Integrated Shipping Q3 2024 GAAP EPS $9.34 Beats $7.20 Estimate, Sales $2.765B Beat $2.433B Estimate"
+H017,2021-07-26,MARA,"U.S. Equity Futures, European Markets Lower; China Education Stocks Fall After Some Companies Say New Regulations Expected to have Material Impact on Earnings; Bitcoin Soars on Speculation Amazon Could Accept Crypto Payments Before Year-End"
+H018,2023-10-03,ALXO,"ALX Oncology Reports Interim Phase 2 ASPEN-06 Trial Data For Advanced HER2-Positive Gastric Cancer, Showing Confirmed Overall Response Rate Of 52% For Evorpacept Combo Treatment Versus 22% For Control Treatment"
+H019,2024-11-13,RIVN,Rivian And Volkswagen Group Launch Joint Venture With Total Deal Size Of Up To $5.8B
+H020,2021-10-19,ETTX,"The Daily Biotech Pulse: Entasis, Dermata Spike Higher On Positive Readouts, J&J Q3 EPS Beats Estimates, Wave Life Sciences Regains Right To CNS Portfolio"
+H021,2024-07-29,LGVN,"HC Wainwright & Co. Maintains Buy on Longeveron, Lowers Price Target to $10"
+H022,2025-07-11,RCAT,"Secretary of Defense Pete Hegseth Signs Memo, Announces Efforts To Boost Drone Industry"
+H023,2022-01-10,VERU,Veru Reports FDA Granted Fast Track Designation For Enobosarm For Treatment Of AR+ ER+ HER2- Metastatic Breast Cancer
+H024,2024-02-06,PLTR,'Not A Q&A Bot:' Palantir CTO Says AI Platform Saved Construction Firm $10M As He Touts 'Operating System For Enterprise'
+H025,2023-01-20,GNS,"Top Reddit Short Squeeze Mentions for Friday January 20, 2022: GNS,	BBBY, APRN, AMC, GME, IBKR, HLBZ, WISA, RAD, TRKA"
+H026,2021-02-23,PLX,"The Daily Biotech Pulse: Aridis To Study Antibody Cocktail For Coronavirus Variants, Revance & Protalix Data Readouts"
+H027,2022-03-10,MQ,Why Bitcoin- And Ethereum-Related Stock Marqeta Is Skyrocketing During Wednesday's After-Hours Session
+H028,2025-09-11,WLDS,Wearable Devices Announces $4M Direct Offering Of 1M Shares At A Price Of $4.00/Share; Issues 1M Shares And Warrants In Institutional Deal
+H029,2022-08-04,HOOD,"Mizuho Maintains Buy on Robinhood Markets, Lowers Price Target to $13"
+H030,2022-06-02,PATH,A Peek Into The Markets: US Stock Futures Gain Ahead Of Economic Reports; Crude Oil Down Over 2%
+H031,2021-11-15,EYPT,"Eyepoint Pharmaceuticals Shares Spike to Premarket Highs; Co on Saturday Announced Wet AMD Trial Results Showed 76% and 53% of Patients Were Rescue-free Up to Four & Six Months, Respectively, After Single Injection of EYP-1901"
+H032,2023-03-03,IOT,"BMO Capital Maintains Market Perform on Samsara, Raises Price Target to $19"
+H033,2025-07-11,RCAT,Trump Says 'I Don't Know' Who Paused Ukraine Weapon Shipments—Hegseth Did Not Inform The White House: Report
+H034,2022-10-14,LASE,10 Industrials Stocks Moving In Friday's Pre-Market Session
+H035,2024-06-12,BMR,Market-Moving News for June 12th
+H036,2022-01-21,PTON,"Top 10 WallStreetBets Mentions for January 21, 2022 Premarket: GME, NFLX, TSLA, AAPL, AMC, PTON, LCID, MSFT, NVDA, SOFI"
+H037,2023-08-11,IDAI,Trust Stamp Receives Notice Of A New Patent Issuance For AI-Powered Tokenization Technology From The U.S. Patent And Trademark Office
+H038,2021-10-19,ETTX,Entasis Therapeutics Announces Topline Results From Phase 3 ATTACK Trial; SUL-DUR Met Primary Efficacy Endpoint
+H039,2021-09-21,NNVC,EXCLUSIVE: NanoViricides' Remdesivir-Encapsulated COVID-19 Therapy Shows Encouraging Preclinical Safety Profile
+H040,2025-03-04,GENI,"Genius Sports Q4 EPS $0.12 Beats $0.02 Estimate, Sales $175.53M Miss $175.54M Estimate"
+H041,2022-02-01,BKKT,Bakkt Reports Hanover Community Bank Joined Co.'s Early Adopter Crypto Program
+H042,2023-03-03,IOT,"JP Morgan Maintains Neutral on Samsara, Raises Price Target to $17"
+H043,2020-12-10,ZKIN,"ZK Int'l. Reports Formation Of Joint Venture, Bid On Hydropower Project With Total Estimated Cost RMB4.9B"
+H044,2025-02-26,AAOI,"Earnings Scheduled For February 26, 2025"
+H045,2021-10-15,RIOT,"DA Davidson Bullish On This Bitcoin Company, Sees Huge Upside"
+H046,2024-11-19,SNOA,Sonoma Pharmaceuticals Receives New FDA 510(k) Clearance For Microcyn-Based Wound Care Hydrogel
+H047,2025-03-04,MASS,908 Devices Q4 2024 Adj EPS $(0.27) Beats $(0.35) Estimate
+H048,2021-03-23,DLPN,Dolphin Entertainment Launches Non-Fungible Tokens Creation And Marketing Division; Expects First Partnership In Collectibles
+H049,2019-03-27,AXSM,Axsome Therapeutics Reports Received FDA Breakthrough Therapy Designation For AXS-05 For Treatment Of Major Depressive Disorder
+H050,2020-11-09,GRPN,"Credit Suisse Maintains Neutral on Groupon, Raises Price Target to $31"
+H051,2021-01-05,BYFC,Broadway Financial Corporation and CFBanc Corporation Announced Monday Receipt of Regulatory Approvals for Merger
+H052,2021-07-20,AEHR,"Benzinga Pro's Top 5 Stocks To Watch For Tuesday, Jul. 20, 2021: NFLX, SFTW, AEHR, LCAP, ENZ"
+H053,2021-10-19,ETTX,Entasis Therapeutics Shares Rise 23% Premarket; Co Announced Monday SUL-DUR Met Primary Endpoint
+H054,2025-06-23,INDO,"Indonesia Energy (INDO) Stock Soars Amid Middle East Tensions, Oil Disruption Fears"
+H055,2021-07-15,BLIN,Bridgeline Announces A Management Company Will Use Co.'s Hawksearch; Financial Details Not Disclosed
+H056,2021-01-19,SOS,SOS Ltd. Shares Up 12%; Co Enters Into Non-Binding Letter Of Intent To Acquire 100% Of Outstanding Shares Of Cryptocurrency Technology Provider FXK
+H057,2021-01-29,AMC,A Peek Into The Markets: US Stock Futures Down Ahead Of Earnings
+H058,2024-05-22,RZLT,12 Health Care Stocks Moving In Tuesday's After-Market Session
+H059,2023-05-10,RNG,"Wells Fargo Maintains Overweight on RingCentral, Lowers Price Target to $50"
+H060,2022-10-17,MGNX,Gilead And MacroGenics Announce Oncology Collaboration To Develop Bispecific Antibodies; Gilead Will Pay Macrogenics An Upfront Payment Of $60M And MacroGenics Will Be Eligible To Receive Up To $1.7B In Potential Milestones
+H061,2025-06-04,SGMT,Sagimet Biosciences Reported Denifanstat Met All Primary And Secondary Endpoints In A Phase 3 Clinical Trial For The Treatment Of Moderate To Severe Acne Vulgaris Conducted By Sagimet's License Partner Ascletis Bioscience Co. Ltd. (Ascletis) In China
+H062,2025-07-24,MXL,Why Alphabet Shares Are Trading Higher; Here Are 20 Stocks Moving Premarket
+H063,2021-05-27,SOS,Why Bitcoin Mining Stocks Are Trading Higher Today
+H064,2021-10-19,ETTX,"Entasis Therapeutics Shares Halted, News Pending"
+H065,2021-08-23,VVOS,Vivos Therapeutics Announces The FDA Has Granted 510(k) Market Clearance To Its mmRNA Oral Appliance for Treating Mild to Moderate Sleep Apnea
+H066,2025-07-11,LEVI,"During Conference Call, Levi Strauss CFO Reportedly Says Co Has Brought 60% Of Inventory Needed To Get Through Second Half Of The Year"
+H067,2021-07-26,MARA,City A.M. Reported Amazon is Looking to Accept Bitcoin Payments by the End of the Year
+H068,2022-01-21,PTON,'Apple Floated as Potential Buyer of Peloton' -MacRumors
+H069,2020-09-01,PRTH,"MRI Software Enters Into Definitive Agreement To Acquire RentPayment Business From Priority Technology Holdings, Inc."
+H070,2022-04-26,MX,'Korea's LX Group seeks to acquire Magnachip Semiconductor' -Korea Economic Daily Report
+H071,2021-02-11,RCMT,RCM Technologies Division Thermal Kinetics Awarded Al-Corn Clean Fuels Sanitizer-Grade Ethanol Project; Contract Size Not Disclosed
+H072,2020-03-12,APT,"Alpha Pro Tech Maintains Expectations To Fulfil ~$4M Of Currently Booked Orders In Q1, Remaining $18.6M In Early Q3"
+H073,2022-03-10,HTCR,12 Information Technology Stocks Moving In Wednesday's After-Market Session
+H074,2025-05-23,SMR,"'Trump to sign orders to boost nuclear power as soon as Friday, sources say'- Reuters"
+H075,2022-01-21,PTON,Peloton CEO: 'Rumors That We Are Halting All Production Of Bikes And Treads Are False'
+H076,2021-04-14,MBRX,Moleculin Awarded New Rare Pediatric Disease Designation From US FDA For WP1066 For The Treatment Of Ependymoma
+H077,2022-03-03,AI,"Piper Sandler Maintains Overweight on C3.ai, Lowers Price Target to $28"
+H078,2021-11-19,LGVN,Longeveron Shares Trading Up 37% Premarket After FDA on Thursday Gave Rare Pediatric Disease Designation to Co's Treatment for Infant Heart Condition
+H079,2020-09-01,BLMN,"Deutsche Bank Upgrades Bloomin Brands to Buy, Announces $20 Price Target"
+H080,2024-11-19,SNOA,"CORRECTION: On Monday November 11, 2024 Sonoma Pharmaceuticals Received New FDA 510(k) Clearance For Microcyn-Based Wound Care Hydrogel"
+H081,2022-01-21,PTON,Peloton Sees Q2 Average Net Monthly Connected Fitness Churn 0.79%
+H082,2023-12-19,ALDX,Aldeyra Therapeutics' Phase 2 Trial Of ADX-629 For Atopic Dermatitis Shows Statistically Significant And Clinically Relevant Improvement In Investigator-assessed And Patient-reported Outcomes Across Different Physiological And Psychosocial Assessments
+H083,2022-04-19,CMPI,Checkmate Pharma Shares Skyrocket Over 300% On Regeneron $250M Acquisition Deal
+H084,2021-09-21,QS,"QuantumScape 8-K Shows Co. Signed Deal With Second Top 10 Auto Original Equipment Manufacturer, Will Collab To Evaluate Prototypes Of Co.'s Solid-State Battery Cells, Buy 10 MWh Capacity From Co.'s Pre-Pilot Production Line Facility, No Terms Disclosed"
+H085,2022-02-23,NU,"Nu Holdings Q4 Adj. Net Income $3.2M, Sales $635.90M"
+H086,2022-08-04,HOOD,"Robinhood Markets CEO Says Tesla To Become Our First Partner For OTWAY, A Product That Allows Public Companies To Identify And Reward Shareholders"
+H087,2024-02-06,PLTR,"Palantir 'Experiencing Its Own Amazon.com-To-AWS Moment,' Says CTO Shyam Sankar"
+H088,2024-11-19,SMCI,Super Micro Computer Is Up 30% In Tuesday Pre-Market: What's Going On?
+H089,2022-03-03,AI,"JMP Securities Maintains Market Outperform on C3.ai, Lowers Price Target to $59"
+H090,2020-06-17,CLIR,UPDATE: ClearSign Says Expects To Further Expand Collaboration Partnerships In Coming Months
+H091,2025-05-02,FIVN,Five9 Raises FY2025 Adj EPS Guidance from $2.58-$2.62 to $2.74-$2.78 vs $2.59 Est; Affirms FY2025 Sales Guidance of $1.14B-$1.144B vs $1.14B Est
+H092,2021-11-15,DRUG,Bright Minds Biosciences Earlier Commenced Trading On Nasdaq Under Ticker 'DRUG'
+H093,2023-08-08,HIMS,"Hims & Hers Health Q2 EPS $(0.03) Beats $(0.06) Estimate, Sales $207.91M Beat $204.62M Estimate"
+H094,2025-07-11,LEVI,"During Conference Call, Levi Strauss CFO Reportedly Says Co Largely Sourcing From Bangladesh, Cambodia, Indonesia Along With About 1% From China, Mid-To-High Single Digits From Vietnam, Minimal From India"
+H095,2021-01-19,AMC,11 Communication Services Stocks Moving In Friday's After-Market Session
+H096,2024-12-05,CXM,"Rosenblatt Maintains Buy on Sprinklr, Maintains $10.5 Price Target"
+H097,2023-11-07,HIMS,Hims & Hers Health Q3 EPS $(0.04)
+H098,2021-08-03,AUTO,11 Communication Services Stocks Moving In Tuesday's Pre-Market Session
+H099,2023-05-10,TCRX,"Morgan Stanley Reiterated Overweight Rating, $14 Price Target On TScan Therapeutics"
+H100,2023-11-03,HOWL,Market-Moving News for November 3rd

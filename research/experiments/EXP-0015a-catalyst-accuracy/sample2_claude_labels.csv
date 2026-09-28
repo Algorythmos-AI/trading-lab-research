@@ -1,0 +1,51 @@
+item_id,claude_label,note
+S2H001,price_target_upgrade,initiation with Outperform and PT
+S2H002,buyout_offer,company being acquired at a fixed price per unit
+S2H003,fda_approval,orphan drug designation
+S2H004,hype_only,social-media trend piece
+S2H005,hype_only,sector theme (quantum)
+S2H006,none,movers roundup
+S2H007,none,movers roundup
+S2H008,earnings_release,quarterly performance
+S2H009,earnings_release,
+S2H010,fda_approval,fast track designation
+S2H011,none,movers roundup
+S2H012,unconfirmed_rumor,"'potential' acquisition, not an agreed deal (either way excluded)"
+S2H013,offering_dilution,equity line of credit raise
+S2H014,clinical_study_results,
+S2H015,none,movers roundup
+S2H016,fda_approval,FDA clears the company to proceed with phase 3
+S2H017,unconfirmed_rumor,media report citing sources
+S2H018,price_target_upgrade,PT raised
+S2H019,breaking_news,government deal
+S2H020,breaking_news,license option agreement with big pharma
+S2H021,none,explainer with no catalyst in the headline
+S2H022,earnings_release,
+S2H023,clinical_study_results,
+S2H024,breaking_news,company development programme (COVID era)
+S2H025,none,"commentary piece labelled 'Report', not a rumoured event"
+S2H026,none,listicle
+S2H027,clinical_study_results,trial milestone (first patient dosed) rather than results
+S2H028,price_target_upgrade,rating upgrade
+S2H029,unconfirmed_rumor,circulated media report of talks
+S2H030,fda_approval,orphan drug designation
+S2H031,price_target_upgrade,PT raised
+S2H032,none,weekly roundup
+S2H033,earnings_release,
+S2H034,none,board statement on internal review
+S2H035,none,stocks-to-watch list
+S2H036,breaking_news,share buyback announcement
+S2H037,clinical_study_results,study outcome supporting an FDA submission
+S2H038,none,market overview
+S2H039,earnings_release,
+S2H040,hype_only,crypto theme unrelated to this symbol
+S2H041,earnings_release,quarterly results item
+S2H042,clinical_study_results,
+S2H043,breaking_news,licensing completed
+S2H044,breaking_news,license and collaboration with upfront payment
+S2H045,price_target_upgrade,rating upgrade
+S2H046,hype_only,short-squeeze theme
+S2H047,none,weekly preview roundup
+S2H048,price_target_upgrade,rating upgrade
+S2H049,none,listicle
+S2H050,hype_only,AI theme piece about another company

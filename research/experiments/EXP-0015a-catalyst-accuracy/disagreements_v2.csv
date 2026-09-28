@@ -1,0 +1,34 @@
+item_id,symbol,headline,classifier_category,claude_label,claude_note
+H007,CRDF,Cardiff Oncology Announced $15M Equity Investment from Pfizer through its Pfizer Breakthrough Growth Initiative,none,breaking_news,strategic equity investment by Pfizer (arguably financing)
+H010,ORMP,"The Daily Biotech Pulse: FDA Approvals For Merck, Pacira And Zealand, Roche-Regeneron Ace Late-Stage COVID-19 Study, AlloVir Appoints Gilead Virology Chief As CEO",fda_approval,none,biotech roundup that does not mention this symbol
+H017,MARA,"U.S. Equity Futures, European Markets Lower; China Education Stocks Fall After Some Companies Say New Regulations Expected to have Material Impact on Earnings; Bitcoin Soars on Speculation Amazon Could Accept Crypto Payments Before Year-End",unconfirmed_rumor,none,market overview
+H020,ETTX,"The Daily Biotech Pulse: Entasis, Dermata Spike Higher On Positive Readouts, J&J Q3 EPS Beats Estimates, Wave Life Sciences Regains Right To CNS Portfolio",earnings_release,clinical_study_results,roundup that names this symbol's positive readout
+H021,LGVN,"HC Wainwright & Co. Maintains Buy on Longeveron, Lowers Price Target to $10",price_target_upgrade,none,maintains rating with lower PT
+H024,PLTR,'Not A Q&A Bot:' Palantir CTO Says AI Platform Saved Construction Firm $10M As He Touts 'Operating System For Enterprise',hype_only,none,executive commentary
+H026,PLX,"The Daily Biotech Pulse: Aridis To Study Antibody Cocktail For Coronavirus Variants, Revance & Protalix Data Readouts",none,clinical_study_results,roundup that names this symbol's data readout
+H028,WLDS,Wearable Devices Announces $4M Direct Offering Of 1M Shares At A Price Of $4.00/Share; Issues 1M Shares And Warrants In Institutional Deal,none,offering_dilution,
+H029,HOOD,"Mizuho Maintains Buy on Robinhood Markets, Lowers Price Target to $13",price_target_upgrade,none,maintains rating with lower PT
+H036,PTON,"Top 10 WallStreetBets Mentions for January 21, 2022 Premarket: GME, NFLX, TSLA, AAPL, AMC, PTON, LCID, MSFT, NVDA, SOFI",none,hype_only,social-media mentions list
+H041,BKKT,Bakkt Reports Hanover Community Bank Joined Co.'s Early Adopter Crypto Program,hype_only,breaking_news,customer adoption (minor)
+H044,AAOI,"Earnings Scheduled For February 26, 2025",earnings_release,none,earnings date schedule
+H045,RIOT,"DA Davidson Bullish On This Bitcoin Company, Sees Huge Upside",hype_only,price_target_upgrade,bullish analyst note
+H048,DLPN,Dolphin Entertainment Launches Non-Fungible Tokens Creation And Marketing Division; Expects First Partnership In Collectibles,breaking_news,hype_only,NFT theme launch
+H051,BYFC,Broadway Financial Corporation and CFBanc Corporation Announced Monday Receipt of Regulatory Approvals for Merger,fda_approval,breaking_news,regulatory approval for a bank merger (not a pinned buyout)
+H054,INDO,"Indonesia Energy (INDO) Stock Soars Amid Middle East Tensions, Oil Disruption Fears",none,hype_only,macro theme (oil / geopolitics)
+H055,BLIN,Bridgeline Announces A Management Company Will Use Co.'s Hawksearch; Financial Details Not Disclosed,none,breaking_news,customer win (minor)
+H057,AMC,A Peek Into The Markets: US Stock Futures Down Ahead Of Earnings,earnings_release,none,market overview
+H059,RNG,"Wells Fargo Maintains Overweight on RingCentral, Lowers Price Target to $50",price_target_upgrade,none,maintains rating with lower PT
+H066,LEVI,"During Conference Call, Levi Strauss CFO Reportedly Says Co Has Brought 60% Of Inventory Needed To Get Through Second Half Of The Year",unconfirmed_rumor,none,"conference-call commentary (""reportedly"" refers to what the CFO said)"
+H067,MARA,City A.M. Reported Amazon is Looking to Accept Bitcoin Payments by the End of the Year,hype_only,unconfirmed_rumor,
+H070,MX,'Korea's LX Group seeks to acquire Magnachip Semiconductor' -Korea Economic Daily Report,breaking_news,unconfirmed_rumor,
+H072,APT,"Alpha Pro Tech Maintains Expectations To Fulfil ~$4M Of Currently Booked Orders In Q1, Remaining $18.6M In Early Q3",earnings_release,breaking_news,order-book business update (could be read as guidance)
+H075,PTON,Peloton CEO: 'Rumors That We Are Halting All Production Of Bikes And Treads Are False',unconfirmed_rumor,none,company denial of rumours
+H077,AI,"Piper Sandler Maintains Overweight on C3.ai, Lowers Price Target to $28",price_target_upgrade,none,maintains rating with lower PT
+H083,CMPI,Checkmate Pharma Shares Skyrocket Over 300% On Regeneron $250M Acquisition Deal,none,buyout_offer,company being acquired
+H086,HOOD,"Robinhood Markets CEO Says Tesla To Become Our First Partner For OTWAY, A Product That Allows Public Companies To Identify And Reward Shareholders",none,breaking_news,partnership
+H089,AI,"JMP Securities Maintains Market Outperform on C3.ai, Lowers Price Target to $59",price_target_upgrade,none,maintains rating with lower PT
+H090,CLIR,UPDATE: ClearSign Says Expects To Further Expand Collaboration Partnerships In Coming Months,breaking_news,none,vague forward-looking statement
+H092,DRUG,Bright Minds Biosciences Earlier Commenced Trading On Nasdaq Under Ticker 'DRUG',none,breaking_news,new Nasdaq listing
+H094,LEVI,"During Conference Call, Levi Strauss CFO Reportedly Says Co Largely Sourcing From Bangladesh, Cambodia, Indonesia Along With About 1% From China, Mid-To-High Single Digits From Vietnam, Minimal From India",unconfirmed_rumor,none,conference-call commentary
+H096,CXM,"Rosenblatt Maintains Buy on Sprinklr, Maintains $10.5 Price Target",price_target_upgrade,none,maintains rating and PT
+H099,TCRX,"Morgan Stanley Reiterated Overweight Rating, $14 Price Target On TScan Therapeutics",price_target_upgrade,none,reiterated rating and PT

@@ -1,0 +1,13 @@
+item_id,symbol,headline,classifier_category,claude_label,claude_note
+S2H002,TGP,"Stonepeak To Acquire Teekay LNG; Transaction Valued At $6.2B, Acquisition Price $17/Unit",breaking_news,buyout_offer,company being acquired at a fixed price per unit
+S2H004,PHUN,"Trump's SPAC Partner Emerges As Top WallStreetBets Interest; Facebook, Snapchat, Tesla And These Are Other Top Trends",breaking_news,hype_only,social-media trend piece
+S2H012,PVTL,Pivotal Software Rips Higher On Potential Acquisition By VMware,buyout_offer,unconfirmed_rumor,"'potential' acquisition, not an agreed deal (either way excluded)"
+S2H016,ANVS,Annovis Bio Announces FDA Notice For Buntanetap Phase 3 Clinical Trial In Parkinson's Disease; Co. Reports 'FDA indicates the Company may proceed with the Phase 3 clinical study',clinical_study_results,fda_approval,FDA clears the company to proceed with phase 3
+S2H024,DYAI,Dyadic Announces Development Of COVID-19 Vaccine In India,none,breaking_news,company development programme (COVID era)
+S2H025,CLOV,"Chamath Palihapitiya Calls For SPAC Regulation, What Else Did He Say?: Report",unconfirmed_rumor,none,"commentary piece labelled 'Report', not a rumoured event"
+S2H032,MUDS,"SPACs Attack Weekly Recap: 6 Deals, Rumors And Headline News",unconfirmed_rumor,none,weekly roundup
+S2H034,RILY,"B. Riley Board Issues Statement Regarding Internal Review; Audit Committee's Review Affirms Co. 'Acted Properly with Regard to the Management-Led Buyout of FRG' And Co. Says 'B. Riley Financial and its Executives Had No Involvement with, or Knowledge of, Alleged Prophecy Misconduct'",buyout_offer,none,board statement on internal review
+S2H036,CWH,Camping World Announces a $100M Buyback,none,breaking_news,share buyback announcement
+S2H037,HSDT,Helius Medical Reports Outcome From PoNS SRP Supporting Planned FDA Submission Seeking Indication For Gait And Balance Deficit In Patients With Chronic Symptoms Of Stroke Under Current Breakthrough Device Designation,fda_approval,clinical_study_results,study outcome supporting an FDA submission
+S2H043,NNVC,Nanoviricides Shares Spike After Co. Issues PR 'NanoViricides Completes Licensing for Coronavirus Field which Includes Current COVID-19 Drug Development',none,breaking_news,licensing completed
+S2H047,AQST,"The Week Ahead In Biotech: Aquestive Awaits FDA Decision, Earnings Flow Slows",earnings_release,none,weekly preview roundup

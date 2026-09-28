@@ -1,0 +1,101 @@
+item_id,claude_label,note
+H001,earnings_release,guidance raise
+H002,hype_only,sector theme (crypto)
+H003,clinical_study_results,
+H004,none,movers roundup
+H005,none,movers roundup
+H006,clinical_study_results,preclinical data publication (study data; weaker than clinical)
+H007,breaking_news,strategic equity investment by Pfizer (arguably financing)
+H008,earnings_release,sales guidance vs estimates
+H009,clinical_study_results,
+H010,none,biotech roundup that does not mention this symbol
+H011,fda_approval,
+H012,price_target_upgrade,initiation with Buy and PT
+H013,price_target_upgrade,initiation with Outperform and PT
+H014,earnings_release,
+H015,hype_only,sector policy theme (drones)
+H016,earnings_release,
+H017,none,market overview
+H018,clinical_study_results,interim phase 2 data
+H019,breaking_news,joint venture
+H020,clinical_study_results,roundup that names this symbol's positive readout
+H021,none,maintains rating with lower PT
+H022,hype_only,sector policy theme (drones)
+H023,fda_approval,fast track designation
+H024,none,executive commentary
+H025,hype_only,social-media short-squeeze list
+H026,clinical_study_results,roundup that names this symbol's data readout
+H027,hype_only,sector theme (crypto)
+H028,offering_dilution,
+H029,none,maintains rating with lower PT
+H030,none,market overview
+H031,clinical_study_results,
+H032,price_target_upgrade,PT raised
+H033,none,political news about another subject
+H034,none,movers roundup
+H035,none,market roundup
+H036,hype_only,social-media mentions list
+H037,breaking_news,patent issuance
+H038,clinical_study_results,
+H039,clinical_study_results,preclinical safety data
+H040,earnings_release,
+H041,breaking_news,customer adoption (minor)
+H042,price_target_upgrade,PT raised
+H043,breaking_news,joint venture / project bid
+H044,none,earnings date schedule
+H045,price_target_upgrade,bullish analyst note
+H046,fda_approval,510(k) clearance
+H047,earnings_release,
+H048,hype_only,NFT theme launch
+H049,fda_approval,breakthrough therapy designation
+H050,price_target_upgrade,PT raised
+H051,breaking_news,regulatory approval for a bank merger (not a pinned buyout)
+H052,none,stocks-to-watch list
+H053,clinical_study_results,
+H054,hype_only,macro theme (oil / geopolitics)
+H055,breaking_news,customer win (minor)
+H056,breaking_news,company to acquire another (LOI)
+H057,none,market overview
+H058,none,movers roundup
+H059,none,maintains rating with lower PT
+H060,breaking_news,pharma collaboration with upfront payment
+H061,clinical_study_results,
+H062,none,movers roundup
+H063,hype_only,sector theme (bitcoin miners)
+H064,none,halt with news pending
+H065,fda_approval,510(k) clearance
+H066,none,conference-call commentary ("reportedly" refers to what the CFO said)
+H067,unconfirmed_rumor,
+H068,unconfirmed_rumor,
+H069,breaking_news,divestiture of a business unit
+H070,unconfirmed_rumor,
+H071,breaking_news,contract award
+H072,breaking_news,order-book business update (could be read as guidance)
+H073,none,movers roundup
+H074,unconfirmed_rumor,sources-say policy report (sector)
+H075,none,company denial of rumours
+H076,fda_approval,rare pediatric disease designation
+H077,none,maintains rating with lower PT
+H078,fda_approval,rare pediatric disease designation
+H079,price_target_upgrade,rating upgrade
+H080,fda_approval,510(k) clearance (correction notice)
+H081,earnings_release,operating metric guidance
+H082,clinical_study_results,
+H083,buyout_offer,company being acquired
+H084,breaking_news,OEM deal
+H085,earnings_release,
+H086,breaking_news,partnership
+H087,none,executive commentary
+H088,none,explainer with no catalyst in the headline
+H089,none,maintains rating with lower PT
+H090,none,vague forward-looking statement
+H091,earnings_release,guidance raise
+H092,breaking_news,new Nasdaq listing
+H093,earnings_release,
+H094,none,conference-call commentary
+H095,none,movers roundup
+H096,none,maintains rating and PT
+H097,earnings_release,
+H098,none,movers roundup
+H099,none,reiterated rating and PT
+H100,none,market roundup
