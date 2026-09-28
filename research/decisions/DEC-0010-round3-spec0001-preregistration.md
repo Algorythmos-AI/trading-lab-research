@@ -1,12 +1,12 @@
 # DEC-0010 — Round 3 pre-registration: SPEC-0001 (Warrior methodology)
 
-- **Status: DRAFT.** This takes effect when the owner:
-  1. approves SPEC-0001 v1.0.0, and
-  2. the catalyst accuracy verdict (EXP-0015a, CAT-01) is recorded.
+- **Status: APPROVED, not yet in effect.** It takes effect when both conditions are met:
+  1. ~~The owner approves SPEC-0001 v1.0.0.~~ **Met:** approved in chat on 2026-09-28; `spec.yaml` now says `status: approved`.
+  2. The catalyst accuracy verdict (EXP-0015a, CAT-01) is recorded. **Open:** the owner's 20 blind labels are in, but the 19 disagreement verdicts are not. Interim result: sample 2 is at 84% decision level against a target of 85% (see `research/experiments/EXP-0015a-catalyst-accuracy/README.md`).
 
-  Until then, no round-3 P&L may be computed or viewed. Counts-only runs are allowed (see the count guard below).
+  Until it takes effect, no round-3 P&L may be computed or viewed. Counts-only runs are allowed (see the count guard below).
 - **Date drafted:** 2026-09-28
-- **Approved by:** owner, pending
+- **Approved by:** owner, 2026-09-28 (in chat)
 - **Specification:** `research/specs/SPEC-0001-warrior-methodology/spec.yaml` v1.0.0. Every rule and threshold comes from it; this record only freezes it. Configs are generated from it, and tests pin code defaults to it.
 
 ## Owner decisions (U1–U13)
