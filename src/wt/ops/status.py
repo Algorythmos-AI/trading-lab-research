@@ -308,7 +308,7 @@ def src_cat01(ctx: Ctx) -> dict:
     report = safeio.read_text(d / "sample2_report_v3.md", 2_000_000)
     acc = re.search(r"Decision-level accuracy[^\n]*?\*\*(\d+(?:\.\d+)?)%\*\*", report)
     tgt = re.search(r"Target\s*(?:≥|>=)\s*(\d+)%", report)
-    pend = re.search(r"verdicts pending \((\d+)/(\d+)\)", readme)
+    pend = re.search(r"verdicts (?:pending|in) \((\d+)/(\d+)\)", readme)
     url = re.search(r"https://claude\.ai/artifact/[A-Za-z0-9_-]+", readme)
     flips = []
     for line in readme.splitlines():

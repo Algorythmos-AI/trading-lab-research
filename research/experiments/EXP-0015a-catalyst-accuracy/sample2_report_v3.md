@@ -1,7 +1,7 @@
 # EXP-0015a — Catalyst classifier accuracy: classifier v3 on sample2
 
 - **Sample:** 50 dev-span headlines (see `sample2_manifest.json`).
-- **Reference labels:** owner_blind 10, claude 40.
+- **Reference labels:** owner_blind 10, claude 31, owner_review 9.
 - **Headline-level exact accuracy:** **76%**.
 - **Decision-level accuracy** (qualifying / excluded / non-qualifying, which is what the scanner uses): **84%**. Target ≥ 85%: **FAIL**.
 - **Claude vs owner on the owner's blind items:** 80% (10 items).
