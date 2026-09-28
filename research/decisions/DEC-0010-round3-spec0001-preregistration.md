@@ -7,7 +7,7 @@
   Until it takes effect, no round-3 P&L may be computed or viewed. Counts-only runs are allowed (see the count guard below).
 - **Date drafted:** 2026-09-28
 - **Approved by:** owner, 2026-09-28 (in chat)
-- **Specification:** `research/specs/SPEC-0001-warrior-methodology/spec.yaml` v1.0.0. Every rule and threshold comes from it; this record only freezes it. Configs are generated from it, and tests pin code defaults to it.
+- **Specification:** `research/specs/SPEC-0001-warrior-methodology/spec.yaml` v1.0.0, amended to v1.0.1 on 2026-09-28 (owner decision in chat). The amendment only changes the forward dry run's live data source (K-31, RTN-06); no trial rule, threshold or trial count changed, so HYP-0010..0019 stand as written. Every rule and threshold comes from it; this record only freezes it. Configs are generated from it, and tests pin code defaults to it.
 
 ## Owner decisions (U1–U13)
 The owner chose these in chat on 2026-09-28; they're recorded in `SPEC-0001/source/clarifications_2026-09-28.md` and `conflicts.md`:

@@ -151,3 +151,50 @@ class AlpacaREST:
                 if not token:
                     break
         return out
+
+
+SIP_DELAY_MIN = 16      # the free plan refuses SIP newer than 15 minutes (HTTP 403, verified 2026-09-28); 1 min margin
+
+
+class HybridFeed:
+    """Wraps a client so that bars(feed="hybrid") returns the consolidated SIP tape for everything older than the
+    free plan's delay and IEX for the most recent minutes (SPEC-0001 routine.data_live, K-31). IEX has no bars
+    before 08:00 ET and few for small caps, so the SIP part carries almost all of the pre-market.
+
+    Bars gain a `src` column ("sip" / "iex"). Volume in the IEX tail is IEX-only, so volume features over a window
+    that reaches the last 16 minutes are understated (conservative). If SIP refuses the request (403), the whole
+    window falls back to IEX. Every other call passes through to the wrapped client. `sip_through` holds the last
+    cut-off used (UTC), for the stage log."""
+
+    def __init__(self, client, delay_min: int = SIP_DELAY_MIN, now=None):
+        self.client, self.delay = client, pd.Timedelta(minutes=delay_min)
+        self.now = now or (lambda: pd.Timestamp.now(tz="UTC"))
+        self.sip_through: pd.Timestamp | None = None
+
+    def __getattr__(self, name):
+        return getattr(self.client, name)
+
+    def bars(self, symbols: Iterable[str], timeframe: str, start: str, end: str,
+             feed: str = "sip", adjustment: str = "raw") -> pd.DataFrame:
+        if feed != "hybrid":
+            return self.client.bars(symbols, timeframe, start, end, feed=feed, adjustment=adjustment)
+        symbols = list(symbols)
+        s, e = pd.Timestamp(start), pd.Timestamp(end)
+        cut = (self.now() - self.delay).floor("min")
+        iso = lambda ts: ts.strftime("%Y-%m-%dT%H:%M:%SZ")  # noqa: E731
+        parts = []
+        if s < cut:
+            try:
+                parts.append(self.client.bars(symbols, timeframe, start, iso(min(e, cut)), feed="sip",
+                                              adjustment=adjustment).assign(src="sip"))
+            except requests.HTTPError as ex:
+                if ex.response is None or ex.response.status_code != 403:
+                    raise
+                cut = s
+        self.sip_through = min(e, cut) if s < cut else None
+        if e > cut:
+            parts.append(self.client.bars(symbols, timeframe, iso(max(s, cut)), end, feed="iex",
+                                          adjustment=adjustment).assign(src="iex"))
+        out = pd.concat([p for p in parts if len(p)], ignore_index=True) if any(len(p) for p in parts) else parts[0]
+        # both ends are inclusive, so the bar starting at the cut-off can come back twice: keep the SIP one
+        return out.drop_duplicates(["symbol", "t"], keep="first").sort_values(["symbol", "t"], ignore_index=True)

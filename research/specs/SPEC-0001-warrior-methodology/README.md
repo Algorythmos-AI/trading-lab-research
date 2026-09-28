@@ -6,7 +6,7 @@ round 3 tests comes from here, and nothing else defines them.
 | File | What it is |
 |---|---|
 | `source/` | The owner's material, exactly as supplied: spec text, indicators sheet, schemas v1/v2, JSON corrections and clarifications C1–C13 |
-| `spec.yaml` | The normalised, machine-readable spec (v1.0.0), validated by `schema.json` |
+| `spec.yaml` | The normalised, machine-readable spec (v1.0.1), validated by `schema.json`. v1.0.0 was approved on 2026-09-28; v1.0.1 changes only the routine's live data source (K-31) |
 | `traceability.csv` | One row per requirement: level, source, spec key, function, test, trials, status |
 | `requirements.md` | Rendered from `traceability.csv` (`scripts/spec_docs.py`) |
 | `conflicts.md` | Where sources disagree or a qualitative rule needed a number, and how each was resolved |
