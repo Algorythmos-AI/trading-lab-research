@@ -1,0 +1,90 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Trading Lab status dashboard section documents (schema_version 1)",
+  "definitions": {
+    "base": {
+      "type": "object",
+      "required": ["schema_version", "doc", "as_of", "run_id", "sources"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "doc": {"type": "string"},
+        "as_of": {"type": "string", "pattern": "^20\\d\\d-\\d\\d-\\d\\dT"},
+        "run_id": {"type": "string", "minLength": 6},
+        "sources": {"type": "object"}
+      }
+    },
+    "source_status": {
+      "type": "object",
+      "required": ["ok"],
+      "properties": {"ok": {"type": "boolean"}, "stale": {"type": ["boolean", "null"]}, "error": {"type": ["string", "null"]}}
+    },
+    "meta": {
+      "allOf": [{"$ref": "#/definitions/base"}],
+      "required": ["as_of_sydney", "as_of_et", "refresh_minutes", "fresh_sources", "total_sources", "dst", "collector"],
+      "properties": {
+        "doc": {"const": "meta"},
+        "refresh_minutes": {"type": "integer", "minimum": 1},
+        "sources": {"type": "object", "additionalProperties": {"$ref": "#/definitions/source_status"}},
+        "dst": {"type": "array"},
+        "last_error": {"type": ["string", "null"]}
+      }
+    },
+    "overview": {
+      "allOf": [{"$ref": "#/definitions/base"}],
+      "required": ["headline", "subline", "kpis", "needs_you", "gates", "market"],
+      "properties": {
+        "doc": {"const": "overview"},
+        "headline": {"type": "string", "minLength": 5},
+        "kpis": {"type": "array", "items": {"type": "object", "required": ["id", "label", "value", "state"],
+          "properties": {"state": {"enum": ["good", "warn", "bad", "neutral"]}, "value": {"type": "string"}}}},
+        "needs_you": {"type": "array", "items": {"type": "object", "required": ["id", "rank", "title", "severity"],
+          "properties": {"severity": {"enum": ["blocker", "high", "medium", "low"]}}}},
+        "gates": {"type": "array", "items": {"type": "object", "required": ["id", "name", "status"],
+          "properties": {"status": {"enum": ["done", "failed", "passed", "in_progress", "not_started"]}}}}
+      }
+    },
+    "research": {
+      "allOf": [{"$ref": "#/definitions/base"}],
+      "required": ["scoreboard", "round3", "decisions", "hypotheses", "trials"],
+      "properties": {
+        "doc": {"const": "research"},
+        "scoreboard": {"type": "array", "items": {"type": "object", "required": ["label", "verdict"],
+          "properties": {"expectancy_r": {"type": ["number", "null"]}, "ci_low": {"type": ["number", "null"]},
+                         "ci_high": {"type": ["number", "null"]}, "n": {"type": ["integer", "null"]},
+                         "verdict": {"enum": ["candidate", "rejected", "inconclusive", "falsified", "not_applicable"]}}}},
+        "cat01": {"type": ["object", "null"]}
+      }
+    },
+    "spec": {
+      "allOf": [{"$ref": "#/definitions/base"}],
+      "properties": {
+        "doc": {"const": "spec"},
+        "total": {"type": "integer"},
+        "by_area": {"type": "array"},
+        "checklist": {"type": "array", "items": {"type": "object", "required": ["item", "state"],
+          "properties": {"state": {"enum": ["done", "partial", "open"]}}}}
+      }
+    },
+    "platform": {
+      "allOf": [{"$ref": "#/definitions/base"}],
+      "required": ["capabilities", "milestones", "roadmap"],
+      "properties": {
+        "doc": {"const": "platform"},
+        "capabilities": {"type": "array", "items": {"type": "object", "required": ["name", "research", "org"],
+          "properties": {"research": {"enum": ["done", "partial", "none"]}, "org": {"enum": ["done", "partial", "none"]}}}},
+        "milestones": {"type": "array"},
+        "roadmap": {"type": "array", "items": {"type": "object", "required": ["rank", "priority", "title"]}}
+      }
+    },
+    "ops": {
+      "allOf": [{"$ref": "#/definitions/base"}],
+      "required": ["market", "host", "errors"],
+      "properties": {"doc": {"const": "ops"}, "errors": {"type": "array"}, "host": {"type": "object"}}
+    },
+    "history": {
+      "allOf": [{"$ref": "#/definitions/base"}],
+      "required": ["timeline", "repos"],
+      "properties": {"doc": {"const": "history"}, "timeline": {"type": "array"}, "repos": {"type": "array"}}
+    }
+  }
+}

@@ -18,3 +18,4 @@ __pycache__/
 .ruff_cache/
 # research artefacts over 10 MB stay out of git; their sha256 is recorded in research/experiments/LARGE_FILES.sha256 (D21)
 research/experiments/EXP-0007-g1-liquid-dev/results.json
+/build/

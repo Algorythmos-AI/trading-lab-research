@@ -1,0 +1,883 @@
+<meta charset="utf-8">
+<title>Trading Lab Control Room</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root {
+  --bg: #f2f4f7; --surface: #ffffff; --surface-2: #eef1f5; --surface-3: #e4e9ef;
+  --ink: #101923; --ink-2: #455261; --muted: #6a7684; --line: #d8dee5; --line-2: #c5cdd6;
+  --accent: #1f5fcc; --accent-ink: #184ca3; --accent-soft: #e2ebfa;
+  --good: #0ca30c; --good-ink: #0a7a0a; --good-soft: #e3f4e3;
+  --warn: #fab219; --warn-ink: #8a5a00; --warn-soft: #fdf1d6;
+  --serious: #ec835a; --serious-ink: #a8431b; --serious-soft: #fbe7de;
+  --bad: #d03b3b; --bad-ink: #b02e2e; --bad-soft: #f9e1e1;
+  --cat-1: #2a78d6; --cat-2: #eb6834; --cat-3: #1baf7a; --cat-4: #eda100;
+  --shadow: 0 1px 2px rgba(16, 25, 35, .06);
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0b1016; --surface: #121921; --surface-2: #18212b; --surface-3: #202b37;
+    --ink: #e7ecf1; --ink-2: #b3bec9; --muted: #8692a0; --line: #25303c; --line-2: #33404e;
+    --accent: #6e9bff; --accent-ink: #9dbbff; --accent-soft: #1a2942;
+    --good-ink: #4cc38a; --good-soft: #10291c; --warn-ink: #f2c35a; --warn-soft: #2e2410;
+    --serious-ink: #f09a78; --serious-soft: #2f1c14; --bad-ink: #f07a7a; --bad-soft: #321718;
+    --cat-1: #3987e5; --cat-2: #d95926; --cat-3: #199e70; --cat-4: #c98500;
+    --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0b1016; --surface: #121921; --surface-2: #18212b; --surface-3: #202b37;
+  --ink: #e7ecf1; --ink-2: #b3bec9; --muted: #8692a0; --line: #25303c; --line-2: #33404e;
+  --accent: #6e9bff; --accent-ink: #9dbbff; --accent-soft: #1a2942;
+  --good-ink: #4cc38a; --good-soft: #10291c; --warn-ink: #f2c35a; --warn-soft: #2e2410;
+  --serious-ink: #f09a78; --serious-soft: #2f1c14; --bad-ink: #f07a7a; --bad-soft: #321718;
+  --cat-1: #3987e5; --cat-2: #d95926; --cat-3: #199e70; --cat-4: #c98500;
+  --shadow: none;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 14px; line-height: 1.5; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-inline: 16px; }
+h1, h2, h3 { font-family: var(--display); font-stretch: 88%; text-wrap: balance; margin: 0; letter-spacing: -.005em; }
+h2 { font-size: 17px; font-weight: 700; }
+p { margin: 0; }
+a { color: var(--accent-ink); text-underline-offset: 2px; }
+code, .mono { font-family: var(--mono); font-size: 12.5px; }
+.num { font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); border-bottom: 1px solid var(--line); }
+.top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 12px 8px; flex-wrap: wrap; }
+.brand { display: flex; align-items: baseline; gap: 10px; }
+.brand b { font-family: var(--display); font-stretch: 80%; font-weight: 800; font-size: 20px; letter-spacing: .01em; }
+.brand span { color: var(--muted); font-size: 13px; }
+.clocks { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
+.clock { padding: 3px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); white-space: nowrap; }
+.clock em { font-style: normal; color: var(--muted); margin-right: 4px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; font: 600 12px var(--body); white-space: nowrap; }
+.pill .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+.s-good { color: var(--good-ink); background: var(--good-soft); }
+.s-warn { color: var(--warn-ink); background: var(--warn-soft); }
+.s-serious { color: var(--serious-ink); background: var(--serious-soft); }
+.s-bad { color: var(--bad-ink); background: var(--bad-soft); }
+.s-neutral { color: var(--ink-2); background: var(--surface-2); }
+.s-accent { color: var(--accent-ink); background: var(--accent-soft); }
+.t-good { color: var(--good-ink); } .t-warn { color: var(--warn-ink); } .t-bad { color: var(--bad-ink); } .t-neutral { color: var(--muted); }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab { appearance: none; border: 0; background: none; color: var(--ink-2); font: 600 13px var(--body); padding: 8px 12px 10px; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; }
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tab .count { font-family: var(--mono); font-size: 11px; margin-left: 5px; padding: 0 5px; border-radius: 4px; background: var(--bad-soft); color: var(--bad-ink); }
+
+main { padding-block: 18px 40px; }
+.banner { margin-bottom: 14px; padding: 10px 12px; border-radius: 8px; font-size: 13px; }
+.stack { display: grid; gap: 16px; }
+.grid-2 { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); align-items: start; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); min-width: 0; }
+.panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 4px 10px; padding: 14px 16px 0; flex-wrap: wrap; }
+.panel-head .sub { color: var(--muted); font-size: 12.5px; }
+.panel-body { padding: 12px 16px 16px; min-width: 0; }
+.panel-error { padding: 12px 16px 16px; color: var(--bad-ink); font-size: 13px; }
+.muted { color: var(--muted); }
+.small { font-size: 12.5px; }
+.eyebrow { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+
+.hero { display: grid; gap: 6px; padding-block: 4px; }
+.hero h1 { font-size: clamp(22px, 3.2vw, 30px); font-weight: 750; line-height: 1.2; max-width: 36ch; }
+.hero p { color: var(--ink-2); max-width: 82ch; }
+
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.kpi { padding: 12px 14px; display: grid; gap: 2px; align-content: start; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 0 -1px -1px 0; }
+.kpi .label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); font-weight: 500; }
+.kpi .value { overflow-wrap: anywhere; font-family: var(--mono); font-size: 22px; font-weight: 600; letter-spacing: -.02em; line-height: 1.25; }
+.kpi .unit { font-family: var(--body); font-size: 12px; color: var(--muted); font-weight: 500; margin-left: 5px; letter-spacing: 0; }
+.kpi .detail { font-size: 12px; color: var(--muted); }
+.ico { width: 14px; height: 14px; flex: none; }
+
+.actions { list-style: none; margin: 0; padding: 0; display: grid; }
+.action { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 4px 10px; padding: 12px 0; border-top: 1px solid var(--line); }
+.action:first-child { border-top: 0; padding-top: 2px; }
+.rank { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--muted); padding-top: 1px; }
+.action > div { min-width: 0; }
+.action-title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-weight: 600; }
+.action p { color: var(--ink-2); font-size: 13px; margin-top: 2px; }
+.cmd { display: flex; margin-top: 6px; max-width: 100%; }
+.cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; padding: 6px 10px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px 0 0 6px; }
+.cmd button { border: 1px solid var(--line); border-left: 0; background: var(--surface); color: var(--ink-2); font: 600 12px var(--body); padding: 0 10px; border-radius: 0 6px 6px 0; cursor: pointer; }
+.cmd button:hover { color: var(--ink); background: var(--surface-2); }
+
+.ladder { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.gate { border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: grid; gap: 4px; align-content: start; min-width: 0; }
+.gate.here { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.gate .gid { font-family: var(--mono); font-weight: 600; font-size: 13px; display: flex; justify-content: space-between; gap: 6px; align-items: center; flex-wrap: wrap; }
+.gate .gname { font-weight: 600; font-size: 13px; line-height: 1.3; }
+.gate .crit { font-size: 11.5px; color: var(--muted); line-height: 1.4; overflow-wrap: anywhere; }
+.here-tag { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--accent-ink); }
+@media (max-width: 760px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 980px) { .ladder { grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); } }
+
+.tbl-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th { text-align: left; font-weight: 600; font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; padding: 6px 8px; border-bottom: 1px solid var(--line-2); white-space: nowrap; }
+td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+td.r, th.r { text-align: right; }
+td.nowrap { white-space: nowrap; }
+
+.dp-row { display: grid; grid-template-columns: minmax(130px, 34%) 1fr; align-items: center; gap: 10px; padding: 3px 4px; border-radius: 6px; }
+.dp-row:hover, .dp-row:focus-visible { background: var(--surface-2); }
+.dp-label { font-size: 12.5px; line-height: 1.3; overflow-wrap: anywhere; }
+.dp-label .n { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+.dp-track { position: relative; height: 22px; }
+.dp-zero { position: absolute; top: -3px; bottom: -3px; width: 1px; background: var(--ink-2); }
+.dp-grid { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line); }
+.dp-ci { position: absolute; top: 10px; height: 2px; border-radius: 2px; }
+.dp-dot { position: absolute; top: 5px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; box-shadow: 0 0 0 2px var(--surface); }
+.dp-axis { display: grid; grid-template-columns: minmax(130px, 34%) 1fr; gap: 10px; margin-top: 4px; padding-inline: 4px; }
+.dp-ticks { position: relative; height: 18px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.dp-ticks span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.readout { margin-top: 10px; min-height: 42px; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); font-size: 12.5px; color: var(--ink-2); }
+.legend { display: flex; gap: 6px 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); margin-top: 8px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+.legend i.sq { border-radius: 2px; }
+.c-candidate { background: var(--good); } .c-inconclusive { background: var(--warn); }
+.c-rejected { background: var(--bad); } .c-falsified { background: var(--serious); } .c-not_applicable { background: var(--muted); }
+.vdot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+
+.bar { position: relative; height: 10px; border-radius: 5px; background: var(--surface-3); overflow: hidden; display: flex; gap: 2px; }
+.bar > span { height: 100%; flex: none; }
+.meter { position: relative; height: 12px; border-radius: 6px; background: var(--surface-3); }
+.meter .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; }
+.meter .mark { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--ink); }
+.row-bars { display: grid; gap: 10px; }
+.row-bar { display: grid; grid-template-columns: minmax(110px, 30%) 1fr auto; align-items: center; gap: 10px; font-size: 13px; }
+.row-bar .v { font-family: var(--mono); font-size: 12px; color: var(--ink-2); text-align: right; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-family: var(--mono); font-size: 11.5px; padding: 1px 7px; border-radius: 5px; background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-2); white-space: nowrap; font-weight: 500; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 5px 14px; font-size: 13px; margin: 0; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.logline { font-family: var(--mono); font-size: 12px; padding: 3px 8px; border-left: 2px solid var(--line-2); overflow-wrap: anywhere; color: var(--ink-2); }
+details > summary { cursor: pointer; font-weight: 600; font-size: 13px; padding: 6px 0; }
+.stages { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: 8px; }
+.stage { border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: grid; gap: 3px; align-content: start; }
+.stage .t { font-family: var(--mono); font-weight: 600; }
+.stage .big { font-family: var(--mono); font-size: 20px; font-weight: 600; line-height: 1.2; }
+.timeline { list-style: none; margin: 0; padding: 0; display: grid; }
+.timeline li { display: grid; grid-template-columns: 96px 1fr; gap: 12px; padding: 7px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.timeline li:first-child { border-top: 0; }
+.foot { margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--line); display: grid; gap: 8px; font-size: 12px; color: var(--muted); }
+.srcs { display: flex; flex-wrap: wrap; gap: 6px; }
+.src { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); font-family: var(--mono); font-size: 11.5px; color: var(--ink-2); }
+.src .dot { width: 7px; height: 7px; border-radius: 50%; }
+.d-ok { background: var(--good); } .d-stale { background: var(--warn); } .d-fail { background: var(--bad); }
+@media (max-width: 560px) {
+  .dp-row, .dp-axis { grid-template-columns: 1fr; gap: 2px; }
+  .dp-axis > div:first-child { display: none; }
+  .row-bar { grid-template-columns: 1fr auto; }
+  .row-bar > .bar, .row-bar > .meter { grid-column: 1 / -1; grid-row: 2; }
+  .timeline li { grid-template-columns: 1fr; gap: 0; }
+  .kpi .value { font-size: 20px; }
+}
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <div class="top-row">
+      <div class="brand"><b>TRADING LAB</b><span>Control room</span></div>
+      <div class="clocks" id="clocks"></div>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Sections" id="tabs"></nav>
+  </div>
+</header>
+<main class="wrap" id="main"></main>
+
+<script type="application/json" id="snapshot">/*__SNAPSHOT__*/null</script>
+<script>
+(function () {
+  "use strict";
+  var DOCS = ["meta", "overview", "research", "spec", "platform", "ops", "history"];
+  var TABS = [
+    { id: "overview", label: "Overview" }, { id: "research", label: "Edge research" },
+    { id: "spec", label: "Methodology" }, { id: "platform", label: "Platform" },
+    { id: "ops", label: "Operations" }, { id: "history", label: "History" }
+  ];
+  var EXPECTED_SCHEMA = 1;
+  var state = { docs: {}, live: false, db: "connecting", tab: "overview", pending: false };
+
+  try {
+    var snap = JSON.parse(document.getElementById("snapshot").textContent);
+    if (snap && typeof snap === "object") DOCS.forEach(function (k) { if (snap[k] && typeof snap[k] === "object") state.docs[k] = snap[k]; });
+  } catch (e) { /* the bare template has no data: the page renders its empty state */ }
+
+  // ------------------------------------------------------------ helpers
+  function h(tag, attrs) {
+    var el = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) {
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) return;
+      if (k === "class") el.className = v;
+      else if (k === "style") el.setAttribute("style", v);
+      else if (k.slice(0, 2) === "on") el.addEventListener(k.slice(2), v);
+      else el.setAttribute(k, v === true ? "" : String(v));
+    });
+    for (var i = 2; i < arguments.length; i++) add(el, arguments[i]);
+    return el;
+  }
+  function add(el, c) {
+    if (c === null || c === undefined || c === false) return;
+    if (Array.isArray(c)) { c.forEach(function (x) { add(el, x); }); return; }
+    el.appendChild(c instanceof Node ? c : document.createTextNode(String(c)));
+  }
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function icon(kind) {
+    var svg = document.createElementNS(SVGNS, "svg");
+    svg.setAttribute("viewBox", "0 0 16 16"); svg.setAttribute("class", "ico"); svg.setAttribute("aria-hidden", "true");
+    var p = document.createElementNS(SVGNS, "path");
+    p.setAttribute("fill", "none"); p.setAttribute("stroke", "currentColor"); p.setAttribute("stroke-width", "2");
+    p.setAttribute("stroke-linecap", "round"); p.setAttribute("stroke-linejoin", "round");
+    var d = { good: "M3 8.5l3 3 7-7", warn: "M8 3v6M8 12.5v.5", bad: "M4 4l8 8M12 4l-8 8", neutral: "M3 8h10" };
+    p.setAttribute("d", d[kind] || d.neutral);
+    svg.appendChild(p);
+    return svg;
+  }
+  function pill(text, tone, withDot) { return h("span", { class: "pill s-" + (tone || "neutral") }, withDot ? h("span", { class: "dot" }) : null, text); }
+  function safeUrl(u) { return typeof u === "string" && /^https:\/\/[^\s"'<>]+$/.test(u) ? u : null; }
+  function link(u, text) { var s = safeUrl(u); return s ? h("a", { href: s, target: "_blank", rel: "noopener noreferrer" }, text || s) : null; }
+  function arr(x) { return Array.isArray(x) ? x : []; }
+  function isNum(x) { return typeof x === "number" && isFinite(x); }
+  function num(x, d) { return isNum(x) ? x.toFixed(d === undefined ? 3 : d) : "—"; }
+  function signed(x, d) { return isNum(x) ? (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(d === undefined ? 3 : d) : "—"; }
+  function fmtTime(iso, tz, withDay) {
+    if (!iso) return "—";
+    var t = new Date(iso); if (isNaN(t.getTime())) return String(iso);
+    try {
+      var o = { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false };
+      if (withDay) { o.weekday = "short"; o.day = "numeric"; o.month = "short"; }
+      return new Intl.DateTimeFormat("en-AU", o).format(t);
+    } catch (e) { return t.toISOString().slice(0, 16).replace("T", " "); }
+  }
+  function ago(iso) {
+    if (!iso) return "never";
+    var t = new Date(iso); if (isNaN(t.getTime())) return "at an unknown time";
+    var m = Math.round((Date.now() - t.getTime()) / 60000);
+    if (m < 1) return "just now"; if (m < 60) return m + " min ago";
+    var hh = Math.floor(m / 60); if (hh < 48) return hh + " h " + (m % 60) + " min ago";
+    return Math.floor(hh / 24) + " days ago";
+  }
+  function selectText(el) {
+    try { var r = document.createRange(); r.selectNodeContents(el); var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); } catch (e) {}
+  }
+  function cmdBox(text) {
+    var code = h("code", null, text);
+    var b = h("button", { type: "button", "aria-label": "Copy command" }, "Copy");
+    b.addEventListener("click", function () {
+      var ok = function () { b.textContent = "Copied"; setTimeout(function () { b.textContent = "Copy"; }, 1500); };
+      try { navigator.clipboard.writeText(text).then(ok, function () { selectText(code); }); } catch (e) { selectText(code); }
+    });
+    return h("div", { class: "cmd" }, code, b);
+  }
+  function table(cols, rows) {
+    var head = h("tr", null, cols.map(function (c) { return h("th", { class: c.r ? "r" : null, scope: "col" }, c.label); }));
+    var body = rows.map(function (r) {
+      return h("tr", null, cols.map(function (c) {
+        var v; try { v = c.get(r); } catch (e) { v = "—"; }
+        return h("td", { class: ((c.r ? "r num" : "") + (c.nowrap ? " nowrap" : "")) || null }, v === null || v === undefined || v === "" ? "—" : v);
+      }));
+    });
+    return h("div", { class: "tbl-wrap" }, h("table", null, h("thead", null, head), h("tbody", null, body)));
+  }
+  function guard(fn, label) {
+    try { return fn(); }
+    catch (e) { return h("div", { class: "panel-error" }, (label || "This part") + " could not be drawn from the current data (" + (e && e.message ? e.message : "unknown error") + "). The rest of the page is unaffected."); }
+  }
+  function panel(title, sub, fn) {
+    var body = h("div", { class: "panel-body" });
+    var sec = h("section", { class: "panel" }, h("div", { class: "panel-head" }, h("h2", null, title), sub ? h("span", { class: "sub" }, sub) : null), body);
+    try { fn(body); }
+    catch (e) { body.replaceWith(h("div", { class: "panel-error" }, "This panel could not be drawn from the current data (" + (e && e.message ? e.message : "unknown error") + "). The rest of the page is unaffected.")); }
+    return sec;
+  }
+  function missing(body, what) { add(body, h("p", { class: "muted small" }, (what || "This data") + " is not available in the latest refresh.")); }
+  var TONE = { done: "good", passed: "good", failed: "bad", in_progress: "accent", partial: "warn", open: "warn", not_started: "neutral", none: "neutral" };
+  var WORD = { done: "Done", passed: "Passed", failed: "Failed", in_progress: "In progress", not_started: "Not started", partial: "Partial", none: "None", open: "Open" };
+  var SEV = { blocker: ["Blocker", "bad"], high: ["High", "serious"], medium: ["Medium", "warn"], low: ["Low", "neutral"] };
+  var VERDICT = { candidate: "Candidate", inconclusive: "Inconclusive", rejected: "Rejected", falsified: "Falsified", not_applicable: "Not applicable" };
+  var VCOLOR = { candidate: "var(--good)", inconclusive: "var(--warn)", rejected: "var(--bad)", falsified: "var(--serious)", not_applicable: "var(--muted)" };
+
+  // ------------------------------------------------------------ header
+  function freshness() {
+    var meta = state.docs.meta || {};
+    if (!meta.as_of) return { tone: "neutral", word: "No data yet" };
+    var age = (Date.now() - new Date(meta.as_of).getTime()) / 60000;
+    var every = meta.refresh_minutes || 15;
+    if (meta.last_error) return { tone: age <= 90 ? "warn" : "bad", word: "Last refresh failed · data " + ago(meta.as_of) };
+    if (age <= every * 2 + 5) return { tone: "good", word: "Updated " + ago(meta.as_of) };
+    if (age <= 90) return { tone: "warn", word: "Refresh late · " + ago(meta.as_of) };
+    return { tone: "bad", word: "Refresh stopped · " + ago(meta.as_of) };
+  }
+  function renderClocks() {
+    var el = document.getElementById("clocks"); if (!el) return;
+    var now = new Date().toISOString();
+    var mk = (state.docs.overview || {}).market || {};
+    var f = freshness();
+    var mode = state.live ? "Live updates on" : state.db === "unavailable" ? "Showing the published snapshot" : "Connecting to live updates";
+    el.replaceChildren(
+      h("span", { class: "clock", title: "Sydney" }, h("em", null, "SYD"), fmtTime(now, "Australia/Sydney")),
+      h("span", { class: "clock", title: "New York" }, h("em", null, "NY"), fmtTime(now, "America/New_York")),
+      mk.phase ? pill(mk.phase, mk.phase === "regular session" ? "accent" : "neutral") : null,
+      h("span", { title: mode }, pill(f.word, f.tone, true)));
+  }
+  function renderTabs() {
+    var nav = document.getElementById("tabs");
+    var urgent = arr((state.docs.overview || {}).needs_you).filter(function (a) { return a.severity === "blocker" || a.severity === "high"; }).length;
+    nav.replaceChildren.apply(nav, TABS.map(function (t) {
+      var b = h("button", { class: "tab", role: "tab", id: "tab-" + t.id, "aria-selected": String(state.tab === t.id), "aria-controls": "pane-" + t.id, type: "button" },
+        t.label, t.id === "overview" && urgent ? h("span", { class: "count", title: urgent + " urgent item(s) need you" }, String(urgent)) : null);
+      b.addEventListener("click", function () { selectTab(t.id, false); });
+      b.addEventListener("keydown", function (ev) {
+        var i = TABS.findIndex(function (x) { return x.id === state.tab; });
+        if (ev.key === "ArrowRight") { selectTab(TABS[(i + 1) % TABS.length].id, true); ev.preventDefault(); }
+        if (ev.key === "ArrowLeft") { selectTab(TABS[(i + TABS.length - 1) % TABS.length].id, true); ev.preventDefault(); }
+      });
+      return b;
+    }));
+  }
+  function selectTab(id, focus) {
+    if (!TABS.some(function (t) { return t.id === id; })) id = "overview";
+    state.tab = id;
+    try { localStorage.setItem("tl-tab", id); } catch (e) {}
+    try { if (history.replaceState) history.replaceState(null, "", "#" + id); } catch (e) {}
+    TABS.forEach(function (t) {
+      var pane = document.getElementById("pane-" + t.id); if (pane) pane.hidden = t.id !== id;
+      var b = document.getElementById("tab-" + t.id); if (b) { b.setAttribute("aria-selected", String(t.id === id)); b.tabIndex = t.id === id ? 0 : -1; }
+    });
+    if (focus) { var b2 = document.getElementById("tab-" + id); if (b2) b2.focus(); }
+  }
+
+  // ------------------------------------------------------------ overview
+  function renderOverview() {
+    var o = state.docs.overview;
+    var pane = h("div", { class: "stack" });
+    if (!o) { pane.appendChild(h("p", { class: "muted" }, "No data yet. The first refresh fills this page.")); return pane; }
+    pane.appendChild(h("div", { class: "hero" }, h("h1", null, o.headline || ""), h("p", null, o.subline || "")));
+    pane.appendChild(guard(function () {
+      return h("div", { class: "kpis", role: "list" }, arr(o.kpis).map(function (k) {
+        var tone = k.state === "bad" ? "bad" : k.state === "warn" ? "warn" : k.state === "good" ? "good" : "neutral";
+        return h("div", { class: "kpi", role: "listitem" },
+          h("span", { class: "label" }, h("span", { class: "t-" + tone, style: "display:inline-flex" }, icon(tone)), k.label),
+          h("span", { class: "value num" }, k.value, k.unit ? h("span", { class: "unit" }, k.unit) : null),
+          k.detail ? h("span", { class: "detail" }, k.detail) : null);
+      }));
+    }, "The summary tiles"));
+    pane.appendChild(panel("Path to live trading", "Each gate must pass before the next", function (b) {
+      var gates = arr(o.gates);
+      var here = gates.findIndex(function (g) { return g.status !== "done" && g.status !== "passed"; });
+      add(b, h("div", { class: "ladder" }, gates.map(function (g, i) {
+        return h("div", { class: "gate" + (i === here ? " here" : "") },
+          h("div", { class: "gid" }, h("span", null, g.id), pill(WORD[g.status] || g.status, TONE[g.status] || "neutral")),
+          h("div", { class: "gname" }, g.name),
+          i === here ? h("div", { class: "here-tag" }, "You are here") : null,
+          h("div", { class: "crit" }, g.criteria || ""),
+          g.progress ? h("div", { class: "small mono" }, g.progress) : null,
+          g.next ? h("div", { class: "crit" }, "Next: " + g.next) : null,
+          g.evidence ? h("div", { class: "crit" }, "Evidence: " + g.evidence) : null);
+      })));
+    }));
+    pane.appendChild(panel("Needs you", arr(o.needs_you).length + " open, most urgent first", function (b) {
+      var list = arr(o.needs_you);
+      if (!list.length) { add(b, h("p", { class: "muted" }, "Nothing is waiting on you.")); return; }
+      add(b, h("ol", { class: "actions" }, list.map(function (a) {
+        var sev = SEV[a.severity] || SEV.low;
+        return h("li", { class: "action" },
+          h("span", { class: "rank" }, String(a.rank)),
+          h("div", null,
+            h("div", { class: "action-title" }, pill(sev[0], sev[1]), h("span", null, a.title), a.manual ? h("span", { class: "chip", title: "Tracked by hand in config/dashboard.yaml" }, "manual") : null),
+            a.why ? h("p", null, a.why) : null,
+            a.blocks ? h("p", { class: "small muted" }, "Blocks: " + a.blocks) : null,
+            a.when ? h("p", { class: "small muted" }, "When: " + a.when) : null,
+            a.command ? cmdBox(a.command) : null,
+            a.link ? h("p", { class: "small" }, link(a.link, a.id === "cat01" ? "Open the review page" : "Open")) : null));
+      })));
+    }));
+    return pane;
+  }
+
+  // ------------------------------------------------------------ research
+  function dotPlot(rows) {
+    var pts = rows.filter(function (r) { return isNum(r.expectancy_r) && r.n; });
+    if (!pts.length) return h("p", { class: "muted" }, "No readable results.");
+    var lo = 0, hi = 0;
+    pts.forEach(function (r) { lo = Math.min(lo, isNum(r.ci_low) ? r.ci_low : r.expectancy_r); hi = Math.max(hi, isNum(r.ci_high) ? r.ci_high : r.expectancy_r); });
+    lo = Math.floor(lo * 10) / 10 - 0.02; hi = Math.ceil(hi * 10) / 10 + 0.02;
+    var X = function (v) { return ((v - lo) / (hi - lo) * 100).toFixed(3) + "%"; };
+    var ticks = []; for (var t = Math.ceil(lo * 10) / 10; t <= hi + 1e-9; t += 0.1) ticks.push(Math.round(t * 10) / 10);
+    if (ticks.length > 9) ticks = ticks.filter(function (v) { return Math.round(v * 10) % 2 === 0; });
+    var readout = h("div", { class: "readout", "aria-live": "polite" }, "Hover or focus a row to see its numbers.");
+    function describe(r) {
+      readout.replaceChildren(h("b", null, r.label), " · " + (VERDICT[r.verdict] || r.verdict) + " · " + (r.span || ""), h("br"),
+        "E[R] " + signed(r.expectancy_r) + "R · CI95 [" + signed(r.ci_low) + ", " + signed(r.ci_high) + "] · n " + r.n +
+        " · PF " + num(r.profit_factor, 2) + (isNum(r.dsr) ? " · DSR " + num(r.dsr, 2) : "") + (r.years_profitable ? " · years profitable " + r.years_profitable : "") + (r.ref ? " · " + r.ref : ""),
+        r.note ? h("br") : null, r.note || "");
+    }
+    var list = h("div", { role: "list" }, pts.map(function (r) {
+      var col = VCOLOR[r.verdict] || "var(--muted)";
+      var track = h("div", { class: "dp-track" },
+        ticks.map(function (t) { return h("span", { class: "dp-grid", style: "left:" + X(t) }); }),
+        h("span", { class: "dp-zero", style: "left:" + X(0) }),
+        (isNum(r.ci_low) && isNum(r.ci_high)) ? h("span", { class: "dp-ci", style: "left:" + X(r.ci_low) + ";width:calc(" + X(r.ci_high) + " - " + X(r.ci_low) + ");background:" + col }) : null,
+        h("span", { class: "dp-dot", style: "left:" + X(r.expectancy_r) + ";background:" + col }));
+      var row = h("div", { class: "dp-row", role: "listitem", tabindex: "0", "aria-label": r.label + ": expectancy " + signed(r.expectancy_r) + " R over " + r.n + " trades, " + (VERDICT[r.verdict] || r.verdict) },
+        h("div", { class: "dp-label" }, r.label, " ", h("span", { class: "n" }, "n=" + r.n)), track);
+      row.addEventListener("mouseenter", function () { describe(r); });
+      row.addEventListener("focus", function () { describe(r); });
+      return row;
+    }));
+    var axis = h("div", { class: "dp-axis" }, h("div", { class: "small muted", style: "text-align:right" }, "R per trade"),
+      h("div", { class: "dp-ticks" }, ticks.map(function (t) { return h("span", { style: "left:" + X(t) }, t === 0 ? "0" : signed(t, 1)); })));
+    var legend = h("div", { class: "legend" }, ["candidate", "inconclusive", "falsified", "rejected"].map(function (v) { return h("span", null, h("i", { class: "c-" + v }), VERDICT[v]); }),
+      h("span", { class: "muted" }, "Line: 95% confidence interval. Dot: expectancy."));
+    return h("div", null, list, axis, legend, readout);
+  }
+  function renderResearch() {
+    var r = state.docs.research;
+    var pane = h("div", { class: "stack" });
+    if (!r) { missing(pane, "Research data"); return pane; }
+    var board = arr(r.scoreboard);
+    pane.appendChild(panel("Strategy scoreboard", "Expectancy per trade in R; development span unless marked", function (b) { add(b, dotPlot(board)); }));
+    pane.appendChild(h("div", { class: "grid-2" },
+      panel("CAT-01 catalyst classifier", "The gate for round 3", function (b) {
+        var c = r.cat01; if (!c) { missing(b, "The CAT-01 result"); return; }
+        var acc = isNum(c.accuracy_pct) ? c.accuracy_pct : 0, tgt = isNum(c.target_pct) ? c.target_pct : 85;
+        var done = c.verdicts_done || 0, tot = c.verdicts_total || 0;
+        add(b, h("div", { class: "row-bars" },
+          h("div", { class: "row-bar" }, h("span", null, "Decision-level accuracy"),
+            h("div", { class: "meter", role: "img", "aria-label": acc + "% against a " + tgt + "% target" },
+              h("span", { class: "fill", style: "width:" + Math.min(100, acc) + "%;background:" + (c.passed ? "var(--good)" : "var(--warn)") }),
+              h("span", { class: "mark", style: "left:" + tgt + "%", title: "Target " + tgt + "%" })),
+            h("span", { class: "v" }, acc + "% / " + tgt + "%")),
+          h("div", { class: "row-bar" }, h("span", null, "Your disagreement verdicts"),
+            h("div", { class: "bar" }, done ? h("span", { style: "width:" + (tot ? 100 * done / tot : 0) + "%;background:var(--accent)" }) : null),
+            h("span", { class: "v" }, done + " / " + (tot || "?")))));
+        add(b, h("p", { class: "small", style: "margin-top:12px" }, "Classifier " + (c.classifier || "") + " on " + (c.sample || "") + ". " +
+          (c.passed ? "It meets the target." : "It is one headline short. If any one of these items goes the classifier's way, it reaches 86%:")));
+        if (!c.passed && arr(c.decisive_items).length) add(b, h("div", { class: "chips", style: "margin-top:8px" }, c.decisive_items.map(function (x) { return h("span", { class: "chip" }, x); })));
+        if (c.review_url) add(b, h("p", { class: "small", style: "margin-top:10px" }, link(c.review_url, "Open the review page to record verdicts")));
+        if (isNum(c.verdicts_on_page)) add(b, h("p", { class: "small muted", style: "margin-top:6px" }, c.verdicts_on_page + " verdict(s) recorded on the review page."));
+      }),
+      panel("Round 3 trials", "Pre-registered in DEC-0010", function (b) {
+        var tr = r.trials || {};
+        add(b, h("p", { class: "small muted", style: "margin-bottom:8px" }, "DEC-0010: " + (r.dec0010_status || "unknown") + ". Trials used " + (tr.used || "?") + "; " + (tr.budget_if_round3 || "?") + " once it takes effect."));
+        add(b, table([
+          { label: "Hypothesis", get: function (t) { return h("span", { class: "mono" }, t.id); }, nowrap: true },
+          { label: "Trial", get: function (t) { return t.name; } },
+          { label: "Set", get: function (t) { return t.set; } },
+          { label: "Status", get: function (t) { return t.run ? pill("Run", "accent") : pill("Not run", "neutral"); } }
+        ], arr(r.round3)));
+      })));
+    pane.appendChild(panel("Scoreboard table", "The same results as the chart", function (b) {
+      add(b, table([
+        { label: "Strategy", get: function (x) { return x.label; } },
+        { label: "Span", get: function (x) { return x.span; }, nowrap: true },
+        { label: "n", r: true, get: function (x) { return isNum(x.n) ? String(x.n) : "—"; } },
+        { label: "E[R]", r: true, get: function (x) { return signed(x.expectancy_r); } },
+        { label: "CI95", r: true, get: function (x) { return isNum(x.ci_low) ? "[" + signed(x.ci_low) + ", " + signed(x.ci_high) + "]" : "—"; }, nowrap: true },
+        { label: "PF", r: true, get: function (x) { return num(x.profit_factor, 2); } },
+        { label: "DSR", r: true, get: function (x) { return num(x.dsr, 2); } },
+        { label: "Verdict", get: function (x) { return h("span", null, h("i", { class: "vdot c-" + x.verdict }), VERDICT[x.verdict] || x.verdict); }, nowrap: true },
+        { label: "Record", get: function (x) { return h("span", { class: "small muted" }, x.error ? "Unreadable: " + x.error : (x.ref || "")); } }
+      ], board));
+    }));
+    pane.appendChild(h("div", { class: "grid-2" },
+      panel("Decisions", arr(r.decisions).length + " recorded, newest first", function (b) {
+        add(b, table([
+          { label: "Id", get: function (d) { return h("span", { class: "mono" }, d.id); }, nowrap: true },
+          { label: "Date", get: function (d) { return d.date; }, nowrap: true },
+          { label: "Decision", get: function (d) { return h("span", null, d.title, d.status && d.status !== "recorded" ? h("span", { class: "small muted" }, " · " + d.status) : null); } }
+        ], arr(r.decisions).slice().reverse()));
+      }),
+      panel("Hypotheses", "Flagged rows have a status the decisions have overtaken", function (b) {
+        add(b, table([
+          { label: "Id", get: function (x) { return h("span", { class: "mono" }, x.id); }, nowrap: true },
+          { label: "Name", get: function (x) { return x.name; } },
+          { label: "Status", get: function (x) { return h("span", null, x.status, x.stale ? [" ", pill("out of date", "warn")] : null); } }
+        ], arr(r.hypotheses)));
+      })));
+    return pane;
+  }
+
+  // ------------------------------------------------------------ methodology
+  function renderSpec() {
+    var s = state.docs.spec;
+    var pane = h("div", { class: "stack" });
+    if (!s || !s.total) { missing(pane, "SPEC-0001 data"); return pane; }
+    var bs = s.by_status || {};
+    pane.appendChild(h("div", { class: "hero" }, h("h1", null, (s.spec_id || "SPEC") + " v" + s.version + ": " + (bs.implemented || 0) + " of " + s.total + " requirements implemented"),
+      h("p", null, (s.title || "") + ". Status: " + (s.status || "?") + ". Long-only. Every implemented requirement names the test that proves it.")));
+    pane.appendChild(panel("Review checklist", "The stock-selection funnel from the architectural review, mapped to requirements", function (b) {
+      add(b, h("div", { class: "row-bars" }, arr(s.checklist).map(function (c) {
+        var pct = c.total ? 100 * c.implemented / c.total : 0;
+        return h("div", { class: "row-bar" }, h("span", null, c.item),
+          h("div", { class: "bar", role: "img", "aria-label": c.implemented + " of " + c.total + " implemented" }, pct ? h("span", { style: "width:" + pct + "%;background:" + (c.state === "done" ? "var(--good)" : "var(--warn)") }) : null),
+          h("span", { class: "v" }, c.implemented + "/" + c.total + (arr(c.open).length ? " · open: " + c.open.join(", ") : "")));
+      })));
+    }));
+    pane.appendChild(h("div", { class: "grid-2" },
+      panel("By area", null, function (b) {
+        var order = [["implemented", "var(--cat-1)", "Implemented"], ["planned", "var(--cat-4)", "Planned"], ["needs_data", "var(--cat-2)", "Needs data"], ["n_a", "var(--muted)", "Not applicable"]];
+        add(b, h("div", { class: "row-bars" }, arr(s.by_area).map(function (a) {
+          return h("div", { class: "row-bar" }, h("span", null, a.area),
+            h("div", { class: "bar" }, order.filter(function (o) { return a[o[0]]; }).map(function (o) { return h("span", { style: "width:calc(" + (100 * a[o[0]] / a.total) + "% - 2px);background:" + o[1], title: o[2] + ": " + a[o[0]] }); })),
+            h("span", { class: "v" }, (a.implemented || 0) + "/" + a.total));
+        })));
+        add(b, h("div", { class: "legend" }, order.map(function (o) { return h("span", null, h("i", { class: "sq", style: "background:" + o[1] }), o[2]); })));
+      }),
+      panel("Not yet implemented", arr(s.open).length + " requirements", function (b) {
+        add(b, table([
+          { label: "Id", get: function (x) { return h("span", { class: "mono" }, x.req_id); }, nowrap: true },
+          { label: "Level", get: function (x) { return x.level; } },
+          { label: "Status", get: function (x) { return pill(String(x.status).replace("_", " "), x.level === "MUST" ? "warn" : "neutral"); }, nowrap: true },
+          { label: "Requirement", get: function (x) { return x.statement; } }
+        ], arr(s.open)));
+      })));
+    return pane;
+  }
+
+  // ------------------------------------------------------------ platform
+  function renderPlatform() {
+    var p = state.docs.platform;
+    var pane = h("div", { class: "stack" });
+    if (!p) { missing(pane, "Platform data"); return pane; }
+    pane.appendChild(panel("Capabilities", "What each repository supports today", function (b) {
+      add(b, table([
+        { label: "Capability", get: function (c) { return h("b", null, c.name); } },
+        { label: "Research repo", get: function (c) { return pill(WORD[c.research] || c.research, TONE[c.research]); }, nowrap: true },
+        { label: "Org repo", get: function (c) { return pill(WORD[c.org] || c.org, TONE[c.org]); }, nowrap: true },
+        { label: "Notes", get: function (c) { return h("span", { class: "small" }, c.note || ""); } }
+      ], arr(p.capabilities)));
+    }));
+    pane.appendChild(h("div", { class: "grid-2" },
+      panel("Recommended order of work", "Ranked by what unblocks proof of edge", function (b) {
+        add(b, h("ol", { class: "actions" }, arr(p.roadmap).map(function (x) {
+          var tone = x.priority === "P0" ? "bad" : x.priority === "P1" ? "serious" : x.priority === "P2" ? "warn" : "neutral";
+          var who = { you: "You", claude: "Claude", both: "You + Claude" }[x.owner] || x.owner;
+          return h("li", { class: "action" }, h("span", { class: "rank" }, String(x.rank)),
+            h("div", null, h("div", { class: "action-title" }, pill(x.priority, tone), h("span", null, x.title), who ? h("span", { class: "chip" }, who) : null),
+              x.why ? h("p", null, x.why) : null));
+        })));
+      }),
+      panel("Org delivery milestones", isNum(p.items_done) ? p.items_done + " of " + p.items_total + " issues done" : null, function (b) {
+        var ms = arr(p.milestones);
+        if (!ms.length) { missing(b, "Milestone data"); return; }
+        add(b, h("div", { class: "row-bars" }, ms.map(function (m) {
+          var tot = (m.open || 0) + (m.closed || 0), pct = tot ? 100 * m.closed / tot : 0;
+          return h("div", { class: "row-bar" }, h("span", null, m.title),
+            h("div", { class: "bar" }, pct ? h("span", { style: "width:" + pct + "%;background:var(--accent)" }) : null),
+            h("span", { class: "v" }, m.closed + "/" + tot + (m.p0_open ? " · " + m.p0_open + " P0" : "")));
+        })));
+        add(b, h("p", { class: "small muted", style: "margin-top:12px" }, "v1.0.0 needs: " + arr(p.v1_gate).join("; ") + "."));
+        var rel = arr(p.releases)[0];
+        if (rel) add(b, h("p", { class: "small muted" }, "Latest release " + rel.tagName + ", " + fmtTime(rel.publishedAt, "Australia/Sydney", true) + " Sydney."));
+        add(b, h("p", { class: "small muted" }, "Required status checks on main: " + (p.required_checks ? "yes." : "none yet (milestone M1).")));
+      })));
+    pane.appendChild(panel("Open org issues", "Grouped by milestone", function (b) {
+      var by = {};
+      arr(p.open_items).forEach(function (it) { (by[it.milestone] = by[it.milestone] || []).push(it); });
+      var keys = Object.keys(by).sort();
+      if (!keys.length) { add(b, h("p", { class: "muted" }, "No open issues.")); return; }
+      keys.forEach(function (k, i) {
+        add(b, h("details", i === 0 ? { open: true } : null, h("summary", null, k + " · " + by[k].length + " open"),
+          table([
+            { label: "#", get: function (x) { return x.number ? "#" + x.number : "—"; }, nowrap: true },
+            { label: "Issue", get: function (x) { return x.title; } },
+            { label: "Priority", get: function (x) { return pill(x.priority, x.priority === "P0" ? "bad" : x.priority === "P1" ? "serious" : "neutral"); } },
+            { label: "Size", get: function (x) { return x.size; } },
+            { label: "Area", get: function (x) { return x.area; } }
+          ], by[k])));
+      });
+    }));
+    pane.appendChild(panel("Recent CI runs on the org repo", null, function (b) {
+      var runs = arr(p.runs).slice(0, 8);
+      if (!runs.length) { missing(b, "CI data"); return; }
+      add(b, table([
+        { label: "Workflow", get: function (x) { return x.workflow; } },
+        { label: "Result", get: function (x) { return pill(x.conclusion || "running", x.conclusion === "success" ? "good" : x.conclusion === "failure" ? "bad" : "neutral"); } },
+        { label: "Branch", get: function (x) { return h("span", { class: "mono" }, x.branch || ""); } },
+        { label: "When (Sydney)", get: function (x) { return fmtTime(x.created, "Australia/Sydney", true); }, nowrap: true }
+      ], runs));
+    }));
+    return pane;
+  }
+
+  // ------------------------------------------------------------ operations
+  function logBlock(dig) {
+    if (!dig || !dig.exists) return h("p", { class: "small muted" }, "No log file yet.");
+    return h("details", null, h("summary", null, dig.file + " · last lines, updated " + ago(dig.modified)),
+      h("div", { style: "display:grid;gap:2px" }, arr(dig.last).map(function (l) { return h("div", { class: "logline" }, l); })));
+  }
+  function meterRow(label, pct, color, markPct, value, aria) {
+    return h("div", { class: "row-bar" }, h("span", null, label),
+      h("div", { class: "meter", role: "img", "aria-label": aria || value },
+        h("span", { class: "fill", style: "width:" + Math.max(0, Math.min(100, pct)) + "%;background:" + color }),
+        isNum(markPct) ? h("span", { class: "mark", style: "left:" + markPct + "%" }) : null),
+      h("span", { class: "v" }, value));
+  }
+  function renderOps() {
+    var o = state.docs.ops;
+    var pane = h("div", { class: "stack" });
+    if (!o) { missing(pane, "Operations data"); return pane; }
+    var host = o.host || {};
+    pane.appendChild(h("div", { class: "grid-2" },
+      panel("Tonight's jobs", "launchd agents on this Mac", function (b) {
+        var jobs = arr(host.jobs);
+        if (!jobs.length) { missing(b, "Job status"); return; }
+        add(b, table([
+          { label: "Job", get: function (j) { return h("div", null, h("b", null, j.name), h("div", { class: "small muted mono" }, j.label)); } },
+          { label: "Starts", get: function (j) { return j.local_time + " Sydney"; }, nowrap: true },
+          { label: "State", get: function (j) { return !j.loaded ? pill("Not loaded", "bad") : j.running ? pill("Running", "accent", true) : pill("Idle", "neutral"); }, nowrap: true },
+          { label: "Last exit", get: function (j) { return isNum(j.last_exit) ? pill(String(j.last_exit), j.last_exit === 0 ? "good" : "warn") : "—"; } }
+        ], jobs));
+        if (host.jobs_error) add(b, h("p", { class: "small muted" }, host.jobs_error));
+        add(b, h("p", { class: "small muted", style: "margin-top:8px" }, "Last exit belongs to the job's previous run. A running job has already restarted."));
+      }),
+      panel("Live code", "What launchd actually runs", function (b) {
+        var d = o.deployed; if (!d) { missing(b, "Deployed checkout data"); return; }
+        add(b, h("dl", { class: "kv" },
+          h("dt", null, "~/trading"), h("dd", { class: "mono" }, d.head + " (" + d.branch + ")"),
+          h("dt", null, "GitHub main"), h("dd", { class: "mono" }, d.main || "unknown"),
+          h("dt", null, "Status"), h("dd", null, d.behind === 0 ? pill("Up to date", "good") : isNum(d.behind) ? pill(d.behind + " commit(s) behind", "bad") : pill("Comparison unavailable", "warn")),
+          h("dt", null, "Local changes"), h("dd", null, d.modified + " modified, " + d.untracked + " untracked")));
+        if (arr(d.missing).length) {
+          add(b, h("p", { class: "small", style: "margin-top:10px" }, "Missing from the live checkout:"));
+          add(b, h("ul", { class: "small", style: "margin:4px 0 0;padding-left:18px" }, d.missing.map(function (c) { return h("li", null, h("span", { class: "mono" }, c.sha), " " + c.subject); })));
+          add(b, h("p", { class: "small muted", style: "margin-top:8px" }, "Update after 06:40 Sydney, when no job is running:"));
+          add(b, cmdBox("git -C ~/trading pull --ff-only"));
+        }
+        if (d.compare_error) add(b, h("p", { class: "small muted" }, d.compare_error));
+      })));
+    pane.appendChild(panel("Pre-market routine", o.routine && o.routine.date ? "Session " + o.routine.date + " (New York date)" : "No routine output yet", function (b) {
+      var r = o.routine; if (!r || !arr(r.stages).length) { missing(b, "Routine output"); return; }
+      add(b, h("div", { class: "stages" }, r.stages.map(function (s) {
+        if (s.error) return h("div", { class: "stage" }, h("span", { class: "t" }, s.file), h("span", { class: "small muted" }, s.error));
+        var st = s.stats || {}, c = s.counts || {};
+        return h("div", { class: "stage" },
+          h("div", { style: "display:flex;justify-content:space-between;gap:6px;align-items:center" }, h("span", { class: "t" }, (s.as_of_et || "?") + " NY"), pill(String(s.feed || "?").toUpperCase(), s.feed === "iex" ? "warn" : "neutral")),
+          h("span", { class: "small muted" }, s.stage),
+          h("span", { class: "big" }, isNum(st.snapshot_symbols) ? String(st.snapshot_symbols) : "—"), h("span", { class: "small muted" }, "symbols in the snapshot"),
+          h("span", { class: "small" }, "Kept " + (isNum(st.kept) ? st.kept : "—") + " · tier 1: " + (c.tier1 || 0) + (c.tier2 !== undefined ? " · tier 2: " + c.tier2 : "")),
+          arr(s.tier1).length ? h("div", { class: "chips" }, s.tier1.map(function (t) { return h("span", { class: "chip" }, t.symbol + (isNum(t.score) ? " " + t.score : "")); })) : null,
+          s.primary ? h("span", { class: "small" }, "Primary: ", h("b", null, s.primary)) : (s.stage === "tickets" ? h("span", { class: "small muted" }, "No primary") : null));
+      })));
+      if (arr(r.stages).some(function (s) { return s.feed === "iex"; })) add(b, h("p", { class: "small muted", style: "margin-top:10px" }, "IEX feed: the live checkout predates the hybrid SIP + IEX feed (PR #6), so pre-market coverage is thin."));
+      add(b, h("div", { style: "margin-top:8px" }, logBlock(r.log)));
+    }));
+    pane.appendChild(h("div", { class: "grid-2" },
+      panel("Paper B", "Strategy B on a US$600 virtual account", function (b) {
+        var p = o.paper; if (!p) { missing(b, "Paper journal"); return; }
+        var v = p.virtual || {}, g = p.g2 || {};
+        add(b, h("dl", { class: "kv" },
+          h("dt", null, "Virtual equity"), h("dd", { class: "num" }, isNum(v.equity) ? "US$" + num(v.equity, 2) + (isNum(v.start) ? " (start " + num(v.start, 2) + ")" : "") : "—"),
+          h("dt", null, "Loss latch"), h("dd", null, v.latched ? pill("Latched: " + (v.latch_reason || ""), "bad") : pill("Clear", "good")),
+          h("dt", null, "Sessions armed"), h("dd", null, String(p.armed_sessions) + (p.last_armed ? ", last " + p.last_armed : "")),
+          h("dt", null, "Trades closed"), h("dd", null, String(p.trades) + (isNum(p.mean_r) ? ", mean " + signed(p.mean_r) + "R" : ""))));
+        add(b, h("div", { class: "row-bars", style: "margin-top:12px" },
+          meterRow("G2 trades", g.trades_needed ? 100 * g.trades / g.trades_needed : 0, "var(--accent)", null, g.trades + "/" + g.trades_needed),
+          meterRow("G2 sessions", g.sessions_needed ? 100 * g.sessions / g.sessions_needed : 0, "var(--accent)", null, g.sessions + "/" + g.sessions_needed)));
+        if (arr(p.recent).length) {
+          add(b, h("p", { class: "eyebrow", style: "margin-top:14px;margin-bottom:4px" }, "Latest journal events"));
+          add(b, table([
+            { label: "Sydney", get: function (x) { return fmtTime(x.ts, "Australia/Sydney", true); }, nowrap: true },
+            { label: "Event", get: function (x) { return h("span", { class: "mono" }, x.event); } },
+            { label: "Detail", get: function (x) { return h("span", { class: "small" }, String(x.detail || "")); } }
+          ], p.recent.slice().reverse().slice(0, 8)));
+        }
+        add(b, h("div", { style: "margin-top:8px" }, logBlock(p.log)));
+      }),
+      panel("Forward test", "Nightly re-run of the frozen candidates", function (b) {
+        var f = o.forward; if (!f) { missing(b, "Forward-test data"); return; }
+        if (!f.exists) add(b, h("p", null, "Not run yet. It starts about 20 minutes after the US close, when the paper session ends."));
+        else add(b, h("dl", { class: "kv" },
+          h("dt", null, "Sessions"), h("dd", null, f.sessions + (f.first ? " (" + f.first + " to " + f.last + ")" : "")),
+          h("dt", null, "Errors"), h("dd", null, String(f.errors))));
+        if (arr(f.strategies).length) add(b, table([
+          { label: "Strategy", get: function (x) { return x.strategy; } },
+          { label: "n", r: true, get: function (x) { return String(x.n); } },
+          { label: "Mean", r: true, get: function (x) { return signed(x.mean_r) + "R"; } },
+          { label: "Total", r: true, get: function (x) { return signed(x.total_r, 2) + "R"; } }
+        ], f.strategies));
+        if (f.latest_scorecard) add(b, h("p", { class: "small muted", style: "margin-top:8px" }, "Latest scorecard: " + f.latest_scorecard));
+        add(b, h("div", { style: "margin-top:8px" }, logBlock(f.log)));
+      })));
+    pane.appendChild(h("div", { class: "grid-2" },
+      panel("This Mac", "Disk, memory, wake schedule and clock changes", function (b) {
+        var free = host.disk_free_gb, floor = host.disk_floor_gb || 3, sw = host.swap || null, warnPct = host.swap_warn_pct || 85;
+        var rows = [];
+        if (isNum(free)) rows.push(meterRow("Free disk", 100 * free / (floor * 2), free < floor ? "var(--bad)" : "var(--good)", 50, num(free, 1) + " GB, need " + floor, free + " GB free; " + floor + " GB needed"));
+        if (sw) rows.push(meterRow("Swap used", sw.used_pct, sw.used_pct >= warnPct ? "var(--serious)" : "var(--accent)", warnPct, num(sw.used_gb, 1) + " of " + num(sw.total_gb, 0) + " GB"));
+        add(b, h("div", { class: "row-bars" }, rows));
+        add(b, h("p", { class: "eyebrow", style: "margin-top:14px;margin-bottom:4px" }, "Wake schedule"));
+        var wakes = arr(host.wakes);
+        add(b, h("p", { class: "small" }, wakes.length ? "Repeating wake: " + wakes.map(function (w) { return w.time + " " + w.days; }).join(", ") + "." : "No repeating wake is set."));
+        arr(host.wake_coverage).forEach(function (c) {
+          add(b, h("p", { class: "small", style: "margin-top:4px" }, c.covered ? pill("Covered", "good") : pill("Not covered", "warn"), " A wake shortly before " + c.needed + " Sydney."));
+        });
+        add(b, h("p", { class: "eyebrow", style: "margin-top:14px;margin-bottom:4px" }, "Clock changes"));
+        arr((state.docs.meta || {}).dst).forEach(function (d) {
+          add(b, h("p", { class: "small" }, h("b", null, d.zone), " moves from " + d.from_offset + " to " + d.to_offset + " on " + d.local_date + ", in " + d.days_away + " days."));
+        });
+        var sched = arr(host.schedule);
+        var late = sched.filter(function (s) { return s.session && !s.ok; });
+        add(b, h("p", { class: "small", style: "margin-top:6px" }, late.length ? pill(late.length + " late start(s) ahead", "bad") : pill("Both jobs start in time over the next 10 days", "good")));
+        add(b, h("details", null, h("summary", null, "Job start times in New York time"),
+          table([
+            { label: "Job", get: function (s) { return h("span", { class: "mono small" }, String(s.job).replace("com.wt.", "")); } },
+            { label: "Sydney", get: function (s) { return s.local; }, nowrap: true },
+            { label: "New York", get: function (s) { return s.et; }, nowrap: true },
+            { label: "Check", get: function (s) { return !s.session ? h("span", { class: "small muted" }, "No session") : s.ok ? pill("OK", "good") : pill("Late for " + s.must_start_before_et, "bad"); } }
+          ], sched)));
+      }),
+      panel("Recent errors in the logs", "Newest routine, paper and forward logs", function (b) {
+        var errs = arr(o.errors);
+        if (!errs.length) { add(b, h("p", { class: "muted" }, "No error lines in the latest logs.")); return; }
+        add(b, h("div", { style: "display:grid;gap:6px" }, errs.slice(-14).map(function (e) {
+          return h("div", null, h("span", { class: "small muted mono" }, e.source), h("div", { class: "logline" }, e.line));
+        })));
+      })));
+    if (o.account) pane.appendChild(panel("Alpaca paper account", "Read-only snapshot", function (b) {
+      var a = o.account;
+      add(b, h("dl", { class: "kv" }, ["equity", "cash", "buying_power", "daytrade_count", "status", "market_is_open"].filter(function (k) { return a[k] !== undefined && a[k] !== null; }).map(function (k) {
+        return [h("dt", null, k.replace(/_/g, " ")), h("dd", { class: "num" }, String(a[k]))];
+      }), h("dt", null, "positions"), h("dd", null, arr(a.positions).length ? arr(a.positions).map(function (p) {
+        return p.symbol + " × " + p.qty + (isNum(p.unrealized_pl) ? " (" + signed(p.unrealized_pl, 2) + " unrealised)" : "");
+      }).join(", ") : "none")));
+    }));
+    return pane;
+  }
+
+  // ------------------------------------------------------------ history
+  function renderHistory() {
+    var hi = state.docs.history;
+    var pane = h("div", { class: "stack" });
+    if (!hi) { missing(pane, "History data"); return pane; }
+    pane.appendChild(panel("Legacy gap-and-go pipeline", "April to July 2026, before the trading freeze", function (b) {
+      var L = hi.legacy; if (!L) { missing(b, "Legacy run logs"); return; }
+      add(b, h("p", { style: "margin-bottom:12px" }, L.total + " scheduled runs from " + L.first + " to " + L.last + ". Orders placed: ", h("b", null, String(L.orders_placed)), "."));
+      var cats = [["safety_abort", "var(--cat-2)", "Safety abort (fired outside market hours)"], ["no_trade", "var(--cat-1)", "Evaluated, no trade"], ["no_candidates", "var(--cat-3)", "No candidates"], ["other", "var(--cat-4)", "Other"]];
+      var totals = arr(L.by_month).map(function (m) { return cats.reduce(function (s, c) { return s + (m[c[0]] || 0); }, 0); });
+      var maxTot = Math.max.apply(null, totals.concat([1]));
+      add(b, h("div", { class: "row-bars" }, arr(L.by_month).map(function (m, i) {
+        return h("div", { class: "row-bar" }, h("span", { class: "mono" }, m.month),
+          h("div", { class: "bar", style: "background:transparent" }, cats.filter(function (c) { return m[c[0]]; }).map(function (c) {
+            return h("span", { style: "width:calc(" + (100 * m[c[0]] / maxTot) + "% - 2px);background:" + c[1], title: c[2] + ": " + m[c[0]] });
+          })),
+          h("span", { class: "v" }, totals[i] + " runs"));
+      })));
+      add(b, h("div", { class: "legend" }, cats.map(function (c) { return h("span", null, h("i", { class: "sq", style: "background:" + c[1] }), c[2]); })));
+      add(b, h("details", { style: "margin-top:10px" }, h("summary", null, "Counts by outcome"),
+        table([{ label: "Outcome", get: function (x) { return x[0]; } }, { label: "Runs", r: true, get: function (x) { return String(x[1]); } }],
+          cats.map(function (c) { return [c[2], (L.by_outcome || {})[c[0]] || 0]; }))));
+    }));
+    pane.appendChild(h("div", { class: "grid-2" },
+      panel("Timeline", null, function (b) {
+        add(b, h("ol", { class: "timeline" }, arr(hi.timeline).map(function (t) { return h("li", null, h("span", { class: "mono small" }, t.date), h("span", null, t.event)); })));
+      }),
+      panel("Repositories", null, function (b) {
+        add(b, table([
+          { label: "Repository", get: function (r) { return link(r.url, r.repo) || r.repo; } },
+          { label: "Visibility", get: function (r) { return r.error ? pill("Unavailable", "warn") : pill(r.visibility, r.visibility === "public" ? "warn" : "neutral"); } },
+          { label: "Last push", get: function (r) { return r.pushed_at ? ago(r.pushed_at) : "—"; }, nowrap: true },
+          { label: "Open PRs", r: true, get: function (r) { return String(arr(r.open_prs).length); } }
+        ], arr(hi.repos)));
+        var reg = hi.registration_pr;
+        if (reg) add(b, h("p", { class: "small", style: "margin-top:10px" }, "Catalog registration ", link(reg.url, reg.repo + "#" + reg.number) || (reg.repo + "#" + reg.number), ": ", pill(reg.state || "unknown", reg.state === "MERGED" ? "good" : "warn")));
+      })));
+    return pane;
+  }
+
+  // ------------------------------------------------------------ frame
+  function renderFooter() {
+    var m = state.docs.meta || {};
+    var srcs = m.sources || {};
+    return h("footer", { class: "foot" },
+      h("div", { class: "srcs" }, Object.keys(srcs).map(function (k) {
+        var s = srcs[k] || {};
+        var cls = !s.ok ? "d-fail" : s.stale ? "d-stale" : "d-ok";
+        var tip = !s.ok ? "Unavailable: " + (s.error || "") : s.stale ? "Last good result from " + ago(s.as_of) + ". Latest error: " + (s.error || "") : "Fresh";
+        return h("span", { class: "src", title: tip }, h("span", { class: "dot " + cls }), k);
+      })),
+      h("div", null, (isNum(m.fresh_sources) ? m.fresh_sources + " of " + m.total_sources + " sources fresh. " : "") +
+        "Built " + (m.as_of_sydney || "—") + " (" + (m.as_of_et || "—") + ") in " + (isNum(m.duration_s) ? m.duration_s + " s" : "—") +
+        ". Refreshes every " + (m.refresh_minutes || 15) + " minutes while the Claude session runs. " +
+        (state.live ? "Live updates on." : state.db === "unavailable" ? "Live updates unavailable; showing the published snapshot." : "Connecting to live updates.") +
+        (m.collector && m.collector.sha ? " Collector " + m.collector.branch + "@" + m.collector.sha + "." : "") + " Run " + (m.run_id || "—") + "."),
+      h("div", null, "Paper trading only. Nothing on this page is financial advice."));
+  }
+  var RENDER = { overview: renderOverview, research: renderResearch, spec: renderSpec, platform: renderPlatform, ops: renderOps, history: renderHistory };
+  function render() {
+    state.pending = false;
+    var main = document.getElementById("main");
+    var frag = document.createDocumentFragment();
+    var bad = DOCS.map(function (k) { return state.docs[k] && state.docs[k].schema_version; }).filter(function (v) { return v !== undefined && v !== EXPECTED_SCHEMA; });
+    if (bad.length) frag.appendChild(h("div", { class: "banner s-warn" }, "This page expects data version " + EXPECTED_SCHEMA + " but received version " + bad[0] + ". Some panels may be incomplete until the page is republished."));
+    var meta = state.docs.meta || {};
+    if (meta.last_error) frag.appendChild(h("div", { class: "banner s-bad" }, "The last refresh failed (" + ago(meta.last_attempt) + "): " + meta.last_error + ". The figures below are from the last good refresh, " + ago(meta.as_of) + "."));
+    TABS.forEach(function (t) {
+      var pane;
+      try { pane = RENDER[t.id](); } catch (e) { pane = h("div", { class: "panel-error" }, "This section could not be drawn: " + (e && e.message)); }
+      var wrap = h("div", { id: "pane-" + t.id, role: "tabpanel", "aria-labelledby": "tab-" + t.id }, pane);
+      wrap.hidden = t.id !== state.tab;
+      frag.appendChild(wrap);
+    });
+    frag.appendChild(renderFooter());
+    main.replaceChildren(frag);
+    renderTabs();
+    selectTab(state.tab, false);
+    renderClocks();
+  }
+  function schedule() { if (state.pending) return; state.pending = true; setTimeout(render, 80); }
+
+  // ------------------------------------------------------------ live data
+  function subscribe(db, name, attempt) {
+    var ref;
+    try { ref = db.doc("status/" + name); } catch (e) { return; }
+    try {
+      ref.onSnapshot(function (snap) {
+        if (!snap || !snap.exists) return;
+        var d = snap.data();
+        if (d && typeof d === "object") { state.docs[name] = d; state.live = true; schedule(); }
+      }, function (err) {
+        var code = err && err.code;
+        if (code === "revoked" || code === "not_granted" || code === "capability_disabled" || code === "capability_removed") { state.db = "unavailable"; state.live = false; schedule(); return; }
+        if (attempt < 3) setTimeout(function () { subscribe(db, name, attempt + 1); }, 30000 * (attempt + 1));
+        else { state.db = "unavailable"; schedule(); }
+      });
+    } catch (e) { state.db = "unavailable"; schedule(); }
+  }
+  function connect() {
+    var c = window.claude;
+    if (!c || typeof c.use !== "function") { state.db = "unavailable"; schedule(); return; }
+    Promise.resolve().then(function () { return c.use("db"); }).then(function (db) {
+      if (!db) { state.db = "unavailable"; schedule(); return; }
+      state.db = "live";
+      DOCS.forEach(function (n) { subscribe(db, n, 0); });
+    }, function () { state.db = "unavailable"; schedule(); });
+  }
+
+  var initial = (location.hash || "").replace("#", "");
+  if (!TABS.some(function (t) { return t.id === initial; })) { try { initial = localStorage.getItem("tl-tab") || "overview"; } catch (e) { initial = "overview"; } }
+  state.tab = TABS.some(function (t) { return t.id === initial; }) ? initial : "overview";
+  render();
+  window.addEventListener("hashchange", function () {
+    var id = (location.hash || "").replace("#", "");
+    if (id !== state.tab && TABS.some(function (t) { return t.id === id; })) selectTab(id, false);
+  });
+  setInterval(renderClocks, 30000);
+  connect();
+})();
+</script>
