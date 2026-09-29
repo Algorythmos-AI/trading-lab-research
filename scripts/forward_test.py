@@ -1,5 +1,5 @@
 """Nightly FORWARD test (DEC-0009, DEC-0010): after each session closes, re-run the frozen rules on that day's data
-(delayed SIP, >15 min old) and append hypothetical trades to research/forward/forward_trades.jsonl.
+(delayed SIP, >15 min old) and append hypothetical trades to the forward ledger (var/forward/forward_trades.jsonl).
 
 Frozen rules (no parameter may change without a new decision record):
   * legacy candidates (DEC-0009): B (QQQ signals, QQQM-equivalent costs, M3); watchlist bull flag (ATR stop, M1, W3);
@@ -40,7 +40,7 @@ from wt.backtest.engine import Costs, simulate  # noqa: E402
 from wt.backtest.management import REGISTRY  # noqa: E402
 from wt.backtest.runner import minute_bars  # noqa: E402
 from wt.core.clock import ET, et, to_utc_iso  # noqa: E402
-from wt.core.config import DATA_DIR, ROOT, load_yaml  # noqa: E402
+from wt.core.config import DATA_DIR, FORWARD_LEDGER, FORWARD_WATCHLIST_DIR, load_yaml  # noqa: E402
 from wt.data.alpaca import SIP_DELAY_MIN, AlpacaREST  # noqa: E402
 from wt.data.edgar import SharesOutstanding  # noqa: E402
 from wt.data.universe import DAILY, load_daily  # noqa: E402
@@ -50,8 +50,8 @@ from wt.scanner.ranking import rank  # noqa: E402
 from wt.signals import setups  # noqa: E402
 from wt.specs.loader import load_spec  # noqa: E402
 
-FWD = ROOT / "research" / "forward"
-LOG = FWD / "forward_trades.jsonl"
+FWD = FORWARD_LEDGER.parent          # runtime state (ADR 0002), git-ignored
+LOG = FORWARD_LEDGER
 
 FORWARD_FROM = dt.date(2026, 9, 28)   # first forward session; everything earlier is the holdout (DEC-0005) or before it
 R3_FROM = dt.date(2026, 9, 28)        # DEC-0010: every round-3 trial runs nightly "from the approval date onward"
@@ -279,7 +279,8 @@ def run_watchlist_flag(a, d, sessions, daily) -> list[dict]:
     cands = build_candidates(d, daily, sessions, a, cache, so, with_quotes=True)
     cache.save()
     top, _ = rank(cands, load_yaml("ranking.yaml"))
-    (ROOT / "watchlist" / f"{d}.json").write_text(json.dumps({"date": str(d), "top": top, "forward": True}, default=str))
+    FORWARD_WATCHLIST_DIR.mkdir(parents=True, exist_ok=True)
+    (FORWARD_WATCHLIST_DIR / f"{d}.json").write_text(json.dumps({"date": str(d), "top": top, "forward": True}, default=str))
     bars = minute_bars(a, d, [t["symbol"] for t in top])
     out = []
     for t in top:

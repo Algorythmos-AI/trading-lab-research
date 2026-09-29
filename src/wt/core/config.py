@@ -13,6 +13,14 @@ load_dotenv(ROOT / ".env")
 DATA_DIR = ROOT / "data"
 CONFIG_DIR = ROOT / "config"
 
+# Runtime state written by the nightly jobs (ADR 0002). Git-ignored, so `git pull --ff-only` on the live checkout
+# can never collide with a file a job is writing. Evidence reaches git only as immutable archive copies, via PRs.
+STATE_DIR = Path(os.environ.get("WT_STATE") or ROOT / "var")
+FORWARD_LEDGER = STATE_DIR / "forward" / "forward_trades.jsonl"
+ROUTINE_DIR = STATE_DIR / "routine"
+FORWARD_WATCHLIST_DIR = STATE_DIR / "watchlist"
+SCORECARD_DIR = STATE_DIR / "scorecards"
+
 
 def env(name: str, default: str | None = None) -> str:
     val = os.environ.get(name, default)

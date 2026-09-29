@@ -8,7 +8,7 @@ For each session:
                          US$600 virtual account, D31)
   11:31 ET  signals      which setups fired on today's bars 09:30-11:30 (ORB 09:30-09:50, Gap-and-Go 09:30-10:00,
                          patterns 09:50-11:00, micro pullback 09:31-11:30); same causal code as the backtest
-Stage files go to research/forward/routine/<date>/.
+Stage files go to var/routine/<date>/ (runtime state, ADR 0002).
 
 Live data is "hybrid" (SPEC-0001 routine.data_live, K-31): the SIP tape up to the free plan's 15-minute delay plus IEX for
 the latest minutes. IEX alone has no bars before 08:00 ET and few for small caps. The nightly forward test re-evaluates
@@ -32,7 +32,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from wt.core.clock import ET, et, to_utc_iso  # noqa: E402
-from wt.core.config import DATA_DIR, ROOT  # noqa: E402
+from wt.core.config import DATA_DIR, ROUTINE_DIR  # noqa: E402
 from wt.data.alpaca import AlpacaREST, HybridFeed  # noqa: E402
 from wt.data.edgar import SharesOutstanding  # noqa: E402
 from wt.data.universe import ASSETS, load_daily  # noqa: E402
@@ -44,7 +44,7 @@ from wt.signals.musts import next_half_dollar_above  # noqa: E402
 from wt.signals.spec_setups import SETUPS  # noqa: E402
 from wt.specs.loader import load_spec  # noqa: E402
 
-OUT = ROOT / "research" / "forward" / "routine"
+OUT = ROUTINE_DIR
 VA_PATH = DATA_DIR / "live" / "virtual_account_gg.json"      # read-only here (D31); never B's account
 STAGES = [("08:00", "tier1"), ("08:30", "charts"), ("09:00", "tier2"), ("09:15", "tickets")]
 

@@ -26,7 +26,11 @@ host:
     - {label: com.wt.routine, local_time: "21:30", tz: Australia/Sydney, must_start_before_et: "07:55",
        name: "Pre-market routine", what: "SPEC-0001 dry run; waits until 07:55 ET, stages at 08:00 / 08:30 / 09:00 / 09:15"}
     - {label: com.wt.paper-b, local_time: "22:30", tz: Australia/Sydney, must_start_before_et: "09:30",
-       name: "Paper B + forward test", what: "Strategy B paper session, then the nightly forward test ~20 min after the close"}
+       name: "Paper B", what: "Strategy B paper session; waits until 09:30 ET, exits at the close"}
+    - {label: com.wt.forward, local_time: "05:40", tz: Australia/Sydney, must_start_before_et: "16:00",
+       name: "Forward test", what: "Frozen candidates re-run on the day's delayed SIP data, 20 min after the close"}
+    - {label: com.wt.weekly, local_time: "11:00", tz: Australia/Sydney, must_start_before_et: "23:59",
+       name: "Weekly scorecard", what: "Saturdays, after Friday's forward test"}
   wake_needed: ["21:25"]                   # one wake before the first job; the routine keeps the Mac awake until paper B
   swap_warn_pct: 85                        # swap files live on the same disk; high swap use eats free space
 

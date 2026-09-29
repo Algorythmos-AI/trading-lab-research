@@ -33,5 +33,7 @@ python_version = "3.12"
 mypy_path = "src"
 ignore_missing_imports = true
 warn_unused_configs = true
+# Only the modules named on the command line are held to --strict; legacy modules they import are read, not reported.
+follow_imports = "silent"
 # Strict typing is applied to new modules first (listed per PR in the Makefile `typecheck` target) and ratcheted
 # outwards; the legacy research code is not type-checked yet.
