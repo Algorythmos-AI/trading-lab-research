@@ -1,0 +1,12 @@
+# Hard pre-trade limits (wt.risk.pretrade), per strategy. Independent of the virtual account's sizing.
+# Frozen per gate: changing a limit that can block an entry resets the gate's counters and needs a decision record.
+B:
+  allowlist: [QQQM]            # B trades QQQM only (signals come from QQQ)
+  max_qty: 10                  # the US$600 virtual account sizes 1-3 shares; 10 is a hard ceiling
+  max_notional: 2000           # US$, per order
+  max_entries_per_day: 1       # plan: at most one trade per day
+  max_orders_per_day: 20       # entry + stop + resizes + exits + re-stops; a runaway loop hits this
+  # log-only checks (never block B; see the module docstring)
+  max_quote_age_s: 5
+  max_collar_pct: 0.5
+  max_spread_pct: 0.15

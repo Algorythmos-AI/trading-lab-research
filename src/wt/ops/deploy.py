@@ -135,11 +135,31 @@ def deploy() -> int:
     return 0
 
 
+def broker_cleanup_before_rollback() -> str | None:
+    """Older code doesn't know the GTC stops this version places. If the account is flat, cancel this repo's
+    resting orders so none can outlive a rollback and open a short. If a position is open, refuse (None = ok)."""
+    import os
+    os.environ["MODE"] = "paper"                    # the paper adapter asserts it; this only reads and cancels
+    from wt.brokers.alpaca_paper import AlpacaPaperBroker
+    from wt.core.ids import is_ours
+    b = AlpacaPaperBroker()
+    if any(p.qty for p in b.positions()):
+        return "a position is open: flatten it (or let the session finish) before rolling back"
+    for o in b.open_orders():
+        if is_ours(o.client_order_id):
+            b.cancel(o.client_order_id)
+            print(f"cancelled resting {o.client_order_id} {o.symbol}")
+    return None
+
+
 def rollback(tag: str) -> int:
     if not tag.startswith("runtime-"):
         print("Rollback targets are runtime-* tags only")
         return 2
     if _refuse_if_closed():
+        return 2
+    if (why := broker_cleanup_before_rollback()) is not None:
+        print(f"Refusing to roll back: {why}")
         return 2
     before = _run("git", "rev-parse", "HEAD").stdout.strip()
     _run("git", "reset", "--hard", "--quiet", tag)
