@@ -1,0 +1,37 @@
+[project]
+name = "wt"
+version = "0.1.0"
+description = "Trading Lab research engine: data, scanner, signals, backtest, risk, OMS and a paper runner (paper only)"
+requires-python = ">=3.12,<3.13"
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q -p no:cacheprovider"
+markers = [
+    "smoke: fast import and sanity checks that `make deploy` runs against the live venv",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+extend-exclude = ["knowledge", "data", "var", "build", "dashboard", "logs"]
+
+[tool.ruff.lint]
+# Bug-class rules only for now. Import sorting (I) and pyupgrade (UP) would rewrite live trading code, so they
+# are deferred to the "Audit 2026-09" milestone and adopted module by module.
+select = ["E9", "F", "B"]
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "src"
+ignore_missing_imports = true
+warn_unused_configs = true
+# Strict typing is applied to new modules first (listed per PR in the Makefile `typecheck` target) and ratcheted
+# outwards; the legacy research code is not type-checked yet.
