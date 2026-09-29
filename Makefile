@@ -16,7 +16,7 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
                  src/wt/research/manifest.py src/wt/research/method.py src/wt/research/trials.py \
                  src/wt/ops/thresholds.py src/wt/analytics/g2.py src/wt/risk/mandate.py \
                  src/wt/analytics/performance.py src/wt/analytics/risk_view.py src/wt/analytics/ops_view.py \
-                 src/wt/ops/audit.py
+                 src/wt/ops/audit.py src/wt/ops/control.py
 JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
@@ -92,12 +92,11 @@ kill: ## Stop new paper-B entries (exits keep being managed): make kill REASON="
 	@printf '%s\n' "$${REASON:-paused by make kill} ($$(date '+%Y-%m-%d %H:%M %Z'))" > KILL && echo "KILL switch ON" && cat KILL
 	@-$(PY) -m wt.ops.audit kill_on
 
-unkill: ## Allow paper-B entries again
-	@rm -f KILL && echo "KILL switch off"
-	@-$(PY) -m wt.ops.audit kill_off
+unkill: ## Allow paper-B entries again (refused while paper B is running)
+	@$(PY) -m wt.ops.control unkill
 
-reset-latch: ## OWNER: clear the virtual account's loss latch: make reset-latch REASON="why it is safe"
-	$(PY) scripts/reset_latch.py "$(REASON)"
+reset-latch: ## OWNER: clear the virtual account's loss latch: make reset-latch REASON="why it is safe" (refused while paper B runs)
+	@$(PY) -m wt.ops.control reset-latch "$(REASON)"
 
 evidence: ## Show what the weekly evidence PR would commit (DRY_RUN is the default here)
 	$(PY) -m wt.ops.evidence --dry-run
