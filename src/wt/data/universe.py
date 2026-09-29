@@ -73,13 +73,16 @@ def load_daily() -> pd.DataFrame:
     """Read the chunked daily store (no merged duplicate is written, to save disk)."""
     chunk_dir = DAILY.parent / "chunks"
     cols = ["symbol", "t", "o", "h", "l", "c", "v", "n", "vw"]
-    daily = pd.concat([pd.read_parquet(f, columns=cols) for f in sorted(chunk_dir.glob("chunk_*.parquet"))],
+    files = sorted(chunk_dir.glob("chunk_*.parquet"))
+    daily = pd.concat([pd.read_parquet(f, columns=cols).assign(_base=not f.name.startswith("chunk_zupd_")) for f in files],
                       ignore_index=True)
     daily["date"] = daily["t"].dt.tz_convert("America/New_York").dt.date
-    # A nightly update chunk (chunk_zupd_<date>) can repeat a session that a later base rebuild already holds;
-    # keep one row per symbol-day, preferring the later file (chunks are read in name order, zupd last).
-    daily = daily.drop_duplicates(["symbol", "date"], keep="last")
-    return daily.drop(columns=["t"]).sort_values(["symbol", "date"], ignore_index=True)
+    # A nightly update chunk (chunk_zupd_<date>) can repeat a session that a base chunk also holds. Keep one row
+    # per symbol-day and let the base chunk win: a base rebuild is the corrected copy, while an update chunk was
+    # fetched minutes after that session's close (audit: update chunks overrode later rebuilds). Among update
+    # chunks the later file wins (the sort is stable; chunks are read in name order).
+    daily = daily.sort_values("_base", kind="stable").drop_duplicates(["symbol", "date"], keep="last")
+    return daily.drop(columns=["t", "_base"]).sort_values(["symbol", "date"], ignore_index=True)
 
 
 if __name__ == "__main__":

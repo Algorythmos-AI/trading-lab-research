@@ -18,6 +18,7 @@ Bookkeeping (fixes D7):
 Usage: python scripts/forward_test.py [YYYY-MM-DD]   (default: every incomplete completed session, up to MAX_CATCHUP)"""
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 import functools
 import json
@@ -44,6 +45,7 @@ from wt.core.config import DATA_DIR, FORWARD_LEDGER, FORWARD_WATCHLIST_DIR, load
 from wt.data.alpaca import SIP_DELAY_MIN, AlpacaREST  # noqa: E402
 from wt.data.edgar import SharesOutstanding  # noqa: E402
 from wt.data.universe import DAILY, load_daily  # noqa: E402
+from wt.ops.safeio import atomic_replace  # noqa: E402
 from wt.scanner.features import PMCache, build_candidates  # noqa: E402
 from wt.scanner.pool import POOL_DIR, DailyIndex, PoolConfig  # noqa: E402
 from wt.scanner.ranking import rank  # noqa: E402
@@ -56,6 +58,7 @@ LOG = FORWARD_LEDGER
 FORWARD_FROM = dt.date(2026, 9, 28)   # first forward session; everything earlier is the holdout (DEC-0005) or before it
 R3_FROM = dt.date(2026, 9, 28)        # DEC-0010: every round-3 trial runs nightly "from the approval date onward"
 MAX_CATCHUP = 5                       # sessions per run
+REFRESH_DAYS = 5                      # newest update chunks fetched again on every run (late prints, corrections)
 POOL_MIN_FREE_GB = 1.0                # one day's pool is small; the multi-year batch build keeps its own 3 GB floor
 R3_EQUITY = 600.0                     # HYP-0010..0019 are stated for a US$600 account
 R3_P_RELAX: frozenset[str] = frozenset()   # Set P musts relaxed by the count guard (DEC-0010); none until it rules
@@ -247,14 +250,38 @@ def daily_end(d: dt.date, now: dt.datetime) -> str:
     return to_utc_iso(min(et(d + dt.timedelta(days=1), "00:00"), now - dt.timedelta(minutes=SIP_DELAY_MIN)))
 
 
-def update_daily(a: AlpacaREST, d: dt.date, now: dt.datetime | None = None) -> None:
-    f = DAILY.parent / "chunks" / f"chunk_zupd_{d}.parquet"
-    if f.exists():
-        return
-    end = daily_end(d, now or dt.datetime.now(ET))
-    syms = sorted(set(pd.concat([pd.read_parquet(x, columns=["symbol"]) for x in (DAILY.parent / "chunks").glob("chunk_0*.parquet")]).symbol))
-    parts = [a.bars(syms[i:i + 200], "1Day", d.isoformat(), end) for i in range(0, len(syms), 200)]
-    pd.concat(parts, ignore_index=True).to_parquet(f)
+def update_days(chunks: Path, pending: list[dt.date], n: int = REFRESH_DAYS) -> list[dt.date]:
+    """The pending sessions plus the newest n update chunks' sessions."""
+    have = set()
+    for f in chunks.glob("chunk_zupd_*.parquet"):
+        with contextlib.suppress(ValueError):          # a hand-named file is read by load_daily, never refreshed
+            have.add(dt.date.fromisoformat(f.stem.removeprefix("chunk_zupd_")))
+    return sorted(set(pending) | set(sorted(have | set(pending))[-n:]))
+
+
+def update_daily(a: AlpacaREST, pending: list[dt.date], now: dt.datetime | None = None) -> list[dt.date]:
+    """Fetch each pending session's daily bars into chunks/chunk_zupd_<d>.parquet, and fetch the newest REFRESH_DAYS
+    update chunks again, each replaced atomically. The first fetch runs ~20 minutes after the close, before late
+    prints and vendor corrections settle, so it must not be the only one; a base rebuild still wins over any update
+    chunk (load_daily). Returns the pending sessions whose bars are on disk. A failed fetch keeps the chunk that
+    was there; a pending session without one is logged and retried next run."""
+    now = now or dt.datetime.now(ET)
+    chunks = DAILY.parent / "chunks"
+    syms = sorted(set(pd.concat([pd.read_parquet(x, columns=["symbol"]) for x in chunks.glob("chunk_0*.parquet")]).symbol))
+    ready = []
+    for d in update_days(chunks, pending):
+        f = chunks / f"chunk_zupd_{d}.parquet"
+        try:
+            end = daily_end(d, now)
+            parts = [a.bars(syms[i:i + 200], "1Day", d.isoformat(), end) for i in range(0, len(syms), 200)]
+            atomic_replace(f, pd.concat(parts, ignore_index=True).to_parquet)
+        except Exception as e:  # noqa: BLE001 — without the day's bars nothing can run; retried next run
+            print(d, "daily update failed:", repr(e)[:200], flush=True)
+            if d in pending and not f.exists():
+                append({"session": str(d), "strategy": "daily_update", "error": repr(e)[:500]})
+        if d in pending and f.exists():
+            ready.append(d)
+    return ready
 
 
 def run_B(a: AlpacaREST, d: dt.date, sessions: list[dt.date]) -> list[dict]:
@@ -341,14 +368,7 @@ def main(day: str | None = None) -> None:
     if not days:
         print("nothing to do: every completed session since", FORWARD_FROM, "has all its strategies")
         return
-    ready = []
-    for d in days:                        # daily bars first, so the store is loaded once with every pending day in it
-        try:
-            update_daily(a, d, now)
-            ready.append(d)
-        except Exception as e:  # noqa: BLE001 — without the day's bars nothing can run; retried next run
-            append({"session": str(d), "strategy": "daily_update", "error": repr(e)[:500]})
-            print(d, "daily update failed:", repr(e)[:200], flush=True)
+    ready = update_daily(a, days, now)    # daily bars first, so the store is loaded once with every pending day in it
     ctx = Context(a, sessions, closes)
     try:
         for d in ready:
