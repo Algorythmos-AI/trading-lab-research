@@ -12,12 +12,12 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
                  src/wt/ops/heartbeat.py src/wt/ops/preflight.py src/wt/ops/jobs.py src/wt/ops/migrate.py \
                  src/wt/ops/agents.py src/wt/ops/deploy.py src/wt/core/safety.py src/wt/core/ids.py \
                  src/wt/brokers/base.py src/wt/brokers/sim.py src/wt/brokers/alpaca_paper.py src/wt/risk/pretrade.py \
-                 src/wt/oms/manager.py src/wt/risk/virtual_account.py
+                 src/wt/oms/manager.py src/wt/risk/virtual_account.py src/wt/ops/publish.py src/wt/brokers/alpaca_read.py
 JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
 .PHONY: help bootstrap lint typecheck test ci hooks status gate deploy rollback migrate-state preflight \
-        agents-diff install-trading-agents kill unkill reset-latch
+        agents-diff install-trading-agents install-dashboard-agent publish schema kill unkill reset-latch
 
 help: ## List the tasks
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/' | sort
@@ -67,8 +67,17 @@ preflight: ## Run every job's preflight under launchd's minimal environment
 agents-diff: ## Which installed launchd agents differ from the code
 	$(PY) -m wt.ops.agents diff
 
-install-trading-agents: ## OWNER: (re)install the com.wt.* agents (gated; outside the trading window)
+install-trading-agents: ## OWNER: (re)install the com.wt.* trading agents (gated; outside the trading window)
 	$(PY) -m wt.ops.agents install --trading
+
+install-dashboard-agent: ## Install the 15-minute dashboard publisher (com.wt.dashboard; not a trading job)
+	$(PY) -m wt.ops.agents install --dashboard
+
+publish: ## Collect, sanitize and publish the dashboard snapshot now (DRY_RUN=1 to only build it)
+	$(PY) -m wt.ops.publish $(if $(DRY_RUN),--dry-run,)
+
+schema: ## Regenerate dashboard/src/lib/snapshot.schema.json from wt.ops.publish.ALLOW
+	$(PY) -c "import json; from wt.ops.publish import to_schema, SCHEMA_PATH; SCHEMA_PATH.parent.mkdir(parents=True, exist_ok=True); SCHEMA_PATH.write_text(json.dumps(to_schema(), indent=2) + '\\n')"
 
 kill: ## Stop new paper-B entries (exits keep being managed): make kill REASON="..."
 	@printf '%s\n' "$${REASON:-paused by make kill} ($$(date '+%Y-%m-%d %H:%M %Z'))" > KILL && echo "KILL switch ON" && cat KILL

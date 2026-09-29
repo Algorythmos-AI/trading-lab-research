@@ -53,8 +53,9 @@ def owner_actions(sources: dict, cfg: dict) -> list[dict]:
         acts.append({"id": "deployed", "title": f"Update ~/trading: it is {dep['behind']} commit(s) behind GitHub main",
                      "why": "launchd runs this checkout, so tonight's jobs lack: "
                             + "; ".join(c["subject"] for c in dep.get("missing", [])[-3:]),
-                     "blocks": "Correct live runs", "command": "git -C ~/trading pull --ff-only",
-                     "when": "After 06:40 Sydney, when no job is running", "link": None, "severity": "high"})
+                     "blocks": "Correct live runs", "command": "make -C ~/trading deploy",
+                     "when": "When `make gate` is open (no job running, outside the trading night)", "link": None,
+                     "severity": "high"})
     host = _d(sources, "host")
     if host:
         if host["disk_free_gb"] < host["disk_floor_gb"]:

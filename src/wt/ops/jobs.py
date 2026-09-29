@@ -221,7 +221,7 @@ def run_job(job: Job, root: Path = ROOT, preflight_only: bool = False, alerts: A
         if not got:
             return refuse(job, "another run of this job is still in progress", alerts, log)
         hb = Heartbeat(job.name, _sha(root))
-        fails = preflight.failures(preflight.run_checks(root))
+        fails = preflight.failures(preflight.run_checks(root)) if job.preflight else []
         if fails:
             return refuse(job, "; ".join(f"{c.name}: {c.detail}" for c in fails), alerts, log, hb)
 

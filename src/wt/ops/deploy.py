@@ -23,7 +23,7 @@ from wt.core.config import ROOT, STATE_DIR
 from wt.ops import agents, migrate, preflight
 from wt.ops.alerts import Alerts
 from wt.ops.locks import held
-from wt.ops.schedule import JOBS, PY, SYDNEY
+from wt.ops.schedule import JOBS, PY, SYDNEY, TRADING_JOBS
 from wt.ops.status import parse_launchctl_list
 from wt.ops.window import deploy_blockers, load_sessions
 
@@ -42,7 +42,7 @@ def _run(*cmd: str, check: bool = True, timeout: float = 600) -> subprocess.Comp
 
 
 def running_jobs() -> dict[str, bool]:
-    labels = [j.label for j in JOBS.values()]
+    labels = [j.label for j in JOBS.values() if j.trading]
     try:
         text = subprocess.run(["launchctl", "list"], capture_output=True, text=True, timeout=10).stdout
     except (OSError, subprocess.SubprocessError):
@@ -53,7 +53,7 @@ def running_jobs() -> dict[str, bool]:
 def gate_blockers(now: dt.datetime | None = None) -> list[str]:
     now = now or _now()
     sessions, exact = load_sessions(now)
-    return deploy_blockers(now, sessions, running_jobs(), held(list(JOBS)), exact)
+    return deploy_blockers(now, sessions, running_jobs(), held(TRADING_JOBS), exact)
 
 
 def sync_venv() -> None:

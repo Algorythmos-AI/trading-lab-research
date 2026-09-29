@@ -29,11 +29,16 @@ class Job:
     deadline_min: int | None = None   # hard limit once the job's own work starts (after any wait)
     trading: bool = True          # the deploy gate treats it as part of the trading night
     what: str = ""
+    interval_s: int | None = None     # run every N seconds (StartInterval) instead of at a clock time
+    preflight: bool = True        # refuse on failed preflight; the dashboard publishes the failures instead
+
 
     def fires(self, after: dt.datetime, days: int = 8) -> list[dt.datetime]:
         """Local fire times strictly after ``after`` (aware), for the next ``days`` days."""
         start = after.astimezone(SYDNEY)
-        out = []
+        out: list[dt.datetime] = []
+        if self.interval_s:
+            return out                # interval jobs have no clock time (and are never trading jobs)
         for i in range(days + 1):
             d = start.date() + dt.timedelta(days=i)
             if self.weekday is not None and (d.isoweekday() % 7) != self.weekday % 7:
@@ -55,4 +60,8 @@ JOBS: dict[str, Job] = {j.name: j for j in (
         what="Nightly forward test of the frozen candidates, 20 min after the close"),
     Job("weekly", "com.wt.weekly", 11, 0, ("scripts/weekly_scorecard.py",), "backtest", "scorecard", weekday=6,
         deadline_min=30, what="Weekly scorecard after Friday's forward test (waits for the forward lock)"),
+    Job("dashboard", "com.wt.dashboard", 0, 0, ("-m", "wt.ops.publish"), "backtest", "dashboard", deadline_min=6,
+        trading=False, interval_s=900, preflight=False,
+        what="Collect status, sanitize, publish to the Vercel dashboard every 15 minutes"),
 )}
+TRADING_JOBS = [j.name for j in JOBS.values() if j.trading]

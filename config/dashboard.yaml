@@ -118,10 +118,11 @@ roadmap:
   - {rank: 10, priority: Later, title: "G3 Webull adapter, then G4 live tiny and G5 scale", why: "Only after an edge is proven", owner: both}
 
 # Owner actions that no file or API can detect. Set done: true when finished.
+# private: true keeps an item on the local page and out of the published dashboard (wt.ops.publish).
 manual_actions:
-  - {id: webull-key, title: "Reset the Webull API key", why: "It was exposed in a screenshot", blocks: "G4 live trading", done: false}
+  - {id: webull-key, title: "Reset the Webull API key", why: "It was exposed in a screenshot", blocks: "G4 live trading", done: false, private: true}
   - {id: maintainers-role, title: "Confirm the maintainers team role on the trading repos", why: "Never confirmed after the migration", blocks: "Nothing yet", done: false}
-  - {id: utc-offsets, title: "Decide whether to normalise UTC offsets in the public decision logs", why: "The offsets hint at travel", blocks: "Nothing", done: false}
+  - {id: utc-offsets, title: "Decide whether to normalise UTC offsets in the public decision logs", why: "The offsets hint at travel", blocks: "Nothing", done: false, private: true}
   - {id: sip-subscription, title: "Decide on a SIP data subscription", why: "Free IEX has no pre-market bars before 08:00 ET (DEC-0001)", blocks: "Better live data", done: false}
   - {id: m2-rescope, title: "Decide the fate of org milestones M2-M5", why: "They target the rejected gap-and-go pipeline", blocks: "Org backlog planning", done: false}
 
