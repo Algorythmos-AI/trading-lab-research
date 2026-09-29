@@ -1,0 +1,8 @@
+# Never commit state, variables or provider caches: they hold identifiers (and state could hold secrets).
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+.terraform/
+.terraform.lock.hcl
+crash.log
