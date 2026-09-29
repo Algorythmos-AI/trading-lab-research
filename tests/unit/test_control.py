@@ -9,8 +9,8 @@ from wt.ops import audit, control, locks
 from wt.risk.virtual_account import StateError, VirtualAccount
 
 
-def _hold(lock_root, ready, stop):
-    with locks.job_lock("paper-b", lock_root):
+def _hold(lock_root, ready, stop, name="paper-b"):
+    with locks.job_lock(name, lock_root):
         ready.set()
         stop.wait(10)
 
@@ -145,3 +145,44 @@ def test_control_actions_release_the_lock_afterwards(tmp_path):
     (tmp_path / "KILL").write_text("x")
     assert control.unkill(root=tmp_path, lock_root=tmp_path / "locks", audit_log=tmp_path / "a.jsonl")[0] == 0
     assert not locks.is_held("paper-b", tmp_path / "locks")
+
+
+
+@pytest.fixture
+def orphan_runner(tmp_path):
+    """A runner orphaned by a dead jobs.py wrapper: it holds only its own process lock."""
+    ctx = mp.get_context("spawn")
+    ready, stop = ctx.Event(), ctx.Event()
+    p = ctx.Process(target=_hold, args=(tmp_path / "locks", ready, stop, locks.RUNNER_LOCK))
+    p.start()
+    assert ready.wait(10)
+    yield tmp_path / "locks"
+    stop.set()
+    p.join(10)
+
+
+def test_an_orphaned_runner_still_blocks_unkill_and_reset(tmp_path, orphan_runner):
+    (tmp_path / "KILL").write_text("paused")
+    assert control.unkill(root=tmp_path, lock_root=orphan_runner, audit_log=tmp_path / "a.jsonl")[0] == 3
+    va = VirtualAccount()
+    va.latch("x")
+    va.save(tmp_path / "va.json")
+    assert control.reset_latch("safe", va_path=tmp_path / "va.json", lock_root=orphan_runner)[0] == 3
+
+
+def test_a_second_runner_process_refuses_to_start(tmp_path, orphan_runner, monkeypatch):
+    from wt.live import runner_b
+    from wt.ops import alerts
+    monkeypatch.setenv("MODE", "paper")
+    monkeypatch.delenv("NTFY_TOPIC", raising=False)
+    monkeypatch.setattr(locks, "LOCK_DIR", orphan_runner)
+    monkeypatch.setattr(alerts, "ALERT_DIR", tmp_path / "alerts")
+    monkeypatch.setattr(runner_b, "LIVE", tmp_path / "live")
+
+    def must_not_run(*a, **k):
+        raise AssertionError("a second runner must not start a session")
+
+    monkeypatch.setattr(runner_b, "_session", must_not_run)
+    runner_b.run()                                           # production path: no broker injected
+    rows = [json.loads(x) for x in (tmp_path / "live" / "journal.jsonl").read_text().splitlines()]
+    assert rows[-1]["event"] == "refuse_to_arm" and "runner lock held" in rows[-1]["reason"]

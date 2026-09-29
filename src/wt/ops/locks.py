@@ -14,6 +14,9 @@ from pathlib import Path
 from wt.core.config import STATE_DIR
 
 LOCK_DIR = STATE_DIR / "locks"
+# Held by the paper-B runner process itself for its whole session (the job lock is held by the jobs.py wrapper,
+# which runs the runner in its own session: if the wrapper dies, this is what still marks the runner as live).
+RUNNER_LOCK = "paper-b-runner"
 
 
 def _path(name: str, root: Path | None) -> Path:

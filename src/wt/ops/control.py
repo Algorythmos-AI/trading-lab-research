@@ -12,7 +12,9 @@ account's own latch history, which the dashboard's audit trail already reads. Th
 """
 from __future__ import annotations
 
+import contextlib
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 from wt.core.config import DATA_DIR, ROOT
@@ -28,13 +30,21 @@ BUSY_RESET = ("paper B is running (its lock is held): its in-memory account woul
               "save. Try again after the session ends.")
 
 
+@contextlib.contextmanager
+def _runner_idle(lock_root: Path | None) -> Iterator[bool]:
+    """Hold both paper-b's job lock and the runner process's own lock for the block; yields False if either is
+    held elsewhere (a runner orphaned by a dead wrapper holds only the second)."""
+    with locks.job_lock(RUNNER_JOB, lock_root) as job, locks.job_lock(locks.RUNNER_LOCK, lock_root) as runner:
+        yield job and runner
+
+
 def unkill(root: Path = ROOT, lock_root: Path | None = None, audit_log: Path | None = None) -> tuple[int, str]:
     """The action runs while holding paper-b's lock, so the runner can't start half-way through it (and a start
     that meets the lock refuses cleanly, through the normal jobs.py path)."""
     kill = root / "KILL"
     if not kill.exists():
         return 0, "KILL switch already off"
-    with locks.job_lock(RUNNER_JOB, lock_root) as got:
+    with _runner_idle(lock_root) as got:
         if not got:
             return 3, BUSY_UNKILL
         kill.unlink()
@@ -47,7 +57,7 @@ def reset_latch(reason: str, va_path: Path = VA_PATH, lock_root: Path | None = N
     from wt.risk.virtual_account import reset_latch as _reset
     if not reason.strip():
         return 2, 'usage: make reset-latch REASON="why it is safe to resume"'
-    with locks.job_lock(RUNNER_JOB, lock_root) as got:
+    with _runner_idle(lock_root) as got:
         if not got:
             return 3, BUSY_RESET
         try:

@@ -46,7 +46,7 @@ from wt.core.clock import ET, et, to_utc_iso
 from wt.core.config import DATA_DIR, ROOT, STATE_DIR, env
 from wt.data.alpaca import DATA, AlpacaREST
 from wt.oms.manager import ACTIVE_POSITION, OMS, PlanStore, TradePlan
-from wt.ops import hc
+from wt.ops import hc, locks
 from wt.ops.alerts import Alerts, Pager
 from wt.risk import events
 from wt.risk.mandate import out_of_mandate
@@ -328,8 +328,20 @@ def run(day: dt.date | None = None, poll_s: float = 20.0, broker: Any = None, re
     production = broker is None
     pager = Pager(alerts if alerts is not None else (Alerts() if production else None))
     try:
-        _session(day, poll_s, broker, rest, clock, sleep, pager,
-                 exits_only if exits_only is not None else env("WT_EXITS_ONLY", "") == "1")
+        if not production:
+            _session(day, poll_s, broker, rest, clock, sleep, pager,
+                     exits_only if exits_only is not None else env("WT_EXITS_ONLY", "") == "1")
+            return
+        # One runner process at a time, whatever launched it: a runner orphaned by a dead jobs.py wrapper still
+        # holds this lock, so a second one (a restart, a boot reconcile) refuses instead of double-managing orders.
+        with locks.job_lock(locks.RUNNER_LOCK) as got:
+            if not got:
+                log("refuse_to_arm", reason="another paper-b runner process is live (runner lock held)")
+                pager.fire("paper-b:second-runner", "paper-b: a second runner refused to start",
+                           "Another paper-b runner process holds the runner lock; this one exited without trading.")
+                return
+            _session(day, poll_s, broker, rest, clock, sleep, pager,
+                     exits_only if exits_only is not None else env("WT_EXITS_ONLY", "") == "1")
     finally:
         pager.close()
 
