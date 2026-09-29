@@ -302,7 +302,7 @@ def test_the_dashboard_reports_its_previous_publish_not_itself(tmp_path, monkeyp
     monkeypatch.setattr("wt.ops.heartbeat.last_runs", lambda: {"dashboard": {"status": "running"}})
     monkeypatch.setattr("wt.ops.alerts.Alerts.firing", lambda self: {})
     monkeypatch.setattr("wt.ops.preflight.run_checks", lambda root: [])
-    monkeypatch.setattr("wt.ops.window.load_sessions", lambda now, back=5: ({}, True))
+    monkeypatch.setattr("wt.ops.window.load_sessions", lambda now, **kw: ({}, True))
     ex = publish.extras(dt.datetime(2026, 9, 29, 7, 20, tzinfo=dt.UTC), root=tmp_path)
     assert ex["jobs"]["last"]["dashboard"]["status"] == "failed"
     assert ex["jobs"]["last"]["dashboard"]["detail"] == "previous publish"
@@ -314,7 +314,7 @@ def test_a_failing_v3_view_never_stops_the_publish(tmp_path, monkeypatch, capsys
     monkeypatch.setattr("wt.ops.heartbeat.last_runs", lambda: {})
     monkeypatch.setattr("wt.ops.alerts.Alerts.firing", lambda self: {})
     monkeypatch.setattr("wt.ops.preflight.run_checks", lambda root: [])
-    monkeypatch.setattr("wt.ops.window.load_sessions", lambda now, back=5: ({}, True))
+    monkeypatch.setattr("wt.ops.window.load_sessions", lambda now, **kw: ({}, True))
 
     def boom(*a, **k):
         raise ZeroDivisionError
@@ -327,3 +327,24 @@ def test_a_failing_v3_view_never_stops_the_publish(tmp_path, monkeypatch, capsys
     snap: dict = {}
     publish.add_digest(snap, publish.Sanitizer(lambda x: x, None, strict=False), dt.datetime.now(dt.UTC), tmp_path)
     assert snap["digest"] == {"since": None, "items": []}
+
+
+def test_windows_are_published_14_days_ahead(tmp_path, monkeypatch):
+    """R8: the watchdog pages only in published windows (then assumes ET weekdays), so publish two weeks of them."""
+    from wt.ops.window import weekday_sessions
+    now = dt.datetime(2026, 10, 1, 20, tzinfo=dt.UTC)
+    seen = {}
+
+    def sessions(now_, back=5, ahead=10):
+        seen["ahead"] = ahead
+        return weekday_sessions(now_.date() - dt.timedelta(days=back), back + ahead + 1), True
+
+    monkeypatch.setattr("wt.ops.heartbeat.HEARTBEAT_DIR", tmp_path)
+    monkeypatch.setattr("wt.ops.heartbeat.last_runs", lambda: {})
+    monkeypatch.setattr("wt.ops.alerts.Alerts.firing", lambda self: {})
+    monkeypatch.setattr("wt.ops.preflight.run_checks", lambda root: [])
+    monkeypatch.setattr("wt.ops.window.load_sessions", sessions)
+    wins = publish.extras(now, root=tmp_path)["expected_windows"]
+    assert seen["ahead"] >= 15
+    last = dt.datetime.fromisoformat(wins[-1]["start"])
+    assert (last - now) > dt.timedelta(days=12) and len(wins) >= 9
