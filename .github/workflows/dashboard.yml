@@ -1,0 +1,120 @@
+name: dashboard
+
+# The status dashboard (dashboard/, Next.js on Vercel). Not a required check: it only runs when the dashboard or
+# its contract changes (docs-only commits never rebuild, org decision D-018).
+#
+# Deploys are prebuilt here and uploaded with `vercel deploy --prebuilt`; the Vercel Git integration is not
+# connected, so Vercel never clones this restricted repository (ADR 0001). Pull requests get a preview (behind
+# Vercel Authentication); main deploys to production.
+on:
+  pull_request:
+    paths: ["dashboard/**", ".github/workflows/dashboard.yml", "src/wt/ops/publish.py"]
+  push:
+    branches: [main]
+    paths: ["dashboard/**", ".github/workflows/dashboard.yml", "src/wt/ops/publish.py"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dashboard-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VERCEL_ORG_ID: team_zdvzZQr6joigVUzLFhQbxXfI          # not secret: identifies the team and project
+  VERCEL_PROJECT_ID: prj_kgz9ePYH1iBuJBB3tuVBbUiAc0zN
+  VERCEL_CLI: vercel@59.7.0
+
+defaults:
+  run:
+    working-directory: dashboard
+
+jobs:
+  check:
+    name: dashboard checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: dashboard/package.json
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: dashboard/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - name: Contract is current (schema generated from the Python allowlist)
+        working-directory: .
+        run: |
+          python3 -c "import json,sys; json.load(open('dashboard/src/lib/snapshot.schema.json'))"
+          git diff --exit-code -- dashboard/src/lib/snapshot.schema.json
+      - run: pnpm build
+        env:
+          DASHBOARD_FIXTURE: "1"
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+        env:
+          DASHBOARD_FIXTURE: "1"
+      - if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playwright-report
+          path: dashboard/playwright-report
+          retention-days: 7
+
+  deploy:
+    name: deploy (${{ github.event_name == 'push' && 'production' || 'preview' }})
+    needs: check
+    # Same-repo PRs and pushes only; Dependabot and forks get no secrets.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      TARGET: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && 'production' || 'preview' }}
+    steps:
+      - name: Skip when the Vercel token is not configured
+        id: gate
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "VERCEL_TOKEN is not set: skipping the deploy (checks still ran)." >> "$GITHUB_STEP_SUMMARY"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.gate.outputs.run == 'true'
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - if: steps.gate.outputs.run == 'true'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: dashboard/package.json
+      - if: steps.gate.outputs.run == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: dashboard/pnpm-lock.yaml
+      - if: steps.gate.outputs.run == 'true'
+        run: npm install --global "$VERCEL_CLI"
+      - if: steps.gate.outputs.run == 'true'
+        name: Pull project settings and environment
+        run: vercel pull --yes --environment="$TARGET" --token="$VERCEL_TOKEN"
+      - if: steps.gate.outputs.run == 'true'
+        name: Build
+        run: |
+          if [ "$TARGET" = production ]; then vercel build --prod --token="$VERCEL_TOKEN"; else vercel build --token="$VERCEL_TOKEN"; fi
+      - if: steps.gate.outputs.run == 'true'
+        name: Deploy prebuilt output
+        run: |
+          if [ "$TARGET" = production ]; then
+            url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
+          else
+            url=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")
+          fi
+          echo "Deployed ($TARGET): $url (Vercel login required)" >> "$GITHUB_STEP_SUMMARY"
