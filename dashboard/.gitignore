@@ -8,3 +8,4 @@ blob-report/
 next-env.d.ts
 *.tsbuildinfo
 .env*.local
+.vercel
