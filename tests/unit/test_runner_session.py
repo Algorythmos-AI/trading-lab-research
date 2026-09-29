@@ -2,7 +2,9 @@
 
 Covers the canary protocol's simulated sessions: gap-through stop-out that trips the -2% latch; crash and
 restart mid-trade (no second entry, booked once); partial fill cancelled at 15:30; a KILL night that arms and
-never trades.
+never trades. Phase 2 (L1, L1b, L2, L4, L5): every refusal or failure with a position open still flattens;
+orphans and earlier plans are adopted and exited; a close is journaled and booked exactly once across a crash;
+a short pages and is never covered; clock skew blocks an entry; positions outside the mandate are never touched.
 """
 from __future__ import annotations
 
@@ -10,14 +12,20 @@ import datetime as dt
 import json
 from types import SimpleNamespace
 
+import time
+
 import numpy as np
 import pandas as pd
 import pytest
 
+from wt.brokers.base import BrokerClock
 from wt.brokers.sim import SimBroker
 from wt.core.clock import ET
-from wt.core.types import OrderStatus
+from wt.core.ids import coid
+from wt.core.types import Order, OrderStatus, Position
 from wt.live import runner_b
+from wt.oms.manager import PlanStore, TradePlan
+from wt.ops.alerts import Pager
 from wt.risk.virtual_account import VirtualAccount
 
 DAY = dt.date(2026, 9, 30)
@@ -89,6 +97,36 @@ def env(tmp_path, monkeypatch):
     return tmp_path
 
 
+class Rec:
+    """Records what the runner's pager delivers."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple] = []
+
+    def fire(self, key, title, message, priority=4, tags=()):
+        self.calls.append(("fire", key, priority))
+
+    def resolve(self, key, title, message, priority=2):
+        self.calls.append(("resolve", key, priority))
+
+    def once_per_day(self, key, title, message, priority=3, day=None):
+        self.calls.append(("once_per_day", key, priority))
+
+    def keys(self, kind="fire"):
+        return [c[1] for c in self.calls if c[0] == kind]
+
+
+def synced(b: SimBroker, clk: "Clock", skew_s: float = 0.0) -> SimBroker:
+    """Give the simulated broker a market clock that follows the fake clock (minus skew_s)."""
+    def clock() -> BrokerClock:
+        now = clk.now()
+        o, c = at(9, 30), at(16, 0)
+        return BrokerClock(timestamp=now - dt.timedelta(seconds=skew_s), is_open=o <= now < c,
+                           next_open=o if now < o else o + dt.timedelta(days=1), next_close=c)
+    b.clock_fn = clock
+    return b
+
+
 def journal(tmp_path) -> list[dict]:
     p = tmp_path / "live" / "journal.jsonl"
     rows = [json.loads(x) for x in p.read_text().splitlines()] if p.exists() else []
@@ -117,6 +155,7 @@ def test_gap_through_stop_is_booked_at_the_real_fill_and_trips_the_latch(env):
             if o.side == "sell" and o.type == "stop" and now >= at(10, 30):
                 b.fill(o.client_order_id, 243.00)               # gap through the 249.25 stop
     clk = Clock(at(8, 0), hook)
+    synced(b, clk)
     runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep)
     j = journal(env)
     closed = [r for r in j if r["event"] == "trade_closed"]
@@ -139,10 +178,12 @@ def test_crash_mid_trade_resumes_without_a_second_entry_and_books_once(env):
         if now >= at(15, 45):
             fill_exits_at(b, 250.60)
     clk = Clock(at(8, 0), hook, crash_at=at(11, 0))
+    synced(b, clk)
     with pytest.raises(Crash):
         runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep)
     assert (env / "live" / f"plan_{DAY}.json").exists()
     clk2 = Clock(at(11, 5), hook)                               # restarted five minutes later
+    synced(b, clk2)
     runner_b.run(DAY, broker=b, rest=FakeREST(clk2), now_fn=clk2.now, sleep_fn=clk2.sleep)
     j = journal(env)
     assert sum(1 for c in b.placed if b.orders[c].side == "buy") == 1          # never re-entered
@@ -164,6 +205,7 @@ def test_partial_fill_cancelled_at_1530_is_protected_and_flattened(env):
         if now >= at(15, 50):
             fill_exits_at(b, 250.40)
     clk = Clock(at(8, 0), hook)
+    synced(b, clk)
     runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep)
     entry = next(o for o in b.orders.values() if o.side == "buy")
     assert entry.status == OrderStatus.CANCELED and entry.filled_qty == 1
@@ -184,19 +226,283 @@ def test_kill_night_arms_and_never_trades(env):
     assert any("kill_file" in r.get("blockers", []) for r in j if r["event"] == "blocked")
 
 
-def test_refusals_are_journaled_and_do_not_raise(env, monkeypatch):
+def test_untrusted_state_turns_entries_off_but_the_session_runs(env):
     (env / "live").mkdir(parents=True)
     (env / "live" / "virtual_account.json.latch").write_text("day -2%")     # latched account file deleted
     b = SimBroker()
     clk = Clock(at(8, 0))
+    synced(b, clk)
     runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep)
-    assert journal(env)[-1]["event"] == "refuse_to_arm" and b.placed == []
+    j = journal(env)
+    refusal = next(r for r in j if r["event"] == "refuse_to_arm")
+    assert refusal["exits_only"] is True and "latch" in refusal["reason"]
+    assert j[-1]["event"] == "session_end" and b.placed == []
+    assert not (env / "live" / "virtual_account.json").exists()             # a default account is never saved
+    assert (env / "live" / "virtual_account.json.latch").exists()
 
 
-def test_disk_floor_refuses_to_arm(env, monkeypatch):
+def test_disk_floor_turns_entries_off_but_the_session_runs(env, monkeypatch):
     monkeypatch.setattr(runner_b, "MIN_FREE_GB", 1e9)            # more than any disk has
     b = SimBroker()
     clk = Clock(at(8, 0))
+    synced(b, clk)
     runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep)
-    last = journal(env)[-1]
-    assert last["event"] == "refuse_to_arm" and "free disk" in last["reason"] and b.placed == []
+    j = journal(env)
+    assert any(r["event"] == "refuse_to_arm" and "free disk" in r["reason"] for r in j)
+    assert j[-1]["event"] == "session_end" and b.placed == []
+
+
+# ---- phase 2: a position is never abandoned --------------------------------------------------------------------
+
+PREV = "2026-09-29"
+
+
+def seed_prior_plan(env, b: SimBroker, qty: int = 2) -> TradePlan:
+    """Yesterday's plan still holds QQQM (the runner died before its end-of-day exit); its GTC stop rests."""
+    stop_id = coid(PREV, "B", "QQQM", "stop", 1)
+    p = TradePlan(date=PREV, strategy="B", symbol="QQQM", qty=qty, trigger=250.2, limit=250.4, stop=249.25,
+                  target=252.2, seq=2, entry_id=coid(PREV, "B", "QQQM", "entry", 0), stop_id=stop_id,
+                  sell_ids=[stop_id], filled_qty=qty, avg_entry=250.26, state="in_position", entry_counted=True)
+    b.pos["QQQM"] = Position("QQQM", qty, 250.26)
+    b.place(Order(stop_id, "QQQM", "sell", qty, "stop", stop_price=249.25, tif="gtc"))
+    PlanStore(env / "live" / f"plan_{PREV}.json").save(p)
+    va = VirtualAccount()
+    va.count_entry(dt.date.fromisoformat(PREV), p.trade_id)
+    va.save(env / "live" / "virtual_account.json")
+    return p
+
+
+def fill_market_sells(b: SimBroker, price: float):
+    def hook(now):
+        for o in b.open_orders():
+            if o.side == "sell" and o.type in ("market", "limit"):
+                b.fill(o.client_order_id, price)
+    return hook
+
+
+class Boom(FakeREST):
+    def __init__(self, clock, fail: str):
+        super().__init__(clock)
+        self.fail = fail
+
+    def calendar(self, start, end):
+        if self.fail == "calendar":
+            raise ConnectionError("calendar down")
+        return super().calendar(start, end)
+
+    def bars(self, *a, **k):
+        if self.fail == "signal_inputs":
+            raise ConnectionError("history down")
+        return super().bars(*a, **k)
+
+
+@pytest.mark.parametrize("cause", ["none", "disk", "state", "events", "signal_inputs", "calendar"])
+def test_an_earlier_plans_position_is_exited_at_the_open_whatever_refuses(env, monkeypatch, cause):
+    b = SimBroker()
+    p = seed_prior_plan(env, b)
+    if cause == "disk":
+        monkeypatch.setattr(runner_b, "MIN_FREE_GB", 1e9)
+    if cause == "state":
+        (env / "live" / "virtual_account.json").unlink()
+        (env / "live" / "virtual_account.json.latch").write_text("latched")
+    if cause == "events":
+        monkeypatch.setattr(runner_b.events, "coverage_ok", lambda d: False)
+    clk = Clock(at(8, 0), fill_market_sells(b, 251.00))
+    synced(b, clk)
+    rec = Rec()
+    runner_b.run(DAY, broker=b, rest=Boom(clk, cause), now_fn=clk.now, sleep_fn=clk.sleep, alerts=rec)
+    j = journal(env)
+    assert b.positions() == [] and b.open_orders() == []
+    assert not [c for c in b.placed if b.orders[c].side == "buy"]                    # never an entry
+    exit_order = next(b.orders[c] for c in b.placed if b.orders[c].type == "market")
+    assert exit_order.status == OrderStatus.FILLED
+    closed = [r for r in j if r["event"] == "trade_closed"]
+    assert len(closed) == 1 and closed[0]["trade_id"] == p.trade_id and closed[0]["exit"] == 251.0
+    assert closed[0]["booked"] is (cause != "state")
+    if cause != "none":
+        assert any(r["event"] == "refuse_to_arm" and r["exits_only"] for r in j)
+    saved = PlanStore(env / "live" / f"plan_{PREV}.json").load()
+    assert saved.state == "closed" and saved.recorded is (cause != "state")
+    assert saved.exit_reason == "adopted_exit"                   # exited at the open, not left to the close
+
+
+def test_an_orphan_is_adopted_exited_and_never_booked(env):
+    (env / "KILL").write_text("paused")
+    b = SimBroker()
+    b.pos["QQQM"] = Position("QQQM", 3, 250.00)                  # nobody's plan placed this
+    clk = Clock(at(8, 0), fill_market_sells(b, 250.50))
+    synced(b, clk)
+    rec = Rec()
+    runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep, alerts=rec)
+    j = journal(env)
+    assert b.positions() == [] and b.open_orders() == []
+    closed = [r for r in j if r["event"] == "trade_closed"]
+    assert len(closed) == 1 and closed[0]["origin"] == "orphan" and closed[0]["booked"] is False
+    assert closed[0]["R"] is None
+    va = VirtualAccount.load(env / "live" / "virtual_account.json") \
+        if (env / "live" / "virtual_account.json").exists() else VirtualAccount()
+    assert va.equity == 600.0 and va.recorded_trades == []
+    assert "paper-b:orphan" in rec.keys()
+
+
+def test_an_orphan_is_resumed_after_a_restart_not_adopted_twice(env):
+    (env / "KILL").write_text("paused")
+    b = SimBroker()
+    b.pos["QQQM"] = Position("QQQM", 3, 250.00)
+    clk = Clock(at(8, 0), crash_at=at(9, 0))                     # dies after adopting, before the open
+    synced(b, clk)
+    with pytest.raises(Crash):
+        runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep)
+    clk2 = Clock(at(9, 5), fill_market_sells(b, 250.50))
+    synced(b, clk2)
+    runner_b.run(DAY, broker=b, rest=FakeREST(clk2), now_fn=clk2.now, sleep_fn=clk2.sleep)
+    j = journal(env)
+    assert [r["event"] for r in j].count("adopted_orphan") == 1
+    assert [r["event"] for r in j].count("resumed_orphan") == 1
+    assert b.positions() == [] and len(b.placed) == len(set(b.placed))
+
+
+def test_an_earlier_unbooked_close_is_booked_at_arm(env):
+    b = SimBroker()
+    p = seed_prior_plan(env, b)
+    b.fill(p.stop_id, 249.20)                                    # yesterday's stop filled; nobody booked it
+    p.state, p.exit_reason = "closed", "stop"
+    PlanStore(env / "live" / f"plan_{PREV}.json").save(p)
+    (env / "KILL").write_text("paused")
+    clk = Clock(at(8, 0))
+    synced(b, clk)
+    runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep)
+    closed = [r for r in journal(env) if r["event"] == "trade_closed"]
+    assert len(closed) == 1 and closed[0]["exit"] == pytest.approx(249.20)
+    va = VirtualAccount.load(env / "live" / "virtual_account.json")
+    assert p.trade_id in va.recorded_trades and va.day_pnl[PREV] == pytest.approx(2 * (249.20 - 250.26))
+
+
+def test_a_crash_between_booking_and_journaling_journals_once(env, monkeypatch):
+    b = SimBroker()
+    real_log = runner_b.log
+    state = {"crashed": False}
+
+    def log(event, **kw):
+        if event == "trade_closed" and not state["crashed"]:
+            state["crashed"] = True
+            raise Crash()                                        # dies after the account was booked and saved
+        real_log(event, **kw)
+    monkeypatch.setattr(runner_b, "log", log)
+
+    def hook(now):
+        for o in b.open_orders():
+            if o.side == "buy" and now >= at(10, 1):
+                b.fill(o.client_order_id, 250.26)
+            if o.side == "sell" and o.type == "stop" and now >= at(10, 30):
+                b.fill(o.client_order_id, 249.00)
+    clk = Clock(at(8, 0), hook)
+    synced(b, clk)
+    with pytest.raises(Crash):
+        runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep)
+    va = VirtualAccount.load(env / "live" / "virtual_account.json")
+    assert len(va.recorded_trades) == 1                          # booked before the crash
+    clk2 = Clock(at(10, 40), hook)
+    synced(b, clk2)
+    runner_b.run(DAY, broker=b, rest=FakeREST(clk2), now_fn=clk2.now, sleep_fn=clk2.sleep)
+    j = journal(env)
+    assert [r["event"] for r in j].count("trade_closed") == 1
+    va = VirtualAccount.load(env / "live" / "virtual_account.json")
+    assert len(va.recorded_trades) == 1 and va.equity == pytest.approx(600 + 2 * (249.00 - 250.26))
+    assert PlanStore(env / "live" / f"plan_{DAY}.json").load().recorded is True
+
+
+def test_a_short_pages_cancels_this_strategys_sells_and_is_never_covered(env):
+    (env / "KILL").write_text("paused")
+    b = SimBroker()
+    sell_id = coid(DAY.isoformat(), "B", "QQQM", "stop", 7)
+
+    def hook(now):
+        if now >= at(15, 56) and "QQQM" not in b.pos:
+            b.pos["QQQM"] = Position("QQQM", -2, 250.00)          # a short appears near the close
+            b.place(Order(sell_id, "QQQM", "sell", 2, "stop", stop_price=248.0, tif="gtc"))
+    clk = Clock(at(8, 0), hook)
+    synced(b, clk)
+    rec = Rec()
+    runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep, alerts=rec)
+    j = journal(env)
+    assert b.orders[sell_id].status == OrderStatus.CANCELED
+    assert not [c for c in b.placed if b.orders[c].side == "buy"]                    # never covered
+    assert any(r["event"] == "END_OF_DAY_NOT_FLAT" and r.get("short") for r in j)
+    assert ("fire", "paper-b:not-flat", 5) in rec.calls
+
+
+def test_clock_skew_blocks_the_entry(env):
+    b = SimBroker()
+    clk = Clock(at(8, 0))
+    synced(b, clk, skew_s=5.0)
+    rec = Rec()
+    runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep, alerts=rec)
+    j = journal(env)
+    assert b.placed == []
+    assert any(r["event"] == "clock_skew" and r["skew_s"] == pytest.approx(5.0) for r in j)
+    assert "paper-b:clock-skew" in rec.keys()
+
+
+def test_a_position_outside_the_mandate_is_flagged_and_never_touched(env, monkeypatch):
+    b = SimBroker()
+    b.pos["AAPL"] = Position("AAPL", 1, 200.0)
+
+    def hook(now):
+        for o in b.open_orders():
+            if o.side == "buy" and now >= at(10, 1):
+                b.fill(o.client_order_id, 250.26)
+        if now >= at(15, 50):
+            fill_exits_at(b, 250.40)
+    clk = Clock(at(8, 0), hook)
+    synced(b, clk)
+    rec = Rec()
+    runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep, alerts=rec)
+    assert not [c for c in b.placed if b.orders[c].symbol == "AAPL"]
+    assert b.pos["AAPL"].qty == 1
+    assert "paper-b:out-of-mandate:AAPL" in rec.keys("once_per_day")
+    assert [r["event"] for r in journal(env)].count("trade_closed") == 1          # B still traded QQQM
+
+    rec2 = Rec()
+    monkeypatch.setattr(runner_b, "out_of_mandate",
+                        lambda pos, allow: [(s, q, True) for s, q in pos if s not in allow])   # recorded as legacy
+    b2 = SimBroker()
+    b2.pos["AAPL"] = Position("AAPL", 1, 200.0)
+    (env / "KILL").write_text("paused")
+    clk2 = Clock(at(8, 0))
+    synced(b2, clk2)
+    runner_b.run(DAY, broker=b2, rest=FakeREST(clk2), now_fn=clk2.now, sleep_fn=clk2.sleep, alerts=rec2)
+    assert not rec2.keys("once_per_day")
+
+
+def test_the_close_unknown_pages_and_leaves_stops_in_place(env):
+    b = SimBroker()
+    seed_prior_plan(env, b)
+    clk = Clock(at(8, 0))                                        # no broker clock configured either
+    rec = Rec()
+    runner_b.run(DAY, broker=b, rest=Boom(clk, "calendar"), now_fn=clk.now, sleep_fn=clk.sleep, alerts=rec)
+    assert any(r["event"] == "close_unknown" for r in journal(env))
+    assert ("fire", "paper-b:close-unknown", 5) in rec.calls
+    assert b.positions()[0].qty == 2 and len(b.open_orders()) == 1                  # the GTC stop still rests
+
+
+def test_the_pager_never_blocks_the_loop():
+    class Slow:
+        def __init__(self):
+            self.n = 0
+
+        def fire(self, *a):
+            time.sleep(0.5)
+            self.n += 1
+    slow = Slow()
+    pager = Pager(slow)
+    t0 = time.monotonic()
+    for _ in range(5):
+        pager.fire("k", "t", "m", 5)
+    assert time.monotonic() - t0 < 0.1                            # queued, not delivered inline
+    pager.close(timeout_s=10)
+    assert slow.n == 5
+    full = Pager(Slow(), maxsize=1)
+    for _ in range(10):
+        full.fire("k", "t", "m", 5)
+    assert full.dropped >= 1

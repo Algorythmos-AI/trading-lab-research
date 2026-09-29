@@ -10,12 +10,24 @@ lookup look like "never placed".
     TransportError the order may or may not exist: resolve it by id, never resubmit blindly.
   * cancel is a no-op for an order that is already terminal or unknown; confirm with get_order.
   * Position.qty is signed. Negative means short, which the paper account must never be.
+  * clock() returns the broker's market clock. The runner uses it to measure local clock skew before an entry, and
+    as the fallback for the session close when the market calendar can't be read.
 """
 from __future__ import annotations
 
+import datetime as dt
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
 from wt.core.types import AccountState, Order, Position
+
+
+@dataclass
+class BrokerClock:
+    timestamp: dt.datetime            # the broker's current time (timezone-aware)
+    is_open: bool
+    next_open: dt.datetime
+    next_close: dt.datetime
 
 
 class TransportError(Exception):
@@ -53,3 +65,7 @@ class Broker(ABC):
 
     @abstractmethod
     def get_order(self, client_order_id: str) -> Order | None: ...
+
+    def clock(self) -> BrokerClock:
+        """The broker's market clock. Raises TransportError when it can't be read."""
+        raise NotImplementedError(f"{self.name} has no market clock")

@@ -18,6 +18,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 from wt.core.config import ROOT, STATE_DIR
 from wt.ops import agents, migrate, preflight
@@ -135,21 +136,34 @@ def deploy() -> int:
     return 0
 
 
-def broker_cleanup_before_rollback() -> str | None:
-    """Older code doesn't know the GTC stops this version places. If the account is flat, cancel this repo's
-    resting orders so none can outlive a rollback and open a short. If a position is open, refuse (None = ok)."""
+def broker_cleanup_before_rollback(broker_factory: Any = None) -> str | None:
+    """Older code doesn't know the GTC stops this version places. If strategy B is flat, cancel this repo's
+    resting orders so none can outlive a rollback and open a short. If B holds a position, refuse (None = ok).
+    Positions outside B's mandate (a manual test buy) don't block a rollback: no version of this code touches them."""
     import os
-    os.environ["MODE"] = "paper"                    # the paper adapter asserts it; this only reads and cancels
-    from wt.brokers.alpaca_paper import AlpacaPaperBroker
+
     from wt.core.ids import is_ours
-    b = AlpacaPaperBroker()
-    if any(p.qty for p in b.positions()):
-        return "a position is open: flatten it (or let the session finish) before rolling back"
-    for o in b.open_orders():
-        if is_ours(o.client_order_id):
-            b.cancel(o.client_order_id)
-            print(f"cancelled resting {o.client_order_id} {o.symbol}")
-    return None
+    from wt.risk.pretrade import load_limits
+    allow = load_limits("B").allowlist
+    prev = os.environ.get("MODE")
+    os.environ["MODE"] = "paper"                    # the paper adapter asserts it; restored below so it can't leak
+    try:
+        if broker_factory is None:
+            from wt.brokers.alpaca_paper import AlpacaPaperBroker
+            broker_factory = AlpacaPaperBroker
+        b = broker_factory()
+        if any(p.qty for p in b.positions() if p.symbol in allow):
+            return "strategy B holds a position: flatten it (or let the session finish) before rolling back"
+        for o in b.open_orders():
+            if is_ours(o.client_order_id):
+                b.cancel(o.client_order_id)
+                print(f"cancelled resting {o.client_order_id} {o.symbol}")
+        return None
+    finally:
+        if prev is None:
+            os.environ.pop("MODE", None)
+        else:
+            os.environ["MODE"] = prev
 
 
 def rollback(tag: str) -> int:

@@ -4,7 +4,8 @@ One page per incident. Each starts with how you'll notice it.
 
 | Incident | You'll see |
 |---|---|
-| [Not flat at the close](not-flat-at-close.md) | ntfy priority 5 "Paper B NOT FLAT at the close"; a red banner |
+| [Not flat at the close](not-flat-at-close.md) | ntfy priority 5 "Paper B NOT FLAT at the close" or "Paper B is SHORT"; a red banner |
+| [Position and session alerts](position-alerts.md) | ntfy "adopted a position", "outside strategy B's mandate", "clock check failed", "close unknown", "exits only" |
 | [Kill switch and flatten](kill-and-flatten.md) | You want trading to stop now |
 | [Loss latch reset](latch-reset.md) | ntfy priority 5 "loss limit latched"; entries stay off |
 | [Rollback a deploy](rollback.md) | The next night's jobs fail after a deploy |

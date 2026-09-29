@@ -20,7 +20,7 @@ from alpaca.trading.enums import OrderSide, QueryOrderStatus, TimeInForce
 from alpaca.trading.requests import (GetOrdersRequest, LimitOrderRequest, MarketOrderRequest, ReplaceOrderRequest,
                                      StopLimitOrderRequest, StopOrderRequest)
 
-from wt.brokers.base import Broker, BrokerRejected, DuplicateOrder, TransportError
+from wt.brokers.base import Broker, BrokerClock, BrokerRejected, DuplicateOrder, TransportError
 from wt.core.config import env
 from wt.core.safety import assert_paper, assert_paper_env
 from wt.core.types import AccountState, Order, OrderStatus, Position
@@ -74,6 +74,14 @@ class AlpacaPaperBroker(Broker):
         return AccountState(equity=float(a.equity), cash=float(a.cash), buying_power=float(a.buying_power),
                             is_paper=str(a.account_number).startswith("PA"),
                             blocked=bool(a.trading_blocked or a.account_blocked))
+
+    def clock(self) -> BrokerClock:
+        try:
+            c: Any = self.c.get_clock()
+        except (APIError, requests.RequestException) as e:
+            raise TransportError(e.__class__.__name__) from e
+        return BrokerClock(timestamp=c.timestamp, is_open=bool(c.is_open), next_open=c.next_open,
+                           next_close=c.next_close)
 
     def positions(self) -> list[Position]:
         try:

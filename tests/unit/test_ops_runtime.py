@@ -142,10 +142,45 @@ def test_offline_messages_spool_then_flush_in_order(tmp_path, sent):
     assert list((tmp_path / "spool").glob("*.json")) == []
 
 
-def test_no_topic_spools_without_raising(tmp_path, sent):
+def test_no_topic_means_alerts_off_nothing_spooled(tmp_path, sent):
     a = alerts.Alerts(root=tmp_path, topic="")
     assert a.notify("t", "m") is False
-    assert len(list((tmp_path / "spool").glob("*.json"))) == 1
+    assert not (tmp_path / "spool").exists() or list((tmp_path / "spool").glob("*.json")) == []
+
+
+def _age_spool(tmp_path, days: float) -> None:
+    for f in (tmp_path / "spool").glob("*.json"):
+        m = json.loads(f.read_text())
+        m["at"] = (dt.datetime.now(dt.UTC) - dt.timedelta(days=days)).isoformat()
+        f.write_text(json.dumps(m))
+
+
+def test_urgent_spooled_alerts_outlive_a_day_and_say_they_are_late(tmp_path, sent):
+    box, ok = sent
+    ok["value"] = False
+    a = alerts.Alerts(root=tmp_path, topic="t")
+    a.notify("not flat", "check the broker", priority=5)
+    a.notify("summary", "daily", priority=2)
+    _age_spool(tmp_path, 2)                                        # the host was offline for two days
+    ok["value"] = True
+    assert a.flush() == 1
+    assert [m["title"] for m in box] == ["not flat"] and box[0]["message"].startswith("(delayed: raised ")
+    ok["value"] = False
+    a.notify("latched", "limit", priority=5)
+    _age_spool(tmp_path, 8)                                        # a week late is too late even for priority 5
+    ok["value"] = True
+    assert a.flush() == 0
+
+
+def test_the_spool_is_capped(tmp_path, sent, monkeypatch):
+    box, ok = sent
+    ok["value"] = False
+    monkeypatch.setattr(alerts, "SPOOL_MAX_FILES", 5)
+    a = alerts.Alerts(root=tmp_path, topic="t")
+    for i in range(12):
+        a.notify(f"m{i}", "x", priority=4)
+    left = sorted(json.loads(f.read_text())["title"] for f in (tmp_path / "spool").glob("*.json"))
+    assert left == sorted(f"m{i}" for i in range(7, 12))           # the newest five survive
 
 
 # ---- locks and heartbeats ----------------------------------------------------------------------------------------
@@ -287,6 +322,27 @@ def test_refusal_exits_zero_and_alerts_once(jobroot, monkeypatch):
     assert last_runs(tmp / "hb")["routine"]["status"] == "refused"
 
 
+def test_paper_b_starts_exits_only_when_it_holds_a_position(jobroot, monkeypatch):
+    root, a, box, tmp = jobroot
+    monkeypatch.setattr(jobs.preflight, "run_checks", lambda root: [preflight.Check("free disk", False, "1.0 GB")])
+    monkeypatch.setattr(jobs, "b_exposure", lambda: True)
+    monkeypatch.setattr(jobs, "JOURNAL", tmp / "journal.jsonl")
+    child = "import os, sys; sys.exit(0 if os.environ.get('WT_EXITS_ONLY') == '1' else 5)"
+    assert jobs.run_job(_job(child, name="paper-b"), root, alerts=a) == 0
+    assert box[0]["title"] == "paper-b: entries off, exits only" and box[0]["priority"] == 4
+    assert last_runs(tmp / "hb")["paper-b"]["status"] == "ok"
+
+
+@pytest.mark.parametrize("check,exposure", [("on main", True), ("venv matches lockfile", True), ("free disk", False)])
+def test_paper_b_is_refused_when_exits_only_is_not_safe(jobroot, monkeypatch, check, exposure):
+    root, a, box, tmp = jobroot
+    monkeypatch.setattr(jobs.preflight, "run_checks", lambda root: [preflight.Check(check, False, "x")])
+    monkeypatch.setattr(jobs, "b_exposure", lambda: exposure)
+    assert jobs.run_job(_job("raise SystemExit(9)", name="paper-b"), root, alerts=a) == 0
+    assert [m["title"] for m in box] == ["paper-b refused to run"]
+    assert last_runs(tmp / "hb")["paper-b"]["status"] == "refused"
+
+
 def test_a_second_concurrent_run_is_refused(jobroot):
     root, a, box, tmp = jobroot
     with job_lock("routine", tmp / "locks"):
@@ -360,3 +416,18 @@ def test_collector_may_write_only_var_dashboard_inside_the_live_checkout(tmp_pat
     assert guard_out_dir(live / "var/dashboard", [live], allowed=[live / "var/dashboard"]) == (live / "var/dashboard").resolve()
     with pytest.raises(PermissionError):
         guard_out_dir(live / "var/other", [live], allowed=[live / "var/dashboard"])
+
+
+def test_rollback_cleanup_ignores_positions_outside_bs_mandate_and_restores_mode(monkeypatch):
+    from wt.brokers.sim import SimBroker
+    from wt.core.types import Order, Position
+    from wt.ops import deploy
+    monkeypatch.delenv("MODE", raising=False)
+    b = SimBroker()
+    b.pos["AAPL"] = Position("AAPL", 1, 200.0)                 # a manual test buy: not B's
+    b.place(Order("wt-B-20260929-aaaaaaaaaaaa", "QQQM", "sell", 2, "stop", stop_price=240.0, tif="gtc"))
+    assert deploy.broker_cleanup_before_rollback(lambda: b) is None
+    assert b.open_orders() == []                                # our GTC stop is gone
+    assert "MODE" not in __import__("os").environ               # nothing leaks into the smoke test or venv sync
+    b.pos["QQQM"] = Position("QQQM", 2, 250.0)
+    assert "strategy B holds a position" in deploy.broker_cleanup_before_rollback(lambda: b)

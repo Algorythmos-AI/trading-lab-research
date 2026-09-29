@@ -6,6 +6,9 @@
 For every run:
   1. Take the job's own lock. If another run holds it, this is a refusal.
   2. Run the preflight checks (`wt.ops.preflight`). A failure is a refusal: one alert per job per day, exit 0.
+     Exception (phase-2 L1): paper-b still starts, in exits-only mode, when strategy B holds a position and every
+     failed check is one that can't make exit management unsafe (disk, .env mode, legacy state). Unreviewed code,
+     a venv mismatch or a held lock never start a runner.
   3. Wait in-process where the job needs it (forward: until close + 20 min ET).
   4. Run the job as a child process under a deadline, with its output appended to logs/<log>_<YYYYMMDD>.log.
   5. Inspect the outcome: exit code, and for paper-b the journal (not flat, unknown position, latch, loop errors).
@@ -40,6 +43,8 @@ JOURNAL = DATA_DIR / "live" / "journal.jsonl"
 KILL = ROOT / "KILL"
 WEEKLY_WAIT_S = 3 * 3600
 KILL_GRACE_S = 30
+# preflight failures that still let paper-b manage an open position (entries stay off)
+EXITS_ONLY_CHECKS = frozenset({"free disk", ".env private", "runtime state migrated"})
 
 
 def _now() -> dt.datetime:
@@ -82,10 +87,11 @@ def deadline_for(job: Job, start: dt.datetime, sessions: dict[dt.date, Session])
     return start + dt.timedelta(minutes=job.deadline_min) if job.deadline_min else None
 
 
-def run_child(job: Job, root: Path, log: Log, deadline: dt.datetime | None) -> tuple[int, bool]:
+def run_child(job: Job, root: Path, log: Log, deadline: dt.datetime | None,
+              extra_env: dict[str, str] | None = None) -> tuple[int, bool]:
     """Run the job's command. Returns (exit code, killed_at_deadline)."""
     env = {**os.environ, "PYTHONPATH": "src", "MODE": job.mode, "PYTHONUNBUFFERED": "1",
-           "PYTHONDONTWRITEBYTECODE": "1"}
+           "PYTHONDONTWRITEBYTECODE": "1", **(extra_env or {})}
     log(f"start {job.name}: {' '.join(job.command)} (MODE={job.mode}, deadline "
         f"{deadline.astimezone(ET):%H:%M} ET)" if deadline else f"start {job.name}: {' '.join(job.command)}")
     try:
@@ -212,6 +218,22 @@ def publish_evidence(root: Path, log: Log, alerts: Alerts) -> None:
         log(f"evidence: could not run ({e.__class__.__name__})")
 
 
+def exits_only_allowed(fails: list[preflight.Check]) -> bool:
+    return bool(fails) and all(c.name in EXITS_ONLY_CHECKS for c in fails)
+
+
+def b_exposure() -> bool:
+    """Does the paper account hold any of strategy B's symbols? Read-only (AccountReader has no order methods).
+    Unknown counts as yes: the exits-only runner re-reads the broker and does nothing if flat."""
+    try:
+        from wt.brokers.alpaca_read import AccountReader
+        from wt.risk.pretrade import load_limits
+        allow = load_limits("B").allowlist
+        return any(sym in allow and qty for sym, qty in AccountReader().positions())
+    except Exception:  # noqa: BLE001
+        return True
+
+
 def refuse(job: Job, reason: str, alerts: Alerts, log: Log, hb: Heartbeat | None = None) -> int:
     log(f"REFUSED {job.name}: {reason}")
     alerts.once_per_day(f"refuse:{job.name}", f"{job.name} refused to run", reason, 3)
@@ -234,8 +256,14 @@ def run_job(job: Job, root: Path = ROOT, preflight_only: bool = False, alerts: A
             return refuse(job, "another run of this job is still in progress", alerts, log)
         hb = Heartbeat(job.name, _sha(root))
         fails = preflight.failures(preflight.run_checks(root)) if job.preflight else []
+        extra_env: dict[str, str] = {}
         if fails:
-            return refuse(job, "; ".join(f"{c.name}: {c.detail}" for c in fails), alerts, log, hb)
+            reason = "; ".join(f"{c.name}: {c.detail}" for c in fails)
+            if not (job.name == "paper-b" and exits_only_allowed(fails) and b_exposure()):
+                return refuse(job, reason, alerts, log, hb)
+            log(f"preflight refused ({reason}), but strategy B holds a position: starting in exits-only mode")
+            alerts.once_per_day(f"refuse:{job.name}", f"{job.name}: entries off, exits only", reason, 4)
+            extra_env["WT_EXITS_ONLY"] = "1"
 
         start = _now()
         sessions, exact = load_sessions(start)
@@ -253,7 +281,7 @@ def run_job(job: Job, root: Path = ROOT, preflight_only: bool = False, alerts: A
 
         work_start = _now()
         try:
-            code, killed = run_child(job, root, log, deadline_for(job, work_start, sessions))
+            code, killed = run_child(job, root, log, deadline_for(job, work_start, sessions), extra_env)
         except OSError as e:            # the child could not start (missing interpreter, fork failure, ...)
             log(f"could not start {job.name}: {e.__class__.__name__}: {e}")
             code, killed = 127, False

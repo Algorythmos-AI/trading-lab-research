@@ -31,6 +31,16 @@ class AccountReader:
     def __init__(self) -> None:
         self._c = TradingClient(env("APCA_API_KEY_ID"), env("APCA_API_SECRET_KEY"), paper=True)
 
+    def positions(self) -> list[tuple[str, int]]:
+        """(symbol, signed quantity): short is negative."""
+        out: list[tuple[str, int]] = []
+        for p in list(self._c.get_all_positions()):
+            q = int(float(_plain(p.qty)))
+            if str(_plain(getattr(p, "side", ""))) == "short" and q > 0:
+                q = -q
+            out.append((str(p.symbol), q))
+        return out
+
     def snapshot(self, max_positions: int = 20) -> dict[str, Any]:
         a: Any = self._c.get_account()          # alpaca-py types these as model-or-raw unions
         clock: Any = self._c.get_clock()
