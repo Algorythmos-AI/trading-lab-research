@@ -88,6 +88,29 @@ def _prune(state: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+HISTORY_MAX_BYTES = 2_000_000
+
+
+def _history(root: Path, key: str, event: str, title: str, priority: int | None = None) -> None:
+    """Append a fired/resolved transition to history.jsonl (the dashboard's alert log). Never raises: a full disk
+    or an odd path must not turn an alert into a crash. The file is cut to its newer half past 2 MB."""
+    try:
+        path = root / "history.jsonl"
+        with open(path, "a") as fh:
+            fh.write(json.dumps({"at": _now().isoformat(timespec="seconds"), "key": key[:80], "event": event,
+                                 "title": scrub(title)[:120], "priority": priority}) + "\n")
+        if path.stat().st_size > HISTORY_MAX_BYTES:
+            lines = path.read_text().splitlines(keepends=True)
+            tmp = root / f".history.{uuid.uuid4().hex}.tmp"
+            try:
+                tmp.write_text("".join(lines[len(lines) // 2:]))
+                os.replace(tmp, path)
+            finally:
+                tmp.unlink(missing_ok=True)                 # never leave a temp file behind (a full disk)
+    except Exception:  # noqa: BLE001, S110 — history is best effort by design
+        pass
+
+
 def _write_state(root: Path, state: dict[str, Any]) -> None:
     state = _prune(state)
     tmp = root / f".state.{uuid.uuid4().hex}.tmp"
@@ -178,6 +201,7 @@ class Alerts:
             state[key] = {"firing": True, "since": _now().isoformat(), "last_seen": _now().isoformat(),
                           "title": scrub(title)[:120]}
             _write_state(self.root, state)
+            _history(self.root, key, "fired", title, priority)
         self.notify(title, message, priority, tags)
         return True
 
@@ -189,6 +213,7 @@ class Alerts:
                 return False
             state[key] = {"firing": False, "resolved": _now().isoformat()}
             _write_state(self.root, state)
+            _history(self.root, key, "resolved", title, priority)
         self.notify(title, message, priority, ("white_check_mark",))
         return True
 

@@ -17,7 +17,8 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
                  src/wt/ops/thresholds.py src/wt/analytics/g2.py src/wt/risk/mandate.py \
                  src/wt/ops/dashguard.py src/wt/ops/drill.py src/wt/brokers/cancel_only.py src/wt/ops/host.py \
                  src/wt/ops/units.py src/wt/ops/hc.py src/wt/core/ledger.py src/wt/ops/r2.py src/wt/ops/lease.py \
-                 src/wt/ops/backup.py src/wt/brokers/shadow.py
+                 src/wt/ops/backup.py src/wt/brokers/shadow.py src/wt/analytics/performance.py \
+                 src/wt/analytics/risk_view.py src/wt/analytics/ops_view.py src/wt/ops/audit.py
 JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
@@ -116,9 +117,11 @@ vm-deploy: ## Deploy on the OCI host through its Access tunnel: make vm-deploy [
 
 kill: ## Stop new paper-B entries (exits keep being managed): make kill REASON="..."
 	@printf '%s\n' "$${REASON:-paused by make kill} ($$(date '+%Y-%m-%d %H:%M %Z'))" > KILL && echo "KILL switch ON" && cat KILL
+	@-$(PY) -m wt.ops.audit kill_on
 
 unkill: ## Allow paper-B entries again
 	@rm -f KILL && echo "KILL switch off"
+	@-$(PY) -m wt.ops.audit kill_off
 
 reset-latch: ## OWNER: clear the virtual account's loss latch: make reset-latch REASON="why it is safe"
 	$(PY) scripts/reset_latch.py "$(REASON)"
