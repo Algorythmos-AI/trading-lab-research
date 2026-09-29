@@ -7,12 +7,9 @@ which flatters long-momentum results. Reported in every G1 report.
 from __future__ import annotations
 
 import re
-import sys
-from pathlib import Path
 
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from wt.core.config import DATA_DIR  # noqa: E402
 from wt.data.alpaca import AlpacaREST  # noqa: E402
 

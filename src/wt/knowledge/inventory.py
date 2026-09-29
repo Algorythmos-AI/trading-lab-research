@@ -8,11 +8,9 @@ import csv
 import json
 import re
 import sqlite3
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from wt.knowledge.scope import classify, source_family, top_of  # noqa: E402
+from wt.knowledge.scope import classify, source_family, top_of
 
 WORK = Path("knowledge/_work")
 DERIVED_TOP = {"VWAP Playbook (X post)"}  # generated from this KB earlier -> not independent evidence

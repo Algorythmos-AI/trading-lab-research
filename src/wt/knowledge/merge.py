@@ -5,13 +5,11 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
-import sys
 from collections import Counter
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from wt.knowledge.taxonomy import COMPONENT_TYPES  # noqa: E402
-from wt.knowledge.scope import source_family  # noqa: E402
+from wt.knowledge.taxonomy import COMPONENT_TYPES
+from wt.knowledge.scope import source_family
 
 WORK = Path("knowledge/_work")
 PNL_RX = re.compile(r"[+-]?\$?\s?\d{1,3}(,\d{3})+(\.\d+)?")

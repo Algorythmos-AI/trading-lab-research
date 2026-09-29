@@ -8,13 +8,11 @@ from __future__ import annotations
 
 import csv
 import sqlite3
-import sys
 from collections import defaultdict
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from wt.knowledge.taxonomy import LEXICON, tag  # noqa: E402
-from wt.knowledge.dedup import load as load_groups  # noqa: E402
+from wt.knowledge.taxonomy import LEXICON, tag
+from wt.knowledge.dedup import load as load_groups
 
 WORK = Path("knowledge/_work")
 MEDIA = {"image": "screenshot"}

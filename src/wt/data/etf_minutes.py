@@ -1,15 +1,13 @@
 """Cache regular-session 1m bars for the ETF track (SPY, QQQ signals; SPYM/QQQM traded) by month."""
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from wt.core.config import DATA_DIR  # noqa: E402
-from wt.data.alpaca import AlpacaREST  # noqa: E402
-from wt.data.quality import dedupe  # noqa: E402
+from wt.core.config import DATA_DIR
+from wt.data.alpaca import AlpacaREST
+from wt.data.quality import dedupe
 
 OUT = DATA_DIR / "minute_etf"
 

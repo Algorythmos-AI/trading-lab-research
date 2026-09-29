@@ -11,10 +11,8 @@ import csv
 import json
 from collections import Counter, defaultdict
 from pathlib import Path
-import sys
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from wt.knowledge.dedup import load as load_groups  # noqa: E402
+from wt.knowledge.dedup import load as load_groups
 
 WORK = Path("knowledge/_work")
 # Promotion thresholds — fixed before mining (plan K0.5). Do not tune after seeing results.

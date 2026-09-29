@@ -8,14 +8,11 @@ conservative for "low float" (true float is usually smaller).
 from __future__ import annotations
 
 import re
-import sys
 import time
-from pathlib import Path
 
 import pandas as pd
 import requests
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from wt.core.config import DATA_DIR  # noqa: E402
 
 UA = {"User-Agent": "wt-research personal-trading-research-bot"}
