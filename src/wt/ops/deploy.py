@@ -142,16 +142,14 @@ def broker_cleanup_before_rollback(broker_factory: Any = None) -> str | None:
     Positions outside B's mandate (a manual test buy) don't block a rollback: no version of this code touches them."""
     import os
 
+    from wt.brokers.cancel_only import connect
     from wt.core.ids import is_ours
     from wt.risk.pretrade import load_limits
     allow = load_limits("B").allowlist
     prev = os.environ.get("MODE")
     os.environ["MODE"] = "paper"                    # the paper adapter asserts it; restored below so it can't leak
     try:
-        if broker_factory is None:
-            from wt.brokers.alpaca_paper import AlpacaPaperBroker
-            broker_factory = AlpacaPaperBroker
-        b = broker_factory()
+        b = connect(broker_factory)                 # positions, open orders, cancel: nothing that adds exposure
         if any(p.qty for p in b.positions() if p.symbol in allow):
             return "strategy B holds a position: flatten it (or let the session finish) before rolling back"
         for o in b.open_orders():
