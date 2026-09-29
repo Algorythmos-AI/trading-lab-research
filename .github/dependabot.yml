@@ -9,6 +9,15 @@ updates:
     target-branch: main
     schedule: { interval: weekly, day: monday, timezone: Australia/Sydney }
     open-pull-requests-limit: 0
+  # The dashboard (Next.js on Vercel) is not part of any frozen strategy. One grouped PR a month keeps it current;
+  # security updates open as they appear. Every merge to main is a production deploy, so it waits for the gate.
+  - package-ecosystem: npm
+    directory: /dashboard
+    target-branch: main
+    schedule: { interval: monthly, timezone: Australia/Sydney }
+    open-pull-requests-limit: 2
+    groups:
+      dashboard: { patterns: ["*"] }
   - package-ecosystem: github-actions
     directory: /
     target-branch: main

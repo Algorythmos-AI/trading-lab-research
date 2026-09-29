@@ -36,6 +36,24 @@ for (const { path, heading } of PAGES) {
   });
 }
 
+test("pages carry a nonce CSP and still run their scripts", async ({ page }) => {
+  const violations: string[] = [];
+  page.on("console", (m) => {
+    if (/Content Security Policy|Refused to (execute|load)/i.test(m.text())) violations.push(m.text());
+  });
+  await page.emulateMedia({ colorScheme: "light" });
+  const res = await page.goto("/");
+  const csp = res?.headers()["content-security-policy"] ?? "";
+  expect(csp).toMatch(/script-src 'self' 'nonce-[A-Za-z0-9+/=]+' 'strict-dynamic'/);
+  expect(csp).not.toContain("'unsafe-inline' 'strict-dynamic'");
+  // The inline theme script ran under the nonce: in light mode it removes the server-rendered "dark" class.
+  await expect(page.locator("html")).not.toHaveClass(/(^|\s)dark(\s|$)/);
+  // React hydrated (Next's own scripts ran): the theme toggle works.
+  await page.getByRole("button", { name: /Switch to dark theme/ }).click();
+  await expect(page.locator("html")).toHaveClass(/(^|\s)dark(\s|$)/);
+  expect(violations).toEqual([]);
+});
+
 test("health endpoint answers without secrets", async ({ request }) => {
   const res = await request.get("/api/health");
   expect(res.ok()).toBe(true);
