@@ -8,10 +8,14 @@ export PYTHONPATH := src
 export PYTHONDONTWRITEBYTECODE := 1
 
 # Modules held to `mypy --strict`. New safety and ops modules join this list in the PR that adds them.
-TYPED_MODULES :=
+TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py src/wt/ops/window.py \
+                 src/wt/ops/heartbeat.py src/wt/ops/preflight.py src/wt/ops/jobs.py src/wt/ops/migrate.py \
+                 src/wt/ops/agents.py src/wt/ops/deploy.py
+JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
-.PHONY: help bootstrap lint typecheck test ci hooks
+.PHONY: help bootstrap lint typecheck test ci hooks status gate deploy rollback migrate-state preflight \
+        agents-diff install-trading-agents kill unkill
 
 help: ## List the tasks
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/' | sort
@@ -35,3 +39,37 @@ ci: lint typecheck test ## Everything CI runs
 
 hooks: ## Install the pre-commit hooks (gitleaks, restricted paths, ruff)
 	pre-commit install
+
+# ---- operations on the live checkout (~/trading). Every command that changes it goes through the deploy gate. ----
+
+status: ## What's going on: kill switch, last job runs, firing alerts, preflight
+	$(PY) -m wt.ops.jobs status
+
+gate: ## Is it safe to change the live checkout right now? (no job running, outside the trading night)
+	$(PY) -m wt.ops.deploy gate
+
+deploy: ## Gate, tag, pull main, migrate runtime state, sync venv, smoke test (auto-rollback on failure)
+	$(PY) -m wt.ops.deploy deploy
+
+rollback: ## Back to a runtime-* tag: make rollback TAG=runtime-YYYYMMDD-N
+	@test -n "$(TAG)" || (echo "usage: make rollback TAG=runtime-YYYYMMDD-N" && exit 2)
+	$(PY) -m wt.ops.deploy rollback $(TAG)
+
+migrate-state: ## Move runtime files from tracked paths into var/ (gated, lossless)
+	$(PY) -m wt.ops.deploy migrate
+
+preflight: ## Run every job's preflight under launchd's minimal environment
+	@for j in routine paper-b forward weekly; do echo "== $$j"; \
+	  env -i HOME="$(HOME)" PATH="$(JOB_PATH)" /bin/zsh deploy/run_job.sh $$j --preflight-only || status=1; done; exit $${status:-0}
+
+agents-diff: ## Which installed launchd agents differ from the code
+	$(PY) -m wt.ops.agents diff
+
+install-trading-agents: ## OWNER: (re)install the com.wt.* agents (gated; outside the trading window)
+	$(PY) -m wt.ops.agents install --trading
+
+kill: ## Stop new paper-B entries (exits keep being managed): make kill REASON="..."
+	@printf '%s\n' "$${REASON:-paused by make kill} ($$(date '+%Y-%m-%d %H:%M %Z'))" > KILL && echo "KILL switch ON" && cat KILL
+
+unkill: ## Allow paper-B entries again
+	@rm -f KILL && echo "KILL switch off"

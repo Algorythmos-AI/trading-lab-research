@@ -1,12 +1,12 @@
 """Weekly forward scorecard (plan G2 + DEC-0009).
 
 Compares FORWARD evidence with what the frozen backtests predict, and checks paper-trading health.
-  * Forward test (research/forward/forward_trades.jsonl): per candidate n, E[R], win rate, PF, cum R,
+  * Forward test (var/forward/forward_trades.jsonl): per candidate n, E[R], win rate, PF, cum R,
     and whether E[R] lies inside the backtest's 95% prediction band for that n (mu +/- 1.96*sd/sqrt(n)).
     A one-sided sequential flag trips if forward E[R] < mu - 2.33*sd/sqrt(n) (early-warning: edge not showing).
   * Paper B (data/live/journal.jsonl): trades, R, signal agreement with forward-test B (same sessions),
     incidents (loop errors, not-flat-at-close, reconcile fixes, latch), G2 progress (>=50 trades, >=30 sessions).
-Writes research/forward/scorecard_<date>.md (and prints it). Usage: python scripts/weekly_scorecard.py
+Writes var/scorecards/scorecard_<date>.md (and prints it). Usage: python scripts/weekly_scorecard.py
 """
 from __future__ import annotations
 
@@ -19,9 +19,9 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from wt.core.config import DATA_DIR, ROOT  # noqa: E402
+from wt.core.config import DATA_DIR, FORWARD_LEDGER, ROOT, SCORECARD_DIR  # noqa: E402
 
-FWD = ROOT / "research/forward/forward_trades.jsonl"
+FWD = FORWARD_LEDGER
 JOURNAL = DATA_DIR / "live/journal.jsonl"
 EXPECT = {  # frozen backtest distributions (development span; walk-forward where applicable)
     "B_qqq_qqqm": ("EXP-0005b-g1-etf-dev-realcost", "B|QQQ|noise|M3"),
@@ -100,7 +100,7 @@ def main() -> str:
           f"zero-incident requirement: {'met so far' if inc['loop_error'] == 0 and inc['END_OF_DAY_NOT_FLAT'] == 0 else 'NOT met — review incidents'}",
           "", "_Rules are frozen; any change requires a new decision record (research/decisions)._"]
     md = "\n".join(L) + "\n"
-    out = ROOT / "research/forward" / f"scorecard_{today}.md"
+    out = SCORECARD_DIR / f"scorecard_{today}.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(md)
     print(md)

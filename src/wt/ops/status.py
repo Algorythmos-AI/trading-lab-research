@@ -402,8 +402,15 @@ def _log_digest(path: Path, keep: int = 12) -> dict:
             "last": [x[:240] for x in lines[-keep:]], "errors": errors[-keep:]}
 
 
+def _state(ctx: Ctx, rel: str, legacy: str) -> Path:
+    """A runtime path in the deployed checkout's var/ (ADR 0002), or its pre-migration location if var/ has none yet."""
+    new = ctx.deployed / "var" / rel
+    old = ctx.deployed / legacy
+    return old if not new.exists() and old.exists() else new
+
+
 def src_routine(ctx: Ctx) -> dict:
-    base = ctx.deployed / "research/forward/routine"
+    base = _state(ctx, "routine", "research/forward/routine")
     day = _latest_date_dir(base)
     stages = []
     if day:
@@ -458,8 +465,8 @@ def src_paper(ctx: Ctx) -> dict:
 
 
 def src_forward(ctx: Ctx) -> dict:
-    fwd = ctx.deployed / "research/forward"
-    rows, bad = safeio.read_jsonl(fwd / "forward_trades.jsonl")
+    ledger = _state(ctx, "forward/forward_trades.jsonl", "research/forward/forward_trades.jsonl")
+    rows, bad = safeio.read_jsonl(ledger)
     sessions = sorted({str(x.get("session")) for x in rows if x.get("session_marker")})
     errors = [x for x in rows if "error" in x]
     by = defaultdict(list)
@@ -468,9 +475,10 @@ def src_forward(ctx: Ctx) -> dict:
             by[str(x.get("strategy"))].append(float(x["R"]))
     strategies = [{"strategy": k, "n": len(v), "mean_r": round(sum(v) / len(v), 3), "total_r": round(sum(v), 3)}
                   for k, v in sorted(by.items())]
-    cards = sorted(fwd.glob("scorecard_*.md"))
+    cards = sorted([*(ctx.deployed / "var/scorecards").glob("scorecard_*.md"),
+                    *(ctx.deployed / "research/forward").glob("scorecard_*.md")], key=lambda p: p.name)
     fl = sorted((ctx.deployed / "logs").glob("forward_*.log"))
-    return {"exists": (fwd / "forward_trades.jsonl").exists(), "sessions": len(sessions),
+    return {"exists": ledger.exists(), "sessions": len(sessions),
             "first": sessions[0] if sessions else None, "last": sessions[-1] if sessions else None,
             "errors": len(errors), "bad_lines": bad, "strategies": strategies,
             "latest_scorecard": cards[-1].name if cards else None,
