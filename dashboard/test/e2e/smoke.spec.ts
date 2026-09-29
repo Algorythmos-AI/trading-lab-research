@@ -36,6 +36,28 @@ for (const { path, heading } of PAGES) {
   });
 }
 
+test("the v3 panels render from the fixture, and the glossary is linked", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto("/risk");
+  await expect(page.getByRole("heading", { name: "Limits in force" })).toBeVisible();
+  await expect(page.getByText("Daily loss latch").first()).toBeVisible();
+  await page.goto("/operations");
+  await expect(page.getByRole("heading", { name: "Job reliability, 14 days" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Audit trail" })).toBeVisible();
+  await page.goto("/strategies");
+  await expect(page.getByRole("heading", { name: "Paper B performance" })).toBeVisible();
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Since the last trading day" })).toBeVisible();
+  await page.getByRole("link", { name: "Glossary" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Glossary" })).toBeVisible();
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(0);
+  expect(errors).toEqual([]);
+});
+
 test("health endpoint answers without secrets", async ({ request }) => {
   const res = await request.get("/api/health");
   expect(res.ok()).toBe(true);
