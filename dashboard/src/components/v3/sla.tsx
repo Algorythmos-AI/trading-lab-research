@@ -7,8 +7,8 @@ import { pct, shortDate } from "@/lib/format";
 import { jobName } from "@/lib/labels";
 import { list, type SlaStatus, type Snapshot } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { hasV3, SLA_GLYPH, SLA_LABEL, SLA_TONE, slaStatus } from "@/lib/v3";
-import { V3Pending } from "./pending";
+import { SLA_GLYPH, SLA_LABEL, SLA_TONE, sectionState, slaStatus } from "@/lib/v3";
+import { V3Missing, V3Pending } from "./pending";
 
 const LEGEND: SlaStatus[] = ["ok", "refused", "partial", "failed", "missed", "none"];
 
@@ -26,8 +26,10 @@ export function SlaPanel({ s }: { s: Snapshot }) {
       icon={Activity}
       means="One square per job per US trading day. 'Missed' means the job was due and left no record; 'Refused' means its safety checks stopped it on purpose. Today stays blank while a job may still run."
     >
-      {!hasV3(s) ? (
+      {sectionState(s, sla) === "v2" ? (
         <V3Pending what="The reliability matrix" />
+      ) : sectionState(s, sla) === "missing" ? (
+        <V3Missing what="The reliability matrix" />
       ) : summary.length === 0 ? (
         <Empty title="No job records yet" />
       ) : (

@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   auditTone,
   hasV3,
+  limitLabel,
   limitTone,
+  sectionState,
   profitFactorText,
   SLA_GLYPH,
   SLA_LABEL,
@@ -37,6 +39,21 @@ describe("v3 helpers", () => {
     expect(profitFactorText({ n: 25, sample_ok: true, pf_no_losses: true })).toBe("No losing trades yet");
     expect(profitFactorText({ n: 25, sample_ok: true, profit_factor: 1.456 })).toBe("1.46");
     expect(profitFactorText({ n: 5, sample_ok: false, profit_factor: 3 })).toBeNull();
+  });
+
+  it("treats a used-up daily entry allowance as normal, not a breach", () => {
+    expect(limitTone("at_limit", "entries_per_day")).toBe("info");
+    expect(limitLabel("at_limit", "entries_per_day")).toBe("Used for today");
+    expect(limitLabel("ok", "entries_per_day")).toBe("Available");
+    expect(limitTone("at_limit", "day_loss")).toBe("bad");
+    expect(limitLabel("at_limit", "day_loss")).toBe("At limit");
+  });
+
+  it("tells a section a v3 host failed to build from one a v2 host never sends", () => {
+    const v3 = fixtureV3();
+    expect(sectionState(v3, v3.perf)).toBe("ok");
+    expect(sectionState(v3, null)).toBe("missing");
+    expect(sectionState(fixture(), null)).toBe("v2");
   });
 
   it("colours audit events by what they mean", () => {

@@ -7,6 +7,9 @@ export function hasV3(s: Snapshot): boolean {
   return typeof s.schema_version === "number" && s.schema_version >= 3;
 }
 
+/** Limits that are counts (entries a day): using the whole allowance is normal on a trading day, not a breach. */
+export const COUNT_LIMITS: ReadonlySet<string> = new Set(["entries_per_day"]);
+
 export const LIMIT_TONE: Record<LimitState, Tone> = { ok: "good", warn: "warn", at_limit: "bad", "n/a": "neutral" };
 export const LIMIT_LABEL: Record<LimitState, string> = {
   ok: "Within limit",
@@ -15,8 +18,23 @@ export const LIMIT_LABEL: Record<LimitState, string> = {
   "n/a": "Not measured",
 };
 
-export function limitTone(state: LimitState | null | undefined): Tone {
+export function limitTone(state: LimitState | null | undefined, id?: string | null): Tone {
+  if (id && COUNT_LIMITS.has(id)) return state === "n/a" || !state ? "neutral" : "info";
   return state ? LIMIT_TONE[state] : "neutral";
+}
+
+export function limitLabel(state: LimitState | null | undefined, id?: string | null): string {
+  if (id && COUNT_LIMITS.has(id) && state === "at_limit") return "Used for today";
+  if (id && COUNT_LIMITS.has(id) && (state === "ok" || state === "warn")) return "Available";
+  return state ? LIMIT_LABEL[state] : "Unknown";
+}
+
+/** v2: the host predates this section. missing: a v3 host sent no value (it failed to build it). */
+export type SectionState = "v2" | "missing" | "ok";
+
+export function sectionState(s: Snapshot, value: unknown): SectionState {
+  if (!hasV3(s)) return "v2";
+  return value === null || value === undefined ? "missing" : "ok";
 }
 
 export const SLA_TONE: Record<SlaStatus, Tone> = {
