@@ -5,6 +5,13 @@ For each strategy FAMILY (setup), each fold picks the variant (management x wind
 fit-window expectancy (min 20 trades), then records that variant's trades in the next 3-month test
 window. Out-of-sample trades are pooled -> stats, DSR (trials = ALL configs evaluated), random-control
 p-value, cost stress, year consistency. Writes research/experiments/<exp>/g1_report.md
+
+--method dec0011 (DEC-0011; results from g1_etf.py --method dec0011 only): DSR at the global trial count of the
+registry (wt.research.trials) instead of this experiment's own count, CI95 from day blocks, and a per-fill cost
+stress (1.5x / 2x) plus a separate stop-slippage stress (2x / 3x), both descriptive. Writes g1_eval_dec0011.json
+and g1_report_dec0011.md beside the legacy files. Gates are unchanged; the default (legacy) reproduces the
+recorded reports.
+Usage: python scripts/g1_eval.py EXP-ID [CONTROL-EXP|-] [FAMILY-FIELDS] [--method dec0011]
 """
 from __future__ import annotations
 
@@ -19,7 +26,10 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from wt.backtest.stats import deflated_sharpe_prob, random_control_pvalue, summarize  # noqa: E402
+from wt.backtest.stress import stressed_R  # noqa: E402
 from wt.core.config import ROOT  # noqa: E402
+from wt.research.manifest import assert_clean_for_preregistered_run, write_manifest  # noqa: E402
+from wt.research.method import get_method, pop_method  # noqa: E402
 
 DEV_START, DEV_END = dt.date(2019, 1, 2), dt.date(2025, 9, 25)
 
@@ -34,10 +44,17 @@ def folds():
     return out
 
 
-def main(exp_id: str, control_exp: str | None = None, family_fields: int = 1, n_trials_override: int | None = None) -> dict:
+def main(exp_id: str, control_exp: str | None = None, family_fields: int = 1, n_trials_override: int | None = None,
+         method: str = "legacy") -> dict:
+    m = get_method(method)
+    if not m.legacy:
+        assert_clean_for_preregistered_run()     # a DEC-0011 evaluation must be reproducible from its commit
     exp = ROOT / "research/experiments" / exp_id
     res = json.loads((exp / "results.json").read_text())
-    n_trials = n_trials_override or res["n_trials"]
+    if not m.legacy and res.get("method") != m.name:          # never mix fill models inside one corrected report
+        raise ValueError(f"{exp_id} was simulated with method {res.get('method', 'legacy')!r}; "
+                         f"--method {m.name} evaluates only results produced with --method {m.name}")
+    n_trials = n_trials_override or m.dsr_trial_count(res["n_trials"])     # legacy: this experiment's own count
     by_family = defaultdict(dict)
     for name, r in res["results"].items():
         fam = "|".join(name.split("|")[:family_fields])
@@ -53,6 +70,9 @@ def main(exp_id: str, control_exp: str | None = None, family_fields: int = 1, n_
     lines = [f"# G1 walk-forward report — {exp_id}", "",
              f"Dev span {DEV_START} → {DEV_END} (holdout 2025-09-26 → 2026-09-25 untouched). "
              f"Trials counted for DSR: **{n_trials}** (all configs evaluated).", ""]
+    if not m.legacy:
+        lines[-1:-1] = [f"Method **{m.name}** (DEC-0011): DSR trials from the global registry, CI95 by "
+                        f"{m.bootstrap_block} blocks, per-fill and stop-slippage stress (descriptive)."]
     summary = {}
     for fam, variants in by_family.items():
         oos, picks = [], []
@@ -69,9 +89,14 @@ def main(exp_id: str, control_exp: str | None = None, family_fields: int = 1, n_
                 oos.append(t[(t.d >= ts) & (t.d <= te)])
                 picks.append((str(ts), best, round(best_e, 3)))
         o = pd.concat(oos) if oos else pd.DataFrame(columns=["R"])
-        s = summarize(o.R.to_numpy()) if len(o) else {"n": 0}
+        ci = {"block": m.bootstrap_block, "days": o.date.to_numpy() if m.bootstrap_block == "day" and len(o) else None}
+        s = summarize(o.R.to_numpy(), **ci) if len(o) else {"n": 0}
         if s.get("n", 0) > 2:
             s["dsr_prob"] = deflated_sharpe_prob(s["per_trade_sharpe"], s["n"], n_trials, s["skew"], s["kurtosis"])
+            stress = [(f"stress_{x}x", {"cost_mult": x}) for x in ((1.5, 2.0) if m.fill_stress else ())]
+            for key, kw in stress + [(f"stop_stress_{k}x", {"stop_mult": k}) for k in m.stop_slip_stress]:
+                ss = summarize(stressed_R(o, **kw), **ci)
+                s[key] = {"expectancy_R": ss["expectancy_R"], "ci95": ss["ci95_expectancy"], "profit_factor": ss["profit_factor"]}
             yrs = o.groupby(pd.to_datetime(o.date).dt.year).R.sum()
             s["years_profitable"] = f"{int((yrs > 0).sum())}/{len(yrs)}"
             months = o.groupby(pd.to_datetime(o.date).dt.to_period("M")).R.sum()
@@ -93,13 +118,21 @@ def main(exp_id: str, control_exp: str | None = None, family_fields: int = 1, n_
                   f"win {s.get('win_rate', 0):.0%}; PF {s.get('profit_factor', 0):.2f}; CI95 {s.get('ci95_expectancy')}",
                   f"- DSR prob {s.get('dsr_prob')}; years profitable {s.get('years_profitable')}; "
                   f"random-control p {s.get('random_control_p')}",
+                  *(["- Stress (descriptive): " + " · ".join(f"{k} {s[k]}" for k in s if "stress_" in k)]
+                    if any("stress_" in k for k in s) else []),
                   f"- Gate: {gate} → **{'PASS' if s['G1_pass_so_far'] else 'FAIL'}**", ""]
-    (exp / "g1_eval.json").write_text(json.dumps(summary, indent=1, default=str))
-    (exp / "g1_report.md").write_text("\n".join(lines))
+    sfx = "" if m.legacy else f"_{m.name}"
+    (exp / f"g1_eval{sfx}.json").write_text(json.dumps(summary, indent=1, default=str))
+    (exp / f"g1_report{sfx}.md").write_text("\n".join(lines))
+    write_manifest(exp, {"exp": exp_id, "control_exp": control_exp, "family_fields": family_fields,
+                         "n_trials_override": n_trials_override, "dsr_trials": n_trials, "method": m.name},
+                   [exp / "results.json"] + ([ROOT / "research/experiments" / control_exp / "results.json"] if control_exp else []),
+                   name=f"manifest_g1_eval{sfx}.json")
     print("\n".join(lines))
     return summary
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] != "-" else None,
-         int(sys.argv[3]) if len(sys.argv) > 3 else 1)
+    meth, argv = pop_method(sys.argv[1:])
+    main(argv[0], argv[1] if len(argv) > 1 and argv[1] != "-" else None, int(argv[2]) if len(argv) > 2 else 1,
+         method=meth.name)

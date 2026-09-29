@@ -21,8 +21,12 @@ Also: a capital table (US$600 / 1,000 / 2,000), exit-reason mix, and tag descrip
 tape features: Spearman rho with R). DESCRIPTIVE ONLY.
 Holdout: `--holdout` evaluates results files produced on the holdout span. Run it once, and only for trials
 whose OOS CI95 lower bound is > 0 (DEC-0005, spec evaluation.holdout_rule).
+Method: `--method dec0011` (wt.research.method) evaluates only results r3_run produced with the same method, and
+writes <name>_dec0011.{json,md} beside the legacy report: CI95 from day blocks, DSR at the registry's global count,
+cost stress over every fill, a separate stop-slippage stress (stop fills at 2x / 3x), $ from Trade.pnl.
+The G1 gates are unchanged. The default (legacy) reproduces the recorded reports.
 
-Usage: PYTHONPATH=src .venv/bin/python scripts/r3_eval.py EXP-0015-r3-dev [--holdout]
+Usage: PYTHONPATH=src .venv/bin/python scripts/r3_eval.py EXP-0015-r3-dev [--holdout] [--method dec0011]
 """
 from __future__ import annotations
 
@@ -38,7 +42,10 @@ from scipy import stats as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from wt.backtest.stats import deflated_sharpe_prob, random_control_pvalue, summarize  # noqa: E402
+from wt.backtest.stress import realised_usd, stressed_R  # noqa: E402
 from wt.core.config import ROOT  # noqa: E402
+from wt.research.manifest import assert_clean_for_preregistered_run, write_manifest  # noqa: E402
+from wt.research.method import LEGACY, METHODS, Method, get_method  # noqa: E402
 from wt.specs.loader import load_spec  # noqa: E402
 
 TAP = ["tape_speed_ratio", "buy_initiated_share", "green_print_surge", "price_per_1k_shares", "ask_size_depletion",
@@ -51,16 +58,20 @@ def stressed(df: pd.DataFrame, m: float) -> np.ndarray:
     return (df.R - (m - 1) * 2 * slip / rps).to_numpy()
 
 
-def trial_stats(df: pd.DataFrame, n_trials: int, control: list[float] | None) -> dict:
+def trial_stats(df: pd.DataFrame, n_trials: int, control: list[float] | None, method: Method = LEGACY) -> dict:
     r = df.R.to_numpy(float)
-    s = summarize(r) if len(r) else {"n": 0}
+    ci = {"block": method.bootstrap_block, "days": df.date.to_numpy() if method.bootstrap_block == "day" else None}
+    s = summarize(r, **ci) if len(r) else {"n": 0}
     if s.get("n", 0) < 3:
         return s
     s["dsr_prob"] = deflated_sharpe_prob(s["per_trade_sharpe"], s["n"], n_trials, s["skew"], s["kurtosis"])
     for m in (1.5, 2.0):
-        rs = stressed(df, m)
-        ss = summarize(rs)
+        rs = stressed_R(df, cost_mult=m) if method.fill_stress else stressed(df, m)
+        ss = summarize(rs, **ci)
         s[f"stress_{m}x"] = {"expectancy_R": ss["expectancy_R"], "ci95": ss["ci95_expectancy"], "profit_factor": ss["profit_factor"]}
+    for k in method.stop_slip_stress:            # reported, not gated: the pre-registered gates stay as they are
+        ss = summarize(stressed_R(df, stop_mult=k), **ci)
+        s[f"stop_stress_{k}x"] = {"expectancy_R": ss["expectancy_R"], "ci95": ss["ci95_expectancy"], "profit_factor": ss["profit_factor"]}
     yrs = df.groupby(pd.to_datetime(df.date).dt.year).R.sum()
     s["years_profitable"] = [int((yrs > 0).sum()), int(len(yrs))]
     months = df.groupby(pd.to_datetime(df.date).dt.to_period("M")).R.sum()
@@ -93,17 +104,26 @@ def gates(s: dict) -> dict:
             "n_ge_100": s.get("n", 0) >= 100}
 
 
-def main(exp: str, holdout: bool) -> dict:
+def main(exp: str, holdout: bool, method: str = "legacy") -> dict:
+    m = get_method(method)
+    if not m.legacy:
+        assert_clean_for_preregistered_run()     # a DEC-0011 evaluation must be reproducible from its commit
     spec = load_spec("SPEC-0001")
     ev = spec["evaluation"]
     span = ev["holdout_span"] if holdout else ev["oos_span"]
     lo, hi = (dt.date.fromisoformat(x) for x in span)
-    n_trials = int(ev["global_trials_after"])
+    n_trials = m.dsr_trial_count(int(ev["global_trials_after"]))
     d = ROOT / "research" / "experiments" / exp
     summary, lines = {}, [f"# {exp} — SPEC-0001 round 3 {'HOLDOUT' if holdout else 'fixed-rule OOS'} report", "",
                           f"Span {lo} → {hi}; DSR trials = {n_trials} (global). Primary account US$600; capital table below.", ""]
+    if not m.legacy:
+        lines[-1:-1] = [f"Method **{m.name}** (DEC-0011): CI95 by {m.bootstrap_block} blocks, stress over every fill, "
+                        f"stop-slippage stress {list(m.stop_slip_stress)}, $ = realised Trade.pnl."]
     for f in sorted(d.glob("results_*.json")):
         res = json.loads(f.read_text())
+        if not m.legacy and res.get("method") != m.name:     # never mix fill models inside one corrected report
+            raise ValueError(f"{f.name} was simulated with method {res.get('method', 'legacy')!r}; "
+                             f"--method {m.name} evaluates only results r3_run produced with --method {m.name}")
         controls = res.get("control_means", {})
         for trial, by_eq in res["trades"].items():
             per_eq = {}
@@ -114,10 +134,11 @@ def main(exp: str, holdout: bool) -> dict:
                     df = df[(df.d >= lo) & (df.d <= hi) & df.R.notna()].reset_index(drop=True)
                 per_eq[eq] = df
             main_df = per_eq.get("600.0", pd.DataFrame())
-            s = trial_stats(main_df, n_trials, controls.get(trial)) if len(main_df) else {"n": 0}
+            s = trial_stats(main_df, n_trials, controls.get(trial), m) if len(main_df) else {"n": 0}
             g = gates(s) if s.get("n", 0) >= 3 else {}
             cap = {eq: {"n": int(len(x)), "E_R": round(float(x.R.mean()), 3) if len(x) else None,
-                        "pnl_usd": round(float((x.R * float(eq) * spec["risk"]["per_trade_risk_pct_of_equity"] / 100).sum()), 2) if len(x) else 0.0}
+                        "pnl_usd": round(realised_usd(x) if m.pnl == "realised" else
+                                         float((x.R * float(eq) * spec["risk"]["per_trade_risk_pct_of_equity"] / 100).sum()), 2) if len(x) else 0.0}
                    for eq, x in per_eq.items()}
             skips = {k: v for k, v in res.get("skips", {}).get(trial, res.get("skips", {})).items()} if isinstance(res.get("skips"), dict) else {}
             summary[trial] = {"stats": s, "gates": g, "pass": bool(g) and all(g.values()), "capital": cap, "skips": skips}
@@ -126,13 +147,17 @@ def main(exp: str, holdout: bool) -> dict:
                       f"- n {s.get('n', 0)} · E[R] {s.get('expectancy_R', float('nan')):+.3f} · CI95 {ci} · PF {s.get('profit_factor')} · "
                       f"win {s.get('win_rate')} · DSR {s.get('dsr_prob')} · control p {s.get('random_control_p')}",
                       f"- stress 1.5x {s.get('stress_1.5x')} · 2x {s.get('stress_2.0x')}",
+                      *(["- stop-slippage stress " + " · ".join(f"{k}x {s.get(f'stop_stress_{k}x')}" for k in m.stop_slip_stress)]
+                        if m.stop_slip_stress else []),
                       f"- years profitable {s.get('years_profitable')} · max month share {s.get('max_month_share_of_profit')}",
                       f"- capital {cap}",
                       f"- gates {g} → **{'PASS' if summary[trial]['pass'] else 'FAIL'}**",
                       f"- holdout eligible (CI95 lower > 0): {bool(ci and ci[0] > 0)}", ""]
-    name = "r3_holdout" if holdout else "r3_eval"
+    name = ("r3_holdout" if holdout else "r3_eval") + ("" if m.legacy else f"_{m.name}")
     (d / f"{name}.json").write_text(json.dumps(summary, indent=1, default=str))
     (d / f"{name}.md").write_text("\n".join(lines))
+    write_manifest(d, {"exp": exp, "holdout": holdout, "method": m.name, "dsr_trials": n_trials},
+                   sorted(d.glob("results_*.json")), name=f"manifest_{name}.json")
     print("\n".join(lines))
     return summary
 
@@ -141,5 +166,6 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("exp")
     ap.add_argument("--holdout", action="store_true")
+    ap.add_argument("--method", default="legacy", choices=sorted(METHODS), help="methodology preset (DEC-0011)")
     args = ap.parse_args()
-    main(args.exp, args.holdout)
+    main(args.exp, args.holdout, args.method)

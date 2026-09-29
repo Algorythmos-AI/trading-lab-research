@@ -11,12 +11,10 @@ from __future__ import annotations
 import csv
 import json
 import sqlite3
-import sys
 from collections import defaultdict
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from wt.knowledge.taxonomy import tag  # noqa: E402
+from wt.knowledge.taxonomy import tag
 
 WORK = Path("knowledge/_work")
 BATCH_CHARS = 150_000

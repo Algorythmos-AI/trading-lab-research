@@ -6,6 +6,8 @@ Conservative fill rules (plan: Research protocol / Fills):
     no fill if bar.open > limit (price gapped past the collar).
   * Stop exit: bar.low <= stop -> fill = min(stop, bar.open) - slippage.
   * Limit target: bar.high >= target -> fill = max(target, bar.open)... capped at bar.high.
+    target_fill="through" (DEC-0011 M-FILL) needs bar.high >= target + 1 tick: a touch does not prove the queue
+    reached our order. The default "touch" keeps recorded experiments reproducible.
   * Same bar touches stop AND target -> STOP first (pessimistic).
   * Fill size capped at max_bar_volume_frac of the bar's volume.
   * Flatten at flatten_time (close - 10 min default) at bar open - slippage.
@@ -36,9 +38,13 @@ class Costs:
     sec_fee_rate_sell: float = 0.0000278   # SEC fee on sell notional (parameterised)
     collar_frac_of_R: float = 0.10         # stop-limit collar as fraction of initial risk
     cost_multiplier: float = 1.0           # 1.5x / 2x stress tests
+    stop_slip_multiplier: float = 1.0      # stop fills only (DEC-0011): stops fire into fast tape, wider than the quote
 
     def slip(self) -> float:
         return self.slippage_per_share * self.cost_multiplier
+
+    def stop_slip(self) -> float:
+        return self.slip() * self.stop_slip_multiplier
 
 
 @dataclass
@@ -55,6 +61,7 @@ class Trade:
     mfe: float = 0.0
     mae: float = 0.0
     tags: dict = field(default_factory=dict)
+    exit_kinds: list = field(default_factory=list)   # "stop" | "limit" | "market", parallel to exits (fill stress)
 
     @property
     def risk_per_share(self) -> float:
@@ -79,10 +86,19 @@ def size_position(entry: float, stop: float, risk_dollars: float, cash: float, m
     return int(max(0, math.floor(min(risk_dollars / per_share, cash / entry, max_notional / entry))))
 
 
+TARGET_FILLS = ("touch", "through")
+
+
 def simulate(bars: pd.DataFrame, signal: EntrySignal, mgmt, costs: Costs, symbol: str, date: str,
              risk_dollars: float, cash: float, max_notional: float, flatten_idx: int,
-             max_bar_volume_frac: float = 0.10) -> Trade | None:
-    """bars: 1-min regular-session bars (columns t,o,h,l,c,v), integer-indexed 0..n-1."""
+             max_bar_volume_frac: float = 0.10, target_fill: str = "touch", tick: float = 0.01) -> Trade | None:
+    """bars: 1-min regular-session bars (columns t,o,h,l,c,v), integer-indexed 0..n-1.
+
+    target_fill: "touch" (recorded default) fills a limit target when bar.high >= target; "through" only when
+    bar.high >= target + tick."""
+    if target_fill not in TARGET_FILLS:
+        raise ValueError(f"target_fill must be one of {TARGET_FILLS}, got {target_fill!r}")
+    through = target_fill == "through"
     o, h, l, c, v = (bars[k].to_numpy() for k in ("o", "h", "l", "c", "v"))
     R = signal.trigger - signal.stop
     if R <= 0:
@@ -123,30 +139,35 @@ def simulate(bars: pd.DataFrame, signal: EntrySignal, mgmt, costs: Costs, symbol
         if j >= flatten_idx:
             px = o[flatten_idx] - costs.slip() if flatten_idx < len(o) else c[-1] - costs.slip()
             tr.exits.append((bars.t.iloc[min(flatten_idx, len(o) - 1)], px, pos, "eod_flatten"))
+            tr.exit_kinds.append("market")
             break
         tr.mfe = max(tr.mfe, (h[j] - tr.entry) / tr.risk_per_share)
         tr.mae = min(tr.mae, (l[j] - tr.entry) / tr.risk_per_share)
         stop = state["stop"]
         if l[j] <= stop:                         # stop first (pessimistic)
-            px = min(stop, o[j]) - costs.slip() if j > i else stop - costs.slip()
+            px = min(stop, o[j]) - costs.stop_slip() if j > i else stop - costs.stop_slip()
             tr.exits.append((bars.t.iloc[j], px, pos, state.get("stop_reason", "stop")))
+            tr.exit_kinds.append("stop")
             pos = 0
             break
         if bv_fail and j == bv_at and j + 1 < len(o):   # failed breakout: out at the next bar's open
             tr.exits.append((bars.t.iloc[j + 1], o[j + 1] - costs.slip(), pos, "breakout_volume_fail"))
+            tr.exit_kinds.append("market")
             pos = 0
             break
         if j > i:                                # targets / rule exits only on bars after entry bar
             for (price, frac, reason) in mgmt.limit_exits(state):
-                if pos > 0 and h[j] >= price:
+                if pos > 0 and (h[j] >= price + tick - 1e-9 if through else h[j] >= price):
                     q = pos if frac >= 1 else max(1, min(pos, round(qty * frac)))
                     tr.exits.append((bars.t.iloc[j], max(price, o[j]) if o[j] <= h[j] else price, q, reason))
+                    tr.exit_kinds.append("limit")
                     pos -= q
                     mgmt.on_partial(state, reason)
             if pos > 0:
                 act = mgmt.on_bar_close(state, bars, j, tr)
                 if act == "exit_market" and j + 1 < len(o):
                     tr.exits.append((bars.t.iloc[j + 1], o[j + 1] - costs.slip(), pos, state.get("exit_reason", "rule")))
+                    tr.exit_kinds.append("market")
                     pos = 0
                     break
         j += 1

@@ -10,6 +10,8 @@ max($0.01, half the spread) (D13), with a strict collar (D38).
   --counts-only   writes trade COUNTS per trial and never writes or prints R (count guard, D16)
   --relax a,b     drops chart musts from Set P (order fixed in DEC-0010: window, pm_consolidation, emas)
   --control       random entries through the same layers (not trials)
+  --method NAME   evaluation-methodology preset (wt.research.method; default legacy = the recorded runs).
+                  dec0011: trade-through targets, and each admitted trade row carries its fills and realised P&L
 
 Usage:
   PYTHONPATH=src .venv/bin/python scripts/r3_run.py EXP-0015-r3-dev 2019-01-02 2025-09-25 --set F [--counts-only]
@@ -31,12 +33,15 @@ from wt.backtest.engine import Costs, simulate  # noqa: E402
 from wt.backtest.management import REGISTRY  # noqa: E402
 from wt.backtest.portfolio import Candidate as PCand  # noqa: E402
 from wt.backtest.portfolio import admit_day  # noqa: E402
-from wt.backtest.runner import minute_bars  # noqa: E402
+from wt.backtest.runner import MIN_DIR, minute_bars  # noqa: E402
+from wt.backtest.stress import detail  # noqa: E402
 from wt.core.clock import et, to_utc_iso  # noqa: E402
 from wt.core.config import DATA_DIR, ROOT, load_yaml  # noqa: E402
 from wt.data.alpaca import AlpacaREST  # noqa: E402
 from wt.data.tape import trade_tags  # noqa: E402
 from wt.ops.safeio import atomic_write, read_cache  # noqa: E402
+from wt.research.manifest import assert_clean_for_preregistered_run, write_manifest  # noqa: E402
+from wt.research.method import LEGACY, METHODS, Method, get_method  # noqa: E402
 from wt.scanner.pool import PM_BARS_DIR, POOL_DIR  # noqa: E402
 from wt.scanner.ranking import Candidate, SpecCandidate, funnel, rank  # noqa: E402
 from wt.signals.musts import spread_ok  # noqa: E402
@@ -110,7 +115,8 @@ def ctx_for(row, pm: pd.DataFrame) -> dict:
 
 
 def run_day(d: dt.date, names: list[tuple[str, int]], pool: pd.DataFrame, pm_all: pd.DataFrame, bars_by: dict,
-            spread_at: SpreadAt, trial: str, close_hhmm: str) -> tuple[list[PCand], list[dict], list[tuple]]:
+            spread_at: SpreadAt, trial: str, close_hhmm: str,
+            method: Method = LEGACY) -> tuple[list[PCand], list[dict], list[tuple]]:
     """Pass 1 for one GG trial: signal chains per name -> admission candidates, skip log, and control inputs
     (the first signal of each chain that passed the spread must)."""
     rows = pool.set_index("symbol")
@@ -141,13 +147,13 @@ def run_day(d: dt.date, names: list[tuple[str, int]], pool: pd.DataFrame, pm_all
 
             def resim(cash, risk, b=b, sig=sig, costs=costs, flatten=flatten, sym=sym):
                 tr = simulate(b, sig, REGISTRY["WT"](), costs, sym, str(d), risk_dollars=risk, cash=cash,
-                              max_notional=cash, flatten_idx=flatten)
+                              max_notional=cash, flatten_idx=flatten, **method.sim_kwargs())
                 if tr is not None:
                     tr.tags.update(trigger=sig.trigger, slip=costs.slippage_per_share)
                 return (tr, tr.r_multiple(costs) if tr else None)
 
             probe = simulate(b, sig, REGISTRY["WT"](), costs, sym, str(d), risk_dollars=1e9, cash=1e9, max_notional=1e9,
-                             flatten_idx=flatten)
+                             flatten_idx=flatten, **method.sim_kwargs())
             if probe is None:
                 skips.append({"symbol": sym, "reason": "no_fill"})
                 break
@@ -161,7 +167,8 @@ def run_day(d: dt.date, names: list[tuple[str, int]], pool: pd.DataFrame, pm_all
 
 
 def gg_day(a: AlpacaREST, d: dt.date, which: str, spec: dict, spread_at: SpreadAt, close: str,
-           relax: set[str] = frozenset()) -> dict[str, tuple[list[PCand], list[dict], list[tuple]]]:
+           relax: set[str] = frozenset(),
+           method: Method = LEGACY) -> dict[str, tuple[list[PCand], list[dict], list[tuple]]]:
     """One pool day of set `which`: {trial: (admission candidates, skips, control inputs)} for GG-1..4.
 
     Empty when the day's pool has no traded names. Shared by the batch runner and the nightly forward test, so
@@ -173,7 +180,7 @@ def gg_day(a: AlpacaREST, d: dt.date, which: str, spec: dict, spread_at: SpreadA
     if not names:
         return {}
     bars_by = minute_bars(a, d, [x for x, _ in names], close_hhmm=close)
-    return {trial: run_day(d, names, pool, pm_all, bars_by, spread_at, trial, close) for trial in GG}
+    return {trial: run_day(d, names, pool, pm_all, bars_by, spread_at, trial, close, method) for trial in GG}
 
 
 def admit(cands: list[PCand], equity: float, spec: dict):
@@ -182,24 +189,29 @@ def admit(cands: list[PCand], equity: float, spec: dict):
     return admit_day(cands, equity, r["max_consecutive_losers_per_day"], r["max_daily_loss_R"], r["per_trade_risk_pct_of_equity"])
 
 
-def trade_row(d: dt.date, c: PCand, tr, r: float | None) -> dict:
-    return {"date": str(d), "symbol": tr.symbol, "setup": tr.setup, "attempt": c.attempt, "priority": c.priority,
-            "entry_time": str(tr.entry_time), "entry": tr.entry, "stop0": tr.stop0, "qty": tr.qty, "R": r,
-            "exit_reason": tr.exits[-1][3], "exit_time": str(tr.exits[-1][0]), "tags": tr.tags}
+def trade_row(d: dt.date, c: PCand, tr, r: float | None, fills: bool = False) -> dict:
+    row = {"date": str(d), "symbol": tr.symbol, "setup": tr.setup, "attempt": c.attempt, "priority": c.priority,
+           "entry_time": str(tr.entry_time), "entry": tr.entry, "stop0": tr.stop0, "qty": tr.qty, "R": r,
+           "exit_reason": tr.exits[-1][3], "exit_time": str(tr.exits[-1][0]), "tags": tr.tags}
+    if fills:       # per-fill stress and realised $ (DEC-0011); the costs run_day simulated with, rebuilt from the tag
+        row.update(detail(tr, Costs(slippage_per_share=tr.tags["slip"])))
+    return row
 
 
-def control_cands(ctl: list[tuple], trial: str, seed: int, d: dt.date) -> list[PCand]:
+def control_cands(ctl: list[tuple], trial: str, seed: int, d: dt.date, method: Method = LEGACY) -> list[PCand]:
     out = []
     for sym, prio, b, sig, costs, flatten in ctl:
         cs = control_signal(b, sig, trial, seed)
         if cs is None:
             continue
-        probe = simulate(b, cs, REGISTRY["WT"](), costs, sym, str(d), 1e9, 1e9, 1e9, flatten_idx=flatten)
+        probe = simulate(b, cs, REGISTRY["WT"](), costs, sym, str(d), 1e9, 1e9, 1e9, flatten_idx=flatten,
+                         **method.sim_kwargs())
         if probe is None:
             continue
 
         def resim(cash, risk, b=b, cs=cs, costs=costs, flatten=flatten, sym=sym):
-            tr = simulate(b, cs, REGISTRY["WT"](), costs, sym, str(d), risk, cash, cash, flatten_idx=flatten)
+            tr = simulate(b, cs, REGISTRY["WT"](), costs, sym, str(d), risk, cash, cash, flatten_idx=flatten,
+                          **method.sim_kwargs())
             return tr, (tr.r_multiple(costs) if tr else None)
 
         out.append(PCand(sym, 1, prio, probe.entry_time, resim))
@@ -207,7 +219,10 @@ def control_cands(ctl: list[tuple], trial: str, seed: int, d: dt.date) -> list[P
 
 
 def main(exp: str, start: str, end: str, which: str, counts_only: bool, relax: set[str], n_control: int = 0,
-         tape: bool = False) -> None:
+         tape: bool = False, method: str = "legacy") -> None:
+    m = get_method(method)
+    if not m.legacy:
+        assert_clean_for_preregistered_run()     # a DEC-0011 re-run must be reproducible from its commit
     spec = load_spec("SPEC-0001")
     a = AlpacaREST(per_minute=150, shared=True)
     spread_at = SpreadAt(a)
@@ -220,7 +235,7 @@ def main(exp: str, start: str, end: str, which: str, counts_only: bool, relax: s
     skipped = {f"{which}:{t}": {} for t in GG}
     ctrl = {f"{which}:{t}": {"sum": np.zeros(n_control), "n": np.zeros(n_control)} for t in GG}
     for n, d in enumerate(days, 1):
-        per_trial = gg_day(a, d, which, spec, spread_at, closes.get(d, "16:00"), relax)
+        per_trial = gg_day(a, d, which, spec, spread_at, closes.get(d, "16:00"), relax, m)
         if not per_trial:
             continue
         for trial in GG:
@@ -228,7 +243,7 @@ def main(exp: str, start: str, end: str, which: str, counts_only: bool, relax: s
             cands, skips, ctl = per_trial[trial]
             oos = d >= dt.date.fromisoformat(spec["evaluation"]["oos_span"][0])     # controls cover the OOS span only
             for seed in range(n_control if (oos and not counts_only) else 0):
-                cres = admit(control_cands(ctl, trial, seed, d), 600.0, spec)
+                cres = admit(control_cands(ctl, trial, seed, d, m), 600.0, spec)
                 rs = [r for _, _, r in cres.admitted if r is not None]
                 ctrl[key]["sum"][seed] += sum(rs)
                 ctrl[key]["n"][seed] += len(rs)
@@ -244,7 +259,7 @@ def main(exp: str, start: str, end: str, which: str, counts_only: bool, relax: s
                     for c, tr, r in res.admitted:
                         if tape and eq == 600.0:
                             tr.tags.update(trade_tags(a, tr.symbol, tr.entry_time, tr.tags["trigger"], tr.stop0))
-                        results[key][str(eq)].append(trade_row(d, c, tr, r))
+                        results[key][str(eq)].append(trade_row(d, c, tr, r, fills=not m.legacy))
         if n % 20 == 0:
             spread_at.save()
             print(f"{n}/{len(days)} {d} counts@600 {counts}", flush=True)
@@ -253,6 +268,8 @@ def main(exp: str, start: str, end: str, which: str, counts_only: bool, relax: s
     out.mkdir(parents=True, exist_ok=True)
     meta = {"spec": "SPEC-0001", "spec_version": spec["version"], "set": which, "relax": sorted(relax), "days": len(days),
             "span": [start, end], "counts_at_600": counts, "skips": skipped}
+    if not m.legacy:
+        meta["method"] = m.name                  # r3_eval --method checks it; legacy output keeps its recorded keys
     if counts_only:
         (out / f"counts_{which}.json").write_text(json.dumps(meta, indent=1, default=str))
         print(json.dumps({"counts_at_600": counts}, indent=1))
@@ -260,6 +277,10 @@ def main(exp: str, start: str, end: str, which: str, counts_only: bool, relax: s
         control_means = {k: [float(s / n) for s, n in zip(v["sum"], v["n"], strict=False) if n > 0] for k, v in ctrl.items()}
         (out / f"results_{which}.json").write_text(json.dumps({**meta, "trades": results, "control_means": control_means}, default=str))
         print(json.dumps({"counts_at_600": counts}, indent=1))
+    write_manifest(out, {"exp": exp, "start": start, "end": end, "set": which, "counts_only": counts_only,
+                         "relax": sorted(relax), "n_control": n_control, "tape": tape, "method": m.name},
+                   [POOL_DIR, PM_BARS_DIR, MIN_DIR, QUOTE_CACHE],
+                   name=f"manifest_{'counts' if counts_only else 'results'}_{which}.json")
 
 
 if __name__ == "__main__":
@@ -272,6 +293,7 @@ if __name__ == "__main__":
     ap.add_argument("--relax", default="")
     ap.add_argument("--control", type=int, default=0, help="random-entry control seeds (not trials)")
     ap.add_argument("--tape", action="store_true", help="fetch descriptive tape tags for each admitted trade at US$600")
+    ap.add_argument("--method", default="legacy", choices=sorted(METHODS), help="methodology preset (DEC-0011)")
     args = ap.parse_args()
     main(args.exp, args.start, args.end, args.which, args.counts_only, {x for x in args.relax.split(",") if x}, args.control,
-         args.tape)
+         args.tape, args.method)

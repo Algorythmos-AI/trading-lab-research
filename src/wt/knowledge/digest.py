@@ -3,12 +3,10 @@ contradictions, playbook). Equity-relevant (non-options-only) records only."""
 from __future__ import annotations
 
 import json
-import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from wt.knowledge.dedup import load as load_groups  # noqa: E402
+from wt.knowledge.dedup import load as load_groups
 
 OUT = Path("knowledge/_work/digest.md")
 

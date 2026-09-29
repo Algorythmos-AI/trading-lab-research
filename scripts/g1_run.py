@@ -16,10 +16,11 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from wt.backtest.runner import StratConfig, minute_bars, run_day, save_experiment  # noqa: E402
+from wt.backtest.runner import MIN_DIR, StratConfig, minute_bars, run_day, save_experiment  # noqa: E402
 from wt.backtest.stats import deflated_sharpe_prob, summarize  # noqa: E402
 from wt.core.config import DATA_DIR, ROOT  # noqa: E402
 from wt.data.alpaca import AlpacaREST  # noqa: E402
+from wt.research.manifest import write_manifest  # noqa: E402
 
 WINDOWS = {"W1": (0, 30), "W2": (0, 60), "W3": (0, 120), "W4": (120, 240)}
 
@@ -103,6 +104,9 @@ def main(exp_id: str, start: str, end: str) -> None:
         res = {f"{fam}|control": {"control_means": m, "trades": []} for fam, m in fam_means.items()}
         n_trials = 0
     save_experiment(exp_id, cfgs, {"sessions": list(wls), "n_trials": n_trials, "results": res})
+    write_manifest(ROOT / "research" / "experiments" / exp_id,
+                   {"exp": exp_id, "start": start, "end": end, "control": CONTROL, "r2": "--r2" in sys.argv},
+                   [ROOT / "watchlist", DATA_DIR / "pm" / "pm_agg.parquet", MIN_DIR])
     rows = [(k, v["summary"].get("n", 0), v["summary"].get("expectancy_R", 0), v["summary"].get("win_rate", 0),
              v["summary"].get("profit_factor", 0), v["summary"].get("ci95_expectancy", [0, 0])) for k, v in res.items()]
     for row in sorted(rows, key=lambda x: -x[2]):
