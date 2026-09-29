@@ -7,6 +7,8 @@ import { PageHeading } from "@/components/page-heading";
 import { Panel } from "@/components/panel";
 import { StatusBadge } from "@/components/status";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { AlertHistoryPanel } from "@/components/v3/audit";
+import { RiskLimitsPanel } from "@/components/v3/risk-limits";
 import { newYork, num, shortDate, sydney, txt, usd } from "@/lib/format";
 import { RED_ALERT_PREFIXES } from "@/lib/health";
 import { activeWindow } from "@/lib/freshness";
@@ -30,12 +32,14 @@ export default async function RiskPage() {
         <NoSnapshot status={result.status} />
       ) : (
         <>
+          <RiskLimitsPanel s={result.snapshot} />
           <div className="grid gap-5 lg:grid-cols-3">
             <KillPanel s={result.snapshot} />
             <LatchPanel s={result.snapshot} />
             <G2Panel s={result.snapshot} />
           </div>
           <AlertsPanel s={result.snapshot} />
+          <AlertHistoryPanel s={result.snapshot} />
           <AccountPanel s={result.snapshot} />
           <WindowsPanel s={result.snapshot} now={now} />
         </>
