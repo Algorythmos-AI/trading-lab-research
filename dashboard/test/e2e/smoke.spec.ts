@@ -52,6 +52,11 @@ test("pages carry a nonce CSP and still run their scripts", async ({ page }) => 
   await page.getByRole("button", { name: /Switch to dark theme/ }).click();
   await expect(page.locator("html")).toHaveClass(/(^|\s)dark(\s|$)/);
   expect(violations).toEqual([]);
+  // Stray paths render the not-found page: a document, so it carries the policy too.
+  for (const path of ["/favicon.ico", "/robots.txt-nope", "/icon-x"]) {
+    const r = await page.request.get(path);
+    expect(r.headers()["content-security-policy"] ?? "", path).toContain("'strict-dynamic'");
+  }
 });
 
 test("health endpoint answers without secrets", async ({ request }) => {

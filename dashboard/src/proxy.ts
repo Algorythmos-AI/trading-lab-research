@@ -42,7 +42,9 @@ export function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     {
-      source: "/((?!api/|_next/static|_next/image|favicon.ico|icon|apple-icon|robots.txt).*)",
+      // Only API routes (deny-all CSP from vercel.json) and Next's static assets skip the proxy. Everything else,
+      // 404s for stray paths included, is a document and gets the nonce policy.
+      source: "/((?!api/|_next/static/|_next/image).*)",
       missing: [
         { type: "header", key: "next-router-prefetch" },
         { type: "header", key: "purpose", value: "prefetch" },
