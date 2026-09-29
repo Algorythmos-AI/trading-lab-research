@@ -159,7 +159,8 @@ def test_watchlist_v2_puts_a_split_on_d_on_the_new_basis(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------- keys: v2 rows never mix with the biased v1 rows
-def test_v2_keys_replace_the_biased_ones_and_old_markers_do_not_cover_them():
+def test_v2_keys_replace_the_biased_ones_and_old_markers_do_not_cover_them(monkeypatch):
+    monkeypatch.setattr(ft, "V2_FROM", dt.date(2026, 9, 28))      # as if DEC-0011 were accepted on that date
     assert set(ft.LEGACY) == {"B_qqq_qqqm", "watchlist_bull_flag_atr_M1_v2", "hod_bull_flag_atr_M1_v2"}
     assert ft.BIASED == set(ft.LEGACY_V1) - {"B_qqq_qqqm"} and not ft.BIASED & ft.required(dt.date(2026, 10, 1))
     rows = [{"session": "2026-09-28", "session_marker": True, "n_trades": 0},
@@ -169,3 +170,12 @@ def test_v2_keys_replace_the_biased_ones_and_old_markers_do_not_cover_them():
     assert "watchlist_bull_flag_atr_M1_v2" not in done["2026-09-29"]
     names = [n for names, _ in ft.units_for(types.SimpleNamespace(a=None, sessions=[]), D) for n in names]
     assert set(ft.LEGACY) <= set(names) and not ft.BIASED & set(names)
+
+
+def test_v2_trials_wait_for_dec0011_acceptance(monkeypatch):
+    import forward_test as ft
+    d = dt.date(2026, 10, 5)
+    monkeypatch.setattr(ft, "V2_FROM", None)
+    assert not set(ft.V2) & ft.required(d)                   # not pre-registered yet: they don't run
+    monkeypatch.setattr(ft, "V2_FROM", dt.date(2026, 10, 2))
+    assert set(ft.V2) <= ft.required(d) and not set(ft.V2) & ft.required(dt.date(2026, 10, 1))   # no backfill

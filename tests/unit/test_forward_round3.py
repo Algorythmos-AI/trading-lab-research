@@ -47,8 +47,9 @@ def test_round3_strategies_map_to_their_preregistered_hypotheses():
 
 
 def test_required_strategies_by_date():
-    assert ft.required(dt.date(2026, 9, 28)) == set(ft.LEGACY) | set(ft.R3_HYP)
-    assert ft.required(dt.date(2026, 9, 25)) == set(ft.LEGACY)
+    # the v2 flags wait for DEC-0011 (V2_FROM is None until it is accepted); B and round 3 run as before
+    assert ft.required(dt.date(2026, 9, 28)) == {"B_qqq_qqqm"} | set(ft.R3_HYP)
+    assert ft.required(dt.date(2026, 9, 25)) == {"B_qqq_qqqm"}
 
 
 def test_a_pre_d7_session_marker_covers_the_legacy_strategies_unless_that_session_errored():

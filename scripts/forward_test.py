@@ -105,8 +105,17 @@ def read_log() -> list[dict]:
     return rows
 
 
+V2 = ("watchlist_bull_flag_atr_M1_v2", "hod_bull_flag_atr_M1_v2")
+# DEC-0011: the v2 flags are NEW trials (85 -> 87). Pre-registration means they start on DEC-0011's acceptance date,
+# never before it and never backfilled. Set this date in the PR that marks DEC-0011 accepted; until then they don't run.
+V2_FROM: dt.date | None = None
+
+
 def required(d: dt.date) -> set[str]:
-    return set(LEGACY) | (set(R3_HYP) if d >= R3_FROM else set())
+    out = {"B_qqq_qqqm"} | (set(R3_HYP) if d >= R3_FROM else set())
+    if V2_FROM is not None and d >= V2_FROM:
+        out |= set(V2)
+    return out
 
 
 def done_by_session(rows: list[dict]) -> dict[str, set[str]]:
