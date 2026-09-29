@@ -33,7 +33,7 @@ export function PerformancePanel({ s }: { s: Snapshot }) {
       {!hasV3(s) ? (
         <V3Pending what="The performance summary" />
       ) : !st || (st.n ?? 0) === 0 ? (
-        <Empty title="No closed trades yet">Statistics appear after paper B's first closed trade.</Empty>
+        <Empty title="No closed trades yet">Statistics appear after paper B&rsquo;s first closed trade.</Empty>
       ) : (
         <div className="grid gap-5">
           <KeyValues
