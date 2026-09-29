@@ -1,0 +1,100 @@
+#cloud-config
+# First boot of the Trading Lab host (ADR 0004). Rendered by Terraform once; later changes ship through wt-deploy.
+# No secrets here: the VM reads them from OCI Vault at every boot (wt-secrets.service).
+timezone: Etc/UTC
+package_update: true
+package_upgrade: true
+packages:
+  - git
+  - make
+  - jq
+  - curl
+  - ca-certificates
+  - chrony
+  - restic
+  - systemd-zram-generator
+  - unattended-upgrades
+  - netfilter-persistent
+  - iptables-persistent
+
+users:
+  - default
+  - name: wt
+    gecos: Trading Lab jobs
+    shell: /bin/bash
+    lock_passwd: true
+  - name: cloudflared
+    gecos: Cloudflare tunnel
+    system: true
+    shell: /usr/sbin/nologin
+    lock_passwd: true
+
+write_files:
+  # Time from the OCI metadata service's NTP (the HMAC window is +/-300 s; the runner checks skew before entries).
+  - path: /etc/chrony/sources.d/oci.sources
+    content: |
+      server 169.254.169.254 iburst prefer
+  # Swap in compressed RAM only: nothing (tmpfs secrets included) is ever paged to disk.
+  - path: /etc/systemd/zram-generator.conf
+    content: |
+      [zram0]
+      zram-size = 4096
+      compression-algorithm = zstd
+  # Upgrades never restart the trading jobs.
+  - path: /etc/needrestart/conf.d/wt.conf
+    content: |
+      $nrconf{restart} = 'l';
+      $nrconf{override_rc}{qr(^wt-)} = 0;
+  # Security updates only, never an automatic reboot, and only on Saturdays (no US session).
+  - path: /etc/apt/apt.conf.d/52wt-unattended
+    content: |
+      Unattended-Upgrade::Allowed-Origins { "$${distro_id}:$${distro_codename}-security"; };
+      Unattended-Upgrade::Automatic-Reboot "false";
+  - path: /etc/systemd/system/apt-daily.timer.d/saturday.conf
+    content: |
+      [Timer]
+      OnCalendar=
+      OnCalendar=Sat 15:00 UTC
+      RandomizedDelaySec=0
+  - path: /etc/systemd/system/apt-daily-upgrade.timer.d/saturday.conf
+    content: |
+      [Timer]
+      OnCalendar=
+      OnCalendar=Sat 16:00 UTC
+      RandomizedDelaySec=0
+  - path: /etc/systemd/journald.conf.d/wt.conf
+    content: |
+      [Journal]
+      SystemMaxUse=500M
+
+runcmd:
+  - [systemctl, disable, --now, systemd-timesyncd]
+  - [systemctl, enable, --now, chrony]
+  - [systemctl, daemon-reload]
+  - [systemctl, restart, systemd-zram-setup@zram0]
+  - [snap, set, system, "refresh.timer=sat,16:00"]
+  # The job user may not reach the instance metadata service (and so can't mint instance-principal tokens); root
+  # and the Oracle agent still can. Oracle's own InstanceServices chain is left untouched.
+  - [iptables, -I, OUTPUT, "1", -d, 169.254.169.254/32, -p, tcp, --dport, "80", -m, owner, --uid-owner, wt, -j, REJECT]
+  - [netfilter-persistent, save]
+  # uv (same version that built the lockfile) and the OCI CLI, pinned.
+  - [sh, -c, "curl -LsSf https://astral.sh/uv/0.11.7/install.sh | env UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 sh"]
+  - [sh, -c, "UV_TOOL_DIR=/opt/uv-tools UV_TOOL_BIN_DIR=/usr/local/bin /usr/local/bin/uv tool install oci-cli==3.94.1"]
+  # cloudflared from Cloudflare's apt repository, held (it never self-updates from apt; upgrades are deliberate).
+  - [sh, -c, "curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg -o /usr/share/keyrings/cloudflare-main.gpg"]
+  - [sh, -c, "echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared noble main' > /etc/apt/sources.list.d/cloudflared.list"]
+  - [sh, -c, "apt-get update && apt-get install -y cloudflared && apt-mark hold cloudflared"]
+  # The repository and its locked environment, as the job user.
+  - [sudo, -u, wt, git, clone, --quiet, "${repo_url}", /home/wt/trading]
+  - [sudo, -u, wt, sh, -c, "cd /home/wt/trading && /usr/local/bin/uv venv --python 3.12 .venv && /usr/local/bin/uv pip sync --python .venv/bin/python --require-hashes requirements.lock.txt && /usr/local/bin/uv pip install --python .venv/bin/python -r requirements-dev.lock.txt"]
+  # Host helpers and the always-on units (secrets, pager, boot reconcile). The job timers are the owner's to enable.
+  - [sh, -c, "install -m 0755 /home/wt/trading/deploy/oci/bin/* /usr/local/bin/"]
+  - [sh, -c, "install -m 0644 /home/wt/trading/deploy/oci/systemd/* /etc/systemd/system/"]
+  - [install, -d, -m, "0750", -o, root, -g, wt, /etc/wt]
+  - [systemctl, daemon-reload]
+  - [systemctl, enable, --now, wt-secrets.timer]
+  - [systemctl, enable, wt-secrets.service, wt-boot-reconcile.service, wt-tunnel.service]
+  # A deploy key for when the repository goes private (the owner adds the public half on GitHub).
+  - [sudo, -u, wt, ssh-keygen, -q, -t, ed25519, -N, "", -C, "trading-lab-host deploy key", -f, /home/wt/.ssh/github_deploy]
+
+final_message: "Trading Lab host bootstrapped. Next: docs/runbooks/oci-host.md, step 'after first boot'."
