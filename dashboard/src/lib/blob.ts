@@ -3,6 +3,8 @@ import { BlobError, BlobNotFoundError, BlobPreconditionFailedError, del, get, he
 
 // Every object is private; reads bypass the CDN so a write is visible to the next read.
 export const LATEST_PATH = "snapshots/latest.json";
+/** A non-primary host's latest snapshot (the OCI host during its shadow run). Never read by the pages or the watchdog. */
+export const SHADOW_LATEST_PATH = "shadow/latest.json";
 export const HISTORY_PREFIX = "snapshots/history/";
 export const ALERT_STATE_PATH = "alerts/state.json";
 
