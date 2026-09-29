@@ -1,0 +1,201 @@
+@import "tailwindcss";
+
+/* Dark is the default (class on <html>); an inline script switches to light from the stored
+   choice or the OS preference before first paint. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+  --radius: 0.375rem;
+
+  /* Surfaces and ink: cool graphite, one steel-blue accent. */
+  --background: #f2f4f5;
+  --foreground: #111a1f;
+  --card: #ffffff;
+  --card-foreground: #111a1f;
+  --popover: #ffffff;
+  --popover-foreground: #111a1f;
+  --primary: #1f5fa8;
+  --primary-foreground: #ffffff;
+  --secondary: #e8edf0;
+  --secondary-foreground: #111a1f;
+  --muted: #eef2f4;
+  --muted-foreground: #53636b;
+  --accent: #e4ebf0;
+  --accent-foreground: #111a1f;
+  --destructive: #b3261e;
+  --border: #d5dde2;
+  --input: #d5dde2;
+  --ring: #1f5fa8;
+
+  /* Status: text steps pass WCAG AA on the card; fills are the fixed status palette. */
+  --good: #106b2a;
+  --good-fill: #0ca30c;
+  --good-soft: rgb(12 163 12 / 0.1);
+  --warn: #8a5a00;
+  --warn-fill: #fab219;
+  --warn-soft: rgb(250 178 25 / 0.16);
+  --bad: #b3261e;
+  --bad-fill: #d03b3b;
+  --bad-soft: rgb(208 59 59 / 0.1);
+  --serious-fill: #ec835a;
+  --info: #1f5fa8;
+  --info-fill: #2a78d6;
+  --info-soft: rgb(42 120 214 / 0.1);
+  --neutral: #53636b;
+  --neutral-fill: #9aa7ae;
+  --neutral-soft: rgb(83 99 107 / 0.1);
+
+  /* Categorical series, fixed order (validated for CVD separation against this surface). */
+  --chart-1: #2a78d6;
+  --chart-2: #eb6834;
+  --chart-3: #1baf7a;
+  --chart-4: #eda100;
+  --chart-5: #e87ba4;
+  --chart-6: #008300;
+  --chart-7: #4a3aa7;
+  --chart-8: #e34948;
+  --chart-grid: #e3e8eb;
+  --chart-axis: #c3ccd1;
+  --chart-na: #b8c2c7;
+  --track: #e6ebee;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #0f1519;
+  --foreground: #e3eaee;
+  --card: #151d22;
+  --card-foreground: #e3eaee;
+  --popover: #1a2429;
+  --popover-foreground: #e3eaee;
+  --primary: #6aa7e8;
+  --primary-foreground: #0b1620;
+  --secondary: #1d282e;
+  --secondary-foreground: #e3eaee;
+  --muted: #1a2429;
+  --muted-foreground: #93a4ad;
+  --accent: #1f2b32;
+  --accent-foreground: #e3eaee;
+  --destructive: #f07373;
+  --border: #26333a;
+  --input: #2c3a42;
+  --ring: #6aa7e8;
+
+  --good: #4cc26a;
+  --good-fill: #0ca30c;
+  --good-soft: rgb(12 163 12 / 0.14);
+  --warn: #f2b441;
+  --warn-fill: #fab219;
+  --warn-soft: rgb(250 178 25 / 0.13);
+  --bad: #f07373;
+  --bad-fill: #d03b3b;
+  --bad-soft: rgb(208 59 59 / 0.16);
+  --serious-fill: #ec835a;
+  --info: #6aa7e8;
+  --info-fill: #3987e5;
+  --info-soft: rgb(57 135 229 / 0.15);
+  --neutral: #93a4ad;
+  --neutral-fill: #5b6b73;
+  --neutral-soft: rgb(147 164 173 / 0.12);
+
+  --chart-1: #3987e5;
+  --chart-2: #d95926;
+  --chart-3: #199e70;
+  --chart-4: #c98500;
+  --chart-5: #d55181;
+  --chart-6: #008300;
+  --chart-7: #9085e9;
+  --chart-8: #e66767;
+  --chart-grid: #222e34;
+  --chart-axis: #34434b;
+  --chart-na: #4a5961;
+  --track: #212c32;
+}
+
+@theme inline {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-good: var(--good);
+  --color-good-fill: var(--good-fill);
+  --color-good-soft: var(--good-soft);
+  --color-warn: var(--warn);
+  --color-warn-fill: var(--warn-fill);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad: var(--bad);
+  --color-bad-fill: var(--bad-fill);
+  --color-bad-soft: var(--bad-soft);
+  --color-serious-fill: var(--serious-fill);
+  --color-info: var(--info);
+  --color-info-fill: var(--info-fill);
+  --color-info-soft: var(--info-soft);
+  --color-neutral: var(--neutral);
+  --color-neutral-fill: var(--neutral-fill);
+  --color-neutral-soft: var(--neutral-soft);
+  --color-track: var(--track);
+  --color-chart-grid: var(--chart-grid);
+  --color-chart-axis: var(--chart-axis);
+  --color-chart-na: var(--chart-na);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-chart-7: var(--chart-7);
+  --color-chart-8: var(--chart-8);
+
+  --radius-sm: calc(var(--radius) * 0.66);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) * 1.33);
+  --radius-xl: calc(var(--radius) * 2);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  /* A grid without explicit columns is one shrinkable column, so wide tables scroll inside their card. */
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0s !important;
+      animation-duration: 0s !important;
+    }
+  }
+}
