@@ -31,4 +31,7 @@ def test_every_job_has_a_known_command():
     from wt.ops.schedule import JOBS
     for job in JOBS.values():
         cmd = job.command
-        assert cmd[0] == "-c" or (SCRIPTS.parent / cmd[0]).exists(), job.name
+        if cmd[0] == "-m":
+            importlib.import_module(cmd[1])
+        else:
+            assert cmd[0] == "-c" or (SCRIPTS.parent / cmd[0]).exists(), job.name
