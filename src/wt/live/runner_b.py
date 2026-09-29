@@ -42,7 +42,7 @@ import pandas as pd
 
 from wt.backtest.engine import size_position
 from wt.core.clock import ET, et, to_utc_iso
-from wt.core.config import DATA_DIR, ROOT, env
+from wt.core.config import DATA_DIR, ROOT, STATE_DIR, env
 from wt.data.alpaca import DATA, AlpacaREST
 from wt.oms.manager import ACTIVE_POSITION, OMS, PlanStore, TradePlan
 from wt.ops.alerts import Alerts, Pager
@@ -301,9 +301,24 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
     free_gb = shutil.disk_usage(ROOT).free / 1e9
     if free_gb < MIN_FREE_GB:
         refuse(f"free disk {free_gb:.1f} GB under the {MIN_FREE_GB:.0f} GB floor")
+    role = env("WT_ROLE", "primary")
     if broker is None:
         from wt.brokers.alpaca_paper import AlpacaPaperBroker  # asserts the paper-only lock
         broker = connect(AlpacaPaperBroker, sleep)
+    if role == "shadow":
+        from wt.brokers.shadow import ShadowBroker             # every order call raises
+        broker = ShadowBroker(broker)
+        refuse("shadow host: this session never places orders")
+    elif env("WT_HOST", "") == "systemd":
+        # On the VM, trading needs the primary lease: two hosts can never both trade B (ADR 0004).
+        from wt.ops import lease
+        held = lease.acquire()
+        if held.ok:
+            log("lease", held=held.reason)
+        else:
+            refuse(f"primary lease not held: {held.reason}")
+            pager.fire("paper-b:lease", "Paper B: no primary lease, entries off",
+                       f"{held.reason}. Exits are still managed. See docs/runbooks/oci-host.md.", 4)
     a = rest if rest is not None else AlpacaREST(per_minute=150)
     try:
         acct = broker.account()
@@ -356,6 +371,9 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         refuse(str(e))
         va, va_ok = VirtualAccount(), False
     books = Books(va, va_path, readonly=not va_ok)
+    chain_flag = STATE_DIR / "evidence" / "chain-broken"      # wt.ops.backup: the evidence can't be trusted
+    if chain_flag.exists():
+        refuse("evidence hash chain broken (var/evidence/chain-broken): entries off until the owner clears it")
     try:
         if not events.coverage_ok(day):
             refuse("macro calendar < 30 days ahead")

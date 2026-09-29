@@ -471,6 +471,8 @@ def send(body: bytes, url: str, secret: str, bypass: str | None, tries: int = 3)
         ts = int(time.time())
         headers = {"content-type": "application/json", "x-wt-timestamp": str(ts),
                    "x-wt-signature": sign(body, secret, ts)}
+        if key_id := os.environ.get("DASHBOARD_KEY_ID"):
+            headers["x-wt-key-id"] = key_id          # this host's own key (ADR 0004); absent = "default"
         if bypass:
             headers["x-vercel-protection-bypass"] = bypass
         try:

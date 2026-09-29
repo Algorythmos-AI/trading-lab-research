@@ -10,6 +10,7 @@ One page per incident. Each starts with how you'll notice it.
 | [Loss latch reset](latch-reset.md) | ntfy priority 5 "loss limit latched"; entries stay off |
 | [Rollback a deploy](rollback.md) | The next night's jobs fail after a deploy |
 | [Rotate secrets](secret-rotation.md) | A secret may have leaked, or it's the scheduled rotation |
+| [Backups, anchors, lease](backups-and-lease.md) | "Evidence chain broken", a backup or anchor failed, or "no primary lease" |
 | [Dashboard late or stopped](dashboard-late.md) | ntfy "Dashboard late"; a grey or amber freshness pill |
 | [Disk nearly full](disk-full.md) | ntfy priority 3 "refused to run: free disk"; the Operations page shows disk under the floor |
 | [Ruleset emergency](ruleset-emergency.md) | CI is down and a fix must land |

@@ -307,3 +307,17 @@ def test_the_dashboard_reports_its_previous_publish_not_itself(tmp_path, monkeyp
     assert ex["jobs"]["last"]["dashboard"]["status"] == "failed"
     assert ex["jobs"]["last"]["dashboard"]["detail"] == "previous publish"
     assert ex["kill"]["reason"] is None
+
+
+def test_a_host_with_its_own_key_names_it(monkeypatch):
+    seen = []
+
+    def post(url, data, headers, timeout):
+        seen.append(headers)
+        return _Resp(200)
+    monkeypatch.setattr(publish.requests, "post", post)
+    monkeypatch.setenv("DASHBOARD_KEY_ID", "oci-syd")
+    assert publish.send(b"{}", "https://x/api/ingest", "s", None)[0]
+    monkeypatch.delenv("DASHBOARD_KEY_ID")
+    assert publish.send(b"{}", "https://x/api/ingest", "s", None)[0]
+    assert seen[0]["x-wt-key-id"] == "oci-syd" and "x-wt-key-id" not in seen[1]

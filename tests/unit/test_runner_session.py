@@ -127,11 +127,11 @@ def synced(b: SimBroker, clk: "Clock", skew_s: float = 0.0) -> SimBroker:
     return b
 
 
-def journal(tmp_path) -> list[dict]:
+def journal(tmp_path, allow_errors: bool = False) -> list[dict]:
     p = tmp_path / "live" / "journal.jsonl"
     rows = [json.loads(x) for x in p.read_text().splitlines()] if p.exists() else []
     errors = [r for r in rows if r["event"] in ("loop_error", "data_timeout")]
-    assert not errors, errors[:3]                               # a clean session hides no swallowed errors
+    assert allow_errors or not errors, errors[:3]               # a clean session hides no swallowed errors
     return rows
 
 
@@ -506,3 +506,65 @@ def test_the_pager_never_blocks_the_loop():
     for _ in range(10):
         full.fire("k", "t", "m", 5)
     assert full.dropped >= 1
+
+
+# ---- the OCI host: primary lease and shadow role (ADR 0004) ---------------------------------------------------
+
+def test_without_the_primary_lease_the_vm_takes_no_entry(env, monkeypatch):
+    from wt.ops import lease
+    monkeypatch.setenv("WT_HOST", "systemd")
+    monkeypatch.setattr(lease, "acquire", lambda client=None, holder=None: lease.Result(False, "held by mac"))
+    b = SimBroker()
+    clk = Clock(at(8, 0))
+    synced(b, clk)
+    rec = Rec()
+    runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep, alerts=rec)
+    j = journal(env)
+    assert b.placed == []
+    assert any(r["event"] == "refuse_to_arm" and "primary lease" in r["reason"] for r in j)
+    assert "paper-b:lease" in rec.keys()
+
+
+def test_with_the_lease_the_vm_trades_as_usual(env, monkeypatch):
+    from wt.ops import lease
+    monkeypatch.setenv("WT_HOST", "systemd")
+    monkeypatch.setattr(lease, "acquire", lambda client=None, holder=None: lease.Result(True, "held by oci-syd"))
+    b = SimBroker()
+
+    def hook(now):
+        for o in b.open_orders():
+            if o.side == "buy" and now >= at(10, 1):
+                b.fill(o.client_order_id, 250.26)
+        if now >= at(15, 50):
+            fill_exits_at(b, 250.40)
+    clk = Clock(at(8, 0), hook)
+    synced(b, clk)
+    runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep)
+    assert [r["event"] for r in journal(env)].count("trade_closed") == 1
+
+
+def test_the_shadow_host_never_sends_an_order(env, monkeypatch):
+    from wt.brokers.shadow import ShadowBroker, ShadowRole
+    monkeypatch.setenv("WT_ROLE", "shadow")
+    b = SimBroker()
+    b.pos["QQQM"] = Position("QQQM", 2, 250.0)                 # even a position is never touched
+    clk = Clock(at(8, 0))
+    synced(b, clk)
+    runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep)
+    assert b.placed == []
+    assert any(r["event"] == "refuse_to_arm" and "shadow" in r["reason"] for r in journal(env, allow_errors=True))
+    with pytest.raises(ShadowRole):
+        ShadowBroker(b).place(Order("x", "QQQM", "buy", 1, "market"))
+
+
+def test_a_broken_evidence_chain_turns_entries_off(env, monkeypatch, tmp_path):
+    flag = tmp_path / "state" / "evidence" / "chain-broken"
+    flag.parent.mkdir(parents=True)
+    flag.write_text("forward: line 3: prev_sha256 does not match line 2\n")
+    monkeypatch.setattr(runner_b, "STATE_DIR", tmp_path / "state")
+    b = SimBroker()
+    clk = Clock(at(8, 0))
+    synced(b, clk)
+    runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep)
+    assert b.placed == []
+    assert any(r["event"] == "refuse_to_arm" and "evidence hash chain" in r["reason"] for r in journal(env))
