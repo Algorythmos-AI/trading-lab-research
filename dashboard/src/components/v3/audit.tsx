@@ -6,8 +6,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { sydney, txt } from "@/lib/format";
 import { humanize } from "@/lib/labels";
 import { list, type Snapshot } from "@/lib/types";
-import { AUDIT_LABEL, auditTone, hasV3 } from "@/lib/v3";
-import { V3Pending } from "./pending";
+import { AUDIT_LABEL, auditTone, hasV3, sectionState } from "@/lib/v3";
+import { V3Missing, V3Pending } from "./pending";
 
 /** One time-ordered record of deploys, overrides, latch resets, refusals and alerts. */
 export function AuditPanel({ s }: { s: Snapshot }) {
@@ -27,8 +27,10 @@ export function AuditPanel({ s }: { s: Snapshot }) {
         ) : null
       }
     >
-      {!hasV3(s) ? (
+      {sectionState(s, a) === "v2" ? (
         <V3Pending what="The audit trail" />
+      ) : sectionState(s, a) === "missing" ? (
+        <V3Missing what="The audit trail" />
       ) : events.length === 0 ? (
         <Empty title="Nothing recorded yet" />
       ) : (
@@ -67,8 +69,10 @@ export function AlertHistoryPanel({ s }: { s: Snapshot }) {
       icon={BellRing}
       means="Alerts as they started and cleared. Repeats while an alert keeps firing are not sent again, so each row is one message."
     >
-      {!hasV3(s) ? (
+      {sectionState(s, s.alerts?.history) === "v2" ? (
         <V3Pending what="The alert history" />
+      ) : sectionState(s, s.alerts?.history) === "missing" ? (
+        <V3Missing what="The alert history" />
       ) : rows.length === 0 ? (
         <Empty title="No alerts recorded yet" />
       ) : (

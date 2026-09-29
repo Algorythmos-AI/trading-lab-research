@@ -7,8 +7,8 @@ import { Panel } from "@/components/panel";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fracPct, num, rMult, shortDate, signed, txt } from "@/lib/format";
 import { list, type Snapshot } from "@/lib/types";
-import { hasV3, profitFactorText, suppressedReason } from "@/lib/v3";
-import { V3Pending } from "./pending";
+import { profitFactorText, sectionState, suppressedReason } from "@/lib/v3";
+import { V3Missing, V3Pending } from "./pending";
 import { Sparkline } from "./sparkline";
 
 /** Strategy B's paper results, honest at small samples: statistics that would mislead stay blank, with the reason. */
@@ -19,6 +19,7 @@ export function PerformancePanel({ s }: { s: Snapshot }) {
   const bins = list(p?.histogram);
   const maxBin = Math.max(1, ...bins.map((b) => b.count ?? 0));
   const why = suppressedReason(st, p?.min_trades);
+  const closedCount = list(s.blotter).length;
   const ci =
     st?.sample_ok === true && typeof st.ci_low === "number" && typeof st.ci_high === "number"
       ? `${rMult(st.ci_low, 2)} to ${rMult(st.ci_high, 2)}`
@@ -30,10 +31,19 @@ export function PerformancePanel({ s }: { s: Snapshot }) {
       icon={ChartSpline}
       means="Closed paper trades in R (1R = the amount risked to the stop). Trades whose exit price had to be estimated are left out. Paper results are evidence for the G2 gate, not a forecast."
     >
-      {!hasV3(s) ? (
+      {sectionState(s, p) === "v2" ? (
         <V3Pending what="The performance summary" />
+      ) : sectionState(s, p) === "missing" ? (
+        <V3Missing what="The performance summary" />
       ) : !st || (st.n ?? 0) === 0 ? (
-        <Empty title="No closed trades yet">Statistics appear after paper B&rsquo;s first closed trade.</Empty>
+        closedCount > 0 ? (
+          <Empty title={`${num(closedCount)} closed trade${closedCount === 1 ? "" : "s"}, none countable yet`}>
+            Trades with an estimated exit price, or positions adopted rather than opened by B, are left out of the
+            statistics. They are listed in the blotter.
+          </Empty>
+        ) : (
+          <Empty title="No closed trades yet">Statistics appear after paper B&rsquo;s first closed trade.</Empty>
+        )
       ) : (
         <div className="grid gap-5">
           <KeyValues
@@ -90,8 +100,10 @@ export function BlotterPanel({ s }: { s: Snapshot }) {
       icon={ScrollText}
       means="Every closed paper trade, newest first. 'Estimated' means no exit fill was found and the stop price stood in; those trades are excluded from the statistics."
     >
-      {!hasV3(s) ? (
+      {sectionState(s, s.blotter) === "v2" ? (
         <V3Pending what="The blotter" />
+      ) : sectionState(s, s.blotter) === "missing" ? (
+        <V3Missing what="The blotter" />
       ) : rows.length === 0 ? (
         <Empty title="No closed trades yet" />
       ) : (
@@ -114,11 +126,11 @@ export function BlotterPanel({ s }: { s: Snapshot }) {
                 <TableCell className="font-mono">{txt(r.symbol)}</TableCell>
                 <TableCell className="text-right tabular-nums">{num(r.qty)}</TableCell>
                 <TableCell className="hidden text-right tabular-nums sm:table-cell">{num(r.entry, 2)}</TableCell>
-                <TableCell className="hidden text-right tabular-nums sm:table-cell">
-                  {num(r.exit, 2)}
-                  {r.estimated ? <span className="text-muted-foreground"> (est.)</span> : null}
+                <TableCell className="hidden text-right tabular-nums sm:table-cell">{num(r.exit, 2)}</TableCell>
+                <TableCell className="text-right font-medium tabular-nums">
+                  {rMult(r.r, 2)}
+                  {r.estimated ? <span className="text-muted-foreground font-normal"> (est.)</span> : null}
                 </TableCell>
-                <TableCell className="text-right font-medium tabular-nums">{rMult(r.r, 2)}</TableCell>
                 <TableCell>
                   {txt(r.reason)}
                   {r.origin && r.origin !== "entry" ? <span className="text-muted-foreground"> · {r.origin}</span> : null}

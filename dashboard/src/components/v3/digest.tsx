@@ -3,8 +3,8 @@ import { Empty } from "@/components/empty";
 import { Panel } from "@/components/panel";
 import { shortDate, txt } from "@/lib/format";
 import { list, type Snapshot } from "@/lib/types";
-import { hasV3 } from "@/lib/v3";
-import { V3Pending } from "./pending";
+import { sectionState } from "@/lib/v3";
+import { V3Missing, V3Pending } from "./pending";
 
 /** What moved since the previous US trading day: the brief a morning reader wants first. */
 export function DigestPanel({ s }: { s: Snapshot }) {
@@ -18,8 +18,10 @@ export function DigestPanel({ s }: { s: Snapshot }) {
       icon={History}
       means="What changed compared with the first snapshot of the previous US trading day. Unchanged items are counted, not listed."
     >
-      {!hasV3(s) ? (
+      {sectionState(s, d) === "v2" ? (
         <V3Pending what="The daily digest" />
+      ) : sectionState(s, d) === "missing" ? (
+        <V3Missing what="The daily digest" />
       ) : !d?.since ? (
         <Empty title="No earlier day to compare with yet">The first comparison appears after one full US trading day.</Empty>
       ) : changed.length === 0 ? (

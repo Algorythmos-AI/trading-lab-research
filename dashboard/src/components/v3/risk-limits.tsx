@@ -7,8 +7,8 @@ import { StatusBadge } from "@/components/status";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { pct, shortDate, sydney, txt } from "@/lib/format";
 import { list, type Snapshot } from "@/lib/types";
-import { hasV3, LIMIT_LABEL, limitTone } from "@/lib/v3";
-import { V3Pending } from "./pending";
+import { limitLabel, limitTone, sectionState } from "@/lib/v3";
+import { V3Missing, V3Pending } from "./pending";
 
 /** Every limit in force, read from the code and config that enforce it, with today's usage. */
 export function RiskLimitsPanel({ s }: { s: Snapshot }) {
@@ -30,8 +30,10 @@ export function RiskLimitsPanel({ s }: { s: Snapshot }) {
         ) : null
       }
     >
-      {!hasV3(s) ? (
+      {sectionState(s, risk) === "v2" ? (
         <V3Pending what="The limits table" />
+      ) : sectionState(s, risk) === "missing" ? (
+        <V3Missing what="The limits table" />
       ) : rows.length === 0 ? (
         <Empty title="No limits in this snapshot" />
       ) : (
@@ -45,7 +47,7 @@ export function RiskLimitsPanel({ s }: { s: Snapshot }) {
                   label={txt(r.label)}
                   value={r.used_pct}
                   max={100}
-                  tone={limitTone(r.state)}
+                  tone={limitTone(r.state, r.id)}
                   valueText={`${txt(r.used)} of ${txt(r.limit)}`}
                 />
               ))}
@@ -72,7 +74,7 @@ export function RiskLimitsPanel({ s }: { s: Snapshot }) {
                     ) : null}
                   </TableCell>
                   <TableCell>
-                    <StatusBadge tone={limitTone(r.state)}>{r.state ? LIMIT_LABEL[r.state] : "Unknown"}</StatusBadge>
+                    <StatusBadge tone={limitTone(r.state, r.id)}>{limitLabel(r.state, r.id)}</StatusBadge>
                   </TableCell>
                   <TableCell className="text-muted-foreground hidden font-mono text-xs sm:table-cell">
                     {txt(r.source)} {r.source_sha ? `@${r.source_sha}` : ""}
