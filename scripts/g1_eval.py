@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from wt.backtest.stats import deflated_sharpe_prob, random_control_pvalue, summarize  # noqa: E402
 from wt.backtest.stress import stressed_R  # noqa: E402
 from wt.core.config import ROOT  # noqa: E402
+from wt.research.manifest import assert_clean_for_preregistered_run, write_manifest  # noqa: E402
 from wt.research.method import get_method, pop_method  # noqa: E402
 
 DEV_START, DEV_END = dt.date(2019, 1, 2), dt.date(2025, 9, 25)
@@ -46,6 +47,8 @@ def folds():
 def main(exp_id: str, control_exp: str | None = None, family_fields: int = 1, n_trials_override: int | None = None,
          method: str = "legacy") -> dict:
     m = get_method(method)
+    if not m.legacy:
+        assert_clean_for_preregistered_run()     # a DEC-0011 evaluation must be reproducible from its commit
     exp = ROOT / "research/experiments" / exp_id
     res = json.loads((exp / "results.json").read_text())
     if not m.legacy and res.get("method") != m.name:          # never mix fill models inside one corrected report
@@ -121,6 +124,10 @@ def main(exp_id: str, control_exp: str | None = None, family_fields: int = 1, n_
     sfx = "" if m.legacy else f"_{m.name}"
     (exp / f"g1_eval{sfx}.json").write_text(json.dumps(summary, indent=1, default=str))
     (exp / f"g1_report{sfx}.md").write_text("\n".join(lines))
+    write_manifest(exp, {"exp": exp_id, "control_exp": control_exp, "family_fields": family_fields,
+                         "n_trials_override": n_trials_override, "dsr_trials": n_trials, "method": m.name},
+                   [exp / "results.json"] + ([ROOT / "research/experiments" / control_exp / "results.json"] if control_exp else []),
+                   name=f"manifest_g1_eval{sfx}.json")
     print("\n".join(lines))
     return summary
 

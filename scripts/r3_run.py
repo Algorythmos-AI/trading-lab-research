@@ -33,13 +33,14 @@ from wt.backtest.engine import Costs, simulate  # noqa: E402
 from wt.backtest.management import REGISTRY  # noqa: E402
 from wt.backtest.portfolio import Candidate as PCand  # noqa: E402
 from wt.backtest.portfolio import admit_day  # noqa: E402
+from wt.backtest.runner import MIN_DIR, minute_bars  # noqa: E402
 from wt.backtest.stress import detail  # noqa: E402
-from wt.backtest.runner import minute_bars  # noqa: E402
 from wt.core.clock import et, to_utc_iso  # noqa: E402
 from wt.core.config import DATA_DIR, ROOT, load_yaml  # noqa: E402
 from wt.data.alpaca import AlpacaREST  # noqa: E402
 from wt.data.tape import trade_tags  # noqa: E402
 from wt.ops.safeio import atomic_write, read_cache  # noqa: E402
+from wt.research.manifest import assert_clean_for_preregistered_run, write_manifest  # noqa: E402
 from wt.research.method import LEGACY, METHODS, Method, get_method  # noqa: E402
 from wt.scanner.pool import PM_BARS_DIR, POOL_DIR  # noqa: E402
 from wt.scanner.ranking import Candidate, SpecCandidate, funnel, rank  # noqa: E402
@@ -220,6 +221,8 @@ def control_cands(ctl: list[tuple], trial: str, seed: int, d: dt.date, method: M
 def main(exp: str, start: str, end: str, which: str, counts_only: bool, relax: set[str], n_control: int = 0,
          tape: bool = False, method: str = "legacy") -> None:
     m = get_method(method)
+    if not m.legacy:
+        assert_clean_for_preregistered_run()     # a DEC-0011 re-run must be reproducible from its commit
     spec = load_spec("SPEC-0001")
     a = AlpacaREST(per_minute=150, shared=True)
     spread_at = SpreadAt(a)
@@ -274,6 +277,10 @@ def main(exp: str, start: str, end: str, which: str, counts_only: bool, relax: s
         control_means = {k: [float(s / n) for s, n in zip(v["sum"], v["n"], strict=False) if n > 0] for k, v in ctrl.items()}
         (out / f"results_{which}.json").write_text(json.dumps({**meta, "trades": results, "control_means": control_means}, default=str))
         print(json.dumps({"counts_at_600": counts}, indent=1))
+    write_manifest(out, {"exp": exp, "start": start, "end": end, "set": which, "counts_only": counts_only,
+                         "relax": sorted(relax), "n_control": n_control, "tape": tape, "method": m.name},
+                   [POOL_DIR, PM_BARS_DIR, MIN_DIR, QUOTE_CACHE],
+                   name=f"manifest_{'counts' if counts_only else 'results'}_{which}.json")
 
 
 if __name__ == "__main__":

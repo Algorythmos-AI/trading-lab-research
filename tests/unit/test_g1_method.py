@@ -28,6 +28,15 @@ def load(name):
 g1_eval, g1_etf = load("g1_eval"), load("g1_etf")
 
 
+@pytest.fixture(autouse=True)
+def guard(monkeypatch):
+    """The clean-tree guard is unit-tested in test_manifest; here only whether a method calls it."""
+    calls = []
+    for mod in (g1_eval, g1_etf):
+        monkeypatch.setattr(mod, "assert_clean_for_preregistered_run", lambda: calls.append("checked"))
+    return calls
+
+
 def results(n=700, seed=2, fills=True):
     rng = np.random.default_rng(seed)
     days = pd.bdate_range("2019-01-02", "2025-09-25")
@@ -49,15 +58,16 @@ def write(tmp_path, monkeypatch, trades, method):
     return exp
 
 
-def test_legacy_eval_counts_the_experiments_own_trials(tmp_path, monkeypatch):
+def test_legacy_eval_counts_the_experiments_own_trials(tmp_path, monkeypatch, guard):
     exp = write(tmp_path, monkeypatch, results(fills=False), None)
     s = g1_eval.main("EXP-G")["B"]["stats"]
     assert s["dsr_prob"] == deflated_sharpe_prob(s["per_trade_sharpe"], s["n"], 12, s["skew"], s["kurtosis"])
     assert "Trials counted for DSR: **12**" in (exp / "g1_report.md").read_text()
     assert "ci95_block" not in s and not any("stress" in k for k in s)
+    assert json.loads((exp / "manifest_g1_eval.json").read_text())["args"]["dsr_trials"] == 12 and guard == []
 
 
-def test_dec0011_eval_uses_the_global_count_day_blocks_and_fill_stress(tmp_path, monkeypatch):
+def test_dec0011_eval_uses_the_global_count_day_blocks_and_fill_stress(tmp_path, monkeypatch, guard):
     exp = write(tmp_path, monkeypatch, results(), "dec0011")
     s = g1_eval.main("EXP-G", method="dec0011")["B"]["stats"]
     n_global = global_trial_count()
@@ -67,7 +77,8 @@ def test_dec0011_eval_uses_the_global_count_day_blocks_and_fill_stress(tmp_path,
     assert s["stress_1.5x"]["expectancy_R"] < s["expectancy_R"]
     assert s["expectancy_R"] > s["stop_stress_2.0x"]["expectancy_R"] > s["stop_stress_3.0x"]["expectancy_R"]
     assert f"Trials counted for DSR: **{n_global}**" in (exp / "g1_report_dec0011.md").read_text()
-    assert not (exp / "g1_eval.json").exists()
+    assert not (exp / "g1_eval.json").exists() and (exp / "manifest_g1_eval_dec0011.json").exists()
+    assert guard == ["checked"]
 
 
 def test_dec0011_eval_refuses_legacy_results(tmp_path, monkeypatch):
@@ -88,7 +99,7 @@ def etf_day(d: pd.Timestamp) -> pd.DataFrame:
 
 
 @pytest.mark.parametrize("method, exit_reason", [("legacy", "target"), ("dec0011", "eod_flatten")])
-def test_g1_etf_runs_the_chosen_fill_model(monkeypatch, method, exit_reason):
+def test_g1_etf_runs_the_chosen_fill_model(tmp_path, monkeypatch, guard, method, exit_reason):
     bars = pd.concat([etf_day(d) for d in pd.bdate_range("2024-01-02", periods=24)], ignore_index=True)
     saved = {}
     monkeypatch.setattr(g1_etf, "load", lambda sym: bars.assign(symbol=sym))
@@ -96,9 +107,12 @@ def test_g1_etf_runs_the_chosen_fill_model(monkeypatch, method, exit_reason):
     monkeypatch.setattr(g1_etf.setups, "a_orb_5m", lambda *a, **k: signal)
     monkeypatch.setattr(g1_etf.setups, "b_intraday_momentum", lambda *a, **k: signal)
     monkeypatch.setattr(g1_etf, "save_experiment", lambda exp, cfgs, res: saved.update(res))
+    monkeypatch.setattr(g1_etf, "ROOT", tmp_path)
     g1_etf.main("EXP-X", method)
     rows = [r for v in saved["results"].values() for r in v["trades"]]
     fixed_target = [r for k, v in saved["results"].items() if k.endswith("|M3") for r in v["trades"]]
     assert fixed_target and {r["exit_reason"] for r in fixed_target} == {exit_reason}
     assert saved.get("method") == (None if method == "legacy" else method)
     assert all(("fills" in r) == (method != "legacy") for r in rows)
+    man = json.loads((tmp_path / "research/experiments/EXP-X/manifest.json").read_text())
+    assert man["args"] == {"exp": "EXP-X", "method": method} and guard == ([] if method == "legacy" else ["checked"])

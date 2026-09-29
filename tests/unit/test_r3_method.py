@@ -22,6 +22,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 import r3_eval  # noqa: E402
 import r3_run  # noqa: E402
 
+@pytest.fixture(autouse=True)
+def guard(monkeypatch):
+    """The clean-tree guard is unit-tested in test_manifest; here only whether a method calls it."""
+    calls = []
+    monkeypatch.setattr(r3_eval, "assert_clean_for_preregistered_run", lambda: calls.append("checked"))
+    return calls
+
+
 RECORDED_ROW_KEYS = {"date", "symbol", "setup", "attempt", "priority", "entry_time", "entry", "stop0", "qty", "R",
                      "exit_reason", "exit_time", "tags"}
 
@@ -117,7 +125,7 @@ def test_realised_dollars_follow_actual_risk_not_nominal():
     assert realised_usd(rows.assign(pnl=[9.97, -6.02])) == pytest.approx(3.95)                 # Trade.pnl wins
 
 
-def test_dec0011_report(tmp_path, monkeypatch):
+def test_dec0011_report(tmp_path, monkeypatch, guard):
     rows = synth_rows()
     exp = write_results(tmp_path, monkeypatch, rows)
     out = r3_eval.main("EXP-T", holdout=False, method="dec0011")["F:GG-2"]
@@ -133,6 +141,9 @@ def test_dec0011_report(tmp_path, monkeypatch):
     assert out["capital"]["600.0"]["pnl_usd"] != round(float(df.R.sum() * 6.0), 2)     # nominal $ would differ
     assert (exp / "r3_eval_dec0011.json").exists() and not (exp / "r3_eval.json").exists()
     assert "stop-slippage stress" in (exp / "r3_eval_dec0011.md").read_text()
+    man = json.loads((exp / "manifest_r3_eval_dec0011.json").read_text())
+    assert man["args"]["method"] == "dec0011" and man["args"]["dsr_trials"] == global_trial_count()
+    assert man["data"]["roots"][-1].endswith("results_F.json") and guard == ["checked"]
 
 
 def test_dec0011_refuses_results_simulated_with_touch_fills(tmp_path, monkeypatch):
@@ -141,10 +152,11 @@ def test_dec0011_refuses_results_simulated_with_touch_fills(tmp_path, monkeypatc
         r3_eval.main("EXP-T", holdout=False, method="dec0011")
 
 
-def test_legacy_report_ignores_the_new_row_fields(tmp_path, monkeypatch):
+def test_legacy_report_ignores_the_new_row_fields(tmp_path, monkeypatch, guard):
     rows = synth_rows(200)
     bare = [{k: v for k, v in r.items() if k in RECORDED_ROW_KEYS} for r in rows]
     write_results(tmp_path, monkeypatch, rows, method=None, name="EXP-A")
     write_results(tmp_path, monkeypatch, bare, method=None, name="EXP-B")
     a, b = r3_eval.main("EXP-A", holdout=False), r3_eval.main("EXP-B", holdout=False)
     assert a == b and "ci95_block" not in a["F:GG-2"]["stats"] and "stop_stress_2.0x" not in a["F:GG-2"]["stats"]
+    assert guard == []                                    # legacy runs are not held to the pre-registration guard

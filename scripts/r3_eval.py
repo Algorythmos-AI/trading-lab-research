@@ -44,6 +44,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from wt.backtest.stats import deflated_sharpe_prob, random_control_pvalue, summarize  # noqa: E402
 from wt.backtest.stress import realised_usd, stressed_R  # noqa: E402
 from wt.core.config import ROOT  # noqa: E402
+from wt.research.manifest import assert_clean_for_preregistered_run, write_manifest  # noqa: E402
 from wt.research.method import LEGACY, METHODS, Method, get_method  # noqa: E402
 from wt.specs.loader import load_spec  # noqa: E402
 
@@ -105,6 +106,8 @@ def gates(s: dict) -> dict:
 
 def main(exp: str, holdout: bool, method: str = "legacy") -> dict:
     m = get_method(method)
+    if not m.legacy:
+        assert_clean_for_preregistered_run()     # a DEC-0011 evaluation must be reproducible from its commit
     spec = load_spec("SPEC-0001")
     ev = spec["evaluation"]
     span = ev["holdout_span"] if holdout else ev["oos_span"]
@@ -153,6 +156,8 @@ def main(exp: str, holdout: bool, method: str = "legacy") -> dict:
     name = ("r3_holdout" if holdout else "r3_eval") + ("" if m.legacy else f"_{m.name}")
     (d / f"{name}.json").write_text(json.dumps(summary, indent=1, default=str))
     (d / f"{name}.md").write_text("\n".join(lines))
+    write_manifest(d, {"exp": exp, "holdout": holdout, "method": m.name, "dsr_trials": n_trials},
+                   sorted(d.glob("results_*.json")), name=f"manifest_{name}.json")
     print("\n".join(lines))
     return summary
 

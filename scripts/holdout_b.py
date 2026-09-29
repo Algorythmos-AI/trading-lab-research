@@ -13,7 +13,9 @@ from wt.backtest.engine import Costs, simulate  # noqa: E402
 from wt.backtest.management import REGISTRY  # noqa: E402
 from wt.backtest.stats import summarize  # noqa: E402
 from wt.core.config import ROOT  # noqa: E402
+from wt.data.etf_minutes import OUT as ETF_DIR  # noqa: E402
 from wt.data.etf_minutes import load  # noqa: E402
+from wt.research.manifest import write_manifest  # noqa: E402
 from wt.signals import setups  # noqa: E402
 
 OUT = ROOT / "research/experiments/EXP-0011-holdout-B-qqqm"
@@ -46,5 +48,6 @@ m = pd.DataFrame(trades).assign(m=lambda x: pd.to_datetime(x.date).dt.to_period(
 OUT.mkdir(parents=True, exist_ok=True)
 (OUT / "results.json").write_text(json.dumps({"summary": s, "monthly": {str(k): v for k, v in m.to_dict("index").items()},
                                               "trades": trades}, indent=1, default=str))
+write_manifest(OUT, {"exp": OUT.name, "span": [str(H0), str(H1)], "slippage_per_share": cst.slippage_per_share}, [ETF_DIR])
 print(json.dumps(s, indent=1))
 print(m)

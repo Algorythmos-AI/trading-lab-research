@@ -17,7 +17,10 @@ from wt.backtest.engine import Costs, simulate  # noqa: E402
 from wt.backtest.management import REGISTRY  # noqa: E402
 from wt.backtest.runner import save_experiment, StratConfig  # noqa: E402
 from wt.backtest.stress import detail  # noqa: E402
+from wt.core.config import ROOT  # noqa: E402
+from wt.data.etf_minutes import OUT as ETF_DIR  # noqa: E402
 from wt.data.etf_minutes import load  # noqa: E402
+from wt.research.manifest import assert_clean_for_preregistered_run, write_manifest  # noqa: E402
 from wt.research.method import get_method, pop_method  # noqa: E402
 from wt.signals import setups  # noqa: E402
 
@@ -29,6 +32,8 @@ SLIP = {"SPY": 0.07, "QQQ": 0.022}   # 1c on SPYM (~SPY/7) and QQQM (~QQQ/2.28) 
 
 def main(exp_id: str, method: str = "legacy") -> None:
     m = get_method(method)
+    if not m.legacy:
+        assert_clean_for_preregistered_run()     # a DEC-0011 re-run must be reproducible from its commit
     cfgs, results = [], {}
     for sym in ("SPY", "QQQ"):
         df = load(sym)
@@ -71,6 +76,7 @@ def main(exp_id: str, method: str = "legacy") -> None:
             results[name] = {"trades": trades, "summary": {"n": len(r), "expectancy_R": float(r.mean()) if len(r) else 0}}
             print(f"{name:<28} n={len(r):<5} E={results[name]['summary']['expectancy_R']:+.3f}R", flush=True)
     save_experiment(exp_id, cfgs, {"n_trials": len(cfgs), "results": results} | ({} if m.legacy else {"method": m.name}))
+    write_manifest(ROOT / "research" / "experiments" / exp_id, {"exp": exp_id, "method": m.name}, [ETF_DIR])
 
 
 if __name__ == "__main__":
