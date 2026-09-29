@@ -31,6 +31,10 @@ jobs:
           uv venv --python 3.12 .venv
           uv pip install --require-hashes --python .venv/bin/python -r requirements.lock.txt
           if [ -f requirements-dev.lock.txt ]; then uv pip install --require-hashes --python .venv/bin/python -r requirements-dev.lock.txt; fi
+      - name: The locked environment installs on the Linux ARM64 VM (hash-checked, no download)
+        run: |
+          uv pip install --dry-run --require-hashes --no-deps --python-platform aarch64-unknown-linux-gnu \
+            --python-version 3.12 --target "$RUNNER_TEMP/arm64" -r requirements.lock.txt
       - name: Lint (ruff)
         run: .venv/bin/ruff check .
       - name: Lint workflows (actionlint + shellcheck)

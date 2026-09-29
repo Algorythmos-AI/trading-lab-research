@@ -45,6 +45,7 @@ from wt.core.clock import ET, et, to_utc_iso
 from wt.core.config import DATA_DIR, ROOT, env
 from wt.data.alpaca import DATA, AlpacaREST
 from wt.oms.manager import ACTIVE_POSITION, OMS, PlanStore, TradePlan
+from wt.ops import hc
 from wt.ops.alerts import Alerts, Pager
 from wt.risk import events
 from wt.risk.mandate import out_of_mandate
@@ -500,6 +501,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         skew_s=measure_skew(broker, clock), virtual=asdict(va) if va_ok else None)
     held_try = dt.datetime.min.replace(tzinfo=ET)
     short_paged = False
+    open_pinged = False
 
     while True:
         now = clock()
@@ -508,6 +510,9 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             continue
         if now >= close_dt:
             break
+        if not open_pinged:                   # the healthchecks "armed" check: the loop reached the open
+            open_pinged = True
+            hc.ping_async("wt-paper-b-armed", "", f"armed at the open; kill={kill_on} entries_off={len(off)}")
         try:
             if KILL.exists() != kill_on:
                 kill_on = not kill_on

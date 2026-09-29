@@ -219,6 +219,18 @@ _SECRET_PATTERNS = [
 ]
 
 
+# Environment variables that hold secrets, wherever they were loaded from (.env, the VM's tmpfs file, systemd).
+SECRET_KEYS = ("APCA_API_KEY_ID", "APCA_API_SECRET_KEY", "DASHBOARD_INGEST_SECRET", "VERCEL_AUTOMATION_BYPASS_SECRET",
+               "CRON_SECRET", "NTFY_TOPIC", "GH_TOKEN", "HC_PING_KEY", "WEBULL_APP_KEY", "WEBULL_APP_SECRET",
+               "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "RESTIC_PASSWORD")
+
+
+def secret_env_values(environ: dict[str, str] | None = None) -> set[str]:
+    """Values of the known secret variables in the environment (8+ characters), used only to scrub output."""
+    e = os.environ if environ is None else environ
+    return {v for k in SECRET_KEYS if len(v := e.get(k, "")) >= 8}
+
+
 def env_secret_values(env_files: list[Path]) -> set[str]:
     """Values from .env files (never their keys' names), used only to scrub output."""
     vals: set[str] = set()

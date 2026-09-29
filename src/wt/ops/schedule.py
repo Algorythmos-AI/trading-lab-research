@@ -1,10 +1,15 @@
 """The nightly jobs, defined once.
 
-The launchd templates (deploy/launchd/*.plist.in), the job runner (`wt.ops.jobs`) and the deploy gate
-(`wt.ops.window`) all read this table, so a schedule can't drift between them.
+The launchd agents (`wt.ops.agents`), the systemd units (`wt.ops.units`), the job runner (`wt.ops.jobs`) and the
+deploy gate (`wt.ops.window`) all read this table, so a schedule can't drift between them.
 
-launchd fires on the host's local clock (Australia/Sydney). Session logic never trusts that clock: every job
-converts to America/New_York itself, so both daylight-saving changes need no schedule edits.
+Two clocks, one table:
+  * launchd (the Mac) fires on the host's local clock, Australia/Sydney: `hour`/`minute`/`weekday`.
+  * systemd (the Linux VM) fires in America/New_York directly: `et` is an OnCalendar day-and-time spec, rendered
+    with the zone, so neither daylight-saving change ever needs a schedule edit (US clocks change on Sundays;
+    no job fires on a weekend).
+Session logic never trusts either: every job converts to America/New_York itself and waits in-process for its
+real start (the routine for 07:55 ET, paper-b for the open, forward for close + 20 min).
 """
 from __future__ import annotations
 
@@ -13,7 +18,21 @@ from dataclasses import dataclass
 from zoneinfo import ZoneInfo
 
 SYDNEY = ZoneInfo("Australia/Sydney")
+NEW_YORK = ZoneInfo("America/New_York")
 PY = ".venv/bin/python"
+_DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+
+def et_days(spec: str) -> set[int]:
+    """Weekdays (Monday = 0) of an OnCalendar day spec: "Mon..Fri", "Fri" or "Mon,Wed"."""
+    out: set[int] = set()
+    for part in spec.split(","):
+        if ".." in part:
+            a, b = (_DAYS.index(x) for x in part.split(".."))
+            out.update(range(a, b + 1))
+        else:
+            out.add(_DAYS.index(part))
+    return out
 
 
 @dataclass(frozen=True)
@@ -31,6 +50,8 @@ class Job:
     what: str = ""
     interval_s: int | None = None     # run every N seconds (StartInterval) instead of at a clock time
     preflight: bool = True        # refuse on failed preflight; the dashboard publishes the failures instead
+    et: str | None = None         # systemd OnCalendar day/time in America/New_York, e.g. "Mon..Fri 07:30"
+    runtime_max_h: float = 6.0    # systemd RuntimeMaxSec: above the job's own deadline plus its in-process wait
 
 
     def fires(self, after: dt.datetime, days: int = 8) -> list[dt.datetime]:
@@ -48,20 +69,41 @@ class Job:
                 out.append(t)
         return out
 
+    def fires_et(self, after: dt.datetime, days: int = 8) -> list[dt.datetime]:
+        """systemd fire times (America/New_York) strictly after ``after``, for the next ``days`` days."""
+        if not self.et:
+            return []
+        day_spec, hhmm = self.et.split()
+        wanted, (h, m) = et_days(day_spec), (int(x) for x in hhmm.split(":"))
+        start = after.astimezone(NEW_YORK)
+        out: list[dt.datetime] = []
+        for i in range(days + 1):
+            d = start.date() + dt.timedelta(days=i)
+            t = dt.datetime(d.year, d.month, d.day, h, m, tzinfo=NEW_YORK)
+            if d.weekday() in wanted and t > start:
+                out.append(t)
+        return out
+
 
 JOBS: dict[str, Job] = {j.name: j for j in (
     Job("routine", "com.wt.routine", 21, 30, ("scripts/premarket_routine.py",), "backtest", "routine",
-        what="SPEC-0001 pre-market dry run; waits in-process until 07:55 ET"),
+        what="SPEC-0001 pre-market dry run; waits in-process until 07:55 ET", et="Mon..Fri 07:30",
+        runtime_max_h=6),
+    # The runner arms up to 3 h before the open and runs to the close; its deadline is close + 45 min.
     Job("paper-b", "com.wt.paper-b", 22, 30, ("-c", "from wt.live.runner_b import run; run()"), "paper", "paper_b",
-        what="Strategy B paper session; waits in-process until 09:30 ET, exits at the close"),
+        what="Strategy B paper session; waits in-process until 09:30 ET, exits at the close", et="Mon..Fri 08:30",
+        runtime_max_h=10),
     # 05:40 Sydney is before the earliest possible close (06:00 AEST / 16:00 EDT). The runner waits in-process
     # until close + 20 min ET, so SIP data is older than the free plan's 15-minute delay.
+    # On systemd it starts at 12:40 ET, before the earliest early close (13:00 + 20 min), and waits.
     Job("forward", "com.wt.forward", 5, 40, ("scripts/forward_test.py",), "backtest", "forward", deadline_min=90,
-        what="Nightly forward test of the frozen candidates, 20 min after the close"),
+        what="Nightly forward test of the frozen candidates, 20 min after the close", et="Mon..Fri 12:40",
+        runtime_max_h=6),
     Job("weekly", "com.wt.weekly", 11, 0, ("scripts/weekly_scorecard.py",), "backtest", "scorecard", weekday=6,
-        deadline_min=30, what="Weekly scorecard after Friday's forward test (waits for the forward lock)"),
+        deadline_min=30, what="Weekly scorecard after Friday's forward test (waits for the forward lock)",
+        et="Fri 20:00", runtime_max_h=4),
     Job("dashboard", "com.wt.dashboard", 0, 0, ("-m", "wt.ops.publish"), "backtest", "dashboard", deadline_min=6,
         trading=False, interval_s=900, preflight=False,
-        what="Collect status, sanitize, publish to the Vercel dashboard every 15 minutes"),
+        what="Collect status, sanitize, publish to the Vercel dashboard every 15 minutes", runtime_max_h=0.25),
 )}
 TRADING_JOBS = [j.name for j in JOBS.values() if j.trading]
