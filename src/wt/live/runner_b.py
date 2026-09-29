@@ -68,26 +68,27 @@ T = TypeVar("T")
 _pool = cf.ThreadPoolExecutor(max_workers=4, thread_name_prefix="data")
 
 
-# Events G2 and the books rest on: fsynced so a power cut can't take them back (plan R3).
-DURABLE_EVENTS = frozenset({"armed", "entry_placed", "entry_filled", "trade_closed", "close_unknown", "session_end",
-                            "adopted_orphan", "adopted_prior_plan", "resumed_orphan", "short_position",
-                            "refuse_to_arm", "kill_state"})
-
-
-def log(event: str, **kw: Any) -> None:
-    """Append to the journal, hash-chained (wt.core.ledger; plan R3). Events tied to a plan or trade carry `idem`,
-    <id>:<event>, so a reader can drop a replay. Never raises: a full disk must not kill a runner that holds a
-    position (H4)."""
+def log(event: str, **kw: Any) -> bool:
+    """Append to the journal, hash-chained and fsynced (wt.core.ledger; plan R3). Every event is fsynced: G2's
+    incident rules read many of them, and a session has only tens. Events tied to a plan or trade carry `idem`,
+    <id>:<event>, so a reader can drop a replay. Returns whether the line is on disk. Never raises: a full disk must
+    not kill a runner that holds a position (H4)."""
     rec: dict[str, Any] = {"ts": dt.datetime.now(dt.UTC).isoformat(), "event": event, **kw}
     ident = kw.get("trade_id") or kw.get("plan_id")
     if ident and "idem" not in rec:
         rec["idem"] = f"{ident}:{event}"
+    ok = True
     try:
-        line = ledger.append(LIVE / "journal.jsonl", rec, fsync=event in DURABLE_EVENTS)
+        line = ledger.append(LIVE / "journal.jsonl", rec, fsync=True)
     except Exception as e:  # noqa: BLE001 — H4: the journal must never take the runner down
-        line = json.dumps(rec, default=str)
+        ok = False
+        try:
+            line = json.dumps(rec, default=str, skipkeys=True)
+        except Exception:  # noqa: BLE001 — a circular or odd value: the event name must still reach the log
+            line = repr(rec)[:2000]
         print(f"JOURNAL WRITE FAILED ({e.__class__.__name__}): {line}", file=sys.stderr, flush=True)
     print(line, flush=True)
+    return ok
 
 
 def with_deadline(fn: Callable[..., T], *args: Any, deadline_s: float = DATA_DEADLINE_S) -> T:
@@ -165,13 +166,31 @@ class Books:
     """Books each closed plan into the virtual account and the journal exactly once (audit C1, phase-2 L2).
 
     Order matters: the account is booked (idempotent by trade id) and saved, then trade_closed is journaled if it
-    is missing, then the plan is marked recorded. A crash anywhere in between is repaired by the next call.
+    is missing, then the plan is marked recorded. A crash anywhere in between is repaired by the next call. A failed
+    account save or journal write (a full disk) leaves the plan unrecorded, so every later call retries it; while
+    the account is unsaved, `flush()` is False and the runner opens nothing (a latch must reach the disk).
     A read-only account (its state could not be trusted) is never booked or saved; the plan stays unrecorded so a
     later, trusted session books it. An orphan's close is journaled but never booked: B did not open it."""
 
     def __init__(self, va: VirtualAccount, va_path: Any, readonly: bool) -> None:
         self.va, self.va_path, self.readonly = va, va_path, readonly
         self.journaled = journaled_closes()
+        self.unsaved = False
+        self._save_failing = False
+
+    def flush(self) -> bool:
+        """Save the account if a booking hasn't reached the disk yet. True when nothing is pending."""
+        if self.readonly or not self.unsaved:
+            return True
+        try:
+            self.va.save(self.va_path)
+        except OSError as e:
+            if not self._save_failing:
+                log("account_save_failed", error=e.__class__.__name__)
+            self._save_failing = True
+            return False
+        self.unsaved = self._save_failing = False
+        return True
 
     def close(self, plan: TradePlan, oms: OMS, day: dt.date, nxt: dt.date,
               persist: Callable[[TradePlan], None]) -> None:
@@ -190,15 +209,17 @@ class Books:
         if attributed and not self.readonly:
             if self.va.record_round_trip(day, nxt, cost=plan.filled_qty * entry, proceeds=plan.filled_qty * px,
                                          trade_id=plan.trade_id):
-                self.va.save(self.va_path)
+                self.unsaved = True
+        saved = self.flush()
         if plan.trade_id not in self.journaled:
             r_mult = (px - entry) / (entry - plan.stop) if attributed and entry > plan.stop else None
-            log("trade_closed", day=day, symbol=plan.symbol, entry=entry, exit=px, exit_price_estimated=estimated,
-                stop=plan.stop, qty=plan.filled_qty, R=r_mult, reason=plan.exit_reason, trade_id=plan.trade_id,
-                origin=plan.origin, booked=attributed and not self.readonly,
-                virtual=None if self.readonly else asdict(self.va))
-            self.journaled.add(plan.trade_id)
-        if not self.readonly:
+            written = log("trade_closed", day=day, symbol=plan.symbol, entry=entry, exit=px,
+                          exit_price_estimated=estimated, stop=plan.stop, qty=plan.filled_qty, R=r_mult,
+                          reason=plan.exit_reason, trade_id=plan.trade_id, origin=plan.origin,
+                          booked=attributed and not self.readonly, virtual=None if self.readonly else asdict(self.va))
+            if written is not False:                           # only an explicit failure is retried
+                self.journaled.add(plan.trade_id)
+        if not self.readonly and saved and plan.trade_id in self.journaled:
             plan.recorded = True
             persist(plan)
 
@@ -600,6 +621,8 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                 blockers = [f"entries_off:{r}" for r in off]
                 if today_store.broken or any(st.broken for st in stores.values()):
                     blockers.append("plan_not_persisted")
+                if not books.flush():
+                    blockers.append("account_not_persisted")
                 if kill_on:
                     blockers.append("kill_file")
                 if va.latched:
