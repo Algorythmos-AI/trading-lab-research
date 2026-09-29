@@ -12,7 +12,8 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
                  src/wt/ops/heartbeat.py src/wt/ops/preflight.py src/wt/ops/jobs.py src/wt/ops/migrate.py \
                  src/wt/ops/agents.py src/wt/ops/deploy.py src/wt/core/safety.py src/wt/core/ids.py \
                  src/wt/brokers/base.py src/wt/brokers/sim.py src/wt/brokers/alpaca_paper.py src/wt/risk/pretrade.py \
-                 src/wt/oms/manager.py src/wt/risk/virtual_account.py src/wt/ops/publish.py src/wt/brokers/alpaca_read.py src/wt/ops/evidence.py
+                 src/wt/oms/manager.py src/wt/risk/virtual_account.py src/wt/ops/publish.py src/wt/brokers/alpaca_read.py src/wt/ops/evidence.py \
+                 src/wt/research/manifest.py src/wt/research/method.py src/wt/research/trials.py
 JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
