@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assumedWindow, etOffsetMin, freshness } from "@/lib/freshness";
+import { assumedWindow, etOffsetMin, freshness, usEasternRuleOffsetMin } from "@/lib/freshness";
 
 const t = (iso: string) => Date.parse(iso);
 const PUBLISHED = [{ session: "2026-09-29", start: "2026-09-29T11:30:00+00:00", end: "2026-09-29T22:00:00+00:00" }];
@@ -8,6 +8,16 @@ describe("assumed weekday windows (after the published horizon)", () => {
   it("reads New York's offset through daylight saving", () => {
     expect(etOffsetMin(t("2026-10-01T13:00:00Z"))).toBe(-240);
     expect(etOffsetMin(t("2026-11-02T13:00:00Z"))).toBe(-300);
+  });
+
+  it("has a rule-based fallback that agrees with Intl through every DST change 2025-2030", () => {
+    for (let ms = Date.UTC(2025, 0, 1); ms < Date.UTC(2031, 0, 1); ms += 3_600_000) {
+      if (usEasternRuleOffsetMin(ms) !== etOffsetMin(ms)) throw new Error(new Date(ms).toISOString());
+    }
+    expect(usEasternRuleOffsetMin(Date.parse("2026-11-01T05:59:00Z"))).toBe(-240);
+    expect(usEasternRuleOffsetMin(Date.parse("2026-11-01T06:00:00Z"))).toBe(-300);
+    expect(usEasternRuleOffsetMin(Date.parse("2027-03-14T06:59:00Z"))).toBe(-300);
+    expect(usEasternRuleOffsetMin(Date.parse("2027-03-14T07:00:00Z"))).toBe(-240);
   });
 
   it("is 07:30-18:00 ET on weekdays only", () => {

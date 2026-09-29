@@ -51,19 +51,35 @@ export function allWindowsEnded(
   });
 }
 
-/** America/New_York's UTC offset in minutes at `ms` (e.g. -240), or null without time-zone data. */
-export function etOffsetMin(ms: number): number | null {
+/** The US rule since 2007: EDT (-240) from the second Sunday of March 02:00 local (07:00 UTC) to the first Sunday
+ * of November 02:00 local (06:00 UTC), EST (-300) otherwise. Used when the runtime has no time-zone data. */
+export function usEasternRuleOffsetMin(ms: number): number {
+  const y = new Date(ms).getUTCFullYear();
+  const nthSunday = (month: number, n: number) => {
+    const first = new Date(Date.UTC(y, month, 1)).getUTCDay();
+    return 1 + ((7 - first) % 7) + 7 * (n - 1);
+  };
+  const start = Date.UTC(y, 2, nthSunday(2, 2), 7);
+  const end = Date.UTC(y, 10, nthSunday(10, 1), 6);
+  return ms >= start && ms < end ? -240 : -300;
+}
+
+/** America/New_York's UTC offset in minutes at `ms` (e.g. -240). Falls back to the US rule (above) when Intl
+ * can't say (older browsers lack `shortOffset`), so the server and the browser never disagree. */
+export function etOffsetMin(ms: number): number {
   try {
     const name = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", timeZoneName: "shortOffset" })
       .formatToParts(new Date(ms))
       .find((p) => p.type === "timeZoneName")?.value;
     const m = /^GMT([+-])(\d{1,2})(?::(\d{2}))?$/.exec(name ?? "");
-    if (!m) return null;
-    const v = Number(m[2]) * 60 + Number(m[3] ?? 0);
-    return m[1] === "-" ? -v : v;
+    if (m) {
+      const v = Number(m[2]) * 60 + Number(m[3] ?? 0);
+      return m[1] === "-" ? -v : v;
+    }
   } catch {
-    return null;
+    // fall through to the rule
   }
+  return usEasternRuleOffsetMin(ms);
 }
 
 /**
@@ -74,7 +90,6 @@ export function etOffsetMin(ms: number): number | null {
  */
 export function assumedWindow(nowMs: number): ExpectedWindow | null {
   const off = etOffsetMin(nowMs);
-  if (off === null) return null;
   const wall = new Date(nowMs + off * 60_000); // its UTC fields read as New York wall time
   const dow = wall.getUTCDay();
   if (dow === 0 || dow === 6) return null;

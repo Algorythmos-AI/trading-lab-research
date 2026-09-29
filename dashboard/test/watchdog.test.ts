@@ -120,10 +120,23 @@ describe("watchdog state machine", () => {
     expect(evaluate(ahead, state(), at("2026-10-02T13:00:00Z")).notices).toEqual([]);
   });
 
-  it("does nothing without a snapshot or an as_of", () => {
-    expect(evaluate(null, state(), at("2026-09-29T12:40:00Z")).notices).toEqual([]);
+  it("pages once per window when there is no snapshot, or none with a readable time", () => {
+    // Tuesday 08:40 ET: inside the published window (and an assumed weekday one).
+    const d1 = evaluate(null, state(), at("2026-09-29T12:40:00Z"));
+    expect(d1.notices.map((n) => n.title)).toEqual(["Dashboard has no readable snapshot"]);
+    expect(d1.notices[0]?.priority).toBe(4);
+    expect(d1.next).toMatchObject({ level: "stopped", window: "2026-09-29" });
+    expect(evaluate(null, d1.next, at("2026-09-29T14:00:00Z")).notices).toEqual([]);   // same window: no repeat
     const noTime = cleanSnapshot({ as_of: null });
-    expect(evaluate(noTime, state(), at("2026-09-29T12:40:00Z")).notices).toEqual([]);
+    expect(evaluate(noTime, state(), at("2026-09-29T12:40:00Z")).notices.map((n) => n.kind)).toEqual(["stopped"]);
+    // A readable snapshot again clears it.
+    const back = evaluate(cleanSnapshot({ as_of: "2026-09-29T14:05:00Z" }), d1.next, at("2026-09-29T14:10:00Z"));
+    expect(back.notices.map((n) => n.kind)).toEqual(["recovered"]);
+  });
+
+  it("stays quiet without a snapshot outside any window", () => {
+    expect(evaluate(null, state(), at("2026-09-30T02:00:00Z")).notices).toEqual([]);      // Tuesday 22:00 ET
+    expect(evaluate(null, state(), at("2026-10-03T15:00:00Z")).notices).toEqual([]);      // Saturday
   });
 
   it("asks for a history prune once per UTC day", () => {

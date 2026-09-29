@@ -1,6 +1,6 @@
 // Pure watchdog state machine: given the latest snapshot, the previous alert state and `now`,
 // decide what to page and what to persist. No I/O here; see watchdog-run.ts for the effects.
-import { freshness, LATE_MIN, OFFLINE_HOURS, STOPPED_MIN, type Freshness } from "./freshness";
+import { assumedWindow, freshness, LATE_MIN, OFFLINE_HOURS, STOPPED_MIN, type Freshness } from "./freshness";
 import type { Notice } from "./ntfy";
 import type { Snapshot } from "./types";
 
@@ -89,6 +89,16 @@ function stopped(min: number, session: string, assumed = false): Notice {
   };
 }
 
+function unreadable(session: string): Notice {
+  return {
+    kind: "stopped",
+    title: "Dashboard has no readable snapshot",
+    message: `The latest status snapshot is missing or has no readable time during the ${session} trading window, so nothing can say the host is alive. Check the publisher and the Blob store.`,
+    priority: 4,
+    tags: ["rotating_light"],
+  };
+}
+
 function recovered(min: number): Notice {
   return {
     kind: "recovered",
@@ -116,9 +126,23 @@ export function evaluate(snapshot: Snapshot | null, prev: AlertState, now: Date)
   if (prune) next.last_prune_day = day;
   const notices: Notice[] = [];
 
-  if (!snapshot) return { next, notices, prune, fresh: null };
-  const fresh = freshness(snapshot.as_of, snapshot.expected_windows, now.getTime());
-  if (fresh.ageMin === null) return { next, notices, prune, fresh };
+  const fresh = snapshot ? freshness(snapshot.as_of, snapshot.expected_windows, now.getTime()) : null;
+  if (!snapshot || !fresh || fresh.ageMin === null) {
+    // No snapshot, or no readable time in it: the dead-man's switch can't see the host, which is itself a page
+    // on a weekday (review of R8). Once per window episode, like "stopped".
+    const w = fresh?.window ?? assumedWindow(now.getTime());
+    if (w) {
+      const session = w.session || w.start || "current";
+      const baseline: AlertLevel = prev.window === session ? prev.level : "ok";
+      if (baseline !== "stopped") {
+        notices.push(unreadable(session));
+        if (baseline === "ok") next.since = now.toISOString();
+      }
+      next.level = "stopped";
+      next.window = session;
+    }
+    return { next, notices, prune, fresh };
+  }
   const minutes = Math.floor(fresh.ageMin);
 
   if (fresh.ageMin <= LATE_MIN) {
