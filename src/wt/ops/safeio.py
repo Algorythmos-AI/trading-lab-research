@@ -14,10 +14,12 @@ import re
 import subprocess
 import tempfile
 import time
-from collections.abc import Iterator
+import warnings
+from collections.abc import Callable, Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
+T = TypeVar("T")
 MAX_JSON_BYTES = 25 * 1024 * 1024
 TAIL_BYTES = 64 * 1024
 
@@ -146,6 +148,39 @@ def atomic_write(path: Path, text: str, root: Path) -> None:
         with contextlib.suppress(FileNotFoundError):
             os.unlink(tmp)
         raise
+
+
+def atomic_replace(path: Path, write: Callable[[Path], None]) -> None:
+    """``write(tmp)`` to a temp file next to ``path``, then rename it over ``path``: readers (another job sharing the
+    cache) see the old file or the new one, never a torn one. For writers that need a path, such as parquet.
+    The temp name starts with a dot and ends in .tmp, so no ``*.parquet`` glob picks it up."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    os.close(fd)
+    try:
+        write(Path(tmp))
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(tmp)
+        raise
+
+
+def read_cache(path: Path, read: Callable[[Path], T], empty: Callable[[], T]) -> T:
+    """A shared cache's contents, or ``empty()`` if the file is missing. A torn or corrupt file (a writer killed
+    before caches were written atomically) is treated as empty with a warning, and kept aside as ``<name>.corrupt``
+    so the next save neither crashes on it nor silently destroys it."""
+    if not path.exists():
+        return empty()
+    try:
+        return read(path)
+    except Exception as e:  # noqa: BLE001 — any parse failure means the same thing: the cache is unusable
+        bad = path.with_name(path.name + ".corrupt")
+        with contextlib.suppress(OSError):
+            os.replace(path, bad)
+        warnings.warn(f"cache {path.name} is unreadable ({e.__class__.__name__}); starting empty, kept as {bad.name}",
+                      RuntimeWarning, stacklevel=2)
+        return empty()
 
 
 def append_capped(path: Path, line: str, root: Path, max_bytes: int = 1024 * 1024) -> None:

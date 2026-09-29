@@ -16,6 +16,7 @@ from wt.backtest.management import REGISTRY
 from wt.core.clock import et, to_utc_iso
 from wt.core.config import DATA_DIR, ROOT
 from wt.data.alpaca import AlpacaREST
+from wt.ops.safeio import atomic_replace, read_cache
 from wt.signals import setups
 
 MIN_DIR = DATA_DIR / "minute"
@@ -25,12 +26,12 @@ def minute_bars(a: AlpacaREST, d: dt.date, symbols: list[str], close_hhmm: str =
     """Regular-session 1m bars (09:30 -> close), cached per day."""
     MIN_DIR.mkdir(parents=True, exist_ok=True)
     f = MIN_DIR / f"{d}.parquet"
-    have = pd.read_parquet(f) if f.exists() else pd.DataFrame(columns=["symbol"])
+    have = read_cache(f, pd.read_parquet, lambda: pd.DataFrame(columns=["symbol"]))
     need = sorted(set(symbols) - set(have.symbol.unique()))
     if need:
         new = a.bars(need, "1Min", to_utc_iso(et(d, "09:30")), to_utc_iso(et(d, close_hhmm)), feed="sip")
         have = pd.concat([have, new], ignore_index=True) if len(have) else new
-        have.to_parquet(f)
+        atomic_replace(f, have.to_parquet)          # shared by the batch runners and the nightly forward test
     return {s: g.sort_values("t").reset_index(drop=True) for s, g in have[have.symbol.isin(symbols)].groupby("symbol")}
 
 

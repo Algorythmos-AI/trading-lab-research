@@ -22,6 +22,7 @@ from wt.core.clock import et, to_utc_iso
 from wt.core.config import DATA_DIR
 from wt.data.alpaca import AlpacaREST
 from wt.data.edgar import SharesOutstanding
+from wt.ops.safeio import atomic_replace, read_cache
 from wt.scanner.catalyst import best_catalyst
 from wt.scanner.ranking import Candidate
 
@@ -32,8 +33,8 @@ class PMCache:
     """(symbol, date) -> pre-market aggregates, persisted."""
 
     def __init__(self):
-        self.df = pd.read_parquet(PM_CACHE) if PM_CACHE.exists() else pd.DataFrame(
-            columns=["symbol", "date", "pm_volume", "pm_dollar_vol", "last_0925", "pm_high", "n_bars"])
+        self.df = read_cache(PM_CACHE, pd.read_parquet, lambda: pd.DataFrame(
+            columns=["symbol", "date", "pm_volume", "pm_dollar_vol", "last_0925", "pm_high", "n_bars"]))
         self.idx = {(s, d) for s, d in zip(self.df.symbol, self.df.date, strict=False)}
         self.new: list[dict] = []
 
@@ -54,8 +55,7 @@ class PMCache:
         if self.new:
             self.df = pd.concat([self.df, pd.DataFrame(self.new)], ignore_index=True)
             self.new = []
-            PM_CACHE.parent.mkdir(parents=True, exist_ok=True)
-            self.df.to_parquet(PM_CACHE)
+            atomic_replace(PM_CACHE, self.df.to_parquet)     # the pool build and the forward test share it
 
 
 def fetch_pm(a: AlpacaREST, cache: PMCache, symbols: list[str], dates: list[dt.date]) -> None:
