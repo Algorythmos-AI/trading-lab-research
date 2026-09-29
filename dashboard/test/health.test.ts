@@ -24,7 +24,7 @@ describe("computeHealth", () => {
     const f = fixture();
     const h = computeHealth(f, new Date("2026-09-29T21:50:00Z"));
     expect(h.level).toBe("amber");
-    expect(codes(h)).toEqual(["kill", "job:routine", "swap", "preflight"]);
+    expect(codes(h)).toEqual(["kill", "job:routine", "disk", "swap", "preflight"]); // 4 GB: under the 15 GB to keep
     expect(h.reasons.find((r) => r.code === "job:routine")?.text).toBe("Pre-market routine failed (exit 1).");
     expect(h.reasons.find((r) => r.code === "preflight")?.text).toMatch(/^5 preflight checks failing: on main, /);
   });
@@ -37,6 +37,27 @@ describe("computeHealth", () => {
       );
       expect(h.level).toBe("red");
       expect(codes(h)).toEqual([`alert:${key}`]);
+    });
+
+    it("disk below the 3 GB floor is RED (tonight's jobs refuse)", () => {
+      const s = cleanSnapshot();
+      s.ops!.host!.disk_free_gb = 2.9;
+      const h = computeHealth(s, IN_WINDOW);
+      expect(h.level).toBe("red");
+      expect(codes(h)).toEqual(["disk-floor"]);
+    });
+
+    it("a position outside B's mandate is RED unless recorded as legacy", () => {
+      const s = cleanSnapshot();
+      s.ops!.account = { trading_blocked: false, positions: [{ symbol: "AAPL", qty: 1, in_mandate: false, legacy: false }] };
+      expect(codes(computeHealth(s, IN_WINDOW))).toEqual(["mandate:AAPL"]);
+      s.ops!.account.positions![0]!.legacy = true;
+      expect(computeHealth(s, IN_WINDOW).level).toBe("green");
+    });
+
+    it("alert paper-b:close-unknown is RED", () => {
+      const s = cleanSnapshot({ alerts: { firing: [{ key: "paper-b:close-unknown", since: null, title: "t" }] } });
+      expect(computeHealth(s, IN_WINDOW).level).toBe("red");
     });
 
     it("ignores other alerts for RED", () => {
@@ -95,10 +116,15 @@ describe("computeHealth", () => {
       expect(codes(computeHealth(cleanSnapshot({ collector: { exit_code: 1 } }), IN_WINDOW))).toEqual(["collector"]);
     });
 
-    it("disk below the floor", () => {
+    it("disk under the 15 GB to keep free is amber", () => {
       const s = cleanSnapshot();
-      s.ops!.host!.disk_free_gb = 2.9;
+      s.ops!.host!.disk_free_gb = 9.5;
       expect(codes(computeHealth(s, IN_WINDOW))).toEqual(["disk"]);
+    });
+
+    it("an unreadable account source is never green", () => {
+      const s = cleanSnapshot({ collector: { exit_code: 0, sources: { account: { ok: false, stale: true } } } });
+      expect(codes(computeHealth(s, IN_WINDOW))).toEqual(["account-stale"]);
     });
 
     it("swap at the warning level", () => {

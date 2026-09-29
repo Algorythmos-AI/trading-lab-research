@@ -312,7 +312,8 @@ def _paper(p: dict[str, Any]) -> dict[str, Any]:
     for r in p.get("recent") or []:
         if not isinstance(r, dict):
             continue
-        raw = r.get("raw") if isinstance(r.get("raw"), dict) else {}
+        got = r.get("raw")
+        raw: dict[str, Any] = got if isinstance(got, dict) else {}
         if raw.get("blockers"):
             detail: str | None = blocker_codes(raw["blockers"])
         elif raw.get("error"):

@@ -18,7 +18,7 @@ export function cleanSnapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     alerts: { firing: [] },
     collector: { exit_code: 0 },
     ops: {
-      host: { disk_free_gb: 10, disk_floor_gb: 3, swap_warn_pct: 85, swap: { used_pct: 20 } },
+      host: { disk_free_gb: 40, disk_floor_gb: 3, swap_warn_pct: 85, swap: { used_pct: 20 } },
       account: { trading_blocked: false },
     },
     preflight: [{ name: "on main", ok: true, detail: "" }],
