@@ -14,11 +14,13 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
                  src/wt/brokers/base.py src/wt/brokers/sim.py src/wt/brokers/alpaca_paper.py src/wt/risk/pretrade.py \
                  src/wt/oms/manager.py src/wt/risk/virtual_account.py src/wt/ops/publish.py src/wt/brokers/alpaca_read.py src/wt/ops/evidence.py \
                  src/wt/research/manifest.py src/wt/research/method.py src/wt/research/trials.py \
-                 src/wt/ops/thresholds.py src/wt/analytics/g2.py src/wt/risk/mandate.py
+                 src/wt/ops/thresholds.py src/wt/analytics/g2.py src/wt/risk/mandate.py \
+                 src/wt/ops/dashguard.py src/wt/ops/drill.py
 JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
 .PHONY: help bootstrap lint typecheck test ci hooks status gate deploy rollback migrate-state preflight publish-verify \
+        watchdog-drill dashboard-deploy \
         agents-diff install-trading-agents install-dashboard-agent publish schema kill unkill reset-latch evidence
 
 help: ## List the tasks
@@ -80,6 +82,17 @@ publish: ## Collect, sanitize and publish the dashboard snapshot now (DRY_RUN=1 
 
 publish-verify: ## Publish now, then read /api/health back and check it serves this snapshot
 	$(PY) -m wt.ops.publish --verify
+
+watchdog-drill: ## Two real DRILL pages through the production watchdog path (late, then recovered); no state touched
+	$(PY) -m wt.ops.drill
+
+dashboard-deploy: ## OWNER: deploy origin/main's dashboard to production from a clean worktree, stamped with its commit
+	@set -e; git fetch --quiet origin main; sha=$$(git rev-parse origin/main); tmp=$$(mktemp -d); \
+	git worktree add --quiet --detach "$$tmp/wt" "$$sha"; \
+	trap 'git worktree remove --force "$$tmp/wt" >/dev/null 2>&1 || true; rm -rf "$$tmp"' EXIT; \
+	mkdir -p "$$tmp/wt/dashboard/.vercel" && cp dashboard/.vercel/project.json "$$tmp/wt/dashboard/.vercel/"; \
+	cd "$$tmp/wt/dashboard" && vercel deploy --prod --yes --build-env BUILD_SHA="$$sha" && \
+	short=$$(printf %.12s "$$sha"); echo "deployed $$short; /api/health should now report version $$short"
 
 schema: ## Regenerate the dashboard contract: snapshot.schema.json (from ALLOW), thresholds.gen.ts, and the TS types
 	$(PY) -c "import json; from wt.ops.publish import to_schema, SCHEMA_PATH; SCHEMA_PATH.parent.mkdir(parents=True, exist_ok=True); SCHEMA_PATH.write_text(json.dumps(to_schema(), indent=2) + '\\n')"

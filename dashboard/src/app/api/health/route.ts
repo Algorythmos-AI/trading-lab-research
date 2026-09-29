@@ -5,7 +5,9 @@ export const dynamic = "force-dynamic";
 
 export async function GET(): Promise<Response> {
   const result = await loadSnapshot();
-  const sha = process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.BUILD_SHA ?? null;
+  // BUILD_SHA is inlined at build time (next.config.ts) by CI and `make dashboard-deploy`. `||`, not `??`:
+  // VERCEL_GIT_COMMIT_SHA is an empty string on CLI deploys, which `??` would keep.
+  const sha = process.env.BUILD_SHA || process.env.VERCEL_GIT_COMMIT_SHA || null;
   return Response.json(
     {
       ok: true,
