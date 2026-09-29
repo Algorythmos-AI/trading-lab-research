@@ -22,8 +22,20 @@ def test_an_unchained_prefix_is_accepted_and_the_chain_starts_after_it(tmp_path)
     p.write_text('{"event": "old"}\n{"event": "older"}\n')
     ledger.append(p, {"event": "new"})
     assert ledger.verify_chain(p) == []
-    p.write_text(p.read_text() + '{"event": "sneaky, unchained"}\n')
-    assert ledger.verify_chain(p) == ["line 4: no prev_sha256 after the chain started"]
+
+
+def test_unchained_lines_after_a_rollback_are_notes_not_breaks(tmp_path):
+    """Older code (a rollback) writes unchained lines. That must not turn entries off for good; the next chained
+    line commits to them, so changing them later is still a break."""
+    p = tmp_path / "j.jsonl"
+    ledger.append(p, {"event": "new code"})
+    with open(p, "a") as f:
+        f.write('{"event": "old code after a rollback"}\n')
+    ledger.append(p, {"event": "new code again"})
+    assert ledger.verify_chain(p) == []
+    assert ledger.notes(p) == ["line 2: unchained line after the chain started (older code?)"]
+    p.write_text(p.read_text().replace("after a rollback", "EDITED"))
+    assert ledger.verify_chain(p) == ["line 3: prev_sha256 does not match line 2"]
 
 
 def test_edits_and_deletions_are_detected(tmp_path):
@@ -45,7 +57,8 @@ def test_a_torn_last_line_is_ended_not_glued(tmp_path):
     ledger.append(p, {"event": "b"})
     lines = p.read_text().splitlines()
     assert lines[1] == '{"event": "torn' and json.loads(lines[2])["event"] == "b"
-    assert ledger.verify_chain(p) == ["line 2: not a JSON object"]      # reported, and the chain continues
+    assert ledger.verify_chain(p) == []                                 # sealed by the next line: not a break
+    assert ledger.notes(p) == ["line 2: not a JSON object (a torn line?)"]
 
 
 def test_a_last_line_longer_than_the_tail_window(tmp_path):
@@ -76,10 +89,9 @@ def test_runner_log_chains_fsyncs_durable_events_and_adds_idem(tmp_path, monkeyp
     synced = []
     real = os.fsync
     monkeypatch.setattr(os, "fsync", lambda fd: (synced.append(fd), real(fd))[1])
-    runner_b.log("loop_error", error="X")
-    assert synced == []
+    assert runner_b.log("loop_error", error="X") is True
     runner_b.log("trade_closed", trade_id="t-1", R=1.0)
-    assert len(synced) == 1
+    assert len(synced) == 2                                             # every event reaches the disk
     rows = [json.loads(x) for x in (tmp_path / "journal.jsonl").read_text().splitlines()]
     assert rows[1]["idem"] == "t-1:trade_closed" and "idem" not in rows[0]
     assert ledger.verify_chain(tmp_path / "journal.jsonl") == []
@@ -92,6 +104,59 @@ def test_runner_log_never_raises(tmp_path, monkeypatch, capsys):
         raise OSError(28, "No space left on device")
 
     monkeypatch.setattr(ledger, "append", boom)
-    runner_b.log("trade_closed", trade_id="t-2")
+    assert runner_b.log("trade_closed", trade_id="t-2") is False
     err = capsys.readouterr().err
     assert "JOURNAL WRITE FAILED (OSError)" in err and "t-2" in err
+    circular: dict = {}
+    circular["self"] = circular
+    assert runner_b.log("odd", weird={(1, 2): "tuple key"}, loop=circular) is False    # the fallback can't raise
+
+
+class _FakeOMS:
+    def exit_fill(self, plan):
+        return plan.exit_fill_price
+
+
+def _closed_plan(attempt=0):
+    from wt.oms.manager import TradePlan
+    return TradePlan(date="2026-10-01", strategy="B", symbol="QQQM", qty=2, trigger=200.2, limit=200.4, stop=199.0,
+                     target=203.0, attempt=attempt, filled_qty=2, avg_entry=200.0, exit_fill_price=198.0,
+                     exit_reason="stop", state="closed")
+
+
+def test_a_failed_account_save_is_retried_and_blocks_entries_until_it_lands(tmp_path, monkeypatch):
+    import datetime as dt
+    from wt.risk.virtual_account import VirtualAccount
+    monkeypatch.setattr(runner_b, "LIVE", tmp_path)
+    plan = _closed_plan()
+    va = VirtualAccount()
+    books = runner_b.Books(va, tmp_path / "va.json", readonly=False)
+    real_save = VirtualAccount.save
+    monkeypatch.setattr(VirtualAccount, "save", lambda self, path: (_ for _ in ()).throw(OSError(28, "full")))
+    persisted = []
+    day = dt.date(2026, 10, 1)
+    books.close(plan, _FakeOMS(), day, day + dt.timedelta(days=1), persisted.append)
+    assert books.unsaved and not books.flush() and not plan.recorded and persisted == []
+    monkeypatch.setattr(VirtualAccount, "save", real_save)
+    books.close(plan, _FakeOMS(), day, day + dt.timedelta(days=1), persisted.append)
+    assert books.flush() and plan.recorded and persisted == [plan]
+    assert VirtualAccount.load(tmp_path / "va.json").recorded_trades == [plan.trade_id]
+    rows = [json.loads(x) for x in (tmp_path / "journal.jsonl").read_text().splitlines()]
+    assert [r["event"] for r in rows].count("trade_closed") == 1
+    assert [r["event"] for r in rows].count("account_save_failed") == 1
+
+
+def test_a_failed_journal_write_leaves_the_close_to_be_retried(tmp_path, monkeypatch):
+    import datetime as dt
+    from wt.risk.virtual_account import VirtualAccount
+    monkeypatch.setattr(runner_b, "LIVE", tmp_path)
+    plan = _closed_plan(attempt=1)
+    books = runner_b.Books(VirtualAccount(), tmp_path / "va.json", readonly=False)
+    real = ledger.append
+    monkeypatch.setattr(ledger, "append", lambda *a, **k: (_ for _ in ()).throw(OSError(28, "full")))
+    day = dt.date(2026, 10, 1)
+    books.close(plan, _FakeOMS(), day, day, lambda p: None)
+    assert not plan.recorded and plan.trade_id not in books.journaled
+    monkeypatch.setattr(ledger, "append", real)
+    books.close(plan, _FakeOMS(), day, day, lambda p: None)
+    assert plan.recorded and plan.trade_id in books.journaled
