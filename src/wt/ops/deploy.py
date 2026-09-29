@@ -22,11 +22,10 @@ from pathlib import Path
 from typing import Any
 
 from wt.core.config import ROOT, STATE_DIR
-from wt.ops import agents, dashguard, migrate, preflight
+from wt.ops import agents, dashguard, host, migrate, preflight
 from wt.ops.alerts import Alerts
 from wt.ops.locks import held
 from wt.ops.schedule import JOBS, PY, SYDNEY, TRADING_JOBS
-from wt.ops.status import parse_launchctl_list
 from wt.ops.window import deploy_blockers, load_sessions
 
 DEPLOY_DIR = STATE_DIR / "deploy"
@@ -44,12 +43,8 @@ def _run(*cmd: str, check: bool = True, timeout: float = 600) -> subprocess.Comp
 
 
 def running_jobs() -> dict[str, bool]:
-    labels = [j.label for j in JOBS.values() if j.trading]
-    try:
-        text = subprocess.run(["launchctl", "list"], capture_output=True, text=True, timeout=10).stdout
-    except (OSError, subprocess.SubprocessError):
-        return {"launchctl": True}          # can't tell: treat as running (fail closed)
-    return {k: bool(v["running"]) for k, v in parse_launchctl_list(text, labels).items()}
+    """Which trading jobs launchd/systemd shows running (wt.ops.host); fails closed when it can't tell."""
+    return host.current().running_jobs([j for j in JOBS.values() if j.trading])
 
 
 def gate_blockers(now: dt.datetime | None = None) -> list[str]:

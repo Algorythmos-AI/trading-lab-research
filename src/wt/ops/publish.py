@@ -553,6 +553,13 @@ def verify_stored(snap: dict[str, Any], url: str, bypass: str | None) -> tuple[b
     return True, f"health serves run {got[0]} as of {got[1]}"
 
 
+def _nonempty_readable(p: Path) -> bool:
+    try:
+        return bool(p.read_text(encoding="utf-8", errors="replace").strip())
+    except OSError:
+        return False
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m wt.ops.publish")
     ap.add_argument("--dry-run", action="store_true", help="build and validate, write the outbox, don't send")
@@ -577,7 +584,13 @@ def _publish(a: argparse.Namespace) -> int:
     if not docs:
         print("no collector documents to publish", file=sys.stderr)
         return 2
-    redact = safeio.Redactor(safeio.env_secret_values([ROOT / ".env"]))
+    env_file = os.environ.get("WT_ENV_FILE")
+    if env_file and not _nonempty_readable(Path(env_file)):
+        # Fail closed: without the secrets file the redactor would know no secret values to scrub.
+        print(f"WT_ENV_FILE is set but {env_file} is missing, unreadable or empty: not publishing", file=sys.stderr)
+        return 2
+    secrets = safeio.env_secret_values([Path(env_file)] if env_file else [ROOT / ".env"])
+    redact = safeio.Redactor(secrets | safeio.secret_env_values())
     leak = LeakIndex(corpus_files(), cache=OUT / "cache")
     san = Sanitizer(redact, leak if leak.available else None, strict=not leak.available)
     run_id = now.strftime("%Y%m%dT%H%M%SZ") + "-" + hashlib.sha1(os.urandom(8)).hexdigest()[:6]
