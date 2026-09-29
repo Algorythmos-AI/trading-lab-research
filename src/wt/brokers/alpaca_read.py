@@ -34,7 +34,8 @@ class AccountReader:
     def positions(self) -> list[tuple[str, int]]:
         """(symbol, signed quantity): short is negative."""
         out: list[tuple[str, int]] = []
-        for p in list(self._c.get_all_positions()):
+        raw: list[Any] = list(self._c.get_all_positions())   # alpaca-py types these as model-or-raw unions
+        for p in raw:
             q = int(float(_plain(p.qty)))
             if str(_plain(getattr(p, "side", ""))) == "short" and q > 0:
                 q = -q
