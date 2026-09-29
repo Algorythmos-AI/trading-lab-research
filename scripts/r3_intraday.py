@@ -177,10 +177,10 @@ def intraday_day(a, d: dt.date, trial: str, sessions: list[dt.date], closes: dic
     CTL.clear()
     if trial == "MP-1":
         today = daily.on(d)
-        splits.refresh(sorted(today[(today.v >= 1_000_000) & (today.l <= 10.0)].index))
+        splits.refresh(sorted(today[(today.v >= 1_000_000) & (today.l <= 10.0)].index), d)
         return mp_day(a, d, p, daily, splits.sf, shares, spec, spread_at, close, skips)
     syms = rev_superset(daily, d, sessions)
-    splits.refresh(syms)
+    splits.refresh(syms, d)
     cands, _ = rev_day(a, d, p, daily, splits.sf, spread_at, close, skips, syms)
     return cands
 
