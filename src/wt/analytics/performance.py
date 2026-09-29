@@ -7,7 +7,11 @@ Honest at small samples, because B trades at most once a day and for weeks will 
   * a profit factor with no losing trade is infinite: reported as None with pf_no_losses=True;
   * trades whose exit price was estimated (no fill found) are excluded from the statistics;
   * the CI is a bootstrap by trading day (with one trade a day, the same as by trade), seeded from the data so it
-    doesn't jitter between publishes.
+    doesn't jitter between publishes;
+  * a 0 R trade is breakeven: counted in n and the expectancy, but neither a win nor a loss;
+  * Sharpe uses G2's clean sessions only (armed, completed, KILL off, no refusal or incident), a clean session
+    without a trade counting 0 R, and drops any session whose trade had an estimated exit;
+  * the maximum drawdown is measured on every trade, before the published curve is thinned.
 Equity is the virtual account's (US$600 start, the account B is sized on), never the broker account's.
 """
 from __future__ import annotations
@@ -16,7 +20,8 @@ import hashlib
 import json
 import math
 import random
-from collections.abc import Sequence
+from collections import defaultdict
+from collections.abc import Collection, Sequence
 from typing import Any
 
 from wt.ops import thresholds
@@ -41,11 +46,23 @@ def bootstrap_ci(rs: Sequence[float], n_boot: int = 2000, alpha: float = 0.05) -
     return round(lo, 4), round(hi, 4)
 
 
-def stats(trades: Sequence[dict[str, Any]], sessions: int = 0) -> dict[str, Any]:
+def daily_series(trades: Sequence[dict[str, Any]], session_days: Collection[str]) -> list[float]:
+    """R per clean session (0 when it had no trade), leaving out sessions whose trade had an estimated exit."""
+    by_day: dict[str, float] = defaultdict(float)
+    for t in usable(trades):
+        by_day[str(t.get("day") or "")[:10]] += _r(t) or 0.0
+    estimated = {str(t.get("day") or "")[:10] for t in trades if t.get("exit_price_estimated")}
+    return [by_day.get(d, 0.0) for d in sorted(set(session_days) - estimated)]
+
+
+def stats(trades: Sequence[dict[str, Any]], sessions: int = 0,
+          session_days: Collection[str] | None = None) -> dict[str, Any]:
+    """`session_days` (G2's clean sessions) drives the Sharpe series; without it, `sessions` pads the trades with
+    0 R days (kept for callers that only have a count)."""
     ts = usable(trades)
     rs = [_r(t) or 0.0 for t in ts]
     n = len(rs)
-    wins, losses = [x for x in rs if x > 0], [x for x in rs if x <= 0]
+    wins, losses = [x for x in rs if x > 0], [x for x in rs if x < 0]
     ok = n >= thresholds.MIN_TRADES_STATS
     out: dict[str, Any] = {
         "n": n, "excluded_estimated": sum(1 for t in trades if t.get("exit_price_estimated")),
@@ -63,8 +80,9 @@ def stats(trades: Sequence[dict[str, Any]], sessions: int = 0) -> dict[str, Any]
             out["profit_factor"] = round(sum(wins) / gross_loss, 3)
         else:
             out["pf_no_losses"] = True
-        if sessions >= thresholds.MIN_SESSIONS_SHARPE:
-            daily = rs + [0.0] * max(0, sessions - n)           # eligible sessions without a trade count as 0 R
+        daily = daily_series(trades, session_days) if session_days is not None \
+            else rs + [0.0] * max(0, sessions - n)              # eligible sessions without a trade count as 0 R
+        if len(daily) >= thresholds.MIN_SESSIONS_SHARPE:
             mean = sum(daily) / len(daily)
             sd = math.sqrt(sum((x - mean) ** 2 for x in daily) / (len(daily) - 1)) if len(daily) > 1 else 0.0
             out["sharpe"] = round(mean / sd * math.sqrt(252), 3) if sd > 0 else None
@@ -84,10 +102,15 @@ def curve(trades: Sequence[dict[str, Any]], start_equity: float = 600.0, max_poi
         out.append({"date": str(t.get("day") or "")[:10], "equity_pct": round((eq / start_equity - 1) * 100, 3),
                     "cum_r": round(cum_r, 3), "dd_pct": round((eq / peak_eq - 1) * 100, 3),
                     "dd_r": round(cum_r - peak_r, 3)})
-    if len(out) > max_points:                                    # keep the ends, thin the middle evenly
-        step = len(out) / max_points
-        out = [out[int(i * step)] for i in range(max_points - 1)] + [out[-1]]
-    return out
+    return thin(out, max_points)
+
+
+def thin(points: list[dict[str, Any]], max_points: int = 400) -> list[dict[str, Any]]:
+    """Keep the ends and thin the middle evenly (for display; measure drawdowns before thinning)."""
+    if len(points) <= max_points:
+        return points
+    step = len(points) / max_points
+    return [points[int(i * step)] for i in range(max_points - 1)] + [points[-1]]
 
 
 def histogram(trades: Sequence[dict[str, Any]], edges: Sequence[float] = (-3, -2, -1, -0.5, 0, 0.5, 1, 2, 3)) \

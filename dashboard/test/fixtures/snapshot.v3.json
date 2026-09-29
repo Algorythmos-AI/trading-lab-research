@@ -54,6 +54,7 @@
  },
  "as_of": "2026-09-29T21:45:00+00:00",
  "audit": {
+  "bad_lines": 0,
   "chain_bad_seq": null,
   "chain_ok": true,
   "events": [
@@ -129,7 +130,8 @@
     "kind": "alert_resolved",
     "source": "alerts"
    }
-  ]
+  ],
+  "rows": 1
  },
  "blotter": [
   {

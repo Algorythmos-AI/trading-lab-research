@@ -56,7 +56,39 @@ def test_v3_views_on_an_empty_host_are_valid(tmp_path):
     snap = gen.build_v3(json.loads(gen.V2.read_text()), {**views, "digest": {"since": None, "items": []}})
     assert publish.validate(snap) == []
     assert snap["perf"]["stats"]["n"] == 0 and snap["risk"]["controls"]["latched"] is None
-    assert snap["audit"] == {"chain_ok": True, "chain_bad_seq": None, "events": []}
+    assert snap["audit"] == {"chain_ok": True, "chain_bad_seq": None, "rows": 0, "bad_lines": 0, "events": []}
+
+
+def test_one_failing_view_leaves_the_others(tmp_path, monkeypatch, capsys):
+    from wt.analytics import ops_view
+
+    def boom(*a, **k):
+        raise ZeroDivisionError
+
+    monkeypatch.setattr(ops_view, "sla", boom)
+    now = dt.datetime(2026, 10, 2, 20, tzinfo=dt.UTC)
+    views = publish.v3_views(now, runs=[], sessions={}, kill=False, live=tmp_path / "live",
+                             alert_dir=tmp_path / "alerts", deploy_dir=tmp_path / "deploy",
+                             audit_log=tmp_path / "audit.jsonl")
+    assert "sla" not in views and {"risk", "perf", "blotter", "audit", "alerts_history"} <= set(views)
+    assert "v3 view sla failed (ZeroDivisionError)" in capsys.readouterr().err
+
+
+def test_perf_uses_clean_sessions_and_dedupes_trades(tmp_path):
+    live = tmp_path / "live"
+    live.mkdir()
+    rows = []
+    for i in range(3):
+        d = f"2026-10-0{i + 1}"
+        rows += [{"ts": f"{d}T13:30:00+00:00", "event": "armed", "day": d, "kill": i == 2},
+                 {"ts": f"{d}T15:00:00+00:00", "event": "trade_closed", "day": d, "trade_id": f"t{i}", "R": 1.0},
+                 {"ts": f"{d}T20:00:00+00:00", "event": "session_end"}]
+    rows.append(dict(rows[1]))                                     # a replayed close: counted once
+    (live / "journal.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    now = dt.datetime(2026, 10, 3, 20, tzinfo=dt.UTC)
+    views = publish.v3_views(now, runs=[], sessions={}, kill=False, live=live, alert_dir=tmp_path / "a",
+                             deploy_dir=tmp_path / "d", audit_log=tmp_path / "audit.jsonl")
+    assert views["perf"]["stats"]["n"] == 3 and views["perf"]["sessions"] == 2      # the KILL-on day isn't clean
 
 
 def test_add_digest_writes_one_file_per_et_day(tmp_path):

@@ -66,16 +66,21 @@ def load_account(path: Path = DATA_DIR / "live" / "virtual_account.json") -> dic
 
 
 def view(today: dt.date, account: dict[str, Any] | None, kill: bool, root: Path = ROOT,
-         risk_yaml: Path | None = None) -> dict[str, Any]:
+         risk_yaml: Path | None = None, va_path: Path | None = None) -> dict[str, Any]:
+    """`va_path` lets the view see the latch sentinel: a sentinel with an account that says unlatched (a failed
+    account write, or a tampered file) is reported latched, because the runner refuses to arm on it."""
     from wt.risk.pretrade import load_limits
+    from wt.risk.virtual_account import VirtualAccount
     hashes = source_hashes(root)
     try:
         lim = load_limits("B", risk_yaml or CONFIG_DIR / "risk.yaml")
         pre: dict[str, Any] = {"max_qty": lim.max_qty, "max_notional": lim.max_notional,
                                "max_entries_per_day": lim.max_entries_per_day,
-                               "max_orders_per_day": lim.max_orders_per_day, "allowlist": ",".join(lim.allowlist)}
-    except (OSError, KeyError, TypeError, ValueError):
+                               "max_orders_per_day": lim.max_orders_per_day,
+                               "allowlist": ",".join(sorted(lim.allowlist))}
+    except Exception:  # noqa: BLE001 — an unreadable risk.yaml (YAMLError included) shows "?" rather than no view
         pre = {}
+    sentinel = va_path is not None and VirtualAccount.sentinel(va_path).exists()
     a = account or {}
     eq = a.get("equity") if isinstance(a.get("equity"), int | float) else None
     hw = a.get("high_water") if isinstance(a.get("high_water"), int | float) else None
@@ -116,10 +121,13 @@ def view(today: dt.date, account: dict[str, Any] | None, kill: bool, root: Path 
     history: list[Any] = raw_hist if isinstance(raw_hist, list) else []
     return {
         "limits": limits,
-        "controls": {"kill": kill, "latched": bool(a.get("latched")) if account else None,
-                     "latch_reason": a.get("latch_reason") or None, "latch_resets": len(history),
+        "controls": {"kill": kill,
+                     "latched": True if sentinel else bool(a.get("latched")) if account else None,
+                     "latch_reason": a.get("latch_reason") or ("latch sentinel present" if sentinel else None),
+                     "latch_resets": len(history),
                      "last_reset": str(history[-1].get("at")) if history and isinstance(history[-1], dict) else None,
-                     "entries_allowed": (not kill and not a.get("latched")) if account else None},
+                     "entries_allowed": False if sentinel else (not kill and not a.get("latched")) if account
+                     else None},
         "used_today": {"date": k, "day_pnl_pct": day_pct, "week_pnl_pct": week_pct, "drawdown_pct": dd_pct,
                        "entries": entries},
         "sources": hashes,

@@ -3489,6 +3489,18 @@
             "null"
           ]
         },
+        "rows": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "bad_lines": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "events": {
           "type": [
             "array",
