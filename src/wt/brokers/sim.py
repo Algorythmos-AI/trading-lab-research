@@ -11,12 +11,14 @@ Fault injection:
   lose_next_response     the next place reaches the broker, then raises TransportError (order present)
   fail_next_gets         the next N get_order calls raise TransportError
   fail_next_positions    the next N positions calls raise TransportError
+  clock_fn               returns the broker's BrokerClock (the session tests drive it from the fake clock)
 """
 from __future__ import annotations
 
 import copy
+from collections.abc import Callable
 
-from wt.brokers.base import Broker, DuplicateOrder, TransportError
+from wt.brokers.base import Broker, BrokerClock, DuplicateOrder, TransportError
 from wt.core.types import AccountState, Order, OrderStatus, Position
 
 
@@ -32,6 +34,7 @@ class SimBroker(Broker):
         self.fail_next_gets = 0
         self.fail_next_positions = 0
         self.placed: list[str] = []            # every accepted client order id, in order
+        self.clock_fn: Callable[[], BrokerClock] | None = None
 
     def account(self) -> AccountState:
         eq = self.cash + sum(p.qty * p.avg_price for p in self.pos.values())
@@ -76,6 +79,11 @@ class SimBroker(Broker):
             raise TransportError("simulated lookup timeout")
         o = self.orders.get(client_order_id)
         return copy.copy(o) if o is not None else None
+
+    def clock(self) -> BrokerClock:
+        if self.clock_fn is None:
+            raise TransportError("simulated broker has no clock configured")
+        return self.clock_fn()
 
     # --- test helpers ---
     def fill(self, cid: str, price: float, qty: int | None = None) -> None:

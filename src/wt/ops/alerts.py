@@ -4,8 +4,12 @@ Rules:
   * Messages carry R and % only. Dollar amounts and account numbers are scrubbed before sending.
   * Alerts fire on state *transitions*. `fire(key)` sends only when `key` was not already firing, and
     `resolve(key)` sends a recovery notice only when it was. `once_per_day` covers refusals.
-  * Delivery never raises. Without a topic, or when ntfy is unreachable, the message goes to a spool that the next
-    call flushes. Spooled messages older than a day are dropped rather than delivered late.
+  * Delivery never raises. When ntfy is unreachable, the message goes to a spool that the next call flushes.
+    Spooled priority 1-3 messages older than a day are dropped rather than delivered late; priority 4-5 messages
+    are kept for a week. The spool holds at most 200 messages (oldest dropped first). A message delivered late says
+    when it was raised. Without a topic nothing is spooled: alerts are simply off.
+  * Pager wraps Alerts for the trading loop: a bounded queue drained by one background thread, so a slow or
+    offline ntfy can never delay an exit.
 
 Priorities: 5 trading-critical (not flat, unknown or short position, latch) · 4 job failed ·
 3 refusal / disk / late · 2 daily summary.
@@ -17,7 +21,9 @@ import datetime as dt
 import fcntl
 import json
 import os
+import queue
 import re
+import threading
 import time
 import uuid
 from collections.abc import Iterator
@@ -29,7 +35,10 @@ import requests
 from wt.core.config import STATE_DIR
 
 ALERT_DIR = STATE_DIR / "alerts"
-SPOOL_MAX_AGE = dt.timedelta(days=1)
+SPOOL_MAX_AGE = dt.timedelta(days=1)             # priority 1-3
+SPOOL_MAX_AGE_URGENT = dt.timedelta(days=7)      # priority 4-5: trading-critical, kept until delivered
+SPOOL_MAX_FILES = 200
+LATE_AFTER = dt.timedelta(minutes=2)
 _MONEY = re.compile(r"(?:US|A|AU)?\$\s?-?[\d,]+(?:\.\d+)?|\b\d[\d,]*(?:\.\d+)?\s?(?:USD|AUD)\b", re.I)
 # Alpaca paper account ids (PA + alphanumerics) and any bare number of 10+ digits; 8-digit dates survive.
 _ACCOUNT = re.compile(r"\bPA[0-9A-Z]{6,}\b|\b\d{10,}\b")
@@ -113,31 +122,42 @@ class Alerts:
         """Send now (after flushing older spooled messages). Returns True when delivered."""
         msg: dict[str, Any] = {"id": uuid.uuid4().hex, "at": _now().isoformat(), "title": scrub(title)[:120],
                "message": scrub(message)[:1000], "priority": max(1, min(5, int(priority))), "tags": list(tags)}
+        if not self.topic:
+            return False                     # alerts are off; spooling would only grow without bound
         self.flush()
         if _send(msg, self.topic, self.server):
             return True
         spool = self.root / "spool"
-        spool.mkdir(parents=True, exist_ok=True)
-        # nanosecond prefix keeps the flush order equal to the send order, even within one second
-        (spool / f"{time.time_ns():020d}-{msg['id']}.json").write_text(json.dumps(msg))
+        try:
+            spool.mkdir(parents=True, exist_ok=True)
+            # nanosecond prefix keeps the flush order equal to the send order, even within one second
+            (spool / f"{time.time_ns():020d}-{msg['id']}.json").write_text(json.dumps(msg))
+            for old in sorted(spool.glob("*.json"))[:-SPOOL_MAX_FILES]:
+                old.unlink(missing_ok=True)
+        except OSError:
+            pass                             # a full disk must not turn an alert into a crash
         return False
 
     def flush(self) -> int:
-        """Deliver spooled messages oldest first; drop those older than a day. Returns the number delivered."""
+        """Deliver spooled messages oldest first, dropping expired ones. Returns the number delivered."""
         spool = self.root / "spool"
-        if not spool.exists():
+        if not spool.exists() or not self.topic:
             return 0
         sent = 0
         for f in sorted(spool.glob("*.json")):
             try:
                 msg = json.loads(f.read_text())
-                age = _now() - dt.datetime.fromisoformat(msg["at"])
-            except (OSError, ValueError, KeyError, json.JSONDecodeError):
+                raised = dt.datetime.fromisoformat(msg["at"])
+                age = _now() - raised
+                urgent = int(msg.get("priority", 3)) >= 4
+            except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
                 f.unlink(missing_ok=True)
                 continue
-            if age > SPOOL_MAX_AGE:
+            if age > (SPOOL_MAX_AGE_URGENT if urgent else SPOOL_MAX_AGE):
                 f.unlink(missing_ok=True)
                 continue
+            if age > LATE_AFTER:
+                msg = {**msg, "message": f"(delayed: raised {raised:%Y-%m-%d %H:%M} UTC) {msg['message']}"}
             if not _send(msg, self.topic, self.server):
                 break                       # still offline: keep order, try again next time
             f.unlink(missing_ok=True)
@@ -180,3 +200,59 @@ class Alerts:
     def firing(self) -> dict[str, Any]:
         """Keys currently firing (for the dashboard)."""
         return {k: v for k, v in _read_state(self.root).items() if isinstance(v, dict) and v.get("firing")}
+
+
+class Pager:
+    """Alerts for a trading loop that must never wait on the network (audit L4).
+
+    Calls return at once: they go on a bounded queue that one daemon thread delivers through ``Alerts`` (which
+    takes the state lock, flushes the spool and posts to ntfy). If the queue is full the alert is dropped and
+    counted; the job runner's end-of-session check still raises the same keys. ``alerts=None`` makes a silent
+    pager (tests and dry runs)."""
+
+    def __init__(self, alerts: Any = None, maxsize: int = 64) -> None:
+        self.alerts = alerts
+        self.dropped = 0
+        self._q: queue.Queue[tuple[str, tuple[Any, ...]] | None] = queue.Queue(maxsize=maxsize)
+        self._t: threading.Thread | None = None
+        if alerts is not None:
+            self._t = threading.Thread(target=self._drain, name="pager", daemon=True)
+            self._t.start()
+
+    def fire(self, key: str, title: str, message: str, priority: int = 4) -> None:
+        self._put("fire", (key, title, message, priority))
+
+    def resolve(self, key: str, title: str, message: str) -> None:
+        self._put("resolve", (key, title, message))
+
+    def once_per_day(self, key: str, title: str, message: str, priority: int = 3) -> None:
+        self._put("once_per_day", (key, title, message, priority))
+
+    def _put(self, method: str, args: tuple[Any, ...]) -> None:
+        if self._t is None:
+            return
+        try:
+            self._q.put_nowait((method, args))
+        except queue.Full:
+            self.dropped += 1
+
+    def _drain(self) -> None:
+        while True:
+            item = self._q.get()
+            if item is None:
+                return
+            method, args = item
+            try:
+                getattr(self.alerts, method)(*args)
+            except Exception:  # noqa: BLE001 — delivery must never take the pager thread down
+                pass
+
+    def close(self, timeout_s: float = 15.0) -> None:
+        """Deliver what is queued, waiting at most ``timeout_s`` (called once, after the session)."""
+        if self._t is None:
+            return
+        try:
+            self._q.put(None, timeout=timeout_s)
+        except queue.Full:
+            return
+        self._t.join(timeout_s)

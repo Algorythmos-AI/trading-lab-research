@@ -67,11 +67,13 @@ class TradePlan:
     state: str = "planned"            # planned|submitting|entry_working|in_position|exiting|closed|aborted
     entry_counted: bool = False
     recorded: bool = False
+    origin: str = "entry"             # entry | orphan (a position no plan placed, adopted so it can be exited)
     log: list[Any] = field(default_factory=list)
 
     @property
     def trade_id(self) -> str:
-        return f"{self.date}-{self.strategy}-{self.symbol}-{self.attempt}"
+        base = f"{self.date}-{self.strategy}-{self.symbol}-{self.attempt}"
+        return base if self.origin == "entry" else f"{base}-{self.origin}"
 
     @property
     def active(self) -> bool:
@@ -128,7 +130,8 @@ class OMS:
         p.log.append(list(entry))
 
     def _next_id(self, p: TradePlan, leg: str) -> str:
-        cid = coid(p.date, p.strategy, p.symbol, leg, p.seq)
+        # an adopted orphan shares the day and symbol with the day's own plan: its legs are namespaced apart
+        cid = coid(p.date, p.strategy, p.symbol, leg if p.origin == "entry" else f"{p.origin}-{leg}", p.seq)
         p.seq += 1
         self._persist(p)                    # the sequence must survive a crash before the order is sent
         return cid
@@ -213,6 +216,14 @@ class OMS:
                 self.b.cancel(o.client_order_id)
                 out.append(o.client_order_id)
         return out
+
+    def cancel_resting_confirmed(self, symbol: str) -> bool:
+        """Cancel this strategy's resting orders in a symbol and confirm each is terminal (M4)."""
+        ok = True
+        for cid in self.cancel_resting(symbol):
+            done, _ = self._confirm_terminal(cid)
+            ok = ok and done
+        return ok
 
     # ---- lifecycle ------------------------------------------------------------------------------
     def place_entry(self, p: TradePlan) -> None:
