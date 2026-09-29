@@ -38,5 +38,9 @@ jobs:
         run: uvx --from actionlint-py==1.7.12.25 actionlint -color
       - name: Type-check new modules (mypy)
         run: make typecheck PY=.venv/bin/python
+      - name: Dashboard contract is current (schema and thresholds regenerate with no diff)
+        run: |
+          make schema PY=.venv/bin/python
+          git diff --exit-code -- dashboard/src/lib/snapshot.schema.json dashboard/src/lib/thresholds.gen.ts
       - name: Unit tests
         run: .venv/bin/python -m pytest
