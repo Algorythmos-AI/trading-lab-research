@@ -48,7 +48,7 @@ function RunsPanel({ s }: { s: Snapshot }) {
     <Panel
       title="Automated checks"
       icon={GitPullRequest}
-      means="Recent runs of the test and security checks that guard every change. Required checks block a merge until they pass."
+      means={`Recent runs of the test and security checks that guard every change to ${s.platform?.ci_repo ?? "this repository"}. Required checks block a merge until they pass.`}
       action={
         required === true ? (
           <StatusBadge tone="good">Required checks on</StatusBadge>
@@ -97,7 +97,7 @@ function MilestonesPanel({ s }: { s: Snapshot }) {
     <Panel
       title="Milestones"
       icon={Milestone}
-      means="Groups of planned engineering work and how many of their issues are closed. P0 marks the must-fix items."
+      means={`Groups of planned engineering work in ${s.platform?.backlog_repo ?? "the backlog"} and how many of their issues are closed. P0 marks the must-fix items.`}
     >
       <div className="grid gap-4">
         <Meter label="All tracked issues" value={done} max={total} valueText={`${num(done)} of ${num(total)} done`} />

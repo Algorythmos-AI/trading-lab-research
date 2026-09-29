@@ -11,9 +11,26 @@ import datetime as dt
 import json
 from typing import Any
 
+from wt.ops import thresholds
 from wt.ops.status import DOC_CAP_BYTES, DOC_NAMES, ET, SCHEMA_PATH, SCHEMA_VERSION, SYD, iso, market_state
 
 STATUS_WORDS = {"planned": "planned", "n_a": "not applicable", "needs_data": "need data"}
+
+
+def trial_counts(cfg: dict) -> dict:
+    """The global trial count from the registry (wt.research.trials), never a hand-typed number.
+    in_force: the newest accepted row; proposed: a newer proposed row, if any; g1_failed_at: the count G1 was
+    judged at (config: trials.used, a historical fact)."""
+    from wt.research.trials import trial_history
+    try:
+        rows = trial_history()
+    except (OSError, ValueError, KeyError, TypeError):
+        rows = []
+    acc = [r for r in rows if r["status"] == "accepted"]
+    prop = [r for r in rows if r["status"] == "proposed" and (not acc or r["total"] > acc[-1]["total"])]
+    return {"in_force": acc[-1]["total"] if acc else None, "in_force_by": acc[-1]["decision"] if acc else None,
+            "proposed": prop[-1]["total"] if prop else None, "proposed_by": prop[-1]["decision"] if prop else None,
+            "g1_failed_at": (cfg.get("trials") or {}).get("used")}
 AUTO_ACTION_ORDER = ("cat01", "swap", "disk", "deployed", "wake", "registration", "old_root")
 
 
@@ -51,18 +68,22 @@ def owner_actions(sources: dict, cfg: dict) -> list[dict]:
     dep = _d(sources, "deployed")
     if dep and dep.get("behind"):
         acts.append({"id": "deployed", "title": f"Update ~/trading: it is {dep['behind']} commit(s) behind GitHub main",
-                     "why": "launchd runs this checkout, so tonight's jobs lack: "
-                            + "; ".join(c["subject"] for c in dep.get("missing", [])[-3:]),
+                     "why": f"launchd runs this checkout: {dep['behind']} newer reviewed commit(s) on main are not "
+                            "live yet. The deploy gate refuses while a job runs or in the trading window.",
                      "blocks": "Correct live runs", "command": "make -C ~/trading deploy",
                      "when": "When `make gate` is open (no job running, outside the trading night)", "link": None,
                      "severity": "high"})
     host = _d(sources, "host")
     if host:
-        if host["disk_free_gb"] < host["disk_floor_gb"]:
-            need = host["disk_floor_gb"] - host["disk_free_gb"]
+        if host["disk_free_gb"] < thresholds.DISK_TARGET_GB:
+            need = thresholds.DISK_TARGET_GB - host["disk_free_gb"]
+            below = host["disk_free_gb"] < thresholds.DISK_FLOOR_GB
             acts.append({"id": "disk", "title": f"Free at least {need:.1f} GB of disk",
-                         "why": f"{host['disk_free_gb']:.1f} GB free; the pool build needs {host['disk_floor_gb']:.0f} GB",
-                         "blocks": "Building the round-3 candidate pool", "command": None, "link": None, "severity": "high"})
+                         "why": f"{host['disk_free_gb']:.1f} GB free. The trading jobs refuse below "
+                                f"{thresholds.DISK_FLOOR_GB:.0f} GB" + (" (they are refusing now)" if below else "")
+                                + f"; keep {thresholds.DISK_TARGET_GB:.0f} GB free.",
+                         "blocks": "Tonight's jobs" if below else "Headroom for swap and the pool build",
+                         "command": None, "link": None, "severity": "blocker" if below else "high"})
         uncovered = [w["needed"] for w in host.get("wake_coverage", []) if not w["covered"]]
         if uncovered:
             acts.append({"id": "wake", "title": f"Schedule a daily wake at {uncovered[0]}",
@@ -133,13 +154,14 @@ def build_overview(sources: dict, cfg: dict, now: dt.datetime) -> dict:
     orders = (legacy or {}).get("orders_placed", 0) + (paper or {}).get("trades", 0)
     sub.append("No order has ever been placed." if orders == 0 else f"{orders} paper trade(s) closed so far.")
 
-    trials = cfg.get("trials", {})
+    tc = trial_counts(cfg)
     kpis = [
         {"id": "edge", "label": "Proven edge", "value": "Yes" if edge else "No", "state": "good" if edge else "bad",
-         "detail": f"G1 failed after {trials.get('used', '?')} trials" if not edge else "G1 passed"},
-        {"id": "trials", "label": "Trials used", "value": str(trials.get("used", "?")),
-         "unit": f"of {trials.get('budget_if_round3', '?')}", "state": "neutral",
-         "detail": "Round 3 adds 10 when DEC-0010 takes effect"},
+         "detail": f"G1 failed after {tc['g1_failed_at']} trials" if not edge else "G1 passed"},
+        {"id": "trials", "label": "Trials in force", "value": str(tc["in_force"] or "?"),
+         "unit": "global count", "state": "neutral",
+         "detail": (f"{tc['proposed']} once {tc['proposed_by']} is accepted; " if tc["proposed"] else "")
+                   + f"G1 failed at {tc['g1_failed_at']}"},
     ]
     if cat:
         kpis.append({"id": "cat01", "label": "Catalyst accuracy", "value": f"{cat['accuracy_pct']:.0f}%" if cat.get("accuracy_pct") is not None else "n/a",
@@ -153,7 +175,9 @@ def build_overview(sources: dict, cfg: dict, now: dt.datetime) -> dict:
     if paper:
         g2 = paper["g2"]
         kpis.append({"id": "g2", "label": "G2 paper evidence", "value": f"{g2['trades']}/{g2['trades_needed']}",
-                     "unit": "trades", "state": "neutral", "detail": f"{g2['sessions']}/{g2['sessions_needed']} sessions armed"})
+                     "unit": "trades", "state": "neutral",
+                     "detail": f"{g2['sessions']}/{g2['sessions_needed']} clean sessions "
+                               f"({g2.get('armed_sessions', 0)} armed; KILL-on, refused or incident nights don't count)"})
     if org:
         kpis.append({"id": "org", "label": "Org backlog", "value": f"{org['items_done']}/{org['items_total']}", "unit": "issues done",
                      "state": "neutral", "detail": next((f"Next: {m['title']}" for m in org["milestones"] if m["state"] == "open"), "")})
@@ -161,11 +185,13 @@ def build_overview(sources: dict, cfg: dict, now: dt.datetime) -> dict:
         behind = dep.get("behind")
         kpis.append({"id": "deployed", "label": "Live code", "value": dep["head"],
                      "unit": "up to date" if behind == 0 else (f"{behind} behind main" if behind else "compare unavailable"),
-                     "state": "good" if behind == 0 else ("bad" if behind else "warn"), "detail": dep.get("subject", "")})
+                     "state": "good" if behind == 0 else ("bad" if behind else "warn"),
+                     "detail": f"committed {str(dep.get('committed') or '')[:10]}".strip()})
     if host:
-        low = host["disk_free_gb"] < host["disk_floor_gb"]
+        tone = thresholds.disk_tone(host["disk_free_gb"])
         kpis.append({"id": "disk", "label": "Disk free", "value": f"{host['disk_free_gb']:.1f}", "unit": "GB",
-                     "state": "bad" if low else "good", "detail": f"Pool build needs {host['disk_floor_gb']:.0f} GB"})
+                     "state": tone,
+                     "detail": f"Jobs refuse below {thresholds.DISK_FLOOR_GB:.0f} GB; keep {thresholds.DISK_TARGET_GB:.0f} GB free"})
 
     gates = []
     for g in cfg.get("gates", []):
@@ -185,7 +211,7 @@ def build_research(sources: dict, cfg: dict) -> dict:
             "round3_experiments": (res or {}).get("round3_experiments", []),
             "decisions": (res or {}).get("decisions", []), "hypotheses": (res or {}).get("hypotheses", []),
             "active_strategies": (res or {}).get("active_strategies", []), "lessons": (res or {}).get("lessons", []),
-            "trials": cfg.get("trials", {}), "dec0010_status": (res or {}).get("dec0010_status"),
+            "trials": {**cfg.get("trials", {}), **trial_counts(cfg)}, "dec0010_status": (res or {}).get("dec0010_status"),
             "sources": _src_status(sources, ["research", "cat01"])}
 
 
@@ -196,7 +222,8 @@ def build_spec(sources: dict) -> dict:
 
 def build_platform(sources: dict, cfg: dict) -> dict:
     org = _d(sources, "org") or {}
-    return {"capabilities": cfg.get("capabilities", []), "milestones": org.get("milestones", []),
+    return {"backlog_repo": org.get("repo"), "ci_repo": org.get("ci_repo"),
+            "capabilities": cfg.get("capabilities", []), "milestones": org.get("milestones", []),
             "open_items": org.get("open_items", []), "priority": org.get("priority", []),
             "items_total": org.get("items_total"), "items_done": org.get("items_done"),
             "releases": org.get("releases", []), "runs": org.get("runs", []),

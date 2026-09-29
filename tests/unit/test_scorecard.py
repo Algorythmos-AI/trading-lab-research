@@ -18,9 +18,17 @@ def test_scorecard_flags_agreement_incidents_and_band(tmp_path, monkeypatch):
         rows.append({"session": d, "strategy": "B_qqq_qqqm", "R": -1.0})       # terrible forward results
         rows.append({"session": d, "session_marker": True, "n_trades": 1})
     fwd.write_text("\n".join(json.dumps(r) for r in rows))
-    j = [{"event": "armed", "day": "2026-10-01"}, {"event": "armed", "day": "2026-10-02"},
-         {"event": "trade_closed", "day": "2026-10-01", "R": 0.5, "virtual": {"equity": 601, "settled_cash": 300, "latched": False}},
-         {"event": "loop_error", "error": "x"}]
+    j = [{"event": "armed", "day": "2026-10-01", "kill": False, "ts": "2026-10-01T12:30:00+00:00"},
+         {"event": "trade_closed", "day": "2026-10-01", "R": 0.5, "trade_id": "2026-10-01-B-QQQM-0",
+          "ts": "2026-10-01T15:00:00+00:00", "virtual": {"equity": 601, "settled_cash": 300, "latched": False}},
+         {"event": "trade_closed", "day": "2026-10-01", "R": 0.5, "trade_id": "2026-10-01-B-QQQM-0",
+          "ts": "2026-10-01T15:05:00+00:00"},                                   # a pre-phase-2 restart duplicate
+         {"event": "session_end", "ts": "2026-10-01T20:00:00+00:00"},
+         {"event": "armed", "day": "2026-10-02", "kill": False, "ts": "2026-10-02T12:30:00+00:00"},
+         {"event": "loop_error", "error": "x", "ts": "2026-10-02T14:00:00+00:00"},
+         {"event": "session_end", "ts": "2026-10-02T20:00:00+00:00"},
+         {"event": "armed", "day": "2026-10-03", "kill": True, "ts": "2026-10-03T12:30:00+00:00"},   # KILL night
+         {"event": "session_end", "ts": "2026-10-03T20:00:00+00:00"}]
     jr.write_text("\n".join(json.dumps(x) for x in j))
     monkeypatch.setattr(sc, "FWD", fwd)
     monkeypatch.setattr(sc, "JOURNAL", jr)
@@ -34,7 +42,9 @@ def test_scorecard_flags_agreement_incidents_and_band(tmp_path, monkeypatch):
     md = sc.main()
     assert "BELOW expectation" in md                      # -1R forward vs positive backtest -> warning
     assert "**1/2** = 50%" in md                          # paper traded 10-01, forward B traded both days
-    assert "loop errors 1" in md and "NOT met" in md      # incident surfaces and blocks G2
+    assert "loop errors 1" in md                          # the incident surfaces
+    assert "Sessions armed: **3** · clean (count for G2): **2**" in md     # the KILL night does not count
+    assert "trades closed: **1**" in md                   # the duplicate close counts once
 
 
 def ledger(tmp_path, monkeypatch, rows):

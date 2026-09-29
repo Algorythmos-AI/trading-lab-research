@@ -203,6 +203,7 @@ function AccountPanel({ s }: { s: Snapshot }) {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Symbol</TableHead>
+                    <TableHead>Mandate</TableHead>
                     <TableHead className="text-right">Quantity</TableHead>
                     <TableHead className="text-right">Market value</TableHead>
                     <TableHead className="text-right">Unrealised P/L</TableHead>
@@ -212,6 +213,17 @@ function AccountPanel({ s }: { s: Snapshot }) {
                   {positions.map((p, i) => (
                     <TableRow key={`${p.symbol}-${i}`}>
                       <TableCell className="font-mono text-xs font-medium">{txt(p.symbol)}</TableCell>
+                      <TableCell>
+                        {p.in_mandate === true ? (
+                          <StatusBadge tone="good">Strategy B</StatusBadge>
+                        ) : p.legacy === true ? (
+                          <StatusBadge tone="neutral">Legacy (accepted)</StatusBadge>
+                        ) : p.in_mandate === false ? (
+                          <StatusBadge tone="bad">Outside mandate</StatusBadge>
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
                       <TableCell className="text-right">{num(p.qty, 0)}</TableCell>
                       <TableCell className="text-right">{usd(p.market_value)}</TableCell>
                       <TableCell

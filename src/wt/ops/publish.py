@@ -49,6 +49,7 @@ SCHEMA_PATH = ROOT / "dashboard" / "src" / "lib" / "snapshot.schema.json"
 OUT = STATE_DIR / "dashboard"
 MAX_BODY = 3_000_000                      # Vercel's request limit is 4.5 MB
 TEXT_MAX, SHORT_MAX = 300, 200
+LIST_MAX = 2000
 NGRAM = 8
 
 
@@ -69,7 +70,7 @@ SOURCE = {"ok": B, "stale": B, "as_of": S, "error": T, "ms": I}
 LOG = {"file": S, "exists": B, "bytes": I, "modified": S, "errors_count": I, "last_error": T}
 
 ALLOW: dict[str, Any] = {
-    "schema": S, "schema_version": I, "run_id": S, "as_of": S, "redaction": S, "withheld": I,
+    "schema": S, "schema_version": I, "run_id": S, "as_of": S, "redaction": S, "withheld": I, "truncated": I,
     "collector": {"sha": S, "branch": S, "dirty": B, "exit_code": I, "fresh_sources": I, "total_sources": I,
                   "duration_s": N, "sources": Map(SOURCE)},
     "market": {"phase": S, "et": S, "sydney": S, "trading_day_et": S},
@@ -88,12 +89,16 @@ ALLOW: dict[str, Any] = {
         "round3": [{"id": S, "set": S, "hyp_status": S, "run": B}],                 # IDs only, never setup names
         "decisions": [{"id": S, "date": S, "status": S}],                         # never titles
         "hypotheses": [{"id": S, "status": S, "stale": B}],                       # never names or statements
-        "active_strategies": [S], "trials": {"used": I, "budget_if_round3": I}, "dec0010_status": S,
+        "active_strategies": [S],
+        "trials": {"used": I, "budget_if_round3": I, "in_force": I, "in_force_by": S, "proposed": I, "proposed_by": S,
+                   "g1_failed_at": I},
+        "dec0010_status": S,
         "lessons_count": I},
     "spec": {"spec_id": S, "version": S, "status": S, "total": I, "by_status": Map(I), "by_level": Map(I),
              "by_area": [{"area": S, "total": I, "implemented": I, "planned": I, "n_a": I, "needs_data": I}],
              "checklist": [{"total": I, "implemented": I, "state": S, "reqs": [S]}]},   # never requirement text
     "platform": {
+        "backlog_repo": S, "ci_repo": S,
         "milestones": [{"key": S, "title": T, "state": S, "open": I, "closed": I, "p0_open": I}],
         "items_total": I, "items_done": I,
         "releases": [{"tagName": S, "name": T, "publishedAt": S, "isLatest": B}],
@@ -108,12 +113,14 @@ ALLOW: dict[str, Any] = {
         "paper": {"events": Map(I), "bad_lines": I, "armed_sessions": I, "last_armed": S, "trades": I, "total_r": N,
                   "mean_r": N, "virtual": {"equity": N, "start": N, "latched": B, "latch_reason": T},
                   "recent": [{"ts": S, "event": S, "detail": T}],
-                  "g2": {"trades": I, "trades_needed": I, "sessions": I, "sessions_needed": I}, "log": LOG},
+                  "g2": {"trades": I, "trades_needed": I, "sessions": I, "sessions_needed": I, "armed_sessions": I,
+                         "incident_free_streak": I, "incident_free_needed": I, "agreement_level": S,
+                         "agreement_days": I, "agreement_agree": I}, "log": LOG},
         "forward": {"exists": B, "sessions": I, "first": S, "last": S, "errors": I, "bad_lines": I,
                     "strategies": [{"strategy": S, "n": I, "mean_r": N, "total_r": N}], "latest_scorecard": S,
                     "log": LOG},
         "host": {"jobs": [{"label": S, "local_time": S, "name": S, "loaded": B, "running": B, "last_exit": I}],
-                 "disk_free_gb": N, "disk_total_gb": N, "disk_floor_gb": N, "swap_warn_pct": N,
+                 "disk_free_gb": N, "disk_total_gb": N, "disk_floor_gb": N, "disk_target_gb": N, "swap_warn_pct": N,
                  "swap": {"total_gb": N, "used_gb": N, "free_gb": N, "used_pct": N},
                  "wake_coverage": [{"needed": S, "covered": B}],
                  "schedule": [{"job": S, "local": S, "et": S, "et_date": S, "session": B, "ok": B,
@@ -121,7 +128,8 @@ ALLOW: dict[str, Any] = {
         "account": {"equity": N, "last_equity": N, "cash": N, "buying_power": N, "daytrade_count": I,
                     "pattern_day_trader": B, "status": S, "trading_blocked": B, "market_is_open": B, "next_open": S,
                     "next_close": S, "paper": B,
-                    "positions": [{"symbol": S, "qty": N, "market_value": N, "unrealized_pl": N}]}},
+                    "positions": [{"symbol": S, "qty": N, "market_value": N, "unrealized_pl": N, "in_mandate": B,
+                                   "legacy": B}]}},
     "jobs": {"last": Map({"status": S, "exit": I, "started": S, "ended": S, "sha": S, "detail": T}),
              "runs": [{"job": S, "status": S, "exit": I, "started": S, "ended": S, "sha": S}]},
     "alerts": {"firing": [{"key": S, "since": S, "title": T}]},
@@ -150,7 +158,7 @@ def to_schema(spec: Any = ALLOW, top: bool = True) -> dict[str, Any]:
         return {"type": ["object", "null"], "propertyNames": {"pattern": _KEY.pattern},
                 "additionalProperties": to_schema(spec.value, False), "maxProperties": 200}
     if isinstance(spec, list):
-        return {"type": ["array", "null"], "items": to_schema(spec[0], False), "maxItems": 2000}
+        return {"type": ["array", "null"], "items": to_schema(spec[0], False), "maxItems": LIST_MAX}
     out: dict[str, Any] = {"type": "object" if top else ["object", "null"], "additionalProperties": False,
                            "properties": {k: to_schema(v, False) for k, v in spec.items()}}
     if top:
@@ -224,6 +232,7 @@ class Sanitizer:
     leak: LeakIndex | None
     strict: bool
     withheld: int = 0
+    truncated: int = 0                    # list items dropped by the per-list cap (the oldest go first)
 
     def text(self, v: Any, limit: int) -> str | None:
         if v is None:
@@ -258,7 +267,12 @@ class Sanitizer:
                 return None
             return {str(k): self.apply(spec.value, x) for k, x in list(v.items())[:200] if _KEY.match(str(k))}
         if isinstance(spec, list):
-            return [self.apply(spec[0], x) for x in v[:2000]] if isinstance(v, list) else None
+            if not isinstance(v, list):
+                return None
+            if len(v) > LIST_MAX:                 # builders append in time order: keep the newest
+                self.truncated += len(v) - LIST_MAX
+                v = v[-LIST_MAX:]
+            return [self.apply(spec[0], x) for x in v]
         if not isinstance(v, dict):
             return None
         return {k: self.apply(s, v[k]) for k, s in spec.items() if k in v}
@@ -266,12 +280,49 @@ class Sanitizer:
 
 # ---- building the snapshot -----------------------------------------------------------------------------------------
 
+_EXC = re.compile(r"\b([A-Z][A-Za-z0-9]*(?:Error|Exception|Timeout|Exit|Interrupt))\b")
+
+
+def codeify(text: Any) -> str | None:
+    """A short code for free text that must not leave the machine as written: exception messages, log lines,
+    runner reasons. The exception class when there is one ("TransportError"), else "error"."""
+    if text is None or text == "":
+        return None
+    m = _EXC.search(str(text))
+    return m.group(1) if m else "error"
+
+
+def blocker_codes(blockers: Any) -> str:
+    """Runner blockers carry detail after a colon ("latched:daily loss limit -2%"); publish only the kind."""
+    kinds = {str(b).split(":", 1)[0] for b in (blockers or [])}
+    return ", ".join(sorted(k for k in kinds if k))
+
+
 def _log(d: Any) -> dict[str, Any] | None:
     if not isinstance(d, dict):
         return None
     errs = d.get("errors") or []
     return {"file": d.get("file"), "exists": d.get("exists"), "bytes": d.get("bytes"), "modified": d.get("modified"),
-            "errors_count": len(errs), "last_error": errs[-1] if errs else None}
+            "errors_count": len(errs), "last_error": codeify(errs[-1]) if errs else None}
+
+
+def _paper(p: dict[str, Any]) -> dict[str, Any]:
+    """Paper events: the kind of each blocker and the class of each error, never the raw text."""
+    recent = []
+    for r in p.get("recent") or []:
+        if not isinstance(r, dict):
+            continue
+        raw = r.get("raw") if isinstance(r.get("raw"), dict) else {}
+        if raw.get("blockers"):
+            detail: str | None = blocker_codes(raw["blockers"])
+        elif raw.get("error"):
+            detail = codeify(raw["error"])
+        elif raw.get("reason"):
+            detail = codeify(raw["reason"]) if raw.get("event") != "refuse_to_arm" else "refused"
+        else:
+            detail = str(raw.get("day") or "") or None
+        recent.append({"ts": r.get("ts"), "event": r.get("event"), "detail": detail})
+    return {**p, "recent": recent}
 
 
 def private_action_ids(cfg_path: Path = ROOT / "config" / "dashboard.yaml") -> set[str]:
@@ -293,10 +344,14 @@ def from_docs(docs: dict[str, Any], private_ids: set[str] | None = None) -> dict
     for part in ("routine", "paper", "forward"):
         if isinstance(ops.get(part), dict):
             ops[part] = {**ops[part], "log": _log(ops[part].get("log"))}
+    if isinstance(ops.get("paper"), dict):
+        ops["paper"] = _paper(ops["paper"])
+    sources = meta.get("sources") if isinstance(meta.get("sources"), dict) else {}
+    sources = {k: ({**v, "error": codeify(v.get("error"))} if isinstance(v, dict) else v) for k, v in sources.items()}
     return {
         "collector": {**(meta.get("collector") or {}), "exit_code": meta.get("exit_code"),
                       "fresh_sources": meta.get("fresh_sources"), "total_sources": meta.get("total_sources"),
-                      "duration_s": meta.get("duration_s"), "sources": meta.get("sources")},
+                      "duration_s": meta.get("duration_s"), "sources": sources},
         "market": ov.get("market") or ops.get("market"), "dst": meta.get("dst"),
         "overview": ov, "research": {**rs, "lessons_count": len(rs.get("lessons") or [])}, "spec": sp,
         "platform": docs.get("platform", {}), "ops": ops,
@@ -367,13 +422,19 @@ def extras(now: dt.datetime, root: Path = ROOT) -> dict[str, Any]:
         except (OSError, json.JSONDecodeError):
             pass
     sessions, _ = load_sessions(now)
+    last = last_runs()
+    prev = next((r for r in reversed(runs) if r.get("job") == "dashboard"), None)
+    if prev is not None:                # this run is the one collecting: show the previous, completed publish
+        last["dashboard"] = {**prev, "detail": "previous publish"}
+    else:
+        last.pop("dashboard", None)
     return {
-        "jobs": {"last": last_runs(), "runs": [r for r in runs if str(r.get("started", "")) >= cutoff][-500:]},
+        "jobs": {"last": last, "runs": [r for r in runs if str(r.get("started", "")) >= cutoff][-500:]},
         "alerts": {"firing": [{"key": k, "since": v.get("since"), "title": v.get("title")}
                               for k, v in sorted(Alerts().firing().items())]},
         "kill": {"on": kill.exists(),
                  "since": dt.datetime.fromtimestamp(kill.stat().st_mtime, dt.UTC).isoformat() if kill.exists() else None,
-                 "reason": kill.read_text().splitlines()[0][:200] if kill.exists() and kill.stat().st_size else None},
+                 "reason": None},              # the KILL file's note is the owner's free text: it stays local
         "deploy": last_deploy,
         "preflight": [{"name": c.name, "ok": c.ok, "detail": c.detail} for c in preflight.run_checks(root)],
         "expected_windows": expected_windows(now, sessions),
@@ -386,7 +447,7 @@ def build(docs: dict[str, Any], extra: dict[str, Any], san: Sanitizer, run_id: s
     clean: dict[str, Any] = san.apply(ALLOW, raw)
     clean.update(schema=SCHEMA_ID, schema_version=SCHEMA_VERSION, run_id=run_id,
                  as_of=now.isoformat(timespec="seconds"), redaction="strict" if san.strict else "standard",
-                 withheld=san.withheld)
+                 withheld=san.withheld, truncated=san.truncated)
     return clean
 
 

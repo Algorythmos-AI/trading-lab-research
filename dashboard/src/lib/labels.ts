@@ -95,13 +95,13 @@ export function ciTone(conclusion: string | null | undefined): Tone {
 
 export function severityTone(severity: string | null | undefined): Tone {
   const s = norm(severity);
-  if (s === "high" || s === "critical") return "bad";
+  if (s === "blocker" || s === "high" || s === "critical") return "bad";
   if (s === "medium") return "warn";
   return "neutral";
 }
 
 export function severityRank(severity: string | null | undefined): number {
-  return { critical: 0, high: 1, medium: 2, low: 3 }[norm(severity)] ?? 4;
+  return { blocker: 0, critical: 0, high: 1, medium: 2, low: 3 }[norm(severity)] ?? 4;
 }
 
 /** Sentence-case label from a snake/kebab identifier: "in_progress" -> "In progress". */

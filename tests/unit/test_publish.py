@@ -81,7 +81,7 @@ def test_restricted_and_private_fields_never_reach_the_snapshot():
     assert s["research"]["decisions"] == [{"id": "DEC-0001", "date": "2026-09-27", "status": "recorded"}]
     assert s["research"]["lessons_count"] == 2
     assert s["ops"]["routine"]["log"] == {"file": "routine.log", "exists": True, "bytes": None, "modified": None,
-                                          "errors_count": 2, "last_error": "ValueError: last one"}
+                                          "errors_count": 2, "last_error": "ValueError"}   # class only
     assert validate(s) == []
 
 
@@ -262,3 +262,48 @@ def test_verify_reads_health_back(monkeypatch):
     assert seen["headers"] == {"x-vercel-protection-bypass": "bypass"}
     ok, why = publish.verify_stored({**snap, "run_id": "r2"}, "https://lab.example/api/ingest", None)
     assert not ok and "expected r2" in why
+
+
+# ---- phase 2 (0.3): nothing free-form leaves the host; lists keep their newest rows --------------------------------
+
+def test_codes_replace_free_text():
+    assert publish.codeify("TransportError('GET https://x/v2/orders?id=PA3T8Y4VW2KV timed out')") == "TransportError"
+    assert publish.codeify("something odd happened in /Users/x") == "error"
+    assert publish.codeify(None) is None and publish.codeify("") is None
+    assert publish.blocker_codes(["latched:daily loss limit -2%", "kill_file", "entries_off:free disk 2.1 GB"]) \
+        == "entries_off, kill_file, latched"
+
+
+def test_paper_events_publish_kinds_not_text():
+    docs = {"ops": {"paper": {"recent": [
+        {"ts": "t1", "event": "blocked", "raw": {"event": "blocked", "blockers": ["latched:daily loss limit -2%"]}},
+        {"ts": "t2", "event": "loop_error", "raw": {"event": "loop_error", "error": "TransportError('secret url')"}},
+        {"ts": "t3", "event": "refuse_to_arm", "raw": {"event": "refuse_to_arm", "reason": "free disk 2.1 GB"}},
+        {"ts": "t4", "event": "armed", "raw": {"event": "armed", "day": "2026-09-30"}}]}},
+        "meta": {"sources": {"account": {"ok": False, "error": "paper account unavailable (ConnectionError)"}}}}
+    raw = from_docs(docs, private_ids=set())
+    assert [r["detail"] for r in raw["ops"]["paper"]["recent"]] == ["latched", "TransportError", "refused", "2026-09-30"]
+    assert raw["collector"]["sources"]["account"]["error"] == "ConnectionError"
+
+
+def test_lists_keep_the_newest_rows_and_count_the_rest():
+    san = sanitizer()
+    out = san.apply([publish.I], list(range(publish.LIST_MAX + 5)))
+    assert out[0] == 5 and out[-1] == publish.LIST_MAX + 4 and san.truncated == 5
+
+
+def test_the_dashboard_reports_its_previous_publish_not_itself(tmp_path, monkeypatch):
+    from wt.ops import heartbeat
+    monkeypatch.setattr(heartbeat, "HEARTBEAT_DIR", tmp_path)
+    (tmp_path / "runs.jsonl").write_text(json.dumps({"job": "dashboard", "status": "failed", "exit": 1,
+                                                     "started": "2026-09-29T07:00:00+00:00"}) + "\n")
+    (tmp_path / "dashboard.json").write_text(json.dumps({"job": "dashboard", "status": "running"}))
+    monkeypatch.setattr(publish, "last_runs", lambda: {"dashboard": {"status": "running"}}, raising=False)
+    monkeypatch.setattr("wt.ops.heartbeat.last_runs", lambda: {"dashboard": {"status": "running"}})
+    monkeypatch.setattr("wt.ops.alerts.Alerts.firing", lambda self: {})
+    monkeypatch.setattr("wt.ops.preflight.run_checks", lambda root: [])
+    monkeypatch.setattr("wt.ops.window.load_sessions", lambda now: ({}, True))
+    ex = publish.extras(dt.datetime(2026, 9, 29, 7, 20, tzinfo=dt.UTC), root=tmp_path)
+    assert ex["jobs"]["last"]["dashboard"]["status"] == "failed"
+    assert ex["jobs"]["last"]["dashboard"]["detail"] == "previous publish"
+    assert ex["kill"]["reason"] is None

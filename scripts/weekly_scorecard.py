@@ -23,6 +23,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from wt.analytics import g2  # noqa: E402
 from wt.core.clock import ET  # noqa: E402
 from wt.core.config import DATA_DIR, FORWARD_LEDGER, ROOT, SCORECARD_DIR  # noqa: E402
 
@@ -34,7 +35,6 @@ EXPECT = {  # frozen backtest distributions (development span; walk-forward wher
     "hod_bull_flag_atr_M1": ("EXP-0014-r2-intraday-hod", "HOD_bull_flag|M1"),
 }
 BIASED = ("watchlist_bull_flag_atr_M1", "hod_bull_flag_atr_M1")   # DEC-0011 H-LA; restarted as *_v2
-G2_MIN_TRADES, G2_MIN_SESSIONS = 50, 30
 
 
 def read_jsonl(p: Path) -> list[dict]:
@@ -112,27 +112,27 @@ def main(now: dt.datetime | None = None) -> str:
             band = f"[{lo:+.3f}, {hi:+.3f}]"
         L.append(f"| {strat} | {cells} | {bt} | {band} | {status} |")
     j = read_jsonl(JOURNAL)
-    closed = [x for x in j if x["event"] == "trade_closed"]
-    armed_days = sorted({str(x["day"]) for x in j if x["event"] == "armed"})
-    paper_days = {str(x.get("day")) for x in closed}
-    fwd_b_days = {x.get("session") for x in fwd if x.get("strategy") == "B_qqq_qqqm"}
-    both = set(armed_days) & set(sessions)
-    agree = sum(1 for d in both if (d in paper_days) == (d in fwd_b_days))
+    closed = g2.trades(j)                              # once per trade id; adopted orphans never count
+    fwd_b_days = {str(x.get("session")) for x in fwd if x.get("strategy") == "B_qqq_qqqm"}
+    g = g2.summary(j, {str(d) for d in sessions}, fwd_b_days)
+    agree, n_both = g["agreement_agree"] or 0, g["agreement_days"] or 0
     inc = {k: sum(1 for x in j if x["event"] == k) for k in ("loop_error", "END_OF_DAY_NOT_FLAT", "reconcile", "refuse_to_arm")}
     latched = [x for x in j if x["event"] == "trade_closed" and x.get("virtual", {}).get("latched")]
     ps = stats([x["R"] for x in closed if x.get("R") is not None])
     last_va = next((x["virtual"] for x in reversed(j) if "virtual" in x), None)
     L += ["", "## 2. Paper trading — strategy B (Alpaca paper, virtual account)", "",
-          f"- Sessions armed: **{len(armed_days)}** · trades closed: **{ps['n']}**"
+          f"- Sessions armed: **{g['armed_sessions']}** · clean (count for G2): **{g['sessions']}** · "
+          f"trades closed: **{ps['n']}**"
           + (f" · E[R] {ps['E']:+.3f} · win {ps['win']:.0%} · cum {ps['cum']:+.2f}R" if ps["n"] else ""),
-          f"- Signal agreement with forward-test B (sessions both ran): "
-          f"**{agree}/{len(both)}**" + (f" = {agree / len(both):.0%} (G2 needs ≥90%)" if both else " (no overlap yet)"),
+          f"- Signal agreement with forward-test B (clean sessions both ran; day-level, provisional until the "
+          f"replay harness): **{agree}/{n_both}**" + (f" = {agree / n_both:.0%} (G2 needs ≥90%)" if n_both else " (no overlap yet)"),
           f"- Incidents: loop errors {inc['loop_error']} · not flat at close {inc['END_OF_DAY_NOT_FLAT']} · "
           f"reconcile fixes {inc['reconcile']} · refused to arm {inc['refuse_to_arm']} · latch events {len(latched)}",
           f"- Virtual account: {'equity US$%.2f, settled cash US$%.2f, latched=%s' % (last_va['equity'], last_va['settled_cash'], last_va['latched']) if last_va else '—'}",
           "", "## 3. G2 progress", "",
-          f"- Paper trades {ps['n']}/{G2_MIN_TRADES} · sessions {len(armed_days)}/{G2_MIN_SESSIONS} · "
-          f"zero-incident requirement: {'met so far' if inc['loop_error'] == 0 and inc['END_OF_DAY_NOT_FLAT'] == 0 else 'NOT met — review incidents'}",
+          f"- Paper trades {ps['n']}/{g2.G2_MIN_TRADES} · clean sessions {g['sessions']}/{g2.G2_MIN_SESSIONS} · "
+          f"incident-free streak {g['incident_free_streak']}/{g2.G2_MIN_INCIDENT_FREE} "
+          "(a KILL-on, refused or incident session does not count)",
           "", "_Rules are frozen; any change requires a new decision record (research/decisions)._"]
     md = "\n".join(L) + "\n"
     out = SCORECARD_DIR / f"scorecard_{today}.md"
