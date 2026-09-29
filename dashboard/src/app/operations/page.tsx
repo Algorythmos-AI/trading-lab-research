@@ -9,6 +9,8 @@ import { PageHeading } from "@/components/page-heading";
 import { Panel } from "@/components/panel";
 import { StatusBadge, ToneIcon } from "@/components/status";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { AuditPanel } from "@/components/v3/audit";
+import { SlaPanel } from "@/components/v3/sla";
 import { duration, newYork, num, pct, shortDate, shortSha, sydney, txt } from "@/lib/format";
 import { humanize, jobKey, jobName, jobTone, sortJobKeys } from "@/lib/labels";
 import { loadSnapshot } from "@/lib/snapshot";
@@ -31,6 +33,7 @@ export default async function OperationsPage() {
       ) : (
         <>
           <HeatmapPanel s={result.snapshot} />
+          <SlaPanel s={result.snapshot} />
           <div className="grid gap-5 lg:grid-cols-2">
             <LastRunsPanel s={result.snapshot} />
             <PreflightPanel s={result.snapshot} />
@@ -40,6 +43,7 @@ export default async function OperationsPage() {
             <LogsPanel s={result.snapshot} />
           </div>
           <SourcesPanel s={result.snapshot} />
+          <AuditPanel s={result.snapshot} />
         </>
       )}
     </>
