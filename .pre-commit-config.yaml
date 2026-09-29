@@ -12,6 +12,10 @@ repos:
         args: [--maxkb=500]
       - id: detect-private-key
       - id: check-merge-conflict
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint
   - repo: local
     hooks:
       - id: check-restricted
