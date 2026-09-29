@@ -25,7 +25,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_pool import SplitStore, market_guard  # noqa: E402
-from r3_run import EQUITIES, SpreadAt, ctx_for, set_names  # noqa: E402
+from r3_run import EQUITIES, SpreadAt, set_names  # noqa: E402
 
 from wt.backtest.controls import control_signal  # noqa: E402
 from wt.backtest.engine import Costs, simulate  # noqa: E402
@@ -269,7 +269,7 @@ def main(exp: str, start: str, end: str, trial: str, counts_only: bool, recall_d
     meta = {"spec": "SPEC-0001", "trial": trial, "span": [start, end], "days": len(days), "count_at_600": count, "skips": skips}
     name = f"{'counts' if counts_only else 'results'}_{trial}.json"
     body = meta if counts_only else {**meta, "trades": trades,
-                                     "control_means": {trial: [float(s / n) for s, n in zip(csum, cn) if n > 0]}}
+                                     "control_means": {trial: [float(s / n) for s, n in zip(csum, cn, strict=False) if n > 0]}}
     (out / name).write_text(json.dumps(body, default=str, indent=None if not counts_only else 1))
     print(json.dumps({"count_at_600": count}))
 

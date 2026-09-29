@@ -15,7 +15,6 @@ import datetime as dt
 import os
 import statistics
 import time
-from pathlib import Path
 
 import pandas as pd
 
@@ -35,7 +34,7 @@ class PMCache:
     def __init__(self):
         self.df = pd.read_parquet(PM_CACHE) if PM_CACHE.exists() else pd.DataFrame(
             columns=["symbol", "date", "pm_volume", "pm_dollar_vol", "last_0925", "pm_high", "n_bars"])
-        self.idx = {(s, d) for s, d in zip(self.df.symbol, self.df.date)}
+        self.idx = {(s, d) for s, d in zip(self.df.symbol, self.df.date, strict=False)}
         self.new: list[dict] = []
 
     def missing(self, symbols, dates):
@@ -135,7 +134,6 @@ def build_candidates(d: dt.date, daily: pd.DataFrame, sessions: list[dt.date], a
         for s in n.get("symbols", []):
             if s in syms:
                 heads.setdefault(s, []).append(n["headline"])
-    out = []
     pre: list[Candidate] = []
     for s in syms:
         if s not in pm_today.index or pm_today.loc[s, "n_bars"] == 0:

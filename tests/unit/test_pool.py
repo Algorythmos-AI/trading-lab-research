@@ -1,7 +1,6 @@
 """Causal candidate pool (POOL-01..04) with a fake data client, offline."""
 import datetime as dt
 
-import numpy as np
 import pandas as pd
 
 from wt.data.corpactions import SplitFactors

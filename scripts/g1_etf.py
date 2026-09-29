@@ -4,8 +4,6 @@ per-share slippage scaled to SPYM/QQQM price ratio ~ 1/7 and ~1/2 -> conservativ
 Usage: python scripts/g1_etf.py EXP-0005-g1-etf"""
 from __future__ import annotations
 
-import itertools
-import json
 import sys
 from pathlib import Path
 

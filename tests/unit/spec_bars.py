@@ -8,7 +8,7 @@ def minute_bars(rows, start_et="09:30", day=DAY):
     """rows: (o, h, l, c, v) at consecutive minutes from start_et (ET)."""
     t0 = pd.Timestamp(f"{day} {start_et}", tz="America/New_York").tz_convert("UTC")
     t = pd.date_range(t0, periods=len(rows), freq="1min")
-    o, h, l, c, v = zip(*rows) if rows else ((), (), (), (), ())
+    o, h, l, c, v = zip(*rows, strict=False) if rows else ((), (), (), (), ())
     return pd.DataFrame({"t": t, "o": o, "h": h, "l": l, "c": c, "v": v})
 
 

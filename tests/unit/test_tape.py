@@ -1,5 +1,4 @@
 """Tape proxies (TAP-01..06) on synthetic ticks: quote rule, tick rule, surge and freeze ratios, 10-second bars."""
-import numpy as np
 import pandas as pd
 
 from wt.data.tape import classify_sides, features, ten_second_bars

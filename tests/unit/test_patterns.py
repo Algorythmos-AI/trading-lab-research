@@ -9,7 +9,7 @@ from wt.signals.patterns import abcd, breakout_volume_ok, bull_flag, flat_top, p
 def mk(rows, start="2024-03-01 14:30"):
     """rows: (o, h, l, c, v) tuples at consecutive minutes from 09:30 ET (14:30 UTC in March, EST)."""
     t = pd.date_range(start, periods=len(rows), freq="1min", tz="UTC")
-    o, h, l, c, v = zip(*rows)
+    o, h, l, c, v = zip(*rows, strict=False)
     return pd.DataFrame({"t": t, "o": o, "h": h, "l": l, "c": c, "v": v})
 
 

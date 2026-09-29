@@ -78,7 +78,7 @@ if __name__ == "__main__":
 def verification_section() -> str:
     """Append K0 verification evidence: sample audit, anchor examples, chunk resolution."""
     import sqlite3
-    v = json.loads((WORK / "verification_report.json").read_text())
+    json.loads((WORK / "verification_report.json").read_text())  # precondition: the K0 report exists and parses
     comps = [json.loads(l) for l in Path("knowledge/components.jsonl").read_text().splitlines() if l.strip()]
     chunks = {c for (c,) in sqlite3.connect(WORK / "kb.sqlite").execute("select chunk_id from chunks")}
     unresolved = sum(c["evidence_chunk_id"] not in chunks for c in comps)
@@ -90,7 +90,6 @@ def verification_section() -> str:
         "sell into strength": has(lambda c: c["concept"] == "sell_into_strength"),
         "partials / scale out": has(lambda c: c["concept"] == "partials_scale_out"),
     }
-    s = json.dumps(v.get("summary", v))[:600]
     out = ["", "## Verification", "",
            f"- Every `evidence_chunk_id` resolves to a real KB chunk: **{len(comps) - unresolved}/{len(comps)}**",
            "- Independent seeded sample audit (20 components vs source chunks, 20 charts vs actual images): "
@@ -99,7 +98,7 @@ def verification_section() -> str:
            "(one fabricated param in an options record, batch_053:0003) — treat single-source parameters as hypotheses, "
            "which G1 tests anyway. Details: `_work/verification_report.json`.",
            "- Anchor examples extracted correctly: " + "; ".join(f"{k} {'✅' if ok else '❌'}" for k, ok in anchors.items()),
-           f"- Chart records: $ amounts resembling P&L/balances are scrubbed at merge time."]
+           "- Chart records: $ amounts resembling P&L/balances are scrubbed at merge time."]
     return "\n".join(out) + "\n"
 
 

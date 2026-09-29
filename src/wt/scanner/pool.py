@@ -86,7 +86,7 @@ def last_print(snap: pd.DataFrame) -> pd.Series:
 
 
 def build_day(d: dt.date, p: dt.date, client, daily: "DailyIndex", universe: set[str], splits: SplitFactors,
-              pm_cache, shares, prev_sessions: list[dt.date], cfg: PoolConfig = PoolConfig(),
+              pm_cache, shares, prev_sessions: list[dt.date], cfg: PoolConfig = PoolConfig(),  # noqa: B008 — never mutated in build_day
               quotes=None, split_refresh=None) -> tuple[pd.DataFrame, pd.DataFrame, PoolStats]:
     """Returns (candidates, pm_bars, stats). `daily`: DailyIndex over raw daily bars (symbol, date, o, h, l, c, v).
     `pm_cache`: features.PMCache. `shares`: edgar.SharesOutstanding. `quotes(symbols, d)` -> {sym: (pct, abs)}.

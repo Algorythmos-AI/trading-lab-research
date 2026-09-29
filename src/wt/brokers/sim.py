@@ -4,7 +4,7 @@ from __future__ import annotations
 import copy
 
 from wt.brokers.base import Broker
-from wt.core.types import AccountState, Order, OrderStatus, Position
+from wt.core.types import AccountState, OrderStatus, Position
 
 
 class SimBroker(Broker):

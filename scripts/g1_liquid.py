@@ -66,7 +66,7 @@ def main(exp_id: str) -> None:
         close = early.get(day, "16:00")
         hh, mm = map(int, close.split(":"))
         flat = (hh * 60 + mm) - 570 - 10
-        for c, (s, p, mg) in zip(cfgs, variants):
+        for c, (s, p, mg) in zip(cfgs, variants, strict=False):
             for sym, b in bars.items():
                 if len(b) < flat:
                     continue
