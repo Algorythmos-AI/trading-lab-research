@@ -102,8 +102,11 @@ def _history(root: Path, key: str, event: str, title: str, priority: int | None 
         if path.stat().st_size > HISTORY_MAX_BYTES:
             lines = path.read_text().splitlines(keepends=True)
             tmp = root / f".history.{uuid.uuid4().hex}.tmp"
-            tmp.write_text("".join(lines[len(lines) // 2:]))
-            os.replace(tmp, path)
+            try:
+                tmp.write_text("".join(lines[len(lines) // 2:]))
+                os.replace(tmp, path)
+            finally:
+                tmp.unlink(missing_ok=True)                 # never leave a temp file behind (a full disk)
     except Exception:  # noqa: BLE001, S110 — history is best effort by design
         pass
 

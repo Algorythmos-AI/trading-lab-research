@@ -82,7 +82,7 @@ def synthetic(n_trades: int = 24, days: int = 14, n_alerts: int = 6, seed: int =
                  "band": {"available": False, "reason": "no expectation band until the DEC-0011 re-runs"}},
         "blotter": ops_view.blotter(trades),
         "sla": ops_view.sla(runs, today, sessions, days=days),
-        "audit": {"chain_ok": True, "chain_bad_seq": None, "events": trail},
+        "audit": {"chain_ok": True, "chain_bad_seq": None, "rows": len(rows), "bad_lines": 0, "events": trail},
         "alerts_history": ops_view.alert_log(alerts),
         "digest": dig,
     }

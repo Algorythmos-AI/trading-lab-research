@@ -170,7 +170,8 @@ ALLOW: dict[str, Any] = {
     "sla": {"days": [S], "cells": [{"job": S, "date": S, "status": SLA_STATUS, "runs": I}],
             "summary": [{"job": S, "expected": I, "ok": I, "refused": I, "failed": I, "missed": I, "ok_pct": N}]},
     "digest": {"since": S, "items": [{"key": S, "label": S, "prev": S, "now": S, "changed": B}]},
-    "audit": {"chain_ok": B, "chain_bad_seq": I, "events": [{"at": S, "kind": S, "source": S, "detail": T}]},
+    "audit": {"chain_ok": B, "chain_bad_seq": I, "rows": I, "bad_lines": I,
+              "events": [{"at": S, "kind": S, "source": S, "detail": T}]},
 }
 REQUIRED = ("schema", "schema_version", "run_id", "as_of")
 _KEY = re.compile(r"^[\w.:+\- /|]{1,64}$")
@@ -443,34 +444,54 @@ def v3_views(now: dt.datetime, *, runs: list[dict[str, Any]], sessions: dict[dt.
              root: Path = ROOT, live: Path = DATA_DIR / "live", alert_dir: Path | None = None,
              deploy_dir: Path | None = None, audit_log: Path | None = None) -> dict[str, Any]:
     """The Wave 1a sections: risk, perf, blotter, sla, audit and the alert history (the digest is added in
-    _publish, from the built snapshot)."""
-    from wt.analytics import ops_view, performance, risk_view
+    _publish, from the built snapshot). Each is built on its own: one that fails is left out (and named on
+    stderr) without taking the others with it."""
+    from wt.analytics import g2, ops_view, performance, risk_view
     from wt.ops import audit
     from wt.ops.alerts import ALERT_DIR
     today = now.astimezone(ET).date()
     journal = _read_jsonl(live / "journal.jsonl")
-    trades = [r for r in journal if r.get("event") == "trade_closed"]
-    armed_days = {str(r.get("day") or str(r.get("ts", ""))[:10]) for r in journal if r.get("event") == "armed"}
-    account = risk_view.load_account(live / "virtual_account.json")
-    curve = performance.curve(trades, start_equity=float((account or {}).get("start_equity") or 600.0))
-    dd_pct, dd_r = performance.max_drawdown(curve)
-    history = _read_jsonl((alert_dir or ALERT_DIR) / "history.jsonl")
-    rows = audit.read(audit_log or audit.AUDIT)
-    chain_ok, bad = audit.verify(rows)
-    return {
-        "risk": risk_view.view(today, account, kill, root=root),
-        "perf": {"stats": performance.stats(trades, sessions=len(armed_days)), "sessions": len(armed_days),
-                 "min_trades": thresholds.MIN_TRADES_STATS, "min_sessions": thresholds.MIN_SESSIONS_SHARPE,
-                 "max_dd_pct": dd_pct, "max_dd_r": dd_r, "curve": curve, "histogram": performance.histogram(trades),
-                 "band": {"available": False, "reason": "no expectation band until the DEC-0011 re-runs"}},
-        "blotter": ops_view.blotter(journal),
-        "sla": ops_view.sla(runs, today, sessions),
-        "audit": {"chain_ok": chain_ok, "chain_bad_seq": bad,
-                  "events": ops_view.audit_trail(deploys=sorted((deploy_dir or STATE_DIR / "deploy").glob("*.json")),
-                                                 account=account, runs=runs, alert_history=history,
-                                                 audit_rows=rows)},
-        "alerts_history": ops_view.alert_log(history),
-    }
+    out: dict[str, Any] = {}
+
+    def section(name: str, build: Callable[[], Any]) -> None:
+        try:
+            out[name] = build()
+        except Exception as e:  # noqa: BLE001 — one bad view must not take the others (or the publish) down
+            print(f"v3 view {name} failed ({e.__class__.__name__}); left out", file=sys.stderr)
+
+    def perf() -> dict[str, Any]:
+        trades = g2.trades(journal)                       # once per trade_id; adopted orphans never count
+        clean = {d for d, s in g2.sessions(journal).items() if s.clean}
+        account = risk_view.load_account(live / "virtual_account.json")
+        full = performance.curve(trades, start_equity=float((account or {}).get("start_equity") or 600.0),
+                                 max_points=10**9)
+        dd_pct, dd_r = performance.max_drawdown(full)      # on every trade, before thinning
+        return {"stats": performance.stats(trades, session_days=clean), "sessions": len(clean),
+                "min_trades": thresholds.MIN_TRADES_STATS, "min_sessions": thresholds.MIN_SESSIONS_SHARPE,
+                "max_dd_pct": dd_pct, "max_dd_r": dd_r, "curve": performance.thin(full),
+                "histogram": performance.histogram(trades),
+                "band": {"available": False, "reason": "no expectation band until the DEC-0011 re-runs"}}
+
+    def audit_section() -> dict[str, Any]:
+        rows = audit.read(audit_log or audit.AUDIT)
+        chain_ok, bad = audit.verify(rows)
+        return {"chain_ok": chain_ok, "chain_bad_seq": bad, "rows": sum(1 for r in rows if "kind" in r),
+                "bad_lines": sum(1 for r in rows if "_bad" in r),
+                "events": ops_view.audit_trail(deploys=sorted((deploy_dir or STATE_DIR / "deploy").glob("*.json")),
+                                               account=risk_view.load_account(live / "virtual_account.json"),
+                                               runs=runs, alert_history=history(), audit_rows=rows)}
+
+    def history() -> list[dict[str, Any]]:
+        return _read_jsonl((alert_dir or ALERT_DIR) / "history.jsonl")
+
+    section("risk", lambda: risk_view.view(today, risk_view.load_account(live / "virtual_account.json"), kill,
+                                           root=root, va_path=live / "virtual_account.json"))
+    section("perf", perf)
+    section("blotter", lambda: ops_view.blotter(journal))
+    section("sla", lambda: ops_view.sla(runs, today, sessions))
+    section("audit", audit_section)
+    section("alerts_history", lambda: ops_view.alert_log(history()))
+    return out
 
 
 def add_digest(snap: dict[str, Any], san: Sanitizer, now: dt.datetime, daily_dir: Path = OUT / "daily") -> None:
@@ -505,7 +526,7 @@ def extras(now: dt.datetime, root: Path = ROOT) -> dict[str, Any]:
         views = v3_views(now, runs=runs, sessions=sessions, kill=kill.exists(), root=root)
     except Exception as e:  # noqa: BLE001 — a new view must never stop the publish the watchdog depends on
         print(f"v3 views failed ({e.__class__.__name__}); publishing without them", file=sys.stderr)
-        views = {"alerts_history": None}
+        views = {}
     last = last_runs()
     prev = next((r for r in reversed(runs) if r.get("job") == "dashboard"), None)
     if prev is not None:                # this run is the one collecting: show the previous, completed publish
@@ -516,7 +537,7 @@ def extras(now: dt.datetime, root: Path = ROOT) -> dict[str, Any]:
         "jobs": {"last": last, "runs": [r for r in runs if str(r.get("started", "")) >= cutoff][-500:]},
         "alerts": {"firing": [{"key": k, "since": v.get("since"), "title": v.get("title")}
                               for k, v in sorted(Alerts().firing().items())],
-                   "history": views.pop("alerts_history")},
+                   "history": views.pop("alerts_history", None)},
         "kill": {"on": kill.exists(),
                  "since": dt.datetime.fromtimestamp(kill.stat().st_mtime, dt.UTC).isoformat() if kill.exists() else None,
                  "reason": None},              # the KILL file's note is the owner's free text: it stays local

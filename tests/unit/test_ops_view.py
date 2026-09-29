@@ -98,3 +98,15 @@ def test_audit_log_chain_detects_edits(tmp_path):
     assert audit.verify(rows) == (False, 1)
     assert audit.verify(audit.read(log)[1:]) == (False, 0)          # a dropped head breaks the chain too
     assert audit.main(["bogus"]) == 2
+
+
+
+def test_a_torn_audit_line_is_ended_and_skipped(tmp_path):
+    log = tmp_path / "events.jsonl"
+    audit.append("kill_on", path=log)
+    with open(log, "a") as f:
+        f.write('{"seq": 1, "kind": "kill_o')                    # a crash mid-write
+    audit.append("kill_off", path=log)
+    rows = audit.read(log)
+    assert [r.get("kind") for r in rows if "_bad" not in r] == ["kill_on", "kill_off"]
+    assert sum(1 for r in rows if "_bad" in r) == 1 and audit.verify(rows) == (True, None)
