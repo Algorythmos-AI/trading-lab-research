@@ -34,8 +34,12 @@ BUSY_RESET = ("paper B is running (its lock is held): its in-memory account woul
 def _runner_idle(lock_root: Path | None) -> Iterator[bool]:
     """Hold both paper-b's job lock and the runner process's own lock for the block; yields False if either is
     held elsewhere (a runner orphaned by a dead wrapper holds only the second)."""
-    with locks.job_lock(RUNNER_JOB, lock_root) as job, locks.job_lock(locks.RUNNER_LOCK, lock_root) as runner:
-        yield job and runner
+    with locks.job_lock(RUNNER_JOB, lock_root) as job:
+        if not job:                        # the wrapper is running paper-b: don't touch the runner's lock at all
+            yield False
+            return
+        with locks.job_lock(locks.RUNNER_LOCK, lock_root) as runner:
+            yield runner
 
 
 def unkill(root: Path = ROOT, lock_root: Path | None = None, audit_log: Path | None = None) -> tuple[int, str]:
@@ -53,7 +57,7 @@ def unkill(root: Path = ROOT, lock_root: Path | None = None, audit_log: Path | N
 
 
 def reset_latch(reason: str, va_path: Path = VA_PATH, lock_root: Path | None = None) -> tuple[int, str]:
-    from wt.risk.virtual_account import NotLatched
+    from wt.risk.virtual_account import NotLatched, StateError
     from wt.risk.virtual_account import reset_latch as _reset
     if not reason.strip():
         return 2, 'usage: make reset-latch REASON="why it is safe to resume"'
@@ -64,6 +68,8 @@ def reset_latch(reason: str, va_path: Path = VA_PATH, lock_root: Path | None = N
             va = _reset(va_path, reason)
         except NotLatched as e:
             return 0, str(e)
+        except StateError as e:
+            return 4, f"{e} (nothing was changed)"
     return 0, f"latch cleared; recorded at {va.latch_history[-1]['at']}"
 
 

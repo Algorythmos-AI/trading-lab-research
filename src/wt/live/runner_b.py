@@ -65,6 +65,7 @@ SKEW_MAX_S = 2.0              # local clock vs broker clock, checked before ever
 CLOCK_MAX_RTT_S = 1.0         # a clock reading that took longer than this says nothing about skew
 HELD_EXIT_RETRY_S = 300       # an adopted position that failed to exit is retried at most every 5 minutes
 CONNECT_TRIES, CONNECT_WAIT_S = 5, 60.0
+RUNNER_LOCK_WAIT_S = 10.0     # how long a starting runner waits for its own process lock
 T = TypeVar("T")
 _pool = cf.ThreadPoolExecutor(max_workers=4, thread_name_prefix="data")
 
@@ -334,11 +335,13 @@ def run(day: dt.date | None = None, poll_s: float = 20.0, broker: Any = None, re
             return
         # One runner process at a time, whatever launched it: a runner orphaned by a dead jobs.py wrapper still
         # holds this lock, so a second one (a restart, a boot reconcile) refuses instead of double-managing orders.
-        with locks.job_lock(locks.RUNNER_LOCK) as got:
+        # A short wait: `make unkill`/`reset-latch` or the deploy gate may be probing this lock for a moment.
+        with locks.job_lock(locks.RUNNER_LOCK, wait_s=RUNNER_LOCK_WAIT_S, poll_s=0.5) as got:
             if not got:
                 log("refuse_to_arm", reason="another paper-b runner process is live (runner lock held)")
-                pager.fire("paper-b:second-runner", "paper-b: a second runner refused to start",
-                           "Another paper-b runner process holds the runner lock; this one exited without trading.")
+                pager.once_per_day("paper-b:second-runner", "paper-b: a second runner refused to start",
+                                   "Another paper-b runner process holds the runner lock; this one exited without "
+                                   "trading.", 4)
                 return
             _session(day, poll_s, broker, rest, clock, sleep, pager,
                      exits_only if exits_only is not None else env("WT_EXITS_ONLY", "") == "1")

@@ -24,7 +24,7 @@ from typing import Any
 from wt.core.config import ROOT, STATE_DIR
 from wt.ops import agents, dashguard, host, migrate, preflight
 from wt.ops.alerts import Alerts
-from wt.ops.locks import held
+from wt.ops.locks import RUNNER_LOCK, held
 from wt.ops.schedule import JOBS, PY, SYDNEY, TRADING_JOBS
 from wt.ops.window import deploy_blockers, load_sessions
 
@@ -50,7 +50,8 @@ def running_jobs() -> dict[str, bool]:
 def gate_blockers(now: dt.datetime | None = None) -> list[str]:
     now = now or _now()
     sessions, exact = load_sessions(now)
-    return deploy_blockers(now, sessions, running_jobs(), held(TRADING_JOBS), exact)
+    # The runner's own lock too: a runner orphaned by a dead wrapper holds only that one.
+    return deploy_blockers(now, sessions, running_jobs(), held([*TRADING_JOBS, RUNNER_LOCK]), exact)
 
 
 def sync_venv() -> None:

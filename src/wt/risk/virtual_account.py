@@ -47,12 +47,13 @@ def _durable_write(path: Path, text: str) -> None:
 def _mark_latched(sentinel: Path, reason: str) -> None:
     """Create the sentinel first as an empty file (a directory entry, no data blocks, so it still succeeds on a full
     disk), make that durable, then try to record the reason in it. Only the file's existence is load-bearing."""
-    fd = os.open(sentinel, os.O_CREAT | os.O_WRONLY, 0o644)
-    try:
-        os.fsync(fd)
-    finally:
-        os.close(fd)
-    _fsync_dir(sentinel.parent)
+    if not sentinel.exists():             # an existing one already latches (and may not be writable: leave it)
+        fd = os.open(sentinel, os.O_CREAT | os.O_WRONLY, 0o644)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        _fsync_dir(sentinel.parent)
     try:
         _durable_write(sentinel, reason)
     except OSError:
@@ -179,9 +180,17 @@ def reset_latch(path: Path, reason: str, by: str = "owner") -> VirtualAccount:
     try:
         va = VirtualAccount.load(path)
     except StateError:
-        raw = json.loads(path.read_text()) if path.exists() else {}
+        if not path.exists():
+            raise StateError(f"{path.name} is missing while latched: restore it from the backup before resetting, "
+                             "or the account's history and P&L would start again from zero") from None
+        try:
+            raw = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as e:
+            raise StateError(f"{path.name} is unreadable ({e.__class__.__name__}): restore it from the backup "
+                             "before resetting") from None
         known = {f.name for f in fields(VirtualAccount)}
-        va = VirtualAccount(**{k: v for k, v in raw.items() if k in known}) if raw else VirtualAccount()
+        va = VirtualAccount(**{k: v for k, v in raw.items() if k in known}) if isinstance(raw, dict) \
+            else VirtualAccount()
     if not va.latched and not s.exists():
         raise NotLatched("the account is not latched: nothing to reset")
     why = va.latch_reason

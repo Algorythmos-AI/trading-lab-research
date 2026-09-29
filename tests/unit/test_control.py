@@ -178,6 +178,7 @@ def test_a_second_runner_process_refuses_to_start(tmp_path, orphan_runner, monke
     monkeypatch.setattr(locks, "LOCK_DIR", orphan_runner)
     monkeypatch.setattr(alerts, "ALERT_DIR", tmp_path / "alerts")
     monkeypatch.setattr(runner_b, "LIVE", tmp_path / "live")
+    monkeypatch.setattr(runner_b, "RUNNER_LOCK_WAIT_S", 0.3)
 
     def must_not_run(*a, **k):
         raise AssertionError("a second runner must not start a session")
@@ -186,3 +187,50 @@ def test_a_second_runner_process_refuses_to_start(tmp_path, orphan_runner, monke
     runner_b.run()                                           # production path: no broker injected
     rows = [json.loads(x) for x in (tmp_path / "live" / "journal.jsonl").read_text().splitlines()]
     assert rows[-1]["event"] == "refuse_to_arm" and "runner lock held" in rows[-1]["reason"]
+
+
+
+def test_control_leaves_the_runner_lock_alone_while_the_wrapper_holds_the_job(tmp_path, runner):
+    """Second review: probing the runner's lock while paper-b is starting could make the real runner refuse."""
+    (tmp_path / "KILL").write_text("x")
+    assert control.unkill(root=tmp_path, lock_root=runner, audit_log=tmp_path / "a.jsonl")[0] == 3
+    # the job lock was busy, so the runner lock was never taken: a runner starting now would get it
+    with locks.job_lock(locks.RUNNER_LOCK, runner) as got:
+        assert got
+
+
+def test_reset_refuses_on_a_missing_or_corrupt_account(tmp_path):
+    path = tmp_path / "va.json"
+    (tmp_path / "va.json.latch").write_text("daily loss limit -2%")
+    code, msg = control.reset_latch("safe", va_path=path, lock_root=tmp_path / "l")
+    assert code == 4 and "missing" in msg and not path.exists()             # no fresh US$600 account
+    path.write_text("{not json")
+    code, msg = control.reset_latch("safe", va_path=path, lock_root=tmp_path / "l")
+    assert code == 4 and "unreadable" in msg and path.read_text() == "{not json"
+
+
+def test_a_read_only_sentinel_does_not_break_saves(tmp_path):
+    path = tmp_path / "va.json"
+    va = VirtualAccount()
+    va.latch("x")
+    va.save(path)
+    os.chmod(tmp_path / "va.json.latch", 0o444)
+    va.equity -= 1
+    va.save(path)                                                           # no PermissionError
+    assert VirtualAccount.load(path).latched
+
+
+def test_the_deploy_gate_counts_the_runner_lock(tmp_path, orphan_runner, monkeypatch):
+    from wt.ops import deploy
+    monkeypatch.setattr(locks, "LOCK_DIR", orphan_runner)
+    seen = {}
+
+    def blockers(now, sessions, running, held_locks, exact):
+        seen["held"] = held_locks
+        return []
+
+    monkeypatch.setattr(deploy, "deploy_blockers", blockers)
+    monkeypatch.setattr(deploy, "load_sessions", lambda now: ({}, True))
+    monkeypatch.setattr(deploy, "running_jobs", lambda: {})
+    deploy.gate_blockers()
+    assert locks.RUNNER_LOCK in seen["held"]
