@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import { FlaskConical } from "lucide-react";
+import { headers } from "next/headers";
 import { AutoRefresh } from "@/components/client/auto-refresh";
 import { THEME_INIT_SCRIPT } from "@/components/client/theme-toggle";
 import { SiteHeader } from "@/components/site-header";
@@ -32,10 +33,11 @@ export const viewport: Viewport = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const result = await loadSnapshot();
   const snap = result.status === "ok" ? result.snapshot : null;
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html lang="en-AU" className={`dark ${GeistSans.variable} ${GeistMono.variable}`} suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <script nonce={nonce} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body className="min-h-dvh">
         <a
