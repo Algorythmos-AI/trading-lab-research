@@ -52,6 +52,7 @@ test("pages carry a nonce CSP and still run their scripts", async ({ page }) => 
   await page.getByRole("button", { name: /Switch to dark theme/ }).click();
   await expect(page.locator("html")).toHaveClass(/(^|\s)dark(\s|$)/);
   expect(violations).toEqual([]);
+});
 
 test("the v3 panels render from the fixture, and the glossary is linked", async ({ page }) => {
   const errors: string[] = [];
