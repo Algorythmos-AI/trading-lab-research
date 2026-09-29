@@ -81,6 +81,9 @@ jobs:
     steps:
       - name: Skip when the Vercel token is not configured
         id: gate
+        # Runs before checkout: dashboard/ (the workflow default) does not exist yet. tests/unit/test_workflows.py
+        # fails any step that would.
+        working-directory: .
         run: |
           if [ -z "$VERCEL_TOKEN" ]; then
             echo "VERCEL_TOKEN is not set: skipping the deploy (checks still ran)." >> "$GITHUB_STEP_SUMMARY"

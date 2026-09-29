@@ -31,6 +31,7 @@ vi.mock("@/lib/blob", () => ({
   ALERT_STATE_PATH: "alerts/state.json",
   PreconditionFailed: blob.PreconditionFailed,
   readText: vi.fn(async (pathname: string) => blob.store.get(pathname) ?? null),
+  readForUpdate: vi.fn(async (pathname: string) => blob.store.get(pathname) ?? null),
   writeText: vi.fn(async (pathname: string, body: string, opts: { ifMatch?: string | null } = {}) => {
     if (blob.state.conflicts > 0 && pathname === "snapshots/latest.json") {
       blob.state.conflicts--;
@@ -76,7 +77,6 @@ beforeEach(() => {
   blob.reset();
   vi.spyOn(console, "log").mockImplementation(() => undefined);
   vi.stubEnv("VERCEL_ENV", "production");
-  vi.stubEnv("ALLOW_PREVIEW_INGEST", "");
   vi.stubEnv("DASHBOARD_INGEST_SECRET", SECRET);
 });
 
@@ -88,17 +88,17 @@ describe("POST /api/ingest", () => {
     expect(blob.store.size).toBe(0);
   });
 
-  it("403 locally (no VERCEL_ENV) unless ALLOW_PREVIEW_INGEST=1", async () => {
+  it("403 locally (no VERCEL_ENV), with no override: only production ever writes", async () => {
     vi.stubEnv("VERCEL_ENV", "");
+    vi.stubEnv("ALLOW_PREVIEW_INGEST", "1"); // the old escape hatch is gone
     expect((await handleIngest(signed(snapshotBody("r1", "2026-09-29T21:45:00+00:00")), NOW)).status).toBe(403);
-    vi.stubEnv("ALLOW_PREVIEW_INGEST", "1");
-    expect((await handleIngest(signed(snapshotBody("r1", "2026-09-29T21:45:00+00:00")), NOW)).status).toBe(200);
+    expect(blob.store.size).toBe(0);
   });
 
   it("401 on a bad signature", async () => {
     const res = await handleIngest(signed(snapshotBody("r1", "2026-09-29T21:45:00+00:00"), { secret: "wrong" }), NOW);
     expect(res.status).toBe(401);
-    expect(await res.json()).toEqual({ error: "unauthorized", reason: "bad-signature" });
+    expect(await res.json()).toEqual({ error: "unauthorized" }); // the reason is logged, never returned
     expect(blob.store.size).toBe(0);
   });
 
@@ -111,7 +111,7 @@ describe("POST /api/ingest", () => {
     const body = snapshotBody("r1", "2026-09-29T21:45:00+00:00");
     const res = await handleIngest(signed(body, { ts: NOW_S - 301 }), NOW);
     expect(res.status).toBe(401);
-    expect(await res.json()).toMatchObject({ reason: "stale" });
+    expect(await res.json()).toEqual({ error: "unauthorized" });
     expect((await handleIngest(signed(body, { ts: NOW_S + 301 }), NOW)).status).toBe(401);
   });
 

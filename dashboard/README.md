@@ -61,13 +61,12 @@ Fixture mode is refused on production deployments, and the page shows a banner w
 
 | Name | Where | Purpose |
 |---|---|---|
-| `BLOB_READ_WRITE_TOKEN` | Vercel (added when the private Blob store is connected) | Read and write snapshots and alert state |
+| `BLOB_READ_WRITE_TOKEN` | Vercel **production only** (added when the private Blob store is connected) | Read and write snapshots and alert state. Previews must not hold it: they run with `DASHBOARD_FIXTURE=1` |
 | `DASHBOARD_INGEST_SECRET` | Vercel production + the Mac's `~/trading/.env` | Shared HMAC key for `/api/ingest` |
 | `CRON_SECRET` | Vercel production | Bearer token Vercel Cron sends to `/api/cron/watchdog` |
 | `NTFY_TOPIC` | Vercel production and preview + the Mac | Secret, random ntfy topic for pages; unset means log and skip |
 | `NTFY_SERVER` | Vercel (optional) | ntfy server, default `https://ntfy.sh` |
-| `DASHBOARD_FIXTURE` | Local and CI only | `1` serves the fixture snapshot (ignored in production) |
-| `ALLOW_PREVIEW_INGEST` | Tests only | `1` lets a non-production deployment accept ingest; leave unset |
+| `DASHBOARD_FIXTURE` | Local, CI and Vercel preview | `1` serves the fixture snapshot (ignored in production) |
 | `DASHBOARD_INGEST_URL` | The Mac | `https://lab.algorythmos.com/api/ingest` |
 | `VERCEL_AUTOMATION_BYPASS_SECRET` | The Mac | Lets the publisher through Vercel Authentication |
 

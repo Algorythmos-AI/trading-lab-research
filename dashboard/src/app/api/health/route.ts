@@ -11,6 +11,7 @@ export async function GET(): Promise<Response> {
       ok: true,
       version: sha ? sha.slice(0, 12) : "dev",
       snapshot_as_of: result.status === "ok" ? (result.snapshot.as_of ?? null) : null,
+      snapshot_run_id: result.status === "ok" ? (result.snapshot.run_id ?? null) : null,
       snapshot: result.status,
       ...(fixtureMode() ? { fixture: true } : {}),
     },

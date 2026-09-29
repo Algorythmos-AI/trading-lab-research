@@ -1,5 +1,5 @@
 import "server-only";
-import { HISTORY_PREFIX, LATEST_PATH, PreconditionFailed, readText, writeText } from "./blob";
+import { HISTORY_PREFIX, LATEST_PATH, PreconditionFailed, readForUpdate, writeText } from "./blob";
 import { verify } from "./hmac";
 import { logEvent } from "./log";
 import { parseTime } from "./freshness";
@@ -67,7 +67,7 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
     return json(status, body);
   };
 
-  if (process.env.VERCEL_ENV !== "production" && process.env.ALLOW_PREVIEW_INGEST !== "1") {
+  if (process.env.VERCEL_ENV !== "production") {
     return done(403, "not-production", { error: "ingest is disabled on this deployment" });
   }
   const secret = process.env.DASHBOARD_INGEST_SECRET;
@@ -78,7 +78,8 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
 
   const auth = verify(secret, req.headers.get("x-wt-timestamp"), req.headers.get("x-wt-signature"), bytes, now);
   if (!auth.ok) {
-    return done(401, "unauthorized", { error: "unauthorized", reason: auth.reason }, { reason: auth.reason, bytes: bytes.byteLength });
+    // The reason is logged, never returned: a caller probing the endpoint learns nothing.
+    return done(401, "unauthorized", { error: "unauthorized" }, { reason: auth.reason, bytes: bytes.byteLength });
   }
 
   let text: string;
@@ -102,7 +103,7 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
 
   try {
     for (let attempt = 0; attempt < 2; attempt++) {
-      const current = await readText(LATEST_PATH);
+      const current = await readForUpdate(LATEST_PATH);
       if (current) {
         const meta = currentMeta(current.text);
         if (meta.runId === runId) return done(200, "duplicate", { status: "duplicate", run_id: runId }, { run_id: runId });
@@ -111,7 +112,7 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
         }
       }
       try {
-        await writeText(LATEST_PATH, text, { ifMatch: current?.etag ?? null });
+        await writeText(LATEST_PATH, text, current ? { ifMatch: current.etag } : { createOnly: true });
       } catch (e) {
         if (e instanceof PreconditionFailed && attempt === 0) continue;
         if (e instanceof PreconditionFailed) {
