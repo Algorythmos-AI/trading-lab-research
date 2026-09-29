@@ -41,6 +41,7 @@ import numpy as np
 import pandas as pd
 
 from wt.backtest.engine import size_position
+from wt.core import ledger
 from wt.core.clock import ET, et, to_utc_iso
 from wt.core.config import DATA_DIR, ROOT, STATE_DIR, env
 from wt.data.alpaca import DATA, AlpacaREST
@@ -67,15 +68,24 @@ T = TypeVar("T")
 _pool = cf.ThreadPoolExecutor(max_workers=4, thread_name_prefix="data")
 
 
+# Events G2 and the books rest on: fsynced so a power cut can't take them back (plan R3).
+DURABLE_EVENTS = frozenset({"armed", "entry_placed", "entry_filled", "trade_closed", "close_unknown", "session_end",
+                            "adopted_orphan", "adopted_prior_plan", "resumed_orphan", "short_position",
+                            "refuse_to_arm", "kill_state"})
+
+
 def log(event: str, **kw: Any) -> None:
-    """Append to the journal. Never raises: a full disk must not kill a runner that holds a position (H4)."""
-    rec = {"ts": dt.datetime.now(dt.UTC).isoformat(), "event": event, **kw}
-    line = json.dumps(rec, default=str)
+    """Append to the journal, hash-chained (wt.core.ledger; plan R3). Events tied to a plan or trade carry `idem`,
+    <id>:<event>, so a reader can drop a replay. Never raises: a full disk must not kill a runner that holds a
+    position (H4)."""
+    rec: dict[str, Any] = {"ts": dt.datetime.now(dt.UTC).isoformat(), "event": event, **kw}
+    ident = kw.get("trade_id") or kw.get("plan_id")
+    if ident and "idem" not in rec:
+        rec["idem"] = f"{ident}:{event}"
     try:
-        LIVE.mkdir(parents=True, exist_ok=True)
-        with open(LIVE / "journal.jsonl", "a") as f:
-            f.write(line + "\n")
-    except OSError as e:
+        line = ledger.append(LIVE / "journal.jsonl", rec, fsync=event in DURABLE_EVENTS)
+    except Exception as e:  # noqa: BLE001 — H4: the journal must never take the runner down
+        line = json.dumps(rec, default=str)
         print(f"JOURNAL WRITE FAILED ({e.__class__.__name__}): {line}", file=sys.stderr, flush=True)
     print(line, flush=True)
 
