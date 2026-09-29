@@ -129,7 +129,7 @@ def paper_outcome(rows: list[dict[str, Any]]) -> dict[str, Any]:
     """Trading-critical facts from one paper session's journal rows."""
     events = [str(r.get("event")) for r in rows]
     unknown = [a for r in rows if str(r.get("event", "")).startswith("reconcile")
-               for a in (r.get("actions") or []) if "UNKNOWN" in str(a)]
+               for a in (r.get("actions") or []) if any(k in str(a) for k in ("UNKNOWN", "SHORT", "UNPROTECTED"))]
     end = next((r for r in reversed(rows) if r.get("event") == "session_end"), None)
     virtual = (end or {}).get("virtual") or {}
     return {"not_flat": "END_OF_DAY_NOT_FLAT" in events, "unknown_positions": len(unknown),
