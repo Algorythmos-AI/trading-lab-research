@@ -117,9 +117,9 @@ def orb_ladder(bars: pd.DataFrame, ctx: dict, start: int = 0, orb5_end: int = 59
         return None
     h, l = bars.h.to_numpy(float), bars.l.to_numpy(float)
     trig1, stop1 = round(h[0] + TICK, 4), round(l[0] - TICK, 4)
-    if m[1] == RTH_OPEN + 1 and h[1] >= trig1:                  # the 1-minute ORB triggered on the 2nd candle
-        if not reward_risk_ok(trig1, stop1, _ceiling(ctx, trig1), min_rr):
-            return None
+    # the 1-minute ORB triggered on the 2nd candle, and its order passed the 2:1 check at 09:30. Without that room no
+    # order rests, so the ladder goes on to the 5-minute ORB (it used to end the search: audit)
+    if m[1] == RTH_OPEN + 1 and h[1] >= trig1 and reward_risk_ok(trig1, stop1, _ceiling(ctx, trig1), min_rr):
         return EntrySignal(0, trig1, stop1, None, "GG-2:orb_1m", meta={"strict_collar": True, "expire_idx": 2})
     first5 = m < RTH_OPEN + 5
     sig = int(np.nonzero(first5)[0][-1])
@@ -197,7 +197,7 @@ def red_to_green(bars: pd.DataFrame, ctx: dict, start: int = 0, window_end: int 
         if h[j] >= trig:
             stop = round(l[:j].min() - TICK, 4)
             if trig - stop < TICK or not reward_risk_ok(trig, stop, _ceiling(ctx, trig), min_rr):
-                return None
+                continue            # this bar's order never rested; the next bar's may (it used to end the search: audit)
             return EntrySignal(j - 1, trig, stop, None, "GG-4", meta={"strict_collar": True, "expire_idx": j + 1})
     return None
 

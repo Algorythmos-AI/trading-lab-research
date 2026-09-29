@@ -59,6 +59,15 @@ def adv(daily: DailyIndex, splits, sym: str, d: dt.date, n: int) -> float:
     return float(h.v.mean()) if len(h) else 0.0
 
 
+def asof_basis(b: pd.DataFrame, k: float) -> pd.DataFrame:
+    """Prior-session minute bars on day d's share basis, k = f(d) / f(p) (corpactions): prices x k, volume / k.
+    REV-1 warms its Bollinger band and RSI up on these bars, so a raw 10:1 split between p and d read as a 90% crash
+    (audit H-REV)."""
+    if k == 1.0:
+        return b
+    return b.assign(**{c: b[c] * k for c in ("o", "h", "l", "c", "vw") if c in b}, v=b.v / k)
+
+
 CTL: list = []           # control inputs of the current day: (sym, prio, bars, signal, costs, flatten, exit_style)
 
 
@@ -159,7 +168,8 @@ def rev_day(a, d, p, daily, splits, spread_at, close, skips, syms) -> tuple[list
         b, pb = bars.get(s), prev.get(s)
         if b is None or pb is None or len(b) < 30 or len(pb) < 60:
             continue
-        ctx = {"prev_rth": pb, "adv5": adv(daily, splits, s, d, 5), "adv20": adv(daily, splits, s, d, 20), "curve": curve}
+        ctx = {"prev_rth": asof_basis(pb, splits.factor(s, d) / splits.factor(s, p)),
+               "adv5": adv(daily, splits, s, d, 5), "adv20": adv(daily, splits, s, d, 20), "curve": curve}
         c = chains(reversal_long, b, ctx, s, 5, d, spread_at, "REV5", flatten_idx(b, d, close), skips)
         if c:
             signalled.add(s)
@@ -177,10 +187,10 @@ def intraday_day(a, d: dt.date, trial: str, sessions: list[dt.date], closes: dic
     CTL.clear()
     if trial == "MP-1":
         today = daily.on(d)
-        splits.refresh(sorted(today[(today.v >= 1_000_000) & (today.l <= 10.0)].index))
+        splits.refresh(sorted(today[(today.v >= 1_000_000) & (today.l <= 10.0)].index), d)
         return mp_day(a, d, p, daily, splits.sf, shares, spec, spread_at, close, skips)
     syms = rev_superset(daily, d, sessions)
-    splits.refresh(syms)
+    splits.refresh(syms, d)
     cands, _ = rev_day(a, d, p, daily, splits.sf, spread_at, close, skips, syms)
     return cands
 

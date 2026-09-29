@@ -4,6 +4,11 @@
 Frozen rules (no parameter may change without a new decision record):
   * legacy candidates (DEC-0009): B (QQQ signals, QQQM-equivalent costs, M3); watchlist bull flag (ATR stop, M1, W3);
     intraday-runner bull flag (HYP-0007, M1)
+  * the two bull flags run as v2 (DEC-0011 H-LA, new trials restarted from zero): the watchlist prefilters on the
+    09:25 pre-market gap instead of d's open, and the HOD flag requires cumulative volume >= 1M by the qualifying bar
+    instead of full-day volume; both use split-adjusted prior closes (and ADV20). Their v1 rows
+    (`watchlist_bull_flag_atr_M1`, `hod_bull_flag_atr_M1`) stay in the ledger untouched and are look-ahead biased:
+    scorecards must report them as `biased` (BIASED), never pooled with the v2 keys
   * round 3 (DEC-0010, from its approval date): the ten SPEC-0001 trials HYP-0010..0019 (GG-1..4 on Sets F and P,
     MP-1, REV-1), run through the same per-day code as the batch runners (r3_run.gg_day, r3_intraday.intraday_day)
     and admitted at US$600, the account the hypotheses state
@@ -15,13 +20,24 @@ Bookkeeping (fixes D7):
   * catch-up: each run processes the newest MAX_CATCHUP incomplete sessions, oldest first, never before FORWARD_FROM
     (earlier dates are the holdout, DEC-0005)
 
+Ledger integrity (audit PR 5c): append() is the only writer. It holds an exclusive lock (a sibling .lock file), writes
+one line, flushes and fsyncs. Every row carries git_sha, ts (UTC) and prev_sha256, the sha256 of the previous line
+(GENESIS on a fresh file's first line), so verify_chain() detects an edited, dropped or inserted line. Trade rows and
+markers carry a key, and a key already in the ledger is never written again: a session starts with a
+session_started row, and a run killed between a strategy's trade rows and its marker re-runs that strategy without
+duplicating what it had written. Rows written before this change have no chain or key and stay as they are.
+
 Usage: python scripts/forward_test.py [YYYY-MM-DD]   (default: every incomplete completed session, up to MAX_CATCHUP)"""
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 import functools
+import hashlib
 import json
+import os
 import shutil
+import subprocess
 import sys
 from collections import defaultdict
 from collections.abc import Callable
@@ -40,12 +56,14 @@ from wt.backtest.engine import Costs, simulate  # noqa: E402
 from wt.backtest.management import REGISTRY  # noqa: E402
 from wt.backtest.runner import minute_bars  # noqa: E402
 from wt.core.clock import ET, et, to_utc_iso  # noqa: E402
-from wt.core.config import DATA_DIR, FORWARD_LEDGER, FORWARD_WATCHLIST_DIR, load_yaml  # noqa: E402
+from wt.core.config import DATA_DIR, FORWARD_LEDGER, FORWARD_WATCHLIST_DIR, ROOT, load_yaml  # noqa: E402
 from wt.data.alpaca import SIP_DELAY_MIN, AlpacaREST  # noqa: E402
 from wt.data.edgar import SharesOutstanding  # noqa: E402
 from wt.data.universe import DAILY, load_daily  # noqa: E402
+from wt.ops.locks import job_lock  # noqa: E402
+from wt.ops.safeio import atomic_replace  # noqa: E402
 from wt.scanner.features import PMCache, build_candidates  # noqa: E402
-from wt.scanner.pool import POOL_DIR, DailyIndex, PoolConfig  # noqa: E402
+from wt.scanner.pool import POOL_DIR, SPLIT_CHECK_HI, SPLIT_CHECK_LO, DailyIndex, PoolConfig  # noqa: E402
 from wt.scanner.ranking import rank  # noqa: E402
 from wt.signals import setups  # noqa: E402
 from wt.specs.loader import load_spec  # noqa: E402
@@ -56,10 +74,16 @@ LOG = FORWARD_LEDGER
 FORWARD_FROM = dt.date(2026, 9, 28)   # first forward session; everything earlier is the holdout (DEC-0005) or before it
 R3_FROM = dt.date(2026, 9, 28)        # DEC-0010: every round-3 trial runs nightly "from the approval date onward"
 MAX_CATCHUP = 5                       # sessions per run
+REFRESH_DAYS = 5                      # newest update chunks fetched again on every run (late prints, corrections)
+LOCK_WAIT_S = 120.0                   # a ledger append waits this long for another writer, then fails the unit
+GENESIS = "0" * 64                    # prev_sha256 of the first line of a fresh ledger
 POOL_MIN_FREE_GB = 1.0                # one day's pool is small; the multi-year batch build keeps its own 3 GB floor
 R3_EQUITY = 600.0                     # HYP-0010..0019 are stated for a US$600 account
 R3_P_RELAX: frozenset[str] = frozenset()   # Set P musts relaxed by the count guard (DEC-0010); none until it rules
-LEGACY = ("B_qqq_qqqm", "watchlist_bull_flag_atr_M1", "hod_bull_flag_atr_M1")
+LEGACY = ("B_qqq_qqqm", "watchlist_bull_flag_atr_M1_v2", "hod_bull_flag_atr_M1_v2")
+LEGACY_V1 = ("B_qqq_qqqm", "watchlist_bull_flag_atr_M1", "hod_bull_flag_atr_M1")   # what a pre-D7 session marker covers
+BIASED = frozenset({"watchlist_bull_flag_atr_M1", "hod_bull_flag_atr_M1"})         # DEC-0011 H-LA: look-ahead
+HOD_VOL_MIN = 1_000_000               # HOD v2: cumulative shares by the qualifying bar (v1: the full day's volume)
 R3_HYP = {"r3:F:GG-1": "HYP-0010", "r3:F:GG-2": "HYP-0011", "r3:F:GG-3": "HYP-0012", "r3:F:GG-4": "HYP-0013",
           "r3:P:GG-1": "HYP-0014", "r3:P:GG-2": "HYP-0015", "r3:P:GG-3": "HYP-0016", "r3:P:GG-4": "HYP-0017",
           "r3:MP-1": "HYP-0018", "r3:REV-1": "HYP-0019"}
@@ -81,13 +105,23 @@ def read_log() -> list[dict]:
     return rows
 
 
+V2 = ("watchlist_bull_flag_atr_M1_v2", "hod_bull_flag_atr_M1_v2")
+# DEC-0011: the v2 flags are NEW trials (85 -> 87). Pre-registration means they start on DEC-0011's acceptance date,
+# never before it and never backfilled. Set this date in the PR that marks DEC-0011 accepted; until then they don't run.
+V2_FROM: dt.date | None = None
+
+
 def required(d: dt.date) -> set[str]:
-    return set(LEGACY) | (set(R3_HYP) if d >= R3_FROM else set())
+    out = {"B_qqq_qqqm"} | (set(R3_HYP) if d >= R3_FROM else set())
+    if V2_FROM is not None and d >= V2_FROM:
+        out |= set(V2)
+    return out
 
 
 def done_by_session(rows: list[dict]) -> dict[str, set[str]]:
     """Strategies that have completed each session. A session marker written before per-strategy markers existed
-    stands for the three legacy strategies, unless that session also logged an error (which one failed is unknown)."""
+    stands for the three legacy strategies of that time (LEGACY_V1), unless that session also logged an error (which
+    one failed is unknown). The v2 flags are new trials, so no old marker covers them."""
     done: dict[str, set[str]] = defaultdict(set)
     old_errors = {str(r.get("session")) for r in rows if "error" in r and "strategy" not in r}
     for r in rows:
@@ -95,7 +129,7 @@ def done_by_session(rows: list[dict]) -> dict[str, set[str]]:
         if r.get("strategy_marker"):
             done[s].add(r["strategy"])
         elif r.get("session_marker") and s not in old_errors:
-            done[s].update(LEGACY)
+            done[s].update(LEGACY_V1)
     return done
 
 
@@ -121,9 +155,19 @@ def marker(d: dt.date, name: str, n: int) -> dict:
     return rec
 
 
+def trade_key(d: dt.date, strategy: str, t: dict, i: int) -> str:
+    """session|strategy|symbol|entry time (or the row's index when a strategy records none, e.g. B)."""
+    return f"{d}|{strategy}|{t.get('symbol', '')}|{t.get('entry_time') or i}"
+
+
 def run_session(d: dt.date, units: list[Unit], done: set[str]) -> set[str]:
-    """Run every unit that still owes a strategy for session d. Returns the strategies now complete."""
+    """Run every unit that still owes a strategy for session d. Returns the strategies now complete.
+
+    Two-phase: a session_started row, then per strategy its trade rows and its marker, then the session marker. All
+    are keyed, so a rerun after a crash anywhere in between writes only what is missing."""
     need, complete = required(d) - done, set(done)
+    if need:
+        append({"session": str(d), "session_started": True, "need": sorted(need), "key": f"{d}|session_started"})
     for names, fn in units:
         todo = [n for n in names if n in need]
         if not todo:
@@ -135,13 +179,13 @@ def run_session(d: dt.date, units: list[Unit], done: set[str]) -> set[str]:
             continue
         for n in todo:
             rows = res.get(n, [])
-            for t in rows:
-                append({"session": str(d), **t, "strategy": n})
-            append(marker(d, n, len(rows)))
+            for i, t in enumerate(rows):
+                append({"session": str(d), **t, "strategy": n, "key": trade_key(d, n, t, i)})
+            append({**marker(d, n, len(rows)), "key": f"{d}|{n}|strategy_marker"})
             complete.add(n)
     if need and required(d) <= complete:          # only the run that completes the session writes its marker
         n_trades = sum(1 for r in read_log() if r.get("session") == str(d) and "R" in r)
-        append({"session": str(d), "session_marker": True, "n_trades": n_trades})
+        append({"session": str(d), "session_marker": True, "n_trades": n_trades, "key": f"{d}|session_marker"})
     return complete
 
 
@@ -223,8 +267,8 @@ def units_for(ctx: Context, d: dt.date) -> list[Unit]:
     a, sessions = ctx.a, ctx.sessions
     return [
         (("B_qqq_qqqm",), lambda: by_strategy(run_B(a, d, sessions))),
-        (("watchlist_bull_flag_atr_M1",), lambda: by_strategy(run_watchlist_flag(a, d, sessions, ctx.raw))),
-        (("hod_bull_flag_atr_M1",), lambda: by_strategy(run_hod_flag(a, d, ctx.raw))),
+        (("watchlist_bull_flag_atr_M1_v2",), lambda: by_strategy(run_watchlist_flag(a, d, sessions, ctx.raw, ctx.splits))),
+        (("hod_bull_flag_atr_M1_v2",), lambda: by_strategy(run_hod_flag(a, d, ctx.daily, ctx.splits))),
         (tuple(f"r3:F:{t}" for t in GG), lambda: r3_gg(ctx, d, "F")),
         (tuple(f"r3:P:{t}" for t in GG), lambda: r3_gg(ctx, d, "P")),
         (("r3:MP-1",), lambda: r3_intraday(ctx, d, "MP-1")),
@@ -232,10 +276,78 @@ def units_for(ctx: Context, d: dt.date) -> list[Unit]:
     ]
 
 
-def append(rec: dict) -> None:
+@functools.lru_cache(maxsize=1)
+def git_sha() -> str:
+    """Short HEAD of the checkout running the job, computed once per run."""
+    try:
+        out = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    return out.stdout.strip() or "unknown"
+
+
+def _keys(lines: list[bytes]) -> set[str]:
+    keys = set()
+    for line in lines:
+        if b'"key"' in line:
+            with contextlib.suppress(ValueError):          # a torn line has no usable key
+                r = json.loads(line)
+                if isinstance(r, dict) and r.get("key"):
+                    keys.add(str(r["key"]))
+    return keys
+
+
+def append(rec: dict) -> bool:
+    """Append one row to the ledger: the only writer (see the module docstring). Returns False, writing nothing, when
+    the row's key is already in the ledger."""
     FWD.mkdir(parents=True, exist_ok=True)
-    with open(LOG, "a") as f:
-        f.write(json.dumps(rec, default=str) + "\n")
+    with job_lock(LOG.name, root=LOG.parent, wait_s=LOCK_WAIT_S, poll_s=0.05) as got:
+        if not got:
+            raise TimeoutError(f"{LOG.name}: another writer held the lock for {LOCK_WAIT_S:.0f}s")
+        data = LOG.read_bytes() if LOG.exists() else b""
+        lines = [x for x in data.split(b"\n") if x]
+        if rec.get("key") and str(rec["key"]) in _keys(lines):
+            return False
+        row = {**rec, "git_sha": git_sha(), "ts": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
+               "prev_sha256": hashlib.sha256(lines[-1]).hexdigest() if lines else GENESIS}
+        out = json.dumps(row, default=str).encode() + b"\n"
+        if data and not data.endswith(b"\n"):
+            out = b"\n" + out                              # end a torn line from a killed writer; verify_chain reports it
+        with open(LOG, "ab") as f:
+            f.write(out)
+            f.flush()
+            os.fsync(f.fileno())
+    return True
+
+
+def verify_chain(path: Path | None = None) -> list[str]:
+    """Problems in the ledger's hash chain; empty when intact. Lines written before the chain existed carry no
+    prev_sha256 and are accepted as a prefix; from the first chained line on, each must name the sha256 of the line
+    before it (GENESIS on the file's first line). Like any hash chain, an edit to the very last line is not seen."""
+    path = path or LOG
+    if not path.exists():
+        return []
+    problems: list[str] = []
+    prev: bytes | None = None
+    chained = False
+    for i, line in enumerate([x for x in path.read_bytes().split(b"\n") if x], 1):
+        want = hashlib.sha256(prev).hexdigest() if prev is not None else GENESIS
+        prev = line
+        try:
+            r = json.loads(line)
+        except ValueError:
+            r = None
+        if not isinstance(r, dict):
+            problems.append(f"line {i}: not a JSON object")
+            continue
+        if r.get("prev_sha256") is None:
+            if chained:
+                problems.append(f"line {i}: no prev_sha256 after the chain started")
+            continue
+        chained = True
+        if r["prev_sha256"] != want:
+            problems.append(f"line {i}: prev_sha256 does not match line {i - 1}" if i > 1 else f"line {i}: not genesis")
+    return problems
 
 
 def daily_end(d: dt.date, now: dt.datetime) -> str:
@@ -247,14 +359,38 @@ def daily_end(d: dt.date, now: dt.datetime) -> str:
     return to_utc_iso(min(et(d + dt.timedelta(days=1), "00:00"), now - dt.timedelta(minutes=SIP_DELAY_MIN)))
 
 
-def update_daily(a: AlpacaREST, d: dt.date, now: dt.datetime | None = None) -> None:
-    f = DAILY.parent / "chunks" / f"chunk_zupd_{d}.parquet"
-    if f.exists():
-        return
-    end = daily_end(d, now or dt.datetime.now(ET))
-    syms = sorted(set(pd.concat([pd.read_parquet(x, columns=["symbol"]) for x in (DAILY.parent / "chunks").glob("chunk_0*.parquet")]).symbol))
-    parts = [a.bars(syms[i:i + 200], "1Day", d.isoformat(), end) for i in range(0, len(syms), 200)]
-    pd.concat(parts, ignore_index=True).to_parquet(f)
+def update_days(chunks: Path, pending: list[dt.date], n: int = REFRESH_DAYS) -> list[dt.date]:
+    """The pending sessions plus the newest n update chunks' sessions."""
+    have = set()
+    for f in chunks.glob("chunk_zupd_*.parquet"):
+        with contextlib.suppress(ValueError):          # a hand-named file is read by load_daily, never refreshed
+            have.add(dt.date.fromisoformat(f.stem.removeprefix("chunk_zupd_")))
+    return sorted(set(pending) | set(sorted(have | set(pending))[-n:]))
+
+
+def update_daily(a: AlpacaREST, pending: list[dt.date], now: dt.datetime | None = None) -> list[dt.date]:
+    """Fetch each pending session's daily bars into chunks/chunk_zupd_<d>.parquet, and fetch the newest REFRESH_DAYS
+    update chunks again, each replaced atomically. The first fetch runs ~20 minutes after the close, before late
+    prints and vendor corrections settle, so it must not be the only one; a base rebuild still wins over any update
+    chunk (load_daily). Returns the pending sessions whose bars are on disk. A failed fetch keeps the chunk that
+    was there; a pending session without one is logged and retried next run."""
+    now = now or dt.datetime.now(ET)
+    chunks = DAILY.parent / "chunks"
+    syms = sorted(set(pd.concat([pd.read_parquet(x, columns=["symbol"]) for x in chunks.glob("chunk_0*.parquet")]).symbol))
+    ready = []
+    for d in update_days(chunks, pending):
+        f = chunks / f"chunk_zupd_{d}.parquet"
+        try:
+            end = daily_end(d, now)
+            parts = [a.bars(syms[i:i + 200], "1Day", d.isoformat(), end) for i in range(0, len(syms), 200)]
+            atomic_replace(f, pd.concat(parts, ignore_index=True).to_parquet)
+        except Exception as e:  # noqa: BLE001 — without the day's bars nothing can run; retried next run
+            print(d, "daily update failed:", repr(e)[:200], flush=True)
+            if d in pending and not f.exists():
+                append({"session": str(d), "strategy": "daily_update", "error": repr(e)[:500]})
+        if d in pending and f.exists():
+            ready.append(d)
+    return ready
 
 
 def run_B(a: AlpacaREST, d: dt.date, sessions: list[dt.date]) -> list[dict]:
@@ -274,13 +410,17 @@ def run_B(a: AlpacaREST, d: dt.date, sessions: list[dt.date]) -> list[dict]:
     return [{"strategy": "B_qqq_qqqm", "R": tr.r_multiple(cst), "exit": tr.exits[-1][3]}] if tr else []
 
 
-def run_watchlist_flag(a, d, sessions, daily) -> list[dict]:
+def run_watchlist_flag(a, d, sessions, daily, splits: SplitStore) -> list[dict]:
+    """Watchlist bull flag v2: the frozen ranking and entry, on candidates prefiltered by the 09:25 pre-market gap
+    (v1 used d's open, known only at 09:30) with split-adjusted prior closes."""
     cache, so = PMCache(), SharesOutstanding()
-    cands = build_candidates(d, daily, sessions, a, cache, so, with_quotes=True)
+    cands = build_candidates(d, daily, sessions, a, cache, so, with_quotes=True, causal=True,
+                             split_refresh=lambda syms: splits.refresh(syms, d, split_like=syms))
     cache.save()
     top, _ = rank(cands, load_yaml("ranking.yaml"))
-    FORWARD_WATCHLIST_DIR.mkdir(parents=True, exist_ok=True)
-    (FORWARD_WATCHLIST_DIR / f"{d}.json").write_text(json.dumps({"date": str(d), "top": top, "forward": True}, default=str))
+    FORWARD_WATCHLIST_DIR.mkdir(parents=True, exist_ok=True)       # v2 file: the v1 watchlists stay as they were
+    (FORWARD_WATCHLIST_DIR / f"{d}_v2.json").write_text(json.dumps({"date": str(d), "top": top, "forward": True,
+                                                                    "strategy": "watchlist_bull_flag_atr_M1_v2"}, default=str))
     bars = minute_bars(a, d, [t["symbol"] for t in top])
     out = []
     for t in top:
@@ -291,16 +431,47 @@ def run_watchlist_flag(a, d, sessions, daily) -> list[dict]:
         if sig:
             tr = simulate(b, sig, REGISTRY["M1"](), Costs(), t["symbol"], str(d), 6, 1e9, 1e9, flatten_idx=min(380, len(b) - 1))
             if tr:
-                out.append({"strategy": "watchlist_bull_flag_atr_M1", "symbol": t["symbol"], "R": tr.r_multiple(Costs())})
+                out.append({"strategy": "watchlist_bull_flag_atr_M1_v2", "symbol": t["symbol"], "R": tr.r_multiple(Costs()),
+                            "entry_time": str(tr.entry_time)})
     return out
 
 
-def run_hod_flag(a, d, daily) -> list[dict]:
+def hod_superset(daily: DailyIndex, d: dt.date, splits: SplitStore) -> pd.DataFrame:
+    """HOD v2 fetch superset for d, indexed by symbol with pc and adv20: prior close $2-30, and from d's daily bar a
+    high >= +10% and volume >= 1M. Only a superset, so no look-ahead: the qualifying bar needs a close >= +10% and
+    cumulative volume >= 1M, and the day's high and volume are at least that. As in v1, 20 prior daily bars are
+    required. Prior close and ADV20 are on d's share basis (R-C2); raw moves that look like a split are refreshed."""
+    today = daily.on(d)
+    today = today[today.v >= HOD_VOL_MIN]
+    rows = []
+    for s, r in today.iterrows():
+        hist = daily.before(s, d, 20)
+        if len(hist) == 20:
+            rows.append((s, r.o, r.h, r.c, float(hist.c.iloc[-1]), hist.date.iloc[-1]))
+    t = pd.DataFrame(rows, columns=["symbol", "o", "h", "c", "pc", "pdate"]).set_index("symbol")
+    if not len(t):
+        return t.assign(adv20=[])
+    hi, lo = 1 + SPLIT_CHECK_HI, 1 + SPLIT_CHECK_LO
+    like = sorted(t.index[(t.o / t.pc >= hi) | (t.o / t.pc <= lo) | (t.c / t.pc >= hi) | (t.c / t.pc <= lo)])
+    sf = splits.refresh(like, d, split_like=like)
+    t["pc"] = t.pc * [sf.factor(s, d) / sf.factor(s, x) for s, x in zip(t.index, t.pdate, strict=True)]
+    g = t[t.pc.between(2, 30) & (t.h / t.pc - 1 >= 0.10)].copy()
+    g["adv20"] = [float(sf.adjust_asof(daily.before(s, d, 20), d).v.mean()) for s in g.index]
+    return g
+
+
+def hod_qualify(b: pd.DataFrame, pc: float, adv: float, f_t: np.ndarray) -> int | None:
+    """HOD v2 qualification: the first 1-minute bar in 09:45-11:30 closing >= +10% over the prior close, at $2-30, with
+    cumulative volume >= 1M and >= 5x the expected cumulative volume by then. Only bars up to the decision bar count."""
+    c, cum = b.c.to_numpy(float), np.cumsum(b.v.to_numpy(float))
+    return next((i for i in range(15, min(120, len(b) - 1)) if c[i] >= 1.10 * pc and 2 <= c[i] <= 30
+                 and cum[i] >= HOD_VOL_MIN and cum[i] / max(1.0, adv * f_t[min(i, len(f_t) - 1)]) >= 5), None)
+
+
+def run_hod_flag(a, d, daily: DailyIndex, splits: SplitStore) -> list[dict]:
+    """HOD bull flag v2 (DEC-0011 H-LA): v1 fetched only names whose FULL-DAY volume reached 1M, known at the close."""
     import r2_intraday_hod as h
-    dd = daily.sort_values(["symbol", "date"]).copy()
-    dd["pc"] = dd.groupby("symbol").c.shift(1)
-    dd["adv20"] = dd.groupby("symbol").v.transform(lambda s: s.rolling(20).mean().shift(1))
-    g = dd[(dd.date == d) & dd.pc.between(2, 30) & (dd.h / dd.pc - 1 >= 0.10) & (dd.v >= 1e6) & dd.adv20.notna()].set_index("symbol")
+    g = hod_superset(daily, d, splits)
     if not len(g):
         return []
     f_t = h.volume_curve()
@@ -308,17 +479,15 @@ def run_hod_flag(a, d, daily) -> list[dict]:
     out = []
     for sym, b in bars.groupby("symbol"):
         b = b.sort_values("t").reset_index(drop=True)
-        cum = np.cumsum(b.v.to_numpy())
-        pc, adv = float(g.loc[sym, "pc"]), float(g.loc[sym, "adv20"])
-        q = next((i for i in range(15, min(120, len(b) - 1)) if b.c.iloc[i] >= 1.10 * pc and 2 <= b.c.iloc[i] <= 30
-                  and cum[i] / max(1.0, adv * f_t[min(i, len(f_t) - 1)]) >= 5), None)
+        q = hod_qualify(b, float(g.loc[sym, "pc"]), float(g.loc[sym, "adv20"]), f_t)
         if q is None:
             continue
         sig = setups.s1_bull_flag_5m(b, window=(q + 1, 120), start=q, atr_stop_mult=1.5)
         if sig:
             tr = simulate(b, sig, REGISTRY["M1"](), Costs(), sym, str(d), 6, 1e9, 1e9, flatten_idx=min(380, len(b) - 1))
             if tr:
-                out.append({"strategy": "hod_bull_flag_atr_M1", "symbol": sym, "R": tr.r_multiple(Costs())})
+                out.append({"strategy": "hod_bull_flag_atr_M1_v2", "symbol": sym, "R": tr.r_multiple(Costs()),
+                            "entry_time": str(tr.entry_time)})
     return out
 
 
@@ -341,14 +510,7 @@ def main(day: str | None = None) -> None:
     if not days:
         print("nothing to do: every completed session since", FORWARD_FROM, "has all its strategies")
         return
-    ready = []
-    for d in days:                        # daily bars first, so the store is loaded once with every pending day in it
-        try:
-            update_daily(a, d, now)
-            ready.append(d)
-        except Exception as e:  # noqa: BLE001 — without the day's bars nothing can run; retried next run
-            append({"session": str(d), "strategy": "daily_update", "error": repr(e)[:500]})
-            print(d, "daily update failed:", repr(e)[:200], flush=True)
+    ready = update_daily(a, days, now)    # daily bars first, so the store is loaded once with every pending day in it
     ctx = Context(a, sessions, closes)
     try:
         for d in ready:

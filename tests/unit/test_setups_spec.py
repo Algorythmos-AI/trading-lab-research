@@ -63,6 +63,14 @@ def test_orb_falls_back_to_5m_when_second_candle_does_not_break():
     assert sig.meta["expire_idx"] == 20                          # 09:50
 
 
+def test_orb_goes_on_to_5m_when_the_1m_order_lacks_2to1_room():
+    rows = OPEN + [(5.03, 5.20, 5.01, 5.18, 80_000), (5.18, 5.22, 5.10, 5.20, 60_000), (5.20, 5.21, 5.12, 5.15, 40_000),
+                   (5.15, 5.19, 5.11, 5.16, 40_000)] + flat(40, 5.16)
+    ctx = {"overhead": [5.15]}                                   # 1m ORB: 0.09 room < 2 x 0.12 risk, so no 1m order
+    sig = orb_ladder(minute_bars(rows), ctx)                     # (the search used to stop here and return None)
+    assert sig.setup == "GG-2:orb_5m" and sig.bar_index == 4 and sig.trigger == 5.23 and sig.stop == 4.94
+
+
 # ---------------------------------------------------------------- GG-4
 def test_red_to_green_needs_a_close_below_open_first():
     rows = OPEN[:1] + [(5.02, 5.03, 4.90, 4.92, 50_000), (4.92, 4.95, 4.85, 4.94, 50_000),
@@ -72,6 +80,18 @@ def test_red_to_green_needs_a_close_below_open_first():
     assert sig.setup == "GG-4" and sig.bar_index == 2 and sig.trigger == 5.01 and sig.stop == 4.84
     green = [(5.00, 5.05, 4.99, 5.04, 150_000)] + [(5.04, 5.10, 5.03, 5.09, 50_000)] * 5 + flat(40, 5.09)
     assert red_to_green(minute_bars(green), {"overhead": []}) is None      # never traded below the open
+
+
+def test_red_to_green_keeps_looking_after_a_bar_without_2to1_room():
+    rows = [(5.00, 5.05, 4.95, 4.98, 150_000), (4.98, 5.00, 4.85, 4.90, 50_000),
+            (4.90, 5.08, 4.89, 5.06, 60_000),                    # new high: trigger 5.01, stop 4.84, overhead 5.20 too near
+            (5.06, 5.25, 5.05, 5.22, 60_000),                    # trigger 5.09: still under 5.20
+            (5.22, 5.30, 5.20, 5.28, 60_000)] + flat(40, 5.28)   # trigger 5.26: blue sky, 2:1 holds
+    sig = red_to_green(minute_bars(rows), {"overhead": [5.20]})  # (the search used to stop at the first new high)
+    assert sig.setup == "GG-4" and sig.bar_index == 3 and sig.trigger == 5.26 and sig.stop == 4.84
+    assert sig.meta["expire_idx"] == 5
+    capped = rows[:3] + flat(40, 5.06)
+    assert red_to_green(minute_bars(capped), {"overhead": [5.20]}) is None     # no later bar with room: no trade
 
 
 # ---------------------------------------------------------------- GG-3

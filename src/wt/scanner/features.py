@@ -7,7 +7,9 @@ Point-in-time rules:
   * News window: prior day 16:00 ET -> 09:25 ET.
   * Recall prefilter (to limit API calls) uses the prior close and the day's OPEN gap >= 2%. The open is
     after 09:25, so this is only used to decide what to FETCH, never as a feature; recall loss is
-    measured in EXP-0002 by scanning the full universe on sample days.
+    measured in EXP-0002 by scanning the full universe on sample days. It is still look-ahead in selection:
+    a name gapping >= 4% at 09:25 that opened below +2% was never a candidate (DEC-0011 H-LA). The frozen
+    backtests keep it; `causal=True` (the v2 forward trial) prefilters on the 09:25 pre-market gap instead.
 """
 from __future__ import annotations
 
@@ -22,6 +24,7 @@ from wt.core.clock import et, to_utc_iso
 from wt.core.config import DATA_DIR
 from wt.data.alpaca import AlpacaREST
 from wt.data.edgar import SharesOutstanding
+from wt.ops.safeio import atomic_replace, read_cache
 from wt.scanner.catalyst import best_catalyst
 from wt.scanner.ranking import Candidate
 
@@ -32,8 +35,8 @@ class PMCache:
     """(symbol, date) -> pre-market aggregates, persisted."""
 
     def __init__(self):
-        self.df = pd.read_parquet(PM_CACHE) if PM_CACHE.exists() else pd.DataFrame(
-            columns=["symbol", "date", "pm_volume", "pm_dollar_vol", "last_0925", "pm_high", "n_bars"])
+        self.df = read_cache(PM_CACHE, pd.read_parquet, lambda: pd.DataFrame(
+            columns=["symbol", "date", "pm_volume", "pm_dollar_vol", "last_0925", "pm_high", "n_bars"]))
         self.idx = {(s, d) for s, d in zip(self.df.symbol, self.df.date, strict=False)}
         self.new: list[dict] = []
 
@@ -54,8 +57,7 @@ class PMCache:
         if self.new:
             self.df = pd.concat([self.df, pd.DataFrame(self.new)], ignore_index=True)
             self.new = []
-            PM_CACHE.parent.mkdir(parents=True, exist_ok=True)
-            self.df.to_parquet(PM_CACHE)
+            atomic_replace(PM_CACHE, self.df.to_parquet)     # the pool build and the forward test share it
 
 
 def fetch_pm(a: AlpacaREST, cache: PMCache, symbols: list[str], dates: list[dt.date]) -> None:
@@ -100,18 +102,44 @@ def last_quotes(a: AlpacaREST, symbols: list[str], d: dt.date) -> dict[str, tupl
     return out
 
 
+def pm_prefilter(a: AlpacaREST, d: dt.date, p: dt.date, prev_close: pd.Series, min_gap: float,
+                 split_refresh=None) -> pd.Series:
+    """Causal recall prefilter: symbols whose last pre-market print up to 09:25 (bars 04:00-09:24, the window
+    of last_0925, so the ranking's gap uses the same price) is >= min_gap % above the prior close. Returns their
+    prior close. `split_refresh(symbols) -> SplitFactors`: prior closes are put on d's share basis, refreshing
+    symbols whose raw 09:25 gap looks like a split (pool.SPLIT_CHECK_HI/LO), so a split on d is not a gap."""
+    snap = a.bars(sorted(prev_close.index), "1Min", to_utc_iso(et(d, "04:00")), to_utc_iso(et(d, "09:24")), feed="sip")
+    if not len(snap):
+        return prev_close.iloc[:0]
+    last = snap.sort_values("t").groupby("symbol").c.last()
+    pc = prev_close.reindex(last.index)
+    if split_refresh is not None:
+        from wt.scanner.pool import SPLIT_CHECK_HI, SPLIT_CHECK_LO
+        raw = last / pc - 1
+        sf = split_refresh(sorted(raw[(raw >= SPLIT_CHECK_HI) | (raw <= SPLIT_CHECK_LO)].index))
+        pc = pc * [sf.factor(s, d) / sf.factor(s, p) for s in pc.index]
+    gap = 100 * (last / pc - 1)
+    return pc[pc.between(1.5, 35) & (gap >= min_gap)]
+
+
 def build_candidates(d: dt.date, daily: pd.DataFrame, sessions: list[dt.date], a: AlpacaREST,
                      cache: PMCache, so: SharesOutstanding, lookback: int = 20,
                      with_quotes: bool = True, prefilter_open_gap: float = 2.0,
-                     quote_cfg: dict | None = None) -> list[Candidate]:
+                     quote_cfg: dict | None = None, causal: bool = False, split_refresh=None) -> list[Candidate]:
+    """09:25 candidates for session d. causal=True prefilters on the 09:25 pre-market gap (pm_prefilter, with
+    split-adjusted prior closes when split_refresh is given) instead of d's open."""
     i = sessions.index(d)
     prev_sessions = sessions[max(0, i - lookback): i]
     prev_day = sessions[i - 1]
-    today = daily[daily.date == d].set_index("symbol")
     prev = daily[daily.date == prev_day].set_index("symbol")
-    j = today.join(prev[["c"]].rename(columns={"c": "prev_close"}), how="inner")
-    j = j[(j.prev_close.between(1.5, 35)) & (100 * (j.o / j.prev_close - 1) >= prefilter_open_gap)]
-    syms = sorted(j.index)
+    if causal:
+        prev_close = pm_prefilter(a, d, prev_day, prev.c[prev.c.between(1.5, 35)], prefilter_open_gap, split_refresh)
+    else:
+        today = daily[daily.date == d].set_index("symbol")
+        j = today.join(prev[["c"]].rename(columns={"c": "prev_close"}), how="inner")
+        j = j[(j.prev_close.between(1.5, 35)) & (100 * (j.o / j.prev_close - 1) >= prefilter_open_gap)]
+        prev_close = j.prev_close
+    syms = sorted(prev_close.index)
     if not syms:
         return []
     dbg = os.environ.get("WT_DEBUG")
@@ -145,7 +173,7 @@ def build_candidates(d: dt.date, daily: pd.DataFrame, sessions: list[dt.date], a
         base_vol = max(statistics.median(b) if b else 0.0, statistics.mean(b) if b else 0.0, 1000.0)
         rvol = r.pm_volume / base_vol
         typ, sc, hl = best_catalyst(heads.get(s, []), s in runners)
-        pre.append(Candidate(symbol=s, price=float(r.last_0925), gap_pct=100 * (r.last_0925 / j.loc[s, "prev_close"] - 1),
+        pre.append(Candidate(symbol=s, price=float(r.last_0925), gap_pct=100 * (r.last_0925 / prev_close[s] - 1),
                              rvol_tod=float(rvol), pm_dollar_vol=float(r.pm_dollar_vol), spread_pct=None,
                              spread_abs=None, float_shares=so.asof(s, d), pm_volume=float(r.pm_volume),
                              catalyst_type=typ, catalyst_score=sc, headlines=hl))

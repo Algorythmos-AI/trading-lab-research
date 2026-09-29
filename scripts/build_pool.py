@@ -4,8 +4,9 @@ Guards:
   D6  - pauses while US markets are in session (09:20-16:05 ET on trading days) so the paper runner keeps its API
         budget; uses the shared cross-process rate limiter
   D30 - aborts if free disk drops below 3 GB
-Split factors (D2) are fetched lazily for symbols whose raw gap looks like a split. They are cached as change
-points in data/daily/split_factors.parquet.
+Split factors (D2) are fetched lazily for symbols whose raw gap looks like a split, and fetched again when a split
+may have taken effect since (R-C2). They are cached as change points, with the date each symbol was fetched
+through, in data/daily/split_factors.parquet.
 
 Usage: PYTHONPATH=src .venv/bin/python scripts/build_pool.py 2019-01-02 2025-09-25 [--per-minute 170] [--limit-days N]
 """
@@ -28,9 +29,13 @@ from wt.data.corpactions import FACTORS, SplitFactors, factor_series  # noqa: E4
 from wt.data.edgar import SharesOutstanding  # noqa: E402
 from wt.data.universe import ASSETS, load_daily  # noqa: E402
 from wt.scanner.features import PMCache, last_quotes  # noqa: E402
-from wt.scanner.pool import POOL_DIR, DailyIndex, PoolConfig, build_day, save_day  # noqa: E402
+from wt.ops.safeio import atomic_replace  # noqa: E402
+from wt.scanner.pool import (POOL_DIR, SPLIT_CHECK_HI, SPLIT_CHECK_LO, DailyIndex, PoolConfig,  # noqa: E402
+                             build_day, save_day)
 
 MIN_FREE_GB = 3.0
+MAX_REFETCH_SPLIT_LIKE = 200     # per run; a day has a handful of split-like movers, so this only guards a pathology
+MAX_REFETCH_STALE = 300          # per run; a full-history fetch costs ~40 requests per 200 symbols
 
 
 def free_gb() -> float:
@@ -51,31 +56,84 @@ def market_guard(open_days: set[dt.date]) -> None:
 
 
 class SplitStore:
-    """Split-factor change points, fetched lazily and cached."""
+    """Split-factor change points, fetched lazily and cached with the date each symbol was fetched through.
+
+    SplitFactors.factor() returns the last known factor, so a split that takes effect after a symbol's fetch stays
+    invisible until the symbol is fetched again: a reverse split on a forward day entered ranking as a fake gap
+    (audit R-C2). refresh(symbols, d) therefore also re-fetches symbols whose `fetched_through` is before d. A table
+    written before the column existed counts as stale. Symbols new to the table are always fetched.
+
+    Bounded, so a large universe never stalls the nightly run: per run at most MAX_REFETCH_SPLIT_LIKE stale symbols
+    whose raw move since their fetch looks like a split (the pool's own check, pool.SPLIT_CHECK_HI/LO: open or close
+    >= +90% or <= -25% vs the prior close, which covers 3:2 and larger forward splits and 1:2 and larger reverse
+    ones), then at most MAX_REFETCH_STALE others, least recently fetched first, so repeated nights rotate through
+    them."""
 
     def __init__(self, a: AlpacaREST, daily_raw: pd.DataFrame, persist: bool = True):
         self.a, self.raw, self.persist = a, daily_raw, persist
         self.table = pd.read_parquet(FACTORS) if FACTORS.exists() else pd.DataFrame(columns=["symbol", "date", "f"])
+        if "fetched_through" not in self.table:
+            self.table["fetched_through"] = None
+        t = self.table
+        self.thru = {s: pd.Timestamp(x).date() for s, x in zip(t.symbol, t.fetched_through, strict=True) if not pd.isna(x)}
+        self.raw_through = daily_raw.date.max() if len(daily_raw) else None
+        self.left = {"split_like": MAX_REFETCH_SPLIT_LIKE, "stale": MAX_REFETCH_STALE}
         self.sf = SplitFactors(self.table)
 
-    def refresh(self, symbols: list[str]) -> SplitFactors:
-        need = sorted(set(symbols) - self.sf.symbols())
-        if need:
-            adj = self.a.bars(need, "1Day", "2018-06-01", sip_safe_end(), adjustment="split")
-            if len(adj):
-                adj["date"] = adj.t.dt.tz_convert("America/New_York").dt.date
-                f = factor_series(self.raw[self.raw.symbol.isin(need)], adj)
-                f = f[(f.groupby("symbol").f.diff().fillna(1) != 0)]                 # change points only
-                missing = sorted(set(need) - set(f.symbol))
-                f = pd.concat([f, pd.DataFrame({"symbol": missing, "date": dt.date(2018, 6, 1), "f": 1.0})], ignore_index=True)
-            else:
-                f = pd.DataFrame({"symbol": need, "date": dt.date(2018, 6, 1), "f": 1.0})
-            self.table = pd.concat([self.table, f], ignore_index=True)
-            if self.persist:                                   # the live routine never writes shared caches
-                FACTORS.parent.mkdir(parents=True, exist_ok=True)
-                self.table.to_parquet(FACTORS)
-            self.sf = SplitFactors(self.table)
+    def refresh(self, symbols, d: dt.date | None = None, split_like=None) -> SplitFactors:
+        """Fetch factors for symbols new to the table; with d (the session being built) also re-fetch stale ones.
+        `split_like`: symbols the caller already knows moved like a split (the pool's 09:25 check); default: scan
+        the raw daily store."""
+        symbols = set(symbols)
+        todo = sorted(symbols - self.sf.symbols())
+        stale = sorted(s for s in symbols - set(todo) if d is not None and not (s in self.thru and self.thru[s] >= d))
+        if stale:
+            like = set(split_like) if split_like is not None else self.looks_split(stale, d)
+            for kind, group in (("split_like", [s for s in stale if s in like]),
+                                ("stale", sorted((s for s in stale if s not in like),
+                                                 key=lambda s: (self.thru.get(s, dt.date.min), s)))):
+                take = group[: self.left[kind]]
+                self.left[kind] -= len(take)
+                todo += take
+        if todo:
+            self._fetch(todo)
         return self.sf
+
+    def looks_split(self, symbols: list[str], d: dt.date) -> set[str]:
+        """Symbols whose raw open or close moved like a split on a day after their fetch, up to d (the last 10
+        calendar days when the fetch date is unknown)."""
+        since = {s: self.thru.get(s, d - dt.timedelta(days=10)) for s in symbols}
+        r = self.raw
+        w = r[r.symbol.isin(set(since)) & (r.date > min(since.values()) - dt.timedelta(days=10)) & (r.date <= d)]
+        w = w.sort_values(["symbol", "date"])
+        pc = w.groupby("symbol").c.shift(1)
+        hi, lo = 1 + SPLIT_CHECK_HI, 1 + SPLIT_CHECK_LO
+        jump = (w.o / pc >= hi) | (w.o / pc <= lo) | (w.c / pc >= hi) | (w.c / pc <= lo)
+        after = w.date.to_numpy() > w.symbol.map(since).to_numpy()
+        return set(w.symbol[jump.to_numpy() & after])
+
+    def _fetch(self, need: list[str]) -> None:
+        end = sip_safe_end()
+        thru = pd.Timestamp(end).tz_convert(ET).date()
+        if self.raw_through is not None:            # factors exist only where the raw store has bars
+            thru = min(thru, self.raw_through)
+        adj = self.a.bars(need, "1Day", "2018-06-01", end, adjustment="split")
+        f = pd.DataFrame(columns=["symbol", "date", "f"])
+        if len(adj):
+            adj["date"] = adj.t.dt.tz_convert("America/New_York").dt.date
+            f = factor_series(self.raw[self.raw.symbol.isin(need)], adj)
+            f = f[(f.groupby("symbol").f.diff().fillna(1) != 0)]                 # change points only
+        old = self.table[self.table.symbol.isin(set(need) - set(f.symbol))]      # nothing new: keep what was known
+        missing = sorted(set(need) - set(f.symbol) - set(old.symbol))
+        parts = [x for x in (f, old[["symbol", "date", "f"]],
+                             pd.DataFrame({"symbol": missing, "date": dt.date(2018, 6, 1), "f": 1.0})) if len(x)]
+        new = pd.concat(parts, ignore_index=True).assign(fetched_through=thru)
+        kept = self.table[~self.table.symbol.isin(need)]
+        self.table = pd.concat([kept, new], ignore_index=True) if len(kept) else new
+        self.thru.update(dict.fromkeys(need, thru))
+        if self.persist:                                   # the live routine never writes shared caches
+            atomic_replace(FACTORS, self.table.to_parquet)
+        self.sf = SplitFactors(self.table)
 
 
 def baseline_nonspread_pass(c: pd.DataFrame) -> pd.Series:
@@ -95,8 +153,9 @@ def build_one(a: AlpacaREST, d: dt.date, sessions: list[dt.date], daily: DailyIn
     """Build and save the causal pool for one session (the batch build and the nightly forward test)."""
     i = sessions.index(d)
     p, prev_sessions = sessions[i - 1], sessions[max(0, i - 25): i]
+    # build_day asks only about names whose 09:25 gap moved like a split, so each one is split-like
     cands, pmb, st = build_day(d, p, a, daily, universe, splits.sf, cache, shares, prev_sessions, cfg,
-                               split_refresh=splits.refresh)
+                               split_refresh=lambda syms: splits.refresh(syms, d, split_like=syms))
     if len(cands):
         mask = baseline_nonspread_pass(cands)
         q = last_quotes(a, sorted(cands[mask].symbol), d) if mask.any() else {}

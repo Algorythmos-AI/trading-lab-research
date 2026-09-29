@@ -36,6 +36,7 @@ from wt.core.clock import et, to_utc_iso  # noqa: E402
 from wt.core.config import DATA_DIR, ROOT, load_yaml  # noqa: E402
 from wt.data.alpaca import AlpacaREST  # noqa: E402
 from wt.data.tape import trade_tags  # noqa: E402
+from wt.ops.safeio import atomic_write, read_cache  # noqa: E402
 from wt.scanner.pool import PM_BARS_DIR, POOL_DIR  # noqa: E402
 from wt.scanner.ranking import Candidate, SpecCandidate, funnel, rank  # noqa: E402
 from wt.signals.musts import spread_ok  # noqa: E402
@@ -53,7 +54,7 @@ class SpreadAt:
 
     def __init__(self, a: AlpacaREST):
         self.a = a
-        self.cache = json.loads(QUOTE_CACHE.read_text()) if QUOTE_CACHE.exists() else {}
+        self.cache = read_cache(QUOTE_CACHE, lambda f: dict(json.loads(f.read_text())), dict)
 
     def __call__(self, symbol: str, t: pd.Timestamp) -> float | None:
         key = f"{symbol}|{t.isoformat()}"
@@ -66,7 +67,7 @@ class SpreadAt:
         return self.cache[key]
 
     def save(self):
-        QUOTE_CACHE.write_text(json.dumps(self.cache))
+        atomic_write(QUOTE_CACHE, json.dumps(self.cache), QUOTE_CACHE.parent)   # batch runners and forward share it
 
 
 def set_names(pool: pd.DataFrame, which: str, spec: dict, relax: set[str]) -> list[tuple[str, int]]:
