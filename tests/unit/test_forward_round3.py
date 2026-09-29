@@ -57,7 +57,7 @@ def test_a_pre_d7_session_marker_covers_the_legacy_strategies_unless_that_sessio
         {"session": "2026-09-29", "error": "boom"}, {"session": "2026-09-29", "session_marker": True},
         {"session": "2026-09-30", "strategy": "r3:MP-1", "strategy_marker": True, "n_trades": 0},
     ])
-    assert done["2026-09-28"] == set(ft.LEGACY)
+    assert done["2026-09-28"] == set(ft.LEGACY_V1)                  # the legacy strategies of that time
     assert done["2026-09-29"] == set()
     assert done["2026-09-30"] == {"r3:MP-1"}
 

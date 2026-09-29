@@ -7,6 +7,9 @@ Fetch superset (NOT a signal): stocks with prior close $2-30, day high >= +10% v
   (estimated from the liquid-universe cache, i.e. other stocks/days — no same-stock look-ahead).
 Entries after qualification: (a) 5m bull flag (ATR stop), (b) first 1m pullback: after >=1 red 1m candle,
 trigger = that candle's high + 1c; stop = min(pullback low, trigger - 1.5*ATR14(1m)). Mgmt M1, M3. 4 trials.
+
+DEC-0011 H-LA: the day-volume filter is look-ahead, not a superset, because the trigger never required 1M shares by
+the qualifying bar. This driver stays as EXP-0014 ran it; the forward trial runs as v2 (forward_test.hod_qualify).
 """
 from __future__ import annotations
 

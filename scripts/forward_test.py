@@ -4,6 +4,11 @@
 Frozen rules (no parameter may change without a new decision record):
   * legacy candidates (DEC-0009): B (QQQ signals, QQQM-equivalent costs, M3); watchlist bull flag (ATR stop, M1, W3);
     intraday-runner bull flag (HYP-0007, M1)
+  * the two bull flags run as v2 (DEC-0011 H-LA, new trials restarted from zero): the watchlist prefilters on the
+    09:25 pre-market gap instead of d's open, and the HOD flag requires cumulative volume >= 1M by the qualifying bar
+    instead of full-day volume; both use split-adjusted prior closes (and ADV20). Their v1 rows
+    (`watchlist_bull_flag_atr_M1`, `hod_bull_flag_atr_M1`) stay in the ledger untouched and are look-ahead biased:
+    scorecards must report them as `biased` (BIASED), never pooled with the v2 keys
   * round 3 (DEC-0010, from its approval date): the ten SPEC-0001 trials HYP-0010..0019 (GG-1..4 on Sets F and P,
     MP-1, REV-1), run through the same per-day code as the batch runners (r3_run.gg_day, r3_intraday.intraday_day)
     and admitted at US$600, the account the hypotheses state
@@ -47,7 +52,7 @@ from wt.data.edgar import SharesOutstanding  # noqa: E402
 from wt.data.universe import DAILY, load_daily  # noqa: E402
 from wt.ops.safeio import atomic_replace  # noqa: E402
 from wt.scanner.features import PMCache, build_candidates  # noqa: E402
-from wt.scanner.pool import POOL_DIR, DailyIndex, PoolConfig  # noqa: E402
+from wt.scanner.pool import POOL_DIR, SPLIT_CHECK_HI, SPLIT_CHECK_LO, DailyIndex, PoolConfig  # noqa: E402
 from wt.scanner.ranking import rank  # noqa: E402
 from wt.signals import setups  # noqa: E402
 from wt.specs.loader import load_spec  # noqa: E402
@@ -62,7 +67,10 @@ REFRESH_DAYS = 5                      # newest update chunks fetched again on ev
 POOL_MIN_FREE_GB = 1.0                # one day's pool is small; the multi-year batch build keeps its own 3 GB floor
 R3_EQUITY = 600.0                     # HYP-0010..0019 are stated for a US$600 account
 R3_P_RELAX: frozenset[str] = frozenset()   # Set P musts relaxed by the count guard (DEC-0010); none until it rules
-LEGACY = ("B_qqq_qqqm", "watchlist_bull_flag_atr_M1", "hod_bull_flag_atr_M1")
+LEGACY = ("B_qqq_qqqm", "watchlist_bull_flag_atr_M1_v2", "hod_bull_flag_atr_M1_v2")
+LEGACY_V1 = ("B_qqq_qqqm", "watchlist_bull_flag_atr_M1", "hod_bull_flag_atr_M1")   # what a pre-D7 session marker covers
+BIASED = frozenset({"watchlist_bull_flag_atr_M1", "hod_bull_flag_atr_M1"})         # DEC-0011 H-LA: look-ahead
+HOD_VOL_MIN = 1_000_000               # HOD v2: cumulative shares by the qualifying bar (v1: the full day's volume)
 R3_HYP = {"r3:F:GG-1": "HYP-0010", "r3:F:GG-2": "HYP-0011", "r3:F:GG-3": "HYP-0012", "r3:F:GG-4": "HYP-0013",
           "r3:P:GG-1": "HYP-0014", "r3:P:GG-2": "HYP-0015", "r3:P:GG-3": "HYP-0016", "r3:P:GG-4": "HYP-0017",
           "r3:MP-1": "HYP-0018", "r3:REV-1": "HYP-0019"}
@@ -90,7 +98,8 @@ def required(d: dt.date) -> set[str]:
 
 def done_by_session(rows: list[dict]) -> dict[str, set[str]]:
     """Strategies that have completed each session. A session marker written before per-strategy markers existed
-    stands for the three legacy strategies, unless that session also logged an error (which one failed is unknown)."""
+    stands for the three legacy strategies of that time (LEGACY_V1), unless that session also logged an error (which
+    one failed is unknown). The v2 flags are new trials, so no old marker covers them."""
     done: dict[str, set[str]] = defaultdict(set)
     old_errors = {str(r.get("session")) for r in rows if "error" in r and "strategy" not in r}
     for r in rows:
@@ -98,7 +107,7 @@ def done_by_session(rows: list[dict]) -> dict[str, set[str]]:
         if r.get("strategy_marker"):
             done[s].add(r["strategy"])
         elif r.get("session_marker") and s not in old_errors:
-            done[s].update(LEGACY)
+            done[s].update(LEGACY_V1)
     return done
 
 
@@ -226,8 +235,8 @@ def units_for(ctx: Context, d: dt.date) -> list[Unit]:
     a, sessions = ctx.a, ctx.sessions
     return [
         (("B_qqq_qqqm",), lambda: by_strategy(run_B(a, d, sessions))),
-        (("watchlist_bull_flag_atr_M1",), lambda: by_strategy(run_watchlist_flag(a, d, sessions, ctx.raw))),
-        (("hod_bull_flag_atr_M1",), lambda: by_strategy(run_hod_flag(a, d, ctx.raw))),
+        (("watchlist_bull_flag_atr_M1_v2",), lambda: by_strategy(run_watchlist_flag(a, d, sessions, ctx.raw, ctx.splits))),
+        (("hod_bull_flag_atr_M1_v2",), lambda: by_strategy(run_hod_flag(a, d, ctx.daily, ctx.splits))),
         (tuple(f"r3:F:{t}" for t in GG), lambda: r3_gg(ctx, d, "F")),
         (tuple(f"r3:P:{t}" for t in GG), lambda: r3_gg(ctx, d, "P")),
         (("r3:MP-1",), lambda: r3_intraday(ctx, d, "MP-1")),
@@ -301,13 +310,17 @@ def run_B(a: AlpacaREST, d: dt.date, sessions: list[dt.date]) -> list[dict]:
     return [{"strategy": "B_qqq_qqqm", "R": tr.r_multiple(cst), "exit": tr.exits[-1][3]}] if tr else []
 
 
-def run_watchlist_flag(a, d, sessions, daily) -> list[dict]:
+def run_watchlist_flag(a, d, sessions, daily, splits: SplitStore) -> list[dict]:
+    """Watchlist bull flag v2: the frozen ranking and entry, on candidates prefiltered by the 09:25 pre-market gap
+    (v1 used d's open, known only at 09:30) with split-adjusted prior closes."""
     cache, so = PMCache(), SharesOutstanding()
-    cands = build_candidates(d, daily, sessions, a, cache, so, with_quotes=True)
+    cands = build_candidates(d, daily, sessions, a, cache, so, with_quotes=True, causal=True,
+                             split_refresh=lambda syms: splits.refresh(syms, d, split_like=syms))
     cache.save()
     top, _ = rank(cands, load_yaml("ranking.yaml"))
-    FORWARD_WATCHLIST_DIR.mkdir(parents=True, exist_ok=True)
-    (FORWARD_WATCHLIST_DIR / f"{d}.json").write_text(json.dumps({"date": str(d), "top": top, "forward": True}, default=str))
+    FORWARD_WATCHLIST_DIR.mkdir(parents=True, exist_ok=True)       # v2 file: the v1 watchlists stay as they were
+    (FORWARD_WATCHLIST_DIR / f"{d}_v2.json").write_text(json.dumps({"date": str(d), "top": top, "forward": True,
+                                                                    "strategy": "watchlist_bull_flag_atr_M1_v2"}, default=str))
     bars = minute_bars(a, d, [t["symbol"] for t in top])
     out = []
     for t in top:
@@ -318,16 +331,47 @@ def run_watchlist_flag(a, d, sessions, daily) -> list[dict]:
         if sig:
             tr = simulate(b, sig, REGISTRY["M1"](), Costs(), t["symbol"], str(d), 6, 1e9, 1e9, flatten_idx=min(380, len(b) - 1))
             if tr:
-                out.append({"strategy": "watchlist_bull_flag_atr_M1", "symbol": t["symbol"], "R": tr.r_multiple(Costs())})
+                out.append({"strategy": "watchlist_bull_flag_atr_M1_v2", "symbol": t["symbol"], "R": tr.r_multiple(Costs()),
+                            "entry_time": str(tr.entry_time)})
     return out
 
 
-def run_hod_flag(a, d, daily) -> list[dict]:
+def hod_superset(daily: DailyIndex, d: dt.date, splits: SplitStore) -> pd.DataFrame:
+    """HOD v2 fetch superset for d, indexed by symbol with pc and adv20: prior close $2-30, and from d's daily bar a
+    high >= +10% and volume >= 1M. Only a superset, so no look-ahead: the qualifying bar needs a close >= +10% and
+    cumulative volume >= 1M, and the day's high and volume are at least that. As in v1, 20 prior daily bars are
+    required. Prior close and ADV20 are on d's share basis (R-C2); raw moves that look like a split are refreshed."""
+    today = daily.on(d)
+    today = today[today.v >= HOD_VOL_MIN]
+    rows = []
+    for s, r in today.iterrows():
+        hist = daily.before(s, d, 20)
+        if len(hist) == 20:
+            rows.append((s, r.o, r.h, r.c, float(hist.c.iloc[-1]), hist.date.iloc[-1]))
+    t = pd.DataFrame(rows, columns=["symbol", "o", "h", "c", "pc", "pdate"]).set_index("symbol")
+    if not len(t):
+        return t.assign(adv20=[])
+    hi, lo = 1 + SPLIT_CHECK_HI, 1 + SPLIT_CHECK_LO
+    like = sorted(t.index[(t.o / t.pc >= hi) | (t.o / t.pc <= lo) | (t.c / t.pc >= hi) | (t.c / t.pc <= lo)])
+    sf = splits.refresh(like, d, split_like=like)
+    t["pc"] = t.pc * [sf.factor(s, d) / sf.factor(s, x) for s, x in zip(t.index, t.pdate, strict=True)]
+    g = t[t.pc.between(2, 30) & (t.h / t.pc - 1 >= 0.10)].copy()
+    g["adv20"] = [float(sf.adjust_asof(daily.before(s, d, 20), d).v.mean()) for s in g.index]
+    return g
+
+
+def hod_qualify(b: pd.DataFrame, pc: float, adv: float, f_t: np.ndarray) -> int | None:
+    """HOD v2 qualification: the first 1-minute bar in 09:45-11:30 closing >= +10% over the prior close, at $2-30, with
+    cumulative volume >= 1M and >= 5x the expected cumulative volume by then. Only bars up to the decision bar count."""
+    c, cum = b.c.to_numpy(float), np.cumsum(b.v.to_numpy(float))
+    return next((i for i in range(15, min(120, len(b) - 1)) if c[i] >= 1.10 * pc and 2 <= c[i] <= 30
+                 and cum[i] >= HOD_VOL_MIN and cum[i] / max(1.0, adv * f_t[min(i, len(f_t) - 1)]) >= 5), None)
+
+
+def run_hod_flag(a, d, daily: DailyIndex, splits: SplitStore) -> list[dict]:
+    """HOD bull flag v2 (DEC-0011 H-LA): v1 fetched only names whose FULL-DAY volume reached 1M, known at the close."""
     import r2_intraday_hod as h
-    dd = daily.sort_values(["symbol", "date"]).copy()
-    dd["pc"] = dd.groupby("symbol").c.shift(1)
-    dd["adv20"] = dd.groupby("symbol").v.transform(lambda s: s.rolling(20).mean().shift(1))
-    g = dd[(dd.date == d) & dd.pc.between(2, 30) & (dd.h / dd.pc - 1 >= 0.10) & (dd.v >= 1e6) & dd.adv20.notna()].set_index("symbol")
+    g = hod_superset(daily, d, splits)
     if not len(g):
         return []
     f_t = h.volume_curve()
@@ -335,17 +379,15 @@ def run_hod_flag(a, d, daily) -> list[dict]:
     out = []
     for sym, b in bars.groupby("symbol"):
         b = b.sort_values("t").reset_index(drop=True)
-        cum = np.cumsum(b.v.to_numpy())
-        pc, adv = float(g.loc[sym, "pc"]), float(g.loc[sym, "adv20"])
-        q = next((i for i in range(15, min(120, len(b) - 1)) if b.c.iloc[i] >= 1.10 * pc and 2 <= b.c.iloc[i] <= 30
-                  and cum[i] / max(1.0, adv * f_t[min(i, len(f_t) - 1)]) >= 5), None)
+        q = hod_qualify(b, float(g.loc[sym, "pc"]), float(g.loc[sym, "adv20"]), f_t)
         if q is None:
             continue
         sig = setups.s1_bull_flag_5m(b, window=(q + 1, 120), start=q, atr_stop_mult=1.5)
         if sig:
             tr = simulate(b, sig, REGISTRY["M1"](), Costs(), sym, str(d), 6, 1e9, 1e9, flatten_idx=min(380, len(b) - 1))
             if tr:
-                out.append({"strategy": "hod_bull_flag_atr_M1", "symbol": sym, "R": tr.r_multiple(Costs())})
+                out.append({"strategy": "hod_bull_flag_atr_M1_v2", "symbol": sym, "R": tr.r_multiple(Costs()),
+                            "entry_time": str(tr.entry_time)})
     return out
 
 
