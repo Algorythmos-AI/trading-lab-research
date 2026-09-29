@@ -61,7 +61,12 @@ export async function runWatchdog(
   deps: WatchdogDeps = blobDeps,
 ): Promise<Record<string, unknown>> {
   const [latest, stored] = await Promise.all([
-    deps.readLatest(),
+    deps.readLatest().catch((e: unknown) => {
+      // An unreadable latest snapshot is judged like a missing one (evaluate pages in a window), instead of
+      // failing the whole tick, which would page nobody.
+      logEvent("watchdog.latest", { outcome: "read-failed", error: e instanceof Error ? e.name : "unknown" });
+      return null;
+    }),
     deps.readState().catch((e: unknown) => {
       logEvent("watchdog.state", { outcome: "read-failed", error: e instanceof Error ? e.name : "unknown" });
       return null; // page from the initial state: at worst a duplicate
