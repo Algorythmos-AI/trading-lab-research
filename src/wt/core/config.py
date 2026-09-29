@@ -9,6 +9,10 @@ from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[3]
 load_dotenv(ROOT / ".env")
+# On the Linux VM the secrets live in a tmpfs file written at boot (ADR 0004); systemd passes it as
+# EnvironmentFile and names it here, so interactive commands (bin/wt) see the same values.
+if os.environ.get("WT_ENV_FILE"):
+    load_dotenv(os.environ["WT_ENV_FILE"], override=False)
 
 DATA_DIR = ROOT / "data"
 CONFIG_DIR = ROOT / "config"

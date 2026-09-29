@@ -75,17 +75,31 @@ def check_disk(root: Path, min_free_gb: float = MIN_FREE_GB) -> Check:
 
 
 def check_env_mode(root: Path) -> Check:
-    p = root / ".env"
+    """The secrets file is private: ~/trading/.env on the Mac, WT_ENV_FILE (tmpfs, written at boot) on the VM."""
+    env_file = os.environ.get("WT_ENV_FILE")
+    p = Path(env_file) if env_file else root / ".env"
     if not p.exists():
-        return Check(".env private", False, ".env missing")
+        return Check(".env private", False, f"{p.name} missing")
     mode = p.stat().st_mode & 0o777
+    if env_file and p.stat().st_size == 0:
+        return Check(".env private", False, f"{p.name} is empty (secrets not fetched yet?)")
     return Check(".env private", mode & 0o077 == 0, f"mode {mode:o}")
+
+
+def check_paging(root: Path) -> Check:
+    """On the VM nothing else would tell the owner a job failed: the ntfy topic must be configured."""
+    ok = bool(os.environ.get("NTFY_TOPIC"))
+    return Check("paging configured", ok, "ntfy topic set" if ok else "NTFY_TOPIC is empty: alerts would be silent")
 
 
 def run_checks(root: Path | None = None, min_free_gb: float = MIN_FREE_GB) -> list[Check]:
     root = root or ROOT
-    return [*check_git(root), check_legacy_state(root), check_venv(root), check_disk(root, min_free_gb),
-            check_env_mode(root)]
+    checks = [*check_git(root), check_legacy_state(root), check_venv(root), check_disk(root, min_free_gb),
+              check_env_mode(root)]
+    from wt.ops.host import current
+    if current().kind == "systemd":
+        checks.append(check_paging(root))
+    return checks
 
 
 def failures(checks: list[Check]) -> list[Check]:
