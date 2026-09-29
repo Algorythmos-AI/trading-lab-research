@@ -57,3 +57,18 @@ def test_view_without_an_account_is_unknown_not_zero():
 def test_gains_use_none_of_a_loss_limit():
     v = rv.view(D, {"equity": 600.0, "high_water": 600.0, "day_pnl": {D.isoformat(): 30.0}}, kill=False)
     assert {r["id"]: r for r in v["limits"]}["day_loss"]["used_pct"] == 0.0
+
+
+
+def test_a_latch_sentinel_is_reported_latched_even_if_the_account_says_not(tmp_path):
+    (tmp_path / "va.json.latch").write_text("daily loss limit -2%")
+    v = rv.view(D, {"equity": 600.0, "high_water": 600.0, "latched": False}, kill=False, va_path=tmp_path / "va.json")
+    assert v["controls"]["latched"] is True and v["controls"]["entries_allowed"] is False
+    assert v["controls"]["latch_reason"] == "latch sentinel present"
+
+
+def test_a_broken_risk_yaml_still_gives_a_view(tmp_path):
+    bad = tmp_path / "risk.yaml"
+    bad.write_text("B: [unclosed")
+    rows = {r["id"]: r for r in rv.view(D, None, kill=False, risk_yaml=bad)["limits"]}
+    assert rows["max_qty"]["limit"] == "?" and rows["day_loss"]["limit"] == "-2% of equity"

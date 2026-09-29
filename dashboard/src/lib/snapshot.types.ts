@@ -745,6 +745,8 @@ export interface Snapshot {
   audit?: {
     chain_ok?: boolean | null;
     chain_bad_seq?: number | null;
+    rows?: number | null;
+    bad_lines?: number | null;
     /**
      * @maxItems 2000
      */

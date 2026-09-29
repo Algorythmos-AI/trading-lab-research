@@ -13,6 +13,7 @@ import datetime as dt
 import fcntl
 import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -43,9 +44,12 @@ def read(path: Path = AUDIT) -> list[dict[str, Any]]:
 
 
 def verify(rows: list[dict[str, Any]]) -> tuple[bool, int | None]:
-    """(ok, seq of the first bad row or None)."""
+    """(ok, seq of the first bad row or None). Torn lines (a crash mid-write; read() marks them `_bad`) are skipped:
+    append() chains past them to the last good row, so they hide nothing. Deleting trailing rows is not visible
+    here; the dashboard publishes the row count for that."""
     prev = GENESIS
-    for i, r in enumerate(rows):
+    good = [r for r in rows if "_bad" not in r]
+    for i, r in enumerate(good):
         intact = isinstance(r.get("prev"), str) and r["prev"] == prev and r.get("seq") == i \
             and r.get("hash") == _digest(r)
         if not intact:
@@ -60,13 +64,16 @@ def append(kind: str, detail: str = "", path: Path = AUDIT, now: dt.datetime | N
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path.with_suffix(".lock"), "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        rows = read(path)
-        prev = rows[-1].get("hash", GENESIS) if rows else GENESIS
-        row: dict[str, Any] = {"seq": len(rows), "at": (now or dt.datetime.now(dt.UTC)).isoformat(timespec="seconds"),
+        good = [r for r in read(path) if "_bad" not in r]
+        prev = str(good[-1].get("hash", GENESIS)) if good else GENESIS
+        row: dict[str, Any] = {"seq": len(good), "at": (now or dt.datetime.now(dt.UTC)).isoformat(timespec="seconds"),
                                "kind": kind, "detail": detail[:200], "prev": prev}
         row["hash"] = _digest(row)
+        torn = path.exists() and path.stat().st_size > 0 and not path.read_bytes().endswith(b"\n")
         with open(path, "a") as fh:
-            fh.write(json.dumps(row, sort_keys=True) + "\n")
+            fh.write(("\n" if torn else "") + json.dumps(row, sort_keys=True) + "\n")   # end a torn line first
+            fh.flush()
+            os.fsync(fh.fileno())
     return row
 
 

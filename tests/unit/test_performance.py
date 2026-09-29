@@ -49,3 +49,28 @@ def test_curve_is_thinned_but_keeps_its_ends():
 def test_histogram_bins():
     h = perf.histogram([t(-5), t(-1), t(0.2), t(1.5), t(9)])
     assert sum(b["count"] for b in h) == 5 and h[0] == {"bin": "< -3", "count": 1} and h[-1]["count"] == 1
+
+
+
+def test_a_zero_r_trade_is_breakeven_not_a_loss():
+    s = perf.stats([t(1.0), t(0.0), t(-1.0)])
+    assert s["win_rate"] == pytest.approx(1 / 3, abs=1e-4) and s["avg_loss_r"] == -1.0
+
+
+def test_sharpe_counts_only_clean_sessions_and_drops_estimated_days():
+    days = [f"2026-{10 + i // 28:02d}-{i % 28 + 1:02d}" for i in range(30)]
+    trades = [t(2.0 if i % 2 else -1.0, day=d) for i, d in enumerate(days)]
+    base = perf.stats(trades, session_days=set(days))
+    padded = perf.stats(trades, session_days=set(days) | {f"2026-12-{i + 1:02d}" for i in range(20)})
+    assert base["sharpe"] > padded["sharpe"]                        # idle clean sessions dilute it, KILL days don't
+    assert perf.daily_series(trades + [t(0.5, day="2026-12-30", exit_price_estimated=True)],
+                             set(days) | {"2026-12-30"}) == perf.daily_series(trades, set(days))
+    assert perf.stats(trades, session_days=set(days[:10]))["sharpe"] is None        # under 30 sessions
+
+
+def test_the_worst_drawdown_is_measured_before_thinning():
+    trades = [t(0.1, day=f"d{i}") for i in range(400)] + [t(-8.0, day="trough")] + \
+        [t(0.1, day=f"e{i}") for i in range(400)]
+    full = perf.curve(trades, max_points=10**9)
+    assert perf.max_drawdown(full)[1] == pytest.approx(-8.0)
+    assert len(perf.thin(full)) == 400
