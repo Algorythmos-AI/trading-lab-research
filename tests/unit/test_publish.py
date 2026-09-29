@@ -348,3 +348,12 @@ def test_windows_are_published_14_days_ahead(tmp_path, monkeypatch):
     assert seen["ahead"] >= 15
     last = dt.datetime.fromisoformat(wins[-1]["start"])
     assert (last - now) > dt.timedelta(days=12) and len(wins) >= 9
+
+
+
+def test_paper_series_counts_a_replayed_close_once(tmp_path):
+    row = {"event": "trade_closed", "day": "2026-10-01", "trade_id": "t1", "R": 1.5}
+    j = tmp_path / "journal.jsonl"
+    j.write_text("\n".join(json.dumps(r) for r in (row, row, {**row, "trade_id": "t2"})) + "\n")
+    s = publish.paper_series(j)
+    assert s[-1]["cum_r"] == 3.0 and s[-1]["trades"] == 2

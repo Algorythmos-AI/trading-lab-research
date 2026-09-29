@@ -110,3 +110,9 @@ def test_a_torn_audit_line_is_ended_and_skipped(tmp_path):
     rows = audit.read(log)
     assert [r.get("kind") for r in rows if "_bad" not in r] == ["kill_on", "kill_off"]
     assert sum(1 for r in rows if "_bad" in r) == 1 and audit.verify(rows) == (True, None)
+
+
+
+def test_blotter_counts_a_replayed_close_once():
+    row = {"event": "trade_closed", "day": "2026-10-01", "trade_id": "t1", "R": 1.0}
+    assert len(ov.blotter([row, dict(row), {**row, "trade_id": "t2"}])) == 2

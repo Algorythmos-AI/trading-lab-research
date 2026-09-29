@@ -76,11 +76,17 @@ def sla(runs: Sequence[dict[str, Any]], today: dt.date, sessions: Mapping[dt.dat
 
 
 def blotter(journal_rows: Iterable[dict[str, Any]], keep: int = 100) -> list[dict[str, Any]]:
-    """Closed trades, newest last. Prices and R only; the virtual account's money stays out."""
+    """Closed trades, newest last, once per trade_id (a pre-phase-2 restart could journal a close twice). Prices
+    and R only; the virtual account's money stays out."""
     out = []
+    seen: set[str] = set()
     for r in journal_rows:
         if r.get("event") != "trade_closed":
             continue
+        tid = str(r.get("trade_id") or "")
+        if tid and tid in seen:
+            continue
+        seen.add(tid)
         rr = r.get("R")
         out.append({"date": str(r.get("day") or str(r.get("ts", ""))[:10]), "symbol": r.get("symbol"),
                     "qty": r.get("qty"), "entry": r.get("entry"), "exit": r.get("exit"), "stop": r.get("stop"),

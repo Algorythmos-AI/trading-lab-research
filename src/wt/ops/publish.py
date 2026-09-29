@@ -417,8 +417,13 @@ def forward_series(ledger: Path = FORWARD_LEDGER) -> list[dict[str, Any]]:
 def paper_series(journal: Path = DATA_DIR / "live" / "journal.jsonl") -> list[dict[str, Any]]:
     days: dict[str, dict[str, Any]] = {}
     cum = 0.0
+    seen: set[str] = set()
     for r in _read_jsonl(journal):
         day = str(r.get("day") or str(r.get("ts", ""))[:10])
+        if r.get("event") == "trade_closed" and r.get("trade_id"):
+            if str(r["trade_id"]) in seen:                     # a replayed close counts once
+                continue
+            seen.add(str(r["trade_id"]))
         if r.get("event") == "trade_closed" and isinstance(r.get("R"), int | float):
             cum += float(r["R"])
             d = days.setdefault(day, {"date": day, "equity": None, "cum_r": cum, "trades": 0})
