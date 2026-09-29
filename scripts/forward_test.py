@@ -33,7 +33,6 @@ from __future__ import annotations
 import contextlib
 import datetime as dt
 import functools
-import hashlib
 import json
 import os
 import shutil
@@ -310,7 +309,7 @@ def append(rec: dict) -> bool:
         if rec.get("key") and str(rec["key"]) in _keys(lines):
             return False
         row = {**rec, "git_sha": git_sha(), "ts": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
-               "prev_sha256": hashlib.sha256(lines[-1]).hexdigest() if lines else GENESIS}
+               "prev_sha256": ledger.expected_prev(lines)}         # the rule verify_chain checks
         out = json.dumps(row, default=str).encode() + b"\n"
         if data and not data.endswith(b"\n"):
             out = b"\n" + out                              # end a torn line from a killed writer; verify_chain reports it

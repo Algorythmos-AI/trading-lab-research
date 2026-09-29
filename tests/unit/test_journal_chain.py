@@ -160,3 +160,79 @@ def test_a_failed_journal_write_leaves_the_close_to_be_retried(tmp_path, monkeyp
     monkeypatch.setattr(ledger, "append", real)
     books.close(plan, _FakeOMS(), day, day, lambda p: None)
     assert plan.recorded and plan.trade_id in books.journaled
+
+
+
+def test_a_chained_line_commits_to_every_line_since_the_last_chained_one(tmp_path):
+    """Second review: editing the chained line before an unchained run, or dropping a line of the run, is a break."""
+    p = tmp_path / "j.jsonl"
+    ledger.append(p, {"event": "a", "R": -1})
+    with open(p, "a") as f:
+        f.write('{"event": "old code 1"}\n{"event": "old code 2"}\n')
+    ledger.append(p, {"event": "b"})
+    assert ledger.verify_chain(p) == []
+    lines = p.read_text().splitlines()
+    p.write_text("\n".join([lines[0].replace('"R": -1', '"R": 3'), *lines[1:]]) + "\n")
+    assert ledger.verify_chain(p)                                   # the edited chained line is caught
+    p.write_text("\n".join([lines[0], lines[1], lines[3]]) + "\n")
+    assert ledger.verify_chain(p)                                   # a dropped unchained line is caught
+
+
+def test_fully_chained_and_legacy_files_hash_as_before(tmp_path):
+    """Existing ledgers must keep verifying: the new rule equals the old one without unchained runs."""
+    import hashlib
+    p = tmp_path / "j.jsonl"
+    p.write_text('{"event": "legacy 1"}\n{"event": "legacy 2"}\n')
+    ledger.append(p, {"event": "x"})
+    ledger.append(p, {"event": "y"})
+    lines = p.read_bytes().split(b"\n")
+    assert json.loads(lines[2])["prev_sha256"] == hashlib.sha256(lines[1]).hexdigest()
+    assert json.loads(lines[3])["prev_sha256"] == hashlib.sha256(lines[2]).hexdigest()
+
+
+def test_a_long_unchained_run_beyond_the_tail_window(tmp_path):
+    p = tmp_path / "j.jsonl"
+    ledger.append(p, {"event": "start"})
+    with open(p, "a") as f:
+        for i in range(3000):
+            f.write(json.dumps({"event": "old", "i": i, "pad": "x" * 40}) + "\n")
+    ledger.append(p, {"event": "after"})
+    assert ledger.verify_chain(p) == []
+
+
+def test_log_survives_a_full_disk_on_the_job_log_too(tmp_path, monkeypatch):
+    import sys
+    monkeypatch.setattr(runner_b, "LIVE", tmp_path)
+    monkeypatch.setattr(ledger, "append", lambda *a, **k: (_ for _ in ()).throw(OSError(28, "full")))
+
+    class Full:
+        def write(self, *_):
+            raise OSError(28, "No space left on device")
+
+        def flush(self):
+            raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(sys, "stdout", Full())
+    monkeypatch.setattr(sys, "stderr", Full())
+    assert runner_b.log("loop_error", error="X") is False            # no exception, even with nowhere to print
+
+
+def test_a_close_whose_failed_write_landed_is_not_journaled_twice(tmp_path, monkeypatch):
+    import datetime as dt
+    from wt.risk.virtual_account import VirtualAccount
+    monkeypatch.setattr(runner_b, "LIVE", tmp_path)
+    plan = _closed_plan(attempt=2)
+    books = runner_b.Books(VirtualAccount(), tmp_path / "va.json", readonly=False)
+    real = ledger.append
+
+    def wrote_then_failed(path, rec, fsync=False):
+        real(path, rec, fsync)
+        raise OSError(5, "I/O error on fsync")
+
+    monkeypatch.setattr(ledger, "append", wrote_then_failed)
+    day = dt.date(2026, 10, 1)
+    books.close(plan, _FakeOMS(), day, day, lambda p: None)
+    monkeypatch.setattr(ledger, "append", real)
+    books.close(plan, _FakeOMS(), day, day, lambda p: None)
+    rows = [json.loads(x) for x in (tmp_path / "journal.jsonl").read_text().splitlines()]
+    assert [r["event"] for r in rows].count("trade_closed") == 1 and plan.recorded
