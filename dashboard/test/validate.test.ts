@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DENY_PATHS, findDenied, validateSnapshot } from "@/lib/validate";
-import { fixture } from "./helpers";
+import { fixture, fixtureV3 } from "./helpers";
 
 type Loose = Record<string, unknown>;
 const loose = (x: unknown) => x as Loose;
@@ -9,6 +9,20 @@ describe("schema validation", () => {
   it("accepts the fixture", () => {
     const r = validateSnapshot(fixture());
     expect(r.ok).toBe(true);
+  });
+
+  it("accepts the v3 fixture, and v2 snapshots stay valid (v3 only adds optional keys)", () => {
+    expect(validateSnapshot(fixtureV3()).ok).toBe(true);
+    expect(fixture().schema_version).toBe(2);
+    expect(fixtureV3().schema_version).toBe(3);
+  });
+
+  it("rejects a value outside an enum leaf", () => {
+    const s = fixtureV3();
+    loose(s.sla?.cells?.[0]).status = "great";
+    const r = validateSnapshot(s);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors.join(" ")).toContain("/sla/cells/0/status");
   });
 
   it("accepts a snapshot with only the required keys, all null", () => {

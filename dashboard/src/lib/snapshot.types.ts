@@ -508,6 +508,18 @@ export interface Snapshot {
           title?: string | null;
         } | null)[]
       | null;
+    /**
+     * @maxItems 2000
+     */
+    history?:
+      | ({
+          at?: string | null;
+          key?: string | null;
+          event?: "fired" | "resolved" | null;
+          title?: string | null;
+          priority?: number | null;
+        } | null)[]
+      | null;
   } | null;
   kill?: {
     on?: boolean | null;
@@ -583,5 +595,166 @@ export interface Snapshot {
         [k: string]: number | null | undefined;
       } | null;
     } | null;
+  } | null;
+  risk?: {
+    /**
+     * @maxItems 2000
+     */
+    limits?:
+      | ({
+          id?: string | null;
+          label?: string | null;
+          limit?: string | null;
+          used?: string | null;
+          used_pct?: number | null;
+          state?: "ok" | "warn" | "at_limit" | "n/a" | null;
+          source?: string | null;
+          source_sha?: string | null;
+        } | null)[]
+      | null;
+    controls?: {
+      kill?: boolean | null;
+      latched?: boolean | null;
+      latch_reason?: string | null;
+      latch_resets?: number | null;
+      last_reset?: string | null;
+      entries_allowed?: boolean | null;
+    } | null;
+    used_today?: {
+      date?: string | null;
+      day_pnl_pct?: number | null;
+      week_pnl_pct?: number | null;
+      drawdown_pct?: number | null;
+      entries?: number | null;
+    } | null;
+    sources?: {
+      [k: string]: string | null | undefined;
+    } | null;
+  } | null;
+  perf?: {
+    stats?: {
+      n?: number | null;
+      excluded_estimated?: number | null;
+      win_rate?: number | null;
+      avg_win_r?: number | null;
+      avg_loss_r?: number | null;
+      expectancy_r?: number | null;
+      total_r?: number | null;
+      sample_ok?: boolean | null;
+      ci_low?: number | null;
+      ci_high?: number | null;
+      profit_factor?: number | null;
+      pf_no_losses?: boolean | null;
+      sharpe?: number | null;
+    } | null;
+    sessions?: number | null;
+    min_trades?: number | null;
+    min_sessions?: number | null;
+    max_dd_pct?: number | null;
+    max_dd_r?: number | null;
+    /**
+     * @maxItems 2000
+     */
+    curve?:
+      | ({
+          date?: string | null;
+          equity_pct?: number | null;
+          cum_r?: number | null;
+          dd_pct?: number | null;
+          dd_r?: number | null;
+        } | null)[]
+      | null;
+    /**
+     * @maxItems 2000
+     */
+    histogram?:
+      | ({
+          bin?: string | null;
+          count?: number | null;
+        } | null)[]
+      | null;
+    band?: {
+      available?: boolean | null;
+      reason?: string | null;
+    } | null;
+  } | null;
+  /**
+   * @maxItems 2000
+   */
+  blotter?:
+    | ({
+        date?: string | null;
+        symbol?: string | null;
+        qty?: number | null;
+        entry?: number | null;
+        exit?: number | null;
+        stop?: number | null;
+        r?: number | null;
+        reason?: string | null;
+        origin?: string | null;
+        estimated?: boolean | null;
+        booked?: boolean | null;
+      } | null)[]
+    | null;
+  sla?: {
+    /**
+     * @maxItems 2000
+     */
+    days?: (string | null)[] | null;
+    /**
+     * @maxItems 2000
+     */
+    cells?:
+      | ({
+          job?: string | null;
+          date?: string | null;
+          status?: "ok" | "refused" | "failed" | "partial" | "missed" | "none" | "n/a" | null;
+          runs?: number | null;
+        } | null)[]
+      | null;
+    /**
+     * @maxItems 2000
+     */
+    summary?:
+      | ({
+          job?: string | null;
+          expected?: number | null;
+          ok?: number | null;
+          refused?: number | null;
+          failed?: number | null;
+          missed?: number | null;
+          ok_pct?: number | null;
+        } | null)[]
+      | null;
+  } | null;
+  digest?: {
+    since?: string | null;
+    /**
+     * @maxItems 2000
+     */
+    items?:
+      | ({
+          key?: string | null;
+          label?: string | null;
+          prev?: string | null;
+          now?: string | null;
+          changed?: boolean | null;
+        } | null)[]
+      | null;
+  } | null;
+  audit?: {
+    chain_ok?: boolean | null;
+    chain_bad_seq?: number | null;
+    /**
+     * @maxItems 2000
+     */
+    events?:
+      | ({
+          at?: string | null;
+          kind?: string | null;
+          source?: string | null;
+          detail?: string | null;
+        } | null)[]
+      | null;
   } | null;
 }

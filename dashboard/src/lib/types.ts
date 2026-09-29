@@ -56,6 +56,27 @@ export type ForwardPoint = Item<NN<Snapshot["series"]>["forward"]>;
 export type PaperPoint = Item<NN<Snapshot["series"]>["paper"]>;
 export type TimelineEvent = Item<NN<Snapshot["history"]>["timeline"]>;
 
+// ---- v3 (Wave 1a) ----
+export type Risk = NN<Snapshot["risk"]>;
+export type RiskLimit = Item<Risk["limits"]>;
+export type RiskControls = NN<Risk["controls"]>;
+export type RiskUsedToday = NN<Risk["used_today"]>;
+export type LimitState = NN<RiskLimit["state"]>;
+export type Perf = NN<Snapshot["perf"]>;
+export type PerfStats = NN<Perf["stats"]>;
+export type CurvePoint = Item<Perf["curve"]>;
+export type HistogramBin = Item<Perf["histogram"]>;
+export type BlotterRow = Item<Snapshot["blotter"]>;
+export type Sla = NN<Snapshot["sla"]>;
+export type SlaCell = Item<Sla["cells"]>;
+export type SlaStatus = NN<SlaCell["status"]>;
+export type SlaSummary = Item<Sla["summary"]>;
+export type Digest = NN<Snapshot["digest"]>;
+export type DigestItem = Item<Digest["items"]>;
+export type Audit = NN<Snapshot["audit"]>;
+export type AuditEvent = Item<Audit["events"]>;
+export type AlertHistoryEntry = Item<NN<Snapshot["alerts"]>["history"]>;
+
 /** Drops null/undefined items from an optional array; never throws. */
 export function list<T>(xs: readonly (T | null | undefined)[] | null | undefined): T[] {
   if (!Array.isArray(xs)) return [];

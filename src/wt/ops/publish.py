@@ -39,15 +39,17 @@ from typing import Any
 import numpy as np
 import requests
 
-from wt.core.clock import et
+from wt.core.clock import ET, et
 from wt.core.config import DATA_DIR, FORWARD_LEDGER, ROOT, STATE_DIR
-from wt.ops import safeio
+from wt.ops import safeio, thresholds
 
 SCHEMA_ID = "trading-lab/snapshot"
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3                        # v3 only adds optional keys: every v2 snapshot is a valid v3 one
 SCHEMA_PATH = ROOT / "dashboard" / "src" / "lib" / "snapshot.schema.json"
 OUT = STATE_DIR / "dashboard"
 MAX_BODY = 3_000_000                      # Vercel's request limit is 4.5 MB
+WINDOW_HORIZON_H = 14 * 24                # the watchdog pages in these windows; after them it assumes weekdays (R8)
+BUDGET = 300_000                          # what a snapshot should stay under; over it prints a warning (not a failure)
 TEXT_MAX, SHORT_MAX = 300, 200
 LIST_MAX = 2000
 NGRAM = 8
@@ -61,6 +63,11 @@ class Leaf:
 
 
 @dataclass(frozen=True)
+class OneOf:
+    values: tuple[str, ...]               # a short string from a closed set (anything else publishes as null)
+
+
+@dataclass(frozen=True)
 class Map:
     value: Any                            # a dict with arbitrary short keys, each value following `value`
 
@@ -68,6 +75,8 @@ class Map:
 S, T, N, I, B = Leaf("S"), Leaf("T"), Leaf("N"), Leaf("I"), Leaf("B")
 SOURCE = {"ok": B, "stale": B, "as_of": S, "error": T, "ms": I}
 LOG = {"file": S, "exists": B, "bytes": I, "modified": S, "errors_count": I, "last_error": T}
+LIMIT_STATE = OneOf(("ok", "warn", "at_limit", "n/a"))
+SLA_STATUS = OneOf(("ok", "refused", "failed", "partial", "missed", "none", "n/a"))
 
 ALLOW: dict[str, Any] = {
     "schema": S, "schema_version": I, "run_id": S, "as_of": S, "redaction": S, "withheld": I, "truncated": I,
@@ -132,7 +141,8 @@ ALLOW: dict[str, Any] = {
                                    "legacy": B}]}},
     "jobs": {"last": Map({"status": S, "exit": I, "started": S, "ended": S, "sha": S, "detail": T}),
              "runs": [{"job": S, "status": S, "exit": I, "started": S, "ended": S, "sha": S}]},
-    "alerts": {"firing": [{"key": S, "since": S, "title": T}]},
+    "alerts": {"firing": [{"key": S, "since": S, "title": T}],
+               "history": [{"at": S, "key": S, "event": OneOf(("fired", "resolved")), "title": T, "priority": I}]},
     "kill": {"on": B, "since": S, "reason": T},
     "deploy": {"to": S, "rollback_tag": S, "at": S, "smoke_ok": B},
     "preflight": [{"name": S, "ok": B, "detail": T}],
@@ -141,6 +151,26 @@ ALLOW: dict[str, Any] = {
                "paper": [{"date": S, "equity": N, "cum_r": N, "trades": I}]},
     "history": {"timeline": [{"date": S, "event": T}],
                 "legacy": {"total": I, "orders_placed": I, "first": S, "last": S, "by_outcome": Map(I)}},
+    # ---- v3 (Wave 1a) ----
+    "risk": {"limits": [{"id": S, "label": S, "limit": S, "used": S, "used_pct": N, "state": LIMIT_STATE,
+                         "source": S, "source_sha": S}],
+             "controls": {"kill": B, "latched": B, "latch_reason": S, "latch_resets": I, "last_reset": S,
+                          "entries_allowed": B},
+             "used_today": {"date": S, "day_pnl_pct": N, "week_pnl_pct": N, "drawdown_pct": N, "entries": I},
+             "sources": Map(S)},
+    "perf": {"stats": {"n": I, "excluded_estimated": I, "win_rate": N, "avg_win_r": N, "avg_loss_r": N,
+                       "expectancy_r": N, "total_r": N, "sample_ok": B, "ci_low": N, "ci_high": N, "profit_factor": N,
+                       "pf_no_losses": B, "sharpe": N},
+             "sessions": I, "min_trades": I, "min_sessions": I, "max_dd_pct": N, "max_dd_r": N,
+             "curve": [{"date": S, "equity_pct": N, "cum_r": N, "dd_pct": N, "dd_r": N}],
+             "histogram": [{"bin": S, "count": I}],
+             "band": {"available": B, "reason": S}},
+    "blotter": [{"date": S, "symbol": S, "qty": N, "entry": N, "exit": N, "stop": N, "r": N, "reason": S, "origin": S,
+                 "estimated": B, "booked": B}],
+    "sla": {"days": [S], "cells": [{"job": S, "date": S, "status": SLA_STATUS, "runs": I}],
+            "summary": [{"job": S, "expected": I, "ok": I, "refused": I, "failed": I, "missed": I, "ok_pct": N}]},
+    "digest": {"since": S, "items": [{"key": S, "label": S, "prev": S, "now": S, "changed": B}]},
+    "audit": {"chain_ok": B, "chain_bad_seq": I, "events": [{"at": S, "kind": S, "source": S, "detail": T}]},
 }
 REQUIRED = ("schema", "schema_version", "run_id", "as_of")
 _KEY = re.compile(r"^[\w.:+\- /|]{1,64}$")
@@ -154,6 +184,8 @@ def to_schema(spec: Any = ALLOW, top: bool = True) -> dict[str, Any]:
                 "N": {"type": ["number", "null"]}, "I": {"type": ["integer", "null"]},
                 "B": {"type": ["boolean", "null"]}}
         return leaves[spec.kind]
+    if isinstance(spec, OneOf):
+        return {"enum": [*spec.values, None]}
     if isinstance(spec, Map):
         return {"type": ["object", "null"], "propertyNames": {"pattern": _KEY.pattern},
                 "additionalProperties": to_schema(spec.value, False), "maxProperties": 200}
@@ -262,6 +294,8 @@ class Sanitizer:
             if k == "S":
                 return self.text(v, SHORT_MAX) if isinstance(v, str | int | float) else None
             return None if self.strict else self.text(v, TEXT_MAX) if isinstance(v, str) else None
+        if isinstance(spec, OneOf):
+            return v if isinstance(v, str) and v in spec.values else None
         if isinstance(spec, Map):
             if not isinstance(v, dict):
                 return None
@@ -405,6 +439,50 @@ def expected_windows(now: dt.datetime, sessions: dict[dt.date, Any], hours: int 
     return out
 
 
+def v3_views(now: dt.datetime, *, runs: list[dict[str, Any]], sessions: dict[dt.date, Any], kill: bool,
+             root: Path = ROOT, live: Path = DATA_DIR / "live", alert_dir: Path | None = None,
+             deploy_dir: Path | None = None, audit_log: Path | None = None) -> dict[str, Any]:
+    """The Wave 1a sections: risk, perf, blotter, sla, audit and the alert history (the digest is added in
+    _publish, from the built snapshot)."""
+    from wt.analytics import ops_view, performance, risk_view
+    from wt.ops import audit
+    from wt.ops.alerts import ALERT_DIR
+    today = now.astimezone(ET).date()
+    journal = _read_jsonl(live / "journal.jsonl")
+    trades = [r for r in journal if r.get("event") == "trade_closed"]
+    armed_days = {str(r.get("day") or str(r.get("ts", ""))[:10]) for r in journal if r.get("event") == "armed"}
+    account = risk_view.load_account(live / "virtual_account.json")
+    curve = performance.curve(trades, start_equity=float((account or {}).get("start_equity") or 600.0))
+    dd_pct, dd_r = performance.max_drawdown(curve)
+    history = _read_jsonl((alert_dir or ALERT_DIR) / "history.jsonl")
+    rows = audit.read(audit_log or audit.AUDIT)
+    chain_ok, bad = audit.verify(rows)
+    return {
+        "risk": risk_view.view(today, account, kill, root=root),
+        "perf": {"stats": performance.stats(trades, sessions=len(armed_days)), "sessions": len(armed_days),
+                 "min_trades": thresholds.MIN_TRADES_STATS, "min_sessions": thresholds.MIN_SESSIONS_SHARPE,
+                 "max_dd_pct": dd_pct, "max_dd_r": dd_r, "curve": curve, "histogram": performance.histogram(trades),
+                 "band": {"available": False, "reason": "no expectation band until the DEC-0011 re-runs"}},
+        "blotter": ops_view.blotter(journal),
+        "sla": ops_view.sla(runs, today, sessions),
+        "audit": {"chain_ok": chain_ok, "chain_bad_seq": bad,
+                  "events": ops_view.audit_trail(deploys=sorted((deploy_dir or STATE_DIR / "deploy").glob("*.json")),
+                                                 account=account, runs=runs, alert_history=history,
+                                                 audit_rows=rows)},
+        "alerts_history": ops_view.alert_log(history),
+    }
+
+
+def add_digest(snap: dict[str, Any], san: Sanitizer, now: dt.datetime, daily_dir: Path = OUT / "daily") -> None:
+    from wt.analytics import ops_view
+    try:
+        d = ops_view.digest(ops_view.digest_metrics(snap), daily_dir, now.astimezone(ET).date())
+    except Exception as e:  # noqa: BLE001 — as above: the digest is optional, the publish is not
+        print(f"digest failed ({e.__class__.__name__})", file=sys.stderr)
+        d = {"since": None, "items": []}
+    snap["digest"] = san.apply(ALLOW["digest"], d)
+
+
 def extras(now: dt.datetime, root: Path = ROOT) -> dict[str, Any]:
     from wt.ops import preflight
     from wt.ops.alerts import Alerts
@@ -422,7 +500,12 @@ def extras(now: dt.datetime, root: Path = ROOT) -> dict[str, Any]:
                            "at": deploys[-1].stem, "smoke_ok": d.get("smoke_ok")}
         except (OSError, json.JSONDecodeError):
             pass
-    sessions, _ = load_sessions(now)
+    sessions, _ = load_sessions(now, back=20, ahead=16)      # 14 days of SLA behind, 14 days of windows ahead
+    try:
+        views = v3_views(now, runs=runs, sessions=sessions, kill=kill.exists(), root=root)
+    except Exception as e:  # noqa: BLE001 — a new view must never stop the publish the watchdog depends on
+        print(f"v3 views failed ({e.__class__.__name__}); publishing without them", file=sys.stderr)
+        views = {"alerts_history": None}
     last = last_runs()
     prev = next((r for r in reversed(runs) if r.get("job") == "dashboard"), None)
     if prev is not None:                # this run is the one collecting: show the previous, completed publish
@@ -432,14 +515,16 @@ def extras(now: dt.datetime, root: Path = ROOT) -> dict[str, Any]:
     return {
         "jobs": {"last": last, "runs": [r for r in runs if str(r.get("started", "")) >= cutoff][-500:]},
         "alerts": {"firing": [{"key": k, "since": v.get("since"), "title": v.get("title")}
-                              for k, v in sorted(Alerts().firing().items())]},
+                              for k, v in sorted(Alerts().firing().items())],
+                   "history": views.pop("alerts_history")},
         "kill": {"on": kill.exists(),
                  "since": dt.datetime.fromtimestamp(kill.stat().st_mtime, dt.UTC).isoformat() if kill.exists() else None,
                  "reason": None},              # the KILL file's note is the owner's free text: it stays local
         "deploy": last_deploy,
         "preflight": [{"name": c.name, "ok": c.ok, "detail": c.detail} for c in preflight.run_checks(root)],
-        "expected_windows": expected_windows(now, sessions),
+        "expected_windows": expected_windows(now, sessions, hours=WINDOW_HORIZON_H),
         "series": {"forward": forward_series(), "paper": paper_series()},
+        **views,
     }
 
 
@@ -597,6 +682,7 @@ def _publish(a: argparse.Namespace) -> int:
     san = Sanitizer(redact, leak if leak.available else None, strict=not leak.available)
     run_id = now.strftime("%Y%m%dT%H%M%SZ") + "-" + hashlib.sha1(os.urandom(8)).hexdigest()[:6]
     snap = build(docs, extras(now), san, run_id, now)
+    add_digest(snap, san, now)
     problems = validate(snap)
     if problems:
         print("snapshot failed schema validation:\n  " + "\n  ".join(problems), file=sys.stderr)
@@ -605,6 +691,8 @@ def _publish(a: argparse.Namespace) -> int:
     if len(body) > MAX_BODY:
         print(f"snapshot is {len(body)} bytes, over the {MAX_BODY} cap", file=sys.stderr)
         return 2
+    if len(body) > BUDGET:
+        print(f"warning: snapshot is {len(body)} bytes, over the {BUDGET} budget (the page gets slow)", file=sys.stderr)
     (OUT / "outbox").mkdir(parents=True, exist_ok=True)
     safeio.atomic_write(OUT / "outbox" / "snapshot.json", body.decode(), OUT)
     print(f"snapshot {run_id}: {len(body)} bytes, redaction={snap['redaction']}, withheld={snap['withheld']}")

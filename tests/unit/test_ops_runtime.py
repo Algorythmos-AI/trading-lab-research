@@ -431,3 +431,32 @@ def test_rollback_cleanup_ignores_positions_outside_bs_mandate_and_restores_mode
     assert "MODE" not in __import__("os").environ               # nothing leaks into the smoke test or venv sync
     b.pos["QQQM"] = Position("QQQM", 2, 250.0)
     assert "strategy B holds a position" in deploy.broker_cleanup_before_rollback(lambda: b)
+
+
+def test_alert_transitions_are_logged_for_the_dashboard(tmp_path, monkeypatch):
+    from wt.ops import alerts as al
+    monkeypatch.setattr(al, "_send", lambda msg, topic, server, timeout=5.0: True)
+    a = al.Alerts(root=tmp_path, topic="t")
+    tmp_path.mkdir(exist_ok=True)
+    assert a.fire("job:paper-b", "paper-b late", "m")
+    assert not a.fire("job:paper-b", "paper-b late", "m")            # repeats are not transitions
+    assert a.resolve("job:paper-b", "paper-b recovered", "m")
+    rows = [json.loads(x) for x in (tmp_path / "history.jsonl").read_text().splitlines()]
+    assert [(r["key"], r["event"], r["priority"]) for r in rows] == [("job:paper-b", "fired", 4),
+                                                                     ("job:paper-b", "resolved", 2)]
+
+
+def test_alert_history_failures_never_raise(tmp_path, monkeypatch):
+    from wt.ops import alerts as al
+    monkeypatch.setattr(al, "_send", lambda msg, topic, server, timeout=5.0: True)
+    (tmp_path / "history.jsonl").mkdir(parents=True)                  # appending to a directory fails
+    assert al.Alerts(root=tmp_path, topic="t").fire("k", "t", "m")
+
+
+def test_alert_history_is_cut_to_its_newer_half(tmp_path, monkeypatch):
+    from wt.ops import alerts as al
+    monkeypatch.setattr(al, "HISTORY_MAX_BYTES", 2000)
+    for i in range(40):
+        al._history(tmp_path, f"k{i}", "fired", "t")
+    lines = (tmp_path / "history.jsonl").read_text().splitlines()
+    assert len(lines) < 40 and json.loads(lines[-1])["key"] == "k39"

@@ -2,4 +2,7 @@
 
 export const DISK_FLOOR_GB = 3.0;
 export const DISK_TARGET_GB = 15.0;
+export const LOSS_LIMIT_AMBER = 0.5;
+export const MIN_SESSIONS_SHARPE = 30;
+export const MIN_TRADES_STATS = 20;
 export const SWAP_WARN_PCT = 85.0;
