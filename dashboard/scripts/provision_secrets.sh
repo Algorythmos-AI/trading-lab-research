@@ -18,6 +18,14 @@ need openssl
 need vercel
 need python3
 
+PROJECT="trading-lab-dashboard"
+SCOPE="skalaliyas-projects"
+if [ ! -f .vercel/project.json ]; then
+  vercel link --yes --project "$PROJECT" --scope "$SCOPE" >/dev/null
+  rm -f .env.local                       # `vercel link` may pull development variables; they are not needed here
+  printf '%s\n' "vercel: linked dashboard/ to $PROJECT" >&2
+fi
+
 say() { printf '%s\n' "$*" >&2; }
 
 # Set NAME for one Vercel environment, reading the value from stdin (never from argv).
@@ -56,40 +64,15 @@ vercel_set NTFY_TOPIC production "$NTFY_TOPIC"
 vercel_set NTFY_TOPIC preview "$NTFY_TOPIC"
 
 # The automation bypass lets the Mac's publisher (and nothing else) through Vercel Authentication.
-BYPASS="$(
-  vercel project protection enable --protection-bypass --format json | python3 -c '
-import json, sys
-
-def find(node):
-    if isinstance(node, dict):
-        pb = node.get("protectionBypass")
-        if isinstance(pb, dict):
-            for key, meta in pb.items():
-                if isinstance(meta, dict) and meta.get("scope") == "automation-bypass":
-                    return key
-        for key in ("automationBypassSecret", "bypassSecret", "secret"):
-            if isinstance(node.get(key), str) and node[key]:
-                return node[key]
-        for value in node.values():
-            found = find(value)
-            if found:
-                return found
-    elif isinstance(node, list):
-        for value in node:
-            found = find(value)
-            if found:
-                return found
-    return None
-
-try:
-    secret = find(json.load(sys.stdin))
-except ValueError:
-    secret = None
-if not secret:
-    sys.exit("could not read the automation bypass secret from the Vercel CLI output")
-print(secret)
-'
-)"
+# We generate the secret (32 characters, as Vercel requires) instead of parsing CLI output, and revoke the previous
+# one after the new one is in place, so a rotation never leaves an old bypass valid.
+OLD_BYPASS="$(grep -E '^VERCEL_AUTOMATION_BYPASS_SECRET=' "$ENV_FILE" | tail -1 | cut -d= -f2- || true)"
+BYPASS="$(openssl rand -hex 16)"
+vercel project protection enable "$PROJECT" --protection-bypass --protection-bypass-secret "$BYPASS" >/dev/null
+if [ -n "$OLD_BYPASS" ] && [ "$OLD_BYPASS" != "$BYPASS" ]; then
+  vercel project protection disable "$PROJECT" --protection-bypass --protection-bypass-secret "$OLD_BYPASS" >/dev/null 2>&1 \
+    || say "vercel: could not revoke the previous bypass secret; remove it in Project Settings > Deployment Protection"
+fi
 say "vercel: automation bypass enabled"
 
 upsert DASHBOARD_INGEST_SECRET "$INGEST_SECRET"
@@ -98,7 +81,7 @@ upsert NTFY_TOPIC "$NTFY_TOPIC"
 upsert DASHBOARD_INGEST_URL "$INGEST_URL"
 upsert VERCEL_AUTOMATION_BYPASS_SECRET "$BYPASS"
 
-unset INGEST_SECRET CRON_SECRET BYPASS
+unset INGEST_SECRET CRON_SECRET BYPASS OLD_BYPASS
 
 cat <<MSG
 
