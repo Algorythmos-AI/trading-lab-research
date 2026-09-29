@@ -20,6 +20,30 @@ from pathlib import Path
 from typing import Any
 
 
+def _fsync_dir(d: Path) -> None:
+    try:
+        fd = os.open(d, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
+def _durable_write(path: Path, text: str) -> None:
+    """Temp file, fsync, rename, fsync the directory: after this returns the new content survives a power cut."""
+    tmp = path.with_name(f".{path.name}.tmp")
+    with open(tmp, "w") as fh:
+        fh.write(text)
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp, path)
+    _fsync_dir(path.parent)
+
+
 class StateError(RuntimeError):
     """The account state can't be trusted (corrupt file, or a latch sentinel without its account)."""
 
@@ -98,18 +122,17 @@ class VirtualAccount:
         return path.with_suffix(path.suffix + ".latch")
 
     def save(self, path: Path) -> None:
+        """Order matters (plan R7): a latch's sentinel is made durable *before* the account is replaced, so a
+        failed account write (a full disk) can't lose a latch: load() then sees the sentinel with an unlatched
+        account and refuses to arm. An unlatch removes the sentinel only *after* the account says so."""
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_name(f".{path.name}.tmp")
-        with open(tmp, "w") as fh:
-            fh.write(json.dumps(asdict(self), indent=1))
-            fh.flush()
-            os.fsync(fh.fileno())
-        os.replace(tmp, path)
         s = self.sentinel(path)
         if self.latched:
-            s.write_text(self.latch_reason or "latched")
-        elif s.exists():
+            _durable_write(s, self.latch_reason or "latched")
+        _durable_write(path, json.dumps(asdict(self), indent=1))
+        if not self.latched and s.exists():
             s.unlink()
+            _fsync_dir(path.parent)
 
     @classmethod
     def load(cls, path: Path, start_equity: float = 600.0) -> VirtualAccount:
