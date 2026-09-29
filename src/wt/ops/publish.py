@@ -440,11 +440,72 @@ def load_docs(out: Path = OUT) -> dict[str, Any]:
     return docs
 
 
+PUBLISH_STATE = OUT / "publish_state.json"
+ALERT_AFTER_FAILURES = 2          # one failed publish is noise; the second in a row fails the job (and alerts)
+LOCK_WAIT_S = 60.0                # `make publish` while the 15-minute job runs: wait a little, then give way
+
+
+def error_code(detail: str) -> str:
+    """A fixed code for a send failure ("http_503", "network_ConnectTimeout"): never the response text."""
+    m = re.match(r"HTTP (\d{3})", detail)
+    if m:
+        return f"http_{m.group(1)}"
+    return "network_" + re.sub(r"[^A-Za-z0-9]", "", detail)[:40] if detail else "unknown"
+
+
+def record_outcome(ok: bool, detail: str, now: dt.datetime, path: Path | None = None) -> dict[str, Any]:
+    """Keep {last_attempt, last_ok, consecutive_failures, last_error_code} across runs. Never raises."""
+    path = path or PUBLISH_STATE
+    try:
+        st: dict[str, Any] = json.loads(path.read_text())
+    except (OSError, ValueError):
+        st = {}
+    st["last_attempt"] = now.isoformat()
+    if ok:
+        st.update(last_ok=now.isoformat(), consecutive_failures=0, last_error_code=None)
+    else:
+        st.update(consecutive_failures=int(st.get("consecutive_failures") or 0) + 1, last_error_code=error_code(detail))
+    try:
+        safeio.atomic_write(path, json.dumps(st, indent=1), path.parent)
+    except OSError:
+        pass
+    return st
+
+
+def health_url(ingest_url: str) -> str:
+    return re.sub(r"/api/ingest/?$", "/api/health", ingest_url)
+
+
+def verify_stored(snap: dict[str, Any], url: str, bypass: str | None) -> tuple[bool, str]:
+    """Read /api/health back and check it now serves this snapshot (run_id and as_of)."""
+    headers = {"x-vercel-protection-bypass": bypass} if bypass else {}
+    try:
+        r = requests.get(health_url(url), headers=headers, timeout=20)
+        h = r.json()
+    except (requests.RequestException, ValueError) as e:
+        return False, f"health unreadable ({e.__class__.__name__})"
+    got = (h.get("snapshot_run_id"), h.get("snapshot_as_of"))
+    want = (snap["run_id"], snap["as_of"])
+    if got[0] != want[0]:
+        return False, f"health serves run {got[0]} as of {got[1]}, expected {want[0]}"
+    return True, f"health serves run {got[0]} as of {got[1]}"
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m wt.ops.publish")
     ap.add_argument("--dry-run", action="store_true", help="build and validate, write the outbox, don't send")
     ap.add_argument("--no-collect", action="store_true", help="reuse the last collector documents")
+    ap.add_argument("--verify", action="store_true", help="after sending, read /api/health back and check it")
     a = ap.parse_args(argv)
+    from wt.ops.locks import job_lock
+    with job_lock("publish", wait_s=LOCK_WAIT_S) as got:
+        if not got:
+            print("another publish is still running; not starting a second one")
+            return 0
+        return _publish(a)
+
+
+def _publish(a: argparse.Namespace) -> int:
     now = dt.datetime.now(dt.UTC).replace(microsecond=0)
     if not a.no_collect:
         code = collect()
@@ -476,8 +537,17 @@ def main(argv: list[str] | None = None) -> int:
     if not url or not secret:
         print("DASHBOARD_INGEST_URL / DASHBOARD_INGEST_SECRET not set: not sending (run provision_secrets.sh)")
         return 0
-    ok, detail = send(body, url, secret, os.environ.get("VERCEL_AUTOMATION_BYPASS_SECRET"))
-    print(f"sent: {ok} ({detail})")
+    bypass = os.environ.get("VERCEL_AUTOMATION_BYPASS_SECRET")
+    ok, detail = send(body, url, secret, bypass)
+    st = record_outcome(ok, detail, now)
+    print(f"sent: {ok} ({error_code(detail) if not ok else detail}); consecutive failures {st['consecutive_failures']}")
+    if ok and a.verify:
+        good, why = verify_stored(snap, url, bypass)
+        print(f"verify: {'ok' if good else 'FAILED'}: {why}")
+        return 0 if good else 1
+    if not ok and st["consecutive_failures"] < ALERT_AFTER_FAILURES:
+        print("first failure in a row: not failing the job yet (the next one alerts)")
+        return 0
     return 0 if ok else 1
 
 

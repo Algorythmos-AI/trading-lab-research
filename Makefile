@@ -17,7 +17,7 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
 JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
-.PHONY: help bootstrap lint typecheck test ci hooks status gate deploy rollback migrate-state preflight \
+.PHONY: help bootstrap lint typecheck test ci hooks status gate deploy rollback migrate-state preflight publish-verify \
         agents-diff install-trading-agents install-dashboard-agent publish schema kill unkill reset-latch evidence
 
 help: ## List the tasks
@@ -76,6 +76,9 @@ install-dashboard-agent: ## Install the 15-minute dashboard publisher (com.wt.da
 
 publish: ## Collect, sanitize and publish the dashboard snapshot now (DRY_RUN=1 to only build it)
 	$(PY) -m wt.ops.publish $(if $(DRY_RUN),--dry-run,)
+
+publish-verify: ## Publish now, then read /api/health back and check it serves this snapshot
+	$(PY) -m wt.ops.publish --verify
 
 schema: ## Regenerate dashboard/src/lib/snapshot.schema.json from wt.ops.publish.ALLOW
 	$(PY) -c "import json; from wt.ops.publish import to_schema, SCHEMA_PATH; SCHEMA_PATH.parent.mkdir(parents=True, exist_ok=True); SCHEMA_PATH.write_text(json.dumps(to_schema(), indent=2) + '\\n')"

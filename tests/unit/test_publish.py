@@ -188,3 +188,77 @@ def test_from_docs_drops_nothing_it_does_not_know_about_silently():
     raw = from_docs(docs_with_restricted_fields(), private_ids={"webull-key"})
     assert raw["overview"]["needs_you"][0]["id"] == "swap"
     assert raw["research"]["lessons_count"] == 2
+
+
+# ---- phase 2 (0.1): failure bookkeeping, one publisher at a time, read-back ----------------------------------------
+
+def test_error_codes_never_carry_response_text():
+    assert publish.error_code("HTTP 503: {\"status\":\"conflict\",\"run_id\":\"x\"}") == "http_503"
+    assert publish.error_code("ConnectTimeout") == "network_ConnectTimeout"
+    assert publish.error_code("") == "unknown"
+
+
+def test_record_outcome_counts_consecutive_failures(tmp_path):
+    p = tmp_path / "publish_state.json"
+    t = dt.datetime(2026, 9, 29, 7, 0, tzinfo=dt.UTC)
+    assert publish.record_outcome(False, "HTTP 503: conflict", t, p)["consecutive_failures"] == 1
+    st = publish.record_outcome(False, "ConnectionError", t, p)
+    assert st["consecutive_failures"] == 2 and st["last_error_code"] == "network_ConnectionError"
+    st = publish.record_outcome(True, "HTTP 200", t, p)
+    assert st["consecutive_failures"] == 0 and st["last_ok"] == t.isoformat() and st["last_error_code"] is None
+
+
+@pytest.fixture
+def quick_publish(tmp_path, monkeypatch):
+    """main() with the collector, documents and sanitizer stubbed: only the send outcome varies."""
+    monkeypatch.setattr(publish, "OUT", tmp_path)
+    monkeypatch.setattr(publish, "PUBLISH_STATE", tmp_path / "publish_state.json")
+    monkeypatch.setattr("wt.ops.locks.LOCK_DIR", tmp_path / "locks")
+    monkeypatch.setattr(publish, "load_docs", lambda out=None: {"x": {}})
+    monkeypatch.setattr(publish, "build", lambda *a, **k: {"run_id": "r1", "as_of": "2026-09-29T07:00:00+00:00",
+                                                          "redaction": "standard", "withheld": 0})
+    monkeypatch.setattr(publish, "validate", lambda snap: [])
+    monkeypatch.setattr(publish, "extras", lambda now, root=None: {})
+    monkeypatch.setenv("DASHBOARD_INGEST_URL", "https://lab.example/api/ingest")
+    monkeypatch.setenv("DASHBOARD_INGEST_SECRET", "s")
+    outcome = {"ok": False}
+    monkeypatch.setattr(publish, "send", lambda *a, **k: (outcome["ok"], "HTTP 503: conflict"))
+    return outcome
+
+
+def test_the_second_failure_in_a_row_fails_the_job(quick_publish):
+    assert publish.main(["--no-collect"]) == 0              # the first failure is only recorded
+    assert publish.main(["--no-collect"]) == 1              # the second fails the job, so it alerts
+    quick_publish["ok"] = True
+    assert publish.main(["--no-collect"]) == 0
+
+
+def test_a_second_publisher_does_not_start(quick_publish, tmp_path, monkeypatch):
+    from wt.ops.locks import job_lock
+    quick_publish["ok"] = True
+    monkeypatch.setattr(publish, "LOCK_WAIT_S", 0.0)
+    with job_lock("publish", tmp_path / "locks"):
+        assert publish.main(["--no-collect"]) == 0
+    assert not (tmp_path / "publish_state.json").exists()    # it never sent
+    assert publish.main(["--no-collect"]) == 0 and (tmp_path / "publish_state.json").exists()
+
+
+def test_verify_reads_health_back(monkeypatch):
+    class R:
+        def __init__(self, body):
+            self.body = body
+
+        def json(self):
+            return self.body
+    seen = {}
+
+    def get(url, headers, timeout):
+        seen["url"], seen["headers"] = url, headers
+        return R({"snapshot_run_id": "r1", "snapshot_as_of": "2026-09-29T07:00:00+00:00"})
+    monkeypatch.setattr(publish.requests, "get", get)
+    snap = {"run_id": "r1", "as_of": "2026-09-29T07:00:00+00:00"}
+    ok, _ = publish.verify_stored(snap, "https://lab.example/api/ingest", "bypass")
+    assert ok and seen["url"] == "https://lab.example/api/health"
+    assert seen["headers"] == {"x-vercel-protection-bypass": "bypass"}
+    ok, why = publish.verify_stored({**snap, "run_id": "r2"}, "https://lab.example/api/ingest", None)
+    assert not ok and "expected r2" in why
