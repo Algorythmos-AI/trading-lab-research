@@ -1,6 +1,6 @@
 // Pure watchdog state machine: given the latest snapshot, the previous alert state and `now`,
 // decide what to page and what to persist. No I/O here; see watchdog-run.ts for the effects.
-import { freshness, LATE_MIN, OFFLINE_HOURS, STOPPED_MIN, type Freshness } from "./freshness";
+import { assumedWindow, freshness, LATE_MIN, OFFLINE_HOURS, STOPPED_MIN, type Freshness } from "./freshness";
 import type { Notice } from "./ntfy";
 import type { Snapshot } from "./types";
 
@@ -66,21 +66,34 @@ export interface WatchdogDecision {
   fresh: Freshness | null;
 }
 
-function late(min: number, session: string): Notice {
+/** Said when the window is assumed: the host's own schedule ran out, which only happens after a long silence. */
+const ASSUMED_NOTE = " The host's published schedule has run out, so a weekday window is assumed.";
+
+function late(min: number, session: string, assumed = false): Notice {
   return {
     kind: "late",
     title: `Dashboard late: no update for ${min} min`,
-    message: `No status snapshot for ${min} min during the ${session} trading window. Check that the Mac is awake and the publisher job is loaded.`,
+    message: `No status snapshot for ${min} min during the ${session} trading window. Check that the trading host is up and the publisher job is loaded.${assumed ? ASSUMED_NOTE : ""}`,
     priority: 4,
     tags: ["warning"],
   };
 }
 
-function stopped(min: number, session: string): Notice {
+function stopped(min: number, session: string, assumed = false): Notice {
   return {
     kind: "stopped",
     title: `Dashboard stopped: no update for ${min} min`,
-    message: `No status snapshot for ${min} min (over ${STOPPED_MIN}) during the ${session} trading window. The nightly jobs may not be running.`,
+    message: `No status snapshot for ${min} min (over ${STOPPED_MIN}) during the ${session} trading window. The nightly jobs may not be running.${assumed ? ASSUMED_NOTE : ""}`,
+    priority: 4,
+    tags: ["rotating_light"],
+  };
+}
+
+function unreadable(session: string): Notice {
+  return {
+    kind: "stopped",
+    title: "Dashboard has no readable snapshot",
+    message: `The latest status snapshot is missing or has no readable time during the ${session} trading window, so nothing can say the host is alive. Check the publisher and the Blob store.`,
     priority: 4,
     tags: ["rotating_light"],
   };
@@ -99,9 +112,9 @@ function recovered(min: number): Notice {
 function offline(days: number): Notice {
   return {
     kind: "offline",
-    title: `Mac offline for ${days} days`,
-    message: `No status snapshot for ${days} days and no trading window is expected. This reminder repeats at most once a day.`,
-    priority: 2,
+    title: `Trading host offline for ${days} days`,
+    message: `No status snapshot for ${days} days. Outside trading windows this reminder repeats at most once a day; inside them the late and stopped pages apply.`,
+    priority: 3,
     tags: ["zzz"],
   };
 }
@@ -113,9 +126,23 @@ export function evaluate(snapshot: Snapshot | null, prev: AlertState, now: Date)
   if (prune) next.last_prune_day = day;
   const notices: Notice[] = [];
 
-  if (!snapshot) return { next, notices, prune, fresh: null };
-  const fresh = freshness(snapshot.as_of, snapshot.expected_windows, now.getTime());
-  if (fresh.ageMin === null) return { next, notices, prune, fresh };
+  const fresh = snapshot ? freshness(snapshot.as_of, snapshot.expected_windows, now.getTime()) : null;
+  if (!snapshot || !fresh || fresh.ageMin === null) {
+    // No snapshot, or no readable time in it: the dead-man's switch can't see the host, which is itself a page
+    // on a weekday (review of R8). Once per window episode, like "stopped".
+    const w = fresh?.window ?? assumedWindow(now.getTime());
+    if (w) {
+      const session = w.session || w.start || "current";
+      const baseline: AlertLevel = prev.window === session ? prev.level : "ok";
+      if (baseline !== "stopped") {
+        notices.push(unreadable(session));
+        if (baseline === "ok") next.since = now.toISOString();
+      }
+      next.level = "stopped";
+      next.window = session;
+    }
+    return { next, notices, prune, fresh };
+  }
   const minutes = Math.floor(fresh.ageMin);
 
   if (fresh.ageMin <= LATE_MIN) {
@@ -130,7 +157,9 @@ export function evaluate(snapshot: Snapshot | null, prev: AlertState, now: Date)
     // A new trading window starts a new episode: page again even if the last one never recovered.
     const baseline: AlertLevel = prev.window === session ? prev.level : "ok";
     if (RANK[level] > RANK[baseline]) {
-      notices.push(level === "stopped" ? stopped(minutes, session) : late(minutes, session));
+      notices.push(
+        level === "stopped" ? stopped(minutes, session, fresh.assumed) : late(minutes, session, fresh.assumed),
+      );
       next.level = level;
       if (baseline === "ok") next.since = now.toISOString();
     } else {
@@ -138,7 +167,7 @@ export function evaluate(snapshot: Snapshot | null, prev: AlertState, now: Date)
     }
     next.window = session;
   } else if (fresh.allWindowsEnded && fresh.ageMin > OFFLINE_HOURS * 60 && prev.last_offline_day !== day) {
-    // Outside every window nothing pages; a long silence gets one low-priority note per UTC day.
+    // Outside every window nothing pages; a long silence gets one note per UTC day.
     notices.push(offline(Math.floor(fresh.ageMin / (24 * 60))));
     next.last_offline_day = day;
   }
