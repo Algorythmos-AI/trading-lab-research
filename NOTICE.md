@@ -16,3 +16,10 @@ private record of the research that tests those rules. Rules are paraphrased and
 
 Rights remain with their respective owners. To have material removed, contact
 info@algorythmos.com.au.
+
+## The status dashboard
+
+The dashboard at lab.algorythmos.com never publishes restricted material. The publisher (`wt.ops.publish`) sends
+only allowlisted fields: ids, statuses, dates, counts, statistics, and short owner-written notes. It withholds any
+text that shares an 8-word phrase with the course corpus. Spec text, decision and hypothesis prose, setup names and
+news headlines are never sent. See `docs/adr/0001-vercel-dashboard.md`.
