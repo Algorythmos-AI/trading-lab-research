@@ -46,6 +46,8 @@ def build(start_year: int = 2018) -> pd.DataFrame:
                 rows.append({"cik": d["cik"], "entity": d["entityName"], "end": d["end"], "shares": d["val"]})
     df = pd.DataFrame(rows).drop_duplicates(["cik", "end"])
     df["end"] = pd.to_datetime(df["end"]).dt.date
+    # The filing date would be the right known_from (audit), but a frames row carries no filing date (only accn, cik,
+    # entityName, loc, end, val) and neither does this table; using it needs a new companyfacts download (`filed`).
     df["known_from"] = (pd.to_datetime(df["end"]) + pd.Timedelta(days=AVAIL_LAG_DAYS)).dt.date
     OUT.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(OUT)

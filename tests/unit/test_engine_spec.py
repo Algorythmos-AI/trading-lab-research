@@ -95,6 +95,15 @@ def test_wt_stagnation_stop_at_minute_5():
     bars = _trend_then(flat(12, 5.12))                                  # never reaches +0.5R (5.16)
     tr = run(bars, EntrySignal(0, 5.10, 5.00, None, "t", meta={"expire_idx": 10}))
     assert tr.exits[-1][3] == "time_stop_5m"
+    assert tr.entry_time == bars.t.iloc[3]                              # entered in the 09:33 bar
+    assert tr.exits[-1][0] == bars.t.iloc[8]                            # 09:38 = 5 minutes on: out at that bar's open
+    assert tr.exits[-1][0] - tr.entry_time == pd.Timedelta(minutes=5)   # (it used to exit at 09:39)
+
+
+def test_bailout_2m_decides_at_the_close_two_minutes_after_entry():
+    bars = _trend_then(flat(12, 5.12))
+    tr = run(bars, EntrySignal(0, 5.10, 5.00, None, "t", meta={"expire_idx": 10}), mgmt="M2_2")
+    assert tr.exits[-1][3] == "time_stop_2m" and tr.exits[-1][0] - tr.entry_time == pd.Timedelta(minutes=2)
 
 
 def test_wt_runner_no_time_cap_and_exits_below_5m_low():

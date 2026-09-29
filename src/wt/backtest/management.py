@@ -40,7 +40,9 @@ class Base:
     def _time_stop(self, s, bars, j, tr):
         if self.time_stop_min is None or s["partial_done"]:
             return None
-        mins = (bars.t.iloc[j] - tr.entry_time).total_seconds() / 60
+        # this runs at bar j's close, one minute after its start stamp, and entry_time is the entry bar's start: without
+        # the + 1 the stop fired (and exited) a minute late (audit)
+        mins = (bars.t.iloc[j] - tr.entry_time).total_seconds() / 60 + 1
         if mins >= self.time_stop_min and (bars.c.iloc[j] - tr.entry) < self.time_stop_min_R * s["R"]:
             s["exit_reason"] = f"time_stop_{self.time_stop_min}m"
             return "exit_market"
