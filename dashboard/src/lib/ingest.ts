@@ -1,5 +1,5 @@
 import "server-only";
-import { HISTORY_PREFIX, LATEST_PATH, PreconditionFailed, readForUpdate, writeText } from "./blob";
+import { HISTORY_PREFIX, LATEST_PATH, PreconditionFailed, SHADOW_LATEST_PATH, readForUpdate, writeText } from "./blob";
 import { verify } from "./hmac";
 import { logEvent } from "./log";
 import { parseTime } from "./freshness";
@@ -56,6 +56,26 @@ function currentMeta(text: string): { runId: string | null; asOf: number | null 
   }
 }
 
+/** The id a host signs with (x-wt-key-id); the Mac's publisher predates ids and is "default". */
+export const DEFAULT_KEY_ID = "default";
+
+/**
+ * The secret for a key id. DASHBOARD_INGEST_KEYS is a JSON map {id: secret} (one key per host, ADR 0004);
+ * DASHBOARD_INGEST_SECRET is the "default" key. Unknown ids get nothing, so they fail the HMAC check.
+ */
+export function secretFor(keyId: string, env: Record<string, string | undefined> = process.env): string | null {
+  if (env.DASHBOARD_INGEST_KEYS) {
+    try {
+      const map = JSON.parse(env.DASHBOARD_INGEST_KEYS) as Record<string, unknown>;
+      const v = map[keyId];
+      if (typeof v === "string" && v.length > 0) return v;
+    } catch {
+      // a malformed map is ignored: the default key still works
+    }
+  }
+  return keyId === DEFAULT_KEY_ID ? (env.DASHBOARD_INGEST_SECRET ?? null) : null;
+}
+
 /**
  * POST /api/ingest. Order: environment gate, size cap, HMAC, JSON, schema + denylist, then a
  * conditional write of snapshots/latest.json (retried once on an etag conflict) and the hourly copy.
@@ -70,13 +90,23 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
   if (process.env.VERCEL_ENV !== "production") {
     return done(403, "not-production", { error: "ingest is disabled on this deployment" });
   }
-  const secret = process.env.DASHBOARD_INGEST_SECRET;
-  if (!secret) return done(503, "not-configured", { error: "ingest is not configured" });
+  const keyIdHeader = req.headers.get("x-wt-key-id");
+  const keyId = keyIdHeader && /^[A-Za-z0-9._-]{1,40}$/.test(keyIdHeader) ? keyIdHeader : DEFAULT_KEY_ID;
+  if (!process.env.DASHBOARD_INGEST_SECRET && !process.env.DASHBOARD_INGEST_KEYS) {
+    return done(503, "not-configured", { error: "ingest is not configured" });
+  }
+  const secret = secretFor(keyId);
+  // Only the primary host's snapshot is the dashboard's; any other valid host (the OCI host in its shadow run)
+  // lands in shadow/latest.json, which no page and no watchdog reads.
+  const primary = (process.env.PRIMARY_HOST || DEFAULT_KEY_ID) === keyId;
+  const target = primary ? LATEST_PATH : SHADOW_LATEST_PATH;
 
   const bytes = await readCapped(req, MAX_BODY_BYTES);
   if (!bytes) return done(413, "too-large", { error: `body exceeds ${MAX_BODY_BYTES} bytes` });
 
-  const auth = verify(secret, req.headers.get("x-wt-timestamp"), req.headers.get("x-wt-signature"), bytes, now);
+  const auth = secret
+    ? verify(secret, req.headers.get("x-wt-timestamp"), req.headers.get("x-wt-signature"), bytes, now)
+    : { ok: false as const, reason: "unknown-key-id" };
   if (!auth.ok) {
     // The reason is logged, never returned: a caller probing the endpoint learns nothing.
     return done(401, "unauthorized", { error: "unauthorized" }, { reason: auth.reason, bytes: bytes.byteLength });
@@ -103,7 +133,7 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
 
   try {
     for (let attempt = 0; attempt < 2; attempt++) {
-      const current = await readForUpdate(LATEST_PATH);
+      const current = await readForUpdate(target);
       if (current) {
         const meta = currentMeta(current.text);
         if (meta.runId === runId) return done(200, "duplicate", { status: "duplicate", run_id: runId }, { run_id: runId });
@@ -112,13 +142,16 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
         }
       }
       try {
-        await writeText(LATEST_PATH, text, current ? { ifMatch: current.etag } : { createOnly: true });
+        await writeText(target, text, current ? { ifMatch: current.etag } : { createOnly: true });
       } catch (e) {
         if (e instanceof PreconditionFailed && attempt === 0) continue;
         if (e instanceof PreconditionFailed) {
           return done(503, "conflict", { status: "conflict", run_id: runId }, { run_id: runId });
         }
         throw e;
+      }
+      if (!primary) {
+        return done(200, "stored-shadow", { status: "stored", run_id: runId, shadow: true }, { run_id: runId, key_id: keyId });
       }
       try {
         await writeText(historyPath(asOf), text);

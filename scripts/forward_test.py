@@ -55,6 +55,7 @@ from r3_run import GG, SpreadAt, admit, gg_day, trade_row  # noqa: E402
 from wt.backtest.engine import Costs, simulate  # noqa: E402
 from wt.backtest.management import REGISTRY  # noqa: E402
 from wt.backtest.runner import minute_bars  # noqa: E402
+from wt.core import ledger  # noqa: E402
 from wt.core.clock import ET, et, to_utc_iso  # noqa: E402
 from wt.core.config import DATA_DIR, FORWARD_LEDGER, FORWARD_WATCHLIST_DIR, ROOT, load_yaml  # noqa: E402
 from wt.data.alpaca import SIP_DELAY_MIN, AlpacaREST  # noqa: E402
@@ -321,33 +322,8 @@ def append(rec: dict) -> bool:
 
 
 def verify_chain(path: Path | None = None) -> list[str]:
-    """Problems in the ledger's hash chain; empty when intact. Lines written before the chain existed carry no
-    prev_sha256 and are accepted as a prefix; from the first chained line on, each must name the sha256 of the line
-    before it (GENESIS on the file's first line). Like any hash chain, an edit to the very last line is not seen."""
-    path = path or LOG
-    if not path.exists():
-        return []
-    problems: list[str] = []
-    prev: bytes | None = None
-    chained = False
-    for i, line in enumerate([x for x in path.read_bytes().split(b"\n") if x], 1):
-        want = hashlib.sha256(prev).hexdigest() if prev is not None else GENESIS
-        prev = line
-        try:
-            r = json.loads(line)
-        except ValueError:
-            r = None
-        if not isinstance(r, dict):
-            problems.append(f"line {i}: not a JSON object")
-            continue
-        if r.get("prev_sha256") is None:
-            if chained:
-                problems.append(f"line {i}: no prev_sha256 after the chain started")
-            continue
-        chained = True
-        if r["prev_sha256"] != want:
-            problems.append(f"line {i}: prev_sha256 does not match line {i - 1}" if i > 1 else f"line {i}: not genesis")
-    return problems
+    """Problems in the ledger's hash chain; empty when intact (the rules live in wt.core.ledger)."""
+    return ledger.verify_chain(path or LOG)
 
 
 def daily_end(d: dt.date, now: dt.datetime) -> str:

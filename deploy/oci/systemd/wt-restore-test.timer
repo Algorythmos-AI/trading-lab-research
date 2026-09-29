@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly restore test of the evidence backup
+
+[Timer]
+OnCalendar=Sat 12:00 America/New_York
+AccuracySec=1s
+Persistent=true
+Unit=wt-restore-test.service
+
+[Install]
+WantedBy=timers.target

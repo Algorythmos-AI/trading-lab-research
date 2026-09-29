@@ -13,6 +13,7 @@ One page per incident. Each starts with how you'll notice it.
 | [Dashboard deploys and the watchdog drill](dashboard-deploy.md) | A dashboard deploy failed, or you want to prove paging works |
 | [The OCI trading host](oci-host.md) | Provisioning, access, rebuild, or the OCI account is lost |
 | [Dead-man's switches](dead-man-switches.md) | A healthchecks.io page, or setting the checks up |
+| [Backups, anchors, lease](backups-and-lease.md) | "Evidence chain broken", a backup or anchor failed, or "no primary lease" |
 | [Dashboard late or stopped](dashboard-late.md) | ntfy "Dashboard late"; a grey or amber freshness pill |
 | [Disk nearly full](disk-full.md) | ntfy priority 3 "refused to run: free disk"; the Operations page shows disk under the floor |
 | [Ruleset emergency](ruleset-emergency.md) | CI is down and a fix must land |
