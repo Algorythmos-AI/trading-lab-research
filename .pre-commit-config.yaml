@@ -1,0 +1,26 @@
+# Install once per checkout: `pre-commit install`. Run everything: `pre-commit run --all-files`.
+# No whitespace or end-of-file fixers: research records and watchlists are evidence and stay byte-for-byte.
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: detect-private-key
+      - id: check-merge-conflict
+  - repo: local
+    hooks:
+      - id: check-restricted
+        name: block restricted and runtime material (knowledge/, data/, var/, PDFs, .env)
+        language: fail
+        entry: Restricted or runtime material must never be committed. See AGENTS.md "Data classes".
+        files: (?i)(\.pdf$|^(knowledge|data|var|logs|build)/|^\.env(?!\.example$)|^KILL$)
+      - id: ruff
+        name: ruff (bug-class rules)
+        language: system
+        entry: .venv/bin/ruff check --force-exclude
+        types: [python]

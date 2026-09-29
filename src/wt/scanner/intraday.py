@@ -9,7 +9,6 @@ span), indexed by clock minute, not by bar position.
 """
 from __future__ import annotations
 
-import datetime as dt
 from functools import lru_cache
 
 import numpy as np

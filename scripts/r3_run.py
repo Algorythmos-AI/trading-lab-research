@@ -27,7 +27,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from wt.backtest.controls import control_signal  # noqa: E402
-from wt.backtest.engine import Costs, EntrySignal, simulate  # noqa: E402
+from wt.backtest.engine import Costs, simulate  # noqa: E402
 from wt.backtest.management import REGISTRY  # noqa: E402
 from wt.backtest.portfolio import Candidate as PCand  # noqa: E402
 from wt.backtest.portfolio import admit_day  # noqa: E402
@@ -256,7 +256,7 @@ def main(exp: str, start: str, end: str, which: str, counts_only: bool, relax: s
         (out / f"counts_{which}.json").write_text(json.dumps(meta, indent=1, default=str))
         print(json.dumps({"counts_at_600": counts}, indent=1))
     else:
-        control_means = {k: [float(s / n) for s, n in zip(v["sum"], v["n"]) if n > 0] for k, v in ctrl.items()}
+        control_means = {k: [float(s / n) for s, n in zip(v["sum"], v["n"], strict=False) if n > 0] for k, v in ctrl.items()}
         (out / f"results_{which}.json").write_text(json.dumps({**meta, "trades": results, "control_means": control_means}, default=str))
         print(json.dumps({"counts_at_600": counts}, indent=1))
 

@@ -9,7 +9,7 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from wt.core.config import DATA_DIR, ROOT  # noqa: E402
+from wt.core.config import ROOT  # noqa: E402
 from wt.data.alpaca import AlpacaREST  # noqa: E402
 from wt.data.edgar import SharesOutstanding  # noqa: E402
 from wt.data.universe import load_daily  # noqa: E402

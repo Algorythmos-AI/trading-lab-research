@@ -73,11 +73,11 @@ def main(prefix: str = "") -> dict:
             w.writerow([i, items[i]["symbol"], items[i]["headline"], clf[i], claude[i], notes.get(i, "")])
     lines = [f"# EXP-0015a — Catalyst classifier accuracy: classifier v{ver} on {prefix.rstrip('_') or 'sample1'}", "",
              f"- **Sample:** {n} dev-span headlines (see `{prefix}manifest.json`).",
-             f"- **Reference labels:** " + ", ".join(f"{k} {v}" for k, v in Counter(src.values()).items()) + ".",
+             "- **Reference labels:** " + ", ".join(f"{k} {v}" for k, v in Counter(src.values()).items()) + ".",
              f"- **Headline-level exact accuracy:** **{exact:.0%}**.",
              f"- **Decision-level accuracy** (qualifying / excluded / non-qualifying, which is what the scanner uses): **{dec:.0%}**. Target ≥ {TARGET:.0%}: "
              f"**{'PASS' if dec >= TARGET else 'FAIL'}**.",
-             f"- **Claude vs owner on the owner's blind items:** " + (f"{claude_vs_owner:.0%} ({len(both)} items)" if both else "pending (owner blind labels not yet in)") + ".",
+             "- **Claude vs owner on the owner's blind items:** " + (f"{claude_vs_owner:.0%} ({len(both)} items)" if both else "pending (owner blind labels not yet in)") + ".",
              f"- **Classifier vs Claude disagreements:** {len(dis)} (the owner review queue: `{prefix}disagreements_v{ver}.csv`).", "",
              "## Confusion matrix (rows = reference label, columns = classifier)", "",
              "| reference \\ classifier | " + " | ".join(cats) + " |", "|---|" + "---|" * len(cats)]

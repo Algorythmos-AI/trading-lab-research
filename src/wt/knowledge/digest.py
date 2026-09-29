@@ -8,7 +8,6 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from wt.knowledge.aggregate import THEMES  # noqa: E402
 from wt.knowledge.dedup import load as load_groups  # noqa: E402
 
 OUT = Path("knowledge/_work/digest.md")
@@ -42,7 +41,7 @@ def main() -> None:
                        key=lambda kv: -len({c["doc_id"] for c in kv[1]}))
         lines.append(f"\n## {t}\n")
         top = 14 if t not in ("mistake", "win_behaviour", "psychology") else 18
-        for (tt, concept), cs in items[:top]:
+        for (_tt, concept), cs in items[:top]:
             docs = {c["doc_id"] for c in cs}
             fams = Counter(c["family"] for c in cs)
             own = sum(c.get("evidence_type") == "own_lesson" for c in cs)

@@ -1,7 +1,5 @@
 """SPEC-0001 setups (ENT-GG-1..4, ENT-MP-1, ENT-REV-1) and the execution musts (EXE-01..03) on hand-built days."""
 import numpy as np
-import pandas as pd
-import pytest
 from spec_bars import flat, minute_bars
 
 from wt.signals.musts import first_minute_volume_ok, next_half_dollar_above, reward_risk_ok, spread_ok
@@ -81,7 +79,7 @@ def test_continuation_5m_bull_flag_after_0945():
     pm = minute_bars(flat(60, 4.00, v=5_000), start_et="08:30")
     rows = [(4.00, 4.05, 3.98, 4.04, 150_000)] + flat(14, 4.04, v=20_000)                     # 09:30-09:45 quiet
     up = []
-    for k, (lo, hi) in enumerate([(4.04, 4.20), (4.20, 4.36), (4.36, 4.52)]):                 # 09:45-10:00: 3 green 5m bars
+    for _k, (lo, hi) in enumerate([(4.04, 4.20), (4.20, 4.36), (4.36, 4.52)]):                 # 09:45-10:00: 3 green 5m bars
         up += [(lo + (hi - lo) * i / 5, lo + (hi - lo) * (i + 1) / 5, lo + (hi - lo) * i / 5 - 0.005,
                 lo + (hi - lo) * (i + 1) / 5, 60_000) for i in range(5)]
     flag = [(4.52, 4.52, 4.49, 4.50, 6_000)] * 5                                              # 10:00-10:05 flag, light volume
