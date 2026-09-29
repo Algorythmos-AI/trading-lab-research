@@ -20,14 +20,24 @@ Bookkeeping (fixes D7):
   * catch-up: each run processes the newest MAX_CATCHUP incomplete sessions, oldest first, never before FORWARD_FROM
     (earlier dates are the holdout, DEC-0005)
 
+Ledger integrity (audit PR 5c): append() is the only writer. It holds an exclusive lock (a sibling .lock file), writes
+one line, flushes and fsyncs. Every row carries git_sha, ts (UTC) and prev_sha256, the sha256 of the previous line
+(GENESIS on a fresh file's first line), so verify_chain() detects an edited, dropped or inserted line. Trade rows and
+markers carry a key, and a key already in the ledger is never written again: a session starts with a
+session_started row, and a run killed between a strategy's trade rows and its marker re-runs that strategy without
+duplicating what it had written. Rows written before this change have no chain or key and stay as they are.
+
 Usage: python scripts/forward_test.py [YYYY-MM-DD]   (default: every incomplete completed session, up to MAX_CATCHUP)"""
 from __future__ import annotations
 
 import contextlib
 import datetime as dt
 import functools
+import hashlib
 import json
+import os
 import shutil
+import subprocess
 import sys
 from collections import defaultdict
 from collections.abc import Callable
@@ -46,10 +56,11 @@ from wt.backtest.engine import Costs, simulate  # noqa: E402
 from wt.backtest.management import REGISTRY  # noqa: E402
 from wt.backtest.runner import minute_bars  # noqa: E402
 from wt.core.clock import ET, et, to_utc_iso  # noqa: E402
-from wt.core.config import DATA_DIR, FORWARD_LEDGER, FORWARD_WATCHLIST_DIR, load_yaml  # noqa: E402
+from wt.core.config import DATA_DIR, FORWARD_LEDGER, FORWARD_WATCHLIST_DIR, ROOT, load_yaml  # noqa: E402
 from wt.data.alpaca import SIP_DELAY_MIN, AlpacaREST  # noqa: E402
 from wt.data.edgar import SharesOutstanding  # noqa: E402
 from wt.data.universe import DAILY, load_daily  # noqa: E402
+from wt.ops.locks import job_lock  # noqa: E402
 from wt.ops.safeio import atomic_replace  # noqa: E402
 from wt.scanner.features import PMCache, build_candidates  # noqa: E402
 from wt.scanner.pool import POOL_DIR, SPLIT_CHECK_HI, SPLIT_CHECK_LO, DailyIndex, PoolConfig  # noqa: E402
@@ -64,6 +75,8 @@ FORWARD_FROM = dt.date(2026, 9, 28)   # first forward session; everything earlie
 R3_FROM = dt.date(2026, 9, 28)        # DEC-0010: every round-3 trial runs nightly "from the approval date onward"
 MAX_CATCHUP = 5                       # sessions per run
 REFRESH_DAYS = 5                      # newest update chunks fetched again on every run (late prints, corrections)
+LOCK_WAIT_S = 120.0                   # a ledger append waits this long for another writer, then fails the unit
+GENESIS = "0" * 64                    # prev_sha256 of the first line of a fresh ledger
 POOL_MIN_FREE_GB = 1.0                # one day's pool is small; the multi-year batch build keeps its own 3 GB floor
 R3_EQUITY = 600.0                     # HYP-0010..0019 are stated for a US$600 account
 R3_P_RELAX: frozenset[str] = frozenset()   # Set P musts relaxed by the count guard (DEC-0010); none until it rules
@@ -133,9 +146,19 @@ def marker(d: dt.date, name: str, n: int) -> dict:
     return rec
 
 
+def trade_key(d: dt.date, strategy: str, t: dict, i: int) -> str:
+    """session|strategy|symbol|entry time (or the row's index when a strategy records none, e.g. B)."""
+    return f"{d}|{strategy}|{t.get('symbol', '')}|{t.get('entry_time') or i}"
+
+
 def run_session(d: dt.date, units: list[Unit], done: set[str]) -> set[str]:
-    """Run every unit that still owes a strategy for session d. Returns the strategies now complete."""
+    """Run every unit that still owes a strategy for session d. Returns the strategies now complete.
+
+    Two-phase: a session_started row, then per strategy its trade rows and its marker, then the session marker. All
+    are keyed, so a rerun after a crash anywhere in between writes only what is missing."""
     need, complete = required(d) - done, set(done)
+    if need:
+        append({"session": str(d), "session_started": True, "need": sorted(need), "key": f"{d}|session_started"})
     for names, fn in units:
         todo = [n for n in names if n in need]
         if not todo:
@@ -147,13 +170,13 @@ def run_session(d: dt.date, units: list[Unit], done: set[str]) -> set[str]:
             continue
         for n in todo:
             rows = res.get(n, [])
-            for t in rows:
-                append({"session": str(d), **t, "strategy": n})
-            append(marker(d, n, len(rows)))
+            for i, t in enumerate(rows):
+                append({"session": str(d), **t, "strategy": n, "key": trade_key(d, n, t, i)})
+            append({**marker(d, n, len(rows)), "key": f"{d}|{n}|strategy_marker"})
             complete.add(n)
     if need and required(d) <= complete:          # only the run that completes the session writes its marker
         n_trades = sum(1 for r in read_log() if r.get("session") == str(d) and "R" in r)
-        append({"session": str(d), "session_marker": True, "n_trades": n_trades})
+        append({"session": str(d), "session_marker": True, "n_trades": n_trades, "key": f"{d}|session_marker"})
     return complete
 
 
@@ -244,10 +267,78 @@ def units_for(ctx: Context, d: dt.date) -> list[Unit]:
     ]
 
 
-def append(rec: dict) -> None:
+@functools.lru_cache(maxsize=1)
+def git_sha() -> str:
+    """Short HEAD of the checkout running the job, computed once per run."""
+    try:
+        out = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    return out.stdout.strip() or "unknown"
+
+
+def _keys(lines: list[bytes]) -> set[str]:
+    keys = set()
+    for line in lines:
+        if b'"key"' in line:
+            with contextlib.suppress(ValueError):          # a torn line has no usable key
+                r = json.loads(line)
+                if isinstance(r, dict) and r.get("key"):
+                    keys.add(str(r["key"]))
+    return keys
+
+
+def append(rec: dict) -> bool:
+    """Append one row to the ledger: the only writer (see the module docstring). Returns False, writing nothing, when
+    the row's key is already in the ledger."""
     FWD.mkdir(parents=True, exist_ok=True)
-    with open(LOG, "a") as f:
-        f.write(json.dumps(rec, default=str) + "\n")
+    with job_lock(LOG.name, root=LOG.parent, wait_s=LOCK_WAIT_S, poll_s=0.05) as got:
+        if not got:
+            raise TimeoutError(f"{LOG.name}: another writer held the lock for {LOCK_WAIT_S:.0f}s")
+        data = LOG.read_bytes() if LOG.exists() else b""
+        lines = [x for x in data.split(b"\n") if x]
+        if rec.get("key") and str(rec["key"]) in _keys(lines):
+            return False
+        row = {**rec, "git_sha": git_sha(), "ts": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
+               "prev_sha256": hashlib.sha256(lines[-1]).hexdigest() if lines else GENESIS}
+        out = json.dumps(row, default=str).encode() + b"\n"
+        if data and not data.endswith(b"\n"):
+            out = b"\n" + out                              # end a torn line from a killed writer; verify_chain reports it
+        with open(LOG, "ab") as f:
+            f.write(out)
+            f.flush()
+            os.fsync(f.fileno())
+    return True
+
+
+def verify_chain(path: Path | None = None) -> list[str]:
+    """Problems in the ledger's hash chain; empty when intact. Lines written before the chain existed carry no
+    prev_sha256 and are accepted as a prefix; from the first chained line on, each must name the sha256 of the line
+    before it (GENESIS on the file's first line). Like any hash chain, an edit to the very last line is not seen."""
+    path = path or LOG
+    if not path.exists():
+        return []
+    problems: list[str] = []
+    prev: bytes | None = None
+    chained = False
+    for i, line in enumerate([x for x in path.read_bytes().split(b"\n") if x], 1):
+        want = hashlib.sha256(prev).hexdigest() if prev is not None else GENESIS
+        prev = line
+        try:
+            r = json.loads(line)
+        except ValueError:
+            r = None
+        if not isinstance(r, dict):
+            problems.append(f"line {i}: not a JSON object")
+            continue
+        if r.get("prev_sha256") is None:
+            if chained:
+                problems.append(f"line {i}: no prev_sha256 after the chain started")
+            continue
+        chained = True
+        if r["prev_sha256"] != want:
+            problems.append(f"line {i}: prev_sha256 does not match line {i - 1}" if i > 1 else f"line {i}: not genesis")
+    return problems
 
 
 def daily_end(d: dt.date, now: dt.datetime) -> str:
