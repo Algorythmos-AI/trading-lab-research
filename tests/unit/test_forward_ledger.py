@@ -117,7 +117,9 @@ def test_legacy_rows_stay_as_an_unchained_prefix_and_a_torn_tail_is_closed(log):
         f.write('{"session": "2026-09-29", "strat')                    # a writer killed mid-line
     ft.append({"session": str(D), "strategy": "x", "error": "retry"})
     assert json.loads(log.read_text().splitlines()[-1])["error"] == "retry"
-    assert ft.verify_chain(log) == ["line 4: not a JSON object"]      # reported, and the chain still links past it
+    assert ft.verify_chain(log) == []                                  # sealed by the next line: not a break
+    from wt.core import ledger
+    assert ledger.notes(log) == ["line 4: not a JSON object (a torn line?)"]
     assert len(ft.read_log()) == 4
 
 
