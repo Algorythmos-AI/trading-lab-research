@@ -1,0 +1,2446 @@
+{
+ "collector": {
+  "sha": "9c1e3c5",
+  "branch": "feat/dashboard-publisher",
+  "dirty": true,
+  "exit_code": 0,
+  "fresh_sources": 12,
+  "total_sources": 12,
+  "duration_s": 48.0,
+  "sources": {
+   "research": {
+    "ok": true,
+    "stale": false,
+    "as_of": "2026-09-29T04:16:33+00:00",
+    "error": null,
+    "ms": 88
+   },
+   "spec": {
+    "ok": true,
+    "stale": false,
+    "as_of": "2026-09-29T04:16:33+00:00",
+    "error": null,
+    "ms": 26
+   },
+   "cat01": {
+    "ok": true,
+    "stale": false,
+    "as_of": "2026-09-29T04:16:33+00:00",
+    "error": null,
+    "ms": 1
+   },
+   "deployed": {
+    "ok": true,
+    "stale": false,
+    "as_of": "2026-09-29T04:16:33+00:00",
+    "error": null,
+    "ms": 1321
+   },
+   "routine": {
+    "ok": true,
+    "stale": false,
+    "as_of": "2026-09-29T04:16:33+00:00",
+    "error": null,
+    "ms": 3
+   },
+   "paper": {
+    "ok": true,
+    "stale": false,
+    "as_of": "2026-09-29T04:16:33+00:00",
+    "error": null,
+    "ms": 1
+   },
+   "forward": {
+    "ok": true,
+    "stale": false,
+    "as_of": "2026-09-29T04:16:33+00:00",
+    "error": null,
+    "ms": 1
+   },
+   "host": {
+    "ok": true,
+    "stale": false,
+    "as_of": "2026-09-29T04:16:33+00:00",
+    "error": null,
+    "ms": 44
+   },
+   "account": {
+    "ok": true,
+    "stale": false,
+    "as_of": "2026-09-29T04:16:33+00:00",
+    "error": null,
+    "ms": 35867
+   },
+   "org": {
+    "ok": true,
+    "stale": false,
+    "as_of": "2026-09-29T04:16:33+00:00",
+    "error": null,
+    "ms": 5763
+   },
+   "repos": {
+    "ok": true,
+    "stale": false,
+    "as_of": "2026-09-29T04:16:33+00:00",
+    "error": null,
+    "ms": 4878
+   },
+   "legacy": {
+    "ok": true,
+    "stale": false,
+    "as_of": "2026-09-29T04:16:33+00:00",
+    "error": null,
+    "ms": 21
+   }
+  }
+ },
+ "market": {
+  "phase": "overnight",
+  "et": "Tue 29 Sep 00:16 EDT",
+  "sydney": "Tue 29 Sep 14:16 AEST",
+  "trading_day_et": "2026-09-29"
+ },
+ "dst": [
+  {
+   "zone": "Sydney",
+   "at_utc": "2026-10-03T16:00:00+00:00",
+   "local_date": "2026-10-04",
+   "from_offset": "UTC+10:00",
+   "to_offset": "UTC+11:00",
+   "days_away": 4
+  },
+  {
+   "zone": "New York",
+   "at_utc": "2026-11-01T06:00:00+00:00",
+   "local_date": "2026-11-01",
+   "from_offset": "UTC-04:00",
+   "to_offset": "UTC-05:00",
+   "days_away": 33
+  }
+ ],
+ "overview": {
+  "headline": "No proven edge yet. Round 3 is cleared to run (DEC-0010 in effect); CAT-01 was recorded below target at 84%.",
+  "subline": "Best candidate: B · QQQ signals, QQQM orders, +0.117R over 415 trades, deflated Sharpe 0.71 (needs 0.95) No order has ever been placed.",
+  "kpis": [
+   {
+    "id": "edge",
+    "label": "Proven edge",
+    "value": "No",
+    "state": "bad",
+    "detail": "G1 failed after 75 trials"
+   },
+   {
+    "id": "trials",
+    "label": "Trials used",
+    "value": "75",
+    "unit": "of 85",
+    "state": "neutral",
+    "detail": "Round 3 adds 10 when DEC-0010 takes effect"
+   },
+   {
+    "id": "cat01",
+    "label": "Catalyst accuracy",
+    "value": "84%",
+    "unit": "target 85%",
+    "state": "warn",
+    "detail": "Your verdicts: 19/19"
+   },
+   {
+    "id": "spec",
+    "label": "SPEC-0001 coverage",
+    "value": "106/112",
+    "unit": "requirements",
+    "state": "good",
+    "detail": "2 not applicable, 1 need data, 3 planned"
+   },
+   {
+    "id": "g2",
+    "label": "G2 paper evidence",
+    "value": "0/50",
+    "unit": "trades",
+    "state": "neutral",
+    "detail": "1/30 sessions armed"
+   },
+   {
+    "id": "org",
+    "label": "Org backlog",
+    "value": "8/47",
+    "unit": "issues done",
+    "state": "neutral",
+    "detail": "Next: M1 · Engineering foundation"
+   },
+   {
+    "id": "deployed",
+    "label": "Live code",
+    "value": "d678ead",
+    "unit": "up to date",
+    "state": "good",
+    "detail": "feat(forward): run the ten round-3 trials nightly, with catch-up and per-strategy markers (#10)"
+   },
+   {
+    "id": "disk",
+    "label": "Disk free",
+    "value": "4.0",
+    "unit": "GB",
+    "state": "good",
+    "detail": "Pool build needs 3 GB"
+   }
+  ],
+  "needs_you": [
+   {
+    "id": "swap",
+    "rank": 1,
+    "title": "Close memory-heavy apps before the live session",
+    "why": "Swap is 7.2 of 8 GB. macOS adds 1 GB swap files on the same disk, which has 4.0 GB free; a full disk would stop the jobs.",
+    "blocks": "Safe overnight runs",
+    "command": null,
+    "when": null,
+    "severity": "high",
+    "manual": false
+   },
+   {
+    "id": "maintainers-role",
+    "rank": 3,
+    "title": "Confirm the maintainers team role on the trading repos",
+    "why": "Never confirmed after the migration",
+    "blocks": "Nothing yet",
+    "command": null,
+    "when": null,
+    "severity": "low",
+    "manual": true
+   },
+   {
+    "id": "sip-subscription",
+    "rank": 5,
+    "title": "Decide on a SIP data subscription",
+    "why": "Free IEX has no pre-market bars before 08:00 ET (DEC-0001)",
+    "blocks": "Better live data",
+    "command": null,
+    "when": null,
+    "severity": "low",
+    "manual": true
+   },
+   {
+    "id": "m2-rescope",
+    "rank": 6,
+    "title": "Decide the fate of org milestones M2-M5",
+    "why": "They target the rejected gap-and-go pipeline",
+    "blocks": "Org backlog planning",
+    "command": null,
+    "when": null,
+    "severity": "low",
+    "manual": true
+   }
+  ],
+  "gates": [
+   {
+    "id": "K0",
+    "name": "Knowledge extraction",
+    "criteria": "8 deliverables approved; feasibility choices made",
+    "status": "done",
+    "evidence": "DEC-0001"
+   },
+   {
+    "id": "G0",
+    "name": "Data readiness",
+    "criteria": "Universe frozen and hashed; data sources, fees and account type recorded",
+    "status": "done",
+    "evidence": "DEC-0003"
+   },
+   {
+    "id": "G1",
+    "name": "Backtest proof of edge",
+    "criteria": "CI95 lower bound > 0 at 1.5x costs; DSR > 0.95 over all trials; beats random p < 0.05; PF >= 1.2; profitable in >= 2/3 of years; no month > 25% of profit",
+    "status": "failed",
+    "evidence": "DEC-0007, DEC-0009 (75 trials, none pass)",
+    "next": "Round 3 under DEC-0010 (in effect 2026-09-29)"
+   },
+   {
+    "id": "G2",
+    "name": "Forward and paper evidence",
+    "criteria": ">= 50 trades, >= 30 sessions, >= 90% replay match, 20 incident-free sessions",
+    "status": "in_progress",
+    "evidence": "Weekly scorecard",
+    "progress": "0/50 trades, 1/30 sessions"
+   },
+   {
+    "id": "G3",
+    "name": "Broker acceptance",
+    "criteria": "Webull UAT contract suite, production read-only checks, owner canary order",
+    "status": "not_started"
+   },
+   {
+    "id": "G4",
+    "name": "Live tiny",
+    "criteria": "0.5% risk (~US$3), >= 50 live trades, about 3 months",
+    "status": "not_started"
+   },
+   {
+    "id": "G5",
+    "name": "Scale",
+    "criteria": "Risk 0.5% -> 0.75% -> 1.0%; capital capped at A$1,000",
+    "status": "not_started"
+   }
+  ]
+ },
+ "research": {
+  "scoreboard": [
+   {
+    "label": "B · QQQ signals, QQQM orders",
+    "span": "development",
+    "verdict": "candidate",
+    "ref": "EXP-0005b · DEC-0007",
+    "note": "Best result. Fails only the deflated-Sharpe test",
+    "n": 415,
+    "expectancy_r": 0.1173,
+    "ci_low": 0.0378,
+    "ci_high": 0.1939,
+    "profit_factor": 1.437,
+    "dsr": 0.707,
+    "win_rate": 0.569,
+    "years_profitable": "5/6",
+    "error": null
+   },
+   {
+    "label": "B · QQQM holdout",
+    "span": "holdout",
+    "verdict": "candidate",
+    "ref": "EXP-0011",
+    "note": "Run once, 2025-09-26 to 2026-09-25",
+    "n": 57,
+    "expectancy_r": 0.0913,
+    "ci_low": -0.1219,
+    "ci_high": 0.3091,
+    "profit_factor": 1.317,
+    "dsr": null,
+    "win_rate": 0.579,
+    "years_profitable": null,
+    "error": null
+   },
+   {
+    "label": "B · SPY signals, SPYM orders",
+    "span": "development",
+    "verdict": "rejected",
+    "ref": "DEC-0007",
+    "note": "Costs erase the edge",
+    "n": 409,
+    "expectancy_r": 0.0609,
+    "ci_low": -0.0181,
+    "ci_high": 0.1395,
+    "profit_factor": 1.222,
+    "dsr": 0.196,
+    "win_rate": 0.501,
+    "years_profitable": "4/6",
+    "error": null
+   },
+   {
+    "label": "A · 5-min ORB, SPY",
+    "span": "development",
+    "verdict": "rejected",
+    "ref": "DEC-0007",
+    "note": null,
+    "n": 550,
+    "expectancy_r": -0.0682,
+    "ci_low": -0.1812,
+    "ci_high": 0.0501,
+    "profit_factor": 0.899,
+    "dsr": 0.0,
+    "win_rate": 0.355,
+    "years_profitable": "2/6",
+    "error": null
+   },
+   {
+    "label": "A · 5-min ORB, QQQ",
+    "span": "development",
+    "verdict": "rejected",
+    "ref": "DEC-0007",
+    "note": null,
+    "n": 553,
+    "expectancy_r": -0.007,
+    "ci_low": -0.1119,
+    "ci_high": 0.104,
+    "profit_factor": 0.988,
+    "dsr": 0.006,
+    "win_rate": 0.358,
+    "years_profitable": "4/6",
+    "error": null
+   },
+   {
+    "label": "S1 · Pre-market high break (gap-and-go)",
+    "span": "development",
+    "verdict": "rejected",
+    "ref": "DEC-0007",
+    "note": "Round 3 re-tests gap-and-go as GG-1..4 under SPEC-0001",
+    "n": 345,
+    "expectancy_r": -0.4042,
+    "ci_low": -0.5317,
+    "ci_high": -0.2742,
+    "profit_factor": 0.445,
+    "dsr": 0.0,
+    "win_rate": 0.214,
+    "years_profitable": "1/6",
+    "error": null
+   },
+   {
+    "label": "S1 · 5-min bull flag",
+    "span": "development",
+    "verdict": "inconclusive",
+    "ref": "DEC-0007",
+    "note": null,
+    "n": 131,
+    "expectancy_r": 0.0843,
+    "ci_low": -0.1691,
+    "ci_high": 0.3353,
+    "profit_factor": 1.136,
+    "dsr": 0.04,
+    "win_rate": 0.435,
+    "years_profitable": "4/6",
+    "error": null
+   },
+   {
+    "label": "S5 · Breakout-retest",
+    "span": "development",
+    "verdict": "rejected",
+    "ref": "DEC-0007",
+    "note": null,
+    "n": 1069,
+    "expectancy_r": -0.1402,
+    "ci_low": -0.2215,
+    "ci_high": -0.0529,
+    "profit_factor": 0.781,
+    "dsr": 0.0,
+    "win_rate": 0.305,
+    "years_profitable": "0/6",
+    "error": null
+   },
+   {
+    "label": "S3 · VWAP trend pullback",
+    "span": "development",
+    "verdict": "rejected",
+    "ref": "DEC-0007",
+    "note": null,
+    "n": 42577,
+    "expectancy_r": -0.124,
+    "ci_low": -0.1353,
+    "ci_high": -0.1126,
+    "profit_factor": 0.776,
+    "dsr": 0.0,
+    "win_rate": 0.307,
+    "years_profitable": "0/6",
+    "error": null
+   },
+   {
+    "label": "B on IWM",
+    "span": "development",
+    "verdict": "falsified",
+    "ref": "EXP-0012 · HYP-0009",
+    "note": null,
+    "n": 488,
+    "expectancy_r": -0.0339,
+    "ci_low": -0.1093,
+    "ci_high": 0.0403,
+    "profit_factor": 0.906,
+    "dsr": null,
+    "win_rate": 0.488,
+    "years_profitable": "3/7",
+    "error": null
+   },
+   {
+    "label": "B on DIA",
+    "span": "development",
+    "verdict": "falsified",
+    "ref": "EXP-0012 · HYP-0009",
+    "note": null,
+    "n": 479,
+    "expectancy_r": 0.0285,
+    "ci_low": -0.0496,
+    "ci_high": 0.1108,
+    "profit_factor": 1.081,
+    "dsr": null,
+    "win_rate": 0.507,
+    "years_profitable": "5/7",
+    "error": null
+   },
+   {
+    "label": "Bull flag, ATR stops",
+    "span": "development",
+    "verdict": "falsified",
+    "ref": "EXP-0013 · HYP-0008",
+    "note": null,
+    "n": 146,
+    "expectancy_r": 0.0062,
+    "ci_low": -0.2439,
+    "ci_high": 0.267,
+    "profit_factor": 1.009,
+    "dsr": 0.158,
+    "win_rate": 0.336,
+    "years_profitable": null,
+    "error": null
+   },
+   {
+    "label": "Breakout-retest, ATR stops",
+    "span": "development",
+    "verdict": "falsified",
+    "ref": "EXP-0013 · HYP-0008",
+    "note": null,
+    "n": 1515,
+    "expectancy_r": -0.0999,
+    "ci_low": -0.1763,
+    "ci_high": -0.0234,
+    "profit_factor": 0.857,
+    "dsr": 0.0,
+    "win_rate": 0.326,
+    "years_profitable": null,
+    "error": null
+   },
+   {
+    "label": "HOD bull flag (walk-forward)",
+    "span": "walk-forward",
+    "verdict": "falsified",
+    "ref": "EXP-0014 · HYP-0007",
+    "note": null,
+    "n": 277,
+    "expectancy_r": 0.0429,
+    "ci_low": -0.1326,
+    "ci_high": 0.2313,
+    "profit_factor": 1.064,
+    "dsr": 0.024,
+    "win_rate": 0.372,
+    "years_profitable": "4/6",
+    "error": null
+   },
+   {
+    "label": "HOD first pullback",
+    "span": "development",
+    "verdict": "falsified",
+    "ref": "EXP-0014 · HYP-0007",
+    "note": null,
+    "n": 4508,
+    "expectancy_r": -0.0646,
+    "ci_low": -0.1089,
+    "ci_high": -0.017,
+    "profit_factor": 0.906,
+    "dsr": null,
+    "win_rate": 0.344,
+    "years_profitable": "2/7",
+    "error": null
+   },
+   {
+    "label": "S2 · Extreme reversal",
+    "span": "development",
+    "verdict": "not_applicable",
+    "ref": "DEC-0006",
+    "note": "Never triggers on liquid stocks",
+    "n": 0,
+    "expectancy_r": null,
+    "ci_low": null,
+    "ci_high": null,
+    "profit_factor": null,
+    "dsr": null,
+    "win_rate": null,
+    "years_profitable": null,
+    "error": null
+   }
+  ],
+  "cat01": {
+   "accuracy_pct": 84.0,
+   "target_pct": 85.0,
+   "passed": false,
+   "verdicts_done": 19,
+   "verdicts_total": 19
+  },
+  "round3": [
+   {
+    "id": "HYP-0010",
+    "set": "F",
+    "hyp_status": "pre-registered",
+    "run": false
+   },
+   {
+    "id": "HYP-0011",
+    "set": "F",
+    "hyp_status": "pre-registered",
+    "run": false
+   },
+   {
+    "id": "HYP-0012",
+    "set": "F",
+    "hyp_status": "pre-registered",
+    "run": false
+   },
+   {
+    "id": "HYP-0013",
+    "set": "F",
+    "hyp_status": "pre-registered",
+    "run": false
+   },
+   {
+    "id": "HYP-0014",
+    "set": "P",
+    "hyp_status": "pre-registered",
+    "run": false
+   },
+   {
+    "id": "HYP-0015",
+    "set": "P",
+    "hyp_status": "pre-registered",
+    "run": false
+   },
+   {
+    "id": "HYP-0016",
+    "set": "P",
+    "hyp_status": "pre-registered",
+    "run": false
+   },
+   {
+    "id": "HYP-0017",
+    "set": "P",
+    "hyp_status": "pre-registered",
+    "run": false
+   },
+   {
+    "id": "HYP-0018",
+    "set": "HOD",
+    "hyp_status": "pre-registered",
+    "run": false
+   },
+   {
+    "id": "HYP-0019",
+    "set": "REV",
+    "hyp_status": "pre-registered",
+    "run": false
+   }
+  ],
+  "decisions": [
+   {
+    "id": "DEC-0001",
+    "date": "2026-09-27",
+    "status": "recorded"
+   },
+   {
+    "id": "DEC-0002",
+    "date": "2026-09-27",
+    "status": "recorded"
+   },
+   {
+    "id": "DEC-0003",
+    "date": "2026-09-27",
+    "status": "recorded"
+   },
+   {
+    "id": "DEC-0004",
+    "date": "2026-09-27",
+    "status": "recorded"
+   },
+   {
+    "id": "DEC-0005",
+    "date": "2026-09-27",
+    "status": "recorded"
+   },
+   {
+    "id": "DEC-0006",
+    "date": "2026-09-27",
+    "status": "recorded"
+   },
+   {
+    "id": "DEC-0007",
+    "date": "2026-09-28",
+    "status": "recorded"
+   },
+   {
+    "id": "DEC-0008",
+    "date": "2026-09-28",
+    "status": "recorded"
+   },
+   {
+    "id": "DEC-0009",
+    "date": "2026-09-28",
+    "status": "recorded"
+   },
+   {
+    "id": "DEC-0010",
+    "date": "2026-09-29",
+    "status": "IN EFFECT from 2026-09-29"
+   }
+  ],
+  "hypotheses": [
+   {
+    "id": "HYP-0001",
+    "status": "pre-registered",
+    "stale": true
+   },
+   {
+    "id": "HYP-0002",
+    "status": "pre-registered",
+    "stale": true
+   },
+   {
+    "id": "HYP-0003",
+    "status": "pre-registered",
+    "stale": true
+   },
+   {
+    "id": "HYP-0004",
+    "status": "pre-registered",
+    "stale": true
+   },
+   {
+    "id": "HYP-0005",
+    "status": "pre-registered",
+    "stale": true
+   },
+   {
+    "id": "HYP-0006",
+    "status": "pre-registered",
+    "stale": true
+   },
+   {
+    "id": "HYP-0007",
+    "status": "falsified",
+    "stale": false
+   },
+   {
+    "id": "HYP-0008",
+    "status": "falsified",
+    "stale": false
+   },
+   {
+    "id": "HYP-0009",
+    "status": "falsified",
+    "stale": false
+   },
+   {
+    "id": "HYP-0010",
+    "status": "pre-registered",
+    "stale": false
+   },
+   {
+    "id": "HYP-0011",
+    "status": "pre-registered",
+    "stale": false
+   },
+   {
+    "id": "HYP-0012",
+    "status": "pre-registered",
+    "stale": false
+   },
+   {
+    "id": "HYP-0013",
+    "status": "pre-registered",
+    "stale": false
+   },
+   {
+    "id": "HYP-0014",
+    "status": "pre-registered",
+    "stale": false
+   },
+   {
+    "id": "HYP-0015",
+    "status": "pre-registered",
+    "stale": false
+   },
+   {
+    "id": "HYP-0016",
+    "status": "pre-registered",
+    "stale": false
+   },
+   {
+    "id": "HYP-0017",
+    "status": "pre-registered",
+    "stale": false
+   },
+   {
+    "id": "HYP-0018",
+    "status": "pre-registered",
+    "stale": false
+   },
+   {
+    "id": "HYP-0019",
+    "status": "pre-registered",
+    "stale": false
+   }
+  ],
+  "active_strategies": [
+   "B_intraday_momentum_qqqm"
+  ],
+  "trials": {
+   "used": 75,
+   "budget_if_round3": 85
+  },
+  "dec0010_status": "IN EFFECT from 2026-09-29",
+  "lessons_count": 2
+ },
+ "spec": {
+  "spec_id": "SPEC-0001",
+  "version": "1.0.1",
+  "status": "approved",
+  "total": 112,
+  "by_status": {
+   "implemented": 106,
+   "n_a": 2,
+   "planned": 3,
+   "needs_data": 1
+  },
+  "by_level": {
+   "MUST": 95,
+   "SHOULD": 7,
+   "INFO": 10
+  },
+  "by_area": [
+   {
+    "area": "pool",
+    "total": 4,
+    "implemented": 4,
+    "planned": 0,
+    "n_a": 0,
+    "needs_data": 0
+   },
+   {
+    "area": "scanner",
+    "total": 32,
+    "implemented": 29,
+    "planned": 1,
+    "n_a": 2,
+    "needs_data": 0
+   },
+   {
+    "area": "catalyst",
+    "total": 1,
+    "implemented": 0,
+    "planned": 1,
+    "n_a": 0,
+    "needs_data": 0
+   },
+   {
+    "area": "funnel",
+    "total": 7,
+    "implemented": 7,
+    "planned": 0,
+    "n_a": 0,
+    "needs_data": 0
+   },
+   {
+    "area": "chart",
+    "total": 7,
+    "implemented": 7,
+    "planned": 0,
+    "n_a": 0,
+    "needs_data": 0
+   },
+   {
+    "area": "pattern",
+    "total": 11,
+    "implemented": 11,
+    "planned": 0,
+    "n_a": 0,
+    "needs_data": 0
+   },
+   {
+    "area": "entry",
+    "total": 7,
+    "implemented": 7,
+    "planned": 0,
+    "n_a": 0,
+    "needs_data": 0
+   },
+   {
+    "area": "execution",
+    "total": 8,
+    "implemented": 8,
+    "planned": 0,
+    "n_a": 0,
+    "needs_data": 0
+   },
+   {
+    "area": "exit",
+    "total": 9,
+    "implemented": 9,
+    "planned": 0,
+    "n_a": 0,
+    "needs_data": 0
+   },
+   {
+    "area": "risk",
+    "total": 7,
+    "implemented": 7,
+    "planned": 0,
+    "n_a": 0,
+    "needs_data": 0
+   },
+   {
+    "area": "tape",
+    "total": 7,
+    "implemented": 6,
+    "planned": 0,
+    "n_a": 0,
+    "needs_data": 1
+   },
+   {
+    "area": "routine",
+    "total": 7,
+    "implemented": 6,
+    "planned": 1,
+    "n_a": 0,
+    "needs_data": 0
+   },
+   {
+    "area": "evaluation",
+    "total": 5,
+    "implemented": 5,
+    "planned": 0,
+    "n_a": 0,
+    "needs_data": 0
+   }
+  ],
+  "checklist": [
+   {
+    "total": 4,
+    "implemented": 4,
+    "state": "done",
+    "reqs": [
+     "SCN-GAP-01",
+     "SCN-GAP-02",
+     "SCN-HOD-01",
+     "SCN-REV-01"
+    ]
+   },
+   {
+    "total": 3,
+    "implemented": 3,
+    "state": "done",
+    "reqs": [
+     "SCN-GAP-05",
+     "SCN-GAP-06",
+     "SCN-HOD-05"
+    ]
+   },
+   {
+    "total": 6,
+    "implemented": 5,
+    "state": "partial",
+    "reqs": [
+     "POOL-04",
+     "SCN-GAP-09",
+     "SCN-GAP-10",
+     "SCN-GAP-11",
+     "SCN-HOD-09",
+     "CAT-01"
+    ]
+   },
+   {
+    "total": 8,
+    "implemented": 8,
+    "state": "done",
+    "reqs": [
+     "SCN-GAP-07",
+     "SCN-GAP-08",
+     "SCN-HOD-02",
+     "SCN-HOD-03",
+     "SCN-HOD-04",
+     "SCN-REV-02",
+     "SCN-REV-03",
+     "SCN-REV-04"
+    ]
+   },
+   {
+    "total": 7,
+    "implemented": 7,
+    "state": "done",
+    "reqs": [
+     "SCN-HOD-08",
+     "ENT-GG-2",
+     "RTN-01",
+     "RTN-02",
+     "RTN-03",
+     "RTN-04",
+     "RTN-05"
+    ]
+   },
+   {
+    "total": 14,
+    "implemented": 14,
+    "state": "done",
+    "reqs": [
+     "POOL-01",
+     "POOL-02",
+     "POOL-03",
+     "SCN-GAP-03",
+     "SCN-GAP-04",
+     "SCN-HOD-06",
+     "SCN-HOD-07",
+     "FUN-01",
+     "FUN-02",
+     "FUN-03",
+     "FUN-04",
+     "FUN-05",
+     "FUN-06",
+     "FUN-07"
+    ]
+   },
+   {
+    "total": 8,
+    "implemented": 8,
+    "state": "done",
+    "reqs": [
+     "EXE-01",
+     "EXE-02",
+     "EXE-05",
+     "EXE-06",
+     "EXE-07",
+     "EXE-08",
+     "EXT-06",
+     "EXT-09"
+    ]
+   },
+   {
+    "total": 5,
+    "implemented": 5,
+    "state": "done",
+    "reqs": [
+     "EXE-04",
+     "EXT-01",
+     "EXT-03",
+     "EXT-04",
+     "EXT-05"
+    ]
+   },
+   {
+    "total": 5,
+    "implemented": 5,
+    "state": "done",
+    "reqs": [
+     "EXE-03",
+     "EXT-01",
+     "EXT-02",
+     "EXT-07",
+     "EXT-08"
+    ]
+   },
+   {
+    "total": 7,
+    "implemented": 7,
+    "state": "done",
+    "reqs": [
+     "RSK-01",
+     "RSK-02",
+     "RSK-03",
+     "RSK-04",
+     "RSK-05",
+     "RSK-06",
+     "RSK-07"
+    ]
+   }
+  ]
+ },
+ "platform": {
+  "milestones": [
+   {
+    "key": "M0",
+    "title": "M0 · Org onboarding and governance",
+    "state": "closed",
+    "open": 0,
+    "closed": 8,
+    "p0_open": 0
+   },
+   {
+    "key": "M1",
+    "title": "M1 · Engineering foundation",
+    "state": "open",
+    "open": 10,
+    "closed": 0,
+    "p0_open": 0
+   },
+   {
+    "key": "M2",
+    "title": "M2 · Risk controls",
+    "state": "open",
+    "open": 12,
+    "closed": 0,
+    "p0_open": 8
+   },
+   {
+    "key": "M3",
+    "title": "M3 · LLMOps",
+    "state": "open",
+    "open": 8,
+    "closed": 0,
+    "p0_open": 0
+   },
+   {
+    "key": "M4",
+    "title": "M4 · Scheduling and operations",
+    "state": "open",
+    "open": 5,
+    "closed": 0,
+    "p0_open": 0
+   },
+   {
+    "key": "M5",
+    "title": "M5 · Data and KB quality",
+    "state": "open",
+    "open": 4,
+    "closed": 0,
+    "p0_open": 0
+   }
+  ],
+  "items_total": 47,
+  "items_done": 8,
+  "releases": [
+   {
+    "tagName": "v0.1.0",
+    "name": "v0.1.0 — M0: org onboarding and governance",
+    "publishedAt": "2026-09-28T04:05:36Z",
+    "isLatest": true
+   }
+  ],
+  "runs": [
+   {
+    "workflow": "security",
+    "conclusion": "success",
+    "created": "2026-09-28T04:07:30Z",
+    "branch": "main"
+   },
+   {
+    "workflow": "CodeQL",
+    "conclusion": "success",
+    "created": "2026-09-28T04:07:29Z",
+    "branch": "main"
+   },
+   {
+    "workflow": "security",
+    "conclusion": "success",
+    "created": "2026-09-28T04:06:10Z",
+    "branch": "docs/m0-release-done"
+   },
+   {
+    "workflow": "CodeQL",
+    "conclusion": "success",
+    "created": "2026-09-28T04:06:08Z",
+    "branch": "refs/pull/65/head"
+   },
+   {
+    "workflow": "security",
+    "conclusion": "success",
+    "created": "2026-09-28T04:04:28Z",
+    "branch": "main"
+   },
+   {
+    "workflow": "CodeQL",
+    "conclusion": "success",
+    "created": "2026-09-28T04:04:27Z",
+    "branch": "main"
+   },
+   {
+    "workflow": "security",
+    "conclusion": "success",
+    "created": "2026-09-28T04:03:18Z",
+    "branch": "release/v0.1.0"
+   },
+   {
+    "workflow": "CodeQL",
+    "conclusion": "success",
+    "created": "2026-09-28T04:03:16Z",
+    "branch": "refs/pull/64/head"
+   },
+   {
+    "workflow": "security",
+    "conclusion": "success",
+    "created": "2026-09-28T04:02:02Z",
+    "branch": "main"
+   },
+   {
+    "workflow": "CodeQL",
+    "conclusion": "success",
+    "created": "2026-09-28T04:02:01Z",
+    "branch": "main"
+   },
+   {
+    "workflow": "security",
+    "conclusion": "success",
+    "created": "2026-09-28T04:00:57Z",
+    "branch": "docs/m0-project-and-dependabot-done"
+   },
+   {
+    "workflow": "CodeQL",
+    "conclusion": "success",
+    "created": "2026-09-28T04:00:54Z",
+    "branch": "refs/pull/63/head"
+   }
+  ],
+  "required_checks": false,
+  "roadmap": [
+   {
+    "rank": 1,
+    "priority": "P0",
+    "title": "Run round 3: counts-only guard, dev runs, r3_eval at 85 trials, DEC-0011",
+    "why": "DEC-0010 is in effect; this is the only open route to G1",
+    "owner": "claude"
+   },
+   {
+    "rank": 2,
+    "priority": "P0",
+    "title": "Forward test: run the round-3 trials nightly, with D7 catch-up and per-strategy markers",
+    "why": "DEC-0010 requires every round-3 trial to run nightly from approval; forward_test.py doesn't yet",
+    "owner": "claude"
+   },
+   {
+    "rank": 3,
+    "priority": "P1",
+    "title": "Run live jobs from a pinned worktree",
+    "why": "Branch work can then never touch what launchd runs",
+    "owner": "claude"
+   },
+   {
+    "rank": 4,
+    "priority": "P1",
+    "title": "RTN-06 feed-agreement report (IEX/hybrid vs SIP)",
+    "why": "Last open MUST requirement besides CAT-01",
+    "owner": "claude"
+   },
+   {
+    "rank": 5,
+    "priority": "P1",
+    "title": "Re-scope org milestones M2-M5",
+    "why": "They harden the gap-and-go pipeline, which lost -0.40R per trade",
+    "owner": "you"
+   },
+   {
+    "rank": 6,
+    "priority": "P1",
+    "title": "Registry tidy-up: HYP-0001..0006 statuses, missing EXP-0009/0010 controls",
+    "why": "The registry must match the decisions",
+    "owner": "claude"
+   },
+   {
+    "rank": 7,
+    "priority": "P2",
+    "title": "Pre-register a catalyst classifier v4 (announcements, SPAC commentary, acquirer vs target)",
+    "why": "CAT-01 failed at 84%; only a new pre-registered change on a fresh sample can close it",
+    "owner": "both"
+   },
+   {
+    "rank": 8,
+    "priority": "P2",
+    "title": "Accumulate G2 evidence: 50 trades, 30 sessions",
+    "why": "Gate before any broker work",
+    "owner": "both"
+   },
+   {
+    "rank": 9,
+    "priority": "P2",
+    "title": "CI for the research repo; audit ledger; human-approval mode",
+    "why": "Required before live trading",
+    "owner": "claude"
+   },
+   {
+    "rank": 10,
+    "priority": "Later",
+    "title": "G3 Webull adapter, then G4 live tiny and G5 scale",
+    "why": "Only after an edge is proven",
+    "owner": "both"
+   }
+  ]
+ },
+ "ops": {
+  "deployed": {
+   "head": "d678ead",
+   "branch": "main",
+   "committed": "2026-09-29T09:53:18+10:00",
+   "modified": 0,
+   "untracked": 5,
+   "main": "d678ead",
+   "behind": 0,
+   "ahead": 0
+  },
+  "routine": {
+   "date": "2026-09-28",
+   "stages": [
+    {
+     "stage": "tier1",
+     "as_of_et": "08:00",
+     "feed": "iex",
+     "stats": {
+      "universe": 4393.0,
+      "snapshot_symbols": 0.0,
+      "split_checked": 0.0,
+      "kept": 0.0,
+      "float_unknown": 0.0
+     },
+     "counts": {
+      "tier1": 0
+     },
+     "tier1": [],
+     "tier2": [],
+     "primary": null,
+     "error": null
+    },
+    {
+     "stage": "charts",
+     "as_of_et": "08:30",
+     "feed": "iex",
+     "stats": {
+      "universe": 4393.0,
+      "snapshot_symbols": 42.0,
+      "split_checked": 0.0,
+      "kept": 8.0,
+      "float_unknown": 0.0
+     },
+     "counts": {
+      "tier1": 0,
+      "charts": 0
+     },
+     "tier1": [],
+     "tier2": [],
+     "primary": null,
+     "error": null
+    },
+    {
+     "stage": "tier2",
+     "as_of_et": "09:00",
+     "feed": "iex",
+     "stats": {
+      "universe": 4393.0,
+      "snapshot_symbols": 50.0,
+      "split_checked": 0.0,
+      "kept": 8.0,
+      "float_unknown": 0.0
+     },
+     "counts": {
+      "tier1": 1,
+      "charts": 1,
+      "tier2": 0
+     },
+     "tier1": [
+      {
+       "symbol": "LABT",
+       "score": 0.807
+      }
+     ],
+     "tier2": [],
+     "primary": null,
+     "error": null
+    },
+    {
+     "stage": "tickets",
+     "as_of_et": "09:15",
+     "feed": "iex",
+     "stats": {
+      "universe": 4393.0,
+      "snapshot_symbols": 48.0,
+      "split_checked": 0.0,
+      "kept": 8.0,
+      "float_unknown": 0.0
+     },
+     "counts": {
+      "tier1": 1,
+      "charts": 1,
+      "tier2": 0,
+      "tickets": 0
+     },
+     "tier1": [
+      {
+       "symbol": "LABT",
+       "score": 0.843
+      }
+     ],
+     "tier2": [],
+     "primary": null,
+     "error": null
+    }
+   ],
+   "log": {
+    "file": "routine_20260928.log",
+    "exists": true,
+    "bytes": 2679,
+    "modified": "2026-09-28T15:31:00+00:00",
+    "errors_count": 5,
+    "last_error": "OSError: [Errno 28] No space left on device: '~/trading/research/forward/routine/2026-09-28/1131_signals.json'"
+   }
+  },
+  "paper": {
+   "events": {
+    "no_session": 1,
+    "armed": 1,
+    "blocked": 1,
+    "loop_error": 3,
+    "session_end": 1
+   },
+   "bad_lines": 0,
+   "armed_sessions": 1,
+   "last_armed": "2026-09-28",
+   "trades": 0,
+   "total_r": 0.0,
+   "mean_r": null,
+   "virtual": {
+    "equity": 600.0,
+    "start": 600.0,
+    "latched": false,
+    "latch_reason": ""
+   },
+   "recent": [
+    {
+     "ts": "2026-09-27T12:30:12.020515+00:00",
+     "event": "no_session",
+     "detail": "2026-09-27"
+    },
+    {
+     "ts": "2026-09-28T12:30:13.533507+00:00",
+     "event": "armed",
+     "detail": "2026-09-28"
+    },
+    {
+     "ts": "2026-09-28T13:30:04.450665+00:00",
+     "event": "blocked",
+     "detail": "stale_signal_data"
+    },
+    {
+     "ts": "2026-09-28T14:11:41.966454+00:00",
+     "event": "loop_error",
+     "detail": "ConnectionError(ProtocolError('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')))"
+    },
+    {
+     "ts": "2026-09-28T18:17:27.587705+00:00",
+     "event": "loop_error",
+     "detail": "ConnectionError(ProtocolError('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')))"
+    },
+    {
+     "ts": "2026-09-28T18:18:48.366584+00:00",
+     "event": "loop_error",
+     "detail": "SSLError(MaxRetryError(\"HTTPSConnectionPool(host='paper-api.alpaca.markets', port=443): Max retries exceeded with url: /v2/orders?status=open (Caused by SSLErro"
+    },
+    {
+     "ts": "2026-09-28T20:00:13.905044+00:00",
+     "event": "session_end",
+     "detail": ""
+    }
+   ],
+   "g2": {
+    "trades": 0,
+    "trades_needed": 50,
+    "sessions": 1,
+    "sessions_needed": 30
+   },
+   "log": {
+    "file": "paper_b_20260928.log",
+    "exists": true,
+    "bytes": 1547,
+    "modified": "2026-09-28T20:00:13+00:00",
+    "errors_count": 3,
+    "last_error": "{'ts': '2026-09-28T18:18:48.366584+00:00', 'event': 'loop_error', 'error': 'SSLError(MaxRetryError(\"HTTPSConnectionPool(host=\\'paper-api.alpaca.markets\\', port=443): Max retries exceeded with url: /v2/orders?status=open (Caused by SSLError("
+   }
+  },
+  "forward": {
+   "exists": true,
+   "sessions": 1,
+   "first": "2026-09-28",
+   "last": "2026-09-28",
+   "errors": 0,
+   "bad_lines": 0,
+   "strategies": [],
+   "latest_scorecard": "scorecard_2026-09-28.md",
+   "log": {
+    "file": "forward_20260929.log",
+    "exists": true,
+    "bytes": 2574,
+    "modified": "2026-09-28T20:20:21+00:00",
+    "errors_count": 3,
+    "last_error": "requests.exceptions.HTTPError: 403 Client Error: Forbidden for url: https://data.alpaca.markets/v2/stocks/bars?symbols=A%2CAA%2CAABA%2CAAC%2CAADX%2CAAL%2CAAME%2CAAMI%2CAAOI%2CAAON%2CAAP%2CAAPL%2CAARD%2CAAUC%2CAB%2CABAT%2CABBV%2CABCB%2CABDC%"
+   }
+  },
+  "host": {
+   "jobs": [
+    {
+     "label": "com.wt.routine",
+     "local_time": "21:30",
+     "name": "Pre-market routine",
+     "loaded": true,
+     "running": false,
+     "last_exit": 1
+    },
+    {
+     "label": "com.wt.paper-b",
+     "local_time": "22:30",
+     "name": "Paper B",
+     "loaded": true,
+     "running": false,
+     "last_exit": 0
+    },
+    {
+     "label": "com.wt.forward",
+     "local_time": "05:40",
+     "name": "Forward test",
+     "loaded": false,
+     "running": false,
+     "last_exit": null
+    },
+    {
+     "label": "com.wt.weekly",
+     "local_time": "11:00",
+     "name": "Weekly scorecard",
+     "loaded": false,
+     "running": false,
+     "last_exit": null
+    }
+   ],
+   "disk_free_gb": 4.0,
+   "disk_total_gb": 228.3,
+   "disk_floor_gb": 3.0,
+   "swap_warn_pct": 85.0,
+   "swap": {
+    "total_gb": 8.0,
+    "used_gb": 7.24,
+    "free_gb": 0.76,
+    "used_pct": 90.5
+   },
+   "wake_coverage": [
+    {
+     "needed": "21:25",
+     "covered": true
+    }
+   ],
+   "schedule": [
+    {
+     "job": "com.wt.routine",
+     "local": "Tue 29 Sep 21:30 AEST",
+     "et": "Tue 29 Sep 07:30 EDT",
+     "et_date": "2026-09-29",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "07:55"
+    },
+    {
+     "job": "com.wt.paper-b",
+     "local": "Tue 29 Sep 22:30 AEST",
+     "et": "Tue 29 Sep 08:30 EDT",
+     "et_date": "2026-09-29",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "09:30"
+    },
+    {
+     "job": "com.wt.forward",
+     "local": "Tue 29 Sep 05:40 AEST",
+     "et": "Mon 28 Sep 15:40 EDT",
+     "et_date": "2026-09-28",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "16:00"
+    },
+    {
+     "job": "com.wt.weekly",
+     "local": "Tue 29 Sep 11:00 AEST",
+     "et": "Mon 28 Sep 21:00 EDT",
+     "et_date": "2026-09-28",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "23:59"
+    },
+    {
+     "job": "com.wt.routine",
+     "local": "Wed 30 Sep 21:30 AEST",
+     "et": "Wed 30 Sep 07:30 EDT",
+     "et_date": "2026-09-30",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "07:55"
+    },
+    {
+     "job": "com.wt.paper-b",
+     "local": "Wed 30 Sep 22:30 AEST",
+     "et": "Wed 30 Sep 08:30 EDT",
+     "et_date": "2026-09-30",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "09:30"
+    },
+    {
+     "job": "com.wt.forward",
+     "local": "Wed 30 Sep 05:40 AEST",
+     "et": "Tue 29 Sep 15:40 EDT",
+     "et_date": "2026-09-29",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "16:00"
+    },
+    {
+     "job": "com.wt.weekly",
+     "local": "Wed 30 Sep 11:00 AEST",
+     "et": "Tue 29 Sep 21:00 EDT",
+     "et_date": "2026-09-29",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "23:59"
+    },
+    {
+     "job": "com.wt.routine",
+     "local": "Thu 01 Oct 21:30 AEST",
+     "et": "Thu 01 Oct 07:30 EDT",
+     "et_date": "2026-10-01",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "07:55"
+    },
+    {
+     "job": "com.wt.paper-b",
+     "local": "Thu 01 Oct 22:30 AEST",
+     "et": "Thu 01 Oct 08:30 EDT",
+     "et_date": "2026-10-01",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "09:30"
+    },
+    {
+     "job": "com.wt.forward",
+     "local": "Thu 01 Oct 05:40 AEST",
+     "et": "Wed 30 Sep 15:40 EDT",
+     "et_date": "2026-09-30",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "16:00"
+    },
+    {
+     "job": "com.wt.weekly",
+     "local": "Thu 01 Oct 11:00 AEST",
+     "et": "Wed 30 Sep 21:00 EDT",
+     "et_date": "2026-09-30",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "23:59"
+    },
+    {
+     "job": "com.wt.routine",
+     "local": "Fri 02 Oct 21:30 AEST",
+     "et": "Fri 02 Oct 07:30 EDT",
+     "et_date": "2026-10-02",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "07:55"
+    },
+    {
+     "job": "com.wt.paper-b",
+     "local": "Fri 02 Oct 22:30 AEST",
+     "et": "Fri 02 Oct 08:30 EDT",
+     "et_date": "2026-10-02",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "09:30"
+    },
+    {
+     "job": "com.wt.forward",
+     "local": "Fri 02 Oct 05:40 AEST",
+     "et": "Thu 01 Oct 15:40 EDT",
+     "et_date": "2026-10-01",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "16:00"
+    },
+    {
+     "job": "com.wt.weekly",
+     "local": "Fri 02 Oct 11:00 AEST",
+     "et": "Thu 01 Oct 21:00 EDT",
+     "et_date": "2026-10-01",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "23:59"
+    },
+    {
+     "job": "com.wt.routine",
+     "local": "Sat 03 Oct 21:30 AEST",
+     "et": "Sat 03 Oct 07:30 EDT",
+     "et_date": "2026-10-03",
+     "session": false,
+     "ok": true,
+     "must_start_before_et": "07:55"
+    },
+    {
+     "job": "com.wt.paper-b",
+     "local": "Sat 03 Oct 22:30 AEST",
+     "et": "Sat 03 Oct 08:30 EDT",
+     "et_date": "2026-10-03",
+     "session": false,
+     "ok": true,
+     "must_start_before_et": "09:30"
+    },
+    {
+     "job": "com.wt.forward",
+     "local": "Sat 03 Oct 05:40 AEST",
+     "et": "Fri 02 Oct 15:40 EDT",
+     "et_date": "2026-10-02",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "16:00"
+    },
+    {
+     "job": "com.wt.weekly",
+     "local": "Sat 03 Oct 11:00 AEST",
+     "et": "Fri 02 Oct 21:00 EDT",
+     "et_date": "2026-10-02",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "23:59"
+    },
+    {
+     "job": "com.wt.routine",
+     "local": "Sun 04 Oct 21:30 AEDT",
+     "et": "Sun 04 Oct 06:30 EDT",
+     "et_date": "2026-10-04",
+     "session": false,
+     "ok": true,
+     "must_start_before_et": "07:55"
+    },
+    {
+     "job": "com.wt.paper-b",
+     "local": "Sun 04 Oct 22:30 AEDT",
+     "et": "Sun 04 Oct 07:30 EDT",
+     "et_date": "2026-10-04",
+     "session": false,
+     "ok": true,
+     "must_start_before_et": "09:30"
+    },
+    {
+     "job": "com.wt.forward",
+     "local": "Sun 04 Oct 05:40 AEDT",
+     "et": "Sat 03 Oct 14:40 EDT",
+     "et_date": "2026-10-03",
+     "session": false,
+     "ok": true,
+     "must_start_before_et": "16:00"
+    },
+    {
+     "job": "com.wt.weekly",
+     "local": "Sun 04 Oct 11:00 AEDT",
+     "et": "Sat 03 Oct 20:00 EDT",
+     "et_date": "2026-10-03",
+     "session": false,
+     "ok": true,
+     "must_start_before_et": "23:59"
+    },
+    {
+     "job": "com.wt.routine",
+     "local": "Mon 05 Oct 21:30 AEDT",
+     "et": "Mon 05 Oct 06:30 EDT",
+     "et_date": "2026-10-05",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "07:55"
+    },
+    {
+     "job": "com.wt.paper-b",
+     "local": "Mon 05 Oct 22:30 AEDT",
+     "et": "Mon 05 Oct 07:30 EDT",
+     "et_date": "2026-10-05",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "09:30"
+    },
+    {
+     "job": "com.wt.forward",
+     "local": "Mon 05 Oct 05:40 AEDT",
+     "et": "Sun 04 Oct 14:40 EDT",
+     "et_date": "2026-10-04",
+     "session": false,
+     "ok": true,
+     "must_start_before_et": "16:00"
+    },
+    {
+     "job": "com.wt.weekly",
+     "local": "Mon 05 Oct 11:00 AEDT",
+     "et": "Sun 04 Oct 20:00 EDT",
+     "et_date": "2026-10-04",
+     "session": false,
+     "ok": true,
+     "must_start_before_et": "23:59"
+    },
+    {
+     "job": "com.wt.routine",
+     "local": "Tue 06 Oct 21:30 AEDT",
+     "et": "Tue 06 Oct 06:30 EDT",
+     "et_date": "2026-10-06",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "07:55"
+    },
+    {
+     "job": "com.wt.paper-b",
+     "local": "Tue 06 Oct 22:30 AEDT",
+     "et": "Tue 06 Oct 07:30 EDT",
+     "et_date": "2026-10-06",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "09:30"
+    },
+    {
+     "job": "com.wt.forward",
+     "local": "Tue 06 Oct 05:40 AEDT",
+     "et": "Mon 05 Oct 14:40 EDT",
+     "et_date": "2026-10-05",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "16:00"
+    },
+    {
+     "job": "com.wt.weekly",
+     "local": "Tue 06 Oct 11:00 AEDT",
+     "et": "Mon 05 Oct 20:00 EDT",
+     "et_date": "2026-10-05",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "23:59"
+    },
+    {
+     "job": "com.wt.routine",
+     "local": "Wed 07 Oct 21:30 AEDT",
+     "et": "Wed 07 Oct 06:30 EDT",
+     "et_date": "2026-10-07",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "07:55"
+    },
+    {
+     "job": "com.wt.paper-b",
+     "local": "Wed 07 Oct 22:30 AEDT",
+     "et": "Wed 07 Oct 07:30 EDT",
+     "et_date": "2026-10-07",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "09:30"
+    },
+    {
+     "job": "com.wt.forward",
+     "local": "Wed 07 Oct 05:40 AEDT",
+     "et": "Tue 06 Oct 14:40 EDT",
+     "et_date": "2026-10-06",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "16:00"
+    },
+    {
+     "job": "com.wt.weekly",
+     "local": "Wed 07 Oct 11:00 AEDT",
+     "et": "Tue 06 Oct 20:00 EDT",
+     "et_date": "2026-10-06",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "23:59"
+    },
+    {
+     "job": "com.wt.routine",
+     "local": "Thu 08 Oct 21:30 AEDT",
+     "et": "Thu 08 Oct 06:30 EDT",
+     "et_date": "2026-10-08",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "07:55"
+    },
+    {
+     "job": "com.wt.paper-b",
+     "local": "Thu 08 Oct 22:30 AEDT",
+     "et": "Thu 08 Oct 07:30 EDT",
+     "et_date": "2026-10-08",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "09:30"
+    },
+    {
+     "job": "com.wt.forward",
+     "local": "Thu 08 Oct 05:40 AEDT",
+     "et": "Wed 07 Oct 14:40 EDT",
+     "et_date": "2026-10-07",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "16:00"
+    },
+    {
+     "job": "com.wt.weekly",
+     "local": "Thu 08 Oct 11:00 AEDT",
+     "et": "Wed 07 Oct 20:00 EDT",
+     "et_date": "2026-10-07",
+     "session": true,
+     "ok": true,
+     "must_start_before_et": "23:59"
+    }
+   ]
+  },
+  "account": {
+   "equity": 100250.0,
+   "last_equity": 100000.0,
+   "cash": 100250.0,
+   "buying_power": 200500.0,
+   "daytrade_count": 0,
+   "pattern_day_trader": null,
+   "status": "ACTIVE",
+   "trading_blocked": false,
+   "market_is_open": false,
+   "next_open": "2026-09-29T09:30:00-04:00",
+   "next_close": "2026-09-29T16:00:00-04:00",
+   "paper": true,
+   "positions": [
+    {
+     "symbol": "QQQM",
+     "qty": 3.0,
+     "market_value": 612.4,
+     "unrealized_pl": -4.2
+    }
+   ]
+  }
+ },
+ "jobs": {
+  "last": {
+   "routine": {
+    "status": "failed",
+    "exit": 1,
+    "started": "2026-09-29T11:30:02+00:00",
+    "ended": "2026-09-29T15:31:40+00:00",
+    "sha": "d678ead",
+    "detail": ""
+   },
+   "paper-b": {
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-29T12:30:01+00:00",
+    "ended": "2026-09-29T20:00:05+00:00",
+    "sha": "d678ead",
+    "detail": ""
+   },
+   "forward": {
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-29T19:40:00+00:00",
+    "ended": "2026-09-29T20:41:12+00:00",
+    "sha": "d678ead",
+    "detail": ""
+   },
+   "dashboard": {
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-29T21:45:00+00:00",
+    "ended": "2026-09-29T21:45:51+00:00",
+    "sha": "d678ead",
+    "detail": ""
+   }
+  },
+  "runs": [
+   {
+    "job": "routine",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-16T11:00:00+00:00",
+    "ended": "2026-09-16T11:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "paper-b",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-16T12:00:00+00:00",
+    "ended": "2026-09-16T12:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "forward",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-16T20:00:00+00:00",
+    "ended": "2026-09-16T20:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "routine",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-17T11:00:00+00:00",
+    "ended": "2026-09-17T11:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "paper-b",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-17T12:00:00+00:00",
+    "ended": "2026-09-17T12:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "forward",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-17T20:00:00+00:00",
+    "ended": "2026-09-17T20:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "routine",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-18T11:00:00+00:00",
+    "ended": "2026-09-18T11:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "paper-b",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-18T12:00:00+00:00",
+    "ended": "2026-09-18T12:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "forward",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-18T20:00:00+00:00",
+    "ended": "2026-09-18T20:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "routine",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-19T11:00:00+00:00",
+    "ended": "2026-09-19T11:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "paper-b",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-19T12:00:00+00:00",
+    "ended": "2026-09-19T12:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "forward",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-19T20:00:00+00:00",
+    "ended": "2026-09-19T20:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "routine",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-20T11:00:00+00:00",
+    "ended": "2026-09-20T11:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "paper-b",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-20T12:00:00+00:00",
+    "ended": "2026-09-20T12:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "forward",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-20T20:00:00+00:00",
+    "ended": "2026-09-20T20:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "routine",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-21T11:00:00+00:00",
+    "ended": "2026-09-21T11:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "paper-b",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-21T12:00:00+00:00",
+    "ended": "2026-09-21T12:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "forward",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-21T20:00:00+00:00",
+    "ended": "2026-09-21T20:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "routine",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-22T11:00:00+00:00",
+    "ended": "2026-09-22T11:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "paper-b",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-22T12:00:00+00:00",
+    "ended": "2026-09-22T12:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "forward",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-22T20:00:00+00:00",
+    "ended": "2026-09-22T20:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "routine",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-23T11:00:00+00:00",
+    "ended": "2026-09-23T11:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "paper-b",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-23T12:00:00+00:00",
+    "ended": "2026-09-23T12:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "forward",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-23T20:00:00+00:00",
+    "ended": "2026-09-23T20:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "routine",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-24T11:00:00+00:00",
+    "ended": "2026-09-24T11:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "paper-b",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-24T12:00:00+00:00",
+    "ended": "2026-09-24T12:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "forward",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-24T20:00:00+00:00",
+    "ended": "2026-09-24T20:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "routine",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-25T11:00:00+00:00",
+    "ended": "2026-09-25T11:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "paper-b",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-25T12:00:00+00:00",
+    "ended": "2026-09-25T12:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "forward",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-25T20:00:00+00:00",
+    "ended": "2026-09-25T20:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "routine",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-26T11:00:00+00:00",
+    "ended": "2026-09-26T11:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "paper-b",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-26T12:00:00+00:00",
+    "ended": "2026-09-26T12:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "forward",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-26T20:00:00+00:00",
+    "ended": "2026-09-26T20:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "routine",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-27T11:00:00+00:00",
+    "ended": "2026-09-27T11:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "paper-b",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-27T12:00:00+00:00",
+    "ended": "2026-09-27T12:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "forward",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-27T20:00:00+00:00",
+    "ended": "2026-09-27T20:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "routine",
+    "status": "failed",
+    "exit": 1,
+    "started": "2026-09-28T11:00:00+00:00",
+    "ended": "2026-09-28T11:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "paper-b",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-28T12:00:00+00:00",
+    "ended": "2026-09-28T12:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "forward",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-28T20:00:00+00:00",
+    "ended": "2026-09-28T20:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "routine",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-29T11:00:00+00:00",
+    "ended": "2026-09-29T11:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "paper-b",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-29T12:00:00+00:00",
+    "ended": "2026-09-29T12:30:00+00:00",
+    "sha": "d678ead"
+   },
+   {
+    "job": "forward",
+    "status": "ok",
+    "exit": 0,
+    "started": "2026-09-29T20:00:00+00:00",
+    "ended": "2026-09-29T20:30:00+00:00",
+    "sha": "d678ead"
+   }
+  ]
+ },
+ "alerts": {
+  "firing": [
+   {
+    "key": "job:routine",
+    "since": "2026-09-29T15:31:40+00:00",
+    "title": "routine failed"
+   }
+  ]
+ },
+ "kill": {
+  "on": true,
+  "since": "2026-09-29T03:42:00+00:00",
+  "reason": "Paper-B entries paused 2026-09-29 by the audit plan (Step 0.2)."
+ },
+ "deploy": {
+  "to": "d678ead",
+  "rollback_tag": "runtime-20260929-1",
+  "at": "20260929T043000Z",
+  "smoke_ok": true
+ },
+ "preflight": [
+  {
+   "name": "on main",
+   "ok": false,
+   "detail": "HEAD is on 'feat/dashboard-publisher'"
+  },
+  {
+   "name": "reviewed commit",
+   "ok": false,
+   "detail": "HEAD has commits that are not on origin/main"
+  },
+  {
+   "name": "clean code",
+   "ok": false,
+   "detail": "12 modified or untracked file(s) under src, scripts, deploy, config, …"
+  },
+  {
+   "name": "runtime state migrated",
+   "ok": true,
+   "detail": "no runtime files in tracked paths"
+  },
+  {
+   "name": "venv matches lockfile",
+   "ok": false,
+   "detail": "no sync stamp; run `make deploy`"
+  },
+  {
+   "name": "free disk",
+   "ok": true,
+   "detail": "4.4 GB free (floor 3 GB)"
+  },
+  {
+   "name": ".env private",
+   "ok": false,
+   "detail": ".env missing"
+  }
+ ],
+ "expected_windows": [
+  {
+   "session": "2026-09-29",
+   "start": "2026-09-29T11:30:00+00:00",
+   "end": "2026-09-29T22:00:00+00:00"
+  },
+  {
+   "session": "2026-09-30",
+   "start": "2026-09-30T11:30:00+00:00",
+   "end": "2026-09-30T22:00:00+00:00"
+  }
+ ],
+ "series": {
+  "forward": [
+   {
+    "strategy": "B_qqq_qqqm",
+    "session": "2026-09-28",
+    "n": 1,
+    "cum_r": 0.8
+   },
+   {
+    "strategy": "B_qqq_qqqm",
+    "session": "2026-09-29",
+    "n": 1,
+    "cum_r": -0.2
+   },
+   {
+    "strategy": "B_qqq_qqqm",
+    "session": "2026-09-30",
+    "n": 1,
+    "cum_r": 1.7
+   },
+   {
+    "strategy": "r3:MP-1",
+    "session": "2026-09-28",
+    "n": 1,
+    "cum_r": 1.2
+   },
+   {
+    "strategy": "r3:MP-1",
+    "session": "2026-09-29",
+    "n": 1,
+    "cum_r": 1.6
+   },
+   {
+    "strategy": "r3:F:GG-1",
+    "session": "2026-09-28",
+    "n": 1,
+    "cum_r": -1.0
+   },
+   {
+    "strategy": "r3:F:GG-1",
+    "session": "2026-09-29",
+    "n": 1,
+    "cum_r": -1.6
+   },
+   {
+    "strategy": "r3:F:GG-1",
+    "session": "2026-09-30",
+    "n": 1,
+    "cum_r": -0.7
+   }
+  ],
+  "paper": [
+   {
+    "date": "2026-09-28",
+    "equity": 600.0,
+    "cum_r": 0.0,
+    "trades": 0
+   },
+   {
+    "date": "2026-09-29",
+    "equity": 600.0,
+    "cum_r": 0.0,
+    "trades": 0
+   }
+  ]
+ },
+ "history": {
+  "timeline": [
+   {
+    "date": "2026-04-16",
+    "event": "First scheduled gap-and-go run (legacy pipeline)"
+   },
+   {
+    "date": "2026-07-09",
+    "event": "Last legacy run; trading freeze since"
+   },
+   {
+    "date": "2026-09-27",
+    "event": "K0 approved; G1 candidate set fixed; org repo PRs #1-#11"
+   },
+   {
+    "date": "2026-09-28",
+    "event": "G1 round 1 and 2: 75 trials, no pass; strategy B frozen"
+   },
+   {
+    "date": "2026-09-28",
+    "event": "trading-lab v0.1.0 released (M0 complete)"
+   },
+   {
+    "date": "2026-09-28",
+    "event": "SPEC-0001 approved (v1.0.1); research PRs #1-#6 merged"
+   },
+   {
+    "date": "2026-09-28",
+    "event": "Paper B armed; pre-market routine launched"
+   }
+  ],
+  "legacy": {
+   "total": 30,
+   "orders_placed": 0,
+   "first": "2026-04-17",
+   "last": "2026-07-09",
+   "by_outcome": {
+    "no_trade": 6,
+    "safety_abort": 13,
+    "other": 3,
+    "no_candidates": 8
+   }
+  }
+ },
+ "schema": "trading-lab/snapshot",
+ "schema_version": 2,
+ "run_id": "20260929T214500Z-fixture",
+ "as_of": "2026-09-29T21:45:00+00:00",
+ "redaction": "standard",
+ "withheld": 0
+}

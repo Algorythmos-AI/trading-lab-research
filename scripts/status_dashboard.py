@@ -6,7 +6,7 @@ org checkout, GitHub (gh), launchctl, pmset and disk usage, and writes only unde
 Usage (from the research checkout):
   PYTHONDONTWRITEBYTECODE=1 ~/trading/.venv/bin/python scripts/status_dashboard.py [--no-github] [--with-account]
 
-Writes build/dashboard/:
+Writes var/dashboard/ (git-ignored runtime state):
   docs/<section>.json   the seven documents the published page reads from its database
   index.html            the page with the same data inlined (opens locally, no network needed)
   status.json           all documents together
@@ -119,7 +119,7 @@ def fail(out: Path | None, msg: str, code: int) -> int:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--config", default=str(ROOT / "config/dashboard.yaml"))
-    ap.add_argument("--out", default="build/dashboard")
+    ap.add_argument("--out", default="var/dashboard", help="default: var/dashboard (runtime state, ADR 0002)")
     ap.add_argument("--no-github", action="store_true", help="skip GitHub; those sources come from the cache")
     ap.add_argument("--with-account", action="store_true", help="include a read-only Alpaca paper account snapshot")
     ap.add_argument("--deadline", type=float, default=120.0, help="seconds for the whole run")
@@ -127,7 +127,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         cfg = yaml.safe_load(Path(args.config).read_text())
         deployed = expand(cfg["paths"]["deployed_root"])
-        out = safeio.guard_out_dir(expand(args.out), [deployed])
+        out = safeio.guard_out_dir(expand(args.out), [deployed], allowed=[deployed / "var" / "dashboard"])
     except (OSError, yaml.YAMLError, KeyError, TypeError, PermissionError) as e:
         return fail(None, f"configuration error: {e}", 2)
     out.mkdir(parents=True, exist_ok=True)

@@ -345,3 +345,18 @@ def test_a_child_that_cannot_start_is_a_recorded_failure(jobroot):
     (root / ".venv/bin/python").unlink()
     assert jobs.run_job(_job("pass"), root, alerts=a) == 127
     assert last_runs(tmp / "hb")["routine"]["status"] == "failed" and box[-1]["title"] == "routine failed"
+
+
+def test_dashboard_agent_runs_on_an_interval_and_is_not_a_trading_job():
+    p = plistlib.loads(agents.render(JOBS["dashboard"], Path("/x/trading")))
+    assert p["StartInterval"] == 900 and "StartCalendarInterval" not in p
+    assert JOBS["dashboard"].trading is False and JOBS["dashboard"].fires(syd(2026, 9, 30, 9, 0)) == []
+    assert window.upcoming_starts(syd(2026, 9, 30, 9, 0)) == []
+
+
+def test_collector_may_write_only_var_dashboard_inside_the_live_checkout(tmp_path):
+    from wt.ops.safeio import guard_out_dir
+    live = tmp_path / "trading"
+    assert guard_out_dir(live / "var/dashboard", [live], allowed=[live / "var/dashboard"]) == (live / "var/dashboard").resolve()
+    with pytest.raises(PermissionError):
+        guard_out_dir(live / "var/other", [live], allowed=[live / "var/dashboard"])

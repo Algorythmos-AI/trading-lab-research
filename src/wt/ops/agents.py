@@ -24,19 +24,22 @@ PATH = f"/opt/homebrew/bin:{Path.home()}/.local/bin:/usr/bin:/bin:/usr/sbin:/sbi
 
 
 def render(job: Job, root: Path = ROOT) -> bytes:
-    interval: dict[str, int] = {"Hour": job.hour, "Minute": job.minute}
-    if job.weekday is not None:
-        interval["Weekday"] = job.weekday
     body: dict[str, Any] = {
         "Label": job.label,
         "ProgramArguments": [str(root / "deploy" / "run_job.sh"), job.name],
-        "StartCalendarInterval": interval,
         "EnvironmentVariables": {"PATH": PATH, "HOME": str(Path.home())},
         "StandardOutPath": str(root / "logs" / f"launchd_{job.name}.out"),
         "StandardErrorPath": str(root / "logs" / f"launchd_{job.name}.err"),
         "RunAtLoad": False,
         "ProcessType": "Standard",
     }
+    if job.interval_s:
+        body["StartInterval"] = job.interval_s
+    else:
+        interval: dict[str, int] = {"Hour": job.hour, "Minute": job.minute}
+        if job.weekday is not None:
+            interval["Weekday"] = job.weekday
+        body["StartCalendarInterval"] = interval
     return plistlib.dumps(body, sort_keys=True)
 
 
@@ -57,15 +60,17 @@ def diff(root: Path = ROOT, agent_dir: Path = AGENT_DIR) -> list[str]:
     return out
 
 
-def install(root: Path = ROOT, agent_dir: Path = AGENT_DIR) -> int:
-    from wt.ops.deploy import gate_blockers
-    if blockers := gate_blockers():
-        print("Refusing to reload the trading agents now:\n  " + "\n  ".join(blockers))
-        return 2
+def install(trading: bool, root: Path = ROOT, agent_dir: Path = AGENT_DIR) -> int:
+    """trading=True reloads the trading jobs (gated); trading=False installs only the non-trading ones."""
+    if trading:
+        from wt.ops.deploy import gate_blockers
+        if blockers := gate_blockers():
+            print("Refusing to reload the trading agents now:\n  " + "\n  ".join(blockers))
+            return 2
     agent_dir.mkdir(parents=True, exist_ok=True)
     (root / "logs").mkdir(exist_ok=True)
     uid = os.getuid()
-    for job in JOBS.values():
+    for job in (j for j in JOBS.values() if j.trading == trading):
         p = agent_dir / f"{job.label}.plist"
         p.write_bytes(render(job, root))
         subprocess.run(["launchctl", "bootout", f"gui/{uid}/{job.label}"], capture_output=True)
@@ -79,13 +84,15 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("diff")
     i = sub.add_parser("install")
-    i.add_argument("--trading", action="store_true", required=True)
+    g = i.add_mutually_exclusive_group(required=True)
+    g.add_argument("--trading", action="store_true", help="the com.wt.* trading jobs (gated)")
+    g.add_argument("--dashboard", action="store_true", help="the dashboard publisher (not gated)")
     a = ap.parse_args(argv)
     if a.cmd == "diff":
         d = diff()
         print("\n".join(d) if d else "launchd agents match the code")
         return 0
-    return install()
+    return install(trading=bool(a.trading))
 
 
 if __name__ == "__main__":

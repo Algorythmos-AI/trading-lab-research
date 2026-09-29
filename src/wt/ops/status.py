@@ -581,12 +581,11 @@ def src_host(ctx: Ctx) -> dict:
 def src_account(ctx: Ctx) -> dict:
     if not ctx.with_account:
         raise SourceError("account snapshot not requested (--with-account)")
-    py = ctx.org / ".venv/bin/python"
-    out = ctx.run([str(py if py.exists() else "python3"), "scripts/account.py", "--json"], 30, cwd=ctx.org)
+    from wt.brokers.alpaca_read import AccountReader     # read-only: no order methods exist on it
     try:
-        d = json.loads(out)
-    except json.JSONDecodeError as e:
-        raise SourceError("account.py returned non-JSON") from e
+        d = AccountReader().snapshot()
+    except Exception as e:  # noqa: BLE001 — any broker error is a source failure with a short, safe message
+        raise SourceError(f"paper account unavailable ({e.__class__.__name__})") from e
     keep = ("equity", "last_equity", "cash", "buying_power", "daytrade_count", "pattern_day_trader",
             "status", "trading_blocked", "market_is_open", "next_open", "next_close", "paper")
     flat = {}

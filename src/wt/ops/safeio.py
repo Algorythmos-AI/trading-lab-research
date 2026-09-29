@@ -119,9 +119,13 @@ def confined(path: Path, root: Path) -> Path:
     return p
 
 
-def guard_out_dir(out: Path, forbidden: list[Path]) -> Path:
-    """Refuse an output directory inside any forbidden tree (the live checkout)."""
+def guard_out_dir(out: Path, forbidden: list[Path], allowed: list[Path] | None = None) -> Path:
+    """Refuse an output directory inside any forbidden tree (the live checkout), except the allowed ones."""
     o = out.resolve()
+    for a in allowed or []:
+        ar = a.expanduser().resolve()
+        if o == ar or o.is_relative_to(ar):
+            return o
     for f in forbidden:
         fr = f.expanduser().resolve()
         if o == fr or o.is_relative_to(fr):

@@ -1,0 +1,14 @@
+[
+ {
+  "secret": "test-secret-1",
+  "ts": 1790000000,
+  "body": "{\"a\":1}",
+  "signature": "sha256=32979bb66353106bffeb2691bb51480f653d951153fe3fd1e6ddd492bf11ee85"
+ },
+ {
+  "secret": "another secret",
+  "ts": 1790000123,
+  "body": "{\"collector\":{\"sha\":\"9c1e3c5\",\"branch\":\"feat/dashboard-publisher\",\"dirty\":true,\"exit_code\":0,\"fresh_sources\":12,\"total_sources\":12,\"duration_s\":48.0,\"sources\":{\"research\":{\"ok\":true,\"stale\":false,\"as_of\":\"2026-09-29T04:16:33+00:00\",\"error\":null,\"ms\":88},\"spec\":{\"ok\":true,\"stale\":false,\"as_of\":\"2026-09-29T04:16:33+00:00\",\"error\":null,\"ms\":26},\"cat01\":{\"ok\":true,\"stale\":false,\"as_of\":\"2026-09-29T04:16:33+00:00\",\"error\":null,\"ms\":1},\"deployed\":{\"ok\":true,\"stale\":false,\"as_of\":\"2026-09-29T04:16:33+0",
+  "signature": "sha256=a2e6ff164db65b8c1490a6d3cca18a0d681a86f847a9507b68557321f52c707f"
+ }
+]
