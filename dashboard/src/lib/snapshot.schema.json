@@ -2405,6 +2405,56 @@
             }
           },
           "maxItems": 2000
+        },
+        "history": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "key": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "event": {
+                "enum": [
+                  "fired",
+                  "resolved",
+                  null
+                ]
+              },
+              "title": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 300
+              },
+              "priority": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            }
+          },
+          "maxItems": 2000
         }
       }
     },
@@ -2725,6 +2775,763 @@
               "maxProperties": 200
             }
           }
+        }
+      }
+    },
+    "risk": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "limits": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "label": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "limit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "used": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "used_pct": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "state": {
+                "enum": [
+                  "ok",
+                  "warn",
+                  "at_limit",
+                  "n/a",
+                  null
+                ]
+              },
+              "source": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "source_sha": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              }
+            }
+          },
+          "maxItems": 2000
+        },
+        "controls": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kill": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "latched": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "latch_reason": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "latch_resets": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "last_reset": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "entries_allowed": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          }
+        },
+        "used_today": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "date": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "day_pnl_pct": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "week_pnl_pct": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "drawdown_pct": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "entries": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          }
+        },
+        "sources": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "propertyNames": {
+            "pattern": "^[\\w.:+\\- /|]{1,64}$"
+          },
+          "additionalProperties": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "maxProperties": 200
+        }
+      }
+    },
+    "perf": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "stats": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "n": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "excluded_estimated": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "win_rate": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "avg_win_r": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "avg_loss_r": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "expectancy_r": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "total_r": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "sample_ok": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "ci_low": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "ci_high": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "profit_factor": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "pf_no_losses": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "sharpe": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          }
+        },
+        "sessions": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "min_trades": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "min_sessions": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "max_dd_pct": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "max_dd_r": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "curve": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "date": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "equity_pct": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "cum_r": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "dd_pct": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "dd_r": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          },
+          "maxItems": 2000
+        },
+        "histogram": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "bin": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "count": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            }
+          },
+          "maxItems": 2000
+        },
+        "band": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "reason": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            }
+          }
+        }
+      }
+    },
+    "blotter": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "symbol": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "qty": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "entry": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "exit": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "stop": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "r": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "origin": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "estimated": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "booked": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        }
+      },
+      "maxItems": 2000
+    },
+    "sla": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "days": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "maxItems": 2000
+        },
+        "cells": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "job": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "date": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "status": {
+                "enum": [
+                  "ok",
+                  "refused",
+                  "failed",
+                  "partial",
+                  "missed",
+                  "none",
+                  "n/a",
+                  null
+                ]
+              },
+              "runs": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            }
+          },
+          "maxItems": 2000
+        },
+        "summary": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "job": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "expected": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "ok": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "refused": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "failed": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "missed": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "ok_pct": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          },
+          "maxItems": 2000
+        }
+      }
+    },
+    "digest": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "since": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
+        "items": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "key": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "label": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "prev": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "now": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "changed": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              }
+            }
+          },
+          "maxItems": 2000
+        }
+      }
+    },
+    "audit": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "chain_ok": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "chain_bad_seq": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "events": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "kind": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "source": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "detail": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 300
+              }
+            }
+          },
+          "maxItems": 2000
         }
       }
     }

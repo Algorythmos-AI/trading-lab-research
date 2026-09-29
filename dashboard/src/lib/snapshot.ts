@@ -9,13 +9,13 @@ export type SnapshotResult =
   | { status: "missing" }
   | { status: "error" };
 
-/** Fixture mode serves the anonymized test snapshot. It is refused on production deployments. */
+/** Fixture mode serves the synthetic v3 test snapshot. It is refused on production deployments. */
 export function fixtureMode(): boolean {
   return process.env.DASHBOARD_FIXTURE === "1" && process.env.VERCEL_ENV !== "production";
 }
 
 async function loadFixture(): Promise<Snapshot> {
-  const mod = await import("../../test/fixtures/snapshot.json");
+  const mod = await import("../../test/fixtures/snapshot.v3.json");
   return (mod.default ?? mod) as unknown as Snapshot;
 }
 

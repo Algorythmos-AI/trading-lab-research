@@ -1,9 +1,15 @@
 import fixtureJson from "./fixtures/snapshot.json";
+import fixtureV3Json from "./fixtures/snapshot.v3.json";
 import type { Snapshot } from "../src/lib/types";
 
-/** A fresh deep copy of the anonymized fixture snapshot. */
+/** A fresh deep copy of the anonymized v2 fixture snapshot (what an un-redeployed host still publishes). */
 export function fixture(): Snapshot {
   return structuredClone(fixtureJson) as unknown as Snapshot;
+}
+
+/** The v2 fixture plus every v3 section, from synthetic data (scripts/gen_fixture.py). */
+export function fixtureV3(): Snapshot {
+  return structuredClone(fixtureV3Json) as unknown as Snapshot;
 }
 
 /** A minimal, fully healthy snapshot for rule tests. */
