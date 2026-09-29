@@ -74,6 +74,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("MODE", "paper")
     monkeypatch.setattr(runner_b, "LIVE", tmp_path / "live")
     monkeypatch.setattr(runner_b, "KILL", tmp_path / "KILL")
+    monkeypatch.setattr(runner_b, "MIN_FREE_GB", 0.0)          # the host's free disk must not decide these tests
     monkeypatch.setattr(runner_b.events, "coverage_ok", lambda d: True)
     monkeypatch.setattr(runner_b.events, "policy", lambda now: ("normal", None))
     fired = {"done": False}
@@ -190,3 +191,12 @@ def test_refusals_are_journaled_and_do_not_raise(env, monkeypatch):
     clk = Clock(at(8, 0))
     runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep)
     assert journal(env)[-1]["event"] == "refuse_to_arm" and b.placed == []
+
+
+def test_disk_floor_refuses_to_arm(env, monkeypatch):
+    monkeypatch.setattr(runner_b, "MIN_FREE_GB", 1e9)            # more than any disk has
+    b = SimBroker()
+    clk = Clock(at(8, 0))
+    runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep)
+    last = journal(env)[-1]
+    assert last["event"] == "refuse_to_arm" and "free disk" in last["reason"] and b.placed == []
