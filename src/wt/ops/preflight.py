@@ -7,16 +7,16 @@ from __future__ import annotations
 
 import hashlib
 import os
-import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
 from wt.core.config import ROOT
+from wt.ops import thresholds
 
 CODE_PATHS = ("src", "scripts", "deploy", "config", "requirements.lock.txt", "pyproject.toml", "Makefile")
 LEGACY_RUNTIME = ("research/forward/forward_trades.jsonl", "research/forward/routine")
-MIN_FREE_GB = 3.0
+MIN_FREE_GB = thresholds.DISK_FLOOR_GB
 LOCK_STAMP = ".venv/.wt-lock.sha256"
 
 
@@ -70,7 +70,7 @@ def check_venv(root: Path) -> Check:
 
 
 def check_disk(root: Path, min_free_gb: float = MIN_FREE_GB) -> Check:
-    free = shutil.disk_usage(root).free / 1e9
+    free = thresholds.disk_free_gb(root)
     return Check("free disk", free >= min_free_gb, f"{free:.1f} GB free (floor {min_free_gb:.0f} GB)")
 
 

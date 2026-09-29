@@ -15,7 +15,6 @@ import datetime as dt
 import io
 import json
 import re
-import shutil
 import time
 from collections import Counter, defaultdict
 from collections.abc import Callable
@@ -26,7 +25,8 @@ from zoneinfo import ZoneInfo
 
 import yaml
 
-from wt.ops import safeio
+from wt.analytics import g2
+from wt.ops import safeio, thresholds
 from wt.ops.safeio import SourceError
 
 SYD = ZoneInfo("Australia/Sydney")
@@ -37,7 +37,6 @@ DOC_NAMES = ("meta", "overview", "research", "spec", "platform", "ops", "history
 DOC_CAP_BYTES = 200 * 1024
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCHEMA_PATH = Path(__file__).with_name("status.schema.json")
-G2_MIN_TRADES, G2_MIN_SESSIONS = 50, 30          # same thresholds as scripts/weekly_scorecard.py
 
 
 # ---------------------------------------------------------------- context and source wrapper
@@ -441,7 +440,7 @@ def src_routine(ctx: Ctx) -> dict:
 def src_paper(ctx: Ctx) -> dict:
     rows, bad = safeio.read_jsonl(ctx.deployed / "data/live/journal.jsonl")
     events = Counter(str(x.get("event")) for x in rows)
-    closed = [x for x in rows if x.get("event") == "trade_closed"]
+    closed = g2.trades(rows)                     # once per trade id; orphans excluded
     armed = sorted({str(x.get("day")) for x in rows if x.get("event") == "armed"})
     equity = None
     for x in reversed(rows):
@@ -453,14 +452,15 @@ def src_paper(ctx: Ctx) -> dict:
     rs = [float(x["R"]) for x in closed if isinstance(x.get("R"), int | float)]
     recent = [{"ts": x.get("ts"), "event": x.get("event"),
                "detail": ", ".join(str(b) for b in x.get("blockers", []))[:160] if x.get("blockers") else
-               (str(x.get("error"))[:160] if x.get("error") else (x.get("day") or ""))}
+               (str(x.get("error"))[:160] if x.get("error") else (x.get("day") or "")),
+               # the publisher reduces these to codes (wt.ops.publish._paper); the local page keeps the detail
+               "raw": {k: x.get(k) for k in ("event", "blockers", "error", "reason", "day") if x.get(k) is not None}}
               for x in rows[-12:]]
     logs = sorted((ctx.deployed / "logs").glob("paper_b_*.log"))
     return {"events": dict(events), "bad_lines": bad, "armed_sessions": len(armed), "last_armed": armed[-1] if armed else None,
             "trades": len(closed), "total_r": round(sum(rs), 3) if rs else 0.0,
             "mean_r": round(sum(rs) / len(rs), 3) if rs else None, "virtual": equity, "recent": recent,
-            "g2": {"trades": len(closed), "trades_needed": G2_MIN_TRADES, "sessions": len(armed),
-                   "sessions_needed": G2_MIN_SESSIONS},
+            "g2": g2.summary(rows),
             "log": _log_digest(logs[-1]) if logs else None}
 
 
@@ -565,15 +565,14 @@ def src_host(ctx: Ctx) -> dict:
         swap = parse_swapusage(ctx.run(["sysctl", "vm.swapusage"], 10))
     except SourceError:
         swap = None
-    usage = shutil.disk_usage("/")
-    floor = float(ctx.cfg.get("host", {}).get("disk_floor_gb", 3.0))
+    free_gb, total_gb = thresholds.disk_free_gb(ctx.deployed), thresholds.disk_total_gb(ctx.deployed)
     today_syd = ctx.now.astimezone(SYD).date()
     return {"jobs": [{**j, **jobs.get(j["label"], {})} for j in jobs_cfg], "jobs_error": jobs_error,
             "wakes": wakes, "wake_error": wake_error,
             "wake_coverage": wake_coverage(wakes, ctx.cfg.get("host", {}).get("wake_needed", [])),
-            "disk_free_gb": round(usage.free / 2**30, 2), "disk_total_gb": round(usage.total / 2**30, 1),
-            "disk_floor_gb": floor, "old_root_exists": ctx.old.exists(), "swap": swap,
-            "swap_warn_pct": float(ctx.cfg.get("host", {}).get("swap_warn_pct", 85)),
+            "disk_free_gb": round(free_gb, 2), "disk_total_gb": round(total_gb, 1),
+            "disk_floor_gb": thresholds.DISK_FLOOR_GB, "disk_target_gb": thresholds.DISK_TARGET_GB,
+            "old_root_exists": ctx.old.exists(), "swap": swap, "swap_warn_pct": thresholds.SWAP_WARN_PCT,
             "schedule": schedule_check(jobs_cfg, today_syd, 10),
             "dst": next_dst_changes(ctx.now, {"Sydney": SYD, "New York": ET})}
 
@@ -597,8 +596,19 @@ def src_account(ctx: Ctx) -> dict:
         elif k in keep:
             flat[k] = v
     pos = d.get("positions") if isinstance(d, dict) else None
+    from wt.risk.mandate import legacy_positions
+    from wt.risk.pretrade import load_limits
+    allow, legacy = load_limits("B").allowlist, legacy_positions()
+
+    def qty_of(p: dict) -> int:
+        try:
+            return int(float(p.get("qty") or 0))
+        except (TypeError, ValueError):
+            return 0
     flat["positions"] = [{"symbol": p.get("symbol"), "qty": p.get("qty"), "market_value": p.get("market_value"),
-                          "unrealized_pl": p.get("unrealized_pl")} for p in (pos or []) if isinstance(p, dict)][:20]
+                          "unrealized_pl": p.get("unrealized_pl"), "in_mandate": p.get("symbol") in allow,
+                          "legacy": legacy.get(str(p.get("symbol")).upper()) == qty_of(p)}
+                         for p in (pos or []) if isinstance(p, dict)][:20]
     return flat
 
 
@@ -638,15 +648,16 @@ def src_org(ctx: Ctx) -> dict:
     for m in milestones:
         m["p0_open"] = sum(1 for x in open_items if x["milestone"] == m["key"] and x["priority"] == "P0")
         m["by_status"] = dict(tab.get(m["key"], {}))
-    rel = ctx.gh_json(["release", "list", "-R", repo, "--json", "tagName,name,publishedAt,isLatest", "--limit", "5"]) or []
-    runs = ctx.gh_json(["run", "list", "-R", repo, "--limit", "12", "--json", "workflowName,conclusion,status,createdAt,headBranch"]) or []
+    ci_repo = ctx.cfg["repos"].get("research", repo)        # the repo whose code runs: its CI, releases, rules
+    rel = ctx.gh_json(["release", "list", "-R", ci_repo, "--json", "tagName,name,publishedAt,isLatest", "--limit", "5"]) or []
+    runs = ctx.gh_json(["run", "list", "-R", ci_repo, "--limit", "12", "--json", "workflowName,conclusion,status,createdAt,headBranch"]) or []
     try:
-        rules = ctx.gh_json(["api", f"repos/{repo}/rules/branches/main"]) or []
+        rules = ctx.gh_json(["api", f"repos/{ci_repo}/rules/branches/main"]) or []
         rule_types = sorted({r.get("type") for r in rules if isinstance(r, dict)})
     except SourceError:
         rule_types = []
     open_items.sort(key=lambda x: (x["milestone"], x["priority"], x["number"] or 0))
-    return {"repo": repo, "milestones": milestones, "items_total": len(items),
+    return {"repo": repo, "ci_repo": ci_repo, "milestones": milestones, "items_total": len(items),
             "items_done": sum(1 for it in items if it.get("status") == "Done"),
             "priority": [{"priority": p, "state": s, "count": c} for (p, s), c in sorted(prio.items())],
             "open_items": open_items, "releases": rel,

@@ -45,6 +45,12 @@
         "null"
       ]
     },
+    "truncated": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
     "collector": {
       "type": [
         "object",
@@ -767,6 +773,38 @@
                 "integer",
                 "null"
               ]
+            },
+            "in_force": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "in_force_by": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "proposed": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "proposed_by": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "g1_failed_at": {
+              "type": [
+                "integer",
+                "null"
+              ]
             }
           }
         },
@@ -962,6 +1000,20 @@
       ],
       "additionalProperties": false,
       "properties": {
+        "backlog_repo": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
+        "ci_repo": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
         "milestones": {
           "type": [
             "array",
@@ -1593,6 +1645,43 @@
                     "integer",
                     "null"
                   ]
+                },
+                "armed_sessions": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "incident_free_streak": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "incident_free_needed": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "agreement_level": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 200
+                },
+                "agreement_days": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "agreement_agree": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
                 }
               }
             },
@@ -1869,6 +1958,12 @@
                 "null"
               ]
             },
+            "disk_target_gb": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
             "swap_warn_pct": {
               "type": [
                 "number",
@@ -2118,6 +2213,18 @@
                   "unrealized_pl": {
                     "type": [
                       "number",
+                      "null"
+                    ]
+                  },
+                  "in_mandate": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "legacy": {
+                    "type": [
+                      "boolean",
                       "null"
                     ]
                   }

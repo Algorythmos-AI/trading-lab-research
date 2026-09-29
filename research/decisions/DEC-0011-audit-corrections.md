@@ -24,11 +24,15 @@ bugs the tests did not cover.
 
 The other data findings are also corrected in code; they change no recorded conclusion on their own:
 - update chunks overriding later rebuilds;
-- a frozen forward universe;
-- the EDGAR `known_from` date;
 - GG-4 and 1-minute ORB searches that stop instead of continuing;
 - the stagnation stop firing a minute late;
 - non-atomic caches.
+
+Known and **not yet corrected** (a 2026-09-29 re-audit found an earlier draft of this record listed them as fixed):
+- the EDGAR `known_from` date is still the period end plus 5 days, not the filing date (`wt.data.edgar`); the fix
+  needs a fresh download and gets its own decision record;
+- the forward universe is still read from a static asset list (no `first_seen` refresh).
+Neither feeds strategy B or the re-runs below.
 
 ## Decision (proposed)
 

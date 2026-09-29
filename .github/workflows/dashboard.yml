@@ -49,11 +49,10 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
-      - name: Contract is current (schema generated from the Python allowlist)
-        working-directory: .
+      - name: Contract is current (TS types regenerate from the committed schema with no diff)
         run: |
-          python3 -c "import json,sys; json.load(open('dashboard/src/lib/snapshot.schema.json'))"
-          git diff --exit-code -- dashboard/src/lib/snapshot.schema.json
+          pnpm gen:types
+          git diff --exit-code -- src/lib/snapshot.types.ts
       - run: pnpm build
         env:
           DASHBOARD_FIXTURE: "1"

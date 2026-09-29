@@ -13,7 +13,8 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
                  src/wt/ops/agents.py src/wt/ops/deploy.py src/wt/core/safety.py src/wt/core/ids.py \
                  src/wt/brokers/base.py src/wt/brokers/sim.py src/wt/brokers/alpaca_paper.py src/wt/risk/pretrade.py \
                  src/wt/oms/manager.py src/wt/risk/virtual_account.py src/wt/ops/publish.py src/wt/brokers/alpaca_read.py src/wt/ops/evidence.py \
-                 src/wt/research/manifest.py src/wt/research/method.py src/wt/research/trials.py
+                 src/wt/research/manifest.py src/wt/research/method.py src/wt/research/trials.py \
+                 src/wt/ops/thresholds.py src/wt/analytics/g2.py src/wt/risk/mandate.py
 JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
@@ -80,8 +81,10 @@ publish: ## Collect, sanitize and publish the dashboard snapshot now (DRY_RUN=1 
 publish-verify: ## Publish now, then read /api/health back and check it serves this snapshot
 	$(PY) -m wt.ops.publish --verify
 
-schema: ## Regenerate dashboard/src/lib/snapshot.schema.json from wt.ops.publish.ALLOW
+schema: ## Regenerate the dashboard contract: snapshot.schema.json (from ALLOW), thresholds.gen.ts, and the TS types
 	$(PY) -c "import json; from wt.ops.publish import to_schema, SCHEMA_PATH; SCHEMA_PATH.parent.mkdir(parents=True, exist_ok=True); SCHEMA_PATH.write_text(json.dumps(to_schema(), indent=2) + '\\n')"
+	$(PY) scripts/gen_thresholds_ts.py
+	@if [ -d dashboard/node_modules ]; then cd dashboard && pnpm -s gen:types; else echo "dashboard/node_modules missing: run pnpm install, then make schema again for the TS types"; fi
 
 kill: ## Stop new paper-B entries (exits keep being managed): make kill REASON="..."
 	@printf '%s\n' "$${REASON:-paused by make kill} ($$(date '+%Y-%m-%d %H:%M %Z'))" > KILL && echo "KILL switch ON" && cat KILL

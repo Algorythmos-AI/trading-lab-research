@@ -1,6 +1,7 @@
 import { freshness, type Freshness } from "./freshness";
 import { num } from "./format";
 import { jobName, sortJobKeys } from "./labels";
+import { DISK_FLOOR_GB, DISK_TARGET_GB } from "./thresholds.gen";
 import { entries, list, type Snapshot } from "./types";
 
 export type HealthLevel = "green" | "amber" | "red";
@@ -17,7 +18,12 @@ export interface Health {
   freshness: Freshness;
 }
 
-export const RED_ALERT_PREFIXES = ["paper-b:not-flat", "paper-b:unknown-position", "paper-b:latched"];
+export const RED_ALERT_PREFIXES = [
+  "paper-b:not-flat",
+  "paper-b:unknown-position",
+  "paper-b:latched",
+  "paper-b:close-unknown",
+];
 const PROBLEM_JOB_STATUSES = new Set(["failed", "refused", "timeout"]);
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -49,6 +55,18 @@ export function computeHealth(s: Snapshot | null, now: Date): Health {
   if (s.ops?.account?.trading_blocked === true) {
     red("trading-blocked", "The paper broker account reports that trading is blocked.");
   }
+  for (const p of list(s.ops?.account?.positions)) {
+    if (p.in_mandate === false && p.legacy !== true && p.qty) {
+      red(
+        `mandate:${p.symbol ?? "?"}`,
+        `The paper account holds ${p.symbol ?? "a symbol"} outside strategy B's mandate. Close it in the Alpaca UI or record it as legacy.`,
+      );
+    }
+  }
+  const host0 = s.ops?.host;
+  if (isNum(host0?.disk_free_gb) && host0.disk_free_gb < DISK_FLOOR_GB) {
+    red("disk-floor", `Disk free (${num(host0.disk_free_gb, 1)} GB) is below the ${num(DISK_FLOOR_GB, 0)} GB floor: tonight's jobs refuse.`);
+  }
   if (f.state === "stopped") {
     red("stopped", `No update for ${age} min during a trading window. The Mac or its jobs may have stopped.`);
   }
@@ -70,8 +88,11 @@ export function computeHealth(s: Snapshot | null, now: Date): Health {
     amber("collector", "The status collector finished with errors (exit 1); some sections may be stale.");
   }
   const host = s.ops?.host;
-  if (isNum(host?.disk_free_gb) && isNum(host?.disk_floor_gb) && host.disk_free_gb < host.disk_floor_gb) {
-    amber("disk", `Disk free (${num(host.disk_free_gb, 1)} GB) is below the ${num(host.disk_floor_gb, 1)} GB floor.`);
+  if (isNum(host?.disk_free_gb) && host.disk_free_gb >= DISK_FLOOR_GB && host.disk_free_gb < DISK_TARGET_GB) {
+    amber("disk", `Disk free (${num(host.disk_free_gb, 1)} GB) is under the ${num(DISK_TARGET_GB, 0)} GB to keep free.`);
+  }
+  if (s.collector?.sources?.account?.stale === true || s.collector?.sources?.account?.ok === false) {
+    amber("account-stale", "The paper account could not be read in this snapshot: positions and balances may be out of date.");
   }
   const swapPct = host?.swap?.used_pct;
   if (isNum(swapPct) && isNum(host?.swap_warn_pct) && swapPct >= host.swap_warn_pct) {

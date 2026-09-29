@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { duration, newYork, num, pct, shortDate, shortSha, sydney, txt } from "@/lib/format";
 import { humanize, jobKey, jobName, jobTone, sortJobKeys } from "@/lib/labels";
 import { loadSnapshot } from "@/lib/snapshot";
+import { DISK_FLOOR_GB, DISK_TARGET_GB } from "@/lib/thresholds.gen";
 import { entries, list, type LogInfo, type Snapshot } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -142,11 +143,10 @@ function PreflightPanel({ s }: { s: Snapshot }) {
 function HostPanel({ s }: { s: Snapshot }) {
   const h = s.ops?.host;
   const free = h?.disk_free_gb;
-  const floor = h?.disk_floor_gb;
   const total = h?.disk_total_gb;
   const swap = h?.swap?.used_pct;
   const warn = h?.swap_warn_pct;
-  const diskLow = typeof free === "number" && typeof floor === "number" && free < floor;
+  const diskTone = typeof free !== "number" ? "neutral" : free < DISK_FLOOR_GB ? "bad" : free < DISK_TARGET_GB ? "warn" : "good";
   const swapHigh = typeof swap === "number" && typeof warn === "number" && swap >= warn;
   const jobs = list(h?.jobs);
   const wake = list(h?.wake_coverage);
@@ -160,10 +160,10 @@ function HostPanel({ s }: { s: Snapshot }) {
         <Meter
           label="Disk free"
           value={free}
-          max={typeof total === "number" ? Math.min(total, Math.max(20, (floor ?? 0) * 4)) : undefined}
-          tone={diskLow ? "bad" : typeof free === "number" && typeof floor === "number" && free < floor * 1.5 ? "warn" : "good"}
-          threshold={floor}
-          thresholdLabel={typeof floor === "number" ? `Floor ${num(floor, 1)} GB (marked)` : undefined}
+          max={typeof total === "number" ? Math.min(total, Math.max(20, DISK_TARGET_GB * 2)) : undefined}
+          tone={diskTone}
+          threshold={DISK_FLOOR_GB}
+          thresholdLabel={`Jobs refuse below ${num(DISK_FLOOR_GB, 0)} GB (marked); keep ${num(DISK_TARGET_GB, 0)} GB free`}
           valueText={`${num(free, 1)} GB`}
         />
         <Meter

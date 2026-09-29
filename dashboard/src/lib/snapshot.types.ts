@@ -7,6 +7,7 @@ export interface Snapshot {
   as_of: string | null;
   redaction?: string | null;
   withheld?: number | null;
+  truncated?: number | null;
   collector?: {
     sha?: string | null;
     branch?: string | null;
@@ -161,6 +162,11 @@ export interface Snapshot {
     trials?: {
       used?: number | null;
       budget_if_round3?: number | null;
+      in_force?: number | null;
+      in_force_by?: string | null;
+      proposed?: number | null;
+      proposed_by?: string | null;
+      g1_failed_at?: number | null;
     } | null;
     dec0010_status?: string | null;
     lessons_count?: number | null;
@@ -205,6 +211,8 @@ export interface Snapshot {
       | null;
   } | null;
   platform?: {
+    backlog_repo?: string | null;
+    ci_repo?: string | null;
     /**
      * @maxItems 2000
      */
@@ -340,6 +348,12 @@ export interface Snapshot {
         trades_needed?: number | null;
         sessions?: number | null;
         sessions_needed?: number | null;
+        armed_sessions?: number | null;
+        incident_free_streak?: number | null;
+        incident_free_needed?: number | null;
+        agreement_level?: string | null;
+        agreement_days?: number | null;
+        agreement_agree?: number | null;
       } | null;
       log?: {
         file?: string | null;
@@ -395,6 +409,7 @@ export interface Snapshot {
       disk_free_gb?: number | null;
       disk_total_gb?: number | null;
       disk_floor_gb?: number | null;
+      disk_target_gb?: number | null;
       swap_warn_pct?: number | null;
       swap?: {
         total_gb?: number | null;
@@ -448,6 +463,8 @@ export interface Snapshot {
             qty?: number | null;
             market_value?: number | null;
             unrealized_pl?: number | null;
+            in_mandate?: boolean | null;
+            legacy?: boolean | null;
           } | null)[]
         | null;
     } | null;
