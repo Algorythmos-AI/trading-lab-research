@@ -102,3 +102,46 @@ def test_an_unlatch_removes_the_sentinel_only_after_the_account_says_so(tmp_path
 
 def test_cli_usage():
     assert control.main(["bogus"]) == 2
+
+
+def test_a_reset_with_nothing_latched_records_nothing(tmp_path):
+    VirtualAccount().save(tmp_path / "va.json")
+    code, msg = control.reset_latch("just checking", va_path=tmp_path / "va.json", lock_root=tmp_path / "l")
+    assert code == 0 and "not latched" in msg
+    assert VirtualAccount.load(tmp_path / "va.json").latch_history == []
+
+
+def test_a_reset_of_a_sentinel_only_latch_keeps_the_sentinels_reason(tmp_path):
+    path = tmp_path / "va.json"
+    VirtualAccount().save(path)
+    (tmp_path / "va.json.latch").write_text("daily loss limit -2%")          # the account write had failed
+    with pytest.raises(StateError):
+        VirtualAccount.load(path)
+    assert control.reset_latch("reviewed", va_path=path, lock_root=tmp_path / "l")[0] == 0
+    got = VirtualAccount.load(path)
+    assert got.latch_history[-1]["reason"] == "daily loss limit -2%" and not got.latched
+
+
+def test_the_sentinel_exists_even_when_its_reason_cant_be_written(tmp_path, monkeypatch):
+    """On a full disk the empty sentinel (no data blocks) still latches; only the reason text is lost."""
+    import wt.risk.virtual_account as vam
+    path = tmp_path / "va.json"
+    VirtualAccount().save(path)
+    va = VirtualAccount.load(path)
+    va.latch("weekly loss limit -4%")
+
+    def full(p, text):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(vam, "_durable_write", full)
+    with pytest.raises(OSError):
+        va.save(path)
+    assert (tmp_path / "va.json.latch").exists()
+    with pytest.raises(StateError):
+        VirtualAccount.load(path)
+
+
+def test_control_actions_release_the_lock_afterwards(tmp_path):
+    (tmp_path / "KILL").write_text("x")
+    assert control.unkill(root=tmp_path, lock_root=tmp_path / "locks", audit_log=tmp_path / "a.jsonl")[0] == 0
+    assert not locks.is_held("paper-b", tmp_path / "locks")
