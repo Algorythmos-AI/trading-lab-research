@@ -60,8 +60,8 @@ Vercel (trading-lab-dashboard) ◄─────┘  private Blob storage; page
 | `make gate` | Is it safe to change the live checkout? (no job running, outside the trading night) |
 | `make deploy` | Gate, tag, pull `main`, migrate state, sync the venv, smoke test. Rolls back by itself on failure |
 | `make rollback TAG=runtime-YYYYMMDD-N` | Back to an earlier deploy |
-| `make kill REASON="…"` / `make unkill` | Stop or allow new paper-B entries. Exits keep being managed |
-| `make reset-latch REASON="…"` | Clear the virtual account's loss latch. Owner only; the reset is recorded |
+| `make kill REASON="…"` / `make unkill` | Stop or allow new paper-B entries. Exits keep being managed. `unkill` is refused while paper B is running |
+| `make reset-latch REASON="…"` | Clear the virtual account's loss latch. Owner only; refused while paper B is running; the reset is recorded |
 | `make install-trading-agents` | (Re)install the launchd jobs. Owner only; gated |
 | `make publish DRY_RUN=1` | Build the dashboard snapshot without sending it |
 | `make ci` | Lint, type-check and test, as CI does |
