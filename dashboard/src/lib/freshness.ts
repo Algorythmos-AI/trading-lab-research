@@ -4,6 +4,10 @@ import type { ExpectedWindow } from "./types";
 export const LATE_MIN = 35;
 export const STOPPED_MIN = 90;
 export const OFFLINE_HOURS = 48;
+/** Assumed window on ET weekdays once the host's published windows have run out: 07:30 ET (the routine starts)
+ * to 18:00 ET (the 16:00 close + 2 h). */
+export const ASSUMED_START_ET_MIN = 7 * 60 + 30;
+export const ASSUMED_END_ET_MIN = 18 * 60;
 
 export type FreshState = "fresh" | "late" | "stopped" | "asleep" | "unknown";
 
@@ -15,6 +19,8 @@ export interface Freshness {
   window: ExpectedWindow | null;
   /** True when every expected window has ended (or none were announced). */
   allWindowsEnded: boolean;
+  /** True when `window` is an assumed ET weekday window, not one the host published. */
+  assumed: boolean;
 }
 
 export function parseTime(s: string | null | undefined): number | null {
@@ -45,23 +51,64 @@ export function allWindowsEnded(
   });
 }
 
+/** America/New_York's UTC offset in minutes at `ms` (e.g. -240), or null without time-zone data. */
+export function etOffsetMin(ms: number): number | null {
+  try {
+    const name = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", timeZoneName: "shortOffset" })
+      .formatToParts(new Date(ms))
+      .find((p) => p.type === "timeZoneName")?.value;
+    const m = /^GMT([+-])(\d{1,2})(?::(\d{2}))?$/.exec(name ?? "");
+    if (!m) return null;
+    const v = Number(m[2]) * 60 + Number(m[3] ?? 0);
+    return m[1] === "-" ? -v : v;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The window a trading host would be expected in on an ET weekday, used only after every published window has
+ * ended: a host silent for longer than its published horizon must still page on trading days (plan R8).
+ * Holidays can't be known here, so a long outage may also page on one. US clocks change on Sundays at 02:00,
+ * so the offset is constant through any weekday window.
+ */
+export function assumedWindow(nowMs: number): ExpectedWindow | null {
+  const off = etOffsetMin(nowMs);
+  if (off === null) return null;
+  const wall = new Date(nowMs + off * 60_000); // its UTC fields read as New York wall time
+  const dow = wall.getUTCDay();
+  if (dow === 0 || dow === 6) return null;
+  const mins = wall.getUTCHours() * 60 + wall.getUTCMinutes();
+  if (mins < ASSUMED_START_ET_MIN || mins > ASSUMED_END_ET_MIN) return null;
+  const ymd = wall.toISOString().slice(0, 10);
+  const midnightUtc = Date.parse(`${ymd}T00:00:00Z`) - off * 60_000;
+  return {
+    session: ymd,
+    start: new Date(midnightUtc + ASSUMED_START_ET_MIN * 60_000).toISOString(),
+    end: new Date(midnightUtc + ASSUMED_END_ET_MIN * 60_000).toISOString(),
+  };
+}
+
 export function freshness(
   asOf: string | null | undefined,
   windows: readonly (ExpectedWindow | null | undefined)[] | null | undefined,
   nowMs: number,
 ): Freshness {
   const t = parseTime(asOf);
-  const window = activeWindow(windows, nowMs);
-  const inWindow = window !== null;
+  const published = activeWindow(windows, nowMs);
   const ended = allWindowsEnded(windows, nowMs);
-  if (t === null) return { state: "unknown", ageMin: null, inWindow, window, allWindowsEnded: ended };
+  const fallback = published === null && ended ? assumedWindow(nowMs) : null;
+  const window = published ?? fallback;
+  const inWindow = window !== null;
+  const assumed = fallback !== null;
+  if (t === null) return { state: "unknown", ageMin: null, inWindow, window, allWindowsEnded: ended, assumed };
   const ageMin = Math.max(0, (nowMs - t) / 60_000);
   let state: FreshState = "fresh";
   if (ageMin > LATE_MIN) {
     if (!inWindow) state = "asleep";
     else state = ageMin > STOPPED_MIN ? "stopped" : "late";
   }
-  return { state, ageMin, inWindow, window, allWindowsEnded: ended };
+  return { state, ageMin, inWindow, window, allWindowsEnded: ended, assumed };
 }
 
 export function describeAge(ageMin: number): string {
