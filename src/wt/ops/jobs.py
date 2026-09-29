@@ -200,6 +200,18 @@ def run_followers(job: Job, root: Path, alerts: Alerts, log: Log) -> None:
         run_job(JOBS["weekly"], root, alerts=alerts)
 
 
+def publish_evidence(root: Path, log: Log, alerts: Alerts) -> None:
+    """After the weekly scorecard: open the week's evidence PR (wt.ops.evidence). Never fails the job."""
+    try:
+        r = subprocess.run([str(root / PY), "-m", "wt.ops.evidence"], cwd=root, capture_output=True, text=True,
+                           timeout=600, env={**os.environ, "PYTHONPATH": "src"})
+        log(f"evidence: {(r.stdout or r.stderr).strip()[-300:]}")
+        if r.returncode != 0:
+            alerts.once_per_day("evidence", "Weekly evidence PR failed", "See the scorecard log.", 2)
+    except (OSError, subprocess.SubprocessError) as e:
+        log(f"evidence: could not run ({e.__class__.__name__})")
+
+
 def refuse(job: Job, reason: str, alerts: Alerts, log: Log, hb: Heartbeat | None = None) -> int:
     log(f"REFUSED {job.name}: {reason}")
     alerts.once_per_day(f"refuse:{job.name}", f"{job.name} refused to run", reason, 3)
@@ -255,6 +267,8 @@ def run_job(job: Job, root: Path = ROOT, preflight_only: bool = False, alerts: A
             if job.name == "forward" and (line := forward_summary()):
                 paused = " Paper B entries are paused (KILL file present)." if KILL.exists() else ""
                 alerts.once_per_day("summary", "Trading Lab daily summary", line + paused, 2)
+            if job.name == "weekly":
+                publish_evidence(root, log, alerts)
             hb.finish("ok", 0)
         else:
             what = "was stopped at its deadline" if killed else f"exited with code {code}"
