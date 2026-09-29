@@ -1,0 +1,11 @@
+# Global trial count for the Deflated Sharpe Ratio. Every configuration evaluated on development data counts,
+# whatever experiment ran it (DEC-0005; the registry is research/experiments/). Read by wt.research.trials.
+#
+# Append-only: one row per decision record that changed the count. global_trial_count() returns the newest row whose
+# status is `accepted`. A `proposed` row takes effect in the PR that records its decision as accepted: flip the row's
+# status in that PR (tests/unit/test_trials.py fails while a row and its record disagree).
+history:
+  - {decision: DEC-0007, total: 65, status: accepted}   # G1: EXP-0005b 12, EXP-0007 18, EXP-0008 35
+  - {decision: DEC-0009, total: 75, status: accepted}   # round 2: 10 trials
+  - {decision: DEC-0010, total: 85, status: accepted}   # round 3: 10 trials (SPEC-0001 evaluation.global_trials_after)
+  - {decision: DEC-0011, total: 87, status: proposed}   # the two legacy forward strategies re-specified (new trials)
