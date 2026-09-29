@@ -48,6 +48,7 @@ SCHEMA_VERSION = 3                        # v3 only adds optional keys: every v2
 SCHEMA_PATH = ROOT / "dashboard" / "src" / "lib" / "snapshot.schema.json"
 OUT = STATE_DIR / "dashboard"
 MAX_BODY = 3_000_000                      # Vercel's request limit is 4.5 MB
+WINDOW_HORIZON_H = 14 * 24                # the watchdog pages in these windows; after them it assumes weekdays (R8)
 BUDGET = 300_000                          # what a snapshot should stay under; over it prints a warning (not a failure)
 TEXT_MAX, SHORT_MAX = 300, 200
 LIST_MAX = 2000
@@ -499,7 +500,7 @@ def extras(now: dt.datetime, root: Path = ROOT) -> dict[str, Any]:
                            "at": deploys[-1].stem, "smoke_ok": d.get("smoke_ok")}
         except (OSError, json.JSONDecodeError):
             pass
-    sessions, _ = load_sessions(now, back=20)
+    sessions, _ = load_sessions(now, back=20, ahead=16)      # 14 days of SLA behind, 14 days of windows ahead
     try:
         views = v3_views(now, runs=runs, sessions=sessions, kill=kill.exists(), root=root)
     except Exception as e:  # noqa: BLE001 — a new view must never stop the publish the watchdog depends on
@@ -521,7 +522,7 @@ def extras(now: dt.datetime, root: Path = ROOT) -> dict[str, Any]:
                  "reason": None},              # the KILL file's note is the owner's free text: it stays local
         "deploy": last_deploy,
         "preflight": [{"name": c.name, "ok": c.ok, "detail": c.detail} for c in preflight.run_checks(root)],
-        "expected_windows": expected_windows(now, sessions),
+        "expected_windows": expected_windows(now, sessions, hours=WINDOW_HORIZON_H),
         "series": {"forward": forward_series(), "paper": paper_series()},
         **views,
     }
