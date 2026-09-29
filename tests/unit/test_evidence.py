@@ -36,3 +36,16 @@ def test_plan_copies_only_new_files_and_never_overwrites(tmp_path):
 def test_run_is_skipped_without_a_token(monkeypatch, capsys):
     monkeypatch.delenv("GH_TOKEN", raising=False)
     assert evidence.run() == 0 and "skipped" in capsys.readouterr().out
+
+
+def test_evidence_never_pushes_unless_the_repo_is_confirmed_private(monkeypatch, capsys):
+    from wt.ops import evidence
+    calls = []
+    monkeypatch.setattr(evidence, "_git", lambda *a, **k: calls.append(a) or "")
+    monkeypatch.setattr(evidence, "plan_copies", lambda wt, week: [])
+    for vis in ("public", "unknown", "internal"):
+        monkeypatch.setattr(evidence, "repo_visibility", lambda token, v=vis: v)
+        monkeypatch.setenv("GH_TOKEN", "t")
+        assert evidence.run() == 0
+        assert "evidence PR parked" in capsys.readouterr().out
+    assert not [a for a in calls if "push" in a]

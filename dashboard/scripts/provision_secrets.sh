@@ -32,7 +32,7 @@ say() { printf '%s\n' "$*" >&2; }
 vercel_set() {
   local name="$1" target="$2" value="$3"
   vercel env rm "$name" "$target" --yes >/dev/null 2>&1 || true
-  printf '%s' "$value" | vercel env add "$name" "$target" >/dev/null
+  printf '%s' "$value" | vercel env add "$name" "$target" --sensitive >/dev/null   # never readable back
   say "vercel: set $name ($target)"
 }
 

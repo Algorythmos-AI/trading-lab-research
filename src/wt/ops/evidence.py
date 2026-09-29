@@ -10,7 +10,8 @@ Runtime files in var/ keep changing. Git only ever receives dated copies that no
 The PR is built in a throwaway worktree created from origin/main, so the live checkout is never switched, and
 `git pull --ff-only` on it can never collide (ADR 0002). Auth comes from GH_TOKEN (a fine-grained token for this
 repo: contents and pull-requests write), so no keychain prompt can hang a launchd job. Without GH_TOKEN the run is
-skipped with a log line.
+skipped with a log line. While the repository is not confirmed private, nothing is pushed: the run lists what it
+would commit and stops (the scorecards name setups, which are restricted).
 """
 from __future__ import annotations
 
@@ -60,11 +61,29 @@ def plan_copies(wt: Path, week: str, ledger: Path = FORWARD_LEDGER, watchlists: 
     return pairs
 
 
+def repo_visibility(token: str | None) -> str:
+    """'private', 'public', 'internal' or 'unknown' (any failure). Only 'private' allows publishing evidence."""
+    env = {**os.environ, "GH_PROMPT_DISABLED": "1", **({"GH_TOKEN": token} if token else {})}
+    try:
+        r = subprocess.run(["gh", "api", f"repos/{REPO}", "--jq", ".visibility"], env=env, capture_output=True,
+                           text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    return r.stdout.strip() if r.returncode == 0 and r.stdout.strip() else "unknown"
+
+
 def run(dry_run: bool = False, today: dt.date | None = None) -> int:
     token = os.environ.get("GH_TOKEN")
     if not token and not dry_run:
         print("evidence PR skipped: GH_TOKEN is not set (fine-grained token, contents + pull-requests write)")
         return 0
+    if not dry_run:
+        vis = repo_visibility(token)
+        if vis != "private":
+            # The scorecards and watchlists name setups (restricted, NOTICE.md): never push them to a repository
+            # that is, or might be, public. The run continues as a dry run so the week's list is still logged.
+            print(f"evidence PR parked: the repository is {vis}, not private; listing only (dry run)")
+            dry_run = True
     today = today or dt.datetime.now(ET).date()
     week = iso_week(today)
     branch = f"evidence/{week}"
@@ -96,9 +115,12 @@ def run(dry_run: bool = False, today: dt.date | None = None) -> int:
         gh = {**os.environ, "GH_TOKEN": token or "", "GH_PROMPT_DISABLED": "1"}
         body = (f"Weekly forward evidence for {week}, copied from `var/` into new, immutable files.\n\n"
                 + "\n".join(f"- `{r}`" for r in rels))
-        subprocess.run(["gh", "pr", "create", "-R", REPO, "--base", "main", "--head", branch,
-                        "--title", f"data(forward): evidence for {week}", "--body", body],
-                       env=gh, capture_output=True, text=True, timeout=120)
+        c = subprocess.run(["gh", "pr", "create", "-R", REPO, "--base", "main", "--head", branch,
+                            "--title", f"data(forward): evidence for {week}", "--body", body],
+                           env=gh, capture_output=True, text=True, timeout=120)
+        if c.returncode != 0 and "already exists" not in (c.stderr or ""):
+            print(f"evidence PR could not be opened: {(c.stderr or c.stdout).strip()[-200:]}")
+            return 1
         m = subprocess.run(["gh", "pr", "merge", branch, "-R", REPO, "--auto", "--squash", "--delete-branch"],
                            env=gh, capture_output=True, text=True, timeout=120)
         if m.returncode != 0:
