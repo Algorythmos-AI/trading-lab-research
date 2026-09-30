@@ -1,6 +1,7 @@
 #cloud-config
-# First boot of the Trading Lab host (ADR 0004). Rendered by Terraform once; later changes ship through wt-deploy.
-# No secrets here: the VM reads them from OCI Vault at every boot (wt-secrets.service).
+# First boot of the Trading Lab host on a GCP free-tier e2-micro (docs/runbooks/gcp-host.md). Passed once as the
+# instance's user-data; later changes ship through wt-deploy. It shares the host helpers and units in deploy/oci.
+# No secrets here: the owner types them on the VM with `sudo wt-set-secrets` (root-only file, never in metadata).
 timezone: Etc/UTC
 package_update: true
 package_upgrade: true
@@ -30,16 +31,23 @@ users:
     lock_passwd: true
 
 write_files:
-  # Time from the OCI metadata service's NTP (the HMAC window is +/-300 s; the runner checks skew before entries).
-  - path: /etc/chrony/sources.d/oci.sources
+  # Secrets come from /etc/wt/secrets.env (wt-set-secrets), not a vault.
+  - path: /etc/wt/secrets-source
+    content: |
+      file
+  # Time from Google's metadata-server NTP (the HMAC window is +/-300 s; the runner checks skew before entries).
+  - path: /etc/chrony/sources.d/gce.sources
     content: |
       server 169.254.169.254 iburst prefer
-  # Swap in compressed RAM only: nothing (tmpfs secrets included) is ever paged to disk.
+  # 1 GB of RAM: compressed swap in RAM only, so nothing (tmpfs secrets included) is ever paged to disk.
   - path: /etc/systemd/zram-generator.conf
     content: |
       [zram0]
-      zram-size = 4096
+      zram-size = ram
       compression-algorithm = zstd
+  - path: /etc/sysctl.d/90-wt-zram.conf
+    content: |
+      vm.swappiness = 100
   # Upgrades never restart the trading jobs.
   - path: /etc/needrestart/conf.d/wt.conf
     content: |
@@ -48,7 +56,7 @@ write_files:
   # Security updates only, never an automatic reboot, and only on Saturdays (no US session).
   - path: /etc/apt/apt.conf.d/52wt-unattended
     content: |
-      Unattended-Upgrade::Allowed-Origins { "$${distro_id}:$${distro_codename}-security"; };
+      Unattended-Upgrade::Allowed-Origins { "${distro_id}:${distro_codename}-security"; };
       Unattended-Upgrade::Automatic-Reboot "false";
   - path: /etc/systemd/system/apt-daily.timer.d/saturday.conf
     content: |
@@ -70,32 +78,35 @@ write_files:
 runcmd:
   - [systemctl, disable, --now, systemd-timesyncd]
   - [systemctl, enable, --now, chrony]
+  # Some cloud kernels ship zram in the "extra" modules package.
+  - [sh, -c, "modprobe zram || apt-get install -y linux-modules-extra-$(uname -r)"]
+  - [sysctl, --system]
   - [systemctl, daemon-reload]
   - [systemctl, restart, systemd-zram-setup@zram0]
   - [snap, set, system, "refresh.timer=sat,16:00"]
-  # The job user may not reach the instance metadata service (and so can't mint instance-principal tokens); root
-  # and the Oracle agent still can. Oracle's own InstanceServices chain is left untouched.
+  # The job user may not reach the metadata server. The VM has no service account anyway; this is the second lock.
   - [iptables, -I, OUTPUT, "1", -d, 169.254.169.254/32, -p, tcp, --dport, "80", -m, owner, --uid-owner, wt, -j, REJECT]
   - [netfilter-persistent, save]
-  # uv (same version that built the lockfile) and the OCI CLI, pinned.
+  # uv, the same version that built the lockfile.
   - [sh, -c, "curl -LsSf https://astral.sh/uv/0.11.7/install.sh | env UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 sh"]
-  - [sh, -c, "UV_TOOL_DIR=/opt/uv-tools UV_TOOL_BIN_DIR=/usr/local/bin /usr/local/bin/uv tool install oci-cli==3.94.1"]
-  # cloudflared from Cloudflare's apt repository, held (it never self-updates from apt; upgrades are deliberate).
+  # cloudflared from Cloudflare's apt repository, held. Inert until a tunnel token is set (wt-tunnel is conditional).
   - [sh, -c, "curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg -o /usr/share/keyrings/cloudflare-main.gpg"]
   - [sh, -c, "echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared noble main' > /etc/apt/sources.list.d/cloudflared.list"]
   - [sh, -c, "apt-get update && apt-get install -y cloudflared && apt-mark hold cloudflared"]
   # The repository and its locked environment, as the job user.
-  - [sudo, -u, wt, git, clone, --quiet, "${repo_url}", /home/wt/trading]
+  - [sudo, -u, wt, git, clone, --quiet, "https://github.com/Algorythmos-AI/trading-lab-research.git", /home/wt/trading]
   - [sudo, -u, wt, sh, -c, "cd /home/wt/trading && /usr/local/bin/uv venv --python 3.12 .venv && /usr/local/bin/uv pip sync --python .venv/bin/python --require-hashes requirements.lock.txt && /usr/local/bin/uv pip install --python .venv/bin/python -r requirements-dev.lock.txt"]
   # Host helpers and the always-on units (secrets, pager, boot reconcile). The job timers are the owner's to enable.
   - [sh, -c, "install -m 0755 /home/wt/trading/deploy/oci/bin/* /usr/local/bin/"]
   - [sh, -c, "install -m 0644 /home/wt/trading/deploy/oci/systemd/* /etc/systemd/system/"]
   - [install, -d, -m, "0750", -o, root, -g, wt, /etc/wt]
+  - [chmod, "0644", /etc/wt/secrets-source]
   - [systemctl, daemon-reload]
   - [systemctl, enable, --now, wt-secrets.timer]
   - [systemctl, enable, wt-secrets.service, wt-boot-reconcile.service, wt-tunnel.service]
   # A deploy key for when the repository goes private (the owner adds the public half on GitHub).
   - [sudo, -u, wt, install, -d, -m, "0700", /home/wt/.ssh]
   - [sudo, -u, wt, ssh-keygen, -q, -t, ed25519, -N, "", -C, "trading-lab-host deploy key", -f, /home/wt/.ssh/github_deploy]
+  - [touch, /var/lib/wt-bootstrap-done]
 
-final_message: "Trading Lab host bootstrapped. Next: docs/runbooks/oci-host.md, step 'after first boot'."
+final_message: "Trading Lab host bootstrapped. Next: docs/runbooks/gcp-host.md, step 'secrets'."

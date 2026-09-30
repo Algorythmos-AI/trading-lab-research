@@ -12,6 +12,7 @@ One page per incident. Each starts with how you'll notice it.
 | [Rotate secrets](secret-rotation.md) | A secret may have leaked, or it's the scheduled rotation |
 | [Dashboard deploys and the watchdog drill](dashboard-deploy.md) | A dashboard deploy failed, or you want to prove paging works |
 | [The OCI trading host](oci-host.md) | Provisioning, access, rebuild, or the OCI account is lost |
+| [The GCP free-tier host](gcp-host.md) | Provisioning, secrets, or rebuild of the e2-micro host |
 | [Dead-man's switches](dead-man-switches.md) | A healthchecks.io page, or setting the checks up |
 | [Backups, anchors, lease](backups-and-lease.md) | "Evidence chain broken", a backup or anchor failed, or "no primary lease" |
 | [Dashboard late or stopped](dashboard-late.md) | ntfy "Dashboard late"; a grey or amber freshness pill |
