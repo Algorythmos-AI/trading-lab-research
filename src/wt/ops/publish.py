@@ -765,6 +765,9 @@ def _publish(a: argparse.Namespace) -> int:
     bypass = os.environ.get("VERCEL_AUTOMATION_BYPASS_SECRET")
     ok, detail = send(body, url, secret, bypass, tries=SEND_TRIES, deadline=deadline)
     st = record_outcome(ok, detail, now)
+    if ok:
+        from wt.ops import hc
+        hc.heartbeat(f"published run {run_id}")      # this host is up and its snapshots arrive (wt.ops.hc)
     print(f"sent: {ok} ({error_code(detail) if not ok else detail}); consecutive failures {st['consecutive_failures']}")
     if ok and a.verify:
         good, why = verify_stored(snap, url, bypass)

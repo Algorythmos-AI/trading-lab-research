@@ -274,3 +274,16 @@ def test_the_install_fingerprint_covers_units_static_units_and_helpers(tmp_path)
     live = Path("/home/wt/trading")                                  # the checkout the units run from
     a, b = (set(units.fingerprint(t, live).splitlines()) for t in trees.values())
     assert {line.split("  ", 1)[1] for line in a ^ b} == {"/usr/local/bin/wt-deploy"}   # a changed helper, alone
+
+
+def test_a_shadow_host_pings_only_its_own_heartbeat(monkeypatch):
+    monkeypatch.setenv("HC_PING_KEY", "k")
+    monkeypatch.setenv("WT_ROLE", "shadow")
+    monkeypatch.setenv("WT_HOST_ID", "gcp-use1")
+    urls = []
+    monkeypatch.setattr(hc.requests, "post", lambda url, data, timeout: urls.append(url) or type("R", (), {"ok": True})())
+    assert hc.ping("wt-paper-b") is False and urls == []           # shared job slugs: never from a shadow
+    assert hc.heartbeat("published") is True
+    assert urls == ["https://hc-ping.com/k/wt-host-gcp-use1"]
+    monkeypatch.setenv("WT_ROLE", "primary")
+    assert hc.ping("wt-paper-b") is True and urls[-1] == "https://hc-ping.com/k/wt-paper-b"

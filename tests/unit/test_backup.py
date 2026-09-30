@@ -71,7 +71,8 @@ def test_nightly_backs_up_anchors_and_writes_the_digest(paths, monkeypatch):
     monkeypatch.setattr(backup, "restic", lambda *args, timeout=3600: calls.append(args) or SimpleNamespace(
         returncode=0, stdout="", stderr=""))
     assert backup.nightly(a, weekly=False, client=Anchors()) == 0
-    assert calls[0][:3] == ("backup", "--tag", "nightly")
+    assert calls[0][:3] == ("backup", "--host", backup.host())
+    assert "nightly" in calls[0] and "role:primary" in calls[0]
     d = json.loads((tmp / "digest.json").read_text())
     assert d["verified"] and d["anchored"] and d["forward"]["lines"] == 4
     assert not (tmp / "evidence" / "chain-broken").exists()
@@ -122,3 +123,42 @@ def test_prune_tolerates_locked_objects(monkeypatch):
     assert backup.prune() == 0
     monkeypatch.setattr(backup, "restic", lambda *args, timeout=3600: SimpleNamespace(returncode=1, stdout="", stderr="auth"))
     assert backup.prune() == 1
+
+
+def test_the_market_data_is_backed_up_on_fridays(paths, monkeypatch):
+    fwd, jr, tmp, box, a = paths
+    chained(fwd, 1)
+    calls = []
+    monkeypatch.setattr(backup, "restic", lambda *args, timeout=3600: calls.append(args) or SimpleNamespace(
+        returncode=0, stdout="", stderr=""))
+    monkeypatch.setattr(backup, "ROOT", tmp)
+    (tmp / "data").mkdir(exist_ok=True)
+    for day, want in ((dt.date(2026, 10, 9), True), (dt.date(2026, 10, 8), False)):       # Friday, Thursday
+        calls.clear()
+        backup.nightly(a, client=Anchors(), today=day)
+        assert ("data" in calls[0]) is want, day
+
+
+def test_a_shadow_host_never_claims_the_primarys_anchor(paths, monkeypatch):
+    fwd, jr, tmp, box, a = paths
+    chained(fwd, 2)
+    s, day = Anchors(), dt.date(2026, 10, 20)
+    monkeypatch.setenv("WT_ROLE", "shadow")
+    monkeypatch.setenv("WT_HOST_ID", "gcp-use1")
+    assert backup.anchor(day, backup.chains(), s) == (True, "anchored shadow/gcp-use1/anchors/2026-10-20.json")
+    monkeypatch.setenv("WT_ROLE", "primary")
+    chained(fwd, 3)                                              # the primary's heads differ from the shadow's
+    assert backup.anchor(day, backup.chains(), s) == (True, "anchored anchors/2026-10-20.json")
+
+
+def test_restore_test_restores_this_hosts_own_snapshot(paths, monkeypatch):
+    seen = []
+    monkeypatch.setenv("WT_HOST_ID", "gcp-use1")
+
+    def fake(*args, timeout=3600):
+        seen.append(args)
+        chained(Path(args[args.index("--target") + 1]) / "fwd.jsonl", 1)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+    monkeypatch.setattr(backup, "restic", fake)
+    backup.restore_test()
+    assert seen[0][:4] == ("restore", "latest", "--host", "gcp-use1")
