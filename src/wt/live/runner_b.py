@@ -352,6 +352,57 @@ def run(day: dt.date | None = None, poll_s: float = 20.0, broker: Any = None, re
         pager.close()
 
 
+DECISION_CAP = 40               # decision events per session beyond the would-be signals themselves
+
+
+class Decisions:
+    """The decision journal (plan v7 A-dec): what B's signal says on each newly closed bar, whatever blocks entries
+    (KILL, the shadow role, exits-only). It only reads bars and computes; it never touches the broker, and `sig`, the
+    variable that gates the order path, never sees its result. Two hosts on the same code must journal the same
+    decisions, which is what the shadow comparison checks.
+
+    A `decision` event is journaled when the signal function returns a signal it had not returned before, and when
+    the blocker set changes (capped), so a session stays at tens of fsynced events."""
+
+    def __init__(self, write: Callable[..., None]):
+        self.write = write
+        self.last_bar: pd.Timestamp | None = None
+        self.last_blockers: tuple[str, ...] | None = None
+        self.seen: set[int] = set()
+        self.signals: list[dict[str, Any]] = []
+        self.events = 0
+        self.inputs = False
+
+    def observe(self, closed: pd.DataFrame, blockers: list[str], sigma: float | None, prev_close: float | None) -> None:
+        if not len(closed) or sigma is None or prev_close is None:
+            return
+        self.inputs = True
+        bar = pd.Timestamp(closed.t.iloc[-1])
+        if bar == self.last_bar:
+            return
+        self.last_bar = bar
+        would = setups.b_intraday_momentum(closed.reset_index(drop=True), sigma, prev_close)
+        key = tuple(sorted(blockers))
+        base = {"bar": str(bar), "closed_bars": len(closed), "blockers": list(key), "sigma": sigma,
+                "prev_close": prev_close}
+        if would is not None and would.bar_index not in self.seen:
+            self.seen.add(would.bar_index)
+            rec = {**base, "would_signal": True, "signal_bar": would.bar_index,
+                   "signal_t": str(closed.t.iloc[would.bar_index]), "trigger": would.trigger, "stop": would.stop,
+                   "runner_acts": would.bar_index == len(closed) - 1 and not key}
+            self.signals.append(rec)
+            self.last_blockers = key
+            self.write("decision", **rec)
+        elif key != self.last_blockers and self.events < DECISION_CAP:
+            self.last_blockers = key
+            self.events += 1
+            self.write("decision", **base, would_signal=False)
+
+    def summary(self) -> None:
+        self.write("decision_summary", inputs=self.inputs, would_signals=len(self.signals),
+                   first=self.signals[0] if self.signals else None)
+
+
 def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callable[[], dt.datetime],
              sleep: Callable[[float], None], pager: Pager, exits_only: bool) -> None:
     off: list[str] = []                 # why entries are off for the whole session (exits keep being managed)
@@ -576,6 +627,13 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             sigma, prev_close = with_deadline(data.sigma_and_prev_close, day, sessions, deadline_s=180.0)
         except Exception as e:  # noqa: BLE001
             refuse(f"signal inputs unavailable ({e.__class__.__name__})")
+    dec_sigma, dec_prev_close = sigma, prev_close          # the decision journal's inputs, even with entries off
+    if off and sessions:
+        try:
+            dec_sigma, dec_prev_close = with_deadline(data.sigma_and_prev_close, day, sessions, deadline_s=180.0)
+        except Exception as e:  # noqa: BLE001 — informational only: it never refuses and never blocks exits
+            log("decision_inputs_unavailable", error=e.__class__.__name__)
+    decisions = Decisions(log)
     kill_on = KILL.exists()
     log("armed", day=day, sigma=sigma, prev_close=prev_close, flatten=flatten_dt, kill=kill_on,
         resumed_plan=plan.state if plan else None, held=held.trade_id if held else None, entries_off=off,
@@ -681,6 +739,10 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                 if not q or (q[1] - q[0]) / ((q[0] + q[1]) / 2) * 100 > MAX_SPREAD_PCT:
                     blockers.append("spread_or_no_quote")
                 sig = None if blockers else setups.b_intraday_momentum(closed.reset_index(drop=True), sigma, prev_close)
+                try:
+                    decisions.observe(closed, blockers, dec_sigma, dec_prev_close)
+                except Exception as e:  # noqa: BLE001 — the journal of what B would do must never disturb what it does
+                    log("decision_error", error=repr(e)[:200])
                 if sig and sig.bar_index == len(closed) - 1:          # only act on the bar that just closed
                     skew = measure_skew(broker, clock)
                     if skew is None or abs(skew) > SKEW_MAX_S:
@@ -746,6 +808,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         log("END_OF_DAY_NOT_FLAT", error=f"could not verify flat after the close: {e!r}"[:300])
         pager.fire("paper-b:not-flat", "Paper B could not verify flat after the close",
                    "The broker could not be read after the close. Check the account.", 5)
+    decisions.summary()
     log("session_end", virtual=asdict(va) if va_ok else None, entries_off=off)
 
 
