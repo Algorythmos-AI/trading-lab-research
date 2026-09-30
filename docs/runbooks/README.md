@@ -11,6 +11,7 @@ One page per incident. Each starts with how you'll notice it.
 | [Rollback a deploy](rollback.md) | The next night's jobs fail after a deploy |
 | [Rotate secrets](secret-rotation.md) | A secret may have leaked, or it's the scheduled rotation |
 | [Dashboard deploys and the watchdog drill](dashboard-deploy.md) | A dashboard deploy failed, or you want to prove paging works |
+| [The OCI trading host](oci-host.md) | Provisioning, access, rebuild, or the OCI account is lost |
 | [Dashboard late or stopped](dashboard-late.md) | ntfy "Dashboard late"; a grey or amber freshness pill |
 | [Disk nearly full](disk-full.md) | ntfy priority 3 "refused to run: free disk"; the Operations page shows disk under the floor |
 | [Ruleset emergency](ruleset-emergency.md) | CI is down and a fix must land |

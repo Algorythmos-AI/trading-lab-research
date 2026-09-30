@@ -1,0 +1,7 @@
+[Unit]
+Description=Trading Lab: page the owner that %i failed
+# Deliberately no dependency on wt-secrets: paging must work when the secrets fetch is what failed.
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/wt-alert %i

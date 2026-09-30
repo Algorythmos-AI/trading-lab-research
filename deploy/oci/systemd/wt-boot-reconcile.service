@@ -1,0 +1,11 @@
+[Unit]
+Description=Trading Lab: after a reboot, start paper-b and forward if the boot fell inside their windows
+Wants=network-online.target wt-secrets.service
+After=network-online.target wt-secrets.service time-sync.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/wt-boot-reconcile
+
+[Install]
+WantedBy=multi-user.target
