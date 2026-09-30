@@ -40,7 +40,7 @@ def test_first_boot_uses_the_file_source_and_no_cloud_cli():
 def test_first_boot_hardening_matches_the_oci_host():
     files = {f["path"]: f["content"] for f in cloud_init()["write_files"]}
     assert "server 169.254.169.254" in files["/etc/chrony/sources.d/gce.sources"]
-    assert "zram-size = ram" in files["/etc/systemd/zram-generator.conf"]      # 1 GB RAM: swap in RAM, never disk
+    assert "zram-size = min(ram / 2, 2048)" in files["/etc/systemd/zram-generator.conf"]      # 1 GB RAM: swap in RAM, never disk
     assert "override_rc" in files["/etc/needrestart/conf.d/wt.conf"]
     assert '"${distro_id}:${distro_codename}-security"' in files["/etc/apt/apt.conf.d/52wt-unattended"]
     assert "Sat 16:00 UTC" in files["/etc/systemd/system/apt-daily-upgrade.timer.d/saturday.conf"]
@@ -148,3 +148,14 @@ def test_install_units_installs_helpers_and_static_units_and_records_the_fingerp
                    "systemctl disable --now", "chrony-wait.service"):
         assert needle in text, needle
     assert text.index("make -s gate") < text.index("install -m")        # never installs with the gate closed
+
+
+def test_tune_host_brings_an_existing_vm_to_the_first_boot_settings():
+    """cloud-init runs once; wt-tune-host applies the same settings to a host that already exists."""
+    tune = (ROOT / "deploy/gcp/bin/wt-tune-host").read_text()
+    boot = (ROOT / "deploy/gcp/cloud-init.yaml").read_text()
+    for setting in ("zram-size = min(ram / 2, 2048)", "SystemMaxUse=500M", "kernelhints} = -1"):
+        assert setting in tune and setting in boot, setting
+    for pkg in ("gh", "time"):
+        assert re.search(rf"^\s+- {pkg}\b", boot, re.M) and pkg in tune
+    assert "--check" in tune and "a wt job is running" in tune           # report-only mode; never while a job runs

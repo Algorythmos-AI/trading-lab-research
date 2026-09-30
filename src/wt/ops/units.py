@@ -33,14 +33,16 @@ USER = "wt"
 HELPER_DIR = Path("deploy/oci/bin")           # installed to /usr/local/bin by wt-install-units
 STATIC_DIR = Path("deploy/oci/systemd")       # installed to /etc/systemd/system by wt-install-units
 
-# cgroup memory per job on the 2 GB VM: (MemoryHigh, MemoryMax, MemorySwapMax). The heavy jobs throttle at High and
-# are killed at Max rather than pushing the paper runner, which runs at the same time, into the OOM killer. The
-# runner itself is never capped (OOMScoreAdjust=-500 instead): killing it mid-session is the worst outcome.
+# cgroup memory per job on the 4 GB VM (e2-medium): (MemoryHigh, MemoryMax, MemorySwapMax). The heavy jobs throttle at
+# High and are killed at Max rather than pushing the paper runner, which runs at the same time, into the OOM killer.
+# The tail loader keeps them near 1 GB, so these are fuses, not budgets. The publisher's limit covers its collector
+# child too. The runner itself is never capped (OOMScoreAdjust=-500 instead): killing it mid-session is the worst
+# outcome.
 MEMORY: dict[str, tuple[str | None, str, str | None]] = {
-    "routine": ("1G", "1200M", "512M"),
-    "forward": ("1G", "1200M", "512M"),
-    "weekly": ("1G", "1200M", "512M"),
-    "dashboard": (None, "400M", "256M"),
+    "routine": ("1536M", "2G", "512M"),
+    "forward": ("1536M", "2G", "512M"),
+    "weekly": ("1536M", "2G", "512M"),
+    "dashboard": (None, "1G", "256M"),
 }
 
 

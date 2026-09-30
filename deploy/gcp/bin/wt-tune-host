@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Root, once on an existing GCP host (cloud-init only runs at first boot): bring it to what deploy/gcp/cloud-init.yaml
+# sets up today. Idempotent: every step checks before it changes anything, and a second run changes nothing.
+#   sudo wt-tune-host            # apply
+#   sudo wt-tune-host --check    # report only
+#   * zram: half the RAM, at most 2 GB (swap in RAM only, so tmpfs secrets never reach disk)
+#   * journald: at most 500 MB on disk
+#   * packages: gh (the collector's GitHub sources, the evidence PRs), time (/usr/bin/time -v)
+#   * git identity for the job user (deploy tags)
+#   * needrestart: no kernel prompt
+# Refuses while a trading job runs (swap is reset here).
+set -euo pipefail
+[[ $EUID -eq 0 ]] || { echo "run with sudo" >&2; exit 2; }
+check=0; [[ "${1:-}" == --check ]] && check=1
+changed=0
+want() {   # want <file> <content>: write it if different
+  local f="$1" body="$2"
+  if [[ -f "$f" && "$(cat "$f")" == "$body" ]]; then echo "ok       $f"; return 0; fi
+  echo "change   $f"; changed=1
+  (( check )) && return 0
+  install -d -m 0755 "$(dirname "$f")"
+  printf '%s\n' "$body" > "$f.tmp" && chmod 0644 "$f.tmp" && mv -f "$f.tmp" "$f"
+}
+if systemctl list-units --state=active --no-legend 'wt-*.service' | grep -Ev 'wt-(secrets|boot-reconcile|tunnel)' | grep -q .; then
+  echo "a wt job is running: not tuning now" >&2; exit 2
+fi
+zram_before=$(cat /etc/systemd/zram-generator.conf 2>/dev/null || true)
+journal_before=$(cat /etc/systemd/journald.conf.d/90-wt.conf 2>/dev/null || true)
+want /etc/systemd/zram-generator.conf $'[zram0]\nzram-size = min(ram / 2, 2048)\ncompression-algorithm = zstd'
+want /etc/systemd/journald.conf.d/90-wt.conf $'[Journal]\nSystemMaxUse=500M'
+want /etc/needrestart/conf.d/wt.conf $'$nrconf{restart} = \'l\';\n$nrconf{override_rc}{qr(^wt-)} = 0;\n$nrconf{kernelhints} = -1;'
+for pkg in gh time; do
+  if dpkg -s "$pkg" >/dev/null 2>&1; then echo "ok       package $pkg"; else
+    echo "install  package $pkg"; changed=1
+    (( check )) || DEBIAN_FRONTEND=noninteractive apt-get install -y -q "$pkg" >/dev/null
+  fi
+done
+for kv in user.name=wt-deploy user.email=wt-deploy@localhost; do
+  k=${kv%%=*}; v=${kv#*=}
+  if [[ "$(runuser -u wt -- git -C /home/wt/trading config --get "$k" || true)" == "$v" ]]; then echo "ok       git $k"; else
+    echo "set      git $k"; changed=1
+    (( check )) || runuser -u wt -- git -C /home/wt/trading config "$k" "$v"
+  fi
+done
+if (( ! check )); then
+  if [[ "$zram_before" != "$(cat /etc/systemd/zram-generator.conf)" ]]; then
+    swapoff /dev/zram0 2>/dev/null || true
+    systemctl daemon-reload && systemctl restart systemd-zram-setup@zram0
+  fi
+  [[ "$journal_before" != "$(cat /etc/systemd/journald.conf.d/90-wt.conf)" ]] && systemctl restart systemd-journald
+fi
+swapon --show
+(( check && changed )) && { echo "wt-tune-host: changes pending"; exit 1; }
+if (( changed )); then echo "wt-tune-host: applied"; else echo "wt-tune-host: nothing to do"; fi

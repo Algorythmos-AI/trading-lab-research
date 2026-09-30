@@ -41,12 +41,17 @@ write_files:
   - path: /etc/chrony/sources.d/gce.sources
     content: |
       server 169.254.169.254 iburst prefer
-  # 1 GB of RAM: compressed swap in RAM only, so nothing (tmpfs secrets included) is ever paged to disk.
+  # Compressed swap in RAM only (half the RAM, at most 2 GB), so nothing (tmpfs secrets included) is ever paged to disk.
   - path: /etc/systemd/zram-generator.conf
     content: |
       [zram0]
-      zram-size = ram
+      zram-size = min(ram / 2, 2048)
       compression-algorithm = zstd
+  # Logs can't fill the disk.
+  - path: /etc/systemd/journald.conf.d/90-wt.conf
+    content: |
+      [Journal]
+      SystemMaxUse=500M
   - path: /etc/sysctl.d/90-wt-zram.conf
     content: |
       vm.swappiness = 100

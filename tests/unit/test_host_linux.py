@@ -246,8 +246,8 @@ def test_heavy_jobs_have_memory_limits_and_the_runner_has_none():
     root = Path("/home/wt/trading")
     for name in ("routine", "forward", "weekly"):
         svc = units.service(JOBS[name], root).splitlines()
-        assert "MemoryHigh=1G" in svc and "MemoryMax=1200M" in svc and "MemorySwapMax=512M" in svc
-    assert "MemoryMax=400M" in units.service(JOBS["dashboard"], root).splitlines()
+        assert "MemoryHigh=1536M" in svc and "MemoryMax=2G" in svc and "MemorySwapMax=512M" in svc
+    assert "MemoryMax=1G" in units.service(JOBS["dashboard"], root).splitlines()
     assert not any(x.startswith("Memory") for x in units.service(JOBS["paper-b"], root).splitlines())
 
 
