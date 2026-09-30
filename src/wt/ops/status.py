@@ -548,28 +548,52 @@ def parse_swapusage(text: str) -> dict | None:
             "used_pct": round(100 * used / total, 1) if total else 0.0}
 
 
+def _systemd_jobs(ctx: Ctx, jobs_cfg: list[dict]) -> dict[str, dict]:
+    """launchctl-shaped job rows from systemd: loaded, running, last exit of wt-<job>.service."""
+    out: dict[str, dict] = {}
+    for j in jobs_cfg:
+        name = str(j.get("name") or j["label"].rsplit(".", 1)[-1])
+        text = ctx.run(["systemctl", "show", f"wt-{name}.service", "--property=LoadState,ActiveState,ExecMainStatus"],
+                       10)
+        kv = dict(line.split("=", 1) for line in text.splitlines() if "=" in line)
+        status = kv.get("ExecMainStatus", "")
+        out[j["label"]] = {"loaded": kv.get("LoadState") == "loaded", "pid": None,
+                           "running": kv.get("ActiveState") in ("active", "activating"),
+                           "last_exit": int(status) if status.lstrip("-").isdigit() else None}
+    return out
+
+
 def src_host(ctx: Ctx) -> dict:
+    from wt.ops.host import current
+    h = current()
     jobs_cfg = ctx.cfg.get("host", {}).get("jobs", [])
     labels = [j["label"] for j in jobs_cfg]
+    wakes: list = []
+    wake_error = None
     try:
-        jobs = parse_launchctl_list(ctx.run(["launchctl", "list"], 10), labels)
+        jobs = (_systemd_jobs(ctx, jobs_cfg) if h.kind == "systemd"
+                else parse_launchctl_list(ctx.run(["launchctl", "list"], 10), labels))
         jobs_error = None
     except SourceError as e:
         jobs, jobs_error = {}, str(e)
-    try:
-        wakes = parse_pmset_repeat(ctx.run(["pmset", "-g", "sched"], 10))
-        wake_error = None
-    except SourceError as e:
-        wakes, wake_error = [], str(e)
-    try:
-        swap = parse_swapusage(ctx.run(["sysctl", "vm.swapusage"], 10))
-    except SourceError:
-        swap = None
+    if h.kind == "launchd":                # pmset wakes only exist on the Mac; the VM never sleeps
+        try:
+            wakes = parse_pmset_repeat(ctx.run(["pmset", "-g", "sched"], 10))
+        except SourceError as e:
+            wakes, wake_error = [], str(e)
+    if h.kind == "launchd":
+        try:
+            swap = parse_swapusage(ctx.run(["sysctl", "vm.swapusage"], 10))
+        except SourceError:
+            swap = None
+    else:
+        swap = h.swap()
     free_gb, total_gb = thresholds.disk_free_gb(ctx.deployed), thresholds.disk_total_gb(ctx.deployed)
     today_syd = ctx.now.astimezone(SYD).date()
-    return {"jobs": [{**j, **jobs.get(j["label"], {})} for j in jobs_cfg], "jobs_error": jobs_error,
+    return {"kind": h.kind, "jobs": [{**j, **jobs.get(j["label"], {})} for j in jobs_cfg], "jobs_error": jobs_error,
             "wakes": wakes, "wake_error": wake_error,
-            "wake_coverage": wake_coverage(wakes, ctx.cfg.get("host", {}).get("wake_needed", [])),
+            "wake_coverage": (wake_coverage(wakes, ctx.cfg.get("host", {}).get("wake_needed", []))
+                              if h.kind == "launchd" else []),
             "disk_free_gb": round(free_gb, 2), "disk_total_gb": round(total_gb, 1),
             "disk_floor_gb": thresholds.DISK_FLOOR_GB, "disk_target_gb": thresholds.DISK_TARGET_GB,
             "old_root_exists": ctx.old.exists(), "swap": swap, "swap_warn_pct": thresholds.SWAP_WARN_PCT,
