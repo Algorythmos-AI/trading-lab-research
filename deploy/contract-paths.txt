@@ -1,0 +1,6 @@
+# The dashboard contract: paths whose changes the live dashboard must have before a publisher that depends on them
+# is deployed (wt.ops.dashguard), and that make the dashboard-gate check run the dashboard's checks (ci.yml).
+# .github/workflows/dashboard.yml deploys on exactly these paths (tests/unit/test_workflows.py checks it).
+dashboard/**
+.github/workflows/dashboard.yml
+src/wt/ops/publish.py

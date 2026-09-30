@@ -105,3 +105,23 @@ def test_live_version_reads_health_with_the_bypass_header(monkeypatch):
     assert dashguard.live_version("https://lab.example/api/ingest", "b") == "abc123def456"
     assert seen == {"url": "https://lab.example/api/health", "headers": {"x-vercel-protection-bypass": "b"}}
     assert dashguard.live_version(None, "b") is None
+
+
+def test_the_contract_file_decides_when_the_target_has_it(tmp_path):
+    import subprocess
+
+    def g(*a):
+        return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *a], cwd=tmp_path, check=True,
+                              capture_output=True, text=True).stdout.strip()
+    g("init", "-q", "-b", "main")
+    (tmp_path / "deploy").mkdir()
+    (tmp_path / "deploy/contract-paths.txt").write_text("# comment\n\nsrc/wt/ops/assemble.py\n")
+    g("add", "-A"); g("commit", "-q", "-m", "paths")
+    (tmp_path / "src/wt/ops").mkdir(parents=True)
+    (tmp_path / "src/wt/ops/assemble.py").write_text("x")
+    g("add", "-A"); g("commit", "-q", "-m", "contract")
+    contract = g("rev-parse", "HEAD")
+    (tmp_path / "README").write_text("docs")
+    g("add", "-A"); g("commit", "-q", "-m", "docs")
+    assert dashguard.paths_at(tmp_path, "HEAD") == ["src/wt/ops/assemble.py"]
+    assert dashguard.last_dashboard_commit(tmp_path, "HEAD") == contract
