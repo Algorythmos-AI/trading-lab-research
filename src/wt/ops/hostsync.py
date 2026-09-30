@@ -33,7 +33,6 @@ from wt.ops import locks
 from wt.ops.schedule import TRADING_JOBS
 
 MANIFEST = ".hostsync-manifest.json"
-DEPLOY_LOCK = getattr(locks, "DEPLOY_LOCK", "deploy")
 # Files or directories, relative to the checkout. A unit missing on the source is simply not carried.
 UNITS = (
     "var/forward/forward_trades.jsonl",          # the forward ledger (hash-chained evidence)
@@ -116,7 +115,7 @@ def verify(seed: Path) -> list[str]:
 def all_locks(lock_root: Path | None = None) -> Iterator[list[str]]:
     """Hold every job lock, the runner's lock, the publisher's and the deploy lock. Yields the busy ones (then none
     is held and the caller must stop)."""
-    names = [*TRADING_JOBS, locks.RUNNER_LOCK, "publish", DEPLOY_LOCK]
+    names = [*TRADING_JOBS, locks.RUNNER_LOCK, "publish", locks.DEPLOY_LOCK]
     with contextlib.ExitStack() as stack:
         busy = [n for n in names if not stack.enter_context(locks.job_lock(n, lock_root))]
         yield busy
