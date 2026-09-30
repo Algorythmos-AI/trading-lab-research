@@ -173,6 +173,8 @@ def load_daily_tail(rows: int) -> tuple[pd.DataFrame, TailMeta]:
         x = pd.read_parquet(f, columns=COLS, use_threads=False)
         str_dtype = str_dtype or x["symbol"].dtype
         codes, names = pd.factorize(x["symbol"])
+        if len(codes) and codes.min() < 0:            # a blank symbol would map onto another symbol's id
+            raise ValueError(f"{f.name}: {int((codes < 0).sum())} rows without a symbol")
         sid = np.array([ids.setdefault(str(n), len(ids)) for n in names], dtype=np.int64)[codes]
         day = x["t"].dt.tz_convert("America/New_York").dt.tz_localize(None).dt.normalize().to_numpy().astype("datetime64[ns]").view(np.int64)
         prio = np.full(len(x), (0 if f.name.startswith("chunk_zupd_") else len(files)) + i, dtype=np.int64)

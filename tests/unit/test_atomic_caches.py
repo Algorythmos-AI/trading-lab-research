@@ -135,16 +135,67 @@ def test_pm_cache_save_keeps_rows_another_writer_added(tmp_path, monkeypatch):
     assert got.set_index("symbol").pm_volume["BBB"] == 1.0              # the first writer's row stands
 
 
-def test_pm_cache_save_waits_for_the_lock(tmp_path, monkeypatch):
+def test_pm_cache_save_waits_for_the_lock_beside_the_file(tmp_path, monkeypatch):
     from wt.ops import locks
     f = tmp_path / "pm_agg.parquet"
     monkeypatch.setattr(features, "PM_CACHE", f)
     monkeypatch.setattr(features, "PM_LOCK_WAIT_S", 0.0)
-    monkeypatch.setattr(locks, "LOCK_DIR", tmp_path / "locks")
+    monkeypatch.setattr(locks, "LOCK_DIR", tmp_path / "elsewhere")   # another checkout's or WT_STATE's lock dir
     c = features.PMCache()
     c.add([_pm("ABC", D)])
-    with locks.job_lock(features.PM_LOCK), pytest.raises(RuntimeError):
+    with locks.job_lock(features.PM_LOCK, root=tmp_path), pytest.raises(RuntimeError):
         c.save()
     assert not f.exists() and len(c.new) == 1                          # nothing written, nothing forgotten
     c.save()
     assert list(pd.read_parquet(f).symbol) == ["ABC"]
+
+
+def test_a_save_never_overwrites_a_file_it_could_not_open(tmp_path, monkeypatch):
+    f = tmp_path / "pm_agg.parquet"
+    monkeypatch.setattr(features, "PM_CACHE", f)
+    pd.DataFrame([_pm("OLD", D - dt.timedelta(days=5))]).to_parquet(f)
+    c = features.PMCache()
+    c.add([_pm("ABC", D)])
+
+    def emfile(*a, **k):
+        raise OSError(24, "Too many open files")
+    monkeypatch.setattr(features.pq, "ParquetFile", emfile)
+    with pytest.raises(RuntimeError):
+        c.save()
+    assert list(pd.read_parquet(f).symbol) == ["OLD"] and len(c.new) == 1   # the file is intact; nothing forgotten
+
+
+def test_an_io_error_on_load_never_sets_a_good_cache_aside(tmp_path, monkeypatch):
+    f = tmp_path / "pm_agg.parquet"
+    pd.DataFrame([_pm("OLD", D)]).to_parquet(f)
+
+    def emfile(*a, **k):
+        raise OSError(24, "Too many open files")
+    with pytest.raises(OSError):
+        safeio.read_cache(f, emfile, lambda: None)
+    with pytest.raises(MemoryError):
+        safeio.read_cache(f, lambda p: (_ for _ in ()).throw(MemoryError()), lambda: None)
+    assert f.exists() and not list(tmp_path.glob("*.corrupt*"))
+
+
+def test_a_second_torn_file_does_not_overwrite_the_first_one_kept_aside(tmp_path):
+    f = tmp_path / "c.parquet"
+    (tmp_path / "c.parquet.corrupt").write_bytes(b"first")
+    f.write_bytes(b"second")
+    with pytest.warns(RuntimeWarning):
+        assert safeio.read_cache(f, pd.read_parquet, lambda: "empty") == "empty"
+    assert (tmp_path / "c.parquet.corrupt").read_bytes() == b"first"
+    assert [p.read_bytes() for p in tmp_path.glob("c.parquet.corrupt-*")] == [b"second"]
+
+
+def test_saves_compact_small_row_groups(tmp_path, monkeypatch):
+    import pyarrow.parquet as pq
+    f = tmp_path / "pm_agg.parquet"
+    monkeypatch.setattr(features, "PM_CACHE", f)
+    monkeypatch.setattr(features, "PM_MAX_ROW_GROUPS", 3)
+    for i in range(6):
+        c = features.PMCache()
+        c.add([_pm(f"S{i}", D)])
+        c.save()
+    assert pq.ParquetFile(f).num_row_groups <= 3
+    assert sorted(pd.read_parquet(f).symbol) == [f"S{i}" for i in range(6)]

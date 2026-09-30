@@ -186,3 +186,11 @@ def test_forward_watchlist_refuses_a_tail_that_misses_its_window(store):
     raw, meta = universe.load_daily_tail(20)
     with pytest.raises(TailWindowExceeded):
         ft.run_watchlist_flag(None, SESSIONS[76], SESSIONS, raw, None, meta)
+
+
+def test_a_row_without_a_symbol_is_refused_not_merged_into_another(store):
+    x = bars("ZZZ", SESSIONS[:3])
+    x["symbol"] = pd.array([None, "ZZZ", "ZZZ"], dtype="string")
+    x.to_parquet(store / "chunk_00400.parquet")
+    with pytest.raises(ValueError, match="without a symbol"):
+        universe.load_daily_tail(5)

@@ -91,7 +91,8 @@ class PMCache:
         if not self.new:
             return
         new = pd.DataFrame(self.new, columns=PM_COLUMNS)
-        with job_lock(PM_LOCK, wait_s=PM_LOCK_WAIT_S) as ok:
+        with job_lock(PM_LOCK, root=PM_CACHE.parent, wait_s=PM_LOCK_WAIT_S) as ok:   # beside the file: every
+            # checkout and every WT_STATE that writes this file takes the same lock
             if not ok:
                 raise RuntimeError(f"the {PM_LOCK} lock stayed held for {PM_LOCK_WAIT_S:.0f}s; nothing saved")
             _append_missing(PM_CACHE, new)                    # the pool build and the forward test share it
@@ -100,16 +101,22 @@ class PMCache:
         self._new_keys, self.new = set(), []
 
 
+PM_MAX_ROW_GROUPS = 16            # each save appends one small row group; past this many, rewrite them as a few big ones
+
+
 def _append_missing(path, new: pd.DataFrame) -> None:
-    """Rewrite `path` atomically as its current rows plus the rows of `new` it lacks, one row group at a time."""
-    try:
-        pf = pq.ParquetFile(path) if path.exists() else None
-    except Exception:  # noqa: BLE001 — torn file: set it aside, as read_cache does, and start from the new rows
-        read_cache(path, pd.read_parquet, lambda: None)
-        pf = None
-    if pf is None:
+    """Rewrite `path` atomically as its current rows plus the rows of `new` it lacks, one row group at a time.
+
+    A file that exists but can't be opened is never overwritten here: that could be an I/O error on a good file.
+    The save fails instead (nothing is lost; the rows are fetched again next run), and the next load sets a truly
+    unreadable file aside (read_cache)."""
+    if not path.exists():
         atomic_replace(path, lambda tmp: new.to_parquet(tmp, index=False))
         return
+    try:
+        pf = pq.ParquetFile(path)
+    except Exception as e:  # noqa: BLE001 — whatever the cause, keep the file and save nothing
+        raise RuntimeError(f"{path.name} could not be opened ({e.__class__.__name__}); nothing saved") from e
     disk = pq.read_table(path, columns=["symbol", "date"], filters=[("date", "in", sorted(set(new.date)))]).to_pandas()
     fresh = new[~pd.MultiIndex.from_arrays([new.symbol, new.date]).isin(pd.MultiIndex.from_arrays([disk.symbol, disk.date]))]
     if not len(fresh):
@@ -119,6 +126,10 @@ def _append_missing(path, new: pd.DataFrame) -> None:
 
     def write(tmp) -> None:
         with pq.ParquetWriter(tmp, schema) as w:
+            if pf.num_row_groups >= PM_MAX_ROW_GROUPS:                 # compact: a few large row groups again
+                w.write_table(pa.concat_tables([pf.read().replace_schema_metadata(None).cast(schema), add]),
+                              row_group_size=1 << 20)
+                return
             for i in range(pf.num_row_groups):
                 w.write_table(pf.read_row_group(i).replace_schema_metadata(None).cast(schema))
             w.write_table(add)
