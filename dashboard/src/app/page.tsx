@@ -7,6 +7,7 @@ import { HealthBanner } from "@/components/health-banner";
 import { NoSnapshot } from "@/components/no-snapshot";
 import { Panel } from "@/components/panel";
 import { StatusBadge, TONE_TEXT, ToneIcon } from "@/components/status";
+import { DigestPanel } from "@/components/v3/digest";
 import { duration, newYork, sydney, txt } from "@/lib/format";
 import { computeHealth } from "@/lib/health";
 import { humanize, jobKey, jobName, jobTone, severityRank, severityTone, sortJobKeys, stateTone } from "@/lib/labels";
@@ -42,6 +43,7 @@ export default async function OverviewPage() {
       </section>
       <KillNotice s={s} />
       <Kpis s={s} />
+      <DigestPanel s={s} />
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
         <NeedsYouPanel s={s} />
         <JobsPanel s={s} />

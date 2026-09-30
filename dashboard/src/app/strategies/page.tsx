@@ -9,6 +9,7 @@ import { PageHeading } from "@/components/page-heading";
 import { Panel } from "@/components/panel";
 import { StatusBadge } from "@/components/status";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { BlotterPanel, PerformancePanel } from "@/components/v3/perf";
 import { newYork, num, pct, rMult, shortDate, sydney, txt } from "@/lib/format";
 import { humanize, isStrategyB, type Tone } from "@/lib/labels";
 import { loadSnapshot } from "@/lib/snapshot";
@@ -37,6 +38,8 @@ export default async function StrategiesPage() {
             <PaperAccount s={result.snapshot} />
             <PaperEvents s={result.snapshot} />
           </div>
+          <PerformancePanel s={result.snapshot} />
+          <BlotterPanel s={result.snapshot} />
         </>
       )}
     </>

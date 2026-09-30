@@ -3,6 +3,7 @@ import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import { FlaskConical } from "lucide-react";
 import { headers } from "next/headers";
+import Link from "next/link";
 import { AutoRefresh } from "@/components/client/auto-refresh";
 import { THEME_INIT_SCRIPT } from "@/components/client/theme-toggle";
 import { SiteHeader } from "@/components/site-header";
@@ -60,7 +61,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         </main>
         <footer className="text-muted-foreground mx-auto max-w-6xl px-4 pb-8 text-xs sm:px-6">
           <p>
-            Read-only view: this site cannot place, cancel or change anything.
+            Read-only view: this site cannot place, cancel or change anything.{" "}
+            <Link href="/glossary" className="hover:text-foreground underline underline-offset-2">
+              Glossary
+            </Link>
+            .
             {snap ? (
               <>
                 {" "}
