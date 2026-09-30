@@ -576,7 +576,10 @@ def sign(body: bytes, secret: str, ts: int) -> str:
     return "sha256=" + hmac.new(secret.encode(), f"{ts}.".encode() + body, hashlib.sha256).hexdigest()
 
 
-def send(body: bytes, url: str, secret: str, bypass: str | None, tries: int = 3) -> tuple[bool, str]:
+def send(body: bytes, url: str, secret: str, bypass: str | None, tries: int = 3,
+         deadline: float | None = None) -> tuple[bool, str]:
+    """POST the snapshot, retrying transient failures with backoff (2, 4, 8 ... s). `deadline` (time.monotonic()):
+    never start a wait that would end after it, so a network drop can't run the job past its own limit."""
     last = ""
     for i in range(tries):
         ts = int(time.time())
@@ -587,7 +590,7 @@ def send(body: bytes, url: str, secret: str, bypass: str | None, tries: int = 3)
         if bypass:
             headers["x-vercel-protection-bypass"] = bypass
         try:
-            r = requests.post(url, data=body, headers=headers, timeout=20)
+            r = requests.post(url, data=body, headers=headers, timeout=SEND_TIMEOUT_S)
             if 200 <= r.status_code < 300:
                 return True, f"HTTP {r.status_code}"
             last = f"HTTP {r.status_code}: {r.text[:160]}"
@@ -595,16 +598,25 @@ def send(body: bytes, url: str, secret: str, bypass: str | None, tries: int = 3)
                 return r.status_code == 409, last          # 409: a newer snapshot is already stored; not an error
         except requests.RequestException as e:
             last = e.__class__.__name__
-        time.sleep(2 ** (i + 1))
+        wait = 2 ** (i + 1)
+        if i == tries - 1 or (deadline is not None and time.monotonic() + wait + SEND_TIMEOUT_S > deadline):
+            break
+        time.sleep(wait)
     return False, last
 
 
 # ---- main --------------------------------------------------------------------------------------------------------
 
 def collect(root: Path = ROOT, out: Path = OUT) -> int:
-    """Run the collector as a child process. Exit 0/1 both leave usable documents."""
-    r = subprocess.run([sys.executable, "scripts/status_dashboard.py", "--with-account", "--out", str(out)], cwd=root,
-                       env={**os.environ, "PYTHONPATH": "src"}, capture_output=True, text=True, timeout=300)
+    """Run the collector as a child process. Exit 0/1 both leave usable documents. A collector that overruns is
+    killed and reported as COLLECT_TIMEOUT_CODE: the publish goes on with the last good documents instead of dying
+    (a hung source once cost a 57-minute gap)."""
+    try:
+        r = subprocess.run([sys.executable, "scripts/status_dashboard.py", "--with-account", "--out", str(out)],
+                           cwd=root, env={**os.environ, "PYTHONPATH": "src"}, capture_output=True, text=True,
+                           timeout=COLLECT_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        return COLLECT_TIMEOUT_CODE
     return r.returncode
 
 
@@ -616,6 +628,11 @@ def load_docs(out: Path = OUT) -> dict[str, Any]:
 
 
 PUBLISH_STATE = OUT / "publish_state.json"
+COLLECT_TIMEOUT_S = 240.0         # the collector's own sources stop at 120 s; this is for a hung one
+COLLECT_TIMEOUT_CODE = 124        # the exit code `timeout` uses
+SEND_TIMEOUT_S = 20.0
+SEND_TRIES = 7                    # backoff 2..64 s, bounded by PUBLISH_BUDGET_S
+PUBLISH_BUDGET_S = 330.0          # under the dashboard job's 6-minute deadline (wt.ops.schedule)
 ALERT_AFTER_FAILURES = 2          # one failed publish is noise; the second in a row fails the job (and alerts)
 LOCK_WAIT_S = 60.0                # `make publish` while the 15-minute job runs: wait a little, then give way
 
@@ -699,6 +716,8 @@ def shadow_key_problem(env: dict[str, str] | None = None) -> str | None:
 
 def _publish(a: argparse.Namespace) -> int:
     now = dt.datetime.now(dt.UTC).replace(microsecond=0)
+    deadline = time.monotonic() + PUBLISH_BUDGET_S
+    code = None
     if not a.no_collect:
         code = collect()
         if code not in (0, 1):
@@ -707,6 +726,8 @@ def _publish(a: argparse.Namespace) -> int:
     if not docs:
         print("no collector documents to publish", file=sys.stderr)
         return 2
+    if code not in (None, 0, 1) and isinstance(docs.get("meta"), dict):
+        docs["meta"] = {**docs["meta"], "exit_code": code}   # say so: the documents are from an earlier run
     env_file = os.environ.get("WT_ENV_FILE")
     if env_file and not _nonempty_readable(Path(env_file)):
         # Fail closed: without the secrets file the redactor would know no secret values to scrub.
@@ -742,7 +763,7 @@ def _publish(a: argparse.Namespace) -> int:
         print("DASHBOARD_INGEST_URL / DASHBOARD_INGEST_SECRET not set: not sending (run provision_secrets.sh)")
         return 0
     bypass = os.environ.get("VERCEL_AUTOMATION_BYPASS_SECRET")
-    ok, detail = send(body, url, secret, bypass)
+    ok, detail = send(body, url, secret, bypass, tries=SEND_TRIES, deadline=deadline)
     st = record_outcome(ok, detail, now)
     print(f"sent: {ok} ({error_code(detail) if not ok else detail}); consecutive failures {st['consecutive_failures']}")
     if ok and a.verify:
