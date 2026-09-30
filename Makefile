@@ -15,7 +15,7 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
                  src/wt/oms/manager.py src/wt/risk/virtual_account.py src/wt/ops/publish.py src/wt/brokers/alpaca_read.py src/wt/ops/evidence.py \
                  src/wt/research/manifest.py src/wt/research/method.py src/wt/research/trials.py \
                  src/wt/ops/thresholds.py src/wt/analytics/g2.py src/wt/risk/mandate.py \
-                 src/wt/ops/dashguard.py src/wt/ops/drill.py
+                 src/wt/ops/dashguard.py src/wt/ops/drill.py src/wt/brokers/cancel_only.py
 JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
