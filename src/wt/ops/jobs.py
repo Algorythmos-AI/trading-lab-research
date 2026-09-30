@@ -26,13 +26,14 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any
 
 from wt.core.clock import ET, et
 from wt.core.config import DATA_DIR, FORWARD_LEDGER, ROOT
-from wt.ops import preflight
+from wt.ops import hc, host, preflight
 from wt.ops.alerts import Alerts
 from wt.ops.heartbeat import Heartbeat, last_runs
 from wt.ops.locks import job_lock
@@ -44,7 +45,7 @@ KILL = ROOT / "KILL"
 WEEKLY_WAIT_S = 3 * 3600
 KILL_GRACE_S = 30
 # preflight failures that still let paper-b manage an open position (entries stay off)
-EXITS_ONLY_CHECKS = frozenset({"free disk", ".env private", "runtime state migrated"})
+EXITS_ONLY_CHECKS = frozenset({"free disk", ".env private", "runtime state migrated", "paging configured"})
 
 
 def _now() -> dt.datetime:
@@ -88,8 +89,12 @@ def deadline_for(job: Job, start: dt.datetime, sessions: dict[dt.date, Session])
 
 
 def run_child(job: Job, root: Path, log: Log, deadline: dt.datetime | None,
-              extra_env: dict[str, str] | None = None) -> tuple[int, bool]:
-    """Run the job's command. Returns (exit code, killed_at_deadline)."""
+              extra_env: dict[str, str] | None = None) -> tuple[int, bool, bool]:
+    """Run the job's command. Returns (exit code, killed_at_deadline, stopped_by_sigterm).
+
+    A deadline stops the job's process group with SIGTERM, then SIGKILL after KILL_GRACE_S (exit 124).
+    A SIGTERM to this runner (systemd stopping the unit, KillMode=mixed) is forwarded to the job's process group
+    the same way (exit 143), so the runner survives long enough to write its heartbeat and page."""
     env = {**os.environ, "PYTHONPATH": "src", "MODE": job.mode, "PYTHONUNBUFFERED": "1",
            "PYTHONDONTWRITEBYTECODE": "1", **(extra_env or {})}
     log(f"start {job.name}: {' '.join(job.command)} (MODE={job.mode}, deadline "
@@ -101,21 +106,53 @@ def run_child(job: Job, root: Path, log: Log, deadline: dt.datetime | None,
     with out:
         proc = subprocess.Popen([str(root / PY), *job.command], cwd=root, env=env, stdout=out, stderr=subprocess.STDOUT,
                                 stdin=subprocess.DEVNULL, start_new_session=True)
-        timeout = None if deadline is None else max(1.0, (deadline - _now()).total_seconds())
-        try:
-            return proc.wait(timeout=timeout), False
-        except subprocess.TimeoutExpired:
-            log(f"deadline reached: stopping {job.name} (pid {proc.pid})")
-            os.killpg(proc.pid, signal.SIGTERM)
+        stop: dict[str, float | None] = {"sigterm": None, "deadline": None}
+
+        def _killpg(sig: int) -> None:
             try:
-                proc.wait(timeout=KILL_GRACE_S)
-            except subprocess.TimeoutExpired:
-                os.killpg(proc.pid, signal.SIGKILL)
-                proc.wait()
-            return 124, True
+                os.killpg(proc.pid, sig)
+            except (ProcessLookupError, PermissionError):
+                pass
+
+        def _on_sigterm(signum: int, frame: Any) -> None:
+            if stop["sigterm"] is None:
+                stop["sigterm"] = time.monotonic()
+                _killpg(signal.SIGTERM)
+
+        prev = None
+        if threading.current_thread() is threading.main_thread():
+            prev = signal.signal(signal.SIGTERM, _on_sigterm)
+        try:
+            limit = None if deadline is None else time.monotonic() + max(1.0, (deadline - _now()).total_seconds())
+            while True:
+                try:
+                    code = proc.wait(timeout=1.0)
+                    break
+                except subprocess.TimeoutExpired:
+                    pass
+                now = time.monotonic()
+                if limit is not None and now >= limit and stop["deadline"] is None:
+                    log(f"deadline reached: stopping {job.name} (pid {proc.pid})")
+                    stop["deadline"] = now
+                    _killpg(signal.SIGTERM)
+                first = min((t for t in (stop["sigterm"], stop["deadline"]) if t is not None), default=None)
+                if first is not None and now - first > KILL_GRACE_S:
+                    _killpg(signal.SIGKILL)
+                    code = proc.wait()
+                    break
+        finally:
+            if prev is not None:
+                signal.signal(signal.SIGTERM, prev)
+        if stop["sigterm"] is not None:
+            log(f"stopped by SIGTERM: {job.name} (pid {proc.pid}) ended with {code}")
+            return 143, False, True
+        if stop["deadline"] is not None:
+            return 124, True, False
+        return code, False, False
 
 
-def journal_since(start: dt.datetime, path: Path = JOURNAL) -> list[dict[str, Any]]:
+def journal_since(start: dt.datetime, path: Path | None = None) -> list[dict[str, Any]]:
+    path = path or JOURNAL                  # resolved at call time, so the module-level path can be redirected
     rows: list[dict[str, Any]] = []
     try:
         lines = path.read_text().splitlines()
@@ -138,7 +175,8 @@ def paper_outcome(rows: list[dict[str, Any]]) -> dict[str, Any]:
                for a in (r.get("actions") or []) if any(k in str(a) for k in ("UNKNOWN", "SHORT", "UNPROTECTED"))]
     end = next((r for r in reversed(rows) if r.get("event") == "session_end"), None)
     virtual = (end or {}).get("virtual") or {}
-    return {"not_flat": "END_OF_DAY_NOT_FLAT" in events, "unknown_positions": len(unknown),
+    return {"armed": "armed" in events, "no_session": "no_session" in events or "too_early" in events,
+            "not_flat": "END_OF_DAY_NOT_FLAT" in events, "unknown_positions": len(unknown),
             "loop_errors": events.count("loop_error"), "latched": bool(virtual.get("latched")),
             "latch_reason": str(virtual.get("latch_reason") or ""), "refused": "refuse_to_arm" in events,
             "trades": events.count("trade_closed"),
@@ -187,11 +225,10 @@ def forward_summary(ledger: Path = FORWARD_LEDGER) -> str | None:
 
 
 def launchd_loaded(label: str) -> bool:
-    """True if launchd knows the agent. Used for the fallback chain while agents are being (re)installed."""
-    try:
-        return subprocess.run(["launchctl", "list", label], capture_output=True, timeout=10).returncode == 0
-    except (OSError, subprocess.SubprocessError):
-        return True                     # unknown: assume installed rather than run a job twice
+    """True if the service manager knows the job's agent/unit (launchd or systemd, wt.ops.host). Used for the
+    follower fallback while agents are being (re)installed; unknown counts as installed."""
+    job = next((j for j in JOBS.values() if j.label == label), None)
+    return True if job is None else host.current().loaded(job)
 
 
 def run_followers(job: Job, root: Path, alerts: Alerts, log: Log) -> None:
@@ -234,11 +271,23 @@ def b_exposure() -> bool:
         return True
 
 
-def refuse(job: Job, reason: str, alerts: Alerts, log: Log, hb: Heartbeat | None = None) -> int:
+HC_JOBS = frozenset({"routine", "paper-b", "forward", "weekly"})     # jobs with a healthchecks.io check
+
+
+def hc_slug(job: Job) -> str:
+    return f"wt-{job.name}"
+
+
+def refuse(job: Job, reason: str, alerts: Alerts, log: Log, hb: Heartbeat | None = None, ping: bool = True) -> int:
+    """A refusal exits 0 (launchd/systemd must not retry it) but is not a success: it pings the check's /fail."""
     log(f"REFUSED {job.name}: {reason}")
     alerts.once_per_day(f"refuse:{job.name}", f"{job.name} refused to run", reason, 3)
     if hb:
         hb.finish("refused", 0, reason)
+    if ping and job.name in HC_JOBS:
+        hc.ping(hc_slug(job), "fail", f"refused: {reason}")
+        if job.name == "paper-b":
+            hc.ping("wt-paper-b-armed", "fail", "refused before arming")
     return 0
 
 
@@ -253,7 +302,8 @@ def run_job(job: Job, root: Path = ROOT, preflight_only: bool = False, alerts: A
 
     with job_lock(job.name) as got:
         if not got:
-            return refuse(job, "another run of this job is still in progress", alerts, log)
+            # not a failure: the run that holds the lock is the one that pings
+            return refuse(job, "another run of this job is still in progress", alerts, log, ping=False)
         hb = Heartbeat(job.name, _sha(root))
         fails = preflight.failures(preflight.run_checks(root)) if job.preflight else []
         extra_env: dict[str, str] = {}
@@ -281,14 +331,24 @@ def run_job(job: Job, root: Path = ROOT, preflight_only: bool = False, alerts: A
 
         work_start = _now()
         try:
-            code, killed = run_child(job, root, log, deadline_for(job, work_start, sessions), extra_env)
+            code, killed, terminated = run_child(job, root, log, deadline_for(job, work_start, sessions), extra_env)
         except OSError as e:            # the child could not start (missing interpreter, fork failure, ...)
             log(f"could not start {job.name}: {e.__class__.__name__}: {e}")
-            code, killed = 127, False
-        log(f"end {job.name}: exit {code}{' (deadline kill)' if killed else ''}")
+            code, killed, terminated = 127, False, False
+        log(f"end {job.name}: exit {code}{' (deadline kill)' if killed else ''}{' (SIGTERM)' if terminated else ''}")
 
         if job.name == "paper-b":
-            alert_paper(paper_outcome(journal_since(start)), alerts)
+            outcome = paper_outcome(journal_since(start))
+            alert_paper(outcome, alerts)
+            if not outcome["armed"]:
+                # The runner pings "armed" itself when its loop reaches the open. A day with no session (or a run
+                # that started too early and handed over to the scheduled start) is fine; anything else is not.
+                if outcome["no_session"]:
+                    hc.ping("wt-paper-b-armed", "", "no session today")
+                else:
+                    hc.ping("wt-paper-b-armed", "fail", f"never armed (exit {code})")
+        if job.name in HC_JOBS:
+            hc.ping(hc_slug(job), "" if code == 0 else "fail", f"exit {code}")
         key = f"job:{job.name}"
         if code == 0:
             alerts.resolve(key, f"{job.name} recovered", f"{job.name} completed normally.")
@@ -299,10 +359,11 @@ def run_job(job: Job, root: Path = ROOT, preflight_only: bool = False, alerts: A
                 publish_evidence(root, log, alerts)
             hb.finish("ok", 0)
         else:
-            what = "was stopped at its deadline" if killed else f"exited with code {code}"
-            prio = 5 if (killed and job.name == "paper-b") else 4
+            what = ("was stopped at its deadline" if killed else
+                    "was stopped by the system (SIGTERM)" if terminated else f"exited with code {code}")
+            prio = 5 if ((killed or terminated) and job.name == "paper-b") else 4
             alerts.fire(key, f"{job.name} failed", f"{job.name} {what}. See {log.path.relative_to(root)}.", prio)
-            hb.finish("timeout" if killed else "failed", code)
+            hb.finish("timeout" if killed else "terminated" if terminated else "failed", code)
     run_followers(job, root, alerts, log)
     return code
 

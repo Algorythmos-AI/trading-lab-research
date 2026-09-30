@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from wt.core.clock import ET, et
-from wt.ops.schedule import JOBS, Job
+from wt.ops.schedule import SYDNEY, JOBS, Job
 
 PRE_SESSION_ET = "07:00"         # the routine's first stage is 08:00 ET; nothing changes after 07:00 ET
 POST_CLOSE_MIN = 120             # forward test (close + 20 min) plus its 90-minute deadline, with slack
@@ -71,15 +71,22 @@ def trading_blackout(now: dt.datetime, sessions: Mapping[dt.date, Session]) -> s
     return None
 
 
-def upcoming_starts(now: dt.datetime, jobs: Iterable[Job] | None = None, lead_min: int = LEAD_MIN) -> list[str]:
-    """Trading jobs that launchd will start within ``lead_min`` minutes of ``now``."""
+def upcoming_starts(now: dt.datetime, jobs: Iterable[Job] | None = None, lead_min: int = LEAD_MIN,
+                    clock: str | None = None) -> list[str]:
+    """Trading jobs the service manager will start within ``lead_min`` minutes of ``now``.
+
+    ``clock`` is the host kind: "launchd" fires on Sydney local time, "systemd" on New York time (default: this
+    host, wt.ops.host)."""
+    if clock is None:
+        from wt.ops.host import current
+        clock = current().kind
     out = []
     for j in jobs if jobs is not None else JOBS.values():
         if not j.trading:
             continue
-        for t in j.fires(now, days=1):
+        for t in (j.fires_et(now, days=1) if clock == "systemd" else j.fires(now, days=1)):
             if t - now.astimezone(t.tzinfo) <= dt.timedelta(minutes=lead_min):
-                out.append(f"{j.label} starts at {t:%H:%M} Sydney ({t.astimezone(ET):%H:%M} ET)")
+                out.append(f"{j.label} starts at {t.astimezone(SYDNEY):%H:%M} Sydney ({t.astimezone(ET):%H:%M} ET)")
     return out
 
 
