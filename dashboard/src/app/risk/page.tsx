@@ -252,10 +252,10 @@ function WindowsPanel({ s, now }: { s: Snapshot; now: Date }) {
     <Panel
       title="Expected activity windows"
       icon={CalendarClock}
-      means="When the Mac is expected to be awake and publishing. Outside these windows silence is normal and nobody is paged."
+      means="When the trading host is expected to be awake and publishing. Outside these windows silence is normal and nobody is paged. If the host stays silent past the last window it published, the watchdog assumes a window on every US weekday (07:30–18:00 New York) and pages then."
     >
       {windows.length === 0 ? (
-        <Empty title="No trading window in the next 48 hours" />
+        <Empty title="No trading window published ahead" />
       ) : (
         <Table>
           <TableHeader>
