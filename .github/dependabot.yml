@@ -18,6 +18,16 @@ updates:
     open-pull-requests-limit: 2
     groups:
       dashboard: { patterns: ["*"] }
+    # Majors the toolchain can't take yet (#39 failed lint on all three): TypeScript 7 (typescript-eslint doesn't
+    # support it), ESLint 10 (eslint-config-next 16 targets ESLint 9), and @types/node past the Node 22 runtime.
+    # Minor and patch updates still come. Lift a line in the PR that moves the toolchain to that major.
+    ignore:
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+      - dependency-name: eslint
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     target-branch: main
