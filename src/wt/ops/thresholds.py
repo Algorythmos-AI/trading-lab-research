@@ -16,8 +16,13 @@ from wt.core.config import ROOT
 DISK_FLOOR_GB = 3.0        # below this the trading jobs refuse (paper-b runs exits-only if it holds a position)
 DISK_TARGET_GB = 15.0      # keep at least this free: under it the dashboard shows amber
 SWAP_WARN_PCT = 85.0       # swap use above this is amber (swap files eat the same disk)
+MIN_TRADES_STATS = 20      # below this many trades: no win rate CI, profit factor or Sharpe (they'd mislead)
+MIN_SESSIONS_SHARPE = 30   # Sharpe needs at least this many eligible sessions
+LOSS_LIMIT_AMBER = 0.5     # a loss limit is amber once half of it is used (red at the latch)
 
-PUBLIC = {"DISK_FLOOR_GB": DISK_FLOOR_GB, "DISK_TARGET_GB": DISK_TARGET_GB, "SWAP_WARN_PCT": SWAP_WARN_PCT}
+PUBLIC = {"DISK_FLOOR_GB": DISK_FLOOR_GB, "DISK_TARGET_GB": DISK_TARGET_GB, "SWAP_WARN_PCT": SWAP_WARN_PCT,
+          "MIN_TRADES_STATS": MIN_TRADES_STATS, "MIN_SESSIONS_SHARPE": MIN_SESSIONS_SHARPE,
+          "LOSS_LIMIT_AMBER": LOSS_LIMIT_AMBER}
 
 
 def disk_free_gb(path: Path | None = None) -> float:
