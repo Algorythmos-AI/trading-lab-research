@@ -111,3 +111,12 @@ def test_the_deploy_command_allows_only_its_verbs():
     assert not re.search(r"(^|[;&|(]|then|do)\s*sudo\s", code, re.M)     # sudo is never *run* (only named in a hint)
     verbs = re.findall(r"^\s{2}([a-z|\\ -]+(?:runtime-\*)?)\)", text, re.M)
     assert verbs == ["gate|status|preflight", "units-diff", "deploy", "rollback\\ runtime-*"]
+
+
+
+def test_terraform_stays_compatible_with_resource_manager():
+    """OCI Resource Manager's newest Terraform is 1.5.x: the stack must accept it, and CI must validate with it."""
+    versions = (ROOT / "deploy/oci/terraform/versions.tf").read_text()
+    assert 'required_version = ">= 1.5.0"' in versions
+    infra = (ROOT / ".github/workflows/infra.yml").read_text()
+    assert "terraform_version: 1.5.7" in infra

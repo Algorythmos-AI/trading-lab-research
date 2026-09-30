@@ -1,5 +1,6 @@
 terraform {
-  required_version = ">= 1.6.0"
+  # OCI Resource Manager runs Terraform 1.5.x at most (and Cloud Shell ships 1.5.7): stay 1.5-compatible.
+  required_version = ">= 1.5.0"
   required_providers {
     oci = {
       source  = "oracle/oci"
