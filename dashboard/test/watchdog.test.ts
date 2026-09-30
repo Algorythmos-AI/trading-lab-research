@@ -81,19 +81,35 @@ describe("watchdog state machine", () => {
     expect(d.next.window).toBe("2026-09-30");
   });
 
-  it("sends at most one 'Mac offline' note per UTC day after 48 h with every window ended", () => {
-    const now = at("2026-10-01T13:00:00Z"); // 49 h after as_of
+  it("sends at most one 'offline' note per UTC day after 48 h, outside any window", () => {
+    const now = at("2026-10-01T23:00:00Z"); // 59 h after as_of; 19:00 ET, after the assumed window
     const d1 = evaluate(snap, state(), now);
     expect(d1.notices).toHaveLength(1);
-    expect(d1.notices[0]).toMatchObject({ kind: "offline", priority: 2, title: "Mac offline for 2 days" });
+    expect(d1.notices[0]).toMatchObject({ kind: "offline", priority: 3, title: "Trading host offline for 2 days" });
     expect(d1.next.last_offline_day).toBe("2026-10-01");
 
     expect(evaluate(snap, d1.next, at("2026-10-01T23:50:00Z")).notices).toEqual([]);
 
     const d3 = evaluate(snap, d1.next, at("2026-10-02T00:10:00Z"));
-    expect(d3.notices.map((n) => n.title)).toEqual(["Mac offline for 2 days"]);
-    const d4 = evaluate(snap, d3.next, at("2026-10-03T13:00:00Z"));
-    expect(d4.notices.map((n) => n.title)).toEqual(["Mac offline for 4 days"]);
+    expect(d3.notices.map((n) => n.title)).toEqual(["Trading host offline for 2 days"]);
+    const d4 = evaluate(snap, d3.next, at("2026-10-03T13:00:00Z")); // a Saturday: no assumed window
+    expect(d4.notices.map((n) => n.title)).toEqual(["Trading host offline for 4 days"]);
+  });
+
+  it("keeps paging on ET weekdays after the host's published windows run out", () => {
+    // Thursday 09:00 ET, two days after the last published window ended.
+    const d1 = evaluate(snap, state(), at("2026-10-01T13:00:00Z"));
+    expect(d1.notices.map((n) => n.kind)).toEqual(["stopped"]);
+    expect(d1.notices[0]?.message).toContain("weekday window is assumed");
+    expect(d1.next).toMatchObject({ level: "stopped", window: "2026-10-01" });
+    // Same assumed window: no repeat. Next weekday: a new episode pages again.
+    expect(evaluate(snap, d1.next, at("2026-10-01T15:00:00Z")).notices).toEqual([]);
+    const d2 = evaluate(snap, d1.next, at("2026-10-02T12:00:00Z"));
+    expect(d2.notices.map((n) => n.kind)).toEqual(["stopped"]);
+    expect(d2.next.window).toBe("2026-10-02");
+    // A fresh snapshot clears it.
+    const back = evaluate(cleanSnapshot({ as_of: "2026-10-02T12:10:00Z" }), d2.next, at("2026-10-02T12:20:00Z"));
+    expect(back.notices.map((n) => n.kind)).toEqual(["recovered"]);
   });
 
   it("is not 'offline' before 48 h, or while a window is still ahead", () => {
@@ -104,10 +120,23 @@ describe("watchdog state machine", () => {
     expect(evaluate(ahead, state(), at("2026-10-02T13:00:00Z")).notices).toEqual([]);
   });
 
-  it("does nothing without a snapshot or an as_of", () => {
-    expect(evaluate(null, state(), at("2026-09-29T12:40:00Z")).notices).toEqual([]);
+  it("pages once per window when there is no snapshot, or none with a readable time", () => {
+    // Tuesday 08:40 ET: inside the published window (and an assumed weekday one).
+    const d1 = evaluate(null, state(), at("2026-09-29T12:40:00Z"));
+    expect(d1.notices.map((n) => n.title)).toEqual(["Dashboard has no readable snapshot"]);
+    expect(d1.notices[0]?.priority).toBe(4);
+    expect(d1.next).toMatchObject({ level: "stopped", window: "2026-09-29" });
+    expect(evaluate(null, d1.next, at("2026-09-29T14:00:00Z")).notices).toEqual([]);   // same window: no repeat
     const noTime = cleanSnapshot({ as_of: null });
-    expect(evaluate(noTime, state(), at("2026-09-29T12:40:00Z")).notices).toEqual([]);
+    expect(evaluate(noTime, state(), at("2026-09-29T12:40:00Z")).notices.map((n) => n.kind)).toEqual(["stopped"]);
+    // A readable snapshot again clears it.
+    const back = evaluate(cleanSnapshot({ as_of: "2026-09-29T14:05:00Z" }), d1.next, at("2026-09-29T14:10:00Z"));
+    expect(back.notices.map((n) => n.kind)).toEqual(["recovered"]);
+  });
+
+  it("stays quiet without a snapshot outside any window", () => {
+    expect(evaluate(null, state(), at("2026-09-30T02:00:00Z")).notices).toEqual([]);      // Tuesday 22:00 ET
+    expect(evaluate(null, state(), at("2026-10-03T15:00:00Z")).notices).toEqual([]);      // Saturday
   });
 
   it("asks for a history prune once per UTC day", () => {
