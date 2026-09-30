@@ -35,7 +35,7 @@ from wt.core.clock import ET, et, to_utc_iso  # noqa: E402
 from wt.core.config import DATA_DIR, ROUTINE_DIR  # noqa: E402
 from wt.data.alpaca import AlpacaREST, HybridFeed  # noqa: E402
 from wt.data.edgar import SharesOutstanding  # noqa: E402
-from wt.data.universe import ASSETS, load_daily  # noqa: E402
+from wt.data.universe import ASSETS, load_daily_tail, tail_rows_for  # noqa: E402
 from wt.risk.virtual_account import VirtualAccount  # noqa: E402
 from wt.scanner.features import PMCache  # noqa: E402
 from wt.scanner.pool import DailyIndex, PoolConfig, build_day  # noqa: E402
@@ -91,11 +91,13 @@ def run(d: dt.date, feed: str, replay: bool) -> Path | None:
     p, prev_sessions = sessions[i - 1], sessions[max(0, i - 25): i]
     assets = pd.read_parquet(ASSETS)
     universe = set(assets[~assets.is_fund_like & ~assets.has_dot].symbol)
-    raw = load_daily()
-    daily = DailyIndex(raw)
+    # Only each symbol's last rows: the whole store peaks near 3 GB. The tail grows with the age of a replayed day,
+    # and any lookup it could not answer exactly raises TailWindowExceeded instead of using a shortened history.
+    raw, tail = load_daily_tail(tail_rows_for(d, PoolConfig.daily_lookback))
+    daily = DailyIndex(raw, tail)
     from build_pool import SplitStore
-    splits = SplitStore(a, raw, persist=False)                    # read shared caches, never write them
-    cache, shares = PMCache(), SharesOutstanding()
+    splits = SplitStore(a, raw, persist=False, tail=tail)         # read shared caches, never write them
+    cache, shares = PMCache(since=prev_sessions[0]), SharesOutstanding()     # the RVOL baselines' sessions only
     folder = OUT / str(d)
     pool, pmb = pd.DataFrame(), pd.DataFrame()
     for hhmm, name in STAGES:

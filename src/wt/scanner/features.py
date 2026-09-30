@@ -19,45 +19,111 @@ import statistics
 import time
 
 import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 from wt.core.clock import et, to_utc_iso
 from wt.core.config import DATA_DIR
 from wt.data.alpaca import AlpacaREST
 from wt.data.edgar import SharesOutstanding
+from wt.ops.locks import job_lock
 from wt.ops.safeio import atomic_replace, read_cache
 from wt.scanner.catalyst import best_catalyst
 from wt.scanner.ranking import Candidate
 
 PM_CACHE = DATA_DIR / "pm" / "pm_agg.parquet"
+PM_COLUMNS = ["symbol", "date", "pm_volume", "pm_dollar_vol", "last_0925", "pm_high", "n_bars"]
+PM_LOCK = "pm-cache"
+PM_LOCK_WAIT_S = 600.0
 
 
 class PMCache:
-    """(symbol, date) -> pre-market aggregates, persisted."""
+    """(symbol, date) -> pre-market aggregates, persisted.
 
-    def __init__(self):
-        self.df = read_cache(PM_CACHE, pd.read_parquet, lambda: pd.DataFrame(
-            columns=["symbol", "date", "pm_volume", "pm_dollar_vol", "last_0925", "pm_high", "n_bars"]))
-        self.idx = {(s, d) for s, d in zip(self.df.symbol, self.df.date, strict=False)}
+    `since`: hold only the rows dated `since` or later. The file has ~2.8M rows and a night needs ~25 sessions of
+    them; asking a filtered cache about an earlier date raises instead of answering "missing".
+
+    save() never writes the file from memory. Under the pm-cache lock it copies the file on disk row group by row
+    group and appends only the rows the file lacks, so neither a filtered cache nor a concurrent writer can drop
+    rows (the old save wrote this process's copy over the file)."""
+
+    def __init__(self, since: dt.date | None = None):
+        self.since = since
+        filters = [("date", ">=", since)] if since is not None else None
+        self.df = read_cache(PM_CACHE, lambda f: pd.read_parquet(f, filters=filters),
+                             lambda: pd.DataFrame(columns=PM_COLUMNS))
+        self._keys = pd.MultiIndex.from_arrays([self.df.symbol, self.df.date])
+        self._new_keys: set[tuple[str, dt.date]] = set()
         self.new: list[dict] = []
 
+    def _check(self, dates) -> None:
+        if self.since is not None:
+            early = sorted(d for d in set(dates) if d < self.since)
+            if early:
+                raise ValueError(f"PMCache(since={self.since}) holds no rows for {early[0]}")
+
+    def _has(self, key: tuple[str, dt.date]) -> bool:
+        return key in self._new_keys or key in self._keys
+
     def missing(self, symbols, dates):
-        return [(s, d) for s in symbols for d in dates if (s, d) not in self.idx]
+        dates = list(dates)
+        self._check(dates)
+        want = pd.MultiIndex.from_product([list(symbols), dates]) if len(symbols) and dates else []
+        if not len(want):
+            return []
+        have = ~want.isin(self._keys)
+        return [k for k, h in zip(want, have, strict=True) if h and k not in self._new_keys]
 
     def add(self, rows: list[dict]):
         for r in rows:
-            if (r["symbol"], r["date"]) not in self.idx:
-                self.idx.add((r["symbol"], r["date"]))
+            key = (r["symbol"], r["date"])
+            if not self._has(key):
+                self._new_keys.add(key)
                 self.new.append(r)
 
     def get(self, symbols, dates) -> pd.DataFrame:
+        dates = set(dates)
+        self._check(dates)
         df = pd.concat([self.df, pd.DataFrame(self.new)], ignore_index=True) if self.new else self.df
-        return df[df.symbol.isin(set(symbols)) & df.date.isin(set(dates))]
+        return df[df.symbol.isin(set(symbols)) & df.date.isin(dates)]
 
     def save(self):
-        if self.new:
-            self.df = pd.concat([self.df, pd.DataFrame(self.new)], ignore_index=True)
-            self.new = []
-            atomic_replace(PM_CACHE, self.df.to_parquet)     # the pool build and the forward test share it
+        if not self.new:
+            return
+        new = pd.DataFrame(self.new, columns=PM_COLUMNS)
+        with job_lock(PM_LOCK, wait_s=PM_LOCK_WAIT_S) as ok:
+            if not ok:
+                raise RuntimeError(f"the {PM_LOCK} lock stayed held for {PM_LOCK_WAIT_S:.0f}s; nothing saved")
+            _append_missing(PM_CACHE, new)                    # the pool build and the forward test share it
+        self.df = pd.concat([self.df, new], ignore_index=True) if len(self.df) else new
+        self._keys = pd.MultiIndex.from_arrays([self.df.symbol, self.df.date])
+        self._new_keys, self.new = set(), []
+
+
+def _append_missing(path, new: pd.DataFrame) -> None:
+    """Rewrite `path` atomically as its current rows plus the rows of `new` it lacks, one row group at a time."""
+    try:
+        pf = pq.ParquetFile(path) if path.exists() else None
+    except Exception:  # noqa: BLE001 — torn file: set it aside, as read_cache does, and start from the new rows
+        read_cache(path, pd.read_parquet, lambda: None)
+        pf = None
+    if pf is None:
+        atomic_replace(path, lambda tmp: new.to_parquet(tmp, index=False))
+        return
+    disk = pq.read_table(path, columns=["symbol", "date"], filters=[("date", "in", sorted(set(new.date)))]).to_pandas()
+    fresh = new[~pd.MultiIndex.from_arrays([new.symbol, new.date]).isin(pd.MultiIndex.from_arrays([disk.symbol, disk.date]))]
+    if not len(fresh):
+        return
+    schema = pf.schema_arrow.remove_metadata()
+    add = pa.Table.from_pandas(fresh, preserve_index=False).replace_schema_metadata(None).cast(schema)
+
+    def write(tmp) -> None:
+        with pq.ParquetWriter(tmp, schema) as w:
+            for i in range(pf.num_row_groups):
+                w.write_table(pf.read_row_group(i).replace_schema_metadata(None).cast(schema))
+            w.write_table(add)
+
+    atomic_replace(path, write)
 
 
 def fetch_pm(a: AlpacaREST, cache: PMCache, symbols: list[str], dates: list[dt.date]) -> None:
