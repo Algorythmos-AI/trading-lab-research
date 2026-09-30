@@ -20,7 +20,7 @@ JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
 .PHONY: help bootstrap lint typecheck test ci hooks status gate deploy rollback migrate-state preflight publish-verify \
-        watchdog-drill dashboard-deploy \
+        watchdog-drill dashboard-deploy vm-deploy \
         agents-diff install-trading-agents install-dashboard-agent publish schema kill unkill reset-latch evidence
 
 help: ## List the tasks
@@ -98,6 +98,19 @@ schema: ## Regenerate the dashboard contract: snapshot.schema.json (from ALLOW),
 	$(PY) -c "import json; from wt.ops.publish import to_schema, SCHEMA_PATH; SCHEMA_PATH.parent.mkdir(parents=True, exist_ok=True); SCHEMA_PATH.write_text(json.dumps(to_schema(), indent=2) + '\\n')"
 	$(PY) scripts/gen_thresholds_ts.py
 	@if [ -d dashboard/node_modules ]; then cd dashboard && pnpm -s gen:types; else echo "dashboard/node_modules missing: run pnpm install, then make schema again for the TS types"; fi
+
+# The Mac's cloudflared client pin: 2026.6.0+ ignores Access service tokens (cloudflare/cloudflared#1673).
+VM_CLOUDFLARED_VERSION := 2026.5.1
+
+vm-deploy: ## Deploy on the OCI host through its Access tunnel: make vm-deploy [VERB=gate|status|preflight|deploy|units-diff]
+	@v=$$($${CLOUDFLARED:-cloudflared} --version 2>/dev/null | awk '{print $$3}'); \
+	if [ "$$v" != "$(VM_CLOUDFLARED_VERSION)" ]; then \
+	  echo "cloudflared $$v on this Mac; vm-deploy needs $(VM_CLOUDFLARED_VERSION) (set CLOUDFLARED=/path/to/it; see docs/runbooks/oci-host.md)"; exit 2; fi; \
+	set -a; . ./.env; set +a; \
+	: "$${VM_SSH_HOST:?VM_SSH_HOST missing from .env}" "$${CF_ACCESS_CLIENT_ID:?}" "$${CF_ACCESS_CLIENT_SECRET:?}"; \
+	ssh -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 -i "$${VM_DEPLOY_KEY:-$$HOME/.ssh/wt-deploy}" \
+	  -o ProxyCommand="$${CLOUDFLARED:-cloudflared} access ssh --hostname %h --id $$CF_ACCESS_CLIENT_ID --secret $$CF_ACCESS_CLIENT_SECRET" \
+	  "wt@$$VM_SSH_HOST" "$${VERB:-status}"
 
 kill: ## Stop new paper-B entries (exits keep being managed): make kill REASON="..."
 	@printf '%s\n' "$${REASON:-paused by make kill} ($$(date '+%Y-%m-%d %H:%M %Z'))" > KILL && echo "KILL switch ON" && cat KILL

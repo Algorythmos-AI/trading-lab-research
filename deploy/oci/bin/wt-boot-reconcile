@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# After any boot: start paper-b and forward if the boot fell inside their windows (systemd timers are
+# Persistent=false, so a start missed during a reboot is not replayed). Their job locks make a repeat harmless.
+set -uo pipefail
+cd /home/wt/trading || exit 0
+units=$(runuser -u wt -- env WT_HOST=systemd PYTHONPATH=src .venv/bin/python -m wt.ops.bootreconcile 2>/dev/null) || exit 0
+for u in $units; do
+  echo "wt-boot-reconcile: starting $u (inside its window)"
+  systemctl start --no-block "$u" || true
+done
+exit 0
