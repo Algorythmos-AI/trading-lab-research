@@ -12,6 +12,11 @@ Why each piece:
   * A broken chain turns paper-B entries off (a flag file the runner checks) and pages; exits keep being managed.
   * The R2 bucket lock covers restic's data/ and snapshots/ prefixes for 30 days, so the VM can't delete them;
     `prune` runs from the Mac and treats "unable to remove" (still locked) as a warning.
+  * Two hosts share one repository (the Mac seeds the VM through it, and a shadow runs next to the primary), so
+    every snapshot carries `--host <WT_HOST_ID>` and a `role:` tag, and restore-test restores this host's own
+    latest snapshot. A shadow's anchors go under shadow/<host>/: the write-once anchor of a day belongs to the
+    primary, and a shadow claiming it first would make the primary's anchor look like rewritten history.
+  * The market-data caches (data/) are backed up on Fridays; the timer fires Mon..Fri only.
 
 Environment: RESTIC_REPOSITORY (s3:https://<account>.r2.cloudflarestorage.com/wt-backups), RESTIC_PASSWORD,
 R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY (restic reads them as AWS_* credentials).
@@ -23,6 +28,7 @@ import datetime as dt
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -32,6 +38,7 @@ from typing import Any
 from wt.core import ledger
 from wt.core.clock import ET
 from wt.core.config import DATA_DIR, FORWARD_LEDGER, ROOT, STATE_DIR
+from wt.ops import hc
 from wt.ops.alerts import Alerts
 from wt.ops.r2 import R2
 
@@ -41,7 +48,21 @@ DIGEST = STATE_DIR / "dashboard" / "evidence_digest.json"
 ANCHOR_BUCKET = os.environ.get("R2_ANCHOR_BUCKET", "wt-anchors")
 NIGHTLY = ["var", "data/live", "logs"]
 WEEKLY = ["data"]                                          # the market-data caches: RTO, not evidence
+WEEKLY_DAY = 4                                             # Friday: the backup timer fires Mon..Fri
 KEEP_WITHIN = "45d"
+
+
+def host() -> str:
+    return os.environ.get("WT_HOST_ID") or socket.gethostname().split(".")[0]
+
+
+def role() -> str:
+    return os.environ.get("WT_ROLE", "primary")
+
+
+def anchor_key(day: dt.date) -> str:
+    key = f"anchors/{day.isoformat()}.json"
+    return key if role() != "shadow" else f"shadow/{host()}/{key}"
 
 
 def restic(*args: str, timeout: float = 3600) -> subprocess.CompletedProcess[str]:
@@ -72,7 +93,7 @@ def anchor(day: dt.date, state: dict[str, dict[str, Any]], client: R2 | None = N
     if not c.configured:
         return False, "R2 not configured"
     body = json.dumps({k: {"lines": v["lines"], "head": v["head"]} for k, v in state.items()}, sort_keys=True)
-    key = f"anchors/{day.isoformat()}.json"
+    key = anchor_key(day)
     w = c.put(ANCHOR_BUCKET, key, body.encode(), if_none_match="*")
     if w.status in (200, 201):
         return True, f"anchored {key}"
@@ -83,16 +104,18 @@ def anchor(day: dt.date, state: dict[str, dict[str, Any]], client: R2 | None = N
     return False, f"anchor write answered HTTP {w.status}"
 
 
-def nightly(alerts: Alerts | None = None, weekly: bool | None = None, client: R2 | None = None) -> int:
+def nightly(alerts: Alerts | None = None, weekly: bool | None = None, client: R2 | None = None,
+            today: dt.date | None = None) -> int:
     alerts = alerts or Alerts()
-    today = dt.datetime.now(ET).date()
+    today = today or dt.datetime.now(ET).date()
     state = chains()
     problems = [f"{k}: {p}" for k, v in state.items() for p in v["problems"]]
     if problems:
         flag_chain(problems, alerts)
     code = 0
-    paths = NIGHTLY + (WEEKLY if (weekly if weekly is not None else today.weekday() == 5) else [])
-    r = restic("backup", "--tag", "nightly", "--exclude-caches", *[p for p in paths if (ROOT / p).exists()])
+    paths = NIGHTLY + (WEEKLY if (weekly if weekly is not None else today.weekday() == WEEKLY_DAY) else [])
+    r = restic("backup", "--host", host(), "--tag", "nightly", "--tag", f"role:{role()}", "--exclude-caches",
+               *[p for p in paths if (ROOT / p).exists()])
     if r.returncode not in (0, 3):                       # 3 = snapshot made, some files unreadable
         alerts.fire("backup", "Nightly backup failed", f"restic exit {r.returncode}; see the backup log.", 4)
         print((r.stderr or r.stdout)[-800:], file=sys.stderr)
@@ -110,6 +133,7 @@ def nightly(alerts: Alerts | None = None, weekly: bool | None = None, client: R2
                                  indent=1))
     if code == 0 and not problems:
         alerts.resolve("backup", "Nightly backup: ok", "Backed up and anchored.")
+    hc.ping("wt-backup", "" if code == 0 and not problems else "fail", f"anchor: {why}")
     return code
 
 
@@ -117,8 +141,8 @@ def restore_test() -> int:
     """Restore the latest snapshot's ledgers into a temp dir and check their chains (weekly)."""
     tmp = Path(tempfile.mkdtemp(prefix="wt-restore-"))
     try:
-        r = restic("restore", "latest", "--target", str(tmp), "--include", str(FORWARD_LEDGER),
-                   "--include", str(JOURNAL))
+        r = restic("restore", "latest", "--host", host(), "--target", str(tmp), "--include", str(FORWARD_LEDGER),
+                   "--include", str(JOURNAL))                   # this host's own latest, never the other host's
         if r.returncode != 0:
             print((r.stderr or r.stdout)[-800:], file=sys.stderr)
             return 1
