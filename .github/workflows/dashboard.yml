@@ -23,8 +23,9 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  VERCEL_ORG_ID: team_zdvzZQr6joigVUzLFhQbxXfI          # not secret: identifies the team and project
-  VERCEL_PROJECT_ID: prj_kgz9ePYH1iBuJBB3tuVBbUiAc0zN
+  # Not secret, but infrastructure identifiers stay out of git (plan v7): GitHub variables, set by the owner.
+  VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
   VERCEL_CLI: vercel@59.7.0
 
 defaults:
@@ -88,6 +89,10 @@ jobs:
         run: |
           if [ "$HAS_TOKEN" != "true" ] || [ "$HAS_BYPASS" != "true" ]; then
             echo "::error::The production Environment needs VERCEL_TOKEN and VERCEL_AUTOMATION_BYPASS_SECRET (docs/runbooks/dashboard-deploy.md). Main is NOT deployed."
+            exit 1
+          fi
+          if [ -z "$VERCEL_ORG_ID" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
+            echo "::error::Set the GitHub variables VERCEL_ORG_ID and VERCEL_PROJECT_ID (docs/runbooks/dashboard-deploy.md). Main is NOT deployed."
             exit 1
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

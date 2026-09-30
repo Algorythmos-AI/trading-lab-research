@@ -14,7 +14,9 @@ each one is a production deploy of the only off-host dead-man's switch.
 Without both secrets the deploy job fails on purpose ("Main is NOT deployed").
 
 **If a deploy fails.** The previous deployment stays live. Read the failed step:
-- *Require the deploy secrets*: set up the Environment as above, then re-run the job.
+- Environment variables (not secret, but kept out of git): `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`, the values
+  in `dashboard/.vercel/project.json` (`orgId`, `projectId`).
+- *Require the deploy secrets*: set up the Environment as above (secrets and variables), then re-run the job.
 - *The live dashboard reports this commit*: Vercel may still be aliasing; re-run once. If it still fails, open
   the deployment in Vercel and promote the previous one.
 

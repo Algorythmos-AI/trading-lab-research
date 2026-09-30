@@ -7,8 +7,8 @@ fields it doesn't know, so the dashboard must be at least as new as the publishe
 The rule, for a deploy of `target` (a commit on origin/main):
   * the live dashboard reports its build commit at /api/health (`version`, the first 12 hex digits);
   * that commit must be on origin/main (nothing unreviewed is live);
-  * the last commit at or before `target` that touched any path in the workflow's `on.push.paths` must be an
-    ancestor of (or equal to) the live commit.
+  * the last commit at or before `target` that touched any contract path (deploy/contract-paths.txt at the target;
+    older commits without it: the workflow's `on.push.paths`) must be an ancestor of (or equal to) the live commit.
 Ancestry, not equality: a later commit that only touched the workflow, a manual redeploy or a redeploy after an
 env change all leave a newer, still-valid version live.
 
@@ -28,6 +28,7 @@ import yaml
 from wt.core.config import ROOT
 
 WORKFLOW = ".github/workflows/dashboard.yml"
+CONTRACT_PATHS = "deploy/contract-paths.txt"
 OVERRIDE_ENV = "WT_DASHBOARD_GUARD_OVERRIDE"
 
 
@@ -43,12 +44,23 @@ def workflow_paths(text: str) -> list[str]:
     return [str(p) for p in paths]
 
 
-def last_dashboard_commit(root: Path, target: str) -> str | None:
-    """The newest commit at or before `target` that touched a dashboard-deploy path (per the target's workflow)."""
+def contract_paths(text: str) -> list[str]:
+    """deploy/contract-paths.txt: one glob per line; blank lines and # comments ignored."""
+    return [line.strip() for line in text.splitlines() if line.strip() and not line.lstrip().startswith("#")]
+
+
+def paths_at(root: Path, target: str) -> list[str]:
+    """The contract paths as of `target` (the shared file, else the older workflow's push filter)."""
+    shown = _git(root, "show", f"{target}:{CONTRACT_PATHS}")
+    if shown.returncode == 0:
+        return contract_paths(shown.stdout)
     shown = _git(root, "show", f"{target}:{WORKFLOW}")
-    if shown.returncode != 0:
-        return None
-    paths = workflow_paths(shown.stdout)
+    return workflow_paths(shown.stdout) if shown.returncode == 0 else []
+
+
+def last_dashboard_commit(root: Path, target: str) -> str | None:
+    """The newest commit at or before `target` that touched a contract path (as of the target)."""
+    paths = paths_at(root, target)
     if not paths:
         return None
     r = _git(root, "log", "-1", "--format=%H", target, "--", *[f":(glob){p}" for p in paths])

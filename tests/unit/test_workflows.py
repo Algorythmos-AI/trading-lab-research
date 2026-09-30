@@ -112,6 +112,26 @@ def test_the_required_check_always_runs():
         cfg = on.get(event) or {}
         assert not {"paths", "paths-ignore"} & set(cfg), f"ci.yml {event} must not be path-filtered"
     assert (wf["jobs"].get("test") or {}).get("name") == "test", "the required check's job name must stay `test`"
+    gate = wf["jobs"].get("dashboard-gate") or {}
+    assert gate.get("name") == "dashboard-gate" and "if" not in gate, "dashboard-gate must always run"
+    assert wf["concurrency"]["cancel-in-progress"] == "${{ github.event_name == 'pull_request' }}", \
+        "a main commit's run must never be cancelled: a cancelled check is not green, so it could never deploy"
+
+
+def test_the_dashboard_contract_paths_are_one_list():
+    """dashguard, dashboard-gate and the dashboard deploy trigger all use deploy/contract-paths.txt's paths."""
+    from wt.ops import dashguard
+    listed = dashguard.contract_paths((ROOT / dashguard.CONTRACT_PATHS).read_text())
+    wf = load(ROOT / ".github" / "workflows" / "dashboard.yml")
+    on = wf.get("on", wf.get(True))
+    assert on["push"]["paths"] == listed and on["pull_request"]["paths"] == listed
+    assert "deploy/contract-paths.txt" in yaml.safe_dump(load(ROOT / ".github" / "workflows" / "ci.yml"))
+
+
+def test_no_infrastructure_ids_in_workflows():
+    for path in WORKFLOWS:
+        text = path.read_text()
+        assert not re.search(r"\b(team|prj)_[A-Za-z0-9]{16,}", text), f"{path.name}: a Vercel id belongs in vars"
 
 
 def test_the_guard_catches_the_bug_it_was_written_for(tmp_path):
