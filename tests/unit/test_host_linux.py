@@ -82,8 +82,8 @@ def test_every_trading_job_has_a_systemd_schedule_and_a_runtime_above_its_deadli
 
 def test_paper_b_unit(tmp_path):
     svc = units.service(JOBS["paper-b"], Path("/home/wt/trading"))
-    for line in ("Type=exec", "User=wt", "Wants=wt-secrets.service network-online.target",
-                 "After=wt-secrets.service network-online.target", "OnFailure=wt-alert@%n.service",
+    for line in ("Type=exec", "User=wt", "Wants=wt-secrets.service network-online.target time-sync.target",
+                 "After=wt-secrets.service network-online.target time-sync.target", "OnFailure=wt-alert@%n.service",
                  "EnvironmentFile=/run/wt-secrets/env", "Environment=WT_HOST=systemd", "Restart=on-failure",
                  "RestartSec=60", "RestartPreventExitStatus=124", "RuntimeMaxSec=36000", "KillMode=mixed",
                  "TimeoutStopSec=60", "OOMScoreAdjust=-500", "LimitCORE=0",
@@ -240,3 +240,37 @@ def test_known_secret_values_are_scrubbed_from_the_environment(monkeypatch):
     monkeypatch.setenv("NTFY_TOPIC", "short")                                  # too short to scrub safely
     vals = safeio.secret_env_values()
     assert "supersecretvalue123" in vals and "short" not in vals
+
+
+def test_heavy_jobs_have_memory_limits_and_the_runner_has_none():
+    root = Path("/home/wt/trading")
+    for name in ("routine", "forward", "weekly"):
+        svc = units.service(JOBS[name], root).splitlines()
+        assert "MemoryHigh=1536M" in svc and "MemoryMax=2G" in svc and "MemorySwapMax=512M" in svc
+    assert "MemoryMax=1G" in units.service(JOBS["dashboard"], root).splitlines()
+    assert not any(x.startswith("Memory") for x in units.service(JOBS["paper-b"], root).splitlines())
+
+
+def test_rendered_units_have_no_inline_comments():
+    for name, text in units.render_all(Path("/home/wt/trading")).items():
+        for line in text.splitlines():
+            assert "#" not in line.split("=", 1)[-1] or line.startswith("ExecStart"), f"{name}: {line}"
+
+
+def test_the_install_fingerprint_covers_units_static_units_and_helpers(tmp_path):
+    import shutil
+    repo = Path(__file__).resolve().parents[2]
+    fp = units.fingerprint(repo)
+    paths = [line.split("  ", 1)[1] for line in fp.splitlines()]
+    assert "/etc/systemd/system/wt-paper-b.service" in paths and "/etc/systemd/system/wt-backup.timer" in paths
+    assert "/usr/local/bin/wt-deploy" in paths and paths == sorted(paths)
+    assert units.fingerprint(repo) == fp                              # stable
+    trees = {}
+    for name in ("base", "changed"):
+        trees[name] = tmp_path / name
+        for d in (units.HELPER_DIR, units.STATIC_DIR):
+            shutil.copytree(repo / d, trees[name] / d)
+    (trees["changed"] / units.HELPER_DIR / "wt-deploy").write_text("changed\n")
+    live = Path("/home/wt/trading")                                  # the checkout the units run from
+    a, b = (set(units.fingerprint(t, live).splitlines()) for t in trees.values())
+    assert {line.split("  ", 1)[1] for line in a ^ b} == {"/usr/local/bin/wt-deploy"}   # a changed helper, alone

@@ -21,6 +21,7 @@ Design (reviewed 2026-09-29):
 from __future__ import annotations
 
 import argparse
+import hashlib
 import sys
 from pathlib import Path
 
@@ -29,6 +30,20 @@ from wt.ops.schedule import JOBS, PY, Job
 UNIT_DIR = Path("/etc/systemd/system")
 SECRETS_FILE = "/run/wt-secrets/env"
 USER = "wt"
+HELPER_DIR = Path("deploy/oci/bin")           # installed to /usr/local/bin by wt-install-units
+STATIC_DIR = Path("deploy/oci/systemd")       # installed to /etc/systemd/system by wt-install-units
+
+# cgroup memory per job on the 4 GB VM (e2-medium): (MemoryHigh, MemoryMax, MemorySwapMax). The heavy jobs throttle at
+# High and are killed at Max rather than pushing the paper runner, which runs at the same time, into the OOM killer.
+# The tail loader keeps them near 1 GB, so these are fuses, not budgets. The publisher's limit covers its collector
+# child too. The runner itself is never capped (OOMScoreAdjust=-500 instead): killing it mid-session is the worst
+# outcome.
+MEMORY: dict[str, tuple[str | None, str, str | None]] = {
+    "routine": ("1536M", "2G", "512M"),
+    "forward": ("1536M", "2G", "512M"),
+    "weekly": ("1536M", "2G", "512M"),
+    "dashboard": (None, "1G", "256M"),
+}
 
 
 def service(job: Job, root: Path, user: str = USER) -> str:
@@ -36,8 +51,9 @@ def service(job: Job, root: Path, user: str = USER) -> str:
     lines = [
         "[Unit]",
         f"Description=Trading Lab {job.name}: {job.what}",
-        "Wants=wt-secrets.service network-online.target",
-        "After=wt-secrets.service network-online.target",
+        # time-sync.target (with chrony-wait enabled): a job never starts on an unsynced clock
+        "Wants=wt-secrets.service network-online.target time-sync.target",
+        "After=wt-secrets.service network-online.target time-sync.target",
         "OnFailure=wt-alert@%n.service",
         "StartLimitIntervalSec=6h",
         "StartLimitBurst=3",
@@ -67,6 +83,10 @@ def service(job: Job, root: Path, user: str = USER) -> str:
     ]
     if job.name == "paper-b":
         lines.append("OOMScoreAdjust=-500")                    # the last thing the kernel should kill
+    if job.name in MEMORY:
+        high, cap, swap = MEMORY[job.name]
+        lines += [f"MemoryHigh={high}"] if high else []
+        lines += [f"MemoryMax={cap}"] + ([f"MemorySwapMax={swap}"] if swap else [])
     return "\n".join(lines) + "\n"
 
 
@@ -99,6 +119,27 @@ def render_all(root: Path) -> dict[str, str]:
     return out
 
 
+def installed_files(root: Path, install_root: Path | None = None) -> dict[str, bytes]:
+    """Everything wt-install-units puts outside the repo, by install path: the rendered job units, the static units
+    and the helpers, read from the checkout at `root`. Their fingerprint tells an unattended deploy whether a release
+    needs the owner (the units or a helper changed) or can go in as code only. `install_root`: the checkout path the
+    units point at (default `root`); a candidate commit checked out elsewhere is rendered for the live checkout."""
+    out = {f"/etc/systemd/system/{n}": t.encode() for n, t in render_all(install_root or root).items()}
+    for f in sorted((root / STATIC_DIR).iterdir()):
+        if f.is_file():
+            out[f"/etc/systemd/system/{f.name}"] = f.read_bytes()
+    for f in sorted((root / HELPER_DIR).iterdir()):
+        if f.is_file():
+            out[f"/usr/local/bin/{f.name}"] = f.read_bytes()
+    return out
+
+
+def fingerprint(root: Path, install_root: Path | None = None) -> str:
+    """One line per installed file ("<sha256>  <path>"), sorted: the same text for the same install."""
+    return "".join(f"{hashlib.sha256(b).hexdigest()}  {p}\n"
+                   for p, b in sorted(installed_files(root, install_root).items()))
+
+
 def diff(rendered: dict[str, str], unit_dir: Path = UNIT_DIR) -> list[str]:
     out = []
     for name, text in sorted(rendered.items()):
@@ -119,8 +160,15 @@ def main(argv: list[str] | None = None) -> int:
     d = sub.add_parser("diff")
     d.add_argument("--root", type=Path, default=Path.cwd())
     d.add_argument("--unit-dir", type=Path, default=UNIT_DIR)
+    f = sub.add_parser("fingerprint", help="print what wt-install-units would install, hashed")
+    f.add_argument("--root", type=Path, default=Path.cwd())
+    f.add_argument("--install-root", type=Path, help="the checkout the units run from (default: --root)")
     a = ap.parse_args(argv)
-    units = render_all(a.root if a.root.is_absolute() else a.root.resolve())   # keep /home as given
+    root = a.root if a.root.is_absolute() else a.root.resolve()               # keep /home as given
+    if a.cmd == "fingerprint":
+        sys.stdout.write(fingerprint(root, a.install_root))
+        return 0
+    units = render_all(root)
     if a.cmd == "render":
         a.out.mkdir(parents=True, exist_ok=True)
         for name, text in units.items():
