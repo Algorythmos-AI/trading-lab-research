@@ -7,6 +7,7 @@ import stat
 import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -111,3 +112,39 @@ def test_the_prompt_script_hides_secrets_and_writes_root_only():
     fetch = (BIN / "wt-fetch-secrets").read_text()
     wanted = set(re.findall(r"\b[A-Z][A-Z_0-9]+\b(?!=)", fetch.split("REQUIRED=(")[1].split("OCI=")[0]))
     assert wanted == set(fields), "wt-set-secrets must prompt for exactly the names wt-fetch-secrets reads"
+
+
+PRIMARY = ("R2_ACCOUNT_ID=a\nR2_ACCESS_KEY_ID=b\nR2_SECRET_ACCESS_KEY=c\nRESTIC_REPOSITORY=s3:x\nRESTIC_PASSWORD=p\n"
+           "HC_PING_KEY=h\n")
+
+
+@pytest.mark.parametrize("role", ["WT_ROLE=primary\n", ""])            # no role means primary (runner_b's default)
+def test_a_primary_refuses_to_start_without_backups_lease_and_pings(tmp_path, role):
+    r = run_fetch(tmp_path, REQUIRED + role)
+    assert r.returncode == 1 and "RESTIC_PASSWORD (primary)" in r.stderr and "HC_PING_KEY (primary)" in r.stderr
+    assert not (tmp_path / "run" / "env").exists()
+    r = run_fetch(tmp_path, REQUIRED + role + PRIMARY + "NTFY_SERVER=https://ntfy.example\nGH_TOKEN=g\n")
+    assert r.returncode == 0, r.stderr
+    env = (tmp_path / "run" / "env").read_text()
+    assert "GH_TOKEN=g\n" in env and "RESTIC_REPOSITORY=s3:x\n" in env
+    assert "NTFY_SERVER=https://ntfy.example\n" in (tmp_path / "etc" / "paging").read_text()
+
+
+def test_a_shadow_host_may_run_without_backups(tmp_path):
+    r = run_fetch(tmp_path, REQUIRED + "WT_ROLE=shadow\n")
+    assert r.returncode == 0, r.stderr
+
+
+def test_boot_reconcile_starts_only_units_whose_timer_is_enabled():
+    text = (BIN / "wt-boot-reconcile").read_text()
+    assert "systemctl is-enabled" in text and '!= enabled' in text
+    assert "WT_ENV_FILE=" in text and '[[ -r "$env_file" ]]' in text
+
+
+def test_install_units_installs_helpers_and_static_units_and_records_the_fingerprint():
+    text = (BIN / "wt-install-units").read_text()
+    for needle in ("install -m 0755 deploy/oci/bin/* /usr/local/bin/", "install -m 0644 deploy/oci/systemd/*",
+                   "wt.ops.units fingerprint", "/etc/wt/installed.sha256", "wt-backup.timer wt-restore-test.timer",
+                   "systemctl disable --now", "chrony-wait.service"):
+        assert needle in text, needle
+    assert text.index("make -s gate") < text.index("install -m")        # never installs with the gate closed

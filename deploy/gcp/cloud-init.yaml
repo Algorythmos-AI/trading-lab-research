@@ -13,6 +13,8 @@ packages:
   - ca-certificates
   - chrony
   - restic
+  - gh                # the collector's GitHub sources and the weekly evidence
+  - time              # /usr/bin/time -v for memory measurements
   - systemd-zram-generator
   - unattended-upgrades
   - netfilter-persistent
@@ -53,6 +55,7 @@ write_files:
     content: |
       $nrconf{restart} = 'l';
       $nrconf{override_rc}{qr(^wt-)} = 0;
+      $nrconf{kernelhints} = -1;
   # Security updates only, never an automatic reboot, and only on Saturdays (no US session).
   - path: /etc/apt/apt.conf.d/52wt-unattended
     content: |
@@ -96,6 +99,9 @@ runcmd:
   # The repository and its locked environment, as the job user.
   - [sudo, -u, wt, git, clone, --quiet, "https://github.com/Algorythmos-AI/trading-lab-research.git", /home/wt/trading]
   - [sudo, -u, wt, sh, -c, "cd /home/wt/trading && /usr/local/bin/uv venv --python 3.12 .venv && /usr/local/bin/uv pip sync --python .venv/bin/python --require-hashes requirements.lock.txt && /usr/local/bin/uv pip install --python .venv/bin/python -r requirements-dev.lock.txt"]
+  # wt-deploy tags every deploy (git tag -a needs an identity).
+  - [sudo, -u, wt, git, -C, /home/wt/trading, config, user.name, wt-deploy]
+  - [sudo, -u, wt, git, -C, /home/wt/trading, config, user.email, wt-deploy@localhost]
   # Host helpers and the always-on units (secrets, pager, boot reconcile). The job timers are the owner's to enable.
   - [sh, -c, "install -m 0755 /home/wt/trading/deploy/oci/bin/* /usr/local/bin/"]
   - [sh, -c, "install -m 0644 /home/wt/trading/deploy/oci/systemd/* /etc/systemd/system/"]

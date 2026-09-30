@@ -1,14 +1,42 @@
 #!/usr/bin/env bash
-# OWNER ONLY (sudo): install the job units rendered from the code and enable their timers. Refuses while the
+# OWNER ONLY (sudo): install everything the host runs from the repo, then enable the job timers. Refuses while the
 # deploy gate is closed (a job running, inside the trading window, or within an hour of a start).
+#   * the job units rendered from the code (wt.ops.units), their timers enabled; job units the code no longer has
+#     are stopped, disabled and removed;
+#   * the static units (deploy/oci/systemd) and the helpers (deploy/oci/bin -> /usr/local/bin), so a changed helper
+#     (wt-deploy itself included) is never left stale;
+#   * the backup and restore-test timers, when the host has a restic repository;
+#   * /etc/wt/installed.sha256, the fingerprint of all of it: an unattended deploy compares it with the target
+#     commit's (python -m wt.ops.units fingerprint) and leaves any release that changes it to the owner.
 set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo "run with sudo" >&2; exit 2; }
 root=/home/wt/trading
 as_wt() { runuser -u wt -- env WT_HOST=systemd WT_ENV_FILE=/run/wt-secrets/env PYTHONPATH=src "$@"; }
 cd "$root"
 as_wt make -s gate PY=.venv/bin/python || { echo "deploy gate closed: not installing units now" >&2; exit 2; }
-as_wt .venv/bin/python -m wt.ops.units render --out var/units --root "$root"
+rm -rf var/units && as_wt .venv/bin/python -m wt.ops.units render --out var/units --root "$root"
+list=/etc/wt/installed-units.txt
+install -d -m 0755 /etc/wt
+mapfile -t new < <(cd var/units && ls wt-*.service wt-*.timer)
+if [[ -r "$list" ]]; then
+  for u in $(comm -23 <(sort "$list") <(printf '%s\n' "${new[@]}" | sort)); do
+    echo "removing $u (no longer a job)"
+    systemctl disable --now "$u" 2>/dev/null || true
+    rm -f "/etc/systemd/system/$u"
+  done
+fi
 install -m 0644 var/units/wt-*.service var/units/wt-*.timer /etc/systemd/system/
+install -m 0644 deploy/oci/systemd/* /etc/systemd/system/
+install -m 0755 deploy/oci/bin/* /usr/local/bin/
+printf '%s\n' "${new[@]}" > "$list"
 systemctl daemon-reload
+systemctl enable chrony-wait.service 2>/dev/null || true      # time-sync.target then really waits for the clock
 for t in var/units/wt-*.timer; do systemctl enable --now "$(basename "$t")"; done
+if grep -q '^RESTIC_REPOSITORY=' /run/wt-secrets/env 2>/dev/null; then
+  systemctl enable --now wt-backup.timer wt-restore-test.timer
+else
+  echo "no RESTIC_REPOSITORY in the secrets: backup timers left off"
+fi
+as_wt .venv/bin/python -m wt.ops.units fingerprint --root "$root" > /etc/wt/installed.sha256
+chmod 0644 /etc/wt/installed.sha256
 systemctl list-timers 'wt-*' --no-pager

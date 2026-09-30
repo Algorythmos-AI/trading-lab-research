@@ -1,10 +1,21 @@
 #!/usr/bin/env bash
-# After any boot: start paper-b and forward if the boot fell inside their windows (systemd timers are
+# After any boot: start the routine, paper-b and forward if the boot fell inside their windows (systemd timers are
 # Persistent=false, so a start missed during a reboot is not replayed). Their job locks make a repeat harmless.
+# Only jobs whose timer is enabled: a host with its job timers disabled or masked (after a rollback to another host)
+# starts nothing, whatever its role. Nothing starts without the secrets file.
 set -uo pipefail
 cd /home/wt/trading || exit 0
-units=$(runuser -u wt -- env WT_HOST=systemd PYTHONPATH=src .venv/bin/python -m wt.ops.bootreconcile 2>/dev/null) || exit 0
+env_file=/run/wt-secrets/env
+[[ -r "$env_file" ]] || { echo "wt-boot-reconcile: no $env_file; starting nothing"; exit 0; }
+units=$(runuser -u wt -- env WT_HOST=systemd WT_ENV_FILE="$env_file" PYTHONPATH=src \
+        .venv/bin/python -m wt.ops.bootreconcile 2>/dev/null) || exit 0
 for u in $units; do
+  t="${u%.service}.timer"
+  state=$(systemctl is-enabled "$t" 2>/dev/null || true)
+  if [[ "$state" != enabled ]]; then
+    echo "wt-boot-reconcile: not starting $u ($t is ${state:-not installed})"
+    continue
+  fi
   echo "wt-boot-reconcile: starting $u (inside its window)"
   systemctl start --no-block "$u" || true
 done
