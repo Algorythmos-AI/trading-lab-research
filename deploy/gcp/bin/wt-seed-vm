@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# On the Mac (the operations console): carry the Mac's runtime state to the GCP host, verified (wt.ops.hostsync).
+#   deploy/gcp/bin/wt-seed-vm                  # rehearsal: copy into /home/wt/seed-rehearsal and verify; nothing swapped
+#   APPLY=1 deploy/gcp/bin/wt-seed-vm          # the cutover: copy, verify, then swap it in on the VM (all locks held)
+# Environment: SRC (default ~/trading), GCLOUD_CONFIG (default algo-trading), VM (trading-lab-host), ZONE (us-east1-b).
+# Nothing is staged on the Mac's disk: tar streams through IAP SSH into the VM. The manifest is hashed first, so a file
+# that changes while it is copied fails the verify rather than landing half-written. With APPLY=1 every com.wt agent
+# must be gone first (the Mac's runner never checks the primary lease).
+set -euo pipefail
+SRC=${SRC:-$HOME/trading}
+CFG=${GCLOUD_CONFIG:-algo-trading}
+VM=${VM:-trading-lab-host}
+ZONE=${ZONE:-us-east1-b}
+REPO=$(cd "$(dirname "$0")/../../.." && pwd)
+PY=${PY:-$SRC/.venv/bin/python}
+if [[ "${APPLY:-}" == 1 ]]; then
+  dest=/home/wt/seed-$(date -u +%Y%m%dT%H%M%SZ)
+  if launchctl list 2>/dev/null | grep -q com.wt; then
+    echo "com.wt agents are still loaded on this Mac: unload them first (cutover step 4.1)" >&2; exit 2
+  fi
+else
+  dest=/home/wt/seed-rehearsal
+fi
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+export PYTHONPATH="$REPO/src"
+"$PY" -m wt.ops.hostsync manifest --root "$SRC" --out "$tmp/.hostsync-manifest.json"
+"$PY" -m wt.ops.hostsync list --root "$SRC" > "$tmp/files"
+ssh_vm() { gcloud --configuration="$CFG" compute ssh "$VM" --zone "$ZONE" --tunnel-through-iap --command "$1"; }
+start=$(date +%s)
+# Two archives in one stream: the VM extracts both with --ignore-zeros. No macOS metadata (AppleDouble ._ files or
+# extended attributes): the VM must receive exactly the manifest's files.
+export COPYFILE_DISABLE=1
+mactar() { tar --no-mac-metadata --no-xattrs "$@"; }
+{ mactar -C "$SRC" -cf - -T "$tmp/files"; mactar -C "$tmp" -cf - .hostsync-manifest.json; } | \
+  ssh_vm "sudo -u wt bash -c 'rm -rf $dest && mkdir -p $dest && tar --ignore-zeros --warning=no-unknown-keyword -xf - -C $dest'"
+echo "copied in $(( $(date +%s) - start ))s"
+run="cd /home/wt/trading && PYTHONPATH=src .venv/bin/python -m wt.ops.hostsync"
+ssh_vm "sudo -u wt bash -c '$run verify --dir $dest'"
+if [[ "${APPLY:-}" == 1 ]]; then
+  ssh_vm "sudo -u wt bash -c '$run apply --from $dest'"
+fi
