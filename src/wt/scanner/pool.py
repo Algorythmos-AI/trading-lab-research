@@ -29,6 +29,7 @@ import pandas as pd
 from wt.core.clock import et, to_utc_iso
 from wt.core.config import DATA_DIR
 from wt.data.corpactions import SplitFactors, suspect_split
+from wt.data.universe import TailMeta, TailWindowExceeded
 from wt.scanner.catalyst import best_catalyst, best_catalyst_spec
 from wt.scanner.checklist import atr14, former_runner, overhead_levels, pm_consolidation, trend, window_ok
 from wt.signals.bars import PM_OPEN, resample_clock
@@ -40,20 +41,33 @@ SPLIT_CHECK_HI, SPLIT_CHECK_LO = 0.90, -0.25
 
 
 class DailyIndex:
-    """Raw daily bars indexed by symbol for fast point-in-time slicing."""
+    """Raw daily bars indexed by symbol for fast point-in-time slicing.
 
-    def __init__(self, daily: pd.DataFrame):
+    `tail`: the TailMeta of a load_daily_tail frame. Then a lookup that would need a row the tail load dropped raises
+    TailWindowExceeded instead of answering from a shortened history. Days are grouped on first use, not all up
+    front (a second full copy of the frame)."""
+
+    def __init__(self, daily: pd.DataFrame, tail: TailMeta | None = None):
+        self.tail = tail
         self.by_sym = {s: g.sort_values("date").reset_index(drop=True) for s, g in daily.groupby("symbol")}
-        self.by_date = {dd: g.set_index("symbol") for dd, g in daily.groupby("date")}
+        self._daily = daily
+        self._by_date: dict[dt.date, pd.DataFrame] = {}
 
     def on(self, day: dt.date) -> pd.DataFrame:
-        return self.by_date.get(day, pd.DataFrame(columns=["o", "h", "l", "c", "v"]))
+        if self.tail is not None and not self.tail.covers(day):
+            raise TailWindowExceeded(f"on({day}): the tail load holds every symbol only from {self.tail.complete_from}")
+        if day not in self._by_date:
+            g = self._daily[self._daily.date == day]
+            self._by_date[day] = g.set_index("symbol") if len(g) else pd.DataFrame(columns=["o", "h", "l", "c", "v"])
+        return self._by_date[day]
 
     def before(self, symbol: str, day: dt.date, n: int) -> pd.DataFrame:
         g = self.by_sym.get(symbol)
         if g is None:
             return pd.DataFrame(columns=["symbol", "date", "o", "h", "l", "c", "v"])
         i = int(np.searchsorted(g.date.to_numpy(), day, side="left"))
+        if i < n and self.tail is not None and symbol in self.tail.first_kept:
+            raise TailWindowExceeded(f"before({symbol}, {day}, {n}): only {i} kept rows precede {day}")
         return g.iloc[max(0, i - n): i]
 
 

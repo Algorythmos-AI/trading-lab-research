@@ -169,18 +169,28 @@ def atomic_replace(path: Path, write: Callable[[Path], None]) -> None:
 def read_cache(path: Path, read: Callable[[Path], T], empty: Callable[[], T]) -> T:
     """A shared cache's contents, or ``empty()`` if the file is missing. A torn or corrupt file (a writer killed
     before caches were written atomically) is treated as empty with a warning, and kept aside as ``<name>.corrupt``
-    so the next save neither crashes on it nor silently destroys it."""
+    (``<name>.corrupt-<time>`` if that exists) so the next save neither crashes on it nor silently destroys it.
+    Running out of memory or an I/O error (EMFILE, EIO ...) says nothing about the file: those are raised."""
     if not path.exists():
         return empty()
     try:
         return read(path)
+    except MemoryError:
+        raise
+    except OSError as e:
+        if e.errno is not None:
+            raise
+        err: Exception = e
     except Exception as e:  # noqa: BLE001 — any parse failure means the same thing: the cache is unusable
-        bad = path.with_name(path.name + ".corrupt")
-        with contextlib.suppress(OSError):
-            os.replace(path, bad)
-        warnings.warn(f"cache {path.name} is unreadable ({e.__class__.__name__}); starting empty, kept as {bad.name}",
-                      RuntimeWarning, stacklevel=2)
-        return empty()
+        err = e
+    bad = path.with_name(path.name + ".corrupt")
+    if bad.exists():
+        bad = path.with_name(f"{path.name}.corrupt-{int(time.time())}")
+    with contextlib.suppress(OSError):
+        os.replace(path, bad)
+    warnings.warn(f"cache {path.name} is unreadable ({err.__class__.__name__}); starting empty, kept as {bad.name}",
+                  RuntimeWarning, stacklevel=2)
+    return empty()
 
 
 def append_capped(path: Path, line: str, root: Path, max_bytes: int = 1024 * 1024) -> None:

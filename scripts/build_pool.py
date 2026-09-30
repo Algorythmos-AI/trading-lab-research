@@ -27,7 +27,7 @@ from wt.core.config import DATA_DIR  # noqa: E402
 from wt.data.alpaca import AlpacaREST, sip_safe_end  # noqa: E402
 from wt.data.corpactions import FACTORS, SplitFactors, factor_series  # noqa: E402
 from wt.data.edgar import SharesOutstanding  # noqa: E402
-from wt.data.universe import ASSETS, load_daily  # noqa: E402
+from wt.data.universe import ASSETS, TailMeta, load_daily, load_daily_symbols  # noqa: E402
 from wt.scanner.features import PMCache, last_quotes  # noqa: E402
 from wt.ops.safeio import atomic_replace  # noqa: E402
 from wt.scanner.pool import (POOL_DIR, SPLIT_CHECK_HI, SPLIT_CHECK_LO, DailyIndex, PoolConfig,  # noqa: E402
@@ -69,8 +69,10 @@ class SplitStore:
     ones), then at most MAX_REFETCH_STALE others, least recently fetched first, so repeated nights rotate through
     them."""
 
-    def __init__(self, a: AlpacaREST, daily_raw: pd.DataFrame, persist: bool = True):
-        self.a, self.raw, self.persist = a, daily_raw, persist
+    tail: TailMeta | None = None          # set when daily_raw is a load_daily_tail frame
+
+    def __init__(self, a: AlpacaREST, daily_raw: pd.DataFrame, persist: bool = True, tail: TailMeta | None = None):
+        self.a, self.raw, self.persist, self.tail = a, daily_raw, persist, tail
         self.table = pd.read_parquet(FACTORS) if FACTORS.exists() else pd.DataFrame(columns=["symbol", "date", "f"])
         if "fetched_through" not in self.table:
             self.table["fetched_through"] = None
@@ -103,14 +105,23 @@ class SplitStore:
         """Symbols whose raw open or close moved like a split on a day after their fetch, up to d (the last 10
         calendar days when the fetch date is unknown)."""
         since = {s: self.thru.get(s, d - dt.timedelta(days=10)) for s in symbols}
-        r = self.raw
-        w = r[r.symbol.isin(set(since)) & (r.date > min(since.values()) - dt.timedelta(days=10)) & (r.date <= d)]
+        start = min(since.values()) - dt.timedelta(days=10)
+        r = self.history(set(since), start + dt.timedelta(days=1))
+        w = r[r.symbol.isin(set(since)) & (r.date > start) & (r.date <= d)]
         w = w.sort_values(["symbol", "date"])
         pc = w.groupby("symbol").c.shift(1)
         hi, lo = 1 + SPLIT_CHECK_HI, 1 + SPLIT_CHECK_LO
         jump = (w.o / pc >= hi) | (w.o / pc <= lo) | (w.c / pc >= hi) | (w.c / pc <= lo)
         after = w.date.to_numpy() > w.symbol.map(since).to_numpy()
         return set(w.symbol[jump.to_numpy() & after])
+
+    def history(self, symbols: set[str], since: dt.date | None = None) -> pd.DataFrame:
+        """These symbols' raw daily rows dated `since` or later (all of them when since is None). A tail-loaded store
+        may have dropped older rows, and factors built from a shortened history would lose their earlier change
+        points on disk; those symbols are read in full from the chunks instead."""
+        if self.tail is not None and any(not self.tail.covers_symbol(s, since or dt.date.min) for s in symbols):
+            return load_daily_symbols(symbols)
+        return self.raw[self.raw.symbol.isin(symbols)]
 
     def _fetch(self, need: list[str]) -> None:
         end = sip_safe_end()
@@ -121,7 +132,7 @@ class SplitStore:
         f = pd.DataFrame(columns=["symbol", "date", "f"])
         if len(adj):
             adj["date"] = adj.t.dt.tz_convert("America/New_York").dt.date
-            f = factor_series(self.raw[self.raw.symbol.isin(need)], adj)
+            f = factor_series(self.history(set(need)), adj)
             f = f[(f.groupby("symbol").f.diff().fillna(1) != 0)]                 # change points only
         old = self.table[self.table.symbol.isin(set(need) - set(f.symbol))]      # nothing new: keep what was known
         missing = sorted(set(need) - set(f.symbol) - set(old.symbol))

@@ -59,7 +59,7 @@ from wt.core.clock import ET, et, to_utc_iso  # noqa: E402
 from wt.core.config import DATA_DIR, FORWARD_LEDGER, FORWARD_WATCHLIST_DIR, ROOT, load_yaml  # noqa: E402
 from wt.data.alpaca import SIP_DELAY_MIN, AlpacaREST  # noqa: E402
 from wt.data.edgar import SharesOutstanding  # noqa: E402
-from wt.data.universe import DAILY, load_daily  # noqa: E402
+from wt.data.universe import DAILY, TailMeta, TailWindowExceeded, load_daily, load_daily_tail, tail_rows_for  # noqa: E402
 from wt.ops.locks import job_lock  # noqa: E402
 from wt.ops.safeio import atomic_replace  # noqa: E402
 from wt.scanner.features import PMCache, build_candidates  # noqa: E402
@@ -74,6 +74,8 @@ LOG = FORWARD_LEDGER
 FORWARD_FROM = dt.date(2026, 9, 28)   # first forward session; everything earlier is the holdout (DEC-0005) or before it
 R3_FROM = dt.date(2026, 9, 28)        # DEC-0010: every round-3 trial runs nightly "from the approval date onward"
 MAX_CATCHUP = 5                       # sessions per run
+CANDIDATE_LOOKBACK = 90               # build_candidates' runner scan: sessions before d
+TAIL_LOOKBACK = 300                   # the longest daily lookback of any forward strategy (pool: daily_lookback)
 REFRESH_DAYS = 5                      # newest update chunks fetched again on every run (late prints, corrections)
 LOCK_WAIT_S = 120.0                   # a ledger append waits this long for another writer, then fails the unit
 GENESIS = "0" * 64                    # prev_sha256 of the first line of a fresh ledger
@@ -199,20 +201,32 @@ def by_strategy(rows: list[dict]) -> dict[str, list[dict]]:
 class Context:
     """The heavy inputs of a run, built once and only when a strategy needs them."""
 
-    def __init__(self, a: AlpacaREST, sessions: list[dt.date], closes: dict):
-        self.a, self.sessions, self.closes = a, sessions, closes
+    def __init__(self, a: AlpacaREST, sessions: list[dt.date], closes: dict, oldest: dt.date | None = None):
+        self.a, self.sessions, self.closes, self.oldest = a, sessions, closes, oldest
 
     @functools.cached_property
+    def _store(self) -> tuple[pd.DataFrame, TailMeta | None]:
+        """Each symbol's last rows, enough for every lookback from the oldest session this run evaluates (the whole
+        store peaks near 3 GB). WT_DAILY_FULL=1 loads everything, as before."""
+        if self.oldest is None or os.environ.get("WT_DAILY_FULL") == "1":
+            return load_daily(), None
+        return load_daily_tail(tail_rows_for(self.oldest, max(PoolConfig.daily_lookback, TAIL_LOOKBACK)))
+
+    @property
     def raw(self) -> pd.DataFrame:
-        return load_daily()
+        return self._store[0]
+
+    @property
+    def tail(self) -> TailMeta | None:
+        return self._store[1]
 
     @functools.cached_property
     def daily(self) -> DailyIndex:
-        return DailyIndex(self.raw)
+        return DailyIndex(self.raw, self.tail)
 
     @functools.cached_property
     def splits(self) -> SplitStore:
-        return SplitStore(self.a, self.raw)
+        return SplitStore(self.a, self.raw, tail=self.tail)
 
     @functools.cached_property
     def shares(self) -> SharesOutstanding:
@@ -233,7 +247,7 @@ class Context:
         free = shutil.disk_usage(DATA_DIR).free / 1e9
         if free < POOL_MIN_FREE_GB:
             raise RuntimeError(f"only {free:.1f} GB free; the pool build needs {POOL_MIN_FREE_GB} GB")
-        cache = PMCache()
+        cache = PMCache(since=self.sessions[0])       # this run's calendar: every session the pool build asks about
         build_one(self.a, d, self.sessions, self.daily, universe_symbols(), self.splits, cache, self.shares, PoolConfig())
         cache.save()
 
@@ -267,7 +281,8 @@ def units_for(ctx: Context, d: dt.date) -> list[Unit]:
     a, sessions = ctx.a, ctx.sessions
     return [
         (("B_qqq_qqqm",), lambda: by_strategy(run_B(a, d, sessions))),
-        (("watchlist_bull_flag_atr_M1_v2",), lambda: by_strategy(run_watchlist_flag(a, d, sessions, ctx.raw, ctx.splits))),
+        (("watchlist_bull_flag_atr_M1_v2",), lambda: by_strategy(run_watchlist_flag(a, d, sessions, ctx.raw, ctx.splits,
+                                                                                     ctx.tail))),
         (("hod_bull_flag_atr_M1_v2",), lambda: by_strategy(run_hod_flag(a, d, ctx.daily, ctx.splits))),
         (tuple(f"r3:F:{t}" for t in GG), lambda: r3_gg(ctx, d, "F")),
         (tuple(f"r3:P:{t}" for t in GG), lambda: r3_gg(ctx, d, "P")),
@@ -385,10 +400,13 @@ def run_B(a: AlpacaREST, d: dt.date, sessions: list[dt.date]) -> list[dict]:
     return [{"strategy": "B_qqq_qqqm", "R": tr.r_multiple(cst), "exit": tr.exits[-1][3]}] if tr else []
 
 
-def run_watchlist_flag(a, d, sessions, daily, splits: SplitStore) -> list[dict]:
+def run_watchlist_flag(a, d, sessions, daily, splits: SplitStore, tail: TailMeta | None = None) -> list[dict]:
     """Watchlist bull flag v2: the frozen ranking and entry, on candidates prefiltered by the 09:25 pre-market gap
     (v1 used d's open, known only at 09:30) with split-adjusted prior closes."""
-    cache, so = PMCache(), SharesOutstanding()
+    start = sessions[max(0, sessions.index(d) - CANDIDATE_LOOKBACK)]
+    if tail is not None and not tail.covers(start):          # build_candidates filters the raw frame by date
+        raise TailWindowExceeded(f"watchlist {d}: the tail load holds every symbol only from {tail.complete_from}")
+    cache, so = PMCache(since=sessions[0]), SharesOutstanding()
     cands = build_candidates(d, daily, sessions, a, cache, so, with_quotes=True, causal=True,
                              split_refresh=lambda syms: splits.refresh(syms, d, split_like=syms))
     cache.save()
@@ -486,7 +504,7 @@ def main(day: str | None = None) -> None:
         print("nothing to do: every completed session since", FORWARD_FROM, "has all its strategies")
         return
     ready = update_daily(a, days, now)    # daily bars first, so the store is loaded once with every pending day in it
-    ctx = Context(a, sessions, closes)
+    ctx = Context(a, sessions, closes, min(ready) if ready else None)
     try:
         for d in ready:
             complete = run_session(d, units_for(ctx, d), done.get(str(d), set()))
