@@ -2,6 +2,7 @@
 
     python -m wt.ops.agents diff                 # which installed agents differ from what the code expects
     python -m wt.ops.agents install --trading    # OWNER ONLY: write the plists and (re)load them
+    python -m wt.ops.agents uninstall            # OWNER ONLY: unload and remove every com.wt.* agent (cutover)
 
 Installing reloads jobs that trade, so it is for the owner to run, outside the trading window. The command refuses
 while the deploy gate is closed.
@@ -79,10 +80,31 @@ def install(trading: bool, root: Path = ROOT, agent_dir: Path = AGENT_DIR) -> in
     return 0
 
 
+def uninstall(agent_dir: Path = AGENT_DIR) -> int:
+    """Unload and delete every com.wt.* agent, the trading ones only when the deploy gate is open. Returns 0 when
+    none is left loaded (`launchctl list | grep com.wt` is then empty)."""
+    from wt.ops.deploy import gate_blockers
+    if blockers := gate_blockers():
+        print("Refusing to unload the agents now:\n  " + "\n  ".join(blockers))
+        return 2
+    uid = os.getuid()
+    left = []
+    for p in sorted(agent_dir.glob("com.wt.*.plist")):
+        label = p.name.removesuffix(".plist")
+        subprocess.run(["launchctl", "bootout", f"gui/{uid}/{label}"], capture_output=True)
+        p.unlink()
+        r = subprocess.run(["launchctl", "print", f"gui/{uid}/{label}"], capture_output=True)
+        print(f"{label}: {'STILL LOADED' if r.returncode == 0 else 'removed'}")
+        if r.returncode == 0:
+            left.append(label)
+    return 1 if left else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m wt.ops.agents")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("diff")
+    sub.add_parser("uninstall")
     i = sub.add_parser("install")
     g = i.add_mutually_exclusive_group(required=True)
     g.add_argument("--trading", action="store_true", help="the com.wt.* trading jobs (gated)")
@@ -92,6 +114,8 @@ def main(argv: list[str] | None = None) -> int:
         d = diff()
         print("\n".join(d) if d else "launchd agents match the code")
         return 0
+    if a.cmd == "uninstall":
+        return uninstall()
     return install(trading=bool(a.trading))
 
 

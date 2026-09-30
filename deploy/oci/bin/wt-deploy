@@ -16,18 +16,12 @@ case "$cmd" in
     exec make -s "$cmd" PY=.venv/bin/python ;;
   units-diff)
     exec .venv/bin/python -m wt.ops.units diff --root /home/wt/trading ;;
-  deploy)
-    make -s deploy PY=.venv/bin/python
-    # The full suite on this ARM64 host is the platform check CI can't do. On failure, go back.
-    if ! .venv/bin/python -m pytest -q -p no:cacheprovider; then
-      latest=""
-      for f in var/deploy/*.json; do [[ -e "$f" ]] && latest="$f"; done     # names are timestamps: last is newest
-      tag=""
-      [[ -n "$latest" ]] && tag=$(jq -r '.rollback_tag // empty' "$latest")
-      echo "wt-deploy: the test suite FAILED on this host; rolling back to ${tag:-?}" >&2
-      [[ -n "$tag" ]] && make -s rollback TAG="$tag" PY=.venv/bin/python
-      exit 1
-    fi
+  deploy|deploy\ *)
+    sha="${cmd#deploy}"; sha="${sha# }"
+    [[ -z "$sha" || "$sha" =~ ^[0-9a-f]{7,40}$ ]] || { echo "wt-deploy: bad sha" >&2; exit 2; }
+    # One transaction (wt.ops.deploy): on main, green, dashboard not behind; the full test suite on this host in a
+    # throwaway worktree BEFORE the switch; then fast-forward, sync, smoke, all under the deploy lock.
+    .venv/bin/python -m wt.ops.deploy deploy --stage ${sha:+--sha "$sha"}
     .venv/bin/python -m wt.ops.units render --out var/units --root /home/wt/trading >/dev/null
     .venv/bin/python -m wt.ops.units diff --root /home/wt/trading || echo "wt-deploy: units changed; the owner runs: sudo wt-install-units"
     ;;
@@ -36,6 +30,6 @@ case "$cmd" in
     [[ "$tag" =~ ^runtime-[A-Za-z0-9._-]+$ ]] || { echo "wt-deploy: bad tag" >&2; exit 2; }
     exec make -s rollback TAG="$tag" PY=.venv/bin/python ;;
   *)
-    echo "wt-deploy: allowed: gate | status | preflight | deploy | units-diff | rollback runtime-<tag>" >&2
+    echo "wt-deploy: allowed: gate | status | preflight | deploy [<sha>] | units-diff | rollback runtime-<tag>" >&2
     exit 2 ;;
 esac

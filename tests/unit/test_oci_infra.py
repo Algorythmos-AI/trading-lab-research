@@ -111,8 +111,8 @@ def test_the_deploy_command_allows_only_its_verbs():
     code = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
     assert "SSH_ORIGINAL_COMMAND" in code
     assert not re.search(r"(^|[;&|(]|then|do)\s*sudo\s", code, re.M)     # sudo is never *run* (only named in a hint)
-    verbs = re.findall(r"^\s{2}([a-z|\\ -]+(?:runtime-\*)?)\)", text, re.M)
-    assert verbs == ["gate|status|preflight", "units-diff", "deploy", "rollback\\ runtime-*"]
+    verbs = re.findall(r"^\s{2}([a-z][a-z|\\ *-]*?(?:runtime-\*)?)\)", text, re.M)
+    assert verbs == ["gate|status|preflight", "units-diff", "deploy|deploy\\ *", "rollback\\ runtime-*"]
 
 
 
