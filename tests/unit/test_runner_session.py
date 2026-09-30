@@ -83,6 +83,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(runner_b, "LIVE", tmp_path / "live")
     monkeypatch.setattr(runner_b, "KILL", tmp_path / "KILL")
     monkeypatch.setattr(runner_b, "MIN_FREE_GB", 0.0)          # the host's free disk must not decide these tests
+    monkeypatch.setattr("wt.risk.mandate.LEGACY_FILE", tmp_path / "legacy_positions.yaml")   # nor its config
     monkeypatch.setattr(runner_b.events, "coverage_ok", lambda d: True)
     monkeypatch.setattr(runner_b.events, "policy", lambda now: ("normal", None))
     fired = {"done": False}
