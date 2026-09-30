@@ -82,3 +82,25 @@ Rebuilds come from code. Turn off deletion protection
 (`gcloud compute instances update trading-lab-host --zone us-east1-b --no-deletion-protection`), delete the
 instance, run the create command in step 1 again, then step 2 again. A primary host restores `var/` from R2 first
 ([backups-and-lease.md](backups-and-lease.md)).
+
+## Primary host (cutover v2, 2026-10)
+The VM is the only host that runs jobs. The Mac is a console for writing code and running these commands.
+
+| | |
+|---|---|
+| Machine | e2-medium (2 vCPU, 4 GB), us-east1-b, pd-balanced 30 GB, daily snapshot schedule `wt-daily` (7 days) |
+| Memory fuses | routine/forward/weekly MemoryHigh 1.5G, MemoryMax 2G; publisher 1G; paper-b uncapped (OOMScoreAdjust -500) |
+| Tuning an existing VM | `sudo wt-tune-host` (zram, journald, needrestart, gh and time, git identity); `--check` only reports |
+
+**Moving the state (`wt.ops.hostsync`).** From a checkout of main on the Mac:
+```bash
+deploy/gcp/bin/wt-seed-vm              # rehearsal: copy and verify into /home/wt/seed-rehearsal, nothing swapped
+APPLY=1 deploy/gcp/bin/wt-seed-vm      # cutover: the Mac's com.wt agents must be unloaded first
+```
+- **What moves:** the forward ledger and the paper journal (hash chains verified), the virtual account and plans, the watchlist, heartbeats, routine output, alert state, and the market data the nightly jobs read (`data/daily`, `edgar`, `pm`, `pm_bars`, `candidates`, `minute`, the volume curve).
+- **What never moves:** secrets, the venv, KILL, git-tracked files, the dashboard cache, deploy records, locks, spooled pages, the chain-broken flag, the rate-limit state, and research-only minute data.
+- **How `apply` works:** it archives the VM's copy under `/home/wt/archive/hostsync-<stamp>/` and swaps unit by unit, holding every job lock and the deploy lock. A seed that differs from its manifest by one byte, or has a broken chain, is refused.
+
+**Rollback to the Mac** runs the same tool in the other direction:
+1. On the VM, run `hostsync manifest` and tar the listed files.
+2. On the Mac, extract into a new directory, then `hostsync verify` and `hostsync apply --root ~/trading`.

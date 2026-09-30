@@ -22,7 +22,7 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
 JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
-.PHONY: help bootstrap lint typecheck test ci hooks status gate deploy rollback migrate-state preflight publish-verify \
+.PHONY: seed-vm help bootstrap lint typecheck test ci hooks status gate deploy rollback migrate-state preflight publish-verify \
         uninstall-agents lease-break \
         watchdog-drill dashboard-deploy vm-deploy \
         agents-diff install-trading-agents install-dashboard-agent publish schema kill unkill reset-latch evidence
@@ -95,6 +95,9 @@ publish: ## Collect, sanitize and publish the dashboard snapshot now (DRY_RUN=1 
 
 publish-verify: ## Publish now, then read /api/health back and check it serves this snapshot
 	$(PY) -m wt.ops.publish --verify
+
+seed-vm: ## From the Mac: copy runtime state to the GCP host and verify it (APPLY=1 also swaps it in; cutover v2)
+	APPLY=$(APPLY) SRC=$(or $(SRC),$(HOME)/trading) deploy/gcp/bin/wt-seed-vm
 
 watchdog-drill: ## Two real DRILL pages through the production watchdog path (late, then recovered); no state touched
 	$(PY) -m wt.ops.drill
