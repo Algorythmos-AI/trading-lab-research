@@ -1,0 +1,6 @@
+# Positions in the paper account that are outside strategy B's mandate (config/risk.yaml allowlist) and that the
+# owner has accepted as legacy (wt.risk.mandate). The runner never touches them either way; a legacy entry only
+# stops the daily "outside the mandate" page and marks the position legacy on the dashboard.
+# An entry covers the exact quantity recorded: any change in quantity is flagged again.
+positions:
+  - {symbol: AAPL, qty: 1, note: "manual test buy from before the September 2026 audit; owner accepted it as legacy on 2026-09-30"}
