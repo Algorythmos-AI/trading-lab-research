@@ -28,8 +28,8 @@ help: ## List the tasks
 
 bootstrap: ## Create .venv from the lockfile (Python 3.12)
 	uv venv --python 3.12 .venv
-	uv pip install --python $(PY) -r requirements.lock.txt
-	@if [ -f requirements-dev.lock.txt ]; then uv pip install --python $(PY) -r requirements-dev.lock.txt; fi
+	uv pip install --require-hashes --python $(PY) -r requirements.lock.txt
+	@if [ -f requirements-dev.lock.txt ]; then uv pip install --require-hashes --python $(PY) -r requirements-dev.lock.txt; fi
 
 lint: ## Ruff, bug-class rules (see pyproject.toml)
 	$(PY) -m ruff check .
