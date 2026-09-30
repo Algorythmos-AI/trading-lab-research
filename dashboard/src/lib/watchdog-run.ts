@@ -9,11 +9,35 @@ import {
   readForUpdate,
   readText,
   writeText,
+  type StoredText,
 } from "./blob";
 import { logEvent } from "./log";
-import { sendNtfy } from "./ntfy";
+import { sendNtfy, type Notice } from "./ntfy";
 import type { Snapshot } from "./types";
 import { evaluate, historyToPrune, parseState, sameState } from "./watchdog";
+
+/** Everything a watchdog tick touches, injectable so the drill can run the real logic on in-memory state. */
+export interface WatchdogDeps {
+  readLatest(): Promise<{ text: string } | null>;
+  readState(): Promise<StoredText | null>;
+  writeState(body: string, opts: { ifMatch?: string; createOnly?: boolean }): Promise<{ etag: string }>;
+  listHistory(): Promise<{ pathname: string; url: string }[]>;
+  deleteHistory(urls: string[]): Promise<void>;
+  send(notice: Notice): Promise<"sent" | "skipped" | "failed">;
+  /** Daily history pruning; off for the drill. */
+  prune: boolean;
+}
+
+/** The production dependencies: private Blob storage and ntfy. */
+export const blobDeps: WatchdogDeps = {
+  readLatest: () => readText(LATEST_PATH),
+  readState: () => readForUpdate(ALERT_STATE_PATH),
+  writeState: (body, opts) => writeText(ALERT_STATE_PATH, body, opts),
+  listHistory: () => listPaths(HISTORY_PREFIX),
+  deleteHistory: (urls) => deleteUrls(urls),
+  send: (notice) => sendNtfy(notice),
+  prune: true,
+};
 
 function parseSnapshot(text: string): Snapshot | null {
   try {
@@ -32,10 +56,18 @@ function parseSnapshot(text: string): Snapshot | null {
  * (Before this, a rejected etag skipped every page, and the daily prune bookkeeping changed the state on
  * the first tick of each UTC day, so the watchdog never paged at all.)
  */
-export async function runWatchdog(now: Date = new Date()): Promise<Record<string, unknown>> {
+export async function runWatchdog(
+  now: Date = new Date(),
+  deps: WatchdogDeps = blobDeps,
+): Promise<Record<string, unknown>> {
   const [latest, stored] = await Promise.all([
-    readText(LATEST_PATH),
-    readForUpdate(ALERT_STATE_PATH).catch((e: unknown) => {
+    deps.readLatest().catch((e: unknown) => {
+      // An unreadable latest snapshot is judged like a missing one (evaluate pages in a window), instead of
+      // failing the whole tick, which would page nobody.
+      logEvent("watchdog.latest", { outcome: "read-failed", error: e instanceof Error ? e.name : "unknown" });
+      return null;
+    }),
+    deps.readState().catch((e: unknown) => {
       logEvent("watchdog.state", { outcome: "read-failed", error: e instanceof Error ? e.name : "unknown" });
       return null; // page from the initial state: at worst a duplicate
     }),
@@ -56,17 +88,13 @@ export async function runWatchdog(now: Date = new Date()): Promise<Record<string
   if (!committed) {
     try {
       etag = (
-        await writeText(
-          ALERT_STATE_PATH,
-          JSON.stringify(decision.next),
-          stored ? { ifMatch: stored.etag } : { createOnly: true },
-        )
+        await deps.writeState(JSON.stringify(decision.next), stored ? { ifMatch: stored.etag } : { createOnly: true })
       ).etag;
       committed = true;
     } catch (e) {
       if (e instanceof PreconditionFailed) {
         // Another tick wrote first. If it committed this same transition it has paged: stay quiet.
-        const now2 = await readForUpdate(ALERT_STATE_PATH).catch(() => null);
+        const now2 = await deps.readState().catch(() => null);
         if (now2 && sameState(parseState(now2.text), decision.next)) {
           logEvent("watchdog", { outcome: "skipped", reason: "concurrent run" });
           return { ...summary, skipped: "concurrent run" };
@@ -79,21 +107,21 @@ export async function runWatchdog(now: Date = new Date()): Promise<Record<string
   let sent = 0;
   let failed = 0;
   for (const notice of decision.notices) {
-    const r = await sendNtfy(notice);
+    const r = await deps.send(notice);
     if (r === "failed") failed++;
     else if (r === "sent") sent++;
   }
   if (failed > 0 && committed && etag) {
     // Put the alert level back so the next tick retries the page (prune bookkeeping is kept).
     const rollback = { ...prev, last_prune_day: decision.next.last_prune_day };
-    await writeText(ALERT_STATE_PATH, JSON.stringify(rollback), { ifMatch: etag }).catch(() => undefined);
+    await deps.writeState(JSON.stringify(rollback), { ifMatch: etag }).catch(() => undefined);
   }
 
   let pruned = 0;
-  if (decision.prune) {
+  if (decision.prune && deps.prune) {
     try {
-      const doomed = historyToPrune(await listPaths(HISTORY_PREFIX), now);
-      await deleteUrls(doomed.map((b) => b.url));
+      const doomed = historyToPrune(await deps.listHistory(), now);
+      await deps.deleteHistory(doomed.map((b) => b.url));
       pruned = doomed.length;
     } catch (e) {
       logEvent("watchdog.prune", { outcome: "error", error: e instanceof Error ? e.name : "unknown" });
@@ -102,5 +130,52 @@ export async function runWatchdog(now: Date = new Date()): Promise<Record<string
 
   const result = { ...summary, notices: decision.notices.map((n) => n.kind), sent, failed, pruned, committed };
   logEvent("watchdog", result);
+  return result;
+}
+
+/**
+ * The watchdog drill: two real ticks of `runWatchdog` against a synthetic snapshot and in-memory state, so
+ * evaluate(), fail-open paging and ntfy delivery are all exercised end to end without touching the stored alert
+ * state, the latest snapshot or the history. Tick 1: 60 minutes stale inside a window around now (a "late" page,
+ * priority 4). Tick 2: fresh (a "recovered" page, priority 2). Every page title starts with "DRILL:".
+ */
+export async function runDrill(
+  now: Date = new Date(),
+  send: (n: Notice) => Promise<"sent" | "skipped" | "failed"> = (n) => sendNtfy(n),
+): Promise<Record<string, unknown>> {
+  const hour = 3_600_000;
+  const window = {
+    session: "drill",
+    start: new Date(now.getTime() - 2 * hour).toISOString(),
+    end: new Date(now.getTime() + 2 * hour).toISOString(),
+  };
+  const snapshot = (asOf: Date): Snapshot =>
+    ({ schema: "trading-lab/snapshot", schema_version: 2, run_id: "drill", as_of: asOf.toISOString(),
+       expected_windows: [window] }) as Snapshot;
+  let latest = snapshot(new Date(now.getTime() - 60 * 60_000));
+  let state: StoredText | null = null;
+  let seq = 0;
+  const pages: { kind: string; priority: number; result: string }[] = [];
+  const mem: WatchdogDeps = {
+    readLatest: async () => ({ text: JSON.stringify(latest) }),
+    readState: async () => state,
+    writeState: async (body) => {
+      state = { text: body, etag: String(++seq) };
+      return { etag: state.etag };
+    },
+    listHistory: async () => [],
+    deleteHistory: async () => undefined,
+    send: async (notice) => {
+      const result = await send({ ...notice, title: `DRILL: ${notice.title}` });
+      pages.push({ kind: notice.kind, priority: notice.priority, result });
+      return result;
+    },
+    prune: false,
+  };
+  const tick1 = await runWatchdog(now, mem);
+  latest = snapshot(now);
+  const tick2 = await runWatchdog(now, mem);
+  const result = { ok: true, drill: true, tick1: tick1.notices, tick2: tick2.notices, pages };
+  logEvent("watchdog.drill", result);
   return result;
 }

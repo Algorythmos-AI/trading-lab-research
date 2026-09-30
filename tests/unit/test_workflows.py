@@ -122,3 +122,48 @@ def test_the_guard_catches_the_bug_it_was_written_for(tmp_path):
     wf.write_text(yaml.safe_dump(bad))
     with pytest.raises(AssertionError, match="before actions/checkout"):
         test_no_step_runs_in_a_repo_directory_before_checkout(wf)
+
+
+# ---- secrets in a public repository (2026-09-29: the repo is public by owner decision; see SECURITY.md) ----------
+
+SECRET_REF = re.compile(r"\$\{\{\s*secrets\.(?!GITHUB_TOKEN\b)[A-Za-z_]+")
+
+
+def _secret_refs(obj: Any) -> bool:
+    return bool(SECRET_REF.search(yaml.safe_dump(obj))) if obj is not None else False
+
+
+@pytest.mark.parametrize("path", WORKFLOWS, ids=lambda p: p.name)
+def test_secrets_are_only_read_behind_an_environment_and_only_at_step_level(path):
+    wf = load(path)
+    assert not _secret_refs(wf.get("env")), f"{path.name}: workflow-level env must not read secrets"
+    for name, job in jobs(wf):
+        if "uses" in job:
+            continue
+        steps = job.get("steps") or []
+        reads = any(_secret_refs(s) for s in steps) or _secret_refs(job.get("env"))
+        if not reads:
+            continue
+        assert job.get("environment"), f"{path.name}: job {name!r} reads secrets without an Environment"
+        assert not _secret_refs(job.get("env")), f"{path.name}: job {name!r} exposes secrets job-wide"
+
+
+def test_the_production_deploy_runs_only_from_main_and_never_for_pull_requests():
+    wf = load(ROOT / ".github" / "workflows" / "dashboard.yml")
+    deploy = wf["jobs"]["deploy"]
+    assert deploy.get("environment") == "production"
+    cond = str(deploy.get("if", ""))
+    assert "github.ref == 'refs/heads/main'" in cond and "pull_request" not in cond
+    checkout = next(s for s in deploy["steps"] if is_checkout(s))
+    assert (checkout.get("with") or {}).get("persist-credentials") is False
+    names = [s.get("name", "") for s in deploy["steps"]]
+    assert names[0] == "Require the deploy secrets"            # a missing token fails the job, never skips it
+    assert names[-1] == "The live dashboard reports this commit"
+    build = next(s for s in deploy["steps"] if str(s.get("name", "")).startswith("Build"))
+    assert "VERCEL_TOKEN" not in yaml.safe_dump(build), "the build must run without the Vercel token"
+    assert (build.get("env") or {}).get("BUILD_SHA") == "${{ github.sha }}"
+
+
+def test_production_deploys_are_never_cancelled_half_way():
+    wf = load(ROOT / ".github" / "workflows" / "dashboard.yml")
+    assert wf["concurrency"]["cancel-in-progress"] == "${{ github.event_name == 'pull_request' }}"

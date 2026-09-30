@@ -102,3 +102,24 @@ describe("watchdog tick", () => {
     expect(pages.sent.map((n) => n.kind)).toEqual(["late", "late"]);
   });
 });
+
+describe("watchdog tick with injected dependencies", () => {
+  it("survives an unreadable latest snapshot (judged like a missing one, never a crashed tick)", async () => {
+    const sent: string[] = [];
+    const r = await runWatchdog(LATE, {
+      readLatest: async () => {
+        throw new Error("blob read failed");
+      },
+      readState: async () => null,
+      writeState: async () => ({ etag: "e1" }),
+      listHistory: async () => [],
+      deleteHistory: async () => undefined,
+      send: async (n) => {
+        sent.push(n.kind);
+        return "sent";
+      },
+      prune: false,
+    });
+    expect(r).toMatchObject({ ok: true, has_snapshot: false });
+  });
+});

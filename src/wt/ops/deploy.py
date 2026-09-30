@@ -7,7 +7,8 @@
 
 The gate refuses when any com.wt.* job is running or holds its lock, inside the trading night
 (07:00 ET to close + 2 h on a session day), within an hour of a scheduled start, or when the market calendar
-can't be read. A failed smoke test rolls straight back to the tag taken before the pull.
+can't be read. A deploy also refuses while the live dashboard is older than the dashboard/contract code it would
+bring (wt.ops.dashguard). A failed smoke test rolls straight back to the tag taken before the pull.
 """
 from __future__ import annotations
 
@@ -21,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from wt.core.config import ROOT, STATE_DIR
-from wt.ops import agents, migrate, preflight
+from wt.ops import agents, dashguard, migrate, preflight
 from wt.ops.alerts import Alerts
 from wt.ops.locks import held
 from wt.ops.schedule import JOBS, PY, SYDNEY, TRADING_JOBS
@@ -106,6 +107,13 @@ def deploy() -> int:
         print("Refusing: " + "; ".join(f"{c.name}: {c.detail}" for c in git))
         return 2
     _run("git", "fetch", "--quiet", "origin", "main")
+    target = _run("git", "rev-parse", "origin/main").stdout.strip()
+    ok_dash, why_dash, override = dashguard.guard(ROOT, target)
+    if not ok_dash:
+        print(f"Refusing: {why_dash}\n  (owner override: {dashguard.OVERRIDE_ENV}='reason' make deploy)")
+        return 2
+    if why_dash:
+        print(f"Dashboard check overridden by the owner ({override}): {why_dash}")
     before = _run("git", "rev-parse", "HEAD").stdout.strip()
     tag = next_tag()
     _run("git", "tag", "-a", tag, "-m", f"runtime state before deploy at {_now():%Y-%m-%dT%H:%M:%SZ}", before)
@@ -115,7 +123,9 @@ def deploy() -> int:
     sync_venv()
     ok, out = smoke()
     body: dict[str, object] = {"from": before, "to": after, "rollback_tag": tag, "lock": preflight.lock_hash(ROOT),
-                               "migrated": res.moved, "conflicts": res.conflicts, "smoke_ok": ok}
+                               "migrated": res.moved, "conflicts": res.conflicts, "smoke_ok": ok,
+                               "dashboard_check": "overridden" if why_dash else "ok",
+                               **({"dashboard_override": {"reason": override, "why": why_dash}} if why_dash else {})}
     if not ok:
         print(f"Smoke test FAILED after pulling {after[:8]}; rolling back to {tag}\n{out}")
         _run("git", "reset", "--hard", "--quiet", tag)

@@ -4,8 +4,8 @@ name: dashboard
 # its contract changes (docs-only commits never rebuild, org decision D-018).
 #
 # Deploys are prebuilt here and uploaded with `vercel deploy --prebuilt`; the Vercel Git integration is not
-# connected, so Vercel never clones this restricted repository (ADR 0001). Pull requests get a preview (behind
-# Vercel Authentication); main deploys to production.
+# connected, so Vercel never clones this repository (ADR 0001). Every push to main that touches the dashboard or
+# its contract deploys to production through the `production` Environment; pull requests only run the checks.
 on:
   pull_request:
     paths: ["dashboard/**", ".github/workflows/dashboard.yml", "src/wt/ops/publish.py"]
@@ -19,7 +19,8 @@ permissions:
 
 concurrency:
   group: dashboard-${{ github.ref }}
-  cancel-in-progress: true
+  # Never cancel a production deploy half way; superseded pull-request runs may be cancelled.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   VERCEL_ORG_ID: team_zdvzZQr6joigVUzLFhQbxXfI          # not secret: identifies the team and project
@@ -68,55 +69,69 @@ jobs:
           retention-days: 7
 
   deploy:
-    name: deploy (${{ github.event_name == 'push' && 'production' || 'preview' }})
+    name: deploy (production)
     needs: check
-    # Same-repo PRs and pushes only; Dependabot and forks get no secrets.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    # Production only: pushes to main and manual runs on main (owner decision, 2026-09-29: deploy on merge).
+    # The `production` Environment allows only the main branch, so its secrets never reach another ref, not even
+    # a pull request that edits this file. PR preview deploys were removed: previews must not hold production data.
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    env:
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      TARGET: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && 'production' || 'preview' }}
+    timeout-minutes: 20
+    environment: production
     steps:
-      - name: Skip when the Vercel token is not configured
-        id: gate
-        # Runs before checkout: dashboard/ (the workflow default) does not exist yet. tests/unit/test_workflows.py
-        # fails any step that would.
+      - name: Require the deploy secrets
+        # Runs before checkout: dashboard/ (the workflow default) does not exist yet.
         working-directory: .
+        env:
+          HAS_TOKEN: ${{ secrets.VERCEL_TOKEN != '' }}
+          HAS_BYPASS: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET != '' }}
         run: |
-          if [ -z "$VERCEL_TOKEN" ]; then
-            echo "VERCEL_TOKEN is not set: skipping the deploy (checks still ran)." >> "$GITHUB_STEP_SUMMARY"
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=true" >> "$GITHUB_OUTPUT"
+          if [ "$HAS_TOKEN" != "true" ] || [ "$HAS_BYPASS" != "true" ]; then
+            echo "::error::The production Environment needs VERCEL_TOKEN and VERCEL_AUTOMATION_BYPASS_SECRET (docs/runbooks/dashboard-deploy.md). Main is NOT deployed."
+            exit 1
           fi
-      - if: steps.gate.outputs.run == 'true'
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - if: steps.gate.outputs.run == 'true'
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           package_json_file: dashboard/package.json
-      - if: steps.gate.outputs.run == 'true'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: pnpm
           cache-dependency-path: dashboard/pnpm-lock.yaml
-      - if: steps.gate.outputs.run == 'true'
-        run: npm install --global "$VERCEL_CLI"
-      - if: steps.gate.outputs.run == 'true'
-        name: Pull project settings and environment
-        run: vercel pull --yes --environment="$TARGET" --token="$VERCEL_TOKEN"
-      - if: steps.gate.outputs.run == 'true'
-        name: Build
+      - name: Install the Vercel CLI (pinned, no install scripts)
+        run: npm install --global --ignore-scripts "$VERCEL_CLI"
+      - name: Pull production settings
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+      - name: Build (stamped with this commit; no token)
+        env:
+          BUILD_SHA: ${{ github.sha }}
+        run: vercel build --prod
+      - name: Deploy the prebuilt output
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          if [ "$TARGET" = production ]; then vercel build --prod --token="$VERCEL_TOKEN"; else vercel build --token="$VERCEL_TOKEN"; fi
-      - if: steps.gate.outputs.run == 'true'
-        name: Deploy prebuilt output
+          url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
+          echo "Deployed to production: $url (Vercel login required)" >> "$GITHUB_STEP_SUMMARY"
+      - name: The live dashboard reports this commit
+        env:
+          BYPASS: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          HEALTH_URL: https://lab.algorythmos.com/api/health
         run: |
-          if [ "$TARGET" = production ]; then
-            url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
-          else
-            url=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")
-          fi
-          echo "Deployed ($TARGET): $url (Vercel login required)" >> "$GITHUB_STEP_SUMMARY"
+          want="${GITHUB_SHA::12}"
+          got=""
+          for _ in $(seq 1 18); do
+            got=$(curl -fsS -H "x-vercel-protection-bypass: $BYPASS" "$HEALTH_URL" \
+                  | python3 -c 'import json, sys; print(json.load(sys.stdin).get("version", ""))' || true)
+            if [ "$got" = "$want" ]; then
+              echo "Live /api/health reports $got." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::Live /api/health reports '$got', expected $want: the deploy did not take effect."
+          exit 1
