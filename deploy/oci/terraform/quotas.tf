@@ -1,6 +1,9 @@
 # One quota policy, statements in this order (most restrictive across policies wins, so a separate "zero compute"
 # policy would block A1 too). It keeps the tenancy inside Always Free even on Pay As You Go: 2 Ampere OCPUs and
 # 12 GB, no other compute, 200 GB of block storage and 5 backups, no paid private vaults.
+# A1 is limited under two names: per availability domain (standard-a1-core-count) and per region
+# (standard-a1-core-regional-count; what Sydney, a single-AD region, enforces). "zero compute-core quotas"
+# zeroes both, so both are set back; the first Resource Manager apply failed on the regional one.
 resource "oci_limits_quota" "always_free" {
   compartment_id = var.tenancy_ocid
   name           = "always-free-only"
@@ -8,8 +11,10 @@ resource "oci_limits_quota" "always_free" {
   statements = [
     "zero compute-core quotas in tenancy",
     "set compute-core quota standard-a1-core-count to 2 in tenancy",
+    "set compute-core quota standard-a1-core-regional-count to 2 in tenancy",
     "zero compute-memory quotas in tenancy",
     "set compute-memory quota standard-a1-memory-count to 12 in tenancy",
+    "set compute-memory quota standard-a1-memory-regional-count to 12 in tenancy",
     "set block-storage quota total-storage-gb to 200 in tenancy",
     "set block-storage quota backup-count to 5 in tenancy",
     "zero kms quota virtual-private-vault-count in tenancy",
