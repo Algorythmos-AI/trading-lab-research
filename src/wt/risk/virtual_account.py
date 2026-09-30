@@ -20,6 +20,46 @@ from pathlib import Path
 from typing import Any
 
 
+def _fsync_dir(d: Path) -> None:
+    try:
+        fd = os.open(d, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
+def _durable_write(path: Path, text: str) -> None:
+    """Temp file, fsync, rename, fsync the directory: after this returns the new content survives a power cut."""
+    tmp = path.with_name(f".{path.name}.tmp")
+    with open(tmp, "w") as fh:
+        fh.write(text)
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp, path)
+    _fsync_dir(path.parent)
+
+
+def _mark_latched(sentinel: Path, reason: str) -> None:
+    """Create the sentinel first as an empty file (a directory entry, no data blocks, so it still succeeds on a full
+    disk), make that durable, then try to record the reason in it. Only the file's existence is load-bearing."""
+    if not sentinel.exists():             # an existing one already latches (and may not be writable: leave it)
+        fd = os.open(sentinel, os.O_CREAT | os.O_WRONLY, 0o644)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        _fsync_dir(sentinel.parent)
+    try:
+        _durable_write(sentinel, reason)
+    except OSError:
+        pass                                    # the empty sentinel already latches; the reason is a nicety
+
+
 class StateError(RuntimeError):
     """The account state can't be trusted (corrupt file, or a latch sentinel without its account)."""
 
@@ -98,18 +138,17 @@ class VirtualAccount:
         return path.with_suffix(path.suffix + ".latch")
 
     def save(self, path: Path) -> None:
+        """Order matters (plan R7): a latch's sentinel is made durable *before* the account is replaced, so a
+        failed account write (a full disk) can't lose a latch: load() then sees the sentinel with an unlatched
+        account and refuses to arm. An unlatch removes the sentinel only *after* the account says so."""
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_name(f".{path.name}.tmp")
-        with open(tmp, "w") as fh:
-            fh.write(json.dumps(asdict(self), indent=1))
-            fh.flush()
-            os.fsync(fh.fileno())
-        os.replace(tmp, path)
         s = self.sentinel(path)
         if self.latched:
-            s.write_text(self.latch_reason or "latched")
-        elif s.exists():
+            _mark_latched(s, self.latch_reason or "latched")
+        _durable_write(path, json.dumps(asdict(self), indent=1))
+        if not self.latched and s.exists():
             s.unlink()
+            _fsync_dir(path.parent)
 
     @classmethod
     def load(cls, path: Path, start_equity: float = 600.0) -> VirtualAccount:
@@ -128,18 +167,40 @@ class VirtualAccount:
         return cls(start_equity, start_equity, start_equity, high_water=start_equity)
 
 
+class NotLatched(RuntimeError):
+    """reset_latch was asked to clear a latch that isn't set (nothing is recorded)."""
+
+
 def reset_latch(path: Path, reason: str, by: str = "owner") -> VirtualAccount:
-    """The only way to clear a latch (`make reset-latch REASON=...`). Keeps a history of every reset."""
+    """The only way to clear a latch (`make reset-latch REASON=...`). Keeps a history of every reset. Raises
+    NotLatched, recording nothing, when neither the account nor its sentinel says latched."""
     if not reason.strip():
         raise ValueError("a reason is required to reset the latch")
+    s = VirtualAccount.sentinel(path)
     try:
         va = VirtualAccount.load(path)
     except StateError:
-        raw = json.loads(path.read_text()) if path.exists() else {}
+        if not path.exists():
+            raise StateError(f"{path.name} is missing while latched: restore it from the backup before resetting, "
+                             "or the account's history and P&L would start again from zero") from None
+        try:
+            raw = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as e:
+            raise StateError(f"{path.name} is unreadable ({e.__class__.__name__}): restore it from the backup "
+                             "before resetting") from None
         known = {f.name for f in fields(VirtualAccount)}
-        va = VirtualAccount(**{k: v for k, v in raw.items() if k in known}) if raw else VirtualAccount()
+        va = VirtualAccount(**{k: v for k, v in raw.items() if k in known}) if isinstance(raw, dict) \
+            else VirtualAccount()
+    if not va.latched and not s.exists():
+        raise NotLatched("the account is not latched: nothing to reset")
+    why = va.latch_reason
+    if not why and s.exists():
+        try:
+            why = s.read_text().strip()[:200] or "latched (sentinel)"
+        except OSError:
+            why = "latched (sentinel)"
     va.latch_history.append({"at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
-                             "reason": va.latch_reason, "reset_by": by, "note": reason.strip()[:200]})
+                             "reason": why, "reset_by": by, "note": reason.strip()[:200]})
     va.latched, va.latch_reason = False, ""
     va.save(path)
     return va
