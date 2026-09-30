@@ -194,16 +194,57 @@ def test_dst_changes_are_found_for_both_zones():
 
 def test_schedule_check_across_both_dst_changes():
     jobs = CFG["host"]["jobs"]
-    rows = status.schedule_check(jobs, dt.date(2026, 10, 1), 40)
+    syd = lambda y, m, d, h=12: dt.datetime(y, m, d, h, tzinfo=status.SYD)
+    rows = status.schedule_check(jobs, syd(2026, 9, 30, 12), "launchd", 40)
     by = {(r["job"], r["et_date"]): r for r in rows}
     assert by[("com.wt.routine", "2026-10-01")]["et"].startswith("Thu 01 Oct 07:30")   # AEST+10 vs EDT-4
     assert by[("com.wt.routine", "2026-10-05")]["et"].startswith("Mon 05 Oct 06:30")   # AEDT+11 vs EDT-4
     assert by[("com.wt.routine", "2026-11-02")]["et"].startswith("Mon 02 Nov 05:30")   # AEDT+11 vs EST-5
     assert all(r["ok"] for r in rows)
-    late = status.schedule_check([dict(jobs[0], local_time="23:59")], dt.date(2026, 9, 28), 1)
+    late = status.schedule_check([dict(jobs[0], must_start_before_et="07:00")], syd(2026, 9, 28), "launchd", 1)
     assert late[0]["ok"] is False
-    weekend = status.schedule_check(jobs[:1], dt.date(2026, 10, 3), 1)[0]
+    weekend = [r for r in status.schedule_check(jobs[:1], syd(2026, 10, 3, 12), "launchd", 1)
+               if r["et_date"] == "2026-10-03"][0]
     assert weekend["session"] is False and weekend["ok"] is True
+
+
+def test_schedule_lists_each_jobs_next_run_first():
+    jobs = CFG["host"]["jobs"]
+    now = dt.datetime(2026, 9, 30, 22, 0, tzinfo=status.SYD)         # Wednesday: the routine (21:30) has fired
+    rows = status.schedule_check(jobs, now, "launchd", 10)
+    first = {}
+    for r in rows:
+        first.setdefault(r["job"], r)
+    assert first["com.wt.routine"]["local"].startswith("Thu 01 Oct 21:30")    # not today's slot, already gone
+    assert first["com.wt.paper-b"]["local"].startswith("Wed 30 Sep 22:30")
+    assert first["com.wt.weekly"]["local"].startswith("Sat 03 Oct 11:00")    # Saturdays only, never "today"
+    assert [r["et_date"] for r in rows] == sorted(r["et_date"] for r in rows)   # in time order
+
+
+def test_schedule_on_systemd_is_in_new_york_time():
+    jobs = CFG["host"]["jobs"]
+    now = dt.datetime(2026, 10, 2, 13, 0, tzinfo=status.ET)            # Friday afternoon ET
+    rows = status.schedule_check(jobs, now, "systemd", 7)
+    first = {}
+    for r in rows:
+        first.setdefault(r["job"], r)
+    assert first["com.wt.routine"]["et"].startswith("Mon 05 Oct 07:30")
+    assert first["com.wt.forward"]["et"].startswith("Mon 05 Oct 12:40")      # Friday 12:40 has passed
+    assert first["com.wt.weekly"]["et"].startswith("Fri 02 Oct 20:00")
+    assert first["com.wt.routine"]["local"] == first["com.wt.routine"]["et"]
+    assert all(r["session"] for r in rows)                                # systemd jobs never fire on a weekend
+
+
+def test_systemd_jobs_are_looked_up_by_job_key():
+    seen = []
+
+    class Ctx:
+        def run(self, argv, timeout):
+            seen.append(argv[2])
+            return "LoadState=loaded\nActiveState=inactive\nExecMainStatus=0\n"
+    got = status._systemd_jobs(Ctx(), CFG["host"]["jobs"])
+    assert seen == ["wt-routine.service", "wt-paper-b.service", "wt-forward.service", "wt-weekly.service"]
+    assert all(v["loaded"] and v["last_exit"] == 0 for v in got.values())
 
 
 def test_market_state_phases():
