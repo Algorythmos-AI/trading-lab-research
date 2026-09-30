@@ -36,13 +36,14 @@ from wt.core.config import DATA_DIR, FORWARD_LEDGER, ROOT
 from wt.ops import hc, host, preflight
 from wt.ops.alerts import Alerts
 from wt.ops.heartbeat import Heartbeat, last_runs
-from wt.ops.locks import job_lock
+from wt.ops.locks import DEPLOY_LOCK, job_lock
 from wt.ops.schedule import JOBS, PY, SYDNEY, Job
 from wt.ops.window import Session, forward_wait_until, load_sessions
 
 JOURNAL = DATA_DIR / "live" / "journal.jsonl"
 KILL = ROOT / "KILL"
 WEEKLY_WAIT_S = 3 * 3600
+DEPLOY_WAIT_S = 30 * 60           # a job due while a deploy switches the checkout waits for it, then starts
 KILL_GRACE_S = 30
 # preflight failures that still let paper-b manage an open position (entries stay off)
 EXITS_ONLY_CHECKS = frozenset({"free disk", ".env private", "runtime state migrated", "paging configured"})
@@ -304,6 +305,12 @@ def run_job(job: Job, root: Path = ROOT, preflight_only: bool = False, alerts: A
         if not got:
             # not a failure: the run that holds the lock is the one that pings
             return refuse(job, "another run of this job is still in progress", alerts, log, ping=False)
+        waited = time.monotonic()
+        with job_lock(DEPLOY_LOCK, wait_s=DEPLOY_WAIT_S) as free:   # released at once: only waits out a deploy
+            if not free:
+                return refuse(job, "a deploy is still changing the checkout after 30 minutes", alerts, log)
+        if (waited := time.monotonic() - waited) > 1:
+            log(f"waited {waited:.0f}s for a deploy to finish")
         hb = Heartbeat(job.name, _sha(root))
         fails = preflight.failures(preflight.run_checks(root)) if job.preflight else []
         extra_env: dict[str, str] = {}

@@ -19,13 +19,15 @@ from collections.abc import Mapping
 from wt.core.clock import ET, et
 from wt.ops.window import Session, load_sessions
 
+ARM_LEAD = dt.timedelta(hours=3, minutes=15)   # wt.live.runner_b.ARM_LEAD (not imported: the runner pulls in the broker)
+
 
 def due(now: dt.datetime, sessions: Mapping[dt.date, Session]) -> list[str]:
     s = sessions.get(now.astimezone(ET).date())
     if s is None:
         return []
     out = []
-    if s.open - dt.timedelta(hours=3) <= now < s.close:
+    if s.open - ARM_LEAD <= now < s.close:
         out.append("wt-paper-b.service")
     if et(s.date, "12:40") <= now < s.close + dt.timedelta(minutes=20 + 90):
         out.append("wt-forward.service")

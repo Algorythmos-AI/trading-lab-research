@@ -56,7 +56,10 @@ from wt.signals import setups
 
 SIG, TRADE, STRATEGY = "QQQ", "QQQM", "B"
 LIVE = DATA_DIR / "live"
-KILL = ROOT / "KILL"          # while this file exists: no new entries (exits and stops keep being managed)
+KILL = ROOT / "KILL"
+# The earliest the runner arms. The Mac's 22:30 Sydney start is exactly 3 h before the open from 2026-11-01 (AEDT +
+# EST); the 15 minutes keep that start from being refused as too early by a few seconds of startup.
+ARM_LEAD = dt.timedelta(hours=3, minutes=15)          # while this file exists: no new entries (exits and stops keep being managed)
 RISK_PCT, MAX_SPREAD_PCT, STALE_S = 1.0, 0.10, 150
 DATA_DEADLINE_S = 15.0        # any single market-data call
 MIN_FREE_GB = 3.0
@@ -418,8 +421,8 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
     if now >= close_dt:
         log("no_session", day=day, reason="started after the close")
         return
-    if now < open_dt - dt.timedelta(hours=3):
-        log("too_early", day=day, reason="started more than 3 h before the open; the scheduled start will run it")
+    if now < open_dt - ARM_LEAD:
+        log("too_early", day=day, reason="started more than 3 h 15 min before the open; the scheduled start will run it")
         return
     flatten_dt, market_dt, verify_dt = (close_dt - dt.timedelta(minutes=m) for m in (10, 5, 2))
 
