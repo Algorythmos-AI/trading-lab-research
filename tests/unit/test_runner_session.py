@@ -88,7 +88,8 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(runner_b.events, "policy", lambda now: ("normal", None))
     fired = {"done": False}
 
-    def signal(closed, sigma, prev_close):                   # one B signal on the 10:00 bar
+    def signal(closed, sigma, prev_close, live=False):       # one B signal on the 10:00 bar
+        assert live, "the runner must ask for the live signal: the backtest form never signals on the newest bar"
         last = pd.Timestamp(closed.t.iloc[-1]).tz_convert(ET)
         if not fired["done"] and last.hour == 10 and last.minute >= 0:
             fired["done"] = True

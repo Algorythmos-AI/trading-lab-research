@@ -677,7 +677,8 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                     blockers.append("stale_signal_data")
                 if not q or (q[1] - q[0]) / ((q[0] + q[1]) / 2) * 100 > MAX_SPREAD_PCT:
                     blockers.append("spread_or_no_quote")
-                sig = None if blockers else setups.b_intraday_momentum(closed.reset_index(drop=True), sigma, prev_close)
+                sig = None if blockers else setups.b_intraday_momentum(closed.reset_index(drop=True), sigma, prev_close,
+                                                                        live=True)
                 if sig and sig.bar_index == len(closed) - 1:          # only act on the bar that just closed
                     skew = measure_skew(broker, clock)
                     if skew is None or abs(skew) > SKEW_MAX_S:
