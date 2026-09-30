@@ -143,24 +143,32 @@ def _hm(s: str) -> dt.time:
     return dt.time(int(h), int(m))
 
 
-def schedule_check(jobs: list[dict], start: dt.date, days: int = 10) -> list[dict]:
-    """For each job and day, its local fire time in ET and whether that is early enough.
+def schedule_check(jobs: list[dict], now: dt.datetime, kind: str = "launchd", days: int = 10) -> list[dict]:
+    """The next fire times of each job after ``now``, from the job table (wt.ops.schedule.JOBS) the agents and the
+    units are rendered from, in time order, with whether each is early enough in ET.
 
-    Weekend ET dates are marked ``no_session``. Uses zoneinfo, so both DST regimes are covered.
+    launchd (the Mac) fires on the host's Sydney clock, systemd (the VM) in America/New_York. Only future fires are
+    listed and each job's own weekdays apply, so the first row of a job is its next run (a weekly job is not shown
+    as today). Weekend ET dates are marked ``no_session``; holidays are not known here (every job checks the
+    market calendar itself). Uses zoneinfo, so both DST regimes are covered.
     """
+    from wt.ops.schedule import JOBS
     rows = []
-    for i in range(days):
-        d = start + dt.timedelta(days=i)
-        for j in jobs:
-            tz = ZoneInfo(j.get("tz", "Australia/Sydney"))
-            local = dt.datetime.combine(d, _hm(j["local_time"]), tzinfo=tz)
-            et = local.astimezone(ET)
-            need = _hm(j["must_start_before_et"])
+    for j in jobs:
+        job = JOBS.get(j["label"].rsplit(".", 1)[-1])
+        if job is None:
+            continue
+        need = _hm(j["must_start_before_et"])
+        for t in (job.fires_et(now, days) if kind == "systemd" else job.fires(now, days)):
+            et = t.astimezone(ET)
             session = et.weekday() < 5
-            rows.append({"job": j["label"], "local": local.strftime("%a %d %b %H:%M %Z"),
+            rows.append({"job": j["label"], "local": t.strftime("%a %d %b %H:%M %Z"),
                          "et": et.strftime("%a %d %b %H:%M %Z"), "et_date": et.date().isoformat(),
                          "session": session, "ok": (et.time() <= need) if session else True,
-                         "must_start_before_et": j["must_start_before_et"]})
+                         "must_start_before_et": j["must_start_before_et"], "_at": et})
+    rows.sort(key=lambda r: r["_at"])
+    for r in rows:
+        del r["_at"]
     return rows
 
 
@@ -552,7 +560,7 @@ def _systemd_jobs(ctx: Ctx, jobs_cfg: list[dict]) -> dict[str, dict]:
     """launchctl-shaped job rows from systemd: loaded, running, last exit of wt-<job>.service."""
     out: dict[str, dict] = {}
     for j in jobs_cfg:
-        name = str(j.get("name") or j["label"].rsplit(".", 1)[-1])
+        name = j["label"].rsplit(".", 1)[-1]           # the job key (com.wt.paper-b -> wt-paper-b); `name` is for people
         text = ctx.run(["systemctl", "show", f"wt-{name}.service", "--property=LoadState,ActiveState,ExecMainStatus"],
                        10)
         kv = dict(line.split("=", 1) for line in text.splitlines() if "=" in line)
@@ -589,7 +597,6 @@ def src_host(ctx: Ctx) -> dict:
     else:
         swap = h.swap()
     free_gb, total_gb = thresholds.disk_free_gb(ctx.deployed), thresholds.disk_total_gb(ctx.deployed)
-    today_syd = ctx.now.astimezone(SYD).date()
     return {"kind": h.kind, "jobs": [{**j, **jobs.get(j["label"], {})} for j in jobs_cfg], "jobs_error": jobs_error,
             "wakes": wakes, "wake_error": wake_error,
             "wake_coverage": (wake_coverage(wakes, ctx.cfg.get("host", {}).get("wake_needed", []))
@@ -597,7 +604,7 @@ def src_host(ctx: Ctx) -> dict:
             "disk_free_gb": round(free_gb, 2), "disk_total_gb": round(total_gb, 1),
             "disk_floor_gb": thresholds.DISK_FLOOR_GB, "disk_target_gb": thresholds.DISK_TARGET_GB,
             "old_root_exists": ctx.old.exists(), "swap": swap, "swap_warn_pct": thresholds.SWAP_WARN_PCT,
-            "schedule": schedule_check(jobs_cfg, today_syd, 10),
+            "schedule": schedule_check(jobs_cfg, ctx.now, h.kind, 10),
             "dst": next_dst_changes(ctx.now, {"Sydney": SYD, "New York": ET})}
 
 
