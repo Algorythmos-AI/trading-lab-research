@@ -37,11 +37,13 @@ def test_no_oracle_identifiers_or_secrets_are_committed():
 def test_one_quota_policy_in_the_order_that_keeps_a1_usable():
     block = re.search(r"statements = \[(.*?)\]", tf("quotas.tf"), re.S).group(1)
     statements = re.findall(r'"((?:zero|set) [^"]+)"', block)
-    assert statements[:4] == [
+    assert statements[:6] == [
         "zero compute-core quotas in tenancy",
         "set compute-core quota standard-a1-core-count to 2 in tenancy",
+        "set compute-core quota standard-a1-core-regional-count to 2 in tenancy",
         "zero compute-memory quotas in tenancy",
         "set compute-memory quota standard-a1-memory-count to 12 in tenancy",
+        "set compute-memory quota standard-a1-memory-regional-count to 12 in tenancy",
     ]
     assert tf("quotas.tf").count('resource "oci_limits_quota"') == 1
 
