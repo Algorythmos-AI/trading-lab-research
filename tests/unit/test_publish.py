@@ -371,3 +371,18 @@ def test_paper_series_counts_a_replayed_close_once(tmp_path):
     j.write_text("\n".join(json.dumps(r) for r in (row, row, {**row, "trade_id": "t2"})) + "\n")
     s = publish.paper_series(j)
     assert s[-1]["cum_r"] == 3.0 and s[-1]["trades"] == 2
+
+
+
+def test_a_shadow_host_never_publishes_under_the_primary_key():
+    """ADR 0004: under the default key the dashboard would take the shadow's snapshot as the primary's."""
+    assert publish.shadow_key_problem({"WT_ROLE": "shadow"})
+    assert publish.shadow_key_problem({"WT_ROLE": "shadow", "DASHBOARD_KEY_ID": "default"})
+    assert publish.shadow_key_problem({"WT_ROLE": "shadow", "DASHBOARD_KEY_ID": "oci-syd"}) is None
+    assert publish.shadow_key_problem({}) is None                                   # the Mac: primary, default key
+    assert publish.shadow_key_problem({"WT_ROLE": "primary", "DASHBOARD_KEY_ID": "oci-syd"}) is None
+
+
+def test_the_vm_fetches_its_dashboard_key_id():
+    fetcher = (publish.ROOT / "deploy/oci/bin/wt-fetch-secrets").read_text()
+    assert "DASHBOARD_KEY_ID" in fetcher.split("OPTIONAL=(", 1)[1].split(")", 1)[0]
