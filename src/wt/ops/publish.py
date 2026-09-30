@@ -687,6 +687,16 @@ def main(argv: list[str] | None = None) -> int:
         return _publish(a)
 
 
+def shadow_key_problem(env: dict[str, str] | None = None) -> str | None:
+    """A shadow host must sign with its own key id: under the default key the dashboard takes its snapshots as the
+    primary's and overwrites them (ADR 0004, PRIMARY_HOST). None when it is fine to send."""
+    e = os.environ if env is None else env
+    if e.get("WT_ROLE", "primary") == "shadow" and e.get("DASHBOARD_KEY_ID", "").strip() in ("", "default"):
+        return ("shadow host without its own DASHBOARD_KEY_ID: not publishing (it would overwrite the primary's "
+                "snapshot). Add DASHBOARD_KEY_ID to the vault and its key to the dashboard's DASHBOARD_INGEST_KEYS.")
+    return None
+
+
 def _publish(a: argparse.Namespace) -> int:
     now = dt.datetime.now(dt.UTC).replace(microsecond=0)
     if not a.no_collect:
@@ -725,6 +735,9 @@ def _publish(a: argparse.Namespace) -> int:
     if a.dry_run:
         return 0
     url, secret = os.environ.get("DASHBOARD_INGEST_URL"), os.environ.get("DASHBOARD_INGEST_SECRET")
+    if (why := shadow_key_problem()) is not None:
+        print(why, file=sys.stderr)
+        return 2
     if not url or not secret:
         print("DASHBOARD_INGEST_URL / DASHBOARD_INGEST_SECRET not set: not sending (run provision_secrets.sh)")
         return 0
