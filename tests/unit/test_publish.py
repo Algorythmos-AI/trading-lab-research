@@ -386,3 +386,51 @@ def test_a_shadow_host_never_publishes_under_the_primary_key():
 def test_the_vm_fetches_its_dashboard_key_id():
     fetcher = (publish.ROOT / "deploy/oci/bin/wt-fetch-secrets").read_text()
     assert "DASHBOARD_KEY_ID" in fetcher.split("OPTIONAL=(", 1)[1].split(")", 1)[0]
+
+
+# ---- plan v7 A-P1: a hung collector or a network drop never costs a publish ------------------------------------
+
+def test_a_hung_collector_is_reported_not_fatal(monkeypatch):
+    import subprocess
+
+    def run(*a, **k):
+        raise subprocess.TimeoutExpired(cmd="collector", timeout=k.get("timeout"))
+    monkeypatch.setattr(publish.subprocess, "run", run)
+    assert publish.collect() == publish.COLLECT_TIMEOUT_CODE
+
+
+def test_after_a_collector_failure_the_last_documents_are_published_and_marked(quick_publish, monkeypatch):
+    seen = {}
+    monkeypatch.setattr(publish, "collect", lambda: publish.COLLECT_TIMEOUT_CODE)
+    monkeypatch.setattr(publish, "load_docs", lambda out=None: {"meta": {"exit_code": 0, "duration_s": 3.0}})
+
+    def build(docs, *a, **k):
+        seen["meta"] = docs["meta"]
+        return {"run_id": "r1", "as_of": "2026-09-29T07:00:00+00:00", "redaction": "standard", "withheld": 0}
+    monkeypatch.setattr(publish, "build", build)
+    quick_publish["ok"] = True
+    assert publish.main([]) == 0
+    assert seen["meta"] == {"exit_code": publish.COLLECT_TIMEOUT_CODE, "duration_s": 3.0}
+
+
+def test_send_keeps_retrying_a_network_drop_within_its_deadline(monkeypatch):
+    clock = {"t": 0.0}
+    calls = []
+
+    def post(*a, **k):
+        calls.append(clock["t"])
+        raise requests.ConnectionError("down")
+    monkeypatch.setattr(publish.requests, "post", post)
+    monkeypatch.setattr(publish.time, "monotonic", lambda: clock["t"])
+    monkeypatch.setattr(publish.time, "sleep", lambda s: clock.__setitem__("t", clock["t"] + s))
+    ok, _ = publish.send(b"{}", "https://x", "s", None, tries=publish.SEND_TRIES, deadline=100.0)
+    assert not ok and calls == [0, 2, 6, 14, 30, 62]              # a 64 s wait (+ a 20 s try) would end past it
+    clock["t"], calls[:] = 0.0, []
+    publish.send(b"{}", "https://x", "s", None, tries=publish.SEND_TRIES, deadline=1e9)
+    assert len(calls) == publish.SEND_TRIES
+
+
+def test_the_publish_budget_fits_the_jobs_deadline():
+    from wt.ops.schedule import JOBS
+    assert publish.PUBLISH_BUDGET_S < JOBS["dashboard"].deadline_min * 60
+    assert publish.COLLECT_TIMEOUT_S + publish.SEND_TIMEOUT_S < publish.PUBLISH_BUDGET_S
