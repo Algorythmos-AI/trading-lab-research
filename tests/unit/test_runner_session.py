@@ -569,3 +569,75 @@ def test_a_broken_evidence_chain_turns_entries_off(env, monkeypatch, tmp_path):
     runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep)
     assert b.placed == []
     assert any(r["event"] == "refuse_to_arm" and "evidence hash chain" in r["reason"] for r in journal(env))
+
+
+# ---- the decision journal (plan v7 A-dec) ----
+
+def _decisions(rows):
+    return [r for r in rows if r["event"] == "decision"]
+
+
+def test_a_kill_night_journals_the_would_be_signal_and_never_trades(env):
+    (env / "KILL").write_text("paused")
+    b = SimBroker()
+    clk = Clock(at(8, 0))
+    runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep)
+    j = journal(env)
+    assert b.placed == []
+    sigs = [r for r in _decisions(j) if r["would_signal"]]
+    assert len(sigs) == 1 and sigs[0]["trigger"] == 500.5 and sigs[0]["stop"] == 498.5
+    assert "kill_file" in sigs[0]["blockers"] and sigs[0]["runner_acts"] is False
+    summary = next(r for r in j if r["event"] == "decision_summary")
+    assert summary["inputs"] and summary["would_signals"] == 1
+    assert [r["event"] for r in j].index("decision_summary") < [r["event"] for r in j].index("session_end")
+
+
+def test_a_shadow_session_journals_decisions_through_a_broker_that_refuses_every_order(env, monkeypatch):
+    monkeypatch.setenv("WT_ROLE", "shadow")
+    b = SimBroker()
+    clk = Clock(at(8, 0))
+    synced(b, clk)
+    runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep)
+    j = journal(env, allow_errors=True)
+    assert b.placed == []
+    sigs = [r for r in _decisions(j) if r["would_signal"]]
+    assert len(sigs) == 1 and any(x.startswith("entries_off:shadow") for x in sigs[0]["blockers"])
+    assert sigs[0]["sigma"] is not None and sigs[0]["prev_close"] is not None   # computed although entries are off
+
+
+def test_decision_events_stay_few(env, monkeypatch):
+    (env / "KILL").write_text("paused")
+    b = SimBroker()
+    clk = Clock(at(8, 0))
+    runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep)
+    assert len(_decisions(journal(env))) <= runner_b.DECISION_CAP + 1
+
+
+def test_the_decision_journal_cannot_reach_the_broker():
+    import ast
+    import inspect
+    tree = ast.parse(inspect.getsource(runner_b.Decisions))
+    names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)} | \
+        {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
+    assert not names & {"broker", "oms", "place", "place_entry", "exit_now", "books", "plan", "sig"}
+
+
+def test_a_failing_decision_journal_never_disturbs_the_session(env, monkeypatch):
+    def boom(*a, **k):
+        raise RuntimeError("journal bug")
+    monkeypatch.setattr(runner_b.Decisions, "observe", boom)
+    b = SimBroker()
+    clk = Clock(at(8, 0))
+    synced(b, clk)
+    runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep)
+    j = journal(env, allow_errors=True)
+    assert "entry_placed" in [r["event"] for r in j]          # the fake signal still trades as before
+    assert any(r["event"] == "decision_error" for r in j)
+    assert not any(r["event"] == "loop_error" for r in j)
+
+
+def test_paper_outcome_ignores_decision_events():
+    from wt.ops import jobs
+    base = [{"event": "armed"}, {"event": "session_end", "virtual": {}}]
+    extra = [{"event": "decision", "would_signal": True}, {"event": "decision_summary", "would_signals": 1}]
+    assert jobs.paper_outcome(base) == jobs.paper_outcome(base[:1] + extra + base[1:])
