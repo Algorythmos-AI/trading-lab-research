@@ -27,6 +27,7 @@ const blob = vi.hoisted(() => {
 
 vi.mock("@/lib/blob", () => ({
   LATEST_PATH: "snapshots/latest.json",
+  SHADOW_LATEST_PATH: "shadow/latest.json",
   HISTORY_PREFIX: "snapshots/history/",
   ALERT_STATE_PATH: "alerts/state.json",
   PreconditionFailed: blob.PreconditionFailed,
@@ -224,5 +225,40 @@ describe("POST /api/ingest", () => {
 
   it("maps the snapshot hour to the history path in UTC", () => {
     expect(historyPath(Date.parse("2026-09-29T09:05:00+10:00"))).toBe("snapshots/history/2026-09-28/23.json");
+  });
+});
+
+describe("per-host keys (ADR 0004)", () => {
+  const keys = JSON.stringify({ "oci-syd": "vm-secret" });
+  const signedAs = (body: string, keyId: string, secret: string) => {
+    const req = signed(body, { secret });
+    req.headers.set("x-wt-key-id", keyId);
+    return req;
+  };
+
+  it("a host signs with its own key; while the Mac is primary its snapshot lands in shadow/", async () => {
+    vi.stubEnv("DASHBOARD_INGEST_KEYS", keys);
+    const res = await handleIngest(signedAs(snapshotBody("vm1", "2026-09-29T21:45:00+00:00"), "oci-syd", "vm-secret"), NOW);
+    expect(await res.json()).toEqual({ status: "stored", run_id: "vm1", shadow: true });
+    expect(blob.store.has("shadow/latest.json")).toBe(true);
+    expect(blob.store.has("snapshots/latest.json")).toBe(false);
+  });
+
+  it("after cutover (PRIMARY_HOST) the VM is live and the Mac's snapshots go to shadow/", async () => {
+    vi.stubEnv("DASHBOARD_INGEST_KEYS", keys);
+    vi.stubEnv("PRIMARY_HOST", "oci-syd");
+    await handleIngest(signedAs(snapshotBody("vm1", "2026-09-29T21:45:00+00:00"), "oci-syd", "vm-secret"), NOW);
+    expect(JSON.parse(blob.store.get("snapshots/latest.json")!.text).run_id).toBe("vm1");
+    const mac = await handleIngest(signed(snapshotBody("mac1", "2026-09-29T21:45:30+00:00")), NOW);
+    expect(await mac.json()).toMatchObject({ shadow: true });
+    expect(JSON.parse(blob.store.get("snapshots/latest.json")!.text).run_id).toBe("vm1");
+  });
+
+  it("an unknown key id or the wrong key's signature is unauthorized", async () => {
+    vi.stubEnv("DASHBOARD_INGEST_KEYS", keys);
+    const body = snapshotBody("x", "2026-09-29T21:45:00+00:00");
+    expect((await handleIngest(signedAs(body, "stranger", SECRET), NOW)).status).toBe(401);
+    expect((await handleIngest(signedAs(body, "oci-syd", SECRET), NOW)).status).toBe(401);
+    expect(blob.store.size).toBe(0);
   });
 });
