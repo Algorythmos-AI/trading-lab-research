@@ -54,6 +54,13 @@ def sign(method: str, host: str, path: str, headers: dict[str, str], payload_sha
     return out
 
 
+def strong_etag(etag: str | None) -> str | None:
+    """The entity tag to send back in If-Match. Cloudflare marks the ETag of a response it compressed as weak
+    (W/"..."), and R2 refuses a weak tag in If-Match with 412: every lease renewal was "lost a race". The object's
+    bytes are what the tag names, so the strong form is the right one to send."""
+    return etag.removeprefix("W/") if etag else etag
+
+
 class R2:
     def __init__(self, account_id: str | None = None, access_key: str | None = None, secret_key: str | None = None,
                  timeout: float = 10.0) -> None:
@@ -75,7 +82,7 @@ class R2:
         r = requests.request(method, f"https://{host}{path}", data=body or None, headers=signed, timeout=self.timeout)
         date = r.headers.get("Date")
         server = email.utils.parsedate_to_datetime(date) if date else None
-        return Response(r.status_code, r.content, r.headers.get("ETag"), server)
+        return Response(r.status_code, r.content, strong_etag(r.headers.get("ETag")), server)
 
     def get(self, bucket: str, key: str) -> Response:
         return self._request("GET", bucket, key)

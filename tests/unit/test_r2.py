@@ -31,3 +31,25 @@ def test_conditional_headers_are_signed(monkeypatch):
     assert out.status == 412 and out.server_time == dt.datetime(2026, 9, 30, 1, 0, tzinfo=dt.UTC)
     assert seen["url"] == "https://acct.r2.cloudflarestorage.com/wt-leases/paper-b"
     assert seen["headers"]["if-none-match"] == "*" and "if-none-match" in seen["headers"]["authorization"]
+
+
+def test_a_weak_etag_is_sent_back_strong(monkeypatch):
+    """Cloudflare returns W/"..." for a compressed (JSON) body; R2 answers 412 to that in If-Match."""
+    from wt.ops import r2 as r2mod
+    assert r2mod.strong_etag('W/"4522141b"') == '"4522141b"'
+    assert r2mod.strong_etag('"4522141b"') == '"4522141b"' and r2mod.strong_etag(None) is None
+    seen = []
+
+    class Resp:
+        status_code, content = 200, b"{}"
+        headers = {"ETag": 'W/"abc"', "Date": "Thu, 01 Oct 2026 09:00:00 GMT"}
+
+    def request(method, url, data=None, headers=None, timeout=None):
+        seen.append((method, headers))
+        return Resp()
+    monkeypatch.setattr(r2mod.requests, "request", request)
+    c = r2mod.R2("acct", "key", "secret")
+    got = c.get("wt-leases", "paper-b")
+    assert got.etag == '"abc"'
+    c.put("wt-leases", "paper-b", b"{}", if_match=got.etag)
+    assert seen[1][1]["if-match"] == '"abc"'
