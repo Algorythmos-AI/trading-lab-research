@@ -141,8 +141,10 @@ def restore_test() -> int:
     """Restore the latest snapshot's ledgers into a temp dir and check their chains (weekly)."""
     tmp = Path(tempfile.mkdtemp(prefix="wt-restore-"))
     try:
-        r = restic("restore", "latest", "--host", host(), "--target", str(tmp), "--include", str(FORWARD_LEDGER),
-                   "--include", str(JOURNAL))                   # this host's own latest, never the other host's
+        # By file name: restic stores a snapshot's paths relative to the backed-up directories' common parent
+        # ("/var/forward/..."), so the ledgers' absolute paths match nothing and the test restored no file.
+        r = restic("restore", "latest", "--host", host(), "--target", str(tmp), "--include", FORWARD_LEDGER.name,
+                   "--include", JOURNAL.name)                   # this host's own latest, never the other host's
         if r.returncode != 0:
             print((r.stderr or r.stdout)[-800:], file=sys.stderr)
             return 1
