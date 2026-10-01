@@ -162,3 +162,5 @@ def test_restore_test_restores_this_hosts_own_snapshot(paths, monkeypatch):
     monkeypatch.setattr(backup, "restic", fake)
     backup.restore_test()
     assert seen[0][:4] == ("restore", "latest", "--host", "gcp-use1")
+    includes = [seen[0][i + 1] for i, a in enumerate(seen[0]) if a == "--include"]
+    assert includes == [backup.FORWARD_LEDGER.name, backup.JOURNAL.name]      # names, not absolute paths
