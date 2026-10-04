@@ -107,14 +107,14 @@ capabilities:
 
 roadmap:
   - {rank: 1, priority: P0, title: "Run round 3: counts-only guard, dev runs, r3_eval at 85 trials, DEC-0011", why: "DEC-0010 is in effect; this is the only open route to G1", owner: claude}
-  - {rank: 2, priority: P0, title: "Forward test: run the round-3 trials nightly, with D7 catch-up and per-strategy markers", why: "DEC-0010 requires every round-3 trial to run nightly from approval; forward_test.py doesn't yet", owner: claude}
-  - {rank: 3, priority: P1, title: "Run live jobs from a pinned worktree", why: "Branch work can then never touch what launchd runs", owner: claude}
-  - {rank: 4, priority: P1, title: "RTN-06 feed-agreement report (IEX/hybrid vs SIP)", why: "Last open MUST requirement besides CAT-01", owner: claude}
-  - {rank: 5, priority: P1, title: "Re-scope org milestones M2-M5", why: "They harden the gap-and-go pipeline, which lost -0.40R per trade", owner: you}
-  - {rank: 6, priority: P1, title: "Registry tidy-up: HYP-0001..0006 statuses, missing EXP-0009/0010 controls", why: "The registry must match the decisions", owner: claude}
+  - {rank: 2, priority: P0, title: "Two clean primary nights on the cloud host, then the kill-switch decision", why: "The jobs moved to the VM on 1 Oct; entries stay off until the host has proved itself and the signal-bar fix has had its own night", owner: both}
+  - {rank: 3, priority: P1, title: "RTN-06 feed-agreement report (IEX/hybrid vs SIP)", why: "Last open MUST requirement besides CAT-01", owner: claude}
+  - {rank: 4, priority: P1, title: "Re-scope org milestones M2-M5", why: "They harden the gap-and-go pipeline, which lost -0.40R per trade", owner: you}
+  - {rank: 5, priority: P1, title: "Registry tidy-up: HYP-0001..0006 statuses, missing EXP-0009/0010 controls", why: "The registry must match the decisions", owner: claude}
+  - {rank: 6, priority: P1, title: "Automatic deploys to the host after green checks", why: "Each release is still deployed by hand inside the gate", owner: claude}
   - {rank: 7, priority: P2, title: "Pre-register a catalyst classifier v4 (announcements, SPAC commentary, acquirer vs target)", why: "CAT-01 failed at 84%; only a new pre-registered change on a fresh sample can close it", owner: both}
   - {rank: 8, priority: P2, title: "Accumulate G2 evidence: 50 trades, 30 sessions", why: "Gate before any broker work", owner: both}
-  - {rank: 9, priority: P2, title: "CI for the research repo; audit ledger; human-approval mode", why: "Required before live trading", owner: claude}
+  - {rank: 9, priority: P2, title: "Human-approval mode", why: "Required before live trading; CI and the audit ledger are in place", owner: claude}
   - {rank: 10, priority: Later, title: "G3 Webull adapter, then G4 live tiny and G5 scale", why: "Only after an edge is proven", owner: both}
 
 # Owner actions that no file or API can detect. Set done: true when finished.
@@ -134,3 +134,4 @@ timeline:
   - {date: "2026-09-28", event: "trading-lab v0.1.0 released (M0 complete)"}
   - {date: "2026-09-28", event: "SPEC-0001 approved (v1.0.1); research PRs #1-#6 merged"}
   - {date: "2026-09-28", event: "Paper B armed; pre-market routine launched"}
+  - {date: "2026-10-01", event: "Jobs moved to the cloud host (primary); the Mac no longer runs them"}
