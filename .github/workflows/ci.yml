@@ -48,7 +48,7 @@ jobs:
       - name: Dashboard contract is current (schema and thresholds regenerate with no diff)
         run: |
           make schema PY=.venv/bin/python
-          git diff --exit-code -- dashboard/src/lib/snapshot.schema.json dashboard/src/lib/thresholds.gen.ts
+          git diff --exit-code -- dashboard/src/lib/snapshot.schema.json dashboard/src/lib/crypto.schema.json dashboard/src/lib/thresholds.gen.ts
       - name: Unit tests
         run: .venv/bin/python -m pytest
 
@@ -100,7 +100,7 @@ jobs:
           pnpm typecheck
           pnpm test
           pnpm gen:types
-          git diff --exit-code -- src/lib/snapshot.types.ts
+          git diff --exit-code -- src/lib/snapshot.types.ts src/lib/crypto.types.ts
           pnpm build
           pnpm exec playwright install --with-deps chromium
           pnpm test:e2e

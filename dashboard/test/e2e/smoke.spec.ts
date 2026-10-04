@@ -96,3 +96,59 @@ test("the watchdog requires the cron secret", async ({ request }) => {
   const res = await request.get("/api/cron/watchdog");
   expect(res.status()).toBe(401);
 });
+
+// ---- the crypto desk (ADR 0005) ------------------------------------------------------------------------------------
+
+const CRYPTO_PAGES = [
+  { path: "/crypto", heading: "Overview" },
+  { path: "/crypto/strategy", heading: "Strategy" },
+  { path: "/crypto/research", heading: "Research" },
+  { path: "/crypto/operations", heading: "Operations" },
+  { path: "/crypto/risk", heading: "Risk" },
+];
+
+for (const { path, heading } of CRYPTO_PAGES) {
+  test(`crypto ${heading} page renders`, async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    const res = await page.goto(path);
+    expect(res?.status()).toBe(200);
+
+    const nav = page.getByRole("navigation", { name: "Sections" });
+    for (const p of CRYPTO_PAGES) {
+      await expect(nav.getByRole("link", { name: p.heading, exact: true })).toHaveAttribute("href", p.path);
+    }
+    await expect(nav.getByRole("link", { name: heading, exact: true })).toHaveAttribute("aria-current", "page");
+    await expect(page.getByRole("heading", { level: 1, name: heading })).toBeAttached();
+    // the desk switch says where we are, and the header shows the crypto desk's clock
+    const desk = page.getByRole("navigation", { name: "Desk" });
+    await expect(desk.getByRole("link", { name: "Crypto" })).toHaveAttribute("aria-current", "true");
+    await expect(desk.getByRole("link", { name: "Stocks" })).not.toHaveAttribute("aria-current", "true");
+    await expect(page.getByText("24/7")).toBeVisible();
+
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+    expect(errors).toEqual([]);
+  });
+}
+
+test("the desk switch moves between the two desks, each with its own sections", async ({ page }) => {
+  await page.goto("/");
+  const desk = page.getByRole("navigation", { name: "Desk" });
+  await expect(desk.getByRole("link", { name: "Stocks" })).toHaveAttribute("aria-current", "true");
+  await expect(page.getByText("24/7")).toHaveCount(0);
+  await desk.getByRole("link", { name: "Crypto" }).click();
+  await expect(page).toHaveURL(/\/crypto$/);
+  await expect(page.getByRole("heading", { name: "Latest bar, per pair" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "BTC/AUD" }).first()).toBeVisible();
+  await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Research", exact: true }).click();
+  await expect(page).toHaveURL(/\/crypto\/research$/);
+  await expect(page.getByRole("heading", { name: "Gate C0: data quality" })).toBeVisible();
+  await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Strategy", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "What a trade is worth after costs" })).toBeVisible();
+  await page.getByRole("navigation", { name: "Desk" }).getByRole("link", { name: "Stocks" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Strategies", exact: true })).toBeAttached();
+});

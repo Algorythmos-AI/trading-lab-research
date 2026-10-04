@@ -1,8 +1,9 @@
 import { freshness } from "@/lib/freshness";
-import type { SnapshotResult } from "@/lib/snapshot";
+import type { CryptoResult, SnapshotResult } from "@/lib/snapshot";
 import { list } from "@/lib/types";
 import { Clocks } from "./client/clocks";
-import { FreshnessPill } from "./client/freshness-pill";
+import { DeskSwitch } from "./client/desk-switch";
+import { DeskFreshnessPill } from "./client/freshness-pill";
 import { NavTabs } from "./client/nav-tabs";
 import { ThemeToggle } from "./client/theme-toggle";
 
@@ -19,10 +20,13 @@ function Mark() {
   );
 }
 
-export function SiteHeader({ result, now }: { result: SnapshotResult; now: number }) {
+export function SiteHeader({ result, crypto, now }: { result: SnapshotResult; crypto: CryptoResult; now: number }) {
   const snap = result.status === "ok" ? result.snapshot : null;
   const windows = list(snap?.expected_windows);
   const f = freshness(snap?.as_of ?? null, windows, now);
+  const csnap = crypto.status === "ok" ? crypto.snapshot : null;
+  const cwindows = list(csnap?.expected_windows);
+  const cf = freshness(csnap?.as_of ?? null, cwindows, now);
   return (
     <header className="bg-card/80 supports-[backdrop-filter]:bg-card/70 z-30 border-b backdrop-blur sm:sticky sm:top-0">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-1.5 px-4 pt-3 sm:gap-x-4 sm:px-6">
@@ -34,10 +38,10 @@ export function SiteHeader({ result, now }: { result: SnapshotResult; now: numbe
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <FreshnessPill
-            asOf={snap?.as_of ?? null}
-            windows={windows}
-            initial={{ state: f.state, ageMin: f.ageMin }}
+          <DeskSwitch />
+          <DeskFreshnessPill
+            stocks={{ asOf: snap?.as_of ?? null, windows, initial: { state: f.state, ageMin: f.ageMin } }}
+            crypto={{ asOf: csnap?.as_of ?? null, windows: cwindows, initial: { state: cf.state, ageMin: cf.ageMin } }}
           />
           <ThemeToggle />
         </div>

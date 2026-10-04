@@ -8,10 +8,10 @@ name: dashboard
 # its contract deploys to production through the `production` Environment; pull requests only run the checks.
 on:
   pull_request:
-    paths: ["dashboard/**", ".github/workflows/dashboard.yml", "src/wt/ops/publish.py"]
+    paths: ["dashboard/**", ".github/workflows/dashboard.yml", "src/wt/ops/publish.py", "src/wt/crypto/snapshot.py"]
   push:
     branches: [main]
-    paths: ["dashboard/**", ".github/workflows/dashboard.yml", "src/wt/ops/publish.py"]
+    paths: ["dashboard/**", ".github/workflows/dashboard.yml", "src/wt/ops/publish.py", "src/wt/crypto/snapshot.py"]
   workflow_dispatch:
 
 permissions:
@@ -54,7 +54,7 @@ jobs:
       - name: Contract is current (TS types regenerate from the committed schema with no diff)
         run: |
           pnpm gen:types
-          git diff --exit-code -- src/lib/snapshot.types.ts
+          git diff --exit-code -- src/lib/snapshot.types.ts src/lib/crypto.types.ts
       - run: pnpm build
         env:
           DASHBOARD_FIXTURE: "1"

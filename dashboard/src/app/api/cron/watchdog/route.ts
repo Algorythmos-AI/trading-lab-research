@@ -1,6 +1,6 @@
 import { bearerMatches } from "@/lib/auth";
 import { logEvent } from "@/lib/log";
-import { runWatchdog } from "@/lib/watchdog-run";
+import { runCryptoWatchdog, runWatchdog } from "@/lib/watchdog-run";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +13,12 @@ export async function GET(req: Request): Promise<Response> {
   }
   try {
     const result = await runWatchdog();
-    return Response.json(result, { headers: { "cache-control": "no-store" } });
+    // The crypto desk's tick is separate and must never take the stocks desk's down with it.
+    const crypto = await runCryptoWatchdog().catch((e: unknown) => {
+      logEvent("watchdog", { outcome: "error", desk: "crypto", error: e instanceof Error ? e.name : "unknown" });
+      return { ok: false, desk: "crypto" };
+    });
+    return Response.json({ ...result, desks: { crypto } }, { headers: { "cache-control": "no-store" } });
   } catch (e) {
     logEvent("watchdog", { outcome: "error", error: e instanceof Error ? e.name : "unknown" });
     return Response.json({ ok: false, error: "watchdog failed" }, { status: 500, headers: { "cache-control": "no-store" } });

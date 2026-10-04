@@ -11,6 +11,7 @@ import {
   writeText,
   type StoredText,
 } from "./blob";
+import { DESK_PATHS } from "./desk";
 import { logEvent } from "./log";
 import { sendNtfy, type Notice } from "./ntfy";
 import type { Snapshot } from "./types";
@@ -38,6 +39,36 @@ export const blobDeps: WatchdogDeps = {
   send: (notice) => sendNtfy(notice),
   prune: true,
 };
+
+/**
+ * The crypto desk's dependencies (ADR 0005): its own latest snapshot, alert state and history, and pages that say
+ * which desk they are about. Its snapshot publishes one always-open window, so an outage at any hour pages.
+ */
+export const cryptoDeps: WatchdogDeps = {
+  readLatest: () => readText(DESK_PATHS.crypto.latest),
+  readState: () => readForUpdate(DESK_PATHS.crypto.alertState),
+  writeState: (body, opts) => writeText(DESK_PATHS.crypto.alertState, body, opts),
+  listHistory: () => listPaths(DESK_PATHS.crypto.history),
+  deleteHistory: (urls) => deleteUrls(urls),
+  send: (notice) => sendNtfy({ ...notice, title: `Crypto desk: ${notice.title}` }),
+  prune: true,
+};
+
+/**
+ * One tick for the crypto desk, or a skip while the desk is "new": it has never published and has no alert
+ * state, so there is nothing to be late. Deploying the dashboard before the desk exists pages nobody.
+ */
+export async function runCryptoWatchdog(
+  now: Date = new Date(),
+  deps: WatchdogDeps = cryptoDeps,
+): Promise<Record<string, unknown>> {
+  const [latest, state] = await Promise.all([
+    deps.readLatest().catch(() => undefined),
+    deps.readState().catch(() => undefined),
+  ]);
+  if (latest === null && state === null) return { ok: true, desk: "crypto", skipped: "never published" };
+  return { ...(await runWatchdog(now, deps)), desk: "crypto" };
+}
 
 function parseSnapshot(text: string): Snapshot | null {
   try {

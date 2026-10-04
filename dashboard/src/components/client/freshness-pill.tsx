@@ -1,6 +1,8 @@
 "use client";
 
 import { CircleCheck, MoonStar, OctagonX, TriangleAlert, CircleDashed } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { deskOfPath } from "@/lib/desk";
 import { describeAge, freshness, type FreshState } from "@/lib/freshness";
 import type { ExpectedWindow } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -23,7 +25,7 @@ function label(state: FreshState, ageMin: number | null): string {
     case "stopped":
       return `Stopped: ${describeAge(ageMin ?? 0)}`;
     case "asleep":
-      return "Mac asleep (expected)";
+      return "Between sessions (expected)";
     default:
       return "No data yet";
   }
@@ -54,4 +56,16 @@ export function FreshnessPill({
       {text}
     </span>
   );
+}
+
+export interface DeskFreshness {
+  asOf: string | null;
+  windows: ExpectedWindow[];
+  initial: { state: FreshState; ageMin: number | null };
+}
+
+/** The pill of the desk the current page belongs to. Each desk has its own snapshot and its own freshness. */
+export function DeskFreshnessPill({ stocks, crypto }: { stocks: DeskFreshness; crypto: DeskFreshness }) {
+  const d = deskOfPath(usePathname()) === "crypto" ? crypto : stocks;
+  return <FreshnessPill asOf={d.asOf} windows={d.windows} initial={d.initial} />;
 }

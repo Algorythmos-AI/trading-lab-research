@@ -18,7 +18,8 @@ describe("assumed weekday windows (after the published horizon)", () => {
     expect(usEasternRuleOffsetMin(Date.parse("2026-11-01T06:00:00Z"))).toBe(-300);
     expect(usEasternRuleOffsetMin(Date.parse("2027-03-14T06:59:00Z"))).toBe(-300);
     expect(usEasternRuleOffsetMin(Date.parse("2027-03-14T07:00:00Z"))).toBe(-240);
-  });
+    // Six years of half-hour steps: about 4 s alone, and past the default 5 s on a busy machine.
+  }, 20_000);
 
   it("is 07:30-18:00 ET on weekdays only", () => {
     expect(assumedWindow(t("2026-10-01T13:00:00Z"))).toEqual({
