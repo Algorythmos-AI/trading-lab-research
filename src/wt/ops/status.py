@@ -657,8 +657,13 @@ def src_org(ctx: Ctx) -> dict:
     milestones = sorted(({"key": _milestone_key(m["title"]), "title": m["title"], "state": m["state"],
                           "open": m["open_issues"], "closed": m["closed_issues"]} for m in ms), key=lambda x: x["key"])
     proj = ctx.cfg.get("project", {})
-    items = (ctx.gh_json(["project", "item-list", str(proj.get("number", 2)), "--owner", proj.get("owner", ""),
-                          "--format", "json", "--limit", "500"], 40) or {}).get("items", [])
+    try:
+        items = (ctx.gh_json(["project", "item-list", str(proj.get("number", 2)), "--owner", proj.get("owner", ""),
+                              "--format", "json", "--limit", "500"], 40) or {}).get("items", [])
+    except SourceError:
+        # The board needs its own token permission (organization Projects). Without it the milestones, CI runs
+        # and releases below are still worth showing; they were all lost with it.
+        items = []
     tab: dict[str, Counter] = defaultdict(Counter)
     prio = Counter()
     open_items = []

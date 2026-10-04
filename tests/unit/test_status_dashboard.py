@@ -320,6 +320,23 @@ def test_github_sources_are_skipped_offline(tmp_path):
     assert res["ok"] is False and "no-github" in res["error"]
 
 
+def test_org_source_survives_a_token_that_cannot_read_the_project_board(tmp_path, monkeypatch):
+    """The VM's token read the milestones and the CI runs but not the board, and the whole source failed."""
+    def gh_json(self, args, want=25.0):
+        if args[0] == "project":
+            raise SourceError("gh failed: Resource not accessible by personal access token")
+        if args[0] == "api" and "milestones" in args[1]:
+            return [{"title": "M1 · Foundations", "state": "open", "open_issues": 2, "closed_issues": 5}]
+        if args[0] == "run":
+            return [{"workflowName": "ci", "conclusion": "success", "status": "completed", "createdAt": "x", "headBranch": "main"}]
+        return []
+    monkeypatch.setattr(status.Ctx, "gh_json", gh_json)
+    res = status.src_org(ctx(tmp_path))
+    assert res["items_total"] == 0 and res["open_items"] == []
+    assert [m["title"] for m in res["milestones"]] == ["M1 · Foundations"]
+    assert res["runs"] == [{"workflow": "ci", "conclusion": "success", "created": "x", "branch": "main"}]
+
+
 def test_deployed_source_never_writes_to_the_live_checkout(tmp_path):
     live = tmp_path / "deployed"
     live.mkdir()
