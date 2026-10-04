@@ -21,7 +21,7 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
                  src/wt/analytics/risk_view.py src/wt/analytics/ops_view.py src/wt/ops/audit.py src/wt/ops/control.py \
                  src/wt/core/desk.py src/wt/crypto/data.py src/wt/crypto/indicators.py src/wt/crypto/quality.py \
                  src/wt/crypto/strategy.py src/wt/crypto/book.py src/wt/crypto/risk.py src/wt/crypto/features.py \
-                 src/wt/crypto/labels.py src/wt/crypto/cycle.py src/wt/crypto/snapshot.py
+                 src/wt/crypto/labels.py src/wt/crypto/cycle.py src/wt/crypto/snapshot.py src/wt/crypto/control.py
 JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
@@ -132,12 +132,17 @@ vm-deploy: ## Deploy on the OCI host through its Access tunnel: make vm-deploy [
 	  -o ProxyCommand="$${CLOUDFLARED:-cloudflared} access ssh --hostname %h --id $$CF_ACCESS_CLIENT_ID --secret $$CF_ACCESS_CLIENT_SECRET" \
 	  "wt@$$VM_SSH_HOST" "$${VERB:-status}"
 
-kill: ## Stop new paper-B entries (exits keep being managed): make kill REASON="..."
-	@printf '%s\n' "$${REASON:-paused by make kill} ($$(date '+%Y-%m-%d %H:%M %Z'))" > KILL && echo "KILL switch ON" && cat KILL
-	@-$(PY) -m wt.ops.audit kill_on
+kill: ## Stop new entries on a desk (exits keep being managed): make kill [DESK=crypto] REASON="..."
+	@if [ "$(DESK)" = "crypto" ]; then f="$$($(PY) -c 'from wt.core.desk import DESKS; print(DESKS["crypto"].kill_file)')"; \
+	  mkdir -p "$$(dirname "$$f")"; printf '%s\n' "$${REASON:-paused by make kill} ($$(date '+%Y-%m-%d %H:%M %Z'))" > "$$f" && echo "crypto KILL switch ON" && cat "$$f"; \
+	else printf '%s\n' "$${REASON:-paused by make kill} ($$(date '+%Y-%m-%d %H:%M %Z'))" > KILL && echo "KILL switch ON" && cat KILL; \
+	  $(PY) -m wt.ops.audit kill_on || true; fi
 
-unkill: ## Allow paper-B entries again (refused while paper B is running)
-	@$(PY) -m wt.ops.control unkill
+unkill: ## Allow entries again: paper B (refused while it is running), or make unkill DESK=crypto
+	@if [ "$(DESK)" = "crypto" ]; then $(PY) -m wt.crypto.control unkill; else $(PY) -m wt.ops.control unkill; fi
+
+reset-crypto-latch: ## OWNER: clear the crypto desk's daily-loss latch
+	@$(PY) -m wt.crypto.control reset-latch
 
 reset-latch: ## OWNER: clear the virtual account's loss latch: make reset-latch REASON="why it is safe" (refused while paper B runs)
 	@$(PY) -m wt.ops.control reset-latch "$(REASON)"

@@ -18,3 +18,4 @@ One page per incident. Each starts with how you'll notice it.
 | [Dashboard late or stopped](dashboard-late.md) | ntfy "Dashboard late"; a grey or amber freshness pill |
 | [Disk nearly full](disk-full.md) | ntfy priority 3 "refused to run: free disk"; the Operations page shows disk under the floor |
 | [Ruleset emergency](ruleset-emergency.md) | CI is down and a fix must land |
+| [Crypto desk](crypto-desk.md) | Installing, controlling or diagnosing the crypto desk |

@@ -37,10 +37,25 @@ def test_an_alert_belongs_to_one_desk():
     assert sum(d.alert_prefix is None for d in desks.DESKS.values()) == 1      # exactly one catch-all
 
 
-def test_every_existing_job_is_a_stocks_job_with_no_calendar():
-    """Phase 1 changes no unit: the jobs the VM runs today render exactly as before."""
-    for j in JOBS.values():
-        assert j.desk == "stocks" and j.calendar is None, j.name
+def test_the_stocks_jobs_are_untouched_and_the_crypto_desk_has_exactly_two_interval_jobs():
+    stocks = {n: j for n, j in JOBS.items() if j.desk == "stocks"}
+    assert set(stocks) == {"routine", "paper-b", "forward", "weekly", "dashboard"}
+    assert all(j.calendar is None for j in stocks.values())
+    crypto = {n: j for n, j in JOBS.items() if j.desk == "crypto"}
+    assert set(crypto) == {"crypto", "dashboard-crypto"}
+    for j in crypto.values():
+        # never a trading job (a 24/7 one would close the equity deploy gate for good); always on a UTC boundary
+        assert not j.trading and j.interval_s == 900 and j.calendar and j.deadline_min and j.et is None, j.name
+        assert j.runtime_max_h * 60 > j.deadline_min + 1
+    assert "OnCalendar=*:0/15:10 UTC" in units.timer(JOBS["crypto"])              # ten seconds after the bar closes
+    assert "OnCalendar=*:1/15:00 UTC" in units.timer(JOBS["dashboard-crypto"])    # the publish follows the cycle
+    assert "crypto" in jobs.HC_JOBS and jobs.hc_slug(JOBS["crypto"]) == "wt-crypto"
+    assert "MemoryMax=512M" in units.service(JOBS["crypto"], Path("/r"))
+
+
+def test_the_backup_runs_every_day_now_that_evidence_is_written_at_weekends():
+    timer = (ROOT / "deploy/oci/systemd/wt-backup.timer").read_text()
+    assert "OnCalendar=*-*-* 19:30 America/New_York" in timer and "Mon..Fri" not in timer
 
 
 def test_a_calendar_job_fires_on_the_utc_boundary_and_has_no_start_limit():

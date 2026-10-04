@@ -109,5 +109,16 @@ JOBS: dict[str, Job] = {j.name: j for j in (
     Job("dashboard", "com.wt.dashboard", 0, 0, ("-m", "wt.ops.publish"), "backtest", "dashboard", deadline_min=6,
         trading=False, interval_s=900, preflight=False,
         what="Collect status, sanitize, publish to the Vercel dashboard every 15 minutes", runtime_max_h=0.25),
+    # The crypto desk (ADR 0005) runs around the clock as two interval jobs on UTC calendar boundaries: one bar
+    # cycle ten seconds after each 15-minute close, and its publish a minute after that. Neither is a trading job
+    # for the equity deploy gate: a deploy waits for a cycle in flight (wt.ops.deploy.quiesced) instead.
+    Job("crypto", "com.wt.crypto", 0, 0, ("-m", "wt.crypto.cycle"), "backtest", "crypto", deadline_min=5,
+        trading=False, interval_s=900, calendar="*:0/15:10", desk="crypto",
+        what="Crypto desk bar cycle: data, quality, exits, entries, evidence; after every 15-minute close",
+        runtime_max_h=0.2),
+    Job("dashboard-crypto", "com.wt.dashboard-crypto", 0, 0, ("-m", "wt.crypto.snapshot"), "backtest",
+        "dashboard_crypto", deadline_min=6, trading=False, interval_s=900, calendar="*:1/15:00", desk="crypto",
+        preflight=False, what="Publish the crypto desk's snapshot to the dashboard every 15 minutes",
+        runtime_max_h=0.25),
 )}
 TRADING_JOBS = [j.name for j in JOBS.values() if j.trading]

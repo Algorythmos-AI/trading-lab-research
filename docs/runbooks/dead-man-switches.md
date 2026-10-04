@@ -25,6 +25,14 @@ Three independent monitors, none of them on the trading host:
 | `wt-forward` | `0 12 * * 1-5` | 7 h | ~16:30–17:50 | The forward test didn't run |
 | `wt-weekly` | `0 18 * * 5` | 6 h | Fri ~19:00–21:00 | The weekly scorecard didn't run |
 
+The crypto desk (ADR 0005) runs at every hour of every day, so its check is a **Simple** schedule, not a cron:
+
+| Slug | Period | Grace | Normal ping | What a page means |
+|---|---|---|---|---|
+| `wt-crypto` | 15 min | 30 min | every 15 minutes, 10–30 s after the bar closes | No crypto bar cycle has finished for 45 minutes |
+
+With the crypto desk on the host, `wt-backup` also pings at weekends: change its cron to `30 19 * * *`.
+
 Five checks; the VM adds backup and restore-test checks later (at most 15 of the free 20). The Mac and the VM
 share these slugs: the ping body says which host and role sent it.
 
