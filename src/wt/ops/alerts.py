@@ -223,8 +223,16 @@ class Alerts:
         return self.fire(f"{key}:{day}", title, message, priority)
 
     def firing(self) -> dict[str, Any]:
-        """Keys currently firing (for the dashboard)."""
-        return {k: v for k, v in _read_state(self.root).items() if isinstance(v, dict) and v.get("firing")}
+        """Keys currently firing (for the dashboard). A once-per-day key is an event of its day, and nothing ever
+        resolves it, so it stops counting after the day that follows: without this, two weeks of daily summaries
+        and refusals (and, after a host move, the old host's) all show as firing."""
+        cutoff = (_now() - dt.timedelta(days=1)).date().isoformat()
+        out = {}
+        for k, v in _read_state(self.root).items():
+            m = _DAY_KEY.search(k)
+            if isinstance(v, dict) and v.get("firing") and not (m and m.group(1) < cutoff):
+                out[k] = v
+        return out
 
 
 class Pager:

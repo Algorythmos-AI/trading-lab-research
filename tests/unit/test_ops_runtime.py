@@ -120,6 +120,15 @@ def test_fire_and_resolve_send_only_on_transitions(tmp_path, sent):
     assert [m["title"] for m in box] == ["x failed", "x ok"]
 
 
+def test_a_once_per_day_alert_stops_counting_as_firing_after_the_next_day(tmp_path, sent):
+    a = alerts.Alerts(root=tmp_path, topic="t")
+    today = dt.datetime.now(dt.UTC).date()
+    for back in (0, 1, 2, 9):
+        a.once_per_day("summary", "daily summary", "x", day=(today - dt.timedelta(days=back)).isoformat())
+    a.fire("job:routine", "routine failed", "exit 1")               # a condition: fires until it is resolved
+    assert set(a.firing()) == {"job:routine", f"summary:{today}", f"summary:{today - dt.timedelta(days=1)}"}
+
+
 def test_once_per_day(tmp_path, sent):
     box, _ = sent
     a = alerts.Alerts(root=tmp_path, topic="t")

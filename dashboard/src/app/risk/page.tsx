@@ -54,7 +54,7 @@ function KillPanel({ s }: { s: Snapshot }) {
     <Panel
       title="Kill switch"
       icon={Power}
-      means="When on, paper B opens no new trades but keeps managing open ones. It is switched on the Mac, never from this page."
+      means="When on, paper B opens no new trades but keeps managing open ones. It is switched on the host, never from this page."
       action={
         k?.on === true ? (
           <StatusBadge tone="warn">On</StatusBadge>
@@ -86,7 +86,7 @@ function LatchPanel({ s }: { s: Snapshot }) {
     <Panel
       title="Virtual account latch"
       icon={Lock}
-      means="The paper runner locks itself (latches) after a loss limit or an unexpected state, and stays locked until the owner resets it on the Mac."
+      means="The paper runner locks itself (latches) after a loss limit or an unexpected state, and stays locked until the owner resets it on the host."
       action={
         v?.latched === true ? (
           <StatusBadge tone="bad">Latched</StatusBadge>
@@ -133,7 +133,7 @@ function AlertsPanel({ s }: { s: Snapshot }) {
     <Panel
       title="Firing alerts"
       icon={BellRing}
-      means="Alerts raised on the Mac that have not cleared. Position alerts are the most serious; job alerts usually clear on the next good run."
+      means="Alerts raised on the host that have not cleared. Position alerts are the most serious; job alerts usually clear on the next good run."
       action={<StatusBadge tone={alerts.length === 0 ? "good" : "warn"}>{alerts.length === 0 ? "None" : `${alerts.length} firing`}</StatusBadge>}
     >
       {alerts.length === 0 ? (

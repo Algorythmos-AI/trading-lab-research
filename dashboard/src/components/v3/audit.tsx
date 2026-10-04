@@ -18,7 +18,7 @@ export function AuditPanel({ s }: { s: Snapshot }) {
       id="audit"
       title="Audit trail"
       icon={ListChecks}
-      means="Who or what changed the system, newest first: deploys, kill switch, latch resets, refused or failed jobs, and alerts. The owner's own notes stay on the Mac."
+      means="Who or what changed the system, newest first: deploys, kill switch, latch resets, refused or failed jobs, and alerts. The owner's own notes stay on the host."
       action={
         !hasV3(s) ? null : a?.chain_ok === true ? (
           <StatusBadge tone="good">Log intact</StatusBadge>
