@@ -8,8 +8,8 @@ import { Panel } from "@/components/panel";
 import { StatusBadge } from "@/components/status";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Sparkline } from "@/components/v3/sparkline";
-import { CURRENCY_NAME, codes, cryptoHealth, items, moneyOf, type Crypto } from "@/lib/crypto";
-import { fracPct, num, pct, rMult, shortDate, signed, zoned } from "@/lib/format";
+import { CURRENCY_NAME, codes, cryptoHealth, items, moneyOf, spreadPct, type Crypto } from "@/lib/crypto";
+import { fracPct, num, rMult, shortDate, signed, zoned } from "@/lib/format";
 import { freshness } from "@/lib/freshness";
 import { requestTime } from "@/lib/now";
 import { loadCryptoSnapshot } from "@/lib/snapshot";
@@ -99,7 +99,7 @@ function MarketPanel({ s }: { s: Crypto }) {
                 <TableCell className="font-mono text-xs">{zoned(m.bar, "UTC")}</TableCell>
                 <TableCell className="text-right font-mono">{num(m.close, 2)}</TableCell>
                 <TableCell className="text-right font-mono">{num(m.rsi, 1)}</TableCell>
-                <TableCell className="text-right font-mono">{pct(m.spread_pct, 2)}</TableCell>
+                <TableCell className="text-right font-mono">{spreadPct(m.spread_pct)}</TableCell>
                 <TableCell>
                   {m.tradable ? <StatusBadge tone="good">Tradable</StatusBadge> : <StatusBadge tone="warn">{codes(m.quality)}</StatusBadge>}
                 </TableCell>
