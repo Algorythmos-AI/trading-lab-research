@@ -49,7 +49,7 @@ DIGEST = STATE_DIR / "dashboard" / "evidence_digest.json"
 ANCHOR_BUCKET = os.environ.get("R2_ANCHOR_BUCKET", "wt-anchors")
 NIGHTLY = ["var", "data/live", "logs"]
 WEEKLY = ["data"]                                          # the market-data caches: RTO, not evidence
-WEEKLY_DAY = 4                                             # Friday: the backup timer fires Mon..Fri
+WEEKLY_DAY = 4                                             # Friday (the backup timer fires every day)
 KEEP_WITHIN = "45d"
 
 

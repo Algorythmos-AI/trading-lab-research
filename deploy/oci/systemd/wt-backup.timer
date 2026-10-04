@@ -1,8 +1,8 @@
 [Unit]
-Description=Nightly evidence backup, after the forward test
+Description=Nightly evidence backup, after the forward test (daily: the crypto desk writes evidence at weekends)
 
 [Timer]
-OnCalendar=Mon..Fri 19:30 America/New_York
+OnCalendar=*-*-* 19:30 America/New_York
 AccuracySec=1s
 Persistent=true
 Unit=wt-backup.service

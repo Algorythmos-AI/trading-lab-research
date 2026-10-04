@@ -301,7 +301,7 @@ def test_a_shadow_host_pings_only_its_own_heartbeat(monkeypatch):
     assert hc.ping("wt-paper-b") is True and urls[-1] == "https://hc-ping.com/k/wt-paper-b"
 
 
-def test_status_flags_an_interval_job_that_is_not_being_started(tmp_path):
+def test_status_flags_an_interval_job_that_is_not_being_started(tmp_path, monkeypatch):
     """What the start limit did: 12 good publishes a day, every one exit 0, and no alert that could see the gaps."""
     import datetime as dt
     import json
@@ -319,3 +319,13 @@ def test_status_flags_an_interval_job_that_is_not_being_started(tmp_path):
     assert runs([3, 18, 33])[0].startswith("  [ok]")                # one missed run is tolerated
     assert runs([3, 18, 400])[0].startswith("  [FAIL] dashboard cadence: 2 of 4")
     assert jobs.cadence(now, tmp_path / "missing")[0].startswith("  [FAIL] dashboard cadence: 0 of 4")
+
+    # a desk this host doesn't run is not reported; once its state exists, its jobs are held to their interval too
+    import dataclasses
+
+    from wt.core import desk as desks
+    assert len(runs([3, 18, 33, 48])) == 1
+    (tmp_path / "crypto").mkdir()
+    monkeypatch.setitem(desks.DESKS, "crypto", dataclasses.replace(desks.DESKS["crypto"], state_dir=tmp_path / "crypto"))
+    assert [x.split(":")[0] for x in jobs.cadence(now, tmp_path)] == [
+        "  [ok] dashboard cadence", "  [FAIL] crypto cadence", "  [FAIL] dashboard-crypto cadence"]

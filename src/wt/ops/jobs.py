@@ -33,6 +33,7 @@ from typing import Any
 
 from wt.core.clock import ET, et
 from wt.core.config import DATA_DIR, FORWARD_LEDGER, ROOT
+from wt.core.desk import DESKS, installed
 from wt.ops import hc, host, preflight
 from wt.ops.alerts import Alerts
 from wt.ops.heartbeat import Heartbeat, last_runs, ok_runs_since
@@ -272,7 +273,8 @@ def b_exposure() -> bool:
         return True
 
 
-HC_JOBS = frozenset({"routine", "paper-b", "forward", "weekly"})     # jobs with a healthchecks.io check
+# jobs with a healthchecks.io check. `crypto` pings every 15 minutes, at any hour: its check has no schedule gap.
+HC_JOBS = frozenset({"routine", "paper-b", "forward", "weekly", "crypto"})
 
 
 def hc_slug(job: Job) -> str:
@@ -383,7 +385,7 @@ def cadence(now: dt.datetime | None = None, heartbeats: Path | None = None) -> l
     now = now or dt.datetime.now(dt.UTC)
     out = []
     for j in JOBS.values():
-        if j.interval_s:
+        if j.interval_s and installed(DESKS[j.desk]):       # a desk this host doesn't run has nothing to be late
             want = 3600 // j.interval_s
             got = ok_runs_since(j.name, now - dt.timedelta(hours=1), heartbeats)
             out.append(f"  [{'ok' if got >= want - 1 else 'FAIL'}] {j.name} cadence: {got} of {want} runs ok in the last hour")
