@@ -343,7 +343,7 @@ function SourcesPanel({ s }: { s: Snapshot }) {
     <Panel
       title="Data sources"
       icon={Database}
-      means="Each section of this dashboard is collected from one source on the Mac. A stale or failed source means that section may be out of date."
+      means="Each section of this dashboard is collected from one source on the host. A stale or failed source means that section may be out of date."
       action={
         typeof c?.fresh_sources === "number" && typeof c?.total_sources === "number" ? (
           <StatusBadge tone={c.fresh_sources === c.total_sources ? "good" : "warn"}>

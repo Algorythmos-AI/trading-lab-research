@@ -72,7 +72,7 @@ function KillNotice({ s }: { s: Snapshot }) {
         <p className="font-medium">Kill switch is on: paper B will not open new trades.</p>
         <p className="text-muted-foreground mt-0.5 text-[0.8125rem]">
           {s.kill.reason ? `${s.kill.reason} ` : ""}
-          Since {sydney(s.kill.since)} Sydney. Exits are still managed. Removing the switch is done on the Mac, not here.
+          Since {sydney(s.kill.since)} Sydney. Exits are still managed. Removing the switch is done on the host, not here.
         </p>
       </div>
     </section>
@@ -121,7 +121,7 @@ function NeedsYouPanel({ s }: { s: Snapshot }) {
     <Panel
       title="Needs you"
       icon={Hand}
-      means="Decisions or actions only the owner can take, most urgent first. Where a command is shown, it is run on the Mac."
+      means="Decisions or actions only the owner can take, most urgent first. Where a command is shown, it is run on the host."
     >
       {items.length === 0 ? (
         <Empty title="Nothing needs you">The lab is not waiting on any decision from you.</Empty>
@@ -156,7 +156,7 @@ function JobsPanel({ s }: { s: Snapshot }) {
     <Panel
       title="Tonight's jobs"
       icon={CalendarClock}
-      means="The nightly jobs on the Mac: how the last run of each went, and when it is scheduled. Times are shown in Sydney and New York."
+      means="The nightly jobs on the host: how the last run of each went, and when it is scheduled. Times are shown in Sydney and New York."
     >
       {keys.length === 0 ? (
         <Empty title="No job results yet">Results appear after the first nightly run is published.</Empty>
