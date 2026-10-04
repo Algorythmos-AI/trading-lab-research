@@ -52,6 +52,10 @@ class Job:
     preflight: bool = True        # refuse on failed preflight; the dashboard publishes the failures instead
     et: str | None = None         # systemd OnCalendar day/time in America/New_York, e.g. "Mon..Fri 07:30"
     runtime_max_h: float = 6.0    # systemd RuntimeMaxSec: above the job's own deadline plus its in-process wait
+    desk: str = "stocks"          # wt.core.desk: whose snapshot, alerts and SLA the job belongs to
+    # systemd OnCalendar in UTC for an interval job that must stay on a clock boundary (a 15-minute bar close):
+    # OnUnitActiveSec counts from the last start and drifts. interval_s still says how often it runs.
+    calendar: str | None = None
 
 
     def fires(self, after: dt.datetime, days: int = 8) -> list[dt.datetime]:

@@ -23,12 +23,14 @@ A deploy is one transaction on one exact commit (plan v7 B7):
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime as dt
 import json
 import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -67,6 +69,21 @@ def gate_blockers(now: dt.datetime | None = None) -> list[str]:
     sessions, exact = load_sessions(now)
     # The runner's own lock too: a runner orphaned by a dead wrapper holds only that one.
     return deploy_blockers(now, sessions, running_jobs(), held([*TRADING_JOBS, RUNNER_LOCK]), exact)
+
+
+QUIESCE_WAIT_S = 120.0
+
+
+@contextlib.contextmanager
+def quiesced(wait_s: float | None = None) -> Iterator[list[str]]:
+    """Hold every interval job's lock for the block, waiting for a run in flight to finish. Those jobs are not
+    trading jobs, so the gate lets a deploy start while one runs; without this the checkout (and the venv) would
+    change under it. Yields the jobs still busy after `wait_s` (empty = quiet)."""
+    wait_s = QUIESCE_WAIT_S if wait_s is None else wait_s
+    with contextlib.ExitStack() as stack:
+        busy = [j.name for j in JOBS.values()
+                if j.interval_s and not stack.enter_context(job_lock(j.name, wait_s=wait_s, poll_s=2.0))]
+        yield busy
 
 
 def sync_venv() -> None:
@@ -200,7 +217,11 @@ def deploy(sha: str | None = None, stage: bool = False) -> int:
             return 2
         if _refuse_if_closed():                    # staging took a while: a job may be due now
             return 2
-        return _switch(target, stage, green, ci_override, why_dash, override)
+        with quiesced() as busy:
+            if busy:
+                print(f"Refusing: still running after {QUIESCE_WAIT_S:.0f}s: {', '.join(busy)}")
+                return 2
+            return _switch(target, stage, green, ci_override, why_dash, override)
 
 
 def _switch(target: str, staged: bool, green: ci.Verdict, ci_override: str, why_dash: str | None,
@@ -280,10 +301,14 @@ def rollback(tag: str) -> int:
         if not got:
             print("Refusing: a deploy is running")
             return 2
-        before = _run("git", "rev-parse", "HEAD").stdout.strip()
-        _run("git", "reset", "--hard", "--quiet", tag)
-        sync_venv()
-        ok, out = smoke()
+        with quiesced() as busy:
+            if busy:
+                print(f"Refusing: still running after {QUIESCE_WAIT_S:.0f}s: {', '.join(busy)}")
+                return 2
+            before = _run("git", "rev-parse", "HEAD").stdout.strip()
+            _run("git", "reset", "--hard", "--quiet", tag)
+            sync_venv()
+            ok, out = smoke()
     record({"rollback_from": before, "to_tag": tag, "smoke_ok": ok})
     print(f"Rolled back {before[:8]} -> {tag}; smoke {'ok' if ok else 'FAILED'}")
     if not ok:

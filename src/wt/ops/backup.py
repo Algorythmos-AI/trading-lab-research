@@ -38,6 +38,7 @@ from typing import Any
 from wt.core import ledger
 from wt.core.clock import ET
 from wt.core.config import DATA_DIR, FORWARD_LEDGER, ROOT, STATE_DIR
+from wt.core.desk import DESKS, Desk, installed
 from wt.ops import hc
 from wt.ops.alerts import Alerts
 from wt.ops.r2 import R2
@@ -71,18 +72,31 @@ def restic(*args: str, timeout: float = 3600) -> subprocess.CompletedProcess[str
     return subprocess.run(["restic", *args], cwd=ROOT, env=env, capture_output=True, text=True, timeout=timeout)
 
 
+def desk_ledgers() -> list[tuple[Desk, str, Path]]:
+    """Every hash-chained ledger of every desk this host runs (ADR 0005), stocks first."""
+    out = [(DESKS["stocks"], "forward", FORWARD_LEDGER), (DESKS["stocks"], "paper", JOURNAL)]
+    return out + [(d, name, path) for d in DESKS.values() if d.name != "stocks" and installed(d)
+                  for name, path in d.ledgers]
+
+
 def chains() -> dict[str, dict[str, Any]]:
     out = {}
-    for name, path in (("forward", FORWARD_LEDGER), ("paper", JOURNAL)):
+    for _, name, path in desk_ledgers():
         n, head = ledger.head(path)
         out[name] = {"lines": n, "head": head, "problems": ledger.verify_chain(path)[:5]}
     return out
 
 
-def flag_chain(problems: list[str], alerts: Alerts) -> None:
-    CHAIN_FLAG.parent.mkdir(parents=True, exist_ok=True)
-    CHAIN_FLAG.write_text("\n".join(problems) + "\n")
-    alerts.fire("evidence:chain", "Evidence chain broken: paper-B entries off",
+def flag_chain(problems: list[str], alerts: Alerts, desk: Desk = DESKS["stocks"]) -> None:
+    """A broken chain switches off entries on the desk that owns the ledger, and on no other."""
+    flag = CHAIN_FLAG if desk.name == "stocks" else desk.chain_flag
+    flag.parent.mkdir(parents=True, exist_ok=True)
+    flag.write_text("\n".join(problems) + "\n")
+    if desk.name == "stocks":
+        key, title = "evidence:chain", "Evidence chain broken: paper-B entries off"
+    else:
+        key, title = f"{desk.alert_prefix}evidence-chain", f"Evidence chain broken: {desk.name} entries off"
+    alerts.fire(key, title,
                 f"{len(problems)} problem(s) in the ledger hash chain; exits are still managed. First: {problems[0]}", 4)
 
 
@@ -110,8 +124,11 @@ def nightly(alerts: Alerts | None = None, weekly: bool | None = None, client: R2
     today = today or dt.datetime.now(ET).date()
     state = chains()
     problems = [f"{k}: {p}" for k, v in state.items() for p in v["problems"]]
-    if problems:
-        flag_chain(problems, alerts)
+    owner = {name: d for d, name, _ in desk_ledgers()}
+    for desk in DESKS.values():
+        mine = [f"{n}: {p}" for n, v in state.items() if owner[n] is desk for p in v["problems"]]
+        if mine:
+            flag_chain(mine, alerts, desk)
     code = 0
     paths = NIGHTLY + (WEEKLY if (weekly if weekly is not None else today.weekday() == WEEKLY_DAY) else [])
     r = restic("backup", "--host", host(), "--tag", "nightly", "--tag", f"role:{role()}", "--exclude-caches",
@@ -143,15 +160,18 @@ def restore_test() -> int:
     try:
         # By file name: restic stores a snapshot's paths relative to the backed-up directories' common parent
         # ("/var/forward/..."), so the ledgers' absolute paths match nothing and the test restored no file.
-        r = restic("restore", "latest", "--host", host(), "--target", str(tmp), "--include", FORWARD_LEDGER.name,
-                   "--include", JOURNAL.name)                   # this host's own latest, never the other host's
+        names = [a for _, _, path in desk_ledgers() for a in ("--include", path.name)]
+        r = restic("restore", "latest", "--host", host(), "--target", str(tmp), *names)   # this host's own latest
         if r.returncode != 0:
             print((r.stderr or r.stdout)[-800:], file=sys.stderr)
             return 1
         restored = {p.name: p for p in tmp.rglob("*.jsonl")}
         bad = {n: ledger.verify_chain(p)[:3] for n, p in restored.items() if ledger.verify_chain(p)}
-        print(f"restore-test: {len(restored)} ledger(s) restored; " + (f"BROKEN {bad}" if bad else "chains intact"))
-        return 1 if bad or not restored else 0
+        # every ledger that had lines when it was backed up must come back: a missing one is not "intact"
+        missing = sorted(path.name for _, _, path in desk_ledgers() if path.exists() and path.name not in restored)
+        print(f"restore-test: {len(restored)} ledger(s) restored; " + (f"BROKEN {bad}" if bad else "chains intact")
+              + (f"; MISSING {missing}" if missing else ""))
+        return 1 if bad or missing or not restored else 0
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

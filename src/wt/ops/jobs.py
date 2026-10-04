@@ -301,16 +301,18 @@ def run_job(job: Job, root: Path = ROOT, preflight_only: bool = False, alerts: A
             print(f"  [{'ok' if c.ok else 'FAIL'}] {c.name}: {c.detail}")
         return 0 if not preflight.failures(checks) else 1
 
+    # Wait out a deploy before taking the job lock: a deploy holds the interval jobs' locks while it changes the
+    # checkout (wt.ops.deploy.quiesced), and a job that already held its own would make it wait for nothing.
+    waited = time.monotonic()
+    with job_lock(DEPLOY_LOCK, wait_s=DEPLOY_WAIT_S) as free:   # released at once: only waits out a deploy
+        if not free:
+            return refuse(job, "a deploy is still changing the checkout after 30 minutes", alerts, log)
+    if (waited := time.monotonic() - waited) > 1:
+        log(f"waited {waited:.0f}s for a deploy to finish")
     with job_lock(job.name) as got:
         if not got:
             # not a failure: the run that holds the lock is the one that pings
             return refuse(job, "another run of this job is still in progress", alerts, log, ping=False)
-        waited = time.monotonic()
-        with job_lock(DEPLOY_LOCK, wait_s=DEPLOY_WAIT_S) as free:   # released at once: only waits out a deploy
-            if not free:
-                return refuse(job, "a deploy is still changing the checkout after 30 minutes", alerts, log)
-        if (waited := time.monotonic() - waited) > 1:
-            log(f"waited {waited:.0f}s for a deploy to finish")
         hb = Heartbeat(job.name, _sha(root))
         fails = preflight.failures(preflight.run_checks(root)) if job.preflight else []
         extra_env: dict[str, str] = {}

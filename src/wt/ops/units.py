@@ -93,7 +93,10 @@ def service(job: Job, root: Path, user: str = USER) -> str:
 
 
 def timer(job: Job) -> str:
-    if job.interval_s:
+    if job.calendar:
+        assert job.interval_s, f"{job.name}: a calendar job also states its interval"
+        when = [f"OnCalendar={job.calendar} UTC"]
+    elif job.interval_s:
         when = ["OnBootSec=2min", f"OnUnitActiveSec={job.interval_s}s"]
     else:
         assert job.et, f"{job.name} has no systemd schedule (Job.et)"
