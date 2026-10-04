@@ -12,11 +12,21 @@ export function items<T>(v: readonly (T | null | undefined)[] | null | undefined
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
-/** Paper book money, in the desk's quote currency. Only ever shown behind the owner's login. */
-export function aud(v: number | null | undefined, digits = 2): string {
+const SYMBOL: Record<string, string> = { USD: "US$", AUD: "A$" };
+export const CURRENCY_NAME: Record<string, string> = { USD: "US dollars", AUD: "Australian dollars" };
+
+/** Paper book money in a quote currency ("USD" -> "US$1,234.50"). Only ever shown behind the owner's login. */
+export function money(v: number | null | undefined, currency: string | null | undefined, digits = 2): string {
   if (!isNum(v)) return DASH;
   const s = Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
-  return `${v < 0 ? "−" : ""}A$${s}`;
+  const sym = SYMBOL[currency ?? ""] ?? (currency ? `${currency} ` : "");
+  return `${v < 0 ? "−" : ""}${sym}${s}`;
+}
+
+/** A formatter bound to the desk's own quote currency, as its snapshot states it. */
+export function moneyOf(s: Crypto): (v: number | null | undefined, digits?: number) => string {
+  const currency = s.config?.quote_currency;
+  return (v, digits = 2) => money(v, currency, digits);
 }
 
 /** Plain words for the codes the desk publishes. An unknown code is shown as it is. */

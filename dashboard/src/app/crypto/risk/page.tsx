@@ -6,7 +6,7 @@ import { PageHeading } from "@/components/page-heading";
 import { Panel } from "@/components/panel";
 import { StatusBadge } from "@/components/status";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { aud, items, type Crypto } from "@/lib/crypto";
+import { items, moneyOf, type Crypto } from "@/lib/crypto";
 import { num, shortDate, signed, sydney, zoned } from "@/lib/format";
 import { loadCryptoSnapshot } from "@/lib/snapshot";
 
@@ -54,6 +54,7 @@ function KillPanel({ s }: { s: Crypto }) {
 }
 
 function LatchPanel({ s }: { s: Crypto }) {
+  const m = moneyOf(s);
   const on = s.risk?.latched;
   return (
     <Panel
@@ -63,7 +64,7 @@ function LatchPanel({ s }: { s: Crypto }) {
       action={on === true ? <StatusBadge tone="bad">Latched</StatusBadge> : on === false ? <StatusBadge tone="good">Clear</StatusBadge> : <StatusBadge tone="neutral">Unknown</StatusBadge>}
     >
       <p className="text-muted-foreground text-sm">
-        Limit {aud(s.risk?.limits?.daily_loss_latch)} a day. Realised today: {aud(s.risk?.today?.realised)}.
+        Limit {m(s.risk?.limits?.daily_loss_latch)} a day. Realised today: {m(s.risk?.today?.realised)}.
       </p>
     </Panel>
   );
@@ -84,12 +85,13 @@ function ChainPanel({ s }: { s: Crypto }) {
 }
 
 function LimitsPanel({ s }: { s: Crypto }) {
+  const m = moneyOf(s);
   const l = s.risk?.limits;
   const t = s.risk?.today;
   return (
     <Panel title="Limits in force" icon={Scale} means="Hard limits on new entries, checked before every paper order. An exit is never blocked by any of them.">
       <div className="grid gap-4 sm:grid-cols-2">
-        <Meter label="Open exposure" value={s.book?.exposure} max={l?.max_open_exposure} valueText={`${aud(s.book?.exposure)} of ${aud(l?.max_open_exposure, 0)}`} />
+        <Meter label="Open exposure" value={s.book?.exposure} max={l?.max_open_exposure} valueText={`${m(s.book?.exposure)} of ${m(l?.max_open_exposure, 0)}`} />
         <Meter label={`Entries today (${shortDate(t?.day)})`} value={t?.entries} max={l?.max_entries_per_day} valueText={`${num(t?.entries)} of ${num(l?.max_entries_per_day)}`} />
         <Meter label="Orders today" value={t?.orders} max={l?.max_orders_per_day} valueText={`${num(t?.orders)} of ${num(l?.max_orders_per_day)}`} />
         <Meter
@@ -97,22 +99,23 @@ function LimitsPanel({ s }: { s: Crypto }) {
           value={Math.max(0, -(t?.realised ?? 0))}
           max={l?.daily_loss_latch}
           tone="warn"
-          valueText={`${aud(t?.realised)} (latch at −${aud(l?.daily_loss_latch, 0)})`}
+          valueText={`${m(t?.realised)} (latch at −${m(l?.daily_loss_latch, 0)})`}
         />
       </div>
-      <p className="text-muted-foreground mt-4 text-xs">At most {aud(l?.max_notional, 0)} per entry.</p>
+      <p className="text-muted-foreground mt-4 text-xs">At most {m(l?.max_notional, 0)} per entry.</p>
     </Panel>
   );
 }
 
 function PositionsPanel({ s }: { s: Crypto }) {
+  const m = moneyOf(s);
   const rows = items(s.book?.positions);
   return (
     <Panel
       title="Paper book"
       icon={Wallet}
       means="Open paper positions with their stop and target. Fills are simulated at the quote with fee and slippage; nothing is sent to the venue."
-      action={<span className="text-muted-foreground text-xs">Equity {aud(s.book?.equity)} · cash {aud(s.book?.cash)}</span>}
+      action={<span className="text-muted-foreground text-xs">Equity {m(s.book?.equity)} · cash {m(s.book?.cash)}</span>}
     >
       {rows.length === 0 ? (
         <Empty title="No open position" />

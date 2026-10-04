@@ -142,7 +142,7 @@ test("the desk switch moves between the two desks, each with its own sections", 
   await desk.getByRole("link", { name: "Crypto" }).click();
   await expect(page).toHaveURL(/\/crypto$/);
   await expect(page.getByRole("heading", { name: "Latest bar, per pair" })).toBeVisible();
-  await expect(page.getByRole("cell", { name: "BTC/AUD" }).first()).toBeVisible();
+  await expect(page.getByRole("cell", { name: "BTC/USD" }).first()).toBeVisible();
   await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Research", exact: true }).click();
   await expect(page).toHaveURL(/\/crypto\/research$/);
   await expect(page.getByRole("heading", { name: "Gate C0: data quality" })).toBeVisible();

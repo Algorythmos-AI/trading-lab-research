@@ -74,7 +74,7 @@
     "entry_price": 129318.09,
     "entry_time": "2026-10-02T10:15:10+00:00",
     "mark": 129601.68,
-    "pair": "BTC/AUD",
+    "pair": "BTC/USD",
     "qty": 0.00038664,
     "stop": 128671.5,
     "target": 130611.27,
@@ -85,13 +85,13 @@
   "start_equity": 10000.0
  },
  "config": {
-  "hash": "2320b56f7ffd",
+  "hash": "01aec7d7c569",
   "pairs": [
-   "BTC/AUD",
-   "ETH/AUD",
-   "SOL/AUD"
+   "BTC/USD",
+   "ETH/USD",
+   "SOL/USD"
   ],
-  "quote_currency": "AUD",
+  "quote_currency": "USD",
   "timeframe_min": 15,
   "venue": "kraken"
  },
@@ -381,7 +381,7 @@
    "bar": "2026-10-02T19:45:00+00:00",
    "close": 129601.68,
    "ema8_distance_pct": -0.116,
-   "pair": "BTC/AUD",
+   "pair": "BTC/USD",
    "quality": [],
    "rsi": 52.15,
    "spread_pct": 0.0654,
@@ -398,7 +398,7 @@
    "bar": "2026-10-02T19:45:00+00:00",
    "close": 3754.36,
    "ema8_distance_pct": -0.0331,
-   "pair": "ETH/AUD",
+   "pair": "ETH/USD",
    "quality": [
     "spread_wide"
    ],
@@ -417,7 +417,7 @@
    "bar": "2026-10-02T19:45:00+00:00",
    "close": 180.09,
    "ema8_distance_pct": -0.102,
-   "pair": "SOL/AUD",
+   "pair": "SOL/USD",
    "quality": [
     "bar_untraded",
     "spread_wide"
@@ -441,7 +441,7 @@
  },
  "perf": {
   "by_pair": {
-   "BTC/AUD": {
+   "BTC/USD": {
     "mean_r": -1.3719999999999999,
     "pnl": -2.38,
     "trades": 7
@@ -943,7 +943,7 @@
   "recent": [
    {
     "held_min": 105.0,
-    "pair": "BTC/AUD",
+    "pair": "BTC/USD",
     "pnl": -0.67,
     "r": -2.695,
     "reason": "stop",
@@ -951,7 +951,7 @@
    },
    {
     "held_min": 105.0,
-    "pair": "BTC/AUD",
+    "pair": "BTC/USD",
     "pnl": 0.1,
     "r": 0.392,
     "reason": "target",
@@ -959,7 +959,7 @@
    },
    {
     "held_min": 105.0,
-    "pair": "BTC/AUD",
+    "pair": "BTC/USD",
     "pnl": 0.1,
     "r": 0.392,
     "reason": "target",
@@ -967,7 +967,7 @@
    },
    {
     "held_min": 105.0,
-    "pair": "BTC/AUD",
+    "pair": "BTC/USD",
     "pnl": 0.1,
     "r": 0.392,
     "reason": "target",
@@ -975,7 +975,7 @@
    },
    {
     "held_min": 105.0,
-    "pair": "BTC/AUD",
+    "pair": "BTC/USD",
     "pnl": -0.67,
     "r": -2.695,
     "reason": "stop",
@@ -983,7 +983,7 @@
    },
    {
     "held_min": 105.0,
-    "pair": "BTC/AUD",
+    "pair": "BTC/USD",
     "pnl": -0.67,
     "r": -2.695,
     "reason": "stop",
@@ -991,7 +991,7 @@
    },
    {
     "held_min": 105.0,
-    "pair": "BTC/AUD",
+    "pair": "BTC/USD",
     "pnl": -0.67,
     "r": -2.695,
     "reason": "stop",
@@ -1014,7 +1014,7 @@
     "bars": 480,
     "median_spread_pct": 0.0837,
     "p95_spread_pct": 0.1096,
-    "pair": "BTC/AUD",
+    "pair": "BTC/USD",
     "passes": false,
     "traded_share": 1.0
    },
@@ -1022,7 +1022,7 @@
     "bars": 480,
     "median_spread_pct": 0.2515,
     "p95_spread_pct": 0.3286,
-    "pair": "ETH/AUD",
+    "pair": "ETH/USD",
     "passes": false,
     "traded_share": 0.56875
    },
@@ -1030,7 +1030,7 @@
     "bars": 480,
     "median_spread_pct": 0.32025000000000003,
     "p95_spread_pct": 0.4212,
-    "pair": "SOL/AUD",
+    "pair": "SOL/USD",
     "passes": false,
     "traded_share": 0.6625
    }

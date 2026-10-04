@@ -11,12 +11,12 @@ B:
   max_collar_pct: 0.5
   max_spread_pct: 0.15
 
-# Crypto desk (ADR 0005, DEC-0012), read by wt.crypto.risk. Amounts are AUD on the paper book. Sizes are
+# Crypto desk (ADR 0005, DEC-0012), read by wt.crypto.risk. Amounts are US$ on the paper book. Sizes are
 # fractional, so the ceiling is notional, not a share count.
 C:
-  allowlist: [BTC/AUD, ETH/AUD, SOL/AUD]
-  max_notional: 50             # AUD per entry
-  max_open_exposure: 500       # AUD across all open positions
+  allowlist: [BTC/USD, ETH/USD, SOL/USD]
+  max_notional: 50             # US$ per entry
+  max_open_exposure: 500       # US$ across all open positions
   max_entries_per_day: 3       # per UTC day
   max_orders_per_day: 20
-  daily_loss_latch: 20         # AUD realised loss in a UTC day; entries stay off until the owner resets it
+  daily_loss_latch: 20         # US$ realised loss in a UTC day; entries stay off until the owner resets it
