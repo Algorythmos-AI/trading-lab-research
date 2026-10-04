@@ -97,8 +97,20 @@ def test_paper_b_unit(tmp_path):
 
 def test_dashboard_unit_is_an_interval_and_never_restarts():
     assert "Restart=no" in units.service(JOBS["dashboard"], Path("/r"))
+    assert "StartLimitIntervalSec=0" in units.service(JOBS["dashboard"], Path("/r")).splitlines()
     t = units.timer(JOBS["dashboard"])
     assert "OnUnitActiveSec=900s" in t and "OnCalendar" not in t
+
+
+def test_only_clock_time_jobs_have_a_start_limit():
+    """systemd counts timer starts against StartLimitBurst: 3 in 6 h let the publisher run 12 times a day, not 96."""
+    for j in JOBS.values():
+        svc = units.service(j, Path("/r")).splitlines()
+        if j.interval_s:
+            assert "StartLimitIntervalSec=0" in svc and not any(x.startswith("StartLimitBurst") for x in svc), j.name
+            assert "Restart=no" in svc, j.name                     # nothing left to bound
+        else:
+            assert "StartLimitIntervalSec=6h" in svc and "StartLimitBurst=3" in svc, j.name
 
 
 def test_render_and_diff(tmp_path):
@@ -287,3 +299,23 @@ def test_a_shadow_host_pings_only_its_own_heartbeat(monkeypatch):
     assert urls == ["https://hc-ping.com/k/wt-host-gcp-use1"]
     monkeypatch.setenv("WT_ROLE", "primary")
     assert hc.ping("wt-paper-b") is True and urls[-1] == "https://hc-ping.com/k/wt-paper-b"
+
+
+def test_status_flags_an_interval_job_that_is_not_being_started(tmp_path):
+    """What the start limit did: 12 good publishes a day, every one exit 0, and no alert that could see the gaps."""
+    import datetime as dt
+    import json
+
+    from wt.ops import jobs
+    now = dt.datetime(2026, 10, 4, 4, 0, tzinfo=dt.UTC)
+
+    def runs(minutes_ago):
+        (tmp_path / "runs.jsonl").write_text("".join(json.dumps(
+            {"job": "dashboard", "status": "ok", "ended": (now - dt.timedelta(minutes=m)).isoformat()}) + "\n"
+            for m in minutes_ago) + "torn line\n")
+        return jobs.cadence(now, tmp_path)
+
+    assert runs([3, 18, 33, 48, 63]) == ["  [ok] dashboard cadence: 4 of 4 runs ok in the last hour"]
+    assert runs([3, 18, 33])[0].startswith("  [ok]")                # one missed run is tolerated
+    assert runs([3, 18, 400])[0].startswith("  [FAIL] dashboard cadence: 2 of 4")
+    assert jobs.cadence(now, tmp_path / "missing")[0].startswith("  [FAIL] dashboard cadence: 0 of 4")

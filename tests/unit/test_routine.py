@@ -27,6 +27,13 @@ def test_stage_times_and_snapshot_windows():
     assert pr.minus("08:00", 25) == "07:35" and pr.minus("09:15", 25) == "08:50"
 
 
+def test_no_candidates_means_no_tickets_not_a_crash():
+    """2026-10-01: an empty pool has no `symbol` column, and the tickets stage died three times on set_index."""
+    empty = {"tier1": [], "tier2": [], "primary": None, "dropped": []}
+    assert pr.tickets(pd.DataFrame(), empty, load_spec("SPEC-0001")) == []
+    assert pr.tickets(pd.DataFrame([{"symbol": "AAA", "pm_high": 5.0}]), empty, load_spec("SPEC-0001")) == []
+
+
 def test_tickets_use_lowest_level_and_cap(tmp_path, monkeypatch):
     monkeypatch.setattr(pr, "VA_PATH", tmp_path / "missing.json")          # default US$600 account, never written
     pool = pd.DataFrame([{"symbol": "AAA", "pm_pattern_trigger": 5.10, "pm_pattern_stop": 5.02, "pm_high": 5.40},

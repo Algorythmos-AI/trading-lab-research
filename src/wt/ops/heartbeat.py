@@ -52,6 +52,23 @@ class Heartbeat:
         return self.rec
 
 
+def ok_runs_since(job: str, since: dt.datetime, root: Path | None = None) -> int:
+    """How many runs of `job` ended ok at or after `since`, from the run history."""
+    n = 0
+    try:
+        lines = (root or HEARTBEAT_DIR).joinpath("runs.jsonl").read_text().splitlines()
+    except OSError:
+        return 0
+    for line in lines[-500:]:
+        try:
+            r = json.loads(line)
+            if r.get("job") == job and r.get("status") == "ok" and dt.datetime.fromisoformat(r["ended"]) >= since:
+                n += 1
+        except (ValueError, KeyError, TypeError):
+            continue
+    return n
+
+
 def last_runs(root: Path | None = None) -> dict[str, dict[str, Any]]:
     out = {}
     for f in sorted((root or HEARTBEAT_DIR).glob("*.json")):

@@ -1,0 +1,43 @@
+{
+ "by_month": [
+  {
+   "month": "2026-04",
+   "no_candidates": 4,
+   "no_trade": 4,
+   "other": 1,
+   "safety_abort": 2
+  },
+  {
+   "month": "2026-05",
+   "no_candidates": 1,
+   "other": 2,
+   "safety_abort": 1
+  },
+  {
+   "month": "2026-06",
+   "safety_abort": 9
+  },
+  {
+   "month": "2026-07",
+   "no_candidates": 3,
+   "no_trade": 2,
+   "safety_abort": 1
+  }
+ ],
+ "by_outcome": {
+  "no_candidates": 8,
+  "no_trade": 6,
+  "other": 3,
+  "safety_abort": 13
+ },
+ "by_tag": {
+  "dress-rehearsal": 1,
+  "postopen-scan": 21,
+  "premarket-watchlist": 8
+ },
+ "first": "2026-04-17",
+ "last": "2026-07-09",
+ "orders_placed": 0,
+ "recent": [],
+ "total": 30
+}
