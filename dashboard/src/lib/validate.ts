@@ -1,10 +1,27 @@
 import Ajv, { type ErrorObject } from "ajv";
+import type { DeskName } from "./desk";
+import cryptoSchema from "./crypto.schema.json";
+import type { CryptoSnapshot } from "./crypto.types";
 import schema from "./snapshot.schema.json";
 import type { Snapshot } from "./types";
 
 // Draft-07, compiled once per server instance. strict:false tolerates the schema's non-URI $id.
 const ajv = new Ajv({ strict: false, allErrors: true });
 const validateSchema = ajv.compile<Snapshot>(schema);
+const validateCryptoSchema = ajv.compile<CryptoSnapshot>(cryptoSchema);
+
+export const STOCKS_SCHEMA = "trading-lab/snapshot";
+export const CRYPTO_SCHEMA = "trading-lab/crypto-snapshot";
+
+/**
+ * Which desk a body belongs to, from its own `schema` field. The field is inside the signed body, so the
+ * desk cannot be chosen by a header: a stocks snapshot can never be filed as the crypto desk's, or the reverse.
+ * Anything that does not name the crypto schema is validated as a stocks snapshot (the original behaviour).
+ */
+export function deskOf(data: unknown): DeskName {
+  const id = data !== null && typeof data === "object" ? (data as { schema?: unknown }).schema : undefined;
+  return id === CRYPTO_SCHEMA ? "crypto" : "stocks";
+}
 
 const MAX_ERRORS = 10;
 
@@ -67,4 +84,20 @@ export function validateSnapshot(data: unknown): ValidationResult {
   }
   if (errors.length > 0) return { ok: false, errors: errors.slice(0, MAX_ERRORS) };
   return { ok: true, snapshot: data as Snapshot };
+}
+
+export type CryptoValidationResult = { ok: true; snapshot: CryptoSnapshot } | { ok: false; errors: string[] };
+
+/** The crypto desk's snapshot: its own schema, the same denylist. */
+export function validateCryptoSnapshot(data: unknown): CryptoValidationResult {
+  if (data === null || typeof data !== "object" || Array.isArray(data)) {
+    return { ok: false, errors: ["/: must be an object"] };
+  }
+  const errors = findDenied(data).map((p) => `${p}: key is not allowed to be published`);
+  if (!validateCryptoSchema(data)) {
+    errors.push(...(validateCryptoSchema.errors ?? []).map(describe));
+  }
+  if ((data as { schema?: unknown }).schema !== CRYPTO_SCHEMA) errors.push("/schema: not the crypto snapshot schema");
+  if (errors.length > 0) return { ok: false, errors: errors.slice(0, MAX_ERRORS) };
+  return { ok: true, snapshot: data as CryptoSnapshot };
 }

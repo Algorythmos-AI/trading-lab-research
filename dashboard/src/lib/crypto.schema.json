@@ -1,0 +1,1194 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "trading-lab/crypto-snapshot",
+  "title": "Trading Lab crypto desk snapshot (generated from wt.crypto.snapshot.ALLOW)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 200
+    },
+    "schema_version": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "run_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 200
+    },
+    "as_of": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 200
+    },
+    "redaction": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 200
+    },
+    "withheld": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "truncated": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "expected_windows": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "session": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "start": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "end": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          }
+        }
+      },
+      "maxItems": 2000
+    },
+    "config": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "hash": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
+        "venue": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
+        "quote_currency": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
+        "timeframe_min": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "pairs": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "maxItems": 2000
+        }
+      }
+    },
+    "strategy": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
+        "rsi_period": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "rsi_below": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "ema_period": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "stop_loss_pct": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "take_profit_pct": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "time_stop_bars": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "taker_fee_pct": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "slippage_bps": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "net_win_pct": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "net_loss_pct": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "breakeven_win_rate": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      }
+    },
+    "market": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "pair": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "bar": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "close": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "rsi": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "vwap_distance_pct": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "ema8_distance_pct": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "atr_pct": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "volume_ratio": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "would_fire": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "why_not": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "maxItems": 2000
+          },
+          "tradable": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "quality": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "maxItems": 2000
+          },
+          "spread_pct": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        }
+      },
+      "maxItems": 2000
+    },
+    "quality": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "days": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "min_days": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "min_traded_share": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "max_median_spread_pct": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "pairs": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "pair": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "bars": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "traded_share": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "median_spread_pct": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "p95_spread_pct": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "passes": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              }
+            }
+          },
+          "maxItems": 2000
+        }
+      }
+    },
+    "book": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "equity": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "cash": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "exposure": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "start_equity": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "return_pct": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "positions": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "pair": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "qty": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "entry_price": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "stop": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "target": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "entry_time": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "mark": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "unrealised_pct": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          },
+          "maxItems": 2000
+        }
+      }
+    },
+    "risk": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "limits": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "max_notional": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "max_open_exposure": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "max_entries_per_day": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "max_orders_per_day": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "daily_loss_latch": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          }
+        },
+        "today": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "day": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "entries": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "orders": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "realised": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          }
+        },
+        "latched": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "chain_ok": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      }
+    },
+    "kill": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "on": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "since": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        }
+      }
+    },
+    "perf": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "trades": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "wins": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "losses": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "win_rate": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "mean_r": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "total_r": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "total_pnl": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "fees": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "by_reason": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "propertyNames": {
+            "pattern": "^[\\w.:+\\- /|]{1,64}$"
+          },
+          "additionalProperties": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "maxProperties": 200
+        },
+        "by_pair": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "propertyNames": {
+            "pattern": "^[\\w.:+\\- /|]{1,64}$"
+          },
+          "additionalProperties": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "trades": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "mean_r": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "pnl": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          },
+          "maxProperties": 200
+        },
+        "equity_curve": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "t": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "equity": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          },
+          "maxItems": 2000
+        },
+        "recent": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "t": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "pair": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "r": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "pnl": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "held_min": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          },
+          "maxItems": 2000
+        }
+      }
+    },
+    "activity": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "cycles_24h": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "expected_24h": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "failed_24h": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "observations_7d": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "fires_7d": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "entries_7d": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "refused_7d": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "propertyNames": {
+            "pattern": "^[\\w.:+\\- /|]{1,64}$"
+          },
+          "additionalProperties": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "maxProperties": 200
+        },
+        "daily": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "day": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "observations": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "fires": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "entries": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "exits": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "cycles": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            }
+          },
+          "maxItems": 2000
+        }
+      }
+    },
+    "distributions": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "propertyNames": {
+        "pattern": "^[\\w.:+\\- /|]{1,64}$"
+      },
+      "additionalProperties": {
+        "type": [
+          "array",
+          "null"
+        ],
+        "items": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "lo": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "hi": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "n": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          }
+        },
+        "maxItems": 2000
+      },
+      "maxProperties": 200
+    },
+    "ml": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "observations": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "labelled": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
+        "status": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        }
+      }
+    },
+    "jobs": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "last": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "propertyNames": {
+            "pattern": "^[\\w.:+\\- /|]{1,64}$"
+          },
+          "additionalProperties": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "status": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "exit": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "started": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "ended": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "sha": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              }
+            }
+          },
+          "maxProperties": 200
+        },
+        "runs": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "job": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "status": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "exit": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "started": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "ended": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "sha": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              }
+            }
+          },
+          "maxItems": 2000
+        }
+      }
+    },
+    "alerts": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "firing": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "key": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "since": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              }
+            }
+          },
+          "maxItems": 2000
+        }
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "run_id",
+    "as_of"
+  ]
+}

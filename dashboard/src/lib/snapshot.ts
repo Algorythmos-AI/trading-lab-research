@@ -1,6 +1,8 @@
 import "server-only";
 import { cache } from "react";
 import { LATEST_PATH, readText } from "./blob";
+import type { CryptoSnapshot } from "./crypto.types";
+import { DESK_PATHS } from "./desk";
 import { logEvent } from "./log";
 import type { Snapshot } from "./types";
 
@@ -44,3 +46,29 @@ export async function getSnapshot(): Promise<{ snapshot: Snapshot; etag: string 
   const r = await loadSnapshot();
   return r.status === "ok" ? { snapshot: r.snapshot, etag: r.etag } : null;
 }
+
+export type CryptoResult =
+  | { status: "ok"; snapshot: CryptoSnapshot; source: "fixture" | "blob" }
+  | { status: "missing" }
+  | { status: "error" };
+
+/** The crypto desk's latest snapshot (ADR 0005). "missing" until the desk has published for the first time. */
+export const loadCryptoSnapshot = cache(async (): Promise<CryptoResult> => {
+  if (fixtureMode()) {
+    const mod = await import("../../test/fixtures/crypto.v1.json");
+    return { status: "ok", snapshot: (mod.default ?? mod) as unknown as CryptoSnapshot, source: "fixture" };
+  }
+  try {
+    const stored = await readText(DESK_PATHS.crypto.latest);
+    if (!stored) return { status: "missing" };
+    const parsed: unknown = JSON.parse(stored.text);
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      logEvent("snapshot.read", { outcome: "not-an-object", desk: "crypto" });
+      return { status: "error" };
+    }
+    return { status: "ok", snapshot: parsed as CryptoSnapshot, source: "blob" };
+  } catch (e) {
+    logEvent("snapshot.read", { outcome: "error", desk: "crypto", error: e instanceof Error ? e.name : "unknown" });
+    return { status: "error" };
+  }
+});

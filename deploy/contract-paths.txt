@@ -4,3 +4,4 @@
 dashboard/**
 .github/workflows/dashboard.yml
 src/wt/ops/publish.py
+src/wt/crypto/snapshot.py

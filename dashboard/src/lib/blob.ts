@@ -8,6 +8,8 @@ export const SHADOW_LATEST_PATH = "shadow/latest.json";
 export const HISTORY_PREFIX = "snapshots/history/";
 export const ALERT_STATE_PATH = "alerts/state.json";
 
+export { DESK_PATHS, type DeskName, type DeskPaths } from "./desk";
+
 export class PreconditionFailed extends Error {
   constructor() {
     super("blob etag changed since it was read");

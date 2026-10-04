@@ -6,10 +6,10 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { AutoRefresh } from "@/components/client/auto-refresh";
 import { THEME_INIT_SCRIPT } from "@/components/client/theme-toggle";
+import { SnapshotFooter, type FooterSnapshot } from "@/components/client/snapshot-footer";
 import { SiteHeader } from "@/components/site-header";
-import { txt } from "@/lib/format";
 import { requestTime } from "@/lib/now";
-import { loadSnapshot } from "@/lib/snapshot";
+import { loadCryptoSnapshot, loadSnapshot } from "@/lib/snapshot";
 import "./globals.css";
 
 export const dynamic = "force-dynamic";
@@ -31,8 +31,16 @@ export const viewport: Viewport = {
   ],
 };
 
+function foot(
+  s: { run_id?: string | null; schema_version?: number | null; redaction?: string | null; withheld?: number | null } | null,
+): FooterSnapshot | null {
+  return s
+    ? { runId: s.run_id ?? null, schemaVersion: s.schema_version ?? null, redaction: s.redaction ?? null, withheld: s.withheld ?? null }
+    : null;
+}
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const result = await loadSnapshot();
+  const [result, crypto] = await Promise.all([loadSnapshot(), loadCryptoSnapshot()]);
   const snap = result.status === "ok" ? result.snapshot : null;
   const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
@@ -47,7 +55,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         >
           Skip to content
         </a>
-        <SiteHeader result={result} now={requestTime().getTime()} />
+        <SiteHeader result={result} crypto={crypto} now={requestTime().getTime()} />
         {result.status === "ok" && result.source === "fixture" ? (
           <div className="bg-info-soft text-info border-b">
             <p className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-1.5 text-xs sm:px-6">
@@ -66,14 +74,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               Glossary
             </Link>
             .
-            {snap ? (
-              <>
-                {" "}
-                Snapshot <span className="font-mono">{txt(snap.run_id)}</span>, schema v{txt(snap.schema_version)},{" "}
-                {txt(snap.redaction)} redaction
-                {typeof snap.withheld === "number" && snap.withheld > 0 ? `, ${snap.withheld} fields withheld` : ""}.
-              </>
-            ) : null}
+            <SnapshotFooter stocks={foot(snap)} crypto={foot(crypto.status === "ok" ? crypto.snapshot : null)} />
           </p>
         </footer>
         <AutoRefresh />

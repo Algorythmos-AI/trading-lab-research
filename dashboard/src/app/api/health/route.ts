@@ -1,10 +1,10 @@
-import { fixtureMode, loadSnapshot } from "@/lib/snapshot";
+import { fixtureMode, loadCryptoSnapshot, loadSnapshot } from "@/lib/snapshot";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(): Promise<Response> {
-  const result = await loadSnapshot();
+  const [result, crypto] = await Promise.all([loadSnapshot(), loadCryptoSnapshot()]);
   // BUILD_SHA is inlined at build time (next.config.ts) by CI and `make dashboard-deploy`. `||`, not `??`:
   // VERCEL_GIT_COMMIT_SHA is an empty string on CLI deploys, which `??` would keep.
   const sha = process.env.BUILD_SHA || process.env.VERCEL_GIT_COMMIT_SHA || null;
@@ -15,6 +15,14 @@ export async function GET(): Promise<Response> {
       snapshot_as_of: result.status === "ok" ? (result.snapshot.as_of ?? null) : null,
       snapshot_run_id: result.status === "ok" ? (result.snapshot.run_id ?? null) : null,
       snapshot: result.status,
+      // Per-desk view (ADR 0005). The fields above stay the stocks desk's: the publisher and the deploy read them.
+      desks: {
+        crypto: {
+          snapshot: crypto.status,
+          as_of: crypto.status === "ok" ? (crypto.snapshot.as_of ?? null) : null,
+          run_id: crypto.status === "ok" ? (crypto.snapshot.run_id ?? null) : null,
+        },
+      },
       ...(fixtureMode() ? { fixture: true } : {}),
     },
     { headers: { "cache-control": "no-store" } },

@@ -1,11 +1,14 @@
 "use client";
 
+import { usePathname } from "next/navigation";
+import { deskOfPath } from "@/lib/desk";
 import { useNow } from "./use-now";
 
 const time = (tz: string) =>
   new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 const SYD = time("Australia/Sydney");
 const NY = time("America/New_York");
+const UTC = time("UTC");
 const NY_PARTS = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/New_York",
   weekday: "short",
@@ -29,6 +32,7 @@ export function marketPhase(now: Date): string {
 export function Clocks() {
   const nowMs = useNow(1000);
   const now = nowMs === null ? null : new Date(nowMs);
+  const crypto = deskOfPath(usePathname()) === "crypto";
   return (
     <div className="flex items-center gap-3 text-xs" aria-label="Local clocks">
       <span className="flex items-baseline gap-1.5">
@@ -39,12 +43,24 @@ export function Clocks() {
         <span className="text-muted-foreground">New York</span>
         <time className="font-mono text-[0.8125rem] font-medium">{now ? NY.format(now) : "--:--"}</time>
       </span>
-      <span
-        className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 whitespace-nowrap"
-        title="From the New York clock; exchange holidays are not shown"
-      >
-        {now ? marketPhase(now) : "Market"}
-      </span>
+      {crypto ? (
+        <>
+          <span className="flex items-baseline gap-1.5">
+            <span className="text-muted-foreground">UTC</span>
+            <time className="font-mono text-[0.8125rem] font-medium">{now ? UTC.format(now) : "--:--"}</time>
+          </span>
+          <span className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 whitespace-nowrap" title="The crypto desk's day and limits run on UTC">
+            24/7
+          </span>
+        </>
+      ) : (
+        <span
+          className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 whitespace-nowrap"
+          title="From the New York clock; exchange holidays are not shown"
+        >
+          {now ? marketPhase(now) : "Market"}
+        </span>
+      )}
     </div>
   );
 }

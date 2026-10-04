@@ -674,14 +674,21 @@ def health_url(ingest_url: str) -> str:
     return re.sub(r"/api/ingest/?$", "/api/health", ingest_url)
 
 
-def verify_stored(snap: dict[str, Any], url: str, bypass: str | None) -> tuple[bool, str]:
-    """Read /api/health back and check it now serves this snapshot (run_id and as_of)."""
+def read_health(url: str, bypass: str | None) -> tuple[dict[str, Any] | None, str]:
+    """(/api/health's body, "") or (None, why)."""
     headers = {"x-vercel-protection-bypass": bypass} if bypass else {}
     try:
-        r = requests.get(health_url(url), headers=headers, timeout=20)
-        h = r.json()
+        h = requests.get(health_url(url), headers=headers, timeout=20).json()
     except (requests.RequestException, ValueError) as e:
-        return False, f"health unreadable ({e.__class__.__name__})"
+        return None, f"health unreadable ({e.__class__.__name__})"
+    return (h, "") if isinstance(h, dict) else (None, "health unreadable (not an object)")
+
+
+def verify_stored(snap: dict[str, Any], url: str, bypass: str | None) -> tuple[bool, str]:
+    """Read /api/health back and check it now serves this snapshot (run_id and as_of)."""
+    h, why = read_health(url, bypass)
+    if h is None:
+        return False, why
     got = (h.get("snapshot_run_id"), h.get("snapshot_as_of"))
     want = (snap["run_id"], snap["as_of"])
     if got[0] != want[0]:

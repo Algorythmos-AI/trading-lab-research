@@ -1,9 +1,10 @@
 import "server-only";
-import { HISTORY_PREFIX, LATEST_PATH, PreconditionFailed, SHADOW_LATEST_PATH, readForUpdate, writeText } from "./blob";
+import { HISTORY_PREFIX, PreconditionFailed, readForUpdate, writeText } from "./blob";
+import { DESK_PATHS } from "./desk";
 import { verify } from "./hmac";
 import { logEvent } from "./log";
 import { parseTime } from "./freshness";
-import { validateSnapshot } from "./validate";
+import { deskOf, validateCryptoSnapshot, validateSnapshot } from "./validate";
 
 export const MAX_BODY_BYTES = 3_500_000;
 
@@ -39,9 +40,9 @@ async function readCapped(req: Request, max: number): Promise<Uint8Array | null>
 }
 
 /** snapshots/history/YYYY-MM-DD/HH.json for the snapshot's UTC hour. */
-export function historyPath(asOfMs: number): string {
+export function historyPath(asOfMs: number, prefix: string = HISTORY_PREFIX): string {
   const iso = new Date(asOfMs).toISOString();
-  return `${HISTORY_PREFIX}${iso.slice(0, 10)}/${iso.slice(11, 13)}.json`;
+  return `${prefix}${iso.slice(0, 10)}/${iso.slice(11, 13)}.json`;
 }
 
 function currentMeta(text: string): { runId: string | null; asOf: number | null } {
@@ -99,7 +100,6 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
   // Only the primary host's snapshot is the dashboard's; any other valid host (the OCI host in its shadow run)
   // lands in shadow/latest.json, which no page and no watchdog reads.
   const primary = (process.env.PRIMARY_HOST || DEFAULT_KEY_ID) === keyId;
-  const target = primary ? LATEST_PATH : SHADOW_LATEST_PATH;
 
   const bytes = await readCapped(req, MAX_BODY_BYTES);
   if (!bytes) return done(413, "too-large", { error: `body exceeds ${MAX_BODY_BYTES} bytes` });
@@ -121,12 +121,16 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
     return done(422, "bad-json", { error: "invalid", errors: ["body is not valid UTF-8 JSON"] }, { bytes: bytes.byteLength });
   }
 
-  const result = validateSnapshot(data);
+  // The desk comes from the signed body (its `schema`), never from a header: ADR 0005.
+  const desk = deskOf(data);
+  const paths = DESK_PATHS[desk];
+  const target = primary ? paths.latest : paths.shadow;
+  const result = desk === "crypto" ? validateCryptoSnapshot(data) : validateSnapshot(data);
   if (!result.ok) {
     return done(422, "invalid", { error: "invalid", errors: result.errors }, { bytes: bytes.byteLength, n_errors: result.errors.length });
   }
   const runId = result.snapshot.run_id;
-  const asOf = parseTime(result.snapshot.as_of);
+  const asOf = parseTime(result.snapshot.as_of ?? null);
   if (!runId || asOf === null) {
     return done(422, "invalid", { error: "invalid", errors: ["/run_id and /as_of must be set; as_of must be a timestamp"] });
   }
@@ -151,14 +155,14 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
         throw e;
       }
       if (!primary) {
-        return done(200, "stored-shadow", { status: "stored", run_id: runId, shadow: true }, { run_id: runId, key_id: keyId });
+        return done(200, "stored-shadow", { status: "stored", run_id: runId, shadow: true }, { run_id: runId, key_id: keyId, desk });
       }
       try {
-        await writeText(historyPath(asOf), text);
+        await writeText(historyPath(asOf, paths.history), text);
       } catch (e) {
         logEvent("ingest.history", { outcome: "error", run_id: runId, error: e instanceof Error ? e.name : "unknown" });
       }
-      return done(200, "stored", { status: "stored", run_id: runId }, { run_id: runId, bytes: bytes.byteLength, attempt });
+      return done(200, "stored", { status: "stored", run_id: runId }, { run_id: runId, bytes: bytes.byteLength, attempt, desk });
     }
   } catch (e) {
     return done(502, "storage-error", { error: "storage unavailable" }, { error: e instanceof Error ? e.name : "unknown" });
