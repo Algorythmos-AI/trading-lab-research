@@ -514,7 +514,13 @@ def extras(now: dt.datetime, root: Path = ROOT) -> dict[str, Any]:
     from wt.ops.alerts import Alerts
     from wt.ops.heartbeat import HEARTBEAT_DIR, last_runs
     from wt.ops.window import load_sessions
-    runs = _read_jsonl(HEARTBEAT_DIR / "runs.jsonl")
+    # ADR 0005: this is the stocks desk's snapshot. Another desk's jobs and alerts belong to its own.
+    from wt.core.desk import desk_of_alert
+    from wt.ops.schedule import JOBS
+
+    def mine(job: object) -> bool:
+        return (JOBS[job].desk if isinstance(job, str) and job in JOBS else "stocks") == "stocks"
+    runs = [r for r in _read_jsonl(HEARTBEAT_DIR / "runs.jsonl") if mine(r.get("job"))]
     cutoff = (now - dt.timedelta(days=14)).isoformat()
     kill = root / "KILL"
     deploys = sorted((STATE_DIR / "deploy").glob("*.json"))
@@ -532,7 +538,7 @@ def extras(now: dt.datetime, root: Path = ROOT) -> dict[str, Any]:
     except Exception as e:  # noqa: BLE001 — a new view must never stop the publish the watchdog depends on
         print(f"v3 views failed ({e.__class__.__name__}); publishing without them", file=sys.stderr)
         views = {}
-    last = last_runs()
+    last = {k: v for k, v in last_runs().items() if mine(k)}
     prev = next((r for r in reversed(runs) if r.get("job") == "dashboard"), None)
     if prev is not None:                # this run is the one collecting: show the previous, completed publish
         last["dashboard"] = {**prev, "detail": "previous publish"}
@@ -541,7 +547,7 @@ def extras(now: dt.datetime, root: Path = ROOT) -> dict[str, Any]:
     return {
         "jobs": {"last": last, "runs": [r for r in runs if str(r.get("started", "")) >= cutoff][-500:]},
         "alerts": {"firing": [{"key": k, "since": v.get("since"), "title": v.get("title")}
-                              for k, v in sorted(Alerts().firing().items())],
+                              for k, v in sorted(Alerts().firing().items()) if desk_of_alert(k) == "stocks"],
                    "history": views.pop("alerts_history", None)},
         "kill": {"on": kill.exists(),
                  "since": dt.datetime.fromtimestamp(kill.stat().st_mtime, dt.UTC).isoformat() if kill.exists() else None,

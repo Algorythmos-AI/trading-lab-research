@@ -18,7 +18,8 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
                  src/wt/ops/dashguard.py src/wt/ops/drill.py src/wt/brokers/cancel_only.py src/wt/ops/host.py \
                  src/wt/ops/units.py src/wt/ops/hc.py src/wt/core/ledger.py src/wt/ops/r2.py src/wt/ops/lease.py \
                  src/wt/ops/backup.py src/wt/brokers/shadow.py src/wt/analytics/performance.py \
-                 src/wt/analytics/risk_view.py src/wt/analytics/ops_view.py src/wt/ops/audit.py src/wt/ops/control.py
+                 src/wt/analytics/risk_view.py src/wt/analytics/ops_view.py src/wt/ops/audit.py src/wt/ops/control.py \
+                 src/wt/core/desk.py
 JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
