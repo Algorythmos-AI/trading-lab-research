@@ -119,6 +119,48 @@ def test_the_restore_test_asks_for_every_installed_ledger_and_notices_a_missing_
     assert "MISSING ['crypto_journal.jsonl']" in capsys.readouterr().out
 
 
+def test_each_desk_anchors_its_own_ledgers_and_a_growing_crypto_journal_is_not_a_rewrite(paths, monkeypatch):  # noqa: F811
+    """2026-10-04: a backup had anchored the day before the crypto desk existed. With one shared anchor the next
+    backup of that day would have paged "DIFFERENT heads", and so would any second backup of a day on which the
+    crypto journal grew, which is every day."""
+    from test_backup import Anchors
+    fwd, jr, tmp, _, _ = paths
+    chained(fwd, 2)
+    chained(jr, 2)
+    s, day = Anchors(), dt.date(2026, 10, 4)
+    assert backup.anchor_desks(day, backup.chains(), s) == (True, "anchored anchors/2026-10-04.json")
+    stocks_anchor = s.objs["anchors/2026-10-04.json"]
+
+    c = crypto_desk(tmp, monkeypatch)                                # the desk is installed later the same day
+    chained(c.journal, 3)
+    ok, why = backup.anchor_desks(day, backup.chains(), s)
+    assert ok and why == "anchors/2026-10-04.json already anchored; anchored anchors/crypto/2026-10-04.json"
+    assert s.objs["anchors/2026-10-04.json"] == stocks_anchor       # untouched, and still only the stocks ledgers
+
+    chained(c.journal, 5)                                            # the same three lines, then two more
+    ok, why = backup.anchor_desks(day, backup.chains(), s)
+    assert ok and why.endswith("anchors/crypto/2026-10-04.json already anchored; the ledger has only grown since")
+
+    c.journal.write_bytes(c.journal.read_bytes().replace(b'"i": 1', b'"i": 9'))      # history rewritten
+    ok, why = backup.anchor_desks(day, backup.chains(), s)
+    assert not ok and why.endswith("anchors/crypto/2026-10-04.json already anchored with DIFFERENT heads")
+
+    chained(fwd, 3)                                                  # the stocks rule is unchanged: same heads or alarm
+    ok, why = backup.anchor_desks(day, backup.chains(), s)
+    assert not ok and why.startswith("anchors/2026-10-04.json already anchored with DIFFERENT heads")
+
+
+def test_head_at_is_the_head_the_file_had_at_that_length(tmp_path):
+    from wt.core import ledger
+    p = tmp_path / "l.jsonl"
+    chained(p, 3)
+    assert ledger.head_at(p, 3) == ledger.head(p)[1]
+    first_three = p.read_bytes()
+    chained(p, 5)
+    assert p.read_bytes().startswith(first_three) and ledger.head_at(p, 3) != ledger.head(p)[1]
+    assert ledger.head_at(p, 6) is None and ledger.head_at(p, 0) is None and ledger.head_at(tmp_path / "no", 1) is None
+
+
 # ---------------------------------------------------------------- the stocks snapshot
 
 def test_the_stocks_snapshot_shows_no_other_desks_alerts_or_jobs(tmp_path, monkeypatch):

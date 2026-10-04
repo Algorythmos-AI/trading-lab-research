@@ -61,8 +61,10 @@ def role() -> str:
     return os.environ.get("WT_ROLE", "primary")
 
 
-def anchor_key(day: dt.date) -> str:
-    key = f"anchors/{day.isoformat()}.json"
+def anchor_key(day: dt.date, desk: Desk | None = None) -> str:
+    """Each desk anchors its own ledgers (ADR 0005). The stocks desk keeps the original key."""
+    sub = "" if desk is None or desk.name == "stocks" else f"{desk.name}/"
+    key = f"anchors/{sub}{day.isoformat()}.json"
     return key if role() != "shadow" else f"shadow/{host()}/{key}"
 
 
@@ -100,22 +102,64 @@ def flag_chain(problems: list[str], alerts: Alerts, desk: Desk = DESKS["stocks"]
                 f"{len(problems)} problem(s) in the ledger hash chain; exits are still managed. First: {problems[0]}", 4)
 
 
-def anchor(day: dt.date, state: dict[str, dict[str, Any]], client: R2 | None = None) -> tuple[bool, str]:
+def extends(anchored: Any, paths: dict[str, Path]) -> bool:
+    """True when every anchored (lines, head) is still line `lines` of its ledger and the ledger's chain is
+    intact: the file only grew since. The head line alone is not enough: an earlier line can be rewritten without
+    touching it, and only the chain shows that."""
+    if not isinstance(anchored, dict) or not anchored:
+        return False
+    for name, a in anchored.items():
+        if not isinstance(a, dict) or name not in paths or ledger.verify_chain(paths[name]):
+            return False
+        n, head = a.get("lines"), a.get("head")
+        if n == 0 and head is None:
+            continue                                        # anchored empty: anything since is an append
+        if not isinstance(n, int) or ledger.head_at(paths[name], n) != head:
+            return False
+    return True
+
+
+def anchor(day: dt.date, state: dict[str, dict[str, Any]], client: R2 | None = None, desk: Desk | None = None,
+           paths: dict[str, Path] | None = None) -> tuple[bool, str]:
     """Write-once anchor of today's chain heads. A second write with the same heads is fine; different heads for
-    an anchored day mean history was rewritten."""
+    an anchored day mean history was rewritten.
+
+    A desk that writes around the clock (`always_open`) has a newer head every few minutes, so a second backup
+    on the same day would always differ. For such a desk the test is the one that matters for an append-only
+    file: the anchored head must still be line `lines` of the ledger (`paths`)."""
     c = client or R2()
     if not c.configured:
         return False, "R2 not configured"
     body = json.dumps({k: {"lines": v["lines"], "head": v["head"]} for k, v in state.items()}, sort_keys=True)
-    key = anchor_key(day)
+    key = anchor_key(day, desk)
     w = c.put(ANCHOR_BUCKET, key, body.encode(), if_none_match="*")
     if w.status in (200, 201):
         return True, f"anchored {key}"
     if w.status == 412:
         existing = c.get(ANCHOR_BUCKET, key)
-        same = existing.status == 200 and json.loads(existing.body) == json.loads(body)
-        return same, f"{key} already anchored" + ("" if same else " with DIFFERENT heads")
+        try:
+            was = json.loads(existing.body) if existing.status == 200 else None
+        except ValueError:
+            was = None
+        if was is not None and was == json.loads(body):
+            return True, f"{key} already anchored"
+        if was is not None and desk is not None and desk.session == "always_open" and extends(was, paths or {}):
+            return True, f"{key} already anchored; the ledger has only grown since"
+        return False, f"{key} already anchored with DIFFERENT heads"
     return False, f"anchor write answered HTTP {w.status}"
+
+
+def anchor_desks(day: dt.date, state: dict[str, dict[str, Any]], client: R2 | None = None) -> tuple[bool, str]:
+    """One anchor per desk, each over its own ledgers. All must hold; the reasons are joined."""
+    by_desk: dict[str, tuple[Desk, dict[str, Path]]] = {}
+    for d, name, path in desk_ledgers():
+        by_desk.setdefault(d.name, (d, {}))[1][name] = path
+    oks, whys = [], []
+    for d, paths in by_desk.values():
+        ok, why = anchor(day, {n: state[n] for n in paths if n in state}, client, d, paths)
+        oks.append(ok)
+        whys.append(why)
+    return all(oks), "; ".join(whys)
 
 
 def nightly(alerts: Alerts | None = None, weekly: bool | None = None, client: R2 | None = None,
@@ -139,7 +183,7 @@ def nightly(alerts: Alerts | None = None, weekly: bool | None = None, client: R2
         code = 1
     elif r.returncode == 3:
         print("restic: snapshot saved; some files were unreadable (see above)", file=sys.stderr)
-    ok, why = anchor(today, state, client)
+    ok, why = anchor_desks(today, state, client)
     print(f"anchor: {why}")
     if not ok:
         alerts.fire("anchor", "Daily evidence anchor failed", why, 4 if "DIFFERENT" in why else 3)
