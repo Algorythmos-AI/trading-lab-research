@@ -1,6 +1,6 @@
 # ADR 0005: Desks
 
-- **Status:** proposed, 2026-10-04
+- **Status:** accepted, 2026-10-04
 - **Context:** the owner's decision of 2026-10-04 to bring the Kraken crypto bot into the lab as a second,
   separately viewable desk
 

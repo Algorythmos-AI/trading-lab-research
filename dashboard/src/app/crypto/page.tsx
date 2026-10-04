@@ -8,7 +8,7 @@ import { Panel } from "@/components/panel";
 import { StatusBadge } from "@/components/status";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Sparkline } from "@/components/v3/sparkline";
-import { aud, codes, cryptoHealth, items, type Crypto } from "@/lib/crypto";
+import { CURRENCY_NAME, codes, cryptoHealth, items, moneyOf, type Crypto } from "@/lib/crypto";
 import { fracPct, num, pct, rMult, shortDate, signed, zoned } from "@/lib/format";
 import { freshness } from "@/lib/freshness";
 import { requestTime } from "@/lib/now";
@@ -46,15 +46,16 @@ export default async function CryptoOverviewPage() {
 }
 
 function KeyNumbers({ s }: { s: Crypto }) {
+  const m = moneyOf(s);
   const p = s.perf;
   const passing = items(s.quality?.pairs).filter((x) => x.passes === true).length;
   const pairs = items(s.quality?.pairs).length;
   return (
-    <Panel title="Key numbers" icon={Gauge} means="The figures the crypto desk is judged on. Money is paper money in Australian dollars.">
+    <Panel title="Key numbers" icon={Gauge} means={`The figures the crypto desk is judged on. Money is paper money in ${CURRENCY_NAME[s.config?.quote_currency ?? ""] ?? "the desk's quote currency"}.`}>
       <KeyValues
         className="sm:grid-cols-4"
         items={[
-          { label: "Paper equity", value: aud(s.book?.equity) },
+          { label: "Paper equity", value: m(s.book?.equity) },
           { label: "Return since start", value: s.book?.return_pct == null ? "—" : `${signed(s.book.return_pct, 2)}%` },
           { label: "Closed trades", value: num(p?.trades) },
           { label: "Win rate", value: fracPct(p?.win_rate) },
@@ -115,6 +116,7 @@ function MarketPanel({ s }: { s: Crypto }) {
 }
 
 function EquityPanel({ s }: { s: Crypto }) {
+  const m = moneyOf(s);
   const curve = items(s.perf?.equity_curve).map((p) => p.equity).filter((v): v is number => typeof v === "number");
   const start = s.book?.start_equity ?? curve[0] ?? 0;
   return (
@@ -125,7 +127,7 @@ function EquityPanel({ s }: { s: Crypto }) {
         <>
           <Sparkline values={curve.map((v) => v - start)} label="Paper equity change since the start" />
           <p className="text-muted-foreground mt-2 text-xs">
-            {aud(curve[0])} → {aud(curve[curve.length - 1])} over {curve.length} hours
+            {m(curve[0])} → {m(curve[curve.length - 1])} over {curve.length} hours
           </p>
         </>
       )}

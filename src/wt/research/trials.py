@@ -31,6 +31,15 @@ def trial_history(path: Path | None = None) -> list[dict[str, Any]]:
     return rows
 
 
+def family_trial_count(family: str, path: Path | None = None) -> int:
+    """The trial count in force for a family counted apart from the global one (the crypto desk's `C`)."""
+    rows = (yaml.safe_load((path or REGISTRY).read_text()).get("families") or {}).get(family) or []
+    accepted = [r for r in rows if r.get("status") == "accepted" and isinstance(r.get("total"), int)]
+    if not accepted:
+        raise ValueError(f"trial registry has no accepted row for family {family}")
+    return int(accepted[-1]["total"])
+
+
 def global_trial_count(path: Path | None = None) -> int:
     """The global trial count in force: the newest accepted row (a proposed record does not count yet)."""
     accepted = [r for r in trial_history(path) if r["status"] == "accepted"]

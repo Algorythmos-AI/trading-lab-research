@@ -9,3 +9,9 @@ history:
   - {decision: DEC-0009, total: 75, status: accepted}   # round 2: 10 trials
   - {decision: DEC-0010, total: 85, status: accepted}   # round 3: 10 trials (SPEC-0001 evaluation.global_trials_after)
   - {decision: DEC-0011, total: 87, status: proposed}   # the two legacy forward strategies re-specified (new trials)
+
+# Trial families counted apart from the global (equity) count above. Same rules: append-only, the newest accepted
+# row is in force. Read by wt.research.trials.family_trial_count.
+families:
+  C:                                                      # crypto desk (DEC-0012)
+    - {decision: DEC-0012, total: 4, status: accepted}    # original, the 2026-04-26 loosening, HYP-0020, AUD -> USD pairs

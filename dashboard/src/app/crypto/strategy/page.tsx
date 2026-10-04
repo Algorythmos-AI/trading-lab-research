@@ -7,7 +7,7 @@ import { PageHeading } from "@/components/page-heading";
 import { Panel } from "@/components/panel";
 import { StatusBadge } from "@/components/status";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { aud, code, items, type Crypto } from "@/lib/crypto";
+import { code, items, moneyOf, type Crypto } from "@/lib/crypto";
 import { fracPct, num, pct, rMult, signed, zoned } from "@/lib/format";
 import { loadCryptoSnapshot } from "@/lib/snapshot";
 
@@ -95,6 +95,7 @@ function EconomicsPanel({ s }: { s: Crypto }) {
 }
 
 function TradesPanel({ s }: { s: Crypto }) {
+  const m = moneyOf(s);
   const rows = items(s.perf?.recent);
   const p = s.perf;
   return (
@@ -102,7 +103,7 @@ function TradesPanel({ s }: { s: Crypto }) {
       title="Closed paper trades"
       icon={History}
       means="Newest first. R is the result as a multiple of the amount risked at the stop, after fees."
-      action={<span className="text-muted-foreground text-xs">{num(p?.trades)} trades · {rMult(p?.total_r, 2)} · {aud(p?.total_pnl)}</span>}
+      action={<span className="text-muted-foreground text-xs">{num(p?.trades)} trades · {rMult(p?.total_r, 2)} · {m(p?.total_pnl)}</span>}
     >
       {rows.length === 0 ? (
         <Empty title="No closed trades yet">The kill switch is on, or no bar has met every entry condition.</Empty>
@@ -126,7 +127,7 @@ function TradesPanel({ s }: { s: Crypto }) {
                 <TableCell>{code(t.reason)}</TableCell>
                 <TableCell className="text-right font-mono">{num(t.held_min, 0)} min</TableCell>
                 <TableCell className="text-right font-mono">{rMult(t.r, 2)}</TableCell>
-                <TableCell className="text-right font-mono">{aud(t.pnl)}</TableCell>
+                <TableCell className="text-right font-mono">{m(t.pnl)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
