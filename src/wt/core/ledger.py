@@ -106,6 +106,15 @@ def head(path: Path) -> tuple[int, str | None]:
     return len(lines), (hashlib.sha256(lines[-1]).hexdigest() if lines else None)
 
 
+def head_at(path: Path, n: int) -> str | None:
+    """sha256 of the file's n-th line (1-based): what its head was when it had n lines. None if it is shorter.
+    An append-only file that held (n, head) on some earlier day still has that line n today."""
+    if n <= 0 or not path.exists():
+        return None
+    lines = [x for x in _read_locked(path).split(b"\n") if x]
+    return hashlib.sha256(lines[n - 1]).hexdigest() if len(lines) >= n else None
+
+
 TAIL = 65_536
 
 
