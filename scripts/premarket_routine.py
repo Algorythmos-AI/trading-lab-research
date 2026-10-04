@@ -124,7 +124,9 @@ def run(d: dt.date, feed: str, replay: bool) -> Path | None:
 
 def tickets(pool: pd.DataFrame, f: dict, spec: dict) -> list[dict]:
     """Staged GG-1 tickets for Tier-2 names. The 09:30 bar isn't known yet, so the stop is the pattern low, or
-    PMH - $0.20 (the GG-1 cap)."""
+    PMH - $0.20 (the GG-1 cap). No Tier-2 names (or an empty pool, which has no columns at all): no tickets."""
+    if not len(pool) or not f["tier2"]:
+        return []
     try:
         va = VirtualAccount.load(VA_PATH) if VA_PATH.exists() else VirtualAccount()
     except Exception:  # noqa: BLE001 — a missing or corrupt file means the default US$600 account; never written here

@@ -11,7 +11,9 @@ Design (reviewed 2026-09-29):
     per boot; `Wants=` (not `Requires=`), so restarting wt-secrets for a key rotation never restarts paper-b.
   * Type=exec with RuntimeMaxSec above each job's own deadline plus its in-process wait: the jobs time themselves;
     systemd only catches a runaway. RestartPreventExitStatus=124 keeps a deadline kill from restarting.
-  * Restart=on-failure with RestartSec=60 and at most 3 starts in 6 h, so a crash loop can't burn through.
+  * Restart=on-failure with RestartSec=60 and at most 3 starts in 6 h, so a crash loop can't burn through. Only
+    the clock-time jobs get that limit: systemd counts every start, so on the 15-minute publisher it refused all
+    but 3 starts in 6 h. An interval job never restarts, so it has no loop to bound (StartLimitIntervalSec=0).
   * KillMode=mixed + TimeoutStopSec=60: SIGTERM reaches the job runner, which forwards it to the job, waits,
     writes its heartbeat and pages (wt.ops.jobs); systemd kills the rest after 60 s.
   * OnFailure pages through wt-alert@, which doesn't depend on the secrets unit.
@@ -55,8 +57,8 @@ def service(job: Job, root: Path, user: str = USER) -> str:
         "Wants=wt-secrets.service network-online.target time-sync.target",
         "After=wt-secrets.service network-online.target time-sync.target",
         "OnFailure=wt-alert@%n.service",
-        "StartLimitIntervalSec=6h",
-        "StartLimitBurst=3",
+        # the limit counts timer starts too, so an interval job must not have one
+        *(["StartLimitIntervalSec=0"] if job.interval_s else ["StartLimitIntervalSec=6h", "StartLimitBurst=3"]),
         "",
         "[Service]",
         "Type=exec",

@@ -35,7 +35,7 @@ from wt.core.clock import ET, et
 from wt.core.config import DATA_DIR, FORWARD_LEDGER, ROOT
 from wt.ops import hc, host, preflight
 from wt.ops.alerts import Alerts
-from wt.ops.heartbeat import Heartbeat, last_runs
+from wt.ops.heartbeat import Heartbeat, last_runs, ok_runs_since
 from wt.ops.locks import DEPLOY_LOCK, job_lock
 from wt.ops.schedule import JOBS, PY, SYDNEY, Job
 from wt.ops.window import Session, forward_wait_until, load_sessions
@@ -375,6 +375,19 @@ def run_job(job: Job, root: Path = ROOT, preflight_only: bool = False, alerts: A
     return code
 
 
+def cadence(now: dt.datetime | None = None, heartbeats: Path | None = None) -> list[str]:
+    """Each interval job against its own interval over the last hour. One missed run is allowed (a deploy, a slow
+    collector); fewer means the scheduler isn't starting it, which no job-level alert can see."""
+    now = now or dt.datetime.now(dt.UTC)
+    out = []
+    for j in JOBS.values():
+        if j.interval_s:
+            want = 3600 // j.interval_s
+            got = ok_runs_since(j.name, now - dt.timedelta(hours=1), heartbeats)
+            out.append(f"  [{'ok' if got >= want - 1 else 'FAIL'}] {j.name} cadence: {got} of {want} runs ok in the last hour")
+    return out
+
+
 def status(root: Path = ROOT) -> int:
     """What's going on, in the terminal: last runs, firing alerts, kill switch, preflight."""
     print(f"KILL switch: {'ON (no new paper-B entries)' if (root / 'KILL').exists() else 'off'}")
@@ -382,6 +395,8 @@ def status(root: Path = ROOT) -> int:
     for name, r in last_runs().items():
         print(f"  {name:8} {r.get('status', '?'):8} exit={r.get('exit')} started={r.get('started')} "
               f"ended={r.get('ended')} sha={r.get('sha')}  {r.get('detail', '')[:80]}")
+    for line in cadence():
+        print(line)
     firing = Alerts().firing()
     print(f"Alerts firing: {', '.join(sorted(firing)) or 'none'}")
     print("Preflight:")

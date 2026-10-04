@@ -743,10 +743,18 @@ def classify_legacy(text: str) -> str:
     return "other"
 
 
+LEGACY_FROZEN = "config/legacy_history.json"
+
+
 def src_legacy(ctx: Ctx) -> dict:
+    """The old repo's run logs. They stopped in 2026-07 and live only on the Mac, so a host without the folder
+    reads the frozen counts in config/legacy_history.json (made once from the same code; no free text)."""
     base = ctx.org / "decisions"
     if not base.is_dir():
-        raise SourceError("legacy decisions folder not found")
+        frozen = ctx.root / LEGACY_FROZEN
+        if not frozen.is_file():
+            raise SourceError("legacy decisions folder not found")
+        return dict(safeio.read_json(frozen))
     runs = []
     for p in sorted(base.rglob("*.md")):
         m = _LEGACY_NAME.search(p.name)

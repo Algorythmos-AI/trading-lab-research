@@ -183,6 +183,17 @@ def test_legacy_source_counts_orders_only_when_an_id_is_present(tmp_path):
     assert res["by_month"] == [{"month": "2026-07", "safety_abort": 1, "other": 1}]
 
 
+def test_legacy_source_reads_the_frozen_counts_on_a_host_without_the_folder(tmp_path):
+    """The VM has no old repo: every collector run there failed on this source until the counts were frozen."""
+    res = status.src_legacy(ctx(tmp_path))                          # no org/decisions under tmp_path
+    frozen = json.loads((ROOT / status.LEGACY_FROZEN).read_text())
+    assert res == frozen and res["total"] > 0 and res["recent"] == []
+    assert set(res) == {"total", "orders_placed", "first", "last", "by_month", "by_tag", "by_outcome", "recent"}
+    assert sum(res["by_outcome"].values()) == res["total"] == sum(res["by_tag"].values())
+    with pytest.raises(SourceError):                                # neither the folder nor the file
+        status.src_legacy(ctx(tmp_path, root=tmp_path))
+
+
 # ------------------------------------------------------------------ time
 
 
