@@ -1,4 +1,5 @@
 import { JOB_ORDER, sortJobKeys } from "./labels";
+import { scanSentence } from "./today";
 import { entries, list, type JobResult, type Snapshot } from "./types";
 
 const SHORT: Record<string, string> = {
@@ -56,5 +57,6 @@ export function summarize(s: Snapshot | null): string {
   const head = parts.length > 0 ? `Tonight: ${parts.join(", ")}.` : "No job results in this snapshot.";
   const n = list(s.overview?.needs_you).length;
   const tail = n === 0 ? "Nothing needs you." : n === 1 ? "1 thing needs you." : `${n} things need you.`;
-  return `${head} ${tail}`;
+  const pre = scanSentence(s);
+  return pre ? `${head} ${pre} ${tail}` : `${head} ${tail}`;
 }
