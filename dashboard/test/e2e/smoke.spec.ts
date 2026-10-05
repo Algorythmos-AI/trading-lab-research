@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 // CI-only smoke test. The server runs with DASHBOARD_FIXTURE=1 (see playwright.config.ts).
 const PAGES = [
   { path: "/", heading: "Overview" },
+  { path: "/today", heading: "Today" },
   { path: "/strategies", heading: "Strategies" },
   { path: "/research", heading: "Research" },
   { path: "/operations", heading: "Operations" },
