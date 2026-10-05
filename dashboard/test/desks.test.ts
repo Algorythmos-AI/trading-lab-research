@@ -1,7 +1,7 @@
 // Desks (ADR 0005): one site, two snapshots, and nothing crossing between them. Ingest files a body by the
 // `schema` inside the signed body; each desk has its own slot, history and watchdog state.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { cryptoHealth } from "@/lib/crypto";
+import { cryptoHealth, plural, spreadPct } from "@/lib/crypto";
 import type { CryptoSnapshot } from "@/lib/crypto.types";
 import { DESK_PATHS, deskOfPath } from "@/lib/desk";
 import { freshness } from "@/lib/freshness";
@@ -180,5 +180,12 @@ describe("crypto health", () => {
     const stale = crypto({ ...base, alerts: { firing: [{ key: "crypto:data-stale", since: null }] } });
     expect(at(stale).level).toBe("red");
     expect(at(crypto({ ...base, activity: { cycles_24h: 40, expected_24h: 96 } })).reasons.map((r) => r.code)).toEqual(["cycles"]);
+  });
+});
+
+describe("crypto formatting", () => {
+  it("shows a tiny spread with enough decimals to be a number, and counts days in English", () => {
+    expect([0.0001, 0.0083, 0.01, 0.26, 0, null].map(spreadPct)).toEqual(["0.0001%", "0.0083%", "0.01%", "0.26%", "0.00%", "—"]);
+    expect([plural(1, "day"), plural(14, "day"), plural(null, "day")]).toEqual(["1 day", "14 days", "—"]);
   });
 });

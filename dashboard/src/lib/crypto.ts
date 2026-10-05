@@ -29,6 +29,17 @@ export function moneyOf(s: Crypto): (v: number | null | undefined, digits?: numb
   return (v, digits = 2) => money(v, currency, digits);
 }
 
+/** A spread in percent. Liquid pairs sit near 0.0001%, which two decimals would print as "0.00%". */
+export function spreadPct(v: number | null | undefined): string {
+  if (!isNum(v)) return DASH;
+  return `${v.toFixed(v !== 0 && Math.abs(v) < 0.01 ? 4 : 2)}%`;
+}
+
+/** "1 day", "2 days". */
+export function plural(n: number | null | undefined, one: string, many = `${one}s`): string {
+  return isNum(n) ? `${n.toLocaleString("en-US")} ${n === 1 ? one : many}` : DASH;
+}
+
 /** Plain words for the codes the desk publishes. An unknown code is shown as it is. */
 const CODES: Record<string, string> = {
   rsi_high: "RSI not low enough",

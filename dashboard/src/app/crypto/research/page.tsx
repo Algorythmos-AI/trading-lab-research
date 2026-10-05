@@ -7,7 +7,7 @@ import { PageHeading } from "@/components/page-heading";
 import { Panel } from "@/components/panel";
 import { StatusBadge } from "@/components/status";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { items, type Crypto } from "@/lib/crypto";
+import { items, plural, spreadPct, type Crypto } from "@/lib/crypto";
 import { fracPct, num, pct } from "@/lib/format";
 import { loadCryptoSnapshot } from "@/lib/snapshot";
 
@@ -57,8 +57,8 @@ function QualityPanel({ s }: { s: Crypto }) {
           value={q?.days}
           max={Math.max(q?.min_days ?? 0, q?.days ?? 0)}
           threshold={q?.min_days}
-          thresholdLabel={`Needs ${num(q?.min_days)} days`}
-          valueText={`${num(q?.days)} days`}
+          thresholdLabel={`Needs ${plural(q?.min_days, "day")}`}
+          valueText={plural(q?.days, "day")}
         />
         {rows.length === 0 ? (
           <Empty title="No bars recorded yet" />
@@ -80,8 +80,8 @@ function QualityPanel({ s }: { s: Crypto }) {
                   <TableCell className="font-medium">{p.pair}</TableCell>
                   <TableCell className="text-right font-mono">{num(p.bars)}</TableCell>
                   <TableCell className="text-right font-mono">{fracPct(p.traded_share)}</TableCell>
-                  <TableCell className="text-right font-mono">{pct(p.median_spread_pct, 2)}</TableCell>
-                  <TableCell className="text-right font-mono">{pct(p.p95_spread_pct, 2)}</TableCell>
+                  <TableCell className="text-right font-mono">{spreadPct(p.median_spread_pct)}</TableCell>
+                  <TableCell className="text-right font-mono">{spreadPct(p.p95_spread_pct)}</TableCell>
                   <TableCell>
                     {p.passes ? <StatusBadge tone="good">Passes</StatusBadge> : <StatusBadge tone="warn">Not yet</StatusBadge>}
                   </TableCell>
