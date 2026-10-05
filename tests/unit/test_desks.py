@@ -145,9 +145,31 @@ def test_each_desk_anchors_its_own_ledgers_and_a_growing_crypto_journal_is_not_a
     ok, why = backup.anchor_desks(day, backup.chains(), s)
     assert not ok and why.endswith("anchors/crypto/2026-10-04.json already anchored with DIFFERENT heads")
 
-    chained(fwd, 3)                                                  # the stocks rule is unchanged: same heads or alarm
+
+
+def test_a_stocks_ledger_that_grew_after_the_days_first_backup_is_not_a_rewrite_either(paths):  # noqa: F811
+    """A backup run before the session (by hand, or caught up after a reboot) anchors the morning's heads. The
+    evening run then finds longer ledgers: an append, not an alarm. A changed earlier line still is one."""
+    from test_backup import Anchors
+    fwd, jr, tmp, _, _ = paths
+    chained(fwd, 2)
+    chained(jr, 2)
+    s, day = Anchors(), dt.date(2026, 10, 5)
+    assert backup.anchor_desks(day, backup.chains(), s)[0]
+    chained(fwd, 4)                                                  # the forward test appended two lines
+    chained(jr, 3)
+    assert backup.anchor_desks(day, backup.chains(), s) == (
+        True, "anchors/2026-10-05.json already anchored; the ledger has only grown since")
+
+    fwd.write_bytes(fwd.read_bytes().replace(b'"i": 0', b'"i": 7'))  # line 1 rewritten; the anchored line 2 is untouched
     ok, why = backup.anchor_desks(day, backup.chains(), s)
-    assert not ok and why.startswith("anchors/2026-10-04.json already anchored with DIFFERENT heads")
+    assert not ok and why == "anchors/2026-10-05.json already anchored with DIFFERENT heads"
+
+    chained(fwd, 1)                                                  # shorter than what was anchored
+    assert not backup.anchor_desks(day, backup.chains(), s)[0]
+    # called without the files (as older callers do), only identical heads pass
+    chained(fwd, 4)
+    assert backup.anchor(day, backup.chains(), s) == (False, "anchors/2026-10-05.json already anchored with DIFFERENT heads")
 
 
 def test_head_at_is_the_head_the_file_had_at_that_length(tmp_path):

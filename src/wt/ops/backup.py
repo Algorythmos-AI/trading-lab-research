@@ -121,12 +121,13 @@ def extends(anchored: Any, paths: dict[str, Path]) -> bool:
 
 def anchor(day: dt.date, state: dict[str, dict[str, Any]], client: R2 | None = None, desk: Desk | None = None,
            paths: dict[str, Path] | None = None) -> tuple[bool, str]:
-    """Write-once anchor of today's chain heads. A second write with the same heads is fine; different heads for
-    an anchored day mean history was rewritten.
+    """Write-once anchor of today's chain heads. A second write of an anchored day is fine when the heads are the
+    same, or when the ledgers have only grown since: every anchored (lines, head) is still line `lines` of its
+    ledger and the ledger's chain is intact (`paths` names the files; without them only "the same" passes).
+    Anything else means history was rewritten.
 
-    A desk that writes around the clock (`always_open`) has a newer head every few minutes, so a second backup
-    on the same day would always differ. For such a desk the test is the one that matters for an append-only
-    file: the anchored head must still be line `lines` of the ledger (`paths`)."""
+    The ledgers are append-only, so "only grown" is the test that matters. The crypto journal grows every 15
+    minutes and the stocks ledgers grow during a session, so a second backup of a day is normal, not an alarm."""
     c = client or R2()
     if not c.configured:
         return False, "R2 not configured"
@@ -148,7 +149,7 @@ def anchor(day: dt.date, state: dict[str, dict[str, Any]], client: R2 | None = N
             was = None
         if was is not None and was == json.loads(body):
             return True, f"{key} already anchored"
-        if was is not None and desk is not None and desk.session == "always_open" and extends(was, paths or {}):
+        if was is not None and paths and extends(was, paths):
             return True, f"{key} already anchored; the ledger has only grown since"
         return False, f"{key} already anchored with DIFFERENT heads"
     return False, f"anchor write answered HTTP {w.status}"
