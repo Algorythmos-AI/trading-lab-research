@@ -204,7 +204,7 @@ function PaperPanel({ s }: { s: Snapshot }) {
                 <span className="text-muted-foreground font-mono text-xs">
                   {newYork(e.ts)} NY
                 </span>
-                <span className="min-w-0 text-sm">
+                <span className="min-w-0 text-sm [overflow-wrap:anywhere]">
                   {eventLabel(e.event)}
                   {e.detail ? <span className="text-muted-foreground">: {detailLabel(e.detail)}</span> : null}
                 </span>
