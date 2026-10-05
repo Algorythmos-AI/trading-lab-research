@@ -149,7 +149,7 @@ def schedule_check(jobs: list[dict], now: dt.datetime, kind: str = "launchd", da
 
     launchd (the Mac) fires on the host's Sydney clock, systemd (the VM) in America/New_York. Only future fires are
     listed and each job's own weekdays apply, so the first row of a job is its next run (a weekly job is not shown
-    as today). Weekend ET dates are marked ``no_session``; holidays are not known here (every job checks the
+    as today). ``local`` is always the owner's Sydney time, whichever clock fires the job. Weekend ET dates are marked ``no_session``; holidays are not known here (every job checks the
     market calendar itself). Uses zoneinfo, so both DST regimes are covered.
     """
     from wt.ops.schedule import JOBS
@@ -162,7 +162,7 @@ def schedule_check(jobs: list[dict], now: dt.datetime, kind: str = "launchd", da
         for t in (job.fires_et(now, days) if kind == "systemd" else job.fires(now, days)):
             et = t.astimezone(ET)
             session = et.weekday() < 5
-            rows.append({"job": j["label"], "local": t.strftime("%a %d %b %H:%M %Z"),
+            rows.append({"job": j["label"], "local": t.astimezone(SYD).strftime("%a %d %b %H:%M %Z"),
                          "et": et.strftime("%a %d %b %H:%M %Z"), "et_date": et.date().isoformat(),
                          "session": session, "ok": (et.time() <= need) if session else True,
                          "must_start_before_et": j["must_start_before_et"], "_at": et})
