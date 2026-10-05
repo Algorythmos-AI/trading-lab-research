@@ -164,3 +164,41 @@ def test_restore_test_restores_this_hosts_own_snapshot(paths, monkeypatch):
     assert seen[0][:4] == ("restore", "latest", "--host", "gcp-use1")
     includes = [seen[0][i + 1] for i, a in enumerate(seen[0]) if a == "--include"]
     assert includes == [backup.FORWARD_LEDGER.name, backup.JOURNAL.name]      # names, not absolute paths
+
+
+def test_a_locked_bucket_that_answers_409_is_read_back_like_a_412(paths):
+    """2026-10-04: the day's second backup got HTTP 409 from the locked anchors bucket for an anchor that was
+    already there and identical. It was reported as a failed anchor, failed the job and paged."""
+    fwd, jr, tmp, box, a = paths
+    chained(fwd, 3)
+    chained(jr, 2)
+
+    class Locked(Anchors):
+        def put(self, bucket, key, body, if_match=None, if_none_match=None, content_type=""):
+            if key in self.objs:
+                return Response(409, b"", None, None)
+            return super().put(bucket, key, body, if_match, if_none_match, content_type)
+    s, day = Locked(), dt.date(2026, 10, 20)
+    assert backup.anchor(day, backup.chains(), s) == (True, "anchored anchors/2026-10-20.json")
+    assert backup.anchor(day, backup.chains(), s) == (True, "anchors/2026-10-20.json already anchored")
+    chained(fwd, 4)
+    assert backup.anchor(day, backup.chains(), s) == (False, "anchors/2026-10-20.json already anchored with DIFFERENT heads")
+
+    class Unreadable(Locked):
+        def get(self, bucket, key):
+            return Response(503, b"", None, None)
+    u = Unreadable()
+    u.objs["anchors/2026-10-20.json"] = b"{}"
+    ok, why = backup.anchor(day, backup.chains(), u)
+    assert not ok and "could not be read back (HTTP 503)" in why
+
+
+def test_a_good_anchor_clears_an_earlier_anchor_alert(paths, monkeypatch):
+    fwd, jr, tmp, box, a = paths
+    chained(fwd, 2)
+    chained(jr, 2)
+    monkeypatch.setattr(backup, "restic", lambda *x, **k: SimpleNamespace(returncode=0, stdout="", stderr=""))
+    monkeypatch.setattr(backup.hc, "ping", lambda *x, **k: True)
+    a.fire("anchor", "Daily evidence anchor failed", "anchor write answered HTTP 409", 3)
+    assert backup.nightly(a, weekly=False, client=Anchors(), today=dt.date(2026, 10, 20)) == 0
+    assert "anchor" not in a.firing()

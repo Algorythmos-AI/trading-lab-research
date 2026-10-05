@@ -135,8 +135,13 @@ def anchor(day: dt.date, state: dict[str, dict[str, Any]], client: R2 | None = N
     w = c.put(ANCHOR_BUCKET, key, body.encode(), if_none_match="*")
     if w.status in (200, 201):
         return True, f"anchored {key}"
-    if w.status == 412:
+    if w.status in (409, 412):
+        # 412: the object exists (If-None-Match). 409: the locked bucket refuses to overwrite an object under
+        # retention, which is the same fact told another way (seen on the first second backup of a day,
+        # 2026-10-04). Either way the answer is in what is stored: read it back and compare.
         existing = c.get(ANCHOR_BUCKET, key)
+        if existing.status != 200:
+            return False, f"anchor write answered HTTP {w.status} and {key} could not be read back (HTTP {existing.status})"
         try:
             was = json.loads(existing.body) if existing.status == 200 else None
         except ValueError:
@@ -192,6 +197,8 @@ def nightly(alerts: Alerts | None = None, weekly: bool | None = None, client: R2
     DIGEST.write_text(json.dumps({"day": today.isoformat(), "verified": not problems, "anchored": ok,
                                   **{k: {"lines": v["lines"], "head": v["head"]} for k, v in state.items()}},
                                  indent=1))
+    if ok:
+        alerts.resolve("anchor", "Daily evidence anchor: ok", why)       # nothing else ever cleared this one
     if code == 0 and not problems:
         alerts.resolve("backup", "Nightly backup: ok", "Backed up and anchored.")
     hc.ping("wt-backup", "" if code == 0 and not problems else "fail", f"anchor: {why}")
