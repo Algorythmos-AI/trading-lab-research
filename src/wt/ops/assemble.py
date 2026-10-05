@@ -67,11 +67,11 @@ def owner_actions(sources: dict, cfg: dict) -> list[dict]:
                      "severity": "blocker"})
     dep = _d(sources, "deployed")
     if dep and dep.get("behind"):
-        acts.append({"id": "deployed", "title": f"Update ~/trading: it is {dep['behind']} commit(s) behind GitHub main",
-                     "why": f"launchd runs this checkout: {dep['behind']} newer reviewed commit(s) on main are not "
+        acts.append({"id": "deployed", "title": f"Deploy to the host: it is {dep['behind']} commit(s) behind GitHub main",
+                     "why": f"The host runs its own checkout: {dep['behind']} newer reviewed commit(s) on main are not "
                             "live yet. The deploy gate refuses while a job runs or in the trading window.",
-                     "blocks": "Correct live runs", "command": "make -C ~/trading deploy",
-                     "when": "When `make gate` is open (no job running, outside the trading night)", "link": None,
+                     "blocks": "Correct live runs", "command": "sudo -u wt /usr/local/bin/wt-deploy \"deploy <sha>\"",
+                     "when": "When the deploy gate is open (no job running, outside the trading window)", "link": None,
                      "severity": "high"})
     host = _d(sources, "host")
     if host:

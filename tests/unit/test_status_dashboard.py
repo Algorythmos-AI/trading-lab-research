@@ -242,7 +242,7 @@ def test_schedule_on_systemd_is_in_new_york_time():
     assert first["com.wt.routine"]["et"].startswith("Mon 05 Oct 07:30")
     assert first["com.wt.forward"]["et"].startswith("Mon 05 Oct 12:40")      # Friday 12:40 has passed
     assert first["com.wt.weekly"]["et"].startswith("Fri 02 Oct 20:00")
-    assert first["com.wt.routine"]["local"] == first["com.wt.routine"]["et"]
+    assert first["com.wt.routine"]["local"].startswith("Mon 05 Oct 22:30")    # the owner's Sydney clock, not ET twice
     assert all(r["session"] for r in rows)                                # systemd jobs never fire on a weekend
 
 
