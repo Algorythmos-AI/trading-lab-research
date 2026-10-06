@@ -512,7 +512,7 @@ def add_digest(snap: dict[str, Any], san: Sanitizer, now: dt.datetime, daily_dir
 def extras(now: dt.datetime, root: Path = ROOT) -> dict[str, Any]:
     from wt.ops import preflight
     from wt.ops.alerts import Alerts
-    from wt.ops.heartbeat import HEARTBEAT_DIR, last_runs
+    from wt.ops.heartbeat import last_runs, recent_runs, thin_runs
     from wt.ops.window import load_sessions
     # ADR 0005: this is the stocks desk's snapshot. Another desk's jobs and alerts belong to its own.
     from wt.core.desk import desk_of_alert
@@ -520,7 +520,7 @@ def extras(now: dt.datetime, root: Path = ROOT) -> dict[str, Any]:
 
     def mine(job: object) -> bool:
         return (JOBS[job].desk if isinstance(job, str) and job in JOBS else "stocks") == "stocks"
-    runs = [r for r in _read_jsonl(HEARTBEAT_DIR / "runs.jsonl") if mine(r.get("job"))]
+    runs = [r for r in recent_runs() if mine(r.get("job"))]
     cutoff = (now - dt.timedelta(days=14)).isoformat()
     kill = root / "KILL"
     deploys = sorted((STATE_DIR / "deploy").glob("*.json"))
@@ -545,7 +545,8 @@ def extras(now: dt.datetime, root: Path = ROOT) -> dict[str, Any]:
     else:
         last.pop("dashboard", None)
     return {
-        "jobs": {"last": last, "runs": [r for r in runs if str(r.get("started", "")) >= cutoff][-500:]},
+        "jobs": {"last": last, "runs": thin_runs([r for r in runs if str(r.get("started", "")) >= cutoff],
+                                                 {j.name for j in JOBS.values() if j.interval_s})[-500:]},
         "alerts": {"firing": [{"key": k, "since": v.get("since"), "title": v.get("title")}
                               for k, v in sorted(Alerts().firing().items()) if desk_of_alert(k) == "stocks"],
                    "history": views.pop("alerts_history", None)},
