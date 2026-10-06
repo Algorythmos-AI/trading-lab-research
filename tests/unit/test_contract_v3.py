@@ -42,6 +42,7 @@ def test_enum_leaves_reject_unknown_values():
 def test_worst_case_payload_stays_under_budget():
     views = gen.synthetic(n_trades=2000, days=14, n_alerts=2000)
     assert len(views["blotter"]) == 100 and len(views["perf"]["curve"]) == 400
+    assert len(views["today"]["trades"]) == 50 and len(views["today"]["days"]) == 90
     snap = gen.build_v3(json.loads(gen.V2.read_text()), views)
     body = json.dumps(snap, separators=(",", ":"))
     assert publish.validate(snap) == []
@@ -57,6 +58,7 @@ def test_v3_views_on_an_empty_host_are_valid(tmp_path):
     assert publish.validate(snap) == []
     assert snap["perf"]["stats"]["n"] == 0 and snap["risk"]["controls"]["latched"] is None
     assert snap["audit"] == {"chain_ok": True, "chain_bad_seq": None, "rows": 0, "bad_lines": 0, "events": []}
+    assert snap["today"]["session"] is None and snap["today"]["trades"] == [] and snap["today"]["pnl"]["trades"] == 0
 
 
 def test_one_failing_view_leaves_the_others(tmp_path, monkeypatch, capsys):

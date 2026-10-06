@@ -18,7 +18,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from wt.analytics import ops_view, performance, risk_view  # noqa: E402
+from wt.analytics import ops_view, performance, risk_view, today_view  # noqa: E402
 from wt.ops import audit, publish, thresholds  # noqa: E402
 
 V2 = ROOT / "dashboard" / "test" / "fixtures" / "snapshot.json"
@@ -73,6 +73,28 @@ def synthetic(n_trades: int = 24, days: int = 14, n_alerts: int = 6, seed: int =
                                "firing": 1, "kill": True, "head": "f53c9aa00000", "preflight_failed": 0,
                                "g2_trades": n_trades}, daily, today)
     curve = performance.curve(trades)
+    journal: list[dict[str, Any]] = []                     # the same trades as the runner would have journaled them
+    for i, t in enumerate(trades):
+        tid = f"{t['day']}-B-QQQM-0"
+        journal += [{"event": "armed", "ts": f"{t['day']}T12:30:00+00:00", "day": t["day"], "kill": False,
+                     "entries_off": []},
+                    {"event": "decision", "ts": f"{t['day']}T14:30:05+00:00", "would_signal": True, "blockers": [],
+                     "signal_t": f"{t['day']} 14:29:00+00:00", "trigger": 400.01, "stop": 398.0, "runner_acts": True},
+                    {"event": "entry_placed", "ts": f"{t['day']}T14:30:06+00:00", "trigger": 200.0, "stop": 199.0,
+                     "target": 202.0, "qty": 2},
+                    {"event": "entry_filled", "ts": f"{t['day']}T14:31:{i % 60:02d}+00:00", "trade_id": tid, "qty": 2,
+                     "price": 200.0},
+                    {**{k: v for k, v in t.items() if k != "virtual"}, "ts": f"{t['day']}T19:45:00+00:00",
+                     "trade_id": tid},
+                    {"event": "session_end", "ts": f"{t['day']}T20:00:05+00:00", "outcome": "traded"}]
+    journal += [{"event": "armed", "ts": f"{today}T12:30:00+00:00", "day": today.isoformat(), "kill": False,
+                 "entries_off": []},
+                {"event": "decision", "ts": f"{today}T14:30:05+00:00", "would_signal": True, "blockers": [],
+                 "signal_t": f"{today} 14:29:00+00:00", "trigger": 400.01, "stop": 398.0, "runner_acts": True},
+                {"event": "entry_placed", "ts": f"{today}T14:30:06+00:00", "trigger": 200.0, "stop": 199.0,
+                 "target": 202.0, "qty": 2},
+                {"event": "entry_filled", "ts": f"{today}T14:31:00+00:00", "trade_id": f"{today}-B-QQQM-0", "qty": 2,
+                 "price": 200.02}]
     dd_pct, dd_r = performance.max_drawdown(curve)
     return {
         "risk": risk_view.view(today, account, kill=True, root=ROOT),
@@ -81,6 +103,7 @@ def synthetic(n_trades: int = 24, days: int = 14, n_alerts: int = 6, seed: int =
                  "max_dd_pct": dd_pct, "max_dd_r": dd_r, "curve": curve, "histogram": performance.histogram(trades),
                  "band": {"available": False, "reason": "no expectation band until the DEC-0011 re-runs"}},
         "blotter": ops_view.blotter(trades),
+        "today": today_view.view(journal, today, account),
         "sla": ops_view.sla(runs, today, sessions, days=days),
         "audit": {"chain_ok": True, "chain_bad_seq": None, "rows": len(rows), "bad_lines": 0, "events": trail},
         "alerts_history": ops_view.alert_log(alerts),

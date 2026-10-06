@@ -1,4 +1,5 @@
-import { CalendarClock, ClipboardList, Gauge, Hand, Milestone, Power } from "lucide-react";
+import { CalendarClock, CircleDollarSign, ClipboardList, Gauge, Hand, Milestone, Power } from "lucide-react";
+import Link from "next/link";
 import { CopyCommand } from "@/components/client/copy-command";
 import { RelativeTime } from "@/components/client/relative-time";
 import { Empty } from "@/components/empty";
@@ -7,6 +8,7 @@ import { HealthBanner } from "@/components/health-banner";
 import { NoSnapshot } from "@/components/no-snapshot";
 import { Panel } from "@/components/panel";
 import { StatusBadge, TONE_TEXT, ToneIcon } from "@/components/status";
+import { PnlTiles } from "@/components/today/trading";
 import { DigestPanel } from "@/components/v3/digest";
 import { duration, newYork, sydney, txt } from "@/lib/format";
 import { computeHealth } from "@/lib/health";
@@ -14,6 +16,7 @@ import { humanize, jobKey, jobName, jobTone, severityRank, severityTone, sortJob
 import { requestTime } from "@/lib/now";
 import { loadSnapshot } from "@/lib/snapshot";
 import { summarize } from "@/lib/summary";
+import { outcomeLine, trading } from "@/lib/trading";
 import { entries, list, type Snapshot } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +45,7 @@ export default async function OverviewPage() {
         {s.overview?.subline ? <p className="text-muted-foreground max-w-[80ch] text-sm">{s.overview.subline}</p> : null}
       </section>
       <KillNotice s={s} />
+      <PnlStrip s={s} />
       <Kpis s={s} />
       <DigestPanel s={s} />
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
@@ -60,6 +64,30 @@ export default async function OverviewPage() {
         )}
       </Panel>
     </>
+  );
+}
+
+/** Paper B's profit and loss at a glance; the trades and the detail are on the Today page. */
+function PnlStrip({ s }: { s: Snapshot }) {
+  const v = trading(s);
+  if (!v.available) return null;
+  const o = outcomeLine(v);
+  return (
+    <Panel
+      title="Paper B profit and loss"
+      icon={CircleDollarSign}
+      means="What the paper strategy's closed trades have made or lost on its US$600 paper ledger. Paper money only."
+      action={<StatusBadge tone={o.tone}>{o.title}</StatusBadge>}
+    >
+      <div className="grid gap-3">
+        <PnlTiles v={v} />
+        <p className="text-muted-foreground text-xs">
+          <Link href="/today" className="underline underline-offset-2">
+            See every trade, the open position and why it did or did not trade
+          </Link>
+        </p>
+      </div>
+    </Panel>
   );
 }
 

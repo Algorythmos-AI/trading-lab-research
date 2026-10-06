@@ -759,4 +759,95 @@ export interface Snapshot {
         } | null)[]
       | null;
   } | null;
+  today?: {
+    session?: string | null;
+    outcome?: string | null;
+    ended?: boolean | null;
+    armed?: {
+      at?: string | null;
+      kill?: boolean | null;
+      entries_off?: number | null;
+    } | null;
+    /**
+     * @maxItems 2000
+     */
+    signals?:
+      | ({
+          at?: string | null;
+          trigger?: number | null;
+          stop?: number | null;
+          blockers?: string | null;
+          acted?: boolean | null;
+        } | null)[]
+      | null;
+    position?: {
+      symbol?: string | null;
+      state?: string | null;
+      qty?: number | null;
+      entry?: number | null;
+      entry_at?: string | null;
+      trigger?: number | null;
+      stop?: number | null;
+      target?: number | null;
+    } | null;
+    pnl?: {
+      today?: number | null;
+      week?: number | null;
+      month?: number | null;
+      total?: number | null;
+      today_r?: number | null;
+      week_r?: number | null;
+      month_r?: number | null;
+      total_r?: number | null;
+      today_trades?: number | null;
+      week_trades?: number | null;
+      month_trades?: number | null;
+      equity?: number | null;
+      start?: number | null;
+      return_pct?: number | null;
+      trades?: number | null;
+      wins?: number | null;
+      losses?: number | null;
+      win_rate?: number | null;
+      avg_win?: number | null;
+      avg_loss?: number | null;
+      profit_factor?: number | null;
+      best?: number | null;
+      worst?: number | null;
+      max_dd?: number | null;
+    } | null;
+    /**
+     * @maxItems 2000
+     */
+    trades?:
+      | ({
+          session?: string | null;
+          symbol?: string | null;
+          qty?: number | null;
+          entry?: number | null;
+          entry_at?: string | null;
+          exit?: number | null;
+          exit_at?: string | null;
+          stop?: number | null;
+          target?: number | null;
+          pnl?: number | null;
+          r?: number | null;
+          reason?: string | null;
+          held_min?: number | null;
+          estimated?: boolean | null;
+          origin?: string | null;
+        } | null)[]
+      | null;
+    /**
+     * @maxItems 2000
+     */
+    days?:
+      | ({
+          date?: string | null;
+          pnl?: number | null;
+          r?: number | null;
+          trades?: number | null;
+        } | null)[]
+      | null;
+  } | null;
 }

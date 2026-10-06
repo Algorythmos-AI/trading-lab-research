@@ -172,6 +172,20 @@ ALLOW: dict[str, Any] = {
     "digest": {"since": S, "items": [{"key": S, "label": S, "prev": S, "now": S, "changed": B}]},
     "audit": {"chain_ok": B, "chain_bad_seq": I, "rows": I, "bad_lines": I,
               "events": [{"at": S, "kind": S, "source": S, "detail": T}]},
+    # ---- Paper B, trade by trade: what it did in its latest session and what it has made or lost ----
+    "today": {"session": S, "outcome": S, "ended": B,
+              "armed": {"at": S, "kill": B, "entries_off": I},
+              "signals": [{"at": S, "trigger": N, "stop": N, "blockers": S, "acted": B}],
+              "position": {"symbol": S, "state": S, "qty": N, "entry": N, "entry_at": S, "trigger": N, "stop": N,
+                           "target": N},
+              "pnl": {"today": N, "week": N, "month": N, "total": N, "today_r": N, "week_r": N, "month_r": N,
+                      "total_r": N, "today_trades": I, "week_trades": I, "month_trades": I, "equity": N, "start": N,
+                      "return_pct": N, "trades": I, "wins": I, "losses": I, "win_rate": N, "avg_win": N,
+                      "avg_loss": N, "profit_factor": N, "best": N, "worst": N, "max_dd": N},
+              "trades": [{"session": S, "symbol": S, "qty": N, "entry": N, "entry_at": S, "exit": N, "exit_at": S,
+                          "stop": N, "target": N, "pnl": N, "r": N, "reason": S, "held_min": N, "estimated": B,
+                          "origin": S}],
+              "days": [{"date": S, "pnl": N, "r": N, "trades": I}]},
 }
 REQUIRED = ("schema", "schema_version", "run_id", "as_of")
 _KEY = re.compile(r"^[\w.:+\- /|]{1,64}$")
@@ -451,7 +465,7 @@ def v3_views(now: dt.datetime, *, runs: list[dict[str, Any]], sessions: dict[dt.
     """The Wave 1a sections: risk, perf, blotter, sla, audit and the alert history (the digest is added in
     _publish, from the built snapshot). Each is built on its own: one that fails is left out (and named on
     stderr) without taking the others with it."""
-    from wt.analytics import g2, ops_view, performance, risk_view
+    from wt.analytics import g2, ops_view, performance, risk_view, today_view
     from wt.ops import audit
     from wt.ops.alerts import ALERT_DIR
     today = now.astimezone(ET).date()
@@ -493,6 +507,7 @@ def v3_views(now: dt.datetime, *, runs: list[dict[str, Any]], sessions: dict[dt.
                                            root=root, va_path=live / "virtual_account.json"))
     section("perf", perf)
     section("blotter", lambda: ops_view.blotter(journal))
+    section("today", lambda: today_view.view(journal, today, risk_view.load_account(live / "virtual_account.json")))
     section("sla", lambda: ops_view.sla(runs, today, sessions))
     section("audit", audit_section)
     section("alerts_history", lambda: ops_view.alert_log(history()))
