@@ -256,4 +256,113 @@ export interface CryptoSnapshot {
         } | null)[]
       | null;
   } | null;
+  /**
+   * @maxItems 2000
+   */
+  sleeves?:
+    | ({
+        name?: string | null;
+        strategy?: string | null;
+        stage?: string | null;
+        tf_min?: number | null;
+        config?: string | null;
+        equity?: number | null;
+        start_equity?: number | null;
+        return_pct?: number | null;
+        cash?: number | null;
+        exposure?: number | null;
+        open_pnl?: number | null;
+        latched?: boolean | null;
+        pnl?: {
+          today?: number | null;
+          week?: number | null;
+          month?: number | null;
+          total?: number | null;
+          today_trades?: number | null;
+          week_trades?: number | null;
+          month_trades?: number | null;
+        } | null;
+        trades?: number | null;
+        wins?: number | null;
+        losses?: number | null;
+        win_rate?: number | null;
+        mean_r?: number | null;
+        total_r?: number | null;
+        fees?: number | null;
+        max_dd?: number | null;
+        /**
+         * @maxItems 2000
+         */
+        positions?:
+          | ({
+              pair?: string | null;
+              qty?: number | null;
+              entry_price?: number | null;
+              entry_time?: string | null;
+              stop?: number | null;
+              target?: number | null;
+              mark?: number | null;
+              mark_time?: string | null;
+              unrealised?: number | null;
+              unrealised_pct?: number | null;
+              unrealised_r?: number | null;
+              risk?: number | null;
+            } | null)[]
+          | null;
+        /**
+         * @maxItems 2000
+         */
+        recent?:
+          | ({
+              pair?: string | null;
+              entry_time?: string | null;
+              exit_time?: string | null;
+              entry_price?: number | null;
+              exit_price?: number | null;
+              qty?: number | null;
+              pnl?: number | null;
+              r?: number | null;
+              reason?: string | null;
+              held_min?: number | null;
+            } | null)[]
+          | null;
+        /**
+         * @maxItems 2000
+         */
+        signals?:
+          | ({
+              t?: string | null;
+              pair?: string | null;
+              outcome?: string | null;
+              /**
+               * @maxItems 2000
+               */
+              why?: (string | null)[] | null;
+            } | null)[]
+          | null;
+        /**
+         * @maxItems 2000
+         */
+        why_not?:
+          | ({
+              pair?: string | null;
+              bar?: string | null;
+              fire?: boolean | null;
+              /**
+               * @maxItems 2000
+               */
+              why?: (string | null)[] | null;
+            } | null)[]
+          | null;
+        /**
+         * @maxItems 2000
+         */
+        equity_curve?:
+          | ({
+              t?: string | null;
+              equity?: number | null;
+            } | null)[]
+          | null;
+      } | null)[]
+    | null;
 }

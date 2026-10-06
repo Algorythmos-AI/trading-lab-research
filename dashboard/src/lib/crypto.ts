@@ -70,6 +70,21 @@ const CODES: Record<string, string> = {
   stop: "Stop",
   target: "Target",
   time: "Time stop",
+  // the tournament sleeves (DEC-0015)
+  trend_exit: "Trend ended",
+  no_uptrend: "no uptrend",
+  no_new_high: "no new high",
+  low_volume: "volume not above average",
+  below_daily_average: "below its 50-day average",
+  no_dip: "no recent sell-off",
+  not_reclaimed: "not back above EMA-8",
+  no_history: "not enough history",
+  no_atr: "no range measure yet",
+  stop_too_tight: "stop would be too close",
+  stop_too_wide: "stop would be too far",
+  late_bar: "signal found too late",
+  positions: "position limit reached",
+  budget: "out of time for this cycle",
 };
 
 export function code(c: string | null | undefined): string {

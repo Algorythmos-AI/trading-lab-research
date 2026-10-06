@@ -1,5 +1,6 @@
 import { Activity, Gauge, LineChart, ListChecks } from "lucide-react";
 import { CryptoKillNotice, NoCryptoSnapshot } from "@/components/crypto/panels";
+import { SleeveChecks, SleevePositions, SleeveSignals, SleeveTrades, TournamentBoard } from "@/components/crypto/tournament";
 import { Empty } from "@/components/empty";
 import { HealthBanner } from "@/components/health-banner";
 import { KeyValues } from "@/components/kv";
@@ -13,6 +14,7 @@ import { fracPct, num, rMult, shortDate, signed, zoned } from "@/lib/format";
 import { freshness } from "@/lib/freshness";
 import { requestTime } from "@/lib/now";
 import { loadCryptoSnapshot } from "@/lib/snapshot";
+import { tournament } from "@/lib/tournament";
 import { list } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +27,7 @@ export default async function CryptoOverviewPage() {
     <>
       <PageHeading
         title="Overview"
-        intro="The crypto desk: Kraken spot pairs on public market data, booked on the lab's own paper simulator. It never holds venue credentials and cannot place a real order."
+        intro="The crypto desk: Kraken spot pairs on public market data, booked on the lab's own paper simulator. Three tournament strategies trade on 4-hour bars beside the original 15-minute rule. It never holds venue credentials and cannot place a real order."
       />
       {result.status !== "ok" ? (
         <NoCryptoSnapshot status={result.status} />
@@ -33,6 +35,7 @@ export default async function CryptoOverviewPage() {
         <>
           <HealthBanner health={cryptoHealth(result.snapshot, freshness(result.snapshot.as_of ?? null, list(result.snapshot.expected_windows), now))} />
           <CryptoKillNotice s={result.snapshot} />
+          <TournamentPanels s={result.snapshot} />
           <KeyNumbers s={result.snapshot} />
           <MarketPanel s={result.snapshot} />
           <div className="grid gap-5 lg:grid-cols-2">
@@ -45,13 +48,30 @@ export default async function CryptoOverviewPage() {
   );
 }
 
+/** The tournament sleeves (DEC-0015). Shown once the host publishes them; the baseline's panels follow. */
+function TournamentPanels({ s }: { s: Crypto }) {
+  const t = tournament(s);
+  if (!t.available) return null;
+  return (
+    <>
+      <TournamentBoard s={s} t={t} />
+      <SleevePositions s={s} t={t} />
+      <SleeveTrades s={s} t={t} />
+      <div className="grid gap-5 lg:grid-cols-2">
+        <SleeveSignals t={t} />
+        <SleeveChecks t={t} />
+      </div>
+    </>
+  );
+}
+
 function KeyNumbers({ s }: { s: Crypto }) {
   const m = moneyOf(s);
   const p = s.perf;
   const passing = items(s.quality?.pairs).filter((x) => x.passes === true).length;
   const pairs = items(s.quality?.pairs).length;
   return (
-    <Panel title="Key numbers" icon={Gauge} means={`The figures the crypto desk is judged on. Money is paper money in ${CURRENCY_NAME[s.config?.quote_currency ?? ""] ?? "the desk's quote currency"}.`}>
+    <Panel title="Baseline rule: key numbers" icon={Gauge} means={`The original 15-minute rule on its own book, kept unchanged as the baseline the tournament is compared with. It rarely fires. Money is paper money in ${CURRENCY_NAME[s.config?.quote_currency ?? ""] ?? "the desk's quote currency"}.`}>
       <KeyValues
         className="sm:grid-cols-4"
         items={[
@@ -73,7 +93,7 @@ function MarketPanel({ s }: { s: Crypto }) {
   const rows = items(s.market);
   return (
     <Panel
-      title="Latest bar, per pair"
+      title="Baseline rule: latest bar, per pair"
       icon={Activity}
       means="What the strategy saw on the most recent closed 15-minute bar. A pair is tradable only if the bar had trades and the quote was tight."
     >
@@ -120,7 +140,7 @@ function EquityPanel({ s }: { s: Crypto }) {
   const curve = items(s.perf?.equity_curve).map((p) => p.equity).filter((v): v is number => typeof v === "number");
   const start = s.book?.start_equity ?? curve[0] ?? 0;
   return (
-    <Panel title="Paper equity" icon={LineChart} means="Equity of the paper book hour by hour, as a change from where it started. Fees are included.">
+    <Panel title="Baseline rule: paper equity" icon={LineChart} means="Equity of the baseline rule's paper book hour by hour, as a change from where it started. Fees are included.">
       {curve.length < 2 ? (
         <Empty title="Not enough history yet" />
       ) : (
@@ -138,7 +158,7 @@ function EquityPanel({ s }: { s: Crypto }) {
 function DailyPanel({ s }: { s: Crypto }) {
   const days = items(s.activity?.daily).slice(-7).reverse();
   return (
-    <Panel title="Daily summary" icon={ListChecks} means="Per UTC day: bars observed, bars where every entry condition held, and what the desk did.">
+    <Panel title="Baseline rule: daily summary" icon={ListChecks} means="Per UTC day: bars observed, bars where every entry condition held, and what the desk did.">
       {days.length === 0 ? (
         <Empty title="No days recorded yet" />
       ) : (
