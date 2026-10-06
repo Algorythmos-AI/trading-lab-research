@@ -257,32 +257,32 @@ def sleeves_view(desk: Desk, cfg: dict[str, Any], rows: list[dict[str, Any]], no
         book = Book.load(folder / "book.json", Decimal(str(sc["common"]["start_equity"])))
         equity = float(book.equity({k: float(v[0]) for k, v in marks.items()}))
         exits = [r for r in mine if r.get("kind") == "exit"]
-        pnl = [(str(r.get("t", ""))[:10], p) for r in exits if (p := _f(r.get("pnl"))) is not None]
+        pnl = [(str(r.get("t", ""))[:10], v) for r in exits if (v := _f(r.get("pnl"))) is not None]
         rs = [r["r"] for r in exits if isinstance(r.get("r"), int | float)]
-        wins = sum(p > 0 for _, p in pnl)
+        wins = sum(v > 0 for _, v in pnl)
         run = peak = dd = 0.0
-        for _, p in pnl:
-            run += p
+        for _, v in pnl:
+            run += v
             peak, dd = max(peak, run), min(dd, run - peak)
-        positions = []
-        for p in book.positions.values():
-            mark = marks.get(p.pair)
-            open_ = float(p.qty) * (float(mark[0]) - float(p.entry_price)) - float(p.entry_fee) if mark else None
+        positions: list[dict[str, Any]] = []
+        for held in book.positions.values():
+            mark = marks.get(held.pair)
+            open_ = float(held.qty) * (float(mark[0]) - float(held.entry_price)) - float(held.entry_fee) if mark else None
             positions.append({
-                "pair": p.pair, "qty": float(p.qty), "entry_price": float(p.entry_price), "entry_time": _iso(p.entry_t),
-                "stop": float(p.stop), "target": float(p.target) if p.target.is_finite() else None,
+                "pair": held.pair, "qty": float(held.qty), "entry_price": float(held.entry_price), "entry_time": _iso(held.entry_t),
+                "stop": float(held.stop), "target": float(held.target) if held.target.is_finite() else None,
                 "mark": float(mark[0]) if mark else None, "mark_time": _iso(mark[1]) if mark else None,
-                "unrealised": open_, "risk": float(p.risk),
-                "unrealised_pct": (float(mark[0]) / float(p.entry_price) - 1) * 100 if mark else None,
-                "unrealised_r": open_ / float(p.risk) if open_ is not None and p.risk > 0 else None})
+                "unrealised": open_, "risk": float(held.risk),
+                "unrealised_pct": (float(mark[0]) / float(held.entry_price) - 1) * 100 if mark else None,
+                "unrealised_r": open_ / float(held.risk) if open_ is not None and held.risk > 0 else None})
         last_eval = next((r for r in reversed(mine) if r.get("kind") == "sleeve" and r.get("pairs")), None)
         curve = {str(r["t"])[:13]: e for r in mine if r.get("kind") == "sleeve" and str(r.get("t", "")) >= cutoff
                  and (e := _f(r.get("equity"))) is not None}
         curve[now.isoformat()[:13]] = equity
-        opens = [x["unrealised"] for x in positions if x["unrealised"] is not None]
+        opens: list[float] = [float(x["unrealised"]) for x in positions if x["unrealised"] is not None]
 
         def total(since: str, pnl: list[tuple[str, float]] = pnl) -> tuple[float, int]:
-            got = [p for d, p in pnl if d >= since]
+            got = [v for d, v in pnl if d >= since]
             return sum(got), len(got)
         out.append({
             "name": name, "strategy": str(sc[name].get("hypothesis")), "stage": engine.STAGE,
