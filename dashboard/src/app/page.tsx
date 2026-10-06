@@ -10,7 +10,7 @@ import { Panel } from "@/components/panel";
 import { StatusBadge, TONE_TEXT, ToneIcon } from "@/components/status";
 import { PnlTiles } from "@/components/today/trading";
 import { DigestPanel } from "@/components/v3/digest";
-import { duration, newYork, sydney, txt } from "@/lib/format";
+import { duration, newYork, shortDate, sydney, txt } from "@/lib/format";
 import { computeHealth } from "@/lib/health";
 import { humanize, jobKey, jobName, jobTone, severityRank, severityTone, sortJobKeys, stateTone } from "@/lib/labels";
 import { requestTime } from "@/lib/now";
@@ -77,7 +77,11 @@ function PnlStrip({ s }: { s: Snapshot }) {
       title="Paper B profit and loss"
       icon={CircleDollarSign}
       means="What the paper strategy's closed trades have made or lost on its US$600 paper ledger. Paper money only."
-      action={<StatusBadge tone={o.tone}>{o.title}</StatusBadge>}
+      action={
+        <StatusBadge tone={o.tone}>
+          {v.current || v.session === null ? o.title : `${shortDate(v.session)}: ${o.title}`}
+        </StatusBadge>
+      }
     >
       <div className="grid gap-3">
         <PnlTiles v={v} />

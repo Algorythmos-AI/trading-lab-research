@@ -69,6 +69,14 @@ describe("Paper B's trades and profit and loss", () => {
     expect(outcomeLine(v).title).toBe("No session recorded yet");
   });
 
+  it("shows the runner's own ledger figures until the ledger file exists", () => {
+    const base = fixture();
+    const s = { ...base, today: { ...base.today, pnl: { ...base.today!.pnl, equity: null, start: null, return_pct: null } }, ops: { ...base.ops, paper: { ...base.ops?.paper, virtual: { equity: 606, start: 600 } } } } as Snapshot;
+    const v = trading(s);
+    expect([v.equity, v.start]).toEqual([606, 600]);
+    expect(v.returnPct).toBeCloseTo(1, 6);
+  });
+
   it("names how a trade ended", () => {
     expect(reasonLabel("eod_flatten")).toBe("Closed before the bell");
     expect(reasonLabel("something_new")).toBe("something new");
