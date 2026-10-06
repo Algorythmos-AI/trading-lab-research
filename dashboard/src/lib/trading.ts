@@ -87,6 +87,9 @@ export interface Trading {
   signals: Signal[];
 }
 
+const returnOf = (equity: number | null, start: number | null): number | null =>
+  equity !== null && start !== null && start > 0 ? (equity / start - 1) * 100 : null;
+
 export function trading(s: Snapshot): Trading {
   const t = s.today;
   const p = t?.pnl;
@@ -148,9 +151,10 @@ export function trading(s: Snapshot): Trading {
       { key: "month", label: "This month", money: n(p?.month), r: n(p?.month_r), trades: n(p?.month_trades) },
       { key: "total", label: "All time", money: n(p?.total), r: n(p?.total_r), trades: n(p?.trades) },
     ],
-    equity: n(p?.equity),
-    start: n(p?.start),
-    returnPct: n(p?.return_pct),
+    // Before the first trade the ledger file does not exist yet: the runner's own figures stand in for it.
+    equity: n(p?.equity) ?? n(s.ops?.paper?.virtual?.equity),
+    start: n(p?.start) ?? n(s.ops?.paper?.virtual?.start),
+    returnPct: n(p?.return_pct) ?? returnOf(n(s.ops?.paper?.virtual?.equity), n(s.ops?.paper?.virtual?.start)),
     stats: {
       trades: n(p?.trades) ?? 0,
       wins: n(p?.wins) ?? 0,
