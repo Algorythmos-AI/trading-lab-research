@@ -21,7 +21,8 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
                  src/wt/analytics/risk_view.py src/wt/analytics/ops_view.py src/wt/ops/audit.py src/wt/ops/control.py \
                  src/wt/core/desk.py src/wt/crypto/data.py src/wt/crypto/indicators.py src/wt/crypto/quality.py \
                  src/wt/crypto/strategy.py src/wt/crypto/book.py src/wt/crypto/risk.py src/wt/crypto/features.py \
-                 src/wt/crypto/labels.py src/wt/crypto/cycle.py src/wt/crypto/snapshot.py src/wt/crypto/control.py
+                 src/wt/crypto/labels.py src/wt/crypto/cycle.py src/wt/crypto/snapshot.py src/wt/crypto/control.py \
+                 src/wt/crypto/rules.py src/wt/crypto/sleeves.py
 JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
