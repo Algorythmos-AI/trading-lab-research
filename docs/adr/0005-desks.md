@@ -46,6 +46,10 @@ trigger, no tests, state lost on redeploy. It is rebuilt here, not copied.
    like every other job. A deploy takes the interval jobs' locks before it changes the checkout. The equity
    deploy gate is unchanged.
 
+   A desk may run several **sleeves**: one registered strategy and one paper book each, with its own limits
+   and loss latch (DEC-0014, DEC-0015). Sleeves share the desk's kill switch, its job and its one journal,
+   where each row names its sleeve. Their results are reported per sleeve and never pooled.
+
 6. **Off-host monitoring follows the desk's session model.** The crypto watchdog window is always open; a desk
    that has never published is "new" and does not page.
 
