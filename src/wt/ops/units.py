@@ -95,7 +95,10 @@ def service(job: Job, root: Path, user: str = USER) -> str:
 
 
 def timer(job: Job) -> str:
-    if job.calendar:
+    if job.calendars:
+        assert job.interval_s, f"{job.name}: a calendar job also states its interval"
+        when = [f"OnCalendar={c}" for c in job.calendars]
+    elif job.calendar:
         assert job.interval_s, f"{job.name}: a calendar job also states its interval"
         when = [f"OnCalendar={job.calendar} UTC"]
     elif job.interval_s:

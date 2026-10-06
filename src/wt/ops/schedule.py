@@ -56,6 +56,10 @@ class Job:
     # systemd OnCalendar in UTC for an interval job that must stay on a clock boundary (a 15-minute bar close):
     # OnUnitActiveSec counts from the last start and drifts. interval_s still says how often it runs.
     calendar: str | None = None
+    # systemd OnCalendar specs, each with its own zone, for a job with more than one rhythm (the stocks publisher:
+    # every 5 minutes in the US session, every 15 otherwise). `interval_s` stays the slowest of them: it is what
+    # the cadence check holds the job to at any hour.
+    calendars: tuple[str, ...] = ()
 
 
     def fires(self, after: dt.datetime, days: int = 8) -> list[dt.datetime]:
@@ -108,7 +112,11 @@ JOBS: dict[str, Job] = {j.name: j for j in (
         et="Fri 20:00", runtime_max_h=4),
     Job("dashboard", "com.wt.dashboard", 0, 0, ("-m", "wt.ops.publish"), "backtest", "dashboard", deadline_min=6,
         trading=False, interval_s=900, preflight=False,
-        what="Collect status, sanitize, publish to the Vercel dashboard every 15 minutes", runtime_max_h=0.25),
+        # Minute 3, not 0: the routine writes each stage file at about :02, and it stays clear of the crypto cycle
+        # (:00:10) and the crypto publish (:01).
+        calendars=("Mon..Fri 07..17:03/5:00 America/New_York", "*:03/15:00 UTC"),
+        what="Collect status, sanitize, publish to the dashboard: every 5 minutes in the US session, every 15 otherwise",
+        runtime_max_h=0.25),
     # The crypto desk (ADR 0005) runs around the clock as two interval jobs on UTC calendar boundaries: one bar
     # cycle ten seconds after each 15-minute close, and its publish a minute after that. Neither is a trading job
     # for the equity deploy gate: a deploy waits for a cycle in flight (wt.ops.deploy.quiesced) instead.

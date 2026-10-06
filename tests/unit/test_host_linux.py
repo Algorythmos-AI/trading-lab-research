@@ -95,11 +95,9 @@ def test_paper_b_unit(tmp_path):
     assert "Persistent=false" in units.timer(JOBS["paper-b"])
 
 
-def test_dashboard_unit_is_an_interval_and_never_restarts():
+def test_dashboard_unit_never_restarts_and_has_no_start_limit():
     assert "Restart=no" in units.service(JOBS["dashboard"], Path("/r"))
     assert "StartLimitIntervalSec=0" in units.service(JOBS["dashboard"], Path("/r")).splitlines()
-    t = units.timer(JOBS["dashboard"])
-    assert "OnUnitActiveSec=900s" in t and "OnCalendar" not in t
 
 
 def test_only_clock_time_jobs_have_a_start_limit():
@@ -329,3 +327,14 @@ def test_status_flags_an_interval_job_that_is_not_being_started(tmp_path, monkey
     monkeypatch.setitem(desks.DESKS, "crypto", dataclasses.replace(desks.DESKS["crypto"], state_dir=tmp_path / "crypto"))
     assert [x.split(":")[0] for x in jobs.cadence(now, tmp_path)] == [
         "  [ok] dashboard cadence", "  [FAIL] crypto cadence", "  [FAIL] dashboard-crypto cadence"]
+
+
+def test_the_stocks_publisher_runs_every_five_minutes_in_session_and_every_fifteen_otherwise():
+    j = JOBS["dashboard"]
+    t = units.timer(j)
+    assert "OnCalendar=Mon..Fri 07..17:03/5:00 America/New_York" in t and "OnCalendar=*:03/15:00 UTC" in t
+    assert "OnUnitActiveSec" not in t and "OnBootSec" not in t
+    assert j.interval_s == 900 and j.calendar is None            # the cadence check still asks for 4 runs an hour
+    if shutil.which("systemd-analyze"):
+        for spec in j.calendars:
+            assert subprocess.run(["systemd-analyze", "calendar", spec], capture_output=True).returncode == 0, spec

@@ -17,7 +17,7 @@ const TERMS: { term: string; means: string }[] = [
   { term: "Missed", means: "A job that was due on a US trading day and left no record at all. That is the case the dead-man's switches exist to catch." },
   { term: "G2 gate", means: "The paper-trading evidence step. Paper B must reach set counts of trades, sessions and incident-free days before any real-money step is even discussed." },
   { term: "Forward test", means: "Signals recorded live each session with no orders sent, so a strategy's rules can be judged on data it never saw." },
-  { term: "Snapshot", means: "The status the trading host publishes every 15 minutes. This site only shows the latest one; it can't change anything." },
+  { term: "Snapshot", means: "The status the trading host publishes: every 5 minutes during the US session, every 15 minutes otherwise. This site only shows the latest one; it can't change anything." },
   { term: "Audit trail", means: "One time-ordered record of deploys, kill-switch changes, latch resets, refused or failed jobs, and alerts. The owner's own notes never leave the Mac." },
   { term: "Paper", means: "Simulated orders at the broker, with no real money. Everything this lab runs is paper." },
 ];
