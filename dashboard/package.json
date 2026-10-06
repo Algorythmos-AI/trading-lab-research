@@ -49,6 +49,9 @@
     "vitest": "5.0.2"
   },
   "pnpm": {
-    "onlyBuiltDependencies": []
+    "onlyBuiltDependencies": [],
+    "overrides": {
+      "source-map-js": ">=1.2.2"
+    }
   }
 }
