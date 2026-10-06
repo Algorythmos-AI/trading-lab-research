@@ -29,6 +29,7 @@ from wt.ops.alerts import Pager
 from wt.risk.virtual_account import VirtualAccount
 
 DAY = dt.date(2026, 9, 30)
+REAL_SIGNAL = runner_b.setups.b_intraday_momentum       # the env fixture replaces it with a scripted one
 
 
 class Crash(BaseException):
@@ -88,7 +89,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(runner_b.events, "policy", lambda now: ("normal", None))
     fired = {"done": False}
 
-    def signal(closed, sigma, prev_close):                   # one B signal on the 10:00 bar
+    def signal(closed, sigma, prev_close, **kw):             # one B signal on the 10:00 bar
         last = pd.Timestamp(closed.t.iloc[-1]).tz_convert(ET)
         if not fired["done"] and last.hour == 10 and last.minute >= 0:
             fired["done"] = True
@@ -641,3 +642,118 @@ def test_paper_outcome_ignores_decision_events():
     base = [{"event": "armed"}, {"event": "session_end", "virtual": {}}]
     extra = [{"event": "decision", "would_signal": True}, {"event": "decision_summary", "would_signals": 1}]
     assert jobs.paper_outcome(base) == jobs.paper_outcome(base[:1] + extra + base[1:])
+
+
+# ---- the real signal through the real loop: a signal on the bar that just closed becomes an order ----
+
+class BreakoutREST(FakeREST):
+    """QQQ sits at 500.5, then closes at 503 from the 10:27 bar: above the noise boundary on the 10:29 bar,
+    the first half-hour mark after it. `missing` drops minutes the way the IEX feed does when nothing trades."""
+
+    def __init__(self, clock: Clock, missing: tuple[str, ...] = ()):
+        super().__init__(clock)
+        self.missing = set(missing)
+
+    def get(self, url: str, params: dict) -> dict:
+        j = super().get(url, params)
+        if "quotes/latest" in url:
+            return j
+        sym = params["symbols"]
+        rows = []
+        for r in j["bars"][sym]:
+            t = pd.Timestamp(r["t"]).tz_convert(ET)
+            if t.strftime("%H:%M") in self.missing:
+                continue
+            c = 503.0 if (t.hour, t.minute) >= (10, 27) else 500.5
+            rows.append({**r, "o": c, "h": c + 0.1, "l": c - 0.1, "c": c})
+        return {"bars": {sym: rows}}
+
+
+@pytest.fixture
+def real_signal(env, monkeypatch):
+    monkeypatch.setattr(runner_b.setups, "b_intraday_momentum", REAL_SIGNAL)
+    monkeypatch.setattr(runner_b.LiveData, "sigma_and_prev_close", lambda self, day, sessions: (0.004, 500.0))
+    return env
+
+
+def _round_trip(b: SimBroker):
+    def hook(now):
+        for o in b.open_orders():
+            if o.side == "buy" and now >= at(10, 31):
+                b.fill(o.client_order_id, o.stop_price or o.limit_price)
+        if now >= at(15, 45):
+            fill_exits_at(b, 252.00)
+    return hook
+
+
+@pytest.mark.parametrize("missing", [(), ("09:47",), ("09:47", "10:12", "10:28")])
+def test_the_real_signal_on_the_bar_that_just_closed_becomes_one_order(real_signal, missing):
+    b = SimBroker()
+    clk = Clock(at(8, 0), _round_trip(b))
+    synced(b, clk)
+    runner_b.run(DAY, broker=b, rest=BreakoutREST(clk, missing), now_fn=clk.now, sleep_fn=clk.sleep)
+    j = journal(real_signal)
+    placed = [r for r in j if r["event"] == "entry_placed"]
+    assert len(placed) == 1, [r["event"] for r in j if r["event"].startswith(("entry", "signal", "decision"))]
+    sig = next(r for r in j if r["event"] == "decision" and r["would_signal"])
+    assert sig["runner_acts"] is True and sig["signal_bar"] == 59 and sig["blockers"] == []
+    assert sig["closed_bars"] == 60                                   # seen when the 10:29 bar closed, not a bar later
+    assert pd.Timestamp(sig["signal_t"]).tz_convert(ET).strftime("%H:%M") == "10:29"
+    assert sum(1 for c in b.placed if b.orders[c].side == "buy") == 1
+    assert [r["event"] for r in j].count("trade_closed") == 1
+    assert j[-1]["event"] == "session_end" and j[-1]["outcome"] == "traded"
+    assert b.positions() == [] and b.open_orders() == []
+
+
+def test_the_default_signal_never_names_the_newest_bar_so_backtests_are_unchanged():
+    n = 60
+    c = np.where(np.arange(n) >= 57, 503.0, 500.5)
+    bars = pd.DataFrame({"t": pd.date_range("2026-09-30 13:30", periods=n, freq="1min", tz="UTC"),
+                         "o": c, "h": c + 0.1, "l": c - 0.1, "c": c, "v": 1e4})
+    assert REAL_SIGNAL(bars, 0.004, 500.0) is None                    # bar 59 is the newest: a backtest waits
+    live = REAL_SIGNAL(bars, 0.004, 500.0, include_last=True)
+    assert live is not None and live.bar_index == 59
+    later = pd.concat([bars, bars.tail(1).assign(t=bars.t.iloc[-1] + pd.Timedelta(minutes=1))], ignore_index=True)
+    old = REAL_SIGNAL(later, 0.004, 500.0)
+    assert old is not None and (old.bar_index, old.trigger, old.stop) == (live.bar_index, live.trigger, live.stop)
+
+
+def test_a_missing_minute_does_not_move_the_half_hour_marks():
+    t = pd.date_range("2026-09-30 13:30", periods=60, freq="1min", tz="UTC")
+    full = pd.DataFrame({"t": t, "o": 500.0, "h": 500.2, "l": 499.8, "c": 500.1, "v": 1e4})
+    gappy = full.drop(index=[0, 17, 42]).reset_index(drop=True)
+    g = runner_b.minute_grid(gappy, at(9, 30))
+    assert len(g) == 60 and list(g.t) == list(t)
+    assert g.v.iloc[17] == 0 and g.c.iloc[17] == 500.1 and g.o.iloc[0] == 500.0
+    assert runner_b.minute_grid(full, at(9, 30)).equals(full)
+
+
+def test_the_session_names_why_there_was_no_trade(env, monkeypatch):
+    (env / "KILL").write_text("paused")
+    b = SimBroker()
+    clk = Clock(at(8, 0))
+    runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep)
+    assert journal(env)[-1]["outcome"] == "blocked:kill_file"
+
+
+def test_a_quiet_session_says_no_signal(env, monkeypatch):
+    monkeypatch.setattr(runner_b.setups, "b_intraday_momentum", lambda *a, **k: None)
+    b = SimBroker()
+    clk = Clock(at(8, 0))
+    synced(b, clk)
+    rec = Rec()
+    runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep, alerts=rec)
+    assert journal(env)[-1]["outcome"] == "no_signal" and "paper-b:signal-not-acted" not in rec.keys()
+
+
+@pytest.mark.parametrize("journal_works", [True, False])
+def test_a_free_signal_that_places_nothing_pages(real_signal, monkeypatch, journal_works):
+    if not journal_works:                                              # the outcome must not depend on the journal
+        monkeypatch.setattr(runner_b.Decisions, "observe", lambda *a, **k: None)
+    b = SimBroker()
+    clk = Clock(at(8, 0))
+    synced(b, clk, skew_s=5.0)                                         # the clock check refuses the entry
+    rec = Rec()
+    runner_b.run(DAY, broker=b, rest=BreakoutREST(clk), now_fn=clk.now, sleep_fn=clk.sleep, alerts=rec)
+    assert b.placed == [] and journal(real_signal)[-1]["outcome"] == "signal_not_acted"
+    assert ("fire", "paper-b:signal-not-acted", 4) in rec.calls

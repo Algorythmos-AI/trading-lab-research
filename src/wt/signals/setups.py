@@ -182,15 +182,20 @@ def a_orb_5m(bars, stop_mode: str = "range_low", atr_daily: float | None = None,
     return EntrySignal(4, round(trig, 4), round(stop, 4), None, f"A_orb_5m_{stop_mode}")
 
 
-def b_intraday_momentum(bars, sigma: float, prev_close: float, start=0, window=(30, 390), vm: float = 1.0):
+def b_intraday_momentum(bars, sigma: float, prev_close: float, start=0, window=(30, 390), vm: float = 1.0,
+                        include_last: bool = False):
     """B — intraday momentum 'noise area' (Zarattini/Aziz/Barbon 2024), LONG only.
     Upper boundary = max(open, prev_close) * (1 + vm*sigma), sigma = avg abs move from open to this
     time over the prior 14 days (caller supplies a single representative sigma). Checked on half-hour
-    marks from 10:00; trigger = the bar close + 1c; stop = session VWAP at signal (trailed by M4-like mgmt)."""
+    marks from 10:00; trigger = the bar close + 1c; stop = session VWAP at signal (trailed by M4-like mgmt).
+
+    A backtest fills the entry on the bar after the signal, so by default the newest bar is never a signal bar.
+    The live runner passes only closed bars and places a stop-limit above the close, so it sets `include_last`
+    to see a signal on the bar that has just closed: the same rule, read one bar sooner."""
     vw = session_vwap(bars)
     c = bars.c.to_numpy()
     upper = max(bars.o.iloc[0], prev_close) * (1 + vm * sigma)
-    for i in range(max(start, window[0] - 1), min(window[1], len(bars) - 1)):
+    for i in range(max(start, window[0] - 1), min(window[1], len(bars) - (0 if include_last else 1))):
         if (i + 1) % 30 != 0:
             continue
         if c[i] > upper and c[i] > vw[i]:

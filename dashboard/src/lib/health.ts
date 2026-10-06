@@ -23,6 +23,7 @@ export const RED_ALERT_PREFIXES = [
   "paper-b:unknown-position",
   "paper-b:latched",
   "paper-b:close-unknown",
+  "paper-b:signal-not-acted",
 ];
 const PROBLEM_JOB_STATUSES = new Set(["failed", "refused", "timeout"]);
 

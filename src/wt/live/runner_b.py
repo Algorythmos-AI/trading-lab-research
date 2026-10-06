@@ -355,6 +355,39 @@ def run(day: dt.date | None = None, poll_s: float = 20.0, broker: Any = None, re
 DECISION_CAP = 40               # decision events per session beyond the would-be signals themselves
 
 
+def minute_grid(closed: pd.DataFrame, open_dt: dt.datetime) -> pd.DataFrame:
+    """The session's closed bars on a full one-minute grid from the open to the newest bar.
+
+    B's half-hour marks are bar positions, which equal minutes since the open only when no minute is missing.
+    The IEX feed skips a minute with no trade there, and every later mark then lands on the wrong bar. A missing
+    minute becomes a flat bar at the last close with no volume, so it moves neither the price nor the VWAP.
+    """
+    if not len(closed):
+        return closed
+    g = closed.drop_duplicates("t", keep="last").set_index("t").sort_index()
+    idx = pd.date_range(pd.Timestamp(open_dt).tz_convert("UTC"), g.index[-1], freq="1min")
+    if len(idx) == len(g) or not len(idx):
+        return g.reset_index()
+    g = g.reindex(idx)
+    c = g.c.ffill().fillna(g.o.bfill())                      # before the first trade: that bar's open
+    for col in ("o", "h", "l"):
+        g[col] = g[col].fillna(c)
+    g["c"], g["v"] = c, g.v.fillna(0.0)
+    return g.rename_axis("t").reset_index()
+
+
+def outcome_of(signals: list[dict[str, Any]], acted: bool, free_signal: bool) -> str:
+    """One plain answer to "why was there no trade today": traded, no_signal, blocked:<code>, signal_not_acted.
+
+    `free_signal` is the loop's own record of a signal with nothing blocking it, so the answer does not depend
+    on the decision journal having worked."""
+    if acted:
+        return "traded"
+    if free_signal or any(not s["blockers"] for s in signals):
+        return "signal_not_acted"
+    return f"blocked:{signals[0]['blockers'][0]}" if signals else "no_signal"
+
+
 class Decisions:
     """The decision journal (plan v7 A-dec): what B's signal says on each newly closed bar, whatever blocks entries
     (KILL, the shadow role, exits-only). It only reads bars and computes; it never touches the broker, and `sig`, the
@@ -381,7 +414,7 @@ class Decisions:
         if bar == self.last_bar:
             return
         self.last_bar = bar
-        would = setups.b_intraday_momentum(closed.reset_index(drop=True), sigma, prev_close)
+        would = setups.b_intraday_momentum(closed.reset_index(drop=True), sigma, prev_close, include_last=True)
         key = tuple(sorted(blockers))
         base = {"bar": str(bar), "closed_bars": len(closed), "blockers": list(key), "sigma": sigma,
                 "prev_close": prev_close}
@@ -640,6 +673,8 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         skew_s=measure_skew(broker, clock), virtual=asdict(va) if va_ok else None)
     held_try = dt.datetime.min.replace(tzinfo=ET)
     short_paged = False
+    acted = plan is not None                               # an entry was placed today (now or before a restart)
+    free_signal = False                                    # a signal fired with nothing blocking it
     open_pinged = False
 
     while True:
@@ -734,16 +769,19 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                 except (TimeoutError, cf.TimeoutError):
                     bars = pd.DataFrame()
                 closed = bars[bars.t <= pd.Timestamp(now) - pd.Timedelta(minutes=1)] if len(bars) else bars
+                closed = minute_grid(closed, open_dt)
                 if not len(closed) or (pd.Timestamp(now) - closed.t.iloc[-1]).total_seconds() > STALE_S:
                     blockers.append("stale_signal_data")
                 if not q or (q[1] - q[0]) / ((q[0] + q[1]) / 2) * 100 > MAX_SPREAD_PCT:
                     blockers.append("spread_or_no_quote")
-                sig = None if blockers else setups.b_intraday_momentum(closed.reset_index(drop=True), sigma, prev_close)
+                sig = None if blockers else setups.b_intraday_momentum(closed.reset_index(drop=True), sigma, prev_close,
+                                                                       include_last=True)
                 try:
                     decisions.observe(closed, blockers, dec_sigma, dec_prev_close)
                 except Exception as e:  # noqa: BLE001 — the journal of what B would do must never disturb what it does
                     log("decision_error", error=repr(e)[:200])
                 if sig and sig.bar_index == len(closed) - 1:          # only act on the bar that just closed
+                    free_signal = True
                     skew = measure_skew(broker, clock)
                     if skew is None or abs(skew) > SKEW_MAX_S:
                         log("clock_skew", skew_s=skew, max_s=SKEW_MAX_S, action="entry skipped")
@@ -770,6 +808,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                             stores[plan.trade_id] = today_store
                             today_store.save(plan)
                             oms.place_entry(plan)
+                            acted = acted or plan.state == "entry_working"
                             log("entry_placed" if plan.state == "entry_working" else "entry_not_placed",
                                 trigger=trig, stop=stop, target=plan.target, qty=qty, ratio=ratio, policy=pol,
                                 state=plan.state, detail=plan.log[-1:] if plan.log else None)
@@ -809,7 +848,12 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         pager.fire("paper-b:not-flat", "Paper B could not verify flat after the close",
                    "The broker could not be read after the close. Check the account.", 5)
     decisions.summary()
-    log("session_end", virtual=asdict(va) if va_ok else None, entries_off=off)
+    outcome = outcome_of(decisions.signals, acted, free_signal)
+    if outcome == "signal_not_acted":
+        pager.fire("paper-b:signal-not-acted", "Paper B had a signal and did not act",
+                   "A signal fired with nothing blocking it and no entry was placed. Read the session's journal "
+                   "(clock_skew, signal_skipped_size, entry_not_placed) before the next session.", 4)
+    log("session_end", virtual=asdict(va) if va_ok else None, entries_off=off, outcome=outcome)
 
 
 if __name__ == "__main__":
