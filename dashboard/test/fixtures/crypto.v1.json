@@ -1057,6 +1057,460 @@
  "run_id": "20261002T200040Z-fixture",
  "schema": "trading-lab/crypto-snapshot",
  "schema_version": 1,
+ "sleeves": [
+  {
+   "cash": 7766.946466686859,
+   "config": "21689556f064",
+   "equity": 10315.904800003878,
+   "equity_curve": [
+    {
+     "equity": 10315.904800003878,
+     "t": "2026-10-02T20:00:00+00:00"
+    }
+   ],
+   "exposure": 2510.4166666506,
+   "fees": 61.400000000000006,
+   "latched": false,
+   "losses": 1,
+   "max_dd": -120.8,
+   "mean_r": 0.9580000000000001,
+   "name": "trend",
+   "open_pnl": 28.499999999817515,
+   "pnl": {
+    "month": 238.96,
+    "month_trades": 1,
+    "today": 0.0,
+    "today_trades": 0,
+    "total": 287.40000000000003,
+    "week": 287.40000000000003,
+    "week_trades": 3
+   },
+   "positions": [
+    {
+     "entry_price": 2.41,
+     "entry_time": "2026-10-02T20:00:10+00:00",
+     "mark": 2.447,
+     "mark_time": "2026-10-02T20:15:10+00:00",
+     "pair": "XRP/USD",
+     "qty": 1041.66666666,
+     "risk": 99.99999999936,
+     "stop": 2.314,
+     "target": null,
+     "unrealised": 28.499999999817515,
+     "unrealised_pct": 1.535269709543563,
+     "unrealised_r": 0.28499999999999914
+    }
+   ],
+   "recent": [
+    {
+     "entry_price": 14.2,
+     "entry_time": "2026-09-29T20:00:10+00:00",
+     "exit_price": 15.6768,
+     "exit_time": "2026-10-01T11:00:10+00:00",
+     "held_min": 2340.0,
+     "pair": "LINK/USD",
+     "pnl": 238.96,
+     "qty": 176.05633803,
+     "r": 2.39,
+     "reason": "trend_exit"
+    },
+    {
+     "entry_price": 0.62,
+     "entry_time": "2026-09-28T20:00:10+00:00",
+     "exit_price": 0.5949024,
+     "exit_time": "2026-09-30T11:00:10+00:00",
+     "held_min": 2340.0,
+     "pair": "ADA/USD",
+     "pnl": -120.8,
+     "qty": 4032.25806452,
+     "r": -1.208,
+     "reason": "stop"
+    },
+    {
+     "entry_price": 11.5,
+     "entry_time": "2026-09-27T20:00:10+00:00",
+     "exit_price": 12.374,
+     "exit_time": "2026-09-28T09:00:10+00:00",
+     "held_min": 780.0,
+     "pair": "AVAX/USD",
+     "pnl": 169.24,
+     "qty": 217.39130435,
+     "r": 1.692,
+     "reason": "trend_exit"
+    }
+   ],
+   "return_pct": 3.159048000038789,
+   "signals": [
+    {
+     "outcome": "refused",
+     "pair": "DOGE/USD",
+     "t": "2026-10-02T20:00:10+00:00",
+     "why": [
+      "stop_too_tight"
+     ]
+    },
+    {
+     "outcome": "entered",
+     "pair": "XRP/USD",
+     "t": "2026-10-02T20:00:10+00:00",
+     "why": []
+    },
+    {
+     "outcome": "entered",
+     "pair": "LINK/USD",
+     "t": "2026-09-29T20:00:10+00:00",
+     "why": []
+    },
+    {
+     "outcome": "entered",
+     "pair": "ADA/USD",
+     "t": "2026-09-28T20:00:10+00:00",
+     "why": []
+    },
+    {
+     "outcome": "entered",
+     "pair": "AVAX/USD",
+     "t": "2026-09-27T20:00:10+00:00",
+     "why": []
+    }
+   ],
+   "stage": "incubation",
+   "start_equity": 10000.0,
+   "strategy": "HYP-0021",
+   "tf_min": 240,
+   "total_r": 2.874,
+   "trades": 3,
+   "why_not": [
+    {
+     "bar": "2026-10-02T16:00:00+00:00",
+     "fire": false,
+     "pair": "BTC/USD",
+     "why": [
+      "no_new_high"
+     ]
+    },
+    {
+     "bar": "2026-10-02T16:00:00+00:00",
+     "fire": false,
+     "pair": "ETH/USD",
+     "why": [
+      "no_new_high"
+     ]
+    },
+    {
+     "bar": "2026-10-02T16:00:00+00:00",
+     "fire": false,
+     "pair": "SOL/USD",
+     "why": [
+      "no_new_high"
+     ]
+    },
+    {
+     "bar": "2026-10-02T16:00:00+00:00",
+     "fire": false,
+     "pair": "XRP/USD",
+     "why": [
+      "no_new_high"
+     ]
+    },
+    {
+     "bar": "2026-10-02T16:00:00+00:00",
+     "fire": false,
+     "pair": "ADA/USD",
+     "why": [
+      "no_new_high"
+     ]
+    },
+    {
+     "bar": "2026-10-02T16:00:00+00:00",
+     "fire": true,
+     "pair": "DOGE/USD",
+     "why": []
+    },
+    {
+     "bar": "2026-10-02T16:00:00+00:00",
+     "fire": false,
+     "pair": "LINK/USD",
+     "why": [
+      "no_new_high"
+     ]
+    },
+    {
+     "bar": "2026-10-02T16:00:00+00:00",
+     "fire": false,
+     "pair": "AVAX/USD",
+     "why": [
+      "no_new_high"
+     ]
+    }
+   ],
+   "win_rate": 0.6666666666666666,
+   "wins": 2
+  },
+  {
+   "cash": 10058.404799965554,
+   "config": "5ac5204a1416",
+   "equity": 10058.404799965554,
+   "equity_curve": [
+    {
+     "equity": 10058.404799965554,
+     "t": "2026-10-02T20:00:00+00:00"
+    }
+   ],
+   "exposure": 0.0,
+   "fees": 40.400000000000006,
+   "latched": false,
+   "losses": 1,
+   "max_dd": -120.8,
+   "mean_r": 0.29200000000000004,
+   "name": "break",
+   "open_pnl": null,
+   "pnl": {
+    "month": 0.0,
+    "month_trades": 0,
+    "today": 0.0,
+    "today_trades": 0,
+    "total": 58.39999999999999,
+    "week": 58.39999999999999,
+    "week_trades": 2
+   },
+   "positions": [],
+   "recent": [
+    {
+     "entry_price": 175.0,
+     "entry_time": "2026-09-28T20:00:10+00:00",
+     "exit_price": 167.916,
+     "exit_time": "2026-09-29T21:00:10+00:00",
+     "held_min": 1500.0,
+     "pair": "SOL/USD",
+     "pnl": -120.8,
+     "qty": 14.28571429,
+     "r": -1.208,
+     "reason": "stop"
+    },
+    {
+     "entry_price": 11.5,
+     "entry_time": "2026-09-27T20:00:10+00:00",
+     "exit_price": 12.42,
+     "exit_time": "2026-09-28T19:00:10+00:00",
+     "held_min": 1380.0,
+     "pair": "AVAX/USD",
+     "pnl": 179.2,
+     "qty": 217.39130435,
+     "r": 1.792,
+     "reason": "target"
+    }
+   ],
+   "return_pct": 0.5840479996555459,
+   "signals": [
+    {
+     "outcome": "refused",
+     "pair": "DOGE/USD",
+     "t": "2026-10-02T20:00:10+00:00",
+     "why": [
+      "stop_too_tight"
+     ]
+    },
+    {
+     "outcome": "entered",
+     "pair": "SOL/USD",
+     "t": "2026-09-28T20:00:10+00:00",
+     "why": []
+    },
+    {
+     "outcome": "entered",
+     "pair": "AVAX/USD",
+     "t": "2026-09-27T20:00:10+00:00",
+     "why": []
+    }
+   ],
+   "stage": "incubation",
+   "start_equity": 10000.0,
+   "strategy": "HYP-0022",
+   "tf_min": 240,
+   "total_r": 0.5840000000000001,
+   "trades": 2,
+   "why_not": [
+    {
+     "bar": "2026-10-02T16:00:00+00:00",
+     "fire": false,
+     "pair": "BTC/USD",
+     "why": [
+      "no_new_high"
+     ]
+    },
+    {
+     "bar": "2026-10-02T16:00:00+00:00",
+     "fire": false,
+     "pair": "ETH/USD",
+     "why": [
+      "no_new_high"
+     ]
+    },
+    {
+     "bar": "2026-10-02T16:00:00+00:00",
+     "fire": false,
+     "pair": "SOL/USD",
+     "why": [
+      "no_new_high"
+     ]
+    },
+    {
+     "bar": "2026-10-02T16:00:00+00:00",
+     "fire": false,
+     "pair": "XRP/USD",
+     "why": [
+      "no_new_high"
+     ]
+    },
+    {
+     "bar": "2026-10-02T16:00:00+00:00",
+     "fire": false,
+     "pair": "ADA/USD",
+     "why": [
+      "no_new_high"
+     ]
+    },
+    {
+     "bar": "2026-10-02T16:00:00+00:00",
+     "fire": true,
+     "pair": "DOGE/USD",
+     "why": []
+    },
+    {
+     "bar": "2026-10-02T16:00:00+00:00",
+     "fire": false,
+     "pair": "LINK/USD",
+     "why": [
+      "no_new_high"
+     ]
+    },
+    {
+     "bar": "2026-10-02T16:00:00+00:00",
+     "fire": false,
+     "pair": "AVAX/USD",
+     "why": [
+      "no_new_high"
+     ]
+    }
+   ],
+   "win_rate": 0.5,
+   "wins": 1
+  },
+  {
+   "cash": 10000.0,
+   "config": "06a640f39e0b",
+   "equity": 10000.0,
+   "equity_curve": [
+    {
+     "equity": 10000.0,
+     "t": "2026-10-02T20:00:00+00:00"
+    }
+   ],
+   "exposure": 0.0,
+   "fees": null,
+   "latched": false,
+   "losses": 0,
+   "max_dd": null,
+   "mean_r": null,
+   "name": "dip",
+   "open_pnl": null,
+   "pnl": {
+    "month": 0.0,
+    "month_trades": 0,
+    "today": 0.0,
+    "today_trades": 0,
+    "total": 0.0,
+    "week": 0.0,
+    "week_trades": 0
+   },
+   "positions": [],
+   "recent": [],
+   "return_pct": 0.0,
+   "signals": [
+    {
+     "outcome": "refused",
+     "pair": "DOGE/USD",
+     "t": "2026-10-02T20:00:10+00:00",
+     "why": [
+      "stop_too_tight"
+     ]
+    }
+   ],
+   "stage": "incubation",
+   "start_equity": 10000.0,
+   "strategy": "HYP-0023",
+   "tf_min": 240,
+   "total_r": null,
+   "trades": 0,
+   "why_not": [
+    {
+     "bar": "2026-10-02T16:00:00+00:00",
+     "fire": false,
+     "pair": "BTC/USD",
+     "why": [
+      "no_new_high"
+     ]
+    },
+    {
+     "bar": "2026-10-02T16:00:00+00:00",
+     "fire": false,
+     "pair": "ETH/USD",
+     "why": [
+      "no_new_high"
+     ]
+    },
+    {
+     "bar": "2026-10-02T16:00:00+00:00",
+     "fire": false,
+     "pair": "SOL/USD",
+     "why": [
+      "no_new_high"
+     ]
+    },
+    {
+     "bar": "2026-10-02T16:00:00+00:00",
+     "fire": false,
+     "pair": "XRP/USD",
+     "why": [
+      "no_new_high"
+     ]
+    },
+    {
+     "bar": "2026-10-02T16:00:00+00:00",
+     "fire": false,
+     "pair": "ADA/USD",
+     "why": [
+      "no_new_high"
+     ]
+    },
+    {
+     "bar": "2026-10-02T16:00:00+00:00",
+     "fire": true,
+     "pair": "DOGE/USD",
+     "why": []
+    },
+    {
+     "bar": "2026-10-02T16:00:00+00:00",
+     "fire": false,
+     "pair": "LINK/USD",
+     "why": [
+      "no_new_high"
+     ]
+    },
+    {
+     "bar": "2026-10-02T16:00:00+00:00",
+     "fire": false,
+     "pair": "AVAX/USD",
+     "why": [
+      "no_new_high"
+     ]
+    }
+   ],
+   "win_rate": null,
+   "wins": 0
+  }
+ ],
  "strategy": {
   "breakeven_win_rate": 0.9333,
   "ema_period": 8,

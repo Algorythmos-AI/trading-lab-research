@@ -1183,6 +1183,498 @@
           "maxItems": 2000
         }
       }
+    },
+    "sleeves": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "strategy": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "stage": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "tf_min": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "config": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "equity": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "start_equity": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "return_pct": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "cash": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "exposure": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "open_pnl": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "latched": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "pnl": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "today": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "week": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "month": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "total": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "today_trades": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "week_trades": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "month_trades": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            }
+          },
+          "trades": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "wins": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "losses": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "win_rate": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "mean_r": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "total_r": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "fees": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "max_dd": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "positions": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "pair": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 200
+                },
+                "qty": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "entry_price": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "entry_time": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 200
+                },
+                "stop": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "target": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "mark": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "mark_time": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 200
+                },
+                "unrealised": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "unrealised_pct": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "unrealised_r": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "risk": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "maxItems": 2000
+          },
+          "recent": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "pair": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 200
+                },
+                "entry_time": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 200
+                },
+                "exit_time": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 200
+                },
+                "entry_price": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "exit_price": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "qty": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "pnl": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "r": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "reason": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 200
+                },
+                "held_min": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "maxItems": 2000
+          },
+          "signals": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "t": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 200
+                },
+                "pair": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 200
+                },
+                "outcome": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 200
+                },
+                "why": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  },
+                  "maxItems": 2000
+                }
+              }
+            },
+            "maxItems": 2000
+          },
+          "why_not": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "pair": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 200
+                },
+                "bar": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 200
+                },
+                "fire": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "why": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  },
+                  "maxItems": 2000
+                }
+              }
+            },
+            "maxItems": 2000
+          },
+          "equity_curve": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "t": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 200
+                },
+                "equity": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "maxItems": 2000
+          }
+        }
+      },
+      "maxItems": 2000
     }
   },
   "required": [
