@@ -3546,6 +3546,477 @@
           "maxItems": 2000
         }
       }
+    },
+    "today": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "session": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
+        "outcome": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
+        "ended": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "armed": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "at": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "kill": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "entries_off": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          }
+        },
+        "signals": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "trigger": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "stop": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "blockers": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "acted": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              }
+            }
+          },
+          "maxItems": 2000
+        },
+        "position": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "symbol": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "state": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "qty": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "entry": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "entry_at": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "trigger": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "stop": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "target": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          }
+        },
+        "pnl": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "today": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "week": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "month": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "total": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "today_r": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "week_r": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "month_r": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "total_r": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "today_trades": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "week_trades": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "month_trades": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "equity": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "start": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "return_pct": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "trades": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "wins": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "losses": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "win_rate": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "avg_win": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "avg_loss": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "profit_factor": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "best": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "worst": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "max_dd": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          }
+        },
+        "trades": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "session": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "symbol": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "qty": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "entry": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "entry_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "exit": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "exit_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "stop": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "target": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "pnl": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "r": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "held_min": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "estimated": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "origin": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              }
+            }
+          },
+          "maxItems": 2000
+        },
+        "days": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "date": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "pnl": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "r": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "trades": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            }
+          },
+          "maxItems": 2000
+        }
+      }
     }
   },
   "required": [

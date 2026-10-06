@@ -1,5 +1,6 @@
 import { Activity, Filter, FlaskConical, Hourglass, ListOrdered, PlayCircle, Power } from "lucide-react";
 import { Empty } from "@/components/empty";
+import { OutcomePanel, PnlPanel, TradesPanel } from "@/components/today/trading";
 import { KeyValues } from "@/components/kv";
 import { NoSnapshot } from "@/components/no-snapshot";
 import { PageHeading } from "@/components/page-heading";
@@ -10,6 +11,7 @@ import { duration, newYork, num, rMult, shortDate, sydney } from "@/lib/format";
 import { humanize, jobName, jobTone } from "@/lib/labels";
 import { loadSnapshot } from "@/lib/snapshot";
 import { detailLabel, eventLabel, scan, sessionJobs, type Scan } from "@/lib/today";
+import { trading } from "@/lib/trading";
 import { list, type Snapshot } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -21,13 +23,14 @@ export default async function TodayPage() {
     <>
       <PageHeading
         title="Today"
-        intro="What the stocks desk did in its latest session, in the order it happened: the pre-market scan, the paper session and the forward test. Nothing on this page is a real order."
+        intro="What the stocks desk did in its latest session: whether Paper B traded and what it made or lost, then the pre-market scan, the paper session log and the forward test. Paper money only: nothing on this page is a real order."
       />
       {result.status !== "ok" ? (
         <NoSnapshot status={result.status} />
       ) : (
         <>
           <NowPanel s={result.snapshot} />
+          <TradingPanels s={result.snapshot} />
           <FunnelPanel v={scan(result.snapshot)} tradingDay={result.snapshot.market?.trading_day_et ?? null} />
           <CandidatesPanel v={scan(result.snapshot)} />
           <PaperPanel s={result.snapshot} />
@@ -35,6 +38,19 @@ export default async function TodayPage() {
           <ComingPanel />
         </>
       )}
+    </>
+  );
+}
+
+/** Paper B's outcome, profit and loss and trades. Shown once the host publishes the `today` section. */
+function TradingPanels({ s }: { s: Snapshot }) {
+  const v = trading(s);
+  if (!v.available) return null;
+  return (
+    <>
+      <OutcomePanel v={v} asOf={s.as_of} />
+      <PnlPanel v={v} />
+      <TradesPanel v={v} />
     </>
   );
 }
@@ -259,7 +275,7 @@ function ComingPanel() {
   return (
     <Empty icon={Hourglass} title="More detail arrives with the next publisher update">
       Still to come on this page: why each stock was dropped, each candidate&apos;s chart checks and news, the dry-run
-      trade plans, every moment Paper B would have traded, and the forward test&apos;s trades for the day.
+      trade plans, and the forward test&apos;s trades for the day.
     </Empty>
   );
 }

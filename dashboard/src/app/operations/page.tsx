@@ -26,7 +26,7 @@ export default async function OperationsPage() {
     <>
       <PageHeading
         title="Operations"
-        intro="Whether the Mac and its nightly jobs are healthy: run history, pre-flight checks, disk and memory, clock changes, the deployed code and how fresh each data source is."
+        intro="Whether the host and its jobs are healthy: run history, pre-flight checks, disk and memory, clock changes, the deployed code and how fresh each data source is."
       />
       {result.status !== "ok" ? (
         <NoSnapshot status={result.status} />
@@ -112,7 +112,7 @@ function PreflightPanel({ s }: { s: Snapshot }) {
     <Panel
       title="Pre-flight checks"
       icon={ClipboardCheck}
-      means="Safety checks run before live jobs start. A failing check does not stop tonight's run on its own, but it means the Mac is not in its intended state."
+      means="Safety checks run before live jobs start. A failing check does not stop tonight's run on its own, but it means the host is not in its intended state."
       action={
         checks.length > 0 ? (
           <StatusBadge tone={failing === 0 ? "good" : "warn"}>
@@ -309,7 +309,7 @@ function LogsPanel({ s }: { s: Snapshot }) {
     <Panel
       title="Job logs"
       icon={Database}
-      means="Error counts in the latest log of each job. The last error line is shown so a failure can be recognised without opening the Mac."
+      means="Error counts in the latest log of each job. The last error line is shown so a failure can be recognised without logging in to the host."
     >
       <ul className="divide-border grid divide-y">
         {logs.map(([name, log]) => (
