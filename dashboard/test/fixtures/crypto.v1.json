@@ -465,6 +465,111 @@
   "on": true,
   "since": "2026-09-30T20:00:40+00:00"
  },
+ "learning": {
+  "lineages_started": 1,
+  "model": {
+   "checkpoint_signals": 60,
+   "checkpoints": 1,
+   "drift_inputs": [],
+   "drifted": false,
+   "finished": 74,
+   "lineage": "m1:C=0.1",
+   "looks": [
+    {
+     "brier": 0.2231,
+     "brier_base": 0.2254,
+     "checkpoint": 1,
+     "lower": -0.318,
+     "passed": false,
+     "signals": 60,
+     "spread": 0.142,
+     "t": "2026-09-30T20:00:00+00:00"
+    }
+   ],
+   "max_checkpoints": 6,
+   "next_checkpoint": 120,
+   "score_psi": 0.062,
+   "state": "shadow",
+   "trained_at": "2026-09-25T20:00:00+00:00",
+   "version": "m1-20260925-fixture0"
+  },
+  "signals": {
+   "finished": 5,
+   "kept": 3,
+   "kept_mean_r": 0.9666666666666667,
+   "mean_r": 0.5,
+   "open": 1,
+   "recorded": 6,
+   "scored": 5,
+   "skipped": 2,
+   "skipped_mean_r": -0.2,
+   "win_rate": 0.6
+  },
+  "switch": "on",
+  "training": {
+   "attempt": 3,
+   "chosen": "m1",
+   "decision": "DEC-0018",
+   "effective_n": 2005.8,
+   "examples": 8873,
+   "leans_on": [
+    {
+     "input": "btc_above_sma50",
+     "weight": 0.31
+    },
+    {
+     "input": "stop_pct",
+     "weight": -0.22
+    },
+    {
+     "input": "volume_ratio",
+     "weight": 0.12
+    }
+   ],
+   "mean_r": -0.094,
+   "models": [
+    {
+     "ci_high": null,
+     "ci_low": null,
+     "dropped": 0,
+     "dropped_mean_r": null,
+     "kept": 7408,
+     "kept_mean_r": -0.147,
+     "log_loss": 0.5914,
+     "name": "m0",
+     "settings": null,
+     "spread": null
+    },
+    {
+     "ci_high": 0.32,
+     "ci_low": -0.113,
+     "dropped": 3095,
+     "dropped_mean_r": -0.207,
+     "kept": 4313,
+     "kept_mean_r": -0.103,
+     "log_loss": 0.5868,
+     "name": "m1",
+     "settings": "C=0.1",
+     "spread": 0.104
+    },
+    {
+     "ci_high": 0.128,
+     "ci_low": -0.346,
+     "dropped": 2742,
+     "dropped_mean_r": -0.086,
+     "kept": 4666,
+     "kept_mean_r": -0.182,
+     "log_loss": 0.6077,
+     "name": "m2",
+     "settings": "n_estimators=300, num_leaves=4",
+     "spread": -0.096
+    }
+   ],
+   "pairs": 30,
+   "t": "2026-09-25T20:00:00+00:00",
+   "win_rate": 0.344
+  }
+ },
  "market": [
   {
    "atr_pct": 0.0431,
@@ -1264,7 +1369,7 @@
      "why": []
     }
    ],
-   "stage": "incubation",
+   "stage": "failed",
    "start_equity": 10000.0,
    "strategy": "HYP-0021",
    "tf_min": 240,
@@ -1414,7 +1519,7 @@
      "why": []
     }
    ],
-   "stage": "incubation",
+   "stage": "failed",
    "start_equity": 10000.0,
    "strategy": "HYP-0022",
    "tf_min": 240,
@@ -1527,7 +1632,7 @@
      ]
     }
    ],
-   "stage": "incubation",
+   "stage": "failed",
    "start_equity": 10000.0,
    "strategy": "HYP-0023",
    "tf_min": 240,
