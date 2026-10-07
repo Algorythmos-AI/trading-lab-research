@@ -28,7 +28,7 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
 JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
-.PHONY: seed-vm help bootstrap bootstrap-ml lock-ml lint typecheck test ci hooks status gate deploy rollback migrate-state preflight publish-verify \
+.PHONY: seed-vm help bootstrap bootstrap-ml lock-ml sync-ml lint typecheck test ci hooks status gate deploy rollback migrate-state preflight publish-verify \
         uninstall-agents lease-break \
         watchdog-drill dashboard-deploy vm-deploy \
         agents-diff install-trading-agents install-dashboard-agent publish schema kill unkill reset-latch evidence
@@ -74,6 +74,9 @@ gate: ## Is it safe to change the live checkout right now? (no job running, outs
 
 deploy: ## Gate; main's tip (or SHA=...) if green; fast-forward, migrate, sync venv, smoke (rolls back on failure). STAGE=1: full tests first
 	$(PY) -m wt.ops.deploy deploy $(if $(SHA),--sha $(SHA),) $(if $(STAGE),--stage,)
+
+sync-ml: ## Finish or retry the ML environment's sync (a deploy does it; this is for one left pending or failed)
+	$(PY) -m wt.ops.deploy sync-ml
 
 rollback: ## Back to a runtime-* tag: make rollback TAG=runtime-YYYYMMDD-N
 	@test -n "$(TAG)" || (echo "usage: make rollback TAG=runtime-YYYYMMDD-N" && exit 2)
