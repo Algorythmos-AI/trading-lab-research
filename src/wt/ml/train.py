@@ -123,7 +123,7 @@ def report(res: dict[str, Any]) -> str:
     day = lambda t: dt.datetime.fromtimestamp(t, dt.UTC).date().isoformat()      # noqa: E731
     c = res["comparison"]
     lines = [f"# {res['id']}: crypto desk, the first models", "",
-             f"- Decision: DEC-0016. Training set: {res['examples']} signals from {len(res['pairs'])} pairs, "
+             f"- Decision: {res['decision']} (DEC-0016 as amended). Training set: {res['examples']} signals from {len(res['pairs'])} pairs, "
              f"{day(res['start'])} to {day(res['end'])} (data hash `{res['data_hash']}`).",
              f"- Win rate of all signals after costs: {res['win_rate'] * 100:.1f}%. Mean R: {res['mean_r']:+.3f}.",
              f"- Validation: {c['folds']} purged walk-forward folds, embargo {c['embargo_days']} days. "
@@ -190,7 +190,7 @@ def main(argv: list[str] | None = None) -> int:
     inputs = dataset.usable_inputs(examples)
     comparison = compare(cfg, examples, inputs)
     res: dict[str, Any] = {
-        "decision": "DEC-0016", "start": start, "end": end, "pairs": sorted(hourly), "examples": len(examples),
+        "decision": "DEC-0018", "start": start, "end": end, "pairs": sorted(hourly), "examples": len(examples),
         "win_rate": float(np.mean([e.y for e in examples])), "mean_r": float(np.mean([e.r for e in examples])),
         "by_sleeve": {n: {"n": sum(e.sleeve == n for e in examples),
                           "mean_r": round(float(np.mean([e.r for e in examples if e.sleeve == n])), 4)}
