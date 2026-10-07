@@ -107,7 +107,10 @@ def test_the_real_scorer_answers_with_the_standard_library_alone_for_a_logistic_
 ])
 def test_every_way_the_scorer_can_fail_ends_in_a_reason_and_no_scores(desk, tmp_path, body, why):
     register(desk)
-    got = scorer.score([{"atr_pct": 1.0}, {"atr_pct": 2.0}], desk, timeout_s=1.0, python=fake_python(tmp_path, body), root=ROOT)
+    # One second is the limit only where the limit is the point: on a busy machine an interpreter can take longer
+    # than that to start, and the other cases would then read as timeouts.
+    limit = 1.0 if why == "timeout" else 20.0
+    got = scorer.score([{"atr_pct": 1.0}, {"atr_pct": 2.0}], desk, timeout_s=limit, python=fake_python(tmp_path, body), root=ROOT)
     assert got == (None, why)
 
 
