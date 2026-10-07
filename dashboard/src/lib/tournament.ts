@@ -1,4 +1,5 @@
 // The crypto tournament (DEC-0015) as the pages read it: one row per sleeve, never pooled. Pure helpers.
+// A challenger that passed its backtest (DEC-0016) is a sleeve like the others; `challengers` lists every idea tried.
 import { items, type Crypto } from "./crypto";
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -10,7 +11,8 @@ const SLEEVE: Record<string, { label: string; does: string }> = {
   break: { label: "Breakout", does: "Buys a close above the 30-bar high on strong volume; fixed stop and target" },
   dip: { label: "Dip", does: "Buys the first recovery after a sell-off, while the daily trend is up" },
 };
-export const sleeveLabel = (name: string | null | undefined): string => SLEEVE[name ?? ""]?.label ?? name ?? "—";
+export const sleeveLabel = (name: string | null | undefined): string =>
+  SLEEVE[name ?? ""]?.label ?? (name?.startsWith("ch-") ? `Challenger ${name.slice(3)}` : (name ?? "—"));
 
 export interface SleeveRow {
   name: string;
@@ -93,7 +95,7 @@ export function tournament(s: Crypto): Tournament {
   const rows: SleeveRow[] = sleeves.map((x) => ({
     name: x.name as string,
     label: sleeveLabel(x.name),
-    does: SLEEVE[x.name as string]?.does ?? "",
+    does: SLEEVE[x.name as string]?.does ?? x.strategy ?? "",
     hypothesis: x.strategy ?? null,
     stage: x.stage ?? "incubation",
     equity: n(x.equity),
@@ -191,4 +193,96 @@ export function tournamentLine(t: Tournament): string {
   const holders = new Set(t.positions.map((p) => p.sleeve)).size;
   const openPart = open === 0 ? "No position is open" : `${open} ${open === 1 ? "position is" : "positions are"} open in ${holders} ${holders === 1 ? "sleeve" : "sleeves"}`;
   return `${openPart}; ${closed} ${closed === 1 ? "trade has" : "trades have"} been closed.`;
+}
+
+export interface ChallengerRow {
+  id: string;
+  label: string;
+  /** Its rules in one line, as the host recorded them before the backtest. */
+  rules: string;
+  /** "neighbour" (one step from the best current sleeve) or "random". */
+  slot: string | null;
+  of: string | null;
+  registeredAt: string | null;
+  /** registered | failed | passed | live | retired */
+  status: string;
+  trades: number | null;
+  perMonth: number | null;
+  winRate: number | null;
+  meanR: number | null;
+  /** 95% interval for the mean R with slippage raised by half: the one the gate reads. */
+  ciLow: number | null;
+  ciHigh: number | null;
+  profitFactor: number | null;
+  controlP: number | null;
+  failedOn: string[];
+  retiredWhy: string | null;
+}
+
+export interface Challengers {
+  /** False until the host publishes the section. */
+  available: boolean;
+  learningOn: boolean;
+  drawnThisWeek: number;
+  perWeek: number | null;
+  live: number;
+  maxLive: number | null;
+  registered: number;
+  maxRegistered: number | null;
+  failed: number;
+  retired: number;
+  /** Newest first. */
+  rows: ChallengerRow[];
+}
+
+export function challengers(s: Crypto): Challengers {
+  const c = s.challengers;
+  const rows: ChallengerRow[] = items(c?.list)
+    .filter((x) => typeof x.id === "string")
+    .map((x) => ({
+      id: x.id as string,
+      label: sleeveLabel(x.id),
+      rules: x.rules ?? "",
+      slot: x.slot ?? null,
+      of: x.of ?? null,
+      registeredAt: x.registered ?? null,
+      status: x.status ?? "registered",
+      trades: n(x.trades),
+      perMonth: n(x.trades_per_month),
+      winRate: n(x.win_rate),
+      meanR: n(x.mean_r),
+      ciLow: n(x.ci_low),
+      ciHigh: n(x.ci_high),
+      profitFactor: n(x.profit_factor),
+      controlP: n(x.control_p),
+      failedOn: items(x.failed_on).filter((v): v is string => typeof v === "string"),
+      retiredWhy: x.retired_why ?? null,
+    }));
+  return {
+    available: c != null,
+    learningOn: c?.learning !== "off",
+    drawnThisWeek: n(c?.drawn_this_week) ?? 0,
+    perWeek: n(c?.per_week),
+    live: n(c?.live) ?? 0,
+    maxLive: n(c?.max_live),
+    registered: n(c?.registered) ?? 0,
+    maxRegistered: n(c?.max_registered),
+    failed: n(c?.failed) ?? 0,
+    retired: n(c?.retired) ?? 0,
+    rows,
+  };
+}
+
+/** "3 ideas tried: 1 trading, 1 failed its backtest, 1 waiting for its backtest." Counts only. */
+export function challengersLine(c: Challengers): string {
+  if (!c.available) return "The challengers have not published yet.";
+  if (c.registered === 0) return c.learningOn ? "No idea has been tried yet." : "Learning is switched off; no idea has been tried.";
+  const waiting = c.rows.filter((r) => r.status === "registered" || r.status === "passed").length;
+  const parts = [
+    c.live > 0 ? `${c.live} trading` : null,
+    c.failed > 0 ? `${c.failed} failed ${c.failed === 1 ? "its" : "their"} backtest` : null,
+    c.retired > 0 ? `${c.retired} retired` : null,
+    waiting > 0 ? `${waiting} waiting for ${waiting === 1 ? "its" : "their"} backtest` : null,
+  ].filter((x): x is string => x !== null);
+  return `${c.registered} ${c.registered === 1 ? "idea" : "ideas"} tried: ${parts.join(", ")}.${c.learningOn ? "" : " Learning is switched off."}`;
 }
