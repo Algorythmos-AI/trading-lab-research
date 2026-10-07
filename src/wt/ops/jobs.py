@@ -257,14 +257,14 @@ def crypto_summary(now: dt.datetime) -> str | None:
         view = snapshot.sleeves_view(desk, load_yaml("crypto.yaml"), rows, now)
         if not view:
             return None
-        day = now.date().isoformat()
+        day, fixed = now.date().isoformat(), snapshot.exit_r(rows)
         parts = []
         for v in view:
-            closed = [r for r in rows if r.get("sleeve") == v["name"] and r.get("kind") == "exit"
-                      and str(r.get("t", "")).startswith(day) and isinstance(r.get("r"), int | float)]
+            closed = [fixed[str(r.get("id"))] for r in rows if r.get("sleeve") == v["name"] and r.get("kind") == "exit"
+                      and str(r.get("t", "")).startswith(day) and str(r.get("id")) in fixed]
             bit = f"{v['name']} {len(v['positions'])} open"
             if closed:
-                bit += f", {len(closed)} closed today {sum(float(r['r']) for r in closed):+.2f}R"
+                bit += f", {len(closed)} closed today {sum(closed):+.2f}R"
             parts.append(bit)
         return "Crypto: " + "; ".join(parts) + "."
     except Exception:  # noqa: BLE001
