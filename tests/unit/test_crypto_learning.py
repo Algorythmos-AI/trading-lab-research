@@ -224,6 +224,7 @@ def test_drift_suspends_an_acting_model_until_it_is_retrained_and_a_new_lineage_
     point(d, version="m1-b")                                                    # the weekly retraining, same lineage
     state, events = judged(d, signals_with_outcomes(60, True))
     assert events == ["resumed", "retrained"] and state["state"] == "acting" and state["checkpoints"] == 1
+    assert "drift" not in state                             # the new version has scored nothing yet
     point(d, version="m2-a", lineage="m2:n_estimators=100,num_leaves=4")
     state, events = judged(d, signals_with_outcomes(60, True))
     assert events == ["lineage"] and state["state"] == "shadow" and state["checkpoints"] == 0 and state["finished"] == 0
@@ -352,6 +353,107 @@ def test_the_model_does_not_touch_a_challenger_or_the_baseline(crypto, monkeypat
     assert rows_of(d, "break", "entry") == [] and len(rows_of(d, cid, "entry")) == 1
     assert "score" not in rows_of(d, cid, "signal")[0]
     assert sum(len(c) for c in calls) == len(rows_of(d, "break", "signal")) + len(rows_of(d, "trend", "signal"))
+
+
+def skipper(d) -> str:
+    """An admitted challenger of the breakout rule that skips a pair another sleeve holds."""
+    dials = rules.canonical({"base": "break", "timeframe_min": 240, "high_bars": 30, "stop_atr": 3.0, "target_atr": 6.0,
+                             "trail_atr": 2.0, "min_stop_pct": 1.0, "btc_filter": False, "volume_filter": False, "skip_held": True})
+    cid = rules.challenger_id(dials)
+    challengers.note(d, cid, "registered", NOW, dials=dials, rules="r", slot="random", of=None, week="w", n_trials=8)
+    challengers.note(d, cid, "c1", NOW, passed=True, failed_on=[], base={"trades": 40, "mean_r": 0.3})
+    challengers.note(d, cid, "admitted", NOW)
+    return cid
+
+
+@pytest.mark.parametrize("score", [0.9, None])
+def test_an_entry_that_waits_for_the_model_is_held_to_every_other_sleeve_as_it_would_be_with_no_model(crypto, monkeypatch, score):  # noqa: F811
+    d, _, _ = crypto
+    cid = skipper(d)
+    act(d)
+    calls: list = []
+    fake_scorer(monkeypatch, score, calls)
+    run(venue({"XBTUSD": break_rows()}), crypto)
+    # With no model the breakout sleeve buys first and the challenger finds the pair held. A waiting entry must
+    # look the same to it: an acting model, or one that gives no answer, never gives a challenger a trade.
+    assert len(rows_of(d, "break", "entry")) == 1 and rows_of(d, cid, "entry") == []
+    seen = [v for r in rows_of(d, cid, "sleeve") for k, v in r["pairs"].items() if k == "BTC/USD"]
+    assert seen and seen[0]["why"] == ["held_elsewhere"]
+    assert len(calls) == 1                                  # asked once a cycle, also when it does not answer
+    if score is not None:
+        sig = rows_of(d, "break", "signal")[0]
+        assert promotion.model_row(sig) == calls[0][[r["is_break"] for r in calls[0]].index(1.0)]   # scored on what is journalled
+
+
+def test_a_fault_in_one_waiting_entry_does_not_lose_the_rest_of_the_cycle(crypto, monkeypatch):  # noqa: F811
+    from wt.crypto import sleeves
+    d, _, _ = crypto
+    act(d)
+    fake_scorer(monkeypatch, 0.9)
+    real = sleeves.enter
+
+    def flaky(book, sleeve, *a, **k):
+        if sleeve == "break":
+            raise KeyError("boom")
+        return real(book, sleeve, *a, **k)
+    monkeypatch.setattr(sleeves, "enter", flaky)
+    v = venue({"XBTUSD": break_rows()})
+    assert run(v, crypto) == 0
+    assert rows_of(d, "break", "entry") == [] and len(rows_of(d, "trend", "entry")) == 1    # the other sleeve's entry stands
+    assert rows_of(d, "trend", "signal") and book_of(d, "trend").positions                  # journalled and saved
+    assert "BTC/USD" not in book_of(d, "break").meta["last_bar"]                            # looked at again next cycle
+    monkeypatch.setattr(sleeves, "enter", real)
+    v.now += 60
+    run(v, crypto)
+    assert len(rows_of(d, "break", "entry")) == 1 and ledger.verify_chain(d.journal) == []
+
+
+def test_a_lineage_that_returns_carries_on_where_it_stopped_and_no_test_is_taken_twice(crypto):  # noqa: F811
+    d, _, _ = crypto
+    point(d)
+    rows = signals_with_outcomes(60, True)
+    assert judged(d, rows)[1] == ["lineage", "promoted"]
+    point(d, version="m2-a", lineage="m2:x")
+    state, events = judged(d, rows)
+    assert events == ["lineage"] and state["state"] == "shadow" and state["lineages_started"] == 2
+    point(d, version="m1-c")                                # a later retraining chooses the first lineage again
+    state, events = judged(d, rows)
+    assert events == ["returned"] and state["state"] == "acting" and state["checkpoints"] == 1 and len(state["looks"]) == 1
+    assert state["lineages_started"] == 2 and "m2:x" in state["past"] and promotion.in_force(d).acting is True
+    (promotion.models_dir(d) / "current.json").unlink()
+    state, events = judged(d, rows)
+    assert events == ["none"] and LINEAGE in state["past"]
+    point(d, version="m1-d")
+    state, events = judged(d, rows)
+    assert events == ["returned"] and state["checkpoints"] == 1
+
+
+def test_drift_is_measured_only_on_signals_the_version_in_force_scored(crypto):  # noqa: F811
+    d, _, _ = crypto
+    point(d, drift={"scores": [0.9, 0.92, 0.94, 0.96], "edges": {}})            # this card would call anything drift
+    old = signals_with_outcomes(60, True)
+    for r in old:
+        if r["kind"] == "signal":
+            r["model"] = "m1-earlier"
+    state, events = judged(d, old)
+    assert events == ["lineage", "promoted"] and "drift" not in state           # another version's scores: not measured
+    state, events = judged(d, old + signals_with_outcomes(60, True, 60))        # sixty of its own
+    assert "suspended" in events and state["drift"]["drifted"]
+
+
+def test_one_pairs_unreadable_history_does_not_stop_the_other_pairs(crypto):  # noqa: F811
+    d, _, _ = crypto
+    ledger.append(d.journal, {**signal_row(), "sid": f"break|ETH/USD|{B0}", "pair": "ETH/USD"})
+    ledger.append(d.journal, signal_row())
+    ledger.append(d.journal, {**signal_row(), "sid": "ancient", "bar": B0 - 500 * DAY})     # too old ever to finish
+
+    def load(pair, start, end):
+        assert start > B0 - 60 * DAY                        # the ancient signal does not stretch the request
+        if pair == "ETH/USD":
+            raise OSError("bad cache")
+        return breakout_history(AFTER)
+    found = outcomes.run(d, CFG, float(B0 + H4 * 5), journal(d), load)
+    assert [o["pair"] for o in found] == ["BTC/USD"]
 
 
 # ---------------------------------------------------------------- the daily job

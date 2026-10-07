@@ -26,6 +26,7 @@ from wt.ops.locks import job_lock
 
 HOUR, DAY = 3600, 86_400
 CYCLE_JOB, LOCK_WAIT_S = "crypto", 600.0
+MAX_AGE_D = 400                 # the longest holding period is 180 four-hour bars; a daily challenger's, 180 days
 
 
 def read_journal(desk: Desk) -> list[dict[str, Any]]:
@@ -113,13 +114,22 @@ def run(desk: Desk, cfg: dict[str, Any], now: float, rows: list[dict[str, Any]],
     for rec in todo:
         if rec.get("sleeve") in specs and isinstance(rec.get("bar"), int) and isinstance(rec.get("pair"), str):
             by_pair.setdefault(rec["pair"], []).append(rec)
-    out = []
+    out: list[dict[str, Any]] = []
     for pair, recs in by_pair.items():
-        need = max((specs[r["sleeve"]].c.bars + 2) * specs[r["sleeve"]].c.timeframe_min * 60 for r in recs)
-        hourly = load(pair, min(int(r["bar"]) for r in recs) - need, end)
-        if not hourly:
+        # A signal too old to finish any more (its bar is not in the history, or its levels are wrong) must not
+        # make every run read years of bars: nothing older than the window is asked for.
+        recs = [r for r in recs if int(r["bar"]) >= end - MAX_AGE_D * DAY]
+        if not recs:
             continue
-        grid = fill_grid(sorted(hourly, key=lambda b: b.t), HOUR)
+        try:
+            need = max((specs[r["sleeve"]].c.bars + 2) * specs[r["sleeve"]].c.timeframe_min * 60 for r in recs)
+            hourly = load(pair, min(int(r["bar"]) for r in recs) - need, end)
+            grid = fill_grid(sorted(hourly, key=lambda b: b.t), HOUR) if hourly else []
+        except Exception as e:  # noqa: BLE001 — one pair's history must not stop the others: it is tried again tomorrow
+            print(f"outcomes: {pair} left for the next run ({e.__class__.__name__})")
+            continue
+        if not grid:
+            continue
         agg: dict[int, list[Bar]] = {}
         for rec in recs:
             spec = specs[rec["sleeve"]]

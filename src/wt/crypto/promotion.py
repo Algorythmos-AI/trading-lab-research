@@ -132,6 +132,7 @@ class Obs:
     cutoff: float
     r: float
     inputs: dict[str, Any]
+    model: str = ""             # the version that scored it
 
     @property
     def kept(self) -> bool:
@@ -139,7 +140,7 @@ class Obs:
 
 
 def scored(rows: list[dict[str, Any]], lineage: str) -> list[Obs]:
-    """Signals this lineage scored whose outcome is known, in the order the outcomes arrived."""
+    """Signals this lineage scored whose outcome is known, in the order their trades ended."""
     outcome = {r.get("sid"): r for r in rows if r.get("kind") == "outcome"}
     out, seen = [], set()
     for r in rows:
@@ -150,7 +151,7 @@ def scored(rows: list[dict[str, Any]], lineage: str) -> list[Obs]:
             continue
         seen.add(r.get("sid"))
         out.append(Obs(str(r["sid"]), str(r.get("t")), str(o.get("exit_t"))[:10], str(o.get("exit_t")), float(r["score"]),
-                       float(r.get("cutoff", 0.0)), float(o["r"]), dict(r.get("inputs") or {})))
+                       float(r.get("cutoff", 0.0)), float(o["r"]), dict(r.get("inputs") or {}), str(r.get("model") or "")))
     return sorted(out, key=lambda x: (x.exit_t, x.sid))
 
 
@@ -229,15 +230,26 @@ def evaluate(desk: Desk, cfg: dict[str, Any], rows: list[dict[str, Any]], now: f
         events.append({"kind": "model", "event": what, "t": stamp, "model": state.get("version"),
                        "lineage": state.get("lineage"), **more})
 
+    # A lineage that is no longer in force keeps what it had used: if a later retraining chooses it again it
+    # carries on from there, with the checkpoints it has left and no test taken twice.
+    past: dict[str, Any] = dict(state.get("past") or {})
+    if state.get("lineage") and (p is None or state["lineage"] != p.lineage):
+        past[state["lineage"]] = {k: v for k, v in state.items() if k != "past"}
     if p is None:
-        if state.get("lineage"):
-            event("none")
-            state = {"state": None, "lineage": None, "version": None, "updated": stamp}
-        return state, events
+        if not state.get("lineage"):
+            return state, events
+        event("none")
+        return {"state": None, "lineage": None, "version": None, "updated": stamp, "past": past}, events
     if state.get("lineage") != p.lineage:
-        state = {"lineage": p.lineage, "version": p.version, "state": SHADOW, "checkpoints": 0, "since": stamp,
-                 "looks": [], "updated": stamp}
-        event("lineage", trained_at=p.trained_at)
+        if p.lineage in past:
+            state = {**past.pop(p.lineage), "version": p.version, "updated": stamp}
+            event("returned", trained_at=p.trained_at)
+        else:
+            state = {"lineage": p.lineage, "version": p.version, "state": SHADOW, "checkpoints": 0, "since": stamp,
+                     "looks": [], "updated": stamp}
+            event("lineage", trained_at=p.trained_at)
+        if state.get("state") == SUSPENDED:
+            state["state"] = state.pop("before", SHADOW)
     elif state.get("version") != p.version:
         state["version"] = p.version
         if state.get("state") == SUSPENDED:                 # a retraining ends a drift suspension
@@ -245,6 +257,8 @@ def evaluate(desk: Desk, cfg: dict[str, Any], rows: list[dict[str, Any]], now: f
             event("resumed")
         event("retrained", trained_at=p.trained_at)
 
+    state["past"] = past
+    state["lineages_started"] = len(past) + 1              # published with the model (DEC-0019)
     obs = scored(rows, p.lineage)
     done = int(state.get("checkpoints", 0))
     due = len(obs) // step
@@ -275,9 +289,15 @@ def evaluate(desk: Desk, cfg: dict[str, Any], rows: list[dict[str, Any]], now: f
     state["checkpoints"] = done
     state["next_checkpoint"] = (done + 1) * step
 
-    if len(obs) >= step:
-        # Measured in shadow too, so the owner sees it; only a model that acts can be suspended by it.
-        d = drift(card(desk, p.version).get("drift") or {}, obs[-step:], float(pr["drift_psi"]), int(pr["drift_inputs"]))
+    # Drift is measured on signals the version in force scored, against that version's own training data: scores
+    # of an earlier version are another model's. So a retraining ends a suspension, and the check starts again
+    # once the new version has scored enough. Measured in shadow too, so the owner sees it; only a model that
+    # acts can be suspended by it.
+    mine = [o for o in obs if o.model == p.version]
+    if len(mine) < step:
+        state.pop("drift", None)
+    else:
+        d = drift(card(desk, p.version).get("drift") or {}, mine[-step:], float(pr["drift_psi"]), int(pr["drift_inputs"]))
         state["drift"] = d
         if d["drifted"] and state["state"] == ACTING:
             state["before"], state["state"] = ACTING, SUSPENDED

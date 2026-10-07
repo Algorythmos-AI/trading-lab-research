@@ -230,7 +230,7 @@ def run(now: float | None = None, api: KrakenPublic | None = None, desk: Desk | 
             fault = s.get("model_fault")
             if fault and fault not in scorer.QUIET:
                 alerts.fire("crypto:scorer-failed", "Crypto: the model did not score this cycle's signals",
-                            f"{fault}. Every signal was traded as its registered rule says.", 3)
+                            f"{fault}. A signal the model gave no answer for was traded as its registered rule says.", 3)
             elif model.scoring and s.get("evaluated"):
                 alerts.resolve("crypto:scorer-failed", "Crypto: the model scores again", "The fault has cleared.")
             print(f"sleeves: evaluated {s['evaluated']} failed {sorted(s['failed'])} open {s['open']}")

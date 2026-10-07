@@ -135,6 +135,8 @@ def run(now: float | None = None, desk: Desk | None = None, cfg: dict[str, Any] 
             alerts.resolve("crypto:learn-train-failed", "Crypto: the model training runs again", "The fault has cleared.")
             models = promotion.models_dir(desk)
             models.mkdir(parents=True, exist_ok=True)
+            # When this run started, not when training ended: the next one is due a week from the job's own hour.
+            summary["t"] = dt.datetime.fromtimestamp(now, dt.UTC).isoformat(timespec="seconds")
             write_atomic(models / "last_train.json", json.dumps(summary, indent=1, sort_keys=True))
             if summary.get("chosen") is None and retire_pointer(desk, now):
                 print("no model beat taking every signal: none is in force")
