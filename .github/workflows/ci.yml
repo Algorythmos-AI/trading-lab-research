@@ -52,6 +52,27 @@ jobs:
       - name: Unit tests
         run: .venv/bin/python -m pytest
 
+  ml:
+    # The machine-learning environment (DEC-0016): its own hashed lockfile, its own tests. The trading suite above
+    # never installs it, which is the proof that nothing the trading jobs import depends on it.
+    name: ml
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPATH: src
+      TZ: UTC
+      WT_ML_REQUIRED: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Install the locked ML environment
+        run: |
+          uv venv --python 3.12 .venv-ml
+          uv pip install --require-hashes --python .venv-ml/bin/python -r requirements-ml.lock.txt
+      - name: ML tests
+        run: .venv-ml/bin/python -m unittest discover -s tests/ml -t . -v
+
   dashboard-gate:
     name: dashboard-gate
     runs-on: ubuntu-24.04
