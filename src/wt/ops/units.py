@@ -47,6 +47,7 @@ MEMORY: dict[str, tuple[str | None, str, str | None]] = {
     "dashboard": (None, "1G", "256M"),
     "crypto": (None, "512M", "128M"),
     "dashboard-crypto": (None, "512M", "128M"),
+    "crypto-challengers": ("1G", "1536M", "256M"),
 }
 
 

@@ -77,13 +77,14 @@ QUIESCE_WAIT_S = 120.0
 
 @contextlib.contextmanager
 def quiesced(wait_s: float | None = None) -> Iterator[list[str]]:
-    """Hold every interval job's lock for the block, waiting for a run in flight to finish. Those jobs are not
-    trading jobs, so the gate lets a deploy start while one runs; without this the checkout (and the venv) would
-    change under it. Yields the jobs still busy after `wait_s` (empty = quiet)."""
+    """Hold the lock of every job the gate does not wait for (the interval jobs and the daily challenger run),
+    waiting for a run in flight to finish. Those are not trading jobs, so the gate lets a deploy start while one
+    runs; without this the checkout (and the venv) would change under it. Yields the jobs still busy after
+    `wait_s` (empty = quiet)."""
     wait_s = QUIESCE_WAIT_S if wait_s is None else wait_s
     with contextlib.ExitStack() as stack:
         busy = [j.name for j in JOBS.values()
-                if j.interval_s and not stack.enter_context(job_lock(j.name, wait_s=wait_s, poll_s=2.0))]
+                if not j.trading and not stack.enter_context(job_lock(j.name, wait_s=wait_s, poll_s=2.0))]
         yield busy
 
 
