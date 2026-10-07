@@ -23,7 +23,7 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
                  src/wt/crypto/strategy.py src/wt/crypto/book.py src/wt/crypto/risk.py src/wt/crypto/features.py \
                  src/wt/crypto/labels.py src/wt/crypto/cycle.py src/wt/crypto/snapshot.py src/wt/crypto/control.py \
                  src/wt/crypto/rules.py src/wt/crypto/sleeves.py src/wt/crypto/backtest.py \
-                 src/wt/crypto/scorer.py src/wt/ml/modelfile.py src/wt/crypto/signals.py
+                 src/wt/crypto/scorer.py src/wt/ml/modelfile.py src/wt/crypto/signals.py src/wt/crypto/challengers.py
 JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
@@ -145,6 +145,15 @@ unkill: ## Allow entries again: paper B (refused while it is running), or make u
 
 reset-crypto-latch: ## OWNER: clear the crypto desk's daily-loss latch
 	@$(PY) -m wt.crypto.control reset-latch
+
+crypto-learning-off: ## OWNER: stop the model acting and the challengers opening trades (exits are still managed)
+	@$(PY) -m wt.crypto.control learning-off
+
+crypto-learning-on: ## OWNER: allow the model and the challengers again
+	@$(PY) -m wt.crypto.control learning-on
+
+crypto-challengers: ## The challengers' record: who was drawn, the backtest verdicts, who is live
+	@$(PY) -m wt.crypto.challengers --status
 
 reset-latch: ## OWNER: clear the virtual account's loss latch: make reset-latch REASON="why it is safe" (refused while paper B runs)
 	@$(PY) -m wt.ops.control reset-latch "$(REASON)"

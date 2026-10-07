@@ -128,5 +128,12 @@ JOBS: dict[str, Job] = {j.name: j for j in (
         "dashboard_crypto", deadline_min=6, trading=False, interval_s=900, calendar="*:1/15:00", desk="crypto",
         preflight=False, what="Publish the crypto desk's snapshot to the dashboard every 15 minutes",
         runtime_max_h=0.25),
+    # The challengers (DEC-0016, 5): once a day, in the quiet hours between the US close and the pre-market
+    # routine (03:30, not 02:30: that half hour does not exist on the night US clocks go forward). Most runs only check retirements and take seconds; the first of an ISO week draws up to two new
+    # ones and backtests each (about 200 two-year runs). Not a trading job: a deploy waits for it instead.
+    Job("crypto-challengers", "com.wt.crypto-challengers", 18, 30, ("-m", "wt.crypto.challengers"), "backtest",
+        "crypto_challengers", deadline_min=60, trading=False, et="Mon..Sun 03:30", desk="crypto",
+        what="Crypto challengers: retire, draw at most two a week, register, backtest (gate C1), admit",
+        runtime_max_h=1.25),
 )}
 TRADING_JOBS = [j.name for j in JOBS.values() if j.trading]
