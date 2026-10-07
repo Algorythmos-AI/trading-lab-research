@@ -16,3 +16,4 @@ families:
   C:                                                      # crypto desk (DEC-0012)
     - {decision: DEC-0012, total: 4, status: accepted}    # original, the 2026-04-26 loosening, HYP-0020, AUD -> USD pairs
     - {decision: DEC-0015, total: 7, status: accepted}    # HYP-0021 TREND, HYP-0022 BREAK, HYP-0023 DIP
+    - {decision: DEC-0019, total: 8, status: accepted}    # the tournament under desk-wide limits (EXP-0020)
