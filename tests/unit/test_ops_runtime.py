@@ -469,3 +469,36 @@ def test_alert_history_is_cut_to_its_newer_half(tmp_path, monkeypatch):
         al._history(tmp_path, f"k{i}", "fired", "t")
     lines = (tmp_path / "history.jsonl").read_text().splitlines()
     assert len(lines) < 40 and json.loads(lines[-1])["key"] == "k39"
+
+
+def test_the_daily_summary_says_what_paper_b_did_in_r_and_never_in_money():
+    armed = {"event": "armed", "ts": "2026-10-06T12:30:06+00:00", "virtual": {"equity": 600.0}}
+    end = {"event": "session_end", "ts": "2026-10-06T20:00:08+00:00", "virtual": {"equity": 601.2}}
+    closed = {"event": "trade_closed", "R": 0.42, "entry": 310.0, "exit": 311.2, "qty": 1}
+    assert jobs.paper_summary([armed, {**end, "outcome": "no_signal"}]) == "Paper B: no signal."
+    assert jobs.paper_summary([armed, closed, {**end, "outcome": "traded"}]) == "Paper B: traded, +0.42R on 1 closed trade(s)."
+    assert jobs.paper_summary([armed, {**end, "outcome": "blocked:kill_file"}]) == "Paper B: a signal was blocked (kill_file)."
+    assert "NOT acted on" in jobs.paper_summary([armed, {**end, "outcome": "signal_not_acted"}])
+    assert jobs.paper_summary([armed]) == "Paper B: session not finished."
+    assert jobs.paper_summary([end]) is None                                   # never armed: nothing to say
+    for line in (jobs.paper_summary([armed, closed, {**end, "outcome": "traded"}]),):
+        assert "$" not in line and "311" not in line and "600" not in line
+
+
+def test_the_daily_summary_joins_its_lines_and_survives_a_missing_desk(tmp_path, monkeypatch):
+    monkeypatch.setattr(jobs, "forward_summary", lambda: "Forward 2026-10-06: 1 trade(s), -0.18R total.")
+    monkeypatch.setattr(jobs, "journal_since", lambda start, path=None: [
+        {"event": "armed", "ts": "2026-10-06T12:30:06+00:00"}, {"event": "session_end", "outcome": "no_signal"}])
+    monkeypatch.setattr(jobs, "crypto_summary", lambda now: "Crypto: trend 1 open; break 1 open; dip 0 open.")
+    start = dt.datetime(2026, 10, 6, 16, 40, tzinfo=dt.UTC)
+    text = jobs.daily_summary(start)
+    assert text == ("Paper B: no signal. Forward 2026-10-06: 1 trade(s), -0.18R total. "
+                    "Crypto: trend 1 open; break 1 open; dip 0 open.")
+    monkeypatch.setattr(jobs, "crypto_summary", lambda now: None)
+    monkeypatch.setattr(jobs, "journal_since", lambda start, path=None: [])
+    assert jobs.daily_summary(start) == "Forward 2026-10-06: 1 trade(s), -0.18R total."
+
+
+def test_the_crypto_line_never_raises(monkeypatch):
+    monkeypatch.setattr(jobs, "installed", lambda desk: (_ for _ in ()).throw(RuntimeError("bug")))
+    assert jobs.crypto_summary(dt.datetime(2026, 10, 6, 20, tzinfo=dt.UTC)) is None
