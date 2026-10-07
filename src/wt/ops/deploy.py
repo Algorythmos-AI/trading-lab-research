@@ -94,35 +94,59 @@ def sync_venv() -> None:
 
 
 ML_LOCK, ML_VENV = "requirements-ml.lock.txt", ".venv-ml"
+ML_NEXT, ML_PREV = ".venv-ml.next", ".venv-ml.prev"
 
 
 def sync_ml() -> str:
     """Bring the machine-learning environment (DEC-0016) in line with its own hashed lockfile: "none" when the
     checkout has no such lockfile, "current" when nothing changed, "synced", or "failed".
 
-    It is a separate environment so that the trading one stays exactly its lockfile. It is synced after the
-    smoke test, and a failure here never fails the deploy: the trading jobs do not import it, and the scorer
-    falls back to unfiltered trading when it is missing (wt.crypto.scorer)."""
+    It is a separate environment so that the trading one stays exactly its lockfile. A failure here never fails
+    the deploy: the trading jobs do not import it, and the scorer falls back to unfiltered trading when it is
+    missing (wt.crypto.scorer).
+
+    The new environment is built beside the live one and put in its place by two renames, so the scorer sees
+    the old environment or the new one and never one that is half installed. The caller runs this after the
+    interval jobs' locks are released: a large first install must not hold the crypto cycle."""
     lock = ROOT / ML_LOCK
     if not lock.exists():
         return "none"
     want = hashlib.sha256(lock.read_bytes()).hexdigest()
-    stamp = ROOT / ML_VENV / ".lock-sha256"
+    live, nxt, prev = ROOT / ML_VENV, ROOT / ML_NEXT, ROOT / ML_PREV
+    stamp = live / ".lock-sha256"
     if stamp.exists() and stamp.read_text().strip() == want:
         return "current"
     try:
         uv = shutil.which("uv") or str(Path.home() / ".local/bin/uv")
-        if not (ROOT / ML_VENV / "bin" / "python").exists():
-            _run(uv, "venv", "--quiet", "--python", str(ROOT / PY), str(ROOT / ML_VENV))
-        _run(uv, "pip", "sync", "--quiet", "--python", str(ROOT / ML_VENV / "bin" / "python"), "--require-hashes",
+        shutil.rmtree(nxt, ignore_errors=True)
+        _run(uv, "venv", "--quiet", "--python", str(ROOT / PY), str(nxt))
+        _run(uv, "pip", "sync", "--quiet", "--python", str(nxt / "bin" / "python"), "--require-hashes",
              str(lock), timeout=1800)
-        stamp.write_text(want + "\n")
+        (nxt / ".lock-sha256").write_text(want + "\n")
+        shutil.rmtree(prev, ignore_errors=True)
+        if live.exists():
+            os.rename(live, prev)
+        os.rename(nxt, live)
+        shutil.rmtree(prev, ignore_errors=True)
         Alerts().resolve("deploy-ml", "ML environment in sync", "The machine-learning environment matches its lockfile.")
         return "synced"
     except (RuntimeError, OSError, subprocess.TimeoutExpired) as e:
+        if not live.exists() and prev.exists():             # the second rename failed: put the old one back
+            with contextlib.suppress(OSError):
+                os.rename(prev, live)
+        shutil.rmtree(nxt, ignore_errors=True)
         Alerts().fire("deploy-ml", "ML environment did not sync",
                       f"{str(e)[:200]}. Trading is unaffected; models are not scored until the next deploy fixes it.", 3)
         return "failed"
+
+
+def _note_ml(rec: Path | None) -> None:
+    """Sync the ML environment and write the outcome into the deploy's record."""
+    state = sync_ml()
+    if rec is not None and rec.exists():
+        rec.write_text(json.dumps({**json.loads(rec.read_text()), "ml_env": state}, indent=1, default=str))
+    if state in ("synced", "failed"):
+        print(f"ML environment: {state}")
 
 
 def smoke() -> tuple[bool, str]:
@@ -254,11 +278,15 @@ def deploy(sha: str | None = None, stage: bool = False) -> int:
             if busy:
                 print(f"Refusing: still running after {QUIESCE_WAIT_S:.0f}s: {', '.join(busy)}")
                 return 2
-            return _switch(target, stage, green, ci_override, why_dash, override)
+            code, rec = _switch(target, stage, green, ci_override, why_dash, override)
+        # The interval jobs run again from here. Still under the deploy lock, so two deploys cannot both build it.
+        if code == 0:
+            _note_ml(rec)
+        return code
 
 
 def _switch(target: str, staged: bool, green: ci.Verdict, ci_override: str, why_dash: str | None,
-            override: str | None) -> int:
+            override: str | None) -> tuple[int, Path | None]:
     before = _run("git", "rev-parse", "HEAD").stdout.strip()
     tag = next_tag()
     _run("git", *TAGGER, "tag", "-a", tag, "-m", f"runtime state before deploy at {_now():%Y-%m-%dT%H:%M:%SZ}", before)
@@ -280,8 +308,7 @@ def _switch(target: str, staged: bool, green: ci.Verdict, ci_override: str, why_
         record(body)
         Alerts().fire("deploy", "Deploy rolled back", f"Smoke test failed on {after[:8]}; live checkout restored "
                       f"to {tag}.", 4)
-        return 1
-    body["ml_env"] = sync_ml()
+        return 1, None
     rec = record(body)
     Alerts().resolve("deploy", "Deploy healthy", f"Live checkout at {after[:8]}.")
     shown = rec.relative_to(ROOT) if rec.is_relative_to(ROOT) else rec          # WT_STATE may live elsewhere
@@ -291,7 +318,7 @@ def _switch(target: str, staged: bool, green: ci.Verdict, ci_override: str, why_
     if host.current().kind == "launchd" and (d := agents.diff()):
         print("launchd agents need reinstalling (owner, outside the trading window):\n  " + "\n  ".join(d) +
               "\n  -> make install-trading-agents")
-    return 0
+    return 0, rec
 
 
 def broker_cleanup_before_rollback(broker_factory: Any = None) -> str | None:
@@ -343,7 +370,8 @@ def rollback(tag: str) -> int:
             _run("git", "reset", "--hard", "--quiet", tag)
             sync_venv()
             ok, out = smoke()
-    record({"rollback_from": before, "to_tag": tag, "smoke_ok": ok})
+        # The ML environment follows the checkout back, so the scorer never runs against a lock from the future.
+        _note_ml(record({"rollback_from": before, "to_tag": tag, "smoke_ok": ok}))
     print(f"Rolled back {before[:8]} -> {tag}; smoke {'ok' if ok else 'FAILED'}")
     if not ok:
         print(out)

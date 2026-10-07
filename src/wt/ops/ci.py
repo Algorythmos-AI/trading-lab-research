@@ -4,7 +4,7 @@
 
 A deploy (wt.ops.deploy) takes only a commit on main whose required checks all concluded "success" on that exact
 commit. Pending, cancelled, skipped, failed or missing count as not green. When a check was re-run, its newest run
-decides. Required names come from WT_REQUIRED_CHECKS (comma-separated; default "test").
+decides. Required names come from WT_REQUIRED_CHECKS (comma-separated; default "test,ml").
 
 Auth: GH_TOKEN or GITHUB_TOKEN when set (a read-only token; the repository may be private), else the `gh` CLI's
 token when it is logged in (the Mac), else unauthenticated (a public repository, 60 requests an hour per IP).
@@ -24,7 +24,7 @@ import requests
 from wt.core.config import ROOT
 
 API = "https://api.github.com"
-DEFAULT_REQUIRED = ("test",)
+DEFAULT_REQUIRED = ("test", "ml")    # ml: the learning job and the scorer run what that job tests
 
 
 @dataclass(frozen=True)
