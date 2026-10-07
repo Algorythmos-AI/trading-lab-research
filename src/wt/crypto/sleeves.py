@@ -169,8 +169,9 @@ def manage(book: Book, sleeve: str, name: str, bars: list[Bar], minutes: list[Ba
 def enter(book: Book, sleeve: str, name: str, last: Bar, atr: float, quote: Quote, info: PairInfo | None,
           blockers: list[str], now: float, day: str, desk: Desk, folder: Path, pairs: tuple[str, ...],
           equity: Decimal, c: rules.Common, p: dict[str, Any], costs: dict[str, Any], lim: risk.SleeveLimits,
-          extra: dict[str, Any]) -> list[str]:
-    """Try the entry for a signal bar. Returns the codes that refused it; empty when the position was opened."""
+          extra: dict[str, Any], desk_why: Callable[[Decimal], list[str]] | None = None) -> list[str]:
+    """Try the entry for a signal bar. Returns the codes that refused it; empty when the position was opened.
+    `desk_why(risk of the new trade)` gives what the desk as a whole forbids (DEC-0019)."""
     if info is None:
         return [*blockers, "no_pair_info"]
     fee = float(costs["taker_fee_pct"])
@@ -182,6 +183,8 @@ def enter(book: Book, sleeve: str, name: str, last: Bar, atr: float, quote: Quot
     target = NO_TARGET if target_f is None else to_tick(Decimal(str(target_f)), info.tick, ROUND_DOWN)
     qty = to_lot(risk.size(equity, book.cash, price, stop, fee, lim), info.lot_decimals)
     why = blockers + risk.sleeve_blockers(name, qty * price, equity, book, day, desk, folder, pairs, lim)
+    if desk_why is not None:
+        why += desk_why(qty * (price - stop))
     if why:
         return why
     try:
@@ -220,6 +223,7 @@ class Run:
     # The entry rule, when it is not the registered one: the backtest's random-entry control sets it.
     entry: Callable[..., tuple[bool, tuple[str, ...], float | None]] | None = None
     off: dict[str, str] = field(default_factory=dict)     # sleeves that may not open a trade, with the reason code
+    desk_lim: risk.DeskLimits | None = None               # limits across all the books together (DEC-0019)
 
     @property
     def day(self) -> str:
@@ -296,7 +300,8 @@ def step_pair(run: Run, name: str, kraken_pair: str, bars_of: Callable[[int], li
                     q = assess(bars, quote, now, c.timeframe_min, run.qcfg)
                     refused = enter(book, n, name, last, atr, quote, run.infos.get(kraken_pair), list(q.reasons),
                                     now, run.day, run.desk, risk.sleeve_dir(run.desk, n), run.pairs,
-                                    book.equity(run.marks), c, spec.p, run.costs, run.lim, run.extra[n])
+                                    book.equity(run.marks), c, spec.p, run.costs, run.lim, run.extra[n],
+                                    _desk_why(run, n, name))
                 if refused:
                     book.note({"kind": "refused", "t": _iso(now), "pair": name, "bar": last.t, "why": refused,
                                **run.extra[n]})
@@ -316,6 +321,19 @@ def step_pair(run: Run, name: str, kraken_pair: str, bars_of: Callable[[int], li
             run.failed[f"{n}:{name}"] = str(e)[:60]
         except Exception as e:  # noqa: BLE001 — as above
             run.failed[f"{n}:{name}"] = e.__class__.__name__
+
+
+def _desk_why(run: Run, sleeve: str, name: str) -> Callable[[Decimal], list[str]] | None:
+    """What the desk as a whole forbids for an entry of `sleeve` in `name`, given the new trade's risk (DEC-0019).
+    Every book of this cycle counts: the registered sleeves and the live challengers."""
+    if run.desk_lim is None:
+        return None
+    lim = run.desk_lim
+
+    def why(new_risk: Decimal) -> list[str]:
+        equity = sum((b.equity(run.marks) for b in run.books.values()), Decimal(0))
+        return risk.desk_blockers(name, sleeve, new_risk, run.books, equity, lim)
+    return why
 
 
 def _signal(run: Run, sleeve: str, name: str, last: Bar, bars: list[Bar], atr: float, quote: Quote | None,
@@ -393,7 +411,7 @@ def run_all(now: float, api: KrakenPublic, desk: Desk, cfg: dict[str, Any], aler
         flush(books[n], risk.sleeve_dir(desk, n) / "book.json", desk.journal)        # repair, as the baseline does
     run = Run(now, desk, specs, cfg["costs"], cfg["quality"], risk.load_sleeve_limits(str(common["limits"])),
               tuple(pairs), books, pair_infos(api, state, list(pairs.values()), utc_day(now), budget),
-              extras(cfg, specs), alerts, off=dict(off or {}))
+              extras(cfg, specs), alerts, off=dict(off or {}), desk_lim=risk.load_desk_limits())
     # How many closed bars of each length the sleeves need. Daily bars also feed the dip rule's filter and the
     # market inputs, whatever the sleeves' own bar lengths are.
     keep: dict[int, int] = {base.daily_min: base.daily_bars}

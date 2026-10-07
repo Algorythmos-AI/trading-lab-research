@@ -31,3 +31,9 @@ CT:
   max_entries_per_day: 4       # per UTC day
   max_orders_per_day: 20
   daily_loss_latch_pct: 3      # realised loss in a UTC day; entries stay off for the sleeve until the owner resets it
+
+# Limits across the whole crypto tournament (DEC-0019), read by wt.crypto.risk: the registered sleeves and every
+# live challenger together. They only refuse entries. The baseline (key C) is neither counted nor limited.
+CD:
+  one_position_per_coin: true  # a sleeve may not open a coin another book of the tournament holds
+  max_open_risk_pct: 3.0       # of the books' combined equity: open risk at the stops, plus the new trade's
