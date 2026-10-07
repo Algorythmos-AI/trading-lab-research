@@ -12,6 +12,7 @@
 # python
 __pycache__/
 .venv/
+.venv-ml/
 *.pyc
 .pytest_cache/
 .mypy_cache/

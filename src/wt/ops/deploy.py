@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import hashlib
 import datetime as dt
 import json
 import os
@@ -90,6 +91,38 @@ def sync_venv() -> None:
     uv = shutil.which("uv") or str(Path.home() / ".local/bin/uv")
     _run(uv, "pip", "sync", "--python", str(ROOT / PY), "requirements.lock.txt")
     (ROOT / preflight.LOCK_STAMP).write_text(preflight.lock_hash(ROOT) + "\n")
+
+
+ML_LOCK, ML_VENV = "requirements-ml.lock.txt", ".venv-ml"
+
+
+def sync_ml() -> str:
+    """Bring the machine-learning environment (DEC-0016) in line with its own hashed lockfile: "none" when the
+    checkout has no such lockfile, "current" when nothing changed, "synced", or "failed".
+
+    It is a separate environment so that the trading one stays exactly its lockfile. It is synced after the
+    smoke test, and a failure here never fails the deploy: the trading jobs do not import it, and the scorer
+    falls back to unfiltered trading when it is missing (wt.crypto.scorer)."""
+    lock = ROOT / ML_LOCK
+    if not lock.exists():
+        return "none"
+    want = hashlib.sha256(lock.read_bytes()).hexdigest()
+    stamp = ROOT / ML_VENV / ".lock-sha256"
+    if stamp.exists() and stamp.read_text().strip() == want:
+        return "current"
+    try:
+        uv = shutil.which("uv") or str(Path.home() / ".local/bin/uv")
+        if not (ROOT / ML_VENV / "bin" / "python").exists():
+            _run(uv, "venv", "--quiet", "--python", str(ROOT / PY), str(ROOT / ML_VENV))
+        _run(uv, "pip", "sync", "--quiet", "--python", str(ROOT / ML_VENV / "bin" / "python"), "--require-hashes",
+             str(lock), timeout=1800)
+        stamp.write_text(want + "\n")
+        Alerts().resolve("deploy-ml", "ML environment in sync", "The machine-learning environment matches its lockfile.")
+        return "synced"
+    except (RuntimeError, OSError, subprocess.TimeoutExpired) as e:
+        Alerts().fire("deploy-ml", "ML environment did not sync",
+                      f"{str(e)[:200]}. Trading is unaffected; models are not scored until the next deploy fixes it.", 3)
+        return "failed"
 
 
 def smoke() -> tuple[bool, str]:
@@ -248,6 +281,7 @@ def _switch(target: str, staged: bool, green: ci.Verdict, ci_override: str, why_
         Alerts().fire("deploy", "Deploy rolled back", f"Smoke test failed on {after[:8]}; live checkout restored "
                       f"to {tag}.", 4)
         return 1
+    body["ml_env"] = sync_ml()
     rec = record(body)
     Alerts().resolve("deploy", "Deploy healthy", f"Live checkout at {after[:8]}.")
     shown = rec.relative_to(ROOT) if rec.is_relative_to(ROOT) else rec          # WT_STATE may live elsewhere
