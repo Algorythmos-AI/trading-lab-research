@@ -1675,6 +1675,243 @@
         }
       },
       "maxItems": 2000
+    },
+    "challengers": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "learning": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
+        "week": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
+        "per_week": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "max_live": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "max_registered": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "registered": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "live": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "failed": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "retired": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "drawn_this_week": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "list": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "rules": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "slot": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "of": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "week": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "registered": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "status": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "n_trials": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "trades": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "trades_per_month": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "win_rate": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "mean_r": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "ci_low": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "ci_high": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "profit_factor": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "dsr": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "control_p": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "max_drawdown_pct": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "failed_on": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 200
+                },
+                "maxItems": 2000
+              },
+              "admitted": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "retired": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "retired_why": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              }
+            }
+          },
+          "maxItems": 2000
+        }
+      }
     }
   },
   "required": [

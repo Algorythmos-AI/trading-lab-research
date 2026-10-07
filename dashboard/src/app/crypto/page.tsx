@@ -1,6 +1,6 @@
 import { Activity, Gauge, LineChart, ListChecks } from "lucide-react";
 import { CryptoKillNotice, NoCryptoSnapshot } from "@/components/crypto/panels";
-import { SleeveChecks, SleevePositions, SleeveSignals, SleeveTrades, TournamentBoard } from "@/components/crypto/tournament";
+import { ChallengersPanel, SleeveChecks, SleevePositions, SleeveSignals, SleeveTrades, TournamentBoard } from "@/components/crypto/tournament";
 import { Empty } from "@/components/empty";
 import { HealthBanner } from "@/components/health-banner";
 import { KeyValues } from "@/components/kv";
@@ -14,7 +14,7 @@ import { fracPct, num, rMult, shortDate, signed, zoned } from "@/lib/format";
 import { freshness } from "@/lib/freshness";
 import { requestTime } from "@/lib/now";
 import { loadCryptoSnapshot } from "@/lib/snapshot";
-import { tournament } from "@/lib/tournament";
+import { challengers, tournament } from "@/lib/tournament";
 import { list } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -52,10 +52,12 @@ export default async function CryptoOverviewPage() {
 function TournamentPanels({ s }: { s: Crypto }) {
   const t = tournament(s);
   if (!t.available) return null;
+  const c = challengers(s);
   return (
     <>
       <TournamentBoard s={s} t={t} />
       <SleevePositions s={s} t={t} />
+      {c.available ? <ChallengersPanel c={c} /> : null}
       <SleeveTrades s={s} t={t} />
       <div className="grid gap-5 lg:grid-cols-2">
         <SleeveSignals t={t} />

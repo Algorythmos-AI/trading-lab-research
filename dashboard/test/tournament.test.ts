@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { code, type Crypto } from "@/lib/crypto";
-import { sleeveLabel, tournament, tournamentLine } from "@/lib/tournament";
+import { challengers, challengersLine, sleeveLabel, tournament, tournamentLine } from "@/lib/tournament";
 
 const fixture = (): Crypto => JSON.parse(readFileSync(new URL("./fixtures/crypto.v1.json", import.meta.url), "utf8")) as Crypto;
 
@@ -14,7 +14,11 @@ describe("the crypto tournament", () => {
       ["trend", "Trend", "incubation"],
       ["break", "Breakout", "incubation"],
       ["dip", "Dip", "incubation"],
+      ["ch-29db21a0", "Challenger 29db21a0", "passed"],
     ]);
+    // A challenger has no built-in description: its recorded rules say what it does.
+    expect(t.rows[3]!.does).toMatch(/^Challenger: break rule on daily bars/);
+    expect(t.rows[3]!.equity).toBe(10000);
     const trend = t.rows[0]!;
     expect(trend.trades).toBe(3);
     expect(trend.wins + trend.losses).toBe(3);
@@ -68,5 +72,38 @@ describe("the crypto tournament", () => {
       "Breakout",
       "other",
     ]);
+  });
+
+  it("lists every idea tried, newest first, with the verdict of its backtest", () => {
+    const c = challengers(fixture());
+    expect(c.available).toBe(true);
+    expect(c.learningOn).toBe(true);
+    expect(c.rows.map((r) => [r.status, r.slot])).toEqual([
+      ["registered", "random"],
+      ["live", "neighbour"],
+      ["failed", "random"],
+    ]);
+    const [waiting, live, failed] = c.rows as [typeof c.rows[0], typeof c.rows[0], typeof c.rows[0]];
+    expect(waiting.trades).toBeNull();
+    expect(waiting.rules).toMatch(/^dip rule on daily bars/);
+    expect([live.of, live.meanR, live.ciLow, live.failedOn]).toEqual(["break", 0.212, 0.019, []]);
+    expect(failed.failedOn.map(code)).toEqual([
+      "not clearly profitable once costs are raised",
+      "could be luck, given how many ideas were tried",
+      "wins too small against losses",
+    ]);
+    expect([c.registered, c.live, c.failed, c.maxLive, c.maxRegistered, c.perWeek]).toEqual([3, 1, 1, 6, 60, 2]);
+    expect(challengersLine(c)).toBe("3 ideas tried: 1 trading, 1 failed its backtest, 1 waiting for its backtest.");
+  });
+
+  it("says so when nothing has been tried, when learning is off, and before the host publishes the section", () => {
+    const empty = { ...fixture(), challengers: { learning: "on", list: [], registered: 0 } } as Crypto;
+    expect(challengersLine(challengers(empty))).toBe("No idea has been tried yet.");
+    const off = { ...fixture(), challengers: { ...fixture().challengers, learning: "off" } } as Crypto;
+    expect(challengers(off).learningOn).toBe(false);
+    expect(challengersLine(challengers(off))).toMatch(/Learning is switched off\.$/);
+    const older = challengers({ ...fixture(), challengers: undefined } as Crypto);
+    expect([older.available, older.rows]).toEqual([false, []]);
+    expect(challengersLine(older)).toBe("The challengers have not published yet.");
   });
 });
