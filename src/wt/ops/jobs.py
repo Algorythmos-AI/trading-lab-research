@@ -226,6 +226,61 @@ def forward_summary(ledger: Path = FORWARD_LEDGER) -> str | None:
             f". Sessions recorded: {len(done)}.")
 
 
+OUTCOME_WORDS = {"traded": "traded", "no_signal": "no signal", "signal_not_acted": "a signal fired and was NOT acted on"}
+
+
+def paper_summary(rows: list[dict[str, Any]]) -> str | None:
+    """One line on Paper B's session from its journal rows: what it did, in R only (plan R13). None when it never
+    armed."""
+    if not any(r.get("event") == "armed" for r in rows):
+        return None
+    end = next((r for r in reversed(rows) if r.get("event") == "session_end"), None)
+    outcome = str((end or {}).get("outcome") or "")
+    rs = [float(r["R"]) for r in rows if r.get("event") == "trade_closed" and isinstance(r.get("R"), int | float)]
+    if outcome.startswith("blocked"):
+        words = f"a signal was blocked ({outcome.split(':', 1)[-1]})"
+    else:
+        words = OUTCOME_WORDS.get(outcome, "session not finished" if end is None else "no trade")
+    return f"Paper B: {words}" + (f", {sum(rs):+.2f}R on {len(rs)} closed trade(s)" if rs else "") + "."
+
+
+def crypto_summary(now: dt.datetime) -> str | None:
+    """One line on the crypto tournament sleeves: positions open and what closed today (UTC), in R only. None when
+    the desk is not on this host or has no sleeves. Never raises: a summary must not fail a job."""
+    try:
+        from wt.core.config import load_yaml
+        from wt.crypto import snapshot
+        desk = DESKS["crypto"]
+        if not installed(desk):
+            return None
+        rows = snapshot._jsonl(desk.journal)
+        view = snapshot.sleeves_view(desk, load_yaml("crypto.yaml"), rows, now)
+        if not view:
+            return None
+        day = now.date().isoformat()
+        parts = []
+        for v in view:
+            closed = [r for r in rows if r.get("sleeve") == v["name"] and r.get("kind") == "exit"
+                      and str(r.get("t", "")).startswith(day) and isinstance(r.get("r"), int | float)]
+            bit = f"{v['name']} {len(v['positions'])} open"
+            if closed:
+                bit += f", {len(closed)} closed today {sum(float(r['r']) for r in closed):+.2f}R"
+            parts.append(bit)
+        return "Crypto: " + "; ".join(parts) + "."
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def daily_summary(start: dt.datetime, now: dt.datetime | None = None) -> str | None:
+    """The end-of-day message sent to the owner's phone after the forward test: Paper B, the forward test and the
+    crypto sleeves, one line each. Statuses, counts and R: never money."""
+    now = now or dt.datetime.now(dt.UTC)
+    day_start = dt.datetime.combine(start.astimezone(ET).date(), dt.time(0), tzinfo=ET)
+    lines = [paper_summary(journal_since(day_start)), forward_summary(), crypto_summary(now)]
+    text = " ".join(x for x in lines if x)
+    return text or None
+
+
 def launchd_loaded(label: str) -> bool:
     """True if the service manager knows the job's agent/unit (launchd or systemd, wt.ops.host). Used for the
     follower fallback while agents are being (re)installed; unknown counts as installed."""
@@ -363,7 +418,7 @@ def run_job(job: Job, root: Path = ROOT, preflight_only: bool = False, alerts: A
         key = f"job:{job.name}"
         if code == 0:
             alerts.resolve(key, f"{job.name} recovered", f"{job.name} completed normally.")
-            if job.name == "forward" and (line := forward_summary()):
+            if job.name == "forward" and (line := daily_summary(start)):
                 paused = " Paper B entries are paused (KILL file present)." if KILL.exists() else ""
                 alerts.once_per_day("summary", "Trading Lab daily summary", line + paused, 2)
             if job.name == "weekly":
