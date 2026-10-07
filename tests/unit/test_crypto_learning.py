@@ -515,7 +515,7 @@ def test_the_snapshot_says_what_was_trained_what_is_in_force_and_how_its_picks_d
     from wt.crypto import snapshot
     d, a, _ = crypto
     empty = snapshot.learning_view(d, CFG, [])
-    assert empty == {"switch": "on", "model": None, "training": None,
+    assert empty == {"switch": "on", "lineages_started": 0, "model": None, "training": None,
                      "signals": {"recorded": 0, "finished": 0, "open": 0, "win_rate": None, "mean_r": None, "scored": 0,
                                  "kept": 0, "kept_mean_r": None, "skipped": 0, "skipped_mean_r": None}}
     assert snapshot.learning_view(d, {**CFG, "learning": {}}, []) is None
@@ -532,7 +532,7 @@ def test_the_snapshot_says_what_was_trained_what_is_in_force_and_how_its_picks_d
     m = view["model"]
     assert (m["version"], m["lineage"], m["state"], m["checkpoints"], m["finished"], m["next_checkpoint"]) == ("m1-a", LINEAGE, "shadow", 1, 60, 120)
     assert (m["max_checkpoints"], m["checkpoint_signals"]) == (6, 60) and len(m["looks"]) == 1 and m["looks"][0]["passed"] is False
-    assert m["drifted"] is False and m["score_psi"] is not None
+    assert m["drifted"] is False and m["score_psi"] is not None and view["lineages_started"] == 1
     t = view["training"]
     assert [x["name"] for x in t["models"]] == ["m0", "m1"] and t["models"][1]["settings"] == "C=1"
     assert (t["models"][1]["ci_low"], t["models"][1]["ci_high"], t["models"][0]["settings"]) == (-0.1, 0.3, None)

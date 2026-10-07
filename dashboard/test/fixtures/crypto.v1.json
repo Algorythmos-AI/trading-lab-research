@@ -466,6 +466,7 @@
   "since": "2026-09-30T20:00:40+00:00"
  },
  "learning": {
+  "lineages_started": 1,
   "model": {
    "checkpoint_signals": 60,
    "checkpoints": 1,

@@ -73,6 +73,8 @@ export interface Learning {
   /** False until the host publishes the section. */
   available: boolean;
   switchOn: boolean;
+  /** How many different models have been put in shadow so far: each one is another chance for luck. */
+  lineagesStarted: number;
   model: {
     version: string;
     lineage: string;
@@ -128,6 +130,7 @@ export function learning(s: Crypto): Learning {
   return {
     available: l != null,
     switchOn: l?.switch !== "off",
+    lineagesStarted: n(l?.lineages_started) ?? 0,
     model:
       m && typeof m.version === "string"
         ? {

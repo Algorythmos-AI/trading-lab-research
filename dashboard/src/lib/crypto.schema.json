@@ -1927,6 +1927,12 @@
           ],
           "maxLength": 200
         },
+        "lineages_started": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "model": {
           "type": [
             "object",

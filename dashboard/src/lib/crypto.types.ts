@@ -411,6 +411,7 @@ export interface CryptoSnapshot {
   } | null;
   learning?: {
     switch?: string | null;
+    lineages_started?: number | null;
     model?: {
       version?: string | null;
       lineage?: string | null;

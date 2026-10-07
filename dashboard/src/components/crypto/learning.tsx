@@ -43,6 +43,7 @@ export function ModelPanel({ l }: { l: Learning }) {
               { label: "Model", value: m.lineage },
               { label: "Trained (UTC)", value: utc(m.trainedAt) },
               { label: "Tests used", value: `${num(m.checkpoints)} of ${num(m.maxCheckpoints)}` },
+              { label: "Models tried in shadow so far", value: num(l.lineagesStarted) },
               { label: "Drift of its scores", value: isNum(m.scorePsi) ? `${m.scorePsi.toFixed(2)} (suspends above 0.25)` : "Not measured yet" },
             ]}
           />

@@ -11,6 +11,7 @@ describe("the crypto model", () => {
     const l = learning(fixture());
     expect(l.available).toBe(true);
     expect(l.switchOn).toBe(true);
+    expect(l.lineagesStarted).toBe(1);
     const m = l.model!;
     expect([m.lineage, m.state, m.stateLabel, m.tone]).toEqual(["m1:C=0.1", "shadow", "In shadow", "info"]);
     expect([m.finished, m.nextCheckpoint, m.checkpoints, m.maxCheckpoints]).toEqual([74, 120, 1, 6]);

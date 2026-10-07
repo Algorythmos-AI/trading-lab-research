@@ -94,7 +94,7 @@ ALLOW: dict[str, Any] = {
                               "max_drawdown_pct": N, "failed_on": [S], "admitted": S, "retired": S,
                               "retired_why": S}]},
     # ---- the model (DEC-0016, 3 and 4): what was trained, what is in force, and the tests it has faced ----
-    "learning": {"switch": S,
+    "learning": {"switch": S, "lineages_started": I,
                  "model": {"version": S, "lineage": S, "state": S, "trained_at": S, "checkpoints": I, "max_checkpoints": I,
                            "checkpoint_signals": I, "finished": I, "next_checkpoint": I, "score_psi": N, "drifted": B,
                            "drift_inputs": [S],
@@ -451,7 +451,10 @@ def learning_view(desk: Desk, cfg: dict[str, Any], rows: list[dict[str, Any]]) -
               if p is not None and recorded[sid].get("lineage") == p.lineage and _f(recorded[sid].get("score")) is not None]
     kept = [r for s, r in scored if float(s["score"]) >= float(s.get("cutoff", 0.0))]
     skipped = [r for s, r in scored if float(s["score"]) < float(s.get("cutoff", 0.0))]
-    return {"switch": "off" if risk.learning_file(desk).exists() else "on", "model": model, "training": training,
+    # How many different models have been put in shadow so far (DEC-0019): each one is another chance for luck.
+    started = len(state.get("past") or {}) + (1 if state.get("lineage") else 0)
+    return {"switch": "off" if risk.learning_file(desk).exists() else "on", "lineages_started": started,
+            "model": model, "training": training,
             "signals": {"recorded": len(recorded), "finished": len(done), "open": len(recorded) - len(done),
                         "win_rate": sum(r > 0 for r in rs) / len(rs) if rs else None,
                         "mean_r": statistics.fmean(rs) if rs else None, "scored": len(scored),
