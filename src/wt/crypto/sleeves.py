@@ -209,6 +209,7 @@ class Pending:
     quote: Quote
     reasons: list[str]
     row: dict[str, Any]
+    equity: Decimal             # the book's value at the pair's turn: what the rule would have sized from
 
 
 @dataclass
@@ -300,7 +301,7 @@ def step_pair(run: Run, name: str, kraken_pair: str, bars_of: Callable[[int], li
             if book.meta["last_bar"].get(name) == last.t:
                 continue                        # this bar was evaluated by an earlier run
             fresh = 0 <= now - (last.t + c.timeframe_min * 60) <= FRESH_S
-            held = any(name in run.books[m].positions for m in run.names if m != n)
+            held = _held(run, n, name)
             fire, why, atr = rules.evaluate(spec, bars, daily, run.market, held, run.entry)
             row: dict[str, Any] = {"bar": last.t, "fire": fire, "why": list(why)}
             if observe is not None:
@@ -320,7 +321,8 @@ def step_pair(run: Run, name: str, kraken_pair: str, bars_of: Callable[[int], li
                         run.marks[name] = quote.bid
                     q = assess(bars, quote, now, c.timeframe_min, run.qcfg)
                     if run.acting and run.scorer is not None and n in rules.NAMES:
-                        run.pending.append(Pending(n, name, kraken_pair, last, bars, atr, quote, list(q.reasons), row))
+                        run.pending.append(Pending(n, name, kraken_pair, last, bars, atr, quote, list(q.reasons), row,
+                                                   book.equity(run.marks)))
                         waits = True
                     else:
                         refused = enter(book, n, name, last, atr, quote, run.infos.get(kraken_pair), list(q.reasons),
@@ -356,6 +358,13 @@ def _conclude(run: Run, n: str, name: str, last: Bar, bars: list[Bar], atr: floa
     return rec
 
 
+def _held(run: Run, n: str, name: str) -> bool:
+    """Whether another sleeve holds the pair. An entry that waits for the model counts as held: to every other
+    sleeve the cycle must look as it would with no model, where that entry was already made."""
+    return (any(name in run.books[m].positions for m in run.names if m != n)
+            or any(p.pair == name and p.sleeve != n for p in run.pending))
+
+
 def _breadth(run: Run, n: str, bar: int) -> float:
     """How many pairs met this sleeve's rule on the same bar."""
     return float(sum(1 for v in run.seen.get(n, {}).values() if v.get("fire") and v.get("bar") == bar))
@@ -369,31 +378,44 @@ def settle(run: Run) -> None:
     """The entries that waited for the model (DEC-0016, 4), once every pair has been looked at: each signal is
     scored on its inputs as they stand, then skipped, bought at half size, or bought as its rule says. If the
     scorer gives no answer every one of them is bought as its rule says. Nothing here can add or enlarge a trade."""
-    waiting, run.pending = run.pending, []
+    waiting = list(run.pending)
     if not waiting or run.scorer is None:
+        run.pending = []
         return
-    drafts = [_signal(run, p.sleeve, p.pair, p.last, p.bars, p.atr, p.quote, ["pending"]) for p in waiting]
-    for p, d in zip(waiting, drafts, strict=True):
-        d["inputs"]["breadth"] = _breadth(run, p.sleeve, p.last.t)
+    got, drafts = None, []
     try:
+        # The inputs as they stand before any of these entries is made. `run.pending` is still full here, so
+        # "held elsewhere" reads as it would with no model.
+        drafts = [_signal(run, p.sleeve, p.pair, p.last, p.bars, p.atr, p.quote, ["pending"]) for p in waiting]
+        for p, d in zip(waiting, drafts, strict=True):
+            d["inputs"]["breadth"] = _breadth(run, p.sleeve, p.last.t)
         got, why = run.scorer(drafts)
     except Exception as e:  # noqa: BLE001 — the scorer never stops a trade
         got, why = None, e.__class__.__name__
     if got is None:
-        run.model_fault = why
+        run.model_fault = why or "failed"
+    run.pending = []
     for k, p in enumerate(waiting):
-        book, spec = run.books[p.sleeve], run.specs[p.sleeve]
-        factor = 1.0 if got is None else float(got.factor(k))
-        if factor <= 0:
-            refused = ["model_skip"]
-        else:
-            refused = enter(book, p.sleeve, p.pair, p.last, p.atr, p.quote, run.infos.get(p.kraken_pair), p.reasons,
-                            run.now, run.day, run.desk, risk.sleeve_dir(run.desk, p.sleeve), run.pairs,
-                            book.equity(run.marks), spec.c, spec.p, run.costs, run.lim, run.extra[p.sleeve], factor)
-        rec = _conclude(run, p.sleeve, p.pair, p.last, p.bars, p.atr, p.quote, refused, p.row)
-        if got is not None:
-            _scored(rec, got, k, run.lineage)
-            rec["acted"] = factor
+        # One entry's fault must not stop the others or the cycle's end: as in `step_pair`, it is named and the
+        # bar is looked at again by the next cycle.
+        try:
+            book, spec = run.books[p.sleeve], run.specs[p.sleeve]
+            factor = 1.0 if got is None else float(got.factor(k))
+            if factor <= 0:
+                refused = ["model_skip"]
+            else:
+                refused = enter(book, p.sleeve, p.pair, p.last, p.atr, p.quote, run.infos.get(p.kraken_pair), p.reasons,
+                                run.now, run.day, run.desk, risk.sleeve_dir(run.desk, p.sleeve), run.pairs,
+                                p.equity, spec.c, spec.p, run.costs, run.lim, run.extra[p.sleeve], factor)
+            rec = _conclude(run, p.sleeve, p.pair, p.last, p.bars, p.atr, p.quote, refused, p.row)
+            if got is not None:
+                rec["inputs"] = drafts[k]["inputs"]         # the inputs the score was computed from
+                _scored(rec, got, k, run.lineage)
+                rec["acted"] = factor
+        except Exception as e:  # noqa: BLE001
+            run.failed[f"{p.sleeve}:{p.pair}"] = e.__class__.__name__
+            run.books[p.sleeve].meta["last_bar"].pop(p.pair, None)
+            run.seen.get(p.sleeve, {}).pop(p.pair, None)
 
 
 def _signal(run: Run, sleeve: str, name: str, last: Bar, bars: list[Bar], atr: float, quote: Quote | None,
@@ -407,7 +429,7 @@ def _signal(run: Run, sleeve: str, name: str, last: Bar, bars: list[Bar], atr: f
     else:
         price = (quote.ask if quote is not None else last.c) * (1 + float(run.costs["slippage_bps"]) / 10_000)
         stop, target, _ = rules.levels(price, atr, run.specs[sleeve].c, run.specs[sleeve].p)
-    held = any(name in run.books[m].positions for m in run.names if m != sleeve)
+    held = _held(run, sleeve, name)
     return {"kind": "signal", "sid": f"{sleeve}|{name}|{last.t}", "t": _iso(run.now), "pair": name, "bar": last.t,
             "taken": not refused, "why": list(refused), "price": round(price, 8), "stop": round(stop, 8),
             "target": None if target is None else round(target, 8), "atr": round(atr, 8),
@@ -424,8 +446,9 @@ def finish(run: Run, flush: Callable[[Book, Path, Path], Any], save: bool = True
         # How many pairs signalled for this sleeve on the same bar: known only now that all have been looked at.
         rec["inputs"]["breadth"] = _breadth(run, n, rec["bar"])
     # In shadow the model scores the registered sleeves' signals after the fact: recorded, acted on by nothing.
+    # Not asked again in a cycle in which it has already failed to answer: one time limit a cycle, not two.
     shadow = [rec for n, rec in run.signalled if n in rules.NAMES and "score" not in rec]
-    if run.scorer is not None and shadow:
+    if run.scorer is not None and shadow and run.model_fault is None:
         try:
             got, why = run.scorer(shadow)
         except Exception as e:  # noqa: BLE001
