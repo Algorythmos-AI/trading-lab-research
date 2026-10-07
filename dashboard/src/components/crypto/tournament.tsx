@@ -1,11 +1,11 @@
-import { ArrowDownRight, ArrowUpRight, Briefcase, ListChecks, Minus, ReceiptText, Signal, Trophy } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Briefcase, FlaskConical, ListChecks, Minus, ReceiptText, Signal, Trophy } from "lucide-react";
 import { Empty } from "@/components/empty";
 import { Panel } from "@/components/panel";
 import { StatusBadge } from "@/components/status";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { code, codes, moneyOf, type Crypto } from "@/lib/crypto";
 import { fracPct, num, rMult, signed, zoned } from "@/lib/format";
-import { sleeveLabel, tournamentLine, type Tournament } from "@/lib/tournament";
+import { challengersLine, sleeveLabel, tournamentLine, type ChallengerRow, type Challengers, type Tournament } from "@/lib/tournament";
 import { cn } from "@/lib/utils";
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -42,7 +42,7 @@ export function TournamentBoard({ s, t }: { s: Crypto; t: Tournament }) {
     <Panel
       title="Tournament"
       icon={Trophy}
-      means="Three strategies trading on paper side by side, each on its own US$10,000 paper book, best return first. They are in incubation: these results are not evidence until a strategy also passes its backtest. Paper money only."
+      means="The strategies trading on paper side by side, each on its own US$10,000 paper book, best return first: the three registered rules, and any challenger that passed its backtest. All of it is incubation: these results are not evidence of an edge. Paper money only."
       action={<span className="text-muted-foreground text-xs">{tournamentLine(t)}</span>}
     >
       <Table>
@@ -64,7 +64,7 @@ export function TournamentBoard({ s, t }: { s: Crypto; t: Tournament }) {
         <TableBody>
           {rows.map((r) => (
             <TableRow key={r.name}>
-              <TableCell>
+              <TableCell className="max-w-md min-w-56 whitespace-normal">
                 <span className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{r.label}</span>
                   <StatusBadge tone={r.stage === "passed" ? "good" : r.stage === "failed" ? "bad" : "info"}>
@@ -278,6 +278,91 @@ export function SleeveChecks({ t }: { t: Tournament }) {
                 })}
               </TableRow>
             ))}
+          </TableBody>
+        </Table>
+      )}
+    </Panel>
+  );
+}
+
+const CHALLENGER_STATUS: Record<string, { tone: "good" | "warn" | "bad" | "info" | "neutral"; label: string }> = {
+  live: { tone: "good", label: "Passed backtest, trading" },
+  passed: { tone: "info", label: "Passed backtest, not admitted yet" },
+  failed: { tone: "bad", label: "Failed backtest" },
+  registered: { tone: "info", label: "Waiting for its backtest" },
+  retired: { tone: "neutral", label: "Retired" },
+};
+
+function challengerNote(r: ChallengerRow): string {
+  if (r.status === "failed") return `Failed on: ${codes(r.failedOn)}.`;
+  if (r.status === "retired") return `Retired: ${code(r.retiredWhy)}.`;
+  if (r.status === "live") return "Has its own paper book on the board above.";
+  if (r.status === "registered") return "Its rules are on record; the backtest has not run yet.";
+  return "";
+}
+
+/** Every strategy idea the desk has tried by itself (DEC-0016), with the verdict of its backtest. */
+export function ChallengersPanel({ c }: { c: Challengers }) {
+  return (
+    <Panel
+      title="Challengers"
+      icon={FlaskConical}
+      means="New strategy ideas the desk tries by itself: at most two a week, each a variation of the three rules. An idea is written down before it is tested on two years of history after costs. Only one that passes joins the tournament, on its own paper book; one that fails never trades. Every idea tried raises the bar for the next, so luck is not mistaken for skill."
+      action={<span className="text-muted-foreground text-xs">{challengersLine(c)}</span>}
+    >
+      <p className="text-muted-foreground mb-3 flex flex-wrap items-center gap-2 text-xs">
+        <StatusBadge tone={c.learningOn ? "good" : "warn"}>{c.learningOn ? "Learning on" : "Learning switched off"}</StatusBadge>
+        <span>
+          This week: {num(c.drawnThisWeek)} of {num(c.perWeek)} drawn. Trading: {num(c.live)} of {num(c.maxLive)}. Tried in all: {num(c.registered)} of{" "}
+          {num(c.maxRegistered)}.
+        </span>
+      </p>
+      {c.rows.length === 0 ? (
+        <Empty title="No idea has been tried yet">The desk draws its first ideas on its next daily run, at 03:30 New York time.</Empty>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Idea</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Recorded (UTC)</TableHead>
+              <TableHead className="text-right">Backtest trades</TableHead>
+              <TableHead className="text-right">Win rate</TableHead>
+              <TableHead className="text-right">Avg R</TableHead>
+              <TableHead className="text-right">Range at higher costs</TableHead>
+              <TableHead className="text-right">Chance it is random</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {c.rows.map((r) => {
+              const st = CHALLENGER_STATUS[r.status] ?? { tone: "neutral" as const, label: r.status };
+              return (
+                <TableRow key={r.id}>
+                  <TableCell className="max-w-sm min-w-56 align-top whitespace-normal">
+                    <span className="font-medium">{r.label}</span>
+                    <span className="text-muted-foreground ml-2 text-xs">
+                      {r.slot === "neighbour" ? `one step from ${sleeveLabel(r.of)}` : "drawn at random"}
+                    </span>
+                    <span className="text-muted-foreground block text-xs">{r.rules}</span>
+                  </TableCell>
+                  <TableCell className="max-w-xs min-w-48 align-top whitespace-normal">
+                    <StatusBadge tone={st.tone}>{st.label}</StatusBadge>
+                    <span className="text-muted-foreground block text-xs">{challengerNote(r)}</span>
+                  </TableCell>
+                  <TableCell className="text-xs whitespace-nowrap">{utc(r.registeredAt)}</TableCell>
+                  <TableCell className="text-right font-mono">
+                    {num(r.trades)}
+                    {isNum(r.perMonth) ? <span className="text-muted-foreground"> ({r.perMonth.toFixed(1)}/month)</span> : null}
+                  </TableCell>
+                  <TableCell className="text-right font-mono">{fracPct(r.winRate)}</TableCell>
+                  <TableCell className={cn("text-right font-mono", toneOf(r.meanR))}>{rMult(r.meanR, 3)}</TableCell>
+                  <TableCell className="text-right font-mono whitespace-nowrap">
+                    {isNum(r.ciLow) && isNum(r.ciHigh) ? `${rMult(r.ciLow, 2)} to ${rMult(r.ciHigh, 2)}` : "—"}
+                  </TableCell>
+                  <TableCell className="text-right font-mono">{isNum(r.controlP) ? `${(r.controlP * 100).toFixed(1)}%` : "—"}</TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       )}
