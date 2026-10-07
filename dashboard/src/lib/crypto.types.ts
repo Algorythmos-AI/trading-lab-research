@@ -365,4 +365,48 @@ export interface CryptoSnapshot {
           | null;
       } | null)[]
     | null;
+  challengers?: {
+    learning?: string | null;
+    week?: string | null;
+    per_week?: number | null;
+    max_live?: number | null;
+    max_registered?: number | null;
+    registered?: number | null;
+    live?: number | null;
+    failed?: number | null;
+    retired?: number | null;
+    drawn_this_week?: number | null;
+    /**
+     * @maxItems 2000
+     */
+    list?:
+      | ({
+          id?: string | null;
+          rules?: string | null;
+          slot?: string | null;
+          of?: string | null;
+          week?: string | null;
+          registered?: string | null;
+          status?: string | null;
+          n_trials?: number | null;
+          trades?: number | null;
+          trades_per_month?: number | null;
+          win_rate?: number | null;
+          mean_r?: number | null;
+          ci_low?: number | null;
+          ci_high?: number | null;
+          profit_factor?: number | null;
+          dsr?: number | null;
+          control_p?: number | null;
+          max_drawdown_pct?: number | null;
+          /**
+           * @maxItems 2000
+           */
+          failed_on?: (string | null)[] | null;
+          admitted?: string | null;
+          retired?: string | null;
+          retired_why?: string | null;
+        } | null)[]
+      | null;
+  } | null;
 }

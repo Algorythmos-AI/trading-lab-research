@@ -135,5 +135,10 @@ JOBS: dict[str, Job] = {j.name: j for j in (
         "crypto_challengers", deadline_min=60, trading=False, et="Mon..Sun 03:30", desk="crypto",
         what="Crypto challengers: retire, draw at most two a week, register, backtest (gate C1), admit",
         runtime_max_h=1.25),
+    # The learning job (DEC-0016, 2 to 4), after the challengers: every signal's outcome, the model's checkpoint
+    # tests, and once a week the retraining, which runs in the machine-learning environment as its own process.
+    Job("crypto-learn", "com.wt.crypto-learn", 19, 30, ("-m", "wt.crypto.learn"), "backtest", "crypto_learn",
+        deadline_min=90, trading=False, et="Mon..Sun 04:30", desk="crypto",
+        what="Crypto learning: signal outcomes, the model's promotion tests, weekly retraining", runtime_max_h=1.75),
 )}
 TRADING_JOBS = [j.name for j in JOBS.values() if j.trading]

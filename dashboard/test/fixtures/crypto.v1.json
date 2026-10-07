@@ -84,6 +84,96 @@
   "return_pct": -0.024914095040762252,
   "start_equity": 10000.0
  },
+ "challengers": {
+  "drawn_this_week": 1,
+  "failed": 1,
+  "learning": "on",
+  "list": [
+   {
+    "admitted": null,
+    "ci_high": null,
+    "ci_low": null,
+    "control_p": null,
+    "dsr": null,
+    "failed_on": [],
+    "id": "ch-df667c64",
+    "max_drawdown_pct": null,
+    "mean_r": null,
+    "n_trials": 10,
+    "of": null,
+    "profit_factor": null,
+    "registered": "2026-10-01T20:02:00+00:00",
+    "retired": null,
+    "retired_why": null,
+    "rules": "dip rule on daily bars, stop 4 ATR (at least 2%), target 8 ATR, only while Bitcoin trends up, volume above average",
+    "slot": "random",
+    "status": "registered",
+    "trades": null,
+    "trades_per_month": null,
+    "week": "2026-W40",
+    "win_rate": null
+   },
+   {
+    "admitted": "2026-09-24T20:06:01+00:00",
+    "ci_high": 0.389,
+    "ci_low": 0.019,
+    "control_p": 0.01,
+    "dsr": 0.962,
+    "failed_on": [],
+    "id": "ch-29db21a0",
+    "max_drawdown_pct": -7.4,
+    "mean_r": 0.212,
+    "n_trials": 9,
+    "of": "break",
+    "profit_factor": 1.41,
+    "registered": "2026-09-24T20:01:00+00:00",
+    "retired": null,
+    "retired_why": null,
+    "rules": "break rule on daily bars, 20-bar high, stop 3 ATR (at least 2%), target 6 ATR, only while Bitcoin trends up, volume above average",
+    "slot": "neighbour",
+    "status": "live",
+    "trades": 96,
+    "trades_per_month": 4.0,
+    "week": "2026-W39",
+    "win_rate": 0.4375
+   },
+   {
+    "admitted": null,
+    "ci_high": 0.018,
+    "ci_low": -0.262,
+    "control_p": 0.41,
+    "dsr": 0.004,
+    "failed_on": [
+     "ci_not_above_zero_at_1.5x_slippage",
+     "deflated_sharpe",
+     "profit_factor"
+    ],
+    "id": "ch-738d9063",
+    "max_drawdown_pct": -31.2,
+    "mean_r": -0.118,
+    "n_trials": 8,
+    "of": null,
+    "profit_factor": 0.84,
+    "registered": "2026-09-24T20:00:00+00:00",
+    "retired": null,
+    "retired_why": null,
+    "rules": "trend rule on 4-hour bars, 20-bar high, stop 3 ATR (at least 2%), trailed 4 ATR, only while Bitcoin trends up, volume above average",
+    "slot": "random",
+    "status": "failed",
+    "trades": 212,
+    "trades_per_month": 8.83,
+    "week": "2026-W39",
+    "win_rate": 0.33
+   }
+  ],
+  "live": 1,
+  "max_live": 6,
+  "max_registered": 60,
+  "per_week": 2,
+  "registered": 3,
+  "retired": 0,
+  "week": "2026-W40"
+ },
  "config": {
   "hash": "01aec7d7c569",
   "pairs": [
@@ -1507,6 +1597,47 @@
      ]
     }
    ],
+   "win_rate": null,
+   "wins": 0
+  },
+  {
+   "cash": 10000.0,
+   "config": "ch-29db21a0",
+   "equity": 10000.0,
+   "equity_curve": [
+    {
+     "equity": 10000.0,
+     "t": "2026-10-02T20:00:00+00:00"
+    }
+   ],
+   "exposure": 0.0,
+   "fees": null,
+   "latched": false,
+   "losses": 0,
+   "max_dd": null,
+   "mean_r": null,
+   "name": "ch-29db21a0",
+   "open_pnl": null,
+   "pnl": {
+    "month": 0.0,
+    "month_trades": 0,
+    "today": 0.0,
+    "today_trades": 0,
+    "total": 0.0,
+    "week": 0.0,
+    "week_trades": 0
+   },
+   "positions": [],
+   "recent": [],
+   "return_pct": 0.0,
+   "signals": [],
+   "stage": "passed",
+   "start_equity": 10000.0,
+   "strategy": "Challenger: break rule on daily bars, 20-bar high, stop 3 ATR (at least 2%), target 6 ATR, only while Bitcoin trends up, volume above average",
+   "tf_min": 1440,
+   "total_r": null,
+   "trades": 0,
+   "why_not": [],
    "win_rate": null,
    "wins": 0
   }

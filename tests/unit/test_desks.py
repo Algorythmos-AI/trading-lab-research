@@ -42,9 +42,10 @@ def test_the_stocks_jobs_are_untouched_and_the_crypto_desk_has_exactly_two_inter
     assert set(stocks) == {"routine", "paper-b", "forward", "weekly", "dashboard"}
     assert all(j.calendar is None for j in stocks.values())
     crypto = {n: j for n, j in JOBS.items() if j.desk == "crypto"}
-    assert set(crypto) == {"crypto", "dashboard-crypto", "crypto-challengers"}
-    daily = crypto.pop("crypto-challengers")                 # once a day, on a clock time (DEC-0016, 5)
-    assert not daily.trading and daily.interval_s is None and daily.et
+    assert set(crypto) == {"crypto", "dashboard-crypto", "crypto-challengers", "crypto-learn"}
+    for name in ("crypto-challengers", "crypto-learn"):      # once a day, on a clock time (DEC-0016)
+        daily = crypto.pop(name)
+        assert not daily.trading and daily.interval_s is None and daily.et
     for j in crypto.values():
         # never a trading job (a 24/7 one would close the equity deploy gate for good); always on a UTC boundary
         assert not j.trading and j.interval_s == 900 and j.calendar and j.deadline_min and j.et is None, j.name
