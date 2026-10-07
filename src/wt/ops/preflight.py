@@ -14,7 +14,7 @@ from pathlib import Path
 from wt.core.config import ROOT
 from wt.ops import thresholds
 
-CODE_PATHS = ("src", "scripts", "deploy", "config", "requirements.lock.txt", "pyproject.toml", "Makefile")
+CODE_PATHS = ("src", "scripts", "deploy", "config", "requirements.lock.txt", "requirements-ml.lock.txt", "pyproject.toml", "Makefile")
 LEGACY_RUNTIME = ("research/forward/forward_trades.jsonl", "research/forward/routine")
 MIN_FREE_GB = thresholds.DISK_FLOOR_GB
 LOCK_STAMP = ".venv/.wt-lock.sha256"

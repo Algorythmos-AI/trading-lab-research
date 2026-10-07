@@ -174,3 +174,28 @@ def test_jobs_wait_for_a_running_deploy(monkeypatch, tmp_path):
     with locks.job_lock(locks.DEPLOY_LOCK):
         assert jobs.run_job(jobs.JOBS["weekly"], tmp_path, alerts=object()) == 0
     assert refused and "deploy" in refused[0]
+
+
+def test_the_ml_environment_is_built_after_the_job_locks_are_released_and_recorded(world, monkeypatch, tmp_path):
+    dev, live, first, st = world
+    second = commit(dev, "b")
+    git(dev, "push", "-q", "origin", "main")
+    seen = {}
+
+    def sync_ml():
+        seen["jobs"] = locks.held([j.name for j in deploy.JOBS.values() if j.interval_s])
+        seen["deploy"] = locks.is_held(locks.DEPLOY_LOCK)
+        seen["head"] = head(live)
+        return "synced"
+    monkeypatch.setattr(deploy, "sync_ml", sync_ml)
+    assert deploy.deploy(second) == 0
+    # A long install holds no interval job (the crypto cycle keeps its bars), and no second deploy can start.
+    assert seen == {"jobs": [], "deploy": True, "head": second}
+    import json
+    rec = sorted((tmp_path / "records").glob("*.json"))[-1]
+    assert json.loads(rec.read_text())["ml_env"] == "synced"
+    st["smoke"] = False
+    seen.clear()
+    third = commit(dev, "c")
+    git(dev, "push", "-q", "origin", "main")
+    assert deploy.deploy(third) == 1 and seen == {}             # rolled back: the ML environment is left alone

@@ -27,7 +27,7 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
 JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
-.PHONY: seed-vm help bootstrap lint typecheck test ci hooks status gate deploy rollback migrate-state preflight publish-verify \
+.PHONY: seed-vm help bootstrap bootstrap-ml lock-ml lint typecheck test ci hooks status gate deploy rollback migrate-state preflight publish-verify \
         uninstall-agents lease-break \
         watchdog-drill dashboard-deploy vm-deploy \
         agents-diff install-trading-agents install-dashboard-agent publish schema kill unkill reset-latch evidence
@@ -39,6 +39,14 @@ bootstrap: ## Create .venv from the lockfile (Python 3.12)
 	uv venv --python 3.12 .venv
 	uv pip install --require-hashes --python $(PY) -r requirements.lock.txt
 	@if [ -f requirements-dev.lock.txt ]; then uv pip install --require-hashes --python $(PY) -r requirements-dev.lock.txt; fi
+
+bootstrap-ml: ## Create .venv-ml from its own lockfile (the learning job and the scorer; DEC-0016)
+	uv venv --python 3.12 .venv-ml
+	uv pip install --require-hashes --python .venv-ml/bin/python -r requirements-ml.lock.txt
+
+lock-ml: ## Recompile the ML lockfile for the host (Linux x86-64), with hashes
+	uv pip compile --python-version 3.12 --python-platform x86_64-unknown-linux-gnu --generate-hashes \
+		requirements-ml.in -o requirements-ml.lock.txt
 
 lint: ## Ruff, bug-class rules (see pyproject.toml)
 	$(PY) -m ruff check .

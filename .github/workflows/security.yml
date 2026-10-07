@@ -25,6 +25,9 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       # Every dependency is pinned, so audit the pins directly instead of resolving a temporary environment.
       - run: uvx pip-audit --strict --disable-pip --no-deps -r requirements.lock.txt -r requirements-dev.lock.txt
+      # The ML environment's pins, on their own: it shares packages with the trading lock, and one audit refuses
+      # a package named twice.
+      - run: uvx pip-audit --strict --disable-pip --no-deps -r requirements-ml.lock.txt
       # The dashboard's production dependencies, from the lockfile (no install needed).
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
