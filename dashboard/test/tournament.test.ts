@@ -11,9 +11,9 @@ describe("the crypto tournament", () => {
     const t = tournament(fixture());
     expect(t.available).toBe(true);
     expect(t.rows.map((r) => [r.name, r.label, r.stage])).toEqual([
-      ["trend", "Trend", "incubation"],
-      ["break", "Breakout", "incubation"],
-      ["dip", "Dip", "incubation"],
+      ["trend", "Trend", "failed"],
+      ["break", "Breakout", "failed"],
+      ["dip", "Dip", "failed"],
       ["ch-29db21a0", "Challenger 29db21a0", "passed"],
     ]);
     // A challenger has no built-in description: its recorded rules say what it does.

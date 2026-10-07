@@ -1,4 +1,5 @@
 import { BarChart3, BrainCircuit, Microscope } from "lucide-react";
+import { ModelPanel, SignalsScorecard, TrainingPanel } from "@/components/crypto/learning";
 import { Histogram, NoCryptoSnapshot } from "@/components/crypto/panels";
 import { Empty } from "@/components/empty";
 import { KeyValues } from "@/components/kv";
@@ -9,6 +10,7 @@ import { StatusBadge } from "@/components/status";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { items, plural, spreadPct, type Crypto } from "@/lib/crypto";
 import { fracPct, num, pct } from "@/lib/format";
+import { learning } from "@/lib/learning";
 import { loadCryptoSnapshot } from "@/lib/snapshot";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +29,7 @@ export default async function CryptoResearchPage() {
     <>
       <PageHeading
         title="Research"
-        intro="Whether these pairs are markets at all (gate C0), what the recorded bars look like, and where the shadow model stands. Nothing here changes an order."
+        intro="Whether these pairs are markets at all (gate C0), what the recorded bars look like, and what the model has learned from the strategies' signals. Paper only."
       />
       {result.status !== "ok" ? (
         <NoCryptoSnapshot status={result.status} />
@@ -35,7 +37,7 @@ export default async function CryptoResearchPage() {
         <>
           <QualityPanel s={result.snapshot} />
           <DistributionsPanel s={result.snapshot} />
-          <MlPanel s={result.snapshot} />
+          <LearningPanels s={result.snapshot} />
         </>
       )}
     </>
@@ -108,6 +110,19 @@ function DistributionsPanel({ s }: { s: Crypto }) {
         ))}
       </div>
     </Panel>
+  );
+}
+
+/** The model (DEC-0016). An older host publishes only the placeholder below. */
+function LearningPanels({ s }: { s: Crypto }) {
+  const l = learning(s);
+  if (!l.available) return <MlPanel s={s} />;
+  return (
+    <>
+      <ModelPanel l={l} />
+      <TrainingPanel l={l} />
+      <SignalsScorecard l={l} />
+    </>
   );
 }
 

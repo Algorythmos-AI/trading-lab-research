@@ -1912,6 +1912,428 @@
           "maxItems": 2000
         }
       }
+    },
+    "learning": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "switch": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
+        "lineages_started": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "model": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "version": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "lineage": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "state": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "trained_at": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "checkpoints": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "max_checkpoints": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "checkpoint_signals": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "finished": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "next_checkpoint": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "score_psi": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "drifted": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "drift_inputs": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "maxItems": 2000
+            },
+            "looks": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "checkpoint": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "signals": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "spread": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "lower": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "brier": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "brier_base": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "passed": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "t": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  }
+                }
+              },
+              "maxItems": 2000
+            }
+          }
+        },
+        "training": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "t": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "chosen": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "decision": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "examples": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "pairs": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "effective_n": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "win_rate": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "mean_r": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "attempt": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "models": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  },
+                  "settings": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  },
+                  "log_loss": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "kept": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "kept_mean_r": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "dropped": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "dropped_mean_r": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "spread": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "ci_low": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "ci_high": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              "maxItems": 2000
+            },
+            "leans_on": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "input": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  },
+                  "weight": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              "maxItems": 2000
+            }
+          }
+        },
+        "signals": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "recorded": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "finished": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "open": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "win_rate": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "mean_r": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "scored": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "kept": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "kept_mean_r": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "skipped": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "skipped_mean_r": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          }
+        }
+      }
     }
   },
   "required": [

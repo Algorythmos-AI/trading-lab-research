@@ -409,4 +409,89 @@ export interface CryptoSnapshot {
         } | null)[]
       | null;
   } | null;
+  learning?: {
+    switch?: string | null;
+    lineages_started?: number | null;
+    model?: {
+      version?: string | null;
+      lineage?: string | null;
+      state?: string | null;
+      trained_at?: string | null;
+      checkpoints?: number | null;
+      max_checkpoints?: number | null;
+      checkpoint_signals?: number | null;
+      finished?: number | null;
+      next_checkpoint?: number | null;
+      score_psi?: number | null;
+      drifted?: boolean | null;
+      /**
+       * @maxItems 2000
+       */
+      drift_inputs?: (string | null)[] | null;
+      /**
+       * @maxItems 2000
+       */
+      looks?:
+        | ({
+            checkpoint?: number | null;
+            signals?: number | null;
+            spread?: number | null;
+            lower?: number | null;
+            brier?: number | null;
+            brier_base?: number | null;
+            passed?: boolean | null;
+            t?: string | null;
+          } | null)[]
+        | null;
+    } | null;
+    training?: {
+      t?: string | null;
+      chosen?: string | null;
+      decision?: string | null;
+      examples?: number | null;
+      pairs?: number | null;
+      effective_n?: number | null;
+      win_rate?: number | null;
+      mean_r?: number | null;
+      attempt?: number | null;
+      /**
+       * @maxItems 2000
+       */
+      models?:
+        | ({
+            name?: string | null;
+            settings?: string | null;
+            log_loss?: number | null;
+            kept?: number | null;
+            kept_mean_r?: number | null;
+            dropped?: number | null;
+            dropped_mean_r?: number | null;
+            spread?: number | null;
+            ci_low?: number | null;
+            ci_high?: number | null;
+          } | null)[]
+        | null;
+      /**
+       * @maxItems 2000
+       */
+      leans_on?:
+        | ({
+            input?: string | null;
+            weight?: number | null;
+          } | null)[]
+        | null;
+    } | null;
+    signals?: {
+      recorded?: number | null;
+      finished?: number | null;
+      open?: number | null;
+      win_rate?: number | null;
+      mean_r?: number | null;
+      scored?: number | null;
+      kept?: number | null;
+      kept_mean_r?: number | null;
+      skipped?: number | null;
+      skipped_mean_r?: number | null;
+    } | null;
+  } | null;
 }
