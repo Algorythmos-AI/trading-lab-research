@@ -124,6 +124,19 @@ def explain(cands: Iterable[SpecCandidate], spec: dict[str, Any],
         band=band, rows=rows)
 
 
+def from_pool(pool: Any) -> list[SpecCandidate]:
+    """A pool frame as Set F's candidates, field for field as scripts/r3_run.set_names builds them, so a record made
+    from these describes the registered run (a test holds the two together)."""
+    if not len(pool):
+        return []
+    return [SpecCandidate(symbol=r.symbol, price=r.price_0925, gap_pct=r.gap_pct, pm_volume=r.pm_volume,
+                          rvol_pm=r.rvol_pm, float_shares=None if r.float_shares != r.float_shares or r.float_shares is None
+                          else r.float_shares, catalyst_status=r.catalyst_status, catalyst_category=r.catalyst_category,
+                          catalyst_score=r.catalyst_score, former_runner=bool(r.former_runner), chart_ok=bool(r.chart_ok),
+                          pm_pattern=r.pm_pattern is not None and r.pm_pattern == r.pm_pattern)
+            for r in pool.itertuples()]
+
+
 def pool_musts(pool: Any) -> dict[str, dict[str, Any]]:
     """symbol -> the chart fields of a pool frame (pool.build_day's candidates), for `explain(..., musts=...)`."""
     cols = [c for c in (*MUSTS, "suspect_split", "hist_bars") if c in getattr(pool, "columns", ())]
