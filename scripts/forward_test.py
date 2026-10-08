@@ -47,7 +47,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from build_pool import SplitStore, build_one, universe_symbols  # noqa: E402
+from build_pool import ScanFailed, SplitStore, build_one, scan_failure, universe_symbols  # noqa: E402
 from r3_intraday import intraday_day  # noqa: E402
 from r3_run import GG, SpreadAt, admit, gg_day, set_names, trade_row  # noqa: E402
 
@@ -60,6 +60,7 @@ from wt.core.config import DATA_DIR, FORWARD_LEDGER, FORWARD_WATCHLIST_DIR, ROOT
 from wt.data.alpaca import SIP_DELAY_MIN, AlpacaREST  # noqa: E402
 from wt.data.edgar import SharesOutstanding  # noqa: E402
 from wt.data.universe import DAILY, TailMeta, TailWindowExceeded, load_daily, load_daily_tail, tail_rows_for  # noqa: E402
+from wt.ops.alerts import Alerts  # noqa: E402
 from wt.ops.locks import job_lock  # noqa: E402
 from wt.ops.safeio import atomic_replace  # noqa: E402
 from wt.scanner.explain import explain, from_pool, pool_musts  # noqa: E402
@@ -242,15 +243,33 @@ class Context:
         return SpreadAt(self.a)
 
     def ensure_pool(self, d: dt.date) -> None:
-        """Build the day's causal pool if it isn't there yet (Sets F and P, and MP-1's Tier 2, read it)."""
-        if (POOL_DIR / f"{d}.parquet").exists():
-            return
+        """Build the day's causal pool if it isn't there yet (Sets F and P, and MP-1's Tier 2, read it).
+
+        A scan with no data (DEC-0024, decision 2) raises ScanFailed: the unit that asked records an error and no
+        marker, and the session is retried on the next run. A pool that an earlier failed scan saved for a session
+        still owed holds no names; it is removed and rebuilt, so it cannot be read as a day with nothing to trade."""
+        path = POOL_DIR / f"{d}.parquet"
+        if path.exists():
+            if not scan_failure(pool_stats(path)):
+                return
+            print(f"{d}: the saved pool came from a scan with no data; rebuilding it")
+            path.unlink()
         free = shutil.disk_usage(DATA_DIR).free / 1e9
         if free < POOL_MIN_FREE_GB:
             raise RuntimeError(f"only {free:.1f} GB free; the pool build needs {POOL_MIN_FREE_GB} GB")
         cache = PMCache(since=self.sessions[0])       # this run's calendar: every session the pool build asks about
-        build_one(self.a, d, self.sessions, self.daily, universe_symbols(), self.splits, cache, self.shares, PoolConfig())
+        try:
+            st = build_one(self.a, d, self.sessions, self.daily, universe_symbols(), self.splits, cache, self.shares,
+                           PoolConfig(), refuse_failed=True)
+        except ScanFailed as e:
+            page("forward:scan-failed", "Forward test: the scan had no data", f"{e}. The round-3 trials recorded an "
+                 "error for this session, not a day without trades, and it will be retried on the next run.", 4)
+            raise
         cache.save()
+        low = collapse(d, vars(st))
+        if low:
+            page("forward:scan-thin", "Forward test: the scan looks thin", f"{d}: {'; '.join(low)}. The session is "
+                 "recorded as normal; check the data feed.", 3)
 
     def close(self) -> None:
         if "spread_at" in self.__dict__:
@@ -296,6 +315,43 @@ def note_funnel(d: dt.date, part: str, build: Callable[[], dict]) -> None:
         atomic_replace(path, lambda tmp: tmp.write_text(text))
     except Exception as e:  # noqa: BLE001 — a description must never cost a trial its session
         print(f"funnel record {d} {part}: {e!r}")
+
+
+def pool_stats(path: Path) -> dict:
+    """The counts saved with a pool file, or {} when it has none or cannot be read."""
+    try:
+        return dict(pd.read_parquet(path, columns=["symbol"]).attrs.get("stats") or {})
+    except Exception:  # noqa: BLE001 — an unreadable pool is for the unit that reads it to report
+        return {}
+
+
+COLLAPSE_KEYS = ("universe", "snapshot_symbols")      # counts that barely move from day to day
+COLLAPSE_RATIO, COLLAPSE_MIN_DAYS, COLLAPSE_LOOKBACK = 0.5, 5, 10
+
+
+def collapse(d: dt.date, stats: dict) -> list[str]:
+    """Which of the day's scan counts fell below half the median of the last sessions' pools (DEC-0024, 2.3), plus
+    a day that kept nothing although names traded. It only informs: nothing is blocked. Quiet until five earlier
+    pools exist."""
+    earlier = sorted(p for p in POOL_DIR.glob("*.parquet") if p.stem < str(d))[-COLLAPSE_LOOKBACK:]
+    past = [s for s in (pool_stats(p) for p in earlier) if s and not scan_failure(s)]
+    out = []
+    if len(past) >= COLLAPSE_MIN_DAYS:
+        for k in COLLAPSE_KEYS:
+            med = float(np.median([s.get(k) or 0 for s in past]))
+            if med > 0 and (stats.get(k) or 0) < COLLAPSE_RATIO * med:
+                out.append(f"{k} {stats.get(k) or 0} against a median of {med:.0f}")
+        if (stats.get("kept") or 0) == 0 and float(np.median([s.get("kept") or 0 for s in past])) > 0:
+            out.append("no name kept")
+    return out
+
+
+def page(key: str, title: str, message: str, priority: int) -> None:
+    """One alert a day for `key`. An alert that cannot be sent never changes what the forward test records."""
+    try:
+        Alerts().once_per_day(key, title, message, priority)
+    except Exception as e:  # noqa: BLE001
+        print(f"alert {key}: {e!r}")
 
 
 def r3_gg(ctx: Context, d: dt.date, which: str) -> dict[str, list[dict]]:
