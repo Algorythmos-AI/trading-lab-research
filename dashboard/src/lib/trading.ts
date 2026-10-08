@@ -209,6 +209,9 @@ export function outcomeLine(v: Trading): { tone: OutcomeTone; title: string; det
   if (o === "no_signal") {
     return { tone: "neutral", title: "No trade: no signal", detail: "QQQ never closed a half-hour above its noise boundary and its average price, so the rule had nothing to act on. This is the usual outcome on most days." };
   }
+  if (o === "no_inputs") {
+    return { tone: "bad", title: "No trade: the signal could not be checked", detail: "The prices the rule needs were missing for the whole session, so it never ran. This is a data fault, not a quiet market." };
+  }
   if (o === "signal_not_acted") {
     return { tone: "bad", title: "No trade: a signal fired and was not acted on", detail: "Nothing was blocking it and no entry was placed. This is a fault to look at before the next session." };
   }
@@ -229,6 +232,7 @@ export function tradeSentence(s: Snapshot): string | null {
   const o = v.outcome ?? "";
   if (o === "traded") return v.position ? "Paper B is in a trade." : "Paper B took a trade today.";
   if (o === "no_signal") return "Paper B had no signal today.";
+  if (o === "no_inputs") return "Paper B could not check its signal today: the prices it needs were missing.";
   if (o === "signal_not_acted") return "Paper B had a signal and did not act on it.";
   if (o.startsWith("blocked")) return "Paper B had a signal that a safety check blocked.";
   return null;

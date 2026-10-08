@@ -479,6 +479,7 @@ def test_the_daily_summary_says_what_paper_b_did_in_r_and_never_in_money():
     assert jobs.paper_summary([armed, closed, {**end, "outcome": "traded"}]) == "Paper B: traded, +0.42R on 1 closed trade(s)."
     assert jobs.paper_summary([armed, {**end, "outcome": "blocked:kill_file"}]) == "Paper B: a signal was blocked (kill_file)."
     assert "NOT acted on" in jobs.paper_summary([armed, {**end, "outcome": "signal_not_acted"}])
+    assert "could NOT be checked" in jobs.paper_summary([armed, {**end, "outcome": "no_inputs"}])
     assert jobs.paper_summary([armed]) == "Paper B: session not finished."
     assert jobs.paper_summary([end]) is None                                   # never armed: nothing to say
     for line in (jobs.paper_summary([armed, closed, {**end, "outcome": "traded"}]),):
