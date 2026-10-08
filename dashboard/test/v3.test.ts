@@ -1,17 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  auditTone,
-  hasV3,
-  limitLabel,
-  limitTone,
-  sectionState,
-  profitFactorText,
-  SLA_GLYPH,
-  SLA_LABEL,
-  SLA_TONE,
-  slaStatus,
-  suppressedReason,
-} from "@/lib/v3";
+import { auditTone, hasV3, limitLabel, limitTone, sectionState, profitFactorText, SLA_GLYPH, SLA_LABEL, SLA_TONE, slaStatus, suppressedReason, binSide } from "@/lib/v3";
 import { fixture, fixtureV3 } from "./helpers";
 
 describe("v3 helpers", () => {
@@ -71,5 +59,18 @@ describe("v3 helpers", () => {
     expect(s.digest?.items?.length).toBeGreaterThan(0);
     expect(s.audit?.events?.length).toBeGreaterThan(0);
     expect(s.alerts?.history?.length).toBeGreaterThan(0);
+  });
+});
+
+describe("the R bands", () => {
+  it("knows which side of zero each band lies on", () => {
+    expect(["< -3", "-3 to -2", "-1 to 0", "0 to 1", "2 to 3", "> 3"].map(binSide)).toEqual(["loss", "loss", "loss", "gain", "gain", "gain"]);
+    expect([binSide("-1 to 1"), binSide("0"), binSide(null), binSide("other")]).toEqual(["flat", "flat", "flat", "flat"]);
+  });
+
+  it("covers every band the host publishes", () => {
+    const bins = fixtureV3().perf?.histogram ?? [];
+    expect(bins.length).toBeGreaterThan(0);
+    expect(bins.map((b) => binSide(b?.bin))).not.toContain("flat");
   });
 });

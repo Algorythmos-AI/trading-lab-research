@@ -19,6 +19,8 @@ import { summarize } from "@/lib/summary";
 import { outcomeLine, trading } from "@/lib/trading";
 import { entries, list, type Snapshot } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { CumulativeChart } from "@/components/charts/cumulative-chart";
+import { cumulativePoints } from "@/components/v3/perf";
 
 export const dynamic = "force-dynamic";
 
@@ -72,11 +74,12 @@ function PnlStrip({ s }: { s: Snapshot }) {
   const v = trading(s);
   if (!v.available) return null;
   const o = outcomeLine(v);
+  const curve = list(s.perf?.curve);
   return (
     <Panel
       title="Paper B profit and loss"
       icon={CircleDollarSign}
-      means="What the paper strategy's closed trades have made or lost on its US$600 paper ledger. Paper money only."
+      means="What the paper strategy's closed trades have made or lost on its US$600 paper ledger, and their running total in R (the result against the amount risked). Paper money only."
       action={
         <StatusBadge tone={o.tone}>
           {v.current || v.session === null ? o.title : `${shortDate(v.session)}: ${o.title}`}
@@ -85,6 +88,7 @@ function PnlStrip({ s }: { s: Snapshot }) {
     >
       <div className="grid gap-3">
         <PnlTiles v={v} />
+        {curve.length >= 2 ? <CumulativeChart compact points={cumulativePoints(curve)} /> : null}
         <p className="text-muted-foreground text-xs">
           <Link href="/today" className="underline underline-offset-2">
             See every trade, the open position and why it did or did not trade

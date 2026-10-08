@@ -1,15 +1,15 @@
 import { ChartSpline, ScrollText } from "lucide-react";
-import { DataDetails } from "@/components/data-details";
+import { Columns } from "@/components/charts/columns";
+import { CumulativeChart } from "@/components/charts/cumulative-chart";
+import { TradeBars } from "@/components/charts/trade-bars";
 import { Empty } from "@/components/empty";
 import { KeyValues } from "@/components/kv";
-import { Meter } from "@/components/meter";
 import { Panel } from "@/components/panel";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fracPct, num, rMult, shortDate, signed, txt } from "@/lib/format";
 import { list, type Snapshot } from "@/lib/types";
-import { profitFactorText, sectionState, suppressedReason } from "@/lib/v3";
+import { binSide, profitFactorText, sectionState, suppressedReason } from "@/lib/v3";
 import { V3Missing, V3Pending } from "./pending";
-import { Sparkline } from "./sparkline";
 
 /** Strategy B's paper results, honest at small samples: statistics that would mislead stay blank, with the reason. */
 export function PerformancePanel({ s }: { s: Snapshot }) {
@@ -17,7 +17,6 @@ export function PerformancePanel({ s }: { s: Snapshot }) {
   const st = p?.stats;
   const curve = list(p?.curve);
   const bins = list(p?.histogram);
-  const maxBin = Math.max(1, ...bins.map((b) => b.count ?? 0));
   const why = suppressedReason(st, p?.min_trades);
   const closedCount = list(s.blotter).length;
   const ci =
@@ -69,25 +68,33 @@ export function PerformancePanel({ s }: { s: Snapshot }) {
             </p>
           ) : null}
           {curve.length >= 2 ? (
-            <div className="grid gap-1">
-              <p className="text-muted-foreground text-xs">Cumulative R, trade by trade</p>
-              <Sparkline values={curve.map((c) => c.cum_r ?? 0)} label="Cumulative R by trade" />
-            </div>
+            <section className="grid gap-2">
+              <h3 className="text-sm font-medium">Running total, trade by trade</h3>
+              <CumulativeChart points={cumulativePoints(curve)} />
+            </section>
           ) : null}
           {p?.band?.available === false ? (
             <p className="text-muted-foreground text-xs">Expectation band: {txt(p.band.reason)}.</p>
           ) : null}
-          <DataDetails summary="Show the R distribution">
-            <div className="grid gap-2">
-              {bins.map((b) => (
-                <Meter key={b.bin} label={`${txt(b.bin)} R`} value={b.count} max={maxBin} valueText={num(b.count)} />
-              ))}
-            </div>
-          </DataDetails>
+          {bins.length > 0 ? (
+            <section className="grid gap-2">
+              <h3 className="text-sm font-medium">How the trades ended, in bands of R</h3>
+              <Columns
+                label="Number of trades per band of R"
+                columns={bins.map((b) => ({ key: txt(b.bin), label: txt(b.bin), count: b.count ?? 0, side: binSide(b.bin) }))}
+              />
+              <p className="text-muted-foreground text-xs">Red bands lost, green bands gained. A healthy rule has its losses bunched near −1R and a tail to the right.</p>
+            </section>
+          ) : null}
         </div>
       )}
     </Panel>
   );
+}
+
+/** The published curve as chart points: one per counted trade, in order. */
+export function cumulativePoints(curve: { date?: string | null; cum_r?: number | null; dd_r?: number | null }[]) {
+  return curve.map((c, i) => ({ i: i + 1, day: shortDate(c.date), cum: c.cum_r ?? null, dd: c.dd_r ?? null }));
 }
 
 /** The last closed trades (newest first). Prices and R only. */
@@ -107,38 +114,47 @@ export function BlotterPanel({ s }: { s: Snapshot }) {
       ) : rows.length === 0 ? (
         <Empty title="No closed trades yet" />
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Day</TableHead>
-              <TableHead>Symbol</TableHead>
-              <TableHead className="text-right">Qty</TableHead>
-              <TableHead className="hidden text-right sm:table-cell">Entry</TableHead>
-              <TableHead className="hidden text-right sm:table-cell">Exit</TableHead>
-              <TableHead className="text-right">R</TableHead>
-              <TableHead>Exit reason</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.slice(0, 30).map((r, i) => (
-              <TableRow key={`${r.date}-${i}`}>
-                <TableCell className="whitespace-nowrap">{shortDate(r.date)}</TableCell>
-                <TableCell className="font-mono">{txt(r.symbol)}</TableCell>
-                <TableCell className="text-right tabular-nums">{num(r.qty)}</TableCell>
-                <TableCell className="hidden text-right tabular-nums sm:table-cell">{num(r.entry, 2)}</TableCell>
-                <TableCell className="hidden text-right tabular-nums sm:table-cell">{num(r.exit, 2)}</TableCell>
-                <TableCell className="text-right font-medium tabular-nums">
-                  {rMult(r.r, 2)}
-                  {r.estimated ? <span className="text-muted-foreground font-normal"> (est.)</span> : null}
-                </TableCell>
-                <TableCell>
-                  {txt(r.reason)}
-                  {r.origin && r.origin !== "entry" ? <span className="text-muted-foreground"> · {r.origin}</span> : null}
-                </TableCell>
+        <div className="grid gap-4">
+          <TradeBars
+            label="Result of each closed paper trade in R, oldest first"
+            whenLabel="Day"
+            trades={list(s.blotter)
+              .filter((r) => typeof r.r === "number")
+              .map((r, i) => ({ i: i + 1, r: r.r as number, what: `${txt(r.symbol)} · ${txt(r.reason)}${r.estimated ? " (estimated)" : ""}`, when: shortDate(r.date) }))}
+          />
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Day</TableHead>
+                <TableHead>Symbol</TableHead>
+                <TableHead className="text-right">Qty</TableHead>
+                <TableHead className="hidden text-right sm:table-cell">Entry</TableHead>
+                <TableHead className="hidden text-right sm:table-cell">Exit</TableHead>
+                <TableHead className="text-right">R</TableHead>
+                <TableHead>Exit reason</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {rows.slice(0, 30).map((r, i) => (
+                <TableRow key={`${r.date}-${i}`}>
+                  <TableCell className="whitespace-nowrap">{shortDate(r.date)}</TableCell>
+                  <TableCell className="font-mono">{txt(r.symbol)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{num(r.qty)}</TableCell>
+                  <TableCell className="hidden text-right tabular-nums sm:table-cell">{num(r.entry, 2)}</TableCell>
+                  <TableCell className="hidden text-right tabular-nums sm:table-cell">{num(r.exit, 2)}</TableCell>
+                  <TableCell className="text-right font-medium tabular-nums">
+                    {rMult(r.r, 2)}
+                    {r.estimated ? <span className="text-muted-foreground font-normal"> (est.)</span> : null}
+                  </TableCell>
+                  <TableCell>
+                    {txt(r.reason)}
+                    {r.origin && r.origin !== "entry" ? <span className="text-muted-foreground"> · {r.origin}</span> : null}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       )}
     </Panel>
   );

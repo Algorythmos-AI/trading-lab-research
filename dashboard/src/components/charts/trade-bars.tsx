@@ -21,9 +21,9 @@ const r = (v: unknown) => {
 const CONFIG: ChartConfig = { win: { label: "Made money", color: "var(--good-fill)" }, loss: { label: "Lost money", color: "var(--bad-fill)" } };
 
 /** One bar per closed trade in the order they ended: its result in R, up for a gain and down for a loss. */
-export function TradeBars({ trades }: { trades: TradeBar[] }) {
+export function TradeBars({ trades, whenLabel = "Ended (UTC)", label = "Result of each closed trade in R, oldest first" }: { trades: TradeBar[]; whenLabel?: string; label?: string }) {
   return (
-    <ChartContainer config={CONFIG} className="h-52" aria-label="Result of each closed trade in R, oldest first">
+    <ChartContainer config={CONFIG} className="h-52" aria-label={label}>
       <BarChart data={trades} margin={{ top: 8, right: 12, bottom: 0, left: 0 }} barCategoryGap="18%">
         <CartesianGrid vertical={false} />
         <XAxis dataKey="i" tickLine={false} axisLine={false} tickMargin={8} minTickGap={16} />
@@ -38,7 +38,7 @@ export function TradeBars({ trades }: { trades: TradeBar[] }) {
                 title={d.what}
                 rows={[
                   { key: "r", name: d.r >= 0 ? "Gain" : "Loss", value: r(d.r), color: d.r >= 0 ? "var(--color-win)" : "var(--color-loss)" },
-                  { key: "when", name: "Ended (UTC)", value: d.when },
+                  { key: "when", name: whenLabel, value: d.when },
                 ]}
               />
             ) : null;
