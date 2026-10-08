@@ -71,6 +71,9 @@ class DailyIndex:
         return g.iloc[max(0, i - n): i]
 
 
+SLICE_BAND = (2.0, 20.0)              # reported beside the registered bands as counts only; it selects nothing
+
+
 @dataclass
 class PoolConfig:
     price_band: tuple = (1.00, 30.00)
@@ -90,6 +93,10 @@ class PoolStats:
     kept: int = 0
     float_unknown: int = 0
     notes: list = field(default_factory=list)
+    # Counts only, added for the funnel record (wt.scanner.explain). Plain ints: they travel as JSON numbers.
+    in_band: int = 0                  # snapshot symbols priced inside cfg.price_band (before the gap floor)
+    slice_snapshot: int = 0           # snapshot symbols priced inside SLICE_BAND
+    slice_kept: int = 0               # kept names priced inside SLICE_BAND
 
 
 def last_print(snap: pd.DataFrame) -> pd.Series:
@@ -115,7 +122,9 @@ def build_day(d: dt.date, p: dt.date, client, daily: "DailyIndex", universe: set
     snap = snap[snap.t < pd.Timestamp(et(d, cfg.snapshot[1]))] if len(snap) else snap
     px = last_print(snap)
     st.snapshot_symbols = len(px)
+    st.slice_snapshot = int(px.between(*SLICE_BAND).sum())
     px = px[px.between(*cfg.price_band)]
+    st.in_band = len(px)
     raw_gap = px / prev.c.reindex(px.index) - 1
     need = sorted(raw_gap[(raw_gap >= SPLIT_CHECK_HI) | (raw_gap <= SPLIT_CHECK_LO)].index)
     if need and split_refresh is not None:
@@ -125,6 +134,7 @@ def build_day(d: dt.date, p: dt.date, client, daily: "DailyIndex", universe: set
     gap = 100 * (px / adj_prev - 1)
     keep = sorted(gap[gap > cfg.gap_min_pct].index)
     st.kept = len(keep)
+    st.slice_kept = sum(1 for s in keep if SLICE_BAND[0] <= float(px[s]) <= SLICE_BAND[1])
     if not keep:
         return pd.DataFrame(), pd.DataFrame(), st
     # ---- pre-market bars (full window) and RVOL baselines --------------------------------------------------
