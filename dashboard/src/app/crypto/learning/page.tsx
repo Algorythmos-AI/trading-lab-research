@@ -1,4 +1,14 @@
-import { LeansOnPanel, ModelPanel, PipelinePanel, SignalsScorecard, TestsPanel, TrainingPanel } from "@/components/crypto/learning";
+import {
+  HistoryPanel,
+  LeansOnPanel,
+  ModelPanel,
+  NotBuiltPanel,
+  PipelinePanel,
+  ScoresPanel,
+  SignalsScorecard,
+  TestsPanel,
+  TrainingPanel,
+} from "@/components/crypto/learning";
 import { NoCryptoSnapshot } from "@/components/crypto/panels";
 import { Empty } from "@/components/empty";
 import { PageHeading } from "@/components/page-heading";
@@ -25,12 +35,15 @@ export default async function CryptoLearningPage() {
         <>
           <ModelPanel l={l} />
           <TestsPanel l={l} />
+          <ScoresPanel l={l} />
           <TrainingPanel l={l} />
           <div className="grid gap-5 lg:grid-cols-2">
             <LeansOnPanel l={l} />
             <PipelinePanel s={result.snapshot} />
           </div>
           <SignalsScorecard l={l} />
+          <HistoryPanel l={l} />
+          <NotBuiltPanel l={l} />
         </>
       )}
     </>

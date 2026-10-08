@@ -1,9 +1,11 @@
 import Link from "next/link";
-import { ArrowRight, BrainCircuit, ClipboardCheck, Cog, FlaskConical, GraduationCap, Scale } from "lucide-react";
+import { ArrowRight, BrainCircuit, ClipboardCheck, Cog, FlaskConical, GraduationCap, History, Hourglass, Scale, Target } from "lucide-react";
 import { DivergingBars } from "@/components/charts/diverging-bars";
 import { Forest } from "@/components/charts/forest";
 import { Funnel } from "@/components/charts/funnel";
 import { KeptSkippedChart } from "@/components/charts/kept-skipped-chart";
+import { RunningChart } from "@/components/charts/running-chart";
+import { ScoreBars } from "@/components/charts/score-bars";
 import { TestsChart } from "@/components/charts/tests-chart";
 import { Empty } from "@/components/empty";
 import { KeyValues } from "@/components/kv";
@@ -16,18 +18,21 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { items, type Crypto } from "@/lib/crypto";
 import { duration, fracPct, num, rMult, shortSha, signed, sydney, zoned } from "@/lib/format";
 import { jobTone } from "@/lib/labels";
-import { LEARN_JOB, isLearningAlert, learningAlertLabel, learningLine, modelRoad, type Learning } from "@/lib/learning";
+import { LEARN_JOB, isLearningAlert, kindLabel, learningAlertLabel, learningLine, lineageLabel, modelRoad, type Learning } from "@/lib/learning";
 import { cn } from "@/lib/utils";
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const utc = (iso: string | null | undefined) => (iso ? zoned(iso, "UTC") : "—");
 const toneOf = (v: number | null | undefined) => (!isNum(v) || Math.abs(v) < 0.0005 ? "text-foreground" : v > 0 ? "text-good" : "text-bad");
 const fixed = (v: number | null | undefined, d: number) => (isNum(v) ? v.toFixed(d) : "—");
+/** The drift limit, until the host publishes its own (DEC-0016, 4). */
 const DRIFT_LIMIT = 0.25;
 
 /** The model in force: where it is on the road from training to acting, and how close its next test is. */
 export function ModelPanel({ l }: { l: Learning }) {
   const m = l.model;
+  const driftLimit = l.limits.driftPsi ?? DRIFT_LIMIT;
+  const maxAge = l.limits.maxAgeDays;
   return (
     <Panel
       title="The model"
@@ -68,8 +73,8 @@ export function ModelPanel({ l }: { l: Learning }) {
               <StatTile
                 label="Drift of its scores"
                 value={isNum(m.scorePsi) ? m.scorePsi.toFixed(2) : "—"}
-                hint={isNum(m.scorePsi) ? `Suspends above ${DRIFT_LIMIT}` : "Not measured yet"}
-                tone={!isNum(m.scorePsi) ? "neutral" : m.scorePsi > DRIFT_LIMIT ? "warn" : "good"}
+                hint={isNum(m.scorePsi) ? `Suspends above ${driftLimit}` : "Not measured yet"}
+                tone={!isNum(m.scorePsi) ? "neutral" : m.scorePsi > driftLimit ? "warn" : "good"}
               />
             </StatTiles>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -87,16 +92,66 @@ export function ModelPanel({ l }: { l: Learning }) {
                 <Meter
                   label="Score drift against its limit"
                   value={m.scorePsi}
-                  max={DRIFT_LIMIT * 2}
-                  threshold={DRIFT_LIMIT}
-                  thresholdLabel={`Limit ${DRIFT_LIMIT}`}
-                  tone={m.scorePsi > DRIFT_LIMIT ? "warn" : "good"}
+                  max={Math.max(driftLimit * 2, m.scorePsi)}
+                  threshold={driftLimit}
+                  thresholdLabel={`Limit ${driftLimit}`}
+                  tone={m.scorePsi > driftLimit ? "warn" : "good"}
                   valueText={m.scorePsi.toFixed(3)}
                 />
               ) : null}
+              {isNum(m.ageDays) && isNum(maxAge) ? (
+                <Meter
+                  label="Age of the model against its limit"
+                  value={m.ageDays}
+                  max={Math.max(maxAge, m.ageDays)}
+                  threshold={maxAge}
+                  thresholdLabel={`Not used when older than ${num(maxAge)} days; it is retrained weekly`}
+                  tone={m.ageDays > maxAge ? "warn" : "good"}
+                  valueText={`${num(m.ageDays, 1)} days`}
+                />
+              ) : null}
             </div>
-            {m.driftInputs.length > 0 ? (
+            {m.driftPsi.length > 0 ? (
+              <section className="grid gap-2">
+                <h3 className="text-sm font-medium">Inputs that have moved away from the training data</h3>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {m.driftPsi.map((x) => (
+                    <Meter
+                      key={x.input}
+                      label={<span className="inline-block first-letter:uppercase">{x.label}</span>}
+                      value={x.psi}
+                      max={Math.max(driftLimit * 2, x.psi)}
+                      threshold={driftLimit}
+                      tone="warn"
+                      valueText={x.psi.toFixed(3)}
+                    />
+                  ))}
+                </div>
+                <p className="text-muted-foreground text-xs">
+                  Only inputs beyond the limit of {driftLimit} are recorded.
+                  {isNum(l.limits.driftInputs) ? ` The model is suspended when ${num(l.limits.driftInputs)} or more are, or when its scores are.` : ""}
+                </p>
+              </section>
+            ) : m.driftInputs.length > 0 ? (
               <p className="text-muted-foreground text-xs">Inputs that have moved away from the training data: {m.driftInputs.join(", ")}.</p>
+            ) : null}
+            {l.detailed ? (
+              <section className="grid gap-2">
+                <h3 className="text-sm font-medium">The model&apos;s card</h3>
+                <KeyValues
+                  items={[
+                    { label: "Kind", value: kindLabel(m.kind) },
+                    { label: "Version", value: m.version, mono: true },
+                    { label: "In shadow since (UTC)", value: utc(m.since) },
+                    { label: "Inputs", value: num(m.inputs) },
+                    { label: "Skips a signal scored below", value: fixed(m.cutoff, 3) },
+                    { label: "Halves a signal scored below", value: fixed(m.halfBelow, 3) },
+                    { label: "Score calibration (slope, shift)", value: isNum(m.calibA) && isNum(m.calibB) ? `${m.calibA.toFixed(3)}, ${m.calibB.toFixed(3)}` : "—" },
+                    { label: "Model file fingerprint", value: m.sha ?? "—", mono: true },
+                    { label: "Input definitions", value: m.features ?? "—", mono: true },
+                  ]}
+                />
+              </section>
             ) : null}
           </>
         )}
@@ -238,7 +293,10 @@ export function TrainingPanel({ l }: { l: Learning }) {
                     <span className="font-medium">{x.label}</span>
                     {x.settings ? <span className="text-muted-foreground block text-xs">{x.settings}</span> : null}
                   </TableCell>
-                  <TableCell className="text-right font-mono">{fixed(x.logLoss, 4)}</TableCell>
+                  <TableCell className="text-right font-mono whitespace-nowrap">
+                    {fixed(x.logLoss, 4)}
+                    {isNum(x.logLossSe) ? <span className="text-muted-foreground"> ±{x.logLossSe.toFixed(4)}</span> : null}
+                  </TableCell>
                   <TableCell className="text-right font-mono">{num(x.kept)}</TableCell>
                   <TableCell className={cn("text-right font-mono", toneOf(x.keptMeanR))}>{rMult(x.keptMeanR, 3)}</TableCell>
                   <TableCell className="text-right font-mono">{x.name === "m0" ? "—" : num(x.skipped)}</TableCell>
@@ -261,8 +319,19 @@ export function TrainingPanel({ l }: { l: Learning }) {
               ))}
             </TableBody>
           </Table>
+          {l.model && l.model.bySleeve.length > 0 ? (
+            <section className="grid gap-2">
+              <h3 className="text-sm font-medium">The model in force: training signals by strategy</h3>
+              <Funnel
+                label="Training signals per strategy"
+                rows={l.model.bySleeve.map((x) => ({ key: x.name, label: `${x.label} (average ${rMult(x.meanR, 3)})`, count: x.n ?? 0 }))}
+              />
+            </section>
+          ) : null}
           <p className="text-muted-foreground text-xs">
             Method {t.decision ?? "—"}, attempt {num(t.attempt)}. Every change of method after a result was seen counts as a further attempt.
+            {t.start && t.end ? ` Data from ${utc(t.start)} to ${utc(t.end)} UTC.` : ""}
+            {t.dataHash ? ` Data fingerprint ${t.dataHash.slice(0, 12)}.` : ""}
           </p>
         </div>
       )}
@@ -273,8 +342,9 @@ export function TrainingPanel({ l }: { l: Learning }) {
 /** What the chosen model weighs, strongest first, on one scale. */
 export function LeansOnPanel({ l }: { l: Learning }) {
   const t = l.training;
-  if (!t) return null;
-  const shown = t.chosen != null && t.leansOn.length > 0;
+  if (!t && !l.model) return null;
+  const rows = l.model && l.model.leansOn.length > 0 ? l.model.leansOn : t?.chosen != null ? t.leansOn : [];
+  const shown = rows.length > 0;
   return (
     <Panel
       title="What the chosen model leans on"
@@ -285,7 +355,7 @@ export function LeansOnPanel({ l }: { l: Learning }) {
         <DivergingBars
           label="Weight of each input in the chosen model"
           format={(v) => signed(v, 2)}
-          rows={t.leansOn.map((x) => ({ key: x.input, label: <span className="first-letter:uppercase inline-block">{x.label}</span>, value: x.weight }))}
+          rows={rows.map((x) => ({ key: x.input, label: <span className="inline-block first-letter:uppercase">{x.label}</span>, value: x.weight }))}
         />
       ) : (
         <Empty title="No model was chosen">Nothing to show: at the last training no model beat taking every signal.</Empty>
@@ -422,6 +492,179 @@ export function LearningCard({ l }: { l: Learning }) {
         {m ? <StatusBadge tone={m.tone}>{m.stateLabel}</StatusBadge> : <StatusBadge tone="neutral">No model in force</StatusBadge>}
         <span className="text-muted-foreground">{learningLine(l)}</span>
       </p>
+    </Panel>
+  );
+}
+
+/** How the model in force has scored the desk's signals, and how the two groups have done as they finished. */
+export function ScoresPanel({ l }: { l: Learning }) {
+  if (!l.detailed || !l.model) return null;
+  const sc = l.scores;
+  return (
+    <Panel
+      title="Scores the model has given"
+      icon={Target}
+      means="Every signal gets a score between 0 and 1 before its result is known: the model's estimate that it ends in profit after costs. Once the model acts, a signal below the first line is skipped and one below the second is taken at half size. The second chart follows both groups as their trades finish."
+    >
+      <div className="grid gap-5 lg:grid-cols-2">
+        <section className="grid content-start gap-2">
+          <h3 className="text-sm font-medium">Signals by score{sc ? `, ${num(sc.total)} scored` : ""}</h3>
+          {sc && sc.bins.length > 0 ? (
+            <ScoreBars bins={sc.bins} cutoff={sc.cutoff} halfBelow={sc.halfBelow} label="Signals per score band, by what the model would do" />
+          ) : (
+            <Empty title="No signal has been scored yet">Scores appear from the next signal a strategy records.</Empty>
+          )}
+        </section>
+        <section className="grid content-start gap-2">
+          <h3 className="text-sm font-medium">Running result of liked and disliked signals</h3>
+          {l.series.length >= 2 ? (
+            <RunningChart points={l.series.map((x) => ({ n: x.n, kept: x.kept, skipped: x.skipped }))} />
+          ) : (
+            <Empty title="Not enough finished signals yet">The lines start once two scored signals have finished.</Empty>
+          )}
+        </section>
+      </div>
+    </Panel>
+  );
+}
+
+/** Every model this host has put in shadow or registered, and everything the learning job recorded about them. */
+export function HistoryPanel({ l }: { l: Learning }) {
+  if (!l.detailed) return null;
+  return (
+    <Panel
+      title="Model history"
+      icon={History}
+      means="Every kind of model that has been put in shadow here with the state it was last in, every version registered, and each thing the learning job recorded. A weekly training that finds no model better than the baseline registers nothing, so it leaves no row."
+    >
+      <div className="grid gap-5">
+        <section className="grid gap-2">
+          <h3 className="text-sm font-medium">Models tried in shadow</h3>
+          {l.lineages.length === 0 ? (
+            <Empty title="No model has been put in shadow yet" />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Model</TableHead>
+                  <TableHead>State</TableHead>
+                  <TableHead>Since (UTC)</TableHead>
+                  <TableHead className="text-right">Tests used</TableHead>
+                  <TableHead className="text-right">Signals finished</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {l.lineages.map((x) => (
+                  <TableRow key={x.lineage}>
+                    <TableCell className="font-medium whitespace-normal">{x.label}</TableCell>
+                    <TableCell>
+                      <span className="flex flex-wrap gap-1.5">
+                        <StatusBadge tone={x.tone}>{x.stateLabel}</StatusBadge>
+                        {x.inForce ? <StatusBadge tone="info">In force</StatusBadge> : <StatusBadge tone="neutral">Not in force</StatusBadge>}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-xs whitespace-nowrap">{utc(x.since)}</TableCell>
+                    <TableCell className="text-right font-mono">{num(x.checkpoints)}</TableCell>
+                    <TableCell className="text-right font-mono">{num(x.finished)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </section>
+        <div className="grid gap-5 lg:grid-cols-2">
+          <section className="grid content-start gap-2">
+            <h3 className="text-sm font-medium">Versions registered, newest first</h3>
+            {l.registry.length === 0 ? (
+              <Empty title="No version has been registered yet" />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Version</TableHead>
+                    <TableHead>Trained (UTC)</TableHead>
+                    <TableHead className="text-right">Signals</TableHead>
+                    <TableHead>Now</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {l.registry.map((x) => (
+                    <TableRow key={x.version}>
+                      <TableCell className="whitespace-normal">
+                        <span className="font-mono text-xs">{x.version}</span>
+                        <span className="text-muted-foreground block text-xs">{lineageLabel(x.lineage)}</span>
+                      </TableCell>
+                      <TableCell className="text-xs whitespace-nowrap">{utc(x.trainedAt)}</TableCell>
+                      <TableCell className="text-right font-mono">{num(x.examples)}</TableCell>
+                      <TableCell>{x.inForce ? <StatusBadge tone="info">In force</StatusBadge> : <StatusBadge tone="neutral">Replaced</StatusBadge>}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </section>
+          <section className="grid content-start gap-2">
+            <h3 className="text-sm font-medium">What the learning job recorded, newest first</h3>
+            {l.events.length === 0 ? (
+              <Empty title="Nothing recorded yet" />
+            ) : (
+              <ol className="divide-border grid divide-y">
+                {l.events.slice(0, 20).map((e, i) => (
+                  <li key={`${e.at}-${e.event}-${i}`} className="grid gap-0.5 py-2 first:pt-0 last:pb-0">
+                    <span className="flex flex-wrap items-center gap-2 text-sm">
+                      <StatusBadge tone={e.tone}>{e.label}</StatusBadge>
+                    </span>
+                    <span className="text-muted-foreground text-xs">
+                      {utc(e.at)} UTC{e.lineage ? ` · ${lineageLabel(e.lineage)}` : ""}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
+            {l.events.length > 20 ? <p className="text-muted-foreground text-xs">Showing the latest 20 of {num(l.events.length)}.</p> : null}
+          </section>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+/** So that nothing is left to guess: what is named in the configuration but not built, and what is not measured. */
+export function NotBuiltPanel({ l }: { l: Learning }) {
+  if (!l.detailed) return null;
+  return (
+    <Panel
+      title="Planned, and not measured"
+      icon={Hourglass}
+      means="The parts of the learning plan that exist only as a line of configuration, and the common model measures this lab does not compute. Listed so that their absence above is not mistaken for a gap in this page."
+    >
+      <div className="grid gap-5 lg:grid-cols-2">
+        <section className="grid content-start gap-2">
+          <h3 className="text-sm font-medium">Named in the configuration, no code yet</h3>
+          {l.planned.length === 0 ? (
+            <Empty title="Nothing is waiting to be built" />
+          ) : (
+            <ul className="grid gap-1.5">
+              {l.planned.map((x) => (
+                <li key={x.name} className="flex flex-wrap items-center gap-2 text-sm">
+                  <StatusBadge tone="neutral">Not built</StatusBadge>
+                  <span>{x.label}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+        <section className="grid content-start gap-2">
+          <h3 className="text-sm font-medium">Not computed anywhere in the lab</h3>
+          <ul className="text-muted-foreground list-disc pl-5 text-sm">
+            <li>A calibration curve (only the two calibration numbers and the forecast error exist).</li>
+            <li>AUC, precision and recall, or a confusion matrix.</li>
+            <li>Results of each validation fold on its own.</li>
+            <li>The drift of an input that is still inside its limit.</li>
+          </ul>
+          <p className="text-muted-foreground text-xs">The model is judged on forecast error and on liked minus disliked, as set out before any result was seen.</p>
+        </section>
+      </div>
     </Panel>
   );
 }

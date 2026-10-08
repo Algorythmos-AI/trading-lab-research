@@ -464,6 +464,37 @@ export interface CryptoSnapshot {
             t?: string | null;
           } | null)[]
         | null;
+      kind?: string | null;
+      sha?: string | null;
+      features?: string | null;
+      inputs?: number | null;
+      cutoff?: number | null;
+      half_below?: number | null;
+      calib_a?: number | null;
+      calib_b?: number | null;
+      age_days?: number | null;
+      since?: string | null;
+      drift_psi?: {
+        [k: string]: number | null | undefined;
+      } | null;
+      by_sleeve?: {
+        [k: string]:
+          | {
+              n?: number | null;
+              mean_r?: number | null;
+            }
+          | null
+          | undefined;
+      } | null;
+      /**
+       * @maxItems 2000
+       */
+      leans_on?:
+        | ({
+            input?: string | null;
+            weight?: number | null;
+          } | null)[]
+        | null;
     } | null;
     training?: {
       t?: string | null;
@@ -475,6 +506,9 @@ export interface CryptoSnapshot {
       win_rate?: number | null;
       mean_r?: number | null;
       attempt?: number | null;
+      start?: string | null;
+      end?: string | null;
+      data_hash?: string | null;
       /**
        * @maxItems 2000
        */
@@ -483,6 +517,7 @@ export interface CryptoSnapshot {
             name?: string | null;
             settings?: string | null;
             log_loss?: number | null;
+            log_loss_se?: number | null;
             kept?: number | null;
             kept_mean_r?: number | null;
             dropped?: number | null;
@@ -514,5 +549,82 @@ export interface CryptoSnapshot {
       skipped?: number | null;
       skipped_mean_r?: number | null;
     } | null;
+    limits?: {
+      drift_psi?: number | null;
+      drift_inputs?: number | null;
+      max_model_age_days?: number | null;
+      demotion_window_signals?: number | null;
+      alpha?: number | null;
+      cutoff_percentile?: number | null;
+      half_size_below_percentile?: number | null;
+    } | null;
+    scores?: {
+      cutoff?: number | null;
+      half_below?: number | null;
+      /**
+       * @maxItems 2000
+       */
+      bins?:
+        | ({
+            lo?: number | null;
+            hi?: number | null;
+            kept?: number | null;
+            halved?: number | null;
+            skipped?: number | null;
+          } | null)[]
+        | null;
+    } | null;
+    /**
+     * @maxItems 2000
+     */
+    series?:
+      | ({
+          t?: string | null;
+          n?: number | null;
+          kept?: number | null;
+          skipped?: number | null;
+        } | null)[]
+      | null;
+    /**
+     * @maxItems 2000
+     */
+    events?:
+      | ({
+          t?: string | null;
+          event?: string | null;
+          lineage?: string | null;
+          version?: string | null;
+        } | null)[]
+      | null;
+    /**
+     * @maxItems 2000
+     */
+    lineages?:
+      | ({
+          lineage?: string | null;
+          state?: string | null;
+          checkpoints?: number | null;
+          finished?: number | null;
+          since?: string | null;
+          in_force?: boolean | null;
+        } | null)[]
+      | null;
+    /**
+     * @maxItems 2000
+     */
+    registry?:
+      | ({
+          version?: string | null;
+          kind?: string | null;
+          lineage?: string | null;
+          trained_at?: string | null;
+          examples?: number | null;
+          in_force?: boolean | null;
+        } | null)[]
+      | null;
+    /**
+     * @maxItems 2000
+     */
+    planned?: (string | null)[] | null;
   } | null;
 }
