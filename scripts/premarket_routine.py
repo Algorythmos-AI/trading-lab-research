@@ -37,6 +37,7 @@ from wt.data.alpaca import AlpacaREST, HybridFeed  # noqa: E402
 from wt.data.edgar import SharesOutstanding  # noqa: E402
 from wt.data.universe import ASSETS, load_daily_tail, tail_rows_for  # noqa: E402
 from wt.risk.virtual_account import VirtualAccount  # noqa: E402
+from wt.scanner.explain import explain, pool_musts  # noqa: E402
 from wt.scanner.features import PMCache  # noqa: E402
 from wt.scanner.pool import DailyIndex, PoolConfig, build_day  # noqa: E402
 from wt.scanner.ranking import SpecCandidate, funnel  # noqa: E402
@@ -67,6 +68,19 @@ def spec_cands(pool: pd.DataFrame) -> list[SpecCandidate]:
                           catalyst_category=r.catalyst_category, catalyst_score=r.catalyst_score,
                           former_runner=bool(r.former_runner), chart_ok=bool(r.chart_ok),
                           pm_pattern=isinstance(r.pm_pattern, str)) for r in pool.itertuples()]
+
+
+def funnel_record(pool: pd.DataFrame, spec: dict) -> tuple[dict[str, int], list[dict]]:
+    """(counts for the stage's `stats`, one row per kept name: the step it reached and why it went no further).
+    A record of the funnel as this stage saw it. It never fails a stage: on any error the stats say so instead."""
+    if not len(pool):
+        return {}, []
+    try:
+        e = explain(spec_cands(pool), spec, pool_musts(pool))
+        return e.flat(), [{"symbol": r.symbol, "price": r.price, "reached": r.reached, "reasons": list(r.reasons)}
+                          for r in e.rows]
+    except Exception:  # noqa: BLE001 — a description must never cost the stage its tiers
+        return {"explain_error": 1}, []
 
 
 def sip_through(a) -> str | None:
@@ -106,11 +120,12 @@ def run(d: dt.date, feed: str, replay: bool) -> Path | None:
         pool, pmb, stats = build_day(d, p, a, daily, universe, splits.sf, cache, shares, prev_sessions, cfg,
                                      split_refresh=splits.refresh)
         f = funnel(spec_cands(pool), spec) if len(pool) else {"tier1": [], "tier2": [], "primary": None, "dropped": []}
-        body = {"stage": name, "as_of_et": hhmm, "feed": feed, "sip_through_et": sip_through(a), "stats": vars(stats),
-                "tier1": f["tier1"]}
+        counts, reached = funnel_record(pool, spec)
+        body = {"stage": name, "as_of_et": hhmm, "feed": feed, "sip_through_et": sip_through(a),
+                "stats": {**vars(stats), **counts}, "tier1": f["tier1"], "reached": reached}
         if name in ("charts", "tier2", "tickets") and len(pool):
             cols = ["symbol", "price_0925", "gap_pct", "trend_ok", "window_ok", "window_room", "atr14", "pm_consolidation",
-                    "pm_pattern", "former_runner", "suspect_split", "chart_ok", "catalyst_category"]
+                    "pm_pattern", "former_runner", "suspect_split", "chart_ok", "catalyst_category", "hist_bars"]
             body["charts"] = pool[pool.symbol.isin([x["symbol"] for x in f["tier1"]])][cols].to_dict(orient="records")
         if name in ("tier2", "tickets"):
             body["tier2"], body["primary"] = f["tier2"], f["primary"]

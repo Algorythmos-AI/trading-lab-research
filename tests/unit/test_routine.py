@@ -44,3 +44,35 @@ def test_tickets_use_lowest_level_and_cap(tmp_path, monkeypatch):
     assert t["BBB"]["trigger"] == 3.01 and t["BBB"]["stop"] == 2.81                        # no pattern: PMH, 20c cap
     assert t["AAA"]["qty"] == 60 and t["AAA"]["risk_usd"] <= 6.0 + 1e-9                     # 1% of US$600
     assert not (tmp_path / "missing.json").exists()
+
+
+def pool_row(sym, **kw):
+    base = dict(symbol=sym, price_0925=5.0, gap_pct=25.0, pm_volume=300_000.0, rvol_pm=6.0, float_shares=8e6,
+                catalyst_status="qualifying", catalyst_category="fda_approval", catalyst_score=1.0, former_runner=False,
+                chart_ok=True, pm_pattern=None, trend_ok=True, window_ok=True, pm_consolidation=True, suspect_split=False,
+                hist_bars=260)
+    return {**base, **kw}
+
+
+def test_a_stage_records_why_each_kept_name_went_no_further():
+    spec = load_spec("SPEC-0001")
+    pool = pd.DataFrame([pool_row("OK", pm_pattern="flag"), pool_row("THIN", rvol_pm=1.0),
+                         pool_row("NEW", chart_ok=False, trend_ok=False, hist_bars=30),
+                         pool_row("BUY", catalyst_status="excluded", catalyst_category="buyout_offer")])
+    counts, rows = pr.funnel_record(pool, spec)
+    assert {k: counts[k] for k in ("n_kept", "n_passed", "n_tier1", "n_chart_ok", "n_tier2", "n_primary")} == {
+        "n_kept": 4, "n_passed": 2, "n_tier1": 2, "n_chart_ok": 1, "n_tier2": 1, "n_primary": 1}
+    assert counts["drop_rvol"] == counts["sole_rvol"] == 1 and counts["drop_catalyst_excluded"] == 1
+    assert counts["chart_history"] == 1 and counts["band2_20_kept"] == 4
+    assert all(type(v) is int for v in counts.values()) and not any("buyout" in k for k in counts)
+    assert {r["symbol"]: (r["reached"], r["reasons"]) for r in rows} == {
+        "OK": ("primary", []), "THIN": ("kept", ["rvol"]), "NEW": ("tier1", ["chart:history"]),
+        "BUY": ("kept", ["catalyst_excluded:buyout_offer"])}
+    f = pr.funnel(pr.spec_cands(pool), spec)                                  # the record describes the same funnel run
+    assert [x["symbol"] for x in f["tier2"]] == ["OK"] and f["primary"] == "OK"
+
+
+def test_the_record_never_costs_a_stage(monkeypatch):
+    assert pr.funnel_record(pd.DataFrame(), load_spec("SPEC-0001")) == ({}, [])
+    monkeypatch.setattr(pr, "explain", lambda *a, **k: 1 / 0)
+    assert pr.funnel_record(pd.DataFrame([pool_row("OK")]), load_spec("SPEC-0001")) == ({"explain_error": 1}, [])
