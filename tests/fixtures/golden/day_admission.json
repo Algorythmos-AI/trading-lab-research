@@ -1,0 +1,122 @@
+{
+ "cash": {
+  "admitted": [
+   [
+    "A",
+    1,
+    100,
+    1.0
+   ],
+   [
+    "B",
+    1,
+    20,
+    1.0
+   ]
+  ],
+  "skipped": [
+   [
+    "C",
+    1,
+    "unfunded"
+   ]
+  ]
+ },
+ "chains": {
+  "admitted": [
+   [
+    "Z",
+    1,
+    118,
+    0.2
+   ],
+   [
+    "B",
+    1,
+    1,
+    1.0
+   ],
+   [
+    "B",
+    2,
+    1,
+    0.3
+   ]
+  ],
+  "skipped": [
+   [
+    "A",
+    1,
+    "unfunded"
+   ],
+   [
+    "A",
+    2,
+    "earlier_attempt_not_admitted"
+   ]
+  ]
+ },
+ "day_loss": {
+  "admitted": [
+   [
+    "A",
+    1,
+    10,
+    -1.2
+   ],
+   [
+    "B",
+    1,
+    10,
+    -1.0
+   ],
+   [
+    "D",
+    1,
+    10,
+    0.1
+   ]
+  ],
+  "skipped": [
+   [
+    "C",
+    1,
+    "day_stop_loss_R"
+   ]
+  ]
+ },
+ "losers": {
+  "admitted": [
+   [
+    "A",
+    1,
+    10,
+    -0.4
+   ],
+   [
+    "B",
+    1,
+    10,
+    -0.4
+   ],
+   [
+    "C",
+    1,
+    10,
+    -0.4
+   ]
+  ],
+  "skipped": [
+   [
+    "D",
+    1,
+    "day_stop_consecutive_losers"
+   ],
+   [
+    "E",
+    1,
+    "day_stop_consecutive_losers"
+   ]
+  ]
+ }
+}
