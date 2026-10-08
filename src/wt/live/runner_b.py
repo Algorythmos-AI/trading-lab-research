@@ -137,6 +137,8 @@ class LiveData:
             if len(b) > 60:
                 vals.append(float(np.mean(np.abs(b.c.iloc[29::30].to_numpy() / b.o.iloc[0] - 1))))
                 prev_close = float(b.c.iloc[-1])
+        if not vals:                                       # no prior session had its bars: np.mean([]) would be NaN
+            raise ValueError("no prior session with a full set of bars")
         return float(np.mean(vals)), prev_close
 
 
@@ -376,16 +378,20 @@ def minute_grid(closed: pd.DataFrame, open_dt: dt.datetime) -> pd.DataFrame:
     return g.rename_axis("t").reset_index()
 
 
-def outcome_of(signals: list[dict[str, Any]], acted: bool, free_signal: bool) -> str:
-    """One plain answer to "why was there no trade today": traded, no_signal, blocked:<code>, signal_not_acted.
+def outcome_of(signals: list[dict[str, Any]], acted: bool, free_signal: bool, unchecked: bool = False) -> str:
+    """One plain answer to "why was there no trade today": traded, no_signal, blocked:<code>, signal_not_acted,
+    no_inputs.
 
     `free_signal` is the loop's own record of a signal with nothing blocking it, so the answer does not depend
-    on the decision journal having worked."""
+    on the decision journal having worked. `unchecked`: the rule was asked on at least one bar and never once had
+    its prices (today's bars, sigma, the prior close), so "no signal" would be a claim nobody checked."""
     if acted:
         return "traded"
     if free_signal or any(not s["blockers"] for s in signals):
         return "signal_not_acted"
-    return f"blocked:{signals[0]['blockers'][0]}" if signals else "no_signal"
+    if signals:
+        return f"blocked:{signals[0]['blockers'][0]}"
+    return "no_inputs" if unchecked else "no_signal"
 
 
 class Decisions:
@@ -405,9 +411,21 @@ class Decisions:
         self.signals: list[dict[str, Any]] = []
         self.events = 0
         self.inputs = False
+        self.asked = 0
+        self.missing_noted = False
+
+    @property
+    def unchecked(self) -> bool:
+        """Asked on at least one loop, and the rule's prices were never there."""
+        return self.asked > 0 and not self.inputs
 
     def observe(self, closed: pd.DataFrame, blockers: list[str], sigma: float | None, prev_close: float | None) -> None:
+        self.asked += 1
         if not len(closed) or sigma is None or prev_close is None:
+            if not self.missing_noted:                     # once a session: the first time the rule could not be asked
+                self.missing_noted = True
+                self.write("decision_inputs_missing", closed_bars=len(closed), sigma=sigma is not None,
+                           prev_close=prev_close is not None)
             return
         self.inputs = True
         bar = pd.Timestamp(closed.t.iloc[-1])
@@ -432,7 +450,7 @@ class Decisions:
             self.write("decision", **base, would_signal=False)
 
     def summary(self) -> None:
-        self.write("decision_summary", inputs=self.inputs, would_signals=len(self.signals),
+        self.write("decision_summary", inputs=self.inputs, asked=self.asked, would_signals=len(self.signals),
                    first=self.signals[0] if self.signals else None)
 
 
@@ -814,6 +832,8 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                                 state=plan.state, detail=plan.log[-1:] if plan.log else None)
                         else:
                             log("signal_skipped_size", qty=qty, R=R)
+                    else:
+                        log("signal_skipped_no_quote", signal_quote=bool(sq), trade_mid=bool(last_mid))
                 elif blockers and now.minute in (0, 30) and now.second < poll_s:
                     log("blocked", blockers=blockers)
         except Exception as e:  # noqa: BLE001 — never crash with an open position; log and keep protecting
@@ -848,11 +868,17 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         pager.fire("paper-b:not-flat", "Paper B could not verify flat after the close",
                    "The broker could not be read after the close. Check the account.", 5)
     decisions.summary()
-    outcome = outcome_of(decisions.signals, acted, free_signal)
+    outcome = outcome_of(decisions.signals, acted, free_signal, decisions.unchecked)
     if outcome == "signal_not_acted":
         pager.fire("paper-b:signal-not-acted", "Paper B had a signal and did not act",
                    "A signal fired with nothing blocking it and no entry was placed. Read the session's journal "
-                   "(clock_skew, signal_skipped_size, entry_not_placed) before the next session.", 4)
+                   "(clock_skew, signal_skipped_size, signal_skipped_no_quote, entry_not_placed) before the next "
+                   "session.", 4)
+    if outcome == "no_inputs":
+        pager.once_per_day("paper-b:no-inputs", "Paper B could not check its signal today",
+                   "The prices the rule needs (today's bars, sigma or the prior close) were missing for the whole "
+                   "session, so it never ran. This is a data fault, not a quiet market. Read decision_inputs_missing "
+                   "and refuse_to_arm in the session's journal.", 4)
     log("session_end", virtual=asdict(va) if va_ok else None, entries_off=off, outcome=outcome)
 
 
