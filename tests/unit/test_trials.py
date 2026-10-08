@@ -63,3 +63,16 @@ def test_proposed_rows_do_not_count_until_accepted(tmp_path):
 def test_malformed_registry_is_refused(tmp_path, rows, msg):
     with pytest.raises(ValueError, match=msg):
         global_trial_count(write(tmp_path, rows))
+
+
+def test_the_research_index_lists_every_experiment_with_a_hash_of_its_result():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("research_index", ROOT / "scripts" / "research_index.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    rows = {r["folder"]: r for r in mod.index()}
+    folders = {p.name for p in (ROOT / "research" / "experiments").glob("EXP-*") if p.is_dir()}
+    assert set(rows) == folders and len(folders) > 10
+    c1 = rows["EXP-0016-crypto-c1"]
+    assert c1["decision"] == "DEC-0015" and c1["data"] == "3a556ccdfce9996a" and len(c1["result"]) == 12
+    assert c1["span"] == "2024-10-07 to 2026-10-07" and rows["EXP-0017-crypto-models"]["superseded"]
