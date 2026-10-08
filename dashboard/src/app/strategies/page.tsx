@@ -10,7 +10,7 @@ import { Panel } from "@/components/panel";
 import { StatusBadge } from "@/components/status";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BlotterPanel, PerformancePanel } from "@/components/v3/perf";
-import { newYork, num, pct, rMult, shortDate, sydney, txt } from "@/lib/format";
+import { newYork, num, pct, rMult, shortDate, sydney, txt, usd } from "@/lib/format";
 import { humanize, isStrategyB, type Tone } from "@/lib/labels";
 import { loadSnapshot } from "@/lib/snapshot";
 import { entries, list, type ForwardPoint, type Snapshot } from "@/lib/types";
@@ -33,6 +33,7 @@ export default async function StrategiesPage() {
       ) : (
         <>
           <ForwardTable s={result.snapshot} />
+          <TrialBooks s={result.snapshot} />
           <ForwardCharts s={result.snapshot} />
           <div className="grid gap-5 lg:grid-cols-2">
             <PaperAccount s={result.snapshot} />
@@ -51,6 +52,62 @@ function BNotice() {
     <StatusBadge tone="warn" className="whitespace-normal">
       {B_NOTICE}
     </StatusBadge>
+  );
+}
+
+/** One row per registered trial, read from the forward ledger (DEC-0023). Absent until a host publishes the books. */
+function TrialBooks({ s }: { s: Snapshot }) {
+  const rows = list(s.ops?.forward?.books);
+  if (rows.length === 0) return null;
+  const quiet = rows.filter((r) => (r.trades ?? 0) === 0).length;
+  return (
+    <Panel
+      title="Trial books"
+      icon={ScrollText}
+      means="Every registered trial, whether or not it has traded: the sessions it ran, the signals that reached the account, the ones the account refused, and the result so far. Each row is the forward test's own record for that trial; nothing is compounded or combined. Dollars are R times the trial's fixed risk per trade. This is evidence gathering, not proof of an edge."
+      action={
+        <span className="text-muted-foreground text-xs">
+          {num(quiet)} of {num(rows.length)} with no trade yet
+        </span>
+      }
+    >
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Trial</TableHead>
+            <TableHead className="text-right">Sessions</TableHead>
+            <TableHead className="text-right">Signals</TableHead>
+            <TableHead className="text-right">Refused</TableHead>
+            <TableHead className="text-right">Trades</TableHead>
+            <TableHead className="text-right">Total R</TableHead>
+            <TableHead className="text-right">Deepest fall</TableHead>
+            <TableHead className="text-right">Nominal</TableHead>
+            <TableHead>Last trade</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((r, i) => (
+            <TableRow key={`${r.strategy}-${i}`}>
+              <TableCell className="whitespace-normal">
+                <div className="font-mono text-xs">{txt(r.strategy)}</div>
+                <div className="text-muted-foreground text-xs">
+                  {r.hyp ?? "active strategy"}
+                  {(r.errors ?? 0) > 0 ? ` · ${num(r.errors)} failed run${r.errors === 1 ? "" : "s"}` : ""}
+                </div>
+              </TableCell>
+              <TableCell className="text-right font-mono">{num(r.sessions)}</TableCell>
+              <TableCell className="text-right font-mono">{num(r.signals)}</TableCell>
+              <TableCell className="text-right font-mono">{num(r.refused)}</TableCell>
+              <TableCell className="text-right font-mono">{num(r.trades)}</TableCell>
+              <TableCell className="text-right font-medium">{(r.trades ?? 0) > 0 ? rMult(r.total_r, 2) : "—"}</TableCell>
+              <TableCell className="text-right">{(r.trades ?? 0) > 0 ? rMult(-(r.max_dd_r ?? 0), 2) : "—"}</TableCell>
+              <TableCell className="text-right">{(r.trades ?? 0) > 0 && r.nominal_usd != null ? usd(r.nominal_usd) : "—"}</TableCell>
+              <TableCell className="text-muted-foreground text-xs">{r.last_trade ? shortDate(r.last_trade) : "none"}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </Panel>
   );
 }
 

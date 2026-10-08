@@ -1828,6 +1828,111 @@
               ],
               "maxLength": 200
             },
+            "books": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "strategy": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  },
+                  "hyp": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  },
+                  "sessions": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "errors": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "first": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  },
+                  "last": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  },
+                  "trades": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "total_r": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "max_dd_r": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "last_trade": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  },
+                  "risk_usd": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "nominal_usd": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "signals": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "refused": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              "maxItems": 2000
+            },
             "log": {
               "type": [
                 "object",

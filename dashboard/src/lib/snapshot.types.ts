@@ -383,6 +383,27 @@ export interface Snapshot {
           } | null)[]
         | null;
       latest_scorecard?: string | null;
+      /**
+       * @maxItems 2000
+       */
+      books?:
+        | ({
+            strategy?: string | null;
+            hyp?: string | null;
+            sessions?: number | null;
+            errors?: number | null;
+            first?: string | null;
+            last?: string | null;
+            trades?: number | null;
+            total_r?: number | null;
+            max_dd_r?: number | null;
+            last_trade?: string | null;
+            risk_usd?: number | null;
+            nominal_usd?: number | null;
+            signals?: number | null;
+            refused?: number | null;
+          } | null)[]
+        | null;
       log?: {
         file?: string | null;
         exists?: boolean | null;
