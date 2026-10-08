@@ -8,6 +8,10 @@ A session is one ET trading date of the paper-B journal (data/live/journal.jsonl
   * nothing refused (refuse_to_arm; since the phase-2 runner a refusal means an exits-only session);
   * no incident: END_OF_DAY_NOT_FLAT, short_position, close_unknown, a reconcile action flagging a SHORT,
     UNKNOWN or UNPROTECTED position, or 3+ loop errors.
+  * the rule was checked: the session did not end `no_inputs` (DEC-0024, decision 1). A session where B's prices
+    were missing all day says nothing about whether the desk runs the rule correctly, so it is counted on its own
+    (`unchecked_sessions`) and, not being clean, is left out of the agreement measure. The outcome exists from the
+    runner of 2026-10-08 on; an earlier session is never reclassified by it.
 Trades are strategy B's own closed plans, counted once per trade_id; adopted orphans never count.
 Agreement stays day-level until the replay harness lands: a clean session agrees when paper B and forward B
 both traded, or both did not. The dashboard labels it provisional.
@@ -41,14 +45,15 @@ class Session:
     completed: bool = False
     kill: bool = False
     refused: bool = False
+    unchecked: bool = False
     loop_errors: int = 0
     incidents: list[str] = field(default_factory=list)
     trades: list[str] = field(default_factory=list)
 
     @property
     def clean(self) -> bool:
-        return (self.armed and self.completed and not self.kill and not self.refused and not self.incidents
-                and self.loop_errors < LOOP_ERRORS_INCIDENT)
+        return (self.armed and self.completed and not self.kill and not self.refused and not self.unchecked
+                and not self.incidents and self.loop_errors < LOOP_ERRORS_INCIDENT)
 
 
 def sessions(rows: Iterable[dict[str, Any]]) -> dict[str, Session]:
@@ -66,6 +71,7 @@ def sessions(rows: Iterable[dict[str, Any]]) -> dict[str, Session]:
             s.kill = True
         elif ev == "session_end":
             s.completed = True
+            s.unchecked = r.get("outcome") == "no_inputs"
         elif ev == "refuse_to_arm":
             s.refused = True
         elif ev == "loop_error":
@@ -112,6 +118,7 @@ def summary(rows: list[dict[str, Any]], forward_sessions: set[str] | None = None
         "trades": len(trades(rows)), "trades_needed": G2_MIN_TRADES,
         "sessions": len(clean), "sessions_needed": G2_MIN_SESSIONS,
         "armed_sessions": sum(1 for s in ss if s.armed),
+        "unchecked_sessions": sum(1 for s in ss if s.unchecked),
         "incident_free_streak": streak, "incident_free_needed": G2_MIN_INCIDENT_FREE,
         "agreement_level": "day", "agreement_days": None, "agreement_agree": None,
     }
