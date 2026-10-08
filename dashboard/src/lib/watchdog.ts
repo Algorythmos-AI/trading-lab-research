@@ -61,7 +61,7 @@ export function sameState(a: AlertState, b: AlertState): boolean {
 export interface WatchdogDecision {
   next: AlertState;
   notices: Notice[];
-  /** True once per UTC day: prune snapshots/history older than HISTORY_KEEP_DAYS. */
+  /** True once per UTC day: prune the desk's history older than HISTORY_KEEP_DAYS. */
   prune: boolean;
   fresh: Freshness | null;
 }
@@ -174,7 +174,8 @@ export function evaluate(snapshot: Snapshot | null, prev: AlertState, now: Date)
   return { next, notices, prune, fresh };
 }
 
-const HISTORY_RE = /^snapshots\/history\/(\d{4}-\d{2}-\d{2})\//;
+// Each desk keeps its own history: snapshots/history/ (stocks) and snapshots/<desk>/history/ (DESK_PATHS).
+const HISTORY_RE = /^snapshots\/(?:[a-z0-9-]+\/)?history\/(\d{4}-\d{2}-\d{2})\//;
 
 /** History objects whose UTC date folder is more than `keepDays` days before `now`. */
 export function historyToPrune<T extends { pathname: string }>(
