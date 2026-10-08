@@ -757,3 +757,81 @@ def test_a_free_signal_that_places_nothing_pages(real_signal, monkeypatch, journ
     runner_b.run(DAY, broker=b, rest=BreakoutREST(clk), now_fn=clk.now, sleep_fn=clk.sleep, alerts=rec)
     assert b.placed == [] and journal(real_signal)[-1]["outcome"] == "signal_not_acted"
     assert ("fire", "paper-b:signal-not-acted", 4) in rec.calls
+
+
+# ---- a session whose rule could not be checked is not a quiet market --------------------------------------------
+
+def test_the_outcome_separates_unchecked_from_quiet():
+    sig = {"blockers": ["kill_file"]}
+    assert runner_b.outcome_of([], False, False) == "no_signal"
+    assert runner_b.outcome_of([], False, False, unchecked=True) == "no_inputs"
+    assert runner_b.outcome_of([sig], False, False, unchecked=True) == "blocked:kill_file"     # a signal was seen
+    assert runner_b.outcome_of([], False, True, unchecked=True) == "signal_not_acted"
+    assert runner_b.outcome_of([], True, False, unchecked=True) == "traded"
+
+
+class NoHistoryREST(FakeREST):
+    """No prior session has bars: sigma has nothing to average."""
+
+    def bars(self, symbols, tf, start, end, feed="sip") -> pd.DataFrame:
+        return pd.DataFrame({"t": [], "o": [], "c": [], "h": [], "l": [], "v": []})
+
+
+def test_sigma_with_no_prior_bars_is_inputs_unavailable_not_a_quiet_day(env):
+    with pytest.raises(ValueError):
+        runner_b.LiveData(NoHistoryREST(Clock(at(8, 0)))).sigma_and_prev_close(DAY, [DAY - dt.timedelta(days=1)])
+    b = SimBroker()
+    clk = Clock(at(8, 0))
+    synced(b, clk)
+    rec = Rec()
+    runner_b.run(DAY, broker=b, rest=NoHistoryREST(clk), now_fn=clk.now, sleep_fn=clk.sleep, alerts=rec)
+    j = journal(env)
+    assert j[-1]["event"] == "session_end" and j[-1]["outcome"] == "no_inputs" and b.placed == []
+    assert any(r["event"] == "refuse_to_arm" and "signal inputs unavailable" in r["reason"] for r in j)
+    missing = [r for r in j if r["event"] == "decision_inputs_missing"]
+    assert len(missing) == 1 and missing[0]["sigma"] is False                   # said once, not on every loop
+    summary = next(r for r in j if r["event"] == "decision_summary")
+    assert summary["inputs"] is False and summary["asked"] > 100
+    assert "paper-b:no-inputs" in rec.keys("once_per_day") and "paper-b:signal-not-acted" not in rec.keys()
+
+
+class NoBarsTodayREST(FakeREST):
+    """History is fine, and today's bars never arrive."""
+
+    def get(self, url: str, params: dict) -> dict:
+        return super().get(url, params) if "quotes/latest" in url else {"bars": {}}
+
+
+def test_a_day_with_no_bars_at_all_is_not_called_no_signal(env):
+    b = SimBroker()
+    clk = Clock(at(8, 0))
+    synced(b, clk)
+    rec = Rec()
+    runner_b.run(DAY, broker=b, rest=NoBarsTodayREST(clk), now_fn=clk.now, sleep_fn=clk.sleep, alerts=rec)
+    j = journal(env)
+    assert j[-1]["outcome"] == "no_inputs" and b.placed == []
+    assert [r["closed_bars"] for r in j if r["event"] == "decision_inputs_missing"] == [0]
+    assert not any(r["event"] == "refuse_to_arm" for r in j)                    # it armed; the day's data failed
+    assert "paper-b:no-inputs" in rec.keys("once_per_day")
+
+
+class NoSignalQuoteREST(BreakoutREST):
+    """QQQM quotes normally; QQQ, the signal's own symbol, has no quote to convert the trigger with."""
+
+    def get(self, url: str, params: dict) -> dict:
+        if "quotes/latest" in url and params["symbols"] == "QQQ":
+            return {"quotes": {}}
+        return super().get(url, params)
+
+
+def test_a_signal_with_no_quote_to_convert_it_is_journaled(real_signal):
+    b = SimBroker()
+    clk = Clock(at(8, 0))
+    synced(b, clk)
+    rec = Rec()
+    runner_b.run(DAY, broker=b, rest=NoSignalQuoteREST(clk), now_fn=clk.now, sleep_fn=clk.sleep, alerts=rec)
+    j = journal(real_signal)
+    skipped = [r for r in j if r["event"] == "signal_skipped_no_quote"]
+    assert skipped and skipped[0]["signal_quote"] is False and skipped[0]["trade_mid"] is True
+    assert b.placed == [] and j[-1]["outcome"] == "signal_not_acted"
+    assert ("fire", "paper-b:signal-not-acted", 4) in rec.calls
