@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { newYork, num, rMult, shortDate, signed, sydney, usd } from "@/lib/format";
 import { outcomeLine, reasonLabel, type Trading } from "@/lib/trading";
 import { cn } from "@/lib/utils";
+import { TradeBars } from "@/components/charts/trade-bars";
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
@@ -69,6 +70,19 @@ export function PnlPanel({ v }: { v: Trading }) {
             { label: "Largest drawdown", value: money(s.maxDd), mono: true },
           ]}
         />
+        {v.days.filter((d) => isNum(d.r)).length >= 2 ? (
+          <section className="grid gap-2">
+            <h3 className="text-sm font-medium">Result of each day with a closed trade</h3>
+            <TradeBars
+              label="Result in R of each day with a closed trade, oldest first"
+              whenLabel="Day"
+              trades={v.days
+                .filter((d) => isNum(d.r))
+                .slice(-90)
+                .map((d, i) => ({ i: i + 1, r: d.r as number, what: `${num(d.trades)} ${d.trades === 1 ? "trade" : "trades"} · ${money(d.pnl)}`, when: shortDate(d.date) }))}
+            />
+          </section>
+        ) : null}
         {v.days.length > 0 ? (
           <div>
             <p className="text-muted-foreground mb-2 text-xs">Days with a closed trade, newest first</p>

@@ -37,7 +37,7 @@ export function SiteHeader({ result, crypto, now }: { result: SnapshotResult; cr
             <p className="text-muted-foreground hidden truncate text-xs sm:block">Paper research status, read-only</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex max-w-full min-w-0 flex-wrap items-center gap-2">
           <DeskSwitch />
           <DeskFreshnessPill
             stocks={{ asOf: snap?.as_of ?? null, windows, initial: { state: f.state, ageMin: f.ageMin } }}

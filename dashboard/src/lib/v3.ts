@@ -120,3 +120,12 @@ export function auditTone(kind: string | null | undefined): Tone {
       return "info";
   }
 }
+
+/** Which side of zero an R band such as "-2 to -1", "< -3", "0 to 1" or "> 3" lies on. */
+export function binSide(bin: string | null | undefined): "loss" | "gain" | "flat" {
+  const nums = (bin ?? "").match(/-?\d+(\.\d+)?/g)?.map(Number) ?? [];
+  if (nums.length === 0) return "flat";
+  if (nums.every((v) => v <= 0) && nums.some((v) => v < 0)) return "loss";
+  if (nums.every((v) => v >= 0) && nums.some((v) => v > 0)) return "gain";
+  return "flat";
+}
