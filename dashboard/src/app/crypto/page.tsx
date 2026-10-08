@@ -1,7 +1,16 @@
 import { Activity, Gauge, LineChart, ListChecks } from "lucide-react";
 import { CryptoKillNotice, NoCryptoSnapshot } from "@/components/crypto/panels";
 import { LearningCard } from "@/components/crypto/learning";
-import { ChallengersPanel, SleeveChecks, SleevePositions, SleeveSignals, SleeveTrades, TournamentBoard } from "@/components/crypto/tournament";
+import {
+  ChallengersPanel,
+  EquityLinesPanel,
+  SleeveChecks,
+  SleevePositions,
+  SleeveSignals,
+  SleeveTrades,
+  TournamentBoard,
+  TournamentTiles,
+} from "@/components/crypto/tournament";
 import { Empty } from "@/components/empty";
 import { HealthBanner } from "@/components/health-banner";
 import { KeyValues } from "@/components/kv";
@@ -58,6 +67,8 @@ function TournamentPanels({ s }: { s: Crypto }) {
   const l = learning(s);
   return (
     <>
+      <TournamentTiles s={s} t={t} />
+      <EquityLinesPanel s={s} />
       <TournamentBoard s={s} t={t} />
       {l.available ? <LearningCard l={l} /> : null}
       <SleevePositions s={s} t={t} />
@@ -146,14 +157,14 @@ function EquityPanel({ s }: { s: Crypto }) {
   const curve = items(s.perf?.equity_curve).map((p) => p.equity).filter((v): v is number => typeof v === "number");
   const start = s.book?.start_equity ?? curve[0] ?? 0;
   return (
-    <Panel title="Baseline rule: paper equity" icon={LineChart} means="Equity of the baseline rule's paper book hour by hour, as a change from where it started. Fees are included.">
+    <Panel title="Baseline rule: paper equity" icon={LineChart} means="Equity of the baseline rule's paper book over time, as a change from where it started. Fees are included.">
       {curve.length < 2 ? (
         <Empty title="Not enough history yet" />
       ) : (
         <>
           <Sparkline values={curve.map((v) => v - start)} label="Paper equity change since the start" />
           <p className="text-muted-foreground mt-2 text-xs">
-            {m(curve[0])} → {m(curve[curve.length - 1])} over {curve.length} hours
+            {m(curve[0])} → {m(curve[curve.length - 1])} over {curve.length} marks
           </p>
         </>
       )}

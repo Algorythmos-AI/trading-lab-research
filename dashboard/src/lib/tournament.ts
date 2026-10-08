@@ -292,3 +292,110 @@ export function challengersLine(c: Challengers): string {
   ].filter((x): x is string => x !== null);
   return `${c.registered} ${c.registered === 1 ? "idea" : "ideas"} tried: ${parts.join(", ")}.${c.learningOn ? "" : " Learning is switched off."}`;
 }
+
+// ---- pictures of the tournament: pure helpers for the charts ----
+
+export interface EquityLine {
+  name: string;
+  label: string;
+  /** The original 15-minute rule's own book, drawn beside the tournament for comparison. */
+  baseline: boolean;
+  /** Return since the book's start, in percent, at each published mark (epoch ms). */
+  points: { t: number; pct: number }[];
+  lastPct: number | null;
+  /** The deepest fall from an earlier high, in percent of that high (zero or below). Null with fewer than two marks. */
+  worstDrawdownPct: number | null;
+}
+
+function lineOf(name: string, label: string, baseline: boolean, start: number | null | undefined, curve: readonly ({ t?: string | null; equity?: number | null } | null)[] | null | undefined): EquityLine {
+  if (!isNum(start) || start <= 0) return { name, label, baseline, points: [], lastPct: null, worstDrawdownPct: null };
+  const marks = items(curve)
+    .map((p) => ({ t: typeof p.t === "string" ? Date.parse(p.t) : NaN, equity: p.equity }))
+    .filter((p): p is { t: number; equity: number } => Number.isFinite(p.t) && isNum(p.equity))
+    .sort((a, b) => a.t - b.t);
+  let peak = -Infinity;
+  let worst = 0;
+  for (const p of marks) {
+    peak = Math.max(peak, p.equity);
+    worst = Math.min(worst, (p.equity / peak - 1) * 100);
+  }
+  const points = marks.map((p) => ({ t: p.t, pct: (p.equity / start - 1) * 100 }));
+  return { name, label, baseline, points, lastPct: points.at(-1)?.pct ?? null, worstDrawdownPct: points.length >= 2 ? worst : null };
+}
+
+/** One line per paper book: every sleeve, then the baseline rule. Books with no published mark are left out. */
+export function equityLines(s: Crypto): EquityLine[] {
+  const sleeves = items(s.sleeves)
+    .filter((x) => typeof x.name === "string")
+    .map((x) => lineOf(x.name as string, sleeveLabel(x.name), false, x.start_equity, x.equity_curve));
+  const base = lineOf("baseline", "Baseline 15-minute rule", true, s.book?.start_equity, s.perf?.equity_curve);
+  return [...sleeves, base].filter((l) => l.points.length > 0);
+}
+
+export interface DeskTotals {
+  books: number;
+  equity: number | null;
+  returnPct: number | null;
+  today: number | null;
+  week: number | null;
+  trades: number;
+  winRate: number | null;
+  open: number;
+  /** The book with the best return so far, when any has moved. */
+  leader: { label: string; returnPct: number } | null;
+}
+
+/** The tournament's books added up. Money is paper money; nothing here pools the books for trading. */
+export function deskTotals(t: Tournament): DeskTotals {
+  const sum = (pick: (r: SleeveRow) => number | null) => {
+    const v = t.rows.map(pick).filter(isNum);
+    return v.length > 0 ? v.reduce((a, b) => a + b, 0) : null;
+  };
+  const equity = sum((r) => r.equity);
+  const start = sum((r) => r.start);
+  const trades = t.rows.reduce((a, r) => a + r.trades, 0);
+  const wins = t.rows.reduce((a, r) => a + r.wins, 0);
+  const moved = t.rows.filter((r) => isNum(r.returnPct) && Math.abs(r.returnPct) >= 0.005).sort((a, b) => (b.returnPct as number) - (a.returnPct as number))[0];
+  return {
+    books: t.rows.length,
+    equity,
+    returnPct: isNum(equity) && isNum(start) && start > 0 ? (equity / start - 1) * 100 : null,
+    today: sum((r) => r.today),
+    week: sum((r) => r.week),
+    trades,
+    winRate: trades > 0 ? wins / trades : null,
+    open: t.positions.length,
+    leader: moved ? { label: moved.label, returnPct: moved.returnPct as number } : null,
+  };
+}
+
+export interface TradeGroup {
+  key: string;
+  label: string;
+  n: number;
+  meanR: number | null;
+}
+
+export interface TradeStats {
+  /** Oldest first: one bar per closed trade. */
+  series: { i: number; r: number; label: string; pair: string; at: string | null; reason: string | null }[];
+  bySleeve: TradeGroup[];
+  byReason: TradeGroup[];
+}
+
+/** The published closed trades (the newest of each sleeve), in the order they ended, and grouped two ways. */
+export function tradeStats(trades: SleeveTrade[]): TradeStats {
+  const done = trades.filter((x) => isNum(x.r)).sort((a, b) => (a.exitAt ?? "").localeCompare(b.exitAt ?? ""));
+  const group = (key: (x: SleeveTrade) => string, label: (k: string) => string): TradeGroup[] => {
+    const by = new Map<string, number[]>();
+    for (const x of done) by.set(key(x), [...(by.get(key(x)) ?? []), x.r as number]);
+    return [...by.entries()]
+      .map(([k, rs]) => ({ key: k, label: label(k), n: rs.length, meanR: rs.reduce((a, b) => a + b, 0) / rs.length }))
+      .sort((a, b) => b.n - a.n || a.label.localeCompare(b.label));
+  };
+  return {
+    series: done.map((x, i) => ({ i: i + 1, r: x.r as number, label: sleeveLabel(x.sleeve), pair: x.pair, at: x.exitAt, reason: x.reason })),
+    bySleeve: group((x) => x.sleeve, sleeveLabel),
+    byReason: group((x) => x.reason ?? "unknown", (k) => k),
+  };
+}

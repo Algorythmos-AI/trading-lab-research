@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { code, type Crypto } from "@/lib/crypto";
-import { challengers, challengersLine, sleeveLabel, tournament, tournamentLine } from "@/lib/tournament";
+import { challengers, challengersLine, sleeveLabel, tournament, tournamentLine, deskTotals, equityLines, tradeStats } from "@/lib/tournament";
 
 const fixture = (): Crypto => JSON.parse(readFileSync(new URL("./fixtures/crypto.v1.json", import.meta.url), "utf8")) as Crypto;
 
@@ -119,5 +119,51 @@ describe("the crypto tournament", () => {
     expect(code("desk_coin")).toBe("another book of the tournament already holds this coin");
     expect(code("desk_risk")).toBe("the desk's total open risk would pass its cap");
     expect(code("model_skip")).toBe("the model scored it below its cut-off");
+  });
+});
+
+describe("the tournament's charts", () => {
+  const f = (): Crypto => JSON.parse(readFileSync(new URL("./fixtures/crypto.v1.json", import.meta.url), "utf8")) as Crypto;
+
+  it("draws every book as a change from its own start, and finds its deepest fall", () => {
+    const s = f();
+    const mark = (h: number, equity: number) => ({ t: new Date(Date.UTC(2026, 9, 1, h)).toISOString(), equity });
+    s.sleeves![0]!.start_equity = 10000;
+    s.sleeves![0]!.equity_curve = [mark(2, 10500), mark(0, 10000), mark(1, 11000), mark(3, 10780), { t: "not a time", equity: 1 }];
+    const lines = equityLines(s);
+    const first = lines[0]!;
+    expect(first.points.map((p) => Number(p.pct.toFixed(2)))).toEqual([0, 10, 5, 7.8]);
+    expect(Number(first.worstDrawdownPct!.toFixed(3))).toBe(-4.545);
+    expect(first.lastPct).toBeCloseTo(7.8);
+    expect(lines.at(-1)).toMatchObject({ name: "baseline", baseline: true });
+    expect(lines.filter((l) => !l.baseline).every((l) => l.points.length >= 1)).toBe(true);
+    const one = lines.find((l) => l.points.length === 1);
+    expect(one?.worstDrawdownPct ?? null).toBeNull();
+    expect(equityLines({ ...s, sleeves: [], perf: undefined } as Crypto)).toEqual([]);
+  });
+
+  it("adds the books up for reading, and names the one ahead", () => {
+    const t = tournament(f());
+    const d = deskTotals(t);
+    expect(d.books).toBe(t.rows.length);
+    expect(d.equity).toBeCloseTo(t.rows.reduce((a, r) => a + (r.equity ?? 0), 0));
+    expect(d.trades).toBe(5);
+    expect(d.winRate).toBeCloseTo(3 / 5);
+    expect(d.open).toBe(t.positions.length);
+    expect(d.leader?.label).toBe("Trend");
+    const empty = deskTotals({ ...t, rows: [], positions: [] });
+    expect([empty.equity, empty.returnPct, empty.winRate, empty.leader]).toEqual([null, null, null, null]);
+  });
+
+  it("orders the closed trades by when they ended and averages them by strategy and by exit", () => {
+    const t = tournament(f());
+    const st = tradeStats(t.trades);
+    expect(st.series.map((x) => x.i)).toEqual([1, 2, 3, 4, 5]);
+    expect(st.series.map((x) => x.at)).toEqual([...st.series.map((x) => x.at)].sort());
+    expect(st.bySleeve.map((g) => [g.label, g.n])).toEqual([["Trend", 3], ["Breakout", 2]]);
+    expect(st.bySleeve.reduce((a, g) => a + g.n, 0)).toBe(st.byReason.reduce((a, g) => a + g.n, 0));
+    const mean = st.series.reduce((a, x) => a + x.r, 0) / st.series.length;
+    expect(st.bySleeve.reduce((a, g) => a + (g.meanR ?? 0) * g.n, 0) / 5).toBeCloseTo(mean);
+    expect(tradeStats([])).toEqual({ series: [], bySleeve: [], byReason: [] });
   });
 });

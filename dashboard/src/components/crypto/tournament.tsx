@@ -1,12 +1,17 @@
-import { ArrowDownRight, ArrowUpRight, Briefcase, FlaskConical, ListChecks, Minus, ReceiptText, Signal, Trophy } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, BarChart3, Briefcase, FlaskConical, LineChart, ListChecks, Minus, ReceiptText, Signal, Trophy } from "lucide-react";
 import { Empty } from "@/components/empty";
 import { Panel } from "@/components/panel";
 import { StatusBadge } from "@/components/status";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { code, codes, moneyOf, type Crypto } from "@/lib/crypto";
 import { fracPct, num, rMult, signed, zoned } from "@/lib/format";
-import { challengersLine, sleeveLabel, tournamentLine, type ChallengerRow, type Challengers, type Tournament } from "@/lib/tournament";
+import { challengersLine, sleeveLabel, tournamentLine, type ChallengerRow, type Challengers, type Tournament, deskTotals, equityLines, tradeStats } from "@/lib/tournament";
 import { cn } from "@/lib/utils";
+import { DivergingBars } from "@/components/charts/diverging-bars";
+import { Forest } from "@/components/charts/forest";
+import { LinesChart } from "@/components/charts/lines-chart";
+import { TradeBars } from "@/components/charts/trade-bars";
+import { StatTile, StatTiles } from "@/components/stat-tile";
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const toneOf = (v: number | null | undefined) => (!isNum(v) || Math.abs(v) < 0.005 ? "text-foreground" : v > 0 ? "text-good" : "text-bad");
@@ -317,6 +322,19 @@ export function ChallengersPanel({ c }: { c: Challengers }) {
           {num(c.maxRegistered)}.
         </span>
       </p>
+      {c.rows.some((r) => isNum(r.meanR)) ? (
+        <section className="mb-4 grid gap-2">
+          <h3 className="text-sm font-medium">Average result of each idea&apos;s backtest, with its range at higher costs</h3>
+          <Forest
+            label="Average R of each challenger's backtest, with its range at higher costs"
+            format={(v) => rMult(v, 2)}
+            rows={c.rows
+              .filter((r) => isNum(r.meanR))
+              .map((r) => ({ key: r.id, label: r.label, sub: (CHALLENGER_STATUS[r.status] ?? { label: r.status }).label, value: r.meanR, low: r.ciLow, high: r.ciHigh }))}
+          />
+          <p className="text-muted-foreground text-xs">Green: the whole range is above zero, one of the conditions for passing. Grey: the range includes zero.</p>
+        </section>
+      ) : null}
       {c.rows.length === 0 ? (
         <Empty title="No idea has been tried yet">The desk draws its first ideas on its next daily run, at 03:30 New York time.</Empty>
       ) : (
@@ -378,6 +396,125 @@ export function ChallengersPanel({ c }: { c: Challengers }) {
             })}
           </TableBody>
         </Table>
+      )}
+    </Panel>
+  );
+}
+
+const LINE_COLOURS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)", "var(--chart-7)", "var(--chart-8)", "var(--chart-6)"];
+
+/** The tournament's headline numbers. The books are added up for reading only; they are never pooled. */
+export function TournamentTiles({ s, t }: { s: Crypto; t: Tournament }) {
+  const m = moneyOf(s);
+  const d = deskTotals(t);
+  const sign = (v: number | null) => (!isNum(v) || Math.abs(v) < 0.005 ? "neutral" : v > 0 ? "good" : "bad");
+  const money = (v: number | null) => (!isNum(v) ? "—" : Math.abs(v) < 0.005 ? m(0) : `${v > 0 ? "+" : "−"}${m(Math.abs(v))}`);
+  return (
+    <StatTiles>
+      <StatTile
+        label={`All ${num(d.books)} paper books`}
+        value={m(d.equity)}
+        hint={isNum(d.returnPct) ? `${signed(d.returnPct, 2)}% since they started` : "No return yet"}
+        tone={sign(d.returnPct)}
+      />
+      <StatTile label="Closed this week" value={money(d.week)} hint={`Today: ${money(d.today)}`} tone={sign(d.week)} />
+      <StatTile
+        label="Closed trades"
+        value={num(d.trades)}
+        hint={isNum(d.winRate) ? `${fracPct(d.winRate)} made money` : "None closed yet"}
+      />
+      <StatTile
+        label="Open positions"
+        value={num(d.open)}
+        hint={d.leader ? `Ahead so far: ${d.leader.label}, ${signed(d.leader.returnPct, 2)}%` : "No book has moved yet"}
+        tone={d.open > 0 ? "info" : "neutral"}
+      />
+    </StatTiles>
+  );
+}
+
+/** Every paper book on one chart, each as a change from its own start, with the baseline rule beside them. */
+export function EquityLinesPanel({ s }: { s: Crypto }) {
+  const lines = equityLines(s);
+  const drawn = lines.filter((l) => l.points.length >= 2);
+  return (
+    <Panel
+      title="Return of each paper book"
+      icon={LineChart}
+      means="Each strategy's paper book over the last 90 days, as a percentage change from where it started, fees included. The host keeps one mark every four hours. The dashed line is the original 15-minute rule, kept as the baseline. All of it is incubation on paper money: a line going up is not evidence of an edge."
+    >
+      {lines.length === 0 ? (
+        <Empty title="No book has published a mark yet" />
+      ) : (
+        <div className="grid gap-3">
+          {drawn.length === 0 ? (
+            <Empty title="Not enough history yet">Each book has one mark so far; the lines start with the next one.</Empty>
+          ) : (
+            <LinesChart
+              label="Return of each paper book since its start, in percent"
+              series={lines.map((l, i) => ({
+                key: l.name,
+                label: l.label,
+                color: l.baseline ? "var(--chart-na)" : (LINE_COLOURS[i % LINE_COLOURS.length] as string),
+                dashed: l.baseline,
+                points: l.points.map((p) => ({ t: p.t, v: p.pct })),
+              }))}
+            />
+          )}
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 lg:grid-cols-5">
+            {lines.map((l) => (
+              <div key={l.name} className="min-w-0">
+                <dt className="text-muted-foreground truncate text-xs">{l.label}</dt>
+                <dd className={cn("font-mono text-sm font-medium", toneOf(l.lastPct))}>{isNum(l.lastPct) ? `${signed(l.lastPct, 2)}%` : "—"}</dd>
+                <dd className="text-muted-foreground text-xs">
+                  {isNum(l.worstDrawdownPct) ? `deepest fall ${signed(l.worstDrawdownPct, 2)}%` : `${num(l.points.length)} ${l.points.length === 1 ? "mark" : "marks"} so far`}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+/** The closed trades as pictures: each trade's result in order, then the average by strategy and by how it ended. */
+export function TradeResultsPanel({ t }: { t: Tournament }) {
+  const st = tradeStats(t.trades);
+  return (
+    <Panel
+      title="Tournament: results of the closed trades"
+      icon={BarChart3}
+      means="One bar per closed trade of the tournament's strategies, in the order they ended. R is the result as a multiple of what the trade risked: +1R made what it risked, −1R lost it. Only the newest trades of each strategy are published, so a long history is cut off at the left."
+      action={<span className="text-muted-foreground text-xs">{num(st.series.length)} trades</span>}
+    >
+      {st.series.length === 0 ? (
+        <Empty title="No closed trades yet">The first bar appears when an open position reaches its stop, its target or its exit rule.</Empty>
+      ) : (
+        <div className="grid gap-5">
+          <TradeBars trades={st.series.map((x) => ({ i: x.i, r: x.r, what: `${x.label} · ${x.pair}`, when: utc(x.at) }))} />
+          <div className="grid gap-5 lg:grid-cols-2">
+            <section className="grid content-start gap-2">
+              <h3 className="text-sm font-medium">Average result by strategy</h3>
+              <DivergingBars
+                label="Average R per strategy"
+                better="positive"
+                format={(v) => rMult(v, 2)}
+                rows={st.bySleeve.map((g) => ({ key: g.key, label: `${g.label} (${num(g.n)})`, value: g.meanR }))}
+              />
+            </section>
+            <section className="grid content-start gap-2">
+              <h3 className="text-sm font-medium">Average result by how the trade ended</h3>
+              <DivergingBars
+                label="Average R per exit reason"
+                better="positive"
+                format={(v) => rMult(v, 2)}
+                rows={st.byReason.map((g) => ({ key: g.key, label: <span className="inline-block first-letter:uppercase">{`${code(g.key)} (${num(g.n)})`}</span>, value: g.meanR }))}
+              />
+            </section>
+          </div>
+          <p className="text-muted-foreground text-xs">The number in brackets is how many trades the average is over. A few trades prove nothing either way.</p>
+        </div>
       )}
     </Panel>
   );
