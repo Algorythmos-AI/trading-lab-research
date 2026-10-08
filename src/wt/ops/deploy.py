@@ -99,6 +99,7 @@ ML_NEXT, ML_PREV = ".venv-ml.next", ".venv-ml.prev"
 ML_ENV_LOCK = "ml-env"                  # one build at a time; not the deploy lock, which every job waits on
 ML_USERS = ("crypto-learn",)            # jobs that run for long in the ML environment: the swap waits for them
 SWAP_WAIT_S = 120.0
+ML_IMPORT_CHECK = "import sklearn, lightgbm"       # what the learning job and the scorer import
 
 
 def sync_ml(swap_wait_s: float | None = None) -> str:
@@ -135,6 +136,9 @@ def sync_ml(swap_wait_s: float | None = None) -> str:
                 _run(uv, "venv", "--quiet", "--python", str(ROOT / PY), str(nxt))
                 _run(uv, "pip", "sync", "--quiet", "--python", str(nxt / "bin" / "python"), "--require-hashes",
                      str(lock), timeout=1800)
+                # Installed is not usable: a wheel can need a system library the host lacks (LightGBM needs
+                # OpenMP, `libgomp1` on Debian). An environment that cannot import is never swapped in.
+                _run(str(nxt / "bin" / "python"), "-c", ML_IMPORT_CHECK, timeout=120)
                 built.write_text(want + "\n")
             wait = SWAP_WAIT_S if swap_wait_s is None else swap_wait_s
             with contextlib.ExitStack() as stack:
@@ -419,7 +423,18 @@ def main(argv: list[str] | None = None) -> int:
     if a.cmd == "sync-ml":
         state = sync_ml()
         print(f"ML environment: {state}")
-        return 0 if state in ("none", "current", "synced") else 1
+        if state not in ("none", "current", "synced"):
+            return 1
+        if state == "none":
+            return 0
+        # In sync with its lockfile is not the same as working: say so if it cannot import what it is for.
+        got = _run(str(ROOT / ML_VENV / "bin" / "python"), "-c", ML_IMPORT_CHECK, check=False, timeout=120)
+        if got.returncode != 0:
+            print("ML environment: installed, but it cannot import its libraries:\n  "
+                  + (got.stderr or got.stdout).strip().splitlines()[-1][:200]
+                  + "\n  (LightGBM needs the system's OpenMP library: sudo apt-get install -y libgomp1)")
+            return 1
+        return 0
     if a.cmd == "rollback":
         return rollback(a.tag)
     return deploy(a.sha, a.stage)
