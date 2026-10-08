@@ -226,7 +226,8 @@ def forward_summary(ledger: Path = FORWARD_LEDGER) -> str | None:
             f". Sessions recorded: {len(done)}.")
 
 
-OUTCOME_WORDS = {"traded": "traded", "no_signal": "no signal", "signal_not_acted": "a signal fired and was NOT acted on"}
+OUTCOME_WORDS = {"traded": "traded", "no_signal": "no signal", "signal_not_acted": "a signal fired and was NOT acted on",
+                 "no_inputs": "the signal could NOT be checked (its prices were missing all session)"}
 
 
 def paper_summary(rows: list[dict[str, Any]]) -> str | None:

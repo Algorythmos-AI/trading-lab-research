@@ -46,6 +46,9 @@ describe("Paper B's trades and profit and loss", () => {
     expect(line("signal_not_acted")).toBe("No trade: a signal fired and was not acted on");
     expect(line(null, false)).toBe("Session in progress");
     expect(outcomeLine(trading(withToday({ outcome: "signal_not_acted" }))).tone).toBe("bad");
+    expect(line("no_inputs")).toBe("No trade: the signal could not be checked");
+    expect(outcomeLine(trading(withToday({ outcome: "no_inputs" }))).tone).toBe("bad");
+    expect(line("a_kind_from_a_newer_host")).toBe("No trade");
   });
 
   it("never calls an older session today", () => {
