@@ -84,7 +84,8 @@ def test_a_set_f_session_is_recorded_in_counts(env):
     assert part["trials"]["GG-1"] == {"candidates": 2, "skips": {"no_fill": 1, "spread": 1}, "admitted": 2,
                                       "admission_skips": {}}
     assert part["trials"]["GG-2"]["skips"] == {"no_rth_bars": 1} and part["trials"]["GG-4"]["candidates"] == 0
-    text = env.path.read_text()
+    assert part.pop("git_sha")                                # set aside: a commit hash is hex and can spell anything
+    text = json.dumps(part)
     assert not any(w in text for w in ('"R"', "buyout", "fda", "0.09", "entry"))      # counts: no result, category or price
 
 
