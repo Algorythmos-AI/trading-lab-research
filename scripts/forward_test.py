@@ -49,7 +49,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_pool import SplitStore, build_one, universe_symbols  # noqa: E402
 from r3_intraday import intraday_day  # noqa: E402
-from r3_run import GG, SpreadAt, admit, gg_day, trade_row  # noqa: E402
+from r3_run import GG, SpreadAt, admit, gg_day, set_names, trade_row  # noqa: E402
 
 from wt.backtest.engine import Costs, simulate  # noqa: E402
 from wt.backtest.management import REGISTRY  # noqa: E402
@@ -62,6 +62,7 @@ from wt.data.edgar import SharesOutstanding  # noqa: E402
 from wt.data.universe import DAILY, TailMeta, TailWindowExceeded, load_daily, load_daily_tail, tail_rows_for  # noqa: E402
 from wt.ops.locks import job_lock  # noqa: E402
 from wt.ops.safeio import atomic_replace  # noqa: E402
+from wt.scanner.explain import explain, from_pool, pool_musts  # noqa: E402
 from wt.scanner.features import PMCache, build_candidates  # noqa: E402
 from wt.scanner.pool import POOL_DIR, SPLIT_CHECK_HI, SPLIT_CHECK_LO, DailyIndex, PoolConfig  # noqa: E402
 from wt.scanner.ranking import rank  # noqa: E402
@@ -256,24 +257,69 @@ class Context:
             self.spread_at.save()
 
 
+def tally(reasons) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for r in reasons:
+        out[str(r)] = out.get(str(r), 0) + 1
+    return dict(sorted(out.items()))
+
+
+def trial_record(cands: list, res, skips=()) -> dict:
+    """Counts for one trial's day: chains that reached admission, what stopped the others, and what admission did."""
+    return {"candidates": len(cands), "skips": tally(s["reason"] for s in skips), "admitted": len(res.admitted),
+            "admission_skips": tally(why for _, why in res.skipped)}
+
+
+def gg_record(d: dt.date, which: str, spec: dict, relax, per_trial: dict, results: dict) -> dict:
+    """The funnel of record for one set on one session, in counts: the pool the trials read, how many names it
+    traded, and each trial's skips. Set F also gets the step and reason counts of wt.scanner.explain."""
+    pool = pd.read_parquet(POOL_DIR / f"{d}.parquet")
+    body = {"pool": {k: v for k, v in (pool.attrs.get("stats") or {}).items() if type(v) is int},
+            "pool_rows": len(pool), "names": len(set_names(pool, which, spec, set(relax))),
+            "trials": {t: trial_record(per_trial[t][0] if t in per_trial else [], results[t],
+                                       per_trial[t][1] if t in per_trial else ()) for t in GG}}
+    if which == "F":
+        body["funnel"] = explain(from_pool(pool), spec, pool_musts(pool)).flat()
+    return body
+
+
+def note_funnel(d: dt.date, part: str, build: Callable[[], dict]) -> None:
+    """Write one part of the session's funnel record to var/forward/funnel/<d>.json, beside the ledger and never in
+    it. Counts only. It describes what the unit did after the unit has decided, and nothing here can fail a unit:
+    an error is printed and the trades are returned as they were."""
+    try:
+        path = FWD / "funnel" / f"{d}.json"
+        doc = json.loads(path.read_text()) if path.exists() else {"session": str(d), "parts": {}}
+        doc["parts"][part] = {**build(), "git_sha": git_sha()}
+        path.parent.mkdir(parents=True, exist_ok=True)
+        text = json.dumps(doc, indent=1, sort_keys=True)
+        atomic_replace(path, lambda tmp: tmp.write_text(text))
+    except Exception as e:  # noqa: BLE001 — a description must never cost a trial its session
+        print(f"funnel record {d} {part}: {e!r}")
+
+
 def r3_gg(ctx: Context, d: dt.date, which: str) -> dict[str, list[dict]]:
     ctx.ensure_pool(d)
-    per_trial = gg_day(ctx.a, d, which, ctx.spec, ctx.spread_at, ctx.closes.get(d, "16:00"),
-                       R3_P_RELAX if which == "P" else frozenset())
-    out = {}
+    relax = R3_P_RELAX if which == "P" else frozenset()
+    per_trial = gg_day(ctx.a, d, which, ctx.spec, ctx.spread_at, ctx.closes.get(d, "16:00"), relax)
+    out, results = {}, {}
     for trial in GG:
         cands = per_trial[trial][0] if trial in per_trial else []
-        res = admit(cands, R3_EQUITY, ctx.spec)
+        res = results[trial] = admit(cands, R3_EQUITY, ctx.spec)
         out[f"r3:{which}:{trial}"] = [trade_row(d, c, tr, r) for c, tr, r in res.admitted]
+    note_funnel(d, f"set_{which}", lambda: gg_record(d, which, ctx.spec, relax, per_trial, results))
     return out
 
 
 def r3_intraday(ctx: Context, d: dt.date, trial: str) -> dict[str, list[dict]]:
     if trial == "MP-1":
         ctx.ensure_pool(d)                # MP-1's universe includes Set F's Tier 2 from the pool
+    skips: dict = {}
     cands = intraday_day(ctx.a, d, trial, ctx.sessions, ctx.closes, ctx.daily, ctx.splits, ctx.shares, ctx.spec,
-                         ctx.spread_at, {})
+                         ctx.spread_at, skips)
     res = admit(cands, R3_EQUITY, ctx.spec)
+    note_funnel(d, trial, lambda: {**trial_record(cands, res),
+                                   "skips": {str(k): v for k, v in sorted(skips.items()) if type(v) is int}})
     return {f"r3:{trial}": [trade_row(d, c, tr, r) for c, tr, r in res.admitted]}
 
 
