@@ -1913,6 +1913,95 @@
         }
       }
     },
+    "desk": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "one_position_per_coin": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "max_open_risk_pct": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "books": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "positions": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "coins": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "maxItems": 2000
+        },
+        "equity": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "open_risk": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "open_risk_pct": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "refused_coin": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "refused_risk": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "refused_coin_7d": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "refused_risk_7d": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
     "learning": {
       "type": [
         "object",

@@ -30,6 +30,7 @@ export default async function CryptoRiskPage() {
             <LatchPanel s={result.snapshot} />
             <ChainPanel s={result.snapshot} />
           </div>
+          <DeskLimitsPanel s={result.snapshot} />
           <LimitsPanel s={result.snapshot} />
           <PositionsPanel s={result.snapshot} />
           <AlertsPanel s={result.snapshot} />
@@ -80,6 +81,61 @@ function ChainPanel({ s }: { s: Crypto }) {
       action={ok === true ? <StatusBadge tone="good">Intact</StatusBadge> : ok === false ? <StatusBadge tone="bad">Broken</StatusBadge> : <StatusBadge tone="neutral">Unknown</StatusBadge>}
     >
       <p className="text-muted-foreground text-sm">{ok === false ? "Entries are off until the owner clears it." : "No break has been flagged."}</p>
+    </Panel>
+  );
+}
+
+/** Limits across the tournament's books together (DEC-0019). Shown once the host publishes them. */
+function DeskLimitsPanel({ s }: { s: Crypto }) {
+  const d = s.desk;
+  if (!d) return null;
+  const m = moneyOf(s);
+  const coins = items(d.coins);
+  const used = typeof d.open_risk_pct === "number" ? d.open_risk_pct : null;
+  const cap = typeof d.max_open_risk_pct === "number" ? d.max_open_risk_pct : null;
+  return (
+    <Panel
+      title="Limits across the whole tournament"
+      icon={Scale}
+      means="Each strategy has its own paper book, so without these limits two of them could buy the same coin on the same bar: one bet, twice the size. Two rules apply across all the tournament's books together: one position per coin, and a cap on the total that would be lost if every open position hit its stop. They only refuse new entries; they never close a position. The baseline rule is outside them."
+    >
+      <div className="grid gap-4">
+        <Meter
+          label="Open risk across the books, if every stop were hit"
+          value={used}
+          max={Math.max(cap ?? 0, used ?? 0)}
+          threshold={cap}
+          thresholdLabel={cap !== null ? `Cap ${cap.toFixed(1)}% of combined equity` : undefined}
+          valueText={used !== null ? `${used.toFixed(2)}% (${m(d.open_risk)} of ${m(d.equity)})` : "—"}
+          tone={used !== null && cap !== null && used >= cap * 0.8 ? "warn" : "info"}
+        />
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Limit</TableHead>
+              <TableHead>Now</TableHead>
+              <TableHead className="text-right">Entries refused, last 7 days</TableHead>
+              <TableHead className="text-right">Refused in all</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow>
+              <TableCell className="font-medium">One position per coin{d.one_position_per_coin === false ? " (off)" : ""}</TableCell>
+              <TableCell>
+                {coins.length === 0 ? "No coin is held" : `${num(d.positions)} open in ${num(d.books)} books: ${coins.join(", ")}`}
+              </TableCell>
+              <TableCell className="text-right font-mono">{num(d.refused_coin_7d)}</TableCell>
+              <TableCell className="text-right font-mono">{num(d.refused_coin)}</TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell className="font-medium">Total open risk{cap !== null ? `, at most ${cap.toFixed(1)}%` : ""}</TableCell>
+              <TableCell>{used !== null ? `${used.toFixed(2)}% in use` : "—"}</TableCell>
+              <TableCell className="text-right font-mono">{num(d.refused_risk_7d)}</TableCell>
+              <TableCell className="text-right font-mono">{num(d.refused_risk)}</TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </div>
     </Panel>
   );
 }

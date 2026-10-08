@@ -85,6 +85,11 @@ const CODES: Record<string, string> = {
   // the challengers (DEC-0016): filters, the owner's switch, the backtest's tests, retirement
   btc_not_in_uptrend: "Bitcoin is not in an uptrend",
   held_elsewhere: "another sleeve holds the pair",
+  desk_coin: "another book of the tournament already holds this coin",
+  desk_risk: "the desk's total open risk would pass its cap",
+  model_skip: "the model scored it below its cut-off",
+  not_confirmed_on_earlier_history: "did not hold up on the two years before",
+  features_changed: "the model was trained on different inputs",
   learning_off: "learning is switched off",
   retired: "retired",
   too_few_trades: "too few trades",
