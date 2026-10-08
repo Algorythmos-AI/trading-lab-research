@@ -159,14 +159,35 @@ def universe_symbols() -> set[str]:
     return set(assets[~assets.is_fund_like & ~assets.has_dot].symbol)
 
 
+class ScanFailed(RuntimeError):
+    """The day's scan had no data to scan: not a day with nothing to trade (DEC-0024, decision 2)."""
+
+
+def scan_failure(stats) -> str | None:
+    """Why a pool's own counts say its scan failed, or None. `stats`: PoolStats, or the dict saved with a pool.
+    A real universe with nothing kept is a legitimate day and is not a failure."""
+    get = stats.get if isinstance(stats, dict) else lambda k: getattr(stats, k, None)
+    if get("universe") == 0:
+        return "the universe is empty (no symbol had a prior-day bar)"
+    if get("snapshot_symbols") == 0:
+        return "no symbol had a pre-market bar"
+    return None
+
+
 def build_one(a: AlpacaREST, d: dt.date, sessions: list[dt.date], daily: DailyIndex, universe: set[str],
-              splits: SplitStore, cache: PMCache, shares: SharesOutstanding, cfg: PoolConfig):
-    """Build and save the causal pool for one session (the batch build and the nightly forward test)."""
+              splits: SplitStore, cache: PMCache, shares: SharesOutstanding, cfg: PoolConfig,
+              refuse_failed: bool = False):
+    """Build and save the causal pool for one session (the batch build and the nightly forward test).
+    `refuse_failed` (the forward test): a scan with no data raises ScanFailed and nothing is saved, so the day is
+    retried instead of being recorded as a day with no names."""
     i = sessions.index(d)
     p, prev_sessions = sessions[i - 1], sessions[max(0, i - 25): i]
     # build_day asks only about names whose 09:25 gap moved like a split, so each one is split-like
     cands, pmb, st = build_day(d, p, a, daily, universe, splits.sf, cache, shares, prev_sessions, cfg,
                                split_refresh=lambda syms: splits.refresh(syms, d, split_like=syms))
+    why = scan_failure(st) if refuse_failed else None
+    if why:
+        raise ScanFailed(f"{d}: {why}")
     if len(cands):
         mask = baseline_nonspread_pass(cands)
         q = last_quotes(a, sorted(cands[mask].symbol), d) if mask.any() else {}
