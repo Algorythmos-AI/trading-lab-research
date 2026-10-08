@@ -441,14 +441,14 @@ export function EquityLinesPanel({ s }: { s: Crypto }) {
     <Panel
       title="Return of each paper book"
       icon={LineChart}
-      means="Each strategy's paper book hour by hour, as a percentage change from where it started, fees included. The dashed line is the original 15-minute rule, kept as the baseline. All of it is incubation on paper money: a line going up is not evidence of an edge."
+      means="Each strategy's paper book over the last 90 days, as a percentage change from where it started, fees included. The host keeps one mark every four hours. The dashed line is the original 15-minute rule, kept as the baseline. All of it is incubation on paper money: a line going up is not evidence of an edge."
     >
       {lines.length === 0 ? (
         <Empty title="No book has published a mark yet" />
       ) : (
         <div className="grid gap-3">
           {drawn.length === 0 ? (
-            <Empty title="Not enough history yet">Each book has one mark so far; the lines start with the next hour.</Empty>
+            <Empty title="Not enough history yet">Each book has one mark so far; the lines start with the next one.</Empty>
           ) : (
             <LinesChart
               label="Return of each paper book since its start, in percent"
