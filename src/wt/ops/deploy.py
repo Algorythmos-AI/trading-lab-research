@@ -428,10 +428,10 @@ def main(argv: list[str] | None = None) -> int:
         if state == "none":
             return 0
         # In sync with its lockfile is not the same as working: say so if it cannot import what it is for.
-        r = _run(str(ROOT / ML_VENV / "bin" / "python"), "-c", ML_IMPORT_CHECK, check=False, timeout=120)
-        if r.returncode != 0:
+        got = _run(str(ROOT / ML_VENV / "bin" / "python"), "-c", ML_IMPORT_CHECK, check=False, timeout=120)
+        if got.returncode != 0:
             print("ML environment: installed, but it cannot import its libraries:\n  "
-                  + (r.stderr or r.stdout).strip().splitlines()[-1][:200]
+                  + (got.stderr or got.stdout).strip().splitlines()[-1][:200]
                   + "\n  (LightGBM needs the system's OpenMP library: sudo apt-get install -y libgomp1)")
             return 1
         return 0
