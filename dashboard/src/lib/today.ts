@@ -45,6 +45,78 @@ export interface Scan {
   /** The newest stage that ran a scan (not the signals check). */
   latest: ScanStage | null;
   candidates: Candidate[];
+  /** Why names went no further, as the newest scan saw it. Null until the host publishes these counts. */
+  why: Why | null;
+}
+
+export interface WhyRow {
+  code: string;
+  label: string;
+  count: number;
+}
+
+/** The funnel record of one scan stage (the host's wt.scanner.explain), in counts. */
+export interface Why {
+  /** "09:15" New York: the stage these counts are from. */
+  at: string | null;
+  /** Nested: each step is a subset of the one before it. */
+  steps: WhyRow[];
+  /** Hard filters: how many names failed each one (a name can fail several), and how many failed only that one. */
+  reasons: (WhyRow & { only: number })[];
+  /** Candidates that the chart checks stopped, by check (a name can fail several). */
+  chart: WhyRow[];
+  /** The same steps for names priced US$2 to US$20. A count beside the registered bands: it selects nothing. */
+  band: WhyRow[];
+  /** True when the host could not build the record for this stage. */
+  failed: boolean;
+}
+
+const STEP: [string, string][] = [
+  ["kept", "Gapping up"],
+  ["passed", "Passed every filter"],
+  ["tier1", "Candidates"],
+  ["chart_ok", "Passed the chart checks"],
+  ["tier2", "Short list"],
+  ["primary", "First pick"],
+];
+const REASON: Record<string, string> = {
+  price: "Price outside the band",
+  gap: "Gap too small",
+  float: "Too many shares",
+  float_unknown: "Share count not known",
+  pm_volume: "Too little pre-market volume",
+  rvol: "Volume not unusual enough",
+  catalyst_excluded: "News of an excluded kind",
+  catalyst_missing: "No qualifying news",
+};
+const CHART: Record<string, string> = {
+  history: "Too little price history",
+  trend: "Not in an uptrend",
+  window: "No room above the price",
+  pm_consolidation: "Not holding near its pre-market high",
+  suspect_split: "Looks like an unadjusted split",
+  chart: "Chart checks",
+};
+
+/** The newest scan stage's funnel record. Every key is optional: an older host sends none, and then this is null. */
+export function why(stats: Record<string, unknown> | null | undefined, at: string | null): Why | null {
+  const st = stats ?? {};
+  const failed = isNum(st.explain_error) && st.explain_error > 0;
+  if (!isNum(st.n_kept)) return failed ? { at, steps: [], reasons: [], chart: [], band: [], failed } : null;
+  const n = (k: string) => (isNum(st[k]) ? (st[k] as number) : 0);
+  const rows = (prefix: string, labels: Record<string, string>): WhyRow[] =>
+    Object.keys(st)
+      .filter((k) => k.startsWith(prefix) && isNum(st[k]))
+      .map((k) => ({ code: k.slice(prefix.length), label: labels[k.slice(prefix.length)] ?? k.slice(prefix.length), count: n(k) }))
+      .sort((a, b) => b.count - a.count || a.code.localeCompare(b.code));
+  return {
+    at,
+    steps: STEP.map(([code, label]) => ({ code, label, count: n(`n_${code}`) })),
+    reasons: rows("drop_", REASON).map((r) => ({ ...r, only: n(`sole_${r.code}`) })),
+    chart: rows("chart_", CHART),
+    band: STEP.filter(([code]) => isNum(st[`band2_20_${code}`])).map(([code, label]) => ({ code, label, count: n(`band2_20_${code}`) })),
+    failed,
+  };
 }
 
 export function scan(s: Snapshot): Scan {
@@ -84,7 +156,15 @@ export function scan(s: Snapshot): Scan {
       shortListed: shortList.has(c.symbol),
       primary: primary === c.symbol,
     }));
-  return { date, current: date !== null && tradingDay !== null && date === tradingDay, stages, latest, candidates };
+  const newest = [...raw].reverse().find((st) => (st.stage ?? "signals") !== "signals");
+  return {
+    date,
+    current: date !== null && tradingDay !== null && date === tradingDay,
+    stages,
+    latest,
+    candidates,
+    why: why(newest?.stats as Record<string, unknown> | undefined, newest?.as_of_et ?? null),
+  };
 }
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
@@ -118,6 +198,8 @@ const EVENT: Record<string, string> = {
   entry_filled: "Entry filled",
   trade_closed: "Trade closed",
   signal_skipped_size: "Signal skipped: size too small",
+  signal_skipped_no_quote: "Signal skipped: no quote to price it",
+  decision_inputs_missing: "Could not check the signal: prices missing",
   reconcile: "Checked orders against the broker",
   reconcile_startup: "Checked orders against the broker at start",
   data_timeout: "Market data timed out",

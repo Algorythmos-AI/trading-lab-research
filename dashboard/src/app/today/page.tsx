@@ -1,4 +1,5 @@
 import { Activity, Filter, FlaskConical, Hourglass, ListOrdered, PlayCircle, Power } from "lucide-react";
+import { Funnel } from "@/components/charts/funnel";
 import { Empty } from "@/components/empty";
 import { OutcomePanel, PnlPanel, TradesPanel } from "@/components/today/trading";
 import { KeyValues } from "@/components/kv";
@@ -10,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { duration, newYork, num, rMult, shortDate, sydney } from "@/lib/format";
 import { humanize, jobName, jobTone } from "@/lib/labels";
 import { loadSnapshot } from "@/lib/snapshot";
-import { detailLabel, eventLabel, scan, sessionJobs, type Scan } from "@/lib/today";
+import { detailLabel, eventLabel, scan, sessionJobs, type Scan, type Why } from "@/lib/today";
 import { trading } from "@/lib/trading";
 import { list, type Snapshot } from "@/lib/types";
 
@@ -32,6 +33,7 @@ export default async function TodayPage() {
           <NowPanel s={result.snapshot} />
           <TradingPanels s={result.snapshot} />
           <FunnelPanel v={scan(result.snapshot)} tradingDay={result.snapshot.market?.trading_day_et ?? null} />
+          <WhyPanel w={scan(result.snapshot).why} />
           <CandidatesPanel v={scan(result.snapshot)} />
           <PaperPanel s={result.snapshot} />
           <ForwardPanel s={result.snapshot} />
@@ -142,6 +144,67 @@ function FunnelPanel({ v, tradingDay }: { v: Scan; tradingDay: string | null }) 
           {signals ? (
             <p className="text-muted-foreground text-[0.8125rem]">
               After the open (11:31 New York): {num(signals.signals)} of the short-listed plans would have triggered.
+            </p>
+          ) : null}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+/** Why the gapping names went no further, from the newest scan. Nothing is drawn until a host publishes the counts. */
+function WhyPanel({ w }: { w: Why | null }) {
+  if (!w) return null;
+  const kept = w.steps[0]?.count ?? 0;
+  const dropped = kept - (w.steps[1]?.count ?? 0);
+  return (
+    <Panel
+      title="Why names went no further"
+      icon={Filter}
+      means="The newest scan, step by step: how many gapping names passed every filter, became candidates, passed the chart checks and made the short list, and which rule stopped the rest. This is the scan as it saw the market at that minute; the after-close record can differ."
+      action={w.at ? <span className="text-muted-foreground text-xs">Scan at {w.at} New York</span> : undefined}
+    >
+      {w.failed && w.steps.length === 0 ? (
+        <Empty title="The scan could not build this record">The stage itself ran; only its explanation is missing.</Empty>
+      ) : (
+        <div className="grid gap-5">
+          <Funnel label="Names at each step of the newest scan" rows={w.steps.map((x) => ({ key: x.code, label: x.label, count: x.count }))} />
+          {w.reasons.length > 0 ? (
+            <div className="grid gap-2">
+              <p className="text-[0.8125rem]">
+                {num(dropped)} of {num(kept)} gapping names failed a filter. A name can fail more than one; &ldquo;only this&rdquo; counts the names that
+                failed nothing else.
+              </p>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Filter</TableHead>
+                    <TableHead className="text-right">Failed it</TableHead>
+                    <TableHead className="text-right">Only this</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {w.reasons.map((r) => (
+                    <TableRow key={r.code}>
+                      <TableCell>{r.label}</TableCell>
+                      <TableCell className="text-right font-mono">{num(r.count)}</TableCell>
+                      <TableCell className="text-right font-mono">{num(r.only)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : null}
+          {w.chart.length > 0 ? (
+            <div className="grid gap-2">
+              <p className="text-[0.8125rem]">Candidates the chart checks stopped, by check:</p>
+              <Funnel label="Candidates stopped by each chart check" rows={w.chart.map((x) => ({ key: x.code, label: x.label, count: x.count, fill: "bg-chart-2" }))} />
+            </div>
+          ) : null}
+          {w.band.length > 0 ? (
+            <p className="text-muted-foreground text-[0.8125rem]">
+              Priced US$2 to US$20: {w.band.map((x) => `${num(x.count)} ${x.label.toLowerCase()}`).join(", ")}. A count beside the scan&apos;s own price
+              band; it selects nothing.
             </p>
           ) : null}
         </div>

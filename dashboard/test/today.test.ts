@@ -1,7 +1,7 @@
 // The Today page's helpers: the pre-market scan as a person reads it, from fields the snapshot already carries.
 import { describe, expect, it } from "vitest";
 import { summarize } from "@/lib/summary";
-import { detailLabel, eventLabel, scan, scanSentence } from "@/lib/today";
+import { detailLabel, eventLabel, scan, scanSentence, why } from "@/lib/today";
 import type { Snapshot } from "@/lib/types";
 import { fixture } from "./helpers";
 
@@ -65,6 +65,39 @@ describe("the pre-market scan", () => {
     const text = summarize(morning());
     expect(text).toContain("Pre-market: 801 scanned, 47 gapping, 1 candidate.");
     expect(text).not.toMatch(/\$|ZZZA/); // never money, never a ticker in the one-line summary
+  });
+});
+
+describe("why names went no further", () => {
+  const record = { n_kept: 44, n_passed: 1, n_tier1: 1, n_chart_ok: 0, n_tier2: 0, n_primary: 0, drop_rvol: 30, sole_rvol: 4, drop_float_unknown: 11,
+    drop_catalyst_missing: 38, sole_catalyst_missing: 9, chart_trend: 1, chart_pm_consolidation: 1, band2_20_kept: 29, band2_20_passed: 1, band2_20_tier1: 1,
+    band2_20_tier2: 0 };
+
+  it("is absent until a host publishes the counts, so an older host changes nothing on the page", () => {
+    expect(scan(morning()).why).toBeNull();
+    expect(scan(fixture()).why).toBeNull();
+    expect(why(undefined, null)).toBeNull();
+  });
+
+  it("reads the newest scan stage's steps, reasons, chart checks and the band count", () => {
+    const s = morning();
+    const stages = s.ops!.routine!.stages!;
+    stages[2] = { ...stages[2]!, stats: { ...stats(801, 44), ...record } };
+    stages.push({ stage: null, as_of_et: null, stats: {}, counts: { signals: 0 }, tier1: [], tier2: [], primary: null });
+    const w = scan(s).why!;
+    expect(w.at).toBe("09:00"); // the signals check is not a scan
+    expect(w.steps.map((x) => [x.label, x.count])).toEqual([["Gapping up", 44], ["Passed every filter", 1], ["Candidates", 1], ["Passed the chart checks", 0], ["Short list", 0], ["First pick", 0]]);
+    expect(w.reasons.map((x) => [x.code, x.count, x.only])).toEqual([["catalyst_missing", 38, 9], ["rvol", 30, 4], ["float_unknown", 11, 0]]);
+    expect(w.reasons[0]!.label).toBe("No qualifying news");
+    expect(w.chart.map((x) => x.label)).toEqual(["Not holding near its pre-market high", "Not in an uptrend"]);
+    expect(w.band.map((x) => [x.code, x.count])).toEqual([["kept", 29], ["passed", 1], ["tier1", 1], ["tier2", 0]]);
+    expect(w.failed).toBe(false);
+  });
+
+  it("shows a code it has no words for, and says when the host could not build the record", () => {
+    expect(why({ n_kept: 3, drop_something_new: 2 }, "08:00")!.reasons).toEqual([{ code: "something_new", label: "something_new", count: 2, only: 0 }]);
+    expect(why({ explain_error: 1 }, "08:00")).toMatchObject({ failed: true, steps: [] });
+    expect(why({ n_kept: "44" }, "08:00")).toBeNull(); // a number sent as text is not a count
   });
 });
 
