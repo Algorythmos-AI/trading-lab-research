@@ -1,0 +1,1514 @@
+{
+ "dropped": [
+  {
+   "reasons": [
+    "price",
+    "gap",
+    "rvol",
+    "liquidity"
+   ],
+   "symbol": "R00"
+  },
+  {
+   "reasons": [
+    "spread"
+   ],
+   "symbol": "R01"
+  },
+  {
+   "reasons": [
+    "price"
+   ],
+   "symbol": "R02"
+  },
+  {
+   "reasons": [
+    "spread_abs",
+    "float"
+   ],
+   "symbol": "R03"
+  },
+  {
+   "reasons": [
+    "gap",
+    "rvol",
+    "liquidity"
+   ],
+   "symbol": "R04"
+  },
+  {
+   "reasons": [
+    "spread",
+    "catalyst:offering_dilution"
+   ],
+   "symbol": "R06"
+  },
+  {
+   "reasons": [
+    "price",
+    "float"
+   ],
+   "symbol": "R07"
+  },
+  {
+   "reasons": [
+    "gap",
+    "rvol",
+    "liquidity"
+   ],
+   "symbol": "R08"
+  },
+  {
+   "reasons": [
+    "price"
+   ],
+   "symbol": "R09"
+  },
+  {
+   "reasons": [
+    "spread",
+    "float"
+   ],
+   "symbol": "R11"
+  },
+  {
+   "reasons": [
+    "gap",
+    "rvol",
+    "liquidity"
+   ],
+   "symbol": "R12"
+  },
+  {
+   "reasons": [
+    "price"
+   ],
+   "symbol": "R14"
+  },
+  {
+   "reasons": [
+    "float"
+   ],
+   "symbol": "R15"
+  },
+  {
+   "reasons": [
+    "price",
+    "gap",
+    "rvol",
+    "liquidity",
+    "spread"
+   ],
+   "symbol": "R16"
+  },
+  {
+   "reasons": [
+    "catalyst:offering_dilution"
+   ],
+   "symbol": "R18"
+  },
+  {
+   "reasons": [
+    "float"
+   ],
+   "symbol": "R19"
+  },
+  {
+   "reasons": [
+    "gap",
+    "rvol",
+    "liquidity"
+   ],
+   "symbol": "R20"
+  },
+  {
+   "reasons": [
+    "price",
+    "spread",
+    "spread_abs"
+   ],
+   "symbol": "R21"
+  },
+  {
+   "reasons": [
+    "price",
+    "float"
+   ],
+   "symbol": "R23"
+  },
+  {
+   "reasons": [
+    "gap",
+    "rvol",
+    "liquidity"
+   ],
+   "symbol": "R24"
+  },
+  {
+   "reasons": [
+    "spread",
+    "spread_abs"
+   ],
+   "symbol": "R26"
+  },
+  {
+   "reasons": [
+    "float"
+   ],
+   "symbol": "R27"
+  },
+  {
+   "reasons": [
+    "price",
+    "gap",
+    "rvol",
+    "liquidity",
+    "spread_abs"
+   ],
+   "symbol": "R28"
+  },
+  {
+   "reasons": [
+    "price",
+    "catalyst:offering_dilution"
+   ],
+   "symbol": "R30"
+  },
+  {
+   "reasons": [
+    "spread",
+    "spread_abs",
+    "float"
+   ],
+   "symbol": "R31"
+  },
+  {
+   "reasons": [
+    "gap",
+    "rvol",
+    "liquidity"
+   ],
+   "symbol": "R32"
+  },
+  {
+   "reasons": [
+    "spread_abs"
+   ],
+   "symbol": "R33"
+  },
+  {
+   "reasons": [
+    "price",
+    "float"
+   ],
+   "symbol": "R35"
+  },
+  {
+   "reasons": [
+    "gap",
+    "rvol",
+    "liquidity",
+    "spread"
+   ],
+   "symbol": "R36"
+  },
+  {
+   "reasons": [
+    "price"
+   ],
+   "symbol": "R37"
+  },
+  {
+   "reasons": [
+    "spread_abs"
+   ],
+   "symbol": "R38"
+  },
+  {
+   "reasons": [
+    "float"
+   ],
+   "symbol": "R39"
+  },
+  {
+   "reasons": [
+    "gap",
+    "rvol",
+    "liquidity"
+   ],
+   "symbol": "R40"
+  },
+  {
+   "reasons": [
+    "spread"
+   ],
+   "symbol": "R41"
+  },
+  {
+   "reasons": [
+    "price",
+    "catalyst:offering_dilution"
+   ],
+   "symbol": "R42"
+  },
+  {
+   "reasons": [
+    "float"
+   ],
+   "symbol": "R43"
+  },
+  {
+   "reasons": [
+    "price",
+    "gap",
+    "rvol",
+    "liquidity"
+   ],
+   "symbol": "R44"
+  },
+  {
+   "reasons": [
+    "spread"
+   ],
+   "symbol": "R46"
+  },
+  {
+   "reasons": [
+    "float"
+   ],
+   "symbol": "R47"
+  },
+  {
+   "reasons": [
+    "gap",
+    "rvol",
+    "liquidity"
+   ],
+   "symbol": "R48"
+  },
+  {
+   "reasons": [
+    "price"
+   ],
+   "symbol": "R49"
+  },
+  {
+   "reasons": [
+    "price",
+    "spread",
+    "float"
+   ],
+   "symbol": "R51"
+  },
+  {
+   "reasons": [
+    "gap",
+    "rvol",
+    "liquidity"
+   ],
+   "symbol": "R52"
+  },
+  {
+   "reasons": [
+    "catalyst:offering_dilution"
+   ],
+   "symbol": "R54"
+  },
+  {
+   "reasons": [
+    "float"
+   ],
+   "symbol": "R55"
+  },
+  {
+   "reasons": [
+    "price",
+    "gap",
+    "rvol",
+    "liquidity",
+    "spread",
+    "spread_abs"
+   ],
+   "symbol": "R56"
+  },
+  {
+   "reasons": [
+    "price"
+   ],
+   "symbol": "R58"
+  },
+  {
+   "reasons": [
+    "float",
+    "halted"
+   ],
+   "symbol": "R59"
+  },
+  {
+   "reasons": [
+    "below_top_n"
+   ],
+   "symbol": "R10"
+  },
+  {
+   "reasons": [
+    "below_top_n"
+   ],
+   "symbol": "R34"
+  }
+ ],
+ "inputs": [
+  {
+   "catalyst_score": 1.0,
+   "catalyst_type": "fda_clinical",
+   "float_shares": null,
+   "gap_pct": 3.99,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 999999.0,
+   "pm_volume": 100000.0,
+   "price": 1.99,
+   "rvol_tod": 1.99,
+   "spread_abs": null,
+   "spread_pct": null,
+   "symbol": "R00"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 5000000.0,
+   "gap_pct": 60.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 40000000.0,
+   "pm_volume": 125000.0,
+   "price": 5.0,
+   "rvol_tod": 2.0,
+   "spread_abs": 0.031,
+   "spread_pct": 1.01,
+   "symbol": "R01"
+  },
+  {
+   "catalyst_score": 1.0,
+   "catalyst_type": "fda_clinical",
+   "float_shares": 100000000.0,
+   "gap_pct": 15.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 5000000.0,
+   "pm_volume": 150000.0,
+   "price": 30.01,
+   "rvol_tod": 5.0,
+   "spread_abs": 0.01,
+   "spread_pct": 0.2,
+   "symbol": "R02"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 100000001.0,
+   "gap_pct": 4.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 1000000.0,
+   "pm_volume": 175000.0,
+   "price": 4.99,
+   "rvol_tod": 30.0,
+   "spread_abs": 0.05,
+   "spread_pct": 0.5,
+   "symbol": "R03"
+  },
+  {
+   "catalyst_score": 1.0,
+   "catalyst_type": "fda_clinical",
+   "float_shares": null,
+   "gap_pct": 3.99,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 999999.0,
+   "pm_volume": 200000.0,
+   "price": 30.0,
+   "rvol_tod": 1.99,
+   "spread_abs": 0.03,
+   "spread_pct": 1.0,
+   "symbol": "R04"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 5000000.0,
+   "gap_pct": 60.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 40000000.0,
+   "pm_volume": 225000.0,
+   "price": 2.0,
+   "rvol_tod": 2.0,
+   "spread_abs": null,
+   "spread_pct": null,
+   "symbol": "R05"
+  },
+  {
+   "catalyst_score": -1.0,
+   "catalyst_type": "offering_dilution",
+   "float_shares": 100000000.0,
+   "gap_pct": 15.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 5000000.0,
+   "pm_volume": 250000.0,
+   "price": 12.0,
+   "rvol_tod": 5.0,
+   "spread_abs": 0.031,
+   "spread_pct": 1.01,
+   "symbol": "R06"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 100000001.0,
+   "gap_pct": 4.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 1000000.0,
+   "pm_volume": 275000.0,
+   "price": 1.99,
+   "rvol_tod": 30.0,
+   "spread_abs": 0.01,
+   "spread_pct": 0.2,
+   "symbol": "R07"
+  },
+  {
+   "catalyst_score": 1.0,
+   "catalyst_type": "fda_clinical",
+   "float_shares": null,
+   "gap_pct": 3.99,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 999999.0,
+   "pm_volume": 300000.0,
+   "price": 5.0,
+   "rvol_tod": 1.99,
+   "spread_abs": 0.05,
+   "spread_pct": 0.5,
+   "symbol": "R08"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 5000000.0,
+   "gap_pct": 60.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 40000000.0,
+   "pm_volume": 325000.0,
+   "price": 30.01,
+   "rvol_tod": 2.0,
+   "spread_abs": 0.03,
+   "spread_pct": 1.0,
+   "symbol": "R09"
+  },
+  {
+   "catalyst_score": 1.0,
+   "catalyst_type": "fda_clinical",
+   "float_shares": 100000000.0,
+   "gap_pct": 15.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 5000000.0,
+   "pm_volume": 350000.0,
+   "price": 4.99,
+   "rvol_tod": 5.0,
+   "spread_abs": null,
+   "spread_pct": null,
+   "symbol": "R10"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 100000001.0,
+   "gap_pct": 4.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 1000000.0,
+   "pm_volume": 375000.0,
+   "price": 30.0,
+   "rvol_tod": 30.0,
+   "spread_abs": 0.031,
+   "spread_pct": 1.01,
+   "symbol": "R11"
+  },
+  {
+   "catalyst_score": 1.0,
+   "catalyst_type": "fda_clinical",
+   "float_shares": null,
+   "gap_pct": 3.99,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 999999.0,
+   "pm_volume": 400000.0,
+   "price": 2.0,
+   "rvol_tod": 1.99,
+   "spread_abs": 0.01,
+   "spread_pct": 0.2,
+   "symbol": "R12"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 5000000.0,
+   "gap_pct": 60.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 40000000.0,
+   "pm_volume": 425000.0,
+   "price": 12.0,
+   "rvol_tod": 2.0,
+   "spread_abs": 0.05,
+   "spread_pct": 0.5,
+   "symbol": "R13"
+  },
+  {
+   "catalyst_score": 1.0,
+   "catalyst_type": "fda_clinical",
+   "float_shares": 100000000.0,
+   "gap_pct": 15.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 5000000.0,
+   "pm_volume": 450000.0,
+   "price": 1.99,
+   "rvol_tod": 5.0,
+   "spread_abs": 0.03,
+   "spread_pct": 1.0,
+   "symbol": "R14"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 100000001.0,
+   "gap_pct": 4.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 1000000.0,
+   "pm_volume": 475000.0,
+   "price": 5.0,
+   "rvol_tod": 30.0,
+   "spread_abs": null,
+   "spread_pct": null,
+   "symbol": "R15"
+  },
+  {
+   "catalyst_score": 1.0,
+   "catalyst_type": "fda_clinical",
+   "float_shares": null,
+   "gap_pct": 3.99,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 999999.0,
+   "pm_volume": 500000.0,
+   "price": 30.01,
+   "rvol_tod": 1.99,
+   "spread_abs": 0.031,
+   "spread_pct": 1.01,
+   "symbol": "R16"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 5000000.0,
+   "gap_pct": 60.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 40000000.0,
+   "pm_volume": 525000.0,
+   "price": 4.99,
+   "rvol_tod": 2.0,
+   "spread_abs": 0.01,
+   "spread_pct": 0.2,
+   "symbol": "R17"
+  },
+  {
+   "catalyst_score": -1.0,
+   "catalyst_type": "offering_dilution",
+   "float_shares": 100000000.0,
+   "gap_pct": 15.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 5000000.0,
+   "pm_volume": 550000.0,
+   "price": 30.0,
+   "rvol_tod": 5.0,
+   "spread_abs": 0.05,
+   "spread_pct": 0.5,
+   "symbol": "R18"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 100000001.0,
+   "gap_pct": 4.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 1000000.0,
+   "pm_volume": 575000.0,
+   "price": 2.0,
+   "rvol_tod": 30.0,
+   "spread_abs": 0.03,
+   "spread_pct": 1.0,
+   "symbol": "R19"
+  },
+  {
+   "catalyst_score": 1.0,
+   "catalyst_type": "fda_clinical",
+   "float_shares": null,
+   "gap_pct": 3.99,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 999999.0,
+   "pm_volume": 600000.0,
+   "price": 12.0,
+   "rvol_tod": 1.99,
+   "spread_abs": null,
+   "spread_pct": null,
+   "symbol": "R20"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 5000000.0,
+   "gap_pct": 60.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 40000000.0,
+   "pm_volume": 625000.0,
+   "price": 1.99,
+   "rvol_tod": 2.0,
+   "spread_abs": 0.031,
+   "spread_pct": 1.01,
+   "symbol": "R21"
+  },
+  {
+   "catalyst_score": 1.0,
+   "catalyst_type": "fda_clinical",
+   "float_shares": 100000000.0,
+   "gap_pct": 15.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 5000000.0,
+   "pm_volume": 650000.0,
+   "price": 5.0,
+   "rvol_tod": 5.0,
+   "spread_abs": 0.01,
+   "spread_pct": 0.2,
+   "symbol": "R22"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 100000001.0,
+   "gap_pct": 4.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 1000000.0,
+   "pm_volume": 675000.0,
+   "price": 30.01,
+   "rvol_tod": 30.0,
+   "spread_abs": 0.05,
+   "spread_pct": 0.5,
+   "symbol": "R23"
+  },
+  {
+   "catalyst_score": 1.0,
+   "catalyst_type": "fda_clinical",
+   "float_shares": null,
+   "gap_pct": 3.99,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 999999.0,
+   "pm_volume": 700000.0,
+   "price": 4.99,
+   "rvol_tod": 1.99,
+   "spread_abs": 0.03,
+   "spread_pct": 1.0,
+   "symbol": "R24"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 5000000.0,
+   "gap_pct": 60.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 40000000.0,
+   "pm_volume": 725000.0,
+   "price": 30.0,
+   "rvol_tod": 2.0,
+   "spread_abs": null,
+   "spread_pct": null,
+   "symbol": "R25"
+  },
+  {
+   "catalyst_score": 1.0,
+   "catalyst_type": "fda_clinical",
+   "float_shares": 100000000.0,
+   "gap_pct": 15.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 5000000.0,
+   "pm_volume": 750000.0,
+   "price": 2.0,
+   "rvol_tod": 5.0,
+   "spread_abs": 0.031,
+   "spread_pct": 1.01,
+   "symbol": "R26"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 100000001.0,
+   "gap_pct": 4.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 1000000.0,
+   "pm_volume": 775000.0,
+   "price": 12.0,
+   "rvol_tod": 30.0,
+   "spread_abs": 0.01,
+   "spread_pct": 0.2,
+   "symbol": "R27"
+  },
+  {
+   "catalyst_score": 1.0,
+   "catalyst_type": "fda_clinical",
+   "float_shares": null,
+   "gap_pct": 3.99,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 999999.0,
+   "pm_volume": 800000.0,
+   "price": 1.99,
+   "rvol_tod": 1.99,
+   "spread_abs": 0.05,
+   "spread_pct": 0.5,
+   "symbol": "R28"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 5000000.0,
+   "gap_pct": 60.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 40000000.0,
+   "pm_volume": 825000.0,
+   "price": 5.0,
+   "rvol_tod": 2.0,
+   "spread_abs": 0.03,
+   "spread_pct": 1.0,
+   "symbol": "R29"
+  },
+  {
+   "catalyst_score": -1.0,
+   "catalyst_type": "offering_dilution",
+   "float_shares": 100000000.0,
+   "gap_pct": 15.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 5000000.0,
+   "pm_volume": 850000.0,
+   "price": 30.01,
+   "rvol_tod": 5.0,
+   "spread_abs": null,
+   "spread_pct": null,
+   "symbol": "R30"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 100000001.0,
+   "gap_pct": 4.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 1000000.0,
+   "pm_volume": 875000.0,
+   "price": 4.99,
+   "rvol_tod": 30.0,
+   "spread_abs": 0.031,
+   "spread_pct": 1.01,
+   "symbol": "R31"
+  },
+  {
+   "catalyst_score": 1.0,
+   "catalyst_type": "fda_clinical",
+   "float_shares": null,
+   "gap_pct": 3.99,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 999999.0,
+   "pm_volume": 900000.0,
+   "price": 30.0,
+   "rvol_tod": 1.99,
+   "spread_abs": 0.01,
+   "spread_pct": 0.2,
+   "symbol": "R32"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 5000000.0,
+   "gap_pct": 60.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 40000000.0,
+   "pm_volume": 925000.0,
+   "price": 2.0,
+   "rvol_tod": 2.0,
+   "spread_abs": 0.05,
+   "spread_pct": 0.5,
+   "symbol": "R33"
+  },
+  {
+   "catalyst_score": 1.0,
+   "catalyst_type": "fda_clinical",
+   "float_shares": 100000000.0,
+   "gap_pct": 15.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 5000000.0,
+   "pm_volume": 950000.0,
+   "price": 12.0,
+   "rvol_tod": 5.0,
+   "spread_abs": 0.03,
+   "spread_pct": 1.0,
+   "symbol": "R34"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 100000001.0,
+   "gap_pct": 4.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 1000000.0,
+   "pm_volume": 975000.0,
+   "price": 1.99,
+   "rvol_tod": 30.0,
+   "spread_abs": null,
+   "spread_pct": null,
+   "symbol": "R35"
+  },
+  {
+   "catalyst_score": 1.0,
+   "catalyst_type": "fda_clinical",
+   "float_shares": null,
+   "gap_pct": 3.99,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 999999.0,
+   "pm_volume": 1000000.0,
+   "price": 5.0,
+   "rvol_tod": 1.99,
+   "spread_abs": 0.031,
+   "spread_pct": 1.01,
+   "symbol": "R36"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 5000000.0,
+   "gap_pct": 60.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 40000000.0,
+   "pm_volume": 1025000.0,
+   "price": 30.01,
+   "rvol_tod": 2.0,
+   "spread_abs": 0.01,
+   "spread_pct": 0.2,
+   "symbol": "R37"
+  },
+  {
+   "catalyst_score": 1.0,
+   "catalyst_type": "fda_clinical",
+   "float_shares": 100000000.0,
+   "gap_pct": 15.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 5000000.0,
+   "pm_volume": 1050000.0,
+   "price": 4.99,
+   "rvol_tod": 5.0,
+   "spread_abs": 0.05,
+   "spread_pct": 0.5,
+   "symbol": "R38"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 100000001.0,
+   "gap_pct": 4.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 1000000.0,
+   "pm_volume": 1075000.0,
+   "price": 30.0,
+   "rvol_tod": 30.0,
+   "spread_abs": 0.03,
+   "spread_pct": 1.0,
+   "symbol": "R39"
+  },
+  {
+   "catalyst_score": 1.0,
+   "catalyst_type": "fda_clinical",
+   "float_shares": null,
+   "gap_pct": 3.99,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 999999.0,
+   "pm_volume": 1100000.0,
+   "price": 2.0,
+   "rvol_tod": 1.99,
+   "spread_abs": null,
+   "spread_pct": null,
+   "symbol": "R40"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 5000000.0,
+   "gap_pct": 60.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 40000000.0,
+   "pm_volume": 1125000.0,
+   "price": 12.0,
+   "rvol_tod": 2.0,
+   "spread_abs": 0.031,
+   "spread_pct": 1.01,
+   "symbol": "R41"
+  },
+  {
+   "catalyst_score": -1.0,
+   "catalyst_type": "offering_dilution",
+   "float_shares": 100000000.0,
+   "gap_pct": 15.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 5000000.0,
+   "pm_volume": 1150000.0,
+   "price": 1.99,
+   "rvol_tod": 5.0,
+   "spread_abs": 0.01,
+   "spread_pct": 0.2,
+   "symbol": "R42"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 100000001.0,
+   "gap_pct": 4.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 1000000.0,
+   "pm_volume": 1175000.0,
+   "price": 5.0,
+   "rvol_tod": 30.0,
+   "spread_abs": 0.05,
+   "spread_pct": 0.5,
+   "symbol": "R43"
+  },
+  {
+   "catalyst_score": 1.0,
+   "catalyst_type": "fda_clinical",
+   "float_shares": null,
+   "gap_pct": 3.99,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 999999.0,
+   "pm_volume": 1200000.0,
+   "price": 30.01,
+   "rvol_tod": 1.99,
+   "spread_abs": 0.03,
+   "spread_pct": 1.0,
+   "symbol": "R44"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 5000000.0,
+   "gap_pct": 60.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 40000000.0,
+   "pm_volume": 1225000.0,
+   "price": 4.99,
+   "rvol_tod": 2.0,
+   "spread_abs": null,
+   "spread_pct": null,
+   "symbol": "R45"
+  },
+  {
+   "catalyst_score": 1.0,
+   "catalyst_type": "fda_clinical",
+   "float_shares": 100000000.0,
+   "gap_pct": 15.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 5000000.0,
+   "pm_volume": 1250000.0,
+   "price": 30.0,
+   "rvol_tod": 5.0,
+   "spread_abs": 0.031,
+   "spread_pct": 1.01,
+   "symbol": "R46"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 100000001.0,
+   "gap_pct": 4.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 1000000.0,
+   "pm_volume": 1275000.0,
+   "price": 2.0,
+   "rvol_tod": 30.0,
+   "spread_abs": 0.01,
+   "spread_pct": 0.2,
+   "symbol": "R47"
+  },
+  {
+   "catalyst_score": 1.0,
+   "catalyst_type": "fda_clinical",
+   "float_shares": null,
+   "gap_pct": 3.99,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 999999.0,
+   "pm_volume": 1300000.0,
+   "price": 12.0,
+   "rvol_tod": 1.99,
+   "spread_abs": 0.05,
+   "spread_pct": 0.5,
+   "symbol": "R48"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 5000000.0,
+   "gap_pct": 60.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 40000000.0,
+   "pm_volume": 1325000.0,
+   "price": 1.99,
+   "rvol_tod": 2.0,
+   "spread_abs": 0.03,
+   "spread_pct": 1.0,
+   "symbol": "R49"
+  },
+  {
+   "catalyst_score": 1.0,
+   "catalyst_type": "fda_clinical",
+   "float_shares": 100000000.0,
+   "gap_pct": 15.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 5000000.0,
+   "pm_volume": 1350000.0,
+   "price": 5.0,
+   "rvol_tod": 5.0,
+   "spread_abs": null,
+   "spread_pct": null,
+   "symbol": "R50"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 100000001.0,
+   "gap_pct": 4.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 1000000.0,
+   "pm_volume": 1375000.0,
+   "price": 30.01,
+   "rvol_tod": 30.0,
+   "spread_abs": 0.031,
+   "spread_pct": 1.01,
+   "symbol": "R51"
+  },
+  {
+   "catalyst_score": 1.0,
+   "catalyst_type": "fda_clinical",
+   "float_shares": null,
+   "gap_pct": 3.99,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 999999.0,
+   "pm_volume": 1400000.0,
+   "price": 4.99,
+   "rvol_tod": 1.99,
+   "spread_abs": 0.01,
+   "spread_pct": 0.2,
+   "symbol": "R52"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 5000000.0,
+   "gap_pct": 60.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 40000000.0,
+   "pm_volume": 1425000.0,
+   "price": 30.0,
+   "rvol_tod": 2.0,
+   "spread_abs": 0.05,
+   "spread_pct": 0.5,
+   "symbol": "R53"
+  },
+  {
+   "catalyst_score": -1.0,
+   "catalyst_type": "offering_dilution",
+   "float_shares": 100000000.0,
+   "gap_pct": 15.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 5000000.0,
+   "pm_volume": 1450000.0,
+   "price": 2.0,
+   "rvol_tod": 5.0,
+   "spread_abs": 0.03,
+   "spread_pct": 1.0,
+   "symbol": "R54"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 100000001.0,
+   "gap_pct": 4.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 1000000.0,
+   "pm_volume": 1475000.0,
+   "price": 12.0,
+   "rvol_tod": 30.0,
+   "spread_abs": null,
+   "spread_pct": null,
+   "symbol": "R55"
+  },
+  {
+   "catalyst_score": 1.0,
+   "catalyst_type": "fda_clinical",
+   "float_shares": null,
+   "gap_pct": 3.99,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 999999.0,
+   "pm_volume": 1500000.0,
+   "price": 1.99,
+   "rvol_tod": 1.99,
+   "spread_abs": 0.031,
+   "spread_pct": 1.01,
+   "symbol": "R56"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 5000000.0,
+   "gap_pct": 60.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 40000000.0,
+   "pm_volume": 1525000.0,
+   "price": 5.0,
+   "rvol_tod": 2.0,
+   "spread_abs": 0.01,
+   "spread_pct": 0.2,
+   "symbol": "R57"
+  },
+  {
+   "catalyst_score": 1.0,
+   "catalyst_type": "fda_clinical",
+   "float_shares": 100000000.0,
+   "gap_pct": 15.0,
+   "halted": false,
+   "headlines": [],
+   "pm_dollar_vol": 5000000.0,
+   "pm_volume": 1550000.0,
+   "price": 30.01,
+   "rvol_tod": 5.0,
+   "spread_abs": 0.05,
+   "spread_pct": 0.5,
+   "symbol": "R58"
+  },
+  {
+   "catalyst_score": 0.6,
+   "catalyst_type": "earnings",
+   "float_shares": 100000001.0,
+   "gap_pct": 4.0,
+   "halted": true,
+   "headlines": [],
+   "pm_dollar_vol": 1000000.0,
+   "pm_volume": 1575000.0,
+   "price": 4.99,
+   "rvol_tod": 30.0,
+   "spread_abs": 0.03,
+   "spread_pct": 1.0,
+   "symbol": "R59"
+  }
+ ],
+ "top": [
+  {
+   "features": {
+    "catalyst_type": "earnings",
+    "float_shares": 5000000.0,
+    "gap_pct": 60.0,
+    "pm_dollar_vol": 40000000.0,
+    "price": 4.99,
+    "rvol_tod": 2.0,
+    "spread_pct": 0.2
+   },
+   "headlines": [],
+   "rank": 1,
+   "score": 74.621,
+   "subscores": {
+    "catalyst": 0.6,
+    "float": 1.0,
+    "float_rotation": 1.0,
+    "gap": 1.0,
+    "liquidity": 1.0,
+    "price": 1.0,
+    "rvol": 0.301,
+    "spread": 0.8
+   },
+   "symbol": "R17"
+  },
+  {
+   "features": {
+    "catalyst_type": "earnings",
+    "float_shares": 5000000.0,
+    "gap_pct": 60.0,
+    "pm_dollar_vol": 40000000.0,
+    "price": 5.0,
+    "rvol_tod": 2.0,
+    "spread_pct": 0.2
+   },
+   "headlines": [],
+   "rank": 2,
+   "score": 74.621,
+   "subscores": {
+    "catalyst": 0.6,
+    "float": 1.0,
+    "float_rotation": 1.0,
+    "gap": 1.0,
+    "liquidity": 1.0,
+    "price": 1.0,
+    "rvol": 0.301,
+    "spread": 0.8
+   },
+   "symbol": "R57"
+  },
+  {
+   "features": {
+    "catalyst_type": "earnings",
+    "float_shares": 5000000.0,
+    "gap_pct": 60.0,
+    "pm_dollar_vol": 40000000.0,
+    "price": 4.99,
+    "rvol_tod": 2.0,
+    "spread_pct": null
+   },
+   "headlines": [],
+   "rank": 3,
+   "score": 72.521,
+   "subscores": {
+    "catalyst": 0.6,
+    "float": 1.0,
+    "float_rotation": 1.0,
+    "gap": 1.0,
+    "liquidity": 1.0,
+    "price": 1.0,
+    "rvol": 0.301,
+    "spread": 0.5
+   },
+   "symbol": "R45"
+  },
+  {
+   "features": {
+    "catalyst_type": "earnings",
+    "float_shares": 5000000.0,
+    "gap_pct": 60.0,
+    "pm_dollar_vol": 40000000.0,
+    "price": 2.0,
+    "rvol_tod": 2.0,
+    "spread_pct": null
+   },
+   "headlines": [],
+   "rank": 4,
+   "score": 69.771,
+   "subscores": {
+    "catalyst": 0.6,
+    "float": 1.0,
+    "float_rotation": 0.45,
+    "gap": 1.0,
+    "liquidity": 1.0,
+    "price": 1.0,
+    "rvol": 0.301,
+    "spread": 0.5
+   },
+   "symbol": "R05"
+  },
+  {
+   "features": {
+    "catalyst_type": "earnings",
+    "float_shares": 5000000.0,
+    "gap_pct": 60.0,
+    "pm_dollar_vol": 40000000.0,
+    "price": 5.0,
+    "rvol_tod": 2.0,
+    "spread_pct": 1.0
+   },
+   "headlines": [],
+   "rank": 5,
+   "score": 69.021,
+   "subscores": {
+    "catalyst": 0.6,
+    "float": 1.0,
+    "float_rotation": 1.0,
+    "gap": 1.0,
+    "liquidity": 1.0,
+    "price": 1.0,
+    "rvol": 0.301,
+    "spread": 0.0
+   },
+   "symbol": "R29"
+  },
+  {
+   "features": {
+    "catalyst_type": "earnings",
+    "float_shares": 5000000.0,
+    "gap_pct": 60.0,
+    "pm_dollar_vol": 40000000.0,
+    "price": 12.0,
+    "rvol_tod": 2.0,
+    "spread_pct": 0.5
+   },
+   "headlines": [],
+   "rank": 6,
+   "score": 68.771,
+   "subscores": {
+    "catalyst": 0.6,
+    "float": 1.0,
+    "float_rotation": 0.85,
+    "gap": 1.0,
+    "liquidity": 1.0,
+    "price": 0.7,
+    "rvol": 0.301,
+    "spread": 0.5
+   },
+   "symbol": "R13"
+  },
+  {
+   "features": {
+    "catalyst_type": "fda_clinical",
+    "float_shares": 100000000.0,
+    "gap_pct": 15.0,
+    "pm_dollar_vol": 5000000.0,
+    "price": 5.0,
+    "rvol_tod": 5.0,
+    "spread_pct": 0.2
+   },
+   "headlines": [],
+   "rank": 7,
+   "score": 65.649,
+   "subscores": {
+    "catalyst": 1.0,
+    "float": 0.2,
+    "float_rotation": 0.065,
+    "gap": 0.345,
+    "liquidity": 0.537,
+    "price": 1.0,
+    "rvol": 0.699,
+    "spread": 0.8
+   },
+   "symbol": "R22"
+  },
+  {
+   "features": {
+    "catalyst_type": "earnings",
+    "float_shares": 5000000.0,
+    "gap_pct": 60.0,
+    "pm_dollar_vol": 40000000.0,
+    "price": 30.0,
+    "rvol_tod": 2.0,
+    "spread_pct": null
+   },
+   "headlines": [],
+   "rank": 8,
+   "score": 65.521,
+   "subscores": {
+    "catalyst": 0.6,
+    "float": 1.0,
+    "float_rotation": 1.0,
+    "gap": 1.0,
+    "liquidity": 1.0,
+    "price": 0.3,
+    "rvol": 0.301,
+    "spread": 0.5
+   },
+   "symbol": "R25"
+  },
+  {
+   "features": {
+    "catalyst_type": "earnings",
+    "float_shares": 5000000.0,
+    "gap_pct": 60.0,
+    "pm_dollar_vol": 40000000.0,
+    "price": 30.0,
+    "rvol_tod": 2.0,
+    "spread_pct": 0.5
+   },
+   "headlines": [],
+   "rank": 9,
+   "score": 65.521,
+   "subscores": {
+    "catalyst": 0.6,
+    "float": 1.0,
+    "float_rotation": 1.0,
+    "gap": 1.0,
+    "liquidity": 1.0,
+    "price": 0.3,
+    "rvol": 0.301,
+    "spread": 0.5
+   },
+   "symbol": "R53"
+  },
+  {
+   "features": {
+    "catalyst_type": "fda_clinical",
+    "float_shares": 100000000.0,
+    "gap_pct": 15.0,
+    "pm_dollar_vol": 5000000.0,
+    "price": 5.0,
+    "rvol_tod": 5.0,
+    "spread_pct": null
+   },
+   "headlines": [],
+   "rank": 10,
+   "score": 63.899,
+   "subscores": {
+    "catalyst": 1.0,
+    "float": 0.2,
+    "float_rotation": 0.135,
+    "gap": 0.345,
+    "liquidity": 0.537,
+    "price": 1.0,
+    "rvol": 0.699,
+    "spread": 0.5
+   },
+   "symbol": "R50"
+  }
+ ]
+}

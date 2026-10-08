@@ -1,0 +1,1488 @@
+{
+ "funnel": {
+  "dropped": [
+   {
+    "reasons": [
+     "price",
+     "gap",
+     "float_unknown",
+     "pm_volume",
+     "rvol"
+    ],
+    "symbol": "B00"
+   },
+   {
+    "reasons": [
+     "float"
+    ],
+    "symbol": "B01"
+   },
+   {
+    "reasons": [
+     "catalyst_excluded:buyout_offer"
+    ],
+    "symbol": "B02"
+   },
+   {
+    "reasons": [
+     "catalyst_missing:none"
+    ],
+    "symbol": "B03"
+   },
+   {
+    "reasons": [
+     "price",
+     "pm_volume",
+     "rvol"
+    ],
+    "symbol": "B04"
+   },
+   {
+    "reasons": [
+     "gap",
+     "float_unknown",
+     "catalyst_excluded:buyout_offer"
+    ],
+    "symbol": "B06"
+   },
+   {
+    "reasons": [
+     "float",
+     "catalyst_missing:none"
+    ],
+    "symbol": "B07"
+   },
+   {
+    "reasons": [
+     "pm_volume",
+     "rvol"
+    ],
+    "symbol": "B08"
+   },
+   {
+    "reasons": [
+     "price"
+    ],
+    "symbol": "B09"
+   },
+   {
+    "reasons": [
+     "catalyst_excluded:buyout_offer"
+    ],
+    "symbol": "B10"
+   },
+   {
+    "reasons": [
+     "catalyst_missing:none"
+    ],
+    "symbol": "B11"
+   },
+   {
+    "reasons": [
+     "gap",
+     "float_unknown",
+     "pm_volume",
+     "rvol"
+    ],
+    "symbol": "B12"
+   },
+   {
+    "reasons": [
+     "price",
+     "float"
+    ],
+    "symbol": "B13"
+   },
+   {
+    "reasons": [
+     "catalyst_excluded:buyout_offer"
+    ],
+    "symbol": "B14"
+   },
+   {
+    "reasons": [
+     "catalyst_missing:none"
+    ],
+    "symbol": "B15"
+   },
+   {
+    "reasons": [
+     "pm_volume",
+     "rvol"
+    ],
+    "symbol": "B16"
+   },
+   {
+    "reasons": [
+     "price",
+     "gap",
+     "float_unknown",
+     "catalyst_excluded:buyout_offer"
+    ],
+    "symbol": "B18"
+   },
+   {
+    "reasons": [
+     "float",
+     "catalyst_missing:none"
+    ],
+    "symbol": "B19"
+   },
+   {
+    "reasons": [
+     "pm_volume",
+     "rvol"
+    ],
+    "symbol": "B20"
+   },
+   {
+    "reasons": [
+     "price",
+     "catalyst_excluded:buyout_offer"
+    ],
+    "symbol": "B22"
+   },
+   {
+    "reasons": [
+     "catalyst_missing:none"
+    ],
+    "symbol": "B23"
+   },
+   {
+    "reasons": [
+     "gap",
+     "float_unknown",
+     "pm_volume",
+     "rvol"
+    ],
+    "symbol": "B24"
+   },
+   {
+    "reasons": [
+     "float"
+    ],
+    "symbol": "B25"
+   },
+   {
+    "reasons": [
+     "catalyst_excluded:buyout_offer"
+    ],
+    "symbol": "B26"
+   },
+   {
+    "reasons": [
+     "price",
+     "catalyst_missing:none"
+    ],
+    "symbol": "B27"
+   },
+   {
+    "reasons": [
+     "pm_volume",
+     "rvol"
+    ],
+    "symbol": "B28"
+   },
+   {
+    "reasons": [
+     "gap",
+     "float_unknown",
+     "catalyst_excluded:buyout_offer"
+    ],
+    "symbol": "B30"
+   },
+   {
+    "reasons": [
+     "price",
+     "float",
+     "catalyst_missing:none"
+    ],
+    "symbol": "B31"
+   },
+   {
+    "reasons": [
+     "pm_volume",
+     "rvol"
+    ],
+    "symbol": "B32"
+   },
+   {
+    "reasons": [
+     "catalyst_excluded:buyout_offer"
+    ],
+    "symbol": "B34"
+   },
+   {
+    "reasons": [
+     "catalyst_missing:none"
+    ],
+    "symbol": "B35"
+   }
+  ],
+  "primary": "P32",
+  "tier1": [
+   {
+    "score": 0.9651,
+    "symbol": "P07"
+   },
+   {
+    "score": 0.8516,
+    "symbol": "P28"
+   },
+   {
+    "score": 0.8382,
+    "symbol": "P35"
+   },
+   {
+    "score": 0.8258,
+    "symbol": "P08"
+   },
+   {
+    "score": 0.8071,
+    "symbol": "P21"
+   },
+   {
+    "score": 0.7973,
+    "symbol": "P14"
+   },
+   {
+    "score": 0.7899,
+    "symbol": "P32"
+   },
+   {
+    "score": 0.7769,
+    "symbol": "P16"
+   },
+   {
+    "score": 0.7747,
+    "symbol": "P31"
+   },
+   {
+    "score": 0.755,
+    "symbol": "P06"
+   },
+   {
+    "score": 0.736,
+    "symbol": "P20"
+   },
+   {
+    "score": 0.7337,
+    "symbol": "P15"
+   },
+   {
+    "score": 0.7175,
+    "symbol": "P17"
+   },
+   {
+    "score": 0.7171,
+    "symbol": "P30"
+   },
+   {
+    "score": 0.7162,
+    "symbol": "P26"
+   },
+   {
+    "score": 0.7098,
+    "symbol": "P19"
+   },
+   {
+    "score": 0.7052,
+    "symbol": "P04"
+   },
+   {
+    "score": 0.6698,
+    "symbol": "P10"
+   },
+   {
+    "score": 0.6656,
+    "symbol": "P24"
+   },
+   {
+    "score": 0.6545,
+    "symbol": "P03"
+   }
+  ],
+  "tier2": [
+   {
+    "primary": false,
+    "rank": 1,
+    "score": 0.8258,
+    "symbol": "P08"
+   },
+   {
+    "primary": false,
+    "rank": 2,
+    "score": 0.8071,
+    "symbol": "P21"
+   },
+   {
+    "primary": false,
+    "rank": 3,
+    "score": 0.7973,
+    "symbol": "P14"
+   },
+   {
+    "primary": true,
+    "rank": 4,
+    "score": 0.7899,
+    "symbol": "P32"
+   }
+  ]
+ },
+ "inputs": [
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": false,
+   "float_shares": null,
+   "former_runner": true,
+   "gap_pct": 5.0,
+   "pm_pattern": true,
+   "pm_volume": 49999,
+   "price": 0.99,
+   "rvol_pm": 1.9,
+   "symbol": "B00",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 50000000.0,
+   "former_runner": false,
+   "gap_pct": 400.0,
+   "pm_pattern": false,
+   "pm_volume": 5000000,
+   "price": 1.49,
+   "rvol_pm": 2.0,
+   "symbol": "B01",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "buyout_offer",
+   "catalyst_score": 0.0,
+   "catalyst_status": "excluded",
+   "chart_ok": true,
+   "float_shares": 49900000.0,
+   "former_runner": false,
+   "gap_pct": 80.0,
+   "pm_pattern": false,
+   "pm_volume": 300000,
+   "price": 5.0,
+   "rvol_pm": 6.0,
+   "symbol": "B02",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "none",
+   "catalyst_score": 0.0,
+   "catalyst_status": "non_qualifying",
+   "chart_ok": false,
+   "float_shares": 19000000.0,
+   "former_runner": false,
+   "gap_pct": 25.0,
+   "pm_pattern": false,
+   "pm_volume": 50000,
+   "price": 10.01,
+   "rvol_pm": 40.0,
+   "symbol": "B03",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 8000000.0,
+   "former_runner": false,
+   "gap_pct": 12.0,
+   "pm_pattern": true,
+   "pm_volume": 49999,
+   "price": 20.01,
+   "rvol_pm": 1.9,
+   "symbol": "B04",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 2000000.0,
+   "former_runner": true,
+   "gap_pct": 5.01,
+   "pm_pattern": false,
+   "pm_volume": 5000000,
+   "price": 1.0,
+   "rvol_pm": 2.0,
+   "symbol": "B05",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "buyout_offer",
+   "catalyst_score": 0.0,
+   "catalyst_status": "excluded",
+   "chart_ok": false,
+   "float_shares": null,
+   "former_runner": false,
+   "gap_pct": 5.0,
+   "pm_pattern": false,
+   "pm_volume": 300000,
+   "price": 1.5,
+   "rvol_pm": 6.0,
+   "symbol": "B06",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "none",
+   "catalyst_score": 0.0,
+   "catalyst_status": "non_qualifying",
+   "chart_ok": true,
+   "float_shares": 50000000.0,
+   "former_runner": false,
+   "gap_pct": 400.0,
+   "pm_pattern": false,
+   "pm_volume": 50000,
+   "price": 10.0,
+   "rvol_pm": 40.0,
+   "symbol": "B07",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 49900000.0,
+   "former_runner": false,
+   "gap_pct": 80.0,
+   "pm_pattern": true,
+   "pm_volume": 49999,
+   "price": 20.0,
+   "rvol_pm": 1.9,
+   "symbol": "B08",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": false,
+   "float_shares": 19000000.0,
+   "former_runner": false,
+   "gap_pct": 25.0,
+   "pm_pattern": false,
+   "pm_volume": 5000000,
+   "price": 0.99,
+   "rvol_pm": 2.0,
+   "symbol": "B09",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "buyout_offer",
+   "catalyst_score": 0.0,
+   "catalyst_status": "excluded",
+   "chart_ok": true,
+   "float_shares": 8000000.0,
+   "former_runner": true,
+   "gap_pct": 12.0,
+   "pm_pattern": false,
+   "pm_volume": 300000,
+   "price": 1.49,
+   "rvol_pm": 6.0,
+   "symbol": "B10",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "none",
+   "catalyst_score": 0.0,
+   "catalyst_status": "non_qualifying",
+   "chart_ok": true,
+   "float_shares": 2000000.0,
+   "former_runner": false,
+   "gap_pct": 5.01,
+   "pm_pattern": false,
+   "pm_volume": 50000,
+   "price": 5.0,
+   "rvol_pm": 40.0,
+   "symbol": "B11",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": false,
+   "float_shares": null,
+   "former_runner": false,
+   "gap_pct": 5.0,
+   "pm_pattern": true,
+   "pm_volume": 49999,
+   "price": 10.01,
+   "rvol_pm": 1.9,
+   "symbol": "B12",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 50000000.0,
+   "former_runner": false,
+   "gap_pct": 400.0,
+   "pm_pattern": false,
+   "pm_volume": 5000000,
+   "price": 20.01,
+   "rvol_pm": 2.0,
+   "symbol": "B13",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "buyout_offer",
+   "catalyst_score": 0.0,
+   "catalyst_status": "excluded",
+   "chart_ok": true,
+   "float_shares": 49900000.0,
+   "former_runner": false,
+   "gap_pct": 80.0,
+   "pm_pattern": false,
+   "pm_volume": 300000,
+   "price": 1.0,
+   "rvol_pm": 6.0,
+   "symbol": "B14",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "none",
+   "catalyst_score": 0.0,
+   "catalyst_status": "non_qualifying",
+   "chart_ok": false,
+   "float_shares": 19000000.0,
+   "former_runner": true,
+   "gap_pct": 25.0,
+   "pm_pattern": false,
+   "pm_volume": 50000,
+   "price": 1.5,
+   "rvol_pm": 40.0,
+   "symbol": "B15",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 8000000.0,
+   "former_runner": false,
+   "gap_pct": 12.0,
+   "pm_pattern": true,
+   "pm_volume": 49999,
+   "price": 10.0,
+   "rvol_pm": 1.9,
+   "symbol": "B16",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 2000000.0,
+   "former_runner": false,
+   "gap_pct": 5.01,
+   "pm_pattern": false,
+   "pm_volume": 5000000,
+   "price": 20.0,
+   "rvol_pm": 2.0,
+   "symbol": "B17",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "buyout_offer",
+   "catalyst_score": 0.0,
+   "catalyst_status": "excluded",
+   "chart_ok": false,
+   "float_shares": null,
+   "former_runner": false,
+   "gap_pct": 5.0,
+   "pm_pattern": false,
+   "pm_volume": 300000,
+   "price": 0.99,
+   "rvol_pm": 6.0,
+   "symbol": "B18",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "none",
+   "catalyst_score": 0.0,
+   "catalyst_status": "non_qualifying",
+   "chart_ok": true,
+   "float_shares": 50000000.0,
+   "former_runner": false,
+   "gap_pct": 400.0,
+   "pm_pattern": false,
+   "pm_volume": 50000,
+   "price": 1.49,
+   "rvol_pm": 40.0,
+   "symbol": "B19",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 49900000.0,
+   "former_runner": true,
+   "gap_pct": 80.0,
+   "pm_pattern": true,
+   "pm_volume": 49999,
+   "price": 5.0,
+   "rvol_pm": 1.9,
+   "symbol": "B20",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": false,
+   "float_shares": 19000000.0,
+   "former_runner": false,
+   "gap_pct": 25.0,
+   "pm_pattern": false,
+   "pm_volume": 5000000,
+   "price": 10.01,
+   "rvol_pm": 2.0,
+   "symbol": "B21",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "buyout_offer",
+   "catalyst_score": 0.0,
+   "catalyst_status": "excluded",
+   "chart_ok": true,
+   "float_shares": 8000000.0,
+   "former_runner": false,
+   "gap_pct": 12.0,
+   "pm_pattern": false,
+   "pm_volume": 300000,
+   "price": 20.01,
+   "rvol_pm": 6.0,
+   "symbol": "B22",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "none",
+   "catalyst_score": 0.0,
+   "catalyst_status": "non_qualifying",
+   "chart_ok": true,
+   "float_shares": 2000000.0,
+   "former_runner": false,
+   "gap_pct": 5.01,
+   "pm_pattern": false,
+   "pm_volume": 50000,
+   "price": 1.0,
+   "rvol_pm": 40.0,
+   "symbol": "B23",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": false,
+   "float_shares": null,
+   "former_runner": false,
+   "gap_pct": 5.0,
+   "pm_pattern": true,
+   "pm_volume": 49999,
+   "price": 1.5,
+   "rvol_pm": 1.9,
+   "symbol": "B24",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 50000000.0,
+   "former_runner": true,
+   "gap_pct": 400.0,
+   "pm_pattern": false,
+   "pm_volume": 5000000,
+   "price": 10.0,
+   "rvol_pm": 2.0,
+   "symbol": "B25",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "buyout_offer",
+   "catalyst_score": 0.0,
+   "catalyst_status": "excluded",
+   "chart_ok": true,
+   "float_shares": 49900000.0,
+   "former_runner": false,
+   "gap_pct": 80.0,
+   "pm_pattern": false,
+   "pm_volume": 300000,
+   "price": 20.0,
+   "rvol_pm": 6.0,
+   "symbol": "B26",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "none",
+   "catalyst_score": 0.0,
+   "catalyst_status": "non_qualifying",
+   "chart_ok": false,
+   "float_shares": 19000000.0,
+   "former_runner": false,
+   "gap_pct": 25.0,
+   "pm_pattern": false,
+   "pm_volume": 50000,
+   "price": 0.99,
+   "rvol_pm": 40.0,
+   "symbol": "B27",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 8000000.0,
+   "former_runner": false,
+   "gap_pct": 12.0,
+   "pm_pattern": true,
+   "pm_volume": 49999,
+   "price": 1.49,
+   "rvol_pm": 1.9,
+   "symbol": "B28",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 2000000.0,
+   "former_runner": false,
+   "gap_pct": 5.01,
+   "pm_pattern": false,
+   "pm_volume": 5000000,
+   "price": 5.0,
+   "rvol_pm": 2.0,
+   "symbol": "B29",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "buyout_offer",
+   "catalyst_score": 0.0,
+   "catalyst_status": "excluded",
+   "chart_ok": false,
+   "float_shares": null,
+   "former_runner": true,
+   "gap_pct": 5.0,
+   "pm_pattern": false,
+   "pm_volume": 300000,
+   "price": 10.01,
+   "rvol_pm": 6.0,
+   "symbol": "B30",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "none",
+   "catalyst_score": 0.0,
+   "catalyst_status": "non_qualifying",
+   "chart_ok": true,
+   "float_shares": 50000000.0,
+   "former_runner": false,
+   "gap_pct": 400.0,
+   "pm_pattern": false,
+   "pm_volume": 50000,
+   "price": 20.01,
+   "rvol_pm": 40.0,
+   "symbol": "B31",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 49900000.0,
+   "former_runner": false,
+   "gap_pct": 80.0,
+   "pm_pattern": true,
+   "pm_volume": 49999,
+   "price": 1.0,
+   "rvol_pm": 1.9,
+   "symbol": "B32",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": false,
+   "float_shares": 19000000.0,
+   "former_runner": false,
+   "gap_pct": 25.0,
+   "pm_pattern": false,
+   "pm_volume": 5000000,
+   "price": 1.5,
+   "rvol_pm": 2.0,
+   "symbol": "B33",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "buyout_offer",
+   "catalyst_score": 0.0,
+   "catalyst_status": "excluded",
+   "chart_ok": true,
+   "float_shares": 8000000.0,
+   "former_runner": false,
+   "gap_pct": 12.0,
+   "pm_pattern": false,
+   "pm_volume": 300000,
+   "price": 10.0,
+   "rvol_pm": 6.0,
+   "symbol": "B34",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "none",
+   "catalyst_score": 0.0,
+   "catalyst_status": "non_qualifying",
+   "chart_ok": true,
+   "float_shares": 2000000.0,
+   "former_runner": true,
+   "gap_pct": 5.01,
+   "pm_pattern": false,
+   "pm_volume": 50000,
+   "price": 20.0,
+   "rvol_pm": 40.0,
+   "symbol": "B35",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 2000000.0,
+   "former_runner": true,
+   "gap_pct": 6.0,
+   "pm_pattern": false,
+   "pm_volume": 60000,
+   "price": 1.2,
+   "rvol_pm": 2.0,
+   "symbol": "P00",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": false,
+   "float_shares": 45000000.0,
+   "former_runner": false,
+   "gap_pct": 13.0,
+   "pm_pattern": false,
+   "pm_volume": 70000,
+   "price": 3.0,
+   "rvol_pm": 2.75,
+   "symbol": "P01",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 19000000.0,
+   "former_runner": false,
+   "gap_pct": 20.0,
+   "pm_pattern": true,
+   "pm_volume": 80000,
+   "price": 6.5,
+   "rvol_pm": 3.5,
+   "symbol": "P02",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 8000000.0,
+   "former_runner": false,
+   "gap_pct": 27.0,
+   "pm_pattern": false,
+   "pm_volume": 90000,
+   "price": 9.9,
+   "rvol_pm": 4.25,
+   "symbol": "P03",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": false,
+   "float_shares": 2000000.0,
+   "former_runner": false,
+   "gap_pct": 34.0,
+   "pm_pattern": false,
+   "pm_volume": 100000,
+   "price": 12.0,
+   "rvol_pm": 5.0,
+   "symbol": "P04",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 45000000.0,
+   "former_runner": false,
+   "gap_pct": 41.0,
+   "pm_pattern": false,
+   "pm_volume": 110000,
+   "price": 19.5,
+   "rvol_pm": 5.75,
+   "symbol": "P05",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 19000000.0,
+   "former_runner": false,
+   "gap_pct": 48.0,
+   "pm_pattern": false,
+   "pm_volume": 120000,
+   "price": 1.2,
+   "rvol_pm": 6.5,
+   "symbol": "P06",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": false,
+   "float_shares": 8000000.0,
+   "former_runner": true,
+   "gap_pct": 55.0,
+   "pm_pattern": true,
+   "pm_volume": 130000,
+   "price": 3.0,
+   "rvol_pm": 7.25,
+   "symbol": "P07",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 2000000.0,
+   "former_runner": false,
+   "gap_pct": 62.0,
+   "pm_pattern": false,
+   "pm_volume": 140000,
+   "price": 6.5,
+   "rvol_pm": 8.0,
+   "symbol": "P08",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 45000000.0,
+   "former_runner": false,
+   "gap_pct": 69.0,
+   "pm_pattern": false,
+   "pm_volume": 150000,
+   "price": 9.9,
+   "rvol_pm": 2.0,
+   "symbol": "P09",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": false,
+   "float_shares": 19000000.0,
+   "former_runner": false,
+   "gap_pct": 76.0,
+   "pm_pattern": false,
+   "pm_volume": 160000,
+   "price": 12.0,
+   "rvol_pm": 2.75,
+   "symbol": "P10",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 8000000.0,
+   "former_runner": false,
+   "gap_pct": 6.0,
+   "pm_pattern": false,
+   "pm_volume": 170000,
+   "price": 19.5,
+   "rvol_pm": 3.5,
+   "symbol": "P11",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 2000000.0,
+   "former_runner": false,
+   "gap_pct": 13.0,
+   "pm_pattern": true,
+   "pm_volume": 180000,
+   "price": 1.2,
+   "rvol_pm": 4.25,
+   "symbol": "P12",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": false,
+   "float_shares": 45000000.0,
+   "former_runner": false,
+   "gap_pct": 20.0,
+   "pm_pattern": false,
+   "pm_volume": 190000,
+   "price": 3.0,
+   "rvol_pm": 5.0,
+   "symbol": "P13",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 19000000.0,
+   "former_runner": true,
+   "gap_pct": 27.0,
+   "pm_pattern": false,
+   "pm_volume": 200000,
+   "price": 6.5,
+   "rvol_pm": 5.75,
+   "symbol": "P14",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 8000000.0,
+   "former_runner": false,
+   "gap_pct": 34.0,
+   "pm_pattern": false,
+   "pm_volume": 210000,
+   "price": 9.9,
+   "rvol_pm": 6.5,
+   "symbol": "P15",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": false,
+   "float_shares": 2000000.0,
+   "former_runner": false,
+   "gap_pct": 41.0,
+   "pm_pattern": false,
+   "pm_volume": 220000,
+   "price": 12.0,
+   "rvol_pm": 7.25,
+   "symbol": "P16",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 45000000.0,
+   "former_runner": false,
+   "gap_pct": 48.0,
+   "pm_pattern": true,
+   "pm_volume": 230000,
+   "price": 19.5,
+   "rvol_pm": 8.0,
+   "symbol": "P17",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 19000000.0,
+   "former_runner": false,
+   "gap_pct": 55.0,
+   "pm_pattern": false,
+   "pm_volume": 240000,
+   "price": 1.2,
+   "rvol_pm": 2.0,
+   "symbol": "P18",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": false,
+   "float_shares": 8000000.0,
+   "former_runner": false,
+   "gap_pct": 62.0,
+   "pm_pattern": false,
+   "pm_volume": 250000,
+   "price": 3.0,
+   "rvol_pm": 2.75,
+   "symbol": "P19",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 2000000.0,
+   "former_runner": false,
+   "gap_pct": 69.0,
+   "pm_pattern": false,
+   "pm_volume": 260000,
+   "price": 6.5,
+   "rvol_pm": 3.5,
+   "symbol": "P20",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 45000000.0,
+   "former_runner": true,
+   "gap_pct": 76.0,
+   "pm_pattern": false,
+   "pm_volume": 270000,
+   "price": 9.9,
+   "rvol_pm": 4.25,
+   "symbol": "P21",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": false,
+   "float_shares": 19000000.0,
+   "former_runner": false,
+   "gap_pct": 6.0,
+   "pm_pattern": true,
+   "pm_volume": 280000,
+   "price": 12.0,
+   "rvol_pm": 5.0,
+   "symbol": "P22",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 8000000.0,
+   "former_runner": false,
+   "gap_pct": 13.0,
+   "pm_pattern": false,
+   "pm_volume": 290000,
+   "price": 19.5,
+   "rvol_pm": 5.75,
+   "symbol": "P23",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 2000000.0,
+   "former_runner": false,
+   "gap_pct": 20.0,
+   "pm_pattern": false,
+   "pm_volume": 300000,
+   "price": 1.2,
+   "rvol_pm": 6.5,
+   "symbol": "P24",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": false,
+   "float_shares": 45000000.0,
+   "former_runner": false,
+   "gap_pct": 27.0,
+   "pm_pattern": false,
+   "pm_volume": 310000,
+   "price": 3.0,
+   "rvol_pm": 7.25,
+   "symbol": "P25",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 19000000.0,
+   "former_runner": false,
+   "gap_pct": 34.0,
+   "pm_pattern": false,
+   "pm_volume": 320000,
+   "price": 6.5,
+   "rvol_pm": 8.0,
+   "symbol": "P26",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 8000000.0,
+   "former_runner": false,
+   "gap_pct": 41.0,
+   "pm_pattern": true,
+   "pm_volume": 330000,
+   "price": 9.9,
+   "rvol_pm": 2.0,
+   "symbol": "P27",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": false,
+   "float_shares": 2000000.0,
+   "former_runner": true,
+   "gap_pct": 48.0,
+   "pm_pattern": false,
+   "pm_volume": 340000,
+   "price": 12.0,
+   "rvol_pm": 2.75,
+   "symbol": "P28",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 45000000.0,
+   "former_runner": false,
+   "gap_pct": 55.0,
+   "pm_pattern": false,
+   "pm_volume": 350000,
+   "price": 19.5,
+   "rvol_pm": 3.5,
+   "symbol": "P29",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 19000000.0,
+   "former_runner": false,
+   "gap_pct": 62.0,
+   "pm_pattern": false,
+   "pm_volume": 360000,
+   "price": 1.2,
+   "rvol_pm": 4.25,
+   "symbol": "P30",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": false,
+   "float_shares": 8000000.0,
+   "former_runner": false,
+   "gap_pct": 69.0,
+   "pm_pattern": false,
+   "pm_volume": 370000,
+   "price": 3.0,
+   "rvol_pm": 5.0,
+   "symbol": "P31",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 2000000.0,
+   "former_runner": false,
+   "gap_pct": 76.0,
+   "pm_pattern": true,
+   "pm_volume": 380000,
+   "price": 6.5,
+   "rvol_pm": 5.75,
+   "symbol": "P32",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 45000000.0,
+   "former_runner": false,
+   "gap_pct": 6.0,
+   "pm_pattern": false,
+   "pm_volume": 390000,
+   "price": 9.9,
+   "rvol_pm": 6.5,
+   "symbol": "P33",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": false,
+   "float_shares": 19000000.0,
+   "former_runner": false,
+   "gap_pct": 13.0,
+   "pm_pattern": false,
+   "pm_volume": 400000,
+   "price": 12.0,
+   "rvol_pm": 7.25,
+   "symbol": "P34",
+   "tags": {}
+  },
+  {
+   "catalyst_category": "fda_approval",
+   "catalyst_score": 1.0,
+   "catalyst_status": "qualifying",
+   "chart_ok": true,
+   "float_shares": 8000000.0,
+   "former_runner": true,
+   "gap_pct": 20.0,
+   "pm_pattern": false,
+   "pm_volume": 410000,
+   "price": 19.5,
+   "rvol_pm": 8.0,
+   "symbol": "P35",
+   "tags": {}
+  }
+ ],
+ "scores": {
+  "B00": 0.399771238,
+  "B01": 0.575257499,
+  "B02": 0.544537813,
+  "B03": 0.547584928,
+  "B04": 0.489564132,
+  "B05": 0.605399055,
+  "B06": 0.22462065,
+  "B07": 0.6,
+  "B08": 0.5696884,
+  "B09": 0.522842427,
+  "B10": 0.614413545,
+  "B11": 0.480141556,
+  "B12": 0.249771238,
+  "B13": 0.575257499,
+  "B14": 0.544537813,
+  "B15": 0.697584928,
+  "B16": 0.489564132,
+  "B17": 0.455399055,
+  "B18": 0.22462065,
+  "B19": 0.6,
+  "B20": 0.7196884,
+  "B21": 0.522842427,
+  "B22": 0.464413545,
+  "B23": 0.480141556,
+  "B24": 0.249771238,
+  "B25": 0.725257499,
+  "B26": 0.544537813,
+  "B27": 0.547584928,
+  "B28": 0.489564132,
+  "B29": 0.455399055,
+  "B30": 0.37462065,
+  "B31": 0.6,
+  "B32": 0.5696884,
+  "B33": 0.522842427,
+  "B34": 0.464413545,
+  "B35": 0.630141556,
+  "P00": 0.611184701,
+  "P01": 0.435189616,
+  "P02": 0.558432083,
+  "P03": 0.654469285,
+  "P04": 0.705195522,
+  "P05": 0.651766081,
+  "P06": 0.754952029,
+  "P07": 0.965084502,
+  "P08": 0.825772497,
+  "P09": 0.575257499,
+  "P10": 0.669833173,
+  "P11": 0.521944214,
+  "P12": 0.582453675,
+  "P13": 0.537157573,
+  "P14": 0.797289013,
+  "P15": 0.73368136,
+  "P16": 0.776933621,
+  "P17": 0.717496186,
+  "P18": 0.635257499,
+  "P19": 0.709833173,
+  "P20": 0.736017011,
+  "P21": 0.807097233,
+  "P22": 0.520669704,
+  "P23": 0.615273404,
+  "P24": 0.665643411,
+  "P25": 0.612456554,
+  "P26": 0.716225517,
+  "P27": 0.637106618,
+  "P28": 0.851556863,
+  "P29": 0.636017011,
+  "P30": 0.717097233,
+  "P31": 0.774742501,
+  "P32": 0.789916961,
+  "P33": 0.489155542,
+  "P34": 0.600440944,
+  "P35": 0.838187568
+ }
+}
