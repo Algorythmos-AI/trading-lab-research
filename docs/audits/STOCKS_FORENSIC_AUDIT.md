@@ -79,7 +79,7 @@ Strategy B, from the journal (6 armed sessions):
 
 Blocker codes journaled across all sessions: `kill_file` 77, `spread_or_no_quote` 29, `stale_signal_data` 6,
 `event` 2. These count journal rows, not minutes. `spread_or_no_quote` recurs often enough to check before it
-blocks a real signal (limit 0.10% on an IEX quote, `runner_b.py:776`).
+blocks a real signal (limit 0.10% on an IEX quote, `runner_b.py:63, 775`).
 
 Forward ledger: B has 7 sessions and 2 hypothetical trades. Each of the ten round-3 trials has 8 sessions and 0
 trades. No error rows.
