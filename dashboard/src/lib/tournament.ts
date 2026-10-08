@@ -217,6 +217,8 @@ export interface ChallengerRow {
   controlP: number | null;
   failedOn: string[];
   retiredWhy: string | null;
+  /** The same rules on the two years before the backtest's span (DEC-0021). Null when that run has not happened. */
+  confirm: { passed: boolean; trades: number | null; meanR: number | null; profitFactor: number | null } | null;
 }
 
 export interface Challengers {
@@ -257,6 +259,10 @@ export function challengers(s: Crypto): Challengers {
       controlP: n(x.control_p),
       failedOn: items(x.failed_on).filter((v): v is string => typeof v === "string"),
       retiredWhy: x.retired_why ?? null,
+      confirm:
+        typeof x.confirm_passed === "boolean"
+          ? { passed: x.confirm_passed, trades: n(x.confirm_trades), meanR: n(x.confirm_mean_r), profitFactor: n(x.confirm_profit_factor) }
+          : null,
     }));
   return {
     available: c != null,

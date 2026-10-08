@@ -87,6 +87,8 @@ describe("the crypto tournament", () => {
     expect(waiting.trades).toBeNull();
     expect(waiting.rules).toMatch(/^dip rule on daily bars/);
     expect([live.of, live.meanR, live.ciLow, live.failedOn]).toEqual(["break", 0.212, 0.019, []]);
+    expect(live.confirm).toEqual({ passed: true, trades: 88, meanR: 0.131, profitFactor: 1.22 });   // the earlier two years
+    expect([waiting.confirm, failed.confirm]).toEqual([null, null]);                                // only run after a pass
     expect(failed.failedOn.map(code)).toEqual([
       "not clearly profitable once costs are raised",
       "could be luck, given how many ideas were tried",
