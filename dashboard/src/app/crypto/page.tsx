@@ -1,5 +1,6 @@
 import { Activity, Gauge, LineChart, ListChecks } from "lucide-react";
 import { CryptoKillNotice, NoCryptoSnapshot } from "@/components/crypto/panels";
+import { LearningCard } from "@/components/crypto/learning";
 import { ChallengersPanel, SleeveChecks, SleevePositions, SleeveSignals, SleeveTrades, TournamentBoard } from "@/components/crypto/tournament";
 import { Empty } from "@/components/empty";
 import { HealthBanner } from "@/components/health-banner";
@@ -14,6 +15,7 @@ import { fracPct, num, rMult, shortDate, signed, zoned } from "@/lib/format";
 import { freshness } from "@/lib/freshness";
 import { requestTime } from "@/lib/now";
 import { loadCryptoSnapshot } from "@/lib/snapshot";
+import { learning } from "@/lib/learning";
 import { challengers, tournament } from "@/lib/tournament";
 import { list } from "@/lib/types";
 
@@ -53,9 +55,11 @@ function TournamentPanels({ s }: { s: Crypto }) {
   const t = tournament(s);
   if (!t.available) return null;
   const c = challengers(s);
+  const l = learning(s);
   return (
     <>
       <TournamentBoard s={s} t={t} />
+      {l.available ? <LearningCard l={l} /> : null}
       <SleevePositions s={s} t={t} />
       {c.available ? <ChallengersPanel c={c} /> : null}
       <SleeveTrades s={s} t={t} />

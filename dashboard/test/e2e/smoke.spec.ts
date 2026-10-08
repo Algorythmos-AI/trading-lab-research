@@ -104,6 +104,7 @@ const CRYPTO_PAGES = [
   { path: "/crypto", heading: "Overview" },
   { path: "/crypto/strategy", heading: "Strategy" },
   { path: "/crypto/research", heading: "Research" },
+  { path: "/crypto/learning", heading: "Machine learning" },
   { path: "/crypto/operations", heading: "Operations" },
   { path: "/crypto/risk", heading: "Risk" },
 ];

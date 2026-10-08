@@ -46,6 +46,8 @@ export interface ModelLine {
   label: string;
   settings: string | null;
   logLoss: number | null;
+  /** Its log-loss minus the baseline's: below zero is a better forecast. Null for the baseline itself. */
+  logLossDelta: number | null;
   kept: number | null;
   keptMeanR: number | null;
   skipped: number | null;
@@ -179,6 +181,7 @@ export function learning(s: Crypto): Learning {
               label: modelLabel(x.name),
               settings: x.settings ?? null,
               logLoss: n(x.log_loss),
+              logLossDelta: x.name !== "m0" && isNum(base) && isNum(x.log_loss) ? x.log_loss - base : null,
               kept: n(x.kept),
               keptMeanR: n(x.kept_mean_r),
               skipped: n(x.dropped),
@@ -225,4 +228,47 @@ export function learningLine(l: Learning): string {
   }
   if (l.training) return "No model is in force: at the last training none beat taking every signal.";
   return "No model has been trained on this host yet.";
+}
+
+/** The learning job on the host, as the snapshot's `jobs` names it. */
+export const LEARN_JOB = "crypto-learn";
+
+/** The alerts that belong to the model. An unknown one under the same prefixes is shown by its key. */
+const ALERT: Record<string, string> = {
+  "crypto:scorer-failed": "The model did not score the last cycle's signals; they are traded as their rules say",
+  "crypto:learn-train-failed": "The weekly training failed",
+  "crypto:model-promoted": "The model was promoted today",
+  "crypto:model-demoted": "The model was demoted today",
+  "crypto:model-suspended": "The model was suspended today",
+  "deploy-ml": "The machine-learning environment on the host is not in sync",
+};
+export const isLearningAlert = (key: string | null | undefined): key is string =>
+  typeof key === "string" && (key in ALERT || /^crypto:(model-|scorer-|learn-)/.test(key));
+export const learningAlertLabel = (key: string): string => ALERT[key] ?? key;
+
+export type StepState = "done" | "current" | "failed" | "paused" | "todo";
+export interface Step {
+  key: string;
+  label: string;
+  state: StepState;
+}
+
+/** The road a model travels, and where this one is: trained, better than the baseline, in shadow, tested, acting. */
+export function modelRoad(l: Learning): Step[] {
+  const m = l.model;
+  const trained = l.training != null || m != null;
+  const chosen = m != null;
+  const passed = m != null && (m.looks.some((k) => k.passed) || m.state === "acting" || m.state === "demoted" || m.state === "suspended");
+  const after = (done: boolean, now: boolean): StepState => (done ? "done" : now ? "current" : "todo");
+  return [
+    { key: "trained", label: "Trained", state: after(trained, true) },
+    { key: "chosen", label: "Beat the baseline", state: chosen ? "done" : trained ? "failed" : "todo" },
+    { key: "shadow", label: "In shadow", state: after(passed, chosen) },
+    { key: "passed", label: "Passed a test", state: passed ? "done" : "todo" },
+    {
+      key: "acting",
+      label: m?.state === "demoted" ? "Demoted" : m?.state === "suspended" ? "Suspended" : "Acting",
+      state: m?.state === "acting" ? "current" : m?.state === "demoted" ? "failed" : m?.state === "suspended" ? "paused" : "todo",
+    },
+  ];
 }

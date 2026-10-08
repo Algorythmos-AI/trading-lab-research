@@ -21,6 +21,7 @@ export const CRYPTO_NAV = [
   { href: "/crypto", label: "Overview" },
   { href: "/crypto/strategy", label: "Strategy" },
   { href: "/crypto/research", label: "Research" },
+  { href: "/crypto/learning", label: "Machine learning" },
   { href: "/crypto/operations", label: "Operations" },
   { href: "/crypto/risk", label: "Risk" },
   { href: "/engineering", label: "Engineering" },
