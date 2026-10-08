@@ -127,6 +127,10 @@ ALLOW: dict[str, Any] = {
                          "agreement_days": I, "agreement_agree": I}, "log": LOG},
         "forward": {"exists": B, "sessions": I, "first": S, "last": S, "errors": I, "bad_lines": I,
                     "strategies": [{"strategy": S, "n": I, "mean_r": N, "total_r": N}], "latest_scorecard": S,
+                    # one book per registered trial (DEC-0023): ids, counts, R and nominal dollars; never a setup name
+                    "books": [{"strategy": S, "hyp": S, "sessions": I, "errors": I, "first": S, "last": S, "trades": I,
+                               "total_r": N, "max_dd_r": N, "last_trade": S, "risk_usd": N, "nominal_usd": N,
+                               "signals": I, "refused": I}],
                     "log": LOG},
         "host": {"jobs": [{"label": S, "local_time": S, "name": S, "loaded": B, "running": B, "last_exit": I}],
                  "disk_free_gb": N, "disk_total_gb": N, "disk_floor_gb": N, "disk_target_gb": N, "swap_warn_pct": N,

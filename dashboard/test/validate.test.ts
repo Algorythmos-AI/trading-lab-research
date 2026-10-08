@@ -25,6 +25,16 @@ describe("schema validation", () => {
     if (!r.ok) expect(r.errors.join(" ")).toContain("/sla/cells/0/status");
   });
 
+  it("accepts a trial book, and refuses a book that carries anything else", () => {
+    const book = { strategy: "r3:F:GG-1", hyp: "HYP-0010", sessions: 9, errors: 0, first: "2026-09-28", last: "2026-10-08", trades: 3, total_r: -0.8,
+      max_dd_r: 1.8, last_trade: "2026-10-07", risk_usd: 6, nominal_usd: -4.8, signals: 4, refused: 1 };
+    const s = fixtureV3();
+    loose(loose(s.ops).forward).books = [book, { ...book, strategy: "B_qqq_qqqm", hyp: null, risk_usd: null, nominal_usd: null, signals: null, refused: null }];
+    expect(validateSnapshot(s).ok).toBe(true);
+    loose(loose(s.ops).forward).books = [{ ...book, symbol: "ZZZA" }];
+    expect(validateSnapshot(s).ok).toBe(false);
+  });
+
   it("accepts a snapshot with only the required keys, all null", () => {
     expect(validateSnapshot({ schema: null, schema_version: null, run_id: null, as_of: null }).ok).toBe(true);
   });

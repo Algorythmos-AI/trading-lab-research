@@ -25,7 +25,7 @@ from zoneinfo import ZoneInfo
 
 import yaml
 
-from wt.analytics import g2
+from wt.analytics import forward_book, g2
 from wt.ops import safeio, thresholds
 from wt.ops.safeio import SourceError
 
@@ -486,9 +486,18 @@ def src_forward(ctx: Ctx) -> dict:
     cards = sorted([*(ctx.deployed / "var/scorecards").glob("scorecard_*.md"),
                     *(ctx.deployed / "research/forward").glob("scorecard_*.md")], key=lambda p: p.name)
     fl = sorted((ctx.deployed / "logs").glob("forward_*.log"))
+    funnels = []
+    for f in sorted((ledger.parent / "funnel").glob("*.json")):
+        try:
+            doc = safeio.read_json(f)
+        except Exception:  # noqa: BLE001 — one unreadable record costs the books its counts for that day, nothing else
+            continue
+        if isinstance(doc, dict):
+            funnels.append(doc)
     return {"exists": ledger.exists(), "sessions": len(sessions),
             "first": sessions[0] if sessions else None, "last": sessions[-1] if sessions else None,
             "errors": len(errors), "bad_lines": bad, "strategies": strategies,
+            "books": forward_book.view([x for x in rows if isinstance(x, dict)], funnels),
             "latest_scorecard": cards[-1].name if cards else None,
             "log": _log_digest(fl[-1]) if fl else None}
 
