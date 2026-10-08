@@ -16,11 +16,19 @@ specific to this repository. Where the two conflict, the org file's "Never" sect
    - Experiments are append-only: a re-run gets a new EXP id.
    - A holdout is run once per frozen config.
 3. **The live checkout is production.**
-   - launchd runs the working tree of `~/trading` every trading night.
-   - Develop in a worktree (`git worktree add ~/trading-wt/<branch> origin/main`) with its own `.venv`.
-   - Never edit, switch branches in, or reinstall the venv of `~/trading` while any `com.wt.*` job is running.
+   - Since 2026-10 the jobs run on the cloud host (`docs/runbooks/gcp-host.md`): systemd runs the working tree
+     of `/home/wt/trading` there. It changes only through the gated deploy (`wt-deploy`), never by hand.
+   - The Mac's `~/trading` is no longer what runs. It is a console checkout and may be far behind
+     `origin/main`: read the state of the code from `origin/main`, never from it.
+   - Develop in a worktree (`git worktree add ~/trading-wt/<branch> origin/main`). Remove it when its pull
+     request is merged; share a `.venv` between worktrees if the disk is short.
+   - Never edit, switch branches in, or reinstall the venv of a checkout that runs jobs while any `wt-*` or
+     `com.wt.*` job is running.
    - Session times follow America/New_York, so Sydney clock rules break at every DST change.
-4. **launchd.** Never load, unload or kickstart the `com.wt.*` agents. Hand the owner the `make` command.
+   - Several agent sessions may work here at once. Before numbering a record or touching a shared file, read
+     `origin/main` and the open pull requests, and say which ids and files you are taking.
+4. **Units and agents.** Never load, unload, enable, disable or kickstart the `wt-*` systemd units or the
+   `com.wt.*` launchd agents. Hand the owner the command (`sudo wt-install-units`, or the `make` target).
 5. **Commits and PRs.**
    - Branch, open a PR, and let the `test` check pass, then squash-merge.
    - No `Co-Authored-By` trailer and no AI-tool mention anywhere (org decision D-016).
