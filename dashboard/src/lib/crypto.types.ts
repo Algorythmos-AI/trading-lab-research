@@ -340,6 +340,20 @@ export interface CryptoSnapshot {
               why?: (string | null)[] | null;
             } | null)[]
           | null;
+        funnel?: {
+          since?: string | null;
+          fired?: number | null;
+          entered?: number | null;
+          /**
+           * @maxItems 2000
+           */
+          refused?:
+            | ({
+                code?: string | null;
+                count?: number | null;
+              } | null)[]
+            | null;
+        } | null;
         /**
          * @maxItems 2000
          */
