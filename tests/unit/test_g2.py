@@ -53,3 +53,26 @@ def test_day_level_agreement_over_clean_sessions_both_ran():
 def test_a_refusal_row_without_a_day_lands_on_its_et_date():
     rows = [{"event": "refuse_to_arm", "reason": "x", "ts": "2026-10-02T01:00:00+00:00"}]   # 21:00 ET on 10-01
     assert "2026-10-01" in g2.sessions(rows)
+
+
+def ended(day: str, outcome: str | None) -> list[dict]:
+    rows = session(day, complete=False)
+    return rows + [{"event": "session_end", "ts": ts(day, "20:00"), **({"outcome": outcome} if outcome else {})}]
+
+
+def test_a_session_whose_signal_could_not_be_checked_is_not_clean():
+    """DEC-0024, decision 1: `no_inputs` is counted on its own, breaks the clean streak and is not in agreement."""
+    rows = (ended("2026-10-08", "no_signal") + ended("2026-10-09", "no_inputs") + ended("2026-10-12", "no_signal")
+            + ended("2026-10-13", "blocked:kill_file") + ended("2026-10-14", "traded"))
+    s = g2.summary(rows, forward_sessions={"2026-10-08", "2026-10-09", "2026-10-12", "2026-10-13", "2026-10-14"},
+                   forward_b_days=set())
+    assert s["armed_sessions"] == 5 and s["sessions"] == 4 and s["unchecked_sessions"] == 1
+    assert s["incident_free_streak"] == 3                              # the unchecked session ends the run before it
+    assert s["agreement_days"] == 4 and s["agreement_agree"] == 4      # it would have "agreed" by not trading: left out
+    assert not g2.sessions(rows)["2026-10-09"].clean and g2.sessions(rows)["2026-10-13"].clean
+
+
+def test_a_session_from_before_the_outcome_existed_is_judged_as_before():
+    rows = ended("2026-10-01", None) + ended("2026-10-02", "no_signal")
+    s = g2.summary(rows)
+    assert s["sessions"] == 2 and s["unchecked_sessions"] == 0
