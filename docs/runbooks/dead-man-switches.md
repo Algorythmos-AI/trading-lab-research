@@ -31,9 +31,20 @@ The crypto desk (ADR 0005) runs at every hour of every day, so its check is a **
 |---|---|---|---|---|
 | `wt-crypto` | 15 min | 30 min | every 15 minutes, 10–30 s after the bar closes | No crypto bar cycle has finished for 45 minutes |
 
+The crypto desk's two daily jobs run every day of the week, at New York times, so their checks are **Cron**
+schedules in **America/New_York** like the stock jobs':
+
+| Slug | Cron | Grace | Normal ping (ET) | What a page means |
+|---|---|---|---|---|
+| `wt-crypto-challengers` | `0 3 * * *` | 2 h | 03:30 to 04:30 | The challengers' run didn't finish, refused, or its timer never fired |
+| `wt-crypto-learn` | `0 4 * * *` | 2 h 30 min | 04:30 to 06:00 | The learning run (outcomes, tests, weekly training) didn't finish, refused, or its timer never fired |
+
+A run with learning switched off still ends normally and pings. A failed weekly training is its own notice and
+does not fail the job, so it does not page here.
+
 With the crypto desk on the host, `wt-backup` also pings at weekends: change its cron to `30 19 * * *`.
 
-Five checks; the VM adds backup and restore-test checks later (at most 15 of the free 20). The Mac and the VM
+Eight checks with the crypto desk's three; the VM adds backup and restore-test checks (at most 15 of the free 20). The Mac and the VM
 share these slugs: the ping body says which host and role sent it.
 
 ## What the jobs send

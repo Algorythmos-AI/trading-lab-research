@@ -329,7 +329,9 @@ def b_exposure() -> bool:
 
 
 # jobs with a healthchecks.io check. `crypto` pings every 15 minutes, at any hour: its check has no schedule gap.
-HC_JOBS = frozenset({"routine", "paper-b", "forward", "weekly", "crypto"})
+# The two daily crypto jobs alert when they fail; only a check notices when one never starts (a timer disabled
+# or never installed), which is how both were absent for their first day on the host.
+HC_JOBS = frozenset({"routine", "paper-b", "forward", "weekly", "crypto", "crypto-challengers", "crypto-learn"})
 
 
 def hc_slug(job: Job) -> str:

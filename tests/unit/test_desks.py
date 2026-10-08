@@ -53,6 +53,12 @@ def test_the_stocks_jobs_are_untouched_and_the_crypto_desk_has_exactly_two_inter
     assert "OnCalendar=*:0/15:10 UTC" in units.timer(JOBS["crypto"])              # ten seconds after the bar closes
     assert "OnCalendar=*:1/15:00 UTC" in units.timer(JOBS["dashboard-crypto"])    # the publish follows the cycle
     assert "crypto" in jobs.HC_JOBS and jobs.hc_slug(JOBS["crypto"]) == "wt-crypto"
+    # Every job the crypto desk runs on a timer has a dead-man check, except the publisher (the dashboard's own
+    # watchdog pages on a stale snapshot). A job that only alerts on failure says nothing when it never starts.
+    daily = {"crypto-challengers", "crypto-learn"}
+    assert daily <= set(JOBS) and daily <= jobs.HC_JOBS
+    book = (ROOT / "docs/runbooks/dead-man-switches.md").read_text()
+    assert all(f"`{jobs.hc_slug(JOBS[n])}`" in book for n in ("crypto", *sorted(daily)))
     assert "MemoryMax=512M" in units.service(JOBS["crypto"], Path("/r"))
 
 
