@@ -56,3 +56,9 @@ def test_s5_retest_causal():
 
 def test_pm_high_break_causal():
     assert check(setups.s1_pm_high_break, pm_high=10.1, window=(0, 240)) > 0
+
+
+def test_b_intraday_momentum_causal():
+    kw = dict(sigma=0.002, prev_close=9.95)
+    assert check(setups.b_intraday_momentum, **kw) >= 5
+    assert check(setups.b_intraday_momentum, include_last=True, **kw) >= 5      # the live runner's reading of the rule
