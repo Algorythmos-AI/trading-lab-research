@@ -28,6 +28,7 @@ from wt.specs.loader import load_spec
 ROOT = Path(__file__).resolve().parents[2]
 GOLDEN = ROOT / "tests/fixtures/golden"
 SPEC = load_spec("SPEC-0001")
+POOL_STATS_PINNED = ("universe", "snapshot_symbols", "split_checked", "kept", "float_unknown", "notes")
 WHY = "a frozen function's output or source changed: this needs a decision record before the golden is regenerated"
 
 
@@ -112,7 +113,8 @@ def test_pool_build_output_is_unchanged():
                                SplitFactors(pd.DataFrame(columns=["symbol", "date", "f"])), tp.FakeCache(),
                                tp.FakeShares(), sessions, PoolConfig(), split_refresh=lambda syms: tp.split_factors())
     rows = json.loads(cands.sort_values("symbol").round(9).to_json(orient="records", date_format="iso"))
-    check("pool_build", {"candidates": rows, "stats": asdict(st), "pm_bars": len(pmb),
+    stats = {k: v for k, v in asdict(st).items() if k in POOL_STATS_PINNED}          # counts added later are not selection
+    check("pool_build", {"candidates": rows, "stats": stats, "pm_bars": len(pmb),
                          "pm_first": str(pmb.t.min()), "pm_last": str(pmb.t.max())})
 
 
