@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { bearerMatches } from "@/lib/auth";
+import { DESK_PATHS } from "@/lib/desk";
 import { scrubMoney } from "@/lib/ntfy";
 import { evaluate, historyToPrune, INITIAL_STATE, parseState, sameState, type AlertState } from "@/lib/watchdog";
 import { cleanSnapshot } from "./helpers";
@@ -173,6 +174,28 @@ describe("history pruning", () => {
     expect(historyToPrune(blobs, at("2026-09-29T05:00:00Z")).map((b) => b.pathname)).toEqual([
       "snapshots/history/2026-06-30/23.json",
     ]);
+  });
+});
+
+describe("history pruning, every desk", () => {
+  it("prunes the crypto desk's history too, by the same rule", () => {
+    const blobs = [
+      { pathname: "snapshots/crypto/history/2026-06-30/23.json" },
+      { pathname: "snapshots/crypto/history/2026-07-01/00.json" },
+      { pathname: "snapshots/crypto/latest.json" },
+      { pathname: "snapshots/crypto/history/not-a-date/01.json" },
+      { pathname: "elsewhere/snapshots/history/2026-01-01/00.json" },
+    ];
+    expect(historyToPrune(blobs, at("2026-09-29T05:00:00Z")).map((b) => b.pathname)).toEqual([
+      "snapshots/crypto/history/2026-06-30/23.json",
+    ]);
+  });
+
+  it("can prune under every desk's history prefix", () => {
+    for (const paths of Object.values(DESK_PATHS)) {
+      const old = [{ pathname: `${paths.history}2026-01-01/00.json` }];
+      expect(historyToPrune(old, at("2026-09-29T05:00:00Z")), paths.history).toHaveLength(1);
+    }
   });
 });
 
