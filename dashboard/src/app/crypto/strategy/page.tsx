@@ -1,5 +1,6 @@
 import { Calculator, History, ScrollText, ShieldX } from "lucide-react";
 import { NoCryptoSnapshot } from "@/components/crypto/panels";
+import { TradeResultsPanel } from "@/components/crypto/tournament";
 import { Empty } from "@/components/empty";
 import { KeyValues } from "@/components/kv";
 import { Meter } from "@/components/meter";
@@ -10,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { code, items, moneyOf, type Crypto } from "@/lib/crypto";
 import { fracPct, num, pct, rMult, signed, zoned } from "@/lib/format";
 import { loadCryptoSnapshot } from "@/lib/snapshot";
+import { tournament } from "@/lib/tournament";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Crypto strategy" };
@@ -26,6 +28,7 @@ export default async function CryptoStrategyPage() {
         <NoCryptoSnapshot status={result.status} />
       ) : (
         <>
+          <TournamentResults s={result.snapshot} />
           <div className="grid gap-5 lg:grid-cols-2">
             <RulesPanel s={result.snapshot} />
             <EconomicsPanel s={result.snapshot} />
@@ -36,6 +39,12 @@ export default async function CryptoStrategyPage() {
       )}
     </>
   );
+}
+
+/** The tournament's closed trades as charts. Shown once the host publishes the sleeves. */
+function TournamentResults({ s }: { s: Crypto }) {
+  const t = tournament(s);
+  return t.available ? <TradeResultsPanel t={t} /> : null;
 }
 
 function RulesPanel({ s }: { s: Crypto }) {

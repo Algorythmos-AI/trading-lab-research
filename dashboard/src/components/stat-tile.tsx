@@ -40,7 +40,7 @@ export function StatTile({
         {Icon ? <Icon aria-hidden className={cn("size-3.5 shrink-0", TONE_TEXT[tone])} /> : null}
         <span className="truncate">{label}</span>
       </p>
-      <p className="mt-1 font-mono text-xl leading-tight font-semibold tracking-tight break-words">{value}</p>
+      <p className="mt-1 font-mono text-[1.0625rem] leading-tight font-semibold tracking-tight break-words sm:text-xl">{value}</p>
       {hint ? <p className="text-muted-foreground mt-1 text-xs leading-snug">{hint}</p> : null}
     </div>
   );
