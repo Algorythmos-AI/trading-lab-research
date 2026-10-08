@@ -494,13 +494,103 @@
   "since": "2026-09-30T20:00:40+00:00"
  },
  "learning": {
-  "lineages_started": 1,
+  "events": [
+   {
+    "event": "lineage",
+    "lineage": "m1:C=0.1",
+    "t": "2026-09-25T20:00:00+00:00",
+    "version": "m1-20260925-fixture0"
+   },
+   {
+    "event": "checkpoint",
+    "lineage": "m1:C=0.1",
+    "t": "2026-09-30T20:00:00+00:00",
+    "version": "m1-20260925-fixture0"
+   }
+  ],
+  "limits": {
+   "alpha": 0.05,
+   "cutoff_percentile": 40.0,
+   "demotion_window_signals": 120,
+   "drift_inputs": 3,
+   "drift_psi": 0.25,
+   "half_size_below_percentile": 60.0,
+   "max_model_age_days": 14.0
+  },
+  "lineages": [
+   {
+    "checkpoints": 1,
+    "finished": 74,
+    "in_force": true,
+    "lineage": "m1:C=0.1",
+    "since": "2026-09-25T20:00:00+00:00",
+    "state": "shadow"
+   },
+   {
+    "checkpoints": 0,
+    "finished": 12,
+    "in_force": false,
+    "lineage": "m2:n_estimators=100,num_leaves=4",
+    "since": "2026-09-18T20:00:00+00:00",
+    "state": "shadow"
+   }
+  ],
+  "lineages_started": 2,
   "model": {
+   "age_days": 7.0,
+   "by_sleeve": {
+    "break": {
+     "mean_r": -0.118,
+     "n": 3644
+    },
+    "dip": {
+     "mean_r": -0.102,
+     "n": 1127
+    },
+    "trend": {
+     "mean_r": -0.071,
+     "n": 4102
+    }
+   },
+   "calib_a": 0.94,
+   "calib_b": -0.03,
    "checkpoint_signals": 60,
    "checkpoints": 1,
+   "cutoff": 0.31,
    "drift_inputs": [],
+   "drift_psi": {},
    "drifted": false,
+   "features": "fixture00001",
    "finished": 74,
+   "half_below": 0.36,
+   "inputs": 3,
+   "kind": "logistic",
+   "leans_on": [
+    {
+     "input": "btc_above_sma50",
+     "weight": 0.31
+    },
+    {
+     "input": "stop_pct",
+     "weight": -0.22
+    },
+    {
+     "input": "volume_ratio",
+     "weight": 0.12
+    },
+    {
+     "input": "rsi",
+     "weight": -0.07
+    },
+    {
+     "input": "is_trend",
+     "weight": 0.05
+    },
+    {
+     "input": "hour_utc",
+     "weight": 0.01
+    }
+   ],
    "lineage": "m1:C=0.1",
    "looks": [
     {
@@ -517,10 +607,108 @@
    "max_checkpoints": 6,
    "next_checkpoint": 120,
    "score_psi": 0.062,
+   "sha": "f1x7ure0f1x7",
+   "since": "2026-09-25T20:00:00+00:00",
    "state": "shadow",
    "trained_at": "2026-09-25T20:00:00+00:00",
    "version": "m1-20260925-fixture0"
   },
+  "planned": [
+   "forecaster",
+   "m3",
+   "regime"
+  ],
+  "registry": [
+   {
+    "examples": 8790,
+    "in_force": false,
+    "kind": "lightgbm",
+    "lineage": "m2:n_estimators=100,num_leaves=4",
+    "trained_at": "2026-09-18T20:00:00+00:00",
+    "version": "m2-20260918-fixture9"
+   },
+   {
+    "examples": 8873,
+    "in_force": true,
+    "kind": "logistic",
+    "lineage": "m1:C=0.1",
+    "trained_at": "2026-09-25T20:00:00+00:00",
+    "version": "m1-20260925-fixture0"
+   }
+  ],
+  "scores": {
+   "bins": [
+    {
+     "halved": 0,
+     "hi": 0.25,
+     "kept": 0,
+     "lo": 0.2,
+     "skipped": 1
+    },
+    {
+     "halved": 0,
+     "hi": 0.3,
+     "kept": 0,
+     "lo": 0.25,
+     "skipped": 1
+    },
+    {
+     "halved": 1,
+     "hi": 0.35,
+     "kept": 0,
+     "lo": 0.3,
+     "skipped": 0
+    },
+    {
+     "halved": 0,
+     "hi": 0.4,
+     "kept": 1,
+     "lo": 0.35,
+     "skipped": 0
+    },
+    {
+     "halved": 0,
+     "hi": 0.45,
+     "kept": 2,
+     "lo": 0.4,
+     "skipped": 0
+    }
+   ],
+   "cutoff": 0.31,
+   "half_below": 0.36
+  },
+  "series": [
+   {
+    "kept": 1.9,
+    "n": 1,
+    "skipped": 0.0,
+    "t": "2026-09-28T09:53:20+00:00"
+   },
+   {
+    "kept": 3.9,
+    "n": 2,
+    "skipped": 0.0,
+    "t": "2026-09-29T01:53:20+00:00"
+   },
+   {
+    "kept": 3.9,
+    "n": 3,
+    "skipped": -1.0,
+    "t": "2026-09-29T17:53:20+00:00"
+   },
+   {
+    "kept": 2.9,
+    "n": 4,
+    "skipped": -1.0,
+    "t": "2026-09-30T09:53:20+00:00"
+   },
+   {
+    "kept": 2.9,
+    "n": 5,
+    "skipped": -0.4,
+    "t": "2026-10-01T01:53:20+00:00"
+   }
+  ],
   "signals": {
    "finished": 5,
    "kept": 3,
@@ -537,8 +725,10 @@
   "training": {
    "attempt": 3,
    "chosen": "m1",
+   "data_hash": "fixture0c0ffee00",
    "decision": "DEC-0018",
    "effective_n": 2005.8,
+   "end": "2026-09-25T20:00:00+00:00",
    "examples": 8873,
    "leans_on": [
     {
@@ -564,6 +754,7 @@
      "kept": 7408,
      "kept_mean_r": -0.147,
      "log_loss": 0.5914,
+     "log_loss_se": 0.0225,
      "name": "m0",
      "settings": null,
      "spread": null
@@ -576,6 +767,7 @@
      "kept": 4313,
      "kept_mean_r": -0.103,
      "log_loss": 0.5868,
+     "log_loss_se": 0.0225,
      "name": "m1",
      "settings": "C=0.1",
      "spread": 0.104
@@ -588,12 +780,14 @@
      "kept": 4666,
      "kept_mean_r": -0.182,
      "log_loss": 0.6077,
+     "log_loss_se": 0.0225,
      "name": "m2",
      "settings": "n_estimators=300, num_leaves=4",
      "spread": -0.096
     }
    ],
    "pairs": 30,
+   "start": "2024-09-25T20:00:00+00:00",
    "t": "2026-09-25T20:00:00+00:00",
    "win_rate": 0.344
   }

@@ -2201,6 +2201,146 @@
                 }
               },
               "maxItems": 2000
+            },
+            "kind": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "sha": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "features": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "inputs": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "cutoff": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "half_below": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "calib_a": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "calib_b": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "age_days": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "since": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "drift_psi": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "propertyNames": {
+                "pattern": "^[\\w.:+\\- /|]{1,64}$"
+              },
+              "additionalProperties": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "maxProperties": 200
+            },
+            "by_sleeve": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "propertyNames": {
+                "pattern": "^[\\w.:+\\- /|]{1,64}$"
+              },
+              "additionalProperties": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "n": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "mean_r": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              "maxProperties": 200
+            },
+            "leans_on": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "input": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  },
+                  "weight": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              "maxItems": 2000
             }
           }
         },
@@ -2268,6 +2408,27 @@
                 "null"
               ]
             },
+            "start": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "end": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "data_hash": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
             "models": {
               "type": [
                 "array",
@@ -2295,6 +2456,12 @@
                     "maxLength": 200
                   },
                   "log_loss": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "log_loss_se": {
                     "type": [
                       "number",
                       "null"
@@ -2445,6 +2612,334 @@
               ]
             }
           }
+        },
+        "limits": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "drift_psi": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "drift_inputs": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "max_model_age_days": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "demotion_window_signals": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "alpha": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "cutoff_percentile": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "half_size_below_percentile": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          }
+        },
+        "scores": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "cutoff": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "half_below": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "bins": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "lo": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "hi": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "kept": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "halved": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "skipped": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              "maxItems": 2000
+            }
+          }
+        },
+        "series": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "t": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "n": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "kept": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "skipped": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          },
+          "maxItems": 2000
+        },
+        "events": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "t": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "event": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "lineage": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "version": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              }
+            }
+          },
+          "maxItems": 2000
+        },
+        "lineages": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "lineage": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "state": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "checkpoints": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "finished": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "since": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "in_force": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              }
+            }
+          },
+          "maxItems": 2000
+        },
+        "registry": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "version": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "kind": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "lineage": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "trained_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "examples": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "in_force": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              }
+            }
+          },
+          "maxItems": 2000
+        },
+        "planned": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "maxItems": 2000
         }
       }
     }
