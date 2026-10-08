@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { Crypto } from "@/lib/crypto";
-import { inputLabel, learning, learningLine, modelLabel } from "@/lib/learning";
+import { inputLabel, isLearningAlert, learning, learningAlertLabel, learningLine, modelLabel, modelRoad } from "@/lib/learning";
 
 const fixture = (): Crypto => JSON.parse(readFileSync(new URL("./fixtures/crypto.v1.json", import.meta.url), "utf8")) as Crypto;
 
@@ -56,5 +56,29 @@ describe("the crypto model", () => {
     const older = learning({ ...f, learning: undefined } as Crypto);
     expect([older.available, older.model, older.training]).toEqual([false, null, null]);
     expect(learningLine(older)).toBe("The model has not published yet.");
+  });
+
+  it("places the model on the road from training to acting", () => {
+    const f = fixture();
+    const states = (c: Crypto) => modelRoad(learning(c)).map((x) => x.state);
+    expect(states(f)).toEqual(["done", "done", "current", "todo", "todo"]);
+    const none = { ...f, learning: { ...f.learning, model: null, training: { ...f.learning!.training, chosen: null } } } as Crypto;
+    expect(states(none)).toEqual(["done", "failed", "todo", "todo", "todo"]);
+    const fresh = { ...f, learning: { switch: "on", model: null, training: null, signals: null } } as Crypto;
+    expect(states(fresh)).toEqual(["current", "todo", "todo", "todo", "todo"]);
+    const inState = (state: string) => ({ ...f, learning: { ...f.learning, model: { ...f.learning!.model, state } } }) as Crypto;
+    expect(states(inState("acting"))).toEqual(["done", "done", "done", "done", "current"]);
+    expect(modelRoad(learning(inState("demoted"))).at(-1)).toEqual({ key: "acting", label: "Demoted", state: "failed" });
+    expect(modelRoad(learning(inState("suspended"))).at(-1)).toEqual({ key: "acting", label: "Suspended", state: "paused" });
+  });
+
+  it("measures each model's forecast error against the baseline, and knows the model's own alerts", () => {
+    const lines = learning(fixture()).training!.lines;
+    expect(lines.map((x) => (x.logLossDelta === null ? null : Number(x.logLossDelta.toFixed(4))))).toEqual([null, -0.0046, 0.0163]);
+    expect(isLearningAlert("crypto:scorer-failed")).toBe(true);
+    expect(isLearningAlert("crypto:model-demoted")).toBe(true);
+    expect(isLearningAlert("crypto:stale-bars")).toBe(false);
+    expect(learningAlertLabel("crypto:learn-train-failed")).toBe("The weekly training failed");
+    expect(learningAlertLabel("crypto:model-returned")).toBe("crypto:model-returned");
   });
 });
