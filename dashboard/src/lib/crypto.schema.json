@@ -1987,6 +1987,24 @@
                   "number",
                   "null"
                 ]
+              },
+              "cost_mean_r": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "gross_mean_r": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "gross_se_r": {
+                "type": [
+                  "number",
+                  "null"
+                ]
               }
             }
           },
