@@ -36,7 +36,7 @@ export const DENY_PATHS: readonly string[] = [
   "spec.title",
   "spec.open",
 ];
-export const DENY_KEYS: ReadonlySet<string> = new Set(["headlines", "review_url", "subject", "statement"]);
+export const DENY_KEYS: ReadonlySet<string> = new Set(["headlines", "review_url", "subject", "statement", "setup", "catalyst_headline", "catalyst_category"]);
 
 const denyPathSet = new Set(DENY_PATHS);
 
