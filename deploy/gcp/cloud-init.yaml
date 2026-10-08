@@ -13,6 +13,7 @@ packages:
   - ca-certificates
   - chrony
   - restic
+  - libgomp1          # OpenMP, which LightGBM in .venv-ml loads at import (DEC-0016)
   - gh                # the collector's GitHub sources and the weekly evidence
   - time              # /usr/bin/time -v for memory measurements
   - systemd-zram-generator

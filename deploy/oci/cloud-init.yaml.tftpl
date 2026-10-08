@@ -12,6 +12,7 @@ packages:
   - ca-certificates
   - chrony
   - restic
+  - libgomp1          # OpenMP, which LightGBM in .venv-ml loads at import (DEC-0016)
   - systemd-zram-generator
   - unattended-upgrades
   - netfilter-persistent

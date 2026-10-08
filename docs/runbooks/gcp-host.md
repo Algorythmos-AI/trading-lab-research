@@ -84,6 +84,11 @@ instance, run the create command in step 1 again, then step 2 again. A primary h
 ([backups-and-lease.md](backups-and-lease.md)).
 
 ## Primary host (cutover v2, 2026-10)
+
+The machine-learning environment (`.venv-ml`) needs the system's OpenMP library, which a wheel cannot carry:
+`sudo apt-get install -y libgomp1` (first boot installs it; a host built before 2026-10-08 needs it once). A
+deploy never swaps in an environment that cannot import its libraries, and `make sync-ml` says whether the live
+one can.
 The VM is the only host that runs jobs. The Mac is a console for writing code and running these commands.
 
 | | |
