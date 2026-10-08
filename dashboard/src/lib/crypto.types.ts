@@ -409,6 +409,23 @@ export interface CryptoSnapshot {
         } | null)[]
       | null;
   } | null;
+  desk?: {
+    one_position_per_coin?: boolean | null;
+    max_open_risk_pct?: number | null;
+    books?: number | null;
+    positions?: number | null;
+    /**
+     * @maxItems 2000
+     */
+    coins?: (string | null)[] | null;
+    equity?: number | null;
+    open_risk?: number | null;
+    open_risk_pct?: number | null;
+    refused_coin?: number | null;
+    refused_risk?: number | null;
+    refused_coin_7d?: number | null;
+    refused_risk_7d?: number | null;
+  } | null;
   learning?: {
     switch?: string | null;
     lineages_started?: number | null;

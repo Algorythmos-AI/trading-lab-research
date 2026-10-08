@@ -106,4 +106,16 @@ describe("the crypto tournament", () => {
     expect([older.available, older.rows]).toEqual([false, []]);
     expect(challengersLine(older)).toBe("The challengers have not published yet.");
   });
+
+  it("carries the desk-wide limits and names their refusals in plain words", () => {
+    const d = fixture().desk!;
+    expect([d.one_position_per_coin, d.max_open_risk_pct, d.books]).toEqual([true, 3, 4]);
+    expect(d.coins).toEqual(["XRP/USD"]);
+    expect(d.open_risk_pct!).toBeGreaterThan(0);
+    expect(d.open_risk_pct!).toBeLessThan(3);
+    expect([d.refused_coin, d.refused_coin_7d, d.refused_risk]).toEqual([1, 1, 0]);
+    expect(code("desk_coin")).toBe("another book of the tournament already holds this coin");
+    expect(code("desk_risk")).toBe("the desk's total open risk would pass its cap");
+    expect(code("model_skip")).toBe("the model scored it below its cut-off");
+  });
 });
