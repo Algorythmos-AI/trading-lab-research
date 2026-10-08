@@ -307,7 +307,7 @@ export function ChallengersPanel({ c }: { c: Challengers }) {
     <Panel
       title="Challengers"
       icon={FlaskConical}
-      means="New strategy ideas the desk tries by itself: at most two a week, each a variation of the three rules. An idea is written down before it is tested on two years of history after costs. Only one that passes joins the tournament, on its own paper book; one that fails never trades. Every idea tried raises the bar for the next, so luck is not mistaken for skill."
+      means="New strategy ideas the desk tries by itself: at most two a week, each a variation of the three rules. An idea is written down before it is tested on two years of history after costs. One that passes is then run once on the two years before that, which it was not chosen on, and must make money there too. Only then does it join the tournament, on its own paper book; one that fails never trades. Every idea tried raises the bar for the next, so luck is not mistaken for skill."
       action={<span className="text-muted-foreground text-xs">{challengersLine(c)}</span>}
     >
       <p className="text-muted-foreground mb-3 flex flex-wrap items-center gap-2 text-xs">
@@ -331,6 +331,7 @@ export function ChallengersPanel({ c }: { c: Challengers }) {
               <TableHead className="text-right">Avg R</TableHead>
               <TableHead className="text-right">Range at higher costs</TableHead>
               <TableHead className="text-right">Chance it is random</TableHead>
+              <TableHead className="text-right">Earlier two years</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -338,14 +339,14 @@ export function ChallengersPanel({ c }: { c: Challengers }) {
               const st = CHALLENGER_STATUS[r.status] ?? { tone: "neutral" as const, label: r.status };
               return (
                 <TableRow key={r.id}>
-                  <TableCell className="max-w-sm min-w-56 align-top whitespace-normal">
+                  <TableCell className="max-w-sm min-w-48 align-top whitespace-normal">
                     <span className="font-medium">{r.label}</span>
                     <span className="text-muted-foreground ml-2 text-xs">
                       {r.slot === "neighbour" ? `one step from ${sleeveLabel(r.of)}` : "drawn at random"}
                     </span>
                     <span className="text-muted-foreground block text-xs">{r.rules}</span>
                   </TableCell>
-                  <TableCell className="max-w-xs min-w-48 align-top whitespace-normal">
+                  <TableCell className="max-w-xs min-w-40 align-top whitespace-normal">
                     <StatusBadge tone={st.tone}>{st.label}</StatusBadge>
                     <span className="text-muted-foreground block text-xs">{challengerNote(r)}</span>
                   </TableCell>
@@ -360,6 +361,18 @@ export function ChallengersPanel({ c }: { c: Challengers }) {
                     {isNum(r.ciLow) && isNum(r.ciHigh) ? `${rMult(r.ciLow, 2)} to ${rMult(r.ciHigh, 2)}` : "—"}
                   </TableCell>
                   <TableCell className="text-right font-mono">{isNum(r.controlP) ? `${(r.controlP * 100).toFixed(1)}%` : "—"}</TableCell>
+                  <TableCell className="text-right whitespace-nowrap">
+                    {r.confirm ? (
+                      <>
+                        <span className={cn("font-mono", toneOf(r.confirm.meanR))}>{rMult(r.confirm.meanR, 3)}</span>
+                        <span className="text-muted-foreground block text-xs">
+                          {num(r.confirm.trades)} trades, {r.confirm.passed ? "held up" : "did not hold up"}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground">{r.status === "failed" ? "Not run" : "—"}</span>
+                    )}
+                  </TableCell>
                 </TableRow>
               );
             })}

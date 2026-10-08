@@ -406,6 +406,10 @@ export interface CryptoSnapshot {
           admitted?: string | null;
           retired?: string | null;
           retired_why?: string | null;
+          confirm_passed?: boolean | null;
+          confirm_trades?: number | null;
+          confirm_mean_r?: number | null;
+          confirm_profit_factor?: number | null;
         } | null)[]
       | null;
   } | null;

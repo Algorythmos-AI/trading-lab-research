@@ -1906,6 +1906,30 @@
                   "null"
                 ],
                 "maxLength": 200
+              },
+              "confirm_passed": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "confirm_trades": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "confirm_mean_r": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "confirm_profit_factor": {
+                "type": [
+                  "number",
+                  "null"
+                ]
               }
             }
           },
