@@ -1127,6 +1127,17 @@
    ],
    "exposure": 2510.4166666506,
    "fees": 61.400000000000006,
+   "funnel": {
+    "entered": 4,
+    "fired": 5,
+    "refused": [
+     {
+      "code": "stop_too_tight",
+      "count": 1
+     }
+    ],
+    "since": "2026-09-27T20:00:10+00:00"
+   },
    "latched": false,
    "losses": 1,
    "max_dd": -120.8,
@@ -1316,6 +1327,21 @@
    ],
    "exposure": 0.0,
    "fees": 40.400000000000006,
+   "funnel": {
+    "entered": 2,
+    "fired": 4,
+    "refused": [
+     {
+      "code": "desk_coin",
+      "count": 1
+     },
+     {
+      "code": "stop_too_tight",
+      "count": 1
+     }
+    ],
+    "since": "2026-09-27T20:00:10+00:00"
+   },
    "latched": false,
    "losses": 1,
    "max_dd": -120.8,
@@ -1474,6 +1500,17 @@
    ],
    "exposure": 0.0,
    "fees": null,
+   "funnel": {
+    "entered": 0,
+    "fired": 1,
+    "refused": [
+     {
+      "code": "stop_too_tight",
+      "count": 1
+     }
+    ],
+    "since": "2026-10-02T20:00:10+00:00"
+   },
    "latched": false,
    "losses": 0,
    "max_dd": null,
@@ -1587,6 +1624,7 @@
    ],
    "exposure": 0.0,
    "fees": null,
+   "funnel": null,
    "latched": false,
    "losses": 0,
    "max_dd": null,

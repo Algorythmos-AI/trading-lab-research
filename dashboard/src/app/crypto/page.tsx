@@ -1,3 +1,4 @@
+import { DrawdownPanel, MonthlyReturnsPanel } from "@/components/crypto/performance";
 import { Activity, Gauge, LineChart, ListChecks } from "lucide-react";
 import { CryptoKillNotice, NoCryptoSnapshot } from "@/components/crypto/panels";
 import { LearningCard } from "@/components/crypto/learning";
@@ -69,6 +70,10 @@ function TournamentPanels({ s }: { s: Crypto }) {
     <>
       <TournamentTiles s={s} t={t} />
       <EquityLinesPanel s={s} />
+      <div className="grid gap-5 lg:grid-cols-2">
+        <DrawdownPanel s={s} />
+        <MonthlyReturnsPanel s={s} />
+      </div>
       <TournamentBoard s={s} t={t} />
       {l.available ? <LearningCard l={l} /> : null}
       <SleevePositions s={s} t={t} />

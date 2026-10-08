@@ -33,3 +33,5 @@ node_modules/
 .next/
 .vercel/
 *.tsbuildinfo
+# a symlink to a shared install, when the disk is short (a real folder is already ignored by node_modules/)
+dashboard/node_modules

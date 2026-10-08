@@ -1593,6 +1593,63 @@
             },
             "maxItems": 2000
           },
+          "funnel": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "since": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "fired": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "entered": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "refused": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "maxLength": 200
+                    },
+                    "count": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    }
+                  }
+                },
+                "maxItems": 2000
+              }
+            }
+          },
           "why_not": {
             "type": [
               "array",

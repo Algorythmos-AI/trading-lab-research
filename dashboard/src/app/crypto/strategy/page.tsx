@@ -1,5 +1,6 @@
 import { Calculator, History, ScrollText, ShieldX } from "lucide-react";
 import { NoCryptoSnapshot } from "@/components/crypto/panels";
+import { SignalFunnelPanel } from "@/components/crypto/performance";
 import { TradeResultsPanel } from "@/components/crypto/tournament";
 import { Empty } from "@/components/empty";
 import { KeyValues } from "@/components/kv";
@@ -44,7 +45,12 @@ export default async function CryptoStrategyPage() {
 /** The tournament's closed trades as charts. Shown once the host publishes the sleeves. */
 function TournamentResults({ s }: { s: Crypto }) {
   const t = tournament(s);
-  return t.available ? <TradeResultsPanel t={t} /> : null;
+  return t.available ? (
+    <>
+      <TradeResultsPanel t={t} />
+      <SignalFunnelPanel s={s} />
+    </>
+  ) : null;
 }
 
 function RulesPanel({ s }: { s: Crypto }) {
