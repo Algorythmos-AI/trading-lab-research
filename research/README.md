@@ -4,6 +4,8 @@ Every hypothesis, experiment, decision, strategy version and lesson is a file he
 Nothing about strategy parameters changes without an entry. This is also the **global trial registry**
 used for the Deflated Sharpe calculation (every experiment run counts as a trial).
 
+Where each desk stands, in one page: [`G1_SUMMARY.md`](G1_SUMMARY.md) (stocks) and [`CRYPTO_SUMMARY.md`](CRYPTO_SUMMARY.md) (crypto).
+
 ```
 research/
  ├── hypotheses/          HYP-NNNN-<slug>.yaml   what we believe and why (with KB evidence)

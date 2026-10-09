@@ -83,6 +83,33 @@ Rebuilds come from code. Turn off deletion protection
 instance, run the create command in step 1 again, then step 2 again. A primary host restores `var/` from R2 first
 ([backups-and-lease.md](backups-and-lease.md)).
 
+## Deploying (owner)
+
+A deploy is one command on the host, run as the job user. It checks the gate and the commit's CI, runs the
+full test suite in a throwaway worktree, then fast-forwards, syncs the environment and smoke-tests, and rolls
+itself back if the smoke test fails.
+
+```
+gcloud --configuration=algo-trading compute ssh trading-lab-host --zone us-east1-b --tunnel-through-iap
+sudo -u wt nohup /usr/local/bin/wt-deploy deploy > /tmp/wt-deploy.log 2>&1 &
+tail -f /tmp/wt-deploy.log
+```
+
+- **Run it detached, as above.** The staged tests take several minutes and an idle IAP tunnel drops before
+  they finish; a dropped session kills a deploy started in the foreground. `tail -f` can be stopped and
+  started again without touching the deploy.
+- **"Deploy gate CLOSED: inside the trading window"** means it is between 07:00 and 18:00 New York time on a
+  session day (two hours after the close), or a trading job starts within the hour. Nothing is wrong; run it
+  after 18:00 New York. `sudo -u wt /usr/local/bin/wt-deploy gate` says whether it is open.
+- **"Refusing: ... is not green (test: pending)"** means the commit's checks are still running on GitHub.
+  Wait for them and run it again. A deploy needs `test` and `ml`.
+- **"Nothing deployed: already at ..."** means the host is on that commit.
+- **It is done** when the log shows `Deployed <from> -> <to>`. If it then prints "units changed", run
+  `sudo wt-install-units`.
+- **Afterwards:** `sudo -u wt /usr/local/bin/wt-deploy preflight` should be all `[ok]`, and
+  `sudo -u wt make -C /home/wt/trading sync-ml` should print `ML environment: current` and nothing else.
+- **To go back:** [rollback](rollback.md).
+
 ## Primary host (cutover v2, 2026-10)
 
 The machine-learning environment (`.venv-ml`) needs the system's OpenMP library, which a wheel cannot carry:
