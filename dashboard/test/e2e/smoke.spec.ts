@@ -65,7 +65,8 @@ test("pages carry a nonce CSP and still run their scripts", async ({ page }) => 
 test("the options page shows the board, the rules and a ladder per name", async ({ page }) => {
   await page.goto("/options");
   await expect(page.getByText("Levels for Mon 12 Oct")).toBeVisible();
-  await expect(page.getByRole("link", { name: "SPY", exact: true })).toBeVisible();
+  // The board and the live panel both link SPY to its ladder; the live one appears once /api/quote answers.
+  await expect(page.getByRole("link", { name: "SPY", exact: true }).first()).toBeVisible();
   await expect(page.getByText("No rule is proven yet", { exact: false })).toBeVisible();
   await expect(page.getByRole("list", { name: "SPY zones, highest first" })).toBeAttached();
   // The live panel polls /api/quote; fixture mode answers with SPY 0.3 ATR above its close at 11:00 New York on the
