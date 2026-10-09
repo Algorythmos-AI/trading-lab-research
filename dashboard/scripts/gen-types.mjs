@@ -1,6 +1,7 @@
 // Regenerates the TypeScript types from the Python-owned contracts:
 //   src/lib/snapshot.schema.json -> src/lib/snapshot.types.ts   (root type Snapshot)
 //   src/lib/crypto.schema.json   -> src/lib/crypto.types.ts     (root type CryptoSnapshot)
+//   src/lib/radar.schema.json    -> src/lib/radar.types.ts      (root type RadarEdition; owned here, not by Python)
 // Run with `pnpm gen:types` after `make schema` changes a schema. The output is committed.
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -12,6 +13,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 for (const [file, out, name] of [
   ["snapshot.schema.json", "snapshot.types.ts", "Snapshot"],
   ["crypto.schema.json", "crypto.types.ts", "CryptoSnapshot"],
+  ["radar.schema.json", "radar.types.ts", "RadarEdition"],
 ]) {
   const schema = JSON.parse(readFileSync(join(root, "src/lib", file), "utf8"));
   // Name the root type explicitly instead of deriving it from the long schema title.

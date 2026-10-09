@@ -1,0 +1,312 @@
+{
+ "schema": "stocksdelta/radar",
+ "schema_version": 1,
+ "run_id": "radar-2026-09-21-fixture",
+ "as_of": "2026-09-21T09:00:00+00:00",
+ "edition_date": "2026-09-21",
+ "title": "2026-09-21 | PRE-MARKET RADAR",
+ "prices_as_of": "Fri 18 Sep 2026 close, IBKR",
+ "report_url": "https://claude.ai/artifact/WGkVFfLqzjjm5oXKKC4r2p",
+ "summary": "Six of twelve watchlist names are sitting on a technical level going into Monday's US open. AMZN and IBKR are the cleanest tests; TSLA is near a level but inside a downtrend. Research, not a buy list; no orders placed.",
+ "regime": "The Fed raised rates 25bp on 16 Sep to 3.75 to 4.00%; the 10-year yield pushed above 5%. A rotation, not a broad flush.",
+ "footnote": "Levels are weekly swing lows plus 10, 20 and 40-week moving averages from IBKR bars (Fri 18 Sep close). 13F data is a 30 June snapshot filed mid-August.",
+ "lists": [
+  {
+   "name": "SUPPORT PLAYS",
+   "ibkr_id": "102",
+   "note": "Price within about 4% above a real support level.",
+   "symbols": [
+    "AMZN",
+    "GOOGL",
+    "IBKR"
+   ]
+  },
+  {
+   "name": "MEGA CAP OPTIONS",
+   "ibkr_id": "104",
+   "note": "The mega-caps plus SPY.",
+   "symbols": [
+    "SPY",
+    "AMZN",
+    "TSLA"
+   ]
+  },
+  {
+   "name": "INSTITUTIONAL CONVICTION",
+   "ibkr_id": "106",
+   "note": "Confirmed fund buying.",
+   "symbols": [
+    "SPCX",
+    "GOOGL"
+   ]
+  }
+ ],
+ "tickers": [
+  {
+   "symbol": "AMZN",
+   "price": 253.71,
+   "change_pct": -1.2,
+   "support": 244.3,
+   "support_2": 241.07,
+   "resistance": 255.28,
+   "high_52w": 274.48,
+   "to_support_pct": -3.71,
+   "to_resistance_pct": 0.6,
+   "off_high_pct": -7.6,
+   "ma10": 258.21,
+   "ma20": 255.28,
+   "ma40": 241.07,
+   "rs13": -2.1,
+   "rs26": 1.4,
+   "volume_ratio": 1.18,
+   "above_mas": 1,
+   "stance": "Testing support",
+   "tag": null,
+   "lists": [
+    "SUPPORT PLAYS",
+    "MEGA CAP OPTIONS"
+   ],
+   "why": "First real test of the rising trend since April; invalidation below the 244 shelf.",
+   "notes": [
+    {
+     "label": "Technicals",
+     "text": "Lost both its 10-week (258.21) and 20-week (255.28) moving averages and is sitting on the 244 to 250 shelf, with the 40-week MA at 241.07 just underneath.",
+     "source": "IBKR weekly bars",
+     "date": "2026-09-18",
+     "confidence": "High"
+    },
+    {
+     "label": "Managers",
+     "text": "Q2 13Fs were split: nine funds bought, nine sold. No consensus.",
+     "source": "Q2 13F filings",
+     "date": "2026-08-18",
+     "confidence": "Medium"
+    },
+    {
+     "label": "Fundamental",
+     "text": "AWS grew 36.7% year on year in Q2 on a $169bn run rate with a $496bn backlog; about $220bn of 2026 capex keeps free cash flow under pressure.",
+     "source": "Trefis",
+     "date": "2026-09-16",
+     "confidence": "Medium"
+    }
+   ],
+   "company": "Amazon.com"
+  },
+  {
+   "symbol": "GOOGL",
+   "price": 349.54,
+   "change_pct": 2.0,
+   "support": 338.22,
+   "support_2": 327.74,
+   "resistance": 371.1,
+   "high_52w": 400.8,
+   "to_support_pct": -3.24,
+   "to_resistance_pct": 6.2,
+   "off_high_pct": -12.8,
+   "ma10": null,
+   "ma20": null,
+   "ma40": 338.22,
+   "rs13": -4.0,
+   "rs26": 6.1,
+   "volume_ratio": 1.31,
+   "above_mas": 2,
+   "stance": "Held support",
+   "tag": null,
+   "lists": [
+    "SUPPORT PLAYS",
+    "INSTITUTIONAL CONVICTION"
+   ],
+   "why": "Already tested 327.74 and reclaimed the 40-week MA; confirmation rather than entry.",
+   "notes": [
+    {
+     "label": "Managers",
+     "text": "Berkshire added 48.1m shares (about $17bn); Third Point raised its stake 489%; eleven institutions added.",
+     "source": "Q2 13F filings",
+     "date": "2026-08-18",
+     "confidence": "High"
+    },
+    {
+     "label": "The catch",
+     "text": "Crowding cuts both ways: more sellers stand behind a level break. 13F data is up to eleven weeks stale.",
+     "source": "Interpretation",
+     "date": "2026-09-21",
+     "confidence": "Low"
+    }
+   ],
+   "company": "Alphabet"
+  },
+  {
+   "symbol": "IBKR",
+   "price": 90.69,
+   "change_pct": 0.4,
+   "support": 84.96,
+   "support_2": 80.75,
+   "resistance": 96.0,
+   "high_52w": 96.0,
+   "to_support_pct": -6.32,
+   "to_resistance_pct": 5.9,
+   "off_high_pct": -5.5,
+   "ma10": null,
+   "ma20": null,
+   "ma40": 80.75,
+   "rs13": 3.2,
+   "rs26": 8.8,
+   "volume_ratio": 1.05,
+   "above_mas": 2,
+   "stance": "Between levels",
+   "tag": null,
+   "lists": [
+    "SUPPORT PLAYS"
+   ],
+   "why": "Sitting on its 20-week MA; the 85 to 86 band is a clean invalidation level.",
+   "notes": [
+    {
+     "label": "Technicals",
+     "text": "Spiked to 84.96 intraday on Thursday and closed 88.38, then recovered Friday. The uptrend is intact with the 40-week MA at 80.75.",
+     "source": "IBKR daily bars",
+     "date": "2026-09-18",
+     "confidence": "High"
+    },
+    {
+     "label": "Rates",
+     "text": "A higher policy rate is a revenue tailwind for a broker earning interest on client cash. Inference from the business model.",
+     "source": "Inference",
+     "date": "2026-09-21",
+     "confidence": "Low"
+    },
+    {
+     "label": "Street",
+     "text": "Consensus Buy, mean target $105.74 across 14 analysts, range $70 to $121; Hold ratings rose from one to four since April.",
+     "source": "stockanalysis.com",
+     "date": "2026-09-18",
+     "confidence": "Medium"
+    }
+   ],
+   "company": "Interactive Brokers Group"
+  },
+  {
+   "symbol": "SPY",
+   "price": 761.69,
+   "change_pct": -0.2,
+   "support": 749.6,
+   "support_2": null,
+   "resistance": 776.34,
+   "high_52w": 776.34,
+   "to_support_pct": -1.59,
+   "to_resistance_pct": 1.9,
+   "off_high_pct": -1.9,
+   "ma10": 761.01,
+   "ma20": null,
+   "ma40": 712.4,
+   "rs13": 0.0,
+   "rs26": 0.0,
+   "volume_ratio": 0.97,
+   "above_mas": 3,
+   "stance": "Testing support",
+   "tag": null,
+   "lists": [
+    "MEGA CAP OPTIONS"
+   ],
+   "why": "Closed on its 10-week MA, 1.6% above the September swing low; it decides the rest.",
+   "notes": [
+    {
+     "label": "Positioning",
+     "text": "Hedge fund semiconductor exposure fell from a record 24% in June to 18% by late July; Goldman called it a healthy reset.",
+     "source": "Goldman Sachs",
+     "date": "2026-07-22",
+     "confidence": "Medium"
+    }
+   ],
+   "company": "S&P 500 ETF"
+  },
+  {
+   "symbol": "TSLA",
+   "price": 364.27,
+   "change_pct": -3.1,
+   "support": 354.05,
+   "support_2": 342.5,
+   "resistance": 396.4,
+   "high_52w": 481.2,
+   "to_support_pct": -2.81,
+   "to_resistance_pct": 8.8,
+   "off_high_pct": -24.3,
+   "ma10": null,
+   "ma20": null,
+   "ma40": 396.4,
+   "rs13": -11.2,
+   "rs26": -18.5,
+   "volume_ratio": 1.12,
+   "above_mas": 0,
+   "stance": "Downtrend",
+   "tag": "risk",
+   "lists": [
+    "MEGA CAP OPTIONS"
+   ],
+   "why": "Near a level but below its 40-week MA, so that line is resistance.",
+   "notes": [
+    {
+     "label": "Technicals",
+     "text": "Below its 40-week MA, so that line is resistance overhead. Nearest support is last week's low at 354.05, then about 342.50.",
+     "source": "IBKR weekly bars",
+     "date": "2026-09-18",
+     "confidence": "High"
+    }
+   ],
+   "company": "Tesla"
+  },
+  {
+   "symbol": "SPCX",
+   "price": 152.71,
+   "change_pct": 1.9,
+   "support": 142.87,
+   "support_2": null,
+   "resistance": null,
+   "high_52w": 225.64,
+   "to_support_pct": -6.44,
+   "to_resistance_pct": null,
+   "off_high_pct": -32.3,
+   "ma10": null,
+   "ma20": null,
+   "ma40": null,
+   "rs13": null,
+   "rs26": null,
+   "volume_ratio": null,
+   "above_mas": null,
+   "stance": "Held support",
+   "tag": "new",
+   "lists": [
+    "INSTITUTIONAL CONVICTION"
+   ],
+   "why": "Every one of nine institutions with a Q2 position added or initiated.",
+   "notes": [
+    {
+     "label": "Technicals",
+     "text": "Only about 14 weeks of trading. Six consecutive weeks of higher lows since the August crash; support is that rising sequence near 143.",
+     "source": "IBKR weekly bars",
+     "date": "2026-09-18",
+     "confidence": "Medium"
+    },
+    {
+     "label": "Managers",
+     "text": "All nine institutions with a disclosed Q2 position added or initiated, among them PIF, D1, Altimeter, Viking, Tiger and Appaloosa.",
+     "source": "Q2 13F filings",
+     "date": "2026-08-18",
+     "confidence": "Medium"
+    }
+   ],
+   "company": "Space Exploration Technologies Cl A"
+  }
+ ],
+ "avoid": [
+  {
+   "symbols": "AAPL",
+   "price": "336.13",
+   "why": "At its 52-week high with nothing below it for 17%."
+  },
+  {
+   "symbols": "PLTR",
+   "price": "177.64",
+   "why": "Far above every level after rebounding from 106."
+  }
+ ]
+}

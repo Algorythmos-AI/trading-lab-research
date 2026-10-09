@@ -33,3 +33,9 @@ export const DESK_LABEL: Record<DeskName, string> = { stocks: "Stocks", crypto: 
 export function deskOfPath(pathname: string): DeskName {
   return pathname === "/crypto" || pathname.startsWith("/crypto/") ? "crypto" : "stocks";
 }
+
+/** The pre-market radar's editions: the newest one, and one copy per edition date (a same-day refresh replaces it). */
+export const RADAR_PATHS = {
+  latest: "radar/latest.json",
+  history: "radar/editions/",
+} as const;

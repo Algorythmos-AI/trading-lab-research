@@ -2,6 +2,8 @@ import Ajv, { type ErrorObject } from "ajv";
 import type { DeskName } from "./desk";
 import cryptoSchema from "./crypto.schema.json";
 import type { CryptoSnapshot } from "./crypto.types";
+import radarSchema from "./radar.schema.json";
+import type { RadarEdition } from "./radar.types";
 import schema from "./snapshot.schema.json";
 import type { Snapshot } from "./types";
 
@@ -9,9 +11,17 @@ import type { Snapshot } from "./types";
 const ajv = new Ajv({ strict: false, allErrors: true });
 const validateSchema = ajv.compile<Snapshot>(schema);
 const validateCryptoSchema = ajv.compile<CryptoSnapshot>(cryptoSchema);
+const validateRadarSchema = ajv.compile<RadarEdition>(radarSchema);
 
 export const STOCKS_SCHEMA = "trading-lab/snapshot";
 export const CRYPTO_SCHEMA = "trading-lab/crypto-snapshot";
+/** The daily pre-market radar's edition: research notes, not a desk. It has no windows and no watchdog. */
+export const RADAR_SCHEMA = "stocksdelta/radar";
+
+/** True when the signed body names the radar schema. Like deskOf, the body decides, never a header. */
+export function isRadar(data: unknown): boolean {
+  return data !== null && typeof data === "object" && (data as { schema?: unknown }).schema === RADAR_SCHEMA;
+}
 
 /**
  * Which desk a body belongs to, from its own `schema` field. The field is inside the signed body, so the
@@ -100,4 +110,19 @@ export function validateCryptoSnapshot(data: unknown): CryptoValidationResult {
   if ((data as { schema?: unknown }).schema !== CRYPTO_SCHEMA) errors.push("/schema: not the crypto snapshot schema");
   if (errors.length > 0) return { ok: false, errors: errors.slice(0, MAX_ERRORS) };
   return { ok: true, snapshot: data as CryptoSnapshot };
+}
+
+export type RadarValidationResult = { ok: true; edition: RadarEdition } | { ok: false; errors: string[] };
+
+/** A radar edition: its own schema, the same denylist. */
+export function validateRadarEdition(data: unknown): RadarValidationResult {
+  if (data === null || typeof data !== "object" || Array.isArray(data)) {
+    return { ok: false, errors: ["/: must be an object"] };
+  }
+  const errors = findDenied(data).map((p) => `${p}: key is not allowed to be published`);
+  if (!validateRadarSchema(data)) {
+    errors.push(...(validateRadarSchema.errors ?? []).map(describe));
+  }
+  if (errors.length > 0) return { ok: false, errors: errors.slice(0, MAX_ERRORS) };
+  return { ok: true, edition: data as RadarEdition };
 }

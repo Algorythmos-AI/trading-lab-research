@@ -1,10 +1,10 @@
 import "server-only";
 import { HISTORY_PREFIX, PreconditionFailed, readForUpdate, writeText } from "./blob";
-import { DESK_PATHS } from "./desk";
+import { DESK_PATHS, RADAR_PATHS } from "./desk";
 import { verify } from "./hmac";
 import { logEvent } from "./log";
 import { parseTime } from "./freshness";
-import { deskOf, validateCryptoSnapshot, validateSnapshot } from "./validate";
+import { deskOf, isRadar, validateCryptoSnapshot, validateRadarEdition, validateSnapshot } from "./validate";
 
 export const MAX_BODY_BYTES = 3_500_000;
 
@@ -61,6 +61,12 @@ function currentMeta(text: string): { runId: string | null; asOf: number | null 
 export const DEFAULT_KEY_ID = "default";
 
 /**
+ * The key the pre-market radar signs with. It lives in a cloud research environment, not on a trading host, so
+ * it may only publish radar editions: a stocks or crypto snapshot signed with it is refused.
+ */
+export const RADAR_KEY_ID = "radar";
+
+/**
  * The secret for a key id. DASHBOARD_INGEST_KEYS is a JSON map {id: secret} (one key per host, ADR 0004);
  * DASHBOARD_INGEST_SECRET is the "default" key. Unknown ids get nothing, so they fail the HMAC check.
  */
@@ -74,6 +80,7 @@ export function secretFor(keyId: string, env: Record<string, string | undefined>
       // a malformed map is ignored: the default key still works
     }
   }
+  if (keyId === RADAR_KEY_ID) return env.RADAR_INGEST_SECRET || null;
   return keyId === DEFAULT_KEY_ID ? (env.DASHBOARD_INGEST_SECRET ?? null) : null;
 }
 
@@ -93,7 +100,7 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
   }
   const keyIdHeader = req.headers.get("x-wt-key-id");
   const keyId = keyIdHeader && /^[A-Za-z0-9._-]{1,40}$/.test(keyIdHeader) ? keyIdHeader : DEFAULT_KEY_ID;
-  if (!process.env.DASHBOARD_INGEST_SECRET && !process.env.DASHBOARD_INGEST_KEYS) {
+  if (!process.env.DASHBOARD_INGEST_SECRET && !process.env.DASHBOARD_INGEST_KEYS && !process.env.RADAR_INGEST_SECRET) {
     return done(503, "not-configured", { error: "ingest is not configured" });
   }
   const secret = secretFor(keyId);
@@ -119,6 +126,11 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
     data = JSON.parse(text);
   } catch {
     return done(422, "bad-json", { error: "invalid", errors: ["body is not valid UTF-8 JSON"] }, { bytes: bytes.byteLength });
+  }
+
+  if (isRadar(data)) return storeRadar(text, data, done);
+  if (keyId === RADAR_KEY_ID) {
+    return done(403, "radar-key-scope", { error: "this key may only publish radar editions" });
   }
 
   // The desk comes from the signed body (its `schema`), never from a header: ADR 0005.
@@ -168,4 +180,48 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
     return done(502, "storage-error", { error: "storage unavailable" }, { error: e instanceof Error ? e.name : "unknown" });
   }
   return done(503, "conflict", { status: "conflict", run_id: runId }, { run_id: runId });
+}
+
+type Done = (status: number, outcome: string, body: Record<string, unknown>, extra?: Record<string, unknown>) => Response;
+
+/**
+ * A radar edition: the same duplicate / older / etag rules as a desk snapshot, written to radar/latest.json, plus
+ * one copy per edition date. A same-day refresh (a later as_of) replaces both. Any valid key may publish one.
+ */
+async function storeRadar(text: string, data: unknown, done: Done): Promise<Response> {
+  const result = validateRadarEdition(data);
+  if (!result.ok) return done(422, "invalid", { error: "invalid", errors: result.errors }, { desk: "radar", n_errors: result.errors.length });
+  const { run_id: runId, edition_date: date } = result.edition;
+  const asOf = parseTime(result.edition.as_of ?? null);
+  if (!runId || asOf === null) {
+    return done(422, "invalid", { error: "invalid", errors: ["/run_id and /as_of must be set; as_of must be a timestamp"] });
+  }
+  try {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const current = await readForUpdate(RADAR_PATHS.latest);
+      if (current) {
+        const meta = currentMeta(current.text);
+        if (meta.runId === runId) return done(200, "duplicate", { status: "duplicate", run_id: runId }, { run_id: runId, desk: "radar" });
+        if (meta.asOf !== null && asOf <= meta.asOf) {
+          return done(409, "older", { status: "older", run_id: runId }, { run_id: runId, desk: "radar" });
+        }
+      }
+      try {
+        await writeText(RADAR_PATHS.latest, text, current ? { ifMatch: current.etag } : { createOnly: true });
+      } catch (e) {
+        if (e instanceof PreconditionFailed && attempt === 0) continue;
+        if (e instanceof PreconditionFailed) return done(503, "conflict", { status: "conflict", run_id: runId }, { run_id: runId, desk: "radar" });
+        throw e;
+      }
+      try {
+        await writeText(`${RADAR_PATHS.history}${date}.json`, text);
+      } catch (e) {
+        logEvent("ingest.history", { outcome: "error", run_id: runId, desk: "radar", error: e instanceof Error ? e.name : "unknown" });
+      }
+      return done(200, "stored", { status: "stored", run_id: runId }, { run_id: runId, bytes: text.length, attempt, desk: "radar" });
+    }
+  } catch (e) {
+    return done(502, "storage-error", { error: "storage unavailable" }, { error: e instanceof Error ? e.name : "unknown", desk: "radar" });
+  }
+  return done(503, "conflict", { status: "conflict", run_id: runId }, { run_id: runId, desk: "radar" });
 }
