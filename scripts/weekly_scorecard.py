@@ -23,9 +23,9 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from wt.analytics import g2  # noqa: E402
+from wt.analytics import funnel_agreement, g2  # noqa: E402
 from wt.core.clock import ET  # noqa: E402
-from wt.core.config import DATA_DIR, FORWARD_LEDGER, ROOT, SCORECARD_DIR  # noqa: E402
+from wt.core.config import DATA_DIR, FORWARD_LEDGER, ROOT, ROUTINE_DIR, SCORECARD_DIR  # noqa: E402
 
 FWD = FORWARD_LEDGER
 JOURNAL = DATA_DIR / "live/journal.jsonl"
@@ -82,6 +82,63 @@ def stats(r: list[float]) -> dict:
             "pf": float(w.sum() / -l.sum()) if l.sum() < 0 else math.inf}
 
 
+STAGE_ORDER = ("tickets", "tier2", "charts", "tier1")      # the dry run's latest stage file that holds the funnel
+
+
+def seen_rows(day_dir: Path) -> list[dict] | None:
+    """The dry run's funnel rows for one session, from its latest stage file, or None when it left none."""
+    for name in STAGE_ORDER:
+        try:
+            rows = json.loads((day_dir / f"{name}.json").read_text()).get("reached")
+        except (OSError, ValueError):
+            continue
+        if rows:
+            return rows
+    return None
+
+
+def record_rows(day: str) -> list[dict] | None:
+    """The forward test's funnel rows for one session, from the after-close pool the trials read, or None."""
+    import pandas as pd
+
+    from wt.scanner.explain import explain, from_pool, pool_musts
+    from wt.scanner.pool import POOL_DIR
+    from wt.specs.loader import load_spec
+    path = POOL_DIR / f"{day}.parquet"
+    if not path.exists():
+        return None
+    pool = pd.read_parquet(path)
+    if not len(pool):
+        return []
+    return [{"symbol": r.symbol, "reached": r.reached}
+            for r in explain(from_pool(pool), load_spec("SPEC-0001"), pool_musts(pool)).rows]
+
+
+def agreement() -> list[str]:
+    """Section 4: the dry run's funnel against the forward test's, in counts (DEC-0023, section 2). A description:
+    any failure here costs the scorecard this section and nothing else."""
+    try:
+        days = []
+        for d in sorted(p for p in ROUTINE_DIR.glob("*") if p.is_dir()):
+            a, b = seen_rows(d), record_rows(d.name)
+            if a is not None and b is not None:
+                days.append(funnel_agreement.compare(a, b))
+        t = funnel_agreement.total(days)
+    except Exception as e:  # noqa: BLE001
+        return ["", "## 4. The dry run against the record", "", f"- Not available this week ({e.__class__.__name__})."]
+    L = ["", "## 4. The dry run against the record", "",
+         f"Sessions with both a dry run and a forward pool: **{t['sessions']}**. Counts only; the two records are "
+         "never merged (DEC-0023)."]
+    if t["sessions"]:
+        fp = t["first_pick"]
+        L += ["", "| Tier | Dry run | Of record | In both |", "|---|---|---|---|",
+              f"| Tier 1 names | {t['tier1_seen']} | {t['tier1_record']} | {t['tier1_both']} |",
+              f"| Tier 2 names | {t['tier2_seen']} | {t['tier2_record']} | {t['tier2_both']} |", "",
+              f"- First pick: same {fp['same']} · different {fp['different']} · on one side only {fp['one_side']} · "
+              f"none on either {fp['neither']}"]
+    return L
+
+
 def main(now: dt.datetime | None = None) -> str:
     today = session_date(now or dt.datetime.now(ET))
     fwd = dedupe(read_jsonl(FWD))
@@ -133,6 +190,7 @@ def main(now: dt.datetime | None = None) -> str:
           f"- Paper trades {ps['n']}/{g2.G2_MIN_TRADES} · clean sessions {g['sessions']}/{g2.G2_MIN_SESSIONS} · "
           f"incident-free streak {g['incident_free_streak']}/{g2.G2_MIN_INCIDENT_FREE} "
           "(a KILL-on, refused or incident session does not count)",
+          *agreement(),
           "", "_Rules are frozen; any change requires a new decision record (research/decisions)._"]
     md = "\n".join(L) + "\n"
     out = SCORECARD_DIR / f"scorecard_{today}.md"
