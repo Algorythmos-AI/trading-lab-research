@@ -45,6 +45,10 @@ The repo is **restricted**: it holds specifications and research notes derived f
 | PRIVATE | account balances, host details, log lines, commit subjects, owner notes | Only behind the owner's login, redacted |
 | SAFE | counts, IDs, statuses, dates, R-multiples and statistics | Yes, behind the owner's login |
 
+The dashboard's Radar page (`stocksdelta/radar`, key id `radar`) carries the owner's own pre-market research from
+public sources, not material derived from this repo. It is PRIVATE: owner-only, behind the login. The denylist still
+applies to it, and nothing from `research/`, `knowledge/` or the specs may be put into a radar edition.
+
 ## Layout
 
 ```
