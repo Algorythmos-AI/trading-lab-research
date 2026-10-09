@@ -107,9 +107,25 @@ def test_report_is_dated_by_the_new_york_session(tmp_path, monkeypatch):
     assert sc.session_date(dt.datetime(2026, 1, 5, 23, 30, tzinfo=dt.timezone.utc)) == dt.date(2026, 1, 5)
 
 
+def _routine_stages():
+    """The dry run's own stage file names, read from its source so the scorecard cannot drift from them."""
+    import ast
+    tree = ast.parse((ROOT / "scripts/premarket_routine.py").read_text())
+    stages = next(ast.literal_eval(n.value) for n in tree.body
+                  if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") == "STAGES")
+    return {name: f"{hhmm.replace(':', '')}_{name}" for hhmm, name in stages}
+
+
+STAGE_FILES = _routine_stages()
+
+
+def test_the_scorecard_reads_every_stage_the_dry_run_writes():
+    assert set(sc.STAGE_ORDER) == set(STAGE_FILES) and STAGE_FILES["tickets"] == "0915_tickets"
+
+
 def _stage(folder, name, reached):
     folder.mkdir(parents=True, exist_ok=True)
-    (folder / f"{name}.json").write_text(json.dumps({"reached": [{"symbol": k, "reached": v} for k, v in reached.items()]}))
+    (folder / f"{STAGE_FILES[name]}.json").write_text(json.dumps({"reached": [{"symbol": k, "reached": v} for k, v in reached.items()]}))
 
 
 def test_the_dry_run_is_set_against_the_record_in_counts_only(tmp_path, monkeypatch):
@@ -161,6 +177,9 @@ def test_signals_both_records_saw_are_counted_by_name_and_trial(tmp_path, monkey
     day("2026-10-13", [], {"GG-1": [], "GG-2": [], "GG-3": [], "GG-4": []})          # a quiet day on both sides counts
     day("2026-10-14", [{"symbol": "DDDD", "trial": "GG-1"}], None)                   # no forward record: left out
     day("2026-10-15", None, {"GG-1": ["EEEE"]})                                      # no dry-run stage: left out
+    (routine / "2026-10-16").mkdir()                                                 # the dry run's scan had no data
+    (routine / "2026-10-16" / "1131_signals.json").write_text(json.dumps({"tier2": [], "signals": [], "scan_failed": "x"}))
+    (fwd / "signals" / "2026-10-16.json").write_text(json.dumps({"signals": {"GG-1": ["FFFF"]}}))
     line = sc.agreement()[-1]
     assert "sessions with both records: 2" in line and "dry run 2 · of record 2 · in both 1" in line
     assert not any(s in "\n".join(sc.agreement()) for s in ("AAAA", "BBBB", "CCCC", "DDDD", "EEEE"))

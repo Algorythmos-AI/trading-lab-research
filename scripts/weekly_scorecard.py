@@ -88,12 +88,13 @@ STAGE_ORDER = ("tickets", "tier2", "charts", "tier1")      # the dry run's lates
 def seen_rows(day_dir: Path) -> list[dict] | None:
     """The dry run's funnel rows for one session, from its latest stage file, or None when it left none."""
     for name in STAGE_ORDER:
-        try:
-            rows = json.loads((day_dir / f"{name}.json").read_text()).get("reached")
-        except (OSError, ValueError):
-            continue
-        if rows:
-            return rows
+        for path in sorted(day_dir.glob(f"*_{name}.json"), reverse=True):      # e.g. 0915_tickets.json
+            try:
+                rows = json.loads(path.read_text()).get("reached")
+            except (OSError, ValueError, AttributeError):
+                continue
+            if rows:
+                return rows
     return None
 
 
@@ -124,8 +125,8 @@ def signal_days() -> list[dict]:
             record = json.loads((FWD.parent / "signals" / f"{d.name}.json").read_text())
         except (OSError, ValueError):
             continue
-        if not isinstance(seen, dict) or not isinstance(record, dict):
-            continue
+        if not isinstance(seen, dict) or not isinstance(record, dict) or seen.get("scan_failed"):
+            continue                      # a dry run whose scan had no data saw no signals; that is not a quiet day
         days.append(funnel_agreement.compare_signals(funnel_agreement.seen_pairs(seen.get("signals") or []),
                                                      funnel_agreement.record_pairs(record.get("signals") or {})))
     return days

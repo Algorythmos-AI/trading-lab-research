@@ -83,6 +83,14 @@ def funnel_record(pool: pd.DataFrame, spec: dict) -> tuple[dict[str, int], list[
         return {"explain_error": 1}, []
 
 
+def scan_note(stats) -> dict:
+    """{"scan_failed": why} when the stage's scan had no data to scan (DEC-0024, decision 2), else nothing. A stage
+    marked so is not a morning with nothing to trade, and nothing downstream may count it as one."""
+    from build_pool import scan_failure
+    why = scan_failure(stats)
+    return {"scan_failed": why} if why else {}
+
+
 def sip_through(a) -> str | None:
     t = getattr(a, "sip_through", None)
     return None if t is None else t.tz_convert(ET).strftime("%H:%M")
@@ -113,7 +121,7 @@ def run(d: dt.date, feed: str, replay: bool) -> Path | None:
     splits = SplitStore(a, raw, persist=False, tail=tail)         # read shared caches, never write them
     cache, shares = PMCache(since=prev_sessions[0]), SharesOutstanding()     # the RVOL baselines' sessions only
     folder = OUT / str(d)
-    pool, pmb = pd.DataFrame(), pd.DataFrame()
+    pool, pmb, failed = pd.DataFrame(), pd.DataFrame(), {}
     for hhmm, name in STAGES:
         wait_until(d, hhmm, replay)
         cfg = PoolConfig(snapshot=(minus(hhmm, 25), hhmm), feed=feed)
@@ -121,7 +129,10 @@ def run(d: dt.date, feed: str, replay: bool) -> Path | None:
                                      split_refresh=splits.refresh)
         f = funnel(spec_cands(pool), spec) if len(pool) else {"tier1": [], "tier2": [], "primary": None, "dropped": []}
         counts, reached = funnel_record(pool, spec)
-        body = {"stage": name, "as_of_et": hhmm, "feed": feed, "sip_through_et": sip_through(a),
+        failed = scan_note(stats)
+        if failed:
+            print(f"{d} {hhmm} {name}: the scan had no data ({failed['scan_failed']})")
+        body = {"stage": name, "as_of_et": hhmm, "feed": feed, "sip_through_et": sip_through(a), **failed,
                 "stats": {**vars(stats), **counts}, "tier1": f["tier1"], "reached": reached}
         if name in ("charts", "tier2", "tickets") and len(pool):
             cols = ["symbol", "price_0925", "gap_pct", "trend_ok", "window_ok", "window_room", "atr14", "pm_consolidation",
@@ -133,7 +144,7 @@ def run(d: dt.date, feed: str, replay: bool) -> Path | None:
             body["tickets"] = tickets(pool, f, spec)
         write(folder, f"{hhmm.replace(':', '')}_{name}", body)
     wait_until(d, "11:31", replay)
-    write(folder, "1131_signals", {**signals(a, d, pool, pmb, f, feed), "sip_through_et": sip_through(a)})
+    write(folder, "1131_signals", {**signals(a, d, pool, pmb, f, feed), **failed, "sip_through_et": sip_through(a)})
     return folder
 
 
