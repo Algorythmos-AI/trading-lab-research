@@ -12,7 +12,7 @@ export default async function RadarPage({ searchParams }: { searchParams: Promis
   return (
     <>
       <PageHeading
-        title="Pre-market radar"
+        title="Radar"
         intro="The daily research radar: what each IBKR watchlist holds and why, the support and resistance levels, and the dated, sourced notes behind each name. Research only, published after each run; nothing here is an order."
       />
       {result.status !== "ok" ? (
