@@ -76,7 +76,7 @@ export function OptionsLive({ tickers, session }: { tickers: OptionsTicker[]; se
         <p className="text-muted-foreground text-sm">Loading live prices…</p>
       ) : feed.status === "off" ? (
         <Empty title="Live prices are off">
-          The dashboard has no Alpaca keys yet. Add ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY in Vercel (production) and redeploy.
+          The dashboard has no Alpaca keys yet. Add ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY (or APCA_API_KEY_ID and APCA_API_SECRET_KEY) in Vercel (production) and redeploy.
         </Empty>
       ) : feed.status === "error" ? (
         <Empty title="Live prices are unavailable right now">The feed did not answer; this panel retries every minute.</Empty>

@@ -78,7 +78,7 @@ Fixture mode is refused on production deployments, and the page shows a banner w
 | `BLOB_READ_WRITE_TOKEN` | Vercel **production only** (added when the private Blob store is connected) | Read and write snapshots and alert state. Previews must not hold it: they run with `DASHBOARD_FIXTURE=1` |
 | `DASHBOARD_INGEST_SECRET` | Vercel production + the Mac's `~/trading/.env` | Shared HMAC key for `/api/ingest` |
 | `RADAR_INGEST_SECRET` | Vercel production + the radar's cloud environment | HMAC key for key id `radar`. It may only publish research editions (`stocksdelta/radar`, `stocksdelta/options`); unset means the radar key is refused |
-| `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY` | Vercel production only | Alpaca paper-account keys, used only for the free IEX market data behind `/api/quote`; unset means the Options page shows live prices as off |
+| `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY` (or Alpaca's own `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY`) | Vercel production only | Alpaca paper-account keys, used only for the free IEX market data behind `/api/quote`; unset means the Options page shows live prices as off |
 | `ALPACA_DATA_URL` | Vercel (optional) | Market-data base URL, default `https://data.alpaca.markets` |
 | `CRON_SECRET` | Vercel production | Bearer token Vercel Cron sends to `/api/cron/watchdog` |
 | `NTFY_TOPIC` | Vercel production and preview + the Mac | Secret, random ntfy topic for pages; unset means log and skip |

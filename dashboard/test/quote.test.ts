@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { handleQuote } from "@/lib/quote-route";
-import { CACHE_MS, MAX_SYMBOLS, fetchQuotes, normalise, parseSymbols, resetQuoteCache } from "@/lib/quote";
+import { CACHE_MS, MAX_SYMBOLS, alpacaKeys, fetchQuotes, normalise, parseSymbols, resetQuoteCache } from "@/lib/quote";
 
 const NOW = new Date("2026-10-12T15:00:00Z");
 const KEYS = { id: "test-key-id", secret: "test-key-secret" };
@@ -32,6 +32,19 @@ describe("symbols", () => {
     expect(parseSymbols(null)).toBeNull();
     const many = Array.from({ length: 30 }, (_, i) => `A${i}`).join(",");
     expect(parseSymbols(many)!.length).toBe(MAX_SYMBOLS);
+  });
+});
+
+describe("alpacaKeys", () => {
+  it("reads ALPACA_ names, falls back to Alpaca's own APCA_ names, and needs both halves", () => {
+    expect(alpacaKeys({ ALPACA_API_KEY_ID: "a", ALPACA_API_SECRET_KEY: "b" })).toEqual({ id: "a", secret: "b" });
+    expect(alpacaKeys({ APCA_API_KEY_ID: "c", APCA_API_SECRET_KEY: "d" })).toEqual({ id: "c", secret: "d" });
+    expect(alpacaKeys({ ALPACA_API_KEY_ID: "a", ALPACA_API_SECRET_KEY: "b", APCA_API_KEY_ID: "c", APCA_API_SECRET_KEY: "d" })).toEqual({
+      id: "a",
+      secret: "b",
+    });
+    expect(alpacaKeys({ ALPACA_API_KEY_ID: "a", APCA_API_SECRET_KEY: "d" })).toBeNull();
+    expect(alpacaKeys({})).toBeNull();
   });
 });
 
@@ -101,6 +114,8 @@ describe("GET /api/quote", () => {
     vi.stubEnv("DASHBOARD_FIXTURE", "");
     vi.stubEnv("ALPACA_API_KEY_ID", "");
     vi.stubEnv("ALPACA_API_SECRET_KEY", "");
+    vi.stubEnv("APCA_API_KEY_ID", "");
+    vi.stubEnv("APCA_API_SECRET_KEY", "");
     const f = vi.fn();
     vi.stubGlobal("fetch", f);
     const res = await get("?s=SPY");
