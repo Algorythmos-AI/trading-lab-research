@@ -76,3 +76,10 @@ def test_the_record_never_costs_a_stage(monkeypatch):
     assert pr.funnel_record(pd.DataFrame(), load_spec("SPEC-0001")) == ({}, [])
     monkeypatch.setattr(pr, "explain", lambda *a, **k: 1 / 0)
     assert pr.funnel_record(pd.DataFrame([pool_row("OK")]), load_spec("SPEC-0001")) == ({"explain_error": 1}, [])
+
+
+def test_a_stage_whose_scan_had_no_data_says_so():
+    from types import SimpleNamespace as NS
+    assert "universe" in pr.scan_note(NS(universe=0, snapshot_symbols=0))["scan_failed"]
+    assert "pre-market bar" in pr.scan_note(NS(universe=4300, snapshot_symbols=0))["scan_failed"]
+    assert pr.scan_note(NS(universe=4300, snapshot_symbols=800, kept=0)) == {}       # nothing gapped: a real morning

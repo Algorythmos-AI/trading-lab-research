@@ -129,3 +129,21 @@ def test_a_unit_that_meets_a_failed_scan_records_an_error_and_no_marker(tmp_path
     assert not set(gg) & complete and not any(r.get("session_marker") for r in rows)
     assert [r["strategy"] for r in rows if r.get("error")] == [",".join(gg)]
     assert not any(r.get("strategy_marker") and r["strategy"] in gg for r in rows)       # retried on the next run
+
+
+def test_a_day_with_names_kept_and_none_in_tier_1_is_reported(env, monkeypatch):
+    for k in range(1, 7):
+        save_pool(env.pool, D - dt.timedelta(days=k), universe=4300, snapshot_symbols=800, kept=30)
+    save_pool(env.pool, D, universe=4300, snapshot_symbols=800, kept=12)
+    today = {"universe": 4300, "snapshot_symbols": 800, "kept": 12}
+    t1, real = {str(D): 0}, ft.tier1_count
+    assert real(env.pool / f"{D}.parquet") == 0 and real(env.pool / "none.parquet") is None    # empty pool; no pool
+    monkeypatch.setattr(ft, "tier1_count", lambda path: t1.get(path.stem, 5))
+    assert ft.collapse(D, today) == ["no name reached Tier 1"]
+    t1[str(D)] = 2
+    assert ft.collapse(D, today) == []                                   # an ordinary day
+    t1[str(D)] = None
+    assert ft.collapse(D, today) == []                                   # a pool that cannot be read is not an alert
+    t1[str(D)] = 0
+    monkeypatch.setattr(ft, "tier1_count", lambda path: 0)
+    assert ft.collapse(D, today) == []                                   # Tier 1 is usually empty: nothing unusual

@@ -329,12 +329,24 @@ COLLAPSE_KEYS = ("universe", "snapshot_symbols")      # counts that barely move 
 COLLAPSE_RATIO, COLLAPSE_MIN_DAYS, COLLAPSE_LOOKBACK = 0.5, 5, 10
 
 
+def tier1_count(path: Path) -> int | None:
+    """How many names the funnel put in Tier 1 from a saved pool, or None when that cannot be told."""
+    try:
+        pool = pd.read_parquet(path)
+        if not len(pool):
+            return 0
+        return int(explain(from_pool(pool), load_spec("SPEC-0001"), pool_musts(pool)).counts.get("tier1", 0))
+    except Exception:  # noqa: BLE001 — the thin check only informs
+        return None
+
+
 def collapse(d: dt.date, stats: dict) -> list[str]:
     """Which of the day's scan counts fell below half the median of the last sessions' pools (DEC-0024, 2.3), plus
-    a day that kept nothing although names traded. It only informs: nothing is blocked. Quiet until five earlier
-    pools exist."""
+    a day that kept nothing, or put nothing in Tier 1, although the earlier days usually did. It only informs:
+    nothing is blocked. Quiet until five earlier pools exist."""
     earlier = sorted(p for p in POOL_DIR.glob("*.parquet") if p.stem < str(d))[-COLLAPSE_LOOKBACK:]
-    past = [s for s in (pool_stats(p) for p in earlier) if s and not scan_failure(s)]
+    paths = [(p, s) for p, s in ((p, pool_stats(p)) for p in earlier) if s and not scan_failure(s)]
+    past = [s for _, s in paths]
     out = []
     if len(past) >= COLLAPSE_MIN_DAYS:
         for k in COLLAPSE_KEYS:
@@ -343,6 +355,10 @@ def collapse(d: dt.date, stats: dict) -> list[str]:
                 out.append(f"{k} {stats.get(k) or 0} against a median of {med:.0f}")
         if (stats.get("kept") or 0) == 0 and float(np.median([s.get("kept") or 0 for s in past])) > 0:
             out.append("no name kept")
+        elif (stats.get("kept") or 0) > 0 and tier1_count(POOL_DIR / f"{d}.parquet") == 0:
+            t1 = [n for n in (tier1_count(p) for p, _ in paths) if n is not None]
+            if len(t1) >= COLLAPSE_MIN_DAYS and float(np.median(t1)) > 0:
+                out.append("no name reached Tier 1")
     return out
 
 
