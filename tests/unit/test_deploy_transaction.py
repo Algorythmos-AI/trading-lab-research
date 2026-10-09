@@ -121,6 +121,51 @@ def test_the_gate_is_asked_again_under_the_lock(world):
     assert deploy.deploy(second, stage=True) == 2 and head(live) == first
 
 
+def test_a_second_deploy_does_not_stage_while_the_first_is_staging(world, capsys):
+    """Staging clears its worktree before it starts: a second deploy of the same commit must not get that far while
+    the first one's tests run in it. It is refused as busy, not as a failed suite: no alert, nothing changed."""
+    dev, live, first, st = world
+    second = commit(dev, "b")
+    git(dev, "push", "-q", "origin", "main")
+    staged = []
+    deploy_stage = deploy.stage_tests
+
+    def never(target):
+        staged.append(target)
+        return deploy_stage(target)
+    deploy.stage_tests = never
+    try:
+        with locks.job_lock(deploy.STAGE_LOCK):
+            assert deploy.deploy(second, stage=True) == 2
+        assert staged == [] and head(live) == first and st["alerts"] == [] and st["synced"] == 0
+        assert "another deploy is testing" in capsys.readouterr().out
+        assert not (deploy.DEPLOY_DIR).exists() or not list(deploy.DEPLOY_DIR.glob("*.json"))
+        # the first one is done: the same command now goes through, and staging ran once
+        assert deploy.deploy(second, stage=True) == 0 and head(live) == second and staged == [second]
+    finally:
+        deploy.stage_tests = deploy_stage
+
+
+def test_the_staging_lock_is_released_before_the_switch_and_is_not_a_job_lock(world):
+    dev, live, first, st = world
+    second = commit(dev, "b")
+    git(dev, "push", "-q", "origin", "main")
+    seen = {}
+    real = deploy._switch
+
+    def switch(*a, **k):
+        seen["staging_held"] = locks.is_held(deploy.STAGE_LOCK)
+        return real(*a, **k)
+    deploy._switch = switch
+    try:
+        assert deploy.deploy(second, stage=True) == 0
+    finally:
+        deploy._switch = real
+    assert seen == {"staging_held": False}
+    from wt.ops.schedule import JOBS
+    assert deploy.STAGE_LOCK not in JOBS and deploy.STAGE_LOCK not in (locks.DEPLOY_LOCK, deploy.ML_ENV_LOCK)
+
+
 def test_one_deploy_at_a_time(world):
     dev, live, first, st = world
     second = commit(dev, "b")

@@ -96,6 +96,10 @@ def sync_venv() -> None:
 
 ML_LOCK, ML_VENV = "requirements-ml.lock.txt", ".venv-ml"
 ML_NEXT, ML_PREV = ".venv-ml.next", ".venv-ml.prev"
+# Held while a deploy tests its target before the switch. Staging runs for minutes, outside the deploy lock (which
+# every job waits on), and starts by clearing its worktree: without this a second deploy of the same commit removed
+# the first one's worktree under its running tests, and that first deploy was refused as "tests failed".
+STAGE_LOCK = "deploy-stage"
 ML_ENV_LOCK = "ml-env"                  # one build at a time; not the deploy lock, which every job waits on
 ML_USERS = ("crypto-learn",)            # jobs that run for long in the ML environment: the swap waits for them
 SWAP_WAIT_S = 120.0
@@ -285,7 +289,13 @@ def deploy(sha: str | None = None, stage: bool = False) -> int:
         print(f"Dashboard check overridden by the owner ({override}): {why_dash}")
     if stage:
         print(f"staging {target[:12]}: the full test suite in a throwaway worktree ...", flush=True)
-        passed, out = stage_tests(target)
+        with job_lock(STAGE_LOCK) as mine:
+            if not mine:
+                # Not a failed suite: nothing was tested, so no alert and no record. The other deploy decides.
+                print("Refusing: another deploy is testing a commit before its switch; wait for it to finish, "
+                      "then run this again (it will say so if there is nothing left to deploy)")
+                return 2
+            passed, out = stage_tests(target)
         if not passed:
             record({"target": target, "staged": False, "stage_output": out})
             Alerts().fire("deploy", "Deploy refused: tests failed", f"The test suite failed on {target[:8]} before "

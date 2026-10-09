@@ -89,6 +89,9 @@ A deploy is one command on the host, run as the job user. It checks the gate and
 full test suite in a throwaway worktree, then fast-forwards, syncs the environment and smoke-tests, and rolls
 itself back if the smoke test fails.
 
+Run one deploy at a time. A second one started while the first is still testing is refused with "another deploy
+is testing a commit"; wait for the first, then run it again (it says "already at" when nothing is left to do).
+
 ```
 gcloud --configuration=algo-trading compute ssh trading-lab-host --zone us-east1-b --tunnel-through-iap
 sudo -u wt nohup /usr/local/bin/wt-deploy deploy > /tmp/wt-deploy.log 2>&1 &
