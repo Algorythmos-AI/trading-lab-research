@@ -19,6 +19,7 @@ export const NAV = [
 /** The crypto desk's sections (ADR 0005). Engineering is one page for the whole lab. */
 export const CRYPTO_NAV = [
   { href: "/crypto", label: "Overview" },
+  { href: "/crypto/market", label: "Market" },
   { href: "/crypto/strategy", label: "Strategy" },
   { href: "/crypto/research", label: "Research" },
   { href: "/crypto/learning", label: "Machine learning" },
