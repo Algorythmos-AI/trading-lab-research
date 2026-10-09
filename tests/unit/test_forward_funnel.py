@@ -172,3 +172,27 @@ def test_nothing_else_in_the_codebase_reads_a_sealed_outcome():
                                                                        "note_shadow", '"sealed"')):
                 hits.append(str(f.relative_to(ROOT)))
     assert hits == []
+
+
+def test_the_scorecard_reads_the_record_from_the_same_pool_with_the_same_funnel(tmp_path, monkeypatch):
+    """weekly_scorecard.record_rows: the rows it compares the dry run with are the funnel of record's own."""
+    import importlib.util
+
+    import wt.scanner.pool as pool_mod
+    import wt.specs.loader as loader
+    s = importlib.util.spec_from_file_location("sc_rows", ROOT / "scripts/weekly_scorecard.py")
+    sc = importlib.util.module_from_spec(s)
+    s.loader.exec_module(sc)
+    (tmp_path / "pool").mkdir()
+    pool = pool_frame()
+    pool.to_parquet(tmp_path / "pool" / f"{D}.parquet")
+    pd.DataFrame({"date": [], "symbol": []}).to_parquet(tmp_path / "pool" / "2026-01-02.parquet")
+    monkeypatch.setattr(pool_mod, "POOL_DIR", tmp_path / "pool")
+    monkeypatch.setattr(loader, "load_spec", lambda name: SPEC)
+    got = sc.record_rows(str(D))
+    f = funnel(from_pool(pool), SPEC)
+    assert {r["symbol"] for r in got if r["reached"] in ("tier2", "primary")} == {c["symbol"] for c in f["tier2"]}
+    first = f["primary"]["symbol"] if isinstance(f["primary"], dict) else f["primary"]
+    assert [r["symbol"] for r in got if r["reached"] == "primary"] == ([first] if first else [])
+    assert f["tier2"]                                                    # the fixture does reach Tier 2
+    assert sc.record_rows("2026-01-02") == [] and sc.record_rows("2026-01-05") is None

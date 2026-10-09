@@ -129,9 +129,13 @@ class LiveData:
         return (q["bp"], q["ap"], pd.Timestamp(q["t"]))
 
     def sigma_and_prev_close(self, day: dt.date, sessions: list[dt.date]) -> tuple[float, float | None]:
-        """sigma = mean over prior 14 sessions of mean |close(:59/:29 marks)/open - 1| (same as backtest); SIP history."""
+        """sigma = mean over prior 14 sessions of mean |close(:59/:29 marks)/open - 1| (same as backtest); SIP history.
+
+        A prior session without its bars is left out, so sigma can rest on fewer than 14. `sigma_sessions` keeps
+        how many it used, for the journal (DEC-0024, decision 3); the calculation is unchanged."""
         prior = [d for d in sessions if d < day][-14:]
         vals, prev_close = [], None
+        self.sigma_sessions = None
         for d in prior:
             b = self.a.bars([SIG], "1Min", to_utc_iso(et(d, "09:30")), to_utc_iso(et(d, "15:59")), feed="sip")
             if len(b) > 60:
@@ -139,6 +143,7 @@ class LiveData:
                 prev_close = float(b.c.iloc[-1])
         if not vals:                                       # no prior session had its bars: np.mean([]) would be NaN
             raise ValueError("no prior session with a full set of bars")
+        self.sigma_sessions = len(vals)
         return float(np.mean(vals)), prev_close
 
 
@@ -413,6 +418,8 @@ class Decisions:
         self.inputs = False
         self.asked = 0
         self.missing_noted = False
+        self.marks = 0                  # half-hour marks seen, the only bars the rule can signal on
+        self.spread_only_marks = 0      # of those, the ones where the spread check was the only blocker (DEC-0024, 6)
 
     @property
     def unchecked(self) -> bool:
@@ -432,6 +439,9 @@ class Decisions:
         if bar == self.last_bar:
             return
         self.last_bar = bar
+        if len(closed) % 30 == 0 and 30 <= len(closed) <= 390:      # the bar that just closed is a half-hour mark
+            self.marks += 1
+            self.spread_only_marks += list(blockers) == ["spread_or_no_quote"]
         would = setups.b_intraday_momentum(closed.reset_index(drop=True), sigma, prev_close, include_last=True)
         key = tuple(sorted(blockers))
         base = {"bar": str(bar), "closed_bars": len(closed), "blockers": list(key), "sigma": sigma,
@@ -451,7 +461,8 @@ class Decisions:
 
     def summary(self) -> None:
         self.write("decision_summary", inputs=self.inputs, asked=self.asked, would_signals=len(self.signals),
-                   first=self.signals[0] if self.signals else None)
+                   first=self.signals[0] if self.signals else None, marks=self.marks,
+                   spread_only_marks=self.spread_only_marks)
 
 
 def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callable[[], dt.datetime],
@@ -686,7 +697,8 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             log("decision_inputs_unavailable", error=e.__class__.__name__)
     decisions = Decisions(log)
     kill_on = KILL.exists()
-    log("armed", day=day, sigma=sigma, prev_close=prev_close, flatten=flatten_dt, kill=kill_on,
+    log("armed", day=day, sigma=sigma, prev_close=prev_close, sigma_sessions=getattr(data, "sigma_sessions", None),
+        flatten=flatten_dt, kill=kill_on,
         resumed_plan=plan.state if plan else None, held=held.trade_id if held else None, entries_off=off,
         skew_s=measure_skew(broker, clock), virtual=asdict(va) if va_ok else None)
     held_try = dt.datetime.min.replace(tzinfo=ET)

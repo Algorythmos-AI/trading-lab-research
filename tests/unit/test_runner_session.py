@@ -835,3 +835,51 @@ def test_a_signal_with_no_quote_to_convert_it_is_journaled(real_signal):
     assert skipped and skipped[0]["signal_quote"] is False and skipped[0]["trade_mid"] is True
     assert b.placed == [] and j[-1]["outcome"] == "signal_not_acted"
     assert ("fire", "paper-b:signal-not-acted", 4) in rec.calls
+
+
+# ---- two counts the journal keeps and nothing acts on (DEC-0024, decisions 3 and 6) ----
+
+class ShortHistoryREST(FakeREST):
+    """One prior session in three comes back with too few bars to count."""
+
+    def __init__(self, clock: Clock):
+        super().__init__(clock)
+        self.asked = 0
+
+    def bars(self, symbols, tf, start, end, feed="sip") -> pd.DataFrame:
+        self.asked += 1
+        b = super().bars(symbols, tf, start, end, feed)
+        return b.iloc[:40] if self.asked % 3 == 0 else b
+
+
+def test_the_journal_says_how_many_sessions_sigma_rests_on(env):
+    clk = Clock(at(8, 0))
+    whole, short = runner_b.LiveData(FakeREST(clk)), runner_b.LiveData(ShortHistoryREST(clk))
+    sessions = [d.date() for d in pd.bdate_range(end=DAY, periods=30)]
+    whole.sigma_and_prev_close(DAY, sessions)
+    short.sigma_and_prev_close(DAY, sessions)
+    assert whole.sigma_sessions == 14 and short.sigma_sessions == 10      # 4 of the 14 were short: left out, not replaced
+    b = SimBroker()
+    synced(b, clk)
+    runner_b.run(DAY, broker=b, rest=ShortHistoryREST(clk), now_fn=clk.now, sleep_fn=clk.sleep)
+    armed = next(r for r in journal(env) if r["event"] == "armed")
+    assert armed["sigma_sessions"] == 10 and armed["sigma"] is not None
+
+
+def test_the_journal_counts_the_marks_where_only_the_spread_check_blocked():
+    """A mark is a bar the rule can signal on: the 30th, 60th, ... closed minute. Each is counted once, and it
+    counts against the spread check only when nothing else was blocking at that moment."""
+    out: list[dict] = []
+    d = runner_b.Decisions(lambda event, **kw: out.append({"event": event, **kw}))
+    t0 = pd.Timestamp(at(9, 30))
+    day = pd.DataFrame({"t": pd.date_range(t0, periods=390, freq="1min"), "o": 500.0, "h": 500.0, "l": 500.0,
+                        "c": 500.0, "v": 1e5})
+    spread, kill = ["spread_or_no_quote"], ["kill_file", "spread_or_no_quote"]
+    blockers = {30: spread, 60: spread, 90: kill, 120: []}
+    for n in range(1, 151):
+        d.observe(day.iloc[:n], blockers.get(n, spread if n % 30 else []), 0.004, 500.0)
+        d.observe(day.iloc[:n], blockers.get(n, []), 0.004, 500.0)        # a second loop on the same bar counts nothing
+    d.summary()
+    summary = out[-1]
+    assert summary["event"] == "decision_summary" and summary["marks"] == 5 and summary["spread_only_marks"] == 2
+    assert summary["would_signals"] == 0

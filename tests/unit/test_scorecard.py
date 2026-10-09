@@ -34,6 +34,7 @@ def test_scorecard_flags_agreement_incidents_and_band(tmp_path, monkeypatch):
     monkeypatch.setattr(sc, "JOURNAL", jr)
     monkeypatch.setattr(sc, "ROOT", tmp_path)
     monkeypatch.setattr(sc, "SCORECARD_DIR", tmp_path / "scorecards")
+    monkeypatch.setattr(sc, "ROUTINE_DIR", tmp_path / "routine")
     (tmp_path / "research/experiments/EXP-0005b-g1-etf-dev-realcost").mkdir(parents=True)
     for exp, name in sc.EXPECT.values():
         p = tmp_path / "research/experiments" / exp
@@ -54,6 +55,7 @@ def ledger(tmp_path, monkeypatch, rows):
     monkeypatch.setattr(sc, "JOURNAL", tmp_path / "no_journal.jsonl")
     monkeypatch.setattr(sc, "ROOT", tmp_path)
     monkeypatch.setattr(sc, "SCORECARD_DIR", tmp_path / "scorecards")
+    monkeypatch.setattr(sc, "ROUTINE_DIR", tmp_path / "routine")
     for exp, name in sc.EXPECT.values():
         p = tmp_path / "research/experiments" / exp
         p.mkdir(parents=True, exist_ok=True)
@@ -103,3 +105,39 @@ def test_report_is_dated_by_the_new_york_session(tmp_path, monkeypatch):
     assert md.startswith("# Forward scorecard — 2026-10-02")                   # Friday's session in New York
     assert (tmp_path / "scorecards/scorecard_2026-10-02.md").exists()
     assert sc.session_date(dt.datetime(2026, 1, 5, 23, 30, tzinfo=dt.timezone.utc)) == dt.date(2026, 1, 5)
+
+
+def _stage(folder, name, reached):
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"{name}.json").write_text(json.dumps({"reached": [{"symbol": k, "reached": v} for k, v in reached.items()]}))
+
+
+def test_the_dry_run_is_set_against_the_record_in_counts_only(tmp_path, monkeypatch):
+    routine = tmp_path / "routine"
+    _stage(routine / "2026-10-05", "tier1", {"AAAA": "tier1"})                       # superseded by the later stage
+    _stage(routine / "2026-10-05", "tickets", {"AAAA": "primary", "BBBB": "tier2", "CCCC": "tier1"})
+    _stage(routine / "2026-10-06", "tier2", {"DDDD": "primary"})
+    _stage(routine / "2026-10-07", "tier2", {"EEEE": "primary"})                     # no forward pool: left out
+    (routine / "2026-10-08").mkdir()                                                 # a dry run that wrote nothing
+    record = {"2026-10-05": [{"symbol": "AAAA", "reached": "primary"}, {"symbol": "ZZZZ", "reached": "tier1"}],
+              "2026-10-06": [], "2026-10-08": []}
+    monkeypatch.setattr(sc, "ROUTINE_DIR", routine)
+    monkeypatch.setattr(sc, "record_rows", record.get)
+    md = "\n".join(sc.agreement())
+    assert "both a dry run and a forward pool: **2**" in md
+    assert "| Tier 1 names | 4 | 2 | 1 |" in md and "| Tier 2 names | 3 | 1 | 1 |" in md
+    assert "same 1 · different 0 · on one side only 1 · none on either 0" in md
+    assert not any(s in md for s in ("AAAA", "BBBB", "CCCC", "DDDD", "ZZZZ"))
+
+
+def test_a_failing_comparison_costs_only_its_section(tmp_path, monkeypatch):
+    routine = tmp_path / "routine"
+    _stage(routine / "2026-10-05", "tier2", {"AAAA": "primary"})
+    monkeypatch.setattr(sc, "ROUTINE_DIR", routine)
+
+    def broken(day):
+        raise OSError("pool unreadable")
+    monkeypatch.setattr(sc, "record_rows", broken)
+    assert sc.agreement()[-1] == "- Not available this week (OSError)."
+    monkeypatch.setattr(sc, "ROUTINE_DIR", tmp_path / "none")
+    assert "**0**" in "\n".join(sc.agreement()) and not any("|" in x for x in sc.agreement())
