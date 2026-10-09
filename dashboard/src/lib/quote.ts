@@ -39,10 +39,14 @@ export function parseSymbols(raw: string | null): string[] | null {
   return out.length > 0 ? out.slice(0, MAX_SYMBOLS) : null;
 }
 
+/** The Alpaca keys from ALPACA_API_KEY_ID / ALPACA_API_SECRET_KEY, or Alpaca's own APCA_API_KEY_ID / APCA_API_SECRET_KEY. */
 export function alpacaKeys(env: Record<string, string | undefined> = process.env): { id: string; secret: string } | null {
-  const id = env.ALPACA_API_KEY_ID;
-  const secret = env.ALPACA_API_SECRET_KEY;
-  return id && secret ? { id, secret } : null;
+  const pairs: [string | undefined, string | undefined][] = [
+    [env.ALPACA_API_KEY_ID, env.ALPACA_API_SECRET_KEY],
+    [env.APCA_API_KEY_ID, env.APCA_API_SECRET_KEY],
+  ];
+  for (const [id, secret] of pairs) if (id && secret) return { id, secret };
+  return null;
 }
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
