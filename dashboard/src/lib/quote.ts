@@ -29,8 +29,8 @@ export interface QuoteResponse {
 export const MAX_SYMBOLS = 12;
 const SYMBOL = /^[A-Z][A-Z0-9.]{0,9}$/;
 const DEFAULT_DATA_URL = "https://data.alpaca.markets";
-/** Shared by every open tab on an instance: IEX prices barely move in this long, and the free plan is rate-limited. */
-export const CACHE_MS = 10_000;
+/** Tabs on one instance share each answer for this long, just under the page's 2-second poll; the free plan allows 200 calls a minute. */
+export const CACHE_MS = 1_500;
 
 /** The symbols from `?s=SPY,QQQ`: upper-cased, valid, unique, at most MAX_SYMBOLS. Null when none are valid. */
 export function parseSymbols(raw: string | null): string[] | null {

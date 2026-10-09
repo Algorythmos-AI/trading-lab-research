@@ -10,7 +10,7 @@ import { newYork, num, signed } from "@/lib/format";
 import { LIVE_STATE_TONE, liveNeighbours, liveState, type LiveQuote, type OptionsTicker } from "@/lib/options";
 import { useNow } from "./use-now";
 
-const POLL_MS = 15_000;
+const POLL_MS = 2_000;
 const RETRY_MS = 60_000;
 /** A last trade older than this, while the session is open, is flagged as delayed (IEX is a thin feed). */
 const DELAYED_MS = 5 * 60_000;
@@ -22,7 +22,7 @@ type Feed =
   | { status: "ok"; asOf: string; quotes: Record<string, LiveQuote>; missing: string[] };
 
 /**
- * The live layer: polls /api/quote (same origin, so the page's connect-src 'self' holds) every 15 seconds while
+ * The live layer: polls /api/quote (same origin, so the page's connect-src 'self' holds) every 2 seconds while
  * the tab is visible, and judges each live price against the edition's levels. Research only.
  */
 export function OptionsLive({ tickers, session }: { tickers: OptionsTicker[]; session: string }) {
@@ -69,7 +69,7 @@ export function OptionsLive({ tickers, session }: { tickers: OptionsTicker[]; se
       means={
         feed.status === "ok"
           ? `Alpaca IEX feed, checked ${newYork(feed.asOf, false)} New York. IEX carries a small share of volume, so prices can lag the tape.`
-          : "Alpaca's free IEX feed, refreshed every 15 seconds while this page is open."
+          : "Alpaca's free IEX feed, refreshed every 2 seconds while this page is open."
       }
     >
       {feed.status === "loading" ? (

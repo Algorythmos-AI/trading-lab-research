@@ -41,7 +41,7 @@ wt.ops.publish                            POST /api/ingest            (productio
   validated against `src/lib/options.schema.json` (owned here; `options.types.ts` is generated). Stored at
   `options/latest.json` plus `options/editions/YYYY-MM-DD.json`, one per session the levels are built for. Like the
   radar it has no windows and no watchdog.
-- **Live prices** (`/api/quote?s=SPY,QQQ`, read by the Options page every 15 s while it is open): last trades from
+- **Live prices** (`/api/quote?s=SPY,QQQ`, read by the Options page every 2 s while it is open): last trades from
   Alpaca's free IEX feed, fetched on the server so the page keeps `connect-src 'self'` and never sees the keys. At most
   12 symbols, cached 10 s per instance; 503 until the keys are set, 502 when Alpaca fails. Fixture mode answers from
   the options fixture with no keys and no network. Research only: the keys are market-data keys and nothing here
