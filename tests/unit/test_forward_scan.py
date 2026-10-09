@@ -58,6 +58,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(ft, "POOL_DIR", tmp_path / "pool")
     monkeypatch.setattr(ft, "DATA_DIR", tmp_path)
     monkeypatch.setattr(ft, "universe_symbols", lambda: set())
+    monkeypatch.setattr(ft.shutil, "disk_usage", lambda p: SimpleNamespace(free=50e9))   # not the machine's own disk
     monkeypatch.setattr(ft, "PMCache", lambda since: SimpleNamespace(save=lambda: None))
     monkeypatch.setattr(ft, "page", lambda key, title, message, priority: pages.append((key, priority)))
     state = {"stats": PoolStats(universe=4300, snapshot_symbols=800, kept=20)}
