@@ -374,7 +374,14 @@ export function ChallengersPanel({ c }: { c: Challengers }) {
                     {isNum(r.perMonth) ? <span className="text-muted-foreground"> ({r.perMonth.toFixed(1)}/month)</span> : null}
                   </TableCell>
                   <TableCell className="text-right font-mono">{fracPct(r.winRate)}</TableCell>
-                  <TableCell className={cn("text-right font-mono", toneOf(r.meanR))}>{rMult(r.meanR, 3)}</TableCell>
+                  <TableCell className="text-right whitespace-nowrap">
+                    <span className={cn("font-mono", toneOf(r.meanR))}>{rMult(r.meanR, 3)}</span>
+                    {r.cost ? (
+                      <span className="text-muted-foreground block text-xs">
+                        {rMult(r.cost.grossR, 2)} before costs of {r.cost.meanR.toFixed(2)}R
+                      </span>
+                    ) : null}
+                  </TableCell>
                   <TableCell className="text-right font-mono whitespace-nowrap">
                     {isNum(r.ciLow) && isNum(r.ciHigh) ? `${rMult(r.ciLow, 2)} to ${rMult(r.ciHigh, 2)}` : "—"}
                   </TableCell>

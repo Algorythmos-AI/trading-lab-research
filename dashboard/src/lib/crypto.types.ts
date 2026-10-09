@@ -424,6 +424,9 @@ export interface CryptoSnapshot {
           confirm_trades?: number | null;
           confirm_mean_r?: number | null;
           confirm_profit_factor?: number | null;
+          cost_mean_r?: number | null;
+          gross_mean_r?: number | null;
+          gross_se_r?: number | null;
         } | null)[]
       | null;
   } | null;

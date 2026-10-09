@@ -89,6 +89,11 @@ describe("the crypto tournament", () => {
     expect([live.of, live.meanR, live.ciLow, live.failedOn]).toEqual(["break", 0.212, 0.019, []]);
     expect(live.confirm).toEqual({ passed: true, trades: 88, meanR: 0.131, profitFactor: 1.22 });   // the earlier two years
     expect([waiting.confirm, failed.confirm]).toEqual([null, null]);                                // only run after a pass
+    // What a backtest's trades cost in R and made before costs: beside the verdict, never part of it (DEC-0022).
+    expect(live.cost).toEqual({ meanR: 0.071, grossR: 0.283, grossSe: 0.094 });
+    expect(failed.cost).toEqual({ meanR: 0.124, grossR: 0.006, grossSe: 0.081 });
+    expect(waiting.cost).toBeNull();
+    expect(live.cost!.grossR - live.cost!.meanR).toBeCloseTo(live.meanR as number, 9);
     expect(failed.failedOn.map(code)).toEqual([
       "not clearly profitable once costs are raised",
       "could be luck, given how many ideas were tried",
