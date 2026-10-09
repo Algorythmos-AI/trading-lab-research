@@ -64,7 +64,7 @@ function TrialBooks({ s }: { s: Snapshot }) {
     <Panel
       title="Trial books"
       icon={ScrollText}
-      means="Every registered trial, whether or not it has traded: the sessions it ran, the signals that reached the account, the ones the account refused, and the result so far. Each row is the forward test's own record for that trial; nothing is compounded or combined. Dollars are R times the trial's fixed risk per trade. This is evidence gathering, not proof of an edge."
+      means="Every registered trial, whether or not it has traded: the sessions it ran, the signals that reached the account, the ones the account refused, and the result so far. Shadow resolved counts refused signals whose outcome has been recorded and sealed; those outcomes are not shown or used until a registered experiment opens them. Each row is the forward test's own record for that trial; nothing is compounded or combined. Dollars are R times the trial's fixed risk per trade. This is evidence gathering, not proof of an edge."
       action={
         <span className="text-muted-foreground text-xs">
           {num(quiet)} of {num(rows.length)} with no trade yet
@@ -78,6 +78,7 @@ function TrialBooks({ s }: { s: Snapshot }) {
             <TableHead className="text-right">Sessions</TableHead>
             <TableHead className="text-right">Signals</TableHead>
             <TableHead className="text-right">Refused</TableHead>
+            <TableHead className="text-right">Shadow resolved</TableHead>
             <TableHead className="text-right">Trades</TableHead>
             <TableHead className="text-right">Total R</TableHead>
             <TableHead className="text-right">Deepest fall</TableHead>
@@ -98,6 +99,7 @@ function TrialBooks({ s }: { s: Snapshot }) {
               <TableCell className="text-right font-mono">{num(r.sessions)}</TableCell>
               <TableCell className="text-right font-mono">{num(r.signals)}</TableCell>
               <TableCell className="text-right font-mono">{num(r.refused)}</TableCell>
+              <TableCell className="text-right font-mono">{num(r.shadow_resolved)}</TableCell>
               <TableCell className="text-right font-mono">{num(r.trades)}</TableCell>
               <TableCell className="text-right font-medium">{(r.trades ?? 0) > 0 ? rMult(r.total_r, 2) : "—"}</TableCell>
               <TableCell className="text-right">{(r.trades ?? 0) > 0 ? rMult(-(r.max_dd_r ?? 0), 2) : "—"}</TableCell>
