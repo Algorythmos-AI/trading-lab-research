@@ -158,3 +158,118 @@ export const LEVEL_NAMES: Record<string, string> = {
 export function levelName(code: string): string {
   return LEVEL_NAMES[code] ?? code;
 }
+
+/** A live quote as the page uses it (the /api/quote shape). */
+export interface LiveQuote {
+  price: number;
+  at: string;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  day: string | null;
+  prev_close: number | null;
+}
+
+/** New York date and minutes after midnight of an instant. Null for an unreadable time. */
+export function nyClock(iso: string): { day: string; minutes: number } | null {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return null;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: NEW_YORK,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(t));
+  const get = (k: string) => parts.find((p) => p.type === k)?.value ?? "";
+  return { day: `${get("year")}-${get("month")}-${get("day")}`, minutes: Number(get("hour")) * 60 + Number(get("minute")) };
+}
+
+const OPEN_MIN = 9 * 60 + 30;
+
+export type LiveStateName =
+  | "NOT OPEN YET"
+  | "NO TRADE"
+  | "GAP ABOVE"
+  | "GAP BELOW"
+  | "TESTING SUPPORT"
+  | "TESTING RESISTANCE"
+  | "ABOVE PDH"
+  | "BELOW PDL"
+  | "INSIDE"
+  | "CLOSED";
+
+/**
+ * Where a live price stands against the session's levels, by the levels engine's rules (olib.state): no trade in
+ * the first 15 minutes; a gap when the session opened beyond yesterday's high or low and is still beyond it;
+ * testing a major zone within a quarter ATR of it; otherwise above yesterday's high, below its low, or inside.
+ * Judged at the quote's own time, so a stale quote is never read as live. Yesterday's close is left out of the
+ * zones, as everywhere on the page.
+ */
+export function liveState(t: OptionsTicker, q: LiveQuote, session: string): LiveStateName {
+  const clock = nyClock(q.at);
+  if (!clock) return "NOT OPEN YET";
+  if (clock.day > session) return "CLOSED";
+  if (clock.day < session || q.day !== session) return "NOT OPEN YET";
+  if (clock.minutes >= (t.half_day ? 13 * 60 : 16 * 60)) return "CLOSED";
+  if (clock.minutes < OPEN_MIN) return "NOT OPEN YET";
+  if (clock.minutes < OPEN_MIN + 15) return "NO TRADE";
+  const price = q.price;
+  const pdh = t.levels?.find((l) => l.name === "PDH")?.price;
+  const pdl = t.levels?.find((l) => l.name === "PDL")?.price;
+  if (isNum(q.open) && isNum(pdh) && q.open > pdh && price > pdh) return "GAP ABOVE";
+  if (isNum(q.open) && isNum(pdl) && q.open < pdl && price < pdl) return "GAP BELOW";
+  const band = isNum(t.atr14) ? 0.25 * t.atr14 : 0;
+  const close = t.last?.close;
+  for (const raw of t.zones ?? []) {
+    const z = withoutClose(raw, t.levels);
+    if (!z?.big) continue;
+    if (Math.abs(price - z.lo) <= band || Math.abs(price - z.hi) <= band || (z.lo <= price && price <= z.hi)) {
+      const resistance = isNum(close) ? (z.lo > close ? true : z.hi < close ? false : z.side === "resistance") : z.side === "resistance";
+      return resistance ? "TESTING RESISTANCE" : "TESTING SUPPORT";
+    }
+  }
+  if (isNum(pdh) && price > pdh) return "ABOVE PDH";
+  if (isNum(pdl) && price < pdl) return "BELOW PDL";
+  return "INSIDE";
+}
+
+export const LIVE_STATE_TONE: Record<LiveStateName, Tone> = {
+  "NOT OPEN YET": "neutral",
+  "NO TRADE": "warn",
+  "GAP ABOVE": "info",
+  "GAP BELOW": "info",
+  "TESTING SUPPORT": "good",
+  "TESTING RESISTANCE": "bad",
+  "ABOVE PDH": "info",
+  "BELOW PDL": "info",
+  INSIDE: "neutral",
+  CLOSED: "neutral",
+};
+
+/**
+ * The nearest zone edge above and below a live price (yesterday's close left out), with distances in ATR. A zone
+ * the price is inside counts by its own top and bottom.
+ */
+export function liveNeighbours(t: OptionsTicker, price: number): { up: number | null; down: number | null; upAtr: number | null; downAtr: number | null } {
+  let up: number | null = null;
+  let down: number | null = null;
+  for (const raw of t.zones ?? []) {
+    const z = withoutClose(raw, t.levels);
+    if (!z) continue;
+    // Inside a zone, its own edges are the nearest levels each way.
+    const upEdge = z.lo > price ? z.lo : z.hi > price ? z.hi : null;
+    const downEdge = z.hi < price ? z.hi : z.lo < price ? z.lo : null;
+    if (upEdge !== null && (up === null || upEdge < up)) up = upEdge;
+    if (downEdge !== null && (down === null || downEdge > down)) down = downEdge;
+  }
+  const atr = isNum(t.atr14) && t.atr14 > 0 ? t.atr14 : null;
+  return {
+    up,
+    down,
+    upAtr: up !== null && atr ? (up - price) / atr : null,
+    downAtr: down !== null && atr ? (price - down) / atr : null,
+  };
+}

@@ -41,6 +41,11 @@ wt.ops.publish                            POST /api/ingest            (productio
   validated against `src/lib/options.schema.json` (owned here; `options.types.ts` is generated). Stored at
   `options/latest.json` plus `options/editions/YYYY-MM-DD.json`, one per session the levels are built for. Like the
   radar it has no windows and no watchdog.
+- **Live prices** (`/api/quote?s=SPY,QQQ`, read by the Options page every 15 s while it is open): last trades from
+  Alpaca's free IEX feed, fetched on the server so the page keeps `connect-src 'self'` and never sees the keys. At most
+  12 symbols, cached 10 s per instance; 503 until the keys are set, 502 when Alpaca fails. Fixture mode answers from
+  the options fixture with no keys and no network. Research only: the keys are market-data keys and nothing here
+  can trade.
 - **Watchdog** (`src/lib/watchdog.ts`, pure and unit-tested): in a window a snapshot older than 35 min is late
   and older than 90 min is stopped (both priority 4); a fresh snapshot after an alert sends "recovered"
   (priority 2). Outside every window nothing pages. The alert state is committed with `ifMatch` before paging,
@@ -73,6 +78,8 @@ Fixture mode is refused on production deployments, and the page shows a banner w
 | `BLOB_READ_WRITE_TOKEN` | Vercel **production only** (added when the private Blob store is connected) | Read and write snapshots and alert state. Previews must not hold it: they run with `DASHBOARD_FIXTURE=1` |
 | `DASHBOARD_INGEST_SECRET` | Vercel production + the Mac's `~/trading/.env` | Shared HMAC key for `/api/ingest` |
 | `RADAR_INGEST_SECRET` | Vercel production + the radar's cloud environment | HMAC key for key id `radar`. It may only publish research editions (`stocksdelta/radar`, `stocksdelta/options`); unset means the radar key is refused |
+| `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY` | Vercel production only | Alpaca paper-account keys, used only for the free IEX market data behind `/api/quote`; unset means the Options page shows live prices as off |
+| `ALPACA_DATA_URL` | Vercel (optional) | Market-data base URL, default `https://data.alpaca.markets` |
 | `CRON_SECRET` | Vercel production | Bearer token Vercel Cron sends to `/api/cron/watchdog` |
 | `NTFY_TOPIC` | Vercel production and preview + the Mac | Secret, random ntfy topic for pages; unset means log and skip |
 | `NTFY_SERVER` | Vercel (optional) | ntfy server, default `https://ntfy.sh` |
