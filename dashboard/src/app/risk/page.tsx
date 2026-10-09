@@ -122,6 +122,12 @@ function G2Panel({ s }: { s: Snapshot }) {
           max={g2?.sessions_needed}
           valueText={`${num(g2?.sessions)} of ${num(g2?.sessions_needed)}`}
         />
+        {typeof g2?.unchecked_sessions === "number" ? (
+          <p className="text-muted-foreground text-sm">
+            Sessions left out because the runner could not check its inputs:{" "}
+            <span className="text-foreground font-mono">{num(g2.unchecked_sessions)}</span>
+          </p>
+        ) : null}
       </div>
     </Panel>
   );

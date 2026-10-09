@@ -123,7 +123,7 @@ ALLOW: dict[str, Any] = {
                   "mean_r": N, "virtual": {"equity": N, "start": N, "latched": B, "latch_reason": T},
                   "recent": [{"ts": S, "event": S, "detail": T}],
                   "g2": {"trades": I, "trades_needed": I, "sessions": I, "sessions_needed": I, "armed_sessions": I,
-                         "incident_free_streak": I, "incident_free_needed": I, "agreement_level": S,
+                         "unchecked_sessions": I, "incident_free_streak": I, "incident_free_needed": I, "agreement_level": S,
                          "agreement_days": I, "agreement_agree": I}, "log": LOG},
         "forward": {"exists": B, "sessions": I, "first": S, "last": S, "errors": I, "bad_lines": I,
                     "strategies": [{"strategy": S, "n": I, "mean_r": N, "total_r": N}], "latest_scorecard": S,
