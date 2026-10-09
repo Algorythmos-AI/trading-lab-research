@@ -102,6 +102,7 @@ test("the watchdog requires the cron secret", async ({ request }) => {
 
 const CRYPTO_PAGES = [
   { path: "/crypto", heading: "Overview" },
+  { path: "/crypto/market", heading: "Market" },
   { path: "/crypto/strategy", heading: "Strategy" },
   { path: "/crypto/research", heading: "Research" },
   { path: "/crypto/learning", heading: "Machine learning" },

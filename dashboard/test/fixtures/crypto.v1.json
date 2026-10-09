@@ -479,6 +479,65 @@
    "start": "2026-10-01T20:00:40+00:00"
   }
  ],
+ "exposure": {
+  "books": [
+   {
+    "equity": 10315.904800003878,
+    "name": "trend",
+    "notional": 2548.95833331702,
+    "notional_pct": 24.709013729130785,
+    "positions": 1,
+    "risk": 138.54166666577999,
+    "risk_pct": 1.3429909382813217
+   },
+   {
+    "equity": 10058.404799965554,
+    "name": "break",
+    "notional": 0.0,
+    "notional_pct": 0.0,
+    "positions": 0,
+    "risk": 0.0,
+    "risk_pct": 0.0
+   },
+   {
+    "equity": 10000.0,
+    "name": "dip",
+    "notional": 0.0,
+    "notional_pct": 0.0,
+    "positions": 0,
+    "risk": 0.0,
+    "risk_pct": 0.0
+   },
+   {
+    "equity": 10000.0,
+    "name": "ch-29db21a0",
+    "notional": 0.0,
+    "notional_pct": 0.0,
+    "positions": 0,
+    "risk": 0.0,
+    "risk_pct": 0.0
+   }
+  ],
+  "coins": [
+   {
+    "books": [
+     "trend"
+    ],
+    "equity_pct": 6.313317450062228,
+    "notional": 2548.95833331702,
+    "pair": "XRP/USD",
+    "risk": 138.54166666577999,
+    "risk_pct": 0.3431431225411836,
+    "share_pct": 100.0,
+    "unrealised": 28.499999999817515
+   }
+  ],
+  "equity": 40374.309599969434,
+  "gross": 2548.95833331702,
+  "gross_pct": 6.313317450062228,
+  "largest_share_pct": 100.0,
+  "risk": 138.54166666577999
+ },
  "jobs": {
   "last": {
    "crypto": {
@@ -865,6 +924,309 @@
   "observations": 1440,
   "status": "not_trained"
  },
+ "monitor": {
+  "bar": "2026-10-02T20:00:00+00:00",
+  "correlation": {
+   "bars": 120,
+   "high": 0.663,
+   "low": -0.017,
+   "mean": 0.331,
+   "pairs": [
+    "BTC/USD",
+    "ETH/USD",
+    "SOL/USD",
+    "XRP/USD",
+    "ADA/USD",
+    "DOGE/USD",
+    "LINK/USD",
+    "AVAX/USD"
+   ],
+   "rows": [
+    {
+     "pair": "BTC/USD",
+     "with": [
+      1.0,
+      0.663,
+      0.606,
+      0.616,
+      0.312,
+      0.379,
+      0.425,
+      0.368
+     ]
+    },
+    {
+     "pair": "ETH/USD",
+     "with": [
+      0.663,
+      1.0,
+      0.479,
+      0.581,
+      0.177,
+      0.426,
+      0.407,
+      0.259
+     ]
+    },
+    {
+     "pair": "SOL/USD",
+     "with": [
+      0.606,
+      0.479,
+      1.0,
+      0.552,
+      0.341,
+      0.25,
+      0.33,
+      0.232
+     ]
+    },
+    {
+     "pair": "XRP/USD",
+     "with": [
+      0.616,
+      0.581,
+      0.552,
+      1.0,
+      0.267,
+      0.405,
+      0.29,
+      0.271
+     ]
+    },
+    {
+     "pair": "ADA/USD",
+     "with": [
+      0.312,
+      0.177,
+      0.341,
+      0.267,
+      1.0,
+      -0.017,
+      0.035,
+      0.159
+     ]
+    },
+    {
+     "pair": "DOGE/USD",
+     "with": [
+      0.379,
+      0.426,
+      0.25,
+      0.405,
+      -0.017,
+      1.0,
+      0.315,
+      0.032
+     ]
+    },
+    {
+     "pair": "LINK/USD",
+     "with": [
+      0.425,
+      0.407,
+      0.33,
+      0.29,
+      0.035,
+      0.315,
+      1.0,
+      0.095
+     ]
+    },
+    {
+     "pair": "AVAX/USD",
+     "with": [
+      0.368,
+      0.259,
+      0.232,
+      0.271,
+      0.159,
+      0.032,
+      0.095,
+      1.0
+     ]
+    }
+   ]
+  },
+  "pairs": [
+   {
+    "above_ema20": true,
+    "above_ema50": true,
+    "atr_pct": 1.1889,
+    "bar": "2026-10-02T20:00:00+00:00",
+    "bars": 150,
+    "close": 0.6993,
+    "dist_ema20_pct": 2.8863,
+    "dist_ema50_pct": 7.3925,
+    "pair": "ADA/USD",
+    "rank": 1,
+    "ret_1": -0.6615,
+    "ret_30": 15.6506,
+    "ret_day": -0.7452,
+    "rsi": 67.84,
+    "stale": false,
+    "to_high_20_pct": -1.5037,
+    "to_high_30_pct": -1.5037,
+    "volume_ratio": 0.9423
+   },
+   {
+    "above_ema20": true,
+    "above_ema50": true,
+    "atr_pct": 0.8488,
+    "bar": "2026-10-02T20:00:00+00:00",
+    "bars": 150,
+    "close": 170932.913471,
+    "dist_ema20_pct": 2.6351,
+    "dist_ema50_pct": 7.0331,
+    "pair": "BTC/USD",
+    "rank": 2,
+    "ret_1": -0.3504,
+    "ret_30": 9.7575,
+    "ret_day": 1.8966,
+    "rsi": 76.46,
+    "stale": false,
+    "to_high_20_pct": -0.4809,
+    "to_high_30_pct": -0.4809,
+    "volume_ratio": 0.9988
+   },
+   {
+    "above_ema20": true,
+    "above_ema50": true,
+    "atr_pct": 1.0095,
+    "bar": "2026-10-02T20:00:00+00:00",
+    "bars": 150,
+    "close": 215.705204,
+    "dist_ema20_pct": 2.7062,
+    "dist_ema50_pct": 5.877,
+    "pair": "SOL/USD",
+    "rank": 3,
+    "ret_1": 0.4833,
+    "ret_30": 9.5741,
+    "ret_day": 0.3366,
+    "rsi": 67.13,
+    "stale": false,
+    "to_high_20_pct": 0.2324,
+    "to_high_30_pct": 0.2324,
+    "volume_ratio": 0.5501
+   },
+   {
+    "above_ema20": false,
+    "above_ema50": true,
+    "atr_pct": 1.3516,
+    "bar": "2026-10-02T20:00:00+00:00",
+    "bars": 150,
+    "close": 13.367362,
+    "dist_ema20_pct": -0.8576,
+    "dist_ema50_pct": 3.3571,
+    "pair": "AVAX/USD",
+    "rank": 4,
+    "ret_1": -3.1949,
+    "ret_30": 7.7558,
+    "ret_day": -3.8767,
+    "rsi": 50.49,
+    "stale": false,
+    "to_high_20_pct": -4.0335,
+    "to_high_30_pct": -4.0335,
+    "volume_ratio": 0.9641
+   },
+   {
+    "above_ema20": true,
+    "above_ema50": true,
+    "atr_pct": 1.0816,
+    "bar": "2026-10-02T20:00:00+00:00",
+    "bars": 150,
+    "close": 3.037744,
+    "dist_ema20_pct": 0.0519,
+    "dist_ema50_pct": 2.603,
+    "pair": "XRP/USD",
+    "rank": 5,
+    "ret_1": -0.6058,
+    "ret_30": 4.4827,
+    "ret_day": -1.5581,
+    "rsi": 52.93,
+    "stale": false,
+    "to_high_20_pct": -2.3044,
+    "to_high_30_pct": -2.3044,
+    "volume_ratio": 1.4879
+   },
+   {
+    "above_ema20": true,
+    "above_ema50": true,
+    "atr_pct": 0.8009,
+    "bar": "2026-10-02T20:00:00+00:00",
+    "bars": 150,
+    "close": 4799.454139,
+    "dist_ema20_pct": 1.1718,
+    "dist_ema50_pct": 2.9429,
+    "pair": "ETH/USD",
+    "rank": 6,
+    "ret_1": 0.2757,
+    "ret_30": 3.0824,
+    "ret_day": 0.2973,
+    "rsi": 61.59,
+    "stale": false,
+    "to_high_20_pct": -0.3745,
+    "to_high_30_pct": -0.3745,
+    "volume_ratio": 0.8492
+   },
+   {
+    "above_ema20": false,
+    "above_ema50": false,
+    "atr_pct": 1.4796,
+    "bar": "2026-10-02T20:00:00+00:00",
+    "bars": 150,
+    "close": 0.197251,
+    "dist_ema20_pct": -2.9897,
+    "dist_ema50_pct": -3.6617,
+    "pair": "DOGE/USD",
+    "rank": 7,
+    "ret_1": -0.5882,
+    "ret_30": -7.7719,
+    "ret_day": -1.6008,
+    "rsi": 37.5,
+    "stale": false,
+    "to_high_20_pct": -7.8882,
+    "to_high_30_pct": -9.0334,
+    "volume_ratio": 1.0053
+   },
+   {
+    "above_ema20": false,
+    "above_ema50": false,
+    "atr_pct": 1.2152,
+    "bar": "2026-10-02T20:00:00+00:00",
+    "bars": 150,
+    "close": 12.003797,
+    "dist_ema20_pct": -1.0645,
+    "dist_ema50_pct": -5.1921,
+    "pair": "LINK/USD",
+    "rank": 8,
+    "ret_1": 0.907,
+    "ret_30": -10.5626,
+    "ret_day": 2.2698,
+    "rsi": 39.09,
+    "stale": false,
+    "to_high_20_pct": -9.4778,
+    "to_high_30_pct": -12.5081,
+    "volume_ratio": 1.0086
+   }
+  ],
+  "regime": {
+   "above_ema50": 6,
+   "breadth": 0.75,
+   "btc_close": 103849.549634,
+   "btc_ret_30d": -1.6334,
+   "btc_sma50": 103313.08,
+   "btc_vs_sma50_pct": 0.5193,
+   "code": "up",
+   "daily_bar": "2026-10-02T20:00:00+00:00",
+   "pairs": 8,
+   "rising": 6,
+   "rising_share": 0.75,
+   "stale": false,
+   "vol_30d_pct": 24.15
+  },
+  "tf_min": 240
+ },
  "perf": {
   "by_pair": {
    "BTC/USD": {
@@ -1125,6 +1487,7 @@
  "schema_version": 1,
  "sleeves": [
   {
+   "best_r": 2.39,
    "cash": 7766.946466686859,
    "config": "21689556f064",
    "equity": 10315.904800003878,
@@ -1150,9 +1513,13 @@
    "latched": false,
    "losses": 1,
    "max_dd": -120.8,
+   "mean_loss_r": -1.208,
    "mean_r": 0.9580000000000001,
+   "mean_win_r": 2.041,
+   "median_r": 1.692,
    "name": "trend",
    "open_pnl": 28.499999999817515,
+   "payoff": 1.689569536423841,
    "pnl": {
     "month": 238.96,
     "month_trades": 1,
@@ -1176,6 +1543,68 @@
      "unrealised": 28.499999999817515,
      "unrealised_pct": 1.535269709543563,
      "unrealised_r": 0.28499999999999914
+    }
+   ],
+   "r_bands": [
+    {
+     "hi": -2.0,
+     "lo": null,
+     "n": 0
+    },
+    {
+     "hi": -1.5,
+     "lo": -2.0,
+     "n": 0
+    },
+    {
+     "hi": -1.0,
+     "lo": -1.5,
+     "n": 1
+    },
+    {
+     "hi": -0.5,
+     "lo": -1.0,
+     "n": 0
+    },
+    {
+     "hi": 0.0,
+     "lo": -0.5,
+     "n": 0
+    },
+    {
+     "hi": 0.5,
+     "lo": 0.0,
+     "n": 0
+    },
+    {
+     "hi": 1.0,
+     "lo": 0.5,
+     "n": 0
+    },
+    {
+     "hi": 1.5,
+     "lo": 1.0,
+     "n": 0
+    },
+    {
+     "hi": 2.0,
+     "lo": 1.5,
+     "n": 1
+    },
+    {
+     "hi": 3.0,
+     "lo": 2.0,
+     "n": 1
+    },
+    {
+     "hi": 4.0,
+     "lo": 3.0,
+     "n": 0
+    },
+    {
+     "hi": null,
+     "lo": 4.0,
+     "n": 0
     }
    ],
    "recent": [
@@ -1322,9 +1751,11 @@
     }
    ],
    "win_rate": 0.6666666666666666,
-   "wins": 2
+   "wins": 2,
+   "worst_r": -1.208
   },
   {
+   "best_r": 1.792,
    "cash": 10058.404799965554,
    "config": "5ac5204a1416",
    "equity": 10058.404799965554,
@@ -1354,9 +1785,13 @@
    "latched": false,
    "losses": 1,
    "max_dd": -120.8,
+   "mean_loss_r": -1.208,
    "mean_r": 0.29200000000000004,
+   "mean_win_r": 1.792,
+   "median_r": 0.29200000000000004,
    "name": "break",
    "open_pnl": null,
+   "payoff": 1.4834437086092715,
    "pnl": {
     "month": 0.0,
     "month_trades": 0,
@@ -1367,6 +1802,68 @@
     "week_trades": 2
    },
    "positions": [],
+   "r_bands": [
+    {
+     "hi": -2.0,
+     "lo": null,
+     "n": 0
+    },
+    {
+     "hi": -1.5,
+     "lo": -2.0,
+     "n": 0
+    },
+    {
+     "hi": -1.0,
+     "lo": -1.5,
+     "n": 1
+    },
+    {
+     "hi": -0.5,
+     "lo": -1.0,
+     "n": 0
+    },
+    {
+     "hi": 0.0,
+     "lo": -0.5,
+     "n": 0
+    },
+    {
+     "hi": 0.5,
+     "lo": 0.0,
+     "n": 0
+    },
+    {
+     "hi": 1.0,
+     "lo": 0.5,
+     "n": 0
+    },
+    {
+     "hi": 1.5,
+     "lo": 1.0,
+     "n": 0
+    },
+    {
+     "hi": 2.0,
+     "lo": 1.5,
+     "n": 1
+    },
+    {
+     "hi": 3.0,
+     "lo": 2.0,
+     "n": 0
+    },
+    {
+     "hi": 4.0,
+     "lo": 3.0,
+     "n": 0
+    },
+    {
+     "hi": null,
+     "lo": 4.0,
+     "n": 0
+    }
+   ],
    "recent": [
     {
      "entry_price": 175.0,
@@ -1495,9 +1992,11 @@
     }
    ],
    "win_rate": 0.5,
-   "wins": 1
+   "wins": 1,
+   "worst_r": -1.208
   },
   {
+   "best_r": null,
    "cash": 10000.0,
    "config": "06a640f39e0b",
    "equity": 10000.0,
@@ -1523,9 +2022,13 @@
    "latched": false,
    "losses": 0,
    "max_dd": null,
+   "mean_loss_r": null,
    "mean_r": null,
+   "mean_win_r": null,
+   "median_r": null,
    "name": "dip",
    "open_pnl": null,
+   "payoff": null,
    "pnl": {
     "month": 0.0,
     "month_trades": 0,
@@ -1536,6 +2039,7 @@
     "week_trades": 0
    },
    "positions": [],
+   "r_bands": [],
    "recent": [],
    "return_pct": 0.0,
    "signals": [
@@ -1619,9 +2123,11 @@
     }
    ],
    "win_rate": null,
-   "wins": 0
+   "wins": 0,
+   "worst_r": null
   },
   {
+   "best_r": null,
    "cash": 10000.0,
    "config": "ch-29db21a0",
    "equity": 10000.0,
@@ -1637,9 +2143,13 @@
    "latched": false,
    "losses": 0,
    "max_dd": null,
+   "mean_loss_r": null,
    "mean_r": null,
+   "mean_win_r": null,
+   "median_r": null,
    "name": "ch-29db21a0",
    "open_pnl": null,
+   "payoff": null,
    "pnl": {
     "month": 0.0,
     "month_trades": 0,
@@ -1650,6 +2160,7 @@
     "week_trades": 0
    },
    "positions": [],
+   "r_bands": [],
    "recent": [],
    "return_pct": 0.0,
    "signals": [],
@@ -1661,7 +2172,8 @@
    "trades": 0,
    "why_not": [],
    "win_rate": null,
-   "wins": 0
+   "wins": 0,
+   "worst_r": null
   }
  ],
  "strategy": {

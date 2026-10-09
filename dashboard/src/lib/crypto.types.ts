@@ -290,6 +290,22 @@ export interface CryptoSnapshot {
         total_r?: number | null;
         fees?: number | null;
         max_dd?: number | null;
+        mean_win_r?: number | null;
+        mean_loss_r?: number | null;
+        payoff?: number | null;
+        best_r?: number | null;
+        worst_r?: number | null;
+        median_r?: number | null;
+        /**
+         * @maxItems 2000
+         */
+        r_bands?:
+          | ({
+              lo?: number | null;
+              hi?: number | null;
+              n?: number | null;
+            } | null)[]
+          | null;
         /**
          * @maxItems 2000
          */
@@ -446,6 +462,111 @@ export interface CryptoSnapshot {
     refused_risk?: number | null;
     refused_coin_7d?: number | null;
     refused_risk_7d?: number | null;
+  } | null;
+  monitor?: {
+    tf_min?: number | null;
+    bar?: string | null;
+    regime?: {
+      code?: string | null;
+      btc_close?: number | null;
+      btc_sma50?: number | null;
+      btc_vs_sma50_pct?: number | null;
+      btc_ret_30d?: number | null;
+      vol_30d_pct?: number | null;
+      daily_bar?: string | null;
+      stale?: boolean | null;
+      pairs?: number | null;
+      above_ema50?: number | null;
+      breadth?: number | null;
+      rising?: number | null;
+      rising_share?: number | null;
+    } | null;
+    /**
+     * @maxItems 2000
+     */
+    pairs?:
+      | ({
+          pair?: string | null;
+          bar?: string | null;
+          close?: number | null;
+          bars?: number | null;
+          stale?: boolean | null;
+          rank?: number | null;
+          ret_1?: number | null;
+          ret_day?: number | null;
+          ret_30?: number | null;
+          to_high_20_pct?: number | null;
+          to_high_30_pct?: number | null;
+          dist_ema20_pct?: number | null;
+          dist_ema50_pct?: number | null;
+          above_ema20?: boolean | null;
+          above_ema50?: boolean | null;
+          rsi?: number | null;
+          atr_pct?: number | null;
+          volume_ratio?: number | null;
+        } | null)[]
+      | null;
+    correlation?: {
+      bars?: number | null;
+      /**
+       * @maxItems 2000
+       */
+      pairs?: (string | null)[] | null;
+      /**
+       * @maxItems 2000
+       */
+      rows?:
+        | ({
+            pair?: string | null;
+            /**
+             * @maxItems 2000
+             */
+            with?: (number | null)[] | null;
+          } | null)[]
+        | null;
+      mean?: number | null;
+      low?: number | null;
+      high?: number | null;
+    } | null;
+  } | null;
+  exposure?: {
+    equity?: number | null;
+    gross?: number | null;
+    gross_pct?: number | null;
+    risk?: number | null;
+    largest_share_pct?: number | null;
+    /**
+     * @maxItems 2000
+     */
+    coins?:
+      | ({
+          pair?: string | null;
+          /**
+           * @maxItems 2000
+           */
+          books?: (string | null)[] | null;
+          notional?: number | null;
+          risk?: number | null;
+          unrealised?: number | null;
+          equity_pct?: number | null;
+          share_pct?: number | null;
+          risk_pct?: number | null;
+        } | null)[]
+      | null;
+    /**
+     * @maxItems 2000
+     */
+    books?:
+      | ({
+          name?: string | null;
+          equity?: number | null;
+          positions?: number | null;
+          notional?: number | null;
+          risk?: number | null;
+          notional_pct?: number | null;
+          risk_pct?: number | null;
+        } | null)[]
+      | null;
   } | null;
   learning?: {
     switch?: string | null;

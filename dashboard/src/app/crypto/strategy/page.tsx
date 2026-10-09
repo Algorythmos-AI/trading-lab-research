@@ -1,4 +1,5 @@
 import { Calculator, History, ScrollText, ShieldX } from "lucide-react";
+import { RDistributionPanel } from "@/components/crypto/market";
 import { NoCryptoSnapshot } from "@/components/crypto/panels";
 import { SignalFunnelPanel } from "@/components/crypto/performance";
 import { TradeResultsPanel } from "@/components/crypto/tournament";
@@ -48,6 +49,7 @@ function TournamentResults({ s }: { s: Crypto }) {
   return t.available ? (
     <>
       <TradeResultsPanel t={t} />
+      <RDistributionPanel s={s} />
       <SignalFunnelPanel s={s} />
     </>
   ) : null;

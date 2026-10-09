@@ -1371,6 +1371,76 @@
               "null"
             ]
           },
+          "mean_win_r": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "mean_loss_r": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "payoff": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "best_r": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "worst_r": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "median_r": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "r_bands": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "lo": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "hi": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "n": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "maxItems": 2000
+          },
           "positions": {
             "type": [
               "array",
@@ -2098,6 +2168,497 @@
             "integer",
             "null"
           ]
+        }
+      }
+    },
+    "monitor": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "tf_min": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "bar": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
+        "regime": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "btc_close": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "btc_sma50": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "btc_vs_sma50_pct": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "btc_ret_30d": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "vol_30d_pct": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "daily_bar": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "stale": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "pairs": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "above_ema50": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "breadth": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "rising": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "rising_share": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          }
+        },
+        "pairs": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "pair": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "bar": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "close": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "bars": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "stale": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "rank": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "ret_1": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "ret_day": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "ret_30": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "to_high_20_pct": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "to_high_30_pct": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "dist_ema20_pct": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "dist_ema50_pct": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "above_ema20": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "above_ema50": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "rsi": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "atr_pct": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "volume_ratio": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          },
+          "maxItems": 2000
+        },
+        "correlation": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "bars": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "pairs": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "maxItems": 2000
+            },
+            "rows": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "pair": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  },
+                  "with": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "maxItems": 2000
+                  }
+                }
+              },
+              "maxItems": 2000
+            },
+            "mean": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "low": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "high": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "exposure": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "equity": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "gross": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "gross_pct": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "risk": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "largest_share_pct": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "coins": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "pair": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "books": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 200
+                },
+                "maxItems": 2000
+              },
+              "notional": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "risk": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "unrealised": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "equity_pct": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "share_pct": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "risk_pct": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          },
+          "maxItems": 2000
+        },
+        "books": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "equity": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "positions": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "notional": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "risk": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "notional_pct": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "risk_pct": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          },
+          "maxItems": 2000
         }
       }
     },
