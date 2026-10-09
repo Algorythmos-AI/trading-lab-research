@@ -141,3 +141,26 @@ def test_a_failing_comparison_costs_only_its_section(tmp_path, monkeypatch):
     assert sc.agreement()[-1] == "- Not available this week (OSError)."
     monkeypatch.setattr(sc, "ROUTINE_DIR", tmp_path / "none")
     assert "**0**" in "\n".join(sc.agreement()) and not any("|" in x for x in sc.agreement())
+
+
+def test_signals_both_records_saw_are_counted_by_name_and_trial(tmp_path, monkeypatch):
+    routine, fwd = tmp_path / "routine", tmp_path / "forward"
+    monkeypatch.setattr(sc, "ROUTINE_DIR", routine)
+    monkeypatch.setattr(sc, "FWD", fwd / "forward_trades.jsonl")
+    monkeypatch.setattr(sc, "record_rows", lambda day: None)
+    (fwd / "signals").mkdir(parents=True)
+
+    def day(d, seen, record):
+        (routine / d).mkdir(parents=True)
+        if seen is not None:
+            (routine / d / "1131_signals.json").write_text(json.dumps({"tier2": [], "signals": seen}))
+        if record is not None:
+            (fwd / "signals" / f"{d}.json").write_text(json.dumps({"session": d, "signals": record}))
+    day("2026-10-12", [{"symbol": "AAAA", "trial": "GG-1"}, {"symbol": "BBBB", "trial": "GG-4"},
+                       {"symbol": "AAAA", "trial": "MP-1"}], {"GG-1": ["AAAA"], "GG-2": ["CCCC"], "GG-4": []})
+    day("2026-10-13", [], {"GG-1": [], "GG-2": [], "GG-3": [], "GG-4": []})          # a quiet day on both sides counts
+    day("2026-10-14", [{"symbol": "DDDD", "trial": "GG-1"}], None)                   # no forward record: left out
+    day("2026-10-15", None, {"GG-1": ["EEEE"]})                                      # no dry-run stage: left out
+    line = sc.agreement()[-1]
+    assert "sessions with both records: 2" in line and "dry run 2 · of record 2 · in both 1" in line
+    assert not any(s in "\n".join(sc.agreement()) for s in ("AAAA", "BBBB", "CCCC", "DDDD", "EEEE"))

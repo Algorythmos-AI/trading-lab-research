@@ -114,6 +114,23 @@ def record_rows(day: str) -> list[dict] | None:
             for r in explain(from_pool(pool), load_spec("SPEC-0001"), pool_musts(pool)).rows]
 
 
+def signal_days() -> list[dict]:
+    """Per session with both records: how many Set F signals the dry run and the forward test each saw, and how
+    many both did. The dry run's come from its 11:31 stage, the forward test's from var/forward/signals/."""
+    days = []
+    for d in sorted(p for p in ROUTINE_DIR.glob("*") if p.is_dir()):
+        try:
+            seen = json.loads((d / "1131_signals.json").read_text())
+            record = json.loads((FWD.parent / "signals" / f"{d.name}.json").read_text())
+        except (OSError, ValueError):
+            continue
+        if not isinstance(seen, dict) or not isinstance(record, dict):
+            continue
+        days.append(funnel_agreement.compare_signals(funnel_agreement.seen_pairs(seen.get("signals") or []),
+                                                     funnel_agreement.record_pairs(record.get("signals") or {})))
+    return days
+
+
 def agreement() -> list[str]:
     """Section 4: the dry run's funnel against the forward test's, in counts (DEC-0023, section 2). A description:
     any failure here costs the scorecard this section and nothing else."""
@@ -136,6 +153,12 @@ def agreement() -> list[str]:
               f"| Tier 2 names | {t['tier2_seen']} | {t['tier2_record']} | {t['tier2_both']} |", "",
               f"- First pick: same {fp['same']} · different {fp['different']} · on one side only {fp['one_side']} · "
               f"none on either {fp['neither']}"]
+    try:
+        g = funnel_agreement.total_signals(signal_days())
+    except Exception as e:  # noqa: BLE001
+        return [*L, f"- Signals: not available this week ({e.__class__.__name__})."]
+    L += [f"- Signals (a rule firing on a name, the four Set F trials; sessions with both records: {g['sessions']}): "
+          f"dry run {g['signals_seen']} · of record {g['signals_record']} · in both {g['signals_both']}"]
     return L
 
 

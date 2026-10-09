@@ -196,3 +196,29 @@ def test_the_scorecard_reads_the_record_from_the_same_pool_with_the_same_funnel(
     assert [r["symbol"] for r in got if r["reached"] == "primary"] == ([first] if first else [])
     assert f["tier2"]                                                    # the fixture does reach Tier 2
     assert sc.record_rows("2026-01-02") == [] and sc.record_rows("2026-01-05") is None
+
+
+# ---- Set F's signal names, for the scorecard's agreement count (DEC-0023, section 2) -----------------------------
+
+def test_a_signal_name_is_kept_whatever_happened_after_the_rule_fired(env, monkeypatch):
+    per_trial = {"GG-1": ([tpf.cand("ADM", 1, 3, 1.0, qty=10), tpf.cand("ADM", 5, 6, 1.0, qty=10, attempt=2)],
+                          [{"symbol": "WIDE", "reason": "spread", "spread": 0.09}, {"symbol": "NOBAR", "reason": "no_rth_bars"},
+                           {"symbol": "NOFILL", "reason": "no_fill"}],
+                          [("ADM", 0, None, None, None, 0), ("NOFILL", 1, None, None, None, 0)]),
+                 "GG-3": ([], [], [])}
+    assert ft.signal_names(per_trial) == {"GG-1": ["ADM", "NOFILL", "WIDE"], "GG-2": [], "GG-3": [], "GG-4": []}
+    monkeypatch.setattr(ft, "gg_day", lambda *a, **k: per_trial)
+    trades = ft.r3_gg(env.ctx, D, "F")
+    path = env.tmp / "forward" / "signals" / f"{D}.json"
+    doc = json.loads(path.read_text())
+    assert doc["signals"]["GG-1"] == ["ADM", "NOFILL", "WIDE"] and doc["set"] == "F"
+    doc.pop("git_sha")
+    assert not any(w in json.dumps(doc) for w in ('"R"', "0.09", "entry", "time"))    # names only
+    path.unlink()
+    assert ft.r3_gg(env.ctx, D, "P") == {k.replace(":F:", ":P:"): v for k, v in trades.items()}
+    assert not path.exists()                                                          # Set P is not what the dry run follows
+
+    def broken(per_trial):
+        raise RuntimeError("no names today")
+    monkeypatch.setattr(ft, "signal_names", broken)
+    assert ft.r3_gg(env.ctx, D, "F") == trades                                        # a failure costs no trade

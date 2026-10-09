@@ -354,6 +354,32 @@ def page(key: str, title: str, message: str, priority: int) -> None:
         print(f"alert {key}: {e!r}")
 
 
+def signal_names(per_trial: dict) -> dict[str, list[str]]:
+    """Per GG trial, the names on which the registered rule fired at least once: every first signal, whether the
+    spread must then passed (the control inputs), failed (a `spread` skip) or the chain went on to admission."""
+    out = {}
+    for trial in GG:
+        cands, skips, ctl = per_trial[trial] if trial in per_trial else ([], [], [])
+        names = {c[0] for c in ctl} | {c.chain for c in cands if c.attempt == 1}
+        names |= {s["symbol"] for s in skips if s.get("reason") == "spread"}
+        out[trial] = sorted(names)
+    return out
+
+
+def note_signals(d: dt.date, per_trial: dict) -> None:
+    """Keep Set F's signal names for the session in var/forward/signals/<d>.json, so the weekly scorecard can count
+    how many the dry run also saw (DEC-0023, section 2). Names and nothing else: no time, price or result. Runtime
+    state, never published. Like the funnel record it cannot fail a unit or change a trade."""
+    try:
+        path = FWD / "signals" / f"{d}.json"
+        text = json.dumps({"session": str(d), "set": "F", "signals": signal_names(per_trial), "git_sha": git_sha()},
+                          indent=1, sort_keys=True)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_replace(path, lambda tmp: tmp.write_text(text))
+    except Exception as e:  # noqa: BLE001 — a description must never cost a trial its session
+        print(f"signal names {d}: {e!r}")
+
+
 # ---- sealed shadow outcomes (DEC-0023, section 4) ---------------------------------------------------------------
 # What the registered exit simulation says of a signal that admission refused for cash or for a day stop. Written
 # beside the ledger and never in it. SEALED: no code reads an R from these files; only the number resolved is
@@ -411,6 +437,8 @@ def r3_gg(ctx: Context, d: dt.date, which: str) -> dict[str, list[dict]]:
         out[f"r3:{which}:{trial}"] = [trade_row(d, c, tr, r) for c, tr, r in res.admitted]
     note_funnel(d, f"set_{which}", lambda: gg_record(d, which, ctx.spec, relax, per_trial, results))
     note_shadow(d, f"set_{which}", {f"r3:{which}:{t}": r for t, r in results.items()}, ctx.spec)
+    if which == "F":                      # the dry run follows Set F; Set P relaxes musts the dry run applies
+        note_signals(d, per_trial)
     return out
 
 
