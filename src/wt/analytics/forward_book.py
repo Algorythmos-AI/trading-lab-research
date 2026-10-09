@@ -35,6 +35,7 @@ class Book:
     nominal_usd: float | None    # total_r * risk_usd
     signals: int | None          # chains that reached admission, summed over the funnel records; None without records
     refused: int | None          # of those, the ones admission refused
+    shadow_resolved: int | None  # sealed shadow outcomes resolved so far (DEC-0023, section 4): a count, never a result
 
 
 def _num(v: Any) -> float | None:
@@ -76,6 +77,20 @@ def funnel_counts(strategy: str, records: Iterable[Mapping[str, Any]]) -> tuple[
     return (signals, refused) if seen else None
 
 
+def shadow_resolved(strategy: str, records: Iterable[Mapping[str, Any]]) -> int | None:
+    """How many of a trial's refused signals have a sealed outcome, summed over the funnel records' `shadow`
+    counts. The outcomes themselves sit in a sealed folder that nothing here opens. None before any record has
+    counts for the trial."""
+    n, seen = 0, False
+    for rec in records:
+        for part in (rec.get("shadow") or {}).values():
+            counts = part.get(strategy) if isinstance(part, dict) else None
+            if isinstance(counts, dict):
+                seen = True
+                n += int(_num(counts.get("resolved")) or 0)
+    return n if seen else None
+
+
 def books(rows: Iterable[Mapping[str, Any]], funnels: Iterable[Mapping[str, Any]] = ()) -> list[Book]:
     """One Book per registered trial, in the order of their hypothesis ids, then B."""
     rows, funnels = list(rows), list(funnels)
@@ -112,7 +127,8 @@ def books(rows: Iterable[Mapping[str, Any]], funnels: Iterable[Mapping[str, Any]
                         first=days[0] if days else None, last=days[-1] if days else None, trades=len(rs),
                         total_r=total, max_dd_r=round(drawdown(rs), 4), last_trade=mine[-1][0] if mine else None,
                         risk_usd=risk, nominal_usd=None if risk is None else round(total * risk, 2),
-                        signals=counts[0] if counts else None, refused=counts[1] if counts else None))
+                        signals=counts[0] if counts else None, refused=counts[1] if counts else None,
+                        shadow_resolved=shadow_resolved(name, funnels)))
     return out
 
 

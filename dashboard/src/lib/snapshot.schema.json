@@ -1928,6 +1928,12 @@
                       "integer",
                       "null"
                     ]
+                  },
+                  "shadow_resolved": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
                   }
                 }
               },

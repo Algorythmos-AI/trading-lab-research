@@ -66,8 +66,19 @@ def test_the_view_changes_nothing_it_reads_and_is_plain_data():
     assert ledger == LEDGER and funnels == FUNNELS
     assert fb.view(reversed(LEDGER), FUNNELS)[0]["trades"] == 5 and out == fb.view(LEDGER, FUNNELS)
     assert set(out[0]) == {"strategy", "hyp", "sessions", "errors", "first", "last", "trades", "total_r", "max_dd_r",
-                           "last_trade", "risk_usd", "nominal_usd", "signals", "refused"}
+                           "last_trade", "risk_usd", "nominal_usd", "signals", "refused", "shadow_resolved"}
     assert not any(k in out[0] for k in ("setup", "symbol", "entry"))
+
+
+def test_the_sealed_outcomes_are_counted_and_never_read():
+    shadow = [{**FUNNELS[0], "shadow": {"set_F": {"r3:F:GG-1": {"refused": 1, "resolved": 1}, "git_sha": "abc"},
+                                        "MP-1": {"r3:MP-1": {"refused": 2, "resolved": 0}, "git_sha": "abc"}}},
+              {**FUNNELS[1], "shadow": {"set_F": {"r3:F:GG-1": {"refused": 3, "resolved": 2}}}}]
+    by = {b.strategy: b for b in fb.books(LEDGER, shadow)}
+    assert by["r3:F:GG-1"].shadow_resolved == 3 and by["r3:MP-1"].shadow_resolved == 0
+    assert by["B_qqq_qqqm"].shadow_resolved is None                     # B has no admission step and no shadow
+    assert all(b.shadow_resolved is None for b in fb.books(LEDGER, FUNNELS))      # records from before the counts
+    assert by["r3:F:GG-1"].total_r == 1.0 and by["r3:F:GG-1"].refused == 1        # nothing else moves
 
 
 def test_drawdown_is_the_deepest_fall_from_a_high():

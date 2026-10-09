@@ -402,6 +402,7 @@ export interface Snapshot {
             nominal_usd?: number | null;
             signals?: number | null;
             refused?: number | null;
+            shadow_resolved?: number | null;
           } | null)[]
         | null;
       log?: {
