@@ -1,5 +1,6 @@
 import { PageHeading } from "@/components/page-heading";
 import { BoardPanel, EditionPanel, HowToRead, NoOptions, PaperPanel, RulesPanel, TickerCards } from "@/components/options";
+import { OptionsLive } from "@/components/client/options-live";
 import { EditionPicker } from "@/components/radar";
 import { requestTime } from "@/lib/now";
 import { listOptionsDates, loadOptions } from "@/lib/snapshot";
@@ -24,6 +25,9 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
         <>
           <EditionPicker dates={dates} current={result.edition.session} base="/options" />
           <EditionPanel e={result.edition} now={now} />
+          {!date ? (
+            <OptionsLive tickers={result.edition.tickers} session={result.edition.session} />
+          ) : null}
           <BoardPanel e={result.edition} />
           <RulesPanel e={result.edition} />
           <TickerCards e={result.edition} />

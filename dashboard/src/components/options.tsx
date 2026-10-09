@@ -410,6 +410,11 @@ export function HowToRead({ e }: { e: Options }) {
             calls or puts.
           </li>
         ) : null}
+        <li>
+          Live states, judged at each quote&apos;s own time: NO TRADE for the first 15 minutes; GAP ABOVE or GAP BELOW when the
+          session opened beyond yesterday&apos;s high or low and is still beyond it; TESTING SUPPORT or TESTING RESISTANCE within a
+          quarter ATR of a major zone; otherwise ABOVE PDH, BELOW PDL or INSIDE. A state is a location, not a signal.
+        </li>
         <li>Research only. Nothing here is an order, and no rule is a recommendation until it is marked proven.</li>
       </ul>
     </Panel>

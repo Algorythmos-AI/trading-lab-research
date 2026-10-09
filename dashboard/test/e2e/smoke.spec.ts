@@ -68,6 +68,10 @@ test("the options page shows the board, the rules and a ladder per name", async 
   await expect(page.getByRole("link", { name: "SPY", exact: true })).toBeVisible();
   await expect(page.getByText("No rule is proven yet", { exact: false })).toBeVisible();
   await expect(page.getByRole("list", { name: "SPY zones, highest first" })).toBeAttached();
+  // The live panel polls /api/quote; fixture mode answers with SPY 0.3 ATR above its close at 11:00 New York on the
+  // fixture's session, inside the major resistance zone.
+  const live = page.getByRole("table").filter({ hasText: "Next zone up" });
+  await expect(live.getByRole("row").filter({ hasText: "SPY" })).toContainText("TESTING RESISTANCE");
 });
 
 test("the v3 panels render from the fixture, and the glossary is linked", async ({ page }) => {

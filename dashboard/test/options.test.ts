@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sign } from "@/lib/hmac";
-import { editionState, ladder, moveBands, nearest, ruleLabel, type Options, type OptionsTicker } from "@/lib/options";
+import { editionState, ladder, liveNeighbours, liveState, moveBands, nearest, nyClock, ruleLabel, type LiveQuote, type Options, type OptionsTicker } from "@/lib/options";
 import { OPTIONS_SCHEMA, isOptions, validateOptionsEdition } from "@/lib/validate";
 import { fixture } from "./helpers";
 import optionsJson from "./fixtures/options.v1.json";
@@ -208,5 +208,63 @@ describe("options view helpers", () => {
   it("names rules by label", () => {
     expect(ruleLabel(e, "brk_PDH_close")).toBe("Hourly close above yesterday's high");
     expect(ruleLabel(e, "unknown_rule")).toBe("unknown_rule");
+  });
+
+  describe("live state", () => {
+    const q = (price: number, at: string, open: number | null = 778.55, day: string | null = "2026-10-12"): LiveQuote => ({
+      price,
+      at,
+      open,
+      high: null,
+      low: null,
+      day,
+      prev_close: 778.55,
+    });
+    const S = "2026-10-12";
+    const at = (ny: string) => `2026-10-12T${ny}:00-04:00`; // New York is on EDT in October
+
+    it("reads New York time from an instant", () => {
+      expect(nyClock("2026-10-12T13:45:00Z")).toEqual({ day: "2026-10-12", minutes: 9 * 60 + 45 });
+    });
+
+    it("is not open before the session or on a quote from an earlier day, and closed after the bell", () => {
+      expect(liveState(spy, q(778.6, "2026-10-09T19:59:00Z", 776.24, "2026-10-09"), S)).toBe("NOT OPEN YET");
+      expect(liveState(spy, q(778.6, at("09:00"), null, "2026-10-09"), S)).toBe("NOT OPEN YET");
+      expect(liveState(spy, q(778.6, at("16:00")), S)).toBe("CLOSED");
+      expect(liveState({ ...spy, half_day: true }, q(778.6, at("13:05")), S)).toBe("CLOSED");
+      expect(liveState(spy, q(778.6, "2026-10-13T14:00:00Z", 778, "2026-10-13"), S)).toBe("CLOSED");
+    });
+
+    it("is NO TRADE for the first 15 minutes", () => {
+      expect(liveState(spy, q(790, at("09:44")), S)).toBe("NO TRADE");
+      expect(liveState(spy, q(790, at("09:45")), S)).not.toBe("NO TRADE");
+    });
+
+    it("calls a gap only while price stays beyond the level it gapped past", () => {
+      expect(liveState(spy, q(785, at("10:30"), 784), S)).toBe("GAP ABOVE");
+      expect(liveState(spy, q(770.5, at("10:30"), 771), S)).toBe("GAP BELOW");
+    });
+
+    it("tests a major zone within a quarter ATR, by where the zone lies against yesterday's close", () => {
+      // PDH + PWH + 52WH 779.40 to 781.62 (weight 6) sits above the 778.55 close: resistance.
+      expect(liveState(spy, q(779.0, at("10:30")), S)).toBe("TESTING RESISTANCE");
+      // MA50 + MA20 + PWL 767.57 to 769.63 (weight 5): support. 770.5 is 0.14 ATR above it.
+      expect(liveState(spy, q(770.5, at("10:30")), S)).toBe("TESTING SUPPORT");
+    });
+
+    it("otherwise is above yesterday's high, below its low, or inside", () => {
+      expect(liveState(spy, q(786, at("11:00")), S)).toBe("ABOVE PDH");
+      expect(liveState(spy, q(774.0, at("11:00")), S)).toBe("BELOW PDL");
+      expect(liveState(spy, q(777.0, at("11:00")), S)).toBe("INSIDE");
+    });
+
+    it("finds the nearest zone edges around a live price", () => {
+      const n = liveNeighbours(spy, 777);
+      expect(n.up).toBe(779.4);
+      expect(n.down).toBe(775.16);
+      expect(n.upAtr).toBeCloseTo((779.4 - 777) / spy.atr14!, 6);
+      // Inside PDH + PWH + 52WH (779.40 to 781.62): its own edges.
+      expect(liveNeighbours(spy, 780.43)).toMatchObject({ up: 781.62, down: 779.4 });
+    });
   });
 });
