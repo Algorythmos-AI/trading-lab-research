@@ -1652,6 +1652,12 @@
                     "null"
                   ]
                 },
+                "unchecked_sessions": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
                 "incident_free_streak": {
                   "type": [
                     "integer",

@@ -120,7 +120,21 @@ def build_v3(v2: dict[str, Any], views: dict[str, Any]) -> dict[str, Any]:
         out[k] = san.apply(publish.ALLOW[k], v)
     out["alerts"] = {**(v2.get("alerts") or {}), "history": san.apply(publish.ALLOW["alerts"]["history"], history)}
     out["schema_version"] = publish.SCHEMA_VERSION
+    ops = out["ops"] = {**out["ops"]}
+    ops["forward"] = {**ops["forward"], "books": san.apply(publish.ALLOW["ops"]["forward"]["books"], BOOKS)}
+    ops["paper"] = {**ops["paper"], "g2": {**ops["paper"]["g2"], "unchecked_sessions": 1}}
     return out
+
+
+_BOOK = {"strategy": "r3:F:GG-1", "hyp": "HYP-0010", "sessions": 9, "errors": 0, "first": "2026-09-28", "last": "2026-10-08",
+         "trades": 3, "total_r": -0.8, "max_dd_r": 1.8, "last_trade": "2026-10-07", "risk_usd": 6, "nominal_usd": -4.8,
+         "signals": 4, "refused": 1, "shadow_resolved": 1}
+BOOKS = [   # the trial books (v3 additions the v2 fixture cannot carry): one row with no admission step, one with none traded
+    {**_BOOK, "strategy": "B_qqq_qqqm", "hyp": None, "trades": 5, "total_r": 1.2, "max_dd_r": 0.9, "risk_usd": None,
+     "nominal_usd": None, "signals": None, "refused": None, "shadow_resolved": None},
+    _BOOK,
+    {**_BOOK, "strategy": "r3:MP-1", "hyp": "HYP-0014", "trades": 0, "total_r": 0.0, "max_dd_r": 0.0, "last_trade": None,
+     "nominal_usd": 0.0, "signals": 2, "refused": 2, "shadow_resolved": 0}]
 
 
 def main(argv: list[str]) -> int:

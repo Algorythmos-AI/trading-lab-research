@@ -349,6 +349,7 @@ export interface Snapshot {
         sessions?: number | null;
         sessions_needed?: number | null;
         armed_sessions?: number | null;
+        unchecked_sessions?: number | null;
         incident_free_streak?: number | null;
         incident_free_needed?: number | null;
         agreement_level?: string | null;
