@@ -1,0 +1,373 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "stocksdelta/radar",
+  "title": "Pre-market radar edition (published by the Stocksdelta radar after each run)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "stocksdelta/radar"
+    },
+    "schema_version": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "run_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 200
+    },
+    "as_of": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 40
+    },
+    "edition_date": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "title": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 120
+    },
+    "prices_as_of": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 200
+    },
+    "report_url": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 300,
+      "pattern": "^https://claude\\.ai/"
+    },
+    "summary": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 3000
+    },
+    "regime": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 1500
+    },
+    "footnote": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 1500
+    },
+    "lists": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "ibkr_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 20
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 600
+          },
+          "symbols": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "maxLength": 24
+            }
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    "tickers": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 24,
+            "pattern": "^[A-Z0-9.\\-/ ]+$"
+          },
+          "company": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 120
+          },
+          "price": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "change_pct": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "support": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "support_2": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "resistance": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "high_52w": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "to_support_pct": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "to_resistance_pct": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "off_high_pct": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "ma10": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "ma20": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "ma40": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "rs13": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "rs26": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "volume_ratio": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "above_mas": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "stance": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 40
+          },
+          "tag": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "new",
+              "risk",
+              null
+            ]
+          },
+          "lists": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "maxLength": 60
+            }
+          },
+          "why": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 600
+          },
+          "notes": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "label": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 60
+                },
+                "text": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 1500
+                },
+                "source": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 200
+                },
+                "date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 40
+                },
+                "confidence": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "High",
+                    "Medium",
+                    "Low",
+                    null
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "symbol"
+        ]
+      }
+    },
+    "avoid": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "symbols": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 120
+          },
+          "price": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 80
+          },
+          "why": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 600
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "run_id",
+    "as_of",
+    "edition_date"
+  ]
+}

@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 const PAGES = [
   { path: "/", heading: "Overview" },
   { path: "/today", heading: "Today" },
+  { path: "/radar", heading: "Radar" },
   { path: "/strategies", heading: "Strategies" },
   { path: "/research", heading: "Research" },
   { path: "/operations", heading: "Operations" },

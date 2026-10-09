@@ -32,6 +32,10 @@ wt.ops.publish                            POST /api/ingest            (productio
   missing, and every page renders "—" for missing values instead of failing.
 - **Ingest** (`src/lib/ingest.ts`): previews never accept writes. Accepted outcomes are `stored`, `duplicate`
   (same `run_id`) and `older` (409, `as_of` not newer than the stored one); an etag conflict is retried once.
+- **Radar** (`/radar`): the daily pre-market radar's editions, signed with key id `radar` and validated against
+  `src/lib/radar.schema.json` (owned here; `pnpm gen:types` regenerates `radar.types.ts`). Stored at
+  `radar/latest.json` plus `radar/editions/YYYY-MM-DD.json`, where a same-day refresh replaces that date's copy.
+  It has no expected windows, so the watchdog never pages for it.
 - **Watchdog** (`src/lib/watchdog.ts`, pure and unit-tested): in a window a snapshot older than 35 min is late
   and older than 90 min is stopped (both priority 4); a fresh snapshot after an alert sends "recovered"
   (priority 2). Outside every window nothing pages. The alert state is committed with `ifMatch` before paging,
@@ -63,6 +67,7 @@ Fixture mode is refused on production deployments, and the page shows a banner w
 |---|---|---|
 | `BLOB_READ_WRITE_TOKEN` | Vercel **production only** (added when the private Blob store is connected) | Read and write snapshots and alert state. Previews must not hold it: they run with `DASHBOARD_FIXTURE=1` |
 | `DASHBOARD_INGEST_SECRET` | Vercel production + the Mac's `~/trading/.env` | Shared HMAC key for `/api/ingest` |
+| `RADAR_INGEST_SECRET` | Vercel production + the radar's cloud environment | HMAC key for key id `radar`. It may only publish radar editions (`stocksdelta/radar`); unset means the radar key is refused |
 | `CRON_SECRET` | Vercel production | Bearer token Vercel Cron sends to `/api/cron/watchdog` |
 | `NTFY_TOPIC` | Vercel production and preview + the Mac | Secret, random ntfy topic for pages; unset means log and skip |
 | `NTFY_SERVER` | Vercel (optional) | ntfy server, default `https://ntfy.sh` |
