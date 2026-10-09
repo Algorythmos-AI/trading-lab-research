@@ -302,14 +302,14 @@ def gg_record(d: dt.date, which: str, spec: dict, relax, per_trial: dict, result
     return body
 
 
-def note_funnel(d: dt.date, part: str, build: Callable[[], dict]) -> None:
+def note_funnel(d: dt.date, part: str, build: Callable[[], dict], section: str = "parts") -> None:
     """Write one part of the session's funnel record to var/forward/funnel/<d>.json, beside the ledger and never in
     it. Counts only. It describes what the unit did after the unit has decided, and nothing here can fail a unit:
     an error is printed and the trades are returned as they were."""
     try:
         path = FWD / "funnel" / f"{d}.json"
         doc = json.loads(path.read_text()) if path.exists() else {"session": str(d), "parts": {}}
-        doc["parts"][part] = {**build(), "git_sha": git_sha()}
+        doc.setdefault(section, {})[part] = {**build(), "git_sha": git_sha()}
         path.parent.mkdir(parents=True, exist_ok=True)
         text = json.dumps(doc, indent=1, sort_keys=True)
         atomic_replace(path, lambda tmp: tmp.write_text(text))
@@ -354,6 +354,52 @@ def page(key: str, title: str, message: str, priority: int) -> None:
         print(f"alert {key}: {e!r}")
 
 
+# ---- sealed shadow outcomes (DEC-0023, section 4) ---------------------------------------------------------------
+# What the registered exit simulation says of a signal that admission refused for cash or for a day stop. Written
+# beside the ledger and never in it. SEALED: no code reads an R from these files; only the number resolved is
+# counted. The seal opens once, by an experiment with its own id, after the round-3 evaluation is recorded and 30
+# outcomes are resolved. A name that failed the funnel, a signal that failed a must, and a later attempt whose
+# earlier attempt was not admitted are not refused signals and get no outcome.
+SEALED_DIR_NAME = "sealed"
+SHADOW_REASONS = ("unfunded", "day_stop_consecutive_losers", "day_stop_loss_R")
+
+
+def shadow_rows(d: dt.date, strategy: str, res, spec: dict) -> list[dict]:
+    """One row per refused signal: the candidate simulated alone at the registered equity and risk, as if nothing
+    else were held that day. `resolved` is False when even the whole account could not fund it."""
+    risk = R3_EQUITY * spec["risk"]["per_trade_risk_pct_of_equity"] / 100
+    rows = []
+    for cand, why in res.skipped:
+        if why not in SHADOW_REASONS:
+            continue
+        tr, r = cand.resim(R3_EQUITY, risk)
+        row = {"session": str(d), "strategy": strategy, "symbol": cand.chain, "attempt": cand.attempt,
+               "refused": why, "signal_time": str(cand.entry_time), "resolved": tr is not None and r is not None}
+        if row["resolved"]:
+            row.update(R=float(r), entry=tr.entry, qty=tr.qty, exit_time=str(tr.exits[-1][0]))
+        rows.append(row)
+    return rows
+
+
+def note_shadow(d: dt.date, part: str, results: dict[str, object], spec: dict) -> None:
+    """Seal the day's shadow outcomes for the trials in `results` ({strategy: DayResult}) and record how many were
+    refused and resolved, as counts, in the funnel record. Called after the unit's trades are decided; like the
+    funnel record it can never fail a unit or change a trade."""
+    try:
+        by = {name: shadow_rows(d, name, res, spec) for name, res in results.items()}
+        path = FWD / SEALED_DIR_NAME / f"{d}.json"
+        doc = json.loads(path.read_text()) if path.exists() else {"session": str(d), "sealed": True, "parts": {}}
+        doc["parts"][part] = {"rows": [r for rows in by.values() for r in rows], "git_sha": git_sha()}
+        path.parent.mkdir(parents=True, exist_ok=True)
+        text = json.dumps(doc, indent=1, sort_keys=True)
+        atomic_replace(path, lambda tmp: tmp.write_text(text))
+    except Exception as e:  # noqa: BLE001 — a shadow outcome must never cost a trial its session
+        print(f"shadow outcomes {d} {part}: {e!r}")
+        return
+    note_funnel(d, part, lambda: {name: {"refused": len(rows), "resolved": sum(r["resolved"] for r in rows)}
+                                  for name, rows in by.items()}, section="shadow")
+
+
 def r3_gg(ctx: Context, d: dt.date, which: str) -> dict[str, list[dict]]:
     ctx.ensure_pool(d)
     relax = R3_P_RELAX if which == "P" else frozenset()
@@ -364,6 +410,7 @@ def r3_gg(ctx: Context, d: dt.date, which: str) -> dict[str, list[dict]]:
         res = results[trial] = admit(cands, R3_EQUITY, ctx.spec)
         out[f"r3:{which}:{trial}"] = [trade_row(d, c, tr, r) for c, tr, r in res.admitted]
     note_funnel(d, f"set_{which}", lambda: gg_record(d, which, ctx.spec, relax, per_trial, results))
+    note_shadow(d, f"set_{which}", {f"r3:{which}:{t}": r for t, r in results.items()}, ctx.spec)
     return out
 
 
@@ -376,7 +423,9 @@ def r3_intraday(ctx: Context, d: dt.date, trial: str) -> dict[str, list[dict]]:
     res = admit(cands, R3_EQUITY, ctx.spec)
     note_funnel(d, trial, lambda: {**trial_record(cands, res),
                                    "skips": {str(k): v for k, v in sorted(skips.items()) if type(v) is int}})
-    return {f"r3:{trial}": [trade_row(d, c, tr, r) for c, tr, r in res.admitted]}
+    out = {f"r3:{trial}": [trade_row(d, c, tr, r) for c, tr, r in res.admitted]}
+    note_shadow(d, trial, {f"r3:{trial}": res}, ctx.spec)
+    return out
 
 
 def units_for(ctx: Context, d: dt.date) -> list[Unit]:

@@ -113,6 +113,67 @@ def test_parts_of_one_session_share_a_file_and_the_ledger_is_untouched(env, monk
     assert sorted(p.name for p in (env.tmp / "forward" / "funnel").iterdir()) == [f"{D}.json"]   # no temp file left
 
 
+# ---- sealed shadow outcomes (DEC-0023, section 4) ----------------------------------------------------------------
+
+def _refusing_day():
+    """A funded winner that takes the whole account, a signal refused for cash, a second attempt on a chain that
+    never got its first, and a signal too large for the whole account."""
+    return [tpf.cand("WIN", 1, 30, 1.0, qty=120), tpf.cand("CASH", 5, 9, -1.0, qty=40),
+            tpf.cand("LATE", 6, 8, 2.0, qty=10, attempt=2), tpf.cand("HUGE", 7, 9, 3.0, qty=1, px=5000.0)]
+
+
+def test_only_a_signal_refused_for_cash_or_a_day_stop_gets_a_shadow_outcome():
+    res = ft.admit(_refusing_day(), ft.R3_EQUITY, SPEC)
+    assert sorted((c.chain, why) for c, why in res.skipped) == [
+        ("CASH", "unfunded"), ("HUGE", "unfunded"), ("LATE", "earlier_attempt_not_admitted")]
+    rows = {r["symbol"]: r for r in ft.shadow_rows(D, "r3:F:GG-1", res, SPEC)}
+    assert set(rows) == {"CASH", "HUGE"}                               # LATE exists only after a trade that never was
+    assert rows["CASH"]["resolved"] and rows["CASH"]["R"] == -1.0 and rows["CASH"]["qty"] == 40   # sized alone
+    assert rows["HUGE"]["resolved"] is False and "R" not in rows["HUGE"]
+
+
+def test_three_losers_then_a_refused_signal_is_resolved_under_its_own_reason():
+    cs = [tpf.cand(s, i * 10, i * 10 + 5, -1.0 if i < 3 else 2.0, qty=10) for i, s in enumerate("ABCD")]
+    res = ft.admit(cs, ft.R3_EQUITY, SPEC)
+    rows = ft.shadow_rows(D, "r3:MP-1", res, SPEC)
+    assert [c.chain for c, _, _ in res.admitted] == ["A", "B"]         # two losers reach the day's loss limit
+    assert [(r["symbol"], r["refused"], r["R"]) for r in rows] == [("C", "day_stop_loss_R", -1.0),
+                                                                    ("D", "day_stop_loss_R", 2.0)]
+
+
+def test_shadow_outcomes_are_sealed_beside_the_ledger_and_change_no_trade(env, monkeypatch):
+    env_trials = {"GG-1": (_refusing_day(), [], []), "GG-2": ([], [], [])}
+    monkeypatch.setattr(ft, "gg_day", lambda *a, **k: env_trials)
+    with_shadow = ft.r3_gg(env.ctx, D, "F")
+    sealed = env.tmp / "forward" / "sealed" / f"{D}.json"
+    doc = json.loads(sealed.read_text())
+    assert doc["sealed"] is True and [r["symbol"] for r in doc["parts"]["set_F"]["rows"]] == ["CASH", "HUGE"]
+    funnel_doc = json.loads(env.path.read_text())
+    assert set(funnel_doc["parts"]) == {"set_F"}                                      # the funnel's own parts are as before
+    counts = funnel_doc["shadow"]["set_F"]
+    assert counts["r3:F:GG-1"] == {"refused": 2, "resolved": 1} and counts["r3:F:GG-2"] == {"refused": 0, "resolved": 0}
+    assert '"R"' not in json.dumps(funnel_doc["shadow"])                              # counts only
+    assert not (env.tmp / "forward" / "forward_trades.jsonl").exists()                # never in the ledger
+
+    def broken(*a, **k):
+        raise RuntimeError("no outcome today")
+    monkeypatch.setattr(ft, "shadow_rows", broken)
+    assert ft.r3_gg(env.ctx, D, "F") == with_shadow                                   # a failure costs no trade
+    assert [t["symbol"] for t in with_shadow["r3:F:GG-1"]] == ["WIN"]
+
+
+def test_nothing_else_in_the_codebase_reads_a_sealed_outcome():
+    """The seal: outside the forward test, no source file names the sealed folder or the functions that fill it."""
+    hits = []
+    for folder, pattern in (("src", "*.py"), ("scripts", "*.py"), ("dashboard/src", "*.ts*")):
+        for f in (ROOT / folder).rglob(pattern):
+            text = f.read_text(errors="ignore")
+            if f.name != "forward_test.py" and any(w in text for w in ("SEALED_DIR_NAME", "forward/sealed", "shadow_rows",
+                                                                       "note_shadow", '"sealed"')):
+                hits.append(str(f.relative_to(ROOT)))
+    assert hits == []
+
+
 def test_the_scorecard_reads_the_record_from_the_same_pool_with_the_same_funnel(tmp_path, monkeypatch):
     """weekly_scorecard.record_rows: the rows it compares the dry run with are the funnel of record's own."""
     import importlib.util
