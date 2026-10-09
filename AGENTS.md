@@ -47,7 +47,8 @@ The repo is **restricted**: it holds specifications and research notes derived f
 
 The dashboard's Radar page (`stocksdelta/radar`, key id `radar`) carries the owner's own pre-market research from
 public sources, not material derived from this repo. It is PRIVATE: owner-only, behind the login. The denylist still
-applies to it, and nothing from `research/`, `knowledge/` or the specs may be put into a radar edition.
+applies to it, and nothing from `research/`, `knowledge/` or the specs may be put into a radar edition. The Options page
+(`stocksdelta/options`, the same key) is the same class under the same rules.
 
 ## Layout
 

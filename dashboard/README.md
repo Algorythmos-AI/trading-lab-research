@@ -36,6 +36,11 @@ wt.ops.publish                            POST /api/ingest            (productio
   `src/lib/radar.schema.json` (owned here; `pnpm gen:types` regenerates `radar.types.ts`). Stored at
   `radar/latest.json` plus `radar/editions/YYYY-MM-DD.json`, where a same-day refresh replaces that date's copy.
   It has no expected windows, so the watchdog never pages for it.
+- **Options** (`/options`): the after-close options levels editions (support and resistance for the next session,
+  close strength, expected move, and the paper record of the probation entry rules), signed with key id `radar` and
+  validated against `src/lib/options.schema.json` (owned here; `options.types.ts` is generated). Stored at
+  `options/latest.json` plus `options/editions/YYYY-MM-DD.json`, one per session the levels are built for. Like the
+  radar it has no windows and no watchdog.
 - **Watchdog** (`src/lib/watchdog.ts`, pure and unit-tested): in a window a snapshot older than 35 min is late
   and older than 90 min is stopped (both priority 4); a fresh snapshot after an alert sends "recovered"
   (priority 2). Outside every window nothing pages. The alert state is committed with `ifMatch` before paging,
@@ -67,7 +72,7 @@ Fixture mode is refused on production deployments, and the page shows a banner w
 |---|---|---|
 | `BLOB_READ_WRITE_TOKEN` | Vercel **production only** (added when the private Blob store is connected) | Read and write snapshots and alert state. Previews must not hold it: they run with `DASHBOARD_FIXTURE=1` |
 | `DASHBOARD_INGEST_SECRET` | Vercel production + the Mac's `~/trading/.env` | Shared HMAC key for `/api/ingest` |
-| `RADAR_INGEST_SECRET` | Vercel production + the radar's cloud environment | HMAC key for key id `radar`. It may only publish radar editions (`stocksdelta/radar`); unset means the radar key is refused |
+| `RADAR_INGEST_SECRET` | Vercel production + the radar's cloud environment | HMAC key for key id `radar`. It may only publish research editions (`stocksdelta/radar`, `stocksdelta/options`); unset means the radar key is refused |
 | `CRON_SECRET` | Vercel production | Bearer token Vercel Cron sends to `/api/cron/watchdog` |
 | `NTFY_TOPIC` | Vercel production and preview + the Mac | Secret, random ntfy topic for pages; unset means log and skip |
 | `NTFY_SERVER` | Vercel (optional) | ntfy server, default `https://ntfy.sh` |

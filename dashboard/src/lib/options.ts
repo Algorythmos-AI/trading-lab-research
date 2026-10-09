@@ -1,0 +1,160 @@
+// The options levels page's view helpers. Pure: no I/O; the clock is always passed in.
+import { dayIn, NEW_YORK } from "./format";
+import type { OptionsEdition } from "./options.types";
+import type { Tone } from "./radar";
+
+export type Options = OptionsEdition;
+export type OptionsTicker = OptionsEdition["tickers"][number];
+export type OptionsZone = NonNullable<OptionsTicker["zones"]>[number];
+export type OptionsRule = NonNullable<OptionsEdition["rules"]>[number];
+export type PaperTrade = NonNullable<OptionsEdition["paper"]>[number];
+
+const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+
+/**
+ * Whether the edition is the one to use now, by New York date. Built after a close for the next session, it is
+ * "next" until that session starts (the evening, the weekend), "today" on its session, and "stale" once a later
+ * session has begun without a newer edition.
+ */
+export function editionState(session: string, now: Date): "next" | "today" | "stale" {
+  const today = dayIn(now.toISOString(), NEW_YORK);
+  if (!today || today < session) return "next";
+  return today === session ? "today" : "stale";
+}
+
+/** Zones of this weight or more are "major" (the levels engine uses the same cut). */
+export const MAJOR_WEIGHT = 5;
+
+/** One rung of a ticker's ladder: a zone with its distance from the last close. */
+export interface Rung {
+  zone: OptionsZone;
+  /** Edge nearest the close: the bottom of a zone above, the top of a zone below. */
+  edge: number;
+  /** Signed percent from the close to that edge (negative below); 0 when the close is inside. */
+  distPct: number;
+  /** The same distance in 14-day ATRs, unsigned; null without an ATR. */
+  distAtr: number | null;
+  /** True when the close sits inside the zone. */
+  inside: boolean;
+}
+
+/**
+ * A zone without yesterday's close (PDC). The close is always a member of the zone it sits in, so leaving it in
+ * would show every name as "inside" a zone; the zone is rebuilt from its other members' prices, and dropped when
+ * the close was its only member. Without the edition's levels the zone is used as published.
+ */
+export function withoutClose(zone: OptionsZone, levels: OptionsTicker["levels"]): OptionsZone | null {
+  const members = zone.members ?? [];
+  if (!members.includes("PDC")) return zone;
+  const rest = members.filter((m) => m !== "PDC");
+  if (rest.length === 0) return null;
+  const byName = new Map((levels ?? []).map((l) => [l.name, l]));
+  const prices: number[] = [];
+  for (const m of rest) {
+    const l = byName.get(m);
+    if (!l) return { ...zone, members: rest };
+    prices.push(isNum(l.lo) ? l.lo : l.price, isNum(l.hi) ? l.hi : l.price);
+  }
+  const weight = isNum(zone.weight) ? zone.weight - (byName.get("PDC")?.weight ?? 1) : zone.weight;
+  return {
+    ...zone,
+    lo: Math.min(...prices),
+    hi: Math.max(...prices),
+    members: rest,
+    weight,
+    big: isNum(weight) ? weight >= MAJOR_WEIGHT : zone.big,
+  };
+}
+
+/**
+ * The zones around the last close: above it nearest first, the ones it sits inside, and below it nearest first.
+ * Sides come from where each zone lies against the close, so a zone is never shown on the wrong side.
+ */
+export function ladder(t: OptionsTicker): { above: Rung[]; at: Rung[]; below: Rung[] } {
+  const close = t.last?.close;
+  if (!isNum(close) || close <= 0) return { above: [], at: [], below: [] };
+  const atr = isNum(t.atr14) && t.atr14 > 0 ? t.atr14 : null;
+  const above: Rung[] = [];
+  const at: Rung[] = [];
+  const below: Rung[] = [];
+  for (const raw of t.zones ?? []) {
+    const zone = withoutClose(raw, t.levels);
+    if (!zone) continue;
+    if (zone.lo > close) {
+      const d = zone.lo - close;
+      above.push({ zone, edge: zone.lo, distPct: (d / close) * 100, distAtr: atr ? d / atr : null, inside: false });
+    } else if (zone.hi < close) {
+      const d = close - zone.hi;
+      below.push({ zone, edge: zone.hi, distPct: (-d / close) * 100, distAtr: atr ? d / atr : null, inside: false });
+    } else {
+      at.push({ zone, edge: close, distPct: 0, distAtr: 0, inside: true });
+    }
+  }
+  above.sort((a, b) => a.edge - b.edge);
+  below.sort((a, b) => b.edge - a.edge);
+  return { above, at, below };
+}
+
+/** The nearest support and resistance beyond the close, for the board. */
+export function nearest(t: OptionsTicker): { support: Rung | null; resistance: Rung | null } {
+  const { above, below } = ladder(t);
+  return { support: below[0] ?? null, resistance: above[0] ?? null };
+}
+
+/** Where a one-day and a one-week expected move put price, both ways, from the last close. */
+export function moveBands(t: OptionsTicker): { day: [number, number] | null; week: [number, number] | null } {
+  const close = t.last?.close;
+  const em = t.expected_move;
+  const band = (m: number | null | undefined): [number, number] | null =>
+    isNum(close) && isNum(m) && m > 0 ? [close - m, close + m] : null;
+  return { day: band(em?.day), week: band(em?.week) };
+}
+
+export function chipTone(chip: string | null | undefined): Tone {
+  if (chip === "STRONG") return "good";
+  if (chip === "WEAK") return "bad";
+  return "neutral";
+}
+
+export const CHIP_LABEL: Record<string, string> = { STRONG: "Strong close", MID: "Mid close", WEAK: "Weak close" };
+
+export function ruleTone(status: OptionsRule["status"]): Tone {
+  if (status === "proven") return "good";
+  if (status === "probation") return "warn";
+  return "neutral";
+}
+
+export const RULE_STATUS_LABEL: Record<OptionsRule["status"], string> = {
+  proven: "Proven",
+  probation: "On probation",
+  retired: "Retired",
+};
+
+/** A rule's readable name, falling back to its id. */
+export function ruleLabel(e: Options, id: string): string {
+  return (e.rules ?? []).find((r) => r.id === id)?.label ?? id;
+}
+
+/** "PDH" -> "yesterday's high", for tooltips and screen readers. Unknown names are returned as they are. */
+export const LEVEL_NAMES: Record<string, string> = {
+  PDH: "yesterday's high",
+  PDL: "yesterday's low",
+  PDC: "yesterday's close",
+  PWH: "last week's high",
+  PWL: "last week's low",
+  WTDH: "this week's high so far",
+  WTDL: "this week's low so far",
+  PMH: "last month's high",
+  PML: "last month's low",
+  "52WH": "52-week high",
+  "52WL": "52-week low",
+  MA20: "20-day average",
+  MA50: "50-day average",
+  MA200: "200-day average",
+  DEMAND: "demand zone (base before a strong up day)",
+  SUPPLY: "supply zone (base before a strong down day)",
+};
+
+export function levelName(code: string): string {
+  return LEVEL_NAMES[code] ?? code;
+}

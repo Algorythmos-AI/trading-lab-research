@@ -1,0 +1,2524 @@
+{
+  "schema": "stocksdelta/options",
+  "schema_version": 1,
+  "run_id": "options-2026-10-12-20261009T210000",
+  "as_of": "2026-10-09T21:00:00+00:00",
+  "session": "2026-10-12",
+  "built_from": "2026-10-09",
+  "source": "IBKR daily bars (official close), IBKR implied vol snapshot",
+  "tickers": [
+    {
+      "symbol": "SPY",
+      "from_bar": "2026-10-09",
+      "half_day": false,
+      "last": {
+        "open": 776.24,
+        "high": 779.4,
+        "low": 775.16,
+        "close": 778.55
+      },
+      "atr14": 6.26,
+      "close_strength": {
+        "pos": 0.8,
+        "chip": "STRONG"
+      },
+      "expected_move": {
+        "annual_iv": 0.1192,
+        "iv_pct_52w": 0.084,
+        "day": 5.85,
+        "week": 13.07,
+        "from": "IBKR implied vol"
+      },
+      "levels": [
+        {
+          "name": "PDH",
+          "price": 779.4,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PDL",
+          "price": 775.16,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PDC",
+          "price": 778.55,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PWH",
+          "price": 781.62,
+          "tf": "week",
+          "weight": 2
+        },
+        {
+          "name": "PWL",
+          "price": 769.63,
+          "tf": "week",
+          "weight": 2
+        },
+        {
+          "name": "PMH",
+          "price": 775.14,
+          "tf": "month",
+          "weight": 3
+        },
+        {
+          "name": "PML",
+          "price": 749.6,
+          "tf": "month",
+          "weight": 3
+        },
+        {
+          "name": "52WH",
+          "price": 781.62,
+          "tf": "52w",
+          "weight": 3
+        },
+        {
+          "name": "52WL",
+          "price": 629.28,
+          "tf": "52w",
+          "weight": 3
+        },
+        {
+          "name": "MA20",
+          "price": 767.98,
+          "tf": "ma",
+          "weight": 1
+        },
+        {
+          "name": "MA50",
+          "price": 767.57,
+          "tf": "ma",
+          "weight": 2
+        },
+        {
+          "name": "MA200",
+          "price": 722.93,
+          "tf": "ma",
+          "weight": 3
+        },
+        {
+          "name": "DEMAND",
+          "price": 731.86,
+          "tf": "sd",
+          "weight": 2,
+          "lo": 725.33,
+          "hi": 738.38
+        }
+      ],
+      "zones": [
+        {
+          "lo": 629.28,
+          "hi": 629.28,
+          "weight": 3,
+          "members": [
+            "52WL"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 722.93,
+          "hi": 738.38,
+          "weight": 5,
+          "members": [
+            "MA200",
+            "DEMAND"
+          ],
+          "side": "support",
+          "big": true
+        },
+        {
+          "lo": 749.6,
+          "hi": 749.6,
+          "weight": 3,
+          "members": [
+            "PML"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 767.57,
+          "hi": 769.63,
+          "weight": 5,
+          "members": [
+            "MA50",
+            "MA20",
+            "PWL"
+          ],
+          "side": "support",
+          "big": true
+        },
+        {
+          "lo": 775.14,
+          "hi": 778.55,
+          "weight": 5,
+          "members": [
+            "PMH",
+            "PDL",
+            "PDC"
+          ],
+          "side": "support",
+          "big": true
+        },
+        {
+          "lo": 779.4,
+          "hi": 781.62,
+          "weight": 6,
+          "members": [
+            "PDH",
+            "PWH",
+            "52WH"
+          ],
+          "side": "resistance",
+          "big": true
+        }
+      ],
+      "problems": []
+    },
+    {
+      "symbol": "QQQ",
+      "from_bar": "2026-10-09",
+      "half_day": false,
+      "last": {
+        "open": 752.55,
+        "high": 752.86,
+        "low": 748.39,
+        "close": 751.24
+      },
+      "atr14": 8.53,
+      "close_strength": {
+        "pos": 0.638,
+        "chip": "MID"
+      },
+      "expected_move": {
+        "annual_iv": 0.1785,
+        "iv_pct_52w": 0.203,
+        "day": 8.45,
+        "week": 18.89,
+        "from": "IBKR implied vol"
+      },
+      "levels": [
+        {
+          "name": "PDH",
+          "price": 752.86,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PDL",
+          "price": 748.39,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PDC",
+          "price": 751.24,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PWH",
+          "price": 762.86,
+          "tf": "week",
+          "weight": 2
+        },
+        {
+          "name": "PWL",
+          "price": 743.23,
+          "tf": "week",
+          "weight": 2
+        },
+        {
+          "name": "PMH",
+          "price": 748.35,
+          "tf": "month",
+          "weight": 3
+        },
+        {
+          "name": "PML",
+          "price": 700.0,
+          "tf": "month",
+          "weight": 3
+        },
+        {
+          "name": "52WH",
+          "price": 762.86,
+          "tf": "52w",
+          "weight": 3
+        },
+        {
+          "name": "52WL",
+          "price": 555.6,
+          "tf": "52w",
+          "weight": 3
+        },
+        {
+          "name": "MA20",
+          "price": 737.54,
+          "tf": "ma",
+          "weight": 1
+        },
+        {
+          "name": "MA50",
+          "price": 724.52,
+          "tf": "ma",
+          "weight": 2
+        },
+        {
+          "name": "MA200",
+          "price": 672.18,
+          "tf": "ma",
+          "weight": 3
+        },
+        {
+          "name": "DEMAND",
+          "price": 718.4,
+          "tf": "sd",
+          "weight": 2,
+          "lo": 715.08,
+          "hi": 721.73
+        }
+      ],
+      "zones": [
+        {
+          "lo": 555.6,
+          "hi": 555.6,
+          "weight": 3,
+          "members": [
+            "52WL"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 672.18,
+          "hi": 672.18,
+          "weight": 3,
+          "members": [
+            "MA200"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 700.0,
+          "hi": 700.0,
+          "weight": 3,
+          "members": [
+            "PML"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 715.08,
+          "hi": 721.73,
+          "weight": 2,
+          "members": [
+            "DEMAND"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 724.52,
+          "hi": 724.52,
+          "weight": 2,
+          "members": [
+            "MA50"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 737.54,
+          "hi": 737.54,
+          "weight": 1,
+          "members": [
+            "MA20"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 743.23,
+          "hi": 743.23,
+          "weight": 2,
+          "members": [
+            "PWL"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 748.35,
+          "hi": 751.24,
+          "weight": 5,
+          "members": [
+            "PMH",
+            "PDL",
+            "PDC"
+          ],
+          "side": "support",
+          "big": true
+        },
+        {
+          "lo": 752.86,
+          "hi": 752.86,
+          "weight": 1,
+          "members": [
+            "PDH"
+          ],
+          "side": "resistance",
+          "big": false
+        },
+        {
+          "lo": 762.86,
+          "hi": 762.86,
+          "weight": 5,
+          "members": [
+            "PWH",
+            "52WH"
+          ],
+          "side": "resistance",
+          "big": true
+        }
+      ],
+      "problems": []
+    },
+    {
+      "symbol": "AAPL",
+      "from_bar": "2026-10-09",
+      "half_day": false,
+      "last": {
+        "open": 331.69,
+        "high": 338.6,
+        "low": 330.7,
+        "close": 336.62
+      },
+      "atr14": 6.46,
+      "close_strength": {
+        "pos": 0.749,
+        "chip": "MID"
+      },
+      "expected_move": {
+        "annual_iv": 0.2573,
+        "iv_pct_52w": 0.554,
+        "day": 5.46,
+        "week": 12.2,
+        "from": "IBKR implied vol"
+      },
+      "levels": [
+        {
+          "name": "PDH",
+          "price": 338.6,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PDL",
+          "price": 330.7,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PDC",
+          "price": 336.62,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PWH",
+          "price": 341.57,
+          "tf": "week",
+          "weight": 2
+        },
+        {
+          "name": "PWL",
+          "price": 330.62,
+          "tf": "week",
+          "weight": 2
+        },
+        {
+          "name": "PMH",
+          "price": 345.34,
+          "tf": "month",
+          "weight": 3
+        },
+        {
+          "name": "PML",
+          "price": 309.9,
+          "tf": "month",
+          "weight": 3
+        },
+        {
+          "name": "52WH",
+          "price": 345.34,
+          "tf": "52w",
+          "weight": 3
+        },
+        {
+          "name": "52WL",
+          "price": 243.42,
+          "tf": "52w",
+          "weight": 3
+        },
+        {
+          "name": "MA20",
+          "price": 335.39,
+          "tf": "ma",
+          "weight": 1
+        },
+        {
+          "name": "MA50",
+          "price": 322.39,
+          "tf": "ma",
+          "weight": 2
+        },
+        {
+          "name": "MA200",
+          "price": 290.74,
+          "tf": "ma",
+          "weight": 3
+        },
+        {
+          "name": "DEMAND",
+          "price": 292.89,
+          "tf": "sd",
+          "weight": 2,
+          "lo": 289.19,
+          "hi": 296.59
+        },
+        {
+          "name": "DEMAND",
+          "price": 317.14,
+          "tf": "sd",
+          "weight": 2,
+          "lo": 313.04,
+          "hi": 321.24
+        }
+      ],
+      "zones": [
+        {
+          "lo": 243.42,
+          "hi": 243.42,
+          "weight": 3,
+          "members": [
+            "52WL"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 289.19,
+          "hi": 296.59,
+          "weight": 2,
+          "members": [
+            "DEMAND"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 290.74,
+          "hi": 290.74,
+          "weight": 3,
+          "members": [
+            "MA200"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 309.9,
+          "hi": 309.9,
+          "weight": 3,
+          "members": [
+            "PML"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 313.04,
+          "hi": 321.24,
+          "weight": 2,
+          "members": [
+            "DEMAND"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 322.39,
+          "hi": 322.39,
+          "weight": 2,
+          "members": [
+            "MA50"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 330.62,
+          "hi": 330.7,
+          "weight": 3,
+          "members": [
+            "PWL",
+            "PDL"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 335.39,
+          "hi": 336.62,
+          "weight": 2,
+          "members": [
+            "MA20",
+            "PDC"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 338.6,
+          "hi": 338.6,
+          "weight": 1,
+          "members": [
+            "PDH"
+          ],
+          "side": "resistance",
+          "big": false
+        },
+        {
+          "lo": 341.57,
+          "hi": 341.57,
+          "weight": 2,
+          "members": [
+            "PWH"
+          ],
+          "side": "resistance",
+          "big": false
+        },
+        {
+          "lo": 345.34,
+          "hi": 345.34,
+          "weight": 6,
+          "members": [
+            "PMH",
+            "52WH"
+          ],
+          "side": "resistance",
+          "big": true
+        }
+      ],
+      "problems": []
+    },
+    {
+      "symbol": "MSFT",
+      "from_bar": "2026-10-09",
+      "half_day": false,
+      "last": {
+        "open": 528.24,
+        "high": 537.2,
+        "low": 526.25,
+        "close": 535.08
+      },
+      "atr14": 12.72,
+      "close_strength": {
+        "pos": 0.806,
+        "chip": "STRONG"
+      },
+      "expected_move": {
+        "annual_iv": 0.2956,
+        "iv_pct_52w": 0.633,
+        "day": 9.97,
+        "week": 22.28,
+        "from": "IBKR implied vol"
+      },
+      "levels": [
+        {
+          "name": "PDH",
+          "price": 537.2,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PDL",
+          "price": 526.25,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PDC",
+          "price": 535.08,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PWH",
+          "price": 537.2,
+          "tf": "week",
+          "weight": 2
+        },
+        {
+          "name": "PWL",
+          "price": 518.79,
+          "tf": "week",
+          "weight": 2
+        },
+        {
+          "name": "PMH",
+          "price": 519.83,
+          "tf": "month",
+          "weight": 3
+        },
+        {
+          "name": "PML",
+          "price": 486.0,
+          "tf": "month",
+          "weight": 3
+        },
+        {
+          "name": "52WH",
+          "price": 553.72,
+          "tf": "52w",
+          "weight": 3
+        },
+        {
+          "name": "52WL",
+          "price": 349.2,
+          "tf": "52w",
+          "weight": 3
+        },
+        {
+          "name": "MA20",
+          "price": 510.1,
+          "tf": "ma",
+          "weight": 1
+        },
+        {
+          "name": "MA50",
+          "price": 500.45,
+          "tf": "ma",
+          "weight": 2
+        },
+        {
+          "name": "MA200",
+          "price": 434.0,
+          "tf": "ma",
+          "weight": 3
+        },
+        {
+          "name": "DEMAND",
+          "price": 356.71,
+          "tf": "sd",
+          "weight": 2,
+          "lo": 349.2,
+          "hi": 364.23
+        },
+        {
+          "name": "DEMAND",
+          "price": 492.36,
+          "tf": "sd",
+          "weight": 2,
+          "lo": 487.31,
+          "hi": 497.4
+        },
+        {
+          "name": "DEMAND",
+          "price": 495.06,
+          "tf": "sd",
+          "weight": 2,
+          "lo": 491.22,
+          "hi": 498.9
+        }
+      ],
+      "zones": [
+        {
+          "lo": 349.2,
+          "hi": 364.23,
+          "weight": 5,
+          "members": [
+            "52WL",
+            "DEMAND"
+          ],
+          "side": "support",
+          "big": true
+        },
+        {
+          "lo": 434.0,
+          "hi": 434.0,
+          "weight": 3,
+          "members": [
+            "MA200"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 486.0,
+          "hi": 497.4,
+          "weight": 5,
+          "members": [
+            "PML",
+            "DEMAND"
+          ],
+          "side": "support",
+          "big": true
+        },
+        {
+          "lo": 491.22,
+          "hi": 498.9,
+          "weight": 2,
+          "members": [
+            "DEMAND"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 500.45,
+          "hi": 500.45,
+          "weight": 2,
+          "members": [
+            "MA50"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 510.1,
+          "hi": 510.1,
+          "weight": 1,
+          "members": [
+            "MA20"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 518.79,
+          "hi": 519.83,
+          "weight": 5,
+          "members": [
+            "PWL",
+            "PMH"
+          ],
+          "side": "support",
+          "big": true
+        },
+        {
+          "lo": 526.25,
+          "hi": 526.25,
+          "weight": 1,
+          "members": [
+            "PDL"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 535.08,
+          "hi": 537.2,
+          "weight": 4,
+          "members": [
+            "PDC",
+            "PDH",
+            "PWH"
+          ],
+          "side": "resistance",
+          "big": false
+        },
+        {
+          "lo": 553.72,
+          "hi": 553.72,
+          "weight": 3,
+          "members": [
+            "52WH"
+          ],
+          "side": "resistance",
+          "big": false
+        }
+      ],
+      "problems": []
+    },
+    {
+      "symbol": "NVDA",
+      "from_bar": "2026-10-09",
+      "half_day": false,
+      "last": {
+        "open": 233.84,
+        "high": 233.88,
+        "low": 229.12,
+        "close": 229.36
+      },
+      "atr14": 5.2,
+      "close_strength": {
+        "pos": 0.05,
+        "chip": "WEAK"
+      },
+      "expected_move": {
+        "annual_iv": 0.2945,
+        "iv_pct_52w": 0.016,
+        "day": 4.25,
+        "week": 9.51,
+        "from": "IBKR implied vol"
+      },
+      "levels": [
+        {
+          "name": "PDH",
+          "price": 233.88,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PDL",
+          "price": 229.12,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PDC",
+          "price": 229.36,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PWH",
+          "price": 243.37,
+          "tf": "week",
+          "weight": 2
+        },
+        {
+          "name": "PWL",
+          "price": 229.12,
+          "tf": "week",
+          "weight": 2
+        },
+        {
+          "name": "PMH",
+          "price": 234.76,
+          "tf": "month",
+          "weight": 3
+        },
+        {
+          "name": "PML",
+          "price": 208.93,
+          "tf": "month",
+          "weight": 3
+        },
+        {
+          "name": "52WH",
+          "price": 243.37,
+          "tf": "52w",
+          "weight": 3
+        },
+        {
+          "name": "52WL",
+          "price": 164.27,
+          "tf": "52w",
+          "weight": 3
+        },
+        {
+          "name": "MA20",
+          "price": 226.74,
+          "tf": "ma",
+          "weight": 1
+        },
+        {
+          "name": "MA50",
+          "price": 222.08,
+          "tf": "ma",
+          "weight": 2
+        },
+        {
+          "name": "MA200",
+          "price": 202.15,
+          "tf": "ma",
+          "weight": 3
+        },
+        {
+          "name": "DEMAND",
+          "price": 198.48,
+          "tf": "sd",
+          "weight": 2,
+          "lo": 194.96,
+          "hi": 202.0
+        }
+      ],
+      "zones": [
+        {
+          "lo": 164.27,
+          "hi": 164.27,
+          "weight": 3,
+          "members": [
+            "52WL"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 194.96,
+          "hi": 202.0,
+          "weight": 2,
+          "members": [
+            "DEMAND"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 202.15,
+          "hi": 202.15,
+          "weight": 3,
+          "members": [
+            "MA200"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 208.93,
+          "hi": 208.93,
+          "weight": 3,
+          "members": [
+            "PML"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 222.08,
+          "hi": 222.08,
+          "weight": 2,
+          "members": [
+            "MA50"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 226.74,
+          "hi": 226.74,
+          "weight": 1,
+          "members": [
+            "MA20"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 229.12,
+          "hi": 229.36,
+          "weight": 4,
+          "members": [
+            "PDL",
+            "PWL",
+            "PDC"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 233.88,
+          "hi": 234.76,
+          "weight": 4,
+          "members": [
+            "PDH",
+            "PMH"
+          ],
+          "side": "resistance",
+          "big": false
+        },
+        {
+          "lo": 243.37,
+          "hi": 243.37,
+          "weight": 5,
+          "members": [
+            "PWH",
+            "52WH"
+          ],
+          "side": "resistance",
+          "big": true
+        }
+      ],
+      "problems": []
+    },
+    {
+      "symbol": "AMZN",
+      "from_bar": "2026-10-09",
+      "half_day": false,
+      "last": {
+        "open": 256.5,
+        "high": 262.75,
+        "low": 256.13,
+        "close": 262.5
+      },
+      "atr14": 5.63,
+      "close_strength": {
+        "pos": 0.962,
+        "chip": "STRONG"
+      },
+      "expected_move": {
+        "annual_iv": 0.3907,
+        "iv_pct_52w": 0.705,
+        "day": 6.46,
+        "week": 14.45,
+        "from": "IBKR implied vol"
+      },
+      "levels": [
+        {
+          "name": "PDH",
+          "price": 262.75,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PDL",
+          "price": 256.13,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PDC",
+          "price": 262.5,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PWH",
+          "price": 262.75,
+          "tf": "week",
+          "weight": 2
+        },
+        {
+          "name": "PWL",
+          "price": 250.17,
+          "tf": "week",
+          "weight": 2
+        },
+        {
+          "name": "PMH",
+          "price": 261.12,
+          "tf": "month",
+          "weight": 3
+        },
+        {
+          "name": "PML",
+          "price": 244.3,
+          "tf": "month",
+          "weight": 3
+        },
+        {
+          "name": "52WH",
+          "price": 287.2,
+          "tf": "52w",
+          "weight": 3
+        },
+        {
+          "name": "52WL",
+          "price": 196.0,
+          "tf": "52w",
+          "weight": 3
+        },
+        {
+          "name": "MA20",
+          "price": 252.02,
+          "tf": "ma",
+          "weight": 1
+        },
+        {
+          "name": "MA50",
+          "price": 259.1,
+          "tf": "ma",
+          "weight": 2
+        },
+        {
+          "name": "MA200",
+          "price": 242.15,
+          "tf": "ma",
+          "weight": 3
+        },
+        {
+          "name": "DEMAND",
+          "price": 235.44,
+          "tf": "sd",
+          "weight": 2,
+          "lo": 231.06,
+          "hi": 239.83
+        }
+      ],
+      "zones": [
+        {
+          "lo": 196.0,
+          "hi": 196.0,
+          "weight": 3,
+          "members": [
+            "52WL"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 231.06,
+          "hi": 239.83,
+          "weight": 2,
+          "members": [
+            "DEMAND"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 242.15,
+          "hi": 242.15,
+          "weight": 3,
+          "members": [
+            "MA200"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 244.3,
+          "hi": 244.3,
+          "weight": 3,
+          "members": [
+            "PML"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 250.17,
+          "hi": 250.17,
+          "weight": 2,
+          "members": [
+            "PWL"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 252.02,
+          "hi": 252.02,
+          "weight": 1,
+          "members": [
+            "MA20"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 256.13,
+          "hi": 256.13,
+          "weight": 1,
+          "members": [
+            "PDL"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 259.1,
+          "hi": 259.1,
+          "weight": 2,
+          "members": [
+            "MA50"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 261.12,
+          "hi": 261.12,
+          "weight": 3,
+          "members": [
+            "PMH"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 262.5,
+          "hi": 262.75,
+          "weight": 4,
+          "members": [
+            "PDC",
+            "PDH",
+            "PWH"
+          ],
+          "side": "resistance",
+          "big": false
+        },
+        {
+          "lo": 287.2,
+          "hi": 287.2,
+          "weight": 3,
+          "members": [
+            "52WH"
+          ],
+          "side": "resistance",
+          "big": false
+        }
+      ],
+      "problems": []
+    },
+    {
+      "symbol": "GOOGL",
+      "from_bar": "2026-10-09",
+      "half_day": false,
+      "last": {
+        "open": 351.4,
+        "high": 354.7,
+        "low": 350.31,
+        "close": 351.68
+      },
+      "atr14": 8.66,
+      "close_strength": {
+        "pos": 0.312,
+        "chip": "MID"
+      },
+      "expected_move": {
+        "annual_iv": 0.3611,
+        "iv_pct_52w": 0.709,
+        "day": 8.0,
+        "week": 17.89,
+        "from": "IBKR implied vol"
+      },
+      "levels": [
+        {
+          "name": "PDH",
+          "price": 354.7,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PDL",
+          "price": 350.31,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PDC",
+          "price": 351.68,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PWH",
+          "price": 356.83,
+          "tf": "week",
+          "weight": 2
+        },
+        {
+          "name": "PWL",
+          "price": 342.4,
+          "tf": "week",
+          "weight": 2
+        },
+        {
+          "name": "PMH",
+          "price": 364.17,
+          "tf": "month",
+          "weight": 3
+        },
+        {
+          "name": "PML",
+          "price": 327.74,
+          "tf": "month",
+          "weight": 3
+        },
+        {
+          "name": "52WH",
+          "price": 408.61,
+          "tf": "52w",
+          "weight": 3
+        },
+        {
+          "name": "52WL",
+          "price": 235.84,
+          "tf": "52w",
+          "weight": 3
+        },
+        {
+          "name": "MA20",
+          "price": 345.92,
+          "tf": "ma",
+          "weight": 1
+        },
+        {
+          "name": "MA50",
+          "price": 346.25,
+          "tf": "ma",
+          "weight": 2
+        },
+        {
+          "name": "MA200",
+          "price": 340.03,
+          "tf": "ma",
+          "weight": 3
+        },
+        {
+          "name": "SUPPLY",
+          "price": 376.04,
+          "tf": "sd",
+          "weight": 2,
+          "lo": 373.52,
+          "hi": 378.56
+        },
+        {
+          "name": "DEMAND",
+          "price": 333.43,
+          "tf": "sd",
+          "weight": 2,
+          "lo": 330.34,
+          "hi": 336.51
+        },
+        {
+          "name": "SUPPLY",
+          "price": 374.01,
+          "tf": "sd",
+          "weight": 2,
+          "lo": 367.5,
+          "hi": 380.52
+        },
+        {
+          "name": "SUPPLY",
+          "price": 353.36,
+          "tf": "sd",
+          "weight": 2,
+          "lo": 349.1,
+          "hi": 357.61
+        },
+        {
+          "name": "SUPPLY",
+          "price": 346.8,
+          "tf": "sd",
+          "weight": 2,
+          "lo": 341.0,
+          "hi": 352.6
+        }
+      ],
+      "zones": [
+        {
+          "lo": 235.84,
+          "hi": 235.84,
+          "weight": 3,
+          "members": [
+            "52WL"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 327.74,
+          "hi": 327.74,
+          "weight": 3,
+          "members": [
+            "PML"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 330.34,
+          "hi": 336.51,
+          "weight": 2,
+          "members": [
+            "DEMAND"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 340.03,
+          "hi": 352.6,
+          "weight": 5,
+          "members": [
+            "MA200",
+            "SUPPLY"
+          ],
+          "side": "support",
+          "big": true
+        },
+        {
+          "lo": 342.4,
+          "hi": 342.4,
+          "weight": 2,
+          "members": [
+            "PWL"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 345.92,
+          "hi": 346.25,
+          "weight": 3,
+          "members": [
+            "MA20",
+            "MA50"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 349.1,
+          "hi": 357.61,
+          "weight": 3,
+          "members": [
+            "SUPPLY",
+            "PDL"
+          ],
+          "side": "resistance",
+          "big": false
+        },
+        {
+          "lo": 351.68,
+          "hi": 351.68,
+          "weight": 1,
+          "members": [
+            "PDC"
+          ],
+          "side": "resistance",
+          "big": false
+        },
+        {
+          "lo": 354.7,
+          "hi": 354.7,
+          "weight": 1,
+          "members": [
+            "PDH"
+          ],
+          "side": "resistance",
+          "big": false
+        },
+        {
+          "lo": 356.83,
+          "hi": 356.83,
+          "weight": 2,
+          "members": [
+            "PWH"
+          ],
+          "side": "resistance",
+          "big": false
+        },
+        {
+          "lo": 364.17,
+          "hi": 364.17,
+          "weight": 3,
+          "members": [
+            "PMH"
+          ],
+          "side": "resistance",
+          "big": false
+        },
+        {
+          "lo": 367.5,
+          "hi": 380.52,
+          "weight": 2,
+          "members": [
+            "SUPPLY"
+          ],
+          "side": "resistance",
+          "big": false
+        },
+        {
+          "lo": 373.52,
+          "hi": 378.56,
+          "weight": 2,
+          "members": [
+            "SUPPLY"
+          ],
+          "side": "resistance",
+          "big": false
+        },
+        {
+          "lo": 408.61,
+          "hi": 408.61,
+          "weight": 3,
+          "members": [
+            "52WH"
+          ],
+          "side": "resistance",
+          "big": false
+        }
+      ],
+      "problems": []
+    },
+    {
+      "symbol": "META",
+      "from_bar": "2026-10-09",
+      "half_day": false,
+      "last": {
+        "open": 726.5,
+        "high": 728.02,
+        "low": 716.2,
+        "close": 718.6
+      },
+      "atr14": 22.01,
+      "close_strength": {
+        "pos": 0.203,
+        "chip": "WEAK"
+      },
+      "expected_move": {
+        "annual_iv": 0.4347,
+        "iv_pct_52w": 0.829,
+        "day": 19.68,
+        "week": 44.0,
+        "from": "IBKR implied vol"
+      },
+      "levels": [
+        {
+          "name": "PDH",
+          "price": 728.02,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PDL",
+          "price": 716.2,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PDC",
+          "price": 718.6,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PWH",
+          "price": 747.6,
+          "tf": "week",
+          "weight": 2
+        },
+        {
+          "name": "PWL",
+          "price": 711.68,
+          "tf": "week",
+          "weight": 2
+        },
+        {
+          "name": "PMH",
+          "price": 779.82,
+          "tf": "month",
+          "weight": 3
+        },
+        {
+          "name": "PML",
+          "price": 556.1,
+          "tf": "month",
+          "weight": 3
+        },
+        {
+          "name": "52WH",
+          "price": 779.82,
+          "tf": "52w",
+          "weight": 3
+        },
+        {
+          "name": "52WL",
+          "price": 520.26,
+          "tf": "52w",
+          "weight": 3
+        },
+        {
+          "name": "MA20",
+          "price": 719.18,
+          "tf": "ma",
+          "weight": 1
+        },
+        {
+          "name": "MA50",
+          "price": 639.73,
+          "tf": "ma",
+          "weight": 2
+        },
+        {
+          "name": "MA200",
+          "price": 630.13,
+          "tf": "ma",
+          "weight": 3
+        },
+        {
+          "name": "DEMAND",
+          "price": 549.27,
+          "tf": "sd",
+          "weight": 2,
+          "lo": 540.22,
+          "hi": 558.33
+        },
+        {
+          "name": "DEMAND",
+          "price": 573.9,
+          "tf": "sd",
+          "weight": 2,
+          "lo": 569.13,
+          "hi": 578.68
+        },
+        {
+          "name": "DEMAND",
+          "price": 675.48,
+          "tf": "sd",
+          "weight": 2,
+          "lo": 660.8,
+          "hi": 690.15
+        }
+      ],
+      "zones": [
+        {
+          "lo": 520.26,
+          "hi": 520.26,
+          "weight": 3,
+          "members": [
+            "52WL"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 540.22,
+          "hi": 558.33,
+          "weight": 2,
+          "members": [
+            "DEMAND"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 556.1,
+          "hi": 556.1,
+          "weight": 3,
+          "members": [
+            "PML"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 569.13,
+          "hi": 578.68,
+          "weight": 2,
+          "members": [
+            "DEMAND"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 630.13,
+          "hi": 630.13,
+          "weight": 3,
+          "members": [
+            "MA200"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 639.73,
+          "hi": 639.73,
+          "weight": 2,
+          "members": [
+            "MA50"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 660.8,
+          "hi": 690.15,
+          "weight": 2,
+          "members": [
+            "DEMAND"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 711.68,
+          "hi": 711.68,
+          "weight": 2,
+          "members": [
+            "PWL"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 716.2,
+          "hi": 719.18,
+          "weight": 3,
+          "members": [
+            "PDL",
+            "PDC",
+            "MA20"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 728.02,
+          "hi": 728.02,
+          "weight": 1,
+          "members": [
+            "PDH"
+          ],
+          "side": "resistance",
+          "big": false
+        },
+        {
+          "lo": 747.6,
+          "hi": 747.6,
+          "weight": 2,
+          "members": [
+            "PWH"
+          ],
+          "side": "resistance",
+          "big": false
+        },
+        {
+          "lo": 779.82,
+          "hi": 779.82,
+          "weight": 6,
+          "members": [
+            "PMH",
+            "52WH"
+          ],
+          "side": "resistance",
+          "big": true
+        }
+      ],
+      "problems": []
+    },
+    {
+      "symbol": "TSLA",
+      "from_bar": "2026-10-09",
+      "half_day": false,
+      "last": {
+        "open": 382.19,
+        "high": 388.55,
+        "low": 379.73,
+        "close": 382.72
+      },
+      "atr14": 11.03,
+      "close_strength": {
+        "pos": 0.339,
+        "chip": "MID"
+      },
+      "expected_move": {
+        "annual_iv": 0.417,
+        "iv_pct_52w": 0.227,
+        "day": 10.05,
+        "week": 22.48,
+        "from": "IBKR implied vol"
+      },
+      "levels": [
+        {
+          "name": "PDH",
+          "price": 388.55,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PDL",
+          "price": 379.73,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PDC",
+          "price": 382.72,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PWH",
+          "price": 388.55,
+          "tf": "week",
+          "weight": 2
+        },
+        {
+          "name": "PWL",
+          "price": 364.91,
+          "tf": "week",
+          "weight": 2
+        },
+        {
+          "name": "PMH",
+          "price": 386.83,
+          "tf": "month",
+          "weight": 3
+        },
+        {
+          "name": "PML",
+          "price": 345.88,
+          "tf": "month",
+          "weight": 3
+        },
+        {
+          "name": "52WH",
+          "price": 498.83,
+          "tf": "52w",
+          "weight": 3
+        },
+        {
+          "name": "52WL",
+          "price": 297.38,
+          "tf": "52w",
+          "weight": 3
+        },
+        {
+          "name": "MA20",
+          "price": 368.66,
+          "tf": "ma",
+          "weight": 1
+        },
+        {
+          "name": "MA50",
+          "price": 354.75,
+          "tf": "ma",
+          "weight": 2
+        },
+        {
+          "name": "MA200",
+          "price": 390.6,
+          "tf": "ma",
+          "weight": 3
+        },
+        {
+          "name": "SUPPLY",
+          "price": 421.75,
+          "tf": "sd",
+          "weight": 2,
+          "lo": 417.16,
+          "hi": 426.35
+        },
+        {
+          "name": "SUPPLY",
+          "price": 425.48,
+          "tf": "sd",
+          "weight": 2,
+          "lo": 418.09,
+          "hi": 432.86
+        },
+        {
+          "name": "DEMAND",
+          "price": 343.23,
+          "tf": "sd",
+          "weight": 2,
+          "lo": 338.96,
+          "hi": 347.5
+        },
+        {
+          "name": "DEMAND",
+          "price": 352.0,
+          "tf": "sd",
+          "weight": 2,
+          "lo": 345.2,
+          "hi": 358.8
+        },
+        {
+          "name": "SUPPLY",
+          "price": 379.52,
+          "tf": "sd",
+          "weight": 2,
+          "lo": 375.7,
+          "hi": 383.34
+        }
+      ],
+      "zones": [
+        {
+          "lo": 297.38,
+          "hi": 297.38,
+          "weight": 3,
+          "members": [
+            "52WL"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 338.96,
+          "hi": 347.5,
+          "weight": 2,
+          "members": [
+            "DEMAND"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 345.2,
+          "hi": 358.8,
+          "weight": 5,
+          "members": [
+            "DEMAND",
+            "PML"
+          ],
+          "side": "support",
+          "big": true
+        },
+        {
+          "lo": 354.75,
+          "hi": 354.75,
+          "weight": 2,
+          "members": [
+            "MA50"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 364.91,
+          "hi": 364.91,
+          "weight": 2,
+          "members": [
+            "PWL"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 368.66,
+          "hi": 368.66,
+          "weight": 1,
+          "members": [
+            "MA20"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 375.7,
+          "hi": 383.34,
+          "weight": 2,
+          "members": [
+            "SUPPLY"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 379.73,
+          "hi": 379.73,
+          "weight": 1,
+          "members": [
+            "PDL"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 382.72,
+          "hi": 382.72,
+          "weight": 1,
+          "members": [
+            "PDC"
+          ],
+          "side": "resistance",
+          "big": false
+        },
+        {
+          "lo": 386.83,
+          "hi": 388.55,
+          "weight": 6,
+          "members": [
+            "PMH",
+            "PDH",
+            "PWH"
+          ],
+          "side": "resistance",
+          "big": true
+        },
+        {
+          "lo": 390.6,
+          "hi": 390.6,
+          "weight": 3,
+          "members": [
+            "MA200"
+          ],
+          "side": "resistance",
+          "big": false
+        },
+        {
+          "lo": 417.16,
+          "hi": 432.86,
+          "weight": 4,
+          "members": [
+            "SUPPLY",
+            "SUPPLY"
+          ],
+          "side": "resistance",
+          "big": false
+        },
+        {
+          "lo": 498.83,
+          "hi": 498.83,
+          "weight": 3,
+          "members": [
+            "52WH"
+          ],
+          "side": "resistance",
+          "big": false
+        }
+      ],
+      "problems": []
+    },
+    {
+      "symbol": "PLTR",
+      "from_bar": "2026-10-09",
+      "half_day": false,
+      "last": {
+        "open": 201.47,
+        "high": 209.3,
+        "low": 198.33,
+        "close": 209.03
+      },
+      "atr14": 6.14,
+      "close_strength": {
+        "pos": 0.975,
+        "chip": "STRONG"
+      },
+      "expected_move": {
+        "annual_iv": 0.5361,
+        "iv_pct_52w": 0.594,
+        "day": 7.06,
+        "week": 15.78,
+        "from": "IBKR implied vol"
+      },
+      "levels": [
+        {
+          "name": "PDH",
+          "price": 209.3,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PDL",
+          "price": 198.33,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PDC",
+          "price": 209.03,
+          "tf": "day",
+          "weight": 1
+        },
+        {
+          "name": "PWH",
+          "price": 209.3,
+          "tf": "week",
+          "weight": 2
+        },
+        {
+          "name": "PWL",
+          "price": 187.63,
+          "tf": "week",
+          "weight": 2
+        },
+        {
+          "name": "PMH",
+          "price": 194.68,
+          "tf": "month",
+          "weight": 3
+        },
+        {
+          "name": "PML",
+          "price": 164.55,
+          "tf": "month",
+          "weight": 3
+        },
+        {
+          "name": "52WH",
+          "price": 209.3,
+          "tf": "52w",
+          "weight": 3
+        },
+        {
+          "name": "52WL",
+          "price": 106.37,
+          "tf": "52w",
+          "weight": 3
+        },
+        {
+          "name": "MA20",
+          "price": 187.0,
+          "tf": "ma",
+          "weight": 1
+        },
+        {
+          "name": "MA50",
+          "price": 176.98,
+          "tf": "ma",
+          "weight": 2
+        },
+        {
+          "name": "MA200",
+          "price": 152.33,
+          "tf": "ma",
+          "weight": 3
+        },
+        {
+          "name": "DEMAND",
+          "price": 123.3,
+          "tf": "sd",
+          "weight": 2,
+          "lo": 119.62,
+          "hi": 126.97
+        },
+        {
+          "name": "DEMAND",
+          "price": 171.64,
+          "tf": "sd",
+          "weight": 2,
+          "lo": 165.71,
+          "hi": 177.57
+        },
+        {
+          "name": "DEMAND",
+          "price": 183.78,
+          "tf": "sd",
+          "weight": 2,
+          "lo": 182.03,
+          "hi": 185.54
+        },
+        {
+          "name": "DEMAND",
+          "price": 200.04,
+          "tf": "sd",
+          "weight": 2,
+          "lo": 195.65,
+          "hi": 204.44
+        }
+      ],
+      "zones": [
+        {
+          "lo": 106.37,
+          "hi": 106.37,
+          "weight": 3,
+          "members": [
+            "52WL"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 119.62,
+          "hi": 126.97,
+          "weight": 2,
+          "members": [
+            "DEMAND"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 152.33,
+          "hi": 152.33,
+          "weight": 3,
+          "members": [
+            "MA200"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 164.55,
+          "hi": 164.55,
+          "weight": 3,
+          "members": [
+            "PML"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 165.71,
+          "hi": 177.57,
+          "weight": 2,
+          "members": [
+            "DEMAND"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 176.98,
+          "hi": 176.98,
+          "weight": 2,
+          "members": [
+            "MA50"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 182.03,
+          "hi": 185.54,
+          "weight": 2,
+          "members": [
+            "DEMAND"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 187.0,
+          "hi": 187.63,
+          "weight": 3,
+          "members": [
+            "MA20",
+            "PWL"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 194.68,
+          "hi": 204.44,
+          "weight": 5,
+          "members": [
+            "PMH",
+            "DEMAND"
+          ],
+          "side": "support",
+          "big": true
+        },
+        {
+          "lo": 198.33,
+          "hi": 198.33,
+          "weight": 1,
+          "members": [
+            "PDL"
+          ],
+          "side": "support",
+          "big": false
+        },
+        {
+          "lo": 209.03,
+          "hi": 209.3,
+          "weight": 7,
+          "members": [
+            "PDC",
+            "PDH",
+            "PWH",
+            "52WH"
+          ],
+          "side": "resistance",
+          "big": true
+        }
+      ],
+      "problems": []
+    }
+  ],
+  "rules": [
+    {
+      "id": "brk_PDH_close",
+      "label": "Hourly close above yesterday's high",
+      "side": "call",
+      "status": "probation",
+      "since": "2026-10-09",
+      "backtest": {
+        "n": 636,
+        "avg_r": -0.002,
+        "ci_lo": -0.071,
+        "ci_hi": 0.067,
+        "period": "Hourly, 10 names, Mar to Oct 2026"
+      },
+      "live": {
+        "n": 6,
+        "avg_r": 0.458,
+        "wins": 4
+      }
+    },
+    {
+      "id": "reclaim_PDL_close",
+      "label": "Dip below yesterday's low, hourly close back above it",
+      "side": "call",
+      "status": "probation",
+      "since": "2026-10-09",
+      "backtest": {
+        "n": 187,
+        "avg_r": 0.008,
+        "ci_lo": -0.084,
+        "ci_hi": 0.099,
+        "period": "Hourly, 10 names, Mar to Oct 2026"
+      },
+      "live": {
+        "n": 1,
+        "avg_r": -0.156,
+        "wins": 0
+      }
+    },
+    {
+      "id": "brk_PDL_close",
+      "label": "Hourly close below yesterday's low",
+      "side": "put",
+      "status": "probation",
+      "since": "2026-10-09",
+      "backtest": {
+        "n": 547,
+        "avg_r": -0.008,
+        "ci_lo": -0.082,
+        "ci_hi": 0.066,
+        "period": "Hourly, 10 names, Mar to Oct 2026"
+      },
+      "live": {
+        "n": 2,
+        "avg_r": -0.524,
+        "wins": 0
+      }
+    },
+    {
+      "id": "reject_PDH_close",
+      "label": "Poke above yesterday's high, hourly close back below it",
+      "side": "put",
+      "status": "probation",
+      "since": "2026-10-09",
+      "backtest": {
+        "n": 229,
+        "avg_r": 0.033,
+        "ci_lo": -0.055,
+        "ci_hi": 0.122,
+        "period": "Hourly, 10 names, Mar to Oct 2026"
+      },
+      "live": {
+        "n": 1,
+        "avg_r": 0.229,
+        "wins": 1
+      }
+    }
+  ],
+  "paper": [
+    {
+      "session": "2026-10-09",
+      "symbol": "AAPL",
+      "rule": "reclaim_PDL_close",
+      "side": "call",
+      "entry": 337.77,
+      "stop": 330.39,
+      "target": 352.53,
+      "exit": "close",
+      "r": -0.156
+    },
+    {
+      "session": "2026-10-09",
+      "symbol": "META",
+      "rule": "reject_PDH_close",
+      "side": "put",
+      "entry": 720.61,
+      "stop": 729.39,
+      "target": 703.05,
+      "exit": "close",
+      "r": 0.229
+    },
+    {
+      "session": "2026-10-09",
+      "symbol": "META",
+      "rule": "brk_PDH_close",
+      "side": "call",
+      "entry": 726.95,
+      "stop": 719.47,
+      "target": 741.91,
+      "exit": "stop",
+      "r": -1.0
+    },
+    {
+      "session": "2026-10-09",
+      "symbol": "NVDA",
+      "rule": "brk_PDL_close",
+      "side": "put",
+      "entry": 229.28,
+      "stop": 230.92,
+      "target": 226.0,
+      "exit": "close",
+      "r": -0.049
+    },
+    {
+      "session": "2026-10-09",
+      "symbol": "PLTR",
+      "rule": "brk_PDH_close",
+      "side": "call",
+      "entry": 205.45,
+      "stop": 203.27,
+      "target": 209.8,
+      "exit": "close",
+      "r": 1.645
+    },
+    {
+      "session": "2026-10-09",
+      "symbol": "SPY",
+      "rule": "brk_PDH_close",
+      "side": "call",
+      "entry": 777.33,
+      "stop": 775.73,
+      "target": 780.54,
+      "exit": "close",
+      "r": 0.761
+    },
+    {
+      "session": "2026-10-09",
+      "symbol": "MSFT",
+      "rule": "brk_PDH_close",
+      "side": "call",
+      "entry": 533.82,
+      "stop": 531.02,
+      "target": 539.41,
+      "exit": "close",
+      "r": 0.451
+    },
+    {
+      "session": "2026-10-09",
+      "symbol": "AMZN",
+      "rule": "brk_PDH_close",
+      "side": "call",
+      "entry": 260.55,
+      "stop": 258.77,
+      "target": 264.1,
+      "exit": "close",
+      "r": 1.098
+    },
+    {
+      "session": "2026-10-09",
+      "symbol": "AAPL",
+      "rule": "brk_PDL_close",
+      "side": "put",
+      "entry": 332.47,
+      "stop": 337.15,
+      "target": 323.12,
+      "exit": "stop",
+      "r": -1.0
+    },
+    {
+      "session": "2026-10-09",
+      "symbol": "TSLA",
+      "rule": "brk_PDH_close",
+      "side": "call",
+      "entry": 385.08,
+      "stop": 373.75,
+      "target": 407.75,
+      "exit": "close",
+      "r": -0.208
+    }
+  ],
+  "expected_move_check": {
+    "inside_1d_pct": 85.0,
+    "touch_5d_pct": 29.8,
+    "n": 500,
+    "period": "SPY vs VIX, 2 years to 9 Oct 2026"
+  }
+}

@@ -199,7 +199,7 @@ export function AvoidPanel({ r }: { r: Radar }) {
   );
 }
 
-export function EditionPicker({ dates, current }: { dates: string[]; current: string }) {
+export function EditionPicker({ dates, current, base = "/radar" }: { dates: string[]; current: string; base?: string }) {
   if (dates.length < 2) return null;
   return (
     <nav aria-label="Earlier editions" className="flex flex-wrap items-center gap-1.5 text-xs">
@@ -207,7 +207,7 @@ export function EditionPicker({ dates, current }: { dates: string[]; current: st
       {dates.map((d, i) => (
         <Link
           key={d}
-          href={i === 0 ? "/radar" : `/radar?d=${d}`}
+          href={i === 0 ? base : `${base}?d=${d}`}
           aria-current={d === current ? "page" : undefined}
           className={cn(
             "rounded border px-2 py-0.5 font-mono",

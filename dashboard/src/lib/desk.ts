@@ -39,3 +39,9 @@ export const RADAR_PATHS = {
   latest: "radar/latest.json",
   history: "radar/editions/",
 } as const;
+
+/** The after-close options levels editions, one per session they are built for, kept the same way as the radar's. */
+export const OPTIONS_PATHS = {
+  latest: "options/latest.json",
+  history: "options/editions/",
+} as const;

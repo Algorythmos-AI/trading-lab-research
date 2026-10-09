@@ -2,6 +2,8 @@ import Ajv, { type ErrorObject } from "ajv";
 import type { DeskName } from "./desk";
 import cryptoSchema from "./crypto.schema.json";
 import type { CryptoSnapshot } from "./crypto.types";
+import optionsSchema from "./options.schema.json";
+import type { OptionsEdition } from "./options.types";
 import radarSchema from "./radar.schema.json";
 import type { RadarEdition } from "./radar.types";
 import schema from "./snapshot.schema.json";
@@ -12,15 +14,23 @@ const ajv = new Ajv({ strict: false, allErrors: true });
 const validateSchema = ajv.compile<Snapshot>(schema);
 const validateCryptoSchema = ajv.compile<CryptoSnapshot>(cryptoSchema);
 const validateRadarSchema = ajv.compile<RadarEdition>(radarSchema);
+const validateOptionsSchema = ajv.compile<OptionsEdition>(optionsSchema);
 
 export const STOCKS_SCHEMA = "trading-lab/snapshot";
 export const CRYPTO_SCHEMA = "trading-lab/crypto-snapshot";
 /** The daily pre-market radar's edition: research notes, not a desk. It has no windows and no watchdog. */
 export const RADAR_SCHEMA = "stocksdelta/radar";
+/** The after-close options levels edition: research for the next session's calls and puts. No desk, no watchdog. */
+export const OPTIONS_SCHEMA = "stocksdelta/options";
 
 /** True when the signed body names the radar schema. Like deskOf, the body decides, never a header. */
 export function isRadar(data: unknown): boolean {
   return data !== null && typeof data === "object" && (data as { schema?: unknown }).schema === RADAR_SCHEMA;
+}
+
+/** True when the signed body names the options levels schema. */
+export function isOptions(data: unknown): boolean {
+  return data !== null && typeof data === "object" && (data as { schema?: unknown }).schema === OPTIONS_SCHEMA;
 }
 
 /**
@@ -125,4 +135,19 @@ export function validateRadarEdition(data: unknown): RadarValidationResult {
   }
   if (errors.length > 0) return { ok: false, errors: errors.slice(0, MAX_ERRORS) };
   return { ok: true, edition: data as RadarEdition };
+}
+
+export type OptionsValidationResult = { ok: true; edition: OptionsEdition } | { ok: false; errors: string[] };
+
+/** An options levels edition: its own schema, the same denylist. */
+export function validateOptionsEdition(data: unknown): OptionsValidationResult {
+  if (data === null || typeof data !== "object" || Array.isArray(data)) {
+    return { ok: false, errors: ["/: must be an object"] };
+  }
+  const errors = findDenied(data).map((p) => `${p}: key is not allowed to be published`);
+  if (!validateOptionsSchema(data)) {
+    errors.push(...(validateOptionsSchema.errors ?? []).map(describe));
+  }
+  if (errors.length > 0) return { ok: false, errors: errors.slice(0, MAX_ERRORS) };
+  return { ok: true, edition: data as OptionsEdition };
 }
