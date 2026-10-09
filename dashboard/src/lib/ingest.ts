@@ -214,7 +214,7 @@ async function storeRadar(text: string, data: unknown, done: Done): Promise<Resp
         throw e;
       }
       try {
-        await writeText(`${RADAR_PATHS.history}${date}.json`, text);
+        await writeDatedRadar(`${RADAR_PATHS.history}${date}.json`, text, asOf);
       } catch (e) {
         logEvent("ingest.history", { outcome: "error", run_id: runId, desk: "radar", error: e instanceof Error ? e.name : "unknown" });
       }
@@ -224,4 +224,22 @@ async function storeRadar(text: string, data: unknown, done: Done): Promise<Resp
     return done(502, "storage-error", { error: "storage unavailable" }, { error: e instanceof Error ? e.name : "unknown", desk: "radar" });
   }
   return done(503, "conflict", { status: "conflict", run_id: runId }, { run_id: runId, desk: "radar" });
+}
+
+/**
+ * The dated copy, written only while nothing newer is there: two overlapping publishes for one date are ordered
+ * by latest.json, and this keeps the dated copy from being overwritten by the older of the two.
+ */
+async function writeDatedRadar(path: string, text: string, asOf: number): Promise<void> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const current = await readForUpdate(path);
+    const stored = current ? currentMeta(current.text).asOf : null;
+    if (stored !== null && stored >= asOf) return;
+    try {
+      await writeText(path, text, current ? { ifMatch: current.etag } : { createOnly: true });
+      return;
+    } catch (e) {
+      if (!(e instanceof PreconditionFailed) || attempt === 1) throw e;
+    }
+  }
 }

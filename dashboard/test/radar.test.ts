@@ -137,6 +137,16 @@ describe("POST /api/ingest with a radar edition", () => {
     expect(JSON.parse(blob.store.get("radar/editions/2026-09-21.json")!.text).run_id).toBe("radar-refresh");
   });
 
+  it("an older edition never overwrites a newer dated copy", async () => {
+    const newer = edition((r) => {
+      r.run_id = "radar-newer";
+      r.as_of = "2026-09-21T10:30:00+00:00";
+    });
+    blob.put("radar/editions/2026-09-21.json", JSON.stringify(newer)); // the newer publish wrote its dated copy first
+    expect((await handleIngest(post(edition()), NOW)).status).toBe(200);
+    expect(JSON.parse(blob.store.get("radar/editions/2026-09-21.json")!.text).run_id).toBe("radar-newer");
+  });
+
   it("the radar key cannot publish a stocks snapshot", async () => {
     const snap = fixture() as unknown as Record<string, unknown>;
     snap.run_id = "r1";
