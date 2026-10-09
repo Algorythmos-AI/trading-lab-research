@@ -2,8 +2,9 @@ import "server-only";
 import { cache } from "react";
 import { LATEST_PATH, listPaths, readText } from "./blob";
 import type { CryptoSnapshot } from "./crypto.types";
-import { DESK_PATHS, RADAR_PATHS } from "./desk";
+import { DESK_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
 import { logEvent } from "./log";
+import type { OptionsEdition } from "./options.types";
 import { radarDates } from "./radar";
 import type { RadarEdition } from "./radar.types";
 import type { Snapshot } from "./types";
@@ -113,6 +114,48 @@ export async function listRadarDates(max = 30): Promise<string[]> {
     return radarDates(paths.map((p) => p.pathname), RADAR_PATHS.history).slice(0, max);
   } catch (e) {
     logEvent("radar.list", { outcome: "error", error: e instanceof Error ? e.name : "unknown" });
+    return [];
+  }
+}
+
+export type OptionsResult =
+  | { status: "ok"; edition: OptionsEdition; source: "fixture" | "blob" }
+  | { status: "missing" }
+  | { status: "error" };
+
+/**
+ * An options levels edition: the newest one, or the one built for session `date` (YYYY-MM-DD). "missing" until
+ * the after-close run has published, or when that session has no edition.
+ */
+export const loadOptions = cache(async (date?: string): Promise<OptionsResult> => {
+  if (fixtureMode()) {
+    const mod = await import("../../test/fixtures/options.v1.json");
+    return { status: "ok", edition: (mod.default ?? mod) as unknown as OptionsEdition, source: "fixture" };
+  }
+  const path = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${OPTIONS_PATHS.history}${date}.json` : OPTIONS_PATHS.latest;
+  try {
+    const stored = await readText(path);
+    if (!stored) return { status: "missing" };
+    const parsed: unknown = JSON.parse(stored.text);
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      logEvent("snapshot.read", { outcome: "not-an-object", desk: "options" });
+      return { status: "error" };
+    }
+    return { status: "ok", edition: parsed as OptionsEdition, source: "blob" };
+  } catch (e) {
+    logEvent("snapshot.read", { outcome: "error", desk: "options", error: e instanceof Error ? e.name : "unknown" });
+    return { status: "error" };
+  }
+});
+
+/** Session dates with an options edition, newest first (at most `max`). Empty when storage cannot be listed. */
+export async function listOptionsDates(max = 30): Promise<string[]> {
+  if (fixtureMode()) return [];
+  try {
+    const paths = await listPaths(OPTIONS_PATHS.history);
+    return radarDates(paths.map((p) => p.pathname), OPTIONS_PATHS.history).slice(0, max);
+  } catch (e) {
+    logEvent("options.list", { outcome: "error", error: e instanceof Error ? e.name : "unknown" });
     return [];
   }
 }

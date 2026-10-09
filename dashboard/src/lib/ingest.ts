@@ -1,10 +1,10 @@
 import "server-only";
 import { HISTORY_PREFIX, PreconditionFailed, readForUpdate, writeText } from "./blob";
-import { DESK_PATHS, RADAR_PATHS } from "./desk";
+import { DESK_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
 import { verify } from "./hmac";
 import { logEvent } from "./log";
 import { parseTime } from "./freshness";
-import { deskOf, isRadar, validateCryptoSnapshot, validateRadarEdition, validateSnapshot } from "./validate";
+import { deskOf, isOptions, isRadar, validateCryptoSnapshot, validateOptionsEdition, validateRadarEdition, validateSnapshot } from "./validate";
 
 export const MAX_BODY_BYTES = 3_500_000;
 
@@ -62,7 +62,8 @@ export const DEFAULT_KEY_ID = "default";
 
 /**
  * The key the pre-market radar signs with. It lives in a cloud research environment, not on a trading host, so
- * it may only publish radar editions: a stocks or crypto snapshot signed with it is refused.
+ * it may only publish research editions (radar and options levels): a stocks or crypto snapshot signed with it is
+ * refused.
  */
 export const RADAR_KEY_ID = "radar";
 
@@ -128,9 +129,10 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
     return done(422, "bad-json", { error: "invalid", errors: ["body is not valid UTF-8 JSON"] }, { bytes: bytes.byteLength });
   }
 
-  if (isRadar(data)) return storeRadar(text, data, done);
+  if (isRadar(data)) return storeEdition(RADAR_EDITION, text, data, done);
+  if (isOptions(data)) return storeEdition(OPTIONS_EDITION, text, data, done);
   if (keyId === RADAR_KEY_ID) {
-    return done(403, "radar-key-scope", { error: "this key may only publish radar editions" });
+    return done(403, "radar-key-scope", { error: "this key may only publish research editions" });
   }
 
   // The desk comes from the signed body (its `schema`), never from a header: ADR 0005.
@@ -184,53 +186,80 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
 
 type Done = (status: number, outcome: string, body: Record<string, unknown>, extra?: Record<string, unknown>) => Response;
 
+/** A research edition kind: where it is stored, how it is validated, and which field names its dated copy. */
+interface EditionKind {
+  desk: "radar" | "options";
+  paths: { latest: string; history: string };
+  validate: (data: unknown) => { ok: true; runId: string | null; asOf: string | null; date: string } | { ok: false; errors: string[] };
+}
+
+const RADAR_EDITION: EditionKind = {
+  desk: "radar",
+  paths: RADAR_PATHS,
+  validate: (data) => {
+    const r = validateRadarEdition(data);
+    return r.ok ? { ok: true, runId: r.edition.run_id ?? null, asOf: r.edition.as_of ?? null, date: r.edition.edition_date } : r;
+  },
+};
+
+const OPTIONS_EDITION: EditionKind = {
+  desk: "options",
+  paths: OPTIONS_PATHS,
+  validate: (data) => {
+    const r = validateOptionsEdition(data);
+    return r.ok ? { ok: true, runId: r.edition.run_id ?? null, asOf: r.edition.as_of ?? null, date: r.edition.session } : r;
+  },
+};
+
 /**
- * A radar edition: the same duplicate / older / etag rules as a desk snapshot, written to radar/latest.json, plus
- * one copy per edition date. A same-day refresh (a later as_of) replaces both. Any valid key may publish one.
+ * A research edition (radar or options levels): the same duplicate / older / etag rules as a desk snapshot,
+ * written to its latest.json, plus one copy per edition date. A same-day refresh (a later as_of) replaces both.
+ * Any valid key may publish one.
  */
-async function storeRadar(text: string, data: unknown, done: Done): Promise<Response> {
-  const result = validateRadarEdition(data);
-  if (!result.ok) return done(422, "invalid", { error: "invalid", errors: result.errors }, { desk: "radar", n_errors: result.errors.length });
-  const { run_id: runId, edition_date: date } = result.edition;
-  const asOf = parseTime(result.edition.as_of ?? null);
+async function storeEdition(kind: EditionKind, text: string, data: unknown, done: Done): Promise<Response> {
+  const { desk, paths } = kind;
+  const result = kind.validate(data);
+  if (!result.ok) return done(422, "invalid", { error: "invalid", errors: result.errors }, { desk, n_errors: result.errors.length });
+  const { runId, date } = result;
+  const asOf = parseTime(result.asOf);
   if (!runId || asOf === null) {
     return done(422, "invalid", { error: "invalid", errors: ["/run_id and /as_of must be set; as_of must be a timestamp"] });
   }
   try {
     for (let attempt = 0; attempt < 2; attempt++) {
-      const current = await readForUpdate(RADAR_PATHS.latest);
+      const current = await readForUpdate(paths.latest);
       if (current) {
         const meta = currentMeta(current.text);
-        if (meta.runId === runId) return done(200, "duplicate", { status: "duplicate", run_id: runId }, { run_id: runId, desk: "radar" });
+        if (meta.runId === runId) return done(200, "duplicate", { status: "duplicate", run_id: runId }, { run_id: runId, desk });
         if (meta.asOf !== null && asOf <= meta.asOf) {
-          return done(409, "older", { status: "older", run_id: runId }, { run_id: runId, desk: "radar" });
+          return done(409, "older", { status: "older", run_id: runId }, { run_id: runId, desk });
         }
       }
       try {
-        await writeText(RADAR_PATHS.latest, text, current ? { ifMatch: current.etag } : { createOnly: true });
+        await writeText(paths.latest, text, current ? { ifMatch: current.etag } : { createOnly: true });
       } catch (e) {
         if (e instanceof PreconditionFailed && attempt === 0) continue;
-        if (e instanceof PreconditionFailed) return done(503, "conflict", { status: "conflict", run_id: runId }, { run_id: runId, desk: "radar" });
+        if (e instanceof PreconditionFailed) return done(503, "conflict", { status: "conflict", run_id: runId }, { run_id: runId, desk });
         throw e;
       }
       try {
-        await writeDatedRadar(`${RADAR_PATHS.history}${date}.json`, text, asOf);
+        await writeDated(`${paths.history}${date}.json`, text, asOf);
       } catch (e) {
-        logEvent("ingest.history", { outcome: "error", run_id: runId, desk: "radar", error: e instanceof Error ? e.name : "unknown" });
+        logEvent("ingest.history", { outcome: "error", run_id: runId, desk, error: e instanceof Error ? e.name : "unknown" });
       }
-      return done(200, "stored", { status: "stored", run_id: runId }, { run_id: runId, bytes: text.length, attempt, desk: "radar" });
+      return done(200, "stored", { status: "stored", run_id: runId }, { run_id: runId, bytes: text.length, attempt, desk });
     }
   } catch (e) {
-    return done(502, "storage-error", { error: "storage unavailable" }, { error: e instanceof Error ? e.name : "unknown", desk: "radar" });
+    return done(502, "storage-error", { error: "storage unavailable" }, { error: e instanceof Error ? e.name : "unknown", desk });
   }
-  return done(503, "conflict", { status: "conflict", run_id: runId }, { run_id: runId, desk: "radar" });
+  return done(503, "conflict", { status: "conflict", run_id: runId }, { run_id: runId, desk });
 }
 
 /**
  * The dated copy, written only while nothing newer is there: two overlapping publishes for one date are ordered
  * by latest.json, and this keeps the dated copy from being overwritten by the older of the two.
  */
-async function writeDatedRadar(path: string, text: string, asOf: number): Promise<void> {
+async function writeDated(path: string, text: string, asOf: number): Promise<void> {
   for (let attempt = 0; attempt < 2; attempt++) {
     const current = await readForUpdate(path);
     const stored = current ? currentMeta(current.text).asOf : null;

@@ -5,6 +5,7 @@ const PAGES = [
   { path: "/", heading: "Overview" },
   { path: "/today", heading: "Today" },
   { path: "/radar", heading: "Radar" },
+  { path: "/options", heading: "Options" },
   { path: "/strategies", heading: "Strategies" },
   { path: "/research", heading: "Research" },
   { path: "/operations", heading: "Operations" },
@@ -59,6 +60,14 @@ test("pages carry a nonce CSP and still run their scripts", async ({ page }) => 
     const r = await page.request.get(path);
     expect(r.headers()["content-security-policy"] ?? "", path).toContain("'strict-dynamic'");
   }
+});
+
+test("the options page shows the board, the rules and a ladder per name", async ({ page }) => {
+  await page.goto("/options");
+  await expect(page.getByText("Levels for Mon 12 Oct")).toBeVisible();
+  await expect(page.getByRole("link", { name: "SPY", exact: true })).toBeVisible();
+  await expect(page.getByText("No rule is proven yet", { exact: false })).toBeVisible();
+  await expect(page.getByRole("list", { name: "SPY zones, highest first" })).toBeAttached();
 });
 
 test("the v3 panels render from the fixture, and the glossary is linked", async ({ page }) => {
