@@ -155,8 +155,8 @@ extensions; learning only at a pre-registered sample checkpoint.
 
 ## P. Where the plan stands, 11 October 2026
 
-Added after the work of section L was carried out. Statuses and pull request numbers only. "Open" means the pull
-request exists with its checks passing and waits for the owner's merge.
+Added after the work of section L was carried out. Statuses and pull request numbers only. Every pull request
+in the table was merged by 10 October 2026 (New York).
 
 | Plan item | Carried by | Status |
 |---|---|---|
@@ -172,11 +172,11 @@ request exists with its checks passing and waits for the owner's merge.
 | A book per registered trial from the forward ledger | PR 129 | Merged |
 | Sealed shadow outcomes for signals admission refused; the resolved count on the books | PRs 136, 137 | Merged |
 | Sessions left out of G2 shown on the Risk page | PR 140 | Merged |
-| Data-quality counts for each scan, record only; dry-run pages on a failed or IEX-only scan | PR 168 | Open |
-| Strategy B replayed on recorded bars beside the runner's journal | PR 174 | Open |
-| Near misses, the funnel of record and the scan strip on the dashboard; banner rules for a failed scan and the loss limits | PR 173 | Open |
-| Pins on the learning code's shared pieces | PR 169 | Open |
-| `wt.ml.examples`; the scorer takes the inputs' identity | PR 170 | Open |
+| Data-quality counts for each scan, record only; dry-run pages on a failed or IEX-only scan | PR 168 | Merged |
+| Strategy B replayed on recorded bars beside the runner's journal | PR 174 | Merged |
+| Near misses, the funnel of record and the scan strip on the dashboard; banner rules for a failed scan and the loss limits | PR 173 | Merged |
+| Pins on the learning code's shared pieces | PR 169 | Merged |
+| `wt.ml.examples`; the scorer takes the inputs' identity | PR 170 | Merged |
 
 ### Not done, and why
 
