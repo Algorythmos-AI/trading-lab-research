@@ -50,7 +50,9 @@ wt.ops.publish                            POST /api/ingest            (productio
   close and what options cost), Live (price against the levels) and Review (the paper record per name). The view
   follows the New York clock until one is chosen; the view and the name live in the address (`?view=live&s=NVDA`),
   so a reload lands in the same place. `J`/`K` move between names and `1` `2` `3` switch view while focus is inside
-  the desk. The selected name's level map carries a crosshair (point at it to read a price against the close in
+  the desk. Cmd K or Ctrl K opens a command palette (`src/components/client/desk-palette.tsx`) from anywhere on the
+  page: type a ticker, a view, a map layer or a page; names can also be found by "strong", "weak", "rich" or
+  "cheap". The selected name's level map carries a crosshair (point at it to read a price against the close in
   dollars, ATRs and expected moves, and the zone it is inside) and its zones, candles, expected move and labels can
   each be switched off. The page as it was before stays at `?view=classic` for one release.
 - **Live prices** (`/api/quote?s=SPY,QQQ`, read by the Options page every 2 s while it is open, one poll shared by the

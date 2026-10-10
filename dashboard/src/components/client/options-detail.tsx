@@ -13,9 +13,8 @@ import {
   ladder,
   levelPrice,
   MAP_LAYER_LABEL,
-  MAP_LAYERS,
+  mapLayersOf,
   mapView,
-  moveBands,
   movesFromClose,
   nearest,
   paperFor,
@@ -104,11 +103,7 @@ export function OptionsDetail({
   const view = mapView(t);
   const hasMap = view !== null && close !== null;
   const strength = t.close_strength?.chip;
-  // Only the layers the map actually draws for this name, judged the way the map judges them: no candles toggle
-  // without bars, no expected-move toggle without a move, no zones toggle when no zone falls inside the window.
-  const layers = MAP_LAYERS.filter((k) =>
-    k === "candles" ? (view?.bars.length ?? 0) > 0 : k === "move" ? moveBands(t).day !== null : k === "zones" ? (view?.zones.length ?? 0) > 0 : true,
-  );
+  const layers = mapLayersOf(t);
 
   return (
     <div className="grid content-start gap-4 p-4" data-desk-detail={t.symbol}>

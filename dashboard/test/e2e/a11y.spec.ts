@@ -28,9 +28,12 @@ test.skip(({ isMobile }) => isMobile, "accessibility scan runs on the desktop pr
 /**
  * On the Options pages, wait until the live feed has drawn its state chips. Scanning before the first quote
  * arrives would judge a page with no chips on it, and whether a scan saw them would depend on timing.
+ *
+ * It waits for the chip itself, a badge. The words alone are not enough: "TESTING RESISTANCE" is also in the help
+ * text the server sends, so a wait on the words passed at once, before the page was even interactive.
  */
 async function liveChips(page: import("@playwright/test").Page) {
-  await expect(page.locator("main")).toContainText("TESTING RESISTANCE");
+  await expect(page.locator('[data-slot="badge"]', { hasText: "TESTING RESISTANCE" }).first()).toBeVisible();
 }
 
 async function scan(page: import("@playwright/test").Page): Promise<string[]> {
@@ -54,6 +57,20 @@ for (const theme of ["light", "dark"] as const) {
       expect(await scan(page)).toEqual([]);
     });
   }
+
+  test(`the command palette passes the accessibility scan in ${theme}, open and with nothing matching`, async ({ page, context }) => {
+    await useTheme(context, theme);
+    await page.goto("/options?view=live");
+    // The live chips only appear once the desk is interactive, so the shortcut below is not lost.
+    await liveChips(page);
+    await page.keyboard.press("Control+k");
+    const palette = page.getByRole("dialog", { name: "Search names and actions" });
+    await expect(palette.getByRole("combobox")).toBeFocused();
+    expect(await scan(page)).toEqual([]);
+    await page.keyboard.type("zzzz");
+    await expect(palette).toContainText("Nothing matches");
+    expect(await scan(page)).toEqual([]);
+  });
 
   for (const fx of OPTIONS_STATES) {
     test(`/options in the ${fx} state passes the accessibility scan in ${theme}`, async ({ page, context, baseURL }) => {
