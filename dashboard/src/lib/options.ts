@@ -273,3 +273,117 @@ export function liveNeighbours(t: OptionsTicker, price: number): { up: number | 
     downAtr: down !== null && atr ? (price - down) / atr : null,
   };
 }
+
+/** How far each way, in ATRs, the glance strip's room bar reaches from price. */
+export const ROOM_REACH = 3;
+
+/** A zone placed on the room bar: offsets from price in ATRs, clamped to the bar's reach. */
+export interface RoomZone {
+  from: number;
+  to: number;
+  tone: "support" | "resistance" | "at";
+  big: boolean;
+  zone: OptionsZone;
+}
+
+/**
+ * One name's row on the glance strip, centred on `price` (the live price, or the close): every zone within reach
+ * as ATR offsets, the one-day expected move in ATRs, and the nearest edge each way. Null without a usable ATR,
+ * since the bar is drawn in ATRs.
+ */
+export function roomView(
+  t: OptionsTicker,
+  price: number,
+): { zones: RoomZone[]; em: number | null; up: number | null; down: number | null; upAtr: number | null; downAtr: number | null } | null {
+  const atr = isNum(t.atr14) && t.atr14 > 0 ? t.atr14 : null;
+  if (!atr || !isNum(price)) return null;
+  const clamp = (v: number) => Math.max(-ROOM_REACH, Math.min(ROOM_REACH, v));
+  const zones: RoomZone[] = [];
+  for (const raw of t.zones ?? []) {
+    const z = withoutClose(raw, t.levels);
+    if (!z) continue;
+    const lo = (z.lo - price) / atr;
+    const hi = (z.hi - price) / atr;
+    if (hi < -ROOM_REACH || lo > ROOM_REACH) continue;
+    const tone = z.hi < price ? "support" : z.lo > price ? "resistance" : "at";
+    zones.push({ from: clamp(lo), to: clamp(hi), tone, big: Boolean(z.big), zone: z });
+  }
+  const em = isNum(t.expected_move?.day) && t.expected_move.day > 0 ? t.expected_move.day / atr : null;
+  return { zones, em, ...liveNeighbours(t, price) };
+}
+
+export type Bar = NonNullable<OptionsTicker["bars"]>[number];
+
+/** A zone on the level map, with its side against the close. */
+export interface MapZone {
+  zone: OptionsZone;
+  tone: "support" | "resistance";
+}
+
+/**
+ * The level map's price window: the recent bars, the one-week expected move (or two ATRs without one) and the
+ * zones that sit inside or just beyond that window. Zones far away (a 52-week low a third below) are left off so
+ * they do not squash the chart; the full list stays under the chart. Null without a close.
+ */
+export function mapView(t: OptionsTicker): { lo: number; hi: number; bars: Bar[]; zones: MapZone[] } | null {
+  const close = t.last?.close;
+  if (!isNum(close) || close <= 0) return null;
+  const bars = (t.bars ?? []).filter((b) => isNum(b.h) && isNum(b.l) && b.h >= b.l);
+  const atr = isNum(t.atr14) && t.atr14 > 0 ? t.atr14 : close * 0.01;
+  const reach = isNum(t.expected_move?.week) && t.expected_move.week > 0 ? t.expected_move.week : 2 * atr;
+  let lo = close - reach;
+  let hi = close + reach;
+  for (const b of bars) {
+    lo = Math.min(lo, b.l);
+    hi = Math.max(hi, b.h);
+  }
+  const slack = (hi - lo) * 0.25;
+  const zones: MapZone[] = [];
+  for (const raw of t.zones ?? []) {
+    const z = withoutClose(raw, t.levels);
+    if (!z || z.hi < lo - slack || z.lo > hi + slack) continue;
+    zones.push({ zone: z, tone: z.lo > close ? "resistance" : z.hi < close ? "support" : z.side });
+  }
+  for (const { zone } of zones) {
+    lo = Math.min(lo, zone.lo);
+    hi = Math.max(hi, zone.hi);
+  }
+  const pad = (hi - lo) * 0.04;
+  return { lo: lo - pad, hi: hi + pad, bars, zones };
+}
+
+/** A round tick step giving about `count` gridlines across `span`. */
+export function niceStep(span: number, count = 5): number {
+  const raw = span / count;
+  if (!(raw > 0)) return 1;
+  const p = 10 ** Math.floor(Math.log10(raw));
+  const m = raw / p;
+  return (m < 1.5 ? 1 : m < 3 ? 2 : m < 7 ? 5 : 10) * p;
+}
+
+/**
+ * Spreads labels anchored at `ys` (top to bottom, in pixels) so none sit closer than `gap`, keeping them inside
+ * [top, bottom]. Returns the label positions in the input order.
+ */
+export function spreadLabels(ys: number[], gap: number, top: number, bottom: number): number[] {
+  const order = ys.map((y, i) => ({ y, i })).sort((a, b) => a.y - b.y);
+  const out = new Array<number>(ys.length);
+  let prev = -Infinity;
+  for (const o of order) {
+    const y = Math.max(o.y, prev + gap, top);
+    out[o.i] = y;
+    prev = y;
+  }
+  const over = prev - bottom;
+  if (over > 0) {
+    // Push the stack back up from the bottom, keeping the spacing.
+    let next = Infinity;
+    for (let k = order.length - 1; k >= 0; k--) {
+      const i = order[k]!.i;
+      const y = Math.min(out[i]! - over, next - gap);
+      out[i] = y;
+      next = y;
+    }
+  }
+  return out;
+}

@@ -1,6 +1,6 @@
 import { PageHeading } from "@/components/page-heading";
-import { BoardPanel, EditionPanel, HowToRead, NoOptions, PaperPanel, RulesPanel, TickerCards } from "@/components/options";
-import { OptionsLive } from "@/components/client/options-live";
+import { BoardTable, EditionPanel, HowToRead, NoOptions, PaperPanel, RulesPanel, TickerCards } from "@/components/options";
+import { OptionsGlance } from "@/components/client/options-glance";
 import { EditionPicker } from "@/components/radar";
 import { requestTime } from "@/lib/now";
 import { listOptionsDates, loadOptions } from "@/lib/snapshot";
@@ -17,7 +17,7 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
     <>
       <PageHeading
         title="Options"
-        intro="Support and resistance for calls and puts: yesterday's, last week's and last month's highs and lows, the 52-week range, the key averages and supply and demand zones, rebuilt after every close for the next session. Research only; nothing here is an order."
+        intro="Where each name sits against its support and resistance, rebuilt after every close. Research only; nothing here is an order."
       />
       {result.status !== "ok" ? (
         <NoOptions status={result.status} date={date} />
@@ -25,10 +25,9 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
         <>
           <EditionPicker dates={dates} current={result.edition.session} base="/options" />
           <EditionPanel e={result.edition} now={now} />
-          {!date ? (
-            <OptionsLive tickers={result.edition.tickers} session={result.edition.session} />
-          ) : null}
-          <BoardPanel e={result.edition} />
+          <OptionsGlance tickers={result.edition.tickers} session={result.edition.session} live={!date}>
+            <BoardTable e={result.edition} />
+          </OptionsGlance>
           <RulesPanel e={result.edition} />
           <TickerCards e={result.edition} />
           <PaperPanel e={result.edition} />

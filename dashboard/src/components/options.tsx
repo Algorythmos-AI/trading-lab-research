@@ -1,6 +1,8 @@
-import { CalendarClock, ClipboardList, FlaskConical, Inbox, Info, Layers, TriangleAlert } from "lucide-react";
+import { CalendarClock, ClipboardList, FlaskConical, Inbox, Info, TriangleAlert } from "lucide-react";
 import Link from "next/link";
+import { TradeBars } from "@/components/charts/trade-bars";
 import { Empty } from "@/components/empty";
+import { EvidenceBars, LevelMap, RuleRanges, type Finding } from "@/components/options-charts";
 import { Panel } from "@/components/panel";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -73,11 +75,14 @@ export function EditionPanel({ e, now }: { e: Options; now: Date }) {
           trade from them.
         </p>
       ) : (
-        <p className="text-muted-foreground max-w-prose text-sm">
-          Support and resistance roll forward after every close: yesterday, last week, last month, the 52-week range, the 20, 50
-          and 200-day averages and supply and demand bases. Levels within half a percent merge into one zone; the more timeframes
-          agree, the heavier the zone.
-        </p>
+        <details className="text-sm">
+          <summary className="text-muted-foreground cursor-pointer text-xs">How the levels are built</summary>
+          <p className="text-muted-foreground mt-2 max-w-prose">
+            Support and resistance roll forward after every close: yesterday, last week, last month, the 52-week range, the 20, 50
+            and 200-day averages and supply and demand bases. Levels within half a percent merge into one zone; the more
+            timeframes agree, the heavier the zone.
+          </p>
+        </details>
       )}
     </Panel>
   );
@@ -99,13 +104,9 @@ function Distance({ r }: { r: Rung | null }) {
   );
 }
 
-export function BoardPanel({ e }: { e: Options }) {
+/** The glance strip's numbers as a table: close, expected move, IV percentile and the nearest zone each way. */
+export function BoardTable({ e }: { e: Options }) {
   return (
-    <Panel
-      title="Board"
-      means="Every name at a glance: how it closed, how far the options market expects it to move, and the nearest zone each way."
-      icon={Layers}
-    >
       <Table>
         <TableHeader>
           <TableRow>
@@ -153,7 +154,6 @@ export function BoardPanel({ e }: { e: Options }) {
           })}
         </TableBody>
       </Table>
-    </Panel>
   );
 }
 
@@ -228,7 +228,10 @@ export function TickerCards({ e }: { e: Options }) {
             }
           >
             <div className="grid gap-3">
-              <ol aria-label={`${t.symbol} zones, highest first`} className="grid gap-1.5">
+              <LevelMap t={t} />
+              <details className="text-sm">
+                <summary className="text-muted-foreground cursor-pointer text-xs">Nearest zones as a list</summary>
+              <ol aria-label={`${t.symbol} zones, highest first`} className="mt-2 grid gap-1.5">
                 {shownAbove.map((r, i) => (
                   <RungRow key={`a${i}`} r={r} side="above" />
                 ))}
@@ -240,6 +243,7 @@ export function TickerCards({ e }: { e: Options }) {
                   <RungRow key={`b${i}`} r={r} side="below" />
                 ))}
               </ol>
+              </details>
               <details className="text-sm">
                 <summary className="text-muted-foreground cursor-pointer text-xs">
                   All {(t.levels ?? []).length} levels{hidden > 0 ? ` (${hidden} more zones)` : ""}
@@ -283,7 +287,21 @@ export function RulesPanel({ e }: { e: Options }) {
       }
       icon={FlaskConical}
     >
-      <Table>
+      <RuleRanges rules={rules} />
+      <ul className="text-muted-foreground mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs" aria-label="Key">
+        <li className="flex items-center gap-1.5">
+          <span className="bg-neutral-fill inline-block h-1.5 w-4 rounded-full" />
+          backtest 95% range (grey when it crosses zero: no edge)
+        </li>
+        <li className="flex items-center gap-1.5">
+          <span className="border-info-fill inline-block size-2.5 rounded-full border-2" />
+          live paper so far
+        </li>
+        <li>Promotion needs 30 paper cases, a range above zero after costs, both halves of history and 4 weeks live.</li>
+      </ul>
+      <details className="mt-3 text-sm">
+        <summary className="text-muted-foreground cursor-pointer text-xs">Show the numbers as a table</summary>
+      <Table className="mt-2">
         <TableHeader>
           <TableRow>
             <TableHead>Rule</TableHead>
@@ -332,11 +350,10 @@ export function RulesPanel({ e }: { e: Options }) {
           ))}
         </TableBody>
       </Table>
-      <p className="text-muted-foreground mt-3 max-w-prose text-xs">
-        R is the result in units of the risk taken: +1R made what the stop would have lost. Each backtest average shows its number of
-        cases and, on wider screens, its 95% range. An average near 0R with a range that straddles zero means no edge after costs. Promotion needs 30 or more cases, a range above zero after costs, a result
-        that holds in both halves of history and four weeks of live paper tracking.
+      <p className="text-muted-foreground mt-2 max-w-prose text-xs">
+        R is the result in units of the risk taken: +1R made what the stop would have lost.
       </p>
+      </details>
     </Panel>
   );
 }
@@ -348,7 +365,23 @@ export function PaperPanel({ e }: { e: Options }) {
       {rows.length === 0 ? (
         <Empty title="No paper trades yet" />
       ) : (
-        <Table>
+        <div className="grid gap-3">
+          <TradeBars
+            trades={rows.map((p, i) => ({
+              i: i + 1,
+              r: p.r ?? 0,
+              what: `${p.symbol} ${p.side ?? ""} · ${ruleLabel(e, p.rule)}`,
+              when: shortDate(p.session),
+            }))}
+            whenLabel="Session"
+            label="Each paper trade's result in R, in the order logged"
+          />
+          <p className="text-muted-foreground font-mono text-xs">
+            {rows.length} trades · total {rMult(rows.reduce((a, p) => a + (p.r ?? 0), 0), 2)} · {rows.filter((p) => (p.r ?? 0) > 0).length} won
+          </p>
+          <details className="text-sm">
+            <summary className="text-muted-foreground cursor-pointer text-xs">Show every trade</summary>
+        <Table className="mt-2">
           <TableHeader>
             <TableRow>
               <TableHead>Session</TableHead>
@@ -384,6 +417,8 @@ export function PaperPanel({ e }: { e: Options }) {
             ))}
           </TableBody>
         </Table>
+          </details>
+        </div>
       )}
     </Panel>
   );
@@ -391,32 +426,44 @@ export function PaperPanel({ e }: { e: Options }) {
 
 export function HowToRead({ e }: { e: Options }) {
   const check = e.expected_move_check;
+  const findings: Finding[] = [
+    {
+      title: "Price touched yesterday's high or low",
+      value: 88.5,
+      valueLabel: "of days, 2 years, 10 names",
+      use: "The levels are a map, not a signal: good targets and stop references.",
+    },
+    {
+      title: "Higher high the next day",
+      value: 77.6,
+      valueLabel: "after a strong close",
+      base: 52.9,
+      baseLabel: "after an ordinary day",
+      use: "The edge comes from the close, not from breaking a level.",
+    },
+  ];
+  if (check?.inside_1d_pct != null) {
+    findings.push({
+      title: "Stayed inside the 1-day expected move",
+      value: Math.round(check.inside_1d_pct),
+      valueLabel: `of ${num(check.n)} days${check.period ? `, ${check.period}` : ""}`,
+      base: 68,
+      baseLabel: "if options were fairly priced",
+      use: `Options usually overprice the move${check.touch_5d_pct != null ? ` (beyond it within a week ${num(check.touch_5d_pct, 0)}% of the time)` : ""}, which favours spreads over single calls or puts.`,
+    });
+  }
   return (
-    <Panel title="How to read this" means="What the testing behind this page found, so the levels are used for what they are good at." icon={Info}>
-      <ul className="grid max-w-prose list-disc gap-2 pl-5 text-sm">
-        <li>
-          The levels are a map, not a signal. Over two years of daily bars on these ten names, price reached yesterday&apos;s high or
-          low on 88.5% of days, which makes them good targets and stop references.
-        </li>
-        <li>
-          A strong close (top quarter of the day&apos;s range) was followed by a higher high the next day 77.6% of the time, against
-          52.9% on an ordinary day. That edge comes from the close, not from breaking a level.
-        </li>
-        {check ? (
-          <li>
-            The options market tends to overprice moves: {check.period ?? "in testing"}, price stayed inside the one-day expected move
-            on {num(check.inside_1d_pct, 0)}% of days ({num(check.n)} days), against about 68% if it were fairly priced. Within a week
-            it touched beyond the expected move {num(check.touch_5d_pct, 0)}% of the time. That favours spreads over buying single
-            calls or puts.
-          </li>
-        ) : null}
-        <li>
-          Live states, judged at each quote&apos;s own time: NO TRADE for the first 15 minutes; GAP ABOVE or GAP BELOW when the
-          session opened beyond yesterday&apos;s high or low and is still beyond it; TESTING SUPPORT or TESTING RESISTANCE within a
-          quarter ATR of a major zone; otherwise ABOVE PDH, BELOW PDL or INSIDE. A state is a location, not a signal.
-        </li>
-        <li>Research only. Nothing here is an order, and no rule is a recommendation until it is marked proven.</li>
-      </ul>
+    <Panel title="What the testing found" means="So the levels are used for what they are good at." icon={Info}>
+      <EvidenceBars findings={findings} />
+      <details className="mt-4 text-sm">
+        <summary className="text-muted-foreground cursor-pointer text-xs">What the live states mean</summary>
+        <p className="text-muted-foreground mt-2 max-w-prose">
+          Judged at each quote&apos;s own time: NO TRADE for the first 15 minutes; GAP ABOVE or GAP BELOW when the session opened
+          beyond yesterday&apos;s high or low and is still beyond it; TESTING SUPPORT or TESTING RESISTANCE within a quarter ATR of a
+          major zone; otherwise ABOVE PDH, BELOW PDL or INSIDE. A state is a location, not a signal.
+        </p>
+      </details>
+      <p className="text-muted-foreground mt-3 text-xs">Research only. Nothing here is an order, and no rule is a recommendation until it is marked proven.</p>
     </Panel>
   );
 }

@@ -37,7 +37,8 @@ wt.ops.publish                            POST /api/ingest            (productio
   `radar/latest.json` plus `radar/editions/YYYY-MM-DD.json`, where a same-day refresh replaces that date's copy.
   It has no expected windows, so the watchdog never pages for it.
 - **Options** (`/options`): the after-close options levels editions (support and resistance for the next session,
-  close strength, expected move, and the paper record of the probation entry rules), signed with key id `radar` and
+  close strength, expected move, optional recent daily bars for the level map, and the paper record of the probation
+  entry rules), signed with key id `radar` and
   validated against `src/lib/options.schema.json` (owned here; `options.types.ts` is generated). Stored at
   `options/latest.json` plus `options/editions/YYYY-MM-DD.json`, one per session the levels are built for. Like the
   radar it has no windows and no watchdog.

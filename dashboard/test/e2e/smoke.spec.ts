@@ -62,17 +62,18 @@ test("pages carry a nonce CSP and still run their scripts", async ({ page }) => 
   }
 });
 
-test("the options page shows the board, the rules and a ladder per name", async ({ page }) => {
+test("the options page shows the glance strip, the rules and a level map per name", async ({ page }) => {
   await page.goto("/options");
   await expect(page.getByText("Levels for Mon 12 Oct")).toBeVisible();
-  // The board and the live panel both link SPY to its ladder; the live one appears once /api/quote answers.
-  await expect(page.getByRole("link", { name: "SPY", exact: true }).first()).toBeVisible();
+  const glance = page.getByRole("list", { name: "Every name against its nearest zones" });
+  await expect(glance.getByRole("link", { name: "SPY", exact: true })).toBeVisible();
   await expect(page.getByText("No rule is proven yet", { exact: false })).toBeVisible();
-  await expect(page.getByRole("list", { name: "SPY zones, highest first" })).toBeAttached();
-  // The live panel polls /api/quote; fixture mode answers with SPY 0.3 ATR above its close at 11:00 New York on the
+  await expect(page.getByRole("img", { name: /^SPY: last 40 daily bars/ })).toBeVisible();
+  // The strip polls /api/quote; fixture mode answers with SPY 0.3 ATR above its close at 11:00 New York on the
   // fixture's session, inside the major resistance zone.
-  const live = page.getByRole("table").filter({ hasText: "Next zone up" });
-  await expect(live.getByRole("row").filter({ hasText: "SPY" })).toContainText("TESTING RESISTANCE");
+  await expect(glance.getByRole("listitem").filter({ hasText: "SPY" })).toContainText("TESTING RESISTANCE");
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
 });
 
 test("the v3 panels render from the fixture, and the glossary is linked", async ({ page }) => {
