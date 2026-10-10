@@ -119,9 +119,9 @@ test("the keyboard moves between names and views while focus is in the desk", as
   await page.keyboard.press("3");
   await expect(desk(page)).toHaveAttribute("data-desk-view", "review");
   await page.keyboard.press("?");
-  await expect(page.getByText("They work while focus is inside the desk.")).toBeVisible();
+  await expect(page.getByText("The single keys work while focus is inside the desk.", { exact: false })).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(page.getByText("They work while focus is inside the desk.")).toBeHidden();
+  await expect(page.getByText("The single keys work while focus is inside the desk.", { exact: false })).toBeHidden();
 });
 
 test("the map reads a price under the pointer, and its layers switch off and on", async ({ page }) => {
@@ -153,6 +153,70 @@ test("the map reads a price under the pointer, and its layers switch off and on"
   await expect(page.getByRole("img", { name: /^QQQ: last 40 daily bars/ }).locator('[data-layer="move"]')).toBeHidden();
   await page.getByRole("group", { name: "Map layers" }).getByRole("button", { name: "Expected move" }).click();
   await expect(page.getByRole("img", { name: /^QQQ: last 40 daily bars/ }).locator('[data-layer="move"]')).toBeVisible();
+});
+
+const palette = (page: Page) => page.getByRole("dialog", { name: "Search names and actions" });
+
+/** Open the palette with the keyboard and wait until its search box has the keyboard. */
+async function openPalette(page: Page) {
+  await page.keyboard.press("Control+k");
+  await expect(palette(page).getByRole("combobox")).toBeFocused();
+}
+
+test("the command palette finds a name, a view and a layer, and hands the keyboard back to the desk", async ({ page }) => {
+  await open(page, "/options?view=brief&s=SPY");
+  await openPalette(page);
+  await page.keyboard.type("nvda");
+  await expect(palette(page).getByRole("option")).toHaveCount(1);
+  await page.keyboard.press("Enter");
+  await expect(palette(page)).toBeHidden();
+  await expect(page.locator('[data-desk-detail="NVDA"]')).toBeVisible();
+  // Choosing an item also clears the search, and a fresh palette opens with its first row ready for Enter.
+  await openPalette(page);
+  await expect(palette(page).getByRole("combobox")).toHaveValue("");
+  await expect(palette(page).getByRole("option").first()).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Escape");
+  await expect(palette(page)).toBeHidden();
+  await expect(page).toHaveURL(/s=NVDA/);
+  // The desk has the keyboard again, on the chosen name: J moves on from NVDA to the next in the edition.
+  await expect(row(page, "NVDA").getByRole("button")).toBeFocused();
+  await page.keyboard.press("j");
+  await expect(page.locator('[data-desk-detail="AMZN"]')).toBeVisible();
+  // A view by name. Other things match "review" loosely; the view ranks first and Enter takes the first.
+  await openPalette(page);
+  await page.keyboard.type("review");
+  await expect(palette(page).getByRole("option").first()).toContainText("Review");
+  await page.keyboard.press("Enter");
+  await expect(desk(page)).toHaveAttribute("data-desk-view", "review");
+  await expect(page).toHaveURL(/view=review/);
+  // A map layer by what it does.
+  await openPalette(page);
+  await page.keyboard.type("hide expected");
+  await expect(palette(page).getByRole("option").first()).toContainText("Hide expected move");
+  await page.keyboard.press("Enter");
+  await expect(palette(page)).toBeHidden();
+  await expect(page.locator('[data-desk-detail="AMZN"] [data-layer="move"]')).toBeHidden();
+});
+
+test("the palette opens from its button, offers a way on when nothing matches, and closes on Escape", async ({ page }) => {
+  await open(page, "/options?view=brief&s=SPY");
+  await desk(page).getByRole("button", { name: /^Search/ }).click();
+  await expect(palette(page).getByRole("combobox")).toBeFocused();
+  await page.keyboard.type("zzzz");
+  await expect(palette(page)).toContainText("Nothing matches");
+  // The list is never left empty: one action is on offer, and Enter takes it.
+  await expect(palette(page).getByRole("option")).toHaveCount(1);
+  await page.keyboard.press("Enter");
+  await expect(palette(page).getByRole("combobox")).toHaveValue("");
+  await expect(palette(page).getByRole("option", { name: /^SPY/ })).toBeVisible();
+  // Escape changes nothing and gives the keyboard back to the selected name.
+  await page.keyboard.press("Escape");
+  await expect(palette(page)).toBeHidden();
+  await expect(page.locator('[data-desk-detail="SPY"]')).toBeVisible();
+  await expect(row(page, "SPY").getByRole("button")).toBeFocused();
+  // Each opening starts from an empty search.
+  await openPalette(page);
+  await expect(palette(page).getByRole("combobox")).toHaveValue("");
 });
 
 test("sorting a column keeps names without a value last, whichever way it runs", async ({ page, context, baseURL }) => {

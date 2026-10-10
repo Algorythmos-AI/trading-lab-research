@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, Keyboard, TriangleAlert } from "lucide-react";
+import { ArrowDown, ArrowUp, Keyboard, Search, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RoomBar } from "@/components/options-charts";
 import { fracPct, num, rMult, signed, weekDate } from "@/lib/format";
@@ -10,6 +10,7 @@ import {
   clockSpan,
   DESK_VIEWS,
   liveRead,
+  mapLayersOf,
   movesFromClose,
   nearest,
   needsALook,
@@ -26,6 +27,7 @@ import {
   type OptionsTicker,
 } from "@/lib/options";
 import { cn } from "@/lib/utils";
+import { DeskPalette } from "./desk-palette";
 import { FeedPill, StateChip, useLive } from "./live-layer";
 import { OptionsDetail, Tick } from "./options-detail";
 import { PaneBoundary } from "./pane-boundary";
@@ -243,8 +245,10 @@ function SessionLine({ session, halfDay }: { session: string; halfDay: boolean }
 }
 
 const SHORTCUTS: [string, string][] = [
+  ["⌘K  Ctrl K", "Search names and actions"],
   ["J  K", "Next and previous name"],
   ["1  2  3", "Brief, Live, Review"],
+  ["/", "Search"],
   ["?", "Show or hide this list"],
 ];
 
@@ -281,6 +285,7 @@ export function OptionsDesk({
   const [symbol, setSymbol] = useState<string | null>(initialSymbol);
   const [sort, setSort] = useState<{ view: DeskView; key: string; dir: "asc" | "desc" } | null>(null);
   const [help, setHelp] = useState(false);
+  const [palette, setPalette] = useState(false);
   const [hiddenLayers, setHiddenLayers] = useState<ReadonlySet<MapLayer>>(new Set());
   const toggleLayer = (layer: MapLayer) =>
     setHiddenLayers((cur) => {
@@ -353,7 +358,25 @@ export function OptionsDesk({
     setSort((cur) => (cur && cur.view === view && cur.key === c.key ? (cur.dir === "desc" ? { ...cur, dir: "asc" } : null) : { view, key: c.key, dir: "desc" }));
   };
 
+  // Cmd K or Ctrl K opens the palette from anywhere on the page. A chord with a modifier cannot fire while
+  // someone is typing a word, so unlike the single keys below it does not need focus to be in the desk.
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      if ((ev.metaKey || ev.ctrlKey) && !ev.altKey && !ev.shiftKey && ev.key.toLowerCase() === "k") {
+        ev.preventDefault();
+        // A held chord repeats; without this the palette would flicker open and shut.
+        if (!ev.repeat) setPalette((p) => !p);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  // When the palette has gone, the keyboard goes to the selected name, whichever way the palette was closed.
+  const focusSelected = () => window.setTimeout(() => rowButtons.current.get(symbolRef.current ?? "")?.focus(), 0);
+
   const onKeyDown = (ev: React.KeyboardEvent) => {
+    // The palette is drawn outside the desk but its keys still bubble here through React; they are its own.
+    if (palette) return;
     if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
     const el = ev.target as HTMLElement;
     if (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName)) return;
@@ -361,6 +384,7 @@ export function OptionsDesk({
     if (ev.key === "j" || (ev.key === "ArrowDown" && inMonitor)) step(1);
     else if (ev.key === "k" || (ev.key === "ArrowUp" && inMonitor)) step(-1);
     else if (ev.key === "1" || ev.key === "2" || ev.key === "3") choose(DESK_VIEWS[Number(ev.key) - 1]!);
+    else if (ev.key === "/") setPalette(true);
     else if (ev.key === "?") setHelp((h) => !h);
     else if (ev.key === "Escape" && help) setHelp(false);
     else return;
@@ -410,6 +434,20 @@ export function OptionsDesk({
           {live ? <FeedPill /> : null}
           <button
             type="button"
+            aria-haspopup="dialog"
+            aria-keyshortcuts="Meta+K Control+K"
+            title="Search names and actions (Cmd K or Ctrl K)"
+            onClick={() => setPalette(true)}
+            className="text-muted-foreground hover:text-foreground flex items-center gap-1 rounded px-1 text-[0.6875rem]"
+          >
+            <Search aria-hidden className="size-3.5" />
+            Search
+            <kbd aria-hidden className="bg-muted rounded px-1 font-mono text-[0.625rem]">
+              ⌘K
+            </kbd>
+          </button>
+          <button
+            type="button"
             aria-expanded={help}
             aria-controls="desk-shortcuts"
             onClick={() => setHelp((h) => !h)}
@@ -429,7 +467,7 @@ export function OptionsDesk({
                 </div>
               ))}
             </dl>
-            <p>They work while focus is inside the desk.</p>
+            <p>The single keys work while focus is inside the desk. Cmd K or Ctrl K works anywhere on the page.</p>
           </div>
         ) : null}
         {stale ? (
@@ -538,6 +576,20 @@ export function OptionsDesk({
           ) : null}
         </div>
       </div>
+      <DeskPalette
+        open={palette}
+        onOpenChange={setPalette}
+        tickers={e.tickers}
+        symbol={selected?.t.symbol ?? null}
+        view={view}
+        layers={selected ? mapLayersOf(selected.t) : []}
+        hiddenLayers={hiddenLayers}
+        onName={select}
+        onView={choose}
+        onLayer={toggleLayer}
+        onShortcuts={() => setHelp(true)}
+        onClosed={focusSelected}
+      />
     </section>
   );
 }

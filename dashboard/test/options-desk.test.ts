@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   clockSpan,
   closeMinute,
+  mapLayersOf,
   mapReadout,
   mapView,
   priceAtY,
@@ -175,5 +176,20 @@ describe("the map crosshair", () => {
     expect(mapReadout({ ...spy, atr14: null }, 800, zones).atrs).toBeNull();
     expect(mapReadout({ ...spy, expected_move: null }, 800, zones).moves).toBeNull();
     expect(mapReadout({ ...spy, last: null }, 800, zones)).toMatchObject({ fromClose: null, atrs: null, moves: null });
+  });
+});
+
+describe("the layers a map can show", () => {
+  const spy = e.tickers.find((t) => t.symbol === "SPY")!;
+
+  it("offers every layer for a full name, and only the ones its map draws otherwise", () => {
+    expect(mapLayersOf(spy)).toEqual(["zones", "candles", "move", "labels"]);
+    expect(mapLayersOf({ ...spy, bars: [] })).toEqual(["zones", "move", "labels"]);
+    expect(mapLayersOf({ ...spy, expected_move: null })).toEqual(["zones", "candles", "labels"]);
+    expect(mapLayersOf({ ...spy, zones: [] })).toEqual(["candles", "move", "labels"]);
+    // An expected move of zero is not a cone the map draws.
+    expect(mapLayersOf({ ...spy, expected_move: { ...spy.expected_move!, day: 0 } })).not.toContain("move");
+    // No close means no map, so nothing to switch.
+    expect(mapLayersOf({ ...spy, last: null })).toEqual([]);
   });
 });

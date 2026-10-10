@@ -55,6 +55,20 @@ for (const theme of ["light", "dark"] as const) {
     });
   }
 
+  test(`the command palette passes the accessibility scan in ${theme}, open and with nothing matching`, async ({ page, context }) => {
+    await useTheme(context, theme);
+    await page.goto("/options?view=live");
+    // The live chips only appear once the desk is interactive, so the shortcut below is not lost.
+    await liveChips(page);
+    await page.keyboard.press("Control+k");
+    const palette = page.getByRole("dialog", { name: "Search names and actions" });
+    await expect(palette.getByRole("combobox")).toBeFocused();
+    expect(await scan(page)).toEqual([]);
+    await page.keyboard.type("zzzz");
+    await expect(palette).toContainText("Nothing matches");
+    expect(await scan(page)).toEqual([]);
+  });
+
   for (const fx of OPTIONS_STATES) {
     test(`/options in the ${fx} state passes the accessibility scan in ${theme}`, async ({ page, context, baseURL }) => {
       await useTheme(context, theme);
