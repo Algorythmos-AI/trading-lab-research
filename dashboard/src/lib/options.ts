@@ -484,3 +484,49 @@ export function sessionShare(t: OptionsTicker, atIso: string): number | null {
   const open = 9 * 60 + 30;
   return Math.max(0, Math.min(1, (clock.minutes - open) / (close - open)));
 }
+
+/** IV percentile at or below this reads as cheap options, at or above RICH_IVP as rich (52-week percentile, 0 to 1). */
+export const CHEAP_IVP = 0.25;
+export const RICH_IVP = 0.6;
+/** A close in the top quarter of the day's range is strong; the bottom quarter is weak. */
+export const STRONG_POS = 0.75;
+export const WEAK_POS = 0.25;
+
+export interface StructurePoint {
+  symbol: string;
+  /** IV percentile, 52 weeks, 0 to 1. */
+  ivp: number;
+  /** Where the close sat in the day's range, 0 at the low and 1 at the high. */
+  pos: number;
+  chip: string | null;
+}
+
+/** The corners of the structure map that are worth naming: a strong or weak close with cheap or rich options. */
+export type Corner = "strong-cheap" | "strong-rich" | "weak-cheap" | "weak-rich";
+
+/**
+ * The names for the close strength vs option price map: every name with both a close position and an IV
+ * percentile, plus the names left off for want of either, and which names sit in each corner.
+ */
+export function structureView(tickers: readonly OptionsTicker[]): {
+  points: StructurePoint[];
+  missing: string[];
+  corners: Record<Corner, string[]>;
+} {
+  const points: StructurePoint[] = [];
+  const missing: string[] = [];
+  const corners: Record<Corner, string[]> = { "strong-cheap": [], "strong-rich": [], "weak-cheap": [], "weak-rich": [] };
+  for (const t of tickers) {
+    const pos = t.close_strength?.pos;
+    const ivp = t.expected_move?.iv_pct_52w;
+    if (!isNum(pos) || !isNum(ivp)) {
+      missing.push(t.symbol);
+      continue;
+    }
+    points.push({ symbol: t.symbol, ivp, pos, chip: t.close_strength?.chip ?? null });
+    const side = pos >= STRONG_POS ? "strong" : pos <= WEAK_POS ? "weak" : null;
+    const price = ivp <= CHEAP_IVP ? "cheap" : ivp >= RICH_IVP ? "rich" : null;
+    if (side && price) corners[`${side}-${price}`].push(t.symbol);
+  }
+  return { points, missing, corners };
+}

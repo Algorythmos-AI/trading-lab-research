@@ -2,12 +2,16 @@
 // (no hooks); every number a picture encodes is also in its title text or the table under it.
 import { num, signed } from "@/lib/format";
 import {
+  CHEAP_IVP,
   CHIP_LABEL,
   mapView,
   moveBands,
   niceStep,
+  RICH_IVP,
   ROOM_REACH,
   spreadLabels,
+  STRONG_POS,
+  type structureView,
   type OptionsRule,
   type OptionsTicker,
   type roomView,
@@ -342,6 +346,95 @@ export interface Finding {
   base?: number;
   baseLabel?: string;
   use: string;
+}
+
+const CHIP_FILL: Record<string, string> = { STRONG: "var(--good-fill)", MID: "var(--neutral-fill)", WEAK: "var(--bad-fill)" };
+
+/**
+ * Close strength against option price, one dot per name: up is a stronger close (where it sat in the day's range),
+ * right is pricier options (52-week IV percentile). The left band is where options are cheap, the right band where
+ * they are rich. The two axes are the only two things the testing found that matter; the bands hint at a kind of
+ * structure, never a trade.
+ */
+export function StructureMap({ view }: { view: ReturnType<typeof structureView> }) {
+  const W = 480;
+  const H = 330;
+  const L = 58;
+  const R = W - 12;
+  const T = 26;
+  const B = H - 42;
+  const x = (v: number) => L + v * (R - L);
+  const y = (v: number) => B - v * (B - T);
+  const pts = [...view.points].sort((a, b) => a.symbol.localeCompare(b.symbol));
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      className="h-auto w-full max-w-xl"
+      role="img"
+      aria-label={`Close strength against IV percentile for ${pts.length} names`}
+    >
+      <rect x={L} y={T} width={x(CHEAP_IVP) - L} height={B - T} fill="var(--info-fill)" fillOpacity={0.1} />
+      <rect x={x(RICH_IVP)} y={T} width={R - x(RICH_IVP)} height={B - T} fill="var(--warn-fill)" fillOpacity={0.1} />
+      <text x={L + 4} y={T - 8} fontSize={12} style={{ fill: "var(--info)" }}>
+        cheap options
+      </text>
+      <text x={R - 4} y={T - 8} fontSize={12} textAnchor="end" style={{ fill: "var(--warn)" }}>
+        rich options
+      </text>
+      {[0.25, 0.5, 0.75].map((v) => (
+        <line key={`v${v}`} x1={x(v)} x2={x(v)} y1={T} y2={B} stroke="var(--chart-grid)" strokeDasharray={v === 0.5 ? "3 3" : undefined} />
+      ))}
+      <line x1={L} x2={R} y1={y(0.5)} y2={y(0.5)} stroke="var(--chart-grid)" strokeDasharray="3 3" />
+      <line x1={L} x2={R} y1={y(STRONG_POS)} y2={y(STRONG_POS)} stroke="var(--good-fill)" strokeOpacity={0.5} />
+      <text x={R - 4} y={y(STRONG_POS) - 4} fontSize={11.5} textAnchor="end" style={{ fill: "var(--good)" }}>
+        strong close
+      </text>
+      <line x1={L} x2={R} y1={B} y2={B} stroke="var(--chart-axis)" />
+      <line x1={L} x2={L} y1={T} y2={B} stroke="var(--chart-axis)" />
+      {[0, 0.25, 0.5, 0.75, 1].map((v) => (
+        <g key={v}>
+          <text x={x(v)} y={B + 14} fontSize={11.5} textAnchor="middle" style={{ fill: "var(--muted-foreground)" }} className="font-mono">
+            {Math.round(v * 100)}%
+          </text>
+          <text x={L - 6} y={y(v) + 3} fontSize={11.5} textAnchor="end" style={{ fill: "var(--muted-foreground)" }} className="font-mono">
+            {v === 1 ? "high" : v === 0 ? "low" : v.toFixed(2)}
+          </text>
+        </g>
+      ))}
+      <text x={(L + R) / 2} y={H - 8} fontSize={12} textAnchor="middle" style={{ fill: "var(--muted-foreground)" }}>
+        IV percentile, 52 weeks → pricier options
+      </text>
+      <text x={12} y={(T + B) / 2} fontSize={12} textAnchor="middle" transform={`rotate(-90 12 ${(T + B) / 2})`} style={{ fill: "var(--muted-foreground)" }}>
+        close in the day&apos;s range →
+      </text>
+      {pts.map((p) => {
+        const cx = x(p.ivp);
+        const cy = y(p.pos);
+        // A name with a neighbour just above-left puts its label below, so close dots keep readable labels.
+        const crowded = pts.some((q) => q !== p && Math.abs(x(q.ivp) - cx) < 44 && cy - y(q.pos) > 0 && cy - y(q.pos) < 14);
+        // Keep a label off the strong-close line.
+        const onLine = cy - y(STRONG_POS) > 0 && cy - y(STRONG_POS) < 16;
+        const right = cx < R - 40;
+        return (
+          <g key={p.symbol}>
+            <title>{`${p.symbol}: close at ${Math.round(p.pos * 100)}% of the day's range${p.chip ? ` (${CHIP_LABEL[p.chip] ?? p.chip})` : ""}, IV percentile ${Math.round(p.ivp * 100)}%`}</title>
+            <circle cx={cx} cy={cy} r={6} fill={p.chip ? (CHIP_FILL[p.chip] ?? "var(--neutral-fill)") : "var(--neutral-fill)"} stroke="var(--card)" strokeWidth={2} />
+            <text
+              x={right ? cx + 9 : cx - 9}
+              y={crowded || onLine ? cy + 16 : cy - 6}
+              fontSize={13}
+              fontWeight={600}
+              textAnchor={right ? "start" : "end"}
+              style={{ fill: "var(--foreground)" }}
+              className="font-mono"
+            >
+              {p.symbol}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
 }
 
 /** The testing behind the page, as bars: each finding's rate and, where it has one, the ordinary-day rate. */

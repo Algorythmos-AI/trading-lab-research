@@ -72,6 +72,9 @@ test("the options page shows the glance strip, the rules and a level map per nam
   // The strip polls /api/quote; fixture mode answers with SPY 0.3 ATR above its close at 11:00 New York on the
   // fixture's session, inside the major resistance zone.
   await expect(glance.getByRole("listitem").filter({ hasText: "SPY" })).toContainText("TESTING RESISTANCE");
+  // Close strength vs option price: NVDA is the weak close with cheap options.
+  await expect(page.getByRole("img", { name: /^Close strength against IV percentile for 10 names/ })).toBeVisible();
+  await expect(page.getByRole("list", { name: "Names in each corner" })).toContainText("NVDA");
   // The same quote moves the live dot on SPY's level map.
   await expect(page.getByTestId("SPY-live-mark")).toBeAttached();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

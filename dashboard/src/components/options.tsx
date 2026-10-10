@@ -1,9 +1,9 @@
-import { CalendarClock, ClipboardList, FlaskConical, Inbox, Info, TriangleAlert } from "lucide-react";
+import { CalendarClock, ClipboardList, FlaskConical, Grid2x2, Inbox, Info, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { TradeBars } from "@/components/charts/trade-bars";
 import { Empty } from "@/components/empty";
 import { LiveCardChip } from "@/components/client/live-layer";
-import { EvidenceBars, LevelMap, RuleRanges, type Finding } from "@/components/options-charts";
+import { EvidenceBars, LevelMap, RuleRanges, StructureMap, type Finding } from "@/components/options-charts";
 import { Panel } from "@/components/panel";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -19,6 +19,8 @@ import {
   RULE_STATUS_LABEL,
   ruleLabel,
   ruleTone,
+  structureView,
+  type Corner,
   type Options,
   type OptionsTicker,
   type Rung,
@@ -422,6 +424,66 @@ export function PaperPanel({ e }: { e: Options }) {
           </details>
         </div>
       )}
+    </Panel>
+  );
+}
+
+const CORNERS: { key: Corner; title: string; hint: string; tone: string }[] = [
+  { key: "strong-cheap", title: "Strong close, cheap options", hint: "debit spreads cost less", tone: "border-info/40" },
+  { key: "strong-rich", title: "Strong close, rich options", hint: "defined-risk credit spreads", tone: "border-warn/40" },
+  { key: "weak-cheap", title: "Weak close, cheap options", hint: "debit spreads cost less", tone: "border-info/40" },
+  { key: "weak-rich", title: "Weak close, rich options", hint: "defined-risk credit spreads", tone: "border-warn/40" },
+];
+
+/**
+ * Close strength against option price: the two things the testing found that matter, on one picture. The corners
+ * name which names sit where and hint at a kind of structure; every structure stays on paper probation.
+ */
+export function StructurePanel({ e }: { e: Options }) {
+  const view = structureView(e.tickers);
+  if (view.points.length === 0) return null;
+  return (
+    <Panel
+      title="Close strength vs option price"
+      means="Up is a stronger close; right is pricier options. Each corner hints at a kind of structure, never a trade."
+      icon={Grid2x2}
+    >
+      <div className="grid items-start gap-4 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <StructureMap view={view} />
+        <div className="grid gap-3">
+          <ul className="grid grid-cols-2 gap-2" aria-label="Names in each corner">
+            {CORNERS.map((c) => (
+              <li key={c.key} className={cn("rounded-md border p-2", c.tone)}>
+                <span className="block text-xs font-medium">{c.title}</span>
+                <span className="text-muted-foreground block text-[0.6875rem]">{c.hint}</span>
+                <span className="mt-1 block font-mono text-sm font-semibold">
+                  {view.corners[c.key].length > 0 ? view.corners[c.key].join(" · ") : <span className="text-muted-foreground font-normal">none</span>}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-muted-foreground text-xs">
+            Hints, not trades: every structure is on paper probation. Corners are the top or bottom quarter of the day&apos;s range with
+            the IV percentile at or under 25% or at or over 60%.
+          </p>
+          {view.missing.length > 0 ? (
+            <p className="text-muted-foreground text-xs">No IV percentile or close position in this edition for {view.missing.join(", ")}.</p>
+          ) : null}
+          <details className="text-sm">
+            <summary className="text-muted-foreground cursor-pointer text-xs">Why these two axes</summary>
+            <ul className="text-muted-foreground mt-2 grid list-disc gap-1 pl-4 text-xs">
+              <li>A close in the top quarter of the day&apos;s range was followed by a higher high the next day 77.6% of the time, against 52.9% on an ordinary day (2 years, 10 names).</li>
+              <li>
+                Options usually overprice the move
+                {e.expected_move_check?.inside_1d_pct != null
+                  ? `: price stayed inside the 1-day expected move on ${Math.round(e.expected_move_check.inside_1d_pct)}% of days, against 68% if fairly priced`
+                  : ""}
+                . So rich options lean to selling premium with defined risk, and cheap options make debit spreads cheaper.
+              </li>
+            </ul>
+          </details>
+        </div>
+      </div>
     </Panel>
   );
 }
