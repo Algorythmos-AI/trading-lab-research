@@ -37,3 +37,15 @@ CT:
 CD:
   one_position_per_coin: true  # a sleeve may not open a coin another book of the tournament holds
   max_open_risk_pct: 3.0       # of the books' combined equity: open risk at the stops, plus the new trade's
+
+# The data harvest (DEC-0027), read by wt.crypto.harvest: per harvest book, as a share of its own paper book. Sized
+# so that a signal is almost never refused for room: small positions, many of them. The latch is a guard against a
+# fault, not a loss limit: losing trades are expected and are the data too. Not evidence; DEC-0019 does not apply.
+CH:
+  risk_pct: 0.5                # of equity risked per trade; quantity = risk / stop distance
+  max_position_pct: 5          # of equity in one position
+  max_exposure_pct: 100        # of equity across open positions: no leverage
+  max_positions: 30            # one per coin
+  max_entries_per_day: 60      # per UTC day
+  max_orders_per_day: 200
+  daily_loss_latch_pct: 25     # realised loss in a UTC day; entries stay off for the book until the owner resets it
