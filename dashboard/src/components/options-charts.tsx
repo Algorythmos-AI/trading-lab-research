@@ -12,12 +12,14 @@ import {
   spreadLabels,
   STRONG_POS,
   type structureView,
+  type Finding,
   type OptionsRule,
   type OptionsTicker,
   type roomView,
 } from "@/lib/options";
 import { cn } from "@/lib/utils";
 import { LiveMapMark } from "./client/live-layer";
+import { Badge } from "./ui/badge";
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
@@ -338,23 +340,13 @@ export function RuleRanges({ rules }: { rules: OptionsRule[] }) {
   );
 }
 
-/** A finding as a share of days, against the share expected by chance when there is one. */
-export interface Finding {
-  title: string;
-  value: number;
-  valueLabel: string;
-  base?: number;
-  baseLabel?: string;
-  use: string;
-}
-
 const CHIP_FILL: Record<string, string> = { STRONG: "var(--good-fill)", MID: "var(--neutral-fill)", WEAK: "var(--bad-fill)" };
 
 /**
  * Close strength against option price, one dot per name: up is a stronger close (where it sat in the day's range),
  * right is pricier options (52-week IV percentile). The left band is where options are cheap, the right band where
- * they are rich. The two axes are the only two things the testing found that matter; the bands hint at a kind of
- * structure, never a trade.
+ * they are rich. The two axes are the two leads from early testing; a band says what a call or put costs against
+ * its own year, never a trade.
  */
 export function StructureMap({ view }: { view: ReturnType<typeof structureView> }) {
   const W = 480;
@@ -437,14 +429,24 @@ export function StructureMap({ view }: { view: ReturnType<typeof structureView> 
   );
 }
 
-/** The testing behind the page, as bars: each finding's rate and, where it has one, the ordinary-day rate. */
+/**
+ * The testing behind the page, as bars: each finding's rate and, where it has one, the rate to compare it with.
+ * A finding with no registered experiment behind it carries an Exploratory badge.
+ */
 export function EvidenceBars({ findings }: { findings: Finding[] }) {
   return (
     <div className="grid gap-5 md:grid-cols-3">
       {findings.map((f) => (
         <div key={f.title} className="grid content-start gap-1.5">
-          <p className="text-sm font-medium">{f.title}</p>
-          <div className="grid gap-1" role="img" aria-label={`${f.value}% ${f.valueLabel}${f.base != null ? `, against ${f.base}% ${f.baseLabel}` : ""}`}>
+          <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
+            {f.title}
+            {f.exploratory ? <Badge variant="warn">Exploratory</Badge> : null}
+          </p>
+          <div
+            className="grid gap-1"
+            role="img"
+            aria-label={`${f.exploratory ? "Exploratory: " : ""}${f.value}% ${f.valueLabel}${f.base != null ? `, against ${f.base}% ${f.baseLabel}` : ""}`}
+          >
             <span className="bg-track relative h-3 overflow-hidden rounded-sm">
               <span className="bg-info-fill absolute inset-y-0 left-0 rounded-sm" style={{ width: `${f.value}%` }} />
             </span>

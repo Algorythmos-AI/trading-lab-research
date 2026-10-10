@@ -77,6 +77,11 @@ test("the options page shows the glance strip, the rules and a level map per nam
   await expect(page.getByRole("list", { name: "Names in each corner" })).toContainText("NVDA");
   // The same quote moves the live dot on SPY's level map.
   await expect(page.getByTestId("SPY-live-mark")).toBeAttached();
+  // Findings with no registered experiment say so, the scorecard says what its R measures, and nothing on the
+  // page suggests a spread (the owner trades single calls and puts).
+  await expect(page.getByText("Exploratory", { exact: true })).toHaveCount(3);
+  await expect(page.getByText("R is measured on the stock", { exact: false })).toBeVisible();
+  await expect(page.locator("main")).not.toContainText(/spread|selling premium/i);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
 });

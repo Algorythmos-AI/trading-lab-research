@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sign } from "@/lib/hmac";
-import { editionState, ladder, liveNeighbours, liveState, mapView, moveBands, nearest, structureView, needsALook, extendTrail, liveRead, sessionShare, STALE_MS, TRAIL_MS, niceStep, nyClock, roomView, ROOM_REACH, ruleLabel, spreadLabels, type LiveQuote, type Options, type OptionsTicker } from "@/lib/options";
+import { CORNER_COST, editionState, findingsOf, ladder, liveNeighbours, liveState, mapView, moveBands, nearest, ONE_SIGMA_PCT, structureView, needsALook, extendTrail, liveRead, sessionShare, STALE_MS, TRAIL_MS, niceStep, nyClock, roomView, ROOM_REACH, ruleLabel, spreadLabels, type LiveQuote, type Options, type OptionsTicker } from "@/lib/options";
 import { OPTIONS_SCHEMA, isOptions, validateOptionsEdition } from "@/lib/validate";
 import { fixture } from "./helpers";
 import optionsJson from "./fixtures/options.v1.json";
@@ -387,5 +387,22 @@ describe("options view helpers", () => {
     expect(v.corners["strong-rich"]).toEqual(["MSFT", "AMZN"]);
     const gap = structureView([{ ...e.tickers[0]!, expected_move: null }]);
     expect(gap).toMatchObject({ points: [], missing: ["SPY"] });
+  });
+  it("marks every finding exploratory and words the page for single calls and puts", () => {
+    const e = optionsJson as unknown as Options;
+    const found = findingsOf(e);
+    // No finding has a registered experiment behind it yet, so none may read as a result.
+    expect(found).toHaveLength(3);
+    expect(found.every((f) => f.exploratory)).toBe(true);
+    // The expected-move check comes from the edition: 85% of 500 days, against the one-sigma share.
+    expect(found[2]).toMatchObject({ value: 85, base: ONE_SIGMA_PCT, valueLabel: "of 500 days, SPY vs VIX, 2 years to 9 Oct 2026" });
+    expect(found[2]!.use).toContain("within a week 30% of the time");
+    // An edition without the check shows the two fixed figures only.
+    expect(findingsOf({ ...e, expected_move_check: null })).toHaveLength(2);
+    // The owner trades single calls and puts: nothing on the page may suggest a spread or selling premium.
+    const copy = [...found.flatMap((f) => [f.title, f.use, f.valueLabel, f.baseLabel ?? ""]), ...Object.values(CORNER_COST)].join(" ");
+    expect(copy).not.toMatch(/spread|selling premium|credit|debit/i);
+    expect(CORNER_COST["weak-cheap"]).toBe(CORNER_COST["strong-cheap"]);
+    expect(CORNER_COST["weak-rich"]).toBe(CORNER_COST["strong-rich"]);
   });
 });

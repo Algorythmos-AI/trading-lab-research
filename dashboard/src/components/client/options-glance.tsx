@@ -4,7 +4,7 @@ import { Gauge } from "lucide-react";
 import { RoomBar } from "@/components/options-charts";
 import { Panel } from "@/components/panel";
 import { fracPct, newYork, num, signed } from "@/lib/format";
-import { CHIP_LABEL, liveRead, needsALook, roomView, ROOM_REACH, type OptionsTicker } from "@/lib/options";
+import { CHEAP_IVP, CHIP_LABEL, liveRead, needsALook, RICH_IVP, roomView, ROOM_REACH, type OptionsTicker } from "@/lib/options";
 import { cn } from "@/lib/utils";
 import { FeedPill, FocusButton, StateChip, useLive } from "./live-layer";
 
@@ -12,10 +12,6 @@ import { FeedPill, FocusButton, StateChip, useLive } from "./live-layer";
 const TRAIL_DOTS = 12;
 
 const CHIP_DOT: Record<string, string> = { STRONG: "bg-good-fill", MID: "bg-neutral-fill", WEAK: "bg-bad-fill" };
-
-/** IV percentile at or above this reads as rich, at or below the low mark as cheap. */
-const RICH = 0.6;
-const CHEAP = 0.25;
 
 /**
  * Every name on one line: price against the nearest zones on a bar measured in ATRs, so all names read on one
@@ -142,12 +138,12 @@ export function OptionsGlance({ tickers, live, children }: { tickers: OptionsTic
                   <span className="bg-track relative h-1.5 overflow-hidden rounded-full">
                     {ivp != null ? (
                       <span
-                        className={cn("absolute inset-y-0 left-0 rounded-full", ivp >= RICH ? "bg-warn-fill" : "bg-info-fill")}
+                        className={cn("absolute inset-y-0 left-0 rounded-full", ivp >= RICH_IVP ? "bg-warn-fill" : "bg-info-fill")}
                         style={{ width: `${Math.max(2, ivp * 100)}%` }}
                       />
                     ) : null}
                   </span>
-                  <span className="text-muted-foreground">{ivp == null ? "" : ivp >= RICH ? "options rich" : ivp <= CHEAP ? "options cheap" : "middling"}</span>
+                  <span className="text-muted-foreground">{ivp == null ? "" : ivp >= RICH_IVP ? "options rich" : ivp <= CHEAP_IVP ? "options cheap" : "middling"}</span>
                 </div>
                 <div className="hidden text-right font-mono text-sm sm:block">
                   {t.expected_move?.day != null ? `±${num(t.expected_move.day, 2)}` : "—"}
