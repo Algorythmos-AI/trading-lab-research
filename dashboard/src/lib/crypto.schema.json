@@ -2662,6 +2662,214 @@
         }
       }
     },
+    "harvest": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "switch": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
+        "decision": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
+        "coins": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "since": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
+        "signals_today": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "entries_today": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "exits_today": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "signals_7d": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "entries_7d": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "labelled": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "labelled_7d": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "win_rate": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "mean_r": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "feature_rows_7d": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "daily": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "day": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "signals": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "entries": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "exits": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "labelled": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            }
+          },
+          "maxItems": 2000
+        },
+        "books": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "tf_min": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "equity": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "return_pct": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "open": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "trades": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "signals": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "signals_7d": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            }
+          },
+          "maxItems": 2000
+        }
+      }
+    },
     "learning": {
       "type": [
         "object",

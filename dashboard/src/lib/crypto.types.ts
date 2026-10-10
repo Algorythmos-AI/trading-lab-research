@@ -568,6 +568,49 @@ export interface CryptoSnapshot {
         } | null)[]
       | null;
   } | null;
+  harvest?: {
+    switch?: string | null;
+    decision?: string | null;
+    coins?: number | null;
+    since?: string | null;
+    signals_today?: number | null;
+    entries_today?: number | null;
+    exits_today?: number | null;
+    signals_7d?: number | null;
+    entries_7d?: number | null;
+    labelled?: number | null;
+    labelled_7d?: number | null;
+    win_rate?: number | null;
+    mean_r?: number | null;
+    feature_rows_7d?: number | null;
+    /**
+     * @maxItems 2000
+     */
+    daily?:
+      | ({
+          day?: string | null;
+          signals?: number | null;
+          entries?: number | null;
+          exits?: number | null;
+          labelled?: number | null;
+        } | null)[]
+      | null;
+    /**
+     * @maxItems 2000
+     */
+    books?:
+      | ({
+          name?: string | null;
+          tf_min?: number | null;
+          equity?: number | null;
+          return_pct?: number | null;
+          open?: number | null;
+          trades?: number | null;
+          signals?: number | null;
+          signals_7d?: number | null;
+        } | null)[]
+      | null;
+  } | null;
   learning?: {
     switch?: string | null;
     lineages_started?: number | null;
