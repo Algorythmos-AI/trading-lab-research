@@ -19,6 +19,7 @@ import {
 } from "@/lib/options";
 import { cn } from "@/lib/utils";
 import { LiveMapMark } from "./client/live-layer";
+import { MapFrame } from "./client/map-frame";
 import { Badge } from "./ui/badge";
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -105,8 +106,11 @@ const LABELS_EACH_SIDE = 3;
  * Recent daily candles with every nearby zone as a band (stronger when more timeframes agree), the close, and the
  * options market's expected move as a cone into the next day and the week. Candles stay grey so colour only ever
  * means support (green) or resistance (red).
+ *
+ * The zones, the candles, the expected move and the labels are each a layer (`data-layer`), so a wrapper can hide
+ * one with `data-hide`. With `interactive` the map carries a crosshair that reads a price off it.
  */
-export function LevelMap({ t }: { t: OptionsTicker }) {
+export function LevelMap({ t, interactive = false }: { t: OptionsTicker; interactive?: boolean }) {
   const v = mapView(t);
   const close = t.last?.close;
   if (!v || !isNum(close)) return null;
@@ -145,13 +149,20 @@ export function LevelMap({ t }: { t: OptionsTicker }) {
   );
 
   return (
-    <figure className="grid gap-1.5">
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        className="h-auto w-full"
-        role="img"
-        aria-label={`${t.symbol}: last ${n} daily bars with support and resistance zones and the expected move`}
-      >
+    <MapFrame
+      t={{ ...t, bars: undefined }}
+      label={`${t.symbol}: last ${n} daily bars with support and resistance zones and the expected move`}
+      w={W}
+      h={H}
+      top={TOP}
+      bottom={BOTTOM}
+      x0={X0}
+      x1={XW}
+      lo={v.lo}
+      hi={v.hi}
+      zones={v.zones}
+      interactive={interactive}
+    >
         {ticks.map((p) => (
           <g key={p}>
             <line x1={X0} x2={XW} y1={y(p)} y2={y(p)} stroke="var(--chart-grid)" strokeWidth={1} />
@@ -160,59 +171,63 @@ export function LevelMap({ t }: { t: OptionsTicker }) {
             </text>
           </g>
         ))}
-        {v.zones.map(({ zone, tone }, i) => {
-          const y1 = y(zone.hi);
-          const h = Math.max(3, y(zone.lo) - y1);
-          const fill = tone === "support" ? "var(--good-fill)" : "var(--bad-fill)";
-          return (
-            <rect
-              key={i}
-              x={X0}
-              y={h === 3 ? y1 - 1.5 : y1}
-              width={XW - X0}
-              height={h}
-              fill={fill}
-              fillOpacity={Math.min(0.5, 0.08 + 0.07 * (zone.weight ?? 1))}
-            >
-              <title>
-                {`${tone === "support" ? "Support" : "Resistance"} ${num(zone.lo, 2)}${zone.lo === zone.hi ? "" : `–${num(zone.hi, 2)}`}: ${(zone.members ?? []).join(" + ")}`}
-              </title>
-            </rect>
-          );
-        })}
-        {v.bars.map((b, i) => {
-          const cx = X0 + bw * (i + 0.5);
-          const up = b.c >= b.o;
-          const top = y(Math.max(b.o, b.c));
-          return (
-            <g key={b.d}>
-              <title>{`${b.d}  O ${num(b.o, 2)}  H ${num(b.h, 2)}  L ${num(b.l, 2)}  C ${num(b.c, 2)}`}</title>
-              <line x1={cx} x2={cx} y1={y(b.h)} y2={y(b.l)} stroke="var(--muted-foreground)" strokeWidth={1} />
+        <g data-layer="zones">
+          {v.zones.map(({ zone, tone }, i) => {
+            const y1 = y(zone.hi);
+            const h = Math.max(3, y(zone.lo) - y1);
+            const fill = tone === "support" ? "var(--good-fill)" : "var(--bad-fill)";
+            return (
               <rect
-                x={cx - bw * 0.32}
-                y={top}
-                width={bw * 0.64}
-                height={Math.max(1.2, Math.abs(y(b.o) - y(b.c)))}
-                rx={0.8}
-                fill={up ? "var(--card)" : "var(--muted-foreground)"}
-                stroke="var(--muted-foreground)"
-                strokeWidth={1}
-              />
-              {i % 10 === 0 || i === n - 1 ? (
-                <text x={i === 0 ? X0 : cx} y={H - 6} fontSize={10.5} textAnchor={i === 0 ? "start" : "middle"} style={{ fill: "var(--muted-foreground)" }} className="font-mono">
-                  {b.d.slice(5)}
-                </text>
-              ) : null}
-            </g>
-          );
-        })}
-        {n === 0 ? (
-          <text x={(X0 + X1) / 2} y={H - 6} fontSize={9} textAnchor="middle" style={{ fill: "var(--muted-foreground)" }}>
-            Candles appear once the after-close run sends recent bars.
-          </text>
-        ) : null}
+                key={i}
+                x={X0}
+                y={h === 3 ? y1 - 1.5 : y1}
+                width={XW - X0}
+                height={h}
+                fill={fill}
+                fillOpacity={Math.min(0.5, 0.08 + 0.07 * (zone.weight ?? 1))}
+              >
+                <title>
+                  {`${tone === "support" ? "Support" : "Resistance"} ${num(zone.lo, 2)}${zone.lo === zone.hi ? "" : `–${num(zone.hi, 2)}`}: ${(zone.members ?? []).join(" + ")}`}
+                </title>
+              </rect>
+            );
+          })}
+        </g>
+        <g data-layer="candles">
+          {v.bars.map((b, i) => {
+            const cx = X0 + bw * (i + 0.5);
+            const up = b.c >= b.o;
+            const top = y(Math.max(b.o, b.c));
+            return (
+              <g key={b.d}>
+                <title>{`${b.d}  O ${num(b.o, 2)}  H ${num(b.h, 2)}  L ${num(b.l, 2)}  C ${num(b.c, 2)}`}</title>
+                <line x1={cx} x2={cx} y1={y(b.h)} y2={y(b.l)} stroke="var(--muted-foreground)" strokeWidth={1} />
+                <rect
+                  x={cx - bw * 0.32}
+                  y={top}
+                  width={bw * 0.64}
+                  height={Math.max(1.2, Math.abs(y(b.o) - y(b.c)))}
+                  rx={0.8}
+                  fill={up ? "var(--card)" : "var(--muted-foreground)"}
+                  stroke="var(--muted-foreground)"
+                  strokeWidth={1}
+                />
+                {i % 10 === 0 || i === n - 1 ? (
+                  <text x={i === 0 ? X0 : cx} y={H - 6} fontSize={10.5} textAnchor={i === 0 ? "start" : "middle"} style={{ fill: "var(--muted-foreground)" }} className="font-mono">
+                    {b.d.slice(5)}
+                  </text>
+                ) : null}
+              </g>
+            );
+          })}
+          {n === 0 ? (
+            <text x={(X0 + X1) / 2} y={H - 6} fontSize={9} textAnchor="middle" style={{ fill: "var(--muted-foreground)" }}>
+              Candles appear once the after-close run sends recent bars.
+            </text>
+          ) : null}
+        </g>
         {bands.day ? (
-          <g>
+          <g data-layer="move">
             <title>{`Expected move: 1 day ${num(bands.day[0], 2)} to ${num(bands.day[1], 2)}${bands.week ? `, 1 week ${num(bands.week[0], 2)} to ${num(bands.week[1], 2)}` : ""}`}</title>
             <polygon
               points={
@@ -239,19 +254,20 @@ export function LevelMap({ t }: { t: OptionsTicker }) {
         <line x1={X0} x2={XW} y1={y(close)} y2={y(close)} stroke="var(--foreground)" strokeOpacity={0.7} strokeDasharray="4 3" />
         <circle cx={xLast} cy={y(close)} r={4} fill="var(--foreground)" stroke="var(--card)" strokeWidth={2} />
         <LiveMapMark t={{ ...t, bars: undefined }} lo={v.lo} hi={v.hi} top={TOP} bottom={BOTTOM} xFrom={xLast} xTo={XD} lineFrom={X0} lineTo={XW} />
-        {labels.map((l, i) => (
-          <g key={i}>
-            <path d={`M${XW} ${l.y} L${LX - 4} ${placed[i]! - 3}`} stroke={l.color} strokeOpacity={0.5} fill="none" />
-            <text x={LX} y={placed[i]! - 1} fontSize={12.5} fontWeight={l.strong ? 600 : 400} style={{ fill: l.color }} className="font-mono">
-              {l.text}
-            </text>
-            <text x={LX} y={placed[i]! + 11} fontSize={10} style={{ fill: "var(--muted-foreground)" }} className="font-mono">
-              {l.sub}
-            </text>
-          </g>
-        ))}
-      </svg>
-    </figure>
+        <g data-layer="labels">
+          {labels.map((l, i) => (
+            <g key={i}>
+              <path d={`M${XW} ${l.y} L${LX - 4} ${placed[i]! - 3}`} stroke={l.color} strokeOpacity={0.5} fill="none" />
+              <text x={LX} y={placed[i]! - 1} fontSize={12.5} fontWeight={l.strong ? 600 : 400} style={{ fill: l.color }} className="font-mono">
+                {l.text}
+              </text>
+              <text x={LX} y={placed[i]! + 11} fontSize={10} style={{ fill: "var(--muted-foreground)" }} className="font-mono">
+                {l.sub}
+              </text>
+            </g>
+          ))}
+        </g>
+    </MapFrame>
   );
 }
 
