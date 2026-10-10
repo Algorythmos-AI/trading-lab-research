@@ -1,5 +1,6 @@
 import { PageHeading } from "@/components/page-heading";
 import { BoardTable, EditionPanel, HowToRead, NoOptions, PaperPanel, RulesPanel, TickerCards } from "@/components/options";
+import { FocusScope, LiveQuotes } from "@/components/client/live-layer";
 import { OptionsGlance } from "@/components/client/options-glance";
 import { EditionPicker } from "@/components/radar";
 import { requestTime } from "@/lib/now";
@@ -22,17 +23,25 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
       {result.status !== "ok" ? (
         <NoOptions status={result.status} date={date} />
       ) : (
-        <>
-          <EditionPicker dates={dates} current={result.edition.session} base="/options" />
-          <EditionPanel e={result.edition} now={now} />
-          <OptionsGlance tickers={result.edition.tickers} session={result.edition.session} live={!date}>
-            <BoardTable e={result.edition} />
-          </OptionsGlance>
-          <RulesPanel e={result.edition} />
-          <TickerCards e={result.edition} />
-          <PaperPanel e={result.edition} />
-          <HowToRead e={result.edition} />
-        </>
+        <LiveQuotes symbols={result.edition.tickers.map((t) => t.symbol).join(",")} session={result.edition.session} enabled={!date}>
+          <FocusScope>
+            <EditionPicker dates={dates} current={result.edition.session} base="/options" />
+            <div data-explain className="contents">
+              <EditionPanel e={result.edition} now={now} />
+            </div>
+            <OptionsGlance tickers={result.edition.tickers} live={!date}>
+              <BoardTable e={result.edition} />
+            </OptionsGlance>
+            <div data-explain className="contents">
+              <RulesPanel e={result.edition} />
+            </div>
+            <TickerCards e={result.edition} />
+            <div data-explain className="contents">
+              <PaperPanel e={result.edition} />
+              <HowToRead e={result.edition} />
+            </div>
+          </FocusScope>
+        </LiveQuotes>
       )}
     </>
   );

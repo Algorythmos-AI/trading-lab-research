@@ -2,6 +2,7 @@ import { CalendarClock, ClipboardList, FlaskConical, Inbox, Info, TriangleAlert 
 import Link from "next/link";
 import { TradeBars } from "@/components/charts/trade-bars";
 import { Empty } from "@/components/empty";
+import { LiveCardChip } from "@/components/client/live-layer";
 import { EvidenceBars, LevelMap, RuleRanges, type Finding } from "@/components/options-charts";
 import { Panel } from "@/components/panel";
 import { Badge } from "@/components/ui/badge";
@@ -208,7 +209,7 @@ function CloseRow({ t }: { t: OptionsTicker }) {
 
 export function TickerCards({ e }: { e: Options }) {
   return (
-    <section aria-label="Level ladders" className="grid gap-5 lg:grid-cols-2">
+    <section aria-label="Level ladders" className="grid gap-5 lg:grid-cols-2 group-data-[focus=on]/focus:xl:grid-cols-3">
       {e.tickers.map((t) => {
         const { above, at, below } = ladder(t);
         const shownAbove = above.slice(0, LADDER_DEPTH).reverse();
@@ -219,6 +220,7 @@ export function TickerCards({ e }: { e: Options }) {
             key={t.symbol}
             id={`o-${t.symbol}`}
             title={<span className="font-mono">{t.symbol}</span>}
+            action={<LiveCardChip t={{ ...t, bars: undefined }} />}
             means={
               <span className="font-mono">
                 H {num(t.last?.high, 2)} · L {num(t.last?.low, 2)} · ATR {num(t.atr14, 2)}
