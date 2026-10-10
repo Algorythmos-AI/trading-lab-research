@@ -143,3 +143,58 @@ export const TONE_VAR: Record<Tone, string> = {
   info: "var(--info-fill)",
   neutral: "var(--neutral-fill)",
 };
+
+/** Minutes since midnight in a time zone for an instant. */
+export function zoneMinutes(at: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(at);
+  const n = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? NaN);
+  return n("hour") * 60 + n("minute");
+}
+
+/** Minutes since midnight in New York: where the "now" line sits on the trading-night timeline. */
+export const nyMinutes = (at: Date) => zoneMinutes(at, "America/New_York");
+
+/** How far Sydney's clock is ahead of New York's at an instant, in minutes (14 to 16 hours, by the two DST rules). */
+export function sydneyAheadOfNy(at: Date): number {
+  return (((zoneMinutes(at, "Australia/Sydney") - nyMinutes(at)) % 1440) + 1440) % 1440;
+}
+
+export interface GateLike {
+  id?: string | null;
+  status?: string | null;
+}
+
+/** A research gate's colour: done green, failed red, in progress blue, not started grey. */
+export function gateTone(status: string | null | undefined): Tone {
+  switch (String(status ?? "").toLowerCase()) {
+    case "done":
+    case "passed":
+      return "good";
+    case "failed":
+      return "bad";
+    case "in_progress":
+      return "info";
+    default:
+      return "neutral";
+  }
+}
+
+/** The gate the desk is working on: the first one that is not done, or null when all are. */
+export function currentGate<T extends GateLike>(gates: readonly T[]): T | null {
+  return gates.find((g) => gateTone(g.status) !== "good") ?? null;
+}
+
+/** How many of the jobs' last runs ended well, of how many reported. */
+export function jobsHealthy(last: Iterable<JobRunLike>): { ok: number; total: number; tone: Tone } {
+  let ok = 0;
+  let total = 0;
+  let worst: Tone = "good";
+  for (const r of last) {
+    total += 1;
+    const t = jobDot(r).tone;
+    if (t === "good") ok += 1;
+    if (t === "bad") worst = "bad";
+    else if (t !== "good" && t !== "info" && worst !== "bad") worst = "warn";
+  }
+  return { ok, total, tone: total === 0 ? "neutral" : worst };
+}

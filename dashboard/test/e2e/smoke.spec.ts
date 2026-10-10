@@ -265,3 +265,17 @@ test("each desk has its own Engineering wiki, and both show the shared Lab platf
   // The crypto wiki lists the desk's jobs from the crypto snapshot.
   await expect(page.getByRole("list", { name: "The crypto desk's jobs and their last runs" })).toContainText("Bar cycle");
 });
+
+test("the stocks wiki draws the desk from the snapshot", async ({ page }) => {
+  await page.goto("/engineering");
+  for (const name of ["At a glance", "Architecture", "A trading night", "Order safety", "Research gates", "Runbooks and decisions"]) {
+    await expect(page.getByRole("heading", { name, exact: true })).toBeAttached();
+  }
+  // The fixture's kill switch is on and its routine's last run failed: the glance and the guard say so.
+  const glance = page.getByRole("list", { name: "The stocks desk at a glance" });
+  await expect(glance).toContainText("Kill switch on");
+  await expect(glance).toContainText("needs a look: routine");
+  await expect(page.getByRole("img", { name: /^Architecture of the stocks desk\..*routine \(last run failed\)/ })).toBeAttached();
+  await expect(page.getByRole("img", { name: /^Order safety\..*Kill switch on/ })).toBeAttached();
+  await expect(page.getByRole("img", { name: /^Research gates: K0 .* G1 .*failed/ })).toBeAttached();
+});
