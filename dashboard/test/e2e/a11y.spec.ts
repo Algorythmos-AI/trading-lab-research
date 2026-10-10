@@ -28,9 +28,12 @@ test.skip(({ isMobile }) => isMobile, "accessibility scan runs on the desktop pr
 /**
  * On the Options pages, wait until the live feed has drawn its state chips. Scanning before the first quote
  * arrives would judge a page with no chips on it, and whether a scan saw them would depend on timing.
+ *
+ * It waits for the chip itself, a badge. The words alone are not enough: "TESTING RESISTANCE" is also in the help
+ * text the server sends, so a wait on the words passed at once, before the page was even interactive.
  */
 async function liveChips(page: import("@playwright/test").Page) {
-  await expect(page.locator("main")).toContainText("TESTING RESISTANCE");
+  await expect(page.locator('[data-slot="badge"]', { hasText: "TESTING RESISTANCE" }).first()).toBeVisible();
 }
 
 async function scan(page: import("@playwright/test").Page): Promise<string[]> {
