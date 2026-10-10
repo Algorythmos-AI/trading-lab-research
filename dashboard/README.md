@@ -87,6 +87,17 @@ wt.ops.publish                            POST /api/ingest            (productio
   quotes whose newest is more than 35 minutes old (105 for a contract that does not expire that day) are too old to
   price from, and the numbers are withheld; with the market shut the last quotes are simply the last quotes, and the
   stock's price is labelled "Last close" instead of "Now". Everything it shows is an estimate and it suggests nothing.
+- **Paper option positions** (`stocksdelta/options-live`, schema `src/lib/options-live.schema.json`): the open option
+  positions of the paper account kept for manual option trades, with open interest by strike, published by the
+  trading host's `options-live` job through the same signed `POST /api/ingest`. Paper only by its schema
+  (`paper: true` is required; an account number, a balance or buying power is an unknown key and refuses the whole
+  document), and never from the research environment's key. Only the latest is kept. The desk draws a **Paper
+  positions** pane under the list (`src/components/client/options-positions.tsx`, logic in `src/lib/positions.ts`):
+  each contract, what was paid, the broker's mark and the open result; a position on one of the desk's names opens
+  that name with the held contract loaded into the Contract pane. Read only. A document not renewed for half an
+  hour while the market is open is shown with a warning; one older than a day and a half is not shown; until the
+  job has published once there is no pane. `/api/health` reports the stored run under `editions.options_live`,
+  and nothing of what it holds.
 - **Live prices** (`/api/quote?s=SPY,QQQ`, read by the Options page every 2 s while it is open, one poll shared by the
   glance strip, the level maps' live dot and the state chips; a quote older than 30 s shows as stale): last trades from
   Alpaca's free IEX feed, fetched on the server so the page keeps `connect-src 'self'` and never sees the keys. At most

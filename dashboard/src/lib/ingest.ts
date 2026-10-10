@@ -1,10 +1,10 @@
 import "server-only";
 import { HISTORY_PREFIX, PreconditionFailed, readForUpdate, writeText } from "./blob";
-import { DESK_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
+import { DESK_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
 import { verify } from "./hmac";
 import { logEvent } from "./log";
 import { parseTime } from "./freshness";
-import { contractOf, isOptions, isRadar, validateOptionsEdition, validateRadarEdition } from "./validate";
+import { contractOf, isOptions, isOptionsLive, isRadar, validateOptionsEdition, validateOptionsLive, validateRadarEdition } from "./validate";
 
 export const MAX_BODY_BYTES = 3_500_000;
 
@@ -134,6 +134,9 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
   if (keyId === RADAR_KEY_ID) {
     return done(403, "radar-key-scope", { error: "this key may only publish research editions" });
   }
+  // After the radar key's refusal on purpose: positions come from the trading host, never from the research
+  // environment, whatever the body says it is.
+  if (isOptionsLive(data)) return storeEdition(OPTIONS_LIVE, text, data, done);
 
   // The desk comes from the signed body (its `schema`), never from a header: ADR 0005. The slot and the validator
   // are read from the same contract, so the body is filed where it was validated.
@@ -188,10 +191,13 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
 
 type Done = (status: number, outcome: string, body: Record<string, unknown>, extra?: Record<string, unknown>) => Response;
 
-/** A research edition kind: where it is stored, how it is validated, and which field names its dated copy. */
+/**
+ * A document kind stored like a research edition: where it is stored, how it is validated, and which field names
+ * its dated copy. A kind with no `history` path keeps only its latest.
+ */
 interface EditionKind {
-  desk: "radar" | "options";
-  paths: { latest: string; history: string };
+  desk: "radar" | "options" | "options-live";
+  paths: { latest: string; history?: string };
   validate: (data: unknown) => { ok: true; runId: string | null; asOf: string | null; date: string } | { ok: false; errors: string[] };
 }
 
@@ -210,6 +216,16 @@ const OPTIONS_EDITION: EditionKind = {
   validate: (data) => {
     const r = validateOptionsEdition(data);
     return r.ok ? { ok: true, runId: r.edition.run_id ?? null, asOf: r.edition.as_of ?? null, date: r.edition.session } : r;
+  },
+};
+
+/** The options live document. Latest only; the date it returns is never used to file a copy. */
+const OPTIONS_LIVE: EditionKind = {
+  desk: "options-live",
+  paths: OPTIONS_LIVE_PATHS,
+  validate: (data) => {
+    const r = validateOptionsLive(data);
+    return r.ok ? { ok: true, runId: r.doc.run_id, asOf: r.doc.as_of, date: r.doc.as_of.slice(0, 10) } : r;
   },
 };
 
@@ -244,10 +260,12 @@ async function storeEdition(kind: EditionKind, text: string, data: unknown, done
         if (e instanceof PreconditionFailed) return done(503, "conflict", { status: "conflict", run_id: runId }, { run_id: runId, desk });
         throw e;
       }
-      try {
-        await writeDated(`${paths.history}${date}.json`, text, asOf);
-      } catch (e) {
-        logEvent("ingest.history", { outcome: "error", run_id: runId, desk, error: e instanceof Error ? e.name : "unknown" });
+      if (paths.history) {
+        try {
+          await writeDated(`${paths.history}${date}.json`, text, asOf);
+        } catch (e) {
+          logEvent("ingest.history", { outcome: "error", run_id: runId, desk, error: e instanceof Error ? e.name : "unknown" });
+        }
       }
       return done(200, "stored", { status: "stored", run_id: runId }, { run_id: runId, bytes: text.length, attempt, desk });
     }

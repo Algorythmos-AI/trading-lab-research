@@ -1,0 +1,201 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "stocksdelta/options-live",
+  "title": "Options live document (published by the options-live job on the trading host)",
+  "description": "What the Options desk needs between editions: the open option positions of the paper account kept for manual option trades, and open interest by strike for the desk's names. Paper only: a document that does not say so is refused. No account number, no balances, no buying power.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "as_of",
+    "paper",
+    "positions"
+  ],
+  "properties": {
+    "schema": {
+      "const": "stocksdelta/options-live"
+    },
+    "schema_version": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "as_of": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40
+    },
+    "paper": {
+      "description": "Always true. The publisher reads a paper account and nothing else.",
+      "const": true
+    },
+    "market": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "is_open": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "next_open": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 40
+        },
+        "next_close": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 40
+        }
+      }
+    },
+    "positions": {
+      "description": "Open option positions, one row per contract. Stock positions are not sent.",
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contract",
+          "qty"
+        ],
+        "properties": {
+          "contract": {
+            "description": "The OCC symbol: root, yymmdd, C or P, strike in thousandths.",
+            "type": "string",
+            "pattern": "^[A-Z]{1,6}\\d{6}[CP]\\d{8}$"
+          },
+          "qty": {
+            "description": "Contracts held. Negative is short.",
+            "type": "integer",
+            "minimum": -9999,
+            "maximum": 9999
+          },
+          "avg_price": {
+            "description": "Average price paid per share.",
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "price": {
+            "description": "The broker's current mark per share.",
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "market_value": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "unrealized_pl": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "open_interest": {
+      "description": "Open interest by contract for the desk's names, as the exchange last reported it (one session behind).",
+      "type": [
+        "array",
+        "null"
+      ],
+      "maxItems": 60,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "symbol",
+          "rows"
+        ],
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9.]{0,9}$"
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rows": {
+            "type": "array",
+            "maxItems": 600,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "expiry",
+                "strike",
+                "kind",
+                "oi"
+              ],
+              "properties": {
+                "expiry": {
+                  "type": "string",
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                },
+                "strike": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "kind": {
+                  "enum": [
+                    "call",
+                    "put"
+                  ]
+                },
+                "oi": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "problems": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "maxItems": 24,
+      "items": {
+        "type": "string",
+        "maxLength": 200
+      }
+    }
+  }
+}

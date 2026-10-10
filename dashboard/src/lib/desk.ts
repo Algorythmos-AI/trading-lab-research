@@ -56,6 +56,14 @@ export const RADAR_PATHS = {
   history: "radar/editions/",
 } as const;
 
+/**
+ * The options live document: open paper option positions and open interest. Latest only: it is a view of now, and
+ * yesterday's positions are nobody's business to keep.
+ */
+export const OPTIONS_LIVE_PATHS = {
+  latest: "options-live/latest.json",
+} as const;
+
 /** The after-close options levels editions, one per session they are built for, kept the same way as the radar's. */
 export const OPTIONS_PATHS = {
   latest: "options/latest.json",

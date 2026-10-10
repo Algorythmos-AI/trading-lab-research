@@ -38,6 +38,14 @@ function writeStored(key: string, value: string | null) {
   window.dispatchEvent(new Event(CHANGED));
 }
 
+/**
+ * Set the contract remembered for a name from outside the pane (the positions list does, so that opening a
+ * position prices what is held). The pane, if it is on the page, hears of it and redraws.
+ */
+export function storePick(symbol: string, pick: Pick): void {
+  writeStored(pickKey(symbol), JSON.stringify(pick));
+}
+
 function subscribe(onChange: () => void) {
   window.addEventListener(CHANGED, onChange);
   window.addEventListener("storage", onChange);

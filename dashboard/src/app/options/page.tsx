@@ -8,7 +8,7 @@ import { EditionPicker } from "@/components/radar";
 import { sydney, weekDate } from "@/lib/format";
 import { requestTime } from "@/lib/now";
 import { editionState, isDeskView, isHalfDay, viewForClock, type DeskPane, type Options } from "@/lib/options";
-import { listOptionsDates, loadOptions } from "@/lib/snapshot";
+import { listOptionsDates, loadOptions, loadOptionsLive } from "@/lib/snapshot";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Options" };
@@ -64,7 +64,8 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
   const one = (v: string | string[] | undefined) => (typeof v === "string" ? v : undefined);
   const rawDate = one(sp.d);
   const date = rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : undefined;
-  const [result, dates] = await Promise.all([loadOptions(date), listOptionsDates()]);
+  // The paper positions are a view of now, so an older edition is drawn without them.
+  const [result, dates, positions] = await Promise.all([loadOptions(date), listOptionsDates(), date ? null : loadOptionsLive()]);
   const now = requestTime();
   if (result.status !== "ok") {
     return (
@@ -103,6 +104,7 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
             manualView={manualView}
             initialSymbol={initialSymbol}
             initialPane={initialPane}
+            positions={positions?.status === "ok" ? positions.doc : null}
             stale={stale}
           />
         </PaneBoundary>
