@@ -175,7 +175,7 @@ test("health endpoint answers without secrets", async ({ request }) => {
     snapshot_as_of: expect.any(String),
     // The research editions on file and the newest format of each this build accepts.
     editions: {
-      options: { status: "ok", accepts: 1, session: "2026-10-12", run_id: expect.any(String) },
+      options: { status: "ok", accepts: 2, session: "2026-10-12", run_id: expect.any(String) },
       radar: { status: "ok", accepts: 1, edition_date: expect.any(String) },
     },
   });

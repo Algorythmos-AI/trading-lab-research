@@ -25,6 +25,7 @@ import {
   type Options,
   type OptionsTicker,
   type Rung,
+  volRead,
 } from "@/lib/options";
 import { cn } from "@/lib/utils";
 import { StateChip, useLiveRead } from "./live-layer";
@@ -109,6 +110,7 @@ export function OptionsDetail({
   const hasMap = view !== null && close !== null;
   const strength = t.close_strength?.chip;
   const layers = mapLayersOf(t);
+  const vol = volRead(t);
 
   return (
     <div className="grid content-start gap-4 p-4" data-desk-detail={t.symbol}>
@@ -249,6 +251,26 @@ export function OptionsDetail({
         <Fact label="IV percentile" title="Where implied vol sits in its own last 52 weeks">
           {fracPct(ivp, 0)}
         </Fact>
+        {/* From the edition's second format. A name without the block shows none of these, not four dashes. */}
+        {vol ? (
+          <>
+            <Fact
+              label="IV against realised"
+              title={`30-day implied vol (${fracPct(vol.iv, 1)}) over 30-day realised vol (${fracPct(vol.hv, 1)}). Above 1, the options price in more movement than the stock has been making.`}
+            >
+              {vol.ivOverHv !== null ? `${num(vol.ivOverHv, 2)}×` : "—"}
+            </Fact>
+            <Fact label="IV change, 1 day" title="The day's change in 30-day implied vol, in volatility points">
+              {vol.changePts !== null ? `${signed(vol.changePts, 1)} pts` : "—"}
+            </Fact>
+            <Fact label="IV pct, 13 / 26 wk" title="Where implied vol sits in its own last 13 and 26 weeks. The 52-week percentile is the fact before these.">
+              {vol.pcts.map((p) => fracPct(p, 0)).join(" / ")}
+            </Fact>
+            <Fact label="Option volume" title="The day's option volume against its own 20-day average">
+              {vol.volumeRatio !== null ? `${num(vol.volumeRatio, 1)}× average` : "—"}
+            </Fact>
+          </>
+        ) : null}
       </dl>
 
       {above.length + at.length + below.length > 0 ? (

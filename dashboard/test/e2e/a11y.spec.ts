@@ -18,7 +18,7 @@ const PAGES = [
   "/engineering",
   "/glossary",
 ];
-const OPTIONS_STATES = ["partial", "poison", "empty", "error"];
+const OPTIONS_STATES = ["partial", "poison", "empty", "error", "v2"];
 
 // These run at desktop width. The Options desk is also scanned at a phone's width, in a11y-phone.spec.ts; the other
 // pages are not yet, and wide tables that scroll sideways on a phone are a known gap there.
@@ -73,7 +73,7 @@ for (const theme of ["light", "dark"] as const) {
       // Live view, so the monitor carries state chips on highlighted and selected rows.
       await page.goto("/options?view=live");
       await expect(page.getByRole("heading", { level: 1, name: "Options" })).toBeAttached();
-      if (fx === "partial" || fx === "poison") await liveChips(page);
+      if (fx === "partial" || fx === "poison" || fx === "v2") await liveChips(page);
       expect(await scan(page)).toEqual([]);
     });
   }

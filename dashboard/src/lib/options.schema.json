@@ -330,6 +330,75 @@
               "type": "string",
               "maxLength": 200
             }
+          },
+          "vol": {
+            "description": "How the name's options are priced against its own past and its own movement. Volatilities are annualised fractions (0.24 is 24%), as expected_move.annual_iv is. New in version 2.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "iv30": {
+                "description": "30-day implied vol as a fraction. The ceiling of 5 refuses a value sent as a percentage.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 5
+              },
+              "iv_change_1d": {
+                "description": "The day's change in iv30 as a fraction: 0.012 is 1.2 volatility points. The bounds refuse a value sent in points.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": -1,
+                "maximum": 1
+              },
+              "iv_pct_13w": {
+                "description": "Where iv30 sits in its own last 13 weeks, as a fraction.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 1
+              },
+              "iv_pct_26w": {
+                "description": "Where iv30 sits in its own last 26 weeks, as a fraction. The 52-week figure is expected_move.iv_pct_52w.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 1
+              },
+              "hv30": {
+                "description": "30-day realised vol as a fraction.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 5
+              },
+              "opt_volume": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "opt_volume_avg20": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              }
+            }
           }
         }
       }
@@ -552,6 +621,148 @@
             "null"
           ],
           "maxLength": 80
+        }
+      }
+    },
+    "market": {
+      "description": "The day itself, as of the close the edition was built from. New in version 2.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "vix": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "close": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "change": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "pct_52w": {
+              "description": "A fraction: 0.34 is the 34th percentile of the last year.",
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        },
+        "session": {
+          "description": "Whether the session the levels are for closes early. The site works the hours out from this alone.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "half_day": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          }
+        },
+        "calendar": {
+          "description": "Whether the macro rows in `events` are the whole calendar for the session and the week after it. Only 'complete' lets the page say a day has no scheduled release.",
+          "enum": [
+            "complete",
+            "partial",
+            null
+          ]
+        }
+      }
+    },
+    "events": {
+      "description": "Scheduled events near the session: macro releases (no symbol) and earnings (one symbol). Codes only, never headlines: the site names the codes it knows and shows any other as 'Other release'. New in version 2.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "maxItems": 400,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "date",
+          "kind",
+          "type"
+        ],
+        "properties": {
+          "date": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "time_et": {
+            "description": "New York time, 8:30 or 08:30, seconds allowed and ignored.",
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^([01]?\\d|2[0-3]):[0-5]\\d(:[0-5]\\d)?$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "enum": [
+              "macro",
+              "earnings"
+            ]
+          },
+          "type": {
+            "description": "A code such as cpi or fomc_decision. Never drawn as written.",
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,40}$"
+          },
+          "severity": {
+            "enum": [
+              "high",
+              "medium",
+              "low",
+              null
+            ]
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Z][A-Z0-9.]{0,9}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "when": {
+            "description": "For earnings: bmo, amc or during. Another code is accepted and not drawn.",
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z]{1,12}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
         }
       }
     }

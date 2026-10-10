@@ -3,12 +3,14 @@
 import { ArrowDown, ArrowUp, ChartCandlestick, ChevronLeft, ChevronRight, Keyboard, List, Search, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RoomBar } from "@/components/options-charts";
+import { OptionsDay } from "@/components/options-day";
 import { fracPct, num, rMult, signed, weekDate } from "@/lib/format";
 import {
   CHEAP_IVP,
   CHIP_LABEL,
   clockSpan,
   DESK_VIEWS,
+  isHalfDay,
   liveRead,
   mapLayersOf,
   movesFromClose,
@@ -286,7 +288,7 @@ export function OptionsDesk({
   stale: boolean;
 }) {
   const { feed, session, now } = useLive();
-  const halfDay = e.tickers.some((t) => t.half_day);
+  const halfDay = isHalfDay(e);
   const [picked, setPicked] = useState<DeskView | null>(manualView ? initialView : null);
   const view: DeskView = picked ?? (live && now !== null ? viewForClock(e.session, halfDay, new Date(now)) : initialView);
   const [symbol, setSymbol] = useState<string | null>(initialSymbol);
@@ -544,6 +546,7 @@ export function OptionsDesk({
             <p>The single keys work while focus is inside the desk. Cmd K or Ctrl K works anywhere on the page.</p>
           </div>
         ) : null}
+        <OptionsDay e={e} />
         {stale ? (
           <p role="alert" className="text-bad flex basis-full items-start gap-2 text-sm">
             <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
