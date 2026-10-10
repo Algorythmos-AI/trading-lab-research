@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { handleQuote } from "@/lib/quote-route";
 import { CACHE_MS, MAX_CACHED, MAX_SYMBOLS, alpacaKeys, fetchQuotes, normalise, parseSymbols, resetQuoteCache } from "@/lib/quote";
+import optionsSchema from "@/lib/options.schema.json";
 
 const NOW = new Date("2026-10-12T15:00:00Z");
 const KEYS = { id: "test-key-id", secret: "test-key-secret" };
@@ -32,8 +33,8 @@ describe("symbols", () => {
     expect(parseSymbols(null)).toBeNull();
     const many = Array.from({ length: MAX_SYMBOLS + 20 }, (_, i) => `A${i}`).join(",");
     expect(parseSymbols(many)!.length).toBe(MAX_SYMBOLS);
-    // One options edition may carry 60 names; the cap must not drop any of them.
-    expect(MAX_SYMBOLS).toBe(60);
+    // The page asks for every name in the edition; the cap must not drop any of them.
+    expect(MAX_SYMBOLS).toBe(optionsSchema.properties.tickers.maxItems);
   });
 });
 
@@ -142,6 +143,21 @@ describe("fetchQuotes", () => {
     expect(f).toHaveBeenCalledTimes(calls);
     await fetchQuotes([name(0)], KEYS, NOW, f, "https://data.example");
     expect(f).toHaveBeenCalledTimes(calls + 1);
+  });
+
+  it("answers a fresh name even when this very call pushes it out of a full cache", async () => {
+    // SPY goes in first, so it is the oldest entry; then the cache is filled to its bound, all at one instant.
+    const f = okFetch({ SPY: snap(779.1) });
+    await fetchQuotes(["SPY"], KEYS, NOW, f, "https://data.example");
+    const filler = Array.from({ length: MAX_CACHED - 1 }, (_, i) => `F${i}`);
+    for (let i = 0; i < filler.length; i += MAX_SYMBOLS) {
+      await fetchQuotes(filler.slice(i, i + MAX_SYMBOLS), KEYS, NOW, f, "https://data.example");
+    }
+    // One new name overflows the cache. SPY is still fresh and must be in the answer, not in `missing`.
+    const r = await fetchQuotes(["SPY", "NEW"], KEYS, NOW, f, "https://data.example");
+    expect(String(f.mock.calls.at(-1)![0])).toContain("symbols=NEW&");
+    expect(r.quotes.SPY!.price).toBe(779.1);
+    expect(r.missing).toEqual(["NEW"]);
   });
 
   it("throws on an HTTP error without caching it", async () => {

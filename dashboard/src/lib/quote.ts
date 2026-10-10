@@ -26,7 +26,7 @@ export interface QuoteResponse {
   fixture?: true;
 }
 
-/** As many names as one options edition may carry (options.schema.json), so the board never loses a price to the cap. */
+/** As many names as one options edition may carry (options.schema.json; a test holds the two equal), so the board never loses a price to the cap. */
 export const MAX_SYMBOLS = 60;
 const SYMBOL = /^[A-Z][A-Z0-9.]{0,9}$/;
 const DEFAULT_DATA_URL = "https://data.alpaca.markets";
@@ -136,17 +136,18 @@ export async function fetchQuotes(
       cache.delete(s);
       cache.set(s, { at: t, quote: normalise(map[s] ?? null) });
     }
-    prune();
   }
   const quotes: Record<string, Quote> = {};
   const missing: string[] = [];
   let oldest = t;
   for (const s of symbols) {
-    // Every asked name was fresh or has just been written; a name pruned in between reads as missing.
+    // Every asked name was fresh or has just been written.
     const hit = cache.get(s);
     if (hit) oldest = Math.min(oldest, hit.at);
     if (hit?.quote) quotes[s] = hit.quote;
     else missing.push(s);
   }
+  // Only after the answer is read: pruning first could drop a fresh name this answer still needs.
+  prune();
   return { as_of: new Date(oldest).toISOString(), feed: "iex", quotes, missing };
 }
