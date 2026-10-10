@@ -305,9 +305,23 @@ export interface Snapshot {
              */
             tier2?: (string | null)[] | null;
             primary?: string | null;
+            scan_failed?: boolean | null;
             error?: string | null;
           } | null)[]
         | null;
+      near?: {
+        total?: number | null;
+        /**
+         * @maxItems 2000
+         */
+        rows?:
+          | ({
+              symbol?: string | null;
+              price?: number | null;
+              reason?: string | null;
+            } | null)[]
+          | null;
+      } | null;
       log?: {
         file?: string | null;
         exists?: boolean | null;
@@ -406,6 +420,15 @@ export interface Snapshot {
             shadow_resolved?: number | null;
           } | null)[]
         | null;
+      funnel?: {
+        session?: string | null;
+        pool?: {
+          [k: string]: number | null | undefined;
+        } | null;
+        counts?: {
+          [k: string]: number | null | undefined;
+        } | null;
+      } | null;
       log?: {
         file?: string | null;
         exists?: boolean | null;

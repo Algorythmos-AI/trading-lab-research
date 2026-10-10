@@ -49,6 +49,24 @@ export interface Scan {
   candidates: Candidate[];
   /** Why names went no further, as the newest scan saw it. Null until the host publishes these counts. */
   why: Why | null;
+  /** True when the newest scan had no data to scan: an empty universe, or no stock with a pre-market bar. That
+   * is a data failure, never a quiet morning. False for an older host that does not say. */
+  failed: boolean;
+  /** The feed the newest scan read ("hybrid", "sip", "iex"), when the host says. */
+  feed: string | null;
+}
+
+export interface NearRow {
+  symbol: string;
+  price: number | null;
+  /** The one filter this name failed, in words. */
+  label: string;
+}
+
+/** Names that failed exactly one filter in the newest scan. Null until the host publishes them. */
+export interface Near {
+  total: number;
+  rows: NearRow[];
 }
 
 export interface WhyRow {
@@ -121,6 +139,24 @@ export function why(stats: Record<string, unknown> | null | undefined, at: strin
   };
 }
 
+export function near(s: Snapshot): Near | null {
+  const n = s.ops?.routine?.near;
+  if (!n || !isNum(n.total)) return null;
+  const rows = list(n.rows)
+    .filter((r): r is { symbol: string; price?: number | null; reason?: string | null } => typeof r.symbol === "string" && r.symbol.length > 0)
+    .map((r) => ({ symbol: r.symbol, price: count(r.price), label: REASON[r.reason ?? ""] ?? "Another filter" }));
+  return { total: n.total, rows };
+}
+
+/** The forward test's own funnel for its newest session: the after-close pool, in counts. Kept apart from the
+ * dry run's (`scan().why`): the two read different data at different times and are never merged. */
+export function ofRecord(s: Snapshot): { session: string | null; kept: number | null; universe: number | null; why: Why } | null {
+  const f = s.ops?.forward?.funnel;
+  const w = f ? why(f.counts as Record<string, unknown> | undefined, null) : null;
+  if (!f || !w || w.steps.length === 0) return null;
+  return { session: f.session ?? null, kept: count(f.pool?.kept), universe: count(f.pool?.universe), why: w };
+}
+
 export function scan(s: Snapshot): Scan {
   const r = s.ops?.routine;
   const date = r?.date ?? null;
@@ -166,6 +202,8 @@ export function scan(s: Snapshot): Scan {
     latest,
     candidates,
     why: why(newest?.stats as Record<string, unknown> | undefined, newest?.as_of_et ?? null),
+    failed: newest?.scan_failed === true || (latest !== null && (latest.universe === 0 || latest.traded === 0)),
+    feed: typeof newest?.feed === "string" ? newest.feed : null,
   };
 }
 

@@ -1159,6 +1159,25 @@
    "errors": 0,
    "exists": true,
    "first": "2026-09-28",
+   "funnel": {
+    "counts": {
+     "drop_catalyst_missing": 22,
+     "drop_float": 14,
+     "drop_rvol": 9,
+     "n_chart_ok": 1,
+     "n_kept": 31,
+     "n_passed": 2,
+     "n_primary": 1,
+     "n_tier1": 2,
+     "n_tier2": 1
+    },
+    "pool": {
+     "kept": 31,
+     "snapshot_symbols": 812,
+     "universe": 4393
+    },
+    "session": "2026-09-28"
+   },
    "last": "2026-09-28",
    "latest_scorecard": "scorecard_2026-09-28.md",
    "log": {
@@ -1669,6 +1688,26 @@
     "last_error": "OSError: [Errno 28] No space left on device: '~/trading/research/forward/routine/2026-09-28/1131_signals.json'",
     "modified": "2026-09-28T15:31:00+00:00"
    },
+   "near": {
+    "rows": [
+     {
+      "price": 4.13,
+      "reason": "catalyst_missing",
+      "symbol": "ZZZA"
+     },
+     {
+      "price": 9.5,
+      "reason": "float",
+      "symbol": "ZZZB"
+     },
+     {
+      "price": 2.84,
+      "reason": "rvol",
+      "symbol": "ZZZC"
+     }
+    ],
+    "total": 3
+   },
    "stages": [
     {
      "as_of_et": "08:00",
@@ -1678,6 +1717,7 @@
      "error": null,
      "feed": "iex",
      "primary": null,
+     "scan_failed": false,
      "stage": "tier1",
      "stats": {
       "float_unknown": 0.0,
@@ -1698,6 +1738,7 @@
      "error": null,
      "feed": "iex",
      "primary": null,
+     "scan_failed": false,
      "stage": "charts",
      "stats": {
       "float_unknown": 0.0,
@@ -1719,6 +1760,7 @@
      "error": null,
      "feed": "iex",
      "primary": null,
+     "scan_failed": false,
      "stage": "tier2",
      "stats": {
       "float_unknown": 0.0,
@@ -1746,6 +1788,7 @@
      "error": null,
      "feed": "iex",
      "primary": null,
+     "scan_failed": false,
      "stage": "tickets",
      "stats": {
       "float_unknown": 0.0,

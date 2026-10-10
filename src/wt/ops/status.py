@@ -416,10 +416,38 @@ def _state(ctx: Ctx, rel: str, legacy: str) -> Path:
     return old if not new.exists() and old.exists() else new
 
 
+NEAR_MAX = 20
+
+
+def near_misses(reached: object) -> dict | None:
+    """Names that failed exactly one hard filter in a stage's funnel record: ticker, price and the reason's code
+    without its suffix (a catalyst category comes from a headline and is never published). At most NEAR_MAX rows,
+    by reason then ticker; `total` says how many there were."""
+    if not isinstance(reached, list):
+        return None
+    rows = []
+    for r in reached:
+        why = r.get("reasons") if isinstance(r, dict) else None
+        if isinstance(r, dict) and r.get("reached") == "kept" and isinstance(why, list) and len(why) == 1 \
+                and isinstance(r.get("symbol"), str):
+            rows.append({"symbol": r["symbol"], "price": _num(r.get("price"), 2), "reason": str(why[0]).split(":")[0]})
+    rows.sort(key=lambda x: (x["reason"], x["symbol"]))
+    return {"total": len(rows), "rows": rows[:NEAR_MAX]}
+
+
+def forward_funnel(doc: object) -> dict | None:
+    """The newest funnel of record (Set F on the after-close pool), in counts: the scan's and each funnel step's."""
+    part = ((doc.get("parts") or {}).get("set_F") if isinstance(doc, dict) else None) or {}
+    if not isinstance(part, dict) or not isinstance(part.get("funnel"), dict):
+        return None
+    ints = lambda d: {k: v for k, v in (d or {}).items() if type(v) is int}      # noqa: E731
+    return {"session": doc.get("session"), "pool": ints(part.get("pool")), "counts": ints(part["funnel"])}
+
+
 def src_routine(ctx: Ctx) -> dict:
     base = _state(ctx, "routine", "research/forward/routine")
     day = _latest_date_dir(base)
-    stages = []
+    stages, near = [], None
     if day:
         for p in sorted(day.glob("*.json")):
             try:
@@ -431,6 +459,8 @@ def src_routine(ctx: Ctx) -> dict:
                 continue
             stats = {k: v for k, v in (d.get("stats") or {}).items() if isinstance(v, int | float)}
             prim = d.get("primary")
+            if "reached" in d:                       # the newest stage that holds a funnel record wins
+                near = near_misses(d.get("reached"))
             stages.append({"file": p.name, "stage": d.get("stage"), "as_of_et": d.get("as_of_et"),
                            "feed": d.get("feed"), "stats": stats,
                            "counts": {k: len(v) for k, v in d.items() if isinstance(v, list)},
@@ -438,9 +468,10 @@ def src_routine(ctx: Ctx) -> dict:
                                      for x in (d.get("tier1") or [])[:20] if isinstance(x, dict)],
                            "tier2": [x.get("symbol") if isinstance(x, dict) else str(x) for x in (d.get("tier2") or [])][:10],
                            "primary": (prim.get("symbol") if isinstance(prim, dict) else prim),
+                           "scan_failed": bool(d.get("scan_failed")) if "stats" in d else None,
                            "error": None})
     logs = sorted((ctx.deployed / "logs").glob("routine_*.log"))
-    return {"date": day.name if day else None, "stages": stages,
+    return {"date": day.name if day else None, "stages": stages, "near": near,
             "log": _log_digest(logs[-1]) if logs else None,
             "launchd_err": _log_digest(ctx.deployed / "logs/launchd_routine.err", 6)}
 
@@ -498,6 +529,7 @@ def src_forward(ctx: Ctx) -> dict:
             "first": sessions[0] if sessions else None, "last": sessions[-1] if sessions else None,
             "errors": len(errors), "bad_lines": bad, "strategies": strategies,
             "books": forward_book.view([x for x in rows if isinstance(x, dict)], funnels),
+            "funnel": next((f for f in (forward_funnel(d) for d in reversed(funnels)) if f), None),
             "latest_scorecard": cards[-1].name if cards else None,
             "log": _log_digest(fl[-1]) if fl else None}
 

@@ -118,7 +118,9 @@ ALLOW: dict[str, Any] = {
                      "ahead": I},
         "routine": {"date": S, "stages": [{"stage": S, "as_of_et": S, "feed": S, "stats": Map(N), "counts": Map(I),
                                            "tier1": [{"symbol": S, "score": N}], "tier2": [S], "primary": S,
-                                           "error": T}], "log": LOG},
+                                           "scan_failed": B, "error": T}],
+                    # names that failed exactly one hard filter in the newest stage: ticker, price, closed code
+                    "near": {"total": I, "rows": [{"symbol": S, "price": N, "reason": S}]}, "log": LOG},
         "paper": {"events": Map(I), "bad_lines": I, "armed_sessions": I, "last_armed": S, "trades": I, "total_r": N,
                   "mean_r": N, "virtual": {"equity": N, "start": N, "latched": B, "latch_reason": T},
                   "recent": [{"ts": S, "event": S, "detail": T}],
@@ -131,6 +133,8 @@ ALLOW: dict[str, Any] = {
                     "books": [{"strategy": S, "hyp": S, "sessions": I, "errors": I, "first": S, "last": S, "trades": I,
                                "total_r": N, "max_dd_r": N, "last_trade": S, "risk_usd": N, "nominal_usd": N,
                                "signals": I, "refused": I, "shadow_resolved": I}],
+                    # the newest funnel of record (Set F, after-close pool): counts only
+                    "funnel": {"session": S, "pool": Map(I), "counts": Map(I)},
                     "log": LOG},
         "host": {"jobs": [{"label": S, "local_time": S, "name": S, "loaded": B, "running": B, "last_exit": I}],
                  "disk_free_gb": N, "disk_total_gb": N, "disk_floor_gb": N, "disk_target_gb": N, "swap_warn_pct": N,
