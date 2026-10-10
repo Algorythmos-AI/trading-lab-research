@@ -39,6 +39,8 @@ export function ChartContainer({
   return (
     <ChartContext.Provider value={{ config }}>
       <div
+        // A labelled chart is one picture to a screen reader; the label is only allowed on an element with a role.
+        role={props["aria-label"] ? "img" : undefined}
         data-slot="chart"
         data-chart={chartId}
         className={cn(

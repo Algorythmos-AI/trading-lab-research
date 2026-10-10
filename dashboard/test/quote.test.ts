@@ -212,6 +212,36 @@ describe("GET /api/quote", () => {
     expect((await res.json()).quotes.SPY.price).toBe(779.1);
   });
 
+  it("fixture variants: the fx cookie turns the feed off, makes it fail, or makes it tick", async () => {
+    vi.stubEnv("DASHBOARD_FIXTURE", "1");
+    vi.stubEnv("VERCEL_ENV", "");
+    const withFx = (fx: string, at: Date = NOW) =>
+      handleQuote(new Request("https://lab.example/api/quote?s=SPY", { headers: { cookie: `theme=x; fx=${fx}` } }), at);
+    expect((await withFx("quotes-off")).status).toBe(503);
+    expect((await withFx("quotes-error")).status).toBe(502);
+    const plain = await (await get("?s=SPY")).json();
+    const held = await (await withFx("quotes-tick", new Date("2026-10-12T15:00:02Z"))).json();
+    const flipped = await (await withFx("quotes-tick", new Date("2026-10-12T15:00:03Z"))).json();
+    expect(held.quotes.SPY.price).toBe(plain.quotes.SPY.price);
+    expect(Math.round((flipped.quotes.SPY.price - held.quotes.SPY.price) * 100)).toBe(1);
+    expect(flipped.quotes.SPY.at).toBe("2026-10-12T15:00:03.000Z");
+    expect(plain.quotes.SPY.at).toBe("2026-10-12T15:00:00.000Z");
+  });
+
+  it("the fx cookie does nothing outside fixture mode, and fixture mode is refused in production", async () => {
+    vi.stubEnv("ALPACA_API_KEY_ID", "test-key-id");
+    vi.stubEnv("ALPACA_API_SECRET_KEY", "test-key-secret");
+    vi.stubGlobal("fetch", okFetch({ SPY: snap(779.1) }));
+    const off = () => handleQuote(new Request("https://lab.example/api/quote?s=SPY", { headers: { cookie: "fx=quotes-off" } }), NOW);
+    vi.stubEnv("DASHBOARD_FIXTURE", "");
+    expect((await off()).status).toBe(200);
+    vi.stubEnv("DASHBOARD_FIXTURE", "1");
+    vi.stubEnv("VERCEL_ENV", "production");
+    const res = await off();
+    expect(res.status).toBe(200);
+    expect((await res.json()).fixture).toBeUndefined();
+  });
+
   it("fixture mode answers from the options fixture with no keys and no network", async () => {
     vi.stubEnv("DASHBOARD_FIXTURE", "1");
     vi.stubEnv("VERCEL_ENV", "");

@@ -200,7 +200,13 @@ function Registry({
       {rows.length === 0 ? (
         <p className="text-muted-foreground text-xs">{empty}</p>
       ) : (
-        <div className="max-h-80 overflow-y-auto">
+        <div
+          // A scrolling list must be reachable by keyboard, or its lower rows cannot be read without a mouse.
+          role="region"
+          aria-label={caption}
+          tabIndex={0}
+          className="focus-visible:ring-ring/60 max-h-80 overflow-y-auto rounded-md outline-none focus-visible:ring-2"
+        >
           <Table>
             <TableHeader>
               <TableRow>

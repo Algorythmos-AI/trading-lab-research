@@ -72,10 +72,20 @@ DASHBOARD_FIXTURE=1 pnpm dev        # serves test/fixtures/snapshot.json, no sto
 | `pnpm lint` | ESLint (Next.js core-web-vitals + TypeScript rules) |
 | `pnpm typecheck` | `tsc --noEmit` in strict mode |
 | `pnpm test` | Vitest unit tests: HMAC vectors, schema and denylist, health, summary, watchdog, ingest |
-| `pnpm test:e2e` | Playwright smoke test of all six pages in fixture mode. CI only: it needs `pnpm build` first and a browser installed by the workflow (`pnpm exec playwright install --with-deps chromium`) |
+| `pnpm test:e2e` | Playwright in fixture mode: a smoke test of every page (`smoke.spec.ts`), the Options page in each failure state and under live updates (`states.spec.ts`), and an axe accessibility scan of every stocks page in both themes (`a11y.spec.ts`). CI only: it needs `pnpm build` first and a browser installed by the workflow (`pnpm exec playwright install --with-deps chromium`) |
 | `pnpm gen:types` | Regenerate every `src/lib/*.types.ts` from its schema. CI fails when any of them differs from what is committed |
 
 Fixture mode is refused on production deployments, and the page shows a banner whenever it is on.
+
+**Fixture variants.** In fixture mode only, the `fx` cookie bends the fixtures into the states a pane must survive
+(`src/lib/fixture-variants.ts`): `empty` (nothing published), `error` (storage down), `partial` (a valid but sparse
+edition), `poison` (a stored edition that no longer matches its schema), `quotes-off`, `quotes-error` and
+`quotes-tick` (the live price flips by a cent every three seconds). Join several with a dot: `fx=partial.quotes-tick`.
+Outside fixture mode the cookie is never read.
+
+**One pane fails alone.** Each pane of the Options page sits in a `PaneBoundary`
+(`src/components/client/pane-boundary.tsx`). A pane that cannot be drawn shows a short notice with a retry; the
+other panes keep working.
 
 ## Environment variables
 

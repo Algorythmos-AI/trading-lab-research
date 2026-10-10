@@ -3,6 +3,7 @@ import Link from "next/link";
 import { TradeBars } from "@/components/charts/trade-bars";
 import { Empty } from "@/components/empty";
 import { LiveCardChip } from "@/components/client/live-layer";
+import { PaneBoundary } from "@/components/client/pane-boundary";
 import { EvidenceBars, LevelMap, RuleRanges, StructureMap } from "@/components/options-charts";
 import { Panel } from "@/components/panel";
 import { Badge } from "@/components/ui/badge";
@@ -212,70 +213,77 @@ function CloseRow({ t }: { t: OptionsTicker }) {
   );
 }
 
+/** One name's card: its level map, the nearest zones as a list, and every level. */
+function TickerCard({ t }: { t: OptionsTicker }) {
+  const { above, at, below } = ladder(t);
+  const shownAbove = above.slice(0, LADDER_DEPTH).reverse();
+  const shownBelow = below.slice(0, LADDER_DEPTH);
+  const hidden = above.length + below.length - shownAbove.length - shownBelow.length;
+  return (
+    <Panel
+      id={`o-${t.symbol}`}
+      title={<span className="font-mono">{t.symbol}</span>}
+      action={<LiveCardChip t={{ ...t, bars: undefined }} />}
+      means={
+        <span className="font-mono">
+          H {num(t.last?.high, 2)} · L {num(t.last?.low, 2)} · ATR {num(t.atr14, 2)}
+          {t.expected_move?.annual_iv != null ? ` · IV ${fracPct(t.expected_move.annual_iv, 1)}` : ""}
+          {t.half_day ? " · half day" : ""}
+        </span>
+      }
+    >
+      <div className="grid gap-3">
+        <LevelMap t={t} />
+        <details className="text-sm">
+          <summary className="text-muted-foreground cursor-pointer text-xs">Nearest zones as a list</summary>
+        <ol aria-label={`${t.symbol} zones, highest first`} className="mt-2 grid gap-1.5">
+          {shownAbove.map((r, i) => (
+            <RungRow key={`a${i}`} r={r} side="above" />
+          ))}
+          <CloseRow t={t} />
+          {at.map((r, i) => (
+            <RungRow key={`i${i}`} r={r} side="at" />
+          ))}
+          {shownBelow.map((r, i) => (
+            <RungRow key={`b${i}`} r={r} side="below" />
+          ))}
+        </ol>
+        </details>
+        <details className="text-sm">
+          <summary className="text-muted-foreground cursor-pointer text-xs">
+            All {(t.levels ?? []).length} levels{hidden > 0 ? ` (${hidden} more zones)` : ""}
+          </summary>
+          <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 font-mono text-xs sm:grid-cols-3">
+            {[...(t.levels ?? [])]
+              .sort((a, b) => b.price - a.price)
+              .map((l) => (
+                <li key={l.name} title={levelName(l.name)} className="flex justify-between gap-2">
+                  <span className="text-muted-foreground">{l.name}</span>
+                  <span>{l.lo != null && l.hi != null ? `${num(l.lo, 2)}–${num(l.hi, 2)}` : num(l.price, 2)}</span>
+                </li>
+              ))}
+          </ul>
+        </details>
+        {(t.problems ?? []).length > 0 ? (
+          <p className="text-warn flex items-start gap-1.5 text-xs">
+            <TriangleAlert aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+            {(t.problems ?? []).join(" ")}
+          </p>
+        ) : null}
+      </div>
+    </Panel>
+  );
+}
+
+/** A card per name, each behind its own boundary, so one name that cannot be drawn leaves the others standing. */
 export function TickerCards({ e }: { e: Options }) {
   return (
     <section aria-label="Level ladders" className="grid gap-5 lg:grid-cols-2 group-data-[focus=on]/focus:xl:grid-cols-3">
-      {e.tickers.map((t) => {
-        const { above, at, below } = ladder(t);
-        const shownAbove = above.slice(0, LADDER_DEPTH).reverse();
-        const shownBelow = below.slice(0, LADDER_DEPTH);
-        const hidden = above.length + below.length - shownAbove.length - shownBelow.length;
-        return (
-          <Panel
-            key={t.symbol}
-            id={`o-${t.symbol}`}
-            title={<span className="font-mono">{t.symbol}</span>}
-            action={<LiveCardChip t={{ ...t, bars: undefined }} />}
-            means={
-              <span className="font-mono">
-                H {num(t.last?.high, 2)} · L {num(t.last?.low, 2)} · ATR {num(t.atr14, 2)}
-                {t.expected_move?.annual_iv != null ? ` · IV ${fracPct(t.expected_move.annual_iv, 1)}` : ""}
-                {t.half_day ? " · half day" : ""}
-              </span>
-            }
-          >
-            <div className="grid gap-3">
-              <LevelMap t={t} />
-              <details className="text-sm">
-                <summary className="text-muted-foreground cursor-pointer text-xs">Nearest zones as a list</summary>
-              <ol aria-label={`${t.symbol} zones, highest first`} className="mt-2 grid gap-1.5">
-                {shownAbove.map((r, i) => (
-                  <RungRow key={`a${i}`} r={r} side="above" />
-                ))}
-                <CloseRow t={t} />
-                {at.map((r, i) => (
-                  <RungRow key={`i${i}`} r={r} side="at" />
-                ))}
-                {shownBelow.map((r, i) => (
-                  <RungRow key={`b${i}`} r={r} side="below" />
-                ))}
-              </ol>
-              </details>
-              <details className="text-sm">
-                <summary className="text-muted-foreground cursor-pointer text-xs">
-                  All {(t.levels ?? []).length} levels{hidden > 0 ? ` (${hidden} more zones)` : ""}
-                </summary>
-                <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 font-mono text-xs sm:grid-cols-3">
-                  {[...(t.levels ?? [])]
-                    .sort((a, b) => b.price - a.price)
-                    .map((l) => (
-                      <li key={l.name} title={levelName(l.name)} className="flex justify-between gap-2">
-                        <span className="text-muted-foreground">{l.name}</span>
-                        <span>{l.lo != null && l.hi != null ? `${num(l.lo, 2)}–${num(l.hi, 2)}` : num(l.price, 2)}</span>
-                      </li>
-                    ))}
-                </ul>
-              </details>
-              {(t.problems ?? []).length > 0 ? (
-                <p className="text-warn flex items-start gap-1.5 text-xs">
-                  <TriangleAlert aria-hidden className="mt-0.5 size-3.5 shrink-0" />
-                  {(t.problems ?? []).join(" ")}
-                </p>
-              ) : null}
-            </div>
-          </Panel>
-        );
-      })}
+      {e.tickers.map((t) => (
+        <PaneBoundary key={t.symbol} name={`${t.symbol} levels`}>
+          <TickerCard t={t} />
+        </PaneBoundary>
+      ))}
     </section>
   );
 }
