@@ -48,7 +48,8 @@ wt.ops.publish                            POST /api/ingest            (productio
 - **Live prices** (`/api/quote?s=SPY,QQQ`, read by the Options page every 2 s while it is open, one poll shared by the
   glance strip, the level maps' live dot and the state chips; a quote older than 30 s shows as stale): last trades from
   Alpaca's free IEX feed, fetched on the server so the page keeps `connect-src 'self'` and never sees the keys. At most
-  12 symbols, cached 10 s per instance; 503 until the keys are set, 502 when Alpaca fails. Fixture mode answers from
+  60 symbols (as many as one options edition may carry), each cached 1.5 s per instance on its own, so two pages
+  asking for different names share what overlaps; 503 until the keys are set, 502 when Alpaca fails. Fixture mode answers from
   the options fixture with no keys and no network. Research only: the keys are market-data keys and nothing here
   can trade.
 - **Watchdog** (`src/lib/watchdog.ts`, pure and unit-tested): in a window a snapshot older than 35 min is late
@@ -72,7 +73,7 @@ DASHBOARD_FIXTURE=1 pnpm dev        # serves test/fixtures/snapshot.json, no sto
 | `pnpm typecheck` | `tsc --noEmit` in strict mode |
 | `pnpm test` | Vitest unit tests: HMAC vectors, schema and denylist, health, summary, watchdog, ingest |
 | `pnpm test:e2e` | Playwright smoke test of all six pages in fixture mode. CI only: it needs `pnpm build` first and a browser installed by the workflow (`pnpm exec playwright install --with-deps chromium`) |
-| `pnpm gen:types` | Regenerate `src/lib/snapshot.types.ts` after the schema changes |
+| `pnpm gen:types` | Regenerate every `src/lib/*.types.ts` from its schema. CI fails when any of them differs from what is committed |
 
 Fixture mode is refused on production deployments, and the page shows a banner whenever it is on.
 

@@ -26,11 +26,14 @@ export interface QuoteResponse {
   fixture?: true;
 }
 
-export const MAX_SYMBOLS = 12;
+/** As many names as one options edition may carry (options.schema.json; a test holds the two equal), so the board never loses a price to the cap. */
+export const MAX_SYMBOLS = 60;
 const SYMBOL = /^[A-Z][A-Z0-9.]{0,9}$/;
 const DEFAULT_DATA_URL = "https://data.alpaca.markets";
-/** Tabs on one instance share each answer for this long, just under the page's 2-second poll; the free plan allows 200 calls a minute. */
+/** Each name's answer is shared on one instance for this long, just under the page's 2-second poll; the free plan allows 200 calls a minute. */
 export const CACHE_MS = 1_500;
+/** Names remembered at once. Far above what the pages ask for; a bound, so a stream of odd symbols cannot grow the cache. */
+export const MAX_CACHED = 256;
 
 /** The symbols from `?s=SPY,QQQ`: upper-cased, valid, unique, at most MAX_SYMBOLS. Null when none are valid. */
 export function parseSymbols(raw: string | null): string[] | null {
@@ -80,16 +83,27 @@ export function normalise(raw: RawSnapshot): Quote | null {
   };
 }
 
-let cache: { key: string; at: number; value: QuoteResponse } | null = null;
+/** One name's last answer: its quote (null when Alpaca had no usable price) and when it was fetched. */
+const cache = new Map<string, { at: number; quote: Quote | null }>();
 
 /** Test hook: forget the shared cache. */
 export function resetQuoteCache(): void {
-  cache = null;
+  cache.clear();
+}
+
+/** Drop the oldest names beyond MAX_CACHED. A Map iterates in insertion order, and a refreshed name is re-inserted. */
+function prune(): void {
+  for (const s of cache.keys()) {
+    if (cache.size <= MAX_CACHED) return;
+    cache.delete(s);
+  }
 }
 
 /**
- * Snapshots for `symbols` from Alpaca's IEX feed, cached for CACHE_MS per symbol set. Throws on a transport or
- * HTTP error (the route answers 502); the keys and the response body are never logged.
+ * Snapshots for `symbols` from Alpaca's IEX feed. Each name is cached for CACHE_MS on its own, so two pages asking
+ * for different names share what overlaps instead of evicting each other; only the names past their time go
+ * upstream, in one call. `as_of` is the oldest fetch among the names answered. Throws on a transport or HTTP error
+ * (the route answers 502) and caches nothing from it; the keys and the response body are never logged.
  */
 export async function fetchQuotes(
   symbols: string[],
@@ -98,29 +112,42 @@ export async function fetchQuotes(
   fetchImpl: typeof fetch = fetch,
   baseUrl: string = process.env.ALPACA_DATA_URL || DEFAULT_DATA_URL,
 ): Promise<QuoteResponse> {
-  const key = [...symbols].sort().join(",");
-  if (cache && cache.key === key && now.getTime() - cache.at < CACHE_MS) return cache.value;
-  const url = `${baseUrl}/v2/stocks/snapshots?symbols=${encodeURIComponent(symbols.join(","))}&feed=iex`;
-  const res = await fetchImpl(url, {
-    headers: { "APCA-API-KEY-ID": keys.id, "APCA-API-SECRET-KEY": keys.secret, accept: "application/json" },
-    cache: "no-store",
-    signal: AbortSignal.timeout(8_000),
+  const t = now.getTime();
+  // An entry stamped after `now` (a clock that stepped back) is not trusted either.
+  const due = symbols.filter((s) => {
+    const hit = cache.get(s);
+    return !hit || t < hit.at || t - hit.at >= CACHE_MS;
   });
-  if (!res.ok) {
-    logEvent("quote.fetch", { outcome: "http-error", status: res.status });
-    throw new Error(`alpaca ${res.status}`);
+  if (due.length > 0) {
+    const url = `${baseUrl}/v2/stocks/snapshots?symbols=${encodeURIComponent(due.join(","))}&feed=iex`;
+    const res = await fetchImpl(url, {
+      headers: { "APCA-API-KEY-ID": keys.id, "APCA-API-SECRET-KEY": keys.secret, accept: "application/json" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) {
+      logEvent("quote.fetch", { outcome: "http-error", status: res.status });
+      throw new Error(`alpaca ${res.status}`);
+    }
+    const body = (await res.json()) as Record<string, unknown>;
+    // Older API versions nest the map under "snapshots"; current ones return it at the top level.
+    const map = (body && typeof body.snapshots === "object" && body.snapshots !== null ? body.snapshots : body) as Record<string, RawSnapshot>;
+    for (const s of due) {
+      cache.delete(s);
+      cache.set(s, { at: t, quote: normalise(map[s] ?? null) });
+    }
   }
-  const body = (await res.json()) as Record<string, unknown>;
-  // Older API versions nest the map under "snapshots"; current ones return it at the top level.
-  const map = (body && typeof body.snapshots === "object" && body.snapshots !== null ? body.snapshots : body) as Record<string, RawSnapshot>;
   const quotes: Record<string, Quote> = {};
   const missing: string[] = [];
+  let oldest = t;
   for (const s of symbols) {
-    const q = normalise(map[s] ?? null);
-    if (q) quotes[s] = q;
+    // Every asked name was fresh or has just been written.
+    const hit = cache.get(s);
+    if (hit) oldest = Math.min(oldest, hit.at);
+    if (hit?.quote) quotes[s] = hit.quote;
     else missing.push(s);
   }
-  const value: QuoteResponse = { as_of: now.toISOString(), feed: "iex", quotes, missing };
-  cache = { key, at: now.getTime(), value };
-  return value;
+  // Only after the answer is read: pruning first could drop a fresh name this answer still needs.
+  prune();
+  return { as_of: new Date(oldest).toISOString(), feed: "iex", quotes, missing };
 }
