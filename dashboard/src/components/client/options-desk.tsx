@@ -365,6 +365,9 @@ export function OptionsDesk({
       ref={frame}
       aria-label="Options desk"
       data-desk-view={view}
+      // Set once the browser has taken over from the server-drawn page (the clock is only read in the browser).
+      // A click that lands before then is lost, so the browser tests wait for this before they touch the desk.
+      data-ready={now !== null ? "true" : undefined}
       onKeyDown={onKeyDown}
       className="bg-card w-[min(calc(100vw-2rem),96rem)] justify-self-center overflow-hidden rounded-xl border xl:grid xl:h-[calc(100dvh-10.5rem)] xl:min-h-[35rem] xl:grid-rows-[auto_minmax(0,1fr)]"
     >
