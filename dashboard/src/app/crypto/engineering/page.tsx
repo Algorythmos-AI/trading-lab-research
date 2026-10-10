@@ -1,9 +1,21 @@
 import { NoCryptoSnapshot } from "@/components/crypto/panels";
 import { PageHeading } from "@/components/page-heading";
 import { LAB_PLATFORM_TOC, LabPlatform } from "@/components/wiki/lab-platform";
+import {
+  ArchitectureSection,
+  ChallengersSection,
+  ClockSection,
+  ControlsSection,
+  CRYPTO_TOC,
+  CycleSection,
+  GlanceSection,
+  LearningSection,
+  LimitsSection,
+} from "@/components/wiki/crypto";
 import { ToneDot, WikiLayout, WikiSection, type TocGroup } from "@/components/wiki/kit";
 import type { Crypto } from "@/lib/crypto";
 import { duration, sydney } from "@/lib/format";
+import { requestTime } from "@/lib/now";
 import { loadCryptoSnapshot, loadSnapshot } from "@/lib/snapshot";
 import { entries } from "@/lib/types";
 import { jobDot } from "@/lib/wiki";
@@ -11,7 +23,7 @@ import { jobDot } from "@/lib/wiki";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Crypto engineering" };
 
-const TOC: TocGroup[] = [{ title: "Crypto desk", items: [{ id: "jobs", label: "The desk's jobs" }] }, LAB_PLATFORM_TOC];
+const TOC: TocGroup[] = [CRYPTO_TOC, LAB_PLATFORM_TOC];
 
 /** The crypto desk's scheduled jobs in the order a day meets them, with what each one does. */
 const JOBS: { key: string; name: string; what: string; when: string }[] = [
@@ -23,21 +35,36 @@ const JOBS: { key: string; name: string; what: string; when: string }[] = [
 
 export default async function CryptoEngineeringPage() {
   const [crypto, stocks] = await Promise.all([loadCryptoSnapshot(), loadSnapshot()]);
+  const c = crypto.status === "ok" ? crypto.snapshot : null;
+  const now = requestTime();
   return (
     <>
       <PageHeading
         title="Engineering"
-        intro="How the crypto desk is built: its jobs, and the lab platform it shares with the stocks desk. Pictures lead; the dots on them are live."
+        intro="How the crypto desk is built: the paper books, the bar cycle, the clock it runs on, its limits, how it learns, and the lab platform it shares with the stocks desk. Pictures lead; the dots on them are live."
       />
+      {crypto.status !== "ok" ? <NoCryptoSnapshot status={crypto.status} /> : null}
       <WikiLayout toc={TOC}>
+        {c ? (
+          <>
+            <GlanceSection s={c} />
+            <ArchitectureSection s={c} />
+            <CycleSection s={c} />
+            <ClockSection s={c} now={now} />
+            <LimitsSection s={c} />
+            <LearningSection s={c} />
+            <ChallengersSection s={c} />
+          </>
+        ) : null}
         <WikiSection
           id="jobs"
           eyebrow="Crypto desk"
           title="The desk's jobs"
           lede="Four scheduled jobs make up the desk. Each goes through the same job runner as the stocks desk's: lock, preflight, deadline, heartbeat."
         >
-          {crypto.status !== "ok" ? <NoCryptoSnapshot status={crypto.status} /> : <JobList s={crypto.snapshot} />}
+          {c ? <JobList s={c} /> : <p className="text-muted-foreground text-sm">No crypto snapshot to read the jobs from.</p>}
         </WikiSection>
+        <ControlsSection />
         <LabPlatform s={stocks.status === "ok" ? stocks.snapshot : null} />
       </WikiLayout>
     </>
