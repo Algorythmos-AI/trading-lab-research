@@ -1,5 +1,5 @@
-import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type BrowserContext } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { liveChips, scan, useTheme } from "./axe";
 
 // CI-only. Every stocks page, in both themes, must pass axe's WCAG 2.1 A and AA rules with nothing waived. The
 // Options page is also scanned in its failure states, since an error notice has to be as readable as the data.
@@ -19,32 +19,10 @@ const PAGES = [
   "/glossary",
 ];
 const OPTIONS_STATES = ["partial", "poison", "empty", "error"];
-const TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
 
-// Scanned at desktop width only for now. The phone layout is scanned when the new Options layout lands; wide
-// tables that scroll sideways on a phone are a known gap there.
-test.skip(({ isMobile }) => isMobile, "accessibility scan runs on the desktop project");
-
-/**
- * On the Options pages, wait until the live feed has drawn its state chips. Scanning before the first quote
- * arrives would judge a page with no chips on it, and whether a scan saw them would depend on timing.
- *
- * It waits for the chip itself, a badge. The words alone are not enough: "TESTING RESISTANCE" is also in the help
- * text the server sends, so a wait on the words passed at once, before the page was even interactive.
- */
-async function liveChips(page: import("@playwright/test").Page) {
-  await expect(page.locator('[data-slot="badge"]', { hasText: "TESTING RESISTANCE" }).first()).toBeVisible();
-}
-
-async function scan(page: import("@playwright/test").Page): Promise<string[]> {
-  const { violations } = await new AxeBuilder({ page }).withTags(TAGS).analyze();
-  return violations.map((v) => `${v.id} x${v.nodes.length}: ${v.nodes[0]?.target.join(" ") ?? ""}`);
-}
-
-async function useTheme(context: BrowserContext, theme: "light" | "dark") {
-  // The theme is read from storage before first paint, so no colour is caught half way through a transition.
-  await context.addInitScript((t) => window.localStorage.setItem("tl-theme", t), theme);
-}
+// These run at desktop width. The Options desk is also scanned at a phone's width, in a11y-phone.spec.ts; the other
+// pages are not yet, and wide tables that scroll sideways on a phone are a known gap there.
+test.skip(({ isMobile }) => isMobile, "these scans run on the desktop project");
 
 for (const theme of ["light", "dark"] as const) {
   for (const path of PAGES) {

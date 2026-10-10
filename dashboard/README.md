@@ -52,7 +52,10 @@ wt.ops.publish                            POST /api/ingest            (productio
   so a reload lands in the same place. `J`/`K` move between names and `1` `2` `3` switch view while focus is inside
   the desk. Cmd K or Ctrl K opens a command palette (`src/components/client/desk-palette.tsx`) from anywhere on the
   page: type a ticker, a view, a map layer or a page; names can also be found by "strong", "weak", "rich" or
-  "cheap". The selected name's level map carries a crosshair (point at it to read a price against the close in
+  "cheap". Below 640px the desk shows one pane at a time, the names or the selected name: choosing a name opens it,
+  a bar held at the bottom of the screen switches panes and steps to the next or previous name, the name's price
+  line stays at the top while the rest scrolls, and the open pane is kept in the address (`&pane=name`). The
+  selected name's level map carries a crosshair (point at it to read a price against the close in
   dollars, ATRs and expected moves, and the zone it is inside) and its zones, candles, expected move and labels can
   each be switched off. The page as it was before stays at `?view=classic` for one release.
 - **Live prices** (`/api/quote?s=SPY,QQQ`, read by the Options page every 2 s while it is open, one poll shared by the
@@ -82,7 +85,7 @@ DASHBOARD_FIXTURE=1 pnpm dev        # serves test/fixtures/snapshot.json, no sto
 | `pnpm lint` | ESLint (Next.js core-web-vitals + TypeScript rules) |
 | `pnpm typecheck` | `tsc --noEmit` in strict mode |
 | `pnpm test` | Vitest unit tests: HMAC vectors, schema and denylist, health, summary, watchdog, ingest |
-| `pnpm test:e2e` | Playwright in fixture mode: a smoke test of every page (`smoke.spec.ts`), the Options desk's layout, views, keyboard, sorting, failure states and live updates (`desk.spec.ts`), the same failure states on the classic Options page (`states.spec.ts`), and an axe accessibility scan of every stocks page in both themes (`a11y.spec.ts`). CI only: it needs `pnpm build` first and a browser installed by the workflow (`pnpm exec playwright install --with-deps chromium`) |
+| `pnpm test:e2e` | Playwright in fixture mode: a smoke test of every page (`smoke.spec.ts`), the Options desk's layout, views, keyboard, sorting, failure states, live updates and phone layout (`desk.spec.ts`), the same failure states on the classic Options page (`states.spec.ts`), and an axe accessibility scan of every stocks page in both themes (`a11y.spec.ts`) and of the Options desk at a phone's width (`a11y-phone.spec.ts`). CI only: it needs `pnpm build` first and a browser installed by the workflow (`pnpm exec playwright install --with-deps chromium`) |
 | `pnpm gen:types` | Regenerate every `src/lib/*.types.ts` from its schema. CI fails when any of them differs from what is committed |
 
 Fixture mode is refused on production deployments, and the page shows a banner whenever it is on.

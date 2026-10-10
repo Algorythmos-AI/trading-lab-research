@@ -2,6 +2,9 @@ import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 
 // CI-only. The Options desk: one frame with the monitor of every name beside the selected name's map. The server
 // runs in fixture mode; the `fx` cookie bends the fixtures into the states the desk must survive.
+//
+// Every test runs twice, at a laptop's width and at a phone's. A phone shows the list or the selected name, one at
+// a time, so a test that needs the other pane asks for it with `showPane`, which does nothing on a wide screen.
 async function variant(context: BrowserContext, baseURL: string | undefined, fx: string) {
   await context.addCookies([{ name: "fx", value: fx, url: baseURL! }]);
 }
@@ -17,23 +20,39 @@ async function open(page: Page, url: string) {
   await page.goto(url);
   await expect(desk(page)).toHaveAttribute("data-ready", "true");
 }
+const paneTab = (page: Page, name: string) => desk(page).getByRole("group", { name: "Pane" }).getByRole("button", { name, exact: true });
+/**
+ * On a phone, bring the list ("Names") or the selected name (its ticker) to the front. A wide screen shows both and
+ * has no bar to switch them. Whether this is a phone is read off the bar, not the button: a wrong ticker then fails
+ * here, on the click, instead of passing silently.
+ */
+async function showPane(page: Page, name: string) {
+  if (await page.locator("[data-desk-bar]").isVisible()) await paneTab(page, name).click();
+}
+/** Choose a name from the list, bringing the list back first where a phone has an open name in front of it. */
+async function pick(page: Page, symbol: string) {
+  await showPane(page, "Names");
+  await row(page, symbol).getByRole("button").click();
+}
+const detail = (page: Page, symbol: string) => page.locator(`[data-desk-detail="${symbol}"]`);
 const rows = (page: Page) => page.locator("[data-desk-row]");
 const row = (page: Page, symbol: string) => page.locator(`[data-desk-row="${symbol}"]`);
 const order = (page: Page) => rows(page).evaluateAll((els) => els.map((el) => el.getAttribute("data-desk-row")));
 
-test("the desk shows every name beside the selected name's map and takes live prices", async ({ page }) => {
+test("the desk shows every name and the selected name's map, and takes live prices", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await open(page, "/options?view=live");
   await expect(desk(page)).toBeVisible();
   await expect(rows(page)).toHaveCount(10);
-  // The first name is selected until another is chosen, and its level map is drawn.
-  await expect(page.locator('[data-desk-detail="SPY"]')).toBeVisible();
-  await expect(page.getByRole("img", { name: /^SPY: last 40 daily bars/ })).toBeVisible();
   // The shared feed reaches the monitor: SPY is 0.3 ATR above its close, inside its major resistance zone.
   await expect(row(page, "SPY")).toContainText("TESTING RESISTANCE");
   // The chip is on screen, not clipped off the edge of a narrow monitor.
   await expect(row(page, "SPY").getByText("TESTING RESISTANCE")).toBeInViewport({ ratio: 1 });
+  // The first name is selected until another is chosen, and its level map is drawn.
+  await showPane(page, "SPY");
+  await expect(detail(page, "SPY")).toBeVisible();
+  await expect(page.getByRole("img", { name: /^SPY: last 40 daily bars/ })).toBeVisible();
   await expect(page.getByTestId("SPY-live-mark")).toBeAttached();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
@@ -82,14 +101,16 @@ test("choosing a name changes the map at once and a reload lands on the same nam
   await row(page, "NVDA").click();
   await expect(page.locator('[data-desk-detail="NVDA"]')).toBeVisible();
   await expect(page.getByRole("img", { name: /^NVDA: last 40 daily bars/ })).toBeVisible();
-  await expect(row(page, "NVDA").getByRole("button")).toHaveAttribute("aria-pressed", "true");
+  // Found by tag, not by role: on a phone the list is behind the open name, and a role lookup skips what is hidden.
+  await expect(row(page, "NVDA").locator("button")).toHaveAttribute("aria-pressed", "true");
   await expect(page).toHaveURL(/s=NVDA/);
   await page.reload();
   await expect(page.locator('[data-desk-detail="NVDA"]')).toBeVisible();
   await expect(desk(page)).toHaveAttribute("data-desk-view", "brief");
 });
 
-test("the shortcuts still work after choosing a name with the mouse", async ({ page }) => {
+test("the shortcuts still work after choosing a name with the mouse", async ({ page, isMobile }) => {
+  test.skip(isMobile, "on a phone choosing a name opens it in place of the list; the phone test below covers that");
   await open(page, "/options?view=brief&s=SPY");
   // Click a cell, not the name's button: focus must still end up inside the desk.
   await row(page, "QQQ").locator("td").first().click();
@@ -105,7 +126,8 @@ test("the shortcuts still work after choosing a name with the mouse", async ({ p
   await expect(page.locator('[data-desk-detail="QQQ"]')).toBeVisible();
 });
 
-test("the keyboard moves between names and views while focus is in the desk", async ({ page }) => {
+test("the keyboard moves between names and views while focus is in the desk", async ({ page, isMobile }) => {
+  test.skip(isMobile, "the list and the name share the screen only on a wide one; the phone test below covers stepping");
   await open(page, "/options?view=brief&s=SPY");
   await row(page, "SPY").getByRole("button").focus();
   // Brief keeps the edition's order: SPY, QQQ, AAPL.
@@ -126,6 +148,7 @@ test("the keyboard moves between names and views while focus is in the desk", as
 
 test("the map reads a price under the pointer, and its layers switch off and on", async ({ page }) => {
   await open(page, "/options?view=brief&s=SPY");
+  await showPane(page, "SPY");
   const map = page.getByRole("img", { name: /^SPY: last 40 daily bars/ });
   const readout = page.locator("[data-map-readout]");
   await expect(readout).toContainText("Point at the map");
@@ -148,11 +171,71 @@ test("the map reads a price under the pointer, and its layers switch off and on"
   await expect(map.locator('[data-layer="move"]')).toBeHidden();
   await expect(map.locator('[data-layer="zones"]')).toBeVisible();
   // The choice belongs to the desk, not to one name: it holds when another name is chosen.
-  await row(page, "QQQ").getByRole("button").click();
+  await pick(page, "QQQ");
   await expect(page.locator('[data-desk-detail="QQQ"]')).toBeVisible();
   await expect(page.getByRole("img", { name: /^QQQ: last 40 daily bars/ }).locator('[data-layer="move"]')).toBeHidden();
   await page.getByRole("group", { name: "Map layers" }).getByRole("button", { name: "Expected move" }).click();
   await expect(page.getByRole("img", { name: /^QQQ: last 40 daily bars/ }).locator('[data-layer="move"]')).toBeVisible();
+});
+
+test("on a phone the desk shows one pane at a time, and the bar at the bottom switches panes and steps through names", async ({ page, isMobile }) => {
+  test.skip(!isMobile, "a wide screen shows the list and the name side by side");
+  const sideways = () => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  const monitor = page.locator("[data-desk-monitor]");
+  const bar = page.locator("[data-desk-bar]");
+  await open(page, "/options?view=brief");
+  // The list alone at first, with the bar in reach at the bottom of the screen.
+  await expect(monitor).toBeVisible();
+  await expect(detail(page, "SPY")).toBeHidden();
+  await expect(bar).toBeInViewport({ ratio: 1 });
+  await expect(paneTab(page, "Names")).toHaveAttribute("aria-pressed", "true");
+  expect(await sideways()).toBeLessThanOrEqual(0);
+  // A name opens in place of the list. The keyboard, and with it a screen reader's place, goes to its heading.
+  await row(page, "QQQ").click();
+  await expect(detail(page, "QQQ")).toBeVisible();
+  await expect(monitor).toBeHidden();
+  await expect(detail(page, "QQQ").getByRole("heading", { name: "QQQ" })).toBeFocused();
+  await expect(paneTab(page, "QQQ")).toHaveAttribute("aria-pressed", "true");
+  await expect(page).toHaveURL(/pane=name/);
+  // The name is taller than the screen, so the bar is held at the bottom of it.
+  await expect(bar).toBeInViewport({ ratio: 1 });
+  expect(await sideways()).toBeLessThanOrEqual(0);
+  // The two arrows step through the names in the list's order (Brief keeps the edition's: SPY, QQQ, AAPL)
+  // without leaving the name, and keep the focus so they can be pressed again.
+  await bar.getByRole("button", { name: "Next name" }).click();
+  await expect(detail(page, "AAPL")).toBeVisible();
+  await bar.getByRole("button", { name: "Previous name" }).click();
+  await expect(detail(page, "QQQ")).toBeVisible();
+  await expect(bar.getByRole("button", { name: "Previous name" })).toBeFocused();
+  await bar.getByRole("button", { name: "Previous name" }).click();
+  await expect(detail(page, "SPY")).toBeVisible();
+  await expect(page).toHaveURL(/s=SPY/);
+  // Half way down the name, its quote line is still at the top of the screen.
+  await detail(page, "SPY").evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    window.scrollTo(0, window.scrollY + box.top + box.height / 2);
+  });
+  await expect(detail(page, "SPY").getByRole("heading", { name: "SPY" })).toBeInViewport({ ratio: 1 });
+  // A reload lands on the same name, still open.
+  await page.reload();
+  await expect(desk(page)).toHaveAttribute("data-ready", "true");
+  await expect(detail(page, "SPY")).toBeVisible();
+  await expect(monitor).toBeHidden();
+  // Back to the list: the name is still the selected one there, and the address forgets the pane.
+  await paneTab(page, "Names").click();
+  await expect(monitor).toBeVisible();
+  await expect(detail(page, "SPY")).toBeHidden();
+  await expect(row(page, "SPY").getByRole("button")).toHaveAttribute("aria-pressed", "true");
+  await expect(page).not.toHaveURL(/pane=/);
+  // The bar's other button opens the selected name again. Choosing a view from there brings the list back: a view
+  // is the list's columns, so with the name in front it would change nothing on screen.
+  await paneTab(page, "SPY").click();
+  await expect(detail(page, "SPY")).toBeVisible();
+  await desk(page).getByRole("button", { name: "Review", exact: true }).click();
+  await expect(desk(page)).toHaveAttribute("data-desk-view", "review");
+  await expect(monitor).toBeVisible();
+  await expect(desk(page).getByRole("columnheader", { name: /^Paper trades/ })).toBeVisible();
+  await expect(page).not.toHaveURL(/pane=/);
 });
 
 const palette = (page: Page) => page.getByRole("dialog", { name: "Search names and actions" });
@@ -163,7 +246,7 @@ async function openPalette(page: Page) {
   await expect(palette(page).getByRole("combobox")).toBeFocused();
 }
 
-test("the command palette finds a name, a view and a layer, and hands the keyboard back to the desk", async ({ page }) => {
+test("the command palette finds a name, a view and a layer, and hands the keyboard back to the desk", async ({ page, isMobile }) => {
   await open(page, "/options?view=brief&s=SPY");
   await openPalette(page);
   await page.keyboard.type("nvda");
@@ -178,8 +261,9 @@ test("the command palette finds a name, a view and a layer, and hands the keyboa
   await page.keyboard.press("Escape");
   await expect(palette(page)).toBeHidden();
   await expect(page).toHaveURL(/s=NVDA/);
-  // The desk has the keyboard again, on the chosen name: J moves on from NVDA to the next in the edition.
-  await expect(row(page, "NVDA").getByRole("button")).toBeFocused();
+  // The desk has the keyboard again, on the chosen name: J moves on from NVDA to the next in the edition. On a
+  // phone the palette opened the name in place of the list, so there the keyboard is on the name's heading.
+  await expect(isMobile ? detail(page, "NVDA").getByRole("heading", { name: "NVDA" }) : row(page, "NVDA").getByRole("button")).toBeFocused();
   await page.keyboard.press("j");
   await expect(page.locator('[data-desk-detail="AMZN"]')).toBeVisible();
   // A view by name. Other things match "review" loosely; the view ranks first and Enter takes the first.
@@ -212,7 +296,7 @@ test("the palette opens from its button, offers a way on when nothing matches, a
   // Escape changes nothing and gives the keyboard back to the selected name.
   await page.keyboard.press("Escape");
   await expect(palette(page)).toBeHidden();
-  await expect(page.locator('[data-desk-detail="SPY"]')).toBeVisible();
+  await expect(row(page, "SPY").getByRole("button")).toHaveAttribute("aria-pressed", "true");
   await expect(row(page, "SPY").getByRole("button")).toBeFocused();
   // Each opening starts from an empty search.
   await openPalette(page);
@@ -250,7 +334,7 @@ test("a sparse edition shows dashes on the desk, never NaN, and no pane breaks",
   await row(page, "NVDA").click();
   await expect(page.getByText("No level map for this name")).toBeVisible();
   // AAPL has no zones in this variant, but it still has bars, so its map is drawn.
-  await row(page, "AAPL").click();
+  await pick(page, "AAPL");
   await expect(page.locator('[data-desk-detail="AAPL"]')).toBeVisible();
   const text = (await desk(page).textContent()) ?? "";
   expect(text).not.toMatch(/NaN|undefined|Infinity/);
@@ -262,6 +346,7 @@ test("a corrupt paper record breaks the scorecard and nothing else", async ({ pa
   await variant(context, baseURL, "poison");
   await open(page, "/options?view=review");
   await expect(rows(page)).toHaveCount(10);
+  await showPane(page, "SPY");
   await expect(page.locator('[data-desk-detail="SPY"]')).toBeVisible();
   await expect(page.locator('[data-pane-error="Paper scorecard"]')).toBeVisible();
   await expect(page.locator("[data-pane-error]")).toHaveCount(1);

@@ -107,22 +107,31 @@ export function OptionsDetail({
 
   return (
     <div className="grid content-start gap-4 p-4" data-desk-detail={t.symbol}>
-      <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h2 className="font-mono text-xl leading-none font-semibold">{t.symbol}</h2>
-        <span className="font-mono text-xl leading-none">
-          <Tick value={price}>{num(price, 2)}</Tick>
-        </span>
-        {change !== null ? (
-          <span className={cn("font-mono text-sm", change > 0 ? "text-good" : change < 0 ? "text-bad" : "text-muted-foreground")}>
-            {signed(change, 2)}
-            {moves !== null ? <span className="text-muted-foreground"> · {signed(moves, 2)} expected moves</span> : null}
+      {/* On a phone the name, its price and its change stay at the top of the screen while the rest scrolls under
+          them (unless the screen is very short, where that would leave no room for the rest). For that the line
+          has to be a child of the pane itself, so there the wrapper steps aside (`contents`); on a wider screen
+          the line steps aside instead, and its parts sit in the wrapper's row. */}
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 max-sm:contents">
+        <header className="bg-card flex flex-wrap items-baseline gap-x-3 gap-y-1 max-sm:top-0 max-sm:z-10 max-sm:-mx-4 max-sm:-mt-4 max-sm:border-b max-sm:px-4 max-sm:py-2.5 sm:contents max-sm:[@media(min-height:30rem)]:sticky">
+          {/* Focusable by script only: on a phone it takes the keyboard when the name opens. */}
+          <h2 tabIndex={-1} className="font-mono text-xl leading-none font-semibold">
+            {t.symbol}
+          </h2>
+          <span className="font-mono text-xl leading-none">
+            <Tick value={price}>{num(price, 2)}</Tick>
           </span>
-        ) : (
-          <span className="text-muted-foreground text-xs">
-            {read.inSession ? "live; no close in this edition to compare with" : price === null ? "no last bar in this edition" : "at the close"}
-          </span>
-        )}
-        <span className="ml-auto flex flex-wrap items-center gap-1.5">
+          {change !== null ? (
+            <span className={cn("font-mono text-sm", change > 0 ? "text-good" : change < 0 ? "text-bad" : "text-muted-foreground")}>
+              {signed(change, 2)}
+              {moves !== null ? <span className="text-muted-foreground"> · {signed(moves, 2)} expected moves</span> : null}
+            </span>
+          ) : (
+            <span className="text-muted-foreground text-xs">
+              {read.inSession ? "live; no close in this edition to compare with" : price === null ? "no last bar in this edition" : "at the close"}
+            </span>
+          )}
+        </header>
+        <span className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
           <StateChip read={read} />
           {strength ? <Badge variant={chipTone(strength)}>{CHIP_LABEL[strength] ?? strength}</Badge> : null}
           {ivp !== null ? (
@@ -131,7 +140,7 @@ export function OptionsDetail({
             </Badge>
           ) : null}
         </span>
-      </header>
+      </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_15rem]">
         {hasMap ? (
