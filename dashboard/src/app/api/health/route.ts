@@ -1,11 +1,11 @@
 import { optionsHealth, radarHealth } from "@/lib/editions";
-import { fixtureMode, loadCryptoSnapshot, loadOptions, loadRadar, loadSnapshot } from "@/lib/snapshot";
+import { fixtureMode, loadCryptoSnapshot, loadHftSnapshot, loadOptions, loadRadar, loadSnapshot } from "@/lib/snapshot";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(): Promise<Response> {
-  const [result, crypto, options, radar] = await Promise.all([loadSnapshot(), loadCryptoSnapshot(), loadOptions(), loadRadar()]);
+  const [result, crypto, hft, options, radar] = await Promise.all([loadSnapshot(), loadCryptoSnapshot(), loadHftSnapshot(), loadOptions(), loadRadar()]);
   // BUILD_SHA is inlined at build time (next.config.ts) by CI and `make dashboard-deploy`. `||`, not `??`:
   // VERCEL_GIT_COMMIT_SHA is an empty string on CLI deploys, which `??` would keep.
   const sha = process.env.BUILD_SHA || process.env.VERCEL_GIT_COMMIT_SHA || null;
@@ -22,6 +22,11 @@ export async function GET(): Promise<Response> {
           snapshot: crypto.status,
           as_of: crypto.status === "ok" ? (crypto.snapshot.as_of ?? null) : null,
           run_id: crypto.status === "ok" ? (crypto.snapshot.run_id ?? null) : null,
+        },
+        hft: {
+          snapshot: hft.status,
+          as_of: hft.status === "ok" ? (hft.snapshot.as_of ?? null) : null,
+          run_id: hft.status === "ok" ? (hft.snapshot.run_id ?? null) : null,
         },
       },
       // The research editions on file, and the newest format of each this build accepts. A publisher checks

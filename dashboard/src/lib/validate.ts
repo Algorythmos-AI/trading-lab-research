@@ -2,6 +2,8 @@ import Ajv, { type ErrorObject } from "ajv";
 import type { DeskName } from "./desk";
 import cryptoSchema from "./crypto.schema.json";
 import type { CryptoSnapshot } from "./crypto.types";
+import hftSchema from "./hft.schema.json";
+import type { HftSnapshot } from "./hft.types";
 import optionsSchema from "./options.schema.json";
 import type { OptionsEdition } from "./options.types";
 import radarSchema from "./radar.schema.json";
@@ -13,11 +15,14 @@ import type { Snapshot } from "./types";
 const ajv = new Ajv({ strict: false, allErrors: true });
 const validateSchema = ajv.compile<Snapshot>(schema);
 const validateCryptoSchema = ajv.compile<CryptoSnapshot>(cryptoSchema);
+const validateHftSchema = ajv.compile<HftSnapshot>(hftSchema);
 const validateRadarSchema = ajv.compile<RadarEdition>(radarSchema);
 const validateOptionsSchema = ajv.compile<OptionsEdition>(optionsSchema);
 
 export const STOCKS_SCHEMA = "trading-lab/snapshot";
 export const CRYPTO_SCHEMA = "trading-lab/crypto-snapshot";
+/** The HFT desk's snapshot (ADR 0006). The contract belongs to hft-lab; hft.schema.json is a pinned copy of it. */
+export const HFT_SCHEMA = "hft-lab/snapshot";
 /** The daily pre-market radar's edition: research notes, not a desk. It has no windows and no watchdog. */
 export const RADAR_SCHEMA = "stocksdelta/radar";
 /** The after-close options levels edition: research for the next session's calls and puts. No desk, no watchdog. */
@@ -33,14 +38,45 @@ export function isOptions(data: unknown): boolean {
   return data !== null && typeof data === "object" && (data as { schema?: unknown }).schema === OPTIONS_SCHEMA;
 }
 
+/** What every desk's validator returns: the snapshot's own id and time, or the paths that failed. */
+export type DeskValidation = { ok: true; snapshot: { run_id?: string | null; as_of?: string | null } } | { ok: false; errors: string[] };
+
 /**
- * Which desk a body belongs to, from its own `schema` field. The field is inside the signed body, so the
- * desk cannot be chosen by a header: a stocks snapshot can never be filed as the crypto desk's, or the reverse.
- * Anything that does not name the crypto schema is validated as a stocks snapshot (the original behaviour).
+ * What ingest knows about a schema id: the desk whose slot the body is filed in, and the validator it must pass.
+ * Both come from the one entry, so a body can never be validated as one desk's and filed as another's.
  */
-export function deskOf(data: unknown): DeskName {
+export interface DeskContract {
+  kind: "desk";
+  desk: DeskName;
+  validate: (data: unknown) => DeskValidation;
+}
+
+const STOCKS_CONTRACT: DeskContract = { kind: "desk", desk: "stocks", validate: validateSnapshot };
+
+/**
+ * The snapshot contracts, keyed by the `schema` id a body names. A new desk is one more entry. The research
+ * editions (RADAR_SCHEMA, OPTIONS_SCHEMA) are routed before this is consulted; they could become entries of another
+ * `kind` here instead of a second registry.
+ */
+export const CONTRACTS: ReadonlyMap<string, DeskContract> = new Map<string, DeskContract>([
+  [STOCKS_SCHEMA, STOCKS_CONTRACT],
+  [CRYPTO_SCHEMA, { kind: "desk", desk: "crypto", validate: validateCryptoSnapshot }],
+  [HFT_SCHEMA, { kind: "desk", desk: "hft", validate: validateHftSnapshot }],
+]);
+
+/**
+ * The contract a body is held to, from its own `schema` field. The field is inside the signed body, so the desk
+ * cannot be chosen by a header: one desk's snapshot can never be filed as another's. A body that names no desk's
+ * schema is held to the stocks contract (the original behaviour), which refuses it unless it is a stocks snapshot.
+ */
+export function contractOf(data: unknown): DeskContract {
   const id = data !== null && typeof data === "object" ? (data as { schema?: unknown }).schema : undefined;
-  return id === CRYPTO_SCHEMA ? "crypto" : "stocks";
+  return (typeof id === "string" ? CONTRACTS.get(id) : undefined) ?? STOCKS_CONTRACT;
+}
+
+/** Which desk a body belongs to: the desk of the contract its `schema` field names. */
+export function deskOf(data: unknown): DeskName {
+  return contractOf(data).desk;
 }
 
 const MAX_ERRORS = 10;
@@ -120,6 +156,22 @@ export function validateCryptoSnapshot(data: unknown): CryptoValidationResult {
   if ((data as { schema?: unknown }).schema !== CRYPTO_SCHEMA) errors.push("/schema: not the crypto snapshot schema");
   if (errors.length > 0) return { ok: false, errors: errors.slice(0, MAX_ERRORS) };
   return { ok: true, snapshot: data as CryptoSnapshot };
+}
+
+export type HftValidationResult = { ok: true; snapshot: HftSnapshot } | { ok: false; errors: string[] };
+
+/** The HFT desk's snapshot: its own schema, the same denylist. */
+export function validateHftSnapshot(data: unknown): HftValidationResult {
+  if (data === null || typeof data !== "object" || Array.isArray(data)) {
+    return { ok: false, errors: ["/: must be an object"] };
+  }
+  const errors = findDenied(data).map((p) => `${p}: key is not allowed to be published`);
+  if (!validateHftSchema(data)) {
+    errors.push(...(validateHftSchema.errors ?? []).map(describe));
+  }
+  if ((data as { schema?: unknown }).schema !== HFT_SCHEMA) errors.push("/schema: not the HFT snapshot schema");
+  if (errors.length > 0) return { ok: false, errors: errors.slice(0, MAX_ERRORS) };
+  return { ok: true, snapshot: data as HftSnapshot };
 }
 
 export type RadarValidationResult = { ok: true; edition: RadarEdition } | { ok: false; errors: string[] };
