@@ -109,11 +109,21 @@ describe("the options live document's contract", () => {
     ["negative open interest", (d: OptionsLive) => (d.open_interest![0]!.rows[0]!.oi = -5)],
     ["an expiry that is not a date", (d: OptionsLive) => (d.open_interest![0]!.rows[0]!.expiry = "next Friday")],
     ["a missing run id", (d: OptionsLive) => delete loose(d).run_id],
+    ["a time with no zone", (d: OptionsLive) => (d.as_of = "2026-10-12T16:00:00")],
     ["more positions than a person holds", (d: OptionsLive) => (d.positions = Array.from({ length: 101 }, () => ({ ...d.positions[0]! })))],
   ])("refuses %s", (_what, damage) => {
     const d = doc();
     damage(d);
     expect(validateOptionsLive(d).ok).toBe(false);
+  });
+});
+
+describe("an adjusted contract", () => {
+  it("does not refuse the document, and is left off the desk's list", () => {
+    const d = doc([], (x) => x.positions.push({ contract: "NVDA1261218C00120000", qty: 1 }));
+    expect(validateOptionsLive(d)).toMatchObject({ ok: true });
+    expect(positionRows(d, new Set(["SPY", "NVDA"]), NOW.getTime()).map((r) => r.symbol)).not.toContain("NVDA1");
+    expect(positionRows(d, new Set(), NOW.getTime())).toHaveLength(3);
   });
 });
 
@@ -134,6 +144,26 @@ describe("POST /api/ingest with an options live document", () => {
     expect((await (await handleIngest(post(doc()), NOW)).json()).status).toBe("duplicate");
     const older = doc([], (d) => ((d.run_id = "older"), (d.as_of = "2026-10-12T15:00:00Z")));
     expect((await handleIngest(post(older), NOW)).status).toBe(409);
+  });
+
+  it("is acknowledged and dropped from a host that is not the primary, so two hosts never share the slot", async () => {
+    vi.stubEnv("DASHBOARD_INGEST_KEYS", JSON.stringify({ "gcp-use1": HOST_SECRET }));
+    vi.stubEnv("PRIMARY_HOST", "gcp-use1");
+    // The default key is now a shadow host's.
+    const res = await handleIngest(post(doc()), NOW);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ status: "ignored", shadow: true });
+    expect(blob.store.size).toBe(0);
+    expect((await handleIngest(post(doc(), { keyId: "gcp-use1" }), NOW)).status).toBe(200);
+    expect([...blob.store.keys()]).toEqual(["options-live/latest.json"]);
+  });
+
+  it("refuses a document dated ahead of the server's clock, which would read as fresh until time caught up", async () => {
+    const ahead = doc([], (d) => (d.as_of = "2026-10-13T16:00:00Z"));
+    const res = await handleIngest(post(ahead), NOW);
+    expect(res.status).toBe(422);
+    expect(await res.text()).toContain("as_of");
+    expect(blob.store.size).toBe(0);
   });
 
   it("is refused from the research environment's key: positions come from the trading host", async () => {

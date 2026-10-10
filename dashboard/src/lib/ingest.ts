@@ -7,6 +7,8 @@ import { parseTime } from "./freshness";
 import { contractOf, isOptions, isOptionsLive, isRadar, validateOptionsEdition, validateOptionsLive, validateRadarEdition } from "./validate";
 
 export const MAX_BODY_BYTES = 3_500_000;
+/** How far ahead of this server's clock an options live document may be dated: clock drift, not more. */
+export const OPTIONS_LIVE_AHEAD_MS = 10 * 60_000;
 
 function json(status: number, body: Record<string, unknown>): Response {
   return Response.json(body, { status, headers: { "cache-control": "no-store" } });
@@ -136,7 +138,18 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
   }
   // After the radar key's refusal on purpose: positions come from the trading host, never from the research
   // environment, whatever the body says it is.
-  if (isOptionsLive(data)) return storeEdition(OPTIONS_LIVE, text, data, done);
+  if (isOptionsLive(data)) {
+    // One slot, one account: a second host (a shadow run) would take turns with the primary in it. Its document
+    // is acknowledged and dropped, so its job does not fail.
+    if (!primary) return done(200, "ignored-shadow", { status: "ignored", shadow: true }, { key_id: keyId, desk: "options-live" });
+    // A document dated ahead of this clock would be shown as fresh, and refuse every true one as older, until
+    // real time caught up with it.
+    const at = Date.parse(String((data as { as_of?: unknown }).as_of ?? ""));
+    if (Number.isFinite(at) && at > now.getTime() + OPTIONS_LIVE_AHEAD_MS) {
+      return done(422, "ahead-of-clock", { error: "invalid", errors: ["/as_of: is ahead of the server's clock"] }, { desk: "options-live" });
+    }
+    return storeEdition(OPTIONS_LIVE, text, data, done);
+  }
 
   // The desk comes from the signed body (its `schema`), never from a header: ADR 0005. The slot and the validator
   // are read from the same contract, so the body is filed where it was validated.

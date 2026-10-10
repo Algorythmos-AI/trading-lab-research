@@ -28,9 +28,10 @@
       "maxLength": 200
     },
     "as_of": {
+      "description": "When the host read the account: an ISO time with its zone.",
       "type": "string",
-      "minLength": 1,
-      "maxLength": 40
+      "maxLength": 40,
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
     },
     "paper": {
       "description": "Always true. The publisher reads a paper account and nothing else.",
@@ -78,9 +79,9 @@
         ],
         "properties": {
           "contract": {
-            "description": "The OCC symbol: root, yymmdd, C or P, strike in thousandths.",
+            "description": "The OCC symbol: root, yymmdd, C or P, strike in thousandths. A root with a digit is an adjusted contract; the desk lists standard ones only.",
             "type": "string",
-            "pattern": "^[A-Z]{1,6}\\d{6}[CP]\\d{8}$"
+            "pattern": "^[A-Z][A-Z0-9]{0,5}\\d{6}[CP]\\d{8}$"
           },
           "qty": {
             "description": "Contracts held. Negative is short.",

@@ -7,6 +7,9 @@ export interface OptionsLive {
   schema: "stocksdelta/options-live";
   schema_version?: number | null;
   run_id: string;
+  /**
+   * When the host read the account: an ISO time with its zone.
+   */
   as_of: string;
   /**
    * Always true. The publisher reads a paper account and nothing else.
@@ -24,7 +27,7 @@ export interface OptionsLive {
    */
   positions: {
     /**
-     * The OCC symbol: root, yymmdd, C or P, strike in thousandths.
+     * The OCC symbol: root, yymmdd, C or P, strike in thousandths. A root with a digit is an adjusted contract; the desk lists standard ones only.
      */
     contract: string;
     /**

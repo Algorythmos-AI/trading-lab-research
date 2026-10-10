@@ -203,7 +203,7 @@ export function fixtureOptionsLive(e: OptionsEdition, now: Date, flags: Readonly
     as_of: asOf.toISOString(),
     paper: true,
     // The stale document is one from an open market: that is when its age is a fault and not just the hour.
-    market: { is_open: flags.has("positions-old"), next_open: null, next_close: null },
+    market: { is_open: flags.has("positions-old"), next_open: null, next_close: new Date(now.getTime() + 2 * 3_600_000).toISOString() },
     positions,
     open_interest: [
       {

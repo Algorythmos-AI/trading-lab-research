@@ -84,7 +84,10 @@ export function positionsTotal(rows: readonly PositionRow[]): number | null {
 
 /** In session, positions older than this are shown greyed: the host has stopped publishing. */
 export const POSITIONS_OLD_MIN = 30;
-/** Older than this they are not shown at all: a day and a half covers one session and the night after it. */
+/**
+ * Older than this they are not shown at all. The host sends around the clock, weekends included, so a document
+ * this old means the host has been silent for a day and a half, and what it last said is no longer worth showing.
+ */
 export const POSITIONS_GONE_MIN = 36 * 60;
 
 /**

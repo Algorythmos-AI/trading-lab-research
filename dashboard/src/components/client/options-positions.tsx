@@ -65,7 +65,11 @@ export function OptionsPositions({
   // Until the browser's clock is read, the document's own time stands in: the server and the first draw agree.
   const asOf = Date.parse(doc.as_of);
   const clock = now ?? (Number.isFinite(asOf) ? asOf : 0);
-  const age = positionsAge(doc.as_of, clock, marketOpen || doc.market?.is_open === true);
+  // The document's own "open" stands only until the close it names: the last one sent before the bell must not
+  // read as a stopped host all evening.
+  const close = Date.parse(doc.market?.next_close ?? "");
+  const openByDoc = doc.market?.is_open === true && (!Number.isFinite(close) || clock < close);
+  const age = positionsAge(doc.as_of, clock, marketOpen || openByDoc);
   if (age.state === "gone") return null;
   const rows = positionRows(doc, new Set(names), clock);
   const total = positionsTotal(rows);
@@ -92,8 +96,8 @@ export function OptionsPositions({
         <p className="text-muted-foreground mt-1 text-xs">No open option positions in the paper account.</p>
       ) : (
         <ul className="divide-border/60 mt-1 divide-y">
-          {rows.map((r) => (
-            <li key={r.contract}>
+          {rows.map((r, i) => (
+            <li key={`${r.contract}:${i}`}>
               {r.onDesk && pickFor(r) ? (
                 <button type="button" onClick={() => onOpen(r)} title={`Open ${r.symbol} with this contract in the contract pane`} className={cn(ROW, "hover:bg-muted/60 rounded")}>
                   <Line r={r} />

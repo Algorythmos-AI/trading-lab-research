@@ -660,7 +660,7 @@ export function OptionsDesk({
               </tbody>
             </table>
           </PaneBoundary>
-          {positions && live ? (
+          {positions && live && view === "live" ? (
             <PaneBoundary name="Paper positions">
               <OptionsPositions
                 doc={positions}
