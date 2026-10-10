@@ -3,6 +3,8 @@
 //   src/lib/crypto.schema.json   -> src/lib/crypto.types.ts     (root type CryptoSnapshot)
 //   src/lib/radar.schema.json    -> src/lib/radar.types.ts      (root type RadarEdition; owned here, not by Python)
 //   src/lib/options.schema.json  -> src/lib/options.types.ts    (root type OptionsEdition; owned here, not by Python)
+//   src/lib/hft.schema.json      -> src/lib/hft.types.ts        (root type HftSnapshot; vendored from hft-lab and
+//                                                                 pinned by hft.contract.lock.json, not by Python)
 // Run with `pnpm gen:types` after `make schema` changes a schema. The output is committed.
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -11,11 +13,13 @@ import { compile } from "json-schema-to-typescript";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-for (const [file, out, name] of [
+for (const [file, out, name, options = {}] of [
   ["snapshot.schema.json", "snapshot.types.ts", "Snapshot"],
   ["crypto.schema.json", "crypto.types.ts", "CryptoSnapshot"],
   ["radar.schema.json", "radar.types.ts", "RadarEdition"],
   ["options.schema.json", "options.types.ts", "OptionsEdition"],
+  // Its lists are capped at 8 to 40 items; without this each would be typed as a union of every tuple length.
+  ["hft.schema.json", "hft.types.ts", "HftSnapshot", { maxItems: -1 }],
 ]) {
   const schema = JSON.parse(readFileSync(join(root, "src/lib", file), "utf8"));
   // Name the root type explicitly instead of deriving it from the long schema title.
@@ -28,6 +32,7 @@ for (const [file, out, name] of [
     unreachableDefinitions: false,
     format: true,
     style: { semi: true, singleQuote: false, printWidth: 100 },
+    ...options,
   });
   writeFileSync(join(root, "src/lib", out), ts);
   console.log(`wrote src/lib/${out}`);
