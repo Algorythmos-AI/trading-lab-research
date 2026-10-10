@@ -87,3 +87,13 @@ Neither feeds strategy B or the re-runs below.
 3. Update `research/G1_SUMMARY.md` and `research/active_strategies/` (B's entry) with old and corrected numbers
    side by side.
 4. Record the outcome in DEC-0012.
+
+## Note on the ids named above (added 2026-10-11; nothing above is changed)
+
+This record was drafted on 2026-09-29 and names EXP-0016 to EXP-0020 and DEC-0012 for its re-runs and its
+outcome. While it waited for approval those ids were taken by the crypto desk's records (EXP-0016 to EXP-0022,
+DEC-0012). The numbers above therefore no longer point at these re-runs.
+
+When this record is approved, each re-run and the outcome record take the next free id at the time they are
+registered, and the experiment's own record names the paragraph of this decision it carries out. No re-run has
+been registered or run.

@@ -57,7 +57,7 @@ src/wt/        data · scanner · signals · backtest · risk · oms · brokers 
 scripts/       research drivers and nightly jobs (forward_test, premarket_routine, status_dashboard, ...)
 research/      hypotheses/ experiments/ decisions/ active_strategies/ lessons_learned/ specs/ forward/
 config/        ranking and catalyst configs, macro-event calendar, dashboard config
-deploy/        launchd agents and their run scripts
+deploy/        host helpers, systemd units and first-boot files (gcp/, oci/), and the jobs' run scripts
 tests/unit/    pytest suite (CI-safe: fixtures and tmp_path only, no network)
 ```
 
