@@ -24,7 +24,8 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
                  src/wt/crypto/labels.py src/wt/crypto/cycle.py src/wt/crypto/snapshot.py src/wt/crypto/control.py \
                  src/wt/crypto/rules.py src/wt/crypto/sleeves.py src/wt/crypto/backtest.py \
                  src/wt/crypto/scorer.py src/wt/ml/modelfile.py src/wt/crypto/signals.py src/wt/crypto/challengers.py \
-                 src/wt/crypto/outcomes.py src/wt/crypto/promotion.py src/wt/crypto/learn.py
+                 src/wt/crypto/outcomes.py src/wt/crypto/promotion.py src/wt/crypto/learn.py \
+                 src/wt/crypto/harvest.py
 JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
@@ -166,6 +167,15 @@ crypto-learning-off: ## OWNER: stop the model acting and the challengers opening
 
 crypto-learning-on: ## OWNER: allow the model and the challengers again
 	@$(PY) -m wt.crypto.control learning-on
+
+crypto-harvest-off: ## OWNER: stop the data-harvest books opening trades (DEC-0027; exits are still managed)
+	@$(PY) -m wt.crypto.control harvest-off
+
+crypto-harvest-on: ## OWNER: allow the data-harvest books again
+	@$(PY) -m wt.crypto.control harvest-on
+
+crypto-harvest: ## The data-harvest books: signals, entries, exits, open positions
+	@$(PY) -m wt.crypto.harvest --status
 
 crypto-challengers: ## The challengers' record: who was drawn, the backtest verdicts, who is live
 	@$(PY) -m wt.crypto.challengers --status

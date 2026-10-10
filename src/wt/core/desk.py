@@ -38,9 +38,11 @@ DESKS: dict[str, Desk] = {d.name: d for d in (
          (("forward", FORWARD_LEDGER), ("paper", DATA_DIR / "live" / "journal.jsonl")),
          STATE_DIR / "evidence" / "chain-broken", "us_equity", None, "trading-lab/snapshot"),
     # Its journal has its own file name: the restore test finds ledgers by name, and two `journal.jsonl` would
-    # shadow each other.
+    # shadow each other. The data harvest's journal (DEC-0027, wt.crypto.harvest) is listed first so the backup
+    # checks and anchors it too; the desk's own journal stays last, which is what `journal` returns.
     Desk("crypto", "C", CRYPTO_DIR, CRYPTO_DIR / "KILL",
-         (("crypto", CRYPTO_DIR / "crypto_journal.jsonl"),),
+         (("crypto-harvest", CRYPTO_DIR / "harvest" / "harvest_journal.jsonl"),
+          ("crypto", CRYPTO_DIR / "crypto_journal.jsonl")),
          CRYPTO_DIR / "chain-broken", "always_open", "crypto:", "trading-lab/crypto-snapshot"),
 )}
 
