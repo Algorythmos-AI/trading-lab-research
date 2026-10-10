@@ -1,5 +1,5 @@
-import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
+import { scan, useTheme } from "./axe";
 
 // CI-only smoke test. The server runs with DASHBOARD_FIXTURE=1 (see playwright.config.ts).
 const PAGES = [
@@ -500,21 +500,20 @@ test("on a laptop the third desk leaves the header one row above the sections, o
   }
 });
 
-// The same scan a11y.spec.ts runs on the stocks pages: WCAG 2.1 A and AA, nothing waived, both themes, desktop width.
+// The same scan a11y.spec.ts runs on the stocks pages (WCAG 2.1 A and AA, nothing waived, both themes), on the desktop
+// project and on the phone project: the page's tables scroll inside an area the keyboard can reach.
 for (const theme of ["light", "dark"] as const) {
   for (const [fx, state] of [
     [null, "from the fixture"],
     ["empty", "before the desk has published"],
   ] as const) {
-    test(`/hft ${state} passes the accessibility scan in ${theme}`, async ({ page, context, baseURL, isMobile }) => {
-      test.skip(isMobile, "accessibility scan runs on the desktop project");
-      await context.addInitScript((t) => window.localStorage.setItem("tl-theme", t), theme);
+    test(`/hft ${state} passes the accessibility scan in ${theme}`, async ({ page, context, baseURL }) => {
+      await useTheme(context, theme);
       if (fx) await context.addCookies([{ name: "fx", value: fx, url: baseURL! }]);
       await page.goto("/hft");
       await expect(page.getByRole("heading", { level: 1, name: "HFT" })).toBeAttached();
       expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(theme === "dark");
-      const { violations } = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
-      expect(violations.map((v) => `${v.id} x${v.nodes.length}: ${v.nodes[0]?.target.join(" ") ?? ""}`)).toEqual([]);
+      expect(await scan(page)).toEqual([]);
     });
   }
 }
