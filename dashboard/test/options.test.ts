@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sign } from "@/lib/hmac";
-import { editionState, ladder, liveNeighbours, liveState, mapView, moveBands, nearest, needsALook, extendTrail, liveRead, sessionShare, STALE_MS, TRAIL_MS, niceStep, nyClock, roomView, ROOM_REACH, ruleLabel, spreadLabels, type LiveQuote, type Options, type OptionsTicker } from "@/lib/options";
+import { editionState, ladder, liveNeighbours, liveState, mapView, moveBands, nearest, structureView, needsALook, extendTrail, liveRead, sessionShare, STALE_MS, TRAIL_MS, niceStep, nyClock, roomView, ROOM_REACH, ruleLabel, spreadLabels, type LiveQuote, type Options, type OptionsTicker } from "@/lib/options";
 import { OPTIONS_SCHEMA, isOptions, validateOptionsEdition } from "@/lib/validate";
 import { fixture } from "./helpers";
 import optionsJson from "./fixtures/options.v1.json";
@@ -374,5 +374,18 @@ describe("options view helpers", () => {
       expect(sessionShare(spy, at("16:00:00"))).toBe(1);
       expect(sessionShare({ ...spy, half_day: true }, at("11:15:00"))).toBeCloseTo(0.5, 6);
     });
+  });
+  it("places names on the close strength vs option price map and names the corners", () => {
+    const e = optionsJson as unknown as Options;
+    const v = structureView(e.tickers);
+    expect(v.points).toHaveLength(10);
+    expect(v.missing).toEqual([]);
+    // NVDA closed at 5% of its range with options at the 2nd percentile; META weak with options at the 83rd.
+    expect(v.corners["weak-cheap"]).toEqual(["NVDA"]);
+    expect(v.corners["weak-rich"]).toEqual(["META"]);
+    expect(v.corners["strong-cheap"]).toEqual(["SPY"]);
+    expect(v.corners["strong-rich"]).toEqual(["MSFT", "AMZN"]);
+    const gap = structureView([{ ...e.tickers[0]!, expected_move: null }]);
+    expect(gap).toMatchObject({ points: [], missing: ["SPY"] });
   });
 });

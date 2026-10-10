@@ -1,5 +1,5 @@
 import { PageHeading } from "@/components/page-heading";
-import { BoardTable, EditionPanel, HowToRead, NoOptions, PaperPanel, RulesPanel, TickerCards } from "@/components/options";
+import { BoardTable, EditionPanel, HowToRead, NoOptions, PaperPanel, RulesPanel, StructurePanel, TickerCards } from "@/components/options";
 import { FocusScope, LiveQuotes } from "@/components/client/live-layer";
 import { OptionsGlance } from "@/components/client/options-glance";
 import { EditionPicker } from "@/components/radar";
@@ -32,6 +32,7 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
             <OptionsGlance tickers={result.edition.tickers} live={!date}>
               <BoardTable e={result.edition} />
             </OptionsGlance>
+            <StructurePanel e={result.edition} />
             <div data-explain className="contents">
               <RulesPanel e={result.edition} />
             </div>
