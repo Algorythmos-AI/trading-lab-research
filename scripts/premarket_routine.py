@@ -39,6 +39,7 @@ from wt.data.universe import ASSETS, load_daily_tail, tail_rows_for  # noqa: E40
 from wt.risk.virtual_account import VirtualAccount  # noqa: E402
 from wt.scanner.explain import explain, pool_musts  # noqa: E402
 from wt.scanner.features import PMCache  # noqa: E402
+from wt.scanner import quality  # noqa: E402
 from wt.scanner.pool import DailyIndex, PoolConfig, build_day  # noqa: E402
 from wt.scanner.ranking import SpecCandidate, funnel  # noqa: E402
 from wt.signals.musts import next_half_dollar_above  # noqa: E402
@@ -91,6 +92,15 @@ def scan_note(stats) -> dict:
     return {"scan_failed": why} if why else {}
 
 
+def page(key: str, title: str, message: str, priority: int) -> None:
+    """One alert a day for `key`. An alert that cannot be sent never changes what the dry run writes."""
+    try:
+        from wt.ops.alerts import Alerts
+        Alerts().once_per_day(key, title, message, priority)
+    except Exception as e:  # noqa: BLE001
+        print(f"alert {key}: {e!r}")
+
+
 def sip_through(a) -> str | None:
     t = getattr(a, "sip_through", None)
     return None if t is None else t.tz_convert(ET).strftime("%H:%M")
@@ -132,7 +142,15 @@ def run(d: dt.date, feed: str, replay: bool) -> Path | None:
         failed = scan_note(stats)
         if failed:
             print(f"{d} {hhmm} {name}: the scan had no data ({failed['scan_failed']})")
+        if not replay:                    # a replay describes an old morning; only today's can page
+            if failed:
+                page("routine:scan-failed", "Dry run: the scan had no data", f"{d} {hhmm}: {failed['scan_failed']}. "
+                     "The stage is marked as failed, not as a quiet morning.", 4)
+            elif stats.sip_fallback:
+                page("routine:sip-fallback", "Dry run: no consolidated bars", f"{d} {hhmm}: the scan read IEX bars "
+                     "only, so its volumes are one venue's. The stage is recorded as normal.", 3)
         body = {"stage": name, "as_of_et": hhmm, "feed": feed, "sip_through_et": sip_through(a), **failed,
+                "quality": quality.codes(vars(stats)),
                 "stats": {**vars(stats), **counts}, "tier1": f["tier1"], "reached": reached}
         if name in ("charts", "tier2", "tickets") and len(pool):
             cols = ["symbol", "price_0925", "gap_pct", "trend_ok", "window_ok", "window_room", "atr14", "pm_consolidation",

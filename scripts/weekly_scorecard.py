@@ -14,6 +14,7 @@ Saturday morning in Sydney, which is still Friday's session in New York. Usage: 
 """
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 import json
 import math
@@ -23,7 +24,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from wt.analytics import funnel_agreement, g2  # noqa: E402
+from wt.analytics import b_replay, funnel_agreement, g2  # noqa: E402
 from wt.core.clock import ET  # noqa: E402
 from wt.core.config import DATA_DIR, FORWARD_LEDGER, ROOT, ROUTINE_DIR, SCORECARD_DIR  # noqa: E402
 
@@ -132,6 +133,26 @@ def signal_days() -> list[dict]:
     return days
 
 
+def replay_line() -> str:
+    """B's rule replayed on recorded bars against the runner's journal, in sessions per status (a record: G2's own
+    agreement measure above is unchanged)."""
+    try:
+        recs = []
+        for f in sorted((FWD.parent / "replay").glob("*.json")):
+            with contextlib.suppress(OSError, ValueError):
+                d = json.loads(f.read_text())
+                if isinstance(d, dict):
+                    recs.append(d)
+        a, b = b_replay.tally(recs, "replay_vs_journal"), b_replay.tally(recs, "forward_vs_replay")
+        known = len(recs) - a["unknown"]
+    except Exception as e:  # noqa: BLE001
+        return f"- Replay of B on recorded bars: not available this week ({e.__class__.__name__})."
+    return (f"- Replay of B on recorded bars against the runner's journal (sessions recorded {len(recs)}, comparable "
+            f"{known}): same bar {a['same']} · no signal on either {a['neither']} · different bar {a['different']} · "
+            f"replay only {a['only_first']} · journal only {a['only_second']}. Forward test against the replay: "
+            f"same {b['same'] + b['neither']} · not the same {b['different'] + b['only_first'] + b['only_second']}")
+
+
 def agreement() -> list[str]:
     """Section 4: the dry run's funnel against the forward test's, in counts (DEC-0023, section 2). A description:
     any failure here costs the scorecard this section and nothing else."""
@@ -207,6 +228,7 @@ def main(now: dt.datetime | None = None) -> str:
           + (f" · E[R] {ps['E']:+.3f} · win {ps['win']:.0%} · cum {ps['cum']:+.2f}R" if ps["n"] else ""),
           f"- Signal agreement with forward-test B (clean sessions both ran; day-level, provisional until the "
           f"replay harness): **{agree}/{n_both}**" + (f" = {agree / n_both:.0%} (G2 needs ≥90%)" if n_both else " (no overlap yet)"),
+          replay_line(),
           f"- Incidents: loop errors {inc['loop_error']} · not flat at close {inc['END_OF_DAY_NOT_FLAT']} · "
           f"reconcile fixes {inc['reconcile']} · refused to arm {inc['refuse_to_arm']} · latch events {len(latched)}",
           f"- Virtual account: {'equity US$%.2f, settled cash US$%.2f, latched=%s' % (last_va['equity'], last_va['settled_cash'], last_va['latched']) if last_va else '—'}",

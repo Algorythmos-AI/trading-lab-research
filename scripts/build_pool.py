@@ -191,6 +191,7 @@ def build_one(a: AlpacaREST, d: dt.date, sessions: list[dt.date], daily: DailyIn
     if len(cands):
         mask = baseline_nonspread_pass(cands)
         q = last_quotes(a, sorted(cands[mask].symbol), d) if mask.any() else {}
+        st.quotes_asked, st.quotes_missing = int(mask.sum()), int(mask.sum()) - len(q)     # record only
         cands["spread_pct"] = [q.get(x, (float("nan"),) * 2)[0] for x in cands.symbol]
         cands["spread_abs"] = [q.get(x, (float("nan"),) * 2)[1] for x in cands.symbol]
     save_day(d, cands, pmb, st)

@@ -32,6 +32,7 @@ from wt.data.corpactions import SplitFactors, suspect_split
 from wt.data.universe import TailMeta, TailWindowExceeded
 from wt.scanner.catalyst import best_catalyst, best_catalyst_spec
 from wt.scanner.checklist import atr14, former_runner, overhead_levels, pm_consolidation, trend, window_ok
+from wt.scanner.quality import bar_counts, sip_fallback
 from wt.signals.bars import PM_OPEN, resample_clock
 from wt.signals.patterns import pm_pattern
 
@@ -97,6 +98,14 @@ class PoolStats:
     in_band: int = 0                  # snapshot symbols priced inside cfg.price_band (before the gap floor)
     slice_snapshot: int = 0           # snapshot symbols priced inside SLICE_BAND
     slice_kept: int = 0               # kept names priced inside SLICE_BAND
+    # Data quality, record only (wt.scanner.quality): what the snapshot's bars and the spread quotes looked like.
+    snap_bars: int = 0                # minute bars in the snapshot window
+    snap_iex_bars: int = 0            # of those, bars from IEX alone (the hybrid feed's last minutes)
+    snap_dup_bars: int = 0            # repeated (symbol, minute) rows; a loader should never return one
+    snap_zero_vol_bars: int = 0       # bars with no volume
+    sip_fallback: int = 0             # 1 when a hybrid snapshot held no consolidated bar at all
+    quotes_asked: int = 0             # names a spread quote was asked for
+    quotes_missing: int = 0           # of those, names that got none
 
 
 def last_print(snap: pd.DataFrame) -> pd.Series:
@@ -122,6 +131,9 @@ def build_day(d: dt.date, p: dt.date, client, daily: "DailyIndex", universe: set
     snap = snap[snap.t < pd.Timestamp(et(d, cfg.snapshot[1]))] if len(snap) else snap
     px = last_print(snap)
     st.snapshot_symbols = len(px)
+    for k, v in bar_counts(snap).items():
+        setattr(st, k, v)
+    st.sip_fallback = sip_fallback(snap, cfg.feed)
     st.slice_snapshot = int(px.between(*SLICE_BAND).sum())
     px = px[px.between(*cfg.price_band)]
     st.in_band = len(px)
