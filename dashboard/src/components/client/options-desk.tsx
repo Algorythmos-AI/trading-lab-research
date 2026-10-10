@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowDown, ArrowUp, Keyboard, TriangleAlert } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { RoomBar } from "@/components/options-charts";
 import { fracPct, num, rMult, signed, weekDate } from "@/lib/format";
 import {
@@ -57,7 +57,11 @@ interface Column {
   /** Said in full for a screen reader and on hover: what the number is and its unit. */
   hint: string;
   align?: "left" | "right";
-  /** Tailwind width class for the column, so numbers never push each other about. */
+  /**
+   * The column's width from the `md` breakpoint up, where the table has a fixed layout so numbers never push each
+   * other about. Each view leaves one column without a width: it takes what is left, so the fixed ones always fit.
+   * On a phone the table lays itself out and the `wideOnly` columns are hidden.
+   */
   width: string;
   sort?: (r: Row) => number | null | undefined;
   cell: (r: Row) => React.ReactNode;
@@ -80,12 +84,12 @@ function Distance({ edge, atr }: { edge: number | null | undefined; atr: number 
 
 const COLUMNS: Record<DeskView, Column[]> = {
   brief: [
-    { key: "close", head: "Close", hint: "Last close, in dollars", width: "w-[5.5rem]", sort: (r) => r.close, cell: (r) => num(r.close, 2) },
+    { key: "close", head: "Close", hint: "Last close, in dollars", width: "md:w-[5.5rem]", sort: (r) => r.close, cell: (r) => num(r.close, 2) },
     {
       key: "em",
       head: "1-day move",
       hint: "The move the options market prices for one day, in dollars",
-      width: "w-[5.5rem]",
+      width: "md:w-[5.5rem]",
       sort: (r) => r.t.expected_move?.day,
       cell: (r) => (r.t.expected_move?.day != null ? `±${num(r.t.expected_move.day, 2)}` : dash),
     },
@@ -93,7 +97,7 @@ const COLUMNS: Record<DeskView, Column[]> = {
       key: "ivp",
       head: "IV percentile",
       hint: "Where implied vol sits in its own last 52 weeks; low means options are cheap for this name",
-      width: "w-[8.5rem]",
+      width: "",
       sort: (r) => r.t.expected_move?.iv_pct_52w,
       cell: (r) => {
         const ivp = r.t.expected_move?.iv_pct_52w;
@@ -115,7 +119,7 @@ const COLUMNS: Record<DeskView, Column[]> = {
       key: "support",
       head: "Support",
       hint: "Nearest zone below the close, and how far in ATRs",
-      width: "w-[6rem]",
+      width: "md:w-[6rem]",
       sort: (r) => r.near.support?.distAtr,
       // Without a close there is nothing to measure from: a dash, not "none near".
       cell: (r) => (r.close === null ? dash : <Distance edge={r.near.support?.edge} atr={r.near.support?.distAtr} />),
@@ -125,7 +129,7 @@ const COLUMNS: Record<DeskView, Column[]> = {
       key: "resistance",
       head: "Resistance",
       hint: "Nearest zone above the close, and how far in ATRs",
-      width: "w-[6rem]",
+      width: "md:w-[6rem]",
       sort: (r) => r.near.resistance?.distAtr,
       cell: (r) => (r.close === null ? dash : <Distance edge={r.near.resistance?.edge} atr={r.near.resistance?.distAtr} />),
       wideOnly: true,
@@ -136,7 +140,7 @@ const COLUMNS: Record<DeskView, Column[]> = {
       key: "last",
       head: "Last",
       hint: "Live price in session, otherwise the close, in dollars",
-      width: "w-[5.5rem]",
+      width: "md:w-[5.5rem]",
       sort: (r) => r.read.price,
       cell: (r) => <Tick value={r.read.price}>{num(r.read.price, 2)}</Tick>,
     },
@@ -144,7 +148,7 @@ const COLUMNS: Record<DeskView, Column[]> = {
       key: "change",
       head: "Change",
       hint: "Change from the close, in percent",
-      width: "w-[4.75rem]",
+      width: "md:w-[4.75rem]",
       sort: (r) => r.change,
       cell: (r) => (r.change === null ? dash : <span className={tone(r.change)}>{signed(r.change, 2)}%</span>),
     },
@@ -152,14 +156,15 @@ const COLUMNS: Record<DeskView, Column[]> = {
       key: "moves",
       head: "Moves",
       hint: "Change from the close in one-day expected moves: 1.00 is the whole move the options market priced",
-      width: "w-[4.25rem]",
+      width: "md:w-[4.25rem]",
       sort: (r) => r.moves,
       cell: (r) => (r.moves === null ? dash : <span className={tone(r.moves)}>{signed(r.moves, 2)}</span>),
+      wideOnly: true,
     },
     {
       key: "room",
-      head: "Room, ±3 ATR",
-      hint: "Price in the middle; support zones green, resistance red, the one-day expected move blue",
+      head: "Room",
+      hint: "Three ATRs each side of the price: support zones green, resistance red, the one-day expected move blue",
       align: "left",
       width: "",
       wideOnly: true,
@@ -181,19 +186,19 @@ const COLUMNS: Record<DeskView, Column[]> = {
       head: "State",
       hint: "Where the live price stands against the levels: a location, not a signal",
       align: "left",
-      width: "w-[10.5rem]",
+      width: "md:w-[10.5rem]",
       cell: (r) =>
         r.read.inSession ? <StateChip read={r.read} /> : dash,
     },
   ],
   review: [
-    { key: "trades", head: "Paper trades", hint: "Paper trades the probation rules took on this name", width: "w-[6.5rem]", sort: (r) => r.paper.n, cell: (r) => num(r.paper.n) },
-    { key: "won", head: "Won", hint: "How many of them finished above zero", width: "w-[4rem]", sort: (r) => (r.paper.n > 0 ? r.paper.wins : null), cell: (r) => (r.paper.n > 0 ? num(r.paper.wins) : dash) },
+    { key: "trades", head: "Paper trades", hint: "Paper trades the probation rules took on this name", width: "md:w-[6.5rem]", sort: (r) => r.paper.n, cell: (r) => num(r.paper.n) },
+    { key: "won", head: "Won", hint: "How many of them finished above zero", width: "md:w-[4rem]", sort: (r) => (r.paper.n > 0 ? r.paper.wins : null), cell: (r) => (r.paper.n > 0 ? num(r.paper.wins) : dash) },
     {
       key: "total",
       head: "Total, R",
       hint: "Their sum in R, measured on the stock with no option prices or costs",
-      width: "w-[5.5rem]",
+      width: "md:w-[5.5rem]",
       sort: (r) => r.paper.totalR,
       cell: (r) => (r.paper.totalR === null ? dash : <span className={tone(r.paper.totalR)}>{rMult(r.paper.totalR, 2)}</span>),
     },
@@ -202,7 +207,7 @@ const COLUMNS: Record<DeskView, Column[]> = {
       head: "Close",
       hint: "Where the close sat in the day's range",
       align: "left",
-      width: "w-[7rem]",
+      width: "",
       sort: (r) => r.t.close_strength?.pos,
       cell: (r) => (r.t.close_strength?.chip ? <span className="font-sans text-xs">{CHIP_LABEL[r.t.close_strength.chip] ?? r.t.close_strength.chip}</span> : dash),
       wideOnly: true,
@@ -276,11 +281,17 @@ export function OptionsDesk({
   const [sort, setSort] = useState<{ view: DeskView; key: string; dir: "asc" | "desc" } | null>(null);
   const [help, setHelp] = useState(false);
   const rowButtons = useRef(new Map<string, HTMLButtonElement>());
+  const frame = useRef<HTMLElement>(null);
 
   const remember = useCallback((params: Record<string, string>) => {
     const url = new URL(window.location.href);
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-    window.history.replaceState(null, "", url);
+    try {
+      window.history.replaceState(null, "", url);
+    } catch {
+      // Safari refuses more than 100 of these in 30 seconds (a held key gets there). The address then lags the
+      // desk for a moment; the desk itself must carry on.
+    }
   }, []);
 
   const ok = feed.status === "ok";
@@ -303,20 +314,31 @@ export function OptionsDesk({
   const active = sort && sort.view === view ? columns.find((c) => c.key === sort.key && c.sort) : undefined;
   const ordered = active ? sortByNumber(rows, active.sort!, sort!.dir) : view === "live" ? needsALook(rows, (r) => r.read) : rows;
   const selected = ordered.find((r) => r.t.symbol === symbol) ?? ordered[0] ?? null;
+  const symbolRef = useRef<string | null>(null);
+  useEffect(() => {
+    symbolRef.current = selected?.t.symbol ?? null;
+  });
 
-  const select = (s: string, focus = false) => {
+  // Every way of choosing a name leaves focus on that name's button. A click on a table cell would otherwise
+  // drop focus to the page, and the shortcuts, which only hear keys from inside the desk, would go quiet.
+  const select = (s: string) => {
     setSymbol(s);
     remember({ s });
-    if (focus) rowButtons.current.get(s)?.focus();
+    rowButtons.current.get(s)?.focus();
   };
   const choose = (v: DeskView) => {
     setPicked(v);
     remember({ view: v });
+    // Changing view replaces the column headers. If focus was on one, it is gone once they redraw: put it on the
+    // selected name, so the keyboard keeps working.
+    window.setTimeout(() => {
+      if (!frame.current?.contains(document.activeElement)) rowButtons.current.get(symbolRef.current ?? "")?.focus();
+    }, 0);
   };
   const step = (by: number) => {
     if (ordered.length === 0) return;
     const i = Math.max(0, ordered.findIndex((r) => r.t.symbol === selected?.t.symbol));
-    select(ordered[(i + by + ordered.length) % ordered.length]!.t.symbol, true);
+    select(ordered[(i + by + ordered.length) % ordered.length]!.t.symbol);
   };
   const cycleSort = (c: Column) => {
     if (!c.sort) return;
@@ -340,6 +362,7 @@ export function OptionsDesk({
   return (
     // The key handler only hears keys that bubble up from the desk's own buttons; the section itself takes no focus.
     <section
+      ref={frame}
       aria-label="Options desk"
       data-desk-view={view}
       onKeyDown={onKeyDown}
@@ -353,7 +376,11 @@ export function OptionsDesk({
               type="button"
               aria-pressed={view === v}
               title={VIEW_HINT[v]}
-              onClick={() => choose(v)}
+              onClick={(ev) => {
+                // Safari does not focus a button on click; without focus in the desk the shortcuts would not hear keys.
+                ev.currentTarget.focus();
+                choose(v);
+              }}
               className={cn(
                 "rounded px-3 py-1 text-xs font-medium transition-colors",
                 view === v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
@@ -404,22 +431,22 @@ export function OptionsDesk({
       </div>
 
       <div className="xl:grid xl:min-h-0 xl:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
-        <div data-desk-monitor className="border-b xl:min-h-0 xl:overflow-y-auto xl:border-r xl:border-b-0">
+        <div data-desk-monitor className="overflow-x-auto border-b xl:min-h-0 xl:overflow-y-auto xl:border-r xl:border-b-0">
           {/* The monitor and the selected name fail apart: a name that cannot be drawn leaves the board standing. */}
           <PaneBoundary name="The monitor">
-            <table className="w-full table-fixed border-collapse text-[0.8125rem]">
+            <table className="w-full border-collapse text-[0.8125rem] md:table-fixed">
               <caption className="sr-only">
                 Every name in the {VIEW_LABEL[view]} view. Choose a name to see its level map.
               </caption>
               <colgroup>
-                <col className="w-[5.75rem]" />
+                <col className="md:w-[5.75rem]" />
                 {columns.map((c) => (
                   <col key={c.key} className={cn(c.width, c.wideOnly && "max-md:hidden")} />
                 ))}
               </colgroup>
               <thead className="bg-card sticky top-0 z-10">
                 <tr className="border-b">
-                  <th scope="col" className="text-muted-foreground px-3 py-2 text-left text-[0.6875rem] font-medium">
+                  <th scope="col" className="text-muted-foreground px-2 py-2 text-left text-[0.6875rem] font-medium md:px-3">
                     Name
                   </th>
                   {columns.map((c) => {
@@ -430,7 +457,7 @@ export function OptionsDesk({
                         scope="col"
                         title={c.hint}
                         aria-sort={dir === "asc" ? "ascending" : dir === "desc" ? "descending" : undefined}
-                        className={cn("text-muted-foreground px-2 py-2 text-[0.6875rem] font-medium", c.align === "left" ? "text-left" : "text-right", c.wideOnly && "max-md:hidden")}
+                        className={cn("text-muted-foreground px-1.5 py-2 text-[0.6875rem] font-medium md:px-2", c.align === "left" ? "text-left" : "text-right", c.wideOnly && "max-md:hidden")}
                       >
                         {c.sort ? (
                           <button type="button" onClick={() => cycleSort(c)} className={cn("hover:text-foreground inline-flex items-center gap-0.5 rounded", dir && "text-foreground")}>
@@ -464,7 +491,7 @@ export function OptionsDesk({
                         on ? "bg-accent shadow-[inset_2px_0_0_var(--primary)]" : testing ? "bg-warn-soft" : "hover:bg-muted/60",
                       )}
                     >
-                      <th scope="row" className="px-3 text-left font-normal">
+                      <th scope="row" className="px-2 text-left font-normal md:px-3">
                         <button
                           type="button"
                           ref={(el) => {
@@ -480,7 +507,7 @@ export function OptionsDesk({
                         </button>
                       </th>
                       {columns.map((c) => (
-                        <td key={c.key} className={cn("px-2 font-mono", c.align === "left" ? "text-left" : "text-right", c.wideOnly && "max-md:hidden")}>
+                        <td key={c.key} className={cn("px-1.5 font-mono md:px-2", c.align === "left" ? "text-left" : "text-right", c.wideOnly && "max-md:hidden")}>
                           {c.cell(r)}
                         </td>
                       ))}

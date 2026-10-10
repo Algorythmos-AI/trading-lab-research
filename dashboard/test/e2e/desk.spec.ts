@@ -22,6 +22,8 @@ test("the desk shows every name beside the selected name's map and takes live pr
   await expect(page.getByRole("img", { name: /^SPY: last 40 daily bars/ })).toBeVisible();
   // The shared feed reaches the monitor: SPY is 0.3 ATR above its close, inside its major resistance zone.
   await expect(row(page, "SPY")).toContainText("TESTING RESISTANCE");
+  // The chip is on screen, not clipped off the edge of a narrow monitor.
+  await expect(row(page, "SPY").getByText("TESTING RESISTANCE")).toBeInViewport({ ratio: 1 });
   await expect(page.getByTestId("SPY-live-mark")).toBeAttached();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
@@ -37,17 +39,29 @@ test("the whole desk fits one laptop screen", async ({ page, isMobile }) => {
   expect(box).not.toBeNull();
   expect(box!.y + box!.height).toBeLessThanOrEqual(900);
   expect(box!.width).toBeGreaterThan(1300);
+  // Centred in the window, with nothing hanging off either side.
+  expect(box!.x).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(1440);
 });
 
-test("each view gives the monitor its own columns", async ({ page }) => {
+/** How far the monitor's table is wider than the monitor itself: above zero means it scrolls sideways. */
+const monitorOverflow = (page: Page) =>
+  page.locator("[data-desk-monitor]").evaluate((el) => el.scrollWidth - el.clientWidth);
+
+test("each view gives the monitor its own columns, and none of them needs sideways scrolling", async ({ page }) => {
   await page.goto("/options?view=brief");
   await expect(desk(page)).toHaveAttribute("data-desk-view", "brief");
   await expect(desk(page).getByRole("columnheader", { name: /^IV percentile/ })).toBeVisible();
+  expect(await monitorOverflow(page)).toBeLessThanOrEqual(0);
   await desk(page).getByRole("button", { name: "Live", exact: true }).click();
   await expect(desk(page)).toHaveAttribute("data-desk-view", "live");
   await expect(desk(page).getByRole("columnheader", { name: /^State/ })).toBeVisible();
+  // With live chips drawn, which is when the Live view is at its widest.
+  await expect(row(page, "SPY")).toContainText("TESTING RESISTANCE");
+  expect(await monitorOverflow(page)).toBeLessThanOrEqual(0);
   await desk(page).getByRole("button", { name: "Review", exact: true }).click();
   await expect(desk(page).getByRole("columnheader", { name: /^Paper trades/ })).toBeVisible();
+  expect(await monitorOverflow(page)).toBeLessThanOrEqual(0);
   // AAPL took two paper trades in the fixture and won neither.
   await expect(row(page, "AAPL")).toContainText("\u22121.16R");
   await expect(page).toHaveURL(/view=review/);
@@ -63,6 +77,22 @@ test("choosing a name changes the map at once and a reload lands on the same nam
   await page.reload();
   await expect(page.locator('[data-desk-detail="NVDA"]')).toBeVisible();
   await expect(desk(page)).toHaveAttribute("data-desk-view", "brief");
+});
+
+test("the shortcuts still work after choosing a name with the mouse", async ({ page }) => {
+  await page.goto("/options?view=brief&s=SPY");
+  // Click a cell, not the name's button: focus must still end up inside the desk.
+  await row(page, "QQQ").locator("td").first().click();
+  await expect(page.locator('[data-desk-detail="QQQ"]')).toBeVisible();
+  await expect(row(page, "QQQ").getByRole("button")).toBeFocused();
+  await page.keyboard.press("j");
+  await expect(page.locator('[data-desk-detail="AAPL"]')).toBeVisible();
+  // Changing view from a column header removes that header; the keyboard must keep working afterwards.
+  await desk(page).getByRole("columnheader", { name: /^Close/ }).getByRole("button").focus();
+  await page.keyboard.press("3");
+  await expect(desk(page)).toHaveAttribute("data-desk-view", "review");
+  await page.keyboard.press("k");
+  await expect(page.locator('[data-desk-detail="QQQ"]')).toBeVisible();
 });
 
 test("the keyboard moves between names and views while focus is in the desk", async ({ page }) => {
