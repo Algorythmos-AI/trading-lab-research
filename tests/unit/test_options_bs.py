@@ -24,7 +24,28 @@ KINDS: tuple[bs.Kind, ...] = ("call", "put")
 
 
 def test_committed_vectors_are_current():
-    assert gen.VECTORS.read_text() == gen.render(), "run python scripts/gen_bs_vectors.py"
+    assert gen.current(), "run python scripts/gen_bs_vectors.py"
+
+
+def test_the_staleness_check_sees_a_changed_number_a_missing_case_and_a_changed_word_but_not_rounding():
+    fresh = gen.build()
+    assert gen.same(fresh, gen.build())
+    # The sixteenth figure differs between C libraries; that is not a change.
+    nudged = gen.build()
+    nudged["price"][5]["price"] *= 1 + 1e-13
+    assert gen.same(fresh, nudged)
+    changed = gen.build()
+    changed["price"][5]["price"] *= 1 + 1e-6
+    assert not gen.same(fresh, changed)
+    shorter = gen.build()
+    shorter["long"].pop()
+    assert not gen.same(fresh, shorter)
+    other = gen.build()
+    other["price"][5]["kind"] = "put" if other["price"][5]["kind"] == "call" else "call"
+    assert not gen.same(fresh, other)
+    blank = gen.build()
+    blank["implied"][0]["sigma"] = None
+    assert not gen.same(fresh, blank)
 
 
 def _cases(n: int, seed: int, *, tame: bool = False):

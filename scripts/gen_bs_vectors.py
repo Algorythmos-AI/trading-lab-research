@@ -6,11 +6,15 @@ drift apart unnoticed. Synthetic inputs only: no market data.
 
     python scripts/gen_bs_vectors.py            # rewrite the vectors
     python scripts/gen_bs_vectors.py --check    # exit 1 if the committed vectors are stale (CI)
+
+The check compares numbers, not bytes: the last digit of exp, log and erfc differs between C libraries, so the
+same code gives a file that differs in the sixteenth figure on another machine.
 """
 from __future__ import annotations
 
 import dataclasses
 import json
+import math
 import random
 import sys
 from pathlib import Path
@@ -132,14 +136,32 @@ def render() -> str:
     return json.dumps(build(), indent=1) + "\n"
 
 
+def same(a: Any, b: Any) -> bool:
+    """True when two vector files say the same thing: the same shape, the same words, numbers within a part in
+    a billion (or a million-millionth, for the ones near zero)."""
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(same(a[k], b[k]) for k in a)
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(same(x, y) for x, y in zip(a, b, strict=True))
+    if isinstance(a, bool) or isinstance(b, bool) or a is None or b is None or isinstance(a, str) or isinstance(b, str):
+        return type(a) is type(b) and a == b
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        return math.isclose(a, b, rel_tol=1e-9, abs_tol=1e-12)
+    return False
+
+
+def current() -> bool:
+    """True when the committed vectors are what this code would write."""
+    return VECTORS.exists() and same(json.loads(VECTORS.read_text()), json.loads(render()))
+
+
 def main(argv: list[str]) -> int:
-    text = render()
     if "--check" in argv:
-        if not VECTORS.exists() or VECTORS.read_text() != text:
+        if not current():
             print(f"{VECTORS.relative_to(ROOT)} is stale: run python scripts/gen_bs_vectors.py", file=sys.stderr)
             return 1
         return 0
-    VECTORS.write_text(text)
+    VECTORS.write_text(render())
     print(f"wrote {VECTORS.relative_to(ROOT)}")
     return 0
 
