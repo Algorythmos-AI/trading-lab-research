@@ -58,6 +58,11 @@ wt.ops.publish                            POST /api/ingest            (productio
   selected name's level map carries a crosshair (point at it to read a price against the close in
   dollars, ATRs and expected moves, and the zone it is inside) and its zones, candles, expected move and labels can
   each be switched off. The page as it was before stays at `?view=classic` for one release.
+- **Option arithmetic** (`src/lib/bs.ts`, `src/lib/longopt.ts`; nothing on a page uses it yet): the value of one
+  long call or put, its sensitivities, the volatility a price implies, breakeven, and what an hour of waiting costs.
+  Textbook Black-Scholes with a flat rate and yield, so an estimate for American options. The same arithmetic is in
+  Python (`src/wt/options/`), and both are held to one file of vectors, `test/fixtures/bs.vectors.json`, written by
+  `python scripts/gen_bs_vectors.py` (`--check` in the Python tests keeps it current).
 - **Live prices** (`/api/quote?s=SPY,QQQ`, read by the Options page every 2 s while it is open, one poll shared by the
   glance strip, the level maps' live dot and the state chips; a quote older than 30 s shows as stale): last trades from
   Alpaca's free IEX feed, fetched on the server so the page keeps `connect-src 'self'` and never sees the keys. At most
