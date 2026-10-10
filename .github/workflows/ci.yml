@@ -121,7 +121,7 @@ jobs:
           pnpm typecheck
           pnpm test
           pnpm gen:types
-          git diff --exit-code -- src/lib/snapshot.types.ts src/lib/crypto.types.ts
+          git diff --exit-code -- 'src/lib/*.types.ts'
           pnpm build
           pnpm exec playwright install --with-deps chromium
           pnpm test:e2e

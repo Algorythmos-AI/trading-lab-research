@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { handleQuote } from "@/lib/quote-route";
-import { CACHE_MS, MAX_SYMBOLS, alpacaKeys, fetchQuotes, normalise, parseSymbols, resetQuoteCache } from "@/lib/quote";
+import { CACHE_MS, MAX_CACHED, MAX_SYMBOLS, alpacaKeys, fetchQuotes, normalise, parseSymbols, resetQuoteCache } from "@/lib/quote";
 
 const NOW = new Date("2026-10-12T15:00:00Z");
 const KEYS = { id: "test-key-id", secret: "test-key-secret" };
@@ -30,8 +30,10 @@ describe("symbols", () => {
     expect(parseSymbols("spy, QQQ,spy,,bad sym,BRK.B")).toEqual(["SPY", "QQQ", "BRK.B"]);
     expect(parseSymbols("../x,<script>")).toBeNull();
     expect(parseSymbols(null)).toBeNull();
-    const many = Array.from({ length: 30 }, (_, i) => `A${i}`).join(",");
+    const many = Array.from({ length: MAX_SYMBOLS + 20 }, (_, i) => `A${i}`).join(",");
     expect(parseSymbols(many)!.length).toBe(MAX_SYMBOLS);
+    // One options edition may carry 60 names; the cap must not drop any of them.
+    expect(MAX_SYMBOLS).toBe(60);
   });
 });
 
@@ -92,6 +94,54 @@ describe("fetchQuotes", () => {
     expect(f).toHaveBeenCalledTimes(1);
     await fetchQuotes(["SPY"], KEYS, new Date(NOW.getTime() + CACHE_MS), f, "https://data.example");
     expect(f).toHaveBeenCalledTimes(2);
+  });
+
+  it("caches each name on its own, so two pages with different names do not evict each other", async () => {
+    const f = okFetch({ SPY: snap(779.1), QQQ: snap(751.2), AAPL: snap(336.6) });
+    const board = ["SPY", "QQQ"];
+    await fetchQuotes(board, KEYS, NOW, f, "https://data.example");
+    await fetchQuotes(["AAPL"], KEYS, new Date(NOW.getTime() + 100), f, "https://data.example");
+    const again = await fetchQuotes(board, KEYS, new Date(NOW.getTime() + 200), f, "https://data.example");
+    expect(f).toHaveBeenCalledTimes(2);
+    expect(Object.keys(again.quotes)).toEqual(board);
+  });
+
+  it("asks upstream only for the names past their time, and dates the answer by the oldest fetch", async () => {
+    const f = okFetch({ SPY: snap(779.1), QQQ: snap(751.2) });
+    await fetchQuotes(["SPY"], KEYS, NOW, f, "https://data.example");
+    const later = new Date(NOW.getTime() + 500);
+    const r = await fetchQuotes(["SPY", "QQQ"], KEYS, later, f, "https://data.example");
+    expect(String(f.mock.calls[1]![0])).toBe("https://data.example/v2/stocks/snapshots?symbols=QQQ&feed=iex");
+    expect(r.quotes.SPY!.price).toBe(779.1);
+    expect(r.quotes.QQQ!.price).toBe(751.2);
+    expect(r.as_of).toBe(NOW.toISOString());
+    // A name with no usable price is remembered as missing for the same time, not asked for again at once.
+    const none = okFetch({});
+    await fetchQuotes(["ZZZZ"], KEYS, later, none, "https://data.example");
+    expect((await fetchQuotes(["ZZZZ"], KEYS, later, none, "https://data.example")).missing).toEqual(["ZZZZ"]);
+    expect(none).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not trust an entry stamped after the caller's clock", async () => {
+    const f = okFetch({ SPY: snap(779.1) });
+    await fetchQuotes(["SPY"], KEYS, NOW, f, "https://data.example");
+    await fetchQuotes(["SPY"], KEYS, new Date(NOW.getTime() - 60_000), f, "https://data.example");
+    expect(f).toHaveBeenCalledTimes(2);
+  });
+
+  it("remembers at most MAX_CACHED names, dropping the oldest first", async () => {
+    const f = okFetch({});
+    const name = (i: number) => `A${i}`;
+    const total = MAX_CACHED + MAX_SYMBOLS;
+    for (let i = 0; i < total; i += MAX_SYMBOLS) {
+      await fetchQuotes(Array.from({ length: MAX_SYMBOLS }, (_, k) => name(i + k)), KEYS, NOW, f, "https://data.example");
+    }
+    const calls = f.mock.calls.length;
+    // The newest names are still held; the first ones were dropped and go upstream again.
+    await fetchQuotes([name(total - 1)], KEYS, NOW, f, "https://data.example");
+    expect(f).toHaveBeenCalledTimes(calls);
+    await fetchQuotes([name(0)], KEYS, NOW, f, "https://data.example");
+    expect(f).toHaveBeenCalledTimes(calls + 1);
   });
 
   it("throws on an HTTP error without caching it", async () => {

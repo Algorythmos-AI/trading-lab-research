@@ -162,7 +162,16 @@ test("the v3 panels render from the fixture, and the glossary is linked", async 
 test("health endpoint answers without secrets", async ({ request }) => {
   const res = await request.get("/api/health");
   expect(res.ok()).toBe(true);
-  expect(await res.json()).toMatchObject({ ok: true, fixture: true, snapshot_as_of: expect.any(String) });
+  expect(await res.json()).toMatchObject({
+    ok: true,
+    fixture: true,
+    snapshot_as_of: expect.any(String),
+    // The research editions on file and the newest format of each this build accepts.
+    editions: {
+      options: { status: "ok", accepts: 1, session: "2026-10-12", run_id: expect.any(String) },
+      radar: { status: "ok", accepts: 1, edition_date: expect.any(String) },
+    },
+  });
 });
 
 test("ingest refuses writes outside production", async ({ request }) => {
