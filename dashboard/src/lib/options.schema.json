@@ -289,6 +289,40 @@
               }
             }
           },
+          "bars": {
+            "type": "array",
+            "maxItems": 60,
+            "description": "Recent daily bars, oldest first, for the level map.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "d",
+                "o",
+                "h",
+                "l",
+                "c"
+              ],
+              "properties": {
+                "d": {
+                  "type": "string",
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                },
+                "o": {
+                  "type": "number"
+                },
+                "h": {
+                  "type": "number"
+                },
+                "l": {
+                  "type": "number"
+                },
+                "c": {
+                  "type": "number"
+                }
+              }
+            }
+          },
           "problems": {
             "type": "array",
             "maxItems": 24,

@@ -59,6 +59,18 @@ export interface OptionsEdition {
       big?: boolean | null;
     }[];
     /**
+     * Recent daily bars, oldest first, for the level map.
+     *
+     * @maxItems 60
+     */
+    bars?: {
+      d: string;
+      o: number;
+      h: number;
+      l: number;
+      c: number;
+    }[];
+    /**
      * @maxItems 24
      */
     problems?: string[];

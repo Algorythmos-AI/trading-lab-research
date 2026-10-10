@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sign } from "@/lib/hmac";
-import { editionState, ladder, liveNeighbours, liveState, moveBands, nearest, nyClock, ruleLabel, type LiveQuote, type Options, type OptionsTicker } from "@/lib/options";
+import { editionState, ladder, liveNeighbours, liveState, mapView, moveBands, nearest, niceStep, nyClock, roomView, ROOM_REACH, ruleLabel, spreadLabels, type LiveQuote, type Options, type OptionsTicker } from "@/lib/options";
 import { OPTIONS_SCHEMA, isOptions, validateOptionsEdition } from "@/lib/validate";
 import { fixture } from "./helpers";
 import optionsJson from "./fixtures/options.v1.json";
@@ -94,6 +94,10 @@ describe("options edition schema", () => {
     expect(validateOptionsEdition(edition((r) => ((r.rules as Record<string, unknown>[])[0]!.status = "great"))).ok).toBe(false);
     expect(validateOptionsEdition(edition((r) => ((tickers(r)[0]!.zones as Record<string, unknown>[])[0]!.side = "up"))).ok).toBe(false);
     expect(validateOptionsEdition(edition((r) => delete r.session)).ok).toBe(false);
+    // Recent bars are optional; a malformed one is refused.
+    expect(validateOptionsEdition(edition((r) => tickers(r).forEach((t) => delete t.bars))).ok).toBe(true);
+    expect(validateOptionsEdition(edition((r) => ((tickers(r)[0]!.bars as Record<string, unknown>[])[0]!.d = "9 Oct"))).ok).toBe(false);
+    expect(validateOptionsEdition(edition((r) => ((tickers(r)[0]!.bars as Record<string, unknown>[])[0]!.v = 1))).ok).toBe(false);
     expect(validateOptionsEdition(edition((r) => (r.session = "12 Oct"))).ok).toBe(false);
   });
 
@@ -265,6 +269,53 @@ describe("options view helpers", () => {
       expect(n.upAtr).toBeCloseTo((779.4 - 777) / spy.atr14!, 6);
       // Inside PDH + PWH + 52WH (779.40 to 781.62): its own edges.
       expect(liveNeighbours(spy, 780.43)).toMatchObject({ up: 781.62, down: 779.4 });
+    });
+  });
+
+  describe("pictures", () => {
+    const e = optionsJson as unknown as Options;
+    const spy = e.tickers.find((t) => t.symbol === "SPY")!;
+
+    it("places zones on the room bar in ATRs from price, by side, within reach", () => {
+      const v = roomView(spy, 778.55)!;
+      const atr = spy.atr14!;
+      // PDL + PMH 775.14 to 775.16 below the close is support; PDH + PWH + 52WH above is resistance.
+      const sup = v.zones.find((z) => z.zone.members?.includes("PDL"))!;
+      expect(sup.tone).toBe("support");
+      expect(sup.to).toBeCloseTo((775.16 - 778.55) / atr, 6);
+      expect(v.zones.find((z) => z.zone.members?.includes("PDH"))!.tone).toBe("resistance");
+      expect(v.zones.every((z) => z.from >= -ROOM_REACH && z.to <= ROOM_REACH)).toBe(true);
+      // The 52-week low is far below: left off the bar.
+      expect(v.zones.some((z) => z.zone.members?.includes("52WL"))).toBe(false);
+      expect(v.em).toBeCloseTo(spy.expected_move!.day! / atr, 6);
+      expect(v.down).toBe(775.16);
+      // A price inside a zone marks it "at".
+      expect(roomView(spy, 780.43)!.zones.find((z) => z.zone.members?.includes("PDH"))!.tone).toBe("at");
+      expect(roomView({ ...spy, atr14: null }, 778.55)).toBeNull();
+    });
+
+    it("frames the level map around the bars and the week's expected move, dropping far zones", () => {
+      const v = mapView(spy)!;
+      expect(v.bars).toHaveLength(40);
+      const lows = Math.min(...v.bars.map((b) => b.l));
+      expect(v.lo).toBeLessThan(lows);
+      expect(v.hi).toBeGreaterThan(spy.last!.close + spy.expected_move!.week!);
+      expect(v.zones.some((z) => z.zone.members?.includes("52WL"))).toBe(false);
+      expect(v.zones.every((z) => (z.tone === "support" ? z.zone.hi < spy.last!.close : z.zone.lo > spy.last!.close))).toBe(true);
+      // Without bars it still frames the close and the expected move.
+      const bare = mapView({ ...spy, bars: undefined })!;
+      expect(bare.bars).toHaveLength(0);
+      expect(bare.lo).toBeLessThan(spy.last!.close - spy.expected_move!.week!);
+      expect(mapView({ ...spy, last: null })).toBeNull();
+    });
+
+    it("picks round gridline steps and keeps labels apart", () => {
+      expect(niceStep(50, 5)).toBe(10);
+      expect(niceStep(7, 5)).toBe(1);
+      expect(niceStep(0.3, 5)).toBeCloseTo(0.05, 9);
+      expect(spreadLabels([10, 12, 100], 20, 0, 200)).toEqual([10, 30, 100]);
+      // Kept inside the bottom edge, in input order.
+      expect(spreadLabels([195, 190], 20, 0, 200)).toEqual([200, 180]);
     });
   });
 });
