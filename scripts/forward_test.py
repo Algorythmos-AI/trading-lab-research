@@ -51,6 +51,7 @@ from build_pool import ScanFailed, SplitStore, build_one, scan_failure, universe
 from r3_intraday import intraday_day  # noqa: E402
 from r3_run import GG, SpreadAt, admit, gg_day, set_names, trade_row  # noqa: E402
 
+from wt.analytics import b_replay  # noqa: E402
 from wt.backtest.engine import Costs, simulate  # noqa: E402
 from wt.backtest.management import REGISTRY  # noqa: E402
 from wt.backtest.runner import minute_bars  # noqa: E402
@@ -578,6 +579,31 @@ def update_daily(a: AlpacaREST, pending: list[dt.date], now: dt.datetime | None 
     return ready
 
 
+RUNNER_JOURNAL = DATA_DIR / "live" / "journal.jsonl"
+
+
+def note_replay(d: dt.date, bars: pd.DataFrame, sig) -> None:
+    """Keep B's three readings of the session (wt.analytics.b_replay) in var/forward/replay/<d>.json: the forward
+    test's, the rule walked over the recorded bars with the runner's own inputs, and what the runner journaled.
+    Written after the signal is decided; it can never fail the unit or change a trade. Runtime state: it holds
+    QQQ price levels and is never published."""
+    try:
+        rows = []
+        if RUNNER_JOURNAL.exists():
+            for line in RUNNER_JOURNAL.read_text().splitlines():
+                with contextlib.suppress(ValueError):
+                    r = json.loads(line)
+                    if isinstance(r, dict):
+                        rows.append(r)
+        doc = {**b_replay.record(str(d), bars, sig, b_replay.journal_reading(rows, str(d))), "git_sha": git_sha()}
+        path = FWD / "replay" / f"{d}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        text = json.dumps(doc, indent=1, sort_keys=True)
+        atomic_replace(path, lambda tmp: tmp.write_text(text))
+    except Exception as e:  # noqa: BLE001 — a description must never cost B its session
+        print(f"replay record {d}: {e!r}")
+
+
 def run_B(a: AlpacaREST, d: dt.date, sessions: list[dt.date]) -> list[dict]:
     prior = [x for x in sessions if x < d][-14:]
     vals = []
@@ -588,6 +614,7 @@ def run_B(a: AlpacaREST, d: dt.date, sessions: list[dt.date]) -> list[dict]:
             pc = float(b.c.iloc[-1])
     b = a.bars(["QQQ"], "1Min", to_utc_iso(et(d, "09:30")), to_utc_iso(et(d, "15:59"))).reset_index(drop=True)
     sig = setups.b_intraday_momentum(b, sigma=float(np.mean(vals)), prev_close=pc) if len(b) > 200 else None
+    note_replay(d, b, sig)
     if not sig:
         return []
     cst = Costs(slippage_per_share=0.022)
