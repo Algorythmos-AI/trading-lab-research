@@ -13,8 +13,21 @@ export const VARIANT_COOKIE = "fx";
  * - `poison`: a stored edition that no longer matches its schema, as after corruption. One pane must fail alone.
  * - `quotes-off`: the live feed has no keys. `quotes-error`: Alpaca is failing.
  * - `quotes-tick`: the live price flips by one cent every three seconds, without changing any name's state.
+ * - `chain-off`: the option feed has no keys. `chain-error`: Alpaca is failing.
+ * - `chain-thin`: the nearest expiry's first calls come without a volatility, without a market, and crossed.
  */
-export const VARIANT_FLAGS = ["empty", "error", "partial", "poison", "quotes-off", "quotes-error", "quotes-tick"] as const;
+export const VARIANT_FLAGS = [
+  "empty",
+  "error",
+  "partial",
+  "poison",
+  "quotes-off",
+  "quotes-error",
+  "quotes-tick",
+  "chain-off",
+  "chain-error",
+  "chain-thin",
+] as const;
 export type VariantFlag = (typeof VARIANT_FLAGS)[number];
 
 const KNOWN = new Set<string>(VARIANT_FLAGS);
