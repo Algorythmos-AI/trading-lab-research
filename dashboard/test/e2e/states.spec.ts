@@ -24,12 +24,15 @@ test("storage that cannot be read says so", async ({ page, context, baseURL }) =
 test("a sparse edition shows dashes, never NaN, and breaks no pane", async ({ page, context, baseURL }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await variant(context, baseURL, "partial");
+  // The live feed is off here on purpose. With it on, a live price replaces the dash within two seconds, so
+  // whether the dash was still there depended on which arrived first: the assertion or the first quote.
+  await variant(context, baseURL, "partial.quotes-off");
   await page.goto("/options");
   await expect(glanceRows(page)).toHaveCount(10);
+  await expect(page.getByText("Live off")).toBeVisible();
   // QQQ has no ATR in this variant, so its bar cannot be drawn and the row says why.
   await expect(glanceRows(page).filter({ hasText: "QQQ" })).toContainText("No ATR in this edition");
-  // NVDA has no last bar: its close is a dash, not a zero.
+  // NVDA has no last bar: with no live price either, its price is a dash, not a zero.
   await expect(glanceRows(page).filter({ hasText: "NVDA" })).toContainText("—");
   const text = (await page.locator("main").textContent()) ?? "";
   expect(text).not.toMatch(/NaN|undefined|Infinity/);
@@ -37,6 +40,20 @@ test("a sparse edition shows dashes, never NaN, and breaks no pane", async ({ pa
   await expect(page.getByRole("heading", { name: "Paper scorecard" })).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
+  expect(errors).toEqual([]);
+});
+
+test("a sparse edition with the live feed on takes live prices without NaN or a broken pane", async ({ page, context, baseURL }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await variant(context, baseURL, "partial");
+  await page.goto("/options");
+  // The feed is live once SPY carries a live state; NVDA has no last bar but still gets its live price.
+  await expect(glanceRows(page).filter({ hasText: "SPY" })).toContainText("TESTING RESISTANCE");
+  await expect(glanceRows(page).filter({ hasText: "NVDA" })).toContainText("INSIDE");
+  const text = (await page.locator("main").textContent()) ?? "";
+  expect(text).not.toMatch(/NaN|undefined|Infinity/);
+  await expect(page.locator("[data-pane-error]")).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 
