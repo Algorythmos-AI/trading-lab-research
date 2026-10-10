@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { deskOfPath } from "@/lib/desk";
+import { deskOfPath, type DeskName } from "@/lib/desk";
 import { useNow } from "./use-now";
 
 const time = (tz: string) =>
@@ -29,10 +29,20 @@ export function marketPhase(now: Date): string {
   return "Overnight";
 }
 
+/**
+ * A desk that does not keep US equity hours shows the UTC clock and a badge for the hours its market keeps, in
+ * place of the equity market phase. Null for the stocks desk.
+ */
+const SESSION: Record<DeskName, { badge: string; title: string } | null> = {
+  stocks: null,
+  crypto: { badge: "24/7", title: "The crypto desk's day and limits run on UTC" },
+  hft: { badge: "24/5", title: "Currencies trade around the clock on weekdays, from Sunday evening to Friday evening in New York" },
+};
+
 export function Clocks() {
   const nowMs = useNow(1000);
   const now = nowMs === null ? null : new Date(nowMs);
-  const crypto = deskOfPath(usePathname()) === "crypto";
+  const session = SESSION[deskOfPath(usePathname())];
   return (
     <div className="flex items-center gap-3 text-xs" aria-label="Local clocks">
       <span className="flex items-baseline gap-1.5">
@@ -43,14 +53,14 @@ export function Clocks() {
         <span className="text-muted-foreground">New York</span>
         <time className="font-mono text-[0.8125rem] font-medium">{now ? NY.format(now) : "--:--"}</time>
       </span>
-      {crypto ? (
+      {session ? (
         <>
           <span className="flex items-baseline gap-1.5">
             <span className="text-muted-foreground">UTC</span>
             <time className="font-mono text-[0.8125rem] font-medium">{now ? UTC.format(now) : "--:--"}</time>
           </span>
-          <span className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 whitespace-nowrap" title="The crypto desk's day and limits run on UTC">
-            24/7
+          <span className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 whitespace-nowrap" title={session.title}>
+            {session.badge}
           </span>
         </>
       ) : (

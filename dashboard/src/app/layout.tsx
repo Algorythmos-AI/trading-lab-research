@@ -9,7 +9,7 @@ import { THEME_INIT_SCRIPT } from "@/components/client/theme-toggle";
 import { SnapshotFooter, type FooterSnapshot } from "@/components/client/snapshot-footer";
 import { SiteHeader } from "@/components/site-header";
 import { requestTime } from "@/lib/now";
-import { loadCryptoSnapshot, loadSnapshot } from "@/lib/snapshot";
+import { loadCryptoSnapshot, loadHftSnapshot, loadSnapshot } from "@/lib/snapshot";
 import "./globals.css";
 
 export const dynamic = "force-dynamic";
@@ -40,8 +40,9 @@ function foot(
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const [result, crypto] = await Promise.all([loadSnapshot(), loadCryptoSnapshot()]);
+  const [result, crypto, hft] = await Promise.all([loadSnapshot(), loadCryptoSnapshot(), loadHftSnapshot()]);
   const snap = result.status === "ok" ? result.snapshot : null;
+  const hsnap = hft.status === "ok" ? hft.snapshot : null;
   const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html lang="en-AU" className={`dark ${GeistSans.variable} ${GeistMono.variable}`} suppressHydrationWarning>
@@ -55,7 +56,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         >
           Skip to content
         </a>
-        <SiteHeader result={result} crypto={crypto} now={requestTime().getTime()} />
+        <SiteHeader result={result} crypto={crypto} hft={hft} now={requestTime().getTime()} />
         {result.status === "ok" && result.source === "fixture" ? (
           <div className="bg-info-soft text-info border-b">
             <p className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-1.5 text-xs sm:px-6">
@@ -74,7 +75,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               Glossary
             </Link>
             .
-            <SnapshotFooter stocks={foot(snap)} crypto={foot(crypto.status === "ok" ? crypto.snapshot : null)} />
+            <SnapshotFooter
+              desks={{
+                stocks: foot(snap),
+                crypto: foot(crypto.status === "ok" ? crypto.snapshot : null),
+                hft: hsnap ? { runId: hsnap.run_id ?? null, schemaVersion: hsnap.schema_version ?? null, withheld: null } : null,
+              }}
+            />
           </p>
         </footer>
         <AutoRefresh />

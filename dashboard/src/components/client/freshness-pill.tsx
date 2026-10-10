@@ -2,7 +2,7 @@
 
 import { CircleCheck, MoonStar, OctagonX, TriangleAlert, CircleDashed } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { deskOfPath } from "@/lib/desk";
+import { deskOfPath, type DeskName } from "@/lib/desk";
 import { describeAge, freshness, type FreshState } from "@/lib/freshness";
 import type { ExpectedWindow } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -65,7 +65,7 @@ export interface DeskFreshness {
 }
 
 /** The pill of the desk the current page belongs to. Each desk has its own snapshot and its own freshness. */
-export function DeskFreshnessPill({ stocks, crypto }: { stocks: DeskFreshness; crypto: DeskFreshness }) {
-  const d = deskOfPath(usePathname()) === "crypto" ? crypto : stocks;
+export function DeskFreshnessPill({ desks }: { desks: Record<DeskName, DeskFreshness> }) {
+  const d = desks[deskOfPath(usePathname())];
   return <FreshnessPill asOf={d.asOf} windows={d.windows} initial={d.initial} />;
 }
