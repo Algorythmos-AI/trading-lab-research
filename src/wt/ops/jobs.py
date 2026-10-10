@@ -39,7 +39,7 @@ from wt.ops.alerts import Alerts
 from wt.ops.heartbeat import Heartbeat, last_runs, ok_runs_since
 from wt.ops.locks import DEPLOY_LOCK, job_lock
 from wt.ops.schedule import JOBS, PY, SYDNEY, Job
-from wt.ops.window import Session, forward_wait_until, load_sessions
+from wt.ops.window import CalendarFault, Session, forward_wait_until, load_sessions
 
 JOURNAL = DATA_DIR / "live" / "journal.jsonl"
 KILL = ROOT / "KILL"
@@ -387,7 +387,8 @@ def run_job(job: Job, root: Path = ROOT, preflight_only: bool = False, alerts: A
         start = _now()
         sessions, exact = load_sessions(start)
         if not exact:
-            log("market calendar unavailable; using the weekday fallback")
+            why = f": {exact}" if isinstance(exact, CalendarFault) else ""
+            log(f"market calendar unavailable; using the weekday fallback{why}")
         if job.name == "forward" and (until := forward_wait_until(start, sessions)) is not None:
             log(f"waiting until {until.astimezone(ET):%H:%M} ET (close + 20 min) before the forward test")
             while (left := (until - _now()).total_seconds()) > 0:

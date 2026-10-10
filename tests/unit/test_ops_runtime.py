@@ -322,6 +322,15 @@ def test_failed_job_alerts_and_records_the_heartbeat(jobroot):
     assert box[-1]["title"] == "routine recovered"
 
 
+def test_the_job_log_says_why_the_calendar_fell_back(jobroot, monkeypatch):
+    root, a, box, tmp = jobroot
+    fault = window.calendar_fault(KeyError("missing required env var APCA_API_KEY_ID"))
+    monkeypatch.setattr(jobs, "load_sessions", lambda now: ({}, fault))
+    assert jobs.run_job(_job("pass"), root, alerts=a) == 0                        # the fallback never stops a job
+    [log] = (root / "logs").glob("routine_*.log")
+    assert "using the weekday fallback: APCA_API_KEY_ID is not set" in log.read_text()
+
+
 def test_refusal_exits_zero_and_alerts_once(jobroot, monkeypatch):
     root, a, box, tmp = jobroot
     monkeypatch.setattr(jobs.preflight, "run_checks", lambda root: [preflight.Check("free disk", False, "1.0 GB")])
