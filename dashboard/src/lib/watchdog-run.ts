@@ -11,7 +11,7 @@ import {
   writeText,
   type StoredText,
 } from "./blob";
-import { DESK_PATHS } from "./desk";
+import { DESK_LABEL, DESK_PATHS, type DeskName } from "./desk";
 import { logEvent } from "./log";
 import { sendNtfy, type Notice } from "./ntfy";
 import type { Snapshot } from "./types";
@@ -40,34 +40,53 @@ export const blobDeps: WatchdogDeps = {
   prune: true,
 };
 
-/**
- * The crypto desk's dependencies (ADR 0005): its own latest snapshot, alert state and history, and pages that say
- * which desk they are about. Its snapshot publishes one always-open window, so an outage at any hour pages.
- */
-export const cryptoDeps: WatchdogDeps = {
-  readLatest: () => readText(DESK_PATHS.crypto.latest),
-  readState: () => readForUpdate(DESK_PATHS.crypto.alertState),
-  writeState: (body, opts) => writeText(DESK_PATHS.crypto.alertState, body, opts),
-  listHistory: () => listPaths(DESK_PATHS.crypto.history),
-  deleteHistory: (urls) => deleteUrls(urls),
-  send: (notice) => sendNtfy({ ...notice, title: `Crypto desk: ${notice.title}` }),
-  prune: true,
-};
+/** The desks added after the stocks desk (ADR 0005). Each has its own tick, which a "new" desk skips. */
+export type AddedDesk = Exclude<DeskName, "stocks">;
 
 /**
- * One tick for the crypto desk, or a skip while the desk is "new": it has never published and has no alert
+ * An added desk's dependencies: its own latest snapshot, alert state and history, and pages that say which desk
+ * they are about. A desk is watched inside the windows its own snapshot publishes: the crypto desk publishes one
+ * always-open window, so an outage at any hour pages.
+ */
+function deskDeps(desk: AddedDesk): WatchdogDeps {
+  const paths = DESK_PATHS[desk];
+  return {
+    readLatest: () => readText(paths.latest),
+    readState: () => readForUpdate(paths.alertState),
+    writeState: (body, opts) => writeText(paths.alertState, body, opts),
+    listHistory: () => listPaths(paths.history),
+    deleteHistory: (urls) => deleteUrls(urls),
+    send: (notice) => sendNtfy({ ...notice, title: `${DESK_LABEL[desk]} desk: ${notice.title}` }),
+    prune: true,
+  };
+}
+
+export const cryptoDeps: WatchdogDeps = deskDeps("crypto");
+export const hftDeps: WatchdogDeps = deskDeps("hft");
+
+/** The added desks in the order the cron runs their ticks. A new desk is one more entry. */
+export const DESK_DEPS: Record<AddedDesk, WatchdogDeps> = { crypto: cryptoDeps, hft: hftDeps };
+
+/**
+ * One tick for an added desk, or a skip while the desk is "new": it has never published and has no alert
  * state, so there is nothing to be late. Deploying the dashboard before the desk exists pages nobody.
  */
-export async function runCryptoWatchdog(
+export async function runDeskWatchdog(
+  desk: AddedDesk,
   now: Date = new Date(),
-  deps: WatchdogDeps = cryptoDeps,
+  deps: WatchdogDeps = DESK_DEPS[desk],
 ): Promise<Record<string, unknown>> {
   const [latest, state] = await Promise.all([
     deps.readLatest().catch(() => undefined),
     deps.readState().catch(() => undefined),
   ]);
-  if (latest === null && state === null) return { ok: true, desk: "crypto", skipped: "never published" };
-  return { ...(await runWatchdog(now, deps)), desk: "crypto" };
+  if (latest === null && state === null) return { ok: true, desk, skipped: "never published" };
+  return { ...(await runWatchdog(now, deps)), desk };
+}
+
+/** The crypto desk's tick. */
+export function runCryptoWatchdog(now: Date = new Date(), deps: WatchdogDeps = cryptoDeps): Promise<Record<string, unknown>> {
+  return runDeskWatchdog("crypto", now, deps);
 }
 
 function parseSnapshot(text: string): Snapshot | null {

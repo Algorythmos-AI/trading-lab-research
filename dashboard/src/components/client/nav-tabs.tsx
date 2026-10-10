@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
-import { deskOfPath } from "@/lib/desk";
+import { DESK_HOME, deskOfPath, type DeskName } from "@/lib/desk";
 import { cn } from "@/lib/utils";
 
 export const NAV = [
@@ -30,9 +30,15 @@ export const CRYPTO_NAV = [
   { href: "/crypto/engineering", label: "Engineering" },
 ] as const;
 
+/** The HFT desk's sections (ADR 0006). One for now; the desk lives in another repository and adds pages as it grows. */
+export const HFT_NAV = [{ href: "/hft", label: "Overview" }] as const;
+
+const DESK_NAV: Record<DeskName, readonly { href: string; label: string }[]> = { stocks: NAV, crypto: CRYPTO_NAV, hft: HFT_NAV };
+
 export function NavTabs() {
   const pathname = usePathname();
-  const nav = deskOfPath(pathname) === "crypto" ? CRYPTO_NAV : NAV;
+  const desk = deskOfPath(pathname);
+  const nav = DESK_NAV[desk];
   const listRef = useRef<HTMLUListElement>(null);
   useEffect(() => {
     // On a phone the tab row scrolls sideways; keep the current section in view.
@@ -42,7 +48,8 @@ export function NavTabs() {
     <nav aria-label="Sections" className="-mb-px overflow-x-auto [scrollbar-width:none]">
       <ul ref={listRef} className="flex min-w-max gap-1">
         {nav.map((item) => {
-          const active = item.href === "/" || item.href === "/crypto" ? pathname === item.href : pathname.startsWith(item.href);
+          // A desk's first page matches exactly; every other section also covers the pages under it.
+          const active = item.href === DESK_HOME[desk] ? pathname === item.href : pathname.startsWith(item.href);
           return (
             <li key={item.href}>
               <Link

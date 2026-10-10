@@ -1,7 +1,7 @@
-// Desks (ADR 0005): the stocks desk and the crypto desk share this site and nothing else. Pure constants, safe
-// to import from server and browser code.
+// Desks (ADR 0005, ADR 0006): the stocks desk, the crypto desk and the HFT desk share this site and nothing else.
+// Pure constants, safe to import from server and browser code. A new desk is one more entry in each record here.
 
-export type DeskName = "stocks" | "crypto";
+export type DeskName = "stocks" | "crypto" | "hft";
 
 export interface DeskPaths {
   latest: string;
@@ -25,13 +25,29 @@ export const DESK_PATHS: Record<DeskName, DeskPaths> = {
     history: "snapshots/crypto/history/",
     alertState: "alerts/crypto-state.json",
   },
+  hft: {
+    latest: "snapshots/hft/latest.json",
+    shadow: "shadow/hft/latest.json",
+    history: "snapshots/hft/history/",
+    alertState: "alerts/hft-state.json",
+  },
 };
 
-export const DESK_LABEL: Record<DeskName, string> = { stocks: "Stocks", crypto: "Crypto" };
+export const DESK_LABEL: Record<DeskName, string> = { stocks: "Stocks", crypto: "Crypto", hft: "HFT" };
 
-/** The desk a page belongs to, from its path. Pages outside /crypto are the stocks desk's or global. */
+/** Each desk's first page. The stocks desk keeps the site root; every other desk lives under its own prefix. */
+export const DESK_HOME: Record<DeskName, string> = { stocks: "/", crypto: "/crypto", hft: "/hft" };
+
+/** The desks in the order the header shows them. */
+export const DESKS = Object.keys(DESK_HOME) as DeskName[];
+
+/** The desk a page belongs to, from its path. Pages outside every other desk's prefix are the stocks desk's or global. */
 export function deskOfPath(pathname: string): DeskName {
-  return pathname === "/crypto" || pathname.startsWith("/crypto/") ? "crypto" : "stocks";
+  for (const desk of DESKS) {
+    const home = DESK_HOME[desk];
+    if (home !== "/" && (pathname === home || pathname.startsWith(`${home}/`))) return desk;
+  }
+  return "stocks";
 }
 
 /** The pre-market radar's editions: the newest one, and one copy per edition date (a same-day refresh replaces it). */

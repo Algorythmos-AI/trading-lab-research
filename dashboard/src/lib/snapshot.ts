@@ -4,6 +4,7 @@ import { LATEST_PATH, listPaths, readText } from "./blob";
 import type { CryptoSnapshot } from "./crypto.types";
 import { DESK_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
 import { parseFlags, partialOptions, poisonedOptions, VARIANT_COOKIE, type VariantFlag } from "./fixture-variants";
+import type { HftSnapshot } from "./hft.types";
 import { logEvent } from "./log";
 import type { OptionsEdition } from "./options.types";
 import { radarDates } from "./radar";
@@ -87,6 +88,38 @@ export const loadCryptoSnapshot = cache(async (): Promise<CryptoResult> => {
     return { status: "ok", snapshot: parsed as CryptoSnapshot, source: "blob" };
   } catch (e) {
     logEvent("snapshot.read", { outcome: "error", desk: "crypto", error: e instanceof Error ? e.name : "unknown" });
+    return { status: "error" };
+  }
+});
+
+export type HftResult =
+  | { status: "ok"; snapshot: HftSnapshot; source: "fixture" | "blob" }
+  | { status: "missing" }
+  | { status: "error" };
+
+/**
+ * The HFT desk's latest snapshot (ADR 0006). "missing" until the desk has published for the first time. In fixture
+ * mode the `empty` and `error` variants stand for that and for unreadable storage, so both states can be looked at.
+ */
+export const loadHftSnapshot = cache(async (): Promise<HftResult> => {
+  if (fixtureMode()) {
+    const flags = await fixtureFlags();
+    if (flags.has("empty")) return { status: "missing" };
+    if (flags.has("error")) return { status: "error" };
+    const mod = await import("../../test/fixtures/hft.v1.json");
+    return { status: "ok", snapshot: (mod.default ?? mod) as unknown as HftSnapshot, source: "fixture" };
+  }
+  try {
+    const stored = await readText(DESK_PATHS.hft.latest);
+    if (!stored) return { status: "missing" };
+    const parsed: unknown = JSON.parse(stored.text);
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      logEvent("snapshot.read", { outcome: "not-an-object", desk: "hft" });
+      return { status: "error" };
+    }
+    return { status: "ok", snapshot: parsed as HftSnapshot, source: "blob" };
+  } catch (e) {
+    logEvent("snapshot.read", { outcome: "error", desk: "hft", error: e instanceof Error ? e.name : "unknown" });
     return { status: "error" };
   }
 });

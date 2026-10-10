@@ -90,6 +90,35 @@ wt.ops.publish                            POST /api/ingest            (productio
 - **Health** (`src/lib/health.ts`) and the top-of-page **summary** sentence (`src/lib/summary.ts`) are pure
   functions of the snapshot and the current time.
 
+## Desks
+
+The site shows three desks. The header's switch moves between them, and each has its own snapshot, its own
+freshness pill and its own watchdog state (ADR 0005). Ingest files a snapshot by the `schema` id inside the signed
+body, never by a header.
+
+| Desk | Pages | `schema` id | Schema file in `src/lib/` | Latest snapshot | Watchdog state |
+|---|---|---|---|---|---|
+| Stocks | `/` and every page outside another desk's prefix | `trading-lab/snapshot` | `snapshot.schema.json`, generated from the Python allowlist (`make schema`) | `snapshots/latest.json` | `alerts/state.json` |
+| Crypto | `/crypto` and the pages under it | `trading-lab/crypto-snapshot` | `crypto.schema.json`, generated from `wt.crypto.snapshot` (`make schema`) | `snapshots/crypto/latest.json` | `alerts/crypto-state.json` |
+| HFT | `/hft` | `hft-lab/snapshot` | `hft.schema.json`, a copy of the contract owned by `Algorythmos-AI/hft-lab`, pinned by `hft.contract.lock.json` | `snapshots/hft/latest.json` | `alerts/hft-state.json` |
+
+- **One entry per desk.** A desk is an entry in `src/lib/desk.ts` (label, first page, storage paths), a contract
+  in `src/lib/validate.ts` (keyed by schema id: the validator and the slot come from the same entry), a loader in
+  `src/lib/snapshot.ts`, a watchdog entry in `src/lib/watchdog-run.ts` and a section list in
+  `src/components/client/nav-tabs.tsx`.
+- **The HFT desk lives in another repository** (ADR 0006). This repository holds no code for it; the dashboard
+  only shows what it publishes. Until its first snapshot arrives, `/hft` is an empty state with no numbers, its
+  watchdog tick is skipped and `/api/health` reports `desks.hft.snapshot` as `missing`.
+- **Taking a new version of the HFT contract.** Copy the schema from `hft-lab` over `src/lib/hft.schema.json`, run
+  `pnpm gen:types`, and put the file's SHA-256 and the source commit in `src/lib/hft.contract.lock.json`.
+  `pnpm test` fails while the hash and the file disagree. `make schema` does not produce this file. Deploy the
+  dashboard before the publisher that sends the new fields: ingest refuses fields it does not know.
+- **When the HFT desk is watched.** Like every desk, inside the `expected_windows` of its own latest snapshot.
+  Currencies are closed at weekends, so each snapshot must list the window that is open or the next one to open;
+  when every listed window has ended, the watchdog falls back to US equity weekday hours.
+- **Fixture mode** serves `test/fixtures/hft.v1.json`. The `fx` cookie's `empty` and `error` variants (below) also
+  put `/hft` into its not-yet-published and storage-down states.
+
 ## Local development
 
 ```sh

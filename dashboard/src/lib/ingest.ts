@@ -4,7 +4,7 @@ import { DESK_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
 import { verify } from "./hmac";
 import { logEvent } from "./log";
 import { parseTime } from "./freshness";
-import { deskOf, isOptions, isRadar, validateCryptoSnapshot, validateOptionsEdition, validateRadarEdition, validateSnapshot } from "./validate";
+import { contractOf, isOptions, isRadar, validateOptionsEdition, validateRadarEdition } from "./validate";
 
 export const MAX_BODY_BYTES = 3_500_000;
 
@@ -135,11 +135,13 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
     return done(403, "radar-key-scope", { error: "this key may only publish research editions" });
   }
 
-  // The desk comes from the signed body (its `schema`), never from a header: ADR 0005.
-  const desk = deskOf(data);
+  // The desk comes from the signed body (its `schema`), never from a header: ADR 0005. The slot and the validator
+  // are read from the same contract, so the body is filed where it was validated.
+  const contract = contractOf(data);
+  const desk = contract.desk;
   const paths = DESK_PATHS[desk];
   const target = primary ? paths.latest : paths.shadow;
-  const result = desk === "crypto" ? validateCryptoSnapshot(data) : validateSnapshot(data);
+  const result = contract.validate(data);
   if (!result.ok) {
     return done(422, "invalid", { error: "invalid", errors: result.errors }, { bytes: bytes.byteLength, n_errors: result.errors.length });
   }

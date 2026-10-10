@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { scan, useTheme } from "./axe";
 
 // CI-only smoke test. The server runs with DASHBOARD_FIXTURE=1 (see playwright.config.ts).
 const PAGES = [
@@ -299,3 +300,220 @@ test("the crypto wiki draws the desk from the crypto snapshot", async ({ page })
   await expect(page.getByRole("img", { name: /^The data harvest \(switch on, DEC-0027\): books h-trend, .*h-explore/ })).toBeAttached();
   await expect(page.getByRole("list", { name: "The data harvest in numbers" })).toContainText("107");
 });
+
+// ---- the HFT desk (ADR 0006) ----------------------------------------------------------------------------------------
+
+const DESK_LINKS = [
+  { name: "Stocks", href: "/" },
+  { name: "Crypto", href: "/crypto" },
+  { name: "HFT", href: "/hft" },
+];
+
+test("the desk switch has three desks and says which one a page belongs to", async ({ page }) => {
+  for (const [path, current] of [
+    ["/", "Stocks"],
+    ["/options", "Stocks"],
+    ["/crypto", "Crypto"],
+    ["/crypto/risk", "Crypto"],
+    ["/hft", "HFT"],
+  ] as const) {
+    await page.goto(path);
+    const desk = page.getByRole("navigation", { name: "Desk" });
+    await expect(desk.getByRole("link")).toHaveText(DESK_LINKS.map((d) => d.name));
+    for (const d of DESK_LINKS) {
+      const link = desk.getByRole("link", { name: d.name, exact: true });
+      await expect(link).toHaveAttribute("href", d.href);
+      if (d.name === current) await expect(link).toHaveAttribute("aria-current", "true");
+      else await expect(link).not.toHaveAttribute("aria-current", "true");
+    }
+    await expect(desk.locator('[aria-current="true"]')).toHaveCount(1);
+  }
+});
+
+test("the HFT page renders from the fixture", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  const res = await page.goto("/hft");
+  expect(res?.status()).toBe(200);
+
+  // one section for now, and the header shows the HFT desk's hours
+  const nav = page.getByRole("navigation", { name: "Sections" });
+  await expect(nav.getByRole("link")).toHaveCount(1);
+  await expect(nav.getByRole("link", { name: "Overview", exact: true })).toHaveAttribute("href", "/hft");
+  await expect(nav.getByRole("link", { name: "Overview", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByText("24/5")).toBeVisible();
+  await expect(page.getByText("24/7")).toHaveCount(0);
+
+  await expect(page.getByRole("heading", { level: 1, name: "HFT" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+  await expect(page.locator("#health-title")).toBeVisible();
+  for (const name of ["Build phases", "Recorder", "Pairs", "Sleeves", "Books", "Learning"]) {
+    await expect(page.getByRole("heading", { level: 2, name, exact: true })).toBeVisible();
+  }
+  const status = page.getByRole("region", { name: "Desk status" });
+  for (const words of ["Paper", "Shadow", "IBKR paper", "Open", "Off"]) await expect(status).toContainText(words);
+  await expect(page.getByRole("list", { name: "Build phases in order" }).getByRole("listitem")).toHaveCount(8);
+  await expect(page.getByRole("list", { name: "Build phases in order" }).getByRole("listitem").filter({ hasText: "F3" })).toContainText("Now");
+  const pairs = page.getByRole("region", { name: "Currency pairs" });
+  await expect(pairs.getByRole("columnheader")).toHaveText(["Pair", "Form", "Last quote", "Updates a second", "Median spread"]);
+  await expect(pairs.getByRole("cell", { name: "EUR.USD" })).toBeVisible();
+  const sleeves = page.getByRole("region", { name: "Sleeves" });
+  await expect(sleeves.getByRole("row")).toHaveCount(3);
+  await expect(sleeves.getByRole("row").nth(2)).toContainText("Directional change");
+  await expect(page.getByRole("heading", { level: 3, name: "Shadow book" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 3, name: "Broker book" })).toBeVisible();
+  await expect(page.getByText("The shadow book is the result of record.")).toBeVisible();
+  await expect(page.getByText("dc_2026w39.r1")).toBeVisible();
+  // a table's scroll area can be reached with the keyboard
+  await pairs.focus();
+  await expect(pairs).toBeFocused();
+  // the footer names the HFT snapshot, which has no redaction level
+  await expect(page.locator("footer")).toContainText("Snapshot 20261009T143000Z-fixture, schema v1.");
+  await expect(page.locator("footer")).not.toContainText("redaction");
+
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+  expect(errors).toEqual([]);
+});
+
+test("the HFT page is a composed empty state while the desk has not published", async ({ page, context, baseURL }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await context.addCookies([{ name: "fx", value: "empty", url: baseURL! }]);
+  const res = await page.goto("/hft");
+  expect(res?.status()).toBe(200);
+  await expect(page.getByRole("heading", { level: 1, name: "HFT" })).toBeVisible();
+  await expect(page.getByText("The HFT desk has not published yet")).toBeVisible();
+  await expect(page.getByText("This page fills in when the desk's recorder starts", { exact: false })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "What this page will show" })).toBeVisible();
+  // nothing that looks like a reading: no banner, no table, no badge, and not one digit beyond the phases' names
+  const main = page.locator("main");
+  await expect(main.locator("#health-title")).toHaveCount(0);
+  await expect(main.locator("table")).toHaveCount(0);
+  await expect(main.locator('[data-slot="badge"]')).toHaveCount(0);
+  expect(((await main.innerText()) ?? "").replace("F0 to F7", "")).not.toMatch(/\d|—/);
+  // the header says there is no data, and the footer names no snapshot
+  await expect(page.getByRole("banner").getByRole("status")).toHaveText("No data yet");
+  await expect(page.locator("footer")).not.toContainText("Snapshot");
+  await expect(page.getByRole("navigation", { name: "Desk" }).getByRole("link", { name: "HFT" })).toHaveAttribute("aria-current", "true");
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+  expect(errors).toEqual([]);
+});
+
+test("the HFT page says so when its storage cannot be read", async ({ page, context, baseURL }) => {
+  await context.addCookies([{ name: "fx", value: "error", url: baseURL! }]);
+  await page.goto("/hft");
+  await expect(page.getByRole("heading", { level: 1, name: "HFT" })).toBeVisible();
+  await expect(page.getByText("Storage could not be read")).toBeVisible();
+  await expect(page.locator("main table")).toHaveCount(0);
+});
+
+test("the desk switch reaches the HFT desk and comes back", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("navigation", { name: "Desk" }).getByRole("link", { name: "HFT" }).click();
+  await expect(page).toHaveURL(/\/hft$/);
+  await expect(page.getByRole("heading", { level: 1, name: "HFT" })).toBeVisible();
+  await page.getByRole("navigation", { name: "Desk" }).getByRole("link", { name: "Crypto" }).click();
+  await expect(page).toHaveURL(/\/crypto$/);
+  await expect(page.getByText("24/7")).toBeVisible();
+  await page.getByRole("navigation", { name: "Desk" }).getByRole("link", { name: "Stocks" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Strategies", exact: true })).toBeAttached();
+});
+
+test("health reports the HFT desk beside the crypto desk", async ({ request }) => {
+  const body = await (await request.get("/api/health")).json();
+  expect(body.desks).toEqual({
+    crypto: { snapshot: "ok", as_of: expect.any(String), run_id: expect.any(String) },
+    hft: { snapshot: "ok", as_of: "2026-10-09T14:30:00+00:00", run_id: "20261009T143000Z-fixture" },
+  });
+});
+
+/** Where the header's parts sit. Rounded: only rows and edges matter here. */
+async function headerBoxes(page: import("@playwright/test").Page) {
+  return page.evaluate(() => {
+    const box = (el: Element | null | undefined) => {
+      const b = el?.getBoundingClientRect();
+      return b ? { top: Math.round(b.top), bottom: Math.round(b.bottom), left: Math.round(b.left), right: Math.round(b.right) } : null;
+    };
+    const header = document.querySelector("header");
+    const desk = header?.querySelector('nav[aria-label="Desk"]');
+    return {
+      width: document.documentElement.clientWidth,
+      overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      position: header ? getComputedStyle(header).position : null,
+      header: box(header),
+      desk: box(desk),
+      links: [...(desk?.querySelectorAll("a") ?? [])].map(box),
+      pill: box(header?.querySelector('[role="status"]')),
+      clocks: box(header?.querySelector('[aria-label="Local clocks"]')),
+      sections: box(header?.querySelector('nav[aria-label="Sections"]')),
+    };
+  });
+}
+
+const EVERY_DESK = ["/", "/options", "/crypto", "/hft"];
+
+test("on a phone the three desks stay on one line, nothing scrolls sideways, and the header does not stick", async ({ page, isMobile }) => {
+  test.skip(isMobile, "sets its own phone widths");
+  for (const width of [360, 375, 412]) {
+    await page.setViewportSize({ width, height: 800 });
+    for (const path of EVERY_DESK) {
+      await page.goto(path);
+      await expect(page.getByRole("navigation", { name: "Desk" }).getByRole("link")).toHaveCount(3);
+      const h = await headerBoxes(page);
+      const at = `${path} at ${width}px`;
+      expect(h.overflow, at).toBeLessThanOrEqual(0);
+      expect(new Set(h.links.map((l) => l?.top)).size, at).toBe(1);
+      expect(h.desk!.left, at).toBeGreaterThanOrEqual(0);
+      expect(h.desk!.right, at).toBeLessThanOrEqual(h.width);
+      expect(h.pill!.right, at).toBeLessThanOrEqual(h.width);
+      // The Options desk pins its own bars to the top and bottom of a phone screen, so the site header must scroll away.
+      expect(h.position, at).toBe("static");
+    }
+  }
+});
+
+test("on a laptop the third desk leaves the header one row above the sections, on every desk", async ({ page, isMobile }) => {
+  test.skip(isMobile, "sets its own laptop widths");
+  for (const width of [1280, 1366, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    const heights = new Set<number>();
+    for (const path of EVERY_DESK) {
+      await page.goto(path);
+      await expect(page.getByRole("navigation", { name: "Desk" }).getByRole("link")).toHaveCount(3);
+      const h = await headerBoxes(page);
+      const at = `${path} at ${width}px`;
+      // the switch, the pill and the clocks share one row, and the sections come straight after it
+      expect(h.pill!.top, at).toBeLessThan(h.desk!.bottom);
+      expect(h.pill!.bottom, at).toBeGreaterThan(h.desk!.top);
+      expect(h.clocks!.top, at).toBeLessThan(h.desk!.bottom);
+      expect(h.clocks!.bottom, at).toBeGreaterThan(h.desk!.top);
+      expect(h.sections!.top, at).toBeGreaterThanOrEqual(h.desk!.bottom);
+      expect(h.position, at).toBe("sticky");
+      expect(h.overflow, at).toBeLessThanOrEqual(0);
+      heights.add(h.header!.bottom - h.header!.top);
+    }
+    // The Options desk is sized from this height (xl:h-[calc(100dvh-10.5rem)]): it is the same on every desk's pages.
+    expect([...heights], `header height at ${width}px`).toHaveLength(1);
+  }
+});
+
+// The same scan a11y.spec.ts runs on the stocks pages (WCAG 2.1 A and AA, nothing waived, both themes), on the desktop
+// project and on the phone project: the page's tables scroll inside an area the keyboard can reach.
+for (const theme of ["light", "dark"] as const) {
+  for (const [fx, state] of [
+    [null, "from the fixture"],
+    ["empty", "before the desk has published"],
+  ] as const) {
+    test(`/hft ${state} passes the accessibility scan in ${theme}`, async ({ page, context, baseURL }) => {
+      await useTheme(context, theme);
+      if (fx) await context.addCookies([{ name: "fx", value: fx, url: baseURL! }]);
+      await page.goto("/hft");
+      await expect(page.getByRole("heading", { level: 1, name: "HFT" })).toBeAttached();
+      expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(theme === "dark");
+      expect(await scan(page)).toEqual([]);
+    });
+  }
+}
