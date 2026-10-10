@@ -1,7 +1,7 @@
 // The Today page's helpers: the pre-market scan as a person reads it, from fields the snapshot already carries.
 import { describe, expect, it } from "vitest";
 import { summarize } from "@/lib/summary";
-import { detailLabel, eventLabel, scan, scanSentence, why } from "@/lib/today";
+import { CLOCK_TO, detailLabel, eventLabel, scan, scanSentence, sessionClock, why } from "@/lib/today";
 import type { Snapshot } from "@/lib/types";
 import { fixture } from "./helpers";
 
@@ -109,5 +109,40 @@ describe("plain words for the runner's log", () => {
     expect(detailLabel("kill_file, stale_signal_data")).toBe("kill switch on, signal data too old");
     expect(detailLabel("2026-10-05")).toBe("2026-10-05");
     expect(detailLabel(null)).toBe("");
+  });
+});
+
+describe("the session clock", () => {
+  const day = (jobs: Record<string, unknown>) =>
+    ({ ...fixture(), market: { phase: "open", trading_day_et: "2026-10-05" }, jobs: { last: jobs } }) as unknown as Snapshot;
+
+  it("places each job's run on the New York day, beside its scheduled start", () => {
+    const c = sessionClock(
+      day({
+        routine: { status: "ok", started: "2026-10-05T11:30:02Z", ended: "2026-10-05T15:31:40Z" },
+        "paper-b": { status: "running", started: "2026-10-05T12:30:01Z" },
+        forward: { status: "failed", started: "2026-10-02T19:40:00Z", ended: "2026-10-02T20:41:00Z" },
+      }),
+    );
+    expect(c.day).toBe("2026-10-05");
+    const [routine, paper, forward] = c.runs;
+    expect(routine).toMatchObject({ key: "routine", at: 450, from: 450, to: 691, tone: "good", running: false });
+    // Still running: no end, so the browser draws it to "now"; amber, not the status tone.
+    expect(paper).toMatchObject({ key: "paper-b", at: 510, from: 510, to: null, tone: "warn", running: true });
+    // Its last run was an earlier day: only the scheduled tick is drawn.
+    expect(forward).toMatchObject({ key: "forward", at: 940, from: null, to: null, tone: "bad" });
+  });
+
+  it("draws a run that ends after midnight to the end of the day", () => {
+    const c = sessionClock(day({ forward: { status: "ok", started: "2026-10-05T19:40:00Z", ended: "2026-10-06T05:00:00Z" } }));
+    expect(c.runs.find((r) => r.key === "forward")).toMatchObject({ from: 940, to: CLOCK_TO });
+  });
+
+  it("has a lane for each job even before any has run", () => {
+    expect(sessionClock(day({})).runs.map((r) => [r.key, r.from])).toEqual([
+      ["routine", null],
+      ["paper-b", null],
+      ["forward", null],
+    ]);
   });
 });

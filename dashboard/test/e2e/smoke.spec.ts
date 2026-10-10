@@ -72,6 +72,9 @@ test("the options page shows the glance strip, the rules and a level map per nam
   // The strip polls /api/quote; fixture mode answers with SPY 0.3 ATR above its close at 11:00 New York on the
   // fixture's session, inside the major resistance zone.
   await expect(glance.getByRole("listitem").filter({ hasText: "SPY" })).toContainText("TESTING RESISTANCE");
+  // Close strength vs option price: NVDA is the weak close with cheap options.
+  await expect(page.getByRole("img", { name: /^Close strength against IV percentile for 10 names/ })).toBeVisible();
+  await expect(page.getByRole("list", { name: "Names in each corner" })).toContainText("NVDA");
   // The same quote moves the live dot on SPY's level map.
   await expect(page.getByTestId("SPY-live-mark")).toBeAttached();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -114,6 +117,22 @@ test("the radar draws the scorecard, the picks, the lines and the week", async (
   // The tables are one click away.
   await page.getByText("Every list as a table").click();
   await expect(page.getByRole("heading", { name: "SUPPORT PLAYS", exact: true })).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+});
+
+test("today draws the session clock and the open paper position", async ({ page }) => {
+  // 11:02 New York on the fixture's trading day, so the clock shows "now".
+  await page.clock.setFixedTime(new Date("2026-09-29T15:02:00Z"));
+  await page.goto("/today");
+  const clock = page.getByRole("img", { name: /^The New York day 2026-09-29 from 04:00 to 20:00/ });
+  await expect(clock).toBeVisible();
+  // Every lane ends in a word, never colour alone: the fixture's routine run failed.
+  await expect(page.getByTestId("clock-routine")).toContainText("failed");
+  await expect(page.getByTestId("clock-paper-b")).toContainText("ok");
+  await expect(page.getByTestId("clock-now")).toContainText("now 11:02");
+  // The fixture holds QQQM; there is no live quote for it, so the bar uses the paper account's mark.
+  await expect(page.getByRole("img", { name: /^QQQM paper position: stop 199\.00, entry 200\.02, target 202\.00, price 204\.13/ })).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
 });

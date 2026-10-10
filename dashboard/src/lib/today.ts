@@ -1,5 +1,7 @@
 // The Today page: what the stocks desk did in its latest session, in the order it happened. Pure helpers over
 // fields the snapshot already carries; no I/O and no clock.
+import { jobTone, type Tone } from "./labels";
+import { nyClock } from "./options";
 import { entries, list, type Snapshot } from "./types";
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -246,4 +248,55 @@ export function sessionJobs(s: Snapshot): { key: string; status: string | null; 
     started: last[key]?.started ?? null,
     ended: last[key]?.ended ?? null,
   }));
+}
+
+/** The New York day the session clock draws: 04:00 to 20:00, in minutes after midnight. */
+export const CLOCK_FROM = 4 * 60;
+export const CLOCK_TO = 20 * 60;
+export const BELL_OPEN = 9 * 60 + 30;
+export const BELL_CLOSE = 16 * 60;
+
+/** When each session job is scheduled to start, New York minutes (the host's systemd timers). */
+export const SCHEDULE: Record<string, number> = { routine: 7 * 60 + 30, "paper-b": 8 * 60 + 30, forward: 15 * 60 + 40 };
+
+export interface ClockRun {
+  key: string;
+  status: string | null;
+  tone: Tone;
+  /** Scheduled start, New York minutes. */
+  at: number;
+  /** The last run on the clock's day, New York minutes; null when the last run was on another day. */
+  from: number | null;
+  /** Null while it is still running (the bar then reaches "now"), or when it did not run that day. */
+  to: number | null;
+  running: boolean;
+  started: string | null;
+  ended: string | null;
+}
+
+/**
+ * The session as one New York day: each job's scheduled start and, when its last run was on that day, the span it
+ * actually ran. The day is the market's trading day. Pure: "now" is drawn by the browser.
+ */
+export function sessionClock(s: Snapshot): { day: string | null; runs: ClockRun[] } {
+  const day = s.market?.trading_day_et ?? null;
+  const runs = sessionJobs(s).map((j) => {
+    const start = j.started ? nyClock(j.started) : null;
+    const end = j.ended ? nyClock(j.ended) : null;
+    const onDay = start !== null && start.day === day;
+    const running = onDay && j.status === "running";
+    return {
+      key: j.key,
+      status: j.status,
+      tone: running ? ("warn" as Tone) : jobTone(j.status),
+      at: SCHEDULE[j.key] ?? CLOCK_FROM,
+      from: onDay ? start.minutes : null,
+      // A run that ends after midnight is drawn to the end of the day.
+      to: onDay && !running && end ? (end.day === day ? end.minutes : CLOCK_TO) : null,
+      running,
+      started: j.started,
+      ended: j.ended,
+    };
+  });
+  return { day, runs };
 }
