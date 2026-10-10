@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, Keyboard, Search, TriangleAlert } from "lucide-react";
+import { ArrowDown, ArrowUp, ChartCandlestick, ChevronLeft, ChevronRight, Keyboard, List, Search, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RoomBar } from "@/components/options-charts";
 import { fracPct, num, rMult, signed, weekDate } from "@/lib/format";
@@ -20,6 +20,7 @@ import {
   sessionClock,
   sortByNumber,
   viewForClock,
+  type DeskPane,
   type DeskView,
   type LiveRead,
   type MapLayer,
@@ -259,6 +260,9 @@ const SHORTCUTS: [string, string][] = [
  * the server: the whole edition is already here.
  *
  * Single-key shortcuts work only while focus is inside the desk, so they never fire while typing elsewhere.
+ *
+ * A phone has no room for the two side by side. There the desk shows one pane at a time, the names or the selected
+ * name, with a bar at the bottom of the screen to switch between them and to step from one name to the next.
  */
 export function OptionsDesk({
   e,
@@ -266,6 +270,7 @@ export function OptionsDesk({
   initialView,
   manualView,
   initialSymbol,
+  initialPane,
   stale,
 }: {
   e: Options;
@@ -276,6 +281,8 @@ export function OptionsDesk({
   /** True when the address named the view, so the clock must not change it. */
   manualView: boolean;
   initialSymbol: string | null;
+  /** The pane a phone opens on. A wider screen shows both panes whatever this says. */
+  initialPane: DeskPane;
   stale: boolean;
 }) {
   const { feed, session, now } = useLive();
@@ -283,6 +290,9 @@ export function OptionsDesk({
   const [picked, setPicked] = useState<DeskView | null>(manualView ? initialView : null);
   const view: DeskView = picked ?? (live && now !== null ? viewForClock(e.session, halfDay, new Date(now)) : initialView);
   const [symbol, setSymbol] = useState<string | null>(initialSymbol);
+  const [pane, setPane] = useState<DeskPane>(initialPane);
+  /** The name the phone's arrows last stepped to, for a screen reader: nothing else on screen would say it. */
+  const [spoken, setSpoken] = useState("");
   const [sort, setSort] = useState<{ view: DeskView; key: string; dir: "asc" | "desc" } | null>(null);
   const [help, setHelp] = useState(false);
   const [palette, setPalette] = useState(false);
@@ -295,10 +305,16 @@ export function OptionsDesk({
     });
   const rowButtons = useRef(new Map<string, HTMLButtonElement>());
   const frame = useRef<HTMLElement>(null);
+  const panes = useRef<HTMLDivElement>(null);
+  const bar = useRef<HTMLDivElement>(null);
 
+  /** Write the desk's state into the address. An empty value takes its name out of the address. */
   const remember = useCallback((params: Record<string, string>) => {
     const url = new URL(window.location.href);
-    for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+    for (const [k, v] of Object.entries(params)) {
+      if (v === "") url.searchParams.delete(k);
+      else url.searchParams.set(k, v);
+    }
     try {
       window.history.replaceState(null, "", url);
     } catch {
@@ -332,26 +348,78 @@ export function OptionsDesk({
     symbolRef.current = selected?.t.symbol ?? null;
   });
 
-  // Every way of choosing a name leaves focus on that name's button. A click on a table cell would otherwise
-  // drop focus to the page, and the shortcuts, which only hear keys from inside the desk, would go quiet.
-  const select = (s: string) => {
+  // The bar that switches panes is only drawn on a phone. Asking whether it is drawn asks the stylesheet, so the
+  // width at which the desk becomes a phone layout is written in one place.
+  const onPhone = () => (bar.current?.offsetHeight ?? 0) > 0;
+  const focusHeading = () => frame.current?.querySelector<HTMLElement>("[data-desk-detail] h2")?.focus({ preventScroll: true });
+  /** The keyboard goes to the name's row where the list is on the page; on a phone with a name open, to its heading. */
+  const focusName = (s: string) => {
+    const button = rowButtons.current.get(s);
+    if (button && button.offsetParent !== null) button.focus();
+    // The heading belongs to the name being drawn, so wait for it.
+    else window.setTimeout(focusHeading, 0);
+  };
+
+  // Every way of choosing a name leaves focus on that name. A click on a table cell would otherwise drop focus to
+  // the page, and the shortcuts, which only hear keys from inside the desk, would go quiet. The arrows that step
+  // through the names on a phone keep the focus themselves (`stepFromBar`), so they can be pressed again.
+  const select = (s: string, focus = true) => {
     setSymbol(s);
     remember({ s });
-    rowButtons.current.get(s)?.focus();
+    if (focus) focusName(s);
+  };
+  const show = (p: DeskPane) => {
+    setPane(p);
+    remember({ pane: p === "name" ? "name" : "" });
+    window.setTimeout(() => {
+      // The two panes differ in height. If the new one starts above the top of the screen, bring its top into
+      // view, so the reader lands at its start and not part-way down it.
+      const el = panes.current;
+      if (el && el.getBoundingClientRect().top < 0) el.scrollIntoView({ block: "start" });
+      // The pane that had the keyboard is no longer on the page; the new one takes it. In the list that also
+      // scrolls the selected name into view if it is out of sight.
+      if (p === "name") focusHeading();
+      else rowButtons.current.get(symbolRef.current ?? "")?.focus();
+    }, 0);
+  };
+  /** Choosing a name by hand: a row, or the palette. On a phone that also opens the name. */
+  const openName = (s: string) => {
+    if (!onPhone()) return select(s);
+    select(s, false);
+    show("name");
   };
   const choose = (v: DeskView) => {
     setPicked(v);
     remember({ view: v });
+    // A view is a set of columns for the list. On a phone with a name open the list is behind it, so bring it
+    // back: otherwise choosing a view would change nothing the reader can see.
+    if (pane === "name" && onPhone()) return show("names");
     // Changing view replaces the column headers. If focus was on one, it is gone once they redraw: put it on the
     // selected name, so the keyboard keeps working.
     window.setTimeout(() => {
-      if (!frame.current?.contains(document.activeElement)) rowButtons.current.get(symbolRef.current ?? "")?.focus();
+      if (!frame.current?.contains(document.activeElement) && symbolRef.current) focusName(symbolRef.current);
     }, 0);
   };
-  const step = (by: number) => {
-    if (ordered.length === 0) return;
+  const step = (by: number, focus = true): string | null => {
+    if (ordered.length === 0) return null;
     const i = Math.max(0, ordered.findIndex((r) => r.t.symbol === selected?.t.symbol));
-    select(ordered[(i + by + ordered.length) % ordered.length]!.t.symbol);
+    const next = ordered[(i + by + ordered.length) % ordered.length]!.t.symbol;
+    select(next, focus);
+    return next;
+  };
+  /** The arrows in the phone's bar: the next or the previous name, without leaving the pane that is open. */
+  const stepFromBar = (by: number, button: HTMLButtonElement) => {
+    // Safari does not focus a button on click. Without this the focus would be on the outgoing name's heading,
+    // and would be lost with it.
+    button.focus();
+    const next = step(by, false);
+    if (next === null) return;
+    setSpoken(next);
+    window.setTimeout(() => {
+      // A name much shorter than the last can leave the screen looking past the end of the desk: bring it back.
+      const box = frame.current?.getBoundingClientRect();
+      if (box && box.bottom < window.innerHeight / 2) panes.current?.scrollIntoView({ block: "start" });
+    }, 0);
   };
   const cycleSort = (c: Column) => {
     if (!c.sort) return;
@@ -372,7 +440,10 @@ export function OptionsDesk({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
   // When the palette has gone, the keyboard goes to the selected name, whichever way the palette was closed.
-  const focusSelected = () => window.setTimeout(() => rowButtons.current.get(symbolRef.current ?? "")?.focus(), 0);
+  const focusSelected = () =>
+    window.setTimeout(() => {
+      if (symbolRef.current) focusName(symbolRef.current);
+    }, 0);
 
   const onKeyDown = (ev: React.KeyboardEvent) => {
     // The palette is drawn outside the desk but its keys still bubble here through React; they are its own.
@@ -397,11 +468,14 @@ export function OptionsDesk({
       ref={frame}
       aria-label="Options desk"
       data-desk-view={view}
+      data-desk-pane={pane}
       // Set once the browser has taken over from the server-drawn page (the clock is only read in the browser).
       // A click that lands before then is lost, so the browser tests wait for this before they touch the desk.
       data-ready={now !== null ? "true" : undefined}
       onKeyDown={onKeyDown}
-      className="bg-card w-[min(calc(100vw-2rem),96rem)] justify-self-center overflow-hidden rounded-xl border xl:grid xl:h-[calc(100dvh-10.5rem)] xl:min-h-[35rem] xl:grid-rows-[auto_minmax(0,1fr)]"
+      // Clipped, not hidden: a hidden overflow would make the desk a scroll box, and the name's quote line and the
+      // bar at the bottom of a phone could then no longer stay on screen while the page scrolls.
+      className="bg-card w-[min(calc(100vw-2rem),96rem)] justify-self-center overflow-clip rounded-xl border xl:grid xl:h-[calc(100dvh-10.5rem)] xl:min-h-[35rem] xl:grid-rows-[auto_minmax(0,1fr)]"
     >
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b px-3 py-2">
         <div role="group" aria-label="View" className="bg-muted inline-flex rounded-md p-0.5">
@@ -479,8 +553,11 @@ export function OptionsDesk({
         ) : null}
       </div>
 
-      <div className="xl:grid xl:min-h-0 xl:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
-        <div data-desk-monitor className="overflow-x-auto border-b xl:min-h-0 xl:overflow-y-auto xl:border-r xl:border-b-0">
+      <div ref={panes} className="xl:grid xl:min-h-0 xl:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+        <div
+          data-desk-monitor
+          className={cn("overflow-x-auto border-b max-sm:border-b-0 xl:min-h-0 xl:overflow-y-auto xl:border-r xl:border-b-0", pane === "name" && "max-sm:hidden")}
+        >
           {/* The monitor and the selected name fail apart: a name that cannot be drawn leaves the board standing. */}
           <PaneBoundary name="The monitor">
             <table className="w-full border-collapse text-[0.8125rem] md:table-fixed">
@@ -506,7 +583,7 @@ export function OptionsDesk({
                         scope="col"
                         title={c.hint}
                         aria-sort={dir === "asc" ? "ascending" : dir === "desc" ? "descending" : undefined}
-                        className={cn("text-muted-foreground px-1.5 py-2 text-[0.6875rem] font-medium md:px-2", c.align === "left" ? "text-left" : "text-right", c.wideOnly && "max-md:hidden")}
+                        className={cn("text-muted-foreground px-1 py-2 text-[0.6875rem] font-medium sm:px-1.5 md:px-2", c.align === "left" ? "text-left" : "text-right", c.wideOnly && "max-md:hidden")}
                       >
                         {c.sort ? (
                           <button type="button" onClick={() => cycleSort(c)} className={cn("hover:text-foreground inline-flex items-center gap-0.5 rounded", dir && "text-foreground")}>
@@ -534,7 +611,7 @@ export function OptionsDesk({
                     <tr
                       key={r.t.symbol}
                       data-desk-row={r.t.symbol}
-                      onClick={() => select(r.t.symbol)}
+                      onClick={() => openName(r.t.symbol)}
                       className={cn(
                         "h-11 cursor-pointer border-b last:border-b-0",
                         on ? "bg-accent shadow-[inset_2px_0_0_var(--primary)]" : testing ? "bg-warn-soft" : "hover:bg-muted/60",
@@ -548,7 +625,8 @@ export function OptionsDesk({
                             else rowButtons.current.delete(r.t.symbol);
                           }}
                           aria-pressed={on}
-                          className="flex items-center gap-1.5 rounded font-mono font-semibold"
+                          // On a phone the bar covers the bottom of the screen: a focused name stops above it.
+                          className="flex items-center gap-1.5 rounded font-mono font-semibold max-sm:scroll-mb-16"
                         >
                           {chip ? <span aria-hidden className={cn("inline-block size-2 rounded-[2px]", CHIP_DOT[chip])} title={CHIP_LABEL[chip] ?? chip} /> : null}
                           {r.t.symbol}
@@ -556,7 +634,7 @@ export function OptionsDesk({
                         </button>
                       </th>
                       {columns.map((c) => (
-                        <td key={c.key} className={cn("px-1.5 font-mono md:px-2", c.align === "left" ? "text-left" : "text-right", c.wideOnly && "max-md:hidden")}>
+                        <td key={c.key} className={cn("px-1 font-mono sm:px-1.5 md:px-2", c.align === "left" ? "text-left" : "text-right", c.wideOnly && "max-md:hidden")}>
                           {c.cell(r)}
                         </td>
                       ))}
@@ -568,7 +646,7 @@ export function OptionsDesk({
           </PaneBoundary>
         </div>
 
-        <div className="xl:min-h-0 xl:overflow-y-auto">
+        <div className={cn("xl:min-h-0 xl:overflow-y-auto", pane === "names" && "max-sm:hidden")}>
           {selected ? (
             <PaneBoundary key={selected.t.symbol} name={selected.t.symbol}>
               <OptionsDetail e={e} t={selected.t} hiddenLayers={hiddenLayers} onToggleLayer={toggleLayer} />
@@ -576,6 +654,53 @@ export function OptionsDesk({
           ) : null}
         </div>
       </div>
+      {selected ? (
+        // Held at the bottom of the screen, unless the screen is very short (a zoomed-in window): there it and the
+        // name's quote line would leave no room for anything else, so both scroll with the page.
+        <div ref={bar} data-desk-bar className="bg-card bottom-0 z-20 flex items-stretch border-t sm:hidden [@media(min-height:30rem)]:sticky">
+          <div role="group" aria-label="Pane" className="flex min-w-0 flex-1">
+            {(["names", "name"] as const).map((p) => (
+              <button
+                key={p}
+                type="button"
+                aria-pressed={pane === p}
+                onClick={() => show(p)}
+                className={cn(
+                  // The focus ring is drawn inside the button: outside it, the desk's edge and the screen's would cut it.
+                  "-mt-px flex min-h-12 min-w-0 flex-1 items-center justify-center gap-1.5 border-t-2 text-[0.8125rem] font-medium focus-visible:-outline-offset-2",
+                  pane === p ? "border-primary text-foreground" : "text-muted-foreground border-transparent",
+                )}
+              >
+                {p === "names" ? <List aria-hidden className="size-4" /> : <ChartCandlestick aria-hidden className="size-4" />}
+                {p === "names" ? "Names" : <span className="font-mono">{selected.t.symbol}</span>}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            aria-label="Previous name"
+            disabled={ordered.length < 2}
+            onClick={(ev) => stepFromBar(-1, ev.currentTarget)}
+            className="text-muted-foreground flex min-h-12 w-12 items-center justify-center border-l focus-visible:-outline-offset-2 disabled:opacity-40"
+          >
+            <ChevronLeft aria-hidden className="size-5" />
+          </button>
+          <button
+            type="button"
+            aria-label="Next name"
+            disabled={ordered.length < 2}
+            onClick={(ev) => stepFromBar(1, ev.currentTarget)}
+            className="text-muted-foreground flex min-h-12 w-12 items-center justify-center border-l focus-visible:-outline-offset-2 disabled:opacity-40"
+          >
+            <ChevronRight aria-hidden className="size-5" />
+          </button>
+          {/* Says the new name aloud when one of the two arrows changes it. Every other way of choosing a name moves
+              the focus to that name, which says it already. */}
+          <span role="status" className="sr-only">
+            {spoken}
+          </span>
+        </div>
+      ) : null}
       <DeskPalette
         open={palette}
         onOpenChange={setPalette}
@@ -584,7 +709,7 @@ export function OptionsDesk({
         view={view}
         layers={selected ? mapLayersOf(selected.t) : []}
         hiddenLayers={hiddenLayers}
-        onName={select}
+        onName={openName}
         onView={choose}
         onLayer={toggleLayer}
         onShortcuts={() => setHelp(true)}

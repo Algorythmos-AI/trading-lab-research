@@ -7,7 +7,7 @@ import { PaneBoundary } from "@/components/client/pane-boundary";
 import { EditionPicker } from "@/components/radar";
 import { sydney, weekDate } from "@/lib/format";
 import { requestTime } from "@/lib/now";
-import { editionState, isDeskView, viewForClock, type Options } from "@/lib/options";
+import { editionState, isDeskView, viewForClock, type DeskPane, type Options } from "@/lib/options";
 import { listOptionsDates, loadOptions } from "@/lib/snapshot";
 
 export const dynamic = "force-dynamic";
@@ -57,7 +57,7 @@ function ClassicOptions({ e, dates, date, now }: { e: Options; dates: string[]; 
   );
 }
 
-type Params = Record<"d" | "view" | "s", string | string[] | undefined>;
+type Params = Record<"d" | "view" | "s" | "pane", string | string[] | undefined>;
 
 export default async function OptionsPage({ searchParams }: { searchParams: Promise<Params> }) {
   const sp = await searchParams;
@@ -84,6 +84,8 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
   const initialView = manualView ? viewParam : date ? "review" : viewForClock(e.session, e.tickers.some((t) => t.half_day), now);
   const wanted = one(sp.s)?.toUpperCase();
   const initialSymbol = e.tickers.find((t) => t.symbol === wanted)?.symbol ?? e.tickers[0]?.symbol ?? null;
+  // Only a phone shows one pane at a time; the address remembers which, so a reload lands on the same one.
+  const initialPane: DeskPane = one(sp.pane) === "name" ? "name" : "names";
   const stale = !date && editionState(e.session, now) === "stale";
 
   return (
@@ -100,6 +102,7 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
             initialView={initialView}
             manualView={manualView}
             initialSymbol={initialSymbol}
+            initialPane={initialPane}
             stale={stale}
           />
         </PaneBoundary>

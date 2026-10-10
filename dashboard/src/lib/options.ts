@@ -647,6 +647,12 @@ export type DeskView = (typeof DESK_VIEWS)[number];
 export const isDeskView = (v: unknown): v is DeskView => typeof v === "string" && (DESK_VIEWS as readonly string[]).includes(v);
 
 /**
+ * On a phone the desk shows one pane at a time: the list of names, or the selected name. A wider screen shows both
+ * and takes no notice of this.
+ */
+export type DeskPane = "names" | "name";
+
+/**
  * The view that fits the clock for this edition: live while its session trades, review from its close until New
  * York's midnight, and brief the rest of the time (the evening before, the weekend, the morning before the open,
  * and an edition that has gone stale, which the page flags on its own).
