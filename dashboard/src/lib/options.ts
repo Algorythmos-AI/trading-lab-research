@@ -1,5 +1,5 @@
 // The options levels page's view helpers. Pure: no I/O; the clock is always passed in.
-import { dayIn, NEW_YORK } from "./format";
+import { dayIn, NEW_YORK, num } from "./format";
 import type { OptionsEdition } from "./options.types";
 import type { Tone } from "./radar";
 
@@ -529,4 +529,66 @@ export function structureView(tickers: readonly OptionsTicker[]): {
     if (side && price) corners[`${side}-${price}`].push(t.symbol);
   }
   return { points, missing, corners };
+}
+
+/** What a corner of the map says about the price of a single call or put. A description, never a trade. */
+export const CORNER_COST: Record<Corner, string> = {
+  "strong-cheap": "calls and puts cost less than usual",
+  "strong-rich": "calls and puts cost more than usual",
+  "weak-cheap": "calls and puts cost less than usual",
+  "weak-rich": "calls and puts cost more than usual",
+};
+
+/** A finding as a share of days, against the share to compare it with when there is one. */
+export interface Finding {
+  title: string;
+  value: number;
+  valueLabel: string;
+  base?: number;
+  baseLabel?: string;
+  use: string;
+  /** True until a registered experiment stands behind the number. */
+  exploratory: boolean;
+}
+
+/** What a one-standard-deviation move covers when the implied vol is exactly right, in percent of days. */
+export const ONE_SIGMA_PCT = 68;
+
+/**
+ * The testing behind the page. None of it has a registered experiment yet, so every finding is exploratory: the
+ * first two are fixed figures from early testing, the third is recomputed by the after-close run and shows only
+ * when the edition carries it.
+ */
+export function findingsOf(e: Options): Finding[] {
+  const findings: Finding[] = [
+    {
+      title: "Price touched yesterday's high or low",
+      value: 88.5,
+      valueLabel: "of days, 2 years, 10 names",
+      use: "The levels are a map, not a signal: good targets and stop references.",
+      exploratory: true,
+    },
+    {
+      title: "Higher high the next day",
+      value: 77.6,
+      valueLabel: "after a strong close",
+      base: 52.9,
+      baseLabel: "after an ordinary day",
+      use: "The edge comes from the close, not from breaking a level.",
+      exploratory: true,
+    },
+  ];
+  const check = e.expected_move_check;
+  if (check?.inside_1d_pct != null) {
+    findings.push({
+      title: "Stayed inside the 1-day expected move",
+      value: Math.round(check.inside_1d_pct),
+      valueLabel: `of ${num(check.n)} days${check.period ? `, ${check.period}` : ""}`,
+      base: ONE_SIGMA_PCT,
+      baseLabel: "if the implied vol were exactly right",
+      use: `On this check options priced in more movement than arrived${check.touch_5d_pct != null ? ` (price went beyond it within a week ${num(check.touch_5d_pct, 0)}% of the time)` : ""}. A long call or put pays for the move that is priced in.`,
+      exploratory: true,
+    });
+  }
+  return findings;
 }

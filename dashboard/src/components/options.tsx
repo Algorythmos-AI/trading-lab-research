@@ -3,7 +3,7 @@ import Link from "next/link";
 import { TradeBars } from "@/components/charts/trade-bars";
 import { Empty } from "@/components/empty";
 import { LiveCardChip } from "@/components/client/live-layer";
-import { EvidenceBars, LevelMap, RuleRanges, StructureMap, type Finding } from "@/components/options-charts";
+import { EvidenceBars, LevelMap, RuleRanges, StructureMap } from "@/components/options-charts";
 import { Panel } from "@/components/panel";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -11,11 +11,14 @@ import { fracPct, num, rMult, shortDate, signed, sydney } from "@/lib/format";
 import {
   CHIP_LABEL,
   chipTone,
+  CORNER_COST,
   editionState,
+  findingsOf,
   ladder,
   levelName,
   moveBands,
   nearest,
+  ONE_SIGMA_PCT,
   RULE_STATUS_LABEL,
   ruleLabel,
   ruleTone,
@@ -355,7 +358,8 @@ export function RulesPanel({ e }: { e: Options }) {
         </TableBody>
       </Table>
       <p className="text-muted-foreground mt-2 max-w-prose text-xs">
-        R is the result in units of the risk taken: +1R made what the stop would have lost.
+        R is the result in units of the risk taken: +1R made what the stop would have lost. It is measured on the stock&apos;s
+        price, not on an option&apos;s, with no trading costs taken off.
       </p>
       </details>
     </Panel>
@@ -365,7 +369,11 @@ export function RulesPanel({ e }: { e: Options }) {
 export function PaperPanel({ e }: { e: Options }) {
   const rows = e.paper ?? [];
   return (
-    <Panel title="Paper scorecard" means="Each probation rule's triggers, replayed on hourly bars after the close. Paper only." icon={ClipboardList}>
+    <Panel
+      title="Paper scorecard"
+      means="Each probation rule's triggers, replayed on hourly bars after the close. Paper only. R is measured on the stock, with no option prices or costs."
+      icon={ClipboardList}
+    >
       {rows.length === 0 ? (
         <Empty title="No paper trades yet" />
       ) : (
@@ -428,16 +436,16 @@ export function PaperPanel({ e }: { e: Options }) {
   );
 }
 
-const CORNERS: { key: Corner; title: string; hint: string; tone: string }[] = [
-  { key: "strong-cheap", title: "Strong close, cheap options", hint: "debit spreads cost less", tone: "border-info/40" },
-  { key: "strong-rich", title: "Strong close, rich options", hint: "defined-risk credit spreads", tone: "border-warn/40" },
-  { key: "weak-cheap", title: "Weak close, cheap options", hint: "debit spreads cost less", tone: "border-info/40" },
-  { key: "weak-rich", title: "Weak close, rich options", hint: "defined-risk credit spreads", tone: "border-warn/40" },
+const CORNERS: { key: Corner; title: string; tone: string }[] = [
+  { key: "strong-cheap", title: "Strong close, cheap options", tone: "border-info/40" },
+  { key: "strong-rich", title: "Strong close, rich options", tone: "border-warn/40" },
+  { key: "weak-cheap", title: "Weak close, cheap options", tone: "border-info/40" },
+  { key: "weak-rich", title: "Weak close, rich options", tone: "border-warn/40" },
 ];
 
 /**
- * Close strength against option price: the two things the testing found that matter, on one picture. The corners
- * name which names sit where and hint at a kind of structure; every structure stays on paper probation.
+ * Close strength against option price: the two leads from early testing, on one picture. The corners name which
+ * names sit where and what a single call or put costs there against its own year. A location, never a trade.
  */
 export function StructurePanel({ e }: { e: Options }) {
   const view = structureView(e.tickers);
@@ -445,7 +453,7 @@ export function StructurePanel({ e }: { e: Options }) {
   return (
     <Panel
       title="Close strength vs option price"
-      means="Up is a stronger close; right is pricier options. Each corner hints at a kind of structure, never a trade."
+      means="Up is a stronger close; right is pricier options. A corner says where a name sits, never what to trade."
       icon={Grid2x2}
     >
       <div className="grid items-start gap-4 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
@@ -455,7 +463,7 @@ export function StructurePanel({ e }: { e: Options }) {
             {CORNERS.map((c) => (
               <li key={c.key} className={cn("rounded-md border p-2", c.tone)}>
                 <span className="block text-xs font-medium">{c.title}</span>
-                <span className="text-muted-foreground block text-[0.6875rem]">{c.hint}</span>
+                <span className="text-muted-foreground block text-[0.6875rem]">{CORNER_COST[c.key]}</span>
                 <span className="mt-1 block font-mono text-sm font-semibold">
                   {view.corners[c.key].length > 0 ? view.corners[c.key].join(" · ") : <span className="text-muted-foreground font-normal">none</span>}
                 </span>
@@ -463,8 +471,8 @@ export function StructurePanel({ e }: { e: Options }) {
             ))}
           </ul>
           <p className="text-muted-foreground text-xs">
-            Hints, not trades: every structure is on paper probation. Corners are the top or bottom quarter of the day&apos;s range with
-            the IV percentile at or under 25% or at or over 60%.
+            A location, not a trade. Corners are the top or bottom quarter of the day&apos;s range with the IV percentile at or
+            under 25% or at or over 60%.
           </p>
           {view.missing.length > 0 ? (
             <p className="text-muted-foreground text-xs">No IV percentile or close position in this edition for {view.missing.join(", ")}.</p>
@@ -472,14 +480,17 @@ export function StructurePanel({ e }: { e: Options }) {
           <details className="text-sm">
             <summary className="text-muted-foreground cursor-pointer text-xs">Why these two axes</summary>
             <ul className="text-muted-foreground mt-2 grid list-disc gap-1 pl-4 text-xs">
-              <li>A close in the top quarter of the day&apos;s range was followed by a higher high the next day 77.6% of the time, against 52.9% on an ordinary day (2 years, 10 names).</li>
               <li>
-                Options usually overprice the move
-                {e.expected_move_check?.inside_1d_pct != null
-                  ? `: price stayed inside the 1-day expected move on ${Math.round(e.expected_move_check.inside_1d_pct)}% of days, against 68% if fairly priced`
-                  : ""}
-                . So rich options lean to selling premium with defined risk, and cheap options make debit spreads cheaper.
+                Exploratory, with no registered experiment behind it yet: a close in the top quarter of the day&apos;s range was
+                followed by a higher high the next day 77.6% of the time, against 52.9% on an ordinary day (2 years, 10 names).
               </li>
+              {e.expected_move_check?.inside_1d_pct != null ? (
+                <li>
+                  Also exploratory: price stayed inside the 1-day expected move on {Math.round(e.expected_move_check.inside_1d_pct)}%
+                  of days, against {ONE_SIGMA_PCT}% if the implied vol were exactly right. A long call or put pays for the move
+                  that is priced in, and pays more when options are rich.
+                </li>
+              ) : null}
             </ul>
           </details>
         </div>
@@ -489,36 +500,16 @@ export function StructurePanel({ e }: { e: Options }) {
 }
 
 export function HowToRead({ e }: { e: Options }) {
-  const check = e.expected_move_check;
-  const findings: Finding[] = [
-    {
-      title: "Price touched yesterday's high or low",
-      value: 88.5,
-      valueLabel: "of days, 2 years, 10 names",
-      use: "The levels are a map, not a signal: good targets and stop references.",
-    },
-    {
-      title: "Higher high the next day",
-      value: 77.6,
-      valueLabel: "after a strong close",
-      base: 52.9,
-      baseLabel: "after an ordinary day",
-      use: "The edge comes from the close, not from breaking a level.",
-    },
-  ];
-  if (check?.inside_1d_pct != null) {
-    findings.push({
-      title: "Stayed inside the 1-day expected move",
-      value: Math.round(check.inside_1d_pct),
-      valueLabel: `of ${num(check.n)} days${check.period ? `, ${check.period}` : ""}`,
-      base: 68,
-      baseLabel: "if options were fairly priced",
-      use: `Options usually overprice the move${check.touch_5d_pct != null ? ` (beyond it within a week ${num(check.touch_5d_pct, 0)}% of the time)` : ""}, which favours spreads over single calls or puts.`,
-    });
-  }
+  const findings = findingsOf(e);
   return (
     <Panel title="What the testing found" means="So the levels are used for what they are good at." icon={Info}>
       <EvidenceBars findings={findings} />
+      {findings.some((f) => f.exploratory) ? (
+        <p className="text-muted-foreground mt-3 max-w-prose text-xs">
+          Exploratory means no registered experiment stands behind the number yet. The first two are fixed figures from early
+          testing; the expected-move check is recomputed by the after-close run. Treat them as leads to test, not as results.
+        </p>
+      ) : null}
       <details className="mt-4 text-sm">
         <summary className="text-muted-foreground cursor-pointer text-xs">What the live states mean</summary>
         <p className="text-muted-foreground mt-2 max-w-prose">
