@@ -14,10 +14,10 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
                  src/wt/brokers/base.py src/wt/brokers/sim.py src/wt/brokers/alpaca_paper.py src/wt/risk/pretrade.py \
                  src/wt/oms/manager.py src/wt/risk/virtual_account.py src/wt/ops/publish.py src/wt/brokers/alpaca_read.py src/wt/ops/evidence.py \
                  src/wt/research/manifest.py src/wt/research/method.py src/wt/research/trials.py \
-                 src/wt/ops/thresholds.py src/wt/analytics/g2.py src/wt/risk/mandate.py src/wt/scanner/explain.py \
+                 src/wt/ops/thresholds.py src/wt/analytics/g2.py src/wt/analytics/b_replay.py src/wt/risk/mandate.py src/wt/scanner/explain.py \
                  src/wt/ops/dashguard.py src/wt/ops/drill.py src/wt/brokers/cancel_only.py src/wt/ops/host.py \
                  src/wt/ops/units.py src/wt/ops/hc.py src/wt/core/ledger.py src/wt/ops/r2.py src/wt/ops/lease.py \
-                 src/wt/ops/backup.py src/wt/brokers/shadow.py src/wt/analytics/performance.py src/wt/analytics/forward_book.py src/wt/analytics/funnel_agreement.py src/wt/analytics/b_replay.py \
+                 src/wt/ops/backup.py src/wt/brokers/shadow.py src/wt/analytics/performance.py src/wt/analytics/forward_book.py src/wt/analytics/funnel_agreement.py \
                  src/wt/analytics/risk_view.py src/wt/analytics/ops_view.py src/wt/ops/audit.py src/wt/ops/control.py \
                  src/wt/core/desk.py src/wt/crypto/data.py src/wt/crypto/indicators.py src/wt/crypto/quality.py \
                  src/wt/crypto/strategy.py src/wt/crypto/book.py src/wt/crypto/risk.py src/wt/crypto/features.py \
