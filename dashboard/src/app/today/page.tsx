@@ -1,6 +1,7 @@
 import { Activity, Filter, FlaskConical, Hourglass, ListOrdered, PlayCircle, Power } from "lucide-react";
 import { Funnel } from "@/components/charts/funnel";
 import { Empty } from "@/components/empty";
+import { SessionClock } from "@/components/today/session-clock";
 import { OutcomePanel, PnlPanel, TradesPanel } from "@/components/today/trading";
 import { KeyValues } from "@/components/kv";
 import { NoSnapshot } from "@/components/no-snapshot";
@@ -11,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { duration, newYork, num, rMult, shortDate, sydney } from "@/lib/format";
 import { humanize, jobName, jobTone } from "@/lib/labels";
 import { loadSnapshot } from "@/lib/snapshot";
-import { detailLabel, eventLabel, scan, sessionJobs, type Scan, type Why } from "@/lib/today";
+import { detailLabel, eventLabel, scan, sessionClock, sessionJobs, type Scan, type Why } from "@/lib/today";
 import { trading } from "@/lib/trading";
 import { list, type Snapshot } from "@/lib/types";
 
@@ -59,33 +60,40 @@ function TradingPanels({ s }: { s: Snapshot }) {
 
 function NowPanel({ s }: { s: Snapshot }) {
   const jobs = sessionJobs(s);
+  const clock = sessionClock(s);
   return (
     <Panel
       title="Now"
       icon={PlayCircle}
-      means="Where the session is, and the last run of each of its three jobs. Times are New York, with Sydney beside them."
+      means="Where the session is, and the last run of each of its three jobs. Dashed tick: when a job is due. Bar: when it ran that day. Times are New York."
       action={<StatusBadge tone="info">{humanize(s.market?.phase) || "Unknown phase"}</StatusBadge>}
     >
       <div className="grid gap-4">
-        <KeyValues
-          items={[
-            { label: "Trading day (New York)", value: shortDate(s.market?.trading_day_et) },
-            { label: "New York", value: s.market?.et ?? "—" },
-            { label: "Sydney", value: s.market?.sydney ?? "—" },
-          ]}
-        />
-        <ul className="divide-border grid divide-y">
-          {jobs.map((j) => (
-            <li key={j.key} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5 first:pt-0 last:pb-0">
-              <span className="min-w-0 flex-1 text-sm font-medium">{jobName(j.key)}</span>
-              <span className="text-muted-foreground text-xs">
-                {j.started ? `${newYork(j.started)} NY (${sydney(j.started, false)} Sydney)` : "no run yet"}
-                {j.started && j.ended ? `, took ${duration(j.started, j.ended)}` : ""}
-              </span>
-              <StatusBadge tone={jobTone(j.status)}>{j.status === "running" ? "Running now" : humanize(j.status) || "No run yet"}</StatusBadge>
-            </li>
-          ))}
-        </ul>
+        <SessionClock day={clock.day} runs={clock.runs} />
+        <details>
+          <summary className="text-muted-foreground cursor-pointer text-xs">Times, with Sydney</summary>
+          <div className="mt-3 grid gap-4">
+            <KeyValues
+              items={[
+                { label: "Trading day (New York)", value: shortDate(s.market?.trading_day_et) },
+                { label: "New York", value: s.market?.et ?? "—" },
+                { label: "Sydney", value: s.market?.sydney ?? "—" },
+              ]}
+            />
+            <ul className="divide-border grid divide-y">
+              {jobs.map((j) => (
+                <li key={j.key} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+                  <span className="min-w-0 flex-1 text-sm font-medium">{jobName(j.key)}</span>
+                  <span className="text-muted-foreground text-xs">
+                    {j.started ? `${newYork(j.started)} NY (${sydney(j.started, false)} Sydney)` : "no run yet"}
+                    {j.started && j.ended ? `, took ${duration(j.started, j.ended)}` : ""}
+                  </span>
+                  <StatusBadge tone={jobTone(j.status)}>{j.status === "running" ? "Running now" : humanize(j.status) || "No run yet"}</StatusBadge>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </details>
       </div>
     </Panel>
   );

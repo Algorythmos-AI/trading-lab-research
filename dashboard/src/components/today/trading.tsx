@@ -8,6 +8,7 @@ import { newYork, num, rMult, shortDate, signed, sydney, usd } from "@/lib/forma
 import { outcomeLine, reasonLabel, type Trading } from "@/lib/trading";
 import { cn } from "@/lib/utils";
 import { TradeBars } from "@/components/charts/trade-bars";
+import { PositionBar } from "./position-bar";
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
@@ -150,19 +151,24 @@ function PositionCard({ v, asOf }: { v: Trading; asOf: string | null | undefined
         {filled ? <span className={cn("font-mono text-sm font-semibold tabular-nums", toneOf(p.openPnl))}>{money(p.openPnl)}</span> : null}
         {filled && isNum(p.openR) ? <span className="text-muted-foreground font-mono text-xs">{rMult(p.openR, 2)}</span> : null}
       </div>
-      <KeyValues
-        className="sm:grid-cols-5"
-        items={[
-          { label: "Bought at", value: filled ? num(p.entry, 2) : "—", mono: true },
-          { label: "Bought (NY)", value: filled ? newYork(p.entryAt) : "—" },
-          { label: "Price now", value: num(p.mark, 2), mono: true },
-          { label: "Stop", value: num(p.stop, 2), mono: true },
-          { label: "Target", value: num(p.target, 2), mono: true },
-        ]}
-      />
-      <p className="text-muted-foreground mt-2 text-xs">
-        Price as of the last update{asOf ? ` (${newYork(asOf)} NY)` : ""}. It is closed before the bell if neither the stop nor the target is reached.
-      </p>
+      <PositionBar p={p} asOf={asOf} />
+      <details className="mt-2">
+        <summary className="text-muted-foreground cursor-pointer text-xs">The numbers</summary>
+        <KeyValues
+          className="mt-2 sm:grid-cols-5"
+          items={[
+            { label: "Bought at", value: filled ? num(p.entry, 2) : "—", mono: true },
+            { label: "Bought (NY)", value: filled ? newYork(p.entryAt) : "—" },
+            { label: "Price now", value: num(p.mark, 2), mono: true },
+            { label: "Stop", value: num(p.stop, 2), mono: true },
+            { label: "Target", value: num(p.target, 2), mono: true },
+          ]}
+        />
+        <p className="text-muted-foreground mt-2 text-xs">
+          Price now is the paper account&apos;s, as of the last update{asOf ? ` (${newYork(asOf)} NY)` : ""}. It is closed before the bell if neither
+          the stop nor the target is reached.
+        </p>
+      </details>
     </div>
   );
 }

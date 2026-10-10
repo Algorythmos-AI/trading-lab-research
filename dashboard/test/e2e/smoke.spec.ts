@@ -104,6 +104,22 @@ test("a live quote older than 30 seconds reads as stale", async ({ page }) => {
   await expect(spy).toContainText("STALE");
 });
 
+test("today draws the session clock and the open paper position", async ({ page }) => {
+  // 11:02 New York on the fixture's trading day, so the clock shows "now".
+  await page.clock.setFixedTime(new Date("2026-09-29T15:02:00Z"));
+  await page.goto("/today");
+  const clock = page.getByRole("img", { name: /^The New York day 2026-09-29 from 04:00 to 20:00/ });
+  await expect(clock).toBeVisible();
+  // Every lane ends in a word, never colour alone: the fixture's routine run failed.
+  await expect(page.getByTestId("clock-routine")).toContainText("failed");
+  await expect(page.getByTestId("clock-paper-b")).toContainText("ok");
+  await expect(page.getByTestId("clock-now")).toContainText("now 11:02");
+  // The fixture holds QQQM; there is no live quote for it, so the bar uses the paper account's mark.
+  await expect(page.getByRole("img", { name: /^QQQM paper position: stop 199\.00, entry 200\.02, target 202\.00, price 204\.13/ })).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+});
+
 test("the v3 panels render from the fixture, and the glossary is linked", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
