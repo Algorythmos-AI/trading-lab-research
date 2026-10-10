@@ -649,7 +649,7 @@ export function OptionsDesk({
         <div className={cn("xl:min-h-0 xl:overflow-y-auto", pane === "names" && "max-sm:hidden")}>
           {selected ? (
             <PaneBoundary key={selected.t.symbol} name={selected.t.symbol}>
-              <OptionsDetail e={e} t={selected.t} hiddenLayers={hiddenLayers} onToggleLayer={toggleLayer} />
+              <OptionsDetail e={e} t={selected.t} live={live} hiddenLayers={hiddenLayers} onToggleLayer={toggleLayer} />
             </PaneBoundary>
           ) : null}
         </div>

@@ -28,6 +28,8 @@ import {
 } from "@/lib/options";
 import { cn } from "@/lib/utils";
 import { StateChip, useLiveRead } from "./live-layer";
+import { OptionsContract } from "./options-contract";
+import { PaneBoundary } from "./pane-boundary";
 
 /** A label over its value: the desk's way of stating a fact, one unit per cell. */
 function Fact({ label, children, title }: { label: string; children: React.ReactNode; title?: string }) {
@@ -80,11 +82,14 @@ function ZoneRow({ r, side }: { r: Rung; side: "above" | "at" | "below" }) {
 export function OptionsDetail({
   e,
   t,
+  live,
   hiddenLayers,
   onToggleLayer,
 }: {
   e: Options;
   t: OptionsTicker;
+  /** False for an older edition: its levels are history, so no contract is priced against them. */
+  live: boolean;
   /** Map layers the reader has switched off. Held by the desk, so the choice survives a change of name. */
   hiddenLayers: ReadonlySet<MapLayer>;
   onToggleLayer: (layer: MapLayer) => void;
@@ -207,6 +212,11 @@ export function OptionsDetail({
           </ul>
         </section>
       </div>
+
+      {/* Its own boundary: a contract that cannot be priced leaves the map and the facts standing. */}
+      <PaneBoundary name={`${t.symbol} contract`}>
+        <OptionsContract t={t} live={live} />
+      </PaneBoundary>
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 border-t pt-3 sm:grid-cols-5">
         <Fact label="Support" title="Nearest zone below the close, and how far in ATRs">

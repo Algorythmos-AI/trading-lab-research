@@ -303,6 +303,82 @@ test("the palette opens from its button, offers a way on when nothing matches, a
   await expect(palette(page).getByRole("combobox")).toHaveValue("");
 });
 
+// Exact: the scenario table inside it is a region too, named "SPY contract scenarios".
+const contract = (page: Page) => page.getByRole("region", { name: "SPY contract", exact: true });
+
+test("the contract pane prices the call or put the reader names, remembers it across a reload, and forgets it when cleared", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await open(page, "/options?view=live&s=SPY");
+  await showPane(page, "SPY");
+  // Shut until asked for: no option quotes are fetched for a name nobody is pricing.
+  await expect(contract(page)).toHaveAttribute("data-contract", "closed");
+  await contract(page).getByRole("button", { name: "Price a call or put" }).click();
+  await expect(contract(page)).toHaveAttribute("data-contract", "ready");
+  // It opens on a call at the nearest expiry, priced at the ask, with a row for where the stock is now.
+  await expect(contract(page).getByRole("button", { name: "Call", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(contract(page)).toContainText("at the ask");
+  await expect(contract(page).getByRole("columnheader", { name: "Expiry" })).toBeVisible();
+  await expect(contract(page).getByRole("rowheader", { name: /Now$/ })).toBeVisible();
+  // Three puts bought at 2.00 on the last expiry offered, more than a fortnight out: $600 at risk, and with a
+  // price paid there is a profit or loss now.
+  await contract(page).getByRole("button", { name: "Put", exact: true }).click();
+  const expiry = contract(page).getByLabel("Expiry");
+  await expiry.selectOption({ index: (await expiry.locator("option").count()) - 1 });
+  await contract(page).getByLabel("Contracts").fill("3");
+  await contract(page).getByLabel("Paid, per share").fill("2");
+  await expect(contract(page)).toContainText("$600");
+  await expect(contract(page)).not.toContainText("at the ask");
+  expect((await contract(page).textContent()) ?? "").not.toMatch(/NaN|undefined|Infinity/);
+  // A reload opens the pane on the same contract.
+  await page.reload();
+  await expect(desk(page)).toHaveAttribute("data-ready", "true");
+  await showPane(page, "SPY");
+  await expect(contract(page)).toHaveAttribute("data-contract", "ready");
+  await expect(contract(page).getByRole("button", { name: "Put", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(contract(page).getByLabel("Contracts")).toHaveValue("3");
+  await expect(contract(page).getByLabel("Paid, per share")).toHaveValue("2");
+  await expect(contract(page)).toContainText("$600");
+  // Cleared, it is shut again and stays shut.
+  await contract(page).getByRole("button", { name: "Clear" }).click();
+  await expect(contract(page)).toHaveAttribute("data-contract", "closed");
+  await page.reload();
+  await expect(desk(page)).toHaveAttribute("data-ready", "true");
+  await expect(contract(page)).toHaveAttribute("data-contract", "closed");
+  expect(errors).toEqual([]);
+});
+
+test("the contract pane says so when option quotes are off, failing or damaged, and the rest of the name stands", async ({ page, context, baseURL }) => {
+  const openPane = async (fx: string) => {
+    await variant(context, baseURL, fx);
+    await open(page, "/options?view=live&s=SPY");
+    await showPane(page, "SPY");
+    await contract(page).getByRole("button", { name: "Price a call or put" }).click();
+  };
+  await openPane("chain-off");
+  await expect(contract(page)).toHaveAttribute("data-contract", "off");
+  await expect(contract(page)).toContainText("Option quotes are not set up on this site");
+  await openPane("chain-error");
+  await expect(contract(page)).toHaveAttribute("data-contract", "error");
+  await expect(contract(page).getByRole("button", { name: "Try again" })).toBeVisible();
+  // The map and the facts of the name are untouched by either.
+  await expect(page.getByRole("img", { name: /^SPY: last 40 daily bars/ })).toBeVisible();
+  await expect(page.locator("[data-pane-error]")).toHaveCount(0);
+  // Damaged quotes: the three lowest calls come with no volatility, no market, and a crossed quote.
+  await openPane("chain-thin");
+  await expect(contract(page)).toHaveAttribute("data-contract", "ready");
+  const strike = contract(page).getByLabel("Strike");
+  await strike.selectOption({ index: 0 });
+  await expect(contract(page)).toContainText("name");
+  await strike.selectOption({ index: 1 });
+  await expect(contract(page)).toContainText("no market");
+  await expect(contract(page)).toContainText("at the model's value");
+  await strike.selectOption({ index: 2 });
+  await expect(contract(page)).toContainText("crossed quote");
+  expect((await contract(page).textContent()) ?? "").not.toMatch(/NaN|undefined|Infinity/);
+  await expect(page.locator("[data-pane-error]")).toHaveCount(0);
+});
+
 test("sorting a column keeps names without a value last, whichever way it runs", async ({ page, context, baseURL }) => {
   // In the sparse fixture SPY and AMZN have no expected move.
   await variant(context, baseURL, "partial.quotes-off");

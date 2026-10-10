@@ -50,6 +50,22 @@ for (const theme of ["light", "dark"] as const) {
     expect(await scan(page)).toEqual([]);
   });
 
+  test(`the contract pane passes the accessibility scan in ${theme}, priced and with damaged quotes`, async ({ page, context, baseURL }) => {
+    await useTheme(context, theme);
+    await context.addCookies([{ name: "fx", value: "chain-thin", url: baseURL! }]);
+    await page.goto("/options?view=live");
+    await liveChips(page);
+    const pane = page.getByRole("region", { name: "SPY contract", exact: true });
+    await pane.getByRole("button", { name: "Price a call or put" }).click();
+    await expect(pane).toHaveAttribute("data-contract", "ready");
+    expect(await scan(page)).toEqual([]);
+    // A crossed quote, and a price paid, which brings the coloured profit and loss.
+    await pane.getByLabel("Strike").selectOption({ index: 2 });
+    await pane.getByLabel("Paid, per share").fill("40");
+    await expect(pane).toContainText("crossed quote");
+    expect(await scan(page)).toEqual([]);
+  });
+
   for (const fx of OPTIONS_STATES) {
     test(`/options in the ${fx} state passes the accessibility scan in ${theme}`, async ({ page, context, baseURL }) => {
       await useTheme(context, theme);

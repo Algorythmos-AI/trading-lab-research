@@ -20,4 +20,16 @@ for (const theme of ["light", "dark"] as const) {
       expect(await scan(page)).toEqual([]);
     });
   }
+
+  test(`the contract pane passes the accessibility scan on a phone in ${theme}`, async ({ page, context }) => {
+    await useTheme(context, theme);
+    await page.goto("/options?view=live&pane=name");
+    await liveChips(page);
+    const pane = page.getByRole("region", { name: "SPY contract", exact: true });
+    await pane.getByRole("button", { name: "Price a call or put" }).click();
+    await expect(pane).toHaveAttribute("data-contract", "ready");
+    await pane.getByLabel("Paid, per share").fill("2");
+    await expect(pane).not.toContainText("at the ask");
+    expect(await scan(page)).toEqual([]);
+  });
 }

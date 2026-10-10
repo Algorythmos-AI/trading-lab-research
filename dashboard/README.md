@@ -58,11 +58,22 @@ wt.ops.publish                            POST /api/ingest            (productio
   selected name's level map carries a crosshair (point at it to read a price against the close in
   dollars, ATRs and expected moves, and the zone it is inside) and its zones, candles, expected move and labels can
   each be switched off. The page as it was before stays at `?view=classic` for one release.
-- **Option arithmetic** (`src/lib/bs.ts`, `src/lib/longopt.ts`; nothing on a page uses it yet): the value of one
+- **Option arithmetic** (`src/lib/bs.ts`, `src/lib/longopt.ts`; the contract pane below is built on it): the value of one
   long call or put, its sensitivities, the volatility a price implies, breakeven, and what an hour of waiting costs.
   Textbook Black-Scholes with a flat rate and yield, so an estimate for American options. The same arithmetic is in
   Python (`src/wt/options/`), and both are held to one file of vectors, `test/fixtures/bs.vectors.json`, written by
   `python scripts/gen_bs_vectors.py` (`--check` in the Python tests keeps it current).
+- **Option quotes and the contract pane** (`/api/chain?s=SPY&px=780.43`, `src/lib/chain.ts`): calls and puts for one
+  name from Alpaca's indicative feed, which runs 15 minutes behind the market, fetched on the server with the same
+  keys as the live prices. It answers with the nearest four expiries and the first one a fortnight or more out, 21
+  strikes each around the price given; a contract adjusted for a split or a merger is left out. Each name's answer
+  is shared for 20 s. The desk's **Contract** pane (`src/components/client/options-contract.tsx`, logic in
+  `src/lib/contract.ts`) stays shut, and asks for nothing, until the reader opens it on a name: then it prices the
+  call or put they choose (cost, breakeven, value now, delta, hourly decay) and what it would be worth with the
+  stock at the nearest zones and a day's move either side, now, at the session's close and at expiry. The chosen
+  contract is kept in the browser's own storage and nowhere else. In session a quote more than 35 minutes old (105
+  for a contract that does not expire that day) is too old to price from, and the numbers are withheld. Everything
+  it shows is an estimate and it suggests nothing.
 - **Live prices** (`/api/quote?s=SPY,QQQ`, read by the Options page every 2 s while it is open, one poll shared by the
   glance strip, the level maps' live dot and the state chips; a quote older than 30 s shows as stale): last trades from
   Alpaca's free IEX feed, fetched on the server so the page keeps `connect-src 'self'` and never sees the keys. At most
@@ -90,7 +101,7 @@ DASHBOARD_FIXTURE=1 pnpm dev        # serves test/fixtures/snapshot.json, no sto
 | `pnpm lint` | ESLint (Next.js core-web-vitals + TypeScript rules) |
 | `pnpm typecheck` | `tsc --noEmit` in strict mode |
 | `pnpm test` | Vitest unit tests: HMAC vectors, schema and denylist, health, summary, watchdog, ingest |
-| `pnpm test:e2e` | Playwright in fixture mode: a smoke test of every page (`smoke.spec.ts`), the Options desk's layout, views, keyboard, sorting, failure states, live updates and phone layout (`desk.spec.ts`), the same failure states on the classic Options page (`states.spec.ts`), and an axe accessibility scan of every stocks page in both themes (`a11y.spec.ts`) and of the Options desk at a phone's width (`a11y-phone.spec.ts`). CI only: it needs `pnpm build` first and a browser installed by the workflow (`pnpm exec playwright install --with-deps chromium`) |
+| `pnpm test:e2e` | Playwright in fixture mode: a smoke test of every page (`smoke.spec.ts`), the Options desk's layout, views, keyboard, sorting, failure states, live updates, phone layout and contract pane (`desk.spec.ts`), the same failure states on the classic Options page (`states.spec.ts`), and an axe accessibility scan of every stocks page in both themes (`a11y.spec.ts`) and of the Options desk at a phone's width (`a11y-phone.spec.ts`). CI only: it needs `pnpm build` first and a browser installed by the workflow (`pnpm exec playwright install --with-deps chromium`) |
 | `pnpm gen:types` | Regenerate every `src/lib/*.types.ts` from its schema. CI fails when any of them differs from what is committed |
 
 Fixture mode is refused on production deployments, and the page shows a banner whenever it is on.
