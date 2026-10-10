@@ -1,11 +1,24 @@
-import { ArrowUpRight, Ban, BookOpen, Inbox, ListChecks } from "lucide-react";
+import { ArrowUpRight, Ban, BookOpen, CalendarDays, Crosshair, Inbox, ListChecks, Ruler, Scale } from "lucide-react";
 import Link from "next/link";
 import { Empty } from "@/components/empty";
+import { DistanceBars, GaugeTiles, PickCards, RegimeScale, ScoreDumbbells, WeekStrip } from "@/components/radar-charts";
 import { Panel } from "@/components/panel";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { num, pct, shortDate, sydney } from "@/lib/format";
-import { levelPosition, researched, stanceTone, tickersOf, type Radar, type RadarNote, type RadarTicker } from "@/lib/radar";
+import {
+  calendarWeek,
+  DAILY_LIST,
+  distances,
+  levelPosition,
+  researched,
+  scoreRows,
+  stanceTone,
+  tickersOf,
+  type Radar,
+  type RadarNote,
+  type RadarTicker,
+} from "@/lib/radar";
 import type { RadarResult } from "@/lib/snapshot";
 import { cn } from "@/lib/utils";
 
@@ -53,6 +66,12 @@ export function EditionPanel({ r }: { r: Radar }) {
     >
       <div className="grid gap-3 text-sm">
         {r.summary ? <p className="max-w-prose">{r.summary}</p> : null}
+        {r.regime_word ? (
+          <div className="max-w-sm">
+            <RegimeScale word={r.regime_word} />
+          </div>
+        ) : null}
+        {(r.gauges ?? []).length > 0 ? <GaugeTiles gauges={r.gauges ?? []} /> : null}
         {r.regime ? (
           <p className="text-muted-foreground max-w-prose">
             <span className="text-foreground font-medium">Market: </span>
@@ -218,5 +237,79 @@ export function EditionPicker({ dates, current, base = "/radar" }: { dates: stri
         </Link>
       ))}
     </nav>
+  );
+}
+
+/** How the lists did in the last session against their benchmarks. Nothing for editions without a scorecard. */
+export function ScorePanel({ r }: { r: Radar }) {
+  const rows = scoreRows(r);
+  if (rows.length === 0) return null;
+  return (
+    <Panel
+      title="How the last calls did"
+      icon={Scale}
+      means={`Each list's average move${r.scorecard_session ? ` on ${shortDate(r.scorecard_session)}` : ""} (dot) against its benchmark (tick). Green: it beat the benchmark. Red: it lagged.`}
+    >
+      <ScoreDumbbells rows={rows} session={r.scorecard_session} />
+    </Panel>
+  );
+}
+
+/** The daily picks as cards. Nothing when the edition has no DAILY RADAR list. */
+export function PicksPanel({ r }: { r: Radar }) {
+  const picks = tickersOf(r, DAILY_LIST);
+  if (picks.length === 0) return null;
+  return (
+    <Panel
+      title="Daily radar picks"
+      icon={Crosshair}
+      means="Each pick between its support (green) and the line above it (red, or grey at a 52-week high). The hollow amber ring is the pre-market price. Research, not a buy list."
+    >
+      <PickCards picks={picks} />
+    </Panel>
+  );
+}
+
+/** How close the support plays and breakout names are to their lines. */
+export function LinesPanel({ r }: { r: Radar }) {
+  const support = distances(r, "SUPPORT PLAYS");
+  const breakout = distances(r, "BREAKOUT WATCH");
+  if (support.length === 0 && breakout.length === 0) return null;
+  return (
+    <Panel
+      title="How close each name is to its line"
+      icon={Ruler}
+      means="Support plays: how far price sits above the support where the idea is wrong. Breakout watch: how far under the line it has to clear. Shortest first; solid bars are within half a percent."
+    >
+      <div className="grid gap-6 md:grid-cols-2">
+        {support.length > 0 ? (
+          <section className="grid gap-2">
+            <h3 className="text-sm font-medium">Support plays, above support</h3>
+            <DistanceBars rows={support} title="Support plays: percent above support" kind="support" />
+          </section>
+        ) : null}
+        {breakout.length > 0 ? (
+          <section className="grid gap-2">
+            <h3 className="text-sm font-medium">Breakout watch, under the line</h3>
+            <DistanceBars rows={breakout} title="Breakout watch: percent under resistance" kind="breakout" />
+          </section>
+        ) : null}
+      </div>
+    </Panel>
+  );
+}
+
+/** The week's dated events. Nothing for editions without a calendar. */
+export function CalendarPanel({ r }: { r: Radar }) {
+  if ((r.calendar ?? []).length === 0) return null;
+  const week = calendarWeek(r);
+  return (
+    <Panel
+      title="The week's catalysts"
+      icon={CalendarDays}
+      means="Dated events for the next five weekdays, so a CPI morning or a bond holiday is visible before you plan around it. Amber: high impact. Times are New York."
+    >
+      <WeekStrip days={week.days} later={week.later} today={r.edition_date} />
+    </Panel>
   );
 }

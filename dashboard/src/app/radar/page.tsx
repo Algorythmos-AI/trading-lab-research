@@ -1,5 +1,16 @@
 import { PageHeading } from "@/components/page-heading";
-import { AvoidPanel, EditionPanel, EditionPicker, NoRadar, TickerCards, WatchlistPanel } from "@/components/radar";
+import {
+  AvoidPanel,
+  CalendarPanel,
+  EditionPanel,
+  EditionPicker,
+  LinesPanel,
+  NoRadar,
+  PicksPanel,
+  ScorePanel,
+  TickerCards,
+  WatchlistPanel,
+} from "@/components/radar";
 import { listRadarDates, loadRadar } from "@/lib/snapshot";
 
 export const dynamic = "force-dynamic";
@@ -21,10 +32,19 @@ export default async function RadarPage({ searchParams }: { searchParams: Promis
         <>
           <EditionPicker dates={dates} current={result.edition.edition_date} />
           <EditionPanel r={result.edition} />
-          {(result.edition.lists ?? []).map((l) => (
-            <WatchlistPanel key={l.name} r={result.edition} name={l.name} note={l.note} />
-          ))}
+          <ScorePanel r={result.edition} />
+          <PicksPanel r={result.edition} />
+          <LinesPanel r={result.edition} />
+          <CalendarPanel r={result.edition} />
           <AvoidPanel r={result.edition} />
+          <details className="group">
+            <summary className="text-muted-foreground cursor-pointer text-sm">Every list as a table</summary>
+            <div className="mt-4 grid gap-5">
+              {(result.edition.lists ?? []).map((l) => (
+                <WatchlistPanel key={l.name} r={result.edition} name={l.name} note={l.note} />
+              ))}
+            </div>
+          </details>
           <TickerCards r={result.edition} />
           {result.edition.footnote ? <p className="text-muted-foreground max-w-prose text-xs">{result.edition.footnote}</p> : null}
         </>

@@ -35,6 +35,9 @@ wt.ops.publish                            POST /api/ingest            (productio
 - **Radar** (`/radar`): the daily pre-market radar's editions, signed with key id `radar` and validated against
   `src/lib/radar.schema.json` (owned here; `pnpm gen:types` regenerates `radar.types.ts`). Stored at
   `radar/latest.json` plus `radar/editions/YYYY-MM-DD.json`, where a same-day refresh replaces that date's copy.
+  Optional chart fields (`regime_word`, `gauges`, `scorecard`, `calendar`, and per ticker `evidence_grade`,
+  `chart_grade`, `premarket_price`) draw the regime scale, the scorecard, the pick cards and the week strip; an
+  edition without them still renders, with fewer pictures.
   It has no expected windows, so the watchdog never pages for it.
 - **Options** (`/options`): the after-close options levels editions (support and resistance for the next session,
   close strength, expected move, optional recent daily bars for the level map, and the paper record of the probation

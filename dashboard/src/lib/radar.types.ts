@@ -11,6 +11,47 @@ export interface RadarEdition {
   report_url?: string | null;
   summary?: string | null;
   regime?: string | null;
+  regime_word?: "risk-on" | "neutral" | "risk-off" | null;
+  /**
+   * @maxItems 24
+   */
+  gauges?:
+    | {
+        label: string;
+        value?: string | null;
+        change?: number | null;
+        change_unit?: "pct" | "pts" | null;
+        better?: "up" | "down" | null;
+        note?: string | null;
+      }[]
+    | null;
+  scorecard_session?: string | null;
+  /**
+   * @maxItems 24
+   */
+  scorecard?:
+    | {
+        list: string;
+        avg_move_pct?: number | null;
+        benchmark?: string | null;
+        benchmark_move_pct?: number | null;
+        hits?: number | null;
+        total?: number | null;
+        hit_label?: string | null;
+      }[]
+    | null;
+  /**
+   * @maxItems 60
+   */
+  calendar?:
+    | {
+        date: string;
+        time_et?: string | null;
+        label: string;
+        kind?: "macro" | "earnings" | "holiday" | "other" | null;
+        impact?: "high" | "medium" | "low" | null;
+      }[]
+    | null;
   footnote?: string | null;
   lists?:
     | {
@@ -29,6 +70,7 @@ export interface RadarEdition {
         support?: number | null;
         support_2?: number | null;
         resistance?: number | null;
+        premarket_price?: number | null;
         high_52w?: number | null;
         to_support_pct?: number | null;
         to_resistance_pct?: number | null;
@@ -41,6 +83,8 @@ export interface RadarEdition {
         volume_ratio?: number | null;
         above_mas?: number | null;
         stance?: string | null;
+        evidence_grade?: number | null;
+        chart_grade?: number | null;
         tag?: "new" | "risk" | null;
         lists?: string[] | null;
         why?: string | null;
