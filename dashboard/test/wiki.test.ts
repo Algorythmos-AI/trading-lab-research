@@ -1,6 +1,6 @@
 // The Engineering wikis' live state: CI lanes, job dots, the host node and the deploy stamp.
 import { describe, expect, it } from "vitest";
-import { ciLanes, diskTone, hostTone, jobDot, laneTone, stampIso } from "@/lib/wiki";
+import { ciLanes, currentGate, diskTone, gateTone, hostTone, jobDot, jobsHealthy, laneTone, nyMinutes, stampIso, sydneyAheadOfNy } from "@/lib/wiki";
 import { fixture } from "./helpers";
 
 describe("ciLanes", () => {
@@ -95,5 +95,34 @@ describe("stampIso", () => {
     expect(stampIso("2026-09-29T04:30:00Z")).toBe("2026-09-29T04:30:00Z");
     expect(stampIso("soon")).toBeNull();
     expect(stampIso(null)).toBeNull();
+  });
+});
+
+describe("stocks wiki helpers", () => {
+  it("places now on the New York clock, across daylight saving", () => {
+    expect(nyMinutes(new Date("2026-10-09T13:30:00Z"))).toBe(9 * 60 + 30); // EDT
+    expect(nyMinutes(new Date("2026-12-09T14:30:00Z"))).toBe(9 * 60 + 30); // EST
+    expect(sydneyAheadOfNy(new Date("2026-10-09T13:30:00Z"))).toBe(15 * 60); // EDT vs AEDT
+    expect(sydneyAheadOfNy(new Date("2026-07-09T13:30:00Z"))).toBe(14 * 60); // EDT vs AEST
+    expect(sydneyAheadOfNy(new Date("2026-12-09T14:30:00Z"))).toBe(16 * 60); // EST vs AEDT
+  });
+
+  it("finds the gate being worked on and colours each gate", () => {
+    const gates = [
+      { id: "K0", status: "done" },
+      { id: "G1", status: "failed" },
+      { id: "G2", status: "in_progress" },
+    ];
+    expect(currentGate(gates)?.id).toBe("G1");
+    expect(currentGate([{ id: "K0", status: "done" }])).toBeNull();
+    expect(gates.map((g) => gateTone(g.status))).toEqual(["good", "bad", "info"]);
+    expect(gateTone("not_started")).toBe("neutral");
+  });
+
+  it("counts healthy last runs and reports the worst", () => {
+    expect(jobsHealthy([{ status: "ok" }, { status: "ok" }])).toEqual({ ok: 2, total: 2, tone: "good" });
+    expect(jobsHealthy([{ status: "ok" }, { status: "refused" }])).toEqual({ ok: 1, total: 2, tone: "warn" });
+    expect(jobsHealthy([{ status: "failed" }, { status: "refused" }]).tone).toBe("bad");
+    expect(jobsHealthy([]).tone).toBe("neutral");
   });
 });

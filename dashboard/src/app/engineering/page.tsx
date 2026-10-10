@@ -7,30 +7,39 @@ import { Panel } from "@/components/panel";
 import { StatusBadge } from "@/components/status";
 import { LAB_PLATFORM_TOC, LabPlatform } from "@/components/wiki/lab-platform";
 import { WikiLayout, WikiSection, type TocGroup } from "@/components/wiki/kit";
+import { ArchitectureSection, GatesSection, GlanceSection, NightSection, OrdersSection, RunbooksSection, STOCKS_TOC } from "@/components/wiki/stocks";
 import { num, shortDate, sydney, txt } from "@/lib/format";
 import { humanize, severityTone } from "@/lib/labels";
+import { requestTime } from "@/lib/now";
 import { loadSnapshot } from "@/lib/snapshot";
 import { entries, list, type Snapshot } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Engineering" };
 
-const TOC: TocGroup[] = [
-  { title: "Stocks desk", items: [{ id: "plans", label: "Plans and history" }] },
-  LAB_PLATFORM_TOC,
-];
+const TOC: TocGroup[] = [STOCKS_TOC, LAB_PLATFORM_TOC];
 
 export default async function EngineeringPage() {
   const result = await loadSnapshot();
   const s = result.status === "ok" ? result.snapshot : null;
+  const now = requestTime();
   return (
     <>
       <PageHeading
         title="Engineering"
-        intro="How the stocks desk is built: its plans and history, and the lab platform it shares with the crypto desk. Pictures lead; the dots on them are live."
+        intro="How the stocks desk is built: the machine, a trading night, how orders stay safe, the research gates, and the lab platform it shares with the crypto desk. Pictures lead; the dots on them are live."
       />
       {result.status !== "ok" ? <NoSnapshot status={result.status} /> : null}
       <WikiLayout toc={TOC}>
+        {s ? (
+          <>
+            <GlanceSection s={s} />
+            <ArchitectureSection s={s} />
+            <NightSection s={s} now={now} />
+            <OrdersSection s={s} />
+            <GatesSection s={s} />
+          </>
+        ) : null}
         {s ? (
           <WikiSection
             id="plans"
@@ -48,6 +57,7 @@ export default async function EngineeringPage() {
             </div>
           </WikiSection>
         ) : null}
+        <RunbooksSection />
         <LabPlatform s={s} />
       </WikiLayout>
     </>
