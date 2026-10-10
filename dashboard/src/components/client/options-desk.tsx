@@ -30,9 +30,13 @@ import {
   type OptionsTicker,
 } from "@/lib/options";
 import { cn } from "@/lib/utils";
+import type { OptionsLive } from "@/lib/options-live.types";
+import { pickFor, type PositionRow } from "@/lib/positions";
 import { DeskPalette } from "./desk-palette";
 import { FeedPill, StateChip, useLive } from "./live-layer";
+import { storePick } from "./options-contract";
 import { OptionsDetail, Tick } from "./options-detail";
+import { OptionsPositions } from "./options-positions";
 import { PaneBoundary } from "./pane-boundary";
 
 const VIEW_LABEL: Record<DeskView, string> = { brief: "Brief", live: "Live", review: "Review" };
@@ -273,6 +277,7 @@ export function OptionsDesk({
   manualView,
   initialSymbol,
   initialPane,
+  positions,
   stale,
 }: {
   e: Options;
@@ -285,6 +290,8 @@ export function OptionsDesk({
   initialSymbol: string | null;
   /** The pane a phone opens on. A wider screen shows both panes whatever this says. */
   initialPane: DeskPane;
+  /** The paper account's open option positions, when the trading host has published them. */
+  positions: OptionsLive | null;
   stale: boolean;
 }) {
   const { feed, session, now } = useLive();
@@ -383,6 +390,12 @@ export function OptionsDesk({
       if (p === "name") focusHeading();
       else rowButtons.current.get(symbolRef.current ?? "")?.focus();
     }, 0);
+  };
+  /** Opening a position: its name, with the contract that is held loaded into the contract pane. */
+  const openPosition = (row: PositionRow) => {
+    const pick = pickFor(row);
+    if (pick) storePick(row.symbol, pick);
+    openName(row.symbol);
   };
   /** Choosing a name by hand: a row, or the palette. On a phone that also opens the name. */
   const openName = (s: string) => {
@@ -647,6 +660,16 @@ export function OptionsDesk({
               </tbody>
             </table>
           </PaneBoundary>
+          {positions && live && view === "live" ? (
+            <PaneBoundary name="Paper positions">
+              <OptionsPositions
+                doc={positions}
+                names={e.tickers.map((t) => t.symbol)}
+                marketOpen={now !== null && sessionClock(e.session, halfDay, new Date(now))?.phase === "open"}
+                onOpen={openPosition}
+              />
+            </PaneBoundary>
+          ) : null}
         </div>
 
         <div className={cn("xl:min-h-0 xl:overflow-y-auto", pane === "names" && "max-sm:hidden")}>

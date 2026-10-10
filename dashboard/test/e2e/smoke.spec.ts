@@ -177,6 +177,7 @@ test("health endpoint answers without secrets", async ({ request }) => {
     editions: {
       options: { status: "ok", accepts: 2, session: "2026-10-12", run_id: expect.any(String) },
       radar: { status: "ok", accepts: 1, edition_date: expect.any(String) },
+      options_live: { status: "ok", accepts: 1, run_id: expect.any(String) },
     },
   });
 });

@@ -2,10 +2,11 @@ import "server-only";
 import { cache } from "react";
 import { LATEST_PATH, listPaths, readText } from "./blob";
 import type { CryptoSnapshot } from "./crypto.types";
-import { DESK_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
-import { parseFlags, partialOptions, poisonedOptions, v2Options, VARIANT_COOKIE, type VariantFlag } from "./fixture-variants";
+import { DESK_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
+import { fixtureOptionsLive, parseFlags, partialOptions, poisonedOptions, v2Options, VARIANT_COOKIE, type VariantFlag } from "./fixture-variants";
 import type { HftSnapshot } from "./hft.types";
 import { logEvent } from "./log";
+import type { OptionsLive } from "./options-live.types";
 import type { OptionsEdition } from "./options.types";
 import { radarDates } from "./radar";
 import type { RadarEdition } from "./radar.types";
@@ -198,6 +199,34 @@ export const loadOptions = cache(async (date?: string): Promise<OptionsResult> =
     return { status: "ok", edition: parsed as OptionsEdition, source: "blob" };
   } catch (e) {
     logEvent("snapshot.read", { outcome: "error", desk: "options", error: e instanceof Error ? e.name : "unknown" });
+    return { status: "error" };
+  }
+});
+
+export type OptionsLiveResult = { status: "ok"; doc: OptionsLive; source: "fixture" | "blob" } | { status: "missing" } | { status: "error" };
+
+/**
+ * The options live document: the paper account's open option positions and open interest. "missing" until the
+ * options-live job has published once.
+ */
+export const loadOptionsLive = cache(async (): Promise<OptionsLiveResult> => {
+  if (fixtureMode()) {
+    const flags = await fixtureFlags();
+    if (flags.has("positions-off") || flags.has("empty") || flags.has("error")) return { status: "missing" };
+    const mod = await import("../../test/fixtures/options.v1.json");
+    return { status: "ok", doc: fixtureOptionsLive((mod.default ?? mod) as unknown as OptionsEdition, new Date(), flags), source: "fixture" };
+  }
+  try {
+    const stored = await readText(OPTIONS_LIVE_PATHS.latest);
+    if (!stored) return { status: "missing" };
+    const parsed: unknown = JSON.parse(stored.text);
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      logEvent("snapshot.read", { outcome: "not-an-object", desk: "options-live" });
+      return { status: "error" };
+    }
+    return { status: "ok", doc: parsed as OptionsLive, source: "blob" };
+  } catch (e) {
+    logEvent("snapshot.read", { outcome: "error", desk: "options-live", error: e instanceof Error ? e.name : "unknown" });
     return { status: "error" };
   }
 });

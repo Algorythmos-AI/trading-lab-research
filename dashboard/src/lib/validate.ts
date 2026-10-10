@@ -4,6 +4,8 @@ import cryptoSchema from "./crypto.schema.json";
 import type { CryptoSnapshot } from "./crypto.types";
 import hftSchema from "./hft.schema.json";
 import type { HftSnapshot } from "./hft.types";
+import optionsLiveSchema from "./options-live.schema.json";
+import type { OptionsLive } from "./options-live.types";
 import optionsSchema from "./options.schema.json";
 import type { OptionsEdition } from "./options.types";
 import radarSchema from "./radar.schema.json";
@@ -18,6 +20,7 @@ const validateCryptoSchema = ajv.compile<CryptoSnapshot>(cryptoSchema);
 const validateHftSchema = ajv.compile<HftSnapshot>(hftSchema);
 const validateRadarSchema = ajv.compile<RadarEdition>(radarSchema);
 const validateOptionsSchema = ajv.compile<OptionsEdition>(optionsSchema);
+const validateOptionsLiveSchema = ajv.compile<OptionsLive>(optionsLiveSchema);
 
 export const STOCKS_SCHEMA = "trading-lab/snapshot";
 export const CRYPTO_SCHEMA = "trading-lab/crypto-snapshot";
@@ -31,6 +34,17 @@ export const OPTIONS_SCHEMA = "stocksdelta/options";
 /** True when the signed body names the radar schema. Like deskOf, the body decides, never a header. */
 export function isRadar(data: unknown): boolean {
   return data !== null && typeof data === "object" && (data as { schema?: unknown }).schema === RADAR_SCHEMA;
+}
+
+/**
+ * What the Options desk needs between editions: the paper option positions and open interest. It comes from the
+ * trading host, not from the research environment, so the radar's key may not publish it.
+ */
+export const OPTIONS_LIVE_SCHEMA = "stocksdelta/options-live";
+
+/** True when the signed body names the options live schema. */
+export function isOptionsLive(data: unknown): boolean {
+  return data !== null && typeof data === "object" && (data as { schema?: unknown }).schema === OPTIONS_LIVE_SCHEMA;
 }
 
 /** True when the signed body names the options levels schema. */
@@ -202,4 +216,19 @@ export function validateOptionsEdition(data: unknown): OptionsValidationResult {
   }
   if (errors.length > 0) return { ok: false, errors: errors.slice(0, MAX_ERRORS) };
   return { ok: true, edition: data as OptionsEdition };
+}
+
+export type OptionsLiveValidationResult = { ok: true; doc: OptionsLive } | { ok: false; errors: string[] };
+
+/** An options live document: its own schema, the same denylist. Paper only, by the schema's own `paper: true`. */
+export function validateOptionsLive(data: unknown): OptionsLiveValidationResult {
+  if (data === null || typeof data !== "object" || Array.isArray(data)) {
+    return { ok: false, errors: ["/: must be an object"] };
+  }
+  const errors = findDenied(data).map((p) => `${p}: key is not allowed to be published`);
+  if (!validateOptionsLiveSchema(data)) {
+    errors.push(...(validateOptionsLiveSchema.errors ?? []).map(describe));
+  }
+  if (errors.length > 0) return { ok: false, errors: errors.slice(0, MAX_ERRORS) };
+  return { ok: true, doc: data as OptionsLive };
 }

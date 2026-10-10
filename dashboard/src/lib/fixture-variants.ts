@@ -2,6 +2,7 @@
 // down, a sparse edition, a corrupt one, the live feed off or failing). They exist only in fixture mode
 // (DASHBOARD_FIXTURE=1, refused in production) and are chosen per request by the `fx` cookie, so the browser tests
 // can put any page into any state. Pure: no I/O.
+import type { OptionsLive } from "./options-live.types";
 import type { OptionsEdition } from "./options.types";
 
 export const VARIANT_COOKIE = "fx";
@@ -16,6 +17,8 @@ export const VARIANT_COOKIE = "fx";
  * - `chain-off`: the option feed has no keys. `chain-error`: Alpaca is failing.
  * - `chain-thin`: the nearest expiry's first calls come without a volatility, without a market, and crossed.
  * - `v2`: the edition in its second format, with the day's context, events and each name's volatility block.
+ * - `positions-off`: no options live document has been published. `positions-none`: one has, with nothing open.
+ * - `positions-old`: the document is three hours old.
  */
 export const VARIANT_FLAGS = [
   "empty",
@@ -29,6 +32,9 @@ export const VARIANT_FLAGS = [
   "chain-error",
   "chain-thin",
   "v2",
+  "positions-off",
+  "positions-none",
+  "positions-old",
 ] as const;
 export type VariantFlag = (typeof VARIANT_FLAGS)[number];
 
@@ -158,4 +164,58 @@ export const TICK_HOLD_S = 3;
 export function tickPrice(base: number, second: number): number {
   const up = Math.floor(Math.abs(second) / TICK_HOLD_S) % 2 === 1;
   return Math.round((base + (up ? 0.01 : 0)) * 100) / 100;
+}
+
+/** An OCC option symbol: root, yymmdd, C or P, strike in thousandths. */
+export function occSymbol(root: string, expiry: string, kind: "call" | "put", strike: number): string {
+  return `${root}${expiry.slice(2).replace(/-/g, "")}${kind === "call" ? "C" : "P"}${String(Math.round(strike * 1000)).padStart(8, "0")}`;
+}
+
+/**
+ * A synthetic options live document: three open paper option positions (two on the desk's names, one on a name
+ * the desk does not carry) and a little open interest. Dated from `now`, so its contracts have not expired and
+ * its age is what a healthy feed's would be, whenever the tests run.
+ */
+export function fixtureOptionsLive(e: OptionsEdition, now: Date, flags: ReadonlySet<VariantFlag> = new Set()): OptionsLive {
+  // The first Friday at least a week out.
+  let day = now.getTime() + 7 * DAY;
+  while (new Date(day).getUTCDay() !== 5) day += DAY;
+  const expiry = new Date(day).toISOString().slice(0, 10);
+  const asOf = new Date(now.getTime() - (flags.has("positions-old") ? 180 : 2) * 60_000);
+  const strikeNear = (symbol: string, step: number) => {
+    const close = e.tickers.find((t) => t.symbol === symbol)?.last?.close ?? 100;
+    return Math.round(close / step) * step;
+  };
+  const spy = strikeNear("SPY", 5);
+  const nvda = strikeNear("NVDA", 5);
+  const positions: OptionsLive["positions"] = flags.has("positions-none")
+    ? []
+    : [
+        { contract: occSymbol("SPY", expiry, "call", spy), qty: 2, avg_price: 2.85, price: 3.1, market_value: 620, unrealized_pl: 50 },
+        { contract: occSymbol("NVDA", expiry, "put", nvda), qty: 1, avg_price: 3.4, price: 2.9, market_value: 290, unrealized_pl: -50 },
+        // A name the desk does not carry, with only what the broker always sends.
+        { contract: occSymbol("IWM", expiry, "call", 250), qty: 1, avg_price: null, price: null, market_value: 180, unrealized_pl: 12.5 },
+      ];
+  return {
+    schema: "stocksdelta/options-live",
+    schema_version: 1,
+    run_id: `options-live-fixture-${asOf.toISOString()}`,
+    as_of: asOf.toISOString(),
+    paper: true,
+    // The stale document is one from an open market: that is when its age is a fault and not just the hour.
+    market: { is_open: flags.has("positions-old"), next_open: null, next_close: new Date(now.getTime() + 2 * 3_600_000).toISOString() },
+    positions,
+    open_interest: [
+      {
+        symbol: "SPY",
+        as_of: new Date(now.getTime() - DAY).toISOString().slice(0, 10),
+        rows: [
+          { expiry, strike: spy, kind: "call", oi: 18250 },
+          { expiry, strike: spy, kind: "put", oi: 9120 },
+          { expiry, strike: spy + 5, kind: "call", oi: 22410 },
+        ],
+      },
+    ],
+    problems: [],
+  };
 }

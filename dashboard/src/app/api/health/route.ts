@@ -1,11 +1,18 @@
-import { optionsHealth, radarHealth } from "@/lib/editions";
-import { fixtureMode, loadCryptoSnapshot, loadHftSnapshot, loadOptions, loadRadar, loadSnapshot } from "@/lib/snapshot";
+import { optionsHealth, optionsLiveHealth, radarHealth } from "@/lib/editions";
+import { fixtureMode, loadCryptoSnapshot, loadHftSnapshot, loadOptions, loadOptionsLive, loadRadar, loadSnapshot } from "@/lib/snapshot";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(): Promise<Response> {
-  const [result, crypto, hft, options, radar] = await Promise.all([loadSnapshot(), loadCryptoSnapshot(), loadHftSnapshot(), loadOptions(), loadRadar()]);
+  const [result, crypto, hft, options, radar, optionsLive] = await Promise.all([
+    loadSnapshot(),
+    loadCryptoSnapshot(),
+    loadHftSnapshot(),
+    loadOptions(),
+    loadRadar(),
+    loadOptionsLive(),
+  ]);
   // BUILD_SHA is inlined at build time (next.config.ts) by CI and `make dashboard-deploy`. `||`, not `??`:
   // VERCEL_GIT_COMMIT_SHA is an empty string on CLI deploys, which `??` would keep.
   const sha = process.env.BUILD_SHA || process.env.VERCEL_GIT_COMMIT_SHA || null;
@@ -31,7 +38,7 @@ export async function GET(): Promise<Response> {
       },
       // The research editions on file, and the newest format of each this build accepts. A publisher checks
       // `accepts` before it sends and reads `run_id` back after.
-      editions: { options: optionsHealth(options), radar: radarHealth(radar) },
+      editions: { options: optionsHealth(options), radar: radarHealth(radar), options_live: optionsLiveHealth(optionsLive) },
       ...(fixtureMode() ? { fixture: true } : {}),
     },
     { headers: { "cache-control": "no-store" } },
