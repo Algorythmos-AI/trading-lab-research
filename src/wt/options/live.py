@@ -53,7 +53,8 @@ PAPER_HOST = "https://paper-api.alpaca.markets"
 OCC = re.compile(r"[A-Z]{1,6}\d{6}[CP]\d{8}")
 MAX_POSITIONS = 100
 MAX_QTY = 9999
-GET_TIMEOUT_S = 15.0
+GET_TIMEOUT_S = (5.0, 10.0)        # connect, read: two reads of three tries each stay far inside the deadline
+ISO_TIME = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})")
 GET_TRIES = 3
 PUBLISH_BUDGET_S = 150.0          # under the job's 4-minute deadline (wt.ops.schedule)
 SEND_TRIES = 5
@@ -78,7 +79,9 @@ class OptionsAccount:
         last = "network"
         for i in range(GET_TRIES):
             try:
-                r = self._s.get(PAPER_HOST + path, headers=self._headers, timeout=GET_TIMEOUT_S)
+                # No redirects: a 30x would carry the key headers to whatever host it named.
+                r = self._s.get(PAPER_HOST + path, headers=self._headers, timeout=GET_TIMEOUT_S,
+                                allow_redirects=False)
             except requests.RequestException as e:
                 last = "network-" + e.__class__.__name__
             else:
@@ -165,7 +168,7 @@ def market(clock: dict[str, Any] | None) -> dict[str, Any] | None:
         return None
 
     def when(v: Any) -> str | None:
-        return v if isinstance(v, str) and 0 < len(v) <= 40 else None
+        return v if isinstance(v, str) and len(v) <= 40 and ISO_TIME.fullmatch(v) else None
     is_open = clock.get("is_open")
     return {"is_open": is_open if isinstance(is_open, bool) else None,
             "next_open": when(clock.get("next_open")), "next_close": when(clock.get("next_close"))}
@@ -203,7 +206,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--verify", action="store_true")
     a = ap.parse_args(argv)
     from wt.ops.locks import job_lock
-    with job_lock("publish-options-live", wait_s=publish.LOCK_WAIT_S) as got:
+    with job_lock("publish-options-live") as got:        # no wait: the next run is minutes away
         if not got:
             print("another options-live publish is still running; not starting a second one")
             return 0

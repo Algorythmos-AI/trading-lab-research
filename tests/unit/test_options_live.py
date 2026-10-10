@@ -41,7 +41,8 @@ class Session:
     def __init__(self, *replies):
         self.replies, self.calls = list(replies), []
 
-    def get(self, url, headers=None, timeout=None):
+    def get(self, url, headers=None, timeout=None, allow_redirects=True):
+        assert allow_redirects is False
         self.calls.append(url)
         r = self.replies.pop(0)
         if isinstance(r, Exception):
@@ -129,6 +130,8 @@ def test_the_document_passes_the_sites_contract_and_names_nothing_about_the_acco
         assert word not in text, word
     assert live.validate(live.build([], None, "r2", NOW)) == []               # nothing held, clock unreadable
     assert live.build([], None, "r2", NOW)["market"] is None
+    odd = live.market({"is_open": "yes", "next_open": "<b>soon</b>", "next_close": CLOCK["next_close"]})
+    assert odd == {"is_open": None, "next_open": None, "next_close": CLOCK["next_close"]}
     assert live.validate({**doc, "paper": False}) and live.validate({**doc, "equity": 1.0})
 
 
@@ -136,6 +139,7 @@ def test_the_document_passes_the_sites_contract_and_names_nothing_about_the_acco
     ([Reply(401)], "keys-rejected"),
     ([Reply(403)], "keys-rejected"),
     ([Reply(404)], "http-404"),
+    ([Reply(302)], "http-302"),
     ([Reply(503), Reply(503), Reply(503)], "http-503"),
     ([requests.ConnectTimeout(), requests.ConnectTimeout(), requests.ConnectTimeout()], "network-ConnectTimeout"),
     ([Reply(200, text="<html>")], "not-json"),
@@ -186,7 +190,7 @@ def test_a_run_sends_the_signed_document_and_logs_only_a_count(monkeypatch, caps
     assert live.validate(doc) == [] and doc["market"] is None and doc["problems"] == ["clock-unavailable:http-503"]
     assert json.loads((live.OUT / "outbox" / "document.json").read_text()) == doc
     out = capsys.readouterr().out
-    assert "1 option positions" in out and "SPY" not in out and "620" not in out
+    assert "1 option positions" in out and "SPY" not in out and "market_value" not in out
 
 
 def test_a_dry_run_and_a_host_with_no_ingest_settings_send_nothing(monkeypatch):
