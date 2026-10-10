@@ -1,6 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sign } from "@/lib/hmac";
-import { levelPosition, radarDates, researched, stanceTone, tickersOf, type Radar } from "@/lib/radar";
+import {
+  calendarWeek,
+  distances,
+  gaugeTone,
+  levelPosition,
+  radarDates,
+  researched,
+  roomOf,
+  scoreRows,
+  stanceTone,
+  tickersOf,
+  type Radar,
+} from "@/lib/radar";
 import { RADAR_SCHEMA, validateRadarEdition } from "@/lib/validate";
 import { fixture } from "./helpers";
 import radarJson from "./fixtures/radar.v1.json";
@@ -204,5 +216,64 @@ describe("radar view helpers", () => {
     expect(stanceTone("Testing support")).toBe("warn");
     expect(stanceTone("At highs")).toBe("info");
     expect(stanceTone(null)).toBe("neutral");
+  });
+});
+
+describe("the radar's pictures", () => {
+  const r = radarJson as unknown as Radar;
+
+  it("reads each list against its benchmark", () => {
+    const rows = scoreRows(r);
+    expect(rows.map((x) => [x.list, x.benchmark, x.hits])).toEqual([
+      ["SUPPORT PLAYS", "SPY", "2 of 3 held"],
+      ["MEGA CAP OPTIONS", "QQQ", "2 of 3 up"],
+      ["INSTITUTIONAL CONVICTION", "SPY", "2 of 2 up"],
+    ]);
+    expect(rows[0]!.edge).toBeCloseTo(-0.22, 6);
+    expect(rows[1]!.edge).toBeCloseTo(1.65, 6);
+    expect(scoreRows({ ...r, scorecard: undefined })).toEqual([]);
+  });
+
+  it("colours a gauge by whether its move helps stocks", () => {
+    expect(gaugeTone({ label: "S&P 500", change: -0.47, better: "up" })).toBe("bad");
+    expect(gaugeTone({ label: "VIX", change: -0.5, better: "down" })).toBe("good");
+    expect(gaugeTone({ label: "Fear & Greed", note: "fear" })).toBe("neutral");
+    expect(gaugeTone({ label: "Brent", change: 4.1 })).toBe("neutral");
+  });
+
+  it("draws a pick's room from support to resistance, or to the 52-week high with nothing above", () => {
+    const amzn = tickersOf(r, "DAILY RADAR")[0]!;
+    expect(roomOf(amzn)).toMatchObject({ support: 244.3, ceiling: 255.28, atHigh: false, premarket: 255.1 });
+    expect(roomOf(amzn)!.roomPct).toBeCloseTo(3.709, 3);
+    const spcx = r.tickers!.find((t) => t.symbol === "SPCX")!;
+    expect(roomOf(spcx)).toMatchObject({ ceiling: spcx.high_52w ?? null, atHigh: true });
+    expect(roomOf({ ...spcx, support: null })).toBeNull();
+  });
+
+  it("puts the name nearest its line first", () => {
+    // Support plays: distance above support, from to_support_pct (negative when support is below).
+    expect(distances(r, "SUPPORT PLAYS").map((d) => [d.symbol, d.pct])).toEqual([
+      ["GOOGL", 3.24],
+      ["AMZN", 3.71],
+      ["IBKR", 6.32],
+    ]);
+    const b = distances(r, "BREAKOUT WATCH");
+    expect(b.map((d) => d.symbol)).toEqual(["AMZN", "SPY", "GOOGL"]);
+    expect(b[0]!.pct).toBe(0.6);
+  });
+
+  it("lays the calendar over five weekdays from the edition's date, the rest later", () => {
+    const w = calendarWeek(r);
+    expect(w.days.map((d) => d.date)).toEqual(["2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24", "2026-09-25"]);
+    expect(w.days[4]!.events.map((e) => e.label)).toEqual(["PCE inflation"]);
+    expect(w.later.map((e) => e.label)).toEqual(["Payrolls"]);
+    // A Friday edition skips the weekend.
+    expect(calendarWeek({ ...r, edition_date: "2026-09-25" }).days.map((d) => d.date)).toEqual([
+      "2026-09-25",
+      "2026-09-28",
+      "2026-09-29",
+      "2026-09-30",
+      "2026-10-01",
+    ]);
   });
 });

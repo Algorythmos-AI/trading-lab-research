@@ -104,6 +104,23 @@ test("a live quote older than 30 seconds reads as stale", async ({ page }) => {
   await expect(spy).toContainText("STALE");
 });
 
+test("the radar draws the scorecard, the picks, the lines and the week", async ({ page }) => {
+  await page.goto("/radar");
+  await expect(page.getByRole("img", { name: "Market regime: neutral" })).toBeVisible();
+  await expect(page.getByRole("list", { name: "Market gauges" })).toContainText("VIX");
+  await expect(page.getByRole("img", { name: /^Each list's average move on .* against its benchmark\. SUPPORT PLAYS/ })).toBeVisible();
+  const picks = page.getByRole("list", { name: "Daily radar picks" });
+  await expect(picks.getByRole("img", { name: /^AMZN: price 253\.71, support 244\.30/ })).toBeVisible();
+  await expect(picks).toContainText("strong");
+  await expect(page.getByRole("img", { name: /^Support plays: percent above support\. GOOGL 3\.2%/ })).toBeVisible();
+  await expect(page.getByRole("list", { name: "Catalysts this week" })).toContainText("PCE inflation");
+  // The tables are one click away.
+  await page.getByText("Every list as a table").click();
+  await expect(page.getByRole("heading", { name: "SUPPORT PLAYS", exact: true })).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+});
+
 test("today draws the session clock and the open paper position", async ({ page }) => {
   // 11:02 New York on the fixture's trading day, so the clock shows "now".
   await page.clock.setFixedTime(new Date("2026-09-29T15:02:00Z"));

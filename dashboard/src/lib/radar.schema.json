@@ -68,6 +68,206 @@
       ],
       "maxLength": 1500
     },
+    "regime_word": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "risk-on",
+        "neutral",
+        "risk-off",
+        null
+      ]
+    },
+    "gauges": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "maxItems": 24,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "value": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 24
+          },
+          "change": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "change_unit": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "pct",
+              "pts",
+              null
+            ]
+          },
+          "better": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "up",
+              "down",
+              null
+            ]
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 40
+          }
+        },
+        "required": [
+          "label"
+        ]
+      }
+    },
+    "scorecard_session": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "scorecard": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "maxItems": 24,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "list": {
+            "type": "string",
+            "maxLength": 60
+          },
+          "avg_move_pct": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "benchmark": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 12
+          },
+          "benchmark_move_pct": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "hits": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 100
+          },
+          "total": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 100
+          },
+          "hit_label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 20
+          }
+        },
+        "required": [
+          "list"
+        ]
+      }
+    },
+    "calendar": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "maxItems": 60,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "time_et": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^\\d{2}:\\d{2}$"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "macro",
+              "earnings",
+              "holiday",
+              "other",
+              null
+            ]
+          },
+          "impact": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "high",
+              "medium",
+              "low",
+              null
+            ]
+          }
+        },
+        "required": [
+          "date",
+          "label"
+        ]
+      }
+    },
     "footnote": {
       "type": [
         "string",
@@ -171,6 +371,12 @@
               "null"
             ]
           },
+          "premarket_price": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
           "high_52w": {
             "type": [
               "number",
@@ -243,6 +449,22 @@
               "null"
             ],
             "maxLength": 40
+          },
+          "evidence_grade": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 3
+          },
+          "chart_grade": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 3
           },
           "tag": {
             "type": [
