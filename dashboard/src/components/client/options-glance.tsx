@@ -3,15 +3,13 @@
 import { Gauge } from "lucide-react";
 import { RoomBar } from "@/components/options-charts";
 import { Panel } from "@/components/panel";
-import { Badge } from "@/components/ui/badge";
 import { fracPct, newYork, num, signed } from "@/lib/format";
-import { CHIP_LABEL, LIVE_STATE_TONE, liveState, roomView, ROOM_REACH, type OptionsTicker } from "@/lib/options";
+import { CHIP_LABEL, liveRead, needsALook, roomView, ROOM_REACH, type OptionsTicker } from "@/lib/options";
 import { cn } from "@/lib/utils";
-import { useNow } from "./use-now";
-import { useQuotes } from "./use-quotes";
+import { FeedPill, FocusButton, StateChip, useLive } from "./live-layer";
 
-/** A last trade older than this, while the session is open, is flagged as delayed (IEX is a thin feed). */
-const DELAYED_MS = 5 * 60_000;
+/** At most this many trail dots behind the live dot on a room bar. */
+const TRAIL_DOTS = 12;
 
 const CHIP_DOT: Record<string, string> = { STRONG: "bg-good-fill", MID: "bg-neutral-fill", WEAK: "bg-bad-fill" };
 
@@ -22,25 +20,19 @@ const CHEAP = 0.25;
 /**
  * Every name on one line: price against the nearest zones on a bar measured in ATRs, so all names read on one
  * scale, with the options market's one-day move and how pricey options are. On the newest edition it follows the
- * live price every 2 seconds; `children` is the same data as a table, folded away.
+ * shared live feed every 2 seconds, and while the session trades the names that need a look (testing a major
+ * zone, then gaps) sort to the top. `children` is the same data as a table, folded away.
  */
-export function OptionsGlance({
-  tickers,
-  session,
-  live,
-  children,
-}: {
-  tickers: OptionsTicker[];
-  session: string;
-  live: boolean;
-  children?: React.ReactNode;
-}) {
-  const feed = useQuotes(tickers.map((t) => t.symbol).join(","), live);
-  const now = useNow(5_000);
+export function OptionsGlance({ tickers, live, children }: { tickers: OptionsTicker[]; live: boolean; children?: React.ReactNode }) {
+  const { feed, session, now } = useLive();
+  const ok = feed.status === "ok";
+  const reads = new Map(tickers.map((t) => [t.symbol, liveRead(t, ok ? feed.quotes[t.symbol] : undefined, session, now, ok ? feed.receivedAt : null)]));
+  const trading = [...reads.values()].some((r) => r.inSession);
+  const rows = needsALook(tickers, (t) => reads.get(t.symbol)!);
   const means = !live
     ? "Every name at its close for this edition: the bar is centred on the close and measured in ATRs."
     : feed.status === "ok"
-      ? `Centred on the live price (Alpaca IEX, checked ${newYork(feed.asOf, false)} New York; IEX can lag the tape). The bar is measured in ATRs, so every name reads on one scale.`
+      ? `Centred on the live price (Alpaca IEX, checked ${newYork(feed.asOf, false)} New York; IEX can lag the tape). The bar is measured in ATRs, so every name reads on one scale.${trading ? " Names that need a look come first." : ""}`
       : feed.status === "off"
         ? "Live prices are off (no Alpaca keys in Vercel), so each bar is centred on the close."
         : feed.status === "error"
@@ -48,9 +40,19 @@ export function OptionsGlance({
           : "Centred on the close until the first live price arrives. The bar is measured in ATRs.";
 
   return (
-    <Panel title="At a glance" means={means} icon={Gauge}>
+    <Panel
+      title="At a glance"
+      means={means}
+      icon={Gauge}
+      action={
+        <span className="flex items-center gap-3">
+          {live ? <FeedPill /> : null}
+          <FocusButton />
+        </span>
+      }
+    >
       <div className="grid gap-3">
-        <ul className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs" aria-label="Key">
+        <ul className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs" aria-label="Key" data-explain>
           <li className="flex items-center gap-1.5">
             <span className="bg-good-fill inline-block h-2 w-3.5 rounded-[2px]" />
             support zone
@@ -67,28 +69,35 @@ export function OptionsGlance({
             <span className="bg-foreground inline-block size-2 rounded-full" />
             price · ticks every 1 ATR, ±{ROOM_REACH} shown
           </li>
+          {live ? (
+            <li className="flex items-center gap-1.5">
+              <span className="bg-warn-fill inline-block size-2 rounded-full" />
+              live price, faint dots where it was · hollow when stale
+            </li>
+          ) : null}
         </ul>
         <div role="list" aria-label="Every name against its nearest zones">
-          {tickers.map((t) => {
-            const q = feed.status === "ok" ? feed.quotes[t.symbol] : undefined;
+          {rows.map((t) => {
+            const read = reads.get(t.symbol)!;
+            const q = read.q;
             const close = t.last?.close ?? null;
-            const state = q ? liveState(t, q, session) : null;
-            const inSession = state !== null && state !== "CLOSED" && state !== "NOT OPEN YET";
-            const price = q && inSession ? q.price : close;
+            const price = read.price;
             const view = price !== null ? roomView(t, price) : null;
             const ref = close ?? q?.prev_close ?? null;
-            const change = q && inSession && ref ? ((q.price - ref) / ref) * 100 : null;
-            const delayed = q && inSession && now !== null && now - Date.parse(q.at) > DELAYED_MS;
+            const change = q && read.inSession && ref ? ((q.price - ref) / ref) * 100 : null;
             const chip = t.close_strength?.chip;
             const ivp = t.expected_move?.iv_pct_52w;
-            const testing = state === "TESTING SUPPORT" || state === "TESTING RESISTANCE";
+            const testing = read.state === "TESTING SUPPORT" || read.state === "TESTING RESISTANCE";
+            const trail = ok && read.inSession && price !== null && t.atr14 ? (feed.trails[t.symbol] ?? []).slice(0, -1) : [];
+            const every = Math.max(1, Math.ceil(trail.length / TRAIL_DOTS));
+            const trailAtr = trail.filter((_, i) => (trail.length - 1 - i) % every === 0).map((pt) => (pt.p - price!) / t.atr14!);
             return (
               <div
                 key={t.symbol}
                 role="listitem"
                 className={cn(
                   "grid grid-cols-1 items-center gap-x-4 gap-y-1.5 border-b py-2.5 last:border-b-0 sm:grid-cols-[6.5rem_8rem_minmax(0,1fr)_7.5rem_4.5rem]",
-                  testing && "bg-warn-soft -mx-2 rounded-md px-2",
+                  testing && read.inSession && "bg-warn-soft -mx-2 rounded-md px-2",
                 )}
               >
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 sm:contents">
@@ -105,15 +114,8 @@ export function OptionsGlance({
                   </div>
                   <div className="flex items-baseline gap-2 font-mono text-sm sm:grid sm:gap-0.5">
                     <span>{num(price, 2)}</span>
-                    <span className="text-muted-foreground text-[0.6875rem]">
-                      {change !== null ? `${signed(change, 2)}%` : "close"}
-                      {delayed ? <span className="text-warn"> · delayed</span> : null}
-                    </span>
-                    {state && inSession ? (
-                      <Badge variant={LIVE_STATE_TONE[state]} className="w-fit px-1 font-sans text-[0.625rem]">
-                        {state}
-                      </Badge>
-                    ) : null}
+                    <span className="text-muted-foreground text-[0.6875rem]">{change !== null ? `${signed(change, 2)}%` : "close"}</span>
+                    <StateChip read={read} />
                   </div>
                 </div>
                 <div className="min-w-0">
@@ -121,6 +123,9 @@ export function OptionsGlance({
                     <>
                       <RoomBar
                         view={view}
+                        trail={trailAtr}
+                        live={read.inSession}
+                        stale={read.stale}
                         label={`${t.symbol}: ${view.downAtr === null ? "no support near" : `${num(view.downAtr, 1)} ATR down to support at ${num(view.down, 2)}`}, ${view.upAtr === null ? "no resistance near" : `${num(view.upAtr, 1)} ATR up to resistance at ${num(view.up, 2)}`}`}
                       />
                       <div className="flex justify-between gap-2 font-mono text-[0.6875rem]">

@@ -241,3 +241,11 @@
     }
   }
 }
+
+/* Options focus mode: only the glance strip, the level maps and the chips stay. Unlayered, so it wins over the
+   `contents` utility on the wrappers it hides. */
+[data-focus="on"] [data-explain],
+[data-focus="on"] [data-slot="card-description"],
+[data-focus="on"] details {
+  display: none;
+}

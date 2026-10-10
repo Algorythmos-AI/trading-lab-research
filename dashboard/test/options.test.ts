@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sign } from "@/lib/hmac";
-import { editionState, ladder, liveNeighbours, liveState, mapView, moveBands, nearest, niceStep, nyClock, roomView, ROOM_REACH, ruleLabel, spreadLabels, type LiveQuote, type Options, type OptionsTicker } from "@/lib/options";
+import { editionState, ladder, liveNeighbours, liveState, mapView, moveBands, nearest, needsALook, extendTrail, liveRead, sessionShare, STALE_MS, TRAIL_MS, niceStep, nyClock, roomView, ROOM_REACH, ruleLabel, spreadLabels, type LiveQuote, type Options, type OptionsTicker } from "@/lib/options";
 import { OPTIONS_SCHEMA, isOptions, validateOptionsEdition } from "@/lib/validate";
 import { fixture } from "./helpers";
 import optionsJson from "./fixtures/options.v1.json";
@@ -316,6 +316,63 @@ describe("options view helpers", () => {
       expect(spreadLabels([10, 12, 100], 20, 0, 200)).toEqual([10, 30, 100]);
       // Kept inside the bottom edge, in input order.
       expect(spreadLabels([195, 190], 20, 0, 200)).toEqual([200, 180]);
+    });
+  });
+  describe("live layer", () => {
+    const e = optionsJson as unknown as Options;
+    const spy = e.tickers.find((t) => t.symbol === "SPY")!;
+    const S = e.session;
+    const q = (price: number, at: string): LiveQuote => ({ price, at, open: 778.55, high: null, low: null, day: S, prev_close: 778.55 });
+    const at = (ny: string) => `${S}T${ny}-04:00`;
+    const ms = (iso: string) => Date.parse(iso);
+
+    it("keeps a trail of newer prices over the last few minutes", () => {
+      let trail = extendTrail([], q(779, at("10:00:00")));
+      trail = extendTrail(trail, q(779.5, at("10:00:02")));
+      // The same trade again, or an older one, adds nothing.
+      trail = extendTrail(trail, q(779.5, at("10:00:02")));
+      trail = extendTrail(trail, q(778, at("09:59:00")));
+      expect(trail.map((x) => x.p)).toEqual([779, 779.5]);
+      // Points older than the trail's reach drop off.
+      trail = extendTrail(trail, q(780, new Date(ms(at("10:00:01")) + TRAIL_MS).toISOString()));
+      expect(trail.map((x) => x.p)).toEqual([779.5, 780]);
+    });
+
+    it("reads a live quote, and calls it stale after 30 seconds", () => {
+      const quote = q(781, at("11:00:00"));
+      const fresh = liveRead(spy, quote, S, ms(at("11:00:05")), ms(at("11:00:04")));
+      expect(fresh).toMatchObject({ price: 781, state: "TESTING RESISTANCE", inSession: true, stale: false, ageS: 5 });
+      const old = liveRead(spy, quote, S, ms(at("11:00:00")) + STALE_MS + 1000, ms(at("11:00:30")));
+      expect(old.stale).toBe(true);
+      // A fresh trade but a feed that stopped answering is stale too.
+      expect(liveRead(spy, quote, S, ms(at("11:00:40")), ms(at("11:00:01"))).stale).toBe(true);
+      // Outside the session the price is the close and nothing is stale.
+      const shut = liveRead(spy, q(781, at("16:30:00")), S, ms(at("17:30:00")), ms(at("17:30:00")));
+      expect(shut).toMatchObject({ price: spy.last!.close, inSession: false, stale: false });
+      expect(liveRead(spy, undefined, S, null, null)).toMatchObject({ price: spy.last!.close, state: null });
+    });
+
+    it("sorts names testing a major zone first, then gaps, and keeps order otherwise", () => {
+      const read = (state: string | null, stale = false) => ({ price: 1, state, inSession: state !== null, stale, ageS: 0, q: null }) as ReturnType<typeof liveRead>;
+      const rows = [
+        { s: "A", r: read("INSIDE") },
+        { s: "B", r: read("TESTING SUPPORT", true) },
+        { s: "C", r: read("GAP ABOVE") },
+        { s: "D", r: read("TESTING RESISTANCE") },
+        { s: "E", r: read("INSIDE") },
+        { s: "F", r: read(null) },
+      ];
+      expect(needsALook(rows, (x) => x.r).map((x) => x.s)).toEqual(["D", "B", "C", "A", "E", "F"]);
+      // Out of session nothing moves.
+      const shut = rows.map((x) => ({ ...x, r: read(null) }));
+      expect(needsALook(shut, (x) => x.r).map((x) => x.s)).toEqual(["A", "B", "C", "D", "E", "F"]);
+    });
+
+    it("walks the live dot across the session", () => {
+      expect(sessionShare(spy, at("09:30:00"))).toBe(0);
+      expect(sessionShare(spy, at("12:45:00"))).toBeCloseTo(0.5, 6);
+      expect(sessionShare(spy, at("16:00:00"))).toBe(1);
+      expect(sessionShare({ ...spy, half_day: true }, at("11:15:00"))).toBeCloseTo(0.5, 6);
     });
   });
 });

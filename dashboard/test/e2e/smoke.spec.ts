@@ -72,8 +72,33 @@ test("the options page shows the glance strip, the rules and a level map per nam
   // The strip polls /api/quote; fixture mode answers with SPY 0.3 ATR above its close at 11:00 New York on the
   // fixture's session, inside the major resistance zone.
   await expect(glance.getByRole("listitem").filter({ hasText: "SPY" })).toContainText("TESTING RESISTANCE");
+  // The same quote moves the live dot on SPY's level map.
+  await expect(page.getByTestId("SPY-live-mark")).toBeAttached();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
+});
+
+test("options focus mode keeps the strip and the maps and hides the rest", async ({ page }) => {
+  await page.goto("/options");
+  const rules = page.getByRole("heading", { name: "Entry rules" });
+  await expect(rules).toBeVisible();
+  await page.getByRole("button", { name: "Focus mode" }).click();
+  await expect(rules).toBeHidden();
+  await expect(page.getByRole("list", { name: "Every name against its nearest zones" })).toBeVisible();
+  await expect(page.getByRole("img", { name: /^SPY: last 40 daily bars/ })).toBeVisible();
+  // Remembered on reload, and one click brings everything back.
+  await page.reload();
+  await expect(rules).toBeHidden();
+  await page.getByRole("button", { name: "Show everything" }).click();
+  await expect(rules).toBeVisible();
+});
+
+test("a live quote older than 30 seconds reads as stale", async ({ page }) => {
+  // Fixture quotes are SPY's last trade at 11:00 New York on the fixture's session; a minute later it is stale.
+  await page.clock.setFixedTime(new Date("2026-10-12T15:01:00Z"));
+  await page.goto("/options");
+  const spy = page.getByRole("list", { name: "Every name against its nearest zones" }).getByRole("listitem").filter({ hasText: "SPY" });
+  await expect(spy).toContainText("STALE");
 });
 
 test("the v3 panels render from the fixture, and the glossary is linked", async ({ page }) => {

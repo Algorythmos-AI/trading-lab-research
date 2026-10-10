@@ -13,6 +13,7 @@ import {
   type roomView,
 } from "@/lib/options";
 import { cn } from "@/lib/utils";
+import { LiveMapMark } from "./client/live-layer";
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
@@ -25,7 +26,20 @@ const roomAt = (v: number) => `${((v + ROOM_REACH) / (2 * ROOM_REACH)) * 100}%`;
  * One name's room bar: price in the middle, every zone within three ATRs each way (green below, red above, amber
  * when price sits inside one), and the one-day expected move as a blue band. Heavier zones are drawn stronger.
  */
-export function RoomBar({ view, label }: { view: NonNullable<ReturnType<typeof roomView>>; label: string }) {
+export function RoomBar({
+  view,
+  label,
+  trail = [],
+  live = false,
+  stale = false,
+}: {
+  view: NonNullable<ReturnType<typeof roomView>>;
+  label: string;
+  /** Recent live prices as ATR offsets from the current one, oldest first: drawn as fading dots behind it. */
+  trail?: number[];
+  live?: boolean;
+  stale?: boolean;
+}) {
   return (
     <div className="relative h-7" role="img" aria-label={label}>
       <span className="bg-track absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full" />
@@ -50,7 +64,19 @@ export function RoomBar({ view, label }: { view: NonNullable<ReturnType<typeof r
       {[-2, -1, 1, 2].map((k) => (
         <span key={k} className="bg-chart-axis absolute bottom-0 h-1.5 w-px" style={{ left: roomAt(k) }} />
       ))}
-      <span className="bg-foreground border-card absolute top-1/2 left-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2" />
+      {trail.map((v, i) => (
+        <span
+          key={i}
+          className="bg-foreground absolute top-1/2 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full"
+          style={{ left: roomAt(Math.max(-ROOM_REACH, Math.min(ROOM_REACH, v))), opacity: 0.12 + (0.33 * (i + 1)) / trail.length }}
+        />
+      ))}
+      <span
+        className={cn(
+          "absolute top-1/2 left-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2",
+          stale ? "bg-card border-warn-fill border-dashed" : live ? "bg-warn-fill border-card" : "bg-foreground border-card",
+        )}
+      />
     </div>
   );
 }
@@ -206,6 +232,7 @@ export function LevelMap({ t }: { t: OptionsTicker }) {
         ) : null}
         <line x1={X0} x2={XW} y1={y(close)} y2={y(close)} stroke="var(--foreground)" strokeOpacity={0.7} strokeDasharray="4 3" />
         <circle cx={xLast} cy={y(close)} r={4} fill="var(--foreground)" stroke="var(--card)" strokeWidth={2} />
+        <LiveMapMark t={{ ...t, bars: undefined }} lo={v.lo} hi={v.hi} top={TOP} bottom={BOTTOM} xFrom={xLast} xTo={XD} lineFrom={X0} lineTo={XW} />
         {labels.map((l, i) => (
           <g key={i}>
             <path d={`M${XW} ${l.y} L${LX - 4} ${placed[i]! - 3}`} stroke={l.color} strokeOpacity={0.5} fill="none" />

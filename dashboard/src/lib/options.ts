@@ -387,3 +387,100 @@ export function spreadLabels(ys: number[], gap: number, top: number, bottom: num
   }
   return out;
 }
+
+/** A live quote this old (or a feed that has not answered for this long) is shown as stale: the dot goes hollow. */
+export const STALE_MS = 30_000;
+
+/** How much of the price trail the live dot keeps: the last few minutes of quotes seen on this page. */
+export const TRAIL_MS = 5 * 60_000;
+
+/** One price seen on the live feed, at the time of its trade. */
+export interface TrailPoint {
+  at: number;
+  p: number;
+}
+
+/** Adds a quote to a trail if it is newer than the last point, and drops points older than the trail's reach. */
+export function extendTrail(trail: readonly TrailPoint[], q: LiveQuote): TrailPoint[] {
+  const at = Date.parse(q.at);
+  if (!Number.isFinite(at) || !isNum(q.price)) return [...trail];
+  const last = trail[trail.length - 1];
+  const next = last && last.at >= at ? [...trail] : [...trail, { at, p: q.price }];
+  return next.filter((x) => x.at >= at - TRAIL_MS);
+}
+
+/** One name as the live layer shows it: the price to draw, its state, and whether the quote can still be trusted. */
+export interface LiveRead {
+  price: number | null;
+  state: LiveStateName | null;
+  /** True while the session is trading (the state is a live one, not before the open or after the close). */
+  inSession: boolean;
+  stale: boolean;
+  /** Seconds since the quote's trade, or since the feed last answered, whichever is longer. */
+  ageS: number | null;
+  q: LiveQuote | null;
+}
+
+/**
+ * Reads one name off the live feed. Outside the session (or with no quote) the price is the edition's close. A
+ * quote is stale once its last trade, or the feed's last answer, is more than 30 seconds old; `now` and
+ * `receivedAt` are browser times, `q.at` is the trade's time.
+ */
+export function liveRead(t: OptionsTicker, q: LiveQuote | undefined, session: string, now: number | null, receivedAt: number | null): LiveRead {
+  const close = t.last?.close ?? null;
+  if (!q) return { price: close, state: null, inSession: false, stale: false, ageS: null, q: null };
+  const state = liveState(t, q, session);
+  const inSession = state !== "CLOSED" && state !== "NOT OPEN YET";
+  let ageS: number | null = null;
+  if (now !== null) {
+    const ages = [now - Date.parse(q.at), receivedAt !== null ? now - receivedAt : 0].filter((a) => Number.isFinite(a));
+    ageS = ages.length > 0 ? Math.max(0, Math.round(Math.max(...ages) / 1000)) : null;
+  }
+  return {
+    price: inSession ? q.price : close,
+    state,
+    inSession,
+    stale: inSession && ageS !== null && ageS * 1000 > STALE_MS,
+    ageS,
+    q,
+  };
+}
+
+/** How urgently each live state wants a look: a test of a major zone first, a fresh gap next, then the rest. */
+const LOOK_RANK: Record<LiveStateName, number> = {
+  "TESTING SUPPORT": 0,
+  "TESTING RESISTANCE": 0,
+  "GAP ABOVE": 1,
+  "GAP BELOW": 1,
+  "ABOVE PDH": 2,
+  "BELOW PDL": 2,
+  INSIDE: 3,
+  "NO TRADE": 4,
+  "NOT OPEN YET": 5,
+  CLOSED: 5,
+};
+
+/**
+ * The glance strip's order while the session trades: names testing a major zone float to the top, then gaps,
+ * then breaks of yesterday's range. A stale quote sorts below fresh ones of the same state. Ties keep the
+ * edition's order, so rows only move when a state changes, not on every tick.
+ */
+export function needsALook<T>(rows: readonly T[], read: (row: T) => LiveRead): T[] {
+  const rank = (r: LiveRead) => (r.state && r.inSession ? LOOK_RANK[r.state] * 2 + (r.stale ? 1 : 0) : 99);
+  return rows
+    .map((row, i) => ({ row, i, k: rank(read(row)) }))
+    .sort((a, b) => a.k - b.k || a.i - b.i)
+    .map((x) => x.row);
+}
+
+/**
+ * Where the live dot sits across the level map's gap between the last candle and the one-day line: the share of
+ * the regular session gone, 0 at the open and 1 at the close (13:00 on a half day). Null before the open.
+ */
+export function sessionShare(t: OptionsTicker, atIso: string): number | null {
+  const clock = nyClock(atIso);
+  if (!clock) return null;
+  const close = t.half_day ? 13 * 60 : 16 * 60;
+  const open = 9 * 60 + 30;
+  return Math.max(0, Math.min(1, (clock.minutes - open) / (close - open)));
+}
