@@ -117,6 +117,13 @@ JOBS: dict[str, Job] = {j.name: j for j in (
         calendars=("Mon..Fri 07..17:03/5:00 America/New_York", "*:03/15:00 UTC"),
         what="Collect status, sanitize, publish to the dashboard: every 5 minutes in the US session, every 15 otherwise",
         runtime_max_h=0.25),
+    # The Options desk's paper positions (wt.options.live): read only, from the second paper account. A minute
+    # after the stocks publisher on both rhythms. Without that account's keys it does nothing and exits 0.
+    Job("options-live", "com.wt.options-live", 0, 0, ("-m", "wt.options.live"), "backtest", "options_live",
+        deadline_min=4, trading=False, interval_s=900, preflight=False,
+        calendars=("Mon..Fri 09..16:04/5:00 America/New_York", "*:04/15:00 UTC"),
+        what="Publish the options paper account's open positions, read only: every 5 minutes in the US session, every 15 otherwise",
+        runtime_max_h=0.2),
     # The crypto desk (ADR 0005) runs around the clock as two interval jobs on UTC calendar boundaries: one bar
     # cycle ten seconds after each 15-minute close, and its publish a minute after that. Neither is a trading job
     # for the equity deploy gate: a deploy waits for a cycle in flight (wt.ops.deploy.quiesced) instead.

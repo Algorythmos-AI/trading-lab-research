@@ -39,7 +39,7 @@ def test_an_alert_belongs_to_one_desk():
 
 def test_the_stocks_jobs_are_untouched_and_the_crypto_desk_has_exactly_two_interval_jobs():
     stocks = {n: j for n, j in JOBS.items() if j.desk == "stocks"}
-    assert set(stocks) == {"routine", "paper-b", "forward", "weekly", "dashboard"}
+    assert set(stocks) == {"routine", "paper-b", "forward", "weekly", "dashboard", "options-live"}
     assert all(j.calendar is None for j in stocks.values())
     crypto = {n: j for n, j in JOBS.items() if j.desk == "crypto"}
     assert set(crypto) == {"crypto", "dashboard-crypto", "crypto-challengers", "crypto-learn"}

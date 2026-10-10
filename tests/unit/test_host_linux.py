@@ -311,7 +311,7 @@ def test_status_flags_an_interval_job_that_is_not_being_started(tmp_path, monkey
         (tmp_path / "runs.jsonl").write_text("".join(json.dumps(
             {"job": "dashboard", "status": "ok", "ended": (now - dt.timedelta(minutes=m)).isoformat()}) + "\n"
             for m in minutes_ago) + "torn line\n")
-        return jobs.cadence(now, tmp_path)
+        return [x for x in jobs.cadence(now, tmp_path) if " dashboard cadence" in x]
 
     assert runs([3, 18, 33, 48, 63]) == ["  [ok] dashboard cadence: 4 of 4 runs ok in the last hour"]
     assert runs([3, 18, 33])[0].startswith("  [ok]")                # one missed run is tolerated
@@ -322,12 +322,13 @@ def test_status_flags_an_interval_job_that_is_not_being_started(tmp_path, monkey
     import dataclasses
 
     from wt.core import desk as desks
-    assert len(runs([3, 18, 33, 48])) == 1
+    runs([3, 18, 33, 48])
+    assert [x.split(":")[0] for x in jobs.cadence(now, tmp_path)] == [
+        "  [ok] dashboard cadence", "  [FAIL] options-live cadence"]
     (tmp_path / "crypto").mkdir()
     monkeypatch.setitem(desks.DESKS, "crypto", dataclasses.replace(desks.DESKS["crypto"], state_dir=tmp_path / "crypto"))
     assert [x.split(":")[0] for x in jobs.cadence(now, tmp_path)] == [
-        "  [ok] dashboard cadence", "  [FAIL] crypto cadence", "  [FAIL] dashboard-crypto cadence"]
-
+        "  [ok] dashboard cadence", "  [FAIL] options-live cadence", "  [FAIL] crypto cadence", "  [FAIL] dashboard-crypto cadence"]
 
 def test_the_stocks_publisher_runs_every_five_minutes_in_session_and_every_fifteen_otherwise():
     j = JOBS["dashboard"]

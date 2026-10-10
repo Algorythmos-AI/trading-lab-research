@@ -11,6 +11,7 @@ One page per incident. Each starts with how you'll notice it.
 | [Rollback a deploy](rollback.md) | The next night's jobs fail after a deploy |
 | [Rotate secrets](secret-rotation.md) | A secret may have leaked, or it's the scheduled rotation |
 | [Dashboard deploys and the watchdog drill](dashboard-deploy.md) | A dashboard deploy failed, or you want to prove paging works |
+| [Options desk: paper positions](options-positions.md) | The Paper positions pane is absent or says it is old; setting up the second paper account |
 | [The OCI trading host](oci-host.md) | Provisioning, access, rebuild, or the OCI account is lost |
 | [The GCP free-tier host](gcp-host.md) | Provisioning, secrets, or rebuild of the e2-micro host |
 | [Dead-man's switches](dead-man-switches.md) | A healthchecks.io page, or setting the checks up |
