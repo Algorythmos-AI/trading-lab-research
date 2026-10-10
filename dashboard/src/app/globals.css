@@ -45,6 +45,13 @@
   --neutral: #53636b;
   --neutral-fill: #9aa7ae;
   --neutral-soft: rgb(83 99 107 / 0.1);
+  /* Each soft tint flattened onto the card colour: a chip that must read the same on any row uses these, and a
+     contrast checker can measure them (a translucent tint over an unknown row cannot be measured). */
+  --good-chip: #e7f6e7;
+  --warn-chip: #fef3da;
+  --bad-chip: #faebeb;
+  --info-chip: #eaf2fb;
+  --neutral-chip: #eeeff0;
 
   /* Categorical series, fixed order (validated for CVD separation against this surface). */
   --chart-1: #2a78d6;
@@ -105,6 +112,11 @@
   --neutral: #93a4ad;
   --neutral-fill: #5b6b73;
   --neutral-soft: rgb(147 164 173 / 0.12);
+  --good-chip: #14301f;
+  --warn-chip: #333021;
+  --bad-chip: #332226;
+  --info-chip: #1a2d3f;
+  --neutral-chip: #242d33;
 
   --chart-1: #3987e5;
   --chart-2: #d95926;
@@ -240,6 +252,52 @@
       animation-iteration-count: 1 !important;
     }
   }
+}
+
+/* A status chip that keeps its own backdrop: an opaque colour (the soft tint flattened onto the card), not a
+   translucent tint over whatever row is behind it, so its text has the same contrast on a highlighted or selected
+   row as on a plain one. */
+.chip-solid {
+  background-color: var(--chip-bg, var(--card));
+}
+/* Attention without fading the words: a ring that spreads from the chip and clears. The reduced-motion rule above
+   turns it off. */
+@keyframes chip-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--chip-ring, currentColor) 60%, transparent);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 5px transparent;
+  }
+}
+.chip-pulse {
+  animation: chip-ring 1.8s ease-out infinite;
+}
+
+/* A live number that just changed: a brief wash in the direction it moved, then nothing. Background only, so the
+   number never shifts; the reduced-motion rule above turns it off. */
+@keyframes tick-up {
+  from {
+    background-color: var(--good-soft);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+@keyframes tick-down {
+  from {
+    background-color: var(--bad-soft);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+.tick-up {
+  animation: tick-up 700ms ease-out;
+}
+.tick-down {
+  animation: tick-down 700ms ease-out;
 }
 
 /* Options focus mode: only the glance strip, the level maps and the chips stay. Unlayered, so it wins over the

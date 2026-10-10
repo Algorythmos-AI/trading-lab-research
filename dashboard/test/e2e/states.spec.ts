@@ -3,6 +3,10 @@ import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 // CI-only. The server runs in fixture mode, and the `fx` cookie bends the fixtures into the states a pane must
 // survive (src/lib/fixture-variants.ts): nothing published, storage down, a sparse edition, a corrupt one, and the
 // live feed off, failing or ticking.
+// These run against the page as it was before the desk (kept at ?view=classic for one release). The desk's own
+// states are in desk.spec.ts.
+const CLASSIC = "/options?view=classic";
+
 async function variant(context: BrowserContext, baseURL: string | undefined, fx: string) {
   await context.addCookies([{ name: "fx", value: fx, url: baseURL! }]);
 }
@@ -11,13 +15,13 @@ const glanceRows = (page: Page) => page.getByRole("list", { name: "Every name ag
 
 test("nothing published yet says what will fill the page", async ({ page, context, baseURL }) => {
   await variant(context, baseURL, "empty");
-  await page.goto("/options");
+  await page.goto(CLASSIC);
   await expect(page.getByText("The options levels have not published yet")).toBeVisible();
 });
 
 test("storage that cannot be read says so", async ({ page, context, baseURL }) => {
   await variant(context, baseURL, "error");
-  await page.goto("/options");
+  await page.goto(CLASSIC);
   await expect(page.getByText("Storage could not be read")).toBeVisible();
 });
 
@@ -27,7 +31,7 @@ test("a sparse edition shows dashes, never NaN, and breaks no pane", async ({ pa
   // The live feed is off here on purpose. With it on, a live price replaces the dash within two seconds, so
   // whether the dash was still there depended on which arrived first: the assertion or the first quote.
   await variant(context, baseURL, "partial.quotes-off");
-  await page.goto("/options");
+  await page.goto(CLASSIC);
   await expect(glanceRows(page)).toHaveCount(10);
   await expect(page.getByText("Live off")).toBeVisible();
   // QQQ has no ATR in this variant, so its bar cannot be drawn and the row says why.
@@ -47,7 +51,7 @@ test("a sparse edition with the live feed on takes live prices without NaN or a 
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await variant(context, baseURL, "partial");
-  await page.goto("/options");
+  await page.goto(CLASSIC);
   // The feed is live once SPY carries a live state; NVDA has no last bar but still gets its live price.
   await expect(glanceRows(page).filter({ hasText: "SPY" })).toContainText("TESTING RESISTANCE");
   await expect(glanceRows(page).filter({ hasText: "NVDA" })).toContainText("INSIDE");
@@ -59,7 +63,7 @@ test("a sparse edition with the live feed on takes live prices without NaN or a 
 
 test("a corrupt edition fails one pane and leaves every other pane working", async ({ page, context, baseURL }) => {
   await variant(context, baseURL, "poison");
-  await page.goto("/options");
+  await page.goto(CLASSIC);
   const broken = page.locator('[data-pane-error="Paper scorecard"]');
   await expect(broken).toBeVisible();
   await expect(broken).toContainText("The rest of the page is unaffected");
@@ -78,7 +82,7 @@ test("a corrupt edition fails one pane and leaves every other pane working", asy
 
 test("a live feed with no keys reads as off and the strip stays on the close", async ({ page, context, baseURL }) => {
   await variant(context, baseURL, "quotes-off");
-  await page.goto("/options");
+  await page.goto(CLASSIC);
   await expect(page.getByText("Live off")).toBeVisible();
   await expect(page.getByText("Live prices are off", { exact: false })).toBeVisible();
   await expect(glanceRows(page)).toHaveCount(10);
@@ -86,7 +90,7 @@ test("a live feed with no keys reads as off and the strip stays on the close", a
 
 test("a failing live feed reads as retrying and the strip stays on the close", async ({ page, context, baseURL }) => {
   await variant(context, baseURL, "quotes-error");
-  await page.goto("/options");
+  await page.goto(CLASSIC);
   await expect(page.getByText("Retrying")).toBeVisible();
   await expect(page.getByText("Live prices did not answer", { exact: false })).toBeVisible();
   await expect(glanceRows(page)).toHaveCount(10);
@@ -94,7 +98,7 @@ test("a failing live feed reads as retrying and the strip stays on the close", a
 
 test("live price updates change the numbers without moving the page", async ({ page, context, baseURL }) => {
   await variant(context, baseURL, "quotes-tick");
-  await page.goto("/options");
+  await page.goto(CLASSIC);
   const spy = glanceRows(page).filter({ hasText: "SPY" });
   // The feed is live once SPY carries a live state.
   await expect(spy).toContainText("TESTING RESISTANCE");

@@ -90,25 +90,31 @@ const STATE_VARIANT: Record<LiveStateName, "good" | "bad" | "info" | "neutral"> 
   CLOSED: "neutral",
 };
 
+/** The chip's own backdrop and ring colours, so they do not depend on the row behind it. */
+const chipStyle = (variant: "good" | "bad" | "info" | "neutral" | "warn") =>
+  ({ "--chip-bg": `var(--${variant}-chip)`, "--chip-ring": `var(--${variant}-fill)` }) as React.CSSProperties;
+
 /**
- * A live state as colour, icon and word. A test of a major zone pulses (not when the reader asks for reduced
- * motion, and not on a stale quote); a stale quote adds how old it is.
+ * A live state as colour, icon and word. A test of a major zone pulses a ring around the chip (not when the
+ * reader asks for reduced motion, and not on a stale quote); a stale quote turns grey and adds how old it is.
+ *
+ * The words never fade: an earlier version pulsed and dimmed the chip's opacity, which took its text below the
+ * contrast it needs for half of every pulse. The chip also keeps its own backdrop (`chip-solid`), so it reads the
+ * same on a highlighted or selected row as on a plain one.
  */
 export function StateChip({ read, className }: { read: LiveRead; className?: string }) {
   if (!read.state || !read.inSession) return null;
   const Icon = STATE_ICON[read.state];
   const testing = read.state === "TESTING SUPPORT" || read.state === "TESTING RESISTANCE";
+  const variant = read.stale ? "neutral" : STATE_VARIANT[read.state];
   return (
     <span className={cn("flex flex-wrap items-center gap-1", className)}>
-      <Badge
-        variant={STATE_VARIANT[read.state]}
-        className={cn("px-1 font-sans text-[0.625rem]", testing && !read.stale && "motion-safe:animate-pulse", read.stale && "opacity-60")}
-      >
+      <Badge variant={variant} style={chipStyle(variant)} className={cn("chip-solid px-1 font-sans text-[0.625rem]", testing && !read.stale && "chip-pulse")}>
         <Icon aria-hidden />
         {read.state}
       </Badge>
       {read.stale ? (
-        <Badge variant="warn" className="px-1 font-sans text-[0.625rem]">
+        <Badge variant="warn" style={chipStyle("warn")} className="chip-solid px-1 font-sans text-[0.625rem]">
           <CircleDashed aria-hidden />
           STALE {read.ageS !== null ? `${read.ageS}s` : ""}
         </Badge>

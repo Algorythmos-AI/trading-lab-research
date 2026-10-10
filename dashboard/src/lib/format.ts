@@ -107,3 +107,12 @@ export function shortDate(ymd: string | null | undefined): string {
   const date = new Date(Date.UTC(y!, m! - 1, d!));
   return new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "numeric", month: "short" }).format(date);
 }
+
+/** "Mon 12 Oct" from YYYY-MM-DD, without timezone drift. A dash for a missing or unreadable day. */
+export function weekDate(ymd: string | null | undefined): string {
+  if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return DASH;
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" }).format(
+    new Date(Date.UTC(y!, m! - 1, d!)),
+  );
+}

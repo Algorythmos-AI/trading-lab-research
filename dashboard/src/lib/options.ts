@@ -187,7 +187,13 @@ export function nyClock(iso: string): { day: string; minutes: number } | null {
   return { day: `${get("year")}-${get("month")}-${get("day")}`, minutes: Number(get("hour")) * 60 + Number(get("minute")) };
 }
 
-const OPEN_MIN = 9 * 60 + 30;
+/** Minutes after midnight in New York when the regular session opens. */
+export const OPEN_MIN = 9 * 60 + 30;
+
+/** Minutes after midnight in New York when the regular session ends: 16:00, or 13:00 on a half day. */
+export function closeMinute(halfDay: boolean | null | undefined): number {
+  return halfDay ? 13 * 60 : 16 * 60;
+}
 
 export type LiveStateName =
   | "NOT OPEN YET"
@@ -591,4 +597,107 @@ export function findingsOf(e: Options): Finding[] {
     });
   }
   return findings;
+}
+
+/** The instant of a New York wall-clock time on a given day, right under either daylight-saving offset. */
+export function nyInstant(day: string, minutes: number): number | null {
+  // Right when New York is four hours behind UTC; one more look at the clock corrects it when it is five.
+  const guess = Date.parse(`${day}T00:00:00Z`) + (minutes + 4 * 60) * 60_000;
+  if (!Number.isFinite(guess)) return null;
+  const at = nyClock(new Date(guess).toISOString());
+  if (!at) return null;
+  const seen = at.day === day ? at.minutes : at.day < day ? at.minutes - 1440 : at.minutes + 1440;
+  return guess - (seen - minutes) * 60_000;
+}
+
+/** Where `now` falls against the edition's own session, and how long until its open or its close. */
+export interface SessionClock {
+  phase: "before" | "open" | "after";
+  /** Milliseconds to the open (before) or to the close (open); null once the session has closed. */
+  ms: number | null;
+}
+
+/**
+ * The edition's session against the clock. The session day comes from the edition, which is only ever built for a
+ * trading day, so no holiday calendar is needed here; `halfDay` moves the close to 13:00.
+ */
+export function sessionClock(session: string, halfDay: boolean, now: Date): SessionClock | null {
+  const open = nyInstant(session, OPEN_MIN);
+  const close = nyInstant(session, closeMinute(halfDay));
+  if (open === null || close === null) return null;
+  const t = now.getTime();
+  if (t < open) return { phase: "before", ms: open - t };
+  if (t < close) return { phase: "open", ms: close - t };
+  return { phase: "after", ms: null };
+}
+
+/** A span of time for a countdown: "5:18:07" under a day, "2 d 8 h" beyond it. */
+export function clockSpan(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const days = Math.floor(total / 86_400);
+  const hours = Math.floor((total % 86_400) / 3600);
+  if (days > 0) return `${days} d ${hours} h`;
+  const two = (n: number) => String(n).padStart(2, "0");
+  return `${hours}:${two(Math.floor((total % 3600) / 60))}:${two(total % 60)}`;
+}
+
+/** The three ways to read the desk: before the open, while the session trades, and after its close. */
+export const DESK_VIEWS = ["brief", "live", "review"] as const;
+export type DeskView = (typeof DESK_VIEWS)[number];
+export const isDeskView = (v: unknown): v is DeskView => typeof v === "string" && (DESK_VIEWS as readonly string[]).includes(v);
+
+/**
+ * The view that fits the clock for this edition: live while its session trades, review from its close until New
+ * York's midnight, and brief the rest of the time (the evening before, the weekend, the morning before the open,
+ * and an edition that has gone stale, which the page flags on its own).
+ */
+export function viewForClock(session: string, halfDay: boolean, now: Date): DeskView {
+  const clock = sessionClock(session, halfDay, now);
+  if (!clock || clock.phase === "before") return "brief";
+  if (clock.phase === "open") return "live";
+  return nyClock(now.toISOString())?.day === session ? "review" : "brief";
+}
+
+/** How far a price sits from the edition's close, in one-day expected moves. Null without both. */
+export function movesFromClose(t: OptionsTicker, price: number | null | undefined): number | null {
+  const close = t.last?.close;
+  const day = t.expected_move?.day;
+  if (!isNum(price) || !isNum(close) || !isNum(day) || day <= 0) return null;
+  return (price - close) / day;
+}
+
+/** Rows ordered by a number. A row without one goes last whichever way the sort runs; ties keep their order. */
+export function sortByNumber<T>(rows: readonly T[], value: (row: T) => number | null | undefined, dir: "asc" | "desc"): T[] {
+  const sign = dir === "asc" ? 1 : -1;
+  return rows
+    .map((row, i) => ({ row, i, v: value(row) }))
+    .sort((a, b) => {
+      const an = isNum(a.v);
+      const bn = isNum(b.v);
+      if (an && bn) return sign * ((a.v as number) - (b.v as number)) || a.i - b.i;
+      if (an !== bn) return an ? -1 : 1;
+      return a.i - b.i;
+    })
+    .map((x) => x.row);
+}
+
+/**
+ * One name's paper record in an edition: its trades, how many won, and their total in R. A row that is not a
+ * trade at all (a corrupt stored edition) is skipped, so the monitor that calls this for every name still draws.
+ */
+export function paperFor(e: Options, symbol: string): { rows: PaperTrade[]; n: number; wins: number; totalR: number | null } {
+  const rows = (e.paper ?? []).filter((p) => p !== null && typeof p === "object" && p.symbol === symbol);
+  const scored = rows.filter((p) => isNum(p.r));
+  return {
+    rows,
+    n: rows.length,
+    wins: scored.filter((p) => (p.r as number) > 0).length,
+    totalR: scored.length > 0 ? scored.reduce((a, p) => a + (p.r as number), 0) : null,
+  };
+}
+
+/** A named level's price on a name ("PDH", "PDL", …), or null when the edition does not carry it. */
+export function levelPrice(t: OptionsTicker, name: string): number | null {
+  const p = t.levels?.find((l) => l.name === name)?.price;
+  return isNum(p) ? p : null;
 }
