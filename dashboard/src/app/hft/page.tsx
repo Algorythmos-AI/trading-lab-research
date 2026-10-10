@@ -17,7 +17,7 @@ export default async function HftPage() {
     <>
       <PageHeading
         title="HFT"
-        intro="The HFT desk is a separate platform, kept in its own repository, that trades currencies on a broker paper account, fully automatically. This page shows only what that platform publishes."
+        intro="The HFT desk is a separate platform, kept in its own repository, built to trade currencies on a broker paper account automatically. It is being built in stages, and this page shows only what that platform publishes."
       />
       {result.status !== "ok" ? (
         <NoHftSnapshot status={result.status} />

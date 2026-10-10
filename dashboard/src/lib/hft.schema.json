@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "hft-lab/snapshot",
-  "title": "HFT desk snapshot, version 1 (the contract is owned by hft-lab; this copy is pinned by hft.contract.lock.json)",
+  "title": "HFT desk snapshot, version 1. Owned by hft-lab (contracts/hft-snapshot.v1.schema.json); a consumer keeps a copy pinned by its SHA-256",
   "type": "object",
   "additionalProperties": false,
   "required": [

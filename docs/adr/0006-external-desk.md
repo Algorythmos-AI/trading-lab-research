@@ -7,9 +7,9 @@
 ## Context
 
 ADR 0005 expected a third desk to be "a new `Desk` record, a venue package and a snapshot schema" in this
-repository. The HFT desk is not that. It is a separate platform in a separate repository: it trades currencies on
-a broker paper account, fully automatically. It records quotes, runs strategy sleeves, keeps a conservative shadow
-book beside the broker's and retrains weekly.
+repository. The HFT desk is not that. It is a separate platform in a separate repository: it is being built
+to trade currencies on a broker paper account automatically: to record quotes, run strategy sleeves, keep a
+conservative shadow book beside the broker's and retrain weekly.
 
 This repository has no code for it and will not get any. It is not running yet, so no snapshot exists.
 

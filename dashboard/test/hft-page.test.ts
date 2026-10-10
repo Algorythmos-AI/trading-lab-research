@@ -54,7 +54,7 @@ describe("the HFT page before the desk has published", () => {
     const out = text(html);
     expect(html).toMatch(/<h1[^>]*>HFT<\/h1>/);
     expect(out).toContain("a separate platform");
-    expect(out).toContain("trades currencies on a broker paper account, fully automatically");
+    expect(out).toContain("built to trade currencies on a broker paper account automatically");
     expect(out).toContain("The HFT desk has not published yet");
     expect(out).toContain("This page fills in when the desk's recorder starts");
     expect(out).toContain("What this page will show");
