@@ -140,7 +140,7 @@ schema: ## Regenerate the dashboard contract: snapshot.schema.json (from ALLOW),
 # The Mac's cloudflared client pin: 2026.6.0+ ignores Access service tokens (cloudflare/cloudflared#1673).
 VM_CLOUDFLARED_VERSION := 2026.5.1
 
-vm-deploy: ## Deploy on the OCI host through its Access tunnel: make vm-deploy [VERB=gate|status|preflight|deploy|units-diff]
+vm-deploy: ## OCI host only, through its Access tunnel (the GCP host is deployed from an IAP session with wt-deploy: docs/runbooks/gcp-host.md): make vm-deploy [VERB=gate|status|preflight|deploy|units-diff]
 	@v=$$($${CLOUDFLARED:-cloudflared} --version 2>/dev/null | awk '{print $$3}'); \
 	if [ "$$v" != "$(VM_CLOUDFLARED_VERSION)" ]; then \
 	  echo "cloudflared $$v on this Mac; vm-deploy needs $(VM_CLOUDFLARED_VERSION) (set CLOUDFLARED=/path/to/it; see docs/runbooks/oci-host.md)"; exit 2; fi; \

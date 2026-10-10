@@ -152,3 +152,60 @@ extensions; learning only at a pre-registered sample checkpoint.
 3. DEC-0011: approve or amend. Round 3: run.
 4. Is `NTFY_TOPIC` set for the scheduled jobs on the host?
 5. Paid real-time SIP data, the only route to judging small caps in real time.
+
+## P. Where the plan stands, 11 October 2026
+
+Added after the work of section L was carried out. Statuses and pull request numbers only. "Open" means the pull
+request exists with its checks passing and waits for the owner's merge.
+
+| Plan item | Carried by | Status |
+|---|---|---|
+| Frozen functions pinned by goldens and source hashes | PR 114 | Merged |
+| Runner truthfulness: `no_inputs`, a journal row when inputs are absent, a logged skip on a missing quote | PRs 115, 122 | Merged |
+| DEC-0023 (evidence charter) and DEC-0024 (clean sessions, data-failure days) | PR 126 | Merged, accepted |
+| A no-input session is not a clean G2 session | PR 127 | Merged |
+| A scan with no data is an error, not a day without trades; thin-scan alert | PRs 128, 139 | Merged |
+| Funnel explainer beside the frozen functions; US$2-20 counts | PR 117 | Merged |
+| Dry run records reasons; forward funnel of record beside the ledger | PRs 117, 119 | Merged |
+| `sigma_sessions`, `marks`, `spread_only_marks` in the journal | PR 134 | Merged |
+| Dry run against the record, in counts: tiers, first pick, signals | PRs 135, 138, 139 | Merged |
+| A book per registered trial from the forward ledger | PR 129 | Merged |
+| Sealed shadow outcomes for signals admission refused; the resolved count on the books | PRs 136, 137 | Merged |
+| Sessions left out of G2 shown on the Risk page | PR 140 | Merged |
+| Data-quality counts for each scan, record only; dry-run pages on a failed or IEX-only scan | PR 168 | Open |
+| Strategy B replayed on recorded bars beside the runner's journal | PR 174 | Open |
+| Near misses, the funnel of record and the scan strip on the dashboard; banner rules for a failed scan and the loss limits | PR 173 | Open |
+| Pins on the learning code's shared pieces | PR 169 | Open |
+| `wt.ml.examples`; the scorer takes the inputs' identity | PR 170 | Open |
+
+### Not done, and why
+
+| Plan item | Reason |
+|---|---|
+| One shared `sigma_and_prev_close` for the runner, the forward test and the backtests | DEC-0024, decision 3: the three calculations stay as they are until DEC-0011's re-runs. `tests/unit/test_b_parity.py` holds where they agree and where they part |
+| Counts of stale and missing bars | Neither can be counted without a threshold, and a threshold is a rule |
+| A stocks dataset, labels, models, shadow scoring (plan F3 onward) | Gated: after the round-3 result is recorded and an owner decision. Forward outcomes for the small-cap trials: 1 trade in 10 sessions |
+| G2 reading the replay record | It would redefine a gate measure: a decision record first |
+
+### Corrections to this document
+
+- Section B said `forward` "ran" on the host at a time that read as mid-session on the dashboard. That is by
+  design: the unit starts at 12:40 New York, before the earliest early close, and waits until 20 minutes after the
+  close (`src/wt/ops/schedule.py`).
+- Verdict 5 ("nothing records why a name was rejected") no longer holds: the dry run and the forward test both
+  record it, in counts.
+
+### First session on the new code (9 October 2026, read from the dashboard)
+
+- Dry run: universe 4,328 at every stage, 29 names gapping at 09:15, 0 passed every filter, no failed scan.
+- Paper B: armed, entries allowed, no signal, no trade. Clean G2 sessions 4 of 30; sessions left out for missing inputs 0.
+- Trial books: 10 sessions for each small-cap trial; signals 0, refused 0, shadow outcomes resolved 0.
+
+### Owner decisions still open
+
+1. DEC-0011: approve or amend, then run its re-runs and round 3. The ids it names are taken (see its closing note).
+2. Whether the funnel's selectivity is intended: due once ten sessions of the funnel counts exist (DEC-0024, decision 5).
+3. A spread limit for B: only if `spread_only_marks` is ever above zero (DEC-0024, decision 6).
+4. Whether G2's agreement measure should read the replay record.
+5. Paid real-time consolidated data, the only route to judging small caps in real time.
+6. The thin-scan alert's thresholds (half the median of ten pools; five pools before it speaks) were chosen in PR 128 and never confirmed.
