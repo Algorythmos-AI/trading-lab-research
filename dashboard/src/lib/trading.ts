@@ -237,3 +237,22 @@ export function tradeSentence(s: Snapshot): string | null {
   if (o.startsWith("blocked")) return "Paper B had a signal that a safety check blocked.";
   return null;
 }
+
+/**
+ * The price scale for an open position's bar: stop to target, widened to take in the price if it has run past
+ * either, with a little room each side. Null without both a stop and a target.
+ */
+export function positionScale(p: OpenPosition, price: number | null): { lo: number; hi: number } | null {
+  if (p.stop === null || p.target === null || p.target <= p.stop) return null;
+  const vals = [p.stop, p.target, p.entry ?? p.trigger, price].filter(isNum);
+  const lo = Math.min(...vals);
+  const hi = Math.max(...vals);
+  const pad = (hi - lo) * 0.08;
+  return { lo: lo - pad, hi: hi + pad };
+}
+
+/** The open result in R at a price: (price − entry) / (entry − stop). Null before the fill. */
+export function openR(p: OpenPosition, price: number | null): number | null {
+  if (p.state !== "in_position" || price === null || p.entry === null || p.stop === null || p.entry - p.stop <= 0) return null;
+  return (price - p.entry) / (p.entry - p.stop);
+}

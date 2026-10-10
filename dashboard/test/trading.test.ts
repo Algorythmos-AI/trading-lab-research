@@ -1,7 +1,7 @@
 // Paper B's trades and profit and loss as the pages read them, from the snapshot's `today` section.
 import { describe, expect, it } from "vitest";
 import { summarize } from "@/lib/summary";
-import { outcomeLine, reasonLabel, tradeSentence, trading } from "@/lib/trading";
+import { openR, outcomeLine, positionScale, reasonLabel, tradeSentence, trading, type OpenPosition } from "@/lib/trading";
 import type { Snapshot } from "@/lib/types";
 import { fixtureV3 as fixture } from "./helpers";
 
@@ -84,5 +84,44 @@ describe("Paper B's trades and profit and loss", () => {
     expect(reasonLabel("eod_flatten")).toBe("Closed before the bell");
     expect(reasonLabel("something_new")).toBe("something new");
     expect(reasonLabel(null)).toBe("—");
+  });
+});
+
+describe("the open position's bar", () => {
+  const pos = (over: Partial<OpenPosition> = {}): OpenPosition => ({
+    symbol: "QQQM",
+    state: "in_position",
+    qty: 2,
+    entry: 200.02,
+    entryAt: "2026-10-02T14:31:00Z",
+    trigger: 200,
+    stop: 199,
+    target: 202,
+    mark: 200.61,
+    openPnl: 1.18,
+    openR: 0.58,
+    ...over,
+  });
+
+  it("spans the stop to the target with room each side", () => {
+    const s = positionScale(pos(), 200.61)!;
+    expect(s.lo).toBeCloseTo(198.76, 2);
+    expect(s.hi).toBeCloseTo(202.24, 2);
+  });
+
+  it("widens to take in a price past the target or the stop", () => {
+    expect(positionScale(pos(), 204.13)!.hi).toBeGreaterThan(204.13);
+    expect(positionScale(pos(), 198.1)!.lo).toBeLessThan(198.1);
+  });
+
+  it("has no bar without both a stop and a target", () => {
+    expect(positionScale(pos({ stop: null }), 200)).toBeNull();
+    expect(positionScale(pos({ target: 198 }), 200)).toBeNull();
+  });
+
+  it("reads the open result in R, and none before the fill", () => {
+    expect(openR(pos(), 200.61)).toBeCloseTo(0.578, 3);
+    expect(openR(pos(), 199)).toBeCloseTo(-1, 6);
+    expect(openR(pos({ state: "entry_working", entry: null }), 200.61)).toBeNull();
   });
 });
