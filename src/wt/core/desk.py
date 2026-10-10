@@ -55,6 +55,18 @@ def desk_of_alert(key: str) -> str:
     return "stocks"
 
 
+def moved_marker(desk: Desk) -> Path:
+    """The file that says a desk now runs from a repository of its own: `<state directory>.MOVED`, beside the state
+    directory and not inside it, because the directory itself is moved away. For the crypto desk: `var/crypto.MOVED`."""
+    return desk.state_dir.with_name(desk.state_dir.name + ".MOVED")
+
+
+def moved(desk: Desk) -> bool:
+    """Has this desk left this checkout? The stocks desk cannot: it is what this repository is."""
+    return desk.name != "stocks" and moved_marker(desk).exists()
+
+
 def installed(desk: Desk) -> bool:
-    """A desk exists on this host once its state directory does (the crypto desk before its first run does not)."""
-    return desk.name == "stocks" or desk.state_dir.is_dir()
+    """A desk exists on this host once its state directory does (the crypto desk before its first run does not).
+    A desk that has moved is not installed here, whatever is left of its directory."""
+    return desk.name == "stocks" or (desk.state_dir.is_dir() and not moved(desk))

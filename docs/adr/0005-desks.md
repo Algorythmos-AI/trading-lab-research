@@ -53,6 +53,17 @@ trigger, no tests, state lost on redeploy. It is rebuilt here, not copied.
 6. **Off-host monitoring follows the desk's session model.** The crypto watchdog window is always open; a desk
    that has never published is "new" and does not page.
 
+7. **A desk can leave, and then runs nothing here** (added 2026-10-11, for the crypto desk's move to its own
+   repository). While the file `<state directory>.MOVED` exists (`var/crypto.MOVED`), `wt.ops.jobs.run_job`
+   returns before it takes a lock or starts the job: no child process, no heartbeat, no check-in ping, no
+   state. The desk also stops counting as installed, so the backup and the cadence check leave it alone.
+   - Why it is needed with the timers disabled: installing the units enables every timer this code still
+     renders, and a run without the desk's state would create an empty desk and publish it as healthy.
+   - The marker is beside the state directory, not inside it, because the directory is moved away.
+   - It covers jobs started by the scheduler. A module run by hand (`python -m wt.crypto.cycle`) does not
+     pass through `run_job`.
+   - Removing the marker brings the desk back: that is the rollback.
+
 ## Consequences
 
 - A third desk (FX) is a new `Desk` record, a venue package and a snapshot schema; the shared layers do not
