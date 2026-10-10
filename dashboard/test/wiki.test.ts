@@ -1,6 +1,6 @@
 // The Engineering wikis' live state: CI lanes, job dots, the host node and the deploy stamp.
 import { describe, expect, it } from "vitest";
-import { ciLanes, currentGate, diskTone, gateTone, hostTone, jobDot, jobsHealthy, laneTone, nyMinutes, stampIso, sydneyAheadOfNy } from "@/lib/wiki";
+import { ciLanes, currentGate, diskTone, gateTone, hostTone, jobDot, jobsHealthy, laneTone, modelTone, nyMinutes, stampIso, sydneyAheadOfNy, utcAheadOfNy } from "@/lib/wiki";
 import { fixture } from "./helpers";
 
 describe("ciLanes", () => {
@@ -124,5 +124,16 @@ describe("stocks wiki helpers", () => {
     expect(jobsHealthy([{ status: "ok" }, { status: "refused" }])).toEqual({ ok: 1, total: 2, tone: "warn" });
     expect(jobsHealthy([{ status: "failed" }, { status: "refused" }]).tone).toBe("bad");
     expect(jobsHealthy([]).tone).toBe("neutral");
+  });
+});
+
+describe("crypto wiki helpers", () => {
+  it("knows how far UTC is ahead of New York in both seasons", () => {
+    expect(utcAheadOfNy(new Date("2026-10-09T13:30:00Z"))).toBe(4 * 60);
+    expect(utcAheadOfNy(new Date("2026-12-09T14:30:00Z"))).toBe(5 * 60);
+  });
+
+  it("colours a model lineage by its state", () => {
+    expect(["acting", "shadow", "suspended", "demoted", null].map(modelTone)).toEqual(["good", "info", "bad", "neutral", "neutral"]);
   });
 });
