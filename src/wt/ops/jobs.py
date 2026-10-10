@@ -33,7 +33,7 @@ from typing import Any
 
 from wt.core.clock import ET, et
 from wt.core.config import DATA_DIR, FORWARD_LEDGER, ROOT
-from wt.core.desk import DESKS, installed
+from wt.core.desk import DESKS, installed, moved, moved_marker
 from wt.ops import hc, host, preflight
 from wt.ops.alerts import Alerts
 from wt.ops.heartbeat import Heartbeat, last_runs, ok_runs_since
@@ -360,6 +360,13 @@ def run_job(job: Job, root: Path = ROOT, preflight_only: bool = False, alerts: A
         for c in checks:
             print(f"  [{'ok' if c.ok else 'FAIL'}] {c.name}: {c.detail}")
         return 0 if not preflight.failures(checks) else 1
+
+    # A desk that has moved to its own repository runs nothing here, however its timer came to fire (installing the
+    # units re-enables every timer this code still renders). Starting the job would create a fresh, empty desk beside
+    # the real one and publish it. So: no lock, no heartbeat, no check-in ping, no child. Exit 0: nothing is wrong.
+    if moved(desk := DESKS[job.desk]):
+        log(f"{job.name} not started: the {desk.name} desk has moved ({moved_marker(desk)} exists)")
+        return 0
 
     # Wait out a deploy before taking the job lock: a deploy holds the interval jobs' locks while it changes the
     # checkout (wt.ops.deploy.quiesced), and a job that already held its own would make it wait for nothing.

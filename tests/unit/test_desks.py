@@ -94,6 +94,30 @@ def crypto_desk(tmp: Path, monkeypatch) -> desks.Desk:
     return d
 
 
+def test_a_desk_that_has_moved_is_not_installed_whatever_is_left_of_its_directory(paths, monkeypatch):  # noqa: F811
+    """The crypto desk leaves for its own repository: from the moment the marker exists, nothing here anchors,
+    restores or expects it, even if a stray command recreates its directory."""
+    fwd, jr, tmp, _, _ = paths
+    c = crypto_desk(tmp, monkeypatch)
+    chained(fwd, 2)
+    chained(jr, 2)
+    chained(c.journal, 3)
+    assert desks.installed(c) and not desks.moved(c)
+    assert list(backup.chains()) == ["forward", "paper", "crypto"]
+    assert desks.moved_marker(c) == tmp / "crypto.MOVED"            # beside the state directory, which is moved away
+    desks.moved_marker(c).write_text("moved to its own repository\n")
+    assert desks.moved(c) and not desks.installed(c)
+    assert list(backup.chains()) == ["forward", "paper"]
+    assert not any("crypto" in line for line in jobs.cadence(heartbeats=tmp / "none"))
+
+
+def test_the_marker_is_where_the_cutover_runbook_puts_it_and_the_stocks_desk_cannot_move(tmp_path):
+    assert desks.moved_marker(desks.DESKS["crypto"]) == STATE_DIR / "crypto.MOVED"
+    stocks = dataclasses.replace(desks.DESKS["stocks"], state_dir=tmp_path / "var")
+    desks.moved_marker(stocks).write_text("a mistake\n")
+    assert not desks.moved(stocks) and desks.installed(stocks)
+
+
 def test_a_broken_crypto_chain_switches_off_crypto_entries_only(paths, monkeypatch):  # noqa: F811
     fwd, jr, tmp, box, a = paths
     c = crypto_desk(tmp, monkeypatch)

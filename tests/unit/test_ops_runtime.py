@@ -1,6 +1,7 @@
 """Runtime safety net (PR 2): schedule, deploy gate windows, alerts, locks, preflight, migration, job runner."""
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import json
 import plistlib
@@ -10,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from wt.core import desk as desks
 from wt.core.clock import ET
 from wt.ops import agents, alerts, jobs, migrate, preflight, window
 from wt.ops.heartbeat import Heartbeat, last_runs
@@ -320,6 +322,54 @@ def test_failed_job_alerts_and_records_the_heartbeat(jobroot):
     assert last_runs(tmp / "hb")["routine"]["status"] == "failed"
     assert jobs.run_job(_job("pass"), root, alerts=a) == 0                        # recovery notice
     assert box[-1]["title"] == "routine recovered"
+
+
+def _crypto_job(code: str, name: str = "crypto") -> Job:
+    return dataclasses.replace(_job(code, name=name), desk="crypto")
+
+
+def _crypto_desk_at(tmp: Path, monkeypatch) -> desks.Desk:
+    d = dataclasses.replace(desks.DESKS["crypto"], state_dir=tmp / "var" / "crypto")
+    monkeypatch.setitem(desks.DESKS, "crypto", d)
+    (tmp / "var").mkdir()
+    return d
+
+
+def test_a_moved_desks_job_starts_nothing_and_leaves_nothing(jobroot, monkeypatch):
+    """After the crypto desk moves to its own repository a timer here can still fire (installing the units enables
+    every timer the code renders). Its job must then do nothing: a run would create an empty desk and publish it."""
+    root, a, box, tmp = jobroot
+    d = _crypto_desk_at(tmp, monkeypatch)
+    desks.moved_marker(d).write_text("moved to its own repository\n")
+    pings: list[tuple] = []
+    monkeypatch.setattr(jobs.hc, "ping", lambda *args, **kw: pings.append(args))
+    ran = tmp / "ran"
+    for name in ("crypto", "dashboard-crypto", "crypto-challengers", "crypto-learn"):
+        assert JOBS[name].desk == "crypto"
+        assert jobs.run_job(_crypto_job(f"open({str(ran)!r}, 'w').close()", name), root, alerts=a) == 0
+    assert not ran.exists()                              # no child process
+    assert not d.state_dir.exists()                      # no fresh desk beside the real one
+    assert box == [] and pings == []                     # no alert, and no ping on the check the real desk now owns
+    assert last_runs(tmp / "hb") == {}                   # no heartbeat for the cadence check to count
+    assert not (tmp / "locks").exists()                  # it never took a lock, so it cannot hold up a deploy
+    assert "not started: the crypto desk has moved" in next((root / "logs").glob("crypto_*.log")).read_text()
+
+
+def test_without_the_marker_the_same_job_runs_as_before(jobroot, monkeypatch):
+    root, a, box, tmp = jobroot
+    _crypto_desk_at(tmp, monkeypatch)
+    monkeypatch.setattr(jobs.hc, "ping", lambda *args, **kw: True)
+    ran = tmp / "ran"
+    assert jobs.run_job(_crypto_job(f"open({str(ran)!r}, 'w').close()"), root, alerts=a) == 0
+    assert ran.exists() and last_runs(tmp / "hb")["crypto"]["status"] == "ok"
+
+
+def test_a_stocks_job_ignores_another_desks_marker(jobroot, monkeypatch):
+    root, a, box, tmp = jobroot
+    desks.moved_marker(_crypto_desk_at(tmp, monkeypatch)).write_text("moved\n")
+    ran = tmp / "ran"
+    assert jobs.run_job(_job(f"open({str(ran)!r}, 'w').close()"), root, alerts=a) == 0
+    assert ran.exists()
 
 
 def test_the_job_log_says_why_the_calendar_fell_back(jobroot, monkeypatch):
