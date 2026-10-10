@@ -538,6 +538,194 @@
   "largest_share_pct": 100.0,
   "risk": 138.54166666577999
  },
+ "harvest": {
+  "books": [
+   {
+    "equity": 10000.0,
+    "name": "h-trend",
+    "open": 0,
+    "return_pct": 0.0,
+    "signals": 34,
+    "signals_7d": 34,
+    "tf_min": 240,
+    "trades": 29
+   },
+   {
+    "equity": 10000.0,
+    "name": "h-break",
+    "open": 0,
+    "return_pct": 0.0,
+    "signals": 0,
+    "signals_7d": 0,
+    "tf_min": 240,
+    "trades": 0
+   },
+   {
+    "equity": 10000.0,
+    "name": "h-dip",
+    "open": 0,
+    "return_pct": 0.0,
+    "signals": 0,
+    "signals_7d": 0,
+    "tf_min": 240,
+    "trades": 0
+   },
+   {
+    "equity": 10000.0,
+    "name": "h-trend-60m",
+    "open": 0,
+    "return_pct": 0.0,
+    "signals": 0,
+    "signals_7d": 0,
+    "tf_min": 60,
+    "trades": 0
+   },
+   {
+    "equity": 10000.0,
+    "name": "h-break-60m",
+    "open": 0,
+    "return_pct": 0.0,
+    "signals": 33,
+    "signals_7d": 33,
+    "tf_min": 60,
+    "trades": 29
+   },
+   {
+    "equity": 10000.0,
+    "name": "h-dip-60m",
+    "open": 0,
+    "return_pct": 0.0,
+    "signals": 21,
+    "signals_7d": 21,
+    "tf_min": 60,
+    "trades": 20
+   },
+   {
+    "equity": 10000.0,
+    "name": "h-explore",
+    "open": 0,
+    "return_pct": 0.0,
+    "signals": 32,
+    "signals_7d": 32,
+    "tf_min": 60,
+    "trades": 29
+   }
+  ],
+  "coins": 30,
+  "daily": [
+   {
+    "day": "2026-09-19",
+    "entries": 0,
+    "exits": 0,
+    "labelled": 0,
+    "signals": 0
+   },
+   {
+    "day": "2026-09-20",
+    "entries": 0,
+    "exits": 0,
+    "labelled": 0,
+    "signals": 0
+   },
+   {
+    "day": "2026-09-21",
+    "entries": 0,
+    "exits": 0,
+    "labelled": 0,
+    "signals": 0
+   },
+   {
+    "day": "2026-09-22",
+    "entries": 0,
+    "exits": 0,
+    "labelled": 0,
+    "signals": 0
+   },
+   {
+    "day": "2026-09-23",
+    "entries": 0,
+    "exits": 0,
+    "labelled": 0,
+    "signals": 0
+   },
+   {
+    "day": "2026-09-24",
+    "entries": 0,
+    "exits": 0,
+    "labelled": 0,
+    "signals": 0
+   },
+   {
+    "day": "2026-09-25",
+    "entries": 0,
+    "exits": 0,
+    "labelled": 0,
+    "signals": 0
+   },
+   {
+    "day": "2026-09-26",
+    "entries": 0,
+    "exits": 0,
+    "labelled": 0,
+    "signals": 0
+   },
+   {
+    "day": "2026-09-27",
+    "entries": 2,
+    "exits": 0,
+    "labelled": 0,
+    "signals": 2
+   },
+   {
+    "day": "2026-09-28",
+    "entries": 12,
+    "exits": 11,
+    "labelled": 11,
+    "signals": 12
+   },
+   {
+    "day": "2026-09-29",
+    "entries": 20,
+    "exits": 17,
+    "labelled": 17,
+    "signals": 20
+   },
+   {
+    "day": "2026-09-30",
+    "entries": 22,
+    "exits": 25,
+    "labelled": 24,
+    "signals": 22
+   },
+   {
+    "day": "2026-10-01",
+    "entries": 30,
+    "exits": 29,
+    "labelled": 29,
+    "signals": 30
+   },
+   {
+    "day": "2026-10-02",
+    "entries": 34,
+    "exits": 25,
+    "labelled": 26,
+    "signals": 34
+   }
+  ],
+  "decision": "DEC-0027",
+  "entries_7d": 120,
+  "entries_today": 34,
+  "exits_today": 25,
+  "feature_rows_7d": 144,
+  "labelled": 107,
+  "labelled_7d": 107,
+  "mean_r": 0.20186915887850468,
+  "signals_7d": 120,
+  "signals_today": 34,
+  "since": "2026-09-27",
+  "switch": "on",
+  "win_rate": 0.4953271028037383
+ },
  "jobs": {
   "last": {
    "crypto": {

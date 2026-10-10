@@ -1,6 +1,7 @@
 import { DrawdownPanel, MonthlyReturnsPanel } from "@/components/crypto/performance";
 import { Activity, Gauge, LineChart, ListChecks } from "lucide-react";
 import { CryptoKillNotice, NoCryptoSnapshot } from "@/components/crypto/panels";
+import { HarvestPanel } from "@/components/crypto/harvest";
 import { LearningCard } from "@/components/crypto/learning";
 import {
   ChallengersPanel,
@@ -25,6 +26,7 @@ import { fracPct, num, rMult, shortDate, signed, zoned } from "@/lib/format";
 import { freshness } from "@/lib/freshness";
 import { requestTime } from "@/lib/now";
 import { loadCryptoSnapshot } from "@/lib/snapshot";
+import { harvest } from "@/lib/harvest";
 import { learning } from "@/lib/learning";
 import { challengers, tournament } from "@/lib/tournament";
 import { list } from "@/lib/types";
@@ -39,7 +41,7 @@ export default async function CryptoOverviewPage() {
     <>
       <PageHeading
         title="Overview"
-        intro="The crypto desk: Kraken spot pairs on public market data, booked on the lab's own paper simulator. Three tournament strategies trade on 4-hour bars beside the original 15-minute rule. It never holds venue credentials and cannot place a real order."
+        intro="The crypto desk: Kraken spot pairs on public market data, booked on the lab's own paper simulator. Three tournament strategies trade on 4-hour bars beside the original 15-minute rule, and a data harvest trades around the clock to collect training data. It never holds venue credentials and cannot place a real order."
       />
       {result.status !== "ok" ? (
         <NoCryptoSnapshot status={result.status} />
@@ -47,6 +49,7 @@ export default async function CryptoOverviewPage() {
         <>
           <HealthBanner health={cryptoHealth(result.snapshot, freshness(result.snapshot.as_of ?? null, list(result.snapshot.expected_windows), now))} />
           <CryptoKillNotice s={result.snapshot} />
+          <HarvestSection s={result.snapshot} />
           <TournamentPanels s={result.snapshot} />
           <KeyNumbers s={result.snapshot} />
           <MarketPanel s={result.snapshot} />
@@ -58,6 +61,12 @@ export default async function CryptoOverviewPage() {
       )}
     </>
   );
+}
+
+/** The data harvest (DEC-0027), shown once the host publishes it. */
+function HarvestSection({ s }: { s: Crypto }) {
+  const h = harvest(s);
+  return h.available ? <HarvestPanel s={s} h={h} /> : null;
 }
 
 /** The tournament sleeves (DEC-0015). Shown once the host publishes them; the baseline's panels follow. */
