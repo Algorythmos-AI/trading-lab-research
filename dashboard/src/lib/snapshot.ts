@@ -3,7 +3,7 @@ import { cache } from "react";
 import { LATEST_PATH, listPaths, readText } from "./blob";
 import type { CryptoSnapshot } from "./crypto.types";
 import { DESK_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
-import { parseFlags, partialOptions, poisonedOptions, VARIANT_COOKIE, type VariantFlag } from "./fixture-variants";
+import { parseFlags, partialOptions, poisonedOptions, v2Options, VARIANT_COOKIE, type VariantFlag } from "./fixture-variants";
 import type { HftSnapshot } from "./hft.types";
 import { logEvent } from "./log";
 import type { OptionsEdition } from "./options.types";
@@ -182,7 +182,8 @@ export const loadOptions = cache(async (date?: string): Promise<OptionsResult> =
     if (flags.has("error")) return { status: "error" };
     const mod = await import("../../test/fixtures/options.v1.json");
     const base = (mod.default ?? mod) as unknown as OptionsEdition;
-    const edition = flags.has("poison") ? poisonedOptions(base) : flags.has("partial") ? partialOptions(base) : base;
+    const shaped = flags.has("v2") ? v2Options(base) : base;
+    const edition = flags.has("poison") ? poisonedOptions(shaped) : flags.has("partial") ? partialOptions(shaped) : shaped;
     return { status: "ok", edition, source: "fixture" };
   }
   const path = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${OPTIONS_PATHS.history}${date}.json` : OPTIONS_PATHS.latest;

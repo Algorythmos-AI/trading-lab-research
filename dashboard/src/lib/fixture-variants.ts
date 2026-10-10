@@ -15,6 +15,7 @@ export const VARIANT_COOKIE = "fx";
  * - `quotes-tick`: the live price flips by one cent every three seconds, without changing any name's state.
  * - `chain-off`: the option feed has no keys. `chain-error`: Alpaca is failing.
  * - `chain-thin`: the nearest expiry's first calls come without a volatility, without a market, and crossed.
+ * - `v2`: the edition in its second format, with the day's context, events and each name's volatility block.
  */
 export const VARIANT_FLAGS = [
   "empty",
@@ -27,6 +28,7 @@ export const VARIANT_FLAGS = [
   "chain-off",
   "chain-error",
   "chain-thin",
+  "v2",
 ] as const;
 export type VariantFlag = (typeof VARIANT_FLAGS)[number];
 
@@ -80,6 +82,57 @@ export function partialOptions(e: OptionsEdition): OptionsEdition {
   }
   out.paper = [];
   out.expected_move_check = null;
+  return out;
+}
+
+const DAY = 86_400_000;
+const plus = (day: string, days: number) => new Date(Date.parse(`${day}T00:00:00Z`) + days * DAY).toISOString().slice(0, 10);
+
+/**
+ * The same edition in its second format: the day's context, scheduled events around the session, and a volatility
+ * block on each name. Synthetic, like the rest of the fixture. Some of it is left out or
+ * left partly empty on purpose, since every part of the second format is optional and the page must say so with a
+ * dash, not a zero.
+ */
+export function v2Options(e: OptionsEdition): OptionsEdition {
+  const out = structuredClone(e);
+  out.schema_version = 2;
+  out.market = { vix: { close: 16.24, change: 0.82, pct_52w: 0.34 }, session: { half_day: false }, calendar: "complete" };
+  const [a, b, c] = out.tickers.map((t) => t.symbol);
+  out.events = [
+    { date: plus(e.session, 2), time_et: "14:00", kind: "macro", type: "fomc_decision", severity: "high" },
+    { date: e.session, time_et: "14:00", kind: "macro", type: "fomc_minutes", severity: "medium" },
+    // Written the way another calendar might: one digit for the hour, seconds, capitals.
+    { date: e.session, time_et: "8:30:00", kind: "macro", type: "CPI", severity: "high" },
+    // A code this build has no name for, with no time: never drawn as written, and after the timed ones.
+    { date: e.session, time_et: null, kind: "macro", type: "fed_holds_rates_powell_turns_hawkish", severity: null },
+    // The same release listed twice must not trip the page.
+    { date: e.session, time_et: null, kind: "macro", type: "fed_holds_rates_powell_turns_hawkish", severity: null },
+    ...(b ? [{ date: plus(e.session, 3), time_et: null, kind: "earnings" as const, type: "earnings", symbol: b, when: "amc" as const }] : []),
+    ...(a ? [{ date: plus(e.session, 1), time_et: null, kind: "earnings" as const, type: "earnings", symbol: a, when: "bmo" as const }] : []),
+    // Outside the week, and for a name the edition does not carry: neither belongs on the page.
+    ...(c ? [{ date: plus(e.session, 30), time_et: null, kind: "earnings" as const, type: "earnings", symbol: c, when: "amc" as const }] : []),
+    { date: e.session, time_et: null, kind: "earnings", type: "earnings", symbol: "ZZZZ", when: "amc" },
+    { date: plus(e.session, -3), time_et: "08:30", kind: "macro", type: "nfp", severity: "high" },
+  ];
+  out.tickers.forEach((t, i) => {
+    const iv = t.expected_move?.annual_iv ?? null;
+    // One name with no block at all, one with a block of blanks, the rest filled in.
+    if (i === 3) return;
+    if (i === 4) {
+      t.vol = { iv30: null, iv_change_1d: null, iv_pct_13w: null, iv_pct_26w: null, hv30: null, opt_volume: null, opt_volume_avg20: null };
+      return;
+    }
+    t.vol = {
+      iv30: iv,
+      iv_change_1d: iv === null ? null : Math.round((i % 2 === 0 ? 0.012 : -0.008) * 1000) / 1000,
+      iv_pct_13w: Math.min(1, (t.expected_move?.iv_pct_52w ?? 0.3) + 0.14),
+      iv_pct_26w: Math.min(1, (t.expected_move?.iv_pct_52w ?? 0.3) + 0.05),
+      hv30: iv === null ? null : Math.round((iv / (i % 3 === 0 ? 1.32 : 0.9)) * 10000) / 10000,
+      opt_volume: 120_000 + i * 15_000,
+      opt_volume_avg20: i === 5 ? 0 : 100_000,
+    };
+  });
   return out;
 }
 

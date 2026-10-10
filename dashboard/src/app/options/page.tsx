@@ -7,7 +7,7 @@ import { PaneBoundary } from "@/components/client/pane-boundary";
 import { EditionPicker } from "@/components/radar";
 import { sydney, weekDate } from "@/lib/format";
 import { requestTime } from "@/lib/now";
-import { editionState, isDeskView, viewForClock, type DeskPane, type Options } from "@/lib/options";
+import { editionState, isDeskView, isHalfDay, viewForClock, type DeskPane, type Options } from "@/lib/options";
 import { listOptionsDates, loadOptions } from "@/lib/snapshot";
 
 export const dynamic = "force-dynamic";
@@ -81,7 +81,7 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
   // The view and the selected name come from the address when it names them; otherwise the view follows the New
   // York clock (an older edition opens on its review) and the first name is selected.
   const manualView = isDeskView(viewParam);
-  const initialView = manualView ? viewParam : date ? "review" : viewForClock(e.session, e.tickers.some((t) => t.half_day), now);
+  const initialView = manualView ? viewParam : date ? "review" : viewForClock(e.session, isHalfDay(e), now);
   const wanted = one(sp.s)?.toUpperCase();
   const initialSymbol = e.tickers.find((t) => t.symbol === wanted)?.symbol ?? e.tickers[0]?.symbol ?? null;
   // Only a phone shows one pane at a time; the address remembers which, so a reload lands on the same one.

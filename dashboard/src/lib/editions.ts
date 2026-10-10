@@ -6,7 +6,7 @@ import type { OptionsResult, RadarResult } from "./snapshot";
  * nothing newer: the schemas refuse unknown fields, so a newer edition sent to an older site is rejected whole
  * and that day has no edition. Raise it in the same change that teaches the schema the new fields.
  */
-export const OPTIONS_ACCEPTS = 1;
+export const OPTIONS_ACCEPTS = 2;
 export const RADAR_ACCEPTS = 1;
 
 export interface EditionHealth {

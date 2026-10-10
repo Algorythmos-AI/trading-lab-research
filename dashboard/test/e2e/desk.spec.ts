@@ -379,6 +379,52 @@ test("the contract pane says so when option quotes are off, failing or damaged, 
   await expect(page.locator("[data-pane-error]")).toHaveCount(0);
 });
 
+test("an edition in the second format shows the day's context and each name's volatility; the first format shows neither", async ({ page, context, baseURL, isMobile }) => {
+  // The first format, which is what production has until the engine sends the second: no line, no extra facts.
+  await open(page, "/options?view=brief&s=SPY");
+  await expect(page.locator("[data-desk-day]")).toHaveCount(0);
+  await showPane(page, "SPY");
+  await expect(page.locator('[data-desk-detail="SPY"]')).not.toContainText("IV against realised");
+  // The second format.
+  await variant(context, baseURL, "v2");
+  await open(page, "/options?view=brief&s=SPY");
+  const day = page.locator("[data-desk-day]");
+  await expect(day).toBeVisible();
+  await expect(day).toContainText("VIX 16.24");
+  // The session's own releases in time order, each time marked as New York's. A code the site has no name for is
+  // never drawn as written: the fixture's one spells out a headline.
+  await expect(day).toContainText(/CPI inflation 08:30 ET.*Fed minutes 14:00 ET.*Other release/);
+  await expect(day).not.toContainText(/powell|hawkish/i);
+  await expect(day).not.toContainText("ZZZZ");
+  // The rest of the line is in view on a wide screen and one tap away on a phone. Each copy is checked where it
+  // is the one on screen: text alone would be found in the hidden copy too.
+  const rest = isMobile ? day.locator("[data-day-more]") : day.locator("[data-day-wide]");
+  if (isMobile) {
+    await expect(day.getByText("Next 6 days", { exact: false }).last()).toBeHidden();
+    await day.locator("summary").click();
+  }
+  for (const text of ["Next 6 days: Fed decision Wed 14 Oct 14:00 ET", "Earnings, next 6 days: SPY Tue 13 Oct before the open", "09:30 to 16:00"]) {
+    await expect(rest.getByText(text, { exact: false })).toBeVisible();
+  }
+  await showPane(page, "SPY");
+  const facts = page.locator('[data-desk-detail="SPY"]');
+  await expect(facts).toContainText("IV against realised");
+  await expect(facts).toContainText("1.32×");
+  await expect(facts).toContainText("+1.2 pts");
+  // A name the edition gives no block: none of the extra facts, and nothing broken.
+  await pick(page, "MSFT");
+  await expect(page.locator('[data-desk-detail="MSFT"]')).toBeVisible();
+  await expect(page.locator('[data-desk-detail="MSFT"]')).not.toContainText("IV against realised");
+  // A name with a block of blanks: the facts are there, as dashes.
+  await pick(page, "NVDA");
+  await expect(page.locator('[data-desk-detail="NVDA"]')).toContainText(/IV against realised\s*—/);
+  await expect(page.locator('[data-desk-detail="NVDA"]')).toContainText(/Option volume\s*—/);
+  expect((await desk(page).textContent()) ?? "").not.toMatch(/NaN|undefined|Infinity|null/);
+  await expect(page.locator("[data-pane-error]")).toHaveCount(0);
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+});
+
 test("sorting a column keeps names without a value last, whichever way it runs", async ({ page, context, baseURL }) => {
   // In the sparse fixture SPY and AMZN have no expected move.
   await variant(context, baseURL, "partial.quotes-off");

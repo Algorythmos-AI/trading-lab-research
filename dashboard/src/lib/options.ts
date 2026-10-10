@@ -759,3 +759,133 @@ export function mapReadout(t: OptionsTicker, price: number, zones: readonly MapZ
     zone,
   };
 }
+
+// ---- Edition version 2: the day itself, and how each name's options are priced ----
+
+export type OptionsEvent = NonNullable<Options["events"]>[number];
+
+/**
+ * What an event code means, in a trader's words. Only these are ever drawn. A code this build has no name for is
+ * drawn as OTHER_EVENT, never as written: the code is text chosen by whoever built the edition, and a headline
+ * spelt with underscores must not reach the page.
+ */
+export const EVENT_LABEL: Readonly<Record<string, string>> = {
+  nfp: "Jobs report",
+  cpi: "CPI inflation",
+  fomc_decision: "Fed decision",
+  fomc_minutes: "Fed minutes",
+  fomc_emergency: "Fed emergency meeting",
+  quad_witching: "Quad witching",
+  earnings: "Earnings",
+};
+export const OTHER_EVENT = "Other release";
+
+export function eventLabel(type: string): string {
+  const code = type.toLowerCase().replace(/-/g, "_");
+  // Own keys only: "constructor" is a code like any other, not a way into the object's prototype.
+  return Object.hasOwn(EVENT_LABEL, code) ? EVENT_LABEL[code]! : OTHER_EVENT;
+}
+
+const EARNINGS_WHEN: Readonly<Record<string, string>> = { bmo: "before the open", amc: "after the close", during: "during the session" };
+
+/** When in the day a company reports, in words, or null for a code this build does not know. */
+export function earningsWhen(when: string | null | undefined): string | null {
+  return when != null && Object.hasOwn(EARNINGS_WHEN, when) ? EARNINGS_WHEN[when]! : null;
+}
+
+/** An event's New York time as HH:MM ("8:30" and "08:30:00" both read "08:30"), or null when it has none. */
+export function eventTime(ev: OptionsEvent): string | null {
+  const m = /^(\d{1,2}):(\d{2})/.exec(ev.time_et ?? "");
+  return m ? `${m[1]!.padStart(2, "0")}:${m[2]}` : null;
+}
+
+/** How many days after the session an event is still listed. */
+export const EVENT_HORIZON_DAYS = 6;
+
+export interface DayContext {
+  /** Macro events on the session's own date, earliest first; one with no time comes after the timed ones. */
+  onTheDay: OptionsEvent[];
+  /** Macro events in the EVENT_HORIZON_DAYS days after the session, soonest first. */
+  ahead: OptionsEvent[];
+  /** Earnings of the edition's own names, from the session's date to the horizon, soonest first. */
+  earnings: OptionsEvent[];
+  /**
+   * True only when the edition says its macro rows are the whole calendar. Without that, a day with no rows is a
+   * day the page knows nothing about, not a clear one.
+   */
+  complete: boolean;
+}
+
+const byWhen = (a: OptionsEvent, b: OptionsEvent) =>
+  a.date.localeCompare(b.date) ||
+  (eventTime(a) ?? "99:99").localeCompare(eventTime(b) ?? "99:99") ||
+  a.type.localeCompare(b.type) ||
+  (a.symbol ?? "").localeCompare(b.symbol ?? "");
+
+/**
+ * The scheduled events that bear on the edition's session. Null when the edition carries no events list at all (an
+ * edition in the first format).
+ */
+export function dayContext(e: Options): DayContext | null {
+  if (!Array.isArray(e.events)) return null;
+  const start = Date.parse(`${e.session}T00:00:00Z`);
+  const end = start + EVENT_HORIZON_DAYS * 86_400_000;
+  const names = new Set(e.tickers.map((t) => t.symbol));
+  const within = (ev: OptionsEvent) => {
+    const at = Date.parse(`${ev.date}T00:00:00Z`);
+    // A date that does not exist (30 February) is dropped, on every browser alike: some would roll it forward.
+    return Number.isFinite(at) && new Date(at).toISOString().slice(0, 10) === ev.date && at >= start && at <= end;
+  };
+  const events = e.events.filter(within).sort(byWhen);
+  return {
+    onTheDay: events.filter((ev) => ev.kind === "macro" && ev.date === e.session),
+    ahead: events.filter((ev) => ev.kind === "macro" && ev.date !== e.session),
+    earnings: events.filter((ev) => ev.kind === "earnings" && ev.symbol != null && names.has(ev.symbol)),
+    complete: e.market?.calendar === "complete",
+  };
+}
+
+/**
+ * Whether the edition's session closes early. The second format says so once, under `market`; the first says so
+ * on each name. One answer for the whole page, so the countdown and the hours shown cannot disagree.
+ */
+export function isHalfDay(e: Options): boolean {
+  return e.market?.session?.half_day ?? e.tickers.some((t) => t.half_day);
+}
+
+/** The session's hours in New York, worked out from the one half-day answer: "09:30" to "16:00", or to "13:00". */
+export function sessionHours(e: Options): { open: string; close: string; halfDay: boolean } {
+  const halfDay = isHalfDay(e);
+  const hhmm = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+  return { open: hhmm(OPEN_MIN), close: hhmm(closeMinute(halfDay)), halfDay };
+}
+
+export interface VolRead {
+  /** 30-day implied vol over 30-day realised vol: above 1, options price more movement than the stock has made. */
+  ivOverHv: number | null;
+  iv: number | null;
+  hv: number | null;
+  /** The day's change in implied vol, in volatility points (1.2 is 1.2 points). */
+  changePts: number | null;
+  /** Where implied vol sits in its own last 13 and 26 weeks, as fractions. The 52-week one is on expected_move. */
+  pcts: [number | null, number | null];
+  /** The day's option volume over its 20-day average. */
+  volumeRatio: number | null;
+}
+
+/** A name's volatility block, read for the page. Null when the edition gives the name none. */
+export function volRead(t: OptionsTicker): VolRead | null {
+  const v = t.vol;
+  if (!v) return null;
+  const iv = v.iv30 ?? null;
+  const hv = v.hv30 ?? null;
+  const avg = v.opt_volume_avg20 ?? null;
+  return {
+    ivOverHv: iv !== null && hv !== null && hv > 0 ? iv / hv : null,
+    iv,
+    hv,
+    changePts: v.iv_change_1d != null ? v.iv_change_1d * 100 : null,
+    pcts: [v.iv_pct_13w ?? null, v.iv_pct_26w ?? null],
+    volumeRatio: v.opt_volume != null && avg !== null && avg > 0 ? v.opt_volume / avg : null,
+  };
+}

@@ -32,4 +32,17 @@ for (const theme of ["light", "dark"] as const) {
     await expect(pane).not.toContainText("at the ask");
     expect(await scan(page)).toEqual([]);
   });
+
+  test(`the Options desk in the edition's second format passes the accessibility scan on a phone in ${theme}`, async ({ page, context, baseURL }) => {
+    await useTheme(context, theme);
+    await context.addCookies([{ name: "fx", value: "v2", url: baseURL! }]);
+    await page.goto("/options?view=live");
+    await expect(page.locator("[data-desk-bar]")).toBeVisible();
+    await liveChips(page);
+    // The part of the day's line that only a phone folds away, open.
+    await page.locator("[data-desk-day] summary").click();
+    // The whole phrase: "next 6 days" alone is also in the earnings line.
+    await expect(page.locator("[data-day-more]").getByText("Next 6 days: Fed decision", { exact: false })).toBeVisible();
+    expect(await scan(page)).toEqual([]);
+  });
 }

@@ -45,6 +45,17 @@ wt.ops.publish                            POST /api/ingest            (productio
   validated against `src/lib/options.schema.json` (owned here; `options.types.ts` is generated). Stored at
   `options/latest.json` plus `options/editions/YYYY-MM-DD.json`, one per session the levels are built for. Like the
   radar it has no windows and no watchdog.
+  The edition has a second format (`schema_version: 2`), all of it optional: `market` (the VIX, whether the
+  session is a half day, and whether the macro calendar is complete), `events` (macro releases and earnings as
+  codes, dates and New York times, never headlines) and a `vol` block on each name (implied and realised vol as
+  fractions, percentiles over 13 and 26 weeks, the day's change, option volume and its average). `/api/health`
+  reports `accepts: 2` under `editions.options`, which is what a publisher reads before sending it; an edition in
+  the first format validates as before and the page draws none of the new parts for it. On the desk the second
+  format adds one line under the status bar (`src/components/options-day.tsx`) and four facts on a name. Three
+  rules keep that line honest: an event code is drawn only as the name this site has for it (anything else reads
+  "Other release", so a headline cannot arrive as a code); a day with no macro row reads "no scheduled release"
+  only when the edition marks its calendar complete, and "releases not known" otherwise; and the session's hours
+  come from the one half-day flag, the same one the countdown uses.
   The page opens on the **desk** (`src/components/client/options-desk.tsx`): one frame with every name in a sortable
   monitor beside the selected name's level map, rules and facts. Three views change the monitor's columns: Brief (the
   close and what options cost), Live (price against the levels) and Review (the paper record per name). The view

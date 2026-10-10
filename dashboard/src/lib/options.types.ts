@@ -74,6 +74,33 @@ export interface OptionsEdition {
      * @maxItems 24
      */
     problems?: string[];
+    /**
+     * How the name's options are priced against its own past and its own movement. Volatilities are annualised fractions (0.24 is 24%), as expected_move.annual_iv is. New in version 2.
+     */
+    vol?: {
+      /**
+       * 30-day implied vol as a fraction. The ceiling of 5 refuses a value sent as a percentage.
+       */
+      iv30?: number | null;
+      /**
+       * The day's change in iv30 as a fraction: 0.012 is 1.2 volatility points. The bounds refuse a value sent in points.
+       */
+      iv_change_1d?: number | null;
+      /**
+       * Where iv30 sits in its own last 13 weeks, as a fraction.
+       */
+      iv_pct_13w?: number | null;
+      /**
+       * Where iv30 sits in its own last 26 weeks, as a fraction. The 52-week figure is expected_move.iv_pct_52w.
+       */
+      iv_pct_26w?: number | null;
+      /**
+       * 30-day realised vol as a fraction.
+       */
+      hv30?: number | null;
+      opt_volume?: number | null;
+      opt_volume_avg20?: number | null;
+    } | null;
   }[];
   /**
    * @maxItems 24
@@ -117,4 +144,52 @@ export interface OptionsEdition {
     n?: number | null;
     period?: string | null;
   } | null;
+  /**
+   * The day itself, as of the close the edition was built from. New in version 2.
+   */
+  market?: {
+    vix?: {
+      close?: number | null;
+      change?: number | null;
+      /**
+       * A fraction: 0.34 is the 34th percentile of the last year.
+       */
+      pct_52w?: number | null;
+    } | null;
+    /**
+     * Whether the session the levels are for closes early. The site works the hours out from this alone.
+     */
+    session?: {
+      half_day?: boolean | null;
+    } | null;
+    /**
+     * Whether the macro rows in `events` are the whole calendar for the session and the week after it. Only 'complete' lets the page say a day has no scheduled release.
+     */
+    calendar?: "complete" | "partial" | null;
+  } | null;
+  /**
+   * Scheduled events near the session: macro releases (no symbol) and earnings (one symbol). Codes only, never headlines: the site names the codes it knows and shows any other as 'Other release'. New in version 2.
+   *
+   * @maxItems 400
+   */
+  events?:
+    | {
+        date: string;
+        /**
+         * New York time, 8:30 or 08:30, seconds allowed and ignored.
+         */
+        time_et?: string | null;
+        kind: "macro" | "earnings";
+        /**
+         * A code such as cpi or fomc_decision. Never drawn as written.
+         */
+        type: string;
+        severity?: "high" | "medium" | "low" | null;
+        symbol?: string | null;
+        /**
+         * For earnings: bmo, amc or during. Another code is accepted and not drawn.
+         */
+        when?: string | null;
+      }[]
+    | null;
 }
