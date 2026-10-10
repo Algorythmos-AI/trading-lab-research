@@ -242,6 +242,31 @@
   }
 }
 
+/* A live number that just changed: a brief wash in the direction it moved, then nothing. Background only, so the
+   number never shifts; the reduced-motion rule above turns it off. */
+@keyframes tick-up {
+  from {
+    background-color: var(--good-soft);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+@keyframes tick-down {
+  from {
+    background-color: var(--bad-soft);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+.tick-up {
+  animation: tick-up 700ms ease-out;
+}
+.tick-down {
+  animation: tick-down 700ms ease-out;
+}
+
 /* Options focus mode: only the glance strip, the level maps and the chips stay. Unlayered, so it wins over the
    `contents` utility on the wrappers it hides. */
 [data-focus="on"] [data-explain],

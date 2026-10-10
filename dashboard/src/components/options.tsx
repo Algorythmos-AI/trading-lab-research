@@ -8,7 +8,7 @@ import { EvidenceBars, LevelMap, RuleRanges, StructureMap } from "@/components/o
 import { Panel } from "@/components/panel";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { fracPct, num, rMult, shortDate, signed, sydney } from "@/lib/format";
+import { fracPct, num, rMult, shortDate, signed, sydney, weekDate as sessionDay } from "@/lib/format";
 import {
   CHIP_LABEL,
   chipTone,
@@ -49,15 +49,6 @@ export function NoOptions({ status, date }: { status: Exclude<OptionsResult["sta
     <Empty icon={Inbox} title="The options levels have not published yet">
       The after-close run publishes here each weekday, with the levels for the next session.
     </Empty>
-  );
-}
-
-/** "Mon 12 Oct" from YYYY-MM-DD, without timezone drift. */
-function sessionDay(ymd: string | null | undefined): string {
-  if (!ymd) return "—";
-  const [y, m, d] = ymd.split("-").map(Number);
-  return new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" }).format(
-    new Date(Date.UTC(y!, m! - 1, d!)),
   );
 }
 
