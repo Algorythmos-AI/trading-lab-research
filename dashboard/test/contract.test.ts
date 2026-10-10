@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import { price } from "@/lib/bs";
 import type { ChainContract, ChainResponse } from "@/lib/chain";
 import {
+  bellMinute,
   contractView,
   daysToExpiry,
   defaultPick,
+  feedAge,
   minutesToExpiry,
   parsePick,
   pickKey,
@@ -31,6 +33,8 @@ const chainOf = (contracts: ChainContract[], date = SESSION): ChainResponse => (
   as_of: "2026-10-12T16:00:00Z", feed: "indicative", delay_min: 15, symbol: "SPY", expiries: [{ date, contracts }],
 });
 const pick = (over: Partial<Pick> = {}): Pick => ({ kind: "call", expiry: SESSION, strike: 780, contracts: 1, paid: null, ...over });
+const OPEN = { marketOpen: true, priceIsLive: true };
+const SHUT = { marketOpen: false, priceIsLive: false };
 
 describe("a remembered contract", () => {
   it("is read back when it is one", () => {
@@ -137,7 +141,7 @@ describe("the prices worth asking about", () => {
 
 describe("what the pane shows for a contract", () => {
   it("prices it at the ask, with its breakeven, its value now and what waiting costs", () => {
-    const v = contractView(pick(), chainOf([row()]), spy, 780.43, NOON, SESSION, true);
+    const v = contractView(pick(), chainOf([row()]), spy, 780.43, NOON, SESSION, OPEN);
     expect(v.expired).toBe(false);
     expect(v.stale).toBe(false);
     expect(v.minutes).toBe(240);
@@ -156,13 +160,14 @@ describe("what the pane shows for a contract", () => {
   });
 
   it("asks what if at each level, now and at expiry; at expiry the option is worth what it would be exercised for", () => {
-    const v = contractView(pick(), chainOf([row()]), spy, 780.43, NOON, SESSION, true);
+    const v = contractView(pick(), chainOf([row()]), spy, 780.43, NOON, SESSION, OPEN);
     // The session's close is the expiry itself here, so it is not a column of its own.
     expect(v.times.map((t) => t.label)).toEqual(["Now", "Expiry"]);
     expect(v.rows.map((r) => r.level.label)).toEqual(["+1 day move", "Now", "Resistance", "Support", "−1 day move"]);
     for (const r of v.rows) {
       expect(r.cells).toHaveLength(2);
-      expect(r.cells[1]!.value).toBeCloseTo(Math.max(r.level.price - 780, 0), 2);
+      // Exactly, not to within the model's one-minute floor on time: it has to agree with the breakeven.
+      expect(r.cells[1]!.value).toBe(Math.max(r.level.price - 780, 0));
       expect(r.cells[1]!.pnl).toBeCloseTo((r.cells[1]!.value - 3.1) * 100, 9);
     }
     const now = v.rows.find((r) => r.level.label === "Now")!;
@@ -170,17 +175,19 @@ describe("what the pane shows for a contract", () => {
   });
 
   it("adds the session's close as a column when the contract outlives it", () => {
-    const v = contractView(pick({ expiry: "2026-10-16" }), chainOf([row()], "2026-10-16"), spy, 780.43, NOON, SESSION, true);
+    const v = contractView(pick({ expiry: "2026-10-16" }), chainOf([row()], "2026-10-16"), spy, 780.43, NOON, SESSION, OPEN);
     expect(v.times.map((t) => t.label)).toEqual(["Now", "Mon 12 Oct close", "Expiry"]);
     expect(v.times[1]!.ahead).toBe(240);
     // And once that close has passed, it is gone again.
-    const later = contractView(pick({ expiry: "2026-10-16" }), chainOf([row()], "2026-10-16"), spy, 780.43, at("2026-10-12T21:00:00Z"), SESSION, false);
-    expect(later.times.map((t) => t.label)).toEqual(["Now", "Expiry"]);
+    const later = contractView(pick({ expiry: "2026-10-16" }), chainOf([row()], "2026-10-16"), spy, 780.43, at("2026-10-12T21:00:00Z"), SESSION, SHUT);
+    expect(later.times.map((t) => t.label)).toEqual(["Last close", "Expiry"]);
+    expect(later.here).toBe("Last close");
+    expect(later.rows.map((r) => r.level.label)).toContain("Last close");
   });
 
   it("uses what the reader paid, for more than one contract, and for a put", () => {
     const put = row({ kind: "put", strike: 775, bid: 1.0, ask: 1.1, iv: 0.13 });
-    const v = contractView(pick({ kind: "put", strike: 775, contracts: 3, paid: 2 }), chainOf([row(), put]), spy, 780.43, NOON, SESSION, true);
+    const v = contractView(pick({ kind: "put", strike: 775, contracts: 3, paid: 2 }), chainOf([row(), put]), spy, 780.43, NOON, SESSION, OPEN);
     expect([v.paid, v.paidFrom]).toEqual([2, "entered"]);
     expect(v.cost).toBe(600);
     expect(v.breakeven).toBe(773);
@@ -191,10 +198,10 @@ describe("what the pane shows for a contract", () => {
   });
 
   it("prices from the model's own value when the quote is crossed or there is no market", () => {
-    const crossed = contractView(pick(), chainOf([row({ bid: 3.6, ask: 3.1 })]), spy, 780.43, NOON, SESSION, true);
+    const crossed = contractView(pick(), chainOf([row({ bid: 3.6, ask: 3.1 })]), spy, 780.43, NOON, SESSION, OPEN);
     expect(crossed.quote!.state).toBe("crossed");
     expect(crossed.paidFrom).toBe("model");
-    const none = contractView(pick(), chainOf([row({ bid: 0, ask: 0, last: null })]), spy, 780.43, NOON, SESSION, true);
+    const none = contractView(pick(), chainOf([row({ bid: 0, ask: 0, last: null })]), spy, 780.43, NOON, SESSION, OPEN);
     expect(none.quote!.state).toBe("no-market");
     expect(none.paidFrom).toBe("model");
     expect(none.paid).toBeCloseTo(none.value!, 12);
@@ -202,7 +209,7 @@ describe("what the pane shows for a contract", () => {
 
   it("shows only expiry when no volatility can be found", () => {
     const bare = { ...spy, expected_move: null };
-    const v = contractView(pick(), chainOf([row({ iv: null, bid: 0, ask: 0 })]), bare, 780.43, NOON, SESSION, true);
+    const v = contractView(pick(), chainOf([row({ iv: null, bid: 0, ask: 0 })]), bare, 780.43, NOON, SESSION, OPEN);
     expect(v.sigma).toBeNull();
     expect(v.times.map((t) => t.label)).toEqual(["Expiry"]);
     expect(v.value).toBeNull();
@@ -212,7 +219,7 @@ describe("what the pane shows for a contract", () => {
   });
 
   it("prices a strike the chain does not carry from the name's own volatility", () => {
-    const v = contractView(pick({ strike: 700 }), chainOf([row()]), spy, 780.43, NOON, SESSION, true);
+    const v = contractView(pick({ strike: 700 }), chainOf([row()]), spy, 780.43, NOON, SESSION, OPEN);
     expect(v.contract).toBeNull();
     expect(v.quote).toBeNull();
     expect(v.volFrom).toBe("name");
@@ -220,7 +227,7 @@ describe("what the pane shows for a contract", () => {
   });
 
   it("withholds everything for an expired contract", () => {
-    const v = contractView(pick(), chainOf([row()]), spy, 780.43, at("2026-10-12T20:00:00Z"), SESSION, false);
+    const v = contractView(pick(), chainOf([row()]), spy, 780.43, at("2026-10-12T20:00:00Z"), SESSION, SHUT);
     expect(v.expired).toBe(true);
     expect(v.rows).toEqual([]);
     expect(v.value).toBeNull();
@@ -228,13 +235,15 @@ describe("what the pane shows for a contract", () => {
 
   it("withholds the numbers in session when the quote is too old, sooner for a same-day contract", () => {
     const old = (min: number) => new Date(NOON - min * 60_000).toISOString();
-    const sameDay = (min: number, inSession = true) => contractView(pick(), chainOf([row({ at: old(min) })]), spy, 780.43, NOON, SESSION, inSession);
+    const sameDay = (min: number, clock = OPEN) => contractView(pick(), chainOf([row({ at: old(min) })]), spy, 780.43, NOON, SESSION, clock);
     expect(sameDay(STALE_SAME_DAY_MIN).stale).toBe(false);
     expect(sameDay(STALE_SAME_DAY_MIN + 1).stale).toBe(true);
     expect(sameDay(STALE_SAME_DAY_MIN + 1).rows).toEqual([]);
     // With the market shut an old quote is simply the last one there is.
-    expect(sameDay(600, false).stale).toBe(false);
-    const later = (min: number) => contractView(pick({ expiry: "2026-10-16" }), chainOf([row({ at: old(min) })], "2026-10-16"), spy, 780.43, NOON, SESSION, true);
+    expect(sameDay(600, SHUT).stale).toBe(false);
+    // And it is the clock that says the market is open, not a stock price that still reads as live.
+    expect(sameDay(600, { marketOpen: false, priceIsLive: true }).stale).toBe(false);
+    const later = (min: number) => contractView(pick({ expiry: "2026-10-16" }), chainOf([row({ at: old(min) })], "2026-10-16"), spy, 780.43, NOON, SESSION, OPEN);
     expect(later(STALE_SAME_DAY_MIN + 1).stale).toBe(false);
     expect(later(STALE_LATER_MIN + 1).stale).toBe(true);
   });
@@ -243,11 +252,60 @@ describe("what the pane shows for a contract", () => {
     const rows = [row(), row({ iv: null }), row({ bid: null, ask: null, last: null, at: null, iv: null, delta: null, volume: null }), row({ bid: 0, ask: 0.01 })];
     for (const r of rows) {
       for (const spot of [780.43, 0.01, 100000]) {
-        const v = contractView(pick(), chainOf([r]), spy, spot, NOON, SESSION, true);
+        const v = contractView(pick(), chainOf([r]), spy, spot, NOON, SESSION, OPEN);
         const numbers = [v.cost, v.breakeven, v.breakevenMoves, v.value, v.pnlNow, v.delta, v.thetaDay, v.decayHour, ...v.rows.flatMap((x) => x.cells.flatMap((c) => [c.value, c.pnl]))];
         for (const n of numbers) if (n !== null) expect(Number.isFinite(n)).toBe(true);
       }
     }
+  });
+});
+
+describe("what the review of the pane found", () => {
+  it("judges the feed by its newest quote, so one quiet contract is not mistaken for a dead feed", () => {
+    const quiet = row({ strike: 700, at: new Date(NOON - 300 * 60_000).toISOString() });
+    const busy = row({ strike: 780, at: new Date(NOON - 16 * 60_000).toISOString() });
+    const chain = chainOf([quiet, busy]);
+    expect(feedAge(chain, NOON)).toBe(16);
+    expect(contractView(pick({ strike: 700 }), chain, spy, 780.43, NOON, SESSION, OPEN).stale).toBe(false);
+    expect(feedAge(chainOf([row({ at: null })]), NOON)).toBeNull();
+    expect(feedAge(null, NOON)).toBeNull();
+    expect(feedAge({ ...chainOf([]), expiries: [] }, NOON)).toBeNull();
+  });
+
+  it("rings the bell at 13:00 for a contract expiring on the edition's own half day, and at 16:00 otherwise", () => {
+    expect(bellMinute(SESSION, SESSION, true)).toBe(13 * 60);
+    expect(bellMinute(SESSION, SESSION, false)).toBe(16 * 60);
+    expect(bellMinute(SESSION, SESSION, null)).toBe(16 * 60);
+    expect(bellMinute("2026-10-16", SESSION, true)).toBe(16 * 60);
+    expect(minutesToExpiry(SESSION, NOON, 13 * 60)).toBe(60);
+    const half = { ...spy, half_day: true };
+    expect(contractView(pick(), chainOf([row()]), half, 780.43, NOON, SESSION, OPEN).minutes).toBe(60);
+    // Half past one on a half day: that day's contract has expired, though 16:00 has not come.
+    expect(contractView(pick(), chainOf([row()]), half, 780.43, at("2026-10-12T17:30:00Z"), SESSION, SHUT).expired).toBe(true);
+  });
+
+  it("calls the stock's price the last close when the market is shut, in the table and its columns", () => {
+    const v = contractView(pick({ expiry: "2026-10-16" }), chainOf([row()], "2026-10-16"), spy, 778.55, at("2026-10-11T12:00:00Z"), SESSION, SHUT);
+    expect(v.here).toBe("Last close");
+    expect(v.times[0]!.label).toBe("Last close");
+    expect(v.rows.some((r) => r.level.label === "Now")).toBe(false);
+    expect(v.rows.some((r) => r.level.label === "Last close")).toBe(true);
+  });
+
+  it("never reports waiting as a gain", () => {
+    for (const k of [700, 780, 860]) {
+      for (const kind of ["call", "put"] as const) {
+        const v = contractView(pick({ kind, strike: k }), chainOf([row({ kind, strike: k })]), spy, 780.43, NOON, SESSION, OPEN);
+        expect(v.decayHour).toBeGreaterThanOrEqual(0);
+        expect(Object.is(v.decayHour, -0)).toBe(false);
+      }
+    }
+  });
+
+  it("refuses a strike or a premium no option has, from storage edited by hand", () => {
+    expect(parsePick(JSON.stringify({ ...pick(), strike: 1e300 }))).toBeNull();
+    expect(parsePick(JSON.stringify({ ...pick(), paid: 1e300 }))).toBeNull();
+    expect(parsePick(JSON.stringify({ ...pick(), strike: 5000, paid: 900 }))).not.toBeNull();
   });
 });
 

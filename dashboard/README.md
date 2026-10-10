@@ -66,14 +66,16 @@ wt.ops.publish                            POST /api/ingest            (productio
 - **Option quotes and the contract pane** (`/api/chain?s=SPY&px=780.43`, `src/lib/chain.ts`): calls and puts for one
   name from Alpaca's indicative feed, which runs 15 minutes behind the market, fetched on the server with the same
   keys as the live prices. It answers with the nearest four expiries and the first one a fortnight or more out, 21
-  strikes each around the price given; a contract adjusted for a split or a merger is left out. Each name's answer
-  is shared for 20 s. The desk's **Contract** pane (`src/components/client/options-contract.tsx`, logic in
+  strikes each around the price given; a contract adjusted for a split or a merger is left out. With `&x=` and `&k=`
+  (an expiry and a strike) the answer always carries that contract too, so one the reader holds stays quoted
+  wherever the price and the calendar have moved. Each name's answer is shared for 20 s. The desk's **Contract** pane (`src/components/client/options-contract.tsx`, logic in
   `src/lib/contract.ts`) stays shut, and asks for nothing, until the reader opens it on a name: then it prices the
   call or put they choose (cost, breakeven, value now, delta, hourly decay) and what it would be worth with the
   stock at the nearest zones and a day's move either side, now, at the session's close and at expiry. The chosen
-  contract is kept in the browser's own storage and nowhere else. In session a quote more than 35 minutes old (105
-  for a contract that does not expire that day) is too old to price from, and the numbers are withheld. Everything
-  it shows is an estimate and it suggests nothing.
+  contract is kept in the browser's own storage and nowhere else. While the market is open, by the clock, option
+  quotes whose newest is more than 35 minutes old (105 for a contract that does not expire that day) are too old to
+  price from, and the numbers are withheld; with the market shut the last quotes are simply the last quotes, and the
+  stock's price is labelled "Last close" instead of "Now". Everything it shows is an estimate and it suggests nothing.
 - **Live prices** (`/api/quote?s=SPY,QQQ`, read by the Options page every 2 s while it is open, one poll shared by the
   glance strip, the level maps' live dot and the state chips; a quote older than 30 s shows as stale): last trades from
   Alpaca's free IEX feed, fetched on the server so the page keeps `connect-src 'self'` and never sees the keys. At most

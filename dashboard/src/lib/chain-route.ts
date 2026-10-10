@@ -1,6 +1,21 @@
 import "server-only";
 import { greeks, price } from "./bs";
-import { addDays, CHAIN_DELAY_MIN, fetchChain, NEAR_EXPIRIES, nyDate, parsePrice, parseSymbol, STRIKES_PER_EXPIRY, SWING_MIN_DAYS, type ChainContract, type ChainExpiry, type ChainResponse } from "./chain";
+import {
+  addDays,
+  CHAIN_DELAY_MIN,
+  fetchChain,
+  NEAR_EXPIRIES,
+  nyDate,
+  parseKeep,
+  parsePrice,
+  parseSymbol,
+  STRIKES_PER_EXPIRY,
+  SWING_MIN_DAYS,
+  type ChainContract,
+  type ChainExpiry,
+  type ChainResponse,
+  type Keep,
+} from "./chain";
 import { FIXTURE_OFFSET_ATR, flagsFromCookieHeader } from "./fixture-variants";
 import { logEvent } from "./log";
 import { nyInstant } from "./options";
@@ -34,7 +49,7 @@ export function fixtureExpiries(from: string): string[] {
  * passed, and its quotes are as old as the real feed's would be. Lets the browser tests drive the contract pane
  * with no network and no keys. `thin` damages the nearest expiry's first three calls, one way each.
  */
-export async function fixtureChain(symbol: string, now: Date, thin = false): Promise<ChainResponse> {
+export async function fixtureChain(symbol: string, now: Date, thin = false, keep: Keep | null = null): Promise<ChainResponse> {
   const mod = await import("../../test/fixtures/options.v1.json");
   const e = (mod.default ?? mod) as unknown as OptionsEdition;
   const t = e.tickers.find((x) => x.symbol === symbol);
@@ -49,14 +64,19 @@ export async function fixtureChain(symbol: string, now: Date, thin = false): Pro
   const quoted = new Date(now.getTime() - CHAIN_DELAY_MIN * 60_000);
   const today = nyDate(now);
   const rung = (nyInstant(today, 16 * 60) ?? Infinity) <= now.getTime();
-  const expiries: ChainExpiry[] = fixtureExpiries(rung ? addDays(today, 1) : today).map((date) => {
+  const dates = fixtureExpiries(rung ? addDays(today, 1) : today);
+  // The reader's own contract is in the answer wherever it sits, as it is in the real one.
+  if (keep && !dates.includes(keep.expiry)) dates.push(keep.expiry);
+  const expiries: ChainExpiry[] = dates.sort().map((date) => {
     const bell = nyInstant(date, 16 * 60) ?? now.getTime();
     const minutes = (bell - quoted.getTime()) / 60_000;
     const contracts: ChainContract[] = [];
+    const strikes = Array.from({ length: STRIKES_PER_EXPIRY }, (_, n) => cents(centre + (n - half) * step)).filter((x) => x > 0);
+    if (keep && keep.expiry === date && !strikes.includes(keep.strike)) strikes.push(keep.strike);
+    strikes.sort((a, b) => a - b);
     for (const kind of ["call", "put"] as const) {
-      for (let i = -half; i <= half; i++) {
-        const strike = cents(centre + i * step);
-        if (strike <= 0) continue;
+      for (const strike of strikes) {
+        const i = (strike - centre) / step;
         const sigma = vol * (1 + 0.6 * Math.abs(Math.log(strike / spot)));
         const value = price(spot, strike, minutes, sigma, kind);
         contracts.push({
@@ -84,24 +104,27 @@ export async function fixtureChain(symbol: string, now: Date, thin = false): Pro
 }
 
 /**
- * GET /api/chain?s=SPY&px=780.43: calls and puts for one name around a price, from Alpaca's indicative feed
- * (15 minutes behind the market). 503 until the keys are set.
+ * GET /api/chain?s=SPY&px=780.43[&x=2026-10-30&k=785]: calls and puts for one name around a price, from Alpaca's
+ * indicative feed (15 minutes behind the market), always including the contract named by `x` and `k` when given.
+ * 503 until the keys are set.
  */
 export async function handleChain(req: Request, now: Date = new Date()): Promise<Response> {
   const params = new URL(req.url).searchParams;
   const symbol = parseSymbol(params.get("s"));
   const px = parsePrice(params.get("px"));
   if (!symbol || px === null) return json(400, { error: "give ?s= with one ticker symbol and ?px= with its price" });
+  // The reader's own contract, when they have one. A malformed one is simply not kept.
+  const keep = parseKeep(params.get("x"), params.get("k"), nyDate(now));
   if (fixtureMode()) {
     const flags = flagsFromCookieHeader(req.headers.get("cookie"));
     if (flags.has("chain-off")) return json(503, { error: "not-configured" });
     if (flags.has("chain-error")) return json(502, { error: "upstream" });
-    return json(200, await fixtureChain(symbol, now, flags.has("chain-thin")));
+    return json(200, await fixtureChain(symbol, now, flags.has("chain-thin"), keep));
   }
   const keys = alpacaKeys();
   if (!keys) return json(503, { error: "not-configured" });
   try {
-    return json(200, await fetchChain(symbol, px, keys, now));
+    return json(200, await fetchChain(symbol, px, keys, now, fetch, undefined, keep));
   } catch (e) {
     logEvent("chain.fetch", { outcome: "error", error: e instanceof Error ? e.name : "unknown" });
     return json(502, { error: "upstream" });

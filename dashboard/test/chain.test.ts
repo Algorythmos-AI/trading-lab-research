@@ -6,6 +6,7 @@ import {
   NEAR_EXPIRIES,
   normaliseContract,
   nyDate,
+  parseKeep,
   parseOcc,
   parsePrice,
   parseSymbol,
@@ -42,6 +43,27 @@ describe("what the route is asked for", () => {
     expect(parsePrice("780.43")).toBe(780.43);
     expect(parsePrice("5")).toBe(5);
     for (const bad of [null, "", "0", "0.00", "-5", "1e3", "abc", "780.43.1", "1234567", "780,43", "NaN"]) expect(parsePrice(bad)).toBeNull();
+  });
+});
+
+describe("the reader's own contract in a request", () => {
+  it("is an expiry from today to about a year out, and a strike", () => {
+    expect(parseKeep("2026-10-30", "785", "2026-10-12")).toEqual({ expiry: "2026-10-30", strike: 785 });
+    expect(parseKeep("2026-10-12", "232.5", "2026-10-12")).toEqual({ expiry: "2026-10-12", strike: 232.5 });
+  });
+
+  it.each([
+    [null, "785"],
+    ["2026-10-30", null],
+    ["2026-10-11", "785"],
+    ["2028-10-30", "785"],
+    ["2026-13-01", "785"],
+    ["2026-06-31", "785"],
+    ["30 Oct", "785"],
+    ["2026-10-30", "0"],
+    ["2026-10-30", "abc"],
+  ])("is not kept when it is %s and %s", (x, k) => {
+    expect(parseKeep(x, k, "2026-10-12")).toBeNull();
   });
 });
 
@@ -125,6 +147,42 @@ describe("what the page is offered", () => {
   });
 });
 
+describe("what the page is offered when the reader holds a contract", () => {
+  const TODAY = "2026-10-12";
+  const all: Record<string, ReturnType<typeof snap>> = {};
+  for (const d of ["2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16", "2026-10-30", "2026-11-06"]) {
+    for (let k = 760; k < 800; k++) all[occ(d, "C", k)] = snap();
+  }
+  // Their own contract, fetched on its own: an expiry in the gap between the two windows, a strike far from the price.
+  all[occ("2026-10-22", "C", 700)] = snap();
+  all[occ("2026-10-22", "P", 700)] = snap();
+
+  it("always carries their expiry and their strike, without pushing a near expiry out", () => {
+    const got = selectChain(all, "SPY", 780, TODAY, { expiry: "2026-10-22", strike: 700 });
+    expect(got.map((x) => x.date)).toEqual(["2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-22", "2026-10-30"]);
+    expect(got.find((x) => x.date === "2026-10-22")!.contracts.map((c) => `${c.kind} ${c.strike}`)).toEqual(["call 700", "put 700"]);
+  });
+
+  it("adds a strike outside the nearest ones to an expiry already offered, in its place among the others", () => {
+    all[occ("2026-10-13", "C", 705)] = snap();
+    const got = selectChain(all, "SPY", 780, TODAY, { expiry: "2026-10-13", strike: 705 });
+    const strikes = got.find((x) => x.date === "2026-10-13")!.contracts.filter((c) => c.kind === "call").map((c) => c.strike);
+    expect(strikes).toHaveLength(STRIKES_PER_EXPIRY + 1);
+    expect(strikes[0]).toBe(705);
+    expect([...strikes].sort((a, b) => a - b)).toEqual(strikes);
+    delete all[occ("2026-10-13", "C", 705)];
+  });
+
+  it("changes nothing when their contract is not in what came back, or is already among the nearest", () => {
+    const plain = selectChain(all, "SPY", 780, TODAY).map((x) => x.date);
+    expect(plain).toEqual(["2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-30"]);
+    expect(selectChain(all, "SPY", 780, TODAY, { expiry: "2026-12-18", strike: 780 }).map((x) => x.date)).toEqual(plain);
+    expect(selectChain(all, "SPY", 780, TODAY, { expiry: "2026-10-13", strike: 780 }).map((x) => x.date)).toEqual(plain);
+    // Holding the swing expiry itself keeps it once, not twice.
+    expect(selectChain(all, "SPY", 780, TODAY, { expiry: "2026-10-30", strike: 780 }).map((x) => x.date)).toEqual(plain);
+  });
+});
+
 describe("fetching a chain", () => {
   const body = (snapshots: Record<string, unknown>, next: string | null = null) => new Response(JSON.stringify({ snapshots, next_page_token: next }), { status: 200 });
   const near = { [occ("2026-10-12", "C", 780)]: snap(), [occ("2026-10-12", "P", 780)]: snap() };
@@ -174,6 +232,27 @@ describe("fetching a chain", () => {
     expect(f).toHaveBeenCalledTimes(4);
     await fetchChain("SPY", 790, KEYS, new Date(NOW.getTime() - 60_000), f);
     expect(f).toHaveBeenCalledTimes(6);
+  });
+
+  it("asks a third time, for exactly the reader's own contract, and asks again when that contract changes", async () => {
+    const mine = { [occ("2026-10-22", "C", 700)]: snap(), [occ("2026-10-22", "P", 700)]: snap() };
+    const f = vi.fn<typeof fetch>(async (input) => {
+      const q = new URL(String(input)).searchParams;
+      return q.get("expiration_date_gte") === "2026-10-22" ? body(mine) : q.get("expiration_date_gte") === "2026-10-12" ? body(near) : body(far);
+    });
+    const keep = { expiry: "2026-10-22", strike: 700 };
+    const got = await fetchChain("SPY", 780, KEYS, NOW, f, "https://data.example", keep);
+    expect(f).toHaveBeenCalledTimes(3);
+    const own = f.mock.calls.map((c) => new URL(String(c[0])).searchParams).find((q) => q.get("expiration_date_gte") === "2026-10-22")!;
+    expect([own.get("expiration_date_lte"), own.get("strike_price_gte"), own.get("strike_price_lte")]).toEqual(["2026-10-22", "700.000", "700.000"]);
+    expect(got.expiries.map((x) => x.date)).toEqual(["2026-10-12", "2026-10-22", "2026-10-30"]);
+    // The same contract again is answered from memory; another contract, or none, is not.
+    await fetchChain("SPY", 780, KEYS, new Date(NOW.getTime() + 1000), f, "https://data.example", keep);
+    expect(f).toHaveBeenCalledTimes(3);
+    await fetchChain("SPY", 780, KEYS, new Date(NOW.getTime() + 2000), f, "https://data.example", { expiry: "2026-10-22", strike: 705 });
+    expect(f).toHaveBeenCalledTimes(6);
+    await fetchChain("SPY", 780, KEYS, new Date(NOW.getTime() + 3000), f, "https://data.example");
+    expect(f).toHaveBeenCalledTimes(8);
   });
 
   it("follows further pages, but not for ever", async () => {
@@ -242,6 +321,16 @@ describe("the fixture chain", () => {
     }
   });
 
+  it("carries the reader's own contract wherever it sits", async () => {
+    const chain = await fixtureChain("SPY", NOW, false, { expiry: "2026-10-22", strike: 701 });
+    expect(chain.expiries.map((x) => x.date)).toEqual(["2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-22", "2026-10-30"]);
+    const own = chain.expiries.find((x) => x.date === "2026-10-22")!.contracts.filter((c) => c.strike === 701);
+    expect(own.map((c) => c.kind)).toEqual(["call", "put"]);
+    for (const c of own) for (const v of [c.bid, c.ask, c.iv, c.delta, c.volume]) expect(Number.isFinite(v)).toBe(true);
+    // Its strike is not added to the other expiries.
+    expect(chain.expiries[0]!.contracts.some((c) => c.strike === 701)).toBe(false);
+  });
+
   it("is empty for a name the fixture does not have, and damaged three ways when asked", async () => {
     expect((await fixtureChain("ZZZZ", NOW)).expiries).toEqual([]);
     const thin = (await fixtureChain("SPY", NOW, true)).expiries[0]!.contracts;
@@ -291,6 +380,12 @@ describe("GET /api/chain", () => {
     const thin = (await (await get("?s=SPY&px=780", "fx=partial.chain-thin")).json()) as { expiries: { contracts: { iv: number | null }[] }[] };
     expect(thin.expiries[0]!.contracts[0]!.iv).toBeNull();
     expect(VARIANT_FLAGS).toEqual(expect.arrayContaining(["chain-off", "chain-error", "chain-thin"]));
+    // The reader's own contract rides along in the address; a malformed one is ignored, not refused.
+    const kept = (await (await get("?s=SPY&px=780&x=2026-10-22&k=701")).json()) as { expiries: { date: string }[] };
+    expect(kept.expiries.map((x) => x.date)).toContain("2026-10-22");
+    const ignored = await get("?s=SPY&px=780&x=yesterday&k=-1");
+    expect(ignored.status).toBe(200);
+    expect(((await ignored.json()) as { expiries: unknown[] }).expiries).toHaveLength(5);
     // On a production deployment fixture mode is refused, so the cookie means nothing and the keys decide.
     vi.stubEnv("VERCEL_ENV", "production");
     for (const k of ["ALPACA_API_KEY_ID", "ALPACA_API_SECRET_KEY", "APCA_API_KEY_ID", "APCA_API_SECRET_KEY"]) vi.stubEnv(k, "");

@@ -1,38 +1,39 @@
 "use client";
 
 import { Calculator, RotateCw, TriangleAlert, X } from "lucide-react";
-import { useId, useMemo, useState, useSyncExternalStore } from "react";
+import { useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Empty } from "@/components/empty";
 import { fracPct, newYork, num, signed, weekDate } from "@/lib/format";
-import { contractView, daysToExpiry, defaultPick, MAX_CONTRACTS, minutesToExpiry, parsePick, pickKey, type Pick, type VolSource } from "@/lib/contract";
+import { bellMinute, contractView, daysToExpiry, defaultPick, MAX_CONTRACTS, minutesToExpiry, parsePick, pickKey, type Pick, type VolSource } from "@/lib/contract";
 import type { ChainResponse } from "@/lib/chain";
 import { MULTIPLIER } from "@/lib/longopt";
-import type { OptionsTicker } from "@/lib/options";
+import { sessionClock, type OptionsTicker } from "@/lib/options";
 import { cn } from "@/lib/utils";
 import { useLive, useLiveRead } from "./live-layer";
 import { useChain } from "./use-chain";
 
 // The chosen contract lives in the browser's own storage and nowhere else. Storage can be switched off (private
-// windows, strict settings); the choice then lasts as long as the page, from this map.
+// windows, strict settings); only then does the choice live in this map, for as long as the page. While storage
+// works the map stays empty, so a contract cleared in another tab is cleared here too.
 const memory = new Map<string, string>();
 const CHANGED = "tl-options-contract";
 
 function readStored(key: string): string | null {
   try {
-    return window.localStorage.getItem(key) ?? memory.get(key) ?? null;
+    return window.localStorage.getItem(key);
   } catch {
     return memory.get(key) ?? null;
   }
 }
 
 function writeStored(key: string, value: string | null) {
-  if (value === null) memory.delete(key);
-  else memory.set(key, value);
   try {
     if (value === null) window.localStorage.removeItem(key);
     else window.localStorage.setItem(key, value);
+    memory.delete(key);
   } catch {
-    // Storage refused: the map above still holds the choice for this page.
+    if (value === null) memory.delete(key);
+    else memory.set(key, value);
   }
   window.dispatchEvent(new Event(CHANGED));
 }
@@ -95,20 +96,30 @@ export function OptionsContract({ t, live }: { t: OptionsTicker; live: boolean }
   const read = useLiveRead(t);
   const [stored, setStored] = usePick(t.symbol);
   const [opened, setOpened] = useState(false);
-  /** What is in the Contracts box while it is being typed in: it has to be allowed to be empty for a moment. */
-  const [typed, setTyped] = useState<string | null>(null);
+  /**
+   * What is in a number box while it is being typed in. A box has to be allowed to hold "", "0" or "0." for a
+   * moment: writing the number in use back over each of those would garble what the reader is typing.
+   */
+  const [typed, setTyped] = useState<{ count?: string; paid?: string }>({});
   const ids = useId();
+  const section = useRef<HTMLElement>(null);
   const close = t.last?.close ?? null;
-  // A remembered contract that has expired is dropped the moment it is seen: there is nothing left to price.
-  const kept = stored && now !== null && (minutesToExpiry(stored.expiry, now) ?? 0) <= 0 ? null : stored;
+  const spot = read.price;
+  const left = (expiry: string, at: number) => minutesToExpiry(expiry, at, bellMinute(expiry, session, t.half_day)) ?? 0;
+  // A remembered contract that has expired is not shown: there is nothing left to price.
+  const kept = stored && now !== null && left(stored.expiry, now) <= 0 ? null : stored;
   const active = live && (opened || kept !== null);
-  const { feed, retry } = useChain(t.symbol, close, active);
+  // The strikes are asked for around the stock's price, in steps of half a percent of the close: near enough to
+  // follow a move, coarse enough that a ticking price does not ask again every two seconds.
+  const step = close !== null ? close * 0.005 : null;
+  const px = close === null || step === null || spot === null ? close : Math.round((Math.round(spot / step) * step) * 100) / 100;
+  const { feed, retry, reset } = useChain(t.symbol, px, active, kept ? `${kept.expiry}:${kept.strike}` : "");
   // An expiry whose bell has rung can linger in the feed for the rest of that day. It is not offered.
   const chain: ChainResponse | null = useMemo(() => {
     if (feed.status !== "ok" || now === null) return null;
-    return { ...feed.chain, expiries: feed.chain.expiries.filter((x) => (minutesToExpiry(x.date, now) ?? 0) > 0) };
-  }, [feed, now]);
-  const spot = read.price;
+    const ahead = (x: string) => (minutesToExpiry(x, now, bellMinute(x, session, t.half_day)) ?? 0) > 0;
+    return { ...feed.chain, expiries: feed.chain.expiries.filter((x) => ahead(x.date)) };
+  }, [feed, now, session, t.half_day]);
 
   if (!live || close === null) return null;
 
@@ -118,28 +129,44 @@ export function OptionsContract({ t, live }: { t: OptionsTicker; live: boolean }
       Contract
     </h3>
   );
+  // Each of these removes the button that was pressed. The keyboard goes somewhere sensible instead of to the page,
+  // where the desk's shortcuts would stop hearing keys: to the pane when it opens, to its button when it shuts.
+  const toPane = () => window.setTimeout(() => section.current?.focus(), 0);
+  const open = () => {
+    // An expired contract left in storage is cleared now that the reader is starting afresh.
+    if (stored && !kept) setStored(null);
+    setOpened(true);
+    toPane();
+  };
   const shut = () => {
     setStored(null);
     setOpened(false);
+    setTyped({});
+    reset();
+    window.setTimeout(() => section.current?.querySelector("button")?.focus(), 0);
   };
 
   if (!active) {
     return (
-      <section aria-label={`${t.symbol} contract`} data-contract="closed" className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t pt-3">
+      <section ref={section} aria-label={`${t.symbol} contract`} data-contract="closed" className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t pt-3">
         {heading}
-        <button type="button" onClick={() => setOpened(true)} className="hover:bg-accent rounded border px-2.5 py-1 text-xs font-medium">
+        <button type="button" onClick={open} className="hover:bg-accent rounded border px-2.5 py-1 text-xs font-medium">
           Price a call or put
         </button>
       </section>
     );
   }
 
-  const pick = kept ?? (chain && spot !== null ? defaultPick(chain, spot) : null);
+  // The default is the strike nearest the close, which holds still; nearest the live price, it would flip between
+  // two strikes with every tick of a stock sitting between them.
+  const pick = kept ?? (chain ? defaultPick(chain, close) : null);
   const expiry = chain?.expiries.find((x) => x.date === pick?.expiry) ?? null;
   const strikes = expiry ? expiry.contracts.filter((c) => c.kind === pick?.kind).map((c) => c.strike) : [];
   const state =
     feed.status === "off" ? "off" : feed.status === "error" ? "error" : feed.status !== "ok" || now === null ? "loading" : pick === null || spot === null ? "empty" : "ready";
-  const view = state === "ready" ? contractView(pick!, chain, t, spot!, now!, session, read.inSession) : null;
+  // Open by the clock, not by a quote: a last trade stamped before the bell would read as "in session" all evening.
+  const marketOpen = now !== null && sessionClock(session, Boolean(t.half_day), new Date(now))?.phase === "open";
+  const view = state === "ready" ? contractView(pick!, chain, t, spot!, now!, session, { marketOpen, priceIsLive: read.inSession }) : null;
 
   /** Change part of the pick. A new kind or expiry keeps the strike when it exists there, else takes the nearest. */
   const change = (part: Partial<Pick>) => {
@@ -151,7 +178,7 @@ export function OptionsContract({ t, live }: { t: OptionsTicker; live: boolean }
   };
 
   return (
-    <section aria-label={`${t.symbol} contract`} data-contract={state} className="grid gap-3 border-t pt-3">
+    <section ref={section} tabIndex={-1} aria-label={`${t.symbol} contract`} data-contract={state} className="grid gap-3 border-t pt-3 outline-none">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
         {heading}
         <span className="text-muted-foreground flex items-center gap-3 text-[0.6875rem]">
@@ -164,7 +191,7 @@ export function OptionsContract({ t, live }: { t: OptionsTicker; live: boolean }
       </div>
 
       {state === "loading" ? (
-        <div aria-busy="true" className="grid gap-2">
+        <div role="status" aria-busy="true" className="grid gap-2">
           <span className="sr-only">Loading option quotes</span>
           <span className="bg-muted h-8 rounded motion-safe:animate-pulse" />
           <span className="bg-muted h-24 rounded motion-safe:animate-pulse" />
@@ -175,7 +202,14 @@ export function OptionsContract({ t, live }: { t: OptionsTicker; live: boolean }
         <div role="alert" className="text-bad flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
           <TriangleAlert aria-hidden className="size-4 shrink-0" />
           Option quotes could not be read.
-          <button type="button" onClick={retry} className="text-foreground hover:bg-accent flex items-center gap-1 rounded border px-2 py-0.5 text-xs">
+          <button
+            type="button"
+            onClick={() => {
+              retry();
+              toPane();
+            }}
+            className="text-foreground hover:bg-accent flex items-center gap-1 rounded border px-2 py-0.5 text-xs"
+          >
             <RotateCw aria-hidden className="size-3" />
             Try again
           </button>
@@ -234,14 +268,14 @@ export function OptionsContract({ t, live }: { t: OptionsTicker; live: boolean }
                 min={1}
                 max={MAX_CONTRACTS}
                 step={1}
-                value={typed ?? pick.contracts}
+                value={typed.count ?? pick.contracts}
                 onChange={(ev) => {
-                  setTyped(ev.target.value);
+                  setTyped((cur) => ({ ...cur, count: ev.target.value }));
                   const n = Number(ev.target.value);
                   if (Number.isInteger(n) && n >= 1 && n <= MAX_CONTRACTS) change({ contracts: n });
                 }}
                 // Leaving the box puts back the number in use, whatever was left half typed.
-                onBlur={() => setTyped(null)}
+                onBlur={() => setTyped((cur) => ({ ...cur, count: undefined }))}
                 className={cn(FIELD, "w-16")}
               />
             </label>
@@ -254,11 +288,17 @@ export function OptionsContract({ t, live }: { t: OptionsTicker; live: boolean }
                 min={0.01}
                 step={0.01}
                 placeholder={view.contract?.ask != null && view.contract.ask > 0 ? `${num(view.contract.ask, 2)} ask` : "ask"}
-                value={pick.paid ?? ""}
+                value={typed.paid ?? pick.paid ?? ""}
                 onChange={(ev) => {
-                  const v = Number(ev.target.value);
-                  change({ paid: ev.target.value !== "" && v > 0 ? Math.round(v * 100) / 100 : null });
+                  const raw = ev.target.value;
+                  setTyped((cur) => ({ ...cur, paid: raw }));
+                  const v = Number(raw);
+                  // An empty box means "price it at the ask". Anything else counts only once it is a price:
+                  // "0" and "0." on the way to "0.05" change nothing.
+                  if (raw === "") change({ paid: null });
+                  else if (Number.isFinite(v) && v >= 0.01 && v <= 100_000) change({ paid: Math.round(v * 100) / 100 });
                 }}
+                onBlur={() => setTyped((cur) => ({ ...cur, paid: undefined }))}
                 className={cn(FIELD, "w-24")}
               />
             </label>
@@ -267,10 +307,10 @@ export function OptionsContract({ t, live }: { t: OptionsTicker; live: boolean }
           {view.expired ? (
             <Empty title="This contract has expired">Choose another expiry, or clear it.</Empty>
           ) : view.stale ? (
-            <p role="alert" className="text-warn flex items-start gap-2 text-sm">
+            <p role="status" className="text-warn flex items-start gap-2 text-sm">
               <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
-              This contract&apos;s last quote is {num(view.ageMin, 0)} minutes old, too old to price it from while the market is open. The numbers are
-              withheld until a newer quote arrives.
+              The newest option quote is {num(view.ageMin, 0)} minutes old, too old to price this contract from while the market is open. The numbers
+              are withheld until newer quotes arrive.
             </p>
           ) : (
             <>
@@ -303,13 +343,13 @@ export function OptionsContract({ t, live }: { t: OptionsTicker; live: boolean }
                     <span className="text-muted-foreground"> · {view.breakevenMoves <= 0 ? "already past" : `${num(view.breakevenMoves, 2)} day moves away`}</span>
                   ) : null}
                 </Figure>
-                <Figure label="Value now, estimate" title="The model's value per share at the stock's price now">
+                <Figure label={view.here === "Now" ? "Value now, estimate" : "Value at the last close, estimate"} title="The model's value per share at the stock's price shown in the table below">
                   {num(view.value, 2)}
                   {view.paidFrom === "entered" && view.pnlNow !== null ? <span className={tone(view.pnlNow)}> · {money(view.pnlNow)}</span> : null}
                 </Figure>
                 <Figure label="Delta · decay" title="How much the option moves per $1 of stock, and what an hour of waiting costs the whole position with the stock unchanged">
                   {view.delta !== null ? signed(view.delta, 2) : "—"}
-                  {view.decayHour !== null ? <span className="text-muted-foreground"> · ${num(view.decayHour * MULTIPLIER * pick.contracts)} an hour</span> : null}
+                  {view.decayHour !== null ? <span className="text-muted-foreground"> · ${num(Math.round(view.decayHour * MULTIPLIER * pick.contracts))} an hour</span> : null}
                 </Figure>
               </dl>
 
@@ -333,8 +373,8 @@ export function OptionsContract({ t, live }: { t: OptionsTicker; live: boolean }
                   </thead>
                   <tbody>
                     {view.rows.map((row) => (
-                      <tr key={row.level.label} className={cn("border-b last:border-b-0", row.level.label === "Now" && "shadow-[inset_2px_0_0_var(--primary)]")}>
-                        <th scope="row" className={cn("py-1.5 pr-2 text-left font-normal", row.level.label === "Now" && "pl-2")}>
+                      <tr key={row.level.label} className={cn("border-b last:border-b-0", row.level.label === view.here && "shadow-[inset_2px_0_0_var(--primary)]")}>
+                        <th scope="row" className={cn("py-1.5 pr-2 text-left font-normal", row.level.label === view.here && "pl-2")}>
                           <span className="font-mono">{num(row.level.price, 2)}</span>
                           <span className="text-muted-foreground ml-1.5 text-[0.6875rem]">{row.level.label}</span>
                         </th>
@@ -353,7 +393,8 @@ export function OptionsContract({ t, live }: { t: OptionsTicker; live: boolean }
           )}
 
           <p className="text-muted-foreground text-[0.6875rem]">
-            {view.contract?.at ? `Last quote ${newYork(view.contract.at, false)} New York. ` : ""}
+            {view.contract?.at ? `This contract's last quote: ${newYork(view.contract.at, false)} New York. ` : ""}
+            {read.inSession && read.stale ? "The stock's own price has stopped updating; these numbers use its last one. " : ""}
             {view.sigma === null && !view.expired && !view.stale ? "No volatility is available for this contract, so only its value at expiry is shown. " : ""}
             Estimates from a flat-volatility model; an American option can be worth a little more. They describe this contract and are not advice. The
             contract is remembered in this browser only.

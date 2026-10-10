@@ -62,6 +62,21 @@ export function parseSymbol(raw: string | null): string | null {
   return SYMBOL.test(s) ? s : null;
 }
 
+/** A contract the reader has chosen. The answer always carries its expiry and its strike, however far they have drifted from the price. */
+export interface Keep {
+  expiry: string;
+  strike: number;
+}
+
+/** The reader's own contract from `?x=2026-10-30&k=785`: a date from `today` to about a year out and a strike, or null. */
+export function parseKeep(x: string | null, k: string | null, today: string): Keep | null {
+  const strike = parsePrice(k);
+  if (x === null || strike === null || !/^\d{4}-\d{2}-\d{2}$/.test(x)) return null;
+  const at = Date.parse(`${x}T00:00:00Z`);
+  if (!Number.isFinite(at) || new Date(at).toISOString().slice(0, 10) !== x) return null;
+  return x >= today && x <= addDays(today, 400) ? { expiry: x, strike } : null;
+}
+
 /** The price the strikes are chosen around, from `?px=780.43`: a positive number under a million, or null. */
 export function parsePrice(raw: string | null): number | null {
   if (raw === null || !/^\d{1,6}(\.\d{1,4})?$/.test(raw.trim())) return null;
@@ -130,10 +145,10 @@ export function normaliseContract(kind: "call" | "put", strike: number, raw: Raw
 
 /**
  * What the page is offered from everything Alpaca returned: the nearest few expiries that have not passed, plus the
- * first one a fortnight or more out, each with the strikes nearest the stock's price. Calls before puts, strikes
- * rising, expiries rising.
+ * first one a fortnight or more out, each with the strikes nearest the stock's price. The reader's own contract,
+ * when they have one, is always among them. Calls before puts, strikes rising, expiries rising.
  */
-export function selectChain(snapshots: Record<string, RawSnapshot>, symbol: string, px: number, today: string): ChainExpiry[] {
+export function selectChain(snapshots: Record<string, RawSnapshot>, symbol: string, px: number, today: string, keep: Keep | null = null): ChainExpiry[] {
   const byExpiry = new Map<string, Map<number, { call?: ChainContract; put?: ChainContract }>>();
   for (const [occ, raw] of Object.entries(snapshots)) {
     const parts = parseOcc(occ, symbol);
@@ -144,24 +159,27 @@ export function selectChain(snapshots: Record<string, RawSnapshot>, symbol: stri
     strikes.set(parts.strike, pair);
     pair[parts.kind] = normaliseContract(parts.kind, parts.strike, raw);
   }
+  const own = keep;
   const dates = [...byExpiry.keys()].sort();
-  const keep = dates.slice(0, NEAR_EXPIRIES);
+  // The nearest few are counted without the reader's own expiry when it is a far one, so holding it does not push
+  // a near one out.
+  const kept = dates.filter((d) => d !== own?.expiry || d <= addDays(today, NEAR_DAYS)).slice(0, NEAR_EXPIRIES);
   const swing = dates.find((d) => d >= addDays(today, SWING_MIN_DAYS));
-  if (swing && !keep.includes(swing)) keep.push(swing);
-  return keep.map((date) => {
+  if (swing && !kept.includes(swing)) kept.push(swing);
+  if (own && byExpiry.has(own.expiry) && !kept.includes(own.expiry)) kept.push(own.expiry);
+  return kept.sort().map((date) => {
     const strikes = byExpiry.get(date)!;
-    const nearest = [...strikes.keys()]
-      .sort((a, b) => Math.abs(a - px) - Math.abs(b - px) || a - b)
-      .slice(0, STRIKES_PER_EXPIRY)
-      .sort((a, b) => a - b);
+    const chosen = [...strikes.keys()].sort((a, b) => Math.abs(a - px) - Math.abs(b - px) || a - b).slice(0, STRIKES_PER_EXPIRY);
+    if (own && own.expiry === date && strikes.has(own.strike) && !chosen.includes(own.strike)) chosen.push(own.strike);
+    const nearest = chosen.sort((a, b) => a - b);
     const contracts: ChainContract[] = [];
     for (const kind of ["call", "put"] as const) for (const k of nearest) if (strikes.get(k)![kind]) contracts.push(strikes.get(k)![kind]!);
     return { date, contracts };
   });
 }
 
-/** One name's last answer: what was offered, the price it was chosen around, and when it was fetched. */
-const cache = new Map<string, { at: number; px: number; expiries: ChainExpiry[] }>();
+/** One name's last answer: what was offered, the price and the contract it was chosen around, and when it was fetched. */
+const cache = new Map<string, { at: number; px: number; own: string; expiries: ChainExpiry[] }>();
 
 /** Test hook: forget the shared cache. */
 export function resetChainCache(): void {
@@ -194,14 +212,18 @@ async function page(
     token = typeof body?.next_page_token === "string" && body.next_page_token ? body.next_page_token : null;
     if (!token) break;
   }
+  // More was on offer than was read. The strikes nearest the price are still there; say so rather than nothing.
+  if (token) logEvent("chain.fetch", { outcome: "truncated", pages: MAX_PAGES });
   return out;
 }
 
 /**
  * The option chain for `symbol` around `px`, from Alpaca's indicative feed. Two calls upstream: the expiries of the
- * coming week, and those a fortnight to three weeks out. The answer is shared for CHAIN_CACHE_MS, unless the price
- * asked around has moved more than a percent since. Throws on a transport or HTTP error (the route answers 502)
- * and caches nothing from it; the keys and the response body are never logged.
+ * coming week, and those a fortnight to three weeks out; a third, for one expiry and one strike, when the reader
+ * has a contract of their own (`keep`), so it is quoted wherever it sits. The answer is shared for CHAIN_CACHE_MS,
+ * unless the price asked around has moved more than a percent since or the contract kept has changed. Throws on a
+ * transport or HTTP error (the route answers 502) and caches nothing from it; the keys and the response body are
+ * never logged.
  */
 export async function fetchChain(
   symbol: string,
@@ -210,20 +232,26 @@ export async function fetchChain(
   now: Date = new Date(),
   fetchImpl: typeof fetch = fetch,
   baseUrl: string = process.env.ALPACA_DATA_URL || DEFAULT_DATA_URL,
+  keep: Keep | null = null,
 ): Promise<ChainResponse> {
   const t = now.getTime();
   const hit = cache.get(symbol);
+  const own = keep ? `${keep.expiry}:${keep.strike}` : "";
   // An entry stamped after `now` (a clock that stepped back) is not trusted either.
-  const fresh = hit && t >= hit.at && t - hit.at < CHAIN_CACHE_MS && Math.abs(hit.px - px) <= 0.01 * px;
+  const fresh = hit && t >= hit.at && t - hit.at < CHAIN_CACHE_MS && Math.abs(hit.px - px) <= 0.01 * px && hit.own === own;
   if (!fresh) {
     const today = nyDate(now);
     const strikes = { strike_price_gte: (px * (1 - STRIKE_WINDOW)).toFixed(2), strike_price_lte: (px * (1 + STRIKE_WINDOW)).toFixed(2) };
-    const [near, far] = await Promise.all([
+    const k = keep ? keep.strike.toFixed(3) : "";
+    const [near, far, mine] = await Promise.all([
       page(symbol, { ...strikes, expiration_date_gte: today, expiration_date_lte: addDays(today, NEAR_DAYS) }, keys, fetchImpl, baseUrl),
       page(symbol, { ...strikes, expiration_date_gte: addDays(today, SWING_MIN_DAYS), expiration_date_lte: addDays(today, FAR_DAYS) }, keys, fetchImpl, baseUrl),
+      keep
+        ? page(symbol, { strike_price_gte: k, strike_price_lte: k, expiration_date_gte: keep.expiry, expiration_date_lte: keep.expiry }, keys, fetchImpl, baseUrl)
+        : Promise.resolve({}),
     ]);
     cache.delete(symbol);
-    cache.set(symbol, { at: t, px, expiries: selectChain({ ...near, ...far }, symbol, px, today) });
+    cache.set(symbol, { at: t, px, own, expiries: selectChain({ ...near, ...far, ...mine }, symbol, px, today, keep) });
     // A Map iterates in insertion order, and a refreshed name was just re-inserted: the first keys are the oldest.
     for (const s of cache.keys()) {
       if (cache.size <= CHAIN_MAX_CACHED) break;

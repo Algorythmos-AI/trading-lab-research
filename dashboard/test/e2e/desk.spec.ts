@@ -319,7 +319,7 @@ test("the contract pane prices the call or put the reader names, remembers it ac
   await expect(contract(page).getByRole("button", { name: "Call", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(contract(page)).toContainText("at the ask");
   await expect(contract(page).getByRole("columnheader", { name: "Expiry" })).toBeVisible();
-  await expect(contract(page).getByRole("rowheader", { name: /Now$/ })).toBeVisible();
+  await expect(contract(page).getByRole("rowheader", { name: /(Now|Last close)$/ })).toBeVisible();
   // Three puts bought at 2.00 on the last expiry offered, more than a fortnight out: $600 at risk, and with a
   // price paid there is a profit or loss now.
   await contract(page).getByRole("button", { name: "Put", exact: true }).click();
