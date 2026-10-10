@@ -160,11 +160,11 @@ export function OptionsDetail({ e, t }: { e: Options; t: OptionsTicker }) {
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 border-t pt-3 sm:grid-cols-5">
         <Fact label="Support" title="Nearest zone below the close, and how far in ATRs">
-          {near.support ? num(near.support.edge, 2) : "none near"}
+          {near.support ? num(near.support.edge, 2) : close === null ? "—" : "none near"}
           {near.support?.distAtr != null ? <span className="text-muted-foreground"> · {num(near.support.distAtr, 1)} ATR</span> : null}
         </Fact>
         <Fact label="Resistance" title="Nearest zone above the close, and how far in ATRs">
-          {near.resistance ? num(near.resistance.edge, 2) : "none near"}
+          {near.resistance ? num(near.resistance.edge, 2) : close === null ? "—" : "none near"}
           {near.resistance?.distAtr != null ? <span className="text-muted-foreground"> · {num(near.resistance.distAtr, 1)} ATR</span> : null}
         </Fact>
         <Fact label="1-day move" title="What the options market prices for one day">

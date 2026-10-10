@@ -62,8 +62,9 @@ test("pages carry a nonce CSP and still run their scripts", async ({ page }) => 
   }
 });
 
-test("the options page shows the glance strip, the rules and a level map per name", async ({ page }) => {
-  await page.goto("/options");
+// The page as it was before the desk stays at ?view=classic for one release; these three tests keep it honest.
+test("the classic options page shows the glance strip, the rules and a level map per name", async ({ page }) => {
+  await page.goto("/options?view=classic");
   await expect(page.getByText("Levels for Mon 12 Oct")).toBeVisible();
   const glance = page.getByRole("list", { name: "Every name against its nearest zones" });
   await expect(glance.getByRole("link", { name: "SPY", exact: true })).toBeVisible();
@@ -86,8 +87,8 @@ test("the options page shows the glance strip, the rules and a level map per nam
   expect(overflow).toBeLessThanOrEqual(0);
 });
 
-test("options focus mode keeps the strip and the maps and hides the rest", async ({ page }) => {
-  await page.goto("/options");
+test("classic options focus mode keeps the strip and the maps and hides the rest", async ({ page }) => {
+  await page.goto("/options?view=classic");
   const rules = page.getByRole("heading", { name: "Entry rules" });
   await expect(rules).toBeVisible();
   await page.getByRole("button", { name: "Focus mode" }).click();
@@ -104,7 +105,7 @@ test("options focus mode keeps the strip and the maps and hides the rest", async
 test("a live quote older than 30 seconds reads as stale", async ({ page }) => {
   // Fixture quotes are SPY's last trade at 11:00 New York on the fixture's session; a minute later it is stale.
   await page.clock.setFixedTime(new Date("2026-10-12T15:01:00Z"));
-  await page.goto("/options");
+  await page.goto("/options?view=classic");
   const spy = page.getByRole("list", { name: "Every name against its nearest zones" }).getByRole("listitem").filter({ hasText: "SPY" });
   await expect(spy).toContainText("STALE");
 });

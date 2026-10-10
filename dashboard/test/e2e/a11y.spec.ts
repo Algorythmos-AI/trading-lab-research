@@ -3,7 +3,21 @@ import { expect, test, type BrowserContext } from "@playwright/test";
 
 // CI-only. Every stocks page, in both themes, must pass axe's WCAG 2.1 A and AA rules with nothing waived. The
 // Options page is also scanned in its failure states, since an error notice has to be as readable as the data.
-const PAGES = ["/", "/today", "/radar", "/options", "/strategies", "/research", "/operations", "/risk", "/engineering", "/glossary"];
+const PAGES = [
+  "/",
+  "/today",
+  "/radar",
+  "/options?view=brief",
+  "/options?view=live",
+  "/options?view=review",
+  "/options?view=classic",
+  "/strategies",
+  "/research",
+  "/operations",
+  "/risk",
+  "/engineering",
+  "/glossary",
+];
 const OPTIONS_STATES = ["partial", "poison", "empty", "error"];
 const TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
 
@@ -36,7 +50,7 @@ for (const theme of ["light", "dark"] as const) {
     test(`/options in the ${fx} state passes the accessibility scan in ${theme}`, async ({ page, context, baseURL }) => {
       await useTheme(context, theme);
       await context.addCookies([{ name: "fx", value: fx, url: baseURL! }]);
-      await page.goto("/options");
+      await page.goto("/options?view=brief");
       await expect(page.getByRole("heading", { level: 1, name: "Options" })).toBeAttached();
       expect(await scan(page)).toEqual([]);
     });

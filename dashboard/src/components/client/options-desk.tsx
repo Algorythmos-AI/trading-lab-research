@@ -27,6 +27,7 @@ import {
 import { cn } from "@/lib/utils";
 import { FeedPill, StateChip, useLive } from "./live-layer";
 import { OptionsDetail, Tick } from "./options-detail";
+import { PaneBoundary } from "./pane-boundary";
 
 const VIEW_LABEL: Record<DeskView, string> = { brief: "Brief", live: "Live", review: "Review" };
 const VIEW_HINT: Record<DeskView, string> = {
@@ -116,7 +117,8 @@ const COLUMNS: Record<DeskView, Column[]> = {
       hint: "Nearest zone below the close, and how far in ATRs",
       width: "w-[6rem]",
       sort: (r) => r.near.support?.distAtr,
-      cell: (r) => <Distance edge={r.near.support?.edge} atr={r.near.support?.distAtr} />,
+      // Without a close there is nothing to measure from: a dash, not "none near".
+      cell: (r) => (r.close === null ? dash : <Distance edge={r.near.support?.edge} atr={r.near.support?.distAtr} />),
       wideOnly: true,
     },
     {
@@ -125,7 +127,7 @@ const COLUMNS: Record<DeskView, Column[]> = {
       hint: "Nearest zone above the close, and how far in ATRs",
       width: "w-[6rem]",
       sort: (r) => r.near.resistance?.distAtr,
-      cell: (r) => <Distance edge={r.near.resistance?.edge} atr={r.near.resistance?.distAtr} />,
+      cell: (r) => (r.close === null ? dash : <Distance edge={r.near.resistance?.edge} atr={r.near.resistance?.distAtr} />),
       wideOnly: true,
     },
   ],
@@ -380,17 +382,17 @@ export function OptionsDesk({
           </button>
         </div>
         {help ? (
-          <dl id="desk-shortcuts" className="text-muted-foreground flex basis-full flex-wrap gap-x-6 gap-y-1 text-[0.6875rem]">
-            {SHORTCUTS.map(([keys, what]) => (
-              <div key={keys} className="flex items-baseline gap-2">
-                <dt className="text-foreground bg-muted rounded px-1.5 py-0.5 font-mono">{keys}</dt>
-                <dd>{what}</dd>
-              </div>
-            ))}
-            <div>
-              <dd>They work while focus is inside the desk.</dd>
-            </div>
-          </dl>
+          <div id="desk-shortcuts" className="text-muted-foreground flex basis-full flex-wrap items-baseline gap-x-6 gap-y-1 text-[0.6875rem]">
+            <dl className="flex flex-wrap gap-x-6 gap-y-1">
+              {SHORTCUTS.map(([keys, what]) => (
+                <div key={keys} className="flex items-baseline gap-2">
+                  <dt className="text-foreground bg-muted rounded px-1.5 py-0.5 font-mono">{keys}</dt>
+                  <dd>{what}</dd>
+                </div>
+              ))}
+            </dl>
+            <p>They work while focus is inside the desk.</p>
+          </div>
         ) : null}
         {stale ? (
           <p role="alert" className="text-bad flex basis-full items-start gap-2 text-sm">
@@ -403,91 +405,100 @@ export function OptionsDesk({
 
       <div className="xl:grid xl:min-h-0 xl:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
         <div data-desk-monitor className="border-b xl:min-h-0 xl:overflow-y-auto xl:border-r xl:border-b-0">
-          <table className="w-full table-fixed border-collapse text-[0.8125rem]">
-            <caption className="sr-only">
-              Every name in the {VIEW_LABEL[view]} view. Choose a name to see its level map.
-            </caption>
-            <colgroup>
-              <col className="w-[5.75rem]" />
-              {columns.map((c) => (
-                <col key={c.key} className={cn(c.width, c.wideOnly && "max-md:hidden")} />
-              ))}
-            </colgroup>
-            <thead className="bg-card sticky top-0 z-10">
-              <tr className="border-b">
-                <th scope="col" className="text-muted-foreground px-3 py-2 text-left text-[0.6875rem] font-medium">
-                  Name
-                </th>
-                {columns.map((c) => {
-                  const dir = active?.key === c.key ? sort!.dir : null;
+          {/* The monitor and the selected name fail apart: a name that cannot be drawn leaves the board standing. */}
+          <PaneBoundary name="The monitor">
+            <table className="w-full table-fixed border-collapse text-[0.8125rem]">
+              <caption className="sr-only">
+                Every name in the {VIEW_LABEL[view]} view. Choose a name to see its level map.
+              </caption>
+              <colgroup>
+                <col className="w-[5.75rem]" />
+                {columns.map((c) => (
+                  <col key={c.key} className={cn(c.width, c.wideOnly && "max-md:hidden")} />
+                ))}
+              </colgroup>
+              <thead className="bg-card sticky top-0 z-10">
+                <tr className="border-b">
+                  <th scope="col" className="text-muted-foreground px-3 py-2 text-left text-[0.6875rem] font-medium">
+                    Name
+                  </th>
+                  {columns.map((c) => {
+                    const dir = active?.key === c.key ? sort!.dir : null;
+                    return (
+                      <th
+                        key={c.key}
+                        scope="col"
+                        title={c.hint}
+                        aria-sort={dir === "asc" ? "ascending" : dir === "desc" ? "descending" : undefined}
+                        className={cn("text-muted-foreground px-2 py-2 text-[0.6875rem] font-medium", c.align === "left" ? "text-left" : "text-right", c.wideOnly && "max-md:hidden")}
+                      >
+                        {c.sort ? (
+                          <button type="button" onClick={() => cycleSort(c)} className={cn("hover:text-foreground inline-flex items-center gap-0.5 rounded", dir && "text-foreground")}>
+                            {c.head}
+                            {dir === "asc" ? <ArrowUp aria-hidden className="size-3" /> : dir === "desc" ? <ArrowDown aria-hidden className="size-3" /> : null}
+                            <span className="sr-only">: {c.hint}. Sort.</span>
+                          </button>
+                        ) : (
+                          <>
+                            {c.head}
+                            <span className="sr-only">: {c.hint}</span>
+                          </>
+                        )}
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {ordered.map((r) => {
+                  const on = r.t.symbol === selected?.t.symbol;
+                  const testing = r.read.inSession && (r.read.state === "TESTING SUPPORT" || r.read.state === "TESTING RESISTANCE");
+                  const chip = r.t.close_strength?.chip;
                   return (
-                    <th
-                      key={c.key}
-                      scope="col"
-                      title={c.hint}
-                      aria-sort={dir === "asc" ? "ascending" : dir === "desc" ? "descending" : undefined}
-                      className={cn("text-muted-foreground px-2 py-2 text-[0.6875rem] font-medium", c.align === "left" ? "text-left" : "text-right", c.wideOnly && "max-md:hidden")}
-                    >
-                      {c.sort ? (
-                        <button type="button" onClick={() => cycleSort(c)} className={cn("hover:text-foreground inline-flex items-center gap-0.5 rounded", dir && "text-foreground")}>
-                          {c.head}
-                          {dir === "asc" ? <ArrowUp aria-hidden className="size-3" /> : dir === "desc" ? <ArrowDown aria-hidden className="size-3" /> : null}
-                          <span className="sr-only">: {c.hint}. Sort.</span>
-                        </button>
-                      ) : (
-                        <>
-                          {c.head}
-                          <span className="sr-only">: {c.hint}</span>
-                        </>
+                    <tr
+                      key={r.t.symbol}
+                      data-desk-row={r.t.symbol}
+                      onClick={() => select(r.t.symbol)}
+                      className={cn(
+                        "h-11 cursor-pointer border-b last:border-b-0",
+                        on ? "bg-accent shadow-[inset_2px_0_0_var(--primary)]" : testing ? "bg-warn-soft" : "hover:bg-muted/60",
                       )}
-                    </th>
+                    >
+                      <th scope="row" className="px-3 text-left font-normal">
+                        <button
+                          type="button"
+                          ref={(el) => {
+                            if (el) rowButtons.current.set(r.t.symbol, el);
+                            else rowButtons.current.delete(r.t.symbol);
+                          }}
+                          aria-pressed={on}
+                          className="flex items-center gap-1.5 rounded font-mono font-semibold"
+                        >
+                          {chip ? <span aria-hidden className={cn("inline-block size-2 rounded-[2px]", CHIP_DOT[chip])} title={CHIP_LABEL[chip] ?? chip} /> : null}
+                          {r.t.symbol}
+                          {chip ? <span className="sr-only">, {CHIP_LABEL[chip] ?? chip}</span> : null}
+                        </button>
+                      </th>
+                      {columns.map((c) => (
+                        <td key={c.key} className={cn("px-2 font-mono", c.align === "left" ? "text-left" : "text-right", c.wideOnly && "max-md:hidden")}>
+                          {c.cell(r)}
+                        </td>
+                      ))}
+                    </tr>
                   );
                 })}
-              </tr>
-            </thead>
-            <tbody>
-              {ordered.map((r) => {
-                const on = r.t.symbol === selected?.t.symbol;
-                const testing = r.read.inSession && (r.read.state === "TESTING SUPPORT" || r.read.state === "TESTING RESISTANCE");
-                const chip = r.t.close_strength?.chip;
-                return (
-                  <tr
-                    key={r.t.symbol}
-                    data-desk-row={r.t.symbol}
-                    onClick={() => select(r.t.symbol)}
-                    className={cn(
-                      "h-11 cursor-pointer border-b last:border-b-0",
-                      on ? "bg-accent shadow-[inset_2px_0_0_var(--primary)]" : testing ? "bg-warn-soft" : "hover:bg-muted/60",
-                    )}
-                  >
-                    <th scope="row" className="px-3 text-left font-normal">
-                      <button
-                        type="button"
-                        ref={(el) => {
-                          if (el) rowButtons.current.set(r.t.symbol, el);
-                          else rowButtons.current.delete(r.t.symbol);
-                        }}
-                        aria-pressed={on}
-                        className="flex items-center gap-1.5 rounded font-mono font-semibold"
-                      >
-                        {chip ? <span aria-hidden className={cn("inline-block size-2 rounded-[2px]", CHIP_DOT[chip])} title={CHIP_LABEL[chip] ?? chip} /> : null}
-                        {r.t.symbol}
-                        {chip ? <span className="sr-only">, {CHIP_LABEL[chip] ?? chip}</span> : null}
-                      </button>
-                    </th>
-                    {columns.map((c) => (
-                      <td key={c.key} className={cn("px-2 font-mono", c.align === "left" ? "text-left" : "text-right", c.wideOnly && "max-md:hidden")}>
-                        {c.cell(r)}
-                      </td>
-                    ))}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          </PaneBoundary>
         </div>
 
-        <div className="xl:min-h-0 xl:overflow-y-auto">{selected ? <OptionsDetail key={selected.t.symbol} e={e} t={selected.t} /> : null}</div>
+        <div className="xl:min-h-0 xl:overflow-y-auto">
+          {selected ? (
+            <PaneBoundary key={selected.t.symbol} name={selected.t.symbol}>
+              <OptionsDetail e={e} t={selected.t} />
+            </PaneBoundary>
+          ) : null}
+        </div>
       </div>
     </section>
   );

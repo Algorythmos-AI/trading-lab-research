@@ -116,6 +116,9 @@ describe("monitor helpers", () => {
     expect(aapl.totalR).toBeCloseTo(-1.156, 3);
     expect(paperFor(e, "GOOGL")).toEqual({ rows: [], n: 0, wins: 0, totalR: null });
     expect(paperFor({ ...e, paper: undefined }, "AAPL").n).toBe(0);
+    // A corrupt stored edition can hold a row that is not a trade; the monitor must still be able to count.
+    const corrupt = { ...e, paper: [null, ...e.paper!] } as unknown as Options;
+    expect(paperFor(corrupt, "AAPL").n).toBe(2);
   });
 
   it("finds a named level", () => {

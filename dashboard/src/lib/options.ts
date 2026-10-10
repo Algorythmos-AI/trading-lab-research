@@ -681,9 +681,12 @@ export function sortByNumber<T>(rows: readonly T[], value: (row: T) => number | 
     .map((x) => x.row);
 }
 
-/** One name's paper record in an edition: its trades, how many won, and their total in R. */
+/**
+ * One name's paper record in an edition: its trades, how many won, and their total in R. A row that is not a
+ * trade at all (a corrupt stored edition) is skipped, so the monitor that calls this for every name still draws.
+ */
 export function paperFor(e: Options, symbol: string): { rows: PaperTrade[]; n: number; wins: number; totalR: number | null } {
-  const rows = (e.paper ?? []).filter((p) => p.symbol === symbol);
+  const rows = (e.paper ?? []).filter((p) => p !== null && typeof p === "object" && p.symbol === symbol);
   const scored = rows.filter((p) => isNum(p.r));
   return {
     rows,
