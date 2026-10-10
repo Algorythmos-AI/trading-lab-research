@@ -185,6 +185,7 @@ const CRYPTO_PAGES = [
   { path: "/crypto/learning", heading: "Machine learning" },
   { path: "/crypto/operations", heading: "Operations" },
   { path: "/crypto/risk", heading: "Risk" },
+  { path: "/crypto/engineering", heading: "Engineering" },
 ];
 
 for (const { path, heading } of CRYPTO_PAGES) {
@@ -231,4 +232,22 @@ test("the desk switch moves between the two desks, each with its own sections", 
   await page.getByRole("navigation", { name: "Desk" }).getByRole("link", { name: "Stocks" }).click();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Strategies", exact: true })).toBeAttached();
+});
+
+test("each desk has its own Engineering wiki, and both show the shared Lab platform", async ({ page }) => {
+  for (const [path, first] of [
+    ["/engineering", "Plans and history"],
+    ["/crypto/engineering", "The desk's jobs"],
+  ] as const) {
+    await page.goto(path);
+    await expect(page.getByRole("heading", { level: 2, name: "Lab platform" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: first, exact: true })).toBeAttached();
+    for (const name of ["How a change ships", "Recent check runs", "What leaves the host", "The trading host"]) {
+      await expect(page.getByRole("heading", { name, exact: true })).toBeAttached();
+    }
+    await expect(page.getByRole("img", { name: /^How a change ships\./ })).toBeAttached();
+    await expect(page.getByRole("img", { name: /^Recent check runs: security/ })).toBeAttached();
+  }
+  // The crypto wiki lists the desk's jobs from the crypto snapshot.
+  await expect(page.getByRole("list", { name: "The crypto desk's jobs and their last runs" })).toContainText("Bar cycle");
 });

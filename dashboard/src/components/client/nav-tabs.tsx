@@ -18,7 +18,7 @@ export const NAV = [
   { href: "/engineering", label: "Engineering" },
 ] as const;
 
-/** The crypto desk's sections (ADR 0005). Engineering is one page for the whole lab. */
+/** The crypto desk's sections (ADR 0005). Each desk has its own Engineering wiki; the Lab platform part is shared. */
 export const CRYPTO_NAV = [
   { href: "/crypto", label: "Overview" },
   { href: "/crypto/market", label: "Market" },
@@ -27,7 +27,7 @@ export const CRYPTO_NAV = [
   { href: "/crypto/learning", label: "Machine learning" },
   { href: "/crypto/operations", label: "Operations" },
   { href: "/crypto/risk", label: "Risk" },
-  { href: "/engineering", label: "Engineering" },
+  { href: "/crypto/engineering", label: "Engineering" },
 ] as const;
 
 export function NavTabs() {

@@ -249,3 +249,23 @@
 [data-focus="on"] details {
   display: none;
 }
+
+/* Engineering wikis: data paths flow along their line, a running job's dot pulses. The reduced-motion rule in the
+   base layer stops both. */
+.wiki-flow {
+  stroke-dasharray: 6 5;
+  animation: wiki-flow 1.6s linear infinite;
+}
+@keyframes wiki-flow {
+  to {
+    stroke-dashoffset: -22;
+  }
+}
+.wiki-pulse {
+  animation: wiki-pulse 1.8s ease-in-out infinite;
+}
+@keyframes wiki-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}

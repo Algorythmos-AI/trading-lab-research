@@ -1,91 +1,56 @@
-import { Flag, GitPullRequest, Map as MapIcon, Milestone, Rocket, ScrollText } from "lucide-react";
+import { Flag, Map as MapIcon, Milestone, Rocket, ScrollText } from "lucide-react";
 import { Empty } from "@/components/empty";
 import { Meter } from "@/components/meter";
 import { NoSnapshot } from "@/components/no-snapshot";
 import { PageHeading } from "@/components/page-heading";
 import { Panel } from "@/components/panel";
 import { StatusBadge } from "@/components/status";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { LAB_PLATFORM_TOC, LabPlatform } from "@/components/wiki/lab-platform";
+import { WikiLayout, WikiSection, type TocGroup } from "@/components/wiki/kit";
 import { num, shortDate, sydney, txt } from "@/lib/format";
-import { ciTone, humanize, severityTone } from "@/lib/labels";
+import { humanize, severityTone } from "@/lib/labels";
 import { loadSnapshot } from "@/lib/snapshot";
 import { entries, list, type Snapshot } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Engineering" };
 
+const TOC: TocGroup[] = [
+  { title: "Stocks desk", items: [{ id: "plans", label: "Plans and history" }] },
+  LAB_PLATFORM_TOC,
+];
+
 export default async function EngineeringPage() {
   const result = await loadSnapshot();
+  const s = result.status === "ok" ? result.snapshot : null;
   return (
     <>
       <PageHeading
         title="Engineering"
-        intro="The software side of the lab: automated checks on each change, milestones, releases and what is planned next."
+        intro="How the stocks desk is built: its plans and history, and the lab platform it shares with the crypto desk. Pictures lead; the dots on them are live."
       />
-      {result.status !== "ok" ? (
-        <NoSnapshot status={result.status} />
-      ) : (
-        <>
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-            <RunsPanel s={result.snapshot} />
-            <MilestonesPanel s={result.snapshot} />
-          </div>
-          <RoadmapPanel s={result.snapshot} />
-          <div className="grid gap-5 lg:grid-cols-2">
-            <ReleasesPanel s={result.snapshot} />
-            <TimelinePanel s={result.snapshot} />
-          </div>
-        </>
-      )}
+      {result.status !== "ok" ? <NoSnapshot status={result.status} /> : null}
+      <WikiLayout toc={TOC}>
+        {s ? (
+          <WikiSection
+            id="plans"
+            eyebrow="Stocks desk"
+            title="Plans and history"
+            lede="Planned engineering work, in order, with the milestones it rolls up to, the tagged releases and the dates that shaped the lab."
+          >
+            <div className="grid gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+              <RoadmapPanel s={s} />
+              <MilestonesPanel s={s} />
+            </div>
+            <div className="grid gap-5 lg:grid-cols-2">
+              <ReleasesPanel s={s} />
+              <TimelinePanel s={s} />
+            </div>
+          </WikiSection>
+        ) : null}
+        <LabPlatform s={s} />
+      </WikiLayout>
     </>
-  );
-}
-
-function RunsPanel({ s }: { s: Snapshot }) {
-  const runs = list(s.platform?.runs);
-  const required = s.platform?.required_checks;
-  return (
-    <Panel
-      title="Automated checks"
-      icon={GitPullRequest}
-      means={`Recent runs of the test and security checks that guard every change to ${s.platform?.ci_repo ?? "this repository"}. Required checks block a merge until they pass.`}
-      action={
-        required === true ? (
-          <StatusBadge tone="good">Required checks on</StatusBadge>
-        ) : required === false ? (
-          <StatusBadge tone="warn">Required checks off</StatusBadge>
-        ) : null
-      }
-    >
-      {runs.length === 0 ? (
-        <Empty title="No check runs in this snapshot" />
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Check</TableHead>
-              <TableHead>Result</TableHead>
-              <TableHead>Branch</TableHead>
-              <TableHead>When (Sydney)</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {runs.map((r, i) => (
-              <TableRow key={`${r.workflow}-${r.created}-${i}`}>
-                <TableCell className="font-medium">{txt(r.workflow)}</TableCell>
-                <TableCell>
-                  <StatusBadge tone={ciTone(r.conclusion)}>{r.conclusion ? humanize(r.conclusion) : "In progress"}</StatusBadge>
-                </TableCell>
-                <TableCell className="max-w-48 truncate font-mono text-xs" title={r.branch ?? undefined}>
-                  {txt(r.branch)}
-                </TableCell>
-                <TableCell>{sydney(r.created)}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
-    </Panel>
   );
 }
 

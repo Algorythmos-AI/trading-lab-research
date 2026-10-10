@@ -63,7 +63,7 @@ beforeEach(() => {
 describe("which desk", () => {
   it("comes from the path for pages and from the body for snapshots", () => {
     expect(["/", "/risk", "/engineering", "/cryptography"].map(deskOfPath)).toEqual(["stocks", "stocks", "stocks", "stocks"]);
-    expect(["/crypto", "/crypto/risk"].map(deskOfPath)).toEqual(["crypto", "crypto"]);
+    expect(["/crypto", "/crypto/risk", "/crypto/engineering"].map(deskOfPath)).toEqual(["crypto", "crypto", "crypto"]);
     expect(deskOf(crypto())).toBe("crypto");
     expect(deskOf(fixture())).toBe("stocks");
     expect(deskOf({ schema: "something-else" })).toBe("stocks");
