@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   clockSpan,
   closeMinute,
+  mapReadout,
+  mapView,
+  priceAtY,
   isDeskView,
   levelPrice,
   movesFromClose,
@@ -125,5 +128,52 @@ describe("monitor helpers", () => {
     expect(levelPrice(spy, "PDH")).toBeGreaterThan(0);
     expect(levelPrice(spy, "NOPE")).toBeNull();
     expect(levelPrice({ ...spy, levels: undefined }, "PDH")).toBeNull();
+  });
+});
+
+describe("the map crosshair", () => {
+  const spy = e.tickers.find((t) => t.symbol === "SPY")!;
+
+  it("turns a height on the map into a price, and stays inside the plotted window", () => {
+    // A window from 100 to 200 drawn between heights 10 (top) and 110 (bottom).
+    expect(priceAtY(10, 100, 200, 10, 110)).toBe(200);
+    expect(priceAtY(110, 100, 200, 10, 110)).toBe(100);
+    expect(priceAtY(60, 100, 200, 10, 110)).toBe(150);
+    expect(priceAtY(-50, 100, 200, 10, 110)).toBe(200);
+    expect(priceAtY(999, 100, 200, 10, 110)).toBe(100);
+    // A window with no height or no span cannot be read: the low is returned rather than NaN.
+    expect(priceAtY(5, 100, 100, 10, 110)).toBe(100);
+    expect(priceAtY(5, 100, 200, 10, 10)).toBe(100);
+  });
+
+  it("measures a price from the close in dollars, ATRs and expected moves", () => {
+    const close = spy.last!.close;
+    const zones = mapView(spy)!.zones;
+    const at = mapReadout(spy, close + spy.atr14!, zones);
+    expect(at.fromClose).toBeCloseTo(spy.atr14!, 9);
+    expect(at.atrs).toBeCloseTo(1, 9);
+    expect(at.moves).toBeCloseTo(spy.atr14! / spy.expected_move!.day!, 9);
+    expect(mapReadout(spy, close, zones)).toMatchObject({ fromClose: 0, atrs: 0, moves: 0 });
+  });
+
+  it("names the zone a price is inside, the heaviest when two overlap, and none outside every zone", () => {
+    const zones = mapView(spy)!.zones;
+    const first = zones[0]!;
+    const mid = (first.zone.lo + first.zone.hi) / 2;
+    expect(mapReadout(spy, mid, zones).zone).not.toBeNull();
+    const far = Math.max(...zones.map((z) => z.zone.hi)) + 1000;
+    expect(mapReadout(spy, far, zones).zone).toBeNull();
+    const light = { zone: { lo: 10, hi: 20, side: "support" as const, weight: 1 }, tone: "support" as const };
+    const heavy = { zone: { lo: 15, hi: 25, side: "resistance" as const, weight: 6 }, tone: "resistance" as const };
+    expect(mapReadout(spy, 17, [light, heavy]).zone).toBe(heavy);
+    expect(mapReadout(spy, 17, [heavy, light]).zone).toBe(heavy);
+    expect(mapReadout(spy, 12, [light, heavy]).zone).toBe(light);
+  });
+
+  it("leaves a distance unknown rather than wrong when the edition lacks what it needs", () => {
+    const zones = mapView(spy)!.zones;
+    expect(mapReadout({ ...spy, atr14: null }, 800, zones).atrs).toBeNull();
+    expect(mapReadout({ ...spy, expected_move: null }, 800, zones).moves).toBeNull();
+    expect(mapReadout({ ...spy, last: null }, 800, zones)).toMatchObject({ fromClose: null, atrs: null, moves: null });
   });
 });

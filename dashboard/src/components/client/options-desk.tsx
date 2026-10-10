@@ -21,6 +21,7 @@ import {
   viewForClock,
   type DeskView,
   type LiveRead,
+  type MapLayer,
   type Options,
   type OptionsTicker,
 } from "@/lib/options";
@@ -280,6 +281,13 @@ export function OptionsDesk({
   const [symbol, setSymbol] = useState<string | null>(initialSymbol);
   const [sort, setSort] = useState<{ view: DeskView; key: string; dir: "asc" | "desc" } | null>(null);
   const [help, setHelp] = useState(false);
+  const [hiddenLayers, setHiddenLayers] = useState<ReadonlySet<MapLayer>>(new Set());
+  const toggleLayer = (layer: MapLayer) =>
+    setHiddenLayers((cur) => {
+      const next = new Set(cur);
+      if (!next.delete(layer)) next.add(layer);
+      return next;
+    });
   const rowButtons = useRef(new Map<string, HTMLButtonElement>());
   const frame = useRef<HTMLElement>(null);
 
@@ -525,7 +533,7 @@ export function OptionsDesk({
         <div className="xl:min-h-0 xl:overflow-y-auto">
           {selected ? (
             <PaneBoundary key={selected.t.symbol} name={selected.t.symbol}>
-              <OptionsDetail e={e} t={selected.t} />
+              <OptionsDetail e={e} t={selected.t} hiddenLayers={hiddenLayers} onToggleLayer={toggleLayer} />
             </PaneBoundary>
           ) : null}
         </div>

@@ -254,6 +254,14 @@
   }
 }
 
+/* Level map layers a reader has switched off: the wrapper lists them in data-hide. */
+[data-hide~="zones"] [data-layer="zones"],
+[data-hide~="candles"] [data-layer="candles"],
+[data-hide~="move"] [data-layer="move"],
+[data-hide~="labels"] [data-layer="labels"] {
+  display: none;
+}
+
 /* A status chip that keeps its own backdrop: an opaque colour (the soft tint flattened onto the card), not a
    translucent tint over whatever row is behind it, so its text has the same contrast on a highlighted or selected
    row as on a plain one. */

@@ -12,13 +12,17 @@ import {
   chipTone,
   ladder,
   levelPrice,
+  MAP_LAYER_LABEL,
+  MAP_LAYERS,
   mapView,
+  moveBands,
   movesFromClose,
   nearest,
   paperFor,
   RICH_IVP,
   RULE_STATUS_LABEL,
   ruleTone,
+  type MapLayer,
   type Options,
   type OptionsTicker,
   type Rung,
@@ -74,7 +78,18 @@ function ZoneRow({ r, side }: { r: Rung; side: "above" | "at" | "below" }) {
  * side, and what the rules have done on it. Every number comes from the edition or the shared live feed; a missing
  * one shows as a dash.
  */
-export function OptionsDetail({ e, t }: { e: Options; t: OptionsTicker }) {
+export function OptionsDetail({
+  e,
+  t,
+  hiddenLayers,
+  onToggleLayer,
+}: {
+  e: Options;
+  t: OptionsTicker;
+  /** Map layers the reader has switched off. Held by the desk, so the choice survives a change of name. */
+  hiddenLayers: ReadonlySet<MapLayer>;
+  onToggleLayer: (layer: MapLayer) => void;
+}) {
   const read = useLiveRead(t);
   const close = t.last?.close ?? null;
   const price = read.price;
@@ -86,8 +101,14 @@ export function OptionsDetail({ e, t }: { e: Options; t: OptionsTicker }) {
   const pdh = levelPrice(t, "PDH");
   const pdl = levelPrice(t, "PDL");
   const paper = paperFor(e, t.symbol);
-  const hasMap = mapView(t) !== null && close !== null;
+  const view = mapView(t);
+  const hasMap = view !== null && close !== null;
   const strength = t.close_strength?.chip;
+  // Only the layers the map actually draws for this name, judged the way the map judges them: no candles toggle
+  // without bars, no expected-move toggle without a move, no zones toggle when no zone falls inside the window.
+  const layers = MAP_LAYERS.filter((k) =>
+    k === "candles" ? (view?.bars.length ?? 0) > 0 : k === "move" ? moveBands(t).day !== null : k === "zones" ? (view?.zones.length ?? 0) > 0 : true,
+  );
 
   return (
     <div className="grid content-start gap-4 p-4" data-desk-detail={t.symbol}>
@@ -119,8 +140,31 @@ export function OptionsDetail({ e, t }: { e: Options; t: OptionsTicker }) {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_15rem]">
         {hasMap ? (
-          <div className="mx-auto w-full max-w-2xl">
-            <LevelMap t={t} />
+          <div className="mx-auto grid w-full max-w-2xl content-start gap-1.5">
+            <div role="group" aria-label="Map layers" className="flex flex-wrap items-center gap-1">
+              <span className="text-muted-foreground mr-1 text-[0.6875rem]">Show</span>
+              {layers.map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  aria-pressed={!hiddenLayers.has(k)}
+                  onClick={(ev) => {
+                    // Safari does not focus a button on click; keep focus in the desk so the shortcuts still hear keys.
+                    ev.currentTarget.focus();
+                    onToggleLayer(k);
+                  }}
+                  className={cn(
+                    "rounded border px-1.5 py-0.5 text-[0.6875rem] transition-colors",
+                    hiddenLayers.has(k) ? "text-muted-foreground hover:text-foreground" : "bg-accent text-foreground",
+                  )}
+                >
+                  {MAP_LAYER_LABEL[k]}
+                </button>
+              ))}
+            </div>
+            <div data-hide={[...hiddenLayers].join(" ") || undefined}>
+              <LevelMap t={t} interactive />
+            </div>
           </div>
         ) : (
           <Empty title="No level map for this name">

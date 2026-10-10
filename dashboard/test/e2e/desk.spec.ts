@@ -124,6 +124,37 @@ test("the keyboard moves between names and views while focus is in the desk", as
   await expect(page.getByText("They work while focus is inside the desk.")).toBeHidden();
 });
 
+test("the map reads a price under the pointer, and its layers switch off and on", async ({ page }) => {
+  await open(page, "/options?view=brief&s=SPY");
+  const map = page.getByRole("img", { name: /^SPY: last 40 daily bars/ });
+  const readout = page.locator("[data-map-readout]");
+  await expect(readout).toContainText("Point at the map");
+  // Wait for the live state to arrive first. Its chip joins the heading above the map; on a narrow screen that
+  // can push the map down a line, and a map that moves from under a resting pointer clears the crosshair.
+  await expect(page.locator('[data-desk-detail="SPY"]')).toContainText("TESTING RESISTANCE");
+  const box = await map.boundingBox();
+  expect(box).not.toBeNull();
+  // A third of the way in from the left and down from the top: inside the plot, on any screen.
+  await map.hover({ position: { x: box!.width * 0.3, y: box!.height * 0.3 } });
+  await expect(readout).toContainText("from the close");
+  await expect(readout).toContainText("ATR");
+  await expect(map.locator("[data-map-crosshair]")).toBeAttached();
+  // Switching a layer off hides that layer and no other; switching it on brings it back.
+  const layers = page.getByRole("group", { name: "Map layers" });
+  const move = layers.getByRole("button", { name: "Expected move" });
+  await expect(move).toHaveAttribute("aria-pressed", "true");
+  await move.click();
+  await expect(move).toHaveAttribute("aria-pressed", "false");
+  await expect(map.locator('[data-layer="move"]')).toBeHidden();
+  await expect(map.locator('[data-layer="zones"]')).toBeVisible();
+  // The choice belongs to the desk, not to one name: it holds when another name is chosen.
+  await row(page, "QQQ").getByRole("button").click();
+  await expect(page.locator('[data-desk-detail="QQQ"]')).toBeVisible();
+  await expect(page.getByRole("img", { name: /^QQQ: last 40 daily bars/ }).locator('[data-layer="move"]')).toBeHidden();
+  await page.getByRole("group", { name: "Map layers" }).getByRole("button", { name: "Expected move" }).click();
+  await expect(page.getByRole("img", { name: /^QQQ: last 40 daily bars/ }).locator('[data-layer="move"]')).toBeVisible();
+});
+
 test("sorting a column keeps names without a value last, whichever way it runs", async ({ page, context, baseURL }) => {
   // In the sparse fixture SPY and AMZN have no expected move.
   await variant(context, baseURL, "partial.quotes-off");

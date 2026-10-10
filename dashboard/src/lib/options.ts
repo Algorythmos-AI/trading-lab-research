@@ -701,3 +701,44 @@ export function levelPrice(t: OptionsTicker, name: string): number | null {
   const p = t.levels?.find((l) => l.name === name)?.price;
   return isNum(p) ? p : null;
 }
+
+/** The layers of the level map a reader can switch off. The close line and the live price always stay. */
+export const MAP_LAYERS = ["zones", "candles", "move", "labels"] as const;
+export type MapLayer = (typeof MAP_LAYERS)[number];
+export const MAP_LAYER_LABEL: Record<MapLayer, string> = { zones: "Zones", candles: "Candles", move: "Expected move", labels: "Labels" };
+
+/** The price at a height on the level map, for a height in the map's own units. Clamped to the plotted window. */
+export function priceAtY(y: number, lo: number, hi: number, top: number, bottom: number): number {
+  if (!(bottom > top) || !(hi > lo)) return lo;
+  const share = (Math.max(top, Math.min(bottom, y)) - top) / (bottom - top);
+  return hi - share * (hi - lo);
+}
+
+/** What the crosshair says about one price on a name's map. */
+export interface MapReadout {
+  price: number;
+  /** Signed distance from the close in dollars, in 14-day ATRs and in one-day expected moves; null when unknown. */
+  fromClose: number | null;
+  atrs: number | null;
+  moves: number | null;
+  /** The zone the price sits inside; the heaviest one when zones overlap. */
+  zone: MapZone | null;
+}
+
+/** Reads one price off a name's map: how far it is from the close, in three units, and the zone it is inside. */
+export function mapReadout(t: OptionsTicker, price: number, zones: readonly MapZone[]): MapReadout {
+  const close = t.last?.close;
+  const fromClose = isNum(close) ? price - close : null;
+  const atr = isNum(t.atr14) && t.atr14 > 0 ? t.atr14 : null;
+  let zone: MapZone | null = null;
+  for (const z of zones) {
+    if (z.zone.lo <= price && price <= z.zone.hi && (zone === null || (z.zone.weight ?? 0) > (zone.zone.weight ?? 0))) zone = z;
+  }
+  return {
+    price,
+    fromClose,
+    atrs: fromClose !== null && atr !== null ? fromClose / atr : null,
+    moves: movesFromClose(t, price),
+    zone,
+  };
+}
