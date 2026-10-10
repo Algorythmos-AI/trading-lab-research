@@ -69,7 +69,7 @@ Vercel (trading-lab-dashboard) ◄─────┘  private Blob storage; page
 ## Layout
 
 ```
-src/wt/          data · scanner · signals · backtest · risk · oms · brokers · live · ops · knowledge · specs
+src/wt/          data · scanner · signals · backtest · risk · oms · brokers · live · ops · knowledge · specs · options
 scripts/         research drivers and nightly jobs
 research/        hypotheses/ experiments/ decisions/ active_strategies/ lessons_learned/ specs/ forward/
 config/          ranking, catalyst and risk limits, macro-event calendar, dashboard config
