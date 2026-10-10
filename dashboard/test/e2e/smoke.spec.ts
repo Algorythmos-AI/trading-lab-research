@@ -282,7 +282,8 @@ test("the stocks wiki draws the desk from the snapshot", async ({ page }) => {
 
 test("the crypto wiki draws the desk from the crypto snapshot", async ({ page }) => {
   await page.goto("/crypto/engineering");
-  const sections = ["At a glance", "Architecture", "The bar cycle", "Around the clock", "Risk limits", "The learning loop", "Challengers and gates"];
+  const sections = ["At a glance", "Architecture", "The bar cycle", "Around the clock", "Risk limits", "The learning loop"];
+  sections.push("Challengers and gates", "The data harvest");
   for (const name of [...sections, "Owner controls"]) {
     await expect(page.getByRole("heading", { name, exact: true })).toBeAttached();
   }
@@ -293,4 +294,7 @@ test("the crypto wiki draws the desk from the crypto snapshot", async ({ page })
   await expect(page.getByRole("img", { name: /^Architecture of the crypto desk\..*5 paper books \(baseline, trend, break, dip, ch-29db21a0\)/ })).toBeAttached();
   await expect(page.getByRole("img", { name: /^The learning loop: .*The lineage in force is shadow, with 74 finished signals/ })).toBeAttached();
   await expect(page.getByRole("img", { name: /^A UTC day of 96 bar cycles\./ })).toBeAttached();
+  // The harvest books come from the snapshot's own harvest block.
+  await expect(page.getByRole("img", { name: /^The data harvest \(switch on, DEC-0027\): books h-trend, .*h-explore/ })).toBeAttached();
+  await expect(page.getByRole("list", { name: "The data harvest in numbers" })).toContainText("107");
 });

@@ -18,6 +18,7 @@ export const CRYPTO_TOC: TocGroup = {
     { id: "limits", label: "Risk limits" },
     { id: "learning", label: "The learning loop" },
     { id: "challengers", label: "Challengers and gates" },
+    { id: "harvest", label: "The data harvest" },
     { id: "jobs", label: "The desk's jobs" },
     { id: "controls", label: "Owner controls" },
   ],
@@ -659,12 +660,101 @@ export function ChallengersSection({ s }: { s: Crypto }) {
   );
 }
 
+const HARVEST_BOOKS = ["h-trend", "h-break", "h-dip", "h-trend-60m", "h-break-60m", "h-dip-60m", "h-explore"];
+
+export function HarvestSection({ s }: { s: Crypto }) {
+  const id = "dg-harvest";
+  const h = s.harvest;
+  const on = h?.switch === "on";
+  const byName = new Map(items(h?.books).map((b) => [b.name ?? "", b]));
+  const names = [...HARVEST_BOOKS, ...[...byName.keys()].filter((n) => n && !HARVEST_BOOKS.includes(n))];
+  const node = (name: string, x: number, y: number) => {
+    const b = byName.get(name);
+    const tone: Tone = !h ? "neutral" : on ? "good" : "warn";
+    return (
+      <Node
+        key={name}
+        x={x}
+        y={y}
+        w={160}
+        h={44}
+        title={name}
+        sub={b ? `${num(b.trades ?? 0)} trades · ${num(b.open ?? 0)} open` : "not reported"}
+        mono
+        dot={{ tone, title: `${name}: ${!h ? "not in this snapshot" : on ? "harvest on" : "harvest off"}` }}
+      />
+    );
+  };
+  const four = names.filter((n) => n.startsWith("h-") && !n.endsWith("-60m") && n !== "h-explore").slice(0, 3);
+  const hour = names.filter((n) => n.endsWith("-60m")).slice(0, 3);
+  return (
+    <WikiSection
+      id="harvest"
+      eyebrow="Crypto desk"
+      title="The data harvest"
+      lede="Separate paper books whose only job is to trade often and record everything for the learning data. They run the registered rules on 30 coins, last in each bar cycle, and nothing they do counts as evidence."
+    >
+      <Figure
+        caption={
+          <>
+            <b className="text-foreground font-medium">From bar cycle to training rows.</b> The harvest has its own books, limits and journal,
+            and nothing in the tournament reads them. The first cycle of each hour follows every harvest signal to its outcome and writes one
+            feature row per coin per closed hour. Entries stop with the desk&apos;s kill switch, a broken evidence chain, or its own off switch;
+            exits always run.
+          </>
+        }
+      >
+        <Diagram
+          id={id}
+          w={960}
+          h={270}
+          label={`The data harvest${h ? ` (switch ${h.switch ?? "unknown"}, ${h.decision ?? ""})` : ", not in this snapshot yet"}: books ${names.join(", ")} run inside the bar cycle on ${h?.coins ?? 30} coins, write their own journal, and once an hour label outcomes and write feature rows for the learning data.${
+            h ? ` Last 7 days: ${h.signals_7d ?? 0} signals, ${h.feature_rows_7d ?? 0} feature rows; ${h.labelled ?? 0} labelled in all.` : ""
+          }`}
+        >
+          <Node x={20} y={30} w={170} h={52} title="bar cycle" sub="after baseline and sleeves" tone="info" />
+          <Zone x={216} y={14} w={540} h={244} label={`Harvest books · ${h?.coins ?? 30} coins · paper`} />
+          <T x={236} y={52} caps>
+            4-hour
+          </T>
+          {four.map((n, i) => node(n, 236 + i * 172, 60))}
+          <T x={236} y={130} caps>
+            1-hour
+          </T>
+          {hour.map((n, i) => node(n, 236 + i * 172, 138))}
+          {node("h-explore", 236, 200)}
+          <T x={408} y={220} muted>
+            one random paper entry an hour, so the data
+          </T>
+          <T x={408} y={236} muted>
+            also covers moments no rule would pick
+          </T>
+          <Node x={784} y={30} w={156} h={52} title="harvest journal" sub="its own, hash-chained" />
+          <Node x={784} y={112} w={156} h={52} title="hourly step" sub="labels, feature rows" />
+          <Node x={784} y={194} w={156} h={52} title="learning data" sub="30 coins, hourly" tone="violet" />
+          <Edge diagram={id} d="M190 56 H216" tone="info" flow />
+          <Edge diagram={id} d="M756 56 H784" />
+          <Edge diagram={id} d="M862 82 V112" />
+          <Edge diagram={id} d="M862 164 V194" />
+        </Diagram>
+      </Figure>
+      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="The data harvest in numbers">
+        <Tile label="Switch" value={h ? String(h.switch ?? "unknown") : "—"} sub={h?.decision ?? "not in this snapshot yet"} tone={!h ? "neutral" : on ? "good" : "warn"} />
+        <Tile label="Signals, 7 days" value={h ? num(h.signals_7d) : "—"} sub={h ? `${num(h.signals_today)} today` : undefined} tone="neutral" />
+        <Tile label="Labelled" value={h ? num(h.labelled) : "—"} sub={h ? `${num(h.labelled_7d)} in 7 days` : undefined} tone="neutral" />
+        <Tile label="Feature rows, 7 days" value={h ? num(h.feature_rows_7d) : "—"} sub={h ? `since ${h.since ?? "?"}` : undefined} tone="neutral" />
+      </ul>
+    </WikiSection>
+  );
+}
+
 const CONTROLS: { what: string; cmd: string; refused: string }[] = [
   { what: "Stop new entries", cmd: "make kill DESK=crypto REASON=…", refused: "never" },
   { what: "Allow entries", cmd: "make unkill DESK=crypto", refused: "while a cycle runs, or the evidence chain is broken" },
   { what: "Clear daily-loss latches", cmd: "make reset-crypto-latch", refused: "while a cycle runs" },
   { what: "Model and challengers off or on", cmd: "make crypto-learning-off / -on", refused: "while a cycle runs" },
   { what: "See the challengers", cmd: "make crypto-challengers", refused: "never" },
+  { what: "Harvest books off or on", cmd: "make crypto-harvest-off / -on", refused: "never; exits always run" },
 ];
 
 export function ControlsSection() {

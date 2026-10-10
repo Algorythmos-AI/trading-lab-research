@@ -9,6 +9,7 @@ import {
   CRYPTO_TOC,
   CycleSection,
   GlanceSection,
+  HarvestSection,
   LearningSection,
   LimitsSection,
 } from "@/components/wiki/crypto";
@@ -54,6 +55,7 @@ export default async function CryptoEngineeringPage() {
             <LimitsSection s={c} />
             <LearningSection s={c} />
             <ChallengersSection s={c} />
+            <HarvestSection s={c} />
           </>
         ) : null}
         <WikiSection
