@@ -1,4 +1,4 @@
-import { CalendarClock, CircleDollarSign, ClipboardList, Gauge, Hand, Milestone, Power } from "lucide-react";
+import { CalendarClock, CircleDollarSign, ClipboardList, Gauge, Hand, Milestone, Power, Radar } from "lucide-react";
 import Link from "next/link";
 import { CopyCommand } from "@/components/client/copy-command";
 import { RelativeTime } from "@/components/client/relative-time";
@@ -10,12 +10,13 @@ import { Panel } from "@/components/panel";
 import { StatusBadge, TONE_TEXT, ToneIcon } from "@/components/status";
 import { PnlTiles } from "@/components/today/trading";
 import { DigestPanel } from "@/components/v3/digest";
-import { duration, newYork, shortDate, sydney, txt } from "@/lib/format";
+import { duration, newYork, num, shortDate, sydney, txt } from "@/lib/format";
 import { computeHealth } from "@/lib/health";
 import { humanize, jobKey, jobName, jobTone, severityRank, severityTone, sortJobKeys, stateTone } from "@/lib/labels";
 import { requestTime } from "@/lib/now";
 import { loadSnapshot } from "@/lib/snapshot";
 import { summarize } from "@/lib/summary";
+import { scan } from "@/lib/today";
 import { outcomeLine, trading } from "@/lib/trading";
 import { entries, list, type Snapshot } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -48,6 +49,7 @@ export default async function OverviewPage() {
       </section>
       <KillNotice s={s} />
       <PnlStrip s={s} />
+      <ScanStrip s={s} />
       <Kpis s={s} />
       <DigestPanel s={s} />
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
@@ -92,6 +94,59 @@ function PnlStrip({ s }: { s: Snapshot }) {
         <p className="text-muted-foreground text-xs">
           <Link href="/today" className="underline underline-offset-2">
             See every trade, the open position and why it did or did not trade
+          </Link>
+        </p>
+      </div>
+    </Panel>
+  );
+}
+
+/** The newest pre-market scan in one row of counts: how wide it looked and how far names got. The dry run's
+ * view ("as seen"); the reasons and the forward test's own funnel are on the Today page. */
+function ScanStrip({ s }: { s: Snapshot }) {
+  const v = scan(s);
+  const l = v.latest;
+  if (!l) return null;
+  const top = (v.why?.reasons ?? []).filter((r) => r.count > 0).slice(0, 3);
+  const cells: { label: string; value: number | null }[] = [
+    { label: "Stocks scanned", value: l.universe },
+    { label: "Trading pre-market", value: l.traded },
+    { label: "Gapping up", value: l.gapping },
+    { label: "Candidates", value: l.candidates },
+    { label: "Short list", value: l.shortList },
+    { label: "Trade plans", value: l.tickets },
+  ];
+  return (
+    <Panel
+      title="Pre-market scan"
+      icon={Radar}
+      means="The newest small-cap scan in counts: every listed stock, those trading before the open, those gapping up, and how many passed each later step. A dry run: it places no order."
+      action={
+        <StatusBadge tone={v.failed ? "bad" : v.current ? "good" : "neutral"}>
+          {v.failed ? "No data to scan" : v.current ? `Today, ${l.at ?? "latest"} New York` : `${shortDate(v.date)}, not today's`}
+        </StatusBadge>
+      }
+    >
+      <div className="grid gap-3">
+        <ul className="bg-border grid grid-cols-3 gap-px overflow-hidden rounded-lg border md:grid-cols-6">
+          {cells.map((c) => (
+            <li key={c.label} className="bg-card grid content-start gap-1 p-3">
+              <span className="text-muted-foreground text-xs">{c.label}</span>
+              <span className="font-mono text-lg font-semibold tracking-tight">{num(c.value)}</span>
+            </li>
+          ))}
+        </ul>
+        {v.failed ? (
+          <p className="text-bad text-sm">The scan had no data to scan. That is a data failure, not a quiet morning.</p>
+        ) : top.length > 0 ? (
+          <p className="text-muted-foreground text-[0.8125rem]">
+            Most common reasons a gapping name went no further: {top.map((r) => `${r.label.toLowerCase()} (${num(r.count)})`).join(", ")}.
+          </p>
+        ) : null}
+        <p className="text-muted-foreground text-xs">
+          {v.feed ? `Data feed: ${v.feed}. ` : ""}
+          <Link href="/today" className="underline underline-offset-2">
+            See each step, the near misses and the forward test&apos;s own funnel
           </Link>
         </p>
       </div>

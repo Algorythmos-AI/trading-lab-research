@@ -1423,6 +1423,12 @@
                     ],
                     "maxLength": 200
                   },
+                  "scan_failed": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
                   "error": {
                     "type": [
                       "string",
@@ -1433,6 +1439,57 @@
                 }
               },
               "maxItems": 2000
+            },
+            "near": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "total": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "rows": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "symbol": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 200
+                      },
+                      "price": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "reason": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 200
+                      }
+                    }
+                  },
+                  "maxItems": 2000
+                }
+              }
             },
             "log": {
               "type": [
@@ -1944,6 +2001,54 @@
                 }
               },
               "maxItems": 2000
+            },
+            "funnel": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "session": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 200
+                },
+                "pool": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "propertyNames": {
+                    "pattern": "^[\\w.:+\\- /|]{1,64}$"
+                  },
+                  "additionalProperties": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "maxProperties": 200
+                },
+                "counts": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "propertyNames": {
+                    "pattern": "^[\\w.:+\\- /|]{1,64}$"
+                  },
+                  "additionalProperties": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "maxProperties": 200
+                }
+              }
             },
             "log": {
               "type": [

@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { duration, newYork, num, rMult, shortDate, sydney } from "@/lib/format";
 import { humanize, jobName, jobTone } from "@/lib/labels";
 import { loadSnapshot } from "@/lib/snapshot";
-import { detailLabel, eventLabel, scan, sessionClock, sessionJobs, type Scan, type Why } from "@/lib/today";
+import { detailLabel, eventLabel, near, ofRecord, scan, sessionClock, sessionJobs, type Near, type Scan, type Why } from "@/lib/today";
 import { trading } from "@/lib/trading";
 import { list, type Snapshot } from "@/lib/types";
 
@@ -35,9 +35,11 @@ export default async function TodayPage() {
           <TradingPanels s={result.snapshot} />
           <FunnelPanel v={scan(result.snapshot)} tradingDay={result.snapshot.market?.trading_day_et ?? null} />
           <WhyPanel w={scan(result.snapshot).why} />
+          <NearPanel n={near(result.snapshot)} />
           <CandidatesPanel v={scan(result.snapshot)} />
           <PaperPanel s={result.snapshot} />
           <ForwardPanel s={result.snapshot} />
+          <OfRecordPanel s={result.snapshot} />
           <ComingPanel />
         </>
       )}
@@ -217,6 +219,66 @@ function WhyPanel({ w }: { w: Why | null }) {
           ) : null}
         </div>
       )}
+    </Panel>
+  );
+}
+
+function NearPanel({ n }: { n: Near | null }) {
+  if (!n) return null;
+  return (
+    <Panel
+      title="Near misses"
+      icon={Filter}
+      means="Gapping names that failed exactly one filter in the newest scan, and which one. A list to look at, not a watch list: no result is measured on these names."
+      action={<span className="text-muted-foreground text-xs">{n.total > n.rows.length ? `${num(n.rows.length)} of ${num(n.total)}` : `${num(n.total)}`}</span>}
+    >
+      {n.rows.length === 0 ? (
+        <Empty title="No name failed just one filter" />
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Ticker</TableHead>
+              <TableHead className="text-right">Price</TableHead>
+              <TableHead>The one filter it failed</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {n.rows.map((r) => (
+              <TableRow key={r.symbol}>
+                <TableCell className="font-mono text-xs">{r.symbol}</TableCell>
+                <TableCell className="text-right font-mono">{r.price === null ? "—" : `US$${num(r.price, 2)}`}</TableCell>
+                <TableCell>{r.label}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </Panel>
+  );
+}
+
+/** The forward test's own funnel. Kept in its own panel: it reads the after-close pool, the scan above read the
+ * morning as it happened, and the two are never added together. */
+function OfRecordPanel({ s }: { s: Snapshot }) {
+  const r = ofRecord(s);
+  if (!r) return null;
+  return (
+    <Panel
+      title="Funnel of record"
+      icon={FlaskConical}
+      means="The same steps as the morning scan, counted again after the close on the complete data the forward test's trials read. This is the record the trials are judged on; the morning scan is what could be seen at the time."
+      action={r.session ? <span className="text-muted-foreground text-xs">Session {shortDate(r.session)}</span> : undefined}
+    >
+      <div className="grid gap-3">
+        <Funnel label="Names at each step of the funnel of record" rows={r.why.steps.map((x) => ({ key: x.code, label: x.label, count: x.count }))} />
+        {r.why.reasons.length > 0 ? (
+          <p className="text-muted-foreground text-[0.8125rem]">
+            Failed a filter (a name can fail several): {r.why.reasons.map((x) => `${x.label.toLowerCase()} ${num(x.count)}`).join(", ")}.
+          </p>
+        ) : null}
+        {r.universe !== null ? <p className="text-muted-foreground text-xs">Scanned {num(r.universe)} stocks.</p> : null}
+      </div>
     </Panel>
   );
 }

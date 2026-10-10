@@ -2,6 +2,7 @@ import { freshness, type Freshness } from "./freshness";
 import { num } from "./format";
 import { jobName, sortJobKeys } from "./labels";
 import { DISK_FLOOR_GB, DISK_TARGET_GB } from "./thresholds.gen";
+import { scan } from "./today";
 import { entries, list, type Snapshot } from "./types";
 
 export type HealthLevel = "green" | "amber" | "red";
@@ -25,6 +26,10 @@ export const RED_ALERT_PREFIXES = [
   "paper-b:close-unknown",
   "paper-b:signal-not-acted",
 ];
+/** Alerts about the scan's data. They need a look and are never urgent: no position depends on a scan. */
+export const SCAN_ALERT_PREFIXES = ["forward:scan-failed", "forward:scan-thin", "routine:scan-failed", "routine:sip-fallback"];
+/** The loss limits whose use is measured. The other limits are caps that are meant to be reached (one entry a day). */
+const LOSS_LIMITS = new Set(["day_loss", "week_loss", "drawdown"]);
 const PROBLEM_JOB_STATUSES = new Set(["failed", "refused", "timeout"]);
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -68,11 +73,29 @@ export function computeHealth(s: Snapshot | null, now: Date): Health {
   if (isNum(host0?.disk_free_gb) && host0.disk_free_gb < DISK_FLOOR_GB) {
     red("disk-floor", `Disk free (${num(host0.disk_free_gb, 1)} GB) is below the ${num(DISK_FLOOR_GB, 0)} GB floor: tonight's jobs refuse.`);
   }
+  const sc = scan(s);
+  if (sc.current && sc.failed) {
+    red("scan-failed", "Today's pre-market scan had no data to scan. This is a data failure, not a quiet morning: check the data feed.");
+  }
+  for (const l of list(s.risk?.limits)) {
+    if (LOSS_LIMITS.has(l.id ?? "") && l.state === "at_limit") {
+      red(`limit:${l.id}`, `${l.label || "A loss limit"} is used up (${l.used ?? "at its limit"}).`);
+    }
+  }
   if (f.state === "stopped") {
     red("stopped", `No update for ${age} min during a trading window. The Mac or its jobs may have stopped.`);
   }
 
   // AMBER
+  for (const a of list(s.alerts?.firing)) {
+    const key = a.key ?? "";
+    if (SCAN_ALERT_PREFIXES.some((p) => key.startsWith(p))) amber(`alert:${key}`, `${a.title || "Scan data alert"}.`);
+  }
+  for (const l of list(s.risk?.limits)) {
+    if (LOSS_LIMITS.has(l.id ?? "") && l.state === "warn") {
+      amber(`limit:${l.id}`, `${l.label || "A loss limit"} is close to its limit (${l.used ?? "in use"}).`);
+    }
+  }
   if (s.kill?.on === true) amber("kill", "Kill switch is on: paper B makes no new entries.");
   const last = Object.fromEntries(entries(s.jobs?.last));
   for (const key of sortJobKeys(Object.keys(last))) {

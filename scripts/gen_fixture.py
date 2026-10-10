@@ -123,6 +123,9 @@ def build_v3(v2: dict[str, Any], views: dict[str, Any]) -> dict[str, Any]:
     ops = out["ops"] = {**out["ops"]}
     ops["forward"] = {**ops["forward"], "books": san.apply(publish.ALLOW["ops"]["forward"]["books"], BOOKS)}
     ops["paper"] = {**ops["paper"], "g2": {**ops["paper"]["g2"], "unchecked_sessions": 1}}
+    routine = ops["routine"] = {**ops["routine"], "near": san.apply(publish.ALLOW["ops"]["routine"]["near"], NEAR)}
+    routine["stages"] = [{**st, **({"scan_failed": False} if st.get("stats") else {})} for st in routine["stages"]]
+    ops["forward"]["funnel"] = san.apply(publish.ALLOW["ops"]["forward"]["funnel"], FUNNEL)
     return out
 
 
@@ -154,6 +157,15 @@ def main(argv: list[str]) -> int:
     V3.write_text(body)
     print(f"wrote {V3.relative_to(ROOT)} ({len(body)} bytes)")
     return 0
+
+
+# The newest dry-run stage's near misses and the newest funnel of record: counts, tickers, prices, closed codes.
+NEAR = {"total": 3, "rows": [{"symbol": "ZZZA", "price": 4.13, "reason": "catalyst_missing"},
+                             {"symbol": "ZZZB", "price": 9.5, "reason": "float"},
+                             {"symbol": "ZZZC", "price": 2.84, "reason": "rvol"}]}
+FUNNEL = {"session": "2026-09-28", "pool": {"universe": 4393, "snapshot_symbols": 812, "kept": 31},
+          "counts": {"n_kept": 31, "n_passed": 2, "n_tier1": 2, "n_chart_ok": 1, "n_tier2": 1, "n_primary": 1,
+                     "drop_catalyst_missing": 22, "drop_float": 14, "drop_rvol": 9}}
 
 
 if __name__ == "__main__":
