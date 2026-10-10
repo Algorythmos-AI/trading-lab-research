@@ -46,16 +46,68 @@ def weekday_sessions(start: dt.date, days: int) -> dict[dt.date, Session]:
     return out
 
 
-def load_sessions(now: dt.datetime, back: int = 5, ahead: int = 10) -> tuple[dict[dt.date, Session], bool]:
-    """Sessions around ``now`` from the Alpaca calendar. Returns (sessions, exact); exact is False on fallback."""
+@dataclass(frozen=True)
+class CalendarFault:
+    """Why the Alpaca calendar could not be read, in words the owner can act on.
+
+    It is falsy and takes the place of ``exact=False``, so a caller that only tests ``if not exact`` is unchanged.
+    Neither field ever holds a request header or a key value."""
+    kind: str                    # "credentials", "secrets", "unreachable" or "other"
+    cause: str
+    remedy: str
+
+    def __bool__(self) -> bool:
+        return False
+
+    def __str__(self) -> str:
+        return f"{self.cause}; {self.remedy}"
+
+
+SET_SECRETS = "sudo wt-set-secrets (console checkout: .env)"
+RETRY = "retry when the Alpaca calendar answers"
+MISSING_ENV = "missing required env var "        # wt.core.config.env
+RETRIES_SPENT = "GET failed after "              # wt.data.alpaca.AlpacaREST.get
+
+
+def calendar_fault(e: BaseException) -> CalendarFault:
+    """Classify a failed calendar read, so the gate can tell stale keys from an outage.
+
+    The message is built from the exception's type, the HTTP status and the name of an env var, and from nothing
+    else: the keys travel in request headers, and no header or response text is copied. Nothing is imported
+    here, so this cannot raise where the calendar client itself failed to import."""
+    status = getattr(getattr(e, "response", None), "status_code", None)
+    text = str(e.args[0]) if e.args else ""
+    if status in (401, 403):
+        return CalendarFault("credentials", f"Alpaca rejected this host's API keys (HTTP {status} from /v2/calendar), "
+                             "so this is not an outage", f"set the current paper key pair: {SET_SECRETS}")
+    if isinstance(e, KeyError) and text.startswith(MISSING_ENV):
+        return CalendarFault("secrets", f"{text[len(MISSING_ENV):]} is not set: this host's secrets file is missing "
+                             "or unreadable", f"write it: {SET_SECRETS}")
+    if status is not None:
+        return CalendarFault("other", f"the calendar read failed (HTTP {status} from /v2/calendar)",
+                             "cause unknown, so a retry alone may not fix it")
+    if isinstance(e, RuntimeError) and text.startswith(RETRIES_SPENT):
+        return CalendarFault("unreachable", f"Alpaca did not answer ({text.split(':', 1)[0]}: network error, "
+                             "HTTP 429 or 5xx)", RETRY)
+    if isinstance(e, OSError):   # requests' connection, timeout and decoding errors are all OSError
+        return CalendarFault("unreachable", f"Alpaca could not be reached ({e.__class__.__name__})", RETRY)
+    return CalendarFault("other", f"the calendar read failed ({e.__class__.__name__})",
+                         "cause unknown, so a retry alone may not fix it")
+
+
+def load_sessions(now: dt.datetime, back: int = 5,
+                  ahead: int = 10) -> tuple[dict[dt.date, Session], bool | CalendarFault]:
+    """Sessions around ``now`` from the Alpaca calendar. Returns (sessions, exact).
+
+    On fallback ``exact`` is a CalendarFault: falsy, and it says why the calendar could not be read."""
     d = now.astimezone(ET).date()
     try:
         from wt.data.alpaca import AlpacaREST
         cal = AlpacaREST(per_minute=30).calendar((d - dt.timedelta(days=back)).isoformat(),
                                                 (d + dt.timedelta(days=ahead)).isoformat())
         return sessions_from_calendar(cal.to_dict(orient="records")), True
-    except Exception:  # noqa: BLE001 — any calendar failure falls back, and callers see exact=False
-        return weekday_sessions(d - dt.timedelta(days=back), back + ahead + 1), False
+    except Exception as e:  # noqa: BLE001 — any calendar failure falls back, and callers see a falsy exact
+        return weekday_sessions(d - dt.timedelta(days=back), back + ahead + 1), calendar_fault(e)
 
 
 def trading_blackout(now: dt.datetime, sessions: Mapping[dt.date, Session]) -> str | None:
@@ -91,15 +143,19 @@ def upcoming_starts(now: dt.datetime, jobs: Iterable[Job] | None = None, lead_mi
 
 
 def deploy_blockers(now: dt.datetime, sessions: Mapping[dt.date, Session], running: Mapping[str, bool],
-                    locks: Iterable[str], exact_calendar: bool = True) -> list[str]:
-    """Every reason a deploy must not touch the live checkout now. Empty means allowed."""
+                    locks: Iterable[str], exact_calendar: bool | CalendarFault = True) -> list[str]:
+    """Every reason a deploy must not touch the live checkout now. Empty means allowed.
+
+    Without the exact calendar the gate stays closed whatever the cause (a holiday or a half day would be
+    missed); a CalendarFault only changes what the line tells the owner to do."""
     out = [f"{label} is running" for label, r in sorted(running.items()) if r]
     out += [f"job lock held: {name}" for name in locks]
     if (b := trading_blackout(now, sessions)) is not None:
         out.append(b)
     out += upcoming_starts(now)
     if not exact_calendar:
-        out.append("market calendar unavailable (weekday fallback in use); retry when the Alpaca calendar answers")
+        why = f": {exact_calendar}" if isinstance(exact_calendar, CalendarFault) else f"; {RETRY}"
+        out.append(f"market calendar unavailable (weekday fallback in use){why}")
     return out
 
 

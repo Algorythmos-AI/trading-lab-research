@@ -104,6 +104,22 @@ tail -f /tmp/wt-deploy.log
 - **"Deploy gate CLOSED: inside the trading window"** means it is between 07:00 and 18:00 New York time on a
   session day (two hours after the close), or a trading job starts within the hour. Nothing is wrong; run it
   after 18:00 New York. `sudo -u wt /usr/local/bin/wt-deploy gate` says whether it is open.
+- **"Deploy gate CLOSED: market calendar unavailable (weekday fallback in use)"** means the gate could not read
+  Alpaca's calendar. It stays closed, because without the calendar it cannot see a holiday or a half day. The
+  rest of the line gives the cause:
+  - *"Alpaca rejected this host's API keys (HTTP 401 ...)"*: the host's paper key pair is stale. Alpaca is up
+    and a retry will not help. Regenerating a paper key invalidates every older copy, so this follows a
+    regeneration that reached only the Mac's `.env` (seen 2026-10-10). Run `sudo wt-set-secrets`
+    ([secret-rotation.md](secret-rotation.md)).
+  - *"... is not set: this host's secrets file is missing or unreadable"*: `/run/wt-secrets/env` was not
+    written, the job user cannot read it, or it holds no Alpaca keys. `sudo wt-set-secrets` writes it again;
+    Enter keeps every value already there.
+  - *"Alpaca did not answer ..."* or *"Alpaca could not be reached ..."*: a network fault or an outage at
+    Alpaca. Run the deploy again later.
+  - *"the calendar read failed (...)"*: none of the above; the name in brackets is the error.
+
+  A line that ends in "retry when the Alpaca calendar answers" and names no cause comes from a host that does
+  not have this yet: older code prints it for every one of these causes. If Alpaca is up, check the keys first.
 - **"Refusing: ... is not green (test: pending)"** means the commit's checks are still running on GitHub.
   Wait for them and run it again. A deploy needs `test` and `ml`.
 - **"Nothing deployed: already at ..."** means the host is on that commit.
