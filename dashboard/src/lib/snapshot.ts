@@ -3,6 +3,7 @@ import { cache } from "react";
 import { LATEST_PATH, listPaths, readText } from "./blob";
 import type { CryptoSnapshot } from "./crypto.types";
 import { DESK_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
+import { parseFlags, partialOptions, poisonedOptions, VARIANT_COOKIE, type VariantFlag } from "./fixture-variants";
 import { logEvent } from "./log";
 import type { OptionsEdition } from "./options.types";
 import { radarDates } from "./radar";
@@ -17,6 +18,20 @@ export type SnapshotResult =
 /** Fixture mode serves the synthetic v3 test snapshot. It is refused on production deployments. */
 export function fixtureMode(): boolean {
   return process.env.DASHBOARD_FIXTURE === "1" && process.env.VERCEL_ENV !== "production";
+}
+
+/**
+ * The fixture variant flags for this request, from the `fx` cookie (see fixture-variants.ts). Always empty outside
+ * fixture mode, so production never reads the cookie, and empty where there is no request (a unit test).
+ */
+export async function fixtureFlags(): Promise<Set<VariantFlag>> {
+  if (!fixtureMode()) return new Set();
+  try {
+    const { cookies } = await import("next/headers");
+    return parseFlags((await cookies()).get(VARIANT_COOKIE)?.value);
+  } catch {
+    return new Set();
+  }
 }
 
 async function loadFixture(): Promise<Snapshot> {
@@ -129,8 +144,13 @@ export type OptionsResult =
  */
 export const loadOptions = cache(async (date?: string): Promise<OptionsResult> => {
   if (fixtureMode()) {
+    const flags = await fixtureFlags();
+    if (flags.has("empty")) return { status: "missing" };
+    if (flags.has("error")) return { status: "error" };
     const mod = await import("../../test/fixtures/options.v1.json");
-    return { status: "ok", edition: (mod.default ?? mod) as unknown as OptionsEdition, source: "fixture" };
+    const base = (mod.default ?? mod) as unknown as OptionsEdition;
+    const edition = flags.has("poison") ? poisonedOptions(base) : flags.has("partial") ? partialOptions(base) : base;
+    return { status: "ok", edition, source: "fixture" };
   }
   const path = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${OPTIONS_PATHS.history}${date}.json` : OPTIONS_PATHS.latest;
   try {

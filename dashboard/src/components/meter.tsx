@@ -1,3 +1,4 @@
+import { useId } from "react";
 import type { Tone } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import { TONE_FILL } from "./status";
@@ -27,6 +28,7 @@ export function Meter({
   thresholdLabel?: string;
   className?: string;
 }) {
+  const labelId = useId();
   const ok = typeof value === "number" && typeof max === "number" && Number.isFinite(value) && max > 0;
   const share = ok ? clamp(value / max) : 0;
   const tick =
@@ -34,12 +36,15 @@ export function Meter({
   return (
     <div className={cn("grid gap-1.5", className)}>
       <div className="flex items-baseline justify-between gap-3 text-[0.8125rem]">
-        <span className="text-muted-foreground">{label}</span>
+        <span id={labelId} className="text-muted-foreground">
+          {label}
+        </span>
         <span className="font-medium">{valueText}</span>
       </div>
       <div
         role="meter"
-        aria-label={typeof label === "string" ? label : undefined}
+        // Named by the visible label, whatever it is made of, so a meter is never announced without a name.
+        aria-labelledby={labelId}
         aria-valuemin={0}
         aria-valuemax={ok ? max : undefined}
         aria-valuenow={ok ? value : undefined}
