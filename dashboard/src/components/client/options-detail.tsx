@@ -102,7 +102,9 @@ export function OptionsDetail({ e, t }: { e: Options; t: OptionsTicker }) {
             {moves !== null ? <span className="text-muted-foreground"> · {signed(moves, 2)} expected moves</span> : null}
           </span>
         ) : (
-          <span className="text-muted-foreground text-xs">{price === null ? "no last bar in this edition" : "at the close"}</span>
+          <span className="text-muted-foreground text-xs">
+            {read.inSession ? "live; no close in this edition to compare with" : price === null ? "no last bar in this edition" : "at the close"}
+          </span>
         )}
         <span className="ml-auto flex flex-wrap items-center gap-1.5">
           <StateChip read={read} />

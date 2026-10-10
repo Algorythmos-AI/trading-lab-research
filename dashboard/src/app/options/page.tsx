@@ -91,7 +91,17 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
       <h1 className="sr-only">Options</h1>
       <LiveQuotes symbols={e.tickers.map((t) => t.symbol).join(",")} session={e.session} enabled={!date}>
         <PaneBoundary name="The options desk">
-          <OptionsDesk e={e} live={!date} initialView={initialView} manualView={manualView} initialSymbol={initialSymbol} stale={stale} />
+          {/* Keyed by edition: opening another edition starts the desk afresh, so a view or a sort chosen on one
+              never carries over to another. */}
+          <OptionsDesk
+            key={`${e.session}:${date ?? "latest"}`}
+            e={e}
+            live={!date}
+            initialView={initialView}
+            manualView={manualView}
+            initialSymbol={initialSymbol}
+            stale={stale}
+          />
         </PaneBoundary>
         <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-xs">
           <p className="max-w-prose">

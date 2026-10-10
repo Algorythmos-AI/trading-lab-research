@@ -7,6 +7,16 @@ async function variant(context: BrowserContext, baseURL: string | undefined, fx:
 }
 
 const desk = (page: Page) => page.getByRole("region", { name: "Options desk" });
+
+/**
+ * Open the desk and wait until the browser has taken it over. The page arrives drawn by the server and becomes
+ * interactive a moment later; a click or a key in between is lost, so a test that acted straight after `goto`
+ * passed or failed on timing.
+ */
+async function open(page: Page, url: string) {
+  await page.goto(url);
+  await expect(desk(page)).toHaveAttribute("data-ready", "true");
+}
 const rows = (page: Page) => page.locator("[data-desk-row]");
 const row = (page: Page, symbol: string) => page.locator(`[data-desk-row="${symbol}"]`);
 const order = (page: Page) => rows(page).evaluateAll((els) => els.map((el) => el.getAttribute("data-desk-row")));
@@ -14,7 +24,7 @@ const order = (page: Page) => rows(page).evaluateAll((els) => els.map((el) => el
 test("the desk shows every name beside the selected name's map and takes live prices", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await page.goto("/options?view=live");
+  await open(page, "/options?view=live");
   await expect(desk(page)).toBeVisible();
   await expect(rows(page)).toHaveCount(10);
   // The first name is selected until another is chosen, and its level map is drawn.
@@ -22,6 +32,8 @@ test("the desk shows every name beside the selected name's map and takes live pr
   await expect(page.getByRole("img", { name: /^SPY: last 40 daily bars/ })).toBeVisible();
   // The shared feed reaches the monitor: SPY is 0.3 ATR above its close, inside its major resistance zone.
   await expect(row(page, "SPY")).toContainText("TESTING RESISTANCE");
+  // The chip is on screen, not clipped off the edge of a narrow monitor.
+  await expect(row(page, "SPY").getByText("TESTING RESISTANCE")).toBeInViewport({ ratio: 1 });
   await expect(page.getByTestId("SPY-live-mark")).toBeAttached();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
@@ -31,30 +43,42 @@ test("the desk shows every name beside the selected name's map and takes live pr
 test("the whole desk fits one laptop screen", async ({ page, isMobile }) => {
   test.skip(isMobile, "one screen is the laptop layout; a phone scrolls");
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/options?view=brief");
+  await open(page, "/options?view=brief");
   await expect(rows(page)).toHaveCount(10);
   const box = await desk(page).boundingBox();
   expect(box).not.toBeNull();
   expect(box!.y + box!.height).toBeLessThanOrEqual(900);
   expect(box!.width).toBeGreaterThan(1300);
+  // Centred in the window, with nothing hanging off either side.
+  expect(box!.x).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(1440);
 });
 
-test("each view gives the monitor its own columns", async ({ page }) => {
-  await page.goto("/options?view=brief");
+/** How far the monitor's table is wider than the monitor itself: above zero means it scrolls sideways. */
+const monitorOverflow = (page: Page) =>
+  page.locator("[data-desk-monitor]").evaluate((el) => el.scrollWidth - el.clientWidth);
+
+test("each view gives the monitor its own columns, and none of them needs sideways scrolling", async ({ page }) => {
+  await open(page, "/options?view=brief");
   await expect(desk(page)).toHaveAttribute("data-desk-view", "brief");
   await expect(desk(page).getByRole("columnheader", { name: /^IV percentile/ })).toBeVisible();
+  expect(await monitorOverflow(page)).toBeLessThanOrEqual(0);
   await desk(page).getByRole("button", { name: "Live", exact: true }).click();
   await expect(desk(page)).toHaveAttribute("data-desk-view", "live");
   await expect(desk(page).getByRole("columnheader", { name: /^State/ })).toBeVisible();
+  // With live chips drawn, which is when the Live view is at its widest.
+  await expect(row(page, "SPY")).toContainText("TESTING RESISTANCE");
+  expect(await monitorOverflow(page)).toBeLessThanOrEqual(0);
   await desk(page).getByRole("button", { name: "Review", exact: true }).click();
   await expect(desk(page).getByRole("columnheader", { name: /^Paper trades/ })).toBeVisible();
+  expect(await monitorOverflow(page)).toBeLessThanOrEqual(0);
   // AAPL took two paper trades in the fixture and won neither.
   await expect(row(page, "AAPL")).toContainText("\u22121.16R");
   await expect(page).toHaveURL(/view=review/);
 });
 
 test("choosing a name changes the map at once and a reload lands on the same name and view", async ({ page }) => {
-  await page.goto("/options?view=brief");
+  await open(page, "/options?view=brief");
   await row(page, "NVDA").click();
   await expect(page.locator('[data-desk-detail="NVDA"]')).toBeVisible();
   await expect(page.getByRole("img", { name: /^NVDA: last 40 daily bars/ })).toBeVisible();
@@ -65,8 +89,24 @@ test("choosing a name changes the map at once and a reload lands on the same nam
   await expect(desk(page)).toHaveAttribute("data-desk-view", "brief");
 });
 
+test("the shortcuts still work after choosing a name with the mouse", async ({ page }) => {
+  await open(page, "/options?view=brief&s=SPY");
+  // Click a cell, not the name's button: focus must still end up inside the desk.
+  await row(page, "QQQ").locator("td").first().click();
+  await expect(page.locator('[data-desk-detail="QQQ"]')).toBeVisible();
+  await expect(row(page, "QQQ").getByRole("button")).toBeFocused();
+  await page.keyboard.press("j");
+  await expect(page.locator('[data-desk-detail="AAPL"]')).toBeVisible();
+  // Changing view from a column header removes that header; the keyboard must keep working afterwards.
+  await desk(page).getByRole("columnheader", { name: /^Close/ }).getByRole("button").focus();
+  await page.keyboard.press("3");
+  await expect(desk(page)).toHaveAttribute("data-desk-view", "review");
+  await page.keyboard.press("k");
+  await expect(page.locator('[data-desk-detail="QQQ"]')).toBeVisible();
+});
+
 test("the keyboard moves between names and views while focus is in the desk", async ({ page }) => {
-  await page.goto("/options?view=brief&s=SPY");
+  await open(page, "/options?view=brief&s=SPY");
   await row(page, "SPY").getByRole("button").focus();
   // Brief keeps the edition's order: SPY, QQQ, AAPL.
   await page.keyboard.press("j");
@@ -87,7 +127,7 @@ test("the keyboard moves between names and views while focus is in the desk", as
 test("sorting a column keeps names without a value last, whichever way it runs", async ({ page, context, baseURL }) => {
   // In the sparse fixture SPY and AMZN have no expected move.
   await variant(context, baseURL, "partial.quotes-off");
-  await page.goto("/options?view=brief");
+  await open(page, "/options?view=brief");
   const head = desk(page).getByRole("columnheader", { name: /^1-day move/ });
   await head.getByRole("button").click();
   await expect(head).toHaveAttribute("aria-sort", "descending");
@@ -108,7 +148,7 @@ test("a sparse edition shows dashes on the desk, never NaN, and no pane breaks",
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await variant(context, baseURL, "partial.quotes-off");
-  await page.goto("/options?view=brief");
+  await open(page, "/options?view=brief");
   await expect(rows(page)).toHaveCount(10);
   // NVDA has no last bar: its close is a dash, and it has nothing to draw a map against.
   await expect(row(page, "NVDA")).toContainText("—");
@@ -125,7 +165,7 @@ test("a sparse edition shows dashes on the desk, never NaN, and no pane breaks",
 
 test("a corrupt paper record breaks the scorecard and nothing else", async ({ page, context, baseURL }) => {
   await variant(context, baseURL, "poison");
-  await page.goto("/options?view=review");
+  await open(page, "/options?view=review");
   await expect(rows(page)).toHaveCount(10);
   await expect(page.locator('[data-desk-detail="SPY"]')).toBeVisible();
   await expect(page.locator('[data-pane-error="Paper scorecard"]')).toBeVisible();
@@ -145,7 +185,7 @@ test("nothing published and storage down each say so in place of the desk", asyn
 
 test("live price updates change the monitor's numbers without moving the desk", async ({ page, context, baseURL }) => {
   await variant(context, baseURL, "quotes-tick");
-  await page.goto("/options?view=live");
+  await open(page, "/options?view=live");
   // The feed is live once SPY carries a live state; the names that need a look have sorted to the top by then.
   await expect(row(page, "SPY")).toContainText("TESTING RESISTANCE");
   const seen = await page.evaluate(async () => {
