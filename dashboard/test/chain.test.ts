@@ -228,6 +228,20 @@ describe("the fixture chain", () => {
     }
   });
 
+  it("starts on today until the closing bell and on the next weekday after it, so its first expiry can be priced", async () => {
+    const first = async (iso: string) => (await fixtureChain("SPY", new Date(iso))).expiries[0]!.date;
+    expect(await first("2026-10-12T19:59:00Z")).toBe("2026-10-12"); // 15:59 in New York
+    expect(await first("2026-10-12T20:00:00Z")).toBe("2026-10-13"); // the bell
+    expect(await first("2026-10-16T21:30:00Z")).toBe("2026-10-19"); // Friday evening: Monday
+    expect(await first("2026-11-02T20:30:00Z")).toBe("2026-11-02"); // standard time: the bell is at 21:00 UTC
+    // And whenever it is asked, no price in it is anything but a number.
+    for (const iso of ["2026-10-12T19:59:59Z", "2026-10-12T20:00:00Z", "2026-10-17T12:00:00Z", "2026-11-01T06:30:00Z"]) {
+      for (const x of (await fixtureChain("SPY", new Date(iso), true)).expiries) {
+        for (const c of x.contracts) for (const v of [c.bid, c.ask, c.last, c.iv, c.delta, c.volume]) if (v !== null) expect(Number.isFinite(v)).toBe(true);
+      }
+    }
+  });
+
   it("is empty for a name the fixture does not have, and damaged three ways when asked", async () => {
     expect((await fixtureChain("ZZZZ", NOW)).expiries).toEqual([]);
     const thin = (await fixtureChain("SPY", NOW, true)).expiries[0]!.contracts;

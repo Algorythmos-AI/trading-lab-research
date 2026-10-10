@@ -95,6 +95,8 @@ export function OptionsContract({ t, live }: { t: OptionsTicker; live: boolean }
   const read = useLiveRead(t);
   const [stored, setStored] = usePick(t.symbol);
   const [opened, setOpened] = useState(false);
+  /** What is in the Contracts box while it is being typed in: it has to be allowed to be empty for a moment. */
+  const [typed, setTyped] = useState<string | null>(null);
   const ids = useId();
   const close = t.last?.close ?? null;
   // A remembered contract that has expired is dropped the moment it is seen: there is nothing left to price.
@@ -232,11 +234,14 @@ export function OptionsContract({ t, live }: { t: OptionsTicker; live: boolean }
                 min={1}
                 max={MAX_CONTRACTS}
                 step={1}
-                value={pick.contracts}
+                value={typed ?? pick.contracts}
                 onChange={(ev) => {
-                  const n = Math.round(Number(ev.target.value));
-                  if (n >= 1 && n <= MAX_CONTRACTS) change({ contracts: n });
+                  setTyped(ev.target.value);
+                  const n = Number(ev.target.value);
+                  if (Number.isInteger(n) && n >= 1 && n <= MAX_CONTRACTS) change({ contracts: n });
                 }}
+                // Leaving the box puts back the number in use, whatever was left half typed.
+                onBlur={() => setTyped(null)}
                 className={cn(FIELD, "w-16")}
               />
             </label>

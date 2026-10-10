@@ -15,19 +15,23 @@ function json(status: number, body: unknown): Response {
 const weekday = (day: string) => new Date(`${day}T00:00:00Z`).getUTCDay();
 const cents = (v: number) => Math.round(v * 100) / 100;
 
-/** The expiries a fixture chain carries: the next few weekdays from `today`, and the first Friday a fortnight out. */
-export function fixtureExpiries(today: string): string[] {
+/**
+ * The expiries a fixture chain carries: the next few weekdays from `from`, and the first Friday a fortnight out.
+ * `from` is today in New York until today's closing bell, and tomorrow after it, so the first expiry is always
+ * one that can still be priced.
+ */
+export function fixtureExpiries(from: string): string[] {
   const out: string[] = [];
-  for (let d = today; out.length < NEAR_EXPIRIES; d = addDays(d, 1)) if (weekday(d) >= 1 && weekday(d) <= 5) out.push(d);
-  let swing = addDays(today, SWING_MIN_DAYS);
+  for (let d = from; out.length < NEAR_EXPIRIES; d = addDays(d, 1)) if (weekday(d) >= 1 && weekday(d) <= 5) out.push(d);
+  let swing = addDays(from, SWING_MIN_DAYS);
   while (weekday(swing) !== 5) swing = addDays(swing, 1);
   return out.includes(swing) ? out : [...out, swing];
 }
 
 /**
  * Fixture mode: a chain for a fixture name, priced by the desk's own arithmetic from that name's implied volatility
- * with a mild smile, around the price the fixture's live feed quotes. Dated from `now`, so its expiries are never in
- * the past, and its quotes are as old as the real feed's would be. Lets the browser tests drive the contract pane
+ * with a mild smile, around the price the fixture's live feed quotes. Dated from `now`, so no expiry in it has
+ * passed, and its quotes are as old as the real feed's would be. Lets the browser tests drive the contract pane
  * with no network and no keys. `thin` damages the nearest expiry's first three calls, one way each.
  */
 export async function fixtureChain(symbol: string, now: Date, thin = false): Promise<ChainResponse> {
@@ -43,7 +47,9 @@ export async function fixtureChain(symbol: string, now: Date, thin = false): Pro
   const centre = Math.round(spot / step) * step;
   const half = (STRIKES_PER_EXPIRY - 1) / 2;
   const quoted = new Date(now.getTime() - CHAIN_DELAY_MIN * 60_000);
-  const expiries: ChainExpiry[] = fixtureExpiries(nyDate(now)).map((date) => {
+  const today = nyDate(now);
+  const rung = (nyInstant(today, 16 * 60) ?? Infinity) <= now.getTime();
+  const expiries: ChainExpiry[] = fixtureExpiries(rung ? addDays(today, 1) : today).map((date) => {
     const bell = nyInstant(date, 16 * 60) ?? now.getTime();
     const minutes = (bell - quoted.getTime()) / 60_000;
     const contracts: ChainContract[] = [];
