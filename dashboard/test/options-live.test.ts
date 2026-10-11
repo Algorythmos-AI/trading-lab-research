@@ -306,14 +306,26 @@ describe("a position's greeks", () => {
   const clock = { marketOpen: true, priceIsLive: true };
   const at = (c: ChainResponse | null, r = row) => positionGreeks(r, c, spy, row.strike, NOW.getTime(), e.session, clock);
 
-  it("gives delta per share and what a day costs the whole position", () => {
+  it("gives delta per share and what a day of waiting costs the whole position", () => {
     const g = at(chain())!;
     expect(g.delta).toBeGreaterThan(0.3);
     expect(g.delta).toBeLessThan(0.7);
     // Two contracts: a day of waiting costs twice one contract's decay, and it is a cost.
-    expect(g.decayDay).toBeLessThan(0);
+    expect(g.toExpiry).toBe(false);
+    expect(g.decay).toBeLessThan(0);
     const one = at(chain(), { ...row, qty: 1 })!;
-    expect(g.decayDay).toBeCloseTo(one.decayDay! * 2, 9);
+    expect(g.decay).toBeCloseTo(one.decay! * 2, 9);
+  });
+
+  it("in a contract's last day counts the decay to the bell, never more than the option is worth", () => {
+    // The expiry's own afternoon, an hour before the bell, at the money: theta's rate would say hundreds a day.
+    const bell = Date.parse(`${row.expiry}T20:00:00Z`);
+    const g = positionGreeks(row, chain(), spy, row.strike, bell - 60 * 60_000, row.expiry, { marketOpen: false, priceIsLive: false })!;
+    expect(g.toExpiry).toBe(true);
+    expect(g.decay).toBeLessThan(0);
+    // Worth about 3.10 a share by its quote; an at-the-money hour at 12% is worth far less, and that is all it can lose.
+    expect(Math.abs(g.decay!)).toBeLessThan(3.2 * 100 * row.qty);
+    expect(Math.abs(g.decay!)).toBeLessThan(150);
   });
 
   it("is nothing for a short or expired position, with no quote for the contract, or with old quotes in session", () => {

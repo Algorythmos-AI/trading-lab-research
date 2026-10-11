@@ -2,7 +2,7 @@
 //
 // They come from the options live document, which the trading host publishes from the paper account kept for
 // manual option trades. The desk shows them; it never places, changes or closes one.
-import type { OptionKind } from "./bs";
+import { price, type OptionKind } from "./bs";
 import type { Pick } from "./contract";
 import type { ChainResponse } from "./chain";
 import { MAX_CONTRACTS, contractView, daysToExpiry, minutesToExpiry } from "./contract";
@@ -117,15 +117,24 @@ export function pickFor(row: PositionRow): Pick | null {
 export interface PositionGreeks {
   /** Dollars the option gains per share for $1 on the stock. */
   delta: number | null;
-  /** What a calendar day of waiting costs the whole position, in dollars, stock and volatility unchanged. */
-  decayDay: number | null;
+  /**
+   * What waiting costs the whole position, in dollars, stock and volatility unchanged: over the next day, or to
+   * the closing bell when the contract expires sooner. Negative is a loss.
+   */
+  decay: number | null;
+  /** True when `decay` runs to expiry because less than a day is left. */
+  toExpiry: boolean;
 }
 
 /** Positions priced at once: each needs a request of its own, and a person holds a handful. */
 export const GREEKS_MAX = 8;
+const DAY_MINUTES = 24 * 60;
 
 /**
- * A long position's delta and daily decay, worked out as the contract pane works them out for the same contract.
+ * A long position's delta and what a day of waiting costs it. The contract, its quote, its volatility and the
+ * time left are read as the contract pane reads them. The decay is a difference in value, not theta's rate: in a
+ * contract's last day the rate runs to many times what the option is worth.
+ *
  * Null for a short or expired position, with no quote for the contract, or while the quotes are too old to use.
  */
 export function positionGreeks(
@@ -140,6 +149,15 @@ export function positionGreeks(
   const pick = pickFor(row);
   if (!pick || !chain || !(spot > 0)) return null;
   const v = contractView(pick, chain, t, spot, now, session, clock);
-  if (v.expired || v.stale || v.contract === null || (v.delta === null && v.thetaDay === null)) return null;
-  return { delta: v.delta, decayDay: v.thetaDay !== null ? v.thetaDay * MULTIPLIER * row.qty : null };
+  if (v.expired || v.stale || v.contract === null || v.minutes === null) return null;
+  let decay: number | null = null;
+  const toExpiry = v.minutes <= DAY_MINUTES;
+  if (v.sigma !== null) {
+    const today = price(spot, row.strike, v.minutes, v.sigma, row.kind);
+    // At the bell the option is worth what it is in the money by, and nothing more.
+    const then = toExpiry ? Math.max(row.kind === "call" ? spot - row.strike : row.strike - spot, 0) : price(spot, row.strike, v.minutes - DAY_MINUTES, v.sigma, row.kind);
+    decay = (then - today) * MULTIPLIER * row.qty;
+  }
+  if (v.delta === null && decay === null) return null;
+  return { delta: v.delta, decay, toExpiry };
 }
