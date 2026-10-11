@@ -12,6 +12,7 @@ import {
   nyInstant,
   OPEN_MIN,
   paperFor,
+  nextHourlyClose,
   sessionClock,
   sortByNumber,
   viewForClock,
@@ -47,6 +48,16 @@ describe("the session clock", () => {
     expect(sessionClock(SESSION, false, at("2026-10-12T13:30:00Z"))).toEqual({ phase: "open", ms: 6.5 * 3_600_000 });
     expect(sessionClock(SESSION, false, at("2026-10-12T19:59:30Z"))).toEqual({ phase: "open", ms: 30_000 });
     expect(sessionClock(SESSION, false, at("2026-10-12T20:00:00Z"))).toEqual({ phase: "after", ms: null });
+    // The hourly bars the rules are read on: the first closes at 10:00, the rest on the clock hour.
+    expect(nextHourlyClose(SESSION, false, at("2026-10-12T13:29:59Z"))).toBeNull();
+    expect(nextHourlyClose(SESSION, false, at("2026-10-12T13:30:00Z"))).toEqual({ label: "10:00", ms: 30 * 60_000 });
+    expect(nextHourlyClose(SESSION, false, at("2026-10-12T14:00:00Z"))).toEqual({ label: "11:00", ms: 3_600_000 });
+    expect(nextHourlyClose(SESSION, false, at("2026-10-12T19:59:30Z"))).toEqual({ label: "16:00", ms: 30_000 });
+    expect(nextHourlyClose(SESSION, false, at("2026-10-12T20:00:00Z"))).toBeNull();
+    expect(nextHourlyClose(SESSION, true, at("2026-10-12T16:30:00Z"))).toEqual({ label: "13:00", ms: 30 * 60_000 });
+    expect(nextHourlyClose(SESSION, true, at("2026-10-12T17:00:00Z"))).toBeNull(); // a half day ends at 13:00
+    expect(nextHourlyClose("2026-11-02", false, at("2026-11-02T15:30:00Z"))).toEqual({ label: "11:00", ms: 30 * 60_000 }); // after the clocks go back
+    expect(nextHourlyClose("not a day", false, at("2026-10-12T15:00:00Z"))).toBeNull();
     // The weekend before: more than two days to the open.
     expect(sessionClock(SESSION, false, at("2026-10-10T05:00:00Z"))!.phase).toBe("before");
   });

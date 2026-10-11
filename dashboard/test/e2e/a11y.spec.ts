@@ -50,6 +50,18 @@ for (const theme of ["light", "dark"] as const) {
     expect(await scan(page)).toEqual([]);
   });
 
+  test(`a notice of a rule triggering passes the accessibility scan in ${theme}`, async ({ page, context, baseURL }) => {
+    await useTheme(context, theme);
+    await context.addCookies([{ name: "fx", value: "rules-none", url: baseURL! }]);
+    await page.goto("/options?view=live");
+    await liveChips(page);
+    // The rules trigger while the page is open; the next refresh brings the notices.
+    await context.addCookies([{ name: "fx", value: "", url: baseURL! }]);
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await expect(page.locator("[data-trigger-notice]")).toHaveCount(2);
+    expect(await scan(page)).toEqual([]);
+  });
+
   test(`the brief view's option costs pass the accessibility scan in ${theme}, priced and with no option feed`, async ({ page, context, baseURL }) => {
     await useTheme(context, theme);
     await page.goto("/options?view=brief");

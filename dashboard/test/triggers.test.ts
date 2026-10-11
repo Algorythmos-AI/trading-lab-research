@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { fixtureOptionsLive } from "@/lib/fixture-variants";
 import type { Options } from "@/lib/options";
-import { OTHER_RULE, rulesAreOld, rulesToday } from "@/lib/triggers";
+import { announce, OTHER_RULE, rulesAreOld, rulesToday } from "@/lib/triggers";
 import { validateOptionsLive } from "@/lib/validate";
 import optionsJson from "./fixtures/options.v1.json";
 
@@ -75,5 +75,22 @@ describe("the rules' states in today's session", () => {
     expect(rulesToday(yesterday, e, NOW.getTime())).toBeNull();
     expect(rulesToday(doc(), e, NOW.getTime() + 37 * 3_600_000)).toBeNull();
     expect(rulesToday(doc(), e, NOW.getTime() + 35 * 3_600_000)).not.toBeNull();
+  });
+
+  it("announces a trigger once, and none that were there when the page opened", () => {
+    const none = rulesToday(doc(["rules-none"]), e, NOW.getTime())!;
+    const two = rulesToday(doc(), e, NOW.getTime())!;
+    const opened = announce(null, two);
+    expect(opened.fresh).toEqual([]); // already triggered when the page opened
+    expect(announce(opened.seen, two).seen).toBe(opened.seen); // nothing new: the same object, so no redraw
+    const quiet = announce(null, none);
+    const first = announce(quiet.seen, two);
+    expect(first.fresh.map((t) => t.symbol).sort()).toEqual([e.tickers[0]!.symbol, e.tickers[2]!.symbol].sort());
+    expect(announce(first.seen, two).fresh).toEqual([]);
+    // A trigger whose state moves on (open, then stopped) is the same trigger.
+    const moved = { ...two, triggers: two.triggers.map((t) => ({ ...t, state: "stopped" as const })) };
+    expect(announce(first.seen, moved).fresh).toEqual([]);
+    // Another session starts from nothing again.
+    expect(announce(first.seen, { ...two, session: "2026-10-13" }).fresh).toEqual([]);
   });
 });

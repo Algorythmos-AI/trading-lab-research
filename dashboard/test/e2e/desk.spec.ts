@@ -489,9 +489,23 @@ test("the live view lists the rules that have triggered today, and each name's r
   await expect(page.getByRole("region", { name: "Rules today" })).toHaveAttribute("data-rules-age", "old");
   await expect(page.getByRole("region", { name: "Rules today" }).getByRole("status")).toContainText("may be out of date");
   // Nothing triggered: the pane says so. No rule states from the host: no pane, and the desk as it was.
+  const notices = page.locator("[data-trigger-notice]");
+  await expect(notices).toHaveCount(0); // what had triggered before the page opened is not announced
   await variant(context, baseURL, "rules-none");
   await open(page, "/options?view=live");
   await expect(page.getByRole("region", { name: "Rules today" })).toContainText("No rule has triggered so far");
+  // Two rules trigger while the page is open: the next refresh announces each once, and the desk does not move.
+  const top = await rows(page).first().boundingBox();
+  await variant(context, baseURL, "");
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await expect(notices).toHaveCount(2);
+  expect((await rows(page).first().boundingBox())?.y).toBe(top?.y);
+  await expect(notices.first()).toContainText("paper rule triggered on the 12:00 ET hourly close");
+  await page.getByRole("button", { name: "Dismiss the notice for SPY" }).click();
+  await expect(notices).toHaveCount(1);
+  await notices.getByRole("button", { name: `Show ${other}` }).click();
+  await expect(detail(page, other!)).toBeVisible();
+  await expect(notices).toHaveCount(0);
   await variant(context, baseURL, "rules-off");
   await open(page, "/options?view=live");
   await expect(page.getByRole("region", { name: "Rules today" })).toHaveCount(0);

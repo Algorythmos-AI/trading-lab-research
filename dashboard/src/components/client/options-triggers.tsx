@@ -1,8 +1,9 @@
 "use client";
 
-import { TriangleAlert } from "lucide-react";
+import { TriangleAlert, X } from "lucide-react";
+import { useState } from "react";
 import { newYork, num, rMult, weekDate } from "@/lib/format";
-import { rulesAreOld, STATE_LABEL, type RulesToday, type Trigger } from "@/lib/triggers";
+import { announce, rulesAreOld, STATE_LABEL, type RulesToday, type SeenTriggers, type Trigger } from "@/lib/triggers";
 import { cn } from "@/lib/utils";
 
 /** A target is a gain and a stop a loss whatever the figure; otherwise the colour follows the figure as it is printed. */
@@ -80,5 +81,67 @@ export function OptionsTriggers({ rules, marketOpen, onOpen }: { rules: RulesTod
         record.
       </p>
     </section>
+  );
+}
+
+const NOTICES_KEPT = 4;
+
+/**
+ * A notice when a probation rule triggers while the page is open: the name, the rule and the hourly close, with
+ * a way to open the name and a way to dismiss it. Triggers that were already there when the page opened are not
+ * announced. It sits over the page's corner, so nothing on the desk moves when one arrives.
+ *
+ * Like the board, it says what happened to a paper rule and nothing about what to do.
+ */
+export function TriggerNotices({ rules, onOpen }: { rules: RulesToday | null; onOpen: (symbol: string) => void }) {
+  const [seen, setSeen] = useState<SeenTriggers | null>(null);
+  const [shown, setShown] = useState<Trigger[]>([]);
+  if (rules) {
+    const next = announce(seen, rules);
+    if (next.seen !== seen) {
+      // New states arrived with this render: note them before drawing, so each trigger is announced once.
+      setSeen(next.seen);
+      // Nothing fresh here means a first sight or another session: either way there is nothing to keep showing.
+      setShown(next.fresh.length > 0 ? [...next.fresh, ...shown].slice(0, NOTICES_KEPT) : []);
+    }
+  }
+  const when = (t: Trigger) => (t.bar ? `on the ${t.bar} ET hourly close` : "today");
+  const latest = shown[0];
+  return (
+    <div data-trigger-notices={shown.length} className="pointer-events-none fixed right-3 bottom-16 z-40 flex w-[min(22rem,calc(100vw-1.5rem))] flex-col gap-2 md:bottom-3">
+      {/* Always on the page, so a screen reader hears a notice arrive. */}
+      <p role="status" className="sr-only">
+        {latest ? `${latest.symbol}: a paper rule triggered ${when(latest)}. ${latest.label}.` : ""}
+      </p>
+      {shown.map((t) => (
+        <div key={`${t.symbol}:${t.rule}`} data-trigger-notice={t.symbol} className="bg-popover text-popover-foreground pointer-events-auto rounded-md border p-2.5 shadow-md">
+          <div className="flex items-start gap-2">
+            <p className="min-w-0 flex-1 text-xs">
+              <span className="text-[0.8125rem] font-medium">{t.symbol}</span> <span className="text-muted-foreground">paper rule triggered {when(t)}</span>
+              <span className="mt-0.5 block">{t.label}</span>
+              <span className="text-muted-foreground mt-0.5 block text-[0.6875rem]">Provisional: delayed bars, checked again after the close.</span>
+            </p>
+            <button
+              type="button"
+              aria-label={`Dismiss the notice for ${t.symbol}`}
+              onClick={() => setShown((all) => all.filter((x) => x !== t))}
+              className="text-muted-foreground hover:text-foreground -m-1 flex size-7 shrink-0 items-center justify-center rounded"
+            >
+              <X aria-hidden className="size-4" />
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              onOpen(t.symbol);
+              setShown((all) => all.filter((x) => x !== t));
+            }}
+            className="text-foreground mt-1.5 rounded border px-2 py-1 text-xs font-medium"
+          >
+            Show {t.symbol}
+          </button>
+        </div>
+      ))}
+    </div>
   );
 }

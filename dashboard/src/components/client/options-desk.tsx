@@ -19,6 +19,7 @@ import {
   paperFor,
   RICH_IVP,
   roomView,
+  nextHourlyClose,
   sessionClock,
   sortByNumber,
   viewForClock,
@@ -40,7 +41,7 @@ import { storePick } from "./options-contract";
 import { OptionsCosts } from "./options-costs";
 import { OptionsDetail, Tick } from "./options-detail";
 import { OptionsPositions } from "./options-positions";
-import { OptionsTriggers } from "./options-triggers";
+import { OptionsTriggers, TriggerNotices } from "./options-triggers";
 import { PaneBoundary } from "./pane-boundary";
 
 const VIEW_LABEL: Record<DeskView, string> = { brief: "Brief", live: "Live", review: "Review" };
@@ -234,6 +235,7 @@ function SessionLine({ session, halfDay }: { session: string; halfDay: boolean }
   const { now } = useLive();
   const day = weekDate(session);
   const clock = now === null ? null : sessionClock(session, halfDay, new Date(now));
+  const hourly = now === null ? null : nextHourlyClose(session, halfDay, new Date(now));
   return (
     <p className="text-muted-foreground text-xs">
       Session <span className="text-foreground font-medium">{day}</span>
@@ -247,6 +249,12 @@ function SessionLine({ session, halfDay }: { session: string; halfDay: boolean }
         <>
           {" "}
           closes in <span className="text-foreground font-mono">{clockSpan(clock.ms ?? 0)}</span>
+          {hourly ? (
+            <span data-next-hourly={hourly.label}>
+              {" "}
+              · next hourly close {hourly.label} ET in <span className="text-foreground font-mono">{clockSpan(hourly.ms)}</span>
+            </span>
+          ) : null}
         </>
       ) : (
         " has closed"
@@ -746,6 +754,7 @@ export function OptionsDesk({
           </span>
         </div>
       ) : null}
+      <TriggerNotices rules={live ? rules : null} onOpen={openName} />
       <DeskPalette
         open={palette}
         onOpenChange={setPalette}

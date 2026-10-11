@@ -85,3 +85,22 @@ export function rulesToday(doc: OptionsLive | null, e: Options, now: number): Ru
 export function rulesAreOld(r: RulesToday, marketOpen: boolean): boolean {
   return (marketOpen || r.openByDoc) && !r.complete && r.ageMin > POSITIONS_OLD_MIN;
 }
+
+/** The triggers a page has already seen in one session, by name and rule. */
+export interface SeenTriggers {
+  session: string;
+  keys: ReadonlySet<string>;
+}
+
+/**
+ * What to announce when rule states reach an open page. The first states seen for a session announce nothing:
+ * they were there when the page opened. After that each trigger not seen before is announced once, whatever its
+ * state by then. `seen` comes back as the same object when nothing is new.
+ */
+export function announce(seen: SeenTriggers | null, r: RulesToday): { seen: SeenTriggers; fresh: Trigger[] } {
+  const key = (t: Trigger) => `${t.symbol}|${t.rule}`;
+  if (seen === null || seen.session !== r.session) return { seen: { session: r.session, keys: new Set(r.triggers.map(key)) }, fresh: [] };
+  const fresh = r.triggers.filter((t) => !seen.keys.has(key(t)));
+  if (fresh.length === 0) return { seen, fresh };
+  return { seen: { session: r.session, keys: new Set([...seen.keys, ...fresh.map(key)]) }, fresh };
+}

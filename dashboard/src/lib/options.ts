@@ -631,6 +631,22 @@ export function sessionClock(session: string, halfDay: boolean, now: Date): Sess
   return { phase: "after", ms: null };
 }
 
+/**
+ * The next close of an hourly bar while the session trades: 10:00 first (the bar that opens at 09:30 is half an
+ * hour long), then each clock hour up to the session's close. The probation rules are read on these closes.
+ * Null before the open and from the close on.
+ */
+export function nextHourlyClose(session: string, halfDay: boolean, now: Date): { label: string; ms: number } | null {
+  const open = nyInstant(session, OPEN_MIN);
+  const t = now.getTime();
+  if (open === null || t < open) return null;
+  for (let m = 10 * 60; m <= closeMinute(halfDay); m += 60) {
+    const at = nyInstant(session, m);
+    if (at !== null && t < at) return { label: `${String(m / 60).padStart(2, "0")}:00`, ms: at - t };
+  }
+  return null;
+}
+
 /** A span of time for a countdown: "5:18:07" under a day, "2 d 8 h" beyond it. */
 export function clockSpan(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000));
