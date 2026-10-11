@@ -1,0 +1,67 @@
+{
+ "_doc": "The four probation rules shown on the Options page, as the after-close routine has carried them since 2026-10-09. The backtest figures were worked out in the cloud project on hourly bars, 10 names, 3 Mar to 9 Oct 2026, same-day exit, before this repository held the engine: they have no experiment record here yet and the page labels them exploratory. A status changes only by the promotion test, with a decision record.",
+ "rules": [
+  {
+   "id": "brk_PDH_close",
+   "label": "Hourly close above yesterday's high",
+   "side": "call",
+   "status": "probation",
+   "since": "2026-10-09",
+   "backtest": {
+    "n": 636,
+    "avg_r": -0.002,
+    "ci_lo": -0.071,
+    "ci_hi": 0.067,
+    "period": "Hourly, 10 names, Mar to Oct 2026"
+   }
+  },
+  {
+   "id": "reclaim_PDL_close",
+   "label": "Dip below yesterday's low, hourly close back above it",
+   "side": "call",
+   "status": "probation",
+   "since": "2026-10-09",
+   "backtest": {
+    "n": 187,
+    "avg_r": 0.008,
+    "ci_lo": -0.084,
+    "ci_hi": 0.099,
+    "period": "Hourly, 10 names, Mar to Oct 2026"
+   }
+  },
+  {
+   "id": "brk_PDL_close",
+   "label": "Hourly close below yesterday's low",
+   "side": "put",
+   "status": "probation",
+   "since": "2026-10-09",
+   "backtest": {
+    "n": 547,
+    "avg_r": -0.008,
+    "ci_lo": -0.082,
+    "ci_hi": 0.066,
+    "period": "Hourly, 10 names, Mar to Oct 2026"
+   }
+  },
+  {
+   "id": "reject_PDH_close",
+   "label": "Poke above yesterday's high, hourly close back below it",
+   "side": "put",
+   "status": "probation",
+   "since": "2026-10-09",
+   "backtest": {
+    "n": 229,
+    "avg_r": 0.033,
+    "ci_lo": -0.055,
+    "ci_hi": 0.122,
+    "period": "Hourly, 10 names, Mar to Oct 2026"
+   }
+  }
+ ],
+ "expected_move_check": {
+  "inside_1d_pct": 85.0,
+  "touch_5d_pct": 29.8,
+  "n": 500,
+  "period": "SPY vs VIX, 2 years to 9 Oct 2026"
+ }
+}

@@ -6,3 +6,5 @@ dashboard/**
 src/wt/ops/publish.py
 src/wt/crypto/snapshot.py
 src/wt/options/live.py
+src/wt/options/edition.py
+scripts/options_edition.py
