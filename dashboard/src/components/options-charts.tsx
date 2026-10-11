@@ -119,6 +119,8 @@ export interface BreakevenMark {
 
 /** How long the longest open-interest bar is drawn, in the map's units. */
 const OI_BAR = 54;
+/** Where the bars start: past the price scale's labels at the left edge. */
+const OI_X = X0 + 34;
 
 export function LevelMap({
   t,
@@ -273,21 +275,40 @@ export function LevelMap({
           </g>
         ) : null}
         {interest ? (
-          // Bars from the left edge at the strikes with the most open contracts: filled for calls, outlined for
-          // puts, each as long as its share of the largest. Blue, as everything from the option market is.
+          // Bars at the strikes with the most open contracts, starting clear of the price scale: filled for calls
+          // above the strike's line, outlined for puts below it, each as long as its share of the largest, with one
+          // label a strike. Blue, as everything from the option market is.
           <g data-layer="oi" data-interest={interest.marks.filter((m) => m.strike >= v.lo && m.strike <= v.hi).length}>
             {(() => {
               const shown = interest.marks.filter((m) => m.strike >= v.lo && m.strike <= v.hi);
               const most = Math.max(1, ...shown.map((m) => m.oi));
-              return shown.map((m) => {
-                const len = Math.max(4, (m.oi / most) * OI_BAR);
-                const at = y(m.strike) + (m.kind === "call" ? -3 : 3);
+              const strikes = [...new Set(shown.map((m) => m.strike))];
+              return strikes.map((strike) => {
+                const here = shown.filter((m) => m.strike === strike).sort((p, q) => (p.kind === q.kind ? 0 : p.kind === "call" ? -1 : 1));
+                const len = (m: (typeof here)[number]) => Math.max(4, (m.oi / most) * OI_BAR);
                 return (
-                  <g key={`${m.kind}:${m.strike}`}>
-                    <title>{`${num(m.oi)} open ${m.kind}s at ${num(m.strike, m.strike % 1 === 0 ? 0 : 2)}${interest.asOf ? `, as of ${interest.asOf}` : ""}`}</title>
-                    <rect x={X0} y={at - 2} width={len} height={4} fill={m.kind === "call" ? "var(--info)" : "var(--card)"} stroke="var(--info)" strokeWidth={1} />
-                    <text x={X0 + len + 4} y={at + 3} fontSize={9.5} style={{ fill: "var(--info)", paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 2.5 }} className="font-mono">
-                      {`${shortCount(m.oi)} ${m.kind === "call" ? "C" : "P"}`}
+                  <g key={strike}>
+                    <title>{`${here.map((m) => `${num(m.oi)} open ${m.kind}s`).join(" and ")} at ${num(strike, strike % 1 === 0 ? 0 : 2)}${interest.asOf ? `, as of ${interest.asOf}` : ""}`}</title>
+                    {here.map((m) => (
+                      <rect
+                        key={m.kind}
+                        x={OI_X}
+                        y={y(strike) + (m.kind === "call" ? -5 : 1)}
+                        width={len(m)}
+                        height={4}
+                        fill={m.kind === "call" ? "var(--info)" : "var(--card)"}
+                        stroke="var(--info)"
+                        strokeWidth={1}
+                      />
+                    ))}
+                    <text
+                      x={OI_X + Math.max(...here.map(len)) + 4}
+                      y={y(strike) + 3}
+                      fontSize={9.5}
+                      style={{ fill: "var(--info)", paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 2.5 }}
+                      className="font-mono"
+                    >
+                      {here.map((m) => `${shortCount(m.oi)} ${m.kind === "call" ? "C" : "P"}`).join(" · ")}
                     </text>
                   </g>
                 );

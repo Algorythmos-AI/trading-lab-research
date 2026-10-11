@@ -426,6 +426,7 @@ test("the map marks the strikes with the most open interest, and the layer can b
   await expect(marks).toBeHidden();
   // A name the host sent nothing for has no marks and no switch for them.
   await pick(page, "NVDA");
+  await expect(detail(page, "NVDA")).toBeVisible();
   await expect(detail(page, "NVDA").locator('[data-layer="oi"]')).toHaveCount(0);
   await expect(detail(page, "NVDA").getByRole("button", { name: "Open interest" })).toHaveCount(0);
   // Until the host publishes, there is none anywhere.
