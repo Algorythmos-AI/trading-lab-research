@@ -64,6 +64,7 @@ describe("the rules' states in today's session", () => {
     expect(rulesAreOld(late, true)).toBe(true);
     expect(rulesAreOld(late, false)).toBe(false); // after the bell an old document is just the day's last
     expect(rulesAreOld({ ...late, complete: true }, true)).toBe(false);
+    expect(rulesAreOld({ ...late, openByDoc: true }, false)).toBe(true); // the host's own word that the market is open
   });
 
   it("shows nothing for another session's states, with no block, with no document, or once the document is too old", () => {

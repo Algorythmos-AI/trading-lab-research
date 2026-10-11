@@ -33,6 +33,8 @@ export interface RulesToday {
   desk: number;
   /** Minutes since the host sent the document these states came in. */
   ageMin: number;
+  /** The host's own word, when it last sent, that the market was open and has not yet closed. */
+  openByDoc: boolean;
   /** Rules that have triggered, latest first, then by name. */
   triggers: Trigger[];
   /** Every rule's state by name and rule id, for the name's own rule list. */
@@ -52,6 +54,8 @@ export function rulesToday(doc: OptionsLive | null, e: Options, now: number): Ru
   if (!doc || !block || block.session !== e.session) return null;
   const at = Date.parse(doc.as_of);
   if (!Number.isFinite(at) || (now - at) / 60_000 > POSITIONS_GONE_MIN) return null;
+  const close = Date.parse(doc.market?.next_close ?? "");
+  const openByDoc = doc.market?.is_open === true && (!Number.isFinite(close) || now < close);
   const labels = new Map((e.rules ?? []).map((r) => [r.id, r.label ?? OTHER_RULE]));
   const carried = new Set(e.tickers.map((t) => t.symbol));
   const triggers: Trigger[] = [];
@@ -71,7 +75,7 @@ export function rulesToday(doc: OptionsLive | null, e: Options, now: number): Ru
     bySymbol[n.symbol] = mine;
   }
   triggers.sort((a, b) => (b.bar ?? "").localeCompare(a.bar ?? "") || a.symbol.localeCompare(b.symbol) || a.rule.localeCompare(b.rule));
-  return { session: block.session, asOf: block.as_of, delayMin: block.delay_min ?? null, complete: block.complete === true, names, desk: carried.size, ageMin: Math.max(0, (now - at) / 60_000), triggers, bySymbol };
+  return { session: block.session, asOf: block.as_of, delayMin: block.delay_min ?? null, complete: block.complete === true, names, desk: carried.size, ageMin: Math.max(0, (now - at) / 60_000), openByDoc, triggers, bySymbol };
 }
 
 /**
@@ -79,5 +83,5 @@ export function rulesToday(doc: OptionsLive | null, e: Options, now: number): Ru
  * word did not say it was over, and nothing has arrived for half an hour.
  */
 export function rulesAreOld(r: RulesToday, marketOpen: boolean): boolean {
-  return marketOpen && !r.complete && r.ageMin > POSITIONS_OLD_MIN;
+  return (marketOpen || r.openByDoc) && !r.complete && r.ageMin > POSITIONS_OLD_MIN;
 }
