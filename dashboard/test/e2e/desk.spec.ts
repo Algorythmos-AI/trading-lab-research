@@ -460,6 +460,40 @@ test("the brief view prices an at-the-money call and put on every name, only whe
   await expect(rows(page)).toHaveCount(10);
 });
 
+test("the live view lists the rules that have triggered today, and each name's rules say where they stand", async ({ page, context, baseURL }) => {
+  await open(page, "/options?view=live");
+  const today = page.getByRole("region", { name: "Rules today" });
+  // Two rules have triggered in the fixture's session: one at its target, one still open. Latest first.
+  await expect(today).toHaveAttribute("data-triggers", "2");
+  const items = today.getByRole("listitem");
+  await expect(items).toHaveCount(2);
+  await expect(items.nth(0)).toContainText("Target reached");
+  await expect(items.nth(0)).toContainText("on the 12:00 ET hourly close");
+  await expect(items.nth(1)).toContainText("Open");
+  await expect(items.nth(1)).toContainText("+0.42R");
+  // It says what it is: provisional, behind the market, and not a signal.
+  await expect(today).toContainText("16 min behind");
+  await expect(today).toContainText("not a signal to trade");
+  expect((await today.textContent()) ?? "").not.toMatch(/NaN|undefined|brk_|reject_|reclaim_/);
+  // A row opens its name, whose own rule list carries today's state.
+  await items.nth(1).getByRole("button").click();
+  await expect(detail(page, "SPY")).toBeVisible();
+  await expect(detail(page, "SPY").locator('[data-rule-today="open"]')).toContainText("today: open, from 11:00 ET");
+  await expect(detail(page, "SPY").locator('[data-rule-today="waiting"]')).toHaveCount(3);
+  // Nothing triggered: the pane says so. No rule states from the host: no pane, and the desk as it was.
+  await variant(context, baseURL, "rules-none");
+  await open(page, "/options?view=live");
+  await expect(page.getByRole("region", { name: "Rules today" })).toContainText("No rule has triggered so far");
+  await variant(context, baseURL, "rules-off");
+  await open(page, "/options?view=live");
+  await expect(page.getByRole("region", { name: "Rules today" })).toHaveCount(0);
+  await expect(positions(page)).toBeVisible();
+  // It belongs to the live view.
+  await variant(context, baseURL, "");
+  await open(page, "/options?view=brief");
+  await expect(page.getByRole("region", { name: "Rules today" })).toHaveCount(0);
+});
+
 test("the map marks the strikes with the most open interest, and the layer can be switched off", async ({ page, context, baseURL }) => {
   await open(page, "/options?view=live&s=SPY");
   await showPane(page, "SPY");
