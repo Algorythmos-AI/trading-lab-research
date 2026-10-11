@@ -24,6 +24,8 @@ export function VolShape({ shape, spot, strike, expiry }: { shape: Shape; spot: 
   const x = (k: number) => X0 + ((k - first) / span) * (X1 - X0);
   const y = (v: number) => TOP + ((hi - v) / (hi - lo)) * (BOTTOM - TOP);
   const strikeText = (k: number) => num(k, k % 1 === 0 ? 0 : 2);
+  const spotShown = spot >= first && spot <= last;
+  const strikeShown = shape.points.some((p) => p.strike === strike);
   return (
     <figure data-vol-shape={shape.points.length} className="grid gap-1">
       <figcaption className="text-xs">
@@ -33,16 +35,16 @@ export function VolShape({ shape, spot, strike, expiry }: { shape: Shape; spot: 
           · {fracPct(shape.atm.iv, 1)} at {strikeText(shape.atm.strike)}, from {fracPct(shape.lo, 1)} to {fracPct(shape.hi, 1)} across the strikes shown
         </span>
       </figcaption>
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Implied volatility by strike for the ${expiry} expiry`} className="w-full max-w-md">
-        {[shape.hi, shape.lo].map((v) => (
-          <g key={v}>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Implied volatility at each level, ${expiry}`} className="w-full max-w-md">
+        {(shape.hi === shape.lo ? [shape.hi] : [shape.hi, shape.lo]).map((v, i) => (
+          <g key={i}>
             <line x1={X0} x2={X1} y1={y(v)} y2={y(v)} stroke="var(--chart-grid)" strokeWidth={1} />
             <text x={X0 - 4} y={y(v) + 3.5} fontSize={9.5} textAnchor="end" style={{ fill: "var(--muted-foreground)" }} className="font-mono">
               {fracPct(v, 1)}
             </text>
           </g>
         ))}
-        {spot >= first && spot <= last ? <line x1={x(spot)} x2={x(spot)} y1={TOP} y2={BOTTOM} stroke="var(--foreground)" strokeOpacity={0.6} strokeDasharray="4 3" /> : null}
+        {spotShown ? <line x1={x(spot)} x2={x(spot)} y1={TOP} y2={BOTTOM} stroke="var(--foreground)" strokeOpacity={0.6} strokeDasharray="4 3" /> : null}
         {shape.points.map((p) => (
           <g key={p.strike}>
             <title>{`${strikeText(p.strike)}: call ${p.call !== null ? fracPct(p.call, 1) : "none"}, put ${p.put !== null ? fracPct(p.put, 1) : "none"}`}</title>
@@ -58,7 +60,10 @@ export function VolShape({ shape, spot, strike, expiry }: { shape: Shape; spot: 
           {strikeText(last)}
         </text>
       </svg>
-      <p className="text-muted-foreground text-[0.6875rem]">Filled: calls. Outlined: puts. Dashed line: the stock&apos;s price. The tick under the axis is the strike being priced.</p>
+      <p className="text-muted-foreground text-[0.6875rem]">
+        Filled: calls. Outlined: puts.{spotShown ? " Dashed line: the stock's price." : " The stock's price is outside these strikes."}
+        {strikeShown ? " The tick under the axis is the strike being priced." : ""}
+      </p>
       <details className="text-xs">
         <summary className="text-muted-foreground cursor-pointer">The same as a table ({shape.points.length} strikes)</summary>
         <table className="mt-1 w-full max-w-xs font-mono">

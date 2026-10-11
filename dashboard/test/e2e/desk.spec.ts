@@ -329,7 +329,7 @@ test("the contract pane prices the call or put the reader names, remembers it ac
   await expect(contract(page).getByRole("rowheader", { name: /(Now|Last close)$/ })).toBeVisible();
   // Under the scenarios: the expiry's volatility strike by strike, as a picture and as the same numbers in a table.
   const shape = contract(page).locator("[data-vol-shape]");
-  await expect(shape.getByRole("img", { name: /Implied volatility by strike/ })).toBeVisible();
+  await expect(shape.getByRole("img", { name: /Implied volatility at each level/ })).toBeVisible();
   expect(Number(await shape.getAttribute("data-vol-shape"))).toBeGreaterThanOrEqual(3);
   await shape.getByText(/The same as a table/).click();
   await expect(shape.getByRole("columnheader", { name: "Strike" })).toBeVisible();
