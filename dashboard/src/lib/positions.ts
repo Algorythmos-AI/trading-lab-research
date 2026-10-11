@@ -4,8 +4,10 @@
 // manual option trades. The desk shows them; it never places, changes or closes one.
 import type { OptionKind } from "./bs";
 import type { Pick } from "./contract";
-import { MAX_CONTRACTS, daysToExpiry, minutesToExpiry } from "./contract";
+import type { ChainResponse } from "./chain";
+import { MAX_CONTRACTS, contractView, daysToExpiry, minutesToExpiry } from "./contract";
 import { MULTIPLIER } from "./longopt";
+import type { OptionsTicker } from "./options";
 import type { OptionsLive } from "./options-live.types";
 
 export type LivePosition = OptionsLive["positions"][number];
@@ -109,4 +111,35 @@ export function pickFor(row: PositionRow): Pick | null {
   if (row.qty <= 0 || row.expired) return null;
   const paid = row.avgPrice !== null && row.avgPrice > 0 ? Math.round(row.avgPrice * 100) / 100 : null;
   return { kind: row.kind, expiry: row.expiry, strike: row.strike, contracts: Math.min(row.qty, MAX_CONTRACTS), paid: paid !== null && paid >= 0.01 ? paid : null };
+}
+
+/** How a position moves, from the option feed's quote for its contract. */
+export interface PositionGreeks {
+  /** Dollars the option gains per share for $1 on the stock. */
+  delta: number | null;
+  /** What a calendar day of waiting costs the whole position, in dollars, stock and volatility unchanged. */
+  decayDay: number | null;
+}
+
+/** Positions priced at once: each needs a request of its own, and a person holds a handful. */
+export const GREEKS_MAX = 8;
+
+/**
+ * A long position's delta and daily decay, worked out as the contract pane works them out for the same contract.
+ * Null for a short or expired position, with no quote for the contract, or while the quotes are too old to use.
+ */
+export function positionGreeks(
+  row: PositionRow,
+  chain: ChainResponse | null,
+  t: OptionsTicker,
+  spot: number,
+  now: number,
+  session: string,
+  clock: { marketOpen: boolean; priceIsLive: boolean },
+): PositionGreeks | null {
+  const pick = pickFor(row);
+  if (!pick || !chain || !(spot > 0)) return null;
+  const v = contractView(pick, chain, t, spot, now, session, clock);
+  if (v.expired || v.stale || v.contract === null || (v.delta === null && v.thetaDay === null)) return null;
+  return { delta: v.delta, decayDay: v.thetaDay !== null ? v.thetaDay * MULTIPLIER * row.qty : null };
 }

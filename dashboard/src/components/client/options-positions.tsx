@@ -1,9 +1,12 @@
 "use client";
 
 import { TriangleAlert } from "lucide-react";
+import { useEffect, useState } from "react";
+import type { ChainResponse } from "@/lib/chain";
 import { newYork, num, weekDate } from "@/lib/format";
 import type { OptionsLive } from "@/lib/options-live.types";
-import { pickFor, positionRows, positionsAge, positionsTotal, type PositionRow } from "@/lib/positions";
+import { liveRead, type OptionsTicker } from "@/lib/options";
+import { GREEKS_MAX, pickFor, positionGreeks, positionRows, positionsAge, positionsTotal, type PositionGreeks, type PositionRow } from "@/lib/positions";
 import { cn } from "@/lib/utils";
 import { useLive } from "./live-layer";
 
@@ -15,7 +18,7 @@ function dollars(v: number | null): string {
 }
 const tone = (v: number | null) => (v === null || Math.round(v) === 0 ? "text-muted-foreground" : v > 0 ? "text-good" : "text-bad");
 
-function Line({ r }: { r: PositionRow }) {
+function Line({ r, g }: { r: PositionRow; g: PositionGreeks | null }) {
   return (
     <>
       <span className="min-w-0">
@@ -27,6 +30,12 @@ function Line({ r }: { r: PositionRow }) {
           {weekDate(r.expiry)}
           {r.expired ? ", expired" : r.days === 0 ? ", today" : r.days === 1 ? ", 1 day" : r.days !== null ? `, ${r.days} days` : ""} ·{" "}
           {r.qty < 0 ? `short ${Math.abs(r.qty)}` : `${r.qty} ${r.qty === 1 ? "contract" : "contracts"}`}
+          {g ? (
+            <span data-greeks className="font-mono">
+              {g.delta !== null ? ` · Δ ${num(g.delta, 2)}` : ""}
+              {g.decayDay !== null ? ` · ${g.decayDay <= 0 ? "−" : "+"}$${num(Math.abs(g.decayDay), 0)}/day` : ""}
+            </span>
+          ) : null}
         </span>
       </span>
       <span className="text-right font-mono">
@@ -51,17 +60,60 @@ const ROW = "grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-baseline gap-
  */
 export function OptionsPositions({
   doc,
-  names,
+  tickers,
   marketOpen,
   onOpen,
 }: {
   doc: OptionsLive;
-  names: readonly string[];
+  /** The desk's names: a position on one of them can be opened, and is priced from the option feed. */
+  tickers: readonly OptionsTicker[];
   /** Whether the session is open by the clock, right now. */
   marketOpen: boolean;
   onOpen: (row: PositionRow) => void;
 }) {
-  const { now } = useLive();
+  const { now, feed, session } = useLive();
+  const names = tickers.map((t) => t.symbol);
+  // One request a position for its contract's quote, asked again when the host sends a new document. Only long
+  // positions on the desk's names that have not expired, and only a handful: the rest show without greeks.
+  const [chains, setChains] = useState<Record<string, ChainResponse>>({});
+  const wanted = (doc.positions ?? [])
+    .map((p) => p.contract)
+    .sort()
+    .join(",");
+  useEffect(() => {
+    let stopped = false;
+    const bySymbol = new Map(tickers.map((t) => [t.symbol, t]));
+    const todo = positionRows(doc, new Set(bySymbol.keys()), Date.now())
+      .filter((r) => r.onDesk && pickFor(r) !== null)
+      .slice(0, GREEKS_MAX);
+    void (async () => {
+      for (const r of todo) {
+        const close = bySymbol.get(r.symbol)?.last?.close;
+        if (stopped || typeof close !== "number" || !(close > 0)) continue;
+        try {
+          const res = await fetch(`/api/chain?s=${encodeURIComponent(r.symbol)}&px=${close.toFixed(2)}&x=${r.expiry}&k=${r.strike}`, { cache: "no-store" });
+          if (res.status === 503) return; // no option feed on this site: the rows stand without greeks
+          if (!res.ok || stopped) continue;
+          const chain = (await res.json()) as ChainResponse;
+          if (!stopped) setChains((c) => ({ ...c, [r.contract]: chain }));
+        } catch {
+          // one position without greeks is not worth a message
+        }
+      }
+    })();
+    return () => {
+      stopped = true;
+    };
+    // The document's time is what says "ask again"; the tickers are the same names from one render to the next.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wanted, doc.as_of]);
+  const greeksOf = (r: PositionRow): PositionGreeks | null => {
+    const t = tickers.find((x) => x.symbol === r.symbol);
+    const chain = chains[r.contract];
+    if (!t || !chain || now === null) return null;
+    const read = liveRead(t, feed.status === "ok" ? feed.quotes[t.symbol] : undefined, session, now, feed.status === "ok" ? feed.receivedAt : null);
+    return read.price !== null ? positionGreeks(r, chain, t, read.price, now, session, { marketOpen, priceIsLive: read.inSession }) : null;
+  };
   // Until the browser's clock is read, the document's own time stands in: the server and the first draw agree.
   const asOf = Date.parse(doc.as_of);
   const clock = now ?? (Number.isFinite(asOf) ? asOf : 0);
@@ -100,18 +152,20 @@ export function OptionsPositions({
             <li key={`${r.contract}:${i}`}>
               {r.onDesk && pickFor(r) ? (
                 <button type="button" onClick={() => onOpen(r)} title={`Open ${r.symbol} with this contract in the contract pane`} className={cn(ROW, "hover:bg-muted/60 rounded")}>
-                  <Line r={r} />
+                  <Line r={r} g={greeksOf(r)} />
                 </button>
               ) : (
                 <div className={ROW}>
-                  <Line r={r} />
+                  <Line r={r} g={null} />
                 </div>
               )}
             </li>
           ))}
         </ul>
       )}
-      <p className="text-muted-foreground mt-1.5 text-[0.6875rem]">Paper account, read only. Marks and results are the broker&apos;s.</p>
+      <p className="text-muted-foreground mt-1.5 text-[0.6875rem]">
+        Paper account, read only. Marks and results are the broker&apos;s. Δ and the cost of a day&apos;s waiting are estimates from option quotes 15 minutes behind the market.
+      </p>
     </section>
   );
 }

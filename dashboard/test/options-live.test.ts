@@ -4,7 +4,8 @@ import { fixtureOptionsLive, occSymbol, VARIANT_FLAGS, type VariantFlag } from "
 import { sign } from "@/lib/hmac";
 import type { OptionsLive } from "@/lib/options-live.types";
 import type { Options } from "@/lib/options";
-import { parseContract, pickFor, positionRows, POSITIONS_GONE_MIN, POSITIONS_OLD_MIN, positionsAge, positionsTotal } from "@/lib/positions";
+import type { ChainResponse } from "@/lib/chain";
+import { parseContract, pickFor, positionGreeks, positionRows, POSITIONS_GONE_MIN, POSITIONS_OLD_MIN, positionsAge, positionsTotal } from "@/lib/positions";
 import { isOptionsLive, OPTIONS_LIVE_SCHEMA, validateOptionsLive } from "@/lib/validate";
 import optionsJson from "./fixtures/options.v1.json";
 
@@ -288,5 +289,41 @@ describe("how far to trust the document by its age", () => {
     for (const bad of [null, undefined, "", "yesterday"]) expect(positionsAge(bad, NOW.getTime(), true).state).toBe("gone");
     // A clock that is behind the document's does not make it negative.
     expect(positionsAge(at(-5), NOW.getTime(), true)).toEqual({ minutes: 0, state: "fresh" });
+  });
+});
+
+describe("a position's greeks", () => {
+  const spy = e.tickers.find((t) => t.symbol === "SPY")!;
+  const d = doc();
+  const row = positionRows(d, new Set(["SPY"]), NOW.getTime()).find((r) => r.symbol === "SPY")!;
+  const chain = (over: Partial<ChainResponse["expiries"][number]["contracts"][number]> = {}): ChainResponse => ({
+    as_of: new Date(NOW.getTime() - 15 * 60_000).toISOString(),
+    feed: "indicative",
+    delay_min: 15,
+    symbol: "SPY",
+    expiries: [{ date: row.expiry, contracts: [{ kind: row.kind, strike: row.strike, bid: 3.0, ask: 3.2, last: 3.1, at: null, iv: 0.12, delta: 0.52, volume: 10, ...over }] }],
+  });
+  const clock = { marketOpen: true, priceIsLive: true };
+  const at = (c: ChainResponse | null, r = row) => positionGreeks(r, c, spy, row.strike, NOW.getTime(), e.session, clock);
+
+  it("gives delta per share and what a day costs the whole position", () => {
+    const g = at(chain())!;
+    expect(g.delta).toBeGreaterThan(0.3);
+    expect(g.delta).toBeLessThan(0.7);
+    // Two contracts: a day of waiting costs twice one contract's decay, and it is a cost.
+    expect(g.decayDay).toBeLessThan(0);
+    const one = at(chain(), { ...row, qty: 1 })!;
+    expect(g.decayDay).toBeCloseTo(one.decayDay! * 2, 9);
+  });
+
+  it("is nothing for a short or expired position, with no quote for the contract, or with old quotes in session", () => {
+    expect(at(chain(), { ...row, qty: -2 })).toBeNull();
+    expect(at(chain(), { ...row, expired: true })).toBeNull();
+    expect(at(null)).toBeNull();
+    expect(at({ ...chain(), expiries: [] })).toBeNull();
+    // The age is the newest quote's own time: six hours old with the market open is too old to price from.
+    expect(at(chain({ at: new Date(NOW.getTime() - 6 * 3_600_000).toISOString() }))).toBeNull();
+    expect(at(chain({ at: new Date(NOW.getTime() - 16 * 60_000).toISOString() }))).not.toBeNull();
+    expect(positionGreeks(row, chain(), spy, 0, NOW.getTime(), e.session, clock)).toBeNull();
   });
 });
