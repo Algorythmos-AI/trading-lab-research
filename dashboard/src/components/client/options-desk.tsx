@@ -36,6 +36,7 @@ import { pickFor, type PositionRow } from "@/lib/positions";
 import { DeskPalette } from "./desk-palette";
 import { FeedPill, StateChip, useLive } from "./live-layer";
 import { storePick } from "./options-contract";
+import { OptionsCosts } from "./options-costs";
 import { OptionsDetail, Tick } from "./options-detail";
 import { OptionsPositions } from "./options-positions";
 import { PaneBoundary } from "./pane-boundary";
@@ -664,6 +665,11 @@ export function OptionsDesk({
               </tbody>
             </table>
           </PaneBoundary>
+          {live && view === "brief" ? (
+            <PaneBoundary name="Option costs">
+              <OptionsCosts tickers={e.tickers} session={e.session} halfDay={halfDay} />
+            </PaneBoundary>
+          ) : null}
           {positions && live && view === "live" ? (
             <PaneBoundary name="Paper positions">
               <OptionsPositions
