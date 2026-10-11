@@ -257,7 +257,7 @@ export function LevelMap({ t, interactive = false, breakeven = null }: { t: Opti
             ) : null}
           </g>
         ) : null}
-        {breakeven && isNum(breakeven.price) ? (
+        {breakeven && isNum(breakeven.price) && breakeven.price > 0 ? (
           // Blue, like everything else on the map that comes from option prices. Off the map's range it is named
           // at the edge it lies beyond, never drawn where it is not.
           <g data-breakeven={breakeven.price > v.hi ? "above" : breakeven.price < v.lo ? "below" : "on"}>
@@ -267,7 +267,7 @@ export function LevelMap({ t, interactive = false, breakeven = null }: { t: Opti
             ) : null}
             <text
               x={X0 + 48}
-              y={breakeven.price > v.hi ? TOP + 11 : breakeven.price < v.lo ? BOTTOM - 5 : Math.max(TOP + 11, y(breakeven.price) - 4)}
+              y={breakeven.price > v.hi ? TOP + 11 : breakeven.price < v.lo ? BOTTOM - 5 : y(breakeven.price) < TOP + 15 ? y(breakeven.price) + 12 : y(breakeven.price) - 4}
               fontSize={10.5}
               style={{ fill: "var(--info)", paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 3 }}
               className="font-mono"
