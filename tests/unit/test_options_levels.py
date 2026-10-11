@@ -168,14 +168,16 @@ def test_week_and_month_levels_roll_on_the_right_bar():
     # The short Thanksgiving week is one week: Friday's half day still belongs to it.
     fri = lv.levels_for([b for b in hist if b.d < "2026-11-27"], "2026-11-27")
     assert fri["prev_week"] == ["2026-11-16", "2026-11-20"] and fri["half_day"]
-    # ISO week 53 of 2026 runs into January: the first session of 2027 still sees it as the week so far.
+    # ISO week 53 of 2026 runs into January: for the first full week of 2027 it is the previous week, whole.
     hist27 = bars(7, end="2027-01-08", n=330)
     jan = lv.levels_for([b for b in hist27 if b.d < "2027-01-04"], "2027-01-04")
     assert jan["prev_week"] == ["2026-12-28", "2026-12-31"] and jan["prev_month"] == "2026-12"
 
 
 @pytest.mark.parametrize("seed", range(12))
-def test_zones_never_overlap_and_account_for_every_level(seed):
+def test_zones_come_in_order_and_account_for_every_level(seed):
+    """Zones are not disjoint: a level inside an earlier supply or demand band opens a zone of its own, because
+    merging compares lows only. That is the engine as it has always run; this test does not claim otherwise."""
     got = lv.levels_for(bars(seed), "2026-10-12")
     zones = got["zones"]
     assert sum(len(z["members"]) for z in zones) == len(got["levels"])
@@ -255,7 +257,8 @@ def test_each_rule_triggers_once_on_the_hourly_close_and_is_scored_in_r():
     up = [hour(0, 100, 100.4, 99.9, 100.3), hour(1, 100.3, 101.0, 100.2, 100.9), hour(2, 100.9, 101.2, 100.6, 101.0),
           hour(3, 101.0, 102.1, 100.9, 102.0), hour(4, 102.0, 102.2, 101.8, 102.1)]
     (t,) = rules.probation_triggers(up, got)
-    # Entry on the close across 100.5; stop a fifth of ATR under the level; target two risks away, reached in bar 3.
+    # Entry on the close across 100.5; stop a fifth of ATR under the level; target two risks away. Bar 3's high of
+    # 102.1 does not count: the target is 102.10000000000002 in floating point. Bar 4's 102.2 does.
     assert t == {"rule": "brk_PDH_close", "side": "call", "trigger_bar": "2026-10-12T10:30", "entry": 100.9,
                  "stop": 100.3, "target": 102.1, "exit": "target", "r": 2.0}
     stopped = [*up[:2], hour(2, 100.9, 101.0, 100.2, 100.4), hour(3, 100.4, 100.5, 100.1, 100.2)]
@@ -302,3 +305,19 @@ def test_every_result_is_between_a_full_stop_and_a_full_target(seed):
         assert (x["exit"] == "stop") == (x["r"] == -1.0) or x["exit"] == "close"
         side = 1 if x["side"] == "call" else -1
         assert (x["entry"] - x["stop"]) * side > 0 and (x["target"] - x["entry"]) * side > 0
+
+
+def test_a_band_with_half_its_edges_is_refused_and_a_target_means_two_r():
+    with pytest.raises(TypeError, match="both its low and its high"):
+        lv.merge_zones([lv.Level("A", 100.0, "sd", 1, lo=99.0)], ref=100.0)
+    got = lv.levels_for(flat(), "2026-10-12")
+    for seed in range(40):
+        rng = random.Random(seed)
+        px = 100.0
+        hb = []
+        for i in range(7):
+            c = px * (1 + (rng.random() - 0.5) * 0.03)
+            hb.append(hour(i, px, max(px, c) * 1.002, min(px, c) * 0.998, c))
+            px = c
+        for x in rules.probation_triggers(hb, got):
+            assert (x["exit"] == "target") == (x["r"] == 2.0) and (x["exit"] == "stop") == (x["r"] == -1.0)

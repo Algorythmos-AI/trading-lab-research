@@ -15,7 +15,8 @@ from dataclasses import dataclass, field
 from typing import Any, TypedDict
 
 # ---------------------------------------------------------------- calendar
-# NYSE full-day closures. Checked against IBKR's daily bars for 2024-10-10..2026-10-09 by the tests.
+# NYSE full-day closures, 2024 to 2027. In the cloud project these were checked against two years of IBKR's daily
+# bars; that check needs real bars and did not move here. Dates before 2024 are not covered and read as sessions.
 HOLIDAYS = {
     # 2024
     "2024-01-01", "2024-01-15", "2024-02-19", "2024-03-29", "2024-05-27", "2024-06-19", "2024-07-04",
@@ -303,6 +304,8 @@ def merge_zones(lv: list[Level], ref: float, pct: float = 0.005) -> list[Zone]:
     """
     pts: list[tuple[float, float, Level]] = []
     for x in lv:
+        if x.lo is not None and x.hi is None:
+            raise TypeError(f"{x.name}: a band needs both its low and its high")     # as the original refused it
         lo, hi = (x.lo, x.hi) if x.lo is not None and x.hi is not None else (x.price, x.price)
         pts.append((lo, hi, x))
     pts.sort(key=lambda p: p[0])
