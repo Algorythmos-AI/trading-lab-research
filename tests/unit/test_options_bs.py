@@ -219,3 +219,33 @@ def test_value_at_another_price_later_matches_pricing_it_there_and_then():
     # Past expiry it is what the option is worth exercised, to within the one-minute floor.
     assert longopt.value_if(785, 780, 390, 0.12, "call", 10_000) == pytest.approx(5.0, abs=1e-3)
     assert longopt.value_if(785, 780, 390, 0.12, "put", 10_000) == pytest.approx(0.0, abs=1e-3)
+
+
+def test_a_textbook_price_stands_on_its_own():
+    """A reference from outside this code (Hull's worked example): the vectors are written by the code under
+    test, so without this a wrong formula would agree with itself everywhere."""
+    half_year = 0.5 * bs.MINUTES_PER_YEAR
+    assert bs.price(42, 40, half_year, 0.2, "call", r=0.1) == pytest.approx(4.7594, abs=5e-4)
+    assert bs.price(42, 40, half_year, 0.2, "put", r=0.1) == pytest.approx(0.8086, abs=5e-4)
+
+
+@pytest.mark.parametrize("sigma", [0.12, 1.0, 2.5])
+def test_at_and_after_the_bell_an_option_is_worth_what_it_is_in_the_money_by(sigma):
+    # At the money it expires worthless, however high the volatility: no minute of time value is left over.
+    assert longopt.value_if(780, 780, 30, sigma, "call", ahead=60) == 0.0
+    assert longopt.value_if(780, 780, 30, sigma, "put", ahead=30) == 0.0
+    assert longopt.value_if(785, 780, 30, sigma, "call", ahead=60) == 5.0
+    assert longopt.value_if(770, 780, 0, sigma, "put") == 10.0
+    # With half an hour left, the hour's decay is all of the value, not all but a minute's worth.
+    for kind in ("call", "put"):
+        assert longopt.decay(780, 780, 30, sigma, kind, 60) == pytest.approx(bs.price(780, 780, 30, sigma, kind), abs=1e-12)
+        assert longopt.decay(780, 780, 0, sigma, kind) == 0.0
+        assert longopt.decay(780, 780, -5, sigma, kind) == 0.0
+
+
+def test_time_that_is_not_a_number_is_refused():
+    for bad in (float("nan"), float("inf")):
+        with pytest.raises(ValueError):
+            bs.price(100, 100, bad, 0.2, "call")
+        with pytest.raises(ValueError):
+            bs.greeks(100, 100, bad, 0.2, "put")

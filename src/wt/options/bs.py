@@ -41,6 +41,8 @@ class Greeks:
 
 def years(minutes: float) -> float:
     """Minutes to expiry as a fraction of a 365-day year, floored at one minute."""
+    if not math.isfinite(minutes):
+        raise ValueError("minutes to expiry must be a finite number")
     return max(minutes, MIN_MINUTES) / MINUTES_PER_YEAR
 
 

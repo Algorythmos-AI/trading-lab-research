@@ -380,9 +380,9 @@ export function OptionsContract({
                   {num(view.value, 2)}
                   {view.paidFrom === "entered" && view.pnlNow !== null ? <span className={tone(view.pnlNow)}> · {money(view.pnlNow)}</span> : null}
                 </Figure>
-                <Figure label="Delta · decay" title="How much the option moves per $1 of stock, and what an hour of waiting costs the whole position with the stock unchanged">
+                <Figure label="Delta · decay" title="How much the option moves per $1 of stock, and what an hour of waiting (or the time to expiry, when that is less) costs the whole position with the stock unchanged">
                   {view.delta !== null ? signed(view.delta, 2) : "—"}
-                  {view.decayHour !== null ? <span className="text-muted-foreground"> · ${num(Math.round(view.decayHour * MULTIPLIER * pick.contracts))} an hour</span> : null}
+                  {view.decayHour !== null ? <span className="text-muted-foreground"> · ${num(Math.round(view.decayHour * MULTIPLIER * pick.contracts))} {view.decayToExpiry ? "to expiry" : "an hour"}</span> : null}
                 </Figure>
               </dl>
 
@@ -431,7 +431,8 @@ export function OptionsContract({
             {view.contract?.at ? `This contract's last quote: ${newYork(view.contract.at, false)} New York. ` : ""}
             {read.inSession && read.stale ? "The stock's own price has stopped updating; these numbers use its last one. " : ""}
             {view.sigma === null && !view.expired && !view.stale ? "No volatility is available for this contract, so only its value at expiry is shown. " : ""}
-            Estimates from a flat-volatility model; an American option can be worth a little more. They describe this contract and are not advice. The
+            Estimates from a flat-volatility model that leaves out interest and dividends; an American option can be worth a little more, and a call
+            held over an ex-dividend date a little less. They describe this contract and are not advice. The
             contract is remembered in this browser only.
           </p>
         </>
