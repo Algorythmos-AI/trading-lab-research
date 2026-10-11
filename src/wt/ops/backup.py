@@ -126,8 +126,8 @@ def anchor(day: dt.date, state: dict[str, dict[str, Any]], client: R2 | None = N
     ledger and the ledger's chain is intact (`paths` names the files; without them only "the same" passes).
     Anything else means history was rewritten.
 
-    The ledgers are append-only, so "only grown" is the test that matters. The crypto journal grows every 15
-    minutes and the stocks ledgers grow during a session, so a second backup of a day is normal, not an alarm."""
+    The ledgers are append-only, so "only grown" is the test that matters. The stocks ledgers grow during a
+    session, so a second backup of a day is normal, not an alarm."""
     c = client or R2()
     if not c.configured:
         return False, "R2 not configured"

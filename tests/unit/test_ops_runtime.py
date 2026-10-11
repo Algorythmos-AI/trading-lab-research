@@ -1,7 +1,6 @@
 """Runtime safety net (PR 2): schedule, deploy gate windows, alerts, locks, preflight, migration, job runner."""
 from __future__ import annotations
 
-import dataclasses
 import datetime as dt
 import json
 import plistlib
@@ -11,7 +10,6 @@ from pathlib import Path
 
 import pytest
 
-from wt.core import desk as desks
 from wt.core.clock import ET
 from wt.ops import agents, alerts, jobs, migrate, preflight, window
 from wt.ops.heartbeat import Heartbeat, last_runs
@@ -324,54 +322,6 @@ def test_failed_job_alerts_and_records_the_heartbeat(jobroot):
     assert box[-1]["title"] == "routine recovered"
 
 
-def _crypto_job(code: str, name: str = "crypto") -> Job:
-    return dataclasses.replace(_job(code, name=name), desk="crypto")
-
-
-def _crypto_desk_at(tmp: Path, monkeypatch) -> desks.Desk:
-    d = dataclasses.replace(desks.DESKS["crypto"], state_dir=tmp / "var" / "crypto")
-    monkeypatch.setitem(desks.DESKS, "crypto", d)
-    (tmp / "var").mkdir()
-    return d
-
-
-def test_a_moved_desks_job_starts_nothing_and_leaves_nothing(jobroot, monkeypatch):
-    """After the crypto desk moves to its own repository a timer here can still fire (installing the units enables
-    every timer the code renders). Its job must then do nothing: a run would create an empty desk and publish it."""
-    root, a, box, tmp = jobroot
-    d = _crypto_desk_at(tmp, monkeypatch)
-    desks.moved_marker(d).write_text("moved to its own repository\n")
-    pings: list[tuple] = []
-    monkeypatch.setattr(jobs.hc, "ping", lambda *args, **kw: pings.append(args))
-    ran = tmp / "ran"
-    for name in ("crypto", "dashboard-crypto", "crypto-challengers", "crypto-learn"):
-        assert JOBS[name].desk == "crypto"
-        assert jobs.run_job(_crypto_job(f"open({str(ran)!r}, 'w').close()", name), root, alerts=a) == 0
-    assert not ran.exists()                              # no child process
-    assert not d.state_dir.exists()                      # no fresh desk beside the real one
-    assert box == [] and pings == []                     # no alert, and no ping on the check the real desk now owns
-    assert last_runs(tmp / "hb") == {}                   # no heartbeat for the cadence check to count
-    assert not (tmp / "locks").exists()                  # it never took a lock, so it cannot hold up a deploy
-    assert "not started: the crypto desk has moved" in next((root / "logs").glob("crypto_*.log")).read_text()
-
-
-def test_without_the_marker_the_same_job_runs_as_before(jobroot, monkeypatch):
-    root, a, box, tmp = jobroot
-    _crypto_desk_at(tmp, monkeypatch)
-    monkeypatch.setattr(jobs.hc, "ping", lambda *args, **kw: True)
-    ran = tmp / "ran"
-    assert jobs.run_job(_crypto_job(f"open({str(ran)!r}, 'w').close()"), root, alerts=a) == 0
-    assert ran.exists() and last_runs(tmp / "hb")["crypto"]["status"] == "ok"
-
-
-def test_a_stocks_job_ignores_another_desks_marker(jobroot, monkeypatch):
-    root, a, box, tmp = jobroot
-    desks.moved_marker(_crypto_desk_at(tmp, monkeypatch)).write_text("moved\n")
-    ran = tmp / "ran"
-    assert jobs.run_job(_job(f"open({str(ran)!r}, 'w').close()"), root, alerts=a) == 0
-    assert ran.exists()
-
-
 def test_the_job_log_says_why_the_calendar_fell_back(jobroot, monkeypatch):
     root, a, box, tmp = jobroot
     fault = window.calendar_fault(KeyError("missing required env var APCA_API_KEY_ID"))
@@ -545,20 +495,12 @@ def test_the_daily_summary_says_what_paper_b_did_in_r_and_never_in_money():
         assert "$" not in line and "311" not in line and "600" not in line
 
 
-def test_the_daily_summary_joins_its_lines_and_survives_a_missing_desk(tmp_path, monkeypatch):
+def test_the_daily_summary_joins_its_lines_and_leaves_out_an_empty_one(tmp_path, monkeypatch):
     monkeypatch.setattr(jobs, "forward_summary", lambda: "Forward 2026-10-06: 1 trade(s), -0.18R total.")
     monkeypatch.setattr(jobs, "journal_since", lambda start, path=None: [
         {"event": "armed", "ts": "2026-10-06T12:30:06+00:00"}, {"event": "session_end", "outcome": "no_signal"}])
-    monkeypatch.setattr(jobs, "crypto_summary", lambda now: "Crypto: trend 1 open; break 1 open; dip 0 open.")
     start = dt.datetime(2026, 10, 6, 16, 40, tzinfo=dt.UTC)
     text = jobs.daily_summary(start)
-    assert text == ("Paper B: no signal. Forward 2026-10-06: 1 trade(s), -0.18R total. "
-                    "Crypto: trend 1 open; break 1 open; dip 0 open.")
-    monkeypatch.setattr(jobs, "crypto_summary", lambda now: None)
+    assert text == "Paper B: no signal. Forward 2026-10-06: 1 trade(s), -0.18R total."
     monkeypatch.setattr(jobs, "journal_since", lambda start, path=None: [])
     assert jobs.daily_summary(start) == "Forward 2026-10-06: 1 trade(s), -0.18R total."
-
-
-def test_the_crypto_line_never_raises(monkeypatch):
-    monkeypatch.setattr(jobs, "installed", lambda desk: (_ for _ in ()).throw(RuntimeError("bug")))
-    assert jobs.crypto_summary(dt.datetime(2026, 10, 6, 20, tzinfo=dt.UTC)) is None

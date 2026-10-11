@@ -163,7 +163,7 @@ def test_the_staging_lock_is_released_before_the_switch_and_is_not_a_job_lock(wo
         deploy._switch = real
     assert seen == {"staging_held": False}
     from wt.ops.schedule import JOBS
-    assert deploy.STAGE_LOCK not in JOBS and deploy.STAGE_LOCK not in (locks.DEPLOY_LOCK, deploy.ML_ENV_LOCK)
+    assert deploy.STAGE_LOCK not in JOBS and deploy.STAGE_LOCK != locks.DEPLOY_LOCK
 
 
 def test_one_deploy_at_a_time(world):
@@ -219,29 +219,3 @@ def test_jobs_wait_for_a_running_deploy(monkeypatch, tmp_path):
     with locks.job_lock(locks.DEPLOY_LOCK):
         assert jobs.run_job(jobs.JOBS["weekly"], tmp_path, alerts=object()) == 0
     assert refused and "deploy" in refused[0]
-
-
-def test_the_ml_environment_is_built_after_every_lock_a_job_waits_on_is_released_and_recorded(world, monkeypatch, tmp_path):
-    dev, live, first, st = world
-    second = commit(dev, "b")
-    git(dev, "push", "-q", "origin", "main")
-    seen = {}
-
-    def sync_ml():
-        seen["jobs"] = locks.held([j.name for j in deploy.JOBS.values()])
-        seen["deploy"] = locks.is_held(locks.DEPLOY_LOCK)
-        seen["head"] = head(live)
-        return "synced"
-    monkeypatch.setattr(deploy, "sync_ml", sync_ml)
-    assert deploy.deploy(second) == 0
-    # A long install holds nothing a job waits on: not a job's own lock, and not the deploy lock, which every
-    # job waits for before it starts (wt.ops.jobs.run_job).
-    assert seen == {"jobs": [], "deploy": False, "head": second}
-    import json
-    rec = sorted((tmp_path / "records").glob("*.json"))[-1]
-    assert json.loads(rec.read_text())["ml_env"] == "synced"
-    st["smoke"] = False
-    seen.clear()
-    third = commit(dev, "c")
-    git(dev, "push", "-q", "origin", "main")
-    assert deploy.deploy(third) == 1 and seen == {}             # rolled back: the ML environment is left alone

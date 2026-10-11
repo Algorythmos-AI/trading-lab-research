@@ -26,7 +26,7 @@ import re
 import threading
 import time
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -221,6 +221,20 @@ class Alerts:
         """At most one alert per ``key`` per calendar day (Sydney date by default)."""
         day = day or dt.datetime.now(dt.UTC).astimezone().date().isoformat()
         return self.fire(f"{key}:{day}", title, message, priority)
+
+    def forget(self, gone: Callable[[str], bool]) -> list[str]:
+        """Remove every key `gone` names from the state, firing or not, and return them. For keys whose owner no
+        longer runs here (a desk that left, wt.core.desk.RETIRED): nothing would ever resolve them, and they would
+        show as firing for good. No notice is sent and no history row is written: nothing recovered. The state
+        file is rewritten only when there is something to remove, so a second call does nothing."""
+        if not any(gone(k) for k in _read_state(self.root)):
+            return []
+        with _locked(self.root):
+            state = _read_state(self.root)
+            keys = sorted(k for k in state if gone(k))
+            if keys:
+                _write_state(self.root, {k: v for k, v in state.items() if k not in keys})
+        return keys
 
     def firing(self) -> dict[str, Any]:
         """Keys currently firing (for the dashboard). A once-per-day key is an event of its day, and nothing ever

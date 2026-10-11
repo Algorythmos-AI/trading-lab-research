@@ -325,10 +325,13 @@ def test_status_flags_an_interval_job_that_is_not_being_started(tmp_path, monkey
     runs([3, 18, 33, 48])
     assert [x.split(":")[0] for x in jobs.cadence(now, tmp_path)] == [
         "  [ok] dashboard cadence", "  [FAIL] options-live cadence"]
-    (tmp_path / "crypto").mkdir()
-    monkeypatch.setitem(desks.DESKS, "crypto", dataclasses.replace(desks.DESKS["crypto"], state_dir=tmp_path / "crypto"))
+    monkeypatch.setitem(desks.DESKS, "fx", dataclasses.replace(desks.DESKS["stocks"], name="fx", state_dir=tmp_path / "fx"))
+    monkeypatch.setitem(JOBS, "fx", dataclasses.replace(JOBS["dashboard"], name="fx", desk="fx"))
     assert [x.split(":")[0] for x in jobs.cadence(now, tmp_path)] == [
-        "  [ok] dashboard cadence", "  [FAIL] options-live cadence", "  [FAIL] crypto cadence", "  [FAIL] dashboard-crypto cadence"]
+        "  [ok] dashboard cadence", "  [FAIL] options-live cadence"]
+    (tmp_path / "fx").mkdir()
+    assert [x.split(":")[0] for x in jobs.cadence(now, tmp_path)] == [
+        "  [ok] dashboard cadence", "  [FAIL] options-live cadence", "  [FAIL] fx cadence"]
 
 def test_the_stocks_publisher_runs_every_five_minutes_in_session_and_every_fifteen_otherwise():
     j = JOBS["dashboard"]

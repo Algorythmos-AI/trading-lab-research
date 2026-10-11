@@ -33,7 +33,7 @@ from typing import Any
 
 from wt.core.clock import ET, et
 from wt.core.config import DATA_DIR, FORWARD_LEDGER, ROOT
-from wt.core.desk import DESKS, installed, moved, moved_marker
+from wt.core.desk import DESKS, RETIRED, installed, retired_alert, retired_job
 from wt.ops import hc, host, preflight
 from wt.ops.alerts import Alerts
 from wt.ops.heartbeat import Heartbeat, last_runs, ok_runs_since
@@ -245,39 +245,12 @@ def paper_summary(rows: list[dict[str, Any]]) -> str | None:
     return f"Paper B: {words}" + (f", {sum(rs):+.2f}R on {len(rs)} closed trade(s)" if rs else "") + "."
 
 
-def crypto_summary(now: dt.datetime) -> str | None:
-    """One line on the crypto tournament sleeves: positions open and what closed today (UTC), in R only. None when
-    the desk is not on this host or has no sleeves. Never raises: a summary must not fail a job."""
-    try:
-        from wt.core.config import load_yaml
-        from wt.crypto import snapshot
-        desk = DESKS["crypto"]
-        if not installed(desk):
-            return None
-        rows = snapshot._jsonl(desk.journal)
-        view = snapshot.sleeves_view(desk, load_yaml("crypto.yaml"), rows, now)
-        if not view:
-            return None
-        day, fixed = now.date().isoformat(), snapshot.exit_r(rows)
-        parts = []
-        for v in view:
-            closed = [fixed[str(r.get("id"))] for r in rows if r.get("sleeve") == v["name"] and r.get("kind") == "exit"
-                      and str(r.get("t", "")).startswith(day) and str(r.get("id")) in fixed]
-            bit = f"{v['name']} {len(v['positions'])} open"
-            if closed:
-                bit += f", {len(closed)} closed today {sum(closed):+.2f}R"
-            parts.append(bit)
-        return "Crypto: " + "; ".join(parts) + "."
-    except Exception:  # noqa: BLE001
-        return None
-
-
 def daily_summary(start: dt.datetime, now: dt.datetime | None = None) -> str | None:
-    """The end-of-day message sent to the owner's phone after the forward test: Paper B, the forward test and the
-    crypto sleeves, one line each. Statuses, counts and R: never money."""
+    """The end-of-day message sent to the owner's phone after the forward test: Paper B and the forward test, one
+    line each. Statuses, counts and R: never money."""
     now = now or dt.datetime.now(dt.UTC)
     day_start = dt.datetime.combine(start.astimezone(ET).date(), dt.time(0), tzinfo=ET)
-    lines = [paper_summary(journal_since(day_start)), forward_summary(), crypto_summary(now)]
+    lines = [paper_summary(journal_since(day_start)), forward_summary()]
     text = " ".join(x for x in lines if x)
     return text or None
 
@@ -329,10 +302,8 @@ def b_exposure() -> bool:
         return True
 
 
-# jobs with a healthchecks.io check. `crypto` pings every 15 minutes, at any hour: its check has no schedule gap.
-# The two daily crypto jobs alert when they fail; only a check notices when one never starts (a timer disabled
-# or never installed), which is how both were absent for their first day on the host.
-HC_JOBS = frozenset({"routine", "paper-b", "forward", "weekly", "crypto", "crypto-challengers", "crypto-learn"})
+# jobs with a healthchecks.io check
+HC_JOBS = frozenset({"routine", "paper-b", "forward", "weekly"})
 
 
 def hc_slug(job: Job) -> str:
@@ -352,6 +323,20 @@ def refuse(job: Job, reason: str, alerts: Alerts, log: Log, hb: Heartbeat | None
     return 0
 
 
+def forget_retired(alerts: Alerts, log: Log) -> list[str]:
+    """Drop the alert keys a desk left behind when it moved out of this checkout (wt.core.desk.RETIRED): nothing here
+    can resolve them, and they would show as firing for good. Every job calls this as it starts, so the first one
+    after the deploy clears them and says so once; after that there is nothing to find. Never raises."""
+    try:
+        gone = alerts.forget(retired_alert)
+    except Exception:  # noqa: BLE001 — housekeeping must not stop a job
+        return []
+    if gone:
+        log(f"forgot {len(gone)} alert key(s) left by a desk that no longer runs here "
+            f"({', '.join(r.name for r in RETIRED)}): {', '.join(gone)}")
+    return gone
+
+
 def run_job(job: Job, root: Path = ROOT, preflight_only: bool = False, alerts: Alerts | None = None) -> int:
     alerts = alerts or Alerts()
     log = Log(root, job)
@@ -361,12 +346,7 @@ def run_job(job: Job, root: Path = ROOT, preflight_only: bool = False, alerts: A
             print(f"  [{'ok' if c.ok else 'FAIL'}] {c.name}: {c.detail}")
         return 0 if not preflight.failures(checks) else 1
 
-    # A desk that has moved to its own repository runs nothing here, however its timer came to fire (installing the
-    # units re-enables every timer this code still renders). Starting the job would create a fresh, empty desk beside
-    # the real one and publish it. So: no lock, no heartbeat, no check-in ping, no child. Exit 0: nothing is wrong.
-    if moved(desk := DESKS[job.desk]):
-        log(f"{job.name} not started: the {desk.name} desk has moved ({moved_marker(desk)} exists)")
-        return 0
+    forget_retired(alerts, log)
 
     # Wait out a deploy before taking the job lock: a deploy holds the interval jobs' locks while it changes the
     # checkout (wt.ops.deploy.quiesced), and a job that already held its own would make it wait for nothing.
@@ -463,11 +443,13 @@ def status(root: Path = ROOT) -> int:
     print(f"KILL switch: {'ON (no new paper-B entries)' if (root / 'KILL').exists() else 'off'}")
     print("Last runs:")
     for name, r in last_runs().items():
+        if retired_job(name):                   # the last heartbeat of a job that now runs from another repository
+            continue
         print(f"  {name:8} {r.get('status', '?'):8} exit={r.get('exit')} started={r.get('started')} "
               f"ended={r.get('ended')} sha={r.get('sha')}  {r.get('detail', '')[:80]}")
     for line in cadence():
         print(line)
-    firing = Alerts().firing()
+    firing = {k: v for k, v in Alerts().firing().items() if not retired_alert(k)}
     print(f"Alerts firing: {', '.join(sorted(firing)) or 'none'}")
     print("Preflight:")
     for c in preflight.run_checks(root):

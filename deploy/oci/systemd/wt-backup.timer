@@ -1,5 +1,5 @@
 [Unit]
-Description=Nightly evidence backup, after the forward test (daily: the crypto desk writes evidence at weekends)
+Description=Nightly evidence backup, after the forward test (daily)
 
 [Timer]
 OnCalendar=*-*-* 19:30 America/New_York

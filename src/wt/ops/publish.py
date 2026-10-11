@@ -538,10 +538,12 @@ def extras(now: dt.datetime, root: Path = ROOT) -> dict[str, Any]:
     from wt.ops.heartbeat import last_runs, recent_runs, thin_runs
     from wt.ops.window import load_sessions
     # ADR 0005: this is the stocks desk's snapshot. Another desk's jobs and alerts belong to its own.
-    from wt.core.desk import desk_of_alert
+    from wt.core.desk import desk_of_alert, retired_job
     from wt.ops.schedule import JOBS
 
     def mine(job: object) -> bool:
+        if isinstance(job, str) and retired_job(job):           # a desk that left: its last heartbeats are still here
+            return False
         return (JOBS[job].desk if isinstance(job, str) and job in JOBS else "stocks") == "stocks"
     runs = [r for r in recent_runs() if mine(r.get("job"))]
     cutoff = (now - dt.timedelta(days=14)).isoformat()

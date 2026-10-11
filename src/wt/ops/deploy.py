@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import hashlib
 import datetime as dt
 import json
 import os
@@ -94,87 +93,10 @@ def sync_venv() -> None:
     (ROOT / preflight.LOCK_STAMP).write_text(preflight.lock_hash(ROOT) + "\n")
 
 
-ML_LOCK, ML_VENV = "requirements-ml.lock.txt", ".venv-ml"
-ML_NEXT, ML_PREV = ".venv-ml.next", ".venv-ml.prev"
 # Held while a deploy tests its target before the switch. Staging runs for minutes, outside the deploy lock (which
 # every job waits on), and starts by clearing its worktree: without this a second deploy of the same commit removed
 # the first one's worktree under its running tests, and that first deploy was refused as "tests failed".
 STAGE_LOCK = "deploy-stage"
-ML_ENV_LOCK = "ml-env"                  # one build at a time; not the deploy lock, which every job waits on
-ML_USERS = ("crypto-learn",)            # jobs that run for long in the ML environment: the swap waits for them
-SWAP_WAIT_S = 120.0
-ML_IMPORT_CHECK = "import sklearn, lightgbm"       # what the learning job and the scorer import
-
-
-def sync_ml(swap_wait_s: float | None = None) -> str:
-    """Bring the machine-learning environment (DEC-0016) in line with its own hashed lockfile: "none" when the
-    checkout has no such lockfile, "current" when nothing changed, "synced", "pending" (built, not yet swapped
-    in), "busy" (another build is running) or "failed".
-
-    It is a separate environment so that the trading one stays exactly its lockfile. A failure here never fails
-    the deploy: the trading jobs do not import it, and the scorer falls back to unfiltered trading when it is
-    missing (wt.crypto.scorer).
-
-    Nothing here holds a lock a trading job waits on. Every job waits for the deploy lock before it starts, so
-    this runs after that lock is released, under a lock of its own: a large install delays no job. The new
-    environment is built beside the live one and put in its place by two renames, so the scorer sees the old
-    one or the new one and never one that is half installed. The renames wait for the learning job, which
-    trains in the environment for up to an hour; if it is still running the built environment is kept and the
-    next call (the next deploy, or `make sync-ml`) only has to swap it in."""
-    lock = ROOT / ML_LOCK
-    if not lock.exists():
-        return "none"
-    want = hashlib.sha256(lock.read_bytes()).hexdigest()
-    live, nxt, prev = ROOT / ML_VENV, ROOT / ML_NEXT, ROOT / ML_PREV
-    stamp = live / ".lock-sha256"
-    if stamp.exists() and stamp.read_text().strip() == want:
-        return "current"
-    with job_lock(ML_ENV_LOCK) as mine:
-        if not mine:
-            return "busy"
-        try:
-            built = nxt / ".lock-sha256"
-            if not (built.exists() and built.read_text().strip() == want):
-                uv = shutil.which("uv") or str(Path.home() / ".local/bin/uv")
-                shutil.rmtree(nxt, ignore_errors=True)
-                _run(uv, "venv", "--quiet", "--python", str(ROOT / PY), str(nxt))
-                _run(uv, "pip", "sync", "--quiet", "--python", str(nxt / "bin" / "python"), "--require-hashes",
-                     str(lock), timeout=1800)
-                # Installed is not usable: a wheel can need a system library the host lacks (LightGBM needs
-                # OpenMP, `libgomp1` on Debian). An environment that cannot import is never swapped in.
-                _run(str(nxt / "bin" / "python"), "-c", ML_IMPORT_CHECK, timeout=120)
-                built.write_text(want + "\n")
-            wait = SWAP_WAIT_S if swap_wait_s is None else swap_wait_s
-            with contextlib.ExitStack() as stack:
-                if not all(stack.enter_context(job_lock(n, wait_s=wait, poll_s=2.0)) for n in ML_USERS):
-                    Alerts().fire("deploy-ml", "ML environment built, not yet in use",
-                                  "The learning job is running in the old one. Trading is unaffected. The next deploy "
-                                  "swaps the new one in, or run: make sync-ml", 3)
-                    return "pending"
-                shutil.rmtree(prev, ignore_errors=True)
-                if live.exists():
-                    os.rename(live, prev)
-                os.rename(nxt, live)
-            shutil.rmtree(prev, ignore_errors=True)
-            Alerts().resolve("deploy-ml", "ML environment in sync", "The machine-learning environment matches its lockfile.")
-            return "synced"
-        except (RuntimeError, OSError, subprocess.TimeoutExpired) as e:
-            if not live.exists() and prev.exists():             # the second rename failed: put the old one back
-                with contextlib.suppress(OSError):
-                    os.rename(prev, live)
-            shutil.rmtree(nxt, ignore_errors=True)
-            Alerts().fire("deploy-ml", "ML environment did not sync",
-                          f"{str(e)[:200]}. Trading is unaffected; models are not scored until the next deploy fixes it.", 3)
-            return "failed"
-
-
-def _note_ml(rec: Path | None) -> None:
-    """Sync the ML environment and write the outcome into the deploy's record."""
-    state = sync_ml()
-    if rec is not None and rec.exists():
-        rec.write_text(json.dumps({**json.loads(rec.read_text()), "ml_env": state}, indent=1, default=str))
-    if state in ("synced", "failed", "pending", "busy"):
-        print(f"ML environment: {state}" + ("  (finish with: make sync-ml)" if state in ("pending", "busy") else ""))
 
 
 def smoke() -> tuple[bool, str]:
@@ -312,10 +234,7 @@ def deploy(sha: str | None = None, stage: bool = False) -> int:
             if busy:
                 print(f"Refusing: still running after {QUIESCE_WAIT_S:.0f}s: {', '.join(busy)}")
                 return 2
-            code, rec = _switch(target, stage, green, ci_override, why_dash, override)
-    # Every lock is released: jobs start again. The ML environment has its own lock (see `sync_ml`).
-    if code == 0:
-        _note_ml(rec)
+            code, _ = _switch(target, stage, green, ci_override, why_dash, override)
     return code
 
 
@@ -404,8 +323,7 @@ def rollback(tag: str) -> int:
             _run("git", "reset", "--hard", "--quiet", tag)
             sync_venv()
             ok, out = smoke()
-    # The ML environment follows the checkout back, so the scorer never runs against a lock from the future.
-    _note_ml(record({"rollback_from": before, "to_tag": tag, "smoke_ok": ok}))
+    record({"rollback_from": before, "to_tag": tag, "smoke_ok": ok})
     print(f"Rolled back {before[:8]} -> {tag}; smoke {'ok' if ok else 'FAILED'}")
     if not ok:
         print(out)
@@ -420,7 +338,6 @@ def main(argv: list[str] | None = None) -> int:
     dp.add_argument("--sha", help="the commit to deploy (default: the tip of main)")
     dp.add_argument("--stage", action="store_true", help="run the full test suite on the target before switching")
     sub.add_parser("migrate")
-    sub.add_parser("sync-ml")
     r = sub.add_parser("rollback")
     r.add_argument("tag")
     a = ap.parse_args(argv)
@@ -430,21 +347,6 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if not b else 2
     if a.cmd == "migrate":
         return do_migrate()
-    if a.cmd == "sync-ml":
-        state = sync_ml()
-        print(f"ML environment: {state}")
-        if state not in ("none", "current", "synced"):
-            return 1
-        if state == "none":
-            return 0
-        # In sync with its lockfile is not the same as working: say so if it cannot import what it is for.
-        got = _run(str(ROOT / ML_VENV / "bin" / "python"), "-c", ML_IMPORT_CHECK, check=False, timeout=120)
-        if got.returncode != 0:
-            print("ML environment: installed, but it cannot import its libraries:\n  "
-                  + (got.stderr or got.stdout).strip().splitlines()[-1][:200]
-                  + "\n  (LightGBM needs the system's OpenMP library: sudo apt-get install -y libgomp1)")
-            return 1
-        return 0
     if a.cmd == "rollback":
         return rollback(a.tag)
     return deploy(a.sha, a.stage)

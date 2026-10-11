@@ -32,7 +32,7 @@ def trial_history(path: Path | None = None) -> list[dict[str, Any]]:
 
 
 def family_trial_count(family: str, path: Path | None = None) -> int:
-    """The trial count in force for a family counted apart from the global one (the crypto desk's `C`)."""
+    """The trial count in force for a family counted apart from the global one (the options desk's `O`)."""
     rows = (yaml.safe_load((path or REGISTRY).read_text()).get("families") or {}).get(family) or []
     accepted = [r for r in rows if r.get("status") == "accepted" and isinstance(r.get("total"), int)]
     if not accepted:

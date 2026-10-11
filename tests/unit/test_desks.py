@@ -1,4 +1,6 @@
-"""Desks (ADR 0005): the stocks desk keeps its paths; nothing crosses desks in the backup, the snapshot or a deploy."""
+"""Desks (ADR 0005): the stocks desk keeps its paths; nothing crosses desks in the backup, the snapshot or a deploy.
+
+The crypto desk, the second one, left for its own repository; the tests of what it left behind are here too."""
 from __future__ import annotations
 
 import dataclasses
@@ -30,46 +32,52 @@ def test_no_two_ledgers_share_a_file_name_or_an_anchor_name():
     assert len({p.name for _, p in every}) == len(every) == len({n for n, _ in every})
 
 
-def test_an_alert_belongs_to_one_desk():
-    assert desks.desk_of_alert("crypto:data-stale") == "crypto"
+def test_an_alert_belongs_to_one_desk(monkeypatch):
     for key in ("job:routine", "paper-b:out-of-mandate:AAPL", "evidence:chain", "summary:2026-10-02", "deploy"):
         assert desks.desk_of_alert(key) == "stocks", key
     assert sum(d.alert_prefix is None for d in desks.DESKS.values()) == 1      # exactly one catch-all
+    monkeypatch.setitem(desks.DESKS, "fx", dataclasses.replace(desks.DESKS["stocks"], name="fx", alert_prefix="fx:"))
+    assert desks.desk_of_alert("fx:data-stale") == "fx" and desks.desk_of_alert("job:routine") == "stocks"
 
 
-def test_the_stocks_jobs_are_untouched_and_the_crypto_desk_has_exactly_two_interval_jobs():
-    stocks = {n: j for n, j in JOBS.items() if j.desk == "stocks"}
-    assert set(stocks) == {"routine", "paper-b", "forward", "weekly", "dashboard", "options-live"}
-    assert all(j.calendar is None for j in stocks.values())
-    crypto = {n: j for n, j in JOBS.items() if j.desk == "crypto"}
-    assert set(crypto) == {"crypto", "dashboard-crypto", "crypto-challengers", "crypto-learn"}
-    for name in ("crypto-challengers", "crypto-learn"):      # once a day, on a clock time (DEC-0016)
-        daily = crypto.pop(name)
-        assert not daily.trading and daily.interval_s is None and daily.et
-    for j in crypto.values():
-        # never a trading job (a 24/7 one would close the equity deploy gate for good); always on a UTC boundary
-        assert not j.trading and j.interval_s == 900 and j.calendar and j.deadline_min and j.et is None, j.name
-        assert j.runtime_max_h * 60 > j.deadline_min + 1
-    assert "OnCalendar=*:0/15:10 UTC" in units.timer(JOBS["crypto"])              # ten seconds after the bar closes
-    assert "OnCalendar=*:1/15:00 UTC" in units.timer(JOBS["dashboard-crypto"])    # the publish follows the cycle
-    assert "crypto" in jobs.HC_JOBS and jobs.hc_slug(JOBS["crypto"]) == "wt-crypto"
-    # Every job the crypto desk runs on a timer has a dead-man check, except the publisher (the dashboard's own
-    # watchdog pages on a stale snapshot). A job that only alerts on failure says nothing when it never starts.
-    daily = {"crypto-challengers", "crypto-learn"}
-    assert daily <= set(JOBS) and daily <= jobs.HC_JOBS
-    book = (ROOT / "docs/runbooks/dead-man-switches.md").read_text()
-    assert all(f"`{jobs.hc_slug(JOBS[n])}`" in book for n in ("crypto", *sorted(daily)))
-    assert "MemoryMax=512M" in units.service(JOBS["crypto"], Path("/r"))
+def test_only_the_stocks_desk_runs_from_this_repository():
+    """The crypto desk left for its own repository (research/MOVED.md). Its record, its four jobs, their units and
+    their dead-man checks went with it; what it left on the host is named in RETIRED."""
+    assert set(desks.DESKS) == {"stocks"}
+    assert {j.desk for j in JOBS.values()} == {"stocks"}
+    left = {"crypto", "dashboard-crypto", "crypto-challengers", "crypto-learn"}
+    assert not left & set(JOBS) and not left & set(units.MEMORY) and not left & jobs.HC_JOBS
+    assert [(r.name, r.alert_prefix, set(r.jobs)) for r in desks.RETIRED] == [("crypto", "crypto:", left)]
+    assert not {n for d in desks.DESKS.values() for n, _ in d.ledgers} & {"crypto", "crypto-harvest"}
 
 
-def test_the_backup_runs_every_day_now_that_evidence_is_written_at_weekends():
+def test_what_a_retired_desk_left_behind_belongs_to_no_desk():
+    """Its own keys carry its prefix. Its jobs' keys never did (`job:crypto`), and neither did the deploy's notice
+    about the machine-learning environment: all of them were raised here and can never be resolved here."""
+    for key in ("crypto:data-stale", "crypto:latch:trend", "crypto:evidence-chain", "job:crypto", "job:crypto-learn",
+                "job:dashboard-crypto", "refuse:crypto-challengers:2026-10-10", "refuse:crypto:2026-10-10", "deploy-ml"):
+        assert desks.retired_alert(key) and desks.desk_of_alert(key) is None, key
+    for key in ("job:routine", "job:dashboard", "refuse:paper-b:2026-10-10", "deploy", "evidence:chain", "summary:2026-10-10",
+                "cryptic", "job:crypto-other", "paper-b:out-of-mandate:AAPL"):
+        assert not desks.retired_alert(key) and desks.desk_of_alert(key) == "stocks", key
+    assert all(desks.retired_job(n) for r in desks.RETIRED for n in r.jobs)
+    assert not any(desks.retired_job(n) for n in JOBS)
+
+
+def test_the_stocks_jobs_are_untouched():
+    assert set(JOBS) == {"routine", "paper-b", "forward", "weekly", "dashboard", "options-live"}
+    assert all(j.calendar is None for j in JOBS.values())
+    assert jobs.HC_JOBS == {"routine", "paper-b", "forward", "weekly"}
+
+
+def test_the_backup_still_runs_every_day():
     timer = (ROOT / "deploy/oci/systemd/wt-backup.timer").read_text()
     assert "OnCalendar=*-*-* 19:30 America/New_York" in timer and "Mon..Fri" not in timer
 
 
 def test_a_calendar_job_fires_on_the_utc_boundary_and_has_no_start_limit():
-    j = Job("crypto", "com.wt.crypto", 0, 0, ("-m", "wt.crypto.cycle"), "paper", "crypto", trading=False,
-            interval_s=900, calendar="*:0/15:10", desk="crypto", runtime_max_h=0.2)
+    j = Job("fx", "com.wt.fx", 0, 0, ("-m", "wt.fx.cycle"), "paper", "fx", trading=False,
+            interval_s=900, calendar="*:0/15:10", desk="fx", runtime_max_h=0.2)
     t = units.timer(j).splitlines()
     assert "OnCalendar=*:0/15:10 UTC" in t and not any(x.startswith(("OnUnitActiveSec", "OnBootSec")) for x in t)
     svc = units.service(j, Path("/r")).splitlines()
@@ -85,57 +93,47 @@ def test_a_desk_that_is_not_installed_is_not_backed_up_or_anchored(paths):  # no
     assert list(backup.chains()) == ["forward", "paper"]
 
 
-def crypto_desk(tmp: Path, monkeypatch) -> desks.Desk:
-    d = dataclasses.replace(desks.DESKS["crypto"], state_dir=tmp / "crypto",
-                            ledgers=(("crypto", tmp / "crypto" / "crypto_journal.jsonl"),),
-                            chain_flag=tmp / "crypto" / "chain-broken")
-    monkeypatch.setitem(desks.DESKS, "crypto", d)
+def second_desk(tmp: Path, monkeypatch) -> desks.Desk:
+    """A desk beside the stocks desk. None runs from this repository today; the shared layers still keep desks
+    apart (ADR 0005), and these tests hold them to it for the next one."""
+    d = desks.Desk("fx", "F", tmp / "fx", tmp / "fx" / "KILL", (("fx", tmp / "fx" / "fx_journal.jsonl"),),
+                   tmp / "fx" / "chain-broken", "always_open", "fx:", "trading-lab/fx-snapshot")
+    monkeypatch.setitem(desks.DESKS, "fx", d)
     d.state_dir.mkdir()
     return d
 
 
-def test_a_desk_that_has_moved_is_not_installed_whatever_is_left_of_its_directory(paths, monkeypatch):  # noqa: F811
-    """The crypto desk leaves for its own repository: from the moment the marker exists, nothing here anchors,
-    restores or expects it, even if a stray command recreates its directory."""
+def test_a_desk_is_installed_once_its_state_directory_exists(paths, monkeypatch):  # noqa: F811
     fwd, jr, tmp, _, _ = paths
-    c = crypto_desk(tmp, monkeypatch)
+    d = second_desk(tmp, monkeypatch)
     chained(fwd, 2)
     chained(jr, 2)
-    chained(c.journal, 3)
-    assert desks.installed(c) and not desks.moved(c)
-    assert list(backup.chains()) == ["forward", "paper", "crypto"]
-    assert desks.moved_marker(c) == tmp / "crypto.MOVED"            # beside the state directory, which is moved away
-    desks.moved_marker(c).write_text("moved to its own repository\n")
-    assert desks.moved(c) and not desks.installed(c)
-    assert list(backup.chains()) == ["forward", "paper"]
-    assert not any("crypto" in line for line in jobs.cadence(heartbeats=tmp / "none"))
+    chained(d.journal, 3)
+    assert desks.installed(d) and list(backup.chains()) == ["forward", "paper", "fx"]
+    d.journal.unlink()
+    d.state_dir.rmdir()
+    assert not desks.installed(d) and list(backup.chains()) == ["forward", "paper"]
+    assert desks.installed(desks.DESKS["stocks"])
 
 
-def test_the_marker_is_where_the_cutover_runbook_puts_it_and_the_stocks_desk_cannot_move(tmp_path):
-    assert desks.moved_marker(desks.DESKS["crypto"]) == STATE_DIR / "crypto.MOVED"
-    stocks = dataclasses.replace(desks.DESKS["stocks"], state_dir=tmp_path / "var")
-    desks.moved_marker(stocks).write_text("a mistake\n")
-    assert not desks.moved(stocks) and desks.installed(stocks)
-
-
-def test_a_broken_crypto_chain_switches_off_crypto_entries_only(paths, monkeypatch):  # noqa: F811
+def test_a_broken_chain_on_another_desk_switches_off_that_desks_entries_only(paths, monkeypatch):  # noqa: F811
     fwd, jr, tmp, box, a = paths
-    c = crypto_desk(tmp, monkeypatch)
+    c = second_desk(tmp, monkeypatch)
     chained(fwd, 2)
     chained(jr, 2)
     chained(c.journal, 3)
     c.journal.write_bytes(c.journal.read_bytes().replace(b'"i": 1', b'"i": 9'))        # rewrite history
-    assert list(backup.chains()) == ["forward", "paper", "crypto"]
+    assert list(backup.chains()) == ["forward", "paper", "fx"]
     monkeypatch.setattr(backup, "restic", lambda *a, **k: type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})())
     monkeypatch.setattr(backup.hc, "ping", lambda *a, **k: True)
     backup.nightly(a, weekly=False, client=type("C", (), {"configured": False})(), today=dt.date(2026, 10, 20))
     assert c.chain_flag.exists() and not backup.CHAIN_FLAG.exists()
-    assert "crypto:evidence-chain" in a.firing() and "evidence:chain" not in a.firing()
+    assert "fx:evidence-chain" in a.firing() and "evidence:chain" not in a.firing()
 
 
 def test_the_restore_test_asks_for_every_installed_ledger_and_notices_a_missing_one(paths, monkeypatch, capsys):  # noqa: F811
     fwd, jr, tmp, _, _ = paths
-    c = crypto_desk(tmp, monkeypatch)
+    c = second_desk(tmp, monkeypatch)
     for p in (fwd, jr, c.journal):
         chained(p, 2)
     seen = []
@@ -144,18 +142,18 @@ def test_the_restore_test_asks_for_every_installed_ledger_and_notices_a_missing_
         seen.append(args)
         target = Path(args[args.index("--target") + 1])
         chained(target / fwd.name, 2)
-        chained(target / jr.name, 2)                         # the crypto journal does not come back
+        chained(target / jr.name, 2)                         # the other desk's journal does not come back
         return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
     monkeypatch.setattr(backup, "restic", fake)
     assert backup.restore_test() == 1
     assert [seen[0][i + 1] for i, x in enumerate(seen[0]) if x == "--include"] == [fwd.name, jr.name, c.journal.name]
-    assert "MISSING ['crypto_journal.jsonl']" in capsys.readouterr().out
+    assert "MISSING ['fx_journal.jsonl']" in capsys.readouterr().out
 
 
-def test_each_desk_anchors_its_own_ledgers_and_a_growing_crypto_journal_is_not_a_rewrite(paths, monkeypatch):  # noqa: F811
-    """2026-10-04: a backup had anchored the day before the crypto desk existed. With one shared anchor the next
-    backup of that day would have paged "DIFFERENT heads", and so would any second backup of a day on which the
-    crypto journal grew, which is every day."""
+def test_each_desk_anchors_its_own_ledgers_and_a_growing_journal_is_not_a_rewrite(paths, monkeypatch):  # noqa: F811
+    """2026-10-04: a backup had anchored the day before a second desk existed. With one shared anchor the next
+    backup of that day would have paged "DIFFERENT heads", and so would any second backup of a day on which that
+    desk's journal grew."""
     from test_backup import Anchors
     fwd, jr, tmp, _, _ = paths
     chained(fwd, 2)
@@ -164,19 +162,19 @@ def test_each_desk_anchors_its_own_ledgers_and_a_growing_crypto_journal_is_not_a
     assert backup.anchor_desks(day, backup.chains(), s) == (True, "anchored anchors/2026-10-04.json")
     stocks_anchor = s.objs["anchors/2026-10-04.json"]
 
-    c = crypto_desk(tmp, monkeypatch)                                # the desk is installed later the same day
+    c = second_desk(tmp, monkeypatch)                                # the desk is installed later the same day
     chained(c.journal, 3)
     ok, why = backup.anchor_desks(day, backup.chains(), s)
-    assert ok and why == "anchors/2026-10-04.json already anchored; anchored anchors/crypto/2026-10-04.json"
+    assert ok and why == "anchors/2026-10-04.json already anchored; anchored anchors/fx/2026-10-04.json"
     assert s.objs["anchors/2026-10-04.json"] == stocks_anchor       # untouched, and still only the stocks ledgers
 
     chained(c.journal, 5)                                            # the same three lines, then two more
     ok, why = backup.anchor_desks(day, backup.chains(), s)
-    assert ok and why.endswith("anchors/crypto/2026-10-04.json already anchored; the ledger has only grown since")
+    assert ok and why.endswith("anchors/fx/2026-10-04.json already anchored; the ledger has only grown since")
 
     c.journal.write_bytes(c.journal.read_bytes().replace(b'"i": 1', b'"i": 9'))      # history rewritten
     ok, why = backup.anchor_desks(day, backup.chains(), s)
-    assert not ok and why.endswith("anchors/crypto/2026-10-04.json already anchored with DIFFERENT heads")
+    assert not ok and why.endswith("anchors/fx/2026-10-04.json already anchored with DIFFERENT heads")
 
 
 
@@ -223,12 +221,12 @@ def test_the_stocks_snapshot_shows_no_other_desks_alerts_or_jobs(tmp_path, monke
     monkeypatch.setattr(alerts, "ALERT_DIR", tmp_path / "alerts")
     monkeypatch.setattr(heartbeat, "HEARTBEAT_DIR", tmp_path / "hb")
     monkeypatch.setattr(alerts, "_send", lambda *a, **k: True)
-    monkeypatch.setitem(JOBS, "crypto", Job("crypto", "x", 0, 0, (), "paper", "crypto", trading=False,
-                                            interval_s=900, desk="crypto"))
+    monkeypatch.setitem(desks.DESKS, "fx", dataclasses.replace(desks.DESKS["stocks"], name="fx", alert_prefix="fx:"))
+    monkeypatch.setitem(JOBS, "fx", Job("fx", "x", 0, 0, (), "paper", "fx", trading=False, interval_s=900, desk="fx"))
     a = alerts.Alerts(topic="")
-    a.fire("crypto:data-stale", "stale", "x")
+    a.fire("fx:data-stale", "stale", "x")
     a.fire("job:routine", "routine failed", "x")
-    for name in ("crypto", "routine"):
+    for name in ("fx", "routine"):
         heartbeat.Heartbeat(name, "abc").finish("ok", 0)
     monkeypatch.setattr(publish, "v3_views", lambda *a, **k: {})
     monkeypatch.setattr("wt.ops.window.load_sessions", lambda *a, **k: ({}, True))
@@ -236,6 +234,78 @@ def test_the_stocks_snapshot_shows_no_other_desks_alerts_or_jobs(tmp_path, monke
     out = publish.extras(dt.datetime(2026, 10, 5, 12, tzinfo=dt.UTC), tmp_path)
     assert [x["key"] for x in out["alerts"]["firing"]] == ["job:routine"]
     assert set(out["jobs"]["last"]) == {"routine"} and {r["job"] for r in out["jobs"]["runs"]} == {"routine"}
+
+
+def test_what_the_crypto_desk_left_on_the_host_never_reads_as_the_stocks_desks(tmp_path, monkeypatch, capsys):
+    """The state the host has on the day the desk's code is removed: its alerts still recorded as firing, its jobs'
+    last heartbeats and run history still on disk. With its record gone every one of them would be the stocks
+    desk's, which owns whatever no other desk claims: shown as firing for good, and listed among its jobs."""
+    from wt.ops import alerts, heartbeat
+    monkeypatch.setattr(alerts, "ALERT_DIR", tmp_path / "alerts")
+    monkeypatch.setattr(heartbeat, "HEARTBEAT_DIR", tmp_path / "hb")
+    monkeypatch.setattr(alerts, "_send", lambda *a, **k: True)
+    a = alerts.Alerts(topic="")
+    for key in ("crypto:data-stale", "crypto:latch:trend", "job:crypto-learn", "deploy-ml", "job:routine"):
+        a.fire(key, key, "x")
+    for name in ("crypto", "dashboard-crypto", "crypto-challengers", "crypto-learn", "routine"):
+        heartbeat.Heartbeat(name, "abc").finish("ok", 0)
+    monkeypatch.setattr(publish, "v3_views", lambda *a, **k: {})
+    monkeypatch.setattr("wt.ops.window.load_sessions", lambda *a, **k: ({}, True))
+    monkeypatch.setattr("wt.ops.preflight.run_checks", lambda root: [])
+    out = publish.extras(dt.datetime(2026, 10, 5, 12, tzinfo=dt.UTC), tmp_path)
+    assert [x["key"] for x in out["alerts"]["firing"]] == ["job:routine"]          # before anything was cleared
+    assert set(out["jobs"]["last"]) == {"routine"} and {r["job"] for r in out["jobs"]["runs"]} == {"routine"}
+    monkeypatch.setattr(jobs, "cadence", lambda: [])
+    jobs.status(tmp_path)
+    shown = capsys.readouterr().out
+    assert "Alerts firing: job:routine\n" in shown and "crypto" not in shown
+
+
+def test_the_first_job_after_the_removal_forgets_the_retired_desks_alerts_once(tmp_path, monkeypatch):
+    """Dropped, not resolved: no "recovered" notice goes out for a desk that is running elsewhere, and no history
+    row is written. One log line names what went; the next job finds nothing and says nothing."""
+    from wt.ops import alerts
+    sent = []
+    monkeypatch.setattr(alerts, "_send", lambda msg, *a, **k: sent.append(msg["title"]) or True)
+    a = alerts.Alerts(tmp_path / "alerts", topic="t")
+    for key in ("crypto:data-stale", "crypto:exit-gap:trend:BTC/USD", "job:dashboard-crypto", "deploy-ml", "job:routine"):
+        a.fire(key, key, "x")
+    a.resolve("crypto:data-stale", "back", "x")                    # a resolved key of the desk goes too
+    a.once_per_day("refuse:crypto", "refused", "x", day="2026-10-10")
+    before, history = len(sent), (tmp_path / "alerts" / "history.jsonl").read_text()
+    lines: list[str] = []
+    gone = jobs.forget_retired(a, lines.append)
+    assert gone == ["crypto:data-stale", "crypto:exit-gap:trend:BTC/USD", "deploy-ml", "job:dashboard-crypto",
+                    "refuse:crypto:2026-10-10"]
+    assert len(lines) == 1 and "5 alert key(s)" in lines[0] and "crypto:data-stale" in lines[0]
+    assert list(a.firing()) == ["job:routine"]
+    assert len(sent) == before and (tmp_path / "alerts" / "history.jsonl").read_text() == history
+    state = tmp_path / "alerts" / "state.json"
+    stamp = state.stat().st_mtime_ns
+    assert jobs.forget_retired(a, lines.append) == [] and len(lines) == 1 and state.stat().st_mtime_ns == stamp
+    assert jobs.forget_retired(object(), lines.append) == [] and len(lines) == 1      # never raises
+
+
+def test_every_job_run_clears_them_before_it_starts(tmp_path, monkeypatch):
+    from wt.ops import alerts
+    monkeypatch.setattr(alerts, "_send", lambda *a, **k: True)
+    monkeypatch.setattr(locks, "LOCK_DIR", tmp_path / "locks")
+    a = alerts.Alerts(tmp_path / "alerts", topic="")
+    a.fire("crypto:latch", "latched", "x")
+    lines: list[str] = []
+    monkeypatch.setattr(jobs, "Log", lambda root, job: lines.append)
+
+    class Stop(Exception):
+        pass
+
+    def heartbeat(name, sha):
+        raise Stop
+    monkeypatch.setattr(jobs, "Heartbeat", heartbeat)
+    try:
+        jobs.run_job(JOBS["dashboard"], tmp_path, alerts=a)
+    except Stop:
+        pass
+    assert a.firing() == {} and sum("forgot 1 alert key(s)" in x for x in lines) == 1
 
 
 # ---------------------------------------------------------------- deploys
