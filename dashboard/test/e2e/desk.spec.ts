@@ -475,11 +475,19 @@ test("the live view lists the rules that have triggered today, and each name's r
   await expect(today).toContainText("16 min behind");
   await expect(today).toContainText("not a signal to trade");
   expect((await today.textContent()) ?? "").not.toMatch(/NaN|undefined|brk_|reject_|reclaim_/);
-  // A row opens its name, whose own rule list carries today's state.
-  await items.nth(1).getByRole("button").click();
-  await expect(detail(page, "SPY")).toBeVisible();
-  await expect(detail(page, "SPY").locator('[data-rule-today="open"]')).toContainText("today: open, from 11:00 ET");
-  await expect(detail(page, "SPY").locator('[data-rule-today="waiting"]')).toHaveCount(3);
+  await expect(today).toHaveAttribute("data-rules-age", "fresh");
+  // A row opens its name (not the one the desk opened on), whose own rule list carries today's state.
+  const other = await items.nth(0).getAttribute("data-trigger");
+  expect(other).not.toBe("SPY");
+  await items.nth(0).getByRole("button").click();
+  await expect(detail(page, other!)).toBeVisible();
+  await expect(detail(page, other!).locator('[data-rule-today="target"]')).toContainText("triggered on the 12:00 ET close, target reached");
+  await expect(detail(page, other!).locator('[data-rule-today="waiting"]')).toHaveCount(3);
+  // The host silent for three hours with the market open: the states stay, with a warning.
+  await variant(context, baseURL, "positions-old");
+  await open(page, "/options?view=live");
+  await expect(page.getByRole("region", { name: "Rules today" })).toHaveAttribute("data-rules-age", "old");
+  await expect(page.getByRole("region", { name: "Rules today" }).getByRole("status")).toContainText("may be out of date");
   // Nothing triggered: the pane says so. No rule states from the host: no pane, and the desk as it was.
   await variant(context, baseURL, "rules-none");
   await open(page, "/options?view=live");

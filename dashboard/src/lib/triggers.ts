@@ -5,7 +5,7 @@
 // in-session read of it. Descriptive only: a rule on probation is not a signal to trade.
 import type { Options } from "./options";
 import type { OptionsLive } from "./options-live.types";
-import { POSITIONS_GONE_MIN } from "./positions";
+import { POSITIONS_GONE_MIN, POSITIONS_OLD_MIN } from "./positions";
 
 export type RuleState = "waiting" | "open" | "stopped" | "target" | "closed";
 
@@ -28,8 +28,11 @@ export interface RulesToday {
   delayMin: number | null;
   /** True once the session's last hourly bar is in. */
   complete: boolean;
-  /** Names the host worked the rules out for. */
+  /** Names the host worked the rules out for, and how many the desk carries: fewer means some were left out. */
   names: number;
+  desk: number;
+  /** Minutes since the host sent the document these states came in. */
+  ageMin: number;
   /** Rules that have triggered, latest first, then by name. */
   triggers: Trigger[];
   /** Every rule's state by name and rule id, for the name's own rule list. */
@@ -55,11 +58,11 @@ export function rulesToday(doc: OptionsLive | null, e: Options, now: number): Ru
   const bySymbol: RulesToday["bySymbol"] = {};
   let names = 0;
   for (const n of block.names ?? []) {
-    if (!n || !carried.has(n.symbol) || !Array.isArray(n.states)) continue;
+    if (!n || !carried.has(n.symbol) || !Array.isArray(n.states) || Object.hasOwn(bySymbol, n.symbol)) continue;
     names++;
     const mine: RulesToday["bySymbol"][string] = {};
     for (const s of n.states) {
-      if (!s || typeof s.rule !== "string" || !(s.state in STATE_LABEL)) continue;
+      if (!s || typeof s.rule !== "string" || !Object.hasOwn(STATE_LABEL, s.state) || Object.hasOwn(mine, s.rule)) continue;
       const bar = typeof s.bar === "string" ? s.bar : null;
       const r = typeof s.r === "number" && Number.isFinite(s.r) ? s.r : null;
       mine[s.rule] = { state: s.state, bar, r };
@@ -68,5 +71,13 @@ export function rulesToday(doc: OptionsLive | null, e: Options, now: number): Ru
     bySymbol[n.symbol] = mine;
   }
   triggers.sort((a, b) => (b.bar ?? "").localeCompare(a.bar ?? "") || a.symbol.localeCompare(b.symbol) || a.rule.localeCompare(b.rule));
-  return { session: block.session, asOf: block.as_of, delayMin: block.delay_min ?? null, complete: block.complete === true, names, triggers, bySymbol };
+  return { session: block.session, asOf: block.as_of, delayMin: block.delay_min ?? null, complete: block.complete === true, names, desk: carried.size, ageMin: Math.max(0, (now - at) / 60_000), triggers, bySymbol };
+}
+
+/**
+ * True when the states should not be read as current: the session is still running by the clock, the host's last
+ * word did not say it was over, and nothing has arrived for half an hour.
+ */
+export function rulesAreOld(r: RulesToday, marketOpen: boolean): boolean {
+  return marketOpen && !r.complete && r.ageMin > POSITIONS_OLD_MIN;
 }

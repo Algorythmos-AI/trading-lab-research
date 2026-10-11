@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { fixtureOptionsLive } from "@/lib/fixture-variants";
 import type { Options } from "@/lib/options";
-import { OTHER_RULE, rulesToday } from "@/lib/triggers";
+import { OTHER_RULE, rulesAreOld, rulesToday } from "@/lib/triggers";
 import { validateOptionsLive } from "@/lib/validate";
 import optionsJson from "./fixtures/options.v1.json";
 
@@ -46,6 +46,24 @@ describe("the rules' states in today's session", () => {
     const extra = doc();
     extra.rules!.names.push({ symbol: "ZZZZ", states: [{ rule: e.rules![0]!.id, state: "open", bar: "10:00" }] });
     expect(rulesToday(extra, e, NOW.getTime())!.triggers.some((t) => t.symbol === "ZZZZ")).toBe(false);
+  });
+
+  it("says when the host left names out, ignores a name or rule sent twice, and when the states have gone old", () => {
+    const part = doc(["rules-none"]);
+    part.rules!.names = part.rules!.names.slice(0, 6);
+    const r = rulesToday(part, e, NOW.getTime())!;
+    expect([r.names, r.desk]).toEqual([6, e.tickers.length]);
+    const twice = doc();
+    twice.rules!.names.push({ ...twice.rules!.names[0]! });
+    twice.rules!.names[2]!.states.push({ ...twice.rules!.names[2]!.states[3]! });
+    expect(rulesToday(twice, e, NOW.getTime())!.triggers).toHaveLength(2);
+    const fresh = rulesToday(doc(), e, NOW.getTime())!;
+    expect(fresh.ageMin).toBeCloseTo(2, 5);
+    expect(rulesAreOld(fresh, true)).toBe(false);
+    const late = rulesToday(doc(), e, NOW.getTime() + 45 * 60_000)!;
+    expect(rulesAreOld(late, true)).toBe(true);
+    expect(rulesAreOld(late, false)).toBe(false); // after the bell an old document is just the day's last
+    expect(rulesAreOld({ ...late, complete: true }, true)).toBe(false);
   });
 
   it("shows nothing for another session's states, with no block, with no document, or once the document is too old", () => {

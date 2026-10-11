@@ -217,7 +217,7 @@ export function OptionsDetail({
                       {rule.side ? (rule.side === "call" ? "calls" : "puts") : null}
                       {today?.[rule.id] ? (
                         <span data-rule-today={today[rule.id]!.state}>
-                          · today: {today[rule.id]!.state === "waiting" ? "waiting" : `${STATE_LABEL[today[rule.id]!.state].toLowerCase()}${today[rule.id]!.bar ? `, from ${today[rule.id]!.bar} ET` : ""}`}
+                          · today, provisional: {today[rule.id]!.state === "waiting" ? "waiting" : `triggered${today[rule.id]!.bar ? ` on the ${today[rule.id]!.bar} ET close` : ""}, ${STATE_LABEL[today[rule.id]!.state].toLowerCase()}`}
                         </span>
                       ) : null}
                     </span>

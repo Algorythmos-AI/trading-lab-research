@@ -676,7 +676,7 @@ export function OptionsDesk({
           ) : null}
           {rules && live && view === "live" ? (
             <PaneBoundary name="Rules today">
-              <OptionsTriggers rules={rules} onOpen={openName} />
+              <OptionsTriggers rules={rules} marketOpen={now !== null && sessionClock(e.session, halfDay, new Date(now))?.phase === "open"} onOpen={openName} />
             </PaneBoundary>
           ) : null}
           {positions && live && view === "live" ? (
@@ -694,7 +694,7 @@ export function OptionsDesk({
         <div className={cn("xl:min-h-0 xl:overflow-y-auto", pane === "names" && "max-sm:hidden")}>
           {selected ? (
             <PaneBoundary key={selected.t.symbol} name={selected.t.symbol}>
-              <OptionsDetail e={e} t={selected.t} live={live} hiddenLayers={hiddenLayers} onToggleLayer={toggleLayer} interest={live ? (interest[selected.t.symbol] ?? null) : null} today={live ? (rules?.bySymbol[selected.t.symbol] ?? null) : null} />
+              <OptionsDetail e={e} t={selected.t} live={live} hiddenLayers={hiddenLayers} onToggleLayer={toggleLayer} interest={live ? (interest[selected.t.symbol] ?? null) : null} today={live && view === "live" ? (rules?.bySymbol[selected.t.symbol] ?? null) : null} />
             </PaneBoundary>
           ) : null}
         </div>
