@@ -53,7 +53,8 @@ def hourly_bars(parts: Sequence[Mapping[str, Any]], session: str, cutoff: dt.dat
     for start, end in slots(session):
         if cutoff < end:
             break
-        inside = sorted((at, p) for p in parts if (at := _when(p.get("t"))) is not None and start <= at < end)
+        inside = sorted(((at, p) for p in parts if isinstance(p, Mapping) and (at := _when(p.get("t"))) is not None
+                         and start <= at < end), key=lambda x: x[0])        # on the time alone: two bars may share one
         try:
             o, c = float(inside[0][1]["o"]), float(inside[-1][1]["c"])
             h, low = max(float(p["h"]) for _, p in inside), min(float(p["l"]) for _, p in inside)

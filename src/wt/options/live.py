@@ -145,11 +145,12 @@ class OptionsAccount:
         return out
 
     def bars(self, symbols: list[str], timeframe: str, start: dt.datetime, end: dt.datetime) -> dict[str, list[Any]]:
-        """Stock bars by name from the consolidated tape, split-adjusted, a few pages at most."""
+        """Stock bars by name from the consolidated tape, split-adjusted. Two pages at most: ten names' year of
+        daily bars, or their day of half-hours, fit in one."""
         params = {"symbols": ",".join(symbols), "timeframe": timeframe, "feed": "sip", "adjustment": "split",
                   "limit": "10000", "start": start.strftime("%Y-%m-%dT%H:%M:%SZ"), "end": end.strftime("%Y-%m-%dT%H:%M:%SZ")}
         out: dict[str, list[Any]] = {}
-        for _ in range(OI_PAGES):
+        for _ in range(2):
             got = self._get("/v2/stocks/bars", params, DATA_HOST, tries=1)
             if not isinstance(got, dict) or not isinstance(got.get("bars"), dict):
                 raise BrokerFault("bars-not-an-object")
@@ -365,17 +366,19 @@ def rules_block(account: OptionsAccount, names: list[str], now: dt.datetime) -> 
     complete = cutoff >= intraday.slots(session)[-1][1]
     out, skipped = [], 0
     for name in names:
-        loaded = lv.load_ibkr(intraday.daily_raw(daily.get(name, [])))
-        if loaded.problems or not loaded.bars or loaded.bars[-1].d != lv.prev_session(session):
-            skipped += 1
-            continue
-        try:
+        try:                                    # one name's unreadable bars cost that name, never the others
+            rows = [b for b in daily.get(name, []) if isinstance(b, dict)]
+            loaded = lv.load_ibkr(intraday.daily_raw(rows))
+            if loaded.problems or not loaded.bars or loaded.bars[-1].d != lv.prev_session(session):
+                skipped += 1
+                continue
             levels = lv.levels_for(loaded.bars, session)
-        except ValueError:
+            hourly = intraday.hourly_bars(parts.get(name, []), session, cutoff)
+            states = intraday.rule_states(hourly, levels, complete)
+        except (ValueError, TypeError, KeyError, AttributeError, IndexError):
             skipped += 1
             continue
-        hourly = intraday.hourly_bars(parts.get(name, []), session, cutoff)
-        out.append({"symbol": name, "bars": len(hourly), "states": intraday.rule_states(hourly, levels, complete)})
+        out.append({"symbol": name, "bars": len(hourly), "states": states})
     block = {"session": session, "as_of": cutoff.isoformat(timespec="seconds"), "delay_min": FEED_DELAY_MIN,
              "provisional": True, "complete": complete, "names": out}
     return block, [f"rules-skipped:{skipped}"] if skipped else []
@@ -390,7 +393,8 @@ def new_triggers(block: dict[str, Any] | None, seen_path: Path) -> list[tuple[st
         kept = json.loads(seen_path.read_text())
     except (OSError, ValueError):
         kept = {}
-    seen = set(kept.get("keys", [])) if isinstance(kept, dict) and kept.get("session") == block["session"] else set()
+    keys = kept.get("keys") if isinstance(kept, dict) and kept.get("session") == block["session"] else None
+    seen = {str(k) for k in keys} if isinstance(keys, list) else set()
     fresh = [(n["symbol"], s["rule"], str(s.get("bar") or ""))
              for n in block["names"] for s in n["states"] if s["state"] != "waiting" and f"{n['symbol']}:{s['rule']}" not in seen]
     if fresh:
@@ -411,9 +415,9 @@ def announce(fresh: list[tuple[str, str, str]], mode: str, labels: dict[str, str
             continue
         try:
             from wt.ops.alerts import Alerts
-            Alerts().fire(f"options:rule:{session}:{sym}:{rule}", f"{sym}: {labels.get(rule, 'a probation rule')}",
-                          f"Triggered on the {bar or '?'} ET hourly close, from data 15 minutes behind the market. "
-                          "A paper rule on probation: not a signal to trade.", 3)
+            Alerts().once_per_day(f"options:rule:{sym}:{rule}", f"{sym}: {labels.get(rule, 'a probation rule')}",
+                                  f"Triggered on the {bar or '?'} ET hourly close, from data 15 minutes behind the market. "
+                                  "A paper rule on probation: not a signal to trade.", 3, day=session)
         except Exception as e:  # noqa: BLE001 — an alert that cannot be sent must not stop the positions
             print(f"rule alert not sent ({e.__class__.__name__})", file=sys.stderr)
 
@@ -526,7 +530,7 @@ def _publish(a: argparse.Namespace, account: OptionsAccount | None = None) -> in
     problems += oi_problems
     url, ingest_secret = os.environ.get("DASHBOARD_INGEST_URL"), os.environ.get("DASHBOARD_INGEST_SECRET")
     bypass = os.environ.get("VERCEL_AUTOMATION_BYPASS_SECRET")
-    rules = None
+    rules, mode = None, "off"
     try:
         desk = load_yaml("options_desk.yaml")
         mode = str(desk.get("rule_alerts") or "off")
@@ -536,9 +540,6 @@ def _publish(a: argparse.Namespace, account: OptionsAccount | None = None) -> in
         if wanted and time.monotonic() < deadline - 90.0:
             rules, rule_problems = rules_block(account, desk_names(), now)
             problems += rule_problems
-            labels = {str(r["id"]): str(r["label"]) for r in json.loads((CONFIG_DIR / "options_rules.json").read_text())["rules"]}
-            if rules is not None and not a.dry_run:
-                announce(new_triggers(rules, OUT / "rules_seen.json"), mode, labels, rules["session"])
     except BrokerFault as e:
         rules = None
         problems.append(f"rules-unavailable:{e.code}"[:200])
@@ -547,6 +548,10 @@ def _publish(a: argparse.Namespace, account: OptionsAccount | None = None) -> in
         problems.append(f"rules-failed:{e.__class__.__name__}"[:200])
     run_id = now.strftime("%Y%m%dT%H%M%SZ") + "-" + hashlib.sha1(os.urandom(8)).hexdigest()[:6]
     doc = build(raw, clock, run_id, now, problems, oi, rules)
+    if rules is not None and validate(doc):
+        # The rule states are what failed to validate, or might be: the positions go out without them.
+        rules = None
+        doc = build(raw, clock, run_id, now, [*problems, "rules-invalid"], oi)
     if bad := validate(doc):
         print("options live document failed schema validation:\n  " + "\n  ".join(bad), file=sys.stderr)
         return 2
@@ -565,11 +570,28 @@ def _publish(a: argparse.Namespace, account: OptionsAccount | None = None) -> in
         print("DASHBOARD_INGEST_URL / DASHBOARD_INGEST_SECRET not set: not sending")
         return 0
     ok, detail = publish.send(body, url, ingest_secret, bypass, tries=SEND_TRIES, deadline=deadline)
+    if not ok and rules is not None and detail.startswith("HTTP 422"):
+        # Refused whole, with rule states in it: the dashboard no longer takes them (a rollback), whatever it said
+        # within the hour. Forget that answer and send the positions as version 1, once.
+        (OUT / "site_accepts.json").unlink(missing_ok=True)
+        rules = None
+        doc = build(raw, clock, run_id, now, [*problems, "rules-refused"], oi)
+        body = json.dumps(doc, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+        ok, detail = publish.send(body, url, ingest_secret, bypass, tries=1, deadline=deadline)
     if not ok:
         print(f"sent: False ({publish.error_code(detail)})")
         return _failed(detail, now)
     publish.record_outcome(True, detail, now, OUT / "publish_state.json")
     print(f"sent: True ({detail})")
+    if rules is not None:
+        # Only now: what is announced is what the dashboard holds, a host that may not publish never pages, and a
+        # slow alert cannot delay the positions.
+        try:
+            labels = {str(r.get("id")): str(r.get("label") or "a probation rule")
+                      for r in json.loads((CONFIG_DIR / "options_rules.json").read_text())["rules"]}
+            announce(new_triggers(rules, OUT / "rules_seen.json"), mode, labels, rules["session"])
+        except Exception as e:  # noqa: BLE001 — a missed announcement is said in the log and is not a failed run
+            print(f"rule triggers not announced ({e.__class__.__name__})", file=sys.stderr)
     if a.verify:
         good, why = verify_stored(doc, url, bypass)
         print(f"verify: {'ok' if good else 'FAILED'}: {why}")

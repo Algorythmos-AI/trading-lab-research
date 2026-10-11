@@ -435,6 +435,11 @@ def test_the_rules_block_is_built_from_two_requests_and_the_site_accepts_it():
     assert live.rules_block(early, ["SPY"], ny("09:40"))[0]["names"][0]["bars"] == 0 and [c[0] for c in early.bar_calls] == ["1Day"]
     assert live.rules_block(rule_account(), ["SPY"], ny("16:16"))[0]["complete"] is True
     assert live.rules_block(rule_account(), ["SPY"], ny("11:16", day="2026-10-10")) == (None, [])     # a Saturday
+    odd = rule_account()
+    odd._bars["1Day"]["QQQ"] = [*daily()[:-1], {"t": "2026-10-09T04:00:00Z", "o": None, "h": 1, "l": 1, "c": 1}, "torn"]
+    odd._bars["30Min"]["SPY"] = [*BREAK, dict(BREAK[1]), {**BREAK[1], "c": 100.55}]      # the same half-hour three times
+    block, problems = live.rules_block(odd, ["SPY", "QQQ"], ny("11:16"))
+    assert [n["symbol"] for n in block["names"]] == ["SPY"] and problems == ["rules-skipped:1"]   # QQQ's bad bar costs QQQ
     stale = rule_account()
     stale._bars["1Day"]["SPY"] = daily(end="2026-10-08")                      # yesterday's bar has not arrived
     assert live.rules_block(stale, ["SPY"], ny("11:16")) == (
@@ -452,6 +457,8 @@ def test_a_trigger_is_announced_once_a_session_by_name_and_rule_and_never_with_a
     assert live.new_triggers(later, seen) == []                               # its outcome is not a new trigger
     assert live.new_triggers({**block, "session": "2026-10-13"}, seen) == fresh   # a new session starts again
     assert live.new_triggers(None, seen) == []
+    seen.write_text(json.dumps({"session": SESSION, "keys": None}))            # a damaged file is an empty one
+    assert live.new_triggers(block, seen) == fresh
     sent = []
     import wt.ops.alerts as alerts_mod
     monkeypatch.setattr(alerts_mod.Alerts, "fire", lambda self, key, title, message, priority=4, tags=(): sent.append((key, title, message, priority)) or True)
@@ -460,12 +467,13 @@ def test_a_trigger_is_announced_once_a_session_by_name_and_rule_and_never_with_a
     assert sent == [] and "rule triggered: SPY brk_PDH_close at the 11:00 ET hourly close" in capsys.readouterr().out
     live.announce(fresh, "phone", {"brk_PDH_close": "Hourly close above yesterday's high"}, SESSION)
     (key, title, message, priority), = sent
-    assert key == f"options:rule:{SESSION}:SPY:brk_PDH_close" and title == "SPY: Hourly close above yesterday's high" and priority == 3
+    assert key == f"options:rule:SPY:brk_PDH_close:{SESSION}" and title == "SPY: Hourly close above yesterday's high" and priority == 3
     assert "not a signal to trade" in message and not any(ch.isdigit() for ch in message.replace("11:00", "").replace("15 minutes", ""))
 
 
 def test_rule_states_are_sent_only_to_a_dashboard_that_accepts_them_and_never_stop_the_positions(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(live, "desk_names", lambda: ["SPY"])
+    monkeypatch.setattr(live, "load_yaml", lambda name: {"names": ["SPY"], "rule_alerts": "log"})      # not the owner's switch
     monkeypatch.setenv("DASHBOARD_INGEST_URL", "https://x.invalid/api/ingest")
     monkeypatch.setenv("DASHBOARD_INGEST_SECRET", "s" * 20)
     sent = []
@@ -494,6 +502,22 @@ def test_rule_states_are_sent_only_to_a_dashboard_that_accepts_them_and_never_st
     assert live._publish(args(), Account([option()])) == 0
     assert "rules" not in sent[-1] and sent[-1]["schema_version"] == 1 and "rules-unavailable:no-bars-in-this-test" in sent[-1]["problems"]
     assert len(sent[-1]["positions"]) == 1
+    # The dashboard said it takes version 2 and then refuses the document whole (a rollback inside the hour): the
+    # positions go again as version 1, the answer is forgotten, and nothing is announced for what was not stored.
+    replies = iter([(False, 'HTTP 422: {"errors":["/rules: key is not allowed"]}'), (True, "HTTP 200")])
+    bodies = []
+    monkeypatch.setattr(publish, "send", lambda body, *a, **k: bodies.append(json.loads(body)) or next(replies))
+    (live.OUT / "rules_seen.json").unlink()
+    assert live._publish(args(), rule_account()) == 0
+    assert [b["schema_version"] for b in bodies] == [2, 1] and "rules-refused" in bodies[1]["problems"] and len(bodies[1]["positions"]) == 1
+    assert not (live.OUT / "site_accepts.json").exists() and "rule triggered" not in capsys.readouterr().out
+    monkeypatch.setattr(publish, "send", lambda body, *a, **k: sent.append(json.loads(body)) or (True, "HTTP 200"))
+    # A block the site's schema would refuse never leaves: the positions go without it.
+    real = live.rules_block
+    monkeypatch.setattr(live, "rules_block", lambda *a: ({**real(*a)[0], "provisional": False}, []))
+    assert live._publish(args(), rule_account()) == 0
+    assert "rules" not in sent[-1] and "rules-invalid" in sent[-1]["problems"] and len(sent[-1]["positions"]) == 1
+    monkeypatch.setattr(live, "rules_block", real)
     # Switched off in the desk's config: not worked out, and the dashboard is not asked.
     (live.OUT / "site_accepts.json").unlink()
     monkeypatch.setattr(live, "load_yaml", lambda name: {"names": ["SPY"], "rule_alerts": "off"})
