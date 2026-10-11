@@ -131,6 +131,20 @@ body, never by a header.
 - **The HFT desk lives in another repository** (ADR 0006). This repository holds no code for it; the dashboard
   only shows what it publishes. Until its first snapshot arrives, `/hft` is an empty state with no numbers, its
   watchdog tick is skipped and `/api/health` reports `desks.hft.snapshot` as `missing`.
+- **Who may publish a desk** (`src/lib/ingest-scope.ts`). By default the key id named by `PRIMARY_HOST` (the
+  `default` key when unset) is the primary publisher of every desk, and any other valid key's snapshot is filed in
+  the desk's shadow slot, which nothing reads. `DASHBOARD_INGEST_SCOPES` changes that per key: a JSON map
+  `{"<key id>": {"desks": ["hft"]}}`. A key id listed there is the primary publisher of exactly those desks,
+  whatever `PRIMARY_HOST` says, and may send nothing else: another desk's snapshot, a research edition or the
+  options live document signed with it is refused with 403 (logged as `key-scope`) and nothing is stored. A key id
+  not listed behaves as before, except that it is no longer primary for a desk a listed key owns: its snapshot for
+  that desk goes to the shadow slot. Unset or `{}` changes nothing. The key's secret still comes from
+  `DASHBOARD_INGEST_KEYS`, and the signature is checked before any of this.
+  A value that is not exactly that shape (not JSON, an unknown desk, an empty desk list, a field beside `desks`,
+  a key id outside the key-id pattern, the id `radar`, or one desk given to two keys) is not applied at all. Every
+  other key then follows `PRIMARY_HOST` alone, and every word of the value that could be a key id is refused
+  with 503 (`key-scope-config`) until the value is fixed, so a key that was meant to be limited never becomes
+  unlimited through a typing mistake. Each signed request logs `ingest.scopes` with a reason code while it lasts.
 - **Taking a new version of the HFT contract.** Copy the schema from `hft-lab` over `src/lib/hft.schema.json`, run
   `pnpm gen:types`, and put the file's SHA-256 and the source commit in `src/lib/hft.contract.lock.json`.
   `pnpm test` fails while the hash and the file disagree. `make schema` does not produce this file. Deploy the
@@ -175,6 +189,9 @@ other panes keep working.
 |---|---|---|
 | `BLOB_READ_WRITE_TOKEN` | Vercel **production only** (added when the private Blob store is connected) | Read and write snapshots and alert state. Previews must not hold it: they run with `DASHBOARD_FIXTURE=1` |
 | `DASHBOARD_INGEST_SECRET` | Vercel production + the Mac's `~/trading/.env` | Shared HMAC key for `/api/ingest` |
+| `DASHBOARD_INGEST_KEYS` | Vercel production (optional) | JSON map `{"<key id>": "<secret>"}`: one HMAC key per publisher, chosen by the `x-wt-key-id` header (ADR 0004) |
+| `PRIMARY_HOST` | Vercel production (optional) | The key id whose snapshots are the visible ones; default `default`. Every other key's go to the shadow slots |
+| `DASHBOARD_INGEST_SCOPES` | Vercel production (optional) | JSON map `{"<key id>": {"desks": ["hft"]}}`: that key is the primary publisher of those desks and may publish nothing else (see Desks). Holds no secret |
 | `RADAR_INGEST_SECRET` | Vercel production + the radar's cloud environment | HMAC key for key id `radar`. It may only publish research editions (`stocksdelta/radar`, `stocksdelta/options`); unset means the radar key is refused |
 | `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY` (or Alpaca's own `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY`) | Vercel production only | Alpaca paper-account keys, used only for the free IEX market data behind `/api/quote`; unset means the Options page shows live prices as off |
 | `ALPACA_DATA_URL` | Vercel (optional) | Market-data base URL, default `https://data.alpaca.markets` |
