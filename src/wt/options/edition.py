@@ -17,6 +17,7 @@ from __future__ import annotations
 import csv
 import datetime as dt
 import json
+import math
 import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -295,22 +296,21 @@ def _num(x: Any) -> float | None:
         return None
     try:
         v = float(x)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
-    return v if v == v and abs(v) != float("inf") else None
+    return v if math.isfinite(v) else None
 
 
-def _fraction(x: Any, like: float | None) -> float | None:
-    """A volatility as a fraction of one, whichever way the feed wrote it. The broker gives implied volatility
-    as a fraction (0.24) and names its realised figure a percentage; a value is read as a percentage when that
-    puts it nearer `like` (the name's implied volatility), and otherwise when it is above 5, which no fraction is."""
+HV_BELIEVABLE = 20.0         # realised and implied volatility further apart than this many times are not both right
+
+
+def _vol(x: Any, percent: bool = False) -> float | None:
+    """A volatility as a fraction of one: the cell as it stands, or divided by 100 when the feed writes that
+    figure as a percentage. Nothing is inferred from the size of the number. None above 500% a year."""
     v = _num(x)
     if v is None or v < 0:
         return None
-    if like is not None and like > 0 and v > 0:
-        v = v / 100 if abs(v / 100 / like - 1) < abs(v / like - 1) else v
-    elif v > 5:
-        v = v / 100
+    v = v / 100 if percent else v
     return v if v <= 5 else None
 
 
@@ -320,26 +320,41 @@ def _unit(x: Any) -> float | None:
     return v if v is not None and 0 <= v <= 1 else None
 
 
+def _total(a: float | None, b: float | None) -> float | None:
+    if a is None or b is None or a < 0 or b < 0:
+        return None
+    return a + b if math.isfinite(a + b) else None
+
+
 def vol_block(row: Mapping[str, Any] | None, before: Mapping[str, Any] | None) -> dict[str, Any] | None:
     """One name's volatility block from its row in the volatility log and the row of the session before.
-    Every figure is optional: what cannot be read is left out, never guessed."""
+    Every figure is optional: what cannot be read is left out, never guessed.
+
+    Implied volatility is logged as a fraction (0.24). Realised volatility is logged from the broker's field
+    named a percentage (18.0) and is divided by 100. Should that field ever arrive as a fraction, the result
+    would sit a hundred times under the implied figure; a realised figure more than HV_BELIEVABLE times away
+    from the implied one is therefore left out, so a wrong unit shows as a blank and never as a number."""
     if not row:
         return None
-    iv = _fraction(row.get("annual_iv"), None)
-    was = _fraction(before.get("annual_iv"), None) if before else None
-    calls, puts = _num(row.get("call_vol")), _num(row.get("put_vol"))
-    avg_c, avg_p = _num(row.get("avg_call_vol")), _num(row.get("avg_put_vol"))
+    iv = _vol(row.get("annual_iv"))
+    was = _vol(before.get("annual_iv")) if before else None
+    hv = _vol(row.get("hv_annual"), percent=True)
+    if hv is not None and iv is not None and iv > 0 and not (iv / HV_BELIEVABLE <= hv <= iv * HV_BELIEVABLE):
+        hv = None
     change = iv - was if iv is not None and was is not None else None
     out = {
         "iv30": _rnd(iv, 4),
         "iv_change_1d": _rnd(change, 4) if change is not None and -1 <= change <= 1 else None,
         "iv_pct_13w": _rnd(_unit(row.get("ivp_13w")), 3),
         "iv_pct_26w": _rnd(_unit(row.get("ivp_26w")), 3),
-        "hv30": _rnd(_fraction(row.get("hv_annual"), iv), 4),
-        "opt_volume": calls + puts if calls is not None and puts is not None and min(calls, puts) >= 0 else None,
-        "opt_volume_avg20": avg_c + avg_p if avg_c is not None and avg_p is not None and min(avg_c, avg_p) >= 0 else None,
+        "hv30": _rnd(hv, 4),
+        "opt_volume": _total(_num(row.get("call_vol")), _num(row.get("put_vol"))),
+        "opt_volume_avg20": _total(_num(row.get("avg_call_vol")), _num(row.get("avg_put_vol"))),
     }
     return out if any(v is not None for v in out.values()) else None
+
+
+EVENTS_MAX = 400             # what the edition's schema allows
 
 
 def macro_events(calendar: Sequence[Mapping[str, Any]], session: str, days: int = EVENT_DAYS) -> list[dict[str, Any]]:
@@ -349,15 +364,20 @@ def macro_events(calendar: Sequence[Mapping[str, Any]], session: str, days: int 
     last = first + dt.timedelta(days=days)
     out = []
     for e in calendar:
-        d = e["date"] if isinstance(e["date"], dt.date) else dt.date.fromisoformat(str(e["date"]))
+        raw = e.get("date")
+        try:                                  # a row whose date cannot be read is not an event: it is passed over
+            d = raw.date() if isinstance(raw, dt.datetime) else raw if isinstance(raw, dt.date) else dt.date.fromisoformat(str(raw))
+        except ValueError:
+            continue
         code = str(e.get("type") or "")
-        if not (first <= d <= last) or not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", code):
+        if not (first <= d <= last) or not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", code, re.ASCII):
             continue
         t = str(e.get("time_et") or "")
         sev = e.get("severity")
-        out.append({"date": d.isoformat(), "time_et": t if re.fullmatch(r"([01]?\d|2[0-3]):[0-5]\d(:[0-5]\d)?", t) else None,
+        out.append({"date": d.isoformat(),
+                    "time_et": t if re.fullmatch(r"([01]?\d|2[0-3]):[0-5]\d(:[0-5]\d)?", t, re.ASCII) else None,
                     "kind": "macro", "type": code, "severity": sev if sev in ("high", "medium", "low") else None})
-    return sorted(out, key=lambda x: (x["date"], x["time_et"] or "", x["type"]))
+    return sorted(out, key=lambda x: (x["date"], x["time_et"] or "", x["type"]))[:EVENTS_MAX]
 
 
 def build_edition(levels_doc: Mapping[str, Any], iv_history: Sequence[Mapping[str, Any]],

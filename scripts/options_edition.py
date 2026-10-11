@@ -19,7 +19,7 @@ Exit codes:
 
 The edition's format is `edition_format` in config/options_desk.yaml (1, or 2 for the day's context, events and
 each name's volatility), or `--format`. Before sending format 2 the script asks the dashboard's /api/health what it
-accepts, and sends format 1 when the answer is older or cannot be read: an edition the site would refuse whole is
+accepts, and builds format 1 when the answer is older or cannot be read: an edition the site would refuse whole is
 never sent.
 
 One command does what the routine did in two (build, then publish), so: a name that could not be built does not
@@ -114,11 +114,17 @@ def main(argv: list[str] | None = None) -> int:
 
     url = os.environ.get("DASHBOARD_INGEST_URL") or DEFAULT_URL
     secret, bypass = os.environ.get("RADAR_INGEST_SECRET"), os.environ.get("VERCEL_AUTOMATION_BYPASS_SECRET")
-    fmt = a.format or int(desk.get("edition_format") or edition.EDITION_VERSION)
-    if fmt > edition.EDITION_VERSION and a.send and secret and bypass:
-        accepts = site_accepts(url, bypass)
+    fmt = a.format or desk.get("edition_format")
+    if fmt not in (edition.EDITION_VERSION, edition.EDITION_VERSION_MAX) or isinstance(fmt, bool):
+        if fmt is not None:
+            print(f"edition_format {fmt!r} is not a format this script writes: using {edition.EDITION_VERSION}", file=sys.stderr)
+        fmt = edition.EDITION_VERSION
+    if fmt > edition.EDITION_VERSION and a.send:
+        # Asked on every send, and a send that cannot ask (no secrets) builds format 1 too: a format 2 file is
+        # only ever written for a dashboard known to take it, or on a dry run.
+        accepts = site_accepts(url, bypass) if secret and bypass else 0
         if accepts < fmt:
-            print(f"the dashboard accepts edition format {accepts or 'unknown'}: sending format {edition.EDITION_VERSION}")
+            print(f"the dashboard accepts edition format {accepts or 'unknown'}: building format {edition.EDITION_VERSION}")
             fmt = edition.EDITION_VERSION
     rules_doc = json.loads((CONFIG_DIR / "options_rules.json").read_text())
     calendar = macro_calendar() if fmt > edition.EDITION_VERSION else None
