@@ -412,6 +412,36 @@ test("the paper positions sit under the list, and opening one prices the contrac
   await expect(page.locator("[data-pane-error]")).toHaveCount(0);
 });
 
+test("the brief view prices an at-the-money call and put on every name, only when asked", async ({ page, context, baseURL }) => {
+  const asked: string[] = [];
+  page.on("request", (r) => {
+    if (r.url().includes("/api/chain")) asked.push(new URL(r.url()).searchParams.get("s") ?? "");
+  });
+  await open(page, "/options?view=brief");
+  const costs = page.getByRole("region", { name: "Option costs" });
+  // Shut until asked for: reading the levels fetches no option quote.
+  await expect(costs).toHaveAttribute("data-costs", "closed");
+  expect(asked).toEqual([]);
+  await costs.getByRole("button", { name: "Show at-the-money costs" }).click();
+  await expect(costs).toHaveAttribute("data-costs", "ready");
+  expect(new Set(asked).size).toBe(10);
+  // Every name has a line with an ask for the call and the put, and the distance to breakeven under it.
+  const spy = costs.locator('[data-cost-row="SPY"]').first();
+  await expect(spy.getByRole("cell").first()).toContainText(/\d\.\d\d/);
+  await expect(spy.getByRole("cell").first()).toContainText(/mv|past/);
+  await expect(costs.locator("[data-cost-row]")).not.toHaveCount(0);
+  expect((await costs.textContent()) ?? "").not.toMatch(/NaN|undefined|Infinity/);
+  // It belongs to the brief: the live view has the positions there instead.
+  await open(page, "/options?view=live");
+  await expect(page.getByRole("region", { name: "Option costs" })).toHaveCount(0);
+  // With no option feed it says so once, and nothing else on the desk changes.
+  await variant(context, baseURL, "chain-off");
+  await open(page, "/options?view=brief");
+  await page.getByRole("region", { name: "Option costs" }).getByRole("button", { name: "Show at-the-money costs" }).click();
+  await expect(page.getByRole("region", { name: "Option costs" })).toHaveAttribute("data-costs", "off");
+  await expect(rows(page)).toHaveCount(10);
+});
+
 test("the map marks the strikes with the most open interest, and the layer can be switched off", async ({ page, context, baseURL }) => {
   await open(page, "/options?view=live&s=SPY");
   await showPane(page, "SPY");
