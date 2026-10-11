@@ -18,7 +18,7 @@ import csv
 import datetime as dt
 import json
 import re
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -64,7 +64,7 @@ def _read_file(path: str) -> str | None:
         return None
 
 
-def extract_transcript(lines: Sequence[str], by_contract: Mapping[str, str], since_ts: str = "",
+def extract_transcript(lines: Iterable[str], by_contract: Mapping[str, str], since_ts: str = "",
                        read: Callable[[str], str | None] = _read_file) -> tuple[Pulls, Pulls, Pulls]:
     """(daily, hourly, snapshot) per name: the latest result of each kind among the price-history and snapshot
     tool calls made at or after `since_ts`. `by_contract` maps the broker's contract id to the name."""

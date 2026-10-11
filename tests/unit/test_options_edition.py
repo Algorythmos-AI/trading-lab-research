@@ -14,7 +14,7 @@ import jsonschema
 import pytest
 import yaml
 
-from tests.unit.test_options_levels import synth
+from test_options_levels import synth          # conftest puts tests/unit on the path
 from wt.ops import publish
 from wt.options import edition
 from wt.options import levels as lv
@@ -198,7 +198,7 @@ def test_the_script_builds_from_a_folder_of_pulls_twice_the_same_and_sends_only_
 
     for name in ("RADAR_INGEST_SECRET", "VERCEL_AUTOMATION_BYPASS_SECRET", "DASHBOARD_INGEST_URL"):
         monkeypatch.delenv(name, raising=False)
-    assert script.main([*args, "--send"]) == 2                                # no secrets: built, not sent, and it says so
+    assert script.main([*args, "--send"]) == 3                                # no secrets: built, not sent, and it says so
     assert "RADAR_INGEST_SECRET" in capsys.readouterr().err
     sent = []
     monkeypatch.setenv("RADAR_INGEST_SECRET", "s" * 24)
@@ -208,9 +208,14 @@ def test_the_script_builds_from_a_folder_of_pulls_twice_the_same_and_sends_only_
     assert sent == [("https://lab.algorythmos.com/api/ingest", {"key_id": "radar"})]
     text = capsys.readouterr()
     assert "s" * 24 not in text.out + text.err and "b" * 24 not in text.out + text.err
-    monkeypatch.setattr(publish, "send", lambda *a, **k: (False, "HTTP 422: {\"errors\": [\"/tickers/0: secret text\"]}"))
-    assert script.main([*args, "--send"]) == 1
-    assert "http_422" in capsys.readouterr().out                             # the code, never the response text
+    assert "dashboard: stored (http_200)" in text.out
+    for ok, detail, code in ((False, 'HTTP 422: {"errors": ["/tickers/0: response text"]}', "http_422"),
+                             (True, 'HTTP 409: {"status":"older","run_id":"response text"}', "http_409"),
+                             (False, "ConnectTimeout", "network_ConnectTimeout")):
+        monkeypatch.setattr(publish, "send", lambda *a, _r=(ok, detail), **k: _r)
+        assert script.main([*args, "--send"]) == 1                           # a newer edition already there is not "stored"
+        out = capsys.readouterr().out
+        assert f"NOT stored ({code})" in out and "response text" not in out  # the code, never the response's text
 
 
 def test_the_script_fails_on_a_name_it_could_not_build_and_stops_quietly_when_there_is_nothing_new(tmp_path, capsys):
@@ -236,3 +241,24 @@ def test_the_sender_signs_with_the_key_id_it_is_given(monkeypatch):
     assert seen["x-wt-key-id"] == "radar"
     publish.send(b"{}", "https://x.invalid/api/ingest", "secret", None)
     assert seen["x-wt-key-id"] == "gcp-use1"                                  # unchanged for every existing caller
+
+
+def test_the_paper_record_is_newest_first_capped_and_each_rules_figures_add_up():
+    run = edition.run(NAMES, *pulls(), NOW)
+    assert run.levels_doc is not None
+    row = lambda session, bar, rule, r, ticker="AAA": {"session": session, "ticker": ticker, "rule": rule, "side": "call",    # noqa: E731
+                                                       "trigger_bar": bar, "entry": "100", "stop": "99", "target": "102",
+                                                       "exit": "close", "r": r}
+    rows = [row("2026-10-07", "2026-10-07T10:30", "brk_PDH_close", "2.0"), row("2026-10-08", "2026-10-08T13:30", "brk_PDH_close", "-1.0"),
+            row("2026-10-08", "2026-10-08T10:30", "brk_PDH_close", "0.5", "BBB"), row("2026-10-08", "2026-10-08T11:30", "brk_PDL_close", "")]
+    doc = edition.build_edition(run.levels_doc, [], rows, RULES, dt.datetime(2026, 10, 9, 22, 5, tzinfo=dt.UTC))
+    assert [(p["session"], p["symbol"], p["r"]) for p in doc["paper"]] == [
+        ("2026-10-08", "AAA", -1.0), ("2026-10-08", "AAA", None), ("2026-10-08", "BBB", 0.5), ("2026-10-07", "AAA", 2.0)]
+    live = {r["id"]: r["live"] for r in doc["rules"]}
+    assert live["brk_PDH_close"] == {"n": 3, "avg_r": 0.5, "wins": 2}
+    assert live["brk_PDL_close"] == {"n": 0, "avg_r": None, "wins": 0}       # a row with no result yet is not a case
+    many = [row("2026-10-08", f"2026-10-08T10:{i:02d}", "brk_PDH_close", "1.0", f"N{i}") for i in range(60)]
+    capped = edition.build_edition(run.levels_doc, [], many, RULES, dt.datetime(2026, 10, 9, 22, 5, tzinfo=dt.UTC))
+    assert len(capped["paper"]) == edition.PAPER_MAX and capped["paper"][0]["symbol"] == "N59"
+    assert capped["rules"][0]["live"]["n"] == 60                              # the count is of every case, not of those shown
+    jsonschema.Draft7Validator(SCHEMA).validate(capped)

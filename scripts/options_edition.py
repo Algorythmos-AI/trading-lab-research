@@ -11,8 +11,14 @@ bars and a volatility snapshot. They come either as files (`--pulls`: <NAME>.dai
 `--data` is where the run keeps its state between nights: levels/<session>.json, iv_history.csv, scorecard.csv.
 Running the same session twice adds no rows.
 
-Exit 0: written (and, with --send, stored or a duplicate). 1: a data problem, or the send failed. 2: nothing new
-(a weekend or holiday with the next session already built), or --send without its secrets.
+Exit codes:
+  0  written and, with --send, stored (or the same edition was already there)
+  1  a data problem for at least one name, or the dashboard did not store the edition
+  2  nothing new: a weekend or holiday with the next session already built. Nothing is sent.
+  3  --send without its secrets: built and written, not sent
+
+One command does what the routine did in two (build, then publish), so: a name that could not be built does not
+stop the edition going out without it, and the exit is still 1; when no name could be built nothing is sent.
 
 Sending signs with RADAR_INGEST_SECRET under key id "radar" (the key the dashboard lets publish research
 editions) and passes VERCEL_AUTOMATION_BYPASS_SECRET; both come from the environment and are never printed.
@@ -62,7 +68,8 @@ def main(argv: list[str] | None = None) -> int:
         daily, hourly, snaps = edition.read_pulls(a.pulls, names)
     else:
         by_contract = {str(v): str(k) for k, v in (desk.get("contracts") or {}).items()}
-        daily, hourly, snaps = edition.extract_transcript(a.transcript.read_text().splitlines(), by_contract, a.since_ts)
+        with a.transcript.open() as f:                # line by line: a result may hold a line separator inside a string
+            daily, hourly, snaps = edition.extract_transcript(f, by_contract, a.since_ts)
     run = edition.run(names, daily, hourly, snaps, now)
 
     levels_doc = run.levels_doc
@@ -93,11 +100,14 @@ def main(argv: list[str] | None = None) -> int:
     missing = [n for n, v in (("RADAR_INGEST_SECRET", secret), ("VERCEL_AUTOMATION_BYPASS_SECRET", bypass)) if not v]
     if missing or secret is None:
         print("NOT PUBLISHED: missing environment variable(s): " + ", ".join(missing), file=sys.stderr)
-        return 2
+        return 3
     ok, detail = publish.send(body, os.environ.get("DASHBOARD_INGEST_URL") or DEFAULT_URL, secret, bypass, key_id=KEY_ID)
-    # The status and nothing else: the response text is the dashboard's, the body is research.
-    print(f"dashboard: {'stored or duplicate' if ok else 'NOT stored'} ({detail if ok else publish.error_code(detail)})")
-    return 0 if ok and not run.failed else 1
+    # For an edition only 200 means stored (or the same run already there). The sender counts 409 as fine for a
+    # snapshot; here it means the dashboard holds a newer edition and kept it.
+    stored = ok and detail == "HTTP 200"
+    # The status code and nothing else: never the response's text.
+    print(f"dashboard: {'stored' if stored else 'NOT stored'} ({publish.error_code(detail)})")
+    return 0 if stored and not run.failed else 1
 
 
 if __name__ == "__main__":
