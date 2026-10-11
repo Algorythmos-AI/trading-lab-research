@@ -68,6 +68,13 @@ class Account:
             raise live.BrokerFault("not-in-this-test")
         return self._closes
 
+    def bars(self, symbols, timeframe, start, end):
+        self.bar_calls = [*getattr(self, "bar_calls", []), (timeframe, start, end)]
+        got = getattr(self, "_bars", None)
+        if got is None:
+            raise live.BrokerFault("no-bars-in-this-test")
+        return got[timeframe]
+
     def contracts(self, symbol, lo, hi, first, last):
         self.asked.append((symbol, round(lo, 2), round(hi, 2), first, last))
         if isinstance(self._contracts, Exception):
@@ -89,6 +96,7 @@ class Account:
 def _state(tmp_path, monkeypatch):
     monkeypatch.setattr(live, "OUT", tmp_path / "options-live")
     monkeypatch.setattr(live.time, "sleep", lambda s: None)
+    monkeypatch.setattr(publish, "read_health", lambda *a: (None, "not asked in this test"))
     for name in (live.KEY_ID_VAR, live.SECRET_VAR, "DASHBOARD_INGEST_URL", "DASHBOARD_INGEST_SECRET", "WT_ROLE",
                  "DASHBOARD_KEY_ID"):
         monkeypatch.delenv(name, raising=False)
@@ -100,7 +108,7 @@ def test_the_module_can_only_read_and_only_from_the_paper_host():
     for word in (".post(", ".put(", ".patch(", ".delete(", "/v2/orders", "/v2/account", "TradingClient", "alpaca.markets"):
         assert word not in src.replace(live.PAPER_HOST, "").replace(live.DATA_HOST, ""), word
     assert "APCA_API_KEY_ID" not in src                    # never strategy B's account
-    assert [n for n in vars(live.OptionsAccount) if not n.startswith("_")] == ["positions", "clock", "closes", "contracts"]
+    assert [n for n in vars(live.OptionsAccount) if not n.startswith("_")] == ["positions", "clock", "closes", "bars", "contracts"]
     assert live.DATA_HOST == "https://data.alpaca.markets"
     s = Session(Reply(200, []), Reply(200, CLOCK))
     acct = live.OptionsAccount("k", "s", s)
@@ -341,3 +349,177 @@ def test_the_desks_names_are_well_formed_and_the_contract_request_stays_on_the_p
     assert s.params[1]["strike_price_gte"] == "717.60" and s.params[2]["page_token"] == "t"
     with pytest.raises(live.BrokerFault):
         live.OptionsAccount("k", "s", Session(Reply(200, []))).contracts("SPY", 1, 2, dt.date(2026, 10, 12), dt.date(2026, 10, 13))
+
+
+# ---- where the rules stand during the session
+
+from test_options_levels import sessions  # noqa: E402  (conftest puts tests/unit on the path)
+
+from wt.options import intraday  # noqa: E402
+from wt.options import levels as lv  # noqa: E402
+
+SESSION = "2026-10-12"                    # a Monday; the flat history below ends on the Friday before
+
+
+def daily(px=100.0, rng=1.0, end="2026-10-09", n=40):
+    """Quiet identical days as the feed sends them: prior high 100.5, prior low 99.5, ATR 1."""
+    return [{"t": f"{d}T04:00:00Z", "o": px, "h": px + rng / 2, "l": px - rng / 2, "c": px, "v": 1e6} for d in sessions(end, n)]
+
+
+def half(hhmm, o, h, low, c, day=SESSION):
+    at = dt.datetime.fromisoformat(f"{day}T{hhmm}").replace(tzinfo=intraday.NEW_YORK).astimezone(dt.UTC)
+    return {"t": at.strftime("%Y-%m-%dT%H:%M:%SZ"), "o": o, "h": h, "l": low, "c": c}
+
+
+def ny(hhmm, day=SESSION):
+    return dt.datetime.fromisoformat(f"{day}T{hhmm}").replace(tzinfo=intraday.NEW_YORK).astimezone(dt.UTC)
+
+
+BREAK = [half("09:30", 100, 100.4, 99.9, 100.3), half("10:00", 100.3, 100.6, 100.2, 100.5), half("10:30", 100.5, 101.0, 100.4, 100.9),
+         half("11:00", 100.9, 101.2, 100.8, 101.1), half("11:30", 101.1, 102.3, 101.0, 102.2)]
+
+
+def test_the_sessions_hours_are_cut_as_the_broker_cuts_them_and_only_finished_ones_count():
+    assert [(a.strftime("%H:%M"), b.strftime("%H:%M")) for a, b in intraday.slots(SESSION)][:2] == [("09:30", "10:00"), ("10:00", "11:00")]
+    assert len(intraday.slots(SESSION)) == 7 and len(intraday.slots("2026-11-27")) == 4      # a half day ends at 13:00
+    assert intraday.hourly_bars(BREAK, SESSION, ny("09:59")) == []
+    one = intraday.hourly_bars(BREAK, SESSION, ny("10:00"))
+    assert [(b.d, b.o, b.h, b.l, b.c) for b in one] == [("2026-10-12T09:30", 100, 100.4, 99.9, 100.3)]
+    two = intraday.hourly_bars(BREAK, SESSION, ny("11:59"))
+    assert [(b.d, b.o, b.h, b.l, b.c) for b in two][1] == ("2026-10-12T10:00", 100.3, 101.0, 100.2, 100.9)   # two halves, one hour
+    assert len(intraday.hourly_bars(BREAK, SESSION, ny("12:00"))) == 3
+    odd = [*BREAK, {"t": "not a time", "o": 1, "h": 1, "l": 1, "c": 1}, half("12:00", 0, 0, 0, 0), half("09:30", 1, 1, 1, 1, day="2026-10-09")]
+    assert len(intraday.hourly_bars(odd, SESSION, ny("16:00"))) == 3                          # an hour with no real bar is left out
+
+
+def test_a_rule_is_waiting_until_its_hourly_close_then_open_then_scored():
+    levels = lv.levels_for(lv.load_ibkr(intraday.daily_raw(daily())).bars, SESSION)
+    state = lambda hhmm, complete=False: {s["rule"]: s for s in intraday.rule_states(                    # noqa: E731
+        intraday.hourly_bars(BREAK, SESSION, ny(hhmm)), levels, complete)}
+    assert all(s["state"] == "waiting" for s in state("10:59").values())
+    # The 10:00 to 11:00 hour closes at 100.9, above the prior high of 100.5: seen as soon as that hour is in.
+    got = state("11:00")["brk_PDH_close"]
+    assert got == {"rule": "brk_PDH_close", "state": "open", "bar": "11:00", "side": "call", "r": 0.0}
+    assert [s["rule"] for s in intraday.rule_states([], levels, False)] == ["brk_PDH_close", "reclaim_PDL_close", "brk_PDL_close", "reject_PDH_close"]
+    # An hour later the target (two risks of 0.6 above 100.9) has been reached.
+    assert state("12:00")["brk_PDH_close"] == {"rule": "brk_PDH_close", "state": "target", "bar": "11:00", "side": "call", "r": 2.0}
+    # With the session over and no target, an open trade is closed at the last bar, as the after-close run scores it.
+    quiet = [*BREAK[:3], half("11:00", 100.9, 101.0, 100.8, 100.95)]
+    ended = {s["rule"]: s for s in intraday.rule_states(intraday.hourly_bars(quiet, SESSION, ny("16:00")), levels, True)}
+    assert ended["brk_PDH_close"]["state"] == "closed" and ended["brk_PDH_close"]["r"] == pytest.approx(0.05 / 0.6, abs=1e-3)
+    live_now = {s["rule"]: s for s in intraday.rule_states(intraday.hourly_bars(quiet, SESSION, ny("12:00")), levels, False)}
+    assert live_now["brk_PDH_close"]["state"] == "open"
+
+
+def rule_account(parts=BREAK, names=("SPY", "QQQ")):
+    acct = Account([option()])
+    acct._bars = {"1Day": {n: daily() for n in names}, "30Min": {"SPY": parts}}
+    return acct
+
+
+def test_the_rules_block_is_built_from_two_requests_and_the_site_accepts_it():
+    acct = rule_account()
+    block, problems = live.rules_block(acct, ["SPY", "QQQ", "GONE"], ny("11:16"))
+    assert problems == ["rules-skipped:1"]                                   # a name with no daily bars is counted, not sent
+    assert [c[0] for c in acct.bar_calls] == ["1Day", "30Min"]
+    assert acct.bar_calls[1][2] == ny("11:00")                               # sixteen minutes behind the clock
+    assert (block["session"], block["delay_min"], block["provisional"], block["complete"]) == (SESSION, 16, True, False)
+    spy, qqq = block["names"]
+    assert spy["bars"] == 2 and {s["rule"]: s["state"] for s in spy["states"]}["brk_PDH_close"] == "open"
+    assert qqq["bars"] == 0 and all(s == {"rule": s["rule"], "state": "waiting"} for s in qqq["states"])
+    doc = live.build([option()], CLOCK, "r1", ny("11:16"), rules=block)
+    assert live.validate(doc) == [] and doc["schema_version"] == 2
+    assert "rules" not in live.build([option()], CLOCK, "r1", ny("11:16")) and live.build([], None, "r", NOW)["schema_version"] == 1
+    # Before the first hour is in there is nothing to ask the feed for; after the close the block says it is complete.
+    early = rule_account()
+    assert live.rules_block(early, ["SPY"], ny("09:40"))[0]["names"][0]["bars"] == 0 and [c[0] for c in early.bar_calls] == ["1Day"]
+    assert live.rules_block(rule_account(), ["SPY"], ny("16:16"))[0]["complete"] is True
+    assert live.rules_block(rule_account(), ["SPY"], ny("11:16", day="2026-10-10")) == (None, [])     # a Saturday
+    odd = rule_account()
+    odd._bars["1Day"]["QQQ"] = [*daily()[:-1], {"t": "2026-10-09T04:00:00Z", "o": None, "h": 1, "l": 1, "c": 1}, "torn"]
+    odd._bars["30Min"]["SPY"] = [*BREAK, dict(BREAK[1]), {**BREAK[1], "c": 100.55}]      # the same half-hour three times
+    block, problems = live.rules_block(odd, ["SPY", "QQQ"], ny("11:16"))
+    assert [n["symbol"] for n in block["names"]] == ["SPY"] and problems == ["rules-skipped:1"]   # QQQ's bad bar costs QQQ
+    stale = rule_account()
+    stale._bars["1Day"]["SPY"] = daily(end="2026-10-08")                      # yesterday's bar has not arrived
+    assert live.rules_block(stale, ["SPY"], ny("11:16")) == (
+        {"session": SESSION, "as_of": ny("11:00").isoformat(timespec="seconds"), "delay_min": 16, "provisional": True,
+         "complete": False, "names": []}, ["rules-skipped:1"])
+
+
+def test_a_trigger_is_announced_once_a_session_by_name_and_rule_and_never_with_a_price(tmp_path, capsys, monkeypatch):
+    block, _ = live.rules_block(rule_account(), ["SPY"], ny("11:16"))
+    seen = tmp_path / "seen.json"
+    fresh = live.new_triggers(block, seen)
+    assert fresh == [("SPY", "brk_PDH_close", "11:00")]
+    assert live.new_triggers(block, seen) == []                               # five minutes later: already said
+    later, _ = live.rules_block(rule_account(), ["SPY"], ny("12:16"))
+    assert live.new_triggers(later, seen) == []                               # its outcome is not a new trigger
+    assert live.new_triggers({**block, "session": "2026-10-13"}, seen) == fresh   # a new session starts again
+    assert live.new_triggers(None, seen) == []
+    seen.write_text(json.dumps({"session": SESSION, "keys": None}))            # a damaged file is an empty one
+    assert live.new_triggers(block, seen) == fresh
+    sent = []
+    import wt.ops.alerts as alerts_mod
+    monkeypatch.setattr(alerts_mod.Alerts, "fire", lambda self, key, title, message, priority=4, tags=(): sent.append((key, title, message, priority)) or True)
+    monkeypatch.setattr(alerts_mod.Alerts, "__init__", lambda self, *a, **k: None)
+    live.announce(fresh, "log", {"brk_PDH_close": "Hourly close above yesterday's high"}, SESSION)
+    assert sent == [] and "rule triggered: SPY brk_PDH_close at the 11:00 ET hourly close" in capsys.readouterr().out
+    live.announce(fresh, "phone", {"brk_PDH_close": "Hourly close above yesterday's high"}, SESSION)
+    (key, title, message, priority), = sent
+    assert key == f"options:rule:SPY:brk_PDH_close:{SESSION}" and title == "SPY: Hourly close above yesterday's high" and priority == 3
+    assert "not a signal to trade" in message and not any(ch.isdigit() for ch in message.replace("11:00", "").replace("15 minutes", ""))
+
+
+def test_rule_states_are_sent_only_to_a_dashboard_that_accepts_them_and_never_stop_the_positions(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(live, "desk_names", lambda: ["SPY"])
+    monkeypatch.setattr(live, "load_yaml", lambda name: {"names": ["SPY"], "rule_alerts": "log"})      # not the owner's switch
+    monkeypatch.setenv("DASHBOARD_INGEST_URL", "https://x.invalid/api/ingest")
+    monkeypatch.setenv("DASHBOARD_INGEST_SECRET", "s" * 20)
+    sent = []
+    monkeypatch.setattr(publish, "send", lambda body, *a, **k: sent.append(json.loads(body)) or (True, "HTTP 200"))
+
+    class Now(dt.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return ny("11:16")
+    monkeypatch.setattr(live.dt, "datetime", Now)
+    asked = []
+
+    def health(accepts):
+        return lambda *a: asked.append(1) or ({"editions": {"options_live": {"accepts": accepts}}}, "")
+    monkeypatch.setattr(publish, "read_health", health(1))
+    assert live._publish(args(), rule_account()) == 0
+    assert sent[-1]["schema_version"] == 1 and "rules" not in sent[-1]          # an older dashboard gets what it takes
+    assert live._publish(args(), rule_account()) == 0 and len(asked) == 1        # and is not asked again within the hour
+    (live.OUT / "site_accepts.json").unlink()
+    monkeypatch.setattr(publish, "read_health", health(2))
+    assert live._publish(args(), rule_account()) == 0
+    assert sent[-1]["schema_version"] == 2 and sent[-1]["rules"]["names"][0]["symbol"] == "SPY" and live.validate(sent[-1]) == []
+    assert "rule triggered: SPY brk_PDH_close" in capsys.readouterr().out
+    assert live._publish(args(), rule_account()) == 0 and "rule triggered" not in capsys.readouterr().out
+    # The bars cannot be read: the positions go out as before, and the document says why the rules are missing.
+    assert live._publish(args(), Account([option()])) == 0
+    assert "rules" not in sent[-1] and sent[-1]["schema_version"] == 1 and "rules-unavailable:no-bars-in-this-test" in sent[-1]["problems"]
+    assert len(sent[-1]["positions"]) == 1
+    # The dashboard said it takes version 2 and then refuses the document whole (a rollback inside the hour): the
+    # positions go again as version 1, the answer is forgotten, and nothing is announced for what was not stored.
+    replies = iter([(False, 'HTTP 422: {"errors":["/rules: key is not allowed"]}'), (True, "HTTP 200")])
+    bodies = []
+    monkeypatch.setattr(publish, "send", lambda body, *a, **k: bodies.append(json.loads(body)) or next(replies))
+    (live.OUT / "rules_seen.json").unlink()
+    assert live._publish(args(), rule_account()) == 0
+    assert [b["schema_version"] for b in bodies] == [2, 1] and "rules-refused" in bodies[1]["problems"] and len(bodies[1]["positions"]) == 1
+    assert not (live.OUT / "site_accepts.json").exists() and "rule triggered" not in capsys.readouterr().out
+    monkeypatch.setattr(publish, "send", lambda body, *a, **k: sent.append(json.loads(body)) or (True, "HTTP 200"))
+    # A block the site's schema would refuse never leaves: the positions go without it.
+    real = live.rules_block
+    monkeypatch.setattr(live, "rules_block", lambda *a: ({**real(*a)[0], "provisional": False}, []))
+    assert live._publish(args(), rule_account()) == 0
+    assert "rules" not in sent[-1] and "rules-invalid" in sent[-1]["problems"] and len(sent[-1]["positions"]) == 1
+    monkeypatch.setattr(live, "rules_block", real)
+    # Switched off in the desk's config: not worked out, and the dashboard is not asked.
+    (live.OUT / "site_accepts.json").unlink()
+    monkeypatch.setattr(live, "load_yaml", lambda name: {"names": ["SPY"], "rule_alerts": "off"})
+    monkeypatch.setattr(publish, "read_health", lambda *a: pytest.fail("asked with the switch off"))
+    assert live._publish(args(), rule_account()) == 0 and "rules" not in sent[-1]

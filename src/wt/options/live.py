@@ -11,8 +11,9 @@ nothing in this module can place, change or cancel an order.
 
 What leaves the host: one row per open option contract (the OCC symbol, the quantity, the broker's average price,
 mark, market value and unrealised result), the market clock, and open interest by contract for the desk's names
-(public market data, read with the same key pair). No account number, no balances, no buying power, no stock
-positions, no orders.
+(public market data, read with the same key pair). On a session day it also carries where each probation rule
+stands so far, replayed on market data a quarter of an hour behind (`wt.options.intraday`), once the dashboard
+says it accepts that. No account number, no balances, no buying power, no stock positions, no orders.
 
 Without the key pair the job does nothing and exits 0, so its unit can be installed before the account exists.
 When the account cannot be read nothing is sent: an empty list would say "nothing is held", which is not known.
@@ -35,11 +36,17 @@ from typing import Any
 
 import requests
 
-from wt.core.config import ROOT, STATE_DIR, load_yaml
+from wt.core.config import CONFIG_DIR, ROOT, STATE_DIR, load_yaml
 from wt.ops import publish, safeio
+from wt.options import intraday
+from wt.options import levels as lv
 
 SCHEMA_ID = "stocksdelta/options-live"
 SCHEMA_VERSION = 1
+RULES_VERSION = 2                 # the document's version once it carries `rules`
+FEED_DELAY_MIN = 16               # the consolidated tape is refused for the last 15 minutes; one more for margin
+RULE_HISTORY_DAYS = 420           # calendar days of daily bars the session's levels are built from
+ACCEPTS_KEEP_S = 3600.0           # how long the dashboard's answer to "what do you accept" is believed
 SCHEMA_PATH = ROOT / "dashboard" / "src" / "lib" / "options-live.schema.json"
 OUT = STATE_DIR / "options-live"
 JOB = "options-live"
@@ -135,6 +142,25 @@ class OptionsAccount:
             close = next((c for b in bars if isinstance(b, dict) and (c := _num(b.get("c"))) is not None and c > 0), None)
             if close is not None:
                 out[str(sym)] = close
+        return out
+
+    def bars(self, symbols: list[str], timeframe: str, start: dt.datetime, end: dt.datetime) -> dict[str, list[Any]]:
+        """Stock bars by name from the consolidated tape, split-adjusted. Two pages at most: ten names' year of
+        daily bars, or their day of half-hours, fit in one."""
+        params = {"symbols": ",".join(symbols), "timeframe": timeframe, "feed": "sip", "adjustment": "split",
+                  "limit": "10000", "start": start.strftime("%Y-%m-%dT%H:%M:%SZ"), "end": end.strftime("%Y-%m-%dT%H:%M:%SZ")}
+        out: dict[str, list[Any]] = {}
+        for _ in range(2):
+            got = self._get("/v2/stocks/bars", params, DATA_HOST, tries=1)
+            if not isinstance(got, dict) or not isinstance(got.get("bars"), dict):
+                raise BrokerFault("bars-not-an-object")
+            for sym, rows in got["bars"].items():
+                if isinstance(rows, list):
+                    out.setdefault(str(sym), []).extend(rows)
+            token = got.get("next_page_token")
+            if not isinstance(token, str) or not token:
+                break
+            params = {**params, "page_token": token}
         return out
 
     def contracts(self, symbol: str, lo: float, hi: float, first: dt.date, last: dt.date) -> list[Any]:
@@ -321,6 +347,103 @@ def open_interest(account: OptionsAccount, now: dt.datetime, cache: Path,
     return (merged or None) if (got or have is not None) else None, problems
 
 
+def rules_block(account: OptionsAccount, names: list[str], now: dt.datetime) -> tuple[dict[str, Any] | None, list[str]]:
+    """(where each probation rule stands in today's session, problems). None on a day with no session.
+
+    Levels come from the feed's own daily bars up to yesterday, checked as the after-close run checks its bars; a
+    name whose bars fail that check, or do not reach yesterday, is left out and counted. Two requests in all."""
+    session = now.astimezone(intraday.NEW_YORK).date().isoformat()
+    try:
+        if not lv.is_session(session):
+            return None, []
+    except ValueError:                              # past the calendar the engine carries
+        return None, ["rules-unavailable:calendar"]
+    cutoff = now - dt.timedelta(minutes=FEED_DELAY_MIN)
+    opened = intraday.slots(session)[0][0]
+    day = dt.datetime.fromisoformat(session).replace(tzinfo=dt.UTC)
+    daily = account.bars(names, "1Day", day - dt.timedelta(days=RULE_HISTORY_DAYS), day - dt.timedelta(seconds=1))
+    parts = account.bars(names, "30Min", opened.astimezone(dt.UTC), cutoff) if cutoff > opened else {}
+    complete = cutoff >= intraday.slots(session)[-1][1]
+    out, skipped = [], 0
+    for name in names:
+        try:                                    # one name's unreadable bars cost that name, never the others
+            rows = [b for b in daily.get(name, []) if isinstance(b, dict)]
+            loaded = lv.load_ibkr(intraday.daily_raw(rows))
+            if loaded.problems or not loaded.bars or loaded.bars[-1].d != lv.prev_session(session):
+                skipped += 1
+                continue
+            levels = lv.levels_for(loaded.bars, session)
+            hourly = intraday.hourly_bars(parts.get(name, []), session, cutoff)
+            states = intraday.rule_states(hourly, levels, complete)
+        except (ValueError, TypeError, KeyError, AttributeError, IndexError):
+            skipped += 1
+            continue
+        out.append({"symbol": name, "bars": len(hourly), "states": states})
+    block = {"session": session, "as_of": cutoff.isoformat(timespec="seconds"), "delay_min": FEED_DELAY_MIN,
+             "provisional": True, "complete": complete, "names": out}
+    return block, [f"rules-skipped:{skipped}"] if skipped else []
+
+
+def new_triggers(block: dict[str, Any] | None, seen_path: Path) -> list[tuple[str, str, str]]:
+    """(name, rule, time) for each rule that has triggered and was not seen triggered before this session. The
+    file remembers one session; a new session starts it again."""
+    if not block:
+        return []
+    try:
+        kept = json.loads(seen_path.read_text())
+    except (OSError, ValueError):
+        kept = {}
+    keys = kept.get("keys") if isinstance(kept, dict) and kept.get("session") == block["session"] else None
+    seen = {str(k) for k in keys} if isinstance(keys, list) else set()
+    fresh = [(n["symbol"], s["rule"], str(s.get("bar") or ""))
+             for n in block["names"] for s in n["states"] if s["state"] != "waiting" and f"{n['symbol']}:{s['rule']}" not in seen]
+    if fresh:
+        seen |= {f"{sym}:{rule}" for sym, rule, _ in fresh}
+        try:
+            safeio.atomic_write(seen_path, json.dumps({"session": block["session"], "keys": sorted(seen)}), seen_path.parent)
+        except OSError:
+            pass
+    return fresh
+
+
+def announce(fresh: list[tuple[str, str, str]], mode: str, labels: dict[str, str], session: str) -> None:
+    """Say that a rule triggered: always in the job's log, and on the phone when `mode` is "phone". Names the
+    stock and the rule and nothing else: no price, no size, no result. It is a paper rule on probation."""
+    for sym, rule, bar in fresh:
+        print(f"rule triggered: {sym} {rule} at the {bar or '?'} ET hourly close (provisional)")
+        if mode != "phone":
+            continue
+        try:
+            from wt.ops.alerts import Alerts
+            Alerts().once_per_day(f"options:rule:{sym}:{rule}", f"{sym}: {labels.get(rule, 'a probation rule')}",
+                                  f"Triggered on the {bar or '?'} ET hourly close, from data 15 minutes behind the market. "
+                                  "A paper rule on probation: not a signal to trade.", 3, day=session)
+        except Exception as e:  # noqa: BLE001 — an alert that cannot be sent must not stop the positions
+            print(f"rule alert not sent ({e.__class__.__name__})", file=sys.stderr)
+
+
+def site_accepts(url: str, bypass: str | None, now: dt.datetime, cache: Path) -> int:
+    """The newest options-live version the dashboard validates (from /api/health), remembered for an hour; 0 when
+    it cannot be read, so a block the site might refuse whole is not sent."""
+    try:
+        kept = json.loads(cache.read_text())
+        if isinstance(kept, dict) and 0 <= (now - dt.datetime.fromisoformat(str(kept["at"]))).total_seconds() < ACCEPTS_KEEP_S:
+            return int(kept["accepts"])
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    health, _ = publish.read_health(url, bypass)
+    editions = health.get("editions") if isinstance(health, dict) else None
+    mine = editions.get("options_live") if isinstance(editions, dict) else None
+    accepts = mine.get("accepts") if isinstance(mine, dict) else None
+    if not isinstance(accepts, int) or isinstance(accepts, bool):
+        return 0
+    try:
+        safeio.atomic_write(cache, json.dumps({"at": now.isoformat(), "accepts": accepts}), cache.parent)
+    except OSError:
+        pass
+    return accepts
+
+
 def market(clock: dict[str, Any] | None) -> dict[str, Any] | None:
     """The market clock as the broker gives it, or None when it could not be read."""
     if clock is None:
@@ -334,11 +457,15 @@ def market(clock: dict[str, Any] | None) -> dict[str, Any] | None:
 
 
 def build(raw: list[Any], clock: dict[str, Any] | None, run_id: str, now: dt.datetime,
-          problems: list[str] | None = None, oi: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+          problems: list[str] | None = None, oi: list[dict[str, Any]] | None = None,
+          rules: dict[str, Any] | None = None) -> dict[str, Any]:
     rows, left_out = position_rows(raw)
-    return {"schema": SCHEMA_ID, "schema_version": SCHEMA_VERSION, "run_id": run_id,
-            "as_of": now.isoformat(timespec="seconds"), "paper": True, "market": market(clock),
-            "positions": rows, "open_interest": oi, "problems": [*(problems or []), *left_out][:24]}
+    doc = {"schema": SCHEMA_ID, "schema_version": SCHEMA_VERSION, "run_id": run_id,
+           "as_of": now.isoformat(timespec="seconds"), "paper": True, "market": market(clock),
+           "positions": rows, "open_interest": oi, "problems": [*(problems or []), *left_out][:24]}
+    if rules is not None:                       # only then: a dashboard that takes version 1 refuses the key itself
+        doc.update(schema_version=RULES_VERSION, rules=rules)
+    return doc
 
 
 def validate(doc: dict[str, Any], schema_path: Path = SCHEMA_PATH) -> list[str]:
@@ -401,8 +528,30 @@ def _publish(a: argparse.Namespace, account: OptionsAccount | None = None) -> in
     oi, oi_problems = open_interest(account, now, OUT / "open_interest.json",
                                     min(time.monotonic() + OI_BUDGET_S, deadline - 60.0))
     problems += oi_problems
+    url, ingest_secret = os.environ.get("DASHBOARD_INGEST_URL"), os.environ.get("DASHBOARD_INGEST_SECRET")
+    bypass = os.environ.get("VERCEL_AUTOMATION_BYPASS_SECRET")
+    rules, mode = None, "off"
+    try:
+        desk = load_yaml("options_desk.yaml")
+        mode = str(desk.get("rule_alerts") or "off")
+        # Asked of the dashboard, not assumed: sent to a site that takes version 1, the whole document, positions
+        # and all, would be refused. A dry run builds it regardless, to be looked at.
+        wanted = mode != "off" and (a.dry_run or (bool(url) and site_accepts(url or "", bypass, now, OUT / "site_accepts.json") >= RULES_VERSION))
+        if wanted and time.monotonic() < deadline - 90.0:
+            rules, rule_problems = rules_block(account, desk_names(), now)
+            problems += rule_problems
+    except BrokerFault as e:
+        rules = None
+        problems.append(f"rules-unavailable:{e.code}"[:200])
+    except Exception as e:  # noqa: BLE001 — the rule states are an extra: no fault in them may stop the positions
+        rules = None
+        problems.append(f"rules-failed:{e.__class__.__name__}"[:200])
     run_id = now.strftime("%Y%m%dT%H%M%SZ") + "-" + hashlib.sha1(os.urandom(8)).hexdigest()[:6]
-    doc = build(raw, clock, run_id, now, problems, oi)
+    doc = build(raw, clock, run_id, now, problems, oi, rules)
+    if rules is not None and validate(doc):
+        # The rule states are what failed to validate, or might be: the positions go out without them.
+        rules = None
+        doc = build(raw, clock, run_id, now, [*problems, "rules-invalid"], oi)
     if bad := validate(doc):
         print("options live document failed schema validation:\n  " + "\n  ".join(bad), file=sys.stderr)
         return 2
@@ -414,20 +563,35 @@ def _publish(a: argparse.Namespace, account: OptionsAccount | None = None) -> in
           f"{len(body)} bytes")
     if a.dry_run:
         return 0
-    url, ingest_secret = os.environ.get("DASHBOARD_INGEST_URL"), os.environ.get("DASHBOARD_INGEST_SECRET")
     if (why := publish.shadow_key_problem()) is not None:
         print(why, file=sys.stderr)
         return 2
     if not url or not ingest_secret:
         print("DASHBOARD_INGEST_URL / DASHBOARD_INGEST_SECRET not set: not sending")
         return 0
-    bypass = os.environ.get("VERCEL_AUTOMATION_BYPASS_SECRET")
     ok, detail = publish.send(body, url, ingest_secret, bypass, tries=SEND_TRIES, deadline=deadline)
+    if not ok and rules is not None and detail.startswith("HTTP 422"):
+        # Refused whole, with rule states in it: the dashboard no longer takes them (a rollback), whatever it said
+        # within the hour. Forget that answer and send the positions as version 1, once.
+        (OUT / "site_accepts.json").unlink(missing_ok=True)
+        rules = None
+        doc = build(raw, clock, run_id, now, [*problems, "rules-refused"], oi)
+        body = json.dumps(doc, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+        ok, detail = publish.send(body, url, ingest_secret, bypass, tries=1, deadline=deadline)
     if not ok:
         print(f"sent: False ({publish.error_code(detail)})")
         return _failed(detail, now)
     publish.record_outcome(True, detail, now, OUT / "publish_state.json")
     print(f"sent: True ({detail})")
+    if rules is not None:
+        # Only now: what is announced is what the dashboard holds, a host that may not publish never pages, and a
+        # slow alert cannot delay the positions.
+        try:
+            labels = {str(r.get("id")): str(r.get("label") or "a probation rule")
+                      for r in json.loads((CONFIG_DIR / "options_rules.json").read_text())["rules"]}
+            announce(new_triggers(rules, OUT / "rules_seen.json"), mode, labels, rules["session"])
+        except Exception as e:  # noqa: BLE001 — a missed announcement is said in the log and is not a failed run
+            print(f"rule triggers not announced ({e.__class__.__name__})", file=sys.stderr)
     if a.verify:
         good, why = verify_stored(doc, url, bypass)
         print(f"verify: {'ok' if good else 'FAILED'}: {why}")

@@ -45,3 +45,20 @@ timer is stopped, as the stocks publisher does.
 When the account cannot be read the job sends nothing, so the desk never shows "no positions" by mistake.
 
 To stop it: `sudo systemctl disable --now wt-options-live.timer` (owner). The pane disappears after 36 hours.
+
+## Rule states during the session
+
+On a session day the same job also works out where each of the four probation rules stands so far, and sends
+that with the positions. It replays the rules with the code the after-close run uses, on the feed's half-hour
+bars, which run 16 minutes behind the market. What it says is provisional: the after-close edition is the record.
+
+`rule_alerts` in `config/options_desk.yaml` is the switch:
+
+| Value | What happens |
+|---|---|
+| `off` | Not worked out, nothing sent |
+| `log` | Worked out and sent; a rule that triggers is written to the job's log (`rule triggered: SPY ...`) |
+| `phone` | The same, and it pages the phone: the stock and the rule, never a price. One page per name and rule a session |
+
+It is sent only once the dashboard reports it accepts version 2 of the document (asked once an hour). If the
+bars cannot be read, the positions go out as usual and the document's `problems` says `rules-unavailable`.
