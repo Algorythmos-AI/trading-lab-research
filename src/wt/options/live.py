@@ -52,6 +52,8 @@ DATA_HOST = "https://data.alpaca.markets"          # market data: the stocks' la
 
 # Open interest: the exchange reports it once a day, so it is read a few times a day and kept between runs.
 OI_REFRESH_H = 6.0
+OI_RETRY_H = 0.5                  # after a failed or partial read, not before this
+OI_BUDGET_S = 45.0                # the most a run spends reading it before the positions are sent
 OI_KEEP_H = 72.0                  # an older reading is dropped rather than shown as current
 OI_DAYS = 35                      # expiries out to five weeks: the desk's same-day and swing trades
 OI_STRIKE_BAND = 0.08             # strikes within 8% of the last close
@@ -87,9 +89,10 @@ class OptionsAccount:
         self._s = session or requests.Session()
         self._headers = {"APCA-API-KEY-ID": key_id, "APCA-API-SECRET-KEY": secret}
 
-    def _get(self, path: str, params: dict[str, str] | None = None, host: str = PAPER_HOST) -> Any:
+    def _get(self, path: str, params: dict[str, str] | None = None, host: str = PAPER_HOST,
+             tries: int = GET_TRIES) -> Any:
         last = "network"
-        for i in range(GET_TRIES):
+        for i in range(tries):
             try:
                 # No redirects: a 30x would carry the key headers to whatever host it named.
                 r = self._s.get(host + path, params=params, headers=self._headers, timeout=GET_TIMEOUT_S,
@@ -107,7 +110,7 @@ class OptionsAccount:
                 last = f"http-{r.status_code}"
                 if r.status_code != 429 and r.status_code < 500:
                     raise BrokerFault(last)
-            if i < GET_TRIES - 1:
+            if i < tries - 1:
                 time.sleep(2 ** i)
         raise BrokerFault(last)
 
@@ -125,7 +128,7 @@ class OptionsAccount:
 
     def closes(self, symbols: list[str]) -> dict[str, float]:
         """Each stock's last daily close, for the names that have one."""
-        got = self._get("/v2/stocks/snapshots", {"symbols": ",".join(symbols), "feed": "iex"}, DATA_HOST)
+        got = self._get("/v2/stocks/snapshots", {"symbols": ",".join(symbols), "feed": "iex"}, DATA_HOST, tries=1)
         out: dict[str, float] = {}
         for sym, snap in (got.items() if isinstance(got, dict) else ()):
             bars = [snap.get(k) for k in ("dailyBar", "prevDailyBar")] if isinstance(snap, dict) else []
@@ -141,7 +144,7 @@ class OptionsAccount:
                   "expiration_date_gte": first.isoformat(), "expiration_date_lte": last.isoformat()}
         out: list[Any] = []
         for _ in range(OI_PAGES):
-            got = self._get("/v2/options/contracts", params)
+            got = self._get("/v2/options/contracts", params, tries=1)       # one try: the next run comes soon
             if not isinstance(got, dict) or not isinstance(got.get("option_contracts"), list):
                 raise BrokerFault("contracts-not-a-list")
             out += got["option_contracts"]
@@ -228,49 +231,94 @@ def desk_names() -> list[str]:
     return list(dict.fromkeys(n for n in names if isinstance(n, str) and SYMBOL.fullmatch(n)))[:OI_NAMES]
 
 
-def read_open_interest(account: OptionsAccount, names: list[str], today: dt.date) -> list[dict[str, Any]]:
-    """Open interest for each name that has a last close and at least one contract with a figure."""
+def read_open_interest(account: OptionsAccount, names: list[str], today: dt.date,
+                       stop: float) -> tuple[dict[str, dict[str, Any]], int]:
+    """(open interest by name, how many names were missed). One name's fault costs that name only, and the reading
+    stops at `stop` (time.monotonic()) with what it has: the positions are waiting to be sent."""
     closes = account.closes(names)
-    out: list[dict[str, Any]] = []
-    for name in names:
+    got: dict[str, dict[str, Any]] = {}
+    missed = 0
+    for i, name in enumerate(names):
+        if time.monotonic() >= stop:
+            missed += len(names) - i
+            break
         close = closes.get(name)
         if close is None:
+            missed += 1
             continue
-        raw = account.contracts(name, close * (1 - OI_STRIKE_BAND), close * (1 + OI_STRIKE_BAND), today,
-                                today + dt.timedelta(days=OI_DAYS))
+        try:
+            raw = account.contracts(name, close * (1 - OI_STRIKE_BAND), close * (1 + OI_STRIKE_BAND), today,
+                                    today + dt.timedelta(days=OI_DAYS))
+        except BrokerFault:
+            missed += 1
+            continue
         rows, as_of = oi_rows(raw)
         if rows:
-            out.append({"symbol": name, "as_of": as_of, "rows": rows})
-    return out
+            got[name] = {"symbol": name, "as_of": as_of, "rows": rows}
+    return got, missed
 
 
-def open_interest(account: OptionsAccount, now: dt.datetime, cache: Path) -> tuple[list[dict[str, Any]] | None, list[str]]:
-    """(open interest, problems). Read again when the kept reading is older than OI_REFRESH_H; a failed read keeps
-    the last one for up to OI_KEEP_H and says so. It never stops the positions from going out."""
-    kept: dict[str, Any] = {}
+def _age_h(stamp: Any, now: dt.datetime) -> float:
+    """Hours since an ISO time the job wrote itself; infinite for anything else."""
+    try:
+        age = (now - dt.datetime.fromisoformat(str(stamp))).total_seconds() / 3600
+    except (TypeError, ValueError):
+        return float("inf")
+    return age if age >= 0 else float("inf")
+
+
+def _sendable(oi: list[dict[str, Any]], now: dt.datetime) -> bool:
+    """Would the site take this open interest? A kept reading is checked like a fresh one before it is sent."""
+    try:
+        return not validate(build([], None, "check", now, oi=oi))
+    except Exception:  # noqa: BLE001 — a reading that cannot even be checked is not sent
+        return False
+
+
+def open_interest(account: OptionsAccount, now: dt.datetime, cache: Path,
+                  stop: float) -> tuple[list[dict[str, Any]] | None, list[str]]:
+    """(open interest, problems). It never stops the positions from going out, and never holds them up past `stop`.
+
+    The reading is kept between runs. It is read again when older than OI_REFRESH_H, at most once every
+    OI_RETRY_H while that fails. A name that could not be read keeps its last figures for up to OI_KEEP_H."""
     try:
         kept = json.loads(cache.read_text())
     except (OSError, ValueError):
-        pass
-    age_h = float("inf")
-    try:
-        age_h = (now - dt.datetime.fromisoformat(str(kept.get("read")))).total_seconds() / 3600
-    except (TypeError, ValueError):
         kept = {}
-    have = kept.get("open_interest") if isinstance(kept.get("open_interest"), list) and 0 <= age_h <= OI_KEEP_H else None
-    if have is not None and age_h < OI_REFRESH_H:
+    if not isinstance(kept, dict):
+        kept = {}
+    read_age = _age_h(kept.get("read"), now)
+    have = kept.get("open_interest")
+    if not isinstance(have, list) or read_age > OI_KEEP_H or not _sendable(have, now):
+        have = None
+    if have is not None and read_age < OI_REFRESH_H:
         return have, []
+    if _age_h(kept.get("tried"), now) < OI_RETRY_H:
+        return have, ["open-interest-stale"] if have is not None else []
+    names = desk_names()
+    problems: list[str] = []
+    got: dict[str, dict[str, Any]] = {}
+    missed = len(names)
     try:
-        fresh = read_open_interest(account, desk_names(), now.astimezone(dt.UTC).date())
+        got, missed = read_open_interest(account, names, now.astimezone(dt.UTC).date(), stop)
     except BrokerFault as e:
-        return have, [f"open-interest-unavailable:{e.code}"[:200]]
+        problems.append(f"open-interest-unavailable:{e.code}"[:200])
     except Exception as e:  # noqa: BLE001 — open interest is an extra: no fault in it may stop the positions
-        return have, [f"open-interest-failed:{e.__class__.__name__}"[:200]]
+        problems.append(f"open-interest-failed:{e.__class__.__name__}"[:200])
+    if missed and not problems:
+        problems.append(f"open-interest-partial:{missed}")
+    last = {str(o.get("symbol")): o for o in (have or []) if isinstance(o, dict)}
+    merged = [o for name in names if (o := got.get(name) or last.get(name)) is not None]
+    if not _sendable(merged, now):
+        return None, [*problems, "open-interest-invalid"]
+    # Complete: the six hours start again. Partial: the old time stands, so it is tried again in half an hour.
+    kept_read = kept.get("read") if have is not None else None
+    state = {"read": now.isoformat() if not missed else kept_read, "tried": now.isoformat(), "open_interest": merged}
     try:
-        safeio.atomic_write(cache, json.dumps({"read": now.isoformat(), "open_interest": fresh}), cache.parent)
+        safeio.atomic_write(cache, json.dumps(state), cache.parent)
     except OSError:
         pass
-    return fresh, []
+    return (merged or None) if (got or have is not None) else None, problems
 
 
 def market(clock: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -350,7 +398,8 @@ def _publish(a: argparse.Namespace, account: OptionsAccount | None = None) -> in
         clock = account.clock()
     except BrokerFault as e:
         problems.append(f"clock-unavailable:{e.code}"[:200])
-    oi, oi_problems = open_interest(account, now, OUT / "open_interest.json")
+    oi, oi_problems = open_interest(account, now, OUT / "open_interest.json",
+                                    min(time.monotonic() + OI_BUDGET_S, deadline - 60.0))
     problems += oi_problems
     run_id = now.strftime("%Y%m%dT%H%M%SZ") + "-" + hashlib.sha1(os.urandom(8)).hexdigest()[:6]
     doc = build(raw, clock, run_id, now, problems, oi)

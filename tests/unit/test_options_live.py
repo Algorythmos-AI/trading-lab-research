@@ -260,32 +260,71 @@ def test_open_interest_rows_are_standard_contracts_with_a_figure_largest_first()
     assert live.oi_rows([]) == ([], None)
 
 
-def test_open_interest_is_read_inside_a_strike_band_and_a_date_range_for_names_with_a_close(tmp_path):
+FAR = float("inf")
+
+
+def test_open_interest_is_read_inside_a_strike_band_and_one_names_fault_costs_that_name_only(monkeypatch):
     acct = Account(closes={"SPY": 780.0, "QQQ": 500.0}, contracts=[contract()])
-    got = live.read_open_interest(acct, ["SPY", "NOCLOSE", "QQQ"], dt.date(2026, 10, 12))
-    assert [g["symbol"] for g in got] == ["SPY", "QQQ"] and got[0]["as_of"] == "2026-10-09"
+    got, missed = live.read_open_interest(acct, ["SPY", "NOCLOSE", "QQQ"], dt.date(2026, 10, 12), FAR)
+    assert list(got) == ["SPY", "QQQ"] and missed == 1 and got["SPY"]["as_of"] == "2026-10-09"
     assert acct.asked[0] == ("SPY", 717.6, 842.4, dt.date(2026, 10, 12), dt.date(2026, 11, 16))
-    doc = live.build([], CLOCK, "r", NOW, oi=got)
-    assert live.validate(doc) == []
+    assert live.validate(live.build([], CLOCK, "r", NOW, oi=list(got.values()))) == []
+
+    class OneBad(Account):
+        def contracts(self, symbol, *a):
+            if symbol == "QQQ":
+                raise live.BrokerFault("http-503")
+            return [contract()]
+    got, missed = live.read_open_interest(OneBad(closes={"SPY": 1.0, "QQQ": 1.0, "IWM": 1.0}), ["SPY", "QQQ", "IWM"],
+                                          dt.date(2026, 10, 12), FAR)
+    assert list(got) == ["SPY", "IWM"] and missed == 1
+    # Out of time: it stops asking and hands back what it has.
+    late = Account(closes={"SPY": 1.0, "QQQ": 1.0}, contracts=[contract()])
+    assert live.read_open_interest(late, ["SPY", "QQQ"], dt.date(2026, 10, 12), 0.0) == ({}, 2) and late.asked == []
 
 
-def test_open_interest_is_kept_between_runs_and_a_failed_read_never_stops_the_positions(tmp_path):
+def test_open_interest_is_kept_between_runs_and_a_failed_read_never_stops_the_positions(tmp_path, monkeypatch):
     cache = tmp_path / "oi.json"
-    good = Account(closes={"SPY": 780.0}, contracts=[contract()])
-    first, problems = live.open_interest(good, NOW, cache)
-    assert problems == [] and first and len(good.asked) == len(live.desk_names()[:1]) == 1
+    monkeypatch.setattr(live, "desk_names", lambda: ["SPY", "QQQ"])
+    good = Account(closes={"SPY": 780.0, "QQQ": 500.0}, contracts=[contract()])
+    first, problems = live.open_interest(good, NOW, cache, FAR)
+    assert problems == [] and [o["symbol"] for o in first] == ["SPY", "QQQ"]
     # Within six hours the kept reading is used and the broker is not asked again.
-    again, problems = live.open_interest(Account(), NOW + dt.timedelta(hours=5), cache)
+    again, problems = live.open_interest(Account(), NOW + dt.timedelta(hours=5), cache, FAR)
     assert again == first and problems == []
-    # After that a failed read keeps the last reading and says so; after three days it is dropped.
-    stale, problems = live.open_interest(Account(), NOW + dt.timedelta(hours=7), cache)
+    # After that a failed read keeps the last reading and says so, and is not tried again for half an hour.
+    stale, problems = live.open_interest(Account(), NOW + dt.timedelta(hours=7), cache, FAR)
     assert stale == first and problems == ["open-interest-unavailable:not-in-this-test"]
-    gone, problems = live.open_interest(Account(), NOW + dt.timedelta(hours=80), cache)
+    quiet = Account(closes={"SPY": 780.0}, contracts=[contract()])
+    assert live.open_interest(quiet, NOW + dt.timedelta(hours=7, minutes=10), cache, FAR) == (first, ["open-interest-stale"])
+    assert quiet.asked == []
+    # A partial read replaces the names it got and keeps the others' last figures; it is retried, not kept six hours.
+    part = Account(closes={"SPY": 780.0}, contracts=[contract(oi="7")])
+    mixed, problems = live.open_interest(part, NOW + dt.timedelta(hours=8), cache, FAR)
+    assert problems == ["open-interest-partial:1"] and mixed[0]["rows"][0]["oi"] == 7 and mixed[1] == first[1]
+    retry = Account(closes={"SPY": 780.0, "QQQ": 500.0}, contracts=[contract()])
+    assert live.open_interest(retry, NOW + dt.timedelta(hours=9), cache, FAR)[1] == [] and len(retry.asked) == 2
+    # After three days without a read the old figures are dropped.
+    gone, problems = live.open_interest(Account(), NOW + dt.timedelta(hours=9 + 80), cache, FAR)
     assert gone is None and problems == ["open-interest-unavailable:not-in-this-test"]
-    # A torn cache, or any other fault while reading, is the same: no open interest, and the run goes on.
-    cache.write_text("{torn")
-    broken = Account(closes={"SPY": 780.0}, contracts=RuntimeError("boom"))
-    assert live.open_interest(broken, NOW, cache) == (None, ["open-interest-failed:RuntimeError"])
+
+
+@pytest.mark.parametrize("text", ["{torn", "[1, 2]", '"a string"', '{"read": 5, "open_interest": "x"}',
+                                  '{"read": "2026-10-12T15:00:00+00:00", "open_interest": [{"symbol": "spy", "rows": []}]}'])
+def test_a_bad_kept_reading_is_ignored_and_any_fault_while_reading_leaves_the_run_going(tmp_path, monkeypatch, text):
+    cache = tmp_path / "oi.json"
+    cache.write_text(text)
+    monkeypatch.setattr(live, "desk_names", lambda: ["SPY"])
+    assert live.open_interest(Account(closes=RuntimeError), NOW, cache, FAR)[0] is None
+    cache.write_text(text)
+
+    class Boom(Account):
+        def closes(self, symbols):
+            raise RuntimeError("boom")
+    assert live.open_interest(Boom(), NOW, cache, FAR) == (None, ["open-interest-failed:RuntimeError"])
+    cache.write_text(text)
+    ok, problems = live.open_interest(Account(closes={"SPY": 780.0}, contracts=[contract()]), NOW, cache, FAR)
+    assert problems == [] and ok[0]["symbol"] == "SPY"
 
 
 def test_the_desks_names_are_well_formed_and_the_contract_request_stays_on_the_paper_host():
