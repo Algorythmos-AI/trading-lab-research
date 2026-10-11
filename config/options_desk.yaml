@@ -2,6 +2,11 @@
 # interest (wt.options.live) uses the same list.
 names: [SPY, QQQ, AAPL, MSFT, NVDA, AMZN, GOOGL, META, TSLA, PLTR]
 
+# The edition format the after-close run sends (scripts/options_edition.py). 1 is what the dashboard has always
+# received. 2 adds the day's context, scheduled events and each name's volatility block; it is the owner's switch,
+# flipped after a shadow night. Whatever is set here, the script sends 1 to a dashboard that does not accept 2.
+edition_format: 1
+
 # The broker's contract id for each name's stock: how the edition builder tells one pull from another when it
 # reads them out of a session transcript (scripts/options_edition.py --transcript). Public identifiers.
 contracts:
