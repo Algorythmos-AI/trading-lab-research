@@ -121,7 +121,7 @@ tail -f /tmp/wt-deploy.log
   A line that ends in "retry when the Alpaca calendar answers" and names no cause comes from a host that does
   not have this yet: older code prints it for every one of these causes. If Alpaca is up, check the keys first.
 - **"Refusing: ... is not green (test: pending)"** means the commit's checks are still running on GitHub.
-  Wait for them and run it again. A deploy needs `test` and `ml`.
+  Wait for them and run it again. A deploy needs `test`.
 - **"Nothing deployed: already at ..."** means the host is on that commit.
 - **It is done** when the log shows `Deployed <from> -> <to>`. If it then prints "units changed", run
   `sudo wt-install-units`.

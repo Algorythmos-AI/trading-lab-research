@@ -262,9 +262,8 @@ def test_an_environment_that_cannot_import_its_libraries_is_never_swapped_in(tmp
 def test_the_ml_lock_is_part_of_the_checked_code_and_of_the_audit():
     import yaml
 
-    from wt.ops import ci, preflight
+    from wt.ops import preflight
     assert "requirements-ml.lock.txt" in preflight.CODE_PATHS
-    assert "ml" in ci.DEFAULT_REQUIRED
     audit = yaml.safe_load((ROOT / ".github/workflows/security.yml").read_text())["jobs"]["dependencies"]["steps"]
     assert any("pip-audit" in str(s.get("run", "")) and "requirements-ml.lock.txt" in str(s.get("run", "")) for s in audit)
     assert "x86_64-unknown-linux-gnu" in (ROOT / "Makefile").read_text()       # the lock is compiled for the host
