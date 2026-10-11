@@ -340,7 +340,10 @@ def test_org_source_survives_a_token_that_cannot_read_the_project_board(tmp_path
 def test_deployed_source_never_writes_to_the_live_checkout(tmp_path):
     live = tmp_path / "deployed"
     live.mkdir()
-    for cmd in (["git", "init", "-q"], ["git", "-c", "user.email=a@b", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init"]):
+    # No background upkeep after the commit: git starts it detached, and it can touch .git/objects after the
+    # snapshot below is taken, which this test would then blame on the code under test.
+    quiet = ["-c", "gc.auto=0", "-c", "maintenance.auto=false"]
+    for cmd in (["git", "init", "-q"], ["git", *quiet, "-c", "user.email=a@b", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init"]):
         safeio.run(["git", "-C", str(live), *cmd[1:]])
     (live / "new.txt").write_text("x")
     before = {p: p.stat().st_mtime_ns for p in live.rglob("*")}
