@@ -403,7 +403,10 @@ test("the paper positions sit under the list, and opening one prices the contrac
   // Two contracts of the SPY call, paid 2.85 and marked 3.10: fifty dollars up. The three together: 12.50 up.
   await expect(positions(page).getByRole("listitem").filter({ hasText: "SPY" })).toContainText("+$50");
   await expect(positions(page)).toContainText(/open result \+\$13/);
+  // A position on one of the desk's names is priced from the option feed: its delta and what a day costs.
+  await expect(positions(page).getByRole("listitem").filter({ hasText: "SPY" }).locator("[data-greeks]")).toContainText(/Δ −?\d\.\d\d · [−+]\$[\d,]+(\/day| to expiry)/);
   // A name the desk does not carry is listed, and has nowhere to open.
+  await expect(positions(page).getByRole("listitem").filter({ hasText: "IWM" }).locator("[data-greeks]")).toHaveCount(0);
   await expect(positions(page).getByRole("listitem").filter({ hasText: "IWM" }).getByRole("button")).toHaveCount(0);
   // Opening the SPY position selects SPY (on a phone, opens it) and loads what is held into the contract pane.
   await positions(page).getByRole("button", { name: /^SPY/ }).click();

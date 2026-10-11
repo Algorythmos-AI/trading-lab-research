@@ -50,6 +50,22 @@ for (const theme of ["light", "dark"] as const) {
     expect(await scan(page)).toEqual([]);
   });
 
+  test(`the brief view's option costs pass the accessibility scan in ${theme}, priced and with no option feed`, async ({ page, context, baseURL }) => {
+    await useTheme(context, theme);
+    await page.goto("/options?view=brief");
+    await liveChips(page);
+    const costs = page.getByRole("region", { name: "Option costs" });
+    await costs.getByRole("button", { name: "Show at-the-money costs" }).click();
+    await expect(costs).toHaveAttribute("data-costs", "ready");
+    expect(await scan(page)).toEqual([]);
+    await context.addCookies([{ name: "fx", value: "chain-off", url: baseURL! }]);
+    await page.goto("/options?view=brief");
+    await liveChips(page);
+    await page.getByRole("region", { name: "Option costs" }).getByRole("button", { name: "Show at-the-money costs" }).click();
+    await expect(page.getByRole("region", { name: "Option costs" })).toHaveAttribute("data-costs", "off");
+    expect(await scan(page)).toEqual([]);
+  });
+
   test(`the contract pane passes the accessibility scan in ${theme}, priced and with damaged quotes`, async ({ page, context, baseURL }) => {
     await useTheme(context, theme);
     await context.addCookies([{ name: "fx", value: "chain-thin", url: baseURL! }]);

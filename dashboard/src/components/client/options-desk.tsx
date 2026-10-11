@@ -674,7 +674,7 @@ export function OptionsDesk({
             <PaneBoundary name="Paper positions">
               <OptionsPositions
                 doc={positions}
-                names={e.tickers.map((t) => t.symbol)}
+                tickers={e.tickers}
                 marketOpen={now !== null && sessionClock(e.session, halfDay, new Date(now))?.phase === "open"}
                 onOpen={openPosition}
               />
