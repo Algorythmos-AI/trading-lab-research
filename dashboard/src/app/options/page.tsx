@@ -8,7 +8,7 @@ import { EditionPicker } from "@/components/radar";
 import { sydney, weekDate } from "@/lib/format";
 import { requestTime } from "@/lib/now";
 import { interestBySymbol } from "@/lib/oi";
-import { editionState, isDeskView, isHalfDay, viewForClock, type DeskPane, type Options } from "@/lib/options";
+import { editionState, isDeskView, isHalfDay, mapView, viewForClock, type DeskPane, type Options } from "@/lib/options";
 import { listOptionsDates, loadOptions, loadOptionsLive } from "@/lib/snapshot";
 
 export const dynamic = "force-dynamic";
@@ -109,7 +109,10 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
             // The pane needs the positions; the map needs a handful of marks. The contract-by-contract open interest
             // (over 100 KB) stays on the server.
             positions={live ? { ...live, open_interest: null } : null}
-            interest={interestBySymbol(live, now.getTime())}
+            interest={interestBySymbol(live, now.getTime(), (s) => {
+              const t = e.tickers.find((x) => x.symbol === s);
+              return t ? mapView(t) : null;
+            })}
             stale={stale}
           />
         </PaneBoundary>

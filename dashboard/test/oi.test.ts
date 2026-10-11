@@ -3,6 +3,7 @@ import { INTEREST_EACH, interestBySymbol, shortCount } from "@/lib/oi";
 import type { OptionsLive } from "@/lib/options-live.types";
 
 const NOW = Date.parse("2026-10-12T16:00:00Z");
+const ALL = () => ({ lo: 0, hi: 1e9 });
 const row = (strike: number, kind: "call" | "put", oi: number, expiry = "2026-10-16") => ({ expiry, strike, kind, oi });
 const doc = (rows: ReturnType<typeof row>[], asOf = "2026-10-12T15:58:00Z"): OptionsLive => ({
   schema: "stocksdelta/options-live",
@@ -26,6 +27,7 @@ describe("open interest for the map", () => {
         row(770, "put", 3000),
       ]),
       NOW,
+      ALL,
     );
     expect(got.SPY!.asOf).toBe("2026-10-09");
     expect(got.SPY!.marks).toEqual([
@@ -41,15 +43,26 @@ describe("open interest for the map", () => {
 
   it("leaves out empty strikes and rows it cannot read, and a name with nothing left", () => {
     const odd = [row(780, "call", 0), row(0, "put", 50), { ...row(781, "call", 5), kind: "straddle" }, null] as unknown as ReturnType<typeof row>[];
-    expect(interestBySymbol(doc(odd), NOW)).toEqual({});
+    expect(interestBySymbol(doc(odd), NOW, ALL)).toEqual({});
   });
 
   it("is empty with no document, with none sent, and once the document is as old as hidden positions", () => {
-    expect(interestBySymbol(null, NOW)).toEqual({});
-    expect(interestBySymbol({ ...doc([row(780, "call", 5)]), open_interest: null }, NOW)).toEqual({});
-    expect(interestBySymbol(doc([row(780, "call", 5)], "2026-10-10T16:00:00Z"), NOW)).toEqual({});
-    expect(interestBySymbol(doc([row(780, "call", 5)], "not a time"), NOW)).toEqual({});
-    expect(Object.keys(interestBySymbol(doc([row(780, "call", 5)], "2026-10-11T16:00:00Z"), NOW))).toEqual(["SPY"]);
+    expect(interestBySymbol(null, NOW, ALL)).toEqual({});
+    expect(interestBySymbol({ ...doc([row(780, "call", 5)]), open_interest: null }, NOW, ALL)).toEqual({});
+    expect(interestBySymbol(doc([row(780, "call", 5)], "2026-10-10T16:00:00Z"), NOW, ALL)).toEqual({});
+    expect(interestBySymbol(doc([row(780, "call", 5)], "not a time"), NOW, ALL)).toEqual({});
+    expect(Object.keys(interestBySymbol(doc([row(780, "call", 5)], "2026-10-11T16:00:00Z"), NOW, ALL))).toEqual(["SPY"]);
+  });
+
+  it("chooses among the strikes the map can show, and gives a name with none of them, or with no map, no marks", () => {
+    const d = doc([row(900, "call", 99_000), row(780, "call", 10), row(785, "call", 20), row(700, "put", 50_000)]);
+    const inMap = interestBySymbol(d, NOW, () => ({ lo: 750, hi: 800 }));
+    expect(inMap.SPY!.marks).toEqual([
+      { strike: 785, kind: "call", oi: 20 },
+      { strike: 780, kind: "call", oi: 10 },
+    ]);
+    expect(interestBySymbol(d, NOW, () => ({ lo: 100, hi: 200 }))).toEqual({});
+    expect(interestBySymbol(d, NOW, () => null)).toEqual({});
   });
 
   it("writes a count short", () => {
