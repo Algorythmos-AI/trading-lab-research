@@ -11,6 +11,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -55,12 +56,25 @@ def index(root: Path = ROOT) -> list[dict[str, Any]]:
     return [row(p) for p in sorted((root / "research" / "experiments").glob("EXP-*")) if p.is_dir()]
 
 
+MOVED_ROW = re.compile(r"^\| ((?:HYP|EXP|DEC|LL)-\d{4}) \| `([^`]+)` \|", re.M)
+
+
+def moved(root: Path = ROOT) -> dict[str, str]:
+    """Ids whose records left for another repository, with the path each had here (research/MOVED.md). They are
+    taken: a moved id is not free, although no file here carries it any more."""
+    f = root / "research" / "MOVED.md"
+    return dict(MOVED_ROW.findall(f.read_text())) if f.exists() else {}
+
+
 def main() -> int:
     rows = index()
     print("| Experiment | Decision | Span | Data hash | Result hash | Added in | Note |\n|---|---|---|---|---|---|---|")
     for r in rows:
         print(f"| {r['folder']} | {r['decision']} | {r['span']} | {r['data']} | {r['result']} | {r['commit']} | "
               f"{'superseded' if r['superseded'] else ''} |")
+    for rid, was in moved().items():
+        if rid.startswith("EXP-"):
+            print(f"| {was.rstrip('/').rsplit('/', 1)[-1]} | - | - | - | - | - | moved to crypto-lab; the id stays taken |")
     return 0
 
 

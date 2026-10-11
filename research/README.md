@@ -4,7 +4,8 @@ Every hypothesis, experiment, decision, strategy version and lesson is a file he
 Nothing about strategy parameters changes without an entry. This is also the **global trial registry**
 used for the Deflated Sharpe calculation (every experiment run counts as a trial).
 
-Where each desk stands, in one page: [`G1_SUMMARY.md`](G1_SUMMARY.md) (stocks) and [`CRYPTO_SUMMARY.md`](CRYPTO_SUMMARY.md) (crypto).
+Where the stocks desk stands, in one page: [`G1_SUMMARY.md`](G1_SUMMARY.md). The crypto desk's records moved to
+`crypto-lab` and keep their ids, which are taken: [`MOVED.md`](MOVED.md).
 
 ```
 research/
@@ -17,7 +18,8 @@ research/
 ```
 
 ## Rules
-1. IDs are sequential and never reused. Experiments are append-only: re-running = new EXP id.
+1. IDs are sequential and never reused, including the ids of records that moved away ([`MOVED.md`](MOVED.md)).
+   Experiments are append-only: re-running = new EXP id.
 2. A strategy version bump requires: a hypothesis, ≥1 experiment, and a decision referencing them.
 3. Holdout runs are logged as `EXP-…-holdout` and may happen **once** per frozen config.
 4. Owner approvals (K0, gate passes, live switch) are recorded as decisions with `approved_by: owner`.

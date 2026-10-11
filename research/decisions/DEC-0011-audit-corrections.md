@@ -97,3 +97,6 @@ DEC-0012). The numbers above therefore no longer point at these re-runs.
 When this record is approved, each re-run and the outcome record take the next free id at the time they are
 registered, and the experiment's own record names the paragraph of this decision it carries out. No re-run has
 been registered or run.
+
+Added with the crypto desk's move: those records now live in `crypto-lab` and keep their ids, so EXP-0016 to
+EXP-0022 and DEC-0012 stay taken here (`research/MOVED.md`). Nothing else in this note changes.

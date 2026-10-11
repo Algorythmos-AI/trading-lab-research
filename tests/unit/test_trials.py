@@ -73,6 +73,27 @@ def test_the_research_index_lists_every_experiment_with_a_hash_of_its_result():
     rows = {r["folder"]: r for r in mod.index()}
     folders = {p.name for p in (ROOT / "research" / "experiments").glob("EXP-*") if p.is_dir()}
     assert set(rows) == folders and len(folders) > 10
-    c1 = rows["EXP-0016-crypto-c1"]
-    assert c1["decision"] == "DEC-0015" and c1["data"] == "3a556ccdfce9996a" and len(c1["result"]) == 12
-    assert c1["span"] == "2024-10-07 to 2026-10-07" and rows["EXP-0017-crypto-models"]["superseded"]
+    assert all(len(r["result"]) == 12 for r in rows.values() if r["result"] != "-")
+
+
+def test_a_moved_id_is_taken_and_no_record_here_carries_it(capsys):
+    """The crypto desk's records left for crypto-lab with their ids (research/MOVED.md). An id that no file here
+    carries must not look free: the index still lists the moved experiments, and no record here may reuse one."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("research_index", ROOT / "scripts" / "research_index.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    moved = mod.moved()
+    assert len(moved) == 29 and moved["EXP-0016"] == "research/experiments/EXP-0016-crypto-c1/"
+    assert {i for i in moved if i.startswith("EXP-")} == {f"EXP-00{n}" for n in range(16, 23)}
+    assert {"HYP-0020", "HYP-0024", "DEC-0012", "DEC-0027", "LL-0003", "LL-0006"} <= set(moved)
+    assert not {"DEC-0028", "DEC-0029", "HYP-0025", "HYP-0028", "EXP-0023"} & set(moved)      # the options desk's
+    here = [p for p in (ROOT / "research").rglob("*") if p.name.split("-")[0] in ("HYP", "EXP", "DEC", "LL")]
+    taken = {"-".join(p.name.split("-")[:2]).split(".")[0] for p in here}
+    assert not taken & set(moved), "a record here reuses the id of a record that moved"
+    assert not any((ROOT / was).exists() for was in moved.values())
+    assert not (ROOT / "research" / "CRYPTO_SUMMARY.md").exists()
+    assert mod.main() == 0
+    out = capsys.readouterr().out
+    assert all(f"| {name} |" in out for name in ("EXP-0016-crypto-c1", "EXP-0022-crypto-trend-ranked", "EXP-0015a-catalyst-accuracy"))
+    assert out.count("moved to crypto-lab; the id stays taken") == 7
