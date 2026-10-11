@@ -17,6 +17,7 @@ from __future__ import annotations
 import csv
 import datetime as dt
 import json
+import math
 import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -28,7 +29,9 @@ from wt.options import rules
 
 LEVELS_SCHEMA = "stocksdelta/options-levels"
 EDITION_SCHEMA = "stocksdelta/options"
-EDITION_VERSION = 1
+EDITION_VERSION = 1          # what the routine has always sent
+EDITION_VERSION_MAX = 2      # adds the day's context, scheduled events and each name's volatility block
+EVENT_DAYS = 6               # macro events are sent for the session and this many days after it
 SOURCE = "IBKR daily bars (official close), IBKR implied vol snapshot"
 IV_FIELDS = ["session", "ticker", "last", "daily_iv", "annual_iv", "ivp_13w", "ivp_26w", "ivp_52w", "hv_annual",
              "call_vol", "put_vol", "avg_call_vol", "avg_put_vol", "snap_ts"]
@@ -287,10 +290,125 @@ def _ticker(sym: str, t: Mapping[str, Any], iv_row: Mapping[str, Any] | None, pr
     }
 
 
+def _num(x: Any) -> float | None:
+    """A finite number from a log cell or a pull, or None."""
+    if x is None or x == "" or isinstance(x, bool):
+        return None
+    try:
+        v = float(x)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return v if math.isfinite(v) else None
+
+
+HV_BELIEVABLE = 20.0         # realised and implied volatility further apart than this many times are not both right
+
+
+def _vol(x: Any, percent: bool = False) -> float | None:
+    """A volatility as a fraction of one: the cell as it stands, or divided by 100 when the feed writes that
+    figure as a percentage. Nothing is inferred from the size of the number. None above 500% a year."""
+    v = _num(x)
+    if v is None or v < 0:
+        return None
+    v = v / 100 if percent else v
+    return v if v <= 5 else None
+
+
+def _unit(x: Any) -> float | None:
+    """A percentile as a fraction, or None when it is not between 0 and 1."""
+    v = _num(x)
+    return v if v is not None and 0 <= v <= 1 else None
+
+
+def _total(a: float | None, b: float | None) -> float | None:
+    if a is None or b is None or a < 0 or b < 0:
+        return None
+    return a + b if math.isfinite(a + b) else None
+
+
+def vol_block(row: Mapping[str, Any] | None, before: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    """One name's volatility block from its row in the volatility log and the row of the session before.
+    Every figure is optional: what cannot be read is left out, never guessed.
+
+    Implied volatility is logged as a fraction (0.24). Realised volatility is logged from the broker's field
+    named a percentage (18.0) and is divided by 100. Should that field ever arrive as a fraction, the result
+    would sit a hundred times under the implied figure; a realised figure more than HV_BELIEVABLE times away
+    from the implied one is therefore left out, so a wrong unit shows as a blank and never as a number."""
+    if not row:
+        return None
+    iv = _vol(row.get("annual_iv"))
+    was = _vol(before.get("annual_iv")) if before else None
+    hv = _vol(row.get("hv_annual"), percent=True)
+    if hv is not None and iv is not None and iv > 0 and not (iv / HV_BELIEVABLE <= hv <= iv * HV_BELIEVABLE):
+        hv = None
+    change = iv - was if iv is not None and was is not None else None
+    out = {
+        "iv30": _rnd(iv, 4),
+        "iv_change_1d": _rnd(change, 4) if change is not None and -1 <= change <= 1 else None,
+        "iv_pct_13w": _rnd(_unit(row.get("ivp_13w")), 3),
+        "iv_pct_26w": _rnd(_unit(row.get("ivp_26w")), 3),
+        "hv30": _rnd(hv, 4),
+        "opt_volume": _total(_num(row.get("call_vol")), _num(row.get("put_vol"))),
+        "opt_volume_avg20": _total(_num(row.get("avg_call_vol")), _num(row.get("avg_put_vol"))),
+    }
+    return out if any(v is not None for v in out.values()) else None
+
+
+EVENTS_MAX = 400             # what the edition's schema allows
+
+
+def macro_events(calendar: Sequence[Mapping[str, Any]], session: str, days: int = EVENT_DAYS) -> list[dict[str, Any]]:
+    """The calendar's rows from the session to `days` days after it, as the edition carries them: the date, the
+    New York time, a code and a severity. Never a headline, a source or the desk's own policy for the event."""
+    first = dt.date.fromisoformat(session)
+    last = first + dt.timedelta(days=days)
+    out = []
+    for e in calendar:
+        raw = e.get("date")
+        try:                                  # a row whose date cannot be read is not an event: it is passed over
+            d = raw.date() if isinstance(raw, dt.datetime) else raw if isinstance(raw, dt.date) else dt.date.fromisoformat(str(raw))
+        except ValueError:
+            continue
+        code = str(e.get("type") or "")
+        if not (first <= d <= last) or not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", code, re.ASCII):
+            continue
+        t = str(e.get("time_et") or "")
+        sev = e.get("severity")
+        out.append({"date": d.isoformat(),
+                    "time_et": t if re.fullmatch(r"([01]?\d|2[0-3]):[0-5]\d(:[0-5]\d)?", t, re.ASCII) else None,
+                    "kind": "macro", "type": code, "severity": sev if sev in ("high", "medium", "low") else None})
+    return sorted(out, key=lambda x: (x["date"], x["time_et"] or "", x["type"]))[:EVENTS_MAX]
+
+
 def build_edition(levels_doc: Mapping[str, Any], iv_history: Sequence[Mapping[str, Any]],
-                  scorecard: Sequence[Mapping[str, Any]], rules_doc: Mapping[str, Any], now: dt.datetime) -> dict[str, Any]:
+                  scorecard: Sequence[Mapping[str, Any]], rules_doc: Mapping[str, Any], now: dt.datetime,
+                  version: int = EDITION_VERSION, calendar: Sequence[Mapping[str, Any]] | None = None) -> dict[str, Any]:
     """The `stocksdelta/options` edition from one levels document, the whole volatility log and the whole
-    scorecard. `rules_doc` carries the four rules' labels, status and backtest figures."""
+    scorecard. `rules_doc` carries the four rules' labels, status and backtest figures.
+
+    `version` 2 adds, to exactly what version 1 holds: each name's volatility block, whether the session closes
+    early, and the macro calendar's rows for the week (`calendar`, as `wt.risk.events.events()` gives them). The
+    calendar is sent as "partial": it does not hold every release, so the page must not read a day without a row
+    as a day with nothing scheduled. The VIX is left out until the routine pulls it."""
+    if version not in (EDITION_VERSION, EDITION_VERSION_MAX):
+        raise ValueError(f"edition version {version} is not one this builder writes")
+    doc = _edition_v1(levels_doc, iv_history, scorecard, rules_doc, now)
+    if version == EDITION_VERSION:
+        return doc
+    iv = {(r["session"], r["ticker"]): r for r in iv_history}
+    built_from = levels_doc.get("built_from")
+    before = lv.prev_session(built_from) if built_from else None
+    for t in doc["tickers"]:
+        t["vol"] = vol_block(iv.get((built_from, t["symbol"])), iv.get((before, t["symbol"])))
+    doc["schema_version"] = EDITION_VERSION_MAX
+    doc["market"] = {"vix": None, "session": {"half_day": doc["session"] in lv.HALF_DAYS},
+                     "calendar": "partial" if calendar is not None else None}
+    doc["events"] = macro_events(calendar, doc["session"]) if calendar is not None else None
+    return doc
+
+
+def _edition_v1(levels_doc: Mapping[str, Any], iv_history: Sequence[Mapping[str, Any]],
+                scorecard: Sequence[Mapping[str, Any]], rules_doc: Mapping[str, Any], now: dt.datetime) -> dict[str, Any]:
     iv = {(r["session"], r["ticker"]): r for r in iv_history}
     probs = levels_doc.get("problems") or {}
     tickers = [_ticker(sym, t, iv.get((levels_doc.get("built_from"), sym)), probs.get(sym, []))

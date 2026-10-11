@@ -262,3 +262,116 @@ def test_the_paper_record_is_newest_first_capped_and_each_rules_figures_add_up()
     assert len(capped["paper"]) == edition.PAPER_MAX and capped["paper"][0]["symbol"] == "N59"
     assert capped["rules"][0]["live"]["n"] == 60                              # the count is of every case, not of those shown
     jsonschema.Draft7Validator(SCHEMA).validate(capped)
+
+
+# ---- edition format 2
+
+CALENDAR = [{"date": dt.date(2026, 10, 9), "time_et": "08:30", "type": "nfp", "severity": "high", "policy": "reduce", "source": "x"},
+            {"date": dt.date(2026, 10, 14), "time_et": "8:30", "type": "cpi", "severity": "high", "policy": "skip", "source": "y"},
+            {"date": dt.date(2026, 10, 12), "time_et": "", "type": "fomc_minutes", "severity": "odd", "policy": "reduce"},
+            {"date": "2026-10-18", "time_et": "14:00", "type": "fomc_decision", "severity": "high"},
+            {"date": dt.date(2026, 10, 19), "time_et": "14:00", "type": "fomc_decision", "severity": "high"},
+            {"date": dt.date(2026, 10, 13), "time_et": "09:00", "type": "a headline, not a code", "severity": "low"}]
+
+
+def test_format_two_adds_to_format_one_and_the_dashboard_accepts_it():
+    run = edition.run(NAMES, *pulls(), NOW)
+    when = dt.datetime(2026, 10, 9, 22, 5, 7, tzinfo=dt.UTC)
+    iv = [{k: "" if v is None else str(v) for k, v in r.items()} for r in run.iv_rows]
+    iv += [{**iv[0], "session": "2026-10-08", "annual_iv": "0.19"}]                    # yesterday's row for one name
+    sc = [{k: str(v) for k, v in r.items()} for r in run.scorecard_rows]
+    one = edition.build_edition(run.levels_doc, iv, sc, RULES, when)
+    two = edition.build_edition(run.levels_doc, iv, sc, RULES, when, version=2, calendar=CALENDAR)
+    jsonschema.Draft7Validator(SCHEMA).validate(two)
+    assert two["schema_version"] == 2 and one["schema_version"] == 1
+    stripped = {**two, "schema_version": 1, "tickers": [{k: v for k, v in t.items() if k != "vol"} for t in two["tickers"]]}
+    del stripped["market"], stripped["events"]
+    assert stripped == one                                                             # nothing format 1 holds has moved
+    assert two["market"] == {"vix": None, "session": {"half_day": False}, "calendar": "partial"}
+    # The session and the six days after it, soonest first; codes only, and never the desk's policy or its source.
+    assert two["events"] == [
+        {"date": "2026-10-12", "time_et": None, "kind": "macro", "type": "fomc_minutes", "severity": None},
+        {"date": "2026-10-14", "time_et": "8:30", "kind": "macro", "type": "cpi", "severity": "high"},
+        {"date": "2026-10-18", "time_et": "14:00", "kind": "macro", "type": "fomc_decision", "severity": "high"}]
+    vol = two["tickers"][0]["vol"]
+    # Realised volatility arrives as a percentage (18.0) and is sent as a fraction, like the implied figure.
+    assert vol == {"iv30": 0.2, "iv_change_1d": 0.01, "iv_pct_13w": 0.4, "iv_pct_26w": 0.3, "hv30": 0.18,
+                   "opt_volume": 22.0, "opt_volume_avg20": 17.0}
+    assert two["tickers"][1]["vol"]["iv_change_1d"] is None                            # no row for the day before
+    bare = edition.build_edition(run.levels_doc, iv, sc, RULES, when, version=2)
+    assert bare["events"] is None and bare["market"]["calendar"] is None
+    jsonschema.Draft7Validator(SCHEMA).validate(bare)
+    with pytest.raises(ValueError, match="not one this builder writes"):
+        edition.build_edition(run.levels_doc, iv, sc, RULES, when, version=3)
+    half = edition.build_edition({**run.levels_doc, "session": "2026-11-27"}, iv, sc, RULES, when, version=2)
+    assert half["market"]["session"] == {"half_day": True}
+
+
+@pytest.mark.parametrize("row,want", [
+    ({"annual_iv": "0.25", "hv_annual": "22.4"}, {"iv30": 0.25, "hv30": 0.224}),      # the feed's percentage, as a fraction
+    ({"annual_iv": "0.04", "hv_annual": "4.8"}, {"iv30": 0.04, "hv30": 0.048}),       # a quiet name: 4.8 is still a percentage
+    ({"annual_iv": "0.25", "hv_annual": "52"}, {"iv30": 0.25, "hv30": 0.52}),         # realised twice implied is believable
+    ({"annual_iv": "", "hv_annual": "4.8"}, {"iv30": None, "hv30": 0.048}),           # no implied figure: the same rule
+    ({"annual_iv": "0.25", "hv_annual": "0.224"}, {"iv30": 0.25, "hv30": None}),      # a fraction where a percentage belongs: blank
+    ({"annual_iv": "0.25", "hv_annual": "600"}, {"iv30": 0.25, "hv30": None}),        # 600%: above what is sent
+    ({"annual_iv": "0.01", "hv_annual": "90"}, {"iv30": 0.01, "hv30": None}),         # ninety times implied: one of them is wrong
+    ({"annual_iv": "nan", "hv_annual": "-3"}, None),
+    ({"annual_iv": "0.25", "ivp_13w": "40", "ivp_26w": "-0.1"}, {"iv30": 0.25, "iv_pct_13w": None, "iv_pct_26w": None}),
+    ({"annual_iv": "0.25", "call_vol": "10", "put_vol": ""}, {"iv30": 0.25, "opt_volume": None}),
+    ({"annual_iv": "0.25", "call_vol": "1e308", "put_vol": "1e308"}, {"iv30": 0.25, "opt_volume": None}),
+    ({"annual_iv": "900"}, None),                                                       # no volatility is 900%: not sent
+])
+def test_a_volatility_block_never_sends_a_figure_it_cannot_read(row, want):
+    got = edition.vol_block(row, None)
+    if want is None:
+        assert got is None
+    else:
+        assert got is not None and {k: got[k] for k in want} == want
+        jsonschema.Draft7Validator(SCHEMA["properties"]["tickers"]["items"]["properties"]["vol"]).validate(got)
+        json.dumps(got, allow_nan=False)
+    assert edition.vol_block(None, None) is None and edition.vol_block({}, None) is None
+
+
+def test_calendar_rows_that_cannot_be_read_are_passed_over_and_the_list_is_capped():
+    odd = [{"date": None, "type": "cpi"}, {"date": "2026-13-01", "type": "cpi"}, {"type": "cpi"}, {"date": 5, "type": "cpi"},
+           {"date": dt.datetime(2026, 10, 13, 8, 30), "time_et": "0\u0668:30", "type": "nfp", "severity": "high"}]
+    assert edition.macro_events(odd, "2026-10-12") == [
+        {"date": "2026-10-13", "time_et": None, "kind": "macro", "type": "nfp", "severity": "high"}]
+    many = [{"date": dt.date(2026, 10, 12), "time_et": "08:30", "type": f"code_{i}", "severity": "low"} for i in range(450)]
+    assert len(edition.macro_events(many, "2026-10-12")) == edition.EVENTS_MAX
+
+
+def test_the_script_sends_format_two_only_to_a_dashboard_that_accepts_it(tmp_path, monkeypatch, capsys):
+    write_pulls(tmp_path / "pulls")
+    args = ["--pulls", str(tmp_path / "pulls"), "--data", str(tmp_path / "data"), "--now", "2026-10-09T22:00:00"]
+    out = tmp_path / "edition.json"
+    assert DESK["edition_format"] == 1                                                 # the owner's switch is off
+    assert script.main([*args, "--dry-run", "--out", str(out)]) == 0 and json.loads(out.read_text())["schema_version"] == 1
+    monkeypatch.setattr(publish, "read_health", lambda *a: pytest.fail("asked the dashboard on a dry run"))
+    assert script.main([*args, "--dry-run", "--format", "2", "--out", str(out)]) == 0
+    two = json.loads(out.read_text())
+    jsonschema.Draft7Validator(SCHEMA).validate(two)
+    assert two["schema_version"] == 2 and two["market"]["calendar"] == "partial" and isinstance(two["events"], list)
+    assert two["events"] and all(set(e) == {"date", "time_et", "kind", "type", "severity"} for e in two["events"])
+
+    monkeypatch.setenv("RADAR_INGEST_SECRET", "s" * 24)
+    monkeypatch.setenv("VERCEL_AUTOMATION_BYPASS_SECRET", "b" * 24)
+    sent = []
+    monkeypatch.setattr(publish, "send", lambda body, *a, **k: sent.append(json.loads(body)["schema_version"]) or (True, "HTTP 200"))
+    for health, want in (({"editions": {"options": {"accepts": 2}}}, 2), ({"editions": {"options": {"accepts": 1}}}, 1),
+                         ({"editions": {}}, 1), (None, 1), ({"editions": {"options": {"accepts": True}}}, 1)):
+        monkeypatch.setattr(publish, "read_health", lambda *a, _h=health: (_h, "" if _h else "health unreadable"))
+        assert script.main([*args, "--send", "--format", "2"]) == 0
+        assert sent[-1] == want
+    assert "building format 1" in capsys.readouterr().out
+    monkeypatch.setattr(publish, "read_health", lambda *a: pytest.fail("format 1 needs no question"))
+    assert script.main([*args, "--send"]) == 0 and sent[-1] == 1
+    # A send that cannot ask the dashboard (no secrets) writes format 1 too, and says it was not sent.
+    monkeypatch.delenv("RADAR_INGEST_SECRET")
+    assert script.main([*args, "--send", "--format", "2", "--out", str(out)]) == 3
+    assert json.loads(out.read_text())["schema_version"] == 1
+    # A switch set to something this script does not write is format 1, said aloud, never a crash.
+    for bad in (3, "two", True, -1):
+        monkeypatch.setattr(script, "load_yaml", lambda name, _b=bad: {**DESK, "edition_format": _b})
+        assert script.main([*args, "--dry-run", "--out", str(out)]) == 0 and json.loads(out.read_text())["schema_version"] == 1
+    assert "not a format this script writes" in capsys.readouterr().err

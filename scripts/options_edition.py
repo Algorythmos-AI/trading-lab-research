@@ -17,6 +17,11 @@ Exit codes:
   2  nothing new: a weekend or holiday with the next session already built. Nothing is sent.
   3  --send without its secrets: built and written, not sent
 
+The edition's format is `edition_format` in config/options_desk.yaml (1, or 2 for the day's context, events and
+each name's volatility), or `--format`. Before sending format 2 the script asks the dashboard's /api/health what it
+accepts, and builds format 1 when the answer is older or cannot be read: an edition the site would refuse whole is
+never sent.
+
 One command does what the routine did in two (build, then publish), so: a name that could not be built does not
 stop the edition going out without it, and the exit is still 1; when no name could be built nothing is sent.
 
@@ -43,6 +48,26 @@ KEY_ID = "radar"
 DEFAULT_URL = "https://lab.algorythmos.com/api/ingest"
 
 
+def site_accepts(url: str, bypass: str | None) -> int:
+    """The newest edition format the live dashboard validates, from /api/health; 0 when it cannot be read."""
+    health, _ = publish.read_health(url, bypass)
+    editions = health.get("editions") if isinstance(health, dict) else None
+    options = editions.get("options") if isinstance(editions, dict) else None
+    accepts = options.get("accepts") if isinstance(options, dict) else None
+    return accepts if isinstance(accepts, int) and not isinstance(accepts, bool) else 0
+
+
+def macro_calendar() -> list[dict[str, object]] | None:
+    """The repo's macro-event calendar, or None when it cannot be read: the edition then goes out without events
+    and says its calendar is unknown."""
+    try:
+        from wt.risk import events
+        return list(events.events())
+    except Exception as e:  # noqa: BLE001 — events are an extra: a broken calendar file must not stop the levels
+        print(f"macro calendar unavailable ({e.__class__.__name__}): sending without events", file=sys.stderr)
+        return None
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="options_edition.py")
     src = ap.add_mutually_exclusive_group(required=True)
@@ -52,6 +77,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--data", type=Path, required=True, help="state folder: levels/, iv_history.csv, scorecard.csv")
     ap.add_argument("--now", help="UTC time to treat as now, e.g. 2026-10-12T22:00:00 (default: the clock)")
     ap.add_argument("--out", type=Path, help="also write the edition here")
+    ap.add_argument("--format", type=int, choices=(1, 2), help="edition format (default: edition_format in the desk's config)")
     mode = ap.add_mutually_exclusive_group(required=True)
     mode.add_argument("--dry-run", action="store_true", help="build and write, do not send")
     mode.add_argument("--send", action="store_true")
@@ -86,22 +112,38 @@ def main(argv: list[str] | None = None) -> int:
         print("no name could be built: nothing to send", file=sys.stderr)
         return 1
 
+    url = os.environ.get("DASHBOARD_INGEST_URL") or DEFAULT_URL
+    secret, bypass = os.environ.get("RADAR_INGEST_SECRET"), os.environ.get("VERCEL_AUTOMATION_BYPASS_SECRET")
+    fmt = a.format or desk.get("edition_format")
+    if fmt not in (edition.EDITION_VERSION, edition.EDITION_VERSION_MAX) or isinstance(fmt, bool):
+        if fmt is not None:
+            print(f"edition_format {fmt!r} is not a format this script writes: using {edition.EDITION_VERSION}", file=sys.stderr)
+        fmt = edition.EDITION_VERSION
+    if fmt > edition.EDITION_VERSION and a.send:
+        # Asked on every send, and a send that cannot ask (no secrets) builds format 1 too: a format 2 file is
+        # only ever written for a dashboard known to take it, or on a dry run.
+        accepts = site_accepts(url, bypass) if secret and bypass else 0
+        if accepts < fmt:
+            print(f"the dashboard accepts edition format {accepts or 'unknown'}: building format {edition.EDITION_VERSION}")
+            fmt = edition.EDITION_VERSION
     rules_doc = json.loads((CONFIG_DIR / "options_rules.json").read_text())
+    calendar = macro_calendar() if fmt > edition.EDITION_VERSION else None
     doc = edition.build_edition(levels_doc, edition.read_csv(a.data / "iv_history.csv"),
-                                edition.read_csv(a.data / "scorecard.csv"), rules_doc, dt.datetime.now(dt.UTC))
+                                edition.read_csv(a.data / "scorecard.csv"), rules_doc, dt.datetime.now(dt.UTC),
+                                version=fmt, calendar=calendar)
     body = json.dumps(doc, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode()
     if a.out:
         a.out.write_bytes(body)
-    print(f"edition: session {doc['session']}, {len(doc['tickers'])} tickers, {len(doc['paper'])} paper trades, {len(body)} bytes")
+    print(f"edition: format {doc['schema_version']}, session {doc['session']}, {len(doc['tickers'])} tickers, "
+          f"{len(doc['paper'])} paper trades, {len(body)} bytes")
     if a.dry_run:
         return 1 if run.failed else 0
 
-    secret, bypass = os.environ.get("RADAR_INGEST_SECRET"), os.environ.get("VERCEL_AUTOMATION_BYPASS_SECRET")
     missing = [n for n, v in (("RADAR_INGEST_SECRET", secret), ("VERCEL_AUTOMATION_BYPASS_SECRET", bypass)) if not v]
     if missing or secret is None:
         print("NOT PUBLISHED: missing environment variable(s): " + ", ".join(missing), file=sys.stderr)
         return 3
-    ok, detail = publish.send(body, os.environ.get("DASHBOARD_INGEST_URL") or DEFAULT_URL, secret, bypass, key_id=KEY_ID)
+    ok, detail = publish.send(body, url, secret, bypass, key_id=KEY_ID)
     # For an edition only 200 means stored (or the same run already there). The sender counts 409 as fine for a
     # snapshot; here it means the dashboard holds a newer edition and kept it.
     stored = ok and detail == "HTTP 200"
