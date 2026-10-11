@@ -9,6 +9,8 @@ import type { ChainResponse } from "@/lib/chain";
 import { MULTIPLIER } from "@/lib/longopt";
 import { sessionClock, type OptionsTicker } from "@/lib/options";
 import { cn } from "@/lib/utils";
+import { volShape } from "@/lib/volshape";
+import { VolShape } from "../options-vol-shape";
 import { useLive, useLiveRead } from "./live-layer";
 import { useChain } from "./use-chain";
 
@@ -191,6 +193,7 @@ export function OptionsContract({
   const pick = kept ?? (chain ? defaultPick(chain, close) : null);
   const expiry = chain?.expiries.find((x) => x.date === pick?.expiry) ?? null;
   const strikes = expiry ? expiry.contracts.filter((c) => c.kind === pick?.kind).map((c) => c.strike) : [];
+  const shape = expiry && spot !== null ? volShape(expiry, spot) : null;
   const state =
     feed.status === "off" ? "off" : feed.status === "error" ? "error" : feed.status !== "ok" || now === null ? "loading" : pick === null || spot === null ? "empty" : "ready";
   // Open by the clock, not by a quote: a last trade stamped before the bell would read as "in session" all evening.
@@ -421,6 +424,8 @@ export function OptionsContract({
               </div>
             </>
           )}
+
+          {shape && !view.stale && !view.expired ? <VolShape shape={shape} spot={spot!} strike={pick?.strike ?? null} expiry={weekDate(expiry!.date)} /> : null}
 
           <p className="text-muted-foreground text-[0.6875rem]">
             {view.contract?.at ? `This contract's last quote: ${newYork(view.contract.at, false)} New York. ` : ""}
