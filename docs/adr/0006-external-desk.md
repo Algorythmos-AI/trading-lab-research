@@ -63,3 +63,51 @@ desk would mean a second login, a second watchdog and a second thing to keep dep
   in the desk's shadow slot, which no page reads. Which key the HFT publisher signs with, and whether a key can
   be limited to one desk's schema, has to be settled before the desk first publishes. It is not settled here.
 - Every page now reads three latest snapshots instead of two.
+
+## Addendum, 2026-10-11: the HFT publisher's key
+
+This settles the open consequence above: which key the HFT publisher signs with, and whether a key can be limited
+to one desk.
+
+1. **The HFT publisher signs with its own key id, scoped to the HFT desk.** It runs from another repository as
+   another Unix user. It is never given the `PRIMARY_HOST` key, which can write every desk's page.
+2. **A scope is a per-key entry in `DASHBOARD_INGEST_SCOPES`** on the site: a JSON map
+   `{"<key id>": {"desks": ["hft"]}}`, read by `dashboard/src/lib/ingest-scope.ts`.
+   - A key id listed there is the primary publisher of exactly the listed desks, whatever `PRIMARY_HOST` says.
+   - It may publish only those desks' snapshots. Another desk's snapshot, a research edition, the options live
+     document or a body that names no known schema is refused with 403 (`key-scope`), and nothing is stored, not
+     even in a shadow slot.
+   - A key id not listed keeps the `PRIMARY_HOST` rule, with one change: it is not primary for a desk that a
+     listed key owns. Its snapshot for that desk is filed in the shadow slot. So the stocks key cannot overwrite
+     the HFT page, and the HFT key cannot touch anything else.
+   - Unset or `{}`, ingest behaves as it did before scopes existed.
+3. **The scope holds no secret.** The key's secret is one more entry in `DASHBOARD_INGEST_KEYS`, as for any host
+   (ADR 0004). The signature is checked before the scope is looked at, so a wrong signature gets the same answer
+   whether or not its key id is scoped.
+4. **A value that cannot be read is not half applied.** If the variable is not exactly the documented shape, no
+   scope is in force: every other key follows `PRIMARY_HOST` alone, as if the variable were unset. Every word of
+   the value that could be a key id is refused outright (503, `key-scope-config`) and each signed request logs
+   `ingest.scopes` with a reason code.
+   - Why refuse those ids: the alternative is that a key the owner meant to limit becomes an ordinary key because
+     of a typing mistake.
+   - Why not refuse everyone: a typing mistake in one optional variable would stop the other desks publishing.
+   - What it costs: while the value is broken, the `PRIMARY_HOST` key is primary for the HFT desk again. The log
+     event is how that is noticed.
+   - One desk given to two keys, a field beside `desks` and the research key's id (`radar`) count as unreadable.
+
+### What the owner sets, and in what order
+
+The site first, then the publisher. In the other order the publisher's requests are unauthorized (401), which is
+harmless but pages nobody.
+
+1. Choose a key id for the HFT publisher (letters, digits, `.`, `_`, `-`; at most 40) and generate a secret for it.
+2. On the site's production environment:
+   - add the id and its secret to `DASHBOARD_INGEST_KEYS`;
+   - set `DASHBOARD_INGEST_SCOPES` to `{"<that key id>": {"desks": ["hft"]}}`;
+   - redeploy, so the new values are read.
+3. In the other platform's secrets file, readable by its Unix user only: the ingest URL, the key id (sent as
+   `x-wt-key-id`), that one secret, and the automation-bypass secret that lets a publisher through the site's
+   login. Nothing else of this platform's goes there.
+4. Start the publisher. Its first stored snapshot arms the HFT watchdog (see Consequences).
+
+From step 2 on, no other key can write the HFT page, including before the publisher first runs.

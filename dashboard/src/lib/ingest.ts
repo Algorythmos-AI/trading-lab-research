@@ -2,6 +2,7 @@ import "server-only";
 import { HISTORY_PREFIX, PreconditionFailed, readForUpdate, writeText } from "./blob";
 import { DESK_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
 import { verify } from "./hmac";
+import { KEY_ID_RE, decideScope, parseScopes } from "./ingest-scope";
 import { logEvent } from "./log";
 import { parseTime } from "./freshness";
 import { contractOf, isOptions, isOptionsLive, isRadar, validateOptionsEdition, validateOptionsLive, validateRadarEdition } from "./validate";
@@ -87,8 +88,11 @@ export function secretFor(keyId: string, env: Record<string, string | undefined>
   return keyId === DEFAULT_KEY_ID ? (env.DASHBOARD_INGEST_SECRET ?? null) : null;
 }
 
+/** The optional per-key scopes: a JSON map {"<key id>": {"desks": ["hft"]}}. Read by ./ingest-scope. */
+export const SCOPES_ENV = "DASHBOARD_INGEST_SCOPES";
+
 /**
- * POST /api/ingest. Order: environment gate, size cap, HMAC, JSON, schema + denylist, then a
+ * POST /api/ingest. Order: environment gate, size cap, HMAC, JSON, the key's scope, schema + denylist, then a
  * conditional write of snapshots/latest.json (retried once on an etag conflict) and the hourly copy.
  */
 export async function handleIngest(req: Request, now: Date = new Date()): Promise<Response> {
@@ -102,14 +106,11 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
     return done(403, "not-production", { error: "ingest is disabled on this deployment" });
   }
   const keyIdHeader = req.headers.get("x-wt-key-id");
-  const keyId = keyIdHeader && /^[A-Za-z0-9._-]{1,40}$/.test(keyIdHeader) ? keyIdHeader : DEFAULT_KEY_ID;
+  const keyId = keyIdHeader && KEY_ID_RE.test(keyIdHeader) ? keyIdHeader : DEFAULT_KEY_ID;
   if (!process.env.DASHBOARD_INGEST_SECRET && !process.env.DASHBOARD_INGEST_KEYS && !process.env.RADAR_INGEST_SECRET) {
     return done(503, "not-configured", { error: "ingest is not configured" });
   }
   const secret = secretFor(keyId);
-  // Only the primary host's snapshot is the dashboard's; any other valid host (the OCI host in its shadow run)
-  // lands in shadow/latest.json, which no page and no watchdog reads.
-  const primary = (process.env.PRIMARY_HOST || DEFAULT_KEY_ID) === keyId;
 
   const bytes = await readCapped(req, MAX_BODY_BYTES);
   if (!bytes) return done(413, "too-large", { error: `body exceeds ${MAX_BODY_BYTES} bytes` });
@@ -130,6 +131,24 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
   } catch {
     return done(422, "bad-json", { error: "invalid", errors: ["body is not valid UTF-8 JSON"] }, { bytes: bytes.byteLength });
   }
+
+  // Only the primary host's snapshot is the dashboard's; any other valid host (the OCI host in its shadow run)
+  // lands in shadow/latest.json, which no page and no watchdog reads. PRIMARY_HOST names the primary for every
+  // desk, unless a key is scoped to a desk: that key is then the desk's primary and may publish nothing else.
+  // Decided here, after the signature and before anything is routed or stored, so a wrong signature is answered
+  // the same whether or not its key id is scoped.
+  const scopes = parseScopes(process.env[SCOPES_ENV], [RADAR_KEY_ID]);
+  if (!scopes.ok) logEvent("ingest.scopes", { outcome: "malformed", reason: scopes.reason });
+  // The desk whose snapshot this body is, by the same routing as below; null for every other document kind.
+  const snapshotOf = isRadar(data) || isOptions(data) || isOptionsLive(data) ? null : contractOf(data).desk;
+  const scope = decideScope(scopes, keyId, snapshotOf, process.env.PRIMARY_HOST || DEFAULT_KEY_ID);
+  if (!scope.allow && scope.outcome === "key-scope-config") {
+    return done(503, "key-scope-config", { error: "ingest is not configured for this key" }, { key_id: keyId });
+  }
+  if (!scope.allow) {
+    return done(403, "key-scope", { error: "this key may not publish this document" }, { key_id: keyId, desk: snapshotOf ?? "none" });
+  }
+  const primary = scope.primary;
 
   if (isRadar(data)) return storeEdition(RADAR_EDITION, text, data, done);
   if (isOptions(data)) return storeEdition(OPTIONS_EDITION, text, data, done);
