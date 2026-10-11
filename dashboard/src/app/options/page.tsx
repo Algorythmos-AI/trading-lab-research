@@ -7,6 +7,7 @@ import { PaneBoundary } from "@/components/client/pane-boundary";
 import { EditionPicker } from "@/components/radar";
 import { sydney, weekDate } from "@/lib/format";
 import { requestTime } from "@/lib/now";
+import { interestBySymbol } from "@/lib/oi";
 import { editionState, isDeskView, isHalfDay, viewForClock, type DeskPane, type Options } from "@/lib/options";
 import { listOptionsDates, loadOptions, loadOptionsLive } from "@/lib/snapshot";
 
@@ -67,6 +68,7 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
   // The paper positions are a view of now, so an older edition is drawn without them.
   const [result, dates, positions] = await Promise.all([loadOptions(date), listOptionsDates(), date ? null : loadOptionsLive()]);
   const now = requestTime();
+  const live = positions?.status === "ok" ? positions.doc : null;
   if (result.status !== "ok") {
     return (
       <>
@@ -104,7 +106,10 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
             manualView={manualView}
             initialSymbol={initialSymbol}
             initialPane={initialPane}
-            positions={positions?.status === "ok" ? positions.doc : null}
+            // The pane needs the positions; the map needs a handful of marks. The contract-by-contract open interest
+            // (over 100 KB) stays on the server.
+            positions={live ? { ...live, open_interest: null } : null}
+            interest={interestBySymbol(live, now.getTime())}
             stale={stale}
           />
         </PaneBoundary>

@@ -17,6 +17,7 @@ import {
   type OptionsTicker,
   type roomView,
 } from "@/lib/options";
+import { shortCount, type Interest } from "@/lib/oi";
 import { cn } from "@/lib/utils";
 import { LiveMapMark } from "./client/live-layer";
 import { MapFrame } from "./client/map-frame";
@@ -116,7 +117,21 @@ export interface BreakevenMark {
   kind: "call" | "put";
 }
 
-export function LevelMap({ t, interactive = false, breakeven = null }: { t: OptionsTicker; interactive?: boolean; breakeven?: BreakevenMark | null }) {
+/** How long the longest open-interest bar is drawn, in the map's units. */
+const OI_BAR = 54;
+
+export function LevelMap({
+  t,
+  interactive = false,
+  breakeven = null,
+  interest = null,
+}: {
+  t: OptionsTicker;
+  interactive?: boolean;
+  breakeven?: BreakevenMark | null;
+  /** The strikes holding the most open calls and puts, when the host has sent open interest. */
+  interest?: Interest | null;
+}) {
   const v = mapView(t);
   const close = t.last?.close;
   if (!v || !isNum(close)) return null;
@@ -255,6 +270,29 @@ export function LevelMap({ t, interactive = false, breakeven = null }: { t: Opti
                 1w
               </text>
             ) : null}
+          </g>
+        ) : null}
+        {interest ? (
+          // Bars from the left edge at the strikes with the most open contracts: filled for calls, outlined for
+          // puts, each as long as its share of the largest. Blue, as everything from the option market is.
+          <g data-layer="oi" data-interest={interest.marks.filter((m) => m.strike >= v.lo && m.strike <= v.hi).length}>
+            {(() => {
+              const shown = interest.marks.filter((m) => m.strike >= v.lo && m.strike <= v.hi);
+              const most = Math.max(1, ...shown.map((m) => m.oi));
+              return shown.map((m) => {
+                const len = Math.max(4, (m.oi / most) * OI_BAR);
+                const at = y(m.strike) + (m.kind === "call" ? -3 : 3);
+                return (
+                  <g key={`${m.kind}:${m.strike}`}>
+                    <title>{`${num(m.oi)} open ${m.kind}s at ${num(m.strike, m.strike % 1 === 0 ? 0 : 2)}${interest.asOf ? `, as of ${interest.asOf}` : ""}`}</title>
+                    <rect x={X0} y={at - 2} width={len} height={4} fill={m.kind === "call" ? "var(--info)" : "var(--card)"} stroke="var(--info)" strokeWidth={1} />
+                    <text x={X0 + len + 4} y={at + 3} fontSize={9.5} style={{ fill: "var(--info)", paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 2.5 }} className="font-mono">
+                      {`${shortCount(m.oi)} ${m.kind === "call" ? "C" : "P"}`}
+                    </text>
+                  </g>
+                );
+              });
+            })()}
           </g>
         ) : null}
         {breakeven && isNum(breakeven.price) && breakeven.price > 0 ? (

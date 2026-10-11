@@ -258,6 +258,7 @@
 [data-hide~="zones"] [data-layer="zones"],
 [data-hide~="candles"] [data-layer="candles"],
 [data-hide~="move"] [data-layer="move"],
+[data-hide~="oi"] [data-layer="oi"],
 [data-hide~="labels"] [data-layer="labels"] {
   display: none;
 }

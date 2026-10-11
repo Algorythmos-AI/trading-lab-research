@@ -709,19 +709,22 @@ export function levelPrice(t: OptionsTicker, name: string): number | null {
 }
 
 /** The layers of the level map a reader can switch off. The close line and the live price always stay. */
-export const MAP_LAYERS = ["zones", "candles", "move", "labels"] as const;
+export const MAP_LAYERS = ["zones", "candles", "move", "oi", "labels"] as const;
 export type MapLayer = (typeof MAP_LAYERS)[number];
-export const MAP_LAYER_LABEL: Record<MapLayer, string> = { zones: "Zones", candles: "Candles", move: "Expected move", labels: "Labels" };
+export const MAP_LAYER_LABEL: Record<MapLayer, string> = { zones: "Zones", candles: "Candles", move: "Expected move", oi: "Open interest", labels: "Labels" };
 
 /**
  * The layers a name's map actually draws, judged the way the map judges them: no candles without bars, no expected
  * move without one, no zones when none falls inside the map's window. The labels always include the close. Empty
- * when the name has no map at all.
+ * when the name has no map at all. Open interest comes from another document, so the caller says whether the map
+ * has any to draw.
  */
-export function mapLayersOf(t: OptionsTicker): MapLayer[] {
+export function mapLayersOf(t: OptionsTicker, hasInterest = false): MapLayer[] {
   const view = mapView(t);
   if (!view) return [];
-  return MAP_LAYERS.filter((k) => (k === "candles" ? view.bars.length > 0 : k === "move" ? moveBands(t).day !== null : k === "zones" ? view.zones.length > 0 : true));
+  return MAP_LAYERS.filter((k) =>
+    k === "candles" ? view.bars.length > 0 : k === "move" ? moveBands(t).day !== null : k === "zones" ? view.zones.length > 0 : k === "oi" ? hasInterest : true,
+  );
 }
 
 /** The price at a height on the level map, for a height in the map's own units. Clamped to the plotted window. */
