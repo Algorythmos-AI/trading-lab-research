@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "stocksdelta/options-live",
   "title": "Options live document (published by the options-live job on the trading host)",
-  "description": "What the Options desk needs between editions: the open option positions of the paper account kept for manual option trades, and open interest by strike for the desk's names. Paper only: a document that does not say so is refused. No account number, no balances, no buying power.",
+  "description": "What the Options desk needs between editions: the open option positions of the paper account kept for manual option trades, open interest by strike for the desk's names, and where each probation rule stands in the session so far. Paper only: a document that does not say so is refused. No account number, no balances, no buying power.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -196,6 +196,134 @@
       "items": {
         "type": "string",
         "maxLength": 200
+      }
+    },
+    "rules": {
+      "description": "Where each probation rule stands in the session so far, replayed by the host on market data that runs behind the market. Provisional: the after-close edition's record is the one that counts. New in version 2.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "session",
+        "as_of",
+        "provisional",
+        "names"
+      ],
+      "properties": {
+        "session": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "as_of": {
+          "description": "The time the bars reach: the host's clock less the feed's delay.",
+          "type": "string",
+          "maxLength": 40,
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+        },
+        "delay_min": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 120
+        },
+        "provisional": {
+          "description": "Always true: another feed's bars than the record's.",
+          "const": true
+        },
+        "complete": {
+          "description": "True once the session's last hourly bar is in.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "names": {
+          "type": "array",
+          "maxItems": 60,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "symbol",
+              "states"
+            ],
+            "properties": {
+              "symbol": {
+                "type": "string",
+                "pattern": "^[A-Z][A-Z0-9.]{0,9}$"
+              },
+              "bars": {
+                "description": "Finished hourly bars the states were worked out from.",
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 12
+              },
+              "states": {
+                "type": "array",
+                "maxItems": 40,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "rule",
+                    "state"
+                  ],
+                  "properties": {
+                    "rule": {
+                      "description": "A rule's id, as the edition's rules carry it. Never drawn as written.",
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_]{1,40}$"
+                    },
+                    "state": {
+                      "enum": [
+                        "waiting",
+                        "open",
+                        "stopped",
+                        "target",
+                        "closed"
+                      ]
+                    },
+                    "bar": {
+                      "description": "New York time of the hourly close the rule triggered on.",
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "side": {
+                      "enum": [
+                        "call",
+                        "put",
+                        null
+                      ]
+                    },
+                    "r": {
+                      "description": "The result in R on the stock so far, before any option cost.",
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "minimum": -5,
+                      "maximum": 5
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     }
   }
