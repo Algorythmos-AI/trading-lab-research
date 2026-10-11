@@ -197,6 +197,8 @@ export interface ContractView {
   thetaDay: number | null;
   /** What an hour of waiting costs per share, stock and volatility unchanged. */
   decayHour: number | null;
+  /** True when less than an hour is left, so `decayHour` runs to the bell and is not an hourly figure. */
+  decayToExpiry: boolean;
   times: ScenarioTime[];
   /** One row per level; one cell per time. P&L is for all contracts, in dollars, and null with nothing paid. */
   rows: { level: ScenarioLevel; cells: { value: number; pnl: number | null }[] }[];
@@ -227,7 +229,7 @@ export function contractView(
   const blank: ContractView = {
     contract, quote, ageMin, minutes, days, expired, stale, here,
     sigma: null, volFrom: null, paid: null, paidFrom: null, cost: null, breakeven: null, breakevenMoves: null,
-    value: null, pnlNow: null, delta: null, thetaDay: null, decayHour: null, times: [], rows: [],
+    value: null, pnlNow: null, delta: null, thetaDay: null, decayHour: null, decayToExpiry: false, times: [], rows: [],
   };
   if (expired || stale || !(spot > 0)) return blank;
 
@@ -265,6 +267,7 @@ export function contractView(
     thetaDay: g?.thetaDay ?? null,
     // Never below zero: with no rate or yield an option cannot gain from time passing, only rounding can say so.
     decayHour: sigma !== null ? Math.max(0, decay(spot, pick.strike, left, sigma, pick.kind, 60)) : null,
+    decayToExpiry: left < 60,
     times,
     rows: scenarioLevels(t, spot, clock.priceIsLive).map((level) => ({
       level,

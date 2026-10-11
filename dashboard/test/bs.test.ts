@@ -194,3 +194,37 @@ describe("one long option", () => {
     expect(valueIf(785, 780, 390, 0.12, "put", 10_000)).toBeCloseTo(0, 3);
   });
 });
+
+describe("at and after the bell", () => {
+  it.each([0.12, 1.0, 2.5])("an option is worth what it is in the money by, at %f volatility", (sigma) => {
+    expect(valueIf(780, 780, 30, sigma, "call", 60)).toBe(0);
+    expect(valueIf(780, 780, 30, sigma, "put", 30)).toBe(0);
+    expect(valueIf(785, 780, 30, sigma, "call", 60)).toBe(5);
+    expect(valueIf(770, 780, 0, sigma, "put")).toBe(10);
+    for (const k of ["call", "put"] as const) {
+      expect(decay(780, 780, 30, sigma, k, 60)).toBeCloseTo(price(780, 780, 30, sigma, k), 12);
+      expect(decay(780, 780, -5, sigma, k)).toBe(0);
+    }
+  });
+
+  it("refuses a time that is not a number", () => {
+    for (const bad of [NaN, Infinity]) {
+      expect(() => price(100, 100, bad, 0.2, "call")).toThrow(RangeError);
+      expect(() => greeks(100, 100, bad, 0.2, "put")).toThrow(RangeError);
+    }
+  });
+});
+
+describe("a reference from outside this code", () => {
+  it("prices Hull's worked example", () => {
+    const halfYear = 0.5 * MINUTES_PER_YEAR;
+    expect(price(42, 40, halfYear, 0.2, "call", 0.1)).toBeCloseTo(4.7594, 3);
+    expect(price(42, 40, halfYear, 0.2, "put", 0.1)).toBeCloseTo(0.8086, 3);
+  });
+
+  it("keeps erfc's digits just below the switch between its two methods", () => {
+    // Reference values from Python's math.erfc; the error peaks here, at about one part in a trillion.
+    expect(Math.abs(erfc(2.49) - 0.0004292878677339129) / 0.0004292878677339129).toBeLessThan(5e-12);
+    expect(Math.abs(erfc(2.2) - 0.0018628462979818896) / 0.0018628462979818896).toBeLessThan(5e-12);
+  });
+});

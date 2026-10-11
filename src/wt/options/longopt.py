@@ -42,18 +42,30 @@ def pnl(value: float, premium: float, contracts: int = 1) -> float:
     return (value - premium) * MULTIPLIER * contracts
 
 
+def _value(s: float, strike: float, minutes: float, sigma: float | None, kind: Kind, r: float, q: float) -> float:
+    """The value with `minutes` left; at or after the closing bell, what the option is in the money by and no more.
+
+    `bs.price` never takes time as less than one minute, which is right for an option still trading and wrong for
+    one that has expired: at the money, a minute of time value is cents a share at 12% and dollars at 250%."""
+    if minutes <= 0:
+        bs.floor_value(s, strike, minutes, kind)      # the same refusal of a bad price or strike
+        return max(s - strike if kind == "call" else strike - s, 0.0)
+    return bs.price(s, strike, minutes, sigma, kind, r, q)
+
+
 def decay(
     s: float, strike: float, minutes: float, sigma: float | None, kind: Kind,
     ahead: float = 60.0, r: float = 0.0, q: float = 0.0,
 ) -> float:
-    """What the option loses per share over the next `ahead` minutes if the stock and its volatility stay put."""
-    later = max(minutes - ahead, 0.0)
-    return bs.price(s, strike, minutes, sigma, kind, r, q) - bs.price(s, strike, later, sigma, kind, r, q)
+    """What the option loses per share over the next `ahead` minutes if the stock and its volatility stay put.
+    With less than `ahead` left, that is everything but what it is in the money by."""
+    return _value(s, strike, minutes, sigma, kind, r, q) - _value(s, strike, minutes - ahead, sigma, kind, r, q)
 
 
 def value_if(
     s_then: float, strike: float, minutes: float, sigma: float | None, kind: Kind,
     ahead: float = 0.0, r: float = 0.0, q: float = 0.0,
 ) -> float:
-    """The option's value per share if the stock is at `s_then` in `ahead` minutes, volatility unchanged."""
-    return bs.price(s_then, strike, max(minutes - ahead, 0.0), sigma, kind, r, q)
+    """The option's value per share if the stock is at `s_then` in `ahead` minutes, volatility unchanged. Once
+    `ahead` reaches expiry, what it is in the money by."""
+    return _value(s_then, strike, minutes - ahead, sigma, kind, r, q)
