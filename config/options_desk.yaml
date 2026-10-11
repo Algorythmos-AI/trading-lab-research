@@ -1,0 +1,3 @@
+# The Options desk's names, for the host job that reads open interest (wt.options.live). They are the names the
+# after-close edition carries; a name here that the edition drops is ignored by the page.
+names: [SPY, QQQ, AAPL, MSFT, NVDA, AMZN, GOOGL, META, TSLA, PLTR]

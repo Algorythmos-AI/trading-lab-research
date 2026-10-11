@@ -10,8 +10,9 @@ and its mandate check never see them. `OptionsAccount` can only GET, from the pa
 nothing in this module can place, change or cancel an order.
 
 What leaves the host: one row per open option contract (the OCC symbol, the quantity, the broker's average price,
-mark, market value and unrealised result) and the market clock. No account number, no balances, no buying power,
-no stock positions, no orders.
+mark, market value and unrealised result), the market clock, and open interest by contract for the desk's names
+(public market data, read with the same key pair). No account number, no balances, no buying power, no stock
+positions, no orders.
 
 Without the key pair the job does nothing and exits 0, so its unit can be installed before the account exists.
 When the account cannot be read nothing is sent: an empty list would say "nothing is held", which is not known.
@@ -34,7 +35,7 @@ from typing import Any
 
 import requests
 
-from wt.core.config import ROOT, STATE_DIR
+from wt.core.config import ROOT, STATE_DIR, load_yaml
 from wt.ops import publish, safeio
 
 SCHEMA_ID = "stocksdelta/options-live"
@@ -47,6 +48,17 @@ KEY_ID_VAR = "APCA_OPTIONS_KEY_ID"
 SECRET_VAR = "APCA_OPTIONS_SECRET_KEY"
 # The paper host, as a constant: a live key is refused here, and no setting can point this module anywhere else.
 PAPER_HOST = "https://paper-api.alpaca.markets"
+DATA_HOST = "https://data.alpaca.markets"          # market data: the stocks' last closes, to centre the strikes
+
+# Open interest: the exchange reports it once a day, so it is read a few times a day and kept between runs.
+OI_REFRESH_H = 6.0
+OI_KEEP_H = 72.0                  # an older reading is dropped rather than shown as current
+OI_DAYS = 35                      # expiries out to five weeks: the desk's same-day and swing trades
+OI_STRIKE_BAND = 0.08             # strikes within 8% of the last close
+OI_ROWS = 200                     # per name, the contracts with the most open interest
+OI_PAGES = 4
+OI_NAMES = 60
+SYMBOL = re.compile(r"[A-Z][A-Z0-9.]{0,9}")
 
 # A standard contract: root, yymmdd, C or P, strike in thousandths. An adjusted contract has a digit in its root
 # and a deliverable that is not 100 shares, so the desk's arithmetic would be wrong for it: it is left out.
@@ -75,12 +87,12 @@ class OptionsAccount:
         self._s = session or requests.Session()
         self._headers = {"APCA-API-KEY-ID": key_id, "APCA-API-SECRET-KEY": secret}
 
-    def _get(self, path: str) -> Any:
+    def _get(self, path: str, params: dict[str, str] | None = None, host: str = PAPER_HOST) -> Any:
         last = "network"
         for i in range(GET_TRIES):
             try:
                 # No redirects: a 30x would carry the key headers to whatever host it named.
-                r = self._s.get(PAPER_HOST + path, headers=self._headers, timeout=GET_TIMEOUT_S,
+                r = self._s.get(host + path, params=params, headers=self._headers, timeout=GET_TIMEOUT_S,
                                 allow_redirects=False)
             except requests.RequestException as e:
                 last = "network-" + e.__class__.__name__
@@ -110,6 +122,34 @@ class OptionsAccount:
         if not isinstance(got, dict):
             raise BrokerFault("clock-not-an-object")
         return got
+
+    def closes(self, symbols: list[str]) -> dict[str, float]:
+        """Each stock's last daily close, for the names that have one."""
+        got = self._get("/v2/stocks/snapshots", {"symbols": ",".join(symbols), "feed": "iex"}, DATA_HOST)
+        out: dict[str, float] = {}
+        for sym, snap in (got.items() if isinstance(got, dict) else ()):
+            bars = [snap.get(k) for k in ("dailyBar", "prevDailyBar")] if isinstance(snap, dict) else []
+            close = next((c for b in bars if isinstance(b, dict) and (c := _num(b.get("c"))) is not None and c > 0), None)
+            if close is not None:
+                out[str(sym)] = close
+        return out
+
+    def contracts(self, symbol: str, lo: float, hi: float, first: dt.date, last: dt.date) -> list[Any]:
+        """The listed option contracts of one stock inside a strike band and a date range, a few pages at most."""
+        params = {"underlying_symbols": symbol, "status": "active", "limit": "10000",
+                  "strike_price_gte": f"{lo:.2f}", "strike_price_lte": f"{hi:.2f}",
+                  "expiration_date_gte": first.isoformat(), "expiration_date_lte": last.isoformat()}
+        out: list[Any] = []
+        for _ in range(OI_PAGES):
+            got = self._get("/v2/options/contracts", params)
+            if not isinstance(got, dict) or not isinstance(got.get("option_contracts"), list):
+                raise BrokerFault("contracts-not-a-list")
+            out += got["option_contracts"]
+            token = got.get("next_page_token")
+            if not isinstance(token, str) or not token:
+                break
+            params = {**params, "page_token": token}
+        return out
 
 
 def _num(v: Any) -> float | None:
@@ -162,6 +202,77 @@ def position_rows(raw: list[Any]) -> tuple[list[dict[str, Any]], list[str]]:
     return rows, [f"{code}:{n}" for code, n in sorted(left_out.items())]
 
 
+def oi_rows(raw: list[Any]) -> tuple[list[dict[str, Any]], str | None]:
+    """One stock's contracts as open-interest rows, the largest first and at most OI_ROWS of them, with the date
+    the exchange's figures are for. Only standard contracts that carry a figure."""
+    rows: list[dict[str, Any]] = []
+    dates: Counter[str] = Counter()
+    for c in raw:
+        if not isinstance(c, dict) or str(c.get("size")) != "100" or not OCC.fullmatch(str(c.get("symbol"))):
+            continue
+        oi, strike, expiry = _num(c.get("open_interest")), _num(c.get("strike_price")), c.get("expiration_date")
+        if oi is None or oi < 0 or oi != int(oi) or strike is None or strike <= 0 or c.get("type") not in ("call", "put"):
+            continue
+        if not isinstance(expiry, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", expiry):
+            continue
+        rows.append({"expiry": expiry, "strike": strike, "kind": c["type"], "oi": int(oi)})
+        if isinstance(d := c.get("open_interest_date"), str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", d):
+            dates[d] += 1
+    rows.sort(key=lambda r: (-int(r["oi"]), str(r["expiry"]), float(r["strike"]), str(r["kind"])))
+    return rows[:OI_ROWS], (max(dates) if dates else None)
+
+
+def desk_names() -> list[str]:
+    """The desk's names from config/options_desk.yaml: well-formed symbols, no repeats."""
+    names = load_yaml("options_desk.yaml").get("names") or []
+    return list(dict.fromkeys(n for n in names if isinstance(n, str) and SYMBOL.fullmatch(n)))[:OI_NAMES]
+
+
+def read_open_interest(account: OptionsAccount, names: list[str], today: dt.date) -> list[dict[str, Any]]:
+    """Open interest for each name that has a last close and at least one contract with a figure."""
+    closes = account.closes(names)
+    out: list[dict[str, Any]] = []
+    for name in names:
+        close = closes.get(name)
+        if close is None:
+            continue
+        raw = account.contracts(name, close * (1 - OI_STRIKE_BAND), close * (1 + OI_STRIKE_BAND), today,
+                                today + dt.timedelta(days=OI_DAYS))
+        rows, as_of = oi_rows(raw)
+        if rows:
+            out.append({"symbol": name, "as_of": as_of, "rows": rows})
+    return out
+
+
+def open_interest(account: OptionsAccount, now: dt.datetime, cache: Path) -> tuple[list[dict[str, Any]] | None, list[str]]:
+    """(open interest, problems). Read again when the kept reading is older than OI_REFRESH_H; a failed read keeps
+    the last one for up to OI_KEEP_H and says so. It never stops the positions from going out."""
+    kept: dict[str, Any] = {}
+    try:
+        kept = json.loads(cache.read_text())
+    except (OSError, ValueError):
+        pass
+    age_h = float("inf")
+    try:
+        age_h = (now - dt.datetime.fromisoformat(str(kept.get("read")))).total_seconds() / 3600
+    except (TypeError, ValueError):
+        kept = {}
+    have = kept.get("open_interest") if isinstance(kept.get("open_interest"), list) and 0 <= age_h <= OI_KEEP_H else None
+    if have is not None and age_h < OI_REFRESH_H:
+        return have, []
+    try:
+        fresh = read_open_interest(account, desk_names(), now.astimezone(dt.UTC).date())
+    except BrokerFault as e:
+        return have, [f"open-interest-unavailable:{e.code}"[:200]]
+    except Exception as e:  # noqa: BLE001 — open interest is an extra: no fault in it may stop the positions
+        return have, [f"open-interest-failed:{e.__class__.__name__}"[:200]]
+    try:
+        safeio.atomic_write(cache, json.dumps({"read": now.isoformat(), "open_interest": fresh}), cache.parent)
+    except OSError:
+        pass
+    return fresh, []
+
+
 def market(clock: dict[str, Any] | None) -> dict[str, Any] | None:
     """The market clock as the broker gives it, or None when it could not be read."""
     if clock is None:
@@ -175,11 +286,11 @@ def market(clock: dict[str, Any] | None) -> dict[str, Any] | None:
 
 
 def build(raw: list[Any], clock: dict[str, Any] | None, run_id: str, now: dt.datetime,
-          problems: list[str] | None = None) -> dict[str, Any]:
+          problems: list[str] | None = None, oi: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     rows, left_out = position_rows(raw)
     return {"schema": SCHEMA_ID, "schema_version": SCHEMA_VERSION, "run_id": run_id,
             "as_of": now.isoformat(timespec="seconds"), "paper": True, "market": market(clock),
-            "positions": rows, "problems": [*(problems or []), *left_out][:24]}
+            "positions": rows, "open_interest": oi, "problems": [*(problems or []), *left_out][:24]}
 
 
 def validate(doc: dict[str, Any], schema_path: Path = SCHEMA_PATH) -> list[str]:
@@ -239,8 +350,10 @@ def _publish(a: argparse.Namespace, account: OptionsAccount | None = None) -> in
         clock = account.clock()
     except BrokerFault as e:
         problems.append(f"clock-unavailable:{e.code}"[:200])
+    oi, oi_problems = open_interest(account, now, OUT / "open_interest.json")
+    problems += oi_problems
     run_id = now.strftime("%Y%m%dT%H%M%SZ") + "-" + hashlib.sha1(os.urandom(8)).hexdigest()[:6]
-    doc = build(raw, clock, run_id, now, problems)
+    doc = build(raw, clock, run_id, now, problems, oi)
     if bad := validate(doc):
         print("options live document failed schema validation:\n  " + "\n  ".join(bad), file=sys.stderr)
         return 2
@@ -248,7 +361,8 @@ def _publish(a: argparse.Namespace, account: OptionsAccount | None = None) -> in
     (OUT / "outbox").mkdir(parents=True, exist_ok=True)
     safeio.atomic_write(OUT / "outbox" / "document.json", body.decode(), OUT)
     # A count is all the log says about the account.
-    print(f"options live {run_id}: {len(doc['positions'])} option positions, {len(body)} bytes")
+    print(f"options live {run_id}: {len(doc['positions'])} option positions, open interest for {len(oi or [])} names, "
+          f"{len(body)} bytes")
     if a.dry_run:
         return 0
     url, ingest_secret = os.environ.get("DASHBOARD_INGEST_URL"), os.environ.get("DASHBOARD_INGEST_SECRET")
