@@ -21,3 +21,4 @@ families:
     - {decision: DEC-0025, total: 12, status: accepted}   # HYP-0024 TREND with ranked entries (one trial)
   O:                                                      # options desk (DEC-0028)
     - {decision: DEC-0028, total: 12, status: accepted}   # four rules x three variants tried before registration: a floor
+    - {decision: DEC-0029, total: 20, status: proposed}   # each rule priced as two contracts (near, a week out): 8 trials
