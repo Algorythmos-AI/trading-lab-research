@@ -39,20 +39,40 @@ class Session:
     """Stands in for requests.Session: it answers GETs and has nothing else to call."""
 
     def __init__(self, *replies):
-        self.replies, self.calls = list(replies), []
+        self.replies, self.calls, self.params = list(replies), [], []
 
-    def get(self, url, headers=None, timeout=None, allow_redirects=True):
+    def get(self, url, params=None, headers=None, timeout=None, allow_redirects=True):
         assert allow_redirects is False
         self.calls.append(url)
+        self.params.append(params)
         r = self.replies.pop(0)
         if isinstance(r, Exception):
             raise r
         return r
 
 
+def contract(strike="780", kind="call", oi="1825", expiry="2026-10-16", **over):
+    occ = f"SPY{expiry[2:4]}{expiry[5:7]}{expiry[8:]}{kind[0].upper()}{int(float(strike) * 1000):08d}"
+    return {"symbol": occ, "expiration_date": expiry, "strike_price": strike, "type": kind, "open_interest": oi,
+            "open_interest_date": "2026-10-09", "size": "100", "style": "american", "id": "x", **over}
+
+
 class Account:
-    def __init__(self, positions=None, clock=CLOCK):
-        self._p, self._c = positions, clock
+    """Open interest is unavailable unless a test gives it closes and contracts."""
+
+    def __init__(self, positions=None, clock=CLOCK, closes=None, contracts=None):
+        self._p, self._c, self._closes, self._contracts, self.asked = positions, clock, closes, contracts, []
+
+    def closes(self, symbols):
+        if self._closes is None:
+            raise live.BrokerFault("not-in-this-test")
+        return self._closes
+
+    def contracts(self, symbol, lo, hi, first, last):
+        self.asked.append((symbol, round(lo, 2), round(hi, 2), first, last))
+        if isinstance(self._contracts, Exception):
+            raise self._contracts
+        return self._contracts or []
 
     def positions(self):
         if isinstance(self._p, Exception):
@@ -77,10 +97,11 @@ def _state(tmp_path, monkeypatch):
 def test_the_module_can_only_read_and_only_from_the_paper_host():
     src = inspect.getsource(live)
     assert live.PAPER_HOST == "https://paper-api.alpaca.markets"
-    for word in (".post(", ".put(", ".patch(", ".delete(", "/v2/orders", "TradingClient", "api.alpaca.markets/v2"):
-        assert word not in src.replace(live.PAPER_HOST, ""), word
+    for word in (".post(", ".put(", ".patch(", ".delete(", "/v2/orders", "/v2/account", "TradingClient", "alpaca.markets"):
+        assert word not in src.replace(live.PAPER_HOST, "").replace(live.DATA_HOST, ""), word
     assert "APCA_API_KEY_ID" not in src                    # never strategy B's account
-    assert [n for n in vars(live.OptionsAccount) if not n.startswith("_")] == ["positions", "clock"]
+    assert [n for n in vars(live.OptionsAccount) if not n.startswith("_")] == ["positions", "clock", "closes", "contracts"]
+    assert live.DATA_HOST == "https://data.alpaca.markets"
     s = Session(Reply(200, []), Reply(200, CLOCK))
     acct = live.OptionsAccount("k", "s", s)
     acct.positions(), acct.clock()
@@ -124,7 +145,7 @@ def test_the_document_passes_the_sites_contract_and_names_nothing_about_the_acco
     assert live.validate(doc) == []
     assert doc["paper"] is True and doc["as_of"] == "2026-10-12T16:00:00+00:00"
     assert doc["market"] == {"is_open": True, "next_open": CLOCK["next_open"], "next_close": CLOCK["next_close"]}
-    assert doc["problems"] == ["not-an-option:1"]
+    assert doc["problems"] == ["not-an-option:1"] and doc["open_interest"] is None
     text = json.dumps(doc)
     for word in ("asset_id", "cost_basis", "account", "equity", "buying_power", "cash"):
         assert word not in text, word
@@ -187,7 +208,8 @@ def test_a_run_sends_the_signed_document_and_logs_only_a_count(monkeypatch, caps
     monkeypatch.setenv("DASHBOARD_INGEST_SECRET", "s" * 20)
     assert live._publish(args(), Account([option()], live.BrokerFault("http-503"))) == 0
     doc = json.loads(sent[0][0])
-    assert live.validate(doc) == [] and doc["market"] is None and doc["problems"] == ["clock-unavailable:http-503"]
+    assert live.validate(doc) == [] and doc["market"] is None
+    assert doc["problems"] == ["clock-unavailable:http-503", "open-interest-unavailable:not-in-this-test"]
     assert json.loads((live.OUT / "outbox" / "document.json").read_text()) == doc
     out = capsys.readouterr().out
     assert "1 option positions" in out and "SPY" not in out and "market_value" not in out
@@ -218,3 +240,65 @@ def test_the_accounts_keys_are_scrubbed_and_prompted_hidden_and_optional():
     assert {live.KEY_ID_VAR, live.SECRET_VAR} <= set(safeio.SECRET_KEYS)
     text = (live.ROOT / "deploy/oci/bin/wt-set-secrets").read_text()
     assert f'"{live.KEY_ID_VAR}||1|0"' in text and f'"{live.SECRET_VAR}||1|0"' in text
+
+
+def test_open_interest_rows_are_standard_contracts_with_a_figure_largest_first():
+    rows, as_of = live.oi_rows([
+        contract("780", "call", "1825"), contract("775", "put", "9000"), contract("785", "call", "0"),
+        contract("790", "call", None), contract("790", "put", "12.5"), contract("795", "call", "-3"),
+        contract("800", "call", "50", size="10"), contract("805", "call", "50", symbol="SPY1261016C00805000"),
+        contract("810", "call", "50", type="straddle"), contract("0", "call", "50"), "torn",
+    ])
+    assert rows == [
+        {"expiry": "2026-10-16", "strike": 775.0, "kind": "put", "oi": 9000},
+        {"expiry": "2026-10-16", "strike": 780.0, "kind": "call", "oi": 1825},
+        {"expiry": "2026-10-16", "strike": 785.0, "kind": "call", "oi": 0},
+    ]
+    assert as_of == "2026-10-09"
+    many, _ = live.oi_rows([contract(str(700 + i), "call", str(i)) for i in range(300)])
+    assert len(many) == live.OI_ROWS and many[0]["oi"] == 299
+    assert live.oi_rows([]) == ([], None)
+
+
+def test_open_interest_is_read_inside_a_strike_band_and_a_date_range_for_names_with_a_close(tmp_path):
+    acct = Account(closes={"SPY": 780.0, "QQQ": 500.0}, contracts=[contract()])
+    got = live.read_open_interest(acct, ["SPY", "NOCLOSE", "QQQ"], dt.date(2026, 10, 12))
+    assert [g["symbol"] for g in got] == ["SPY", "QQQ"] and got[0]["as_of"] == "2026-10-09"
+    assert acct.asked[0] == ("SPY", 717.6, 842.4, dt.date(2026, 10, 12), dt.date(2026, 11, 16))
+    doc = live.build([], CLOCK, "r", NOW, oi=got)
+    assert live.validate(doc) == []
+
+
+def test_open_interest_is_kept_between_runs_and_a_failed_read_never_stops_the_positions(tmp_path):
+    cache = tmp_path / "oi.json"
+    good = Account(closes={"SPY": 780.0}, contracts=[contract()])
+    first, problems = live.open_interest(good, NOW, cache)
+    assert problems == [] and first and len(good.asked) == len(live.desk_names()[:1]) == 1
+    # Within six hours the kept reading is used and the broker is not asked again.
+    again, problems = live.open_interest(Account(), NOW + dt.timedelta(hours=5), cache)
+    assert again == first and problems == []
+    # After that a failed read keeps the last reading and says so; after three days it is dropped.
+    stale, problems = live.open_interest(Account(), NOW + dt.timedelta(hours=7), cache)
+    assert stale == first and problems == ["open-interest-unavailable:not-in-this-test"]
+    gone, problems = live.open_interest(Account(), NOW + dt.timedelta(hours=80), cache)
+    assert gone is None and problems == ["open-interest-unavailable:not-in-this-test"]
+    # A torn cache, or any other fault while reading, is the same: no open interest, and the run goes on.
+    cache.write_text("{torn")
+    broken = Account(closes={"SPY": 780.0}, contracts=RuntimeError("boom"))
+    assert live.open_interest(broken, NOW, cache) == (None, ["open-interest-failed:RuntimeError"])
+
+
+def test_the_desks_names_are_well_formed_and_the_contract_request_stays_on_the_paper_host():
+    names = live.desk_names()
+    assert 1 <= len(names) <= live.OI_NAMES and len(set(names)) == len(names) and "SPY" in names
+    s = Session(Reply(200, {"SPY": {"dailyBar": {"c": 780.0}}, "X": {"prevDailyBar": {"c": "12.5"}}, "Y": {}}),
+                Reply(200, {"option_contracts": [contract()], "next_page_token": "t"}),
+                Reply(200, {"option_contracts": [contract("781")], "next_page_token": None}))
+    acct = live.OptionsAccount("k", "s", s)
+    assert acct.closes(["SPY", "X", "Y"]) == {"SPY": 780.0, "X": 12.5}
+    assert len(acct.contracts("SPY", 717.6, 842.4, dt.date(2026, 10, 12), dt.date(2026, 11, 16))) == 2
+    assert s.calls == [live.DATA_HOST + "/v2/stocks/snapshots", live.PAPER_HOST + "/v2/options/contracts",
+                       live.PAPER_HOST + "/v2/options/contracts"]
+    assert s.params[1]["strike_price_gte"] == "717.60" and s.params[2]["page_token"] == "t"
+    with pytest.raises(live.BrokerFault):
+        live.OptionsAccount("k", "s", Session(Reply(200, []))).contracts("SPY", 1, 2, dt.date(2026, 10, 12), dt.date(2026, 10, 13))
