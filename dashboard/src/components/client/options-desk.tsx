@@ -235,7 +235,6 @@ function SessionLine({ session, halfDay }: { session: string; halfDay: boolean }
   const { now } = useLive();
   const day = weekDate(session);
   const clock = now === null ? null : sessionClock(session, halfDay, new Date(now));
-  const hourly = now === null ? null : nextHourlyClose(session, halfDay, new Date(now));
   return (
     <p className="text-muted-foreground text-xs">
       Session <span className="text-foreground font-medium">{day}</span>
@@ -249,12 +248,6 @@ function SessionLine({ session, halfDay }: { session: string; halfDay: boolean }
         <>
           {" "}
           closes in <span className="text-foreground font-mono">{clockSpan(clock.ms ?? 0)}</span>
-          {hourly ? (
-            <span data-next-hourly={hourly.label}>
-              {" "}
-              · next hourly close {hourly.label} ET in <span className="text-foreground font-mono">{clockSpan(hourly.ms)}</span>
-            </span>
-          ) : null}
         </>
       ) : (
         " has closed"
@@ -684,7 +677,7 @@ export function OptionsDesk({
           ) : null}
           {rules && live && view === "live" ? (
             <PaneBoundary name="Rules today">
-              <OptionsTriggers rules={rules} marketOpen={now !== null && sessionClock(e.session, halfDay, new Date(now))?.phase === "open"} onOpen={openName} />
+              <OptionsTriggers rules={rules} nextClose={now === null ? null : nextHourlyClose(e.session, halfDay, new Date(now))} marketOpen={now !== null && sessionClock(e.session, halfDay, new Date(now))?.phase === "open"} onOpen={openName} />
             </PaneBoundary>
           ) : null}
           {positions && live && view === "live" ? (
@@ -754,7 +747,7 @@ export function OptionsDesk({
           </span>
         </div>
       ) : null}
-      <TriggerNotices rules={live ? rules : null} onOpen={openName} />
+      <TriggerNotices session={live ? e.session : null} rules={live ? rules : null} onOpen={openName} onDismissed={focusSelected} />
       <DeskPalette
         open={palette}
         onOpenChange={setPalette}

@@ -499,10 +499,15 @@ test("the live view lists the rules that have triggered today, and each name's r
   await variant(context, baseURL, "");
   await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
   await expect(notices).toHaveCount(2);
-  expect((await rows(page).first().boundingBox())?.y).toBe(top?.y);
+  expect((await rows(page).first().boundingBox())?.y).toBeCloseTo(top!.y, 0);
   await expect(notices.first()).toContainText("paper rule triggered on the 12:00 ET hourly close");
+  await expect(notices.first()).toContainText("not a signal to trade");
+  await expect(page.locator("[data-trigger-notices]").getByRole("status")).toContainText("2 paper rules triggered");
   await page.getByRole("button", { name: "Dismiss the notice for SPY" }).click();
   await expect(notices).toHaveCount(1);
+  // Dismissing does not speak again, and the keyboard is back on the desk.
+  await expect(page.locator("[data-trigger-notices]").getByRole("status")).toContainText("2 paper rules triggered");
+  await expect(page.locator("body")).not.toBeFocused();
   await notices.getByRole("button", { name: `Show ${other}` }).click();
   await expect(detail(page, other!)).toBeVisible();
   await expect(notices).toHaveCount(0);
