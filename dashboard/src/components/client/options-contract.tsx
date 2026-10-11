@@ -1,7 +1,7 @@
 "use client";
 
 import { Calculator, RotateCw, TriangleAlert, X } from "lucide-react";
-import { useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Empty } from "@/components/empty";
 import { fracPct, newYork, num, signed, weekDate } from "@/lib/format";
 import { bellMinute, contractView, daysToExpiry, defaultPick, MAX_CONTRACTS, minutesToExpiry, parsePick, pickKey, type Pick, type VolSource } from "@/lib/contract";
@@ -99,7 +99,28 @@ const FIELD = "bg-background h-8 rounded border px-2 font-mono text-[0.8125rem]"
  *
  * Read only and descriptive: it prices a contract the reader names; it does not suggest one.
  */
-export function OptionsContract({ t, live }: { t: OptionsTicker; live: boolean }) {
+/**
+ * Tells the map where the priced contract breaks even, and takes it back when the pane closes or stops pricing.
+ * A component of its own so the effect lives exactly as long as there is a breakeven to show.
+ */
+function ReportBreakeven({ price, kind, report }: { price: number; kind: Pick["kind"]; report: (mark: { price: number; kind: Pick["kind"] } | null) => void }) {
+  useEffect(() => {
+    report({ price, kind });
+    return () => report(null);
+  }, [price, kind, report]);
+  return null;
+}
+
+export function OptionsContract({
+  t,
+  live,
+  onBreakeven,
+}: {
+  t: OptionsTicker;
+  live: boolean;
+  /** Called with the breakeven of the contract being priced, and with null when there is none. Must be stable. */
+  onBreakeven?: (mark: { price: number; kind: Pick["kind"] } | null) => void;
+}) {
   const { now, session } = useLive();
   const read = useLiveRead(t);
   const [stored, setStored] = usePick(t.symbol);
@@ -187,6 +208,7 @@ export function OptionsContract({ t, live }: { t: OptionsTicker; live: boolean }
 
   return (
     <section ref={section} tabIndex={-1} aria-label={`${t.symbol} contract`} data-contract={state} className="grid gap-3 border-t pt-3 outline-none">
+      {onBreakeven && view && pick && view.breakeven !== null ? <ReportBreakeven price={view.breakeven} kind={pick.kind} report={onBreakeven} /> : null}
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
         {heading}
         <span className="text-muted-foreground flex items-center gap-3 text-[0.6875rem]">

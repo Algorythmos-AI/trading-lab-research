@@ -313,8 +313,15 @@ test("the contract pane prices the call or put the reader names, remembers it ac
   await showPane(page, "SPY");
   // Shut until asked for: no option quotes are fetched for a name nobody is pricing.
   await expect(contract(page)).toHaveAttribute("data-contract", "closed");
+  // Nothing priced, nothing drawn: the map shows a breakeven only for the contract in the pane.
+  const breakeven = detail(page, "SPY").locator("[data-breakeven]");
+  await expect(breakeven).toHaveCount(0);
   await contract(page).getByRole("button", { name: "Price a call or put" }).click();
   await expect(contract(page)).toHaveAttribute("data-contract", "ready");
+  // The map now marks where this contract breaks even: on the map, or named at the edge it lies beyond.
+  await expect(breakeven).toHaveCount(1);
+  await expect(breakeven).toHaveAttribute("data-breakeven", /^(on|above|below)$/);
+  await expect(breakeven.locator("text")).toContainText(/Breakeven \d/);
   // It opens on a call at the nearest expiry, priced at the ask, with a row for where the stock is now.
   await expect(contract(page).getByRole("button", { name: "Call", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(contract(page)).toContainText("at the ask");

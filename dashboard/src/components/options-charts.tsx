@@ -110,7 +110,13 @@ const LABELS_EACH_SIDE = 3;
  * The zones, the candles, the expected move and the labels are each a layer (`data-layer`), so a wrapper can hide
  * one with `data-hide`. With `interactive` the map carries a crosshair that reads a price off it.
  */
-export function LevelMap({ t, interactive = false }: { t: OptionsTicker; interactive?: boolean }) {
+/** Where the contract being priced breaks even at expiry, for the level map to draw. */
+export interface BreakevenMark {
+  price: number;
+  kind: "call" | "put";
+}
+
+export function LevelMap({ t, interactive = false, breakeven = null }: { t: OptionsTicker; interactive?: boolean; breakeven?: BreakevenMark | null }) {
   const v = mapView(t);
   const close = t.last?.close;
   if (!v || !isNum(close)) return null;
@@ -249,6 +255,25 @@ export function LevelMap({ t, interactive = false }: { t: OptionsTicker; interac
                 1w
               </text>
             ) : null}
+          </g>
+        ) : null}
+        {breakeven && isNum(breakeven.price) ? (
+          // Blue, like everything else on the map that comes from option prices. Off the map's range it is named
+          // at the edge it lies beyond, never drawn where it is not.
+          <g data-breakeven={breakeven.price > v.hi ? "above" : breakeven.price < v.lo ? "below" : "on"}>
+            <title>{`Breakeven at expiry for the ${breakeven.kind} being priced: ${num(breakeven.price, 2)}`}</title>
+            {breakeven.price <= v.hi && breakeven.price >= v.lo ? (
+              <line x1={X0} x2={XW} y1={y(breakeven.price)} y2={y(breakeven.price)} stroke="var(--info)" strokeWidth={1.5} strokeDasharray="7 3 2 3" />
+            ) : null}
+            <text
+              x={X0 + 48}
+              y={breakeven.price > v.hi ? TOP + 11 : breakeven.price < v.lo ? BOTTOM - 5 : Math.max(TOP + 11, y(breakeven.price) - 4)}
+              fontSize={10.5}
+              style={{ fill: "var(--info)", paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 3 }}
+              className="font-mono"
+            >
+              {`Breakeven ${num(breakeven.price, 2)}${breakeven.price > v.hi ? " ↑ above this range" : breakeven.price < v.lo ? " ↓ below this range" : ""}`}
+            </text>
           </g>
         ) : null}
         <line x1={X0} x2={XW} y1={y(close)} y2={y(close)} stroke="var(--foreground)" strokeOpacity={0.7} strokeDasharray="4 3" />
