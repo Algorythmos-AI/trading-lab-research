@@ -32,6 +32,7 @@ from wt.options import intraday, rules  # noqa: E402
 from wt.options import levels as lv  # noqa: E402
 
 START, END = "2026-03-03", "2026-10-09"
+SEED, N_BOOT = 7, 5000  # the resampling behind every range, recorded with the result
 MIN_HOURLY = 6          # as the after-close run: fewer hourly bars than this is not a session it scores
 HISTORY_DAYS = 430
 
@@ -43,7 +44,8 @@ def _rows(df, name: str) -> list[dict]:
 
 
 def replicate(names: list[str], daily, halves, start: str, end: str) -> tuple[list[dict], dict]:
-    """Every trigger of every rule, and what was left out and why."""
+    """Every trigger of every rule, and what was left out and why. A name whose daily bars have problems is noted
+    under `names_with_bar_problems` and still scored, on the rows the loader keeps."""
     out: list[dict] = []
     skipped = {"names_with_bar_problems": [], "sessions_without_levels": 0, "sessions_with_few_hourly_bars": 0}
     for name in names:
@@ -76,8 +78,8 @@ def summary(rs: list[float], days: list[str]) -> dict:
     if not rs:
         return {"n": 0}
     r = np.asarray(rs, dtype=float)
-    lo, hi = bootstrap_ci(r)
-    dlo, dhi = bootstrap_ci(r, block="day", days=days)
+    lo, hi = bootstrap_ci(r, seed=SEED, n_boot=N_BOOT)
+    dlo, dhi = bootstrap_ci(r, seed=SEED, n_boot=N_BOOT, block="day", days=days)
     return {"n": len(rs), "avg_r": round(float(r.mean()), 4), "ci95": [round(lo, 4), round(hi, 4)],
             "ci95_by_session": [round(dlo, 4), round(dhi, 4)], "win_rate": round(float((r > 0).mean()), 4),
             "stops": int((r == -1.0).sum()), "targets": int((r == 2.0).sum())}
@@ -89,6 +91,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--start", default=START)
     ap.add_argument("--end", default=END)
     a = ap.parse_args(argv)
+    if (a.out / "result.json").exists():
+        print(f"{a.out} already holds a result: experiments are append-only, so a re-run takes a new EXP id", file=sys.stderr)
+        return 2
     names = [str(n) for n in load_yaml("options_desk.yaml")["names"]]
     seen = {r["id"]: r["backtest"] for r in json.loads((ROOT / "config" / "options_rules.json").read_text())["rules"]}
     client = AlpacaREST(shared=True)
@@ -111,7 +116,7 @@ def main(argv: list[str] | None = None) -> int:
         "id": "EXP-0023", "decision": "DEC-0028", "hypotheses": ["HYP-0025", "HYP-0026", "HYP-0027", "HYP-0028"],
         "what": "replication of a result seen before registration; not evidence for or against any rule",
         "start": a.start, "end": a.end, "names": names, "feed": "consolidated tape, 30-minute bars cut into the broker's hours, split-adjusted",
-        "data_hash": digest.hexdigest()[:16], "daily_bars": int(len(daily)), "half_hour_bars": int(len(halves)),
+        "data_hash": digest.hexdigest()[:16], "bootstrap": {"seed": SEED, "resamples": N_BOOT}, "daily_bars": int(len(daily)), "half_hour_bars": int(len(halves)),
         "sessions_with_a_trigger": len(sessions), "skipped": skipped, "unit": "R on the stock, before any option cost",
         "rules": per_rule,
         "pooled": summary([t["r"] for t in trades], [t["session"] for t in trades]),

@@ -40,12 +40,30 @@ def test_one_session_is_replayed_with_the_registered_rules_and_what_is_left_out_
     assert s["ci95"][0] <= s["avg_r"] <= s["ci95"][1]
 
 
-def test_the_recorded_experiment_says_what_it_is_and_agrees_with_what_was_seen():
-    result = json.loads((ROOT / "research/experiments/EXP-0023-options-rules-replication/result.json").read_text())
+def test_a_record_is_never_written_over(tmp_path, capsys):
+    (tmp_path / "result.json").write_text("{}")
+    assert rep.main(["--out", str(tmp_path)]) == 2                # before any key is read or bar pulled
+    assert (tmp_path / "result.json").read_text() == "{}" and "new EXP id" in capsys.readouterr().err
+
+
+RECORD = ROOT / "research/experiments/EXP-0023-options-rules-replication"
+
+
+def test_the_record_quotes_the_registered_figures_and_the_report_quotes_the_record():
+    result = json.loads((RECORD / "result.json").read_text())
+    report = (RECORD / "report.md").read_text()
     assert result["decision"] == "DEC-0028" and "not evidence" in result["what"] and list(result["rules"]) == list(rules.RULES)
-    for v in result["rules"].values():
+    registered = {r["id"]: r["backtest"] for r in json.loads((ROOT / "config/options_rules.json").read_text())["rules"]}
+    rows = {line.split("|")[1].strip().strip("`"): [c.strip() for c in line.split("|")[2:-1]] for line in report.splitlines() if line.startswith("| `")}
+    assert list(rows) == list(rules.RULES)
+    for rule, v in result["rules"].items():
         here, seen = v["replication"], v["seen_before_registration"]
-        assert abs(here["n"] - seen["n"]) <= 1 and abs(here["avg_r"] - seen["avg_r"]) < 0.01
-        assert here["ci95"][0] < 0 < here["ci95"][1]              # no edge shown, as DEC-0028 records
-    report = (ROOT / "research/experiments/EXP-0023-options-rules-replication/report.md").read_text()
-    assert "not a test" in report and "before any option cost" in report
+        assert seen == {k: registered[rule][k] for k in ("n", "avg_r", "ci_lo", "ci_hi")}      # what was seen is not retyped
+        assert rows[rule] == [str(seen["n"]), str(here["n"]), f"{seen['avg_r']:+.3f}", f"{here['avg_r']:+.4f}",
+                              f"[{seen['ci_lo']:+.3f}, {seen['ci_hi']:+.3f}]", f"[{here['ci95'][0]:+.4f}, {here['ci95'][1]:+.4f}]",
+                              f"[{here['ci95_by_session'][0]:+.4f}, {here['ci95_by_session'][1]:+.4f}]"]
+    pooled, exits = result["pooled"], result["by_exit"]
+    assert sum(v["replication"]["n"] for v in result["rules"].values()) == pooled["n"] == sum(exits.values())
+    assert f"Pooled: {pooled['n']} cases, mean R {pooled['avg_r']:+.4f}" in report
+    assert f"{exits['stop']} stops, {exits['target']} targets" in report and result["data_hash"] in report
+    assert "not a test" in report and "before any option cost" in report and "still open" in report
