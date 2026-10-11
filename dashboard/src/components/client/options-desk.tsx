@@ -30,6 +30,7 @@ import {
   type OptionsTicker,
 } from "@/lib/options";
 import { cn } from "@/lib/utils";
+import type { Interest } from "@/lib/oi";
 import type { OptionsLive } from "@/lib/options-live.types";
 import { pickFor, type PositionRow } from "@/lib/positions";
 import { DeskPalette } from "./desk-palette";
@@ -278,6 +279,7 @@ export function OptionsDesk({
   initialSymbol,
   initialPane,
   positions,
+  interest,
   stale,
 }: {
   e: Options;
@@ -292,6 +294,8 @@ export function OptionsDesk({
   initialPane: DeskPane;
   /** The paper account's open option positions, when the trading host has published them. */
   positions: OptionsLive | null;
+  /** Open-interest marks by name, worked out on the server from the same document. */
+  interest: Record<string, Interest>;
   stale: boolean;
 }) {
   const { feed, session, now } = useLive();
@@ -675,7 +679,7 @@ export function OptionsDesk({
         <div className={cn("xl:min-h-0 xl:overflow-y-auto", pane === "names" && "max-sm:hidden")}>
           {selected ? (
             <PaneBoundary key={selected.t.symbol} name={selected.t.symbol}>
-              <OptionsDetail e={e} t={selected.t} live={live} hiddenLayers={hiddenLayers} onToggleLayer={toggleLayer} />
+              <OptionsDetail e={e} t={selected.t} live={live} hiddenLayers={hiddenLayers} onToggleLayer={toggleLayer} interest={live ? (interest[selected.t.symbol] ?? null) : null} />
             </PaneBoundary>
           ) : null}
         </div>
@@ -733,7 +737,7 @@ export function OptionsDesk({
         tickers={e.tickers}
         symbol={selected?.t.symbol ?? null}
         view={view}
-        layers={selected ? mapLayersOf(selected.t) : []}
+        layers={selected ? mapLayersOf(selected.t, live && selected.t.symbol in interest) : []}
         hiddenLayers={hiddenLayers}
         onName={openName}
         onView={choose}

@@ -27,6 +27,7 @@ import {
   type Rung,
   volRead,
 } from "@/lib/options";
+import type { Interest } from "@/lib/oi";
 import { cn } from "@/lib/utils";
 import { StateChip, useLiveRead } from "./live-layer";
 import { OptionsContract } from "./options-contract";
@@ -86,6 +87,7 @@ export function OptionsDetail({
   live,
   hiddenLayers,
   onToggleLayer,
+  interest,
 }: {
   e: Options;
   t: OptionsTicker;
@@ -94,6 +96,8 @@ export function OptionsDetail({
   /** Map layers the reader has switched off. Held by the desk, so the choice survives a change of name. */
   hiddenLayers: ReadonlySet<MapLayer>;
   onToggleLayer: (layer: MapLayer) => void;
+  /** This name's open-interest marks, when the host has sent any. */
+  interest: Interest | null;
 }) {
   const read = useLiveRead(t);
   const close = t.last?.close ?? null;
@@ -109,7 +113,7 @@ export function OptionsDetail({
   const view = mapView(t);
   const hasMap = view !== null && close !== null;
   const strength = t.close_strength?.chip;
-  const layers = mapLayersOf(t);
+  const layers = mapLayersOf(t, interest !== null);
   // Kept with the name it was priced for, so the line never lingers on the next name's map.
   const [mark, setMark] = useState<{ symbol: string; at: BreakevenMark } | null>(null);
   const symbol = t.symbol;
@@ -178,7 +182,7 @@ export function OptionsDetail({
               ))}
             </div>
             <div data-hide={[...hiddenLayers].join(" ") || undefined}>
-              <LevelMap t={t} interactive breakeven={mark?.symbol === t.symbol ? mark.at : null} />
+              <LevelMap t={t} interactive breakeven={mark?.symbol === t.symbol ? mark.at : null} interest={interest} />
             </div>
           </div>
         ) : (

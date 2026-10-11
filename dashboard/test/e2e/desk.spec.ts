@@ -412,6 +412,29 @@ test("the paper positions sit under the list, and opening one prices the contrac
   await expect(page.locator("[data-pane-error]")).toHaveCount(0);
 });
 
+test("the map marks the strikes with the most open interest, and the layer can be switched off", async ({ page, context, baseURL }) => {
+  await open(page, "/options?view=live&s=SPY");
+  await showPane(page, "SPY");
+  const marks = detail(page, "SPY").locator('[data-layer="oi"]');
+  // Two strikes carry open interest in the fixture; the at-the-money one has calls and puts.
+  await expect(marks).toHaveAttribute("data-interest", "3");
+  await expect(marks.locator("text").first()).toContainText(/\d(k|M)? [CP]$/);
+  const toggle = detail(page, "SPY").getByRole("group", { name: "Map layers" }).getByRole("button", { name: "Open interest" });
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await expect(marks).toBeHidden();
+  // A name the host sent nothing for has no marks and no switch for them.
+  await pick(page, "NVDA");
+  await expect(detail(page, "NVDA").locator('[data-layer="oi"]')).toHaveCount(0);
+  await expect(detail(page, "NVDA").getByRole("button", { name: "Open interest" })).toHaveCount(0);
+  // Until the host publishes, there is none anywhere.
+  await variant(context, baseURL, "positions-off");
+  await open(page, "/options?view=live&s=SPY");
+  await showPane(page, "SPY");
+  await expect(detail(page, "SPY").locator('[data-layer="oi"]')).toHaveCount(0);
+});
+
 test("the paper positions say when there are none, warn when they have gone stale, and are absent until published", async ({ page, context, baseURL }) => {
   await variant(context, baseURL, "positions-none");
   await open(page, "/options?view=live");
