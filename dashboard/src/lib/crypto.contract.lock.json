@@ -1,0 +1,15 @@
+{
+  "source_repo": "Algorythmos-AI/crypto-lab",
+  "source_tag": "contract-7f189ff33c17",
+  "source_commit": "cdb864883865bf1127b30a4ea050f9375244d703",
+  "schema": {
+    "source_path": "contracts/crypto.schema.json",
+    "path": "src/lib/crypto.schema.json",
+    "sha256": "7f189ff33c17a860f7600b34fd5ed44dfe4bd7efe418e87c5484da6a103b323d"
+  },
+  "fixture": {
+    "source_path": "contracts/crypto.v1.json",
+    "path": "test/fixtures/crypto.v1.json",
+    "sha256": "67356018c56eb47d94d2771cc36ea1bd3f7e6b798b76cd0aaba789122ebfafcb"
+  }
+}

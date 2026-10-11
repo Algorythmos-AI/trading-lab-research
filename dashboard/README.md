@@ -121,7 +121,7 @@ body, never by a header.
 | Desk | Pages | `schema` id | Schema file in `src/lib/` | Latest snapshot | Watchdog state |
 |---|---|---|---|---|---|
 | Stocks | `/` and every page outside another desk's prefix | `trading-lab/snapshot` | `snapshot.schema.json`, generated from the Python allowlist (`make schema`) | `snapshots/latest.json` | `alerts/state.json` |
-| Crypto | `/crypto` and the pages under it | `trading-lab/crypto-snapshot` | `crypto.schema.json`, generated from `wt.crypto.snapshot` (`make schema`) | `snapshots/crypto/latest.json` | `alerts/crypto-state.json` |
+| Crypto | `/crypto` and the pages under it | `trading-lab/crypto-snapshot` | `crypto.schema.json`, a copy of the contract owned by `Algorythmos-AI/crypto-lab`, pinned by `crypto.contract.lock.json` | `snapshots/crypto/latest.json` | `alerts/crypto-state.json` |
 | HFT | `/hft` | `hft-lab/snapshot` | `hft.schema.json`, a copy of the contract owned by `Algorythmos-AI/hft-lab`, pinned by `hft.contract.lock.json` | `snapshots/hft/latest.json` | `alerts/hft-state.json` |
 
 - **One entry per desk.** A desk is an entry in `src/lib/desk.ts` (label, first page, storage paths), a contract
@@ -145,6 +145,16 @@ body, never by a header.
   other key then follows `PRIMARY_HOST` alone, and every word of the value that could be a key id is refused
   with 503 (`key-scope-config`) until the value is fixed, so a key that was meant to be limited never becomes
   unlimited through a typing mistake. Each signed request logs `ingest.scopes` with a reason code while it lasts.
+- **The crypto desk lives in another repository too** (ADR 0005, addendum). It ran from this one until it moved to
+  `Algorythmos-AI/crypto-lab`, which now publishes its snapshot and owns its contract. The schema id did not
+  change, so the pages, the slot and the watchdog state are the ones it always had.
+- **Taking a new version of the crypto contract.** Copy `contracts/crypto.schema.json` over
+  `src/lib/crypto.schema.json` and `contracts/crypto.v1.json` over `test/fixtures/crypto.v1.json` from a
+  `contract-<hash>` tag of `crypto-lab`, without editing either. Run `pnpm gen:types`, and put the tag, its commit
+  and the two hashes of that repository's `contracts/SHA256SUMS` in `src/lib/crypto.contract.lock.json`. `pnpm test`
+  and the Python suite (`tests/unit/test_contract_locks.py`) fail while a hash and its file disagree. `make schema`
+  does not produce these files. Deploy the dashboard before `crypto-lab` deploys the publisher that sends the new
+  fields: ingest refuses fields it does not know.
 - **Taking a new version of the HFT contract.** Copy the schema from `hft-lab` over `src/lib/hft.schema.json`, run
   `pnpm gen:types`, and put the file's SHA-256 and the source commit in `src/lib/hft.contract.lock.json`.
   `pnpm test` fails while the hash and the file disagree. `make schema` does not produce this file. Deploy the
