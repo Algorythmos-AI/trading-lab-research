@@ -125,16 +125,14 @@ tail -f /tmp/wt-deploy.log
 - **"Nothing deployed: already at ..."** means the host is on that commit.
 - **It is done** when the log shows `Deployed <from> -> <to>`. If it then prints "units changed", run
   `sudo wt-install-units`.
-- **Afterwards:** `sudo -u wt /usr/local/bin/wt-deploy preflight` should be all `[ok]`, and
-  `sudo -u wt make -C /home/wt/trading sync-ml` should print `ML environment: current` and nothing else.
+- **Afterwards:** `sudo -u wt /usr/local/bin/wt-deploy preflight` should be all `[ok]`.
 - **To go back:** [rollback](rollback.md).
 
 ## Primary host (cutover v2, 2026-10)
 
-The machine-learning environment (`.venv-ml`) needs the system's OpenMP library, which a wheel cannot carry:
-`sudo apt-get install -y libgomp1` (first boot installs it; a host built before 2026-10-08 needs it once). A
-deploy never swaps in an environment that cannot import its libraries, and `make sync-ml` says whether the live
-one can.
+The host is shared with `Algorythmos-AI/crypto-lab` (its own checkout, `/home/wt/crypto-lab`, and its own
+`cryptolab-*` units). Its machine-learning environment needs the system's OpenMP library, which a wheel cannot
+carry, so first boot still installs `libgomp1` here; that repository's runbooks cover the rest.
 The VM is the only host that runs jobs. The Mac is a console for writing code and running these commands.
 
 | | |

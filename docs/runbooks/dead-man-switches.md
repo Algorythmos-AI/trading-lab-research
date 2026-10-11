@@ -25,27 +25,14 @@ Three independent monitors, none of them on the trading host:
 | `wt-forward` | `0 12 * * 1-5` | 7 h | ~16:30–17:50 | The forward test didn't run |
 | `wt-weekly` | `0 18 * * 5` | 6 h | Fri ~19:00–21:00 | The weekly scorecard didn't run |
 
-The crypto desk (ADR 0005) runs at every hour of every day, so its check is a **Simple** schedule, not a cron:
+The backup runs every day of the week, so `wt-backup`'s cron is `30 19 * * *`.
 
-| Slug | Period | Grace | Normal ping | What a page means |
-|---|---|---|---|---|
-| `wt-crypto` | 15 min | 30 min | every 15 minutes, 10–30 s after the bar closes | No crypto bar cycle has finished for 45 minutes |
-
-The crypto desk's two daily jobs run every day of the week, at New York times, so their checks are **Cron**
-schedules in **America/New_York** like the stock jobs':
-
-| Slug | Cron | Grace | Normal ping (ET) | What a page means |
-|---|---|---|---|---|
-| `wt-crypto-challengers` | `0 3 * * *` | 2 h | 03:30 to 04:30 | The challengers' run didn't finish, refused, or its timer never fired |
-| `wt-crypto-learn` | `0 4 * * *` | 2 h 30 min | 04:30 to 06:00 | The learning run (outcomes, tests, weekly training) didn't finish, refused, or its timer never fired |
-
-A run with learning switched off still ends normally and pings. A failed weekly training is its own notice and
-does not fail the job, so it does not page here.
-
-With the crypto desk on the host, `wt-backup` also pings at weekends: change its cron to `30 19 * * *`.
-
-Eight checks with the crypto desk's three; the VM adds backup and restore-test checks (at most 15 of the free 20). The Mac and the VM
+Five checks; the VM adds backup and restore-test checks. The Mac and the VM
 share these slugs: the ping body says which host and role sent it.
+
+The checks `wt-crypto`, `wt-crypto-challengers`, `wt-crypto-learn` and `wt-crypto-backup` keep their slugs and
+belong to `Algorythmos-AI/crypto-lab`, whose units ping them from the same host. Nothing in this repository pings
+them any more; do not delete them.
 
 ## What the jobs send
 

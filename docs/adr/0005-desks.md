@@ -1,6 +1,6 @@
 # ADR 0005: Desks
 
-- **Status:** accepted, 2026-10-04
+- **Status:** accepted, 2026-10-04; the crypto desk has since left (see the addendum at the end)
 - **Context:** the owner's decision of 2026-10-04 to bring the Kraken crypto bot into the lab as a second,
   separately viewable desk
 
@@ -22,7 +22,7 @@ trigger, no tests, state lost on redeploy. It is rebuilt here, not copied.
 1. **A desk is a named record** (`wt.core.desk.Desk`): its state directory, kill file, journal, lease key, lock
    names, session model (`us_equity` or `always_open`), alert-key prefix and snapshot schema id.
    - `stocks` points at today's paths exactly. Nothing moves and no unit text changes.
-   - `crypto` lives under `var/crypto/`.
+   - `crypto` lived under `var/crypto/` (it has left: see the addendum).
 
 2. **A desk owns** its state, kill switch, limits (`config/risk.yaml`, one top-level key per desk strategy),
    journal, snapshot and watchdog state. **The lab shares** the host, the job runner, deploys, alert delivery,
@@ -72,3 +72,47 @@ trigger, no tests, state lost on redeploy. It is rebuilt here, not copied.
   separate decision.
 - The nightly backup becomes daily, because evidence is now written on weekends.
 - Two snapshots mean two publishers, two freshness pills and two watchdog states to keep green.
+
+## Addendum: the crypto desk has left (org decision D-026)
+
+The crypto desk moved to its own repository, `Algorythmos-AI/crypto-lab`, with its code, its tests, its research
+records and their history. It runs there from its own checkout on the same host, under units named
+`cryptolab-*`. The desk registry here now holds one record, `stocks`.
+
+What was removed here, after the cutover had run clean:
+
+- `wt.crypto`, `wt.ml`, the desk's scripts, configuration, lockfile, runbook and tests; the `crypto` record in
+  `wt.core.desk`; its four jobs, their units and dead-man slugs; the machine-learning environment's sync in the
+  deploy; the `ml` check; risk keys `C`, `CT`, `CD`, `CH` and trial family `C`.
+- **Decision 4** no longer describes anything here. `AGENTS.md` rule 1 now says no crypto code may be added.
+- **Decision 7, the moved-marker guard, is removed with the record it guarded.** It stood between the timers this
+  code rendered and a desk whose state had been moved away. This code renders none of those timers any more, the
+  job runner refuses a job name it does not know, and `sudo wt-install-units` removes the four old units because
+  they are no longer rendered. The file `var/crypto.MOVED` may stay on the host: nothing reads it, and it keeps a
+  rollback to an earlier `runtime-*` tag safe, because the code at that tag still has the guard.
+
+What a desk that left leaves behind, and what is done about it (`wt.core.desk.RETIRED`):
+
+- **Alert keys.** Every key that was firing at the cutover stays recorded as firing in `var/alerts/state.json`,
+  and nothing here can resolve it: the desk's own `crypto:*` keys, its jobs' `job:<name>` and
+  `refuse:<name>:<day>` keys, and `deploy-ml`. The stocks desk owns every key no other desk claims, so they would
+  have shown on its pages as firing for good. They are dropped from the state by the first job that starts after
+  the deploy, with one log line, no notice and no history row (nothing recovered; the desk raises its own alerts
+  where it runs now). Until then neither the snapshot nor `make status` shows them.
+- **Heartbeats.** The last runs of its four jobs stay in `var/heartbeats`. The stocks snapshot and `make status`
+  leave them out.
+- **Research ids.** Its records keep their ids in the other repository. `research/MOVED.md` lists them so that
+  none is given to a new record here.
+
+What remains shared:
+
+- **The host.** One server, two checkouts, two unit prefixes. The backup here stays daily.
+- **The dashboard site.** It still shows the crypto desk, from the snapshot `crypto-lab` publishes under the same
+  schema id, in the same slot, with the same watchdog state. The schema and its fixture are copies of that
+  repository's `contracts/` files at a tagged commit, pinned by `dashboard/src/lib/crypto.contract.lock.json`
+  (ADR 0006 describes the same arrangement for the HFT desk). The dashboard is deployed before a publisher that
+  sends new fields.
+- **The ingest key and the alert topic.** Unchanged by the move.
+
+Decisions 1 to 3, 5 and 6 still describe how a desk is added: a `Desk` record, a venue package, a snapshot schema.
+The shared layers keep desks apart for the next one, and the tests hold them to it with a made-up second desk.

@@ -9,8 +9,8 @@ specific to this repository. Where the two conflict, the org file's "Never" sect
    - The broker adapter hard-codes paper access.
    - `MODE`, `LIVE_TRADING_ENABLED` and any live keys belong to the owner alone.
    - Never submit orders outside `wt.live` / `wt.oms`.
-   - The crypto desk (`wt.crypto`, ADR 0005) books simulated fills on public market data only. It has no venue
-     credentials, no private endpoint and no order route, and none may be added.
+   - The crypto desk no longer runs from this repo: it moved to `Algorythmos-AI/crypto-lab` (ADR 0005, addendum).
+     No crypto code, venue credential or order route may be added here.
 2. **Pre-registration.** Every strategy or evaluation change needs a hypothesis, an experiment and a decision
    record in `research/`, written before any affected P&L is viewed.
    - Experiments are append-only: a re-run gets a new EXP id.
@@ -53,9 +53,9 @@ applies to it, and nothing from `research/`, `knowledge/` or the specs may be pu
 ## Layout
 
 ```
-src/wt/        data · scanner · signals · backtest · risk · oms · brokers · live · crypto · ops · knowledge · specs
+src/wt/        data · scanner · signals · backtest · risk · oms · brokers · live · ops · knowledge · specs
 scripts/       research drivers and nightly jobs (forward_test, premarket_routine, status_dashboard, ...)
-research/      hypotheses/ experiments/ decisions/ active_strategies/ lessons_learned/ specs/ forward/
+research/      hypotheses/ experiments/ decisions/ active_strategies/ lessons_learned/ specs/ forward/ MOVED.md
 config/        ranking and catalyst configs, macro-event calendar, dashboard config
 deploy/        host helpers, systemd units and first-boot files (gcp/, oci/), and the jobs' run scripts
 tests/unit/    pytest suite (CI-safe: fixtures and tmp_path only, no network)
