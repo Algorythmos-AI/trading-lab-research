@@ -1,9 +1,9 @@
 "use client";
 
 import { TriangleAlert } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Empty } from "@/components/empty";
-import { LevelMap } from "@/components/options-charts";
+import { LevelMap, type BreakevenMark } from "@/components/options-charts";
 import { Badge } from "@/components/ui/badge";
 import { fracPct, num, rMult, signed } from "@/lib/format";
 import {
@@ -110,6 +110,10 @@ export function OptionsDetail({
   const hasMap = view !== null && close !== null;
   const strength = t.close_strength?.chip;
   const layers = mapLayersOf(t);
+  // Kept with the name it was priced for, so the line never lingers on the next name's map.
+  const [mark, setMark] = useState<{ symbol: string; at: BreakevenMark } | null>(null);
+  const symbol = t.symbol;
+  const onBreakeven = useCallback((at: BreakevenMark | null) => setMark(at ? { symbol, at } : null), [symbol]);
   const vol = volRead(t);
 
   return (
@@ -174,7 +178,7 @@ export function OptionsDetail({
               ))}
             </div>
             <div data-hide={[...hiddenLayers].join(" ") || undefined}>
-              <LevelMap t={t} interactive />
+              <LevelMap t={t} interactive breakeven={mark?.symbol === t.symbol ? mark.at : null} />
             </div>
           </div>
         ) : (
@@ -217,7 +221,7 @@ export function OptionsDetail({
 
       {/* Its own boundary: a contract that cannot be priced leaves the map and the facts standing. */}
       <PaneBoundary name={`${t.symbol} contract`}>
-        <OptionsContract t={t} live={live} />
+        <OptionsContract t={t} live={live} onBreakeven={onBreakeven} />
       </PaneBoundary>
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 border-t pt-3 sm:grid-cols-5">
