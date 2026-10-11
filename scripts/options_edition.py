@@ -40,17 +40,54 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from wt.core.config import CONFIG_DIR, load_yaml  # noqa: E402
-from wt.ops import publish  # noqa: E402
+import yaml  # noqa: E402
+
 from wt.options import edition  # noqa: E402
+
+# Building needs this file, wt.options and a YAML reader, and nothing else: a dry run works in an environment
+# that has none of the lab's other dependencies. The sender (requests and the rest) is loaded only to send.
+CONFIG_DIR = Path(__file__).resolve().parents[1] / "config"
+
+
+def load_yaml(name: str) -> dict:
+    return yaml.safe_load((CONFIG_DIR / name).read_text())
+
+
+def _publish():
+    from wt.ops import publish
+    return publish
 
 KEY_ID = "radar"
 DEFAULT_URL = "https://lab.algorythmos.com/api/ingest"
 
 
+STAMPS = ("run_id", "as_of")        # the two fields that differ between any two builds: when each was made
+
+
+def differences(a: object, b: object, path: str = "") -> list[str]:
+    """Where two editions differ, as paths (`tickers[3].zones[1].hi`), ignoring when each was built. Numbers are
+    compared exactly: both builds round the same way, so a last-digit difference is a difference."""
+    if isinstance(a, dict) and isinstance(b, dict):
+        out: list[str] = []
+        for k in sorted(set(a) | set(b)):
+            if not path and k in STAMPS:
+                continue
+            here = f"{path}.{k}" if path else str(k)
+            if k not in a or k not in b:
+                out.append(f"{here} (only in {'the other' if k in a else 'this'} build)")
+            else:
+                out += differences(a[k], b[k], here)
+        return out
+    if isinstance(a, list) and isinstance(b, list):
+        if len(a) != len(b):
+            return [f"{path} (length {len(a)} against {len(b)})"]
+        return [d for i, (x, y) in enumerate(zip(a, b, strict=True)) for d in differences(x, y, f"{path}[{i}]")]
+    return [] if a == b and type(a) is type(b) else [path]
+
+
 def site_accepts(url: str, bypass: str | None) -> int:
     """The newest edition format the live dashboard validates, from /api/health; 0 when it cannot be read."""
-    health, _ = publish.read_health(url, bypass)
+    health, _ = _publish().read_health(url, bypass)
     editions = health.get("editions") if isinstance(health, dict) else None
     options = editions.get("options") if isinstance(editions, dict) else None
     accepts = options.get("accepts") if isinstance(options, dict) else None
@@ -81,6 +118,7 @@ def main(argv: list[str] | None = None) -> int:
     mode = ap.add_mutually_exclusive_group(required=True)
     mode.add_argument("--dry-run", action="store_true", help="build and write, do not send")
     mode.add_argument("--send", action="store_true")
+    ap.add_argument("--compare", type=Path, help="an edition written by another build of the same pulls: print how the two differ, as counts")
     a = ap.parse_args(argv)
 
     now = dt.datetime.fromisoformat(a.now) if a.now else dt.datetime.now(dt.UTC).replace(tzinfo=None)
@@ -136,6 +174,18 @@ def main(argv: list[str] | None = None) -> int:
         a.out.write_bytes(body)
     print(f"edition: format {doc['schema_version']}, session {doc['session']}, {len(doc['tickers'])} tickers, "
           f"{len(doc['paper'])} paper trades, {len(body)} bytes")
+    if a.compare:
+        try:
+            other = json.loads(a.compare.read_text())
+        except (OSError, ValueError) as e:
+            print(f"compare: {a.compare} cannot be read ({e.__class__.__name__})", file=sys.stderr)
+            return 1
+        diffs = differences(other, doc)
+        print(f"compare: {len(diffs)} difference(s) outside run_id and as_of")
+        for path in diffs[:40]:
+            print(f"  {path}")              # where they differ, never the values: the pulls are real market data
+        if diffs:
+            return 1
     if a.dry_run:
         return 1 if run.failed else 0
 
@@ -143,6 +193,7 @@ def main(argv: list[str] | None = None) -> int:
     if missing or secret is None:
         print("NOT PUBLISHED: missing environment variable(s): " + ", ".join(missing), file=sys.stderr)
         return 3
+    publish = _publish()
     ok, detail = publish.send(body, url, secret, bypass, key_id=KEY_ID)
     # For an edition only 200 means stored (or the same run already there). The sender counts 409 as fine for a
     # snapshot; here it means the dashboard holds a newer edition and kept it.

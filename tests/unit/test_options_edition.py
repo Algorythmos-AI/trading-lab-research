@@ -375,3 +375,47 @@ def test_the_script_sends_format_two_only_to_a_dashboard_that_accepts_it(tmp_pat
         monkeypatch.setattr(script, "load_yaml", lambda name, _b=bad: {**DESK, "edition_format": _b})
         assert script.main([*args, "--dry-run", "--out", str(out)]) == 0 and json.loads(out.read_text())["schema_version"] == 1
     assert "not a format this script writes" in capsys.readouterr().err
+
+
+def test_two_builds_of_the_same_pulls_are_compared_by_where_they_differ_never_by_value(tmp_path, capsys):
+    write_pulls(tmp_path / "pulls")
+    args = ["--pulls", str(tmp_path / "pulls"), "--now", "2026-10-09T22:00:00", "--dry-run"]
+    first = tmp_path / "first.json"
+    assert script.main([*args, "--data", str(tmp_path / "a"), "--out", str(first)]) == 0
+    assert script.main([*args, "--data", str(tmp_path / "b"), "--compare", str(first)]) == 0
+    assert "compare: 0 difference(s)" in capsys.readouterr().out          # built apart, minutes apart: the same edition
+    doc = json.loads(first.read_text())
+    secret_price = 123456.78
+    doc["tickers"][3]["zones"][0]["hi"] = secret_price
+    doc["tickers"][0]["atr14"] = float(doc["tickers"][0]["atr14"]) + 0.01
+    del doc["tickers"][1]["bars"][-1]
+    doc["rules"][0]["extra"] = True
+    doc["session"] = "2026-10-13"
+    first.write_text(json.dumps(doc))
+    assert script.main([*args, "--data", str(tmp_path / "c"), "--compare", str(first)]) == 1
+    out = capsys.readouterr().out
+    assert "compare: 5 difference(s)" in out
+    for where in ("tickers[3].zones[0].hi", "tickers[0].atr14", "tickers[1].bars (length 39 against 40)",
+                  "rules[0].extra (only in the other build)", "session"):
+        assert where in out, where
+    assert str(secret_price) not in out and "2026-10-13" not in out
+    assert script.differences({"a": 1}, {"a": 1.0}) == ["a"] and script.differences({"a": [1, {"b": None}]}, {"a": [1, {"b": None}]}) == []
+    assert script.main([*args, "--data", str(tmp_path / "d"), "--compare", str(tmp_path / "missing.json")]) == 1
+
+
+def test_a_dry_run_loads_none_of_the_sender(tmp_path):
+    """The shadow night runs this where the lab's other dependencies may not be installed."""
+    import subprocess
+    import sys
+    write_pulls(tmp_path / "pulls")
+    code = ("import sys, runpy\n"
+            "class Block:\n"
+            "    def find_spec(self, name, path=None, target=None):\n"
+            "        if name.split('.')[0] in ('requests', 'numpy', 'pandas', 'dotenv', 'jsonschema') or name.startswith('wt.ops') or name.startswith('wt.core'):\n"
+            "            raise ImportError('blocked: ' + name)\n"
+            "sys.meta_path.insert(0, Block())\n"
+            f"sys.argv = ['options_edition.py', '--pulls', {str(tmp_path / 'pulls')!r}, '--data', {str(tmp_path / 'data')!r}, '--now', '2026-10-09T22:00:00', '--dry-run', '--format', '2']\n"
+            f"runpy.run_path({str(ROOT / 'scripts' / 'options_edition.py')!r}, run_name='__main__')\n")
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=tmp_path, timeout=120)
+    assert r.returncode == 0, r.stderr[-600:]
+    assert "edition: format 2" in r.stdout
