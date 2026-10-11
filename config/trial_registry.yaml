@@ -19,3 +19,5 @@ families:
     - {decision: DEC-0019, total: 8, status: accepted}    # the tournament under desk-wide limits (EXP-0020)
     - {decision: DEC-0020, total: 11, status: accepted}   # resting-limit entries screened on the three sleeves (EXP-0021)
     - {decision: DEC-0025, total: 12, status: accepted}   # HYP-0024 TREND with ranked entries (one trial)
+  O:                                                      # options desk (DEC-0028)
+    - {decision: DEC-0028, total: 12, status: accepted}   # four rules x three variants tried before registration: a floor

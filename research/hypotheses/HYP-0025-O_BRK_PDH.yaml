@@ -1,0 +1,10 @@
+id: HYP-0025
+trial: "O-BRK-PDH"
+family: O                       # options desk; counted apart from the equity and crypto trials (DEC-0028)
+status: pre-registered          # DEC-0028; registered AFTER its exploratory result was seen, which the record says plainly
+statement: "On the ten names of config/options_desk.yaml, a long entry on the first hourly close above the prior session's high, when the hourly close before it was at or below that high, with a stop a fifth of the 14-day ATR below the prior high, a target two risks away and an exit at the session's last hourly close otherwise, has positive expectancy in R on the stock, and still has it once the cost of the option that expresses it is counted."
+rule: brk_PDH_close             # wt.options.rules.probation_triggers, at the commit of DEC-0028: every number comes from that code
+config: config/options_rules.json
+evidence: {decision: DEC-0028}
+seen_before_registration: {n: 636, avg_r: -0.002, ci_lo: -0.071, ci_hi: 0.067, span: "hourly bars, 10 names, 2026-03-03 to 2026-10-09, same-day exit, R on the stock before any cost", where: "the cloud project, before this repository held the engine"}
+falsified_if: "On paper cases logged after DEC-0028 is accepted (config/options_rules.json `since` or later; nothing from the span above counts): fewer than 30 cases after 20 sessions is no verdict; with 30 or more, the rule is falsified if the CI95 lower bound of mean R after option costs is at or below 0, or if mean R after option costs is at or below 0 in either half of the cases taken in order. Until an option-priced replay exists (a later, separately registered experiment), 'after option costs' cannot be computed and the rule can be neither promoted nor called proven."
