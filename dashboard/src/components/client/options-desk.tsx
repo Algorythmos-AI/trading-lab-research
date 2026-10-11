@@ -19,6 +19,7 @@ import {
   paperFor,
   RICH_IVP,
   roomView,
+  nextHourlyClose,
   sessionClock,
   sortByNumber,
   viewForClock,
@@ -40,7 +41,7 @@ import { storePick } from "./options-contract";
 import { OptionsCosts } from "./options-costs";
 import { OptionsDetail, Tick } from "./options-detail";
 import { OptionsPositions } from "./options-positions";
-import { OptionsTriggers } from "./options-triggers";
+import { OptionsTriggers, TriggerNotices } from "./options-triggers";
 import { PaneBoundary } from "./pane-boundary";
 
 const VIEW_LABEL: Record<DeskView, string> = { brief: "Brief", live: "Live", review: "Review" };
@@ -676,7 +677,7 @@ export function OptionsDesk({
           ) : null}
           {rules && live && view === "live" ? (
             <PaneBoundary name="Rules today">
-              <OptionsTriggers rules={rules} marketOpen={now !== null && sessionClock(e.session, halfDay, new Date(now))?.phase === "open"} onOpen={openName} />
+              <OptionsTriggers rules={rules} nextClose={now === null ? null : nextHourlyClose(e.session, halfDay, new Date(now))} marketOpen={now !== null && sessionClock(e.session, halfDay, new Date(now))?.phase === "open"} onOpen={openName} />
             </PaneBoundary>
           ) : null}
           {positions && live && view === "live" ? (
@@ -746,6 +747,7 @@ export function OptionsDesk({
           </span>
         </div>
       ) : null}
+      <TriggerNotices session={live ? e.session : null} rules={live ? rules : null} onOpen={openName} onDismissed={focusSelected} />
       <DeskPalette
         open={palette}
         onOpenChange={setPalette}
