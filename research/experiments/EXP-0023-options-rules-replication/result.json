@@ -1,0 +1,150 @@
+{
+ "id": "EXP-0023",
+ "decision": "DEC-0028",
+ "hypotheses": [
+  "HYP-0025",
+  "HYP-0026",
+  "HYP-0027",
+  "HYP-0028"
+ ],
+ "what": "replication of a result seen before registration; not evidence for or against any rule",
+ "start": "2026-03-03",
+ "end": "2026-10-09",
+ "names": [
+  "SPY",
+  "QQQ",
+  "AAPL",
+  "MSFT",
+  "NVDA",
+  "AMZN",
+  "GOOGL",
+  "META",
+  "TSLA",
+  "PLTR"
+ ],
+ "feed": "consolidated tape, 30-minute bars cut into the broker's hours, split-adjusted",
+ "data_hash": "841db71157a321aa",
+ "daily_bars": 4460,
+ "half_hour_bars": 49299,
+ "sessions_with_a_trigger": 154,
+ "skipped": {
+  "names_with_bar_problems": [],
+  "sessions_without_levels": 0,
+  "sessions_with_few_hourly_bars": 0
+ },
+ "unit": "R on the stock, before any option cost",
+ "rules": {
+  "brk_PDH_close": {
+   "replication": {
+    "n": 636,
+    "avg_r": -0.0015,
+    "ci95": [
+     -0.071,
+     0.0689
+    ],
+    "ci95_by_session": [
+     -0.0958,
+     0.094
+    ],
+    "win_rate": 0.4796,
+    "stops": 180,
+    "targets": 40
+   },
+   "seen_before_registration": {
+    "n": 636,
+    "avg_r": -0.002,
+    "ci_lo": -0.071,
+    "ci_hi": 0.067
+   }
+  },
+  "reclaim_PDL_close": {
+   "replication": {
+    "n": 187,
+    "avg_r": 0.0081,
+    "ci95": [
+     -0.0816,
+     0.1023
+    ],
+    "ci95_by_session": [
+     -0.103,
+     0.1196
+    ],
+    "win_rate": 0.4866,
+    "stops": 24,
+    "targets": 2
+   },
+   "seen_before_registration": {
+    "n": 187,
+    "avg_r": 0.008,
+    "ci_lo": -0.084,
+    "ci_hi": 0.099
+   }
+  },
+  "brk_PDL_close": {
+   "replication": {
+    "n": 547,
+    "avg_r": -0.0067,
+    "ci95": [
+     -0.0832,
+     0.0702
+    ],
+    "ci95_by_session": [
+     -0.131,
+     0.1182
+    ],
+    "win_rate": 0.4625,
+    "stops": 151,
+    "targets": 39
+   },
+   "seen_before_registration": {
+    "n": 547,
+    "avg_r": -0.008,
+    "ci_lo": -0.082,
+    "ci_hi": 0.066
+   }
+  },
+  "reject_PDH_close": {
+   "replication": {
+    "n": 228,
+    "avg_r": 0.0265,
+    "ci95": [
+     -0.0598,
+     0.1165
+    ],
+    "ci95_by_session": [
+     -0.075,
+     0.1282
+    ],
+    "win_rate": 0.4825,
+    "stops": 27,
+    "targets": 10
+   },
+   "seen_before_registration": {
+    "n": 229,
+    "avg_r": 0.033,
+    "ci_lo": -0.055,
+    "ci_hi": 0.122
+   }
+  }
+ },
+ "pooled": {
+  "n": 1598,
+  "avg_r": 0.0018,
+  "ci95": [
+   -0.0394,
+   0.0421
+  ],
+  "ci95_by_session": [
+   -0.049,
+   0.0573
+  ],
+  "win_rate": 0.475,
+  "stops": 382,
+  "targets": 91
+ },
+ "by_exit": {
+  "stop": 382,
+  "target": 91,
+  "close": 1125
+ }
+}
