@@ -28,6 +28,7 @@ import {
   volRead,
 } from "@/lib/options";
 import type { Interest } from "@/lib/oi";
+import { STATE_LABEL, type RuleState } from "@/lib/triggers";
 import { cn } from "@/lib/utils";
 import { StateChip, useLiveRead } from "./live-layer";
 import { OptionsContract } from "./options-contract";
@@ -88,6 +89,7 @@ export function OptionsDetail({
   hiddenLayers,
   onToggleLayer,
   interest,
+  today,
 }: {
   e: Options;
   t: OptionsTicker;
@@ -98,6 +100,8 @@ export function OptionsDetail({
   onToggleLayer: (layer: MapLayer) => void;
   /** This name's open-interest marks, when the host has sent any. */
   interest: Interest | null;
+  /** Each rule's state on this name in today's session, when the host has sent them. */
+  today: Record<string, { state: RuleState; bar: string | null; r: number | null }> | null;
 }) {
   const read = useLiveRead(t);
   const close = t.last?.close ?? null;
@@ -211,6 +215,11 @@ export function OptionsDetail({
                         {RULE_STATUS_LABEL[rule.status]}
                       </Badge>
                       {rule.side ? (rule.side === "call" ? "calls" : "puts") : null}
+                      {today?.[rule.id] ? (
+                        <span data-rule-today={today[rule.id]!.state}>
+                          · today, provisional: {today[rule.id]!.state === "waiting" ? "waiting" : `triggered${today[rule.id]!.bar ? ` on the ${today[rule.id]!.bar} ET close` : ""}, ${STATE_LABEL[today[rule.id]!.state].toLowerCase()}`}
+                        </span>
+                      ) : null}
                     </span>
                   </span>
                   <span className={cn("text-right font-mono text-[0.8125rem]", mine.length === 0 ? "text-muted-foreground" : total > 0 ? "text-good" : total < 0 ? "text-bad" : "")}>

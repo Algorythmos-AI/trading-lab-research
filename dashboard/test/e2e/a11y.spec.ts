@@ -18,7 +18,7 @@ const PAGES = [
   "/engineering",
   "/glossary",
 ];
-const OPTIONS_STATES = ["partial", "poison", "empty", "error", "v2", "positions-none", "positions-old"];
+const OPTIONS_STATES = ["partial", "poison", "empty", "error", "v2", "positions-none", "positions-old", "rules-none", "rules-off"];
 
 // These run at desktop width. The Options desk is also scanned at a phone's width, in a11y-phone.spec.ts; the other
 // pages are not yet, and wide tables that scroll sideways on a phone are a known gap there.

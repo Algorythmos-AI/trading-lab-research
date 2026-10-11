@@ -33,12 +33,14 @@ import { cn } from "@/lib/utils";
 import type { Interest } from "@/lib/oi";
 import type { OptionsLive } from "@/lib/options-live.types";
 import { pickFor, type PositionRow } from "@/lib/positions";
+import { rulesToday } from "@/lib/triggers";
 import { DeskPalette } from "./desk-palette";
 import { FeedPill, StateChip, useLive } from "./live-layer";
 import { storePick } from "./options-contract";
 import { OptionsCosts } from "./options-costs";
 import { OptionsDetail, Tick } from "./options-detail";
 import { OptionsPositions } from "./options-positions";
+import { OptionsTriggers } from "./options-triggers";
 import { PaneBoundary } from "./pane-boundary";
 
 const VIEW_LABEL: Record<DeskView, string> = { brief: "Brief", live: "Live", review: "Review" };
@@ -301,6 +303,8 @@ export function OptionsDesk({
 }) {
   const { feed, session, now } = useLive();
   const halfDay = isHalfDay(e);
+  // Until the browser's clock is read, the document's own time stands in, as the positions pane does.
+  const rules = rulesToday(positions, e, now ?? (positions ? Date.parse(positions.as_of) : 0));
   const [picked, setPicked] = useState<DeskView | null>(manualView ? initialView : null);
   const view: DeskView = picked ?? (live && now !== null ? viewForClock(e.session, halfDay, new Date(now)) : initialView);
   const [symbol, setSymbol] = useState<string | null>(initialSymbol);
@@ -670,6 +674,11 @@ export function OptionsDesk({
               <OptionsCosts tickers={e.tickers} session={e.session} halfDay={halfDay} />
             </PaneBoundary>
           ) : null}
+          {rules && live && view === "live" ? (
+            <PaneBoundary name="Rules today">
+              <OptionsTriggers rules={rules} marketOpen={now !== null && sessionClock(e.session, halfDay, new Date(now))?.phase === "open"} onOpen={openName} />
+            </PaneBoundary>
+          ) : null}
           {positions && live && view === "live" ? (
             <PaneBoundary name="Paper positions">
               <OptionsPositions
@@ -685,7 +694,7 @@ export function OptionsDesk({
         <div className={cn("xl:min-h-0 xl:overflow-y-auto", pane === "names" && "max-sm:hidden")}>
           {selected ? (
             <PaneBoundary key={selected.t.symbol} name={selected.t.symbol}>
-              <OptionsDetail e={e} t={selected.t} live={live} hiddenLayers={hiddenLayers} onToggleLayer={toggleLayer} interest={live ? (interest[selected.t.symbol] ?? null) : null} />
+              <OptionsDetail e={e} t={selected.t} live={live} hiddenLayers={hiddenLayers} onToggleLayer={toggleLayer} interest={live ? (interest[selected.t.symbol] ?? null) : null} today={live && view === "live" ? (rules?.bySymbol[selected.t.symbol] ?? null) : null} />
             </PaneBoundary>
           ) : null}
         </div>
