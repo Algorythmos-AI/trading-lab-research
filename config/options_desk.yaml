@@ -1,3 +1,17 @@
-# The Options desk's names, for the host job that reads open interest (wt.options.live). They are the names the
-# after-close edition carries; a name here that the edition drops is ignored by the page.
+# The Options desk's names. They are the names the after-close edition carries; the host job that reads open
+# interest (wt.options.live) uses the same list.
 names: [SPY, QQQ, AAPL, MSFT, NVDA, AMZN, GOOGL, META, TSLA, PLTR]
+
+# The broker's contract id for each name's stock: how the edition builder tells one pull from another when it
+# reads them out of a session transcript (scripts/options_edition.py --transcript). Public identifiers.
+contracts:
+  SPY: 756733
+  QQQ: 320227571
+  AAPL: 265598
+  MSFT: 272093
+  NVDA: 4815747
+  AMZN: 3691937
+  GOOGL: 208813719
+  META: 107113386
+  TSLA: 76792991
+  PLTR: 444857009
