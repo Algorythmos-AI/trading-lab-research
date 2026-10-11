@@ -667,7 +667,7 @@ export function OptionsDesk({
           </PaneBoundary>
           {live && view === "brief" ? (
             <PaneBoundary name="Option costs">
-              <OptionsCosts tickers={e.tickers} />
+              <OptionsCosts tickers={e.tickers} session={e.session} halfDay={halfDay} />
             </PaneBoundary>
           ) : null}
           {positions && live && view === "live" ? (

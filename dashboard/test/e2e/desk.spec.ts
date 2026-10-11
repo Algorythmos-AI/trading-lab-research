@@ -429,7 +429,14 @@ test("the brief view prices an at-the-money call and put on every name, only whe
   const spy = costs.locator('[data-cost-row="SPY"]').first();
   await expect(spy.getByRole("cell").first()).toContainText(/\d\.\d\d/);
   await expect(spy.getByRole("cell").first()).toContainText(/mv|past/);
-  await expect(costs.locator("[data-cost-row]")).not.toHaveCount(0);
+  // Ten names, a near and a swing line each, every one with an ask on both sides.
+  await expect(costs.locator("[data-cost-row]")).toHaveCount(20);
+  for (const row of await costs.locator("[data-cost-row]").all()) {
+    await expect(row.getByRole("cell").first()).toContainText(/\d\.\d\d/);
+    await expect(row.getByRole("cell").last()).toContainText(/\d\.\d\d/);
+  }
+  await expect(costs.locator("[data-costs-age]")).toHaveAttribute("data-costs-age", "fresh");
+  await expect(costs.getByRole("button", { name: "Refresh" })).toBeEnabled();
   expect((await costs.textContent()) ?? "").not.toMatch(/NaN|undefined|Infinity/);
   // It belongs to the brief: the live view has the positions there instead.
   await open(page, "/options?view=live");
@@ -439,6 +446,7 @@ test("the brief view prices an at-the-money call and put on every name, only whe
   await open(page, "/options?view=brief");
   await page.getByRole("region", { name: "Option costs" }).getByRole("button", { name: "Show at-the-money costs" }).click();
   await expect(page.getByRole("region", { name: "Option costs" })).toHaveAttribute("data-costs", "off");
+  await expect(page.getByRole("region", { name: "Option costs" }).getByRole("button", { name: "Refresh" })).toBeEnabled();
   await expect(rows(page)).toHaveCount(10);
 });
 

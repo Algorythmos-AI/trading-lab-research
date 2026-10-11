@@ -42,10 +42,13 @@ function side(contracts: ChainContract[], kind: OptionKind, close: number, expec
   return { strike: c.strike, ask, spreadPct: q.state === "ok" ? q.spreadPct : null, moves: ask !== null ? breakevenMoves(c.strike, ask, kind, close, expectedMove) : null, state: q.state };
 }
 
-/** The cost lines for one name: the nearest expiry still trading, then the swing expiry when it is a different one. */
-export function costLines(chain: ChainResponse, close: number, expectedMove: number | null | undefined, now: number): CostLine[] {
+/**
+ * The cost lines for one name: the nearest expiry still trading, then the swing expiry when it is a different one.
+ * `bell` gives the minute of the New York day an expiry stops trading, so a half day's own expiry ends at 13:00.
+ */
+export function costLines(chain: ChainResponse, close: number, expectedMove: number | null | undefined, now: number, bell?: (expiry: string) => number): CostLine[] {
   if (!(close > 0)) return [];
-  const open = chain.expiries.filter((x) => x.contracts.length > 0 && (minutesToExpiry(x.date, now) ?? 0) > 0);
+  const open = chain.expiries.filter((x) => x.contracts.length > 0 && (minutesToExpiry(x.date, now, bell?.(x.date)) ?? 0) > 0);
   const near = open[0];
   if (!near) return [];
   const swing = open.find((x) => (daysToExpiry(x.date, now) ?? 0) >= SWING_MIN_DAYS);

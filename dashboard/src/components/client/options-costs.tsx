@@ -1,10 +1,11 @@
 "use client";
 
 import { RotateCw } from "lucide-react";
-import { Fragment, useCallback, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type { ChainResponse } from "@/lib/chain";
-import { costLines, type CostSide } from "@/lib/costs";
-import { num, weekDate } from "@/lib/format";
+import { bellMinute } from "@/lib/contract";
+import { costLines, type CostLine, type CostSide } from "@/lib/costs";
+import { newYork, num, weekDate } from "@/lib/format";
 import type { OptionsTicker } from "@/lib/options";
 import { useLive } from "./live-layer";
 
@@ -30,16 +31,37 @@ function Side({ s }: { s: CostSide | null }) {
  * Descriptive only: the ask a buyer would pay, the distance to breakeven in expected day's moves from the last
  * close, and how wide the quote is.
  */
-export function OptionsCosts({ tickers }: { tickers: OptionsTicker[] }) {
+/** Quotes read this long ago are called old: the panel asks once and does not keep asking. */
+export const COSTS_OLD_MIN = 30;
+
+/** The strike a line is priced at; both, when the feed listed the call and the put at different ones. */
+function strikes(l: CostLine): string {
+  const s = (v: number) => num(v, v % 1 === 0 ? 0 : 2);
+  if (l.call && l.put && l.call.strike !== l.put.strike) return ` · ${s(l.call.strike)} C / ${s(l.put.strike)} P`;
+  const one = l.call ?? l.put;
+  return one ? ` · ${s(one.strike)}` : "";
+}
+
+export function OptionsCosts({ tickers, session, halfDay }: { tickers: OptionsTicker[]; session: string; halfDay: boolean }) {
   const { now } = useLive();
   const [open, setOpen] = useState(false);
   const [off, setOff] = useState(false);
   const [got, setGot] = useState<Record<string, Got>>({});
+  /** When the last round of asking began: the quotes on show are at least this old. */
+  const [askedAt, setAskedAt] = useState<number | null>(null);
   const run = useRef(0);
+  // Leaving the brief view stops the round in flight: the rest of the names are not asked for.
+  useEffect(
+    () => () => {
+      run.current++;
+    },
+    [],
+  );
 
   const load = useCallback(async () => {
     const mine = ++run.current;
     setOff(false);
+    setAskedAt(Date.now());
     setGot(Object.fromEntries(tickers.map((t) => [t.symbol, { status: "loading" } as Got])));
     for (const t of tickers) {
       const close = t.last?.close;
@@ -48,7 +70,10 @@ export function OptionsCosts({ tickers }: { tickers: OptionsTicker[] }) {
         try {
           const res = await fetch(`/api/chain?s=${encodeURIComponent(t.symbol)}&px=${close.toFixed(2)}`, { cache: "no-store" });
           if (res.status === 503) {
-            if (run.current === mine) setOff(true);
+            if (run.current === mine) {
+              setOff(true);
+              setGot({});
+            }
             return; // the site has no keys for the option feed: no name will answer
           }
           if (res.ok) next = { status: "ok", chain: (await res.json()) as ChainResponse };
@@ -108,7 +133,7 @@ export function OptionsCosts({ tickers }: { tickers: OptionsTicker[] }) {
             <tbody>
               {tickers.map((t) => {
                 const g = got[t.symbol];
-                const lines = g?.status === "ok" && now !== null && t.last?.close != null ? costLines(g.chain, t.last.close, t.expected_move?.day, now) : [];
+                const lines = g?.status === "ok" && now !== null && t.last?.close != null ? costLines(g.chain, t.last.close, t.expected_move?.day, now, (x) => bellMinute(x, session, halfDay)) : [];
                 return (
                   <Fragment key={t.symbol}>
                     {lines.length === 0 ? (
@@ -117,7 +142,7 @@ export function OptionsCosts({ tickers }: { tickers: OptionsTicker[] }) {
                           {t.symbol}
                         </th>
                         <td colSpan={2} className="text-muted-foreground py-1.5 pl-2 text-right text-xs">
-                          {!g || g.status === "loading" ? "loading…" : g.status === "error" ? "no answer" : "no quotes"}
+                          {!g ? "refresh to load" : g.status === "loading" ? "loading…" : g.status === "error" ? "no answer" : "no quotes"}
                         </td>
                       </tr>
                     ) : (
@@ -128,7 +153,7 @@ export function OptionsCosts({ tickers }: { tickers: OptionsTicker[] }) {
                             <span className="text-muted-foreground text-[0.6875rem] whitespace-nowrap">
                               {weekDate(l.expiry)}
                               {l.days === 0 ? ", today" : l.days !== null ? `, ${l.days}d` : ""}
-                              {l.call ? ` · ${num(l.call.strike, l.call.strike % 1 === 0 ? 0 : 2)}` : ""}
+                              {strikes(l)}
                             </span>
                           </th>
                           <td className="px-2 py-1.5 text-right align-top font-mono">
@@ -147,7 +172,18 @@ export function OptionsCosts({ tickers }: { tickers: OptionsTicker[] }) {
           </table>
         </div>
       )}
-      <p className="text-muted-foreground mt-1.5 text-[0.6875rem]">
+      {!off && askedAt !== null ? (
+        <p data-costs-age={now !== null && (now - askedAt) / 60_000 > COSTS_OLD_MIN ? "old" : "fresh"} className="mt-1.5 text-[0.6875rem]">
+          {now !== null && (now - askedAt) / 60_000 > COSTS_OLD_MIN ? (
+            <span className="text-warn">
+              Read at {newYork(new Date(askedAt).toISOString(), false)} ET, {num((now - askedAt) / 60_000, 0)} minutes ago. Refresh before relying on these.
+            </span>
+          ) : (
+            <span className="text-muted-foreground">Read at {newYork(new Date(askedAt).toISOString(), false)} ET.</span>
+          )}
+        </p>
+      ) : null}
+      <p className="text-muted-foreground mt-1 text-[0.6875rem]">
         At the strike nearest the last close. Under each ask: expected day&apos;s moves from the close to breakeven at expiry (mv), and the bid-ask spread. Quotes run 15 minutes
         behind the market.
       </p>

@@ -38,6 +38,14 @@ describe("at-the-money costs", () => {
     expect(costLines(chain([{ date: "2026-10-13", contracts: strip }]), 0, 4, NOW)).toEqual([]);
   });
 
+  it("ends a half day's own expiry at its early bell", () => {
+    const today = chain([{ date: "2026-10-12", contracts: strip }, { date: "2026-10-13", contracts: strip }]);
+    // 14:00 in New York: still trading on a full day, rung an hour ago when the bell is at 13:00.
+    const at = Date.parse("2026-10-12T18:00:00Z");
+    expect(costLines(today, 780, 4, at)[0]!.expiry).toBe("2026-10-12");
+    expect(costLines(today, 780, 4, at, (x) => (x === "2026-10-12" ? 13 * 60 : 16 * 60))[0]!.expiry).toBe("2026-10-13");
+  });
+
   it("leaves a dash where nobody is offering, and takes no spread from half a quote or a crossed one", () => {
     const odd = [c("call", 780, null, null), c("put", 780, 3, 2), c("call", 790, 0, 0.05)];
     const [l] = costLines(chain([{ date: "2026-10-13", contracts: odd }]), 780, 4, NOW);
