@@ -17,6 +17,9 @@ export interface HourlyBar {
 /** Fewer bars than this is not a picture worth switching to. */
 export const HOURLY_MIN_BARS = 6;
 
+/** A stored document is not checked again when it is read, so the stamp's shape is checked here. */
+const STAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+
 const price = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v > 0;
 
 /**
@@ -34,12 +37,13 @@ export function hourlyBySymbol(doc: OptionsLive | null, carried: readonly string
     const seen = new Set<string>();
     const bars: HourlyBar[] = [];
     for (const b of n.bars) {
-      if (!b || typeof b !== "object" || typeof b.t !== "string" || seen.has(b.t)) continue;
-      if (!price(b.o) || !price(b.h) || !price(b.l) || !price(b.c) || b.h < b.l) continue;
+      if (!b || typeof b !== "object" || typeof b.t !== "string" || !STAMP.test(b.t) || seen.has(b.t)) continue;
+      if (!price(b.o) || !price(b.h) || !price(b.l) || !price(b.c)) continue;
+      if (b.h < Math.max(b.o, b.c) || b.l > Math.min(b.o, b.c)) continue; // not a candle
       seen.add(b.t);
       bars.push({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c });
     }
-    bars.sort((p, q) => p.t.localeCompare(q.t));
+    bars.sort((p, q) => (p.t < q.t ? -1 : p.t > q.t ? 1 : 0)); // fixed-width stamps: plain order is time order
     if (bars.length >= HOURLY_MIN_BARS) out[n.symbol] = bars;
   }
   return out;

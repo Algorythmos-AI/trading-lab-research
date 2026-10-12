@@ -803,7 +803,7 @@ test("the map can be switched to hourly candles when the host has sent them, and
   await expect(map).toHaveAttribute("data-map-range", "hourly");
   await expect(map.locator('[data-layer="candles"] > g')).toHaveCount(35);
   expect(daily).not.toBe(35);
-  await expect(range).toContainText("35 finished hours from the delayed tape");
+  await expect(range).toContainText("35 finished hourly bars from the delayed tape");
   await expect(map.getByRole("img")).toHaveAccessibleName(/SPY: last 35 hourly bars/);
   await expect(map.locator('[data-layer="zones"] rect').first()).toBeAttached(); // the same zones, behind other candles
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

@@ -102,6 +102,8 @@ export function OptionsDetail({
   expanded = false,
   fullHref = null,
   hourly = null,
+  range: wanted = "daily",
+  onRange,
 }: {
   e: Options;
   t: OptionsTicker;
@@ -120,6 +122,9 @@ export function OptionsDetail({
   fullHref?: string | null;
   /** This name's hourly bars, when the host has sent enough of them: the map then offers an hourly range. */
   hourly?: readonly HourlyBar[] | null;
+  /** The range the reader chose, held by whoever holds this pane so that it survives a change of name. */
+  range?: "daily" | "hourly";
+  onRange?: (range: "daily" | "hourly") => void;
 }) {
   const read = useLiveRead(t);
   const close = t.last?.close ?? null;
@@ -135,16 +140,16 @@ export function OptionsDetail({
   const view = mapView(t);
   const hasMap = view !== null && close !== null;
   const strength = t.close_strength?.chip;
-  const layers = mapLayersOf(t, interest !== null);
+
   // Kept with the name it was priced for, so the line never lingers on the next name's map.
   const [mark, setMark] = useState<{ symbol: string; at: BreakevenMark } | null>(null);
   const symbol = t.symbol;
   const onBreakeven = useCallback((at: BreakevenMark | null) => setMark(at ? { symbol, at } : null), [symbol]);
   const vol = volRead(t);
-  // Kept here, so the choice survives a change of name; a name without hourly bars is drawn on the daily range.
-  const [wanted, setWanted] = useState<"daily" | "hourly">("daily");
+  // A name without hourly bars is drawn on the daily range, whatever was chosen.
   const range = wanted === "hourly" && hourly ? "hourly" : "daily";
   const drawn = range === "hourly" && hourly ? withHourly(t, hourly) : t;
+  const layers = mapLayersOf(drawn, interest !== null);
   // The zone the pointer is on, in the map or in the list: each picks it out in the other.
   const [hot, setHot] = useState<{ symbol: string; key: string } | null>(null);
   const hotKey = hot?.symbol === symbol ? hot.key : null;
@@ -226,7 +231,7 @@ export function OptionsDetail({
                     aria-pressed={range === k}
                     onClick={(ev) => {
                       ev.currentTarget.focus();
-                      setWanted(k);
+                      onRange?.(k);
                     }}
                     className={cn("rounded px-2 py-0.5 text-[0.6875rem] font-medium", range === k ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground")}
                   >
@@ -235,13 +240,13 @@ export function OptionsDetail({
                 ))}
                 {range === "hourly" ? (
                   <span className="text-muted-foreground text-[0.6875rem]">
-                    · {hourly.length} finished hours from the delayed tape, last {hourly[hourly.length - 1]!.t.slice(5).replace("T", " ")} ET
+                    · {hourly.length} finished hourly bars from the delayed tape; the last began {hourly[hourly.length - 1]!.t.slice(5).replace("T", " ")} ET
                   </span>
                 ) : null}
               </div>
             ) : null}
             <div data-hide={[...hiddenLayers].join(" ") || undefined} data-map-range={range}>
-              <LevelMap t={drawn} unit={range} interactive breakeven={mark?.symbol === t.symbol ? mark.at : null} interest={interest} hotZone={hotKey} onZone={onZone} />
+              <LevelMap t={drawn} unit={range} closeDay={e.built_from ?? null} interactive breakeven={mark?.symbol === t.symbol ? mark.at : null} interest={interest} hotZone={hotKey} onZone={onZone} />
             </div>
           </div>
         ) : (

@@ -36,6 +36,7 @@ export function OptionsName({
 }) {
   const { now } = useLive();
   const [hidden, setHidden] = useState<ReadonlySet<MapLayer>>(new Set());
+  const [range, setRange] = useState<"daily" | "hourly">("daily");
   const toggle = (layer: MapLayer) =>
     setHidden((was) => {
       const next = new Set(was);
@@ -62,7 +63,7 @@ export function OptionsName({
           {live ? <FeedPill /> : null}
         </div>
       ) : null}
-      <OptionsDetail e={e} t={t} live={live} hiddenLayers={hidden} onToggleLayer={toggle} interest={live ? interest : null} today={today} hourly={live ? hourly : null} expanded />
+      <OptionsDetail e={e} t={t} live={live} hiddenLayers={hidden} onToggleLayer={toggle} interest={live ? interest : null} today={today} hourly={live ? hourly : null} range={range} onRange={setRange} expanded />
     </div>
   );
 }

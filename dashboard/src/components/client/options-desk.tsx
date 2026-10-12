@@ -324,6 +324,7 @@ export function OptionsDesk({
   const [hiddenLayers, setHiddenLayers] = useState<ReadonlySet<MapLayer>>(new Set());
   const [density, flipDensity] = useDensity();
   const agree = live ? agreement(positions, e) : null;
+  const [mapRange, setMapRange] = useState<"daily" | "hourly">("daily");
   const toggleLayer = (layer: MapLayer) =>
     setHiddenLayers((cur) => {
       const next = new Set(cur);
@@ -715,7 +716,7 @@ export function OptionsDesk({
         <div className={cn("xl:min-h-0 xl:overflow-y-auto", pane === "names" && "max-sm:hidden")}>
           {selected ? (
             <PaneBoundary key={selected.t.symbol} name={selected.t.symbol}>
-              <OptionsDetail e={e} t={selected.t} live={live} hiddenLayers={hiddenLayers} onToggleLayer={toggleLayer} fullHref={live ? `/options/${selected.t.symbol}` : null} hourly={live ? (hourly[selected.t.symbol] ?? null) : null} interest={live ? (interest[selected.t.symbol] ?? null) : null} today={live && view === "live" ? (rules?.bySymbol[selected.t.symbol] ?? null) : null} />
+              <OptionsDetail e={e} t={selected.t} live={live} hiddenLayers={hiddenLayers} onToggleLayer={toggleLayer} fullHref={live ? `/options/${selected.t.symbol}` : null} hourly={live ? (hourly[selected.t.symbol] ?? null) : null} range={mapRange} onRange={setMapRange} interest={live ? (interest[selected.t.symbol] ?? null) : null} today={live && view === "live" ? (rules?.bySymbol[selected.t.symbol] ?? null) : null} />
             </PaneBoundary>
           ) : null}
         </div>

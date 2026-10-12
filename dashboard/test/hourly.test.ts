@@ -40,6 +40,8 @@ describe("the map's hourly range", () => {
       { ...good[10]!, h: Number.NaN },
       { ...good[11]!, l: -1 },
       { ...good[12]!, h: 1, l: 2 },
+      { ...good[13]!, h: good[13]!.c - 1 }, // a high under its own close
+      { ...good[14]!, t: "soon" },
       null as never,
       { t: 7 } as never,
     ];
