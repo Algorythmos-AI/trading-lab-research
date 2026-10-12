@@ -29,6 +29,13 @@ _spec = importlib.util.spec_from_file_location("options_edition", ROOT / "script
 assert _spec and _spec.loader
 script = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(script)
+REAL_EARNINGS_ROWS = script.earnings_rows
+
+
+@pytest.fixture(autouse=True)
+def _no_real_earnings(monkeypatch):
+    """The hand-kept earnings file changes with the calendar; a test that runs the script must not depend on it."""
+    monkeypatch.setattr(script, "earnings_rows", lambda: [])
 
 
 def pulls(names=NAMES, finished="2026-10-09", hours=7):
@@ -419,3 +426,103 @@ def test_a_dry_run_loads_none_of_the_sender(tmp_path):
     r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=tmp_path, timeout=120)
     assert r.returncode == 0, r.stderr[-600:]
     assert "edition: format 2" in r.stdout
+
+
+def test_the_volatility_index_block_is_its_close_change_and_place_in_the_year_or_nothing():
+    raw = synth(7, start=18.0)
+    closes = raw["close"]
+    got, why = edition.vix_block(raw, "2026-10-09", NOW)
+    earlier = closes[-253:-1]
+    assert why == "" and got == {"close": round(closes[-1], 2), "change": round(closes[-1] - closes[-2], 2),
+                                 "pct_52w": round(sum(1 for c in earlier if c < closes[-1]) / 252, 4)}
+    top = {**raw, "high": [*raw["high"][:-1], 99.0], "close": [*raw["close"][:-1], max(closes) + 1]}
+    assert edition.vix_block(top, "2026-10-09", NOW)[0]["pct_52w"] == 1.0     # a year's high is above every earlier close
+    assert edition.vix_block(None, "2026-10-09", NOW) == (None, "no pull") and edition.vix_block({}, "2026-10-09", NOW)[0] is None
+    assert "expected 2026-10-12" in edition.vix_block(raw, "2026-10-12", NOW)[1]            # an old level is not today's
+    assert edition.vix_block(raw, "2026-10-09", dt.datetime(2026, 10, 9, 19, 0))[0] is None  # the close is not final yet
+    assert edition.vix_block(synth(7, n=120, start=18.0), "2026-10-09", NOW)[0]["pct_52w"] is None   # not a year of closes
+    gap = {k: v[:-30] + v[-29:] for k, v in raw.items()}
+    assert "missing session" in edition.vix_block(gap, "2026-10-09", NOW)[1]
+    old_gap = {k: v[:10] + v[11:] for k, v in raw.items()}                    # a fault older than the year is not today's
+    assert edition.vix_block(old_gap, "2026-10-09", NOW)[0] == got
+    # A doubling overnight, or a close the index has never printed, is a wrong pull: nothing is shown.
+    jump = {**raw, "open": [*raw["open"][:-1], closes[-2] * 2.02], "high": [*raw["high"][:-1], closes[-2] * 2.1],
+            "close": [*closes[:-1], closes[-2] * 2.05]}
+    assert edition.vix_block(jump, "2026-10-09", NOW)[0] is None
+    far = {k: ([x * 10 for x in v] if k != "time" and k != "volume" else v) for k, v in raw.items()}
+    assert edition.vix_block(far, "2026-10-09", NOW) == (None, "a close outside the index's range")
+
+
+def test_earnings_rows_are_the_desks_names_inside_the_week_one_row_a_name():
+    rows = [{"symbol": "aaa", "date": "2026-10-14", "when": "AMC", "source": "x", "quality": "confirmed"},
+            {"symbol": "AAA", "date": "2026-10-15", "when": "amc", "quality": "expected"},   # the confirmed date stands
+            {"symbol": "BBB", "date": "2026-10-13", "when": "sometime"},
+            {"symbol": "BBB", "date": "2026-10-12", "when": "bmo"},               # the later row for a name wins
+            {"symbol": "ZZZ", "date": "2026-10-13", "when": "bmo"},               # not a name the desk carries
+            {"symbol": "DDD", "date": "2026-10-19", "when": "bmo"},               # past the week
+            {"symbol": "DDD", "date": "2026-10-11", "when": "bmo"},               # before the session
+            {"symbol": "CCC", "date": "soon", "when": "bmo"}, {}]
+    row = lambda d, s, w: {"date": d, "time_et": None, "kind": "earnings", "type": "earnings", "severity": None, "symbol": s, "when": w}  # noqa: E731
+    assert edition.earnings_events(rows, NAMES, "2026-10-12") == [row("2026-10-12", "BBB", "bmo"), row("2026-10-14", "AAA", "amc")]
+    assert edition.earnings_events([], NAMES, "2026-10-12") == []
+    # After the close of the day the levels were built from: the gap lands in the session, so it is carried.
+    eve = [{"symbol": "CCC", "date": "2026-10-09", "when": "amc"}, {"symbol": "DDD", "date": "2026-10-09", "when": "bmo"}]
+    assert edition.earnings_events(eve, NAMES, "2026-10-12") == []
+    assert edition.earnings_events(eve, NAMES, "2026-10-12", built_from="2026-10-09") == [row("2026-10-09", "CCC", "amc")]
+
+
+def test_format_two_carries_the_index_and_earnings_when_given_and_the_site_takes_them():
+    run = edition.run(NAMES, *pulls(), NOW)
+    when = dt.datetime(2026, 10, 9, 22, 5, tzinfo=dt.UTC)
+    vix, _ = edition.vix_block(synth(7, start=18.0), run.finished, NOW)
+    earn = edition.earnings_events([{"symbol": "AAA", "date": "2026-10-14", "when": "amc"}], NAMES, run.session)
+    doc = edition.build_edition(run.levels_doc, [], [], RULES, when, version=2, vix=vix, earnings=earn)
+    jsonschema.Draft7Validator(SCHEMA).validate(doc)
+    assert doc["market"]["vix"] == vix and doc["market"]["calendar"] is None    # no macro calendar was read
+    assert doc["events"] == earn
+    both = edition.build_edition(run.levels_doc, [], [], RULES, when, version=2, calendar=CALENDAR, earnings=earn)
+    jsonschema.Draft7Validator(SCHEMA).validate(both)
+    assert [(e["date"], e["kind"]) for e in both["events"]] == [("2026-10-12", "macro"), ("2026-10-14", "earnings"), ("2026-10-14", "macro"), ("2026-10-18", "macro")]
+    assert edition.build_edition(run.levels_doc, [], [], RULES, when, version=2, earnings=[])["events"] == []   # read, and none this week
+    one = edition.build_edition(run.levels_doc, [], [], RULES, when, vix=vix, earnings=earn)
+    assert "market" not in one and "events" not in one                          # format 1 is what it always was
+
+
+def test_the_script_reads_the_index_with_the_pulls_and_the_earnings_file(tmp_path, monkeypatch, capsys):
+    folder = tmp_path / "pulls"
+    folder.mkdir()
+    daily, hourly, snaps = pulls(names=[str(n) for n in DESK["names"]])
+    for kind, group in (("daily", daily), ("hourly", hourly), ("snapshot", snaps)):
+        for name, d in group.items():
+            (folder / f"{name}.{kind}.json").write_text(json.dumps(d))
+    (folder / "VIX.daily.json").write_text(json.dumps({**synth(7, start=18.0), "chart_step": 86400}))
+    cfg = tmp_path / "config"
+    (cfg / "events").mkdir(parents=True)
+    (cfg / "events" / "earnings.csv").write_text("# a comment\nsymbol,date,when,source,quality\nNVDA,2026-10-14,amc,test,confirmed\n")
+    (cfg / "options_rules.json").write_text(json.dumps(RULES))
+    (cfg / "options_desk.yaml").write_text(yaml.safe_dump(DESK))
+    monkeypatch.setattr(script, "CONFIG_DIR", cfg)
+    monkeypatch.setattr(script, "macro_calendar", lambda: None)
+    monkeypatch.setattr(script, "earnings_rows", REAL_EARNINGS_ROWS)
+    out = tmp_path / "edition.json"
+    assert script.main(["--pulls", str(folder), "--data", str(tmp_path / "data"), "--now", NOW.isoformat(), "--dry-run", "--format", "2", "--out", str(out)]) == 0
+    doc = json.loads(out.read_text())
+    jsonschema.Draft7Validator(SCHEMA).validate(doc)
+    assert doc["market"]["vix"]["close"] > 0 and "VIX" not in [t["symbol"] for t in doc["tickers"]]
+    assert [(e["symbol"], e["when"]) for e in doc["events"]] == [("NVDA", "amc")]
+    assert REAL_EARNINGS_ROWS()[0]["symbol"] == "NVDA"
+    # A spreadsheet's re-save: a byte-order mark, a quoted comment, blank lines, capitals and spaces in the header.
+    (cfg / "events" / "earnings.csv").write_bytes(b"\xef\xbb\xbf\"# kept, by hand\"\r\n\r\n Symbol , Date ,When\r\nNVDA,2026-10-14,amc\r\n")
+    assert REAL_EARNINGS_ROWS() == [{"symbol": "NVDA", "date": "2026-10-14", "when": "amc"}]
+    (cfg / "events" / "earnings.csv").write_text("name,day\nNVDA,2026-10-14\n")
+    assert REAL_EARNINGS_ROWS() == [] and "no symbol and date columns" in capsys.readouterr().err
+    (cfg / "events" / "earnings.csv").write_bytes(b"symbol,date,source\nNVDA,2026-10-14,caf\xe9\n")
+    assert REAL_EARNINGS_ROWS() == [] and "unreadable (UnicodeDecodeError)" in capsys.readouterr().err
+    monkeypatch.setattr(script, "CONFIG_DIR", tmp_path / "nowhere")
+    assert REAL_EARNINGS_ROWS() == []
+    # An index pull the loader cannot read costs the index, never the edition.
+    monkeypatch.setattr(script, "CONFIG_DIR", cfg)
+    bad = synth(7, start=18.0)
+    (folder / "VIX.daily.json").write_text(json.dumps({**bad, "volume": [None] * len(bad["time"]), "chart_step": 86400}))
+    assert script.main(["--pulls", str(folder), "--data", str(tmp_path / "data2"), "--now", NOW.isoformat(), "--dry-run", "--format", "2", "--out", str(out)]) == 0
+    assert json.loads(out.read_text())["market"]["vix"] is None and "volatility index left out: unreadable (TypeError)" in capsys.readouterr().out

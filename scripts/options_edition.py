@@ -32,6 +32,7 @@ Research only: no broker is touched and nothing here is an order.
 from __future__ import annotations
 
 import argparse
+import csv
 import datetime as dt
 import json
 import os
@@ -94,6 +95,23 @@ def site_accepts(url: str, bypass: str | None) -> int:
     return accepts if isinstance(accepts, int) and not isinstance(accepts, bool) else 0
 
 
+def earnings_rows() -> list[dict[str, str]]:
+    """The hand-kept earnings dates (config/events/earnings.csv). A missing or unreadable file is no dates, and
+    says so: the edition still goes out."""
+    try:
+        # utf-8-sig: a spreadsheet's byte-order mark is not part of the first column's name.
+        with (CONFIG_DIR / "events" / "earnings.csv").open(newline="", encoding="utf-8-sig") as f:
+            lines = [line for line in f if line.strip() and not line.lstrip().lstrip('"').startswith("#")]
+        rows = [{str(k or "").strip().lower(): str(v or "") for k, v in r.items()} for r in csv.DictReader(lines)]
+    except (OSError, ValueError, csv.Error) as e:      # ValueError: bytes that are not UTF-8
+        print(f"earnings dates unreadable ({e.__class__.__name__}): sending without them", file=sys.stderr)
+        return []
+    if rows and not {"symbol", "date"} <= set(rows[0]):
+        print("earnings dates: the file has no symbol and date columns: sending without them", file=sys.stderr)
+        return []
+    return rows
+
+
 def macro_calendar() -> list[dict[str, object]] | None:
     """The repo's macro-event calendar, or None when it cannot be read: the edition then goes out without events
     and says its calendar is unknown."""
@@ -129,11 +147,16 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     if a.pulls:
-        daily, hourly, snaps = edition.read_pulls(a.pulls, names)
+        daily, hourly, snaps = edition.read_pulls(a.pulls, [*names, edition.VIX])
     else:
         by_contract = {str(v): str(k) for k, v in (desk.get("contracts") or {}).items()}
+        if desk.get("vix_contract"):
+            by_contract[str(desk["vix_contract"])] = edition.VIX
         with a.transcript.open() as f:                # line by line: a result may hold a line separator inside a string
             daily, hourly, snaps = edition.extract_transcript(f, by_contract, a.since_ts)
+    vix_raw = daily.pop(edition.VIX, None)           # the index travels with the pulls and is never a name
+    hourly.pop(edition.VIX, None)
+    snaps.pop(edition.VIX, None)
     run = edition.run(names, daily, hourly, snaps, now)
 
     levels_doc = run.levels_doc
@@ -165,10 +188,22 @@ def main(argv: list[str] | None = None) -> int:
             print(f"the dashboard accepts edition format {accepts or 'unknown'}: building format {edition.EDITION_VERSION}")
             fmt = edition.EDITION_VERSION
     rules_doc = json.loads((CONFIG_DIR / "options_rules.json").read_text())
-    calendar = macro_calendar() if fmt > edition.EDITION_VERSION else None
+    two = fmt > edition.EDITION_VERSION
+    calendar = macro_calendar() if two else None
+    vix = None
+    if two and (vix_raw is not None or desk.get("vix_contract")):
+        try:                                           # the index is an extra: a pull it cannot read must not stop the levels
+            vix, why = edition.vix_block(vix_raw, run.finished, now)
+        except Exception as e:  # noqa: BLE001
+            vix, why = None, f"unreadable ({e.__class__.__name__})"
+        if vix is None:
+            print(f"volatility index left out: {why}")
     doc = edition.build_edition(levels_doc, edition.read_csv(a.data / "iv_history.csv"),
                                 edition.read_csv(a.data / "scorecard.csv"), rules_doc, dt.datetime.now(dt.UTC),
-                                version=fmt, calendar=calendar)
+                                version=fmt, calendar=calendar,
+                                vix=vix,
+                                earnings=edition.earnings_events(earnings_rows(), names, levels_doc["session"],
+                                                                 built_from=levels_doc.get("built_from")) if two else None)
     body = json.dumps(doc, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode()
     if a.out:
         a.out.write_bytes(body)
