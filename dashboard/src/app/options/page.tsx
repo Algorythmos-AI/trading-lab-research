@@ -108,7 +108,7 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
             initialPane={initialPane}
             // The pane needs the positions; the map needs a handful of marks. The contract-by-contract open interest
             // (over 100 KB) stays on the server.
-            positions={live ? { ...live, open_interest: null } : null}
+            positions={live ? { ...live, open_interest: null, hourly: null } : null}
             interest={interestBySymbol(live, now.getTime(), (s) => {
               const t = e.tickers.find((x) => x.symbol === s);
               return t ? mapView(t) : null;

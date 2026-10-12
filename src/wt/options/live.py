@@ -44,6 +44,8 @@ from wt.options import levels as lv
 SCHEMA_ID = "stocksdelta/options-live"
 SCHEMA_VERSION = 1
 RULES_VERSION = 2                 # the document's version once it carries `rules`
+HOURLY_VERSION = 3                # and once it carries `hourly`
+HOURLY_SESSIONS = 5               # sessions of hourly bars sent for the map's hourly range
 FEED_DELAY_MIN = 16               # the consolidated tape is refused for the last 15 minutes; one more for margin
 RULE_HISTORY_DAYS = 420           # calendar days of daily bars the session's levels are built from
 ACCEPTS_KEEP_S = 3600.0           # how long the dashboard's answer to "what do you accept" is believed
@@ -384,6 +386,33 @@ def rules_block(account: OptionsAccount, names: list[str], now: dt.datetime) -> 
     return block, [f"rules-skipped:{skipped}"] if skipped else []
 
 
+def hourly_block(account: OptionsAccount, names: list[str], now: dt.datetime) -> list[dict[str, Any]]:
+    """Each name's finished hourly bars for the last few sessions, cut as the rules cut them, from one request
+    for half-hour bars. A bar is its start in New York time and four prices; a name with none is left out.
+    Delayed by the feed like everything here. Empty before the first hour of the calendar the engine carries."""
+    today = now.astimezone(intraday.NEW_YORK).date().isoformat()
+    try:
+        sessions = [today if lv.is_session(today) else lv.prev_session(today)]
+        while len(sessions) < HOURLY_SESSIONS:
+            sessions.insert(0, lv.prev_session(sessions[0]))
+    except ValueError:                              # past the calendar the engine carries
+        return []
+    cutoff = now - dt.timedelta(minutes=FEED_DELAY_MIN)
+    opened = intraday.slots(sessions[0])[0][0]
+    if cutoff <= opened:
+        return []
+    parts = account.bars(names, "30Min", opened.astimezone(dt.UTC), cutoff)
+    out = []
+    for name in names:
+        rows = [p for p in parts.get(name, []) if isinstance(p, dict)]
+        bars = [b for s in sessions for b in intraday.hourly_bars(rows, s, cutoff)]
+        sent = [{"t": b.d, "o": round(b.o, 4), "h": round(b.h, 4), "l": round(b.l, 4), "c": round(b.c, 4)}
+                for b in bars if round(min(b.o, b.h, b.l, b.c), 4) > 0]             # not a price that rounds to nothing
+        if sent:
+            out.append({"symbol": name, "bars": sent})
+    return out
+
+
 def new_triggers(block: dict[str, Any] | None, seen_path: Path) -> list[tuple[str, str, str]]:
     """(name, rule, time) for each rule that has triggered and was not seen triggered before this session. The
     file remembers one session; a new session starts it again."""
@@ -458,14 +487,20 @@ def market(clock: dict[str, Any] | None) -> dict[str, Any] | None:
 
 def build(raw: list[Any], clock: dict[str, Any] | None, run_id: str, now: dt.datetime,
           problems: list[str] | None = None, oi: list[dict[str, Any]] | None = None,
-          rules: dict[str, Any] | None = None) -> dict[str, Any]:
+          rules: dict[str, Any] | None = None, hourly: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     rows, left_out = position_rows(raw)
     doc = {"schema": SCHEMA_ID, "schema_version": SCHEMA_VERSION, "run_id": run_id,
            "as_of": now.isoformat(timespec="seconds"), "paper": True, "market": market(clock),
            "positions": rows, "open_interest": oi, "problems": [*(problems or []), *left_out][:24]}
     if rules is not None:                       # only then: a dashboard that takes version 1 refuses the key itself
         doc.update(schema_version=RULES_VERSION, rules=rules)
+    if hourly:                                  # the same care: a dashboard that takes version 2 refuses this key
+        doc.update(schema_version=HOURLY_VERSION, hourly=hourly)
     return doc
+
+
+def _body(doc: dict[str, Any]) -> bytes:
+    return json.dumps(doc, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
 
 
 def validate(doc: dict[str, Any], schema_path: Path = SCHEMA_PATH) -> list[str]:
@@ -531,13 +566,18 @@ def _publish(a: argparse.Namespace, account: OptionsAccount | None = None) -> in
     url, ingest_secret = os.environ.get("DASHBOARD_INGEST_URL"), os.environ.get("DASHBOARD_INGEST_SECRET")
     bypass = os.environ.get("VERCEL_AUTOMATION_BYPASS_SECRET")
     rules, mode = None, "off"
+    hourly: list[dict[str, Any]] | None = None
+    want_hourly = False
     try:
         desk = load_yaml("options_desk.yaml")
         mode = str(desk.get("rule_alerts") or "off")
+        asked = desk.get("hourly_bars") is True
         # Asked of the dashboard, not assumed: sent to a site that takes version 1, the whole document, positions
         # and all, would be refused. A dry run builds it regardless, to be looked at.
-        wanted = mode != "off" and (a.dry_run or (bool(url) and site_accepts(url or "", bypass, now, OUT / "site_accepts.json") >= RULES_VERSION))
-        if wanted and time.monotonic() < deadline - 90.0:
+        takes = 0 if mode == "off" and not asked else HOURLY_VERSION if a.dry_run else \
+            site_accepts(url, bypass, now, OUT / "site_accepts.json") if url else 0
+        want_hourly = asked and takes >= HOURLY_VERSION     # only once the dashboard has answered
+        if mode != "off" and takes >= RULES_VERSION and time.monotonic() < deadline - 90.0:
             rules, rule_problems = rules_block(account, desk_names(), now)
             problems += rule_problems
     except BrokerFault as e:
@@ -546,21 +586,43 @@ def _publish(a: argparse.Namespace, account: OptionsAccount | None = None) -> in
     except Exception as e:  # noqa: BLE001 — the rule states are an extra: no fault in them may stop the positions
         rules = None
         problems.append(f"rules-failed:{e.__class__.__name__}"[:200])
+    if want_hourly and time.monotonic() < deadline - 75.0:
+        try:                                    # an extra, like the rule states: no fault in it may stop the positions
+            hourly = hourly_block(account, desk_names(), now) or None
+        except BrokerFault as e:
+            problems.append(f"hourly-unavailable:{e.code}"[:200])
+        except Exception as e:  # noqa: BLE001
+            problems.append(f"hourly-failed:{e.__class__.__name__}"[:200])
     run_id = now.strftime("%Y%m%dT%H%M%SZ") + "-" + hashlib.sha1(os.urandom(8)).hexdigest()[:6]
-    doc = build(raw, clock, run_id, now, problems, oi, rules)
+    doc = build(raw, clock, run_id, now, problems, oi, rules, hourly)
+    if hourly is not None and (bad := validate(doc)):
+        # Dropped only when the fault is theirs, or is in neither extra and so might be: a fault in the rule states
+        # is the rule states' (below).
+        if any(e.startswith("hourly") for e in bad) or not any(e.startswith("rules") for e in bad):
+            hourly = None
+            problems.append("hourly-invalid")
+            doc = build(raw, clock, run_id, now, problems, oi, rules)
     if rules is not None and validate(doc):
         # The rule states are what failed to validate, or might be: the positions go out without them.
         rules = None
-        doc = build(raw, clock, run_id, now, [*problems, "rules-invalid"], oi)
+        problems.append("rules-invalid")
+        doc = build(raw, clock, run_id, now, problems, oi, None, hourly)
     if bad := validate(doc):
         print("options live document failed schema validation:\n  " + "\n  ".join(bad), file=sys.stderr)
         return 2
-    body = json.dumps(doc, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    try:
+        body = _body(doc)
+    except ValueError:
+        # A number that is not one (the schema check lets a NaN through): it can only be in an extra.
+        rules = hourly = None
+        problems.append("extras-unreadable")
+        doc = build(raw, clock, run_id, now, problems, oi)
+        body = _body(doc)
     (OUT / "outbox").mkdir(parents=True, exist_ok=True)
     safeio.atomic_write(OUT / "outbox" / "document.json", body.decode(), OUT)
     # A count is all the log says about the account.
     print(f"options live {run_id}: {len(doc['positions'])} option positions, open interest for {len(oi or [])} names, "
-          f"{len(body)} bytes")
+          f"{f'hourly bars for {len(hourly)} names, ' if hourly else ''}{len(body)} bytes")
     if a.dry_run:
         return 0
     if (why := publish.shadow_key_problem()) is not None:
@@ -570,14 +632,23 @@ def _publish(a: argparse.Namespace, account: OptionsAccount | None = None) -> in
         print("DASHBOARD_INGEST_URL / DASHBOARD_INGEST_SECRET not set: not sending")
         return 0
     ok, detail = publish.send(body, url, ingest_secret, bypass, tries=SEND_TRIES, deadline=deadline)
-    if not ok and rules is not None and detail.startswith("HTTP 422"):
-        # Refused whole, with rule states in it: the dashboard no longer takes them (a rollback), whatever it said
-        # within the hour. Forget that answer and send the positions as version 1, once.
-        (OUT / "site_accepts.json").unlink(missing_ok=True)
-        rules = None
-        doc = build(raw, clock, run_id, now, [*problems, "rules-refused"], oi)
-        body = json.dumps(doc, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
-        ok, detail = publish.send(body, url, ingest_secret, bypass, tries=1, deadline=deadline)
+    if not ok and detail.startswith("HTTP 422") and (rules is not None or hourly is not None):
+        # Refused whole, with an extra in it: the dashboard does not take what it said it takes (a rollback, or a
+        # check here that is looser than its own). Step down one extra at a time, the positions always last, and
+        # remember for the hour what was stored, so the next run does not walk the same steps.
+        steps = [*([("hourly-refused", rules, None)] if hourly is not None and rules is not None else []),
+                 ("+".join([*(["rules-refused"] if rules is not None else []), *(["hourly-refused"] if hourly is not None else [])]), None, None)]
+        for why, keep_rules, keep_hourly in steps:
+            rules, hourly = keep_rules, keep_hourly
+            doc = build(raw, clock, run_id, now, [*problems, *why.split("+")], oi, rules, hourly)
+            ok, detail = publish.send(_body(doc), url, ingest_secret, bypass, tries=1, deadline=deadline)
+            if ok or not detail.startswith("HTTP 422"):
+                break
+        try:
+            stored = int(doc["schema_version"]) if ok else SCHEMA_VERSION
+            safeio.atomic_write(OUT / "site_accepts.json", json.dumps({"at": now.isoformat(), "accepts": stored}), OUT)
+        except OSError:
+            (OUT / "site_accepts.json").unlink(missing_ok=True)
     if not ok:
         print(f"sent: False ({publish.error_code(detail)})")
         return _failed(detail, now)
