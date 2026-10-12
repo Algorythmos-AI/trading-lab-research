@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, ChartCandlestick, ChevronLeft, ChevronRight, Keyboard, List, Search, TriangleAlert } from "lucide-react";
+import { ArrowDown, ArrowUp, ChartCandlestick, ChevronLeft, ChevronRight, Keyboard, List, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RoomBar } from "@/components/options-charts";
 import { OptionsDay } from "@/components/options-day";
@@ -45,6 +45,8 @@ import { OptionsDetail, Tick } from "./options-detail";
 import { OptionsPositions } from "./options-positions";
 import { OptionsTriggers, TriggerNotices } from "./options-triggers";
 import { PaneBoundary } from "./pane-boundary";
+import { Notice } from "@/components/ui/notice";
+import { Kbd } from "@/components/ui/kbd";
 
 const VIEW_LABEL: Record<DeskView, string> = { brief: "Brief", live: "Live", review: "Review" };
 const VIEW_HINT: Record<DeskView, string> = {
@@ -552,9 +554,7 @@ export function OptionsDesk({
           >
             <Search aria-hidden className="size-3.5" />
             Search
-            <kbd aria-hidden className="bg-muted rounded px-1 font-mono text-[0.625rem]">
-              ⌘K
-            </kbd>
+            <Kbd aria-hidden>⌘K</Kbd>
           </button>
           <button
             type="button"
@@ -582,11 +582,10 @@ export function OptionsDesk({
         ) : null}
         <OptionsDay e={e} />
         {stale ? (
-          <p role="alert" className="text-bad flex basis-full items-start gap-2 text-sm">
-            <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
+          <Notice tone="bad" size="sm" role="alert" className="basis-full">
             These levels were for {weekDate(e.session)}. A later session has started and no newer edition has published, so do not trade
             from them.
-          </p>
+          </Notice>
         ) : null}
       </div>
 

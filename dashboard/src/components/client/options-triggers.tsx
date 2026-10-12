@@ -1,11 +1,13 @@
 "use client";
 
-import { TriangleAlert, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useState } from "react";
 import { newYork, num, rMult, weekDate } from "@/lib/format";
 import { clockSpan } from "@/lib/options";
 import { announce, rulesAreOld, STATE_LABEL, type RulesToday, type SeenTriggers, type Trigger } from "@/lib/triggers";
 import { cn } from "@/lib/utils";
+import { Notice } from "@/components/ui/notice";
+import { Pane } from "@/components/ui/pane";
 
 /** A target is a gain and a stop a loss whatever the figure; otherwise the colour follows the figure as it is printed. */
 function tone(t: Trigger): string {
@@ -37,14 +39,18 @@ export function OptionsTriggers({
   const old = rulesAreOld(rules, marketOpen);
   const partial = rules.names > 0 && rules.names < rules.desk;
   return (
-    <section aria-label="Rules today" data-triggers={rules.triggers.length} data-rules-age={old ? "old" : "fresh"} className="border-t px-3 py-2.5">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-        <h3 className="text-[0.8125rem] font-medium">Rules today</h3>
-        <span className="text-muted-foreground text-[0.6875rem]">
+    <Pane
+      label="Rules today"
+      title="Rules today"
+      data-triggers={rules.triggers.length}
+      data-rules-age={old ? "old" : "fresh"}
+      meta={
+        <>
           {weekDate(rules.session)} · {rules.complete ? "session over · " : ""}as of {newYork(rules.asOf, false)} ET
           {rules.delayMin ? ` · ${rules.delayMin} min behind` : ""}
-        </span>
-      </div>
+        </>
+      }
+    >
       {nextClose && !rules.complete ? (
         <p data-next-hourly={nextClose.label} className="text-muted-foreground text-[0.6875rem]">
           Next hourly close {nextClose.label} ET in <span className="text-foreground font-mono">{clockSpan(nextClose.ms)}</span>
@@ -52,10 +58,9 @@ export function OptionsTriggers({
         </p>
       ) : null}
       {old ? (
-        <p role="status" className="text-warn mt-1 flex items-start gap-1.5 text-xs">
-          <TriangleAlert aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+        <Notice role="status" className="mt-1">
           Nothing has come from the host for {num(rules.ageMin, 0)} minutes, so these may be out of date.
-        </p>
+        </Notice>
       ) : null}
       {partial ? (
         <p className="text-muted-foreground mt-1 text-xs">
@@ -98,7 +103,7 @@ export function OptionsTriggers({
         Paper rules on probation, replayed on delayed data: provisional, and not a signal to trade. R is on the stock, before any option cost. The after-close edition is the
         record.
       </p>
-    </section>
+    </Pane>
   );
 }
 

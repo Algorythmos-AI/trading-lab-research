@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { TriangleAlert } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Empty } from "@/components/empty";
 import { LevelMap, type BreakevenMark } from "@/components/options-charts";
@@ -34,16 +33,8 @@ import { cn } from "@/lib/utils";
 import { StateChip, useLiveRead } from "./live-layer";
 import { OptionsContract } from "./options-contract";
 import { PaneBoundary } from "./pane-boundary";
-
-/** A label over its value: the desk's way of stating a fact, one unit per cell. */
-function Fact({ label, children, title }: { label: string; children: React.ReactNode; title?: string }) {
-  return (
-    <div className="min-w-0" title={title}>
-      <dt className="text-muted-foreground truncate text-[0.6875rem]">{label}</dt>
-      <dd className="truncate font-mono text-[0.8125rem]">{children}</dd>
-    </div>
-  );
-}
+import { Notice } from "@/components/ui/notice";
+import { Stat } from "@/components/ui/stat";
 
 /** A live number that washes green or red for a moment when it changes. The wash is background only. */
 export function Tick({ value, children, className }: { value: number | null; children: React.ReactNode; className?: string }) {
@@ -298,54 +289,54 @@ export function OptionsDetail({
       </PaneBoundary>
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 border-t pt-3 sm:grid-cols-5">
-        <Fact label="Support" title="Nearest zone below the close, and how far in ATRs">
+        <Stat label="Support" title="Nearest zone below the close, and how far in ATRs">
           {near.support ? num(near.support.edge, 2) : close === null ? "—" : "none near"}
           {near.support?.distAtr != null ? <span className="text-muted-foreground"> · {num(near.support.distAtr, 1)} ATR</span> : null}
-        </Fact>
-        <Fact label="Resistance" title="Nearest zone above the close, and how far in ATRs">
+        </Stat>
+        <Stat label="Resistance" title="Nearest zone above the close, and how far in ATRs">
           {near.resistance ? num(near.resistance.edge, 2) : close === null ? "—" : "none near"}
           {near.resistance?.distAtr != null ? <span className="text-muted-foreground"> · {num(near.resistance.distAtr, 1)} ATR</span> : null}
-        </Fact>
-        <Fact label="1-day move" title="What the options market prices for one day">
+        </Stat>
+        <Stat label="1-day move" title="What the options market prices for one day">
           {t.expected_move?.day != null ? `±${num(t.expected_move.day, 2)}` : "—"}
-        </Fact>
-        <Fact label="1-week move" title="What the options market prices for one week">
+        </Stat>
+        <Stat label="1-week move" title="What the options market prices for one week">
           {t.expected_move?.week != null ? `±${num(t.expected_move.week, 2)}` : "—"}
-        </Fact>
-        <Fact label="ATR, 14 days">{num(t.atr14, 2)}</Fact>
-        <Fact label="Prior high" title="The high of the session the levels were built from">
+        </Stat>
+        <Stat label="ATR, 14 days">{num(t.atr14, 2)}</Stat>
+        <Stat label="Prior high" title="The high of the session the levels were built from">
           {num(t.last?.high ?? pdh, 2)}
-        </Fact>
-        <Fact label="Prior low" title="The low of the session the levels were built from">
+        </Stat>
+        <Stat label="Prior low" title="The low of the session the levels were built from">
           {num(t.last?.low ?? pdl, 2)}
-        </Fact>
-        <Fact label="Close in range" title="Where the close sat between the day's low (0%) and high (100%)">
+        </Stat>
+        <Stat label="Close in range" title="Where the close sat between the day's low (0%) and high (100%)">
           {fracPct(t.close_strength?.pos, 0)}
-        </Fact>
-        <Fact label="Implied vol" title="Annualised, from the options market at the close">
+        </Stat>
+        <Stat label="Implied vol" title="Annualised, from the options market at the close">
           {fracPct(t.expected_move?.annual_iv, 1)}
-        </Fact>
-        <Fact label="IV percentile" title="Where implied vol sits in its own last 52 weeks">
+        </Stat>
+        <Stat label="IV percentile" title="Where implied vol sits in its own last 52 weeks">
           {fracPct(ivp, 0)}
-        </Fact>
+        </Stat>
         {/* From the edition's second format. A name without the block shows none of these, not four dashes. */}
         {vol ? (
           <>
-            <Fact
+            <Stat
               label="IV against realised"
               title={`30-day implied vol (${fracPct(vol.iv, 1)}) over 30-day realised vol (${fracPct(vol.hv, 1)}). Above 1, the options price in more movement than the stock has been making.`}
             >
               {vol.ivOverHv !== null ? `${num(vol.ivOverHv, 2)}×` : "—"}
-            </Fact>
-            <Fact label="IV change, 1 day" title="The day's change in 30-day implied vol, in volatility points">
+            </Stat>
+            <Stat label="IV change, 1 day" title="The day's change in 30-day implied vol, in volatility points">
               {vol.changePts !== null ? `${signed(vol.changePts, 1)} pts` : "—"}
-            </Fact>
-            <Fact label="IV pct, 13 / 26 wk" title="Where implied vol sits in its own last 13 and 26 weeks. The 52-week percentile is the fact before these.">
+            </Stat>
+            <Stat label="IV pct, 13 / 26 wk" title="Where implied vol sits in its own last 13 and 26 weeks. The 52-week percentile is the fact before these.">
               {vol.pcts.map((p) => fracPct(p, 0)).join(" / ")}
-            </Fact>
-            <Fact label="Option volume" title="The day's option volume against its own 20-day average">
+            </Stat>
+            <Stat label="Option volume" title="The day's option volume against its own 20-day average">
               {vol.volumeRatio !== null ? `${num(vol.volumeRatio, 1)}× average` : "—"}
-            </Fact>
+            </Stat>
           </>
         ) : null}
       </dl>
@@ -370,10 +361,9 @@ export function OptionsDetail({
       ) : null}
 
       {(t.problems ?? []).length > 0 ? (
-        <p className="text-warn flex items-start gap-1.5 text-xs">
-          <TriangleAlert aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+        <Notice>
           {(t.problems ?? []).join(" ")}
-        </p>
+        </Notice>
       ) : null}
     </div>
   );
