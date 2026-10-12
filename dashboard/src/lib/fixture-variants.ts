@@ -39,8 +39,15 @@ export const VARIANT_FLAGS = [
   "rules-off",
   "rules-final",
   "hourly-off",
+  "frozen",
 ] as const;
 export type VariantFlag = (typeof VARIANT_FLAGS)[number];
+
+/**
+ * `frozen`: the server's clock for the Options pages stands at this instant (11:01 New York on the fixture's
+ * session), so a screenshot is the same picture on every run. The browser's clock is set to match by the test.
+ */
+export const FROZEN_NOW = "2026-10-12T15:01:00Z";
 
 const KNOWN = new Set<string>(VARIANT_FLAGS);
 

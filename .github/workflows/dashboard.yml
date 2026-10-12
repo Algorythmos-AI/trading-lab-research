@@ -62,6 +62,21 @@ jobs:
       - run: pnpm test:e2e
         env:
           DASHBOARD_FIXTURE: "1"
+      # What the desk looks like on this commit, whatever the comparison above said: after a change that is meant
+      # to alter a picture, these are the files to look at and commit (docs/runbooks/dashboard-screenshots.md).
+      - name: Draw the screenshots as this commit draws them
+        if: always()
+        run: pnpm exec playwright test visual.spec.ts --update-snapshots --reporter=line
+        env:
+          DASHBOARD_FIXTURE: "1"
+          VISUAL_UPDATE: "1"
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: screenshots
+          path: dashboard/test/e2e/__screenshots__
+          retention-days: 7
+          if-no-files-found: warn
       - if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

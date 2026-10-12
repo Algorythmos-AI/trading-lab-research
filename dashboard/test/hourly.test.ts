@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { fixtureOptionsLive } from "@/lib/fixture-variants";
+import { readFileSync } from "node:fs";
+import { fixtureOptionsLive, FROZEN_NOW, parseFlags } from "@/lib/fixture-variants";
 import { HOURLY_MIN_BARS, hourlyBySymbol, withHourly } from "@/lib/hourly";
 import { mapView, type Options } from "@/lib/options";
 import { POSITIONS_GONE_MIN } from "@/lib/positions";
@@ -66,5 +67,12 @@ describe("the map's hourly range", () => {
     expect(hour.bars).toHaveLength(35);
     expect(hour.hi - hour.lo).toBeLessThanOrEqual(day.hi - day.lo);
     expect(t.bars).not.toBe(h.bars); // the edition's own name is not changed
+  });
+
+  it("has a clock the screenshots can stand still, and the browser test names the same instant", () => {
+    expect(parseFlags("frozen.quotes-off").has("frozen")).toBe(true);
+    expect(readFileSync("test/e2e/visual.spec.ts", "utf8")).toContain(`const FROZEN_NOW = "${FROZEN_NOW}";`);
+    // Inside the fixture's session, so the desk is pictured as it is while the market trades.
+    expect(new Date(FROZEN_NOW).toISOString().slice(0, 10)).toBe(e.session);
   });
 });
