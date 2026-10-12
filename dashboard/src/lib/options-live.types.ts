@@ -117,4 +117,27 @@ export interface OptionsLive {
       }[];
     }[];
   } | null;
+  /**
+   * Each name's finished hourly bars for the last few sessions, from the delayed consolidated tape, for the map's hourly range. New in version 3.
+   *
+   * @maxItems 40
+   */
+  hourly?:
+    | {
+        symbol: string;
+        /**
+         * @maxItems 80
+         */
+        bars: {
+          /**
+           * The bar's start, New York time.
+           */
+          t: string;
+          o: number;
+          h: number;
+          l: number;
+          c: number;
+        }[];
+      }[]
+    | null;
 }

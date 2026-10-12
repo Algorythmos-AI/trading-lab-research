@@ -62,3 +62,11 @@ bars, which run 16 minutes behind the market. What it says is provisional: the a
 
 It is sent only once the dashboard reports it accepts version 2 of the document (asked once an hour). If the
 bars cannot be read, the positions go out as usual and the document's `problems` says `rules-unavailable`.
+
+## Hourly bars (document version 3)
+
+With `hourly_bars: true` in `config/options_desk.yaml` the job also sends each name's finished hourly bars for the
+last five sessions, from one more request for half-hour bars on the delayed tape. They are for the map's hourly
+range. Like the rule states they go only to a dashboard whose `/api/health` says it accepts version 3, and no
+fault in them stops the positions: the document then goes without them and `problems` carries `hourly-unavailable`,
+`hourly-failed`, `hourly-invalid` or `hourly-refused`. The log line counts the names, never a price.
