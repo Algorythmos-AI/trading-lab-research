@@ -21,8 +21,6 @@ async function draw(page: Page, url: string, ready: string) {
   await page.goto(url);
   await expect(page.locator(ready)).toHaveAttribute("data-ready", "true");
   await page.evaluate(() => document.fonts.ready);
-  // Whatever the page asks for after it is up has answered before the picture is taken.
-  await page.waitForLoadState("networkidle");
 }
 
 /** The site's own header shows two running clocks and the feed's age: it is not the desk, and is left out. */
