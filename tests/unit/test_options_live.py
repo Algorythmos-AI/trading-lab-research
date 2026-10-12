@@ -627,3 +627,18 @@ def test_hourly_bars_go_only_to_a_dashboard_that_takes_them_and_never_stop_the_p
     monkeypatch.setattr(live, "hourly_block", lambda *a: [{"symbol": "SPY", "bars": [{"t": "2026-10-12T09:30", "o": 1.0, "h": float("nan"), "l": 1.0, "c": 1.0}]}])
     assert live._publish(args(), rule_account()) == 0
     assert "hourly" not in sent[-1] and len(sent[-1]["positions"]) == 1 and {"extras-unreadable", "hourly-invalid"} & set(sent[-1]["problems"])
+
+
+def test_bars_are_read_to_the_last_page_and_a_reply_cut_short_is_a_fault_not_a_shorter_answer():
+    # The feed pages by name: a reader that stops early loses whole names (seen live: seven of ten).
+    pages = [Reply(200, {"bars": {"AAPL": [1, 2], "META": [3]}, "next_page_token": "a"}),
+             Reply(200, {"bars": {"META": [4], "QQQ": [5]}, "next_page_token": "b"}),
+             Reply(200, {"bars": {"SPY": [6]}, "next_page_token": "c"}),
+             Reply(200, {"bars": {"TSLA": [7]}, "next_page_token": None})]
+    session = Session(*pages)
+    acct = live.OptionsAccount("k", "s", session=session)
+    got = acct.bars(["AAPL", "META", "QQQ", "SPY", "TSLA"], "30Min", ny("09:30"), ny("11:00"))
+    assert got == {"AAPL": [1, 2], "META": [3, 4], "QQQ": [5], "SPY": [6], "TSLA": [7]}
+    endless = Session(*[Reply(200, {"bars": {"AAPL": [1]}, "next_page_token": "more"}) for _ in range(live.BAR_PAGES)])
+    with pytest.raises(live.BrokerFault, match="bars-truncated"):
+        live.OptionsAccount("k", "s", session=endless).bars(["AAPL"], "30Min", ny("09:30"), ny("11:00"))
