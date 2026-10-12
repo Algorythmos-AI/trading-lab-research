@@ -6,11 +6,10 @@ import { OptionsName } from "@/components/client/options-name";
 import { PaneBoundary } from "@/components/client/pane-boundary";
 import { PageHeading } from "@/components/page-heading";
 import { sydney, weekDate } from "@/lib/format";
-import { requestTime } from "@/lib/now";
 import { hourlyBySymbol } from "@/lib/hourly";
 import { interestBySymbol } from "@/lib/oi";
 import { editionState, mapView } from "@/lib/options";
-import { loadOptions, loadOptionsLive } from "@/lib/snapshot";
+import { loadOptions, loadOptionsLive, pageTime } from "@/lib/snapshot";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +46,7 @@ export default async function OptionsNamePage({ params, searchParams }: Props) {
   const e = result.edition;
   const t = e.tickers.find((x) => x.symbol === symbol);
   if (!t) notFound();
-  const now = requestTime();
+  const now = await pageTime();
   const live = positions?.status === "ok" ? positions.doc : null;
   const interest = interestBySymbol(live, now.getTime(), (s) => (s === symbol ? mapView(t) : null))[symbol] ?? null;
   return (

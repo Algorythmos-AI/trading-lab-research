@@ -3,7 +3,7 @@ import { cache } from "react";
 import { LATEST_PATH, listPaths, readText } from "./blob";
 import type { CryptoSnapshot } from "./crypto.types";
 import { DESK_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
-import { fixtureOptionsLive, parseFlags, partialOptions, poisonedOptions, v2Options, VARIANT_COOKIE, type VariantFlag } from "./fixture-variants";
+import { fixtureOptionsLive, FROZEN_NOW, parseFlags, partialOptions, poisonedOptions, v2Options, VARIANT_COOKIE, type VariantFlag } from "./fixture-variants";
 import type { HftSnapshot } from "./hft.types";
 import { logEvent } from "./log";
 import type { OptionsLive } from "./options-live.types";
@@ -206,6 +206,14 @@ export const loadOptions = cache(async (date?: string): Promise<OptionsResult> =
 export type OptionsLiveResult = { status: "ok"; doc: OptionsLive; source: "fixture" | "blob" } | { status: "missing" } | { status: "error" };
 
 /**
+ * The time an Options page is drawn for: now, always, outside fixture mode. In fixture mode the `frozen` flag
+ * stands it still, for screenshots.
+ */
+export async function pageTime(): Promise<Date> {
+  return (await fixtureFlags()).has("frozen") ? new Date(FROZEN_NOW) : new Date();
+}
+
+/**
  * The options live document: the paper account's open option positions and open interest. "missing" until the
  * options-live job has published once.
  */
@@ -214,7 +222,7 @@ export const loadOptionsLive = cache(async (): Promise<OptionsLiveResult> => {
     const flags = await fixtureFlags();
     if (flags.has("positions-off") || flags.has("empty") || flags.has("error")) return { status: "missing" };
     const mod = await import("../../test/fixtures/options.v1.json");
-    return { status: "ok", doc: fixtureOptionsLive((mod.default ?? mod) as unknown as OptionsEdition, new Date(), flags), source: "fixture" };
+    return { status: "ok", doc: fixtureOptionsLive((mod.default ?? mod) as unknown as OptionsEdition, flags.has("frozen") ? new Date(FROZEN_NOW) : new Date(), flags), source: "fixture" };
   }
   try {
     const stored = await readText(OPTIONS_LIVE_PATHS.latest);

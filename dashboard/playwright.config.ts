@@ -6,6 +6,9 @@ const PORT = Number(process.env.E2E_PORT ?? 3100);
 
 export default defineConfig({
   testDir: "test/e2e",
+  // One set of pictures, made on the CI runner (Linux): the same machine every time, so no platform in the name.
+  snapshotPathTemplate: "test/e2e/__screenshots__/{projectName}/{arg}{ext}",
+  expect: { toHaveScreenshot: { maxDiffPixelRatio: 0.002, animations: "disabled", caret: "hide" } },
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
