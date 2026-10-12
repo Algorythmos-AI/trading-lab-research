@@ -27,6 +27,7 @@ import {
   type OptionsTicker,
   type Rung,
   volRead, zoneKey } from "@/lib/options";
+import { withHourly, type HourlyBar } from "@/lib/hourly";
 import type { Interest } from "@/lib/oi";
 import { STATE_LABEL, type RuleState } from "@/lib/triggers";
 import { cn } from "@/lib/utils";
@@ -100,6 +101,9 @@ export function OptionsDetail({
   today,
   expanded = false,
   fullHref = null,
+  hourly = null,
+  range: wanted = "daily",
+  onRange,
 }: {
   e: Options;
   t: OptionsTicker;
@@ -116,6 +120,11 @@ export function OptionsDetail({
   expanded?: boolean;
   /** Where this name's own page is, when this pane is not already it. */
   fullHref?: string | null;
+  /** This name's hourly bars, when the host has sent enough of them: the map then offers an hourly range. */
+  hourly?: readonly HourlyBar[] | null;
+  /** The range the reader chose, held by whoever holds this pane so that it survives a change of name. */
+  range?: "daily" | "hourly";
+  onRange?: (range: "daily" | "hourly") => void;
 }) {
   const read = useLiveRead(t);
   const close = t.last?.close ?? null;
@@ -131,12 +140,16 @@ export function OptionsDetail({
   const view = mapView(t);
   const hasMap = view !== null && close !== null;
   const strength = t.close_strength?.chip;
-  const layers = mapLayersOf(t, interest !== null);
+
   // Kept with the name it was priced for, so the line never lingers on the next name's map.
   const [mark, setMark] = useState<{ symbol: string; at: BreakevenMark } | null>(null);
   const symbol = t.symbol;
   const onBreakeven = useCallback((at: BreakevenMark | null) => setMark(at ? { symbol, at } : null), [symbol]);
   const vol = volRead(t);
+  // A name without hourly bars is drawn on the daily range, whatever was chosen.
+  const range = wanted === "hourly" && hourly ? "hourly" : "daily";
+  const drawn = range === "hourly" && hourly ? withHourly(t, hourly) : t;
+  const layers = mapLayersOf(drawn, interest !== null);
   // The zone the pointer is on, in the map or in the list: each picks it out in the other.
   const [hot, setHot] = useState<{ symbol: string; key: string } | null>(null);
   const hotKey = hot?.symbol === symbol ? hot.key : null;
@@ -208,8 +221,32 @@ export function OptionsDetail({
                 </button>
               ))}
             </div>
-            <div data-hide={[...hiddenLayers].join(" ") || undefined}>
-              <LevelMap t={t} interactive breakeven={mark?.symbol === t.symbol ? mark.at : null} interest={interest} hotZone={hotKey} onZone={onZone} />
+            {hourly ? (
+              <div role="group" aria-label="Map range" className="flex flex-wrap items-center gap-1">
+                <span className="text-muted-foreground mr-1 text-[0.6875rem]">Candles</span>
+                {(["daily", "hourly"] as const).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    aria-pressed={range === k}
+                    onClick={(ev) => {
+                      ev.currentTarget.focus();
+                      onRange?.(k);
+                    }}
+                    className={cn("rounded px-2 py-0.5 text-[0.6875rem] font-medium", range === k ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground")}
+                  >
+                    {k === "daily" ? "Daily" : "Hourly"}
+                  </button>
+                ))}
+                {range === "hourly" ? (
+                  <span className="text-muted-foreground text-[0.6875rem]">
+                    · {hourly.length} finished hourly bars from the delayed tape; the last began {hourly[hourly.length - 1]!.t.slice(5).replace("T", " ")} ET
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+            <div data-hide={[...hiddenLayers].join(" ") || undefined} data-map-range={range}>
+              <LevelMap t={drawn} unit={range} closeDay={e.built_from ?? null} interactive breakeven={mark?.symbol === t.symbol ? mark.at : null} interest={interest} hotZone={hotKey} onZone={onZone} />
             </div>
           </div>
         ) : (

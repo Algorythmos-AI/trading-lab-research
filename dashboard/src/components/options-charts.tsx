@@ -128,6 +128,8 @@ export function LevelMap({
   interest = null,
   hotZone = null,
   onZone,
+  unit = "daily",
+  closeDay = null,
 }: {
   t: OptionsTicker;
   interactive?: boolean;
@@ -137,6 +139,11 @@ export function LevelMap({
   /** The zone to pick out (`zoneKey`), and a way to say which zone the pointer is over: the zones list uses both. */
   hotZone?: string | null;
   onZone?: (key: string | null) => void;
+  /** What one candle is. Hourly candles carry a time in their date (`withHourly`) and are dated once a session. */
+  unit?: "daily" | "hourly";
+  /** The day of the close the levels were built from. Hourly candles after it are today's: the close's dot, the
+   *  expected move and the live price start at that day's last candle, not at the newest one. */
+  closeDay?: string | null;
 }) {
   const v = mapView(t);
   const close = t.last?.close;
@@ -147,8 +154,21 @@ export function LevelMap({
   for (let p = Math.ceil(v.lo / step) * step; p <= v.hi; p += step) ticks.push(p);
   const n = v.bars.length;
   const bw = n > 0 ? (X1 - X0) / n : 0;
-  const xLast = n > 0 ? X0 + bw * (n - 0.5) : X1;
+  const upTo = unit === "hourly" && closeDay ? v.bars.findLastIndex((b) => b.d.slice(0, 10) <= closeDay) : n - 1;
+  const xLast = n > 0 ? X0 + bw * (Math.max(upTo, 0) + 0.5) : X1;
   const bands = moveBands(t);
+  // Hourly candles are dated once a session, and not where the date would sit on the one before it.
+  const dated = new Set<number>();
+  if (unit === "hourly") {
+    let lastX = -Infinity;
+    v.bars.forEach((b, i) => {
+      const x = i === 0 ? X0 + 16 : X0 + bw * (i + 0.5);
+      if ((i === 0 || b.d.slice(0, 10) !== v.bars[i - 1]!.d.slice(0, 10)) && x - lastX >= 36) {
+        dated.add(i);
+        lastX = x;
+      }
+    });
+  }
 
   const above = v.zones.filter((z) => z.tone === "resistance").sort((a, b) => a.zone.lo - b.zone.lo).slice(0, LABELS_EACH_SIDE);
   const below = v.zones.filter((z) => z.tone === "support").sort((a, b) => b.zone.hi - a.zone.hi).slice(0, LABELS_EACH_SIDE);
@@ -178,7 +198,7 @@ export function LevelMap({
   return (
     <MapFrame
       t={{ ...t, bars: undefined }}
-      label={`${t.symbol}: last ${n} daily bars with support and resistance zones and the expected move`}
+      label={`${t.symbol}: last ${n} ${unit} bars with support and resistance zones and the expected move`}
       w={W}
       h={H}
       top={TOP}
@@ -233,7 +253,7 @@ export function LevelMap({
             const top = y(Math.max(b.o, b.c));
             return (
               <g key={b.d}>
-                <title>{`${b.d}  O ${num(b.o, 2)}  H ${num(b.h, 2)}  L ${num(b.l, 2)}  C ${num(b.c, 2)}`}</title>
+                <title>{`${unit === "hourly" ? `${b.d.replace("T", " ")} ET` : b.d}  O ${num(b.o, 2)}  H ${num(b.h, 2)}  L ${num(b.l, 2)}  C ${num(b.c, 2)}`}</title>
                 <line x1={cx} x2={cx} y1={y(b.h)} y2={y(b.l)} stroke="var(--muted-foreground)" strokeWidth={1} />
                 <rect
                   x={cx - bw * 0.32}
@@ -245,9 +265,9 @@ export function LevelMap({
                   stroke="var(--muted-foreground)"
                   strokeWidth={1}
                 />
-                {i % 10 === 0 || i === n - 1 ? (
+                {(unit === "hourly" ? dated.has(i) : i % 10 === 0 || i === n - 1) ? (
                   <text x={i === 0 ? X0 : cx} y={H - 6} fontSize={10.5} textAnchor={i === 0 ? "start" : "middle"} style={{ fill: "var(--muted-foreground)" }} className="font-mono">
-                    {b.d.slice(5)}
+                    {b.d.slice(5, 10)}
                   </text>
                 ) : null}
               </g>

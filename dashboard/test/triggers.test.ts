@@ -12,7 +12,7 @@ const doc = (flags: string[] = []) => fixtureOptionsLive(e as never, NOW, new Se
 describe("the rules' states in today's session", () => {
   it("is a document the site accepts, with and without the block", () => {
     expect(validateOptionsLive(doc())).toMatchObject({ ok: true });
-    expect(doc().schema_version).toBe(2);
+    expect(doc(["hourly-off"]).schema_version).toBe(2);
     expect(validateOptionsLive(doc(["rules-off"]))).toMatchObject({ ok: true });
     expect(doc(["rules-off"]).rules).toBeUndefined();
     const bad = doc();

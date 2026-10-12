@@ -7,6 +7,7 @@ import { PaneBoundary } from "@/components/client/pane-boundary";
 import { PageHeading } from "@/components/page-heading";
 import { sydney, weekDate } from "@/lib/format";
 import { requestTime } from "@/lib/now";
+import { hourlyBySymbol } from "@/lib/hourly";
 import { interestBySymbol } from "@/lib/oi";
 import { editionState, mapView } from "@/lib/options";
 import { loadOptions, loadOptionsLive } from "@/lib/snapshot";
@@ -59,7 +60,7 @@ export default async function OptionsNamePage({ params, searchParams }: Props) {
       </nav>
       <LiveQuotes symbols={symbol} session={e.session} enabled={!date}>
         <PaneBoundary name={symbol}>
-          <OptionsName e={e} t={t} live={!date} positions={live ? { ...live, open_interest: null } : null} interest={interest} stale={!date && editionState(e.session, now) === "stale"} />
+          <OptionsName e={e} t={t} live={!date} positions={live ? { ...live, open_interest: null, hourly: null } : null} interest={interest} hourly={hourlyBySymbol(live, [symbol], now.getTime())[symbol] ?? null} stale={!date && editionState(e.session, now) === "stale"} />
         </PaneBoundary>
         <p className="text-muted-foreground w-[min(calc(100vw-2rem),72rem)] justify-self-center text-xs">
           Levels for {weekDate(e.session)}, built from the {weekDate(e.built_from)} close. Source: {e.source ?? "not stated"}. Published {sydney(e.as_of)} Sydney.
