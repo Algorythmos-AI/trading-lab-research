@@ -96,12 +96,20 @@ def site_accepts(url: str, bypass: str | None) -> int:
 
 
 def earnings_rows() -> list[dict[str, str]]:
-    """The hand-kept earnings dates (config/events/earnings.csv). A missing or unreadable file is no dates."""
+    """The hand-kept earnings dates (config/events/earnings.csv). A missing or unreadable file is no dates, and
+    says so: the edition still goes out."""
     try:
-        with (CONFIG_DIR / "events" / "earnings.csv").open(newline="") as f:
-            return [r for r in csv.DictReader(line for line in f if not line.startswith("#"))]
-    except (OSError, csv.Error):
+        # utf-8-sig: a spreadsheet's byte-order mark is not part of the first column's name.
+        with (CONFIG_DIR / "events" / "earnings.csv").open(newline="", encoding="utf-8-sig") as f:
+            lines = [line for line in f if line.strip() and not line.lstrip().lstrip('"').startswith("#")]
+        rows = [{str(k or "").strip().lower(): str(v or "") for k, v in r.items()} for r in csv.DictReader(lines)]
+    except (OSError, ValueError, csv.Error) as e:      # ValueError: bytes that are not UTF-8
+        print(f"earnings dates unreadable ({e.__class__.__name__}): sending without them", file=sys.stderr)
         return []
+    if rows and not {"symbol", "date"} <= set(rows[0]):
+        print("earnings dates: the file has no symbol and date columns: sending without them", file=sys.stderr)
+        return []
+    return rows
 
 
 def macro_calendar() -> list[dict[str, object]] | None:
@@ -182,11 +190,20 @@ def main(argv: list[str] | None = None) -> int:
     rules_doc = json.loads((CONFIG_DIR / "options_rules.json").read_text())
     two = fmt > edition.EDITION_VERSION
     calendar = macro_calendar() if two else None
+    vix = None
+    if two and (vix_raw is not None or desk.get("vix_contract")):
+        try:                                           # the index is an extra: a pull it cannot read must not stop the levels
+            vix, why = edition.vix_block(vix_raw, run.finished, now)
+        except Exception as e:  # noqa: BLE001
+            vix, why = None, f"unreadable ({e.__class__.__name__})"
+        if vix is None:
+            print(f"volatility index left out: {why}")
     doc = edition.build_edition(levels_doc, edition.read_csv(a.data / "iv_history.csv"),
                                 edition.read_csv(a.data / "scorecard.csv"), rules_doc, dt.datetime.now(dt.UTC),
                                 version=fmt, calendar=calendar,
-                                vix=edition.vix_block(vix_raw, run.finished, now) if two else None,
-                                earnings=edition.earnings_events(earnings_rows(), names, levels_doc["session"]) if two else None)
+                                vix=vix,
+                                earnings=edition.earnings_events(earnings_rows(), names, levels_doc["session"],
+                                                                 built_from=levels_doc.get("built_from")) if two else None)
     body = json.dumps(doc, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode()
     if a.out:
         a.out.write_bytes(body)

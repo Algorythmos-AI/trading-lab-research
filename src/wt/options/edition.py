@@ -357,46 +357,62 @@ def vol_block(row: Mapping[str, Any] | None, before: Mapping[str, Any] | None) -
 EVENTS_MAX = 400             # what the edition's schema allows
 VIX = "VIX"                  # the key the volatility index's daily pull travels under; never a name in the edition
 VIX_YEAR = 252               # sessions in the year its percentile is taken over
-VIX_YEAR_MIN = 200           # fewer closes than this is not a year: the percentile is left out
+VIX_YEAR_MIN = 200           # fewer earlier closes than this is not a year: the percentile is left out
+VIX_DAYS = 380               # calendar days of its bars that are read: a fault older than the year is not today's
+VIX_MIN, VIX_MAX = 5.0, 150.0  # the index has never closed outside these; a close that does is a wrong pull
 EARNINGS_WHEN = ("bmo", "amc", "during")
 
 
-def vix_block(raw: Mapping[str, Any] | None, finished: str, now: dt.datetime) -> dict[str, Any] | None:
-    """The volatility index at the finished session's close, from its daily pull: the close, the change on the
-    day and the share of the last year's closes it is above (a fraction, as the page words it). None when there is no pull, its bars
-    fail the checks every pull gets, or its last final bar is not the finished session's: an old level is not
-    shown as today's. A jump that looks like a split is a jump here, since an index does not split."""
+def vix_block(raw: Mapping[str, Any] | None, finished: str, now: dt.datetime) -> tuple[dict[str, Any] | None, str]:
+    """(the volatility index at the finished session's close, why it is left out). From its daily pull: the close,
+    the change on the day and the share of the year's earlier closes it is above (a fraction, as the page words
+    it). Left out when there is no pull, when its bars fail any check a pull gets (a doubling overnight is far
+    likelier a wrong contract or a bad print than the index), when a close is outside what the index has ever
+    printed, or when its last final bar is not the finished session's: an old level is not shown as today's.
+    The reason holds dates and counts only."""
     if not raw:
-        return None
-    ld = lv.load_ibkr(raw, now_utc=now)
-    if any("split" not in p for p in ld.problems) or len(ld.bars) < 2 or ld.bars[-1].d != finished:
-        return None
-    closes = [b.c for b in ld.bars[-VIX_YEAR:]]
-    last = closes[-1]
-    pct = sum(1 for c in closes if c < last) / len(closes) if len(closes) >= VIX_YEAR_MIN else None
-    return {"close": round(last, 2), "change": round(last - closes[-2], 2), "pct_52w": None if pct is None else round(pct, 4)}
+        return None, "no pull"
+    since = (dt.date.fromisoformat(finished) - dt.timedelta(days=VIX_DAYS)).isoformat()
+    ld = lv.load_ibkr(raw, since=since, now_utc=now)
+    if ld.problems:
+        return None, f"{len(ld.problems)} problem(s) in its bars, first: {ld.problems[0]}"
+    if len(ld.bars) < 2 or ld.bars[-1].d != finished:
+        return None, f"last final bar is {ld.bars[-1].d if ld.bars else 'none'}, expected {finished}"
+    closes = [b.c for b in ld.bars[-(VIX_YEAR + 1):]]
+    if not all(VIX_MIN < c < VIX_MAX for c in closes):
+        return None, "a close outside the index's range"
+    last, earlier = closes[-1], closes[:-1]
+    pct = sum(1 for c in earlier if c < last) / len(earlier) if len(earlier) >= VIX_YEAR_MIN else None
+    return {"close": round(last, 2), "change": round(last - earlier[-1], 2), "pct_52w": None if pct is None else round(pct, 4)}, ""
 
 
-def earnings_events(rows: Sequence[Mapping[str, Any]], names: Sequence[str], session: str, days: int = EVENT_DAYS) -> list[dict[str, Any]]:
+def earnings_events(rows: Sequence[Mapping[str, Any]], names: Sequence[str], session: str, days: int = EVENT_DAYS,
+                    built_from: str | None = None) -> list[dict[str, Any]]:
     """The hand-kept earnings dates (config/events/earnings.csv) for the edition's names, from the session to
     `days` days after it: the name, the date and whether it is before the open, after the close or during the
-    session. A row for another name, with a date that cannot be read, or outside the window is passed over."""
+    session. A report after the close of the day the levels were built from (`built_from`) is carried too: its
+    gap lands in the session. One row per name: a confirmed date before an expected one, then the later row in
+    the file. A row for another name, with a date that cannot be read, or outside the window is passed over."""
     first = dt.date.fromisoformat(session)
     last = first + dt.timedelta(days=days)
+    eve = dt.date.fromisoformat(built_from) if built_from else None
     carried = set(names)
-    out: dict[tuple[str, str], dict[str, Any]] = {}
+    out: dict[str, tuple[bool, dict[str, Any]]] = {}
     for e in rows:
         sym = str(e.get("symbol") or "").strip().upper()
         try:
             d = dt.date.fromisoformat(str(e.get("date") or "").strip())
         except ValueError:
             continue
-        if sym not in carried or not (first <= d <= last):
-            continue
         when = str(e.get("when") or "").strip().lower()
-        out[(d.isoformat(), sym)] = {"date": d.isoformat(), "time_et": None, "kind": "earnings", "type": "earnings",
-                                     "severity": None, "symbol": sym, "when": when if when in EARNINGS_WHEN else None}
-    return [out[k] for k in sorted(out)]
+        if sym not in carried or not (first <= d <= last or (d == eve and when == "amc")):
+            continue
+        confirmed = str(e.get("quality") or "").strip().lower() == "confirmed"
+        if sym in out and out[sym][0] and not confirmed:
+            continue
+        out[sym] = (confirmed, {"date": d.isoformat(), "time_et": None, "kind": "earnings", "type": "earnings",
+                                "severity": None, "symbol": sym, "when": when if when in EARNINGS_WHEN else None})
+    return sorted((row for _, row in out.values()), key=lambda x: (x["date"], x["symbol"]))
 
 
 def macro_events(calendar: Sequence[Mapping[str, Any]], session: str, days: int = EVENT_DAYS) -> list[dict[str, Any]]:
