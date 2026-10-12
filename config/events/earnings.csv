@@ -1,0 +1,5 @@
+# Earnings dates for the Options desk's names, kept by hand. Edition format 2 sends the rows that fall in the
+# session's week (scripts/options_edition.py). when: bmo (before the open), amc (after the close) or during.
+# quality: confirmed (the company has announced the date) or expected. A wrong date here is shown on the page,
+# so a row is added only from the company's own announcement or a source named in `source`.
+symbol,date,when,source,quality

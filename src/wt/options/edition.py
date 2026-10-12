@@ -355,6 +355,48 @@ def vol_block(row: Mapping[str, Any] | None, before: Mapping[str, Any] | None) -
 
 
 EVENTS_MAX = 400             # what the edition's schema allows
+VIX = "VIX"                  # the key the volatility index's daily pull travels under; never a name in the edition
+VIX_YEAR = 252               # sessions in the year its percentile is taken over
+VIX_YEAR_MIN = 200           # fewer closes than this is not a year: the percentile is left out
+EARNINGS_WHEN = ("bmo", "amc", "during")
+
+
+def vix_block(raw: Mapping[str, Any] | None, finished: str, now: dt.datetime) -> dict[str, Any] | None:
+    """The volatility index at the finished session's close, from its daily pull: the close, the change on the
+    day and the share of the last year's closes it is above (a fraction, as the page words it). None when there is no pull, its bars
+    fail the checks every pull gets, or its last final bar is not the finished session's: an old level is not
+    shown as today's. A jump that looks like a split is a jump here, since an index does not split."""
+    if not raw:
+        return None
+    ld = lv.load_ibkr(raw, now_utc=now)
+    if any("split" not in p for p in ld.problems) or len(ld.bars) < 2 or ld.bars[-1].d != finished:
+        return None
+    closes = [b.c for b in ld.bars[-VIX_YEAR:]]
+    last = closes[-1]
+    pct = sum(1 for c in closes if c < last) / len(closes) if len(closes) >= VIX_YEAR_MIN else None
+    return {"close": round(last, 2), "change": round(last - closes[-2], 2), "pct_52w": None if pct is None else round(pct, 4)}
+
+
+def earnings_events(rows: Sequence[Mapping[str, Any]], names: Sequence[str], session: str, days: int = EVENT_DAYS) -> list[dict[str, Any]]:
+    """The hand-kept earnings dates (config/events/earnings.csv) for the edition's names, from the session to
+    `days` days after it: the name, the date and whether it is before the open, after the close or during the
+    session. A row for another name, with a date that cannot be read, or outside the window is passed over."""
+    first = dt.date.fromisoformat(session)
+    last = first + dt.timedelta(days=days)
+    carried = set(names)
+    out: dict[tuple[str, str], dict[str, Any]] = {}
+    for e in rows:
+        sym = str(e.get("symbol") or "").strip().upper()
+        try:
+            d = dt.date.fromisoformat(str(e.get("date") or "").strip())
+        except ValueError:
+            continue
+        if sym not in carried or not (first <= d <= last):
+            continue
+        when = str(e.get("when") or "").strip().lower()
+        out[(d.isoformat(), sym)] = {"date": d.isoformat(), "time_et": None, "kind": "earnings", "type": "earnings",
+                                     "severity": None, "symbol": sym, "when": when if when in EARNINGS_WHEN else None}
+    return [out[k] for k in sorted(out)]
 
 
 def macro_events(calendar: Sequence[Mapping[str, Any]], session: str, days: int = EVENT_DAYS) -> list[dict[str, Any]]:
@@ -382,14 +424,17 @@ def macro_events(calendar: Sequence[Mapping[str, Any]], session: str, days: int 
 
 def build_edition(levels_doc: Mapping[str, Any], iv_history: Sequence[Mapping[str, Any]],
                   scorecard: Sequence[Mapping[str, Any]], rules_doc: Mapping[str, Any], now: dt.datetime,
-                  version: int = EDITION_VERSION, calendar: Sequence[Mapping[str, Any]] | None = None) -> dict[str, Any]:
+                  version: int = EDITION_VERSION, calendar: Sequence[Mapping[str, Any]] | None = None,
+                  vix: Mapping[str, Any] | None = None,
+                  earnings: Sequence[Mapping[str, Any]] | None = None) -> dict[str, Any]:
     """The `stocksdelta/options` edition from one levels document, the whole volatility log and the whole
     scorecard. `rules_doc` carries the four rules' labels, status and backtest figures.
 
     `version` 2 adds, to exactly what version 1 holds: each name's volatility block, whether the session closes
     early, and the macro calendar's rows for the week (`calendar`, as `wt.risk.events.events()` gives them). The
     calendar is sent as "partial": it does not hold every release, so the page must not read a day without a row
-    as a day with nothing scheduled. The VIX is left out until the routine pulls it."""
+    as a day with nothing scheduled. `vix` is the volatility index's block (`vix_block`) when the routine pulled
+    it, and `earnings` the hand-kept dates' rows (`earnings_events`); each is left out when there is none."""
     if version not in (EDITION_VERSION, EDITION_VERSION_MAX):
         raise ValueError(f"edition version {version} is not one this builder writes")
     doc = _edition_v1(levels_doc, iv_history, scorecard, rules_doc, now)
@@ -401,9 +446,11 @@ def build_edition(levels_doc: Mapping[str, Any], iv_history: Sequence[Mapping[st
     for t in doc["tickers"]:
         t["vol"] = vol_block(iv.get((built_from, t["symbol"])), iv.get((before, t["symbol"])))
     doc["schema_version"] = EDITION_VERSION_MAX
-    doc["market"] = {"vix": None, "session": {"half_day": doc["session"] in lv.HALF_DAYS},
+    doc["market"] = {"vix": dict(vix) if vix else None, "session": {"half_day": doc["session"] in lv.HALF_DAYS},
                      "calendar": "partial" if calendar is not None else None}
-    doc["events"] = macro_events(calendar, doc["session"]) if calendar is not None else None
+    rows = (macro_events(calendar, doc["session"]) if calendar is not None else []) + [dict(e) for e in earnings or []]
+    doc["events"] = sorted(rows, key=lambda x: (x["date"], x["time_et"] or "", x["kind"], x["type"], x.get("symbol") or ""))[:EVENTS_MAX] \
+        if calendar is not None or earnings is not None else None
     return doc
 
 

@@ -14,6 +14,10 @@ edition_format: 1
 # The owner's switch. It stays on `log` for a week before `phone`.
 rule_alerts: log
 
+# The broker's contract id for the volatility index (VIX), or null. When set and the after-close routine pulls a
+# year of its daily bars, edition format 2 carries the index's close, change and place in its year. Null: left out.
+vix_contract: null
+
 # The broker's contract id for each name's stock: how the edition builder tells one pull from another when it
 # reads them out of a session transcript (scripts/options_edition.py --transcript). Public identifiers.
 contracts:
