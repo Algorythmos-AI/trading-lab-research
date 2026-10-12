@@ -34,6 +34,11 @@ async function pick(page: Page, symbol: string) {
   await showPane(page, "Names");
   await row(page, symbol).getByRole("button").click();
 }
+/** A name's own page has no desk to wait on: wait for its pane to be taken over by the browser. */
+async function openName(page: Page, symbol: string) {
+  await page.goto(`/options/${symbol}`);
+  await expect(page.locator(`[data-name-page="${symbol.toUpperCase()}"]`)).toHaveAttribute("data-ready", "true");
+}
 const detail = (page: Page, symbol: string) => page.locator(`[data-desk-detail="${symbol}"]`);
 const rows = (page: Page) => page.locator("[data-desk-row]");
 const row = (page: Page, symbol: string) => page.locator(`[data-desk-row="${symbol}"]`);
@@ -714,15 +719,19 @@ test("a name has a page of its own, reached from the desk and leading back to it
   await expect(page).toHaveURL(/\/options\?s=AAPL$/);
   await expect(desk(page)).toBeVisible();
   // A lower-case address is the same name; a name the edition does not carry is not a page.
-  await page.goto("/options/aapl");
+  await openName(page, "aapl");
   await expect(detail(page, "AAPL")).toBeVisible();
-  expect((await page.goto("/options/ZZZZ"))?.status()).toBe(404);
-  expect((await page.goto("/options/not%20a%20name"))?.status()).toBe(404);
+  // The page streams behind its loading outline, so the status is already sent when it finds no such name: it says so.
+  for (const path of ["/options/ZZZZ", "/options/not%20a%20name"]) {
+    await page.goto(path);
+    await expect(page.getByText("This page does not exist")).toBeVisible();
+    await expect(page.locator("[data-desk-detail]")).toHaveCount(0);
+  }
 });
 
 test("pointing at a zone on the map picks it out in the list, and the reverse", async ({ page, isMobile }) => {
   test.skip(isMobile, "a pointer that hovers is a desktop's");
-  await open(page, "/options/AAPL");
+  await openName(page, "AAPL");
   const pane = detail(page, "AAPL");
   const rowsOf = pane.locator("[data-zone-row]");
   const key = await rowsOf.first().getAttribute("data-zone-row");
@@ -735,11 +744,17 @@ test("pointing at a zone on the map picks it out in the list, and the reverse", 
   if ((await onMap.count()) > 0) await expect(onMap).toHaveAttribute("data-hot", "");
   await page.mouse.move(0, 0);
   await expect(pane.locator("[data-hot]")).toHaveCount(0);
-  // And from the map to the list.
+  // And from the map to the list: the crosshair's height decides, whatever is drawn over the zone there.
+  await page.evaluate(() => window.scrollTo(0, 0));
   const drawn = pane.locator("rect[data-zone]").first();
-  const drawnKey = await drawn.getAttribute("data-zone");
-  await drawn.hover({ force: true });
-  await expect(pane.locator(`[data-zone-row="${drawnKey}"]`)).toHaveAttribute("data-hot", "");
+  const box = (await drawn.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  // One zone is picked out (the heaviest at that price), and it is the same one in the list and on the map.
+  await expect(pane.locator("[data-zone-row][data-hot]")).toHaveCount(1);
+  const picked = await pane.locator("[data-zone-row][data-hot]").getAttribute("data-zone-row");
+  await expect(pane.locator(`rect[data-zone="${picked}"]`).first()).toHaveAttribute("data-hot", "");
+  await page.mouse.move(0, 0);
+  await expect(pane.locator("[data-hot]")).toHaveCount(0);
 });
 
 test("the rows can be made compact, the choice is remembered, and a phone keeps its tall rows", async ({ page, isMobile }) => {
@@ -766,6 +781,11 @@ test("the review says how the in-session rule states compared with the record, o
   await open(page, "/options?view=review");
   await expect(page.locator("[data-agreement]")).toContainText("only in session");
   await expect(page.locator("[data-agreement]")).toContainText("10 names");
+  // A damaged paper record breaks the scorecard and not the desk, here as everywhere.
+  await variant(context, baseURL, "poison.rules-final");
+  await open(page, "/options?view=review");
+  await expect(rows(page)).toHaveCount(10);
+  await variant(context, baseURL, "rules-final");
   await open(page, "/options?view=live");
   await expect(page.locator("[data-agreement]")).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Rules today" })).toHaveCount(0); // yesterday's states are not today's

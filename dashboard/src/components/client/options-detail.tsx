@@ -64,8 +64,9 @@ function ZoneRow({ r, side, hot, onZone }: { r: Rung; side: "above" | "at" | "be
     <li
       data-zone-row={key}
       data-hot={hot === key ? "" : undefined}
-      onPointerEnter={() => onZone(key)}
-      onPointerLeave={() => onZone(null)}
+      // A mouse only: a finger that starts a scroll on the list would flash the row.
+      onPointerEnter={(ev) => ev.pointerType === "mouse" && onZone(key)}
+      onPointerLeave={(ev) => ev.pointerType === "mouse" && onZone(null)}
       className={cn("grid break-inside-avoid grid-cols-[0.5rem_minmax(0,1fr)_auto] items-baseline gap-x-2 py-1", hot === key && "bg-accent")}
     >
       <span
@@ -154,7 +155,7 @@ export function OptionsDetail({
             {t.symbol}
           </h2>
           {fullHref ? (
-            <Link href={fullHref} data-full-page className="text-muted-foreground hover:text-foreground text-[0.6875rem] underline underline-offset-2">
+            <Link href={fullHref} prefetch={false} data-full-page className="text-muted-foreground hover:text-foreground text-[0.6875rem] underline underline-offset-2">
               Full page
             </Link>
           ) : null}

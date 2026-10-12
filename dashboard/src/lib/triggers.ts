@@ -132,12 +132,19 @@ export function agreement(doc: OptionsLive | null, e: Options): Agreement | null
   for (const n of block.names ?? []) {
     if (!n || !carried.has(n.symbol) || !Array.isArray(n.states) || worked.has(n.symbol)) continue;
     worked.add(n.symbol);
+    const read = new Set<string>(); // a rule sent twice is read once, the first time, as `rulesToday` reads it
     for (const s of n.states) {
-      if (s && typeof s.rule === "string" && Object.hasOwn(STATE_LABEL, s.state) && s.state !== "waiting") live.add(`${n.symbol}|${s.rule}`);
+      if (!s || typeof s.rule !== "string" || !Object.hasOwn(STATE_LABEL, s.state) || read.has(s.rule)) continue;
+      read.add(s.rule);
+      if (s.state !== "waiting") live.add(`${n.symbol}|${s.rule}`);
     }
   }
   if (worked.size === 0) return null;
-  const record = new Set((e.paper ?? []).filter((p) => p.session === block.session && worked.has(p.symbol)).map((p) => `${p.symbol}|${p.rule}`));
+  // A damaged paper record breaks the scorecard's own pane and nothing else: here its bad rows are passed over.
+  const rows = Array.isArray(e.paper) ? e.paper : [];
+  const record = new Set(
+    rows.filter((p) => p !== null && typeof p === "object" && p.session === block.session && worked.has(p.symbol)).map((p) => `${p.symbol}|${p.rule}`),
+  );
   const both = [...live].filter((k) => record.has(k)).length;
   return { session: block.session, names: worked.size, both, onlyLive: live.size - both, onlyRecord: record.size - both };
 }

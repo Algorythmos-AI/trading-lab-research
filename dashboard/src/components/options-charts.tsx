@@ -189,6 +189,7 @@ export function LevelMap({
       hi={v.hi}
       zones={v.zones}
       interactive={interactive}
+      onZone={onZone}
     >
         {ticks.map((p) => (
           <g key={p}>
@@ -211,8 +212,6 @@ export function LevelMap({
                 data-hot={hotZone === key ? "" : undefined}
                 stroke={hotZone === key ? "var(--foreground)" : "none"}
                 strokeWidth={1.25}
-                onPointerEnter={onZone ? () => onZone(key) : undefined}
-                onPointerLeave={onZone ? () => onZone(null) : undefined}
                 x={X0}
                 y={h === 3 ? y1 - 1.5 : y1}
                 width={XW - X0}

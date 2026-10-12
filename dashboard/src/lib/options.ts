@@ -856,7 +856,10 @@ export function dayContext(e: Options): DayContext | null {
   const within = (ev: OptionsEvent) => {
     const at = Date.parse(`${ev.date}T00:00:00Z`);
     // A date that does not exist (30 February) is dropped, on every browser alike: some would roll it forward.
-    return Number.isFinite(at) && new Date(at).toISOString().slice(0, 10) === ev.date && at >= start && at <= end;
+    if (!Number.isFinite(at) || new Date(at).toISOString().slice(0, 10) !== ev.date) return false;
+    // A report after the close of the day the levels were built from: its gap lands in the session.
+    if (ev.kind === "earnings" && ev.when === "amc" && e.built_from != null && ev.date === e.built_from) return true;
+    return at >= start && at <= end;
   };
   const events = e.events.filter(within).sort(byWhen);
   return {

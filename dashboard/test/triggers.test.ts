@@ -111,6 +111,9 @@ describe("the rules' states in today's session", () => {
     expect(agreement({ ...fin, rules: { ...fin.rules!, complete: false } }, record)).toBeNull();
     expect(agreement({ ...fin, rules: { ...fin.rules!, names: [] } }, record)).toBeNull();
     expect(agreement(null, record)).toBeNull();
+    // A damaged record's rows are passed over, never thrown on: the desk calls this on every draw.
+    expect(agreement(fin, { ...record, paper: [null, 7, ...record.paper] as never })).toMatchObject({ both: 1, onlyRecord: 1 });
+    expect(agreement(fin, { ...e, paper: "gone" as never })).toMatchObject({ both: 0, onlyLive: 2, onlyRecord: 0 });
     expect(agreement(doc(["rules-off"]), record)).toBeNull();
   });
 });

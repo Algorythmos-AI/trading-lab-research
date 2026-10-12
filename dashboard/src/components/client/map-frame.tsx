@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { num, signed } from "@/lib/format";
-import { mapReadout, priceAtY, type MapZone, type OptionsTicker } from "@/lib/options";
+import { mapReadout, priceAtY, zoneKey, type MapZone, type OptionsTicker } from "@/lib/options";
 import { cn } from "@/lib/utils";
 
 /**
@@ -27,6 +27,7 @@ export function MapFrame({
   zones,
   interactive = false,
   children,
+  onZone,
 }: {
   t: OptionsTicker;
   label: string;
@@ -41,6 +42,8 @@ export function MapFrame({
   hi: number;
   zones: readonly MapZone[];
   interactive?: boolean;
+  /** Told which zone (`zoneKey`) the crosshair is in, or null: the zones list picks it out. A mouse only. */
+  onZone?: (key: string | null) => void;
   children: React.ReactNode;
 }) {
   const svg = useRef<SVGSVGElement>(null);
@@ -49,7 +52,13 @@ export function MapFrame({
   const place = (ev: React.PointerEvent<SVGSVGElement>) => {
     const box = svg.current?.getBoundingClientRect();
     if (!box || box.height === 0) return;
-    setY(Math.max(top, Math.min(bottom, ((ev.clientY - box.top) / box.height) * h)));
+    const at = Math.max(top, Math.min(bottom, ((ev.clientY - box.top) / box.height) * h));
+    setY(at);
+    // Read off the crosshair, not off the zone's own shape: a zone under a candle or a price line still counts.
+    if (onZone && ev.pointerType === "mouse") {
+      const under = mapReadout(t, priceAtY(at, lo, hi, top, bottom), zones).zone;
+      onZone(under ? zoneKey(under.zone) : null);
+    }
   };
 
   const read = y === null ? null : mapReadout(t, priceAtY(y, lo, hi, top, bottom), zones);
@@ -68,7 +77,15 @@ export function MapFrame({
         // leaves no stray line behind.
         onPointerMove={interactive ? (ev) => ev.pointerType === "mouse" && place(ev) : undefined}
         onPointerUp={interactive ? (ev) => ev.pointerType !== "mouse" && place(ev) : undefined}
-        onPointerLeave={interactive ? (ev) => ev.pointerType === "mouse" && setY(null) : undefined}
+        onPointerLeave={
+          interactive
+            ? (ev) => {
+                if (ev.pointerType !== "mouse") return;
+                setY(null);
+                onZone?.(null);
+              }
+            : undefined
+        }
       >
         {children}
         {read && y !== null ? (
