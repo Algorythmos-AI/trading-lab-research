@@ -104,3 +104,40 @@ export function announce(seen: SeenTriggers | null, r: RulesToday): { seen: Seen
   if (fresh.length === 0) return { seen, fresh };
   return { seen: { session: r.session, keys: new Set([...seen.keys, ...fresh.map(key)]) }, fresh };
 }
+
+/** How the host's in-session reading of one finished session compares with the after-close record of it. */
+export interface Agreement {
+  session: string;
+  /** Names the host worked the rules out for; only their triggers are compared. */
+  names: number;
+  both: number;
+  onlyLive: number;
+  onlyRecord: number;
+}
+
+/**
+ * The host's final rule states for the session the edition was built from, set against the paper record's rows
+ * for that session: which triggers both hold, and which only one does. The host reads delayed bars from another
+ * feed than the after-close run, so this count is how far "provisional" has been from the record.
+ *
+ * Null unless the host's states are complete and for exactly that session. The site keeps only the host's latest
+ * document, so the two overlap from the evening edition until the host's first run of the next session.
+ */
+export function agreement(doc: OptionsLive | null, e: Options): Agreement | null {
+  const block = doc?.rules;
+  if (!block || block.complete !== true || !e.built_from || block.session !== e.built_from) return null;
+  const carried = new Set(e.tickers.map((t) => t.symbol));
+  const worked = new Set<string>();
+  const live = new Set<string>();
+  for (const n of block.names ?? []) {
+    if (!n || !carried.has(n.symbol) || !Array.isArray(n.states) || worked.has(n.symbol)) continue;
+    worked.add(n.symbol);
+    for (const s of n.states) {
+      if (s && typeof s.rule === "string" && Object.hasOwn(STATE_LABEL, s.state) && s.state !== "waiting") live.add(`${n.symbol}|${s.rule}`);
+    }
+  }
+  if (worked.size === 0) return null;
+  const record = new Set((e.paper ?? []).filter((p) => p.session === block.session && worked.has(p.symbol)).map((p) => `${p.symbol}|${p.rule}`));
+  const both = [...live].filter((k) => record.has(k)).length;
+  return { session: block.session, names: worked.size, both, onlyLive: live.size - both, onlyRecord: record.size - both };
+}

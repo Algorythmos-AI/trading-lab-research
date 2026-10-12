@@ -34,7 +34,8 @@ import { cn } from "@/lib/utils";
 import type { Interest } from "@/lib/oi";
 import type { OptionsLive } from "@/lib/options-live.types";
 import { pickFor, type PositionRow } from "@/lib/positions";
-import { rulesToday } from "@/lib/triggers";
+import { agreement, rulesToday } from "@/lib/triggers";
+import { useDensity } from "./desk-prefs";
 import { DeskPalette } from "./desk-palette";
 import { FeedPill, StateChip, useLive } from "./live-layer";
 import { storePick } from "./options-contract";
@@ -261,6 +262,7 @@ const SHORTCUTS: [string, string][] = [
   ["J  K", "Next and previous name"],
   ["1  2  3", "Brief, Live, Review"],
   ["/", "Search"],
+  ["D", "Compact or comfortable rows"],
   ["?", "Show or hide this list"],
 ];
 
@@ -316,6 +318,8 @@ export function OptionsDesk({
   const [help, setHelp] = useState(false);
   const [palette, setPalette] = useState(false);
   const [hiddenLayers, setHiddenLayers] = useState<ReadonlySet<MapLayer>>(new Set());
+  const [density, flipDensity] = useDensity();
+  const agree = live ? agreement(positions, e) : null;
   const toggleLayer = (layer: MapLayer) =>
     setHiddenLayers((cur) => {
       const next = new Set(cur);
@@ -481,6 +485,7 @@ export function OptionsDesk({
     else if (ev.key === "k" || (ev.key === "ArrowUp" && inMonitor)) step(-1);
     else if (ev.key === "1" || ev.key === "2" || ev.key === "3") choose(DESK_VIEWS[Number(ev.key) - 1]!);
     else if (ev.key === "/") setPalette(true);
+    else if (ev.key === "d") flipDensity();
     else if (ev.key === "?") setHelp((h) => !h);
     else if (ev.key === "Escape" && help) setHelp(false);
     else return;
@@ -494,6 +499,7 @@ export function OptionsDesk({
       aria-label="Options desk"
       data-desk-view={view}
       data-desk-pane={pane}
+      data-desk-density={density}
       // Set once the browser has taken over from the server-drawn page (the clock is only read in the browser).
       // A click that lands before then is lost, so the browser tests wait for this before they touch the desk.
       data-ready={now !== null ? "true" : undefined}
@@ -640,6 +646,7 @@ export function OptionsDesk({
                       onClick={() => openName(r.t.symbol)}
                       className={cn(
                         "h-11 cursor-pointer border-b last:border-b-0",
+                        density === "compact" && "md:h-8",
                         on ? "bg-accent shadow-[inset_2px_0_0_var(--primary)]" : testing ? "bg-warn-soft" : "hover:bg-muted/60",
                       )}
                     >
@@ -670,6 +677,15 @@ export function OptionsDesk({
               </tbody>
             </table>
           </PaneBoundary>
+          {agree && view === "review" ? (
+            <p data-agreement={agree.session} className="text-muted-foreground border-t px-3 py-2.5 text-xs">
+              In-session rule states against the after-close record for {weekDate(agree.session)}:{" "}
+              <span className="text-foreground font-mono">{agree.both}</span> {agree.both === 1 ? "trigger" : "triggers"} in both,{" "}
+              <span className="text-foreground font-mono">{agree.onlyLive}</span> only in session,{" "}
+              <span className="text-foreground font-mono">{agree.onlyRecord}</span> only in the record ({agree.names} {agree.names === 1 ? "name" : "names"}). The
+              in-session states read delayed bars from another feed, which is why they are marked provisional.
+            </p>
+          ) : null}
           {live && view === "brief" ? (
             <PaneBoundary name="Option costs">
               <OptionsCosts tickers={e.tickers} session={e.session} halfDay={halfDay} />
@@ -695,7 +711,7 @@ export function OptionsDesk({
         <div className={cn("xl:min-h-0 xl:overflow-y-auto", pane === "names" && "max-sm:hidden")}>
           {selected ? (
             <PaneBoundary key={selected.t.symbol} name={selected.t.symbol}>
-              <OptionsDetail e={e} t={selected.t} live={live} hiddenLayers={hiddenLayers} onToggleLayer={toggleLayer} interest={live ? (interest[selected.t.symbol] ?? null) : null} today={live && view === "live" ? (rules?.bySymbol[selected.t.symbol] ?? null) : null} />
+              <OptionsDetail e={e} t={selected.t} live={live} hiddenLayers={hiddenLayers} onToggleLayer={toggleLayer} fullHref={live ? `/options/${selected.t.symbol}` : null} interest={live ? (interest[selected.t.symbol] ?? null) : null} today={live && view === "live" ? (rules?.bySymbol[selected.t.symbol] ?? null) : null} />
             </PaneBoundary>
           ) : null}
         </div>

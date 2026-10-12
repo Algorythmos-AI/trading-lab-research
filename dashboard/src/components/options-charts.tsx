@@ -15,8 +15,7 @@ import {
   type Finding,
   type OptionsRule,
   type OptionsTicker,
-  type roomView,
-} from "@/lib/options";
+  type roomView, zoneKey } from "@/lib/options";
 import { shortCount, type Interest } from "@/lib/oi";
 import { cn } from "@/lib/utils";
 import { LiveMapMark } from "./client/live-layer";
@@ -127,12 +126,17 @@ export function LevelMap({
   interactive = false,
   breakeven = null,
   interest = null,
+  hotZone = null,
+  onZone,
 }: {
   t: OptionsTicker;
   interactive?: boolean;
   breakeven?: BreakevenMark | null;
   /** The strikes holding the most open calls and puts, when the host has sent open interest. */
   interest?: Interest | null;
+  /** The zone to pick out (`zoneKey`), and a way to say which zone the pointer is over: the zones list uses both. */
+  hotZone?: string | null;
+  onZone?: (key: string | null) => void;
 }) {
   const v = mapView(t);
   const close = t.last?.close;
@@ -199,9 +203,16 @@ export function LevelMap({
             const y1 = y(zone.hi);
             const h = Math.max(3, y(zone.lo) - y1);
             const fill = tone === "support" ? "var(--good-fill)" : "var(--bad-fill)";
+            const key = zoneKey(zone);
             return (
               <rect
                 key={i}
+                data-zone={key}
+                data-hot={hotZone === key ? "" : undefined}
+                stroke={hotZone === key ? "var(--foreground)" : "none"}
+                strokeWidth={1.25}
+                onPointerEnter={onZone ? () => onZone(key) : undefined}
+                onPointerLeave={onZone ? () => onZone(null) : undefined}
                 x={X0}
                 y={h === 3 ? y1 - 1.5 : y1}
                 width={XW - X0}

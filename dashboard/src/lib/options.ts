@@ -321,6 +321,9 @@ export function roomView(
 export type Bar = NonNullable<OptionsTicker["bars"]>[number];
 
 /** A zone on the level map, with its side against the close. */
+/** One zone's identity on a name: its two edges. The map and the zones list use it to point at the same zone. */
+export const zoneKey = (z: Pick<OptionsZone, "lo" | "hi">): string => `${z.lo}:${z.hi}`;
+
 export interface MapZone {
   zone: OptionsZone;
   tone: "support" | "resistance";
