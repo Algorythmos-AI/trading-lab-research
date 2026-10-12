@@ -45,6 +45,7 @@ SCHEMA_ID = "stocksdelta/options-live"
 SCHEMA_VERSION = 1
 RULES_VERSION = 2                 # the document's version once it carries `rules`
 HOURLY_VERSION = 3                # and once it carries `hourly`
+BAR_PAGES = 12                    # pages of bars read for one request before it counts as a fault
 HOURLY_SESSIONS = 5               # sessions of hourly bars sent for the map's hourly range
 FEED_DELAY_MIN = 16               # the consolidated tape is refused for the last 15 minutes; one more for margin
 RULE_HISTORY_DAYS = 420           # calendar days of daily bars the session's levels are built from
@@ -147,12 +148,14 @@ class OptionsAccount:
         return out
 
     def bars(self, symbols: list[str], timeframe: str, start: dt.datetime, end: dt.datetime) -> dict[str, list[Any]]:
-        """Stock bars by name from the consolidated tape, split-adjusted. Two pages at most: ten names' year of
-        daily bars, or their day of half-hours, fit in one."""
+        """Stock bars by name from the consolidated tape, split-adjusted, every page of them. The feed cuts a page
+        well short of the limit asked for (five sessions of ten names' half-hours came as four pages), and names
+        come in order, so a reply cut short is whole names missing: if pages remain after `BAR_PAGES`, that is a
+        fault, never a shorter answer."""
         params = {"symbols": ",".join(symbols), "timeframe": timeframe, "feed": "sip", "adjustment": "split",
                   "limit": "10000", "start": start.strftime("%Y-%m-%dT%H:%M:%SZ"), "end": end.strftime("%Y-%m-%dT%H:%M:%SZ")}
         out: dict[str, list[Any]] = {}
-        for _ in range(2):
+        for _ in range(BAR_PAGES):
             got = self._get("/v2/stocks/bars", params, DATA_HOST, tries=1)
             if not isinstance(got, dict) or not isinstance(got.get("bars"), dict):
                 raise BrokerFault("bars-not-an-object")
@@ -161,9 +164,9 @@ class OptionsAccount:
                     out.setdefault(str(sym), []).extend(rows)
             token = got.get("next_page_token")
             if not isinstance(token, str) or not token:
-                break
+                return out
             params = {**params, "page_token": token}
-        return out
+        raise BrokerFault("bars-truncated")
 
     def contracts(self, symbol: str, lo: float, hi: float, first: dt.date, last: dt.date) -> list[Any]:
         """The listed option contracts of one stock inside a strike band and a date range, a few pages at most."""
