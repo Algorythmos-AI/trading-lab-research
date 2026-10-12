@@ -188,7 +188,7 @@ describe("the health report", () => {
   it("says which run is stored and when, and nothing of what it holds", () => {
     const d = doc();
     const h = optionsLiveHealth({ status: "ok", doc: d, source: "blob" });
-    expect(h).toEqual({ status: "ok", accepts: OPTIONS_LIVE_ACCEPTS, run_id: d.run_id, as_of: d.as_of, schema_version: 2 });
+    expect(h).toEqual({ status: "ok", accepts: OPTIONS_LIVE_ACCEPTS, run_id: d.run_id, as_of: d.as_of, schema_version: d.schema_version });
     expect(JSON.stringify(h)).not.toMatch(/SPY|position|qty/);
     expect(optionsLiveHealth({ status: "missing" })).toEqual({ status: "missing", accepts: OPTIONS_LIVE_ACCEPTS, run_id: null, as_of: null, schema_version: null });
   });

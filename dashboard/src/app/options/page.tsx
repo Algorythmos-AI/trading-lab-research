@@ -7,6 +7,7 @@ import { PaneBoundary } from "@/components/client/pane-boundary";
 import { EditionPicker } from "@/components/radar";
 import { sydney, weekDate } from "@/lib/format";
 import { requestTime } from "@/lib/now";
+import { hourlyBySymbol } from "@/lib/hourly";
 import { interestBySymbol } from "@/lib/oi";
 import { editionState, isDeskView, isHalfDay, mapView, viewForClock, type DeskPane, type Options } from "@/lib/options";
 import { listOptionsDates, loadOptions, loadOptionsLive } from "@/lib/snapshot";
@@ -113,6 +114,7 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
               const t = e.tickers.find((x) => x.symbol === s);
               return t ? mapView(t) : null;
             })}
+            hourly={hourlyBySymbol(live, e.tickers.map((t) => t.symbol), now.getTime())}
             stale={stale}
           />
         </PaneBoundary>

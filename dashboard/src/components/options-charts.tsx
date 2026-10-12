@@ -128,6 +128,7 @@ export function LevelMap({
   interest = null,
   hotZone = null,
   onZone,
+  unit = "daily",
 }: {
   t: OptionsTicker;
   interactive?: boolean;
@@ -137,6 +138,8 @@ export function LevelMap({
   /** The zone to pick out (`zoneKey`), and a way to say which zone the pointer is over: the zones list uses both. */
   hotZone?: string | null;
   onZone?: (key: string | null) => void;
+  /** What one candle is. Hourly candles carry a time in their date (`withHourly`) and are dated once a session. */
+  unit?: "daily" | "hourly";
 }) {
   const v = mapView(t);
   const close = t.last?.close;
@@ -178,7 +181,7 @@ export function LevelMap({
   return (
     <MapFrame
       t={{ ...t, bars: undefined }}
-      label={`${t.symbol}: last ${n} daily bars with support and resistance zones and the expected move`}
+      label={`${t.symbol}: last ${n} ${unit} bars with support and resistance zones and the expected move`}
       w={W}
       h={H}
       top={TOP}
@@ -233,7 +236,7 @@ export function LevelMap({
             const top = y(Math.max(b.o, b.c));
             return (
               <g key={b.d}>
-                <title>{`${b.d}  O ${num(b.o, 2)}  H ${num(b.h, 2)}  L ${num(b.l, 2)}  C ${num(b.c, 2)}`}</title>
+                <title>{`${b.d.replace("T", " ")}  O ${num(b.o, 2)}  H ${num(b.h, 2)}  L ${num(b.l, 2)}  C ${num(b.c, 2)}`}</title>
                 <line x1={cx} x2={cx} y1={y(b.h)} y2={y(b.l)} stroke="var(--muted-foreground)" strokeWidth={1} />
                 <rect
                   x={cx - bw * 0.32}
@@ -245,9 +248,9 @@ export function LevelMap({
                   stroke="var(--muted-foreground)"
                   strokeWidth={1}
                 />
-                {i % 10 === 0 || i === n - 1 ? (
+                {(unit === "hourly" ? i === 0 || b.d.slice(0, 10) !== v.bars[i - 1]!.d.slice(0, 10) : i % 10 === 0 || i === n - 1) ? (
                   <text x={i === 0 ? X0 : cx} y={H - 6} fontSize={10.5} textAnchor={i === 0 ? "start" : "middle"} style={{ fill: "var(--muted-foreground)" }} className="font-mono">
-                    {b.d.slice(5)}
+                    {b.d.slice(5, 10)}
                   </text>
                 ) : null}
               </g>

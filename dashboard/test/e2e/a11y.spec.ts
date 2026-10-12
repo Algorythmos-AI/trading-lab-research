@@ -19,7 +19,7 @@ const PAGES = [
   "/engineering",
   "/glossary",
 ];
-const OPTIONS_STATES = ["partial", "poison", "empty", "error", "v2", "positions-none", "positions-old", "rules-none", "rules-off", "rules-final"];
+const OPTIONS_STATES = ["partial", "poison", "empty", "error", "v2", "positions-none", "positions-old", "rules-none", "rules-off", "rules-final", "hourly-off"];
 
 // These run at desktop width. The Options desk is also scanned at a phone's width, in a11y-phone.spec.ts; the other
 // pages are not yet, and wide tables that scroll sideways on a phone are a known gap there.
@@ -57,6 +57,15 @@ for (const theme of ["light", "dark"] as const) {
     await context.addCookies([{ name: "fx", value: "rules-final", url: baseURL! }]);
     await page.goto("/options?view=review");
     await expect(page.locator("[data-agreement]")).toBeVisible();
+    expect(await scan(page)).toEqual([]);
+  });
+
+  test(`the map on its hourly range passes the accessibility scan in ${theme}`, async ({ page, context }) => {
+    await useTheme(context, theme);
+    await page.goto("/options?view=live");
+    await liveChips(page);
+    await page.getByRole("group", { name: "Map range" }).getByRole("button", { name: "Hourly" }).click();
+    await expect(page.locator('[data-map-range="hourly"]')).toBeVisible();
     expect(await scan(page)).toEqual([]);
   });
 

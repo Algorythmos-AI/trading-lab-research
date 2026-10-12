@@ -38,6 +38,7 @@ export const VARIANT_FLAGS = [
   "rules-none",
   "rules-off",
   "rules-final",
+  "hourly-off",
 ] as const;
 export type VariantFlag = (typeof VARIANT_FLAGS)[number];
 
@@ -221,6 +222,7 @@ export function fixtureOptionsLive(e: OptionsEdition, now: Date, flags: Readonly
     ],
     problems: [],
     ...(flags.has("rules-off") ? {} : { schema_version: 2, rules: fixtureRules(e, asOf, flags.has("rules-none"), flags.has("rules-final")) }),
+    ...(flags.has("hourly-off") ? {} : { schema_version: 3, hourly: fixtureHourly(e) }),
   };
 }
 
@@ -242,4 +244,31 @@ function fixtureRules(e: OptionsEdition, asOf: Date, none: boolean, final = fals
     complete: final,
     names: e.tickers.map((t) => ({ symbol: t.symbol, bars: 3, states: ids.map((rule) => ({ rule, ...(hit[t.symbol]?.[rule] ?? { state: "waiting" as const }) })) })),
   };
+}
+
+
+/**
+ * Five sessions of hourly bars for every name but the last (a name the host left out), ending at the close the
+ * edition was built from: plain arithmetic around each name's close, so the picture is the same on every run.
+ */
+function fixtureHourly(e: OptionsEdition): NonNullable<OptionsLive["hourly"]> {
+  const days = ["2026-10-05", "2026-10-06", "2026-10-07", "2026-10-08", "2026-10-09"];
+  const hours = ["09:30", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00"];
+  return e.tickers.slice(0, -1).flatMap((t, k) => {
+    const close = t.last?.close;
+    if (typeof close !== "number" || !(close > 0)) return [];
+    const step = close * 0.0015;
+    const total = days.length * hours.length;
+    const bars = days.flatMap((d, i) =>
+      hours.map((h, j) => {
+        const n = i * hours.length + j;
+        // A slow drift into the close with a wobble that differs by name.
+        const c = close - (total - 1 - n) * step * 0.4 + Math.sin(n * 0.9 + k) * step * 2;
+        const o = close - (total - n) * step * 0.4 + Math.sin((n - 1) * 0.9 + k) * step * 2;
+        const r4 = (x: number) => Math.round(x * 10_000) / 10_000;
+        return { t: `${d}T${h}`, o: r4(o), h: r4(Math.max(o, c) + step), l: r4(Math.min(o, c) - step), c: r4(c) };
+      }),
+    );
+    return [{ symbol: t.symbol, bars }];
+  });
 }

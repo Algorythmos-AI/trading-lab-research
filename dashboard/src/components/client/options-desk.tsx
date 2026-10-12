@@ -31,6 +31,7 @@ import {
   type OptionsTicker,
 } from "@/lib/options";
 import { cn } from "@/lib/utils";
+import type { HourlyBar } from "@/lib/hourly";
 import type { Interest } from "@/lib/oi";
 import type { OptionsLive } from "@/lib/options-live.types";
 import { pickFor, type PositionRow } from "@/lib/positions";
@@ -286,6 +287,7 @@ export function OptionsDesk({
   initialPane,
   positions,
   interest,
+  hourly,
   stale,
 }: {
   e: Options;
@@ -302,6 +304,8 @@ export function OptionsDesk({
   positions: OptionsLive | null;
   /** Open-interest marks by name, worked out on the server from the same document. */
   interest: Record<string, Interest>;
+  /** Hourly bars by name, worked out on the server from the same document. */
+  hourly: Record<string, HourlyBar[]>;
   stale: boolean;
 }) {
   const { feed, session, now } = useLive();
@@ -711,7 +715,7 @@ export function OptionsDesk({
         <div className={cn("xl:min-h-0 xl:overflow-y-auto", pane === "names" && "max-sm:hidden")}>
           {selected ? (
             <PaneBoundary key={selected.t.symbol} name={selected.t.symbol}>
-              <OptionsDetail e={e} t={selected.t} live={live} hiddenLayers={hiddenLayers} onToggleLayer={toggleLayer} fullHref={live ? `/options/${selected.t.symbol}` : null} interest={live ? (interest[selected.t.symbol] ?? null) : null} today={live && view === "live" ? (rules?.bySymbol[selected.t.symbol] ?? null) : null} />
+              <OptionsDetail e={e} t={selected.t} live={live} hiddenLayers={hiddenLayers} onToggleLayer={toggleLayer} fullHref={live ? `/options/${selected.t.symbol}` : null} hourly={live ? (hourly[selected.t.symbol] ?? null) : null} interest={live ? (interest[selected.t.symbol] ?? null) : null} today={live && view === "live" ? (rules?.bySymbol[selected.t.symbol] ?? null) : null} />
             </PaneBoundary>
           ) : null}
         </div>

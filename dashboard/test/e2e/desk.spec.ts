@@ -790,3 +790,41 @@ test("the review says how the in-session rule states compared with the record, o
   await expect(page.locator("[data-agreement]")).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Rules today" })).toHaveCount(0); // yesterday's states are not today's
 });
+
+test("the map can be switched to hourly candles when the host has sent them, and back", async ({ page, context, baseURL }) => {
+  await open(page, "/options?view=live&s=SPY");
+  await showPane(page, "SPY");
+  const pane = detail(page, "SPY");
+  const range = pane.getByRole("group", { name: "Map range" });
+  const map = pane.locator("[data-map-range]");
+  await expect(map).toHaveAttribute("data-map-range", "daily");
+  const daily = await map.locator('[data-layer="candles"] > g').count();
+  await range.getByRole("button", { name: "Hourly" }).click();
+  await expect(map).toHaveAttribute("data-map-range", "hourly");
+  await expect(map.locator('[data-layer="candles"] > g')).toHaveCount(35);
+  expect(daily).not.toBe(35);
+  await expect(range).toContainText("35 finished hours from the delayed tape");
+  await expect(map.getByRole("img")).toHaveAccessibleName(/SPY: last 35 hourly bars/);
+  await expect(map.locator('[data-layer="zones"] rect').first()).toBeAttached(); // the same zones, behind other candles
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  // The choice holds for the next name; a name the host sent no bars for is drawn daily, with nothing to switch.
+  await pick(page, "AAPL");
+  await showPane(page, "AAPL");
+  await expect(detail(page, "AAPL").locator("[data-map-range]")).toHaveAttribute("data-map-range", "hourly");
+  await pick(page, "PLTR");
+  await showPane(page, "PLTR");
+  await expect(detail(page, "PLTR").getByRole("group", { name: "Map range" })).toHaveCount(0);
+  await expect(detail(page, "PLTR").locator("[data-map-range]")).toHaveAttribute("data-map-range", "daily");
+  // Back on a name with bars the choice is still hourly, and Daily returns the edition's candles.
+  await pick(page, "SPY");
+  await showPane(page, "SPY");
+  await expect(map).toHaveAttribute("data-map-range", "hourly");
+  await range.getByRole("button", { name: "Daily" }).click();
+  await expect(map.locator('[data-layer="candles"] > g')).toHaveCount(daily);
+  // No bars from the host at all: no switch, and the map as it always was.
+  await variant(context, baseURL, "hourly-off");
+  await open(page, "/options?view=live&s=SPY");
+  await showPane(page, "SPY");
+  await expect(detail(page, "SPY").getByRole("group", { name: "Map range" })).toHaveCount(0);
+  await expect(detail(page, "SPY").locator("[data-map-range]")).toHaveAttribute("data-map-range", "daily");
+});

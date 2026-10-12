@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { HourlyBar } from "@/lib/hourly";
 import type { Interest } from "@/lib/oi";
 import type { MapLayer, Options, OptionsTicker } from "@/lib/options";
 import type { OptionsLive } from "@/lib/options-live.types";
@@ -21,6 +22,7 @@ export function OptionsName({
   live,
   positions,
   interest,
+  hourly,
   stale,
 }: {
   e: Options;
@@ -28,6 +30,7 @@ export function OptionsName({
   live: boolean;
   positions: OptionsLive | null;
   interest: Interest | null;
+  hourly: HourlyBar[] | null;
   /** A later session has started and no newer edition has published. */
   stale: boolean;
 }) {
@@ -59,7 +62,7 @@ export function OptionsName({
           {live ? <FeedPill /> : null}
         </div>
       ) : null}
-      <OptionsDetail e={e} t={t} live={live} hiddenLayers={hidden} onToggleLayer={toggle} interest={live ? interest : null} today={today} expanded />
+      <OptionsDetail e={e} t={t} live={live} hiddenLayers={hidden} onToggleLayer={toggle} interest={live ? interest : null} today={today} hourly={live ? hourly : null} expanded />
     </div>
   );
 }
