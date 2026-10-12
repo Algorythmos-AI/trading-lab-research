@@ -757,7 +757,10 @@ test("pointing at a zone on the map picks it out in the list, and the reverse", 
   await expect(pane.locator("[data-hot]")).toHaveCount(0);
 });
 
-test("the rows can be made compact, the choice is remembered, and a phone keeps its tall rows", async ({ page, isMobile }) => {
+test("the rows can be made compact, the choice is remembered, and a phone keeps its tall rows", async ({ page, context, baseURL, isMobile }) => {
+  // With no live prices every row is one line of text, whatever the hour. With them a row can hold two chips, one
+  // under the other (a state and STALE), which no density makes shorter: the test then failed after the close.
+  await variant(context, baseURL, "quotes-off");
   await open(page, "/options?view=live");
   await expect(desk(page)).toHaveAttribute("data-desk-density", "comfortable");
   const tall = (await rows(page).first().boundingBox())!.height;

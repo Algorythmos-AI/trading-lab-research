@@ -32,7 +32,9 @@ for (const theme of ["dark", "light"] as const) {
       // A phone is pictured in the dark theme only: the light one differs in colour, which the desktop covers.
       test.skip(isMobile && theme === "light", "the phone is pictured once");
       await useTheme(context, theme);
-      await context.addCookies([{ name: "fx", value: "frozen.quotes-off", url: baseURL! }]);
+      // No option feed either: the positions' greeks are fetched after the page is up and priced against the real
+      // clock, so with them a picture depended on when it was taken (seen: the phone's live view, 33px taller).
+      await context.addCookies([{ name: "fx", value: "frozen.quotes-off.chain-off", url: baseURL! }]);
     });
 
     for (const view of ["brief", "live", "review"] as const) {
