@@ -510,7 +510,8 @@ def test_rule_states_are_sent_only_to_a_dashboard_that_accepts_them_and_never_st
     (live.OUT / "rules_seen.json").unlink()
     assert live._publish(args(), rule_account()) == 0
     assert [b["schema_version"] for b in bodies] == [2, 1] and "rules-refused" in bodies[1]["problems"] and len(bodies[1]["positions"]) == 1
-    assert not (live.OUT / "site_accepts.json").exists() and "rule triggered" not in capsys.readouterr().out
+    assert json.loads((live.OUT / "site_accepts.json").read_text())["accepts"] == 1 and "rule triggered" not in capsys.readouterr().out
+    (live.OUT / "site_accepts.json").unlink()                 # the hour passes; the dashboard (this test's) says 2 again
     monkeypatch.setattr(publish, "send", lambda body, *a, **k: sent.append(json.loads(body)) or (True, "HTTP 200"))
     # A block the site's schema would refuse never leaves: the positions go without it.
     real = live.rules_block
@@ -595,5 +596,34 @@ def test_hourly_bars_go_only_to_a_dashboard_that_takes_them_and_never_stop_the_p
     bodies = []
     monkeypatch.setattr(publish, "send", lambda body, *a, **k: bodies.append(json.loads(body)) or next(replies))
     assert live._publish(args(), rule_account()) == 0
-    assert [b["schema_version"] for b in bodies] == [3, 1] and {"rules-refused", "hourly-refused"} <= set(bodies[1]["problems"])
-    assert not (live.OUT / "site_accepts.json").exists()
+    # Refused with both extras: the bars are dropped first and the rule states kept; what was stored is remembered,
+    # so the next run sends version 2 straight away and does not ask the dashboard again.
+    assert [b["schema_version"] for b in bodies] == [3, 2] and bodies[1]["problems"][-1] == "hourly-refused" and "rules" in bodies[1]
+    assert json.loads((live.OUT / "site_accepts.json").read_text())["accepts"] == 2
+    monkeypatch.setattr(publish, "read_health", lambda *a: pytest.fail("asked again inside the hour"))
+    monkeypatch.setattr(publish, "send", lambda body, *a, **k: sent.append(json.loads(body)) or (True, "HTTP 200"))
+    acct = rule_account()
+    assert live._publish(args(), acct) == 0 and sent[-1]["schema_version"] == 2
+    assert [c[0] for c in acct.bar_calls] == ["1Day", "30Min"]                    # the rules' two requests, no third
+    # Refused at every step: the positions go as version 1.
+    health(3)
+    replies = iter([(False, "HTTP 422: x"), (False, "HTTP 422: x"), (True, "HTTP 200")])
+    bodies.clear()
+    monkeypatch.setattr(publish, "send", lambda body, *a, **k: bodies.append(json.loads(body)) or next(replies))
+    assert live._publish(args(), rule_account()) == 0
+    assert [b["schema_version"] for b in bodies] == [3, 2, 1] and {"rules-refused", "hourly-refused"} <= set(bodies[2]["problems"])
+    assert json.loads((live.OUT / "site_accepts.json").read_text())["accepts"] == 1 and len(bodies[2]["positions"]) == 1
+    monkeypatch.setattr(publish, "send", lambda body, *a, **k: sent.append(json.loads(body)) or (True, "HTTP 200"))
+    # A fault in the rule states is theirs: the bars still go.
+    health(3)
+    real_rules = live.rules_block
+    monkeypatch.setattr(live, "rules_block", lambda *a: ({**real_rules(*a)[0], "provisional": False}, []))
+    assert live._publish(args(), rule_account()) == 0
+    assert "rules" not in sent[-1] and "hourly" in sent[-1] and sent[-1]["problems"][-1] == "rules-invalid" and "hourly-invalid" not in sent[-1]["problems"]
+    monkeypatch.setattr(live, "rules_block", real_rules)
+    # A price that is not a number is no bar, and one that slips through never stops the positions.
+    wild = [half("09:30", 100, float("inf"), 99.9, 100.3), half("10:00", 100.3, 100.6, 100.2, 100.5)]
+    assert [b["t"] for b in live.hourly_block(rule_account(parts=wild), ["SPY"], ny("11:16"))[0]["bars"]] == ["2026-10-12T10:00"]
+    monkeypatch.setattr(live, "hourly_block", lambda *a: [{"symbol": "SPY", "bars": [{"t": "2026-10-12T09:30", "o": 1.0, "h": float("nan"), "l": 1.0, "c": 1.0}]}])
+    assert live._publish(args(), rule_account()) == 0
+    assert "hourly" not in sent[-1] and len(sent[-1]["positions"]) == 1 and {"extras-unreadable", "hourly-invalid"} & set(sent[-1]["problems"])

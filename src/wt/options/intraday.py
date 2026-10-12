@@ -9,6 +9,7 @@ from them, so what this says is provisional: the after-close record is the one t
 from __future__ import annotations
 
 import datetime as dt
+import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -60,7 +61,7 @@ def hourly_bars(parts: Sequence[Mapping[str, Any]], session: str, cutoff: dt.dat
             h, low = max(float(p["h"]) for _, p in inside), min(float(p["l"]) for _, p in inside)
         except (IndexError, KeyError, TypeError, ValueError):
             continue
-        if min(o, h, low, c) > 0:
+        if all(math.isfinite(x) for x in (o, h, low, c)) and min(o, h, low, c) > 0:   # a feed's NaN or Infinity is no bar
             out.append(lv.Bar(start.strftime("%Y-%m-%dT%H:%M"), o, max(h, o, c), min(low, o, c), c))
     return out
 

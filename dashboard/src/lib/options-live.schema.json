@@ -332,7 +332,7 @@
         "array",
         "null"
       ],
-      "maxItems": 40,
+      "maxItems": 60,
       "items": {
         "type": "object",
         "additionalProperties": false,

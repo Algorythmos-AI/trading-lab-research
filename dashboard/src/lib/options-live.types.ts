@@ -120,7 +120,7 @@ export interface OptionsLive {
   /**
    * Each name's finished hourly bars for the last few sessions, from the delayed consolidated tape, for the map's hourly range. New in version 3.
    *
-   * @maxItems 40
+   * @maxItems 60
    */
   hourly?:
     | {
