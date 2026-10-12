@@ -97,6 +97,16 @@ describe("the day's events", () => {
     expect(dayContext(mixed)!.onTheDay.map((ev) => ev.type)).toEqual(["cpi", "fomc_minutes"]);
   });
 
+  it("keeps a report after the close of the day the levels were built from, and no other event from before the session", () => {
+    const sym = v1.tickers[0]!.symbol;
+    const eve = v1.built_from!;
+    const on = (when: string, kind: "earnings" | "macro" = "earnings"): OptionsEvent => ({ date: eve, kind, type: kind === "earnings" ? "earnings" : "cpi", symbol: kind === "earnings" ? sym : null, when });
+    expect(dayContext({ ...v1, events: [on("amc")] })!.earnings).toHaveLength(1); // its gap lands in the session
+    expect(dayContext({ ...v1, events: [on("bmo")] })!.earnings).toHaveLength(0); // already in the close the levels use
+    const macro = dayContext({ ...v1, events: [on("amc", "macro")] })!;
+    expect([macro.onTheDay, macro.ahead, macro.earnings].flat()).toHaveLength(0);
+  });
+
   it("reads a time as HH:MM whatever digits it came with", () => {
     const ev = (time_et: string | null): OptionsEvent => ({ date: SESSION, kind: "macro", type: "cpi", time_et });
     expect(eventTime(ev("8:30"))).toBe("08:30");

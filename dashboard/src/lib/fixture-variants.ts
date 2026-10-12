@@ -37,6 +37,7 @@ export const VARIANT_FLAGS = [
   "positions-old",
   "rules-none",
   "rules-off",
+  "rules-final",
 ] as const;
 export type VariantFlag = (typeof VARIANT_FLAGS)[number];
 
@@ -219,12 +220,12 @@ export function fixtureOptionsLive(e: OptionsEdition, now: Date, flags: Readonly
       },
     ],
     problems: [],
-    ...(flags.has("rules-off") ? {} : { schema_version: 2, rules: fixtureRules(e, asOf, flags.has("rules-none")) }),
+    ...(flags.has("rules-off") ? {} : { schema_version: 2, rules: fixtureRules(e, asOf, flags.has("rules-none"), flags.has("rules-final")) }),
   };
 }
 
 /** Rule states for the fixture's own session: one rule open on the first name and one at its target on the third. */
-function fixtureRules(e: OptionsEdition, asOf: Date, none: boolean): NonNullable<OptionsLive["rules"]> {
+function fixtureRules(e: OptionsEdition, asOf: Date, none: boolean, final = false): NonNullable<OptionsLive["rules"]> {
   const ids = (e.rules ?? []).map((r) => r.id);
   const hit: Record<string, Record<string, { state: "open" | "target"; bar: string; side: "call" | "put"; r: number }>> = none
     ? {}
@@ -233,11 +234,12 @@ function fixtureRules(e: OptionsEdition, asOf: Date, none: boolean): NonNullable
         [e.tickers[2]?.symbol ?? ""]: { [ids[3] ?? ""]: { state: "target", bar: "12:00", side: "put", r: 2 } },
       };
   return {
-    session: e.session,
+    // `rules-final`: the evening, when the host's last word is still the finished session the edition was built from.
+    session: final ? (e.built_from ?? e.session) : e.session,
     as_of: new Date(asOf.getTime() - 16 * 60_000).toISOString(),
     delay_min: 16,
     provisional: true,
-    complete: false,
+    complete: final,
     names: e.tickers.map((t) => ({ symbol: t.symbol, bars: 3, states: ids.map((rule) => ({ rule, ...(hit[t.symbol]?.[rule] ?? { state: "waiting" as const }) })) })),
   };
 }

@@ -34,6 +34,11 @@ async function pick(page: Page, symbol: string) {
   await showPane(page, "Names");
   await row(page, symbol).getByRole("button").click();
 }
+/** A name's own page has no desk to wait on: wait for its pane to be taken over by the browser. */
+async function openName(page: Page, symbol: string) {
+  await page.goto(`/options/${symbol}`);
+  await expect(page.locator(`[data-name-page="${symbol.toUpperCase()}"]`)).toHaveAttribute("data-ready", "true");
+}
 const detail = (page: Page, symbol: string) => page.locator(`[data-desk-detail="${symbol}"]`);
 const rows = (page: Page) => page.locator("[data-desk-row]");
 const row = (page: Page, symbol: string) => page.locator(`[data-desk-row="${symbol}"]`);
@@ -697,4 +702,91 @@ test("live price updates change the monitor's numbers without moving the desk", 
   });
   expect(seen.texts, "the SPY row should have changed at least once").toBeGreaterThan(1);
   expect(seen.shift, "cumulative layout shift while prices update").toBe(0);
+});
+
+test("a name has a page of its own, reached from the desk and leading back to it", async ({ page }) => {
+  await open(page, "/options?view=live&s=AAPL");
+  await showPane(page, "AAPL");
+  await detail(page, "AAPL").locator("[data-full-page]").click();
+  await expect(page).toHaveURL(/\/options\/AAPL$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("AAPL, Options");
+  await expect(detail(page, "AAPL")).toBeVisible();
+  await expect(page.locator("[data-desk-row]")).toHaveCount(0); // the list stays on the desk
+  await expect(page.getByRole("list", { name: "AAPL zones, highest first" })).toBeVisible(); // open from the start here
+  await expect(detail(page, "AAPL").locator("[data-full-page]")).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.getByRole("navigation", { name: "Back" }).getByRole("link", { name: "All names" }).click();
+  await expect(page).toHaveURL(/\/options\?s=AAPL$/);
+  await expect(desk(page)).toBeVisible();
+  // A lower-case address is the same name; a name the edition does not carry is not a page.
+  await openName(page, "aapl");
+  await expect(detail(page, "AAPL")).toBeVisible();
+  // The page streams behind its loading outline, so the status is already sent when it finds no such name: it says so.
+  for (const path of ["/options/ZZZZ", "/options/not%20a%20name"]) {
+    await page.goto(path);
+    await expect(page.getByText("This page does not exist")).toBeVisible();
+    await expect(page.locator("[data-desk-detail]")).toHaveCount(0);
+  }
+});
+
+test("pointing at a zone on the map picks it out in the list, and the reverse", async ({ page, isMobile }) => {
+  test.skip(isMobile, "a pointer that hovers is a desktop's");
+  await openName(page, "AAPL");
+  const pane = detail(page, "AAPL");
+  const rowsOf = pane.locator("[data-zone-row]");
+  const key = await rowsOf.first().getAttribute("data-zone-row");
+  expect(key).toMatch(/^[\d.]+:[\d.]+$/);
+  await expect(pane.locator("[data-hot]")).toHaveCount(0);
+  await rowsOf.first().hover();
+  await expect(rowsOf.first()).toHaveAttribute("data-hot", "");
+  // The same zone on the map, when the map's window reaches it.
+  const onMap = pane.locator(`rect[data-zone="${key}"]`);
+  if ((await onMap.count()) > 0) await expect(onMap).toHaveAttribute("data-hot", "");
+  await page.mouse.move(0, 0);
+  await expect(pane.locator("[data-hot]")).toHaveCount(0);
+  // And from the map to the list: the crosshair's height decides, whatever is drawn over the zone there.
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const drawn = pane.locator("rect[data-zone]").first();
+  const box = (await drawn.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  // One zone is picked out (the heaviest at that price), and it is the same one in the list and on the map.
+  await expect(pane.locator("[data-zone-row][data-hot]")).toHaveCount(1);
+  const picked = await pane.locator("[data-zone-row][data-hot]").getAttribute("data-zone-row");
+  await expect(pane.locator(`rect[data-zone="${picked}"]`).first()).toHaveAttribute("data-hot", "");
+  await page.mouse.move(0, 0);
+  await expect(pane.locator("[data-hot]")).toHaveCount(0);
+});
+
+test("the rows can be made compact, the choice is remembered, and a phone keeps its tall rows", async ({ page, isMobile }) => {
+  await open(page, "/options?view=live");
+  await expect(desk(page)).toHaveAttribute("data-desk-density", "comfortable");
+  const tall = (await rows(page).first().boundingBox())!.height;
+  await rows(page).first().getByRole("button").focus();
+  await page.keyboard.press("d");
+  await expect(desk(page)).toHaveAttribute("data-desk-density", "compact");
+  const now = (await rows(page).first().boundingBox())!.height;
+  if (isMobile) expect(now).toBe(tall);
+  else expect(now).toBeLessThan(tall);
+  await open(page, "/options?view=live");
+  await expect(desk(page)).toHaveAttribute("data-desk-density", "compact");
+  await rows(page).first().getByRole("button").focus();
+  await page.keyboard.press("d");
+  await expect(desk(page)).toHaveAttribute("data-desk-density", "comfortable");
+});
+
+test("the review says how the in-session rule states compared with the record, only when both are for the same session", async ({ page, context, baseURL }) => {
+  await open(page, "/options?view=review");
+  await expect(page.locator("[data-agreement]")).toHaveCount(0); // mid-session states: nothing to compare yet
+  await variant(context, baseURL, "rules-final");
+  await open(page, "/options?view=review");
+  await expect(page.locator("[data-agreement]")).toContainText("only in session");
+  await expect(page.locator("[data-agreement]")).toContainText("10 names");
+  // A damaged paper record breaks the scorecard and not the desk, here as everywhere.
+  await variant(context, baseURL, "poison.rules-final");
+  await open(page, "/options?view=review");
+  await expect(rows(page)).toHaveCount(10);
+  await variant(context, baseURL, "rules-final");
+  await open(page, "/options?view=live");
+  await expect(page.locator("[data-agreement]")).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Rules today" })).toHaveCount(0); // yesterday's states are not today's
 });

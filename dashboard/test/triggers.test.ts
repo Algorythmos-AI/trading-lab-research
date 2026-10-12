@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { fixtureOptionsLive } from "@/lib/fixture-variants";
 import type { Options } from "@/lib/options";
-import { announce, OTHER_RULE, rulesAreOld, rulesToday } from "@/lib/triggers";
+import { agreement, announce, OTHER_RULE, rulesAreOld, rulesToday } from "@/lib/triggers";
 import { validateOptionsLive } from "@/lib/validate";
 import optionsJson from "./fixtures/options.v1.json";
 
@@ -92,5 +92,28 @@ describe("the rules' states in today's session", () => {
     expect(announce(first.seen, moved).fresh).toEqual([]);
     // Another session starts from nothing again.
     expect(announce(first.seen, { ...two, session: "2026-10-13" }).fresh).toEqual([]);
+  });
+
+  it("sets the host's final states for the finished session against the record's rows for it", () => {
+    expect(agreement(doc(), e)).toBeNull(); // mid-session states for the edition's own session: nothing to compare
+    const fin = doc(["rules-final"]);
+    expect(fin.rules!.session).toBe(e.built_from);
+    const [first, third] = [e.tickers[0]!.symbol, e.tickers[2]!.symbol];
+    const ids = (e.rules ?? []).map((r) => r.id);
+    const row = (symbol: string, rule: string, session = e.built_from!) => ({ session, symbol, rule });
+    // The record holds one of the host's two triggers, one the host did not see, and rows that do not count.
+    const record = { ...e, paper: [row(first, ids[0]!), row(e.tickers[1]!.symbol, ids[1]!), row(third, ids[3]!, "2026-10-01"), row("ZZZZ", ids[0]!)] };
+    expect(agreement(fin, record)).toEqual({ session: e.built_from, names: e.tickers.length, both: 1, onlyLive: 1, onlyRecord: 1 });
+    // A name the host left out is not compared, in either direction.
+    const part = doc(["rules-final"]);
+    part.rules!.names = part.rules!.names.filter((n) => n.symbol !== first);
+    expect(agreement(part, record)).toEqual({ session: e.built_from, names: e.tickers.length - 1, both: 0, onlyLive: 1, onlyRecord: 1 });
+    expect(agreement({ ...fin, rules: { ...fin.rules!, complete: false } }, record)).toBeNull();
+    expect(agreement({ ...fin, rules: { ...fin.rules!, names: [] } }, record)).toBeNull();
+    expect(agreement(null, record)).toBeNull();
+    // A damaged record's rows are passed over, never thrown on: the desk calls this on every draw.
+    expect(agreement(fin, { ...record, paper: [null, 7, ...record.paper] as never })).toMatchObject({ both: 1, onlyRecord: 1 });
+    expect(agreement(fin, { ...e, paper: "gone" as never })).toMatchObject({ both: 0, onlyLive: 2, onlyRecord: 0 });
+    expect(agreement(doc(["rules-off"]), record)).toBeNull();
   });
 });

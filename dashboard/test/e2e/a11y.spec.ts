@@ -11,6 +11,7 @@ const PAGES = [
   "/options?view=live",
   "/options?view=review",
   "/options?view=classic",
+  "/options/AAPL",
   "/strategies",
   "/research",
   "/operations",
@@ -18,7 +19,7 @@ const PAGES = [
   "/engineering",
   "/glossary",
 ];
-const OPTIONS_STATES = ["partial", "poison", "empty", "error", "v2", "positions-none", "positions-old", "rules-none", "rules-off"];
+const OPTIONS_STATES = ["partial", "poison", "empty", "error", "v2", "positions-none", "positions-old", "rules-none", "rules-off", "rules-final"];
 
 // These run at desktop width. The Options desk is also scanned at a phone's width, in a11y-phone.spec.ts; the other
 // pages are not yet, and wide tables that scroll sideways on a phone are a known gap there.
@@ -31,7 +32,8 @@ for (const theme of ["light", "dark"] as const) {
       await page.goto(path);
       await expect(page.getByRole("heading", { level: 1 })).toBeAttached();
       expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(theme === "dark");
-      if (path.startsWith("/options")) await liveChips(page);
+      if (path.startsWith("/options?")) await liveChips(page);
+      if (path.startsWith("/options/")) await expect(page.locator("[data-name-page]")).toHaveAttribute("data-ready", "true");
       expect(await scan(page)).toEqual([]);
     });
   }
@@ -47,6 +49,14 @@ for (const theme of ["light", "dark"] as const) {
     expect(await scan(page)).toEqual([]);
     await page.keyboard.type("zzzz");
     await expect(palette).toContainText("Nothing matches");
+    expect(await scan(page)).toEqual([]);
+  });
+
+  test(`the review's count of how the in-session states compared passes the accessibility scan in ${theme}`, async ({ page, context, baseURL }) => {
+    await useTheme(context, theme);
+    await context.addCookies([{ name: "fx", value: "rules-final", url: baseURL! }]);
+    await page.goto("/options?view=review");
+    await expect(page.locator("[data-agreement]")).toBeVisible();
     expect(await scan(page)).toEqual([]);
   });
 

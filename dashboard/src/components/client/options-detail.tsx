@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { TriangleAlert } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Empty } from "@/components/empty";
@@ -25,8 +26,7 @@ import {
   type Options,
   type OptionsTicker,
   type Rung,
-  volRead,
-} from "@/lib/options";
+  volRead, zoneKey } from "@/lib/options";
 import type { Interest } from "@/lib/oi";
 import { STATE_LABEL, type RuleState } from "@/lib/triggers";
 import { cn } from "@/lib/utils";
@@ -57,10 +57,18 @@ export function Tick({ value, children, className }: { value: number | null; chi
   );
 }
 
-function ZoneRow({ r, side }: { r: Rung; side: "above" | "at" | "below" }) {
+function ZoneRow({ r, side, hot, onZone }: { r: Rung; side: "above" | "at" | "below"; hot: string | null; onZone: (key: string | null) => void }) {
   const z = r.zone;
+  const key = zoneKey(z);
   return (
-    <li className="grid break-inside-avoid grid-cols-[0.5rem_minmax(0,1fr)_auto] items-baseline gap-x-2 py-1">
+    <li
+      data-zone-row={key}
+      data-hot={hot === key ? "" : undefined}
+      // A mouse only: a finger that starts a scroll on the list would flash the row.
+      onPointerEnter={(ev) => ev.pointerType === "mouse" && onZone(key)}
+      onPointerLeave={(ev) => ev.pointerType === "mouse" && onZone(null)}
+      className={cn("grid break-inside-avoid grid-cols-[0.5rem_minmax(0,1fr)_auto] items-baseline gap-x-2 py-1", hot === key && "bg-accent")}
+    >
       <span
         aria-hidden
         className={cn("h-2.5 w-1 self-center rounded-full", side === "above" ? "bg-bad-fill" : side === "below" ? "bg-good-fill" : "bg-warn-fill", !z.big && "opacity-50")}
@@ -90,6 +98,8 @@ export function OptionsDetail({
   onToggleLayer,
   interest,
   today,
+  expanded = false,
+  fullHref = null,
 }: {
   e: Options;
   t: OptionsTicker;
@@ -102,6 +112,10 @@ export function OptionsDetail({
   interest: Interest | null;
   /** Each rule's state on this name in today's session, when the host has sent them. */
   today: Record<string, { state: RuleState; bar: string | null; r: number | null }> | null;
+  /** Open the zones list from the start: the name's own page does. */
+  expanded?: boolean;
+  /** Where this name's own page is, when this pane is not already it. */
+  fullHref?: string | null;
 }) {
   const read = useLiveRead(t);
   const close = t.last?.close ?? null;
@@ -123,6 +137,10 @@ export function OptionsDetail({
   const symbol = t.symbol;
   const onBreakeven = useCallback((at: BreakevenMark | null) => setMark(at ? { symbol, at } : null), [symbol]);
   const vol = volRead(t);
+  // The zone the pointer is on, in the map or in the list: each picks it out in the other.
+  const [hot, setHot] = useState<{ symbol: string; key: string } | null>(null);
+  const hotKey = hot?.symbol === symbol ? hot.key : null;
+  const onZone = useCallback((key: string | null) => setHot(key === null ? null : { symbol, key }), [symbol]);
 
   return (
     <div className="grid content-start gap-4 p-4" data-desk-detail={t.symbol}>
@@ -136,6 +154,11 @@ export function OptionsDetail({
           <h2 tabIndex={-1} className="font-mono text-xl leading-none font-semibold">
             {t.symbol}
           </h2>
+          {fullHref ? (
+            <Link href={fullHref} prefetch={false} data-full-page className="text-muted-foreground hover:text-foreground text-[0.6875rem] underline underline-offset-2">
+              Full page
+            </Link>
+          ) : null}
           <span className="font-mono text-xl leading-none">
             <Tick value={price}>{num(price, 2)}</Tick>
           </span>
@@ -186,7 +209,7 @@ export function OptionsDetail({
               ))}
             </div>
             <div data-hide={[...hiddenLayers].join(" ") || undefined}>
-              <LevelMap t={t} interactive breakeven={mark?.symbol === t.symbol ? mark.at : null} interest={interest} />
+              <LevelMap t={t} interactive breakeven={mark?.symbol === t.symbol ? mark.at : null} interest={interest} hotZone={hotKey} onZone={onZone} />
             </div>
           </div>
         ) : (
@@ -291,19 +314,19 @@ export function OptionsDetail({
       </dl>
 
       {above.length + at.length + below.length > 0 ? (
-        <details className="border-t pt-3 text-sm">
+        <details open={expanded || undefined} className="border-t pt-3 text-sm">
           <summary className="text-muted-foreground cursor-pointer text-xs">
             The zones on the map as a list ({above.length + at.length + below.length})
           </summary>
           <ol aria-label={`${t.symbol} zones, highest first`} className="divide-border/60 mt-1 divide-y sm:columns-2 sm:gap-8">
             {[...above].reverse().map((r, i) => (
-              <ZoneRow key={`a${i}`} r={r} side="above" />
+              <ZoneRow key={`a${i}`} r={r} side="above" hot={hotKey} onZone={onZone} />
             ))}
             {at.map((r, i) => (
-              <ZoneRow key={`i${i}`} r={r} side="at" />
+              <ZoneRow key={`i${i}`} r={r} side="at" hot={hotKey} onZone={onZone} />
             ))}
             {below.map((r, i) => (
-              <ZoneRow key={`b${i}`} r={r} side="below" />
+              <ZoneRow key={`b${i}`} r={r} side="below" hot={hotKey} onZone={onZone} />
             ))}
           </ol>
         </details>
