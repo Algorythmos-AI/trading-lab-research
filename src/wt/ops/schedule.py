@@ -124,6 +124,12 @@ JOBS: dict[str, Job] = {j.name: j for j in (
         calendars=("Mon..Fri 09..16:04/5:00 America/New_York", "*:04/15:00 UTC"),
         what="Publish the options paper account's open positions, read only: every 5 minutes in the US session, every 15 otherwise",
         runtime_max_h=0.2),
+    # ADR 0007: twice an hour the host says, at most once a day, when a deploy would be accepted. It deploys
+    # nothing. Minutes 20 and 50: clear of the bar cycles (:00:10 and each quarter) and of both publishers.
+    Job("deploy-notify", "com.wt.deploy-notify", 0, 0, ("-m", "wt.ops.deploy", "ready"), "backtest", "deploy_notify",
+        deadline_min=5, trading=False, interval_s=1800, preflight=False, calendars=("*:20/30:00 UTC",),
+        what="Tell the owner when a deploy is ready (main ahead, green, gate open); it never deploys",
+        runtime_max_h=0.2),
     # The crypto desk (ADR 0005) runs around the clock as two interval jobs on UTC calendar boundaries: one bar
     # cycle ten seconds after each 15-minute close, and its publish a minute after that. Neither is a trading job
     # for the equity deploy gate: a deploy waits for a cycle in flight (wt.ops.deploy.quiesced) instead.
