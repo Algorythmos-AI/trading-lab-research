@@ -155,3 +155,19 @@ APPLY=1 deploy/gcp/bin/wt-seed-vm      # cutover: the Mac's com.wt agents must b
 **Rollback to the Mac** runs the same tool in the other direction:
 1. On the VM, run `hostsync manifest` and tar the listed files.
 2. On the Mac, extract into a new directory, then `hostsync verify` and `hostsync apply --root ~/trading`.
+
+
+## The deploy notice (ADR 0007)
+
+Twice an hour the unit `wt-deploy-notify` checks whether a deploy would be accepted right now and, if so, sends
+"A deploy is ready" once a day. It deploys nothing.
+
+| | |
+|---|---|
+| See what it last decided | `journalctl -u wt-deploy-notify -n 5 --no-pager` (one line per run, starting "deploy notice:") |
+| Run the check by hand | `sudo -u wt /usr/local/bin/wt-deploy gate`, then `cd /home/wt/trading && sudo -u wt env PYTHONPATH=src .venv/bin/python -m wt.ops.deploy ready` |
+| Silence it | `sudo -u wt touch /home/wt/trading/var/deploy/NOTIFY_OFF` |
+| Turn it back on | `sudo -u wt rm /home/wt/trading/var/deploy/NOTIFY_OFF` |
+
+It stays silent while the gate is closed, while the tip of main is under 30 minutes old, while a required check
+is not green, and while the live dashboard is older than the code main would bring.

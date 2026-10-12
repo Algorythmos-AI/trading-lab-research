@@ -4,6 +4,7 @@
     python -m wt.ops.deploy deploy [--sha SHA] [--stage]  # one transaction: see below
     python -m wt.ops.deploy rollback <tag>                # back to a runtime-* tag (same gate, same checks)
     python -m wt.ops.deploy migrate                       # move runtime files out of tracked paths (same gate)
+    python -m wt.ops.deploy ready                         # notify-only: say when a deploy would be accepted (ADR 0007)
 
 The gate refuses when any com.wt.* job is running or holds its lock, inside the trading night
 (07:00 ET to close + 2 h on a session day), within an hour of a scheduled start, or when the market calendar
@@ -383,6 +384,68 @@ def broker_cleanup_before_rollback(broker_factory: Any = None) -> str | None:
             os.environ["MODE"] = prev
 
 
+# ---- a deploy is ready: tell the owner, change nothing (ADR 0007) -----------------------------------------------
+NOTIFY_KEY = "deploy-ready"
+NOTIFY_OFF = "NOTIFY_OFF"               # a file of this name in var/deploy/ silences the notice
+NOTIFY_MIN_AGE_MIN = 30                 # merges come in bursts: wait for the tip of main to settle
+
+
+def _commit_time(sha: str) -> dt.datetime:
+    return dt.datetime.fromtimestamp(int(_run("git", "show", "-s", "--format=%ct", sha).stdout.strip()), dt.UTC)
+
+
+def _settle_ready(alerts: Any, now: dt.datetime) -> None:
+    """Clear this notice once there is nothing left to deploy (today's key and yesterday's)."""
+    for d in (now, now - dt.timedelta(days=1)):
+        alerts.resolve(f"{NOTIFY_KEY}:{d.astimezone().date().isoformat()}", "Host is up to date",
+                       "Nothing on main is waiting to be deployed.", 1)
+
+
+def ready(now: dt.datetime | None = None) -> int:
+    """Say, at most once a day, that a deploy would be accepted right now: main is ahead of the live checkout, its
+    tip is green and has settled, the dashboard is not behind it, and the gate is open. It reads; it never
+    deploys, stages, tags or touches the checkout beyond a `git fetch`, and only while the gate is open. Always exits 0: a notice that cannot be
+    worked out is a line in the job's log, not a failed job."""
+    now = now or _now()
+    if (DEPLOY_DIR / NOTIFY_OFF).exists():
+        print(f"deploy notice: off ({DEPLOY_DIR / NOTIFY_OFF} exists)")
+        return 0
+    try:
+        # The gate first: while it is closed (a session, a job running) the checkout is not even fetched.
+        if blockers := gate_blockers(now):
+            print(f"deploy notice: the gate is closed ({blockers[0]})")
+            return 0
+        target, why = resolve_target(None)
+        alerts = Alerts()
+        if target is None:
+            if why.startswith("already at"):
+                _settle_ready(alerts, now)
+            print(f"deploy notice: nothing to deploy ({why})")
+            return 0
+        age_min = (now - _commit_time(target)).total_seconds() / 60
+        if age_min < NOTIFY_MIN_AGE_MIN:
+            print(f"deploy notice: {target[:12]} is {age_min:.0f} min old; waiting for main to settle")
+            return 0
+        green = ci.check(target)
+        if not green.green:
+            print(f"deploy notice: {target[:12]} is not green ({green.detail})")
+            return 0
+        ok_dash, why_dash, _ = dashguard.guard(ROOT, target)
+        if not ok_dash:
+            print(f"deploy notice: {target[:12]} waits for the dashboard ({why_dash})")
+            return 0
+        head = _run("git", "rev-parse", "HEAD").stdout.strip()
+        n = _run("git", "rev-list", "--count", f"{head}..{target}").stdout.strip()
+        sent = alerts.once_per_day(
+            NOTIFY_KEY, "A deploy is ready",
+            f"main is green and {n} commit{'' if n == '1' else 's'} ahead of the host ({head[:8]} -> {target[:8]}); "
+            "the gate is open. To deploy: sudo -u wt /usr/local/bin/wt-deploy deploy", 3)
+        print(f"deploy notice: {target[:12]} is ready, {n} ahead ({'sent' if sent else 'already said today'})")
+    except Exception as e:  # noqa: BLE001 — a notice must never fail its job or page about itself
+        print(f"deploy notice: could not be worked out ({e.__class__.__name__}: {str(e)[:200]})")
+    return 0
+
+
 def rollback(tag: str) -> int:
     if not tag.startswith("runtime-"):
         print("Rollback targets are runtime-* tags only")
@@ -421,6 +484,7 @@ def main(argv: list[str] | None = None) -> int:
     dp.add_argument("--stage", action="store_true", help="run the full test suite on the target before switching")
     sub.add_parser("migrate")
     sub.add_parser("sync-ml")
+    sub.add_parser("ready")
     r = sub.add_parser("rollback")
     r.add_argument("tag")
     a = ap.parse_args(argv)
@@ -430,6 +494,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if not b else 2
     if a.cmd == "migrate":
         return do_migrate()
+    if a.cmd == "ready":
+        return ready()
     if a.cmd == "sync-ml":
         state = sync_ml()
         print(f"ML environment: {state}")
