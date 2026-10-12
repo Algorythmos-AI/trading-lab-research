@@ -1,6 +1,5 @@
 "use client";
 
-import { TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ChainResponse } from "@/lib/chain";
 import { newYork, num, weekDate } from "@/lib/format";
@@ -9,6 +8,8 @@ import { liveRead, type OptionsTicker } from "@/lib/options";
 import { GREEKS_MAX, pickFor, positionGreeks, positionRows, positionsAge, positionsTotal, type PositionGreeks, type PositionRow } from "@/lib/positions";
 import { cn } from "@/lib/utils";
 import { useLive } from "./live-layer";
+import { Notice } from "@/components/ui/notice";
+import { Pane } from "@/components/ui/pane";
 
 /** Dollars for a whole position, signed: "+$125", "−$40". */
 function dollars(v: number | null): string {
@@ -126,23 +127,26 @@ export function OptionsPositions({
   const rows = positionRows(doc, new Set(names), clock);
   const total = positionsTotal(rows);
   return (
-    <section aria-label="Paper option positions" data-positions={rows.length === 0 ? "empty" : age.state} className="border-t px-3 py-2.5">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-        <h3 className="text-[0.8125rem] font-medium">Paper positions</h3>
-        <span className="text-muted-foreground text-[0.6875rem]">
+    <Pane
+      label="Paper option positions"
+      title="Paper positions"
+      data-positions={rows.length === 0 ? "empty" : age.state}
+      meta={
+        <>
           {rows.length > 0 && total !== null ? (
             <>
               open result <span className={cn("font-mono", tone(total))}>{dollars(total)}</span> ·{" "}
-            </>
-          ) : null}
-          as of {newYork(doc.as_of, false)} ET
-        </span>
-      </div>
+      
+        </>
+            ) : null}
+            as of {newYork(doc.as_of, false)} ET
+        </>
+      }
+    >
       {age.state === "old" ? (
-        <p role="status" className="text-warn mt-1 flex items-start gap-1.5 text-xs">
-          <TriangleAlert aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+        <Notice role="status" className="mt-1">
           These are {num(age.minutes, 0)} minutes old: the host has stopped sending them. Check the broker before relying on them.
-        </p>
+        </Notice>
       ) : null}
       {rows.length === 0 ? (
         <p className="text-muted-foreground mt-1 text-xs">No open option positions in the paper account.</p>
@@ -166,6 +170,6 @@ export function OptionsPositions({
       <p className="text-muted-foreground mt-1.5 text-[0.6875rem]">
         Paper account, read only. Marks and results are the broker&apos;s. Δ and what a day of waiting costs (to expiry, in a contract&apos;s last day) are estimates from option quotes 15 minutes behind the market.
       </p>
-    </section>
+    </Pane>
   );
 }

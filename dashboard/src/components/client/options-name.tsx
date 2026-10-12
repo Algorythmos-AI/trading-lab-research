@@ -5,12 +5,12 @@ import type { HourlyBar } from "@/lib/hourly";
 import type { Interest } from "@/lib/oi";
 import type { MapLayer, Options, OptionsTicker } from "@/lib/options";
 import type { OptionsLive } from "@/lib/options-live.types";
-import { TriangleAlert } from "lucide-react";
 import { weekDate } from "@/lib/format";
 import { isHalfDay, sessionClock } from "@/lib/options";
 import { rulesAreOld, rulesToday } from "@/lib/triggers";
 import { FeedPill, useLive } from "./live-layer";
 import { OptionsDetail } from "./options-detail";
+import { Notice } from "@/components/ui/notice";
 
 /**
  * One name on a page of its own: the same pane the desk shows beside its list, at the page's full width and with
@@ -54,11 +54,10 @@ export function OptionsName({
       {live || stale ? (
         <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1 border-b px-4 py-2">
           {stale ? (
-            <p role="alert" className="text-bad mr-auto flex items-start gap-2 text-sm">
-              <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
+            <Notice tone="bad" size="sm" role="alert" className="mr-auto">
               These levels were for {weekDate(e.session)}. A later session has started and no newer edition has published, so do not trade from
               them.
-            </p>
+            </Notice>
           ) : null}
           {live ? <FeedPill /> : null}
         </div>

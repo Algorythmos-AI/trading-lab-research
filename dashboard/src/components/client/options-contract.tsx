@@ -13,6 +13,8 @@ import { volShape } from "@/lib/volshape";
 import { VolShape } from "../options-vol-shape";
 import { useLive, useLiveRead } from "./live-layer";
 import { useChain } from "./use-chain";
+import { Notice } from "@/components/ui/notice";
+import { Skeleton } from "@/components/ui/skeleton";
 
 // The chosen contract lives in the browser's own storage and nowhere else. Storage can be switched off (private
 // windows, strict settings); only then does the choice live in this map, for as long as the page. While storage
@@ -226,8 +228,8 @@ export function OptionsContract({
       {state === "loading" ? (
         <div role="status" aria-busy="true" className="grid gap-2">
           <span className="sr-only">Loading option quotes</span>
-          <span className="bg-muted h-8 rounded motion-safe:animate-pulse" />
-          <span className="bg-muted h-24 rounded motion-safe:animate-pulse" />
+          <Skeleton className="h-8" />
+          <Skeleton className="h-24" />
         </div>
       ) : state === "off" ? (
         <Empty title="Option quotes are not set up on this site">The contract pane needs the market-data keys the live prices use.</Empty>
@@ -340,11 +342,10 @@ export function OptionsContract({
           {view.expired ? (
             <Empty title="This contract has expired">Choose another expiry, or clear it.</Empty>
           ) : view.stale ? (
-            <p role="status" className="text-warn flex items-start gap-2 text-sm">
-              <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
+            <Notice size="sm" role="status">
               The newest option quote is {num(view.ageMin, 0)} minutes old, too old to price this contract from while the market is open. The numbers
               are withheld until newer quotes arrive.
-            </p>
+            </Notice>
           ) : (
             <>
               <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-3">
