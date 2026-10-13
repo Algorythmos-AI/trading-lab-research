@@ -98,7 +98,7 @@ def test_a_notice_that_cannot_be_worked_out_never_fails_its_job(notice, monkeypa
     monkeypatch.setattr(deploy.ci, "check", boom)
     assert deploy.ready(LATER) == 0
     assert notice.rec.sent == [] and "could not be worked out (ConnectionError" in capsys.readouterr().out
-    monkeypatch.setattr(deploy.ci, "check", lambda sha: ci.Verdict(True, "stub", {}))
+    monkeypatch.setattr(deploy.ci, "check", lambda sha, required=None: ci.Verdict(True, "stub", {}))
     assert deploy.main(["ready"]) == 0                                        # the command line reaches it
 
 

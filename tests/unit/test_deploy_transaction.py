@@ -43,12 +43,12 @@ def world(tmp_path, monkeypatch):
     monkeypatch.setattr(deploy, "gate_blockers", lambda now=None: gate())
     monkeypatch.setattr(deploy.preflight, "check_git", lambda root: [])
     monkeypatch.setattr(deploy.preflight, "lock_hash", lambda root: "h")
-    monkeypatch.setattr(deploy.ci, "check", lambda sha: ci.Verdict(state["green"], "stub", {"test": "success"}))
+    monkeypatch.setattr(deploy.ci, "check", lambda sha, required=None: ci.Verdict(state["green"], "stub", {"test": "success"}))
     monkeypatch.setattr(deploy.dashguard, "guard", lambda root, target: (True, "", ""))
     monkeypatch.setattr(deploy.migrate, "migrate", lambda: type("R", (), {"moved": [], "conflicts": []})())
     monkeypatch.setattr(deploy, "sync_venv", lambda: state.__setitem__("synced", state["synced"] + 1))
     monkeypatch.setattr(deploy, "smoke", lambda: (state["smoke"], "smoke output"))
-    monkeypatch.setattr(deploy, "stage_tests", lambda target: state["stage"])
+    monkeypatch.setattr(deploy, "stage_tests", lambda target, timeout_s=None: state["stage"])
 
     class A:
         def fire(self, key, title, msg, prio=4):
@@ -130,7 +130,7 @@ def test_a_second_deploy_does_not_stage_while_the_first_is_staging(world, capsys
     staged = []
     deploy_stage = deploy.stage_tests
 
-    def never(target):
+    def never(target, timeout_s=None):
         staged.append(target)
         return deploy_stage(target)
     deploy.stage_tests = never
