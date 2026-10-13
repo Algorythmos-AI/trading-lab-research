@@ -171,3 +171,18 @@ Twice an hour the unit `wt-deploy-notify` checks whether a deploy would be accep
 
 It stays silent while the gate is closed, while the tip of main is under 30 minutes old, while a required check
 is not green, and while the live dashboard is older than the code main would bring.
+
+## Automatic deploys (ADR 0008)
+
+Once an hour (minute 35) the job `deploy-auto` deploys the tip of `main` when your own deploy would be accepted
+and the gate will stay open for an hour: the same tests before the switch, the same smoke test and rollback after
+it. Your phone gets "Deployed automatically" each time, with the two commits.
+
+- **Stop it:** `sudo -u wt touch /home/wt/trading/var/deploy/AUTO_OFF`. Start it again by removing the file.
+- **What it leaves to you:** a release that changes the schedule, the units or the host helpers. Your phone gets
+  "A deploy needs you" with the reason. Run `sudo -u wt /usr/local/bin/wt-deploy deploy`, then
+  `sudo wt-install-units`.
+- **What it did:** `logs/deploy_auto_<date>.log` has one line per run and why it did or did not deploy; each
+  deploy's record in `var/deploy/` carries `"by": "auto"`.
+- **Go back:** `sudo -u wt /usr/local/bin/wt-deploy 'rollback runtime-<tag>'`; the tag is in the record. Then
+  create `AUTO_OFF`, or the next run deploys the same commit again.

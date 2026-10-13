@@ -130,6 +130,14 @@ JOBS: dict[str, Job] = {j.name: j for j in (
         deadline_min=5, trading=False, interval_s=1800, preflight=False, calendars=("*:20/30:00 UTC",),
         what="Tell the owner when a deploy is ready (main ahead, green, gate open); it never deploys",
         runtime_max_h=0.2),
+    # ADR 0008: once an hour the host deploys the tip of main itself, when a deploy typed by the owner would be
+    # accepted: gate open and staying open, main green and settled, nothing in the release that needs sudo. It
+    # runs the same transaction as `wt-deploy deploy` and pages on every deploy. Minute 35: clear of the bar
+    # cycles, both publishers and the notice. The deadline is above the test suite's own limit plus the switch.
+    Job("deploy-auto", "com.wt.deploy-auto", 0, 0, ("-m", "wt.ops.deploy", "auto"), "backtest", "deploy_auto",
+        deadline_min=50, trading=False, interval_s=3600, preflight=False, calendars=("*:35:00 UTC",),
+        what="Deploy the tip of main when the owner's own deploy would be accepted; off with var/deploy/AUTO_OFF",
+        runtime_max_h=1.0),
     # The crypto desk (ADR 0005) runs around the clock as two interval jobs on UTC calendar boundaries: one bar
     # cycle ten seconds after each 15-minute close, and its publish a minute after that. Neither is a trading job
     # for the equity deploy gate: a deploy waits for a cycle in flight (wt.ops.deploy.quiesced) instead.

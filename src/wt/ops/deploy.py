@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import Any
 
 from wt.core.config import ROOT, STATE_DIR
-from wt.ops import agents, ci, dashguard, host, migrate, preflight
+from wt.ops import agents, ci, dashguard, host, migrate, preflight, safeio, units
 from wt.ops.alerts import Alerts
 from wt.ops.locks import DEPLOY_LOCK, RUNNER_LOCK, held, job_lock
 from wt.ops.schedule import JOBS, PY, TRADING_JOBS
@@ -77,15 +77,17 @@ QUIESCE_WAIT_S = 120.0
 
 
 @contextlib.contextmanager
-def quiesced(wait_s: float | None = None) -> Iterator[list[str]]:
+def quiesced(wait_s: float | None = None, own: str | None = None) -> Iterator[list[str]]:
     """Hold the lock of every job the gate does not wait for (the interval jobs and the daily challenger run),
     waiting for a run in flight to finish. Those are not trading jobs, so the gate lets a deploy start while one
     runs; without this the checkout (and the venv) would change under it. Yields the jobs still busy after
-    `wait_s` (empty = quiet)."""
+    `wait_s` (empty = quiet). `own` is the job this deploy is itself running as (the automatic deploy): its lock
+    is already held by its own runner, so it is not waited for."""
     wait_s = QUIESCE_WAIT_S if wait_s is None else wait_s
     with contextlib.ExitStack() as stack:
         busy = [j.name for j in JOBS.values()
-                if not j.trading and not stack.enter_context(job_lock(j.name, wait_s=wait_s, poll_s=2.0))]
+                if not j.trading and j.name != own
+                and not stack.enter_context(job_lock(j.name, wait_s=wait_s, poll_s=2.0))]
         yield busy
 
 
@@ -266,7 +268,7 @@ def resolve_target(sha: str | None) -> tuple[str | None, str]:
     return target, ""
 
 
-def deploy(sha: str | None = None, stage: bool = False) -> int:
+def deploy(sha: str | None = None, stage: bool = False, by: str = "owner", own_job: str | None = None) -> int:
     if _refuse_if_closed():
         return 2
     git = [c for c in preflight.check_git(ROOT) if c.name in ("on main", "clean code") and not c.ok]
@@ -278,11 +280,14 @@ def deploy(sha: str | None = None, stage: bool = False) -> int:
         print(f"Nothing deployed: {why}")
         return 0 if why.startswith("already at") else 2
     green = ci.check(target)
-    ci_override = os.environ.get(CI_OVERRIDE_ENV, "").strip()
+    # The overrides are the owner's, typed for one deploy: an automatic deploy never reads them.
+    ci_override = os.environ.get(CI_OVERRIDE_ENV, "").strip() if by == "owner" else ""
     if not green.green and not ci_override:
         print(f"Refusing: {target[:12]} is not green ({green.detail})\n  (owner override: {CI_OVERRIDE_ENV}='reason')")
         return 2
     ok_dash, why_dash, override = dashguard.guard(ROOT, target)
+    if by != "owner" and why_dash:
+        ok_dash = False                         # passed only by an override left in the environment: not here
     if not ok_dash:
         print(f"Refusing: {why_dash}\n  (owner override: {dashguard.OVERRIDE_ENV}='reason' make deploy)")
         return 2
@@ -309,11 +314,11 @@ def deploy(sha: str | None = None, stage: bool = False) -> int:
             return 2
         if _refuse_if_closed():                    # staging took a while: a job may be due now
             return 2
-        with quiesced() as busy:
+        with quiesced(own=own_job) as busy:
             if busy:
                 print(f"Refusing: still running after {QUIESCE_WAIT_S:.0f}s: {', '.join(busy)}")
                 return 2
-            code, rec = _switch(target, stage, green, ci_override, why_dash, override)
+            code, rec = _switch(target, stage, green, ci_override, why_dash, override, by)
     # Every lock is released: jobs start again. The ML environment has its own lock (see `sync_ml`).
     if code == 0:
         _note_ml(rec)
@@ -321,7 +326,7 @@ def deploy(sha: str | None = None, stage: bool = False) -> int:
 
 
 def _switch(target: str, staged: bool, green: ci.Verdict, ci_override: str, why_dash: str | None,
-            override: str | None) -> tuple[int, Path | None]:
+            override: str | None, by: str = "owner") -> tuple[int, Path | None]:
     before = _run("git", "rev-parse", "HEAD").stdout.strip()
     tag = next_tag()
     _run("git", *TAGGER, "tag", "-a", tag, "-m", f"runtime state before deploy at {_now():%Y-%m-%dT%H:%M:%SZ}", before)
@@ -332,6 +337,7 @@ def _switch(target: str, staged: bool, green: ci.Verdict, ci_override: str, why_
     ok, out = smoke()
     body: dict[str, object] = {"from": before, "to": after, "rollback_tag": tag, "lock": preflight.lock_hash(ROOT),
                                "migrated": res.moved, "conflicts": res.conflicts, "smoke_ok": ok, "staged": staged,
+                               "by": by,
                                "ci": green.checks if green.green else {"override": ci_override, "why": green.detail},
                                "dashboard_check": "overridden" if why_dash else "ok",
                                **({"dashboard_override": {"reason": override, "why": why_dash}} if why_dash else {})}
@@ -435,6 +441,11 @@ def ready(now: dt.datetime | None = None) -> int:
             print(f"deploy notice: {target[:12]} waits for the dashboard ({why_dash})")
             return 0
         head = _run("git", "rev-parse", "HEAD").stdout.strip()
+        if auto_enabled():
+            # The host deploys this by itself at its next run (ADR 0008); a release it leaves to the owner is said
+            # there, in words that say why. Two notices for one release would be one too many.
+            print(f"deploy notice: {target[:12]} is ready; the automatic deploy takes it from here")
+            return 0
         n = _run("git", "rev-list", "--count", f"{head}..{target}").stdout.strip()
         sent = alerts.once_per_day(
             NOTIFY_KEY, "A deploy is ready",
@@ -443,6 +454,104 @@ def ready(now: dt.datetime | None = None) -> int:
         print(f"deploy notice: {target[:12]} is ready, {n} ahead ({'sent' if sent else 'already said today'})")
     except Exception as e:  # noqa: BLE001 — a notice must never fail its job or page about itself
         print(f"deploy notice: could not be worked out ({e.__class__.__name__}: {str(e)[:200]})")
+    return 0
+
+
+# ---- the host deploys itself (ADR 0008) --------------------------------------------------------------------------
+AUTO_JOB = "deploy-auto"
+AUTO_OFF = "AUTO_OFF"                   # a file of this name in var/deploy/ stops automatic deploys
+AUTO_STATE = "auto.json"                # the last target tried, so one that failed its tests is not tried again
+AUTO_MARGIN_MIN = 60                    # the gate must still be open this long from now: the tests take a while
+# What `sudo wt-install-units` installs is made from these. A release that touches any of them needs the owner.
+OWNER_PATHS = ("deploy/oci/bin", "deploy/oci/systemd", "src/wt/ops/schedule.py", "src/wt/ops/units.py")
+
+
+def auto_enabled() -> bool:
+    """True on a host whose timers run the automatic deploy and where the owner has not switched it off."""
+    return AUTO_JOB in JOBS and host.current().kind == "systemd" and not (DEPLOY_DIR / AUTO_OFF).exists()
+
+
+def needs_owner(head: str, target: str) -> str | None:
+    """Why this release cannot go in unattended, or None. Installing units needs `sudo`, which no job has: a
+    release that changes what is installed, or a host whose installed units already differ from its code, is the
+    owner's. Judged by path, so a comment in the schedule counts too: the owner deploys a few releases by hand
+    rather than one going in with half its timers."""
+    changed = _run("git", "diff", "--name-only", head, target, "--", *OWNER_PATHS).stdout.split()
+    if changed:
+        return f"it changes what wt-install-units installs ({len(changed)} file{'' if len(changed) == 1 else 's'})"
+    if host.current().kind == "systemd" and units.diff(units.render_all(ROOT)):
+        return "the installed units differ from the code: run sudo wt-install-units first"
+    return None
+
+
+def _auto_state() -> dict[str, Any]:
+    try:
+        got = json.loads((DEPLOY_DIR / AUTO_STATE).read_text())
+    except (OSError, ValueError):
+        return {}
+    return got if isinstance(got, dict) else {}
+
+
+def auto(now: dt.datetime | None = None) -> int:
+    """Deploy the tip of main if a deploy typed by the owner would be accepted right now, and say so on the
+    owner's phone. It asks what `ready` asks, then runs the same transaction as `wt-deploy deploy` (the full test
+    suite on this host before the switch, the smoke test and the rollback after it), with three differences: the
+    owner's overrides are never read, a release that needs `sudo wt-install-units` is left to the owner, and a
+    target whose tests failed here is not tried again. Always exits 0: a refusal is a line in the job's log, and
+    a deploy that fails pages by itself."""
+    now = now or _now()
+    if not auto_enabled():
+        print(f"auto deploy: off ({DEPLOY_DIR / AUTO_OFF} exists, or this host does not run it)")
+        return 0
+    try:
+        if blockers := gate_blockers(now):
+            print(f"auto deploy: the gate is closed ({blockers[0]})")
+            return 0
+        # The tests run for minutes and the switch asks the gate again: do not start what cannot finish.
+        if later := gate_blockers(now + dt.timedelta(minutes=AUTO_MARGIN_MIN)):
+            print(f"auto deploy: the gate closes within {AUTO_MARGIN_MIN} min ({later[0]})")
+            return 0
+        git = [c for c in preflight.check_git(ROOT) if c.name in ("on main", "clean code") and not c.ok]
+        if git:
+            print("auto deploy: " + "; ".join(f"{c.name}: {c.detail}" for c in git))
+            return 0
+        target, why = resolve_target(None)
+        alerts = Alerts()
+        if target is None:
+            if why.startswith("already at"):
+                _settle_ready(alerts, now)
+            print(f"auto deploy: nothing to deploy ({why})")
+            return 0
+        if _auto_state().get("failed") == target:
+            print(f"auto deploy: {target[:12]} failed its tests here before; waiting for a newer commit")
+            return 0
+        age_min = (now - _commit_time(target)).total_seconds() / 60
+        if age_min < NOTIFY_MIN_AGE_MIN:
+            print(f"auto deploy: {target[:12]} is {age_min:.0f} min old; waiting for main to settle")
+            return 0
+        head = _run("git", "rev-parse", "HEAD").stdout.strip()
+        if owner := needs_owner(head, target):
+            sent = alerts.once_per_day(
+                NOTIFY_KEY, "A deploy needs you",
+                f"{head[:8]} -> {target[:8]} was not deployed automatically: {owner}. To deploy: "
+                "sudo -u wt /usr/local/bin/wt-deploy deploy, then sudo wt-install-units", 3)
+            print(f"auto deploy: {target[:12]} is the owner's: {owner} ({'said' if sent else 'already said today'})")
+            return 0
+        n = _run("git", "rev-list", "--count", f"{head}..{target}").stdout.strip()
+        print(f"auto deploy: {head[:12]} -> {target[:12]}, {n} commit{'' if n == '1' else 's'}", flush=True)
+        code = deploy(target, stage=True, by="auto", own_job=AUTO_JOB)
+        after = _run("git", "rev-parse", "HEAD").stdout.strip()
+        safeio.atomic_write(DEPLOY_DIR / AUTO_STATE, json.dumps(
+            {"at": now.isoformat(timespec="seconds"), "target": target, "code": code,
+             **({"failed": target} if code == 1 and after != target else {})}), DEPLOY_DIR)
+        if code == 0 and after == target:
+            alerts.notify("Deployed automatically", f"The host moved {head[:8]} -> {target[:8]} ({n} commit"
+                          f"{'' if n == '1' else 's'}): tests passed here before the switch and the smoke test "
+                          f"after it. To go back: sudo -u wt /usr/local/bin/wt-deploy 'rollback <tag>' (the tag is "
+                          f"in var/deploy). To stop automatic deploys: touch var/deploy/{AUTO_OFF}", 3)
+            _settle_ready(alerts, now)
+    except Exception as e:  # noqa: BLE001 — the job never fails for a deploy it could not start; a deploy pages for itself
+        print(f"auto deploy: stopped ({e.__class__.__name__}: {str(e)[:200]})")
     return 0
 
 
@@ -485,6 +594,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("migrate")
     sub.add_parser("sync-ml")
     sub.add_parser("ready")
+    sub.add_parser("auto")
     r = sub.add_parser("rollback")
     r.add_argument("tag")
     a = ap.parse_args(argv)
@@ -496,6 +606,8 @@ def main(argv: list[str] | None = None) -> int:
         return do_migrate()
     if a.cmd == "ready":
         return ready()
+    if a.cmd == "auto":
+        return auto()
     if a.cmd == "sync-ml":
         state = sync_ml()
         print(f"ML environment: {state}")
