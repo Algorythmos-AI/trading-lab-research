@@ -18,9 +18,10 @@ specific to this repository. Where the two conflict, the org file's "Never" sect
 3. **The live checkout is production.**
    - Since 2026-10 the jobs run on the cloud host (`docs/runbooks/gcp-host.md`): systemd runs the working tree
      of `/home/wt/trading` there. It changes only through the gated deploy (`wt-deploy`), never by hand.
-   - The host runs that same gated deploy itself once an hour (ADR 0008): merging to `main` is deploying, a
-     few hours later. A release that changes units or host helpers waits for the owner. Automated
-     contributors never start a deploy, and never create or remove `var/deploy/AUTO_OFF`.
+   - Where the owner has switched it on, the host runs that same gated deploy itself once an hour (ADR 0008):
+     merging to `main` is then deploying, a few hours later. A release that changes units, host helpers or the
+     deploy's own code waits for the owner. Automated contributors never start a deploy, and never create or
+     remove `var/deploy/AUTO_ON`.
    - The Mac's `~/trading` is no longer what runs. It is a console checkout and may be far behind
      `origin/main`: read the state of the code from `origin/main`, never from it.
    - Develop in a worktree (`git worktree add ~/trading-wt/<branch> origin/main`). Remove it when its pull

@@ -174,15 +174,22 @@ is not green, and while the live dashboard is older than the code main would bri
 
 ## Automatic deploys (ADR 0008)
 
-Once an hour (minute 35) the job `deploy-auto` deploys the tip of `main` when your own deploy would be accepted
-and the gate will stay open for an hour: the same tests before the switch, the same smoke test and rollback after
-it. Your phone gets "Deployed automatically" each time, with the two commits.
+Once an hour (minute 35) the job `deploy-auto` looks at whether your own deploy would be accepted and the gate
+will stay open for an hour.
 
-- **Stop it:** `sudo -u wt touch /home/wt/trading/var/deploy/AUTO_OFF`. Start it again by removing the file.
-- **What it leaves to you:** a release that changes the schedule, the units or the host helpers. Your phone gets
-  "A deploy needs you" with the reason. Run `sudo -u wt /usr/local/bin/wt-deploy deploy`, then
+- **It is off until you switch it on.** Off, each run writes one line saying what it would have done. Read a
+  night of them first: `grep "auto deploy" /home/wt/trading/logs/deploy_auto_*.log | tail -20`.
+- **Switch it on:** `sudo -u wt touch /home/wt/trading/var/deploy/AUTO_ON`. Before you do, restrict who can
+  merge to `main` on GitHub: from then on a merge is a deploy.
+- **Switch it off:** `sudo -u wt rm /home/wt/trading/var/deploy/AUTO_ON`. A run in its tests stops before the
+  switch.
+- **What it leaves to you:** a release that changes the schedule, the units, the host helpers or the deploy's own
+  code. Your phone gets "A deploy needs you". Run `sudo -u wt /usr/local/bin/wt-deploy deploy`, then
   `sudo wt-install-units`.
-- **What it did:** `logs/deploy_auto_<date>.log` has one line per run and why it did or did not deploy; each
-  deploy's record in `var/deploy/` carries `"by": "auto"`.
-- **Go back:** `sudo -u wt /usr/local/bin/wt-deploy 'rollback runtime-<tag>'`; the tag is in the record. Then
-  create `AUTO_OFF`, or the next run deploys the same commit again.
+- **What it did:** the log above has one line per run and why; each deploy's record in `var/deploy/` carries
+  `"by": "auto"`.
+- **Go back:** `sudo -u wt /usr/local/bin/wt-deploy 'rollback runtime-<tag>'`; the tag is in the newest record.
+  The commit you rolled back is not deployed again; a newer one is, so switch it off if `main` still holds the
+  fault.
+- **A commit it gave up on:** it remembers a target that failed here in `var/deploy-auto.json` and tries it
+  once more after six hours. Delete that file to make it try now.
