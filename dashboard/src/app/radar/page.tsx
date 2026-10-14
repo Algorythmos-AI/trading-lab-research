@@ -11,7 +11,10 @@ import {
   TickerCards,
   WatchlistPanel,
 } from "@/components/radar";
-import { listRadarDates, loadRadar } from "@/lib/snapshot";
+import { Notice } from "@/components/ui/notice";
+import { weekDate } from "@/lib/format";
+import { radarStale } from "@/lib/radar";
+import { listRadarDates, loadRadar, pageTime } from "@/lib/snapshot";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Radar" };
@@ -19,7 +22,7 @@ export const metadata = { title: "Radar" };
 export default async function RadarPage({ searchParams }: { searchParams: Promise<{ d?: string | string[] }> }) {
   const raw = (await searchParams).d;
   const date = typeof raw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : undefined;
-  const [result, dates] = await Promise.all([loadRadar(date), listRadarDates()]);
+  const [result, dates, now] = await Promise.all([loadRadar(date), listRadarDates(), pageTime()]);
   return (
     <>
       <PageHeading
@@ -31,6 +34,12 @@ export default async function RadarPage({ searchParams }: { searchParams: Promis
       ) : (
         <>
           <EditionPicker dates={dates} current={result.edition.edition_date} />
+          {!date && radarStale(result.edition.edition_date, now) ? (
+            <Notice tone="bad" size="sm" role="alert">
+              This radar is from {weekDate(result.edition.edition_date)}. Today&apos;s session has opened and no newer edition has
+              published (or the market is shut for a holiday), so its levels and notes may be out of date.
+            </Notice>
+          ) : null}
           <EditionPanel r={result.edition} />
           <ScorePanel r={result.edition} />
           <PicksPanel r={result.edition} />

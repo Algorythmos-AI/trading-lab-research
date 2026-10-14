@@ -1,4 +1,4 @@
-// The pre-market radar's view helpers. Pure: no I/O, no clock.
+// The pre-market radar's view helpers. Pure: no I/O; any clock is passed in.
 import type { RadarEdition } from "./radar.types";
 
 export type Radar = RadarEdition;
@@ -14,6 +14,22 @@ export function radarDates(pathnames: readonly string[], prefix: string): string
     if (m?.[1]) out.add(m[1]);
   }
   return [...out].sort().reverse();
+}
+
+/**
+ * True once a weekday's regular session has opened in New York and the radar on show is from an earlier day: that
+ * morning's run did not publish. Weekends never count; a US holiday can, which the notice's wording allows for.
+ */
+export function radarStale(editionDate: string, now: Date): boolean {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+      .formatToParts(now)
+      .map((x) => [x.type, x.value]),
+  );
+  if (p.weekday === "Sat" || p.weekday === "Sun") return false;
+  const today = `${p.year}-${p.month}-${p.day}`;
+  const minute = Number(p.hour) * 60 + Number(p.minute);
+  return today > editionDate && minute >= 9 * 60 + 30;
 }
 
 export type Tone = "good" | "warn" | "bad" | "info" | "neutral";
