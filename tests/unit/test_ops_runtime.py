@@ -134,9 +134,12 @@ def test_a_once_per_day_alert_stops_counting_as_firing_after_the_next_day(tmp_pa
 def test_once_per_day(tmp_path, sent):
     box, _ = sent
     a = alerts.Alerts(root=tmp_path, topic="t")
-    assert a.once_per_day("refuse:routine", "refused", "disk", day="2026-09-29")
-    assert not a.once_per_day("refuse:routine", "refused", "disk", day="2026-09-29")
-    assert a.once_per_day("refuse:routine", "refused", "disk", day="2026-09-30")
+    # Days relative to now: keys older than KEEP_DAYS are pruned, so a fixed date stops deduplicating once it ages out.
+    today = alerts._now().date()
+    d1, d2 = (today - dt.timedelta(days=1)).isoformat(), today.isoformat()
+    assert a.once_per_day("refuse:routine", "refused", "disk", day=d1)
+    assert not a.once_per_day("refuse:routine", "refused", "disk", day=d1)
+    assert a.once_per_day("refuse:routine", "refused", "disk", day=d2)
     assert len(box) == 2
 
 
