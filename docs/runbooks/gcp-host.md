@@ -139,7 +139,8 @@ The VM is the only host that runs jobs. The Mac is a console for writing code an
 
 | | |
 |---|---|
-| Machine | e2-medium (2 vCPU, 4 GB), us-east1-b, pd-balanced 30 GB, daily snapshot schedule `wt-daily` (7 days) |
+| Machine | e2-standard-2 (2 vCPU, 8 GB) since 2026-10-13 21:07 UTC, before that e2-medium (4 GB); us-east1-b, pd-balanced 30 GB, daily snapshot schedule `wt-daily` (7 days). The external address is ephemeral and changes on a stop; nothing depends on it |
+| Why 8 GB | The forex desk's pre-flight measured 1.06 GB as the least memory available over a day at 4 GB, under the 1.5 GB it needs. Resized in the gap after a :00 crypto run with no job running; the desks were down about 80 s |
 | Memory fuses | routine/forward/weekly MemoryHigh 1.5G, MemoryMax 2G; publisher 1G; paper-b uncapped (OOMScoreAdjust -500) |
 | Tuning an existing VM | `sudo wt-tune-host` (zram, journald, needrestart, gh and time, git identity); `--check` only reports |
 
