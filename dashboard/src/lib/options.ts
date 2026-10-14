@@ -22,6 +22,16 @@ export function editionState(session: string, now: Date): "next" | "today" | "st
   return today === session ? "today" : "stale";
 }
 
+/** Calendar days a close may sit behind its session: a weekend plus a holiday (Thu close for a Mon after Good Friday). */
+export const MAX_BUILD_GAP_DAYS = 4;
+
+/** True when the edition was built from a close too far behind the session it is for: a pull that missed a day. */
+export function builtFromOld(session: string, builtFrom: string | null | undefined): boolean {
+  if (!builtFrom) return false;
+  const gap = (Date.parse(`${session}T00:00:00Z`) - Date.parse(`${builtFrom}T00:00:00Z`)) / 86_400_000;
+  return Number.isFinite(gap) && (gap <= 0 || gap > MAX_BUILD_GAP_DAYS);
+}
+
 /** Zones of this weight or more are "major" (the levels engine uses the same cut). */
 export const MAJOR_WEIGHT = 5;
 
