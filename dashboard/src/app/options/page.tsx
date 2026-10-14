@@ -5,10 +5,11 @@ import { OptionsDesk } from "@/components/client/options-desk";
 import { OptionsGlance } from "@/components/client/options-glance";
 import { PaneBoundary } from "@/components/client/pane-boundary";
 import { EditionPicker } from "@/components/radar";
+import { Notice } from "@/components/ui/notice";
 import { sydney, weekDate } from "@/lib/format";
 import { hourlyBySymbol } from "@/lib/hourly";
 import { interestBySymbol } from "@/lib/oi";
-import { editionState, isDeskView, isHalfDay, mapView, viewForClock, type DeskPane, type Options } from "@/lib/options";
+import { builtFromOld, editionState, isDeskView, isHalfDay, mapView, viewForClock, type DeskPane, type Options } from "@/lib/options";
 import { listOptionsDates, loadOptions, loadOptionsLive, pageTime } from "@/lib/snapshot";
 
 export const dynamic = "force-dynamic";
@@ -16,11 +17,23 @@ export const metadata = { title: "Options" };
 
 const INTRO = "Where each name sits against its support and resistance, rebuilt after every close. Research only; nothing here is an order.";
 
+/** Levels built from a close more than a weekend behind their session: a day's bars never arrived. */
+function OldCloseNotice({ e }: { e: Options }) {
+  if (!builtFromOld(e.session, e.built_from)) return null;
+  return (
+    <Notice tone="bad" size="sm" role="alert">
+      These levels for {weekDate(e.session)} were built from the {weekDate(e.built_from)} close, more than a weekend earlier. A
+      day&apos;s bars are missing, so check them before use.
+    </Notice>
+  );
+}
+
 /** The page as it was before the desk: one long column of panels. Kept at ?view=classic for one release. */
 function ClassicOptions({ e, dates, date, now }: { e: Options; dates: string[]; date: string | undefined; now: Date }) {
   return (
     <>
       <PageHeading title="Options" intro={INTRO} />
+      <OldCloseNotice e={e} />
       <LiveQuotes symbols={e.tickers.map((t) => t.symbol).join(",")} session={e.session} enabled={!date}>
         <FocusScope>
           <EditionPicker dates={dates} current={e.session} base="/options" />
@@ -94,6 +107,7 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
   return (
     <>
       <h1 className="sr-only">Options</h1>
+      <OldCloseNotice e={e} />
       <LiveQuotes symbols={e.tickers.map((t) => t.symbol).join(",")} session={e.session} enabled={!date}>
         <PaneBoundary name="The options desk">
           {/* Keyed by edition: opening another edition starts the desk afresh, so a view or a sort chosen on one

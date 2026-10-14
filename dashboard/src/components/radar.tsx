@@ -219,14 +219,17 @@ export function AvoidPanel({ r }: { r: Radar }) {
 }
 
 export function EditionPicker({ dates, current, base = "/radar" }: { dates: string[]; current: string; base?: string }) {
-  if (dates.length < 2) return null;
+  // The edition on show is always a chip, even when its stored copy is missing (a failed write).
+  const all = dates.includes(current) ? dates : [current, ...dates].sort().reverse();
+  if (all.length < 2) return null;
   return (
     <nav aria-label="Earlier editions" className="flex flex-wrap items-center gap-1.5 text-xs">
       <span className="text-muted-foreground mr-1">Editions:</span>
-      {dates.map((d, i) => (
+      {all.map((d) => (
         <Link
           key={d}
-          href={i === 0 ? base : `${base}?d=${d}`}
+          // Every chip names its date: the bare page shows the latest copy, which can differ from the newest stored one.
+          href={`${base}?d=${d}`}
           aria-current={d === current ? "page" : undefined}
           className={cn(
             "rounded border px-2 py-0.5 font-mono",
