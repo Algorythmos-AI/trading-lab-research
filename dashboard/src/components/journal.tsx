@@ -41,7 +41,8 @@ import { cn } from "@/lib/utils";
 const usd = (v: number | null | undefined, digits = 0) => {
   if (v === null || v === undefined || !Number.isFinite(v)) return "—";
   const s = Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
-  return `${v > 0 ? "+" : v < 0 ? "−" : ""}$${s}`;
+  // The word joiner keeps the sign on the same line as the amount.
+  return `${v > 0 ? "+\u2060" : v < 0 ? "−\u2060" : ""}$${s}`;
 };
 const pct = (v: number | null | undefined) => (v === null || v === undefined ? "—" : `${Math.round(v * 100)}%`);
 const toneOf = (v: number | null | undefined) => (v === null || v === undefined || v === 0 ? "neutral" : v > 0 ? "good" : "bad");
@@ -190,12 +191,13 @@ export function CalendarPanel({ days }: { days: DayRow[] }) {
   const months = calendar(days, 6);
   const reach = Math.max(1, ...days.slice(-130).map((d) => Math.abs(d.pnl)));
   return (
-    <Panel id="calendar" title="Trading calendar" icon={CalendarDays} means="The last six months with trades, Monday to Friday. Green made money that day, red lost it; the stronger the colour, the bigger the day.">
+    <Panel id="calendar" title="Trading calendar" icon={CalendarDays} means="The latest months with trades, Monday to Friday. Green made money that day, red lost it; the stronger the colour, the bigger the day.">
       <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-        {months.map((m) => (
-          <div key={m.month} className="grid gap-1.5">
+        {months.map((m, i) => (
+          // A phone shows the latest three months; the rest would be a long scroll.
+          <div key={m.month} className={cn("gap-1.5", i >= 3 ? "hidden sm:grid" : "grid")}>
             <p className="flex items-baseline justify-between text-sm">
-              <span className="font-medium">{new Date(`${m.month}-15T12:00:00Z`).toLocaleDateString("en-AU", { month: "long", year: "numeric", timeZone: "UTC" })}</span>
+              <span className="font-medium">{new Date(`${m.month}-15T12:00:00Z`).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" })}</span>
               <span className={cn("font-mono text-xs", m.pnl > 0 ? "text-good" : m.pnl < 0 ? "text-bad" : "text-muted-foreground")}>{usd(m.pnl)}</span>
             </p>
             <div className="text-muted-foreground grid grid-cols-5 gap-1 text-center text-[0.625rem]">
@@ -241,7 +243,7 @@ export function LessonsPanel({ lessons }: { lessons: Lesson[] }) {
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {lessons.map((l) => (
-            <div key={l.id} className={cn("bg-card relative grid gap-2 overflow-hidden rounded-lg border py-3 pr-3.5 pl-4", "before:absolute before:inset-y-0 before:left-0 before:w-1", LESSON_EDGE[l.tone])}>
+            <div key={l.id} className={cn("bg-card relative grid content-start gap-2 overflow-hidden rounded-lg border py-3 pr-3.5 pl-4", "before:absolute before:inset-y-0 before:left-0 before:w-1", LESSON_EDGE[l.tone])}>
               <p className={cn("text-[0.6875rem] font-medium tracking-wide uppercase", LESSON_TAG_TONE[l.tone])}>{LESSON_TAG[l.tone]}</p>
               <p className="text-sm leading-snug font-semibold">{l.title}</p>
               <p className="text-muted-foreground text-[0.8125rem] leading-snug">{l.finding}</p>
@@ -352,23 +354,26 @@ export function DayList({ days }: { days: DayRow[] }) {
   const worst = sorted.slice(0, 5);
   const best = sorted.slice(-5).reverse();
   const row = (d: DayRow) => (
-    <li key={d.day} className="flex items-baseline justify-between gap-3 text-[0.8125rem]">
-      <span>
-        {shortDay(d.day)} <span className="text-muted-foreground text-xs">· {d.trades} trades</span>
+    <li key={d.day} className="flex items-center justify-between gap-3 py-1 text-[0.8125rem] not-last:border-b">
+      <span className="grid min-w-0 leading-tight">
+        <span className="font-medium whitespace-nowrap">{shortDay(d.day)}</span>
+        <span className="text-muted-foreground text-xs whitespace-nowrap">
+          {d.trades} trade{d.trades === 1 ? "" : "s"}
+        </span>
       </span>
-      <span className={cn("font-mono text-xs font-semibold", d.pnl > 0 ? "text-good" : "text-bad")}>{usd(d.pnl, 2)}</span>
+      <span className={cn("shrink-0 font-mono text-[0.8125rem] font-semibold whitespace-nowrap", d.pnl > 0 ? "text-good" : "text-bad")}>{usd(d.pnl, 0)}</span>
     </li>
   );
   return (
     <Panel id="days" title="Best and worst days" icon={Clock} means="The five biggest days each way. Open the calendar above to see when they fell.">
-      <div className="grid gap-6 sm:grid-cols-2">
-        <div className="grid content-start gap-1.5">
+      <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
+        <div className="grid content-start gap-1">
           <p className="text-good text-xs font-medium">Best</p>
-          <ul className="grid gap-1">{best.filter((d) => d.pnl > 0).map(row)}</ul>
+          <ul className="grid">{best.filter((d) => d.pnl > 0).map(row)}</ul>
         </div>
-        <div className="grid content-start gap-1.5">
+        <div className="grid content-start gap-1">
           <p className="text-bad text-xs font-medium">Worst</p>
-          <ul className="grid gap-1">{worst.filter((d) => d.pnl < 0).map(row)}</ul>
+          <ul className="grid">{worst.filter((d) => d.pnl < 0).map(row)}</ul>
         </div>
       </div>
     </Panel>

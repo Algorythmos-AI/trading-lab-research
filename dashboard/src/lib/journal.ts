@@ -59,7 +59,7 @@ export function daysToExpiry(t: Trade): number | null {
 export function contractLabel(t: Pick<Trade, "symbol" | "kind" | "strike" | "expiry">): string {
   if (t.kind === "stock") return `${t.symbol} shares`;
   const strike = isNum(t.strike) ? `${Number(t.strike.toFixed(2))}` : "";
-  const exp = t.expiry ? ` · ${new Date(`${t.expiry}T12:00:00Z`).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "2-digit", timeZone: "UTC" })}` : "";
+  const exp = t.expiry ? ` · ${shortDay(t.expiry)}` : "";
   return `${t.symbol} ${strike} ${t.kind}${exp}`;
 }
 
@@ -369,7 +369,8 @@ export interface Lesson {
   compare?: { a: { label: string; avg: number; trades: number }; b: { label: string; avg: number; trades: number } };
 }
 
-const money = (v: number) => `${v < 0 ? "−" : v > 0 ? "+" : ""}$${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+// The word joiner keeps the sign on the same line as the amount.
+const money = (v: number) => `${v < 0 ? "−\u2060" : v > 0 ? "+\u2060" : ""}$${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 const pctOf = (v: number) => `${Math.round(v * 100)}%`;
 const avgOf = (ts: readonly Trade[]) => (ts.length ? ts.reduce((s, t) => s + t.pnl, 0) / ts.length : 0);
 const sumOf = (ts: readonly Trade[]) => ts.reduce((s, t) => s + t.pnl, 0);
@@ -512,12 +513,22 @@ export function lessons(input: readonly Trade[]): Lesson[] {
 export function fmtMinutes(m: number): string {
   if (m < 1) return `${Math.round(m * 60)} s`;
   if (m < 90) return `${Math.round(m)} min`;
-  if (m < 60 * 24) return `${(m / 60).toFixed(1)} h`;
-  return `${(m / 1440).toFixed(1)} days`;
+  if (m < 60 * 24) return `${Number((m / 60).toFixed(1))} h`;
+  const d = m / 1440;
+  return `${d < 10 ? Number(d.toFixed(1)) : Math.round(d)} day${d === 1 ? "" : "s"}`;
 }
 
+/** Three-letter months everywhere: the en-AU locale writes "June" and "Sept", which breaks the rhythm of a column. */
+export const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+
+/** "15 Mar 24" for a YYYY-MM-DD day. */
 export function shortDay(ymd: string): string {
-  return new Date(`${ymd}T12:00:00Z`).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "2-digit", timeZone: "UTC" });
+  return `${Number(ymd.slice(8, 10))} ${MONTHS[Number(ymd.slice(5, 7)) - 1]} ${ymd.slice(2, 4)}`;
+}
+
+/** "Mar 24" for a YYYY-MM month. */
+export function shortMonth(ym: string): string {
+  return `${MONTHS[Number(ym.slice(5, 7)) - 1]} ${ym.slice(2, 4)}`;
 }
 
 // ── Calendar ─────────────────────────────────────────────────────────────────────────────────────────────────────
