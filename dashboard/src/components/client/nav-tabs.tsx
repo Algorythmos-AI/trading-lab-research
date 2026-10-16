@@ -11,6 +11,7 @@ export const NAV = [
   { href: "/today", label: "Today" },
   { href: "/radar", label: "Radar" },
   { href: "/options", label: "Options" },
+  { href: "/trades", label: "Trades" },
   { href: "/strategies", label: "Strategies" },
   { href: "/research", label: "Research" },
   { href: "/operations", label: "Operations" },

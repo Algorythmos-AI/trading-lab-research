@@ -1,11 +1,21 @@
 import "server-only";
 import { HISTORY_PREFIX, PreconditionFailed, readForUpdate, writeText } from "./blob";
-import { DESK_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
+import { DESK_PATHS, JOURNAL_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
 import { verify } from "./hmac";
 import { KEY_ID_RE, decideScope, parseScopes } from "./ingest-scope";
 import { logEvent } from "./log";
 import { parseTime } from "./freshness";
-import { contractOf, isOptions, isOptionsLive, isRadar, validateOptionsEdition, validateOptionsLive, validateRadarEdition } from "./validate";
+import {
+  contractOf,
+  isJournal,
+  isOptions,
+  isOptionsLive,
+  isRadar,
+  validateJournal,
+  validateOptionsEdition,
+  validateOptionsLive,
+  validateRadarEdition,
+} from "./validate";
 
 export const MAX_BODY_BYTES = 3_500_000;
 /** How far ahead of this server's clock an options live document may be dated: clock drift, not more. */
@@ -140,7 +150,7 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
   const scopes = parseScopes(process.env[SCOPES_ENV], [RADAR_KEY_ID]);
   if (!scopes.ok) logEvent("ingest.scopes", { outcome: "malformed", reason: scopes.reason });
   // The desk whose snapshot this body is, by the same routing as below; null for every other document kind.
-  const snapshotOf = isRadar(data) || isOptions(data) || isOptionsLive(data) ? null : contractOf(data).desk;
+  const snapshotOf = isRadar(data) || isOptions(data) || isOptionsLive(data) || isJournal(data) ? null : contractOf(data).desk;
   const scope = decideScope(scopes, keyId, snapshotOf, process.env.PRIMARY_HOST || DEFAULT_KEY_ID);
   if (!scope.allow && scope.outcome === "key-scope-config") {
     return done(503, "key-scope-config", { error: "ingest is not configured for this key" }, { key_id: keyId });
@@ -152,6 +162,8 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
 
   if (isRadar(data)) return storeEdition(RADAR_EDITION, text, data, done);
   if (isOptions(data)) return storeEdition(OPTIONS_EDITION, text, data, done);
+  // The owner's journal is read from their own broker in the research environment, where the radar is built.
+  if (isJournal(data)) return storeEdition(JOURNAL, text, data, done);
   if (keyId === RADAR_KEY_ID) {
     return done(403, "radar-key-scope", { error: "this key may only publish research editions" });
   }
@@ -228,7 +240,7 @@ type Done = (status: number, outcome: string, body: Record<string, unknown>, ext
  * its dated copy. A kind with no `history` path keeps only its latest.
  */
 interface EditionKind {
-  desk: "radar" | "options" | "options-live";
+  desk: "radar" | "options" | "options-live" | "journal";
   paths: { latest: string; history?: string };
   validate: (data: unknown) => { ok: true; runId: string | null; asOf: string | null; date: string } | { ok: false; errors: string[] };
 }
@@ -257,6 +269,16 @@ const OPTIONS_LIVE: EditionKind = {
   paths: OPTIONS_LIVE_PATHS,
   validate: (data) => {
     const r = validateOptionsLive(data);
+    return r.ok ? { ok: true, runId: r.doc.run_id, asOf: r.doc.as_of, date: r.doc.as_of.slice(0, 10) } : r;
+  },
+};
+
+/** The trade journal. Latest only: every document carries the whole history. */
+const JOURNAL: EditionKind = {
+  desk: "journal",
+  paths: JOURNAL_PATHS,
+  validate: (data) => {
+    const r = validateJournal(data);
     return r.ok ? { ok: true, runId: r.doc.run_id, asOf: r.doc.as_of, date: r.doc.as_of.slice(0, 10) } : r;
   },
 };

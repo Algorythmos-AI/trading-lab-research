@@ -64,6 +64,14 @@ export const OPTIONS_LIVE_PATHS = {
   latest: "options-live/latest.json",
 } as const;
 
+/**
+ * The owner's trade journal: every closed trade of their own brokerage account, re-sent whole after each session.
+ * Latest only: each document carries the full history, so a dated copy would only repeat it.
+ */
+export const JOURNAL_PATHS = {
+  latest: "journal/latest.json",
+} as const;
+
 /** The after-close options levels editions, one per session they are built for, kept the same way as the radar's. */
 export const OPTIONS_PATHS = {
   latest: "options/latest.json",

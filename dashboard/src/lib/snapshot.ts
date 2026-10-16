@@ -2,9 +2,10 @@ import "server-only";
 import { cache } from "react";
 import { LATEST_PATH, listPaths, readText } from "./blob";
 import type { CryptoSnapshot } from "./crypto.types";
-import { DESK_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
+import { DESK_PATHS, JOURNAL_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
 import { fixtureOptionsLive, FROZEN_NOW, parseFlags, partialOptions, poisonedOptions, v2Options, VARIANT_COOKIE, type VariantFlag } from "./fixture-variants";
 import type { HftSnapshot } from "./hft.types";
+import type { JournalDoc } from "./journal.types";
 import { logEvent } from "./log";
 import type { OptionsLive } from "./options-live.types";
 import type { OptionsEdition } from "./options.types";
@@ -235,6 +236,31 @@ export const loadOptionsLive = cache(async (): Promise<OptionsLiveResult> => {
     return { status: "ok", doc: parsed as OptionsLive, source: "blob" };
   } catch (e) {
     logEvent("snapshot.read", { outcome: "error", desk: "options-live", error: e instanceof Error ? e.name : "unknown" });
+    return { status: "error" };
+  }
+});
+
+export type JournalResult = { status: "ok"; doc: JournalDoc; source: "fixture" | "blob" } | { status: "missing" } | { status: "error" };
+
+/** The owner's trade journal. "missing" until it has been published once. */
+export const loadJournal = cache(async (): Promise<JournalResult> => {
+  if (fixtureMode()) {
+    const flags = await fixtureFlags();
+    if (flags.has("empty") || flags.has("error")) return { status: "missing" };
+    const mod = await import("../../test/fixtures/journal.v1.json");
+    return { status: "ok", doc: (mod.default ?? mod) as unknown as JournalDoc, source: "fixture" };
+  }
+  try {
+    const stored = await readText(JOURNAL_PATHS.latest);
+    if (!stored) return { status: "missing" };
+    const parsed: unknown = JSON.parse(stored.text);
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      logEvent("snapshot.read", { outcome: "not-an-object", desk: "journal" });
+      return { status: "error" };
+    }
+    return { status: "ok", doc: parsed as JournalDoc, source: "blob" };
+  } catch (e) {
+    logEvent("snapshot.read", { outcome: "error", desk: "journal", error: e instanceof Error ? e.name : "unknown" });
     return { status: "error" };
   }
 });

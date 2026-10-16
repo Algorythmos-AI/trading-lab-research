@@ -1,5 +1,5 @@
 // What /api/health says about the research editions on file. Pure: no I/O.
-import type { OptionsLiveResult, OptionsResult, RadarResult } from "./snapshot";
+import type { JournalResult, OptionsLiveResult, OptionsResult, RadarResult } from "./snapshot";
 
 /**
  * The newest edition format this build's schema validates. A publisher reads it from /api/health and sends
@@ -10,6 +10,7 @@ export const OPTIONS_ACCEPTS = 2;
 export const RADAR_ACCEPTS = 1;
 /** 2 adds `rules`: where each probation rule stands in the session so far. */
 export const OPTIONS_LIVE_ACCEPTS = 3;
+export const JOURNAL_ACCEPTS = 1;
 
 export interface EditionHealth {
   /** "ok" when an edition is stored and readable, "missing" before the first one, "error" when storage failed. */
@@ -55,6 +56,18 @@ export function optionsLiveHealth(r: OptionsLiveResult): EditionHealth {
   return {
     status: r.status,
     accepts: OPTIONS_LIVE_ACCEPTS,
+    run_id: d?.run_id ?? null,
+    as_of: d?.as_of ?? null,
+    schema_version: d?.schema_version ?? null,
+  };
+}
+
+/** The stored trade journal: the run that built it and when. Nothing about the trades: this endpoint is read by machines. */
+export function journalHealth(r: JournalResult): EditionHealth {
+  const d = r.status === "ok" ? r.doc : null;
+  return {
+    status: r.status,
+    accepts: JOURNAL_ACCEPTS,
     run_id: d?.run_id ?? null,
     as_of: d?.as_of ?? null,
     schema_version: d?.schema_version ?? null,
