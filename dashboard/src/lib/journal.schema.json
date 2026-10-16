@@ -1,0 +1,97 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "stocksdelta/journal",
+  "title": "Trade journal (the owner's own broker trades, published from the research environment)",
+  "description": "Every closed trade of the owner's own brokerage account, matched first in, first out from the broker's filled orders, and the lots still open. Read only: it is a record of what happened, it suggests nothing and nothing here can trade. No account number, no balance, no buying power, no notes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "as_of", "source", "currency", "trades"],
+  "properties": {
+    "schema": { "const": "stocksdelta/journal" },
+    "schema_version": { "type": ["integer", "null"] },
+    "run_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "as_of": {
+      "description": "When the broker's history was read: an ISO time with its zone.",
+      "type": "string",
+      "maxLength": 40,
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+    },
+    "source": { "description": "Which broker the trades came from.", "enum": ["webull-au"] },
+    "currency": { "const": "USD" },
+    "fees_included": {
+      "description": "False when the broker's history carries no commissions or fees, so every result is before them.",
+      "type": ["boolean", "null"]
+    },
+    "fills": { "description": "Filled orders the trades were matched from.", "type": ["integer", "null"], "minimum": 0 },
+    "history_from": { "description": "The first day the broker's history was read from.", "$ref": "#/definitions/ymd" },
+    "trades": {
+      "type": "array",
+      "maxItems": 25000,
+      "items": { "$ref": "#/definitions/trade" }
+    },
+    "open": {
+      "description": "Lots bought or sold and not yet closed, at what they cost. No current price: the page does not mark them.",
+      "type": ["array", "null"],
+      "maxItems": 500,
+      "items": { "$ref": "#/definitions/lot" }
+    },
+    "gaps": {
+      "description": "Places where the broker's history did not add up: a close with no open before it, so its result is the whole credit.",
+      "type": ["array", "null"],
+      "maxItems": 200,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["date", "kind", "symbol"],
+        "properties": {
+          "date": { "$ref": "#/definitions/ymd" },
+          "kind": { "enum": ["close-without-open", "position-without-orders"] },
+          "symbol": { "$ref": "#/definitions/ticker" },
+          "pnl": { "type": ["number", "null"] }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "ymd": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+    "stamp": { "type": "string", "maxLength": 40, "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$" },
+    "ticker": { "type": "string", "pattern": "^[A-Z][A-Z0-9.]{0,9}$" },
+    "asset": { "description": "What was traded: a call, a put, or the stock itself.", "enum": ["call", "put", "stock"] },
+    "trade": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "symbol", "kind", "side", "qty", "opened_at", "closed_at", "entry", "exit", "multiplier", "pnl", "close"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "symbol": { "$ref": "#/definitions/ticker" },
+        "kind": { "$ref": "#/definitions/asset" },
+        "strike": { "type": ["number", "null"] },
+        "expiry": { "oneOf": [{ "$ref": "#/definitions/ymd" }, { "type": "null" }] },
+        "side": { "description": "Long: bought first. Short: sold first.", "enum": ["long", "short"] },
+        "qty": { "description": "Contracts or shares in this matched piece.", "type": "number", "exclusiveMinimum": 0 },
+        "opened_at": { "$ref": "#/definitions/stamp" },
+        "closed_at": { "$ref": "#/definitions/stamp" },
+        "entry": { "description": "Price per share or per contract share at the open.", "type": "number", "minimum": 0 },
+        "exit": { "description": "Price at the close; 0 for an option that expired worthless.", "type": "number", "minimum": 0 },
+        "multiplier": { "description": "100 for an option contract, 1 for a share.", "type": "number", "exclusiveMinimum": 0 },
+        "pnl": { "description": "Result in dollars, before fees.", "type": "number" },
+        "close": { "description": "How it ended: closed by an order, or left to expire.", "enum": ["order", "expired"] }
+      }
+    },
+    "lot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["symbol", "kind", "side", "qty", "entry"],
+      "properties": {
+        "symbol": { "$ref": "#/definitions/ticker" },
+        "kind": { "$ref": "#/definitions/asset" },
+        "strike": { "type": ["number", "null"] },
+        "expiry": { "oneOf": [{ "$ref": "#/definitions/ymd" }, { "type": "null" }] },
+        "side": { "enum": ["long", "short"] },
+        "qty": { "type": "number", "exclusiveMinimum": 0 },
+        "entry": { "type": "number", "minimum": 0 },
+        "opened_at": { "oneOf": [{ "$ref": "#/definitions/stamp" }, { "type": "null" }] }
+      }
+    }
+  }
+}

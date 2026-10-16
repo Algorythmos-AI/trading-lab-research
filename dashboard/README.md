@@ -98,6 +98,20 @@ wt.ops.publish                            POST /api/ingest            (productio
   hour while the market is open is shown with a warning; one older than a day and a half is not shown; until the
   job has published once there is no pane. `/api/health` reports the stored run under `editions.options_live`,
   and nothing of what it holds.
+- **Trades** (`/trades`, `stocksdelta/journal`, schema `src/lib/journal.schema.json`; `journal.types.ts` is
+  generated): the owner's own closed trades from their brokerage account, matched first in, first out from the
+  broker's filled orders by the owner's research environment and published through the same signed
+  `POST /api/ingest` with the `radar` key. Each trade is a symbol, call/put/stock, strike and expiry, quantity,
+  open and close times, prices and its result in dollars, before fees; an account number, a balance or an order id
+  is an unknown key and refuses the whole document. Only the latest is kept (`journal/latest.json`), and each
+  edition carries the whole history, so a later one replaces it outright. The page (`src/app/trades/page.tsx`,
+  `src/components/journal.tsx`, all arithmetic in `src/lib/journal.ts`, pure and unit-tested) filters by period,
+  kind and ticker through the URL and shows tiles, the running total with its drawdown, months, best and worst
+  days, a six-month calendar, patterns in the record (each comparing like with like, at least 8 trades a side),
+  breakdowns by ticker, kind, hour, weekday, hold time, days to expiry and size, and every trade in a searchable
+  table. Read only: it describes what happened and suggests nothing. An edition older than three and a half days
+  is shown with a notice. `/api/health` reports it under `editions.journal`. Fixture mode reads the synthetic
+  `test/fixtures/journal.v1.json`.
 - **Live prices** (`/api/quote?s=SPY,QQQ`, read by the Options page every 2 s while it is open, one poll shared by the
   glance strip, the level maps' live dot and the state chips; a quote older than 30 s shows as stale): last trades from
   Alpaca's free IEX feed, fetched on the server so the page keeps `connect-src 'self'` and never sees the keys. At most
@@ -192,7 +206,7 @@ other panes keep working.
 | `DASHBOARD_INGEST_KEYS` | Vercel production (optional) | JSON map `{"<key id>": "<secret>"}`: one HMAC key per publisher, chosen by the `x-wt-key-id` header (ADR 0004) |
 | `PRIMARY_HOST` | Vercel production (optional) | The key id whose snapshots are the visible ones; default `default`. Every other key's go to the shadow slots |
 | `DASHBOARD_INGEST_SCOPES` | Vercel production (optional) | JSON map `{"<key id>": {"desks": ["hft"]}}`: that key is the primary publisher of those desks and may publish nothing else (see Desks). Holds no secret |
-| `RADAR_INGEST_SECRET` | Vercel production + the radar's cloud environment | HMAC key for key id `radar`. It may only publish research editions (`stocksdelta/radar`, `stocksdelta/options`); unset means the radar key is refused |
+| `RADAR_INGEST_SECRET` | Vercel production + the radar's cloud environment | HMAC key for key id `radar`. It may only publish research editions (`stocksdelta/radar`, `stocksdelta/options`, `stocksdelta/journal`); unset means the radar key is refused |
 | `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY` (or Alpaca's own `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY`) | Vercel production only | Alpaca paper-account keys, used only for the free IEX market data behind `/api/quote`; unset means the Options page shows live prices as off |
 | `ALPACA_DATA_URL` | Vercel (optional) | Market-data base URL, default `https://data.alpaca.markets` |
 | `CRON_SECRET` | Vercel production | Bearer token Vercel Cron sends to `/api/cron/watchdog` |

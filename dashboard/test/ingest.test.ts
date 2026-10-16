@@ -262,3 +262,72 @@ describe("per-host keys (ADR 0004)", () => {
     expect(blob.store.size).toBe(0);
   });
 });
+
+describe("the trade journal (stocksdelta/journal)", () => {
+  const journal = (runId: string, asOf: string, mutate?: (d: Record<string, unknown>) => void) => {
+    const d = {
+      schema: "stocksdelta/journal",
+      schema_version: 1,
+      run_id: runId,
+      as_of: asOf,
+      source: "webull-au",
+      currency: "USD",
+      fees_included: false,
+      trades: [
+        {
+          id: "t1",
+          symbol: "SPY",
+          kind: "put",
+          strike: 759,
+          expiry: "2026-10-19",
+          side: "long",
+          qty: 1,
+          opened_at: "2026-10-16T17:40:21Z",
+          closed_at: "2026-10-16T17:41:34Z",
+          entry: 1.62,
+          exit: 1.23,
+          multiplier: 100,
+          pnl: -39,
+          close: "order",
+        },
+      ],
+    } as Record<string, unknown>;
+    mutate?.(d);
+    return JSON.stringify(d);
+  };
+  const asRadar = (body: string) => {
+    const req = signed(body, { secret: "radar-secret" });
+    req.headers.set("x-wt-key-id", "radar");
+    return req;
+  };
+
+  it("the research environment's key stores it at journal/latest.json, and nothing else", async () => {
+    vi.stubEnv("RADAR_INGEST_SECRET", "radar-secret");
+    const res = await handleIngest(asRadar(journal("j1", "2026-09-29T21:40:00Z")), NOW);
+    expect(await res.json()).toEqual({ status: "stored", run_id: "j1" });
+    expect([...blob.store.keys()]).toEqual(["journal/latest.json"]);
+  });
+
+  it("a newer journal replaces the old one; an older one is refused", async () => {
+    vi.stubEnv("RADAR_INGEST_SECRET", "radar-secret");
+    await handleIngest(asRadar(journal("j1", "2026-09-29T21:40:00Z")), NOW);
+    expect((await handleIngest(asRadar(journal("j2", "2026-09-29T21:45:00Z")), NOW)).status).toBe(200);
+    expect(JSON.parse(blob.store.get("journal/latest.json")!.text).run_id).toBe("j2");
+    expect((await handleIngest(asRadar(journal("j0", "2026-09-29T21:30:00Z")), NOW)).status).toBe(409);
+  });
+
+  it("refuses an account number, a balance or a note: the schema has no room for them", async () => {
+    vi.stubEnv("RADAR_INGEST_SECRET", "radar-secret");
+    for (const extra of [{ account_id: "123" }, { balance: 1000 }, { notes: "x" }]) {
+      const res = await handleIngest(asRadar(journal("j3", "2026-09-29T21:40:00Z", (d) => Object.assign(d, extra))), NOW);
+      expect(res.status).toBe(422);
+    }
+    expect(blob.store.size).toBe(0);
+  });
+
+  it("refuses a trade with a field it does not know", async () => {
+    vi.stubEnv("RADAR_INGEST_SECRET", "radar-secret");
+    const body = journal("j4", "2026-09-29T21:40:00Z", (d) => ((d.trades as Record<string, unknown>[])[0]!.order_id = "abc"));
+    expect((await handleIngest(asRadar(body), NOW)).status).toBe(422);
+  });
+});

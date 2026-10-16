@@ -4,6 +4,8 @@ import cryptoSchema from "./crypto.schema.json";
 import type { CryptoSnapshot } from "./crypto.types";
 import hftSchema from "./hft.schema.json";
 import type { HftSnapshot } from "./hft.types";
+import journalSchema from "./journal.schema.json";
+import type { JournalDoc } from "./journal.types";
 import optionsLiveSchema from "./options-live.schema.json";
 import type { OptionsLive } from "./options-live.types";
 import optionsSchema from "./options.schema.json";
@@ -21,6 +23,7 @@ const validateHftSchema = ajv.compile<HftSnapshot>(hftSchema);
 const validateRadarSchema = ajv.compile<RadarEdition>(radarSchema);
 const validateOptionsSchema = ajv.compile<OptionsEdition>(optionsSchema);
 const validateOptionsLiveSchema = ajv.compile<OptionsLive>(optionsLiveSchema);
+const validateJournalSchema = ajv.compile<JournalDoc>(journalSchema);
 
 export const STOCKS_SCHEMA = "trading-lab/snapshot";
 export const CRYPTO_SCHEMA = "trading-lab/crypto-snapshot";
@@ -45,6 +48,14 @@ export const OPTIONS_LIVE_SCHEMA = "stocksdelta/options-live";
 /** True when the signed body names the options live schema. */
 export function isOptionsLive(data: unknown): boolean {
   return data !== null && typeof data === "object" && (data as { schema?: unknown }).schema === OPTIONS_LIVE_SCHEMA;
+}
+
+/** The owner's trade journal: their own broker's closed trades. A record, not research; no desk, no watchdog. */
+export const JOURNAL_SCHEMA = "stocksdelta/journal";
+
+/** True when the signed body names the trade journal schema. */
+export function isJournal(data: unknown): boolean {
+  return data !== null && typeof data === "object" && (data as { schema?: unknown }).schema === JOURNAL_SCHEMA;
 }
 
 /** True when the signed body names the options levels schema. */
@@ -231,4 +242,19 @@ export function validateOptionsLive(data: unknown): OptionsLiveValidationResult 
   }
   if (errors.length > 0) return { ok: false, errors: errors.slice(0, MAX_ERRORS) };
   return { ok: true, doc: data as OptionsLive };
+}
+
+export type JournalValidationResult = { ok: true; doc: JournalDoc } | { ok: false; errors: string[] };
+
+/** A trade journal: its own schema, the same denylist. */
+export function validateJournal(data: unknown): JournalValidationResult {
+  if (data === null || typeof data !== "object" || Array.isArray(data)) {
+    return { ok: false, errors: ["/: must be an object"] };
+  }
+  const errors = findDenied(data).map((p) => `${p}: key is not allowed to be published`);
+  if (!validateJournalSchema(data)) {
+    errors.push(...(validateJournalSchema.errors ?? []).map(describe));
+  }
+  if (errors.length > 0) return { ok: false, errors: errors.slice(0, MAX_ERRORS) };
+  return { ok: true, doc: data as JournalDoc };
 }
