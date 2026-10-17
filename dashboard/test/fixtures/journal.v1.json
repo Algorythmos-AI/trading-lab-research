@@ -1,6 +1,6 @@
 {
  "schema": "stocksdelta/journal",
- "schema_version": 1,
+ "schema_version": 2,
  "run_id": "fixture-journal-1",
  "as_of": "2026-10-16T21:05:00Z",
  "source": "webull-au",
@@ -4061,5 +4061,50 @@
    "symbol": "SPY",
    "pnl": 81
   }
- ]
+ ],
+ "money": {
+  "currency": "AUD",
+  "as_of": "2026-10-16T21:05:00Z",
+  "account_value": 5240.0,
+  "cash": 4610.0,
+  "positions": 630.0,
+  "usd_rate": 1.52,
+  "complete_from": "2025-01-02",
+  "transfers": [
+   {
+    "date": "2025-01-02",
+    "amount": 5000,
+    "source": "statement"
+   },
+   {
+    "date": "2025-06-10",
+    "amount": 2000,
+    "source": "statement"
+   },
+   {
+    "date": "2025-11-03",
+    "amount": -1500,
+    "source": "statement"
+   },
+   {
+    "date": "2026-10-14",
+    "amount": 500,
+    "source": "detected"
+   }
+  ],
+  "values": [
+   {
+    "date": "2026-10-13",
+    "value": 5010.0
+   },
+   {
+    "date": "2026-10-14",
+    "value": 5480.0
+   },
+   {
+    "date": "2026-10-15",
+    "value": 5240.0
+   }
+  ]
+ }
 }

@@ -9,7 +9,7 @@ export type Ymd = string;
 export type Stamp = string;
 
 /**
- * Every closed trade of the owner's own brokerage account, matched first in, first out from the broker's filled orders, and the lots still open. Read only: it is a record of what happened, it suggests nothing and nothing here can trade. No account number, no balance, no buying power, no notes.
+ * Every closed trade of the owner's own brokerage account, matched first in, first out from the broker's filled orders, and the lots still open. Read only: it is a record of what happened, it suggests nothing and nothing here can trade. No account number, no buying power, no notes; the account value appears only in `money`.
  */
 export interface JournalDoc {
   schema: "stocksdelta/journal";
@@ -59,6 +59,55 @@ export interface JournalDoc {
         pnl?: number | null;
       }[]
     | null;
+  /**
+   * Money moved into and out of the account, and what the account is worth, in the account's base currency. The owner's own record, read from their broker; null until it is first read.
+   */
+  money?: {
+    /**
+     * The account's base currency, which every amount here is in.
+     */
+    currency: string;
+    as_of: Stamp;
+    /**
+     * Cash plus positions at as_of.
+     */
+    account_value?: number | null;
+    cash?: number | null;
+    positions?: number | null;
+    /**
+     * Units of the base currency per US dollar at as_of, as the broker valued the account.
+     */
+    usd_rate?: number | null;
+    /**
+     * The transfer list is complete from this day on; null when earlier transfers may be missing.
+     */
+    complete_from?: Ymd | null;
+    /**
+     * @maxItems 2000
+     */
+    transfers: {
+      date: Ymd;
+      /**
+       * Positive in, negative out.
+       */
+      amount: number;
+      /**
+       * statement: from the owner's broker records. detected: a change in the account's value its trades do not explain.
+       */
+      source: "statement" | "detected";
+    }[];
+    /**
+     * The account's value at the end of each recorded day, oldest first.
+     *
+     * @maxItems 4000
+     */
+    values?:
+      | {
+          date: Ymd;
+          value: number;
+        }[]
+      | null;
+  } | null;
 }
 export interface Trade {
   id: string;

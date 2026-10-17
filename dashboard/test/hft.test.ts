@@ -553,7 +553,7 @@ describe("GET /api/health", () => {
     options: { status: "missing", accepts: 2, session: null, run_id: null, as_of: null, schema_version: null },
     radar: { status: "missing", accepts: 1, edition_date: null, run_id: null, as_of: null, schema_version: null },
     options_live: { status: "missing", accepts: 3, run_id: null, as_of: null, schema_version: null },
-    journal: { status: "missing", accepts: 1, run_id: null, as_of: null, schema_version: null },
+    journal: { status: "missing", accepts: 2, run_id: null, as_of: null, schema_version: null },
   };
 
   beforeEach(() => {

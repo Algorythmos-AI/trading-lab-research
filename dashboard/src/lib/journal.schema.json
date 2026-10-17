@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "stocksdelta/journal",
   "title": "Trade journal (the owner's own broker trades, published from the research environment)",
-  "description": "Every closed trade of the owner's own brokerage account, matched first in, first out from the broker's filled orders, and the lots still open. Read only: it is a record of what happened, it suggests nothing and nothing here can trade. No account number, no balance, no buying power, no notes.",
+  "description": "Every closed trade of the owner's own brokerage account, matched first in, first out from the broker's filled orders, and the lots still open. Read only: it is a record of what happened, it suggests nothing and nothing here can trade. No account number, no buying power, no notes; the account value appears only in `money`.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "run_id", "as_of", "source", "currency", "trades"],
@@ -48,6 +48,41 @@
           "kind": { "enum": ["close-without-open", "position-without-orders"] },
           "symbol": { "$ref": "#/definitions/ticker" },
           "pnl": { "type": ["number", "null"] }
+        }
+      }
+    },
+    "money": {
+      "description": "Money moved into and out of the account, and what the account is worth, in the account's base currency. The owner's own record, read from their broker; null until it is first read.",
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["currency", "as_of", "transfers"],
+      "properties": {
+        "currency": { "description": "The account's base currency, which every amount here is in.", "type": "string", "pattern": "^[A-Z]{3}$" },
+        "as_of": { "$ref": "#/definitions/stamp" },
+        "account_value": { "description": "Cash plus positions at as_of.", "type": ["number", "null"] },
+        "cash": { "type": ["number", "null"] },
+        "positions": { "type": ["number", "null"] },
+        "usd_rate": { "description": "Units of the base currency per US dollar at as_of, as the broker valued the account.", "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "complete_from": { "description": "The transfer list is complete from this day on; null when earlier transfers may be missing.", "oneOf": [{ "$ref": "#/definitions/ymd" }, { "type": "null" }] },
+        "transfers": {
+          "type": "array",
+          "maxItems": 2000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["date", "amount", "source"],
+            "properties": {
+              "date": { "$ref": "#/definitions/ymd" },
+              "amount": { "description": "Positive in, negative out.", "type": "number" },
+              "source": { "description": "statement: from the owner's broker records. detected: a change in the account's value its trades do not explain.", "enum": ["statement", "detected"] }
+            }
+          }
+        },
+        "values": {
+          "description": "The account's value at the end of each recorded day, oldest first.",
+          "type": ["array", "null"],
+          "maxItems": 4000,
+          "items": { "type": "object", "additionalProperties": false, "required": ["date", "value"], "properties": { "date": { "$ref": "#/definitions/ymd" }, "value": { "type": "number" } } }
         }
       }
     }
