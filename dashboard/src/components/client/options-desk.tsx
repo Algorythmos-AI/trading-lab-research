@@ -117,6 +117,8 @@ const COLUMNS: Record<DeskView, Column[]> = {
       head: "IV percentile",
       hint: "Where implied vol sits in its own last 52 weeks; low means options are cheap for this name",
       width: "",
+      // On a phone the nearest support and resistance take its place: they are what a trade is planned from.
+      wideOnly: true,
       sort: (r) => r.t.expected_move?.iv_pct_52w,
       cell: (r) => {
         const ivp = r.t.expected_move?.iv_pct_52w;
@@ -142,7 +144,6 @@ const COLUMNS: Record<DeskView, Column[]> = {
       sort: (r) => r.near.support?.distAtr,
       // Without a close there is nothing to measure from: a dash, not "none near".
       cell: (r) => (r.close === null ? dash : <Distance edge={r.near.support?.edge} atr={r.near.support?.distAtr} />),
-      wideOnly: true,
     },
     {
       key: "resistance",
@@ -151,7 +152,6 @@ const COLUMNS: Record<DeskView, Column[]> = {
       width: "md:w-[6rem]",
       sort: (r) => r.near.resistance?.distAtr,
       cell: (r) => (r.close === null ? dash : <Distance edge={r.near.resistance?.edge} atr={r.near.resistance?.distAtr} />),
-      wideOnly: true,
     },
   ],
   live: [

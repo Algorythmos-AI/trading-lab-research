@@ -58,7 +58,7 @@ function Row({ label, value, name, className }: { label: string; value: number |
 function FocusCard({ item, pre }: { item: Item; pre: Pre | undefined }) {
   const b = BIAS[item.bias];
   return (
-    <li className={cn("bg-card grid content-start gap-2 rounded-lg border border-t-4 px-3 py-2.5", b.edge)}>
+    <li className={cn("bg-card grid w-[82%] shrink-0 snap-start content-start gap-2 rounded-lg border border-t-4 px-3 py-2.5 sm:w-auto", b.edge)}>
       <div className="flex items-baseline justify-between gap-2">
         <a href={`/options?s=${item.symbol}`} className="text-base font-bold tracking-tight hover:underline">
           <span className="text-muted-foreground mr-1 text-xs font-normal">#{item.rank}</span>
@@ -104,7 +104,8 @@ export function FocusStrip({ e }: { e: Options }) {
           Enter only on a break then retest. $50 max risk, 5 trades a day max. Research only.
         </p>
       </div>
-      <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {/* On a phone the cards sit side by side and swipe, so the desk stays near the top of the screen. */}
+      <ul className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-px-4 px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 xl:grid-cols-4">
         {items.map((i) => (
           <FocusCard key={i.symbol} item={i} pre={pre.get(i.symbol)} />
         ))}

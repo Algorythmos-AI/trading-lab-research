@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
 import { Empty } from "@/components/empty";
 import { LevelMap, type BreakevenMark } from "@/components/options-charts";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +35,17 @@ import { OptionsContract } from "./options-contract";
 import { PaneBoundary } from "./pane-boundary";
 import { Notice } from "@/components/ui/notice";
 import { Stat } from "@/components/ui/stat";
+
+/** Phones (below the `sm` breakpoint) get the level map's taller, larger-text geometry. The server draws the wide one. */
+const PHONE_QUERY = "(max-width: 639.98px)";
+function subscribePhone(cb: () => void) {
+  const m = window.matchMedia(PHONE_QUERY);
+  m.addEventListener("change", cb);
+  return () => m.removeEventListener("change", cb);
+}
+function usePhone() {
+  return useSyncExternalStore(subscribePhone, () => window.matchMedia(PHONE_QUERY).matches, () => false);
+}
 
 /** A live number that washes green or red for a moment when it changes. The wash is background only. */
 export function Tick({ value, children, className }: { value: number | null; children: React.ReactNode; className?: string }) {
@@ -131,6 +142,7 @@ export function OptionsDetail({
   const view = mapView(t);
   const hasMap = view !== null && close !== null;
   const strength = t.close_strength?.chip;
+  const phone = usePhone();
 
   // Kept with the name it was priced for, so the line never lingers on the next name's map.
   const [mark, setMark] = useState<{ symbol: string; at: BreakevenMark } | null>(null);
@@ -237,7 +249,7 @@ export function OptionsDetail({
               </div>
             ) : null}
             <div data-hide={[...hiddenLayers].join(" ") || undefined} data-map-range={range}>
-              <LevelMap t={drawn} unit={range} closeDay={e.built_from ?? null} interactive breakeven={mark?.symbol === t.symbol ? mark.at : null} interest={interest} hotZone={hotKey} onZone={onZone} />
+              <LevelMap phone={phone} t={drawn} unit={range} closeDay={e.built_from ?? null} interactive breakeven={mark?.symbol === t.symbol ? mark.at : null} interest={interest} hotZone={hotKey} onZone={onZone} />
             </div>
           </div>
         ) : (
