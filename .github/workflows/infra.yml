@@ -6,7 +6,7 @@ on:
   pull_request:
     paths: ["deploy/oci/**", ".github/workflows/infra.yml"]
   push:
-    branches: [main]
+    branches: [main, integration]
     paths: ["deploy/oci/**", ".github/workflows/infra.yml"]
 
 permissions:

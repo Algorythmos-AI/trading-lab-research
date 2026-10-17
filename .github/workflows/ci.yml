@@ -1,12 +1,13 @@
 name: ci
 
-# Required checks on main (repo ruleset): `test` and `dashboard-gate`. Keep both job names stable and never add
+# Required checks on main and integration (repo rulesets, ADR 0009): `test` and `dashboard-gate`; main also requires
+# `release-source` (release.yml). Keep both job names stable and never add
 # path filters to this workflow: a required check that does not run leaves pull requests waiting forever.
 # dashboard-gate always runs and decides for itself whether the dashboard's checks apply (deploy/contract-paths.txt).
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, integration]
 
 permissions:
   contents: read
