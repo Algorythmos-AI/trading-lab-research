@@ -14,6 +14,7 @@ import {
 } from "@/components/journal";
 import { Empty } from "@/components/empty";
 import { PageHeading } from "@/components/page-heading";
+import { TradeRulesFor } from "@/components/trade-rules";
 import { Notice } from "@/components/ui/notice";
 import { newYork } from "@/lib/format";
 import { applyFilter, contractLabel, daily, groupBy, journalStale, lessons, marketState, moneyView, parseFilter, sessionView, shortDay, summarize, yearsOf, type JournalDoc } from "@/lib/journal";
@@ -71,6 +72,7 @@ function JournalBody({ doc, q, now }: { doc: JournalDoc; q: Record<string, strin
           This journal was last read from the broker on {newYork(doc.as_of)} New York time. Trades since then are not in it yet.
         </Notice>
       ) : null}
+      <TradeRulesFor doc={doc} now={now} />
       {session ? <TodayPanel view={session} asOf={doc.as_of} now={now} market={marketState(now)} /> : null}
       {doc.money ? <MoneyPanel m={moneyView(doc.money, all.reduce((sum, t) => sum + t.pnl, 0))} /> : null}
       <JournalFilters filter={filter} years={yearsOf(all)} symbols={symbols.sort()} />
