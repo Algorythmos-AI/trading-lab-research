@@ -190,7 +190,7 @@ export function OptionsDetail({
 
       <div className="grid gap-4">
         {hasMap ? (
-          <div className="grid w-full content-start gap-1.5">
+          <div className="mx-auto grid w-full max-w-4xl content-start gap-1.5">
             <div role="group" aria-label="Map layers" className="flex flex-wrap items-center gap-1">
               <span className="text-muted-foreground mr-1 text-[0.6875rem]">Show</span>
               {layers.map((k) => (

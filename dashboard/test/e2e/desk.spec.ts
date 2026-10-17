@@ -286,7 +286,8 @@ test("the command palette finds a name, a view and a layer, and hands the keyboa
   await expect(palette(page).getByRole("option").first()).toContainText("Show expected move");
   await page.keyboard.press("Enter");
   await expect(palette(page)).toBeHidden();
-  await expect(page.locator('[data-desk-detail="AMZN"] [data-layer="move"]')).toBeVisible();
+  // On a phone the name's pane is not the one showing, so read the switch off the map's wrapper.
+  await expect(page.locator('[data-desk-detail="AMZN"] [data-map-range]')).not.toHaveAttribute("data-hide", /\bmove\b/);
 });
 
 test("the palette opens from its button, offers a way on when nothing matches, and closes on Escape", async ({ page }) => {
@@ -752,6 +753,8 @@ test("pointing at a zone on the map picks it out in the list, and the reverse", 
   // And from the map to the list: the crosshair's height decides, whatever is drawn over the zone there.
   await page.evaluate(() => window.scrollTo(0, 0));
   const drawn = pane.locator("rect[data-zone]").first();
+  // The map is tall enough now to sit partly below the fold of the pane.
+  await drawn.scrollIntoViewIfNeeded();
   const box = (await drawn.boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   // One zone is picked out (the heaviest at that price), and it is the same one in the list and on the map.
