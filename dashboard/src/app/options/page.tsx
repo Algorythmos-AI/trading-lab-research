@@ -113,8 +113,7 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
     <>
       <h1 className="sr-only">Options</h1>
       <OldCloseNotice e={e} />
-      {/* Top of the trading screen: the day's limits, then the few names to watch, then the desk. */}
-      <DayBar doc={journal.status === "ok" ? journal.doc : null} now={now} session={e.session} />
+      {/* Top of the trading screen: the few names to watch, then the desk; the day's limits sit straight under it. */}
       <PaneBoundary name="Today's focus">
         <FocusStrip e={full} />
       </PaneBoundary>
@@ -141,6 +140,7 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
             stale={stale}
           />
         </PaneBoundary>
+        <DayBar doc={journal.status === "ok" ? journal.doc : null} now={now} session={e.session} />
         {full.focus?.items.length ? (
           <p className="text-xs">
             <a className="text-muted-foreground hover:text-foreground underline" href={showAll ? "/options" : "/options?all=1"}>

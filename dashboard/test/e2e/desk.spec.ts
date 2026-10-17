@@ -660,6 +660,8 @@ test("a corrupt paper record breaks the scorecard and nothing else", async ({ pa
   await expect(rows(page)).toHaveCount(10);
   await showPane(page, "SPY");
   await expect(page.locator('[data-desk-detail="SPY"]')).toBeVisible();
+  // The scorecard sits in the folded research section.
+  await page.getByText("Research and evidence").click();
   await expect(page.locator('[data-pane-error="Paper scorecard"]')).toBeVisible();
   await expect(page.locator("[data-pane-error]")).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "Entry rules" })).toBeVisible();
