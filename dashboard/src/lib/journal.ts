@@ -1,8 +1,8 @@
 // The trade journal's arithmetic. Pure: no I/O; any clock is passed in. Every number on the Trades page comes from
 // here, from the closed trades the publisher matched (first in, first out) out of the broker's filled orders.
-import type { JournalDoc, Trade } from "./journal.types";
+import type { JournalDoc, Lot, Trade } from "./journal.types";
 
-export type { JournalDoc, Trade };
+export type { JournalDoc, Lot, Trade };
 
 const NY = "America/New_York";
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -573,4 +573,52 @@ export function calendar(days: readonly DayRow[], count = 6): CalendarMonth[] {
 export function journalStale(doc: Pick<JournalDoc, "as_of">, now: Date): boolean {
   const at = Date.parse(doc.as_of);
   return Number.isFinite(at) && now.getTime() - at > 84 * 3_600_000;
+}
+
+// ── The session ──────────────────────────────────────────────────────────────────────────────────────────────────
+
+export type MarketState = "open" | "pre" | "after" | "closed";
+
+/** Where the regular US session stands in New York: 9:30 to 16:00 on weekdays, with the extended hours either side. Holidays are not known here. */
+export function marketState(now: Date): MarketState {
+  const t = nyTime(now.toISOString());
+  if (t.weekday === "Sat" || t.weekday === "Sun") return "closed";
+  if (t.minute >= 570 && t.minute < 960) return "open";
+  if (t.minute >= 240 && t.minute < 570) return "pre";
+  if (t.minute >= 960 && t.minute < 1200) return "after";
+  return "closed";
+}
+
+/** Whole minutes from an ISO time to now; null when the time does not parse. */
+export function minutesSince(iso: string, now: Date): number | null {
+  const at = Date.parse(iso);
+  return Number.isFinite(at) ? Math.max(0, Math.floor((now.getTime() - at) / 60_000)) : null;
+}
+
+export interface SessionView {
+  /** The New York day on show. */
+  day: string;
+  /** True when that day is today in New York; otherwise it is the latest day with trades. */
+  isToday: boolean;
+  /** The day's closed trades, newest first. */
+  trades: Trade[];
+  summary: Summary;
+  /** Lots still open now, newest first. */
+  open: Lot[];
+}
+
+/** Today's trades in New York, or the latest session with trades when today has none yet. Null with no trades at all. */
+export function sessionView(doc: Pick<JournalDoc, "trades" | "open">, now: Date): SessionView | null {
+  const today = nyTime(now.toISOString()).day;
+  const open = [...(doc.open ?? [])].sort((a, b) => (b.opened_at ?? "").localeCompare(a.opened_at ?? ""));
+  let day = today;
+  let trades = doc.trades.filter((t) => closeDay(t) === today);
+  if (trades.length === 0 && open.every((l) => !l.opened_at || nyTime(l.opened_at).day !== today)) {
+    const last = doc.trades.reduce<string | null>((m, t) => (m === null || t.closed_at > m ? t.closed_at : m), null);
+    if (last === null) return open.length ? { day, isToday: true, trades, summary: summarize(trades), open } : null;
+    day = nyTime(last).day;
+    trades = doc.trades.filter((t) => closeDay(t) === day);
+  }
+  trades = [...trades].sort((a, b) => b.closed_at.localeCompare(a.closed_at) || a.id.localeCompare(b.id));
+  return { day, isToday: day === today, trades, summary: summarize(trades), open };
 }
