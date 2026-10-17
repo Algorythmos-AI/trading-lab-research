@@ -629,6 +629,10 @@ export type Money = NonNullable<JournalDoc["money"]>;
 
 export interface MoneyPoint {
   date: string;
+  /** Everything put in, up to and including this day. */
+  putIn: number;
+  /** Everything taken out, up to and including this day, as a positive amount. */
+  takenOut: number;
   /** Everything put in less everything taken out, up to and including this day. */
   netIn: number;
   /** The account's value at the end of this day, when it was recorded. */
@@ -673,15 +677,23 @@ export function moneyView(m: Money, tradingUsd: number): MoneyView {
   const netIn = deposits - withdrawals;
   const value = isNum(m.account_value) ? m.account_value : null;
   const gain = value !== null && netIn > 0 ? value - netIn : null;
-  const days = new Map<string, { flow: number; value: number | null }>();
-  for (const t of m.transfers) days.set(t.date, { flow: (days.get(t.date)?.flow ?? 0) + t.amount, value: days.get(t.date)?.value ?? null });
-  for (const v of m.values ?? []) days.set(v.date, { flow: days.get(v.date)?.flow ?? 0, value: v.value });
-  let cum = 0;
+  // Money in and money out run as separate totals, so a broker that dates a deposit after the withdrawals it paid
+  // for never draws the account below zero.
+  const days = new Map<string, { inflow: number; outflow: number; value: number | null }>();
+  const day = (date: string) => days.get(date) ?? { inflow: 0, outflow: 0, value: null };
+  for (const t of m.transfers) {
+    const d = day(t.date);
+    days.set(t.date, t.amount >= 0 ? { ...d, inflow: d.inflow + t.amount } : { ...d, outflow: d.outflow - t.amount });
+  }
+  for (const v of m.values ?? []) days.set(v.date, { ...day(v.date), value: v.value });
+  let putIn = 0;
+  let takenOut = 0;
   const series = [...days.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, d]) => {
-      cum += d.flow;
-      return { date, netIn: cum, value: d.value };
+      putIn += d.inflow;
+      takenOut += d.outflow;
+      return { date, putIn, takenOut, netIn: putIn - takenOut, value: d.value };
     });
   return {
     currency: m.currency,

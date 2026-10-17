@@ -264,14 +264,24 @@ describe("money in and out", () => {
     expect(m.transfers[0]!.date).toBe("2026-10-14");
   });
 
-  it("steps the amount put in at each transfer and carries the value where recorded", () => {
+  it("steps the money put in and taken out at each transfer and carries the value where recorded", () => {
     const m = moneyView(money, 0);
-    expect(m.series.map((p) => [p.date, p.netIn, p.value])).toEqual([
-      ["2025-01-02", 5000, null],
-      ["2025-11-03", 3500, null],
-      ["2026-10-14", 4000, null],
-      ["2026-10-15", 4000, 5240],
+    expect(m.series.map((p) => [p.date, p.putIn, p.takenOut, p.netIn, p.value])).toEqual([
+      ["2025-01-02", 5000, 0, 5000, null],
+      ["2025-11-03", 5000, 1500, 3500, null],
+      ["2026-10-14", 5500, 1500, 4000, null],
+      ["2026-10-15", 5500, 1500, 4000, 5240],
     ]);
+  });
+
+  it("keeps both totals at zero or above when a deposit is dated after the withdrawals it paid for", () => {
+    const late = { ...money, transfers: [
+      { date: "2024-01-05", amount: -300, source: "statement" as const },
+      { date: "2025-01-04", amount: 1000, source: "statement" as const },
+    ] };
+    const m = moneyView(late, 0);
+    expect(m.series.every((p) => p.putIn >= 0 && p.takenOut >= 0)).toBe(true);
+    expect(m.series[0]).toMatchObject({ putIn: 0, takenOut: 300, netIn: -300 });
   });
 
   it("gives no gain before anything has been put in", () => {
