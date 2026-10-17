@@ -108,7 +108,6 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
   return (
     <>
       <h1 className="sr-only">Options</h1>
-      <TradeRulesFor doc={journal.status === "ok" ? journal.doc : null} now={now} />
       <OldCloseNotice e={e} />
       <LiveQuotes symbols={e.tickers.map((t) => t.symbol).join(",")} session={e.session} enabled={!date}>
         <PaneBoundary name="The options desk">
@@ -140,6 +139,8 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
           </p>
           <EditionPicker dates={dates} current={e.session} base="/options" />
         </div>
+        {/* Straight under the desk: the desk is built to fill one laptop screen, so nothing may sit above it. */}
+        <TradeRulesFor doc={journal.status === "ok" ? journal.doc : null} now={now} />
         <section aria-label="Evidence and paper record" className="grid gap-5 lg:grid-cols-2">
           <PaneBoundary name="Entry rules">
             <RulesPanel e={e} />
