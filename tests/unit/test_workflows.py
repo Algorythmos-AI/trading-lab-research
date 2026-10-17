@@ -8,7 +8,8 @@ which does not exist until the checkout. These tests keep that class of failure 
   * every action is pinned to a full commit SHA;
   * every repository path a workflow names exists;
   * every job has a timeout;
-  * the required `test` check never gets path filters (a required check that doesn't run blocks merges).
+  * the required `test` check never gets path filters (a required check that doesn't run blocks merges);
+  * staging deploys only from integration, in fixture mode, and main takes releases and hotfixes only (ADR 0009).
 """
 from __future__ import annotations
 
@@ -187,3 +188,38 @@ def test_the_production_deploy_runs_only_from_main_and_never_for_pull_requests()
 def test_production_deploys_are_never_cancelled_half_way():
     wf = load(ROOT / ".github" / "workflows" / "dashboard.yml")
     assert wf["concurrency"]["cancel-in-progress"] == "${{ github.event_name == 'pull_request' }}"
+
+
+def test_the_staging_deploy_runs_only_from_integration_in_fixture_mode():
+    wf = load(ROOT / ".github" / "workflows" / "dashboard.yml")
+    assert wf["on"]["push"]["branches"] == ["main", "integration"]
+    deploy = wf["jobs"]["deploy-staging"]
+    assert deploy.get("environment") == "staging"
+    cond = str(deploy.get("if", ""))
+    assert "github.ref == 'refs/heads/integration'" in cond and "pull_request" not in cond
+    assert "vars.STAGING_ENABLED == 'true'" in cond, "staging stays off until the owner has set it up"
+    checkout = next(s for s in deploy["steps"] if is_checkout(s))
+    assert (checkout.get("with") or {}).get("persist-credentials") is False
+    names = [s.get("name", "") for s in deploy["steps"]]
+    assert names[0] == "Require the deploy secrets"
+    assert names[-1] == "The staging dashboard reports this commit"
+    build = next(s for s in deploy["steps"] if str(s.get("name", "")).startswith("Build"))
+    assert "VERCEL_TOKEN" not in yaml.safe_dump(build), "the build must run without the Vercel token"
+    assert (build.get("env") or {}).get("DASHBOARD_FIXTURE") == "1", "staging must never show live data"
+    assert "--prod" not in yaml.safe_dump(deploy), "staging is a preview deployment, never production"
+
+
+def test_main_takes_pull_requests_only_from_integration_and_hotfixes():
+    wf = load(ROOT / ".github" / "workflows" / "release.yml")
+    assert set(wf["on"]) == {"pull_request"} and not {"paths", "paths-ignore", "branches"} & set(wf["on"]["pull_request"] or {})
+    assert "edited" in wf["on"]["pull_request"]["types"], "retargeting a pull request to main must re-run the check"
+    job = wf["jobs"]["release-source"]
+    assert job.get("name") == "release-source" and "if" not in job, "the required check must always run"
+    script = job["steps"][0]["run"]
+    assert "integration|hotfix/*)" in script and '"$HEAD_REPO" != "$REPO"' in script
+
+
+@pytest.mark.parametrize("name", ["ci.yml", "security.yml", "infra.yml", "dashboard.yml"])
+def test_pushes_to_integration_run_the_same_workflows_as_main(name):
+    wf = load(ROOT / ".github" / "workflows" / name)
+    assert wf["on"]["push"]["branches"] == ["main", "integration"]
