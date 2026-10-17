@@ -1,0 +1,36 @@
+name: release
+
+# Required check on main (repo ruleset, ADR 0009): `release-source`. main takes pull requests from two places only:
+# integration (a release) and hotfix/* (a fix production can't wait for), both from this repository, never a fork.
+# Pull requests into any other branch pass at once. No path filters: a required check that does not run leaves pull
+# requests waiting forever. `edited` re-runs the check when a pull request's base is changed to main.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  release-source:
+    name: release-source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: main takes pull requests from integration and hotfix/* only
+        env:
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ "$BASE" != "main" ]; then
+            echo "into $BASE: no source rule"; exit 0
+          fi
+          if [ "$HEAD_REPO" != "$REPO" ]; then
+            echo "::error::main takes pull requests from this repository only, not from $HEAD_REPO."; exit 1
+          fi
+          case "$HEAD" in
+            integration|hotfix/*) echo "ok: $HEAD -> main" ;;
+            *) echo "::error::main takes pull requests from integration (a release) or hotfix/* only, not from $HEAD. Retarget this pull request to integration (ADR 0009)."; exit 1 ;;
+          esac
