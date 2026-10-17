@@ -2,6 +2,7 @@ import { PageHeading } from "@/components/page-heading";
 import { TradeRulesFor } from "@/components/trade-rules";
 import { BoardTable, EditionPanel, HowToRead, NoOptions, PaperPanel, RulesPanel, StructurePanel, TickerCards } from "@/components/options";
 import { FocusScope, LiveQuotes } from "@/components/client/live-layer";
+import { FocusStrip } from "@/components/options-focus";
 import { OptionsDesk } from "@/components/client/options-desk";
 import { OptionsGlance } from "@/components/client/options-glance";
 import { PaneBoundary } from "@/components/client/pane-boundary";
@@ -109,6 +110,10 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
     <>
       <h1 className="sr-only">Options</h1>
       <OldCloseNotice e={e} />
+      {/* The one thing above the desk: the few names to watch, kept to a single short row on a laptop. */}
+      <PaneBoundary name="Today's focus">
+        <FocusStrip e={e} />
+      </PaneBoundary>
       <LiveQuotes symbols={e.tickers.map((t) => t.symbol).join(",")} session={e.session} enabled={!date}>
         <PaneBoundary name="The options desk">
           {/* Keyed by edition: opening another edition starts the desk afresh, so a view or a sort chosen on one

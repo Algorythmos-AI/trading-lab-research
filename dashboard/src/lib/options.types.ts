@@ -192,4 +192,60 @@ export interface OptionsEdition {
         when?: string | null;
       }[]
     | null;
+  /**
+   * The names to watch this session: picked from the board after the close, with one breakout level and one support each, plus an optional pre-market heads-up. New in version 3.
+   */
+  focus?: {
+    picked_at?: string | null;
+    method?: string | null;
+    /**
+     * @maxItems 24
+     */
+    items: {
+      symbol: string;
+      rank: number;
+      bias: "breakout" | "support" | "range";
+      why?: string | null;
+      close?: number | null;
+      atr?: number | null;
+      resistance?: {
+        price: number;
+        name?: string | null;
+      } | null;
+      support?: {
+        price: number;
+        name?: string | null;
+      } | null;
+      breakout_above?: number | null;
+      hold_above?: number | null;
+      target_up?: {
+        price: number;
+        name?: string | null;
+      } | null;
+      target_down?: {
+        price: number;
+        name?: string | null;
+      } | null;
+      score?: number | null;
+    }[];
+    premarket?: {
+      as_of: string;
+      /**
+       * @maxItems 24
+       */
+      items: {
+        symbol: string;
+        price?: number | null;
+        gap_pct?: number | null;
+        where?:
+          | "above_resistance"
+          | "near_resistance"
+          | "between"
+          | "near_support"
+          | "below_support"
+          | null;
+        note?: string | null;
+      }[];
+    } | null;
+  } | null;
 }
