@@ -197,6 +197,7 @@ def test_the_staging_deploy_runs_only_from_integration_in_fixture_mode():
     assert deploy.get("environment") == "staging"
     cond = str(deploy.get("if", ""))
     assert "github.ref == 'refs/heads/integration'" in cond and "pull_request" not in cond
+    assert "vars.STAGING_ENABLED == 'true'" in cond, "staging stays off until the owner has set it up"
     checkout = next(s for s in deploy["steps"] if is_checkout(s))
     assert (checkout.get("with") or {}).get("persist-credentials") is False
     names = [s.get("name", "") for s in deploy["steps"]]
@@ -211,6 +212,7 @@ def test_the_staging_deploy_runs_only_from_integration_in_fixture_mode():
 def test_main_takes_pull_requests_only_from_integration_and_hotfixes():
     wf = load(ROOT / ".github" / "workflows" / "release.yml")
     assert set(wf["on"]) == {"pull_request"} and not {"paths", "paths-ignore", "branches"} & set(wf["on"]["pull_request"] or {})
+    assert "edited" in wf["on"]["pull_request"]["types"], "retargeting a pull request to main must re-run the check"
     job = wf["jobs"]["release-source"]
     assert job.get("name") == "release-source" and "if" not in job, "the required check must always run"
     script = job["steps"][0]["run"]

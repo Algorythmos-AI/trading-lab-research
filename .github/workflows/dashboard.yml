@@ -164,7 +164,11 @@ jobs:
     # Staging only: pushes to integration and manual runs on integration (ADR 0009). The `staging` Environment allows
     # only the integration branch and holds its own token. The deployment is a Vercel preview, so ingest refuses
     # every write (ingest.ts) and DASHBOARD_FIXTURE=1 serves the synthetic fixtures: nothing on it is live.
-    if: github.ref == 'refs/heads/integration' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    # It is off until the owner has set up the staging Environment and domain and set the GitHub variable
+    # STAGING_ENABLED to `true` (docs/runbooks/dashboard-deploy.md), so integration isn't red before then.
+    if: >-
+      github.ref == 'refs/heads/integration' && vars.STAGING_ENABLED == 'true' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: staging

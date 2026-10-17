@@ -23,6 +23,8 @@ through `/api/health`, which must report the commit and `fixture: true`. One-tim
 - Repo Settings > Environments > New environment `staging`: deployment branch rule `integration`; secrets
   `VERCEL_TOKEN` (its own token, with an expiry) and `VERCEL_AUTOMATION_BYPASS_SECRET` (the same value as for
   production: protection is per project).
+- Repo Settings > Secrets and variables > Actions > Variables: `STAGING_ENABLED` = `true`. Until then the staging
+  job is skipped.
 
 **If a deploy fails.** The previous deployment stays live. Read the failed step:
 - Environment variables (not secret, but kept out of git): `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`, the values

@@ -3,9 +3,10 @@ name: release
 # Required check on main (repo ruleset, ADR 0009): `release-source`. main takes pull requests from two places only:
 # integration (a release) and hotfix/* (a fix production can't wait for), both from this repository, never a fork.
 # Pull requests into any other branch pass at once. No path filters: a required check that does not run leaves pull
-# requests waiting forever.
+# requests waiting forever. `edited` re-runs the check when a pull request's base is changed to main.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited]
 
 permissions:
   contents: read
