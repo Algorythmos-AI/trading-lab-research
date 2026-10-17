@@ -91,20 +91,29 @@ export function RoomBar({
 
 // Level map geometry, in viewBox units. Candles fill the plot; the expected move gets a narrow gutter after the
 // last candle; the price axis, with one tag a level, runs down the right edge as on a broker's chart.
-const W = 640;
-const H = 340;
-const TOP = 10;
-const X0 = 4;
-const X1 = 536;
-const XD = 552;
-const XW = 568;
-/** The price axis: tags start here and run to the right edge. */
-const AX = 574;
-const TAG_H = 14;
-/** Height kept under the candles for volume, when the bars carry it. */
-const VOL_H = 40;
-/** Levels tagged each side of the close; the rest are drawn as faint lines and listed under the chart. */
-const LABELS_EACH_SIDE = 2;
+interface MapGeometry {
+  W: number;
+  H: number;
+  TOP: number;
+  X0: number;
+  X1: number;
+  XD: number;
+  XW: number;
+  /** The price axis: tags start here and run to the right edge. */
+  AX: number;
+  TAG_H: number;
+  /** Height kept under the candles for volume, when the bars carry it. */
+  VOL_H: number;
+  /** Height of the date row under the candles. */
+  DATE_H: number;
+  /** Levels tagged each side of the close; the rest are drawn as faint lines and listed under the chart. */
+  LABELS_EACH_SIDE: number;
+  /** Text size, as a multiple of the wide map's. */
+  F: number;
+}
+const WIDE: MapGeometry = { W: 640, H: 340, TOP: 10, X0: 4, X1: 536, XD: 552, XW: 568, AX: 574, TAG_H: 14, VOL_H: 40, DATE_H: 20, LABELS_EACH_SIDE: 2, F: 1 };
+/** A phone's map: a narrower, taller box, so the candles keep their height and the text reads at phone size. */
+const PHONE: MapGeometry = { W: 410, H: 470, TOP: 12, X0: 4, X1: 316, XD: 328, XW: 338, AX: 342, TAG_H: 20, VOL_H: 56, DATE_H: 28, LABELS_EACH_SIDE: 2, F: 1.4 };
 
 /**
  * Recent candles, each nearby zone as one thin line at the edge price meets first (with a faint band behind it for
@@ -123,8 +132,6 @@ export interface BreakevenMark {
 
 /** How long the longest open-interest bar is drawn, in the map's units. */
 const OI_BAR = 54;
-/** Where the bars start: clear of the plot's left edge. */
-const OI_X = X0 + 6;
 
 export function LevelMap({
   t,
@@ -135,6 +142,7 @@ export function LevelMap({
   onZone,
   unit = "daily",
   closeDay = null,
+  phone = false,
 }: {
   t: OptionsTicker;
   interactive?: boolean;
@@ -149,14 +157,19 @@ export function LevelMap({
   /** The day of the close the levels were built from. Hourly candles after it are today's: the close's dot, the
    *  expected move and the live price start at that day's last candle, not at the newest one. */
   closeDay?: string | null;
+  /** Draw the phone's geometry: taller, with larger text. */
+  phone?: boolean;
 }) {
+  const { W, H, TOP, X0, X1, XD, XW, AX, TAG_H, VOL_H, DATE_H, LABELS_EACH_SIDE, F } = phone ? PHONE : WIDE;
+  /** Where the open-interest bars start: clear of the plot's left edge. */
+  const OI_X = X0 + 6;
   const v = mapView(t);
   const close = t.last?.close;
   if (!v || !isNum(close)) return null;
   const n = v.bars.length;
   const vols = v.bars.map((b) => (isNum(b.v) && b.v >= 0 ? b.v : null));
   const hasVol = vols.some((x) => x !== null && x > 0);
-  const BOTTOM = H - 20 - (hasVol ? VOL_H : 0);
+  const BOTTOM = H - DATE_H - (hasVol ? VOL_H : 0);
   const y = (p: number) => TOP + ((v.hi - p) / (v.hi - v.lo)) * (BOTTOM - TOP);
   const step = niceStep(v.hi - v.lo, 6);
   const ticks: number[] = [];
@@ -173,7 +186,7 @@ export function LevelMap({
     v.bars.forEach((b, i) => {
       const x = X0 + bw * (i + 0.5);
       const due = unit === "hourly" ? i === 0 || b.d.slice(0, 10) !== v.bars[i - 1]!.d.slice(0, 10) : i % 10 === 0;
-      if (due && x - lastX >= 44 && x <= X1 - 20) {
+      if (due && x - lastX >= 44 * F && x <= X1 - 20) {
         dated.add(i);
         lastX = x;
       }
@@ -231,9 +244,9 @@ export function LevelMap({
         {ticks.map((p) => (
           <line key={p} x1={X0} x2={XW} y1={y(p)} y2={y(p)} stroke="var(--chart-grid)" strokeWidth={0.75} />
         ))}
-        <line x1={AX - 2} x2={AX - 2} y1={TOP} y2={H - 20} stroke="var(--chart-grid)" strokeWidth={1} />
+        <line x1={AX - 2} x2={AX - 2} y1={TOP} y2={H - DATE_H} stroke="var(--chart-grid)" strokeWidth={1} />
         {freeTicks.map((p) => (
-          <text key={p} x={AX + 4} y={y(p) + 3.5} fontSize={10} style={{ fill: "var(--muted-foreground)" }} className="font-mono">
+          <text key={p} x={AX + 4} y={y(p) + 3.5 * F} fontSize={10 * F} style={{ fill: "var(--muted-foreground)" }} className="font-mono">
             {num(p, step < 1 ? 2 : 0)}
           </text>
         ))}
@@ -279,7 +292,7 @@ export function LevelMap({
                   <text
                     x={X0 + 3}
                     y={at - 3}
-                    fontSize={9}
+                    fontSize={9 * F}
                     pointerEvents="none"
                     style={{ fill: color, paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 3 }}
                     className="font-mono"
@@ -303,10 +316,10 @@ export function LevelMap({
                 <line x1={cx} x2={cx} y1={y(b.h)} y2={y(b.l)} stroke={color} strokeWidth={1} />
                 <rect x={cx - bw * 0.36} y={top} width={bw * 0.72} height={Math.max(1, Math.abs(y(b.o) - y(b.c)))} fill={color} />
                 {hasVol && vol !== null ? (
-                  <rect x={cx - bw * 0.36} y={H - 20 - (vol / most) * (VOL_H - 6)} width={bw * 0.72} height={(vol / most) * (VOL_H - 6)} fill={color} fillOpacity={0.35} />
+                  <rect x={cx - bw * 0.36} y={H - DATE_H - (vol / most) * (VOL_H - 6)} width={bw * 0.72} height={(vol / most) * (VOL_H - 6)} fill={color} fillOpacity={0.35} />
                 ) : null}
                 {dated.has(i) ? (
-                  <text x={i === 0 ? X0 : cx} y={H - 6} fontSize={10} textAnchor={i === 0 ? "start" : "middle"} style={{ fill: "var(--muted-foreground)" }} className="font-mono">
+                  <text x={i === 0 ? X0 : cx} y={H - 6 * F} fontSize={10 * F} textAnchor={i === 0 ? "start" : "middle"} style={{ fill: "var(--muted-foreground)" }} className="font-mono">
                     {b.d.slice(5, 10)}
                   </text>
                 ) : null}
@@ -314,7 +327,7 @@ export function LevelMap({
             );
           })}
           {n === 0 ? (
-            <text x={(X0 + X1) / 2} y={H - 6} fontSize={9} textAnchor="middle" style={{ fill: "var(--muted-foreground)" }}>
+            <text x={(X0 + X1) / 2} y={H - 6 * F} fontSize={9 * F} textAnchor="middle" style={{ fill: "var(--muted-foreground)" }}>
               Candles appear once the after-close run sends recent bars.
             </text>
           ) : null}
@@ -334,11 +347,11 @@ export function LevelMap({
               strokeOpacity={0.45}
             />
             <line x1={XD} x2={XD} y1={y(bands.day[1])} y2={y(bands.day[0])} stroke="var(--info-fill)" strokeWidth={2} />
-            <text x={XD} y={y(bands.day[1]) - 4} fontSize={9.5} textAnchor="middle" style={{ fill: "var(--info)" }} className="font-mono">
+            <text x={XD} y={y(bands.day[1]) - 4} fontSize={9.5 * F} textAnchor="middle" style={{ fill: "var(--info)" }} className="font-mono">
               1d
             </text>
             {bands.week ? (
-              <text x={XW} y={y(bands.week[1]) - 4} fontSize={9.5} textAnchor="end" style={{ fill: "var(--info)" }} className="font-mono">
+              <text x={XW} y={y(bands.week[1]) - 4} fontSize={9.5 * F} textAnchor="end" style={{ fill: "var(--info)" }} className="font-mono">
                 1w
               </text>
             ) : null}
@@ -374,7 +387,7 @@ export function LevelMap({
                     <text
                       x={OI_X + Math.max(...here.map(len)) + 4}
                       y={y(strike) + 3}
-                      fontSize={9.5}
+                      fontSize={9.5 * F}
                       style={{ fill: "var(--info)", paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 2.5 }}
                       className="font-mono"
                     >
@@ -397,7 +410,7 @@ export function LevelMap({
             <text
               x={X0 + 6}
               y={breakeven.price > v.hi ? TOP + 11 : breakeven.price < v.lo ? BOTTOM - 5 : y(breakeven.price) < TOP + 15 ? y(breakeven.price) + 12 : y(breakeven.price) - 4}
-              fontSize={10.5}
+              fontSize={10.5 * F}
               style={{ fill: "var(--info)", paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 3 }}
               className="font-mono"
             >
@@ -414,7 +427,7 @@ export function LevelMap({
               <title>{l.title}</title>
               {Math.abs(placed[i]! - l.y) > 1 ? <path d={`M${AX - 2} ${l.y} L${AX + 2} ${placed[i]!}`} stroke={l.fill} strokeOpacity={0.7} fill="none" /> : null}
               <rect x={AX} y={placed[i]! - TAG_H / 2} width={W - AX - 1} height={TAG_H} rx={2} fill={l.fill} />
-              <text x={AX + 4} y={placed[i]! + 3.5} fontSize={10.5} fontWeight={600} style={{ fill: l.ink }} className="font-mono">
+              <text x={AX + 4} y={placed[i]! + 3.5 * F} fontSize={10.5 * F} fontWeight={600} style={{ fill: l.ink }} className="font-mono">
                 {l.text}
               </text>
             </g>

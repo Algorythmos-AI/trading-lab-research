@@ -33,14 +33,15 @@ export function SiteHeader({ result, crypto, hft, now }: { result: SnapshotResul
   return (
     <header className="bg-card/80 supports-[backdrop-filter]:bg-card/70 z-30 border-b backdrop-blur sm:sticky sm:top-0">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-1.5 px-4 pt-3 sm:gap-x-4 sm:px-6">
-        <div className="mr-auto flex min-w-0 items-center gap-2.5">
+        {/* On a phone the name gives way so the desk switch shares its row: the header is one row shorter. */}
+        <div className="flex min-w-0 items-center gap-2.5 sm:mr-auto">
           <Mark />
-          <div className="min-w-0 leading-tight">
+          <div className="min-w-0 leading-tight max-sm:sr-only">
             <p className="truncate text-sm font-semibold">Trading Lab</p>
             <p className="text-muted-foreground hidden truncate text-xs sm:block">Paper research status, read-only</p>
           </div>
         </div>
-        <div className="flex max-w-full min-w-0 flex-wrap items-center gap-2">
+        <div className="flex max-w-full min-w-0 flex-wrap items-center gap-2 max-sm:contents">
           <DeskSwitch />
           <DeskFreshnessPill
             desks={{
