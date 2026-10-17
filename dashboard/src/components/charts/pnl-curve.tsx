@@ -2,6 +2,7 @@
 
 import { Area, CartesianGrid, ComposedChart, Line, ReferenceLine, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartContainer, ChartLegendList, ChartTooltipBox, type ChartConfig } from "@/components/ui/chart";
+import { shortDay } from "@/lib/journal";
 
 export interface PnlPoint {
   /** YYYY-MM-DD in New York. */
@@ -19,38 +20,33 @@ export const usdSigned = (v: unknown, digits = 0) => {
   return `${n > 0 ? "+" : n < 0 ? "−" : ""}$${s}`;
 };
 
-const shortAxis = (v: unknown) => {
+export const shortAxis = (v: unknown) => {
   const n = typeof v === "number" ? v : Number(v);
   if (!Number.isFinite(n)) return "";
   const a = Math.abs(n);
   const s = a >= 1000 ? `${(a / 1000).toFixed(a >= 10_000 ? 0 : 1)}k` : `${Math.round(a)}`;
-  return `${n < 0 ? "−" : ""}$${s}`;
+  return `${n < 0 ? "−" : n > 0 ? "+" : ""}$${s}`;
 };
 
-const dayLabel = (ymd: string) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "2-digit", timeZone: "UTC" });
+const dayLabel = shortDay;
 
 const CONFIG: ChartConfig = {
   cum: { label: "Running total", color: "var(--chart-1)" },
   dd: { label: "Below the earlier high", color: "var(--chart-8)" },
 };
 
-/** The running total of closed trades in dollars, day by day, with the fall from its earlier high shaded beneath. */
+/** The running total of closed trades in dollars, day by day, with the gap down from its earlier high shaded. */
 export function PnlCurve({ points }: { points: PnlPoint[] }) {
-  const data = points.map((p, i) => ({ ...p, i }));
+  // `band` spans the running total and the high it stood below (dd is that gap, 0 or negative).
+  const data = points.map((p, i) => ({ ...p, i, band: [p.cum, p.cum - p.dd] as [number, number] }));
   return (
     <div>
       <ChartContainer config={CONFIG} className="h-64 sm:h-72" aria-label="Running total of closed trades in dollars, by day, with the fall from the earlier high">
         <ComposedChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
-          <defs>
-            <linearGradient id="pnl-cum-fill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--color-cum)" stopOpacity={0.22} />
-              <stop offset="100%" stopColor="var(--color-cum)" stopOpacity={0} />
-            </linearGradient>
-          </defs>
           <CartesianGrid vertical={false} />
           <XAxis dataKey="i" type="number" domain={[0, "dataMax"]} tickLine={false} axisLine={false} tickMargin={8} minTickGap={48} tickFormatter={(i: number) => (data[i] ? dayLabel(data[i]!.day) : "")} />
-          <YAxis tickLine={false} axisLine={false} width={56} tickFormatter={shortAxis} domain={[(lo: number) => Math.min(0, lo), (hi: number) => Math.max(0, hi)]} />
-          <ReferenceLine y={0} strokeWidth={1.5} />
+          <YAxis tickLine={false} axisLine={false} width={56} tickFormatter={shortAxis} domain={["auto", "auto"]} />
+          <ReferenceLine y={0} strokeWidth={1.5} ifOverflow="extendDomain" />
           <Tooltip
             cursor={{ stroke: "var(--chart-axis)", strokeWidth: 1 }}
             content={({ active, payload }) => {
@@ -67,8 +63,7 @@ export function PnlCurve({ points }: { points: PnlPoint[] }) {
               ) : null;
             }}
           />
-          <Area dataKey="dd" type="stepAfter" stroke="var(--color-dd)" strokeWidth={1} fill="var(--color-dd)" fillOpacity={0.16} isAnimationActive={false} />
-          <Area dataKey="cum" type="linear" stroke="none" fill="url(#pnl-cum-fill)" isAnimationActive={false} />
+          <Area dataKey="band" type="linear" stroke="none" fill="var(--color-dd)" fillOpacity={0.18} isAnimationActive={false} activeDot={false} />
           <Line dataKey="cum" type="linear" stroke="var(--color-cum)" strokeWidth={2} dot={false} activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--card)" }} isAnimationActive={false} />
         </ComposedChart>
       </ChartContainer>

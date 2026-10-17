@@ -14,7 +14,7 @@ import { Empty } from "@/components/empty";
 import { PageHeading } from "@/components/page-heading";
 import { Notice } from "@/components/ui/notice";
 import { newYork } from "@/lib/format";
-import { applyFilter, contractLabel, daily, groupBy, journalStale, lessons, parseFilter, summarize, yearsOf, type JournalDoc } from "@/lib/journal";
+import { applyFilter, contractLabel, daily, groupBy, journalStale, lessons, parseFilter, shortDay, summarize, yearsOf, type JournalDoc } from "@/lib/journal";
 import { loadJournal, pageTime } from "@/lib/snapshot";
 
 export const dynamic = "force-dynamic";
@@ -49,7 +49,18 @@ function JournalBody({ doc, q, now }: { doc: JournalDoc; q: Record<string, strin
     .slice(0, 12)
     .map((g) => g.key);
   if (filter.symbol && !symbols.includes(filter.symbol)) symbols.push(filter.symbol);
-  const gaps = doc.gaps ?? [];
+  // Lots of one contract bought in pieces read as one holding at its average cost; gaps of one symbol on one day as one.
+  const open = new Map<string, { label: string; qty: number; cost: number }>();
+  for (const l of doc.open ?? []) {
+    const label = contractLabel(l);
+    const o = open.get(label) ?? { label, qty: 0, cost: 0 };
+    o.qty += l.qty;
+    o.cost += l.qty * l.entry;
+    open.set(label, o);
+  }
+  const gaps = new Map<string, number>();
+  for (const g of doc.gaps ?? []) gaps.set(`${g.symbol} on ${shortDay(g.date)}`, (gaps.get(`${g.symbol} on ${shortDay(g.date)}`) ?? 0) + 1);
+  const gapCount = (doc.gaps ?? []).length;
   return (
     <>
       {journalStale(doc, now) ? (
@@ -74,20 +85,21 @@ function JournalBody({ doc, q, now }: { doc: JournalDoc; q: Record<string, strin
           <TradesPanel trades={trades} />
         </>
       )}
-      {(doc.open ?? []).length > 0 ? (
-        <p className="text-muted-foreground text-xs">
-          Still open, at cost: {(doc.open ?? []).map((l) => `${l.qty.toLocaleString("en-US")} × ${contractLabel(l)} at ${l.entry.toFixed(2)}`).join("; ")}.
+      {open.size > 0 ? (
+        <p className="text-muted-foreground max-w-prose text-xs">
+          Still open, at average cost:{" "}
+          {[...open.values()].map((o) => `${o.qty.toLocaleString("en-US")} × ${o.label} at ${(o.cost / o.qty).toFixed(2)}`).join("; ")}.
         </p>
       ) : null}
       <p className="text-muted-foreground max-w-prose text-xs">
         Read from the broker ({doc.source === "webull-au" ? "Webull Australia" : doc.source}) on {newYork(doc.as_of)} New York time
-        {doc.history_from ? `, history from ${doc.history_from}` : ""}. {doc.fills ? `${doc.fills.toLocaleString("en-US")} filled orders were matched first in, first out. ` : ""}
+        {doc.history_from ? `, history from ${shortDay(doc.history_from)}` : ""}. {doc.fills ? `${doc.fills.toLocaleString("en-US")} filled orders were matched first in, first out. ` : ""}
         Results are in US dollars{doc.fees_included === false ? " and before commissions and fees, which the broker's history does not carry" : ""}. Days are New York trading days.
-        {gaps.length > 0
-          ? ` ${gaps.length} close${gaps.length === 1 ? "" : "s"} had no matching open in the broker's history (${gaps
+        {gapCount > 0
+          ? ` ${gapCount} close${gapCount === 1 ? "" : "s"} had no matching open in the broker's history (${[...gaps]
               .slice(0, 4)
-              .map((g) => `${g.symbol} on ${g.date}`)
-              .join(", ")}${gaps.length > 4 ? ", …" : ""}); each is counted as its whole credit.`
+              .map(([where, n]) => (n > 1 ? `${n} on ${where}` : where))
+              .join(", ")}${gaps.size > 4 ? ", …" : ""}); each is counted as its whole credit.`
           : ""}
       </p>
     </>
