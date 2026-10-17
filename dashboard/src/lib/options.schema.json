@@ -765,6 +765,252 @@
           }
         }
       }
+    },
+    "focus": {
+      "description": "The names to watch this session: picked from the board after the close, with one breakout level and one support each, plus an optional pre-market heads-up. New in version 3.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "picked_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 40
+        },
+        "method": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 300
+        },
+        "items": {
+          "type": "array",
+          "maxItems": 24,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "symbol",
+              "rank",
+              "bias"
+            ],
+            "properties": {
+              "symbol": {
+                "type": "string",
+                "maxLength": 12
+              },
+              "rank": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10
+              },
+              "bias": {
+                "enum": [
+                  "breakout",
+                  "support",
+                  "range"
+                ]
+              },
+              "why": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "close": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "atr": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "resistance": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": false,
+                "required": [
+                  "price"
+                ],
+                "properties": {
+                  "price": {
+                    "type": "number"
+                  },
+                  "name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 40
+                  }
+                }
+              },
+              "support": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": false,
+                "required": [
+                  "price"
+                ],
+                "properties": {
+                  "price": {
+                    "type": "number"
+                  },
+                  "name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 40
+                  }
+                }
+              },
+              "breakout_above": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "hold_above": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "target_up": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": false,
+                "required": [
+                  "price"
+                ],
+                "properties": {
+                  "price": {
+                    "type": "number"
+                  },
+                  "name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 40
+                  }
+                }
+              },
+              "target_down": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": false,
+                "required": [
+                  "price"
+                ],
+                "properties": {
+                  "price": {
+                    "type": "number"
+                  },
+                  "name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 40
+                  }
+                }
+              },
+              "score": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          }
+        },
+        "premarket": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "as_of",
+            "items"
+          ],
+          "properties": {
+            "as_of": {
+              "type": "string",
+              "maxLength": 40
+            },
+            "items": {
+              "type": "array",
+              "maxItems": 24,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "symbol"
+                ],
+                "properties": {
+                  "symbol": {
+                    "type": "string",
+                    "maxLength": 12
+                  },
+                  "price": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "gap_pct": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "where": {
+                    "enum": [
+                      "above_resistance",
+                      "near_resistance",
+                      "between",
+                      "near_support",
+                      "below_support",
+                      null
+                    ]
+                  },
+                  "note": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }
