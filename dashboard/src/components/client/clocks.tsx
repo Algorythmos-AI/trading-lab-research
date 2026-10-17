@@ -45,12 +45,12 @@ export function Clocks() {
   const session = SESSION[deskOfPath(usePathname())];
   return (
     <div className="flex items-center gap-3 text-xs" aria-label="Local clocks">
-      {/* One colour per city, so the two clocks tell apart at a glance. */}
-      <span className="bg-clock-syd-chip text-clock-syd flex items-baseline gap-1.5 rounded px-1.5 py-0.5">
+      {/* One colour per city, so the two clocks tell apart at a glance. leading-4 keeps each chip as tall as the badge beside it. */}
+      <span className="bg-clock-syd-chip text-clock-syd flex items-baseline gap-1.5 rounded px-1.5 py-0.5 leading-4">
         <span className="font-medium">Sydney</span>
         <time className="font-mono text-[0.8125rem] font-bold">{now ? SYD.format(now) : "--:--"}</time>
       </span>
-      <span className="bg-clock-ny-chip text-clock-ny flex items-baseline gap-1.5 rounded px-1.5 py-0.5">
+      <span className="bg-clock-ny-chip text-clock-ny flex items-baseline gap-1.5 rounded px-1.5 py-0.5 leading-4">
         <span className="font-medium">New York</span>
         <time className="font-mono text-[0.8125rem] font-bold">{now ? NY.format(now) : "--:--"}</time>
       </span>
