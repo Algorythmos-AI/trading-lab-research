@@ -2,7 +2,9 @@
 // Picked after the close from the board; an optional pre-market line says where each name sits before the open.
 // Server-rendered and compact, so it can sit above the desk without pushing it off a laptop screen.
 import { ArrowDownToLine, ArrowUpFromLine, MoveHorizontal, Target } from "lucide-react";
-import { sydney } from "@/lib/format";
+import { sydney, weekDate } from "@/lib/format";
+import { sessionView, type JournalDoc } from "@/lib/journal";
+import { dayCheck, DAY_LOSS_LIMIT, MAX_TRADES_PER_DAY } from "@/lib/trade-rules";
 import type { Options } from "@/lib/options";
 import { cn } from "@/lib/utils";
 
@@ -68,13 +70,11 @@ function FocusCard({ item, pre }: { item: Item; pre: Pre | undefined }) {
         </span>
       </div>
       <div className="grid gap-1">
-        <Row label="Break and hold above" value={item.breakout_above ?? item.resistance?.price} name={item.resistance?.name} className="text-good" />
-        <Row label="Hold support at" value={item.hold_above ?? item.support?.price} name={item.support?.name} className="text-info" />
+        <Row label="Break above" value={item.breakout_above ?? item.resistance?.price} name={item.resistance?.name} className="text-good" />
+        <Row label="Support" value={item.hold_above ?? item.support?.price} name={item.support?.name} className="text-info" />
         {item.target_up ? <Row label="Next up" value={item.target_up.price} name={item.target_up.name} /> : null}
         {item.target_down ? <Row label="Next down" value={item.target_down.price} name={item.target_down.name} /> : null}
-        <Row label="Close · ATR" value={item.close} name={item.atr != null ? `± ${item.atr.toFixed(2)}` : null} />
       </div>
-      {item.why ? <p className="text-muted-foreground text-xs leading-snug">{item.why}</p> : null}
       {pre ? (
         <p className="bg-muted/60 rounded px-2 py-1 text-xs">
           <span className="font-semibold">{pre.where ? WHERE[pre.where] : "Pre-market"}</span>
@@ -97,7 +97,7 @@ export function FocusStrip({ e }: { e: Options }) {
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 id="focus-title" className="flex items-center gap-2 text-sm font-semibold">
           <Target aria-hidden className="text-muted-foreground size-4" />
-          Today&apos;s focus: {items.length} names, nothing else
+          Today&apos;s focus
         </h2>
         <p className="text-muted-foreground text-xs">
           {f.premarket ? `Pre-market check ${sydney(f.premarket.as_of)} Sydney. ` : f.picked_at ? `Picked ${sydney(f.picked_at)} Sydney. ` : ""}
@@ -110,5 +110,44 @@ export function FocusStrip({ e }: { e: Options }) {
         ))}
       </ul>
     </section>
+  );
+}
+
+/** The edition with only its focus names, in focus rank order; the whole edition when it has no focus block. */
+export function focusOnly(e: Options): Options {
+  const ranks = new Map((e.focus?.items ?? []).map((i) => [i.symbol, i.rank]));
+  const tickers = e.tickers.filter((t) => ranks.has(t.symbol)).sort((a, b) => ranks.get(a.symbol)! - ranks.get(b.symbol)!);
+  return tickers.length ? { ...e, tickers } : e;
+}
+
+const DAY = {
+  clear: { word: "Clear to trade", tone: "bg-good-soft border-good-fill/40", text: "text-good" },
+  careful: { word: "Careful", tone: "bg-warn-soft border-warn-fill/50", text: "text-warn" },
+  stop: { word: "Stop for today", tone: "bg-bad-soft border-bad-fill/50", text: "text-bad" },
+} as const;
+
+/** One line at the top: the session, today's trade count and the day's loss against the limits. */
+export function DayBar({ doc, now, session }: { doc: JournalDoc | null; now: Date; session: string }) {
+  const c = dayCheck(doc ? sessionView(doc, now) : null);
+  const s = DAY[c.status];
+  const loss = Math.max(0, -c.net);
+  return (
+    <div role="status" className={cn("flex flex-wrap items-center gap-x-6 gap-y-1 rounded-lg border px-3.5 py-2 text-sm", s.tone)}>
+      <span className={cn("font-semibold", s.text)}>{c.isToday ? s.word : "New day"}</span>
+      <span className="text-muted-foreground">Session {weekDate(session)}</span>
+      <span>
+        Trades{" "}
+        <span className="font-mono font-semibold">
+          {c.used} of {MAX_TRADES_PER_DAY}
+        </span>
+      </span>
+      <span>
+        Day loss{" "}
+        <span className="font-mono font-semibold">
+          ${loss.toFixed(0)} of ${DAY_LOSS_LIMIT}
+        </span>
+      </span>
+      <span className="text-muted-foreground text-xs">{c.line}</span>
+    </div>
   );
 }

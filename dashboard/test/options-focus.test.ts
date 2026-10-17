@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { FocusStrip } from "@/components/options-focus";
+import { DayBar, FocusStrip, focusOnly } from "@/components/options-focus";
 import type { Options } from "@/lib/options";
 import { validateOptionsEdition } from "@/lib/validate";
 import optionsJson from "./fixtures/options.v1.json";
@@ -67,5 +67,19 @@ describe("today's focus", () => {
 
   it("draws nothing without a focus block", () => {
     expect(renderToStaticMarkup(createElement(FocusStrip, { e: v1 }))).toBe("");
+  });
+});
+
+describe("the trading screen", () => {
+  it("narrows the desk to the focus names in rank order, and keeps the whole board without a focus block", () => {
+    expect(focusOnly(withFocus()).tickers.map((t) => t.symbol)).toEqual(["SPY", "QQQ"]);
+    expect(focusOnly(v1).tickers).toHaveLength(v1.tickers.length);
+  });
+
+  it("puts the day's limits in one line, a fresh day with no journal", () => {
+    const html = renderToStaticMarkup(createElement(DayBar, { doc: null, now: new Date("2026-10-19T14:00:00Z"), session: "2026-10-19" }));
+    expect(html).toContain("New day");
+    expect(html).toContain("0 of 5");
+    expect(html).toContain("$0 of $100");
   });
 });

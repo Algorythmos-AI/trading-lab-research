@@ -2,7 +2,7 @@ import { PageHeading } from "@/components/page-heading";
 import { TradeRulesFor } from "@/components/trade-rules";
 import { BoardTable, EditionPanel, HowToRead, NoOptions, PaperPanel, RulesPanel, StructurePanel, TickerCards } from "@/components/options";
 import { FocusScope, LiveQuotes } from "@/components/client/live-layer";
-import { FocusStrip } from "@/components/options-focus";
+import { DayBar, FocusStrip, focusOnly } from "@/components/options-focus";
 import { OptionsDesk } from "@/components/client/options-desk";
 import { OptionsGlance } from "@/components/client/options-glance";
 import { PaneBoundary } from "@/components/client/pane-boundary";
@@ -73,7 +73,7 @@ function ClassicOptions({ e, dates, date, now }: { e: Options; dates: string[]; 
   );
 }
 
-type Params = Record<"d" | "view" | "s" | "pane", string | string[] | undefined>;
+type Params = Record<"d" | "view" | "s" | "pane" | "all", string | string[] | undefined>;
 
 export default async function OptionsPage({ searchParams }: { searchParams: Promise<Params> }) {
   const sp = await searchParams;
@@ -92,7 +92,10 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
       </>
     );
   }
-  const e = result.edition;
+  const full = result.edition;
+  // While trading the desk shows only the focus names; ?all=1 brings back the whole board.
+  const showAll = one(sp.all) === "1";
+  const e = showAll ? full : focusOnly(full);
   const viewParam = one(sp.view);
   if (viewParam === "classic") return <ClassicOptions e={e} dates={dates} date={date} now={now} />;
 
@@ -110,9 +113,10 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
     <>
       <h1 className="sr-only">Options</h1>
       <OldCloseNotice e={e} />
-      {/* The one thing above the desk: the few names to watch, kept to a single short row on a laptop. */}
+      {/* Top of the trading screen: the day's limits, then the few names to watch, then the desk. */}
+      <DayBar doc={journal.status === "ok" ? journal.doc : null} now={now} session={e.session} />
       <PaneBoundary name="Today's focus">
-        <FocusStrip e={e} />
+        <FocusStrip e={full} />
       </PaneBoundary>
       <LiveQuotes symbols={e.tickers.map((t) => t.symbol).join(",")} session={e.session} enabled={!date}>
         <PaneBoundary name="The options desk">
@@ -137,6 +141,13 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
             stale={stale}
           />
         </PaneBoundary>
+        {full.focus?.items.length ? (
+          <p className="text-xs">
+            <a className="text-muted-foreground hover:text-foreground underline" href={showAll ? "/options" : "/options?all=1"}>
+              {showAll ? "Show only the focus names" : `Show all ${full.tickers.length} names`}
+            </a>
+          </p>
+        ) : null}
         <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-xs">
           <p className="max-w-prose">
             Levels for {weekDate(e.session)}, built from the {weekDate(e.built_from)} close. Source: {e.source ?? "not stated"}. Published{" "}
@@ -145,21 +156,33 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
           <EditionPicker dates={dates} current={e.session} base="/options" />
         </div>
         {/* Straight under the desk: the desk is built to fill one laptop screen, so nothing may sit above it. */}
-        <TradeRulesFor doc={journal.status === "ok" ? journal.doc : null} now={now} />
-        <section aria-label="Evidence and paper record" className="grid gap-5 lg:grid-cols-2">
+        {/* Folded: the day's limits already sit at the top; the full rules and their evidence are one click away. */}
+        <details className="rounded-lg border">
+          <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Rules before every trade (9)</summary>
+          <div className="p-2">
+            <TradeRulesFor doc={journal.status === "ok" ? journal.doc : null} now={now} />
+          </div>
+        </details>
+        <details className="rounded-lg border">
+          <summary className="text-muted-foreground cursor-pointer px-4 py-3 text-sm">
+            <span className="text-foreground font-semibold">Research and evidence</span> · entry rules on probation, paper scorecard, close strength,
+            what the testing found. Not needed to trade.
+          </summary>
+          <section aria-label="Evidence and paper record" className="grid gap-5 p-4 pt-0 lg:grid-cols-2">
           <PaneBoundary name="Entry rules">
-            <RulesPanel e={e} />
+            <RulesPanel e={full} />
           </PaneBoundary>
           <PaneBoundary name="Paper scorecard">
-            <PaperPanel e={e} />
+            <PaperPanel e={full} />
           </PaneBoundary>
           <PaneBoundary name="Close strength vs option price">
-            <StructurePanel e={e} />
+            <StructurePanel e={full} />
           </PaneBoundary>
           <PaneBoundary name="What the testing found">
-            <HowToRead e={e} />
+            <HowToRead e={full} />
           </PaneBoundary>
-        </section>
+          </section>
+        </details>
       </LiveQuotes>
     </>
   );
