@@ -160,7 +160,7 @@ export function JournalTiles({ s }: { s: Summary }) {
 
 export function CurvePanel({ days }: { days: DayRow[] }) {
   return (
-    <Panel id="curve" title="Running total" icon={ChartLine} means="Every closed trade added up, day by day. The shaded band underneath is how far the total stood below its best.">
+    <Panel id="curve" title="Running total" icon={ChartLine} means="Every closed trade added up, day by day. The shaded band above the line is how far the total stood below its best so far.">
       <PnlCurve points={days.map((d) => ({ day: d.day, pnl: d.pnl, cum: d.cum, dd: d.dd, trades: d.trades }))} />
     </Panel>
   );
