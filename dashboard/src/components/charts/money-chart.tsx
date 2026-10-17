@@ -5,11 +5,12 @@ import { ChartContainer, ChartLegendList, ChartTooltipBox, type ChartConfig } fr
 import { shortDay, type MoneyPoint } from "@/lib/journal";
 
 const CONFIG: ChartConfig = {
-  netIn: { label: "Put in, less taken out", color: "var(--chart-2)" },
+  putIn: { label: "Put in", color: "var(--chart-3)" },
+  takenOut: { label: "Taken out", color: "var(--chart-2)" },
   value: { label: "Account value", color: "var(--chart-1)" },
 };
 
-/** What was put into the account over time (a step at each transfer) against what the account was worth. */
+/** What was put into and taken out of the account over time (a step at each transfer) against what it was worth. */
 export function MoneyChart({ points, symbol }: { points: MoneyPoint[]; symbol: string }) {
   const money = (v: unknown, digits = 0) => {
     const n = typeof v === "number" ? v : Number(v);
@@ -27,7 +28,7 @@ export function MoneyChart({ points, symbol }: { points: MoneyPoint[]; symbol: s
   const tick = (t: number) => shortDay(new Date(t).toISOString().slice(0, 10));
   return (
     <div>
-      <ChartContainer config={CONFIG} className="h-56 sm:h-64" aria-label="Money put into the account, less money taken out, against the account's value, by day">
+      <ChartContainer config={CONFIG} className="h-56 sm:h-64" aria-label="Money put into the account and money taken out, against the account's value, by day">
         <ComposedChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
           <CartesianGrid vertical={false} />
           <XAxis dataKey="t" type="number" scale="time" domain={["dataMin", "dataMax"]} tickLine={false} axisLine={false} tickMargin={8} minTickGap={48} tickFormatter={tick} />
@@ -40,14 +41,17 @@ export function MoneyChart({ points, symbol }: { points: MoneyPoint[]; symbol: s
                 <ChartTooltipBox
                   title={shortDay(d.date)}
                   rows={[
-                    { key: "netIn", name: "Put in, less taken out", value: money(d.netIn), color: "var(--color-netIn)" },
+                    { key: "putIn", name: "Put in", value: money(d.putIn), color: "var(--color-putIn)" },
+                    { key: "takenOut", name: "Taken out", value: money(d.takenOut), color: "var(--color-takenOut)" },
+                    { key: "netIn", name: "Put in, less taken out", value: money(d.netIn) },
                     { key: "value", name: "Account value", value: d.value === null ? "not recorded" : money(d.value), color: "var(--color-value)" },
                   ]}
                 />
               ) : null;
             }}
           />
-          <Line dataKey="netIn" type="stepAfter" stroke="var(--color-netIn)" strokeWidth={2} dot={false} activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--card)" }} isAnimationActive={false} />
+          <Line dataKey="putIn" type="stepAfter" stroke="var(--color-putIn)" strokeWidth={2} dot={false} activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--card)" }} isAnimationActive={false} />
+          <Line dataKey="takenOut" type="stepAfter" stroke="var(--color-takenOut)" strokeWidth={2} dot={false} activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--card)" }} isAnimationActive={false} />
           <Line dataKey="value" type="linear" stroke="var(--color-value)" strokeWidth={2} dot={{ r: 2 }} connectNulls activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--card)" }} isAnimationActive={false} />
         </ComposedChart>
       </ChartContainer>
