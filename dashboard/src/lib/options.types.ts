@@ -69,6 +69,10 @@ export interface OptionsEdition {
       h: number;
       l: number;
       c: number;
+      /**
+       * Shares traded in the bar, when the source has it.
+       */
+      v?: number;
     }[];
     /**
      * @maxItems 24

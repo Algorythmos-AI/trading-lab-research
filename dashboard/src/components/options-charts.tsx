@@ -15,6 +15,7 @@ import {
   type Finding,
   type OptionsRule,
   type OptionsTicker,
+  type MapZone,
   type roomView, zoneKey } from "@/lib/options";
 import { shortCount, type Interest } from "@/lib/oi";
 import { cn } from "@/lib/utils";
@@ -88,27 +89,31 @@ export function RoomBar({
   );
 }
 
-// Level map geometry, in viewBox units.
-const W = 496;
-const H = 300;
-const TOP = 12;
-const BOTTOM = H - 22;
+// Level map geometry, in viewBox units. Candles fill the plot; the expected move gets a narrow gutter after the
+// last candle; the price axis, with one tag a level, runs down the right edge as on a broker's chart.
+const W = 640;
+const H = 340;
+const TOP = 10;
 const X0 = 4;
-const X1 = 292;
-const XD = 314;
-const XW = 340;
-const LX = 350;
-const LABEL_GAP = 27;
-/** Zones labelled each side of the close; the rest are drawn unlabelled and listed under the chart. */
-const LABELS_EACH_SIDE = 3;
+const X1 = 536;
+const XD = 552;
+const XW = 568;
+/** The price axis: tags start here and run to the right edge. */
+const AX = 574;
+const TAG_H = 14;
+/** Height kept under the candles for volume, when the bars carry it. */
+const VOL_H = 40;
+/** Levels tagged each side of the close; the rest are drawn as faint lines and listed under the chart. */
+const LABELS_EACH_SIDE = 2;
 
 /**
- * Recent daily candles with every nearby zone as a band (stronger when more timeframes agree), the close, and the
- * options market's expected move as a cone into the next day and the week. Candles stay grey so colour only ever
- * means support (green) or resistance (red).
+ * Recent candles, each nearby zone as one thin line at the edge price meets first (with a faint band behind it for
+ * the zone's width), the close, and the options market's expected move as a cone into the next day and the week.
+ * Green and red candles, as on a broker's chart; the price axis on the right carries a tag at the close and at the
+ * nearest two levels each side, so the numbers that matter are read where a trader looks for them.
  *
- * The zones, the candles, the expected move and the labels are each a layer (`data-layer`), so a wrapper can hide
- * one with `data-hide`. With `interactive` the map carries a crosshair that reads a price off it.
+ * The zones, the candles, the expected move and the tags are each a layer (`data-layer`), so a wrapper can hide one
+ * with `data-hide`. With `interactive` the map carries a crosshair that reads a price and a candle off it.
  */
 /** Where the contract being priced breaks even at expiry, for the level map to draw. */
 export interface BreakevenMark {
@@ -118,8 +123,8 @@ export interface BreakevenMark {
 
 /** How long the longest open-interest bar is drawn, in the map's units. */
 const OI_BAR = 54;
-/** Where the bars start: past the price scale's labels at the left edge. */
-const OI_X = X0 + 34;
+/** Where the bars start: clear of the plot's left edge. */
+const OI_X = X0 + 6;
 
 export function LevelMap({
   t,
@@ -148,57 +153,68 @@ export function LevelMap({
   const v = mapView(t);
   const close = t.last?.close;
   if (!v || !isNum(close)) return null;
+  const n = v.bars.length;
+  const vols = v.bars.map((b) => (isNum(b.v) && b.v >= 0 ? b.v : null));
+  const hasVol = vols.some((x) => x !== null && x > 0);
+  const BOTTOM = H - 20 - (hasVol ? VOL_H : 0);
   const y = (p: number) => TOP + ((v.hi - p) / (v.hi - v.lo)) * (BOTTOM - TOP);
-  const step = niceStep(v.hi - v.lo, 5);
+  const step = niceStep(v.hi - v.lo, 6);
   const ticks: number[] = [];
   for (let p = Math.ceil(v.lo / step) * step; p <= v.hi; p += step) ticks.push(p);
-  const n = v.bars.length;
   const bw = n > 0 ? (X1 - X0) / n : 0;
   const upTo = unit === "hourly" && closeDay ? v.bars.findLastIndex((b) => b.d.slice(0, 10) <= closeDay) : n - 1;
   const xLast = n > 0 ? X0 + bw * (Math.max(upTo, 0) + 0.5) : X1;
   const bands = moveBands(t);
-  // Hourly candles are dated once a session, and not where the date would sit on the one before it.
+  const most = Math.max(1, ...vols.map((x) => x ?? 0));
+  // Dates under the candles: hourly ones once a session, daily ones about every two weeks, never crowded.
   const dated = new Set<number>();
-  if (unit === "hourly") {
+  {
     let lastX = -Infinity;
     v.bars.forEach((b, i) => {
-      const x = i === 0 ? X0 + 16 : X0 + bw * (i + 0.5);
-      if ((i === 0 || b.d.slice(0, 10) !== v.bars[i - 1]!.d.slice(0, 10)) && x - lastX >= 36) {
+      const x = X0 + bw * (i + 0.5);
+      const due = unit === "hourly" ? i === 0 || b.d.slice(0, 10) !== v.bars[i - 1]!.d.slice(0, 10) : i % 10 === 0;
+      if (due && x - lastX >= 44 && x <= X1 - 20) {
         dated.add(i);
         lastX = x;
       }
     });
   }
 
+  // Each zone is drawn at the edge price reaches first: the bottom of one above, the top of one below.
+  const edge = ({ zone, tone }: MapZone) => (tone === "resistance" ? zone.lo : zone.hi);
+  const toneColor = (tone: MapZone["tone"]) => (tone === "support" ? "var(--good)" : "var(--bad)");
   const above = v.zones.filter((z) => z.tone === "resistance").sort((a, b) => a.zone.lo - b.zone.lo).slice(0, LABELS_EACH_SIDE);
   const below = v.zones.filter((z) => z.tone === "support").sort((a, b) => b.zone.hi - a.zone.hi).slice(0, LABELS_EACH_SIDE);
-  const labels = [
-    ...[...above, ...below].map(({ zone, tone }) => ({
-      y: y((zone.lo + zone.hi) / 2),
-      text: zone.lo === zone.hi ? num(zone.lo, 2) : `${num(zone.lo, 2)}–${num(zone.hi, 2)}`,
-      sub: `${(zone.members ?? []).join(" + ")}${zone.weight != null ? ` · w${zone.weight}` : ""}`,
-      color: tone === "support" ? "var(--good)" : "var(--bad)",
-      strong: Boolean(zone.big),
+  const tagged = new Set([...above, ...below]);
+  const tags = [
+    ...[...above, ...below].map((z) => ({
+      y: y(edge(z)),
+      text: num(edge(z), 2),
+      title: `${z.tone === "support" ? "Support" : "Resistance"} ${z.zone.lo === z.zone.hi ? num(z.zone.lo, 2) : `${num(z.zone.lo, 2)} to ${num(z.zone.hi, 2)}`}: ${(z.zone.members ?? []).join(" + ")}`,
+      fill: toneColor(z.tone),
+      ink: "var(--card)",
     })),
     {
       y: y(close),
-      text: `Close ${num(close, 2)}`,
-      sub: t.close_strength?.chip ? (CHIP_LABEL[t.close_strength.chip] ?? "") : "",
-      color: "var(--foreground)",
-      strong: true,
+      text: num(close, 2),
+      title: `Close ${num(close, 2)}${t.close_strength?.chip ? `, ${(CHIP_LABEL[t.close_strength.chip] ?? "").toLowerCase()}` : ""}`,
+      fill: "var(--foreground)",
+      ink: "var(--card)",
     },
   ];
   const placed = spreadLabels(
-    labels.map((l) => l.y),
-    LABEL_GAP,
-    TOP + 4,
-    H - 10,
+    tags.map((l) => l.y),
+    TAG_H + 1,
+    TOP + TAG_H / 2,
+    BOTTOM - TAG_H / 2,
   );
+  // Axis prices give way to a tag sitting on them.
+  const freeTicks = ticks.filter((p) => placed.every((ty) => Math.abs(ty - y(p)) > TAG_H - 2));
 
   return (
     <MapFrame
       t={{ ...t, bars: undefined }}
-      label={`${t.symbol}: last ${n} ${unit} bars with support and resistance zones and the expected move`}
+      label={`${t.symbol}: last ${n} ${unit} bars with support and resistance levels and the expected move`}
       w={W}
       h={H}
       top={TOP}
@@ -210,63 +226,87 @@ export function LevelMap({
       zones={v.zones}
       interactive={interactive}
       onZone={onZone}
+      candles={n > 0 ? { x0: X0, bw, bars: v.bars.map((b) => ({ d: unit === "hourly" ? `${b.d.replace("T", " ")} ET` : b.d, o: b.o, h: b.h, l: b.l, c: b.c })) } : undefined}
     >
         {ticks.map((p) => (
-          <g key={p}>
-            <line x1={X0} x2={XW} y1={y(p)} y2={y(p)} stroke="var(--chart-grid)" strokeWidth={1} />
-            <text x={X0 + 2} y={y(p) - 3} fontSize={10.5} style={{ fill: "var(--muted-foreground)" }} className="font-mono">
-              {num(p, step < 1 ? 2 : 0)}
-            </text>
-          </g>
+          <line key={p} x1={X0} x2={XW} y1={y(p)} y2={y(p)} stroke="var(--chart-grid)" strokeWidth={0.75} />
+        ))}
+        <line x1={AX - 2} x2={AX - 2} y1={TOP} y2={H - 20} stroke="var(--chart-grid)" strokeWidth={1} />
+        {freeTicks.map((p) => (
+          <text key={p} x={AX + 4} y={y(p) + 3.5} fontSize={10} style={{ fill: "var(--muted-foreground)" }} className="font-mono">
+            {num(p, step < 1 ? 2 : 0)}
+          </text>
         ))}
         <g data-layer="zones">
-          {v.zones.map(({ zone, tone }, i) => {
+          {v.zones.map((z, i) => {
+            const { zone, tone } = z;
             const y1 = y(zone.hi);
-            const h = Math.max(3, y(zone.lo) - y1);
-            const fill = tone === "support" ? "var(--good-fill)" : "var(--bad-fill)";
+            const h = Math.max(0, y(zone.lo) - y1);
             const key = zoneKey(zone);
+            const hot = hotZone === key;
+            const color = toneColor(tone);
+            const at = y(edge(z));
             return (
-              <rect
-                key={i}
-                data-zone={key}
-                data-hot={hotZone === key ? "" : undefined}
-                stroke={hotZone === key ? "var(--foreground)" : "none"}
-                strokeWidth={1.25}
-                x={X0}
-                y={h === 3 ? y1 - 1.5 : y1}
-                width={XW - X0}
-                height={h}
-                fill={fill}
-                fillOpacity={Math.min(0.5, 0.08 + 0.07 * (zone.weight ?? 1))}
-              >
-                <title>
-                  {`${tone === "support" ? "Support" : "Resistance"} ${num(zone.lo, 2)}${zone.lo === zone.hi ? "" : `–${num(zone.hi, 2)}`}: ${(zone.members ?? []).join(" + ")}`}
-                </title>
-              </rect>
+              <g key={i}>
+                <rect
+                  data-zone={key}
+                  data-hot={hot ? "" : undefined}
+                  x={X0}
+                  y={h < 4 ? at - 2 : y1}
+                  width={XW - X0}
+                  height={Math.max(4, h)}
+                  fill={color}
+                  fillOpacity={hot ? 0.22 : h < 4 ? 0 : 0.06}
+                  stroke={hot ? color : "none"}
+                  strokeOpacity={0.6}
+                >
+                  <title>
+                    {`${tone === "support" ? "Support" : "Resistance"} ${num(zone.lo, 2)}${zone.lo === zone.hi ? "" : `–${num(zone.hi, 2)}`}: ${(zone.members ?? []).join(" + ")}`}
+                  </title>
+                </rect>
+                <line
+                  x1={X0}
+                  x2={AX - 2}
+                  y1={at}
+                  y2={at}
+                  stroke={color}
+                  strokeWidth={tagged.has(z) || hot ? 1.25 : 1}
+                  strokeOpacity={tagged.has(z) || hot ? 0.9 : 0.35}
+                  strokeDasharray={tagged.has(z) || hot ? undefined : "2 3"}
+                  pointerEvents="none"
+                />
+                {tagged.has(z) && (zone.members ?? []).length > 0 ? (
+                  <text
+                    x={X0 + 3}
+                    y={at - 3}
+                    fontSize={9}
+                    pointerEvents="none"
+                    style={{ fill: color, paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 3 }}
+                    className="font-mono"
+                  >
+                    {(zone.members ?? []).slice(0, 3).join(" · ")}
+                  </text>
+                ) : null}
+              </g>
             );
           })}
         </g>
         <g data-layer="candles">
           {v.bars.map((b, i) => {
             const cx = X0 + bw * (i + 0.5);
-            const up = b.c >= b.o;
+            const color = b.c >= b.o ? "var(--good)" : "var(--bad)";
             const top = y(Math.max(b.o, b.c));
+            const vol = vols[i] ?? null;
             return (
               <g key={b.d}>
-                <title>{`${unit === "hourly" ? `${b.d.replace("T", " ")} ET` : b.d}  O ${num(b.o, 2)}  H ${num(b.h, 2)}  L ${num(b.l, 2)}  C ${num(b.c, 2)}`}</title>
-                <line x1={cx} x2={cx} y1={y(b.h)} y2={y(b.l)} stroke="var(--muted-foreground)" strokeWidth={1} />
-                <rect
-                  x={cx - bw * 0.32}
-                  y={top}
-                  width={bw * 0.64}
-                  height={Math.max(1.2, Math.abs(y(b.o) - y(b.c)))}
-                  rx={0.8}
-                  fill={up ? "var(--card)" : "var(--muted-foreground)"}
-                  stroke="var(--muted-foreground)"
-                  strokeWidth={1}
-                />
-                {(unit === "hourly" ? dated.has(i) : i % 10 === 0 || i === n - 1) ? (
-                  <text x={i === 0 ? X0 : cx} y={H - 6} fontSize={10.5} textAnchor={i === 0 ? "start" : "middle"} style={{ fill: "var(--muted-foreground)" }} className="font-mono">
+                <title>{`${unit === "hourly" ? `${b.d.replace("T", " ")} ET` : b.d}  O ${num(b.o, 2)}  H ${num(b.h, 2)}  L ${num(b.l, 2)}  C ${num(b.c, 2)}${vol !== null ? `  Vol ${shortCount(vol)}` : ""}`}</title>
+                <line x1={cx} x2={cx} y1={y(b.h)} y2={y(b.l)} stroke={color} strokeWidth={1} />
+                <rect x={cx - bw * 0.36} y={top} width={bw * 0.72} height={Math.max(1, Math.abs(y(b.o) - y(b.c)))} fill={color} />
+                {hasVol && vol !== null ? (
+                  <rect x={cx - bw * 0.36} y={H - 20 - (vol / most) * (VOL_H - 6)} width={bw * 0.72} height={(vol / most) * (VOL_H - 6)} fill={color} fillOpacity={0.35} />
+                ) : null}
+                {dated.has(i) ? (
+                  <text x={i === 0 ? X0 : cx} y={H - 6} fontSize={10} textAnchor={i === 0 ? "start" : "middle"} style={{ fill: "var(--muted-foreground)" }} className="font-mono">
                     {b.d.slice(5, 10)}
                   </text>
                 ) : null}
@@ -289,33 +329,33 @@ export function LevelMap({
                   : `${xLast},${y(close)} ${XD},${y(bands.day[1])} ${XD},${y(bands.day[0])}`
               }
               fill="var(--info-fill)"
-              fillOpacity={0.14}
+              fillOpacity={0.12}
               stroke="var(--info-fill)"
-              strokeOpacity={0.5}
+              strokeOpacity={0.45}
             />
             <line x1={XD} x2={XD} y1={y(bands.day[1])} y2={y(bands.day[0])} stroke="var(--info-fill)" strokeWidth={2} />
-            <text x={XD} y={y(bands.day[1]) - 5} fontSize={10.5} textAnchor="middle" style={{ fill: "var(--info)" }} className="font-mono">
+            <text x={XD} y={y(bands.day[1]) - 4} fontSize={9.5} textAnchor="middle" style={{ fill: "var(--info)" }} className="font-mono">
               1d
             </text>
             {bands.week ? (
-              <text x={XW - 2} y={y(bands.week[1]) - 5} fontSize={10.5} textAnchor="end" style={{ fill: "var(--info)" }} className="font-mono">
+              <text x={XW} y={y(bands.week[1]) - 4} fontSize={9.5} textAnchor="end" style={{ fill: "var(--info)" }} className="font-mono">
                 1w
               </text>
             ) : null}
           </g>
         ) : null}
         {interest ? (
-          // Bars at the strikes with the most open contracts, starting clear of the price scale: filled for calls
-          // above the strike's line, outlined for puts below it, each as long as its share of the largest, with one
-          // label a strike. Blue, as everything from the option market is.
+          // Bars at the strikes with the most open contracts: filled for calls above the strike's line, outlined for
+          // puts below it, each as long as its share of the largest, with one label a strike. Blue, as everything
+          // from the option market is.
           <g data-layer="oi" data-interest={interest.marks.filter((m) => m.strike >= v.lo && m.strike <= v.hi).length}>
             {(() => {
               const shown = interest.marks.filter((m) => m.strike >= v.lo && m.strike <= v.hi);
-              const most = Math.max(1, ...shown.map((m) => m.oi));
+              const top = Math.max(1, ...shown.map((m) => m.oi));
               const strikes = [...new Set(shown.map((m) => m.strike))];
               return strikes.map((strike) => {
                 const here = shown.filter((m) => m.strike === strike).sort((p, q) => (p.kind === q.kind ? 0 : p.kind === "call" ? -1 : 1));
-                const len = (m: (typeof here)[number]) => Math.max(4, (m.oi / most) * OI_BAR);
+                const len = (m: (typeof here)[number]) => Math.max(4, (m.oi / top) * OI_BAR);
                 return (
                   <g key={strike}>
                     <title>{`${here.map((m) => `${num(m.oi)} open ${m.kind}s`).join(" and ")} at ${num(strike, strike % 1 === 0 ? 0 : 2)}${interest.asOf ? `, as of ${interest.asOf}` : ""}`}</title>
@@ -355,7 +395,7 @@ export function LevelMap({
               <line x1={X0} x2={XW} y1={y(breakeven.price)} y2={y(breakeven.price)} stroke="var(--info)" strokeWidth={1.5} strokeDasharray="7 3 2 3" />
             ) : null}
             <text
-              x={X0 + 48}
+              x={X0 + 6}
               y={breakeven.price > v.hi ? TOP + 11 : breakeven.price < v.lo ? BOTTOM - 5 : y(breakeven.price) < TOP + 15 ? y(breakeven.price) + 12 : y(breakeven.price) - 4}
               fontSize={10.5}
               style={{ fill: "var(--info)", paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 3 }}
@@ -365,18 +405,17 @@ export function LevelMap({
             </text>
           </g>
         ) : null}
-        <line x1={X0} x2={XW} y1={y(close)} y2={y(close)} stroke="var(--foreground)" strokeOpacity={0.7} strokeDasharray="4 3" />
-        <circle cx={xLast} cy={y(close)} r={4} fill="var(--foreground)" stroke="var(--card)" strokeWidth={2} />
+        <line x1={X0} x2={AX - 2} y1={y(close)} y2={y(close)} stroke="var(--foreground)" strokeOpacity={0.55} strokeDasharray="3 3" />
+        <circle cx={xLast} cy={y(close)} r={3} fill="var(--foreground)" stroke="var(--card)" strokeWidth={1.5} />
         <LiveMapMark t={{ ...t, bars: undefined }} lo={v.lo} hi={v.hi} top={TOP} bottom={BOTTOM} xFrom={xLast} xTo={XD} lineFrom={X0} lineTo={XW} />
         <g data-layer="labels">
-          {labels.map((l, i) => (
+          {tags.map((l, i) => (
             <g key={i}>
-              <path d={`M${XW} ${l.y} L${LX - 4} ${placed[i]! - 3}`} stroke={l.color} strokeOpacity={0.5} fill="none" />
-              <text x={LX} y={placed[i]! - 1} fontSize={12.5} fontWeight={l.strong ? 600 : 400} style={{ fill: l.color }} className="font-mono">
+              <title>{l.title}</title>
+              {Math.abs(placed[i]! - l.y) > 1 ? <path d={`M${AX - 2} ${l.y} L${AX + 2} ${placed[i]!}`} stroke={l.fill} strokeOpacity={0.7} fill="none" /> : null}
+              <rect x={AX} y={placed[i]! - TAG_H / 2} width={W - AX - 1} height={TAG_H} rx={2} fill={l.fill} />
+              <text x={AX + 4} y={placed[i]! + 3.5} fontSize={10.5} fontWeight={600} style={{ fill: l.ink }} className="font-mono">
                 {l.text}
-              </text>
-              <text x={LX} y={placed[i]! + 11} fontSize={10} style={{ fill: "var(--muted-foreground)" }} className="font-mono">
-                {l.sub}
               </text>
             </g>
           ))}

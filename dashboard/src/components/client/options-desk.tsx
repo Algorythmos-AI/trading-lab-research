@@ -323,7 +323,8 @@ export function OptionsDesk({
   const [sort, setSort] = useState<{ view: DeskView; key: string; dir: "asc" | "desc" } | null>(null);
   const [help, setHelp] = useState(false);
   const [palette, setPalette] = useState(false);
-  const [hiddenLayers, setHiddenLayers] = useState<ReadonlySet<MapLayer>>(new Set());
+  // The map opens clean: candles, levels and their tags. The expected-move cone and open interest are a click away.
+  const [hiddenLayers, setHiddenLayers] = useState<ReadonlySet<MapLayer>>(() => new Set<MapLayer>(["move", "oi"]));
   const [density, flipDensity] = useDensity();
   const agree = live ? agreement(positions, e) : null;
   const [mapRange, setMapRange] = useState<"daily" | "hourly">("daily");

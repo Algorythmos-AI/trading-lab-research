@@ -319,6 +319,11 @@
                 },
                 "c": {
                   "type": "number"
+                },
+                "v": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "Shares traded in the bar, when the source has it."
                 }
               }
             }

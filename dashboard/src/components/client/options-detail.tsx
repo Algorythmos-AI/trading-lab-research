@@ -188,9 +188,9 @@ export function OptionsDetail({
         </span>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_15rem]">
+      <div className="grid gap-4">
         {hasMap ? (
-          <div className="mx-auto grid w-full max-w-2xl content-start gap-1.5">
+          <div className="grid w-full content-start gap-1.5">
             <div role="group" aria-label="Map layers" className="flex flex-wrap items-center gap-1">
               <span className="text-muted-foreground mr-1 text-[0.6875rem]">Show</span>
               {layers.map((k) => (
@@ -247,7 +247,7 @@ export function OptionsDetail({
         )}
 
         {/* Research, folded: the probation rules are not a signal, so they stay one click away while trading. */}
-        <details aria-label={`${t.symbol} rules`} className="self-start xl:border-l xl:pl-4">
+        <details aria-label={`${t.symbol} rules`} className="self-start">
           <summary className="cursor-pointer text-[0.8125rem] font-medium">Rules on this name (research)</summary>
           <p className="text-muted-foreground text-[0.6875rem]">
             {paper.n === 0
