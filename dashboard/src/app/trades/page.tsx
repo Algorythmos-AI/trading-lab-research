@@ -6,6 +6,7 @@ import {
   JournalFilters,
   JournalTiles,
   LessonsPanel,
+  MoneyPanel,
   MonthsPanel,
   NoJournal,
   TodayPanel,
@@ -15,7 +16,7 @@ import { Empty } from "@/components/empty";
 import { PageHeading } from "@/components/page-heading";
 import { Notice } from "@/components/ui/notice";
 import { newYork } from "@/lib/format";
-import { applyFilter, contractLabel, daily, groupBy, journalStale, lessons, marketState, parseFilter, sessionView, shortDay, summarize, yearsOf, type JournalDoc } from "@/lib/journal";
+import { applyFilter, contractLabel, daily, groupBy, journalStale, lessons, marketState, moneyView, parseFilter, sessionView, shortDay, summarize, yearsOf, type JournalDoc } from "@/lib/journal";
 import { loadJournal, pageTime } from "@/lib/snapshot";
 
 export const dynamic = "force-dynamic";
@@ -71,6 +72,7 @@ function JournalBody({ doc, q, now }: { doc: JournalDoc; q: Record<string, strin
         </Notice>
       ) : null}
       {session ? <TodayPanel view={session} asOf={doc.as_of} now={now} market={marketState(now)} /> : null}
+      {doc.money ? <MoneyPanel m={moneyView(doc.money, all.reduce((sum, t) => sum + t.pnl, 0))} /> : null}
       <JournalFilters filter={filter} years={yearsOf(all)} symbols={symbols.sort()} />
       {trades.length === 0 ? (
         <Empty title="No trades in this view">Pick another period, ticker or kind.</Empty>

@@ -14,6 +14,7 @@ import {
   journalStale,
   lessons,
   marketState,
+  moneyView,
   parseFilter,
   sessionView,
   summarize,
@@ -233,5 +234,55 @@ describe("the session", () => {
 
   it("returns nothing for an empty journal", () => {
     expect(sessionView({ trades: [], open: [] }, new Date("2026-10-16T14:00:00Z"))).toBeNull();
+  });
+});
+
+describe("money in and out", () => {
+  const money = {
+    currency: "AUD",
+    as_of: "2026-10-16T21:05:00Z",
+    account_value: 5240,
+    usd_rate: 1.5,
+    complete_from: "2025-01-02",
+    transfers: [
+      { date: "2025-01-02", amount: 5000, source: "statement" as const },
+      { date: "2025-11-03", amount: -1500, source: "statement" as const },
+      { date: "2026-10-14", amount: 500, source: "detected" as const },
+    ],
+    values: [{ date: "2026-10-15", value: 5240 }],
+  };
+
+  it("adds up what went in and out and compares it with the value", () => {
+    const m = moneyView(money, -100);
+    expect(m.deposits).toBe(5500);
+    expect(m.withdrawals).toBe(1500);
+    expect(m.netIn).toBe(4000);
+    expect(m.gain).toBe(1240);
+    expect(m.gainPct).toBeCloseTo(0.31);
+    expect(m.tradingLocal).toBe(-150);
+    expect(m.complete).toBe(true);
+    expect(m.transfers[0]!.date).toBe("2026-10-14");
+  });
+
+  it("steps the amount put in at each transfer and carries the value where recorded", () => {
+    const m = moneyView(money, 0);
+    expect(m.series.map((p) => [p.date, p.netIn, p.value])).toEqual([
+      ["2025-01-02", 5000, null],
+      ["2025-11-03", 3500, null],
+      ["2026-10-14", 4000, null],
+      ["2026-10-15", 4000, 5240],
+    ]);
+  });
+
+  it("gives no gain before anything has been put in", () => {
+    const m = moneyView({ ...money, transfers: [], complete_from: null }, 0);
+    expect(m.gain).toBeNull();
+    expect(m.complete).toBe(false);
+  });
+
+  it("accepts a journal with money and refuses an unknown field in it", () => {
+    expect(validateJournal(fixtureDoc).ok).toBe(true);
+    const bad = { ...fixtureDoc, money: { ...money, balance_by_account: 1 } };
+    expect(validateJournal(bad).ok).toBe(false);
   });
 });

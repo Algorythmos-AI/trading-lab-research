@@ -1,7 +1,8 @@
 // The Trades page's panels. Server-rendered; the charts and the table are the only client parts.
-import { Activity, CalendarDays, ChartColumn, ChartLine, Clock, Hourglass, Inbox, Layers, Lightbulb, ListOrdered, Target, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import { Activity, ArrowDownToLine, ArrowUpFromLine, CalendarDays, ChartColumn, ChartLine, Clock, Hourglass, Inbox, Landmark, Layers, Lightbulb, ListOrdered, Scale, Target, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import Link from "next/link";
 import { DivergingBars } from "@/components/charts/diverging-bars";
+import { MoneyChart } from "@/components/charts/money-chart";
 import { MonthBars } from "@/components/charts/month-bars";
 import { PnlCurve } from "@/components/charts/pnl-curve";
 import { JournalTable, type JournalRow } from "@/components/client/journal-table";
@@ -30,6 +31,7 @@ import {
   weekdayKey,
   type DayRow,
   type MarketState,
+  type MoneyView,
   type SessionView,
   type Filter,
   type GroupRow,
@@ -252,6 +254,65 @@ export function TodayPanel({ view, asOf, now, market }: { view: SessionView; asO
           </p>
         ) : null}
         <p className="text-muted-foreground text-xs">Times are New York. The broker is read every two minutes from 9:24 to 16:20 New York on weekdays, and once more after the close.</p>
+      </div>
+    </Panel>
+  );
+}
+
+// ── Money in and out ─────────────────────────────────────────────────────────────────────────────────────────────
+
+const CURRENCY_SYMBOL: Record<string, string> = { AUD: "A$", USD: "US$" };
+
+export function MoneyPanel({ m }: { m: MoneyView }) {
+  const sym = CURRENCY_SYMBOL[m.currency] ?? `${m.currency} `;
+  const amt = (v: number | null, signed = false) => {
+    if (v === null || !Number.isFinite(v)) return "—";
+    const s = `${sym}${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+    return signed ? `${v > 0 ? "+\u2060" : v < 0 ? "−\u2060" : ""}${s}` : v < 0 ? `−\u2060${s}` : s;
+  };
+  const shown = m.transfers.slice(0, 8);
+  return (
+    <Panel id="money" title="Money in and out" icon={Landmark} means={`What you have put into the account and taken out, against what it is worth now. In ${m.currency === "AUD" ? "Australian dollars" : m.currency}, the account's own currency.`}>
+      <div className="grid gap-4">
+        {!m.complete ? (
+          <p className="text-warn text-xs" role="status">
+            Deposits and withdrawals before the dashboard started recording are not in yet. They are added once your Webull transfer history is loaded; until then the totals below cover only what has been recorded.
+          </p>
+        ) : null}
+        <StatTiles className="lg:grid-cols-4">
+          <StatTile label="Put in" icon={ArrowDownToLine} value={amt(m.deposits)} hint={`${m.depositCount} deposit${m.depositCount === 1 ? "" : "s"}`} />
+          <StatTile label="Taken out" icon={ArrowUpFromLine} value={amt(m.withdrawals)} hint={`${m.withdrawalCount} withdrawal${m.withdrawalCount === 1 ? "" : "s"}`} />
+          <StatTile label="Worth now" icon={Wallet} value={amt(m.value)} hint={m.netIn > 0 ? `Against ${amt(m.netIn)} put in, less taken out` : undefined} />
+          <StatTile
+            label="Up or down on it"
+            icon={Scale}
+            tone={toneOf(m.gain)}
+            value={amt(m.gain, true)}
+            hint={m.gainPct === null ? "Needs the full transfer history" : `${m.gainPct >= 0 ? "+" : "−"}${Math.abs(Math.round(m.gainPct * 100))}% of the money put in, after fees`}
+          />
+        </StatTiles>
+        {m.series.length >= 2 ? <MoneyChart points={m.series} symbol={sym} /> : null}
+        {shown.length ? (
+          <ul className="grid" aria-label="Deposits and withdrawals, newest first">
+            {shown.map((t, i) => (
+              <li key={`${t.date}-${i}`} className="flex items-center justify-between gap-3 py-1.5 text-[0.8125rem] not-last:border-b">
+                <span className="grid min-w-0 leading-tight">
+                  <span className="font-medium">{t.amount >= 0 ? "Deposit" : "Withdrawal"}</span>
+                  <span className="text-muted-foreground text-xs">
+                    {shortDay(t.date)} · {t.source === "statement" ? "from your Webull records" : "found from the account value"}
+                  </span>
+                </span>
+                <span className={cn("shrink-0 font-mono font-semibold whitespace-nowrap", t.amount >= 0 ? "text-good" : "text-bad")}>{amt(t.amount, true)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-muted-foreground text-sm">No deposits or withdrawals recorded yet.</p>
+        )}
+        <p className="text-muted-foreground text-xs">
+          The account value is read from Webull after every close. A change in it that your trades do not explain is logged as a deposit or withdrawal.
+          {m.tradingLocal !== null ? ` Your closed trades come to about ${amt(m.tradingLocal, true)} at today's exchange rate, before fees.` : ""}
+        </p>
       </div>
     </Panel>
   );

@@ -622,3 +622,80 @@ export function sessionView(doc: Pick<JournalDoc, "trades" | "open">, now: Date)
   trades = [...trades].sort((a, b) => b.closed_at.localeCompare(a.closed_at) || a.id.localeCompare(b.id));
   return { day, isToday: day === today, trades, summary: summarize(trades), open };
 }
+
+// ── Money in and out ─────────────────────────────────────────────────────────────────────────────────────────────
+
+export type Money = NonNullable<JournalDoc["money"]>;
+
+export interface MoneyPoint {
+  date: string;
+  /** Everything put in less everything taken out, up to and including this day. */
+  netIn: number;
+  /** The account's value at the end of this day, when it was recorded. */
+  value: number | null;
+}
+
+export interface MoneyView {
+  currency: string;
+  deposits: number;
+  depositCount: number;
+  withdrawals: number;
+  withdrawalCount: number;
+  netIn: number;
+  value: number | null;
+  /** What the account is worth over what was put in: zero or more is ahead. Null without a value or with nothing put in. */
+  gain: number | null;
+  gainPct: number | null;
+  /** The trading result in the account's currency at today's rate; null without a rate. */
+  tradingLocal: number | null;
+  /** True when the transfer list is known to be complete. */
+  complete: boolean;
+  /** Transfers newest first. */
+  transfers: Money["transfers"];
+  series: MoneyPoint[];
+}
+
+/** Totals and a day-by-day series from the published money block and the trading result in US dollars. */
+export function moneyView(m: Money, tradingUsd: number): MoneyView {
+  let deposits = 0;
+  let withdrawals = 0;
+  let depositCount = 0;
+  let withdrawalCount = 0;
+  for (const t of m.transfers) {
+    if (t.amount > 0) {
+      deposits += t.amount;
+      depositCount++;
+    } else if (t.amount < 0) {
+      withdrawals -= t.amount;
+      withdrawalCount++;
+    }
+  }
+  const netIn = deposits - withdrawals;
+  const value = isNum(m.account_value) ? m.account_value : null;
+  const gain = value !== null && netIn > 0 ? value - netIn : null;
+  const days = new Map<string, { flow: number; value: number | null }>();
+  for (const t of m.transfers) days.set(t.date, { flow: (days.get(t.date)?.flow ?? 0) + t.amount, value: days.get(t.date)?.value ?? null });
+  for (const v of m.values ?? []) days.set(v.date, { flow: days.get(v.date)?.flow ?? 0, value: v.value });
+  let cum = 0;
+  const series = [...days.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, d]) => {
+      cum += d.flow;
+      return { date, netIn: cum, value: d.value };
+    });
+  return {
+    currency: m.currency,
+    deposits,
+    depositCount,
+    withdrawals,
+    withdrawalCount,
+    netIn,
+    value,
+    gain,
+    gainPct: gain !== null ? gain / netIn : null,
+    tradingLocal: isNum(m.usd_rate) ? tradingUsd * m.usd_rate : null,
+    complete: Boolean(m.complete_from),
+    transfers: [...m.transfers].sort((a, b) => b.date.localeCompare(a.date)),
+    series,
+  };
+}

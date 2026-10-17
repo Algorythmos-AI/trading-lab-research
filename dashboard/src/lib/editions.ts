@@ -10,7 +10,8 @@ export const OPTIONS_ACCEPTS = 2;
 export const RADAR_ACCEPTS = 1;
 /** 2 adds `rules`: where each probation rule stands in the session so far. */
 export const OPTIONS_LIVE_ACCEPTS = 3;
-export const JOURNAL_ACCEPTS = 1;
+/** 2 adds `money`: deposits, withdrawals and the account value. */
+export const JOURNAL_ACCEPTS = 2;
 
 export interface EditionHealth {
   /** "ok" when an edition is stored and readable, "missing" before the first one, "error" when storage failed. */
