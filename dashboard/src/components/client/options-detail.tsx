@@ -246,8 +246,9 @@ export function OptionsDetail({
           </Empty>
         )}
 
-        <section aria-label={`${t.symbol} rules`} className="xl:border-l xl:pl-4">
-          <h3 className="text-[0.8125rem] font-medium">Rules on this name</h3>
+        {/* Research, folded: the probation rules are not a signal, so they stay one click away while trading. */}
+        <details aria-label={`${t.symbol} rules`} className="self-start xl:border-l xl:pl-4">
+          <summary className="cursor-pointer text-[0.8125rem] font-medium">Rules on this name (research)</summary>
           <p className="text-muted-foreground text-[0.6875rem]">
             {paper.n === 0
               ? "No paper trades on this name yet."
@@ -280,7 +281,7 @@ export function OptionsDetail({
               );
             })}
           </ul>
-        </section>
+        </details>
       </div>
 
       {/* Its own boundary: a contract that cannot be priced leaves the map and the facts standing. */}
