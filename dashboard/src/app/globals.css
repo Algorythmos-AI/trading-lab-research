@@ -52,6 +52,11 @@
   --bad-chip: #faebeb;
   --info-chip: #eaf2fb;
   --neutral-chip: #eeeff0;
+  /* The header clocks: one colour per city, so Sydney and New York tell apart at a glance. Text passes WCAG AA. */
+  --clock-syd: #a8481a;
+  --clock-syd-chip: #fbeee6;
+  --clock-ny: #1f5fa8;
+  --clock-ny-chip: #eaf2fb;
 
   /* Categorical series, fixed order (validated for CVD separation against this surface). */
   --chart-1: #2a78d6;
@@ -117,6 +122,10 @@
   --bad-chip: #332226;
   --info-chip: #1a2d3f;
   --neutral-chip: #242d33;
+  --clock-syd: #f0915f;
+  --clock-syd-chip: #33241c;
+  --clock-ny: #6aa7e8;
+  --clock-ny-chip: #1a2d3f;
 
   --chart-1: #3987e5;
   --chart-2: #d95926;
@@ -174,6 +183,10 @@
   --color-info: var(--info);
   --color-info-fill: var(--info-fill);
   --color-info-soft: var(--info-soft);
+  --color-clock-syd: var(--clock-syd);
+  --color-clock-syd-chip: var(--clock-syd-chip);
+  --color-clock-ny: var(--clock-ny);
+  --color-clock-ny-chip: var(--clock-ny-chip);
   --color-neutral: var(--neutral);
   --color-neutral-fill: var(--neutral-fill);
   --color-neutral-soft: var(--neutral-soft);
