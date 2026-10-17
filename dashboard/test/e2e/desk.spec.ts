@@ -85,7 +85,7 @@ const monitorOverflow = (page: Page) =>
 test("each view gives the monitor its own columns, and none of them needs sideways scrolling", async ({ page }) => {
   await open(page, "/options?view=brief");
   await expect(desk(page)).toHaveAttribute("data-desk-view", "brief");
-  await expect(desk(page).getByRole("columnheader", { name: /^IV percentile/ })).toBeVisible();
+  await expect(desk(page).getByRole("columnheader", { name: /^Support/ })).toBeVisible();
   expect(await monitorOverflow(page)).toBeLessThanOrEqual(0);
   await desk(page).getByRole("button", { name: "Live", exact: true }).click();
   await expect(desk(page)).toHaveAttribute("data-desk-view", "live");
