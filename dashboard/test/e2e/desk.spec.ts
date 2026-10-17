@@ -170,17 +170,19 @@ test("the map reads a price under the pointer, and its layers switch off and on"
   // Switching a layer off hides that layer and no other; switching it on brings it back.
   const layers = page.getByRole("group", { name: "Map layers" });
   const move = layers.getByRole("button", { name: "Expected move" });
-  await expect(move).toHaveAttribute("aria-pressed", "true");
-  await move.click();
+  // The map opens clean: the expected move starts switched off.
   await expect(move).toHaveAttribute("aria-pressed", "false");
   await expect(map.locator('[data-layer="move"]')).toBeHidden();
+  await move.click();
+  await expect(move).toHaveAttribute("aria-pressed", "true");
+  await expect(map.locator('[data-layer="move"]')).toBeVisible();
   await expect(map.locator('[data-layer="zones"]')).toBeVisible();
   // The choice belongs to the desk, not to one name: it holds when another name is chosen.
   await pick(page, "QQQ");
   await expect(page.locator('[data-desk-detail="QQQ"]')).toBeVisible();
-  await expect(page.getByRole("img", { name: /^QQQ: last 40 daily bars/ }).locator('[data-layer="move"]')).toBeHidden();
-  await page.getByRole("group", { name: "Map layers" }).getByRole("button", { name: "Expected move" }).click();
   await expect(page.getByRole("img", { name: /^QQQ: last 40 daily bars/ }).locator('[data-layer="move"]')).toBeVisible();
+  await page.getByRole("group", { name: "Map layers" }).getByRole("button", { name: "Expected move" }).click();
+  await expect(page.getByRole("img", { name: /^QQQ: last 40 daily bars/ }).locator('[data-layer="move"]')).toBeHidden();
 });
 
 test("on a phone the desk shows one pane at a time, and the bar at the bottom switches panes and steps through names", async ({ page, isMobile }) => {
@@ -280,11 +282,12 @@ test("the command palette finds a name, a view and a layer, and hands the keyboa
   await expect(page).toHaveURL(/view=review/);
   // A map layer by what it does.
   await openPalette(page);
-  await page.keyboard.type("hide expected");
-  await expect(palette(page).getByRole("option").first()).toContainText("Hide expected move");
+  await page.keyboard.type("show expected");
+  await expect(palette(page).getByRole("option").first()).toContainText("Show expected move");
   await page.keyboard.press("Enter");
   await expect(palette(page)).toBeHidden();
-  await expect(page.locator('[data-desk-detail="AMZN"] [data-layer="move"]')).toBeHidden();
+  // On a phone the name's pane is not the one showing, so read the switch off the map's wrapper.
+  await expect(page.locator('[data-desk-detail="AMZN"] [data-map-range]')).not.toHaveAttribute("data-hide", /\bmove\b/);
 });
 
 test("the palette opens from its button, offers a way on when nothing matches, and closes on Escape", async ({ page }) => {
@@ -532,12 +535,13 @@ test("the map marks the strikes with the most open interest, and the layer can b
   const marks = detail(page, "SPY").locator('[data-layer="oi"]');
   // Two strikes carry open interest in the fixture; the at-the-money one has calls and puts.
   await expect(marks).toHaveAttribute("data-interest", "3");
-  await expect(marks.locator("text").first()).toContainText(/\d(k|M)? [CP]$/);
+  // Off until asked for, so the map opens clean.
   const toggle = detail(page, "SPY").getByRole("group", { name: "Map layers" }).getByRole("button", { name: "Open interest" });
-  await expect(toggle).toHaveAttribute("aria-pressed", "true");
-  await toggle.click();
   await expect(toggle).toHaveAttribute("aria-pressed", "false");
   await expect(marks).toBeHidden();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await expect(marks.locator("text").first()).toContainText(/\d(k|M)? [CP]$/);
   // A name the host sent nothing for has no marks and no switch for them.
   await pick(page, "NVDA");
   await expect(detail(page, "NVDA")).toBeVisible();
@@ -749,6 +753,8 @@ test("pointing at a zone on the map picks it out in the list, and the reverse", 
   // And from the map to the list: the crosshair's height decides, whatever is drawn over the zone there.
   await page.evaluate(() => window.scrollTo(0, 0));
   const drawn = pane.locator("rect[data-zone]").first();
+  // The map is tall enough now to sit partly below the fold of the pane.
+  await drawn.scrollIntoViewIfNeeded();
   const box = (await drawn.boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   // One zone is picked out (the heaviest at that price), and it is the same one in the list and on the map.

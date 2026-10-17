@@ -35,7 +35,8 @@ export function OptionsName({
   stale: boolean;
 }) {
   const { now } = useLive();
-  const [hidden, setHidden] = useState<ReadonlySet<MapLayer>>(new Set());
+  // Opens clean, as the desk's map does: the expected move and open interest are a click away.
+  const [hidden, setHidden] = useState<ReadonlySet<MapLayer>>(() => new Set<MapLayer>(["move", "oi"]));
   const [range, setRange] = useState<"daily" | "hourly">("daily");
   const toggle = (layer: MapLayer) =>
     setHidden((was) => {

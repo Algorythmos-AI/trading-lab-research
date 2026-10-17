@@ -97,7 +97,10 @@ describe("options edition schema", () => {
     // Recent bars are optional; a malformed one is refused.
     expect(validateOptionsEdition(edition((r) => tickers(r).forEach((t) => delete t.bars))).ok).toBe(true);
     expect(validateOptionsEdition(edition((r) => ((tickers(r)[0]!.bars as Record<string, unknown>[])[0]!.d = "9 Oct"))).ok).toBe(false);
-    expect(validateOptionsEdition(edition((r) => ((tickers(r)[0]!.bars as Record<string, unknown>[])[0]!.v = 1))).ok).toBe(false);
+    // Volume is optional and never negative; any other key is refused.
+    expect(validateOptionsEdition(edition((r) => ((tickers(r)[0]!.bars as Record<string, unknown>[])[0]!.v = 1))).ok).toBe(true);
+    expect(validateOptionsEdition(edition((r) => ((tickers(r)[0]!.bars as Record<string, unknown>[])[0]!.v = -1))).ok).toBe(false);
+    expect(validateOptionsEdition(edition((r) => ((tickers(r)[0]!.bars as Record<string, unknown>[])[0]!.x = 1))).ok).toBe(false);
     expect(validateOptionsEdition(edition((r) => (r.session = "12 Oct"))).ok).toBe(false);
   });
 

@@ -28,6 +28,7 @@ export function MapFrame({
   interactive = false,
   children,
   onZone,
+  candles,
 }: {
   t: OptionsTicker;
   label: string;
@@ -45,15 +46,19 @@ export function MapFrame({
   /** Told which zone (`zoneKey`) the crosshair is in, or null: the zones list picks it out. A mouse only. */
   onZone?: (key: string | null) => void;
   children: React.ReactNode;
+  /** The candles' left edge, their width and their prices, so the crosshair can also name the candle under it. */
+  candles?: { x0: number; bw: number; bars: readonly { d: string; o: number; h: number; l: number; c: number }[] };
 }) {
   const svg = useRef<SVGSVGElement>(null);
   const [y, setY] = useState<number | null>(null);
+  const [x, setX] = useState<number | null>(null);
 
   const place = (ev: React.PointerEvent<SVGSVGElement>) => {
     const box = svg.current?.getBoundingClientRect();
     if (!box || box.height === 0) return;
     const at = Math.max(top, Math.min(bottom, ((ev.clientY - box.top) / box.height) * h));
     setY(at);
+    setX(box.width > 0 ? ((ev.clientX - box.left) / box.width) * w : null);
     // Read off the crosshair, not off the zone's own shape: a zone under a candle or a price line still counts.
     if (onZone && ev.pointerType === "mouse") {
       const under = mapReadout(t, priceAtY(at, lo, hi, top, bottom), zones).zone;
@@ -63,6 +68,9 @@ export function MapFrame({
 
   const read = y === null ? null : mapReadout(t, priceAtY(y, lo, hi, top, bottom), zones);
   const z = read?.zone ?? null;
+  const at = candles && x !== null && candles.bw > 0 ? Math.floor((x - candles.x0) / candles.bw) : -1;
+  const bar = candles && at >= 0 && at < candles.bars.length ? candles.bars[at]! : null;
+  const barX = bar && candles ? candles.x0 + candles.bw * (at + 0.5) : null;
 
   return (
     <figure className="grid gap-1.5">
@@ -82,6 +90,7 @@ export function MapFrame({
             ? (ev) => {
                 if (ev.pointerType !== "mouse") return;
                 setY(null);
+                setX(null);
                 onZone?.(null);
               }
             : undefined
@@ -90,7 +99,8 @@ export function MapFrame({
         {children}
         {read && y !== null ? (
           <g aria-hidden pointerEvents="none" data-map-crosshair>
-            <line x1={x0} x2={x1} y1={y} y2={y} stroke="var(--foreground)" strokeWidth={1} strokeOpacity={0.85} />
+            <line x1={x0} x2={x1} y1={y} y2={y} stroke="var(--foreground)" strokeWidth={1} strokeOpacity={0.6} strokeDasharray="3 3" />
+            {barX !== null ? <line x1={barX} x2={barX} y1={top} y2={bottom} stroke="var(--foreground)" strokeWidth={1} strokeOpacity={0.35} strokeDasharray="3 3" /> : null}
             <text
               x={x0 + 2}
               y={y - 4 < top + 10 ? y + 12 : y - 4}
@@ -110,6 +120,11 @@ export function MapFrame({
           {read ? (
             <>
               <span className="font-mono font-semibold">{num(read.price, 2)}</span>
+              {bar ? (
+                <span data-map-candle className="text-muted-foreground font-mono">
+                  {bar.d} O {num(bar.o, 2)} H {num(bar.h, 2)} L {num(bar.l, 2)} C {num(bar.c, 2)}
+                </span>
+              ) : null}
               {read.fromClose !== null ? <span className="font-mono">{signed(read.fromClose, 2)} from the close</span> : null}
               {read.atrs !== null ? <span className="text-muted-foreground font-mono">{signed(read.atrs, 2)} ATR</span> : null}
               {read.moves !== null ? <span className="text-muted-foreground font-mono">{signed(read.moves, 2)} expected moves</span> : null}
