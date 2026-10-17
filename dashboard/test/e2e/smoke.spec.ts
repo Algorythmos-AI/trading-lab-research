@@ -155,13 +155,35 @@ test("the v3 panels render from the fixture, and the glossary is linked", async 
   await expect(page.getByRole("heading", { name: "Audit trail" })).toBeVisible();
   await page.goto("/strategies");
   await expect(page.getByRole("heading", { name: "Paper B performance" })).toBeVisible();
-  await page.goto("/");
+  await page.goto("/research");
   await expect(page.getByRole("heading", { name: "Since the last trading day" })).toBeVisible();
   await page.getByRole("link", { name: "Glossary" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Glossary" })).toBeVisible();
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
+  expect(overflow).toBeLessThanOrEqual(0);
+  expect(errors).toEqual([]);
+});
+
+test("the Overview leads with the owner's own trading, then the robots and the lab's health", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Your account" })).toBeVisible();
+  await expect(page.getByTestId("rule-streak")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Profit and loss" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Your patterns in / })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "The robots, paper money only" })).toBeVisible();
+  await expect(page.getByTestId("health-line")).toBeVisible();
+  // The lab's own panels moved: the gates to Research, the jobs and decisions to Operations.
+  await expect(page.getByRole("heading", { name: "Gate tracker" })).toHaveCount(0);
+  await page.goto("/research");
+  await expect(page.getByRole("heading", { name: "Gate tracker" })).toBeVisible();
+  await page.goto("/operations");
+  await expect(page.getByRole("heading", { name: "Tonight's jobs" })).toBeVisible();
+  await page.goto("/");
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
   expect(errors).toEqual([]);
 });
