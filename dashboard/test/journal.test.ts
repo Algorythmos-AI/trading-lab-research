@@ -13,7 +13,9 @@ import {
   hourKey,
   journalStale,
   lessons,
+  marketState,
   parseFilter,
+  sessionView,
   summarize,
   type JournalDoc,
   type Trade,
@@ -189,5 +191,47 @@ describe("calendar and labels", () => {
   it("calls a journal stale only after a long weekend has passed", () => {
     expect(journalStale({ as_of: "2026-10-16T21:00:00Z" }, new Date("2026-10-19T12:00:00Z"))).toBe(false);
     expect(journalStale({ as_of: "2026-10-16T21:00:00Z" }, new Date("2026-10-20T12:00:00Z"))).toBe(true);
+  });
+});
+
+describe("the session", () => {
+  it("knows when the US market is open, New York time", () => {
+    expect(marketState(new Date("2026-10-16T13:29:00Z"))).toBe("pre"); // 9:29
+    expect(marketState(new Date("2026-10-16T13:30:00Z"))).toBe("open"); // 9:30
+    expect(marketState(new Date("2026-10-16T19:59:00Z"))).toBe("open"); // 15:59
+    expect(marketState(new Date("2026-10-16T20:00:00Z"))).toBe("after"); // 16:00
+    expect(marketState(new Date("2026-10-17T02:00:00Z"))).toBe("closed"); // 22:00
+    expect(marketState(new Date("2026-10-17T15:00:00Z"))).toBe("closed"); // Saturday
+  });
+
+  it("shows today's trades newest first while today has any", () => {
+    const a = trade(50, "2026-10-16T13:40:00Z", "2026-10-16T13:50:00Z");
+    const b = trade(-20, "2026-10-16T14:00:00Z", "2026-10-16T14:30:00Z");
+    const old = trade(10, "2026-10-15T14:00:00Z", "2026-10-15T14:30:00Z");
+    const v = sessionView({ trades: [old, a, b], open: [] }, new Date("2026-10-16T15:00:00Z"))!;
+    expect(v.isToday).toBe(true);
+    expect(v.day).toBe("2026-10-16");
+    expect(v.trades.map((t) => t.id)).toEqual([b.id, a.id]);
+    expect(v.summary.net).toBe(30);
+  });
+
+  it("falls back to the latest session before the first trade of the day", () => {
+    const old = trade(10, "2026-10-15T14:00:00Z", "2026-10-15T14:30:00Z");
+    const v = sessionView({ trades: [old], open: [] }, new Date("2026-10-16T13:00:00Z"))!;
+    expect(v.isToday).toBe(false);
+    expect(v.day).toBe("2026-10-15");
+  });
+
+  it("stays on today once something is opened, even with nothing closed", () => {
+    const old = trade(10, "2026-10-15T14:00:00Z", "2026-10-15T14:30:00Z");
+    const lot = { symbol: "SPY", kind: "put" as const, strike: 750, expiry: "2026-10-16", side: "long" as const, qty: 2, entry: 1.2, opened_at: "2026-10-16T13:45:00Z" };
+    const v = sessionView({ trades: [old], open: [lot] }, new Date("2026-10-16T14:00:00Z"))!;
+    expect(v.isToday).toBe(true);
+    expect(v.trades).toEqual([]);
+    expect(v.open).toHaveLength(1);
+  });
+
+  it("returns nothing for an empty journal", () => {
+    expect(sessionView({ trades: [], open: [] }, new Date("2026-10-16T14:00:00Z"))).toBeNull();
   });
 });

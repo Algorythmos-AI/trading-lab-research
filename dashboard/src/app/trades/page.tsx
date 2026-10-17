@@ -8,13 +8,14 @@ import {
   LessonsPanel,
   MonthsPanel,
   NoJournal,
+  TodayPanel,
   TradesPanel,
 } from "@/components/journal";
 import { Empty } from "@/components/empty";
 import { PageHeading } from "@/components/page-heading";
 import { Notice } from "@/components/ui/notice";
 import { newYork } from "@/lib/format";
-import { applyFilter, contractLabel, daily, groupBy, journalStale, lessons, parseFilter, shortDay, summarize, yearsOf, type JournalDoc } from "@/lib/journal";
+import { applyFilter, contractLabel, daily, groupBy, journalStale, lessons, marketState, parseFilter, sessionView, shortDay, summarize, yearsOf, type JournalDoc } from "@/lib/journal";
 import { loadJournal, pageTime } from "@/lib/snapshot";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +27,7 @@ export default async function TradesPage({ searchParams }: { searchParams: Promi
     <>
       <PageHeading
         title="Trades"
-        intro="Every trade from your own brokerage account, past and new: what each one made or lost, where the money was made and lost, and the patterns worth learning from. A record only; nothing here can trade."
+        intro="Every trade from your own brokerage account, live through the trading day and back to the first one: what each one made or lost, where the money was made and lost, and the patterns worth learning from. A record only; nothing here can trade."
       />
       {result.status !== "ok" ? (
         <NoJournal status={result.status} />
@@ -61,6 +62,7 @@ function JournalBody({ doc, q, now }: { doc: JournalDoc; q: Record<string, strin
   const gaps = new Map<string, number>();
   for (const g of doc.gaps ?? []) gaps.set(`${g.symbol} on ${shortDay(g.date)}`, (gaps.get(`${g.symbol} on ${shortDay(g.date)}`) ?? 0) + 1);
   const gapCount = (doc.gaps ?? []).length;
+  const session = sessionView(doc, now);
   return (
     <>
       {journalStale(doc, now) ? (
@@ -68,6 +70,7 @@ function JournalBody({ doc, q, now }: { doc: JournalDoc; q: Record<string, strin
           This journal was last read from the broker on {newYork(doc.as_of)} New York time. Trades since then are not in it yet.
         </Notice>
       ) : null}
+      {session ? <TodayPanel view={session} asOf={doc.as_of} now={now} market={marketState(now)} /> : null}
       <JournalFilters filter={filter} years={yearsOf(all)} symbols={symbols.sort()} />
       {trades.length === 0 ? (
         <Empty title="No trades in this view">Pick another period, ticker or kind.</Empty>

@@ -1,5 +1,5 @@
 // The Trades page's panels. Server-rendered; the charts and the table are the only client parts.
-import { CalendarDays, ChartColumn, ChartLine, Clock, Inbox, Layers, Lightbulb, ListOrdered, Target, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import { Activity, CalendarDays, ChartColumn, ChartLine, Clock, Hourglass, Inbox, Layers, Lightbulb, ListOrdered, Target, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import Link from "next/link";
 import { DivergingBars } from "@/components/charts/diverging-bars";
 import { MonthBars } from "@/components/charts/month-bars";
@@ -29,6 +29,8 @@ import {
   WEEKDAY_ORDER,
   weekdayKey,
   type DayRow,
+  type MarketState,
+  type SessionView,
   type Filter,
   type GroupRow,
   type Lesson,
@@ -153,6 +155,105 @@ export function JournalTiles({ s }: { s: Summary }) {
         hint={s.worstDay ? `Worst day ${shortDay(s.worstDay.day)}: ${usd(s.worstDay.pnl)}` : undefined}
       />
     </StatTiles>
+  );
+}
+
+// ── Today ────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+const clock = (tz: string) => new Intl.DateTimeFormat("en-AU", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const nyClock = clock("America/New_York");
+const sydClock = clock("Australia/Sydney");
+const dayFmt = new Intl.DateTimeFormat("en-AU", { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" });
+const dayLabel = (ymd: string) => dayFmt.format(new Date(`${ymd}T12:00:00Z`)).replace(",", "");
+const price = (v: number) => v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+const MARKET_WORDS: Record<MarketState, string> = { open: "Market open", pre: "Before the open", after: "After the close", closed: "Market closed" };
+
+/** How fresh the journal is, in one line: a live dot while the market is open and the last check is recent. */
+function SyncLine({ asOf, market, ago }: { asOf: string; market: MarketState; ago: number | null }) {
+  const at = new Date(asOf);
+  const live = market === "open" && ago !== null && ago <= 10;
+  const late = market === "open" && (ago === null || ago > 10);
+  const agoText = ago === null ? "" : ago < 1 ? "just now" : ago < 90 ? `${ago} min ago` : `${Math.round(ago / 60)} h ago`;
+  return (
+    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs" role="status">
+      <span className={cn("inline-flex items-center gap-1.5 font-medium", live ? "text-good" : late ? "text-warn" : "text-muted-foreground")}>
+        <span className="relative flex size-2" aria-hidden>
+          {live ? <span className="bg-good-fill absolute inline-flex size-full animate-ping rounded-full opacity-60" /> : null}
+          <span className={cn("relative inline-flex size-2 rounded-full", live ? "bg-good-fill" : late ? "bg-warn-fill" : "bg-muted-foreground/50")} />
+        </span>
+        {live ? "Live" : MARKET_WORDS[market]}
+      </span>
+      <span className="text-muted-foreground">
+        Checked with the broker {agoText} ({nyClock.format(at)} New York, {sydClock.format(at)} Sydney).
+        {late ? " New trades may not be in yet." : ""}
+      </span>
+    </p>
+  );
+}
+
+export function TodayPanel({ view, asOf, now, market }: { view: SessionView; asOf: string; now: Date; market: MarketState }) {
+  const s = view.summary;
+  const ago = Number.isFinite(Date.parse(asOf)) ? Math.max(0, Math.floor((now.getTime() - Date.parse(asOf)) / 60_000)) : null;
+  const reach = Math.max(1, ...view.trades.map((t) => Math.abs(t.pnl)));
+  const shown = view.trades.slice(0, 12);
+  const label = dayLabel(view.day);
+  return (
+    <Panel
+      id="today"
+      title={view.isToday ? `Today · ${label}` : `Last session · ${label}`}
+      icon={Activity}
+      means="This New York trading day as it happens: each trade appears within about two minutes of closing while the market is open, and this page refreshes itself every minute."
+    >
+      <div className="grid gap-4">
+        <SyncLine asOf={asOf} market={market} ago={ago} />
+        <StatTiles className="lg:grid-cols-4">
+          <StatTile label="Day result" icon={Wallet} tone={toneOf(s.trades ? s.net : null)} value={s.trades ? usd(s.net) : "—"} hint="Closed trades, before fees" />
+          <StatTile
+            label="Closed trades"
+            icon={ListOrdered}
+            value={s.trades.toLocaleString("en-US")}
+            hint={s.trades ? `${s.wins} won · ${s.losses} lost${s.winRate === null ? "" : ` · ${pct(s.winRate)}`}` : view.isToday ? "None closed yet today" : undefined}
+          />
+          <StatTile label="Best and worst" icon={Target} tone={toneOf(s.best?.pnl ?? null)} value={s.best ? usd(s.best.pnl) : "—"} hint={s.worst && s.worst !== s.best ? `${s.worst.pnl < 0 ? "Worst" : "Smallest"} ${usd(s.worst.pnl)}` : undefined} />
+          <StatTile
+            label="Open now"
+            icon={Hourglass}
+            tone={view.open.length ? "warn" : "neutral"}
+            value={view.open.length.toLocaleString("en-US")}
+            hint={view.open.length ? view.open.slice(0, 2).map((l) => `${l.qty.toLocaleString("en-US")} × ${contractLabel(l)}`).join(" · ") + (view.open.length > 2 ? " …" : "") : "Nothing held"}
+          />
+        </StatTiles>
+        {shown.length ? (
+          <ul className="grid" aria-label="Trades closed this session, newest first">
+            {shown.map((t) => (
+              <li key={t.id} className="grid grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-x-3 py-1.5 text-[0.8125rem] not-last:border-b">
+                <span className="text-muted-foreground font-mono text-xs">{nyClock.format(new Date(t.closed_at))}</span>
+                <span className="grid min-w-0 leading-tight">
+                  <span className="truncate font-medium">{contractLabel(t)}</span>
+                  <span className="text-muted-foreground truncate text-xs">
+                    {t.qty.toLocaleString("en-US")} × {price(t.entry)} → {price(t.exit)} · {t.close === "expired" ? "held to expiry" : `held ${fmtMinutes(holdMinutes(t))}`}
+                  </span>
+                </span>
+                <span className="grid justify-items-end gap-1">
+                  <span className={cn("font-mono font-semibold whitespace-nowrap", t.pnl > 0 ? "text-good" : t.pnl < 0 ? "text-bad" : "text-muted-foreground")}>{usd(t.pnl, 0)}</span>
+                  <span className="bg-muted h-1 w-16 overflow-hidden rounded-full" aria-hidden>
+                    <span className={cn("block h-full rounded-full", t.pnl >= 0 ? "bg-good-fill" : "bg-bad-fill")} style={{ width: `${Math.max(4, (Math.abs(t.pnl) / reach) * 100)}%` }} />
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-muted-foreground text-sm">No trades closed yet {view.isToday ? "today" : "this session"}.</p>
+        )}
+        {view.trades.length > shown.length ? (
+          <p className="text-muted-foreground text-xs">
+            {view.trades.length - shown.length} more in <a href="#trades" className="underline underline-offset-2">every trade</a> below.
+          </p>
+        ) : null}
+        <p className="text-muted-foreground text-xs">Times are New York. The broker is read every two minutes from 9:24 to 16:20 New York on weekdays, and once more after the close.</p>
+      </div>
+    </Panel>
   );
 }
 
