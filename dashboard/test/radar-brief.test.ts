@@ -212,6 +212,20 @@ describe("movers and the week", () => {
     expect(w.days[1]?.earnings.map((x) => `${x.symbol}${x.yours ? "*" : ""}`)).toEqual(["TSLA*", "META"]);
     expect(w.later.map((x) => x.label)).toEqual(["FOMC decision"]);
   });
+  it("reads the report time from the radar's label", () => {
+    const r = radar({
+      calendar: [
+        { date: "2026-10-21", label: "TSLA after close", kind: "earnings", impact: "high" },
+        { date: "2026-10-22", label: "NFLX before open", kind: "earnings" },
+        { date: "2026-10-23", label: "META (estimated)", kind: "earnings", impact: "medium" },
+      ],
+    });
+    expect(earningsOf(r, null)).toEqual([
+      { date: "2026-10-21", symbol: "TSLA", when: "amc" },
+      { date: "2026-10-22", symbol: "NFLX", when: "bmo" },
+      { date: "2026-10-23", symbol: "META", when: null },
+    ]);
+  });
   it("works on the fixture edition", () => {
     const r = radarJson as unknown as Radar;
     expect(earningsOf(r, null).map((x) => x.symbol)).toEqual(["MU"]);

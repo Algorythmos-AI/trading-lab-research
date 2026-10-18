@@ -177,7 +177,8 @@ export function earningsOf(r: Radar, opt: OptionsEdition | null): Earnings[] {
   }
   for (const e of r.calendar ?? []) {
     const s = earningsSymbol(e);
-    if (s && !rows.has(`${e.date}|${s}`)) rows.set(`${e.date}|${s}`, { date: e.date, symbol: s, when: null });
+    const when = /after (the )?close/i.test(e.label) ? "amc" : /before (the )?open/i.test(e.label) ? "bmo" : null;
+    if (s && !rows.has(`${e.date}|${s}`)) rows.set(`${e.date}|${s}`, { date: e.date, symbol: s, when });
   }
   return [...rows.values()].sort((a, b) => a.date.localeCompare(b.date) || a.symbol.localeCompare(b.symbol));
 }
