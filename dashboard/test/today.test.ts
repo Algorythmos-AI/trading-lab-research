@@ -131,6 +131,9 @@ describe("the session clock", () => {
     expect(paper).toMatchObject({ key: "paper-b", at: 510, from: 510, to: null, tone: "warn", running: true });
     // Its last run was an earlier day: only the scheduled tick is drawn.
     expect(forward).toMatchObject({ key: "forward", at: 940, from: null, to: null, tone: "bad" });
+    // A clean last run on an earlier day is grey, not green: "no run" today is not a success.
+    const earlier = sessionClock(day({ routine: { status: "ok", started: "2026-10-02T11:30:02Z", ended: "2026-10-02T15:31:40Z" } })).runs[0];
+    expect(earlier).toMatchObject({ key: "routine", from: null, tone: "neutral" });
   });
 
   it("draws a run that ends after midnight to the end of the day", () => {

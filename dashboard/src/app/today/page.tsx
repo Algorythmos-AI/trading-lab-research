@@ -1,4 +1,4 @@
-import { Activity, Filter, FlaskConical, Hourglass, ListOrdered, PlayCircle, Power } from "lucide-react";
+import { Activity, Bot, Filter, FlaskConical, Hourglass, ListOrdered, PlayCircle, Power } from "lucide-react";
 import { Funnel } from "@/components/charts/funnel";
 import { Empty } from "@/components/empty";
 import { SessionClock } from "@/components/today/session-clock";
@@ -11,7 +11,10 @@ import { StatusBadge } from "@/components/status";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { duration, newYork, num, rMult, shortDate, sydney } from "@/lib/format";
 import { humanize, jobName, jobTone } from "@/lib/labels";
-import { loadSnapshot } from "@/lib/snapshot";
+import { loadJournal, loadOptions, loadRadar, loadSnapshot, pageTime } from "@/lib/snapshot";
+import { NoJournal } from "@/components/journal";
+import { NextSessionPanel } from "@/components/overview/home";
+import { YourDay } from "@/components/today/your-day";
 import { detailLabel, eventLabel, near, ofRecord, scan, sessionClock, sessionJobs, type Near, type Scan, type Why } from "@/lib/today";
 import { trading } from "@/lib/trading";
 import { list, type Snapshot } from "@/lib/types";
@@ -20,40 +23,59 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Today" };
 
 export default async function TodayPage() {
-  const result = await loadSnapshot();
+  const [result, journal, options, radar, now] = await Promise.all([loadSnapshot(), loadJournal(), loadOptions(), loadRadar(), pageTime()]);
   return (
     <>
       <PageHeading
         title="Today"
-        intro="What the stocks desk did in its latest session: whether Paper B traded and what it made or lost, then the pre-market scan, the paper session log and the forward test. Paper money only: nothing on this page is a real order."
+        intro="Your trading day as it happens: every trade on the New York clock, the day's running result and how much room the day rules leave, then the names to watch. Below, what the paper robots did. Nothing on this page can place an order."
       />
+      {journal.status === "ok" ? <YourDay doc={journal.doc} now={now} /> : <NoJournal status={journal.status} />}
+      <NextSessionPanel options={options.status === "ok" ? options.edition : null} radar={radar.status === "ok" ? radar.edition : null} />
+      <h2 className="text-muted-foreground mt-2 flex items-center gap-2 text-sm font-semibold">
+        <Bot aria-hidden className="size-4" />
+        The robots, paper money only
+      </h2>
       {result.status !== "ok" ? (
         <NoSnapshot status={result.status} />
       ) : (
         <>
           <NowPanel s={result.snapshot} />
-          <TradingPanels s={result.snapshot} />
+          <OutcomeOnly s={result.snapshot} />
           <FunnelPanel v={scan(result.snapshot)} tradingDay={result.snapshot.market?.trading_day_et ?? null} />
-          <WhyPanel w={scan(result.snapshot).why} />
-          <NearPanel n={near(result.snapshot)} />
-          <CandidatesPanel v={scan(result.snapshot)} />
-          <PaperPanel s={result.snapshot} />
-          <ForwardPanel s={result.snapshot} />
-          <OfRecordPanel s={result.snapshot} />
-          <ComingPanel />
+          <details className="group grid gap-5" data-testid="robot-detail">
+            <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-sm font-medium">
+              More from the robots: Paper B&apos;s trades and results, near misses, the session log and the forward test
+            </summary>
+            <div className="mt-5 grid gap-5">
+              <TradingDetail s={result.snapshot} />
+              <WhyPanel w={scan(result.snapshot).why} />
+              <NearPanel n={near(result.snapshot)} />
+              <CandidatesPanel v={scan(result.snapshot)} />
+              <PaperPanel s={result.snapshot} />
+              <ForwardPanel s={result.snapshot} />
+              <OfRecordPanel s={result.snapshot} />
+              <ComingPanel />
+            </div>
+          </details>
         </>
       )}
     </>
   );
 }
 
-/** Paper B's outcome, profit and loss and trades. Shown once the host publishes the `today` section. */
-function TradingPanels({ s }: { s: Snapshot }) {
+/** Paper B's outcome and open position. Shown once the host publishes the `today` section. */
+function OutcomeOnly({ s }: { s: Snapshot }) {
+  const v = trading(s);
+  return v.available ? <OutcomePanel v={v} asOf={s.as_of} /> : null;
+}
+
+/** Paper B's profit and loss and its trades, folded away under the robots' detail. */
+function TradingDetail({ s }: { s: Snapshot }) {
   const v = trading(s);
   if (!v.available) return null;
   return (
     <>
-      <OutcomePanel v={v} asOf={s.as_of} />
       <PnlPanel v={v} />
       <TradesPanel v={v} />
     </>
