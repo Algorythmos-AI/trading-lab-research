@@ -19,22 +19,29 @@ specific to this repository. Where the two conflict, the org file's "Never" sect
    - Since 2026-10 the jobs run on the cloud host (`docs/runbooks/gcp-host.md`): systemd runs the working tree
      of `/home/wt/trading` there. It changes only through the gated deploy (`wt-deploy`), never by hand.
    - Where the owner has switched it on, the host runs that same gated deploy itself once an hour (ADR 0008):
-     merging to `main` is then deploying, a few hours later. A release that changes units, host helpers or the
-     deploy's own code waits for the owner. Automated contributors never start a deploy, and never create or
+     merging to `main` is then deploying, a few hours later, so work lands on `integration` first (rule 5). A
+     release that changes units, host helpers or the deploy's own code waits for the owner. Automated contributors never start a deploy, and never create or
      remove `var/deploy/AUTO_ON`.
    - The Mac's `~/trading` is no longer what runs. It is a console checkout and may be far behind
      `origin/main`: read the state of the code from `origin/main`, never from it.
-   - Develop in a worktree (`git worktree add ~/trading-wt/<branch> origin/main`). Remove it when its pull
+   - Develop in a worktree (`git worktree add ~/trading-wt/<branch> origin/integration`). Remove it when its pull
      request is merged; share a `.venv` between worktrees if the disk is short.
    - Never edit, switch branches in, or reinstall the venv of a checkout that runs jobs while any `wt-*` or
      `com.wt.*` job is running.
    - Session times follow America/New_York, so Sydney clock rules break at every DST change.
    - Several agent sessions may work here at once. Before numbering a record or touching a shared file, read
-     `origin/main` and the open pull requests, and say which ids and files you are taking.
+     `origin/integration` and the open pull requests, and say which ids and files you are taking.
 4. **Units and agents.** Never load, unload, enable, disable or kickstart the `wt-*` systemd units or the
    `com.wt.*` launchd agents. Hand the owner the command (`sudo wt-install-units`, or the `make` target).
-5. **Commits and PRs.**
-   - Branch, open a PR, and let the `test` check pass, then squash-merge.
+5. **Branches, commits and PRs** (ADR 0009).
+   - `integration` is the default branch. Branch from `origin/integration`, open the PR into `integration`, let
+     the `test` and `dashboard-gate` checks pass, then squash-merge. A push to `integration` deploys the staging
+     dashboard (synthetic data); it never reaches the host or production.
+   - `main` is production. It takes only a Release PR from `integration` and `hotfix/*` PRs (the `release-source`
+     check), merged with a merge commit, never squashed. The owner merges them. Release PRs go in after the US
+     close.
+   - A hotfix branches from `origin/main` as `hotfix/<what>`. Once it is merged, open a PR from `main` into
+     `integration` and merge it with a merge commit, so the next release carries it.
    - No `Co-Authored-By` trailer and no AI-tool mention anywhere (org decision D-016).
    - Author: `skalaliya <skalaliya@gmail.com>`.
 

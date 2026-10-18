@@ -1,3 +1,7 @@
+import { HealthBanner } from "@/components/health-banner";
+import { NeedsYouPanel } from "@/components/overview/lab-panels";
+import { computeHealth } from "@/lib/health";
+import { requestTime } from "@/lib/now";
 import { Activity, CalendarClock, ClipboardCheck, Clock, Database, GitBranch, HardDrive, Workflow } from "lucide-react";
 import { RelativeTime } from "@/components/client/relative-time";
 import { DataDetails } from "@/components/data-details";
@@ -15,7 +19,6 @@ import { AuditPanel } from "@/components/v3/audit";
 import { SlaPanel } from "@/components/v3/sla";
 import { duration, newYork, num, pct, shortDate, shortSha, sydney, txt } from "@/lib/format";
 import { humanize, jobKey, jobName, jobTone, sortJobKeys } from "@/lib/labels";
-import { requestTime } from "@/lib/now";
 import { listOptionsDates, listRadarDates, loadJournal, loadOptions, loadOptionsLive, loadRadar, loadSnapshot } from "@/lib/snapshot";
 import { DISK_FLOOR_GB, DISK_TARGET_GB } from "@/lib/thresholds.gen";
 import { entries, list, type LogInfo, type Snapshot } from "@/lib/types";
@@ -54,6 +57,8 @@ export default async function OperationsPage() {
         <NoSnapshot status={result.status} />
       ) : (
         <>
+          <HealthBanner health={computeHealth(result.snapshot, requestTime())} />
+          <NeedsYouPanel s={result.snapshot} />
           <JobGridPanel s={result.snapshot} />
           <div className="grid gap-5 lg:grid-cols-2">
             <LastRunsPanel s={result.snapshot} />

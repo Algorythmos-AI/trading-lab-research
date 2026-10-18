@@ -1,3 +1,5 @@
+import { DigestPanel } from "@/components/v3/digest";
+import { GatePanel, Kpis, LabSummary } from "@/components/overview/lab-panels";
 import { BookOpen, BrainCircuit, FlaskConical, Layers, Scale, Target } from "lucide-react";
 import { Empty } from "@/components/empty";
 import { KeyValues } from "@/components/kv";
@@ -29,6 +31,10 @@ export default async function ResearchPage() {
         <NoSnapshot status={result.status} />
       ) : (
         <>
+          <LabSummary s={result.snapshot} />
+          <Kpis s={result.snapshot} />
+          <DigestPanel s={result.snapshot} />
+          <GatePanel s={result.snapshot} />
           <ScoreboardPanel s={result.snapshot} />
           <div className="grid gap-5 lg:grid-cols-2">
             <BudgetPanel s={result.snapshot} />
