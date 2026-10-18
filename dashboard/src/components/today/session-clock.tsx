@@ -32,6 +32,14 @@ const SHORT: Record<string, string> = { routine: "Routine", "paper-b": "Paper B"
 const X = (m: number) => L + ((Math.max(CLOCK_FROM, Math.min(CLOCK_TO, m)) - CLOCK_FROM) / (CLOCK_TO - CLOCK_FROM)) * (R - L);
 const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 
+/** The "now HH:MM" label is about 60 units wide and sits to one side of the line; a tick label is about 32 wide. */
+const NOW_LABEL = 62;
+const TICK_HALF = 17;
+export function overlapsNow(tickX: number, nowX: number, leftOfLine: boolean): boolean {
+  const [a, b] = leftOfLine ? [nowX - 4 - NOW_LABEL, nowX] : [nowX, nowX + 4 + NOW_LABEL];
+  return tickX + TICK_HALF > a && tickX - TICK_HALF < b;
+}
+
 function statusWord(r: ClockRun): string {
   if (r.running) return "running";
   if (r.from === null) return "no run";
@@ -126,7 +134,7 @@ export function SessionClock({ day, runs }: { day: string | null; runs: ClockRun
         </g>
       ) : null}
       {[4, 8, 12, 16, 20].map((h) =>
-        nowMin !== null && Math.abs(X(h * 60) - X(nowMin)) < 30 ? null : (
+        nowMin !== null && overlapsNow(X(h * 60), X(nowMin), nowMin > 17 * 60) ? null : (
           <text key={h} x={X(h * 60)} y={bottom + 14} textAnchor="middle" fontSize={11} style={{ fill: "var(--muted-foreground)" }}>
             {hhmm(h * 60)}
           </text>
