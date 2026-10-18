@@ -27,7 +27,9 @@ live, and there was no point at which the owner chose what went out.
 6. **Rules.** A ruleset on each branch: pull request required, no force push, no deletion, required checks
    `test` and `dashboard-gate`. `main` also requires `release-source` (release.yml), which fails unless the pull
    request comes from `integration` or `hotfix/*` in this repository, and allows merge commits only. Head
-   branches are deleted after merge.
+   branches are deleted after merge; the `integration` ruleset's no-deletion rule keeps a release from deleting
+   `integration`. Until `integration` is the default branch, `release-source` enforces only the fork rule, so
+   pull requests that still target `main` during the switch stay green.
 
 ## What does not change
 

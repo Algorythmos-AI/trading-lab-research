@@ -4,6 +4,8 @@ name: release
 # integration (a release) and hotfix/* (a fix production can't wait for), both from this repository, never a fork.
 # Pull requests into any other branch pass at once. No path filters: a required check that does not run leaves pull
 # requests waiting forever. `edited` re-runs the check when a pull request's base is changed to main.
+# The branch rule starts when integration becomes the default branch. Until then pull requests still target main
+# (the transition in ADR 0009), so the check only notes the source and passes; the fork rule holds throughout.
 on:
   pull_request:
     types: [opened, synchronize, reopened, edited]
@@ -22,6 +24,7 @@ jobs:
           BASE: ${{ github.base_ref }}
           HEAD: ${{ github.head_ref }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          DEFAULT: ${{ github.event.repository.default_branch }}
           REPO: ${{ github.repository }}
         run: |
           if [ "$BASE" != "main" ]; then
@@ -29,6 +32,9 @@ jobs:
           fi
           if [ "$HEAD_REPO" != "$REPO" ]; then
             echo "::error::main takes pull requests from this repository only, not from $HEAD_REPO."; exit 1
+          fi
+          if [ "$DEFAULT" != "integration" ]; then
+            echo "::notice::$HEAD -> main allowed: the default branch is still $DEFAULT, so the integration/hotfix rule is not enforced yet (ADR 0009)."; exit 0
           fi
           case "$HEAD" in
             integration|hotfix/*) echo "ok: $HEAD -> main" ;;
