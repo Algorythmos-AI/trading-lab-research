@@ -326,7 +326,9 @@ export function sessionClock(s: Snapshot): { day: string | null; runs: ClockRun[
     return {
       key: j.key,
       status: j.status,
-      tone: running ? ("warn" as Tone) : jobTone(j.status),
+      // A job with no run that day says "no run": in grey when its last run went well, since green would read as a
+      // run today; a last run that failed stays red.
+      tone: running ? ("warn" as Tone) : onDay || jobTone(j.status) !== "good" ? jobTone(j.status) : ("neutral" as Tone),
       at: SCHEDULE[j.key] ?? CLOCK_FROM,
       from: onDay ? start.minutes : null,
       // A run that ends after midnight is drawn to the end of the day.

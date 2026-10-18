@@ -13,7 +13,7 @@ import { V3Missing, V3Pending } from "./pending";
 const LEGEND: SlaStatus[] = ["ok", "refused", "partial", "failed", "missed", "none"];
 
 /** Did each scheduled job run, day by day (ET), over the last two weeks. */
-export function SlaPanel({ s }: { s: Snapshot }) {
+export function SlaPanel({ s, children }: { s: Snapshot; children?: React.ReactNode }) {
   const sla = s.sla;
   const days = list(sla?.days);
   const cells = list(sla?.cells);
@@ -87,6 +87,7 @@ export function SlaPanel({ s }: { s: Snapshot }) {
               </li>
             ))}
           </ul>
+          {children}
         </div>
       )}
     </Panel>

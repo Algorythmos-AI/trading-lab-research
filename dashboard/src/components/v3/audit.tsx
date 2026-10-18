@@ -1,4 +1,5 @@
 import { BellRing, ListChecks } from "lucide-react";
+import { DataDetails } from "@/components/data-details";
 import { Empty } from "@/components/empty";
 import { Panel } from "@/components/panel";
 import { StatusBadge } from "@/components/status";
@@ -6,19 +7,21 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { sydney, txt } from "@/lib/format";
 import { humanize } from "@/lib/labels";
 import { list, type Snapshot } from "@/lib/types";
-import { AUDIT_LABEL, auditTone, hasV3, sectionState } from "@/lib/v3";
+import { AUDIT_LABEL, auditRows, auditTone, hasV3, sectionState, type AuditRow } from "@/lib/v3";
 import { V3Missing, V3Pending } from "./pending";
 
 /** One time-ordered record of deploys, overrides, latch resets, refusals and alerts. */
 export function AuditPanel({ s }: { s: Snapshot }) {
   const a = s.audit;
-  const events = list(a?.events).slice().reverse();
+  const rows = auditRows(list(a?.events).slice().reverse());
+  const recent = rows.slice(0, AUDIT_RECENT);
+  const older = rows.slice(AUDIT_RECENT, AUDIT_MAX);
   return (
     <Panel
       id="audit"
       title="Audit trail"
       icon={ListChecks}
-      means="Who or what changed the system, newest first: deploys, kill switch, latch resets, refused or failed jobs, and alerts. The owner's own notes stay on the host."
+      means="Who or what changed the system, newest first: deploys, kill switch, latch resets, refused or failed jobs, and alerts. Routine deploys on one day share a row. The owner's own notes stay on the host."
       action={
         !hasV3(s) ? null : a?.chain_ok === true ? (
           <StatusBadge tone="good">Log intact</StatusBadge>
@@ -31,31 +34,52 @@ export function AuditPanel({ s }: { s: Snapshot }) {
         <V3Pending what="The audit trail" />
       ) : sectionState(s, a) === "missing" ? (
         <V3Missing what="The audit trail" />
-      ) : events.length === 0 ? (
+      ) : rows.length === 0 ? (
         <Empty title="Nothing recorded yet" />
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>When (Sydney)</TableHead>
-              <TableHead>What</TableHead>
-              <TableHead>Detail</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {events.slice(0, 50).map((e, i) => (
-              <TableRow key={`${e.at}-${i}`}>
-                <TableCell className="whitespace-nowrap">{sydney(e.at)}</TableCell>
-                <TableCell>
-                  <StatusBadge tone={auditTone(e.kind)}>{AUDIT_LABEL[e.kind ?? ""] ?? humanize(e.kind)}</StatusBadge>
-                </TableCell>
-                <TableCell className="text-muted-foreground">{txt(e.detail)}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <div className="grid gap-2">
+          <AuditTable rows={recent} />
+          {older.length > 0 ? (
+            <DataDetails summary={`Show ${older.length} older row${older.length === 1 ? "" : "s"}`}>
+              <AuditTable rows={older} />
+            </DataDetails>
+          ) : null}
+        </div>
       )}
     </Panel>
+  );
+}
+
+const AUDIT_RECENT = 15;
+const AUDIT_MAX = 80;
+
+function AuditTable({ rows }: { rows: AuditRow[] }) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>When (Sydney)</TableHead>
+          <TableHead>What</TableHead>
+          <TableHead>Detail</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((e, i) => (
+          <TableRow key={`${e.at}-${i}`}>
+            <TableCell className="whitespace-nowrap">{sydney(e.at)}</TableCell>
+            <TableCell>
+              <StatusBadge tone={auditTone(e.kind)}>
+                {AUDIT_LABEL[e.kind ?? ""] ?? humanize(e.kind)}
+                {e.count > 1 ? ` ×${e.count}` : ""}
+              </StatusBadge>
+            </TableCell>
+            <TableCell className="text-muted-foreground">
+              {e.count > 1 ? `${e.count} deploys that day, all passed the smoke test; latest ${txt(e.detail).replace(/; smoke ok$/i, "")}` : txt(e.detail)}
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }
 

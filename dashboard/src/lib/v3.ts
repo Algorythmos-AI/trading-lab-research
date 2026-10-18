@@ -1,4 +1,5 @@
 // Tones, labels and small derivations for the v3 sections (risk, perf, sla, digest, audit). Pure, unit-tested.
+import { dayIn, SYDNEY } from "./format";
 import type { Tone } from "./labels";
 import type { LimitState, PerfStats, SlaStatus, Snapshot } from "./types";
 
@@ -128,4 +129,34 @@ export function binSide(bin: string | null | undefined): "loss" | "gain" | "flat
   if (nums.every((v) => v <= 0) && nums.some((v) => v < 0)) return "loss";
   if (nums.every((v) => v >= 0) && nums.some((v) => v > 0)) return "gain";
   return "flat";
+}
+
+export interface AuditRow {
+  at: string | null;
+  kind: string | null;
+  detail: string | null;
+  /** How many events this row stands for: routine deploys on one day are folded into one row. */
+  count: number;
+}
+
+const routineDeploy = (e: { kind?: string | null; detail?: string | null }) => e.kind === "deploy" && /smoke ok/i.test(e.detail ?? "");
+
+/**
+ * The audit events as rows, newest first, with back-to-back routine deploys (smoke test passed) on the same Sydney day
+ * folded into one row. A deploy whose smoke test failed, and every other kind, keeps its own row.
+ */
+export function auditRows(
+  newestFirst: readonly ({ at?: string | null; kind?: string | null; detail?: string | null } | null)[],
+): AuditRow[] {
+  const out: AuditRow[] = [];
+  for (const e of newestFirst) {
+    if (!e) continue;
+    const prev = out.at(-1);
+    if (prev && routineDeploy(prev) && routineDeploy(e) && dayIn(prev.at, SYDNEY) === dayIn(e.at ?? null, SYDNEY)) {
+      prev.count += 1;
+      continue;
+    }
+    out.push({ at: e.at ?? null, kind: e.kind ?? null, detail: e.detail ?? null, count: 1 });
+  }
+  return out;
 }
