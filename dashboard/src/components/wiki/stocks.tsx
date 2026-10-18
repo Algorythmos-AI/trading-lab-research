@@ -282,7 +282,7 @@ export function ArchitectureSection({ s, feeds, now }: { s: Snapshot | null; fee
   };
   const f = (k: FeedKey) => feeds.find((x) => x.key === k);
   const dot = (k: FeedKey) => feedDot(f(k), now);
-  const label = `Where the Stocks site's data comes from. Sources on the left are paper or read only: Alpaca paper account A gives the robot its bars and takes its paper orders; Alpaca paper account B holds your paper option trades, read only; IBKR gives prices for the radar and the levels; Webull Australia holds your real trades, read only. The trading host runs the robot's jobs (routine, paper-b, forward, weekly) and two publishers, for the snapshot and the option positions. Scheduled tasks in the cloud build the radar, the options levels and focus, and sync your Webull trades. Everything reaches this site through its signed ingest. Host jobs: ${[
+  const label = `Where the Stocks site's data comes from. Left of a red line everything is paper or read only. Alpaca paper account A sends bars to the routine, paper-b and forward jobs, and takes paper-b's paper orders. The forward job's ledger feeds the weekly scorecard. Those four jobs write state files that the publisher collects into the snapshot. Alpaca paper account B sends your paper option positions to the options job. A job runner on the trading host starts every job and sends alerts and dead-man pings to your phone. IBKR sends last prices to the pre-open focus, bars and implied vol to the after-close levels, and lists and prices to the radar build. The levels run picks the focus; the radar build leaves its edition in an outbox for the radar send. Webull Australia sends your real trades, read only, to the Webull sync and its backstop. Every one of those feeds reaches this site through its signed ingest: the snapshot to Overview, Today and Operations; positions, levels and focus to Options; the radar to Radar; the journal to Trades. Live prices come to Options straight from Alpaca's IEX quotes through the site, not through the ingest. The site's watchdog checks the snapshot's age and pages your phone when it is late. Host jobs: ${[
     ["routine", "routine"],
     ["paper-b", "paper-b"],
     ["forward", "forward"],
@@ -298,93 +298,203 @@ export function ArchitectureSection({ s, feeds, now }: { s: Snapshot | null; fee
       id="architecture"
       eyebrow="Stocks desk"
       title="Where the data comes from"
-      lede="Four outside accounts on the left, two places that do the work in the middle, this site on the right. Each page reads only what its own feed sends."
+      lede="Outside sources on the left, the two places that do the work in the middle, this site on the right. Every arrow is a real read or write; each page reads only what its own feed sends."
     >
       <Figure
         minWidth={820}
         caption={
           <>
             <b className="text-foreground font-medium">The Stocks site, end to end.</b> A dot on a job is its last run; a dot on a page is
-            whether its data arrived on time. Hover a dot for its words. Left of the red line everything is paper or read only: nothing
-            here can place a real order.
+            whether its data arrived on time. Hover a dot for its words. A word on an arrow is what travels on it; a moving
+            arrow is a data path. Left of the red line everything is paper or read only: nothing here can place a real order.
           </>
         }
       >
-        <Diagram id={id} w={1000} h={440} label={label}>
+        <Diagram id={id} w={1000} h={712} label={label}>
           {/* sources */}
           <T x={20} y={30} caps>
-            Accounts
+            Sources
           </T>
-          <Node x={20} y={84} w={180} h={50} title="Alpaca paper A" sub="robot's bars, paper orders" tone="info" dot={job("paper-b", "paper-b")} />
-          <Node x={20} y={142} w={180} h={50} title="Alpaca paper B" sub="your paper options, read" tone="info" dot={dot("positions")} />
-          <Node x={20} y={256} w={180} h={50} title="IBKR" sub="prices, read only" tone="info" />
-          <Node x={20} y={326} w={180} h={50} title="Webull Australia" sub="your real trades, read only" tone="info" dot={dot("journal")} />
-          <line x1={214} y1={20} x2={214} y2={420} style={{ stroke: "var(--bad-fill)" }} strokeWidth={2} strokeDasharray="8 5" />
-          <T x={20} y={404} muted>
+          <T x={20} y={52} muted>
             paper or read only:
           </T>
-          <T x={20} y={419} muted>
+          <T x={20} y={67} muted>
             no real orders from here
           </T>
+          <Node x={20} y={86} w={180} h={134} title="Alpaca paper A" sub={["robot's bars,", "paper orders"]} tone="info" dot={job("paper-b", "paper-b")} />
+          <Node x={20} y={286} w={180} h={46} title="Alpaca paper B" sub="your paper options, read" tone="info" dot={dot("positions")} />
+          <Node x={20} y={404} w={180} h={108} title="IBKR" sub="prices, read only" tone="info" />
+          <Node x={20} y={532} w={180} h={86} title="Webull Australia" sub="your real trades, read only" tone="info" dot={dot("journal")} />
+          <Node x={20} y={656} w={180} h={44} title="Alpaca market data" sub="IEX quotes, read only" tone="info" />
+          <line x1={214} y1={20} x2={214} y2={704} style={{ stroke: "var(--bad-fill)" }} strokeWidth={2} strokeDasharray="8 5" />
 
-          {/* the trading host */}
-          <Zone x={232} y={14} w={440} h={192} label="Trading host · cloud VM" />
-          <Node x={246} y={36} w={412} h={30} title="systemd timers → job runner · lock, preflight, deadline, alerts" />
-          {[
-            ["routine", "routine", "07:30"],
-            ["paper-b", "paper-b", "08:30"],
-            ["forward", "forward", "12:40"],
-            ["weekly", "weekly", "Fri 20:00"],
-          ].map(([key, name, when], i) => (
-            <Node key={key} x={246 + i * 104} y={84} w={98} h={50} title={name!} sub={when} dot={job(key!, name!)} />
-          ))}
-          <Node x={246} y={142} w={202} h={50} title="options job" sub="positions, every 5 min" dot={dot("positions")} />
-          <Node x={456} y={142} w={202} h={50} title="publisher" sub="snapshot, every 5 min" dot={job("dashboard", "publisher")} />
-
-          {/* the scheduled tasks */}
-          <Zone x={232} y={226} w={440} h={194} label="Scheduled tasks · Claude, in the cloud" />
-          <Node x={246} y={256} w={134} h={50} title="radar" sub={`build ${hhmm(utcToNy(RADAR_UTC, now))}`} dot={dot("radar")} />
-          <Node x={388} y={256} w={134} h={50} title="focus" sub="heads-up 08:50" dot={dot("levels")} />
-          <Node x={530} y={256} w={128} h={50} title="levels + focus" sub={`after close ${hhmm(utcToNy(LEVELS_UTC, now))}`} dot={dot("levels")} />
-          <Node x={246} y={326} w={134} h={50} title="Webull sync" sub="every 2 min" dot={dot("journal")} />
-          <Node x={388} y={326} w={134} h={50} title="Webull backstop" sub={`after close ${hhmm(utcToNy(WEBULL_BACKSTOP_UTC, now))}`} dot={dot("journal")} />
-          <Node x={530} y={326} w={128} h={50} title="radar send" sub={`at ${hhmm(utcToNy(RADAR_SEND_UTC, now))}`} dot={dot("radar")} />
-          <T x={246} y={413} muted>
-            Times are New York. They read only; none can place an order.
-          </T>
-
-          {/* source edges */}
-          <Edge diagram={id} d="M200 104 H246" tone="info" flow />
-          <Edge diagram={id} d="M246 116 H200" tone="good" />
-          <EdgeLabel x={223} y={98}>
-            bars
-          </EdgeLabel>
-          <EdgeLabel x={223} y={130}>
-            orders
-          </EdgeLabel>
-          <Edge diagram={id} d="M200 167 H246" tone="info" flow />
-          <Edge diagram={id} d="M200 281 H246" tone="info" flow />
-          <Edge diagram={id} d="M200 351 H246" tone="info" flow />
+          {/* the zones first, so no zone covers an arrow */}
+          <Zone x={232} y={14} w={440} h={330} label="Trading host · cloud VM" />
+          <Zone x={232} y={358} w={440} h={288} label="Scheduled tasks · Claude, in the cloud" />
+          <Node x={760} y={14} w={224} h={42} title="your phone" sub="ntfy alerts, healthchecks" tone="warn" />
 
           {/* the site */}
-          <Node x={714} y={14} w={266} h={38} title="ntfy + healthchecks · your phone" tone="warn" />
-          <Zone x={700} y={64} w={292} h={356} label="This site · Vercel" />
-          <Node x={714} y={90} w={264} h={34} title="signed ingest · every feed checked" tone="info" />
-          <Node x={714} y={136} w={264} h={50} title="Overview · Today · Operations" sub="snapshot; also Research and Risk" dot={dot("snapshot")} />
-          <Node x={714} y={198} w={160} h={64} title="Options" sub={["levels and focus,", "paper positions"]} dot={dot("levels")} />
-          <Node x={882} y={198} w={96} h={64} title="live prices" sub={["Alpaca IEX,", "every 2 s"]} />
-          <Node x={714} y={274} w={264} h={50} title="Radar" sub="pre-market edition" dot={dot("radar")} />
-          <Node x={714} y={336} w={264} h={50} title="Trades" sub="your Webull journal" dot={dot("journal")} />
-          <Edge diagram={id} d="M882 230 H874" tone="info" />
+          <Zone x={690} y={70} w={302} h={580} label="This site · Vercel" />
+          <rect x={704} y={110} width={34} height={510} rx={6} style={{ fill: `color-mix(in srgb, ${TONE_VAR.info} 11%, var(--card))`, stroke: TONE_VAR.info }} />
+          <text x={725} y={365} fontSize={12.5} textAnchor="middle" transform="rotate(-90 725 365)" style={{ fill: "var(--foreground)" }}>
+            signed ingest · every feed checked against its schema
+          </text>
+          <Node x={754} y={150} w={136} h={54} title="Overview · Today" sub={["Operations,", "Research, Risk"]} dot={dot("snapshot")} />
+          <Node x={754} y={290} w={136} h={150} title="Options" sub={["paper positions,", "levels and focus"]} dot={dot("levels")} />
+          <Node x={754} y={472} w={136} h={40} title="Radar" sub="pre-market edition" dot={dot("radar")} />
+          <Node x={754} y={532} w={136} h={86} title="Trades" sub="your Webull journal" dot={dot("journal")} />
+          <Node x={904} y={150} w={80} h={54} title="watchdog" sub="every 10 min" />
+          <Node x={904} y={340} w={80} h={50} title="live prices" sub={["Alpaca IEX,", "every 2 s"]} />
 
-          {/* producers to pages */}
-          <Edge diagram={id} d="M658 51 H686 V33 H714" tone="warn" />
-          <Edge diagram={id} d="M658 167 H686 V161 H714" tone="info" flow />
-          <Edge diagram={id} d="M448 167 H452 V200 H690 V230 H714" tone="info" flow />
-          <Edge diagram={id} d="M658 281 H676 V242 H714" tone="info" flow />
-          <Edge diagram={id} d="M658 351 H684 V299 H714" tone="info" flow />
-          <Edge diagram={id} d="M313 376 V394 H694 V361 H714" tone="info" flow />
-          <Edge diagram={id} d="M455 376 V394" tone="info" arrow={false} />
+          {/* the trading host */}
+          <Node x={246} y={44} w={412} h={28} title="systemd timers → job runner · lock, preflight, deadline" />
+          {[
+            ["routine", "routine", "Mon–Fri 07:30", 86],
+            ["paper-b", "paper-b", "08:30 to the close", 134],
+            ["forward", "forward", "12:40, after the close", 182],
+            ["weekly", "weekly", "Fri 20:00", 238],
+          ].map(([key, name, when, y]) => (
+            <Node key={key} x={246} y={y as number} w={150} h={38} title={name as string} sub={when as string} dot={job(key as string, name as string)} />
+          ))}
+          <Node x={246} y={290} w={150} h={38} title="options job" sub="every 5 min, read" dot={dot("positions")} />
+          <Node x={470} y={86} w={188} h={190} title="publisher" sub={["every 5 min:", "collect, sanitize,", "sign the snapshot"]} dot={job("dashboard", "publisher")} />
+
+          {/* the runner starts the jobs and pages the phone */}
+          <Edge diagram={id} d="M321 72 V86" />
+          <Edge diagram={id} d="M564 72 V86" />
+          <EdgeLabel x={330} y={82} anchor="start">
+            starts each job
+          </EdgeLabel>
+          <Edge diagram={id} d="M658 58 H690 V35 H760" tone="warn" />
+          <EdgeLabel x={724} y={30}>
+            alerts, pings
+          </EdgeLabel>
+
+          {/* Alpaca A ⇄ the robot's jobs */}
+          <Edge diagram={id} d="M200 100 H246" tone="info" flow />
+          <Edge diagram={id} d="M200 146 H246" tone="info" flow />
+          <Edge diagram={id} d="M246 162 H200" tone="good" />
+          <Edge diagram={id} d="M200 200 H246" tone="info" flow />
+          <EdgeLabel x={230} y={96}>
+            bars
+          </EdgeLabel>
+          <EdgeLabel x={230} y={142}>
+            bars
+          </EdgeLabel>
+          <EdgeLabel x={230} y={175}>
+            orders
+          </EdgeLabel>
+          <EdgeLabel x={230} y={196}>
+            bars
+          </EdgeLabel>
+          {/* forward's ledger feeds the weekly scorecard; all four write the state the publisher collects */}
+          <Edge diagram={id} d="M300 220 V238" tone="info" />
+          <EdgeLabel x={308} y={233} anchor="start">
+            ledger
+          </EdgeLabel>
+          {[105, 153, 201, 257].map((y) => (
+            <Edge key={y} diagram={id} d={`M396 ${y} H470`} tone="info" flow />
+          ))}
+          <EdgeLabel x={433} y={129}>
+            state files
+          </EdgeLabel>
+          {/* Alpaca B → options job */}
+          <Edge diagram={id} d="M200 309 H246" tone="info" flow />
+          <EdgeLabel x={228} y={304}>
+            positions
+          </EdgeLabel>
+
+          {/* host → ingest */}
+          <Edge diagram={id} d="M658 177 H704" tone="info" flow />
+          <EdgeLabel x={681} y={172}>
+            snapshot
+          </EdgeLabel>
+          <Edge diagram={id} d="M396 309 H704" tone="info" flow />
+          <EdgeLabel x={560} y={304}>
+            positions
+          </EdgeLabel>
+
+          {/* the scheduled tasks */}
+          <Node x={392} y={404} w={118} h={40} title="focus" sub="pre-open 08:50" dot={dot("levels")} />
+          <Node x={540} y={404} w={118} h={40} title="levels" sub={`after close ${hhmm(utcToNy(LEVELS_UTC, now))}`} dot={dot("levels")} />
+          <Node x={246} y={472} w={132} h={40} title="radar build" sub={hhmm(utcToNy(RADAR_UTC, now))} dot={dot("radar")} />
+          <Node x={540} y={472} w={118} h={40} title="radar send" sub={hhmm(utcToNy(RADAR_SEND_UTC, now))} dot={dot("radar")} />
+          <Node x={246} y={532} w={132} h={38} title="Webull sync" sub="every 2 min" dot={dot("journal")} />
+          <Node x={246} y={580} w={132} h={38} title="Webull backstop" sub={`after close ${hhmm(utcToNy(WEBULL_BACKSTOP_UTC, now))}`} dot={dot("journal")} />
+          <T x={392} y={636} muted>
+            Times are New York. None can place an order.
+          </T>
+
+          {/* IBKR → focus, levels, radar */}
+          <Edge diagram={id} d="M200 424 H392" tone="info" flow />
+          <EdgeLabel x={300} y={419}>
+            last prices
+          </EdgeLabel>
+          <Edge diagram={id} d="M200 458 H599 V444" tone="info" flow />
+          <EdgeLabel x={300} y={454}>
+            bars, implied vol
+          </EdgeLabel>
+          <Edge diagram={id} d="M200 492 H246" tone="info" flow />
+          <EdgeLabel x={228} y={487}>
+            lists
+          </EdgeLabel>
+          {/* inside the tasks */}
+          <Edge diagram={id} d="M540 432 H510" tone="info" />
+          <EdgeLabel x={525} y={427}>
+            pick
+          </EdgeLabel>
+          <Edge diagram={id} d="M378 492 H540" tone="info" />
+          <EdgeLabel x={459} y={487}>
+            outbox
+          </EdgeLabel>
+          {/* Webull → sync, backstop */}
+          <Edge diagram={id} d="M200 551 H246" tone="info" flow />
+          <Edge diagram={id} d="M200 599 H246" tone="info" flow />
+          <EdgeLabel x={228} y={546}>
+            trades
+          </EdgeLabel>
+          <EdgeLabel x={228} y={594}>
+            trades
+          </EdgeLabel>
+
+          {/* tasks → ingest */}
+          <Edge diagram={id} d="M451 404 V392 H704" tone="info" flow />
+          <EdgeLabel x={600} y={388}>
+            focus, when switched on
+          </EdgeLabel>
+          <Edge diagram={id} d="M658 418 H704" tone="info" flow />
+          <EdgeLabel x={681} y={413}>
+            levels
+          </EdgeLabel>
+          <Edge diagram={id} d="M658 492 H704" tone="info" flow />
+          <EdgeLabel x={681} y={487}>
+            radar
+          </EdgeLabel>
+          <Edge diagram={id} d="M378 551 H704" tone="info" flow />
+          <Edge diagram={id} d="M378 599 H704" tone="info" flow />
+          <EdgeLabel x={560} y={546}>
+            journal
+          </EdgeLabel>
+          <EdgeLabel x={560} y={594}>
+            journal
+          </EdgeLabel>
+
+          {/* ingest → pages, one arrow per feed */}
+          {[177, 309, 392, 418, 492, 551, 599].map((y) => (
+            <Edge key={y} diagram={id} d={`M738 ${y} H754`} tone="info" />
+          ))}
+          {/* the watchdog reads the snapshot's age and pages the phone */}
+          <Edge diagram={id} d="M890 177 H904" tone="info" />
+          <Edge diagram={id} d="M944 150 V56" tone="warn" />
+          <EdgeLabel x={948} y={110} anchor="start">
+            late
+          </EdgeLabel>
+          {/* live prices: the site's own quote route, never the ingest */}
+          <Edge diagram={id} d="M200 678 H995 V365 H984" tone="info" flow />
+          <EdgeLabel x={600} y={673}>
+            quotes, through the site&apos;s own route
+          </EdgeLabel>
+          <Edge diagram={id} d="M904 365 H890" tone="info" />
         </Diagram>
       </Figure>
       <Why title="Why two places do the work.">
