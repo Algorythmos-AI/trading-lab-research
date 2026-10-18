@@ -13,6 +13,19 @@ each one is a production deploy of the only off-host dead-man's switch.
   - `VERCEL_AUTOMATION_BYPASS_SECRET`: the same value as in `~/trading/.env`.
 Without both secrets the deploy job fails on purpose ("Main is NOT deployed").
 
+**Staging (ADR 0009).** Every push to `integration` that touches the dashboard runs `deploy (staging)`: a
+Vercel preview built in fixture mode (`DASHBOARD_FIXTURE=1`), aliased to staging.lab.algorythmos.com and checked
+through `/api/health`, which must report the commit and `fixture: true`. One-time setup (owner):
+- Vercel > the project > Settings > Domains: add `staging.lab.algorythmos.com` (no Git branch; the workflow
+  aliases it), and add its DNS record where algorythmos.com is hosted.
+- Vercel > the project > Settings > Environment Variables: the Preview environment holds no production secret
+  (no blob token, ingest keys or broker keys).
+- Repo Settings > Environments > New environment `staging`: deployment branch rule `integration`; secrets
+  `VERCEL_TOKEN` (its own token, with an expiry) and `VERCEL_AUTOMATION_BYPASS_SECRET` (the same value as for
+  production: protection is per project).
+- Repo Settings > Secrets and variables > Actions > Variables: `STAGING_ENABLED` = `true`. Until then the staging
+  job is skipped.
+
 **If a deploy fails.** The previous deployment stays live. Read the failed step:
 - Environment variables (not secret, but kept out of git): `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`, the values
   in `dashboard/.vercel/project.json` (`orgId`, `projectId`).

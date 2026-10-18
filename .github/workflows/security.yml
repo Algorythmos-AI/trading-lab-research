@@ -3,7 +3,7 @@ name: security
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, integration]
   schedule:
     - cron: "0 20 * * 0" # weekly, Monday 06:00 Sydney
 
