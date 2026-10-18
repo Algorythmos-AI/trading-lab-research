@@ -217,6 +217,10 @@ def test_main_takes_pull_requests_only_from_integration_and_hotfixes():
     assert job.get("name") == "release-source" and "if" not in job, "the required check must always run"
     script = job["steps"][0]["run"]
     assert "integration|hotfix/*)" in script and '"$HEAD_REPO" != "$REPO"' in script
+    step_env = job["steps"][0]["env"]
+    assert step_env["DEFAULT"] == "${{ github.event.repository.default_branch }}"
+    # The fork rule always applies; the branch rule waits until integration is the default branch.
+    assert script.index('"$HEAD_REPO" != "$REPO"') < script.index('"$DEFAULT" != "integration"') < script.index("case ")
 
 
 @pytest.mark.parametrize("name", ["ci.yml", "security.yml", "infra.yml", "dashboard.yml"])
