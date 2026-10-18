@@ -1,15 +1,13 @@
-import { ArrowUpRight, Ban, BookOpen, CalendarDays, Crosshair, Inbox, ListChecks, Ruler, Scale } from "lucide-react";
+import { ArrowUpRight, Ban, BookOpen, Crosshair, Inbox, ListChecks, Scale } from "lucide-react";
 import Link from "next/link";
 import { Empty } from "@/components/empty";
-import { DistanceBars, GaugeTiles, PickCards, RegimeScale, ScoreDumbbells, WeekStrip } from "@/components/radar-charts";
+import { GaugeTiles, PickCards, RegimeScale, ScoreDumbbells } from "@/components/radar-charts";
 import { Panel } from "@/components/panel";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { num, pct, shortDate, sydney } from "@/lib/format";
 import {
-  calendarWeek,
   DAILY_LIST,
-  distances,
   levelPosition,
   researched,
   scoreRows,
@@ -273,46 +271,3 @@ export function PicksPanel({ r }: { r: Radar }) {
   );
 }
 
-/** How close the support plays and breakout names are to their lines. */
-export function LinesPanel({ r }: { r: Radar }) {
-  const support = distances(r, "SUPPORT PLAYS");
-  const breakout = distances(r, "BREAKOUT WATCH");
-  if (support.length === 0 && breakout.length === 0) return null;
-  return (
-    <Panel
-      title="How close each name is to its line"
-      icon={Ruler}
-      means="Support plays: how far price sits above the support where the idea is wrong. Breakout watch: how far under the line it has to clear. Shortest first; solid bars are within half a percent."
-    >
-      <div className="grid gap-6 md:grid-cols-2">
-        {support.length > 0 ? (
-          <section className="grid gap-2">
-            <h3 className="text-sm font-medium">Support plays, above support</h3>
-            <DistanceBars rows={support} title="Support plays: percent above support" kind="support" />
-          </section>
-        ) : null}
-        {breakout.length > 0 ? (
-          <section className="grid gap-2">
-            <h3 className="text-sm font-medium">Breakout watch, under the line</h3>
-            <DistanceBars rows={breakout} title="Breakout watch: percent under resistance" kind="breakout" />
-          </section>
-        ) : null}
-      </div>
-    </Panel>
-  );
-}
-
-/** The week's dated events. Nothing for editions without a calendar. */
-export function CalendarPanel({ r }: { r: Radar }) {
-  if ((r.calendar ?? []).length === 0) return null;
-  const week = calendarWeek(r);
-  return (
-    <Panel
-      title="The week's catalysts"
-      icon={CalendarDays}
-      means="Dated events for the next five weekdays, so a CPI morning or a bond holiday is visible before you plan around it. Amber: high impact. Times are New York."
-    >
-      <WeekStrip days={week.days} later={week.later} today={r.edition_date} />
-    </Panel>
-  );
-}

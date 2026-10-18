@@ -3,7 +3,7 @@
 import { ArrowDown, ArrowUp, Minus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { num, shortDate } from "@/lib/format";
-import { gaugeTone, roomOf, type Distance, type RadarEvent, type RadarGauge, type RadarTicker, type ScoreRow, type Tone } from "@/lib/radar";
+import { gaugeTone, roomOf, type RadarEvent, type RadarGauge, type RadarTicker, type ScoreRow, type Tone } from "@/lib/radar";
 import { cn } from "@/lib/utils";
 
 const sgn = (v: number, d = 2) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(d)}%`;
@@ -251,62 +251,6 @@ export function PickCards({ picks }: { picks: RadarTicker[] }) {
   );
 }
 
-/**
- * How far each name sits from its line, shortest first. Bars under half a percent are drawn solid: those names are
- * on the line now. A name already through it shows its distance as negative, in amber.
- */
-export function DistanceBars({ rows, title, kind }: { rows: Distance[]; title: string; kind: "support" | "breakout" }) {
-  const W = 360;
-  const L = 74;
-  const R = W - 52;
-  const ROW = 24;
-  const H = rows.length * ROW + 30;
-  const max = Math.max(3, Math.ceil(Math.max(...rows.map((d) => d.pct), 0)));
-  const X = (v: number) => L + (Math.max(0, Math.min(max, v)) / max) * (R - L);
-  const fill = kind === "support" ? "var(--good-fill)" : "var(--bad-fill)";
-  const label = `${title}. ${rows.map((d) => `${d.symbol} ${d.pct.toFixed(1)}%`).join(", ")}.`;
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label} className="h-auto w-full">
-      {Array.from({ length: max + 1 }, (_, v) => v).map((v) => (
-        <g key={v}>
-          <line x1={X(v)} x2={X(v)} y1={4} y2={H - 20} stroke="var(--border)" />
-          <text x={X(v)} y={H - 6} textAnchor="middle" fontSize={11} style={{ fill: "var(--muted-foreground)" }}>
-            {v}%
-          </text>
-        </g>
-      ))}
-      {rows.map((d, i) => {
-        const y = 8 + i * ROW;
-        const through = d.pct < 0;
-        return (
-          <g key={d.symbol}>
-            <text x={0} y={y + 11} fontSize={12} fontWeight={600} className="font-mono" style={{ fill: "var(--foreground)" }}>
-              {d.symbol}
-            </text>
-            {d.tag ? (
-              <text x={46} y={y + 11} fontSize={10.5} style={{ fill: d.tag === "risk" ? "var(--warn)" : "var(--info)" }}>
-                {d.tag === "risk" ? "risk" : "new"}
-              </text>
-            ) : null}
-            <rect
-              x={L}
-              y={y + 2}
-              width={through ? 3 : Math.max(2, X(d.pct) - L)}
-              height={12}
-              rx={2}
-              fill={through ? "var(--warn-fill)" : fill}
-              fillOpacity={d.pct < 0.5 ? 0.9 : 0.5}
-            />
-            <text x={(through ? L + 3 : X(d.pct)) + 5} y={y + 12} fontSize={11.5} className="font-mono" style={{ fill: through ? "var(--warn)" : "var(--muted-foreground)" }}>
-              {through ? `${d.pct.toFixed(1)}% ${kind === "support" ? "below" : "above"}` : `${d.pct.toFixed(1)}%`}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
-
 const weekday = (ymd: string) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString("en-AU", { weekday: "short", day: "numeric", timeZone: "UTC" });
 
 const KIND_BAR: Record<string, string> = { macro: "bg-info-fill", earnings: "bg-neutral-fill", holiday: "bg-muted-foreground", other: "bg-neutral-fill" };
@@ -328,7 +272,18 @@ function Event({ e }: { e: RadarEvent }) {
 }
 
 /** Five weekdays of dated events, today first; high-impact events in amber. Later events trail after. */
-export function WeekStrip({ days, later, today }: { days: { date: string; events: RadarEvent[] }[]; later: RadarEvent[]; today: string }) {
+export function WeekStrip({
+  days,
+  later,
+  today,
+  empty = "Nothing dated",
+}: {
+  days: { date: string; events: RadarEvent[] }[];
+  later: RadarEvent[];
+  today: string;
+  /** What an empty day says. */
+  empty?: string;
+}) {
   return (
     <div className="grid gap-3">
       <ol aria-label="Catalysts this week" className="grid gap-2 sm:grid-cols-5">
@@ -342,7 +297,7 @@ export function WeekStrip({ days, later, today }: { days: { date: string; events
               {d.date === today ? " · today" : ""}
             </p>
             {d.events.length === 0 ? (
-              <p className="text-muted-foreground text-xs">Nothing dated</p>
+              <p className="text-muted-foreground text-xs">{empty}</p>
             ) : (
               <ul className="grid gap-2">
                 {d.events.map((e, i) => (

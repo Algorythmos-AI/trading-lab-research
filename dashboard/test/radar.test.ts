@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sign } from "@/lib/hmac";
 import {
   calendarWeek,
-  distances,
   gaugeTone,
   levelPosition,
   radarDates,
@@ -248,18 +247,6 @@ describe("the radar's pictures", () => {
     const spcx = r.tickers!.find((t) => t.symbol === "SPCX")!;
     expect(roomOf(spcx)).toMatchObject({ ceiling: spcx.high_52w ?? null, atHigh: true });
     expect(roomOf({ ...spcx, support: null })).toBeNull();
-  });
-
-  it("puts the name nearest its line first", () => {
-    // Support plays: distance above support, from to_support_pct (negative when support is below).
-    expect(distances(r, "SUPPORT PLAYS").map((d) => [d.symbol, d.pct])).toEqual([
-      ["GOOGL", 3.24],
-      ["AMZN", 3.71],
-      ["IBKR", 6.32],
-    ]);
-    const b = distances(r, "BREAKOUT WATCH");
-    expect(b.map((d) => d.symbol)).toEqual(["AMZN", "SPY", "GOOGL"]);
-    expect(b[0]!.pct).toBe(0.6);
   });
 
   it("lays the calendar over five weekdays from the edition's date, the rest later", () => {

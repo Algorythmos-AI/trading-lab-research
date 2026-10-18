@@ -131,25 +131,6 @@ export function roomOf(t: RadarTicker): Room | null {
   };
 }
 
-export interface Distance {
-  symbol: string;
-  /** Percent: above support for a support play, under the line for a breakout. Negative = already through it. */
-  pct: number;
-  tag: RadarTicker["tag"];
-}
-
-/**
- * How close each name on a list is to the line that matters, shortest first: for SUPPORT PLAYS the distance above
- * support (where the idea is wrong), for anything else the distance under resistance (what it has to clear).
- */
-export function distances(r: Radar, listName: string): Distance[] {
-  const support = listName === "SUPPORT PLAYS";
-  return tickersOf(r, listName)
-    .map((t) => ({ symbol: t.symbol, pct: support ? -(t.to_support_pct ?? NaN) : (t.to_resistance_pct ?? NaN), tag: t.tag }))
-    .filter((d) => Number.isFinite(d.pct))
-    .sort((a, b) => a.pct - b.pct);
-}
-
 const addDays = (ymd: string, n: number) => {
   const d = new Date(`${ymd}T12:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);
