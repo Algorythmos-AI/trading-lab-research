@@ -44,7 +44,7 @@ const sydneyOpen = (ymd: string) => {
 
 // ── Your account ─────────────────────────────────────────────────────────────────────────────────────────────────
 
-function Meter({ label, text, share, tone }: { label: string; text: string; share: number; tone: Tone }) {
+export function Meter({ label, text, share, tone }: { label: string; text: string; share: number; tone: Tone }) {
   const fill = { good: "bg-good-fill", warn: "bg-warn-fill", bad: "bg-bad-fill", info: "bg-info-fill", neutral: "bg-neutral-fill" }[tone];
   return (
     <div className="grid content-start gap-1.5">

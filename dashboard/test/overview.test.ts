@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Trade } from "@/lib/journal";
-import { hourBands, keptStreak, keptVsBroken, nextOpen, periodTotals, quickVsSlow, ruleDays, tickerEnds, untilText, weekStart, withRun } from "@/lib/overview";
+import { dayClock, hourBands, keptStreak, keptVsBroken, nextOpen, periodTotals, quickVsSlow, ruleDays, tickerEnds, untilText, weekStart, withRun } from "@/lib/overview";
 
 let n = 0;
 const trade = (pnl: number, opened: string, closed: string, extra: Partial<Trade> = {}): Trade => ({
@@ -119,6 +119,30 @@ describe("patterns", () => {
       ["PLTR", 50],
       ["SPY", 10],
       ["AMD", -80],
+    ]);
+  });
+});
+
+describe("day clock", () => {
+  it("puts overlapping trades on separate lanes and steps the running result at each close", () => {
+    const trades = [
+      trade(20, at("2026-10-16", "09:40"), at("2026-10-16", "09:50")),
+      trade(-30, at("2026-10-16", "09:45"), at("2026-10-16", "09:47")),
+      trade(5, at("2026-10-16", "10:30"), at("2026-10-16", "10:35")),
+      trade(99, at("2026-10-15", "10:30"), at("2026-10-15", "10:35")),
+    ];
+    const c = dayClock(trades, [{ symbol: "SPY", kind: "call", side: "long", qty: 1, entry: 1, opened_at: at("2026-10-16", "11:00") }], "2026-10-16", 11 * 60 + 30, (t) => t.symbol);
+    expect(c.items.map((i) => [i.from, i.to, i.lane, i.open])).toEqual([
+      [580, 590, 0, false],
+      [585, 587, 1, false],
+      [630, 635, 0, false],
+      [660, 690, 0, true],
+    ]);
+    expect(c.lanes).toBe(2);
+    expect(c.steps).toEqual([
+      { at: 587, cum: -30 },
+      { at: 590, cum: -10 },
+      { at: 635, cum: -5 },
     ]);
   });
 });

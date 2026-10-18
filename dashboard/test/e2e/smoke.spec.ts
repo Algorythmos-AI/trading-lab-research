@@ -132,6 +132,10 @@ test("today draws the session clock and the open paper position", async ({ page 
   // 11:02 New York on the fixture's trading day, so the clock shows "now".
   await page.clock.setFixedTime(new Date("2026-09-29T15:02:00Z"));
   await page.goto("/today");
+  // The owner's own day comes first: the journal's latest session, its trades drawn on the clock.
+  await expect(page.getByRole("heading", { name: /^Your (day|last session) · / })).toBeVisible();
+  await expect(page.getByTestId("trade-clock")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "The robots, paper money only" })).toBeVisible();
   const clock = page.getByRole("img", { name: /^The New York day 2026-09-29 from 04:00 to 20:00/ });
   await expect(clock).toBeVisible();
   // Every lane ends in a word, never colour alone: the fixture's routine run failed.
