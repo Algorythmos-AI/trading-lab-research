@@ -54,7 +54,7 @@ export function VerdictPanel({
     <Panel
       title="The day"
       icon={Gauge}
-      means="Red on a CPI, FOMC, payrolls or PCE day. Amber on the monthly expiry, an earnings report from one of your names, a VIX jump over 10%, or a gap past 80% of a name's expected move. Green otherwise."
+      means="Red on a CPI, FOMC, payrolls or PCE day. Amber on the monthly expiry, an earnings report from one of your names, a VIX jump over 10%, or a gap past 80% of a name's expected move. Green only when every input was there and none fired."
     >
       <div className="flex flex-wrap items-center gap-2" role="group" aria-label={`The day: ${verdict.word}`}>
         <span
@@ -63,6 +63,7 @@ export function VerdictPanel({
             verdict.tone === "bad" && "bg-bad-soft text-bad border-bad/40",
             verdict.tone === "warn" && "bg-warn-soft text-warn border-warn/40",
             verdict.tone === "good" && "bg-good-soft text-good border-good/40",
+            verdict.tone === "neutral" && "bg-muted text-foreground border-border",
           )}
         >
           {verdict.word}
@@ -72,7 +73,7 @@ export function VerdictPanel({
             {r.text}
           </Badge>
         ))}
-        {verdict.reasons.length === 0 ? <Badge variant="good" className="text-[0.8125rem] whitespace-normal">No market-moving release, no expiry, no earnings on your names</Badge> : null}
+        {verdict.tone === "good" ? <Badge variant="good" className="text-[0.8125rem] whitespace-normal">No market-moving release, no expiry, no earnings on your names</Badge> : null}
         {vix ? (
           <Badge variant="neutral" className="font-mono text-[0.8125rem]">
             VIX {vix}
@@ -90,6 +91,11 @@ export function VerdictPanel({
           </Badge>
         ) : null}
       </div>
+      {verdict.unchecked.length > 0 ? (
+        <p className="text-muted-foreground mt-3 text-sm">
+          Could not check: {verdict.unchecked.join("; ")}.{verdict.tone === "neutral" ? " So the day is not called normal." : ""}
+        </p>
+      ) : null}
     </Panel>
   );
 }
@@ -441,9 +447,17 @@ export function MoversPanel({ rows }: { rows: Mover[] }) {
 
 // ── F. The week ──────────────────────────────────────────────────────────────────────────────────────────────────
 
-export function WeekPanel({ days, later, today }: { days: WeekDay[]; later: RadarEvent[]; today: string }) {
+export function WeekPanel({ days, later, today, earningsKnown }: { days: WeekDay[]; later: RadarEvent[]; today: string; earningsKnown: boolean }) {
   return (
-    <Panel title="This week, for your names" icon={CalendarDays} means="Releases from the radar, and earnings, with your names in amber. Times are New York.">
+    <Panel
+      title="This week, for your names"
+      icon={CalendarDays}
+      means={
+        earningsKnown
+          ? "Releases from the radar, and earnings, with your names in amber. Times are New York."
+          : "Releases from the radar. Neither calendar carries earnings dates, so a report from one of your names may be missing here. Times are New York."
+      }
+    >
       <div className="grid gap-3">
         <ol aria-label="This week" className="grid gap-2 sm:grid-cols-5">
           {days.map((d) => (

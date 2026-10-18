@@ -1,4 +1,7 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { VerdictPanel, WeekPanel } from "@/components/radar-brief";
 import type { Trade } from "@/lib/journal";
 import type { OptionsEdition } from "@/lib/options.types";
 import type { Radar } from "@/lib/radar";
@@ -6,6 +9,7 @@ import {
   briefWeek,
   dayVerdict,
   earningsOf,
+  holidaysOf,
   isMonthlyExpiry,
   keyLevels,
   mergedLevels,
@@ -119,14 +123,58 @@ describe("the day's verdict", () => {
       "TSLA gapped 1.6× its daily move: wait for a retest",
     ]);
   });
+  // Every input the call reads, present and quiet: a dated release, an earnings row, a VIX move and a small gap.
+  const quiet = () =>
+    radar({
+      calendar: [{ date: "2026-10-14", time_et: "10:00", label: "Business inventories", kind: "macro", impact: "low" }],
+      gauges: [{ label: "VIX", value: "16.5", change: 0.2, change_unit: "pts" }],
+    });
+  const smallGap = () => openRead("SPY", spyOpt, { symbol: "SPY", premarket_price: 772.5 });
   it("ignores earnings from names you don't trade and is green on a quiet day", () => {
-    const v = dayVerdict(radar(), ["SPY"], [], [{ date: "2026-10-14", symbol: "NFLX", when: "amc" }]);
-    expect(v).toEqual({ tone: "good", word: "Normal day", reasons: [] });
+    const v = dayVerdict(quiet(), ["SPY"], [smallGap()], [{ date: "2026-10-14", symbol: "NFLX", when: "amc" }]);
+    expect(v).toEqual({ tone: "good", word: "Normal day", reasons: [], unchecked: [] });
+  });
+  it("never calls a day normal when an input is missing", () => {
+    const nflx = [{ date: "2026-10-14", symbol: "NFLX", when: "amc" }];
+    // No earnings rows anywhere: "no report from your names" would be a guess.
+    expect(dayVerdict(quiet(), ["SPY"], [smallGap()], [])).toEqual({
+      tone: "neutral",
+      word: "Not fully checked",
+      reasons: [],
+      unchecked: ["earnings dates (none in the calendars)"],
+    });
+    expect(dayVerdict(radar({ ...quiet(), gauges: [] }), ["SPY"], [smallGap()], nflx).unchecked).toEqual(["the VIX move"]);
+    expect(dayVerdict(radar({ ...quiet(), calendar: [] }), ["SPY"], [smallGap()], nflx).unchecked).toEqual(["the release calendar"]);
+    // No pre-market price, or no levels for the session: the gap rule could not run.
+    const noPre = openRead("SPY", spyOpt, { symbol: "SPY" });
+    const noOpt = openRead("SPY", undefined, { symbol: "SPY", premarket_price: 772.5, price: 771.79 });
+    for (const read of [noPre, noOpt]) {
+      expect(dayVerdict(quiet(), ["SPY"], [read], nflx).word).toBe("Not fully checked");
+    }
+    expect(dayVerdict(quiet(), ["SPY"], [], nflx).unchecked).toEqual(["pre-market gaps (no pre-market price or expected move)"]);
+  });
+  it("still names a rule that fired when something else is missing", () => {
+    const v = dayVerdict(radar({ edition_date: "2026-10-16" }), ["SPY"], [], []);
+    expect(v.word).toBe("Careful day");
+    expect(v.reasons.map((x) => x.text)).toEqual(["Monthly options expiry"]);
+    expect(v.unchecked.length).toBeGreaterThan(0);
   });
   it("finds the third Friday", () => {
     expect(isMonthlyExpiry("2026-10-16")).toBe(true);
     expect(isMonthlyExpiry("2026-10-09")).toBe(false);
     expect(isMonthlyExpiry("2026-10-23")).toBe(false);
+    expect(isMonthlyExpiry("2026-10-15")).toBe(false);
+  });
+  it("moves the expiry to Thursday when the third Friday is a holiday", () => {
+    // Good Friday 2025 fell on the third Friday of April.
+    const goodFriday = new Set(["2025-04-18"]);
+    expect(isMonthlyExpiry("2025-04-17", goodFriday)).toBe(true);
+    expect(isMonthlyExpiry("2025-04-18", goodFriday)).toBe(false);
+    expect(isMonthlyExpiry("2025-04-17")).toBe(false);
+    // The radar's calendar is where the holiday comes from.
+    const r = radar({ edition_date: "2025-04-17", calendar: [{ date: "2025-04-18", label: "Good Friday: market closed", kind: "holiday" }] });
+    expect(holidaysOf(r)).toEqual(new Set(["2025-04-18"]));
+    expect(dayVerdict(r, ["SPY"], [], []).reasons.map((x) => x.text)).toEqual(["Monthly options expiry"]);
   });
   it("reads the VIX move in percent from points", () => {
     expect(vixJumpPct(radar({ gauges: [{ label: "VIX", value: "22.0", change: 2, change_unit: "pts" }] }))).toBeCloseTo(10, 5);
@@ -229,6 +277,36 @@ describe("movers and the week", () => {
   it("works on the fixture edition", () => {
     const r = radarJson as unknown as Radar;
     expect(earningsOf(r, null).map((x) => x.symbol)).toEqual(["MU"]);
-    expect(dayVerdict(r, ["SPY"], [], []).word).toBe("Normal day");
+    // The fixture has no pre-market price for SPY, so the gap rule cannot run.
+    expect(dayVerdict(r, ["SPY"], [], earningsOf(r, null)).word).toBe("Not fully checked");
+  });
+});
+
+describe("the brief's panels say what they could not check", () => {
+  const html = (el: ReturnType<typeof createElement>) => renderToStaticMarkup(el);
+  const panel = (verdict: ReturnType<typeof dayVerdict>) => html(createElement(VerdictPanel, { verdict, vix: null, vixChange: null, spyMove: null, regime: null }));
+  it("never shows the all-clear badge on an unchecked day", () => {
+    const out = panel(dayVerdict(radar(), ["SPY"], [], []));
+    expect(out).toContain("Not fully checked");
+    expect(out).toContain("Could not check: the release calendar; earnings dates (none in the calendars); the VIX move;");
+    expect(out).toContain("So the day is not called normal.");
+    expect(out).not.toContain("no earnings on your names");
+  });
+  it("keeps the all-clear badge for a fully checked quiet day", () => {
+    const r = radar({
+      calendar: [{ date: "2026-10-14", time_et: "10:00", label: "Business inventories", kind: "macro", impact: "low" }],
+      gauges: [{ label: "VIX", value: "16.5", change: 0.2, change_unit: "pts" }],
+    });
+    const out = panel(dayVerdict(r, ["SPY"], [openRead("SPY", spyOpt, { symbol: "SPY", premarket_price: 772.5 })], [{ date: "2026-10-20", symbol: "NFLX", when: "amc" }]));
+    expect(out).toContain("Normal day");
+    expect(out).toContain("no earnings on your names");
+    expect(out).not.toContain("Could not check");
+  });
+  it("warns that the week may be missing a report when no calendar has earnings", () => {
+    const w = briefWeek(radar(), [], ["SPY"]);
+    const none = html(createElement(WeekPanel, { days: w.days, later: w.later, today: "2026-10-14", earningsKnown: false }));
+    expect(none).toContain("Neither calendar carries earnings dates");
+    const some = html(createElement(WeekPanel, { days: w.days, later: w.later, today: "2026-10-14", earningsKnown: true }));
+    expect(some).not.toContain("Neither calendar carries earnings dates");
   });
 });

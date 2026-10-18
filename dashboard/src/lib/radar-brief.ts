@@ -149,10 +149,30 @@ export function openPlan(o: OpenRead): string | null {
 /** Releases that move the whole market on their own. A day with one is an event day. */
 const RED_EVENT = /\b(cpi|fomc|payrolls?|nfp|pce|jobs report|fed (rate )?decision)\b/i;
 
-/** The third Friday of a month: the monthly options expiry. */
-export function isMonthlyExpiry(ymd: string): boolean {
+const addDays = (ymd: string, n: number) => {
+  const d = new Date(`${ymd}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+
+const isThirdFriday = (ymd: string) => {
   const d = new Date(`${ymd}T12:00:00Z`);
   return d.getUTCDay() === 5 && d.getUTCDate() >= 15 && d.getUTCDate() <= 21;
+};
+
+/**
+ * The monthly options expiry: the third Friday, or the Thursday before it when that Friday is a market holiday
+ * (Good Friday). `holidays` are the closed days the calendar knows about.
+ */
+export function isMonthlyExpiry(ymd: string, holidays: ReadonlySet<string> = new Set()): boolean {
+  if (isThirdFriday(ymd)) return !holidays.has(ymd);
+  const next = addDays(ymd, 1);
+  return new Date(`${ymd}T12:00:00Z`).getUTCDay() === 4 && isThirdFriday(next) && holidays.has(next);
+}
+
+/** The days the radar's calendar marks as market holidays. */
+export function holidaysOf(r: Radar): Set<string> {
+  return new Set((r.calendar ?? []).filter((e) => e.kind === "holiday").map((e) => e.date));
 }
 
 /** The symbol an earnings row is about: the radar writes it as the label ("MU" or "MU earnings"). */
@@ -184,10 +204,13 @@ export function earningsOf(r: Radar, opt: OptionsEdition | null): Earnings[] {
 }
 
 export interface Verdict {
-  tone: BriefTone;
-  word: "Event day" | "Careful day" | "Normal day";
+  /** neutral: no rule fired, but not every input was there, so the day is not called normal. */
+  tone: BriefTone | "neutral";
+  word: "Event day" | "Careful day" | "Normal day" | "Not fully checked";
   /** Why, one short line each, most serious first. */
   reasons: { tone: BriefTone; text: string }[];
+  /** The inputs the call could not check. With any of these the day is never called normal. */
+  unchecked: string[];
 }
 
 const pctNum = (v: string | null | undefined) => {
@@ -207,7 +230,9 @@ export function vixJumpPct(r: Radar): number | null {
 /**
  * The day in one word. Red on a release that moves the whole market; amber on the monthly expiry, an earnings report
  * from one of the owner's names that day, a VIX jump over 10%, or a gap past 80% of a name's expected move; green
- * otherwise. Every reason the page shows is one of these rules.
+ * only when every input was there and none fired. A missing calendar, earnings dates, VIX change or pre-market gap
+ * is listed in `unchecked`, and a day with no reason but something unchecked is "Not fully checked", never normal.
+ * Every reason the page shows is one of these rules.
  */
 export function dayVerdict(r: Radar, names: readonly string[], reads: readonly OpenRead[], earnings: readonly Earnings[]): Verdict {
   const day = r.edition_date;
@@ -217,7 +242,7 @@ export function dayVerdict(r: Radar, names: readonly string[], reads: readonly O
       reasons.push({ tone: "bad", text: `${e.label}${e.time_et ? ` ${e.time_et}` : ""}: no entries until 30 minutes after` });
     }
   }
-  if (isMonthlyExpiry(day)) reasons.push({ tone: "warn", text: "Monthly options expiry" });
+  if (isMonthlyExpiry(day, holidaysOf(r))) reasons.push({ tone: "warn", text: "Monthly options expiry" });
   for (const e of earnings.filter((x) => x.date === day && names.includes(x.symbol))) {
     reasons.push({ tone: "warn", text: `${e.symbol} reports today: no overnight holds` });
   }
@@ -228,8 +253,17 @@ export function dayVerdict(r: Radar, names: readonly string[], reads: readonly O
       reasons.push({ tone: "warn", text: `${o.symbol} gapped ${o.gapVsMove.toFixed(1)}× its daily move: wait for a retest` });
     }
   }
-  const tone: BriefTone = reasons.some((x) => x.tone === "bad") ? "bad" : reasons.length ? "warn" : "good";
-  return { tone, word: tone === "bad" ? "Event day" : tone === "warn" ? "Careful day" : "Normal day", reasons };
+  const unchecked: string[] = [];
+  if ((r.calendar ?? []).length === 0) unchecked.push("the release calendar");
+  // Earnings rows from neither edition: "no report from your names" would be a guess.
+  if (earnings.length === 0) unchecked.push("earnings dates (none in the calendars)");
+  if (vix === null) unchecked.push("the VIX move");
+  if (!reads.some((o) => o.gapVsMove !== null)) unchecked.push("pre-market gaps (no pre-market price or expected move)");
+  if (reasons.some((x) => x.tone === "bad")) return { tone: "bad", word: "Event day", reasons, unchecked };
+  if (reasons.length > 0) return { tone: "warn", word: "Careful day", reasons, unchecked };
+  return unchecked.length > 0
+    ? { tone: "neutral", word: "Not fully checked", reasons, unchecked }
+    : { tone: "good", word: "Normal day", reasons, unchecked };
 }
 
 // ── The session, against the owner's own record ──────────────────────────────────────────────────────────────────
