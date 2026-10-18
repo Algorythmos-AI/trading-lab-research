@@ -1,3 +1,7 @@
+import { HealthBanner } from "@/components/health-banner";
+import { NeedsYouPanel } from "@/components/overview/lab-panels";
+import { computeHealth } from "@/lib/health";
+import { requestTime } from "@/lib/now";
 import { Activity, CalendarClock, ClipboardCheck, Clock, Database, GitBranch, HardDrive, Workflow } from "lucide-react";
 import { RelativeTime } from "@/components/client/relative-time";
 import { Empty } from "@/components/empty";
@@ -32,6 +36,8 @@ export default async function OperationsPage() {
         <NoSnapshot status={result.status} />
       ) : (
         <>
+          <HealthBanner health={computeHealth(result.snapshot, requestTime())} />
+          <NeedsYouPanel s={result.snapshot} />
           <HeatmapPanel s={result.snapshot} />
           <SlaPanel s={result.snapshot} />
           <div className="grid gap-5 lg:grid-cols-2">
