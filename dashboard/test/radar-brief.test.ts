@@ -119,14 +119,43 @@ describe("the day's verdict", () => {
       "TSLA gapped 1.6× its daily move: wait for a retest",
     ]);
   });
+  const quiet = (over: Partial<Radar> = {}) =>
+    radar({
+      calendar: [{ date: "2026-10-14", time_et: "10:00", label: "Business inventories", kind: "macro", impact: "low" }],
+      gauges: [{ label: "VIX", value: "16.46", change: -2.43, change_unit: "pct" }],
+      ...over,
+    });
+  const spyRead = () => openRead("SPY", spyOpt, { symbol: "SPY", price: 771.79, premarket_price: 772.1 });
   it("ignores earnings from names you don't trade and is green on a quiet day", () => {
-    const v = dayVerdict(radar(), ["SPY"], [], [{ date: "2026-10-14", symbol: "NFLX", when: "amc" }]);
-    expect(v).toEqual({ tone: "good", word: "Normal day", reasons: [] });
+    const v = dayVerdict(quiet(), ["SPY"], [spyRead()], [{ date: "2026-10-14", symbol: "NFLX", when: "amc" }]);
+    expect(v).toEqual({ tone: "good", word: "Normal day", reasons: [], unchecked: [] });
+  });
+  it("is never green when a check had no data", () => {
+    const v = dayVerdict(radar(), ["SPY"], [openRead("SPY", undefined, undefined)], []);
+    expect(v.word).toBe("Not fully checked");
+    expect(v.tone).toBe("warn");
+    expect(v.unchecked).toEqual(["today's releases", "the VIX move", "SPY's levels"]);
+    const noGap = dayVerdict(quiet(), ["SPY"], [openRead("SPY", spyOpt, undefined)], []);
+    expect(noGap.unchecked).toEqual(["SPY's pre-market gap"]);
+  });
+  it("keeps a real warning ahead of a missing check", () => {
+    const v = dayVerdict(radar({ edition_date: "2026-10-16" }), ["SPY"], [], []);
+    expect(v.word).toBe("Careful day");
+    expect(v.unchecked.length).toBeGreaterThan(0);
   });
   it("finds the third Friday", () => {
     expect(isMonthlyExpiry("2026-10-16")).toBe(true);
     expect(isMonthlyExpiry("2026-10-09")).toBe(false);
     expect(isMonthlyExpiry("2026-10-23")).toBe(false);
+  });
+  it("moves the expiry to Thursday when the third Friday is a holiday", () => {
+    // Juneteenth 2026 and Good Friday 2025 (18 Apr) both fall on a third Friday.
+    expect(isMonthlyExpiry("2026-06-19")).toBe(false);
+    expect(isMonthlyExpiry("2026-06-18")).toBe(true);
+    expect(isMonthlyExpiry("2025-04-18")).toBe(false);
+    expect(isMonthlyExpiry("2025-04-17")).toBe(true);
+    expect(isMonthlyExpiry("2026-10-15")).toBe(false);
+    expect(isMonthlyExpiry("2026-11-19", new Set(["2026-11-20"]))).toBe(true);
   });
   it("reads the VIX move in percent from points", () => {
     expect(vixJumpPct(radar({ gauges: [{ label: "VIX", value: "22.0", change: 2, change_unit: "pts" }] }))).toBeCloseTo(10, 5);
@@ -229,6 +258,6 @@ describe("movers and the week", () => {
   it("works on the fixture edition", () => {
     const r = radarJson as unknown as Radar;
     expect(earningsOf(r, null).map((x) => x.symbol)).toEqual(["MU"]);
-    expect(dayVerdict(r, ["SPY"], [], []).word).toBe("Normal day");
+    expect(dayVerdict(r, ["SPY"], [], []).word).not.toBe("Event day");
   });
 });
