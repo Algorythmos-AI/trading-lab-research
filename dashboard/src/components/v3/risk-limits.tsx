@@ -21,7 +21,7 @@ export function RiskLimitsPanel({ s }: { s: Snapshot }) {
       id="limits"
       title="Limits in force"
       icon={Gauge}
-      means="Each limit as the code enforces it, and how much of it today has used. Loss limits count against the US$600 virtual account; a limit that is used up latches the runner until the owner resets it."
+      means="Paper B's limits as its code enforces them, and how much of each today has used. Loss limits count against its US$600 virtual paper account; a limit that is used up latches the robot until the owner resets it on the host."
       action={
         allowed === true ? (
           <StatusBadge tone="good">Entries allowed</StatusBadge>
@@ -38,6 +38,11 @@ export function RiskLimitsPanel({ s }: { s: Snapshot }) {
         <Empty title="No limits in this snapshot" />
       ) : (
         <div className="grid gap-5">
+          {rows.every((r) => r.state === "n/a" || !r.state) ? (
+            <p className="text-muted-foreground text-sm">
+              No limit has a reading in this snapshot. That is normal when paper B has not traded today (a weekend, a holiday or before the open); the limits still apply when it does.
+            </p>
+          ) : null}
           <div className="grid gap-4 sm:grid-cols-3">
             {rows
               .filter((r) => typeof r.used_pct === "number")
