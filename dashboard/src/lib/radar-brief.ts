@@ -149,10 +149,31 @@ export function openPlan(o: OpenRead): string | null {
 /** Releases that move the whole market on their own. A day with one is an event day. */
 const RED_EVENT = /\b(cpi|fomc|payrolls?|nfp|pce|jobs report|fed (rate )?decision)\b/i;
 
-/** The third Friday of a month: the monthly options expiry. */
-export function isMonthlyExpiry(ymd: string): boolean {
+const shiftDay = (ymd: string, days: number) => new Date(Date.parse(`${ymd}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+
+/** Good Friday (the exchanges shut): two days before Western Easter. */
+function goodFriday(year: number): string {
+  const a = year % 19, b = Math.floor(year / 100), c = year % 100;
+  const h = (19 * a + b - Math.floor(b / 4) - Math.floor((b - Math.floor((8 * b + 13) / 25)) / 3) + 15) % 30;
+  const l = (32 + 2 * (b % 4) + 2 * Math.floor(c / 4) - h - (c % 4)) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return shiftDay(`${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`, -2);
+}
+
+/** Market holidays that can land on a third Friday: Good Friday, Juneteenth, and any the radar's calendar lists. */
+function shutOn(ymd: string, holidays: ReadonlySet<string>): boolean {
+  return holidays.has(ymd) || ymd === goodFriday(Number(ymd.slice(0, 4))) || ymd.slice(5) === "06-19";
+}
+
+/** The monthly options expiry: the third Friday, or the Thursday before when that Friday is a market holiday. */
+export function isMonthlyExpiry(ymd: string, holidays: ReadonlySet<string> = new Set()): boolean {
   const d = new Date(`${ymd}T12:00:00Z`);
-  return d.getUTCDay() === 5 && d.getUTCDate() >= 15 && d.getUTCDate() <= 21;
+  const thirdFriday = (x: Date) => x.getUTCDay() === 5 && x.getUTCDate() >= 15 && x.getUTCDate() <= 21;
+  if (thirdFriday(d)) return !shutOn(ymd, holidays);
+  const next = shiftDay(ymd, 1);
+  return d.getUTCDay() === 4 && thirdFriday(new Date(`${next}T12:00:00Z`)) && shutOn(next, holidays);
 }
 
 /** The symbol an earnings row is about: the radar writes it as the label ("MU" or "MU earnings"). */
@@ -185,9 +206,11 @@ export function earningsOf(r: Radar, opt: OptionsEdition | null): Earnings[] {
 
 export interface Verdict {
   tone: BriefTone;
-  word: "Event day" | "Careful day" | "Normal day";
+  word: "Event day" | "Careful day" | "Normal day" | "Not fully checked";
   /** Why, one short line each, most serious first. */
   reasons: { tone: BriefTone; text: string }[];
+  /** Checks the page could not run for want of data. A day with any is never called normal. */
+  unchecked: string[];
 }
 
 const pctNum = (v: string | null | undefined) => {
@@ -207,7 +230,8 @@ export function vixJumpPct(r: Radar): number | null {
 /**
  * The day in one word. Red on a release that moves the whole market; amber on the monthly expiry, an earnings report
  * from one of the owner's names that day, a VIX jump over 10%, or a gap past 80% of a name's expected move; green
- * otherwise. Every reason the page shows is one of these rules.
+ * otherwise, but only when every check had its data: a missing calendar, VIX move or SPY level reads "Not fully
+ * checked" instead. Every reason the page shows is one of these rules.
  */
 export function dayVerdict(r: Radar, names: readonly string[], reads: readonly OpenRead[], earnings: readonly Earnings[]): Verdict {
   const day = r.edition_date;
@@ -217,7 +241,8 @@ export function dayVerdict(r: Radar, names: readonly string[], reads: readonly O
       reasons.push({ tone: "bad", text: `${e.label}${e.time_et ? ` ${e.time_et}` : ""}: no entries until 30 minutes after` });
     }
   }
-  if (isMonthlyExpiry(day)) reasons.push({ tone: "warn", text: "Monthly options expiry" });
+  const holidays = new Set((r.calendar ?? []).filter((x) => x.kind === "holiday").map((x) => x.date));
+  if (isMonthlyExpiry(day, holidays)) reasons.push({ tone: "warn", text: "Monthly options expiry" });
   for (const e of earnings.filter((x) => x.date === day && names.includes(x.symbol))) {
     reasons.push({ tone: "warn", text: `${e.symbol} reports today: no overnight holds` });
   }
@@ -228,8 +253,15 @@ export function dayVerdict(r: Radar, names: readonly string[], reads: readonly O
       reasons.push({ tone: "warn", text: `${o.symbol} gapped ${o.gapVsMove.toFixed(1)}× its daily move: wait for a retest` });
     }
   }
-  const tone: BriefTone = reasons.some((x) => x.tone === "bad") ? "bad" : reasons.length ? "warn" : "good";
-  return { tone, word: tone === "bad" ? "Event day" : tone === "warn" ? "Careful day" : "Normal day", reasons };
+  const unchecked: string[] = [];
+  if (!(r.calendar ?? []).some((x) => x.kind !== "earnings")) unchecked.push("today's releases");
+  if (vix === null) unchecked.push("the VIX move");
+  const spy = reads.find((o) => o.symbol === "SPY");
+  if (!spy || spy.where === null) unchecked.push("SPY's levels");
+  else if (spy.premarket === null) unchecked.push("SPY's pre-market gap");
+  const tone: BriefTone = reasons.some((x) => x.tone === "bad") ? "bad" : reasons.length || unchecked.length ? "warn" : "good";
+  const word = tone === "bad" ? "Event day" : reasons.length ? "Careful day" : unchecked.length ? "Not fully checked" : "Normal day";
+  return { tone, word, reasons, unchecked };
 }
 
 // ── The session, against the owner's own record ──────────────────────────────────────────────────────────────────
