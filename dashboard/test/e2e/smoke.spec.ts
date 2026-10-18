@@ -111,18 +111,23 @@ test("a live quote older than 30 seconds reads as stale", async ({ page }) => {
   await expect(spy).toContainText("STALE");
 });
 
-test("the radar draws the scorecard, the picks, the lines and the week", async ({ page }) => {
+test("the radar leads with the brief: the day, SPY's open, the session, your names, the week", async ({ page }) => {
   await page.goto("/radar");
+  await expect(page.getByRole("group", { name: /^The day: (Normal|Careful|Event) day$/ })).toBeVisible();
+  await expect(page.getByRole("img", { name: /^SPY close 778\.55, expected move ±5\.85\. Levels: PML 749\.60/ })).toBeVisible();
+  await expect(page.getByRole("img", { name: /^The New York session on 2026-09-21: no entries 09:30 to 09:35/ })).toBeVisible();
+  const names = page.getByRole("list", { name: "Your names this morning" });
+  await expect(names.getByRole("listitem").first()).toContainText("SPY");
+  await expect(page.getByRole("list", { name: "This week" })).toContainText("PCE inflation");
+  await expect(page.getByRole("list", { name: "This week" })).toContainText("MU");
+  // The swing research is closed until asked for, and whole when opened.
+  await expect(page.getByRole("list", { name: "Daily radar picks" })).toBeHidden();
+  await page.getByText("Swing research: the radar's picks, lists and notes").click();
   await expect(page.getByRole("img", { name: "Market regime: neutral" })).toBeVisible();
-  await expect(page.getByRole("list", { name: "Market gauges" })).toContainText("VIX");
   await expect(page.getByRole("img", { name: /^Each list's average move on .* against its benchmark\. SUPPORT PLAYS/ })).toBeVisible();
   const picks = page.getByRole("list", { name: "Daily radar picks" });
   await expect(picks.getByRole("img", { name: /^AMZN: price 253\.71, support 244\.30/ })).toBeVisible();
-  await expect(picks).toContainText("strong");
-  await expect(page.getByRole("img", { name: /^Support plays: percent above support\. GOOGL 3\.2%/ })).toBeVisible();
   await expect(page.getByRole("list", { name: "Catalysts this week" })).toContainText("PCE inflation");
-  // The tables are one click away.
-  await page.getByText("Every list as a table").click();
   await expect(page.getByRole("heading", { name: "SUPPORT PLAYS", exact: true })).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
