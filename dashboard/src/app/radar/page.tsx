@@ -114,7 +114,7 @@ function Brief({ r, options, trades }: { r: Radar; options: OptionsEdition | nul
       ) : null}
       <div className="grid gap-5 lg:grid-cols-2">
         <MoversPanel rows={movers(r, options)} />
-        <WeekPanel days={week.days} later={week.later} today={r.edition_date} />
+        <WeekPanel days={week.days} later={week.later} today={r.edition_date} earningsKnown={earnings.length > 0} />
       </div>
     </>
   );

@@ -446,9 +446,17 @@ export function MoversPanel({ rows }: { rows: Mover[] }) {
 
 // ── F. The week ──────────────────────────────────────────────────────────────────────────────────────────────────
 
-export function WeekPanel({ days, later, today }: { days: WeekDay[]; later: RadarEvent[]; today: string }) {
+export function WeekPanel({ days, later, today, earningsKnown }: { days: WeekDay[]; later: RadarEvent[]; today: string; earningsKnown: boolean }) {
   return (
-    <Panel title="This week, for your names" icon={CalendarDays} means="Releases from the radar, and earnings, with your names in amber. Times are New York.">
+    <Panel
+      title="This week, for your names"
+      icon={CalendarDays}
+      means={
+        earningsKnown
+          ? "Releases from the radar, and earnings, with your names in amber. Times are New York."
+          : "Releases from the radar. Neither calendar carries earnings dates, so a report from one of your names may be missing here. Times are New York."
+      }
+    >
       <div className="grid gap-3">
         <ol aria-label="This week" className="grid gap-2 sm:grid-cols-5">
           {days.map((d) => (

@@ -256,6 +256,8 @@ export function dayVerdict(r: Radar, names: readonly string[], reads: readonly O
   const unchecked: string[] = [];
   if (!(r.calendar ?? []).some((x) => x.kind !== "earnings")) unchecked.push("today's releases");
   if (vix === null) unchecked.push("the VIX move");
+  // No earnings row in either calendar: "no report from your names" would be a guess.
+  if (earnings.length === 0) unchecked.push("earnings dates");
   const spy = reads.find((o) => o.symbol === "SPY");
   if (!spy || spy.where === null) unchecked.push("SPY's levels");
   else if (spy.premarket === null) unchecked.push("SPY's pre-market gap");

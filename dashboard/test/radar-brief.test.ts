@@ -1,4 +1,7 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { WeekPanel } from "@/components/radar-brief";
 import type { Trade } from "@/lib/journal";
 import type { OptionsEdition } from "@/lib/options.types";
 import type { Radar } from "@/lib/radar";
@@ -134,9 +137,17 @@ describe("the day's verdict", () => {
     const v = dayVerdict(radar(), ["SPY"], [openRead("SPY", undefined, undefined)], []);
     expect(v.word).toBe("Not fully checked");
     expect(v.tone).toBe("warn");
-    expect(v.unchecked).toEqual(["today's releases", "the VIX move", "SPY's levels"]);
+    expect(v.unchecked).toEqual(["today's releases", "the VIX move", "earnings dates", "SPY's levels"]);
     const noGap = dayVerdict(quiet(), ["SPY"], [openRead("SPY", spyOpt, undefined)], []);
-    expect(noGap.unchecked).toEqual(["SPY's pre-market gap"]);
+    expect(noGap.unchecked).toEqual(["earnings dates", "SPY's pre-market gap"]);
+  });
+  it("does not claim no earnings when neither calendar carries any", () => {
+    const gap = openRead("SPY", spyOpt, { symbol: "SPY", premarket_price: 772.5 });
+    const none = dayVerdict(quiet(), ["SPY"], [gap], []);
+    expect(none).toMatchObject({ word: "Not fully checked", unchecked: ["earnings dates"] });
+    // One earnings row anywhere in the calendars is enough to read the names against.
+    const some = dayVerdict(quiet(), ["SPY"], [gap], [{ date: "2026-10-20", symbol: "NFLX", when: "amc" }]);
+    expect(some).toMatchObject({ word: "Normal day", unchecked: [] });
   });
   it("keeps a real warning ahead of a missing check", () => {
     const v = dayVerdict(radar({ edition_date: "2026-10-16" }), ["SPY"], [], []);
@@ -259,5 +270,15 @@ describe("movers and the week", () => {
     const r = radarJson as unknown as Radar;
     expect(earningsOf(r, null).map((x) => x.symbol)).toEqual(["MU"]);
     expect(dayVerdict(r, ["SPY"], [], []).word).not.toBe("Event day");
+  });
+});
+
+describe("the week panel", () => {
+  it("warns that a report may be missing when no calendar has earnings", () => {
+    const w = briefWeek(radar(), [], ["SPY"]);
+    const html = (earningsKnown: boolean) =>
+      renderToStaticMarkup(createElement(WeekPanel, { days: w.days, later: w.later, today: "2026-10-14", earningsKnown }));
+    expect(html(false)).toContain("Neither calendar carries earnings dates");
+    expect(html(true)).not.toContain("Neither calendar carries earnings dates");
   });
 });
