@@ -151,6 +151,7 @@ test("the v3 panels render from the fixture, and the glossary is linked", async 
   await expect(page.getByRole("heading", { name: "Limits in force" })).toBeVisible();
   await expect(page.getByText("Daily loss latch").first()).toBeVisible();
   await page.goto("/operations");
+  await expect(page.getByRole("heading", { name: "Your feeds" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Job reliability, 14 days" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Audit trail" })).toBeVisible();
   await page.goto("/strategies");

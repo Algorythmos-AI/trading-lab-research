@@ -1,10 +1,12 @@
 import { Activity, CalendarClock, ClipboardCheck, Clock, Database, GitBranch, HardDrive, Workflow } from "lucide-react";
 import { RelativeTime } from "@/components/client/relative-time";
+import { DataDetails } from "@/components/data-details";
 import { Empty } from "@/components/empty";
-import { JobHeatmap } from "@/components/job-heatmap";
+import { JobHeatmap, RunList } from "@/components/job-heatmap";
 import { KeyValues } from "@/components/kv";
 import { Meter } from "@/components/meter";
 import { NoSnapshot } from "@/components/no-snapshot";
+import { FeedsPanel } from "@/components/operations/feeds-panel";
 import { PageHeading } from "@/components/page-heading";
 import { Panel } from "@/components/panel";
 import { StatusBadge, ToneIcon } from "@/components/status";
@@ -13,27 +15,46 @@ import { AuditPanel } from "@/components/v3/audit";
 import { SlaPanel } from "@/components/v3/sla";
 import { duration, newYork, num, pct, shortDate, shortSha, sydney, txt } from "@/lib/format";
 import { humanize, jobKey, jobName, jobTone, sortJobKeys } from "@/lib/labels";
-import { loadSnapshot } from "@/lib/snapshot";
+import { requestTime } from "@/lib/now";
+import { listOptionsDates, listRadarDates, loadJournal, loadOptions, loadOptionsLive, loadRadar, loadSnapshot } from "@/lib/snapshot";
 import { DISK_FLOOR_GB, DISK_TARGET_GB } from "@/lib/thresholds.gen";
 import { entries, list, type LogInfo, type Snapshot } from "@/lib/types";
+import { sectionState } from "@/lib/v3";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Operations" };
 
 export default async function OperationsPage() {
-  const result = await loadSnapshot();
+  const [result, journal, options, optionsLive, radar, optionsDates, radarDates] = await Promise.all([
+    loadSnapshot(),
+    loadJournal(),
+    loadOptions(),
+    loadOptionsLive(),
+    loadRadar(),
+    listOptionsDates(14),
+    listRadarDates(14),
+  ]);
   return (
     <>
       <PageHeading
         title="Operations"
-        intro="Whether the host and its jobs are healthy: run history, pre-flight checks, disk and memory, clock changes, the deployed code and how fresh each data source is."
+        intro="Whether everything your pages are built from arrived on time: your Webull trades, the options levels and focus card, the radar, and the paper lab host with its jobs, checks, disk, deploys and data sources."
+      />
+      <FeedsPanel
+        now={requestTime()}
+        snapshot={result}
+        journal={journal}
+        options={options}
+        optionsLive={optionsLive}
+        radar={radar}
+        optionsDates={optionsDates}
+        radarDates={radarDates}
       />
       {result.status !== "ok" ? (
         <NoSnapshot status={result.status} />
       ) : (
         <>
-          <HeatmapPanel s={result.snapshot} />
-          <SlaPanel s={result.snapshot} />
+          <JobGridPanel s={result.snapshot} />
           <div className="grid gap-5 lg:grid-cols-2">
             <LastRunsPanel s={result.snapshot} />
             <PreflightPanel s={result.snapshot} />
@@ -47,6 +68,17 @@ export default async function OperationsPage() {
         </>
       )}
     </>
+  );
+}
+
+/** One grid of job runs: the host's reliability matrix (it knows a missed run from an unscheduled day), or the run
+ * heatmap from the heartbeat log when the host does not send the matrix. */
+function JobGridPanel({ s }: { s: Snapshot }) {
+  if (sectionState(s, s.sla) !== "ok") return <HeatmapPanel s={s} />;
+  return (
+    <SlaPanel s={s}>
+      <RunList runs={list(s.jobs?.runs)} />
+    </SlaPanel>
   );
 }
 
@@ -158,7 +190,7 @@ function HostPanel({ s }: { s: Snapshot }) {
     <Panel
       title="Host health"
       icon={HardDrive}
-      means="The Mac's free disk and memory pressure. Jobs stop if the disk falls below the floor; heavy swap makes nightly runs slow or unreliable."
+      means="The host's free disk and memory pressure. Jobs stop if the disk falls below the floor; heavy swap makes nightly runs slow or unreliable."
     >
       <div className="grid gap-4">
         <Meter
@@ -181,7 +213,7 @@ function HostPanel({ s }: { s: Snapshot }) {
         />
         {jobs.length > 0 ? (
           <div>
-            <h3 className="mb-1 text-sm font-medium">Scheduled agents</h3>
+            <h3 className="mb-1 text-sm font-medium">Scheduled jobs</h3>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -360,40 +392,63 @@ function SourcesPanel({ s }: { s: Snapshot }) {
       {sources.length === 0 ? (
         <Empty title="No source details in this snapshot" />
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Source</TableHead>
-              <TableHead>State</TableHead>
-              <TableHead>Collected</TableHead>
-              <TableHead className="text-right">Took</TableHead>
-              <TableHead>Error</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {sources.map(([name, src]) => (
-              <TableRow key={name}>
-                <TableCell className="font-medium">{humanize(name)}</TableCell>
-                <TableCell>
-                  {src.ok === false ? (
-                    <StatusBadge tone="bad">Failed</StatusBadge>
-                  ) : src.stale ? (
-                    <StatusBadge tone="warn">Stale</StatusBadge>
-                  ) : src.ok ? (
-                    <StatusBadge tone="good">Fresh</StatusBadge>
-                  ) : (
-                    "—"
-                  )}
-                </TableCell>
-                <TableCell>{sydney(src.as_of)}</TableCell>
-                <TableCell className="text-right">{typeof src.ms === "number" ? `${num(src.ms / 1000, 1)} s` : "—"}</TableCell>
-                <TableCell className="max-w-64 truncate" title={src.error ?? undefined}>
-                  {txt(src.error)}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <>
+          {/* All fresh: one line of chips. Anything stale or failed gets its own row with the error. */}
+          <ul className="flex flex-wrap gap-1.5" aria-label="Sources">
+            {sources.map(([name, src]) => {
+              const tone = src.ok === false ? "bad" : src.stale ? "warn" : src.ok ? "good" : "neutral";
+              const label = src.ok === false ? "failed" : src.stale ? "stale" : src.ok ? "fresh" : "unknown";
+              return (
+                <li key={name}>
+                  <StatusBadge tone={tone}>
+                    {humanize(name)}
+                    <span className="sr-only">: {label}</span>
+                  </StatusBadge>
+                </li>
+              );
+            })}
+          </ul>
+          {sources.some(([, src]) => src.ok === false || src.stale) ? (
+            <ul className="mt-3 grid gap-2">
+              {sources
+                .filter(([, src]) => src.ok === false || src.stale)
+                .map(([name, src]) => (
+                  <li key={name} className="text-sm">
+                    <span className="font-medium">{humanize(name)}</span>
+                    <span className="text-muted-foreground">
+                      {" "}
+                      {src.ok === false ? "failed" : "is stale"}, collected {sydney(src.as_of)}
+                    </span>
+                    {src.error ? <p className="bg-muted mt-1 rounded px-2 py-1 font-mono text-xs break-all">{src.error}</p> : null}
+                  </li>
+                ))}
+            </ul>
+          ) : null}
+          <DataDetails summary="Show each source">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Source</TableHead>
+                  <TableHead>Collected</TableHead>
+                  <TableHead className="text-right">Took</TableHead>
+                  <TableHead>Error</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sources.map(([name, src]) => (
+                  <TableRow key={name}>
+                    <TableCell className="font-medium">{humanize(name)}</TableCell>
+                    <TableCell>{sydney(src.as_of)}</TableCell>
+                    <TableCell className="text-right">{typeof src.ms === "number" ? `${num(src.ms / 1000, 1)} s` : "—"}</TableCell>
+                    <TableCell className="max-w-64 truncate" title={src.error ?? undefined}>
+                      {txt(src.error)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </DataDetails>
+        </>
       )}
     </Panel>
   );
