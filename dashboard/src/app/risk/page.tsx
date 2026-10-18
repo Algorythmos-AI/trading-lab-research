@@ -1,5 +1,7 @@
-import { BellRing, CalendarClock, Landmark, Lock, Power, ShieldCheck } from "lucide-react";
+import { BellRing, Bot, CalendarClock, ChevronDown, Landmark, Lock, Power, ShieldCheck } from "lucide-react";
+import { AccountLimitsPanel, AccountRecentPanel, AccountTodayPanel, EnforcementNote } from "@/components/account-risk";
 import { Empty } from "@/components/empty";
+import { NoJournal } from "@/components/journal";
 import { KeyValues } from "@/components/kv";
 import { Meter } from "@/components/meter";
 import { NoSnapshot } from "@/components/no-snapshot";
@@ -9,42 +11,91 @@ import { StatusBadge } from "@/components/status";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertHistoryPanel } from "@/components/v3/audit";
 import { RiskLimitsPanel } from "@/components/v3/risk-limits";
+import { accountRisk } from "@/lib/account-risk";
 import { newYork, num, shortDate, sydney, txt, usd } from "@/lib/format";
 import { RED_ALERT_PREFIXES } from "@/lib/health";
 import { activeWindow } from "@/lib/freshness";
-import { requestTime } from "@/lib/now";
-import { loadSnapshot } from "@/lib/snapshot";
+import { moneyView, type JournalDoc } from "@/lib/journal";
+import { loadJournal, loadSnapshot, pageTime } from "@/lib/snapshot";
 import { list, type Snapshot } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Risk" };
 
 export default async function RiskPage() {
-  const result = await loadSnapshot();
-  const now = requestTime();
+  const [result, journal, now] = await Promise.all([loadSnapshot(), loadJournal(), pageTime()]);
   return (
     <>
       <PageHeading
         title="Risk"
-        intro="The safety controls around paper trading: the kill switch, the virtual account latch, progress towards the G2 gate, the paper broker account and any alerts that are firing."
+        intro="Your real Webull account first: how much of today's limits you have used, what is open, and how often each limit was broken lately. The paper robot's safety controls are at the bottom. Read only: nothing here can place, block or cancel an order."
       />
-      {result.status !== "ok" ? (
-        <NoSnapshot status={result.status} />
-      ) : (
+      {journal.status !== "ok" ? (
         <>
-          <RiskLimitsPanel s={result.snapshot} />
-          <div className="grid gap-5 lg:grid-cols-3">
-            <KillPanel s={result.snapshot} />
-            <LatchPanel s={result.snapshot} />
-            <G2Panel s={result.snapshot} />
-          </div>
-          <AlertsPanel s={result.snapshot} />
-          <AlertHistoryPanel s={result.snapshot} />
-          <AccountPanel s={result.snapshot} />
-          <WindowsPanel s={result.snapshot} now={now} />
+          <NoJournal status={journal.status} />
+          <EnforcementNote />
         </>
+      ) : (
+        <AccountSection doc={journal.doc} now={now} />
       )}
+      {result.status !== "ok" ? <NoSnapshot status={result.status} /> : <RobotSection s={result.snapshot} now={now} />}
     </>
+  );
+}
+
+function AccountSection({ doc, now }: { doc: JournalDoc; now: Date }) {
+  const r = accountRisk(doc, now);
+  const money = doc.money ? moneyView(doc.money, doc.trades.reduce((sum, t) => sum + t.pnl, 0)) : null;
+  return (
+    <>
+      <AccountTodayPanel r={r} asOf={doc.as_of} now={now} />
+      <AccountLimitsPanel r={r} />
+      <AccountRecentPanel r={r} money={money} />
+    </>
+  );
+}
+
+/** True when the robot has something that needs a look: then its section opens by itself. */
+function robotNeedsLook(s: Snapshot): boolean {
+  const urgent = list(s.alerts?.firing).some((a) => RED_ALERT_PREFIXES.some((p) => (a.key ?? "").startsWith(p)));
+  const atLimit = list(s.risk?.limits).some((l) => l.state === "at_limit" && l.id !== "entries_per_day");
+  return s.kill?.on === true || s.ops?.paper?.virtual?.latched === true || urgent || atLimit;
+}
+
+function RobotSection({ s, now }: { s: Snapshot; now: Date }) {
+  const alerts = list(s.alerts?.firing).length;
+  const g2 = s.ops?.paper?.g2;
+  const kill = s.kill?.on;
+  const latched = s.ops?.paper?.virtual?.latched;
+  return (
+    <details id="robot" className="group grid gap-5" open={robotNeedsLook(s)}>
+      <summary className="bg-card hover:bg-muted/40 flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border px-4 py-3 shadow-sm [&::-webkit-details-marker]:hidden">
+        <Bot aria-hidden className="text-muted-foreground size-5 shrink-0" />
+        <span className="grid min-w-0 flex-1 leading-tight">
+          <span className="font-semibold">Paper robot (paper B)</span>
+          <span className="text-muted-foreground text-xs">The research robot&apos;s own safety controls, in paper money. They do not touch your Webull account.</span>
+        </span>
+        <span className="flex flex-wrap gap-1.5">
+          <StatusBadge tone={kill === true ? "warn" : kill === false ? "good" : "neutral"}>Kill switch {kill === true ? "on" : kill === false ? "off" : "unknown"}</StatusBadge>
+          <StatusBadge tone={latched === true ? "bad" : latched === false ? "good" : "neutral"}>{latched === true ? "Latched" : latched === false ? "Not latched" : "Latch unknown"}</StatusBadge>
+          <StatusBadge tone={alerts === 0 ? "good" : "warn"}>{alerts === 0 ? "No alerts" : `${alerts} alert${alerts === 1 ? "" : "s"}`}</StatusBadge>
+          {g2 ? <StatusBadge tone="neutral">G2 {num(g2.trades)} of {num(g2.trades_needed)} trades</StatusBadge> : null}
+        </span>
+        <ChevronDown aria-hidden className="text-muted-foreground size-4 shrink-0 transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="mt-5 grid gap-5">
+        <AlertsPanel s={s} />
+        <RiskLimitsPanel s={s} />
+        <div className="grid gap-5 lg:grid-cols-3">
+          <KillPanel s={s} />
+          <LatchPanel s={s} />
+          <G2Panel s={s} />
+        </div>
+        <AlertHistoryPanel s={s} />
+        <AccountPanel s={s} />
+        <WindowsPanel s={s} now={now} />
+      </div>
+    </details>
   );
 }
 
