@@ -1,17 +1,16 @@
-// The paper lab's own panels: the nightly summary, its key numbers, the gates, the decisions waiting on the owner and
-// the host's jobs. They lived on the Overview until it became the owner's trading home page; now Research and
+// The paper lab's own panels: the nightly summary, its key numbers, the gates and the decisions waiting on the
+// owner. They lived on the Overview until it became the owner's trading home page; now Research and
 // Operations show them.
-import { CalendarClock, ClipboardList, Gauge, Hand, Milestone, Power } from "lucide-react";
+import { Gauge, Hand, Milestone, Power } from "lucide-react";
 import { CopyCommand } from "@/components/client/copy-command";
-import { RelativeTime } from "@/components/client/relative-time";
 import { Empty } from "@/components/empty";
 import { GateRail } from "@/components/gate-rail";
 import { Panel } from "@/components/panel";
 import { StatusBadge, TONE_TEXT, ToneIcon } from "@/components/status";
-import { duration, newYork, sydney, txt } from "@/lib/format";
-import { humanize, jobKey, jobName, jobTone, severityRank, severityTone, sortJobKeys, stateTone } from "@/lib/labels";
+import { sydney, txt } from "@/lib/format";
+import { humanize, severityRank, severityTone, stateTone } from "@/lib/labels";
 import { summarize } from "@/lib/summary";
-import { entries, list, type Snapshot } from "@/lib/types";
+import { list, type Snapshot } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /** The nightly run in one sentence, with the lab's headline and subline. */
@@ -117,69 +116,6 @@ export function NeedsYouPanel({ s }: { s: Snapshot }) {
             </li>
           ))}
         </ol>
-      )}
-    </Panel>
-  );
-}
-
-export function JobsPanel({ s }: { s: Snapshot }) {
-  const last = Object.fromEntries(entries(s.jobs?.last));
-  const schedule = list(s.ops?.host?.schedule);
-  const keys = sortJobKeys([...Object.keys(last), ...schedule.map((e) => jobKey(e.job)).filter(Boolean)]);
-  return (
-    <Panel
-      title="Tonight's jobs"
-      icon={CalendarClock}
-      means="The nightly jobs on the host: how the last run of each went, and when it is scheduled. Times are shown in Sydney and New York."
-    >
-      {keys.length === 0 ? (
-        <Empty title="No job results yet">Results appear after the first nightly run is published.</Empty>
-      ) : (
-        <ul className="divide-border grid divide-y">
-          {keys.map((key) => {
-            const job = last[key];
-            const slot = schedule.find((e) => jobKey(e.job) === key);
-            return (
-              <li key={key} className="grid gap-1 py-3 first:pt-0 last:pb-0">
-                <div className="flex items-center gap-2">
-                  <span className="min-w-0 flex-1 text-sm font-medium">{jobName(key)}</span>
-                  {job ? (
-                    <StatusBadge tone={jobTone(job.status)}>
-                      {humanize(job.status)}
-                      {typeof job.exit === "number" ? `, exit ${job.exit}` : ""}
-                    </StatusBadge>
-                  ) : (
-                    <StatusBadge tone="neutral">No run yet</StatusBadge>
-                  )}
-                </div>
-                {job ? (
-                  <dl className="text-muted-foreground grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
-                    <dt>Started</dt>
-                    <dd className="text-foreground">
-                      {sydney(job.started)} Sydney <span className="text-muted-foreground">({newYork(job.started, false)} NY)</span>
-                    </dd>
-                    <dt>Ended</dt>
-                    <dd className="text-foreground">
-                      <RelativeTime iso={job.ended} fallback={sydney(job.ended)} />, took {duration(job.started, job.ended)}
-                    </dd>
-                    {job.detail ? (
-                      <>
-                        <dt>Detail</dt>
-                        <dd className="text-foreground break-words">{job.detail}</dd>
-                      </>
-                    ) : null}
-                  </dl>
-                ) : null}
-                {slot ? (
-                  <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
-                    <ClipboardList aria-hidden className="size-3.5" />
-                    Scheduled {txt(slot.local)} ({txt(slot.et)}){slot.session === false ? ", no market session" : ""}
-                  </p>
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
       )}
     </Panel>
   );

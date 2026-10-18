@@ -181,7 +181,7 @@ test("the Overview leads with the owner's own trading, then the robots and the l
   await page.goto("/research");
   await expect(page.getByRole("heading", { name: "Gate tracker" })).toBeVisible();
   await page.goto("/operations");
-  await expect(page.getByRole("heading", { name: "Tonight's jobs" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Needs you" })).toBeVisible();
   await page.goto("/");
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
