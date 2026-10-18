@@ -53,7 +53,8 @@ describe("account risk", () => {
   });
 
   it("reads today's usage when today has trades", () => {
-    const trades = [quick(-30, "2026-10-16", 1), quick(-45, "2026-10-16", 5)];
+    // $200 of premium each, so −$30 and −$45 stay inside the 25% stop and no rule breaks.
+    const trades = [quick(-30, "2026-10-16", 1, { entry: 2, exit: 1.7 }), quick(-45, "2026-10-16", 5, { entry: 2, exit: 1.55 })];
     const r = accountRisk({ trades, open: [] }, new Date("2026-10-16T15:00:00Z"));
     const by = Object.fromEntries(r.limits.map((l) => [l.id, l]));
     expect(r.check.isToday).toBe(true);

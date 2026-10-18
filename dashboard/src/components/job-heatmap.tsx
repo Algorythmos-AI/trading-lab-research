@@ -117,30 +117,38 @@ export function JobHeatmap({ runs, asOf, extraJobs = [] }: { runs: JobRun[]; asO
           No run
         </li>
       </ul>
-      <DataDetails summary="Show every run">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Job</TableHead>
-              <TableHead>Day (New York)</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Exit</TableHead>
-              <TableHead className="text-right">Took</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {[...runs].reverse().map((r, i) => (
-              <TableRow key={i}>
-                <TableCell>{jobName(r.job)}</TableCell>
-                <TableCell>{shortDate(dayIn(r.started, NEW_YORK))}</TableCell>
-                <TableCell>{CELL[toStatus(r.status)].label === "Other" ? txt(r.status) : CELL[toStatus(r.status)].label}</TableCell>
-                <TableCell className="text-right">{txt(r.exit)}</TableCell>
-                <TableCell className="text-right">{duration(r.started, r.ended)}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </DataDetails>
+      <RunList runs={runs} />
     </div>
+  );
+}
+
+/** Every run in the heartbeat log, newest first, folded away under a toggle. */
+export function RunList({ runs }: { runs: JobRun[] }) {
+  if (runs.length === 0) return null;
+  return (
+    <DataDetails summary="Show every run">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Job</TableHead>
+            <TableHead>Day (New York)</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead className="text-right">Exit</TableHead>
+            <TableHead className="text-right">Took</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {[...runs].reverse().map((r, i) => (
+            <TableRow key={i}>
+              <TableCell>{jobName(r.job)}</TableCell>
+              <TableCell>{shortDate(dayIn(r.started, NEW_YORK))}</TableCell>
+              <TableCell>{CELL[toStatus(r.status)].label === "Other" ? txt(r.status) : CELL[toStatus(r.status)].label}</TableCell>
+              <TableCell className="text-right">{txt(r.exit)}</TableCell>
+              <TableCell className="text-right">{duration(r.started, r.ended)}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </DataDetails>
   );
 }
