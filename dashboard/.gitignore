@@ -9,3 +9,7 @@ next-env.d.ts
 *.tsbuildinfo
 .env*.local
 .vercel
+
+# Written by `next dev` (Next.js agent notes); the repo rules live in the root AGENTS.md
+AGENTS.md
+CLAUDE.md
