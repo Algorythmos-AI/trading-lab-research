@@ -253,7 +253,7 @@ test("the desk switch moves between the two desks, each with its own sections", 
 
 test("each desk has its own Engineering wiki, and both show the shared Lab platform", async ({ page }) => {
   for (const [path, first] of [
-    ["/engineering", "Plans and history"],
+    ["/engineering", "Is the data fresh?"],
     ["/crypto/engineering", "The desk's jobs"],
   ] as const) {
     await page.goto(path);
@@ -269,16 +269,23 @@ test("each desk has its own Engineering wiki, and both show the shared Lab platf
   await expect(page.getByRole("list", { name: "The crypto desk's jobs and their last runs" })).toContainText("Bar cycle");
 });
 
-test("the stocks wiki draws the desk from the snapshot", async ({ page }) => {
+test("the stocks wiki draws the desk from the snapshot and the stored feeds", async ({ page }) => {
   await page.goto("/engineering");
-  for (const name of ["At a glance", "Architecture", "A trading night", "Order safety", "Research gates", "Runbooks and decisions"]) {
+  for (const name of ["At a glance", "Where the data comes from", "Is the data fresh?", "A trading day", "The paper robot's safety", "Research gates", "Runbooks and decisions"]) {
     await expect(page.getByRole("heading", { name, exact: true })).toBeAttached();
   }
   // The fixture's kill switch is on and its routine's last run failed: the glance and the guard say so.
   const glance = page.getByRole("list", { name: "The stocks desk at a glance" });
   await expect(glance).toContainText("Kill switch on");
   await expect(glance).toContainText("needs a look: routine");
-  await expect(page.getByRole("img", { name: /^Architecture of the stocks desk\..*routine \(last run failed\)/ })).toBeAttached();
+  await expect(glance).toContainText("of 5 on time");
+  await expect(page.getByRole("img", { name: /^Where the Stocks site's data comes from\..*routine \(last run failed\)/ })).toBeAttached();
+  // Every page's feed is listed with the page it lands on.
+  const feeds = page.getByRole("list", { name: "The Stocks site's data feeds" });
+  for (const name of ["Overview, Today, Operations", "Options", "Radar", "Trades"]) {
+    await expect(feeds.getByRole("link", { name, exact: true }).first()).toBeVisible();
+  }
+  await expect(page.getByRole("img", { name: /^A trading day in New York time, 05:00 to 18:30/ })).toBeAttached();
   await expect(page.getByRole("img", { name: /^Order safety\..*Kill switch on/ })).toBeAttached();
   await expect(page.getByRole("img", { name: /^Research gates: K0 .* G1 .*failed/ })).toBeAttached();
 });
