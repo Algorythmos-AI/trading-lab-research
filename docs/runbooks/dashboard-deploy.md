@@ -16,10 +16,12 @@ Without both secrets the deploy job fails on purpose ("Main is NOT deployed").
 **Staging (ADR 0009).** Every push to `integration` that touches the dashboard runs `deploy (staging)`: a
 Vercel preview built in fixture mode (`DASHBOARD_FIXTURE=1`), aliased to staging.lab.algorythmos.com and checked
 through `/api/health`, which must report the commit and `fixture: true`. One-time setup (owner):
-- Vercel > the project > Settings > Domains: add `staging.lab.algorythmos.com` (no Git branch; the workflow
-  aliases it), and add its DNS record where algorythmos.com is hosted.
+- Vercel > the project > Settings > Domains: add `staging.lab.algorythmos.com` with Git branch `integration`
+  (the workflow aliases it). Never leave the branch empty: a domain without one is a production domain, and every
+  `vercel deploy --prod` would point staging at the live dashboard and its data. Add its DNS record where
+  algorythmos.com is hosted: a CNAME `staging.lab` to the target Vercel shows, DNS only (grey cloud).
 - Vercel > the project > Settings > Environment Variables: the Preview environment holds no production secret
-  (no blob token, ingest keys or broker keys).
+  (no blob token, ingest keys or broker keys). `vercel env ls` should show only `DASHBOARD_FIXTURE` on Preview.
 - Repo Settings > Environments > New environment `staging`: deployment branch rule `integration`; secrets
   `VERCEL_TOKEN` (its own token, with an expiry) and `VERCEL_AUTOMATION_BYPASS_SECRET` (the same value as for
   production: protection is per project).
