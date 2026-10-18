@@ -1,6 +1,6 @@
 // The Overview page's arithmetic on the owner's own trades. Pure: no I/O; the clock is passed in. Built on the
 // journal helpers, so every figure matches the Trades page.
-import { closeDay, daily, groupBy, HOUR_ORDER, hourKey, holdMinutes, nyTime, type DayRow, type GroupRow, type Trade } from "./journal";
+import { closeDay, daily, groupBy, HOUR_ORDER, hourKey, holdMinutes, nyTime, type DayRow, type GroupRow, type Lot, type Trade } from "./journal";
 import { DAY_LOSS_LIMIT, MAX_TRADES_PER_DAY, TIME_STOP_MINUTES } from "./trade-rules";
 
 export interface PeriodTotal {
@@ -149,4 +149,58 @@ export function quickVsSlow(trades: readonly Trade[]): { quick: { trades: number
     side.pnl += t.pnl;
   }
   return out;
+}
+
+export interface ClockTrade {
+  id: string;
+  label: string;
+  /** Minutes after midnight, New York. */
+  from: number;
+  to: number;
+  pnl: number | null;
+  /** The row it is drawn on, so that trades held at the same time do not overlap. */
+  lane: number;
+  /** True for a lot still held: it runs to now. */
+  open: boolean;
+}
+
+/**
+ * One trading day's trades as spans on the New York clock, each on the first lane free at its start, plus the day's
+ * running result after each close. Open lots run to `nowMinute` (or their own start when that is unknown).
+ */
+export function dayClock(
+  trades: readonly Trade[],
+  open: readonly Lot[],
+  day: string,
+  nowMinute: number | null,
+  labelOf: (t: Pick<Trade, "symbol" | "kind" | "strike" | "expiry">) => string,
+): { items: ClockTrade[]; lanes: number; steps: { at: number; cum: number }[] } {
+  const spans: Omit<ClockTrade, "lane">[] = [];
+  for (const t of trades) {
+    const o = nyTime(t.opened_at);
+    const c = nyTime(t.closed_at);
+    if (c.day !== day) continue;
+    // A trade carried in from an earlier day is drawn from the open.
+    spans.push({ id: t.id, label: labelOf(t), from: o.day === day ? o.minute : Math.min(570, c.minute), to: c.minute, pnl: t.pnl, open: false });
+  }
+  open.forEach((l, i) => {
+    if (!l.opened_at) return;
+    const o = nyTime(l.opened_at);
+    const from = o.day === day ? o.minute : 570;
+    spans.push({ id: `open-${i}`, label: labelOf(l), from, to: Math.max(from, nowMinute ?? from), pnl: null, open: true });
+  });
+  spans.sort((a, b) => a.from - b.from || a.to - b.to);
+  const ends: number[] = [];
+  const items = spans.map((s) => {
+    let lane = ends.findIndex((e) => e < s.from);
+    if (lane === -1) lane = ends.push(0) - 1;
+    ends[lane] = Math.max(s.to, s.from + 4);
+    return { ...s, lane };
+  });
+  let cum = 0;
+  const steps = items
+    .filter((i) => !i.open && i.pnl !== null)
+    .sort((a, b) => a.to - b.to)
+    .map((i) => ({ at: i.to, cum: (cum += i.pnl ?? 0) }));
+  return { items, lanes: ends.length, steps };
 }
