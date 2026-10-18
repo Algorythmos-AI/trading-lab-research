@@ -17,7 +17,7 @@ account:
   preferred_keys: [APCA_CLONE_KEY_ID, APCA_CLONE_SECRET_KEY]
   fallback_keys: [APCA_OPTIONS_KEY_ID, APCA_OPTIONS_SECRET_KEY]
   min_options_level: 2          # buying calls and puts
-  client_id_prefix: wt-o-
+  client_id_prefix: wt-O-         # wt.core.ids.coid(date, "O", ...): every order of the clone starts with it
 
 names:
   source: focus                 # the after-close edition's "Today's focus" names
