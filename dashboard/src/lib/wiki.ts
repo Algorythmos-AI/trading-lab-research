@@ -217,3 +217,59 @@ export function modelTone(state: string | null | undefined): Tone {
       return "neutral";
   }
 }
+
+/** A feed's state on the Stocks wiki: arrived on time, late, never published, or unreadable. */
+export type FeedState = "fresh" | "late" | "missing" | "error";
+
+export const FEED_TONE: Record<FeedState, Tone> = { fresh: "good", late: "warn", missing: "neutral", error: "bad" };
+
+/** The newest Monday-to-Friday instant at hh:mm UTC that is at or before `at`. */
+export function lastWeekdayUtc(at: Date, hh: number, mm: number): Date {
+  const d = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate(), hh, mm));
+  if (d.getTime() > at.getTime()) d.setUTCDate(d.getUTCDate() - 1);
+  while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() - 1);
+  return d;
+}
+
+const instant = (iso: string | null | undefined): number | null => {
+  const t = iso ? Date.parse(iso) : NaN;
+  return Number.isFinite(t) ? t : null;
+};
+
+/** A feed published every few minutes: fresh while its newest copy is at most `maxMin` minutes old. */
+export function everyFresh(asOf: string | null | undefined, now: Date, maxMin: number): boolean {
+  const t = instant(asOf);
+  return t !== null && now.getTime() - t <= maxMin * 60_000;
+}
+
+/**
+ * A feed written by a weekday run at hh:mm UTC: fresh when it is newer than the latest such run that has had
+ * `graceMin` minutes to finish. A US holiday with no run reads as late, which the words around it allow for.
+ */
+export function afterRunFresh(asOf: string | null | undefined, now: Date, hh: number, mm: number, graceMin: number): boolean {
+  const t = instant(asOf);
+  if (t === null) return false;
+  return t >= lastWeekdayUtc(new Date(now.getTime() - graceMin * 60_000), hh, mm).getTime();
+}
+
+/**
+ * The trade journal: during the US session (10:00 to 16:20 New York, weekdays) the live sync publishes at least
+ * every half hour; otherwise the after-close sync at 21:38 UTC must have landed.
+ */
+export function journalFresh(asOf: string | null | undefined, now: Date): boolean {
+  const weekday = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short" }).format(now);
+  const m = nyMinutes(now);
+  if (weekday !== "Sat" && weekday !== "Sun" && m >= 10 * 60 && m <= 16 * 60 + 20) return everyFresh(asOf, now, 45);
+  return afterRunFresh(asOf, now, 21, 38, 30);
+}
+
+/** A time of day given in UTC, as minutes after midnight in New York on the day of `at`. */
+export function utcToNy(utcMinutes: number, at: Date): number {
+  return (((utcMinutes - utcAheadOfNy(at)) % 1440) + 1440) % 1440;
+}
+
+/** Whole days between an instant and now, for "from 12 Oct, 5 days ago". */
+export function daysSince(iso: string | null | undefined, now: Date): number | null {
+  const t = instant(iso);
+  return t === null ? null : Math.floor((now.getTime() - t) / 86_400_000);
+}
