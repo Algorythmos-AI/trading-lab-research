@@ -117,6 +117,11 @@ JOBS: dict[str, Job] = {j.name: j for j in (
         calendars=("Mon..Fri 07..17:03/5:00 America/New_York", "*:03/15:00 UTC"),
         what="Collect status, sanitize, publish to the dashboard: every 5 minutes in the US session, every 15 otherwise",
         runtime_max_h=0.25),
+    # The options clone (DEC-0030): one same-day call or put at a time, in a paper account. Starts 09:00 ET, arms at
+    # 09:25, trades 10:00 to 14:30, is flat by 15:10 and ends after the close. A trading job: the deploy gate holds.
+    Job("paper-o", "com.wt.paper-o", 0, 0, ("-m", "wt.live.runner_o"), "paper", "paper_o", et="Mon..Fri 09:00",
+        desk="options", what="Options clone paper session; arms 09:25 ET, flat by 15:10, ends after the close",
+        runtime_max_h=8),
     # The Options desk's paper positions (wt.options.live): read only, from the second paper account. A minute
     # after the stocks publisher on both rhythms. Without that account's keys it does nothing and exits 0.
     Job("options-live", "com.wt.options-live", 0, 0, ("-m", "wt.options.live"), "backtest", "options_live",
