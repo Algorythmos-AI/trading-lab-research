@@ -167,6 +167,14 @@ JOBS: dict[str, Job] = {j.name: j for j in (
     Job("crypto-learn", "com.wt.crypto-learn", 19, 30, ("-m", "wt.crypto.learn"), "backtest", "crypto_learn",
         deadline_min=90, trading=False, et="Mon..Sun 04:30", desk="crypto",
         what="Crypto learning: signal outcomes, the model's promotion tests, weekly retraining", runtime_max_h=1.75),
+    # The pipeline check: the radar, the options edition and its focus names verified against the tape and the option
+    # listings. 08:55 New York: after the 08:50 focus refresh, before the clone arms at 09:25. 18:30: after the
+    # evening edition (21:52 UTC). Reads only; pages on a failed check.
+    Job("pipeline-check", "com.wt.pipeline-check", 0, 0, ("-m", "wt.options.pipeline_check"), "backtest",
+        "pipeline_check", deadline_min=10, trading=False, interval_s=43200, preflight=False, desk="options",
+        calendars=("Mon..Fri 08:55:00 America/New_York", "Mon..Fri 18:30:00 America/New_York"),
+        what="Verify the radar, the options edition and its focus names against the tape: before the open and after the evening edition",
+        runtime_max_h=0.3),
     # The options clone's nightly review (DEC-0030): the day per name and each setup's figures so far. Reads only.
     Job("options-review", "com.wt.options-review", 0, 0, ("scripts/options_clone_review.py",), "backtest",
         "options_review", deadline_min=10, trading=False, et="Mon..Fri 16:30", desk="options", preflight=False,
