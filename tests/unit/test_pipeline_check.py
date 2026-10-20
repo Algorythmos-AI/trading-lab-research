@@ -73,9 +73,12 @@ def test_a_wrong_level_a_wrong_close_and_a_stale_edition_fail():
 def test_the_radar_is_checked_for_its_date_age_close_and_overnight_move():
     r = radar()
     r["edition_date"], r["as_of"] = "2026-10-19", "2026-10-19T10:51:00Z"
+    got = run(radar=r)
+    assert not got["radar.date"].ok and not got["radar.fresh"].ok
+    r = radar()
     r["tickers"][0]["price"] += 0.25
     got = run(radar=r, live={"SPY": 585.0})
-    assert not got["radar.date"].ok and not got["radar.fresh"].ok and not got["radar.close.SPY"].ok
+    assert not got["radar.close.SPY"].ok and got["radar.close.SPY"].severity == "fail"
     assert not got["radar.premarket.SPY"].ok and got["radar.premarket.SPY"].severity == "warn"
 
 
@@ -99,3 +102,18 @@ def test_the_signature_matches_the_site():
     assert pc.edition_signature("edition-test-secret", "radar", 1760284800) == "sha256=ddff8b93300e0eb8db538fcbd86c4bc20037231a912b632f3063006d5be516bc"   # pinned in edition-route.test.ts
     assert pc.edition_signature("s", "radar", 1) != pc.edition_signature("s", "options", 1)
     assert copy.deepcopy(radar()) == radar()
+
+
+def test_a_difference_outside_todays_names_warns_and_a_stale_radar_skips_its_closes():
+    o = options()
+    o["tickers"].append(ticker("QQQ"))
+    o["tickers"][2]["symbol"] = "QQQ"
+    o["focus"]["items"] = [{"symbol": "SPY", "rank": 1}]
+    o["tickers"][1]["levels"][0]["price"] += 0.30               # AMZN, not a name the clone may trade today
+    got = run(options=o)
+    assert not got["options.levels.AMZN"].ok and got["options.levels.AMZN"].severity == "warn"
+    r = radar()
+    r["edition_date"] = "2026-10-19"
+    r["tickers"][0]["price"] += 5
+    got = run(radar=r)
+    assert not got["radar.date"].ok and "radar.close.SPY" not in got
