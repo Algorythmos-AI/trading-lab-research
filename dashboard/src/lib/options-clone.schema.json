@@ -66,9 +66,10 @@
       }
     },
     "names_source": {
-      "description": "focus: the edition's focus names; fallback: the configured index names.",
+      "description": "focus: the edition's focus names; focus+top-up: those that trade today, topped up with the configured index names (DEC-0032); fallback: the configured index names.",
       "enum": [
         "focus",
+        "focus+top-up",
         "fallback",
         null
       ]

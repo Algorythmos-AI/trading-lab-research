@@ -3,3 +3,11 @@
 # quality: confirmed (the company has announced the date) or expected. A wrong date here is shown on the page,
 # so a row is added only from the company's own announcement or a source named in `source`.
 symbol,date,when,source,quality
+TSLA,2026-10-21,amc,Tesla Q3 2026 deliveries release 2026-10-02 (ir.tesla.com),confirmed
+META,2026-10-21,amc,Meta press release 2026-10-12 (investor.atmeta.com),confirmed
+MSFT,2026-10-28,amc,Microsoft press release 2026-10-07 (microsoft.com/investor),confirmed
+GOOGL,2026-10-28,amc,calendar estimate (days.to); Alphabet has not announced,expected
+AMZN,2026-10-29,amc,calendar estimate (wallstreethorizon.com); Amazon has not announced,expected
+AAPL,2026-11-02,amc,Apple investor relations notice reported 2026-10-07 (macdailynews.com),confirmed
+PLTR,2026-11-02,amc,Palantir press release 2026-10-12 (businesswire),confirmed
+NVDA,2026-11-17,amc,stated on NVIDIA earnings call 2026-08-26; no release yet,expected

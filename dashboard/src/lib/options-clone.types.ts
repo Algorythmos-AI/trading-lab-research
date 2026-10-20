@@ -30,9 +30,9 @@ export interface OptionsClone {
    */
   names: string[];
   /**
-   * focus: the edition's focus names; fallback: the configured index names.
+   * focus: the edition's focus names; focus+top-up: those that trade today, topped up with the configured index names (DEC-0032); fallback: the configured index names.
    */
-  names_source?: "focus" | "fallback" | null;
+  names_source?: "focus" | "focus+top-up" | "fallback" | null;
   entries: {
     used: number;
     max: number;

@@ -44,3 +44,18 @@ def test_paper_is_the_only_trading_value_and_size_is_one():
     assert CONFIG["orders"] in ("paper", "off")
     assert "live" not in yaml.safe_dump(CONFIG).lower()
     assert CONFIG["order"]["contracts"] == RISK["max_contracts"] == RISK["max_open_positions"] == 1
+
+
+def test_the_dry_run_is_registered_before_it_runs_and_adds_no_trial():
+    rec = (ROOT / "research" / "decisions" / "DEC-0031-options-clone-dry-run.md").read_text()
+    assert re.search(r"\*\*Status: ACCEPTED on 2026-10-20\.\*\*", rec) and "no result of it has" in rec
+    assert "family O stays at 14" in rec and family_trial_count("O") == 14
+    exp = ROOT / "research" / "experiments" / "EXP-0025-options-clone-dry-run"
+    assert (exp / "README.md").exists()
+
+
+def test_the_tradeable_names_rule_is_recorded_and_configured():
+    rec = (ROOT / "research" / "decisions" / "DEC-0032-options-clone-tradeable-names.md").read_text()
+    assert re.search(r"\*\*Status: ACCEPTED on 2026-10-20\.\*\*", rec) and "No trial is added" in rec
+    assert CONFIG["names"]["top_up"] == ["SPY", "QQQ"] and CONFIG["names"]["min_names"] == 2
+    assert family_trial_count("O") == 14

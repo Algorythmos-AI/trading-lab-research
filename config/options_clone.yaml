@@ -21,8 +21,12 @@ account:
 
 names:
   source: focus                 # the after-close edition's "Today's focus" names
-  fallback: [SPY, QQQ]          # when there is no focus block, or it is older than the last session
+  fallback: [SPY, QQQ]          # when there is no focus block, or it is for another session than today
   max_names: 6
+  # DEC-0032: after the names without a same-day expiry are dropped, add these in order until at least `min_names`
+  # can be traded today (SPY and QQQ list a contract expiring every session).
+  top_up: [SPY, QQQ]
+  min_names: 2
   same_day_expiry_only: true    # a name without a contract expiring today is dropped for the day
 
 feeds:
