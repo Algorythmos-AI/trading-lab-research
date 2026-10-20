@@ -167,5 +167,10 @@ JOBS: dict[str, Job] = {j.name: j for j in (
     Job("crypto-learn", "com.wt.crypto-learn", 19, 30, ("-m", "wt.crypto.learn"), "backtest", "crypto_learn",
         deadline_min=90, trading=False, et="Mon..Sun 04:30", desk="crypto",
         what="Crypto learning: signal outcomes, the model's promotion tests, weekly retraining", runtime_max_h=1.75),
+    # The options clone's nightly review (DEC-0030): the day per name and each setup's figures so far. Reads only.
+    Job("options-review", "com.wt.options-review", 0, 0, ("scripts/options_clone_review.py",), "backtest",
+        "options_review", deadline_min=10, trading=False, et="Mon..Fri 16:30", desk="options", preflight=False,
+        what="Options clone nightly review: the day per name, each setup's figures and verdict so far",
+        runtime_max_h=0.5),
 )}
 TRADING_JOBS = [j.name for j in JOBS.values() if j.trading]
