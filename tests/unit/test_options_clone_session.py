@@ -464,3 +464,46 @@ def test_a_document_that_cannot_be_sent_never_stops_the_runner_and_is_journaled_
     r.publisher = Posted()
     r.publish()
     assert r.publisher.docs == [] and events(world["rows"], "clone_doc_unsent")[-1]["error"].startswith("ValueError")
+
+
+def test_focus_names_without_a_same_day_expiry_are_topped_up_with_spy_and_qqq(world):
+    days, d = [], "2026-10-16"
+    for _ in range(80):
+        days.append(d)
+        d = lv.prev_session(d)
+    days.reverse()
+    rows = [{"t": f"{x}T04:00:00Z", "o": 570 + i * 0.1, "h": 571 + i * 0.1, "l": 569 + i * 0.1, "c": 570.5 + i * 0.1,
+             "v": 1e6} for i, x in enumerate(days)]
+    m = world["m"]
+    names = ("AMZN", "TSLA", "META", "SPY", "QQQ")
+    m.daily = lambda symbols, start, end: {s: rows for s in names}
+    m.contracts = lambda root, expiry: {f"{root}261019C00580000": 5000.0} if root in ("SPY", "QQQ") else {}
+    focus = {"items": [{"symbol": s, "rank": i + 1, "bias": "range"} for i, s in enumerate(("AMZN", "TSLA", "META", "SPY"))]}
+    m.focus = lambda: (focus, "2026-10-19")
+    r = world["make"]()
+    del r.prepare
+    m.now = at("09:25")
+    r.arm()
+    assert sorted(r.names) == ["QQQ", "SPY"] and r.names_source == "focus+top-up"
+    (n,) = events(world["rows"], "names")
+    assert n["topped_up"] == ["QQQ"] and set(n["dropped"]) == {"AMZN", "TSLA", "META"}
+
+
+def test_no_top_up_when_enough_focus_names_trade(world):
+    days, d = [], "2026-10-16"
+    for _ in range(80):
+        days.append(d)
+        d = lv.prev_session(d)
+    days.reverse()
+    rows = [{"t": f"{x}T04:00:00Z", "o": 570 + i * 0.1, "h": 571 + i * 0.1, "l": 569 + i * 0.1, "c": 570.5 + i * 0.1,
+             "v": 1e6} for i, x in enumerate(days)]
+    m = world["m"]
+    m.daily = lambda symbols, start, end: {s: rows for s in symbols}
+    m.contracts = lambda root, expiry: {f"{root}261019C00580000": 5000.0}
+    focus = {"items": [{"symbol": "AMZN", "rank": 1, "bias": "range"}, {"symbol": "META", "rank": 2, "bias": "range"}]}
+    m.focus = lambda: (focus, "2026-10-19")
+    r = world["make"]()
+    del r.prepare
+    m.now = at("09:25")
+    r.arm()
+    assert sorted(r.names) == ["AMZN", "META"] and r.names_source == "focus"
