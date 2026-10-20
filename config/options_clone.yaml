@@ -1,0 +1,112 @@
+# The options clone (DEC-0030): a paper bot that buys one same-day call or put at a time by the owner's nine rules.
+# Every number here is frozen by DEC-0030. Changing one after a result has been seen is a new record and new trials
+# (DEC-0005). Money limits that can block an order live in config/risk.yaml, key O, and are frozen with this file.
+# Times are America/New_York.
+
+version: 1
+
+# What the runner may do. `paper`: it sends orders to the paper account. `off`: it arms, journals every decision
+# and sends nothing. There is no live value: the broker adapter refuses anything but the paper host.
+orders: paper
+# `log`: alerts are written to the job's log. `phone`: they also page through ntfy (names and rules, never prices).
+alerts: phone
+
+account:
+  # The clone's own paper account when this pair is set on the host; otherwise the second paper account, beside the
+  # owner's hand trades (DEC-0030, section 3).
+  preferred_keys: [APCA_CLONE_KEY_ID, APCA_CLONE_SECRET_KEY]
+  fallback_keys: [APCA_OPTIONS_KEY_ID, APCA_OPTIONS_SECRET_KEY]
+  min_options_level: 2          # buying calls and puts
+  client_id_prefix: wt-O-         # wt.core.ids.coid(date, "O", ...): every order of the clone starts with it
+
+names:
+  source: focus                 # the after-close edition's "Today's focus" names
+  fallback: [SPY, QQQ]          # when there is no focus block, or it is older than the last session
+  max_names: 6
+  same_day_expiry_only: true    # a name without a contract expiring today is dropped for the day
+
+feeds:
+  option: indicative            # `opra` once the owner subscribes (the file var/options/switches/opra also selects it)
+  stock: iex
+  poll_s: 10
+  quote_stale_flat_s: 60        # no new entry in a name whose option quote is older than this
+  blind_exit_s: 120             # in a trade: sell when both the quote and the position mark are older than this
+  bar_stall_s: 120              # no 1-minute stock bar for this long in market hours
+  unfit_median_quote_age_s: 5   # over the last 10 minutes: no new entries for the rest of the session
+  unfit_median_slippage_pct: 3  # entry fill vs quoted ask, median of the last ten fills: the same
+  max_skew_s: 2                 # local clock vs the broker's
+
+bars:
+  minutes: 2
+  atr_period: 14                # ATR on 2-minute bars
+  ema_fast: 9
+  ema_slow: 20
+
+levels:
+  names: [PDH, PDL, PWH, PWL, PMH, PML, MA20, MA50]
+  premarket: true               # the session's pre-market high and low
+  strong: [PWH, PWL, PMH, PML]  # with the big zones of merge_zones: where a rejection may be taken
+  tolerance_atr: 1.0            # a setup forms only within this many 2-minute ATRs of a level
+
+setups:
+  retest:                       # HYP-0029
+    max_bars_to_retest: 6
+    retest_within_atr: 1.0
+    invalidation_atr: 1.0       # a 2-minute close this far back through the level
+  rejection:                    # HYP-0030
+    wick_share_min: 0.5         # or a close back inside: then the next bar must close inside too
+    confirm_bars: 1
+    strong_level_only: true
+
+gates:
+  trend: vwap_and_spy           # call: name above VWAP and SPY not below its own; put: the mirror
+  max_extension_atr: 1.5        # entry close within this many ATRs of the 9 EMA
+  min_room_multiple: 2.0        # next level at least this many invalidation distances away
+  room_inside_expected_move: true
+  shock_bar_atr: 3.0
+  shock_pause_min: 10
+  halt_pause_min: 10
+  macro_before_min: 15
+  macro_after_min: 30
+  fomc_blackout: ["13:45", "14:45"]
+  fomc_single_names_until: "13:30"
+
+contract:
+  min_delta: 0.35
+  min_delta_late: 0.40
+  late_from: "13:30"
+  max_ask: 2.00                 # $200 a contract
+  max_spread_pct_of_mid: 8
+  max_spread: 0.15
+  min_volume: 500
+  min_volume_index: 5000        # SPY and QQQ
+  index_names: [SPY, QQQ]
+  min_open_interest: 1000
+
+order:
+  entry_buffer_pct: 2           # limit = the live ask plus this, never above max_ask
+  entry_ttl_bars: 1             # cancelled, confirmed, if not filled by the end of the next 2-minute bar
+  contracts: 1
+
+exits:
+  premium_stop_pct: 25
+  breakeven_after_pct: 25       # once the bid has been this far above the fill, the stop moves to the fill
+  target_pct: 50                # resting limit sell at the broker
+  time_stop_min: 5              # bid not above the fill this long after it
+  take_profit_at_next_level: true
+  broker_stop: try              # place a stop at -25% at the broker if the account accepts one; journal the answer
+
+day:
+  first_entry: "10:00"
+  last_entry: "14:30"
+  flatten: "15:10"
+  verify_flat: "15:20"
+  critical: "15:25"             # the broker starts evaluating expiring positions at 15:30
+  half_day: {last_entry: "11:30", flatten: "12:10", verify_flat: "12:20", critical: "12:25"}
+  loss_pause_after: 2           # consecutive losing trades
+  loss_pause_min: 30
+  done_after_losses: 3
+  name_cooldown_after_loss_min: 20
+
+costs:
+  fee_per_contract_each_way: 0.03   # DEC-0029's figure; the paper account charges none, the record does

@@ -1,0 +1,10 @@
+id: HYP-0029
+trial: "OC-RETEST"
+family: O                       # options desk (DEC-0028); the clone's setups are counted in the same family (DEC-0030)
+status: pre-registered          # DEC-0030; registered before any trade of it exists
+statement: "Buying one same-day call or put on a closed 2-minute break-and-retest of a marked level, in the direction of the name's and SPY's VWAP, with every gate and exit of config/options_clone.yaml, has positive return on premium after fees, measured from paper fills."
+rule: retest                    # wt.options.setups, at the commit that builds it, under config/options_clone.yaml
+config: config/options_clone.yaml
+evidence: {decision: DEC-0030}
+since: "the first session of job paper-o"
+falsified_if: "With at least 30 trades and 20 sessions: the lower end of the 95% bootstrap range of mean return on premium after fees, resampled by session, is at or below 0, or the mean is at or below 0 in either half of the trades taken in order. Fewer than 30 trades is no verdict. A pass never raises the size: that needs its own record."

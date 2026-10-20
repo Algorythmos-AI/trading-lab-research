@@ -117,6 +117,11 @@ JOBS: dict[str, Job] = {j.name: j for j in (
         calendars=("Mon..Fri 07..17:03/5:00 America/New_York", "*:03/15:00 UTC"),
         what="Collect status, sanitize, publish to the dashboard: every 5 minutes in the US session, every 15 otherwise",
         runtime_max_h=0.25),
+    # The options clone (DEC-0030): one same-day call or put at a time, in a paper account. Starts 09:00 ET, arms at
+    # 09:25, trades 10:00 to 14:30, is flat by 15:10 and ends after the close. A trading job: the deploy gate holds.
+    Job("paper-o", "com.wt.paper-o", 0, 0, ("-m", "wt.live.runner_o"), "paper", "paper_o", et="Mon..Fri 09:00",
+        desk="options", what="Options clone paper session; arms 09:25 ET, flat by 15:10, ends after the close",
+        runtime_max_h=8),
     # The Options desk's paper positions (wt.options.live): read only, from the second paper account. A minute
     # after the stocks publisher on both rhythms. Without that account's keys it does nothing and exits 0.
     Job("options-live", "com.wt.options-live", 0, 0, ("-m", "wt.options.live"), "backtest", "options_live",
@@ -162,5 +167,10 @@ JOBS: dict[str, Job] = {j.name: j for j in (
     Job("crypto-learn", "com.wt.crypto-learn", 19, 30, ("-m", "wt.crypto.learn"), "backtest", "crypto_learn",
         deadline_min=90, trading=False, et="Mon..Sun 04:30", desk="crypto",
         what="Crypto learning: signal outcomes, the model's promotion tests, weekly retraining", runtime_max_h=1.75),
+    # The options clone's nightly review (DEC-0030): the day per name and each setup's figures so far. Reads only.
+    Job("options-review", "com.wt.options-review", 0, 0, ("scripts/options_clone_review.py",), "backtest",
+        "options_review", deadline_min=10, trading=False, et="Mon..Fri 16:30", desk="options", preflight=False,
+        what="Options clone nightly review: the day per name, each setup's figures and verdict so far",
+        runtime_max_h=0.5),
 )}
 TRADING_JOBS = [j.name for j in JOBS.values() if j.trading]

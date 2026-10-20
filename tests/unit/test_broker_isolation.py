@@ -10,10 +10,13 @@ from wt.ops import deploy
 
 ROOT = Path(__file__).resolve().parents[2]
 PAPER_BROKER_OK = {"src/wt/live/runner_b.py", "src/wt/brokers/cancel_only.py", "src/wt/brokers/alpaca_paper.py"}
-TRADING_SDK_OK = {"src/wt/brokers/alpaca_paper.py", "src/wt/brokers/alpaca_read.py"}   # alpaca_read: account reads
+# The options clone (DEC-0030) has its own adapter; only its runner may hold it.
+OPTIONS_BROKER_OK = {"src/wt/live/runner_o.py", "src/wt/brokers/alpaca_options_paper.py"}
+TRADING_SDK_OK = {"src/wt/brokers/alpaca_paper.py", "src/wt/brokers/alpaca_read.py",   # alpaca_read: account reads
+                  "src/wt/brokers/alpaca_options_paper.py"}
 ORDER_CALLS = {"submit_order", "replace_order_by_id", "cancel_order_by_id", "cancel_orders", "close_position",
                "close_all_positions", "exercise_options_position"}
-ORDER_CALLS_OK = {"src/wt/brokers/alpaca_paper.py"}
+ORDER_CALLS_OK = {"src/wt/brokers/alpaca_paper.py", "src/wt/brokers/alpaca_options_paper.py"}
 
 
 def _module_of(rel: str) -> str:
@@ -52,6 +55,9 @@ def violations(rel: str, tree: ast.AST) -> list[str]:
         for n in names:
             if (n == "wt.brokers.alpaca_paper" or n.startswith("wt.brokers.alpaca_paper.")) and rel not in PAPER_BROKER_OK:
                 out.append(f"{rel}: imports the paper broker ({n})")
+            if (n == "wt.brokers.alpaca_options_paper" or n.startswith("wt.brokers.alpaca_options_paper.")) \
+                    and rel not in OPTIONS_BROKER_OK:
+                out.append(f"{rel}: imports the options clone's broker ({n})")
             if (n == "alpaca.trading" or n.startswith("alpaca.trading.")) and rel not in TRADING_SDK_OK:
                 out.append(f"{rel}: imports the Alpaca trading SDK ({n})")
     return out
@@ -78,6 +84,8 @@ def test_no_order_capable_handle_outside_the_runner_and_the_adapters():
     "import alpaca.trading.client",
     "reader._c.submit_order(req)",
     "client._CancelOnlyClient__b.place(o)",
+    "from wt.brokers.alpaca_options_paper import AlpacaOptionsPaperBroker",
+    "from wt.brokers import alpaca_options_paper",
 ])
 def test_the_scan_catches_each_way_around_it(src):
     assert violations("src/wt/brokers/sneaky.py", ast.parse(src))
@@ -86,6 +94,10 @@ def test_the_scan_catches_each_way_around_it(src):
 def test_the_allowed_files_pass():
     assert violations("src/wt/live/runner_b.py", ast.parse("from wt.brokers.alpaca_paper import AlpacaPaperBroker")) == []
     assert violations("src/wt/brokers/alpaca_read.py", ast.parse("from alpaca.trading.client import TradingClient")) == []
+    assert violations("src/wt/live/runner_o.py",
+                      ast.parse("from wt.brokers.alpaca_options_paper import AlpacaOptionsPaperBroker")) == []
+    assert violations("src/wt/live/runner_b.py",
+                      ast.parse("from wt.brokers.alpaca_options_paper import AlpacaOptionsPaperBroker"))
 
 
 class FullBroker:

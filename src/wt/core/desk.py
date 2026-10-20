@@ -32,6 +32,7 @@ class Desk:
 
 
 CRYPTO_DIR = STATE_DIR / "crypto"
+OPTIONS_DIR = STATE_DIR / "options"
 
 DESKS: dict[str, Desk] = {d.name: d for d in (
     Desk("stocks", "B", STATE_DIR, ROOT / "KILL",
@@ -44,6 +45,10 @@ DESKS: dict[str, Desk] = {d.name: d for d in (
          (("crypto-harvest", CRYPTO_DIR / "harvest" / "harvest_journal.jsonl"),
           ("crypto", CRYPTO_DIR / "crypto_journal.jsonl")),
          CRYPTO_DIR / "chain-broken", "always_open", "crypto:", "trading-lab/crypto-snapshot"),
+    # The options clone (DEC-0030): its own state, kill file, journal and alert keys.
+    Desk("options", "O", OPTIONS_DIR, OPTIONS_DIR / "KILL",
+         (("options", DATA_DIR / "live" / "options_journal.jsonl"),),
+         OPTIONS_DIR / "chain-broken", "us_equity", "options-clone:", "stocksdelta/options-clone"),
 )}
 
 

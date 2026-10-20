@@ -18,6 +18,7 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
                  src/wt/ops/dashguard.py src/wt/ops/drill.py src/wt/brokers/cancel_only.py src/wt/ops/host.py \
                  src/wt/ops/units.py src/wt/ops/hc.py src/wt/core/ledger.py src/wt/ops/r2.py src/wt/ops/lease.py \
                  src/wt/options/bs.py src/wt/options/longopt.py src/wt/options/live.py src/wt/options/levels.py src/wt/options/rules.py src/wt/options/edition.py src/wt/options/intraday.py \
+                 src/wt/options/regime.py src/wt/options/setups.py src/wt/options/chain.py src/wt/options/session.py \
                  src/wt/ops/backup.py src/wt/brokers/shadow.py src/wt/analytics/performance.py src/wt/analytics/forward_book.py src/wt/analytics/funnel_agreement.py src/wt/scanner/quality.py \
                  src/wt/analytics/risk_view.py src/wt/analytics/ops_view.py src/wt/ops/audit.py src/wt/ops/control.py \
                  src/wt/core/desk.py src/wt/crypto/data.py src/wt/crypto/indicators.py src/wt/crypto/quality.py \
@@ -26,7 +27,9 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
                  src/wt/crypto/rules.py src/wt/crypto/sleeves.py src/wt/crypto/backtest.py \
                  src/wt/crypto/scorer.py src/wt/ml/modelfile.py src/wt/crypto/signals.py src/wt/crypto/challengers.py \
                  src/wt/crypto/outcomes.py src/wt/crypto/promotion.py src/wt/crypto/learn.py \
-                 src/wt/crypto/harvest.py
+                 src/wt/crypto/harvest.py \
+                 src/wt/brokers/alpaca_options_paper.py src/wt/oms/options.py src/wt/risk/options_guard.py \
+                 src/wt/live/runner_o.py src/wt/options/review.py
 JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
@@ -151,14 +154,19 @@ vm-deploy: ## OCI host only, through its Access tunnel (the GCP host is deployed
 	  -o ProxyCommand="$${CLOUDFLARED:-cloudflared} access ssh --hostname %h --id $$CF_ACCESS_CLIENT_ID --secret $$CF_ACCESS_CLIENT_SECRET" \
 	  "wt@$$VM_SSH_HOST" "$${VERB:-status}"
 
-kill: ## Stop new entries on a desk (exits keep being managed): make kill [DESK=crypto] REASON="..."
-	@if [ "$(DESK)" = "crypto" ]; then f="$$($(PY) -c 'from wt.core.desk import DESKS; print(DESKS["crypto"].kill_file)')"; \
-	  mkdir -p "$$(dirname "$$f")"; printf '%s\n' "$${REASON:-paused by make kill} ($$(date '+%Y-%m-%d %H:%M %Z'))" > "$$f" && echo "crypto KILL switch ON" && cat "$$f"; \
+kill: ## Stop new entries on a desk (exits keep being managed): make kill [DESK=crypto|options] REASON="..."
+	@if [ "$(DESK)" = "crypto" ] || [ "$(DESK)" = "options" ]; then f="$$($(PY) -c 'import sys; from wt.core.desk import DESKS; print(DESKS[sys.argv[1]].kill_file)' $(DESK))"; \
+	  mkdir -p "$$(dirname "$$f")"; printf '%s\n' "$${REASON:-paused by make kill} ($$(date '+%Y-%m-%d %H:%M %Z'))" > "$$f" && echo "$(DESK) KILL switch ON" && cat "$$f"; \
 	else printf '%s\n' "$${REASON:-paused by make kill} ($$(date '+%Y-%m-%d %H:%M %Z'))" > KILL && echo "KILL switch ON" && cat KILL; \
 	  $(PY) -m wt.ops.audit kill_on || true; fi
 
-unkill: ## Allow entries again: paper B (refused while it is running), or make unkill DESK=crypto
-	@if [ "$(DESK)" = "crypto" ]; then $(PY) -m wt.crypto.control unkill; else $(PY) -m wt.ops.control unkill; fi
+unkill: ## Allow entries again: paper B (refused while it is running), or make unkill DESK=crypto|options
+	@if [ "$(DESK)" = "crypto" ]; then $(PY) -m wt.crypto.control unkill; \
+	elif [ "$(DESK)" = "options" ]; then rm -f var/options/KILL && echo "options KILL switch off"; \
+	else $(PY) -m wt.ops.control unkill; fi
+
+reset-options-latch: ## OWNER: clear an options clone latch: make reset-options-latch KIND=day|week|drawdown REASON="..."
+	@PYTHONPATH=src $(PY) -m wt.live.runner_o reset-latch "$(KIND)" "$(REASON)"
 
 reset-crypto-latch: ## OWNER: clear the crypto desk's daily-loss latch
 	@$(PY) -m wt.crypto.control reset-latch
