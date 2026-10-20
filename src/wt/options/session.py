@@ -9,7 +9,7 @@ import datetime as dt
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 from wt.options import levels as lv
@@ -45,6 +45,21 @@ def marks(levels: lv.LevelSet, wanted: Sequence[str], strong_names: Sequence[str
         hi, lo = premarket
         out += [Mark("PMKH", hi, False), Mark("PMKL", lo, False)]
     return sorted(out, key=lambda m: m.price)
+
+
+def levelset_from_edition(ticker: Mapping[str, Any]) -> lv.LevelSet | None:
+    """One options-edition ticker's levels and zones in the shape `marks` reads (DEC-0033), or None if unreadable."""
+    try:
+        levels = [lv.Level(str(x["name"]), float(x["price"]), str(x.get("tf", "")), int(x.get("weight", 1)),
+                           float(x["lo"]) if x.get("lo") is not None else None,
+                           float(x["hi"]) if x.get("hi") is not None else None)
+                  for x in ticker.get("levels") or [] if isinstance(x, Mapping)]
+        zones = [z for z in ticker.get("zones") or [] if isinstance(z, Mapping)]
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not levels or not all(math.isfinite(x.price) and x.price > 0 for x in levels):
+        return None
+    return cast(lv.LevelSet, {"levels": levels, "zones": zones})     # `marks` reads only these two keys
 
 
 def premarket_range(rows: Sequence[Mapping[str, Any]], session: dt.date) -> tuple[float, float] | None:

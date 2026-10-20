@@ -89,6 +89,7 @@ class Feeds(Protocol):
     def quotes(self, symbols: Sequence[str]) -> dict[str, Any]: ...
     def contracts(self, root: str, expiry: dt.date) -> dict[str, float]: ...
     def focus(self) -> tuple[Mapping[str, Any] | None, str | None]: ...
+    def edition(self) -> Mapping[str, Any] | None: ...
 
 
 class AlpacaFeeds:
@@ -163,6 +164,11 @@ class AlpacaFeeds:
         """The latest options edition's focus names, from the dashboard's signed route; (None, None) on any
         failure, and the runner then trades its fallback names."""
         return clone_site.read_focus(session_=self.s)
+
+    def edition(self) -> Mapping[str, Any] | None:
+        """The latest options edition from the site (DEC-0033: the levels the cards show), or None."""
+        from wt.options.pipeline_check import read_edition
+        return read_edition("options")
 
 
 # ---------------------------------------------------------------- the runner
@@ -346,6 +352,11 @@ class Runner:
             self.page("levels", "Options clone: no levels today", e.__class__.__name__, 4)
             return
         dropped: dict[str, str] = {}
+        ed = self.feeds.edition() if hasattr(self.feeds, "edition") else None
+        from_edition = {str(x.get("symbol")): x for x in (ed or {}).get("tickers") or [] if isinstance(x, Mapping)} \
+            if isinstance(ed, Mapping) and ed.get("session") == self.session else {}
+        level_source: dict[str, str] = {}
+        level_diffs: dict[str, list[str]] = {}
 
         def add(root: str) -> bool:
             try:
@@ -359,7 +370,15 @@ class Runner:
                 if loaded.problems or not loaded.bars:
                     dropped[root] = "daily bars"
                     return False
-                levels = lv.levels_for(loaded.bars, self.session)
+                own = lv.levels_for(loaded.bars, self.session)
+                theirs = session.levelset_from_edition(from_edition[root]) if root in from_edition else None
+                levels = theirs or own
+                level_source[root] = "edition" if theirs else "tape"
+                if theirs:                                   # the cross-check DEC-0033 asks for, journaled
+                    mine = {x.name: x.price for x in own["levels"]}
+                    level_diffs[root] = [f"{x.name} {round(x.price, 2)} vs {round(mine[x.name], 2)}"
+                                         for x in theirs["levels"] if x.name in self.cfg["levels"]["names"]
+                                         and x.name in mine and abs(x.price - mine[x.name]) > 0.05]
                 pm = session.premarket_range(pre.get(root, []), self.day) if self.cfg["levels"].get("premarket") else None
                 marks = session.marks(levels, self.cfg["levels"]["names"], self.cfg["levels"]["strong"], pm)
                 self.names[root] = Name(root, marks, oi)
@@ -379,7 +398,8 @@ class Runner:
         if topped:
             source = f"{source}+top-up"
         self.names_source = source
-        self.write("names", source=source, names=sorted(self.names), dropped=dropped, topped_up=topped)
+        self.write("names", source=source, names=sorted(self.names), dropped=dropped, topped_up=topped,
+                   level_source=level_source, level_diffs={k: v for k, v in level_diffs.items() if v})
         if not self.names:
             self.off["names"] = "no name to trade"
 
