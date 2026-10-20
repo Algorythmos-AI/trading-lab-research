@@ -2,6 +2,7 @@
 // down, a sparse edition, a corrupt one, the live feed off or failing). They exist only in fixture mode
 // (DASHBOARD_FIXTURE=1, refused in production) and are chosen per request by the `fx` cookie, so the browser tests
 // can put any page into any state. Pure: no I/O.
+import type { OptionsClone } from "./options-clone.types";
 import type { OptionsLive } from "./options-live.types";
 import type { OptionsEdition } from "./options.types";
 
@@ -19,6 +20,7 @@ export const VARIANT_COOKIE = "fx";
  * - `v2`: the edition in its second format, with the day's context, events and each name's volatility block.
  * - `positions-off`: no options live document has been published. `positions-none`: one has, with nothing open.
  * - `positions-old`: the document is three hours old.
+ * - `clone-off`: the options clone has published nothing. `clone-latched`: its document on a bad day.
  */
 export const VARIANT_FLAGS = [
   "empty",
@@ -39,6 +41,8 @@ export const VARIANT_FLAGS = [
   "rules-off",
   "rules-final",
   "hourly-off",
+  "clone-off",
+  "clone-latched",
   "frozen",
 ] as const;
 export type VariantFlag = (typeof VARIANT_FLAGS)[number];
@@ -278,4 +282,26 @@ function fixtureHourly(e: OptionsEdition): NonNullable<OptionsLive["hourly"]> {
     );
     return [{ symbol: t.symbol, bars }];
   });
+}
+
+/**
+ * The options clone's fixture document, as is, or with `clone-latched` as a bad day: the day loss latch on, the
+ * feed unfit, a position to flatten by hand, and the broker's stop refused.
+ */
+export function fixtureOptionsClone(d: OptionsClone, flags: ReadonlySet<VariantFlag> = new Set()): OptionsClone {
+  if (!flags.has("clone-latched")) return d;
+  return {
+    ...d,
+    run_id: `${d.run_id}-latched`,
+    final: false,
+    day_pnl: { ...d.day_pnl, usd: -104.5 },
+    latch: "day",
+    off: ["feed", "latch"],
+    feed_unfit: true,
+    flatten_required: true,
+    broker_stop: "refused",
+    quote_age_median_s: 7.4,
+    slippage_median_pct: 4.1,
+    trades: [...d.trades, { trade_id: `${d.session}-O-3`, hyp: "HYP-0029", side: "put", contract: "QQQ261012P00598000", state: "open", fill: 1.62, exit_fill: null, exit_reason: null, rop: null }],
+  };
 }

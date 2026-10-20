@@ -383,3 +383,84 @@ def test_arm_marks_levels_from_daily_bars_and_drops_a_name_without_a_same_day_ex
     assert n["source"] == "fallback" and n["dropped"] == {"QQQ": "no same-day expiry"}
     assert {"PDH", "PDL", "PWH", "PWL"} <= {mk.name for mk in r.names["SPY"].marks}
     assert all(math.isfinite(mk.price) for mk in r.names["SPY"].marks)
+
+
+# ---------------------------------------------------------------- the dashboard document
+class Posted:
+    """A stand-in for clone_site.Publisher: keeps what the runner hands it."""
+
+    def __init__(self) -> None:
+        self.docs: list[dict[str, Any]] = []
+
+    def post(self, data: bytes) -> None:
+        self.docs.append(json.loads(data))
+
+
+def _keys(node: Any) -> set[str]:
+    if isinstance(node, dict):
+        return set(node) | {k for v in node.values() for k in _keys(v)}
+    if isinstance(node, list):
+        return {k for v in node for k in _keys(v)}
+    return set()
+
+
+def test_the_clone_publishes_at_arm_on_the_fill_and_on_the_exit_within_the_sites_schema(world):
+    from wt.options import clone_site
+    out = Posted()
+    r = world["make"](publisher=out)
+    r.names_source = "fallback"
+    world["m"].now = at("09:25")
+    assert r.arm()
+    assert len(out.docs) == 1 and out.docs[0]["trades"] == [] and out.docs[0]["entries"] == {"used": 0, "max": LIM.max_entries_per_day}
+    run_until(r, world["m"], world["b"], at("10:26", 10))
+    world["m"].bid_fn = lambda t: 2.15
+    run_until(r, world["m"], world["b"], at("10:27"))
+    (p,) = r.today()
+    assert p.state == "closed"
+    for d in out.docs:
+        assert clone_site.validate(d) == [], d
+        assert "setup" not in _keys(d)                       # setup names are RESTRICTED; a trade carries its HYP id
+    last = out.docs[-1]
+    assert last["session"] == "2026-10-19" and last["names"] == ["SPY"] and last["names_source"] == "fallback"
+    assert last["entries"]["used"] == 1 and last["day_pnl"] == {"usd": pytest.approx(74.94), "limit_usd": LIM.day_loss_latch}
+    (t,) = last["trades"]
+    assert t == {"trade_id": "2026-10-19-O-1", "hyp": "HYP-0029", "side": "call", "contract": "SPY261019C00581000",
+                 "state": "closed", "fill": 1.4, "exit_fill": 2.15, "exit_reason": "target", "rop": t["rop"]}
+    assert t["rop"] > 0.5 and last["broker_stop"] == "accepted" and last["slippage_median_pct"] == 0.0
+    spy = next(g for g in last["gates"] if g["symbol"] == "SPY")
+    assert spy["entered"] == 1 and spy["bars"] >= 1
+    by = {s["hyp"]: s for s in last["setups"]}
+    assert by["HYP-0029"]["trades"] == 1 and by["HYP-0030"]["trades"] == 0 and by["all"]["verdict"] == "none"
+    assert any(d["trades"] and d["trades"][0]["state"] == "open" for d in out.docs)        # sent on the fill too
+    assert not last["final"] and not last["flatten_required"] and last["latch"] is None
+
+
+def test_a_latch_and_a_flatten_are_published_when_they_happen(world):
+    out = Posted()
+    r, p = entered(world)
+    r.publisher = out
+    world["m"].bid_fn = lambda t: 1.45
+    r.critical("test")
+    assert out.docs[-1]["flatten_required"] is True
+    r.latches.trip("day", "2026-10-19", "test", at("10:27"))
+    r.publish(final=True)
+    assert out.docs[-1]["latch"] == "day" and out.docs[-1]["final"] is True
+
+
+def test_a_document_that_cannot_be_sent_never_stops_the_runner_and_is_journaled_once(world, monkeypatch):
+    from wt.options import clone_site
+
+    class Broken:
+        def post(self, data: bytes) -> None:
+            raise OSError("disk")
+
+    r = world["make"](publisher=Broken())
+    world["m"].now = at("09:25")
+    r.arm()
+    run_until(r, world["m"], world["b"], at("10:26", 10))
+    assert r.today()[0].state == "open"
+    assert len(events(world["rows"], "clone_doc_unsent")) == 1
+    monkeypatch.setattr(clone_site, "validate", lambda doc: ["trades/0/contract: pattern"])
+    r.publisher = Posted()
+    r.publish()
+    assert r.publisher.docs == [] and events(world["rows"], "clone_doc_unsent")[-1]["error"].startswith("ValueError")

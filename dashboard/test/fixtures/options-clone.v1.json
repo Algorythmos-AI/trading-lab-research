@@ -1,0 +1,178 @@
+{
+  "schema": "stocksdelta/options-clone",
+  "schema_version": 1,
+  "run_id": "options-clone-2026-10-12-200501000000",
+  "as_of": "2026-10-12T20:05:01+00:00",
+  "paper": true,
+  "final": true,
+  "session": "2026-10-12",
+  "names": [
+    "NVDA",
+    "QQQ",
+    "SPY"
+  ],
+  "names_source": "focus",
+  "entries": {
+    "used": 2,
+    "max": 5
+  },
+  "day_pnl": {
+    "usd": 23.4,
+    "limit_usd": 100.0
+  },
+  "latch": null,
+  "off": [],
+  "feed_unfit": false,
+  "flatten_required": false,
+  "broker_stop": "accepted",
+  "quote_age_median_s": 1.8,
+  "slippage_median_pct": 1.2,
+  "trades": [
+    {
+      "trade_id": "2026-10-12-O-1",
+      "hyp": "HYP-0029",
+      "side": "call",
+      "contract": "SPY261012C00581000",
+      "state": "closed",
+      "fill": 1.42,
+      "exit_fill": 1.79,
+      "exit_reason": "target",
+      "rop": 0.2551
+    },
+    {
+      "trade_id": "2026-10-12-O-2",
+      "hyp": "HYP-0030",
+      "side": "put",
+      "contract": "NVDA261012P00185000",
+      "state": "closed",
+      "fill": 1.1,
+      "exit_fill": 0.98,
+      "exit_reason": "time",
+      "rop": -0.1131
+    }
+  ],
+  "gates": [
+    {
+      "symbol": "NVDA",
+      "bars": 195,
+      "setups": 4,
+      "entered": 1,
+      "refused_by": {
+        "contract": 1,
+        "room": 2
+      }
+    },
+    {
+      "symbol": "QQQ",
+      "bars": 195,
+      "setups": 2,
+      "entered": 0,
+      "refused_by": {
+        "extension": 1,
+        "trend": 1
+      }
+    },
+    {
+      "symbol": "SPY",
+      "bars": 195,
+      "setups": 3,
+      "entered": 1,
+      "refused_by": {
+        "open-position": 1,
+        "trend": 1
+      }
+    }
+  ],
+  "setups": [
+    {
+      "hyp": "HYP-0029",
+      "trades": 14,
+      "sessions": 9,
+      "unresolved": 0,
+      "win_rate": 0.5714,
+      "mean_rop": 0.061,
+      "ci_session": [
+        -0.149,
+        0.251
+      ],
+      "ci_trade": [
+        -0.089,
+        0.201
+      ],
+      "first_half_mean": 0.031,
+      "second_half_mean": 0.091,
+      "profit_factor": 1.18,
+      "expectancy_usd": 8.54,
+      "total_usd": 119.56,
+      "max_drawdown_usd": -212.0,
+      "longest_losing_streak": 4,
+      "mfe_captured": 0.41,
+      "exits": {
+        "premium": 4,
+        "target": 3,
+        "time": 7
+      },
+      "verdict": "none"
+    },
+    {
+      "hyp": "HYP-0030",
+      "trades": 6,
+      "sessions": 5,
+      "unresolved": 0,
+      "win_rate": 0.3333,
+      "mean_rop": -0.042,
+      "ci_session": [
+        -0.252,
+        0.148
+      ],
+      "ci_trade": [
+        -0.192,
+        0.098
+      ],
+      "first_half_mean": -0.072,
+      "second_half_mean": -0.012,
+      "profit_factor": 1.18,
+      "expectancy_usd": -5.88,
+      "total_usd": -35.28,
+      "max_drawdown_usd": -212.0,
+      "longest_losing_streak": 4,
+      "mfe_captured": 0.41,
+      "exits": {
+        "premium": 2,
+        "target": 1,
+        "time": 3
+      },
+      "verdict": "none"
+    },
+    {
+      "hyp": "all",
+      "trades": 20,
+      "sessions": 11,
+      "unresolved": 0,
+      "win_rate": 0.5,
+      "mean_rop": 0.0301,
+      "ci_session": [
+        -0.1799,
+        0.2201
+      ],
+      "ci_trade": [
+        -0.1199,
+        0.1701
+      ],
+      "first_half_mean": 0.0001,
+      "second_half_mean": 0.0601,
+      "profit_factor": 1.18,
+      "expectancy_usd": 4.21,
+      "total_usd": 84.28,
+      "max_drawdown_usd": -212.0,
+      "longest_losing_streak": 4,
+      "mfe_captured": 0.41,
+      "exits": {
+        "premium": 6,
+        "target": 5,
+        "time": 9
+      },
+      "verdict": "none"
+    }
+  ]
+}

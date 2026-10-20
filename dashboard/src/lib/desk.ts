@@ -72,6 +72,14 @@ export const JOURNAL_PATHS = {
   latest: "journal/latest.json",
 } as const;
 
+/**
+ * The options clone's document (DEC-0030): its session so far, re-sent after every trade event and at the close.
+ * Latest only: each document carries the figures of every trade so far.
+ */
+export const OPTIONS_CLONE_PATHS = {
+  latest: "options-clone/latest.json",
+} as const;
+
 /** The after-close options levels editions, one per session they are built for, kept the same way as the radar's. */
 export const OPTIONS_PATHS = {
   latest: "options/latest.json",

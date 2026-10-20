@@ -1,6 +1,6 @@
 import "server-only";
 import { HISTORY_PREFIX, PreconditionFailed, readForUpdate, writeText } from "./blob";
-import { DESK_PATHS, JOURNAL_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
+import { DESK_PATHS, JOURNAL_PATHS, OPTIONS_CLONE_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
 import { verify } from "./hmac";
 import { KEY_ID_RE, decideScope, parseScopes } from "./ingest-scope";
 import { logEvent } from "./log";
@@ -9,16 +9,18 @@ import {
   contractOf,
   isJournal,
   isOptions,
+  isOptionsClone,
   isOptionsLive,
   isRadar,
   validateJournal,
+  validateOptionsClone,
   validateOptionsEdition,
   validateOptionsLive,
   validateRadarEdition,
 } from "./validate";
 
 export const MAX_BODY_BYTES = 3_500_000;
-/** How far ahead of this server's clock an options live document may be dated: clock drift, not more. */
+/** How far ahead of this server's clock an options live or clone document may be dated: clock drift, not more. */
 export const OPTIONS_LIVE_AHEAD_MS = 10 * 60_000;
 
 function json(status: number, body: Record<string, unknown>): Response {
@@ -150,7 +152,7 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
   const scopes = parseScopes(process.env[SCOPES_ENV], [RADAR_KEY_ID]);
   if (!scopes.ok) logEvent("ingest.scopes", { outcome: "malformed", reason: scopes.reason });
   // The desk whose snapshot this body is, by the same routing as below; null for every other document kind.
-  const snapshotOf = isRadar(data) || isOptions(data) || isOptionsLive(data) || isJournal(data) ? null : contractOf(data).desk;
+  const snapshotOf = isRadar(data) || isOptions(data) || isOptionsLive(data) || isOptionsClone(data) || isJournal(data) ? null : contractOf(data).desk;
   const scope = decideScope(scopes, keyId, snapshotOf, process.env.PRIMARY_HOST || DEFAULT_KEY_ID);
   if (!scope.allow && scope.outcome === "key-scope-config") {
     return done(503, "key-scope-config", { error: "ingest is not configured for this key" }, { key_id: keyId });
@@ -167,19 +169,20 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
   if (keyId === RADAR_KEY_ID) {
     return done(403, "radar-key-scope", { error: "this key may only publish research editions" });
   }
-  // After the radar key's refusal on purpose: positions come from the trading host, never from the research
-  // environment, whatever the body says it is.
-  if (isOptionsLive(data)) {
+  // After the radar key's refusal on purpose: positions and the clone's trades come from the trading host, never
+  // from the research environment, whatever the body says it is.
+  const hostDoc = isOptionsLive(data) ? OPTIONS_LIVE : isOptionsClone(data) ? OPTIONS_CLONE : null;
+  if (hostDoc) {
     // One slot, one account: a second host (a shadow run) would take turns with the primary in it. Its document
     // is acknowledged and dropped, so its job does not fail.
-    if (!primary) return done(200, "ignored-shadow", { status: "ignored", shadow: true }, { key_id: keyId, desk: "options-live" });
+    if (!primary) return done(200, "ignored-shadow", { status: "ignored", shadow: true }, { key_id: keyId, desk: hostDoc.desk });
     // A document dated ahead of this clock would be shown as fresh, and refuse every true one as older, until
     // real time caught up with it.
     const at = Date.parse(String((data as { as_of?: unknown }).as_of ?? ""));
     if (Number.isFinite(at) && at > now.getTime() + OPTIONS_LIVE_AHEAD_MS) {
-      return done(422, "ahead-of-clock", { error: "invalid", errors: ["/as_of: is ahead of the server's clock"] }, { desk: "options-live" });
+      return done(422, "ahead-of-clock", { error: "invalid", errors: ["/as_of: is ahead of the server's clock"] }, { desk: hostDoc.desk });
     }
-    return storeEdition(OPTIONS_LIVE, text, data, done);
+    return storeEdition(hostDoc, text, data, done);
   }
 
   // The desk comes from the signed body (its `schema`), never from a header: ADR 0005. The slot and the validator
@@ -240,7 +243,7 @@ type Done = (status: number, outcome: string, body: Record<string, unknown>, ext
  * its dated copy. A kind with no `history` path keeps only its latest.
  */
 interface EditionKind {
-  desk: "radar" | "options" | "options-live" | "journal";
+  desk: "radar" | "options" | "options-live" | "options-clone" | "journal";
   paths: { latest: string; history?: string };
   validate: (data: unknown) => { ok: true; runId: string | null; asOf: string | null; date: string } | { ok: false; errors: string[] };
 }
@@ -270,6 +273,16 @@ const OPTIONS_LIVE: EditionKind = {
   validate: (data) => {
     const r = validateOptionsLive(data);
     return r.ok ? { ok: true, runId: r.doc.run_id, asOf: r.doc.as_of, date: r.doc.as_of.slice(0, 10) } : r;
+  },
+};
+
+/** The options clone's document. Latest only: every document carries the figures of every trade so far. */
+const OPTIONS_CLONE: EditionKind = {
+  desk: "options-clone",
+  paths: OPTIONS_CLONE_PATHS,
+  validate: (data) => {
+    const r = validateOptionsClone(data);
+    return r.ok ? { ok: true, runId: r.doc.run_id, asOf: r.doc.as_of, date: r.doc.session } : r;
   },
 };
 
