@@ -60,3 +60,25 @@ Its numbers are frozen in `config/options_clone.yaml` and `config/risk.yaml` key
 - **In the market:** a stop is a market sell after the trigger, so its fill can be worse. The journal records each exit's fill against the bid that triggered it.
 - **Broker-side stop:** if the account accepts a stop order for options, a broker-side stop at -25% rests as well. The journal says `broker-stop: accepted` or `refused`.
 - **Worst case:** if every exit fails, the loss is the premium paid, at most $200 a trade.
+
+## The pipeline check (radar, options edition, focus names)
+
+The host job `pipeline-check` runs at 08:55 New York (after the 08:50 focus refresh, before the clone arms) and at
+18:30 (after the evening edition). It reads the stored radar and options editions back from the site (signed
+`GET /api/editions/<kind>`, host keys only) and checks their claims against the consolidated tape and the option
+listings:
+
+| Check | Fails when |
+|---|---|
+| `options.session`, `options.built_from` | the edition is not for the coming session, or not built from the last close |
+| `options.close.<SYM>` | the edition's close is more than $0.02 from the tape's |
+| `options.levels.<SYM>` | PDH, PDL, PWH, PWL, PMH, PML, MA20 or MA50 is more than $0.05 from the same level recomputed |
+| `radar.date`, `radar.fresh` (before the open) | the radar is not for today, or is more than 6 hours old |
+| `radar.close.<SYM>` (before the open) | the radar's price is more than $0.02 from the last close |
+
+Warnings, never a page: `focus.tradeable` (fewer than two focus names have a contract expiring that session; the
+clone tops up with SPY and QQQ, DEC-0032), `focus.premarket` (the 08:50 refresh did not land), `focus.earnings.<SYM>`
+(a focus name reports, so the clone skips it), `radar.premarket.<SYM>` (price moved more than 0.5% since the radar).
+
+Each run writes `var/pipeline-check/<session>-<slot>.json`. Any failed check pages once a day per run with the ids.
+Read the report: `cat /home/wt/trading/var/pipeline-check/$(date +%F)-pre-open.json`.

@@ -20,7 +20,7 @@ import {
   dayVerdict,
   earningsOf,
   movers,
-  openRead,
+  laterPremarket, openRead,
   sessionRecord,
   timedEvents,
   vixJumpPct,
@@ -75,8 +75,10 @@ function Brief({ r, options, trades }: { r: Radar; options: OptionsEdition | nul
   const rad = new Map((r.tickers ?? []).map((t) => [t.symbol, t]));
   const names = trades.length > 0 ? yourNames(trades, r.edition_date) : [];
   const symbols = names.length > 0 ? names.map((n) => n.symbol) : ["SPY"];
-  const reads = symbols.map((s) => openRead(s, opt.get(s), rad.get(s)));
-  const spy = reads.find((o) => o.symbol === "SPY") ?? openRead("SPY", opt.get("SPY"), rad.get("SPY"));
+  const later = laterPremarket(options, r.as_of);
+  const reads = symbols.map((s) => openRead(s, opt.get(s), rad.get(s), later.get(s)));
+  const spy = reads.find((o) => o.symbol === "SPY") ?? openRead("SPY", opt.get("SPY"), rad.get("SPY"), later.get("SPY"));
+  const refreshed = later.size > 0 ? [...later.values()][0]!.asOf : null;
   const earnings = earningsOf(r, options);
   const verdict = dayVerdict(r, symbols, reads, earnings);
   const week = briefWeek(r, earnings, symbols);
@@ -88,6 +90,7 @@ function Brief({ r, options, trades }: { r: Radar; options: OptionsEdition | nul
       <p className="text-muted-foreground -mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
         <span>
           {weekDate(r.edition_date)} · prices {r.prices_as_of ?? "not stated"} · published {sydney(r.as_of)} Sydney
+          {refreshed ? ` · pre-market prices refreshed ${sydney(refreshed)} Sydney` : ""}
         </span>
         {r.report_url ? (
           <a href={r.report_url} target="_blank" rel="noreferrer" className="text-primary inline-flex items-center gap-1">

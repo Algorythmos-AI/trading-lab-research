@@ -14,6 +14,7 @@ import {
   mergedLevels,
   movers,
   openPlan,
+  laterPremarket,
   openRead,
   sessionRecord,
   sydneyAt,
@@ -280,5 +281,24 @@ describe("the week panel", () => {
       renderToStaticMarkup(createElement(WeekPanel, { days: w.days, later: w.later, today: "2026-10-14", earningsKnown }));
     expect(html(false)).toContain("Neither calendar carries earnings dates");
     expect(html(true)).not.toContain("Neither calendar carries earnings dates");
+  });
+});
+
+describe("one pre-market price: the later focus refresh over the radar's own", () => {
+  const refreshed = (asOf: string) =>
+    ({ focus: { items: [], premarket: { as_of: asOf, items: [{ symbol: "SPY", price: 768.4 }, { symbol: "QQQ", price: null }] } } }) as unknown as Parameters<typeof laterPremarket>[0];
+
+  it("takes the refresh when it was taken after the radar", () => {
+    const later = laterPremarket(refreshed("2026-10-20T12:50:00Z"), "2026-10-20T10:51:00Z");
+    expect([...later.keys()]).toEqual(["SPY"]);
+    const o = openRead("SPY", undefined, { symbol: "SPY", price: 766.48, premarket_price: 767.99 }, later.get("SPY"));
+    expect(o.premarket).toBe(768.4);
+  });
+
+  it("keeps the radar's own when the refresh is older, missing or has no price", () => {
+    expect(laterPremarket(refreshed("2026-10-20T09:00:00Z"), "2026-10-20T10:51:00Z").size).toBe(0);
+    expect(laterPremarket(null, "2026-10-20T10:51:00Z").size).toBe(0);
+    const o = openRead("SPY", undefined, { symbol: "SPY", price: 766.48, premarket_price: 767.99 }, undefined);
+    expect(o.premarket).toBe(767.99);
   });
 });

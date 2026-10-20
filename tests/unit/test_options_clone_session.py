@@ -16,6 +16,7 @@ from wt.core.types import Order, Position
 from wt.live import runner_o
 from wt.live.runner_o import Name, Runner
 from wt.options import levels as lv
+from wt.options.intraday import daily_raw
 from wt.options.regime import NEW_YORK
 from wt.options.setups import Mark
 from wt.risk.options_guard import Limits
@@ -507,3 +508,44 @@ def test_no_top_up_when_enough_focus_names_trade(world):
     m.now = at("09:25")
     r.arm()
     assert sorted(r.names) == ["AMZN", "META"] and r.names_source == "focus"
+
+
+def _edition_rows():
+    days, d = [], "2026-10-16"
+    for _ in range(80):
+        days.append(d)
+        d = lv.prev_session(d)
+    days.reverse()
+    return [{"t": f"{x}T04:00:00Z", "o": 570 + i * 0.1, "h": 571 + i * 0.1, "l": 569 + i * 0.1, "c": 570.5 + i * 0.1,
+             "v": 1e6} for i, x in enumerate(days)]
+
+
+def _arm_with_edition(world, edition):
+    m = world["m"]
+    rows = _edition_rows()
+    m.daily = lambda symbols, start, end: {s: rows for s in symbols}
+    m.contracts = lambda root, expiry: {f"{root}261019C00580000": 5000.0}
+    m.edition = lambda: edition
+    r = world["make"]()
+    del r.prepare
+    m.now = at("09:25")
+    r.arm()
+    return r, events(world["rows"], "names")[-1]
+
+
+def test_the_clone_marks_the_editions_levels_and_journals_a_disagreement(world):
+    own = lv.levels_for(lv.load_ibkr(daily_raw(_edition_rows())).bars, "2026-10-19")
+    levels = [{"name": x.name, "price": x.price + (0.40 if x.name == "PDH" else 0.0), "tf": x.tf, "weight": x.weight}
+              for x in own["levels"]]
+    ed = {"session": "2026-10-19", "tickers": [{"symbol": "SPY", "levels": levels, "zones": []}]}
+    r, n = _arm_with_edition(world, ed)
+    assert n["level_source"] == {"SPY": "edition", "QQQ": "tape"}
+    assert len(n["level_diffs"]["SPY"]) == 1 and n["level_diffs"]["SPY"][0].startswith("PDH")
+    pdh = next(mk for mk in r.names["SPY"].marks if mk.name == "PDH")
+    assert pdh.price == pytest.approx(next(x.price for x in own["levels"] if x.name == "PDH") + 0.40)
+
+
+def test_an_edition_for_another_session_is_not_used(world):
+    ed = {"session": "2026-10-16", "tickers": [{"symbol": "SPY", "levels": [{"name": "PDH", "price": 1.0}], "zones": []}]}
+    r, n = _arm_with_edition(world, ed)
+    assert set(n["level_source"].values()) == {"tape"} and "level_diffs" not in n or n["level_diffs"] == {}
