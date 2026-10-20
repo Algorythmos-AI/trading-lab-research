@@ -95,7 +95,7 @@ function CloneBody({ d }: { d: OptionsClone }) {
           icon={Radio}
           tone={d.names_source === "fallback" ? "warn" : "neutral"}
           value={d.names.length ? d.names.join(" ") : "—"}
-          hint={d.names_source === "focus" ? "From the edition's focus" : d.names_source === "fallback" ? "Fallback: no focus for today" : undefined}
+          hint={d.names_source === "focus" ? "From the edition's focus" : d.names_source === "focus+top-up" ? "Focus names that trade today, plus SPY/QQQ" : d.names_source === "fallback" ? "Fallback: no focus for today" : undefined}
         />
         <StatTile
           label="Feed"

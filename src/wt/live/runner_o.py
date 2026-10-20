@@ -327,39 +327,59 @@ class Runner:
         return not self.off
 
     def prepare(self) -> None:
+        """Today's names: the focus names that can be traded today (a same-day expiry, readable levels), topped up
+        from `names.top_up` in order until at least `names.min_names` can be traded (DEC-0032)."""
         focus, edition = self.feeds.focus()
         cfg_n = self.cfg["names"]
-        wanted, source = session.names(focus, edition, self.session, cfg_n["fallback"], int(cfg_n["max_names"]))
+        cap = int(cfg_n["max_names"])
+        wanted, source = session.names(focus, edition, self.session, cfg_n["fallback"], cap)
+        top_up = [r for r in cfg_n.get("top_up", []) if r not in wanted]
         start = dt.datetime.combine(self.day - dt.timedelta(days=420), dt.time(0), dt.UTC)
         end = dt.datetime.combine(self.day, dt.time(0), dt.UTC) - dt.timedelta(seconds=1)
+        every = list(dict.fromkeys([*wanted, *top_up]))
         try:
-            daily = self.feeds.daily(wanted, start, end)
+            daily = self.feeds.daily(every, start, end)
             pre_start = dt.datetime.combine(self.day, dt.time(4, 0), NEW_YORK)
-            pre = self.feeds.minutes(wanted, pre_start, min(self.now(), self.ck.open))
+            pre = self.feeds.minutes(every, pre_start, min(self.now(), self.ck.open))
         except (TransportError, requests.RequestException) as e:
             self.off["levels"] = "levels unavailable"
             self.page("levels", "Options clone: no levels today", e.__class__.__name__, 4)
             return
         dropped: dict[str, str] = {}
-        for root in wanted:
+
+        def add(root: str) -> bool:
             try:
+                oi: dict[str, float] = {}
                 if cfg_n.get("same_day_expiry_only", True):
                     oi = self.feeds.contracts(root, self.day)
                     if not oi:
                         dropped[root] = "no same-day expiry"
-                        continue
+                        return False
                 loaded = lv.load_ibkr(daily_raw([b for b in daily.get(root, []) if isinstance(b, dict)]))
                 if loaded.problems or not loaded.bars:
                     dropped[root] = "daily bars"
-                    continue
+                    return False
                 levels = lv.levels_for(loaded.bars, self.session)
                 pm = session.premarket_range(pre.get(root, []), self.day) if self.cfg["levels"].get("premarket") else None
                 marks = session.marks(levels, self.cfg["levels"]["names"], self.cfg["levels"]["strong"], pm)
                 self.names[root] = Name(root, marks, oi)
+                return True
             except (ValueError, TypeError, KeyError, TransportError, requests.RequestException) as e:
                 dropped[root] = e.__class__.__name__
+                return False
+
+        for root in wanted:
+            add(root)
+        topped: list[str] = []
+        for root in top_up:
+            if len(self.names) >= min(int(cfg_n.get("min_names", 0)), cap):
+                break
+            if add(root):
+                topped.append(root)
+        if topped:
+            source = f"{source}+top-up"
         self.names_source = source
-        self.write("names", source=source, names=sorted(self.names), dropped=dropped)
+        self.write("names", source=source, names=sorted(self.names), dropped=dropped, topped_up=topped)
         if not self.names:
             self.off["names"] = "no name to trade"
 
