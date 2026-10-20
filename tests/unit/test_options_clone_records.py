@@ -59,3 +59,9 @@ def test_the_tradeable_names_rule_is_recorded_and_configured():
     assert re.search(r"\*\*Status: ACCEPTED on 2026-10-20\.\*\*", rec) and "No trial is added" in rec
     assert CONFIG["names"]["top_up"] == ["SPY", "QQQ"] and CONFIG["names"]["min_names"] == 2
     assert family_trial_count("O") == 14
+
+
+def test_the_one_level_source_rule_is_recorded():
+    rec = (ROOT / "research" / "decisions" / "DEC-0033-options-clone-one-level-source.md").read_text()
+    assert re.search(r"\*\*Status: ACCEPTED on 2026-10-20\.\*\*", rec) and "No trial is added" in rec
+    assert family_trial_count("O") == 14

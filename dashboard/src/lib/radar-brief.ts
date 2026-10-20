@@ -107,9 +107,34 @@ export interface OpenRead {
 /** Gaps bigger than this share of the day's expected move are flagged: the move may be spent before the open. */
 export const GAP_LIMIT = 0.8;
 
-export function openRead(symbol: string, opt: OptionsTicker | undefined, rt: RadarTicker | undefined): OpenRead {
+/** A pre-market price newer than the radar's: the options desk's pre-open focus refresh (about 08:50 New York). */
+export interface LaterPremarket {
+  price: number;
+  asOf: string;
+}
+
+/**
+ * One source for the pre-market price: the focus refresh's price for a name when it was taken after the radar was
+ * built, else nothing (the radar's own stands). The refresh runs nearer the open than the radar's build.
+ */
+export function laterPremarket(options: OptionsEdition | null, radarAsOf: string | null | undefined): Map<string, LaterPremarket> {
+  const out = new Map<string, LaterPremarket>();
+  const pre = options?.focus?.premarket;
+  const at = pre ? Date.parse(pre.as_of) : NaN;
+  const built = radarAsOf ? Date.parse(radarAsOf) : NaN;
+  if (!pre || !Number.isFinite(at) || (Number.isFinite(built) && at <= built)) return out;
+  for (const i of pre.items) if (isNum(i.price) && i.price > 0) out.set(i.symbol, { price: i.price, asOf: pre.as_of });
+  return out;
+}
+
+export function openRead(
+  symbol: string,
+  opt: OptionsTicker | undefined,
+  rt: RadarTicker | undefined,
+  later?: LaterPremarket,
+): OpenRead {
   const close = isNum(opt?.last?.close) ? opt.last.close : isNum(rt?.price) ? rt.price : null;
-  const premarket = isNum(rt?.premarket_price) ? rt.premarket_price : null;
+  const premarket = later ? later.price : isNum(rt?.premarket_price) ? rt.premarket_price : null;
   const ref = premarket ?? close;
   const move = isNum(opt?.expected_move?.day) && opt.expected_move.day > 0 ? opt.expected_move.day : null;
   const levels = keyLevels(opt);
