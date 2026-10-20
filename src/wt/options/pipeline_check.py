@@ -106,6 +106,13 @@ def assess(slot: str, now: dt.datetime, radar: Mapping[str, Any] | None, options
     def add(cid: str, ok: bool, detail: str, sev: str = "fail") -> None:
         out.append(Check(cid, sev if not ok else "info", ok, detail))
 
+    # names the clone may trade today: a difference there fails; elsewhere it only warns
+    focus_items = ((options or {}).get("focus") or {}).get("items") or []
+    tradeable_names = {str(i.get("symbol")) for i in focus_items if isinstance(i, Mapping)} | {"SPY", "QQQ"}
+
+    def sev(sym: str) -> str:
+        return "fail" if sym in tradeable_names else "warn"
+
     # ---- the options edition
     if not options:
         add("options.present", False, "no options edition on the site")
@@ -125,7 +132,7 @@ def assess(slot: str, now: dt.datetime, radar: Mapping[str, Any] | None, options
             close = _num((t.get("last") or {}).get("close"))
             tape_close = loaded.bars[-1].c
             add(f"options.close.{sym}", close is not None and abs(close - tape_close) <= CLOSE_TOL,
-                f"edition {close} vs tape {round(tape_close, 2)}")
+                f"edition {close} vs tape {round(tape_close, 2)}", sev(sym))
             try:
                 mine = {x.name: x.price for x in lv.levels_for(loaded.bars, target)["levels"]}
             except ValueError as e:
@@ -134,7 +141,7 @@ def assess(slot: str, now: dt.datetime, radar: Mapping[str, Any] | None, options
             theirs = {str(x.get("name")): _num(x.get("price")) for x in t.get("levels") or [] if isinstance(x, Mapping)}
             off = [f"{n} {theirs.get(n)} vs {round(mine[n], 2)}" for n in LEVEL_NAMES
                    if n in mine and (theirs.get(n) is None or abs((theirs.get(n) or 0) - mine[n]) > LEVEL_TOL)]
-            add(f"options.levels.{sym}", not off, "; ".join(off) or "all levels agree")
+            add(f"options.levels.{sym}", not off, "; ".join(off) or "all levels agree", sev(sym))
         # ---- its focus names
         focus = options.get("focus") or {}
         items = [i for i in focus.get("items") or [] if isinstance(i, Mapping) and isinstance(i.get("symbol"), str)]
@@ -159,14 +166,15 @@ def assess(slot: str, now: dt.datetime, radar: Mapping[str, Any] | None, options
         if not radar:
             add("radar.present", False, "no radar edition on the site")
         else:
-            add("radar.date", radar.get("edition_date") == target, f"radar for {radar.get('edition_date')}, want {target}")
+            dated = radar.get("edition_date") == target
+            add("radar.date", dated, f"radar for {radar.get('edition_date')}, want {target}")
             try:
                 built = dt.datetime.fromisoformat(str(radar.get("as_of")).replace("Z", "+00:00"))
                 age = (now - built).total_seconds() / 3600
                 add("radar.fresh", age <= RADAR_MAX_AGE_H, f"built {age:.1f} h ago")
             except ValueError:
                 add("radar.fresh", False, "no readable as_of")
-            for t in radar.get("tickers") or []:
+            for t in (radar.get("tickers") or []) if dated else []:     # yesterday's prices are not today's claims
                 if not isinstance(t, Mapping):
                     continue
                 sym = str(t.get("symbol"))
@@ -178,7 +186,7 @@ def assess(slot: str, now: dt.datetime, radar: Mapping[str, Any] | None, options
                     continue
                 price = _num(t.get("price"))
                 add(f"radar.close.{sym}", price is not None and abs(price - loaded.bars[-1].c) <= CLOSE_TOL,
-                    f"radar {price} vs tape close {round(loaded.bars[-1].c, 2)}")
+                    f"radar {price} vs tape close {round(loaded.bars[-1].c, 2)}", sev(sym))
                 pm, now_px = _num(t.get("premarket_price")), live.get(sym)
                 if pm is not None and now_px:
                     drift = abs(now_px - pm) / pm * 100
