@@ -210,8 +210,45 @@ test("health endpoint answers without secrets", async ({ request }) => {
       options: { status: "ok", accepts: 2, session: "2026-10-12", run_id: expect.any(String) },
       radar: { status: "ok", accepts: 1, edition_date: expect.any(String) },
       options_live: { status: "ok", accepts: 3, run_id: expect.any(String) },
+      options_clone: { status: "ok", accepts: 1, session: "2026-10-12", run_id: expect.any(String) },
     },
   });
+});
+
+test("the focus route refuses a request that is not signed", async ({ request }) => {
+  // No ingest key on the fixture server: refused before anything is read. The answer names nothing of the edition.
+  const res = await request.get("/api/focus");
+  expect([401, 503]).toContain(res.status());
+  expect(await res.text()).not.toMatch(/SPY|QQQ|session/);
+});
+
+test("the Trades page draws the clone's session, and its bad day, apart from the journal", async ({ page, context, baseURL }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  expect((await page.goto("/trades"))?.status()).toBe(200);
+  const clone = page.locator("#clone");
+  await expect(clone.getByRole("heading", { name: "The clone" })).toBeVisible();
+  await expect(clone.getByText("2 of 5")).toBeVisible();
+  await expect(clone.getByRole("cell", { name: "SPY261012C00581000" })).toBeVisible();
+  await expect(clone.getByRole("cell", { name: "+25.5%" })).toBeVisible();
+  await expect(clone.getByRole("row", { name: /^NVDA 195 4 1 room 2 · contract 1$/ })).toBeVisible();
+  await expect(clone.getByRole("row", { name: /^HYP-0029 14 9/ })).toContainText("Too early");
+  await expect(clone.getByRole("alert")).toHaveCount(0);
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+
+  await context.addCookies([{ name: "fx", value: "clone-latched", url: baseURL! }]);
+  await page.reload();
+  await expect(clone.getByRole("alert")).toContainText("Flatten required");
+  await expect(clone.getByText("The day loss latch is on")).toBeVisible();
+  await expect(clone.getByText("Entries off: feed, latch")).toBeVisible();
+
+  await context.addCookies([{ name: "fx", value: "clone-off", url: baseURL! }]);
+  await page.reload();
+  await expect(clone.getByText("No session from the clone yet")).toBeVisible();
+  // The journal above is drawn either way.
+  await expect(page.getByRole("heading", { level: 1, name: "Trades" })).toBeVisible();
+  expect(errors).toEqual([]);
 });
 
 test("ingest refuses writes outside production", async ({ request }) => {

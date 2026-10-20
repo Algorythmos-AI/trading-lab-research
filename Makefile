@@ -29,7 +29,8 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
                  src/wt/crypto/outcomes.py src/wt/crypto/promotion.py src/wt/crypto/learn.py \
                  src/wt/crypto/harvest.py \
                  src/wt/brokers/alpaca_options_paper.py src/wt/oms/options.py src/wt/risk/options_guard.py \
-                 src/wt/live/runner_o.py src/wt/options/review.py
+                 src/wt/live/runner_o.py src/wt/options/review.py \
+                 src/wt/options/clone_site.py
 JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help

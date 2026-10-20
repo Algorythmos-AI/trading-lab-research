@@ -2,11 +2,12 @@ import "server-only";
 import { cache } from "react";
 import { LATEST_PATH, listPaths, readText } from "./blob";
 import type { CryptoSnapshot } from "./crypto.types";
-import { DESK_PATHS, JOURNAL_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
-import { fixtureOptionsLive, FROZEN_NOW, parseFlags, partialOptions, poisonedOptions, v2Options, VARIANT_COOKIE, type VariantFlag } from "./fixture-variants";
+import { DESK_PATHS, JOURNAL_PATHS, OPTIONS_CLONE_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
+import { fixtureOptionsClone, fixtureOptionsLive, FROZEN_NOW, parseFlags, partialOptions, poisonedOptions, v2Options, VARIANT_COOKIE, type VariantFlag } from "./fixture-variants";
 import type { HftSnapshot } from "./hft.types";
 import type { JournalDoc } from "./journal.types";
 import { logEvent } from "./log";
+import type { OptionsClone } from "./options-clone.types";
 import type { OptionsLive } from "./options-live.types";
 import type { OptionsEdition } from "./options.types";
 import { radarDates } from "./radar";
@@ -236,6 +237,32 @@ export const loadOptionsLive = cache(async (): Promise<OptionsLiveResult> => {
     return { status: "ok", doc: parsed as OptionsLive, source: "blob" };
   } catch (e) {
     logEvent("snapshot.read", { outcome: "error", desk: "options-live", error: e instanceof Error ? e.name : "unknown" });
+    return { status: "error" };
+  }
+});
+
+export type OptionsCloneResult = { status: "ok"; doc: OptionsClone; source: "fixture" | "blob" } | { status: "missing" } | { status: "error" };
+
+/** The options clone's document (DEC-0030). "missing" until the paper-o runner has published once. */
+export const loadOptionsClone = cache(async (): Promise<OptionsCloneResult> => {
+  if (fixtureMode()) {
+    const flags = await fixtureFlags();
+    if (flags.has("clone-off") || flags.has("empty")) return { status: "missing" };
+    if (flags.has("error")) return { status: "error" };
+    const mod = await import("../../test/fixtures/options-clone.v1.json");
+    return { status: "ok", doc: fixtureOptionsClone((mod.default ?? mod) as unknown as OptionsClone, flags), source: "fixture" };
+  }
+  try {
+    const stored = await readText(OPTIONS_CLONE_PATHS.latest);
+    if (!stored) return { status: "missing" };
+    const parsed: unknown = JSON.parse(stored.text);
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      logEvent("snapshot.read", { outcome: "not-an-object", desk: "options-clone" });
+      return { status: "error" };
+    }
+    return { status: "ok", doc: parsed as OptionsClone, source: "blob" };
+  } catch (e) {
+    logEvent("snapshot.read", { outcome: "error", desk: "options-clone", error: e instanceof Error ? e.name : "unknown" });
     return { status: "error" };
   }
 });

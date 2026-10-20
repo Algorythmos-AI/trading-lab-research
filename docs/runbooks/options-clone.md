@@ -24,6 +24,13 @@ Its numbers are frozen in `config/options_clone.yaml` and `config/risk.yaml` key
 | Log | `logs/paper_o_<YYYYMMDD>.log`; `journalctl -u wt-paper-o` shows only start and exit |
 | Account | The clone's own paper account when `APCA_CLONE_KEY_ID` / `APCA_CLONE_SECRET_KEY` are set (`sudo wt-set-secrets`), otherwise the second paper account beside your hand trades |
 
+## The dashboard
+
+| Direction | What | How |
+|---|---|---|
+| In, at arm | The latest options edition's focus names (symbol, rank, bias) and its session | A signed `GET /api/focus` with the host's `DASHBOARD_KEY_ID` / `DASHBOARD_INGEST_SECRET`. On any failure, or a focus for another session, the clone trades SPY and QQQ; the Trades page then says "Fallback" under Names |
+| Out, after every trade event and at the close | `stocksdelta/options-clone` v1: names, entries, day result against the limit, latch, trades, feed medians, broker stop, decisions by gate, each hypothesis's figures | `wt.ops.publish.send` from a thread of its own, newest first. Drawn as "The clone" on the Trades page. A document that cannot be built or sent is journaled (`clone_doc_unsent`), never retried into a trade; `clone_doc` at the close counts what was sent |
+
 ## Controls (owner)
 
 | To | Run in `/home/wt/trading` as `wt` |

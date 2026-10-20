@@ -30,7 +30,7 @@ from wt.core.config import CONFIG_DIR, DATA_DIR, ROOT, STATE_DIR, env, load_yaml
 from wt.oms.options import OptionPlan, OptionsOMS, PlanStore, book
 from wt.ops import hc, locks
 from wt.ops.alerts import Alerts, Pager
-from wt.options import chain, regime, session, setups
+from wt.options import chain, clone_site, regime, session, setups
 from wt.options import levels as lv
 from wt.options.intraday import daily_raw
 from wt.options.regime import NEW_YORK
@@ -160,7 +160,9 @@ class AlpacaFeeds:
         return out
 
     def focus(self) -> tuple[Mapping[str, Any] | None, str | None]:
-        return None, None                       # the dashboard's focus route arrives with the next pull request
+        """The latest options edition's focus names, from the dashboard's signed route; (None, None) on any
+        failure, and the runner then trades its fallback names."""
+        return clone_site.read_focus(session_=self.s)
 
 
 # ---------------------------------------------------------------- the runner
@@ -204,6 +206,9 @@ class Runner:
     verified: bool = False
     sending: str = ""                                      # the plan whose entry is leaving now (not "unknown")
     paged_critical: bool = False
+    names_source: str | None = None                       # focus | fallback
+    publisher: Any = None                                  # clone_site.Publisher, or None: nothing is published
+    doc_fault: str = ""
 
     def __post_init__(self) -> None:
         self.session = self.day.isoformat()
@@ -318,6 +323,7 @@ class Runner:
                    own_account=own, options_level=level, plans_open=[p.trade_id for p in self.plans if p.active],
                    orders=self.cfg.get("orders"), feed=self.cfg["feeds"]["option"])
         hc.ping_async("wt-paper-o-armed", "", f"names {len(self.names)}")
+        self.publish()
         return not self.off
 
     def prepare(self) -> None:
@@ -352,6 +358,7 @@ class Runner:
                 self.names[root] = Name(root, marks, oi)
             except (ValueError, TypeError, KeyError, TransportError, requests.RequestException) as e:
                 dropped[root] = e.__class__.__name__
+        self.names_source = source
         self.write("names", source=source, names=sorted(self.names), dropped=dropped)
         if not self.names:
             self.off["names"] = "no name to trade"
@@ -387,6 +394,7 @@ class Runner:
                        from_peak=round(from_peak, 2))
             self.pager.once_per_day(f"options-clone:latched-{latched}", "Options clone latched",
                                     f"The {latched} loss latch is on; no new entries.", 4)
+            self.publish()
         if now >= self.ck.verify_flat and not self.verified:
             self.verify(now)
         if now >= self.ck.critical:
@@ -400,6 +408,7 @@ class Runner:
         if not self.paged_critical:
             self.paged_critical = True
             self.page("flatten-required", "Options clone: FLATTEN REQUIRED", why + ". Close it by hand in Alpaca.", 5)
+            self.publish()
 
     def read_tape(self, now: dt.datetime) -> tuple[dict[str, list[regime.Bar]], dict[str, regime.Tape], set[str]]:
         roots = sorted(set(self.names) | {"SPY"})
@@ -438,6 +447,7 @@ class Runner:
                     self.on_fill(p)
                 elif p.state in ("cancelled", "rejected"):
                     self.write("entry_unfilled", trade_id=p.trade_id, state=p.state)
+                    self.publish()
                 return
             self.oms.sync_open(p)
             if p.state == "closed":
@@ -483,6 +493,7 @@ class Runner:
             self.off["fill-over-cap"] = "a fill above the premium cap"
             self.exit(p, "operational", self.now())
         self.check_feed_fit()
+        self.publish()
 
     def bid(self, p: OptionPlan, now: dt.datetime, marks: Mapping[str, float]) -> tuple[float | None, float | None]:
         """The price a seller gets now, and its age in seconds: the live quote's bid when fresh, else the broker's
@@ -560,6 +571,7 @@ class Runner:
         if p.state == "closed" and (p.pnl(self.fee) or 0.0) < 0 and p.root in self.names:
             self.names[p.root].cooldown_until = self.now() + dt.timedelta(
                 minutes=float(self.cfg["day"]["name_cooldown_after_loss_min"]))
+        self.publish()
 
     def verify(self, now: dt.datetime) -> None:
         self.verified = True
@@ -584,6 +596,7 @@ class Runner:
             self.off["feed"] = "feed-unfit"
             self.write("feed_unfit", why=why)
             self.pager.once_per_day("options-clone:feed-unfit", "Options clone: feed unfit, entries off", why, 4)
+            self.publish()
 
     # ---- entries -----------------------------------------------------------------------------
     def look_for_entries(self, now: dt.datetime, bars: Mapping[str, list[regime.Bar]],
@@ -677,6 +690,25 @@ class Runner:
             rec["action"] = "entered" if entered else ("signal-refused" if sigs else "no-setup")
             self.decision(rec)
 
+    # ---- the dashboard -----------------------------------------------------------------------
+    def publish(self, final: bool = False) -> None:
+        """Hand the clone's document (stocksdelta/options-clone) to the publisher. Never raises; a document that
+        cannot be built or fails the site's schema is journaled once per kind of fault and not sent."""
+        if self.publisher is None:
+            return
+        now = self.now()
+        try:
+            doc = clone_site.build(self, now, f"options-clone-{self.session}-{now.astimezone(dt.UTC):%H%M%S%f}", final)
+            bad = clone_site.validate(doc)
+            if bad:
+                raise ValueError(bad[0].split(":")[0] or "doc")
+            self.publisher.post(clone_site.body(doc))
+        except Exception as e:  # noqa: BLE001 — the dashboard must never cost a trade
+            fault = f"{e.__class__.__name__}: {str(e)[:60]}"
+            if fault != self.doc_fault:
+                self.doc_fault = fault
+                self.write("clone_doc_unsent", error=fault)
+
     # ---- the session -------------------------------------------------------------------------
     def done(self) -> bool:
         now = self.now()
@@ -740,7 +772,8 @@ def run(day: dt.date | None = None) -> int:
         r = Runner(day, cfg, lim, AlpacaFeeds(k[0], k[1], "opra" if (OPT / "switches" / "opra").exists()
                                               else str(cfg["feeds"]["option"])),
                    broker, lambda: dt.datetime.now(NEW_YORK), time.sleep, pager, macro=macro, earnings=earnings,
-                   exits_only="exits-only launch" if env("WT_EXITS_ONLY", "") == "1" else None)
+                   exits_only="exits-only launch" if env("WT_EXITS_ONLY", "") == "1" else None,
+                   publisher=clone_site.publisher_from_env())
         r.arm()
         poll = float(cfg["feeds"]["poll_s"])
         while not r.done():
@@ -753,6 +786,10 @@ def run(day: dt.date | None = None) -> int:
         day_pnl, _, _ = r.pnl_view()
         write("session_end", trades=sum(p.fill is not None for p in r.today()), day=round(day_pnl, 2),
               open=[p.trade_id for p in r.plans if p.active])
+        r.publish(final=True)
+        if r.publisher is not None:
+            r.publisher.close(30.0)
+            write("clone_doc", sent=r.publisher.sent, failed=r.publisher.failed, last=r.publisher.last)
         hc.ping_async("wt-paper-o-armed", "", "session end")
         pager.close()
     return 0

@@ -1,0 +1,440 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "stocksdelta/options-clone",
+  "title": "Options clone document (published by the paper-o runner on the trading host)",
+  "description": "The options clone's session (DEC-0030), sent after every trade event and at the close: its names, entries, day result against the loss limit, latches, trades, feed checks, decision counts by gate and the figures of each hypothesis so far. SAFE data only: counts, ids, codes, statuses, dates and statistics. No balance, no free text, no setup name (a trade carries its hypothesis id). Paper only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "run_id",
+    "as_of",
+    "paper",
+    "final",
+    "session",
+    "names",
+    "entries",
+    "day_pnl",
+    "latch",
+    "off",
+    "feed_unfit",
+    "flatten_required",
+    "broker_stop",
+    "trades",
+    "gates",
+    "setups"
+  ],
+  "properties": {
+    "schema": {
+      "const": "stocksdelta/options-clone"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "as_of": {
+      "description": "When the runner built it: an ISO time with its zone.",
+      "type": "string",
+      "maxLength": 40,
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+    },
+    "paper": {
+      "description": "Always true: the clone trades a paper account and nothing else.",
+      "const": true
+    },
+    "final": {
+      "description": "True for the document sent at the close.",
+      "type": "boolean"
+    },
+    "session": {
+      "description": "The New York session date.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "names": {
+      "description": "The names it trades today.",
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Z][A-Z.]{0,9}$"
+      }
+    },
+    "names_source": {
+      "description": "focus: the edition's focus names; fallback: the configured index names.",
+      "enum": [
+        "focus",
+        "fallback",
+        null
+      ]
+    },
+    "entries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "used",
+        "max"
+      ],
+      "properties": {
+        "used": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        }
+      }
+    },
+    "day_pnl": {
+      "description": "Today's result in US dollars after fees, the open trade at its bid, and the day loss limit that latches entries off.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "usd",
+        "limit_usd"
+      ],
+      "properties": {
+        "usd": {
+          "type": "number"
+        },
+        "limit_usd": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "latch": {
+      "description": "The loss latch that is on, if any.",
+      "enum": [
+        "day",
+        "week",
+        "drawdown",
+        null
+      ]
+    },
+    "off": {
+      "description": "Why entries are off for the rest of the session, as codes.",
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9_-]{1,32}$"
+      }
+    },
+    "feed_unfit": {
+      "type": "boolean"
+    },
+    "flatten_required": {
+      "description": "A position must be closed by hand.",
+      "type": "boolean"
+    },
+    "broker_stop": {
+      "description": "Whether the broker took a resting stop on an option: accepted, refused, or not tried yet.",
+      "enum": [
+        "accepted",
+        "refused",
+        null
+      ]
+    },
+    "quote_age_median_s": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "description": "Median age of the option quotes read in the last ten minutes, in seconds."
+    },
+    "slippage_median_pct": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "description": "Median entry fill against the quoted ask, last ten fills, in percent."
+    },
+    "trades": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "trade_id",
+          "hyp",
+          "side",
+          "contract",
+          "state",
+          "fill",
+          "exit_fill",
+          "exit_reason",
+          "rop"
+        ],
+        "properties": {
+          "trade_id": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}-O-\\d{1,3}$"
+          },
+          "hyp": {
+            "enum": [
+              "HYP-0029",
+              "HYP-0030",
+              "other"
+            ]
+          },
+          "side": {
+            "enum": [
+              "call",
+              "put"
+            ]
+          },
+          "contract": {
+            "description": "The OCC symbol.",
+            "type": "string",
+            "pattern": "^[A-Z0-9.]{1,6}\\d{6}[CP]\\d{8}$"
+          },
+          "state": {
+            "enum": [
+              "entering",
+              "open",
+              "exiting",
+              "closed",
+              "unresolved"
+            ]
+          },
+          "fill": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Entry fill per share."
+          },
+          "exit_fill": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Exit fill per share."
+          },
+          "exit_reason": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9_-]{1,32}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rop": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Return on premium after fees, as a fraction."
+          }
+        }
+      }
+    },
+    "gates": {
+      "description": "Per name today: finished bars looked at, setups formed, entries, and refusals by gate (wt.options.review.day_line).",
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "symbol",
+          "bars",
+          "setups",
+          "entered",
+          "refused_by"
+        ],
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z.]{0,9}$"
+          },
+          "bars": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "setups": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "entered": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "refused_by": {
+            "type": "object",
+            "maxProperties": 40,
+            "propertyNames": {
+              "pattern": "^[a-z0-9_-]{1,32}$"
+            },
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            }
+          }
+        }
+      }
+    },
+    "setups": {
+      "description": "Each hypothesis's figures over every trade so far, and both together (wt.options.review.review).",
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "hyp",
+          "trades",
+          "sessions",
+          "verdict"
+        ],
+        "properties": {
+          "hyp": {
+            "enum": [
+              "HYP-0029",
+              "HYP-0030",
+              "all"
+            ]
+          },
+          "trades": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "sessions": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "unresolved": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "win_rate": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "mean_rop": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "ci_session": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          },
+          "ci_trade": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          },
+          "first_half_mean": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "second_half_mean": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "profit_factor": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "expectancy_usd": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "total_usd": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "max_drawdown_usd": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "longest_losing_streak": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "mfe_captured": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "exits": {
+            "type": "object",
+            "maxProperties": 40,
+            "propertyNames": {
+              "pattern": "^[a-z0-9_-]{1,32}$"
+            },
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            }
+          },
+          "verdict": {
+            "enum": [
+              "none",
+              "falsified",
+              "passes"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
