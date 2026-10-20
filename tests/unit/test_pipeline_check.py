@@ -117,3 +117,21 @@ def test_a_difference_outside_todays_names_warns_and_a_stale_radar_skips_its_clo
     r["tickers"][0]["price"] += 5
     got = run(radar=r)
     assert not got["radar.date"].ok and "radar.close.SPY" not in got
+
+
+def test_only_names_the_clone_can_trade_today_can_fail():
+    o = options()                                                 # focus AMZN (no same-day expiry) and SPY
+    assert pc.eligible(o, TARGET, EXP) == {"SPY", "QQQ"}          # AMZN dropped; topped up with QQQ
+    o["tickers"][1]["levels"][0]["price"] += 0.30                 # AMZN
+    got = run(options=o)
+    assert not got["options.levels.AMZN"].ok and got["options.levels.AMZN"].severity == "warn"
+    both = dict(EXP, AMZN=[TARGET])
+    assert pc.eligible(o, TARGET, both) == {"AMZN", "SPY"}       # two focus names trade: no top-up
+
+
+def test_the_check_tops_up_exactly_as_the_clone_does():
+    from pathlib import Path
+
+    import yaml
+    cfg = yaml.safe_load((Path(__file__).resolve().parents[2] / "config" / "options_clone.yaml").read_text())["names"]
+    assert list(pc.TOP_UP) == cfg["top_up"] and pc.MIN_NAMES == cfg["min_names"]
