@@ -276,3 +276,17 @@ def test_the_real_earnings_calendar_blocks_a_name_on_its_report_day_and_the_day_
         for name in ("TSLA", "META"):
             assert (session.event_block(at, name, [], earnings, G, ["SPY", "QQQ"]) == "earnings") is blocked, (name, day)
         assert session.event_block(at, "SPY", [], earnings, G, ["SPY", "QQQ"]) is None
+
+
+def test_missing_greeks_are_worked_out_from_the_mid_and_marked_modelled():
+    raw = dict([snap(580, 1.10, 1.12, 0.52)])
+    sym = next(iter(raw))
+    del raw[sym]["greeks"], raw[sym]["impliedVolatility"]
+    (q,) = chain.parse_snapshots(raw)
+    assert q.delta is None and q.iv is None
+    (m,) = chain.with_model([q], 580.4, 240)
+    assert m.modelled and 0.4 < m.delta < 0.6 and 0.05 < m.iv < 1.0
+    got = chain.pick([m], "SPY", "call", DAY, 580.4, NOW, C, {sym: 5000.0}, set(), late=False)
+    assert got.quote is not None and got.quote.contract.strike == 580
+    (same,) = chain.with_model([chain.parse_snapshots(dict([snap(580, 1.10, 1.12, 0.52)]))[0]], 580.4, 240)
+    assert not same.modelled and same.delta == 0.52                     # a feed delta is kept as sent

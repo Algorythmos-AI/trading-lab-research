@@ -46,6 +46,7 @@ class Quote:
     delta: float | None
     iv: float | None
     volume: float
+    modelled: bool = False     # delta and iv worked out here from the quote's mid (the feed sent none)
 
     @property
     def mid(self) -> float | None:
@@ -93,6 +94,25 @@ def parse_snapshots(raw: Mapping[str, Any]) -> list[Quote]:
             bid = ask = None
         out.append(Quote(c, bid, ask, _when(q.get("t")), _num(gk.get("delta")), _num(snap.get("impliedVolatility")),
                          _num(day.get("v")) or 0.0))
+    return out
+
+
+def with_model(quotes: Sequence[Quote], spot: float, minutes_left: float) -> list[Quote]:
+    """The quotes with a missing implied volatility and delta worked out from the two-sided quote's mid
+    (`wt.options.bs`, no rates, no dividend). The broker's feed sends no greeks for contracts expiring the same day;
+    without this no same-day contract could pass the delta floor. A quote that cannot be solved is left as it is."""
+    from wt.options import bs
+    out: list[Quote] = []
+    for q in quotes:
+        mid = q.mid
+        if (q.delta is None or q.iv is None) and mid and mid > 0 and spot > 0 and minutes_left > 0:
+            kind: bs.Kind = "call" if q.contract.side == "call" else "put"
+            iv = q.iv if q.iv else bs.implied_vol(mid, spot, q.contract.strike, minutes_left, kind)
+            g = bs.greeks(spot, q.contract.strike, minutes_left, iv, kind) if iv else None
+            if iv and g is not None:
+                q = Quote(q.contract, q.bid, q.ask, q.quoted_at, q.delta if q.delta is not None else g.delta, iv,
+                          q.volume, True)
+        out.append(q)
     return out
 
 
