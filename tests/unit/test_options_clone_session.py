@@ -49,6 +49,7 @@ class Market:
         self.bid_fn = lambda t: 1.40              # the held contract's bid
         self.quote_age_s = 2.0
         self.oi = 5000.0
+        self.feed_greeks = True
 
     def stock(self, i: int) -> float:
         if i < len(self.path):
@@ -90,6 +91,8 @@ class Market:
         ask = round(max(0.05, 1.20 + 0.5 * m), 2)
         sym = f"SPY261019{side}{int(k * 1000):08d}"
         t = (self.now - dt.timedelta(seconds=self.quote_age_s)).astimezone(dt.UTC).isoformat().replace("+00:00", "Z")
+        if not self.feed_greeks:          # what the broker's feed really sends for a same-day contract
+            return sym, {"latestQuote": {"bp": round(ask - 0.02, 2), "ap": ask, "t": t}, "dailyBar": {"v": 20000}}
         return sym, {"latestQuote": {"bp": round(ask - 0.02, 2), "ap": ask, "t": t},
                      "greeks": {"delta": delta if side == "C" else -delta}, "impliedVolatility": 0.15,
                      "dailyBar": {"v": 20000}}
@@ -549,3 +552,18 @@ def test_an_edition_for_another_session_is_not_used(world):
     ed = {"session": "2026-10-16", "tickers": [{"symbol": "SPY", "levels": [{"name": "PDH", "price": 1.0}], "zones": []}]}
     r, n = _arm_with_edition(world, ed)
     assert set(n["level_source"].values()) == {"tape"} and "level_diffs" not in n or n["level_diffs"] == {}
+
+
+def test_a_same_day_contract_with_no_greeks_from_the_feed_is_still_traded(world):
+    """The broker's feed sends no delta or implied volatility for contracts expiring that day (seen 20 Oct 2026):
+    the clone works them out from the quote's mid instead of refusing every contract."""
+    world["m"].feed_greeks = False
+    r = world["make"]()
+    world["m"].now = at("09:25")
+    assert r.arm()
+    run_until(r, world["m"], world["b"], at("10:26", 10))
+    (p,) = r.today()
+    assert p.state == "open" and p.side == "call"
+    last = [json.loads(x) for x in (world["tmp"] / "options/decisions/2026-10-19.jsonl").read_text().splitlines()][-1]
+    gates = last["signals"][0]["gates"]
+    assert gates["contract"]["ok"] and gates["reach"]["ok"]
