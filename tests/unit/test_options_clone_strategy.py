@@ -263,3 +263,16 @@ def test_events_close_entries():
     earn = [{"symbol": "TSLA", "date": "2026-10-16", "when": "amc"}]
     assert session.event_block(later, "TSLA", [], earn, G, ["SPY", "QQQ"]) == "earnings"
     assert session.event_block(later, "SPY", [], earn, G, ["SPY", "QQQ"]) is None
+
+
+def test_the_real_earnings_calendar_blocks_a_name_on_its_report_day_and_the_day_after():
+    from wt.live.runner_o import load_events
+    macro, earnings = load_events()
+    rows = {(r["symbol"], r["date"]) for r in earnings}
+    assert ("TSLA", "2026-10-21") in rows and ("META", "2026-10-21") in rows
+    assert all(r["when"] in ("bmo", "amc", "during") and r["quality"] in ("confirmed", "expected") for r in earnings)
+    for day, blocked in (("2026-10-20", False), ("2026-10-21", True), ("2026-10-22", True), ("2026-10-23", False)):
+        at = dt.datetime.fromisoformat(day + "T11:00").replace(tzinfo=NEW_YORK)
+        for name in ("TSLA", "META"):
+            assert (session.event_block(at, name, [], earnings, G, ["SPY", "QQQ"]) == "earnings") is blocked, (name, day)
+        assert session.event_block(at, "SPY", [], earnings, G, ["SPY", "QQQ"]) is None
