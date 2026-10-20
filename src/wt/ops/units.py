@@ -89,7 +89,7 @@ def service(job: Job, root: Path, user: str = USER) -> str:
         "PrivateTmp=yes",
         "ProtectSystem=full",
     ]
-    if job.name == "paper-b":
+    if job.name in ("paper-b", "paper-o"):
         lines.append("OOMScoreAdjust=-500")                    # the last thing the kernel should kill
     if job.name in MEMORY:
         high, cap, swap = MEMORY[job.name]

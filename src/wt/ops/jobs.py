@@ -85,7 +85,7 @@ def deadline_for(job: Job, start: dt.datetime, sessions: dict[dt.date, Session])
     s = sessions.get(start.astimezone(ET).date())
     if job.name == "routine":
         return et(s.date, "12:30") if s else start + dt.timedelta(minutes=15)
-    if job.name == "paper-b":
+    if job.name in ("paper-b", "paper-o"):
         return s.close + dt.timedelta(minutes=45) if s else start + dt.timedelta(minutes=15)
     return start + dt.timedelta(minutes=job.deadline_min) if job.deadline_min else None
 
@@ -332,7 +332,8 @@ def b_exposure() -> bool:
 # jobs with a healthchecks.io check. `crypto` pings every 15 minutes, at any hour: its check has no schedule gap.
 # The two daily crypto jobs alert when they fail; only a check notices when one never starts (a timer disabled
 # or never installed), which is how both were absent for their first day on the host.
-HC_JOBS = frozenset({"routine", "paper-b", "forward", "weekly", "crypto", "crypto-challengers", "crypto-learn"})
+HC_JOBS = frozenset({"routine", "paper-b", "forward", "weekly", "crypto", "crypto-challengers", "crypto-learn",
+                     "paper-o"})
 
 
 def hc_slug(job: Job) -> str:

@@ -1,4 +1,4 @@
-"""After a reboot the VM restarts paper-b and forward only inside their windows (wt.ops.bootreconcile)."""
+"""After a reboot the VM restarts paper-b, paper-o and forward only inside their windows (wt.ops.bootreconcile)."""
 import datetime as dt
 
 import pytest
@@ -20,9 +20,11 @@ def at(hhmm: str) -> dt.datetime:
     ("06:00", []),
     ("06:30", ["wt-paper-b.service"]),                               # 3 h before the open
     ("07:30", ["wt-routine.service", "wt-paper-b.service"]),          # the routine's start
-    ("11:00", ["wt-routine.service", "wt-paper-b.service"]),
-    ("12:30", ["wt-paper-b.service"]),                               # the routine's deadline
-    ("12:40", ["wt-paper-b.service", "wt-forward.service"]),
+    ("08:59", ["wt-routine.service", "wt-paper-b.service"]),
+    ("09:00", ["wt-routine.service", "wt-paper-b.service", "wt-paper-o.service"]),   # the options clone's start
+    ("11:00", ["wt-routine.service", "wt-paper-b.service", "wt-paper-o.service"]),
+    ("12:30", ["wt-paper-b.service", "wt-paper-o.service"]),         # the routine's deadline
+    ("12:40", ["wt-paper-b.service", "wt-paper-o.service", "wt-forward.service"]),
     ("16:00", ["wt-forward.service"]),                               # the close: the runner is done
     ("17:49", ["wt-forward.service"]),
     ("17:50", []),                                                    # close + 20 min + 90 min
@@ -35,6 +37,6 @@ def test_early_close_and_no_session():
     assert due(at("13:30"), EARLY) == ["wt-forward.service"]
     assert due(at("14:50"), EARLY) == []
     assert due(at("11:00"), {}) == []                                # a holiday: nothing to start
-    assert due(dt.datetime(2026, 10, 7, 16, 0, tzinfo=dt.UTC), FULL) == ["wt-routine.service",
-                                                                         "wt-paper-b.service"]   # 12:00 ET
+    assert due(dt.datetime(2026, 10, 7, 16, 0, tzinfo=dt.UTC), FULL) == ["wt-routine.service", "wt-paper-b.service",
+                                                                         "wt-paper-o.service"]   # 12:00 ET
     assert ET.key == "America/New_York"

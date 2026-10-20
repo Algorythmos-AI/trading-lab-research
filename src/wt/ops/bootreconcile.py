@@ -9,6 +9,7 @@ make a second start harmless (the runner resumes its plan or runs exits-only; fo
 Windows, on a session day (America/New_York):
   * routine: from 07:30 (its systemd start) until its 12:30 deadline (wt.ops.jobs);
   * paper-b: from 3 h before the open (the runner's own earliest arm) until the close;
+  * paper-o: from 09:00 (its systemd start) until the close (the runner resumes its plans);
   * forward: from 12:40 (its systemd start) until close + 20 min + its 90-minute deadline.
 
 root's wrapper starts a named unit only if its timer is enabled: on a host whose job timers were disabled or masked
@@ -35,6 +36,8 @@ def due(now: dt.datetime, sessions: Mapping[dt.date, Session]) -> list[str]:
         out.append("wt-routine.service")
     if s.open - ARM_LEAD <= now < s.close:
         out.append("wt-paper-b.service")
+    if et(s.date, "09:00") <= now < s.close:
+        out.append("wt-paper-o.service")
     if et(s.date, "12:40") <= now < s.close + dt.timedelta(minutes=20 + 90):
         out.append("wt-forward.service")
     return out

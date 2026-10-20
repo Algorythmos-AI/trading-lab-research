@@ -24,6 +24,8 @@ Three independent monitors, none of them on the trading host:
 | `wt-paper-b` | `0 6 * * 1-5` | 11 h | ~16:05 (13:05 early close) | The paper-B session job didn't end cleanly |
 | `wt-forward` | `0 12 * * 1-5` | 7 h | ~16:30–17:50 | The forward test didn't run |
 | `wt-weekly` | `0 18 * * 5` | 6 h | Fri ~19:00–21:00 | The weekly scorecard didn't run |
+| `wt-paper-o-armed` | `0 9 * * 1-5` | 1 h | ~09:25 (arm) and after the close | The options clone never armed: not started, refused or crashed while arming |
+| `wt-paper-o` | `0 9 * * 1-5` | 8 h | ~15:20–16:05 | The options clone's session job didn't end cleanly |
 
 The crypto desk (ADR 0005) runs at every hour of every day, so its check is a **Simple** schedule, not a cron:
 
