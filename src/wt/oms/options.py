@@ -365,16 +365,21 @@ class OptionsOMS:
         return out
 
 
+def trade_row(p: OptionPlan, fee_each_way: float) -> dict[str, Any]:
+    """A finished trade as the journal books it, and as wt.options.review reads it."""
+    return {"trade_id": p.trade_id, "setup": p.setup, "root": p.root, "side": p.side, "symbol": p.symbol,
+            "state": p.state, "fill": p.fill, "exit_fill": p.exit_fill, "exit_reason": p.exit_reason,
+            "pnl": p.pnl(fee_each_way), "rop": p.return_on_premium(fee_each_way), "best_bid": p.best_bid,
+            "worst_bid": p.worst_bid, "broker_stop": p.broker_stop, "counts": p.state == "closed"}
+
+
 def book(p: OptionPlan, journaled: set[str], write: Callable[..., bool], fee_each_way: float) -> bool:
     """Journal a finished trade exactly once. True once it is on the journal."""
     if p.trade_id in journaled or p.state in ("cancelled", "rejected"):
         return True                                         # booked already, or never a trade (no fill)
     if p.state not in DONE:
         return False
-    ok = write("trade_closed", trade_id=p.trade_id, setup=p.setup, root=p.root, side=p.side, symbol=p.symbol,
-               state=p.state, fill=p.fill, exit_fill=p.exit_fill, exit_reason=p.exit_reason,
-               pnl=p.pnl(fee_each_way), rop=p.return_on_premium(fee_each_way), best_bid=p.best_bid,
-               worst_bid=p.worst_bid, broker_stop=p.broker_stop, counts=p.state == "closed")
+    ok = write("trade_closed", **trade_row(p, fee_each_way))
     if ok:
         journaled.add(p.trade_id)
     return ok

@@ -12,19 +12,21 @@ import {
   TodayPanel,
   TradesPanel,
 } from "@/components/journal";
+import { PaneBoundary } from "@/components/client/pane-boundary";
 import { Empty } from "@/components/empty";
+import { ClonePanel } from "@/components/options-clone";
 import { PageHeading } from "@/components/page-heading";
 import { TradeRulesFor } from "@/components/trade-rules";
 import { Notice } from "@/components/ui/notice";
 import { newYork } from "@/lib/format";
 import { applyFilter, contractLabel, daily, groupBy, journalStale, lessons, marketState, moneyView, parseFilter, sessionView, shortDay, summarize, yearsOf, type JournalDoc } from "@/lib/journal";
-import { loadJournal, pageTime } from "@/lib/snapshot";
+import { loadJournal, loadOptionsClone, pageTime } from "@/lib/snapshot";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Trades" };
 
 export default async function TradesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const [q, result, now] = await Promise.all([searchParams, loadJournal(), pageTime()]);
+  const [q, result, now, clone] = await Promise.all([searchParams, loadJournal(), pageTime(), loadOptionsClone()]);
   return (
     <>
       <PageHeading
@@ -36,6 +38,11 @@ export default async function TradesPage({ searchParams }: { searchParams: Promi
       ) : (
         <JournalBody doc={result.doc} q={q} now={now} />
       )}
+      {/* The clone's own pane, apart from the journal: it draws whether or not the journal is there, and a fault in
+          it stays in it. */}
+      <PaneBoundary name="The clone">
+        <ClonePanel result={clone} />
+      </PaneBoundary>
     </>
   );
 }

@@ -6,6 +6,8 @@ import hftSchema from "./hft.schema.json";
 import type { HftSnapshot } from "./hft.types";
 import journalSchema from "./journal.schema.json";
 import type { JournalDoc } from "./journal.types";
+import optionsCloneSchema from "./options-clone.schema.json";
+import type { OptionsClone } from "./options-clone.types";
 import optionsLiveSchema from "./options-live.schema.json";
 import type { OptionsLive } from "./options-live.types";
 import optionsSchema from "./options.schema.json";
@@ -24,6 +26,7 @@ const validateRadarSchema = ajv.compile<RadarEdition>(radarSchema);
 const validateOptionsSchema = ajv.compile<OptionsEdition>(optionsSchema);
 const validateOptionsLiveSchema = ajv.compile<OptionsLive>(optionsLiveSchema);
 const validateJournalSchema = ajv.compile<JournalDoc>(journalSchema);
+const validateOptionsCloneSchema = ajv.compile<OptionsClone>(optionsCloneSchema);
 
 export const STOCKS_SCHEMA = "trading-lab/snapshot";
 export const CRYPTO_SCHEMA = "trading-lab/crypto-snapshot";
@@ -48,6 +51,14 @@ export const OPTIONS_LIVE_SCHEMA = "stocksdelta/options-live";
 /** True when the signed body names the options live schema. */
 export function isOptionsLive(data: unknown): boolean {
   return data !== null && typeof data === "object" && (data as { schema?: unknown }).schema === OPTIONS_LIVE_SCHEMA;
+}
+
+/** The options clone's session (DEC-0030), from the trading host's paper-o runner. SAFE data only, by its schema. */
+export const OPTIONS_CLONE_SCHEMA = "stocksdelta/options-clone";
+
+/** True when the signed body names the options clone schema. */
+export function isOptionsClone(data: unknown): boolean {
+  return data !== null && typeof data === "object" && (data as { schema?: unknown }).schema === OPTIONS_CLONE_SCHEMA;
 }
 
 /** The owner's trade journal: their own broker's closed trades. A record, not research; no desk, no watchdog. */
@@ -257,4 +268,19 @@ export function validateJournal(data: unknown): JournalValidationResult {
   }
   if (errors.length > 0) return { ok: false, errors: errors.slice(0, MAX_ERRORS) };
   return { ok: true, doc: data as JournalDoc };
+}
+
+export type OptionsCloneValidationResult = { ok: true; doc: OptionsClone } | { ok: false; errors: string[] };
+
+/** The options clone's document: its own schema, the same denylist. Paper only, by the schema's own `paper: true`. */
+export function validateOptionsClone(data: unknown): OptionsCloneValidationResult {
+  if (data === null || typeof data !== "object" || Array.isArray(data)) {
+    return { ok: false, errors: ["/: must be an object"] };
+  }
+  const errors = findDenied(data).map((p) => `${p}: key is not allowed to be published`);
+  if (!validateOptionsCloneSchema(data)) {
+    errors.push(...(validateOptionsCloneSchema.errors ?? []).map(describe));
+  }
+  if (errors.length > 0) return { ok: false, errors: errors.slice(0, MAX_ERRORS) };
+  return { ok: true, doc: data as OptionsClone };
 }
