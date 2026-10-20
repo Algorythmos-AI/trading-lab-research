@@ -92,6 +92,24 @@ def _num(v: Any) -> float | None:
     return f if f == f and abs(f) != float("inf") else None
 
 
+TOP_UP = ("SPY", "QQQ")   # config/options_clone.yaml names.top_up (DEC-0032)
+MIN_NAMES = 2
+
+
+def eligible(options: Mapping[str, Any] | None, target: str, expiries: Mapping[str, Sequence[str]]) -> set[str]:
+    """The names the clone can trade on `target`, as its runner chooses them (DEC-0032): the focus names with a
+    contract expiring that day, topped up in order from SPY and QQQ (each also expiring that day) to two. Only a
+    difference on one of these fails; elsewhere it warns."""
+    items = ((options or {}).get("focus") or {}).get("items") or [] if options and options.get("session") == target else []
+    out = [str(i.get("symbol")) for i in items if isinstance(i, Mapping) and target in expiries.get(str(i.get("symbol")), ())]
+    for sym in TOP_UP:
+        if len(out) >= MIN_NAMES:
+            break
+        if sym not in out and target in expiries.get(sym, ()):
+            out.append(sym)
+    return set(out)
+
+
 def assess(slot: str, now: dt.datetime, radar: Mapping[str, Any] | None, options: Mapping[str, Any] | None,
            daily: Mapping[str, Sequence[Mapping[str, Any]]], expiries: Mapping[str, Sequence[str]],
            live: Mapping[str, float], earnings: Sequence[Mapping[str, Any]]) -> list[Check]:
@@ -106,9 +124,7 @@ def assess(slot: str, now: dt.datetime, radar: Mapping[str, Any] | None, options
     def add(cid: str, ok: bool, detail: str, sev: str = "fail") -> None:
         out.append(Check(cid, sev if not ok else "info", ok, detail))
 
-    # names the clone may trade today: a difference there fails; elsewhere it only warns
-    focus_items = ((options or {}).get("focus") or {}).get("items") or []
-    tradeable_names = {str(i.get("symbol")) for i in focus_items if isinstance(i, Mapping)} | {"SPY", "QQQ"}
+    tradeable_names = eligible(options, target, expiries)
 
     def sev(sym: str) -> str:
         return "fail" if sym in tradeable_names else "warn"
