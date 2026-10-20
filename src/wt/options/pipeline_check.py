@@ -28,6 +28,7 @@ import requests
 from wt.core.config import STATE_DIR
 from wt.ops import publish
 from wt.options import levels as lv
+from wt.options import session
 from wt.options.intraday import daily_raw
 
 NEW_YORK = ZoneInfo("America/New_York")
@@ -94,14 +95,18 @@ def _num(v: Any) -> float | None:
 
 TOP_UP = ("SPY", "QQQ")   # config/options_clone.yaml names.top_up (DEC-0032)
 MIN_NAMES = 2
+MAX_NAMES = 6             # names.max_names
 
 
-def eligible(options: Mapping[str, Any] | None, target: str, expiries: Mapping[str, Sequence[str]]) -> set[str]:
-    """The names the clone can trade on `target`, as its runner chooses them (DEC-0032): the focus names with a
-    contract expiring that day, topped up in order from SPY and QQQ (each also expiring that day) to two. Only a
-    difference on one of these fails; elsewhere it warns."""
-    items = ((options or {}).get("focus") or {}).get("items") or [] if options and options.get("session") == target else []
-    out = [str(i.get("symbol")) for i in items if isinstance(i, Mapping) and target in expiries.get(str(i.get("symbol")), ())]
+def eligible(options: Mapping[str, Any] | None, target: str, expiries: Mapping[str, Sequence[str]],
+             max_names: int = MAX_NAMES) -> set[str]:
+    """The names the clone can trade on `target`, chosen as its runner chooses them: `wt.options.session.names` (the
+    focus names by rank, upper-cased, de-duplicated, capped at `max_names`, or the fallback without a focus for that
+    session), kept when a contract expires that day, then topped up in order from SPY and QQQ to two (DEC-0032).
+    Only a difference on one of these fails; elsewhere it warns."""
+    focus = (options or {}).get("focus") if options else None
+    wanted, _ = session.names(focus, (options or {}).get("session"), target, list(TOP_UP), max_names)
+    out = [s for s in wanted if target in expiries.get(s, ())]
     for sym in TOP_UP:
         if len(out) >= MIN_NAMES:
             break

@@ -134,4 +134,15 @@ def test_the_check_tops_up_exactly_as_the_clone_does():
 
     import yaml
     cfg = yaml.safe_load((Path(__file__).resolve().parents[2] / "config" / "options_clone.yaml").read_text())["names"]
-    assert list(pc.TOP_UP) == cfg["top_up"] and pc.MIN_NAMES == cfg["min_names"]
+    assert list(pc.TOP_UP) == cfg["top_up"] == cfg["fallback"] and pc.MIN_NAMES == cfg["min_names"]
+    assert pc.MAX_NAMES == cfg["max_names"]
+
+
+def test_eligibility_ranks_dedupes_and_caps_like_the_runner():
+    o = options()
+    o["focus"]["items"] = [{"symbol": "spy", "rank": 1}, {"symbol": "SPY", "rank": 2}]       # one name, twice
+    assert pc.eligible(o, TARGET, EXP) == {"SPY", "QQQ"}                                     # still tops up QQQ
+    many = [{"symbol": s, "rank": i + 1} for i, s in enumerate(("A", "B", "C", "D", "E", "F", "AMZN"))]
+    o["focus"]["items"] = many
+    exp = dict(EXP, AMZN=[TARGET])
+    assert "AMZN" not in pc.eligible(o, TARGET, exp)                                         # seventh: beyond the cap
