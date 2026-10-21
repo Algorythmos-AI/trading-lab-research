@@ -57,7 +57,7 @@ def test_a_consistent_morning_passes_every_failing_check():
     got = run()
     assert [c.id for c in got.values() if not c.ok and c.severity == "fail"] == []
     assert got["options.levels.SPY"].ok and got["options.close.AMZN"].ok and got["radar.close.SPY"].ok
-    assert not got["focus.tradeable"].ok and got["focus.tradeable"].severity == "warn"     # only SPY expires today
+    assert got["focus.tradeable"].ok and "within 7 days" in got["focus.tradeable"].detail   # AMZN: Wednesday's (DEC-0034)
 
 
 def test_a_wrong_level_a_wrong_close_and_a_stale_edition_fail():
@@ -121,12 +121,15 @@ def test_a_difference_outside_todays_names_warns_and_a_stale_radar_skips_its_clo
 
 def test_only_names_the_clone_can_trade_today_can_fail():
     o = options()                                                 # focus AMZN (no same-day expiry) and SPY
-    assert pc.eligible(o, TARGET, EXP) == {"SPY", "QQQ"}          # AMZN dropped; topped up with QQQ
-    o["tickers"][1]["levels"][0]["price"] += 0.30                 # AMZN
+    assert pc.eligible(o, TARGET, EXP, policy="same_day") == {"SPY", "QQQ"}   # DEC-0032: AMZN dropped, QQQ added
+    assert pc.eligible(o, TARGET, EXP) == {"AMZN", "SPY"}         # DEC-0034: AMZN trades its nearest expiry
+    o["tickers"][1]["levels"][0]["price"] += 0.30                 # AMZN, a name the clone trades today
     got = run(options=o)
+    assert not got["options.levels.AMZN"].ok and got["options.levels.AMZN"].severity == "fail"
+    none = dict(EXP, AMZN=[])
+    assert pc.eligible(o, TARGET, none) == {"SPY", "QQQ"}         # no expiry within the window: dropped, topped up
+    got = run(options=o, expiries=none)
     assert not got["options.levels.AMZN"].ok and got["options.levels.AMZN"].severity == "warn"
-    both = dict(EXP, AMZN=[TARGET])
-    assert pc.eligible(o, TARGET, both) == {"AMZN", "SPY"}       # two focus names trade: no top-up
 
 
 def test_the_check_tops_up_exactly_as_the_clone_does():
@@ -136,6 +139,7 @@ def test_the_check_tops_up_exactly_as_the_clone_does():
     cfg = yaml.safe_load((Path(__file__).resolve().parents[2] / "config" / "options_clone.yaml").read_text())["names"]
     assert list(pc.TOP_UP) == cfg["top_up"] == cfg["fallback"] and pc.MIN_NAMES == cfg["min_names"]
     assert pc.MAX_NAMES == cfg["max_names"]
+    assert pc.EXPIRY == cfg["expiry"] and pc.WITHIN_DAYS == cfg["nearest_within_days"]
 
 
 def test_eligibility_ranks_dedupes_and_caps_like_the_runner():

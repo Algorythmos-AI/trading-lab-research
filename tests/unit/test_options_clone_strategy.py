@@ -213,7 +213,7 @@ def test_open_interest_the_late_delta_floor_and_a_held_contract():
     assert chain.pick(qs, "SPY", "call", DAY, 580, NOW, C, {sym: 10.0}, set(), False).reasons == {"open-interest-below-floor": 1}
     assert chain.pick(qs, "SPY", "call", DAY, 580, NOW, C, {sym: 5000.0}, set(), True).reasons == {"delta-below-floor": 1}
     assert chain.pick(qs, "SPY", "call", DAY, 580, NOW, C, {sym: 5000.0}, {sym}, False).reasons == {"already-held": 1}
-    assert chain.pick(qs, "SPY", "put", DAY, 580, NOW, C, {}, set(), False).reasons == {"no-same-day-contract": 1}
+    assert chain.pick(qs, "SPY", "put", DAY, 580, NOW, C, {}, set(), False).reasons == {"no-contract-of-the-expiry": 1}
 
 
 def test_the_entry_limit_is_the_ask_plus_the_buffer_never_above_the_cap():
@@ -284,9 +284,34 @@ def test_missing_greeks_are_worked_out_from_the_mid_and_marked_modelled():
     del raw[sym]["greeks"], raw[sym]["impliedVolatility"]
     (q,) = chain.parse_snapshots(raw)
     assert q.delta is None and q.iv is None
-    (m,) = chain.with_model([q], 580.4, 240)
+    (m,) = chain.with_model([q], 580.4, NOW)
     assert m.modelled and 0.4 < m.delta < 0.6 and 0.05 < m.iv < 1.0
     got = chain.pick([m], "SPY", "call", DAY, 580.4, NOW, C, {sym: 5000.0}, set(), late=False)
     assert got.quote is not None and got.quote.contract.strike == 580
-    (same,) = chain.with_model([chain.parse_snapshots(dict([snap(580, 1.10, 1.12, 0.52)]))[0]], 580.4, 240)
+    (same,) = chain.with_model([chain.parse_snapshots(dict([snap(580, 1.10, 1.12, 0.52)]))[0]], 580.4, NOW)
     assert not same.modelled and same.delta == 0.52                     # a feed delta is kept as sent
+
+
+def test_a_contract_with_days_left_is_modelled_to_its_own_expiry_close():
+    """DEC-0034: the time to expiry is the calendar minutes to the contract's own close, not to today's. From 11:00 on
+    Tuesday 20 Oct to 16:00 on Friday 23 Oct is 3 days and 5 hours; to today's close it would be 5 hours."""
+    from wt.options import bs
+    tue = dt.datetime(2026, 10, 20, 11, 0, tzinfo=NEW_YORK)
+    fri = dt.date(2026, 10, 23)
+    assert chain.minutes_to_expiry(fri, tue) == 3 * 24 * 60 + 5 * 60
+    assert chain.minutes_to_expiry(dt.date(2026, 10, 20), tue) == 5 * 60          # a same-day contract: as before
+    assert chain.expiry_close(dt.date(2026, 11, 27)).hour == 13                      # a half day closes at 13:00
+    raw = {"AMZN261023C00220000": {"latestQuote": {"bp": 3.90, "ap": 4.00, "t": "2026-10-20T14:59:58Z"},
+                                   "dailyBar": {"v": 9000}}}
+    (q,) = chain.parse_snapshots(raw)
+    (m,) = chain.with_model([q], 220.0, tue)
+    assert m.modelled
+    assert m.iv == pytest.approx(bs.implied_vol(3.95, 220.0, 220.0, 4620, "call"), rel=1e-9)
+    today_clock = bs.implied_vol(3.95, 220.0, 220.0, 300, "call")
+    assert today_clock is not None and m.iv < today_clock / 3          # today's clock would overstate it about 4x
+    assert 0.25 < m.iv < 0.6 and 0.5 < m.delta < 0.56                  # an at-the-money call, a little over 0.5
+    got = chain.pick([m], "AMZN", "call", fri, 220.0, tue.astimezone(dt.UTC), {**C, "max_ask": 5.0, "max_spread": 0.2},
+                     {"AMZN261023C00220000": 5000.0}, set(), late=False)
+    assert got.quote is not None and got.quote.contract.expiry == fri
+    none = chain.pick([m], "AMZN", "call", dt.date(2026, 10, 20), 220.0, tue, C, {}, set(), late=False)
+    assert none.quote is None and none.reasons == {"no-contract-of-the-expiry": 1}   # only the name's expiry is bought

@@ -101,3 +101,34 @@ def test_the_nightly_review_reads_the_journal_and_the_decisions(tmp_path):
     doc = r.build("2026-11-02", j, tmp_path)
     assert doc["today"]["trades"] == 1 and doc["today"]["flat"] is True and doc["names"]["SPY"]["entered"] == 1
     assert doc["setups"]["retest"]["trades"] == 1 and doc["setups"]["retest"]["verdict"] == "none"
+
+
+def test_a_trade_on_a_later_expiry_counts_toward_hyp_0031_only():
+    """DEC-0034: a contract expiring on its own session counts toward its setup's trial; one expiring later counts
+    toward `nearest`, both setups pooled, and never toward HYP-0029 or HYP-0030."""
+    assert review.trial_of("retest", "SPY261102C00580000", "2026-11-02") == "retest"
+    assert review.trial_of("rejection", "AMZN261106P00220000", "2026-11-02") == "nearest"
+    assert review.trial_of("retest", "", "2026-11-02") == "retest"                       # an old row with no symbol
+    same = [dict(row(2, 1, 0.5), symbol="SPY261102C00580000")]
+    later = [dict(row(2, 2, -0.25, "retest"), symbol="AMZN261106C00220000"),
+             dict(row(3, 1, 0.5, "rejection"), symbol="META261106P00700000")]
+    got = review.review(same + later, review.TRIALS)
+    assert (got["retest"]["trades"], got["rejection"]["trades"], got["nearest"]["trades"], got["all"]["trades"]) == (1, 0, 2, 3)
+    assert set(review.review(same + later)) == {"retest", "rejection", "all"}          # the site's rows are unchanged
+
+
+def test_the_nearest_trial_has_its_own_report(tmp_path):
+    v = script("options_clone_verdict")
+    rows = book(25, 2, [0.5, -0.25, 0.5])
+    for r in rows:
+        r["symbol"] = f"AMZN26{r['trade_id'][5:7]}{int(r['trade_id'][8:10]) + 1:02d}C00220000"   # the next day's expiry
+    j = tmp_path / "j.jsonl"
+    j.write_text("\n".join(json.dumps(r) for r in rows))
+    same_day = tmp_path / "EXP-0024-x"
+    assert v.main(["--journal", str(j), "--out", str(same_day)]) == 0 and not same_day.exists()   # none are same-day
+    out = tmp_path / "EXP-0026-options-clone-nearest-expiry"
+    assert v.main(["--journal", str(j), "--out", str(out), "--trials", "nearest"]) == 0
+    text = (out / "report.md").read_text()
+    assert text.startswith("# EXP-0026: the options clone on the nearest expiry") and "DEC-0034" in text
+    assert json.loads((out / "result.json").read_text())["nearest"]["trades"] == 50
+    assert v.main(["--journal", str(j), "--out", str(tmp_path / "y"), "--trials", "weekly"]) == 2

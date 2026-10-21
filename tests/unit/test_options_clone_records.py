@@ -16,12 +16,28 @@ HYPOTHESES = [yaml.safe_load(p.read_text()) for p in sorted((ROOT / "research" /
 
 
 def test_two_setups_two_hypotheses_in_family_o():
-    assert [h["id"] for h in HYPOTHESES] == ["HYP-0029", "HYP-0030"]
-    assert [h["rule"] for h in HYPOTHESES] == ["retest", "rejection"] == list(CONFIG["setups"])
+    setups_ = [h for h in HYPOTHESES if h["evidence"] == {"decision": "DEC-0030"}]
+    assert [h["id"] for h in setups_] == ["HYP-0029", "HYP-0030"]
+    assert [h["rule"] for h in setups_] == ["retest", "rejection"] == list(CONFIG["setups"])
     for h in HYPOTHESES:
-        assert h["family"] == "O" and h["status"] == "pre-registered" and h["evidence"] == {"decision": "DEC-0030"}
-        assert h["id"] in DECISION and "by session" in h["falsified_if"] and "30 trades" in h["falsified_if"]
+        assert h["family"] == "O" and h["status"] == "pre-registered"
+        assert "by session" in h["falsified_if"] and "30 trades" in h["falsified_if"]
         assert h["config"] == "config/options_clone.yaml"
+    for h in setups_:
+        assert h["id"] in DECISION
+
+
+def test_the_nearest_expiry_rule_is_recorded_as_one_new_trial_before_its_first_trade():
+    rec = (ROOT / "research" / "decisions" / "DEC-0034-options-clone-nearest-expiry.md").read_text()
+    (h,) = [h for h in HYPOTHESES if h["id"] == "HYP-0031"]
+    assert h["evidence"] == {"decision": "DEC-0034"} and h["rule"] == "nearest" and h["trial"] == "OC-NEAREST"
+    assert "release containing DEC-0034" in h["since"] and "15:10" in h["statement"]
+    assert "Written before any paper result of the new trial exists" in rec and "from 14 to **15**" in rec
+    assert (ROOT / "research" / "experiments" / "EXP-0026-options-clone-nearest-expiry" / "README.md").exists()
+    accepted = re.search(r"\*\*Status: ACCEPTED", rec) is not None
+    assert family_trial_count("O") == (15 if accepted else 14)
+    assert CONFIG["names"]["expiry"] in ("same_day", "nearest") and CONFIG["names"]["nearest_within_days"] == 7
+    assert "same_day_expiry_only" not in CONFIG["names"]
 
 
 def test_the_record_and_the_registry_agree():

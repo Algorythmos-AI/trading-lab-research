@@ -160,7 +160,8 @@ def build(r: Any, now: dt.datetime, run_id: str, final: bool = False) -> dict[st
         "broker_stop": "refused" if "refused" in stops else ("accepted" if stops else None),
         "quote_age_median_s": _median(a for t, a in r.quote_ages if t >= since),
         "slippage_median_pct": _median(slips[-10:]),
-        "trades": [{"trade_id": p.trade_id, "hyp": HYP.get(p.setup, "other"), "side": p.side, "contract": p.symbol,
+        "trades": [{"trade_id": p.trade_id, "hyp": HYP.get(review.trial_of(p.setup, p.symbol, p.date), "other"),
+                    "side": p.side, "contract": p.symbol,
                     "state": p.state, "fill": _num(p.fill), "exit_fill": _num(p.exit_fill),
                     "exit_reason": _code(p.exit_reason), "rop": p.return_on_premium(r.fee)}
                    for p in sorted(today, key=lambda q: q.trade_id) if p.state not in ("new", "cancelled", "rejected")],

@@ -7,6 +7,8 @@
   key `O` as frozen by DEC-0030.
 - Ledger: `data/live/options_journal.jsonl` on the host, append-only and hash-chained (kept out of git). Every
   decision on every 2-minute bar, every gate, every order, every fill, every exit, quote ages and slippage.
+- From DEC-0034 on: only trades on contracts expiring on their own session count here. Trades on a later expiry
+  count toward HYP-0031 (EXP-0026). No trade booked before DEC-0034 changes trial.
 - Unit: return on premium from fills, after $0.03 a contract each way.
 - Ranges: percentile bootstrap of the mean, by session (the verdict) and by trade, as
   `wt.backtest.stats.bootstrap_ci` computes it; both halves in order.
