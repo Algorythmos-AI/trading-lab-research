@@ -686,7 +686,8 @@ class Runner:
                 iv = None
                 try:
                     raw = self.feeds.chain(root, self.day)
-                    quotes = chain.parse_snapshots(raw)
+                    left_min = max((self.ck.close - now).total_seconds() / 60, 1.0)
+                    quotes = chain.with_model(chain.parse_snapshots(raw), tape.close, left_min)
                     atm = min((q for q in quotes if q.contract.side == sig.side and q.iv),
                               key=lambda q: abs(q.contract.strike - tape.close), default=None)
                     iv = atm.iv if atm else None
