@@ -23,3 +23,4 @@ families:
     - {decision: DEC-0028, total: 12, status: accepted}   # four rules x three variants tried before registration: a floor
     - {decision: DEC-0029, total: 20, status: proposed}   # each rule priced as two contracts (near, a week out): 8 trials
     - {decision: DEC-0030, total: 14, status: accepted}   # the clone's two setups (HYP-0029, HYP-0030); 12 + 2 while DEC-0029 is proposed
+    - {decision: DEC-0034, total: 15, status: proposed}   # HYP-0031 OC-NEAREST: the clone on contracts expiring after the session
