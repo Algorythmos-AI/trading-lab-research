@@ -1,6 +1,6 @@
 # Options clone (DEC-0030)
 
-The options clone is a paper bot. It buys one same-day call or put at a time by the nine rules on the Trades page. It runs as the job `paper-o` on the host:
+The options clone is a paper bot. It buys one call or put at a time by the nine rules on the Trades page: a same-day contract, or the name's nearest listed expiry when none expires that day (DEC-0034). It always sells the same day. It runs as the job `paper-o` on the host:
 
 | When (New York) | What it does |
 |---|---|

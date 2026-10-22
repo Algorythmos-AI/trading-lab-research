@@ -6,8 +6,8 @@
 The radar and the options edition are built in the cloud from IBKR; the options clone trades from them. Nothing
 checked their claims. This reads both back from the site (signed GET /api/editions/<kind>), recomputes what they
 claim from the consolidated tape (closes, the day, week and month levels, the moving averages) and the broker's
-option listings (same-day expiries), and writes one report per run to var/pipeline-check/. A failed check pages the
-owner once a day per run with the check ids. It reads only; it never changes an edition or trades.
+option listings (the expiries the clone may trade), and writes one report per run to var/pipeline-check/. A failed
+check pages the owner once a day per run with the check ids. It reads only; it never changes an edition or trades.
 """
 from __future__ import annotations
 
@@ -96,21 +96,31 @@ def _num(v: Any) -> float | None:
 TOP_UP = ("SPY", "QQQ")   # config/options_clone.yaml names.top_up (DEC-0032)
 MIN_NAMES = 2
 MAX_NAMES = 6             # names.max_names
+EXPIRY = "nearest"        # names.expiry (DEC-0034): `same_day`, or `nearest` within WITHIN_DAYS calendar days
+WITHIN_DAYS = 7           # names.nearest_within_days
+
+
+def tradeable(sym: str, target: str, expiries: Mapping[str, Sequence[str]], policy: str = EXPIRY) -> bool:
+    """Whether `sym` has an expiry the clone may trade on `target`: that day's, or under `nearest` any listed one
+    (`expiries` holds only those up to WITHIN_DAYS ahead)."""
+    listed = expiries.get(sym, ())
+    return target in listed if policy == "same_day" else any(str(e) >= target for e in listed)
 
 
 def eligible(options: Mapping[str, Any] | None, target: str, expiries: Mapping[str, Sequence[str]],
-             max_names: int = MAX_NAMES) -> set[str]:
+             max_names: int = MAX_NAMES, policy: str = EXPIRY) -> set[str]:
     """The names the clone can trade on `target`, chosen as its runner chooses them: `wt.options.session.names` (the
     focus names by rank, upper-cased, de-duplicated, capped at `max_names`, or the fallback without a focus for that
-    session), kept when a contract expires that day, then topped up in order from SPY and QQQ to two (DEC-0032).
+    session), kept when it has an expiry the policy allows (DEC-0034), then topped up in order from SPY and QQQ to
+    two (DEC-0032).
     Only a difference on one of these fails; elsewhere it warns."""
     focus = (options or {}).get("focus") if options else None
     wanted, _ = session.names(focus, (options or {}).get("session"), target, list(TOP_UP), max_names)
-    out = [s for s in wanted if target in expiries.get(s, ())]
+    out = [s for s in wanted if tradeable(s, target, expiries, policy)]
     for sym in TOP_UP:
         if len(out) >= MIN_NAMES:
             break
-        if sym not in out and target in expiries.get(sym, ()):
+        if sym not in out and tradeable(sym, target, expiries, policy):
             out.append(sym)
     return set(out)
 
@@ -121,7 +131,8 @@ def assess(slot: str, now: dt.datetime, radar: Mapping[str, Any] | None, options
     """Every check for one run. Pure: the editions and the market data come in, the checks go out.
 
     `daily`: each symbol's consolidated-tape daily bars, split-adjusted, up to the last finished session.
-    `expiries`: each symbol's listed expiry dates in the coming week. `live`: the latest price per symbol (pre-open)."""
+    `expiries`: each symbol's listed expiry dates from `target` to WITHIN_DAYS later. `live`: the latest price per
+    symbol (pre-open)."""
     out: list[Check] = []
     target = target_session(slot, now)
     prev = lv.prev_session(target)
@@ -171,9 +182,10 @@ def assess(slot: str, now: dt.datetime, radar: Mapping[str, Any] | None, options
             pre = focus.get("premarket") or {}
             at = str(pre.get("as_of") or "")
             add("focus.premarket", at[:10] == target, f"pre-open refresh as_of {at or 'missing'}", "warn")
-        tradeable = [str(i["symbol"]) for i in items if target in expiries.get(str(i["symbol"]), ())]
-        add("focus.tradeable", len(tradeable) >= 2,
-            f"{len(tradeable)} of {len(items)} focus names have a contract expiring {target}: {', '.join(tradeable) or 'none'}"
+        can = [str(i["symbol"]) for i in items if tradeable(str(i["symbol"]), target, expiries)]
+        what = f"expiring {target}" if EXPIRY == "same_day" else f"expiring within {WITHIN_DAYS} days of {target}"
+        add("focus.tradeable", len(can) >= 2,
+            f"{len(can)} of {len(items)} focus names have a contract {what}: {', '.join(can) or 'none'}"
             " (the clone tops up with SPY and QQQ)", "warn")
         for i in items:
             sym = str(i["symbol"])
@@ -237,7 +249,7 @@ def market_data(symbols: Sequence[str], target: str, slot: str) -> tuple[dict[st
             break
         params["page_token"] = j["next_page_token"]
     expiries: dict[str, list[str]] = {}
-    week_end = (dt.date.fromisoformat(target) + dt.timedelta(days=6)).isoformat()
+    week_end = (dt.date.fromisoformat(target) + dt.timedelta(days=WITHIN_DAYS)).isoformat()
     for s in symbols:
         try:
             j = _alpaca_get(f"{PAPER}/v2/options/contracts", {"underlying_symbols": s, "expiration_date_gte": target,

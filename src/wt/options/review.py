@@ -3,6 +3,9 @@
 A row is a `trade_closed` event of the clone's journal. Only rows with `counts` true (closed trades, not trades a
 hand sale made `unresolved`) enter the figures; the others are counted apart. The unit is return on premium from
 fills, after fees. The verdict's range resamples whole sessions: trades on one day share that day's market.
+
+Each trade counts toward one trial (DEC-0034): a same-day contract toward its setup's (HYP-0029, HYP-0030); a contract
+expiring after its session toward `nearest` (HYP-0031), both setups pooled.
 """
 from __future__ import annotations
 
@@ -12,13 +15,22 @@ from typing import Any
 import numpy as np
 
 from wt.backtest.stats import bootstrap_ci
+from wt.options.chain import parse_occ
 
 MIN_TRADES, MIN_SESSIONS = 30, 20
 SETUPS = ("retest", "rejection")
+NEAREST = "nearest"
+TRIALS = (*SETUPS, NEAREST)
 
 
 def session_of(row: Mapping[str, Any]) -> str:
     return str(row.get("trade_id", ""))[:10]
+
+
+def trial_of(setup: str, symbol: str, session: str) -> str:
+    """The trial a trade counts toward: `nearest` when its contract expires after `session`, else its setup."""
+    c = parse_occ(symbol)
+    return NEAREST if c is not None and c.expiry.isoformat() > session else setup
 
 
 def _f(v: Any) -> float | None:
@@ -85,11 +97,12 @@ def verdict(fig: Mapping[str, Any]) -> tuple[str, list[str]]:
     return ("falsified", why) if why else ("passes", ["range by session above zero", "both halves above zero"])
 
 
-def review(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-    """Figures and the verdict for each setup and for all trades together."""
+def review(rows: Sequence[Mapping[str, Any]], trials: Sequence[str] = SETUPS) -> dict[str, Any]:
+    """Figures and the verdict for each of `trials` and for all trades together."""
     out: dict[str, Any] = {}
-    for name in (*SETUPS, "all"):
-        part = [r for r in rows if name == "all" or r.get("setup") == name]
+    for name in (*trials, "all"):
+        part = [r for r in rows if name == "all" or
+                trial_of(str(r.get("setup")), str(r.get("symbol", "")), session_of(r)) == name]
         fig = figures(part)
         v, why = verdict(fig)
         out[name] = {**fig, "verdict": v, "why": why}

@@ -41,6 +41,7 @@ JOURNAL = DATA_DIR / "live" / "options_journal.jsonl"
 KILLS = (ROOT / "KILL", OPT / "KILL")
 LOCK = "paper-o-runner"
 ARM_AT = dt.time(9, 25)
+EXPIRY_POLICIES = ("same_day", "nearest")      # config/options_clone.yaml names.expiry (DEC-0034)
 CONNECT_TRIES, CONNECT_WAIT_S = 5, 60.0
 DATA_HOST = "https://data.alpaca.markets"
 PAPER_HOST = "https://paper-api.alpaca.markets"
@@ -87,7 +88,7 @@ class Feeds(Protocol):
     def daily(self, symbols: Sequence[str], start: dt.datetime, end: dt.datetime) -> dict[str, list[dict[str, Any]]]: ...
     def chain(self, root: str, expiry: dt.date) -> dict[str, Any]: ...
     def quotes(self, symbols: Sequence[str]) -> dict[str, Any]: ...
-    def contracts(self, root: str, expiry: dt.date) -> dict[str, float]: ...
+    def contracts(self, root: str, expiry: dt.date, last: dt.date | None = None) -> dict[str, float]: ...
     def focus(self) -> tuple[Mapping[str, Any] | None, str | None]: ...
     def edition(self) -> Mapping[str, Any] | None: ...
 
@@ -149,8 +150,13 @@ class AlpacaFeeds:
         p = {"symbols": ",".join(symbols), "feed": self.feed}
         return dict(self._paged(f"{DATA_HOST}/v1beta1/options/snapshots", p, "snapshots"))
 
-    def contracts(self, root: str, expiry: dt.date) -> dict[str, float]:
-        p = {"underlying_symbols": root, "expiration_date": expiry.isoformat(), "status": "active", "limit": "10000"}
+    def contracts(self, root: str, expiry: dt.date, last: dt.date | None = None) -> dict[str, float]:
+        """Open interest per listed contract expiring on `expiry`, or from `expiry` to `last` when `last` is given."""
+        p = {"underlying_symbols": root, "status": "active", "limit": "10000"}
+        if last is None:
+            p["expiration_date"] = expiry.isoformat()
+        else:
+            p |= {"expiration_date_gte": expiry.isoformat(), "expiration_date_lte": last.isoformat()}
         rows = self._paged(f"{PAPER_HOST}/v2/options/contracts", p, "option_contracts", pages=4)
         out: dict[str, float] = {}
         for r in rows if isinstance(rows, list) else []:
@@ -176,7 +182,8 @@ class AlpacaFeeds:
 class Name:
     root: str
     marks: list[setups.Mark]
-    oi: dict[str, float]
+    oi: dict[str, float]                        # open interest of the contracts of `expiry`
+    expiry: dt.date | None = None               # the expiry it trades today (DEC-0034); None: the session's
     last_bar: str = ""                          # the end (HH:MM) of the last finished bar looked at
     cooldown_until: dt.datetime | None = None
 
@@ -223,6 +230,9 @@ class Runner:
         self.latches = Latches(self.state / "latches")
         self.fee = float(self.cfg["costs"]["fee_per_contract_each_way"])
         self.oms = OptionsOMS(self.broker, self.store, self.lim, self.context, self.now, self.sleep)
+        self.policy = str(self.cfg["names"].get("expiry", "same_day"))
+        if self.policy not in EXPIRY_POLICIES:
+            raise ValueError(f"names.expiry: {self.policy!r} is not one of {EXPIRY_POLICIES}")
 
     # ---- helpers -----------------------------------------------------------------------------
     def today(self) -> list[OptionPlan]:
@@ -332,9 +342,29 @@ class Runner:
         self.publish()
         return not self.off
 
+    def expiry_for(self, root: str) -> tuple[dt.date | None, dict[str, float]]:
+        """The expiry `root` trades today and its contracts' open interest, or (None, {}) if it has none (DEC-0034).
+        Today's when one is listed; under `nearest`, otherwise the first listed within `names.nearest_within_days`."""
+        oi = self.feeds.contracts(root, self.day)
+        if oi:
+            return self.day, oi
+        if self.policy != "nearest":
+            return None, {}
+        last = self.day + dt.timedelta(days=int(self.cfg["names"]["nearest_within_days"]))
+        listed = self.feeds.contracts(root, self.day + dt.timedelta(days=1), last)
+        by_expiry: dict[dt.date, dict[str, float]] = {}
+        for sym, n in listed.items():
+            c = chain.parse_occ(sym)
+            if c is not None and c.root == root and self.day < c.expiry <= last:
+                by_expiry.setdefault(c.expiry, {})[sym] = n
+        if not by_expiry:
+            return None, {}
+        first = min(by_expiry)
+        return first, by_expiry[first]
+
     def prepare(self) -> None:
-        """Today's names: the focus names that can be traded today (a same-day expiry, readable levels), topped up
-        from `names.top_up` in order until at least `names.min_names` can be traded (DEC-0032)."""
+        """Today's names: the focus names that can be traded today (an expiry under `names.expiry`, readable levels),
+        topped up from `names.top_up` in order until at least `names.min_names` can be traded (DEC-0032, DEC-0034)."""
         focus, edition = self.feeds.focus()
         cfg_n = self.cfg["names"]
         cap = int(cfg_n["max_names"])
@@ -357,15 +387,15 @@ class Runner:
             if isinstance(ed, Mapping) and ed.get("session") == self.session else {}
         level_source: dict[str, str] = {}
         level_diffs: dict[str, list[str]] = {}
+        expiries: dict[str, str] = {}
 
         def add(root: str) -> bool:
             try:
-                oi: dict[str, float] = {}
-                if cfg_n.get("same_day_expiry_only", True):
-                    oi = self.feeds.contracts(root, self.day)
-                    if not oi:
-                        dropped[root] = "no same-day expiry"
-                        return False
+                expiry, oi = self.expiry_for(root)
+                if expiry is None:
+                    dropped[root] = "no same-day expiry" if self.policy == "same_day" else \
+                        f"no expiry within {cfg_n['nearest_within_days']} days"
+                    return False
                 loaded = lv.load_ibkr(daily_raw([b for b in daily.get(root, []) if isinstance(b, dict)]))
                 if loaded.problems or not loaded.bars:
                     dropped[root] = "daily bars"
@@ -381,7 +411,8 @@ class Runner:
                                          and x.name in mine and abs(x.price - mine[x.name]) > 0.05]
                 pm = session.premarket_range(pre.get(root, []), self.day) if self.cfg["levels"].get("premarket") else None
                 marks = session.marks(levels, self.cfg["levels"]["names"], self.cfg["levels"]["strong"], pm)
-                self.names[root] = Name(root, marks, oi)
+                self.names[root] = Name(root, marks, oi, expiry)
+                expiries[root] = expiry.isoformat()
                 return True
             except (ValueError, TypeError, KeyError, TransportError, requests.RequestException) as e:
                 dropped[root] = e.__class__.__name__
@@ -399,6 +430,7 @@ class Runner:
             source = f"{source}+top-up"
         self.names_source = source
         self.write("names", source=source, names=sorted(self.names), dropped=dropped, topped_up=topped,
+                   policy=self.policy, expiries=expiries,
                    level_source=level_source, level_diffs={k: v for k, v in level_diffs.items() if v})
         if not self.names:
             self.off["names"] = "no name to trade"
@@ -685,9 +717,8 @@ class Runner:
                     continue
                 iv = None
                 try:
-                    raw = self.feeds.chain(root, self.day)
-                    left_min = max((self.ck.close - now).total_seconds() / 60, 1.0)
-                    quotes = chain.with_model(chain.parse_snapshots(raw), tape.close, left_min)
+                    raw = self.feeds.chain(root, nm.expiry or self.day)
+                    quotes = chain.with_model(chain.parse_snapshots(raw), tape.close, now)
                     atm = min((q for q in quotes if q.contract.side == sig.side and q.iv),
                               key=lambda q: abs(q.contract.strike - tape.close), default=None)
                     iv = atm.iv if atm else None
@@ -697,7 +728,7 @@ class Runner:
                                 session.remaining_move(tape.close, iv, now, self.ck), self.cfg["gates"])
                 for k, v in blocks.items():
                     g.add(k, False, v)
-                choice = chain.pick(quotes, root, sig.side, self.day, tape.close, now,
+                choice = chain.pick(quotes, root, sig.side, nm.expiry or self.day, tape.close, now,
                                     {**self.cfg["contract"], "quote_stale_flat_s": self.cfg["feeds"]["quote_stale_flat_s"]},
                                     nm.oi, self.account_holds, late)
                 g.add("contract", choice.quote is not None, choice.reasons)

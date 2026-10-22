@@ -1,8 +1,9 @@
 """The options clone's contract choice (DEC-0030). Pure: no network, no clock (callers pass the time).
 
 It reads the broker's option snapshots as they come (`latestQuote` with a timestamp, `greeks`, `impliedVolatility`,
-`dailyBar`), measures how old each quote is, and picks one same-day contract or says why there is none. A modelled
-price is never treated as executable: the entry limit comes from the live ask, capped.
+`dailyBar`), measures how old each quote is, and picks one contract of the name's expiry for the day (same-day, or
+the nearest listed one under DEC-0034) or says why there is none. A modelled price is never treated as executable:
+the entry limit comes from the live ask, capped.
 """
 from __future__ import annotations
 
@@ -12,6 +13,9 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
+
+from wt.options.levels import HALF_DAYS
+from wt.options.regime import NEW_YORK
 
 OCC = re.compile(r"(?P<root>[A-Z]{1,6})(?P<yy>\d{2})(?P<mm>\d{2})(?P<dd>\d{2})(?P<cp>[CP])(?P<k>\d{8})")
 
@@ -97,15 +101,28 @@ def parse_snapshots(raw: Mapping[str, Any]) -> list[Quote]:
     return out
 
 
-def with_model(quotes: Sequence[Quote], spot: float, minutes_left: float) -> list[Quote]:
+def expiry_close(expiry: dt.date) -> dt.datetime:
+    """When a contract expiring on `expiry` stops trading: 16:00 New York, 13:00 on a half day."""
+    return dt.datetime.combine(expiry, dt.time(13 if expiry.isoformat() in HALF_DAYS else 16), NEW_YORK)
+
+
+def minutes_to_expiry(expiry: dt.date, now: dt.datetime) -> float:
+    """Calendar minutes from `now` to `expiry`'s close, at least one (DEC-0034: `wt.options.bs` counts a 365-day
+    calendar year, so the volatility and the delta are solved on the same clock)."""
+    return max((expiry_close(expiry) - now).total_seconds() / 60, 1.0)
+
+
+def with_model(quotes: Sequence[Quote], spot: float, now: dt.datetime) -> list[Quote]:
     """The quotes with a missing implied volatility and delta worked out from the two-sided quote's mid
-    (`wt.options.bs`, no rates, no dividend). The broker's feed sends no greeks for contracts expiring the same day;
-    without this no same-day contract could pass the delta floor. A quote that cannot be solved is left as it is."""
+    (`wt.options.bs`, no rates, no dividend), each to its own contract's expiry close (`minutes_to_expiry`). The
+    broker's feed sends no greeks for contracts expiring the same day; without this no same-day contract could pass
+    the delta floor. A quote that cannot be solved is left as it is."""
     from wt.options import bs
     out: list[Quote] = []
     for q in quotes:
         mid = q.mid
-        if (q.delta is None or q.iv is None) and mid and mid > 0 and spot > 0 and minutes_left > 0:
+        minutes_left = minutes_to_expiry(q.contract.expiry, now)
+        if (q.delta is None or q.iv is None) and mid and mid > 0 and spot > 0:
             kind: bs.Kind = "call" if q.contract.side == "call" else "put"
             iv = q.iv if q.iv else bs.implied_vol(mid, spot, q.contract.strike, minutes_left, kind)
             g = bs.greeks(spot, q.contract.strike, minutes_left, iv, kind) if iv else None
@@ -127,13 +144,13 @@ class Choice:
     reasons: dict[str, int]      # why each refused contract was refused, counted
 
 
-def pick(quotes: Sequence[Quote], root: str, side: str, session: dt.date, spot: float, now: dt.datetime,
+def pick(quotes: Sequence[Quote], root: str, side: str, expiry: dt.date, spot: float, now: dt.datetime,
          cfg: Mapping[str, Any], open_interest: Mapping[str, float], held: set[str], late: bool) -> Choice:
-    """The same-day contract to buy, or None with the reasons counted.
+    """The contract to buy, or None with the reasons counted.
 
-    Among `root`'s `side` contracts expiring on `session`, with a fresh two-sided quote: delta at least the floor,
-    ask at most `max_ask`, spread within both caps, volume and open interest at their floors, not a contract the
-    account holds. Of those that pass, the one whose strike is nearest the stock."""
+    Among `root`'s `side` contracts expiring on `expiry` (the name's expiry for the day), with a fresh two-sided
+    quote: delta at least the floor, ask at most `max_ask`, spread within both caps, volume and open interest at
+    their floors, not a contract the account holds. Of those that pass, the one whose strike is nearest the stock."""
     floor = float(cfg["min_delta_late" if late else "min_delta"])
     min_vol = float(cfg["min_volume_index"] if root in cfg.get("index_names", ()) else cfg["min_volume"])
     stale_s = float(cfg.get("quote_stale_flat_s", 60))
@@ -145,7 +162,7 @@ def pick(quotes: Sequence[Quote], root: str, side: str, session: dt.date, spot: 
 
     for q in quotes:
         c = q.contract
-        if c.root != root or c.side != side or c.expiry != session:
+        if c.root != root or c.side != side or c.expiry != expiry:
             continue
         age = q.age_s(now)
         if q.bid is None or q.ask is None:
@@ -170,5 +187,5 @@ def pick(quotes: Sequence[Quote], root: str, side: str, session: dt.date, spot: 
         else:
             ok.append(q)
     if not ok:
-        return Choice(None, reasons or {"no-same-day-contract": 1})
+        return Choice(None, reasons or {"no-contract-of-the-expiry": 1})
     return Choice(min(ok, key=lambda q: (abs(q.contract.strike - spot), q.contract.strike)), reasons)

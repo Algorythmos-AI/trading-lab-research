@@ -1,0 +1,10 @@
+id: HYP-0031
+trial: "OC-NEAREST"
+family: O                       # options desk (DEC-0028); the clone's trials are counted in the same family (DEC-0030)
+status: pre-registered          # DEC-0034; registered before any trade of it exists
+statement: "Buying one call or put on the name's nearest listed expiry when that expiry is after the trade's session, on either of the clone's setups (break and retest, or rejection), with every gate, contract filter and exit of config/options_clone.yaml unchanged and flat by 15:10 the same day, has positive return on premium after fees, measured from paper fills."
+rule: nearest                   # trades whose contract expires after their session (wt.options.review.trial_of), both setups pooled
+config: config/options_clone.yaml
+evidence: {decision: DEC-0034}
+since: "the first session of job paper-o that runs a release containing DEC-0034 (names.expiry: nearest)"
+falsified_if: "With at least 30 trades and 20 sessions: the lower end of the 95% bootstrap range of mean return on premium after fees, resampled by session, is at or below 0, or the mean is at or below 0 in either half of the trades taken in order. Fewer than 30 trades is no verdict. A pass never raises the size: that needs its own record."
