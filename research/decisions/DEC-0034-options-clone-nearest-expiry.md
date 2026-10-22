@@ -1,8 +1,8 @@
 # DEC-0034: The options clone trades each focus name's nearest expiry
 
-- **Status: PROPOSED on 2026-10-21.** The owner asked on 2026-10-21 for the clone to trade the four focus names
-  every day. One question is still open for him (below). Once he answers, the record and its registry row move to
-  ACCEPTED in the same pull request, and merging that pull request accepts it.
+- **Status: ACCEPTED on 2026-10-22.** The owner asked on 2026-10-21 for the clone to trade the four focus names
+  every day. On 2026-10-22 the owner answered the question below ("yes to both, keep exits as they are, accept
+  DEC-0034"), and the merge of the pull request that carries this line accepts it.
 - **Written before any paper result of the new trial exists.** No contract expiring after its trade's session has
   ever been traded by the clone: until now it could only buy same-day contracts. The author has not looked at the
   clone's paper P&L for HYP-0029 or HYP-0030 while writing this record.
@@ -65,8 +65,7 @@ term volatility to that expiry, not the same-day one. The gate still measures on
   different instrument: more premium for the same delta, less gamma and slower decay. Its return on premium is
   read apart from same-day trades. Both setups are pooled in this trial: the question is whether the rulebook still
   pays when the contract has days left, not which setup pays more. Splitting it by setup would add two trials.
-- Family O goes from 14 to **15** (`config/trial_registry.yaml`, row `DEC-0034`, proposed until this record is
-  accepted).
+- Family O goes from 14 to **15** (`config/trial_registry.yaml`, row `DEC-0034`).
 - **Which trial a trade counts toward** (`wt.options.review.trial_of`): a trade whose contract expires on its own
   session counts toward its setup's hypothesis (HYP-0029 or HYP-0030), as before. A trade whose contract expires
   later counts toward HYP-0031 only. No trade counts twice.
@@ -80,11 +79,11 @@ term volatility to that expiry, not the same-day one. The gate still measures on
   range of the mean by session, and both halves. Its report goes to EXP-0026, written once by
   `scripts/options_clone_verdict.py --trials nearest`.
 
-## Open question for the owner (before this record is accepted)
+## The owner's answer (2026-10-22)
 
+**Yes: every number stays.** The default policy is `nearest`, and the window is 7 calendar days. The question was:
 **Do the delta floor (0.35, or 0.40 late) and the premium exits (25% stop, 50% target, breakeven after +25%) stay
-as they are for contracts with days left?** This record assumes **yes**: no number changes, so the only new thing
-being tested is the expiry. Expected effect: a contract with days left has more time value. At the $2.00 cap and
+as they are for contracts with days left?** No number changes, so the only new thing being tested is the expiry. Expected effect: a contract with days left has more time value. At the $2.00 cap and
 the 0.35 floor, fewer contracts will pass, so expect more `premium-over-cap` and `delta-below-floor` refusals on
 those names. The journal counts each refusal by reason. A premium move of 25% also takes a larger stock move on a
 multi-day contract than on a same-day one, so stops and targets will be hit less often before 15:10. Changing a
