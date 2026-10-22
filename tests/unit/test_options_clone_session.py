@@ -27,6 +27,7 @@ LIM = Limits.from_risk(yaml.safe_load((ROOT / "config" / "risk.yaml").read_text(
 DAY = dt.date(2026, 10, 19)
 OPEN = dt.datetime.combine(DAY, dt.time(9, 30), NEW_YORK)
 L, NEXT = 581.0, 584.0
+SAME_DAY = {**CFG, "names": {**CFG["names"], "expiry": "same_day"}}        # the DEC-0032 rule (DEC-0034's other policy)
 
 
 def at(hhmm: str, s: int = 0) -> dt.datetime:
@@ -50,6 +51,8 @@ class Market:
         self.quote_age_s = 2.0
         self.oi = 5000.0
         self.feed_greeks = True
+        self.exp = "261019"                       # the expiry of the contracts the chain lists (YYMMDD)
+        self.chain_calls: list[dt.date] = []
 
     def stock(self, i: int) -> float:
         if i < len(self.path):
@@ -89,7 +92,7 @@ class Market:
         m = (s - k) if side == "C" else (k - s)
         delta = max(0.05, min(0.95, 0.5 + 0.15 * m))
         ask = round(max(0.05, 1.20 + 0.5 * m), 2)
-        sym = f"SPY261019{side}{int(k * 1000):08d}"
+        sym = f"SPY{self.exp}{side}{int(k * 1000):08d}"
         t = (self.now - dt.timedelta(seconds=self.quote_age_s)).astimezone(dt.UTC).isoformat().replace("+00:00", "Z")
         if not self.feed_greeks:          # what the broker's feed really sends for a same-day contract
             return sym, {"latestQuote": {"bp": round(ask - 0.02, 2), "ap": ask, "t": t}, "dailyBar": {"v": 20000}}
@@ -98,6 +101,7 @@ class Market:
                      "dailyBar": {"v": 20000}}
 
     def chain(self, root, expiry):
+        self.chain_calls.append(expiry)
         return dict(self.snap(k, side) for k in range(576, 587) for side in ("C", "P"))
 
     def quotes(self, symbols):
@@ -109,8 +113,8 @@ class Market:
                         "impliedVolatility": 0.15, "dailyBar": {"v": 20000}}
         return out
 
-    def contracts(self, root, expiry):
-        return {f"SPY261019{side}{k * 1000:08d}": self.oi for k in range(576, 587) for side in ("C", "P")}
+    def contracts(self, root, expiry, last=None):
+        return {f"SPY{self.exp}{side}{k * 1000:08d}": self.oi for k in range(576, 587) for side in ("C", "P")}
 
     def focus(self):
         return None, None
@@ -172,8 +176,8 @@ def world(tmp_path, monkeypatch):
         rows.append({"event": event, **kw})
         return True
 
-    def make(**kw: Any) -> Runner:
-        r = Runner(DAY, CFG, LIM, m, b, lambda: m.now, lambda s: None, FakePager(), write=write,
+    def make(cfg: dict[str, Any] = CFG, **kw: Any) -> Runner:
+        r = Runner(DAY, cfg, LIM, m, b, lambda: m.now, lambda s: None, FakePager(), write=write,
                    state=tmp_path / "options", kills=(tmp_path / "KILL",), **kw)
         r.prepare = lambda: r.names.update(SPY=Name("SPY", [Mark("PDL", 576.0), Mark("PDH", L), Mark("PWH", NEXT)],
                                                      m.contracts("SPY", DAY)))
@@ -377,8 +381,8 @@ def test_arm_marks_levels_from_daily_bars_and_drops_a_name_without_a_same_day_ex
              "v": 1e6} for i, x in enumerate(days)]
     m = world["m"]
     m.daily = lambda symbols, start, end: {"SPY": rows, "QQQ": rows}
-    m.contracts = lambda root, expiry: {} if root == "QQQ" else {"SPY261019C00580000": 5000.0}
-    r = world["make"]()
+    m.contracts = lambda root, expiry, last=None: {} if root == "QQQ" else {"SPY261019C00580000": 5000.0}
+    r = world["make"](SAME_DAY)
     del r.prepare                                                   # the real preparation
     m.now = at("09:25")
     r.arm()
@@ -481,10 +485,10 @@ def test_focus_names_without_a_same_day_expiry_are_topped_up_with_spy_and_qqq(wo
     m = world["m"]
     names = ("AMZN", "TSLA", "META", "SPY", "QQQ")
     m.daily = lambda symbols, start, end: {s: rows for s in names}
-    m.contracts = lambda root, expiry: {f"{root}261019C00580000": 5000.0} if root in ("SPY", "QQQ") else {}
+    m.contracts = lambda root, expiry, last=None: {f"{root}261019C00580000": 5000.0} if root in ("SPY", "QQQ") else {}
     focus = {"items": [{"symbol": s, "rank": i + 1, "bias": "range"} for i, s in enumerate(("AMZN", "TSLA", "META", "SPY"))]}
     m.focus = lambda: (focus, "2026-10-19")
-    r = world["make"]()
+    r = world["make"](SAME_DAY)
     del r.prepare
     m.now = at("09:25")
     r.arm()
@@ -503,7 +507,7 @@ def test_no_top_up_when_enough_focus_names_trade(world):
              "v": 1e6} for i, x in enumerate(days)]
     m = world["m"]
     m.daily = lambda symbols, start, end: {s: rows for s in symbols}
-    m.contracts = lambda root, expiry: {f"{root}261019C00580000": 5000.0}
+    m.contracts = lambda root, expiry, last=None: {f"{root}261019C00580000": 5000.0}
     focus = {"items": [{"symbol": "AMZN", "rank": 1, "bias": "range"}, {"symbol": "META", "rank": 2, "bias": "range"}]}
     m.focus = lambda: (focus, "2026-10-19")
     r = world["make"]()
@@ -527,7 +531,7 @@ def _arm_with_edition(world, edition):
     m = world["m"]
     rows = _edition_rows()
     m.daily = lambda symbols, start, end: {s: rows for s in symbols}
-    m.contracts = lambda root, expiry: {f"{root}261019C00580000": 5000.0}
+    m.contracts = lambda root, expiry, last=None: {f"{root}261019C00580000": 5000.0}
     m.edition = lambda: edition
     r = world["make"]()
     del r.prepare
@@ -567,3 +571,95 @@ def test_a_same_day_contract_with_no_greeks_from_the_feed_is_still_traded(world)
     last = [json.loads(x) for x in (world["tmp"] / "options/decisions/2026-10-19.jsonl").read_text().splitlines()][-1]
     gates = last["signals"][0]["gates"]
     assert gates["contract"]["ok"] and gates["reach"]["ok"]
+
+
+def _daily_rows(last: str) -> list[dict[str, Any]]:
+    days, d = [], last
+    for _ in range(80):
+        days.append(d)
+        d = lv.prev_session(d)
+    days.reverse()
+    return [{"t": f"{x}T04:00:00Z", "o": 570 + i * 0.1, "h": 571 + i * 0.1, "l": 569 + i * 0.1, "c": 570.5 + i * 0.1,
+             "v": 1e6} for i, x in enumerate(days)]
+
+
+def test_on_a_tuesday_the_focus_names_without_a_same_day_expiry_trade_their_friday_one(world):
+    """DEC-0034, the 20 Oct case: AMZN, TSLA and META list no contract expiring Tuesday but do list Friday's; SPY lists
+    Tuesday's. All four are traded, each on its nearest expiry; nothing is topped up and nothing is dropped."""
+    tue = dt.date(2026, 10, 20)
+    m = world["m"]
+    rows = _daily_rows("2026-10-19")
+    m.daily = lambda symbols, start, end: {s: rows for s in symbols}
+    asked: list[tuple[str, dt.date, dt.date | None]] = []
+
+    def contracts(root, expiry, last=None):
+        asked.append((root, expiry, last))
+        if root in ("SPY", "QQQ"):
+            return {f"{root}261020C00580000": 5000.0} if last is None else {f"{root}261021C00580000": 5000.0}
+        if last is None:
+            return {}
+        return {f"{root}261023C00220000": 4000.0, f"{root}261023P00220000": 3000.0,      # Friday: the nearest
+                f"{root}261030C00220000": 9000.0}                                      # a later Friday
+    m.contracts = contracts
+    focus = {"items": [{"symbol": s, "rank": i + 1, "bias": "range"} for i, s in enumerate(("AMZN", "TSLA", "META", "SPY"))]}
+    m.focus = lambda: (focus, "2026-10-20")
+    m.now = dt.datetime.combine(tue, dt.time(9, 25), NEW_YORK)
+    r = Runner(tue, CFG, LIM, m, world["b"], lambda: m.now, lambda s: None, type("P", (), {"fire": lambda *a: None})(),
+               write=lambda event, **kw: world["rows"].append({"event": event, **kw}) or True,
+               state=world["tmp"] / "options", kills=(world["tmp"] / "KILL",))
+    r.prepare()
+    assert sorted(r.names) == ["AMZN", "META", "SPY", "TSLA"] and r.names_source == "focus"
+    fri = dt.date(2026, 10, 23)
+    assert {k: n.expiry for k, n in r.names.items()} == {"AMZN": fri, "TSLA": fri, "META": fri, "SPY": tue}
+    assert r.names["AMZN"].oi == {"AMZN261023C00220000": 4000.0, "AMZN261023P00220000": 3000.0}
+    assert r.names["SPY"].oi == {"SPY261020C00580000": 5000.0}             # the same-day name keeps today's expiry
+    assert ("SPY", tue, None) in asked and not any(a[0] == "SPY" and a[2] for a in asked)
+    assert ("AMZN", dt.date(2026, 10, 21), dt.date(2026, 10, 27)) in asked     # tomorrow to seven days out
+    (n,) = events(world["rows"], "names")
+    assert n["policy"] == "nearest" and n["dropped"] == {} and n["topped_up"] == []
+    assert n["expiries"] == {"AMZN": "2026-10-23", "TSLA": "2026-10-23", "META": "2026-10-23", "SPY": "2026-10-20"}
+
+
+def test_a_name_with_no_expiry_inside_the_window_is_still_dropped_and_topped_up(world):
+    m = world["m"]
+    rows = _daily_rows("2026-10-16")
+    m.daily = lambda symbols, start, end: {s: rows for s in symbols}
+    m.contracts = lambda root, expiry, last=None: {f"{root}261019C00580000": 5000.0} if root in ("SPY", "QQQ") else {}
+    focus = {"items": [{"symbol": "AMZN", "rank": 1}, {"symbol": "SPY", "rank": 2}]}
+    m.focus = lambda: (focus, "2026-10-19")
+    r = world["make"]()
+    del r.prepare
+    m.now = at("09:25")
+    r.arm()
+    assert sorted(r.names) == ["QQQ", "SPY"] and r.names_source == "focus+top-up"
+    (n,) = events(world["rows"], "names")
+    assert n["dropped"] == {"AMZN": "no expiry within 7 days"} and n["expiries"] == {"SPY": "2026-10-19", "QQQ": "2026-10-19"}
+
+
+def test_an_unknown_expiry_policy_is_refused(world):
+    with pytest.raises(ValueError, match="names.expiry"):
+        world["make"]({**CFG, "names": {**CFG["names"], "expiry": "weekly"}})
+
+
+def test_a_name_on_its_friday_expiry_buys_that_expiry_and_is_still_flat_by_15_10(world):
+    """The whole trade on a contract with days left: the chain is read for the name's expiry, only that expiry's
+    contracts can be bought, and every exit is the same-day one."""
+    m = world["m"]
+    m.exp = "261023"
+    fri = dt.date(2026, 10, 23)
+    r = world["make"]()
+    r.prepare = lambda: r.names.update(SPY=Name("SPY", [Mark("PDL", 576.0), Mark("PDH", L), Mark("PWH", NEXT)],
+                                                 m.contracts("SPY", fri), fri))
+    m.now = at("09:25")
+    assert r.arm()
+    run_until(r, m, world["b"], at("10:26", 10))
+    (p,) = r.today()
+    assert p.state == "open" and p.symbol == "SPY261023C00581000" and set(m.chain_calls) == {fri}
+    last = [json.loads(x) for x in (world["tmp"] / "options/decisions/2026-10-19.jsonl").read_text().splitlines()][-1]
+    assert last["signals"][0]["gates"]["contract"]["ok"]
+    m.bid_fn = lambda t: 1.45
+    run_until(r, m, world["b"], at("15:10", 10))
+    assert p.state == "closed" and p.exit_reason == "flatten"
+    (row,) = events(world["rows"], "trade_closed")
+    from wt.options import review
+    assert review.trial_of(row["setup"], row["symbol"], "2026-10-19") == "nearest"

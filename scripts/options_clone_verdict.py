@@ -1,9 +1,11 @@
 """EXP-0024's report, written once (DEC-0030, section 6).
 
     python scripts/options_clone_verdict.py --journal <options_journal.jsonl> [--out research/experiments/EXP-0024-...]
+    python scripts/options_clone_verdict.py --journal <...> --trials nearest --out research/experiments/EXP-0026-...
 
-Writes report.md and result.json only when at least one setup has reached 30 trades and 20 sessions, and refuses to
-write over a report that exists: a later look is a new experiment. Counts and statistics only.
+Writes report.md and result.json only when at least one of the trials has reached 30 trades and 20 sessions, and
+refuses to write over a report that exists: a later look is a new experiment. Counts and statistics only. The default
+trials are the two same-day setups (EXP-0024); `nearest` is HYP-0031's (EXP-0026, DEC-0034).
 """
 from __future__ import annotations
 
@@ -20,9 +22,14 @@ from wt.options import review  # noqa: E402
 OUT = ROOT / "research" / "experiments" / "EXP-0024-options-clone-forward"
 
 
-def render(res: dict) -> str:
-    lines = ["# EXP-0024: the options clone, forward on paper: report", "",
-             "- Decision: DEC-0030. Unit: return on premium from fills, after $0.03 a contract each way.",
+TITLES = {"EXP-0024": "the options clone, forward on paper", "EXP-0026": "the options clone on the nearest expiry"}
+DECISIONS = {"EXP-0024": "DEC-0030", "EXP-0026": "DEC-0034"}
+
+
+def render(res: dict, exp: str = "EXP-0024") -> str:
+    lines = [f"# {exp}: {TITLES.get(exp, 'the options clone')}: report", "",
+             f"- Decision: {DECISIONS.get(exp, 'DEC-0030')}. Unit: return on premium from fills, after $0.03 a contract "
+             "each way.",
              "- Ranges: percentile bootstrap of the mean, 5000 resamples, seed 7, by session (the verdict) and by trade.",
              "", "| Setup | Trades | Sessions | Mean on premium | Range by session | Range by trade | Halves | "
              "Profit factor | Max drawdown | Verdict |", "|---|---|---|---|---|---|---|---|---|---|"]
@@ -39,19 +46,24 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--journal", type=Path, required=True)
     ap.add_argument("--out", type=Path, default=OUT)
+    ap.add_argument("--trials", default=",".join(review.SETUPS), help=f"comma-separated, of {review.TRIALS}")
     a = ap.parse_args(argv)
+    trials = tuple(t for t in a.trials.split(",") if t)
+    if not trials or any(t not in review.TRIALS for t in trials):
+        print(f"refused: --trials must be some of {review.TRIALS}", file=sys.stderr)
+        return 2
     report = a.out / "report.md"
     if report.exists():
         print(f"refused: {report} exists; a later look is a new experiment", file=sys.stderr)
         return 1
     rows = [json.loads(x) for x in a.journal.read_text().splitlines() if x.strip()]
-    res = review.review([r for r in rows if r.get("event") == "trade_closed"])
-    if all(f["verdict"] == "none" for k, f in res.items() if k in review.SETUPS):
-        print("no verdict yet: " + "; ".join(f"{k}: {'; '.join(f['why'])}" for k, f in res.items() if k in review.SETUPS))
+    res = review.review([r for r in rows if r.get("event") == "trade_closed"], trials)
+    if all(f["verdict"] == "none" for k, f in res.items() if k in trials):
+        print("no verdict yet: " + "; ".join(f"{k}: {'; '.join(f['why'])}" for k, f in res.items() if k in trials))
         return 0
     a.out.mkdir(parents=True, exist_ok=True)
     (a.out / "result.json").write_text(json.dumps(res, indent=1))
-    report.write_text(render(res))
+    report.write_text(render(res, a.out.name[:8]))
     print(f"wrote {report}")
     return 0
 

@@ -1,4 +1,5 @@
-# The options clone (DEC-0030): a paper bot that buys one same-day call or put at a time by the owner's nine rules.
+# The options clone (DEC-0030): a paper bot that buys one call or put at a time by the owner's nine rules, same-day or
+# the name's nearest expiry (DEC-0034), and sells it the same day.
 # Every number here is frozen by DEC-0030. Changing one after a result has been seen is a new record and new trials
 # (DEC-0005). Money limits that can block an order live in config/risk.yaml, key O, and are frozen with this file.
 # Times are America/New_York.
@@ -27,7 +28,11 @@ names:
   # can be traded today (SPY and QQQ list a contract expiring every session).
   top_up: [SPY, QQQ]
   min_names: 2
-  same_day_expiry_only: true    # a name without a contract expiring today is dropped for the day
+  # DEC-0034: which expiry a name trades. `same_day`: a contract expiring today, or the name is dropped (DEC-0032).
+  # `nearest`: today's expiry when one is listed, otherwise the first listed within `nearest_within_days` calendar
+  # days. Every exit is unchanged: the position is still flat by `day.flatten`.
+  expiry: nearest
+  nearest_within_days: 7
 
 feeds:
   option: indicative            # `opra` once the owner subscribes (the file var/options/switches/opra also selects it)
