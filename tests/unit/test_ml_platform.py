@@ -119,7 +119,7 @@ def test_a_model_trained_on_other_inputs_is_not_used(desk):
     of the definitions it was trained with; with another id the scorer gives a reason and the trade is unfiltered."""
     from wt.crypto import signals
     assert signals.features_id() == signals.features_id() and len(signals.features_id()) == 12
-    p = register(desk)
+    p = register(desk, trained=dt.datetime.now(dt.UTC))     # the scorer checks the age against the real clock
     pointer = desk.state_dir / "models" / "current.json"
     d = json.loads(pointer.read_text())
     assert p.features == "" and scorer.score([{"atr_pct": 1.0}], desk, python=sys.executable, root=ROOT)[1] is None
