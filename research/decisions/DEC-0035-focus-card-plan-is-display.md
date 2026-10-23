@@ -30,5 +30,9 @@ the owner's own thread already prints.
 3. **If the lab is ever to trade or evaluate the card plan** (paper, backtest or forward), that is a new strategy.
    It needs its own hypothesis, experiment and decision record **before** any result is viewed, as AGENTS.md rule 2
    requires. Its numbers are frozen at that point, not taken from the display.
-4. Changing `ENTRY_ATR`, `STOP_ATR` or the target rule on the cards stays a display change under this record, while
-   point 1 holds.
+4. **Only presentation is exempt.** Wording, layout, the glossary and how levels are named can change under this
+   record. Changing a number the card plan uses (`ENTRY_ATR`, `STOP_ATR`, `MIN_ROOM_MULTIPLE`, the trigger, or which
+   level is the target) changes what the owner is told to do, so it needs a dated amendment to this record
+   **before** the change is merged.
+   - The amendment gives the old and new values and the reason.
+   - It must say that no result of the owner's trades with the card plan was viewed to choose them.
