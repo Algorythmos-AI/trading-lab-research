@@ -75,8 +75,21 @@ def test_the_day_line_counts_bars_setups_refusals_and_entries():
            {"root": "SPY", "action": "entered", "signals": [{"gates": {"trend": {"ok": True}}}]},
            {"root": "QQQ", "action": "warming-up"}]
     got = review.day_line(dec)
-    assert got["SPY"] == {"bars": 3, "setups": 2, "entered": 1, "refused_by": {"trend": 1}}
+    assert got["SPY"] == {"bars": 3, "setups": 2, "entered": 1, "refused_by": {"trend": 1},
+                          "refused_for": {"unlogged": 1}}                 # a row from before reasons were logged
     assert got["QQQ"]["bars"] == 1
+
+
+def test_the_day_line_counts_refusals_by_their_first_reason():
+    dec = [{"root": "SPY", "action": "signal-refused",
+            "signals": [{"gates": {"trend": {"ok": False}, "contract": {"ok": False}}, "reason": "trend"},
+                        {"gates": {"contract": {"ok": False}}, "reason": "delta-below-floor"}]},
+           {"root": "SPY", "action": "entry-refused",
+            "signals": [{"gates": {"trend": {"ok": True}}, "reason": "guard-max-entries"}]},
+           {"root": "SPY", "action": "entered", "signals": [{"gates": {"trend": {"ok": True}}, "reason": None}]}]
+    got = review.day_line(dec)["SPY"]
+    assert got["refused_for"] == {"trend": 1, "delta-below-floor": 1, "guard-max-entries": 1}
+    assert got["entered"] == 1 and got["refused_by"] == {"trend": 1, "contract": 2}
 
 
 def test_the_verdict_is_written_once(tmp_path):

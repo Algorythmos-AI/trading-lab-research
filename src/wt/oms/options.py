@@ -120,6 +120,7 @@ class OptionsOMS:
         self.sleep = sleep
         self.wait_s = wait_s
         self.orders_sent = 0
+        self.refused: dict[str, Any] | None = None    # why the last entry was refused before it left (the decision log)
 
     # ---- plumbing ----------------------------------------------------------------------------
     def _save(self, p: OptionPlan) -> None:
@@ -184,9 +185,12 @@ class OptionsOMS:
         p.state = "entering"
         self._save(p)
         order = Order(p.entry_id, p.symbol, "buy", 1, "limit", limit_price=round(p.limit, 2), tif="day")
+        self.refused = None
         try:
             got = self._send(p, order, entry=True)
         except (GuardRejected, BrokerRejected) as e:
+            self.refused = {"by": "guard", "code": e.code, **e.detail} if isinstance(e, GuardRejected) \
+                else {"by": "broker", "code": "broker-refused"}
             p.state = "rejected"
             self.note(p, "entry-refused", str(e)[:160])
             return

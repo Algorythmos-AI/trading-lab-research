@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { computeHealth } from "@/lib/health";
-import { cleanSnapshot, fixture } from "./helpers";
+import { cleanSnapshot, fixture, fixtureV3 } from "./helpers";
 
 // Inside the 2026-09-29 window (11:30Z-22:00Z) and 10 minutes after the clean snapshot.
 const IN_WINDOW = new Date("2026-09-29T12:10:00Z");
@@ -27,6 +27,12 @@ describe("computeHealth", () => {
     expect(codes(h)).toEqual(["kill", "job:routine", "disk", "swap", "preflight"]); // 4 GB: under the 15 GB to keep
     expect(h.reasons.find((r) => r.code === "job:routine")?.text).toBe("Pre-market routine failed (exit 1).");
     expect(h.reasons.find((r) => r.code === "preflight")?.text).toMatch(/^5 preflight checks failing: on main, /);
+  });
+
+  it("reads the served fixture by the clock: RED inside a trading window, AMBER outside (the Overview e2e takes either)", () => {
+    expect(computeHealth(fixtureV3(), new Date("2026-10-23T15:54:00Z")).level).toBe("red");
+    expect(codes(computeHealth(fixtureV3(), new Date("2026-10-23T15:54:00Z")))[0]).toBe("stopped");
+    expect(computeHealth(fixtureV3(), new Date("2026-10-23T06:12:00Z")).level).toBe("amber");
   });
 
   describe("RED rules", () => {
