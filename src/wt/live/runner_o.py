@@ -42,6 +42,11 @@ KILLS = (ROOT / "KILL", OPT / "KILL")
 LOCK = "paper-o-runner"
 ARM_AT = dt.time(9, 25)
 EXPIRY_POLICIES = ("same_day", "nearest")      # config/options_clone.yaml names.expiry (DEC-0034)
+# The order a refused signal's reason is chosen in: what closes entries for everyone, then the strategy's gates, then
+# the contract. The decision log names the first that failed; `gates` keeps every one.
+REASON_ORDER = ("kill", "latch", "off", "open-position", "loss-pause", "cooldown", "stalled", "event",
+                "trend", "extension", "room", "reach", "shock", "contract")
+REASON_CODE = {"off": "entries-off", "stalled": "stock-feed-stalled"}
 CONNECT_TRIES, CONNECT_WAIT_S = 5, 60.0
 DATA_HOST = "https://data.alpaca.markets"
 PAPER_HOST = "https://paper-api.alpaca.markets"
@@ -707,7 +712,7 @@ class Runner:
             sigs = setups.retest(two, near, tape.atr, self.cfg["setups"]["retest"]) + \
                 setups.rejection(two, near, self.cfg["setups"]["rejection"])
             rec["signals"] = []
-            entered = False
+            entered = refused = False
             acted = {(q.root, q.signal_bar, q.setup, q.side) for q in self.today()}
             for sig in sigs:
                 if entered:
@@ -716,6 +721,7 @@ class Runner:
                     rec.setdefault("signals", []).append({"setup": sig.setup, "side": sig.side, "already": True})
                     continue
                 iv = None
+                chain_ok = True
                 try:
                     raw = self.feeds.chain(root, nm.expiry or self.day)
                     quotes = chain.with_model(chain.parse_snapshots(raw), tape.close, now)
@@ -723,7 +729,7 @@ class Runner:
                               key=lambda q: abs(q.contract.strike - tape.close), default=None)
                     iv = atm.iv if atm else None
                 except (TransportError, requests.RequestException):
-                    quotes = []
+                    quotes, chain_ok = [], False
                 g = setups.gate(sig, tape, tapes.get("SPY"), nm.marks,
                                 session.remaining_move(tape.close, iv, now, self.ck), self.cfg["gates"])
                 for k, v in blocks.items():
@@ -732,8 +738,10 @@ class Runner:
                                     {**self.cfg["contract"], "quote_stale_flat_s": self.cfg["feeds"]["quote_stale_flat_s"]},
                                     nm.oi, self.account_holds, late)
                 g.add("contract", choice.quote is not None, choice.reasons)
-                rec["signals"].append({"setup": sig.setup, "side": sig.side, "level": sig.level.name,
-                                       "entry": sig.entry, "gates": g.as_json()})
+                one: dict[str, Any] = {"setup": sig.setup, "side": sig.side, "level": sig.level.name,
+                                       "entry": sig.entry, "gates": g.as_json(),
+                                       **self.logged_refusal(g, sig, nm, choice, chain_ok, streak, last_loss)}
+                rec["signals"].append(one)
                 q = choice.quote
                 if not g.ok or q is None or q.ask is None:
                     continue
@@ -756,11 +764,82 @@ class Runner:
                     self.sending = ""
                 self.write("entry_sent", trade_id=p.trade_id, symbol=p.symbol, setup=p.setup, side=p.side,
                            level=p.level, limit=p.limit, quoted_ask=p.quoted_ask, quote_age_s=age, state=p.state)
+                if p.state == "rejected" and self.oms.refused is not None:   # the guard or the broker said no
+                    why = dict(self.oms.refused)
+                    by, code = why.pop("by"), why.pop("code")
+                    one |= {"reason": code if by == "broker" else f"guard-{code}", "failed": [by], "why": why}
+                    refused = True
                 if p.state == "open":
                     self.on_fill(p)
                 entered = True
-            rec["action"] = "entered" if entered else ("signal-refused" if sigs else "no-setup")
+            rec["action"] = ("entry-refused" if refused else "entered") if entered else \
+                ("signal-refused" if sigs else "no-setup")
             self.decision(rec)
+
+    def logged_refusal(self, *a: Any) -> dict[str, Any]:
+        try:
+            return self.refusal(*a)
+        except Exception as e:  # noqa: BLE001 — the decision log must never cost a trade
+            return {"log_fault": e.__class__.__name__}          # no `reason`: the review counts it unlogged
+
+    def refusal(self, g: setups.Gates, sig: setups.Signal, nm: Name, choice: chain.Choice, chain_ok: bool,
+                streak: int, last_loss: dt.datetime | None) -> dict[str, Any]:
+        """The decision log's account of one signal: the contract it would have bought (its expiry and whether its
+        greeks were modelled), and when refused, the first gate that refused it (REASON_ORDER) as a code, every gate
+        that refused it, and the numbers against the first. Logging only: nothing here decides anything."""
+        contract = chain.contract_detail(choice.quote) if choice.quote is not None else \
+            {k: choice.miss[k] for k in ("expiry", "modelled", "delta")} if choice.miss is not None else \
+            {"expiry": (nm.expiry or self.day).isoformat(), "modelled": None, "delta": None}
+        out: dict[str, Any] = {"contract": contract, "reason": None, "failed": [], "why": {}}
+        failed = [k for k in REASON_ORDER if k in g.checks and not g.checks[k][0]]
+        failed += [k for k in g.failed if k not in failed]
+        if not failed:
+            return out
+        first = failed[0]
+        value = g.checks[first][1]
+        gc = self.cfg["gates"]
+        why: dict[str, Any] = {}
+        code = REASON_CODE.get(first, first)
+        if first == "latch":
+            why = {"kind": value}
+        elif first == "off":
+            why = {"codes": sorted(self.off)}
+        elif first == "open-position":
+            why = {"open": sum(p.active for p in self.plans), "max": self.lim.max_open_positions}
+        elif first == "loss-pause" and last_loss is not None:
+            until = last_loss + dt.timedelta(minutes=float(self.cfg["day"]["loss_pause_min"]))
+            why = {"losses": streak, "until": until.astimezone(NEW_YORK).strftime("%H:%M")}
+        elif first == "cooldown" and nm.cooldown_until is not None:
+            why = {"until": nm.cooldown_until.astimezone(NEW_YORK).strftime("%H:%M")}
+        elif first == "stalled":
+            why = {"max_s": float(self.cfg["feeds"]["bar_stall_s"])}
+        elif first == "event":
+            why = {"event": value}
+        elif first == "trend":
+            why = dict(value) if isinstance(value, Mapping) else {}
+        elif first == "extension":
+            why = {"atr": value, "max": float(gc["max_extension_atr"])}
+        elif first == "room":
+            why = {"multiple": value.get("multiple") if isinstance(value, Mapping) else None,
+                   "min": float(gc["min_room_multiple"])}
+        elif first == "reach":
+            nxt = setups.next_level(sig.side, sig.entry, nm.marks, sig.level.price)
+            why = {"distance": None if nxt is None else round(abs(nxt.price - sig.entry), 4), "remaining_move": value}
+        elif first == "shock":
+            why = {"word": value}
+        elif first == "contract":
+            if not chain_ok:
+                code = "chain-unavailable"
+            elif choice.miss is not None:
+                code = str(choice.miss["reason"])
+                why = {k: v for k, v in choice.miss.items() if k not in ("reason", "expiry", "modelled", "delta")}
+                if code == "delta-below-floor":
+                    why["delta"] = choice.miss.get("delta")
+            else:
+                code = next(iter(choice.reasons), "no-contract-of-the-expiry")
+            why["candidates"] = sum(choice.reasons.values()) if choice.miss is not None else 0
+        out |= {"reason": code, "failed": failed, "why": why}
+        return out
 
     # ---- the dashboard -----------------------------------------------------------------------
     def publish(self, final: bool = False) -> None:

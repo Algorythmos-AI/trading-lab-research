@@ -142,6 +142,13 @@ def entry_limit(ask: float, buffer_pct: float, cap: float) -> float:
 class Choice:
     quote: Quote | None
     reasons: dict[str, int]      # why each refused contract was refused, counted
+    miss: dict[str, Any] | None = None   # when none passed: the refused contract nearest the stock, why, its numbers
+
+
+def contract_detail(q: Quote) -> dict[str, Any]:
+    """What the decision log keeps of a contract: its expiry, whether its greeks were modelled here, its delta."""
+    return {"expiry": q.contract.expiry.isoformat(), "modelled": q.modelled,
+            "delta": None if q.delta is None else round(abs(q.delta), 4)}
 
 
 def pick(quotes: Sequence[Quote], root: str, side: str, expiry: dt.date, spot: float, now: dt.datetime,
@@ -156,9 +163,14 @@ def pick(quotes: Sequence[Quote], root: str, side: str, expiry: dt.date, spot: f
     stale_s = float(cfg.get("quote_stale_flat_s", 60))
     reasons: dict[str, int] = {}
     ok: list[Quote] = []
+    near: tuple[float, float, str, Quote] | None = None
 
     def no(why: str) -> None:
+        nonlocal near
         reasons[why] = reasons.get(why, 0) + 1
+        key = (abs(q.contract.strike - spot), q.contract.strike, why, q)
+        if near is None or key[:2] < near[:2]:
+            near = key
 
     for q in quotes:
         c = q.contract
@@ -187,5 +199,28 @@ def pick(quotes: Sequence[Quote], root: str, side: str, expiry: dt.date, spot: f
         else:
             ok.append(q)
     if not ok:
-        return Choice(None, reasons or {"no-contract-of-the-expiry": 1})
+        return Choice(None, reasons or {"no-contract-of-the-expiry": 1},
+                      None if near is None else _miss(near[3], near[2], now, cfg, floor, min_vol, stale_s, open_interest))
     return Choice(min(ok, key=lambda q: (abs(q.contract.strike - spot), q.contract.strike)), reasons)
+
+
+def _miss(q: Quote, why: str, now: dt.datetime, cfg: Mapping[str, Any], floor: float, min_vol: float,
+          stale_s: float, open_interest: Mapping[str, float]) -> dict[str, Any]:
+    """The refused contract nearest the stock: why, and the number against the gate that refused it."""
+    out: dict[str, Any] = {"reason": why, **contract_detail(q)}
+    age = q.age_s(now)
+    if why == "stale-quote":
+        out |= {"age_s": None if age is None else round(age, 1), "max_s": stale_s}
+    elif why == "delta-below-floor":
+        out |= {"floor": floor}
+    elif why == "premium-over-cap":
+        out |= {"ask": q.ask, "max": float(cfg["max_ask"])}
+    elif why == "spread-too-wide" and q.ask is not None and q.bid is not None:
+        out |= {"spread": round(q.ask - q.bid, 4), "max": float(cfg["max_spread"]),
+                "spread_pct": round((q.ask - q.bid) / q.mid * 100, 2) if q.mid else None,
+                "max_pct": float(cfg["max_spread_pct_of_mid"])}
+    elif why == "volume-below-floor":
+        out |= {"volume": q.volume, "min": min_vol}
+    elif why == "open-interest-below-floor":
+        out |= {"open_interest": open_interest.get(q.contract.symbol, 0.0), "min": float(cfg["min_open_interest"])}
+    return out
