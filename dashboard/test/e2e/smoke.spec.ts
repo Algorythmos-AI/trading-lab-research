@@ -185,7 +185,12 @@ test("the Overview leads with the owner's own trading, then the robots and the l
   await expect(page.getByRole("heading", { name: "Profit and loss" })).toBeVisible();
   await expect(page.getByRole("heading", { name: /^Your patterns in / })).toBeVisible();
   await expect(page.getByRole("heading", { name: "The robots, paper money only" })).toBeVisible();
-  await expect(page.getByTestId("health-line")).toBeVisible();
+  // The fixture's snapshot is weeks old and the server runs on the real clock: inside a trading window that is RED
+  // ("stopped") and the health shows as the banner at the top, otherwise as the line at the foot. Exactly one of them.
+  const healthLine = page.getByTestId("health-line");
+  const healthBanner = page.locator('section[aria-labelledby="health-title"]');
+  await expect(healthLine.or(healthBanner)).toHaveCount(1);
+  await expect(healthLine.or(healthBanner)).toBeVisible();
   // The lab's own panels moved: the gates to Research, the jobs and decisions to Operations.
   await expect(page.getByRole("heading", { name: "Gate tracker" })).toHaveCount(0);
   await page.goto("/research");
