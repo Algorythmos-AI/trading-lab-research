@@ -65,6 +65,16 @@ describe("today's focus", () => {
     expect(html).toContain("Hold support");
   });
 
+  it("spells out each side in plain words, with the codes written out and a glossary", () => {
+    const html = renderToStaticMarkup(createElement(FocusStrip, { e: withFocus() }));
+    expect(html).toContain("CALL if it breaks up");
+    expect(html).toContain("PUT if it breaks down");
+    expect(html).toContain("last week&#x27;s low");
+    expect(html).toContain("Limit order about");
+    expect(html).toContain("What do the codes mean?");
+    expect(html).toContain("loses at most $50");
+  });
+
   it("draws nothing without a focus block", () => {
     expect(renderToStaticMarkup(createElement(FocusStrip, { e: v1 }))).toBe("");
   });
