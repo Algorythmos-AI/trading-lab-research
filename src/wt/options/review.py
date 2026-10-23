@@ -110,11 +110,13 @@ def review(rows: Sequence[Mapping[str, Any]], trials: Sequence[str] = SETUPS) ->
 
 
 def day_line(decisions: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
-    """Per name for one session: bars looked at, setups formed, refusals by gate, entries."""
+    """Per name for one session: bars looked at, setups formed, refusals by gate (every gate that said no), refusals
+    by reason (the first that said no, or the guard's or broker's code), entries. Rows written before the reason was
+    logged count under `unlogged`."""
     out: dict[str, dict[str, Any]] = {}
     for d in decisions:
         root = str(d.get("root"))
-        n = out.setdefault(root, {"bars": 0, "setups": 0, "entered": 0, "refused_by": {}})
+        n = out.setdefault(root, {"bars": 0, "setups": 0, "entered": 0, "refused_by": {}, "refused_for": {}})
         n["bars"] += 1
         for s in d.get("signals") or []:
             if s.get("already"):
@@ -123,5 +125,8 @@ def day_line(decisions: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, Any]
             for g, v in (s.get("gates") or {}).items():
                 if isinstance(v, Mapping) and not v.get("ok"):
                     n["refused_by"][g] = n["refused_by"].get(g, 0) + 1
+            why = s.get("reason") if "reason" in s else ("unlogged" if d.get("action") != "entered" else None)
+            if why:
+                n["refused_for"][str(why)] = n["refused_for"].get(str(why), 0) + 1
         n["entered"] += d.get("action") == "entered"
     return out

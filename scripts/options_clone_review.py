@@ -62,7 +62,8 @@ def main(argv: list[str] | None = None) -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(doc, indent=1))
     for name, n in sorted(doc["names"].items()):
-        print(f"{name}: {n['bars']} bars, {n['setups']} setups, {n['entered']} entered, refused by {n['refused_by']}")
+        print(f"{name}: {n['bars']} bars, {n['setups']} setups, {n['entered']} entered, refused by {n['refused_by']}, "
+              f"first refused by {n['refused_for']}")
     for s, f in doc["setups"].items():
         print(f"{s}: {f['trades']} trades in {f['sessions']} sessions, mean on premium {f.get('mean_rop')}, "
               f"range by session {f.get('ci_session')}, verdict {f['verdict']} ({'; '.join(f['why'])})")

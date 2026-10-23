@@ -18,7 +18,7 @@ Its numbers are frozen in `config/options_clone.yaml` and `config/risk.yaml` key
 | What | Where |
 |---|---|
 | The record (hash-chained) | `data/live/options_journal.jsonl` |
-| One decision per name per finished 2-minute bar | `var/options/decisions/<date>.jsonl` |
+| One decision per name per finished 2-minute bar; each signal's `reason` (the first gate that refused it, or the guard's or broker's code), `failed`, `why` (the numbers against it) and `contract` (expiry, whether its greeks were modelled) | `var/options/decisions/<date>.jsonl` |
 | One plan file per trade | `var/options/plans/plan_<date>-O-<n>.json` |
 | Loss latches | `var/options/latches/{day,week,drawdown}` |
 | Log | `logs/paper_o_<YYYYMMDD>.log`; `journalctl -u wt-paper-o` shows only start and exit |
