@@ -112,8 +112,7 @@ JOBS: dict[str, Job] = {j.name: j for j in (
         et="Fri 20:00", runtime_max_h=4),
     Job("dashboard", "com.wt.dashboard", 0, 0, ("-m", "wt.ops.publish"), "backtest", "dashboard", deadline_min=6,
         trading=False, interval_s=900, preflight=False,
-        # Minute 3, not 0: the routine writes each stage file at about :02, and it stays clear of the crypto cycle
-        # (:00:10) and the crypto publish (:01).
+        # Minute 3, not 0: the routine writes each stage file at about :02.
         calendars=("Mon..Fri 07..17:03/5:00 America/New_York", "*:03/15:00 UTC"),
         what="Collect status, sanitize, publish to the dashboard: every 5 minutes in the US session, every 15 otherwise",
         runtime_max_h=0.25),
@@ -130,43 +129,20 @@ JOBS: dict[str, Job] = {j.name: j for j in (
         what="Publish the options paper account's open positions, read only: every 5 minutes in the US session, every 15 otherwise",
         runtime_max_h=0.2),
     # ADR 0007: twice an hour the host says, at most once a day, when a deploy would be accepted. It deploys
-    # nothing. Minutes 20 and 50: clear of the bar cycles (:00:10 and each quarter) and of both publishers.
+    # nothing. Minutes 20 and 50: clear of both publishers.
     Job("deploy-notify", "com.wt.deploy-notify", 0, 0, ("-m", "wt.ops.deploy", "ready"), "backtest", "deploy_notify",
         deadline_min=5, trading=False, interval_s=1800, preflight=False, calendars=("*:20/30:00 UTC",),
         what="Tell the owner when a deploy is ready (main ahead, green, gate open); it never deploys",
         runtime_max_h=0.2),
     # ADR 0008: once an hour the host deploys the tip of main itself, when a deploy typed by the owner would be
     # accepted: gate open and staying open, main green and settled, nothing in the release that needs sudo. It
-    # runs the same transaction as `wt-deploy deploy` and pages on every deploy. Minute 35: clear of the bar
-    # cycles, both publishers and the notice. Inside a run no switch starts later than 25 minutes in, so the
+    # runs the same transaction as `wt-deploy deploy` and pages on every deploy. Minute 35: clear of both
+    # publishers and the notice. Inside a run no switch starts later than 25 minutes in, so the
     # 50-minute deadline is never reached in the middle of one; systemd's limit also covers the wait for a deploy.
     Job("deploy-auto", "com.wt.deploy-auto", 0, 0, ("-m", "wt.ops.deploy", "auto"), "backtest", "deploy_auto",
         deadline_min=50, trading=False, interval_s=3600, preflight=False, calendars=("*:35:00 UTC",),
         what="Deploy the tip of main when the owner's own deploy would be accepted; dry without var/deploy/AUTO_ON",
         runtime_max_h=1.75),
-    # The crypto desk (ADR 0005) runs around the clock as two interval jobs on UTC calendar boundaries: one bar
-    # cycle ten seconds after each 15-minute close, and its publish a minute after that. Neither is a trading job
-    # for the equity deploy gate: a deploy waits for a cycle in flight (wt.ops.deploy.quiesced) instead.
-    Job("crypto", "com.wt.crypto", 0, 0, ("-m", "wt.crypto.cycle"), "backtest", "crypto", deadline_min=5,
-        trading=False, interval_s=900, calendar="*:0/15:10", desk="crypto",
-        what="Crypto desk bar cycle: data, quality, exits, entries, evidence; after every 15-minute close",
-        runtime_max_h=0.2),
-    Job("dashboard-crypto", "com.wt.dashboard-crypto", 0, 0, ("-m", "wt.crypto.snapshot"), "backtest",
-        "dashboard_crypto", deadline_min=6, trading=False, interval_s=900, calendar="*:1/15:00", desk="crypto",
-        preflight=False, what="Publish the crypto desk's snapshot to the dashboard every 15 minutes",
-        runtime_max_h=0.25),
-    # The challengers (DEC-0016, 5): once a day, in the quiet hours between the US close and the pre-market
-    # routine (03:30, not 02:30: that half hour does not exist on the night US clocks go forward). Most runs only check retirements and take seconds; the first of an ISO week draws up to two new
-    # ones and backtests each (about 200 two-year runs). Not a trading job: a deploy waits for it instead.
-    Job("crypto-challengers", "com.wt.crypto-challengers", 18, 30, ("-m", "wt.crypto.challengers"), "backtest",
-        "crypto_challengers", deadline_min=60, trading=False, et="Mon..Sun 03:30", desk="crypto",
-        what="Crypto challengers: retire, draw at most two a week, register, backtest (gate C1), admit",
-        runtime_max_h=1.25),
-    # The learning job (DEC-0016, 2 to 4), after the challengers: every signal's outcome, the model's checkpoint
-    # tests, and once a week the retraining, which runs in the machine-learning environment as its own process.
-    Job("crypto-learn", "com.wt.crypto-learn", 19, 30, ("-m", "wt.crypto.learn"), "backtest", "crypto_learn",
-        deadline_min=90, trading=False, et="Mon..Sun 04:30", desk="crypto",
-        what="Crypto learning: signal outcomes, the model's promotion tests, weekly retraining", runtime_max_h=1.75),
     # The pipeline check: the radar, the options edition and its focus names verified against the tape and the option
     # listings. 08:55 New York: after the 08:50 focus refresh, before the clone arms at 09:25. 18:30: after the
     # evening edition (21:52 UTC). Reads only; pages on a failed check.

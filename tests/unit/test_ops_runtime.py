@@ -367,8 +367,8 @@ def test_a_moved_desks_job_starts_nothing_and_leaves_nothing(jobroot, monkeypatc
     pings: list[tuple] = []
     monkeypatch.setattr(jobs.hc, "ping", lambda *args, **kw: pings.append(args))
     ran = tmp / "ran"
-    for name in ("crypto", "dashboard-crypto", "crypto-challengers", "crypto-learn"):
-        assert JOBS[name].desk == "crypto"
+    for name in ("crypto", "dashboard-crypto", "crypto-challengers", "crypto-learn"):   # the desk's jobs, as they were
+        assert name not in JOBS and name in jobs.RETIRED_JOBS                         # DEC-0036: none is scheduled now
         assert jobs.run_job(_crypto_job(f"open({str(ran)!r}, 'w').close()", name), root, alerts=a) == 0
     assert not ran.exists()                              # no child process
     assert not d.state_dir.exists()                      # no fresh desk beside the real one
@@ -385,6 +385,25 @@ def test_without_the_marker_the_same_job_runs_as_before(jobroot, monkeypatch):
     ran = tmp / "ran"
     assert jobs.run_job(_crypto_job(f"open({str(ran)!r}, 'w').close()"), root, alerts=a) == 0
     assert ran.exists() and last_runs(tmp / "hb")["crypto"]["status"] == "ok"
+
+
+def test_a_leftover_unit_of_a_retired_job_exits_0_and_runs_nothing(jobroot, monkeypatch, capsys):
+    """DEC-0036: the crypto jobs left the schedule, but their units stay installed until the owner runs
+    wt-install-units. `wt.ops.jobs run crypto` from such a unit must be a quiet no-op: exit 0 (no OnFailure page),
+    no lock, no heartbeat, no check-in ping, no child, and nothing in a log. A name that was never a job is still
+    a usage error."""
+    root, a, box, tmp = jobroot
+    pings: list[tuple] = []
+    monkeypatch.setattr(jobs.hc, "ping", lambda *args, **kw: pings.append(args))
+    monkeypatch.setattr(jobs, "run_job", lambda *args, **kw: (_ for _ in ()).throw(AssertionError("run_job called")))
+    for name in sorted(jobs.RETIRED_JOBS):
+        assert jobs.main(["run", name]) == 0
+        assert f"{name} is no longer a job in this release" in capsys.readouterr().err
+    assert pings == [] and box == [] and last_runs(tmp / "hb") == {}
+    assert not (tmp / "locks").exists() and not (root / "logs").exists()
+    with pytest.raises(SystemExit) as e:
+        jobs.main(["run", "no-such-job"])
+    assert e.value.code == 2
 
 
 def test_a_stocks_job_ignores_another_desks_marker(jobroot, monkeypatch):
@@ -568,20 +587,12 @@ def test_the_daily_summary_says_what_paper_b_did_in_r_and_never_in_money():
         assert "$" not in line and "311" not in line and "600" not in line
 
 
-def test_the_daily_summary_joins_its_lines_and_survives_a_missing_desk(tmp_path, monkeypatch):
+def test_the_daily_summary_joins_its_lines_and_has_no_crypto_line(tmp_path, monkeypatch):
     monkeypatch.setattr(jobs, "forward_summary", lambda: "Forward 2026-10-06: 1 trade(s), -0.18R total.")
     monkeypatch.setattr(jobs, "journal_since", lambda start, path=None: [
         {"event": "armed", "ts": "2026-10-06T12:30:06+00:00"}, {"event": "session_end", "outcome": "no_signal"}])
-    monkeypatch.setattr(jobs, "crypto_summary", lambda now: "Crypto: trend 1 open; break 1 open; dip 0 open.")
     start = dt.datetime(2026, 10, 6, 16, 40, tzinfo=dt.UTC)
-    text = jobs.daily_summary(start)
-    assert text == ("Paper B: no signal. Forward 2026-10-06: 1 trade(s), -0.18R total. "
-                    "Crypto: trend 1 open; break 1 open; dip 0 open.")
-    monkeypatch.setattr(jobs, "crypto_summary", lambda now: None)
+    assert jobs.daily_summary(start) == "Paper B: no signal. Forward 2026-10-06: 1 trade(s), -0.18R total."
     monkeypatch.setattr(jobs, "journal_since", lambda start, path=None: [])
     assert jobs.daily_summary(start) == "Forward 2026-10-06: 1 trade(s), -0.18R total."
-
-
-def test_the_crypto_line_never_raises(monkeypatch):
-    monkeypatch.setattr(jobs, "installed", lambda desk: (_ for _ in ()).throw(RuntimeError("bug")))
-    assert jobs.crypto_summary(dt.datetime(2026, 10, 6, 20, tzinfo=dt.UTC)) is None
+    assert not hasattr(jobs, "crypto_summary")                        # DEC-0036: the desk's line left with its jobs

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { DESK_HOME, deskOfPath, type DeskName } from "@/lib/desk";
+import { deskNote } from "@/lib/desk-state";
 import { cn } from "@/lib/utils";
 
 export const NAV = [
@@ -19,17 +20,8 @@ export const NAV = [
   { href: "/engineering", label: "Engineering" },
 ] as const;
 
-/** The crypto desk's sections (ADR 0005). Each desk has its own Engineering wiki; the Lab platform part is shared. */
-export const CRYPTO_NAV = [
-  { href: "/crypto", label: "Overview" },
-  { href: "/crypto/market", label: "Market" },
-  { href: "/crypto/strategy", label: "Strategy" },
-  { href: "/crypto/research", label: "Research" },
-  { href: "/crypto/learning", label: "Machine learning" },
-  { href: "/crypto/operations", label: "Operations" },
-  { href: "/crypto/risk", label: "Risk" },
-  { href: "/crypto/engineering", label: "Engineering" },
-] as const;
+/** The crypto desk is closed (DEC-0036, src/lib/desks.json): one page at /crypto and no sections. */
+export const CRYPTO_NAV: readonly { href: string; label: string }[] = [];
 
 /** The HFT desk's sections (ADR 0006). One for now; the desk lives in another repository and adds pages as it grows. */
 export const HFT_NAV = [{ href: "/hft", label: "Overview" }] as const;
@@ -45,6 +37,8 @@ export function NavTabs() {
     // On a phone the tab row scrolls sideways; keep the current section in view.
     listRef.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "center" });
   }, [pathname]);
+  // A closed desk has one page and no sections: no empty landmark either.
+  if (nav.length === 0 || (desk !== "stocks" && deskNote(desk).state === "closed")) return null;
   return (
     <nav aria-label="Sections" className="-mb-px overflow-x-auto [scrollbar-width:none]">
       <ul ref={listRef} className="flex min-w-max gap-1">

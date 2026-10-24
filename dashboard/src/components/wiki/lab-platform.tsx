@@ -28,7 +28,7 @@ export function LabPlatform({ s }: { s: Snapshot | null }) {
       <WikiPart
         id="lab-platform"
         title="Lab platform"
-        intro="Shared by both desks and identical on the Stocks and Crypto pages: the road every change takes, what is allowed to leave the host, and the machine the jobs run on."
+        intro="Shared by every desk the lab runs: the road every change takes, what is allowed to leave the host, and the machine the jobs run on."
       />
       <ShipSection s={s} lanes={lanes} />
       <RunsSection lanes={lanes} />

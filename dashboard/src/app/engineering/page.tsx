@@ -32,7 +32,7 @@ export default async function EngineeringPage() {
     <>
       <PageHeading
         title="Engineering"
-        intro="How the Stocks site works: where each page's data comes from and whether it is on time, what runs when, how the paper robot stays safe, and the lab platform it shares with the crypto desk. The dots are live."
+        intro="How the Stocks site works: where each page's data comes from and whether it is on time, what runs when, how the paper robot stays safe, and the lab platform every desk shares. The dots are live."
       />
       {result.status !== "ok" ? <NoSnapshot status={result.status} /> : null}
       <WikiLayout toc={TOC}>

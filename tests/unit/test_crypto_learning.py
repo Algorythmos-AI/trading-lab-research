@@ -15,8 +15,6 @@ from test_crypto_sleeves import B0, CFG, DAY, H4, book_of, break_rows, crypto, j
 
 from wt.core import ledger
 from wt.crypto import challengers, control, learn, outcomes, promotion, risk, rules, scorer
-from wt.ops import units
-from wt.ops.schedule import JOBS
 
 NOW = float(B0 + H4 + 10)
 LINEAGE = "m1:C=1"
@@ -500,14 +498,6 @@ def test_a_failed_training_changes_nothing_and_the_switch_stops_tests_and_traini
     assert called == [] and [r["kind"] for r in journal(d)][-2:] == ["signal", "outcome"]   # outcomes are still recorded
     d.chain_flag.write_text("x")
     assert learn.run(NOW, d, CFG, a, lambda *x: [], lambda desk: called.append(1)) == 2
-
-
-def test_the_learning_job_runs_daily_after_the_challengers_and_a_deploy_waits_for_it():
-    job = JOBS["crypto-learn"]
-    assert not job.trading and job.desk == "crypto" and job.interval_s is None
-    assert job.runtime_max_h * 60 > job.deadline_min > learn.TRAIN_TIMEOUT_S / 60
-    assert "OnCalendar=Mon..Sun 04:30 America/New_York" in units.timer(job)
-    assert "MemoryMax=2G" in units.service(job, Path("/r"))
 
 
 # ---------------------------------------------------------------- the dashboard's section

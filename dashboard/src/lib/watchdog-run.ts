@@ -12,6 +12,7 @@ import {
   type StoredText,
 } from "./blob";
 import { DESK_LABEL, DESK_PATHS, type DeskName } from "./desk";
+import { deskNote } from "./desk-state";
 import { logEvent } from "./log";
 import { sendNtfy, type Notice } from "./ntfy";
 import type { Snapshot } from "./types";
@@ -70,12 +71,15 @@ export const DESK_DEPS: Record<AddedDesk, WatchdogDeps> = { crypto: cryptoDeps, 
 /**
  * One tick for an added desk, or a skip while the desk is "new": it has never published and has no alert
  * state, so there is nothing to be late. Deploying the dashboard before the desk exists pages nobody.
+ * A desk the lab has closed (src/lib/desks.json) is not watched either: its last snapshot going stale is the
+ * decision, not an outage, and nothing is read or written for it.
  */
 export async function runDeskWatchdog(
   desk: AddedDesk,
   now: Date = new Date(),
   deps: WatchdogDeps = DESK_DEPS[desk],
 ): Promise<Record<string, unknown>> {
+  if (deskNote(desk).state === "closed") return { ok: true, desk, skipped: "closed" };
   const [latest, state] = await Promise.all([
     deps.readLatest().catch(() => undefined),
     deps.readState().catch(() => undefined),

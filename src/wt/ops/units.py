@@ -47,10 +47,6 @@ MEMORY: dict[str, tuple[str | None, str, str | None]] = {
     "dashboard": (None, "1G", "256M"),
     "options-live": (None, "512M", "128M"),
     "deploy-notify": (None, "256M", "64M"),
-    "crypto": (None, "512M", "128M"),
-    "dashboard-crypto": (None, "512M", "128M"),
-    "crypto-challengers": ("1G", "1536M", "256M"),
-    "crypto-learn": ("1536M", "2G", "512M"),
 }
 
 
