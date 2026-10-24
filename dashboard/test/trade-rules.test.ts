@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import fixtureDoc from "./fixtures/journal.v1.json";
 import { sessionView, type JournalDoc, type Trade } from "@/lib/journal";
@@ -5,6 +7,7 @@ import {
   breakSummary,
   DAY_LOSS_LIMIT,
   dayCheck,
+  EXP_0023,
   GROUPS,
   journalCurrent,
   MAX_PREMIUM,
@@ -114,7 +117,28 @@ describe("ruleEvidence", () => {
   it("always has the backtest rules, and nothing of the owner's with too few trades", () => {
     const ev = ruleEvidence([trade(10, "2026-10-14T14:00:00Z", "2026-10-14T14:01:00Z")]);
     expect(Object.keys(ev).sort()).toEqual(["levels", "retest"]);
-    expect(ev.levels!.source).toBe("backtest");
+    expect(ev.levels!.source).toBe("none"); // no experiment has measured it, and the page says so
+    expect(ev.retest!.source).toBe("backtest");
+    expect(ev.retest!.finding).toMatch(/^In EXP-0023 .* −0\.0015R over 636 cases .* −0\.0067R over 547; .* \+0\.0081R over 187 .* \+0\.0265R over 228\. Every 95% range spans zero/);
+  });
+
+  it("quotes EXP-0023 exactly as its record holds it, and every range there spans zero", () => {
+    const rec = JSON.parse(readFileSync(path.join(__dirname, "../../research/experiments/EXP-0023-options-rules-replication/result.json"), "utf8"));
+    const rules = rec.rules as Record<string, { replication: { n: number; avg_r: number; ci95: [number, number] } }>;
+    const pairs = [
+      [EXP_0023.breakHigh, "brk_PDH_close"],
+      [EXP_0023.breakLow, "brk_PDL_close"],
+      [EXP_0023.reclaimLow, "reclaim_PDL_close"],
+      [EXP_0023.rejectHigh, "reject_PDH_close"],
+    ] as const;
+    for (const [mine, key] of pairs) {
+      expect(mine).toEqual({ n: rules[key]!.replication.n, avgR: rules[key]!.replication.avg_r });
+      const [lo, hi] = rules[key]!.replication.ci95;
+      expect(lo < 0 && hi > 0).toBe(true);
+    }
+    expect(rec.id).toBe(EXP_0023.id);
+    expect([rec.start, rec.end]).toEqual(["2026-03-03", "2026-10-09"]);
+    expect(rec.names).toHaveLength(10);
   });
 
   it("measures each rule from the trades, comparing like with like", () => {

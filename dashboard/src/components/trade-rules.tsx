@@ -113,7 +113,7 @@ function EvidenceRow({ n, title, group, ev }: { n: number; title: string; group:
         {ev ? (
           <p className="text-muted-foreground text-[0.8125rem] leading-snug">
             <span className={cn("mr-1.5 rounded px-1 py-px text-[0.625rem] font-semibold tracking-wide uppercase", ev.source === "yours" ? "bg-info-soft text-info" : "bg-muted text-muted-foreground")}>
-              {ev.source === "yours" ? "Your trades" : "Backtest"}
+              {ev.source === "yours" ? "Your trades" : ev.source === "backtest" ? "Backtest" : "Not measured"}
             </span>
             {ev.finding}
           </p>

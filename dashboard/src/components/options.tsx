@@ -480,8 +480,8 @@ export function StructurePanel({ e }: { e: Options }) {
             <summary className="text-muted-foreground cursor-pointer text-xs">Why these two axes</summary>
             <ul className="text-muted-foreground mt-2 grid list-disc gap-1 pl-4 text-xs">
               <li>
-                Exploratory, with no registered experiment behind it yet: a close in the top quarter of the day&apos;s range was
-                followed by a higher high the next day 77.6% of the time, against 52.9% on an ordinary day (2 years, 10 names).
+                Not measured yet: no registered experiment has tested whether a close in the top or bottom quarter of the
+                day&apos;s range says anything about the next day. The axes show where each name sits, nothing more.
               </li>
               {e.expected_move_check?.inside_1d_pct != null ? (
                 <li>

@@ -1,6 +1,6 @@
 // The rules before every trade, and the evidence behind each one. Pure: no I/O; any clock is passed in.
 // The thresholds live here; every number about the owner's own trading is measured from the journal at render time,
-// so none of it is written into this repository. The market numbers are backtest statistics of the levels engine.
+// so none of it is written into this repository. The market numbers are EXP-0023's, held equal to its record by a test.
 import { INTRADAY_MAX_AGE_MIN, inUsSession, journalCheck } from "./feeds";
 import { etOffsetMin } from "./freshness";
 import { closeDay, daily, holdMinutes, nyTime, type SessionView, type Trade } from "./journal";
@@ -149,26 +149,24 @@ export const RULES: Rule[] = [
 export interface Evidence {
   /** One or two plain sentences with the numbers in them. */
   finding: string;
-  /** Where the numbers come from. */
-  source: "yours" | "backtest";
+  /** Where the numbers come from: the owner's trades, a registered experiment, or nothing measured yet. */
+  source: "yours" | "backtest" | "none";
   /** Two sides for a small bar pair. */
   compare?: { unit: string; a: { label: string; value: number }; b: { label: string; value: number } };
 }
 
 /**
- * Backtest statistics of the levels engine (hourly and daily bars of 10 large names), stock moves in R before option
- * costs. SAFE statistics only: counts, shares and R-multiples.
+ * EXP-0023, the replication of the four level rules registered by DEC-0028 (research/experiments/
+ * EXP-0023-options-rules-replication/result.json): cases and mean R on the stock, before option costs.
+ * test/trade-rules.test.ts holds these equal to the record, so a figure here cannot drift from it.
  */
-export const BACKTEST = {
-  reachLevel: { pctLow: 87, pctHigh: 91, period: "daily bars, 10 names, 2 years to Oct 2026" },
-  cross: { n: 1183, avgR: -0.005 },
-  retestHolds: { n: 546, avgR: 0.012, stoppedPct: 38 },
-  retestHoldsHigh: { n: 277, avgR: 0.068 },
-  retestFails: { n: 185, stoppedPct: 55 },
-  retestPeriod: "hourly bars, 10 names, Mar to Oct 2026",
-  insideExpectedMovePct: 85,
-  /** SPY 2-minute bars, 9 to 16 Oct 2026, every bar close as an entry either way, an at-the-money option of $1.65 at delta 0.5. */
-  noise: { tightStopPct: 10, tightNextBarPct: 17, stopNextBarPct: 1, period: "SPY 2-minute bars, 9 to 16 Oct 2026" },
+export const EXP_0023 = {
+  id: "EXP-0023",
+  period: "30-minute bars, 10 names, 3 Mar to 9 Oct 2026",
+  breakHigh: { n: 636, avgR: -0.0015 },
+  breakLow: { n: 547, avgR: -0.0067 },
+  reclaimLow: { n: 187, avgR: 0.0081 },
+  rejectHigh: { n: 228, avgR: 0.0265 },
 } as const;
 
 const MIN_SAMPLE = 8;
@@ -292,14 +290,15 @@ export function breakSummary(trades: readonly Trade[], sessions = 20): BreakSumm
 /** What the record says about each rule, keyed by rule id. A rule is missing when its sample is too small. */
 export function ruleEvidence(trades: readonly Trade[]): Record<string, Evidence> {
   const out: Record<string, Evidence> = {};
-  const b = BACKTEST;
+  const x = EXP_0023;
+  const r = (v: number) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(4)}R`;
   out.levels = {
-    source: "backtest",
-    finding: `Price reached yesterday's high or low on ${b.reachLevel.pctLow}–${b.reachLevel.pctHigh}% of days (${b.reachLevel.period}). The levels are reliable targets, which is why they are the map.`,
+    source: "none",
+    finding: "Not measured yet: no registered experiment has counted how often price reaches yesterday's high or low. The levels are the map because every entry rule is written against them.",
   };
   out.retest = {
     source: "backtest",
-    finding: `Entering on the first hourly close through yesterday's high or low averaged ${b.cross.avgR.toFixed(3)}R over ${count(b.cross.n)} trades: no edge. A retest that held did a little better (${b.retestHolds.avgR >= 0 ? "+" : ""}${b.retestHolds.avgR.toFixed(3)}R over ${count(b.retestHolds.n)}; +${b.retestHoldsHigh.avgR.toFixed(2)}R above yesterday's high), and a retest that failed was stopped out ${b.retestFails.stoppedPct}% of the time against ${b.retestHolds.stoppedPct}%. Neither is a proven edge (${b.retestPeriod}): the retest filters out bad entries, and the risk rules are what protect the account.`,
+    finding: `In ${x.id} (${x.period}), a close through yesterday's high averaged ${r(x.breakHigh.avgR)} over ${count(x.breakHigh.n)} cases and through the low ${r(x.breakLow.avgR)} over ${count(x.breakLow.n)}; a reclaim of the low ${r(x.reclaimLow.avgR)} over ${count(x.reclaimLow.n)} and a rejection at the high ${r(x.rejectHigh.avgR)} over ${count(x.rejectHigh.n)}. Every 95% range spans zero: no entry here is an edge, so the risk rules are what protect the account.`,
   };
   if (trades.length < MIN_SAMPLE) return out;
 
@@ -334,7 +333,7 @@ export function ruleEvidence(trades: readonly Trade[]): Record<string, Evidence>
   if (deep.length >= MIN_SAMPLE && shallow.length >= MIN_SAMPLE) {
     out.stop = {
       source: "yours",
-      finding: `${count(deep.length)} losing options were held after they had lost more than ${Math.round(PREMIUM_STOP * 100)}% of what they cost: ${money(sumOf(deep))} in all, ${money(avgOf(deep))} each. The ${count(shallow.length)} cut sooner cost ${money(avgOf(shallow))} each. Tighter is not safer on a same-day option: a ${b.noise.tightStopPct}% stop is about one ordinary ${CONFIRM_BAR_MINUTES}-minute bar, and ${b.noise.tightNextBarPct}% of entries would be stopped by the very next bar against ${b.noise.stopNextBarPct}% at −${Math.round(PREMIUM_STOP * 100)}% (${b.noise.period}). So the stop sits where the chart is wrong, and −${Math.round(PREMIUM_STOP * 100)}% is the most.`,
+      finding: `${count(deep.length)} losing options were held after they had lost more than ${Math.round(PREMIUM_STOP * 100)}% of what they cost: ${money(sumOf(deep))} in all, ${money(avgOf(deep))} each. The ${count(shallow.length)} cut sooner cost ${money(avgOf(shallow))} each. The stop sits where the chart says the trade is wrong, and −${Math.round(PREMIUM_STOP * 100)}% of the premium is the most it may cost.`,
       compare: { unit: "average per loser", a: { label: `Cut by −${Math.round(PREMIUM_STOP * 100)}%`, value: avgOf(shallow) }, b: { label: "Held past it", value: avgOf(deep) } },
     };
   }
