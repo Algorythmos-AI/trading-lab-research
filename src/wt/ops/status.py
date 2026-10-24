@@ -478,6 +478,21 @@ def src_routine(ctx: Ctx) -> dict:
             "launchd_err": _log_digest(ctx.deployed / "logs/launchd_routine.err", 6)}
 
 
+def stop_rule_view(rows: list[dict], now: dt.datetime) -> dict:
+    """Where B's pre-registered stop rule stands (DEC-0037): the record, each trigger against its line, and which
+    one fired. Counts, R and dates only. ``present`` is False when the config carries no rule, which the page says
+    loudly: then nothing stops B."""
+    from wt.risk import stop_rule
+    rule = stop_rule.load("B")
+    if rule is None:
+        return {"present": False}
+    rs = stop_rule.rs_of(rows)
+    fired = stop_rule.evaluate(rule, rows, now.astimezone(ET).date())
+    return {"present": True, "decision": rule.decision, "cum_r": round(sum(rs), 2),
+            "cum_r_max_loss": rule.cum_r_max_loss, "trades": len(rs), "review_at_trades": rule.review_at_trades,
+            "stop_date": rule.stop_date.isoformat(), "fired": fired.kind if fired else None}
+
+
 def src_paper(ctx: Ctx) -> dict:
     rows, bad = safeio.read_jsonl(ctx.deployed / "data/live/journal.jsonl")
     events = Counter(str(x.get("event")) for x in rows)
@@ -502,6 +517,7 @@ def src_paper(ctx: Ctx) -> dict:
             "trades": len(closed), "total_r": round(sum(rs), 3) if rs else 0.0,
             "mean_r": round(sum(rs) / len(rs), 3) if rs else None, "virtual": equity, "recent": recent,
             "g2": g2.summary(rows, replay=b_replay.load_records(_state(ctx, "forward/replay", "research/forward/replay"))),
+            "stop_rule": stop_rule_view(rows, ctx.now),
             "log": _log_digest(logs[-1]) if logs else None}
 
 
