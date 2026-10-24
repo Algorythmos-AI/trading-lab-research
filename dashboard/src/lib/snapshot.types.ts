@@ -373,6 +373,16 @@ export interface Snapshot {
         harness_days?: number | null;
         harness_agree?: number | null;
       } | null;
+      stop_rule?: {
+        present?: boolean | null;
+        decision?: string | null;
+        cum_r?: number | null;
+        cum_r_max_loss?: number | null;
+        trades?: number | null;
+        review_at_trades?: number | null;
+        stop_date?: string | null;
+        fired?: string | null;
+      } | null;
       log?: {
         file?: string | null;
         exists?: boolean | null;

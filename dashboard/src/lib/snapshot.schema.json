@@ -1766,6 +1766,66 @@
                 }
               }
             },
+            "stop_rule": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "present": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "decision": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 200
+                },
+                "cum_r": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "cum_r_max_loss": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "trades": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "review_at_trades": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "stop_date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 200
+                },
+                "fired": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 200
+                }
+              }
+            },
             "log": {
               "type": [
                 "object",
