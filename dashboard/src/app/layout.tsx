@@ -10,7 +10,7 @@ import { SnapshotFooter, type FooterSnapshot } from "@/components/client/snapsho
 import { SiteHeader } from "@/components/site-header";
 import { deskNote } from "@/lib/desk-state";
 import { requestTime } from "@/lib/now";
-import { loadCryptoSnapshot, loadHftSnapshot, loadSnapshot } from "@/lib/snapshot";
+import { loadCryptoSnapshot, loadHftSnapshot, loadSnapshot, type CryptoResult } from "@/lib/snapshot";
 import "./globals.css";
 
 export const dynamic = "force-dynamic";
@@ -41,7 +41,13 @@ function foot(
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const [result, crypto, hft] = await Promise.all([loadSnapshot(), loadCryptoSnapshot(), loadHftSnapshot()]);
+  // A closed desk's pages draw nothing from its snapshot (DEC-0036), so the layout does not read it; /api/health still does.
+  const cryptoClosed = deskNote("crypto").state === "closed";
+  const [result, crypto, hft] = await Promise.all([
+    loadSnapshot(),
+    cryptoClosed ? Promise.resolve<CryptoResult>({ status: "missing" }) : loadCryptoSnapshot(),
+    loadHftSnapshot(),
+  ]);
   const snap = result.status === "ok" ? result.snapshot : null;
   const hsnap = hft.status === "ok" ? hft.snapshot : null;
   const nonce = (await headers()).get("x-nonce") ?? undefined;
@@ -79,8 +85,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <SnapshotFooter
               desks={{
                 stocks: foot(snap),
-                // the closed desk's page is drawn from no snapshot (DEC-0036)
-                crypto: deskNote("crypto").state === "closed" ? null : foot(crypto.status === "ok" ? crypto.snapshot : null),
+                crypto: cryptoClosed ? null : foot(crypto.status === "ok" ? crypto.snapshot : null),
                 hft: hsnap ? { runId: hsnap.run_id ?? null, schemaVersion: hsnap.schema_version ?? null, withheld: null } : null,
               }}
             />

@@ -17,14 +17,25 @@ runbook as it stood while the desk ran is in git history before that date.
 
 ## Owner steps on the host
 
-1. Deploy this release (`wt-deploy deploy`; it changes owner paths, so the host does not take it on its own).
+1. Deploy this release: `sudo -u wt /usr/local/bin/wt-deploy deploy` (it changes owner paths, so the host does
+   not take it on its own).
 2. `sudo wt-install-units` (gate open): the installer removes the units that are no longer rendered, since
    `/etc/wt/installed-units.txt` lists them. Until it runs, a leftover `wt-crypto*.timer` still fires:
    `wt.ops.jobs run <name>` for a retired name exits 0 at once and runs nothing (no lock, no heartbeat, no
    ping, no child), so nothing pages. `var/crypto.MOVED` (ADR 0005 §7) is not needed for that, but it does no
    harm if it exists.
-3. Check: `systemctl list-timers 'wt-*'` shows no `wt-crypto*`; `make status` lists no crypto cadence line.
-4. healthchecks.io: pause or delete `wt-crypto`, `wt-crypto-challengers` and `wt-crypto-learn`, or they page
+   If `/etc/wt/installed-units.txt` is absent (a host installed before it was written), remove the units by hand
+   (`systemctl disable` takes no glob, and `wt-dashboard-crypto` does not match `wt-crypto*`):
+   ```
+   sudo systemctl disable --now wt-crypto.timer wt-dashboard-crypto.timer wt-crypto-challengers.timer wt-crypto-learn.timer
+   sudo rm -f /etc/systemd/system/wt-crypto*.{service,timer} /etc/systemd/system/wt-dashboard-crypto.{service,timer}
+   sudo systemctl daemon-reload
+   ```
+3. Remove the retired jobs' last heartbeats, which the publisher no longer reads but `make status` still lists:
+   `sudo -u wt rm -f /home/wt/trading/var/heartbeats/{crypto,dashboard-crypto,crypto-challengers,crypto-learn}.json`
+4. Check: `systemctl list-timers 'wt-*'` shows no `wt-crypto*`; `make status` lists no crypto job and no crypto
+   cadence line.
+5. healthchecks.io: pause or delete `wt-crypto`, `wt-crypto-challengers` and `wt-crypto-learn`, or they page
    for jobs that no longer run (see [dead-man switches](dead-man-switches.md)).
 
 ## Pages that can still arrive

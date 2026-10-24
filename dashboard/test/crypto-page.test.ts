@@ -23,17 +23,15 @@ describe("the crypto page with the desk closed", () => {
     expect(html).toMatch(/<h1[^>]*>Crypto<\/h1>/);
     expect(out).toContain("The crypto desk is closed.");
     expect(out).toContain("Closed on 24 October 2026 (DEC-0036)");
-    expect(out).toContain("Every registered rule failed gate C1.");
-    expect(out).toContain("12 registered trials and 6 challengers were run; all failed.");
+    expect(out).toContain("Gate C1: 12 registered trials and 6 challengers, 0 passed.");
   });
 
-  it("shows no digit but the date, the record id, the gate and the two counts, and nothing that looks like a reading", () => {
+  it("shows no digit but the date, the record id and the gate's counts, and nothing that looks like a reading", () => {
     const html = renderToString(CryptoPage());
     const out = text(html)
       .replace("24 October 2026", "")
       .replace("DEC-0036", "")
-      .replace("gate C1", "")
-      .replace("12 registered trials and 6 challengers", "");
+      .replace("Gate C1: 12 registered trials and 6 challengers, 0 passed.", "");
     expect(out).not.toMatch(/\d/);
     expect(out).not.toContain("—");
     expect(out).not.toMatch(/\$|USD|AUD|BTC|ETH|Kraken|sleeve|trend|break|dip|harvest/i); // no money, no venue, no setup names

@@ -154,7 +154,7 @@ def sync_ml(swap_wait_s: float | None = None) -> str:
             with contextlib.ExitStack() as stack:
                 if not all(stack.enter_context(job_lock(n, wait_s=wait, poll_s=2.0)) for n in ML_USERS):
                     Alerts().fire("deploy-ml", "ML environment built, not yet in use",
-                                  "The learning job is running in the old one. Trading is unaffected. The next deploy "
+                                  "A job in ML_USERS is running in the old one. Trading is unaffected. The next deploy "
                                   "swaps the new one in, or run: make sync-ml", 3)
                     return "pending"
                 shutil.rmtree(prev, ignore_errors=True)

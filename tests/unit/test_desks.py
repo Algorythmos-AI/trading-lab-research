@@ -213,12 +213,13 @@ def test_the_stocks_snapshot_shows_no_other_desks_alerts_or_jobs(tmp_path, monke
     monkeypatch.setattr(alerts, "ALERT_DIR", tmp_path / "alerts")
     monkeypatch.setattr(heartbeat, "HEARTBEAT_DIR", tmp_path / "hb")
     monkeypatch.setattr(alerts, "_send", lambda *a, **k: True)
-    monkeypatch.setitem(JOBS, "crypto", Job("crypto", "x", 0, 0, (), "paper", "crypto", trading=False,
-                                            interval_s=900, desk="crypto"))
     a = alerts.Alerts(topic="")
     a.fire("crypto:data-stale", "stale", "x")
     a.fire("job:routine", "routine failed", "x")
-    for name in ("crypto", "routine"):
+    # A retired crypto job's heartbeat and run rows are still on the host until the owner removes them (DEC-0036);
+    # they are not in JOBS, and must not be published as a stocks job's.
+    assert "crypto" in jobs.RETIRED_JOBS and "crypto" not in JOBS
+    for name in ("crypto", "crypto-learn", "routine"):
         heartbeat.Heartbeat(name, "abc").finish("ok", 0)
     monkeypatch.setattr(publish, "v3_views", lambda *a, **k: {})
     monkeypatch.setattr("wt.ops.window.load_sessions", lambda *a, **k: ({}, True))

@@ -275,7 +275,7 @@ test("the crypto page says the desk is closed, with no sections and no readings"
   expect(res?.status()).toBe(200);
   await expect(page.getByRole("heading", { level: 1, name: "Crypto" })).toBeVisible();
   await expect(page.getByText("Closed on 24 October 2026 (DEC-0036)")).toBeVisible();
-  await expect(page.getByText("Every registered rule failed gate C1. 12 registered trials and 6 challengers were run; all failed.")).toBeVisible();
+  await expect(page.getByText("Gate C1: 12 registered trials and 6 challengers, 0 passed.")).toBeVisible();
   // one page: no section tabs, no table, no health banner, and the header says the desk is closed
   await expect(page.getByRole("navigation", { name: "Sections" })).toHaveCount(0);
   await expect(page.locator("main table")).toHaveCount(0);

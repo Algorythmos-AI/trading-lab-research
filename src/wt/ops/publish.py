@@ -539,10 +539,14 @@ def extras(now: dt.datetime, root: Path = ROOT) -> dict[str, Any]:
     from wt.ops.window import load_sessions
     # ADR 0005: this is the stocks desk's snapshot. Another desk's jobs and alerts belong to its own.
     from wt.core.desk import desk_of_alert
+    from wt.ops.jobs import RETIRED_JOBS
     from wt.ops.schedule import JOBS
 
     def mine(job: object) -> bool:
-        return (JOBS[job].desk if isinstance(job, str) and job in JOBS else "stocks") == "stocks"
+        # A retired job (DEC-0036) is nobody's: its last heartbeat and runs must not be published as a stocks job's.
+        if not isinstance(job, str) or job in RETIRED_JOBS:
+            return False
+        return (JOBS[job].desk if job in JOBS else "stocks") == "stocks"
     runs = [r for r in recent_runs() if mine(r.get("job"))]
     cutoff = (now - dt.timedelta(days=14)).isoformat()
     kill = root / "KILL"
