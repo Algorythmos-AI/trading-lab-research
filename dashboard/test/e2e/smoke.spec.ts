@@ -507,8 +507,8 @@ test("the desk switch reaches the HFT desk and comes back", async ({ page }) => 
 test("health reports the HFT desk beside the crypto desk", async ({ request }) => {
   const body = await (await request.get("/api/health")).json();
   expect(body.desks).toEqual({
-    crypto: { snapshot: "ok", as_of: expect.any(String), run_id: expect.any(String) },
-    hft: { snapshot: "ok", as_of: "2026-10-09T14:30:00+00:00", run_id: "20261009T143000Z-fixture" },
+    crypto: { snapshot: "ok", as_of: expect.any(String), run_id: expect.any(String), state: "running" },
+    hft: { snapshot: "ok", as_of: "2026-10-09T14:30:00+00:00", run_id: "20261009T143000Z-fixture", state: "parked" },
   });
 });
 
