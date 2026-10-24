@@ -34,7 +34,7 @@ systemd units changed, and a record of who is accountable for what was merged.
    - A release that touches what `sudo wt-install-units` installs, or the deploy's own code (the deploy, the job
      runner, the checks reader, the gate, the locks, the dashboard guard), is not deployed. Neither is anything
      while the installed units differ from the code. The owner is told once a day, with the reason.
-   - It does not run the tests beside the two long crypto jobs.
+   - It does not run the tests beside a long, heavy job (`AUTO_BUSY`; none since the crypto desk closed, DEC-0036).
    - A target that failed its tests or its smoke test on the host is tried once more after six hours and then
      left; a newer commit is taken. What the owner rolled back is never put back.
 5. What the owner hears.

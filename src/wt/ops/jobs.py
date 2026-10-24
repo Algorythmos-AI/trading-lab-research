@@ -245,39 +245,11 @@ def paper_summary(rows: list[dict[str, Any]]) -> str | None:
     return f"Paper B: {words}" + (f", {sum(rs):+.2f}R on {len(rs)} closed trade(s)" if rs else "") + "."
 
 
-def crypto_summary(now: dt.datetime) -> str | None:
-    """One line on the crypto tournament sleeves: positions open and what closed today (UTC), in R only. None when
-    the desk is not on this host or has no sleeves. Never raises: a summary must not fail a job."""
-    try:
-        from wt.core.config import load_yaml
-        from wt.crypto import snapshot
-        desk = DESKS["crypto"]
-        if not installed(desk):
-            return None
-        rows = snapshot._jsonl(desk.journal)
-        view = snapshot.sleeves_view(desk, load_yaml("crypto.yaml"), rows, now)
-        if not view:
-            return None
-        day, fixed = now.date().isoformat(), snapshot.exit_r(rows)
-        parts = []
-        for v in view:
-            closed = [fixed[str(r.get("id"))] for r in rows if r.get("sleeve") == v["name"] and r.get("kind") == "exit"
-                      and str(r.get("t", "")).startswith(day) and str(r.get("id")) in fixed]
-            bit = f"{v['name']} {len(v['positions'])} open"
-            if closed:
-                bit += f", {len(closed)} closed today {sum(closed):+.2f}R"
-            parts.append(bit)
-        return "Crypto: " + "; ".join(parts) + "."
-    except Exception:  # noqa: BLE001
-        return None
-
-
-def daily_summary(start: dt.datetime, now: dt.datetime | None = None) -> str | None:
-    """The end-of-day message sent to the owner's phone after the forward test: Paper B, the forward test and the
-    crypto sleeves, one line each. Statuses, counts and R: never money."""
-    now = now or dt.datetime.now(dt.UTC)
+def daily_summary(start: dt.datetime) -> str | None:
+    """The end-of-day message sent to the owner's phone after the forward test: Paper B and the forward test, one
+    line each. Statuses, counts and R: never money."""
     day_start = dt.datetime.combine(start.astimezone(ET).date(), dt.time(0), tzinfo=ET)
-    lines = [paper_summary(journal_since(day_start)), forward_summary(), crypto_summary(now)]
+    lines = [paper_summary(journal_since(day_start)), forward_summary()]
     text = " ".join(x for x in lines if x)
     return text or None
 
@@ -329,11 +301,13 @@ def b_exposure() -> bool:
         return True
 
 
-# jobs with a healthchecks.io check. `crypto` pings every 15 minutes, at any hour: its check has no schedule gap.
-# The two daily crypto jobs alert when they fail; only a check notices when one never starts (a timer disabled
-# or never installed), which is how both were absent for their first day on the host.
-HC_JOBS = frozenset({"routine", "paper-b", "forward", "weekly", "crypto", "crypto-challengers", "crypto-learn",
-                     "paper-o"})
+# jobs with a healthchecks.io check
+HC_JOBS = frozenset({"routine", "paper-b", "forward", "weekly", "paper-o"})
+
+# Jobs that left the schedule (DEC-0036: the crypto desk is closed). A unit for one can still be installed and fire
+# until the owner runs `sudo wt-install-units`, which removes it. `main` exits 0 quietly for these: no lock, no
+# heartbeat, no ping, no child, and no failure for the unit's OnFailure= to page.
+RETIRED_JOBS = frozenset({"crypto", "dashboard-crypto", "crypto-challengers", "crypto-learn"})
 
 
 def hc_slug(job: Job) -> str:
@@ -480,12 +454,15 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m wt.ops.jobs")
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run")
-    r.add_argument("job", choices=sorted(JOBS))
+    r.add_argument("job", choices=sorted(JOBS.keys() | RETIRED_JOBS))
     r.add_argument("--preflight-only", action="store_true")
     sub.add_parser("status")
     a = ap.parse_args(argv)
     if a.cmd == "status":
         return status()
+    if a.job not in JOBS:                   # a leftover unit of a retired job: nothing to run, nothing wrong
+        print(f"{a.job} is no longer a job in this release (DEC-0036); nothing run", file=sys.stderr)
+        return 0
     return run_job(JOBS[a.job], preflight_only=a.preflight_only)
 
 

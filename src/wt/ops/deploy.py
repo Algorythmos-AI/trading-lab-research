@@ -106,9 +106,11 @@ ML_NEXT, ML_PREV = ".venv-ml.next", ".venv-ml.prev"
 # the first one's worktree under its running tests, and that first deploy was refused as "tests failed".
 STAGE_LOCK = "deploy-stage"
 ML_ENV_LOCK = "ml-env"                  # one build at a time; not the deploy lock, which every job waits on
-ML_USERS = ("crypto-learn",)            # jobs that run for long in the ML environment: the swap waits for them
+# Jobs that run for long in the ML environment: the swap waits for them. None since DEC-0036 closed the crypto desk
+# (its learning job left the schedule); the environment stays for tests/ml and wt.ml.
+ML_USERS: tuple[str, ...] = ()
 SWAP_WAIT_S = 120.0
-ML_IMPORT_CHECK = "import sklearn, lightgbm"       # what the learning job and the scorer import
+ML_IMPORT_CHECK = "import sklearn, lightgbm"       # what wt.ml and tests/ml import
 
 
 def sync_ml(swap_wait_s: float | None = None) -> str:
@@ -117,15 +119,14 @@ def sync_ml(swap_wait_s: float | None = None) -> str:
     in), "busy" (another build is running) or "failed".
 
     It is a separate environment so that the trading one stays exactly its lockfile. A failure here never fails
-    the deploy: the trading jobs do not import it, and the scorer falls back to unfiltered trading when it is
-    missing (wt.crypto.scorer).
+    the deploy: the trading jobs do not import it (tests/ml and wt.ml are the only users since DEC-0036).
 
     Nothing here holds a lock a trading job waits on. Every job waits for the deploy lock before it starts, so
     this runs after that lock is released, under a lock of its own: a large install delays no job. The new
     environment is built beside the live one and put in its place by two renames, so the scorer sees the old
-    one or the new one and never one that is half installed. The renames wait for the learning job, which
-    trains in the environment for up to an hour; if it is still running the built environment is kept and the
-    next call (the next deploy, or `make sync-ml`) only has to swap it in."""
+    one or the new one and never one that is half installed. The renames wait for any job in `ML_USERS` (none
+    today); if one is still running the built environment is kept and the next call (the next deploy, or
+    `make sync-ml`) only has to swap it in."""
     lock = ROOT / ML_LOCK
     if not lock.exists():
         return "none"
@@ -501,7 +502,9 @@ AUTO_TRIES = 2                          # a target that failed here is tried onc
 AUTO_RETRY_H = 6
 AUTO_ALIVE_H = 3                        # the notice of ADR 0007 steps aside only for a job seen running this recently
 AUTO_STUCK_H = 12                       # a release waiting longer than this is said, once a day
-AUTO_BUSY = ("crypto-challengers", "crypto-learn")     # long, heavy jobs: the tests are not run beside them
+# Long, heavy jobs: the tests are not run beside them. None since DEC-0036 closed the crypto desk (the challengers
+# and the learning job left the schedule); the check stays for the next such job.
+AUTO_BUSY: tuple[str, ...] = ()
 # What `sudo wt-install-units` installs is made from the first four. The rest is the deploy's own machinery: a
 # release that changes how the host deploys is not let in by the thing it changes.
 OWNER_PATHS = ("deploy/oci/bin", "deploy/oci/systemd", "src/wt/ops/schedule.py", "src/wt/ops/units.py",

@@ -318,19 +318,17 @@ def test_status_flags_an_interval_job_that_is_not_being_started(tmp_path, monkey
     assert runs([3, 18, 400])[0].startswith("  [FAIL] dashboard cadence: 2 of 4")
     assert jobs.cadence(now, tmp_path / "missing")[0].startswith("  [FAIL] dashboard cadence: 0 of 4")
 
-    # a desk this host doesn't run is not reported; once its state exists, its jobs are held to their interval too
+    # a desk this host doesn't run is not reported; one with state but no interval job (crypto, closed) adds nothing
     import dataclasses
 
     from wt.core import desk as desks
     runs([3, 18, 33, 48])
-    assert [x.split(":")[0] for x in jobs.cadence(now, tmp_path)] == [
-        "  [ok] dashboard cadence", "  [FAIL] options-live cadence", "  [FAIL] deploy-notify cadence",
-        "  [ok] deploy-auto cadence"]                # hourly: one missed run is allowed, so it is never late within the hour
+    expected = ["  [ok] dashboard cadence", "  [FAIL] options-live cadence", "  [FAIL] deploy-notify cadence",
+                "  [ok] deploy-auto cadence"]        # hourly: one missed run is allowed, so it is never late within the hour
+    assert [x.split(":")[0] for x in jobs.cadence(now, tmp_path)] == expected
     (tmp_path / "crypto").mkdir()
     monkeypatch.setitem(desks.DESKS, "crypto", dataclasses.replace(desks.DESKS["crypto"], state_dir=tmp_path / "crypto"))
-    assert [x.split(":")[0] for x in jobs.cadence(now, tmp_path)] == [
-        "  [ok] dashboard cadence", "  [FAIL] options-live cadence", "  [FAIL] deploy-notify cadence",
-        "  [ok] deploy-auto cadence", "  [FAIL] crypto cadence", "  [FAIL] dashboard-crypto cadence"]
+    assert [x.split(":")[0] for x in jobs.cadence(now, tmp_path)] == expected
 
 def test_the_stocks_publisher_runs_every_five_minutes_in_session_and_every_fifteen_otherwise():
     j = JOBS["dashboard"]

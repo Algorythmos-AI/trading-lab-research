@@ -220,7 +220,11 @@ def test_the_swap_waits_for_the_learning_job_and_a_built_environment_is_not_buil
     assert deploy.sync_ml() == "synced"
     lock.write_text("lightgbm==4.8.0 --hash=sha256:bb\n")
     calls.clear()
-    with locks.job_lock("crypto-learn") as training:                     # the weekly retraining is running in it
+    # The swap waits for the jobs in ML_USERS. A job that trains in the environment holds its own lock meanwhile.
+    # DEC-0036: no scheduled job trains in the environment any more, so the test names one of its own.
+    assert deploy.ML_USERS == () and all(n in deploy.JOBS for n in deploy.ML_USERS)
+    monkeypatch.setattr(deploy, "ML_USERS", ("ml-user",))
+    with locks.job_lock("ml-user") as training:                          # a retraining is running in it
         assert training
         assert deploy.sync_ml(swap_wait_s=0.0) == "pending"
         assert "4.7.0" in (live / "built-from").read_text()             # it keeps the environment it started in
@@ -229,13 +233,12 @@ def test_the_swap_waits_for_the_learning_job_and_a_built_environment_is_not_buil
     calls.clear()
     assert deploy.sync_ml() == "synced" and calls == [("resolve",)]     # only the swap was left: nothing is rebuilt
     assert "4.8.0" in (live / "built-from").read_text() and not (tmp_path / ".venv-ml.next").exists()
-    assert not locks.is_held("crypto-learn") and not locks.is_held(deploy.ML_ENV_LOCK)
+    assert not locks.is_held("ml-user") and not locks.is_held(deploy.ML_ENV_LOCK)
     # Two builds never run at once, and the second does not wait for the first.
     lock.write_text("lightgbm==4.9.0 --hash=sha256:cc\n")
     calls.clear()
     with locks.job_lock(deploy.ML_ENV_LOCK):
         assert deploy.sync_ml() == "busy" and calls == []
-    assert "crypto-learn" in deploy.JOBS and all(n in deploy.JOBS for n in deploy.ML_USERS)
 
 
 def test_an_environment_that_cannot_import_its_libraries_is_never_swapped_in(tmp_path, monkeypatch):

@@ -64,6 +64,15 @@ trigger, no tests, state lost on redeploy. It is rebuilt here, not copied.
      pass through `run_job`.
    - Removing the marker brings the desk back: that is the rollback.
 
+   Addendum, 2026-10-24: the crypto desk is closed by DEC-0036; it does not move, it ends. Its four jobs
+   (`crypto`, `dashboard-crypto`, `crypto-challengers`, `crypto-learn`) left the schedule in this release, so
+   `wt-install-units` removes their units once the owner runs it; until then a leftover unit runs
+   `wt.ops.jobs run <name>` for a job that is no longer in `JOBS`, and `main` exits 0 for those names
+   (`RETIRED_JOBS`) without a lock, a heartbeat, a ping or a child. The marker guard above still holds for any
+   job of a desk that is in `JOBS`. The desk's code (`wt.crypto`), its `Desk` record and `var/crypto` leave in
+   the next release; the dashboard shows one page at `/crypto` that states the record, and its watchdog does not
+   watch a closed desk.
+
 ## Consequences
 
 - A third desk (FX) is a new `Desk` record, a venue package and a snapshot schema; the shared layers do not

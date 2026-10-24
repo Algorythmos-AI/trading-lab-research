@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from decimal import Decimal
-from pathlib import Path
 
 import pytest
 
@@ -14,8 +13,6 @@ from test_crypto_sleeves import B0, CFG, H4, book_of, break_rows, crypto, journa
 
 from wt.core import ledger
 from wt.crypto import backtest, challengers, control, risk, rules, snapshot
-from wt.ops import deploy, units
-from wt.ops.schedule import JOBS
 
 NOW = float(B0 + H4 + 10)
 WEEK = challengers.week_of(NOW)
@@ -336,21 +333,6 @@ def test_the_run_refuses_on_a_broken_chain_or_a_book_that_is_not_the_tournaments
     d.chain_flag.unlink()
     odd = {**CFG, "learning": {**CFG["learning"], "challengers": {**CFG["learning"]["challengers"], "start_equity": 5000}}}
     assert challengers.run(NOW, d, odd, MARKET, a) == 2 and journal(d) == []
-
-
-# ---------------------------------------------------------------- the job
-def test_the_daily_job_is_not_a_trading_job_and_a_deploy_waits_for_it(tmp_path):
-    job = JOBS["crypto-challengers"]
-    assert not job.trading and job.desk == "crypto" and job.interval_s is None and job.deadline_min == 60
-    assert job.runtime_max_h * 60 > job.deadline_min + 1
-    assert "OnCalendar=Mon..Sun 03:30 America/New_York" in units.timer(job)     # an hour that exists every night
-    service = units.service(job, Path("/r"))
-    assert "MemoryMax=1536M" in service and "-m wt.ops.jobs run crypto-challengers" in service
-    from wt.ops.locks import job_lock
-    with job_lock("crypto-challengers"), deploy.quiesced(wait_s=0) as busy:
-        assert busy == ["crypto-challengers"]
-    with deploy.quiesced(wait_s=0) as busy:
-        assert busy == []
 
 
 # ---------------------------------------------------------------- the dashboard's list

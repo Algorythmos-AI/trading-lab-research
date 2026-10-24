@@ -37,29 +37,19 @@ def test_an_alert_belongs_to_one_desk():
     assert sum(d.alert_prefix is None for d in desks.DESKS.values()) == 1      # exactly one catch-all
 
 
-def test_the_stocks_jobs_are_untouched_and_the_crypto_desk_has_exactly_two_interval_jobs():
+def test_the_stocks_jobs_are_untouched_and_no_crypto_job_is_left_in_the_schedule():
+    """DEC-0036: the crypto desk is closed. Its four jobs left the schedule; its Desk record stays until the code goes."""
     stocks = {n: j for n, j in JOBS.items() if j.desk == "stocks"}
     assert set(stocks) == {"routine", "paper-b", "forward", "weekly", "dashboard", "options-live", "deploy-notify", "deploy-auto"}
     assert all(j.calendar is None for j in stocks.values())
-    crypto = {n: j for n, j in JOBS.items() if j.desk == "crypto"}
-    assert set(crypto) == {"crypto", "dashboard-crypto", "crypto-challengers", "crypto-learn"}
-    for name in ("crypto-challengers", "crypto-learn"):      # once a day, on a clock time (DEC-0016)
-        daily = crypto.pop(name)
-        assert not daily.trading and daily.interval_s is None and daily.et
-    for j in crypto.values():
-        # never a trading job (a 24/7 one would close the equity deploy gate for good); always on a UTC boundary
-        assert not j.trading and j.interval_s == 900 and j.calendar and j.deadline_min and j.et is None, j.name
-        assert j.runtime_max_h * 60 > j.deadline_min + 1
-    assert "OnCalendar=*:0/15:10 UTC" in units.timer(JOBS["crypto"])              # ten seconds after the bar closes
-    assert "OnCalendar=*:1/15:00 UTC" in units.timer(JOBS["dashboard-crypto"])    # the publish follows the cycle
-    assert "crypto" in jobs.HC_JOBS and jobs.hc_slug(JOBS["crypto"]) == "wt-crypto"
-    # Every job the crypto desk runs on a timer has a dead-man check, except the publisher (the dashboard's own
-    # watchdog pages on a stale snapshot). A job that only alerts on failure says nothing when it never starts.
-    daily = {"crypto-challengers", "crypto-learn"}
-    assert daily <= set(JOBS) and daily <= jobs.HC_JOBS
+    assert not [n for n, j in JOBS.items() if j.desk == "crypto"]
+    assert jobs.RETIRED_JOBS == {"crypto", "dashboard-crypto", "crypto-challengers", "crypto-learn"}
+    assert jobs.RETIRED_JOBS.isdisjoint(JOBS) and jobs.RETIRED_JOBS.isdisjoint(jobs.HC_JOBS)
+    assert not any(n in units.MEMORY for n in jobs.RETIRED_JOBS)
+    assert not any("crypto" in name for name in units.render_all(Path("/r")))
+    assert "crypto" in desks.DESKS                                     # the record, the state and the code leave next
     book = (ROOT / "docs/runbooks/dead-man-switches.md").read_text()
-    assert all(f"`{jobs.hc_slug(JOBS[n])}`" in book for n in ("crypto", *sorted(daily)))
-    assert "MemoryMax=512M" in units.service(JOBS["crypto"], Path("/r"))
+    assert all(f"`wt-{n}`" in book for n in jobs.HC_JOBS)            # every check the jobs still ping is in the runbook
 
 
 def test_the_backup_runs_every_day_now_that_evidence_is_written_at_weekends():
