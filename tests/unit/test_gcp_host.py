@@ -78,7 +78,8 @@ def test_the_runbook_says_how_to_go_private_without_breaking_the_deploy():
     book = (ROOT / "docs/runbooks/gcp-host.md").read_text()
     section = book.split("## Going private (owner)")[1].split("\n## ")[0]
     for needle in ("github_deploy.pub", "remote set-url origin git@github.com:Algorythmos-AI/trading-lab-research.git",
-                   "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl", "GH_TOKEN", "wt-set-secrets", "origin reachable", "never pushes through `origin`"):
+                   "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl", "GH_TOKEN", "wt-set-secrets", "origin reachable", "never pushes through `origin`",
+                   "credential.helper '!gh auth git-credential'", "deploy keys disabled"):
         assert needle in section, needle
     assert book.index("## Going private (owner)") < book.index("## Primary host (cutover v2, 2026-10)")
 

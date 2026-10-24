@@ -137,6 +137,20 @@ moment it is private, an unprepared host fails both: every hourly `deploy-auto` 
 and `wt-alert@` pages. Do these steps first, inside a deploy-gate window, and the flip changes nothing for the
 host. Deploy keys work on public repositories too, so there is no reason to wait.
 
+Two ways to let the host read a private repository. The organisation's policy had **deploy keys disabled** on
+2026-10-24, so the token path below is the one in use; the key path stays here for the day the policy changes.
+
+**Token path (in use).** The remote stays HTTPS; git asks `gh` for credentials, and `gh` reads `GH_TOKEN` from
+the secrets every unit already loads. Do step 3 first, then:
+```
+sudo -u wt git -C /home/wt/trading config credential.helper '!gh auth git-credential'
+sudo -u wt bash -c 'cd /home/wt/trading && set -a && . /run/wt-secrets/env && set +a && GIT_TERMINAL_PROMPT=0 git fetch --quiet origin main && echo fetch ok'
+```
+The one thing to remember is the token's expiry: `wt-deploy preflight` says "origin reachable" fails the day it
+lapses, and `sudo wt-set-secrets` with a new token is the fix. Then go to step 4.
+
+**Deploy-key path (when the organisation allows it).**
+
 1. **Register the host's deploy key** (read-only). Print the public half:
    `sudo -u wt cat /home/wt/.ssh/github_deploy.pub` (a host built before this runbook section has the key
    already; one without it: `sudo -u wt ssh-keygen -q -t ed25519 -N "" -C "trading-lab-host deploy key" -f /home/wt/.ssh/github_deploy`).
@@ -150,8 +164,8 @@ host. Deploy keys work on public repositories too, so there is no reason to wait
    sudo -u wt git -C /home/wt/trading remote set-url origin git@github.com:Algorythmos-AI/trading-lab-research.git
    sudo -u wt git -C /home/wt/trading fetch --quiet origin main && echo fetch ok
    ```
-3. **Give the host a token for what a deploy key cannot do:** reading the checks API and pushing the weekly
-   evidence branch. One fine-grained token, this repository only, permissions *Contents: read and write*,
+3. **Give the host a token** for reading the checks API, pushing the weekly evidence branch and, on the token
+   path, every fetch. One fine-grained token, this repository only, permissions *Contents: read and write*,
    *Pull requests: read and write*, *Checks: read* (Metadata is implied), with an expiry. Store it under `GH_TOKEN`
    with `sudo wt-set-secrets` (Enter keeps every other value). The evidence job pushes to GitHub over HTTPS with
    this token; it never pushes through `origin`.
