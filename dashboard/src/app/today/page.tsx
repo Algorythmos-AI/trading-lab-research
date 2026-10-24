@@ -56,7 +56,7 @@ export default async function TodayPage() {
             <OutcomeOnly s={result.snapshot} />
           </PaneBoundary>
           <PaneBoundary name="Scanner funnel">
-            <FunnelPanel v={scan(result.snapshot)} tradingDay={result.snapshot.market?.trading_day_et ?? null} />
+            <FunnelFrom s={result.snapshot} />
           </PaneBoundary>
           <details className="group grid gap-5" data-testid="robot-detail">
             <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-sm font-medium">
@@ -67,13 +67,13 @@ export default async function TodayPage() {
                 <TradingDetail s={result.snapshot} />
               </PaneBoundary>
               <PaneBoundary name="Why no trade">
-                <WhyPanel w={scan(result.snapshot).why} />
+                <WhyFrom s={result.snapshot} />
               </PaneBoundary>
               <PaneBoundary name="Near misses">
-                <NearPanel n={near(result.snapshot)} />
+                <NearFrom s={result.snapshot} />
               </PaneBoundary>
               <PaneBoundary name="Candidates">
-                <CandidatesPanel v={scan(result.snapshot)} />
+                <CandidatesFrom s={result.snapshot} />
               </PaneBoundary>
               <PaneBoundary name="Paper session log">
                 <PaperPanel s={result.snapshot} />
@@ -150,6 +150,20 @@ function NowPanel({ s }: { s: Snapshot }) {
       </div>
     </Panel>
   );
+}
+
+// The snapshot is read inside each pane, so a malformed scan or near-miss record fails its own pane, not the page.
+function FunnelFrom({ s }: { s: Snapshot }) {
+  return <FunnelPanel v={scan(s)} tradingDay={s.market?.trading_day_et ?? null} />;
+}
+function WhyFrom({ s }: { s: Snapshot }) {
+  return <WhyPanel w={scan(s).why} />;
+}
+function NearFrom({ s }: { s: Snapshot }) {
+  return <NearPanel n={near(s)} />;
+}
+function CandidatesFrom({ s }: { s: Snapshot }) {
+  return <CandidatesPanel v={scan(s)} />;
 }
 
 function FunnelPanel({ v, tradingDay }: { v: Scan; tradingDay: string | null }) {
