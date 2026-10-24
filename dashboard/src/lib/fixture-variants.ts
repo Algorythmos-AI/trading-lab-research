@@ -21,12 +21,15 @@ export const VARIANT_COOKIE = "fx";
  * - `positions-off`: no options live document has been published. `positions-none`: one has, with nothing open.
  * - `positions-old`: the document is three hours old.
  * - `clone-off`: the options clone has published nothing. `clone-latched`: its document on a bad day.
+ * - `journal-poison`: a stored trade journal with a null trade, as after corruption. The panes drawn from the trades
+ *   must fail alone; the rest of each page keeps working.
  */
 export const VARIANT_FLAGS = [
   "empty",
   "error",
   "partial",
   "poison",
+  "journal-poison",
   "quotes-off",
   "quotes-error",
   "quotes-tick",
@@ -162,6 +165,11 @@ export function poisonedOptions(e: OptionsEdition): OptionsEdition {
   const out = structuredClone(e);
   out.paper = [null] as unknown as OptionsEdition["paper"];
   return out;
+}
+
+/** A journal whose trades hold a null row, which the schema forbids and every trade view reads past. */
+export function poisonedJournal<T extends { trades: readonly unknown[] }>(doc: T): T {
+  return { ...doc, trades: [null, ...doc.trades] };
 }
 
 /** How far above its close, in ATRs, every fixture quote sits. */
