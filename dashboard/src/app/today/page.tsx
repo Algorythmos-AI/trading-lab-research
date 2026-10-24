@@ -1,5 +1,6 @@
 import { Activity, Bot, Filter, FlaskConical, Hourglass, ListOrdered, PlayCircle, Power } from "lucide-react";
 import { Funnel } from "@/components/charts/funnel";
+import { PaneBoundary } from "@/components/client/pane-boundary";
 import { Empty } from "@/components/empty";
 import { SessionClock } from "@/components/today/session-clock";
 import { OutcomePanel, PnlPanel, TradesPanel } from "@/components/today/trading";
@@ -30,8 +31,16 @@ export default async function TodayPage() {
         title="Today"
         intro="Your trading day as it happens: every trade on the New York clock, the day's running result and how much room the day rules leave, then the names to watch. Below, what the paper robots did. Nothing on this page can place an order."
       />
-      {journal.status === "ok" ? <YourDay doc={journal.doc} now={now} /> : <NoJournal status={journal.status} />}
-      <NextSessionPanel options={options.status === "ok" ? options.edition : null} radar={radar.status === "ok" ? radar.edition : null} />
+      {journal.status === "ok" ? (
+        <PaneBoundary name="Your day">
+          <YourDay doc={journal.doc} now={now} />
+        </PaneBoundary>
+      ) : (
+        <NoJournal status={journal.status} />
+      )}
+      <PaneBoundary name="Next session">
+        <NextSessionPanel options={options.status === "ok" ? options.edition : null} radar={radar.status === "ok" ? radar.edition : null} />
+      </PaneBoundary>
       <h2 className="text-muted-foreground mt-2 flex items-center gap-2 text-sm font-semibold">
         <Bot aria-hidden className="size-4" />
         The robots, paper money only
@@ -40,21 +49,41 @@ export default async function TodayPage() {
         <NoSnapshot status={result.status} />
       ) : (
         <>
-          <NowPanel s={result.snapshot} />
-          <OutcomeOnly s={result.snapshot} />
-          <FunnelPanel v={scan(result.snapshot)} tradingDay={result.snapshot.market?.trading_day_et ?? null} />
+          <PaneBoundary name="Now">
+            <NowPanel s={result.snapshot} />
+          </PaneBoundary>
+          <PaneBoundary name="Outcome">
+            <OutcomeOnly s={result.snapshot} />
+          </PaneBoundary>
+          <PaneBoundary name="Scanner funnel">
+            <FunnelPanel v={scan(result.snapshot)} tradingDay={result.snapshot.market?.trading_day_et ?? null} />
+          </PaneBoundary>
           <details className="group grid gap-5" data-testid="robot-detail">
             <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-sm font-medium">
               More from the robots: Paper B&apos;s trades and results, near misses, the session log and the forward test
             </summary>
             <div className="mt-5 grid gap-5">
-              <TradingDetail s={result.snapshot} />
-              <WhyPanel w={scan(result.snapshot).why} />
-              <NearPanel n={near(result.snapshot)} />
-              <CandidatesPanel v={scan(result.snapshot)} />
-              <PaperPanel s={result.snapshot} />
-              <ForwardPanel s={result.snapshot} />
-              <OfRecordPanel s={result.snapshot} />
+              <PaneBoundary name="Paper B trading">
+                <TradingDetail s={result.snapshot} />
+              </PaneBoundary>
+              <PaneBoundary name="Why no trade">
+                <WhyPanel w={scan(result.snapshot).why} />
+              </PaneBoundary>
+              <PaneBoundary name="Near misses">
+                <NearPanel n={near(result.snapshot)} />
+              </PaneBoundary>
+              <PaneBoundary name="Candidates">
+                <CandidatesPanel v={scan(result.snapshot)} />
+              </PaneBoundary>
+              <PaneBoundary name="Paper session log">
+                <PaperPanel s={result.snapshot} />
+              </PaneBoundary>
+              <PaneBoundary name="Forward test">
+                <ForwardPanel s={result.snapshot} />
+              </PaneBoundary>
+              <PaneBoundary name="Of record">
+                <OfRecordPanel s={result.snapshot} />
+              </PaneBoundary>
               <ComingPanel />
             </div>
           </details>
