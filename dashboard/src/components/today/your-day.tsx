@@ -8,7 +8,7 @@ import { TradeClock } from "@/components/today/trade-clock";
 import { contractLabel, fmtMinutes, holdMinutes, marketState, nyTime, sessionView, type JournalDoc } from "@/lib/journal";
 import type { Tone } from "@/lib/labels";
 import { dayClock } from "@/lib/overview";
-import { DAY_LOSS_LIMIT, MAX_TRADES_PER_DAY, TIME_STOP_MINUTES, dayCheck, type DayStatus } from "@/lib/trade-rules";
+import { DAY_LOSS_LIMIT, MAX_TRADES_PER_DAY, TIME_STOP_MINUTES, dayCheck, meterToneFor, type DayStatus } from "@/lib/trade-rules";
 import { cn } from "@/lib/utils";
 
 const usd = (v: number | null | undefined) => {
@@ -73,13 +73,13 @@ export function YourDay({ doc, now }: { doc: JournalDoc; now: Date }) {
             label="Trades today"
             text={`${check.used} of ${MAX_TRADES_PER_DAY}`}
             share={check.used / MAX_TRADES_PER_DAY}
-            tone={check.used >= MAX_TRADES_PER_DAY ? "bad" : check.used >= MAX_TRADES_PER_DAY - 1 ? "warn" : "good"}
+            tone={meterToneFor(check.used >= MAX_TRADES_PER_DAY ? "bad" : check.used >= MAX_TRADES_PER_DAY - 1 ? "warn" : "good", check)}
           />
           <Meter
             label="Day loss used"
             text={`${lossUsed ? `−$${Math.round(lossUsed)}` : "$0"} of −$${DAY_LOSS_LIMIT}`}
             share={lossUsed / DAY_LOSS_LIMIT}
-            tone={lossUsed >= DAY_LOSS_LIMIT ? "bad" : lossUsed >= DAY_LOSS_LIMIT * 0.6 ? "warn" : "good"}
+            tone={meterToneFor(lossUsed >= DAY_LOSS_LIMIT ? "bad" : lossUsed >= DAY_LOSS_LIMIT * 0.6 ? "warn" : "good", check)}
           />
         </div>
         <p className={cn("text-sm", TONE_TEXT[view.isToday || !check.current ? rule.tone : "neutral"])}>{check.line}</p>

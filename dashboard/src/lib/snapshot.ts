@@ -275,7 +275,11 @@ export const loadJournal = cache(async (): Promise<JournalResult> => {
     const flags = await fixtureFlags();
     if (flags.has("empty") || flags.has("error")) return { status: "missing" };
     const mod = await import("../../test/fixtures/journal.v1.json");
-    return { status: "ok", doc: (mod.default ?? mod) as unknown as JournalDoc, source: "fixture" };
+    const doc = (mod.default ?? mod) as unknown as JournalDoc;
+    // Under the stood-still clock the journal was read ten minutes earlier, as the live sync would have: a picture
+    // shows a current journal, not one stamped days after the clock.
+    if (flags.has("frozen")) return { status: "ok", doc: { ...doc, as_of: new Date(Date.parse(FROZEN_NOW) - 10 * 60_000).toISOString() }, source: "fixture" };
+    return { status: "ok", doc, source: "fixture" };
   }
   try {
     const stored = await readText(JOURNAL_PATHS.latest);

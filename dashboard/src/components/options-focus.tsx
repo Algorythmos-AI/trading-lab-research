@@ -224,7 +224,7 @@ const DAY = {
 
 /** One line at the top: the session, today's trade count and the day's loss against the limits. */
 export function DayBar({ doc, now, session }: { doc: JournalDoc | null; now: Date; session: string }) {
-  const c = dayCheck(doc ? sessionView(doc, now) : null, doc ? { asOf: doc.as_of, now } : undefined);
+  const c = dayCheck(doc ? sessionView(doc, now) : null, { asOf: doc?.as_of ?? null, now });
   const s = DAY[c.status];
   const loss = Math.max(0, -c.net);
   return (

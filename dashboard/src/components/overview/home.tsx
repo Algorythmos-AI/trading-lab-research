@@ -14,7 +14,7 @@ import type { OptionsEdition } from "@/lib/options.types";
 import { hourBands, keptStreak, keptVsBroken, nextOpen, periodTotals, quickVsSlow, ruleDays, since, tickerEnds, untilText, withRun } from "@/lib/overview";
 import type { RadarEdition } from "@/lib/radar.types";
 import { scan } from "@/lib/today";
-import { DAY_LOSS_LIMIT, MAX_TRADES_PER_DAY, TIME_STOP_MINUTES, dayCheck } from "@/lib/trade-rules";
+import { DAY_LOSS_LIMIT, MAX_TRADES_PER_DAY, TIME_STOP_MINUTES, dayCheck, meterToneFor } from "@/lib/trade-rules";
 import { outcomeLine, trading } from "@/lib/trading";
 import type { Snapshot } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -110,13 +110,13 @@ export function AccountHero({ doc, now }: { doc: JournalDoc; now: Date }) {
           label="Trades today"
           text={`${check.used} of ${MAX_TRADES_PER_DAY}`}
           share={check.used / MAX_TRADES_PER_DAY}
-          tone={check.used >= MAX_TRADES_PER_DAY ? "bad" : check.used >= MAX_TRADES_PER_DAY - 1 ? "warn" : "good"}
+          tone={meterToneFor(check.used >= MAX_TRADES_PER_DAY ? "bad" : check.used >= MAX_TRADES_PER_DAY - 1 ? "warn" : "good", check)}
         />
         <Meter
           label="Day loss used"
           text={`${lossUsed ? `−$${Math.round(lossUsed)}` : "$0"} of −$${DAY_LOSS_LIMIT}`}
           share={lossUsed / DAY_LOSS_LIMIT}
-          tone={lossUsed >= DAY_LOSS_LIMIT ? "bad" : lossUsed >= DAY_LOSS_LIMIT * 0.6 ? "warn" : "good"}
+          tone={meterToneFor(lossUsed >= DAY_LOSS_LIMIT ? "bad" : lossUsed >= DAY_LOSS_LIMIT * 0.6 ? "warn" : "good", check)}
         />
       </div>
       <p className={cn("text-sm", TONE_TEXT[check.isToday || !check.current ? chip.tone : "neutral"])}>{check.line}</p>

@@ -12,7 +12,7 @@ import { type AccountRisk, type HeldBy, type LimitRow } from "@/lib/account-risk
 import { newYork } from "@/lib/format";
 import { shortDay, type MoneyView } from "@/lib/journal";
 import type { Tone } from "@/lib/labels";
-import { DAY_LOSS_LIMIT, MAX_PREMIUM, MAX_TRADES_PER_DAY } from "@/lib/trade-rules";
+import { DAY_LOSS_LIMIT, MAX_PREMIUM, MAX_TRADES_PER_DAY, meterToneFor } from "@/lib/trade-rules";
 import { cn } from "@/lib/utils";
 
 const money0 = (v: number) => `${v < 0 ? "−" : v > 0 ? "+" : ""}$${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
@@ -77,14 +77,14 @@ export function AccountTodayPanel({ r, asOf, now }: { r: AccountRisk; asOf: stri
             label="Day loss limit (closed trades)"
             value={lossUsed}
             max={DAY_LOSS_LIMIT}
-            tone={meterTone(lossUsed / DAY_LOSS_LIMIT)}
+            tone={meterToneFor(meterTone(lossUsed / DAY_LOSS_LIMIT), c)}
             valueText={`${c.isToday ? money0(c.net) : "$0"} of −$${DAY_LOSS_LIMIT}`}
           />
           <Meter
             label="Trades today"
             value={c.used}
             max={MAX_TRADES_PER_DAY}
-            tone={meterTone(c.used / MAX_TRADES_PER_DAY)}
+            tone={meterToneFor(meterTone(c.used / MAX_TRADES_PER_DAY), c)}
             valueText={`${c.used} of ${MAX_TRADES_PER_DAY}`}
           />
           <Meter
