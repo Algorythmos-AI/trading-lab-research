@@ -246,6 +246,29 @@ def test_schedule_on_systemd_is_in_new_york_time():
     assert all(r["session"] for r in rows)                                # systemd jobs never fire on a weekend
 
 
+def test_host_jobs_on_the_vm_are_the_schedule_table_with_the_config_laid_over():
+    from wt.ops.schedule import JOBS
+    now = dt.datetime(2026, 10, 23, 20, 0, tzinfo=dt.UTC)                # Friday 16:00 ET, Saturday 07:00 Sydney
+    rows = status.host_jobs(CFG["host"]["jobs"], "systemd", now, CFG["host"]["overlay"])
+    assert [r["label"] for r in rows] == [j.label for j in JOBS.values()]   # every unit, not the config's four
+    by = {r["label"]: r for r in rows}
+    assert by["com.wt.routine"] == {"label": "com.wt.routine", "name": "Pre-market routine", "must_start_before_et": "07:55",
+                                    "local_time": "Mon 22:30 Sydney (Mon-Fri 07:30 New York)"}
+    assert by["com.wt.weekly"]["local_time"] == "Sat 11:00 Sydney (Fri 20:00 New York)"
+    assert by["com.wt.paper-o"]["must_start_before_et"] == "09:25"
+    assert by["com.wt.dashboard"]["local_time"] == "every 5 min in the US session, 15 otherwise"
+    assert by["com.wt.deploy-auto"]["local_time"] == "hourly"
+    assert by["com.wt.deploy-notify"]["local_time"] == "every 30 min"
+    assert by["com.wt.pipeline-check"]["local_time"] == "Mon-Fri 08:55 and 18:30 New York"
+    assert "name" not in by["com.wt.deploy-auto"]                       # the dashboard names it
+    assert all(r["ok"] for r in status.schedule_check(rows, now, "systemd", 7))
+    mac = status.host_jobs(CFG["host"]["jobs"], "launchd", now)          # the Mac: its own list, zone named
+    assert [j["label"] for j in mac] == [j["label"] for j in CFG["host"]["jobs"]]
+    assert mac[0]["local_time"] == "21:30 Sydney" and CFG["host"]["jobs"][0]["local_time"] == "21:30"
+    # A config entry without a label is ignored, not a crash that would leave the host section stale.
+    assert len(status.host_jobs(CFG["host"]["jobs"], "systemd", now, [{"name": "typo"}])) == len(rows)
+
+
 def test_systemd_jobs_are_looked_up_by_job_key():
     seen = []
 

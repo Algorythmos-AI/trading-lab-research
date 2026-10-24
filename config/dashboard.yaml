@@ -22,6 +22,11 @@ project: {owner: Algorythmos-AI, number: 2}
 
 host:
   disk_floor_gb: 3.0                       # the causal pool build needs 3 GB+ free
+  # On the VM the job list is wt.ops.schedule.JOBS, the table the systemd units are generated from
+  # (wt.ops.status.host_jobs); `jobs` and `overlay` only lay a display name and a start-by time (ET) over the jobs
+  # they name. The Mac reads `jobs` whole, with their Sydney launchd times; it never ran the jobs in `overlay`.
+  overlay:
+    - {label: com.wt.paper-o, name: "Paper options clone", must_start_before_et: "09:25"}
   jobs:
     - {label: com.wt.routine, local_time: "21:30", tz: Australia/Sydney, must_start_before_et: "07:55",
        name: "Pre-market routine", what: "SPEC-0001 dry run; waits until 07:55 ET, stages at 08:00 / 08:30 / 09:00 / 09:15"}

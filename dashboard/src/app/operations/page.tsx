@@ -223,7 +223,7 @@ function HostPanel({ s }: { s: Snapshot }) {
               <TableHeader>
                 <TableRow>
                   <TableHead>Job</TableHead>
-                  <TableHead>Sydney time</TableHead>
+                  <TableHead>When</TableHead>
                   <TableHead>Loaded</TableHead>
                   <TableHead className="text-right">Last exit</TableHead>
                 </TableRow>

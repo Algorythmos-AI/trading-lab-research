@@ -8,6 +8,12 @@ const JOB_NAMES: Record<string, string> = {
   forward: "Forward test",
   weekly: "Weekly scorecard",
   dashboard: "Dashboard publish",
+  "paper-o": "Paper options clone",
+  "options-live": "Options positions publish",
+  "options-review": "Options nightly review",
+  "pipeline-check": "Pipeline check",
+  "deploy-notify": "Deploy notice",
+  "deploy-auto": "Automatic deploy",
 };
 
 /** "com.wt.paper-b" and "paper-b" both map to "paper-b". */
