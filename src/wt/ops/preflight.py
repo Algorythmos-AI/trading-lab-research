@@ -86,21 +86,55 @@ def check_env_mode(root: Path) -> Check:
     return Check(".env private", mode & 0o077 == 0, f"mode {mode:o}")
 
 
+def check_remote(root: Path) -> Check:
+    """Every deploy starts with `git fetch origin main`. While the repository is public an anonymous HTTPS remote
+    answers; once it is private only a registered deploy key (SSH remote) or a token can. Checked before it matters."""
+    try:
+        r = _git(root, "ls-remote", "--exit-code", "--heads", "origin", "main", timeout=30.0)
+    except (OSError, subprocess.SubprocessError) as e:
+        return Check("origin reachable", False, f"git ls-remote failed: {e.__class__.__name__}")
+    if r.returncode == 0:
+        return Check("origin reachable", True, "origin answers for main")
+    why = ((r.stderr or r.stdout).strip().splitlines() or ["no answer"])[-1][:120]
+    return Check("origin reachable", False, f"origin did not answer for main ({why}); register the deploy key and "
+                                            "set origin to the SSH URL (docs/runbooks/gcp-host.md, going private)")
+
+
 def check_paging(root: Path) -> Check:
     """On the VM nothing else would tell the owner a job failed: the ntfy topic must be configured."""
     ok = bool(os.environ.get("NTFY_TOPIC"))
     return Check("paging configured", ok, "ntfy topic set" if ok else "NTFY_TOPIC is empty: alerts would be silent")
 
 
-def run_checks(root: Path | None = None, min_free_gb: float = MIN_FREE_GB) -> list[Check]:
+def current_kind() -> str:
+    from wt.ops.host import current
+    return current().kind
+
+
+def run_checks(root: Path | None = None, min_free_gb: float = MIN_FREE_GB, remote: bool = False) -> list[Check]:
+    """`remote` adds the origin check. It is off for a job's own preflight on purpose: a trading job needs no
+    GitHub, and an outage or a slow SSH handshake at 09:25 ET must not refuse the paper runner."""
     root = root or ROOT
     checks = [*check_git(root), check_legacy_state(root), check_venv(root), check_disk(root, min_free_gb),
               check_env_mode(root)]
-    from wt.ops.host import current
-    if current().kind == "systemd":
+    if current_kind() == "systemd":
         checks.append(check_paging(root))
+        if remote:
+            checks.append(check_remote(root))
     return checks
 
 
 def failures(checks: list[Check]) -> list[Check]:
     return [c for c in checks if not c.ok]
+
+
+def main(argv: list[str] | None = None) -> int:
+    """`python -m wt.ops.preflight`: the host's checks, with the origin check (`make preflight`, `wt-deploy preflight`)."""
+    checks = run_checks(remote=True)
+    for c in checks:
+        print(f"  [{'ok' if c.ok else 'FAIL'}] {c.name}: {c.detail}")
+    return 0 if not failures(checks) else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
