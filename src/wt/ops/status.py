@@ -25,7 +25,7 @@ from zoneinfo import ZoneInfo
 
 import yaml
 
-from wt.analytics import forward_book, g2
+from wt.analytics import b_replay, forward_book, g2
 from wt.ops import safeio, thresholds
 from wt.ops.safeio import SourceError
 
@@ -499,7 +499,7 @@ def src_paper(ctx: Ctx) -> dict:
     return {"events": dict(events), "bad_lines": bad, "armed_sessions": len(armed), "last_armed": armed[-1] if armed else None,
             "trades": len(closed), "total_r": round(sum(rs), 3) if rs else 0.0,
             "mean_r": round(sum(rs) / len(rs), 3) if rs else None, "virtual": equity, "recent": recent,
-            "g2": g2.summary(rows),
+            "g2": g2.summary(rows, replay=b_replay.load_records(_state(ctx, "forward/replay", "research/forward/replay"))),
             "log": _log_digest(logs[-1]) if logs else None}
 
 

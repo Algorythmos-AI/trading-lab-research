@@ -13,7 +13,8 @@ A session is one ET trading date of the paper-B journal (data/live/journal.jsonl
     (`unchecked_sessions`) and, not being clean, is left out of the agreement measure. The outcome exists from the
     runner of 2026-10-08 on; an earlier session is never reclassified by it.
 Trades are strategy B's own closed plans, counted once per trade_id; adopted orphans never count.
-Agreement stays day-level until the replay harness lands: a clean session agrees when paper B and forward B
+Agreement is measured at the bar from the replay records when they exist (DEC-0037, part 1); the day-level
+measure below is what was reported before and what a host without replay records still reports: a clean session agrees when paper B and forward B
 both traded, or both did not. The dashboard labels it provisional.
 """
 from __future__ import annotations
@@ -104,9 +105,10 @@ def trades(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def summary(rows: list[dict[str, Any]], forward_sessions: set[str] | None = None,
-            forward_b_days: set[str] | None = None) -> dict[str, Any]:
-    """G2 progress. With the forward ledger's session dates and the dates forward B traded, also the day-level
-    agreement over clean paper sessions the forward test also ran."""
+            forward_b_days: set[str] | None = None, replay: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """G2 progress. With the replay records (var/forward/replay, wt.analytics.b_replay) the agreement is measured
+    at the bar over clean sessions (DEC-0037). Without them, and with the forward ledger's session dates and the
+    dates forward B traded, the older day-level agreement is reported, labelled as such."""
     ss = sorted(sessions(rows).values(), key=lambda s: s.date)
     clean = [s for s in ss if s.clean]
     streak = 0
@@ -121,8 +123,12 @@ def summary(rows: list[dict[str, Any]], forward_sessions: set[str] | None = None
         "unchecked_sessions": sum(1 for s in ss if s.unchecked),
         "incident_free_streak": streak, "incident_free_needed": G2_MIN_INCIDENT_FREE,
         "agreement_level": "day", "agreement_days": None, "agreement_agree": None,
+        "agreement_unknown": None, "harness_days": None, "harness_agree": None,
     }
-    if forward_sessions is not None and forward_b_days is not None:
+    if replay:                                   # records exist: the bar-level measure (DEC-0037, part 1)
+        from wt.analytics import b_replay
+        out.update(b_replay.agreement(replay, {s.date for s in clean}))
+    elif forward_sessions is not None and forward_b_days is not None:
         both = [s for s in clean if s.date in forward_sessions]
         out["agreement_days"] = len(both)
         out["agreement_agree"] = sum(1 for s in both if bool(s.trades) == (s.date in forward_b_days))

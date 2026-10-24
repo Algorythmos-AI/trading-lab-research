@@ -1745,6 +1745,24 @@
                     "integer",
                     "null"
                   ]
+                },
+                "agreement_unknown": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "harness_days": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "harness_agree": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
                 }
               }
             },

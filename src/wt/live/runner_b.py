@@ -51,6 +51,7 @@ from wt.ops.alerts import Alerts, Pager
 from wt.risk import events
 from wt.risk.mandate import out_of_mandate
 from wt.risk.pretrade import Context, PreTradeGuard, load_limits
+from wt.risk import stop_rule
 from wt.risk.virtual_account import StateError, VirtualAccount
 from wt.signals import setups
 
@@ -145,6 +146,23 @@ class LiveData:
             raise ValueError("no prior session with a full set of bars")
         self.sigma_sessions = len(vals)
         return float(np.mean(vals)), prev_close
+
+
+def journal_rows() -> list[dict[str, Any]]:
+    """Every journal row that parses (the stop rule reads B's closed trades from them)."""
+    out: list[dict[str, Any]] = []
+    try:
+        with open(LIVE / "journal.jsonl") as fh:
+            for line in fh:
+                try:
+                    r = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(r, dict):
+                    out.append(r)
+    except OSError:
+        pass
+    return out
 
 
 def journaled_closes() -> set[str]:
@@ -548,6 +566,29 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         refuse(str(e))
         va, va_ok = VirtualAccount(), False
     books = Books(va, va_path, readonly=not va_ok)
+    # ---- the pre-registered stop (DEC-0037, wt.risk.stop_rule): a latch only a decision record clears ----
+    try:
+        rule = stop_rule.load()
+        fired = stop_rule.evaluate(rule, journal_rows(), day) if rule is not None and va_ok else None
+    except Exception as e:  # noqa: BLE001 — a bad config refuses entries; exits are still managed
+        rule, fired = None, None
+        refuse(f"stop rule unreadable ({e.__class__.__name__}): config/risk.yaml B.stop_rule")
+    else:
+        if rule is None:
+            refuse("no stop rule in config/risk.yaml (B.stop_rule): a desk with no pre-registered stop does not arm")
+    if rule is not None and fired is not None:
+        if not va.latched:
+            va.latch(stop_rule.latch_reason(fired, rule))
+            try:
+                va.save(va_path)
+            except OSError as e:
+                _echo(f"STOP RULE LATCH NOT SAVED ({e.__class__.__name__})", sys.stderr)
+            log("stop_rule", kind=fired.kind, detail=fired.detail, decision=rule.decision)
+            pager.once_per_day("paper-b:stop-rule", f"paper-b stopped by its stop rule ({rule.decision})",
+                               f"{fired.kind}: {fired.detail}. Entries stay off until a new decision record "
+                               "changes B.stop_rule or retires B and clears the latch (make reset-latch "
+                               "REASON=\"... DEC-NNNN\"); a reset alone brings the latch back at the next arming.", 4)
+        refuse(f"stop rule {fired.kind} ({rule.decision}): {fired.detail}")
     chain_flag = STATE_DIR / "evidence" / "chain-broken"      # wt.ops.backup: the evidence can't be trusted
     if chain_flag.exists():
         refuse("evidence hash chain broken (var/evidence/chain-broken): entries off until the owner clears it")
