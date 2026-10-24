@@ -1,7 +1,7 @@
 id: HYP-0024
 trial: "C-TREND-R"
 family: C                       # crypto desk; counted apart from the equity trials (DEC-0012, DEC-0015)
-status: pre-registered          # DEC-0025 accepted by merge; nothing is built or run before that
+status: falsified            # DEC-0036 (EXP-0022): ranked TREND -0.154R over 366 trades, fails C1
 statement: "When the TREND rule (HYP-0021) fires on more pairs than its book can take, entering them in order of each pair's 30-bar return, strongest first, instead of in the order the pairs are listed, gives the rule positive fixed-rule expectancy after exchange fees and slippage."
 config: config/crypto.yaml      # sleeves.trend unchanged; the ordering is the only difference and is fixed in DEC-0025
 evidence: {decision: DEC-0025, adr: docs/adr/0005-desks.md}

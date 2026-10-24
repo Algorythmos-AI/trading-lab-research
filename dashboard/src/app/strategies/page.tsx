@@ -18,7 +18,8 @@ import { entries, list, type ForwardPoint, type Snapshot } from "@/lib/types";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Strategies" };
 
-const B_NOTICE = "Strategy B is under re-evaluation (DEC-0011).";
+// DEC-0011 is still PROPOSED: the audit fixes are in code, the re-run of B that they call for waits for the owner.
+const B_NOTICE = "Strategy B's backtest figures predate the 29 Sep audit fixes; their re-run (DEC-0011) waits for the owner.";
 
 export default async function StrategiesPage() {
   const result = await loadSnapshot();

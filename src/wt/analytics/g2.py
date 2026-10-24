@@ -1,6 +1,7 @@
 """G2 paper evidence: one definition for the collector, the weekly scorecard and the dashboard.
 
-G2 (config/dashboard.yaml): >= 50 trades, >= 30 sessions, >= 90% replay match, 20 incident-free sessions.
+G2 (config/dashboard.yaml; DEC-0023 thresholds, read in two parts by DEC-0037): >= 50 trades, >= 30 sessions,
+>= 90% replay match, 20 incident-free sessions.
 
 A session is one ET trading date of the paper-B journal (data/live/journal.jsonl). It counts ("clean") only if:
   * the runner armed and reached session_end (it completed);

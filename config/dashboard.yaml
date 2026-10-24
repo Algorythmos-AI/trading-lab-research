@@ -43,7 +43,7 @@ gates:
   - {id: G0, name: "Data readiness", criteria: "Universe frozen and hashed; data sources, fees and account type recorded", status: done, evidence: DEC-0003}
   - {id: G1, name: "Backtest proof of edge", criteria: "CI95 lower bound > 0 at 1.5x costs; DSR > 0.95 over all trials; beats random p < 0.05; PF >= 1.2; profitable in >= 2/3 of years; no month > 25% of profit",
      status: failed, evidence: "DEC-0007, DEC-0009 (75 trials, none pass)", next: "Round 3 under DEC-0010 (in effect 2026-09-29)"}
-  - {id: G2, name: "Forward and paper evidence", criteria: ">= 50 trades, >= 30 sessions, >= 90% replay match, 20 incident-free sessions", status: in_progress, evidence: "Weekly scorecard"}
+  - {id: G2, name: "Forward and paper evidence", criteria: "G2a, the desk runs the rule: >= 30 clean sessions, 20 incident-free in a row, >= 90% bar-level agreement. G2b, the rule earns: >= 50 trades (DEC-0023, read per DEC-0037)", status: in_progress, evidence: "Weekly scorecard; DEC-0037"}
   - {id: G3, name: "Broker acceptance", criteria: "Webull UAT contract suite, production read-only checks, owner canary order", status: not_started}
   - {id: G4, name: "Live tiny", criteria: "0.5% risk (~US$3), >= 50 live trades, about 3 months", status: not_started}
   - {id: G5, name: "Scale", criteria: "Risk 0.5% -> 0.75% -> 1.0%; capital capped at A$1,000", status: not_started}
@@ -100,22 +100,20 @@ capabilities:
   - {name: "Paper trading", research: partial, org: partial, note: "Paper B runs nightly on a $600 virtual account; the org pipeline is frozen (ADR-0001)"}
   - {name: "Risk controls in code", research: partial, org: partial, note: "Research: RSK-01..07 and loss latches. Org: order guard only; M2 not started"}
   - {name: "Auditability", research: partial, org: partial, note: "Decision records and journals; no hash-chained ledger yet (org M3)"}
-  - {name: "Observability", research: partial, org: none, note: "Logs, weekly scorecard and this dashboard; no alerting"}
+  - {name: "Observability", research: partial, org: none, note: "Logs, scorecard, dashboard, Vercel watchdog and healthchecks.io; host pings are dropped until it runs the primary role"}
   - {name: "Human approval mode", research: none, org: none, note: "Not built anywhere yet"}
   - {name: "Live trading", research: none, org: none, note: "By design: waits for G1-G3. Webull adapter not started"}
-  - {name: "CI on every change", research: none, org: partial, note: "Research repo has no CI. Org repo runs security scans only"}
+  - {name: "CI on every change", research: done, org: partial, note: "Every pull request runs ruff, mypy, pytest, the dashboard checks with e2e and a security scan. Org repo runs security scans only"}
 
 roadmap:
   - {rank: 1, priority: P0, title: "Run round 3: counts-only guard, dev runs, r3_eval at 85 trials, DEC-0011", why: "DEC-0010 is in effect; this is the only open route to G1", owner: claude}
   - {rank: 2, priority: P0, title: "Two clean primary nights on the cloud host, then the kill-switch decision", why: "The jobs moved to the VM on 1 Oct; entries stay off until the host has proved itself and the signal-bar fix has had its own night", owner: both}
   - {rank: 3, priority: P1, title: "RTN-06 feed-agreement report (IEX/hybrid vs SIP)", why: "Last open MUST requirement besides CAT-01", owner: claude}
   - {rank: 4, priority: P1, title: "Re-scope org milestones M2-M5", why: "They harden the gap-and-go pipeline, which lost -0.40R per trade", owner: you}
-  - {rank: 5, priority: P1, title: "Registry tidy-up: HYP-0001..0006 statuses, missing EXP-0009/0010 controls", why: "The registry must match the decisions", owner: claude}
-  - {rank: 6, priority: P1, title: "Automatic deploys to the host after green checks", why: "Each release is still deployed by hand inside the gate", owner: claude}
-  - {rank: 7, priority: P2, title: "Pre-register a catalyst classifier v4 (announcements, SPAC commentary, acquirer vs target)", why: "CAT-01 failed at 84%; only a new pre-registered change on a fresh sample can close it", owner: both}
-  - {rank: 8, priority: P2, title: "Accumulate G2 evidence: 50 trades, 30 sessions", why: "Gate before any broker work", owner: both}
-  - {rank: 9, priority: P2, title: "Human-approval mode", why: "Required before live trading; CI and the audit ledger are in place", owner: claude}
-  - {rank: 10, priority: Later, title: "G3 Webull adapter, then G4 live tiny and G5 scale", why: "Only after an edge is proven", owner: both}
+  - {rank: 5, priority: P2, title: "Pre-register a catalyst classifier v4 (announcements, SPAC commentary, acquirer vs target)", why: "CAT-01 failed at 84%; only a new pre-registered change on a fresh sample can close it", owner: both}
+  - {rank: 6, priority: P2, title: "Accumulate G2 evidence: G2a sessions and agreement, G2b trades (DEC-0037)", why: "Gate before any broker work; B stops itself under the DEC-0037 rule", owner: both}
+  - {rank: 7, priority: P2, title: "Human-approval mode", why: "Required before live trading; CI and the audit ledger are in place", owner: claude}
+  - {rank: 8, priority: Later, title: "G3 Webull adapter, then G4 live tiny and G5 scale", why: "Only after an edge is proven", owner: both}
 
 # Owner actions that no file or API can detect. Set done: true when finished.
 # private: true keeps an item on the local page and out of the published dashboard (wt.ops.publish).
@@ -135,3 +133,4 @@ timeline:
   - {date: "2026-09-28", event: "SPEC-0001 approved (v1.0.1); research PRs #1-#6 merged"}
   - {date: "2026-09-28", event: "Paper B armed; pre-market routine launched"}
   - {date: "2026-10-01", event: "Jobs moved to the cloud host (primary); the Mac no longer runs them"}
+  - {date: "2026-10-24", event: "Crypto desk closed (DEC-0036); HFT desk parked; the three repositories made private"}
