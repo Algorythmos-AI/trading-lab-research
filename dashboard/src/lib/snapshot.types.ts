@@ -369,6 +369,9 @@ export interface Snapshot {
         agreement_level?: string | null;
         agreement_days?: number | null;
         agreement_agree?: number | null;
+        agreement_unknown?: number | null;
+        harness_days?: number | null;
+        harness_agree?: number | null;
       } | null;
       log?: {
         file?: string | null;

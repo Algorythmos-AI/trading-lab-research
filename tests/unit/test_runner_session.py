@@ -883,3 +883,48 @@ def test_the_journal_counts_the_marks_where_only_the_spread_check_blocked():
     summary = out[-1]
     assert summary["event"] == "decision_summary" and summary["marks"] == 5 and summary["spread_only_marks"] == 2
     assert summary["would_signals"] == 0
+
+
+# ---- the pre-registered stop (DEC-0037) ----------------------------------------------------------------------------
+
+def test_a_fired_stop_rule_latches_the_account_and_arms_exits_only(env, monkeypatch):
+    import datetime as _dt
+
+    from wt.risk import stop_rule
+    from wt.risk.virtual_account import STOP_RULE_PREFIX, VirtualAccount
+    rule = stop_rule.StopRule("DEC-0037", -6.0, 30, _dt.date(2020, 1, 1))     # the date trigger has passed
+    monkeypatch.setattr(runner_b.stop_rule, "load", lambda: rule)
+    b = SimBroker()
+    clk = Clock(at(8, 0))
+    synced(b, clk)
+    runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep)
+    j = journal(env)
+    assert any(r["event"] == "stop_rule" and r["kind"] == "date" and r["decision"] == "DEC-0037" for r in j)
+    assert any(r["event"] == "refuse_to_arm" and r["reason"].startswith("stop rule date (DEC-0037)") for r in j)
+    assert j[-1]["event"] == "session_end" and b.placed == []
+    va_path = env / "live" / "virtual_account.json"
+    va = VirtualAccount.load(va_path)
+    assert va.latched and va.latch_reason.startswith(STOP_RULE_PREFIX) and va.latch_reason.endswith("(DEC-0037)")
+    assert VirtualAccount.sentinel(va_path).exists()
+
+
+def test_a_desk_with_no_stop_rule_or_an_unreadable_one_does_not_arm_for_entries(env, monkeypatch):
+    monkeypatch.setattr(runner_b.stop_rule, "load", lambda: None)
+    b = SimBroker()
+    clk = Clock(at(8, 0))
+    synced(b, clk)
+    runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep)
+    j = journal(env)
+    assert any(r["event"] == "refuse_to_arm" and "no stop rule" in r["reason"] for r in j)
+    assert j[-1]["event"] == "session_end" and b.placed == []
+
+    def broken():
+        raise ValueError("bad config")
+    monkeypatch.setattr(runner_b.stop_rule, "load", broken)
+    b2 = SimBroker()
+    clk2 = Clock(at(8, 0))
+    synced(b2, clk2)
+    runner_b.run(DAY, broker=b2, rest=FakeREST(clk2), now_fn=clk2.now, sleep_fn=clk2.sleep)
+    j = journal(env)
+    assert any(r["event"] == "refuse_to_arm" and "stop rule unreadable (ValueError)" in r["reason"] for r in j)
+    assert j[-1]["event"] == "session_end" and b2.placed == []

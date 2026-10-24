@@ -15,9 +15,14 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import re
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any
+
+# A latch the pre-registered stop rule set (wt.risk.stop_rule, DEC-0037) starts with this; `reset_latch` clears it
+# only for a reason that names a decision record, because the rule itself was a decision record.
+STOP_RULE_PREFIX = "stop rule "
 
 
 def _fsync_dir(d: Path) -> None:
@@ -199,6 +204,12 @@ def reset_latch(path: Path, reason: str, by: str = "owner") -> VirtualAccount:
             why = s.read_text().strip()[:200] or "latched (sentinel)"
         except OSError:
             why = "latched (sentinel)"
+    if why.startswith(STOP_RULE_PREFIX):
+        own = set(re.findall(r"\bDEC-\d{4}\b", why))                    # the rule's own record, named in the latch
+        named = set(re.findall(r"\bDEC-\d{4}\b", reason)) - own
+        if not named:
+            raise StateError(f"this latch is the pre-registered stop rule ({why}); only a new decision record clears "
+                             "it: name that record (DEC-NNNN, not the rule's own) in the reason")
     va.latch_history.append({"at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
                              "reason": why, "reset_by": by, "note": reason.strip()[:200]})
     va.latched, va.latch_reason = False, ""

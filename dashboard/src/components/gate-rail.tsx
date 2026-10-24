@@ -75,10 +75,20 @@ export function GateRail({ gates, g2 }: { gates: Gate[]; g2: Paper["g2"] }) {
                     valueText={`${num(g2.trades)} of ${num(g2.trades_needed)}`}
                   />
                   <Meter
-                    label="Armed sessions"
+                    label="Clean sessions"
                     value={g2.sessions}
                     max={g2.sessions_needed}
                     valueText={`${num(g2.sessions)} of ${num(g2.sessions_needed)}`}
+                  />
+                  <Meter
+                    label={g2.agreement_level === "bar" ? "Replay agreement (needs 90%)" : "Agreement, day-level (provisional)"}
+                    value={g2.agreement_agree}
+                    max={g2.agreement_days}
+                    valueText={
+                      g2.agreement_days
+                        ? `${num(g2.agreement_agree)} of ${num(g2.agreement_days)} sessions`
+                        : "no readable session yet"
+                    }
                   />
                 </div>
               ) : null}

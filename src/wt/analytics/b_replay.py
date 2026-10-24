@@ -12,7 +12,10 @@ This is a record. It does not feed G2: the gate's agreement measure changes only
 """
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+import contextlib
+import json
+from collections.abc import Collection, Iterable, Mapping
+from pathlib import Path
 from typing import Any
 
 from wt.signals import setups
@@ -99,3 +102,35 @@ def tally(records: Iterable[Mapping[str, Any]], key: str) -> dict[str, int]:
         if s in out:
             out[str(s)] += 1
     return out
+
+
+AGREE = ("same", "neither")           # the rule on the recorded bars and the runner reached the same bar, or none
+
+
+def load_records(folder: Path) -> list[dict[str, Any]]:
+    """Every session record under var/forward/replay, in date order; unreadable files are left out."""
+    out: list[dict[str, Any]] = []
+    if not folder.is_dir():
+        return out
+    for f in sorted(folder.glob("*.json")):
+        with contextlib.suppress(OSError, ValueError):
+            d = json.loads(f.read_text())
+            if isinstance(d, dict) and d.get("session"):
+                out.append(d)
+    return out
+
+
+def agreement(records: Iterable[Mapping[str, Any]], sessions: Collection[str] | None = None) -> dict[str, Any]:
+    """G2's agreement at the bar (DEC-0037, part 1): over the clean sessions with a readable record, how many the
+    frozen rule on the recorded bars and the runner agreed on (`replay_vs_journal` same or neither). Beside it,
+    the harness diagnostic (`forward_vs_replay`): the sigma and feed difference, never pooled. Sessions whose
+    reading is unknown are counted, not judged."""
+    recs = [r for r in records if sessions is None or str(r.get("session")) in sessions]
+    judged = [r for r in recs if r.get("replay_vs_journal") in STATUSES and r.get("replay_vs_journal") != "unknown"]
+    harness = [r for r in recs if r.get("forward_vs_replay") in STATUSES and r.get("forward_vs_replay") != "unknown"]
+    return {"agreement_level": "bar",
+            "agreement_days": len(judged),
+            "agreement_agree": sum(1 for r in judged if r.get("replay_vs_journal") in AGREE),
+            "agreement_unknown": len(recs) - len(judged),
+            "harness_days": len(harness),
+            "harness_agree": sum(1 for r in harness if r.get("forward_vs_replay") in AGREE)}

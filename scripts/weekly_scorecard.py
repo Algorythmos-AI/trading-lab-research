@@ -25,6 +25,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from wt.analytics import b_replay, funnel_agreement, g2  # noqa: E402
+from wt.risk import stop_rule  # noqa: E402
 from wt.core.clock import ET  # noqa: E402
 from wt.core.config import DATA_DIR, FORWARD_LEDGER, ROOT, ROUTINE_DIR, SCORECARD_DIR  # noqa: E402
 
@@ -133,6 +134,14 @@ def signal_days() -> list[dict]:
     return days
 
 
+def stop_line(rows: list[dict], today: dt.date) -> str:
+    """Where B's pre-registered stop stands (DEC-0037), or that there is none."""
+    rule = stop_rule.load()
+    if rule is None:
+        return "- Stop rule: **none in config/risk.yaml** (B.stop_rule); the runner does not arm without one"
+    return stop_rule.state_line(rule, rows, today)
+
+
 def replay_line() -> str:
     """B's rule replayed on recorded bars against the runner's journal, in sessions per status (a record: G2's own
     agreement measure above is unchanged)."""
@@ -216,8 +225,10 @@ def main(now: dt.datetime | None = None) -> str:
     j = read_jsonl(JOURNAL)
     closed = g2.trades(j)                              # once per trade id; adopted orphans never count
     fwd_b_days = {str(x.get("session")) for x in fwd if x.get("strategy") == "B_qqq_qqqm"}
-    g = g2.summary(j, {str(d) for d in sessions}, fwd_b_days)
+    replay = b_replay.load_records(FWD.parent / "replay")
+    g = g2.summary(j, {str(d) for d in sessions}, fwd_b_days, replay=replay)
     agree, n_both = g["agreement_agree"] or 0, g["agreement_days"] or 0
+    harness_agree, harness_n = g["harness_agree"] or 0, g["harness_days"] or 0
     inc = {k: sum(1 for x in j if x["event"] == k) for k in ("loop_error", "END_OF_DAY_NOT_FLAT", "reconcile", "refuse_to_arm")}
     latched = [x for x in j if x["event"] == "trade_closed" and x.get("virtual", {}).get("latched")]
     ps = stats([x["R"] for x in closed if x.get("R") is not None])
@@ -226,12 +237,17 @@ def main(now: dt.datetime | None = None) -> str:
           f"- Sessions armed: **{g['armed_sessions']}** · clean (count for G2): **{g['sessions']}** · "
           f"trades closed: **{ps['n']}**"
           + (f" · E[R] {ps['E']:+.3f} · win {ps['win']:.0%} · cum {ps['cum']:+.2f}R" if ps["n"] else ""),
-          f"- Signal agreement with forward-test B (clean sessions both ran; day-level, provisional until the "
-          f"replay harness): **{agree}/{n_both}**" + (f" = {agree / n_both:.0%} (G2 needs ≥90%)" if n_both else " (no overlap yet)"),
+          f"- Agreement at the bar, the frozen rule on recorded bars against the runner (clean sessions with a "
+          f"readable replay record, DEC-0037): **{agree}/{n_both}**"
+          + (f" = {agree / n_both:.0%} (G2a needs ≥90%)" if n_both else " (no readable session yet)")
+          + (f" · {g['agreement_unknown']} session(s) unreadable" if g.get("agreement_unknown") else "")
+          + (f" · harness, forward test against replay: {harness_agree}/{harness_n} (a diagnostic, not pooled)"
+             if harness_n else ""),
           replay_line(),
           f"- Incidents: loop errors {inc['loop_error']} · not flat at close {inc['END_OF_DAY_NOT_FLAT']} · "
           f"reconcile fixes {inc['reconcile']} · refused to arm {inc['refuse_to_arm']} · latch events {len(latched)}",
           f"- Virtual account: {'equity US$%.2f, settled cash US$%.2f, latched=%s' % (last_va['equity'], last_va['settled_cash'], last_va['latched']) if last_va else '—'}",
+          stop_line(j, today),
           "", "## 3. G2 progress", "",
           f"- Paper trades {ps['n']}/{g2.G2_MIN_TRADES} · clean sessions {g['sessions']}/{g2.G2_MIN_SESSIONS} · "
           f"incident-free streak {g['incident_free_streak']}/{g2.G2_MIN_INCIDENT_FREE} "
