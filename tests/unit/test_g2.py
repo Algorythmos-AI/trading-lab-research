@@ -115,3 +115,4 @@ def test_summary_prefers_the_bar_level_measure_when_replay_records_exist():
     assert out["harness_days"] == len(clean) and out["harness_agree"] == len(clean)
     day = g2.summary(rows, {"2026-10-13"}, set())
     assert day["agreement_level"] == "day" and day["agreement_unknown"] is None
+    assert g2.summary(rows, {"2026-10-13"}, set(), replay=[])["agreement_level"] == "day"   # no records: day-level still

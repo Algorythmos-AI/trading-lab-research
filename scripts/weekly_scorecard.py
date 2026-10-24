@@ -237,12 +237,15 @@ def main(now: dt.datetime | None = None) -> str:
           f"- Sessions armed: **{g['armed_sessions']}** · clean (count for G2): **{g['sessions']}** · "
           f"trades closed: **{ps['n']}**"
           + (f" · E[R] {ps['E']:+.3f} · win {ps['win']:.0%} · cum {ps['cum']:+.2f}R" if ps["n"] else ""),
-          f"- Agreement at the bar, the frozen rule on recorded bars against the runner (clean sessions with a "
-          f"readable replay record, DEC-0037): **{agree}/{n_both}**"
-          + (f" = {agree / n_both:.0%} (G2a needs ≥90%)" if n_both else " (no readable session yet)")
-          + (f" · {g['agreement_unknown']} session(s) unreadable" if g.get("agreement_unknown") else "")
-          + (f" · harness, forward test against replay: {harness_agree}/{harness_n} (a diagnostic, not pooled)"
-             if harness_n else ""),
+          (f"- Agreement at the bar, the frozen rule on recorded bars against the runner (clean sessions with a "
+           f"readable replay record, DEC-0037): **{agree}/{n_both}**"
+           + (f" = {agree / n_both:.0%} (G2a needs ≥90%)" if n_both else " (no readable session yet)")
+           + (f" · {g['agreement_unknown']} session(s) unreadable" if g.get("agreement_unknown") else "")
+           + (f" · harness, forward test against replay: {harness_agree}/{harness_n} (a diagnostic, not pooled)"
+              if harness_n else "")) if g["agreement_level"] == "bar" else
+          (f"- Signal agreement with forward-test B (clean sessions both ran; day-level, provisional until replay "
+           f"records exist, DEC-0037): **{agree}/{n_both}**"
+           + (f" = {agree / n_both:.0%}" if n_both else " (no overlap yet)")),
           replay_line(),
           f"- Incidents: loop errors {inc['loop_error']} · not flat at close {inc['END_OF_DAY_NOT_FLAT']} · "
           f"reconcile fixes {inc['reconcile']} · refused to arm {inc['refuse_to_arm']} · latch events {len(latched)}",

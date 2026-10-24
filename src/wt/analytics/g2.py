@@ -125,7 +125,7 @@ def summary(rows: list[dict[str, Any]], forward_sessions: set[str] | None = None
         "agreement_level": "day", "agreement_days": None, "agreement_agree": None,
         "agreement_unknown": None, "harness_days": None, "harness_agree": None,
     }
-    if replay is not None:
+    if replay:                                   # records exist: the bar-level measure (DEC-0037, part 1)
         from wt.analytics import b_replay
         out.update(b_replay.agreement(replay, {s.date for s in clean}))
     elif forward_sessions is not None and forward_b_days is not None:
