@@ -22,6 +22,7 @@ const STATUS = {
   clear: { word: "Clear to trade", icon: CircleCheck, tone: "good", soft: "bg-good-soft border-good-fill/40" },
   careful: { word: "Careful", icon: TriangleAlert, tone: "warn", soft: "bg-warn-soft border-warn-fill/50" },
   stop: { word: "Stop for today", icon: OctagonX, tone: "bad", soft: "bg-bad-soft border-bad-fill/50" },
+  unknown: { word: "Journal not current", icon: TriangleAlert, tone: "warn", soft: "bg-warn-soft border-warn-fill/50" },
 } as const;
 
 const HELD: Record<HeldBy, { word: string; tone: Tone; means: string }> = {
@@ -64,7 +65,7 @@ export function AccountTodayPanel({ r, asOf, now }: { r: AccountRisk; asOf: stri
         <div className={cn("flex items-center gap-3 rounded-lg border px-3.5 py-3", s.soft)} role="status">
           <s.icon aria-hidden className={cn("size-7 shrink-0", TONE_TEXT[s.tone])} />
           <div className="grid min-w-0 leading-tight">
-            <span className={cn("text-base font-semibold", TONE_TEXT[s.tone])}>{c.isToday ? s.word : "New day"}</span>
+            <span className={cn("text-base font-semibold", TONE_TEXT[s.tone])}>{c.isToday || !c.current ? s.word : "New day"}</span>
             <span className="text-muted-foreground text-sm">
               {c.line}
               {!c.isToday && r.day ? ` Last session traded: ${shortDay(r.day)}.` : ""}

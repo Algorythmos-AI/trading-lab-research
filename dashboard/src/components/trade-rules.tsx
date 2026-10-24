@@ -41,6 +41,7 @@ const STATUS = {
   clear: { word: "Clear to trade", icon: CircleCheck, text: "text-good", soft: "bg-good-soft border-good-fill/40", fill: "bg-good-fill" },
   careful: { word: "Careful", icon: TriangleAlert, text: "text-warn", soft: "bg-warn-soft border-warn-fill/50", fill: "bg-warn-fill" },
   stop: { word: "Stop for today", icon: OctagonX, text: "text-bad", soft: "bg-bad-soft border-bad-fill/50", fill: "bg-bad-fill" },
+  unknown: { word: "Journal not current", icon: TriangleAlert, text: "text-warn", soft: "bg-warn-soft border-warn-fill/50", fill: "bg-warn-fill" },
 } as const;
 
 function DayMeter({ label, used, max, text, fill }: { label: string; used: number; max: number; text: string; fill: string }) {
@@ -76,7 +77,7 @@ function TodayStrip({ check }: { check: DayCheck }) {
       <div className="flex min-w-0 items-center gap-2.5 sm:pr-2">
         <s.icon aria-hidden className={cn("size-6 shrink-0", s.text)} />
         <div className="grid min-w-0 leading-tight">
-          <span className={cn("text-sm font-semibold", s.text)}>{check.isToday ? s.word : "New day"}</span>
+          <span className={cn("text-sm font-semibold", s.text)}>{check.isToday || !check.current ? s.word : "New day"}</span>
           <span className="text-muted-foreground text-xs">{check.line}</span>
         </div>
       </div>
@@ -340,7 +341,7 @@ export function TradeRulesFor({ doc, now }: { doc: JournalDoc | null; now: Date 
   const first = trades.reduce<string | null>((m, t) => (m === null || t.opened_at < m ? t.opened_at : m), null);
   return (
     <TradeRules
-      check={doc ? dayCheck(sessionView(doc, now)) : null}
+      check={doc ? dayCheck(sessionView(doc, now), { asOf: doc.as_of, now }) : null}
       evidence={ruleEvidence(trades)}
       breaks={trades.length ? breakSummary(trades) : null}
       tradeCount={trades.length}

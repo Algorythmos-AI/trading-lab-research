@@ -219,16 +219,17 @@ const DAY = {
   clear: { word: "Clear to trade", tone: "bg-good-soft border-good-fill/40", text: "text-good" },
   careful: { word: "Careful", tone: "bg-warn-soft border-warn-fill/50", text: "text-warn" },
   stop: { word: "Stop for today", tone: "bg-bad-soft border-bad-fill/50", text: "text-bad" },
+  unknown: { word: "Journal not current", tone: "bg-warn-soft border-warn-fill/50", text: "text-warn" },
 } as const;
 
 /** One line at the top: the session, today's trade count and the day's loss against the limits. */
 export function DayBar({ doc, now, session }: { doc: JournalDoc | null; now: Date; session: string }) {
-  const c = dayCheck(doc ? sessionView(doc, now) : null);
+  const c = dayCheck(doc ? sessionView(doc, now) : null, doc ? { asOf: doc.as_of, now } : undefined);
   const s = DAY[c.status];
   const loss = Math.max(0, -c.net);
   return (
     <div role="status" className={cn("flex flex-wrap items-center gap-x-6 gap-y-1 rounded-lg border px-3.5 py-2 text-sm", s.tone)}>
-      <span className={cn("font-semibold", s.text)}>{c.isToday ? s.word : "New day"}</span>
+      <span className={cn("font-semibold", s.text)}>{c.isToday || !c.current ? s.word : "New day"}</span>
       <span className="text-muted-foreground">Session {weekDate(session)}</span>
       <span>
         Trades{" "}

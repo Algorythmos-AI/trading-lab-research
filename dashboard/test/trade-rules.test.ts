@@ -173,6 +173,43 @@ describe("dayCheck", () => {
     expect(dayCheck(sessionView({ trades: [], open: [{ ...lot, qty: 1 }] }, now)).brokenRules).toEqual([]);
   });
 
+  it("never reads clear from a journal that is not current", () => {
+    // 11:30 New York on a session day; the hourly sync last read the broker at 09:24.
+    const at = new Date("2026-10-16T15:30:00Z");
+    const c = dayCheck(sessionView({ trades: [], open: [] }, at), { asOf: "2026-10-16T13:24:00Z", now: at });
+    expect(c).toMatchObject({ status: "unknown", current: false, used: 0 });
+    expect(c.line).toBe("Your Webull trades were last read 2 h 6 min ago (09:24 New York): today's count and loss may be missing. Check Webull before an entry.");
+    expect(c.line).not.toMatch(/fresh day|room/);
+  });
+
+  it("says so when the journal has never been read, and keeps the day's figures it has", () => {
+    const at = new Date("2026-10-16T15:30:00Z");
+    const lost = trade(-60, "2026-10-16T13:40:00Z", "2026-10-16T13:45:00Z", { exit: 0.9 });
+    expect(dayCheck(sessionView({ trades: [lost], open: [] }, at), { asOf: null, now: at })).toMatchObject({ status: "unknown", net: -60, line: expect.stringMatching(/^Your Webull trades have not been read/) });
+    // A journal from an earlier day names the day it was read.
+    expect(dayCheck(null, { asOf: "2026-10-14T21:38:00Z", now: at }).line).toMatch(/last read 2 days ago \(Wed, 14 Oct, 17:38 New York\)/);
+  });
+
+  it("names open positions, whose loss is not counted until they close", () => {
+    const lot = { symbol: "SPY", kind: "call" as const, strike: 760, expiry: "2026-10-16", side: "long" as const, qty: 1, entry: 1.2, opened_at: "2026-10-16T14:45:00Z" };
+    const one = dayCheck(sessionView({ trades: [], open: [lot] }, now));
+    expect(one.status).toBe("clear");
+    expect(one.line).toMatch(/ 1 position still open: an open loss is not counted until it closes\.$/);
+    expect(dayCheck(sessionView({ trades: [], open: [lot, { ...lot, strike: 765 }] }, now)).line).toMatch(/2 positions still open/);
+    const stale = dayCheck(sessionView({ trades: [], open: [lot] }, now), { asOf: "2026-10-16T13:24:00Z", now });
+    expect(stale).toMatchObject({ status: "unknown" });
+    expect(stale.line).toMatch(/Check Webull before an entry\. 1 position still open/);
+  });
+
+  it("says when a current journal read the trades, so one placed since is not forgotten", () => {
+    const c = dayCheck(sessionView({ trades: [], open: [] }, now), { asOf: "2026-10-16T15:24:00Z", now });
+    expect(c).toMatchObject({ status: "clear", current: true });
+    expect(c.line).toMatch(/ Trades read at 11:24 New York\.$/);
+    // Before the open, last evening's read is current and names its day.
+    const pre = new Date("2026-10-16T12:00:00Z");
+    expect(dayCheck(null, { asOf: "2026-10-15T21:38:00Z", now: pre })).toMatchObject({ status: "clear", current: true, line: expect.stringMatching(/^A fresh day: .* Trades read at Thu, 15 Oct, 17:38 New York\.$/) });
+  });
+
   it("counts a lot opened today and still held as a trade taken", () => {
     const lot = { symbol: "SPY", kind: "put" as const, strike: 750, expiry: "2026-10-16", side: "long" as const, qty: 1, entry: 1.2, opened_at: "2026-10-16T14:45:00Z" };
     const won = trade(10, "2026-10-16T14:00:00Z", "2026-10-16T14:02:00Z");

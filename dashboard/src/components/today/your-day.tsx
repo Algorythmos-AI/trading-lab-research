@@ -8,7 +8,7 @@ import { TradeClock } from "@/components/today/trade-clock";
 import { contractLabel, fmtMinutes, holdMinutes, marketState, nyTime, sessionView, type JournalDoc } from "@/lib/journal";
 import type { Tone } from "@/lib/labels";
 import { dayClock } from "@/lib/overview";
-import { DAY_LOSS_LIMIT, MAX_TRADES_PER_DAY, TIME_STOP_MINUTES, dayCheck } from "@/lib/trade-rules";
+import { DAY_LOSS_LIMIT, MAX_TRADES_PER_DAY, TIME_STOP_MINUTES, dayCheck, type DayStatus } from "@/lib/trade-rules";
 import { cn } from "@/lib/utils";
 
 const usd = (v: number | null | undefined) => {
@@ -20,16 +20,17 @@ const usd = (v: number | null | undefined) => {
 const toneOf = (v: number | null | undefined): Tone => (v === null || v === undefined || v === 0 ? "neutral" : v > 0 ? "good" : "bad");
 const nyClock = new Intl.DateTimeFormat("en-AU", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 const dayFmt = new Intl.DateTimeFormat("en-AU", { timeZone: "UTC", weekday: "long", day: "numeric", month: "short" });
-const RULE: Record<"clear" | "careful" | "stop", { tone: Tone; word: string }> = {
+const RULE: Record<DayStatus, { tone: Tone; word: string }> = {
   clear: { tone: "good", word: "OK to trade" },
   careful: { tone: "warn", word: "Careful" },
   stop: { tone: "bad", word: "Stop for today" },
+  unknown: { tone: "warn", word: "Journal not current" },
 };
 
 export function YourDay({ doc, now }: { doc: JournalDoc; now: Date }) {
   const view = sessionView(doc, now);
   if (!view) return null;
-  const check = dayCheck(view);
+  const check = dayCheck(view, { asOf: doc.as_of, now });
   const market = marketState(now);
   const nowMinute = view.isToday ? nyTime(now.toISOString()).minute : null;
   const clock = dayClock(view.trades, view.isToday ? view.open : [], view.day, nowMinute, contractLabel);
@@ -45,7 +46,7 @@ export function YourDay({ doc, now }: { doc: JournalDoc; now: Date }) {
       title={title}
       icon={Activity}
       means="Your own Webull trades for the New York day, read from the broker every two minutes while the market is open. Each bar is one trade from entry to exit; the line under them is the day's running result."
-      action={<StatusBadge tone={view.isToday ? rule.tone : "neutral"}>{view.isToday ? rule.word : market === "closed" ? "Market closed" : "No trades yet today"}</StatusBadge>}
+      action={<StatusBadge tone={view.isToday || !check.current ? rule.tone : "neutral"}>{view.isToday || !check.current ? rule.word : market === "closed" ? "Market closed" : "No trades yet today"}</StatusBadge>}
     >
       <div className="grid gap-5">
         <div className="grid grid-cols-2 gap-x-4 gap-y-5 lg:grid-cols-4">
@@ -81,7 +82,7 @@ export function YourDay({ doc, now }: { doc: JournalDoc; now: Date }) {
             tone={lossUsed >= DAY_LOSS_LIMIT ? "bad" : lossUsed >= DAY_LOSS_LIMIT * 0.6 ? "warn" : "good"}
           />
         </div>
-        <p className={cn("text-sm", TONE_TEXT[view.isToday ? rule.tone : "neutral"])}>{check.line}</p>
+        <p className={cn("text-sm", TONE_TEXT[view.isToday || !check.current ? rule.tone : "neutral"])}>{check.line}</p>
         {clock.items.length ? <TradeClock items={clock.items} lanes={clock.lanes} steps={clock.steps} nowMinute={nowMinute} day={view.day} /> : null}
         {view.trades.length ? (
           <ul className="grid sm:grid-cols-2 sm:gap-x-6" aria-label="Trades closed this session, newest first">

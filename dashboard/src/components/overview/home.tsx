@@ -61,12 +61,13 @@ const RULE_CHIP = {
   clear: { tone: "good" as Tone, word: "OK to trade" },
   careful: { tone: "warn" as Tone, word: "Careful" },
   stop: { tone: "bad" as Tone, word: "Stop for today" },
+  unknown: { tone: "warn" as Tone, word: "Journal not current" },
 };
 
 /** The account at a glance: what it is worth, the latest day, and how much of today's room is left. */
 export function AccountHero({ doc, now }: { doc: JournalDoc; now: Date }) {
   const view = sessionView(doc, now);
-  const check = dayCheck(view);
+  const check = dayCheck(view, { asOf: doc.as_of, now });
   const market = marketState(now);
   const next = nextOpen(now);
   const money = doc.money ? moneyView(doc.money, summarize(doc.trades).net) : null;
@@ -84,7 +85,7 @@ export function AccountHero({ doc, now }: { doc: JournalDoc; now: Date }) {
           <StatusBadge tone={market === "open" ? "good" : "neutral"}>
             {next.open ? `Market open · closes in ${untilText(next.minutes)}` : `Opens in ${untilText(next.minutes)} · ${sydneyOpen(next.day)} Sydney`}
           </StatusBadge>
-          <StatusBadge tone={chip.tone}>{check.isToday ? chip.word : "New day · OK to trade"}</StatusBadge>
+          <StatusBadge tone={chip.tone}>{check.isToday || !check.current ? chip.word : "New day · OK to trade"}</StatusBadge>
         </span>
       </div>
       <div className="grid grid-cols-2 gap-x-4 gap-y-5 lg:grid-cols-4">
@@ -118,7 +119,7 @@ export function AccountHero({ doc, now }: { doc: JournalDoc; now: Date }) {
           tone={lossUsed >= DAY_LOSS_LIMIT ? "bad" : lossUsed >= DAY_LOSS_LIMIT * 0.6 ? "warn" : "good"}
         />
       </div>
-      <p className={cn("text-sm", TONE_TEXT[check.isToday ? chip.tone : "neutral"])}>{check.line}</p>
+      <p className={cn("text-sm", TONE_TEXT[check.isToday || !check.current ? chip.tone : "neutral"])}>{check.line}</p>
       <RuleStreak trades={doc.trades} />
     </section>
   );
