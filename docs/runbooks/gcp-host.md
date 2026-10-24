@@ -154,13 +154,20 @@ host. Deploy keys work on public repositories too, so there is no reason to wait
    evidence branch. One fine-grained token, this repository only, permissions *Contents: read and write*,
    *Pull requests: read and write*, *Checks: read* (Metadata is implied), with an expiry. Store it under `GH_TOKEN`
    with `sudo wt-set-secrets` (Enter keeps every other value). The evidence job pushes to GitHub over HTTPS with
-   this token; it never pushes through `origin`.
+   this token; it never pushes through `origin`. Its pull requests target `integration`; they merge on their own
+   only when the repository setting "Allow auto-merge" is on, otherwise you merge them like any other.
+   Weeks the job could not push while the repository was public are archived one at a time, oldest first, each
+   after the previous one has merged:
+   ```
+   sudo -u wt bash -c 'cd /home/wt/trading && set -a && . /run/wt-secrets/env && set +a && PYTHONPATH=src .venv/bin/python -m wt.ops.evidence --week 2026-W41'
+   ```
 4. **Check before the flip:** `sudo -u wt /usr/local/bin/wt-deploy preflight` must show `[ok] origin reachable`,
    and `sudo -u wt /usr/local/bin/wt-deploy gate` must still answer.
 5. **Flip** the repository to private on GitHub (Settings, Danger zone). Then read the next hourly line in
    `logs/deploy_auto_<date>.log`: "nothing to deploy (already at ...)" or a deploy, never a fetch error.
 
-Going back is one click (public again); the SSH remote and the token keep working either way. A GCP rebuild tries
+Going back (public again) is one click only until the first evidence pull request has merged: from then on the
+repository holds scorecards and account figures, and it stays private. The SSH remote and the token work either way. A GCP rebuild tries
 SSH first and falls back to HTTPS while the repository is public; with a private repository, register the new host's
 key (step 1) and clone by hand before step 2 of the runbook. The OCI template still clones over HTTPS at first boot.
 
