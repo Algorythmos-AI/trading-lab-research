@@ -35,8 +35,8 @@ gcloud compute firewall-rules delete default-allow-ssh default-allow-rdp --quiet
 gcloud compute firewall-rules create allow-ssh-from-iap --network default --direction INGRESS \
   --action allow --rules tcp:22 --source-ranges 35.235.240.0/20
 
-curl -fsSLo wt-cloud-init.yaml \
-  https://raw.githubusercontent.com/Algorythmos-AI/trading-lab-research/main/deploy/gcp/cloud-init.yaml
+# From a checkout of this repository (the raw GitHub URL stops answering once the repository is private).
+cp deploy/gcp/cloud-init.yaml wt-cloud-init.yaml
 gcloud compute instances create trading-lab-host --zone us-east1-b --machine-type e2-micro \
   --image-family ubuntu-2404-lts-amd64 --image-project ubuntu-os-cloud \
   --boot-disk-size 30GB --boot-disk-type pd-standard \
@@ -128,6 +128,62 @@ tail -f /tmp/wt-deploy.log
 - **Afterwards:** `sudo -u wt /usr/local/bin/wt-deploy preflight` should be all `[ok]`, and
   `sudo -u wt make -C /home/wt/trading sync-ml` should print `ML environment: current` and nothing else.
 - **To go back:** [rollback](rollback.md).
+
+## Going private (owner)
+
+The host reads the repository in two ways: `git fetch origin main` in every deploy (`wt.ops.deploy`), and the
+GitHub checks API for the commit's CI (`wt.ops.ci`). While the repository is public both work anonymously. The
+moment it is private, an unprepared host fails both: every hourly `deploy-auto` and `deploy-notify` run errors,
+and `wt-alert@` pages. Do these steps first, inside a deploy-gate window, and the flip changes nothing for the
+host. Deploy keys work on public repositories too, so there is no reason to wait.
+
+Two ways to let the host read a private repository. The organisation's policy had **deploy keys disabled** on
+2026-10-24, so the token path below is the one in use; the key path stays here for the day the policy changes.
+
+**Token path (in use).** The remote stays HTTPS; git asks `gh` for credentials, and `gh` reads `GH_TOKEN` from
+the secrets every unit already loads. Do step 3 first, then:
+```
+sudo -u wt git -C /home/wt/trading config credential.helper '!gh auth git-credential'
+sudo -u wt bash -c 'cd /home/wt/trading && set -a && . /run/wt-secrets/env && set +a && GIT_TERMINAL_PROMPT=0 git fetch --quiet origin main && echo fetch ok'
+```
+The one thing to remember is the token's expiry: `wt-deploy preflight` says "origin reachable" fails the day it
+lapses, and `sudo wt-set-secrets` with a new token is the fix. Then go to step 4.
+
+**Deploy-key path (when the organisation allows it).**
+
+1. **Register the host's deploy key** (read-only). Print the public half:
+   `sudo -u wt cat /home/wt/.ssh/github_deploy.pub` (a host built before this runbook section has the key
+   already; one without it: `sudo -u wt ssh-keygen -q -t ed25519 -N "" -C "trading-lab-host deploy key" -f /home/wt/.ssh/github_deploy`).
+   GitHub: repository Settings, Deploy keys, Add deploy key, paste it, leave "Allow write access" off.
+2. **Point the host at SSH** and trust GitHub's host key:
+   ```
+   sudo -Hu wt sh -c 'printf "Host github.com\n  IdentityFile ~/.ssh/github_deploy\n  IdentitiesOnly yes\n" > ~/.ssh/config && chmod 0600 ~/.ssh/config'
+   sudo -Hu wt sh -c 'printf "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl\n" > ~/.ssh/known_hosts && chmod 0600 ~/.ssh/known_hosts'
+   sudo -Hu wt ssh -T git@github.com         # "Hi Algorythmos-AI/trading-lab-research! ... does not provide shell access" is success
+   # The host key above is GitHub's published ed25519 key (https://api.github.com/meta), pinned rather than scanned.
+   sudo -u wt git -C /home/wt/trading remote set-url origin git@github.com:Algorythmos-AI/trading-lab-research.git
+   sudo -u wt git -C /home/wt/trading fetch --quiet origin main && echo fetch ok
+   ```
+3. **Give the host a token** for reading the checks API, pushing the weekly evidence branch and, on the token
+   path, every fetch. One fine-grained token, this repository only, permissions *Contents: read and write*,
+   *Pull requests: read and write*, *Checks: read* (Metadata is implied), with an expiry. Store it under `GH_TOKEN`
+   with `sudo wt-set-secrets` (Enter keeps every other value). The evidence job pushes to GitHub over HTTPS with
+   this token; it never pushes through `origin`. Its pull requests target `integration`; they merge on their own
+   only when the repository setting "Allow auto-merge" is on, otherwise you merge them like any other.
+   Weeks the job could not push while the repository was public are archived one at a time, oldest first, each
+   after the previous one has merged:
+   ```
+   sudo -u wt bash -c 'cd /home/wt/trading && set -a && . /run/wt-secrets/env && set +a && PYTHONPATH=src .venv/bin/python -m wt.ops.evidence --week 2026-W41'
+   ```
+4. **Check before the flip:** `sudo -u wt /usr/local/bin/wt-deploy preflight` must show `[ok] origin reachable`,
+   and `sudo -u wt /usr/local/bin/wt-deploy gate` must still answer.
+5. **Flip** the repository to private on GitHub (Settings, Danger zone). Then read the next hourly line in
+   `logs/deploy_auto_<date>.log`: "nothing to deploy (already at ...)" or a deploy, never a fetch error.
+
+Going back (public again) is one click only until the first evidence pull request has merged: from then on the
+repository holds scorecards and account figures, and it stays private. The SSH remote and the token work either way. A GCP rebuild tries
+SSH first and falls back to HTTPS while the repository is public; with a private repository, register the new host's
+key (step 1) and clone by hand before step 2 of the runbook. The OCI template still clones over HTTPS at first boot.
 
 ## Primary host (cutover v2, 2026-10)
 

@@ -86,6 +86,25 @@ def differences(a: object, b: object, path: str = "") -> list[str]:
     return [] if a == b and type(a) is type(b) else [path]
 
 
+FOCUS_BIAS = ("breakout", "support", "range")
+
+
+def read_focus(path: Path) -> dict[str, object]:
+    """The focus block as the dashboard's schema wants it (`focus`: `items` of symbol, rank, bias and the levels the
+    picker gives them). The picker writes it; this only refuses a shape the site would refuse, before a send."""
+    doc = json.loads(path.read_text())
+    if not isinstance(doc, dict) or not isinstance(doc.get("items"), list):
+        raise ValueError("a focus block is an object with an `items` list")
+    for i, item in enumerate(doc["items"]):
+        if not isinstance(item, dict) or not isinstance(item.get("symbol"), str) or not item["symbol"]:
+            raise ValueError(f"items[{i}] has no symbol")
+        if not isinstance(item.get("rank"), int) or isinstance(item.get("rank"), bool) or not 1 <= item["rank"] <= 10:
+            raise ValueError(f"items[{i}] ({item['symbol']}) has no rank from 1 to 10")
+        if item.get("bias") not in FOCUS_BIAS:
+            raise ValueError(f"items[{i}] ({item['symbol']}) has no bias in {', '.join(FOCUS_BIAS)}")
+    return doc
+
+
 def site_accepts(url: str, bypass: str | None) -> int:
     """The newest edition format the live dashboard validates, from /api/health; 0 when it cannot be read."""
     health, _ = _publish().read_health(url, bypass)
@@ -137,6 +156,8 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--dry-run", action="store_true", help="build and write, do not send")
     mode.add_argument("--send", action="store_true")
     ap.add_argument("--compare", type=Path, help="an edition written by another build of the same pulls: print how the two differ, as counts")
+    ap.add_argument("--focus", type=Path, help="a focus block to carry (JSON in the dashboard's `focus` shape: items with symbol, rank, bias); "
+                                              "the clone reads its names from it")
     a = ap.parse_args(argv)
 
     now = dt.datetime.fromisoformat(a.now) if a.now else dt.datetime.now(dt.UTC).replace(tzinfo=None)
@@ -204,6 +225,12 @@ def main(argv: list[str] | None = None) -> int:
                                 vix=vix,
                                 earnings=edition.earnings_events(earnings_rows(), names, levels_doc["session"],
                                                                  built_from=levels_doc.get("built_from")) if two else None)
+    if a.focus:
+        try:
+            doc["focus"] = read_focus(a.focus)
+        except (OSError, ValueError) as e:
+            print(f"focus block unreadable ({e}): nothing built", file=sys.stderr)
+            return 1
     body = json.dumps(doc, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode()
     if a.out:
         a.out.write_bytes(body)

@@ -126,7 +126,8 @@ ALLOW: dict[str, Any] = {
                   "recent": [{"ts": S, "event": S, "detail": T}],
                   "g2": {"trades": I, "trades_needed": I, "sessions": I, "sessions_needed": I, "armed_sessions": I,
                          "unchecked_sessions": I, "incident_free_streak": I, "incident_free_needed": I, "agreement_level": S,
-                         "agreement_days": I, "agreement_agree": I}, "log": LOG},
+                         "agreement_days": I, "agreement_agree": I, "agreement_unknown": I, "harness_days": I,
+                         "harness_agree": I}, "log": LOG},
         "forward": {"exists": B, "sessions": I, "first": S, "last": S, "errors": I, "bad_lines": I,
                     "strategies": [{"strategy": S, "n": I, "mean_r": N, "total_r": N}], "latest_scorecard": S,
                     # one book per registered trial (DEC-0023): ids, counts, R and nominal dollars; never a setup name

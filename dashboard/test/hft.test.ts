@@ -562,7 +562,7 @@ describe("GET /api/health", () => {
     vi.stubEnv("VERCEL_GIT_COMMIT_SHA", "");
   });
 
-  it("gains desks.hft with the three fields the crypto desk has, and every older field keeps its place and shape", async () => {
+  it("gains desks.hft with the fields the crypto desk has, each desk's state word, and every older field keeps its place and shape", async () => {
     const stocks = { ...fixture(), run_id: "s1", as_of: "2026-10-01T11:46:00Z" };
     sdk.current.write(DESK_PATHS.stocks.latest, JSON.stringify(stocks));
     sdk.current.write(DESK_PATHS.crypto.latest, JSON.stringify(crypto()));
@@ -574,8 +574,8 @@ describe("GET /api/health", () => {
       snapshot_run_id: "s1",
       snapshot: "ok",
       desks: {
-        crypto: { snapshot: "ok", as_of: "2026-10-01T11:46:00Z", run_id: "c1" },
-        hft: { snapshot: "missing", as_of: null, run_id: null },
+        crypto: { snapshot: "ok", as_of: "2026-10-01T11:46:00Z", run_id: "c1", state: "running" },
+        hft: { snapshot: "missing", as_of: null, run_id: null, state: "parked" },
       },
       editions: NO_EDITIONS,
     });
@@ -589,8 +589,8 @@ describe("GET /api/health", () => {
     await post(hft());
     const body = await health();
     expect(body.desks).toEqual({
-      crypto: { snapshot: "missing", as_of: null, run_id: null },
-      hft: { snapshot: "ok", as_of: "2026-10-01T11:46:00Z", run_id: "h1" },
+      crypto: { snapshot: "missing", as_of: null, run_id: null, state: "running" },
+      hft: { snapshot: "ok", as_of: "2026-10-01T11:46:00Z", run_id: "h1", state: "parked" },
     });
     expect([body.snapshot, body.snapshot_as_of, body.snapshot_run_id]).toEqual(["missing", null, null]);
   });
@@ -599,7 +599,7 @@ describe("GET /api/health", () => {
     sdk.current.write(DESK_PATHS.stocks.latest, JSON.stringify(fixture()));
     sdk.current.write(DESK_PATHS.hft.latest, "[]");
     const body = await health();
-    expect((body.desks as Loose).hft).toEqual({ snapshot: "error", as_of: null, run_id: null });
+    expect((body.desks as Loose).hft).toEqual({ snapshot: "error", as_of: null, run_id: null, state: "parked" });
     expect(body.snapshot).toBe("ok");
     expect(body.ok).toBe(true);
   });

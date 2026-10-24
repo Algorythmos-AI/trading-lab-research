@@ -103,7 +103,7 @@ def test_the_forward_test_keeps_the_record_and_a_failure_costs_nothing(tmp_path,
     assert "replay record 2026-03-02" in capsys.readouterr().out
 
 
-def test_the_scorecard_counts_the_statuses_and_leaves_g2_alone(tmp_path, monkeypatch):
+def test_the_scorecard_counts_the_statuses_and_g2_reads_them_by_decision(tmp_path, monkeypatch):
     sc = load("weekly_scorecard")
     monkeypatch.setattr(sc, "FWD", tmp_path / "forward" / "forward_trades.jsonl")
     assert "sessions recorded 0, comparable 0" in sc.replay_line()
@@ -115,4 +115,5 @@ def test_the_scorecard_counts_the_statuses_and_leaves_g2_alone(tmp_path, monkeyp
     assert "sessions recorded 4, comparable 3" in line
     assert "same bar 1 · no signal on either 1 · different bar 1 · replay only 0 · journal only 0" in line
     assert "Forward test against the replay: same 3 · not the same 0" in line
-    assert "b_replay" not in (ROOT / "src/wt/analytics/g2.py").read_text()        # the gate does not read this record
+    g2_src = (ROOT / "src/wt/analytics/g2.py").read_text()
+    assert "DEC-0037" in g2_src and "b_replay" in g2_src        # the gate reads this record by decision, not by drift

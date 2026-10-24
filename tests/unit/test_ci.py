@@ -80,3 +80,22 @@ def test_required_names_come_from_the_environment(monkeypatch):
     assert ci.required_names() == ("test", "ml")           # a red ML suite stops a deploy too
     monkeypatch.setenv("WT_REQUIRED_CHECKS", "test, security / scan ,dashboard-gate")
     assert ci.required_names() == ("test", "security / scan", "dashboard-gate")
+
+
+def test_a_fine_grained_token_reads_the_jobs_through_the_actions_api(monkeypatch):
+    """Check runs answer 403 to a fine-grained token on a private repository; the Actions API gives the same jobs."""
+    monkeypatch.setenv("GH_TOKEN", "github_pat_x")
+    s = Session([Resp(403, {}),
+                 Resp(200, {"workflow_runs": [{"id": 11}, {"id": 12}]}),
+                 Resp(200, {"jobs": [run("test", "success", 1), run("dashboard-gate", "success", 2)]}),
+                 Resp(200, {"jobs": [run("ml", "success", 3)]})])
+    v = ci.check("abc", ("test", "ml"), "O/r", session=s)
+    assert v.green and v.checks == {"test": "success", "ml": "success"}
+    assert s.urls[1].endswith("/repos/O/r/actions/runs?head_sha=abc&per_page=100")
+    assert s.urls[2].endswith("/repos/O/r/actions/runs/11/jobs?filter=latest&per_page=100")
+    s = Session([Resp(403, {}), Resp(200, {"workflow_runs": [{"id": 11}]}),
+                 Resp(200, {"jobs": [run("test", "failure", 1)]})])
+    assert not ci.check("abc", ("test", "ml"), "O/r", session=s).green          # still judged, not waved through
+    s = Session([Resp(403, {}), Resp(403, {})])
+    v = ci.check("abc", ("test",), "O/r", session=s)
+    assert not v.green and "403 (checks) and 403 (actions)" in v.detail

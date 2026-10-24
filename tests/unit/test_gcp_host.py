@@ -57,6 +57,33 @@ def test_first_boot_installs_only_files_that_exist():
         assert (BIN / name).stat().st_mode & stat.S_IXUSR, name
 
 
+def test_the_deploy_key_exists_before_the_clone_and_the_clone_prefers_it():
+    """Going private (docs/runbooks/gcp-host.md): the host must be able to fetch without anonymous HTTPS."""
+    cmds = commands()
+    keygen = next(i for i, c in enumerate(cmds) if "ssh-keygen" in c)
+    clone = next(i for i, c in enumerate(cmds) if "git clone" in c)
+    assert keygen < clone
+    assert "git@github.com:Algorythmos-AI/trading-lab-research.git" in cmds[clone]
+    assert "|| git clone --quiet https://github.com/Algorythmos-AI/trading-lab-research.git" in cmds[clone]
+    assert "BatchMode=yes" in cmds[clone] and "2>/dev/null" not in cmds[clone]         # a refused key is reported
+    assert not any("ssh-keyscan" in c for c in cmds)                                    # pinned, never trust-on-first-use
+    assert any("github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" in c and "known_hosts" in c for c in cmds)
+    assert any("IdentityFile ~/.ssh/github_deploy" in c and "IdentitiesOnly yes" in c for c in cmds)
+    marker = next(c for c in cmds if "wt-bootstrap-done" in c)
+    assert "test -d /home/wt/trading/.git &&" in marker                                  # no checkout, no "bootstrapped"
+    assert "raw.githubusercontent.com" not in (ROOT / "docs/runbooks/gcp-host.md").read_text()
+
+
+def test_the_runbook_says_how_to_go_private_without_breaking_the_deploy():
+    book = (ROOT / "docs/runbooks/gcp-host.md").read_text()
+    section = book.split("## Going private (owner)")[1].split("\n## ")[0]
+    for needle in ("github_deploy.pub", "remote set-url origin git@github.com:Algorythmos-AI/trading-lab-research.git",
+                   "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl", "GH_TOKEN", "wt-set-secrets", "origin reachable", "never pushes through `origin`",
+                   "credential.helper '!gh auth git-credential'", "deploy keys disabled"):
+        assert needle in section, needle
+    assert book.index("## Going private (owner)") < book.index("## Primary host (cutover v2, 2026-10)")
+
+
 def test_the_runbook_keeps_the_vm_free_and_closed():
     book = (ROOT / "docs/runbooks/gcp-host.md").read_text()
     for flag in ("--machine-type e2-micro", "--boot-disk-type pd-standard", "--boot-disk-size 30GB",

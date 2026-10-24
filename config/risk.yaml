@@ -10,6 +10,13 @@ B:
   max_quote_age_s: 5
   max_collar_pct: 0.5
   max_spread_pct: 0.15
+  # The pre-registered stop (DEC-0037): entries stop, as a latch that only a decision record clears, when any of
+  # these holds. Read by wt.risk.stop_rule at arming time and printed by the weekly scorecard.
+  stop_rule:
+    decision: DEC-0037
+    cum_r_max_loss: -6.0        # cumulative R over B's closed trades with a real exit
+    review_at_trades: 30        # at this many trades, stop if the bootstrap CI95 upper bound of E[R] is below zero
+    stop_date: 2027-01-30       # whatever the count is by then
 
 # Crypto desk (ADR 0005, DEC-0012), read by wt.crypto.risk. Amounts are US$ on the paper book. Sizes are
 # fractional, so the ceiling is notional, not a share count.

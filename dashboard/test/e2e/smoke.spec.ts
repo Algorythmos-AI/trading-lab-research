@@ -465,15 +465,19 @@ test("the HFT page is a composed empty state while the desk has not published", 
   const res = await page.goto("/hft");
   expect(res?.status()).toBe(200);
   await expect(page.getByRole("heading", { level: 1, name: "HFT" })).toBeVisible();
-  await expect(page.getByText("The HFT desk has not published yet")).toBeVisible();
-  await expect(page.getByText("This page fills in when the desk's recorder starts", { exact: false })).toBeVisible();
+  // the desk is parked (src/lib/desks.json, HFT-DEC-0005): the page says so, with the date and the record
+  await expect(page.getByText("The HFT desk is parked")).toBeVisible();
+  await expect(page.getByText("stopped on 14 October 2026 (HFT-DEC-0005)", { exact: false })).toBeVisible();
+  await expect(page.getByText("This page fills in when the desk is restarted", { exact: false })).toBeVisible();
+  await expect(page.getByText("has not published yet")).toHaveCount(0);
   await expect(page.getByRole("heading", { level: 2, name: "What this page will show" })).toBeVisible();
   // nothing that looks like a reading: no banner, no table, no badge, and not one digit beyond the phases' names
+  // and the parked date
   const main = page.locator("main");
   await expect(main.locator("#health-title")).toHaveCount(0);
   await expect(main.locator("table")).toHaveCount(0);
   await expect(main.locator('[data-slot="badge"]')).toHaveCount(0);
-  expect(((await main.innerText()) ?? "").replace("F0 to F7", "")).not.toMatch(/\d|—/);
+  expect(((await main.innerText()) ?? "").replace("F0 to F7", "").replace(/stopped on 14 October 2026 \(HFT-DEC-0005\)/, "")).not.toMatch(/\d|—/);
   // the header says there is no data, and the footer names no snapshot
   await expect(page.getByRole("banner").getByRole("status")).toHaveText("No data yet");
   await expect(page.locator("footer")).not.toContainText("Snapshot");
@@ -507,8 +511,8 @@ test("the desk switch reaches the HFT desk and comes back", async ({ page }) => 
 test("health reports the HFT desk beside the crypto desk", async ({ request }) => {
   const body = await (await request.get("/api/health")).json();
   expect(body.desks).toEqual({
-    crypto: { snapshot: "ok", as_of: expect.any(String), run_id: expect.any(String) },
-    hft: { snapshot: "ok", as_of: "2026-10-09T14:30:00+00:00", run_id: "20261009T143000Z-fixture" },
+    crypto: { snapshot: "ok", as_of: expect.any(String), run_id: expect.any(String), state: "running" },
+    hft: { snapshot: "ok", as_of: "2026-10-09T14:30:00+00:00", run_id: "20261009T143000Z-fixture", state: "parked" },
   });
 });
 
