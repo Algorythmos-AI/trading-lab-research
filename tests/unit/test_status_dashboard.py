@@ -262,7 +262,11 @@ def test_host_jobs_on_the_vm_are_the_schedule_table_with_the_config_laid_over():
     assert by["com.wt.pipeline-check"]["local_time"] == "Mon-Fri 08:55 and 18:30 New York"
     assert "name" not in by["com.wt.deploy-auto"]                       # the dashboard names it
     assert all(r["ok"] for r in status.schedule_check(rows, now, "systemd", 7))
-    assert status.host_jobs(CFG["host"]["jobs"], "launchd", now) is CFG["host"]["jobs"]   # the Mac: unchanged
+    mac = status.host_jobs(CFG["host"]["jobs"], "launchd", now)          # the Mac: its own list, zone named
+    assert [j["label"] for j in mac] == [j["label"] for j in CFG["host"]["jobs"]]
+    assert mac[0]["local_time"] == "21:30 Sydney" and CFG["host"]["jobs"][0]["local_time"] == "21:30"
+    # A config entry without a label is ignored, not a crash that would leave the host section stale.
+    assert len(status.host_jobs(CFG["host"]["jobs"], "systemd", now, [{"name": "typo"}])) == len(rows)
 
 
 def test_systemd_jobs_are_looked_up_by_job_key():

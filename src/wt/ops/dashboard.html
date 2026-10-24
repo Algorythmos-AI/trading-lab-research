@@ -634,12 +634,12 @@ details > summary { cursor: pointer; font-weight: 600; font-size: 13px; padding:
     if (!o) { missing(pane, "Operations data"); return pane; }
     var host = o.host || {};
     pane.appendChild(h("div", { class: "grid-2" },
-      panel("Tonight's jobs", "launchd agents on this Mac", function (b) {
+      panel("Tonight's jobs", host.kind === "systemd" ? "systemd timers on the host" : "launchd agents on this Mac", function (b) {
         var jobs = arr(host.jobs);
         if (!jobs.length) { missing(b, "Job status"); return; }
         add(b, table([
           { label: "Job", get: function (j) { return h("div", null, h("b", null, j.name), h("div", { class: "small muted mono" }, j.label)); } },
-          { label: "Starts", get: function (j) { return j.local_time + " Sydney"; }, nowrap: true },
+          { label: "Starts", get: function (j) { return j.local_time; }, nowrap: true },   // the time names its own zone (wt.ops.status.host_jobs)
           { label: "State", get: function (j) { return !j.loaded ? pill("Not loaded", "bad") : j.running ? pill("Running", "accent", true) : pill("Idle", "neutral"); }, nowrap: true },
           { label: "Last exit", get: function (j) { return isNum(j.last_exit) ? pill(String(j.last_exit), j.last_exit === 0 ? "good" : "warn") : "—"; } }
         ], jobs));

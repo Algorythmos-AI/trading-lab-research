@@ -644,12 +644,13 @@ def _cadence(job: Any, now: dt.datetime) -> str:
 
 def host_jobs(cfg_jobs: list[dict], kind: str, now: dt.datetime, overlay: list[dict] | None = None) -> list[dict]:
     """The jobs the host runs. On systemd that is every job in ``wt.ops.schedule.JOBS``, the table the units are
-    generated from; ``config/dashboard.yaml`` only lays a display name and a start-by time over a job it names. On
-    the Mac it is the config's launchd list, as before."""
-    if kind != "systemd":
-        return cfg_jobs
+    generated from; ``config/dashboard.yaml`` only lays a display name and a start-by time over a job it names (an
+    entry without a label is ignored). On the Mac it is the config's launchd list, its times marked as Sydney's.
+    Either way ``local_time`` names its own zone."""
+    if kind != "systemd":                                 # launchd fires on the Mac's Sydney clock
+        return [{**j, "local_time": f"{j['local_time']} Sydney"} if j.get("local_time") else j for j in cfg_jobs]
     from wt.ops.schedule import JOBS
-    over = {j["label"].rsplit(".", 1)[-1]: j for j in [*cfg_jobs, *(overlay or [])]}
+    over = {str(j["label"]).rsplit(".", 1)[-1]: j for j in [*cfg_jobs, *(overlay or [])] if j.get("label")}
     out = []
     for job in JOBS.values():
         o = over.get(job.name, {})
