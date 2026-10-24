@@ -98,7 +98,8 @@ migrate-state: ## Move runtime files from tracked paths into var/ (gated, lossle
 
 preflight: ## Run every job's preflight as its scheduler would (launchd's minimal environment; the unit's on Linux)
 	@if [ "$$(uname)" = Linux ]; then for j in routine paper-b forward weekly; do echo "== $$j"; \
-	  WT_HOST=systemd PYTHONPATH=src $(PY) -m wt.ops.jobs run $$j --preflight-only || status=1; done; exit $${status:-0}; \
+	  WT_HOST=systemd PYTHONPATH=src $(PY) -m wt.ops.jobs run $$j --preflight-only || status=1; done; \
+	  echo "== host"; WT_HOST=systemd PYTHONPATH=src $(PY) -m wt.ops.preflight || status=1; exit $${status:-0}; \
 	else for j in routine paper-b forward weekly; do echo "== $$j"; \
 	  env -i HOME="$(HOME)" PATH="$(JOB_PATH)" /bin/zsh deploy/run_job.sh $$j --preflight-only || status=1; done; \
 	  exit $${status:-0}; fi

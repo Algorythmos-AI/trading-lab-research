@@ -102,8 +102,16 @@ runcmd:
   - [sh, -c, "curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg -o /usr/share/keyrings/cloudflare-main.gpg"]
   - [sh, -c, "echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared noble main' > /etc/apt/sources.list.d/cloudflared.list"]
   - [sh, -c, "apt-get update && apt-get install -y cloudflared && apt-mark hold cloudflared"]
-  # The repository and its locked environment, as the job user.
-  - [sudo, -u, wt, git, clone, --quiet, "https://github.com/Algorythmos-AI/trading-lab-research.git", /home/wt/trading]
+  # A deploy key, made before the clone. The owner registers the public half on GitHub (read-only) when the
+  # repository goes private (docs/runbooks/gcp-host.md, "Going private"); until then the HTTPS clone below serves.
+  - [sudo, -u, wt, install, -d, -m, "0700", /home/wt/.ssh]
+  - [sudo, -u, wt, ssh-keygen, -q, -t, ed25519, -N, "", -C, "trading-lab-host deploy key", -f, /home/wt/.ssh/github_deploy]
+  - [sudo, -u, wt, sh, -c, "printf 'Host github.com\\n  IdentityFile ~/.ssh/github_deploy\\n  IdentitiesOnly yes\\n' > /home/wt/.ssh/config && chmod 0600 /home/wt/.ssh/config"]
+  # GitHub's published ed25519 host key (api.github.com/meta), pinned: no trust-on-first-use for the code the host runs.
+  - [sudo, -u, wt, sh, -c, "printf 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl\\n' > /home/wt/.ssh/known_hosts && chmod 0600 /home/wt/.ssh/known_hosts"]
+  # The repository and its locked environment, as the job user: over SSH when the key is registered, else HTTPS
+  # while the repository is public. Both failing leaves no checkout, and the bootstrap marker below is not written.
+  - [sudo, -u, wt, sh, -c, "GIT_SSH_COMMAND='ssh -o BatchMode=yes' git clone --quiet git@github.com:Algorythmos-AI/trading-lab-research.git /home/wt/trading || git clone --quiet https://github.com/Algorythmos-AI/trading-lab-research.git /home/wt/trading"]
   - [sudo, -u, wt, sh, -c, "cd /home/wt/trading && /usr/local/bin/uv venv --python 3.12 .venv && /usr/local/bin/uv pip sync --python .venv/bin/python --require-hashes requirements.lock.txt && /usr/local/bin/uv pip install --python .venv/bin/python -r requirements-dev.lock.txt"]
   # wt-deploy tags every deploy (git tag -a needs an identity).
   - [sudo, -u, wt, git, -C, /home/wt/trading, config, user.name, wt-deploy]
@@ -116,9 +124,6 @@ runcmd:
   - [systemctl, daemon-reload]
   - [systemctl, enable, --now, wt-secrets.timer]
   - [systemctl, enable, wt-secrets.service, wt-boot-reconcile.service, wt-tunnel.service]
-  # A deploy key for when the repository goes private (the owner adds the public half on GitHub).
-  - [sudo, -u, wt, install, -d, -m, "0700", /home/wt/.ssh]
-  - [sudo, -u, wt, ssh-keygen, -q, -t, ed25519, -N, "", -C, "trading-lab-host deploy key", -f, /home/wt/.ssh/github_deploy]
-  - [touch, /var/lib/wt-bootstrap-done]
+  - [sh, -c, "test -d /home/wt/trading/.git && touch /var/lib/wt-bootstrap-done"]
 
 final_message: "Trading Lab host bootstrapped. Next: docs/runbooks/gcp-host.md, step 'secrets'."

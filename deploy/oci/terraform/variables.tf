@@ -59,7 +59,7 @@ variable "boot_volume_gb" {
 }
 
 variable "repo_url" {
-  description = "HTTPS clone URL of the trading repository (public today; a read-only deploy key once private)."
+  description = "HTTPS clone URL of the trading repository. The OCI first boot clones before it makes a deploy key, so it needs a public repository; a private one is cloned by hand after the key is registered (docs/runbooks/gcp-host.md, 'Going private')."
   type        = string
   default     = "https://github.com/Algorythmos-AI/trading-lab-research.git"
 }
