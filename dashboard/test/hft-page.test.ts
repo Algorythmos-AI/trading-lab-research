@@ -39,12 +39,10 @@ beforeEach(() => {
 });
 
 describe("the HFT desk's sections", () => {
-  it("has one section for now, and the other desks' sections are as they were", () => {
+  it("has one section for now, the stocks sections are as they were, and the closed crypto desk has none", () => {
     expect(HFT_NAV).toEqual([{ href: "/hft", label: "Overview" }]);
     expect(NAV.map((n) => n.href)).toEqual(["/", "/today", "/radar", "/options", "/trades", "/strategies", "/research", "/operations", "/risk", "/engineering"]);
-    expect(CRYPTO_NAV.map((n) => n.href)).toEqual([
-      "/crypto", "/crypto/market", "/crypto/strategy", "/crypto/research", "/crypto/learning", "/crypto/operations", "/crypto/risk", "/crypto/engineering",
-    ]);
+    expect(CRYPTO_NAV).toEqual([]); // DEC-0036: one page at /crypto, no sections
   });
 });
 

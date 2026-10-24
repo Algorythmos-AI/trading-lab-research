@@ -204,20 +204,6 @@ export function utcAheadOfNy(at: Date): number {
   return (((zoneMinutes(at, "UTC") - nyMinutes(at)) % 1440) + 1440) % 1440;
 }
 
-/** A model lineage's state as a colour: acting green, shadow blue, suspended red, demoted grey. */
-export function modelTone(state: string | null | undefined): Tone {
-  switch (String(state ?? "").toLowerCase()) {
-    case "acting":
-      return "good";
-    case "shadow":
-      return "info";
-    case "suspended":
-      return "bad";
-    default:
-      return "neutral";
-  }
-}
-
 /** A feed's state on the Stocks wiki: arrived on time, late, never published, or unreadable. */
 export type FeedState = "fresh" | "late" | "missing" | "error";
 

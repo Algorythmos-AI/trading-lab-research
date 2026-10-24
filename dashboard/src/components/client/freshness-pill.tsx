@@ -1,8 +1,9 @@
 "use client";
 
-import { CircleCheck, MoonStar, OctagonX, TriangleAlert, CircleDashed } from "lucide-react";
+import { Archive, CircleCheck, MoonStar, OctagonX, TriangleAlert, CircleDashed } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { deskOfPath, type DeskName } from "@/lib/desk";
+import { deskNote } from "@/lib/desk-state";
 import { describeAge, freshness, type FreshState } from "@/lib/freshness";
 import type { ExpectedWindow } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -64,8 +65,23 @@ export interface DeskFreshness {
   initial: { state: FreshState; ageMin: number | null };
 }
 
-/** The pill of the desk the current page belongs to. Each desk has its own snapshot and its own freshness. */
+/**
+ * The pill of the desk the current page belongs to. Each desk has its own snapshot and its own freshness. A desk
+ * the lab has closed (src/lib/desks.json) publishes nothing by decision, so its pill says that instead of an age.
+ */
 export function DeskFreshnessPill({ desks }: { desks: Record<DeskName, DeskFreshness> }) {
-  const d = desks[deskOfPath(usePathname())];
+  const desk = deskOfPath(usePathname());
+  if (desk !== "stocks" && deskNote(desk).state === "closed") {
+    return (
+      <span
+        role="status"
+        className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium whitespace-nowrap", STYLE.unknown.cls)}
+      >
+        <Archive aria-hidden className="size-3.5" />
+        Desk closed
+      </span>
+    );
+  }
+  const d = desks[desk];
   return <FreshnessPill asOf={d.asOf} windows={d.windows} initial={d.initial} />;
 }

@@ -82,7 +82,8 @@ def test_what_would_stop_the_owner_stops_it_and_so_does_a_gate_about_to_close(au
     if why == "off":
         (deploy.DEPLOY_DIR / deploy.AUTO_ON).unlink()
     elif why == "busy":
-        monkeypatch.setattr(deploy, "held", lambda names: ["crypto-learn"])
+        monkeypatch.setattr(deploy, "AUTO_BUSY", ("heavy-job",))
+        monkeypatch.setattr(deploy, "held", lambda names: [n for n in names if n == "heavy-job"])
     elif why == "gate":
         auto.state["gate"] = [["wt-paper-b is running"]]
     elif why == "closing":                              # open now, closed within the hour: the tests could outlast it

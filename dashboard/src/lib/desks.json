@@ -1,6 +1,8 @@
 {
   "crypto": {
-    "state": "running"
+    "state": "closed",
+    "since": "2026-10-24",
+    "record": "DEC-0036"
   },
   "hft": {
     "state": "parked",

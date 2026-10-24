@@ -35,7 +35,7 @@ export function marketPhase(now: Date): string {
  */
 const SESSION: Record<DeskName, { badge: string; title: string } | null> = {
   stocks: null,
-  crypto: { badge: "24/7", title: "The crypto desk's day and limits run on UTC" },
+  crypto: { badge: "Closed", title: "The crypto desk is closed (DEC-0036)" },
   hft: { badge: "24/5", title: "Currencies trade around the clock on weekdays, from Sunday evening to Friday evening in New York" },
 };
 
