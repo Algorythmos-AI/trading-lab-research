@@ -574,29 +574,14 @@ export interface Finding {
 export const ONE_SIGMA_PCT = 68;
 
 /**
- * The testing behind the page. None of it has a registered experiment yet, so every finding is exploratory: the
- * first two are fixed figures from early testing, the third is recomputed by the after-close run and shows only
- * when the edition carries it.
+ * The testing behind the page that the edition itself carries: the expected-move check, recomputed by the after-close
+ * run and shown only when the edition has it. Exploratory, as no registered experiment stands behind it. The two
+ * figures typed here from early testing (a level touched on 88.5% of days; a higher high after a strong close) had
+ * no experiment behind them either and were removed; the level rules' measured result is EXP-0023, quoted on the
+ * page.
  */
 export function findingsOf(e: Options): Finding[] {
-  const findings: Finding[] = [
-    {
-      title: "Price touched yesterday's high or low",
-      value: 88.5,
-      valueLabel: "of days, 2 years, 10 names",
-      use: "The levels are a map, not a signal: good targets and stop references.",
-      exploratory: true,
-    },
-    {
-      title: "Higher high the next day",
-      value: 77.6,
-      valueLabel: "after a strong close",
-      base: 52.9,
-      baseLabel: "after an ordinary day",
-      use: "The edge comes from the close, not from breaking a level.",
-      exploratory: true,
-    },
-  ];
+  const findings: Finding[] = [];
   const check = e.expected_move_check;
   if (check?.inside_1d_pct != null) {
     findings.push({

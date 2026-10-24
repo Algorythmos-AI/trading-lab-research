@@ -395,13 +395,14 @@ describe("options view helpers", () => {
     const e = optionsJson as unknown as Options;
     const found = findingsOf(e);
     // No finding has a registered experiment behind it yet, so none may read as a result.
-    expect(found).toHaveLength(3);
+    // Only what the edition carries: no typed figure without an experiment behind it.
+    expect(found).toHaveLength(1);
     expect(found.every((f) => f.exploratory)).toBe(true);
     // The expected-move check comes from the edition: 85% of 500 days, against the one-sigma share.
-    expect(found[2]).toMatchObject({ value: 85, base: ONE_SIGMA_PCT, valueLabel: "of 500 days, SPY vs VIX, 2 years to 9 Oct 2026" });
-    expect(found[2]!.use).toContain("within a week 30% of the time");
-    // An edition without the check shows the two fixed figures only.
-    expect(findingsOf({ ...e, expected_move_check: null })).toHaveLength(2);
+    expect(found[0]).toMatchObject({ value: 85, base: ONE_SIGMA_PCT, valueLabel: "of 500 days, SPY vs VIX, 2 years to 9 Oct 2026" });
+    expect(found[0]!.use).toContain("within a week 30% of the time");
+    // An edition without the check has no finding of its own; the page then quotes EXP-0023 alone.
+    expect(findingsOf({ ...e, expected_move_check: null })).toHaveLength(0);
     // The owner trades single calls and puts: nothing on the page may suggest a spread or selling premium.
     const copy = [...found.flatMap((f) => [f.title, f.use, f.valueLabel, f.baseLabel ?? ""]), ...Object.values(CORNER_COST)].join(" ");
     expect(copy).not.toMatch(/spread|selling premium|credit|debit/i);
