@@ -31,7 +31,8 @@ registered rule; nothing since has changed that answer.
 
 The nightly challenger job (DEC-0016, DEC-0021) kept running after the summary. Its ledger on the host
 (`var/crypto/sleeves/challengers.json`) holds six challengers, every one `failed` on C1 (deflated Sharpe, the
-confidence interval not above zero at 1.5x slippage, no better than random entries, profit factor below one);
+confidence interval not above zero at 1.5x slippage, no better than random entries, profit factor below the
+registered cutoff of 1.2, DEC-0015 section 5);
 none `passed`, none went `live`. On 2026-10-24 the job's own line reads: "6 registered in all {registered: 0,
 failed: 6, passed: 0, live: 0, retired: 0}; best current sleeve break (-0.160R)".
 
