@@ -298,7 +298,7 @@ export function ruleEvidence(trades: readonly Trade[]): Record<string, Evidence>
   };
   out.retest = {
     source: "backtest",
-    finding: `In ${x.id} (${x.period}), a close through yesterday's high averaged ${r(x.breakHigh.avgR)} over ${count(x.breakHigh.n)} cases and through the low ${r(x.breakLow.avgR)} over ${count(x.breakLow.n)}; a reclaim of the low ${r(x.reclaimLow.avgR)} over ${count(x.reclaimLow.n)} and a rejection at the high ${r(x.rejectHigh.avgR)} over ${count(x.rejectHigh.n)}. Every 95% range spans zero: no entry here is an edge, so the risk rules are what protect the account.`,
+    finding: `In ${x.id} (${x.period}), a close through yesterday's high averaged ${r(x.breakHigh.avgR)} over ${count(x.breakHigh.n)} cases and through the low ${r(x.breakLow.avgR)} over ${count(x.breakLow.n)}; a reclaim of the low ${r(x.reclaimLow.avgR)} over ${count(x.reclaimLow.n)} and a rejection at the high ${r(x.rejectHigh.avgR)} over ${count(x.rejectHigh.n)}. Every 95% range spans zero: none shows an edge, so the risk rules are what protect the account.`,
   };
   if (trades.length < MIN_SAMPLE) return out;
 

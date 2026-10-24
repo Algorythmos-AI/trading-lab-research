@@ -30,6 +30,7 @@ import {
   type Rung,
 } from "@/lib/options";
 import type { OptionsResult } from "@/lib/snapshot";
+import { EXP_0023 } from "@/lib/trade-rules";
 import { cn } from "@/lib/utils";
 
 /** How many zones each side of the close the ladder shows before "all levels". */
@@ -502,11 +503,15 @@ export function HowToRead({ e }: { e: Options }) {
   const findings = findingsOf(e);
   return (
     <Panel title="What the testing found" means="So the levels are used for what they are good at." icon={Info}>
-      <EvidenceBars findings={findings} />
+      <p className="text-muted-foreground max-w-prose text-sm">
+        {EXP_0023.id} replicated the four level entry rules on {EXP_0023.period}: none shows an edge, as every 95% range spans
+        zero. The levels are a map for targets and stops; the risk rules are what protect the account.
+      </p>
+      {findings.length > 0 ? <EvidenceBars findings={findings} /> : null}
       {findings.some((f) => f.exploratory) ? (
         <p className="text-muted-foreground mt-3 max-w-prose text-xs">
-          Exploratory means no registered experiment stands behind the number yet. The first two are fixed figures from early
-          testing; the expected-move check is recomputed by the after-close run. Treat them as leads to test, not as results.
+          Exploratory means no registered experiment stands behind the number yet. The expected-move check is recomputed by the
+          after-close run. Treat it as a lead to test, not as a result.
         </p>
       ) : null}
       <details className="mt-4 text-sm">
