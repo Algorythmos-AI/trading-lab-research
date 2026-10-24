@@ -76,3 +76,45 @@ def test_a_session_from_before_the_outcome_existed_is_judged_as_before():
     rows = ended("2026-10-01", None) + ended("2026-10-02", "no_signal")
     s = g2.summary(rows)
     assert s["sessions"] == 2 and s["unchecked_sessions"] == 0
+
+
+def test_bar_level_agreement_from_the_replay_records(tmp_path):
+    """DEC-0037 part 1: same or neither agree; different and one-sided disagree; unknown is counted, not judged;
+    the forward-vs-replay harness number sits beside it and is never pooled."""
+    import json
+
+    from wt.analytics import b_replay
+    folder = tmp_path / "replay"
+    folder.mkdir()
+    recs = [("2026-10-12", "neither", "neither"), ("2026-10-13", "same", "same"), ("2026-10-14", "different", "same"),
+            ("2026-10-15", "only_second", "neither"), ("2026-10-16", "unknown", "unknown"), ("2026-10-19", "same", "different")]
+    for day, rj, fr in recs:
+        (folder / f"{day}.json").write_text(json.dumps({"session": day, "replay_vs_journal": rj, "forward_vs_replay": fr}))
+    (folder / "broken.json").write_text("{")
+    loaded = b_replay.load_records(folder)
+    assert [r["session"] for r in loaded] == [d for d, _, _ in recs]
+    a = b_replay.agreement(loaded)
+    assert a == {"agreement_level": "bar", "agreement_days": 5, "agreement_agree": 3, "agreement_unknown": 1,
+                 "harness_days": 5, "harness_agree": 4}
+    # only the clean sessions asked for are judged; a clean session with no record is unknown, not absent
+    a = b_replay.agreement(loaded, {"2026-10-13", "2026-10-14", "2026-10-16"})
+    assert (a["agreement_days"], a["agreement_agree"], a["agreement_unknown"]) == (2, 1, 1)
+    a = b_replay.agreement(loaded, {"2026-10-13", "2026-10-14", "2026-10-16", "2026-10-20"})
+    assert (a["agreement_days"], a["agreement_agree"], a["agreement_unknown"]) == (2, 1, 2)
+    assert b_replay.load_records(tmp_path / "missing") == []
+
+
+def test_summary_prefers_the_bar_level_measure_when_replay_records_exist():
+    rows = [{"event": "armed", "day": "2026-10-13"}, {"event": "session_end", "day": "2026-10-13", "outcome": "no_signal"},
+            {"event": "decision_summary", "day": "2026-10-13", "inputs": True}]
+    sessions = g2.sessions(rows)
+    clean = {d for d, s in sessions.items() if s.clean}
+    replay = [{"session": d, "replay_vs_journal": "same", "forward_vs_replay": "neither"} for d in clean] + \
+             [{"session": "2026-10-10", "replay_vs_journal": "different", "forward_vs_replay": "different"}]
+    out = g2.summary(rows, replay=replay)
+    assert out["agreement_level"] == "bar"
+    assert out["agreement_days"] == len(clean) and out["agreement_agree"] == len(clean)   # the unclean day is not judged
+    assert out["harness_days"] == len(clean) and out["harness_agree"] == len(clean)
+    day = g2.summary(rows, {"2026-10-13"}, set())
+    assert day["agreement_level"] == "day" and day["agreement_unknown"] is None
+    assert g2.summary(rows, {"2026-10-13"}, set(), replay=[])["agreement_level"] == "day"   # no records: day-level still

@@ -1,20 +1,5 @@
-import {
-  ArrowLeftRight,
-  CircleCheck,
-  CloudOff,
-  FlaskConical,
-  GraduationCap,
-  Inbox,
-  Landmark,
-  Layers,
-  ListChecks,
-  Milestone,
-  MoonStar,
-  Power,
-  Radio,
-  Scale,
-  Workflow,
-} from "lucide-react";
+import { ArrowLeftRight, CircleCheck, CloudOff, FlaskConical, GraduationCap, Inbox, Landmark, Layers, ListChecks, Milestone, MoonStar, PauseCircle, Power, Radio, Scale, Workflow } from "lucide-react";
+import { deskNote, sinceWords } from "@/lib/desk-state";
 import { RelativeTime } from "@/components/client/relative-time";
 import { Empty } from "@/components/empty";
 import { KeyValues } from "@/components/kv";
@@ -47,12 +32,22 @@ export function NoHftSnapshot({ status }: { status: Exclude<HftResult["status"],
       </Empty>
     );
   }
+  const note = deskNote("hft");
+  const since = sinceWords(note.since);
   return (
     <>
-      <Empty icon={Inbox} title="The HFT desk has not published yet">
-        Nothing has reached this site from the desk, so there is nothing to show. This page fills in when the desk&apos;s
-        recorder starts, and it checks again every minute.
-      </Empty>
+      {note.state === "parked" ? (
+        <Empty icon={PauseCircle} title="The HFT desk is parked">
+          It last ran on the owner&apos;s own machine and stopped{since ? ` on ${since}` : ""}
+          {note.record ? ` (${note.record})` : ""}. Nothing runs and nothing is installed on a host, so nothing reaches
+          this site. This page fills in when the desk is restarted and publishes again.
+        </Empty>
+      ) : (
+        <Empty icon={Inbox} title="The HFT desk has not published yet">
+          Nothing has reached this site from the desk, so there is nothing to show. This page fills in when the desk&apos;s
+          recorder starts, and it checks again every minute.
+        </Empty>
+      )}
       <Panel title="What this page will show" icon={ListChecks} means="Each part appears once the desk publishes it. Until then this page holds no readings.">
         <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
           {SECTIONS.map(([name, what]) => (

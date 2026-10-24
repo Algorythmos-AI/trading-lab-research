@@ -1,3 +1,4 @@
+import { deskNote } from "@/lib/desk-state";
 import { journalHealth, optionsCloneHealth, optionsHealth, optionsLiveHealth, radarHealth } from "@/lib/editions";
 import { fixtureMode, loadCryptoSnapshot, loadHftSnapshot, loadJournal, loadOptions, loadOptionsClone, loadOptionsLive, loadRadar, loadSnapshot } from "@/lib/snapshot";
 
@@ -31,11 +32,15 @@ export async function GET(): Promise<Response> {
           snapshot: crypto.status,
           as_of: crypto.status === "ok" ? (crypto.snapshot.as_of ?? null) : null,
           run_id: crypto.status === "ok" ? (crypto.snapshot.run_id ?? null) : null,
+          // The lab's word on the desk (src/lib/desks.json): running, parked or closed. A parked desk publishes
+          // nothing, and "missing" alone would read as a fault.
+          state: deskNote("crypto").state,
         },
         hft: {
           snapshot: hft.status,
           as_of: hft.status === "ok" ? (hft.snapshot.as_of ?? null) : null,
           run_id: hft.status === "ok" ? (hft.snapshot.run_id ?? null) : null,
+          state: deskNote("hft").state,
         },
       },
       // The research editions on file, and the newest format of each this build accepts. A publisher checks
