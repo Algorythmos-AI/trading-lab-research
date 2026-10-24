@@ -70,7 +70,7 @@ def test_the_scorecard_line_says_where_each_trigger_stands():
     assert "**FIRED: cum_r" in fired
 
 
-def test_a_stop_rule_latch_is_cleared_only_with_a_decision_record(tmp_path):
+def test_a_stop_rule_latch_is_cleared_only_with_a_decision_record(tmp_path, monkeypatch):
     path = tmp_path / "virtual_account.json"
     va = VirtualAccount()
     va.latch(stop_rule.latch_reason(stop_rule.Stop("cum_r", "cumulative -6.00R"), RULE))
@@ -79,7 +79,14 @@ def test_a_stop_rule_latch_is_cleared_only_with_a_decision_record(tmp_path):
         reset_latch(path, "losses look like noise, resuming")
     with pytest.raises(StateError, match="not the rule's own"):
         reset_latch(path, "DEC-0037 says resume")                                  # the rule's own record is not new
+    with pytest.raises(StateError, match="no such decision record"):
+        reset_latch(path, "DEC-9999 resumes B")                                    # a record that was never written
     assert VirtualAccount.load(path).latched
+    import wt.risk.virtual_account as va_mod
+    registry = tmp_path / "decisions"
+    registry.mkdir()
+    (registry / "DEC-0041-b-resumes-with-a-wider-stop.md").write_text("# DEC-0041")
+    monkeypatch.setattr(va_mod, "DECISIONS_DIR", registry)
     cleared = reset_latch(path, "DEC-0041 resumes B with a wider stop after the review")
     assert not cleared.latched and cleared.latch_history[-1]["note"].startswith("DEC-0041")
 

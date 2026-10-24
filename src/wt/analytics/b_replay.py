@@ -128,9 +128,11 @@ def agreement(records: Iterable[Mapping[str, Any]], sessions: Collection[str] | 
     recs = [r for r in records if sessions is None or str(r.get("session")) in sessions]
     judged = [r for r in recs if r.get("replay_vs_journal") in STATUSES and r.get("replay_vs_journal") != "unknown"]
     harness = [r for r in recs if r.get("forward_vs_replay") in STATUSES and r.get("forward_vs_replay") != "unknown"]
+    # a clean session with no record at all (a missed forward run) is unknown too, not silently absent
+    expected = len(set(sessions)) if sessions is not None else len(recs)
     return {"agreement_level": "bar",
             "agreement_days": len(judged),
             "agreement_agree": sum(1 for r in judged if r.get("replay_vs_journal") in AGREE),
-            "agreement_unknown": len(recs) - len(judged),
+            "agreement_unknown": max(expected, len(recs)) - len(judged),
             "harness_days": len(harness),
             "harness_agree": sum(1 for r in harness if r.get("forward_vs_replay") in AGREE)}

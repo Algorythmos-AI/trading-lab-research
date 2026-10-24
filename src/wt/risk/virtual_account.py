@@ -23,6 +23,12 @@ from typing import Any
 # A latch the pre-registered stop rule set (wt.risk.stop_rule, DEC-0037) starts with this; `reset_latch` clears it
 # only for a reason that names a decision record, because the rule itself was a decision record.
 STOP_RULE_PREFIX = "stop rule "
+DECISIONS_DIR = Path(__file__).resolve().parents[3] / "research" / "decisions"
+
+
+def decision_exists(record: str, folder: Path | None = None) -> bool:
+    """Whether a decision record (DEC-NNNN) is in the registry of this checkout."""
+    return any((folder or DECISIONS_DIR).glob(f"{record}-*.md")) or any((folder or DECISIONS_DIR).glob(f"{record}.md"))
 
 
 def _fsync_dir(d: Path) -> None:
@@ -210,6 +216,10 @@ def reset_latch(path: Path, reason: str, by: str = "owner") -> VirtualAccount:
         if not named:
             raise StateError(f"this latch is the pre-registered stop rule ({why}); only a new decision record clears "
                              "it: name that record (DEC-NNNN, not the rule's own) in the reason")
+        missing = sorted(r for r in named if not decision_exists(r))
+        if missing:
+            raise StateError(f"no such decision record in research/decisions: {', '.join(missing)}; the record that "
+                             "clears a stop-rule latch is written and merged first")
     va.latch_history.append({"at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
                              "reason": why, "reset_by": by, "note": reason.strip()[:200]})
     va.latched, va.latch_reason = False, ""

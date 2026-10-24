@@ -96,9 +96,11 @@ def test_bar_level_agreement_from_the_replay_records(tmp_path):
     a = b_replay.agreement(loaded)
     assert a == {"agreement_level": "bar", "agreement_days": 5, "agreement_agree": 3, "agreement_unknown": 1,
                  "harness_days": 5, "harness_agree": 4}
-    # only the clean sessions asked for are judged
+    # only the clean sessions asked for are judged; a clean session with no record is unknown, not absent
     a = b_replay.agreement(loaded, {"2026-10-13", "2026-10-14", "2026-10-16"})
     assert (a["agreement_days"], a["agreement_agree"], a["agreement_unknown"]) == (2, 1, 1)
+    a = b_replay.agreement(loaded, {"2026-10-13", "2026-10-14", "2026-10-16", "2026-10-20"})
+    assert (a["agreement_days"], a["agreement_agree"], a["agreement_unknown"]) == (2, 1, 2)
     assert b_replay.load_records(tmp_path / "missing") == []
 
 
