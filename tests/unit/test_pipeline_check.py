@@ -150,3 +150,29 @@ def test_eligibility_ranks_dedupes_and_caps_like_the_runner():
     o["focus"]["items"] = many
     exp = dict(EXP, AMZN=[TARGET])
     assert "AMZN" not in pc.eligible(o, TARGET, exp)                                         # seventh: beyond the cap
+
+
+def test_after_the_close_the_check_waits_for_the_days_bar_before_judging_the_tape():
+    """The consolidated daily bar can lag the 18:30 check; a tradeable name's tape is re-fetched a few times."""
+    prev = lv.prev_session(TARGET)
+    stale = {s: [b for b in rows if str(b.get("t", ""))[:10] < prev] for s, rows in DAILY.items()}
+    calls, naps = [], []
+
+    def fetch(symbols, target, slot):
+        calls.append(slot)
+        return (DAILY if len(calls) >= 2 else stale), EXP, {}
+    got = pc.wait_for_the_days_bar(list(DAILY), TARGET, stale, EXP, options(), sleep=naps.append, fetch=fetch)
+    assert got is DAILY and calls == ["after-close", "after-close"] and naps == [pc.TAPE_WAIT_S] * 2
+    # a tape that is already complete is not fetched again
+    calls.clear(); naps.clear()
+    assert pc.wait_for_the_days_bar(list(DAILY), TARGET, DAILY, EXP, options(), sleep=naps.append, fetch=fetch) is DAILY
+    assert calls == [] and naps == []
+
+
+def test_a_tape_that_ends_early_says_so_in_the_detail():
+    prev = lv.prev_session(TARGET)
+    stale = {s: [b for b in rows if str(b.get("t", ""))[:10] < prev] for s, rows in DAILY.items()}
+    got = run(daily=stale)
+    tape = got["options.tape.SPY"]
+    assert not tape.ok and tape.severity == "warn" and "the day's bar is not published yet" in tape.detail
+    assert f"through {prev}" in tape.detail
