@@ -1,7 +1,7 @@
 // The Engineering wikis' kit: a contents rail, sections that lead with a picture, a diagram frame, a "why" note,
 // and the SVG pieces every diagram is drawn from. Hand-built SVG, like the rest of the site: the page CSP admits no
-// diagram library. Green is healthy, amber attention, red failed, blue the data path, violet the crypto desk's
-// learning; a colour always comes with a word (a label or a <title>).
+// diagram library. Green is healthy, amber attention, red failed, blue the data path; a colour always comes with a
+// word (a label or a <title>).
 import type { Tone } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import { TONE_VAR } from "@/lib/wiki";
@@ -212,7 +212,7 @@ export function Node({
   h: number;
   title: string;
   sub?: string | string[];
-  tone?: Tone | "violet";
+  tone?: Tone;
   dot?: { tone: Tone; pulse?: boolean; title: string };
   dashed?: boolean;
   mono?: boolean;
@@ -221,13 +221,8 @@ export function Node({
   const block = 16 + subs.length * 15;
   const ty = y + (h - block) / 2 + 12;
   const tx = x + (dot ? 28 : 12);
-  const stroke = tone === "violet" ? "var(--chart-7)" : tone ? TONE_VAR[tone] : "var(--border)";
-  const fill =
-    tone === "violet"
-      ? "color-mix(in srgb, var(--chart-7) 12%, var(--card))"
-      : tone
-        ? `color-mix(in srgb, ${TONE_VAR[tone]} 11%, var(--card))`
-        : "var(--card)";
+  const stroke = tone ? TONE_VAR[tone] : "var(--border)";
+  const fill = tone ? `color-mix(in srgb, ${TONE_VAR[tone]} 11%, var(--card))` : "var(--card)";
   return (
     <g>
       <rect x={x} y={y} width={w} height={h} rx={6} style={{ fill, stroke }} strokeWidth={1} strokeDasharray={dashed ? "5 4" : undefined} />

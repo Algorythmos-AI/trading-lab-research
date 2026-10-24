@@ -8,6 +8,7 @@ import { AutoRefresh } from "@/components/client/auto-refresh";
 import { THEME_INIT_SCRIPT } from "@/components/client/theme-toggle";
 import { SnapshotFooter, type FooterSnapshot } from "@/components/client/snapshot-footer";
 import { SiteHeader } from "@/components/site-header";
+import { deskNote } from "@/lib/desk-state";
 import { requestTime } from "@/lib/now";
 import { loadCryptoSnapshot, loadHftSnapshot, loadSnapshot } from "@/lib/snapshot";
 import "./globals.css";
@@ -78,7 +79,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <SnapshotFooter
               desks={{
                 stocks: foot(snap),
-                crypto: foot(crypto.status === "ok" ? crypto.snapshot : null),
+                // the closed desk's page is drawn from no snapshot (DEC-0036)
+                crypto: deskNote("crypto").state === "closed" ? null : foot(crypto.status === "ok" ? crypto.snapshot : null),
                 hft: hsnap ? { runId: hsnap.run_id ?? null, schemaVersion: hsnap.schema_version ?? null, withheld: null } : null,
               }}
             />

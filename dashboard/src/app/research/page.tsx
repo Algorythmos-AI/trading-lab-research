@@ -54,8 +54,8 @@ function NoModelPanel() {
   return (
     <Panel title="Machine learning" icon={BrainCircuit} means="Whether any learned model takes part in this desk's decisions.">
       <Empty title="No learned model on this desk">
-        Every stocks rule is written out by hand; the catalyst check is a fixed word list, not a trained model. The only model in the lab scores
-        the crypto desk&apos;s signals, on that desk&apos;s Machine learning page.
+        Every stocks rule is written out by hand; the catalyst check is a fixed word list, not a trained model. No desk in the lab runs a
+        learned model: the one that did, the crypto desk&apos;s, closed with that desk (DEC-0036).
       </Empty>
     </Panel>
   );

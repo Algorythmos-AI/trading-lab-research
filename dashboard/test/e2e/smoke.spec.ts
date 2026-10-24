@@ -266,81 +266,59 @@ test("the watchdog requires the cron secret", async ({ request }) => {
   expect(res.status()).toBe(401);
 });
 
-// ---- the crypto desk (ADR 0005) ------------------------------------------------------------------------------------
+// ---- the crypto desk (ADR 0005; closed by DEC-0036) ----------------------------------------------------------------
 
-const CRYPTO_PAGES = [
-  { path: "/crypto", heading: "Overview" },
-  { path: "/crypto/market", heading: "Market" },
-  { path: "/crypto/strategy", heading: "Strategy" },
-  { path: "/crypto/research", heading: "Research" },
-  { path: "/crypto/learning", heading: "Machine learning" },
-  { path: "/crypto/operations", heading: "Operations" },
-  { path: "/crypto/risk", heading: "Risk" },
-  { path: "/crypto/engineering", heading: "Engineering" },
-];
+test("the crypto page says the desk is closed, with no sections and no readings", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  const res = await page.goto("/crypto");
+  expect(res?.status()).toBe(200);
+  await expect(page.getByRole("heading", { level: 1, name: "Crypto" })).toBeVisible();
+  await expect(page.getByText("Closed on 24 October 2026 (DEC-0036)")).toBeVisible();
+  await expect(page.getByText("Every registered rule failed gate C1. 12 registered trials and 6 challengers were run; all failed.")).toBeVisible();
+  // one page: no section tabs, no table, no health banner, and the header says the desk is closed
+  await expect(page.getByRole("navigation", { name: "Sections" })).toHaveCount(0);
+  await expect(page.locator("main table")).toHaveCount(0);
+  await expect(page.getByRole("heading", { level: 2 })).toHaveCount(0);
+  await expect(page.getByRole("status").filter({ hasText: "Desk closed" })).toBeVisible();
+  await expect(page.getByText("24/7")).toHaveCount(0);
+  const desk = page.getByRole("navigation", { name: "Desk" });
+  await expect(desk.getByRole("link", { name: "Crypto" })).toHaveAttribute("aria-current", "true");
+  await expect(desk.getByRole("link", { name: "Stocks" })).not.toHaveAttribute("aria-current", "true");
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+  expect(errors).toEqual([]);
+});
 
-for (const { path, heading } of CRYPTO_PAGES) {
-  test(`crypto ${heading} page renders`, async ({ page }) => {
-    const errors: string[] = [];
-    page.on("pageerror", (e) => errors.push(e.message));
+test("the crypto desk's old pages are gone", async ({ page }) => {
+  for (const path of ["/crypto/market", "/crypto/strategy", "/crypto/research", "/crypto/learning", "/crypto/operations", "/crypto/risk", "/crypto/engineering"]) {
     const res = await page.goto(path);
-    expect(res?.status()).toBe(200);
+    expect(res?.status(), path).toBe(404);
+  }
+});
 
-    const nav = page.getByRole("navigation", { name: "Sections" });
-    for (const p of CRYPTO_PAGES) {
-      await expect(nav.getByRole("link", { name: p.heading, exact: true })).toHaveAttribute("href", p.path);
-    }
-    await expect(nav.getByRole("link", { name: heading, exact: true })).toHaveAttribute("aria-current", "page");
-    await expect(page.getByRole("heading", { level: 1, name: heading })).toBeAttached();
-    // the desk switch says where we are, and the header shows the crypto desk's clock
-    const desk = page.getByRole("navigation", { name: "Desk" });
-    await expect(desk.getByRole("link", { name: "Crypto" })).toHaveAttribute("aria-current", "true");
-    await expect(desk.getByRole("link", { name: "Stocks" })).not.toHaveAttribute("aria-current", "true");
-    await expect(page.getByText("24/7")).toBeVisible();
-
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    );
-    expect(overflow).toBeLessThanOrEqual(0);
-    expect(errors).toEqual([]);
-  });
-}
-
-test("the desk switch moves between the two desks, each with its own sections", async ({ page }) => {
+test("the desk switch moves between the stocks desk and the closed crypto desk", async ({ page }) => {
   await page.goto("/");
   const desk = page.getByRole("navigation", { name: "Desk" });
   await expect(desk.getByRole("link", { name: "Stocks" })).toHaveAttribute("aria-current", "true");
-  await expect(page.getByText("24/7")).toHaveCount(0);
+  await expect(page.getByText("Desk closed")).toHaveCount(0);
   await desk.getByRole("link", { name: "Crypto" }).click();
   await expect(page).toHaveURL(/\/crypto$/);
-  await expect(page.getByRole("heading", { name: "Latest bar, per pair" })).toBeVisible();
-  await expect(page.getByRole("cell", { name: "BTC/USD" }).first()).toBeVisible();
-  await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Research", exact: true }).click();
-  await expect(page).toHaveURL(/\/crypto\/research$/);
-  await expect(page.getByRole("heading", { name: "Gate C0: data quality" })).toBeVisible();
-  await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Strategy", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "What a trade is worth after costs" })).toBeVisible();
+  await expect(page.getByText("Closed on 24 October 2026 (DEC-0036)")).toBeVisible();
   await page.getByRole("navigation", { name: "Desk" }).getByRole("link", { name: "Stocks" }).click();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Strategies", exact: true })).toBeAttached();
 });
 
-test("each desk has its own Engineering wiki, and both show the shared Lab platform", async ({ page }) => {
-  for (const [path, first] of [
-    ["/engineering", "Is the data fresh?"],
-    ["/crypto/engineering", "The desk's jobs"],
-  ] as const) {
-    await page.goto(path);
-    await expect(page.getByRole("heading", { level: 2, name: "Lab platform" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: first, exact: true })).toBeAttached();
-    for (const name of ["How a change ships", "Recent check runs", "What leaves the host", "The trading host"]) {
-      await expect(page.getByRole("heading", { name, exact: true })).toBeAttached();
-    }
-    await expect(page.getByRole("img", { name: /^How a change ships\./ })).toBeAttached();
-    await expect(page.getByRole("img", { name: /^Recent check runs: security/ })).toBeAttached();
+test("the stocks Engineering wiki shows the shared Lab platform", async ({ page }) => {
+  await page.goto("/engineering");
+  await expect(page.getByRole("heading", { level: 2, name: "Lab platform" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Is the data fresh?", exact: true })).toBeAttached();
+  for (const name of ["How a change ships", "Recent check runs", "What leaves the host", "The trading host"]) {
+    await expect(page.getByRole("heading", { name, exact: true })).toBeAttached();
   }
-  // The crypto wiki lists the desk's jobs from the crypto snapshot.
-  await expect(page.getByRole("list", { name: "The crypto desk's jobs and their last runs" })).toContainText("Bar cycle");
+  await expect(page.getByRole("img", { name: /^How a change ships\./ })).toBeAttached();
+  await expect(page.getByRole("img", { name: /^Recent check runs: security/ })).toBeAttached();
 });
 
 test("the stocks wiki draws the desk from the snapshot and the stored feeds", async ({ page }) => {
@@ -364,25 +342,6 @@ test("the stocks wiki draws the desk from the snapshot and the stored feeds", as
   await expect(page.getByRole("img", { name: /^Research gates: K0 .* G1 .*failed/ })).toBeAttached();
 });
 
-test("the crypto wiki draws the desk from the crypto snapshot", async ({ page }) => {
-  await page.goto("/crypto/engineering");
-  const sections = ["At a glance", "Architecture", "The bar cycle", "Around the clock", "Risk limits", "The learning loop"];
-  sections.push("Challengers and gates", "The data harvest");
-  for (const name of [...sections, "Owner controls"]) {
-    await expect(page.getByRole("heading", { name, exact: true })).toBeAttached();
-  }
-  // The fixture's crypto kill switch is on, 95 of 96 cycles ran, and the model lineage in force is in shadow.
-  const glance = page.getByRole("list", { name: "The crypto desk at a glance" });
-  await expect(glance).toContainText("Kill switch on");
-  await expect(glance).toContainText("95 of 96");
-  await expect(page.getByRole("img", { name: /^Architecture of the crypto desk\..*5 paper books \(baseline, trend, break, dip, ch-29db21a0\)/ })).toBeAttached();
-  await expect(page.getByRole("img", { name: /^The learning loop: .*The lineage in force is shadow, with 74 finished signals/ })).toBeAttached();
-  await expect(page.getByRole("img", { name: /^A UTC day of 96 bar cycles\./ })).toBeAttached();
-  // The harvest books come from the snapshot's own harvest block.
-  await expect(page.getByRole("img", { name: /^The data harvest \(switch on, DEC-0027\): books h-trend, .*h-explore/ })).toBeAttached();
-  await expect(page.getByRole("list", { name: "The data harvest in numbers" })).toContainText("107");
-});
-
 // ---- the HFT desk (ADR 0006) ----------------------------------------------------------------------------------------
 
 const DESK_LINKS = [
@@ -396,7 +355,6 @@ test("the desk switch has three desks and says which one a page belongs to", asy
     ["/", "Stocks"],
     ["/options", "Stocks"],
     ["/crypto", "Crypto"],
-    ["/crypto/risk", "Crypto"],
     ["/hft", "HFT"],
   ] as const) {
     await page.goto(path);
@@ -498,17 +456,17 @@ test("the desk switch reaches the HFT desk and comes back", async ({ page }) => 
   await expect(page.getByRole("heading", { level: 1, name: "HFT" })).toBeVisible();
   await page.getByRole("navigation", { name: "Desk" }).getByRole("link", { name: "Crypto" }).click();
   await expect(page).toHaveURL(/\/crypto$/);
-  await expect(page.getByText("24/7")).toBeVisible();
+  await expect(page.getByText("Desk closed")).toBeVisible();
   await page.getByRole("navigation", { name: "Desk" }).getByRole("link", { name: "Stocks" }).click();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Strategies", exact: true })).toBeAttached();
 });
 
-test("health reports the HFT desk beside the crypto desk", async ({ request }) => {
+test("health reports the HFT desk beside the crypto desk, each with its state word", async ({ request }) => {
   const body = await (await request.get("/api/health")).json();
   expect(body.desks).toEqual({
-    crypto: { snapshot: "ok", as_of: expect.any(String), run_id: expect.any(String) },
-    hft: { snapshot: "ok", as_of: "2026-10-09T14:30:00+00:00", run_id: "20261009T143000Z-fixture" },
+    crypto: { snapshot: "ok", as_of: expect.any(String), run_id: expect.any(String), state: "closed" },
+    hft: { snapshot: "ok", as_of: "2026-10-09T14:30:00+00:00", run_id: "20261009T143000Z-fixture", state: "parked" },
   });
 });
 

@@ -1,0 +1,12 @@
+{
+  "crypto": {
+    "state": "closed",
+    "since": "2026-10-24",
+    "record": "DEC-0036"
+  },
+  "hft": {
+    "state": "parked",
+    "since": "2026-10-14",
+    "record": "HFT-DEC-0005"
+  }
+}

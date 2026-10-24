@@ -1,10 +1,10 @@
 // Desks (ADR 0005): one site, two snapshots, and nothing crossing between them. Ingest files a body by the
-// `schema` inside the signed body; each desk has its own slot, history and watchdog state.
+// `schema` inside the signed body; each desk has its own slot, history and watchdog state. The crypto desk is
+// closed (DEC-0036): its contract is still accepted, its page is static and its watchdog tick is skipped.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { cryptoHealth, plural, spreadPct } from "@/lib/crypto";
 import type { CryptoSnapshot } from "@/lib/crypto.types";
 import { DESK_PATHS, deskOfPath } from "@/lib/desk";
-import { freshness } from "@/lib/freshness";
+import { deskNote } from "@/lib/desk-state";
 import { sign } from "@/lib/hmac";
 import { deskOf, validateCryptoSnapshot, validateSnapshot } from "@/lib/validate";
 import cryptoFixture from "./fixtures/crypto.v1.json";
@@ -129,33 +129,31 @@ describe("ingest files a snapshot by the schema in its signed body", () => {
   });
 });
 
-describe("the crypto desk's watchdog", () => {
-  it("does nothing, and pages nobody, while the desk has never published", async () => {
-    expect(await runCryptoWatchdog(NOW)).toMatchObject({ skipped: "never published" });
+describe("the crypto desk's watchdog, with the desk closed", () => {
+  it("is the lab's word on the desk: closed since 2026-10-24 by DEC-0036", () => {
+    expect(deskNote("crypto")).toEqual({ state: "closed", since: "2026-10-24", record: "DEC-0036" });
+  });
+
+  it("does nothing, and pages nobody, with nothing published", async () => {
+    expect(await runCryptoWatchdog(NOW)).toEqual({ ok: true, desk: "crypto", skipped: "closed" });
     expect(pages.sent).toEqual([]);
     expect(stored(DESK_PATHS.crypto.alertState)).toBeNull();
   });
 
-  it("pages a late desk on a weekend, says which desk, and keeps its own state", async () => {
-    sdk.current.write(DESK_PATHS.crypto.latest, JSON.stringify(crypto({ as_of: "2026-10-03T02:15:00Z" }))); // 45 min old
+  it("does not page a stale last snapshot, and writes no state: the desk stopped by decision", async () => {
+    sdk.current.write(DESK_PATHS.crypto.latest, JSON.stringify(crypto({ as_of: "2026-10-03T02:15:00Z" }))); // 45 min old, inside its window
     sdk.current.write(DESK_PATHS.stocks.latest, JSON.stringify(fixture()));
-    const r = await runCryptoWatchdog(NOW);
-    expect(r).toMatchObject({ desk: "crypto", level: "late", in_window: true });
-    expect(pages.sent.map((p) => p.kind)).toEqual(["late"]);
-    expect(pages.sent[0]!.title.startsWith("Crypto desk: ")).toBe(true);
-    expect(JSON.parse(stored(DESK_PATHS.crypto.alertState)!).level).toBe("late");
+    expect(await runCryptoWatchdog(NOW)).toEqual({ ok: true, desk: "crypto", skipped: "closed" });
+    expect(pages.sent).toEqual([]);
+    expect(stored(DESK_PATHS.crypto.alertState)).toBeNull();
     expect(stored(DESK_PATHS.stocks.alertState)).toBeNull();
-    pages.sent.length = 0;
-    expect((await runCryptoWatchdog(NOW)).notices).toEqual([]); // quiet until it changes
-    sdk.current.write(DESK_PATHS.crypto.latest, JSON.stringify(crypto({ as_of: "2026-10-03T02:59:00Z" })));
-    await runCryptoWatchdog(NOW);
-    expect(pages.sent.map((p) => p.kind)).toEqual(["recovered"]);
   });
 
-  it("keeps paging once it has published and then gone silent, even with the snapshot gone", async () => {
-    sdk.current.write(DESK_PATHS.crypto.alertState, JSON.stringify({ level: "ok", last_prune_day: "2026-10-03" }));
-    const r = await runCryptoWatchdog(NOW);
-    expect(r.skipped).toBeUndefined();
+  it("does not resume for an old alert state left behind", async () => {
+    sdk.current.write(DESK_PATHS.crypto.alertState, JSON.stringify({ level: "late", last_prune_day: "2026-10-03" }));
+    expect(await runCryptoWatchdog(NOW)).toMatchObject({ skipped: "closed" });
+    expect(pages.sent).toEqual([]);
+    expect(JSON.parse(stored(DESK_PATHS.crypto.alertState)!).level).toBe("late"); // untouched
   });
 
   it("the stocks tick is not affected by a stale crypto desk", async () => {
@@ -165,27 +163,5 @@ describe("the crypto desk's watchdog", () => {
     await runWatchdog(NOW);
     expect(pages.sent.slice(before).every((p) => !p.title.startsWith("Crypto desk"))).toBe(true);
     expect(stored(DESK_PATHS.crypto.alertState)).toBeNull();
-  });
-});
-
-describe("crypto health", () => {
-  const at = (s: CryptoSnapshot, now = NOW.getTime()) =>
-    cryptoHealth(s, freshness(s.as_of ?? null, (s.expected_windows ?? []) as never, now));
-
-  it("is amber with the kill switch on and red when the desk stops or has no data", () => {
-    const base = crypto({ kill: { on: false, since: null }, alerts: { firing: [] }, activity: { cycles_24h: 96, expected_24h: 96 } });
-    expect(at(base).level).toBe("green");
-    expect(at(crypto({ ...base, kill: { on: true, since: null } })).reasons.map((r) => r.code)).toEqual(["kill"]);
-    expect(at(base, NOW.getTime() + 3 * 3_600_000).level).toBe("red");
-    const stale = crypto({ ...base, alerts: { firing: [{ key: "crypto:data-stale", since: null }] } });
-    expect(at(stale).level).toBe("red");
-    expect(at(crypto({ ...base, activity: { cycles_24h: 40, expected_24h: 96 } })).reasons.map((r) => r.code)).toEqual(["cycles"]);
-  });
-});
-
-describe("crypto formatting", () => {
-  it("shows a tiny spread with enough decimals to be a number, and counts days in English", () => {
-    expect([0.0001, 0.0083, 0.01, 0.26, 0, null].map(spreadPct)).toEqual(["0.0001%", "0.0083%", "0.01%", "0.26%", "0.00%", "—"]);
-    expect([plural(1, "day"), plural(14, "day"), plural(null, "day")]).toEqual(["1 day", "14 days", "—"]);
   });
 });

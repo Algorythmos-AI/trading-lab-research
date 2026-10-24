@@ -494,16 +494,16 @@ describe("the HFT desk's watchdog", () => {
       write(hft({ as_of: "2026-10-01T11:15:00Z" }));
     };
 
-    it("runs one tick per desk, in the registry's order, and reports each", async () => {
+    it("runs one tick per desk, in the registry's order, and reports each; the closed crypto desk is skipped", async () => {
       expect(Object.keys(DESK_DEPS)).toEqual(["crypto", "hft"]);
       stale();
       const { status, body } = await tick();
       expect(status).toBe(200);
       expect(body.ok).toBe(true);
       expect(Object.keys(body.desks)).toEqual(["crypto", "hft"]);
-      expect(body.desks.crypto).toMatchObject({ desk: "crypto", level: "late" });
+      expect(body.desks.crypto).toEqual({ ok: true, desk: "crypto", skipped: "closed" }); // DEC-0036: a stale snapshot is not an outage
       expect(body.desks.hft).toMatchObject({ desk: "hft", level: "late" });
-      expect(pages.sent.map((p) => p.title.split(":")[0])).toEqual(["Crypto desk", "HFT desk"]);
+      expect(pages.sent.map((p) => p.title.split(":")[0])).toEqual(["HFT desk"]);
     });
 
     it("reports a desk that has never published as skipped, and pages nobody for it", async () => {
@@ -511,31 +511,31 @@ describe("the HFT desk's watchdog", () => {
       const { status, body } = await tick();
       expect(status).toBe(200);
       expect(body.desks).toEqual({
-        crypto: { ok: true, desk: "crypto", skipped: "never published" },
+        crypto: { ok: true, desk: "crypto", skipped: "closed" },
         hft: { ok: true, desk: "hft", skipped: "never published" },
       });
       expect(pages.sent).toEqual([]);
     });
 
-    it("a failing HFT tick takes neither the stocks tick nor the crypto tick down", async () => {
+    it("a failing HFT tick takes neither the stocks tick nor the other desks' entries down", async () => {
       stale();
       pages.crashFor = "HFT desk";
       const { status, body } = await tick();
       expect(status).toBe(200);
       expect(body).toMatchObject({ ok: true, has_snapshot: true, level: "ok" }); // the stocks desk's own result
-      expect(body.desks.crypto).toMatchObject({ desk: "crypto", level: "late", sent: 1 });
+      expect(body.desks.crypto).toEqual({ ok: true, desk: "crypto", skipped: "closed" });
       expect(body.desks.hft).toEqual({ ok: false, desk: "hft" });
-      expect(pages.sent.map((p) => p.title.split(":")[0])).toEqual(["Crypto desk"]);
+      expect(pages.sent).toEqual([]);
     });
 
-    it("a failing crypto tick does not stop the HFT tick", async () => {
+    it("the closed crypto desk's tick reads and writes nothing, however stale its last snapshot", async () => {
       stale();
-      pages.crashFor = "Crypto desk";
-      const { status, body } = await tick();
-      expect(status).toBe(200);
-      expect(body.ok).toBe(true);
-      expect(body.desks.crypto).toEqual({ ok: false, desk: "crypto" });
-      expect(body.desks.hft).toMatchObject({ desk: "hft", level: "late", sent: 1 });
+      const before = [...sdk.current.store.entries()].map(([k, v]) => [k, v.text]);
+      await tick();
+      expect([...sdk.current.store.entries()].map(([k, v]) => [k, v.text]).filter(([k]) => String(k).includes("crypto"))).toEqual(
+        before.filter(([k]) => String(k).includes("crypto")),
+      );
+      expect(stored(DESK_PATHS.crypto.alertState)).toBeNull();
       expect(pages.sent.map((p) => p.title.split(":")[0])).toEqual(["HFT desk"]);
     });
 
@@ -562,7 +562,7 @@ describe("GET /api/health", () => {
     vi.stubEnv("VERCEL_GIT_COMMIT_SHA", "");
   });
 
-  it("gains desks.hft with the three fields the crypto desk has, and every older field keeps its place and shape", async () => {
+  it("gains desks.hft with the fields the crypto desk has, each desk's state word, and every older field keeps its place and shape", async () => {
     const stocks = { ...fixture(), run_id: "s1", as_of: "2026-10-01T11:46:00Z" };
     sdk.current.write(DESK_PATHS.stocks.latest, JSON.stringify(stocks));
     sdk.current.write(DESK_PATHS.crypto.latest, JSON.stringify(crypto()));
@@ -574,8 +574,8 @@ describe("GET /api/health", () => {
       snapshot_run_id: "s1",
       snapshot: "ok",
       desks: {
-        crypto: { snapshot: "ok", as_of: "2026-10-01T11:46:00Z", run_id: "c1" },
-        hft: { snapshot: "missing", as_of: null, run_id: null },
+        crypto: { snapshot: "ok", as_of: "2026-10-01T11:46:00Z", run_id: "c1", state: "closed" },
+        hft: { snapshot: "missing", as_of: null, run_id: null, state: "parked" },
       },
       editions: NO_EDITIONS,
     });
@@ -589,8 +589,8 @@ describe("GET /api/health", () => {
     await post(hft());
     const body = await health();
     expect(body.desks).toEqual({
-      crypto: { snapshot: "missing", as_of: null, run_id: null },
-      hft: { snapshot: "ok", as_of: "2026-10-01T11:46:00Z", run_id: "h1" },
+      crypto: { snapshot: "missing", as_of: null, run_id: null, state: "closed" },
+      hft: { snapshot: "ok", as_of: "2026-10-01T11:46:00Z", run_id: "h1", state: "parked" },
     });
     expect([body.snapshot, body.snapshot_as_of, body.snapshot_run_id]).toEqual(["missing", null, null]);
   });
@@ -599,7 +599,7 @@ describe("GET /api/health", () => {
     sdk.current.write(DESK_PATHS.stocks.latest, JSON.stringify(fixture()));
     sdk.current.write(DESK_PATHS.hft.latest, "[]");
     const body = await health();
-    expect((body.desks as Loose).hft).toEqual({ snapshot: "error", as_of: null, run_id: null });
+    expect((body.desks as Loose).hft).toEqual({ snapshot: "error", as_of: null, run_id: null, state: "parked" });
     expect(body.snapshot).toBe("ok");
     expect(body.ok).toBe(true);
   });

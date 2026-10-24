@@ -242,13 +242,6 @@ export function FeedsPanel(input: FeedsInput) {
           );
         })}
       </ul>
-      <p className="text-muted-foreground mt-3 text-xs">
-        The crypto harvest has its own page in{" "}
-        <Link href="/crypto/operations" className="underline underline-offset-2">
-          Crypto mode
-        </Link>
-        .
-      </p>
     </Panel>
   );
 }
