@@ -1,6 +1,8 @@
 // The rules before every trade, and the evidence behind each one. Pure: no I/O; any clock is passed in.
 // The thresholds live here; every number about the owner's own trading is measured from the journal at render time,
 // so none of it is written into this repository. The market numbers are backtest statistics of the levels engine.
+import { INTRADAY_MAX_AGE_MIN, inUsSession, journalCheck } from "./feeds";
+import { etOffsetMin } from "./freshness";
 import { closeDay, daily, holdMinutes, nyTime, type SessionView, type Trade } from "./journal";
 
 /** The most a single trade may lose, in dollars. */
@@ -391,7 +393,8 @@ export function ruleEvidence(trades: readonly Trade[]): Record<string, Evidence>
 
 // ── Today ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-export type DayStatus = "clear" | "careful" | "stop";
+/** "unknown": the journal on show is not current, so today's count and loss cannot be read from it. */
+export type DayStatus = "clear" | "careful" | "stop" | "unknown";
 
 export interface DayCheck {
   /** False when the session on show is an earlier day: today has started fresh. */
@@ -408,12 +411,110 @@ export interface DayCheck {
   status: DayStatus;
   /** One plain line on what the status means. */
   line: string;
+  /** False when the journal was not read recently enough to judge today (see `journalCheck`). */
+  current: boolean;
+}
+
+/** When the journal was last read, to judge whether today can be read from it. Absent: not judged (tests, previews). */
+export interface JournalAge {
+  asOf: string | null | undefined;
+  now: Date;
+}
+
+const nyHm = new Intl.DateTimeFormat("en-AU", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const nyDay = new Intl.DateTimeFormat("en-AU", { timeZone: "America/New_York", weekday: "short", day: "numeric", month: "short" });
+
+/** "1 h 20 min", "2 days": how long ago, in words. */
+function agoWords(ms: number): string {
+  const min = Math.max(0, Math.round(ms / 60_000));
+  if (min < 60) return `${min} min`;
+  if (min < 24 * 60) return `${Math.floor(min / 60)} h${min % 60 ? ` ${min % 60} min` : ""}`;
+  const days = Math.round(min / 1440);
+  return `${days} day${days === 1 ? "" : "s"}`;
+}
+
+/** The journal's read time in milliseconds, or NaN when it has none. */
+function readMs(asOf: string | null | undefined): number {
+  return typeof asOf === "string" ? Date.parse(asOf) : NaN;
+}
+
+/** "10:24 New York", or "Fri, 16 Oct, 17:38 New York" when it was not read today. */
+function readAt(t: number, now: Date): string {
+  const at = new Date(t);
+  return nyDay.format(at) === nyDay.format(now) ? `${nyHm.format(at)} New York` : `${nyDay.format(at)}, ${nyHm.format(at)} New York`;
+}
+
+/** When a journal that is not current was read, in words; the sentence's subject is "Your Webull trades". */
+function staleRead(asOf: string | null | undefined, now: Date): string {
+  const t = readMs(asOf);
+  if (!Number.isFinite(t)) return "have not been read";
+  if (t > now.getTime() + FUTURE_SLACK_MIN * 60_000) return `carry a read time in the future (${readAt(t, now)})`;
+  return `were last read ${agoWords(now.getTime() - t)} ago (${readAt(t, now)})`;
+}
+
+/** The line for a journal that is not current: when it was read, and what to do instead of trusting the meters. */
+function staleLine(asOf: string | null | undefined, now: Date): string {
+  return `Your Webull trades ${staleRead(asOf, now)}: today's count and loss may be missing. Check Webull before an entry.`;
+}
+
+/** Say when a current journal read the broker: a trade placed since is not in it yet. */
+function readNote(journal: JournalAge | undefined): string {
+  if (!journal) return "";
+  const t = readMs(journal.asOf);
+  return Number.isFinite(t) ? ` Trades read at ${readAt(t, journal.now)}.` : "";
+}
+
+/** A read stamped this far past the clock is not believed: the clocks disagree, or the stamp is wrong. */
+const FUTURE_SLACK_MIN = 5;
+/** After the close, the session's last reads must be in: the sync's last read is due by 16:00, so 15:15 at the latest. */
+const LAST_READ_NY_MIN = 15 * 60 + 15;
+
+/**
+ * Whether today can be judged from a journal read at `asOf`. Stricter than the feed pill (`journalCheck`), because
+ * here a missing read turns into "OK to trade": in the session the read must be under INTRADAY_MAX_AGE_MIN old with no
+ * opening grace; after the close on a weekday it must include the session's last reads; a stamp in the future is not
+ * believed. Outside those, the evening sync's slot decides, as for the pill (a slot still running counts as current).
+ */
+export function journalCurrent(asOf: string | null | undefined, now: Date): boolean {
+  const t = readMs(asOf);
+  const n = now.getTime();
+  if (!Number.isFinite(t) || t > n + FUTURE_SLACK_MIN * 60_000) return false;
+  if (inUsSession(n)) return n - t <= INTRADAY_MAX_AGE_MIN * 60_000;
+  const state = journalCheck(asOf, n).state;
+  if (state !== "ok" && state !== "due") return false;
+  const wall = new Date(n + etOffsetMin(n) * 60_000);
+  const dow = wall.getUTCDay();
+  const minute = wall.getUTCHours() * 60 + wall.getUTCMinutes();
+  if (dow >= 1 && dow <= 5 && minute >= 16 * 60) return t >= n - (minute - LAST_READ_NY_MIN) * 60_000;
+  return true;
+}
+
+/** A day meter's tone when the journal may be missing trades: only a limit already reached is certain. */
+export function meterToneFor<T extends string>(tone: T, check: Pick<DayCheck, "current">): T | "neutral" {
+  return check.current || tone === "bad" ? tone : "neutral";
+}
+
+/** The open positions' note: the journal has no current price, so an open loss is not in the day's figure. */
+function openNote(view: SessionView | null): string {
+  const n = view?.open.length ?? 0;
+  return n ? ` ${n} position${n === 1 ? "" : "s"} still open: an open loss is not counted until it closes.` : "";
 }
 
 /** Today's trading measured against the day rules. */
-export function dayCheck(view: SessionView | null): DayCheck {
+export function dayCheck(view: SessionView | null, journal?: JournalAge): DayCheck {
+  const judged = baseCheck(view);
+  if (journal && !journalCurrent(journal.asOf, journal.now)) {
+    // A journal that is not current can only be missing trades, so a stop it already shows stands.
+    if (judged.status === "stop") return { ...judged, current: false, line: `${judged.line} Your Webull trades ${staleRead(journal.asOf, journal.now)}.` };
+    // Anything short of a stop cannot be judged: no trade from today may only mean today was not read yet.
+    return { ...judged, status: "unknown", current: false, line: staleLine(journal.asOf, journal.now) + openNote(view) };
+  }
+  return { ...judged, line: judged.line + (judged.status === "stop" ? "" : openNote(view)) + readNote(journal) };
+}
+
+function baseCheck(view: SessionView | null): DayCheck {
   if (!view || !view.isToday) {
-    return { isToday: false, used: 0, net: 0, slowLosers: 0, breaks: 0, brokenRules: [], status: "clear", line: `A fresh day: ${MAX_TRADES_PER_DAY} trades and $${DAY_LOSS_LIMIT} of room.` };
+    return { isToday: false, used: 0, net: 0, slowLosers: 0, breaks: 0, brokenRules: [], status: "clear", current: true, line: `A fresh day: ${MAX_TRADES_PER_DAY} trades and $${DAY_LOSS_LIMIT} of room.` };
   }
   const openedToday = (iso: string | null | undefined) => !!iso && nyTime(iso).day === view.day;
   const used = view.trades.filter((t) => openedToday(t.opened_at)).length + view.open.filter((l) => openedToday(l.opened_at)).length;
@@ -440,5 +541,5 @@ export function dayCheck(view: SessionView | null): DayCheck {
     status = "careful";
     line = used >= MAX_TRADES_PER_DAY - 1 ? `One trade left today. Only an A+ setup.` : `Close to the day's limit: ${money(DAY_LOSS_LIMIT + net).replace("+⁠", "")} of room left.`;
   }
-  return { isToday: true, used, net, slowLosers, breaks, brokenRules, status, line };
+  return { isToday: true, used, net, slowLosers, breaks, brokenRules, status, line, current: true };
 }

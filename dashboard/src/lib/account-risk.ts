@@ -231,9 +231,9 @@ export function limitRows(trades: readonly Trade[], check: DayCheck, open: OpenR
 }
 
 /** The whole account view for the Risk page. */
-export function accountRisk(doc: Pick<JournalDoc, "trades" | "open">, now: Date): AccountRisk {
+export function accountRisk(doc: Pick<JournalDoc, "trades" | "open"> & Partial<Pick<JournalDoc, "as_of">>, now: Date): AccountRisk {
   const view = sessionView(doc, now);
-  const check = dayCheck(view);
+  const check = dayCheck(view, "as_of" in doc ? { asOf: doc.as_of, now } : undefined);
   const today = nyTime(now.toISOString()).day;
   const open = openRisk(doc.open ?? [], today);
   const todayTrades = view?.isToday ? view.trades.filter((t) => nyTime(t.opened_at).day === view.day) : [];

@@ -12,7 +12,7 @@ import { type AccountRisk, type HeldBy, type LimitRow } from "@/lib/account-risk
 import { newYork } from "@/lib/format";
 import { shortDay, type MoneyView } from "@/lib/journal";
 import type { Tone } from "@/lib/labels";
-import { DAY_LOSS_LIMIT, MAX_PREMIUM, MAX_TRADES_PER_DAY } from "@/lib/trade-rules";
+import { DAY_LOSS_LIMIT, MAX_PREMIUM, MAX_TRADES_PER_DAY, meterToneFor } from "@/lib/trade-rules";
 import { cn } from "@/lib/utils";
 
 const money0 = (v: number) => `${v < 0 ? "−" : v > 0 ? "+" : ""}$${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
@@ -22,6 +22,7 @@ const STATUS = {
   clear: { word: "Clear to trade", icon: CircleCheck, tone: "good", soft: "bg-good-soft border-good-fill/40" },
   careful: { word: "Careful", icon: TriangleAlert, tone: "warn", soft: "bg-warn-soft border-warn-fill/50" },
   stop: { word: "Stop for today", icon: OctagonX, tone: "bad", soft: "bg-bad-soft border-bad-fill/50" },
+  unknown: { word: "Journal not current", icon: TriangleAlert, tone: "warn", soft: "bg-warn-soft border-warn-fill/50" },
 } as const;
 
 const HELD: Record<HeldBy, { word: string; tone: Tone; means: string }> = {
@@ -64,7 +65,7 @@ export function AccountTodayPanel({ r, asOf, now }: { r: AccountRisk; asOf: stri
         <div className={cn("flex items-center gap-3 rounded-lg border px-3.5 py-3", s.soft)} role="status">
           <s.icon aria-hidden className={cn("size-7 shrink-0", TONE_TEXT[s.tone])} />
           <div className="grid min-w-0 leading-tight">
-            <span className={cn("text-base font-semibold", TONE_TEXT[s.tone])}>{c.isToday ? s.word : "New day"}</span>
+            <span className={cn("text-base font-semibold", TONE_TEXT[s.tone])}>{c.isToday || !c.current ? s.word : "New day"}</span>
             <span className="text-muted-foreground text-sm">
               {c.line}
               {!c.isToday && r.day ? ` Last session traded: ${shortDay(r.day)}.` : ""}
@@ -76,14 +77,14 @@ export function AccountTodayPanel({ r, asOf, now }: { r: AccountRisk; asOf: stri
             label="Day loss limit (closed trades)"
             value={lossUsed}
             max={DAY_LOSS_LIMIT}
-            tone={meterTone(lossUsed / DAY_LOSS_LIMIT)}
+            tone={meterToneFor(meterTone(lossUsed / DAY_LOSS_LIMIT), c)}
             valueText={`${c.isToday ? money0(c.net) : "$0"} of −$${DAY_LOSS_LIMIT}`}
           />
           <Meter
             label="Trades today"
             value={c.used}
             max={MAX_TRADES_PER_DAY}
-            tone={meterTone(c.used / MAX_TRADES_PER_DAY)}
+            tone={meterToneFor(meterTone(c.used / MAX_TRADES_PER_DAY), c)}
             valueText={`${c.used} of ${MAX_TRADES_PER_DAY}`}
           />
           <Meter
