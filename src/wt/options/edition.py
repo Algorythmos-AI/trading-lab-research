@@ -330,15 +330,16 @@ def vol_block(row: Mapping[str, Any] | None, before: Mapping[str, Any] | None) -
     """One name's volatility block from its row in the volatility log and the row of the session before.
     Every figure is optional: what cannot be read is left out, never guessed.
 
-    Implied volatility is logged as a fraction (0.24). Realised volatility is logged from the broker's field
-    named a percentage (18.0) and is divided by 100. Should that field ever arrive as a fraction, the result
-    would sit a hundred times under the implied figure; a realised figure more than HV_BELIEVABLE times away
+    Implied volatility is logged as a fraction (0.24). Realised volatility comes from the broker's field named
+    `annual_pct`, which carries a fraction too (0.25, never 25.0: twelve shadow nights of the live feed showed
+    every value at or under 5), and is read as one. Should that field ever arrive as a percentage, the result
+    would sit a hundred times over the implied figure; a realised figure more than HV_BELIEVABLE times away
     from the implied one is therefore left out, so a wrong unit shows as a blank and never as a number."""
     if not row:
         return None
     iv = _vol(row.get("annual_iv"))
     was = _vol(before.get("annual_iv")) if before else None
-    hv = _vol(row.get("hv_annual"), percent=True)
+    hv = _vol(row.get("hv_annual"))
     if hv is not None and iv is not None and iv > 0 and not (iv / HV_BELIEVABLE <= hv <= iv * HV_BELIEVABLE):
         hv = None
     change = iv - was if iv is not None and was is not None else None

@@ -57,7 +57,7 @@ def pulls(names=NAMES, finished="2026-10-09", hours=7):
         snaps[name] = {"last": {"price": px, "ts": "t"},
                        "implied-vol-underlying": {"is_valid": True, "daily_iv": 0.012, "annual_iv": 0.2 + i / 50},
                        "implied-volatility-percentile": {"high_13w": 0.4, "high_26w": 0.3, "high_52w": 0.1 * i},
-                       "historical-vol": {"annual_pct": 18.0},
+                       "historical-vol": {"annual_pct": 0.18},        # the feed's field is a fraction, whatever its name says
                        "underlying-today-option-volume": {"callVolume": 10, "putVolume": 12},
                        "underlying-avg-option-volume": {"avgCallVolume": 9, "avgPutVolume": 8}}
     return daily, hourly, snaps
@@ -315,13 +315,13 @@ def test_format_two_adds_to_format_one_and_the_dashboard_accepts_it():
 
 
 @pytest.mark.parametrize("row,want", [
-    ({"annual_iv": "0.25", "hv_annual": "22.4"}, {"iv30": 0.25, "hv30": 0.224}),      # the feed's percentage, as a fraction
-    ({"annual_iv": "0.04", "hv_annual": "4.8"}, {"iv30": 0.04, "hv30": 0.048}),       # a quiet name: 4.8 is still a percentage
-    ({"annual_iv": "0.25", "hv_annual": "52"}, {"iv30": 0.25, "hv30": 0.52}),         # realised twice implied is believable
-    ({"annual_iv": "", "hv_annual": "4.8"}, {"iv30": None, "hv30": 0.048}),           # no implied figure: the same rule
-    ({"annual_iv": "0.25", "hv_annual": "0.224"}, {"iv30": 0.25, "hv30": None}),      # a fraction where a percentage belongs: blank
-    ({"annual_iv": "0.25", "hv_annual": "600"}, {"iv30": 0.25, "hv30": None}),        # 600%: above what is sent
-    ({"annual_iv": "0.01", "hv_annual": "90"}, {"iv30": 0.01, "hv30": None}),         # ninety times implied: one of them is wrong
+    ({"annual_iv": "0.25", "hv_annual": "0.224"}, {"iv30": 0.25, "hv30": 0.224}),     # the feed's fraction, as it stands
+    ({"annual_iv": "0.04", "hv_annual": "0.048"}, {"iv30": 0.04, "hv30": 0.048}),     # a quiet name
+    ({"annual_iv": "0.25", "hv_annual": "0.52"}, {"iv30": 0.25, "hv30": 0.52}),       # realised twice implied is believable
+    ({"annual_iv": "", "hv_annual": "0.048"}, {"iv30": None, "hv30": 0.048}),         # no implied figure: the same rule
+    ({"annual_iv": "0.25", "hv_annual": "22.4"}, {"iv30": 0.25, "hv30": None}),       # a percentage where a fraction belongs: blank
+    ({"annual_iv": "0.25", "hv_annual": "600"}, {"iv30": 0.25, "hv30": None}),        # 600 whatever the unit: above what is sent
+    ({"annual_iv": "0.01", "hv_annual": "0.9"}, {"iv30": 0.01, "hv30": None}),        # ninety times implied: one of them is wrong
     ({"annual_iv": "nan", "hv_annual": "-3"}, None),
     ({"annual_iv": "0.25", "ivp_13w": "40", "ivp_26w": "-0.1"}, {"iv30": 0.25, "iv_pct_13w": None, "iv_pct_26w": None}),
     ({"annual_iv": "0.25", "call_vol": "10", "put_vol": ""}, {"iv30": 0.25, "opt_volume": None}),
@@ -526,3 +526,21 @@ def test_the_script_reads_the_index_with_the_pulls_and_the_earnings_file(tmp_pat
     (folder / "VIX.daily.json").write_text(json.dumps({**bad, "volume": [None] * len(bad["time"]), "chart_step": 86400}))
     assert script.main(["--pulls", str(folder), "--data", str(tmp_path / "data2"), "--now", NOW.isoformat(), "--dry-run", "--format", "2", "--out", str(out)]) == 0
     assert json.loads(out.read_text())["market"]["vix"] is None and "volatility index left out: unreadable (TypeError)" in capsys.readouterr().out
+
+
+def test_the_script_carries_a_focus_block_and_refuses_one_the_site_would_refuse(tmp_path, monkeypatch, capsys):
+    write_pulls(tmp_path / "pulls")
+    args = ["--pulls", str(tmp_path / "pulls"), "--data", str(tmp_path / "data"), "--now", "2026-10-09T22:00:00", "--dry-run"]
+    out = tmp_path / "edition.json"
+    good = tmp_path / "focus.json"
+    good.write_text(json.dumps({"picked_at": "2026-10-09T21:55:00Z", "method": "board", "items": [
+        {"symbol": "SPY", "rank": 1, "bias": "support", "resistance": {"price": 580.5, "name": "PDH"}, "support": {"price": 575.0}}]}))
+    assert script.main([*args, "--out", str(out), "--focus", str(good)]) == 0
+    doc = json.loads(out.read_text())
+    assert doc["focus"]["items"][0]["symbol"] == "SPY" and doc["focus"]["items"][0]["rank"] == 1
+    jsonschema.Draft7Validator(SCHEMA).validate(doc)
+    for bad in ('{"items": "x"}', '{"items": [{"symbol": "SPY", "rank": 0, "bias": "support"}]}',
+                '{"items": [{"symbol": "SPY", "rank": 1, "bias": "up"}]}', '{"items": [{"rank": 1, "bias": "range"}]}', "{torn"):
+        (tmp_path / "bad.json").write_text(bad)
+        assert script.main([*args, "--focus", str(tmp_path / "bad.json")]) == 1
+        assert "focus block unreadable" in capsys.readouterr().err

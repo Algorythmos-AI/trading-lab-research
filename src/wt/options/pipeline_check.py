@@ -159,7 +159,11 @@ def assess(slot: str, now: dt.datetime, radar: Mapping[str, Any] | None, options
             bars = [b for b in daily.get(sym, []) if isinstance(b, Mapping)]
             loaded = lv.load_ibkr(daily_raw(bars))
             if loaded.problems or not loaded.bars or loaded.bars[-1].d != prev:
-                add(f"options.tape.{sym}", False, f"no clean tape through {prev} to check against", "warn")
+                ends = loaded.bars[-1].d if loaded.bars else "nowhere"
+                why = ("; ".join(loaded.problems[:3]) if loaded.problems else
+                       f"the tape ends {ends}, the day's bar is not published yet" if ends < prev else
+                       f"the tape ends {ends}")
+                add(f"options.tape.{sym}", False, f"no clean tape through {prev}: {why}", "warn")
                 continue
             close = _num((t.get("last") or {}).get("close"))
             tape_close = loaded.bars[-1].c
@@ -270,6 +274,33 @@ def market_data(symbols: Sequence[str], target: str, slot: str) -> tuple[dict[st
     return daily, expiries, live
 
 
+TAPE_TRIES, TAPE_WAIT_S = 3, 180.0        # after the close the day's daily bar can lag the check by minutes
+
+
+def last_bar_date(bars: Sequence[Mapping[str, Any]]) -> str:
+    """The date of the newest daily bar, as the loader keys it, or "" without one."""
+    loaded = lv.load_ibkr(daily_raw([b for b in bars if isinstance(b, Mapping)]))
+    return loaded.bars[-1].d if loaded.bars else ""
+
+
+def wait_for_the_days_bar(symbols: Sequence[str], target: str, daily: dict[str, list[Any]],
+                          expiries: Mapping[str, Sequence[str]], options: Mapping[str, Any] | None,
+                          sleep: Callable[[float], None] = time.sleep,
+                          fetch: Callable[[Sequence[str], str, str], tuple[dict[str, list[Any]], Any, Any]] = market_data,
+                          ) -> dict[str, list[Any]]:
+    """After the close the consolidated daily bar of the session just finished can arrive after the check starts.
+    While a name the clone can trade still lacks it, fetch again a few times before judging the tape; the names
+    that never get it are reported with the date their tape ends."""
+    prev = lv.prev_session(target)
+    wanted = [s for s in eligible(options, target, expiries) if s in symbols] or list(symbols)
+    for _ in range(TAPE_TRIES - 1):
+        if all(last_bar_date(daily.get(s, [])) >= prev for s in wanted):
+            return daily
+        sleep(TAPE_WAIT_S)
+        daily, _, _ = fetch(symbols, target, "after-close")
+    return daily
+
+
 def run(slot: str, now: dt.datetime | None = None) -> int:
     import csv
     from wt.core.config import CONFIG_DIR
@@ -282,6 +313,8 @@ def run(slot: str, now: dt.datetime | None = None) -> int:
                      | {"SPY", "QQQ"})
     try:
         daily, expiries, live = market_data(symbols, target, slot)
+        if slot == "after-close":
+            daily = wait_for_the_days_bar(symbols, target, daily, expiries, options)
     except requests.RequestException as e:
         daily, expiries, live = {}, {}, {}
         print(f"market data unavailable: {e.__class__.__name__}", file=sys.stderr)
