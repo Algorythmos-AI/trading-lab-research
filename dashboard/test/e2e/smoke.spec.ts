@@ -530,9 +530,14 @@ test("on a laptop the third desk leaves the header one row above the sections, o
       expect(h.pill!.bottom, at).toBeGreaterThan(h.desk!.top);
       expect(h.clocks!.top, at).toBeLessThan(h.desk!.bottom);
       expect(h.clocks!.bottom, at).toBeGreaterThan(h.desk!.top);
-      expect(h.sections!.top, at).toBeGreaterThanOrEqual(h.desk!.bottom);
       expect(h.position, at).toBe("sticky");
       expect(h.overflow, at).toBeLessThanOrEqual(0);
+      if (path === "/crypto") {
+        // a closed desk has no sections (DEC-0036), so its header is one row shorter and sizes nothing
+        expect(h.sections, at).toBeNull();
+        continue;
+      }
+      expect(h.sections!.top, at).toBeGreaterThanOrEqual(h.desk!.bottom);
       heights.add(h.header!.bottom - h.header!.top);
     }
     // The Options desk is sized from this height (xl:h-[calc(100dvh-10.5rem)]): it is the same on every desk's pages.
