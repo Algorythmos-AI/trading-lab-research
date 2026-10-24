@@ -27,6 +27,9 @@ from wt.core.clock import ET
 from wt.core.config import FORWARD_LEDGER, FORWARD_WATCHLIST_DIR, ROOT, SCORECARD_DIR
 
 REPO = "Algorythmos-AI/trading-lab-research"
+# The push goes to GitHub over HTTPS with GH_TOKEN (through gh's credential helper), never through `origin`: on the
+# host `origin` is a read-only deploy key once the repository is private, and a read-only remote cannot take a push.
+PUSH_URL = f"https://github.com/{REPO}.git"
 WT_ROOT = Path.home() / "trading-wt"
 
 
@@ -35,11 +38,22 @@ def iso_week(d: dt.date) -> str:
     return f"{y}-W{w:02d}"
 
 
+def _redact(text: str) -> str:
+    """A token must never reach a log line, whatever git puts in its error text."""
+    for name in ("GH_TOKEN", "GITHUB_TOKEN"):
+        tok = os.environ.get(name)
+        if tok:
+            text = text.replace(tok, "***")
+    return text
+
+
 def _git(*args: str, cwd: Path, env: dict[str, str] | None = None, check: bool = True) -> str:
     r = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, timeout=120,
                        env={**os.environ, "GIT_TERMINAL_PROMPT": "0", **(env or {})})
     if check and r.returncode != 0:
-        raise RuntimeError(f"git {' '.join(args[:2])} failed: {(r.stderr or r.stdout).strip()[-300:]}")
+        verbs = [a for i, a in enumerate(args) if not a.startswith("-") and (i == 0 or args[i - 1] != "-c")]
+        raise RuntimeError(f"git {verbs[0] if verbs else args[0]} failed: "
+                           f"{_redact((r.stderr or r.stdout).strip()[-300:])}")
     return r.stdout
 
 
@@ -111,7 +125,10 @@ def run(dry_run: bool = False, today: dt.date | None = None) -> int:
         _git("-c", "user.name=skalaliya", "-c", "user.email=skalaliya@gmail.com", "commit", "--quiet", "-m",
              f"data(forward): evidence for {week}\n\nImmutable copies of the forward ledger, scorecards and forward "
              f"watchlists as of {today} (ADR 0002). Nothing existing is modified.", cwd=wt)
-        _git(*helper, "push", "--quiet", "--force-with-lease", "origin", f"{branch}:{branch}", cwd=wt, env=cred)
+        # pushurl, not a bare URL: with a bare URL git has no tracking ref and --force-with-lease expects the branch
+        # to be absent, so a second run in the same week is rejected. Fetches keep using origin's own URL.
+        _git(*helper, "-c", f"remote.origin.pushurl={PUSH_URL}", "push", "--quiet", "--force-with-lease", "origin",
+             f"{branch}:{branch}", cwd=wt, env=cred)
         gh = {**os.environ, "GH_TOKEN": token or "", "GH_PROMPT_DISABLED": "1"}
         body = (f"Weekly forward evidence for {week}, copied from `var/` into new, immutable files.\n\n"
                 + "\n".join(f"- `{r}`" for r in rels))

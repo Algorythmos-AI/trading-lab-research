@@ -10,7 +10,7 @@ export PYTHONDONTWRITEBYTECODE := 1
 # Modules held to `mypy --strict`. New safety and ops modules join this list in the PR that adds them.
 TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py src/wt/ops/window.py \
                  src/wt/ops/heartbeat.py src/wt/ops/preflight.py src/wt/ops/jobs.py src/wt/ops/migrate.py \
-                 src/wt/ops/agents.py src/wt/ops/deploy.py src/wt/ops/ci.py src/wt/core/safety.py src/wt/core/ids.py \
+                 src/wt/ops/agents.py src/wt/ops/deploy.py src/wt/ops/ci.py src/wt/risk/stop_rule.py src/wt/core/safety.py src/wt/core/ids.py \
                  src/wt/brokers/base.py src/wt/brokers/sim.py src/wt/brokers/alpaca_paper.py src/wt/risk/pretrade.py \
                  src/wt/oms/manager.py src/wt/risk/virtual_account.py src/wt/ops/publish.py src/wt/brokers/alpaca_read.py src/wt/ops/evidence.py \
                  src/wt/research/manifest.py src/wt/research/method.py src/wt/research/trials.py \
@@ -98,7 +98,8 @@ migrate-state: ## Move runtime files from tracked paths into var/ (gated, lossle
 
 preflight: ## Run every job's preflight as its scheduler would (launchd's minimal environment; the unit's on Linux)
 	@if [ "$$(uname)" = Linux ]; then for j in routine paper-b forward weekly; do echo "== $$j"; \
-	  WT_HOST=systemd PYTHONPATH=src $(PY) -m wt.ops.jobs run $$j --preflight-only || status=1; done; exit $${status:-0}; \
+	  WT_HOST=systemd PYTHONPATH=src $(PY) -m wt.ops.jobs run $$j --preflight-only || status=1; done; \
+	  echo "== host"; WT_HOST=systemd PYTHONPATH=src $(PY) -m wt.ops.preflight || status=1; exit $${status:-0}; \
 	else for j in routine paper-b forward weekly; do echo "== $$j"; \
 	  env -i HOME="$(HOME)" PATH="$(JOB_PATH)" /bin/zsh deploy/run_job.sh $$j --preflight-only || status=1; done; \
 	  exit $${status:-0}; fi

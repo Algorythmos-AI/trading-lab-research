@@ -25,7 +25,7 @@ from zoneinfo import ZoneInfo
 
 import yaml
 
-from wt.analytics import forward_book, g2
+from wt.analytics import b_replay, forward_book, g2
 from wt.ops import safeio, thresholds
 from wt.ops.safeio import SourceError
 
@@ -263,9 +263,11 @@ def src_research(ctx: Ctx) -> dict:
         board.append(item)
 
     r3_dirs = sorted(p.name for p in (r / "experiments").glob("EXP-0015-r3*"))
+    # "run" means a result exists, not that a folder does: EXP-0015-r3-dev holds a README while the run is pending
+    r3_results = sorted(p.parent.name for p in (r / "experiments").glob("EXP-0015-r3*/result.json"))
     hyp_by_id = {h["id"]: h for h in hyps}
     round3 = [{**t, "hyp_status": hyp_by_id.get(t["id"], {}).get("status", "missing"),
-               "run": bool(r3_dirs)} for t in ctx.cfg.get("round3_trials", [])]
+               "run": bool(r3_results)} for t in ctx.cfg.get("round3_trials", [])]
     active = sorted(p.stem for p in (r / "active_strategies").glob("*.yaml"))
     retired = sorted(p.stem for p in (r / "retired_strategies").glob("*.yaml")) if (r / "retired_strategies").is_dir() else []
     lessons = sorted(p.stem[:7] for p in (r / "lessons_learned").glob("LL-*"))
@@ -499,7 +501,7 @@ def src_paper(ctx: Ctx) -> dict:
     return {"events": dict(events), "bad_lines": bad, "armed_sessions": len(armed), "last_armed": armed[-1] if armed else None,
             "trades": len(closed), "total_r": round(sum(rs), 3) if rs else 0.0,
             "mean_r": round(sum(rs) / len(rs), 3) if rs else None, "virtual": equity, "recent": recent,
-            "g2": g2.summary(rows),
+            "g2": g2.summary(rows, replay=b_replay.load_records(_state(ctx, "forward/replay", "research/forward/replay"))),
             "log": _log_digest(logs[-1]) if logs else None}
 
 

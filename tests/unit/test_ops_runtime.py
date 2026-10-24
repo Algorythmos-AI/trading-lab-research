@@ -264,6 +264,26 @@ def test_preflight_refuses_legacy_state_stale_venv_open_env_and_low_disk(repo):
     assert {"runtime state migrated", "venv matches lockfile", ".env private", "free disk"} <= names
 
 
+def test_preflight_checks_that_origin_answers_before_a_deploy_needs_it(repo):
+    """A private repository with no registered deploy key fails here, not inside the hourly deploy."""
+    ok = preflight.check_remote(repo)
+    assert ok.ok and ok.name == "origin reachable", ok
+    _git(repo, "remote", "set-url", "origin", str(repo.parent / "missing.git"))
+    bad = preflight.check_remote(repo)
+    assert not bad.ok and "register the deploy key" in bad.detail
+
+
+def test_the_origin_check_is_for_the_host_command_never_for_a_trading_job(repo, monkeypatch):
+    """A GitHub outage at 09:25 ET must not refuse the paper runner: run_checks adds the check only on request."""
+    monkeypatch.setattr(preflight, "current_kind", lambda: "systemd")
+    monkeypatch.setenv("NTFY_TOPIC", "t")
+    names = {c.name for c in preflight.run_checks(repo, min_free_gb=0)}
+    assert "origin reachable" not in names and "paging configured" in names
+    assert "origin reachable" in {c.name for c in preflight.run_checks(repo, min_free_gb=0, remote=True)}
+    monkeypatch.setattr(preflight, "current_kind", lambda: "launchd")
+    assert "origin reachable" not in {c.name for c in preflight.run_checks(repo, min_free_gb=0, remote=True)}
+
+
 # ---- migration ---------------------------------------------------------------------------------------------------
 
 def test_migrate_moves_verifies_keeps_a_backup_and_is_idempotent(repo, tmp_path):

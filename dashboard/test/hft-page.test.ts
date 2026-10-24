@@ -53,15 +53,17 @@ describe("the HFT page before the desk has published", () => {
     expect(html).toMatch(/<h1[^>]*>HFT<\/h1>/);
     expect(out).toContain("a separate platform");
     expect(out).toContain("built to trade currencies on a broker paper account automatically");
-    expect(out).toContain("The HFT desk has not published yet");
-    expect(out).toContain("This page fills in when the desk's recorder starts");
+    expect(out).toContain("The HFT desk is parked");                          // src/lib/desks.json, HFT-DEC-0005
+    expect(out).toContain("stopped on 14 October 2026 (HFT-DEC-0005)");
+    expect(out).toContain("This page fills in when the desk is restarted");
+    expect(out).not.toContain("has not published yet");
     expect(out).toContain("What this page will show");
     expect(out).not.toMatch(/could not be read|error|failed/i);
   });
 
   it("shows nothing that looks like a reading: no number but the names of the phases, no dash, no status, no table", async () => {
     const html = await page();
-    const out = text(html).replace("F0 to F7", "");
+    const out = text(html).replace("F0 to F7", "").replace(/stopped on 14 October 2026 \(HFT-DEC-0005\)/, "");
     expect(out).not.toMatch(/\d/);
     expect(out).not.toContain("—");
     expect(out).not.toMatch(/All clear|Needs a look|Action needed|Status (green|amber|red)/);
@@ -73,6 +75,7 @@ describe("the HFT page before the desk has published", () => {
     const out = text(await page());
     expect(out).toContain("Storage could not be read");
     expect(out).not.toContain("has not published yet");
+    expect(out).not.toContain("is parked");
     expect(text(renderToString(createElement(NoHftSnapshot, { status: "error" })))).toContain("It retries every minute");
   });
 });
