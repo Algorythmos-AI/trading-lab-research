@@ -8,6 +8,10 @@ decides. Required names come from WT_REQUIRED_CHECKS (comma-separated; default "
 
 Auth: GH_TOKEN or GITHUB_TOKEN when set (a read-only token; the repository may be private), else the `gh` CLI's
 token when it is logged in (the Mac), else unauthenticated (a public repository, 60 requests an hour per IP).
+
+A fine-grained personal access token cannot be given the "Checks" permission (GitHub keeps it for GitHub Apps), so
+on a private repository the check-runs endpoint answers 403 to it. The same results are then read from the Actions
+API (`Actions: read`): the commit's workflow runs and their jobs, whose names are the check names. Fails closed.
 """
 from __future__ import annotations
 
@@ -85,6 +89,34 @@ def verdict(runs: list[dict[str, Any]], required: tuple[str, ...]) -> Verdict:
     return Verdict(not bad, detail, per)
 
 
+def _pages(session: Any, url: str | None, headers: dict[str, str], key: str) -> tuple[int, list[dict[str, Any]]]:
+    """Every item of a paged list endpoint, or (the first non-200 status, [])."""
+    out: list[dict[str, Any]] = []
+    while url:
+        r = session.get(url, headers=headers, timeout=20)
+        if r.status_code != 200:
+            return r.status_code, []
+        out += list(r.json().get(key, []))
+        url = r.links.get("next", {}).get("url") if hasattr(r, "links") else None
+    return 200, out
+
+
+def _jobs_of_runs(sha: str, slug: str, headers: dict[str, str], session: Any) -> tuple[int, list[dict[str, Any]]]:
+    """The jobs of every workflow run on `sha`, shaped like check runs (id, name, status, conclusion)."""
+    code, runs = _pages(session, f"{API}/repos/{slug}/actions/runs?head_sha={sha}&per_page=100", headers,
+                        "workflow_runs")
+    if code != 200:
+        return code, []
+    jobs: list[dict[str, Any]] = []
+    for run in runs:
+        code, got = _pages(session, f"{API}/repos/{slug}/actions/runs/{run.get('id')}/jobs?filter=latest&per_page=100",
+                           headers, "jobs")
+        if code != 200:
+            return code, []
+        jobs += got
+    return 200, jobs
+
+
 def check(sha: str, required: tuple[str, ...] | None = None, slug: str | None = None,
           session: Any = requests) -> Verdict:
     """The required checks of `sha`. Any API failure is "not green" (fails closed)."""
@@ -92,15 +124,17 @@ def check(sha: str, required: tuple[str, ...] | None = None, slug: str | None = 
     headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
     if tok := token():
         headers["Authorization"] = f"Bearer {tok}"
-    runs: list[dict[str, Any]] = []
+    slug = slug or repo_slug()
     try:
-        url: str | None = f"{API}/repos/{slug or repo_slug()}/commits/{sha}/check-runs?per_page=100"
-        while url:
-            r = session.get(url, headers=headers, timeout=20)
-            if r.status_code != 200:
-                return Verdict(False, f"GitHub API answered HTTP {r.status_code}", {})
-            runs += list(r.json().get("check_runs", []))
-            url = r.links.get("next", {}).get("url") if hasattr(r, "links") else None
+        code, runs = _pages(session, f"{API}/repos/{slug}/commits/{sha}/check-runs?per_page=100", headers,
+                            "check_runs")
+        if code in (403, 404) and "Authorization" in headers:
+            # a fine-grained token cannot hold "Checks": read the same jobs through the Actions API
+            code2, runs = _jobs_of_runs(sha, slug, headers, session)
+            if code2 != 200:
+                return Verdict(False, f"GitHub API answered HTTP {code} (checks) and {code2} (actions)", {})
+        elif code != 200:
+            return Verdict(False, f"GitHub API answered HTTP {code}", {})
     except (requests.RequestException, ValueError) as e:
         return Verdict(False, f"GitHub API unreachable ({e.__class__.__name__})", {})
     return verdict(runs, required)
