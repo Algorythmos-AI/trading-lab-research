@@ -1,6 +1,7 @@
 # ADR 0004: The trading host moves to an OCI Always Free VM
 
-- **Status:** proposed, 2026-09-30 (plan v4.2 §3)
+- **Status:** superseded by [ADR 0010](0010-gcp-trading-host.md) on 2026-10-24. Proposed 2026-09-30 (plan v4.2 §3);
+  the OCI VM was never provisioned (no Ampere capacity), and its helpers and units run on the GCP host.
 - **Context:** the Mac's disk and swap made jobs refuse (2026-09-29); the owner chose Oracle Cloud's free tier.
 
 ## Decision

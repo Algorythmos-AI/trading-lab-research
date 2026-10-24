@@ -627,7 +627,8 @@ def test_the_tournament_sleeves_are_registered_and_leave_the_baseline_alone():
     for name, hyp in (("trend", "HYP-0021"), ("break", "HYP-0022"), ("dip", "HYP-0023")):
         assert sleeves[name]["hypothesis"] == hyp
         doc = yaml.safe_load(next((ROOT / "research/hypotheses").glob(f"{hyp}-*.yaml")).read_text())
-        assert doc["family"] == "C" and doc["evidence"]["decision"] == "DEC-0015" and doc["status"] == "pre-registered"
+        # Registered by DEC-0015; closed as falsified by DEC-0036 (every sleeve failed C1).
+        assert doc["family"] == "C" and doc["evidence"]["decision"] == "DEC-0015" and doc["status"] == "falsified"
     risk = yaml.safe_load((ROOT / "config/risk.yaml").read_text())
     assert risk["CT"]["risk_pct"] == 1.0 and risk["CT"]["max_exposure_pct"] == 100 and risk["C"]["max_notional"] == 50
     for dec in ("DEC-0014", "DEC-0015"):

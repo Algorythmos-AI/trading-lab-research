@@ -1,7 +1,7 @@
 id: HYP-0023
 trial: "C-DIP"
 family: C                       # crypto desk; counted apart from the equity trials (DEC-0012, DEC-0015)
-status: pre-registered          # DEC-0015 accepted 2026-10-06
+status: falsified            # DEC-0036 (EXP-0016): DIP -0.336R over 87 trades, fails C1
 statement: "On liquid Kraken USD spot pairs above their 50-day average, a long-only entry on the first 4-hour close back above EMA-8 after RSI-14 fell below 35, with a 2 ATR stop, a 3 ATR target and a 42-bar time stop, has positive fixed-rule expectancy after exchange fees and slippage."
 config: config/crypto.yaml      # sleeves.dip: every rule and number comes from this file at the commit named in the experiment's manifest
 evidence: {decision: DEC-0015, adr: docs/adr/0005-desks.md}

@@ -110,7 +110,7 @@ export function humanize(id: string | null | undefined): string {
   return s ? s[0]!.toUpperCase() + s.slice(1) : "—";
 }
 
-/** Strategy B (any variant) is under re-evaluation. */
+/** Strategy B, any variant: the rows that carry the DEC-0011 notice on the Strategies page. */
 export function isStrategyB(name: string | null | undefined): boolean {
   return /^B(?:$|[_\s·:-])/.test(String(name ?? "").trim());
 }

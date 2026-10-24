@@ -276,7 +276,8 @@ def test_research_sources_read_the_real_registry(tmp_path):
     assert board["S1 · Pre-market high break (gap-and-go)"]["expectancy_r"] == pytest.approx(-0.404, abs=1e-3)
     assert all(r["error"] is None for r in res["scoreboard"])
     stale = {h["id"] for h in res["hypotheses"] if h["stale"]}
-    assert len(res["round3"]) == 10 and "HYP-0001" in stale              # closed by DEC-0007 but still "pre-registered"
+    assert len(res["round3"]) == 10 and "HYP-0001" not in stale          # closed by DEC-0007, and its status says so
+    assert not stale & set(c.cfg.get("closed_hypotheses", []))
     assert all(("draft" in h["status"]) == (h["id"] in stale) for h in res["hypotheses"] if h["id"] >= "HYP-0010")
     sp = status.src_spec(c)
     assert sp["total"] == 112 and sp["by_status"]["implemented"] >= 106
