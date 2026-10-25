@@ -1,7 +1,9 @@
 # DEC-0011: Audit corrections (September 2026)
 
-- **Status: PROPOSED, awaiting owner approval in chat.** Nothing below is run until the owner approves this record.
-  The code corrections can land before then; the P&L they affect is not computed.
+- **Status: ACCEPTED on 2026-10-25.** The owner accepted it on 2026-10-25, asked directly (accept, or leave it
+  proposed). The merge of the pull request that carries this line is the approval. From that date the two re-specified
+  forward strategies run (`V2_FROM` in `scripts/forward_test.py`), the global trial count is 87, and the re-runs below
+  are registered under the next free experiment ids (see the note at the end). None has been run yet.
 - **Date drafted:** 2026-09-29, before any affected P&L was computed.
 - **Source:** the September 2026 engineering and research audit (plan v2, workstream E).
 - **Owner decisions already given (2026-09-29, in chat):**
@@ -34,7 +36,7 @@ Known and **not yet corrected** (a 2026-09-29 re-audit found an earlier draft of
 - the forward universe is still read from a static asset list (no `first_seen` refresh).
 Neither feeds strategy B or the re-runs below.
 
-## Decision (proposed)
+## Decision
 
 1. **Code corrections.** Every defect above is fixed in code, with a test pinning it. The ETF loader now removes
    duplicates, then asserts that no `(symbol, t)` repeats (`wt.data.quality`).

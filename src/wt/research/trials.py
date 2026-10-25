@@ -15,7 +15,7 @@ import yaml
 from wt.core.config import CONFIG_DIR
 
 REGISTRY = CONFIG_DIR / "trial_registry.yaml"
-STATUSES = ("accepted", "proposed")
+STATUSES = ("accepted", "proposed", "withdrawn")   # withdrawn: never counts, kept for the record
 
 
 def trial_history(path: Path | None = None) -> list[dict[str, Any]]:
