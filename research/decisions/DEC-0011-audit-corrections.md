@@ -1,9 +1,10 @@
 # DEC-0011: Audit corrections (September 2026)
 
 - **Status: ACCEPTED on 2026-10-25.** The owner accepted it on 2026-10-25, asked directly (accept, or leave it
-  proposed). The merge of the pull request that carries this line is the approval. From that date the two re-specified
-  forward strategies run (`V2_FROM` in `scripts/forward_test.py`), the global trial count is 87, and the re-runs below
-  are registered under the next free experiment ids (see the note at the end). None has been run yet.
+  proposed). The merge of the pull request that carries this line is the approval. The global trial count is 87 from
+  that date. The two re-specified forward strategies start only once their hypothesis and experiment records exist
+  (AGENTS.md rule 2; `V2_FROM` in `scripts/forward_test.py` is set in that pull request), and the re-runs below are
+  registered under the next free experiment ids (see the note at the end). Nothing has been run yet.
 - **Date drafted:** 2026-09-29, before any affected P&L was computed.
 - **Source:** the September 2026 engineering and research audit (plan v2, workstream E).
 - **Owner decisions already given (2026-09-29, in chat):**
