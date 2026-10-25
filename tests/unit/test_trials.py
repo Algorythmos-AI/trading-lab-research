@@ -20,6 +20,8 @@ def record(decision: str) -> str:
 def status_of(text: str) -> str:
     """'proposed' while the record's Status line says PROPOSED; records without a Status line were accepted."""
     m = re.search(r"\*\*Status:\s*([^*]+)\*\*", text)
+    if m and "WITHDRAWN" in m.group(1).upper():
+        return "withdrawn"
     return "proposed" if m and "PROPOSED" in m.group(1).upper() else "accepted"
 
 

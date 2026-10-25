@@ -1,8 +1,10 @@
 # DEC-0029: Options desk, pricing the probation rules' cases as the options they stand for
 
-- **Status: PROPOSED on 2026-10-12.** Drafted for the owner to change or accept. It becomes ACCEPTED only when
-  the owner merges a pull request that says so in this line. **Nothing below is built or run before that**, and
-  no option-priced result has been looked at in drafting it.
+- **Status: WITHDRAWN on 2026-10-25.** The owner withdrew it on 2026-10-25, asked directly (accept, withdraw, or
+  leave it proposed). Nothing below was built or run, no option-priced result was looked at, and its eight trials are
+  never spent: family O stays at its count in force (the `DEC-0029` row of `config/trial_registry.yaml` is marked
+  `withdrawn`). The reason is under "Withdrawn" at the end.
+- **Was:** proposed on 2026-10-12, drafted for the owner to change or accept.
 - **Depends on:** DEC-0028 (the four rules, family O, the promotion test).
 - **Does not amend** DEC-0028. It supplies the missing input its promotion test names: "after option costs".
 - **Date drafted:** 2026-10-12.
@@ -97,3 +99,12 @@ of cases that lost more than half the premium.
    the cautious side for liquid names at the money.
 3. **Return on premium as the unit** for the promotion test.
 4. **Whether to run step 1 at all**, given it is on a span already seen.
+
+## Withdrawn (2026-10-25)
+
+EXP-0023 replicated the four rules on the stock: every 95% range of the mean R spans zero, so none shows an edge
+before any option cost. Pricing the cases as options can only subtract the premium's decay and the spread from
+that, so the eight trials this record would add to family O would very likely buy a negative answer while making
+every later trial in the family harder to pass. The question it asks stays open: a new record may ask it again for
+a rule that first shows an edge on the stock.
+
