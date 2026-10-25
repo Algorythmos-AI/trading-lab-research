@@ -21,3 +21,4 @@ One page per incident. Each starts with how you'll notice it.
 | [Ruleset emergency](ruleset-emergency.md) | CI is down and a fix must land |
 | [Crypto desk](crypto-desk.md) | The desk is closed (DEC-0036); what is left of it on the host until the code leaves |
 | [Options clone](options-clone.md) | ntfy "Options clone ...": entered, exited, latched, feed unfit, exit not filled, NOT FLAT, FLATTEN REQUIRED |
+| [Cloud routines](cloud-routines.md) | A feed is late, a routine replied in its thread, or you want to know what runs outside the host |

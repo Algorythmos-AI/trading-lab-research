@@ -1,0 +1,57 @@
+# Cloud routines
+
+Six scheduled Claude routines feed the dashboard and the release flow. They run in Claude's cloud, not on the host
+and not from this repository's code (except where noted), so `systemctl` and the deploy gate know nothing about them.
+Each posts into its own thread on claude.ai. Each replies only when something needs the owner; a normal run updates
+its status line and stays quiet.
+
+| Routine | Id | When | What it does | Writes |
+|---|---|---|---|---|
+| Options levels, after close | `trig_01EUa31y41kKS4WuJqBXJwWN` | 21:52 UTC, Mon–Fri | Pulls IBKR daily and hourly bars and the volatility snapshot for the ten names, builds the levels, picks the next session's four focus names, posts the focus card, then runs the shadow step | The options edition (`/api/ingest`, `trading-lab/options`) |
+| Options focus, pre-open | `trig_01WyzH7k8xAUgj8RZsakUDW7` | 08:50 New York, Mon–Fri | Prices the focus names before the open and republishes the focus block; posts the pre-open card | The edition's focus block |
+| Radar edition | `trig_01B1TN3d4x7dZ3Wxad2LmYgb` | 11:12 UTC, Mon–Fri | Sends the newest radar outbox file; retries once if the radar run is late | The radar edition |
+| Webull trades, live | `trig_01Et86JsFLYn7j7kbBt1dGUm` | :24 every hour 09:24–15:24 New York, Mon–Fri | Each run reads the owner's Webull AU history every 2 minutes for an hour (stops at 16:20) and publishes on change and at least every 30 minutes | The trade journal |
+| Webull trades, after close | `trig_012wh4n2yJT7B4Agy12u7yoF` | 21:38 UTC, Mon–Fri | One full read after the close | The trade journal |
+| Release PR | `trig_01Dbj8zTA2HTq2Uzf9ziRzdj` | 16:20 New York, Mon–Fri | Opens or refreshes the `integration` → `main` release PR and drives its CI; never merges | A pull request |
+
+All of them are read-only toward the brokers: none places, changes or cancels an order.
+
+## What depends on what
+
+- **The journal's freshness** on the dashboard (`dashboard/src/lib/feeds.ts`, `journalCheck`) assumes the live
+  routine's rhythm: under 45 minutes old in the session, and the 21:38 UTC slot otherwise. The day check
+  (`trade-rules.ts`, `journalCurrent`) is stricter and says "Journal not current" when a read is missing.
+- **The options desk and the clone** read the edition and its focus block. The pre-open routine replaces only the
+  focus block.
+- **The IBKR paper login** is shared by the options routines and the HFT desk's runner. Two sessions on one login end
+  each other ("competing live session"); this is why the HFT desk is parked (HFT-DEC-0005).
+- **GitHub access.** The release-PR routine and the options routine's shadow step read this repository. Since the
+  repository is private (2026-10-24), they need the routines' GitHub connection to cover it. The first night after
+  the flip is the check: the shadow step's reply names the step that was blocked.
+- **The shadow step** is temporary: it compares the repository's edition builder with the routine's own. Five
+  consecutive clean nights in format 2 are the condition for switching the build to the repository
+  (`scripts/options_edition.py --pulls --send --focus`, plan step B4, its own decision record).
+
+## Checking a routine
+
+- On claude.ai: the routine's page shows its schedule, its last run and the thread.
+- From a Claude session: `RemoteTrigger` `get` (schedule, `enabled`, `next_run_at`, last run) and `get_run_log` on
+  the run's session id. A fire that was skipped before a session existed leaves no run; `get` still shows it.
+- On the dashboard: Operations, "Your feeds", says whether each feed arrived on schedule.
+
+## Proposed: the weekly supervisor report (plan step D2; the owner creates it)
+
+Fifteen plain lines every Friday after the weekly scorecard, from the same records the Research page's
+"The programme" panel reads. Suggested schedule: `CRON_TZ=America/New_York 30 21 * * 5` (after `wt-weekly` at
+20:00 and the evidence job). Suggested prompt:
+
+> Weekly supervisor report for the trading lab (Algorythmos-AI/trading-lab-research). Read-only: never place,
+> change or cancel an order, never merge, never push. Read the newest weekly scorecard in
+> `research/forward/archive/` on `integration`, or in the open `evidence/*` pull request if it has not merged yet,
+> and the decision records' status lines in `research/decisions/`. Reply in this thread with at most fifteen short
+> lines, counts, ids, dates and R only: what strategy B and the options clone traded this week; G2a (clean
+> sessions, incident-free streak, agreement at the bar) and G2b (trades) against their lines; where B's stop rule
+> (DEC-0037) stands and whether it fired; any decision record still PROPOSED and how long it has waited; any open
+> pull request into `main`; and what is blocked on the owner. Never quote a decision's prose, a setup name, a
+> headline, an account balance or a P&L in dollars. If the scorecard for this week is missing, say so in one line
+> and stop.
