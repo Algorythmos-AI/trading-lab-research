@@ -10,10 +10,10 @@ name: dashboard
 # `staging` Environment: a preview deployment in fixture mode, so it shows synthetic data and holds no production data.
 on:
   pull_request:
-    paths: ["dashboard/**", ".github/workflows/dashboard.yml", "src/wt/ops/publish.py", "src/wt/crypto/snapshot.py", "src/wt/options/live.py", "src/wt/options/edition.py", "scripts/options_edition.py"]
+    paths: ["dashboard/**", ".github/workflows/dashboard.yml", "src/wt/ops/publish.py", "src/wt/options/live.py", "src/wt/options/edition.py", "scripts/options_edition.py"]
   push:
     branches: [main, integration]
-    paths: ["dashboard/**", ".github/workflows/dashboard.yml", "src/wt/ops/publish.py", "src/wt/crypto/snapshot.py", "src/wt/options/live.py", "src/wt/options/edition.py", "scripts/options_edition.py"]
+    paths: ["dashboard/**", ".github/workflows/dashboard.yml", "src/wt/ops/publish.py", "src/wt/options/live.py", "src/wt/options/edition.py", "scripts/options_edition.py"]
   workflow_dispatch:
 
 permissions:

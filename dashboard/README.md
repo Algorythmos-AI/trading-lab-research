@@ -135,7 +135,7 @@ body, never by a header.
 | Desk | Pages | `schema` id | Schema file in `src/lib/` | Latest snapshot | Watchdog state |
 |---|---|---|---|---|---|
 | Stocks | `/` and every page outside another desk's prefix | `trading-lab/snapshot` | `snapshot.schema.json`, generated from the Python allowlist (`make schema`) | `snapshots/latest.json` | `alerts/state.json` |
-| Crypto (closed, DEC-0036) | `/crypto`: one static page | `trading-lab/crypto-snapshot` (still accepted; the desk no longer publishes) | `crypto.schema.json`, generated from `wt.crypto.snapshot` (`make schema`) | `snapshots/crypto/latest.json` | `alerts/crypto-state.json` (not watched: the desk is closed) |
+| Crypto (closed, DEC-0036) | `/crypto`: one static page | `trading-lab/crypto-snapshot` (still accepted; the desk no longer publishes) | `crypto.schema.json`, frozen since `wt.crypto` left the tree (ADR 0005 addendum) | `snapshots/crypto/latest.json` | `alerts/crypto-state.json` (not watched: the desk is closed) |
 | HFT | `/hft` | `hft-lab/snapshot` | `hft.schema.json`, a copy of the contract owned by `Algorythmos-AI/hft-lab`, pinned by `hft.contract.lock.json` | `snapshots/hft/latest.json` | `alerts/hft-state.json` |
 
 - **One entry per desk.** A desk is an entry in `src/lib/desk.ts` (label, first page, storage paths), a contract

@@ -121,12 +121,11 @@ tail -f /tmp/wt-deploy.log
   A line that ends in "retry when the Alpaca calendar answers" and names no cause comes from a host that does
   not have this yet: older code prints it for every one of these causes. If Alpaca is up, check the keys first.
 - **"Refusing: ... is not green (test: pending)"** means the commit's checks are still running on GitHub.
-  Wait for them and run it again. A deploy needs `test` and `ml`.
+  Wait for them and run it again. A deploy needs `test` (`ml` left with the crypto code, DEC-0036).
 - **"Nothing deployed: already at ..."** means the host is on that commit.
 - **It is done** when the log shows `Deployed <from> -> <to>`. If it then prints "units changed", run
   `sudo wt-install-units`.
-- **Afterwards:** `sudo -u wt /usr/local/bin/wt-deploy preflight` should be all `[ok]`, and
-  `sudo -u wt make -C /home/wt/trading sync-ml` should print `ML environment: current` and nothing else.
+- **Afterwards:** `sudo -u wt /usr/local/bin/wt-deploy preflight` should be all `[ok]`.
 - **To go back:** [rollback](rollback.md).
 
 ## Going private (owner)
@@ -187,10 +186,8 @@ key (step 1) and clone by hand before step 2 of the runbook. The OCI template st
 
 ## Primary host (cutover v2, 2026-10)
 
-The machine-learning environment (`.venv-ml`) needs the system's OpenMP library, which a wheel cannot carry:
-`sudo apt-get install -y libgomp1` (first boot installs it; a host built before 2026-10-08 needs it once). A
-deploy never swaps in an environment that cannot import its libraries, and `make sync-ml` says whether the live
-one can.
+The machine-learning environment (`.venv-ml`) left with the crypto desk's code (DEC-0036): a deploy finds no
+`requirements-ml.lock.txt` and leaves it alone. A `.venv-ml` directory left on the host is unused and can be removed.
 The VM is the only host that runs jobs. The Mac is a console for writing code and running these commands.
 
 | | |

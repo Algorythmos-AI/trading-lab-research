@@ -19,6 +19,5 @@ One page per incident. Each starts with how you'll notice it.
 | [Dashboard late or stopped](dashboard-late.md) | ntfy "Dashboard late"; a grey or amber freshness pill |
 | [Disk nearly full](disk-full.md) | ntfy priority 3 "refused to run: free disk"; the Operations page shows disk under the floor |
 | [Ruleset emergency](ruleset-emergency.md) | CI is down and a fix must land |
-| [Crypto desk](crypto-desk.md) | The desk is closed (DEC-0036); what is left of it on the host until the code leaves |
 | [Options clone](options-clone.md) | ntfy "Options clone ...": entered, exited, latched, feed unfit, exit not filled, NOT FLAT, FLATTEN REQUIRED |
 | [Cloud routines](cloud-routines.md) | A feed is late, a routine replied in its thread, or you want to know what runs outside the host |
