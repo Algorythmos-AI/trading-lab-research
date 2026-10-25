@@ -1,0 +1,9 @@
+id: HYP-0032
+strategy: watchlist_bull_flag_atr_M1_v2
+status: pre-registered          # DEC-0011 (accepted 2026-10-25); registered before any trade of it exists
+statement: "The watchlist bull flag of EXP-0013 (5-minute bull flag in the first 120 minutes, stop the wider of the pattern stop and entry - 1.5 x ATR14 on 1-minute bars, exit model M1, flat by the close), run on the frozen ranking's top names prefiltered by the 09:25 pre-market gap instead of the 09:30 open (the look-ahead DEC-0011 found, H-LA) and with split-adjusted prior closes, has positive expectancy in R on forward sessions after the default costs."
+code: scripts/forward_test.py run_watchlist_flag   # forward strategy key watchlist_bull_flag_atr_M1_v2
+evidence: {decision: DEC-0011, experiments: [EXP-0027-forward-v2-flags], replaces: HYP-0008}
+since: "V2_FROM in scripts/forward_test.py, set in a pull request after this record is merged and deployed; never backfilled"
+trials: 1                       # counted in DEC-0011's global 87
+falsified_if: "With at least 30 trades and 20 sessions: the lower end of the 95% bootstrap range of mean R, resampled by session, is at or below 0, or the mean is at or below 0 in either half of the trades taken in order. Fewer than 30 trades by 2027-04-30 closes the trial with no verdict. A pass is not G1: it earns a registered development-span backtest under a new experiment, nothing more."
