@@ -112,9 +112,9 @@ def read_log() -> list[dict]:
 
 V2 = ("watchlist_bull_flag_atr_M1_v2", "hod_bull_flag_atr_M1_v2")
 # DEC-0011: the v2 flags are NEW trials (85 -> 87). Pre-registration means they start on DEC-0011's acceptance date,
-# never before it and never backfilled. DEC-0011 was accepted on 2026-10-25, but AGENTS.md rule 2 also wants each
-# trial's hypothesis and experiment record written first: set this date in the PR that adds them, not before.
-V2_FROM: dt.date | None = None
+# never before it and never backfilled. DEC-0011 was accepted on 2026-10-25; their records (HYP-0032, HYP-0033,
+# EXP-0027) merged and deployed the same day, so the first session is Monday 2026-10-26, which had not run.
+V2_FROM: dt.date | None = dt.date(2026, 10, 26)
 
 
 def required(d: dt.date) -> set[str]:
