@@ -19,12 +19,15 @@ STATUSES = ("accepted", "proposed", "withdrawn")   # withdrawn: never counts, ke
 
 
 def trial_history(path: Path | None = None) -> list[dict[str, Any]]:
-    """The registry rows, validated: known status, integer totals that never decrease."""
+    """The registry rows, validated: known status, integer totals that never decrease. A withdrawn row never counted,
+    so it neither breaks nor sets that order: the next row is measured against the last row that was not withdrawn."""
     rows: list[dict[str, Any]] = yaml.safe_load((path or REGISTRY).read_text())["history"]
     last = 0
     for r in rows:
         if r.get("status") not in STATUSES or not isinstance(r.get("total"), int) or not str(r.get("decision", "")):
             raise ValueError(f"bad trial registry row: {r}")
+        if r["status"] == "withdrawn":
+            continue
         if r["total"] < last:
             raise ValueError(f"trial registry total decreases at {r['decision']}: {r['total']} < {last}")
         last = r["total"]
