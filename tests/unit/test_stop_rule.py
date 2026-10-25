@@ -107,3 +107,15 @@ def test_a_config_without_a_record_id_is_refused(tmp_path):
     none = tmp_path / "none.yaml"
     none.write_text("B: {allowlist: [QQQM]}\n")
     assert stop_rule.load("B", none) is None
+
+
+def test_the_dashboard_view_says_where_each_trigger_stands(monkeypatch):
+    from wt.ops import status
+    now = dt.datetime(2026, 10, 24, 21, 0, tzinfo=dt.UTC)
+    rows = [closed(-1.0, 1), closed(-0.94, 2), closed(-1.0, 3), closed(0.0, 4, estimated=True)]   # the estimate never counts
+    assert status.stop_rule_view(rows, now) == {"present": True, "decision": "DEC-0037", "cum_r": -2.94, "cum_r_max_loss": -6.0,
+                                                "trades": 3, "review_at_trades": 30, "stop_date": "2027-01-30", "fired": None}
+    assert status.stop_rule_view([closed(-3.0, 1), closed(-3.0, 2)], now)["fired"] == "cum_r"
+    assert status.stop_rule_view(rows, dt.datetime(2027, 1, 30, 15, 0, tzinfo=dt.UTC))["fired"] == "date"
+    monkeypatch.setattr(stop_rule, "load", lambda strategy="B": None)
+    assert status.stop_rule_view(rows, now) == {"present": False}

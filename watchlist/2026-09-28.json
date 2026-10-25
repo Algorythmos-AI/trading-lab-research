@@ -1,0 +1,75 @@
+{
+  "date": "2026-09-28",
+  "top": [
+    {
+      "symbol": "CLRO",
+      "score": 80.127,
+      "subscores": {
+        "catalyst": 0.3,
+        "rvol": 1.0,
+        "float": 1.0,
+        "gap": 1.0,
+        "price": 1.0,
+        "liquidity": 1.0,
+        "spread": 0.661,
+        "float_rotation": 1.0
+      },
+      "features": {
+        "price": 5.9093,
+        "gap_pct": 71.28405797101449,
+        "rvol_tod": 14473.262,
+        "pm_dollar_vol": 89440620.4395,
+        "spread_pct": 0.33898305084746544,
+        "float_shares": 2675412.0
+      },
+      "rank": 1
+    },
+    {
+      "symbol": "LABT",
+      "score": 78.707,
+      "subscores": {
+        "catalyst": 0.5,
+        "rvol": 1.0,
+        "float": 1.0,
+        "gap": 0.468,
+        "price": 1.0,
+        "liquidity": 1.0,
+        "spread": 0.504,
+        "float_rotation": 1.0
+      },
+      "features": {
+        "price": 2.019,
+        "gap_pct": 20.89820359281438,
+        "rvol_tod": 100.47709207503075,
+        "pm_dollar_vol": 74851641.0046,
+        "spread_pct": 0.4962779156327659,
+        "float_shares": 2369688.0
+      },
+      "rank": 2
+    },
+    {
+      "symbol": "MEDS",
+      "score": 68.138,
+      "subscores": {
+        "catalyst": 0.3,
+        "rvol": 0.527,
+        "float": 1.0,
+        "gap": 0.682,
+        "price": 1.0,
+        "liquidity": 1.0,
+        "spread": 0.756,
+        "float_rotation": 1.0
+      },
+      "features": {
+        "price": 4.1,
+        "gap_pct": 31.832797427652725,
+        "rvol_tod": 3.3618295168600962,
+        "pm_dollar_vol": 54564356.661199994,
+        "spread_pct": 0.244200244200239,
+        "float_shares": 3061919.0
+      },
+      "rank": 3
+    }
+  ],
+  "forward": true
+}

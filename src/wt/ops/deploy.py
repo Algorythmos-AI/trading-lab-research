@@ -106,8 +106,8 @@ ML_NEXT, ML_PREV = ".venv-ml.next", ".venv-ml.prev"
 # the first one's worktree under its running tests, and that first deploy was refused as "tests failed".
 STAGE_LOCK = "deploy-stage"
 ML_ENV_LOCK = "ml-env"                  # one build at a time; not the deploy lock, which every job waits on
-# Jobs that run for long in the ML environment: the swap waits for them. None since DEC-0036 closed the crypto desk
-# (its learning job left the schedule); the environment stays for tests/ml and wt.ml.
+# Jobs that run for long in the ML environment: the swap waits for them. None: DEC-0036 closed the crypto desk and its
+# code, wt.ml included, left the tree. With no requirements-ml.lock.txt, `sync_ml` answers "none" and does nothing.
 ML_USERS: tuple[str, ...] = ()
 SWAP_WAIT_S = 120.0
 ML_IMPORT_CHECK = "import sklearn, lightgbm"       # what wt.ml and tests/ml import

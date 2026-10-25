@@ -3,7 +3,7 @@
 Each job pings its own check by slug (the ping key and slug URLs, so no check id ever lives in this repository):
     https://hc-ping.com/<HC_PING_KEY>/<slug>          success
     https://hc-ping.com/<HC_PING_KEY>/<slug>/fail     failure or refusal (a refusal exits 0 but is not success)
-Slugs: wt-routine, wt-paper-b-armed, wt-paper-b, wt-forward, wt-weekly. The checks' cron schedules
+Slugs: `wt-<job>` for each job in `wt.ops.jobs.HC_JOBS`, plus the `-armed` ones. The checks' cron schedules
 (docs/runbooks/dead-man-switches.md) tick before the earliest possible ping and allow a long grace, so a normal
 day, an early close and a no-session day (the job still runs, exits early and pings) never page falsely.
 

@@ -478,6 +478,21 @@ def src_routine(ctx: Ctx) -> dict:
             "launchd_err": _log_digest(ctx.deployed / "logs/launchd_routine.err", 6)}
 
 
+def stop_rule_view(rows: list[dict], now: dt.datetime) -> dict:
+    """Where B's pre-registered stop rule stands (DEC-0037): the record, each trigger against its line, and which
+    one fired. Counts, R and dates only. ``present`` is False when the config carries no rule, which the page says
+    loudly: then nothing stops B."""
+    from wt.risk import stop_rule
+    rule = stop_rule.load("B")
+    if rule is None:
+        return {"present": False}
+    rs = stop_rule.rs_of(rows)
+    fired = stop_rule.evaluate(rule, rows, now.astimezone(ET).date())
+    return {"present": True, "decision": rule.decision, "cum_r": round(sum(rs), 2),
+            "cum_r_max_loss": rule.cum_r_max_loss, "trades": len(rs), "review_at_trades": rule.review_at_trades,
+            "stop_date": rule.stop_date.isoformat(), "fired": fired.kind if fired else None}
+
+
 def src_paper(ctx: Ctx) -> dict:
     rows, bad = safeio.read_jsonl(ctx.deployed / "data/live/journal.jsonl")
     events = Counter(str(x.get("event")) for x in rows)
@@ -502,6 +517,7 @@ def src_paper(ctx: Ctx) -> dict:
             "trades": len(closed), "total_r": round(sum(rs), 3) if rs else 0.0,
             "mean_r": round(sum(rs) / len(rs), 3) if rs else None, "virtual": equity, "recent": recent,
             "g2": g2.summary(rows, replay=b_replay.load_records(_state(ctx, "forward/replay", "research/forward/replay"))),
+            "stop_rule": stop_rule_view(rows, ctx.now),
             "log": _log_digest(logs[-1]) if logs else None}
 
 
@@ -614,10 +630,59 @@ def _systemd_jobs(ctx: Ctx, jobs_cfg: list[dict]) -> dict[str, dict]:
     return out
 
 
+_STEP = re.compile(r"/(\d+):00")
+_FIXED = re.compile(r"^(?P<days>\S+) (?P<h>\d\d):(?P<m>\d\d):00 America/New_York$")
+
+
+def _cadence(job: Any, now: dt.datetime) -> str:
+    """When a job runs, in words, for people: the next Sydney fire of a clock job with its New York slot, or the
+    rhythm of an interval job read from its systemd calendars."""
+    days = lambda spec: spec.replace("..", "-")                                       # noqa: E731
+    nxt = job.fires_et(now, 8)
+    if nxt:
+        spec, hm = job.et.split()
+        return f"{nxt[0].astimezone(SYD):%a %H:%M} Sydney ({days(spec)} {hm} New York)"
+    cals = list(job.calendars) or ([job.calendar] if job.calendar else [])
+    fixed = [m for c in cals if (m := _FIXED.match(c))]
+    if fixed and len(fixed) == len(cals):
+        times = " and ".join(f"{m['h']}:{m['m']}" for m in fixed)
+        return f"{days(fixed[0]['days'])} {times} New York"
+    steps = sorted({int(m) for c in cals for m in _STEP.findall(c)})
+    if len(steps) >= 2:
+        return f"every {steps[0]} min in the US session, {steps[-1]} otherwise"
+    if len(steps) == 1:
+        return f"every {steps[0]} min"
+    if job.interval_s:
+        n = job.interval_s // 60
+        return "hourly" if n == 60 else f"every {n} min"
+    return "on demand"
+
+
+def host_jobs(cfg_jobs: list[dict], kind: str, now: dt.datetime, overlay: list[dict] | None = None) -> list[dict]:
+    """The jobs the host runs. On systemd that is every job in ``wt.ops.schedule.JOBS``, the table the units are
+    generated from; ``config/dashboard.yaml`` only lays a display name and a start-by time over a job it names (an
+    entry without a label is ignored). On the Mac it is the config's launchd list, its times marked as Sydney's.
+    Either way ``local_time`` names its own zone."""
+    if kind != "systemd":                                 # launchd fires on the Mac's Sydney clock
+        return [{**j, "local_time": f"{j['local_time']} Sydney"} if j.get("local_time") else j for j in cfg_jobs]
+    from wt.ops.schedule import JOBS
+    over = {str(j["label"]).rsplit(".", 1)[-1]: j for j in [*cfg_jobs, *(overlay or [])] if j.get("label")}
+    out = []
+    for job in JOBS.values():
+        o = over.get(job.name, {})
+        row = {"label": job.label, "local_time": _cadence(job, now),
+               "must_start_before_et": o.get("must_start_before_et", "23:59")}
+        if o.get("name"):
+            row["name"] = o["name"]
+        out.append(row)
+    return out
+
+
 def src_host(ctx: Ctx) -> dict:
     from wt.ops.host import current
     h = current()
-    jobs_cfg = ctx.cfg.get("host", {}).get("jobs", [])
+    host_cfg = ctx.cfg.get("host", {})
+    jobs_cfg = host_jobs(host_cfg.get("jobs", []), h.kind, ctx.now, host_cfg.get("overlay", []))
     labels = [j["label"] for j in jobs_cfg]
     wakes: list = []
     wake_error = None

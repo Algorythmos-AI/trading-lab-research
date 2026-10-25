@@ -1,6 +1,6 @@
 id: HYP-0002
 strategy: S2_extreme_reversal
-status: pre-registered
+status: falsified            # DEC-0006, DEC-0007: never triggers on either universe (n=0), so it cannot pass G1
 statement: "S2_extreme_reversal has positive out-of-sample expectancy after realistic costs, at a US$600-2,000 cash account, long-only."
 evidence: {kb: "knowledge/strategy_components_catalog.md", decision: DEC-0002}
 falsified_if: "G1 gate fails: lower 95% CI of expectancy <= 0 at 1.5x costs, or DSR prob <= 0.95, or random-entry control not beaten at p<0.05"

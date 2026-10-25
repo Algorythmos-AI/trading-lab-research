@@ -83,6 +83,15 @@ def test_round3_v2_and_biased_strategies(tmp_path, monkeypatch):
         assert table_row(md, old).endswith("| — | biased — not evidence (DEC-0011) |")
     assert "r3:MP-1" not in md                             # an error row is not a strategy
     assert md.index("| B_qqq_qqqm |") < md.index("| r3:F:GG-1 |")
+    assert md.count("no frozen backtest, by design (DEC-0010, DEC-0011)") == 1     # said once, under the table
+
+
+def test_b_band_is_marked_provisional_while_its_baseline_waits_for_the_dec0011_rerun(tmp_path, monkeypatch):
+    rows = [{"session": "2026-10-01", "strategy": "B_qqq_qqqm", "R": r} for r in (-1.0, 0.5)]
+    ledger(tmp_path, monkeypatch, rows)
+    md = sc.main(dt.datetime(2026, 10, 2, 21, 0, tzinfo=ZoneInfo("America/New_York")))
+    row = table_row(md, "B_qqq_qqqm")
+    assert row.endswith("— baseline biased (DEC-0011 R-C1) until its re-run |") and "[" in row
 
 
 def test_rows_repeated_under_one_key_count_once(tmp_path, monkeypatch):

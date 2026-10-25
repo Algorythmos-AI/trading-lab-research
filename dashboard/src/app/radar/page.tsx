@@ -1,5 +1,6 @@
 import { ArrowUpRight } from "lucide-react";
 import { PageHeading } from "@/components/page-heading";
+import { PaneBoundary } from "@/components/client/pane-boundary";
 import {
   AvoidPanel,
   CalendarPanel,
@@ -64,8 +65,12 @@ export default async function RadarPage({ searchParams }: { searchParams: Promis
           market is shut for a holiday), so its levels and notes may be out of date.
         </Notice>
       ) : null}
-      <Brief r={r} options={options} trades={trades} />
-      <SwingResearch r={r} trades={trades} />
+      <PaneBoundary name="The brief">
+        <Brief r={r} options={options} trades={trades} />
+      </PaneBoundary>
+      <PaneBoundary name="Swing research">
+        <SwingResearch r={r} trades={trades} />
+      </PaneBoundary>
     </>
   );
 }

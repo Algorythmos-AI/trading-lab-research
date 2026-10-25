@@ -13,14 +13,17 @@ import { StatusBadge } from "@/components/status";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { num, pct, shortDate, txt } from "@/lib/format";
 import { humanize, stateTone, type Tone } from "@/lib/labels";
-import { loadSnapshot } from "@/lib/snapshot";
+import { loadOptionsClone, loadSnapshot } from "@/lib/snapshot";
+import { programme } from "@/lib/programme";
+import { ProgrammePanel } from "@/components/programme-panel";
+import { PaneBoundary } from "@/components/client/pane-boundary";
 import { entries, list, type Snapshot } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Research" };
 
 export default async function ResearchPage() {
-  const result = await loadSnapshot();
+  const [result, clone] = await Promise.all([loadSnapshot(), loadOptionsClone()]);
   return (
     <>
       <PageHeading
@@ -31,6 +34,9 @@ export default async function ResearchPage() {
         <NoSnapshot status={result.status} />
       ) : (
         <>
+          <PaneBoundary name="The programme">
+            <ProgrammePanel rows={programme(result.snapshot, clone.status === "ok" ? clone.doc : null)} />
+          </PaneBoundary>
           <LabSummary s={result.snapshot} />
           <Kpis s={result.snapshot} />
           <DigestPanel s={result.snapshot} />

@@ -1,7 +1,7 @@
 id: HYP-0021
 trial: "C-TREND"
 family: C                       # crypto desk; counted apart from the equity trials (DEC-0012, DEC-0015)
-status: pre-registered          # DEC-0015 accepted 2026-10-06
+status: falsified            # DEC-0036 (EXP-0016): TREND -0.163R over 360 trades, fails C1
 statement: "On liquid Kraken USD spot pairs, a long-only entry on a closed 4-hour bar that makes a new 20-bar high in an EMA-20 over EMA-50 uptrend, with a 2 ATR stop trailed from the highest high and an exit on a close below EMA-20, has positive fixed-rule expectancy after exchange fees and slippage."
 config: config/crypto.yaml      # sleeves.trend: every rule and number comes from this file at the commit named in the experiment's manifest
 evidence: {decision: DEC-0015, adr: docs/adr/0005-desks.md}

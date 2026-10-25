@@ -1,4 +1,5 @@
 import { HealthBanner } from "@/components/health-banner";
+import { PaneBoundary } from "@/components/client/pane-boundary";
 import { NoJournal } from "@/components/journal";
 import { KillNotice } from "@/components/overview/lab-panels";
 import { AccountHero, HealthLine, NextSessionPanel, PatternsPanel, PnlOverview, RobotsStrip } from "@/components/overview/home";
@@ -24,16 +25,32 @@ export default async function OverviewPage() {
       {s ? <KillNotice s={s} /> : null}
       {doc ? (
         <>
-          <AccountHero doc={doc} now={now} />
-          <PnlOverview trades={doc.trades} now={now} />
+          <PaneBoundary name="Your account">
+            <AccountHero doc={doc} now={now} />
+          </PaneBoundary>
+          <PaneBoundary name="Profit and loss">
+            <PnlOverview trades={doc.trades} now={now} />
+          </PaneBoundary>
         </>
       ) : (
         <NoJournal status={journal.status === "ok" ? "missing" : journal.status} />
       )}
-      <NextSessionPanel options={options.status === "ok" ? options.edition : null} radar={radar.status === "ok" ? radar.edition : null} />
-      {doc ? <PatternsPanel trades={doc.trades} now={now} /> : null}
-      <RobotsStrip s={s} />
-      {health.level !== "red" ? <HealthLine health={health} needsYou={list(s?.overview?.needs_you).length} /> : null}
+      <PaneBoundary name="Next session">
+        <NextSessionPanel options={options.status === "ok" ? options.edition : null} radar={radar.status === "ok" ? radar.edition : null} />
+      </PaneBoundary>
+      {doc ? (
+        <PaneBoundary name="Patterns">
+          <PatternsPanel trades={doc.trades} now={now} />
+        </PaneBoundary>
+      ) : null}
+      <PaneBoundary name="Paper robots">
+        <RobotsStrip s={s} />
+      </PaneBoundary>
+      {health.level !== "red" ? (
+        <PaneBoundary name="Lab health">
+          <HealthLine health={health} needsYou={list(s?.overview?.needs_you).length} />
+        </PaneBoundary>
+      ) : null}
     </>
   );
 }

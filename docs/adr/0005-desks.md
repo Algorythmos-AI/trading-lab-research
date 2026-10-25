@@ -81,3 +81,19 @@ trigger, no tests, state lost on redeploy. It is rebuilt here, not copied.
   separate decision.
 - The nightly backup becomes daily, because evidence is now written on weekends.
 - Two snapshots mean two publishers, two freshness pills and two watchdog states to keep green.
+
+## Addendum, 2026-10-25: the crypto desk's code is gone
+
+DEC-0036 closed the crypto desk on 2026-10-24. Its jobs left the schedule first; this addendum records the second
+step. `wt.crypto`, `wt.ml` (which only served the desk), their tests and scripts, `config/crypto.yaml`, the desk's
+keys in `config/risk.yaml` and the `ml` CI job are deleted. Git history keeps all of it.
+
+What stays, on purpose:
+- the desk model itself (`wt.core.desk`), so the backup still carries the crypto journals already written;
+- the closed-desk page and the desk's state in `dashboard/src/lib/desks.json`;
+- `dashboard/src/lib/crypto.schema.json`, frozen (no longer regenerated), so the dashboard's dormant crypto ingest
+  keeps a contract until it is removed;
+- the family-C rows of `config/trial_registry.yaml` and every record in `research/`.
+
+The host's deploy gate now requires the `test` check only (`wt.ops.ci`).
+

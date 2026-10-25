@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import fixtureDoc from "./fixtures/journal.v1.json";
 import { sessionView, type JournalDoc, type Trade } from "@/lib/journal";
@@ -5,9 +7,12 @@ import {
   breakSummary,
   DAY_LOSS_LIMIT,
   dayCheck,
+  EXP_0023,
   GROUPS,
+  journalCurrent,
   MAX_PREMIUM,
   MAX_TRADES_PER_DAY,
+  meterToneFor,
   PLAN_EXAMPLE,
   planNumbers,
   PREMIUM_STOP,
@@ -112,7 +117,28 @@ describe("ruleEvidence", () => {
   it("always has the backtest rules, and nothing of the owner's with too few trades", () => {
     const ev = ruleEvidence([trade(10, "2026-10-14T14:00:00Z", "2026-10-14T14:01:00Z")]);
     expect(Object.keys(ev).sort()).toEqual(["levels", "retest"]);
-    expect(ev.levels!.source).toBe("backtest");
+    expect(ev.levels!.source).toBe("none"); // no experiment has measured it, and the page says so
+    expect(ev.retest!.source).toBe("backtest");
+    expect(ev.retest!.finding).toMatch(/^In EXP-0023 .* −0\.0015R over 636 cases .* −0\.0067R over 547; .* \+0\.0081R over 187 .* \+0\.0265R over 228\. Every 95% range spans zero/);
+  });
+
+  it("quotes EXP-0023 exactly as its record holds it, and every range there spans zero", () => {
+    const rec = JSON.parse(readFileSync(path.join(__dirname, "../../research/experiments/EXP-0023-options-rules-replication/result.json"), "utf8"));
+    const rules = rec.rules as Record<string, { replication: { n: number; avg_r: number; ci95: [number, number] } }>;
+    const pairs = [
+      [EXP_0023.breakHigh, "brk_PDH_close"],
+      [EXP_0023.breakLow, "brk_PDL_close"],
+      [EXP_0023.reclaimLow, "reclaim_PDL_close"],
+      [EXP_0023.rejectHigh, "reject_PDH_close"],
+    ] as const;
+    for (const [mine, key] of pairs) {
+      expect(mine).toEqual({ n: rules[key]!.replication.n, avgR: rules[key]!.replication.avg_r });
+      const [lo, hi] = rules[key]!.replication.ci95;
+      expect(lo < 0 && hi > 0).toBe(true);
+    }
+    expect(rec.id).toBe(EXP_0023.id);
+    expect([rec.start, rec.end]).toEqual(["2026-03-03", "2026-10-09"]);
+    expect(rec.names).toHaveLength(10);
   });
 
   it("measures each rule from the trades, comparing like with like", () => {
@@ -171,6 +197,87 @@ describe("dayCheck", () => {
     const lot = { symbol: "SPY", kind: "call" as const, strike: 760, expiry: "2026-10-16", side: "long" as const, qty: 2, entry: 1.5, opened_at: "2026-10-16T14:45:00Z" };
     expect(dayCheck(sessionView({ trades: [], open: [lot] }, now))).toMatchObject({ status: "stop", brokenRules: [4] });
     expect(dayCheck(sessionView({ trades: [], open: [{ ...lot, qty: 1 }] }, now)).brokenRules).toEqual([]);
+  });
+
+  it("never reads clear from a journal that is not current", () => {
+    // 11:30 New York on a session day; the sync (a read at least every 30 minutes) last read the broker at 09:24.
+    const at = new Date("2026-10-16T15:30:00Z");
+    const c = dayCheck(sessionView({ trades: [], open: [] }, at), { asOf: "2026-10-16T13:24:00Z", now: at });
+    expect(c).toMatchObject({ status: "unknown", current: false, used: 0 });
+    expect(c.line).toBe("Your Webull trades were last read 2 h 6 min ago (09:24 New York): today's count and loss may be missing. Check Webull before an entry.");
+    expect(c.line).not.toMatch(/fresh day|room/);
+  });
+
+  it("says so when the journal has never been read, and keeps the day's figures it has", () => {
+    const at = new Date("2026-10-16T15:30:00Z");
+    const lost = trade(-30, "2026-10-16T13:40:00Z", "2026-10-16T13:45:00Z", { exit: 0.9 });
+    expect(dayCheck(sessionView({ trades: [lost], open: [] }, at), { asOf: null, now: at })).toMatchObject({ status: "unknown", net: -30, line: expect.stringMatching(/^Your Webull trades have not been read/) });
+    // A journal from an earlier day names the day it was read.
+    expect(dayCheck(null, { asOf: "2026-10-14T21:38:00Z", now: at }).line).toMatch(/last read 2 days ago \(Wed, 14 Oct, 17:38 New York\)/);
+  });
+
+  it("names open positions, whose loss is not counted until they close", () => {
+    const lot = { symbol: "SPY", kind: "call" as const, strike: 760, expiry: "2026-10-16", side: "long" as const, qty: 1, entry: 1.2, opened_at: "2026-10-16T14:45:00Z" };
+    const one = dayCheck(sessionView({ trades: [], open: [lot] }, now));
+    expect(one.status).toBe("clear");
+    expect(one.line).toMatch(/ 1 position still open: an open loss is not counted until it closes\.$/);
+    expect(dayCheck(sessionView({ trades: [], open: [lot, { ...lot, strike: 765 }] }, now)).line).toMatch(/2 positions still open/);
+    const stale = dayCheck(sessionView({ trades: [], open: [lot] }, now), { asOf: "2026-10-16T13:24:00Z", now });
+    expect(stale).toMatchObject({ status: "unknown" });
+    expect(stale.line).toMatch(/Check Webull before an entry\. 1 position still open/);
+  });
+
+  it("says when a current journal read the trades, so one placed since is not forgotten", () => {
+    const c = dayCheck(sessionView({ trades: [], open: [] }, now), { asOf: "2026-10-16T15:24:00Z", now });
+    expect(c).toMatchObject({ status: "clear", current: true });
+    expect(c.line).toMatch(/ Trades read at 11:24 New York\.$/);
+    // Before the open, last evening's read is current and names its day.
+    const pre = new Date("2026-10-16T12:00:00Z");
+    expect(dayCheck(null, { asOf: "2026-10-15T21:38:00Z", now: pre })).toMatchObject({ status: "clear", current: true, line: expect.stringMatching(/^A fresh day: .* Trades read at Thu, 15 Oct, 17:38 New York\.$/) });
+  });
+
+  it("keeps a stop a stale journal already shows: missing trades can only add to it", () => {
+    const at = new Date("2026-10-16T15:30:00Z"); // 11:30 New York
+    const t = (pnl: number, m: number) => trade(pnl, `2026-10-16T13:${m}:00Z`, `2026-10-16T13:${m + 1}:00Z`, { exit: 0.9 });
+    const c = dayCheck(sessionView({ trades: [t(-60, 40), t(-50, 44)], open: [] }, at), { asOf: "2026-10-16T13:50:00Z", now: at });
+    expect(c).toMatchObject({ status: "stop", current: false, net: -110 });
+    expect(c.line).toMatch(/ Your Webull trades were last read 1 h 40 min ago \(09:50 New York\)\.$/);
+    expect(c.line).not.toMatch(/before an entry/);
+  });
+
+  it("gives the session's first minutes no grace: the journal must have read the broker this morning", () => {
+    const at = new Date("2026-10-19T13:40:00Z"); // Monday 09:40 New York
+    expect(journalCurrent("2026-10-19T13:26:00Z", at)).toBe(true); // the 09:24 run's first read
+    expect(dayCheck(null, { asOf: "2026-10-16T21:38:00Z", now: at })).toMatchObject({ status: "unknown", current: false });
+    expect(dayCheck(null, { asOf: null, now: at })).toMatchObject({ status: "unknown", line: expect.stringMatching(/^Your Webull trades have not been read/) });
+    expect(journalCurrent("2026-10-19T12:50:00Z", new Date("2026-10-19T13:31:00Z"))).toBe(true); // 41 min, inside the allowance
+  });
+
+  it("after the close, wants the session's last reads, not a morning one", () => {
+    const at = new Date("2026-10-16T20:05:00Z"); // Friday 16:05 New York
+    expect(journalCurrent("2026-10-16T14:00:00Z", at)).toBe(false); // 10:00
+    expect(dayCheck(null, { asOf: "2026-10-16T14:00:00Z", now: at }).status).toBe("unknown");
+    expect(journalCurrent("2026-10-16T19:40:00Z", at)).toBe(true); // 15:40
+    // The evening sync has run: current until the next session.
+    expect(journalCurrent("2026-10-16T21:39:00Z", new Date("2026-10-17T15:00:00Z"))).toBe(true); // Saturday
+    expect(journalCurrent("2026-10-16T21:39:00Z", new Date("2026-10-19T12:00:00Z"))).toBe(true); // Monday 08:00
+    // The evening slot is still running and the session's last read is in: no false alarm while it lands.
+    expect(journalCurrent("2026-10-16T19:58:00Z", new Date("2026-10-16T21:45:00Z"))).toBe(true);
+  });
+
+  it("does not believe a read time in the future", () => {
+    const at = new Date("2026-10-16T15:30:00Z");
+    expect(journalCurrent("2026-10-16T15:33:00Z", at)).toBe(true); // a clock a little ahead
+    const c = dayCheck(null, { asOf: "2026-10-17T15:30:00Z", now: at });
+    expect(c).toMatchObject({ status: "unknown", current: false });
+    expect(c.line).toMatch(/^Your Webull trades carry a read time in the future \(Sat, 17 Oct, 11:30 New York\)/);
+  });
+
+  it("greys the day meters while the journal is not current, except a limit already reached", () => {
+    expect(meterToneFor("good", { current: false })).toBe("neutral");
+    expect(meterToneFor("warn", { current: false })).toBe("neutral");
+    expect(meterToneFor("bad", { current: false })).toBe("bad");
+    expect(meterToneFor("good", { current: true })).toBe("good");
   });
 
   it("counts a lot opened today and still held as a trade taken", () => {

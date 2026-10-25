@@ -6,7 +6,8 @@ Compares FORWARD evidence with what the frozen backtests predict, and checks pap
     A one-sided sequential flag trips if forward E[R] < mu - 2.33*sd/sqrt(n) (early-warning: edge not showing).
     Strategies without a frozen backtest (the round-3 trials `r3:*`, the re-specified `*_v2` flags) show
     "no baseline" instead of an invented one. The two legacy flags with look-ahead filters (DEC-0011 H-LA) are
-    listed for the record and marked "biased — not evidence". Ledger rows repeated under the same `key` count once.
+    listed for the record and marked "biased — not evidence". B's band is drawn from EXP-0005b, which DEC-0011 found
+    biased (R-C1); its row says so until the re-run. Ledger rows repeated under the same `key` count once.
   * Paper B (data/live/journal.jsonl): trades, R, signal agreement with forward-test B (same sessions),
     incidents (loop errors, not-flat-at-close, reconcile fixes, latch), G2 progress (>=50 trades, >=30 sessions).
 Writes var/scorecards/scorecard_<date>.md (and prints it), dated by the US/Eastern session date: the job fires on
@@ -37,6 +38,9 @@ EXPECT = {  # frozen backtest distributions (development span; walk-forward wher
     "hod_bull_flag_atr_M1": ("EXP-0014-r2-intraday-hod", "HOD_bull_flag|M1"),
 }
 BIASED = ("watchlist_bull_flag_atr_M1", "hod_bull_flag_atr_M1")   # DEC-0011 H-LA; restarted as *_v2
+# Baselines DEC-0011 found biased (R-C1, duplicated ETF bars) and whose re-run waits for the owner: the band is
+# still drawn, because it is the only frozen expectation there is, and the row says it is provisional.
+PROVISIONAL = {"B_qqq_qqqm": "baseline biased (DEC-0011 R-C1) until its re-run"}
 
 
 def read_jsonl(p: Path) -> list[dict]:
@@ -221,7 +225,11 @@ def main(now: dt.datetime | None = None) -> str:
             if s["n"] < 20:
                 status += " — n<20, too early"
             band = f"[{lo:+.3f}, {hi:+.3f}]"
+        if strat in PROVISIONAL and base:
+            status += f" — {PROVISIONAL[strat]}"
         L.append(f"| {strat} | {cells} | {bt} | {band} | {status} |")
+    L += ["", "_\"no baseline\": the round-3 trials and the re-specified `*_v2` flags have no frozen backtest, by design "
+          "(DEC-0010, DEC-0011); their forward record is the only evidence they get._"]
     j = read_jsonl(JOURNAL)
     closed = g2.trades(j)                              # once per trade id; adopted orphans never count
     fwd_b_days = {str(x.get("session")) for x in fwd if x.get("strategy") == "B_qqq_qqqm"}

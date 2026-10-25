@@ -1,5 +1,6 @@
 import { BellRing, Bot, CalendarClock, ChevronDown, Landmark, Lock, Power, ShieldCheck } from "lucide-react";
 import { AccountLimitsPanel, AccountRecentPanel, AccountTodayPanel, EnforcementNote } from "@/components/account-risk";
+import { PaneBoundary } from "@/components/client/pane-boundary";
 import { Empty } from "@/components/empty";
 import { NoJournal } from "@/components/journal";
 import { KeyValues } from "@/components/kv";
@@ -36,9 +37,17 @@ export default async function RiskPage() {
           <EnforcementNote />
         </>
       ) : (
-        <AccountSection doc={journal.doc} now={now} />
+        <PaneBoundary name="Your account">
+          <AccountSection doc={journal.doc} now={now} />
+        </PaneBoundary>
       )}
-      {result.status !== "ok" ? <NoSnapshot status={result.status} /> : <RobotSection s={result.snapshot} now={now} />}
+      {result.status !== "ok" ? (
+        <NoSnapshot status={result.status} />
+      ) : (
+        <PaneBoundary name="Paper robot">
+          <RobotSection s={result.snapshot} now={now} />
+        </PaneBoundary>
+      )}
     </>
   );
 }

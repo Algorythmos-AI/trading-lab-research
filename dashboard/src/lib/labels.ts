@@ -8,6 +8,12 @@ const JOB_NAMES: Record<string, string> = {
   forward: "Forward test",
   weekly: "Weekly scorecard",
   dashboard: "Dashboard publish",
+  "paper-o": "Paper options clone",
+  "options-live": "Options positions publish",
+  "options-review": "Options nightly review",
+  "pipeline-check": "Pipeline check",
+  "deploy-notify": "Deploy notice",
+  "deploy-auto": "Automatic deploy",
 };
 
 /** "com.wt.paper-b" and "paper-b" both map to "paper-b". */
@@ -110,7 +116,7 @@ export function humanize(id: string | null | undefined): string {
   return s ? s[0]!.toUpperCase() + s.slice(1) : "—";
 }
 
-/** Strategy B (any variant) is under re-evaluation. */
+/** Strategy B, any variant: the rows that carry the DEC-0011 notice on the Strategies page. */
 export function isStrategyB(name: string | null | undefined): boolean {
   return /^B(?:$|[_\s·:-])/.test(String(name ?? "").trim());
 }

@@ -86,9 +86,11 @@ describe("the trading screen", () => {
     expect(focusOnly(v1).tickers).toHaveLength(v1.tickers.length);
   });
 
-  it("puts the day's limits in one line, a fresh day with no journal", () => {
+  it("puts the day's limits in one line, and with no journal says the trades were not read, never a fresh day", () => {
     const html = renderToStaticMarkup(createElement(DayBar, { doc: null, now: new Date("2026-10-19T14:00:00Z"), session: "2026-10-19" }));
-    expect(html).toContain("New day");
+    expect(html).toContain("Journal not current");
+    expect(html).toContain("have not been read");
+    expect(html).not.toContain("New day");
     expect(html).toContain("0 of 5");
     expect(html).toContain("$0 of $100");
   });

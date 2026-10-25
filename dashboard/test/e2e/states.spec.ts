@@ -61,6 +61,19 @@ test("a sparse edition with the live feed on takes live prices without NaN or a 
   expect(errors).toEqual([]);
 });
 
+test("a corrupt trade journal fails the Overview panes drawn from it and nothing else", async ({ page, context, baseURL }) => {
+  await variant(context, baseURL, "journal-poison");
+  await page.goto("/");
+  const account = page.locator('[data-pane-error="Your account"]');
+  await expect(account).toBeVisible();
+  await expect(account).toContainText("The rest of the page is unaffected");
+  // Only panes drawn from the trades fail; the next session and the robots are still drawn.
+  const failed = await page.locator("[data-pane-error]").evaluateAll((els) => els.map((e) => e.getAttribute("data-pane-error")));
+  expect(failed.every((n) => ["Your account", "Profit and loss", "Patterns"].includes(n ?? ""))).toBe(true);
+  await expect(page.getByRole("heading", { name: /^Top names for |^The next session$/ })).toBeVisible();
+  await expect(page.getByText("This page could not be drawn")).toHaveCount(0);
+});
+
 test("a corrupt edition fails one pane and leaves every other pane working", async ({ page, context, baseURL }) => {
   await variant(context, baseURL, "poison");
   await page.goto(CLASSIC);
