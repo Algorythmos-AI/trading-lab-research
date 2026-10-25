@@ -47,10 +47,11 @@ def test_round3_strategies_map_to_their_preregistered_hypotheses():
 
 
 def test_required_strategies_by_date():
-    # the v2 flags wait for their hypothesis and experiment records (V2_FROM stays None until the PR that adds them)
-    assert ft.V2_FROM is None
+    # the v2 flags start on Monday 2026-10-26, after their records (HYP-0032, HYP-0033, EXP-0027); never backfilled
+    assert ft.V2_FROM == dt.date(2026, 10, 26)
     assert ft.required(dt.date(2026, 9, 28)) == {"B_qqq_qqqm"} | set(ft.R3_HYP)
-    assert ft.required(dt.date(2026, 10, 26)) == {"B_qqq_qqqm"} | set(ft.R3_HYP)
+    assert ft.required(dt.date(2026, 10, 23)) == {"B_qqq_qqqm"} | set(ft.R3_HYP)
+    assert ft.required(dt.date(2026, 10, 26)) == {"B_qqq_qqqm"} | set(ft.R3_HYP) | set(ft.V2)
     assert ft.required(dt.date(2026, 9, 25)) == {"B_qqq_qqqm"}
 
 
