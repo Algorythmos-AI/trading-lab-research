@@ -302,8 +302,8 @@ def b_exposure() -> bool:
 
 
 # jobs with a healthchecks.io check
-# pipeline-check and options-review joined on 2026-10-25 (plan C1): a failed pipeline check is the options desk's
-# only page before the open, and the nightly review is what the clone's verdict is read from.
+# pipeline-check and options-review joined on 2026-10-25 (plan C1): a check that never ran is otherwise silent (a
+# failed pipeline check pages through ntfy on its own), and the nightly review is what the clone's verdict is read from.
 HC_JOBS = frozenset({"routine", "paper-b", "forward", "weekly", "paper-o", "pipeline-check", "options-review"})
 
 # Jobs that left the schedule (DEC-0036: the crypto desk is closed). A unit for one can still be installed and fire
