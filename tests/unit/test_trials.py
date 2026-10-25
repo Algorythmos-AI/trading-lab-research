@@ -20,6 +20,8 @@ def record(decision: str) -> str:
 def status_of(text: str) -> str:
     """'proposed' while the record's Status line says PROPOSED; records without a Status line were accepted."""
     m = re.search(r"\*\*Status:\s*([^*]+)\*\*", text)
+    if m and "WITHDRAWN" in m.group(1).upper():
+        return "withdrawn"
     return "proposed" if m and "PROPOSED" in m.group(1).upper() else "accepted"
 
 
@@ -76,3 +78,16 @@ def test_the_research_index_lists_every_experiment_with_a_hash_of_its_result():
     c1 = rows["EXP-0016-crypto-c1"]
     assert c1["decision"] == "DEC-0015" and c1["data"] == "3a556ccdfce9996a" and len(c1["result"]) == 12
     assert c1["span"] == "2024-10-07 to 2026-10-07" and rows["EXP-0017-crypto-models"]["superseded"]
+
+
+def test_a_withdrawn_row_neither_counts_nor_sets_the_order(tmp_path):
+    rows = [{"decision": "DEC-A", "total": 85, "status": "accepted"},
+            {"decision": "DEC-B", "total": 87, "status": "withdrawn"},
+            {"decision": "DEC-C", "total": 86, "status": "accepted"}]
+    path = tmp_path / "reg.yaml"
+    path.write_text(yaml.safe_dump({"history": rows}))
+    assert global_trial_count(path) == 86
+    rows[2]["total"] = 84                                   # still below the last row that counted
+    path.write_text(yaml.safe_dump({"history": rows}))
+    with pytest.raises(ValueError, match="decreases"):
+        global_trial_count(path)

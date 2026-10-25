@@ -3,12 +3,13 @@
 #
 # Append-only: one row per decision record that changed the count. global_trial_count() returns the newest row whose
 # status is `accepted`. A `proposed` row takes effect in the PR that records its decision as accepted: flip the row's
-# status in that PR (tests/unit/test_trials.py fails while a row and its record disagree).
+# status in that PR (tests/unit/test_trials.py fails while a row and its record disagree). A withdrawn record's row is
+# marked `withdrawn` in the PR that withdraws it and never counts.
 history:
   - {decision: DEC-0007, total: 65, status: accepted}   # G1: EXP-0005b 12, EXP-0007 18, EXP-0008 35
   - {decision: DEC-0009, total: 75, status: accepted}   # round 2: 10 trials
   - {decision: DEC-0010, total: 85, status: accepted}   # round 3: 10 trials (SPEC-0001 evaluation.global_trials_after)
-  - {decision: DEC-0011, total: 87, status: proposed}   # the two legacy forward strategies re-specified (new trials)
+  - {decision: DEC-0011, total: 87, status: accepted}   # the two legacy forward strategies re-specified (new trials)
 
 # Trial families counted apart from the global (equity) count above. Same rules: append-only, the newest accepted
 # row is in force. Read by wt.research.trials.family_trial_count.
@@ -21,6 +22,6 @@ families:
     - {decision: DEC-0025, total: 12, status: accepted}   # HYP-0024 TREND with ranked entries (one trial)
   O:                                                      # options desk (DEC-0028)
     - {decision: DEC-0028, total: 12, status: accepted}   # four rules x three variants tried before registration: a floor
-    - {decision: DEC-0029, total: 20, status: proposed}   # each rule priced as two contracts (near, a week out): 8 trials
-    - {decision: DEC-0030, total: 14, status: accepted}   # the clone's two setups (HYP-0029, HYP-0030); 12 + 2 while DEC-0029 is proposed
+    - {decision: DEC-0029, total: 20, status: withdrawn}  # each rule priced as two contracts: withdrawn 2026-10-25, never counted
+    - {decision: DEC-0030, total: 14, status: accepted}   # the clone's two setups (HYP-0029, HYP-0030): 12 + 2
     - {decision: DEC-0034, total: 15, status: accepted}   # HYP-0031 OC-NEAREST: the clone on contracts expiring after the session

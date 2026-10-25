@@ -1,0 +1,9 @@
+id: HYP-0033
+strategy: hod_bull_flag_atr_M1_v2
+status: pre-registered          # DEC-0011 (accepted 2026-10-25); registered before any trade of it exists
+statement: "The intraday high-of-day bull flag of EXP-0014 (a name priced $2-30 whose 1-minute bar closes at least +10% over its split-adjusted prior close with time-of-day relative volume as in EXP-0014, then a 5-minute bull flag after that bar within the first 120 minutes, stop the wider of the pattern stop and entry - 1.5 x ATR14, exit model M1, flat by the close), qualifying on cumulative volume of at least 1,000,000 shares by the qualifying bar instead of the full day's volume (the look-ahead DEC-0011 found, H-LA), has positive expectancy in R on forward sessions after the default costs."
+code: scripts/forward_test.py run_hod_flag   # forward strategy key hod_bull_flag_atr_M1_v2
+evidence: {decision: DEC-0011, experiments: [EXP-0027-forward-v2-flags], replaces: HYP-0007}
+since: "V2_FROM in scripts/forward_test.py, set in a pull request after this record is merged and deployed; never backfilled"
+trials: 1                       # counted in DEC-0011's global 87
+falsified_if: "With at least 30 trades and 20 sessions: the lower end of the 95% bootstrap range of mean R, resampled by session, is at or below 0, or the mean is at or below 0 in either half of the trades taken in order. Fewer than 30 trades by 2027-04-30 closes the trial with no verdict. A pass is not G1: it earns a registered development-span backtest under a new experiment, nothing more."

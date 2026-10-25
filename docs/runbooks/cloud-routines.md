@@ -1,6 +1,6 @@
 # Cloud routines
 
-Six scheduled Claude routines feed the dashboard and the release flow. They run in Claude's cloud, not on the host
+Seven scheduled Claude routines feed the dashboard, the release flow and the weekly report. They run in Claude's cloud, not on the host
 and not from this repository's code (except where noted), so `systemctl` and the deploy gate know nothing about them.
 Each posts into its own thread on claude.ai. Each replies only when something needs the owner; a normal run updates
 its status line and stays quiet.
@@ -13,6 +13,7 @@ its status line and stays quiet.
 | Webull trades, live | `trig_01Et86JsFLYn7j7kbBt1dGUm` | :24 every hour 09:24–15:24 New York, Mon–Fri | Each run reads the owner's Webull AU history every 2 minutes for an hour (stops at 16:20) and publishes on change and at least every 30 minutes | The trade journal |
 | Webull trades, after close | `trig_012wh4n2yJT7B4Agy12u7yoF` | 21:38 UTC, Mon–Fri | One full read after the close | The trade journal |
 | Release PR | `trig_01Dbj8zTA2HTq2Uzf9ziRzdj` | 16:20 New York, Mon–Fri | Opens or refreshes the `integration` → `main` release PR and drives its CI; never merges | A pull request |
+| Weekly supervisor report | `trig_01EpHRrfQphBMhwEDGykabZi` | Sat 13:30 UTC (Fri evening or Sat morning in New York) | Reads the week's scorecard and the decision records' status lines and replies in at most fifteen lines; runs with the repository only, no connectors | A reply in its thread |
 
 All of them are read-only toward the brokers: none places, changes or cancels an order.
 
@@ -39,11 +40,12 @@ All of them are read-only toward the brokers: none places, changes or cancels an
   the run's session id. A fire that was skipped before a session existed leaves no run; `get` still shows it.
 - On the dashboard: Operations, "Your feeds", says whether each feed arrived on schedule.
 
-## Proposed: the weekly supervisor report (plan step D2; the owner creates it)
+## The weekly supervisor report (plan step D2, created 2026-10-25)
 
-Fifteen plain lines every Friday after the weekly scorecard, from the same records the Research page's
-"The programme" panel reads. Suggested schedule: `CRON_TZ=America/New_York 30 21 * * 5` (after `wt-weekly` at
-20:00 and the evidence job). Suggested prompt:
+Fifteen plain lines every Saturday at 13:30 UTC, after `wt-weekly` (Friday 20:00 New York) and its evidence pull
+request, from the same records the Research page's "The programme" panel reads. It runs with the repository and no
+connectors: a scheduled task acts without pausing for approval, so it carries nothing it does not need (no broker,
+no mail). Its prompt:
 
 > Weekly supervisor report for the trading lab (Algorythmos-AI/trading-lab-research). Read-only: never place,
 > change or cancel an order, never merge, never push. Read the newest weekly scorecard in
