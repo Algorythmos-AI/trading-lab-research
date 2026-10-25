@@ -21,13 +21,7 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
                  src/wt/options/regime.py src/wt/options/setups.py src/wt/options/chain.py src/wt/options/session.py \
                  src/wt/ops/backup.py src/wt/brokers/shadow.py src/wt/analytics/performance.py src/wt/analytics/forward_book.py src/wt/analytics/funnel_agreement.py src/wt/scanner/quality.py \
                  src/wt/analytics/risk_view.py src/wt/analytics/ops_view.py src/wt/ops/audit.py src/wt/ops/control.py \
-                 src/wt/core/desk.py src/wt/crypto/data.py src/wt/crypto/indicators.py src/wt/crypto/quality.py \
-                 src/wt/crypto/strategy.py src/wt/crypto/book.py src/wt/crypto/risk.py src/wt/crypto/features.py \
-                 src/wt/crypto/labels.py src/wt/crypto/cycle.py src/wt/crypto/snapshot.py src/wt/crypto/control.py \
-                 src/wt/crypto/rules.py src/wt/crypto/sleeves.py src/wt/crypto/backtest.py \
-                 src/wt/crypto/scorer.py src/wt/ml/modelfile.py src/wt/crypto/signals.py src/wt/crypto/challengers.py \
-                 src/wt/crypto/outcomes.py src/wt/crypto/promotion.py src/wt/crypto/learn.py \
-                 src/wt/crypto/harvest.py \
+                 src/wt/core/desk.py \
                  src/wt/brokers/alpaca_options_paper.py src/wt/oms/options.py src/wt/risk/options_guard.py \
                  src/wt/live/runner_o.py src/wt/options/review.py \
                  src/wt/options/clone_site.py \
@@ -36,7 +30,7 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
 JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
-.PHONY: seed-vm help bootstrap bootstrap-ml lock-ml sync-ml research-index lint typecheck test ci hooks status gate deploy rollback migrate-state preflight publish-verify \
+.PHONY: seed-vm help bootstrap research-index lint typecheck test ci hooks status gate deploy rollback migrate-state preflight publish-verify \
         uninstall-agents lease-break \
         watchdog-drill dashboard-deploy vm-deploy \
         agents-diff install-trading-agents install-dashboard-agent publish schema kill unkill reset-latch evidence
@@ -48,14 +42,6 @@ bootstrap: ## Create .venv from the lockfile (Python 3.12)
 	uv venv --python 3.12 .venv
 	uv pip install --require-hashes --python $(PY) -r requirements.lock.txt
 	@if [ -f requirements-dev.lock.txt ]; then uv pip install --require-hashes --python $(PY) -r requirements-dev.lock.txt; fi
-
-bootstrap-ml: ## Create .venv-ml from its own lockfile (the learning job and the scorer; DEC-0016)
-	uv venv --python 3.12 .venv-ml
-	uv pip install --require-hashes --python .venv-ml/bin/python -r requirements-ml.lock.txt
-
-lock-ml: ## Recompile the ML lockfile for the host (Linux x86-64), with hashes
-	uv pip compile --python-version 3.12 --python-platform x86_64-unknown-linux-gnu --generate-hashes \
-		requirements-ml.in -o requirements-ml.lock.txt
 
 lint: ## Ruff, bug-class rules (see pyproject.toml)
 	$(PY) -m ruff check .
@@ -85,9 +71,6 @@ deploy: ## Gate; main's tip (or SHA=...) if green; fast-forward, migrate, sync v
 
 research-index: ## Every experiment with its decision, span, data hash, result hash and the commit that added it
 	@$(PY) scripts/research_index.py
-
-sync-ml: ## Finish or retry the ML environment's sync (a deploy does it; this is for one left pending or failed)
-	$(PY) -m wt.ops.deploy sync-ml
 
 rollback: ## Back to a runtime-* tag: make rollback TAG=runtime-YYYYMMDD-N
 	@test -n "$(TAG)" || (echo "usage: make rollback TAG=runtime-YYYYMMDD-N" && exit 2)
@@ -141,7 +124,6 @@ dashboard-deploy: ## OWNER: deploy origin/main's dashboard to production from a 
 
 schema: ## Regenerate the dashboard contract: snapshot.schema.json (from ALLOW), thresholds.gen.ts, and the TS types
 	$(PY) -c "import json; from wt.ops.publish import to_schema, SCHEMA_PATH; SCHEMA_PATH.parent.mkdir(parents=True, exist_ok=True); SCHEMA_PATH.write_text(json.dumps(to_schema(), indent=2) + '\\n')"
-	$(PY) -c "import json; from wt.crypto.snapshot import to_schema, SCHEMA_PATH; SCHEMA_PATH.write_text(json.dumps(to_schema(), indent=2) + '\\n')"
 	$(PY) scripts/gen_thresholds_ts.py
 	@if [ -d dashboard/node_modules ]; then cd dashboard && pnpm -s gen:types; else echo "dashboard/node_modules missing: run pnpm install, then make schema again for the TS types"; fi
 
