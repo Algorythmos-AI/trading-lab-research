@@ -311,3 +311,22 @@ def test_a_listed_sell_never_confirmed_cancelled_still_counts():
     with pytest.raises(GuardRejected, match="sell within long position"):
         oms._submit(Order("wt-B-x", "QQQM", "sell", 4, "limit", limit_price=250.3), protective=True)
     assert b.get_order(p.stop_id).status == OrderStatus.ACCEPTED
+
+
+def test_a_listed_stop_the_lookup_cannot_find_still_counts():
+    from wt.oms.manager import GuardRejected
+    b, oms, _ = mk(guard=True, broker=LaggingList())
+    p = filled_plan(b, oms)
+    real = b.get_order
+    b.get_order = lambda cid: None if cid == p.stop_id else real(cid)     # a 404 for an order that is working
+    assert oms._confirm_terminal(p.stop_id) == (True, None)
+    with pytest.raises(GuardRejected, match="resting sells 4"):          # the listed stop still blocks a second sell
+        oms._submit(Order("wt-B-y", "QQQM", "sell", 4, "limit", limit_price=250.3), protective=True)
+
+
+def test_a_filled_stop_the_list_still_shows_keeps_blocking():
+    b, oms, _ = mk(guard=True, broker=LaggingList())
+    p = filled_plan(b, oms)
+    b.ghosts[p.stop_id] = [Order(**{**b.orders[p.stop_id].__dict__}), 5]   # listed as working...
+    b.fill(p.stop_id, 248.9)                                            # ...though it has filled
+    assert oms._confirm_terminal(p.stop_id)[0] and p.stop_id not in oms._gone

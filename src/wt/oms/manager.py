@@ -120,7 +120,7 @@ class OMS:
         self.b, self.sell_timeout_s, self.sleep = broker, sell_timeout_s, sleep
         self.guard, self.context, self.persist_cb, self.on_entry = guard, context, persist, on_entry
         self.confirm_polls, self.poll_s, self.strategy = confirm_polls, poll_s, strategy
-        self._gone: set[str] = set()        # ids get_order has reported terminal or unknown: never resting again
+        self._gone: set[str] = set()        # ids get_order has reported cancelled or rejected: never resting again
 
     # ---- plumbing -------------------------------------------------------------------------------
     def _persist(self, p: TradePlan) -> None:
@@ -190,8 +190,9 @@ class OMS:
             except TransportError:
                 return False, None
             if o is None or o.status.terminal:
-                self._gone.add(cid)
-                return True, o
+                if o is not None and o.status in (OrderStatus.CANCELED, OrderStatus.REJECTED):
+                    self._gone.add(cid)     # not None (a lookup can miss a live order) nor FILLED (a position read
+                return True, o              # can lag the fill): there the listed order keeps the guard cautious
             self.sleep(self.poll_s)
         return False, None
 
