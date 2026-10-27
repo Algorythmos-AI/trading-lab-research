@@ -4,12 +4,14 @@ HOD v1 fetched only names whose FULL-DAY volume reached 1M; the watchlist v1 pre
 decides from data available at decision time. Synthetic bars and fake clients only."""
 import datetime as dt
 import importlib.util
+import json
 import sys
 import types
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from wt.data.corpactions import SplitFactors
 from wt.scanner import features
@@ -59,6 +61,56 @@ def test_hod_v2_qualifies_when_volume_arrives_in_time_and_ignores_later_bars():
     later.loc[q + 1:, "v"] = 0.0                                   # the rest of the day never happens
     later.loc[q + 1:, "c"] = 1.0
     assert ft.hod_qualify(later, 5.0, 10_000, CURVE) == q
+
+
+
+# ---------------------------------------------------------------- HOD: f(t) is EXP-0014's curve, frozen in git
+def test_hod_curve_is_a_cumulative_curve_of_390_minutes():
+    f_t = ft.hod_curve()
+    assert f_t.shape == (390,) and 0 < f_t[0] < f_t[15] < f_t[119] < f_t[-1] == 1.0
+    assert np.all(np.diff(f_t) >= 0)
+
+
+def test_hod_curve_equals_the_curve_exp0014_computed_wherever_its_data_exists():
+    import r2_intraday_hod as h
+    if not list((h.DATA_DIR / "minute_liquid").glob("*.parquet")):
+        pytest.skip("no data/minute_liquid here (CI, the host): the frozen file is the only copy")
+    assert np.array_equal(ft.hod_curve(), h.volume_curve())
+
+
+def test_hod_curve_refuses_a_file_that_is_not_a_curve(tmp_path, monkeypatch):
+    bad = tmp_path / "curve.json"
+    monkeypatch.setattr(ft, "HOD_CURVE", bad)
+    rising = [x / 390 for x in range(1, 391)]
+    for curve in (rising[:-1], rising + [1.0], [0.6, 0.5] + rising[2:], [float("nan")] + rising[1:], rising[:-1] + [0.99]):
+        bad.write_text(json.dumps({"curve": curve}))           # too short, too long, falling, NaN, not ending at 1
+        with pytest.raises(ValueError):
+            ft.hod_curve()
+
+
+def test_r2_volume_curve_refuses_to_build_from_no_sessions(tmp_path, monkeypatch):
+    import r2_intraday_hod as h
+    monkeypatch.setattr(h, "DATA_DIR", tmp_path)                 # the host: no minute_liquid, so np.mean([]) is NaN
+    with pytest.raises(RuntimeError, match="minute_liquid"):
+        h.volume_curve()
+
+
+def test_run_hod_flag_needs_no_research_data(tmp_path, monkeypatch):
+    """2026-10-26 on the host: f(t) was built from data/minute_liquid, which only the Mac has, and the run crashed."""
+    import r2_intraday_hod as h
+    monkeypatch.setattr(h, "DATA_DIR", tmp_path)
+    g = pd.DataFrame({"pc": [5.0], "adv20": [10_000.0]}, index=pd.Index(["HOD"], name="symbol"))
+    monkeypatch.setattr(ft, "hod_superset", lambda daily, d, splits: g)
+    b = rth([5.0] * 15 + [5.6] * 375, [4_000] * 40 + [60_000] * 350).assign(symbol="HOD")
+    asked, real = [], ft.hod_qualify
+
+    def qualify(bars, pc, adv, f_t):
+        asked.append(f_t)
+        return real(bars, pc, adv, f_t)
+
+    monkeypatch.setattr(ft, "hod_qualify", qualify)
+    out = ft.run_hod_flag(types.SimpleNamespace(bars=lambda *a, **k: b), D, None, None)
+    assert isinstance(out, list) and len(asked) == 1 and np.array_equal(asked[0], ft.hod_curve())
 
 
 class FakeSplits:
