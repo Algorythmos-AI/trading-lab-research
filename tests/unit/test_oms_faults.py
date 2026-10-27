@@ -330,3 +330,20 @@ def test_a_filled_stop_the_list_still_shows_keeps_blocking():
     b.ghosts[p.stop_id] = [Order(**{**b.orders[p.stop_id].__dict__}), 5]   # listed as working...
     b.fill(p.stop_id, 248.9)                                            # ...though it has filled
     assert oms._confirm_terminal(p.stop_id)[0] and p.stop_id not in oms._gone
+
+
+def test_after_a_restart_a_stop_already_cancelled_does_not_block_the_exit():
+    b, oms, _ = mk(guard=True, broker=LaggingList())
+    p = filled_plan(b, oms)
+    b.cancel(p.stop_id)                                           # cancelled before the restart; still listed
+    oms2 = OMS(b, sell_timeout_s=1.0, sleep=lambda s: None, guard=oms.guard, context=oms.context, strategy="B")
+    orig = b.place
+
+    def place_and_fill(o):
+        r = orig(o)
+        if o.type == "limit" and o.side == "sell":
+            b.fill(o.client_order_id, 250.30)
+        return r
+    b.place = place_and_fill
+    assert oms2.exit_now(p, 250.30, "eod_flatten") is True        # exit_now's own read saw it cancelled
+    assert p.state == "closed" and not [e for e in p.log if e[0] == "exit_failed"]

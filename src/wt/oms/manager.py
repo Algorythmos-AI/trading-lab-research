@@ -181,18 +181,24 @@ class OMS:
             last = cur
         return last
 
+    def _read(self, cid: str) -> Order | None:
+        """get_order, remembering a cancel or reject it reports. Not None (a lookup can miss a live order) nor FILLED
+        (a position read can lag the fill): there the listed order keeps the guard cautious."""
+        o = self.b.get_order(cid)
+        if o is not None and o.status in (OrderStatus.CANCELED, OrderStatus.REJECTED):
+            self._gone.add(cid)
+        return o
+
     def _confirm_terminal(self, cid: str) -> tuple[bool, Order | None]:
         """(True, order) once the broker reports the order terminal or unknown; (False, None) if it can't confirm.
         A lookup error is never taken as confirmation (audit M4)."""
         for _ in range(self.confirm_polls):
             try:
-                o = self.b.get_order(cid)
+                o = self._read(cid)
             except TransportError:
                 return False, None
             if o is None or o.status.terminal:
-                if o is not None and o.status in (OrderStatus.CANCELED, OrderStatus.REJECTED):
-                    self._gone.add(cid)     # not None (a lookup can miss a live order) nor FILLED (a position read
-                return True, o              # can lag the fill): there the listed order keeps the guard cautious
+                return True, o
             self.sleep(self.poll_s)
         return False, None
 
@@ -294,7 +300,7 @@ class OMS:
 
     def ensure_stop(self, p: TradePlan) -> None:
         """A GTC stop for min(entry fills, long position), replacing a wrongly sized one (cancel confirmed first)."""
-        cur = self.b.get_order(p.stop_id) if p.stop_id else None
+        cur = self._read(p.stop_id) if p.stop_id else None
         want = min(p.filled_qty, max(self._position_qty(p.symbol), 0))
         if cur is not None and not cur.status.terminal:
             if cur.qty - cur.filled_qty == want:
@@ -332,7 +338,7 @@ class OMS:
     def exit_now(self, p: TradePlan, limit_price: float | None, reason: str, market: bool = False) -> bool:
         """Cancel stop -> confirm -> sell min(position, fills). Returns True when flat."""
         if p.stop_id:
-            s = self.b.get_order(p.stop_id)
+            s = self._read(p.stop_id)
             if s is not None and not s.status.terminal:
                 self.b.cancel(p.stop_id)
                 ok, _ = self._confirm_terminal(p.stop_id)
