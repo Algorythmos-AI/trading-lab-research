@@ -23,7 +23,7 @@ import json
 import os
 import time
 from collections.abc import Callable
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
 from typing import Any
 
@@ -120,6 +120,7 @@ class OMS:
         self.b, self.sell_timeout_s, self.sleep = broker, sell_timeout_s, sleep
         self.guard, self.context, self.persist_cb, self.on_entry = guard, context, persist, on_entry
         self.confirm_polls, self.poll_s, self.strategy = confirm_polls, poll_s, strategy
+        self._gone: set[str] = set()        # ids get_order has reported cancelled or rejected: never resting again
 
     # ---- plumbing -------------------------------------------------------------------------------
     def _persist(self, p: TradePlan) -> None:
@@ -139,7 +140,8 @@ class OMS:
     def _check(self, order: Order, protective: bool) -> None:
         if self.guard is None or self.context is None:
             return
-        r = self.guard.evaluate(order, self.context(order.symbol), protective)
+        ctx = self.context(order.symbol)
+        r = self.guard.evaluate(order, replace(ctx, open_orders=self._live(ctx.open_orders)), protective)
         if not r.ok:
             raise GuardRejected("; ".join(f"{c.name}: {c.detail}" for c in r.failed))
 
@@ -160,6 +162,11 @@ class OMS:
                 return found
             raise
 
+    def _live(self, orders: list[Order]) -> list[Order]:
+        """The orders that can still fill. Alpaca's open-orders list lags a cancel by a moment: on 2026-10-26 the
+        end-of-day sell was refused four times over a stop that get_order had already reported cancelled."""
+        return [o for o in orders if not o.status.terminal and o.client_order_id not in self._gone]
+
     def _position_qty(self, symbol: str) -> int:
         return sum(p.qty for p in self.b.positions() if p.symbol == symbol)
 
@@ -174,12 +181,20 @@ class OMS:
             last = cur
         return last
 
+    def _read(self, cid: str) -> Order | None:
+        """get_order, remembering a cancel or reject it reports. Not None (a lookup can miss a live order) nor FILLED
+        (a position read can lag the fill): there the listed order keeps the guard cautious."""
+        o = self.b.get_order(cid)
+        if o is not None and o.status in (OrderStatus.CANCELED, OrderStatus.REJECTED):
+            self._gone.add(cid)
+        return o
+
     def _confirm_terminal(self, cid: str) -> tuple[bool, Order | None]:
         """(True, order) once the broker reports the order terminal or unknown; (False, None) if it can't confirm.
         A lookup error is never taken as confirmation (audit M4)."""
         for _ in range(self.confirm_polls):
             try:
-                o = self.b.get_order(cid)
+                o = self._read(cid)
             except TransportError:
                 return False, None
             if o is None or o.status.terminal:
@@ -285,7 +300,7 @@ class OMS:
 
     def ensure_stop(self, p: TradePlan) -> None:
         """A GTC stop for min(entry fills, long position), replacing a wrongly sized one (cancel confirmed first)."""
-        cur = self.b.get_order(p.stop_id) if p.stop_id else None
+        cur = self._read(p.stop_id) if p.stop_id else None
         want = min(p.filled_qty, max(self._position_qty(p.symbol), 0))
         if cur is not None and not cur.status.terminal:
             if cur.qty - cur.filled_qty == want:
@@ -323,7 +338,7 @@ class OMS:
     def exit_now(self, p: TradePlan, limit_price: float | None, reason: str, market: bool = False) -> bool:
         """Cancel stop -> confirm -> sell min(position, fills). Returns True when flat."""
         if p.stop_id:
-            s = self.b.get_order(p.stop_id)
+            s = self._read(p.stop_id)
             if s is not None and not s.status.terminal:
                 self.b.cancel(p.stop_id)
                 ok, _ = self._confirm_terminal(p.stop_id)
@@ -377,7 +392,7 @@ class OMS:
     def reconcile(self, managed: set[str], stop_for: dict[str, float], plan: TradePlan | None = None) -> list[str]:
         """Broker = source of truth for this strategy's symbols. Returns actions taken or flagged."""
         acts: list[str] = []
-        orders = self.b.open_orders()
+        orders = self._live(self.b.open_orders())
         positions = {p.symbol: p.qty for p in self.b.positions()}
         ours = [o for o in orders if is_ours(o.client_order_id, self.strategy)]
         for sym in sorted(managed):
