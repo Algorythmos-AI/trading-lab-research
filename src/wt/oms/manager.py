@@ -23,7 +23,7 @@ import json
 import os
 import time
 from collections.abc import Callable
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
 from typing import Any
 
@@ -120,6 +120,7 @@ class OMS:
         self.b, self.sell_timeout_s, self.sleep = broker, sell_timeout_s, sleep
         self.guard, self.context, self.persist_cb, self.on_entry = guard, context, persist, on_entry
         self.confirm_polls, self.poll_s, self.strategy = confirm_polls, poll_s, strategy
+        self._gone: set[str] = set()        # ids get_order has reported terminal or unknown: never resting again
 
     # ---- plumbing -------------------------------------------------------------------------------
     def _persist(self, p: TradePlan) -> None:
@@ -139,7 +140,8 @@ class OMS:
     def _check(self, order: Order, protective: bool) -> None:
         if self.guard is None or self.context is None:
             return
-        r = self.guard.evaluate(order, self.context(order.symbol), protective)
+        ctx = self.context(order.symbol)
+        r = self.guard.evaluate(order, replace(ctx, open_orders=self._live(ctx.open_orders)), protective)
         if not r.ok:
             raise GuardRejected("; ".join(f"{c.name}: {c.detail}" for c in r.failed))
 
@@ -159,6 +161,11 @@ class OMS:
             if found is not None and _same(order, found):
                 return found
             raise
+
+    def _live(self, orders: list[Order]) -> list[Order]:
+        """The orders that can still fill. Alpaca's open-orders list lags a cancel by a moment: on 2026-10-26 the
+        end-of-day sell was refused four times over a stop that get_order had already reported cancelled."""
+        return [o for o in orders if not o.status.terminal and o.client_order_id not in self._gone]
 
     def _position_qty(self, symbol: str) -> int:
         return sum(p.qty for p in self.b.positions() if p.symbol == symbol)
@@ -183,6 +190,7 @@ class OMS:
             except TransportError:
                 return False, None
             if o is None or o.status.terminal:
+                self._gone.add(cid)
                 return True, o
             self.sleep(self.poll_s)
         return False, None
@@ -377,7 +385,7 @@ class OMS:
     def reconcile(self, managed: set[str], stop_for: dict[str, float], plan: TradePlan | None = None) -> list[str]:
         """Broker = source of truth for this strategy's symbols. Returns actions taken or flagged."""
         acts: list[str] = []
-        orders = self.b.open_orders()
+        orders = self._live(self.b.open_orders())
         positions = {p.symbol: p.qty for p in self.b.positions()}
         ours = [o for o in orders if is_ours(o.client_order_id, self.strategy)]
         for sym in sorted(managed):
