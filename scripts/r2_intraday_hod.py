@@ -47,6 +47,8 @@ def volume_curve() -> np.ndarray:
             if len(v) >= 385:
                 curves.append(np.cumsum(v[:390]) / v[:390].sum() if len(v) >= 390 else None)
     curves = [c for c in curves if c is not None]
+    if not curves:                                       # np.mean([]) is a NaN scalar, not a curve
+        raise RuntimeError("no data/minute_liquid sessions to build the volume curve from")
     return np.mean(curves, axis=0)
 
 
