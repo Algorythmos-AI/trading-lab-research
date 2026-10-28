@@ -56,7 +56,7 @@ def pulls(names=NAMES, finished="2026-10-09", hours=7):
         hourly[name] = h
         snaps[name] = {"last": {"price": px, "ts": "t"},
                        "implied-vol-underlying": {"is_valid": True, "daily_iv": 0.012, "annual_iv": 0.2 + i / 50},
-                       "implied-volatility-percentile": {"high_13w": 0.4, "high_26w": 0.3, "high_52w": 0.1 * i},
+                       "implied-volatility-percentile": {"high_13w": 0.4, "high_26w": 0.3, "high_52w": 0.1 * (i % 10)},
                        "historical-vol": {"annual_pct": 0.18},        # the feed's field is a fraction, whatever its name says
                        "underlying-today-option-volume": {"callVolume": 10, "putVolume": 12},
                        "underlying-avg-option-volume": {"avgCallVolume": 9, "avgPutVolume": 8}}

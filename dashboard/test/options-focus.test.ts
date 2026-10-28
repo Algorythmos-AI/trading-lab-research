@@ -75,6 +75,15 @@ describe("today's focus", () => {
     expect(html).toContain("loses at most $50");
   });
 
+  it("warns on a name without a contract every session, and only on it", () => {
+    const e = withFocus();
+    e.session = "2026-10-27";
+    e.focus!.items[0]!.symbol = "AVGO";
+    const html = renderToStaticMarkup(createElement(FocusStrip, { e }));
+    expect(html.match(/No options expire today/g)).toHaveLength(1);
+    expect(renderToStaticMarkup(createElement(FocusStrip, { e: withFocus() }))).not.toContain("expire today");
+  });
+
   it("draws nothing without a focus block", () => {
     expect(renderToStaticMarkup(createElement(FocusStrip, { e: v1 }))).toBe("");
   });
