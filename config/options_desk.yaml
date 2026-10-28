@@ -1,6 +1,7 @@
 # The Options desk's names. They are the names the after-close edition carries; the host job that reads open
 # interest (wt.options.live) uses the same list.
-names: [SPY, QQQ, AAPL, MSFT, NVDA, AMZN, GOOGL, META, TSLA, PLTR]
+# AVGO and AMD since 2026-10-27 (DEC-0038); DEC-0028's probation verdict still counts only the first ten.
+names: [SPY, QQQ, AAPL, MSFT, NVDA, AMZN, GOOGL, META, TSLA, PLTR, AVGO, AMD]
 
 # The edition format the after-close run sends (scripts/options_edition.py). 1 is what the dashboard has always
 # received. 2 adds the day's context, scheduled events and each name's volatility block; it is the owner's switch,
@@ -35,3 +36,5 @@ contracts:
   META: 107113386
   TSLA: 76792991
   PLTR: 444857009
+  AVGO: 313130367
+  AMD: 4391

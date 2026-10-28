@@ -3,7 +3,7 @@
 // Pure: no I/O. The same arithmetic prints the thread's focus card (skills/options-levels/scripts/focus.py card).
 import { NEW_YORK, SYDNEY } from "./format";
 import type { Options } from "./options";
-import { MIN_ROOM_MULTIPLE } from "./trade-rules";
+import { MAX_PREMIUM, MIN_ROOM_MULTIPLE } from "./trade-rules";
 
 type Item = NonNullable<Options["focus"]>["items"][number];
 
@@ -85,6 +85,22 @@ export function focusPlan(item: Item): { call: SidePlan | null; put: SidePlan | 
     call: side("call", item.breakout_above ?? item.resistance?.price, item.resistance?.name ?? "", item.atr, item.target_up),
     put: side("put", item.hold_above ?? item.support?.price, item.support?.name ?? "", item.atr, item.target_down),
   };
+}
+
+/** Names whose options expire on Monday, Wednesday and Friday only (the broker's listing, checked 2026-10-27). */
+export const MWF_ONLY: ReadonlySet<string> = new Set(["AVGO", "AMD"]);
+
+/**
+ * The card's expiry warning for a name without a contract every session: null for the others. On a Tuesday or
+ * Thursday it says to take the next day's expiry and size down. Its premiums near the money also tend to run over the
+ * premium cap (MAX_PREMIUM).
+ */
+export function expiryNote(symbol: string, session: string | null | undefined): string | null {
+  if (!MWF_ONLY.has(symbol) || !session || !/^\d{4}-\d{2}-\d{2}$/.test(session)) return null;
+  const [y, m, d] = session.split("-").map(Number);
+  const day = new Date(Date.UTC(y!, m! - 1, d!)).getUTCDay();
+  const today = day === 1 || day === 3 || day === 5 ? "Options expire today." : "No options expire today: use the next day's expiry and size down.";
+  return `${today} Premiums near the money usually run over $${(MAX_PREMIUM / 100).toFixed(2)}, so go further out or skip.`;
 }
 
 /** The UTC instant of a New York wall time on a day. */

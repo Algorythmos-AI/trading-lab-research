@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { ArrowDownToLine, ArrowUpFromLine, MoveHorizontal, Target } from "lucide-react";
 import { sydney, weekDate } from "@/lib/format";
 import { sessionView, type JournalDoc } from "@/lib/journal";
-import { focusPlan, GLOSSARY, levelWords, noEntryTimes, type SidePlan } from "@/lib/focus-plan";
+import { expiryNote, focusPlan, GLOSSARY, levelWords, noEntryTimes, type SidePlan } from "@/lib/focus-plan";
 import {
   CONFIRM_BAR_MINUTES,
   dayCheck,
@@ -118,9 +118,10 @@ function SideBlock({ plan }: { plan: SidePlan }) {
   );
 }
 
-function FocusCard({ item, pre }: { item: Item; pre: Pre | undefined }) {
+function FocusCard({ item, pre, session }: { item: Item; pre: Pre | undefined; session: string }) {
   const b = BIAS[item.bias];
   const plan = focusPlan(item);
+  const expiry = expiryNote(item.symbol, session);
   return (
     <li className={cn("bg-card grid w-[88%] shrink-0 snap-start content-start gap-2 rounded-lg border border-t-4 px-3 py-2.5 sm:w-auto", b.edge)}>
       <div className="flex items-baseline justify-between gap-2">
@@ -147,6 +148,7 @@ function FocusCard({ item, pre }: { item: Item; pre: Pre | undefined }) {
           {pre.note ? <span className="text-muted-foreground block">{pre.note}</span> : null}
         </p>
       ) : null}
+      {expiry ? <p className="text-warn text-xs leading-snug">{expiry}</p> : null}
       {plan.call ? <SideBlock plan={plan.call} /> : null}
       {plan.put ? <SideBlock plan={plan.put} /> : null}
     </li>
@@ -200,7 +202,7 @@ export function FocusStrip({ e }: { e: Options }) {
       {/* On a phone the cards sit side by side and swipe, so the desk stays near the top of the screen. */}
       <ul className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-px-4 px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 xl:grid-cols-4">
         {items.map((i) => (
-          <FocusCard key={i.symbol} item={i} pre={pre.get(i.symbol)} />
+          <FocusCard key={i.symbol} item={i} pre={pre.get(i.symbol)} session={e.session} />
         ))}
       </ul>
       <Always session={e.session} />

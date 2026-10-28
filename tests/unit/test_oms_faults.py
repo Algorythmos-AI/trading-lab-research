@@ -22,8 +22,8 @@ def plan(qty: int = 4) -> TradePlan:
                      target=252.0)
 
 
-def mk(guard: bool = False, kill: bool = False, store: PlanStore | None = None):
-    b = SimBroker()
+def mk(guard: bool = False, kill: bool = False, store: PlanStore | None = None, broker: SimBroker | None = None):
+    b = broker or SimBroker()
     entries: list[str] = []
 
     def ctx(symbol: str) -> Context:
@@ -246,3 +246,104 @@ def test_h1_market_exit_cancels_and_confirms_the_stop_first():
     b.place = place_and_fill
     assert oms.exit_now(p, None, "eod_market", market=True) is True
     assert p.state == "closed" and p.exit_fill_price == 250.40 and b.open_orders() == []
+
+
+# ---- 2026-10-26: the open-orders list lags a cancel ---------------------------------------------------------------
+
+class LaggingList(SimBroker):
+    """Alpaca's open-orders list keeps showing a cancelled order, as still working, for a few reads after get_order
+    has reported it cancelled."""
+
+    def __init__(self, reads: int = 5) -> None:
+        super().__init__()
+        self.reads, self.ghosts = reads, {}
+
+    def cancel(self, client_order_id: str) -> None:
+        o = self.orders.get(client_order_id)
+        if o is not None and not o.status.terminal:
+            self.ghosts[client_order_id] = [Order(**{**o.__dict__}), self.reads]
+        super().cancel(client_order_id)
+
+    def open_orders(self) -> list[Order]:
+        out = super().open_orders()
+        for cid, g in list(self.ghosts.items()):
+            out.append(Order(**{**g[0].__dict__}))
+            g[1] -= 1
+            if g[1] <= 0:
+                del self.ghosts[cid]
+        return out
+
+
+def test_eod_flatten_sells_once_its_stop_is_confirmed_cancelled_though_the_list_still_shows_it():
+    b, oms, _ = mk(guard=True, broker=LaggingList())
+    p = filled_plan(b, oms)
+    orig = b.place
+
+    def place_and_fill(o):
+        r = orig(o)
+        if o.type == "limit" and o.side == "sell":
+            b.fill(o.client_order_id, 250.30)
+        return r
+    b.place = place_and_fill
+    assert oms.exit_now(p, 250.30, "eod_flatten") is True        # 2026-10-26: refused, re-stopped, four times
+    assert p.state == "closed" and p.exit_reason == "eod_flatten" and p.exit_fill_price == 250.30
+    assert not [e for e in p.log if e[0] == "exit_failed"] and b.pos["QQQM"].qty == 0
+
+
+def test_a_replacement_stop_is_placed_and_kept_while_the_list_still_shows_the_cancelled_one():
+    b, oms, _ = mk(guard=True, broker=LaggingList())
+    p = filled_plan(b, oms)
+    old = p.stop_id
+    b.cancel(old)
+    assert oms._confirm_terminal(old)[0]
+    p.stop_id = ""
+    oms.ensure_stop(p)                                            # 2026-10-26: GuardRejected, a loop error
+    assert p.stop_id != old and b.get_order(p.stop_id).status == OrderStatus.ACCEPTED
+    assert any(o.client_order_id == old for o in b.open_orders())  # the ghost is still listed...
+    assert oms.reconcile({"QQQM"}, {}, plan=p) == []              # ...and reconcile neither cancels nor adds a stop
+    assert b.get_order(p.stop_id).status == OrderStatus.ACCEPTED
+
+
+def test_a_listed_sell_never_confirmed_cancelled_still_counts():
+    from wt.oms.manager import GuardRejected
+    b, oms, _ = mk(guard=True, broker=LaggingList())
+    p = filled_plan(b, oms)
+    with pytest.raises(GuardRejected, match="sell within long position"):
+        oms._submit(Order("wt-B-x", "QQQM", "sell", 4, "limit", limit_price=250.3), protective=True)
+    assert b.get_order(p.stop_id).status == OrderStatus.ACCEPTED
+
+
+def test_a_listed_stop_the_lookup_cannot_find_still_counts():
+    from wt.oms.manager import GuardRejected
+    b, oms, _ = mk(guard=True, broker=LaggingList())
+    p = filled_plan(b, oms)
+    real = b.get_order
+    b.get_order = lambda cid: None if cid == p.stop_id else real(cid)     # a 404 for an order that is working
+    assert oms._confirm_terminal(p.stop_id) == (True, None)
+    with pytest.raises(GuardRejected, match="resting sells 4"):          # the listed stop still blocks a second sell
+        oms._submit(Order("wt-B-y", "QQQM", "sell", 4, "limit", limit_price=250.3), protective=True)
+
+
+def test_a_filled_stop_the_list_still_shows_keeps_blocking():
+    b, oms, _ = mk(guard=True, broker=LaggingList())
+    p = filled_plan(b, oms)
+    b.ghosts[p.stop_id] = [Order(**{**b.orders[p.stop_id].__dict__}), 5]   # listed as working...
+    b.fill(p.stop_id, 248.9)                                            # ...though it has filled
+    assert oms._confirm_terminal(p.stop_id)[0] and p.stop_id not in oms._gone
+
+
+def test_after_a_restart_a_stop_already_cancelled_does_not_block_the_exit():
+    b, oms, _ = mk(guard=True, broker=LaggingList())
+    p = filled_plan(b, oms)
+    b.cancel(p.stop_id)                                           # cancelled before the restart; still listed
+    oms2 = OMS(b, sell_timeout_s=1.0, sleep=lambda s: None, guard=oms.guard, context=oms.context, strategy="B")
+    orig = b.place
+
+    def place_and_fill(o):
+        r = orig(o)
+        if o.type == "limit" and o.side == "sell":
+            b.fill(o.client_order_id, 250.30)
+        return r
+    b.place = place_and_fill
+    assert oms2.exit_now(p, 250.30, "eod_flatten") is True        # exit_now's own read saw it cancelled
+    assert p.state == "closed" and not [e for e in p.log if e[0] == "exit_failed"]

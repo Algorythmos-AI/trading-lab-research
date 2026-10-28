@@ -23,3 +23,13 @@
 - **No baseline:** neither trial has a frozen backtest of its v2 rules, so the weekly scorecard shows "no
   baseline" for both, by design. A pass earns a registered development-span backtest under a new experiment.
 - A number changed after a result is seen means a new experiment and new trials.
+
+## Amendments
+
+- **2026-10-27, f(t) frozen in git (no rule change).** On the first session, 2026-10-26, `run_hod_flag` stopped
+  with a `TypeError` before qualifying any name: it built f(t) from `data/minute_liquid`, research data that is on
+  the Mac and not on the host, and with no files the mean was NaN. The forward test wrote an error row and no
+  marker for that strategy, so the session is retried; no HOD v2 trade or result existed when this was written.
+  `run_hod_flag` now reads `config/hod_volume_curve.json`, which holds the curve EXP-0014's
+  `volume_curve()` computes on that data (390 values), and a test holds the two equal wherever the data exists.
+  The rule is the one registered: the same f(t), applied the same way. The watchlist flag is untouched.

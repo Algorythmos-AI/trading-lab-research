@@ -89,6 +89,7 @@ LEGACY = ("B_qqq_qqqm", "watchlist_bull_flag_atr_M1_v2", "hod_bull_flag_atr_M1_v
 LEGACY_V1 = ("B_qqq_qqqm", "watchlist_bull_flag_atr_M1", "hod_bull_flag_atr_M1")   # what a pre-D7 session marker covers
 BIASED = frozenset({"watchlist_bull_flag_atr_M1", "hod_bull_flag_atr_M1"})         # DEC-0011 H-LA: look-ahead
 HOD_VOL_MIN = 1_000_000               # HOD v2: cumulative shares by the qualifying bar (v1: the full day's volume)
+HOD_CURVE = ROOT / "config/hod_volume_curve.json"   # EXP-0014's f(t), frozen: the host has no minute_liquid data
 R3_HYP = {"r3:F:GG-1": "HYP-0010", "r3:F:GG-2": "HYP-0011", "r3:F:GG-3": "HYP-0012", "r3:F:GG-4": "HYP-0013",
           "r3:P:GG-1": "HYP-0014", "r3:P:GG-2": "HYP-0015", "r3:P:GG-3": "HYP-0016", "r3:P:GG-4": "HYP-0017",
           "r3:MP-1": "HYP-0018", "r3:REV-1": "HYP-0019"}
@@ -684,13 +685,20 @@ def hod_qualify(b: pd.DataFrame, pc: float, adv: float, f_t: np.ndarray) -> int 
                  and cum[i] >= HOD_VOL_MIN and cum[i] / max(1.0, adv * f_t[min(i, len(f_t) - 1)]) >= 5), None)
 
 
+def hod_curve() -> np.ndarray:
+    """EXP-0014's expected cumulative share of the day's volume by minute (390 values), as frozen in HOD_CURVE."""
+    f_t = np.asarray(json.loads(HOD_CURVE.read_text())["curve"], float)
+    if f_t.shape != (390,) or not np.all(np.isfinite(f_t)) or np.any(np.diff(f_t) < 0) or f_t[-1] != 1.0:
+        raise ValueError(f"{HOD_CURVE} is not a cumulative volume curve of 390 minutes")
+    return f_t
+
+
 def run_hod_flag(a, d, daily: DailyIndex, splits: SplitStore) -> list[dict]:
     """HOD bull flag v2 (DEC-0011 H-LA): v1 fetched only names whose FULL-DAY volume reached 1M, known at the close."""
-    import r2_intraday_hod as h
     g = hod_superset(daily, d, splits)
     if not len(g):
         return []
-    f_t = h.volume_curve()
+    f_t = hod_curve()
     bars = a.bars(list(g.index), "1Min", to_utc_iso(et(d, "09:30")), to_utc_iso(et(d, "15:59")))
     out = []
     for sym, b in bars.groupby("symbol"):

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { focusPlan, levelWords, noEntryTimes } from "@/lib/focus-plan";
+import { expiryNote, focusPlan, levelWords, noEntryTimes } from "@/lib/focus-plan";
 
 // The focus card's plan in plain words: entry just through the level, the stop a tenth of the day's range back on the
 // other side, the first target at twice the risk (the 2:1 rule), then the next named level.
@@ -46,5 +46,24 @@ describe("focus plan", () => {
     expect(noEntryTimes("2026-11-03")).toEqual({ firstEntry: "01:35", lunchFrom: "03:30", lunchTo: "05:00" });
     expect(noEntryTimes("2026-07-01")).toEqual({ firstEntry: "23:35", lunchFrom: "01:30", lunchTo: "03:00" });
     expect(noEntryTimes("bad")).toBeNull();
+  });
+});
+
+// AVGO and AMD list options on Monday, Wednesday and Friday only (DEC-0038): the card says so, and nothing for the rest.
+describe("expiry note", () => {
+  it("tells a Tuesday or Thursday to take the next day's expiry", () => {
+    expect(expiryNote("AVGO", "2026-10-27")).toMatch(/^No options expire today: use the next day's expiry and size down\. .*over \$2\.00/);
+    expect(expiryNote("AMD", "2026-10-29")).toMatch(/^No options expire today/);
+  });
+
+  it("says the options expire today on a Monday, Wednesday or Friday", () => {
+    for (const d of ["2026-10-26", "2026-10-28", "2026-10-30"]) expect(expiryNote("AVGO", d)).toMatch(/^Options expire today\./);
+  });
+
+  it("is null for names with a contract every session, and for a bad session", () => {
+    expect(expiryNote("SPY", "2026-10-27")).toBeNull();
+    expect(expiryNote("TSLA", "2026-10-27")).toBeNull();
+    expect(expiryNote("AVGO", null)).toBeNull();
+    expect(expiryNote("AVGO", "27 Oct")).toBeNull();
   });
 });
