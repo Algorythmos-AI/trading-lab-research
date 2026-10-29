@@ -8,6 +8,8 @@
 //   src/lib/options-clone.schema.json -> src/lib/options-clone.types.ts (root type OptionsClone; owned here; the
 //                                                                 Python publisher is tested against it)
 //   src/lib/journal.schema.json  -> src/lib/journal.types.ts    (root type JournalDoc; owned here)
+//   src/lib/ledger.schema.json   -> src/lib/ledger.types.ts     (root type LedgerEdition; owned here; the
+//                                                                 focus-card-ledger publisher builds to it)
 //   src/lib/hft.schema.json      -> src/lib/hft.types.ts        (root type HftSnapshot; vendored from hft-lab and
 //                                                                 pinned by hft.contract.lock.json, not by Python)
 // Run with `pnpm gen:types` after `make schema` changes a schema. The output is committed.
@@ -26,6 +28,7 @@ for (const [file, out, name, options = {}] of [
   ["options-live.schema.json", "options-live.types.ts", "OptionsLive"],
   ["options-clone.schema.json", "options-clone.types.ts", "OptionsClone", { maxItems: -1 }],
   ["journal.schema.json", "journal.types.ts", "JournalDoc", { maxItems: -1 }],
+  ["ledger.schema.json", "ledger.types.ts", "LedgerEdition", { maxItems: -1 }],
   // Its lists are capped at 8 to 40 items; without this each would be typed as a union of every tuple length.
   ["hft.schema.json", "hft.types.ts", "HftSnapshot", { maxItems: -1 }],
 ]) {
