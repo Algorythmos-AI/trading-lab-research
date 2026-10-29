@@ -189,16 +189,18 @@ describe("the prices are written out, not only drawn", () => {
   it("labels each filled side's fill, stop, target 1 and exit, and the levels, one label per price", () => {
     const e = edition();
     for (const n of e.names) {
-      const names = priceLabels(n).flatMap((l) => l.name.split(" · "));
-      if (n.ceiling !== null) expect(names).toContain("Ceiling");
-      for (const s of n.sides.filter((x) => x.filled)) {
-        const both = n.sides.filter((x) => x.filled).length > 1;
-        const who = both ? `${s.side === "call" ? "Call" : "Put"} ` : "";
-        const want = both ? [`${who}T1`, `${who}fill`, `${who}stop`, `${who}exit`] : ["T1", "Fill", "Stop", "Exit"];
-        expect(names).toEqual(expect.arrayContaining(want));
-        expect(priceLabels(n).some((l) => l.v === s.entry)).toBe(true);
+      const labels = priceLabels(n);
+      const at = (v: number | null) => labels.find((l) => v !== null && l.v.toFixed(2) === v.toFixed(2));
+      if (n.ceiling !== null) expect(at(n.ceiling)?.name).toMatch(/Ceiling/);
+      const filled = n.sides.filter((x) => x.filled);
+      for (const s of filled) {
+        expect(at(s.entry)?.name).toMatch(/fill/i);
+        expect(at(s.stop)?.name).toMatch(/stop/i);
+        expect(at(s.t1)?.name).toMatch(/T1/);
+        expect(at(s.exit)?.name).toMatch(/exit|stop|T1/i);
+        if (filled.length > 1) expect(at(s.entry)?.name).toMatch(s.side === "call" ? /^Call / : /^Put /);
       }
-      const printed = priceLabels(n).map((l) => l.v.toFixed(2));
+      const printed = labels.map((l) => l.v.toFixed(2));
       expect(new Set(printed).size).toBe(printed.length);
     }
   });
