@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LEDGER_ACCEPTS, ledgerHealth } from "@/lib/editions";
 import { sign } from "@/lib/hmac";
-import { optionStoppedFirst, optionTotal, RESULT, running, showReview, sessionMinute, weekGrid, type LedgerDay } from "@/lib/ledger";
+import { optionExitPremium, optionStoppedFirst, optionTotal, RESULT, running, showReview, sessionMinute, weekGrid, type LedgerDay } from "@/lib/ledger";
 import type { LedgerEdition } from "@/lib/ledger.types";
 import { isLedger, LEDGER_SCHEMA, validateLedger } from "@/lib/validate";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { LedgerReview, LEDGER_GLOSSARY, priceLabels, spread } from "@/components/ledger";
 import ledgerJson from "./fixtures/ledger.v1.json";
 
 // The focus card ledger: after each close, focus-card-ledger sends how the Top 4 Focus Card did as a research
@@ -179,5 +182,51 @@ describe("when Options shows the review", () => {
   it("only for a card scored before the desk's session", () => {
     expect(showReview(new Date("2026-10-29T20:30:00Z"), "2026-10-29", "2026-10-29")).toBe(false);
     expect(showReview(new Date("2026-10-29T20:30:00Z"), "2026-10-28", "2026-10-12")).toBe(false);
+  });
+});
+
+describe("the prices are written out, not only drawn", () => {
+  it("labels each filled side's fill, stop, target 1 and exit, and the levels, one label per price", () => {
+    const e = edition();
+    for (const n of e.names) {
+      const labels = priceLabels(n);
+      const at = (v: number | null) => labels.find((l) => v !== null && l.v.toFixed(2) === v.toFixed(2));
+      if (n.ceiling !== null) expect(at(n.ceiling)?.name).toMatch(/Ceiling/);
+      const filled = n.sides.filter((x) => x.filled);
+      for (const s of filled) {
+        expect(at(s.entry)?.name).toMatch(/fill/i);
+        expect(at(s.stop)?.name).toMatch(/stop/i);
+        expect(at(s.t1)?.name).toMatch(/T1/);
+        expect(at(s.exit)?.name).toMatch(/exit|stop|T1/i);
+        if (filled.length > 1) expect(at(s.entry)?.name).toMatch(s.side === "call" ? /^Call / : /^Put /);
+      }
+      const printed = labels.map((l) => l.v.toFixed(2));
+      expect(new Set(printed).size).toBe(printed.length);
+    }
+  });
+
+  it("moves labels apart without changing their order or leaving the chart", () => {
+    const ls = [{ y: 50 }, { y: 51 }, { y: 52 }, { y: 140 }];
+    spread(ls, 12, 10, 145);
+    expect(ls.map((l) => l.y)).toEqual([50, 62, 74, 140]);
+    const low = [{ y: 140 }, { y: 141 }];
+    spread(low, 12, 10, 145);
+    expect(low.map((l) => l.y)).toEqual([133, 145]);
+  });
+
+  it("works out what the option sold for from its dollars", () => {
+    expect(optionExitPremium({ right: "P", strike: 212.5, expiry: "2026-10-30", entry_premium: 1.1, pnl_usd: 30, return_pct: 27.3, exit_time: null, reason: "target1" })).toBe(1.4);
+    expect(optionExitPremium({ right: "C", strike: 640, expiry: "2026-10-30", entry_premium: 1.9, pnl_usd: null, return_pct: null, exit_time: null, reason: "no_bars" })).toBeNull();
+  });
+
+  it("puts the day's trades in a table with entry, target 1, exit, R and option dollars, and a glossary", () => {
+    const e = edition();
+    const html = renderToStaticMarkup(createElement(LedgerReview, { e }));
+    expect(html).toContain('data-testid="ledger-trades"');
+    for (const h of ["Ticker", "Entry", "Target 1", "Exit", "Gain (R)", "Option", "Day total"]) expect(html).toContain(h);
+    const filled = e.names.flatMap((n) => n.sides.filter((s) => s.filled));
+    for (const s of filled) expect(html).toContain(s.entry.toFixed(2));
+    expect(html).toContain('data-testid="ledger-glossary"');
+    for (const g of LEDGER_GLOSSARY) expect(html).toContain(g.term.replace("&", "&amp;"));
   });
 });
