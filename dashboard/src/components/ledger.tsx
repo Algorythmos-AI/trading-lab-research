@@ -256,7 +256,7 @@ function Ticket({ s }: { s: LedgerSide }) {
           {s.option.exit_time && s.option.reason !== "session_close" ? ` at ${et(s.option.exit_time)}` : ""}.
         </p>
       ) : (
-        <p className="text-muted-foreground text-xs">No option contract met the clone's contract rules at the fill, so there is no option result.</p>
+        <p className="text-muted-foreground text-xs">No option contract met the clone&apos;s contract rules at the fill, so there is no option result.</p>
       )}
     </div>
   );
