@@ -49,7 +49,9 @@ const et = (iso: string | null | undefined) => newYork(iso, false);
 export function DayChart({ n, big = false }: { n: LedgerName; big?: boolean }) {
   const W = big ? 960 : 400;
   const H = big ? 300 : 170;
-  const pad = { l: big ? 56 : 6, r: big ? 108 : 112, t: 10, b: 20 };
+  // Room on the right for the price labels; wider when both sides filled and each label names its side.
+  const both = n.sides.filter((s) => s.filled).length > 1;
+  const pad = { l: big ? 56 : 6, r: (big ? 108 : 112) + (both ? 40 : 0), t: 10, b: 20 };
   const b = n.bars;
   if (!b || b.t.length < 2) {
     return <p className="text-muted-foreground py-6 text-center text-xs">No bars for this session.</p>;
@@ -165,17 +167,21 @@ export function priceLabels(n: LedgerName): PriceLabel[] {
   const add = (key: string, name: string, v: number | null | undefined, color: string) => {
     if (typeof v !== "number") return;
     const same = out.find((l) => l.v.toFixed(2) === v.toFixed(2));
-    if (same) same.name = `${same.name} · ${name}`;
+    const side = /^(Call|Put) /.exec(name)?.[0];
+    if (same) same.name = `${same.name} · ${side && same.name.startsWith(side) ? name.slice(side.length) : name}`;
     else out.push({ key, name, v, color });
   };
   add("ceiling", "Ceiling", n.ceiling, "var(--chart-1)");
   add("floor", "Floor", n.floor, "var(--chart-2)");
-  for (const s of n.sides.filter((x) => x.filled)) {
+  const filled = n.sides.filter((x) => x.filled);
+  for (const s of filled) {
+    // With both sides filled, each label says which side it belongs to.
+    const who = filled.length > 1 ? `${s.side === "call" ? "Call" : "Put"} ` : "";
     const exitColor = s.result === "stopped" ? "var(--bad)" : isWin(s) ? "var(--good)" : "var(--muted-foreground)";
-    add(`${s.side}-t1`, "T1", s.t1, "var(--good)");
-    add(`${s.side}-fill`, "Fill", s.entry, "var(--foreground)");
-    add(`${s.side}-stop`, "Stop", s.stop, "var(--bad)");
-    add(`${s.side}-exit`, "Exit", s.exit, exitColor);
+    add(`${s.side}-t1`, `${who}T1`, s.t1, "var(--good)");
+    add(`${s.side}-fill`, `${who}fill`.replace(/^fill/, "Fill"), s.entry, "var(--foreground)");
+    add(`${s.side}-stop`, `${who}stop`.replace(/^stop/, "Stop"), s.stop, "var(--bad)");
+    add(`${s.side}-exit`, `${who}exit`.replace(/^exit/, "Exit"), s.exit, exitColor);
   }
   return out;
 }

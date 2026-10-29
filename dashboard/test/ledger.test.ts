@@ -192,7 +192,10 @@ describe("the prices are written out, not only drawn", () => {
       const names = priceLabels(n).flatMap((l) => l.name.split(" · "));
       if (n.ceiling !== null) expect(names).toContain("Ceiling");
       for (const s of n.sides.filter((x) => x.filled)) {
-        expect(names).toEqual(expect.arrayContaining(["Fill", "Stop", "T1", "Exit"]));
+        const both = n.sides.filter((x) => x.filled).length > 1;
+        const who = both ? `${s.side === "call" ? "Call" : "Put"} ` : "";
+        const want = both ? [`${who}T1`, `${who}fill`, `${who}stop`, `${who}exit`] : ["T1", "Fill", "Stop", "Exit"];
+        expect(names).toEqual(expect.arrayContaining(want));
         expect(priceLabels(n).some((l) => l.v === s.entry)).toBe(true);
       }
       const printed = priceLabels(n).map((l) => l.v.toFixed(2));
