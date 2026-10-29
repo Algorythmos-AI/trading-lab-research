@@ -40,6 +40,11 @@ export function optionExit(reason: NonNullable<Side["option"]>["reason"]): strin
   }
 }
 
+/** What the option sold for, per share: the premium paid plus the contract's dollars over its 100 shares. */
+export function optionExitPremium(o: NonNullable<Side["option"]>): number | null {
+  return typeof o.pnl_usd === "number" ? Math.round((o.entry_premium + o.pnl_usd / 100) * 100) / 100 : null;
+}
+
 /** "347.5C" from a strike and its right. */
 export function contractLabel(o: NonNullable<Side["option"]>): string {
   return `${Number.isInteger(o.strike) ? o.strike : o.strike.toFixed(1)}${o.right}`;

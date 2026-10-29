@@ -2,7 +2,7 @@
 // the exit, the result in R and on one option contract) and the running record. Server-rendered SVG and native
 // <details>, so it needs no script. Its own small charts: the shared price chart is left alone.
 import Link from "next/link";
-import { ChevronDown, ChevronLeft, ChevronRight, TriangleAlert } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, CircleHelp, TriangleAlert } from "lucide-react";
 import { Panel } from "@/components/panel";
 import { StatTile, StatTiles } from "@/components/stat-tile";
 import { StatusBadge } from "@/components/status";
@@ -15,6 +15,7 @@ import {
   isWin,
   optionExit,
   optionStoppedFirst,
+  optionExitPremium,
   optionTotal,
   RESULT,
   running,
@@ -39,15 +40,18 @@ function dollars(v: number | null | undefined): string {
   return Math.round(v) === 0 ? s : `${v > 0 ? "+" : "−"}${s}`;
 }
 
+const TONE_TEXT: Record<string, string> = { good: "text-good", bad: "text-bad", warn: "text-warn", neutral: "text-muted-foreground" };
 const toneOf = (v: number | null | undefined) => (typeof v !== "number" || v === 0 ? "" : v > 0 ? "text-good" : "text-bad");
 const r2 = (v: number | null | undefined) => rMult(v, 2);
 const et = (iso: string | null | undefined) => newYork(iso, false);
 
 /** One name's session on its 2-minute closes: the ceiling and floor, the no-entry times, and each filled side from fill to exit. */
 export function DayChart({ n, big = false }: { n: LedgerName; big?: boolean }) {
-  const W = big ? 960 : 380;
-  const H = big ? 300 : 150;
-  const pad = { l: big ? 56 : 6, r: big ? 64 : 52, t: 10, b: 20 };
+  const W = big ? 960 : 400;
+  const H = big ? 300 : 170;
+  // Room on the right for the price labels; wider when both sides filled and each label names its side.
+  const both = n.sides.filter((s) => s.filled).length > 1;
+  const pad = { l: big ? 56 : 6, r: (big ? 108 : 112) + (both ? 40 : 0), t: 10, b: 20 };
   const b = n.bars;
   if (!b || b.t.length < 2) {
     return <p className="text-muted-foreground py-6 text-center text-xs">No bars for this session.</p>;
@@ -62,16 +66,13 @@ export function DayChart({ n, big = false }: { n: LedgerName; big?: boolean }) {
   const X = (m: number) => pad.l + (Math.min(390, Math.max(0, m)) / 390) * (W - pad.l - pad.r);
   const Y = (v: number) => pad.t + (1 - (v - lo) / (hi - lo)) * (H - pad.t - pad.b);
   const line = b.close.map((c, i) => `${i ? "L" : "M"}${X(b.t[i]!).toFixed(1)},${Y(c).toFixed(1)}`).join("");
-  const fs = big ? 11 : 10.5;
+  const fs = big ? 11 : 12;
   const level = (v: number | null, color: string, key: string) =>
-    v === null ? null : (
-      <g key={key}>
-        <line x1={pad.l} x2={W - pad.r} y1={Y(v)} y2={Y(v)} stroke={color} strokeWidth={1.2} strokeDasharray="4 3" />
-        <text x={W - pad.r + 4} y={Y(v) + 3.5} fontSize={fs} fill={color} className="font-mono">
-          {v.toFixed(2)}
-        </text>
-      </g>
-    );
+    v === null ? null : <line key={key} x1={pad.l} x2={W - pad.r} y1={Y(v)} y2={Y(v)} stroke={color} strokeWidth={1.2} strokeDasharray="4 3" />;
+  // Every price the day turned on, written out in the right margin: the levels, and each filled side's fill, stop,
+  // target 1 and exit. Prices that print the same share one label.
+  const labels = priceLabels(n).map((l) => ({ ...l, y: Y(l.v) + 3.5 }));
+  spread(labels, fs + 1.5, pad.t + 8, H - pad.b);
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label={`${n.symbol}: the session's 2-minute closes against the card's levels`}>
       {NO_ENTRY.map(([a, z]) => (
@@ -131,6 +132,7 @@ export function DayChart({ n, big = false }: { n: LedgerName; big?: boolean }) {
             <line x1={a} x2={z} y1={Y(s.entry)} y2={Y(s.entry)} stroke="var(--muted-foreground)" strokeDasharray="2 2" />
             <circle cx={a} cy={Y(s.entry)} r={3.6} fill="var(--card)" stroke="var(--foreground)" strokeWidth={1.6} />
             <rect x={z - 3.5} y={Y(s.exit ?? s.entry) - 3.5} width={7} height={7} fill={exitColor} />
+            {s.exit !== null ? <line x1={z} x2={W - pad.r} y1={Y(s.exit)} y2={Y(s.exit)} stroke={exitColor} strokeWidth={1} strokeDasharray="1 3" /> : null}
             {optStop !== null ? (
               <g>
                 <line x1={X(optStop)} x2={X(optStop)} y1={pad.t} y2={H - pad.b} stroke="var(--warn-fill)" strokeWidth={1.2} strokeDasharray="3 3" />
@@ -142,37 +144,146 @@ export function DayChart({ n, big = false }: { n: LedgerName; big?: boolean }) {
           </g>
         );
       })}
+      {labels.map((l) => (
+        <g key={l.key}>
+          {Math.abs(l.y - 3.5 - Y(l.v)) > 1 ? <line x1={W - pad.r} x2={W - pad.r + 3} y1={Y(l.v)} y2={l.y - 3.5} stroke={l.color} strokeWidth={0.8} /> : null}
+          <text x={W - pad.r + 4} y={l.y} fontSize={fs} fill={l.color} className="font-mono">
+            <tspan className="font-sans" fontSize={fs - 1}>
+              {l.name}
+            </tspan>{" "}
+            {l.v.toFixed(2)}
+          </text>
+        </g>
+      ))}
     </svg>
   );
 }
 
-function SideRow({ s }: { s: LedgerSide }) {
-  const res = RESULT[s.result] ?? { label: s.result, tone: "neutral" as const };
+type PriceLabel = { key: string; name: string; v: number; color: string };
+
+/** The labels a name's chart carries: ceiling and floor, then each filled side's fill, stop, target 1 and exit. */
+export function priceLabels(n: LedgerName): PriceLabel[] {
+  const out: PriceLabel[] = [];
+  const add = (key: string, name: string, v: number | null | undefined, color: string) => {
+    if (typeof v !== "number") return;
+    const same = out.find((l) => l.v.toFixed(2) === v.toFixed(2));
+    const side = /^(Call|Put) /.exec(name)?.[0];
+    if (same) same.name = `${same.name} · ${side && same.name.startsWith(side) ? name.slice(side.length) : name}`;
+    else out.push({ key, name, v, color });
+  };
+  add("ceiling", "Ceiling", n.ceiling, "var(--chart-1)");
+  add("floor", "Floor", n.floor, "var(--chart-2)");
+  const filled = n.sides.filter((x) => x.filled);
+  for (const s of filled) {
+    // With both sides filled, each label says which side it belongs to.
+    const who = filled.length > 1 ? `${s.side === "call" ? "Call" : "Put"} ` : "";
+    const exitColor = s.result === "stopped" ? "var(--bad)" : isWin(s) ? "var(--good)" : "var(--muted-foreground)";
+    add(`${s.side}-t1`, `${who}T1`, s.t1, "var(--good)");
+    add(`${s.side}-fill`, `${who}fill`.replace(/^fill/, "Fill"), s.entry, "var(--foreground)");
+    add(`${s.side}-stop`, `${who}stop`.replace(/^stop/, "Stop"), s.stop, "var(--bad)");
+    add(`${s.side}-exit`, `${who}exit`.replace(/^exit/, "Exit"), s.exit, exitColor);
+  }
+  return out;
+}
+
+/** Moves labels apart so none overlaps, keeping their order and staying inside [top, bottom]. */
+export function spread(ls: { y: number }[], gap: number, top: number, bottom: number): void {
+  const sorted = [...ls].sort((a, b) => a.y - b.y);
+  for (let i = 0; i < sorted.length; i++) sorted[i]!.y = Math.max(sorted[i]!.y, i ? sorted[i - 1]!.y + gap : top);
+  for (let i = sorted.length - 1; i >= 0; i--) sorted[i]!.y = Math.min(sorted[i]!.y, i < sorted.length - 1 ? sorted[i + 1]!.y - gap : bottom);
+}
+
+const px = (v: number | null | undefined) => (typeof v === "number" ? v.toFixed(2) : DASH);
+const premium = (v: number | null | undefined) => (typeof v === "number" ? `$${v.toFixed(2)}` : DASH);
+/** "+5.62" / "−2.81": a move in dollars a share. */
+const perShare = (v: number | null | undefined) => (typeof v !== "number" ? DASH : `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(2)}`);
+
+/** What the trade made a share: the exit against the entry, in the trade's direction. */
+export function moveAShare(s: LedgerSide): number | null {
+  if (!s.filled || s.exit === null) return null;
+  return Math.round((s.side === "call" ? s.exit - s.entry : s.entry - s.exit) * 100) / 100;
+}
+
+/** One cell of a trade ticket: the word, the price, and when, coloured like the chart's line. */
+function Cell({ label, v, when, mark }: { label: string; v: number | null | undefined; when?: string; mark: string }) {
   return (
-    <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-0.5 text-[0.8125rem]">
-      <span className="text-muted-foreground text-[0.6875rem] font-semibold tracking-wider uppercase">{s.side}</span>
-      <span className="flex min-w-0 flex-wrap items-center gap-x-2">
-        <StatusBadge tone={res.tone}>{res.label}</StatusBadge>
-        {s.filled ? (
-          <span className="text-muted-foreground text-xs">
-            filled {et(s.fill_time)}
-            {s.exit_time ? `, out ${et(s.exit_time)}` : ""}
-          </span>
-        ) : null}
+    <div className="bg-muted/40 grid min-w-0 gap-0.5 rounded-md border-t-2 px-2 py-1.5" style={{ borderTopColor: mark }}>
+      <span className="text-muted-foreground flex items-baseline justify-between gap-1 text-[0.6875rem]">
+        {label}
+        {when ? <span className="font-mono">{when}</span> : null}
       </span>
-      <span className={cn("min-w-[4.5rem] text-right font-mono tabular-nums", toneOf(s.r))}>{s.filled ? r2(s.r) : DASH}</span>
-      {s.option ? (
-        <span className="text-muted-foreground col-span-2 col-start-2 text-xs">
-          Option {contractLabel(s.option)}: <span className={cn("font-mono", toneOf(s.option.pnl_usd))}>{dollars(s.option.pnl_usd)}</span>, {optionExit(s.option.reason)}
-          {s.option.exit_time && s.option.reason !== "session_close" ? ` at ${et(s.option.exit_time)}` : ""}
-        </span>
-      ) : null}
+      <span className="font-mono text-[0.9375rem] font-medium tabular-nums">{px(v)}</span>
     </div>
   );
 }
 
+/**
+ * A side that filled, as a ticket: the result and its R, the four share prices with the fill and exit times, what
+ * one R was worth a share and what the trade made, then the option contract.
+ */
+function Ticket({ s }: { s: LedgerSide }) {
+  const res = RESULT[s.result] ?? { label: s.result, tone: "neutral" as const };
+  const risk = Math.abs(s.entry - s.stop);
+  const move = moveAShare(s);
+  const exitMark = s.result === "stopped" ? "var(--bad-fill)" : isWin(s) ? "var(--good-fill)" : "var(--muted-foreground)";
+  const sold = s.option ? optionExitPremium(s.option) : null;
+  return (
+    <div className="grid gap-1.5 rounded-lg border p-2.5" data-testid="ledger-ticket">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="text-[0.6875rem] font-semibold tracking-wider uppercase">{s.side}</span>
+        <StatusBadge tone={res.tone}>{res.label}</StatusBadge>
+        <span className={cn("ml-auto font-mono text-[0.9375rem] font-semibold tabular-nums", toneOf(s.r))}>{r2(s.r)}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+        <Cell label="Entry" v={s.entry} when={et(s.fill_time)} mark="var(--foreground)" />
+        <Cell label="Stop" v={s.stop} mark="var(--bad-fill)" />
+        <Cell label="Target 1" v={s.t1} mark="var(--good-fill)" />
+        <Cell label="Exit" v={s.exit} when={s.exit_time ? et(s.exit_time) : undefined} mark={exitMark} />
+      </div>
+      <p className="text-muted-foreground text-xs">
+        Risk <span className="text-foreground font-mono">{risk.toFixed(2)}</span> a share (entry to stop). It {move !== null && move < 0 ? "lost" : "made"}{" "}
+        <span className={cn("font-mono", toneOf(move))}>{perShare(move)}</span> a share, which is <span className={cn("font-mono", toneOf(s.r))}>{r2(s.r)}</span>.
+      </p>
+      {s.option ? (
+        <p className="text-muted-foreground text-xs">
+          Option {contractLabel(s.option)}: bought <span className="text-foreground font-mono">{premium(s.option.entry_premium)}</span>
+          {sold !== null ? (
+            <>
+              , sold <span className="text-foreground font-mono">{premium(sold)}</span>
+            </>
+          ) : null}{" "}
+          = <span className={cn("font-mono font-medium", toneOf(s.option.pnl_usd))}>{dollars(s.option.pnl_usd)}</span> on one contract, {optionExit(s.option.reason)}
+          {s.option.exit_time && s.option.reason !== "session_close" ? ` at ${et(s.option.exit_time)}` : ""}.
+        </p>
+      ) : (
+        <p className="text-muted-foreground text-xs">No option contract cost $2.00 or less at the fill, so there is no option result.</p>
+      )}
+    </div>
+  );
+}
+
+/** A side that did not fill, in one quiet line: its level and why nothing was bought. */
+function NotTaken({ s }: { s: LedgerSide }) {
+  const where = s.side === "call" ? "ceiling" : "floor";
+  return (
+    <p className="text-muted-foreground flex flex-wrap items-baseline gap-x-2 text-xs">
+      <span className="text-[0.6875rem] font-semibold tracking-wider uppercase">{s.side}</span>
+      <span>
+        Not taken: {s.triggered ? `crossed the ${where} ` : `price never reached the ${where} `}
+        <span className="text-foreground font-mono">{px(s.level)}</span>
+        {s.result === "failed_before_retest"
+          ? ` at ${et(s.trigger_time)}, then broke back through it before any pullback entry`
+          : s.triggered
+            ? ` at ${et(s.trigger_time)} but never pulled back to the entry`
+            : ""}
+        .
+      </span>
+    </p>
+  );
+}
+
 function SideTable({ n }: { n: LedgerName }) {
-  const p = (v: number | null) => (v === null ? DASH : v.toFixed(2));
+  const p = px;
   return (
     // Focusable, so a keyboard can scroll it on a phone.
     <div className="overflow-x-auto" tabIndex={0} role="region" aria-label={`${n.symbol}: both sides`}>
@@ -217,16 +328,19 @@ function NameTile({ n }: { n: LedgerName }) {
         <span className="text-muted-foreground text-xs">{BIAS_LABEL[n.bias] ?? n.bias}</span>
         <span className="ml-auto">
           {n.bias_correct === null ? (
-            <StatusBadge tone="neutral">No bias call</StatusBadge>
+            <StatusBadge tone="neutral">No direction call</StatusBadge>
           ) : (
-            <StatusBadge tone={n.bias_correct ? "good" : "bad"}>Bias {n.bias_correct ? "right" : "wrong"}</StatusBadge>
+            <StatusBadge tone={n.bias_correct ? "good" : "bad"}>Direction {n.bias_correct ? "right" : "wrong"}</StatusBadge>
           )}
         </span>
       </header>
       <DayChart n={n} />
-      <div className="grid gap-1.5">
-        {n.sides.map((s) => (
-          <SideRow key={s.side} s={s} />
+      <div className="grid gap-2">
+        {n.sides.filter((s) => s.filled).map((s) => (
+          <Ticket key={s.side} s={s} />
+        ))}
+        {n.sides.filter((s) => !s.filled).map((s) => (
+          <NotTaken key={s.side} s={s} />
         ))}
       </div>
       <details className="group">
@@ -253,15 +367,155 @@ function Legend() {
   );
   return (
     <div className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs">
-      {item({ borderColor: "var(--chart-1)", borderTopStyle: "dashed" }, "Ceiling (call level)")}
-      {item({ borderColor: "var(--chart-2)", borderTopStyle: "dashed" }, "Floor (put level)")}
+      <span className="text-foreground font-medium">Reading the charts:</span>
+      {item({ borderColor: "var(--chart-1)", borderTopStyle: "dashed" }, "Ceiling: call trigger")}
+      {item({ borderColor: "var(--chart-2)", borderTopStyle: "dashed" }, "Floor: put trigger")}
       {item({ borderColor: "var(--good-fill)" }, "Target 1")}
-      {item({ borderColor: "var(--bad-fill)" }, "Stop, on a 2-minute close")}
+      {item({ borderColor: "var(--bad-fill)" }, "Stop")}
       <span className="inline-flex items-center gap-1.5">
         <span aria-hidden className="bg-muted-foreground/15 inline-block h-2.5 w-3.5" />
-        No-entry times
+        Shaded: no new trades
       </span>
-      <span>○ fill · ■ exit · △ level reached, no fill</span>
+      <span>○ bought · ■ sold · △ level crossed, nothing bought</span>
+    </div>
+  );
+}
+
+/** Every term and abbreviation the page uses, in plain words. */
+export const LEDGER_GLOSSARY: { term: string; words: string }[] = [
+  { term: "R (R-multiple)", words: "Profit or loss in units of risk. 1R is the distance from the entry to the stop, in dollars a share. With entry 624.68 and stop 621.87, 1R is 2.81; selling at 630.30 made 5.62 a share, which is +2.00R. −1.00R means the stop was hit." },
+  { term: "Ceiling", words: "The call trigger level. A call plan starts only after a 2-minute candle closes above it." },
+  { term: "Floor", words: "The put trigger level. A put plan starts only after a 2-minute candle closes below it." },
+  { term: "Level reached", words: "A 2-minute candle closed past the ceiling or floor. Nothing is bought yet." },
+  { term: "Filled on the pullback (retest)", words: "After the level broke, price came back to the entry limit and the order filled. A break with no pullback is never bought." },
+  { term: "Entry", words: "The limit price the trade filled at, a few cents past the level." },
+  { term: "Stop", words: "The share price where the trade is wrong. It counts only when a 2-minute candle closes beyond it." },
+  { term: "Target 1 (T1)", words: "The first profit target, two times the risk from the entry (+2R)." },
+  { term: "Exit", words: "The share price the trade was closed at: target 1, the stop, or the close." },
+  { term: "Stopped", words: "A 2-minute close went past the stop before target 1 was reached." },
+  { term: "Held to close", words: "Neither target 1 nor the stop was reached, so it was closed at 16:00 New York." },
+  { term: "Direction (bias) right / wrong", words: "Whether the name moved the way the card expected. Hold support: right when the day's low stayed above the floor. Breakout watch: right when the day closed above the ceiling. A range card makes no call." },
+  { term: "Option $", words: "One contract (100 shares) bought at the fill and sold at its −25% stop, target 1 or the close, before fees. The nearest out-of-the-money strike costing $2.00 or less." },
+  { term: "No-entry times", words: "The shaded parts of each chart: the first 5 minutes and 11:30 to 13:00 New York. The card takes no entries then." },
+];
+
+/** A small "?" that opens the glossary. Native <details>, so it works with no script and with a keyboard. */
+function Glossary() {
+  return (
+    <details className="group relative" data-testid="ledger-glossary">
+      <summary className="hover:bg-muted inline-flex cursor-pointer list-none items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium [&::-webkit-details-marker]:hidden">
+        <CircleHelp aria-hidden className="size-3.5" />
+        Glossary
+      </summary>
+      <div className="bg-popover text-popover-foreground absolute left-0 z-20 sm:right-0 sm:left-auto mt-1.5 w-[min(30rem,calc(100vw-2rem))] rounded-lg border p-3 shadow-lg">
+        <dl className="grid gap-2 text-xs leading-snug">
+          {LEDGER_GLOSSARY.map((g) => (
+            <div key={g.term} className="grid gap-0.5 sm:grid-cols-[8.5rem_minmax(0,1fr)] sm:gap-3">
+              <dt className="font-semibold">{g.term}</dt>
+              <dd className="text-muted-foreground">{g.words}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </details>
+  );
+}
+
+/** Every filled side of the day in one table, with the share prices, the R and the option dollars, and the totals. */
+function Trades({ e }: { e: LedgerEdition }) {
+  const rows = e.names.flatMap((n) => n.sides.filter((s) => s.filled).map((s) => ({ n, s })));
+  if (rows.length === 0) return null;
+  const others = e.day.sides - rows.length;
+  const th = "py-1.5 pr-3 font-medium whitespace-nowrap";
+  return (
+    <div className="grid content-start gap-1.5" data-testid="ledger-trades">
+      {/* On a phone, one line per trade, so the result and the option are never off screen. */}
+      <ul className="grid gap-1.5 sm:hidden" aria-label="The day's trades">
+        {rows.map(({ n, s }) => (
+          <li key={`${n.symbol}-${s.side}`} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 border-b pb-1.5 text-[0.8125rem]">
+            <span className="font-medium">
+              <span className="font-mono font-semibold">{n.symbol}</span> {s.side === "call" ? "Call" : "Put"}
+            </span>
+            <span className={cn("text-right font-mono font-semibold tabular-nums", toneOf(s.r))}>{r2(s.r)}</span>
+            <span className="text-muted-foreground font-mono text-xs tabular-nums">
+              {px(s.entry)} → {px(s.exit)} · stop {px(s.stop)} · T1 {px(s.t1)}
+            </span>
+            <span className={cn("text-right font-mono text-xs tabular-nums", toneOf(s.option?.pnl_usd))}>{s.option ? `${contractLabel(s.option)} ${dollars(s.option.pnl_usd)}` : "no option"}</span>
+          </li>
+        ))}
+        <li className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 text-[0.8125rem] font-semibold">
+          <span>Day total</span>
+          <span className="text-right font-mono tabular-nums">
+            <span className={toneOf(e.day.r)}>{r2(e.day.r)}</span> · <span className={toneOf(e.day.option_usd)}>{e.day.option_usd === null ? DASH : dollars(e.day.option_usd)}</span>
+          </span>
+        </li>
+      </ul>
+      <div className="hidden overflow-x-auto sm:block" tabIndex={0} role="region" aria-label="The day's trades">
+        <table className="w-full text-[0.8125rem]">
+          <thead className="text-muted-foreground text-xs">
+            <tr className="border-b text-left">
+              <th className={th}>Ticker</th>
+              <th className={th}>Side</th>
+              <th className={cn(th, "text-right")}>Entry</th>
+              <th className={cn(th, "text-right")}>Stop</th>
+              <th className={cn(th, "text-right")}>Target 1</th>
+              <th className={cn(th, "text-right")}>Exit</th>
+              <th className={cn(th, "hidden sm:table-cell")}>Result</th>
+              <th className={cn(th, "hidden text-right sm:table-cell")}>A share</th>
+              <th className={cn(th, "text-right")}>
+                <abbr title="R-multiple: profit in units of the entry-to-stop risk" className="no-underline">
+                  Gain (R)
+                </abbr>
+              </th>
+              <th className={cn(th, "pr-0 text-right")}>Option</th>
+            </tr>
+          </thead>
+          <tbody className="font-mono tabular-nums">
+            {rows.map(({ n, s }) => {
+              const res = RESULT[s.result] ?? { label: s.result, tone: "neutral" as const };
+              return (
+                <tr key={`${n.symbol}-${s.side}`} className="border-b">
+                  <td className="py-1.5 pr-3 font-semibold">{n.symbol}</td>
+                  <td className="pr-3 font-sans capitalize">{s.side}</td>
+                  <td className="pr-3 text-right">{px(s.entry)}</td>
+                  <td className="pr-3 text-right">{px(s.stop)}</td>
+                  <td className="pr-3 text-right">{px(s.t1)}</td>
+                  <td className="pr-3 text-right">{px(s.exit)}</td>
+                  <td className={cn("hidden pr-3 font-sans whitespace-nowrap sm:table-cell", TONE_TEXT[res.tone] ?? "text-muted-foreground")}>{res.label}</td>
+                  <td className={cn("hidden pr-3 text-right sm:table-cell", toneOf(moveAShare(s)))}>{perShare(moveAShare(s))}</td>
+                  <td className={cn("pr-3 text-right", toneOf(s.r))}>{r2(s.r)}</td>
+                  <td className={cn("text-right whitespace-nowrap", toneOf(s.option?.pnl_usd))}>
+                    {s.option ? (
+                      <>
+                        <span className="text-muted-foreground mr-1.5 text-xs">{contractLabel(s.option)}</span>
+                        {dollars(s.option.pnl_usd)}
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground font-sans text-xs">none under $2</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot className="font-mono tabular-nums">
+            <tr className="font-semibold">
+              <td colSpan={6} className="py-1.5 pr-3 font-sans">
+                Day total
+              </td>
+              <td className="hidden sm:table-cell" />
+              <td className="hidden sm:table-cell" />
+              <td className={cn("pr-3 text-right", toneOf(e.day.r))}>{r2(e.day.r)}</td>
+              <td className={cn("text-right", toneOf(e.day.option_usd))}>{e.day.option_usd === null ? DASH : dollars(e.day.option_usd)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      {others > 0 ? (
+        <p className="text-muted-foreground text-xs">
+          The other {others} side{others === 1 ? "" : "s"} did not fill; each name below says why.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -291,24 +545,42 @@ function Verdict({ d }: { d: LedgerDay }) {
   );
 }
 
-function Counts({ d }: { d: LedgerDay }) {
-  const items: [string, string][] = [
-    [num(d.sides), "sides"],
-    [num(d.triggered), "levels reached"],
-    [num(d.filled), "filled on the retest"],
-    [num(d.t1), "hit target 1"],
-    [num(d.stopped), "stopped"],
-    [d.bias_calls ? `${d.bias_right} of ${d.bias_calls}` : DASH, "bias right"],
+/** The day at a glance: the stock result, the option result, how many fills won, and how many directions were right. */
+function Scoreboard({ d }: { d: LedgerDay }) {
+  return (
+    <StatTiles>
+      <StatTile label="Stock result" value={d.filled ? r2(d.r) : DASH} tone={d.r > 0 ? "good" : d.r < 0 ? "bad" : "neutral"} hint={`${num(d.filled)} trade${d.filled === 1 ? "" : "s"}, in R (units of risk)`} />
+      <StatTile
+        label="Option result"
+        value={d.option_usd === null ? DASH : dollars(d.option_usd)}
+        tone={d.option_usd === null || d.option_usd === 0 ? "neutral" : d.option_usd > 0 ? "good" : "bad"}
+        hint={d.option_usd === null ? "No option prices kept" : `${num(d.option_trades)} contract${d.option_trades === 1 ? "" : "s"}, one each, before fees`}
+      />
+      <StatTile label="Hit target 1" value={d.filled ? `${d.t1} of ${d.filled}` : DASH} tone={d.filled ? (d.t1 >= d.stopped ? "good" : "bad") : "neutral"} hint={`${num(d.stopped)} stopped out`} />
+      <StatTile label="Direction right" value={d.bias_calls ? `${d.bias_right} of ${d.bias_calls}` : DASH} tone="neutral" hint="Names that moved the way the card expected" />
+    </StatTiles>
+  );
+}
+
+/** How the day narrowed: setups, levels reached, fills on the pullback, and how the fills ended. */
+function DayPath({ d }: { d: LedgerDay }) {
+  const steps: [number | string, string][] = [
+    [d.sides, "setups on the card"],
+    [d.triggered, "levels reached"],
+    [d.filled, "filled on the pullback"],
+    [d.t1, `hit target 1, ${d.stopped} stopped`],
   ];
   return (
-    <dl className="flex flex-wrap gap-x-6 gap-y-2">
-      {items.map(([v, k]) => (
-        <div key={k} className="grid">
-          <dd className="font-mono text-lg font-medium tabular-nums">{v}</dd>
-          <dt className="text-muted-foreground order-last text-xs">{k}</dt>
-        </div>
+    <ol className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs" aria-label="How the day narrowed">
+      {steps.map(([v, k], i) => (
+        <li key={k} className="flex items-center gap-2">
+          {i ? <ChevronRight aria-hidden className="size-3.5" /> : null}
+          <span>
+            <span className="text-foreground font-mono font-medium">{v}</span> {k}
+          </span>
+        </li>
       ))}
-    </dl>
+    </ol>
   );
 }
 
@@ -362,10 +634,14 @@ export function LedgerReview({ e, base = "/options/record", id = "card-review" }
       action={nav}
       contentClassName="grid gap-4"
     >
-      <Verdict d={e.day} />
-      <Counts d={e.day} />
+      {e.day.filled ? <Scoreboard d={e.day} /> : <Verdict d={e.day} />}
+      <DayPath d={e.day} />
+      <Trades e={e} />
       <Lesson e={e} />
-      <Legend />
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        <Legend />
+        <Glossary />
+      </div>
       <div className="grid gap-3 md:grid-cols-2">
         {e.names.map((n) => (
           <NameTile key={n.symbol} n={n} />
@@ -504,7 +780,7 @@ function TierRow({ name, t, trust, tone }: { name: string; t: Tier; trust: strin
 }
 
 function TierTable({ tiers }: { tiers: LedgerEdition["record"]["tiers"] }) {
-  const head = ["Cards", "Trust", "Sessions", "Sides", "Fills", "Target 1 first", "95% range", "Avg R per fill", "Profit factor", "Bias right"];
+  const head = ["Cards", "Trust", "Sessions", "Sides", "Fills", "Target 1 first", "95% range", "Avg R per fill", "Profit factor", "Direction right"];
   const table = (rows: React.ReactNode, label: string) => (
     <div className="overflow-x-auto" tabIndex={0} role="region" aria-label={label}>
       <table className="w-full text-[0.8125rem]">
@@ -626,7 +902,7 @@ export function LedgerRecord({ e, base = "/options/record", current }: { e: Ledg
             <StatTile label="Fills" value={num(pub.filled)} hint={`of ${num(pub.sides)} sides over ${num(pub.sessions)} days`} />
             <StatTile label="Reached target 1 first" value={fracPct(pub.win.rate, 0)} hint={`95% range ${rangeOf(pub.win)}`} tone={pub.win.rate !== null && pub.win.rate > 1 / 3 ? "good" : "warn"} />
             <StatTile label="Average per fill" value={r2(pub.avg_r)} hint={hist ? `History ${r2(hist.avg_r)}` : undefined} tone={(pub.avg_r ?? 0) > 0 ? "good" : "bad"} />
-            <StatTile label="Bias right" value={fracPct(pub.bias.rate, 0)} hint={hist ? `History ${fracPct(hist.bias.rate, 0)}` : undefined} />
+            <StatTile label="Direction right" value={fracPct(pub.bias.rate, 0)} hint={hist ? `History ${fracPct(hist.bias.rate, 0)}` : undefined} />
             <StatTile
               label="Options, one contract each"
               value={dollars(opt.usd)}
