@@ -3,7 +3,8 @@
 // Picked after the close from the board; an optional pre-market line says where each name sits before the open.
 // Server-rendered and compact, so it can sit above the desk without pushing it off a laptop screen.
 import type { ReactNode } from "react";
-import { ArrowDownToLine, ArrowUpFromLine, MoveHorizontal, Target } from "lucide-react";
+import Link from "next/link";
+import { ArrowDownToLine, ArrowUpFromLine, ChevronRight, MoveHorizontal, Target } from "lucide-react";
 import { sydney, weekDate } from "@/lib/format";
 import { sessionView, type JournalDoc } from "@/lib/journal";
 import { expiryNote, focusPlan, GLOSSARY, levelWords, noEntryTimes, type SidePlan } from "@/lib/focus-plan";
@@ -190,10 +191,21 @@ export function FocusStrip({ e }: { e: Options }) {
   return (
     <section aria-labelledby="focus-title" className="grid gap-2">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h2 id="focus-title" className="flex items-center gap-2 text-sm font-semibold">
-          <Target aria-hidden className="text-muted-foreground size-4" />
-          Today&apos;s focus
-        </h2>
+        <div className="flex items-baseline gap-3">
+          <h2 id="focus-title" className="flex items-center gap-2 text-sm font-semibold">
+            <Target aria-hidden className="text-muted-foreground size-4" />
+            Today&apos;s focus
+          </h2>
+          {/* How past cards did, reachable at all times: the review itself shows here only outside market hours. */}
+          <Link
+            href="/options/record"
+            data-testid="card-record-link"
+            className="text-muted-foreground hover:text-foreground inline-flex items-center text-xs underline-offset-4 hover:underline"
+          >
+            Card record
+            <ChevronRight aria-hidden className="size-3.5" />
+          </Link>
+        </div>
         <p className="text-muted-foreground text-xs">
           {f.premarket ? `Pre-market check ${sydney(f.premarket.as_of)} Sydney. ` : f.picked_at ? `Picked ${sydney(f.picked_at)} Sydney. ` : ""}
           Enter only on a break then retest.
