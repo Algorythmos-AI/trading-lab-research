@@ -3,6 +3,7 @@ import { TradeRulesFor } from "@/components/trade-rules";
 import { BoardTable, EditionPanel, HowToRead, NoOptions, PaperPanel, RulesPanel, StructurePanel, TickerCards } from "@/components/options";
 import { FocusScope, LiveQuotes } from "@/components/client/live-layer";
 import { DayBar, FocusStrip, focusOnly } from "@/components/options-focus";
+import { LedgerReview } from "@/components/ledger";
 import { OptionsDesk } from "@/components/client/options-desk";
 import { OptionsGlance } from "@/components/client/options-glance";
 import { PaneBoundary } from "@/components/client/pane-boundary";
@@ -12,7 +13,8 @@ import { sydney, weekDate } from "@/lib/format";
 import { hourlyBySymbol } from "@/lib/hourly";
 import { interestBySymbol } from "@/lib/oi";
 import { builtFromOld, editionState, isDeskView, isHalfDay, mapView, viewForClock, type DeskPane, type Options } from "@/lib/options";
-import { listOptionsDates, loadJournal, loadOptions, loadOptionsLive, pageTime } from "@/lib/snapshot";
+import { showReview } from "@/lib/ledger";
+import { listOptionsDates, loadJournal, loadLedger, loadOptions, loadOptionsLive, pageTime } from "@/lib/snapshot";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Options" };
@@ -81,7 +83,7 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
   const rawDate = one(sp.d);
   const date = rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : undefined;
   // The paper positions are a view of now, so an older edition is drawn without them.
-  const [result, dates, positions, journal] = await Promise.all([loadOptions(date), listOptionsDates(), date ? null : loadOptionsLive(), loadJournal()]);
+  const [result, dates, positions, journal, ledger] = await Promise.all([loadOptions(date), listOptionsDates(), date ? null : loadOptionsLive(), loadJournal(), date ? null : loadLedger()]);
   const now = await pageTime();
   const live = positions?.status === "ok" ? positions.doc : null;
   if (result.status !== "ok") {
@@ -113,6 +115,12 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
     <>
       <h1 className="sr-only">Options</h1>
       <OldCloseNotice e={e} />
+      {/* The last scored card's review, outside market hours only: while the market is open the desk has the screen. */}
+      {ledger?.status === "ok" && showReview(now, ledger.edition.session, full.session) ? (
+        <PaneBoundary name="How the card did">
+          <LedgerReview e={ledger.edition} />
+        </PaneBoundary>
+      ) : null}
       {/* Top of the trading screen: the few names to watch, then the desk; the day's limits sit straight under it. */}
       <PaneBoundary name="Today's focus">
         <FocusStrip e={full} />

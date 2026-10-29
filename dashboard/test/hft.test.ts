@@ -555,6 +555,7 @@ describe("GET /api/health", () => {
     options_live: { status: "missing", accepts: 3, run_id: null, as_of: null, schema_version: null },
     options_clone: { status: "missing", accepts: 1, session: null, run_id: null, as_of: null, schema_version: null },
     journal: { status: "missing", accepts: 2, run_id: null, as_of: null, schema_version: null },
+    ledger: { status: "missing", accepts: 1, session: null, run_id: null, as_of: null, schema_version: null },
   };
 
   beforeEach(() => {

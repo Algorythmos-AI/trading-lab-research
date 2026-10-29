@@ -2,10 +2,11 @@ import "server-only";
 import { cache } from "react";
 import { LATEST_PATH, listPaths, readText } from "./blob";
 import type { CryptoSnapshot } from "./crypto.types";
-import { DESK_PATHS, JOURNAL_PATHS, OPTIONS_CLONE_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
+import { DESK_PATHS, JOURNAL_PATHS, LEDGER_PATHS, OPTIONS_CLONE_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
 import { fixtureOptionsClone, fixtureOptionsLive, FROZEN_NOW, parseFlags, partialOptions, poisonedJournal, poisonedOptions, v2Options, VARIANT_COOKIE, type VariantFlag } from "./fixture-variants";
 import type { HftSnapshot } from "./hft.types";
 import type { JournalDoc } from "./journal.types";
+import type { LedgerEdition } from "./ledger.types";
 import { logEvent } from "./log";
 import type { OptionsClone } from "./options-clone.types";
 import type { OptionsLive } from "./options-live.types";
@@ -308,3 +309,36 @@ export async function listOptionsDates(max = 30): Promise<string[]> {
     return [];
   }
 }
+
+export type LedgerResult = { status: "ok"; edition: LedgerEdition; source: "fixture" | "blob" } | { status: "missing" } | { status: "error" };
+
+/**
+ * A focus card ledger edition: the newest scored session, or the one for `date` (YYYY-MM-DD). "missing" until the
+ * ledger has published, or when that session was not scored.
+ */
+export const loadLedger = cache(async (date?: string): Promise<LedgerResult> => {
+  if (fixtureMode()) {
+    const flags = await fixtureFlags();
+    if (flags.has("empty")) return { status: "missing" };
+    if (flags.has("error")) return { status: "error" };
+    const mod = await import("../../test/fixtures/ledger.v1.json");
+    const edition = (mod.default ?? mod) as unknown as LedgerEdition;
+    // The fixture holds one scored day; any other date asked for has none, as on the live site.
+    if (date && date !== edition.session) return { status: "missing" };
+    return { status: "ok", edition, source: "fixture" };
+  }
+  const path = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${LEDGER_PATHS.history}${date}.json` : LEDGER_PATHS.latest;
+  try {
+    const stored = await readText(path);
+    if (!stored) return { status: "missing" };
+    const parsed: unknown = JSON.parse(stored.text);
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      logEvent("snapshot.read", { outcome: "not-an-object", desk: "ledger" });
+      return { status: "error" };
+    }
+    return { status: "ok", edition: parsed as LedgerEdition, source: "blob" };
+  } catch (e) {
+    logEvent("snapshot.read", { outcome: "error", desk: "ledger", error: e instanceof Error ? e.name : "unknown" });
+    return { status: "error" };
+  }
+});

@@ -5,6 +5,8 @@ import type { CryptoSnapshot } from "./crypto.types";
 import hftSchema from "./hft.schema.json";
 import type { HftSnapshot } from "./hft.types";
 import journalSchema from "./journal.schema.json";
+import ledgerSchema from "./ledger.schema.json";
+import type { LedgerEdition } from "./ledger.types";
 import type { JournalDoc } from "./journal.types";
 import optionsCloneSchema from "./options-clone.schema.json";
 import type { OptionsClone } from "./options-clone.types";
@@ -27,6 +29,7 @@ const validateOptionsSchema = ajv.compile<OptionsEdition>(optionsSchema);
 const validateOptionsLiveSchema = ajv.compile<OptionsLive>(optionsLiveSchema);
 const validateJournalSchema = ajv.compile<JournalDoc>(journalSchema);
 const validateOptionsCloneSchema = ajv.compile<OptionsClone>(optionsCloneSchema);
+const validateLedgerSchema = ajv.compile<LedgerEdition>(ledgerSchema);
 
 export const STOCKS_SCHEMA = "trading-lab/snapshot";
 export const CRYPTO_SCHEMA = "trading-lab/crypto-snapshot";
@@ -67,6 +70,14 @@ export const JOURNAL_SCHEMA = "stocksdelta/journal";
 /** True when the signed body names the trade journal schema. */
 export function isJournal(data: unknown): boolean {
   return data !== null && typeof data === "object" && (data as { schema?: unknown }).schema === JOURNAL_SCHEMA;
+}
+
+/** The focus card ledger's edition: how the card did after the close. Research, like the options edition. */
+export const LEDGER_SCHEMA = "stocksdelta/ledger";
+
+/** True when the signed body names the ledger schema. */
+export function isLedger(data: unknown): boolean {
+  return data !== null && typeof data === "object" && (data as { schema?: unknown }).schema === LEDGER_SCHEMA;
 }
 
 /** True when the signed body names the options levels schema. */
@@ -283,4 +294,19 @@ export function validateOptionsClone(data: unknown): OptionsCloneValidationResul
   }
   if (errors.length > 0) return { ok: false, errors: errors.slice(0, MAX_ERRORS) };
   return { ok: true, doc: data as OptionsClone };
+}
+
+export type LedgerValidationResult = { ok: true; edition: LedgerEdition } | { ok: false; errors: string[] };
+
+/** A focus card ledger edition: its own schema, the same denylist. */
+export function validateLedger(data: unknown): LedgerValidationResult {
+  if (data === null || typeof data !== "object" || Array.isArray(data)) {
+    return { ok: false, errors: ["/: must be an object"] };
+  }
+  const errors = findDenied(data).map((p) => `${p}: key is not allowed to be published`);
+  if (!validateLedgerSchema(data)) {
+    errors.push(...(validateLedgerSchema.errors ?? []).map(describe));
+  }
+  if (errors.length > 0) return { ok: false, errors: errors.slice(0, MAX_ERRORS) };
+  return { ok: true, edition: data as LedgerEdition };
 }

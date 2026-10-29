@@ -61,6 +61,8 @@ public sources, not material derived from this repo. It is PRIVATE: owner-only, 
 applies to it, and nothing from `research/`, `knowledge/` or the specs may be put into a radar edition. The Options page
 (`stocksdelta/options`, the same key) is the same class under the same rules. So is the Trades page
 (`stocksdelta/journal`, the same key): the owner's own closed trades, never committed here; its fixture is synthetic.
+So is Card record (`/options/record`, `stocksdelta/ledger`, the same key): how the owner's focus card did, sent by the
+private focus-card-ledger repo after each close; its fixture's prices are synthetic.
 
 ## Layout
 

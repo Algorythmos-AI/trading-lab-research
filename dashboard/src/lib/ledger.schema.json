@@ -1,0 +1,197 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "stocksdelta/ledger",
+  "title": "Focus card ledger edition (published by focus-card-ledger after each close)",
+  "description": "How the Top 4 Focus Card did in one session: each name's levels, its 2-minute closes, every call and put side's result in R on the stock and in dollars on one 0DTE option contract, plus the running record of every scored session and the rebuilt history. The owner's own research from public prices, the same class as the options edition. Numbers, codes, statuses and dates only: no free text.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "schema_version", "run_id", "as_of", "session", "scorer_version", "names", "day", "record"],
+  "properties": {
+    "schema": { "const": "stocksdelta/ledger" },
+    "schema_version": { "type": "integer", "minimum": 1, "maximum": 1 },
+    "run_id": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "as_of": { "$ref": "#/definitions/time" },
+    "session": { "$ref": "#/definitions/date" },
+    "scorer_version": { "type": "string", "maxLength": 16 },
+    "card_source": { "description": "published: the card as sent before the open. rebuilt: re-picked later by the card's own code.", "enum": ["published", "rebuilt"] },
+    "names": { "type": "array", "maxItems": 12, "items": { "$ref": "#/definitions/name" } },
+    "day": { "$ref": "#/definitions/day" },
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["days", "tiers"],
+      "properties": {
+        "days": { "description": "Every scored published session, oldest first.", "type": "array", "maxItems": 400, "items": { "$ref": "#/definitions/day" } },
+        "tiers": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "published": { "$ref": "#/definitions/tier" },
+            "rebuilt_2min": { "$ref": "#/definitions/tier" },
+            "rebuilt_60min": { "$ref": "#/definitions/tier" }
+          }
+        },
+        "history": {
+          "description": "The rebuilt cards scored on 2-minute bars.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["daily_r", "by_symbol", "by_distance", "by_weekday"],
+          "properties": {
+            "daily_r": { "type": "array", "maxItems": 400, "items": { "$ref": "#/definitions/dayR" } },
+            "by_symbol": { "type": "array", "maxItems": 30, "items": { "$ref": "#/definitions/slice" } },
+            "by_distance": { "type": "array", "maxItems": 6, "items": { "$ref": "#/definitions/slice" } },
+            "by_weekday": { "type": "array", "maxItems": 5, "items": { "$ref": "#/definitions/slice" } }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "time": { "type": "string", "maxLength": 40, "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$" },
+    "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+    "symbol": { "type": "string", "pattern": "^[A-Z][A-Z0-9.]{0,9}$" },
+    "price": { "type": "number", "exclusiveMinimum": 0, "maximum": 1000000 },
+    "maybePrice": { "anyOf": [{ "$ref": "#/definitions/price" }, { "type": "null" }] },
+    "maybeR": { "anyOf": [{ "type": "number", "minimum": -100, "maximum": 100 }, { "type": "null" }] },
+    "maybeTime": { "anyOf": [{ "$ref": "#/definitions/time" }, { "type": "null" }] },
+    "rate": {
+      "description": "k of n, with its 95% range.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["k", "n", "rate", "lo", "hi"],
+      "properties": {
+        "k": { "type": "integer", "minimum": 0 },
+        "n": { "type": "integer", "minimum": 0 },
+        "rate": { "anyOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }] },
+        "lo": { "anyOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }] },
+        "hi": { "anyOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }] }
+      }
+    },
+    "bars": {
+      "description": "Regular-session bars. t is minutes after 09:30 New York, so a clock change never moves them.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bar_seconds", "source", "t", "close", "high", "low"],
+      "properties": {
+        "bar_seconds": { "type": "integer", "minimum": 60, "maximum": 3600 },
+        "source": { "enum": ["IBKR", "Webull"] },
+        "t": { "type": "array", "maxItems": 400, "items": { "type": "integer", "minimum": 0, "maximum": 390 } },
+        "close": { "type": "array", "maxItems": 400, "items": { "$ref": "#/definitions/price" } },
+        "high": { "type": "array", "maxItems": 400, "items": { "$ref": "#/definitions/price" } },
+        "low": { "type": "array", "maxItems": 400, "items": { "$ref": "#/definitions/price" } }
+      }
+    },
+    "option": {
+      "description": "One contract bought at the fill and sold by the card's rule. Dollars, before fees.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["right", "strike", "expiry", "entry_premium", "pnl_usd", "return_pct", "exit_time", "reason"],
+      "properties": {
+        "right": { "enum": ["C", "P"] },
+        "strike": { "$ref": "#/definitions/price" },
+        "expiry": { "$ref": "#/definitions/date" },
+        "entry_premium": { "$ref": "#/definitions/price" },
+        "pnl_usd": { "anyOf": [{ "type": "number", "minimum": -100000, "maximum": 100000 }, { "type": "null" }] },
+        "return_pct": { "anyOf": [{ "type": "number", "minimum": -100, "maximum": 100000 }, { "type": "null" }] },
+        "exit_time": { "$ref": "#/definitions/maybeTime" },
+        "reason": { "enum": ["option_stop_25pct", "target1", "target2", "stopped", "time_exit", "session_close", "no_bars"] }
+      }
+    },
+    "side": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["side", "level", "entry", "stop", "t1", "t2", "result", "triggered", "filled", "trigger_time", "fill_time", "exit_time", "exit", "r", "r_five_min", "r_hold_t2", "option"],
+      "properties": {
+        "side": { "enum": ["call", "put"] },
+        "confidence": { "enum": ["high", "medium", "low"] },
+        "level": { "$ref": "#/definitions/price" },
+        "entry": { "$ref": "#/definitions/price" },
+        "stop": { "$ref": "#/definitions/price" },
+        "t1": { "$ref": "#/definitions/price" },
+        "t2": { "$ref": "#/definitions/maybePrice" },
+        "result": { "description": "no_fill: the level traded but price never came back to the entry. failed_before_retest: it closed back through the stop first.", "enum": ["target1", "target2", "stopped", "time_exit", "session_close", "no_trigger", "no_fill", "failed_before_retest", "no_bars"] },
+        "triggered": { "type": "boolean" },
+        "filled": { "type": "boolean" },
+        "trigger_time": { "$ref": "#/definitions/maybeTime" },
+        "fill_time": { "$ref": "#/definitions/maybeTime" },
+        "exit_time": { "$ref": "#/definitions/maybeTime" },
+        "exit": { "$ref": "#/definitions/maybePrice" },
+        "r": { "$ref": "#/definitions/maybeR" },
+        "r_five_min": { "$ref": "#/definitions/maybeR" },
+        "r_hold_t2": { "$ref": "#/definitions/maybeR" },
+        "option": { "anyOf": [{ "$ref": "#/definitions/option" }, { "type": "null" }] }
+      }
+    },
+    "name": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["symbol", "rank", "bias", "ceiling", "floor", "atr", "bias_correct", "bars", "sides"],
+      "properties": {
+        "symbol": { "$ref": "#/definitions/symbol" },
+        "rank": { "type": "integer", "minimum": 1, "maximum": 12 },
+        "bias": { "enum": ["support", "breakout", "range"] },
+        "ceiling": { "$ref": "#/definitions/maybePrice" },
+        "floor": { "$ref": "#/definitions/maybePrice" },
+        "atr": { "$ref": "#/definitions/price" },
+        "bias_correct": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] },
+        "bars": { "anyOf": [{ "$ref": "#/definitions/bars" }, { "type": "null" }] },
+        "sides": { "type": "array", "maxItems": 2, "items": { "$ref": "#/definitions/side" } }
+      }
+    },
+    "day": {
+      "description": "One session's totals. r and r_five_min sum the filled sides; option_usd is null before option prices were kept.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session", "sides", "triggered", "filled", "t1", "stopped", "r", "r_five_min", "option_usd", "option_trades", "bias_right", "bias_calls"],
+      "properties": {
+        "session": { "$ref": "#/definitions/date" },
+        "sides": { "type": "integer", "minimum": 0, "maximum": 24 },
+        "triggered": { "type": "integer", "minimum": 0, "maximum": 24 },
+        "filled": { "type": "integer", "minimum": 0, "maximum": 24 },
+        "t1": { "type": "integer", "minimum": 0, "maximum": 24 },
+        "stopped": { "type": "integer", "minimum": 0, "maximum": 24 },
+        "r": { "type": "number", "minimum": -1000, "maximum": 1000 },
+        "r_five_min": { "type": "number", "minimum": -1000, "maximum": 1000 },
+        "option_usd": { "anyOf": [{ "type": "number", "minimum": -1000000, "maximum": 1000000 }, { "type": "null" }] },
+        "option_trades": { "type": "integer", "minimum": 0, "maximum": 24 },
+        "bias_right": { "type": "integer", "minimum": 0, "maximum": 12 },
+        "bias_calls": { "type": "integer", "minimum": 0, "maximum": 12 }
+      }
+    },
+    "tier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to", "sessions", "sides", "filled", "avg_r", "profit_factor", "win", "bias", "trigger"],
+      "properties": {
+        "from": { "$ref": "#/definitions/date" },
+        "to": { "$ref": "#/definitions/date" },
+        "sessions": { "type": "integer", "minimum": 0 },
+        "sides": { "type": "integer", "minimum": 0 },
+        "filled": { "type": "integer", "minimum": 0 },
+        "avg_r": { "$ref": "#/definitions/maybeR" },
+        "profit_factor": { "anyOf": [{ "type": "number", "minimum": 0, "maximum": 1000 }, { "type": "null" }] },
+        "win": { "$ref": "#/definitions/rate" },
+        "bias": { "$ref": "#/definitions/rate" },
+        "trigger": { "$ref": "#/definitions/rate" }
+      }
+    },
+    "dayR": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session", "r"],
+      "properties": { "session": { "$ref": "#/definitions/date" }, "r": { "type": "number", "minimum": -1000, "maximum": 1000 } }
+    },
+    "slice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "sides", "filled", "avg_r", "trigger_rate"],
+      "properties": {
+        "key": { "type": "string", "pattern": "^[A-Za-z0-9 .<>=-]{1,16}$" },
+        "sides": { "type": "integer", "minimum": 0 },
+        "filled": { "type": "integer", "minimum": 0 },
+        "avg_r": { "$ref": "#/definitions/maybeR" },
+        "trigger_rate": { "anyOf": [{ "type": "number", "minimum": 0, "maximum": 1 }, { "type": "null" }] }
+      }
+    }
+  }
+}

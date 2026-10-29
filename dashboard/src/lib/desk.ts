@@ -80,6 +80,15 @@ export const OPTIONS_CLONE_PATHS = {
   latest: "options-clone/latest.json",
 } as const;
 
+/**
+ * The focus card ledger's editions (stocksdelta/ledger): how the Top 4 Focus Card did, one per session it scored,
+ * kept the same way as the radar's. Each carries the running record too, so the latest alone draws Card record.
+ */
+export const LEDGER_PATHS = {
+  latest: "ledger/latest.json",
+  history: "ledger/editions/",
+} as const;
+
 /** The after-close options levels editions, one per session they are built for, kept the same way as the radar's. */
 export const OPTIONS_PATHS = {
   latest: "options/latest.json",
