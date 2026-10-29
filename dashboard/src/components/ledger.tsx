@@ -731,3 +731,46 @@ export function NoLedger({ status, date }: { status: "missing" | "error"; date?:
     </p>
   );
 }
+
+/** The last scored day in one line, with a link to its review: for Today, and for Options while the market is open. */
+export function LedgerLine({ e, href = "/options/record" }: { e: LedgerEdition; href?: string }) {
+  const d = e.day;
+  const fills = e.names.flatMap((n) => n.sides.filter((s) => s.filled));
+  return (
+    <Link
+      href={`${href}?d=${e.session}#card-review`}
+      className="bg-card hover:bg-muted/50 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-lg border px-3.5 py-2.5"
+      data-testid="ledger-line"
+    >
+      <span className="flex gap-1" aria-hidden>
+        {fills.length === 0 ? <span className="bg-neutral-fill/40 h-5 w-2.5 rounded-[2px]" /> : null}
+        {fills.map((s, i) => (
+          <span key={i} className={cn("h-5 w-2.5 rounded-[2px]", s.result === "stopped" ? "bg-bad-fill" : isWin(s) ? "bg-good-fill" : "bg-neutral-fill")} />
+        ))}
+      </span>
+      <span className="grid min-w-0">
+        <span className="text-sm font-medium">Card scored · {weekDate(e.session)}</span>
+        <span className="text-muted-foreground truncate text-xs">
+          {d.filled === 0 ? (
+            "No side filled"
+          ) : (
+            <>
+              {d.t1} of {d.filled} fills hit target 1 · stock <span className={cn("font-mono", toneOf(d.r))}>{r2(d.r)}</span>
+              {d.option_usd !== null ? (
+                <>
+                  {" "}
+                  · options <span className={cn("font-mono", toneOf(d.option_usd))}>{dollars(d.option_usd)}</span>
+                </>
+              ) : null}
+            </>
+          )}
+          {d.bias_calls ? ` · bias right on ${d.bias_right} of ${d.bias_calls}` : ""}
+        </span>
+      </span>
+      <span className="text-primary inline-flex items-center text-sm font-medium whitespace-nowrap">
+        Open the review
+        <ChevronRight aria-hidden className="size-4" />
+      </span>
+    </Link>
+  );
+}

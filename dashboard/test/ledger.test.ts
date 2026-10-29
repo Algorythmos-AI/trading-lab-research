@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LEDGER_ACCEPTS, ledgerHealth } from "@/lib/editions";
 import { sign } from "@/lib/hmac";
-import { optionStoppedFirst, optionTotal, RESULT, running, sessionMinute, weekGrid, type LedgerDay } from "@/lib/ledger";
+import { optionStoppedFirst, optionTotal, RESULT, running, showReview, sessionMinute, weekGrid, type LedgerDay } from "@/lib/ledger";
 import type { LedgerEdition } from "@/lib/ledger.types";
 import { isLedger, LEDGER_SCHEMA, validateLedger } from "@/lib/validate";
 import ledgerJson from "./fixtures/ledger.v1.json";
@@ -163,5 +163,21 @@ describe("reading an edition for the page", () => {
     const weeks = weekGrid([d("2026-10-22"), d("2026-10-23"), d("2026-10-26"), d("2026-10-28")]);
     expect(weeks.map((w) => w[0]!.date)).toEqual(["2026-10-19", "2026-10-26"]);
     expect(weeks[1]!.map((c) => c.day?.session ?? null)).toEqual(["2026-10-26", null, "2026-10-28", null, null]);
+  });
+});
+
+describe("when Options shows the review", () => {
+  const at = (iso: string) => showReview(new Date(iso), "2026-10-29", "2026-10-30");
+  it("not while New York is open; after the close, before the open and at weekends it does", () => {
+    expect(at("2026-10-29T15:00:00Z")).toBe(false); // Thu 11:00 New York
+    expect(at("2026-10-29T20:30:00Z")).toBe(true); // Thu 16:30, after the close
+    expect(at("2026-10-30T13:00:00Z")).toBe(true); // Fri 09:00, before the open
+    expect(at("2026-10-31T15:00:00Z")).toBe(true); // Saturday
+    expect(showReview(new Date("2026-11-02T14:45:00Z"), "2026-10-30", "2026-11-02")).toBe(false); // Mon 09:45 on standard time
+  });
+
+  it("only for a card scored before the desk's session", () => {
+    expect(showReview(new Date("2026-10-29T20:30:00Z"), "2026-10-29", "2026-10-29")).toBe(false);
+    expect(showReview(new Date("2026-10-29T20:30:00Z"), "2026-10-28", "2026-10-12")).toBe(false);
   });
 });

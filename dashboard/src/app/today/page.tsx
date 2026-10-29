@@ -12,7 +12,8 @@ import { StatusBadge } from "@/components/status";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { duration, newYork, num, rMult, shortDate, sydney } from "@/lib/format";
 import { humanize, jobName, jobTone } from "@/lib/labels";
-import { loadJournal, loadOptions, loadRadar, loadSnapshot, pageTime } from "@/lib/snapshot";
+import { loadJournal, loadLedger, loadOptions, loadRadar, loadSnapshot, pageTime } from "@/lib/snapshot";
+import { LedgerLine } from "@/components/ledger";
 import { NoJournal } from "@/components/journal";
 import { NextSessionPanel } from "@/components/overview/home";
 import { YourDay } from "@/components/today/your-day";
@@ -24,7 +25,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Today" };
 
 export default async function TodayPage() {
-  const [result, journal, options, radar, now] = await Promise.all([loadSnapshot(), loadJournal(), loadOptions(), loadRadar(), pageTime()]);
+  const [result, journal, options, radar, now, ledger] = await Promise.all([loadSnapshot(), loadJournal(), loadOptions(), loadRadar(), pageTime(), loadLedger()]);
   return (
     <>
       <PageHeading
@@ -38,6 +39,11 @@ export default async function TodayPage() {
       ) : (
         <NoJournal status={journal.status} />
       )}
+      {ledger.status === "ok" ? (
+        <PaneBoundary name="Card scored">
+          <LedgerLine e={ledger.edition} />
+        </PaneBoundary>
+      ) : null}
       <PaneBoundary name="Next session">
         <NextSessionPanel options={options.status === "ok" ? options.edition : null} radar={radar.status === "ok" ? radar.edition : null} />
       </PaneBoundary>

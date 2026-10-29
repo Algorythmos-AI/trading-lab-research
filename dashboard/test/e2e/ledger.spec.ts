@@ -32,3 +32,16 @@ test("health reports the ledger edition", async ({ request }) => {
   const body = await (await request.get("/api/health")).json();
   expect(body.editions.ledger).toMatchObject({ status: "ok", accepts: 1, session: "2026-10-28" });
 });
+
+test("Today links to the last scored card", async ({ page }) => {
+  await page.goto("/today");
+  const line = page.getByTestId("ledger-line");
+  await expect(line).toContainText("Card scored · Wed 28 Oct");
+  await expect(line).toHaveAttribute("href", "/options/record?d=2026-10-28#card-review");
+});
+
+test("Options leaves the screen to the desk when the scored card is not the day before its levels", async ({ page }) => {
+  // The fixture's levels are for 12 Oct and its scored card is 28 Oct, so the desk page shows no review.
+  await page.goto("/options");
+  await expect(page.locator("#card-review")).toHaveCount(0);
+});

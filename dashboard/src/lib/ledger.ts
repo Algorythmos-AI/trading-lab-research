@@ -111,3 +111,18 @@ export function weekGrid(days: readonly Day[], last = 6): { date: string; day: D
   }
   return weeks;
 }
+
+/**
+ * Whether the Options page shows the last scored day's review. Not while New York's regular session is open: the
+ * page is then for trading, and the desk must fit one laptop screen. After the close, overnight and at weekends it
+ * does, and only for a card scored before the session the desk's levels are for: the day just gone, not a stale
+ * or a later one. Today keeps a one-line link at all times.
+ */
+export function showReview(now: Date, scored: string, deskSession: string): boolean {
+  if (!(scored < deskSession)) return false;
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(now);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  const minute = Number(get("hour")) * 60 + Number(get("minute"));
+  const weekday = !["Sat", "Sun"].includes(get("weekday"));
+  return !(weekday && minute >= 570 && minute < 960);
+}
