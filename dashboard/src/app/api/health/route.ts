@@ -1,12 +1,12 @@
 import { deskNote } from "@/lib/desk-state";
-import { journalHealth, optionsCloneHealth, optionsHealth, optionsLiveHealth, radarHealth } from "@/lib/editions";
-import { fixtureMode, loadCryptoSnapshot, loadHftSnapshot, loadJournal, loadOptions, loadOptionsClone, loadOptionsLive, loadRadar, loadSnapshot } from "@/lib/snapshot";
+import { journalHealth, ledgerHealth, optionsCloneHealth, optionsHealth, optionsLiveHealth, radarHealth } from "@/lib/editions";
+import { fixtureMode, loadCryptoSnapshot, loadHftSnapshot, loadJournal, loadLedger, loadOptions, loadOptionsClone, loadOptionsLive, loadRadar, loadSnapshot } from "@/lib/snapshot";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(): Promise<Response> {
-  const [result, crypto, hft, options, radar, optionsLive, journal, optionsClone] = await Promise.all([
+  const [result, crypto, hft, options, radar, optionsLive, journal, optionsClone, ledger] = await Promise.all([
     loadSnapshot(),
     loadCryptoSnapshot(),
     loadHftSnapshot(),
@@ -15,6 +15,7 @@ export async function GET(): Promise<Response> {
     loadOptionsLive(),
     loadJournal(),
     loadOptionsClone(),
+    loadLedger(),
   ]);
   // BUILD_SHA is inlined at build time (next.config.ts) by CI and `make dashboard-deploy`. `||`, not `??`:
   // VERCEL_GIT_COMMIT_SHA is an empty string on CLI deploys, which `??` would keep.
@@ -51,6 +52,7 @@ export async function GET(): Promise<Response> {
         options_live: optionsLiveHealth(optionsLive),
         options_clone: optionsCloneHealth(optionsClone),
         journal: journalHealth(journal),
+        ledger: ledgerHealth(ledger),
       },
       ...(fixtureMode() ? { fixture: true } : {}),
     },
