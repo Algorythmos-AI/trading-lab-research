@@ -120,7 +120,7 @@ def test_an_unfilled_entry_is_cancelled_and_confirmed_and_a_late_fill_is_honoure
 
 
 @pytest.mark.parametrize("kw, limit, why", [
-    ({}, 2.05, "cap"),
+    ({}, 15.05, "cap"),
     ({"names_today": {"QQQ"}}, 1.02, "not one of today's names"),
     ({"kill": True}, 1.02, "KILL"),
     ({"latched": "day"}, 1.02, "latched"),
@@ -324,11 +324,11 @@ def test_a_trade_is_booked_exactly_once_and_an_unfilled_entry_never(tmp_path):
 def test_latches_are_durable_and_keyed(tmp_path):
     lat = Latches(tmp_path / "latches")
     mon, tue = dt.date(2026, 10, 19), dt.date(2026, 10, 20)
-    assert lat.check(mon, NOW, LIM, day_pnl=-100.0, week_pnl=-100.0, from_peak=-100.0) == "day"
+    assert lat.check(mon, NOW, LIM, day_pnl=-750.0, week_pnl=-750.0, from_peak=-750.0) == "day"
     assert lat.active(tue) is None                               # a new session
-    assert lat.check(tue, NOW, LIM, day_pnl=-50, week_pnl=-300.0, from_peak=-300) == "week"
+    assert lat.check(tue, NOW, LIM, day_pnl=-50, week_pnl=-2250.0, from_peak=-2250) == "week"
     assert lat.active(dt.date(2026, 10, 26)) is None             # a new week
-    assert lat.check(tue, NOW, LIM, day_pnl=0, week_pnl=0, from_peak=-500.0) == "drawdown"
+    assert lat.check(tue, NOW, LIM, day_pnl=0, week_pnl=0, from_peak=-3750.0) == "drawdown"
     assert lat.active(dt.date(2027, 1, 4)) == "drawdown"         # until the owner removes it
     (tmp_path / "latches" / "drawdown").unlink()
     (tmp_path / "latches" / "day").write_text("not json")

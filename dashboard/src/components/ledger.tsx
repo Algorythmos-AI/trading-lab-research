@@ -256,7 +256,7 @@ function Ticket({ s }: { s: LedgerSide }) {
           {s.option.exit_time && s.option.reason !== "session_close" ? ` at ${et(s.option.exit_time)}` : ""}.
         </p>
       ) : (
-        <p className="text-muted-foreground text-xs">No option contract cost $2.00 or less at the fill, so there is no option result.</p>
+        <p className="text-muted-foreground text-xs">No option contract met the clone's contract rules at the fill, so there is no option result.</p>
       )}
     </div>
   );
@@ -395,7 +395,7 @@ export const LEDGER_GLOSSARY: { term: string; words: string }[] = [
   { term: "Stopped", words: "A 2-minute close went past the stop before target 1 was reached." },
   { term: "Held to close", words: "Neither target 1 nor the stop was reached, so it was closed at 16:00 New York." },
   { term: "Direction (bias) right / wrong", words: "Whether the name moved the way the card expected. Hold support: right when the day's low stayed above the floor. Breakout watch: right when the day closed above the ceiling. A range card makes no call." },
-  { term: "Option $", words: "One contract (100 shares) bought at the fill and sold at its −25% stop, target 1 or the close, before fees. The nearest out-of-the-money strike costing $2.00 or less." },
+  { term: "Option $", words: "One contract (100 shares) bought at the fill and sold at its −25% stop, target 1 or the close, before fees. The nearest out-of-the-money strike within the options clone's price cap." },
   { term: "No-entry times", words: "The shaded parts of each chart: the first 5 minutes and 11:30 to 13:00 New York. The card takes no entries then." },
 ];
 

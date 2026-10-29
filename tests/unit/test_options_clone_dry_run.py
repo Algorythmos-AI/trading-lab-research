@@ -61,7 +61,7 @@ def test_the_time_stop_and_twice_the_spread_costs_more():
 def test_no_option_bar_and_over_the_cap_are_left_out_and_counted():
     d = run(bars=[])
     assert d.trades == [] and d.left_out["no-option-bar:retest"] == 1
-    d = run(lambda t: 2.10)
+    d = run(lambda t: 15.10)
     assert d.trades == [] and d.left_out["over-cap:retest"] == 1
 
 

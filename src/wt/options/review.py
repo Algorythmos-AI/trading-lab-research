@@ -6,6 +6,9 @@ fills, after fees. The verdict's range resamples whole sessions: trades on one d
 
 Each trade counts toward one trial (DEC-0034): a same-day contract toward its setup's (HYP-0029, HYP-0030); a contract
 expiring after its session toward `nearest` (HYP-0031), both setups pooled.
+
+Two windows of rules (DEC-0039): `old` takes sessions up to OLD_RULES_END (the $2.00 cap: EXP-0024, EXP-0026);
+`cap15` takes sessions from CAP15_START (the $15.00 cap: EXP-0028). No trade counts in both.
 """
 from __future__ import annotations
 
@@ -21,6 +24,14 @@ MIN_TRADES, MIN_SESSIONS = 30, 20
 SETUPS = ("retest", "rejection")
 NEAREST = "nearest"
 TRIALS = (*SETUPS, NEAREST)
+OLD_RULES_END, CAP15_START = "2026-10-29", "2026-10-30"
+WINDOWS: dict[str, tuple[str | None, str | None]] = {"old": (None, OLD_RULES_END), "cap15": (CAP15_START, None)}
+
+
+def in_window(rows: Sequence[Mapping[str, Any]], rules: str) -> list[Mapping[str, Any]]:
+    """The rows whose session falls in the window of `rules` (`old` or `cap15`), ends included."""
+    since, until = WINDOWS[rules]
+    return [r for r in rows if (since is None or session_of(r) >= since) and (until is None or session_of(r) <= until)]
 
 
 def session_of(row: Mapping[str, Any]) -> str:
