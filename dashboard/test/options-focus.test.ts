@@ -84,6 +84,12 @@ describe("today's focus", () => {
     expect(renderToStaticMarkup(createElement(FocusStrip, { e: withFocus() }))).not.toContain("expire today");
   });
 
+  it("links to Card record beside the heading, so past cards are a click away during market hours too", () => {
+    const html = renderToStaticMarkup(createElement(FocusStrip, { e: withFocus() }));
+    expect(html).toContain('href="/options/record"');
+    expect(html).toContain("Card record");
+  });
+
   it("draws nothing without a focus block", () => {
     expect(renderToStaticMarkup(createElement(FocusStrip, { e: v1 }))).toBe("");
   });
