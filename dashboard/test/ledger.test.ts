@@ -6,7 +6,7 @@ import type { LedgerEdition } from "@/lib/ledger.types";
 import { isLedger, LEDGER_SCHEMA, validateLedger } from "@/lib/validate";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { LedgerReview, LEDGER_GLOSSARY, priceLabels, spread } from "@/components/ledger";
+import { LedgerReview, LEDGER_GLOSSARY, moveAShare, priceLabels, spread } from "@/components/ledger";
 import ledgerJson from "./fixtures/ledger.v1.json";
 
 // The focus card ledger: after each close, focus-card-ledger sends how the Top 4 Focus Card did as a research
@@ -223,10 +223,21 @@ describe("the prices are written out, not only drawn", () => {
     const e = edition();
     const html = renderToStaticMarkup(createElement(LedgerReview, { e }));
     expect(html).toContain('data-testid="ledger-trades"');
-    for (const h of ["Ticker", "Entry", "Target 1", "Exit", "Gain (R)", "Option", "Day total"]) expect(html).toContain(h);
+    for (const h of ["Ticker", "Entry", "Stop", "Target 1", "Exit", "Gain (R)", "Option", "Day total", "Stock result", "Option result", "Hit target 1", "Direction right"]) expect(html).toContain(h);
+    expect(html.match(/data-testid="ledger-ticket"/g)?.length).toBe(e.names.flatMap((n) => n.sides.filter((s) => s.filled)).length);
     const filled = e.names.flatMap((n) => n.sides.filter((s) => s.filled));
     for (const s of filled) expect(html).toContain(s.entry.toFixed(2));
     expect(html).toContain('data-testid="ledger-glossary"');
     for (const g of LEDGER_GLOSSARY) expect(html).toContain(g.term.replace("&", "&amp;"));
+  });
+});
+
+describe("a trade in dollars a share", () => {
+  it("is the exit against the entry in the trade's direction, and nothing when it did not fill", () => {
+    const side = (over: Partial<LedgerEdition["names"][number]["sides"][number]>) => ({ ...edition().names[0]!.sides[0]!, ...over });
+    expect(moveAShare(side({ side: "call", filled: true, entry: 624.68, exit: 630.3 }))).toBe(5.62);
+    expect(moveAShare(side({ side: "put", filled: true, entry: 214.41, exit: 213.09 }))).toBe(1.32);
+    expect(moveAShare(side({ side: "put", filled: true, entry: 708.73, exit: 710.32 }))).toBe(-1.59);
+    expect(moveAShare(side({ filled: false, exit: null }))).toBeNull();
   });
 });
