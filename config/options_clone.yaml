@@ -84,7 +84,7 @@ contract:
   min_delta: 0.35
   min_delta_late: 0.40
   late_from: "13:30"
-  max_ask: 2.00                 # $200 a contract
+  max_ask: 15.00                # $1,500 a contract (DEC-0039; $2.00 up to 2026-10-29)
   max_spread_pct_of_mid: 8
   max_spread: 0.15
   min_volume: 500

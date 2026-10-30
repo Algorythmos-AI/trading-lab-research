@@ -184,7 +184,7 @@ def test_occ_symbols():
 
 def test_the_nearest_strike_that_passes_every_check_is_chosen():
     raw = dict([snap(580, 1.10, 1.12, 0.52), snap(581, 0.70, 0.72, 0.38), snap(579, 1.60, 1.62, 0.64),
-                snap(582, 0.40, 0.42, 0.25), snap(578, 2.10, 2.12, 0.74)])
+                snap(582, 0.40, 0.42, 0.25), snap(578, 15.10, 15.12, 0.74)])
     qs = chain.parse_snapshots(raw)
     oi = {q.contract.symbol: 5000.0 for q in qs}
     got = chain.pick(qs, "SPY", "call", DAY, 580.4, NOW, C, oi, set(), late=False)
