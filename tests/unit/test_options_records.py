@@ -36,6 +36,6 @@ def test_what_was_seen_before_registration_is_what_the_page_shows_and_shows_no_e
 def test_the_registry_counts_family_o_as_the_decision_states():
     rows = yaml.safe_load((ROOT / "config" / "trial_registry.yaml").read_text())["families"]["O"]
     assert rows[0] == {"decision": "DEC-0028", "total": 12, "status": "accepted"}
-    assert family_trial_count("O") == 15                         # DEC-0030 adds two setups, DEC-0034 one
+    assert family_trial_count("O") == 18                         # DEC-0030 adds two setups, DEC-0034 one, DEC-0039 three
     assert re.search(r"trial count for family O is 12", DECISION)
     assert re.search(r"\*\*Status: ACCEPTED on 2026-10-11\.\*\*", DECISION)
