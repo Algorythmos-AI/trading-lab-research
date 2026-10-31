@@ -1,0 +1,76 @@
+{
+  "date": "2026-10-26",
+  "top": [
+    {
+      "symbol": "CLRO",
+      "score": 75.848,
+      "subscores": {
+        "catalyst": 0.3,
+        "rvol": 1.0,
+        "float": 1.0,
+        "gap": 0.663,
+        "price": 1.0,
+        "liquidity": 1.0,
+        "spread": 0.531,
+        "float_rotation": 1.0
+      },
+      "features": {
+        "price": 4.2531,
+        "gap_pct": 30.86461538461538,
+        "rvol_tod": 24.15224593776752,
+        "pm_dollar_vol": 70886935.66009998,
+        "spread_pct": 0.4694835680751074,
+        "float_shares": 2675412.0
+      },
+      "rank": 1
+    },
+    {
+      "symbol": "RENT",
+      "score": 61.27,
+      "subscores": {
+        "catalyst": 0.0,
+        "rvol": 1.0,
+        "float": 0.5,
+        "gap": 0.614,
+        "price": 1.0,
+        "liquidity": 1.0,
+        "spread": 0.662,
+        "float_rotation": 1.0
+      },
+      "features": {
+        "price": 2.95,
+        "gap_pct": 28.260869565217405,
+        "rvol_tod": 13649.96,
+        "pm_dollar_vol": 41978069.325899996,
+        "spread_pct": 0.3384094754653058,
+        "float_shares": 33774121.0
+      },
+      "rank": 2
+    },
+    {
+      "symbol": "DXYZ",
+      "score": 25.136,
+      "subscores": {
+        "catalyst": 0.0,
+        "rvol": 0.568,
+        "float": 0.0,
+        "gap": 0.179,
+        "price": 0.3,
+        "liquidity": 0.278,
+        "spread": 0.966,
+        "float_rotation": 0.0
+      },
+      "features": {
+        "price": 29.57,
+        "gap_pct": 7.527272727272738,
+        "rvol_tod": 3.697272431578458,
+        "pm_dollar_vol": 2301684.2284999997,
+        "spread_pct": 0.03389256058295734,
+        "float_shares": null
+      },
+      "rank": 3
+    }
+  ],
+  "forward": true,
+  "strategy": "watchlist_bull_flag_atr_M1_v2"
+}
