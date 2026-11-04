@@ -212,6 +212,17 @@ def test_a_shadow_host_without_its_own_key_does_not_send(tmp_path, monkeypatch):
     assert ec.run(False, get=fake_get(), env=env, out=tmp_path, clock=NOW) == 2
 
 
+def test_it_runs_while_the_job_runner_holds_its_lock(tmp_path, monkeypatch):
+    from wt.ops import locks
+    monkeypatch.setattr(locks, "LOCK_DIR", tmp_path)
+    ran = []
+    monkeypatch.setattr(ec, "run", lambda dry_run: ran.append(dry_run) or 0)
+    with locks.job_lock("econ-calendar") as got:      # what wt.ops.jobs holds around the child process
+        assert got
+        assert ec.main(["--dry-run"]) == 0
+    assert ran == [True]
+
+
 def test_the_trading_calendar_is_never_written(tmp_path):
     path = ROOT / "config" / "events" / "macro_events.csv"
     before = hashlib.sha256(path.read_bytes()).hexdigest()
