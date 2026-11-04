@@ -2,7 +2,8 @@
 
     python scripts/options_clone_review.py [--date YYYY-MM-DD]
 
-Figures under the $2.00 cap (to 2026-10-29) and under the $15.00 cap (from 2026-10-30, EXP-0028) are kept apart.
+Figures under the $2.00 cap (to 2026-10-29) and under the $15.00 cap (2026-10-30 to 2026-11-04, EXP-0028) and under the
+$5.00 spread cap (from 2026-11-05, EXP-0029) are kept apart.
 Reads the clone's journal and the day's decision lines; writes var/options/review/<date>.json and prints a summary.
 Counts, statistics and R-like figures only. It never trades and never writes a verdict (options_clone_verdict.py).
 """
@@ -52,6 +53,7 @@ def build(day: str, journal: Path = JOURNAL, state: Path = OPT) -> dict:
                   "flat": next((r.get("flat") for r in today if r.get("event") == "verify_flat"), None)},
         "setups": review.review(review.in_window(trades, "old")),
         "cap15": review.review(review.in_window(trades, "cap15"), review.TRIALS),
+        "spread5": review.review(review.in_window(trades, "spread5"), review.TRIALS),
     }
 
 
@@ -66,7 +68,7 @@ def main(argv: list[str] | None = None) -> int:
     for name, n in sorted(doc["names"].items()):
         print(f"{name}: {n['bars']} bars, {n['setups']} setups, {n['entered']} entered, refused by {n['refused_by']}, "
               f"first refused by {n['refused_for']}")
-    for s, f in [*doc["setups"].items(), *((f"cap15 {k}", v) for k, v in doc["cap15"].items())]:
+    for s, f in [*doc["setups"].items(), *((f"{w} {k}", v) for w in ("cap15", "spread5") for k, v in doc[w].items())]:
         print(f"{s}: {f['trades']} trades in {f['sessions']} sessions, mean on premium {f.get('mean_rop')}, "
               f"range by session {f.get('ci_session')}, verdict {f['verdict']} ({'; '.join(f['why'])})")
     return 0
