@@ -1,0 +1,122 @@
+{
+  "date": "2026-10-28",
+  "top": [
+    {
+      "symbol": "GCTK",
+      "score": 82.774,
+      "subscores": {
+        "catalyst": 0.8,
+        "rvol": 1.0,
+        "float": 0.8,
+        "gap": 0.423,
+        "price": 1.0,
+        "liquidity": 1.0,
+        "spread": 0.506,
+        "float_rotation": 1.0
+      },
+      "features": {
+        "price": 2.03,
+        "gap_pct": 18.71345029239766,
+        "rvol_tod": 91.09025957596012,
+        "pm_dollar_vol": 25387498.5731,
+        "spread_pct": 0.49382716049381664,
+        "float_shares": 10578822.0
+      },
+      "rank": 1
+    },
+    {
+      "symbol": "BOOM",
+      "score": 74.361,
+      "subscores": {
+        "catalyst": 0.9,
+        "rvol": 1.0,
+        "float": 0.5,
+        "gap": 0.468,
+        "price": 1.0,
+        "liquidity": 0.339,
+        "spread": 0.845,
+        "float_rotation": 0.21
+      },
+      "features": {
+        "price": 6.468,
+        "gap_pct": 20.89719626168225,
+        "rvol_tod": 431.795,
+        "pm_dollar_vol": 2761068.85,
+        "spread_pct": 0.15467904098994256,
+        "float_shares": 20540949.0
+      },
+      "rank": 2
+    },
+    {
+      "symbol": "BKYI",
+      "score": 68.778,
+      "subscores": {
+        "catalyst": 0.5,
+        "rvol": 0.454,
+        "float": 1.0,
+        "gap": 0.435,
+        "price": 1.0,
+        "liquidity": 1.0,
+        "spread": 0.694,
+        "float_rotation": 1.0
+      },
+      "features": {
+        "price": 3.262,
+        "gap_pct": 19.268738574040235,
+        "rvol_tod": 2.843051787755572,
+        "pm_dollar_vol": 28402820.5011,
+        "spread_pct": 0.30627871362940984,
+        "float_shares": 1085360.0
+      },
+      "rank": 3
+    },
+    {
+      "symbol": "BRAI",
+      "score": 60.588,
+      "subscores": {
+        "catalyst": 0.3,
+        "rvol": 1.0,
+        "float": 0.0,
+        "gap": 0.952,
+        "price": 1.0,
+        "liquidity": 1.0,
+        "spread": 0.795,
+        "float_rotation": 0.0
+      },
+      "features": {
+        "price": 4.8701,
+        "gap_pct": 47.13293051359515,
+        "rvol_tod": 38.78986059400761,
+        "pm_dollar_vol": 51752988.0335,
+        "spread_pct": 0.20512820512820076,
+        "float_shares": null
+      },
+      "rank": 4
+    },
+    {
+      "symbol": "ULBI",
+      "score": 60.197,
+      "subscores": {
+        "catalyst": 0.0,
+        "rvol": 1.0,
+        "float": 0.8,
+        "gap": 1.0,
+        "price": 0.7,
+        "liquidity": 0.479,
+        "spread": 0.936,
+        "float_rotation": 0.162
+      },
+      "features": {
+        "price": 15.6,
+        "gap_pct": 145.2830188679245,
+        "rvol_tod": 269.938,
+        "pm_dollar_vol": 4204712.8343,
+        "spread_pct": 0.06408202499198838,
+        "float_shares": 16663269.0
+      },
+      "rank": 5
+    }
+  ],
+  "forward": true,
+  "strategy": "watchlist_bull_flag_atr_M1_v2"
+}

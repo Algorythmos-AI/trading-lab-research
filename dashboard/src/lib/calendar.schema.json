@@ -1,0 +1,97 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "stocksdelta/calendar",
+  "title": "Economic calendar (published by the econ-calendar job on the trading host)",
+  "description": "The release dates the Calendar page shows, read once a week from the agencies that set them: FRED's release calendar for CPI, PPI, jobs, JOLTS, retail sales, GDP and PCE, the Federal Reserve's FOMC calendar, and the BLS and BEA schedules as cross-checks. Dates and codes only: no titles, no free text. A month after a release's last published date is listed as not yet announced.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "schema_version", "run_id", "as_of", "range", "events", "not_announced", "disagreements", "sources"],
+  "definitions": {
+    "ymd": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+    "month": { "type": "string", "pattern": "^\\d{4}-\\d{2}$" },
+    "stamp": {
+      "type": "string",
+      "maxLength": 40,
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+    },
+    "code": {
+      "description": "Which release: drawn on the page only through its own label table.",
+      "enum": ["cpi", "ppi", "nfp", "jolts", "retail_sales", "gdp", "pce", "fomc_decision"]
+    },
+    "source": { "enum": ["fred", "fed", "bls", "bea"] }
+  },
+  "properties": {
+    "schema": { "const": "stocksdelta/calendar" },
+    "schema_version": { "const": 1 },
+    "run_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "as_of": { "$ref": "#/definitions/stamp" },
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": { "start": { "$ref": "#/definitions/ymd" }, "end": { "$ref": "#/definitions/ymd" } }
+    },
+    "events": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["date", "code", "time_et", "source", "checked_by"],
+        "properties": {
+          "date": { "$ref": "#/definitions/ymd" },
+          "code": { "$ref": "#/definitions/code" },
+          "time_et": { "type": "string", "pattern": "^\\d{2}:\\d{2}$" },
+          "source": { "$ref": "#/definitions/source" },
+          "checked_by": { "type": "array", "maxItems": 4, "uniqueItems": true, "items": { "$ref": "#/definitions/source" } }
+        }
+      }
+    },
+    "not_announced": {
+      "description": "Months in the range after a release's last published date.",
+      "type": "array",
+      "maxItems": 400,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "month"],
+        "properties": { "code": { "$ref": "#/definitions/code" }, "month": { "$ref": "#/definitions/month" } }
+      }
+    },
+    "disagreements": {
+      "description": "A month where a cross-check has a date the primary source does not: both are shown, neither is picked.",
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "month", "source", "dates", "other_source", "other_dates"],
+        "properties": {
+          "code": { "$ref": "#/definitions/code" },
+          "month": { "$ref": "#/definitions/month" },
+          "source": { "$ref": "#/definitions/source" },
+          "dates": { "type": "array", "maxItems": 5, "items": { "$ref": "#/definitions/ymd" } },
+          "other_source": { "$ref": "#/definitions/source" },
+          "other_dates": { "type": "array", "maxItems": 5, "items": { "$ref": "#/definitions/ymd" } }
+        }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "configured", "ok", "fetched_at", "stale_since", "rows"],
+        "properties": {
+          "id": { "$ref": "#/definitions/source" },
+          "configured": { "description": "False for FRED until its key is set.", "type": "boolean" },
+          "ok": { "description": "This run read the source.", "type": "boolean" },
+          "fetched_at": { "description": "When the rows in use were read.", "anyOf": [{ "$ref": "#/definitions/stamp" }, { "type": "null" }] },
+          "stale_since": { "description": "The first failed read since then, when the rows are carried forward.", "anyOf": [{ "$ref": "#/definitions/stamp" }, { "type": "null" }] },
+          "rows": { "type": "integer", "minimum": 0, "maximum": 2000 }
+        }
+      }
+    }
+  }
+}

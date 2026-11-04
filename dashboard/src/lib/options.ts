@@ -793,6 +793,11 @@ export const EVENT_LABEL: Readonly<Record<string, string>> = {
   fomc_minutes: "Fed minutes",
   fomc_emergency: "Fed emergency meeting",
   quad_witching: "Quad witching",
+  ppi: "PPI inflation",
+  pce: "PCE inflation",
+  gdp: "GDP",
+  retail_sales: "Retail sales",
+  jolts: "Job openings (JOLTS)",
   earnings: "Earnings",
 };
 export const OTHER_EVENT = "Other release";

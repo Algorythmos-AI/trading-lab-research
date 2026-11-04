@@ -1,0 +1,705 @@
+{
+ "schema": "stocksdelta/calendar",
+ "schema_version": 1,
+ "run_id": "fixture-calendar-1",
+ "as_of": "2026-11-07T15:00:00+00:00",
+ "range": {
+  "start": "2026-01-01",
+  "end": "2027-12-31"
+ },
+ "events": [
+  {
+   "date": "2026-01-28",
+   "code": "fomc_decision",
+   "time_et": "14:00",
+   "source": "fed",
+   "checked_by": []
+  },
+  {
+   "date": "2026-03-18",
+   "code": "fomc_decision",
+   "time_et": "14:00",
+   "source": "fed",
+   "checked_by": []
+  },
+  {
+   "date": "2026-04-29",
+   "code": "fomc_decision",
+   "time_et": "14:00",
+   "source": "fed",
+   "checked_by": []
+  },
+  {
+   "date": "2026-06-17",
+   "code": "fomc_decision",
+   "time_et": "14:00",
+   "source": "fed",
+   "checked_by": []
+  },
+  {
+   "date": "2026-07-29",
+   "code": "fomc_decision",
+   "time_et": "14:00",
+   "source": "fed",
+   "checked_by": []
+  },
+  {
+   "date": "2026-09-01",
+   "code": "jolts",
+   "time_et": "10:00",
+   "source": "fred",
+   "checked_by": [
+    "bls"
+   ]
+  },
+  {
+   "date": "2026-09-04",
+   "code": "nfp",
+   "time_et": "08:30",
+   "source": "fred",
+   "checked_by": [
+    "bls"
+   ]
+  },
+  {
+   "date": "2026-09-10",
+   "code": "ppi",
+   "time_et": "08:30",
+   "source": "fred",
+   "checked_by": [
+    "bls"
+   ]
+  },
+  {
+   "date": "2026-09-11",
+   "code": "cpi",
+   "time_et": "08:30",
+   "source": "fred",
+   "checked_by": [
+    "bls"
+   ]
+  },
+  {
+   "date": "2026-09-16",
+   "code": "retail_sales",
+   "time_et": "08:30",
+   "source": "fred",
+   "checked_by": []
+  },
+  {
+   "date": "2026-09-16",
+   "code": "fomc_decision",
+   "time_et": "14:00",
+   "source": "fed",
+   "checked_by": []
+  },
+  {
+   "date": "2026-09-29",
+   "code": "jolts",
+   "time_et": "10:00",
+   "source": "fred",
+   "checked_by": [
+    "bls"
+   ]
+  },
+  {
+   "date": "2026-10-02",
+   "code": "nfp",
+   "time_et": "08:30",
+   "source": "fred",
+   "checked_by": [
+    "bls"
+   ]
+  },
+  {
+   "date": "2026-10-14",
+   "code": "cpi",
+   "time_et": "08:30",
+   "source": "fred",
+   "checked_by": [
+    "bls"
+   ]
+  },
+  {
+   "date": "2026-10-15",
+   "code": "ppi",
+   "time_et": "08:30",
+   "source": "fred",
+   "checked_by": [
+    "bls"
+   ]
+  },
+  {
+   "date": "2026-10-16",
+   "code": "retail_sales",
+   "time_et": "08:30",
+   "source": "fred",
+   "checked_by": []
+  },
+  {
+   "date": "2026-10-28",
+   "code": "fomc_decision",
+   "time_et": "14:00",
+   "source": "fed",
+   "checked_by": []
+  },
+  {
+   "date": "2026-11-03",
+   "code": "jolts",
+   "time_et": "10:00",
+   "source": "fred",
+   "checked_by": [
+    "bls"
+   ]
+  },
+  {
+   "date": "2026-11-06",
+   "code": "nfp",
+   "time_et": "08:30",
+   "source": "fred",
+   "checked_by": [
+    "bls"
+   ]
+  },
+  {
+   "date": "2026-11-10",
+   "code": "cpi",
+   "time_et": "08:30",
+   "source": "fred",
+   "checked_by": [
+    "bls"
+   ]
+  },
+  {
+   "date": "2026-11-13",
+   "code": "ppi",
+   "time_et": "08:30",
+   "source": "fred",
+   "checked_by": [
+    "bls"
+   ]
+  },
+  {
+   "date": "2026-11-17",
+   "code": "retail_sales",
+   "time_et": "08:30",
+   "source": "fred",
+   "checked_by": []
+  },
+  {
+   "date": "2026-11-25",
+   "code": "gdp",
+   "time_et": "08:30",
+   "source": "fred",
+   "checked_by": [
+    "bea"
+   ]
+  },
+  {
+   "date": "2026-11-25",
+   "code": "pce",
+   "time_et": "08:30",
+   "source": "fred",
+   "checked_by": [
+    "bea"
+   ]
+  },
+  {
+   "date": "2026-12-01",
+   "code": "jolts",
+   "time_et": "10:00",
+   "source": "fred",
+   "checked_by": [
+    "bls"
+   ]
+  },
+  {
+   "date": "2026-12-04",
+   "code": "nfp",
+   "time_et": "08:30",
+   "source": "fred",
+   "checked_by": [
+    "bls"
+   ]
+  },
+  {
+   "date": "2026-12-09",
+   "code": "fomc_decision",
+   "time_et": "14:00",
+   "source": "fed",
+   "checked_by": []
+  },
+  {
+   "date": "2026-12-10",
+   "code": "cpi",
+   "time_et": "08:30",
+   "source": "fred",
+   "checked_by": [
+    "bls"
+   ]
+  },
+  {
+   "date": "2026-12-15",
+   "code": "ppi",
+   "time_et": "08:30",
+   "source": "fred",
+   "checked_by": [
+    "bls"
+   ]
+  },
+  {
+   "date": "2026-12-16",
+   "code": "retail_sales",
+   "time_et": "08:30",
+   "source": "fred",
+   "checked_by": []
+  },
+  {
+   "date": "2026-12-23",
+   "code": "gdp",
+   "time_et": "08:30",
+   "source": "fred",
+   "checked_by": [
+    "bea"
+   ]
+  },
+  {
+   "date": "2026-12-23",
+   "code": "pce",
+   "time_et": "08:30",
+   "source": "fred",
+   "checked_by": [
+    "bea"
+   ]
+  },
+  {
+   "date": "2027-01-27",
+   "code": "fomc_decision",
+   "time_et": "14:00",
+   "source": "fed",
+   "checked_by": []
+  },
+  {
+   "date": "2027-03-17",
+   "code": "fomc_decision",
+   "time_et": "14:00",
+   "source": "fed",
+   "checked_by": []
+  },
+  {
+   "date": "2027-04-28",
+   "code": "fomc_decision",
+   "time_et": "14:00",
+   "source": "fed",
+   "checked_by": []
+  },
+  {
+   "date": "2027-06-09",
+   "code": "fomc_decision",
+   "time_et": "14:00",
+   "source": "fed",
+   "checked_by": []
+  },
+  {
+   "date": "2027-07-28",
+   "code": "fomc_decision",
+   "time_et": "14:00",
+   "source": "fed",
+   "checked_by": []
+  },
+  {
+   "date": "2027-09-15",
+   "code": "fomc_decision",
+   "time_et": "14:00",
+   "source": "fed",
+   "checked_by": []
+  },
+  {
+   "date": "2027-10-27",
+   "code": "fomc_decision",
+   "time_et": "14:00",
+   "source": "fed",
+   "checked_by": []
+  },
+  {
+   "date": "2027-12-08",
+   "code": "fomc_decision",
+   "time_et": "14:00",
+   "source": "fed",
+   "checked_by": []
+  }
+ ],
+ "not_announced": [
+  {
+   "code": "cpi",
+   "month": "2027-01"
+  },
+  {
+   "code": "cpi",
+   "month": "2027-02"
+  },
+  {
+   "code": "cpi",
+   "month": "2027-03"
+  },
+  {
+   "code": "cpi",
+   "month": "2027-04"
+  },
+  {
+   "code": "cpi",
+   "month": "2027-05"
+  },
+  {
+   "code": "cpi",
+   "month": "2027-06"
+  },
+  {
+   "code": "cpi",
+   "month": "2027-07"
+  },
+  {
+   "code": "cpi",
+   "month": "2027-08"
+  },
+  {
+   "code": "cpi",
+   "month": "2027-09"
+  },
+  {
+   "code": "cpi",
+   "month": "2027-10"
+  },
+  {
+   "code": "cpi",
+   "month": "2027-11"
+  },
+  {
+   "code": "cpi",
+   "month": "2027-12"
+  },
+  {
+   "code": "ppi",
+   "month": "2027-01"
+  },
+  {
+   "code": "ppi",
+   "month": "2027-02"
+  },
+  {
+   "code": "ppi",
+   "month": "2027-03"
+  },
+  {
+   "code": "ppi",
+   "month": "2027-04"
+  },
+  {
+   "code": "ppi",
+   "month": "2027-05"
+  },
+  {
+   "code": "ppi",
+   "month": "2027-06"
+  },
+  {
+   "code": "ppi",
+   "month": "2027-07"
+  },
+  {
+   "code": "ppi",
+   "month": "2027-08"
+  },
+  {
+   "code": "ppi",
+   "month": "2027-09"
+  },
+  {
+   "code": "ppi",
+   "month": "2027-10"
+  },
+  {
+   "code": "ppi",
+   "month": "2027-11"
+  },
+  {
+   "code": "ppi",
+   "month": "2027-12"
+  },
+  {
+   "code": "nfp",
+   "month": "2027-01"
+  },
+  {
+   "code": "nfp",
+   "month": "2027-02"
+  },
+  {
+   "code": "nfp",
+   "month": "2027-03"
+  },
+  {
+   "code": "nfp",
+   "month": "2027-04"
+  },
+  {
+   "code": "nfp",
+   "month": "2027-05"
+  },
+  {
+   "code": "nfp",
+   "month": "2027-06"
+  },
+  {
+   "code": "nfp",
+   "month": "2027-07"
+  },
+  {
+   "code": "nfp",
+   "month": "2027-08"
+  },
+  {
+   "code": "nfp",
+   "month": "2027-09"
+  },
+  {
+   "code": "nfp",
+   "month": "2027-10"
+  },
+  {
+   "code": "nfp",
+   "month": "2027-11"
+  },
+  {
+   "code": "nfp",
+   "month": "2027-12"
+  },
+  {
+   "code": "jolts",
+   "month": "2027-01"
+  },
+  {
+   "code": "jolts",
+   "month": "2027-02"
+  },
+  {
+   "code": "jolts",
+   "month": "2027-03"
+  },
+  {
+   "code": "jolts",
+   "month": "2027-04"
+  },
+  {
+   "code": "jolts",
+   "month": "2027-05"
+  },
+  {
+   "code": "jolts",
+   "month": "2027-06"
+  },
+  {
+   "code": "jolts",
+   "month": "2027-07"
+  },
+  {
+   "code": "jolts",
+   "month": "2027-08"
+  },
+  {
+   "code": "jolts",
+   "month": "2027-09"
+  },
+  {
+   "code": "jolts",
+   "month": "2027-10"
+  },
+  {
+   "code": "jolts",
+   "month": "2027-11"
+  },
+  {
+   "code": "jolts",
+   "month": "2027-12"
+  },
+  {
+   "code": "retail_sales",
+   "month": "2027-01"
+  },
+  {
+   "code": "retail_sales",
+   "month": "2027-02"
+  },
+  {
+   "code": "retail_sales",
+   "month": "2027-03"
+  },
+  {
+   "code": "retail_sales",
+   "month": "2027-04"
+  },
+  {
+   "code": "retail_sales",
+   "month": "2027-05"
+  },
+  {
+   "code": "retail_sales",
+   "month": "2027-06"
+  },
+  {
+   "code": "retail_sales",
+   "month": "2027-07"
+  },
+  {
+   "code": "retail_sales",
+   "month": "2027-08"
+  },
+  {
+   "code": "retail_sales",
+   "month": "2027-09"
+  },
+  {
+   "code": "retail_sales",
+   "month": "2027-10"
+  },
+  {
+   "code": "retail_sales",
+   "month": "2027-11"
+  },
+  {
+   "code": "retail_sales",
+   "month": "2027-12"
+  },
+  {
+   "code": "gdp",
+   "month": "2027-01"
+  },
+  {
+   "code": "gdp",
+   "month": "2027-02"
+  },
+  {
+   "code": "gdp",
+   "month": "2027-03"
+  },
+  {
+   "code": "gdp",
+   "month": "2027-04"
+  },
+  {
+   "code": "gdp",
+   "month": "2027-05"
+  },
+  {
+   "code": "gdp",
+   "month": "2027-06"
+  },
+  {
+   "code": "gdp",
+   "month": "2027-07"
+  },
+  {
+   "code": "gdp",
+   "month": "2027-08"
+  },
+  {
+   "code": "gdp",
+   "month": "2027-09"
+  },
+  {
+   "code": "gdp",
+   "month": "2027-10"
+  },
+  {
+   "code": "gdp",
+   "month": "2027-11"
+  },
+  {
+   "code": "gdp",
+   "month": "2027-12"
+  },
+  {
+   "code": "pce",
+   "month": "2027-01"
+  },
+  {
+   "code": "pce",
+   "month": "2027-02"
+  },
+  {
+   "code": "pce",
+   "month": "2027-03"
+  },
+  {
+   "code": "pce",
+   "month": "2027-04"
+  },
+  {
+   "code": "pce",
+   "month": "2027-05"
+  },
+  {
+   "code": "pce",
+   "month": "2027-06"
+  },
+  {
+   "code": "pce",
+   "month": "2027-07"
+  },
+  {
+   "code": "pce",
+   "month": "2027-08"
+  },
+  {
+   "code": "pce",
+   "month": "2027-09"
+  },
+  {
+   "code": "pce",
+   "month": "2027-10"
+  },
+  {
+   "code": "pce",
+   "month": "2027-11"
+  },
+  {
+   "code": "pce",
+   "month": "2027-12"
+  }
+ ],
+ "disagreements": [],
+ "sources": [
+  {
+   "id": "fred",
+   "configured": true,
+   "ok": true,
+   "fetched_at": "2026-11-07T15:00:00+00:00",
+   "stale_since": null,
+   "rows": 24
+  },
+  {
+   "id": "fed",
+   "configured": true,
+   "ok": true,
+   "fetched_at": "2026-11-07T15:00:00+00:00",
+   "stale_since": null,
+   "rows": 16
+  },
+  {
+   "id": "bls",
+   "configured": true,
+   "ok": true,
+   "fetched_at": "2026-11-07T15:00:00+00:00",
+   "stale_since": null,
+   "rows": 16
+  },
+  {
+   "id": "bea",
+   "configured": true,
+   "ok": true,
+   "fetched_at": "2026-11-07T15:00:00+00:00",
+   "stale_since": null,
+   "rows": 4
+  }
+ ]
+}

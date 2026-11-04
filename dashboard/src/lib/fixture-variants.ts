@@ -2,6 +2,7 @@
 // down, a sparse edition, a corrupt one, the live feed off or failing). They exist only in fixture mode
 // (DASHBOARD_FIXTURE=1, refused in production) and are chosen per request by the `fx` cookie, so the browser tests
 // can put any page into any state. Pure: no I/O.
+import type { CalendarDoc } from "./calendar.types";
 import type { OptionsClone } from "./options-clone.types";
 import type { OptionsLive } from "./options-live.types";
 import type { OptionsEdition } from "./options.types";
@@ -23,6 +24,8 @@ export const VARIANT_COOKIE = "fx";
  * - `clone-off`: the options clone has published nothing. `clone-latched`: its document on a bad day.
  * - `journal-poison`: a stored trade journal with a null trade, as after corruption. The panes drawn from the trades
  *   must fail alone; the rest of each page keeps working.
+ * - `calendar-off`: no economic calendar has been published. `calendar-stale`: the last one is three weeks old and
+ *   FRED could not be read for it. `calendar-poison`: the stored one no longer matches its schema.
  */
 export const VARIANT_FLAGS = [
   "empty",
@@ -46,6 +49,9 @@ export const VARIANT_FLAGS = [
   "hourly-off",
   "clone-off",
   "clone-latched",
+  "calendar-off",
+  "calendar-stale",
+  "calendar-poison",
   "frozen",
 ] as const;
 export type VariantFlag = (typeof VARIANT_FLAGS)[number];
@@ -311,5 +317,19 @@ export function fixtureOptionsClone(d: OptionsClone, flags: ReadonlySet<VariantF
     quote_age_median_s: 7.4,
     slippage_median_pct: 4.1,
     trades: [...d.trades, { trade_id: `${d.session}-O-3`, hyp: "HYP-0029", side: "put", contract: "QQQ261012P00598000", state: "open", fill: 1.62, exit_fill: null, exit_reason: null, rop: null }],
+  };
+}
+
+/**
+ * The economic calendar fixture (the job's own output on the recorded sources), dated two days before `now`, or
+ * three weeks before it with FRED stale for `calendar-stale`.
+ */
+export function fixtureCalendar(doc: CalendarDoc, now: Date, flags: ReadonlySet<VariantFlag>): CalendarDoc {
+  const stale = flags.has("calendar-stale");
+  const asOf = new Date(now.getTime() - (stale ? 21 : 2) * 86_400_000).toISOString().replace(/\.\d{3}Z$/, "Z");
+  return {
+    ...doc,
+    as_of: asOf,
+    sources: doc.sources.map((s) => ({ ...s, fetched_at: s.fetched_at ? asOf : null, ...(stale && s.id === "fred" ? { ok: false, stale_since: asOf } : {}) })),
   };
 }

@@ -1,4 +1,6 @@
 import Ajv, { type ErrorObject } from "ajv";
+import calendarSchema from "./calendar.schema.json";
+import type { CalendarDoc } from "./calendar.types";
 import type { DeskName } from "./desk";
 import cryptoSchema from "./crypto.schema.json";
 import type { CryptoSnapshot } from "./crypto.types";
@@ -28,6 +30,7 @@ const validateRadarSchema = ajv.compile<RadarEdition>(radarSchema);
 const validateOptionsSchema = ajv.compile<OptionsEdition>(optionsSchema);
 const validateOptionsLiveSchema = ajv.compile<OptionsLive>(optionsLiveSchema);
 const validateJournalSchema = ajv.compile<JournalDoc>(journalSchema);
+const validateCalendarSchema = ajv.compile<CalendarDoc>(calendarSchema);
 const validateOptionsCloneSchema = ajv.compile<OptionsClone>(optionsCloneSchema);
 const validateLedgerSchema = ajv.compile<LedgerEdition>(ledgerSchema);
 
@@ -70,6 +73,17 @@ export const JOURNAL_SCHEMA = "stocksdelta/journal";
 /** True when the signed body names the trade journal schema. */
 export function isJournal(data: unknown): boolean {
   return data !== null && typeof data === "object" && (data as { schema?: unknown }).schema === JOURNAL_SCHEMA;
+}
+
+/**
+ * The Calendar page's economic release dates, read once a week by the trading host's econ-calendar job from FRED,
+ * the Fed, BLS and BEA. Dates and codes only. From the trading host, not the research environment.
+ */
+export const CALENDAR_SCHEMA = "stocksdelta/calendar";
+
+/** True when the signed body names the economic calendar schema. */
+export function isCalendar(data: unknown): boolean {
+  return data !== null && typeof data === "object" && (data as { schema?: unknown }).schema === CALENDAR_SCHEMA;
 }
 
 /** The focus card ledger's edition: how the card did after the close. Research, like the options edition. */
@@ -279,6 +293,21 @@ export function validateJournal(data: unknown): JournalValidationResult {
   }
   if (errors.length > 0) return { ok: false, errors: errors.slice(0, MAX_ERRORS) };
   return { ok: true, doc: data as JournalDoc };
+}
+
+export type CalendarValidationResult = { ok: true; doc: CalendarDoc } | { ok: false; errors: string[] };
+
+/** The economic calendar: its own schema (codes and sources from fixed lists, no free text), the same denylist. */
+export function validateCalendar(data: unknown): CalendarValidationResult {
+  if (data === null || typeof data !== "object" || Array.isArray(data)) {
+    return { ok: false, errors: ["/: must be an object"] };
+  }
+  const errors = findDenied(data).map((p) => `${p}: key is not allowed to be published`);
+  if (!validateCalendarSchema(data)) {
+    errors.push(...(validateCalendarSchema.errors ?? []).map(describe));
+  }
+  if (errors.length > 0) return { ok: false, errors: errors.slice(0, MAX_ERRORS) };
+  return { ok: true, doc: data as CalendarDoc };
 }
 
 export type OptionsCloneValidationResult = { ok: true; doc: OptionsClone } | { ok: false; errors: string[] };

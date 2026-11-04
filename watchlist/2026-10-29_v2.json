@@ -1,0 +1,53 @@
+{
+  "date": "2026-10-29",
+  "top": [
+    {
+      "symbol": "NUWE",
+      "score": 76.703,
+      "subscores": {
+        "catalyst": 0.3,
+        "rvol": 1.0,
+        "float": 1.0,
+        "gap": 0.521,
+        "price": 1.0,
+        "liquidity": 1.0,
+        "spread": 0.857,
+        "float_rotation": 1.0
+      },
+      "features": {
+        "price": 6.99,
+        "gap_pct": 23.498233215547714,
+        "rvol_tod": 341.74610856973345,
+        "pm_dollar_vol": 60559878.11550001,
+        "spread_pct": 0.14316392269147868,
+        "float_shares": 3647264.0
+      },
+      "rank": 1
+    },
+    {
+      "symbol": "MAX",
+      "score": 56.813,
+      "subscores": {
+        "catalyst": 0.9,
+        "rvol": 1.0,
+        "float": 0.0,
+        "gap": 0.367,
+        "price": 0.7,
+        "liquidity": 0.018,
+        "spread": 0.5,
+        "float_rotation": 0.0
+      },
+      "features": {
+        "price": 13.6,
+        "gap_pct": 16.040955631399314,
+        "rvol_tod": 74.919,
+        "pm_dollar_vol": 1055371.3369,
+        "spread_pct": null,
+        "float_shares": null
+      },
+      "rank": 2
+    }
+  ],
+  "forward": true,
+  "strategy": "watchlist_bull_flag_atr_M1_v2"
+}

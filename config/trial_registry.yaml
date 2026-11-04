@@ -26,3 +26,4 @@ families:
     - {decision: DEC-0030, total: 14, status: accepted}   # the clone's two setups (HYP-0029, HYP-0030): 12 + 2
     - {decision: DEC-0034, total: 15, status: accepted}   # HYP-0031 OC-NEAREST: the clone on contracts expiring after the session
     - {decision: DEC-0039, total: 18, status: accepted}   # EXP-0028: the clone's three trials again under the $15 cap
+    - {decision: DEC-0040, total: 21, status: accepted}   # EXP-0029: the clone's three trials again under the $5.00 spread cap

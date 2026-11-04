@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sign } from "@/lib/hmac";
 import { fixture } from "./helpers";
@@ -329,5 +331,58 @@ describe("the trade journal (stocksdelta/journal)", () => {
     vi.stubEnv("RADAR_INGEST_SECRET", "radar-secret");
     const body = journal("j4", "2026-09-29T21:40:00Z", (d) => ((d.trades as Record<string, unknown>[])[0]!.order_id = "abc"));
     expect((await handleIngest(asRadar(body), NOW)).status).toBe(422);
+  });
+});
+
+describe("the economic calendar (stocksdelta/calendar)", () => {
+  const calendar = (runId: string, asOf: string, mutate?: (d: Record<string, unknown>) => void) => {
+    const d = JSON.parse(readFileSync(join(__dirname, "fixtures", "calendar.v1.json"), "utf8")) as Record<string, unknown>;
+    d.run_id = runId;
+    d.as_of = asOf;
+    mutate?.(d);
+    return JSON.stringify(d);
+  };
+  const as = (body: string, keyId: string, secret: string) => {
+    const req = signed(body, { secret });
+    req.headers.set("x-wt-key-id", keyId);
+    return req;
+  };
+
+  it("the trading host's key stores it at calendar/latest.json, and nothing else", async () => {
+    const res = await handleIngest(signed(calendar("c1", "2026-09-29T21:40:00Z")), NOW);
+    expect(await res.json()).toEqual({ status: "stored", run_id: "c1" });
+    expect([...blob.store.keys()]).toEqual(["calendar/latest.json"]);
+  });
+
+  it("a newer one replaces it; an older one is refused", async () => {
+    await handleIngest(signed(calendar("c1", "2026-09-29T21:40:00Z")), NOW);
+    expect((await handleIngest(signed(calendar("c2", "2026-09-29T21:45:00Z")), NOW)).status).toBe(200);
+    expect(JSON.parse(blob.store.get("calendar/latest.json")!.text).run_id).toBe("c2");
+    expect((await handleIngest(signed(calendar("c0", "2026-09-29T21:30:00Z")), NOW)).status).toBe(409);
+  });
+
+  it("the research environment's key may not publish it", async () => {
+    vi.stubEnv("RADAR_INGEST_SECRET", "radar-secret");
+    const res = await handleIngest(as(calendar("c1", "2026-09-29T21:40:00Z"), "radar", "radar-secret"), NOW);
+    expect(res.status).toBe(403);
+    expect(blob.store.size).toBe(0);
+  });
+
+  it("a shadow host's copy is acknowledged and dropped", async () => {
+    vi.stubEnv("DASHBOARD_INGEST_KEYS", JSON.stringify({ "oci-syd": "vm-secret" }));
+    const res = await handleIngest(as(calendar("c1", "2026-09-29T21:40:00Z"), "oci-syd", "vm-secret"), NOW);
+    expect(await res.json()).toMatchObject({ status: "ignored", shadow: true });
+    expect(blob.store.size).toBe(0);
+  });
+
+  it("refuses a code it has no label for, free text, and a date ahead of the clock", async () => {
+    const bad = [
+      calendar("c3", "2026-09-29T21:40:00Z", (d) => ((d.events as Record<string, unknown>[])[0]!.code = "Fed_chair_speaks_on_rates")),
+      calendar("c4", "2026-09-29T21:40:00Z", (d) => ((d.events as Record<string, unknown>[])[0]!.title = "CPI for October")),
+      calendar("c5", "2026-09-29T21:40:00Z", (d) => (d.headlines = ["x"])),
+      calendar("c6", "2026-09-30T21:40:00Z"),
+    ];
+    for (const body of bad) expect((await handleIngest(signed(body), NOW)).status).toBe(422);
+    expect(blob.store.size).toBe(0);
   });
 });
