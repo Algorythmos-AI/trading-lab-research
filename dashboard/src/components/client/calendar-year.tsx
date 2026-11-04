@@ -214,6 +214,12 @@ function Detail({ cell: c, results }: { cell: DayCell; results: boolean }) {
                 </span>
               ) : null}
               {e.expected ? <span className="text-muted-foreground">(expected)</span> : null}
+              {e.source ? (
+                <span className="text-muted-foreground">
+                  · {e.source}
+                  {e.checkedBy.length ? `, checked by ${e.checkedBy.join(" and ")}` : ""}
+                </span>
+              ) : null}
             </li>
           ))}
         </ul>

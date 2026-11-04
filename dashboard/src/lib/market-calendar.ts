@@ -243,7 +243,34 @@ export interface DayEvent {
   timeSyd: string | null;
   /** "expected" for a date the company or agency has not confirmed. */
   expected: boolean;
+  /** Where the date comes from, in words ("FRED", "the trading calendar"); null for one worked out here. */
+  source: string | null;
+  /** The other official sources that list the same date. */
+  checkedBy: string[];
 }
+
+/** One release date from the published economic calendar (stocksdelta/calendar). */
+export interface OfficialEvent {
+  date: string;
+  code: string;
+  time_et: string;
+  source: string;
+  checked_by: readonly string[];
+}
+
+/** Each source in words. */
+export const SOURCE_NAME: Readonly<Record<string, string>> = { fred: "FRED", fed: "Federal Reserve", bls: "BLS", bea: "BEA", csv: "the trading calendar" };
+/** Each release's short name, for lists of months and differences. */
+export const SHORT_LABEL: Readonly<Record<string, string>> = {
+  cpi: "CPI",
+  ppi: "PPI",
+  pce: "PCE",
+  gdp: "GDP",
+  retail_sales: "Retail sales",
+  nfp: "Jobs report",
+  jolts: "JOLTS",
+  fomc_decision: "Fed decisions",
+};
 
 const GROUP: Readonly<Record<string, EventGroup>> = {
   fomc_decision: "fed",
@@ -270,35 +297,86 @@ export interface EarningsRow {
 }
 
 /**
- * Every event by New York day: the repo's macro calendar, the month's expiry, and earnings for the Options names.
- * Codes are drawn through EVENT_LABEL, never as written.
+ * Every event by New York day: the official release dates when the economic calendar is published, the repo's own
+ * macro calendar for what it does not cover (by code and month), the month's expiry, and earnings for the Options
+ * names. Codes are drawn through EVENT_LABEL, never as written.
  */
-export function eventsByDay(earnings: readonly EarningsRow[]): Map<string, DayEvent[]> {
+export function eventsByDay(earnings: readonly EarningsRow[], official: readonly OfficialEvent[] = []): Map<string, DayEvent[]> {
   const by = new Map<string, DayEvent[]>();
   const add = (day: string, e: DayEvent) => {
     const list = by.get(day) ?? [];
     if (!list.some((x) => x.code === e.code && x.label === e.label)) list.push(e);
     by.set(day, list);
   };
-  for (const e of data.macro) {
-    if (!(e.code in EVENT_LABEL)) continue;
-    const at = nyInstant(e.date, hhmm(e.time_et));
+  const timed = (day: string, t: string) => {
+    const at = nyInstant(day, hhmm(t));
     const syd = at === null ? null : sydney(at);
-    add(e.date, { code: e.code, label: eventLabel(e.code), group: GROUP[e.code] ?? "growth", timeEt: e.time_et, timeSyd: syd && `${syd.weekday} ${syd.time}`, expected: e.quality !== "exact" });
+    return syd && `${syd.weekday} ${syd.time}`;
+  };
+  const covered = new Set<string>();
+  for (const e of official) {
+    if (!(e.code in EVENT_LABEL)) continue;
+    covered.add(`${e.code}|${e.date.slice(0, 7)}`);
+    add(e.date, {
+      code: e.code,
+      label: eventLabel(e.code),
+      group: GROUP[e.code] ?? "growth",
+      timeEt: e.time_et,
+      timeSyd: timed(e.date, e.time_et),
+      expected: false,
+      source: SOURCE_NAME[e.source] ?? null,
+      checkedBy: e.checked_by.map((s) => SOURCE_NAME[s]).filter((s): s is string => Boolean(s)),
+    });
+  }
+  for (const e of data.macro) {
+    if (!(e.code in EVENT_LABEL) || covered.has(`${e.code}|${e.date.slice(0, 7)}`)) continue;
+    add(e.date, { code: e.code, label: eventLabel(e.code), group: GROUP[e.code] ?? "growth", timeEt: e.time_et, timeSyd: timed(e.date, e.time_et), expected: e.quality !== "exact", source: SOURCE_NAME.csv!, checkedBy: [] });
   }
   for (const y of YEARS) {
     for (let m = 1; m <= 12; m++) {
       const d = monthlyExpiry(y, m);
-      if (d) add(d, { code: "opex", label: "Monthly options expiry", group: "expiry", timeEt: null, timeSyd: null, expected: false });
+      if (d) add(d, { code: "opex", label: "Monthly options expiry", group: "expiry", timeEt: null, timeSyd: null, expected: false, source: null, checkedBy: [] });
     }
   }
   const names = new Set(OPTIONS_NAMES);
   for (const e of earnings) {
     if (!names.has(e.symbol)) continue;
-    add(e.date, { code: "earnings", label: `${e.symbol} earnings${e.when && WHEN[e.when] ? `, ${WHEN[e.when]}` : ""}`, group: "earnings", timeEt: null, timeSyd: null, expected: e.expected });
+    add(e.date, { code: "earnings", label: `${e.symbol} earnings${e.when && WHEN[e.when] ? `, ${WHEN[e.when]}` : ""}`, group: "earnings", timeEt: null, timeSyd: null, expected: e.expected, source: null, checkedBy: [] });
   }
   for (const list of by.values()) list.sort((a, b) => RANK[a.group] - RANK[b.group] || (a.timeEt ?? "99").localeCompare(b.timeEt ?? "99") || a.label.localeCompare(b.label));
   return by;
+}
+
+export interface TradingDiff {
+  code: string;
+  month: string;
+  official: string[];
+  trading: string[];
+}
+
+/**
+ * Where the calendar the paper runners trade around (config/events/macro_events.csv, as built into this page)
+ * differs from the official dates: each month the official calendar lists a release and the trading one has other
+ * dates or none. The page only says so; that file is changed by hand, under its own record.
+ */
+export function tradingCalendarDiffs(official: readonly OfficialEvent[]): TradingDiff[] {
+  const shared = new Set(data.macro.map((e) => e.code));
+  const byKey = (rows: readonly { code: string; date: string }[]) => {
+    const m = new Map<string, string[]>();
+    for (const r of rows) if (shared.has(r.code)) m.set(`${r.code}|${r.date.slice(0, 7)}`, [...(m.get(`${r.code}|${r.date.slice(0, 7)}`) ?? []), r.date].sort());
+    return m;
+  };
+  const off = byKey(official);
+  const csv = byKey(data.macro);
+  const out: TradingDiff[] = [];
+  for (const [key, dates] of off) {
+    const mine = csv.get(key) ?? [];
+    if (mine.join() !== dates.join()) {
+      const [code, month] = key.split("|") as [string, string];
+      out.push({ code, month, official: dates, trading: mine });
+    }
+  }
+  return out.sort((a, b) => a.month.localeCompare(b.month) || a.code.localeCompare(b.code));
 }
 
 /** The repo's earnings rows and the editions' rows, one per name and day; the editions' word wins on a clash. */
@@ -460,10 +538,19 @@ const EXPECTED: readonly { code: string; label: string }[] = [
 ];
 
 /**
- * By month, the expected releases with no date listed yet: every month after a release's last listed date, to the
- * end of the range. Months before that date with no release are left alone (the Fed meets eight times a year).
+ * By month, the releases with no date published yet. With the economic calendar, its own "not yet announced"
+ * months. Without it, from the repo's macro calendar: every month after a release's last listed date, to the end of
+ * the range. Months before that date with no release are left alone (the Fed meets eight times a year).
  */
-export function unlistedByMonth(): Map<string, string[]> {
+export function unlistedByMonth(notAnnounced?: readonly { code: string; month: string }[]): Map<string, string[]> {
+  if (notAnnounced) {
+    const out = new Map<string, string[]>();
+    for (const n of notAnnounced) {
+      const label = SHORT_LABEL[n.code];
+      if (label && n.month >= RANGE.start.slice(0, 7) && n.month <= RANGE.end.slice(0, 7)) out.set(n.month, [...(out.get(n.month) ?? []), label]);
+    }
+    return out;
+  }
   const out = new Map<string, string[]>();
   for (const { code, label } of EXPECTED) {
     const last = data.macro.filter((e) => e.code === code).reduce((m, e) => (e.date > m ? e.date : m), "");
@@ -471,5 +558,66 @@ export function unlistedByMonth(): Map<string, string[]> {
     if (last) month = addDays(`${month}-28`, 7).slice(0, 7);
     for (; `${month}-01` <= RANGE.end; month = addDays(`${month}-28`, 7).slice(0, 7)) out.set(month, [...(out.get(month) ?? []), label]);
   }
+  return out;
+}
+
+// ── The economic calendar's state ────────────────────────────────────────────────────────────────────────────────
+
+/** Older than this, the published calendar is called out of date: the job runs weekly, so two runs were missed. */
+export const CALENDAR_STALE_DAYS = 9;
+
+export interface ReleaseNote {
+  tone: "warn" | "info";
+  text: string;
+}
+
+const monthWords = (m: string) => new Date(`${m}-15T12:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+const dayWords = (d: string) => {
+  const x = new Date(`${d}T12:00:00Z`);
+  return `${WEEKDAYS[x.getUTCDay()]!.slice(0, 3)} ${x.getUTCDate()} ${MONTHS[x.getUTCMonth()]!.slice(0, 3)}`;
+};
+const list = (ds: readonly string[]) => (ds.length ? ds.map(dayWords).join(" and ") : "no date");
+
+/** The minimum a page needs of the published calendar to say how far to trust it. */
+export interface CalendarState {
+  as_of: string;
+  sources: readonly { id: string; configured: boolean; ok: boolean; fetched_at: string | null; stale_since: string | null }[];
+  disagreements: readonly { code: string; month: string; source: string; dates: readonly string[]; other_source: string; other_dates: readonly string[] }[];
+}
+
+/**
+ * What the page says about its release dates: whether the weekly calendar is there and current, which sources it
+ * could not read or that are not set up, where two official sources disagree, and where the trading calendar
+ * differs from the official dates. Warnings first.
+ */
+export function releaseNotes(status: "ok" | "missing" | "error", doc: CalendarState | null, diffs: readonly TradingDiff[], now: Date): ReleaseNote[] {
+  const out: ReleaseNote[] = [];
+  if (status !== "ok" || !doc) {
+    out.push({
+      tone: status === "error" ? "warn" : "info",
+      text: `${status === "error" ? "The economic calendar could not be read" : "The weekly economic calendar has not been published yet"}, so release dates come from the repo's own calendar: Fed, CPI and jobs only.`,
+    });
+    return out;
+  }
+  const age = (now.getTime() - Date.parse(doc.as_of)) / 86_400_000;
+  if (!(age <= CALENDAR_STALE_DAYS)) out.push({ tone: "warn", text: `The economic calendar was last refreshed ${Number.isFinite(age) ? `${Math.floor(age)} days ago` : "at an unknown time"}; the weekly job may have stopped.` });
+  for (const s of doc.sources) {
+    const name = SOURCE_NAME[s.id] ?? s.id;
+    if (s.configured && !s.ok) {
+      out.push({
+        tone: "warn",
+        text: s.fetched_at ? `${name} could not be read on the last run; its dates from ${dayWords(s.fetched_at.slice(0, 10))} are shown.` : `${name} could not be read, and has never been: its releases are missing.`,
+      });
+    }
+  }
+  for (const d of doc.disagreements) {
+    out.push({ tone: "warn", text: `${SHORT_LABEL[d.code] ?? d.code}, ${monthWords(d.month)}: ${SOURCE_NAME[d.source] ?? d.source} gives ${list(d.dates)}, ${SOURCE_NAME[d.other_source] ?? d.other_source} gives ${list(d.other_dates)}. Check before trading around it.` });
+  }
+  for (const d of diffs) {
+    out.push({ tone: "warn", text: `${SHORT_LABEL[d.code] ?? d.code}, ${monthWords(d.month)}: the official date is ${list(d.official)}, but the calendar the paper runners trade around has ${list(d.trading)}.` });
+  }
+  const unset = doc.sources.filter((s) => !s.configured).map((s) => s.id);
+  if (unset.includes("fred")) out.push({ tone: "info", text: "FRED is not set up yet (FRED_API_KEY on the host), so BLS and BEA stand in and retail sales has no dates." });
+  if (unset.includes("bls")) out.push({ tone: "info", text: "BLS is not asked yet: it answers only a caller that leaves a contact address (WT_CONTACT_EMAIL on the host)." });
   return out;
 }

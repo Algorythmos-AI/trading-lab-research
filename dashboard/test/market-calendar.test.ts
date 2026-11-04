@@ -12,9 +12,11 @@ import {
   nextHoliday,
   pickYear,
   RANGE,
+  releaseNotes,
   sessionMoves,
   sessionOf,
   sydneySession,
+  tradingCalendarDiffs,
   tradingDaysLeft,
   unlistedByMonth,
   yearTotals,
@@ -224,5 +226,72 @@ describe("releases not listed yet", () => {
     expect(by.get(lastCpi.slice(0, 7)) ?? []).not.toContain("CPI");
     // The Fed's 2027 meetings are listed, so a month without one is not flagged.
     expect([...by.values()].flat()).not.toContain("Fed decisions");
+  });
+});
+
+describe("the published economic calendar", () => {
+  const off = (date: string, code: string, source = "fred", checked_by: string[] = ["bls"]) => ({ date, code, time_et: code === "fomc_decision" ? "14:00" : "08:30", source, checked_by });
+
+  it("prefers the official date over the repo's, month by month, and keeps the repo's where it is silent", () => {
+    // The repo lists CPI on 10 Nov 2026; say the official calendar has it on the 12th.
+    const by = eventsByDay([], [off("2026-11-12", "cpi"), off("2026-11-13", "ppi")]);
+    expect(by.get("2026-11-12")?.find((e) => e.code === "cpi")).toMatchObject({ source: "FRED", checkedBy: ["BLS"], timeEt: "08:30" });
+    expect(by.get("2026-11-10")?.some((e) => e.code === "cpi")).toBeFalsy();
+    expect(by.get("2026-11-13")?.find((e) => e.code === "ppi")?.label).toBe("PPI inflation");
+    // Jobs is not in it: the repo's row stands, and says where it is from.
+    expect(by.get("2026-11-06")?.find((e) => e.code === "nfp")?.source).toBe("the trading calendar");
+  });
+
+  it("says where the trading calendar differs from the official dates", () => {
+    expect(tradingCalendarDiffs([off("2026-11-10", "cpi")])).toEqual([]);
+    expect(tradingCalendarDiffs([off("2026-11-12", "cpi")])).toEqual([{ code: "cpi", month: "2026-11", official: ["2026-11-12"], trading: ["2026-11-10"] }]);
+    expect(tradingCalendarDiffs([off("2027-01-08", "nfp")])).toEqual([{ code: "nfp", month: "2027-01", official: ["2027-01-08"], trading: [] }]);
+    // A release the trading calendar never carries is not a difference.
+    expect(tradingCalendarDiffs([off("2026-11-13", "ppi")])).toEqual([]);
+  });
+
+  it("takes its months not yet announced as published", () => {
+    const by = unlistedByMonth([{ code: "pce", month: "2027-01" }, { code: "cpi", month: "2027-01" }, { code: "cpi", month: "2030-01" }]);
+    expect(by.get("2027-01")).toEqual(["PCE", "CPI"]);
+    expect(by.has("2030-01")).toBe(false);
+  });
+});
+
+describe("what the page says about its release dates", () => {
+  const now = ny("2026-11-09", "10:00");
+  const src = (id: string, extra: Record<string, unknown> = {}) => ({ id, configured: true, ok: true, fetched_at: "2026-11-07T15:00:00Z", stale_since: null, ...extra });
+  const doc = (extra: Record<string, unknown> = {}) => ({ as_of: "2026-11-07T15:00:00Z", sources: ["fred", "fed", "bls", "bea"].map((s) => src(s)), disagreements: [], ...extra });
+
+  it("is quiet when everything was read this week", () => {
+    expect(releaseNotes("ok", doc(), [], now)).toEqual([]);
+  });
+
+  it("falls back to the repo's calendar, and says so", () => {
+    expect(releaseNotes("missing", null, [], now)[0]).toMatchObject({ tone: "info" });
+    expect(releaseNotes("error", null, [], now)[0]).toMatchObject({ tone: "warn" });
+  });
+
+  it("warns when the calendar is old, a source is stale, sources disagree, or the trading calendar differs", () => {
+    const notes = releaseNotes(
+      "ok",
+      doc({
+        as_of: "2026-10-20T15:00:00Z",
+        sources: [src("fred", { ok: false, stale_since: "2026-11-07T15:00:00Z" }), src("fed"), src("bls"), src("bea", { ok: false, fetched_at: null })],
+        disagreements: [{ code: "cpi", month: "2026-11", source: "fred", dates: ["2026-11-12"], other_source: "bls", other_dates: ["2026-11-10"] }],
+      }),
+      [{ code: "nfp", month: "2027-01", official: ["2027-01-08"], trading: [] }],
+      now,
+    );
+    expect(notes.map((n) => n.tone)).toEqual(["warn", "warn", "warn", "warn", "warn"]);
+    expect(notes[0]!.text).toContain("20 days ago");
+    expect(notes[1]!.text).toContain("FRED could not be read on the last run; its dates from Sat 7 Nov are shown");
+    expect(notes[2]!.text).toContain("BEA could not be read, and has never been");
+    expect(notes[3]!.text).toBe("CPI, Nov 2026: FRED gives Thu 12 Nov, BLS gives Tue 10 Nov. Check before trading around it.");
+    expect(notes[4]!.text).toBe("Jobs report, Jan 2027: the official date is Fri 8 Jan, but the calendar the paper runners trade around has no date.");
+  });
+
+  it("names a source that is not set up, without calling it a fault", () => {
+    const notes = releaseNotes("ok", doc({ sources: [src("fred", { configured: false, ok: false, fetched_at: null }), src("fed"), src("bls", { configured: false, ok: false, fetched_at: null }), src("bea")] }), [], now);
+    expect(notes.map((n) => n.tone)).toEqual(["info", "info"]);
   });
 });

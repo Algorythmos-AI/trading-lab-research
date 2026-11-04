@@ -1,18 +1,20 @@
 import "server-only";
 import { HISTORY_PREFIX, PreconditionFailed, readForUpdate, writeText } from "./blob";
-import { DESK_PATHS, JOURNAL_PATHS, LEDGER_PATHS, OPTIONS_CLONE_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
+import { CALENDAR_PATHS, DESK_PATHS, JOURNAL_PATHS, LEDGER_PATHS, OPTIONS_CLONE_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
 import { verify } from "./hmac";
 import { KEY_ID_RE, decideScope, parseScopes } from "./ingest-scope";
 import { logEvent } from "./log";
 import { parseTime } from "./freshness";
 import {
   contractOf,
+  isCalendar,
   isJournal,
   isLedger,
   isOptions,
   isOptionsClone,
   isOptionsLive,
   isRadar,
+  validateCalendar,
   validateJournal,
   validateLedger,
   validateOptionsClone,
@@ -22,7 +24,7 @@ import {
 } from "./validate";
 
 export const MAX_BODY_BYTES = 3_500_000;
-/** How far ahead of this server's clock an options live or clone document may be dated: clock drift, not more. */
+/** How far ahead of this server's clock a document from the trading host may be dated: clock drift, not more. */
 export const OPTIONS_LIVE_AHEAD_MS = 10 * 60_000;
 
 function json(status: number, body: Record<string, unknown>): Response {
@@ -154,7 +156,7 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
   const scopes = parseScopes(process.env[SCOPES_ENV], [RADAR_KEY_ID]);
   if (!scopes.ok) logEvent("ingest.scopes", { outcome: "malformed", reason: scopes.reason });
   // The desk whose snapshot this body is, by the same routing as below; null for every other document kind.
-  const snapshotOf = isRadar(data) || isOptions(data) || isOptionsLive(data) || isOptionsClone(data) || isJournal(data) || isLedger(data) ? null : contractOf(data).desk;
+  const snapshotOf = isRadar(data) || isOptions(data) || isOptionsLive(data) || isOptionsClone(data) || isCalendar(data) || isJournal(data) || isLedger(data) ? null : contractOf(data).desk;
   const scope = decideScope(scopes, keyId, snapshotOf, process.env.PRIMARY_HOST || DEFAULT_KEY_ID);
   if (!scope.allow && scope.outcome === "key-scope-config") {
     return done(503, "key-scope-config", { error: "ingest is not configured for this key" }, { key_id: keyId });
@@ -174,7 +176,7 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
   }
   // After the radar key's refusal on purpose: positions and the clone's trades come from the trading host, never
   // from the research environment, whatever the body says it is.
-  const hostDoc = isOptionsLive(data) ? OPTIONS_LIVE : isOptionsClone(data) ? OPTIONS_CLONE : null;
+  const hostDoc = isOptionsLive(data) ? OPTIONS_LIVE : isOptionsClone(data) ? OPTIONS_CLONE : isCalendar(data) ? CALENDAR : null;
   if (hostDoc) {
     // One slot, one account: a second host (a shadow run) would take turns with the primary in it. Its document
     // is acknowledged and dropped, so its job does not fail.
@@ -246,7 +248,7 @@ type Done = (status: number, outcome: string, body: Record<string, unknown>, ext
  * its dated copy. A kind with no `history` path keeps only its latest.
  */
 interface EditionKind {
-  desk: "radar" | "options" | "ledger" | "options-live" | "options-clone" | "journal";
+  desk: "radar" | "options" | "ledger" | "options-live" | "options-clone" | "journal" | "calendar";
   paths: { latest: string; history?: string };
   validate: (data: unknown) => { ok: true; runId: string | null; asOf: string | null; date: string } | { ok: false; errors: string[] };
 }
@@ -296,6 +298,16 @@ const OPTIONS_CLONE: EditionKind = {
   validate: (data) => {
     const r = validateOptionsClone(data);
     return r.ok ? { ok: true, runId: r.doc.run_id, asOf: r.doc.as_of, date: r.doc.session } : r;
+  },
+};
+
+/** The economic calendar, from the trading host's weekly econ-calendar job. Latest only: it carries the whole range. */
+const CALENDAR: EditionKind = {
+  desk: "calendar",
+  paths: CALENDAR_PATHS,
+  validate: (data) => {
+    const r = validateCalendar(data);
+    return r.ok ? { ok: true, runId: r.doc.run_id, asOf: r.doc.as_of, date: r.doc.as_of.slice(0, 10) } : r;
   },
 };
 

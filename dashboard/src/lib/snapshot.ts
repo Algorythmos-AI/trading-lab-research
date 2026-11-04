@@ -2,8 +2,10 @@ import "server-only";
 import { cache } from "react";
 import { LATEST_PATH, listPaths, readText } from "./blob";
 import type { CryptoSnapshot } from "./crypto.types";
-import { DESK_PATHS, JOURNAL_PATHS, LEDGER_PATHS, OPTIONS_CLONE_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
-import { fixtureOptionsClone, fixtureOptionsLive, FROZEN_NOW, parseFlags, partialOptions, poisonedJournal, poisonedOptions, v2Options, VARIANT_COOKIE, type VariantFlag } from "./fixture-variants";
+import type { CalendarDoc } from "./calendar.types";
+import { validateCalendar } from "./validate";
+import { CALENDAR_PATHS, DESK_PATHS, JOURNAL_PATHS, LEDGER_PATHS, OPTIONS_CLONE_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
+import { fixtureCalendar, fixtureOptionsClone, fixtureOptionsLive, FROZEN_NOW, parseFlags, partialOptions, poisonedJournal, poisonedOptions, v2Options, VARIANT_COOKIE, type VariantFlag } from "./fixture-variants";
 import type { HftSnapshot } from "./hft.types";
 import type { JournalDoc } from "./journal.types";
 import type { LedgerEdition } from "./ledger.types";
@@ -339,6 +341,36 @@ export const loadLedger = cache(async (date?: string): Promise<LedgerResult> => 
     return { status: "ok", edition: parsed as LedgerEdition, source: "blob" };
   } catch (e) {
     logEvent("snapshot.read", { outcome: "error", desk: "ledger", error: e instanceof Error ? e.name : "unknown" });
+    return { status: "error" };
+  }
+});
+
+export type CalendarResult = { status: "ok"; doc: CalendarDoc; source: "fixture" | "blob" } | { status: "missing" } | { status: "error" };
+
+/**
+ * The economic calendar (stocksdelta/calendar): the release dates the Calendar page shows. "missing" until the
+ * econ-calendar job has published once. Checked against its schema again on the way out, so a stored copy that
+ * no longer matches it reads as an error, never as dates.
+ */
+export const loadCalendar = cache(async (): Promise<CalendarResult> => {
+  if (fixtureMode()) {
+    const flags = await fixtureFlags();
+    if (flags.has("calendar-off") || flags.has("empty")) return { status: "missing" };
+    if (flags.has("error") || flags.has("calendar-poison")) return { status: "error" };
+    const mod = await import("../../test/fixtures/calendar.v1.json");
+    return { status: "ok", doc: fixtureCalendar((mod.default ?? mod) as unknown as CalendarDoc, flags.has("frozen") ? new Date(FROZEN_NOW) : new Date(), flags), source: "fixture" };
+  }
+  try {
+    const stored = await readText(CALENDAR_PATHS.latest);
+    if (!stored) return { status: "missing" };
+    const checked = validateCalendar(JSON.parse(stored.text));
+    if (!checked.ok) {
+      logEvent("snapshot.read", { outcome: "invalid", desk: "calendar" });
+      return { status: "error" };
+    }
+    return { status: "ok", doc: checked.doc, source: "blob" };
+  } catch (e) {
+    logEvent("snapshot.read", { outcome: "error", desk: "calendar", error: e instanceof Error ? e.name : "unknown" });
     return { status: "error" };
   }
 });

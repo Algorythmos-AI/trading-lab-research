@@ -156,5 +156,11 @@ JOBS: dict[str, Job] = {j.name: j for j in (
         "options_review", deadline_min=10, trading=False, et="Mon..Fri 16:30", desk="options", preflight=False,
         what="Options clone nightly review: the day per name, each setup's figures and verdict so far",
         runtime_max_h=0.5),
+    # The Calendar page's release dates (wt.ops.econ_calendar): FRED, the Fed, BLS and BEA, read once a week after
+    # the weekly scorecard. Display only; it never touches the calendar the runners trade around.
+    Job("econ-calendar", "com.wt.econ-calendar", 12, 30, ("-m", "wt.ops.econ_calendar"), "backtest", "econ_calendar",
+        weekday=6, deadline_min=10, trading=False, et="Fri 21:30", preflight=False,
+        what="Read the economic release calendar (FRED, Fed, BLS, BEA) for the Calendar page and publish it",
+        runtime_max_h=0.5),
 )}
 TRADING_JOBS = [j.name for j in JOBS.values() if j.trading]

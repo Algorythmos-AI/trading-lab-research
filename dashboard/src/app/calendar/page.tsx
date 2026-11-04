@@ -17,8 +17,10 @@ import {
   nyNow,
   pickYear,
   RANGE,
+  releaseNotes,
   sessionMoves,
   shortDay,
+  tradingCalendarDiffs,
   tradingDaysLeft,
   unlistedByMonth,
   yearTotals,
@@ -29,7 +31,7 @@ import {
   type YourDay,
 } from "@/lib/market-calendar";
 import { earningsOf } from "@/lib/radar-brief";
-import { loadJournal, loadOptions, loadRadar, pageTime } from "@/lib/snapshot";
+import { loadCalendar, loadJournal, loadOptions, loadRadar, pageTime } from "@/lib/snapshot";
 import { DAY_LOSS_LIMIT, MAX_TRADES_PER_DAY, money } from "@/lib/trade-rules";
 import { cn } from "@/lib/utils";
 
@@ -40,14 +42,14 @@ const inDays = (n: number) => (n === 0 ? "today" : n === 1 ? "tomorrow" : `in ${
 
 const LEGEND: { group: EventGroup; label: string }[] = [
   { group: "fed", label: "Fed" },
-  { group: "inflation", label: "Inflation (CPI)" },
-  { group: "growth", label: "Jobs" },
+  { group: "inflation", label: "Inflation (CPI, PPI, PCE)" },
+  { group: "growth", label: "Jobs, GDP, retail sales" },
   { group: "expiry", label: "Monthly expiry" },
   { group: "earnings", label: "Earnings" },
 ];
 
 export default async function CalendarPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const [q, now, journal, radar, options] = await Promise.all([searchParams, pageTime(), loadJournal(), loadRadar(), loadOptions()]);
+  const [q, now, journal, radar, options, calendar] = await Promise.all([searchParams, pageTime(), loadJournal(), loadRadar(), loadOptions(), loadCalendar()]);
   const year = pickYear(q.y, now);
   const today = nyNow(now).day;
   // A journal that is stored but cannot be worked through (a corrupt row) costs only the results, never the market.
@@ -66,9 +68,12 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       ? earningsOf(radar.edition, opt)
       : (opt?.events ?? []).flatMap((e) => (e.kind === "earnings" && e.symbol ? [{ date: e.date, symbol: e.symbol, when: e.when ?? null }] : []));
   const earnings = mergeEarnings(fromEditions);
-  const months = yearView(year, now, you ?? new Map(), eventsByDay(earnings));
+  const cal = calendar.status === "ok" ? calendar.doc : null;
+  const official = cal?.events ?? [];
+  const months = yearView(year, now, you ?? new Map(), eventsByDay(earnings, official));
   const totals = yearTotals(months);
-  const unlisted = unlistedByMonth();
+  const unlisted = unlistedByMonth(cal?.not_announced);
+  const notes = releaseNotes(calendar.status, cal, tradingCalendarDiffs(official), now);
   const left = tradingDaysLeft(now);
   const holiday = nextHoliday(now);
   const half = nextHalfDay(now);
@@ -207,7 +212,22 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
           <CalendarYear months={months} initial={initial} results={results} />
         </PaneBoundary>
 
-        <UnlistedNote year={year} unlisted={unlisted} />
+        <UnlistedNote year={year} unlisted={unlisted} official={cal !== null} />
+        {notes.length ? (
+          <ul className="grid gap-1" data-testid="release-notes" aria-label="About the release dates">
+            {notes.map((n) =>
+              n.tone === "warn" ? (
+                <li key={n.text}>
+                  <Notice tone="warn">{n.text}</Notice>
+                </li>
+              ) : (
+                <li key={n.text} className="text-muted-foreground text-xs">
+                  {n.text}
+                </li>
+              ),
+            )}
+          </ul>
+        ) : null}
       </Panel>
 
       <Panel id="earnings" icon={CalendarDays} title="Earnings for your Options names" means="The next report for each of the twelve names, when a date is known. A date marked expected has not been confirmed by the company.">
@@ -227,17 +247,22 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   );
 }
 
-function UnlistedNote({ year, unlisted }: { year: number; unlisted: Map<string, string[]> }) {
+function UnlistedNote({ year, unlisted, official }: { year: number; unlisted: Map<string, string[]>; official: boolean }) {
   const rows = [...unlisted.entries()].filter(([m]) => m.startsWith(String(year)));
   if (!rows.length) return null;
   const byLabel = new Map<string, string[]>();
   for (const [m, labels] of rows) for (const l of labels) byLabel.set(l, [...(byLabel.get(l) ?? []), m]);
   const month = (m: string) => new Date(`${m}-15T12:00:00Z`).toLocaleDateString("en-AU", { month: "short", timeZone: "UTC" });
+  const span = (ms: string[]) => (ms.length === 12 ? `all of ${year}` : `${month(ms[0]!)}${ms.length > 1 ? ` to ${month(ms.at(-1)!)}` : ""} ${year}`);
+  // Releases missing for the same stretch share a line.
+  const bySpan = new Map<string, string[]>();
+  for (const [label, ms] of byLabel) bySpan.set(span(ms), [...(bySpan.get(span(ms)) ?? []), label]);
   return (
     <ul className="text-muted-foreground grid gap-0.5 text-xs" data-testid="not-listed">
-      {[...byLabel.entries()].map(([label, ms]) => (
-        <li key={label}>
-          {label}: not yet in the calendar for {ms.length === 12 ? `all of ${year}` : `${month(ms[0]!)}${ms.length > 1 ? ` to ${month(ms.at(-1)!)}` : ""} ${year}`}. Those dates are added once the agency publishes them.
+      {[...bySpan.entries()].map(([when, labels]) => (
+        <li key={when}>
+          {official ? "Not yet announced" : "Not yet in the calendar"} for {when}: {labels.join(", ")}.{" "}
+          {official ? "The weekly refresh adds them once each agency publishes its schedule." : "Those dates are added once the agency publishes them."}
         </li>
       ))}
     </ul>

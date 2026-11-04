@@ -70,3 +70,31 @@ for (const fx of ["empty", "error", "journal-poison"]) {
     expect(errors).toEqual([]);
   });
 }
+
+test("an official release shows its source and its cross-check", async ({ page, context, baseURL }) => {
+  await variant(context, baseURL, "frozen");
+  await page.goto("/calendar");
+  await page.getByRole("button", { name: /^Tue 10 Nov 2026\. CPI inflation/ }).click();
+  const detail = page.getByTestId("day-detail");
+  await expect(detail).toContainText("CPI inflation");
+  await expect(detail).toContainText("08:30 NY · Wed 00:30 Syd");
+  await expect(detail).toContainText("FRED, checked by BLS");
+  await page.getByRole("navigation", { name: "Year" }).getByRole("link", { name: "2027" }).click();
+  await expect(page.getByTestId("not-listed")).toContainText(/Not yet announced for all of 2027: CPI, PPI, Jobs report/);
+});
+
+for (const [fx, text] of [
+  ["calendar-off", "has not been published yet"],
+  ["calendar-poison", "could not be read"],
+  ["calendar-stale", "last refreshed 21 days ago"],
+] as const) {
+  test(`with the economic calendar ${fx.replace("calendar-", "")}, the page says so and still draws`, async ({ page, context, baseURL }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await variant(context, baseURL, `frozen.${fx}`);
+    await page.goto("/calendar");
+    await expect(page.getByTestId("release-notes")).toContainText(text);
+    await expect(page.getByRole("button", { name: /^Thu 26 Nov 2026\. market closed, Thanksgiving Day/ })).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+}
