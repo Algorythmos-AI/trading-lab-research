@@ -336,12 +336,9 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m wt.ops.econ_calendar")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args(argv)
-    from wt.ops.locks import job_lock
-    with job_lock("econ-calendar") as got:
-        if not got:
-            print("another econ-calendar run is still going; not starting a second one")
-            return 0
-        return run(a.dry_run)
+    # No lock of its own: the job runner (wt.ops.jobs) holds the "econ-calendar" lock for the whole run, and taking
+    # it again here found it held by that runner and skipped every scheduled run.
+    return run(a.dry_run)
 
 
 def run(dry_run: bool, get: Get | None = None, env: dict[str, str] | None = None, out: Path = OUT,
