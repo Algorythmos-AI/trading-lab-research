@@ -1,5 +1,5 @@
 // What /api/health says about the research editions on file. Pure: no I/O.
-import type { JournalResult, LedgerResult, OptionsCloneResult, OptionsLiveResult, OptionsResult, RadarResult } from "./snapshot";
+import type { CalendarResult, JournalResult, LedgerResult, OptionsCloneResult, OptionsLiveResult, OptionsResult, RadarResult } from "./snapshot";
 
 /**
  * The newest edition format this build's schema validates. A publisher reads it from /api/health and sends
@@ -14,6 +14,8 @@ export const OPTIONS_CLONE_ACCEPTS = 1;
 /** 2 adds `money`: deposits, withdrawals and the account value. */
 export const JOURNAL_ACCEPTS = 2;
 export const LEDGER_ACCEPTS = 1;
+/** The newest economic calendar format this build validates. */
+export const CALENDAR_ACCEPTS = 1;
 
 export interface EditionHealth {
   /** "ok" when an edition is stored and readable, "missing" before the first one, "error" when storage failed. */
@@ -59,6 +61,18 @@ export function optionsLiveHealth(r: OptionsLiveResult): EditionHealth {
   return {
     status: r.status,
     accepts: OPTIONS_LIVE_ACCEPTS,
+    run_id: d?.run_id ?? null,
+    as_of: d?.as_of ?? null,
+    schema_version: d?.schema_version ?? null,
+  };
+}
+
+/** The stored economic calendar: the run that built it and when. Nothing of its dates. */
+export function calendarHealth(r: CalendarResult): EditionHealth {
+  const d = r.status === "ok" ? r.doc : null;
+  return {
+    status: r.status,
+    accepts: CALENDAR_ACCEPTS,
     run_id: d?.run_id ?? null,
     as_of: d?.as_of ?? null,
     schema_version: d?.schema_version ?? null,

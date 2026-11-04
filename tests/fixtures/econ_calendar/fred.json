@@ -1,0 +1,283 @@
+{
+ "note": "Constructed for tests in the shape FRED's API documents (fred/release, fred/release/dates); not a recorded response, since recording one needs the owner's key. The dates are the BLS and BEA ones from the fixtures beside it; retail sales' are made up.",
+ "releases": {
+  "10": {
+   "release": {
+    "realtime_start": "2026-11-05",
+    "realtime_end": "2026-11-05",
+    "releases": [
+     {
+      "id": 10,
+      "realtime_start": "2026-11-05",
+      "realtime_end": "2026-11-05",
+      "name": "Consumer Price Index",
+      "press_release": true
+     }
+    ]
+   },
+   "dates": {
+    "realtime_start": "2026-01-01",
+    "realtime_end": "9999-12-31",
+    "order_by": "release_date",
+    "sort_order": "asc",
+    "count": 4,
+    "offset": 0,
+    "limit": 10000,
+    "release_dates": [
+     {
+      "release_id": 10,
+      "date": "2026-09-11"
+     },
+     {
+      "release_id": 10,
+      "date": "2026-10-14"
+     },
+     {
+      "release_id": 10,
+      "date": "2026-11-10"
+     },
+     {
+      "release_id": 10,
+      "date": "2026-12-10"
+     }
+    ]
+   }
+  },
+  "46": {
+   "release": {
+    "realtime_start": "2026-11-05",
+    "realtime_end": "2026-11-05",
+    "releases": [
+     {
+      "id": 46,
+      "realtime_start": "2026-11-05",
+      "realtime_end": "2026-11-05",
+      "name": "Producer Price Index",
+      "press_release": true
+     }
+    ]
+   },
+   "dates": {
+    "realtime_start": "2026-01-01",
+    "realtime_end": "9999-12-31",
+    "order_by": "release_date",
+    "sort_order": "asc",
+    "count": 4,
+    "offset": 0,
+    "limit": 10000,
+    "release_dates": [
+     {
+      "release_id": 46,
+      "date": "2026-09-10"
+     },
+     {
+      "release_id": 46,
+      "date": "2026-10-15"
+     },
+     {
+      "release_id": 46,
+      "date": "2026-11-13"
+     },
+     {
+      "release_id": 46,
+      "date": "2026-12-15"
+     }
+    ]
+   }
+  },
+  "50": {
+   "release": {
+    "realtime_start": "2026-11-05",
+    "realtime_end": "2026-11-05",
+    "releases": [
+     {
+      "id": 50,
+      "realtime_start": "2026-11-05",
+      "realtime_end": "2026-11-05",
+      "name": "Employment Situation",
+      "press_release": true
+     }
+    ]
+   },
+   "dates": {
+    "realtime_start": "2026-01-01",
+    "realtime_end": "9999-12-31",
+    "order_by": "release_date",
+    "sort_order": "asc",
+    "count": 4,
+    "offset": 0,
+    "limit": 10000,
+    "release_dates": [
+     {
+      "release_id": 50,
+      "date": "2026-09-04"
+     },
+     {
+      "release_id": 50,
+      "date": "2026-10-02"
+     },
+     {
+      "release_id": 50,
+      "date": "2026-11-06"
+     },
+     {
+      "release_id": 50,
+      "date": "2026-12-04"
+     }
+    ]
+   }
+  },
+  "192": {
+   "release": {
+    "realtime_start": "2026-11-05",
+    "realtime_end": "2026-11-05",
+    "releases": [
+     {
+      "id": 192,
+      "realtime_start": "2026-11-05",
+      "realtime_end": "2026-11-05",
+      "name": "Job Openings and Labor Turnover Survey",
+      "press_release": true
+     }
+    ]
+   },
+   "dates": {
+    "realtime_start": "2026-01-01",
+    "realtime_end": "9999-12-31",
+    "order_by": "release_date",
+    "sort_order": "asc",
+    "count": 4,
+    "offset": 0,
+    "limit": 10000,
+    "release_dates": [
+     {
+      "release_id": 192,
+      "date": "2026-09-01"
+     },
+     {
+      "release_id": 192,
+      "date": "2026-09-29"
+     },
+     {
+      "release_id": 192,
+      "date": "2026-11-03"
+     },
+     {
+      "release_id": 192,
+      "date": "2026-12-01"
+     }
+    ]
+   }
+  },
+  "9": {
+   "release": {
+    "realtime_start": "2026-11-05",
+    "realtime_end": "2026-11-05",
+    "releases": [
+     {
+      "id": 9,
+      "realtime_start": "2026-11-05",
+      "realtime_end": "2026-11-05",
+      "name": "Advance Monthly Sales for Retail and Food Services",
+      "press_release": true
+     }
+    ]
+   },
+   "dates": {
+    "realtime_start": "2026-01-01",
+    "realtime_end": "9999-12-31",
+    "order_by": "release_date",
+    "sort_order": "asc",
+    "count": 4,
+    "offset": 0,
+    "limit": 10000,
+    "release_dates": [
+     {
+      "release_id": 9,
+      "date": "2026-09-16"
+     },
+     {
+      "release_id": 9,
+      "date": "2026-10-16"
+     },
+     {
+      "release_id": 9,
+      "date": "2026-11-17"
+     },
+     {
+      "release_id": 9,
+      "date": "2026-12-16"
+     }
+    ]
+   }
+  },
+  "53": {
+   "release": {
+    "realtime_start": "2026-11-05",
+    "realtime_end": "2026-11-05",
+    "releases": [
+     {
+      "id": 53,
+      "realtime_start": "2026-11-05",
+      "realtime_end": "2026-11-05",
+      "name": "Gross Domestic Product",
+      "press_release": true
+     }
+    ]
+   },
+   "dates": {
+    "realtime_start": "2026-01-01",
+    "realtime_end": "9999-12-31",
+    "order_by": "release_date",
+    "sort_order": "asc",
+    "count": 2,
+    "offset": 0,
+    "limit": 10000,
+    "release_dates": [
+     {
+      "release_id": 53,
+      "date": "2026-11-25"
+     },
+     {
+      "release_id": 53,
+      "date": "2026-12-23"
+     }
+    ]
+   }
+  },
+  "54": {
+   "release": {
+    "realtime_start": "2026-11-05",
+    "realtime_end": "2026-11-05",
+    "releases": [
+     {
+      "id": 54,
+      "realtime_start": "2026-11-05",
+      "realtime_end": "2026-11-05",
+      "name": "Personal Income and Outlays",
+      "press_release": true
+     }
+    ]
+   },
+   "dates": {
+    "realtime_start": "2026-01-01",
+    "realtime_end": "9999-12-31",
+    "order_by": "release_date",
+    "sort_order": "asc",
+    "count": 2,
+    "offset": 0,
+    "limit": 10000,
+    "release_dates": [
+     {
+      "release_id": 54,
+      "date": "2026-11-25"
+     },
+     {
+      "release_id": 54,
+      "date": "2026-12-23"
+     }
+    ]
+   }
+  }
+ }
+}

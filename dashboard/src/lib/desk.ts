@@ -65,6 +65,14 @@ export const OPTIONS_LIVE_PATHS = {
 } as const;
 
 /**
+ * The economic calendar (stocksdelta/calendar): the release dates the Calendar page shows. Latest only: each
+ * document carries the whole range.
+ */
+export const CALENDAR_PATHS = {
+  latest: "calendar/latest.json",
+} as const;
+
+/**
  * The owner's trade journal: every closed trade of their own brokerage account, re-sent whole after each session.
  * Latest only: each document carries the full history, so a dated copy would only repeat it.
  */

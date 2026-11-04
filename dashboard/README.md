@@ -112,6 +112,32 @@ wt.ops.publish                            POST /api/ingest            (productio
   table. Read only: it describes what happened and suggests nothing. An edition older than three and a half days
   is shown with a notice. `/api/health` reports it under `editions.journal`. Fixture mode reads the synthetic
   `test/fixtures/journal.v1.json`.
+- **Calendar** (`/calendar`, `src/app/calendar/page.tsx`, the grid in `src/components/client/calendar-year.tsx`, all
+  arithmetic in `src/lib/market-calendar.ts`, pure and unit-tested): the US market year, 2026 and 2027 (`?y=`), Monday
+  to Friday with weekends narrow. Open days, holidays and 1 pm closes come from `src/lib/market-calendar.json`, which
+  `scripts/build_market_calendar.py` (`make schema`) builds from the `exchange_calendars` XNYS calendar for a fixed
+  range; `tests/unit/test_market_calendar.py` fails when the file drifts from the script, from NYSE's published list
+  (`tests/fixtures/nyse/`) or from the Options desk's `wt.options.levels`. Nothing is typed by hand and a day past
+  the range says so. The same file carries the repo's own `config/events/macro_events.csv`, `earnings.csv` and the
+  Options names, as dates and codes only; event codes are drawn through `EVENT_LABEL`. Each session's open and close
+  are shown in Sydney time, with the daylight-saving switches in both places found from the zones themselves. Your
+  results are worked out at render time from the journal, exactly as on Trades (`daily()`, by the New York close
+  day, before fees), and each day's "!" is the Overview strip's day-rule test (`judgeDay()` in `src/lib/overview.ts`);
+  nothing of them is stored. A journal that is missing, unreadable or corrupt costs only the results.
+- **Economic calendar** (`stocksdelta/calendar`, schema `src/lib/calendar.schema.json`; `calendar.types.ts` is
+  generated): the release dates the Calendar page shows, published once a week (Fri 21:30 New York) by the trading
+  host's `econ-calendar` job (`src/wt/ops/econ_calendar.py`) through the same signed `POST /api/ingest`, never with
+  the radar key; a shadow host's copy is dropped. FRED's release calendar is the primary for CPI, PPI, jobs, JOLTS,
+  retail sales, GDP and PCE (`FRED_API_KEY`); the Fed's FOMC page gives the decision days; the BLS schedule
+  (asked only with `WT_CONTACT_EMAIL`, its policy) and the BEA schedule check them, and stand in where FRED is not
+  set up. Dates, codes from a fixed list and source ids only. A month after a release's last published date is
+  "not yet announced"; a month where two sources disagree carries both. Each source keeps its last good rows on the
+  host, so a page that cannot be read, or whose future dates suddenly halve, never empties the calendar: the job
+  exits 1 and its unit alerts. Only the latest is kept (`calendar/latest.json`), checked against the schema again
+  when read. The page prefers these dates to the repo's `macro_events.csv`, month by month, and says where that
+  file (what the paper runners trade around) differs from the official dates; it never changes it. `/api/health`
+  reports it under `editions.calendar`. Fixture mode reads `test/fixtures/calendar.v1.json` (the job's own output on
+  the recorded sources); `calendar-off`, `calendar-stale` and `calendar-poison` bend it.
 - **Live prices** (`/api/quote?s=SPY,QQQ`, read by the Options page every 2 s while it is open, one poll shared by the
   glance strip, the level maps' live dot and the state chips; a quote older than 30 s shows as stale): last trades from
   Alpaca's free IEX feed, fetched on the server so the page keeps `connect-src 'self'` and never sees the keys. At most

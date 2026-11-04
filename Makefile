@@ -16,7 +16,7 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
                  src/wt/research/manifest.py src/wt/research/method.py src/wt/research/trials.py \
                  src/wt/ops/thresholds.py src/wt/analytics/g2.py src/wt/analytics/b_replay.py src/wt/risk/mandate.py src/wt/scanner/explain.py \
                  src/wt/ops/dashguard.py src/wt/ops/drill.py src/wt/brokers/cancel_only.py src/wt/ops/host.py \
-                 src/wt/ops/units.py src/wt/ops/hc.py src/wt/core/ledger.py src/wt/ops/r2.py src/wt/ops/lease.py \
+                 src/wt/ops/units.py src/wt/ops/hc.py src/wt/ops/econ_calendar.py src/wt/core/ledger.py src/wt/ops/r2.py src/wt/ops/lease.py \
                  src/wt/options/bs.py src/wt/options/longopt.py src/wt/options/live.py src/wt/options/levels.py src/wt/options/rules.py src/wt/options/edition.py src/wt/options/intraday.py \
                  src/wt/options/regime.py src/wt/options/setups.py src/wt/options/chain.py src/wt/options/session.py \
                  src/wt/ops/backup.py src/wt/brokers/shadow.py src/wt/analytics/performance.py src/wt/analytics/forward_book.py src/wt/analytics/funnel_agreement.py src/wt/scanner/quality.py \
@@ -122,9 +122,10 @@ dashboard-deploy: ## OWNER: deploy origin/main's dashboard to production from a 
 	cd "$$tmp/wt/dashboard" && vercel deploy --prod --yes --build-env BUILD_SHA="$$sha" && \
 	short=$$(printf %.12s "$$sha"); echo "deployed $$short; /api/health should now report version $$short"
 
-schema: ## Regenerate the dashboard contract: snapshot.schema.json (from ALLOW), thresholds.gen.ts, and the TS types
+schema: ## Regenerate the dashboard contract: snapshot.schema.json (from ALLOW), thresholds.gen.ts, market-calendar.json, and the TS types
 	$(PY) -c "import json; from wt.ops.publish import to_schema, SCHEMA_PATH; SCHEMA_PATH.parent.mkdir(parents=True, exist_ok=True); SCHEMA_PATH.write_text(json.dumps(to_schema(), indent=2) + '\\n')"
 	$(PY) scripts/gen_thresholds_ts.py
+	$(PY) scripts/build_market_calendar.py
 	@if [ -d dashboard/node_modules ]; then cd dashboard && pnpm -s gen:types; else echo "dashboard/node_modules missing: run pnpm install, then make schema again for the TS types"; fi
 
 # The Mac's cloudflared client pin: 2026.6.0+ ignores Access service tokens (cloudflare/cloudflared#1673).
