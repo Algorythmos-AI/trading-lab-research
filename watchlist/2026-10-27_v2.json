@@ -1,0 +1,76 @@
+{
+  "date": "2026-10-27",
+  "top": [
+    {
+      "symbol": "CLRO",
+      "score": 75.807,
+      "subscores": {
+        "catalyst": 0.3,
+        "rvol": 1.0,
+        "float": 1.0,
+        "gap": 0.448,
+        "price": 1.0,
+        "liquidity": 1.0,
+        "spread": 0.832,
+        "float_rotation": 1.0
+      },
+      "features": {
+        "price": 5.96,
+        "gap_pct": 19.919517102615703,
+        "rvol_tod": 15.157382407834229,
+        "pm_dollar_vol": 83604036.85869999,
+        "spread_pct": 0.16764459346185728,
+        "float_shares": 2675412.0
+      },
+      "rank": 1
+    },
+    {
+      "symbol": "BRAI",
+      "score": 62.285,
+      "subscores": {
+        "catalyst": 0.4,
+        "rvol": 1.0,
+        "float": 0.0,
+        "gap": 0.985,
+        "price": 1.0,
+        "liquidity": 0.956,
+        "spread": 0.684,
+        "float_rotation": 0.0
+      },
+      "features": {
+        "price": 3.1603,
+        "gap_pct": 49.07075471698113,
+        "rvol_tod": 2763.480436649086,
+        "pm_dollar_vol": 17544363.5816,
+        "spread_pct": 0.3159557661927263,
+        "float_shares": null
+      },
+      "rank": 2
+    },
+    {
+      "symbol": "MFIC",
+      "score": 56.379,
+      "subscores": {
+        "catalyst": 0.4,
+        "rvol": 1.0,
+        "float": 0.2,
+        "gap": 0.505,
+        "price": 0.7,
+        "liquidity": 0.657,
+        "spread": 0.805,
+        "float_rotation": 0.087
+      },
+      "features": {
+        "price": 10.26,
+        "gap_pct": 22.72727272727273,
+        "rvol_tod": 716.866,
+        "pm_dollar_vol": 7161538.239,
+        "spread_pct": 0.19493177387913815,
+        "float_shares": 82372628.0
+      },
+      "rank": 3
+    }
+  ],
+  "forward": true,
+  "strategy": "watchlist_bull_flag_atr_M1_v2"
+}
