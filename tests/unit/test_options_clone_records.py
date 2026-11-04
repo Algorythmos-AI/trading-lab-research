@@ -34,13 +34,13 @@ def test_the_nearest_expiry_rule_is_recorded_as_one_new_trial_before_its_first_t
     assert "release containing DEC-0034" in h["since"] and "15:10" in h["statement"]
     assert "Written before any paper result of the new trial exists" in rec and "from 14 to **15**" in rec
     assert (ROOT / "research" / "experiments" / "EXP-0026-options-clone-nearest-expiry" / "README.md").exists()
-    assert re.search(r"\*\*Status: ACCEPTED on 2026-10-22\.\*\*", rec) and family_trial_count("O") == 18
+    assert re.search(r"\*\*Status: ACCEPTED on 2026-10-22\.\*\*", rec) and family_trial_count("O") == 21
     assert CONFIG["names"]["expiry"] == "nearest" and CONFIG["names"]["nearest_within_days"] == 7
     assert "same_day_expiry_only" not in CONFIG["names"]
 
 
 def test_the_record_and_the_registry_agree():
-    assert family_trial_count("O") == 18                                     # 14 + HYP-0031 (DEC-0034)
+    assert family_trial_count("O") == 21                                     # 14 + HYP-0031 (DEC-0034)
     assert re.search(r"from 12 to \*\*14\*\*", DECISION)
     assert re.search(r"\*\*Status: ACCEPTED on 2026-10-18\.\*\*", DECISION)
 
@@ -68,7 +68,7 @@ def test_paper_is_the_only_trading_value_and_size_is_one():
 def test_the_dry_run_is_registered_before_it_runs_and_adds_no_trial():
     rec = (ROOT / "research" / "decisions" / "DEC-0031-options-clone-dry-run.md").read_text()
     assert re.search(r"\*\*Status: ACCEPTED on 2026-10-20\.\*\*", rec) and "no result of it has" in rec
-    assert "family O stays at 14" in rec and family_trial_count("O") == 18    # DEC-0034 added one since
+    assert "family O stays at 14" in rec and family_trial_count("O") == 21    # DEC-0034 added one since
     exp = ROOT / "research" / "experiments" / "EXP-0025-options-clone-dry-run"
     assert (exp / "README.md").exists()
 
@@ -77,13 +77,13 @@ def test_the_tradeable_names_rule_is_recorded_and_configured():
     rec = (ROOT / "research" / "decisions" / "DEC-0032-options-clone-tradeable-names.md").read_text()
     assert re.search(r"\*\*Status: ACCEPTED on 2026-10-20\.\*\*", rec) and "No trial is added" in rec
     assert CONFIG["names"]["top_up"] == ["SPY", "QQQ"] and CONFIG["names"]["min_names"] == 2
-    assert family_trial_count("O") == 18    # DEC-0034 added HYP-0031 since
+    assert family_trial_count("O") == 21    # DEC-0034 added HYP-0031 since
 
 
 def test_the_one_level_source_rule_is_recorded():
     rec = (ROOT / "research" / "decisions" / "DEC-0033-options-clone-one-level-source.md").read_text()
     assert re.search(r"\*\*Status: ACCEPTED on 2026-10-20\.\*\*", rec) and "No trial is added" in rec
-    assert family_trial_count("O") == 18    # DEC-0034 added HYP-0031 since
+    assert family_trial_count("O") == 21    # DEC-0034 added HYP-0031 since
 
 
 def test_the_cap_change_is_recorded_as_three_new_trials_before_its_first_trade():
@@ -92,4 +92,14 @@ def test_the_cap_change_is_recorded_as_three_new_trials_before_its_first_trade()
     assert "Written before any trade under the new cap exists" in rec and "2026-10-30" in rec
     exp = (ROOT / "research" / "experiments" / "EXP-0028-options-clone-cap-15" / "README.md").read_text()
     assert "DEC-0039" in exp and "2026-10-30" in exp and "30 trades and 20 sessions" in exp
-    assert family_trial_count("O") == 18
+    assert family_trial_count("O") == 21
+
+
+def test_the_spread_cap_change_is_recorded_as_three_new_trials_before_its_first_trade():
+    rec = (ROOT / "research" / "decisions" / "DEC-0040-options-clone-spread-cap-5.md").read_text()
+    assert re.search(r"\*\*Status: ACCEPTED on 2026-11-04\.\*\*", rec) and "from 18 to **21**" in rec
+    assert "Written before any trade under the new cap exists" in rec and "2026-11-05" in rec
+    exp = (ROOT / "research" / "experiments" / "EXP-0029-options-clone-spread-5" / "README.md").read_text()
+    assert "DEC-0040" in exp and "2026-11-05" in exp and "30 trades and 20 sessions" in exp
+    clone = yaml.safe_load((ROOT / "config" / "options_clone.yaml").read_text())["contract"]
+    assert clone["max_spread"] == 5.0 and clone["max_spread_pct_of_mid"] == 8
