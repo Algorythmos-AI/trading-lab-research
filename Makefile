@@ -122,9 +122,10 @@ dashboard-deploy: ## OWNER: deploy origin/main's dashboard to production from a 
 	cd "$$tmp/wt/dashboard" && vercel deploy --prod --yes --build-env BUILD_SHA="$$sha" && \
 	short=$$(printf %.12s "$$sha"); echo "deployed $$short; /api/health should now report version $$short"
 
-schema: ## Regenerate the dashboard contract: snapshot.schema.json (from ALLOW), thresholds.gen.ts, and the TS types
+schema: ## Regenerate the dashboard contract: snapshot.schema.json (from ALLOW), thresholds.gen.ts, market-calendar.json, and the TS types
 	$(PY) -c "import json; from wt.ops.publish import to_schema, SCHEMA_PATH; SCHEMA_PATH.parent.mkdir(parents=True, exist_ok=True); SCHEMA_PATH.write_text(json.dumps(to_schema(), indent=2) + '\\n')"
 	$(PY) scripts/gen_thresholds_ts.py
+	$(PY) scripts/build_market_calendar.py
 	@if [ -d dashboard/node_modules ]; then cd dashboard && pnpm -s gen:types; else echo "dashboard/node_modules missing: run pnpm install, then make schema again for the TS types"; fi
 
 # The Mac's cloudflared client pin: 2026.6.0+ ignores Access service tokens (cloudflare/cloudflared#1673).

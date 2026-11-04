@@ -112,6 +112,18 @@ wt.ops.publish                            POST /api/ingest            (productio
   table. Read only: it describes what happened and suggests nothing. An edition older than three and a half days
   is shown with a notice. `/api/health` reports it under `editions.journal`. Fixture mode reads the synthetic
   `test/fixtures/journal.v1.json`.
+- **Calendar** (`/calendar`, `src/app/calendar/page.tsx`, the grid in `src/components/client/calendar-year.tsx`, all
+  arithmetic in `src/lib/market-calendar.ts`, pure and unit-tested): the US market year, 2026 and 2027 (`?y=`), Monday
+  to Friday with weekends narrow. Open days, holidays and 1 pm closes come from `src/lib/market-calendar.json`, which
+  `scripts/build_market_calendar.py` (`make schema`) builds from the `exchange_calendars` XNYS calendar for a fixed
+  range; `tests/unit/test_market_calendar.py` fails when the file drifts from the script, from NYSE's published list
+  (`tests/fixtures/nyse/`) or from the Options desk's `wt.options.levels`. Nothing is typed by hand and a day past
+  the range says so. The same file carries the repo's own `config/events/macro_events.csv`, `earnings.csv` and the
+  Options names, as dates and codes only; event codes are drawn through `EVENT_LABEL`. Each session's open and close
+  are shown in Sydney time, with the daylight-saving switches in both places found from the zones themselves. Your
+  results are worked out at render time from the journal, exactly as on Trades (`daily()`, by the New York close
+  day, before fees), and each day's "!" is the Overview strip's day-rule test (`judgeDay()` in `src/lib/overview.ts`);
+  nothing of them is stored. A journal that is missing, unreadable or corrupt costs only the results.
 - **Live prices** (`/api/quote?s=SPY,QQQ`, read by the Options page every 2 s while it is open, one poll shared by the
   glance strip, the level maps' live dot and the state chips; a quote older than 30 s shows as stale): last trades from
   Alpaca's free IEX feed, fetched on the server so the page keeps `connect-src 'self'` and never sees the keys. At most

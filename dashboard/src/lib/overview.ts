@@ -53,11 +53,14 @@ export interface RuleDay extends DayRow {
 export function ruleDays(trades: readonly Trade[], count = 20): RuleDay[] {
   return daily(trades)
     .slice(-count)
-    .map((d) => {
-      const loss = d.pnl <= -DAY_LOSS_LIMIT;
-      const many = d.trades > MAX_TRADES_PER_DAY;
-      return { ...d, kept: !loss && !many, broke: loss && many ? "both" : loss ? "loss" : many ? "count" : null };
-    });
+    .map((d) => ({ ...d, ...judgeDay(d) }));
+}
+
+/** One day against the two day rules: the test behind the strip on Overview and the "!" on the Calendar. */
+export function judgeDay(d: Pick<DayRow, "pnl" | "trades">): Pick<RuleDay, "kept" | "broke"> {
+  const loss = d.pnl <= -DAY_LOSS_LIMIT;
+  const many = d.trades > MAX_TRADES_PER_DAY;
+  return { kept: !loss && !many, broke: loss && many ? "both" : loss ? "loss" : many ? "count" : null };
 }
 
 /** The days with a running total across just these days, for a chart of a recent stretch. */

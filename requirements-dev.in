@@ -1,5 +1,6 @@
 # Dev tools (type checking). Compile with:
-#   uv pip compile --python-version 3.12 --generate-hashes requirements-dev.in -o requirements-dev.lock.txt
+#   uv pip compile --python-version 3.12 --generate-hashes -c requirements.lock.txt requirements-dev.in -o requirements-dev.lock.txt
+# The constraint keeps the packages both files share (pandas, numpy, ...) at the runtime lock's versions.
 mypy==1.18.2
 mypy-extensions==1.1.0
 pathspec==1.1.1
@@ -7,3 +8,8 @@ types-pyyaml==6.0.12.20260906
 types-requests==2.33.0.20260906
 typing-extensions==4.16.0
 urllib3==2.8.0
+# The NYSE calendar behind dashboard/src/lib/market-calendar.json (scripts/build_market_calendar.py).
+exchange-calendars==4.13.2
+korean-lunar-calendar==0.4.0
+pyluach==2.3.0
+toolz==1.2.0

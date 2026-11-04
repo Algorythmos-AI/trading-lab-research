@@ -7,6 +7,7 @@ const PAGES = [
   { path: "/today", heading: "Today" },
   { path: "/radar", heading: "Radar" },
   { path: "/options", heading: "Options" },
+  { path: "/calendar", heading: "Calendar" },
   { path: "/strategies", heading: "Strategies" },
   { path: "/research", heading: "Research" },
   { path: "/operations", heading: "Operations" },
