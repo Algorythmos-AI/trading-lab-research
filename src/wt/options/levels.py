@@ -365,7 +365,7 @@ def state(price: float, lv: LevelSet, *, session_open: float | None = None, minu
 # `levels.strong` of config/options_clone.yaml, so none can form a setup, gate a trade or change an order. Adding one
 # to the marked levels is a change to the control and needs its own record (DEC-0041, "Deferred").
 # PMH / PML stay last month's high and low; the pre-market high and low are PMKH / PMKL (wt.options.session.marks).
-RESEARCH_CODES = ("ONH", "ONL", "SWH", "SWL", "EVH", "EVL", "GAPH", "GAPL", "ATH")
+RESEARCH_CODES = ("ONH", "ONL", "SWH", "SWL", "EVH", "EVL", "GAPH", "GAPL", "ATH")   # ATH: the 14-month high
 SWING_SESSIONS = 5          # SWH / SWL: the range of the five sessions before today (HYP-0034's five-session range)
 
 
@@ -386,8 +386,9 @@ def event_candle(bars: list[Bar], session: str, event_dates: list[str]) -> tuple
 
 
 def highest_high(bars: list[Bar], session: str) -> float | None:
-    """ATH: the highest high of the daily bars passed in that are dated before `session`. It is the all-time high only
-    as far back as the history the caller loads (the runner loads about fourteen months)."""
+    """ATH: the highest high of the daily bars passed in that are dated before `session`. Not an all-time high: it
+    reaches only as far back as the history the caller loads, which for the runner is about fourteen months (420
+    calendar days). No hypothesis reads it; it is logged for context only."""
     hist = [b.h for b in bars if b.d < session]
     return max(hist) if hist else None
 

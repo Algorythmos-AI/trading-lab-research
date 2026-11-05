@@ -36,6 +36,13 @@ ARMS = ("runner", "trap", "reclaim_fast")
 # switch, a latch, the flatten). The control's own strategy exits (premium, breakeven, time, target, next level, chart,
 # a resting stop or target at the broker) do not: the runner keeps its own.
 SAFETY_EXITS = frozenset({"flatten", "day-loss", "blind", "stock-feed-stalled", "operational", "kill", "latch"})
+TRADE_EVENTS = frozenset({"pending", "filled", "breakeven", "unfilled", "closed"})
+
+
+def vid_of(session: str, setup: str, root: str, bar_end: str, side: str, level: str) -> str:
+    """A trap or reclaim signal's id: one per session, setup, name, bar, side and level (two strong levels can fire
+    on the same bar)."""
+    return f"{session}-{setup}-{root}-{bar_end}-{side}-{level}"
 
 
 @dataclass
@@ -143,17 +150,21 @@ class Shadow:
         self.fee = fee
         self.flatten = flatten
         self.trades: list[Virtual] = []
+        self.seen: set[str] = set()                # every signal's id, taken or refused: a restart writes none twice
 
     # ---- records -----------------------------------------------------------------------------
     def _rec(self, event: str, v: Virtual, now: dt.datetime, **kw: Any) -> dict[str, Any]:
         return {"ts": now.isoformat(), "event": event, **asdict(v), "rop": v.rop(self.fee), **kw}
 
     def restore(self, records: Iterable[Mapping[str, Any]]) -> None:
-        """A restart's book: the last record of each virtual trade, as it was written."""
+        """A restart's book: the last record of each virtual trade, as it was written, and every signal id seen."""
         names = {f.name for f in fields(Virtual)}
         last: dict[str, Mapping[str, Any]] = {}
         for r in records:
-            if isinstance(r, Mapping) and isinstance(r.get("vid"), str) and r.get("arm") in ARMS:
+            if not (isinstance(r, Mapping) and isinstance(r.get("vid"), str) and r.get("arm") in ARMS):
+                continue
+            self.seen.add(str(r["vid"]))
+            if r.get("event") in TRADE_EVENTS:
                 last[str(r["vid"])] = r
         self.trades = [Virtual(**{k: v for k, v in r.items() if k in names}) for r in last.values()]
 
@@ -194,12 +205,14 @@ class Shadow:
         return out
 
     # ---- the trap and reclaim arms -----------------------------------------------------------
-    def signal(self, arm: str, v: Virtual, gates_ok: bool, why: Mapping[str, Any],
-               now: dt.datetime) -> list[dict[str, Any]]:
-        """A trap or reclaim signal and the control's verdict on it. Pending when it passes and the arm is free."""
-        if arm not in self.enabled:
+    def signal(self, arm: str, v: Virtual, gates_ok: bool, why: Mapping[str, Any], now: dt.datetime,
+               refuse: str | None = None) -> list[dict[str, Any]]:
+        """A trap or reclaim signal and the control's verdict on it. Pending when it passes and the arm is free;
+        otherwise a `signal` record with the reason (`refuse`, when the caller already knows it). Once per id."""
+        if arm not in self.enabled or v.vid in self.seen:
             return []
-        refused = None if gates_ok else "gates"
+        self.seen.add(v.vid)
+        refused = refuse or (None if gates_ok else "gates")
         if refused is None and self.busy(arm):
             refused = "arm-busy"
         if refused is None and self.fills(arm) >= self.max_entries:
@@ -207,7 +220,7 @@ class Shadow:
         if refused is None and v.limit is None:
             refused = "no-contract"
         if refused is not None:
-            return [{"ts": now.isoformat(), "event": "signal", "arm": arm, "root": v.root, "side": v.side,
+            return [{"ts": now.isoformat(), "event": "signal", "arm": arm, "vid": v.vid, "root": v.root, "side": v.side,
                      "level": v.level, "signal_bar": v.signal_bar, "entry": None, "refused": refused, "why": dict(why)}]
         self.trades.append(v)
         return [self._rec("pending", v, now, why=dict(why))]

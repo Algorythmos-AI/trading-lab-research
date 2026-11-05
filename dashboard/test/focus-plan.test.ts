@@ -88,7 +88,7 @@ describe("focus plan", () => {
     expect(levelWords("GAPH/GAPL")).toBe(
       "top of today's gap, bottom of today's gap",
     );
-    expect(levelWords("ATH")).toBe("all-time high");
+    expect(levelWords("ATH")).toBe("14-month high");
   });
 
   it("puts the no-entry times in Sydney, across both daylight-saving changes", () => {
@@ -193,7 +193,7 @@ describe("chart lines", () => {
     ).toBe("month");
   });
 
-  it("draws an all-time high as a month line and a five-day high as a week line, never the intraday research codes", () => {
+  it("draws the 14-month high as a month line and a five-day high as a week line, never the intraday research codes", () => {
     const lines = chartLevels(spy, [
       { name: "ATH", price: 782, tf: "52w", weight: 1 },
       { name: "SWL", price: 772, tf: "week", weight: 1 },

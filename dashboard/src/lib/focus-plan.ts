@@ -37,7 +37,7 @@ export const LEVEL_WORDS: Record<string, string> = {
   EVL: "last big-news day's low",
   GAPH: "top of today's gap",
   GAPL: "bottom of today's gap",
-  ATH: "all-time high",
+  ATH: "14-month high",
 };
 
 /** The glossary under the cards, in reading order. */

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ast
 import datetime as dt
+import importlib.util
 import json
 import subprocess
 import sys
@@ -19,6 +20,7 @@ from test_options_clone_strategy import bar, series
 from wt.live import runner_o
 from wt.live.runner_o import Name, Runner
 from wt.options import levels as lv
+from wt.options import arms_verdict as av
 from wt.options import session, setups, shadow
 from wt.options.regime import NEW_YORK, Bar, Tape
 from wt.options.setups import Mark, Signal
@@ -146,7 +148,9 @@ def test_ntz_is_the_middle_third_of_either_range_with_no_mark_broken():
     t = tag(sig(entry=95.0), flat)
     assert t["ntz"] and t["ntz_prior_mid"] and t["broken"] == [] and t["word"] == "range"
     assert tag(sig(entry=93.0), flat)["ntz_prior_mid"]                    # the end, 90 + 9/3, is included
-    assert not tag(sig(entry=92.9), flat)["ntz"]
+    t = tag(sig(entry=92.9), flat)
+    assert t["ntz"] is None and t["ntz_prior_mid"] is False and t["ntz_five_mid"] is None   # unknown, not False
+    assert tag(sig(entry=92.9), flat, five=(100.0, 99.0))["ntz"] is False                 # both known, neither
     assert tag(sig(entry=92.9), flat, five=(96.0, 89.0))["ntz"]           # the five sessions' third: 91.33..93.67
     broke = series([95.0, 98.0, 99.4, 99.2])                              # a close above PDH (opened below it)
     t = tag(sig(entry=95.0), broke)
@@ -357,8 +361,8 @@ def test_the_shadow_module_imports_no_order_path():
 
 
 # ---------------------------------------------------------------- the control is unchanged with the arms on
-def session_run(tmp: Path, monkeypatch: pytest.MonkeyPatch, cfg: dict[str, Any],
-                after: float | None = None) -> dict[str, Any]:
+def session_run(tmp: Path, monkeypatch: pytest.MonkeyPatch, cfg: dict[str, Any], after: float | None = None,
+                names: tuple[str, ...] = ("SPY",), tweak: Any = None) -> dict[str, Any]:
     monkeypatch.setenv("MODE", "paper")
     monkeypatch.setattr(runner_o, "JOURNAL", tmp / "journal.jsonl")
     monkeypatch.setattr(runner_o.hc, "ping_async", lambda *a, **k: None)
@@ -367,6 +371,23 @@ def session_run(tmp: Path, monkeypatch: pytest.MonkeyPatch, cfg: dict[str, Any],
     m.bid_fn = lambda t: 1.40 if t < at("10:40") else 1.45          # the control's time stop; the runner holds on
     b = ts.Paper(m)
     rows: list[dict[str, Any]] = []
+    calls: list[tuple[str, str, str]] = []               # (what, symbols, clock): the order of feed calls and orders
+    minutes, chain_, place = m.minutes, m.chain, b.place
+
+    def logged_minutes(symbols, start, end):
+        calls.append(("minutes", ",".join(symbols), m.now.strftime("%H:%M:%S")))
+        return minutes(symbols, start, end)
+
+    def logged_chain(root, expiry):
+        calls.append(("chain", root, m.now.strftime("%H:%M:%S")))
+        return chain_(root, expiry)
+
+    def logged_place(order):
+        calls.append(("place", order.symbol, m.now.strftime("%H:%M:%S")))
+        return place(order)
+    m.minutes, m.chain, b.place = logged_minutes, logged_chain, logged_place
+    if tweak is not None:
+        tweak(m)
 
     class Pager:
         def fire(self, *a: Any, **k: Any) -> None:
@@ -381,8 +402,9 @@ def session_run(tmp: Path, monkeypatch: pytest.MonkeyPatch, cfg: dict[str, Any],
 
     r = Runner(DAY, cfg, ts.LIM, m, b, lambda: m.now, lambda s: None, Pager(), write=write, state=tmp / "options",
                kills=(tmp / "KILL",))
-    r.prepare = lambda: r.names.update(SPY=Name("SPY", [Mark("PDL", 576.0), Mark("PDH", ts.L, True),
-                                                        Mark("PWH", ts.NEXT, True)], m.contracts("SPY", DAY)))
+    r.prepare = lambda: r.names.update({n: Name(n, [Mark("PDL", 576.0), Mark("PDH", ts.L, True),
+                                                    Mark("PWH", ts.NEXT, True)], m.contracts("SPY", DAY))
+                                        for n in names})
     m.now = at("09:25")
     r.arm()
     ts.run_until(r, m, b, at("10:40"))
@@ -391,7 +413,9 @@ def session_run(tmp: Path, monkeypatch: pytest.MonkeyPatch, cfg: dict[str, Any],
     orders = [(o.client_order_id, o.side, o.type, o.qty, o.limit_price, o.stop_price, str(o.status))
               for o in b.orders.values()]
     shadow_file = tmp / "options" / "shadow" / "2026-10-19.jsonl"
-    return {"decisions": decisions, "orders": orders, "rows": rows, "r": r,
+    plans = [(p.trade_id, p.symbol, p.state, p.limit, p.quoted_ask, p.quote_age_s, p.entry_sent_at, p.fill,
+              p.filled_at, p.exit_fill, p.exit_at, p.exit_reason) for p in r.plans]
+    return {"decisions": decisions, "orders": orders, "rows": rows, "r": r, "calls": calls, "plans": plans,
             "shadow": [json.loads(x) for x in shadow_file.read_text().splitlines()] if shadow_file.exists() else []}
 
 
@@ -418,7 +442,7 @@ def test_the_controls_decisions_orders_and_journal_are_identical_with_the_arms_o
     (entered,) = [json.loads(d) for d in on["decisions"] if json.loads(d)["action"] == "entered"]
     tags = entered["signals"][0]["arms"]
     assert tags["early"] is True and tags["iv_rich"] is False and tags["iv_cap"] == 0.35
-    assert tags["broken"] == ["PDH"] and tags["ntz"] is False and tags["gap_against"] is False
+    assert tags["broken"] == ["PDH"] and tags["ntz"] is None and tags["gap_against"] is False   # no 5-day range here
     runs = [x for x in on["shadow"] if x.get("arm") == "runner"]
     assert [x["event"] for x in runs] == ["filled", "closed"]
     assert runs[0]["paired"] == p.trade_id and runs[0]["fill"] == p.fill
@@ -494,3 +518,227 @@ def test_arm_with_the_arms_on_logs_the_research_levels_and_marks_the_same_levels
     assert got["ATH"] == pytest.approx(571 + (len(days) - 1) * 0.1)
     assert got["SWL"] == pytest.approx(569 + (len(days) - 5) * 0.1)
     assert not (tmp_path / "off" / "shadow").exists()
+
+
+# ---------------------------------------------------------------- review items (D1 to D9)
+def test_two_names_and_a_failing_leader_fetch_leave_the_controls_orders_and_quotes_untouched(tmp_path, monkeypatch):
+    """QQQ is looked at before SPY; its SMH fetch raises. Every order of the poll goes out before any arm's fetch,
+    the control's orders, quotes and times are the same with the arms on and off, and only `leader_against` is
+    unknown on QQQ's tags."""
+    def smh_fails(m: Any) -> None:
+        inner = m.minutes
+
+        def minutes(symbols, start, end):
+            if "SMH" in symbols:
+                inner(symbols, start, end)                      # logged, then it fails
+                raise TimeoutError("slow leader")
+            return inner(symbols, start, end)
+        m.minutes = minutes
+    off = session_run(tmp_path / "off", monkeypatch, CFG, names=("QQQ", "SPY"), tweak=smh_fails)
+    on = session_run(tmp_path / "on", monkeypatch, ON, names=("QQQ", "SPY"), tweak=smh_fails)
+    assert on["orders"] == off["orders"] and on["plans"] == off["plans"] and on["rows"] == off["rows"]
+    assert [strip_arms(x) for x in on["decisions"]] == off["decisions"]
+    # the control's own calls are the same, in the same order, at the same clock, with the arms on
+    assert [c for c in on["calls"] if "SMH" not in c[1]] == off["calls"]
+    assert not any("SMH" in c[1] for c in off["calls"])
+    # in every poll that placed an order, each SMH fetch came after every order of that poll
+    polls = {c[2] for c in on["calls"] if c[0] == "place"}
+    assert polls
+    for t in polls:
+        idx = [i for i, c in enumerate(on["calls"]) if c[2] == t]
+        last_order = max(i for i in idx if on["calls"][i][0] == "place")
+        assert all(i > last_order for i in idx if "SMH" in on["calls"][i][1])
+    assert any("SMH" in c[1] for c in on["calls"])
+    bar = next(json.loads(d) for d in on["decisions"] if json.loads(d)["root"] == "QQQ" and json.loads(d).get("signals"))
+    t = bar["signals"][0]["arms"]
+    assert t["leader_against"] is None and t["leader_fault"] == "TimeoutError"
+    assert t["early"] is True and t["iv_cap"] == 0.35 and "ntz" in t and t["release"] and t["config"]
+    spy = next(json.loads(d) for d in on["decisions"] if json.loads(d)["action"] == "entered")
+    assert spy["root"] == "SPY" and spy["signals"][0]["arms"]["trade_id"] == on["r"].plans[0].trade_id
+    assert "leader_against" not in spy["signals"][0]["arms"]
+
+
+def test_a_failing_overnight_fetch_keeps_the_codes_from_the_daily_bars(tmp_path, monkeypatch):
+    days, d = [], "2026-10-16"
+    for _ in range(80):
+        days.append(d)
+        d = lv.prev_session(d)
+    days.reverse()
+    rows = [{"t": f"{x}T04:00:00Z", "o": 570 + i * 0.1, "h": 571 + i * 0.1, "l": 569 + i * 0.1, "c": 570.5 + i * 0.1,
+             "v": 1e6} for i, x in enumerate(days)]
+    monkeypatch.setattr(runner_o, "JOURNAL", tmp_path / "journal.jsonl")
+    monkeypatch.setattr(runner_o.hc, "ping_async", lambda *a, **k: None)
+    m = ts.Market()
+    m.daily = lambda symbols, start, end: {"SPY": rows}
+    inner = m.minutes
+
+    def minutes(symbols, start, end):
+        if start.astimezone(NEW_YORK).time() == dt.time(16, 0):
+            raise TimeoutError("overnight")
+        return inner(symbols, start, end)
+    m.minutes = minutes
+    r = Runner(DAY, {**ON, "names": {**ON["names"], "fallback": ["SPY"], "top_up": []}}, ts.LIM, m, ts.Paper(m),
+               lambda: m.now, lambda s: None, None, write=lambda *a, **k: True, state=tmp_path, kills=())
+    r.pager = type("P", (), {"fire": staticmethod(lambda *a: None), "once_per_day": staticmethod(lambda *a: None)})()
+    m.now = at("09:25")
+    r.arm()
+    got = r.names["SPY"].research
+    assert {"SWH", "SWL", "ATH"} <= set(got) and "ONH" not in got
+    recs = [json.loads(x) for x in (tmp_path / "shadow" / "2026-10-19.jsonl").read_text().splitlines()]
+    assert any(x["event"] == "fault" and x["arm"] == "overnight" for x in recs)
+
+
+def test_a_malformed_research_arms_block_is_a_fault_and_never_stops_the_runner(tmp_path):
+    bad = {**CFG, "research_arms": {"enabled": True, "tags": {}, "shadow": {}}}
+    m = ts.Market()
+    m.now = at("09:25")
+    r = Runner(DAY, bad, ts.LIM, m, ts.Paper(m), lambda: m.now, lambda s: None, None, write=lambda *a, **k: True,
+               state=tmp_path, kills=())
+    assert r.shadow is None and not r.arms_cfg
+    (rec,) = [json.loads(x) for x in (tmp_path / "shadow" / "2026-10-19.jsonl").read_text().splitlines()]
+    assert rec["event"] == "fault" and rec["arm"] == "setup"
+    r2 = Runner(DAY, {**CFG, "research_arms": "nonsense"}, ts.LIM, m, ts.Paper(m), lambda: m.now, lambda s: None,
+                None, write=lambda *a, **k: True, state=tmp_path / "2", kills=())
+    assert r2.shadow is None
+
+
+def test_the_gap_codes_are_written_once_the_open_is_known(tmp_path):
+    m = ts.Market()
+    r = Runner(DAY, ON, ts.LIM, m, ts.Paper(m), lambda: m.now, lambda s: None, None, write=lambda *a, **k: True,
+               state=tmp_path, kills=())
+    nm = Name("SPY", [Mark("PDL", 570.0), Mark("PDH", 575.0)], {})
+    two = series([579.0, 579.5])
+    r.arms_gap("SPY", nm, two)
+    r.arms_gap("SPY", nm, two)                                       # once a session
+    assert nm.research == {"GAPH": two[0].o, "GAPL": 575.0}
+    (rec,) = [json.loads(x) for x in (tmp_path / "shadow" / "2026-10-19.jsonl").read_text().splitlines()]
+    assert rec["event"] == "levels" and rec["gap"] == {"GAPH": two[0].o, "GAPL": 575.0} and rec["release"]
+
+
+def test_a_chain_error_still_logs_each_trap_signal_as_refused(tmp_path, monkeypatch):
+    def chain_fails_late(m: Any) -> None:
+        inner = m.chain
+
+        def chain(root, expiry):
+            if m.now >= at("10:28"):
+                raise TimeoutError("chain")
+            return inner(root, expiry)
+        m.chain = chain
+    on = session_run(tmp_path, monkeypatch, ON, after=580.6, tweak=chain_fails_late)
+    traps = [x for x in on["shadow"] if x.get("arm") == "trap"]
+    assert traps and all(x["event"] == "signal" and x["refused"] == "chain-unavailable" for x in traps)
+    assert len({x["vid"] for x in traps}) == len(traps)
+
+
+def test_refused_signals_are_not_written_again_after_a_restart_and_two_levels_get_two_ids():
+    sh = book()
+    a = shadow.Virtual("trap", shadow.vid_of("2026-10-19", "trap", "SPY", "10:28", "put", "PDH"), "SPY", "", "put",
+                       "trap", "PDH", 581.0, 582.0, None, "10:28")
+    b = shadow.Virtual("trap", shadow.vid_of("2026-10-19", "trap", "SPY", "10:28", "put", "PWH"), "SPY", "", "put",
+                       "trap", "PWH", 581.2, 582.0, None, "10:28")
+    assert a.vid != b.vid
+    recs = sh.signal("trap", a, False, {}, at("10:28")) + sh.signal("trap", b, False, {}, at("10:28"))
+    assert [r["vid"] for r in recs] == [a.vid, b.vid]
+    assert sh.signal("trap", a, False, {}, at("10:28")) == []                     # once per id
+    again = book()
+    again.restore(recs)
+    assert again.seen == {a.vid, b.vid} and again.trades == []
+    assert again.signal("trap", a, False, {}, at("10:28")) == []
+
+
+# ---------------------------------------------------------------- the verdict script (DEC-0041 point 7)
+def trade(i: int, setup: str, rop: float, day: str) -> dict[str, Any]:
+    return {"event": "trade_closed", "trade_id": f"{day}-O-{i}", "setup": setup, "symbol": "SPY" + day[2:4] +
+            day[5:7] + day[8:10] + "C00581000", "rop": rop, "pnl": rop * 100, "counts": True}
+
+
+def sessions_from(start: str, n: int) -> list[str]:
+    out, d = [], start
+    while len(out) < n:
+        if lv.is_session(d):
+            out.append(d)
+        d = (dt.date.fromisoformat(d) + dt.timedelta(days=1)).isoformat()
+    return out
+
+
+def tagged_book(n_days: int, per_day: int, cfg_hash: str = "c1", change_from: int | None = None):
+    trades, decisions = [], []
+    for k, day in enumerate(sessions_from("2026-11-05", n_days)):
+        for j in range(per_day):
+            i = k * per_day + j
+            flag = j % 2 == 0
+            trades.append(trade(i, "retest", -0.2 if flag else 0.3, day))
+            h = "c2" if change_from is not None and k >= change_from else cfg_hash
+            decisions.append({"root": "SPY", "action": "entered", "signals": [{"arms": {
+                "trade_id": f"{day}-O-{i}", "ntz": flag, "release": "abc", "config": h}}]})
+    return trades, decisions
+
+
+def test_a_tag_trial_shows_counts_only_until_its_count_then_its_verdict():
+    t = av.BY_NAME["OC-NTZ-RETEST"]
+    trades, decisions = tagged_book(10, 4)
+    us, unknown = av.units(t, trades, decisions, [])
+    res = av.decide(t, us, "2026-12-01")
+    assert res == {"trial": "OC-NTZ-RETEST", "hypothesis": "HYP-0034", "status": "pending", "sessions": 10,
+                   "tagged": 20, "rest": 20}                           # counts only, no return of any kind
+    trades, decisions = tagged_book(25, 4)
+    us, _ = av.units(t, trades, decisions, [])
+    res = av.decide(t, us, "2027-01-01")
+    assert res["status"] == "passes" and res["quantity"] == pytest.approx(0.5) and res["ci_session"][0] > 0
+    assert av.units(av.BY_NAME["OC-NTZ-REJECT"], trades, decisions, [])[0] == []          # another base setup
+
+
+def test_a_tag_trial_stops_at_a_config_change_and_closes_without_a_verdict_on_its_date():
+    t = av.BY_NAME["OC-NTZ-RETEST"]
+    trades, decisions = tagged_book(25, 4, change_from=10)
+    us, _ = av.units(t, trades, decisions, [])
+    assert {u.session for u in us} == set(sessions_from("2026-11-05", 10))
+    assert av.decide(t, us, "2027-11-05")["status"] == "closed-no-verdict"
+    for d in decisions:
+        d["signals"][0]["arms"]["release"] = ""                                      # unstamped: not in any window
+    assert av.units(t, trades, decisions, [])[0] == []
+
+
+def test_the_runner_trial_is_paired_and_trap_is_its_own_mean():
+    days = sessions_from("2026-11-05", 22)
+    trades, shadow_ = [], []
+    for k, day in enumerate(days):
+        for j in range(2):
+            i = k * 2 + j
+            trades.append(trade(i, "retest", 0.1, day))
+            shadow_.append({"event": "closed", "arm": "runner", "paired": f"{day}-O-{i}", "rop": 0.3 if j else -0.05,
+                            "release": "abc", "config": "c1"})
+            shadow_.append({"event": "closed", "arm": "trap", "vid": f"{day}-trap-SPY-10:28-put-PWH-{j}",
+                            "rop": 0.2, "release": "abc", "config": "c1"})
+    run = av.decide(av.BY_NAME["OC-RUNNER-RETEST"], av.units(av.BY_NAME["OC-RUNNER-RETEST"], trades, [], shadow_)[0],
+                    "2027-01-01")
+    assert run["units"] == 44 and run["quantity"] == pytest.approx(((0.3 - 0.1) + (-0.05 - 0.1)) / 2)
+    trap = av.decide(av.BY_NAME["OC-TRAP"], av.units(av.BY_NAME["OC-TRAP"], trades, [], shadow_)[0], "2027-01-01")
+    assert trap["status"] == "passes" and trap["quantity"] == pytest.approx(0.2)
+
+
+def test_the_verdict_script_writes_each_report_once_and_prints_counts_only_before(tmp_path, capsys):
+    spec = importlib.util.spec_from_file_location("arms_verdict_script", ROOT / "scripts" / "options_clone_arms_verdict.py")
+    assert spec is not None and spec.loader is not None
+    v = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(v)
+    state, out = tmp_path / "state", tmp_path / "exp"
+    (state / "decisions").mkdir(parents=True)
+    trades, decisions = tagged_book(10, 4)
+    j = tmp_path / "journal.jsonl"
+    j.write_text("\n".join(json.dumps(r) for r in trades))
+    (state / "decisions" / "a.jsonl").write_text("\n".join(json.dumps(d) for d in decisions))
+    args = ["--journal", str(j), "--state", str(state), "--out", str(out), "--today", "2026-12-01"]
+    assert v.main(args) == 0 and not out.exists()
+    printed = capsys.readouterr().out
+    assert "OC-NTZ-RETEST: pending, counts only" in printed and "quantity" not in printed and "0.3" not in printed
+    trades, decisions = tagged_book(25, 4)
+    j.write_text("\n".join(json.dumps(r) for r in trades))
+    (state / "decisions" / "a.jsonl").write_text("\n".join(json.dumps(d) for d in decisions))
+    args[-1] = "2027-01-01"
+    assert v.main(args) == 0
+    report = out / "OC-NTZ-RETEST" / "report.md"
+    assert "passes" in report.read_text() and json.loads((out / "OC-NTZ-RETEST" / "result.json").read_text())
+    first = report.read_text()
+    assert v.main(args) == 0 and report.read_text() == first
+    assert "report exists, not written again" in capsys.readouterr().out

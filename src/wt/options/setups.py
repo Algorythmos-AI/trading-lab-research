@@ -250,7 +250,8 @@ def tag_decision(sig: Signal, bars: Sequence[Bar], marks: Sequence[Mark], *, roo
     QQQ) at the same bar close; `iv` the implied volatility of the contract the entry would be priced from.
 
     - `ntz` (HYP-0034/35): the entry in the middle third (ends included) of the prior session's range or of the five
-      sessions' range, and no mark broken this session. `word` is logged beside it.
+      sessions' range, and no mark broken this session; None when neither third holds and a range is missing.
+      `word` is logged beside it.
     - `gap_against` (HYP-0036/37): a call while a gap up (open above PDH) is unfilled (no low at or below PDH yet), or
       a put while a gap down (open below PDL) is unfilled (no high at or above PDL yet).
     - `leader_against` (HYP-0038/39): in a name of `leader_names`, a call with the leader's close below its VWAP or a
@@ -264,8 +265,9 @@ def tag_decision(sig: Signal, bars: Sequence[Bar], marks: Sequence[Mark], *, roo
     prior_mid = None if pdh is None or pdl is None else _mid_third(x, pdh, pdl)
     five_mid = None if five is None else _mid_third(x, five[0], five[1])
     broken = broken_marks(bars, marks)
-    in_zone = bool(prior_mid) or bool(five_mid)
-    out: dict[str, Any] = {"ntz": in_zone and not broken, "ntz_prior_mid": prior_mid, "ntz_five_mid": five_mid,
+    # in the zone when either third holds; unknown (None) when neither does and either range is missing
+    in_zone: bool | None = True if prior_mid or five_mid else None if prior_mid is None or five_mid is None else False
+    out: dict[str, Any] = {"ntz": None if in_zone is None else in_zone and not broken, "ntz_prior_mid": prior_mid, "ntz_five_mid": five_mid,
                            "broken": broken, "word": word}
     # gap
     op = bars[0].o if bars else None
