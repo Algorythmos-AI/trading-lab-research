@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { DayBar, FocusStrip, focusOnly } from "@/components/options-focus";
 import type { Options } from "@/lib/options";
+import { focusOptions } from "@/lib/fixture-variants";
 import { validateOptionsEdition } from "@/lib/validate";
 import optionsJson from "./fixtures/options.v1.json";
 
@@ -57,7 +58,9 @@ describe("today's focus", () => {
   });
 
   it("draws the names in rank order with their levels and the pre-market line", () => {
-    const html = renderToStaticMarkup(createElement(FocusStrip, { e: withFocus() }));
+    const html = renderToStaticMarkup(
+      createElement(FocusStrip, { e: withFocus() }),
+    );
     expect(html.indexOf("SPY")).toBeLessThan(html.indexOf("QQQ"));
     expect(html).toContain("773.25");
     expect(html).toContain("704.10");
@@ -66,7 +69,9 @@ describe("today's focus", () => {
   });
 
   it("spells out each side in plain words, with the codes written out and a glossary", () => {
-    const html = renderToStaticMarkup(createElement(FocusStrip, { e: withFocus() }));
+    const html = renderToStaticMarkup(
+      createElement(FocusStrip, { e: withFocus() }),
+    );
     expect(html).toContain("CALL if it breaks up");
     expect(html).toContain("PUT if it breaks down");
     expect(html).toContain("last week&#x27;s low");
@@ -81,13 +86,44 @@ describe("today's focus", () => {
     e.focus!.items[0]!.symbol = "AVGO";
     const html = renderToStaticMarkup(createElement(FocusStrip, { e }));
     expect(html.match(/No options expire today/g)).toHaveLength(1);
-    expect(renderToStaticMarkup(createElement(FocusStrip, { e: withFocus() }))).not.toContain("expire today");
+    expect(
+      renderToStaticMarkup(createElement(FocusStrip, { e: withFocus() })),
+    ).not.toContain("expire today");
   });
 
   it("links to Card record beside the heading, so past cards are a click away during market hours too", () => {
-    const html = renderToStaticMarkup(createElement(FocusStrip, { e: withFocus() }));
+    const html = renderToStaticMarkup(
+      createElement(FocusStrip, { e: withFocus() }),
+    );
     expect(html).toContain('href="/options/record"');
     expect(html).toContain("Card record");
+  });
+
+  it("lists the chart lines with a big colour ball, the price, what it is and its colour and style in words", () => {
+    const html = renderToStaticMarkup(
+      createElement(FocusStrip, { e: focusOptions(v1) }),
+    );
+    expect(html.match(/data-testid="chart-lines"/g)).toHaveLength(2);
+    expect(html).toContain('aria-labelledby="lines-SPY"');
+    expect(html).toContain("781.62");
+    expect(html).toContain("one-year high");
+    expect(html).toContain("Red, solid, thick");
+    expect(html).toContain("Green, solid, thick");
+    expect(html).toContain("Purple, dashed");
+    expect(html).not.toContain("200-day average price</span>");
+    // The no-trade box sits between the ceiling row and the floor row, as on the chart.
+    const spy = html.slice(html.indexOf('id="lines-SPY"'));
+    expect(spy.indexOf("779.40")).toBeLessThan(spy.indexOf("Grey box"));
+    expect(spy.indexOf("Grey box")).toBeLessThan(spy.indexOf("775.16"));
+  });
+
+  it("says the colour code once under the cards, with pre-market lines to mark by hand and averages as indicators", () => {
+    const html = renderToStaticMarkup(
+      createElement(FocusStrip, { e: focusOptions(v1) }),
+    );
+    expect(html.match(/data-testid="chart-key"/g)).toHaveLength(1);
+    expect(html).toContain("Not in today&#x27;s data");
+    expect(html).toContain("turn them on as indicators");
   });
 
   it("draws nothing without a focus block", () => {
@@ -97,12 +133,21 @@ describe("today's focus", () => {
 
 describe("the trading screen", () => {
   it("narrows the desk to the focus names in rank order, and keeps the whole board without a focus block", () => {
-    expect(focusOnly(withFocus()).tickers.map((t) => t.symbol)).toEqual(["SPY", "QQQ"]);
+    expect(focusOnly(withFocus()).tickers.map((t) => t.symbol)).toEqual([
+      "SPY",
+      "QQQ",
+    ]);
     expect(focusOnly(v1).tickers).toHaveLength(v1.tickers.length);
   });
 
   it("puts the day's limits in one line, and with no journal says the trades were not read, never a fresh day", () => {
-    const html = renderToStaticMarkup(createElement(DayBar, { doc: null, now: new Date("2026-10-19T14:00:00Z"), session: "2026-10-19" }));
+    const html = renderToStaticMarkup(
+      createElement(DayBar, {
+        doc: null,
+        now: new Date("2026-10-19T14:00:00Z"),
+        session: "2026-10-19",
+      }),
+    );
     expect(html).toContain("Journal not current");
     expect(html).toContain("have not been read");
     expect(html).not.toContain("New day");
