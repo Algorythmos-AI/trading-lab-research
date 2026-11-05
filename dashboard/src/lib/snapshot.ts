@@ -4,8 +4,30 @@ import { LATEST_PATH, listPaths, readText } from "./blob";
 import type { CryptoSnapshot } from "./crypto.types";
 import type { CalendarDoc } from "./calendar.types";
 import { validateCalendar } from "./validate";
-import { CALENDAR_PATHS, DESK_PATHS, JOURNAL_PATHS, LEDGER_PATHS, OPTIONS_CLONE_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
-import { fixtureCalendar, fixtureOptionsClone, fixtureOptionsLive, FROZEN_NOW, parseFlags, partialOptions, poisonedJournal, poisonedOptions, v2Options, VARIANT_COOKIE, type VariantFlag } from "./fixture-variants";
+import {
+  CALENDAR_PATHS,
+  DESK_PATHS,
+  JOURNAL_PATHS,
+  LEDGER_PATHS,
+  OPTIONS_CLONE_PATHS,
+  OPTIONS_LIVE_PATHS,
+  OPTIONS_PATHS,
+  RADAR_PATHS,
+} from "./desk";
+import {
+  fixtureCalendar,
+  fixtureOptionsClone,
+  fixtureOptionsLive,
+  FROZEN_NOW,
+  parseFlags,
+  partialOptions,
+  poisonedJournal,
+  poisonedOptions,
+  focusOptions,
+  v2Options,
+  VARIANT_COOKIE,
+  type VariantFlag,
+} from "./fixture-variants";
 import type { HftSnapshot } from "./hft.types";
 import type { JournalDoc } from "./journal.types";
 import type { LedgerEdition } from "./ledger.types";
@@ -18,13 +40,21 @@ import type { RadarEdition } from "./radar.types";
 import type { Snapshot } from "./types";
 
 export type SnapshotResult =
-  | { status: "ok"; snapshot: Snapshot; etag: string | null; source: "fixture" | "blob" }
+  | {
+      status: "ok";
+      snapshot: Snapshot;
+      etag: string | null;
+      source: "fixture" | "blob";
+    }
   | { status: "missing" }
   | { status: "error" };
 
 /** Fixture mode serves the synthetic v3 test snapshot. It is refused on production deployments. */
 export function fixtureMode(): boolean {
-  return process.env.DASHBOARD_FIXTURE === "1" && process.env.VERCEL_ENV !== "production";
+  return (
+    process.env.DASHBOARD_FIXTURE === "1" &&
+    process.env.VERCEL_ENV !== "production"
+  );
 }
 
 /**
@@ -49,25 +79,45 @@ async function loadFixture(): Promise<Snapshot> {
 /** Reads the latest snapshot. Deduplicated per request; never cached across requests. */
 export const loadSnapshot = cache(async (): Promise<SnapshotResult> => {
   if (fixtureMode()) {
-    return { status: "ok", snapshot: await loadFixture(), etag: null, source: "fixture" };
+    return {
+      status: "ok",
+      snapshot: await loadFixture(),
+      etag: null,
+      source: "fixture",
+    };
   }
   try {
     const stored = await readText(LATEST_PATH);
     if (!stored) return { status: "missing" };
     const parsed: unknown = JSON.parse(stored.text);
-    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    if (
+      parsed === null ||
+      typeof parsed !== "object" ||
+      Array.isArray(parsed)
+    ) {
       logEvent("snapshot.read", { outcome: "not-an-object" });
       return { status: "error" };
     }
-    return { status: "ok", snapshot: parsed as Snapshot, etag: stored.etag, source: "blob" };
+    return {
+      status: "ok",
+      snapshot: parsed as Snapshot,
+      etag: stored.etag,
+      source: "blob",
+    };
   } catch (e) {
-    logEvent("snapshot.read", { outcome: "error", error: e instanceof Error ? e.name : "unknown" });
+    logEvent("snapshot.read", {
+      outcome: "error",
+      error: e instanceof Error ? e.name : "unknown",
+    });
     return { status: "error" };
   }
 });
 
 /** `{snapshot, etag}` or null, for callers that only care whether a snapshot exists. */
-export async function getSnapshot(): Promise<{ snapshot: Snapshot; etag: string | null } | null> {
+export async function getSnapshot(): Promise<{
+  snapshot: Snapshot;
+  etag: string | null;
+} | null> {
   const r = await loadSnapshot();
   return r.status === "ok" ? { snapshot: r.snapshot, etag: r.etag } : null;
 }
@@ -81,19 +131,31 @@ export type CryptoResult =
 export const loadCryptoSnapshot = cache(async (): Promise<CryptoResult> => {
   if (fixtureMode()) {
     const mod = await import("../../test/fixtures/crypto.v1.json");
-    return { status: "ok", snapshot: (mod.default ?? mod) as unknown as CryptoSnapshot, source: "fixture" };
+    return {
+      status: "ok",
+      snapshot: (mod.default ?? mod) as unknown as CryptoSnapshot,
+      source: "fixture",
+    };
   }
   try {
     const stored = await readText(DESK_PATHS.crypto.latest);
     if (!stored) return { status: "missing" };
     const parsed: unknown = JSON.parse(stored.text);
-    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    if (
+      parsed === null ||
+      typeof parsed !== "object" ||
+      Array.isArray(parsed)
+    ) {
       logEvent("snapshot.read", { outcome: "not-an-object", desk: "crypto" });
       return { status: "error" };
     }
     return { status: "ok", snapshot: parsed as CryptoSnapshot, source: "blob" };
   } catch (e) {
-    logEvent("snapshot.read", { outcome: "error", desk: "crypto", error: e instanceof Error ? e.name : "unknown" });
+    logEvent("snapshot.read", {
+      outcome: "error",
+      desk: "crypto",
+      error: e instanceof Error ? e.name : "unknown",
+    });
     return { status: "error" };
   }
 });
@@ -113,19 +175,31 @@ export const loadHftSnapshot = cache(async (): Promise<HftResult> => {
     if (flags.has("empty")) return { status: "missing" };
     if (flags.has("error")) return { status: "error" };
     const mod = await import("../../test/fixtures/hft.v1.json");
-    return { status: "ok", snapshot: (mod.default ?? mod) as unknown as HftSnapshot, source: "fixture" };
+    return {
+      status: "ok",
+      snapshot: (mod.default ?? mod) as unknown as HftSnapshot,
+      source: "fixture",
+    };
   }
   try {
     const stored = await readText(DESK_PATHS.hft.latest);
     if (!stored) return { status: "missing" };
     const parsed: unknown = JSON.parse(stored.text);
-    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    if (
+      parsed === null ||
+      typeof parsed !== "object" ||
+      Array.isArray(parsed)
+    ) {
       logEvent("snapshot.read", { outcome: "not-an-object", desk: "hft" });
       return { status: "error" };
     }
     return { status: "ok", snapshot: parsed as HftSnapshot, source: "blob" };
   } catch (e) {
-    logEvent("snapshot.read", { outcome: "error", desk: "hft", error: e instanceof Error ? e.name : "unknown" });
+    logEvent("snapshot.read", {
+      outcome: "error",
+      desk: "hft",
+      error: e instanceof Error ? e.name : "unknown",
+    });
     return { status: "error" };
   }
 });
@@ -142,20 +216,35 @@ export type RadarResult =
 export const loadRadar = cache(async (date?: string): Promise<RadarResult> => {
   if (fixtureMode()) {
     const mod = await import("../../test/fixtures/radar.v1.json");
-    return { status: "ok", edition: (mod.default ?? mod) as unknown as RadarEdition, source: "fixture" };
+    return {
+      status: "ok",
+      edition: (mod.default ?? mod) as unknown as RadarEdition,
+      source: "fixture",
+    };
   }
-  const path = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${RADAR_PATHS.history}${date}.json` : RADAR_PATHS.latest;
+  const path =
+    date && /^\d{4}-\d{2}-\d{2}$/.test(date)
+      ? `${RADAR_PATHS.history}${date}.json`
+      : RADAR_PATHS.latest;
   try {
     const stored = await readText(path);
     if (!stored) return { status: "missing" };
     const parsed: unknown = JSON.parse(stored.text);
-    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    if (
+      parsed === null ||
+      typeof parsed !== "object" ||
+      Array.isArray(parsed)
+    ) {
       logEvent("snapshot.read", { outcome: "not-an-object", desk: "radar" });
       return { status: "error" };
     }
     return { status: "ok", edition: parsed as RadarEdition, source: "blob" };
   } catch (e) {
-    logEvent("snapshot.read", { outcome: "error", desk: "radar", error: e instanceof Error ? e.name : "unknown" });
+    logEvent("snapshot.read", {
+      outcome: "error",
+      desk: "radar",
+      error: e instanceof Error ? e.name : "unknown",
+    });
     return { status: "error" };
   }
 });
@@ -165,9 +254,15 @@ export async function listRadarDates(max = 30): Promise<string[]> {
   if (fixtureMode()) return [];
   try {
     const paths = await listPaths(RADAR_PATHS.history);
-    return radarDates(paths.map((p) => p.pathname), RADAR_PATHS.history).slice(0, max);
+    return radarDates(
+      paths.map((p) => p.pathname),
+      RADAR_PATHS.history,
+    ).slice(0, max);
   } catch (e) {
-    logEvent("radar.list", { outcome: "error", error: e instanceof Error ? e.name : "unknown" });
+    logEvent("radar.list", {
+      outcome: "error",
+      error: e instanceof Error ? e.name : "unknown",
+    });
     return [];
   }
 }
@@ -181,41 +276,71 @@ export type OptionsResult =
  * An options levels edition: the newest one, or the one built for session `date` (YYYY-MM-DD). "missing" until
  * the after-close run has published, or when that session has no edition.
  */
-export const loadOptions = cache(async (date?: string): Promise<OptionsResult> => {
-  if (fixtureMode()) {
-    const flags = await fixtureFlags();
-    if (flags.has("empty")) return { status: "missing" };
-    if (flags.has("error")) return { status: "error" };
-    const mod = await import("../../test/fixtures/options.v1.json");
-    const base = (mod.default ?? mod) as unknown as OptionsEdition;
-    const shaped = flags.has("v2") ? v2Options(base) : base;
-    const edition = flags.has("poison") ? poisonedOptions(shaped) : flags.has("partial") ? partialOptions(shaped) : shaped;
-    return { status: "ok", edition, source: "fixture" };
-  }
-  const path = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${OPTIONS_PATHS.history}${date}.json` : OPTIONS_PATHS.latest;
-  try {
-    const stored = await readText(path);
-    if (!stored) return { status: "missing" };
-    const parsed: unknown = JSON.parse(stored.text);
-    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-      logEvent("snapshot.read", { outcome: "not-an-object", desk: "options" });
+export const loadOptions = cache(
+  async (date?: string): Promise<OptionsResult> => {
+    if (fixtureMode()) {
+      const flags = await fixtureFlags();
+      if (flags.has("empty")) return { status: "missing" };
+      if (flags.has("error")) return { status: "error" };
+      const mod = await import("../../test/fixtures/options.v1.json");
+      const base = (mod.default ?? mod) as unknown as OptionsEdition;
+      const versioned = flags.has("v2") ? v2Options(base) : base;
+      const shaped = flags.has("focus") ? focusOptions(versioned) : versioned;
+      const edition = flags.has("poison")
+        ? poisonedOptions(shaped)
+        : flags.has("partial")
+          ? partialOptions(shaped)
+          : shaped;
+      return { status: "ok", edition, source: "fixture" };
+    }
+    const path =
+      date && /^\d{4}-\d{2}-\d{2}$/.test(date)
+        ? `${OPTIONS_PATHS.history}${date}.json`
+        : OPTIONS_PATHS.latest;
+    try {
+      const stored = await readText(path);
+      if (!stored) return { status: "missing" };
+      const parsed: unknown = JSON.parse(stored.text);
+      if (
+        parsed === null ||
+        typeof parsed !== "object" ||
+        Array.isArray(parsed)
+      ) {
+        logEvent("snapshot.read", {
+          outcome: "not-an-object",
+          desk: "options",
+        });
+        return { status: "error" };
+      }
+      return {
+        status: "ok",
+        edition: parsed as OptionsEdition,
+        source: "blob",
+      };
+    } catch (e) {
+      logEvent("snapshot.read", {
+        outcome: "error",
+        desk: "options",
+        error: e instanceof Error ? e.name : "unknown",
+      });
       return { status: "error" };
     }
-    return { status: "ok", edition: parsed as OptionsEdition, source: "blob" };
-  } catch (e) {
-    logEvent("snapshot.read", { outcome: "error", desk: "options", error: e instanceof Error ? e.name : "unknown" });
-    return { status: "error" };
-  }
-});
+  },
+);
 
-export type OptionsLiveResult = { status: "ok"; doc: OptionsLive; source: "fixture" | "blob" } | { status: "missing" } | { status: "error" };
+export type OptionsLiveResult =
+  | { status: "ok"; doc: OptionsLive; source: "fixture" | "blob" }
+  | { status: "missing" }
+  | { status: "error" };
 
 /**
  * The time an Options page is drawn for: now, always, outside fixture mode. In fixture mode the `frozen` flag
  * stands it still, for screenshots.
  */
 export async function pageTime(): Promise<Date> {
-  return (await fixtureFlags()).has("frozen") ? new Date(FROZEN_NOW) : new Date();
+  return (await fixtureFlags()).has("frozen")
+    ? new Date(FROZEN_NOW)
+    : new Date();
 }
 
 /**
@@ -225,52 +350,97 @@ export async function pageTime(): Promise<Date> {
 export const loadOptionsLive = cache(async (): Promise<OptionsLiveResult> => {
   if (fixtureMode()) {
     const flags = await fixtureFlags();
-    if (flags.has("positions-off") || flags.has("empty") || flags.has("error")) return { status: "missing" };
+    if (flags.has("positions-off") || flags.has("empty") || flags.has("error"))
+      return { status: "missing" };
     const mod = await import("../../test/fixtures/options.v1.json");
-    return { status: "ok", doc: fixtureOptionsLive((mod.default ?? mod) as unknown as OptionsEdition, flags.has("frozen") ? new Date(FROZEN_NOW) : new Date(), flags), source: "fixture" };
+    return {
+      status: "ok",
+      doc: fixtureOptionsLive(
+        (mod.default ?? mod) as unknown as OptionsEdition,
+        flags.has("frozen") ? new Date(FROZEN_NOW) : new Date(),
+        flags,
+      ),
+      source: "fixture",
+    };
   }
   try {
     const stored = await readText(OPTIONS_LIVE_PATHS.latest);
     if (!stored) return { status: "missing" };
     const parsed: unknown = JSON.parse(stored.text);
-    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-      logEvent("snapshot.read", { outcome: "not-an-object", desk: "options-live" });
+    if (
+      parsed === null ||
+      typeof parsed !== "object" ||
+      Array.isArray(parsed)
+    ) {
+      logEvent("snapshot.read", {
+        outcome: "not-an-object",
+        desk: "options-live",
+      });
       return { status: "error" };
     }
     return { status: "ok", doc: parsed as OptionsLive, source: "blob" };
   } catch (e) {
-    logEvent("snapshot.read", { outcome: "error", desk: "options-live", error: e instanceof Error ? e.name : "unknown" });
+    logEvent("snapshot.read", {
+      outcome: "error",
+      desk: "options-live",
+      error: e instanceof Error ? e.name : "unknown",
+    });
     return { status: "error" };
   }
 });
 
-export type OptionsCloneResult = { status: "ok"; doc: OptionsClone; source: "fixture" | "blob" } | { status: "missing" } | { status: "error" };
+export type OptionsCloneResult =
+  | { status: "ok"; doc: OptionsClone; source: "fixture" | "blob" }
+  | { status: "missing" }
+  | { status: "error" };
 
 /** The options clone's document (DEC-0030). "missing" until the paper-o runner has published once. */
 export const loadOptionsClone = cache(async (): Promise<OptionsCloneResult> => {
   if (fixtureMode()) {
     const flags = await fixtureFlags();
-    if (flags.has("clone-off") || flags.has("empty")) return { status: "missing" };
+    if (flags.has("clone-off") || flags.has("empty"))
+      return { status: "missing" };
     if (flags.has("error")) return { status: "error" };
     const mod = await import("../../test/fixtures/options-clone.v1.json");
-    return { status: "ok", doc: fixtureOptionsClone((mod.default ?? mod) as unknown as OptionsClone, flags), source: "fixture" };
+    return {
+      status: "ok",
+      doc: fixtureOptionsClone(
+        (mod.default ?? mod) as unknown as OptionsClone,
+        flags,
+      ),
+      source: "fixture",
+    };
   }
   try {
     const stored = await readText(OPTIONS_CLONE_PATHS.latest);
     if (!stored) return { status: "missing" };
     const parsed: unknown = JSON.parse(stored.text);
-    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-      logEvent("snapshot.read", { outcome: "not-an-object", desk: "options-clone" });
+    if (
+      parsed === null ||
+      typeof parsed !== "object" ||
+      Array.isArray(parsed)
+    ) {
+      logEvent("snapshot.read", {
+        outcome: "not-an-object",
+        desk: "options-clone",
+      });
       return { status: "error" };
     }
     return { status: "ok", doc: parsed as OptionsClone, source: "blob" };
   } catch (e) {
-    logEvent("snapshot.read", { outcome: "error", desk: "options-clone", error: e instanceof Error ? e.name : "unknown" });
+    logEvent("snapshot.read", {
+      outcome: "error",
+      desk: "options-clone",
+      error: e instanceof Error ? e.name : "unknown",
+    });
     return { status: "error" };
   }
 });
 
-export type JournalResult = { status: "ok"; doc: JournalDoc; source: "fixture" | "blob" } | { status: "missing" } | { status: "error" };
+export type JournalResult =
+  | { status: "ok"; doc: JournalDoc; source: "fixture" | "blob" }
+  | { status: "missing" }
+  | { status: "error" };
 
 /** The owner's trade journal. "missing" until it has been published once. */
 export const loadJournal = cache(async (): Promise<JournalResult> => {
@@ -281,21 +451,38 @@ export const loadJournal = cache(async (): Promise<JournalResult> => {
     const doc = (mod.default ?? mod) as unknown as JournalDoc;
     // Under the stood-still clock the journal was read ten minutes earlier, as the live sync would have: a picture
     // shows a current journal, not one stamped days after the clock.
-    if (flags.has("journal-poison")) return { status: "ok", doc: poisonedJournal(doc), source: "fixture" };
-    if (flags.has("frozen")) return { status: "ok", doc: { ...doc, as_of: new Date(Date.parse(FROZEN_NOW) - 10 * 60_000).toISOString() }, source: "fixture" };
+    if (flags.has("journal-poison"))
+      return { status: "ok", doc: poisonedJournal(doc), source: "fixture" };
+    if (flags.has("frozen"))
+      return {
+        status: "ok",
+        doc: {
+          ...doc,
+          as_of: new Date(Date.parse(FROZEN_NOW) - 10 * 60_000).toISOString(),
+        },
+        source: "fixture",
+      };
     return { status: "ok", doc, source: "fixture" };
   }
   try {
     const stored = await readText(JOURNAL_PATHS.latest);
     if (!stored) return { status: "missing" };
     const parsed: unknown = JSON.parse(stored.text);
-    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    if (
+      parsed === null ||
+      typeof parsed !== "object" ||
+      Array.isArray(parsed)
+    ) {
       logEvent("snapshot.read", { outcome: "not-an-object", desk: "journal" });
       return { status: "error" };
     }
     return { status: "ok", doc: parsed as JournalDoc, source: "blob" };
   } catch (e) {
-    logEvent("snapshot.read", { outcome: "error", desk: "journal", error: e instanceof Error ? e.name : "unknown" });
+    logEvent("snapshot.read", {
+      outcome: "error",
+      desk: "journal",
+      error: e instanceof Error ? e.name : "unknown",
+    });
     return { status: "error" };
   }
 });
@@ -305,47 +492,72 @@ export async function listOptionsDates(max = 30): Promise<string[]> {
   if (fixtureMode()) return [];
   try {
     const paths = await listPaths(OPTIONS_PATHS.history);
-    return radarDates(paths.map((p) => p.pathname), OPTIONS_PATHS.history).slice(0, max);
+    return radarDates(
+      paths.map((p) => p.pathname),
+      OPTIONS_PATHS.history,
+    ).slice(0, max);
   } catch (e) {
-    logEvent("options.list", { outcome: "error", error: e instanceof Error ? e.name : "unknown" });
+    logEvent("options.list", {
+      outcome: "error",
+      error: e instanceof Error ? e.name : "unknown",
+    });
     return [];
   }
 }
 
-export type LedgerResult = { status: "ok"; edition: LedgerEdition; source: "fixture" | "blob" } | { status: "missing" } | { status: "error" };
+export type LedgerResult =
+  | { status: "ok"; edition: LedgerEdition; source: "fixture" | "blob" }
+  | { status: "missing" }
+  | { status: "error" };
 
 /**
  * A focus card ledger edition: the newest scored session, or the one for `date` (YYYY-MM-DD). "missing" until the
  * ledger has published, or when that session was not scored.
  */
-export const loadLedger = cache(async (date?: string): Promise<LedgerResult> => {
-  if (fixtureMode()) {
-    const flags = await fixtureFlags();
-    if (flags.has("empty")) return { status: "missing" };
-    if (flags.has("error")) return { status: "error" };
-    const mod = await import("../../test/fixtures/ledger.v1.json");
-    const edition = (mod.default ?? mod) as unknown as LedgerEdition;
-    // The fixture holds one scored day; any other date asked for has none, as on the live site.
-    if (date && date !== edition.session) return { status: "missing" };
-    return { status: "ok", edition, source: "fixture" };
-  }
-  const path = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${LEDGER_PATHS.history}${date}.json` : LEDGER_PATHS.latest;
-  try {
-    const stored = await readText(path);
-    if (!stored) return { status: "missing" };
-    const parsed: unknown = JSON.parse(stored.text);
-    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-      logEvent("snapshot.read", { outcome: "not-an-object", desk: "ledger" });
+export const loadLedger = cache(
+  async (date?: string): Promise<LedgerResult> => {
+    if (fixtureMode()) {
+      const flags = await fixtureFlags();
+      if (flags.has("empty")) return { status: "missing" };
+      if (flags.has("error")) return { status: "error" };
+      const mod = await import("../../test/fixtures/ledger.v1.json");
+      const edition = (mod.default ?? mod) as unknown as LedgerEdition;
+      // The fixture holds one scored day; any other date asked for has none, as on the live site.
+      if (date && date !== edition.session) return { status: "missing" };
+      return { status: "ok", edition, source: "fixture" };
+    }
+    const path =
+      date && /^\d{4}-\d{2}-\d{2}$/.test(date)
+        ? `${LEDGER_PATHS.history}${date}.json`
+        : LEDGER_PATHS.latest;
+    try {
+      const stored = await readText(path);
+      if (!stored) return { status: "missing" };
+      const parsed: unknown = JSON.parse(stored.text);
+      if (
+        parsed === null ||
+        typeof parsed !== "object" ||
+        Array.isArray(parsed)
+      ) {
+        logEvent("snapshot.read", { outcome: "not-an-object", desk: "ledger" });
+        return { status: "error" };
+      }
+      return { status: "ok", edition: parsed as LedgerEdition, source: "blob" };
+    } catch (e) {
+      logEvent("snapshot.read", {
+        outcome: "error",
+        desk: "ledger",
+        error: e instanceof Error ? e.name : "unknown",
+      });
       return { status: "error" };
     }
-    return { status: "ok", edition: parsed as LedgerEdition, source: "blob" };
-  } catch (e) {
-    logEvent("snapshot.read", { outcome: "error", desk: "ledger", error: e instanceof Error ? e.name : "unknown" });
-    return { status: "error" };
-  }
-});
+  },
+);
 
-export type CalendarResult = { status: "ok"; doc: CalendarDoc; source: "fixture" | "blob" } | { status: "missing" } | { status: "error" };
+export type CalendarResult =
+  | { status: "ok"; doc: CalendarDoc; source: "fixture" | "blob" }
+  | { status: "missing" }
+  | { status: "error" };
 
 /**
  * The economic calendar (stocksdelta/calendar): the release dates the Calendar page shows. "missing" until the
@@ -355,10 +567,20 @@ export type CalendarResult = { status: "ok"; doc: CalendarDoc; source: "fixture"
 export const loadCalendar = cache(async (): Promise<CalendarResult> => {
   if (fixtureMode()) {
     const flags = await fixtureFlags();
-    if (flags.has("calendar-off") || flags.has("empty")) return { status: "missing" };
-    if (flags.has("error") || flags.has("calendar-poison")) return { status: "error" };
+    if (flags.has("calendar-off") || flags.has("empty"))
+      return { status: "missing" };
+    if (flags.has("error") || flags.has("calendar-poison"))
+      return { status: "error" };
     const mod = await import("../../test/fixtures/calendar.v1.json");
-    return { status: "ok", doc: fixtureCalendar((mod.default ?? mod) as unknown as CalendarDoc, flags.has("frozen") ? new Date(FROZEN_NOW) : new Date(), flags), source: "fixture" };
+    return {
+      status: "ok",
+      doc: fixtureCalendar(
+        (mod.default ?? mod) as unknown as CalendarDoc,
+        flags.has("frozen") ? new Date(FROZEN_NOW) : new Date(),
+        flags,
+      ),
+      source: "fixture",
+    };
   }
   try {
     const stored = await readText(CALENDAR_PATHS.latest);
@@ -370,7 +592,11 @@ export const loadCalendar = cache(async (): Promise<CalendarResult> => {
     }
     return { status: "ok", doc: checked.doc, source: "blob" };
   } catch (e) {
-    logEvent("snapshot.read", { outcome: "error", desk: "calendar", error: e instanceof Error ? e.name : "unknown" });
+    logEvent("snapshot.read", {
+      outcome: "error",
+      desk: "calendar",
+      error: e instanceof Error ? e.name : "unknown",
+    });
     return { status: "error" };
   }
 });
