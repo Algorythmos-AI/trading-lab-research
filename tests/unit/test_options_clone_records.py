@@ -137,4 +137,27 @@ def test_the_research_arms_freeze_the_numbers_the_record_states():
     assert run["breakeven_after_pct"] == CONFIG["exits"]["breakeven_after_pct"] == 25
     assert run["flat"] == CONFIG["day"]["flatten"] == "15:10"
     assert by["OC-RECLAIM-FAST"]["sweep_min_atr"] == 0.25 and by["OC-TRAP"]["fail_within_bars"] == 3
-    assert "research_arms" not in CONFIG                    # the code comes later, off by default
+
+
+def test_the_research_arms_block_is_off_by_default_and_carries_the_frozen_numbers():
+    by = {h["trial"]: h["frozen"] for h in ARMS}
+    ra = CONFIG["research_arms"]
+    assert ra["enabled"] is False                           # the owner turns it on; each arm's window starts then
+    t = ra["tags"]
+    iv = by["OC-IVGATE-REJECT"]
+    assert (t["iv_cap_index"], t["iv_cap_single"]) == (iv["cap_index"], iv["cap_single"]) == (0.35, 0.70)
+    assert iv["index_names"] == CONFIG["contract"]["index_names"] == ["SPY", "QQQ"]
+    e = by["OC-EARLY-RETEST"]
+    assert (t["early_from"], t["early_before"], t["late_to"]) == (e["early_from"], e["early_before"], e["late_to"])
+    lead = by["OC-LEADER-REJECT"]
+    assert t["leaders"] == {name: lead["leader"] for name in lead["names"]} == {"QQQ": "SMH"}
+    sh = ra["shadow"]
+    assert sh["arms"] == ["runner", "trap", "reclaim_fast"] and sh["max_entries_per_day"] == 5
+    run = by["OC-RUNNER-REJECT"]
+    assert sh["runner"]["premium_stop_pct"] == run["premium_stop_pct"] == CONFIG["exits"]["premium_stop_pct"]
+    assert sh["runner"]["breakeven_after_pct"] == run["breakeven_after_pct"] and sh["runner"]["trail"] == "ema_fast"
+    assert sh["trap"]["fail_within_bars"] == by["OC-TRAP"]["fail_within_bars"]
+    assert sh["reclaim_fast"]["sweep_min_atr"] == by["OC-RECLAIM-FAST"]["sweep_min_atr"]
+    # the arms never reach the frozen marks
+    assert not {"ONH", "ONL", "SWH", "SWL", "EVH", "EVL", "GAPH", "GAPL", "ATH"} & \
+        set(CONFIG["levels"]["names"] + CONFIG["levels"]["strong"])
