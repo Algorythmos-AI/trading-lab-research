@@ -1,0 +1,13 @@
+id: HYP-0040
+trial: "OC-IVGATE-RETEST"
+family: O                       # options desk (DEC-0028); counted in family O (DEC-0041)
+status: pre-registered          # DEC-0041; registered before any tagged trade exists
+arm: tag                        # a subset of EXP-0029's own decisions: no order of its own, the control unchanged
+statement: "Among the clone's break-and-retest (OC-RETEST) trades of EXP-0029, those whose contract was bought at an implied volatility above a fixed cap have a lower mean return on premium after fees than the rest. The implied volatility is chain.Quote.iv of the contract bought, on the quote the entry order was priced from. Cap: 0.35 (annualised) for SPY and QQQ, 0.70 for every other name, chosen before any clone trade's implied volatility was viewed. A trade whose quote has no iv is in neither group and is counted apart; iv modelled from the mid (Quote.modelled) counts and is also reported apart. The earnings blackout (session.event_block) is unchanged and not part of this trial."
+rule: retest                # the base setup (HYP-0029); the flag `iv_rich` is written into the decision log beside the gates
+frozen: {source: chain.Quote.iv, cap_index: 0.35, cap_single: 0.70, index_names: [SPY, QQQ], tagged: iv_above_cap, missing: excluded_and_counted}
+config: config/options_clone.yaml
+evidence: {decision: DEC-0041, experiments: [EXP-0030-options-clone-research-arms], base: HYP-0029}
+since: "the first session of job paper-o that runs a release writing the DEC-0041 tags into the decision log (research_arms on); never backfilled. Ends early, with whatever it has, on the last session under EXP-0029's frozen config if that config changes"
+close_without_verdict: "2027-11-05"
+falsified_if: "With at least 30 trades in each group (tagged and the rest) and 20 sessions: the lower end of the 95% bootstrap range of the difference in mean return on premium after fees, the rest minus the tagged trades, resampled by session, is at or below 0, or that difference is at or below 0 in either half of the trades taken in order. Fewer than 30 trades in either group by 2027-11-05 closes the trial with no verdict. A pass changes no rule: a gate built on it needs its own record and new trials."

@@ -1,0 +1,13 @@
+id: HYP-0042
+trial: "OC-EARLY-RETEST"
+family: O                       # options desk (DEC-0028); counted in family O (DEC-0041)
+status: pre-registered          # DEC-0041; registered before any tagged trade exists
+arm: tag                        # a subset of EXP-0029's own decisions: no order of its own, the control unchanged
+statement: "Among the clone's break-and-retest (OC-RETEST) trades of EXP-0029, those entered in the first hour the clone may trade have a higher mean return on premium after fees than those entered later. Early: the signal's bar ends from 10:00 up to but not including 11:00, New York time; late: from 11:00 to 14:30. Half-day sessions are in neither group. The window from 09:35 is not tested: the clone's 2-minute ATR is not warm before about 10:00 (deferred by DEC-0041)."
+rule: retest                # the base setup (HYP-0029); the flag `early` is written into the decision log beside the gates
+frozen: {early_from: '10:00', early_before: '11:00', late_from: '11:00', late_to: '14:30', half_days: excluded}
+config: config/options_clone.yaml
+evidence: {decision: DEC-0041, experiments: [EXP-0030-options-clone-research-arms], base: HYP-0029}
+since: "the first session of job paper-o that runs a release writing the DEC-0041 tags into the decision log (research_arms on); never backfilled. Ends early, with whatever it has, on the last session under EXP-0029's frozen config if that config changes"
+close_without_verdict: "2027-11-05"
+falsified_if: "With at least 30 trades in each group (early and late) and 20 sessions: the lower end of the 95% bootstrap range of the difference in mean return on premium after fees, the early minus the late trades, resampled by session, is at or below 0, or that difference is at or below 0 in either half of the trades taken in order. Fewer than 30 trades in either group by 2027-11-05 closes the trial with no verdict. A pass changes no rule: a gate built on it needs its own record and new trials."

@@ -27,3 +27,4 @@ families:
     - {decision: DEC-0034, total: 15, status: accepted}   # HYP-0031 OC-NEAREST: the clone on contracts expiring after the session
     - {decision: DEC-0039, total: 18, status: accepted}   # EXP-0028: the clone's three trials again under the $15 cap
     - {decision: DEC-0040, total: 21, status: accepted}   # EXP-0029: the clone's three trials again under the $5.00 spread cap
+    - {decision: DEC-0041, total: 35, status: accepted}   # EXP-0030: 10 tag arms + 4 shadow arms (HYP-0034 to HYP-0047), no orders
