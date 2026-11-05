@@ -1,6 +1,6 @@
 import { CalendarDays, Clock, Hourglass, PartyPopper, TimerReset } from "lucide-react";
 import Link from "next/link";
-import { CalendarYear, GROUP_DOT } from "@/components/client/calendar-year";
+import { CalendarYear } from "@/components/client/calendar-year";
 import { PaneBoundary } from "@/components/client/pane-boundary";
 import { PageHeading } from "@/components/page-heading";
 import { Panel } from "@/components/panel";
@@ -10,6 +10,7 @@ import { newYork } from "@/lib/format";
 import { journalStale } from "@/lib/journal";
 import {
   eventsByDay,
+  GROUP_DOT,
   mergeEarnings,
   nextEarnings,
   nextHalfDay,
@@ -72,6 +73,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const official = cal?.events ?? [];
   const months = yearView(year, now, you ?? new Map(), eventsByDay(earnings, official));
   const totals = yearTotals(months);
+  const begun = months.some((m) => m.started);
   const unlisted = unlistedByMonth(cal?.not_announced);
   const notes = releaseNotes(calendar.status, cal, tradingCalendarDiffs(official), now);
   const left = tradingDaysLeft(now);
@@ -89,7 +91,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
 
       <StatTiles>
         <StatTile
-          label={`Trading days left in ${today.slice(0, 4)}`}
+          label={`Days left in ${today.slice(0, 4)}`}
           icon={Hourglass}
           value={left ?? "—"}
           hint={left === null ? `The calendar runs to ${shortDay(RANGE.end)}.` : "Counting today until the New York close."}
@@ -109,7 +111,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
           hint={half ? `${half.name} · ${inDays(half.inDays)} · closes 1 pm New York` : "None left in the calendar."}
         />
         <StatTile
-          label="Next session-time move"
+          label="Next time change"
           icon={Clock}
           value={move ? shortDay(move.day) : "—"}
           hint={move ? `${move.cause.where} clocks go ${move.cause.direction}: the open moves from ${move.from} to ${move.to} Sydney.` : "None left in the calendar."}
@@ -152,7 +154,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
           <p>
             <span className="font-semibold">{year}</span>
             <span className="text-muted-foreground"> · {totals.marketDays} market days</span>
-            {results ? (
+            {results && begun ? (
               <>
                 <span className="text-muted-foreground"> · {totals.daysTraded} traded · </span>
                 <span className={totals.ruleDays ? "text-bad" : "text-muted-foreground"}>{totals.ruleDays} broke a day rule</span>

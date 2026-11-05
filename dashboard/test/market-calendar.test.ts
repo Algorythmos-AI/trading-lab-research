@@ -203,6 +203,8 @@ describe("your days", () => {
     expect(yearTotals(months).marketDays).toBe(251);
     expect(months.flatMap((m) => m.weeks.flat()).filter((c) => c?.isToday).map((c) => c!.day)).toEqual(["2026-11-05"]);
     expect(months[10]!.notes).toContain("26: Thanksgiving Day, closed");
+    // A month shows results only once it has begun: November has (today is the 5th), December has not.
+    expect([months[9]!.started, months[10]!.started, months[11]!.started]).toEqual([true, true, false]);
   });
 });
 
