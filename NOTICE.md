@@ -10,9 +10,12 @@ content is:
 - `research/specs/`: the methodology specification and the owner's source notes behind it
 - `research/hypotheses/`, `research/decisions/` and experiment reports that paraphrase course rules
 - `knowledge/`: the extraction outputs. These are git-ignored and never pushed.
+- `research/external/`: public social-media posts by other traders, kept **verbatim** in `posts/*.jsonl` at the
+  owner's decision (2026-11-05), so the study of them can be checked and extended. Rights stay with their authors.
 
 Algorythmos Pty Ltd holds **no licence to redistribute** this material. It is kept here only as the
-private record of the research that tests those rules. Rules are paraphrased and cited, not copied.
+private record of the research that tests those rules. Course rules are paraphrased and cited, not copied; the
+posts under `research/external/` are the one verbatim exception, and the dashboard's leak check covers them.
 
 Rights remain with their respective owners. To have material removed, contact
 info@algorythmos.com.au.

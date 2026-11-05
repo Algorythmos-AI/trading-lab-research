@@ -243,9 +243,28 @@ def _h(gram: str) -> int:
 
 
 def corpus_files(root: Path = ROOT) -> list[Path]:
-    """The restricted material: course extraction batches, K0 deliverables and the spec sources."""
-    pats = ["knowledge/_work/batches/*.txt", "knowledge/*.md", "research/specs/**/*.md", "research/specs/**/*.txt"]
+    """The restricted material: course extraction batches, K0 deliverables, the spec sources, and the verbatim
+    third-party posts kept under research/external/ (see NOTICE.md)."""
+    pats = ["knowledge/_work/batches/*.txt", "knowledge/*.md", "research/specs/**/*.md", "research/specs/**/*.txt",
+            "research/external/**/posts/*.jsonl"]
     return sorted({p for pat in pats for p in root.glob(pat) if p.is_file()})
+
+
+def _corpus_text(p: Path) -> str:
+    """A corpus file as plain text. A JSONL post file contributes each post's own words, one post per line, so JSON
+    keys and escapes never join or split a phrase."""
+    raw = p.read_text(encoding="utf-8", errors="replace")
+    if p.suffix != ".jsonl":
+        return raw
+    out: list[str] = []
+    for line in raw.splitlines():
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(row, dict):
+            out.extend(str(row[k]) for k in ("text", "quoted_text") if row.get(k))
+    return "\n".join(out)
 
 
 class LeakIndex:
@@ -263,7 +282,8 @@ class LeakIndex:
             return
         hs: set[int] = set()
         for p in files:
-            hs.update(_h(g) for g in _grams(_tokens(p.read_text(encoding="utf-8", errors="replace"))))
+            for chunk in _corpus_text(p).split("\n"):
+                hs.update(_h(g) for g in _grams(_tokens(chunk)))
         self.hashes = np.array(sorted(hs), dtype=np.int64)
         if cache is not None:
             cache.mkdir(parents=True, exist_ok=True)
