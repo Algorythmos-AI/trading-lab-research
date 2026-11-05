@@ -49,6 +49,20 @@ test("2027 is one tap away and carries no results yet", async ({ page, context, 
   await expect(page.getByText("2027 · 251 market days")).toBeVisible();
   await expect(page.getByRole("button", { name: /^Fri 24 Dec 2027\. market closed, Christmas Day \(observed\)/ })).toBeVisible();
   await expect(page.getByTestId("not-listed")).toContainText("CPI");
+  // A year (and a month) that has not begun shows its market days only, not "0 traded".
+  await expect(page.getByText("2027 · 251 market days")).not.toContainText("traded");
+  await expect(page.locator("#m-2027-01")).not.toContainText("traded");
+});
+
+test("every event group in the key has its colour", async ({ page, context, baseURL }) => {
+  await variant(context, baseURL, "frozen");
+  await page.goto("/calendar");
+  const key = page.getByRole("list", { name: "Key" });
+  for (const label of ["Fed", "Inflation (CPI, PPI, PCE)", "Jobs, GDP, retail sales", "Monthly expiry", "Earnings"]) {
+    const dot = key.getByRole("listitem").filter({ hasText: label }).locator("span[aria-hidden]");
+    const bg = await dot.evaluate((e) => getComputedStyle(e).backgroundColor);
+    expect(bg, label).not.toBe("rgba(0, 0, 0, 0)");
+  }
 });
 
 test("a bad year in the address falls back to this year", async ({ page, context, baseURL }) => {
