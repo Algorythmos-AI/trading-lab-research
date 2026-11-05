@@ -26,7 +26,9 @@ from wt.options.regime import NEW_YORK, Bar, Tape
 from wt.options.setups import Mark, Signal
 
 ROOT = Path(__file__).resolve().parents[2]
-CFG = yaml.safe_load((ROOT / "config" / "options_clone.yaml").read_text())
+RAW = yaml.safe_load((ROOT / "config" / "options_clone.yaml").read_text())
+# The control as it runs with the arms off, whatever the repository config says (the owner turned them on).
+CFG = {**RAW, "research_arms": {**RAW["research_arms"], "enabled": False}}
 ON = {**CFG, "research_arms": {**CFG["research_arms"], "enabled": True}}
 TAGS = {**CFG["research_arms"]["tags"], "index_names": CFG["contract"]["index_names"]}
 DAY = dt.date(2026, 10, 19)
