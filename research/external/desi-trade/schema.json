@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "research/external/desi-trade/schema.json",
+  "title": "One original post by @Desi_Trade, cleaned and coded",
+  "description": "Mechanical fields are recomputed by scripts/external_posts.py; coded fields follow CODING.md. Every *_claim field is the trader's own claim, never a verified result.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "url", "ts_utc", "ts_et", "month", "session", "text", "text_clean", "quoted_id", "quoted_text",
+               "image_ids", "has_video", "symbols", "kind", "signal", "setups", "vehicle", "direction", "levels",
+               "entry_time_et", "outcome_claim", "pnl_usd_claim", "pct_claim", "points_claim", "lesson"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^[0-9]{15,20}$", "description": "X post id"},
+    "url": {"type": "string", "pattern": "^https://x\\.com/Desi_Trade/status/[0-9]{15,20}$"},
+    "ts_utc": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"},
+    "ts_et": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}-0[45]:00$", "description": "America/New_York, DST-aware"},
+    "month": {"type": "string", "pattern": "^\\d{4}-\\d{2}$", "description": "New York calendar month; equals the file name"},
+    "session": {"enum": ["pre", "rth_open", "rth_mid", "rth_close", "post", "overnight"],
+                "description": "When the POST was made (pre 04:00-09:30, rth_open 09:30-11:00, rth_mid 11:00-15:00, rth_close 15:00-16:00, post 16:00-20:00, else overnight; weekends overnight). Not the entry time."},
+    "text": {"type": "string", "description": "Verbatim post text as shown by X"},
+    "text_clean": {"type": "string", "description": "text without links or truncated link stubs, whitespace collapsed"},
+    "quoted_id": {"type": ["string", "null"]},
+    "quoted_text": {"type": ["string", "null"]},
+    "image_ids": {"type": "array", "items": {"type": "string"}},
+    "has_video": {"type": "boolean"},
+    "symbols": {"type": "array", "items": {
+      "type": "object", "additionalProperties": false, "required": ["symbol", "asset"],
+      "properties": {"symbol": {"type": "string", "pattern": "^[A-Z0-9]{1,6}$"},
+                     "asset": {"enum": ["future", "index", "etf", "equity"]}}}},
+    "kind": {"enum": ["uncoded", "trade", "plan", "level_call", "lesson", "recap", "swing", "promo", "personal"]},
+    "signal": {"type": "boolean", "description": "true for trade, plan, level_call, lesson, recap, swing"},
+    "setups": {"type": "array", "uniqueItems": true, "items": {
+      "enum": ["BR", "RETEST_REJECT", "RECLAIM_RIPPER", "POP_FADE", "GAP_FILL", "HTF_RETEST", "VWAP_RECLAIM",
+               "PULLBACK", "OTHER"]}},
+    "vehicle": {"enum": [null, "future", "option_0dte", "option_short", "option_swing", "leaps", "shares", "mixed"]},
+    "direction": {"enum": [null, "long", "short", "neutral"]},
+    "levels": {"type": "array", "items": {
+      "type": "object", "additionalProperties": false, "required": ["symbol", "price", "type"],
+      "properties": {
+        "symbol": {"type": "string", "pattern": "^[A-Z0-9]{1,6}$"},
+        "price": {"type": "number"},
+        "price_hi": {"type": "number", "description": "upper edge when the level is a zone"},
+        "type": {"enum": ["PDH", "PDL", "PDC", "PMKH", "PMKL", "ONH", "ONL", "HOD", "LOD", "OPEN", "SWING_HIGH",
+                          "SWING_LOW", "EVENT", "GAP", "PRIOR_ATH", "ATH", "MA20", "MA50", "MA100", "MA200",
+                          "CHANNEL", "SUPPLY", "DEMAND", "VOID", "TARGET", "PIVOT", "ENTRY"]}}}},
+    "entry_time_et": {"type": ["string", "null"], "pattern": "^\\d{2}:\\d{2}$",
+                      "description": "only when stated in the post or shown in a fill"},
+    "outcome_claim": {"enum": ["win", "loss", "scratch", "none"]},
+    "pnl_usd_claim": {"type": ["number", "null"]},
+    "pct_claim": {"type": ["number", "null"]},
+    "points_claim": {"type": ["number", "null"]},
+    "lesson": {"type": ["string", "null"], "maxLength": 200, "description": "our plain-English paraphrase, at most 25 words"}
+  },
+  "allOf": [
+    {"if": {"properties": {"kind": {"enum": ["trade", "plan", "level_call", "lesson", "recap", "swing"]}}},
+     "then": {"properties": {"signal": {"const": true}, "lesson": {"type": "string", "minLength": 3}}},
+     "else": {"properties": {"signal": {"const": false}}}}
+  ]
+}

@@ -110,6 +110,19 @@ def test_leak_check_withholds_text_copied_from_the_corpus(tmp_path):
     assert again.leaks("buy the stock when it breaks the high of")
 
 
+def test_leak_check_covers_external_posts_but_not_their_json_keys(tmp_path):
+    posts = tmp_path / "research/external/someone/posts"
+    posts.mkdir(parents=True)
+    row = {"id": "1", "text": "Waited for the fail back below the morning high then sold the pop into supply",
+           "quoted_text": None, "kind": "trade", "lesson": "a b c d e f g h"}
+    (posts / "2026-01.jsonl").write_text(json.dumps(row) + "\n")
+    files = publish.corpus_files(tmp_path)
+    assert files == [posts / "2026-01.jsonl"]
+    leak = LeakIndex(files)
+    assert leak.leaks("note: the fail back below the morning high then sold the pop")
+    assert not leak.leaks("a b c d e f g h")                                   # only the post's own words count
+
+
 def test_strict_mode_drops_free_text_but_keeps_ids_and_numbers():
     s = snapshot(strict=True)
     assert s["redaction"] == "strict" and s["overview"].get("headline") is None
