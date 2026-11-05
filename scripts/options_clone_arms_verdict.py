@@ -15,6 +15,7 @@ import json
 import sys
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -46,7 +47,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--journal", type=Path, required=True)
     ap.add_argument("--state", type=Path, required=True, help="the clone's state folder (decisions/, shadow/)")
     ap.add_argument("--out", type=Path, default=OUT)
-    ap.add_argument("--today", default=dt.date.today().isoformat())
+    ap.add_argument("--today", default=dt.datetime.now(ZoneInfo("America/New_York")).date().isoformat(),
+                    help="the New York date the close date is measured against")
     a = ap.parse_args(argv)
     trades = jsonl([a.journal])
     decisions = jsonl(sorted((a.state / "decisions").glob("*.jsonl")))
@@ -56,14 +58,15 @@ def main(argv: list[str] | None = None) -> int:
         if report.exists():
             print(f"{t.name}: report exists, not written again")
             continue
-        us, unknown = av.units(t, trades, decisions, shadow)
+        us, unknown, no_release = av.units(t, trades, decisions, shadow)
         res = av.decide(t, us, a.today)
         if res["status"] == "pending":
             shown = {k: v for k, v in res.items() if k in ("tagged", "rest", "units", "sessions")}
-            print(f"{t.name}: pending, counts only: {shown}, flag unknown {unknown}")
+            print(f"{t.name}: pending, counts only: {shown}, flag unknown {unknown}, release unknown {no_release}")
             continue
         report.parent.mkdir(parents=True, exist_ok=True)
-        (report.parent / "result.json").write_text(json.dumps({**res, "flag_unknown": unknown}, indent=1))
+        (report.parent / "result.json").write_text(json.dumps({**res, "flag_unknown": unknown,
+                                                                   "release_unknown": no_release}, indent=1))
         report.write_text(av.render(res))
         print(f"{t.name}: wrote {report}")
     return 0

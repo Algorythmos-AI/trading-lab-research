@@ -13,7 +13,9 @@ feed checks, pages) and one decision line per name per finished bar in `var/opti
 Research arms (DEC-0041), only with `research_arms.enabled` in config/options_clone.yaml: each signal's decision line
 gains an `arms` object (the tags of `setups.tag_decision`), and virtual trades (`wt.options.shadow`) go to their own
 file `var/options/shadow/<date>.jsonl`. Every arm runs behind its own fault guard and after the control has decided;
-nothing an arm reads or writes is read by the control, so its orders are the same with the arms on or off.
+nothing an arm reads or writes is read by the control, so its orders are the same with the arms on or off. With the
+arms on, a poll's decision lines are written after the arms' work for that poll, so a runner killed during that work
+loses that poll's lines (its orders, fills and journal are already written).
 """
 from __future__ import annotations
 
@@ -284,6 +286,7 @@ class Runner:
         self.leader_cache: dict[tuple[str, str], regime.Tape | None] = {}
         self.gap_logged: set[str] = set()
         self.stamp: dict[str, str] = {}
+        self.quote_bid: dict[str, tuple[float, float, dt.datetime]] = {}   # symbol -> this poll's fresh quote bid
         self.arms_setup()
 
     # ---- helpers -----------------------------------------------------------------------------
@@ -642,6 +645,7 @@ class Runner:
         if q is not None and q.bid is not None and age is not None:
             self.quote_ages.append((now, age))
             if age <= float(self.cfg["feeds"]["quote_stale_flat_s"]):
+                self.quote_bid[p.symbol] = (q.bid, age, now)       # read by the runner arm only (HYP-0044)
                 return q.bid, age
         seen = self.mark_seen.get(p.symbol)
         if seen is not None:
@@ -1141,22 +1145,23 @@ class Runner:
 
     def arms_step(self, now: dt.datetime, bars: Mapping[str, list[regime.Bar]],
                   tapes: Mapping[str, regime.Tape]) -> None:
-        """The virtual book after the poll. A runner on the contract the control still holds uses the bid `manage`
-        read this poll; only the other contracts are quoted."""
+        """The virtual book after the poll. A runner on the contract the control holds reuses the quote bid `manage`
+        read this poll, only when that bid came from a fresh quote (never a broker mark or an older bid); every other
+        contract is quoted here. A contract with no fresh quote has no bid this poll: no breakeven, no stop."""
         sh = self.shadow
         assert sh is not None
-        held = {p.symbol: p.trade_id for p in self.plans if p.state in ("open", "exiting")}
+        stale = float(self.cfg["feeds"]["quote_stale_flat_s"])
         quotes: dict[str, tuple[float | None, float | None]] = {}
         need: list[str] = []
         for v in sh.trades:
             if v.state not in ("pending", "open"):
                 continue
-            if v.state == "open" and v.symbol in held and held[v.symbol] in self.last_bid:
-                quotes[v.symbol] = (self.last_bid[held[v.symbol]], None)
+            seen = self.quote_bid.get(v.symbol)
+            if v.state == "open" and seen is not None and seen[2] == now and seen[1] <= stale:
+                quotes[v.symbol] = (seen[0], None)
             else:
                 need.append(v.symbol)
         if need:
-            stale = float(self.cfg["feeds"]["quote_stale_flat_s"])
             for q in chain.parse_snapshots(self.feeds.quotes(sorted(set(need)))):
                 age = q.age_s(now)
                 if age is not None and age <= stale:

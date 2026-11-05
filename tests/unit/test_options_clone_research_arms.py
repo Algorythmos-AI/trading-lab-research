@@ -677,12 +677,12 @@ def tagged_book(n_days: int, per_day: int, cfg_hash: str = "c1", change_from: in
 def test_a_tag_trial_shows_counts_only_until_its_count_then_its_verdict():
     t = av.BY_NAME["OC-NTZ-RETEST"]
     trades, decisions = tagged_book(10, 4)
-    us, unknown = av.units(t, trades, decisions, [])
+    us, unknown, _ = av.units(t, trades, decisions, [])
     res = av.decide(t, us, "2026-12-01")
     assert res == {"trial": "OC-NTZ-RETEST", "hypothesis": "HYP-0034", "status": "pending", "sessions": 10,
                    "tagged": 20, "rest": 20}                           # counts only, no return of any kind
     trades, decisions = tagged_book(25, 4)
-    us, _ = av.units(t, trades, decisions, [])
+    us, _, _ = av.units(t, trades, decisions, [])
     res = av.decide(t, us, "2027-01-01")
     assert res["status"] == "passes" and res["quantity"] == pytest.approx(0.5) and res["ci_session"][0] > 0
     assert av.units(av.BY_NAME["OC-NTZ-REJECT"], trades, decisions, [])[0] == []          # another base setup
@@ -691,7 +691,7 @@ def test_a_tag_trial_shows_counts_only_until_its_count_then_its_verdict():
 def test_a_tag_trial_stops_at_a_config_change_and_closes_without_a_verdict_on_its_date():
     t = av.BY_NAME["OC-NTZ-RETEST"]
     trades, decisions = tagged_book(25, 4, change_from=10)
-    us, _ = av.units(t, trades, decisions, [])
+    us, _, _ = av.units(t, trades, decisions, [])
     assert {u.session for u in us} == set(sessions_from("2026-11-05", 10))
     assert av.decide(t, us, "2027-11-05")["status"] == "closed-no-verdict"
     for d in decisions:
@@ -742,3 +742,41 @@ def test_the_verdict_script_writes_each_report_once_and_prints_counts_only_befor
     first = report.read_text()
     assert v.main(args) == 0 and report.read_text() == first
     assert "report exists, not written again" in capsys.readouterr().out
+
+
+def test_a_stalled_quote_while_the_control_holds_gives_the_runner_no_bid(tmp_path, monkeypatch):
+    """From 10:28 the contract's quote is five minutes old while the broker's mark rises to +29%. The control may use
+    the mark; the runner prices only at a fresh quote's bid, so it neither arms breakeven nor stops on that price."""
+    def stall(m: Any) -> None:
+        inner = m.quotes
+        m.bid_fn = lambda t: 1.40 if t < at("10:28") else 1.80
+
+        def quotes(symbols):
+            if m.now < at("10:28"):
+                return inner(symbols)
+            save, m.quote_age_s = m.quote_age_s, 300.0
+            try:
+                return inner(symbols)
+            finally:
+                m.quote_age_s = save
+        m.quotes = quotes
+    on = session_run(tmp_path, monkeypatch, ON, tweak=stall)
+    off = session_run(tmp_path / "off", monkeypatch, CFG, tweak=stall)
+    assert on["orders"] == off["orders"] and on["plans"] == off["plans"]
+    runs = [x for x in on["shadow"] if x.get("arm") == "runner"]
+    assert runs[0]["event"] == "filled"
+    assert not any(x["event"] == "breakeven" for x in runs)
+    (closed,) = [x for x in runs if x["event"] == "closed"]
+    p = on["r"].plans[0]
+    assert p.breakeven and p.exit_reason == "blind"                    # the control armed on the mark, then went blind
+    assert not closed["breakeven"] and closed["last_bid"] == 1.40       # the runner saw no fresh quote after 10:28
+    assert closed["exit_reason"] == "with-control:blind" and closed["exit_fill"] == p.exit_fill   # HYP-0044
+
+
+def test_units_from_an_unknown_release_are_counted_apart_and_never_in_the_window():
+    t = av.BY_NAME["OC-NTZ-RETEST"]
+    trades, decisions = tagged_book(10, 4)
+    for d in decisions[:8]:
+        d["signals"][0]["arms"]["release"] = "unknown"
+    us, _, no_release = av.units(t, trades, decisions, [])
+    assert no_release == 8 and len(us) == 32 and all(u.release == "abc" for u in us)

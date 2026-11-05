@@ -101,8 +101,9 @@ def tags_by_trade(decisions: Sequence[Mapping[str, Any]]) -> dict[str, Mapping[s
 
 
 def units(trial: Trial, trades: Sequence[Mapping[str, Any]], decisions: Sequence[Mapping[str, Any]],
-          shadow: Sequence[Mapping[str, Any]]) -> tuple[list[Unit], int]:
-    """The trial's units in session order, and how many trades were left out with an unknown flag."""
+          shadow: Sequence[Mapping[str, Any]]) -> tuple[list[Unit], int, int]:
+    """The trial's units in session order, how many trades were left out with an unknown flag, and how many units
+    were left out because the release that wrote them is unknown."""
     closed = [r for r in review.in_window([r for r in trades if r.get("event") == "trade_closed"], "spread5")
               if r.get("counts") and _f(r.get("rop")) is not None]
     mine = {str(r["trade_id"]): r for r in closed
@@ -137,12 +138,13 @@ def units(trial: Trial, trades: Sequence[Mapping[str, Any]], decisions: Sequence
                 out.append(Unit(str(v.get("vid", ""))[:10], rop, None, str(v.get("release", "")),
                                 str(v.get("config", ""))))
     out.sort(key=lambda u: u.session)
-    return window(out), unknown
+    return window(out), unknown, sum(u.release == "unknown" for u in out)
 
 
 def window(us: Sequence[Unit]) -> list[Unit]:
-    """Stamped units only, under the first unit's config hash; from the first session under another, nothing."""
-    stamped = [u for u in us if u.release and u.config]
+    """Units stamped by a known release only, under the first unit's config hash; from the first session under
+    another, nothing."""
+    stamped = [u for u in us if u.release and u.release != "unknown" and u.config]
     if not stamped:
         return []
     first = stamped[0].config
