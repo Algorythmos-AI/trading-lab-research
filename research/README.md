@@ -6,6 +6,9 @@ used for the Deflated Sharpe calculation (every experiment run counts as a trial
 
 Where each desk stands, in one page: [`G1_SUMMARY.md`](G1_SUMMARY.md) (stocks) and [`CRYPTO_SUMMARY.md`](CRYPTO_SUMMARY.md) (crypto).
 
+Outside traders studied for ideas, with their posts cleaned and coded: [`external/`](external/). Start with
+[`external/desi-trade/README.md`](external/desi-trade/README.md) (an options and futures level trader, 2025-10 to 2026-11).
+
 ```
 research/
  ├── hypotheses/          HYP-NNNN-<slug>.yaml   what we believe and why (with KB evidence)

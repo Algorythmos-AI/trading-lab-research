@@ -358,3 +358,47 @@ def state(price: float, lv: LevelSet, *, session_open: float | None = None, minu
     if price < pdl:
         return "BELOW PDL"
     return "INSIDE"
+
+
+# ---------------------------------------------------------------- research levels (DEC-0041), for tagging only
+# These codes are computed and logged beside the clone's decisions. None of them is in the frozen `levels.names` or
+# `levels.strong` of config/options_clone.yaml, so none can form a setup, gate a trade or change an order. Adding one
+# to the marked levels is a change to the control and needs its own record (DEC-0041, "Deferred").
+# PMH / PML stay last month's high and low; the pre-market high and low are PMKH / PMKL (wt.options.session.marks).
+RESEARCH_CODES = ("ONH", "ONL", "SWH", "SWL", "EVH", "EVL", "GAPH", "GAPL", "ATH")   # ATH: the 14-month high
+SWING_SESSIONS = 5          # SWH / SWL: the range of the five sessions before today (HYP-0034's five-session range)
+
+
+def swing_range(bars: list[Bar], session: str, n: int = SWING_SESSIONS) -> tuple[float, float] | None:
+    """SWH / SWL: the highest high and lowest low of the `n` finished sessions before `session`, or None with fewer."""
+    hist = [b for b in bars if b.d < session][-n:]
+    return _range(hist) if len(hist) == n else None
+
+
+def event_candle(bars: list[Bar], session: str, event_dates: list[str]) -> tuple[float, float, str] | None:
+    """EVH / EVL: the high and low of the daily bar of the latest event date before `session` (the caller passes the
+    high-severity dates of config/events/macro_events.csv), with that date; None when no such bar is loaded."""
+    have = {b.d: b for b in bars if b.d < session}
+    for d in sorted({e for e in event_dates if e < session}, reverse=True):
+        if d in have:
+            return have[d].h, have[d].l, d
+    return None
+
+
+def highest_high(bars: list[Bar], session: str) -> float | None:
+    """ATH: the highest high of the daily bars passed in that are dated before `session`. Not an all-time high: it
+    reaches only as far back as the history the caller loads, which for the runner is about fourteen months (420
+    calendar days). No hypothesis reads it; it is logged for context only."""
+    hist = [b.h for b in bars if b.d < session]
+    return max(hist) if hist else None
+
+
+def gap_levels(session_open: float, pdh: float, pdl: float) -> dict[str, float]:
+    """GAPH / GAPL: the gap's two edges when the session opened beyond PDH or PDL (`state`'s GAP ABOVE / GAP BELOW).
+    A gap up runs from PDH (GAPL, the edge that fills it) to the open (GAPH); a gap down from the open (GAPL) to PDL
+    (GAPH). Empty when the open is inside the prior day's range."""
+    if session_open > pdh:
+        return {"GAPH": session_open, "GAPL": pdh}
+    if session_open < pdl:
+        return {"GAPH": pdl, "GAPL": session_open}
+    return {}

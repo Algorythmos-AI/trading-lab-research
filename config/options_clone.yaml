@@ -119,3 +119,28 @@ day:
 
 costs:
   fee_per_contract_each_way: 0.03   # DEC-0029's figure; the paper account charges none, the record does
+
+# DEC-0041 (EXP-0030, HYP-0034 to HYP-0047): research arms that never change the control's orders. Off: the runner
+# writes no tag and books no virtual trade. On: each signal's decision line gains an `arms` object (the tag arms) and
+# wt.options.shadow books virtual trades in var/options/shadow/<date>.jsonl (the shadow arms). Every number below is
+# frozen by its hypothesis; turning the block on is the owner's step and starts each arm's window (never backfilled).
+research_arms:
+  enabled: false
+  tags:
+    iv_cap_index: 0.35          # HYP-0040/41: chain.Quote.iv of the contract bought, SPY and QQQ
+    iv_cap_single: 0.70         # every other name
+    early_from: "10:00"         # HYP-0042/43: early is [10:00, 11:00), late [11:00, 14:30]; half days in neither
+    early_before: "11:00"
+    late_to: "14:30"
+    leaders: {QQQ: SMH}         # HYP-0038/39: QQQ against SMH's VWAP
+  shadow:
+    arms: [runner, trap, reclaim_fast]
+    runner:                     # HYP-0044/45: the virtual second contract
+      premium_stop_pct: 25
+      breakeven_after_pct: 25
+      trail: ema_fast           # bars.ema_fast, after breakeven
+    trap:                       # HYP-0046
+      fail_within_bars: 3
+    reclaim_fast:               # HYP-0047
+      sweep_min_atr: 0.25
+    max_entries_per_day: 5      # per trap / reclaim arm; one virtual position per arm at a time
