@@ -2,19 +2,11 @@
 
 import { Clock } from "lucide-react";
 import { useState } from "react";
-import { longDay, shortDay, type DayCell, type EventGroup, type MonthView } from "@/lib/market-calendar";
+import { GROUP_DOT, longDay, shortDay, type DayCell, type MonthView } from "@/lib/market-calendar";
 import { DAY_LOSS_LIMIT, MAX_TRADES_PER_DAY, money } from "@/lib/trade-rules";
 import { cn } from "@/lib/utils";
 
 // Every figure arrives worked out on the server; this only keeps which day is open, so nothing here reads a clock.
-
-export const GROUP_DOT: Readonly<Record<EventGroup, string>> = {
-  fed: "bg-chart-7",
-  inflation: "bg-chart-2",
-  growth: "bg-chart-3",
-  expiry: "bg-chart-1",
-  earnings: "bg-chart-5",
-};
 
 /** The shade of a day's result, in three steps up to the day loss limit, so one big day cannot wash out the rest. */
 function shade(pnl: number): { bg: string; ink: string | null } {
@@ -67,13 +59,13 @@ function Month({ month, selected, onPick, results }: { month: MonthView; selecte
         <h3 id={`m-${month.key}-title`} className="text-sm font-semibold">
           {month.label}
         </h3>
-        {results && month.daysTraded > 0 ? (
+        {results && month.started && month.daysTraded > 0 ? (
           <span className={cn("font-mono text-sm font-semibold", month.pnl > 0 ? "text-good" : month.pnl < 0 ? "text-bad" : "text-muted-foreground")}>{money(month.pnl)}</span>
         ) : null}
       </div>
       <p className="text-muted-foreground text-xs">
         {plural(month.marketDays, "market day")}
-        {results ? (
+        {results && month.started ? (
           <>
             {" · "}
             {month.daysTraded} traded{" · "}

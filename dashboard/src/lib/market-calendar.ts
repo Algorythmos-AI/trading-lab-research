@@ -233,6 +233,16 @@ export function sessionMoves(year: number): SessionMove[] {
 
 export type EventGroup = "fed" | "inflation" | "growth" | "expiry" | "earnings";
 
+/** Each group's dot colour. Here, not in the client component: the server page draws the key with it too, and a
+ * plain value exported from a "use client" module reaches a server component as an empty reference. */
+export const GROUP_DOT: Readonly<Record<EventGroup, string>> = {
+  fed: "bg-chart-7",
+  inflation: "bg-chart-2",
+  growth: "bg-chart-3",
+  expiry: "bg-chart-1",
+  earnings: "bg-chart-5",
+};
+
 export interface DayEvent {
   code: string;
   label: string;
@@ -459,6 +469,8 @@ export interface MonthView {
   /** Monday-first weeks; null pads the days outside the month. */
   weeks: (DayCell | null)[][];
   marketDays: number;
+  /** The month has begun (its first day is today or earlier): only then are its results shown. */
+  started: boolean;
   daysTraded: number;
   ruleDays: number;
   pnl: number;
@@ -479,7 +491,7 @@ export function yearView(year: number, now: Date, you: ReadonlyMap<string, YourD
     const key = `${year}-${String(m).padStart(2, "0")}`;
     const first = `${key}-01`;
     const cells: (DayCell | null)[] = Array.from({ length: (weekday(first) + 6) % 7 }, () => null);
-    const view: MonthView = { key, label: monthName(key), weeks: [], marketDays: 0, daysTraded: 0, ruleDays: 0, pnl: 0, notes: [] };
+    const view: MonthView = { key, label: monthName(key), weeks: [], marketDays: 0, started: first <= today, daysTraded: 0, ruleDays: 0, pnl: 0, notes: [] };
     for (let day = first; day.startsWith(key); day = addDays(day, 1)) {
       const s = sessionOf(day);
       const trading = s.kind === "open" || s.kind === "half";
