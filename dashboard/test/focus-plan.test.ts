@@ -77,6 +77,20 @@ describe("focus plan", () => {
     expect(levelWords(null)).toBe("");
   });
 
+  it("writes out the pre-market and DEC-0041 research codes, keeping PMH / PML as last month's", () => {
+    expect(levelWords("PMH/PMKH")).toBe("last month's high, pre-market high");
+    expect(levelWords("PML/PMKL")).toBe("last month's low, pre-market low");
+    expect(levelWords("ONH/ONL")).toBe("overnight high, overnight low");
+    expect(levelWords("SWH/SWL")).toBe("five-day high, five-day low");
+    expect(levelWords("EVH/EVL")).toBe(
+      "last big-news day's high, last big-news day's low",
+    );
+    expect(levelWords("GAPH/GAPL")).toBe(
+      "top of today's gap, bottom of today's gap",
+    );
+    expect(levelWords("ATH")).toBe("all-time high");
+  });
+
   it("puts the no-entry times in Sydney, across both daylight-saving changes", () => {
     expect(noEntryTimes("2026-10-23")).toEqual({
       firstEntry: "00:35",
@@ -177,6 +191,18 @@ describe("chart lines", () => {
         (l) => l.price === 772,
       )?.kind,
     ).toBe("month");
+  });
+
+  it("draws an all-time high as a month line and a five-day high as a week line, never the intraday research codes", () => {
+    const lines = chartLevels(spy, [
+      { name: "ATH", price: 782, tf: "52w", weight: 1 },
+      { name: "SWL", price: 772, tf: "week", weight: 1 },
+      { name: "ONH", price: 781, tf: "day", weight: 1 },
+      { name: "GAPL", price: 774, tf: "day", weight: 1 },
+    ]);
+    expect(lines.find((l) => l.price === 782)?.kind).toBe("month");
+    expect(lines.find((l) => l.price === 772)?.kind).toBe("week");
+    expect(lines.some((l) => l.price === 781 || l.price === 774)).toBe(false);
   });
 
   it("leaves week and month levels inside the no-trade box off", () => {

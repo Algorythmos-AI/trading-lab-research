@@ -9,6 +9,11 @@ only, flatten) and pages, and never waits for an answer.
 
 Records: the hash-chained journal `data/live/options_journal.jsonl` (arm, orders, fills, exits, trades, latches,
 feed checks, pages) and one decision line per name per finished bar in `var/options/decisions/<date>.jsonl`.
+
+Research arms (DEC-0041), only with `research_arms.enabled` in config/options_clone.yaml: each signal's decision line
+gains an `arms` object (the tags of `setups.tag_decision`), and virtual trades (`wt.options.shadow`) go to their own
+file `var/options/shadow/<date>.jsonl`. Every arm runs behind its own fault guard and after the control has decided;
+nothing an arm reads or writes is read by the control, so its orders are the same with the arms on or off.
 """
 from __future__ import annotations
 
@@ -30,7 +35,7 @@ from wt.core.config import CONFIG_DIR, DATA_DIR, ROOT, STATE_DIR, env, load_yaml
 from wt.oms.options import OptionPlan, OptionsOMS, PlanStore, book
 from wt.ops import hc, locks
 from wt.ops.alerts import Alerts, Pager
-from wt.options import chain, clone_site, regime, session, setups
+from wt.options import chain, clone_site, regime, session, setups, shadow
 from wt.options import levels as lv
 from wt.options.intraday import daily_raw
 from wt.options.regime import NEW_YORK
@@ -191,6 +196,7 @@ class Name:
     expiry: dt.date | None = None               # the expiry it trades today (DEC-0034); None: the session's
     last_bar: str = ""                          # the end (HH:MM) of the last finished bar looked at
     cooldown_until: dt.datetime | None = None
+    research: dict[str, float] = field(default_factory=dict)   # DEC-0041 level codes, tagging only (never marks)
 
 
 @dataclass
@@ -238,6 +244,11 @@ class Runner:
         self.policy = str(self.cfg["names"].get("expiry", "same_day"))
         if self.policy not in EXPIRY_POLICIES:
             raise ValueError(f"names.expiry: {self.policy!r} is not one of {EXPIRY_POLICIES}")
+        ra = self.cfg.get("research_arms") or {}
+        self.arms_cfg: Mapping[str, Any] = ra if ra.get("enabled") is True else {}
+        self.shadow: shadow.Shadow | None = shadow.Shadow(self.session, ra, self.cfg["exits"], self.fee,
+                                                          self.ck.flatten) if self.arms_cfg else None
+        self.leader_cache: dict[tuple[str, str], regime.Tape | None] = {}
 
     # ---- helpers -----------------------------------------------------------------------------
     def today(self) -> list[OptionPlan]:
@@ -340,6 +351,7 @@ class Runner:
             self.page("flatten-required", "Options clone: a position no plan knows",
                       "Entries are off today. See docs/runbooks/options-clone.md.", 5)
         self.prepare()
+        self.arms_guard("restore", self.arms_restore)
         self.write("armed", session=self.session, names=sorted(self.names), off=sorted(self.off),
                    own_account=own, options_level=level, plans_open=[p.trade_id for p in self.plans if p.active],
                    orders=self.cfg.get("orders"), feed=self.cfg["feeds"]["option"])
@@ -417,6 +429,8 @@ class Runner:
                 pm = session.premarket_range(pre.get(root, []), self.day) if self.cfg["levels"].get("premarket") else None
                 marks = session.marks(levels, self.cfg["levels"]["names"], self.cfg["levels"]["strong"], pm)
                 self.names[root] = Name(root, marks, oi, expiry)
+                if self.arms_cfg:
+                    self.arms_guard("levels", self.arms_levels, root, loaded.bars)
                 expiries[root] = expiry.isoformat()
                 return True
             except (ValueError, TypeError, KeyError, TransportError, requests.RequestException) as e:
@@ -439,6 +453,10 @@ class Runner:
                    level_source=level_source, level_diffs={k: v for k, v in level_diffs.items() if v})
         if not self.names:
             self.off["names"] = "no name to trade"
+        if self.arms_cfg and self.names:
+            found = {r: n.research for r, n in sorted(self.names.items())}
+            self.arms_guard("levels", self.arms_write, [{"ts": self.now().isoformat(), "event": "levels",
+                                                         "levels": found}])
 
     # ---- one poll ----------------------------------------------------------------------------
     def step(self) -> None:
@@ -480,6 +498,8 @@ class Runner:
                 self.critical(f"{len(held)} position still open at {self.ck.critical:%H:%M}")
         if self.ck.first_entry <= now <= self.ck.last_entry:
             self.look_for_entries(now, bars, tapes, stalled)
+        if self.shadow is not None:                      # last: the control has managed and entered for this poll
+            self.arms_guard("step", self.arms_step, now, bars, tapes)
 
     def critical(self, why: str) -> None:
         if not self.paged_critical:
@@ -566,6 +586,8 @@ class Runner:
                    quoted_ask=p.quoted_ask, slippage_pct=slip)
         self.pager.fire(f"options-clone:entry-{p.trade_id}", "Options clone entered",
                         f"{p.root} {p.side}, {p.setup} at {p.level}", 3)
+        if self.shadow is not None and p.fill is not None:
+            self.arms_guard("runner", self.arms_runner, p)
         if p.fill is not None and p.fill > float(self.cfg["contract"]["max_ask"]) + 1e-9:
             self.off["fill-over-cap"] = "a fill above the premium cap"
             self.exit(p, "operational", self.now())
@@ -642,6 +664,8 @@ class Runner:
         if book(p, self.journaled, self.write, self.fee):
             p.recorded = True
             self.store.save(p)
+        if self.shadow is not None:
+            self.arms_guard("control-closed", self.arms_control_closed, p)
         rop = p.return_on_premium(self.fee)
         self.pager.fire(f"options-clone:exit-{p.trade_id}", "Options clone exited",
                         f"{p.root} {p.side}: {p.exit_reason}" + ("" if rop is None else f", {rop:+.0%} on premium"), 3)
@@ -712,6 +736,7 @@ class Runner:
             sigs = setups.retest(two, near, tape.atr, self.cfg["setups"]["retest"]) + \
                 setups.rejection(two, near, self.cfg["setups"]["rejection"])
             rec["signals"] = []
+            to_tag: list[tuple[dict[str, Any], setups.Signal, chain.Choice]] = []
             entered = refused = False
             acted = {(q.root, q.signal_bar, q.setup, q.side) for q in self.today()}
             for sig in sigs:
@@ -741,6 +766,7 @@ class Runner:
                 one: dict[str, Any] = {"setup": sig.setup, "side": sig.side, "level": sig.level.name,
                                        "entry": sig.entry, "gates": g.as_json(),
                                        **self.logged_refusal(g, sig, nm, choice, chain_ok, streak, last_loss)}
+                to_tag.append((one, sig, choice))
                 rec["signals"].append(one)
                 q = choice.quote
                 if not g.ok or q is None or q.ask is None:
@@ -774,7 +800,13 @@ class Runner:
                 entered = True
             rec["action"] = ("entry-refused" if refused else "entered") if entered else \
                 ("signal-refused" if sigs else "no-setup")
+            if self.arms_cfg:                            # after any order has left: the tags cost the entry no time
+                for one, sig, choice in to_tag:
+                    tags = self.arms_guard("tags", self.arms_tags, sig, two, nm, tape, choice, root)
+                    one["arms"] = tags if tags is not None else {"fault": True}
             self.decision(rec)
+            if self.shadow is not None:
+                self.arms_guard("signals", self.arms_signals, now, root, nm, two, tape, tapes, near, late)
 
     def logged_refusal(self, *a: Any) -> dict[str, Any]:
         try:
@@ -840,6 +872,147 @@ class Runner:
             why["candidates"] = sum(choice.reasons.values()) if choice.miss is not None else 0
         out |= {"reason": code, "failed": failed, "why": why}
         return out
+
+    # ---- the research arms (DEC-0041) ----------------------------------------------------------
+    # Each runs under `arms_guard` after the control has decided, reads only what the control already read (or fetches
+    # its own data), and writes only to the shadow file or the `arms` key of a decision line. A fault in an arm is
+    # written to the shadow file and costs the control nothing.
+    def arms_guard(self, what: str, fn: Callable[..., Any], *args: Any) -> Any:
+        try:
+            return fn(*args)
+        except Exception as e:  # noqa: BLE001 — a research arm must never cost a trade
+            try:
+                self.arms_write([{"ts": self.now().isoformat(), "event": "fault", "arm": what,
+                                  "error": f"{e.__class__.__name__}: {str(e)[:120]}"}])
+            except Exception:  # noqa: BLE001
+                pass
+            return None
+
+    def arms_path(self) -> Path:
+        return self.state / "shadow" / f"{self.session}.jsonl"
+
+    def arms_write(self, records: Sequence[Mapping[str, Any]]) -> None:
+        if not records:
+            return
+        p = self.arms_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with open(p, "a") as fh:
+            for r in records:
+                fh.write(json.dumps(r, default=str) + "\n")
+
+    def arms_restore(self) -> None:
+        if self.shadow is None or not self.arms_path().exists():
+            return
+        rows = []
+        for line in self.arms_path().read_text().splitlines():
+            try:
+                rows.append(json.loads(line))
+            except ValueError:
+                continue
+        self.shadow.restore(rows)
+
+    def arms_levels(self, root: str, daily: Sequence[lv.Bar]) -> None:
+        """The DEC-0041 level codes known before the open, kept on the name for the tags and the shadow file."""
+        prev = dt.date.fromisoformat(lv.prev_session(self.session))
+        start = dt.datetime.combine(prev, dt.time(16, 0), NEW_YORK)
+        rows = self.feeds.minutes([root], start, min(self.now(), self.ck.open)).get(root, [])
+        events = [str(e.get("date")) for e in self.macro if str(e.get("severity", "")) == "high"]
+        self.names[root].research = session.research_levels(daily, self.session, events,
+                                                            session.overnight_range(rows, self.day, prev))
+
+    def arms_runner(self, p: OptionPlan) -> None:
+        assert self.shadow is not None and p.fill is not None
+        self.arms_write(self.shadow.open_runner(p.trade_id, p.root, p.symbol, p.side, p.setup, p.level, p.level_price,
+                                                p.invalidation, p.next_level, p.signal_bar, p.fill, p.filled_at,
+                                                self.now()))
+
+    def arms_control_closed(self, p: OptionPlan) -> None:
+        assert self.shadow is not None
+        self.arms_write(self.shadow.control_closed(p.trade_id, p.exit_reason, p.exit_fill, self.now()))
+
+    def leader_tape(self, leader: str, bar_end: dt.datetime) -> regime.Tape | None:
+        """The leader's tape (SMH for QQQ) at the close of the bar ending `bar_end`, read with the clone's numbers."""
+        key = (leader, bar_end.isoformat())
+        if key not in self.leader_cache:
+            rows = self.feeds.minutes([leader], self.ck.open, bar_end).get(leader, [])
+            two = [x for x in regime.resample(regime.minute_bars(rows, self.day), int(self.cfg["bars"]["minutes"]),
+                                              bar_end) if x.end <= bar_end]
+            b = self.cfg["bars"]
+            t = regime.read(two, int(b["atr_period"]), int(b["ema_fast"]), int(b["ema_slow"]),
+                            float(self.cfg["gates"]["shock_bar_atr"]))
+            self.leader_cache[key] = t if two and two[-1].end == bar_end else None
+        return self.leader_cache[key]
+
+    def arms_tags(self, sig: setups.Signal, two: Sequence[regime.Bar], nm: Name, tape: regime.Tape,
+                  choice: chain.Choice, root: str) -> dict[str, Any]:
+        tc = self.arms_cfg["tags"]
+        leaders = {str(k): str(v) for k, v in (tc.get("leaders") or {}).items()}
+        lead = self.leader_tape(leaders[root], two[-1].end) if root in leaders else None
+        sw = (nm.research["SWH"], nm.research["SWL"]) if "SWH" in nm.research and "SWL" in nm.research else None
+        q = choice.quote
+        return setups.tag_decision(sig, two, nm.marks, root=root, word=tape.word, five=sw, leader=lead,
+                                   leader_names=list(leaders), iv=None if q is None else q.iv,
+                                   iv_modelled=None if q is None else q.modelled, half_day=self.ck.half_day,
+                                   cfg={**tc, "index_names": self.cfg["contract"]["index_names"]})
+
+    def arms_signals(self, now: dt.datetime, root: str, nm: Name, two: Sequence[regime.Bar], tape: regime.Tape,
+                     tapes: Mapping[str, regime.Tape], near: Sequence[setups.Mark], late: bool) -> None:
+        """The trap and fast-reclaim signals of this bar, gated as the control gates its own (setups.gate, the event
+        blocks, the contract), but never the account's latches, pauses or position count (HYP-0046/47)."""
+        sh = self.shadow
+        assert sh is not None and tape.atr is not None
+        arms = self.arms_cfg["shadow"]
+        sigs = setups.trap(two, near, arms["trap"]) + setups.reclaim_fast(two, near, tape.atr, arms["reclaim_fast"])
+        sigs = [x for x in sigs if x.setup in sh.enabled]
+        if not sigs:
+            return
+        raw = self.feeds.chain(root, nm.expiry or self.day)
+        quotes = chain.with_model(chain.parse_snapshots(raw), tape.close, now)
+        out: list[dict[str, Any]] = []
+        event = session.event_block(now, root, self.macro, self.earnings, self.cfg["gates"],
+                                    self.cfg["contract"]["index_names"])
+        for sig in sigs:
+            atm = min((q for q in quotes if q.contract.side == sig.side and q.iv),
+                      key=lambda q: abs(q.contract.strike - tape.close), default=None)
+            g = setups.gate(sig, tape, tapes.get("SPY"), nm.marks,
+                            session.remaining_move(tape.close, atm.iv if atm else None, now, self.ck),
+                            self.cfg["gates"])
+            if event:
+                g.add("event", False, event)
+            choice = chain.pick(quotes, root, sig.side, nm.expiry or self.day, tape.close, now,
+                                {**self.cfg["contract"], "quote_stale_flat_s": self.cfg["feeds"]["quote_stale_flat_s"]},
+                                nm.oi, self.account_holds, late)
+            g.add("contract", choice.quote is not None, choice.reasons)
+            q = choice.quote
+            nxt = setups.next_level(sig.side, sig.entry, nm.marks, sig.level.price)
+            limit = None if q is None or q.ask is None else chain.entry_limit(
+                q.ask, float(self.cfg["order"]["entry_buffer_pct"]), float(self.cfg["contract"]["max_ask"]))
+            h, m = (int(x) for x in sig.bar_end.split(":"))
+            ttl = int(self.cfg["order"]["entry_ttl_bars"]) * int(self.cfg["bars"]["minutes"])
+            deadline = dt.datetime.combine(self.day, dt.time(h, m), NEW_YORK) + dt.timedelta(minutes=ttl)
+            v = shadow.Virtual(sig.setup, f"{self.session}-{sig.setup}-{root}-{sig.bar_end}-{sig.side}", root,
+                               q.contract.symbol if q is not None else "", sig.side, sig.setup, sig.level.name,
+                               sig.level.price, sig.invalidation, nxt.price if nxt else None, sig.bar_end,
+                               limit=limit, deadline=deadline.isoformat())
+            if any(x.vid == v.vid for x in sh.trades):       # a restart sees the same bar again
+                continue
+            out += sh.signal(sig.setup, v, g.ok, {"gates": g.as_json(), "entry": sig.entry,
+                                                  "quoted_ask": None if q is None else q.ask}, now)
+        self.arms_write(out)
+
+    def arms_step(self, now: dt.datetime, bars: Mapping[str, list[regime.Bar]],
+                  tapes: Mapping[str, regime.Tape]) -> None:
+        sh = self.shadow
+        assert sh is not None
+        syms = sh.symbols()
+        quotes: dict[str, tuple[float | None, float | None]] = {}
+        if syms:
+            stale = float(self.cfg["feeds"]["quote_stale_flat_s"])
+            for q in chain.parse_snapshots(self.feeds.quotes(syms)):
+                age = q.age_s(now)
+                if age is not None and age <= stale:
+                    quotes[q.contract.symbol] = (q.bid, q.ask)
+        self.arms_write(sh.step(now, quotes, bars, tapes))
 
     # ---- the dashboard -----------------------------------------------------------------------
     def publish(self, final: bool = False) -> None:

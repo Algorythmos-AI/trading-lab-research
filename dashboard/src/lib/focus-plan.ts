@@ -25,6 +25,19 @@ export const LEVEL_WORDS: Record<string, string> = {
   "52WL": "one-year low",
   DEMAND: "buying zone",
   SUPPLY: "selling zone",
+  // The pre-market high and low: PMKH / PMKL, never PMH / PML (those are last month's).
+  PMKH: "pre-market high",
+  PMKL: "pre-market low",
+  // The research level codes of DEC-0041. The clone logs them beside its decisions; none is a level it trades at.
+  ONH: "overnight high",
+  ONL: "overnight low",
+  SWH: "five-day high",
+  SWL: "five-day low",
+  EVH: "last big-news day's high",
+  EVL: "last big-news day's low",
+  GAPH: "top of today's gap",
+  GAPL: "bottom of today's gap",
+  ATH: "all-time high",
 };
 
 /** The glossary under the cards, in reading order. */
@@ -159,6 +172,10 @@ const STRUCTURAL: Record<string, LineKind> = {
   PMH: "month",
   PML: "month",
   "52WH": "month",
+  // DEC-0041's longer-range research codes, in the colour of their timeframe if an edition ever carries them.
+  SWH: "week",
+  SWL: "week",
+  ATH: "month",
 };
 
 /** The owner's colour code, in the words the card and the legend use. */

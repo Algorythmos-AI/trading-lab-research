@@ -158,3 +158,42 @@ def event_block(now: dt.datetime, root: str, macro: Sequence[Mapping[str, Any]],
             if d == today.isoformat() or (d == prev.isoformat() and when == "amc"):
                 return "earnings"
     return None
+
+
+def overnight_range(rows: Sequence[Mapping[str, Any]], session: dt.date,
+                    prev_session: dt.date) -> tuple[float, float] | None:
+    """ONH / ONL (DEC-0041, tagging only): the high and low from the prior session's 16:00 close to today's 09:30
+    open, New York, from 1-minute rows (after-hours and pre-market); None without any."""
+    start = dt.datetime.combine(prev_session, dt.time(16, 0), NEW_YORK)
+    end = dt.datetime.combine(session, dt.time(9, 30), NEW_YORK)
+    hs, ls = [], []
+    for r in rows:
+        try:
+            at = dt.datetime.fromisoformat(str(r.get("t")).replace("Z", "+00:00")).astimezone(NEW_YORK)
+            h, low = float(r["h"]), float(r["l"])
+        except (TypeError, ValueError, KeyError, AttributeError):
+            continue
+        if start <= at < end and math.isfinite(h) and math.isfinite(low) and h > 0 and low > 0:
+            hs.append(h)
+            ls.append(low)
+    return (max(hs), min(ls)) if hs else None
+
+
+def research_levels(bars: Sequence[lv.Bar], session: str, event_dates: Sequence[str],
+                    overnight: tuple[float, float] | None) -> dict[str, float]:
+    """The research level codes known before the open (DEC-0041): ONH/ONL, SWH/SWL, EVH/EVL and ATH, by code. Never
+    marks: nothing here is a `Mark`, so no setup can form at one. GAPH/GAPL need the open (`levels.gap_levels`)."""
+    out: dict[str, float] = {}
+    hist = list(bars)
+    if overnight is not None:
+        out["ONH"], out["ONL"] = overnight
+    sw = lv.swing_range(hist, session)
+    if sw is not None:
+        out["SWH"], out["SWL"] = sw
+    ev = lv.event_candle(hist, session, list(event_dates))
+    if ev is not None:
+        out["EVH"], out["EVL"] = ev[0], ev[1]
+    ath = lv.highest_high(hist, session)
+    if ath is not None:
+        out["ATH"] = ath
+    return out
