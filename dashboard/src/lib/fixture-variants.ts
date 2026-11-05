@@ -26,6 +26,7 @@ export const VARIANT_COOKIE = "fx";
  *   must fail alone; the rest of each page keeps working.
  * - `calendar-off`: no economic calendar has been published. `calendar-stale`: the last one is three weeks old and
  *   FRED could not be read for it. `calendar-poison`: the stored one no longer matches its schema.
+ * - `focus`: the options edition with a Today's focus block on SPY and QQQ, so the chart lines can be scanned.
  */
 export const VARIANT_FLAGS = [
   "empty",
@@ -53,6 +54,7 @@ export const VARIANT_FLAGS = [
   "calendar-stale",
   "calendar-poison",
   "frozen",
+  "focus",
 ] as const;
 export type VariantFlag = (typeof VARIANT_FLAGS)[number];
 
@@ -67,15 +69,19 @@ const KNOWN = new Set<string>(VARIANT_FLAGS);
 /** The flags in a cookie value such as `partial.quotes-tick`. Unknown words are ignored. */
 export function parseFlags(raw: string | null | undefined): Set<VariantFlag> {
   const out = new Set<VariantFlag>();
-  for (const word of (raw ?? "").split(".")) if (KNOWN.has(word)) out.add(word as VariantFlag);
+  for (const word of (raw ?? "").split("."))
+    if (KNOWN.has(word)) out.add(word as VariantFlag);
   return out;
 }
 
 /** The flags from a request's `Cookie` header. */
-export function flagsFromCookieHeader(header: string | null | undefined): Set<VariantFlag> {
+export function flagsFromCookieHeader(
+  header: string | null | undefined,
+): Set<VariantFlag> {
   for (const part of (header ?? "").split(";")) {
     const eq = part.indexOf("=");
-    if (eq > 0 && part.slice(0, eq).trim() === VARIANT_COOKIE) return parseFlags(part.slice(eq + 1).trim());
+    if (eq > 0 && part.slice(0, eq).trim() === VARIANT_COOKIE)
+      return parseFlags(part.slice(eq + 1).trim());
   }
   return new Set();
 }
@@ -116,7 +122,44 @@ export function partialOptions(e: OptionsEdition): OptionsEdition {
 }
 
 const DAY = 86_400_000;
-const plus = (day: string, days: number) => new Date(Date.parse(`${day}T00:00:00Z`) + days * DAY).toISOString().slice(0, 10);
+const plus = (day: string, days: number) =>
+  new Date(Date.parse(`${day}T00:00:00Z`) + days * DAY)
+    .toISOString()
+    .slice(0, 10);
+
+/** The edition with a Today's focus block: SPY and QQQ, with levels taken from their own fixture levels. Synthetic. */
+export function focusOptions(e: OptionsEdition): OptionsEdition {
+  const out = structuredClone(e);
+  out.focus = {
+    picked_at: `${e.session}T21:54:00Z`,
+    method: "fixture",
+    items: [
+      {
+        symbol: "SPY",
+        rank: 1,
+        bias: "breakout",
+        resistance: { price: 779.4, name: "PDH" },
+        support: { price: 775.16, name: "PDL" },
+        close: 778.55,
+        atr: 6.26,
+        target_up: { price: 781.62, name: "PWH/52WH" },
+        target_down: { price: 769.63, name: "PWL" },
+      },
+      {
+        symbol: "QQQ",
+        rank: 2,
+        bias: "support",
+        resistance: { price: 752.86, name: "PDH" },
+        support: { price: 748.39, name: "PDL" },
+        close: 751.24,
+        atr: 8.53,
+        target_up: { price: 762.86, name: "PWH/52WH" },
+        target_down: { price: 743.23, name: "PWL" },
+      },
+    ],
+  };
+  return out;
+}
 
 /**
  * The same edition in its second format: the day's context, scheduled events around the session, and a volatility
@@ -127,38 +170,132 @@ const plus = (day: string, days: number) => new Date(Date.parse(`${day}T00:00:00
 export function v2Options(e: OptionsEdition): OptionsEdition {
   const out = structuredClone(e);
   out.schema_version = 2;
-  out.market = { vix: { close: 16.24, change: 0.82, pct_52w: 0.34 }, session: { half_day: false }, calendar: "complete" };
+  out.market = {
+    vix: { close: 16.24, change: 0.82, pct_52w: 0.34 },
+    session: { half_day: false },
+    calendar: "complete",
+  };
   const [a, b, c] = out.tickers.map((t) => t.symbol);
   out.events = [
-    { date: plus(e.session, 2), time_et: "14:00", kind: "macro", type: "fomc_decision", severity: "high" },
-    { date: e.session, time_et: "14:00", kind: "macro", type: "fomc_minutes", severity: "medium" },
+    {
+      date: plus(e.session, 2),
+      time_et: "14:00",
+      kind: "macro",
+      type: "fomc_decision",
+      severity: "high",
+    },
+    {
+      date: e.session,
+      time_et: "14:00",
+      kind: "macro",
+      type: "fomc_minutes",
+      severity: "medium",
+    },
     // Written the way another calendar might: one digit for the hour, seconds, capitals.
-    { date: e.session, time_et: "8:30:00", kind: "macro", type: "CPI", severity: "high" },
+    {
+      date: e.session,
+      time_et: "8:30:00",
+      kind: "macro",
+      type: "CPI",
+      severity: "high",
+    },
     // A code this build has no name for, with no time: never drawn as written, and after the timed ones.
-    { date: e.session, time_et: null, kind: "macro", type: "fed_holds_rates_powell_turns_hawkish", severity: null },
+    {
+      date: e.session,
+      time_et: null,
+      kind: "macro",
+      type: "fed_holds_rates_powell_turns_hawkish",
+      severity: null,
+    },
     // The same release listed twice must not trip the page.
-    { date: e.session, time_et: null, kind: "macro", type: "fed_holds_rates_powell_turns_hawkish", severity: null },
-    ...(b ? [{ date: plus(e.session, 3), time_et: null, kind: "earnings" as const, type: "earnings", symbol: b, when: "amc" as const }] : []),
-    ...(a ? [{ date: plus(e.session, 1), time_et: null, kind: "earnings" as const, type: "earnings", symbol: a, when: "bmo" as const }] : []),
+    {
+      date: e.session,
+      time_et: null,
+      kind: "macro",
+      type: "fed_holds_rates_powell_turns_hawkish",
+      severity: null,
+    },
+    ...(b
+      ? [
+          {
+            date: plus(e.session, 3),
+            time_et: null,
+            kind: "earnings" as const,
+            type: "earnings",
+            symbol: b,
+            when: "amc" as const,
+          },
+        ]
+      : []),
+    ...(a
+      ? [
+          {
+            date: plus(e.session, 1),
+            time_et: null,
+            kind: "earnings" as const,
+            type: "earnings",
+            symbol: a,
+            when: "bmo" as const,
+          },
+        ]
+      : []),
     // Outside the week, and for a name the edition does not carry: neither belongs on the page.
-    ...(c ? [{ date: plus(e.session, 30), time_et: null, kind: "earnings" as const, type: "earnings", symbol: c, when: "amc" as const }] : []),
-    { date: e.session, time_et: null, kind: "earnings", type: "earnings", symbol: "ZZZZ", when: "amc" },
-    { date: plus(e.session, -3), time_et: "08:30", kind: "macro", type: "nfp", severity: "high" },
+    ...(c
+      ? [
+          {
+            date: plus(e.session, 30),
+            time_et: null,
+            kind: "earnings" as const,
+            type: "earnings",
+            symbol: c,
+            when: "amc" as const,
+          },
+        ]
+      : []),
+    {
+      date: e.session,
+      time_et: null,
+      kind: "earnings",
+      type: "earnings",
+      symbol: "ZZZZ",
+      when: "amc",
+    },
+    {
+      date: plus(e.session, -3),
+      time_et: "08:30",
+      kind: "macro",
+      type: "nfp",
+      severity: "high",
+    },
   ];
   out.tickers.forEach((t, i) => {
     const iv = t.expected_move?.annual_iv ?? null;
     // One name with no block at all, one with a block of blanks, the rest filled in.
     if (i === 3) return;
     if (i === 4) {
-      t.vol = { iv30: null, iv_change_1d: null, iv_pct_13w: null, iv_pct_26w: null, hv30: null, opt_volume: null, opt_volume_avg20: null };
+      t.vol = {
+        iv30: null,
+        iv_change_1d: null,
+        iv_pct_13w: null,
+        iv_pct_26w: null,
+        hv30: null,
+        opt_volume: null,
+        opt_volume_avg20: null,
+      };
       return;
     }
     t.vol = {
       iv30: iv,
-      iv_change_1d: iv === null ? null : Math.round((i % 2 === 0 ? 0.012 : -0.008) * 1000) / 1000,
+      iv_change_1d:
+        iv === null
+          ? null
+          : Math.round((i % 2 === 0 ? 0.012 : -0.008) * 1000) / 1000,
       iv_pct_13w: Math.min(1, (t.expected_move?.iv_pct_52w ?? 0.3) + 0.14),
       iv_pct_26w: Math.min(1, (t.expected_move?.iv_pct_52w ?? 0.3) + 0.05),
-      hv30: iv === null ? null : Math.round((iv / (i % 3 === 0 ? 1.32 : 0.9)) * 10000) / 10000,
+      hv30:
+        iv === null
+          ? null
+          : Math.round((iv / (i % 3 === 0 ? 1.32 : 0.9)) * 10000) / 10000,
       opt_volume: 120_000 + i * 15_000,
       opt_volume_avg20: i === 5 ? 0 : 100_000,
     };
@@ -174,7 +311,9 @@ export function poisonedOptions(e: OptionsEdition): OptionsEdition {
 }
 
 /** A journal whose trades hold a null row, which the schema forbids and every trade view reads past. */
-export function poisonedJournal<T extends { trades: readonly unknown[] }>(doc: T): T {
+export function poisonedJournal<T extends { trades: readonly unknown[] }>(
+  doc: T,
+): T {
   return { ...doc, trades: [null, ...doc.trades] };
 }
 
@@ -196,7 +335,12 @@ export function tickPrice(base: number, second: number): number {
 }
 
 /** An OCC option symbol: root, yymmdd, C or P, strike in thousandths. */
-export function occSymbol(root: string, expiry: string, kind: "call" | "put", strike: number): string {
+export function occSymbol(
+  root: string,
+  expiry: string,
+  kind: "call" | "put",
+  strike: number,
+): string {
   return `${root}${expiry.slice(2).replace(/-/g, "")}${kind === "call" ? "C" : "P"}${String(Math.round(strike * 1000)).padStart(8, "0")}`;
 }
 
@@ -205,14 +349,21 @@ export function occSymbol(root: string, expiry: string, kind: "call" | "put", st
  * the desk does not carry) and a little open interest. Dated from `now`, so its contracts have not expired and
  * its age is what a healthy feed's would be, whenever the tests run.
  */
-export function fixtureOptionsLive(e: OptionsEdition, now: Date, flags: ReadonlySet<VariantFlag> = new Set()): OptionsLive {
+export function fixtureOptionsLive(
+  e: OptionsEdition,
+  now: Date,
+  flags: ReadonlySet<VariantFlag> = new Set(),
+): OptionsLive {
   // The first Friday at least a week out.
   let day = now.getTime() + 7 * DAY;
   while (new Date(day).getUTCDay() !== 5) day += DAY;
   const expiry = new Date(day).toISOString().slice(0, 10);
-  const asOf = new Date(now.getTime() - (flags.has("positions-old") ? 180 : 2) * 60_000);
+  const asOf = new Date(
+    now.getTime() - (flags.has("positions-old") ? 180 : 2) * 60_000,
+  );
   const strikeNear = (symbol: string, step: number) => {
-    const close = e.tickers.find((t) => t.symbol === symbol)?.last?.close ?? 100;
+    const close =
+      e.tickers.find((t) => t.symbol === symbol)?.last?.close ?? 100;
     return Math.round(close / step) * step;
   };
   const spy = strikeNear("SPY", 5);
@@ -220,10 +371,31 @@ export function fixtureOptionsLive(e: OptionsEdition, now: Date, flags: Readonly
   const positions: OptionsLive["positions"] = flags.has("positions-none")
     ? []
     : [
-        { contract: occSymbol("SPY", expiry, "call", spy), qty: 2, avg_price: 2.85, price: 3.1, market_value: 620, unrealized_pl: 50 },
-        { contract: occSymbol("NVDA", expiry, "put", nvda), qty: 1, avg_price: 3.4, price: 2.9, market_value: 290, unrealized_pl: -50 },
+        {
+          contract: occSymbol("SPY", expiry, "call", spy),
+          qty: 2,
+          avg_price: 2.85,
+          price: 3.1,
+          market_value: 620,
+          unrealized_pl: 50,
+        },
+        {
+          contract: occSymbol("NVDA", expiry, "put", nvda),
+          qty: 1,
+          avg_price: 3.4,
+          price: 2.9,
+          market_value: 290,
+          unrealized_pl: -50,
+        },
         // A name the desk does not carry, with only what the broker always sends.
-        { contract: occSymbol("IWM", expiry, "call", 250), qty: 1, avg_price: null, price: null, market_value: 180, unrealized_pl: 12.5 },
+        {
+          contract: occSymbol("IWM", expiry, "call", 250),
+          qty: 1,
+          avg_price: null,
+          price: null,
+          market_value: 180,
+          unrealized_pl: 12.5,
+        },
       ];
   return {
     schema: "stocksdelta/options-live",
@@ -232,7 +404,11 @@ export function fixtureOptionsLive(e: OptionsEdition, now: Date, flags: Readonly
     as_of: asOf.toISOString(),
     paper: true,
     // The stale document is one from an open market: that is when its age is a fault and not just the hour.
-    market: { is_open: flags.has("positions-old"), next_open: null, next_close: new Date(now.getTime() + 2 * 3_600_000).toISOString() },
+    market: {
+      is_open: flags.has("positions-old"),
+      next_open: null,
+      next_close: new Date(now.getTime() + 2 * 3_600_000).toISOString(),
+    },
     positions,
     open_interest: [
       {
@@ -246,19 +422,51 @@ export function fixtureOptionsLive(e: OptionsEdition, now: Date, flags: Readonly
       },
     ],
     problems: [],
-    ...(flags.has("rules-off") ? {} : { schema_version: 2, rules: fixtureRules(e, asOf, flags.has("rules-none"), flags.has("rules-final")) }),
-    ...(flags.has("hourly-off") ? {} : { schema_version: 3, hourly: fixtureHourly(e) }),
+    ...(flags.has("rules-off")
+      ? {}
+      : {
+          schema_version: 2,
+          rules: fixtureRules(
+            e,
+            asOf,
+            flags.has("rules-none"),
+            flags.has("rules-final"),
+          ),
+        }),
+    ...(flags.has("hourly-off")
+      ? {}
+      : { schema_version: 3, hourly: fixtureHourly(e) }),
   };
 }
 
 /** Rule states for the fixture's own session: one rule open on the first name and one at its target on the third. */
-function fixtureRules(e: OptionsEdition, asOf: Date, none: boolean, final = false): NonNullable<OptionsLive["rules"]> {
+function fixtureRules(
+  e: OptionsEdition,
+  asOf: Date,
+  none: boolean,
+  final = false,
+): NonNullable<OptionsLive["rules"]> {
   const ids = (e.rules ?? []).map((r) => r.id);
-  const hit: Record<string, Record<string, { state: "open" | "target"; bar: string; side: "call" | "put"; r: number }>> = none
+  const hit: Record<
+    string,
+    Record<
+      string,
+      { state: "open" | "target"; bar: string; side: "call" | "put"; r: number }
+    >
+  > = none
     ? {}
     : {
-        [e.tickers[0]?.symbol ?? ""]: { [ids[0] ?? ""]: { state: "open", bar: "11:00", side: "call", r: 0.42 } },
-        [e.tickers[2]?.symbol ?? ""]: { [ids[3] ?? ""]: { state: "target", bar: "12:00", side: "put", r: 2 } },
+        [e.tickers[0]?.symbol ?? ""]: {
+          [ids[0] ?? ""]: {
+            state: "open",
+            bar: "11:00",
+            side: "call",
+            r: 0.42,
+          },
+        },
+        [e.tickers[2]?.symbol ?? ""]: {
+          [ids[3] ?? ""]: { state: "target", bar: "12:00", side: "put", r: 2 },
+        },
       };
   return {
     // `rules-final`: the evening, when the host's last word is still the finished session the edition was built from.
@@ -267,17 +475,29 @@ function fixtureRules(e: OptionsEdition, asOf: Date, none: boolean, final = fals
     delay_min: 16,
     provisional: true,
     complete: final,
-    names: e.tickers.map((t) => ({ symbol: t.symbol, bars: 3, states: ids.map((rule) => ({ rule, ...(hit[t.symbol]?.[rule] ?? { state: "waiting" as const }) })) })),
+    names: e.tickers.map((t) => ({
+      symbol: t.symbol,
+      bars: 3,
+      states: ids.map((rule) => ({
+        rule,
+        ...(hit[t.symbol]?.[rule] ?? { state: "waiting" as const }),
+      })),
+    })),
   };
 }
-
 
 /**
  * Five sessions of hourly bars for every name but the last (a name the host left out), ending at the close the
  * edition was built from: plain arithmetic around each name's close, so the picture is the same on every run.
  */
 function fixtureHourly(e: OptionsEdition): NonNullable<OptionsLive["hourly"]> {
-  const days = ["2026-10-05", "2026-10-06", "2026-10-07", "2026-10-08", "2026-10-09"];
+  const days = [
+    "2026-10-05",
+    "2026-10-06",
+    "2026-10-07",
+    "2026-10-08",
+    "2026-10-09",
+  ];
   const hours = ["09:30", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00"];
   return e.tickers.slice(0, -1).flatMap((t, k) => {
     const close = t.last?.close;
@@ -288,10 +508,22 @@ function fixtureHourly(e: OptionsEdition): NonNullable<OptionsLive["hourly"]> {
       hours.map((h, j) => {
         const n = i * hours.length + j;
         // A slow drift into the close with a wobble that differs by name.
-        const c = close - (total - 1 - n) * step * 0.4 + Math.sin(n * 0.9 + k) * step * 2;
-        const o = close - (total - n) * step * 0.4 + Math.sin((n - 1) * 0.9 + k) * step * 2;
+        const c =
+          close -
+          (total - 1 - n) * step * 0.4 +
+          Math.sin(n * 0.9 + k) * step * 2;
+        const o =
+          close -
+          (total - n) * step * 0.4 +
+          Math.sin((n - 1) * 0.9 + k) * step * 2;
         const r4 = (x: number) => Math.round(x * 10_000) / 10_000;
-        return { t: `${d}T${h}`, o: r4(o), h: r4(Math.max(o, c) + step), l: r4(Math.min(o, c) - step), c: r4(c) };
+        return {
+          t: `${d}T${h}`,
+          o: r4(o),
+          h: r4(Math.max(o, c) + step),
+          l: r4(Math.min(o, c) - step),
+          c: r4(c),
+        };
       }),
     );
     return [{ symbol: t.symbol, bars }];
@@ -302,7 +534,10 @@ function fixtureHourly(e: OptionsEdition): NonNullable<OptionsLive["hourly"]> {
  * The options clone's fixture document, as is, or with `clone-latched` as a bad day: the day loss latch on, the
  * feed unfit, a position to flatten by hand, and the broker's stop refused.
  */
-export function fixtureOptionsClone(d: OptionsClone, flags: ReadonlySet<VariantFlag> = new Set()): OptionsClone {
+export function fixtureOptionsClone(
+  d: OptionsClone,
+  flags: ReadonlySet<VariantFlag> = new Set(),
+): OptionsClone {
   if (!flags.has("clone-latched")) return d;
   return {
     ...d,
@@ -316,7 +551,20 @@ export function fixtureOptionsClone(d: OptionsClone, flags: ReadonlySet<VariantF
     broker_stop: "refused",
     quote_age_median_s: 7.4,
     slippage_median_pct: 4.1,
-    trades: [...d.trades, { trade_id: `${d.session}-O-3`, hyp: "HYP-0029", side: "put", contract: "QQQ261012P00598000", state: "open", fill: 1.62, exit_fill: null, exit_reason: null, rop: null }],
+    trades: [
+      ...d.trades,
+      {
+        trade_id: `${d.session}-O-3`,
+        hyp: "HYP-0029",
+        side: "put",
+        contract: "QQQ261012P00598000",
+        state: "open",
+        fill: 1.62,
+        exit_fill: null,
+        exit_reason: null,
+        rop: null,
+      },
+    ],
   };
 }
 
@@ -324,12 +572,22 @@ export function fixtureOptionsClone(d: OptionsClone, flags: ReadonlySet<VariantF
  * The economic calendar fixture (the job's own output on the recorded sources), dated two days before `now`, or
  * three weeks before it with FRED stale for `calendar-stale`.
  */
-export function fixtureCalendar(doc: CalendarDoc, now: Date, flags: ReadonlySet<VariantFlag>): CalendarDoc {
+export function fixtureCalendar(
+  doc: CalendarDoc,
+  now: Date,
+  flags: ReadonlySet<VariantFlag>,
+): CalendarDoc {
   const stale = flags.has("calendar-stale");
-  const asOf = new Date(now.getTime() - (stale ? 21 : 2) * 86_400_000).toISOString().replace(/\.\d{3}Z$/, "Z");
+  const asOf = new Date(now.getTime() - (stale ? 21 : 2) * 86_400_000)
+    .toISOString()
+    .replace(/\.\d{3}Z$/, "Z");
   return {
     ...doc,
     as_of: asOf,
-    sources: doc.sources.map((s) => ({ ...s, fetched_at: s.fetched_at ? asOf : null, ...(stale && s.id === "fred" ? { ok: false, stale_since: asOf } : {}) })),
+    sources: doc.sources.map((s) => ({
+      ...s,
+      fetched_at: s.fetched_at ? asOf : null,
+      ...(stale && s.id === "fred" ? { ok: false, stale_since: asOf } : {}),
+    })),
   };
 }
