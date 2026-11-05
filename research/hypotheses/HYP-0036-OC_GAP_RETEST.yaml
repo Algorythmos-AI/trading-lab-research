@@ -1,0 +1,13 @@
+id: HYP-0036
+trial: "OC-GAP-RETEST"
+family: O                       # options desk (DEC-0028); counted in family O (DEC-0041)
+status: pre-registered          # DEC-0041; registered before any tagged trade exists
+arm: tag                        # a subset of EXP-0029's own decisions: no order of its own, the control unchanged
+statement: "Among the clone's break-and-retest (OC-RETEST) trades of EXP-0029, those entered against an unfilled gap have a lower mean return on premium after fees than the rest. A gap up is a session whose regular-hours open is above PDH and a gap down one whose open is below PDL, as wt.options.levels.state draws GAP ABOVE and GAP BELOW. The gap is unfilled at the entry bar when no 2-minute bar since the open has traded back to the gap's edge (a low at or below PDH after a gap up; a high at or above PDL after a gap down). Against: a call while a gap up is unfilled, or a put while a gap down is unfilled."
+rule: retest                # the base setup (HYP-0029); the flag `gap_against` is written into the decision log beside the gates
+frozen: {gap_up: open_above_PDH, gap_down: open_below_PDL, filled: a_bar_touches_PDH_or_PDL, against: [call_into_unfilled_gap_up, put_into_unfilled_gap_down]}
+config: config/options_clone.yaml
+evidence: {decision: DEC-0041, experiments: [EXP-0030-options-clone-research-arms], base: HYP-0029}
+since: "the first session of job paper-o that runs a release writing the DEC-0041 tags into the decision log (research_arms on); never backfilled. Ends early, with whatever it has, on the last session under EXP-0029's frozen config if that config changes"
+close_without_verdict: "2027-11-05"
+falsified_if: "With at least 30 trades in each group (tagged and the rest) and 20 sessions: the lower end of the 95% bootstrap range of the difference in mean return on premium after fees, the rest minus the tagged trades, resampled by session, is at or below 0, or that difference is at or below 0 in either half of the trades taken in order. Fewer than 30 trades in either group by 2027-11-05 closes the trial with no verdict. A pass changes no rule: a gate built on it needs its own record and new trials."
