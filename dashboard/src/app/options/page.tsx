@@ -3,7 +3,12 @@ import { TradeRulesFor } from "@/components/trade-rules";
 import { BoardTable, EditionPanel, HowToRead, NoOptions, PaperPanel, RulesPanel, StructurePanel, TickerCards } from "@/components/options";
 import { FocusScope, LiveQuotes } from "@/components/client/live-layer";
 import { BoardProvider, TradeNow } from "@/components/client/trade-now";
-import { DayBar, FocusStrip, focusOnly } from "@/components/options-focus";
+import { DrawingGuide, FocusStrip, focusOnly, RulesStrip } from "@/components/options-focus";
+import { LadderMini, LevelLadder } from "@/components/level-ladder";
+import { CockpitLadders, CockpitShell } from "@/components/client/cockpit";
+import { BoardChip, FocusGlance, GlanceTile } from "@/components/client/focus-glance";
+import { NowHero } from "@/components/client/now-hero";
+import { StatusRail } from "@/components/client/status-rail";
 import { LedgerReview } from "@/components/ledger";
 import { OptionsDesk } from "@/components/client/options-desk";
 import { OptionsGlance } from "@/components/client/options-glance";
@@ -17,6 +22,9 @@ import { builtFromOld, editionState, isDeskView, isHalfDay, mapView, viewForCloc
 import { showReview } from "@/lib/ledger";
 import { withLeaders } from "@/lib/entry-checks";
 import { boardDay } from "@/lib/trade-now";
+import { sessionView } from "@/lib/journal";
+import { railDay } from "@/lib/session-timeline";
+import { dayCheck } from "@/lib/trade-rules";
 import { listOptionsDates, loadJournal, loadLedger, loadOptions, loadOptionsLive, pageTime } from "@/lib/snapshot";
 
 export const dynamic = "force-dynamic";
@@ -113,94 +121,151 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
   // Only a phone shows one pane at a time; the address remembers which, so a reload lands on the same one.
   const initialPane: DeskPane = one(sp.pane) === "name" ? "name" : "names";
   const stale = !date && editionState(e.session, now) === "stale";
+  const doc = journal.status === "ok" ? journal.doc : null;
   // The board's day: rules 7 and 8 from the journal, and whether a trade has closed green today.
-  const day = boardDay(journal.status === "ok" ? journal.doc : null, now);
+  const day = boardDay(doc, now);
+  // The rail's short day line, from the same check as the rules (the day bar it replaces).
+  const rail = railDay(dayCheck(doc ? sessionView(doc, now) : null, { asOf: doc?.as_of ?? null, now }));
+  const halfDay = isHalfDay(full);
+  // The four focus names, in the card's order: the glance, and the cockpit's large ladders.
+  const four = [...(full.focus?.items ?? [])].sort((a, b) => a.rank - b.rank).slice(0, 4);
+  const pre = (s: string) => full.focus?.premarket?.items.find((p) => p.symbol === s)?.price ?? null;
+  const tick = (s: string) => full.tickers.find((t) => t.symbol === s);
+  const review = ledger?.status === "ok" && showReview(now, ledger.edition.session, full.session) ? ledger.edition : null;
 
   return (
     <>
       <h1 className="sr-only">Options</h1>
-      <OldCloseNotice e={e} />
-      {/* The last scored card's review, outside market hours only: while the market is open the desk has the screen. */}
-      {ledger?.status === "ok" && showReview(now, ledger.edition.session, full.session) ? (
-        <PaneBoundary name="How the card did">
-          <LedgerReview e={ledger.edition} />
-        </PaneBoundary>
-      ) : null}
       <LiveQuotes symbols={withLeaders(e.tickers.map((t) => t.symbol)).join(",")} session={e.session} enabled={!date}>
-        <BoardProvider e={full} live={!date} {...day} openLots={journal.status === "ok" ? (journal.doc.open ?? []) : []} closedTrades={journal.status === "ok" ? journal.doc.trades : []} journalAsOf={journal.status === "ok" ? journal.doc.as_of : null}>
-        {/* Top of the trading screen: what to do now, the few names to watch, then the desk; the day's limits sit
-            straight under it. The board and the cards share the page's one live feed. */}
-        <PaneBoundary name="Trade now">
-          <TradeNow />
-        </PaneBoundary>
-        <PaneBoundary name="Today's focus">
-          <FocusStrip e={full} />
-        </PaneBoundary>
-        <PaneBoundary name="The options desk">
-          {/* Keyed by edition: opening another edition starts the desk afresh, so a view or a sort chosen on one
-              never carries over to another. */}
-          <OptionsDesk
-            key={`${e.session}:${date ?? "latest"}`}
-            e={e}
-            live={!date}
-            initialView={initialView}
-            manualView={manualView}
-            initialSymbol={initialSymbol}
-            initialPane={initialPane}
-            // The pane needs the positions; the map needs a handful of marks. The contract-by-contract open interest
-            // (over 100 KB) stays on the server.
-            positions={live ? { ...live, open_interest: null, hourly: null } : null}
-            interest={interestBySymbol(live, now.getTime(), (s) => {
-              const t = e.tickers.find((x) => x.symbol === s);
-              return t ? mapView(t) : null;
-            })}
-            hourly={hourlyBySymbol(live, e.tickers.map((t) => t.symbol), now.getTime())}
-            stale={stale}
-          />
-        </PaneBoundary>
-        <DayBar doc={journal.status === "ok" ? journal.doc : null} now={now} session={e.session} />
-        {full.focus?.items.length ? (
-          <p className="text-xs">
-            <a className="text-muted-foreground hover:text-foreground underline" href={showAll ? "/options" : "/options?all=1"}>
-              {showAll ? "Show only the focus names" : `Show all ${full.tickers.length} names`}
-            </a>
-          </p>
-        ) : null}
-        <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-xs">
-          <p className="max-w-prose">
-            Levels for {weekDate(e.session)}, built from the {weekDate(e.built_from)} close. Source: {e.source ?? "not stated"}. Published{" "}
-            {sydney(e.as_of)} Sydney. Research only; nothing here is an order.
-          </p>
-          <EditionPicker dates={dates} current={e.session} base="/options" />
-        </div>
-        {/* Straight under the desk: the desk is built to fill one laptop screen, so nothing may sit above it. */}
-        {/* Folded: the day's limits already sit at the top; the full rules and their evidence are one click away. */}
-        <details className="rounded-lg border">
-          <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Rules before every trade (9)</summary>
-          <div className="p-2">
-            <TradeRulesFor doc={journal.status === "ok" ? journal.doc : null} now={now} />
-          </div>
-        </details>
-        <details className="rounded-lg border">
-          <summary className="text-muted-foreground cursor-pointer px-4 py-3 text-sm">
-            <span className="text-foreground font-semibold">Research and evidence</span> · entry rules on probation, paper scorecard, close strength,
-            what the testing found. Not needed to trade.
-          </summary>
-          <section aria-label="Evidence and paper record" className="grid gap-5 p-4 pt-0 lg:grid-cols-2">
-          <PaneBoundary name="Entry rules">
-            <RulesPanel e={full} />
-          </PaneBoundary>
-          <PaneBoundary name="Paper scorecard">
-            <PaperPanel e={full} />
-          </PaneBoundary>
-          <PaneBoundary name="Close strength vs option price">
-            <StructurePanel e={full} />
-          </PaneBoundary>
-          <PaneBoundary name="What the testing found">
-            <HowToRead e={full} />
-          </PaneBoundary>
-          </section>
-        </details>
+        <BoardProvider e={full} live={!date} {...day} openLots={doc?.open ?? []} closedTrades={doc?.trades ?? []} journalAsOf={doc?.as_of ?? null}>
+          {/* Top to bottom: what the day allows and the clock, the one name that matters now, the four at a glance, what
+              to act on, the cards, the rules strip, then the desk. Cockpit keeps only the rail, the hero and the four
+              ladders (everything else carries data-cockpit-hide). The parts share the page's one live feed and board. */}
+          <CockpitShell>
+            <PaneBoundary name="Status rail">
+              <StatusRail day={rail} />
+            </PaneBoundary>
+            <div data-cockpit-hide className="contents">
+              <OldCloseNotice e={e} />
+            </div>
+            <PaneBoundary name="Now">
+              <NowHero />
+            </PaneBoundary>
+            {four.length ? (
+              <PaneBoundary name="Cockpit ladders">
+                <CockpitLadders>
+                  {four.map((i) => (
+                    <div key={i.symbol} className="bg-card grid content-start gap-2 rounded-lg border p-3">
+                      <p className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-price font-mono">{i.symbol}</span>
+                        <BoardChip symbol={i.symbol} />
+                      </p>
+                      <LevelLadder item={i} ticker={tick(i.symbol)} session={full.session} halfDay={halfDay} closeDate={full.built_from ?? null} premarket={pre(i.symbol)} size="desktop" live={!date} idScope="cockpit" />
+                    </div>
+                  ))}
+                </CockpitLadders>
+              </PaneBoundary>
+            ) : null}
+            <div data-cockpit-hide className="contents">
+              {four.length && !date ? (
+                <PaneBoundary name="At a glance">
+                  <FocusGlance>
+                    {four.map((i) => (
+                      <GlanceTile key={i.symbol} symbol={i.symbol}>
+                        <LadderMini item={i} ticker={tick(i.symbol)} session={full.session} halfDay={halfDay} closeDate={full.built_from ?? null} premarket={pre(i.symbol)} />
+                      </GlanceTile>
+                    ))}
+                  </FocusGlance>
+                </PaneBoundary>
+              ) : null}
+              <PaneBoundary name="Trade now">
+                <TradeNow />
+              </PaneBoundary>
+              <PaneBoundary name="Today's focus">
+                <FocusStrip e={full} />
+              </PaneBoundary>
+              <PaneBoundary name="Rules strip">
+                <RulesStrip session={full.session} halfDay={halfDay} />
+              </PaneBoundary>
+              <PaneBoundary name="The options desk">
+                {/* Keyed by edition: opening another edition starts the desk afresh, so a view or a sort chosen on one
+                    never carries over to another. */}
+                <OptionsDesk
+                  key={`${e.session}:${date ?? "latest"}`}
+                  e={e}
+                  live={!date}
+                  initialView={initialView}
+                  manualView={manualView}
+                  initialSymbol={initialSymbol}
+                  initialPane={initialPane}
+                  // The pane needs the positions; the map needs a handful of marks. The contract-by-contract open interest
+                  // (over 100 KB) stays on the server.
+                  positions={live ? { ...live, open_interest: null, hourly: null } : null}
+                  interest={interestBySymbol(live, now.getTime(), (s) => {
+                    const t = e.tickers.find((x) => x.symbol === s);
+                    return t ? mapView(t) : null;
+                  })}
+                  hourly={hourlyBySymbol(live, e.tickers.map((t) => t.symbol), now.getTime())}
+                  stale={stale}
+                />
+              </PaneBoundary>
+              {full.focus?.items.length ? (
+                <p className="text-xs">
+                  <a className="text-muted-foreground hover:text-foreground underline" href={showAll ? "/options" : "/options?all=1"}>
+                    {showAll ? "Show only the focus names" : `Show all ${full.tickers.length} names`}
+                  </a>
+                </p>
+              ) : null}
+              <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-xs">
+                <p className="max-w-prose">
+                  Levels for {weekDate(e.session)}, built from the {weekDate(e.built_from)} close. Source: {e.source ?? "not stated"}. Published{" "}
+                  {sydney(e.as_of)} Sydney. Research only; nothing here is an order.
+                </p>
+                <EditionPicker dates={dates} current={e.session} base="/options" />
+              </div>
+              {/* Folded at the bottom: the last scored card's review (outside market hours only), the drawing guide, the
+                  9 rules and the research behind them. None is needed to trade. */}
+              {review ? (
+                <details className="rounded-lg border" data-review-fold>
+                  <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Yesterday&apos;s review · how the card did</summary>
+                  <div className="p-2">
+                    <PaneBoundary name="How the card did">
+                      <LedgerReview e={review} />
+                    </PaneBoundary>
+                  </div>
+                </details>
+              ) : null}
+              <PaneBoundary name="Drawing guide">
+                <DrawingGuide />
+              </PaneBoundary>
+              <details className="rounded-lg border">
+                <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Rules before every trade (9)</summary>
+                <div className="p-2">
+                  <TradeRulesFor doc={doc} now={now} />
+                </div>
+              </details>
+              <details className="rounded-lg border">
+                <summary className="text-muted-foreground cursor-pointer px-4 py-3 text-sm">
+                  <span className="text-foreground font-semibold">Research and evidence</span> · entry rules on probation, paper scorecard, close strength,
+                  what the testing found. Not needed to trade.
+                </summary>
+                <section aria-label="Evidence and paper record" className="grid gap-5 p-4 pt-0 lg:grid-cols-2">
+                  <PaneBoundary name="Entry rules">
+                    <RulesPanel e={full} />
+                  </PaneBoundary>
+                  <PaneBoundary name="Paper scorecard">
+                    <PaperPanel e={full} />
+                  </PaneBoundary>
+                  <PaneBoundary name="Close strength vs option price">
+                    <StructurePanel e={full} />
+                  </PaneBoundary>
+                  <PaneBoundary name="What the testing found">
+                    <HowToRead e={full} />
+                  </PaneBoundary>
+                </section>
+              </details>
+            </div>
+          </CockpitShell>
         </BoardProvider>
       </LiveQuotes>
     </>

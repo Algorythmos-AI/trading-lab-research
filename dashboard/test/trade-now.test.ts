@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { alertMenuKey, alertMenuOutside, TradeNowBoard } from "@/components/client/trade-now";
+import { actionableRow, alertMenuKey, alertMenuOutside, boardCollapsed, TradeNowBoard } from "@/components/client/trade-now";
 import { BARS_STALE_MS, type BarsFeed } from "@/lib/bars-feed";
 import { type Bar2, type NameState, SERVER_SETTLE_MS } from "@/lib/trade-state";
 import { focusOptions } from "@/lib/fixture-variants";
@@ -213,12 +213,15 @@ describe("TradeNowBoard", () => {
     expect(html).not.toContain("PLAN OFF · ");
     expect(html).toMatch(/data-board-row="SPY" data-board-state="plan_off" data-board-alt="failed_break"/);
     expect(html.match(/data-testing-tag/g)).toHaveLength(2); // the failed break's, and the runner's
-    expect(html).toContain("NO TRADE");
+    // AAPL (no trade) is not worth acting on: it is not listed, only counted
+    expect(html).not.toContain('data-board-row="AAPL"');
+    expect(html).not.toContain("NO TRADE");
+    expect(html).toContain('data-board-hidden="1"');
+    expect(html).toContain("1 more name watching");
     // no sentence is set in the mono font: only prices and the grid's values
     expect(html).not.toMatch(/font-mono[^"]*">Retest holding/);
-    // the order: entry, failed break, no trade
+    // the order: entry, then failed break
     expect(html.indexOf('data-board-row="QQQ"')).toBeLessThan(html.indexOf('data-board-row="SPY"'));
-    expect(html.indexOf('data-board-row="SPY"')).toBeLessThan(html.indexOf('data-board-row="AAPL"'));
   });
 
   it("counts the cautions it does not show", () => {
@@ -230,15 +233,41 @@ describe("TradeNowBoard", () => {
     expect(draw({ kind: "live" }, [busy])).toContain("+2 more");
   });
 
-  it("draws one line per name for watch, get ready and missed", () => {
+  it("lists a get-ready as one line, and says so when nothing is worth acting on", () => {
     for (const step of [1, 2, 4]) {
       const html = draw({ kind: "live" }, boardRows(atStep(step), true));
       expect(html).not.toContain('data-expanded="true"');
       expect(html).not.toContain("Runner plan");
     }
-    expect(draw({ kind: "live" }, boardRows(atStep(1), true))).toContain("WATCH</span>");
-    expect(draw({ kind: "live" }, boardRows(atStep(2), true))).toContain("GET READY · CALL");
-    expect(draw({ kind: "live" }, boardRows(atStep(4), true))).toContain("don&#x27;t chase");
+    // 10:22: both get-readies listed, AAPL counted
+    const two = draw({ kind: "live" }, boardRows(atStep(2), true));
+    expect(two).toContain("GET READY · CALL");
+    expect(two.match(/data-board-row=/g)).toHaveLength(2);
+    expect(two).toContain('data-board-hidden="1"');
+    // 10:10 (all watching) and 10:41 (QQQ missed, the rest watching): no rows, one line
+    for (const step of [1, 4]) {
+      const html = draw({ kind: "live" }, boardRows(atStep(step), true));
+      expect(html).not.toContain("data-board-row");
+      expect(html).toContain("Nothing to act on: 3 names watching");
+    }
+  });
+
+  it("keeps a row that holds an open form, whatever its state", () => {
+    const rows = boardRows(atStep(4), true);
+    const html = renderToStaticMarkup(
+      createElement(TradeNowBoard, {
+        mode: { kind: "live" },
+        rows,
+        now: Date.parse("2026-10-12T14:41:00Z"),
+        paused: false,
+        onOpen: () => undefined,
+        rowExtra: (r: BoardRow) => (r.symbol === "QQQ" ? createElement("form", { "data-im-in-form": "QQQ" }) : null),
+      }),
+    );
+    expect(html.match(/data-board-row=/g)).toHaveLength(1);
+    expect(html).toMatch(/data-board-row="QQQ" data-board-state="watch"/);
+    expect(html).toContain('data-im-in-form="QQQ"');
+    expect(html).toContain('data-board-hidden="2"');
   });
 
   it("greys every row and says so when prices pause", () => {
@@ -246,7 +275,10 @@ describe("TradeNowBoard", () => {
     const html = draw({ kind: "live" }, rows, true);
     expect(html).toContain(">paused<");
     expect(html).toContain("Prices paused: no entry is shown on old prices");
-    expect(html.match(/PRICES PAUSED<\/span>/g)).toHaveLength(3);
+    // a paused row is never worth acting on: none is listed, and no number is shown
+    expect(html).not.toContain("data-board-row");
+    expect(html).not.toContain("data-board-grid");
+    expect(html).not.toContain("Nothing to act on");
     expect(html).not.toContain("ENTER ZONE");
   });
 
@@ -269,6 +301,24 @@ describe("TradeNowBoard", () => {
     const old = draw({ kind: "old", line: "Focus card is for Mon 12 Oct: refreshed after 08:54 Sydney" }, rows);
     expect(old).toContain("Focus card is for Mon 12 Oct");
     expect(old).not.toContain("data-board-row");
+  });
+
+  it("folds into the rail before the open, unless a manage card is open", () => {
+    for (const kind of ["next", "opening", "loading"] as const) {
+      expect(boardCollapsed({ kind, line: "" }, 0)).toBe(true);
+      expect(boardCollapsed({ kind, line: "" }, 1)).toBe(false);
+    }
+    expect(boardCollapsed({ kind: "live" }, 0)).toBe(false);
+    expect(boardCollapsed({ kind: "off", line: "" }, 0)).toBe(false);
+    expect(boardCollapsed({ kind: "old", line: "" }, 0)).toBe(false);
+  });
+
+  it("calls an entry, a get-ready and a live alternative worth acting on, and nothing paused", () => {
+    expect(boardRows(atStep(3), true).map(actionableRow)).toEqual([true, true, false]);
+    expect(boardRows(atStep(2), true).map(actionableRow)).toEqual([true, true, false]);
+    expect(boardRows(atStep(1), true).some(actionableRow)).toBe(false);
+    expect(boardRows(atStep(3, { now: stepInstant(S, 3) + 60_000 }), true).some(actionableRow)).toBe(false);
+    expect(boardRows(atStep(0), false).some(actionableRow)).toBe(false);
   });
 
   it("keys notices on the entry and the failed break only", () => {
@@ -455,5 +505,31 @@ describe("the alerts bell", () => {
     expect(alertMenuOutside(true, false)).toEqual({ close: false, refocus: false });
     expect(alertMenuOutside(false, false)).toEqual({ close: true, refocus: true });
     expect(alertMenuOutside(false, true)).toEqual({ close: true, refocus: false });
+  });
+});
+
+// ---- the Now hero's pure parts ---------------------------------------------------------------------------------------
+describe("the Now hero", () => {
+  it("shows the entry's three numbers, a get-ready's plan, and none on paused prices", async () => {
+    const { heroTiles } = await import("@/components/client/now-hero");
+    const [qqq] = boardRows(atStep(3), true);
+    expect(heroTiles(qqq!, rowView(qqq!.state!), false)).toEqual({ enter: "~752.95", stop: "752.01 or −25%", target: "754.83", plan: false });
+    expect(heroTiles(qqq!, rowView(qqq!.state!), true)).toBeNull();
+    const ready = boardRows(atStep(2), true)[0]!;
+    expect(ready.state!.state).toBe("get_ready");
+    expect(heroTiles(ready, rowView(ready.state!), false)).toMatchObject({ plan: true });
+    const aapl = boardRows(atStep(3), true)[2]!;
+    expect(heroTiles(aapl, rowView(aapl.state!), false)).toBeNull();
+    const stale = boardRows(atStep(3, { now: stepInstant(S, 3) + 60_000 }), true)[0]!;
+    expect(heroTiles(stale, rowView(stale.state!), false)).toBeNull();
+  });
+
+  it("never shows a reassuring manage word on paused prices", async () => {
+    const { heroManage } = await import("@/components/client/now-hero");
+    for (const action of ["hold", "trail", "sell_half"] as const) {
+      expect(heroManage({ action, tone: "good", line: "Holding" }, false).word).not.toBe("CHECK");
+      expect(heroManage({ action, tone: "good", line: "Holding" }, true)).toEqual({ word: "CHECK", tone: "warn", line: "Prices paused: manage this one on your platform" });
+    }
+    expect(heroManage({ action: "exit", tone: "bad", line: "Below the stop: exit" }, true).word).toBe("EXIT");
   });
 });

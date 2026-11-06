@@ -29,7 +29,13 @@ const FILES = [
   "../src/lib/chart-geometry.ts",
   "../src/components/level-ladder.tsx",
   "../src/components/client/ladder-live.tsx",
-  "../src/app/options/ladder-preview/page.tsx",
+  "../src/lib/focus-card.ts",
+  "../src/components/client/status-rail.tsx",
+  "../src/components/client/now-hero.tsx",
+  "../src/components/client/focus-glance.tsx",
+  "../src/components/client/cockpit.tsx",
+  "../src/lib/session-timeline.ts",
+  "../src/components/client/focus-card-live.tsx",
 ];
 
 const BANNED = [

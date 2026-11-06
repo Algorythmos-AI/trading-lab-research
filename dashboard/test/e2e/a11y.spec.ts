@@ -129,6 +129,24 @@ for (const theme of ["light", "dark"] as const) {
     expect(await scan(page)).toEqual([]);
   });
 
+  test(`the status rail with its Today log, the Now hero, the glance and the cockpit pass the accessibility scan in ${theme}`, async ({ page, context, baseURL }) => {
+    await useTheme(context, theme);
+    await context.addCookies([
+      { name: "fx", value: "focus.quotes-script", url: baseURL! },
+      { name: "fxstep", value: "3", url: baseURL! },
+    ]);
+    await page.goto("/options");
+    await expect(page.locator('[data-now-hero="live"] [data-hero-word="enter_zone"]')).toBeVisible();
+    await page.getByRole("button", { name: /^Today · \d+$/ }).click();
+    await expect(page.locator("[data-today-log]")).toBeVisible();
+    expect(await scan(page)).toEqual([]);
+    await page.keyboard.press("Escape");
+    await page.locator("[data-cockpit-switch]").click();
+    await expect(page.locator("[data-cockpit-ladders]")).toBeVisible();
+    expect(await scan(page)).toEqual([]);
+    await page.locator("[data-cockpit-switch]").click();
+  });
+
   test(`the "I'm in" form and the manage card pass the accessibility scan in ${theme}`, async ({ page, context, baseURL }) => {
     await useTheme(context, theme);
     await context.addCookies([

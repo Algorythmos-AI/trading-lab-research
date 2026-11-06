@@ -33,6 +33,11 @@ export interface LevelLadderProps {
   live?: boolean;
   /** The alternative trigger the board shows live, if any: drawn in the warn tone with its word. */
   liveAlt?: LiveAlt | null;
+  /**
+   * Set when the same name's ladder is drawn twice on one page (the Cockpit's beside the card's): it keeps the element
+   * ids apart, since a hatch pattern resolves to the first id in the page, which may sit in a hidden card.
+   */
+  idScope?: string;
 }
 
 export interface LiveAlt {
@@ -82,6 +87,9 @@ export function geometryFor(
     highlight: highlight ?? null,
   });
 }
+
+/** The ids' key: the symbol, plus the scope when the same name's ladder is drawn twice on the page. */
+const idKey = (symbol: string, scope: string | undefined) => (scope ? `${symbol}-${scope}` : symbol);
 
 // The far side is dimmed only while the board highlights one side (LadderLive sets data-highlight).
 const DIM: Record<LadderSide, string> = {
@@ -260,8 +268,9 @@ function Frame({ props, f }: { props: LevelLadderProps; f: LadderFrame }) {
   const { item, ticker, session, premarket, highlight, liveAlt, live = true } = props;
   const g = geometryFor(item, ticker, premarket, f, highlight);
   const i = ladderInputs(item, ticker, premarket);
-  const ids = `ladder-title-${item.symbol} ladder-list-${item.symbol}`;
-  const svg = <LadderSvg g={g} f={f} symbol={item.symbol} labelledBy={ids} liveAlt={liveAlt} />;
+  const key = idKey(item.symbol, props.idScope);
+  const ids = `ladder-title-${key} ladder-list-${key}`;
+  const svg = <LadderSvg g={g} f={f} symbol={key} labelledBy={ids} liveAlt={liveAlt} />;
   if (!live || !ticker)
     return (
       <div className="group/ladder" data-highlight={highlight ?? "none"}>
@@ -295,12 +304,13 @@ export function LevelLadder(props: LevelLadderProps) {
   const { item, ticker, premarket, highlight, liveAlt, size = "auto" } = props;
   const g = geometryFor(item, ticker, premarket, FRAMES.desktop, highlight);
   if (!g.rows.length) return null;
+  const key = idKey(item.symbol, props.idScope);
   return (
     <figure className="grid gap-2" data-testid={`ladder-${item.symbol}`}>
-      <p id={`ladder-title-${item.symbol}`} className="sr-only">
+      <p id={`ladder-title-${key}`} className="sr-only">
         {item.symbol} price ladder, highest price first
       </p>
-      <LadderList g={g} id={`ladder-list-${item.symbol}`} highlight={highlight} liveAlt={liveAlt} />
+      <LadderList g={g} id={`ladder-list-${key}`} highlight={highlight} liveAlt={liveAlt} />
       {size === "phone" ? null : (
         <div className={cn(size === "auto" && "hidden sm:block")}>
           <Frame props={props} f={FRAMES.desktop} />

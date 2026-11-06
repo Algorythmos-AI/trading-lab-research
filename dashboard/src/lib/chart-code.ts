@@ -1,15 +1,14 @@
 // The owner's chart colour code in one place: the words (CHART_CODE, from focus-plan.ts), the Tailwind classes the
 // focus card draws its balls and swatches with (LINE), and the same code as SVG strokes for the price ladder.
 //
-// LINE is a COPY of the one in components/options-focus.tsx for now: that file is being changed by another pull
-// request. PR 3 of the "eyeball" plan makes options-focus import LINE from here and deletes its own copy; until then
-// the two must stay the same (test/level-ladder.test.ts checks the ladder's strokes against these tones).
+// The focus card (components/options-focus.tsx) and the ladder both read their styles from here, so a line looks the
+// same everywhere (test/level-ladder.test.ts checks the ladder's strokes against these tones).
 import { CHART_CODE, type LineKind } from "./focus-plan";
 
 export { CHART_CODE };
 export type { LineKind };
 
-/** The focus card's ball and swatch classes per kind of line. Kept identical to options-focus.tsx's LINE. */
+/** The focus card's ball and swatch classes per kind of line. */
 export const LINE: Record<LineKind, { ball: string; swatch: string }> = {
   ceiling: {
     ball: "bg-bad-fill",

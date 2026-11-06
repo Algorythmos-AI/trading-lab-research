@@ -11,20 +11,25 @@ async function at(context: BrowserContext, baseURL: string | undefined, step: nu
   ]);
 }
 
+// The board itself; before the open it folds into the status rail, which then carries its marks on one line.
 const board = (page: Page) => page.locator("[data-trade-now]");
+const boardSection = (page: Page) => page.locator("section[data-trade-now]");
+const hero = (page: Page) => page.locator("[data-now-hero]");
+const rail = (page: Page) => page.locator("[data-status-rail]");
 const rows = (page: Page) => board(page).locator("[data-board-row]");
 
-test("shows a row per focus name, most urgent first, with only the entry expanded", async ({ page, context, baseURL }) => {
+test("lists only the names worth acting on, most urgent first, and counts the rest", async ({ page, context, baseURL }) => {
   await at(context, baseURL, 3);
   await page.goto("/options");
   await expect(board(page)).toHaveAttribute("data-trade-now", "live");
   await expect(rows(page).first()).toHaveAttribute("data-board-state", "enter_zone");
-  await expect(rows(page)).toHaveCount(3);
+  await expect(rows(page)).toHaveCount(2);
   expect(await rows(page).evaluateAll((els) => els.map((e) => `${e.getAttribute("data-board-row")}:${e.getAttribute("data-board-state")}`))).toEqual([
     "QQQ:enter_zone",
     "SPY:plan_off",
-    "AAPL:no_trade",
   ]);
+  // AAPL, in the middle of yesterday's range, is only counted
+  await expect(board(page).locator("[data-board-hidden]")).toHaveText("1 more name watching: see the glance above");
   // the entry and the live failed break open up with their numbers; the runner plan stays folded
   await expect(board(page).locator('[data-expanded="true"]')).toHaveCount(2);
   const entry = rows(page).first();
@@ -42,12 +47,19 @@ test("shows a row per focus name, most urgent first, with only the entry expande
   await expect(board(page).getByRole("link", { name: /Testing · not proven yet/ })).toHaveAttribute("href", "/strategies");
 });
 
-test("before 09:35 it shows the trigger prices only", async ({ page, context, baseURL }) => {
+test("before 09:35 the board folds into the rail, and the hero shows the #1 name's triggers", async ({ page, context, baseURL }) => {
   await at(context, baseURL, 0);
   await page.goto("/options");
   await expect(board(page)).toHaveAttribute("data-trade-now", "opening");
-  await expect(board(page)).toContainText("Opening range forming: first entries from 09:35");
-  await expect(board(page).locator('[data-board-state="plan"]')).toHaveCount(3);
+  await expect(rail(page).locator("[data-trade-now]")).toContainText("Opening range forming: first entries from 09:35");
+  await expect(boardSection(page)).toHaveCount(0);
+  await expect(rows(page)).toHaveCount(0);
+  // the trigger prices live on the hero, the ladders and the cards now
+  await expect(hero(page)).toHaveAttribute("data-now-hero", "opening");
+  await expect(hero(page).locator("[data-hero-line]")).toContainText("Opening range forming");
+  await expect(hero(page).locator('[data-hero-tile="call"]')).toContainText("Calls above");
+  await expect(hero(page).locator('[data-hero-tile="put"]')).toContainText("Puts below");
+  await expect(rail(page).locator("[data-rail-countdown]")).toHaveText(/^First entries in \d:\d\d$/);
 });
 
 test("with the live prices off it says so and draws no rows", async ({ page, context, baseURL }) => {
@@ -113,12 +125,108 @@ test("on a phone the alert switches sit behind one bell", async ({ page, context
   await expect(bell).toBeFocused();
 });
 
-test("tapping a row brings its focus card into view", async ({ page, context, baseURL }) => {
+test("tapping a row, or a name on the glance, brings its focus card into view", async ({ page, context, baseURL }) => {
   await at(context, baseURL, 3);
   await page.goto("/options");
   await expect(rows(page).first()).toHaveAttribute("data-board-state", "enter_zone");
-  await rows(page).filter({ hasText: "AAPL" }).getByRole("button").click();
+  await rows(page).filter({ hasText: "SPY" }).getByRole("button").first().click();
+  await expect(page.locator("#focus-card-SPY")).toBeFocused();
+  await page.locator('[data-glance="AAPL"]').getByRole("button").click();
   await expect(page.locator("#focus-card-AAPL")).toBeFocused();
+});
+
+test("the glance shows each focus name's ladder with the board's own state chip", async ({ page, context, baseURL }) => {
+  await at(context, baseURL, 3);
+  await page.goto("/options");
+  await expect(page.locator("[data-glance]")).toHaveCount(3);
+  await expect(page.locator('[data-glance="QQQ"]')).toHaveAttribute("data-glance-state", "enter_zone");
+  await expect(page.locator('[data-glance="QQQ"]')).toContainText("ENTER ZONE · CALL");
+  await expect(page.locator('[data-glance="QQQ"] [data-testid="ladder-mini-QQQ"]')).toBeVisible();
+  await expect(page.locator('[data-glance="AAPL"]')).toHaveAttribute("data-glance-state", "no_trade");
+});
+
+test("the hero shows the most urgent name: its state word, side and the three numbers", async ({ page, context, baseURL }) => {
+  await at(context, baseURL, 3);
+  await page.goto("/options");
+  await expect(hero(page)).toHaveAttribute("data-now-hero", "live");
+  await expect(hero(page)).toHaveAttribute("data-hero-for", "QQQ");
+  await expect(hero(page).locator('[data-hero-word="enter_zone"]')).toHaveText("ENTER ZONE");
+  await expect(hero(page).locator("[data-hero-side]")).toHaveText("CALL");
+  await expect(hero(page).locator('[data-hero-tile="in"]')).toContainText("In~752.95");
+  await expect(hero(page).locator('[data-hero-tile="stop"]')).toContainText("Stop752.01");
+  await expect(hero(page).locator('[data-hero-tile="t1"]')).toContainText("T1754.83");
+  await expect(hero(page)).toContainText("Semis against");
+  await expect(hero(page).locator('[data-hero-price="live"]')).toBeVisible();
+  // read only: no tile reads as an order
+  await expect(hero(page)).not.toContainText(/\b(Buy|Order)\b/);
+  // 10:41: QQQ ran past target 1 without you; no name is worth acting on, and the hero says so with no numbers
+  await at(context, baseURL, 4);
+  await expect(hero(page).locator('[data-hero-word="enter_zone"]')).toHaveCount(0, { timeout: 15_000 });
+  await expect(boardSection(page).locator("[data-board-none]")).toContainText("Nothing to act on: 3 names watching");
+});
+
+test("frozen prices grey the hero and say for how long, with no entry shown", async ({ page, context, baseURL }) => {
+  await at(context, baseURL, 3);
+  await page.goto("/options");
+  await expect(hero(page).locator('[data-hero-word="enter_zone"]')).toBeVisible();
+  // the feed stops answering: the board's clock runs on past the stale limit
+  await page.route("**/api/quote**", (route) => route.abort());
+  await expect(hero(page)).toHaveAttribute("data-hero-state", "paused", { timeout: 40_000 });
+  await expect(hero(page).locator("[data-hero-stale]")).toContainText(/Prices paused \d+ s/);
+  await expect(hero(page).locator("[data-hero-tiles]")).toHaveCount(0);
+  await expect(hero(page)).not.toContainText("ENTER ZONE");
+});
+
+test("the rail shows the day, the New York clock's next boundary and the session bar", async ({ page, context, baseURL }) => {
+  await at(context, baseURL, 3);
+  await page.goto("/options");
+  await expect(rail(page).locator("[data-rail-day]")).toContainText(/trades · \$\d+ of \$100/);
+  await expect(rail(page).locator("[data-rail-countdown]")).toHaveText(/^Lunch block 11:30–13:00 in /);
+  await expect(rail(page).locator("[data-session-bar] [data-window]")).toHaveCount(3);
+  await expect(rail(page).locator("[data-now-tick]")).toBeVisible();
+  // the rail stays in view as the page scrolls
+  await page.mouse.wheel(0, 2000);
+  await expect(rail(page)).toBeInViewport();
+});
+
+test("the Today log lists a state change, newest first, and closes on Escape", async ({ page, context, baseURL }) => {
+  await at(context, baseURL, 2);
+  await page.goto("/options");
+  await expect(rows(page).first()).toHaveAttribute("data-board-state", "get_ready");
+  await at(context, baseURL, 3);
+  await expect(rows(page).first()).toHaveAttribute("data-board-state", "enter_zone", { timeout: 15_000 });
+  const button = page.getByRole("button", { name: /^Today · \d+$/ });
+  await button.click();
+  const log = page.locator("[data-today-log]");
+  await expect(log.locator('[data-log-line="QQQ"]').first()).toContainText(/^10:2\d\s*QQQ\s*ENTER ZONE · CALL$/);
+  await page.keyboard.press("Escape");
+  await expect(log).toHaveCount(0);
+  await expect(button).toBeFocused();
+});
+
+test("the cockpit keeps the rail, the hero and the large ladders, survives a reload and leaves on Escape", async ({ page, context, baseURL }) => {
+  await at(context, baseURL, 3);
+  await page.goto("/options");
+  const desk = page.getByRole("region", { name: "Options desk" });
+  await expect(desk).toBeVisible();
+  const toggle = page.locator("[data-cockpit-switch]");
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await expect(desk).toBeHidden();
+  await expect(boardSection(page)).toBeHidden();
+  await expect(page.locator("[data-focus-glance]")).toBeHidden();
+  await expect(rail(page)).toBeVisible();
+  await expect(hero(page)).toBeVisible();
+  // one large ladder per focus name (the fixture has three; a live card has four)
+  await expect(page.locator('[data-cockpit-ladders] figure[data-testid^="ladder-"]')).toHaveCount(3);
+  await page.reload();
+  await expect(page.locator("[data-cockpit-switch]")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("[data-cockpit-ladders]")).toBeVisible();
+  await expect(desk).toBeHidden();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("[data-cockpit-switch]")).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator("[data-cockpit-ladders]")).toHaveCount(0);
+  await expect(desk).toBeVisible();
 });
 
 test("fits a 375 px screen with no sideways scroll", async ({ page, context, baseURL }) => {
@@ -128,9 +236,13 @@ test("fits a 375 px screen with no sideways scroll", async ({ page, context, bas
   await expect(rows(page).first()).toHaveAttribute("data-board-state", "enter_zone");
   const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(over).toBeLessThanOrEqual(0);
-  const box = await board(page).boundingBox();
-  expect(box!.x).toBeGreaterThanOrEqual(0);
-  expect(box!.x + box!.width).toBeLessThanOrEqual(375);
+  for (const part of [board(page), hero(page), rail(page), page.locator("[data-focus-glance]")]) {
+    const box = await part.boundingBox();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(375);
+  }
+  // the rail stays compact on a phone: no more than a third of the screen
+  expect((await rail(page).boundingBox())!.height).toBeLessThanOrEqual(812 / 3);
 });
 
 test("I'm in at the entry opens the manage card, which reads target 1 hit and then exit", async ({ page, context, baseURL }) => {

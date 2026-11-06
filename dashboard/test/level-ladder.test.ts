@@ -280,17 +280,16 @@ describe("size and colour code", () => {
     expect(Math.min(...sizes)).toBeGreaterThanOrEqual(14);
   });
 
-  it("the ladder's strokes are the card's colour code, and the copy of LINE matches the focus card's", () => {
+  it("the ladder's strokes are the card's colour code, and the focus card reads LINE from here", () => {
     for (const k of ["ceiling", "floor", "week"] as const) expect(LINE[k].ball.replace("bg-", "--")).toBe(LINE_SVG[k].stroke.replace(/^var\((.*)\)$/, "$1"));
     expect(LINE.month.ball).toBe("bg-chart-7");
     expect(LINE_SVG.month.stroke).toBe("var(--chart-7)");
     expect(LINE_SVG.ceiling.width).toBe(3);
     expect(LINE_SVG.floor.width).toBe(3);
+    // One source: the focus card draws its balls and swatches from chart-code's LINE, and keeps no copy of its own.
     const card = readFileSync(fileURLToPath(new URL("../src/components/options-focus.tsx", import.meta.url)), "utf8");
-    for (const v of Object.values(LINE)) {
-      expect(card).toContain(`"${v.ball}"`);
-      expect(card).toContain(`"${v.swatch}"`);
-    }
+    expect(card).toMatch(/import \{[^}]*\bLINE\b[^}]*\} from "@\/lib\/chart-code"/);
+    expect(card).not.toMatch(/const LINE\b/);
   });
 });
 

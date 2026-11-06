@@ -94,7 +94,9 @@ for (const [name, e] of [
         expect(onMap("ceiling")).toMatch(/<text [^>]*style="fill:var\(--bad\)/);
         expect(onMap("floor")).toMatch(/<text [^>]*style="fill:var\(--good\)/);
         // On the card: the row with the ceiling's price says "Ceiling" and has the red ball; the floor's, green.
-        const cardRow = (price: number) => card.split("<li ").find((li) => li.includes(`>${p2(price)}</span>`) && /Ceiling<|Floor</.test(li))!;
+        // The card's chart lines (its "Draw on chart" fold), row by row.
+        const lineRows = [...card.matchAll(/data-testid="chart-lines"[\s\S]*?<\/ul>/g)].flatMap((m) => m[0].split("<li "));
+        const cardRow = (price: number) => lineRows.find((li) => li.includes(`>${p2(price)}</span>`) && /Ceiling<|Floor</.test(li))!;
         expect(cardRow(ceiling.price)).toContain("Ceiling<");
         expect(cardRow(ceiling.price)).toMatch(/class="size-7 rounded-full bg-bad-fill"/);
         expect(cardRow(floor.price)).toContain("Floor<");
