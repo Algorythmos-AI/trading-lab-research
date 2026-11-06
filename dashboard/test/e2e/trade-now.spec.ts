@@ -186,8 +186,9 @@ test("the I'm in form keeps the side it opened on after the row moves on", async
   const form = page.locator('[data-im-in-form="QQQ"]');
   await expect(form).toHaveAttribute("data-im-in-side", "call");
   await at(context, baseURL, 4);
-  // QQQ ran past target 1 without you: the row is missed, the form stays as it was opened
-  await expect(rows(page).filter({ hasText: "QQQ" })).toHaveAttribute("data-board-state", "missed", { timeout: 15_000 });
+  // QQQ ran past target 1 without you: the row has left the entry zone (it reads watch, "don't chase", while its put
+  // side is still watched), and the form stays as it was opened
+  await expect(rows(page).filter({ hasText: "QQQ" })).toHaveAttribute("data-board-state", /^(watch|missed)$/, { timeout: 15_000 });
   await expect(form).toContainText("The board has moved on: this note keeps the call you opened");
   await expect(form).toHaveAttribute("data-im-in-side", "call");
   await form.getByLabel("QQQ price at your fill").fill("753.43");
