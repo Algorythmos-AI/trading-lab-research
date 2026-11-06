@@ -13,6 +13,7 @@
 import { MonitorUp, X } from "lucide-react";
 import { useEffect, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
+import { screenKeeper, type WakeLockApi } from "@/lib/wake-lock";
 import { useBoard } from "./trade-now";
 
 // ---- the choice, kept in this browser (the alert switches' pattern) -------------------------------------------------
@@ -51,39 +52,20 @@ export function useCockpit(): boolean {
 }
 
 // ---- the screen kept awake ------------------------------------------------------------------------------------------
-type Sentinel = { release: () => Promise<void> };
-type WakeLockApi = { request: (type: "screen") => Promise<Sentinel> };
-
 function useWakeLock(active: boolean) {
   useEffect(() => {
     if (!active) return;
     const api = (navigator as Navigator & { wakeLock?: WakeLockApi }).wakeLock;
     if (!api) return;
-    let lock: Sentinel | null = null;
-    let gone = false;
-    const take = () => {
-      if (document.visibilityState !== "visible" || lock) return;
-      api.request("screen").then(
-        (l) => {
-          if (gone) void l.release().catch(() => undefined);
-          else lock = l;
-        },
-        () => undefined, // refused (battery saver, a policy): the screen sleeps as usual
-      );
-    };
-    const drop = () => {
-      const l = lock;
-      lock = null;
-      if (l) void l.release().catch(() => undefined);
-    };
+    // The keeper holds at most one lock and releases one that arrives too late (lib/wake-lock.ts).
+    const keeper = screenKeeper(api, () => document.visibilityState === "visible");
     // The browser lets go of the lock when the tab is hidden; take it again when it comes back.
-    const onVisible = () => (document.visibilityState === "visible" ? take() : drop());
-    take();
+    const onVisible = () => (document.visibilityState === "visible" ? keeper.take() : keeper.drop());
+    keeper.take();
     document.addEventListener("visibilitychange", onVisible);
     return () => {
-      gone = true;
       document.removeEventListener("visibilitychange", onVisible);
-      drop();
+      keeper.stop();
     };
   }, [active]);
 }

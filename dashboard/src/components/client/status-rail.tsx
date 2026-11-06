@@ -171,7 +171,8 @@ export function StatusRail({ day }: { day: RailDay | null }) {
   const top = useRailTop();
   if (!b) return null;
   const clock = b.on && b.now !== null && b.mode.kind !== "loading" ? sessionClock(b.session, b.halfDay, b.now) : null;
-  const t = sessionTimeline(b.halfDay, clock?.minute ?? null);
+  // The bar follows the clock's day: today's half day for an older card, the edition's otherwise.
+  const t = sessionTimeline(clock?.halfDay ?? b.halfDay, clock?.minute ?? null);
   const collapsed = b.on && boardCollapsed(b.mode, b.manage.views.length);
   const switches = b.on && b.mode.kind !== "old" && b.mode.kind !== "off";
   return (

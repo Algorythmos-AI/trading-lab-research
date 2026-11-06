@@ -88,7 +88,22 @@ describe("the clock's next boundary", () => {
 
   it("names the next session before its day, and is closed after it", () => {
     expect(sessionClock(S, false, at("20:00:00", "2026-10-09")).line).toBe("Next session Mon 12 Oct · opens 09:30 · first entries 09:35");
-    expect(sessionClock(S, false, at("10:00:00", "2026-10-13")).phase).toBe("closed");
+    expect(sessionClock(S, false, at("20:00:00", "2026-10-13")).phase).toBe("closed");
+  });
+
+  it("works an older card's clock from today's trading day, never Closed in market hours", () => {
+    // Tue 13 Oct at 10:30 with Monday's card: the market is open, whatever the card's day
+    const old = sessionClock(S, false, at("10:30:00", "2026-10-13"));
+    expect(old).toMatchObject({ phase: "open", entries: true, minute: 630, halfDay: false });
+    expect(old.line).toBe("Lunch block 11:30–13:00 in 1 h 00 min");
+    expect(sessionClock(S, false, at("09:31:48", "2026-10-13")).line).toBe("First entries in 3:12");
+    // today's own half day, not the card's: Fri 27 Nov closes at 13:00 with Thursday's card (a holiday) behind it
+    const half = sessionClock("2026-11-25", false, at("12:20:00", "2026-11-27", "-05:00"));
+    expect(half).toMatchObject({ phase: "flat", halfDay: true, line: "No new entries · close 13:00 in 40 min" });
+    // a weekend and a holiday are closed; a day past the calendar says the card is old instead of guessing
+    expect(sessionClock(S, false, at("10:30:00", "2026-10-17")).line).toBe("Closed");
+    expect(sessionClock("2026-11-25", false, at("10:30:00", "2026-11-26", "-05:00")).line).toBe("Closed");
+    expect(sessionClock("2027-12-31", false, Date.parse("2028-01-04T15:30:00Z"))).toMatchObject({ phase: "closed", line: "Old focus card", minute: null });
   });
 
   it("follows New York across the clock change", () => {

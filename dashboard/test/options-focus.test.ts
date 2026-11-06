@@ -1,7 +1,10 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { DayBar, DrawingGuide, FocusStrip, focusOnly, RulesStrip } from "@/components/options-focus";
+import { DrawingGuide, FocusStrip, focusOnly, RulesStrip } from "@/components/options-focus";
+import { type JournalDoc, sessionView } from "@/lib/journal";
+import { railDay } from "@/lib/session-timeline";
+import { dayCheck } from "@/lib/trade-rules";
 import type { Options } from "@/lib/options";
 import { focusOptions } from "@/lib/fixture-variants";
 import { validateOptionsEdition } from "@/lib/validate";
@@ -75,7 +78,7 @@ describe("today's focus", () => {
     const how = html.slice(html.indexOf("data-how"));
     expect(how).toContain("CALL if it breaks up");
     expect(how).toContain("PUT if it breaks down");
-    expect(how).toContain("Limit order about");
+    expect(how).toContain("Limit price about");
     expect(html).toContain("last week&#x27;s low");
   });
 
@@ -143,18 +146,15 @@ describe("the trading screen", () => {
   });
 
   it("puts the day's limits in one line, and with no journal says the trades were not read, never a fresh day", () => {
-    const html = renderToStaticMarkup(
-      createElement(DayBar, {
-        doc: null,
-        now: new Date("2026-10-19T14:00:00Z"),
-        session: "2026-10-19",
-      }),
-    );
-    expect(html).toContain("Journal not current");
-    expect(html).toContain("have not been read");
-    expect(html).not.toContain("New day");
-    expect(html).toContain("0 of 5");
-    expect(html).toContain("$0 of $100");
+    // The status rail's day line (session-timeline's railDay), from the same check the rules use.
+    const now = new Date("2026-10-19T14:00:00Z");
+    const c = dayCheck(null, { asOf: null, now });
+    expect(c.line).toContain("have not been read");
+    const rail = railDay(c);
+    expect(rail.word).toBe("Journal not current");
+    expect(rail.line).not.toContain("New day");
+    expect(rail.line).toContain("0/5 trades");
+    expect(rail.line).toContain("$0 of $100");
   });
 });
 
@@ -177,12 +177,11 @@ describe("New York times and the open-position caution", () => {
   it("says an open position's loss is counted by rule 7, as a caution beside the day line, without changing the count", () => {
     const now = new Date("2026-10-16T15:00:00Z");
     const lot = { symbol: "SPY", kind: "call", strike: 760, expiry: "2026-10-16", side: "long", qty: 1, entry: 1.2, opened_at: "2026-10-16T14:45:00Z" };
-    const doc = { as_of: now.toISOString(), trades: [], open: [lot] } as unknown as Parameters<typeof DayBar>[0]["doc"];
-    const html = renderToStaticMarkup(createElement(DayBar, { doc, now, session: "2026-10-16" }));
-    const open = html.slice(html.indexOf("data-day-open"));
-    expect(open).toMatch(/^data-day-open="true" class="text-warn[^"]*">1 position open: its open loss isn&#x27;t priced here, and rule 7 counts it; check Webull\.</);
-    expect(html.split("1 position open").length).toBe(2); // said once, not also in the grey line
-    expect(html).toContain("1 of 5");
+    const doc = { as_of: now.toISOString(), trades: [], open: [lot] } as unknown as JournalDoc;
+    const rail = railDay(dayCheck(sessionView(doc, now), { asOf: doc.as_of, now }));
+    expect(rail.open).toBe("1 position open: its open loss isn't priced here, and rule 7 counts it; check Webull.");
+    expect(rail.line).not.toContain("1 position open"); // said once, beside the day line
+    expect(rail.line).toContain("1/5 trades");
   });
 });
 
@@ -228,9 +227,9 @@ describe("the focus card: strips, folds and chips", () => {
     // the price first on each line
     expect(call).toMatch(/Trigger<\/span><span class="min-w-0"><span class="text-foreground font-mono font-semibold">712.50<\/span>/);
     expect(call).toContain("A 2-min candle closes above it, then a dip holds it");
-    expect(call).toContain("Limit order about here");
+    expect(call).toContain("Limit price about here");
     expect(call).toContain("−25% on the option");
-    expect(h.slice(0, h.indexOf("data-how"))).not.toContain("Limit order about here");
+    expect(h.slice(0, h.indexOf("data-how"))).not.toContain("Limit price about here");
   });
 
   it("keeps the runner plan folded, with one Testing tag, a line per side", () => {

@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { LadderMark, LadderNote, tagY } from "@/components/client/ladder-live";
+import { LadderMark, LadderNote, liveAltKey, tagY } from "@/components/client/ladder-live";
 import { geometryFor, LadderMini, LevelLadder } from "@/components/level-ladder";
 import { spread as ledgerSpread } from "@/components/ledger";
 import { LINE, LINE_SVG } from "@/lib/chart-code";
@@ -364,5 +364,20 @@ describe("eyeball pass", () => {
     expect(tagY(100, [], 18, 14, 306)).toBe(100);
     const y = tagY(100, [100, 91], 18, 14, 306);
     expect(Math.min(...[100, 91].map((b) => Math.abs(b - y)))).toBeGreaterThanOrEqual(18);
+  });
+});
+
+describe("the board's live alternative on the ladder", () => {
+  it("each marker is lit by the key the live layer sets, and the static list says no side unless one is fixed", () => {
+    const html = renderToStaticMarkup(createElement(LevelLadder, { item: spy, ticker: tickerOf("SPY"), session: edition.session, halfDay: false, closeDate: edition.built_from ?? null, live: false }));
+    for (const kind of ["failed_break", "sweep_reclaim"] as const)
+      for (const side of ["call", "put"] as const) {
+        const marker = html.match(new RegExp(`<g data-alt="${kind}" data-alt-side="${side}"[^>]*class="([^"]*)"`));
+        if (!marker) continue;
+        expect(marker[1]).toContain(`group-data-[live-alt=${liveAltKey({ kind, side })}]/ladder:[--alt-tone:var(--warn)]`);
+        // no underscore in the key: Tailwind reads one in a variant's value as a space
+        expect(liveAltKey({ kind, side })).not.toContain("_");
+      }
+    expect(html).toContain('data-alt="failed_break" data-alt-side="put"');
   });
 });

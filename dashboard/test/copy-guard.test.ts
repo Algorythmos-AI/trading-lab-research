@@ -35,6 +35,7 @@ const FILES = [
   "../src/components/client/focus-glance.tsx",
   "../src/components/client/cockpit.tsx",
   "../src/lib/session-timeline.ts",
+  "../src/lib/wake-lock.ts",
   "../src/components/client/focus-card-live.tsx",
 ];
 

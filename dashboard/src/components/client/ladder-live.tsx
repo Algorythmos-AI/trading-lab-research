@@ -9,13 +9,15 @@
 //
 // The static ladder (components/level-ladder.tsx) is passed in as children; this layer draws over it in the same
 // viewBox. The side the board highlights keeps full opacity; the other side's marks are dimmed by CSS (data-highlight).
+// An alternative the board shows live lights its marker in the warn tone by CSS (data-live-alt), and dims nothing: its
+// numbers are its own, not either side's plan.
 // Read only: it shows prices, nothing else. The only motion is the dot moving, and not for a reader who asks for
 // reduced motion.
 import type { ReactNode } from "react";
 import { type LadderFrame, type LadderLiveView, ladderLiveState } from "@/lib/level-ladder";
 import { cn } from "@/lib/utils";
 import { useLive } from "./live-layer";
-import { boardSide, useBoardRow } from "./trade-now";
+import { boardAlt, boardSide, useBoardRow } from "./trade-now";
 
 export interface LadderLiveProps {
   symbol: string;
@@ -143,16 +145,41 @@ export function LadderNote({ view }: { view: LadderLiveView }) {
   );
 }
 
+/**
+ * The sentence a screen reader hears for what the board draws on the ladder: the highlighted side, or the live
+ * alternative. The static list (level-ladder's LadderList) says nothing about it, since the board can change it.
+ */
+export function ladderBoardLine(highlight: "call" | "put" | null, alt: { kind: string; side: "call" | "put" } | null): string {
+  if (highlight) return `The ${highlight} side is highlighted; the ${highlight === "call" ? "put" : "call"} side is dimmed.`;
+  if (alt) return `The ${alt.kind === "failed_break" ? "failed break" : "sweep"} ${alt.side} is live now on the board; no side is dimmed.`;
+  return "No side is highlighted.";
+}
+
+/** The value of data-live-alt the static ladder's markers are lit by (level-ladder's LIT): "fail-put", "sweep-call". */
+export function liveAltKey(alt: { kind: "failed_break" | "sweep_reclaim"; side: "call" | "put" }): string {
+  return `${alt.kind === "failed_break" ? "fail" : "sweep"}-${alt.side}`;
+}
+
 /** The static ladder with the live dot over it, and the note under it (not on the mini). */
 export function LadderLive(props: LadderLiveProps) {
   const view = useLadderLive(props);
-  // The side the page's board points at (an entry, a get-ready, a live alternative), unless the caller fixed one.
-  const fromBoard = boardSide(useBoardRow(props.symbol));
+  // The side the page's board points at (an entry or a get-ready), unless the caller fixed one; and its live alternative.
+  const r = useBoardRow(props.symbol);
+  const fromBoard = boardSide(r);
+  const alt = boardAlt(r);
   const { frame, domain, busy, children } = props;
   const highlight = props.highlight ?? fromBoard ?? undefined;
   return (
     <div className="grid gap-2">
-      <div className="group/ladder relative" data-highlight={highlight ?? "none"} style={frame.size === "mini" ? { maxWidth: frame.width } : undefined}>
+      <p className="sr-only" data-testid="ladder-board-line">
+        {ladderBoardLine(highlight ?? null, props.highlight ? null : alt)}
+      </p>
+      <div
+        className="group/ladder relative"
+        data-highlight={highlight ?? "none"}
+        data-live-alt={!props.highlight && alt ? liveAltKey(alt) : undefined}
+        style={frame.size === "mini" ? { maxWidth: frame.width } : undefined}
+      >
         {children}
         <svg aria-hidden viewBox={`0 0 ${frame.width} ${frame.height}`} className="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
           <LadderMark view={view} frame={frame} domain={domain} busy={busy} />

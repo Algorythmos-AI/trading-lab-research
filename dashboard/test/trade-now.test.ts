@@ -1,7 +1,9 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { actionableRow, alertMenuKey, alertMenuOutside, boardCollapsed, TradeNowBoard } from "@/components/client/trade-now";
+import { actionableRow, alertMenuKey, alertMenuOutside, boardAlt, boardCollapsed, boardSide, parseBoardLog, TradeNowBoard } from "@/components/client/trade-now";
+import { ladderBoardLine } from "@/components/client/ladder-live";
+import { pausedAgeS } from "@/lib/level-ladder";
 import { BARS_STALE_MS, type BarsFeed } from "@/lib/bars-feed";
 import { type Bar2, type NameState, SERVER_SETTLE_MS } from "@/lib/trade-state";
 import { focusOptions } from "@/lib/fixture-variants";
@@ -495,10 +497,11 @@ describe("notices over a session", () => {
 });
 
 describe("the alerts bell", () => {
-  it("closes on Escape only with the focus in the menu or on the bell", () => {
-    expect(alertMenuKey("Escape", true)).toBe(true);
-    expect(alertMenuKey("Escape", false)).toBe(false);
-    expect(alertMenuKey("Enter", true)).toBe(false);
+  it("claims every Escape while open, and gives the focus back to the bell only when it was in the menu", () => {
+    expect(alertMenuKey("Escape", true)).toEqual({ close: true, refocus: true });
+    // the focus elsewhere: the menu still closes (and the cockpit stays), the focus is left where it is
+    expect(alertMenuKey("Escape", false)).toEqual({ close: true, refocus: false });
+    expect(alertMenuKey("Enter", true)).toEqual({ close: false, refocus: false });
   });
 
   it("closes on a click outside and gives the focus back to the bell, unless the click lands on another control", () => {
@@ -531,5 +534,138 @@ describe("the Now hero", () => {
       expect(heroManage({ action, tone: "good", line: "Holding" }, true)).toEqual({ word: "CHECK", tone: "warn", line: "Prices paused: manage this one on your platform" });
     }
     expect(heroManage({ action: "exit", tone: "bad", line: "Below the stop: exit" }, true).word).toBe("EXIT");
+  });
+});
+
+// ---- the second review's findings ----------------------------------------------------------------------------------
+/** A name's board read, as useBoardRow gives it. */
+const read = (row: BoardRow, paused = false) => ({ row, view: row.state ? rowView(row.state) : null, paused });
+/** A row paused on its own: its quote went stale while the others' did not. */
+const pausedRow = (row: BoardRow): BoardRow => ({ ...row, state: { ...row.state!, state: "paused", line: "Prices paused: check your platform" } });
+
+describe("the side the board points at", () => {
+  it("is an entry's or a get-ready's side only", () => {
+    const [qqq] = boardRows(atStep(3), true);
+    expect(qqq!.state!.state).toBe("enter_zone");
+    expect(boardSide(read(qqq!))).toBe("call");
+    const ready = boardRows(atStep(2), true)[0]!;
+    expect(ready.state!.state).toBe("get_ready");
+    expect(boardSide(read(ready))).toBe(ready.state!.side);
+  });
+
+  it("is none while prices are paused, the whole board's or the name's own", () => {
+    const [qqq] = boardRows(atStep(3), true);
+    expect(boardSide(read(qqq!, true))).toBeNull();
+    const stale = boardRows(atStep(3, { now: stepInstant(S, 3) + 60_000 }), true)[0]!;
+    expect(stale.state!.state).toBe("paused");
+    expect(boardSide(read(stale))).toBeNull();
+    expect(boardAlt(read(stale))).toBeNull();
+    expect(boardSide(null)).toBeNull();
+  });
+
+  it("is none for a live alternative, whose numbers are not either plan strip's: the alternative is named instead", () => {
+    // SPY at 10:28: the call plan is off, the failed break put at the ceiling (779.40) is live
+    const spy = boardRows(atStep(3), true).find((r) => r.symbol === "SPY")!;
+    expect(spy.state!.state).toBe("plan_off");
+    expect(boardSide(read(spy))).toBeNull();
+    expect(boardAlt(read(spy))).toEqual({ kind: "failed_break", side: "put" });
+    expect(boardAlt(read(spy, true))).toBeNull();
+    // the same alternative on a watching row
+    const watching: BoardRow = { ...spy, state: { ...spy.state!, state: "watch" } };
+    expect(rowView(watching.state!).badge.alt).toBe("failed_break");
+    expect(boardSide(read(watching))).toBeNull();
+    expect(boardAlt(read(watching))).toEqual({ kind: "failed_break", side: "put" });
+    // an entry has no alternative to name
+    expect(boardAlt(read(boardRows(atStep(3), true)[0]!))).toBeNull();
+  });
+
+  it("tells a screen reader what the ladder draws, never a side it does not dim", () => {
+    expect(ladderBoardLine("call", null)).toBe("The call side is highlighted; the put side is dimmed.");
+    expect(ladderBoardLine(null, { kind: "failed_break", side: "put" })).toBe("The failed break put is live now on the board; no side is dimmed.");
+    expect(ladderBoardLine(null, null)).toBe("No side is highlighted.");
+  });
+});
+
+describe("a name paused on its own", () => {
+  it("is named apart with what to do, never counted as watching", () => {
+    // 10:10: all three watching, then QQQ's prices pause on their own
+    const rows = boardRows(atStep(1), true).map((r) => (r.symbol === "QQQ" ? pausedRow(r) : r));
+    const html = draw({ kind: "live" }, rows);
+    expect(html).toContain('data-board-paused="1"');
+    expect(html).toContain("QQQ: prices paused, check your platform");
+    expect(html).toContain("Nothing to act on: 2 names watching");
+    expect(html).not.toContain("3 names watching");
+  });
+
+  it("beside an entry: the entry listed, the paused name named, the rest counted", () => {
+    const rows = boardRows(atStep(3), true).map((r) => (r.symbol === "SPY" ? pausedRow(r) : r));
+    const html = draw({ kind: "live" }, rows);
+    expect(html).toMatch(/data-board-row="QQQ" data-board-state="enter_zone"/);
+    expect(html).not.toContain('data-board-row="SPY"');
+    expect(html).toContain("SPY: prices paused, check your platform");
+    expect(html).toContain('data-board-hidden="1"');
+    expect(html).toContain("1 more name watching");
+  });
+
+  it("all paused but one: no watching line at all", () => {
+    const rows = boardRows(atStep(1), true).map((r) => (r.symbol === "AAPL" ? r : pausedRow(r)));
+    const html = draw({ kind: "live" }, rows);
+    expect(html).toContain("SPY, QQQ: prices paused, check your platform");
+    expect(html).toContain("Nothing to act on: 1 name watching");
+    const all = boardRows(atStep(1), true).map(pausedRow);
+    const none = draw({ kind: "live" }, all.slice(0, 2));
+    expect(none).toContain("SPY, QQQ: prices paused");
+    expect(none).not.toContain("watching");
+  });
+});
+
+describe("the Today log read back from this browser", () => {
+  it("keeps only well-formed lines: a side of call, put or none, and a known tone", () => {
+    const good = { at: 1, symbol: "QQQ", word: "ENTER ZONE", side: "call", tone: "good" };
+    const raw = JSON.stringify([
+      good,
+      { ...good, side: null, tone: "neutral" },
+      { ...good, side: "long" },
+      { ...good, side: undefined },
+      { ...good, tone: "purple" },
+      { ...good, tone: 3 },
+      { ...good, at: "10:28" },
+      { ...good, at: null },
+      { ...good, symbol: 7 },
+      null,
+      "QQQ",
+      [good],
+    ]);
+    expect(parseBoardLog(raw)).toEqual([good, { ...good, side: null, tone: "neutral" }]);
+    expect(parseBoardLog("{not json")).toEqual([]);
+    expect(parseBoardLog(JSON.stringify({ at: 1 }))).toEqual([]);
+    expect(parseBoardLog(null)).toEqual([]);
+  });
+});
+
+describe("the paused age", () => {
+  const now = ny("10:30:00");
+  const q = (at: string, day = S) => ({ day, price: 752, at: new Date(ny(at)).toISOString().replace(/\.\d+Z$/, "Z") });
+  it("is the older of the feed's answer and the last trade, as the ladder's caption reads it", () => {
+    // the feed answered 5 s ago, the last trade was 40 s ago: 40
+    expect(pausedAgeS(now, now - 5_000, { ...q("10:29:20") }, S)).toBe(40);
+    // the feed stopped 90 s ago, the last trade 40 s ago: 90 (the old hero said 90 only past the feed's limit)
+    expect(pausedAgeS(now, now - 90_000, q("10:29:20"), S)).toBe(90);
+    // a quote from another day, or no clock: not known
+    expect(pausedAgeS(now, now - 5_000, q("10:29:20", "2026-10-09"), S)).toBeNull();
+    expect(pausedAgeS(null, now, q("10:29:20"), S)).toBeNull();
+    expect(pausedAgeS(now, null, q("10:29:20"), S)).toBeNull();
+    expect(pausedAgeS(now, now, undefined, S)).toBeNull();
+  });
+});
+
+describe("the hero before the live mode", () => {
+  it("draws the #1 name's triggers full size before the open, greyed with prices off, and none for an old card", async () => {
+    const { heroTriggers } = await import("@/components/client/now-hero");
+    expect(heroTriggers("next")).toBe("full");
+    expect(heroTriggers("opening")).toBe("full");
+    expect(heroTriggers("loading")).toBe("full");
+    expect(heroTriggers("off")).toBe("grey");
+    expect(heroTriggers("old")).toBe("none");
   });
 });

@@ -179,7 +179,8 @@ function Live({ b, row }: { b: Board; row: BoardRow }) {
       {tiles ? (
         <div className="grid gap-1">
           {tiles.plan ? <p className="text-explain text-muted-foreground">The {s.side} plan, if the break holds:</p> : null}
-          <dl data-hero-tiles className="grid max-w-2xl grid-cols-3 gap-2">
+          {/* Two and one on a phone: three 22 px prices side by side do not fit 375 px. */}
+          <dl data-hero-tiles className="grid max-w-2xl grid-cols-2 gap-2 sm:grid-cols-3">
             <Tile label="In" value={tiles.enter} data="in" />
             <Tile label="Stop" value={tiles.stop} data="stop" />
             {tiles.target !== null ? <Tile label="T1" value={tiles.target} data="t1" /> : null}
@@ -230,11 +231,21 @@ function Live({ b, row }: { b: Board; row: BoardRow }) {
   );
 }
 
+/**
+ * What the hero shows of the #1 name's triggers before the live mode: full size before the open and while connecting;
+ * greyed with the live prices off (the plan stands, but nothing here is watching it); none for an older focus card,
+ * whose triggers are not today's. Pure.
+ */
+export function heroTriggers(mode: Board["mode"]["kind"]): "full" | "grey" | "none" {
+  return mode === "old" ? "none" : mode === "off" ? "grey" : "full";
+}
+
 function BeforeLive({ b }: { b: Board }) {
   const item = b.items[0] ?? null;
   const plan = item ? focusPlan(item) : { call: null, put: null };
   const view = usePriceView(b, item?.symbol ?? null);
   const line = b.mode.kind === "live" ? "" : b.mode.line;
+  const triggers = heroTriggers(b.mode.kind);
   return (
     <div className="grid gap-3">
       <p data-hero-line className="text-price leading-tight">
@@ -251,11 +262,21 @@ function BeforeLive({ b }: { b: Board }) {
             </p>
             <PriceLine view={view} />
           </div>
-          <dl data-hero-triggers className="grid max-w-2xl grid-cols-2 gap-2">
-            {plan.call ? <Tile label="Calls above" value={plan.call.level.toFixed(2)} data="call" /> : null}
-            {plan.put ? <Tile label="Puts below" value={plan.put.level.toFixed(2)} data="put" /> : null}
-          </dl>
-          <p className="text-explain text-muted-foreground">Enter only on a break, then a retest that holds.</p>
+          {triggers === "none" ? (
+            <p data-hero-triggers="none" className="text-explain text-muted-foreground">
+              This card is for an earlier day: its triggers are not shown.
+            </p>
+          ) : (
+            <>
+              <dl data-hero-triggers={triggers} className={cn("grid max-w-2xl grid-cols-2 gap-2", triggers === "grey" && "text-muted-foreground grayscale")}>
+                {plan.call ? <Tile label="Calls above" value={plan.call.level.toFixed(2)} data="call" /> : null}
+                {plan.put ? <Tile label="Puts below" value={plan.put.level.toFixed(2)} data="put" /> : null}
+              </dl>
+              <p className="text-explain text-muted-foreground">
+                {triggers === "grey" ? "Live prices are off: the plan is on the cards below." : "Enter only on a break, then a retest that holds."}
+              </p>
+            </>
+          )}
         </div>
       ) : null}
     </div>
@@ -286,7 +307,8 @@ export function NowHero() {
           Now
         </h2>
         {row ? (
-          <button type="button" onClick={() => openFocusCard(row.symbol)} className="text-explain text-muted-foreground hover:text-foreground underline-offset-4 hover:underline">
+          // Hidden in the cockpit, which hides the cards it would scroll to.
+          <button type="button" data-cockpit-hide onClick={() => openFocusCard(row.symbol)} className="text-explain text-muted-foreground hover:text-foreground underline-offset-4 hover:underline">
             Show the {row.symbol} card
           </button>
         ) : null}

@@ -70,6 +70,10 @@ test("with the live prices off it says so and draws no rows", async ({ page, con
   await expect(board(page)).toHaveAttribute("data-trade-now", "off");
   await expect(board(page)).toContainText("Live prices off: use the plans below");
   await expect(rows(page)).toHaveCount(0);
+  // the hero keeps the #1 name's triggers, greyed, and says the plan is on the cards
+  await expect(hero(page).locator("[data-hero-triggers]")).toHaveAttribute("data-hero-triggers", "grey");
+  await expect(hero(page)).toContainText("Live prices are off: the plan is on the cards below.");
+  await expect(hero(page)).not.toContainText("Enter only on a break");
 });
 
 test("a notice fires once when a name enters the zone or its plan goes off", async ({ page, context, baseURL }) => {
@@ -95,6 +99,10 @@ test("an old focus card hides the rows and says which day it is for", async ({ p
   await expect(board(page)).toHaveAttribute("data-trade-now", "old");
   await expect(board(page)).toContainText("Focus card is for Mon 12 Oct");
   await expect(rows(page)).toHaveCount(0);
+  // no old triggers in the hero, and the rail's clock is today's (Wed 14 Oct, 10:31: open), never "Closed"
+  await expect(hero(page).locator('[data-hero-tile="call"]')).toHaveCount(0);
+  await expect(hero(page).locator("[data-hero-triggers]")).toHaveAttribute("data-hero-triggers", "none");
+  await expect(rail(page).locator("[data-rail-countdown]")).toHaveText(/^Lunch block 11:30–13:00 in /);
 });
 
 test("on a phone one notice shows at a time, below the board, with a count of the rest", async ({ page, context, baseURL, isMobile }) => {
@@ -177,16 +185,18 @@ test("frozen prices grey the hero and say for how long, with no entry shown", as
   await expect(hero(page)).not.toContainText("ENTER ZONE");
 });
 
-test("the rail shows the day, the New York clock's next boundary and the session bar", async ({ page, context, baseURL }) => {
+test("the rail shows the day, the New York clock's next boundary and the session bar", async ({ page, context, baseURL, isMobile }) => {
   await at(context, baseURL, 3);
   await page.goto("/options");
   await expect(rail(page).locator("[data-rail-day]")).toContainText(/trades · \$\d+ of \$100/);
   await expect(rail(page).locator("[data-rail-countdown]")).toHaveText(/^Lunch block 11:30–13:00 in /);
   await expect(rail(page).locator("[data-session-bar] [data-window]")).toHaveCount(3);
   await expect(rail(page).locator("[data-now-tick]")).toBeVisible();
-  // the rail stays in view as the page scrolls
+  // From sm up the rail stays in view as the page scrolls; on a phone it is not sticky (it would hold a quarter of the
+  // screen), so it scrolls away with the page.
   await page.mouse.wheel(0, 2000);
-  await expect(rail(page)).toBeInViewport();
+  if (isMobile) await expect(rail(page)).not.toBeInViewport();
+  else await expect(rail(page)).toBeInViewport();
 });
 
 test("the Today log lists a state change, newest first, and closes on Escape", async ({ page, context, baseURL }) => {
@@ -217,6 +227,9 @@ test("the cockpit keeps the rail, the hero and the large ladders, survives a rel
   await expect(page.locator("[data-focus-glance]")).toBeHidden();
   await expect(rail(page)).toBeVisible();
   await expect(hero(page)).toBeVisible();
+  // the hero's "Show the card" has no card to show in the cockpit; the notices stay
+  await expect(hero(page).getByRole("button", { name: /^Show the \w+ card$/ })).toBeHidden();
+  await expect(page.locator("[data-board-notices]")).toHaveCount(1);
   // one large ladder per focus name (the fixture has three; a live card has four)
   await expect(page.locator('[data-cockpit-ladders] figure[data-testid^="ladder-"]')).toHaveCount(3);
   await page.reload();
@@ -240,6 +253,21 @@ test("fits a 375 px screen with no sideways scroll", async ({ page, context, bas
     const box = await part.boundingBox();
     expect(box!.x).toBeGreaterThanOrEqual(0);
     expect(box!.x + box!.width).toBeLessThanOrEqual(375);
+  }
+  // each glance chip wraps inside its tile ("FAILED BREAK · PUT" is wider than a phone's tile): nothing clipped
+  for (const tile of await page.locator("[data-glance]").all()) {
+    const t = (await tile.boundingBox())!;
+    const chip = tile.locator("[data-chip-state]");
+    if (!(await chip.count())) continue;
+    const c = (await chip.boundingBox())!;
+    expect(c.x).toBeGreaterThanOrEqual(t.x);
+    expect(c.x + c.width).toBeLessThanOrEqual(t.x + t.width);
+  }
+  // the hero's tiles fit too: two and one on a phone
+  for (const tile of await hero(page).locator("[data-hero-tile]").all()) {
+    const b = (await tile.boundingBox())!;
+    expect(b.x + b.width).toBeLessThanOrEqual(375);
+    expect(await tile.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
   }
   // the rail stays compact on a phone: no more than a third of the screen
   expect((await rail(page).boundingBox())!.height).toBeLessThanOrEqual(812 / 3);

@@ -9,15 +9,14 @@
 import { Fragment, type ReactNode } from "react";
 import Link from "next/link";
 import { ArrowDownToLine, ArrowUpFromLine, ChevronRight, MoveHorizontal, Target } from "lucide-react";
-import { newYork, weekDate } from "@/lib/format";
-import { sessionView, type JournalDoc } from "@/lib/journal";
+import { newYork } from "@/lib/format";
 import { TestingTag } from "@/components/client/trade-now";
 import { AltChips, FocusStateChip, LiveDistance, type LiveInputs, SideFrame } from "@/components/client/focus-card-live";
 import { ladderInputs, LevelLadder } from "@/components/level-ladder";
 import { CHART_CODE, LINE } from "@/lib/chart-code";
 import { altChips, ruleChips } from "@/lib/focus-card";
 import { chartLevels, expiryNote, focusPlan, GLOSSARY, levelWords, type ChartLine, type SidePlan } from "@/lib/focus-plan";
-import { CONFIRM_BAR_MINUTES, dayCheck, DAY_LOSS_LIMIT, MAX_TRADES_PER_DAY, PREMIUM_STOP } from "@/lib/trade-rules";
+import { CONFIRM_BAR_MINUTES, PREMIUM_STOP } from "@/lib/trade-rules";
 import { isHalfDay, type Options, type OptionsTicker } from "@/lib/options";
 import { runnerLine } from "@/lib/trade-now";
 import { cn } from "@/lib/utils";
@@ -167,7 +166,7 @@ function HowSide({ plan }: { plan: SidePlan }) {
         </Step>
         {plan.entry != null ? (
           <Step n={++n} label="Enter" price={<Price v={plan.entry} />}>
-            Limit order about here
+            Limit price about here
           </Step>
         ) : null}
         <Step n={++n} label="Stop" price={plan.stop != null ? <Price v={plan.stop} /> : null}>
@@ -560,80 +559,4 @@ export function focusOnly(e: Options): Options {
     .filter((t) => ranks.has(t.symbol))
     .sort((a, b) => ranks.get(a.symbol)! - ranks.get(b.symbol)!);
   return tickers.length ? { ...e, tickers } : e;
-}
-
-const DAY = {
-  clear: {
-    word: "Clear to trade",
-    tone: "bg-good-soft border-good-fill/40",
-    text: "text-good",
-  },
-  careful: {
-    word: "Careful",
-    tone: "bg-warn-soft border-warn-fill/50",
-    text: "text-warn",
-  },
-  stop: {
-    word: "Stop for today",
-    tone: "bg-bad-soft border-bad-fill/50",
-    text: "text-bad",
-  },
-  unknown: {
-    word: "Journal not current",
-    tone: "bg-warn-soft border-warn-fill/50",
-    text: "text-warn",
-  },
-} as const;
-
-/** One line at the top: the session, today's trade count and the day's loss against the limits. */
-export function DayBar({
-  doc,
-  now,
-  session,
-}: {
-  doc: JournalDoc | null;
-  now: Date;
-  session: string;
-}) {
-  const c = dayCheck(doc ? sessionView(doc, now) : null, {
-    asOf: doc?.as_of ?? null,
-    now,
-  });
-  const s = DAY[c.status];
-  const loss = Math.max(0, -c.net);
-  return (
-    <div
-      role="status"
-      className={cn(
-        "flex flex-wrap items-center gap-x-6 gap-y-1 rounded-lg border px-3.5 py-2 text-sm",
-        s.tone,
-      )}
-    >
-      <span className={cn("font-semibold", s.text)}>
-        {c.isToday || !c.current ? s.word : "New day"}
-      </span>
-      <span className="text-muted-foreground">Session {weekDate(session)}</span>
-      <span>
-        Trades{" "}
-        <span className="font-mono font-semibold">
-          {c.used} of {MAX_TRADES_PER_DAY}
-        </span>
-      </span>
-      <span>
-        Day loss{" "}
-        <span className="font-mono font-semibold">
-          ${loss.toFixed(0)} of ${DAY_LOSS_LIMIT}
-        </span>
-      </span>
-      <span className="text-muted-foreground text-xs">
-        {c.openLine ? c.line.replace(c.openLine, "").replace(/\s{2,}/g, " ").trim() : c.line}
-      </span>
-      {/* Open positions: rule 7 counts their open loss, which the journal cannot price. A caution, never a count. */}
-      {c.openLine ? (
-        <span data-day-open className="text-warn text-xs font-medium">
-          {c.openLine}
-        </span>
-      ) : null}
-    </div>
-  );
 }

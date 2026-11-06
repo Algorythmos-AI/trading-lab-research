@@ -28,10 +28,17 @@ export function BoardChip({ symbol, className }: { symbol: string; className?: s
   const v = r.view;
   const icon = paused ? Pause : v.badge.alt ? GitBranch : STATE_ICON[r.row.state.state];
   return (
-    <span data-chip-state={paused ? "paused" : r.row.state.state}>
-      <StatusBadge tone={paused ? "neutral" : v.badge.tone} icon={icon} className={cn("font-sans text-sm", className)}>
-        {paused ? "PRICES PAUSED" : v.badge.word}
-        {v.badge.side && !paused ? ` · ${v.badge.side.toUpperCase()}` : ""}
+    // The chip may wrap: "FAILED BREAK · PUT" is wider than a phone's glance tile (about 150 px), and a badge that
+    // cannot shrink pushes the tile sideways or is clipped. The side wraps as one piece, never split from its dot.
+    <span data-chip-state={paused ? "paused" : r.row.state.state} className="max-w-full min-w-0">
+      <StatusBadge
+        tone={paused ? "neutral" : v.badge.tone}
+        icon={icon}
+        className={cn("max-w-full shrink flex-wrap justify-start gap-x-1 gap-y-0 text-left font-sans text-sm whitespace-normal", className)}
+      >
+        <span>{paused ? "PRICES PAUSED" : v.badge.word}</span>
+        {/* the space keeps the words apart in the text a reader or a test reads; the gap draws it */}
+        {v.badge.side && !paused ? <>{" "}<span className="whitespace-nowrap">· {v.badge.side.toUpperCase()}</span></> : null}
       </StatusBadge>
     </span>
   );

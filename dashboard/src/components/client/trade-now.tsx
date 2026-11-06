@@ -40,7 +40,8 @@ import {
   rowView,
   type RowView,
 } from "@/lib/trade-now";
-import { FEED_STALE_MS, type NameState, type NameStateName, serverNow } from "@/lib/trade-state";
+import { pausedAgeS } from "@/lib/level-ladder";
+import { type NameState, type NameStateName, serverNow } from "@/lib/trade-state";
 import { cn } from "@/lib/utils";
 import { useLive } from "./live-layer";
 import { useBars } from "./use-bars";
@@ -188,9 +189,13 @@ export function AlertButtons({ className }: { className?: string }) {
   );
 }
 
-/** The bell menu's Escape: it closes the menu only with the focus inside it or on the bell. */
-export function alertMenuKey(key: string, focusInside: boolean): boolean {
-  return key === "Escape" && focusInside;
+/**
+ * The bell menu's Escape. While the menu is open it claims every Escape, wherever the focus is: it closes the menu (and
+ * stops the cockpit from leaving on the same key), so an Escape never leaves the menu open with the cockpit gone. The
+ * focus goes back to the bell only when it was in the menu or on the bell, so it is never pulled from elsewhere.
+ */
+export function alertMenuKey(key: string, focusInside: boolean): { close: boolean; refocus: boolean } {
+  return key === "Escape" ? { close: true, refocus: focusInside } : { close: false, refocus: false };
 }
 
 /** A pointer down while the menu is open: outside it closes the menu, and the focus goes back to the bell unless the
@@ -203,7 +208,7 @@ const CONTROL = "a[href], button, input, select, textarea, summary, [tabindex]";
 
 /**
  * On a phone the two switches fold into one bell with a small menu. Opening it moves the focus to its first switch;
- * Esc (with the focus in the menu or on the bell) or a click outside closes it and gives the focus back to the bell.
+ * Esc (wherever the focus is) or a click outside closes it, and gives the focus back to the bell when it was there.
  * The listeners are on only while it is open.
  */
 export function AlertMenu() {
@@ -216,10 +221,11 @@ export function AlertMenu() {
     if (!open) return;
     menu.current?.querySelector<HTMLButtonElement>("button")?.focus();
     const onKey = (ev: KeyboardEvent) => {
-      if (!alertMenuKey(ev.key, !!box.current && box.current.contains(document.activeElement))) return;
+      const k = alertMenuKey(ev.key, !!box.current && box.current.contains(document.activeElement));
+      if (!k.close) return;
       ev.preventDefault(); // this Escape closes the menu only, not the cockpit too
       setOpen(false);
-      button.current?.focus();
+      if (k.refocus) button.current?.focus();
     };
     const onDown = (ev: PointerEvent) => {
       const target = ev.target instanceof Element ? ev.target : null;
@@ -451,7 +457,10 @@ export function TradeNowBoard({
   // Live: only what is worth acting on, plus a row that holds an open form (it stays as it was opened).
   const drawn = rows.map((r) => ({ r, extra: rowExtra?.(r, paused) ?? null }));
   const listed = mode.kind === "live" ? drawn.filter(({ r, extra }) => actionableRow(r) || extra !== null) : drawn;
-  const watching = rows.length - listed.length;
+  // A name paused on its own (the others live) is never "watching": it is named apart, with what to do.
+  const shown = new Set(listed.map(({ r }) => r.symbol));
+  const pausedNames = mode.kind === "live" && !paused ? rows.filter((r) => r.state?.state === "paused" && !shown.has(r.symbol)).map((r) => r.symbol) : [];
+  const watching = rows.length - listed.length - pausedNames.length;
   const status = mode.kind === "live" ? (paused ? "paused" : "live") : mode.kind === "loading" ? "connecting" : mode.kind === "off" ? "off" : "waiting";
   return (
     <section aria-labelledby="trade-now-title" data-trade-now={mode.kind} data-board-status={status} className="bg-card grid gap-2 rounded-lg border px-3 py-2.5">
@@ -502,16 +511,22 @@ export function TradeNowBoard({
           ))}
         </ul>
       ) : null}
-      {mode.kind === "live" && !paused && rows.length ? (
+      {pausedNames.length ? (
+        <p data-board-paused={pausedNames.length} className="text-warn text-[0.8125rem] font-medium">
+          <Pause aria-hidden className="mr-1 inline size-3.5 align-[-2px]" />
+          {pausedNames.join(", ")}: prices paused, check your platform
+        </p>
+      ) : null}
+      {mode.kind === "live" && !paused && watching > 0 ? (
         listed.length === 0 ? (
           <p data-board-none className="text-explain font-medium">
-            Nothing to act on: {rows.length} name{rows.length === 1 ? "" : "s"} watching
+            Nothing to act on: {watching} name{watching === 1 ? "" : "s"} watching
           </p>
-        ) : watching > 0 ? (
+        ) : (
           <p data-board-hidden={watching} className="text-muted-foreground text-xs">
             {watching} more name{watching === 1 ? "" : "s"} watching: see the glance above
           </p>
-        ) : null
+        )
       ) : null}
       {after}
       <p className="text-muted-foreground text-[0.6875rem]">Advisory states from the study under test; the 9 rules are unchanged. Read only: nothing here places an order.</p>
@@ -632,15 +647,31 @@ export interface BoardLogEntry {
 export const BOARD_LOG_MAX = 30;
 const LOG_KEY = (session: string) => `trade-now-log:${session}`;
 
+// The tones a log line may carry (labels.ts Tone): a line with any other is dropped, never drawn in a guessed colour.
+const LOG_TONES: ReadonlySet<string> = new Set<BoardLogEntry["tone"]>(["good", "warn", "bad", "neutral", "info"]);
+
+/** One saved line, checked field by field: the storage is the browser's, and anything may be in it. */
+function isLogEntry(x: unknown): x is BoardLogEntry {
+  if (!x || typeof x !== "object") return false;
+  const e = x as Record<string, unknown>;
+  return (
+    typeof e.at === "number" &&
+    Number.isFinite(e.at) &&
+    typeof e.symbol === "string" &&
+    typeof e.word === "string" &&
+    (e.side === "call" || e.side === "put" || e.side === null) &&
+    typeof e.tone === "string" &&
+    LOG_TONES.has(e.tone)
+  );
+}
+
 /** The log saved in this browser for the session, if any; [] when storage is off or the text is not a log. */
 export function parseBoardLog(raw: string | null): BoardLogEntry[] {
   if (!raw) return [];
   try {
     const v: unknown = JSON.parse(raw);
     if (!Array.isArray(v)) return [];
-    return v
-      .filter((x): x is BoardLogEntry => !!x && typeof x === "object" && typeof (x as BoardLogEntry).at === "number" && typeof (x as BoardLogEntry).symbol === "string" && typeof (x as BoardLogEntry).word === "string")
-      .slice(0, BOARD_LOG_MAX);
+    return v.filter(isLogEntry).slice(0, BOARD_LOG_MAX);
   } catch {
     return [];
   }
@@ -698,14 +729,22 @@ export function useBoardRow(symbol: string): { row: BoardRow; view: RowView | nu
 }
 
 /**
- * The side the board points at for a name, for the ladder and the card's strips: the side of an entry, a get-ready or
- * a live alternative. None while prices are paused, or for a state without a side.
+ * The side the board points at for a name, for the ladder and the card's strips: the side of an entry or a get-ready
+ * only. None while prices are paused, and none for a live alternative: its numbers are its own, not the plan strip's
+ * on that side, so emphasising that strip (or dimming the far side of the ladder, where an alternative at the ceiling
+ * sits) would put the wrong numbers in front of the owner. The lit alternative chip and the ladder's marker are its cue.
  */
 export function boardSide(r: ReturnType<typeof useBoardRow>): "call" | "put" | null {
   if (!r || r.paused || !r.row.state) return null;
   const s = r.row.state;
-  if (s.state === "enter_zone" || s.state === "get_ready") return s.side ?? null;
-  return r.view?.badge.alt ? (r.view.badge.side ?? null) : null;
+  return s.state === "enter_zone" || s.state === "get_ready" ? (s.side ?? null) : null;
+}
+
+/** The alternative trigger the board shows live for a name, if any (never while prices are paused). */
+export function boardAlt(r: ReturnType<typeof useBoardRow>): { kind: NonNullable<RowView["badge"]["alt"]>; side: "call" | "put" } | null {
+  if (!r || r.paused || !r.row.state || r.row.state.state === "paused") return null;
+  const b = r.view?.badge;
+  return b?.alt && b.side ? { kind: b.alt, side: b.side } : null;
 }
 
 /**
@@ -769,15 +808,11 @@ export function BoardProvider({
         );
   const states = rows.map((r) => r.state).filter((s): s is NameState => s !== null);
   const paused = mode.kind === "live" && states.length > 0 && states.every((s) => s.state === "paused");
-  // The age the engine judges staleness by (trade-state's nameState): the feed's answer when that is too old,
-  // otherwise the name's last trade.
+  // "Prices paused N s": the older of the feed's answer and the name's last trade, as the ladder's caption reads it, so
+  // the hero and the ladder never give two ages for one pause.
   const ageS: Record<string, number | null> = {};
   for (const i of items) {
-    const feedAge = now !== null && answeredAt !== null ? now - answeredAt : null;
-    const q = ok ? feed.quotes[i.symbol] : undefined;
-    const tradeAge = now !== null && q && q.day === e.session && Number.isFinite(Date.parse(q.at)) ? now - Date.parse(q.at) : null;
-    const age = feedAge !== null && feedAge > FEED_STALE_MS ? feedAge : tradeAge;
-    ageS[i.symbol] = age === null ? null : Math.max(0, Math.round(age / 1000));
+    ageS[i.symbol] = pausedAgeS(now, answeredAt, ok ? feed.quotes[i.symbol] : undefined, e.session);
   }
 
   // Notices: states seen once the bars have answered; what was there when the page opened is not announced.
@@ -888,27 +923,38 @@ export function BoardProvider({
 
 /**
  * "Trade now": one state, one sentence and one next action per focus name, from the page's board (BoardProvider).
- * Advisory and read only. Nothing is drawn for an older edition or an edition without a focus card.
+ * Advisory and read only. Nothing is drawn for an older edition or an edition without a focus card. Its notices and
+ * spoken line are TradeNowNotices, placed apart so the cockpit can hide the board and keep them.
  */
 export function TradeNow() {
   const b = useBoard();
   if (!b || !b.on) return null;
-  // Before the open the rail carries the board's line (status-rail.tsx); the notices and the spoken line stay.
-  const collapsed = boardCollapsed(b.mode, b.manage.views.length);
+  // Before the open the rail carries the board's line (status-rail.tsx).
+  if (boardCollapsed(b.mode, b.manage.views.length)) return null;
+  return (
+    <TradeNowBoard
+      mode={b.mode}
+      rows={b.rows}
+      now={b.now}
+      paused={b.paused}
+      barsDelayed={b.barsDelayed}
+      onOpen={openFocusCard}
+      rowExtra={b.manage.rowExtra}
+      after={b.manage.cards}
+    />
+  );
+}
+
+/**
+ * The board's notices (an entry, a live alternative, the manage card's SELL HALF and EXIT) and the screen-reader line
+ * for each change. Rendered once on the page, outside anything the cockpit hides, and whether or not the board itself
+ * is drawn (folded before the open, hidden in the cockpit).
+ */
+export function TradeNowNotices() {
+  const b = useBoard();
+  if (!b || !b.on) return null;
   return (
     <>
-      {collapsed ? null : (
-        <TradeNowBoard
-          mode={b.mode}
-          rows={b.rows}
-          now={b.now}
-          paused={b.paused}
-          barsDelayed={b.barsDelayed}
-          onOpen={openFocusCard}
-          rowExtra={b.manage.rowExtra}
-          after={b.manage.cards}
-        />
-      )}
       <p aria-live="polite" role="status" className="sr-only">
         {b.spoken}
       </p>

@@ -6,6 +6,7 @@
 // and closeMinute), so the rail can never say a window the board does not keep. All times are New York. Pure: no I/O
 // and no clock; the caller passes `now` (the board's server clock).
 import { weekDate } from "./format";
+import { sessionOf } from "./market-calendar";
 import { closeMinute, nyClock, OPEN_MIN } from "./options";
 import { DAY_LOSS_LIMIT, type DayCheck, MAX_TRADES_PER_DAY } from "./trade-rules";
 import { FIRST_ENTRY_MIN, flatMinute, LUNCH_FROM_MIN, LUNCH_TO_MIN, lunchBlock } from "./trade-state";
@@ -72,8 +73,10 @@ export interface SessionClock {
   line: string;
   /** New entries are allowed now, by the clock alone (the board's states still decide). */
   entries: boolean;
-  /** The New York minute with its fraction on the session day, or null on another day: the timeline's now. */
+  /** The New York minute with its fraction on the day the clock is worked for, or null on another day: the timeline's now. */
   minute: number | null;
+  /** The day's half-day answer the clock was worked with: the edition's, or today's calendar for an older card. */
+  halfDay: boolean;
 }
 
 /** A countdown in words: "3:12" under ten minutes, "14 min" under an hour, then "1 h 05 min". */
@@ -90,30 +93,46 @@ export function countdown(seconds: number): string {
  * entries 09:35"; in the opening range, "First entries in 3:12"; before lunch, "Lunch block 11:30–13:00 in 14 min";
  * in it, "No new entries until 13:00"; to the flat time, "New entries end 15:10 in 1 h 20 min"; after it,
  * "No new entries · close 16:00 in 42 min"; then "Closed". A half day closes at 13:00 with no lunch block.
+ *
+ * With an older focus card (the edition's session before today) the clock is worked for today's New York trading day
+ * from the market calendar, with today's own half day: the market is open even though the card is old, and the rail
+ * must never say "Closed" at 10:30. A weekend or holiday is "Closed"; a day the calendar does not cover says "Old focus
+ * card" rather than guess a session state.
  */
 export function sessionClock(session: string, halfDay: boolean, nowMs: number): SessionClock {
   const c = nyClock(new Date(nowMs).toISOString());
+  if (!c) return { phase: "closed", line: "Closed", entries: false, minute: null, halfDay };
+  if (session > c.day)
+    return { phase: "next", line: `Next session ${weekDate(session)} · opens ${hhmm(OPEN_MIN)} · first entries ${hhmm(FIRST_ENTRY_MIN)}`, entries: false, minute: null, halfDay };
+  if (session < c.day) {
+    const today = sessionOf(c.day);
+    if (today.kind === "open" || today.kind === "half") return dayClock(c.minutes, nowMs, today.kind === "half");
+    if (today.kind === "out_of_range") return { phase: "closed", line: "Old focus card", entries: false, minute: null, halfDay };
+    return { phase: "closed", line: "Closed", entries: false, minute: null, halfDay };
+  }
+  return dayClock(c.minutes, nowMs, halfDay);
+}
+
+/** The clock on a trading day, at New York's whole `minutes` and the instant's own seconds. */
+function dayClock(minutes: number, nowMs: number, halfDay: boolean): SessionClock {
   const first = `first entries ${hhmm(FIRST_ENTRY_MIN)}`;
-  if (!c) return { phase: "closed", line: "Closed", entries: false, minute: null };
-  if (session > c.day) return { phase: "next", line: `Next session ${weekDate(session)} · opens ${hhmm(OPEN_MIN)} · ${first}`, entries: false, minute: null };
-  if (session < c.day) return { phase: "closed", line: "Closed", entries: false, minute: null };
   // nyClock gives whole minutes; New York is a whole number of hours from UTC, so the seconds are the instant's own.
   const sec = Math.floor(nowMs / 1000) % 60;
-  const minute = c.minutes + sec / 60;
+  const minute = minutes + sec / 60;
   // In whole seconds, so a countdown never reads a second long from a rounding error.
-  const until = (m: number) => m * 60 - (c.minutes * 60 + sec);
+  const until = (m: number) => m * 60 - (minutes * 60 + sec);
   const close = closeMinute(halfDay);
   const flat = flatMinute(halfDay);
-  if (minute < OPEN_MIN) return { phase: "before", line: `Opens ${hhmm(OPEN_MIN)} in ${countdown(until(OPEN_MIN))} · ${first}`, entries: false, minute };
-  if (minute < FIRST_ENTRY_MIN) return { phase: "opening", line: `First entries in ${countdown(until(FIRST_ENTRY_MIN))}`, entries: false, minute };
-  if (minute >= close) return { phase: "closed", line: "Closed", entries: false, minute };
-  if (minute >= flat) return { phase: "flat", line: `No new entries · close ${hhmm(close)} in ${countdown(until(close))}`, entries: false, minute };
+  const at = (phase: ClockPhase, line: string, entries: boolean): SessionClock => ({ phase, line, entries, minute, halfDay });
+  if (minute < OPEN_MIN) return at("before", `Opens ${hhmm(OPEN_MIN)} in ${countdown(until(OPEN_MIN))} · ${first}`, false);
+  if (minute < FIRST_ENTRY_MIN) return at("opening", `First entries in ${countdown(until(FIRST_ENTRY_MIN))}`, false);
+  if (minute >= close) return at("closed", "Closed", false);
+  if (minute >= flat) return at("flat", `No new entries · close ${hhmm(close)} in ${countdown(until(close))}`, false);
   if (lunchBlock(halfDay)) {
-    if (minute < LUNCH_FROM_MIN)
-      return { phase: "open", line: `Lunch block ${hhmm(LUNCH_FROM_MIN)}–${hhmm(LUNCH_TO_MIN)} in ${countdown(until(LUNCH_FROM_MIN))}`, entries: true, minute };
-    if (minute < LUNCH_TO_MIN) return { phase: "lunch", line: `No new entries until ${hhmm(LUNCH_TO_MIN)}`, entries: false, minute };
+    if (minute < LUNCH_FROM_MIN) return at("open", `Lunch block ${hhmm(LUNCH_FROM_MIN)}–${hhmm(LUNCH_TO_MIN)} in ${countdown(until(LUNCH_FROM_MIN))}`, true);
+    if (minute < LUNCH_TO_MIN) return at("lunch", `No new entries until ${hhmm(LUNCH_TO_MIN)}`, false);
   }
-  return { phase: "open", line: `New entries end ${hhmm(flat)} in ${countdown(until(flat))}`, entries: true, minute };
+  return at("open", `New entries end ${hhmm(flat)} in ${countdown(until(flat))}`, true);
 }
 
 // ---- the day's limits ----------------------------------------------------------------------------------------------

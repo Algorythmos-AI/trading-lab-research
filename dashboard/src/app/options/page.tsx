@@ -2,7 +2,7 @@ import { PageHeading } from "@/components/page-heading";
 import { TradeRulesFor } from "@/components/trade-rules";
 import { BoardTable, EditionPanel, HowToRead, NoOptions, PaperPanel, RulesPanel, StructurePanel, TickerCards } from "@/components/options";
 import { FocusScope, LiveQuotes } from "@/components/client/live-layer";
-import { BoardProvider, TradeNow } from "@/components/client/trade-now";
+import { BoardProvider, TradeNow, TradeNowNotices } from "@/components/client/trade-now";
 import { DrawingGuide, FocusStrip, focusOnly, RulesStrip } from "@/components/options-focus";
 import { LadderMini, LevelLadder } from "@/components/level-ladder";
 import { CockpitLadders, CockpitShell } from "@/components/client/cockpit";
@@ -181,6 +181,14 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
               <PaneBoundary name="Trade now">
                 <TradeNow />
               </PaneBoundary>
+            </div>
+            {/* The notices (an entry, SELL HALF, EXIT) and the spoken line sit outside the cockpit's hidden parts: the
+                cockpit hides the board, never what tells the owner a state has changed. Drawn once, straight under the
+                board, so on a phone they follow it in the page's flow. */}
+            <PaneBoundary name="Trade now notices">
+              <TradeNowNotices />
+            </PaneBoundary>
+            <div data-cockpit-hide className="contents">
               <PaneBoundary name="Today's focus">
                 <FocusStrip e={full} />
               </PaneBoundary>
