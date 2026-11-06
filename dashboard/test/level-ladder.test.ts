@@ -72,7 +72,7 @@ describe("ladder scale", () => {
     expect(t2.offscale).toBe("above");
     expect(t2.y).toBe(g.frame.top);
     expect(g.domain.hi - g.domain.lo).toBeCloseTo(LADDER_MAX_ATR * spy.atr!, 6);
-    const html = renderToStaticMarkup(createElement(LevelLadder, { item: far, ticker: tickerOf("SPY"), session: edition.session, live: false, size: "desktop" }));
+    const html = renderToStaticMarkup(createElement(LevelLadder, { item: far, ticker: tickerOf("SPY"), session: edition.session, halfDay: false, closeDate: edition.built_from ?? null, live: false, size: "desktop" }));
     expect(textOf(html)).toContain(far.target_up.price.toFixed(2));
     expect(html).toContain("off the scale above");
   });
@@ -133,7 +133,7 @@ describe("every plan price is on the ladder", () => {
       const plan = focusPlan(item);
       const alts = altTriggers(plan, item.atr);
       expect(alts).toHaveLength(4);
-      const html = renderToStaticMarkup(createElement(LevelLadder, { item, ticker: tickerOf(item.symbol), session: edition.session }));
+      const html = renderToStaticMarkup(createElement(LevelLadder, { item, ticker: tickerOf(item.symbol), session: edition.session, halfDay: false, closeDate: edition.built_from ?? null }));
       const text = textOf(html);
       for (const p of [plan.call, plan.put]) {
         expect(p).not.toBeNull();
@@ -158,21 +158,23 @@ describe("every plan price is on the ladder", () => {
 });
 
 describe("the price dot", () => {
+  const at = "2026-10-12T14:14:00.000Z"; // 10:14 New York
   const base: LadderLiveInput = {
     mode: "live",
-    paused: false,
-    read: { price: 779.0, inSession: true, stale: false, ageS: 2 },
-    liveAt: "10:14",
+    phase: "in",
+    today: { price: 779.0, at },
+    fresh: true,
+    ageS: 2,
     premarket: null,
     close: 778.55,
-    afterClose: false,
+    closeDate: "2026-10-09",
     ceiling: 779.4,
     floor: 775.16,
     atr: 6.26,
     move: 5,
   };
 
-  it("is filled and labelled live only while the feed is live and fresh, with the distances", () => {
+  it("is filled and labelled live only while the board would use the price, with the distances", () => {
     const v = ladderLiveView(base);
     expect(v.dot).toEqual({ kind: "live", price: 779, label: "live 10:14" });
     expect(v.from).toBe("live");
@@ -181,37 +183,32 @@ describe("the price dot", () => {
   });
 
   it("past a trigger, reads in ATRs past it", () => {
-    const v = ladderLiveView({ ...base, read: { ...base.read, price: 781.9 } });
+    const v = ladderLiveView({ ...base, today: { price: 781.9, at } });
     expect(v.distances[0]!.text).toBe("+0.4 ATR past");
-  });
-
-  it("is hollow and says how old when stale, with no distances", () => {
-    const v = ladderLiveView({ ...base, read: { ...base.read, stale: true, ageS: 34 } });
-    expect(v.dot).toEqual({ kind: "stale", price: 779, label: "stale 34 s" });
-    expect(v.distances).toEqual([]);
   });
 
   it("shows nothing when prices are off, old or paused", () => {
     for (const mode of ["off", "old"] as const) expect(ladderLiveView({ ...base, mode })).toEqual({ dot: null, caption: OFF_CAPTION, distances: [], from: null });
-    expect(ladderLiveView({ ...base, paused: true })).toEqual({ dot: null, caption: PAUSED_CAPTION, distances: [], from: null });
-    expect(ladderLiveView({ ...base, read: { ...base.read, inSession: false } }).dot).toBeNull();
+    expect(ladderLiveView({ ...base, fresh: false, ageS: 34 })).toEqual({ dot: null, caption: "Prices paused 34 s: static plan", distances: [], from: null });
+    expect(ladderLiveView({ ...base, today: null, ageS: null })).toEqual({ dot: null, caption: PAUSED_CAPTION, distances: [], from: null });
     expect(ladderLiveView({ ...base, mode: "loading" })).toEqual({ dot: null, caption: CONNECTING_CAPTION, distances: [], from: null });
   });
 
-  it("before the open: a pre-market diamond with distances from pre, else the close with none", () => {
-    const pre = ladderLiveView({ ...base, mode: "next", premarket: 776.2 });
+  it("before the open: a pre-market diamond with distances from pre, else the dated close with none", () => {
+    const next = { ...base, mode: "next" as const, phase: "before" as const, today: null };
+    const pre = ladderLiveView({ ...next, premarket: 776.2 });
     expect(pre.dot).toEqual({ kind: "pre", price: 776.2, label: "pre 776.20" });
     expect(pre.from).toBe("pre");
     expect(pre.distances).toHaveLength(2);
-    const close = ladderLiveView({ ...base, mode: "next" });
-    expect(close.dot).toEqual({ kind: "close", price: 778.55, label: "close 778.55" });
+    const close = ladderLiveView(next);
+    expect(close.dot).toEqual({ kind: "close", price: 778.55, label: "close Fri 9 Oct 778.55" });
     expect(close.distances).toEqual([]);
-    const after = ladderLiveView({ ...base, mode: "next", afterClose: true, lastPrice: 780.1, premarket: 776.2 });
-    expect(after.dot).toEqual({ kind: "close", price: 780.1, label: "close 780.10" });
+    const after = ladderLiveView({ ...next, phase: "after", today: { price: 780.1, at: "2026-10-12T20:00:00.000Z" }, premarket: 776.2 });
+    expect(after.dot).toEqual({ kind: "last", price: 780.1, label: "last trade 16:00" });
     expect(after.distances).toEqual([]);
   });
 
-  it("renders each mode: filled, hollow dashed, diamond, or nothing", () => {
+  it("renders each mode: filled, diamond, hollow last trade, or nothing", () => {
     const domain = { lo: 770, hi: 785 };
     const f = FRAMES.desktop;
     const mark = (input: LadderLiveInput) => renderToStaticMarkup(createElement(LadderMark, { view: ladderLiveView(input), frame: f, domain }));
@@ -225,33 +222,32 @@ describe("the price dot", () => {
     // The nearer trigger first and bold, the far one muted.
     expect(note(base)).toMatch(/data-near="yes" class="[^"]*font-bold[^"]*">Ceiling/);
     expect(note(base)).toMatch(/text-muted-foreground font-medium">Floor 775.16 · 3.84 away/);
-    const stale = mark({ ...base, read: { ...base.read, stale: true, ageS: 34 } });
-    expect(stale).toContain('data-dot="stale"');
-    expect(stale).toContain('stroke-dasharray="3 2"');
-    expect(stale).toContain("stale 34 s");
-    expect(note({ ...base, read: { ...base.read, stale: true, ageS: 34 } })).not.toContain("away");
-    const pre = mark({ ...base, mode: "next", premarket: 776.2 });
+    const next = { ...base, mode: "next" as const, phase: "before" as const, today: null };
+    const pre = mark({ ...next, premarket: 776.2 });
     expect(pre).toContain('data-dot="pre"');
     expect(pre).toContain("<rect");
     expect(pre).toContain("pre 776.20");
-    expect(note({ ...base, mode: "next", premarket: 776.2 })).toContain("from pre");
-    expect(mark({ ...base, mode: "next" })).toContain("close 778.55");
+    expect(note({ ...next, premarket: 776.2 })).toContain("from pre");
+    expect(mark(next)).toContain("close Fri 9 Oct 778.55");
+    const last = mark({ ...next, phase: "after", today: { price: 780.1, at: "2026-10-12T20:00:00.000Z" } });
+    expect(last).toContain('data-dot="last"');
+    expect(last).toContain('stroke-dasharray="3 2"');
     for (const mode of ["off", "old"] as const) {
       expect(mark({ ...base, mode })).toBe("");
       expect(note({ ...base, mode })).toContain(OFF_CAPTION);
     }
-    expect(mark({ ...base, paused: true })).toBe("");
-    expect(note({ ...base, paused: true })).toContain(PAUSED_CAPTION);
+    expect(mark({ ...base, fresh: false })).toBe("");
+    expect(note({ ...base, fresh: false, ageS: 34 })).toContain("Prices paused 34 s");
     // Off the scale the dot sits at the edge and says which way.
-    expect(mark({ ...base, read: { ...base.read, price: 790 } })).toContain("live 10:14 ↑");
+    expect(mark({ ...base, today: { price: 790, at } })).toContain("live 10:14 ↑");
   });
 
   it("the whole ladder with no live feed draws no dot", () => {
-    const html = renderToStaticMarkup(createElement(LevelLadder, { item: spy, ticker: tickerOf("SPY"), session: edition.session }));
+    const html = renderToStaticMarkup(createElement(LevelLadder, { item: spy, ticker: tickerOf("SPY"), session: edition.session, halfDay: false, closeDate: edition.built_from ?? null }));
     expect(html).not.toContain("data-dot");
     expect(html).toContain(CONNECTING_CAPTION);
     expect(html).toContain('data-highlight="none"');
-    const lit = renderToStaticMarkup(createElement(LevelLadder, { item: spy, ticker: tickerOf("SPY"), session: edition.session, highlight: "put" }));
+    const lit = renderToStaticMarkup(createElement(LevelLadder, { item: spy, ticker: tickerOf("SPY"), session: edition.session, halfDay: false, closeDate: edition.built_from ?? null, highlight: "put" }));
     expect(lit).toContain('data-highlight="put"');
     expect(lit).toContain("group-data-[highlight=put]/ladder:opacity-40");
   });
@@ -259,7 +255,7 @@ describe("the price dot", () => {
 
 describe("the mini ladder", () => {
   it("labels only the ceiling and floor prices", () => {
-    const html = renderToStaticMarkup(createElement(LadderMini, { item: spy, ticker: tickerOf("SPY"), session: edition.session }));
+    const html = renderToStaticMarkup(createElement(LadderMini, { item: spy, ticker: tickerOf("SPY"), session: edition.session, halfDay: false, closeDate: edition.built_from ?? null }));
     const text = textOf(html);
     expect(text).toContain("779.40");
     expect(text).toContain("775.16");
@@ -278,7 +274,7 @@ describe("size and colour code", () => {
     expect(FRAMES.phone.height).toBe(240);
     expect(FRAMES.mini.height).toBe(120);
     for (const f of Object.values(FRAMES)) expect(Math.min(f.font, f.small)).toBeGreaterThanOrEqual(14);
-    const html = renderToStaticMarkup(createElement(LevelLadder, { item: spy, ticker: tickerOf("SPY"), session: edition.session }));
+    const html = renderToStaticMarkup(createElement(LevelLadder, { item: spy, ticker: tickerOf("SPY"), session: edition.session, halfDay: false, closeDate: edition.built_from ?? null }));
     const sizes = [...html.matchAll(/font-size="([\d.]+)"/g)].map((m) => Number(m[1]));
     expect(sizes.length).toBeGreaterThan(0);
     expect(Math.min(...sizes)).toBeGreaterThanOrEqual(14);
@@ -307,11 +303,11 @@ describe("eyeball pass", () => {
     const call = geometryFor(spy, tickerOf("SPY"), null, FRAMES.desktop, "call");
     expect(visible(call).filter((r) => r.role === "entry" || r.role === "stop").map((r) => r.key).sort()).toEqual(["call-entry", "call-stop"]);
     // Hidden ones stay in the hidden list.
-    const html = renderToStaticMarkup(createElement(LevelLadder, { item: spy, ticker: tickerOf("SPY"), session: edition.session, live: false }));
+    const html = renderToStaticMarkup(createElement(LevelLadder, { item: spy, ticker: tickerOf("SPY"), session: edition.session, halfDay: false, closeDate: edition.built_from ?? null, live: false }));
     expect(html).toContain("call entry, entry");
     expect(html).toContain("not labelled on the drawing");
     expect(html).toContain("No side is highlighted.");
-    const lit = renderToStaticMarkup(createElement(LevelLadder, { item: spy, ticker: tickerOf("SPY"), session: edition.session, live: false, highlight: "put" }));
+    const lit = renderToStaticMarkup(createElement(LevelLadder, { item: spy, ticker: tickerOf("SPY"), session: edition.session, halfDay: false, closeDate: edition.built_from ?? null, live: false, highlight: "put" }));
     expect(lit).toContain("The put side is highlighted; the call side is dimmed.");
   });
 
@@ -327,7 +323,7 @@ describe("eyeball pass", () => {
       expect(visible(lit).length).toBeLessThanOrEqual(8);
     }
     for (const f of [FRAMES.desktop, FRAMES.phone]) expect(f.tagX - 3 - f.lineTo).toBeLessThanOrEqual(12);
-    const html = renderToStaticMarkup(createElement(LevelLadder, { item: spy, ticker: tickerOf("SPY"), session: edition.session, live: false, size: "desktop" }));
+    const html = renderToStaticMarkup(createElement(LevelLadder, { item: spy, ticker: tickerOf("SPY"), session: edition.session, halfDay: false, closeDate: edition.built_from ?? null, live: false, size: "desktop" }));
     expect(html).not.toMatch(/<path d="M\d/); // leaders are single straight lines now
   });
 
@@ -358,7 +354,7 @@ describe("eyeball pass", () => {
   });
 
   it("draws the live alternative trigger in the warn tone with its word, the rest muted", () => {
-    const html = renderToStaticMarkup(createElement(LevelLadder, { item: spy, ticker: tickerOf("SPY"), session: edition.session, live: false, size: "desktop", liveAlt: { kind: "sweep_reclaim", side: "put" } }));
+    const html = renderToStaticMarkup(createElement(LevelLadder, { item: spy, ticker: tickerOf("SPY"), session: edition.session, halfDay: false, closeDate: edition.built_from ?? null, live: false, size: "desktop", liveAlt: { kind: "sweep_reclaim", side: "put" } }));
     expect(html).toMatch(/data-alt="sweep_reclaim" data-alt-side="put" data-alt-live="yes"/);
     expect(html).toContain("⤒ sweep → put");
     expect(html).toContain("live now on the board");

@@ -6,8 +6,11 @@
 // Pure: no I/O, no React, no clock. Advisory and read-only: nothing here suggests placing an order.
 import { spread } from "./chart-geometry";
 import { CHART_CODE } from "./chart-code";
-import { type AltCondition, type ChartLine, levelWords, type SidePlan } from "./focus-plan";
-import type { BoardMode } from "./trade-now";
+import { type AltCondition, type ChartLine, levelWords, MERGE_ATR, type SidePlan } from "./focus-plan";
+import { DASH, newYork, weekDate } from "./format";
+import { closeMinute, type LiveQuote, nyClock, OPEN_MIN } from "./options";
+import { type BoardMode, boardMode } from "./trade-now";
+import { FEED_STALE_MS, serverNow, TRADE_STALE_MS } from "./trade-state";
 
 /** The axis never spans less than this many ATRs: a narrow day still reads as a narrow day, not a cliff. */
 export const LADDER_MIN_ATR = 1.5;
@@ -40,6 +43,8 @@ export interface LadderRow {
    * highlighted side, and week or month levels only near the price or when they are a target.
    */
   visible: boolean;
+  /** A plan target that chartLevels merged into a nearby level: that level's own price (the row shows the plan's). */
+  merged?: { price: number };
   /** The line's y; at the top or bottom edge when the price is off the scale. */
   y: number;
   /** The label's y after de-collision. */
@@ -219,6 +224,8 @@ export function ladderGeometry(input: LadderInput): LadderGeometry {
   });
 
   const rows: LadderRow[] = [];
+  /** chartLevels' own merge distance: levels this close are one line. */
+  const tol = Math.max(0.005, atr ? MERGE_ATR * atr : 0);
   const has = (p: number) => rows.some((r) => cent(r.price) === cent(p));
   const add = (r: Omit<LadderRow, "y" | "labelY" | "offscale" | "beyondMove" | "visible"> & { beyondMove?: boolean }) =>
     rows.push({ beyondMove: false, visible: true, ...r, ...at(r.price), labelY: 0 });
@@ -253,9 +260,20 @@ export function ladderGeometry(input: LadderInput): LadderGeometry {
       add({ key: `${up ? "ceiling" : "floor"}-${cent(p.level)}`, price: p.level, role: up ? "ceiling" : "floor", side: p.side, tag: up ? "Ceiling" : "Floor", name: levelWords(p.levelName), style: STYLE(up ? "ceiling" : "floor") });
     if (fin(p.entry)) add({ key: `${p.side}-entry`, price: p.entry, role: "entry", side: p.side, tag: up ? "▲ in" : "▼ in", name: `${p.side} entry`, style: up ? "up triangle" : "down triangle" });
     if (fin(p.stop)) add({ key: `${p.side}-stop`, price: p.stop, role: "stop", side: p.side, tag: "× stop", name: `${p.side} stop`, style: "cross" });
-    if (fin(p.target1) && !has(p.target1)) add({ key: `${p.side}-t1`, price: p.target1, role: "target", side: p.side, tag: "T1", name: `${p.side} target 1`, style: "grey, thin tick" });
-    if (p.target2 && !has(p.target2.price))
-      add({ key: `${p.side}-t2`, price: p.target2.price, role: "target", side: p.side, tag: "T2", name: [levelWords(p.target2.name), `${p.side} target 2`].filter(Boolean).join(", "), style: "grey, thin tick" });
+    // A target within chartLevels' own merge distance of a line is that line: drawn once, labelled with the plan's
+    // price and its T1 / T2 tag, and the hidden list says which level it was drawn on.
+    const target = (t: number, which: "T1" | "T2", name: string) => {
+      const r = rows.find((x) => (x.role === "target" || x.role === "week" || x.role === "month") && Math.abs(x.price - t) <= tol);
+      if (!r) return add({ key: `${p.side}-${which.toLowerCase()}`, price: t, role: "target", side: p.side, tag: which, name, style: "grey, thin tick" });
+      if (!r.tag.includes(which)) r.tag = [which, r.tag].filter(Boolean).join(" ");
+      r.side ??= p.side;
+      if (cent(r.price) !== cent(t)) {
+        r.merged = { price: r.price };
+        Object.assign(r, { price: t }, at(t));
+      }
+    };
+    if (fin(p.target1)) target(p.target1, "T1", `${p.side} target 1`);
+    if (p.target2) target(p.target2.price, "T2", [levelWords(p.target2.name), `${p.side} target 2`].filter(Boolean).join(", "));
   }
   // 3. A second target past the 1-day expected move, measured from the close. Its note is a second line under (or,
   // for a call, over) the target's label in the label column, so it takes a label's room of its own.
@@ -314,7 +332,11 @@ export function ladderGeometry(input: LadderInput): LadderGeometry {
 }
 
 // ---- the price dot ----------------------------------------------------------------------------------------------
-export type LadderDotKind = "live" | "stale" | "pre" | "close";
+/**
+ * live: a fresh same-day quote in the session (filled). pre: the pre-market price before the open. close: the
+ * edition's close, before the open only, with its date. last: the session day's last trade after the close.
+ */
+export type LadderDotKind = "live" | "pre" | "close" | "last";
 
 export interface LadderDistance {
   to: "ceiling" | "floor";
@@ -330,7 +352,7 @@ export interface LadderDistance {
 export interface LadderLiveView {
   /** What the dot shows, or null for no dot. Live is filled; the others are hollow. */
   dot: { kind: LadderDotKind; price: number; label: string } | null;
-  /** A short line when there is no dot or the dot is not live: "Prices off: static plan". */
+  /** A short line when there is no dot: "Prices off: static plan". */
   caption: string | null;
   /** Distances to the two triggers: only from a live, fresh price, or from the pre-market price before the open. */
   distances: LadderDistance[];
@@ -341,6 +363,9 @@ export interface LadderLiveView {
 export const OFF_CAPTION = "Prices off: static plan";
 export const PAUSED_CAPTION = "Prices paused: static plan";
 export const CONNECTING_CAPTION = "Connecting to live prices";
+export const NO_PRICE_CAPTION = "No price for today yet";
+/** "Prices paused 34 s: static plan", or without the age when it is not known. */
+export const pausedCaption = (ageS: number | null) => (ageS === null ? PAUSED_CAPTION : `Prices paused ${ageS} s: static plan`);
 
 /** Distance from a price to each trigger, in $ and in 1-day moves (ATRs without a move); past the trigger, in ATRs. */
 export function triggerDistances(
@@ -365,27 +390,26 @@ export function triggerDistances(
 export interface LadderLiveInput {
   /** The board's mode (trade-now's boardMode), or "loading" before the clock is known. */
   mode: BoardMode["kind"];
-  /** The board would show this name as "prices paused": no quote, or the feed or the trade too old. */
-  paused: boolean;
-  /** The name off the live feed (options.ts liveRead). */
-  read: { price: number | null; inSession: boolean; stale: boolean; ageS: number | null };
-  /** The live quote's New York time, "10:14". */
-  liveAt: string | null;
+  /** Where the clock is against the session: before its open, in it, or after its close. */
+  phase: "before" | "in" | "after";
+  /** This name's quote when it is from the session day; null otherwise. */
+  today: { price: number; at: string } | null;
+  /** The board's rule (trade-state): feed age ≤ FEED_STALE_MS and trade age ≤ TRADE_STALE_MS. */
+  fresh: boolean;
+  /** The older of the feed's and the trade's ages, seconds. */
+  ageS: number | null;
   /** The pre-market price on the focus card, if any. */
   premarket: number | null;
-  /** The edition's close. */
+  /** The edition's close, and the day it is from (the edition's built_from). */
   close: number | null;
-  /** The session has closed today (the dot shows the day's last price as a close). */
-  afterClose: boolean;
-  /** The day's last price after the close, if the feed has one. */
-  lastPrice?: number | null;
+  closeDate: string | null;
   ceiling: number | null;
   floor: number | null;
   atr: number | null | undefined;
   move: number | null | undefined;
 }
 
-/** What the price dot, its label and the distances say in each board mode. */
+/** What the price dot, its label and the distances say. The edition's close is only ever shown before the open. */
 export function ladderLiveView(i: LadderLiveInput): LadderLiveView {
   const none = (caption: string | null): LadderLiveView => ({ dot: null, caption, distances: [], from: null });
   switch (i.mode) {
@@ -396,21 +420,20 @@ export function ladderLiveView(i: LadderLiveInput): LadderLiveView {
       return none(CONNECTING_CAPTION);
     case "live":
     case "opening": {
-      const p = i.read.price;
-      if (i.paused || !i.read.inSession || !fin(p)) return none(PAUSED_CAPTION);
-      if (i.read.stale)
-        return { dot: { kind: "stale", price: p, label: `stale ${i.read.ageS ?? "?"} s` }, caption: null, distances: [], from: null };
+      if (!i.fresh || !i.today) return none(pausedCaption(i.ageS));
+      const p = i.today.price;
       return {
-        dot: { kind: "live", price: p, label: `live ${i.liveAt ?? ""}`.trim() },
+        dot: { kind: "live", price: p, label: `live ${newYork(i.today.at, false)}` },
         caption: null,
         distances: triggerDistances(p, i.ceiling, i.floor, i.atr, i.move),
         from: "live",
       };
     }
     case "next": {
-      if (i.afterClose) {
-        const p = fin(i.lastPrice) ? i.lastPrice : i.close;
-        return fin(p) ? { dot: { kind: "close", price: p, label: `close ${p.toFixed(2)}` }, caption: null, distances: [], from: null } : none(null);
+      if (i.phase === "after") {
+        // The session day's last trade, never yesterday's close. The official close is not in the live feed.
+        if (!i.today) return none(NO_PRICE_CAPTION);
+        return { dot: { kind: "last", price: i.today.price, label: `last trade ${newYork(i.today.at, false)}` }, caption: null, distances: [], from: null };
       }
       if (fin(i.premarket))
         return {
@@ -419,9 +442,69 @@ export function ladderLiveView(i: LadderLiveInput): LadderLiveView {
           distances: triggerDistances(i.premarket, i.ceiling, i.floor, i.atr, i.move),
           from: "pre",
         };
-      return fin(i.close) ? { dot: { kind: "close", price: i.close, label: `close ${i.close.toFixed(2)}` }, caption: null, distances: [], from: null } : none(null);
+      if (!fin(i.close)) return none(NO_PRICE_CAPTION);
+      const when = i.closeDate ? weekDate(i.closeDate) : null;
+      return { dot: { kind: "close", price: i.close, label: `close ${when && when !== DASH ? `${when} ` : ""}${i.close.toFixed(2)}` }, caption: null, distances: [], from: null };
     }
   }
+}
+
+/** The page's live feed as the ladder reads it (client/use-quotes' Feed, structurally). */
+export type LadderFeed =
+  | { status: "loading" | "off" | "error" }
+  | { status: "ok"; asOf: string; receivedAt: number; quotes: Record<string, LiveQuote> };
+
+/**
+ * The dot's view from the feed and the browser's clock, on the board's own clock (trade-state's serverNow) and with the
+ * board's own rules: its mode (boardMode), its staleness (FEED_STALE_MS, TRADE_STALE_MS) and a quote counted only when
+ * it is from the session day. `halfDay` is the edition's (options.ts isHalfDay), as the board's.
+ */
+export function ladderLiveState(p: {
+  feed: LadderFeed;
+  browserNow: number | null;
+  symbol: string;
+  session: string;
+  halfDay: boolean;
+  premarket: number | null;
+  close: number | null;
+  closeDate: string | null;
+  ceiling: number | null;
+  floor: number | null;
+  atr: number | null | undefined;
+  move: number | null | undefined;
+}): LadderLiveView {
+  const f = p.feed;
+  const ok = f.status === "ok";
+  const now = p.browserNow === null ? null : serverNow(ok ? f.asOf : null, ok ? f.receivedAt : null, p.browserNow).getTime();
+  const mode: BoardMode["kind"] = now === null ? "loading" : boardMode(p.session, p.halfDay, f.status === "ok" ? "ok" : f.status, now).kind;
+  const answeredAt = ok && Number.isFinite(Date.parse(f.asOf)) ? Date.parse(f.asOf) : null;
+  const q = ok ? f.quotes[p.symbol] : undefined;
+  const today = q && q.day === p.session && fin(q.price) ? { price: q.price, at: q.at } : null;
+  const feedAge = now !== null && answeredAt !== null ? now - answeredAt : Infinity;
+  const tradeAge = now !== null && today ? now - Date.parse(today.at) : Infinity;
+  const fresh = today !== null && feedAge <= FEED_STALE_MS && tradeAge <= TRADE_STALE_MS;
+  const worst = Math.max(feedAge, tradeAge);
+  const clock = now === null ? null : nyClock(new Date(now).toISOString());
+  const phase: LadderLiveInput["phase"] =
+    !clock || clock.day < p.session || (clock.day === p.session && clock.minutes < OPEN_MIN)
+      ? "before"
+      : clock.day > p.session || clock.minutes >= closeMinute(p.halfDay)
+        ? "after"
+        : "in";
+  return ladderLiveView({
+    mode,
+    phase,
+    today,
+    fresh,
+    ageS: Number.isFinite(worst) ? Math.max(0, Math.round(worst / 1000)) : null,
+    premarket: p.premarket,
+    close: p.close,
+    closeDate: p.closeDate,
+    ceiling: p.ceiling,
+    floor: p.floor,
+    atr: p.atr,
+    move: p.move,
+  });
 }
 
 // ---- the frames ---------------------------------------------------------------------------------------------------

@@ -19,6 +19,10 @@ export interface LevelLadderProps {
   /** The name's row on the board, for its levels, expected move, last bar and the live state. */
   ticker: OptionsTicker | undefined;
   session: string;
+  /** The edition's half day, from options.ts isHalfDay(e): the board's one source, never a ticker's own flag. */
+  halfDay: boolean;
+  /** The day the edition's close is from (the edition's built_from): the dot before the open says "close Fri 9 Oct". */
+  closeDate: string | null;
   /** The pre-market price on the focus card, if any. */
   premarket?: number | null;
   /** The side the board highlights; the other side's marks are dimmed. */
@@ -232,7 +236,7 @@ export function LadderList({ g, id, highlight, liveAlt }: { g: LadderGeometry; i
   const items: { key: string; price: number; text: string }[] = g.rows.map((r) => ({
     key: r.key,
     price: r.price,
-    text: `${r.price.toFixed(2)}: ${r.tag.replace(/^[▲▼×] /, "")}, ${r.name}, ${r.role}, ${r.style}${r.beyondMove ? ", beyond the 1-day move" : ""}${r.offscale ? `, off the scale ${r.offscale}` : ""}${r.visible ? "" : ", not labelled on the drawing"}`,
+    text: `${r.price.toFixed(2)}: ${r.tag.replace(/^[▲▼×] /, "")}, ${r.name}, ${r.role}, ${r.style}${r.beyondMove ? ", beyond the 1-day move" : ""}${r.offscale ? `, off the scale ${r.offscale}` : ""}${r.merged ? `, drawn on the ${r.merged.price.toFixed(2)} level` : ""}${r.visible ? "" : ", not labelled on the drawing"}`,
   }));
   if (g.box) items.push({ key: "box", price: (g.box.hi + g.box.lo) / 2, text: `${g.box.lo.toFixed(2)} to ${g.box.hi.toFixed(2)}: no-trade box, grey, hatched, no trade inside` });
   for (const m of g.markers)
@@ -266,10 +270,10 @@ function Frame({ props, f }: { props: LevelLadderProps; f: LadderFrame }) {
     );
   return (
     <LadderLive
-      // The client needs the name's levels and zones for its live state, not its 60 daily bars.
-      ticker={{ ...ticker, bars: undefined }}
+      symbol={item.symbol}
       session={session}
-      halfDay={ticker.half_day ?? false}
+      halfDay={props.halfDay}
+      closeDate={props.closeDate}
       premarket={i.pre}
       close={i.close}
       ceiling={i.plans.call?.level ?? null}
@@ -315,7 +319,7 @@ export function LevelLadder(props: LevelLadderProps) {
  * The small ladder for the fourfold glance: about 120 px tall, the ceiling and floor with their prices, the box, the
  * targets as ticks, and the price dot. No other labels.
  */
-export function LadderMini({ item, ticker, session, premarket, highlight, live = true }: Omit<LevelLadderProps, "size">) {
+export function LadderMini({ item, ticker, session, halfDay, closeDate, premarket, highlight, live = true }: Omit<LevelLadderProps, "size">) {
   const f = FRAMES.mini;
   const g = geometryFor(item, ticker, premarket, f);
   if (!g.rows.length) return null;
@@ -350,9 +354,25 @@ export function LadderMini({ item, ticker, session, premarket, highlight, live =
         const close = edges.length === 2 && Math.abs(edges[1]!.y - edges[0]!.y) < f.gap;
         const ly = close ? r.y + (r.role === "ceiling" ? -f.gap / 2 : f.gap / 2) : r.y;
         return (
-          <g key={r.key} data-role={r.role} className={dim(r.side)}>
-            <line x1={f.lineFrom} x2={f.lineTo} y1={r.y} y2={r.y} stroke={s.stroke} strokeWidth={s.width} />
+          <g key={r.key} data-role={r.role} data-offscale={r.offscale ?? undefined} className={dim(r.side)}>
+            {r.offscale ? (
+              // Off the scale: a chevron at the edge pointing the way, in the line's colour; the price says where.
+              <path
+                d={(() => {
+                  const x = (f.lineFrom + f.lineTo) / 2;
+                  return r.offscale === "above" ? `M${x - 8},${r.y + 6} L${x},${r.y - 2} L${x + 8},${r.y + 6}` : `M${x - 8},${r.y - 6} L${x},${r.y + 2} L${x + 8},${r.y - 6}`;
+                })()}
+                fill="none"
+                stroke={s.stroke}
+                strokeWidth={3}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            ) : (
+              <line x1={f.lineFrom} x2={f.lineTo} y1={r.y} y2={r.y} stroke={s.stroke} strokeWidth={s.width} />
+            )}
             <text x={f.priceX} y={ly} textAnchor="end" dominantBaseline="central" fontSize={f.font} fontWeight={700} className="font-mono tabular-nums" style={{ fill: s.text }}>
+              {r.offscale === "above" ? "↑" : r.offscale === "below" ? "↓" : ""}
               {r.price.toFixed(2)}
             </text>
           </g>
@@ -369,9 +389,10 @@ export function LadderMini({ item, ticker, session, premarket, highlight, live =
   return (
     <div data-testid={`ladder-mini-${item.symbol}`}>
       <LadderLive
-        ticker={{ ...ticker, bars: undefined }}
+        symbol={item.symbol}
         session={session}
-        halfDay={ticker.half_day ?? false}
+        halfDay={halfDay}
+        closeDate={closeDate}
         premarket={i.pre}
         close={i.close}
         ceiling={i.plans.call?.level ?? null}

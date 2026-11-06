@@ -6,6 +6,7 @@ import { PageHeading } from "@/components/page-heading";
 import { LadderMini, LevelLadder } from "@/components/level-ladder";
 import { LiveQuotes } from "@/components/client/live-layer";
 import { withLeaders } from "@/lib/entry-checks";
+import { isHalfDay } from "@/lib/options";
 import { fixtureMode, loadOptions } from "@/lib/snapshot";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +19,7 @@ export default async function LadderPreview() {
   const e = result.edition;
   const items = [...(e.focus?.items ?? [])].sort((a, b) => a.rank - b.rank).slice(0, 4);
   const pre = (s: string) => e.focus?.premarket?.items.find((p) => p.symbol === s)?.price ?? null;
+  const halfDay = isHalfDay(e);
   const tick = (s: string) => e.tickers.find((t) => t.symbol === s);
   return (
     <>
@@ -28,7 +30,7 @@ export default async function LadderPreview() {
           {items.map((i) => (
             <div key={i.symbol} className="bg-card grid gap-1 rounded-lg border p-2">
               <p className="text-sm font-semibold">{i.symbol}</p>
-              <LadderMini item={i} ticker={tick(i.symbol)} session={e.session} premarket={pre(i.symbol)} />
+              <LadderMini item={i} ticker={tick(i.symbol)} session={e.session} halfDay={halfDay} closeDate={e.built_from ?? null} premarket={pre(i.symbol)} />
             </div>
           ))}
         </section>
@@ -39,7 +41,7 @@ export default async function LadderPreview() {
                 {i.symbol}
                 <span className="text-muted-foreground ml-2 text-sm font-normal">{n === 0 ? "call side highlighted" : n === 1 ? "put side highlighted" : "no side highlighted, one alternative shown as live (preview)"}</span>
               </p>
-              <LevelLadder item={i} ticker={tick(i.symbol)} session={e.session} premarket={pre(i.symbol)} highlight={n === 0 ? "call" : n === 1 ? "put" : undefined} liveAlt={n === 2 ? { kind: "failed_break", side: "call" } : null} />
+              <LevelLadder item={i} ticker={tick(i.symbol)} session={e.session} halfDay={halfDay} closeDate={e.built_from ?? null} premarket={pre(i.symbol)} highlight={n === 0 ? "call" : n === 1 ? "put" : undefined} liveAlt={n === 2 ? { kind: "failed_break", side: "call" } : null} />
             </div>
           ))}
         </section>

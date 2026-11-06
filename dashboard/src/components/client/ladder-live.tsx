@@ -1,29 +1,30 @@
 "use client";
 
 // The live layer of a price ladder: the price dot, a thin "now" line and, under the ladder, the price with its source
-// and the distance to each trigger. It reads the page's one live feed (live-layer's useLive, read with options.ts liveRead on the board's clock) and the
-// board's mode (trade-now's boardMode), so the dot says the same as the board: live only while the feed is live and
-// fresh, hollow when stale, a hollow diamond before the open, nothing when prices are off or paused.
+// and the distance to each trigger. It reads the page's one live feed (live-layer's useLive) on the board's own clock
+// and with the board's own rules (level-ladder's ladderLiveState: boardMode, FEED_STALE_MS, TRADE_STALE_MS, a quote
+// only when it is the session day's), so the dot says what the board says: filled and live only while the board would
+// use the price; before the open a hollow diamond (pre-market, or the edition's close with its date); after the close
+// the day's last trade; nothing when prices are off or paused.
 //
 // The static ladder (components/level-ladder.tsx) is passed in as children; this layer draws over it in the same
 // viewBox. The side the board highlights keeps full opacity; the other side's marks are dimmed by CSS (data-highlight).
 // Read only: it shows prices, nothing else. The only motion is the dot moving, and not for a reader who asks for
 // reduced motion.
 import type { ReactNode } from "react";
-import { newYork } from "@/lib/format";
-import { closeMinute, liveRead, nyClock, type OptionsTicker } from "@/lib/options";
-import { boardMode } from "@/lib/trade-now";
-import { FEED_STALE_MS, serverNow, TRADE_STALE_MS } from "@/lib/trade-state";
-import { type LadderFrame, type LadderLiveView, ladderLiveView } from "@/lib/level-ladder";
+import { type LadderFrame, type LadderLiveView, ladderLiveState } from "@/lib/level-ladder";
 import { cn } from "@/lib/utils";
 import { useLive } from "./live-layer";
 
 export interface LadderLiveProps {
-  ticker: OptionsTicker;
+  symbol: string;
   session: string;
+  /** The edition's half day (options.ts isHalfDay), the board's one source. */
   halfDay: boolean;
   premarket: number | null;
   close: number | null;
+  /** The day the edition's close is from (its built_from), for the "close Fri 9 Oct" label. */
+  closeDate: string | null;
   ceiling: number | null;
   floor: number | null;
   atr: number | null;
@@ -38,35 +39,12 @@ export interface LadderLiveProps {
   children: ReactNode;
 }
 
-/** The dot's view from the live feed and the board's clock. */
-export function useLadderLive(p: Pick<LadderLiveProps, "ticker" | "session" | "halfDay" | "premarket" | "close" | "ceiling" | "floor" | "atr" | "move">): LadderLiveView {
-  const { feed, now: browserNow } = useLive();
-  const ok = feed.status === "ok";
-  // The board's clock, as the Trade now board keeps it: the feed's (server) time once it has answered, the
-  // browser's before; and the answer's own (server) time, so both ages are read on one clock.
-  const now = browserNow === null ? null : serverNow(ok ? feed.asOf : null, ok ? feed.receivedAt : null, browserNow).getTime();
-  const answeredAt = ok && Number.isFinite(Date.parse(feed.asOf)) ? Date.parse(feed.asOf) : null;
-  const mode = now === null ? "loading" : boardMode(p.session, p.halfDay, feed.status, now).kind;
-  const q = ok ? feed.quotes[p.ticker.symbol] : undefined;
-  const read = liveRead(p.ticker, q, p.session, now, answeredAt);
-  // As the board's "prices paused" row: no quote, the feed silent, or the last trade too old.
-  const paused = now === null || answeredAt === null || !q || now - answeredAt > FEED_STALE_MS || !(now - Date.parse(q.at) <= TRADE_STALE_MS);
-  const clock = now === null ? null : nyClock(new Date(now).toISOString());
-  const afterClose = clock !== null && clock.day === p.session && clock.minutes >= closeMinute(p.halfDay);
-  return ladderLiveView({
-    mode,
-    paused: (mode === "live" || mode === "opening") && paused,
-    read,
-    liveAt: read.q ? newYork(read.q.at, false) : null,
-    premarket: p.premarket,
-    close: p.close,
-    afterClose,
-    lastPrice: afterClose && q && q.day === p.session ? q.price : null,
-    ceiling: p.ceiling,
-    floor: p.floor,
-    atr: p.atr,
-    move: p.move,
-  });
+/** The dot's view from the page's live feed and the browser's clock (all the rules are in ladderLiveState). */
+export function useLadderLive(
+  p: Pick<LadderLiveProps, "symbol" | "session" | "halfDay" | "premarket" | "close" | "closeDate" | "ceiling" | "floor" | "atr" | "move">,
+): LadderLiveView {
+  const { feed, now } = useLive();
+  return ladderLiveState({ ...p, feed, browserNow: now });
 }
 
 /**
@@ -101,7 +79,7 @@ export function LadderMark({ view, frame, domain, busy = [] }: { view: LadderLiv
   const ty = tagY(y, busy, frame.small + 4, top, bottom);
   return (
     <g data-testid="ladder-dot" data-dot={dot.kind}>
-      <title>{`${dot.label}${dot.kind === "live" || dot.kind === "stale" ? ` · ${dot.price.toFixed(2)}` : ""}${off ? `, ${off} the scale` : ""}`}</title>
+      <title>{`${dot.label}${dot.kind === "live" || dot.kind === "last" ? ` · ${dot.price.toFixed(2)}` : ""}${off ? `, ${off} the scale` : ""}`}</title>
       {/* The only motion: the dot and its line move to the new price (none for reduced motion). */}
       <g className="transition-transform duration-700 ease-out motion-reduce:transition-none" style={{ transform: `translateY(${y}px)` }}>
         <line x1={frame.lineFrom} x2={frame.lineTo} y1={0} y2={0} stroke="var(--warn)" strokeOpacity={live ? 0.9 : 0.7} strokeWidth={1.5} strokeDasharray={live ? undefined : "3 3"} />
@@ -143,7 +121,7 @@ export function LadderNote({ view }: { view: LadderLiveView }) {
     <div data-testid="ladder-note" className="grid gap-1" aria-live="off">
       {dot ? (
         <p className="flex flex-wrap items-baseline gap-x-2">
-          <span className={cn("font-mono text-[20px] font-medium tabular-nums sm:text-[24px]", dot.kind === "stale" && "text-muted-foreground")}>{dot.price.toFixed(2)}</span>
+          <span className={cn("font-mono text-[20px] font-medium tabular-nums sm:text-[24px]", dot.kind !== "live" && "text-muted-foreground")}>{dot.price.toFixed(2)}</span>
           <span className="text-muted-foreground text-sm">
             {dot.label}
             {view.from === "pre" ? " · distances from pre" : ""}
@@ -176,7 +154,14 @@ export function LadderLive(props: LadderLiveProps) {
           <LadderMark view={view} frame={frame} domain={domain} busy={busy} />
         </svg>
       </div>
-      {frame.size === "mini" ? null : <LadderNote view={view} />}
+      {frame.size === "mini" ? (
+        // The mini draws no words beside its dot: one line for a screen reader instead.
+        <p className="sr-only" data-testid="ladder-mini-note">
+          {props.symbol}: {view.dot ? `${view.dot.label}${view.dot.kind === "live" || view.dot.kind === "last" ? `, ${view.dot.price.toFixed(2)}` : ""}` : (view.caption ?? "no price")}
+        </p>
+      ) : (
+        <LadderNote view={view} />
+      )}
     </div>
   );
 }
