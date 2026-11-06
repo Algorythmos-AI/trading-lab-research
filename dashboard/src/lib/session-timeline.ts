@@ -11,6 +11,7 @@ import { closeMinute, nyClock, OPEN_MIN } from "./options";
 import { DAY_LOSS_LIMIT, type DayCheck, MAX_TRADES_PER_DAY } from "./trade-rules";
 import { FIRST_ENTRY_MIN, flatMinute, LUNCH_FROM_MIN, LUNCH_TO_MIN, lunchBlock } from "./trade-state";
 import type { Tone } from "./labels";
+import { dayRoom } from "./what-if";
 
 export const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 
@@ -143,6 +144,8 @@ export interface RailDay {
   line: string;
   /** The open positions' caution (rule 7 counts their open loss), or null. */
   open: string | null;
+  /** "A stop now leaves $50 of $100 and 4 trades" (what-if's dayRoom), or null when it cannot be said. */
+  room: string | null;
 }
 
 const DAY_WORD: Record<DayCheck["status"], { word: string; tone: Tone }> = {
@@ -162,5 +165,6 @@ export function railDay(c: Pick<DayCheck, "status" | "isToday" | "current" | "us
     tone: s.tone,
     line: `${word} · ${c.used}/${MAX_TRADES_PER_DAY} trades · $${loss.toFixed(0)} of $${DAY_LOSS_LIMIT}`,
     open: c.openLine ? c.openLine : null,
+    room: dayRoom(c),
   };
 }

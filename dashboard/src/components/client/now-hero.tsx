@@ -3,7 +3,9 @@
 // The Now hero: the one name the page wants looked at, full width at the top, big enough to read from across the desk.
 // In the live mode it is the board's most urgent row (useBoard().rows[0]): its state word, its side, the three numbers
 // (In, Stop, T1) as tiles, the live price and the distance to the nearer trigger, up to two cautions, and, when the
-// owner is in a trade on that name, the manage card's word. Before the live mode it shows the mode's line and the #1
+// owner is in a trade on that name, the manage card's word. Under the tiles, small, the what-if lines for the side the
+// board points at: the at-the-money option against the premium cap, which stop comes first, and the day's room after a
+// stop (HeroChecks). Before the live mode it shows the mode's line and the #1
 // focus name with its two triggers.
 //
 // Every state is read from the board, never worked out here, so the hero always says what the board says. Prices that
@@ -20,8 +22,12 @@ import { ACTION_WORD, type ManageView, PAUSED_LINE } from "@/lib/trade-manage";
 import { type BoardRow, rowView, type RowView, STATE_WORD } from "@/lib/trade-now";
 import type { NameStateName } from "@/lib/trade-state";
 import { cn } from "@/lib/utils";
+import { bellMinute } from "@/lib/contract";
+import { atmContract, chainFresh, chainPx, chainStamp, premiumCheck, UNLIKELY_WORDS, whichStopFirst } from "@/lib/what-if";
 import { useLadderLive } from "./ladder-live";
+import { useLive } from "./live-layer";
 import { type Board, openFocusCard, TestingTag, useBoard } from "./trade-now";
+import { useChain } from "./use-chain";
 
 const STATE_ICON: Record<NameStateName, LucideIcon> = {
   no_trade: Ban,
@@ -81,6 +87,7 @@ function PriceLine({ view }: { view: LadderLiveView }) {
       {near ? (
         <p data-hero-distance={near.to} className="text-live tabular-nums">
           {TO[near.to]} {near.level.toFixed(2)} · {near.text}
+          {near.unlikely ? <span className="text-explain text-muted-foreground"> · {UNLIKELY_WORDS}</span> : null}
         </p>
       ) : null}
     </div>
@@ -104,6 +111,53 @@ function usePriceView(b: Board, symbol: string | null): LadderLiveView {
     atr: i?.atr ?? null,
     move: i?.move ?? null,
   });
+}
+
+/**
+ * The hero's what-if lines, small, under the tiles: the at-the-money option's cost against the premium cap and which
+ * stop comes first (from one option chain, for the hero's name only and only in the live mode with the board pointing
+ * at a side), then the day's room after a stop. Each line shows only when its inputs are present and fresh: the chain
+ * no older than STALE_SAME_DAY_MIN, labelled with its time and "15 min behind"; nothing at all on old prices.
+ */
+function HeroChecks({ b, row, view, side, room }: { b: Board; row: BoardRow; view: LadderLiveView; side: "call" | "put" | null; room: string | null }) {
+  const { now: browserNow } = useLive();
+  const price = view.dot?.kind === "live" ? view.dot.price : null;
+  const close = b.ticker(row.symbol)?.last?.close ?? null;
+  const on = side !== null && price !== null;
+  const { feed } = useChain(row.symbol, on ? chainPx(close, price) : null, on);
+  if (!on) return null;
+  const fresh = feed.status === "ok" && chainFresh(feed.chain, feed.receivedAt, browserNow);
+  const chain = feed.status === "ok" && fresh ? feed.chain : null;
+  const atm = chain && b.now !== null ? atmContract(chain, side, price, b.now, (x) => bellMinute(x, b.session, b.halfDay)) : null;
+  const premium = premiumCheck(atm?.contract);
+  const plan = row.state?.plan;
+  const dist = plan && plan.entry !== null && plan.stop !== null ? Math.abs(plan.entry - plan.stop) : null;
+  const first = premium ? whichStopFirst(dist, atm?.contract.delta, premium.ask) : null;
+  if (!premium && !room) return null;
+  return (
+    <div data-hero-checks className="text-explain grid gap-0.5">
+      {chain && premium ? (
+        <>
+          <p data-hero-premium={premium.over ? "over" : "under"} className={cn("font-medium", premium.over && "text-warn")}>
+            {premium.line}
+          </p>
+          {first ? (
+            <p data-hero-stop-first={first.first} className="text-muted-foreground">
+              {first.text} Est. from delta.
+            </p>
+          ) : null}
+          <p data-hero-chain className="text-muted-foreground text-xs">
+            {chainStamp(chain)}
+          </p>
+        </>
+      ) : null}
+      {room ? (
+        <p data-hero-room className="text-muted-foreground">
+          {room}
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 /** The words that reassure: never shown while prices are paused. */
@@ -141,7 +195,7 @@ function useFlash(key: string | null): number {
   return n;
 }
 
-function Live({ b, row }: { b: Board; row: BoardRow }) {
+function Live({ b, row, room }: { b: Board; row: BoardRow; room: string | null }) {
   const s = row.state!;
   const v = rowView(s);
   const paused = b.paused || s.state === "paused";
@@ -154,6 +208,8 @@ function Live({ b, row }: { b: Board; row: BoardRow }) {
   const word = paused ? STATE_WORD.paused : v.badge.word;
   const tone: Tone = paused ? "neutral" : v.badge.tone;
   const icon = paused ? Pause : v.badge.alt ? GitBranch : STATE_ICON[s.state];
+  // The side the board points at (an entry or a get-ready), as the ladder and the cards read it: none while paused.
+  const side = !paused && (s.state === "enter_zone" || s.state === "get_ready") ? (s.side ?? null) : null;
   return (
     <div data-hero-paused={paused ? "true" : undefined} className={cn("grid gap-3", paused && "grayscale")}>
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
@@ -187,6 +243,7 @@ function Live({ b, row }: { b: Board; row: BoardRow }) {
           </dl>
         </div>
       ) : null}
+      <HeroChecks b={b} row={row} view={view} side={side} room={room} />
       {!paused && s.cautions.length ? (
         <ul className="flex flex-wrap items-center gap-2" data-hero-cautions={s.cautions.length + s.moreCautions} aria-label="Cautions">
           {s.cautions.slice(0, 2).map((c) => (
@@ -283,8 +340,11 @@ function BeforeLive({ b }: { b: Board }) {
   );
 }
 
-/** The hero at the top of the page; nothing for an older edition or one without focus names. */
-export function NowHero() {
+/**
+ * The hero at the top of the page; nothing for an older edition or one without focus names. `room` is the server's
+ * day-room line (what-if's dayRoom), shown only with the board pointing at a side.
+ */
+export function NowHero({ room = null }: { room?: string | null }) {
   const b = useBoard();
   const live = !!b && b.on && b.mode.kind === "live" && b.rows.length > 0 && b.rows[0]!.state !== null;
   const top = live ? `${b.rows[0]!.symbol}` : b?.on ? `pre:${b.mode.kind}` : null;
@@ -313,7 +373,7 @@ export function NowHero() {
           </button>
         ) : null}
       </div>
-      {row ? <Live b={b} row={row} /> : <BeforeLive b={b} />}
+      {row ? <Live b={b} row={row} room={room} /> : <BeforeLive b={b} />}
       <p className="text-muted-foreground text-xs">Advisory, from the board: confirm on your chart. Read only: nothing here places an order.</p>
     </section>
   );

@@ -37,6 +37,8 @@ const FILES = [
   "../src/lib/session-timeline.ts",
   "../src/lib/wake-lock.ts",
   "../src/components/client/focus-card-live.tsx",
+  "../src/lib/what-if.ts",
+  "../src/components/client/use-chain.ts",
 ];
 
 const BANNED = [

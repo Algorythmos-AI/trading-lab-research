@@ -32,6 +32,8 @@ export interface StripDistance {
   from: "live" | "pre";
   /** This trigger is the nearer of the two. */
   near: boolean;
+  /** 3 or more 1-day moves away: the strip adds "unlikely today", muted. */
+  unlikely: boolean;
 }
 
 /**
@@ -43,7 +45,7 @@ export function stripDistance(view: LadderLiveView, side: CardSide): StripDistan
   const d = view.distances.find((x) => x.to === (side === "call" ? "ceiling" : "floor"));
   if (!d) return null;
   const [away = d.text, ...rest] = d.text.split(" · ");
-  return { away, move: rest.length ? rest.join(" · ") : null, past: d.text.endsWith(" past"), from: view.from, near: d.near };
+  return { away, move: rest.length ? rest.join(" · ") : null, past: d.text.endsWith(" past"), from: view.from, near: d.near, unlikely: d.unlikely };
 }
 
 /** An alternative chip lights up only while the board shows that very alternative live, and never while paused. */

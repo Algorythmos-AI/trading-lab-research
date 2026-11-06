@@ -359,7 +359,7 @@ function FocusCard({
             {b.word}
           </span>
         </div>
-        <FocusStateChip symbol={item.symbol} />
+        <FocusStateChip symbol={item.symbol} live={live} />
       </div>
       {pre ? <PremarketLine pre={pre} /> : null}
       {expiry ? (

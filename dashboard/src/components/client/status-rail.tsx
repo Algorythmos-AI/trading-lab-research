@@ -1,7 +1,7 @@
 "use client";
 
 // The status rail: one strip under the site header, sticky while the page scrolls, that says where the day stands at a
-// glance. The day's limits ("Clear · 0/5 trades · $0 of $100"), the New York clock with the next boundary ("First
+// glance. The day's limits ("Clear · 0/5 trades · $0 of $100") and what one more stop would leave, the New York clock with the next boundary ("First
 // entries in 3:12"), the session as a thin bar with its no-entry windows shaded and a "now" tick, the Today log of the
 // board's changes, the Cockpit switch and the alert switches. Before the open it also carries the "Trade now" board's
 // line, since the board folds away until its first entries.
@@ -186,6 +186,12 @@ export function StatusRail({ day }: { day: RailDay | null }) {
           <p role="status" data-rail-day={day.tone} className={cn("text-explain rounded-md border px-2 py-0.5 font-medium sm:whitespace-nowrap", DAY_TONE[day.tone])}>
             <span className="font-semibold">{day.word}</span>
             <span className="font-mono tabular-nums">{day.line.slice(day.word.length)}</span>
+          </p>
+        ) : null}
+        {/* Next to the day: what one more stop would leave. Only when the journal is current and nothing is open. */}
+        {day?.room ? (
+          <p data-rail-room className="text-explain text-muted-foreground">
+            {day.room}
           </p>
         ) : null}
         {b.on ? (

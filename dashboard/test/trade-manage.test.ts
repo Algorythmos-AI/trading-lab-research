@@ -117,6 +117,53 @@ describe("the manage card on the scripted morning", () => {
   });
 });
 
+describe("the manage card, drawn big and small", () => {
+  const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  const lot = (over: Partial<Lot> = {}): Lot => ({ symbol: "QQQ", kind: "call", strike: 753, expiry: S, side: "long", qty: 2, entry: 1.2, opened_at: new Date(clock(3)).toISOString(), ...over });
+  const esc = (v: string) => v.replace(/[.$]/g, (m) => `\\${m}`);
+
+  it("reads the fresh price only, and the held contract when the journal names it", () => {
+    expect(viewAt(3).price).toBe(scriptQuote("QQQ", S, 3)!.price);
+    expect(viewAt(3, [note()], [], { rowState: "paused" }).price).toBeNull();
+    expect(viewAt(3, [note()], [], { feed: "off" }).price).toBeNull();
+    expect(viewAt(3, [note()], [], { quote: null }).price).toBeNull();
+    expect(viewAt(3, [], [lot()]).contract).toEqual({ expiry: S, strike: 753 });
+    expect(viewAt(3, [], [lot({ strike: null })]).contract).toBeNull();
+    // a note takes its own lot's contract
+    expect(viewAt(3, [note()], [lot({ strike: 755 })]).contract).toEqual({ expiry: S, strike: 755 });
+    expect(viewAt(3).contract).toBeNull();
+  });
+
+  it("draws the action word, the stop, the distance to it and the countdown big; the trail, the flat time and P&L small", () => {
+    const html = renderToStaticMarkup(createElement(ManageCard, { v: viewAt(3) }));
+    expect(html).toMatch(/data-manage-word[^>]*text-decision[^>]*>.*HOLD/);
+    expect(html).toMatch(new RegExp(`data-manage-big="stop".*?text-price[^>]*>${esc(CALL.stop!.toFixed(2))}<`));
+    const dist = (scriptQuote("QQQ", S, 3)!.price - CALL.stop!).toFixed(2);
+    expect(html).toMatch(new RegExp(`data-manage-big="distance".*?QQQ to the stop.*?text-live[^>]*>${esc(`$${dist}`)}<`));
+    expect(html).toMatch(/data-manage-big="not-working".*?text-live[^>]*>(5:00|4:5\d)</);
+    expect(html).toContain('data-manage-small="trail"');
+    expect(html).toContain('data-manage-small="flat"');
+    expect(text(html)).toContain("P&amp;L see Webull");
+    // no live option P&L, and no estimate without a chain answer
+    expect(html).not.toContain("data-manage-option");
+    expect(text(html)).not.toMatch(/\b(Buy|Order|Place)\b/);
+  });
+
+  it("shows no distance on a CHECK card, and says at the stop once the price is through it", () => {
+    const paused = renderToStaticMarkup(createElement(ManageCard, { v: viewAt(3, [note()], [], { rowState: "paused" }) }));
+    expect(paused).not.toContain('data-manage-big="distance"');
+    expect(paused).toContain("CHECK");
+    const exit = renderToStaticMarkup(createElement(ManageCard, { v: viewAt(5) }));
+    expect(exit).toMatch(/data-manage-big="distance".*?>at the stop</);
+  });
+
+  it("puts the countdown small once it no longer runs", () => {
+    const html = renderToStaticMarkup(createElement(ManageCard, { v: viewAt(4) }));
+    expect(html).not.toContain('data-manage-big="not-working"');
+    expect(html).toMatch(/data-manage-small="not-working".*?>done</);
+  });
+});
+
 describe("where an open trade comes from", () => {
   const lot = (over: Partial<Lot> = {}): Lot => ({ symbol: "QQQ", kind: "call", strike: 753, expiry: S, side: "long", qty: 2, entry: 1.2, opened_at: new Date(clock(3)).toISOString(), ...over });
 

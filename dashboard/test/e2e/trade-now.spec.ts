@@ -173,6 +173,46 @@ test("the hero shows the most urgent name: its state word, side and the three nu
   await expect(boardSection(page).locator("[data-board-none]")).toContainText("Nothing to act on: 3 names watching");
 });
 
+test("the what-if checks: the hero prices the at-the-money option against the cap, and AAPL waits inside its box", async ({ page, context, baseURL }) => {
+  await at(context, baseURL, 3);
+  await page.goto("/options");
+  await expect(hero(page)).toHaveAttribute("data-hero-for", "QQQ");
+  await expect(hero(page).locator('[data-hero-word="enter_zone"]')).toBeVisible();
+  // The fixture chain answers for QQQ (no chain-off flag), dated by the server's own clock with its quotes 15 minutes
+  // behind: fresh. Whether the ask is over $2.00 depends on how long the fixture's nearest expiry has left, so only the
+  // shape is asserted.
+  const checks = hero(page).locator("[data-hero-checks]");
+  await expect(checks.locator("[data-hero-premium]")).toHaveAttribute("data-hero-premium", /^(over|under)$/, { timeout: 15_000 });
+  await expect(checks.locator("[data-hero-premium]")).toContainText(/^ATM call \d+ ask \$\d+\.\d\d: \$[\d,]+ a contract/);
+  await expect(checks.locator("[data-hero-chain]")).toContainText(/^Option chain \d\d:\d\d NY · 15 min behind$/);
+  await expect(checks.locator("[data-hero-stop-first]")).toContainText(/comes first/);
+  // the checks sit under the tiles, never above the state word
+  const word = (await hero(page).locator('[data-hero-word="enter_zone"]').boundingBox())!;
+  const tiles = (await hero(page).locator("[data-hero-tiles]").boundingBox())!;
+  const box = (await checks.boundingBox())!;
+  expect(box.y).toBeGreaterThan(word.y);
+  expect(box.y).toBeGreaterThanOrEqual(tiles.y + tiles.height - 1);
+  await expect(hero(page)).not.toContainText(/\b(Buy|Order|Place)\b/);
+  // AAPL sits at 334.63, strictly between its floor 330.70 and ceiling 338.60, on a live price with no trade: the card
+  // says so beside the board's chip. QQQ (an entry) and SPY (a live alternative) never carry it.
+  await expect(page.locator("#focus-card-AAPL [data-focus-state]")).toHaveAttribute("data-focus-state", "no_trade");
+  await expect(page.locator("#focus-card-AAPL [data-inside-box]")).toHaveText("INSIDE BOX · wait");
+  await expect(page.locator("#focus-card-QQQ [data-inside-box]")).toHaveCount(0);
+  await expect(page.locator("#focus-card-SPY [data-inside-box]")).toHaveCount(0);
+});
+
+test("with the option feed off the hero shows no premium check, never an old number", async ({ page, context, baseURL }) => {
+  await context.addCookies([
+    { name: "fx", value: "focus.quotes-script.chain-off", url: baseURL! },
+    { name: "fxstep", value: "3", url: baseURL! },
+  ]);
+  await page.goto("/options");
+  await expect(hero(page).locator('[data-hero-word="enter_zone"]')).toBeVisible();
+  await page.waitForTimeout(2_000);
+  await expect(hero(page).locator("[data-hero-premium]")).toHaveCount(0);
+  await expect(hero(page).locator("[data-hero-stop-first]")).toHaveCount(0);
+});
+
 test("frozen prices grey the hero and say for how long, with no entry shown", async ({ page, context, baseURL }) => {
   await at(context, baseURL, 3);
   await page.goto("/options");

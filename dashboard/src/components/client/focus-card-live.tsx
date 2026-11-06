@@ -4,11 +4,12 @@
 // the board points at, the live distance in each side's strip, and the alternative chips that light up when the board
 // shows one live. Everything they read is the page's one board (trade-now's useBoardRow) and its one live feed
 // (ladder-live's useLadderLive), so the card always says what the board says. Read only: nothing here is an order.
-import { Ban, CircleCheck, Eye, GitBranch, Hourglass, type LucideIcon, OctagonX, Pause, SkipForward, TriangleAlert } from "lucide-react";
+import { Ban, CircleCheck, Eye, GitBranch, Hourglass, type LucideIcon, Minus, OctagonX, Pause, SkipForward, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { StatusBadge } from "@/components/status";
 import { altIsLive, type AltChip, type CardSide, stripDistance, stripEmphasis } from "@/lib/focus-card";
 import type { NameStateName } from "@/lib/trade-state";
+import { INSIDE_BOX_WORD, showInsideBox, UNLIKELY_WORDS } from "@/lib/what-if";
 import { cn } from "@/lib/utils";
 import { type LadderLiveProps, useLadderLive } from "./ladder-live";
 import { boardSide, TestingTag, useBoardRow } from "./trade-now";
@@ -28,12 +29,16 @@ const STATE_ICON: Record<NameStateName, LucideIcon> = {
  * The name's live state in the card's header: the board's badge word, tone, icon and side, then its cautions. Nothing
  * when the board has no live row for the name (before the open, an old edition, prices off).
  */
-export function FocusStateChip({ symbol }: { symbol: string }) {
+export function FocusStateChip({ symbol, live }: { symbol: string; live: LiveInputs }) {
   const r = useBoardRow(symbol);
+  const view = useLadderLive(live);
   const s = r?.row.state;
   const v = r?.view;
   if (!r || !s || !v) return null;
   const icon = r.paused ? Pause : v.badge.alt ? GitBranch : STATE_ICON[s.state];
+  // "INSIDE BOX · wait": only on the ladder's live dot, beside a watch or a no trade (never an entry, a get-ready or an
+  // alternative), with the price strictly between the floor and the ceiling.
+  const inside = showInsideBox({ dot: view.dot, paused: r.paused, state: s.state, alt: !!v.badge.alt, floor: live.floor, ceiling: live.ceiling });
   return (
     <div className="flex flex-wrap items-center gap-1.5" data-focus-state={r.paused ? "paused" : s.state}>
       {/* text-sm (14 px) and its own icon size: the board's badge, at the card's reading size. */}
@@ -41,6 +46,12 @@ export function FocusStateChip({ symbol }: { symbol: string }) {
         {v.badge.word}
         {v.badge.side && !r.paused ? ` · ${v.badge.side.toUpperCase()}` : ""}
       </StatusBadge>
+      {inside ? (
+        <span data-inside-box className="text-muted-foreground inline-flex items-center gap-1 rounded-md border border-dashed px-2 py-0.5 text-sm font-semibold">
+          <Minus aria-hidden className="size-4" />
+          {INSIDE_BOX_WORD}
+        </span>
+      ) : null}
       {v.testing && !r.paused ? <TestingTag /> : null}
       {!r.paused
         ? s.cautions.map((c) => (
@@ -84,7 +95,8 @@ export function SideFrame({ symbol, side, label, children }: { symbol: string; s
 export type LiveInputs = Pick<LadderLiveProps, "symbol" | "session" | "halfDay" | "premarket" | "close" | "closeDate" | "ceiling" | "floor" | "atr" | "move">;
 
 /**
- * The live distance from the price to this side's trigger: "1.18 away" large, "0.2× move" small under it. Nothing when
+ * The live distance from the price to this side's trigger: "1.18 away" large, "0.2× move" small under it (with
+ * "unlikely today" at 3 moves or more). Nothing when
  * the ladder's view has no distance, never a stale number. Its space is always reserved, so nothing moves when it
  * appears.
  */
@@ -104,6 +116,7 @@ export function LiveDistance({ side, live }: { side: CardSide; live: LiveInputs 
             {d.from === "pre" ? "from pre-market" : null}
             {d.from === "pre" && d.move ? " · " : null}
             {d.move}
+            {d.unlikely ? <span data-unlikely> · {UNLIKELY_WORDS}</span> : null}
           </span>
         </span>
       ) : null}

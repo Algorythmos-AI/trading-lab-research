@@ -13,7 +13,8 @@ export type ChainFeed =
   /** The site has no keys for the option feed. */
   | { status: "off" }
   | { status: "error" }
-  | { status: "ok"; chain: ChainResponse };
+  /** `receivedAt`: when the answer reached the browser (its own clock, ms), for the answer's age (what-if's chainAgeMin). */
+  | { status: "ok"; chain: ChainResponse; receivedAt: number };
 
 /**
  * One name's option chain from /api/chain (same origin, so the page's connect-src 'self' holds), asked for again
@@ -60,7 +61,7 @@ export function useChain(
         }
         if (!res.ok) throw new Error(String(res.status));
         const chain = (await res.json()) as ChainResponse;
-        if (!stopped) setFeed({ status: "ok", chain });
+        if (!stopped) setFeed({ status: "ok", chain, receivedAt: Date.now() });
       } catch {
         if (!stopped) setFeed((f) => (f.status === "ok" ? f : { status: "error" }));
         next = RETRY_MS;
