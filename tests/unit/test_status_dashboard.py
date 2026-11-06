@@ -423,6 +423,18 @@ def test_owner_actions_are_detected_and_ranked():
     assert [a["rank"] for a in acts] == list(range(1, len(acts) + 1))
 
 
+def test_a_release_behind_main_is_the_owners_only_while_the_automatic_deploy_is_off():
+    src = _degraded_sources()
+    src["deployed"] = {"ok": True, "data": {"behind": 2, "missing": []}}
+    (manual,) = [a for a in assemble.owner_actions(src, CFG) if a["id"] == "deployed"]
+    assert manual["severity"] == "high" and manual["command"] == "sudo -u wt /usr/local/bin/wt-deploy deploy"
+    assert "2 commits behind" in manual["title"] and "<sha>" not in manual["command"]
+    src["deployed"]["data"]["auto"] = True
+    (auto,) = [a for a in assemble.owner_actions(src, CFG) if a["id"] == "deployed"]
+    assert auto["severity"] == "low" and auto["command"] is None
+    assert auto["title"] == "Waiting for the automatic deploy: 2 newer reviewed commits on main"
+
+
 def test_page_snapshot_cannot_break_out_of_its_script_element(tmp_path):
     docs = {"meta": {"x": "</script><script>alert(1)</script><!--"}}
     html = sd.render_page(docs)

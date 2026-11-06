@@ -111,7 +111,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
           hint={half ? `${half.name} · ${inDays(half.inDays)} · closes 1 pm New York` : "None left in the calendar."}
         />
         <StatTile
-          label="Next time change"
+          label="First session after a time change"
           icon={Clock}
           value={move ? shortDay(move.day) : "—"}
           hint={move ? `${move.cause.where} clocks go ${move.cause.direction}: the open moves from ${move.from} to ${move.to} Sydney.` : "None left in the calendar."}

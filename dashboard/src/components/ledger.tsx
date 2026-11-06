@@ -330,7 +330,9 @@ function NameTile({ n }: { n: LedgerName }) {
           {n.bias_correct === null ? (
             <StatusBadge tone="neutral">No direction call</StatusBadge>
           ) : (
-            <StatusBadge tone={n.bias_correct ? "good" : "bad"}>Direction {n.bias_correct ? "right" : "wrong"}</StatusBadge>
+            // The card's call on the name, not a trade result: a side can still hit its target on a wrong call, so a
+            // wrong call is a warning beside the tickets, never the red of a loss.
+            <StatusBadge tone={n.bias_correct ? "good" : "warn"}>Card&apos;s direction {n.bias_correct ? "right" : "wrong"}</StatusBadge>
           )}
         </span>
       </header>
