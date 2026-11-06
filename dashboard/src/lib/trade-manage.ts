@@ -432,6 +432,8 @@ export interface ManageView {
   price: number | null;
   /** The contract held, when known (OpenTrade.contract). */
   contract: { expiry: string; strike: number } | null;
+  /** The stock price the trade is managed from: the note's fill, or the card's entry for a journal lot (`cardEntry`). */
+  entry: number;
 }
 
 export function mmss(sec: number): string {
@@ -537,6 +539,7 @@ export function manageView(t: OpenTrade, x: ManageInput): ManageView {
     // Never the price of a paused card, even one that says EXIT: a distance from it would be an old number.
     price: !off && !t.unmatched && !cardPaused(x.rowState, x.quote, x.now, x.session) ? x.quote!.price : null,
     contract: t.contract ?? null,
+    entry: t.entry.price,
   };
 }
 

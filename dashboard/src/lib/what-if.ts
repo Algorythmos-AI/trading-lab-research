@@ -9,7 +9,7 @@ import type { OptionKind } from "./bs";
 import type { ChainContract, ChainResponse } from "./chain";
 import { minutesToExpiry, readQuote, STALE_SAME_DAY_MIN } from "./contract";
 import { newYork } from "./format";
-import type { NameStateName } from "./trade-state";
+import type { NameStateName, NoTradeWhy } from "./trade-state";
 import { DAY_LOSS_LIMIT, MAX_PREMIUM, MAX_TRADES_PER_DAY, PREMIUM_STOP, RISK_PER_TRADE, type DayCheck } from "./trade-rules";
 
 const fin = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -51,19 +51,24 @@ export const INSIDE_BOX_WORD = "INSIDE BOX · wait";
 
 /**
  * Whether a card shows the INSIDE BOX chip beside the board's state chip: only on a live price dot (not pre-market,
- * the close, the last trade or paused), only while the board says watch or no trade with no live alternative, and
- * only with the price strictly inside the box. Never beside an entry, a get-ready or an alternative.
+ * the close, the last trade or paused), only while the board says watch, or no trade because the price is in the
+ * middle of yesterday's range, with no live alternative, and only with the price strictly inside the box. Never beside
+ * an entry, a get-ready or an alternative, and never beside a no trade for a closed window (the opening range, the
+ * lunch block, after the flat time, the day's limit, the session closed): "wait" there would promise an entry the
+ * rules will not allow.
  */
 export function showInsideBox(p: {
   dot: { kind: string; price: number } | null;
   paused: boolean;
   state: NameStateName | null | undefined;
+  /** The row's no-trade reason (NameState.why). */
+  why?: NoTradeWhy | null;
   alt: boolean;
   floor: number | null | undefined;
   ceiling: number | null | undefined;
 }): boolean {
   if (!p.dot || p.dot.kind !== "live" || p.paused || p.alt) return false;
-  if (p.state !== "watch" && p.state !== "no_trade") return false;
+  if (p.state !== "watch" && !(p.state === "no_trade" && p.why === "range_middle")) return false;
   return insideBox(p.dot.price, p.floor, p.ceiling);
 }
 
@@ -81,11 +86,13 @@ export function chainPx(close: number | null | undefined, spot: number | null | 
 
 /**
  * How old a chain answer's prices are now, in minutes: how far its newest quote was behind its own `as_of` when it
- * was answered, plus the time since it reached the browser (both read on one clock each, so a server and a browser
- * that disagree on the time cannot make an old answer look new). Null without a quote time or a receipt.
+ * was answered, plus the time since it reached the browser. Each part is read on one clock: the first on the
+ * server's, the second on the browser's monotonic clock (`performance.now()`, which a changed wall clock does not
+ * move), so neither a server and a browser that disagree on the time nor a clock set back can make an old answer look
+ * new. `receivedPerf` and `perfNow` are that monotonic clock, ms. Null without a quote time or a receipt.
  */
-export function chainAgeMin(chain: ChainResponse | null | undefined, receivedAt: number | null | undefined, browserNow: number | null | undefined): number | null {
-  if (!chain || !fin(receivedAt) || !fin(browserNow)) return null;
+export function chainAgeMin(chain: ChainResponse | null | undefined, receivedPerf: number | null | undefined, perfNow: number | null | undefined): number | null {
+  if (!chain || !fin(receivedPerf) || !fin(perfNow)) return null;
   const asOf = Date.parse(chain.as_of);
   let newest = -Infinity;
   for (const x of chain.expiries)
@@ -94,16 +101,17 @@ export function chainAgeMin(chain: ChainResponse | null | undefined, receivedAt:
       if (Number.isFinite(at) && at > newest) newest = at;
     }
   if (!Number.isFinite(asOf) || !Number.isFinite(newest)) return null;
-  return Math.max(0, asOf - newest) / 60_000 + Math.max(0, browserNow - receivedAt) / 60_000;
+  // The monotonic clock never runs backwards; the clamp only guards a caller that passes the two the wrong way round.
+  return Math.max(0, asOf - newest) / 60_000 + Math.max(0, perfNow - receivedPerf) / 60_000;
 }
 
 /** A chain answer is fresh enough for a check while its prices are no older than STALE_SAME_DAY_MIN. */
-export function chainFresh(chain: ChainResponse | null | undefined, receivedAt: number | null | undefined, browserNow: number | null | undefined): boolean {
-  const age = chainAgeMin(chain, receivedAt, browserNow);
+export function chainFresh(chain: ChainResponse | null | undefined, receivedPerf: number | null | undefined, perfNow: number | null | undefined): boolean {
+  const age = chainAgeMin(chain, receivedPerf, perfNow);
   return age !== null && age <= STALE_SAME_DAY_MIN;
 }
 
-/** "Option chain 10:14 NY · 15 min behind": the label on every chain-derived line. */
+/** "Option chain 10:14 NY · 15 min behind": the label on every chain-derived line (the chain's own time and delay). */
 export function chainStamp(chain: ChainResponse): string {
   const at = newYork(chain.as_of, false);
   return `Option chain ${at} NY · ${chain.delay_min} min behind`;
@@ -112,7 +120,9 @@ export function chainStamp(chain: ChainResponse): string {
 /**
  * The at-the-money contract on a side, chosen as the Brief prices one (costs.ts): the nearest expiry still trading at
  * `now`, the strike nearest `price`, the lower of two equally near. `bell` gives an expiry's closing minute (a half
- * day's own expiry ends at 13:00). Null when the chain has none.
+ * day's own expiry ends at 13:00). Null when the chain has none, and null when the nearest strike is more than one
+ * strike step from `price`: a chain asked for before a big move no longer reaches the money, and its nearest strike
+ * is not at it.
  */
 export function atmContract(
   chain: ChainResponse,
@@ -130,6 +140,11 @@ export function atmContract(
     const d = Math.abs(x.strike - price) - Math.abs(best.strike - price);
     return d < 0 || (d === 0 && x.strike < best.strike) ? x : best;
   });
+  // The step is the gap to the next listed strike on either side; a lone strike has none, so it cannot be judged.
+  const strikes = [...new Set(of.map((c) => c.strike))].sort((a, b) => a - b);
+  const i = strikes.indexOf(contract.strike);
+  const gaps = [strikes[i + 1]! - contract.strike, contract.strike - strikes[i - 1]!].filter((g) => Number.isFinite(g) && g > 0);
+  if (!gaps.length || Math.abs(contract.strike - price) > Math.max(...gaps) + 1e-9) return null;
   return { expiry: near.date, contract };
 }
 
@@ -159,12 +174,14 @@ export interface PremiumCheck {
   /** The ask for one contract (100 shares), in dollars. */
   perContract: number;
   over: boolean;
-  /** "ATM call 755 ask $1.45: $145 a contract, under the $2.00 cap", or the over-the-cap line. */
+  /** "ATM call 755 ask $1.45 ($145 a contract), within the $2.00 cap ($200)", or the over-the-cap line. */
   line: string;
 }
 
 /**
- * The at-the-money option's ask for one contract against the premium cap (MAX_PREMIUM, dollars a contract). Null
+ * The at-the-money option's ask for one contract against the premium cap (MAX_PREMIUM, dollars a contract). The line
+ * says each figure a share first, as the platform quotes it, and a contract in brackets, the same form as the rules
+ * strip's "Option under $2.00 ($200 a contract)", so the ask and the cap are always read in the same unit. Null
  * without an ask: nobody offering, or a crossed quote, whose ask is not to be trusted.
  */
 export function premiumCheck(contract: ChainContract | null | undefined, cap: number = MAX_PREMIUM): PremiumCheck | null {
@@ -174,9 +191,9 @@ export function premiumCheck(contract: ChainContract | null | undefined, cap: nu
   const ask = contract.ask;
   const perContract = Math.round(ask * 100 * 100) / 100;
   const over = perContract > cap + 1e-9;
-  const capWords = `the ${usd(cap / 100)} cap`;
-  const head = `ATM ${contract.kind} ${contract.strike} ask ${usd(ask)}: ${whole(perContract)} a contract`;
-  return { ask, perContract, over, line: over ? `${head}. Over ${capWords}: pick a strike further out of the money` : `${head}, under ${capWords}` };
+  const capWords = `the ${usd(cap / 100)} cap (${whole(cap)})`;
+  const head = `ATM ${contract.kind} ${contract.strike} ask ${usd(ask)} (${whole(perContract)} a contract)`;
+  return { ask, perContract, over, line: over ? `${head}, over ${capWords}: pick a strike further out of the money` : `${head}, within ${capWords}` };
 }
 
 // ---- which stop first ---------------------------------------------------------------------------------------------
@@ -227,6 +244,36 @@ export function optionAtStop(distance: number | null | undefined, delta: number 
   return Math.abs(delta) * distance * 100;
 }
 
+/**
+ * $ on the stock from the entry to the stop: what a stop costs the trade, whatever the price is doing now. Null when
+ * the stop is not on the losing side of the entry for the side (a call's below it, a put's above it), or is the
+ * entry: a stop on the wrong side is a mistake in the levels, and taking its size would hide it behind a loss that
+ * looks normal. The hero's which-stop line and the manage card's estimate both measure with this, so they agree.
+ */
+export function entryStopDistance(side: OptionKind, entry: number | null | undefined, stop: number | null | undefined): number | null {
+  if (!fin(entry) || !fin(stop)) return null;
+  const d = Math.round((side === "call" ? entry - stop : stop - entry) * 100) / 100;
+  return d > 0 ? d : null;
+}
+
+/**
+ * The manage card's label for lossFromEntry, naming whose entry it is measured from: a journal lot's fill is unknown,
+ * so its card measures from the card's entry and says so rather than calling it the owner's.
+ */
+export function fromEntryLabel(cardEntry: boolean): string {
+  return `At the stop, from ${cardEntry ? "the card entry" : "your entry"}`;
+}
+
+/** The option's estimated loss if the stop is hit, measured from the entry: |delta| × |entry − stop| × 100. */
+export function lossFromEntry(
+  side: OptionKind,
+  entry: number | null | undefined,
+  stop: number | null | undefined,
+  delta: number | null | undefined,
+): number | null {
+  return optionAtStop(entryStopDistance(side, entry, stop), delta);
+}
+
 // ---- the day's room -------------------------------------------------------------------------------------------------
 /**
  * "A stop now leaves $50 of $100 and 4 trades": the day's room once one more trade is taken and stopped, a stop
@@ -242,4 +289,13 @@ export function dayRoom(c: Pick<DayCheck, "status" | "current" | "used" | "net" 
   if (left <= 0) return `A stop now ends the day: ${room} left.`;
   if (trades === 0) return `A stop now leaves ${room} and no trades: this is the day's last.`;
   return `A stop now leaves ${room} and ${trades} trade${trades === 1 ? "" : "s"}.`;
+}
+
+/**
+ * The day's room line as the page shows it (the rail and the hero alike): none while the board has any open trade card.
+ * The server builds the line from the journal alone, and an "I'm in" note lives only in this browser: its trade is
+ * not priced, and its fill may not have reached the journal yet, so a room worked out without it would be too generous.
+ */
+export function roomShown(room: string | null | undefined, openCards: number): string | null {
+  return room && openCards === 0 ? room : null;
 }

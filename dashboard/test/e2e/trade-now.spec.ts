@@ -11,7 +11,8 @@ async function at(context: BrowserContext, baseURL: string | undefined, step: nu
   ]);
 }
 
-// The board itself; before the open it folds into the status rail, which then carries its marks on one line.
+// The board itself; before the open it folds into the status rail, whose countdown then carries its marks (its line
+// is the hero's headline, not repeated on the rail).
 const board = (page: Page) => page.locator("[data-trade-now]");
 const boardSection = (page: Page) => page.locator("section[data-trade-now]");
 const hero = (page: Page) => page.locator("[data-now-hero]");
@@ -51,7 +52,10 @@ test("before 09:35 the board folds into the rail, and the hero shows the #1 name
   await at(context, baseURL, 0);
   await page.goto("/options");
   await expect(board(page)).toHaveAttribute("data-trade-now", "opening");
-  await expect(rail(page).locator("[data-trade-now]")).toContainText("Opening range forming: first entries from 09:35");
+  await expect(rail(page).locator("[data-trade-now]")).toHaveAttribute("data-board-status", "waiting");
+  // the board's line is said once, as the hero's headline, not again on the rail
+  await expect(hero(page).locator("[data-hero-line]")).toHaveText("Opening range forming: first entries from 09:35");
+  await expect(rail(page)).not.toContainText("Opening range forming");
   await expect(boardSection(page)).toHaveCount(0);
   await expect(rows(page)).toHaveCount(0);
   // the trigger prices live on the hero, the ladders and the cards now
@@ -183,7 +187,7 @@ test("the what-if checks: the hero prices the at-the-money option against the ca
   // shape is asserted.
   const checks = hero(page).locator("[data-hero-checks]");
   await expect(checks.locator("[data-hero-premium]")).toHaveAttribute("data-hero-premium", /^(over|under)$/, { timeout: 15_000 });
-  await expect(checks.locator("[data-hero-premium]")).toContainText(/^ATM call \d+ ask \$\d+\.\d\d: \$[\d,]+ a contract/);
+  await expect(checks.locator("[data-hero-premium]")).toContainText(/^ATM call \d+ ask \$\d+\.\d\d \(\$[\d,]+ a contract\), (within|over) the \$2\.00 cap \(\$200\)/);
   await expect(checks.locator("[data-hero-chain]")).toContainText(/^Option chain \d\d:\d\d NY · 15 min behind$/);
   await expect(checks.locator("[data-hero-stop-first]")).toContainText(/comes first/);
   // the checks sit under the tiles, never above the state word
@@ -206,9 +210,12 @@ test("with the option feed off the hero shows no premium check, never an old num
     { name: "fx", value: "focus.quotes-script.chain-off", url: baseURL! },
     { name: "fxstep", value: "3", url: baseURL! },
   ]);
+  // Wait for the chain request to have answered "not configured" before asserting what is absent, so the check is not
+  // passing only because nothing has answered yet.
+  const off = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/chain" && r.status() === 503, { timeout: 20_000 });
   await page.goto("/options");
   await expect(hero(page).locator('[data-hero-word="enter_zone"]')).toBeVisible();
-  await page.waitForTimeout(2_000);
+  await off;
   await expect(hero(page).locator("[data-hero-premium]")).toHaveCount(0);
   await expect(hero(page).locator("[data-hero-stop-first]")).toHaveCount(0);
 });

@@ -89,7 +89,7 @@ export interface RuleChip {
 
 /**
  * The rules that hold for every name, as chips: "No entries before 09:35", "No entries 11:30–13:00" (not on a half
- * day), "Option under $2.00", "Out after 5 min", "Max 5 a day". New York times, from the board's own constants; the
+ * day), "Option under $2.00 ($200 a contract)", "Out after 5 min", "Max 5 a day". New York times, from the board's own constants; the
  * time chips are left out for a session that is not a day.
  */
 export function ruleChips(session: string | null | undefined, halfDay: boolean): RuleChip[] {
@@ -99,7 +99,8 @@ export function ruleChips(session: string | null | undefined, halfDay: boolean):
   if (t?.lunchFrom && t.lunchTo) out.push({ key: "lunch", text: `No entries ${t.lunchFrom}–${t.lunchTo}`, note: null });
   out.push({
     key: "premium",
-    text: `Option under $${(MAX_PREMIUM / 100).toFixed(2)}`,
+    // A share first, as the platform quotes it, and a contract in brackets: the hero's premium line uses the same form.
+    text: `Option under $${(MAX_PREMIUM / 100).toFixed(2)} ($${MAX_PREMIUM} a contract)`,
     note: `the −${Math.round(PREMIUM_STOP * 100)}% stop loses at most $${RISK_PER_TRADE}`,
   });
   out.push({ key: "time", text: `Out after ${TIME_STOP_MINUTES} min`, note: "if it isn't working" });

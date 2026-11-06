@@ -419,7 +419,7 @@ function FocusCard({
 // ---- under the cards: placed by the page --------------------------------------------------------------------------
 /**
  * The rules that hold for every name, as large chips with this session's New York times: "No entries before 09:35",
- * "No entries 11:30–13:00" (none on a half day), "Option under $2.00", "Out after 5 min", "Max 5 a day".
+ * "No entries 11:30–13:00" (none on a half day), "Option under $2.00 ($200 a contract)", "Out after 5 min", "Max 5 a day".
  */
 export function RulesStrip({ session, halfDay }: { session: string; halfDay: boolean }) {
   const chips = ruleChips(session, halfDay);

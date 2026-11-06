@@ -10,11 +10,15 @@ import {
   chainPx,
   chainStamp,
   dayRoom,
+  entryStopDistance,
+  fromEntryLabel,
   heldOrAtm,
   insideBox,
+  lossFromEntry,
   moveWords,
   optionAtStop,
   premiumCheck,
+  roomShown,
   showInsideBox,
   stopDistance,
   UNLIKELY_MOVES,
@@ -99,10 +103,16 @@ describe("inside the box", () => {
     expect(insideBox(Number.NaN, 330.7, 338.6)).toBe(false);
   });
 
-  const base = { dot: { kind: "live", price: 334.6 }, paused: false, state: "no_trade" as const, alt: false, floor: 330.7, ceiling: 338.6 };
-  it("shows the chip on a live dot beside a watch or a no trade", () => {
+  const base = { dot: { kind: "live", price: 334.6 }, paused: false, state: "no_trade" as const, why: "range_middle" as const, alt: false, floor: 330.7, ceiling: 338.6 };
+  it("shows the chip on a live dot beside a watch or a no trade for the middle of yesterday's range", () => {
     expect(showInsideBox(base)).toBe(true);
-    expect(showInsideBox({ ...base, state: "watch" })).toBe(true);
+    expect(showInsideBox({ ...base, state: "watch", why: undefined })).toBe(true);
+  });
+
+  it("never shows it beside a no trade for a closed window, or one that does not say why", () => {
+    for (const why of ["closed", "opening", "lunch", "late", "day_limit", "no_plan"] as const) expect(showInsideBox({ ...base, why })).toBe(false);
+    expect(showInsideBox({ ...base, why: undefined })).toBe(false);
+    expect(showInsideBox({ ...base, why: null })).toBe(false);
   });
 
   it("never shows it off a live dot, while paused, beside an entry, a get-ready or an alternative", () => {
@@ -119,9 +129,16 @@ describe("inside the box", () => {
 describe("the option chain's age", () => {
   const ch = chain([{ date: "2026-10-12", contracts: strip }]);
   it("adds the feed's lag at the answer to the time since it arrived, on each clock alone", () => {
-    // quotes 15 min behind the answer, received 2 min ago (the browser's clock can be anything)
+    // quotes 15 min behind the answer, received 2 min ago on the browser's monotonic clock
     expect(chainAgeMin(ch, 1_000_000, 1_000_000 + 120_000)).toBeCloseTo(17, 10);
     expect(chainFresh(ch, 1_000_000, 1_000_000 + 120_000)).toBe(true);
+  });
+
+  it("measures the time since the answer on the monotonic clock, so a wall clock set back cannot make it new", () => {
+    // Received at 5 s of page time, read 21 min later: stale, whatever the wall clock was set to in between (the
+    // wall clock is not an input at all).
+    expect(chainAgeMin(ch, 5_000, 5_000 + 21 * 60_000)).toBeCloseTo(36, 10);
+    expect(chainFresh(ch, 5_000, 5_000 + 21 * 60_000)).toBe(false);
   });
 
   it("is stale past STALE_SAME_DAY_MIN, never fresh without a quote time or a receipt", () => {
@@ -182,6 +199,16 @@ describe("the at-the-money contract", () => {
     expect(atmContract(half, "call", 780, after)?.expiry).toBe("2026-11-27");
   });
 
+  it("has none once the price is more than a strike step past the chain's last strike", () => {
+    // the strip runs 775 to 785 in steps of 5: 790 is one step past 785, 790.01 is more
+    expect(atmContract(ch, "call", 790, NOW)?.contract.strike).toBe(785);
+    expect(atmContract(ch, "call", 790.01, NOW)).toBeNull();
+    expect(atmContract(ch, "put", 769.99, NOW)).toBeNull();
+    expect(atmContract(ch, "put", 770, NOW)?.contract.strike).toBe(775);
+    // a lone strike has no step to judge by
+    expect(atmContract(chain([{ date: "2026-10-12", contracts: [c("call", 780, 1.4, 1.5, 0.5)] }]), "call", 780, NOW)).toBeNull();
+  });
+
   it("has none without a price or a contract on that side", () => {
     expect(atmContract(ch, "call", 0, NOW)).toBeNull();
     expect(atmContract(chain([{ date: "2026-10-12", contracts: strip.filter((x) => x.kind === "put") }]), "call", 780, NOW)).toBeNull();
@@ -200,19 +227,19 @@ describe("the at-the-money contract", () => {
 describe("the premium check", () => {
   it("prices one contract at the ask against the $200 cap", () => {
     expect(MAX_PREMIUM).toBe(200);
-    expect(premiumCheck(c("call", 780, 1.4, 1.45))).toEqual({ ask: 1.45, perContract: 145, over: false, line: "ATM call 780 ask $1.45: $145 a contract, under the $2.00 cap" });
+    expect(premiumCheck(c("call", 780, 1.4, 1.45))).toEqual({ ask: 1.45, perContract: 145, over: false, line: "ATM call 780 ask $1.45 ($145 a contract), within the $2.00 cap ($200)" });
     expect(premiumCheck(c("put", 780, 2.3, 2.45))).toEqual({
       ask: 2.45,
       perContract: 245,
       over: true,
-      line: "ATM put 780 ask $2.45: $245 a contract. Over the $2.00 cap: pick a strike further out of the money",
+      line: "ATM put 780 ask $2.45 ($245 a contract), over the $2.00 cap ($200): pick a strike further out of the money",
     });
   });
 
   it("is not over at the cap itself, and rounds the dollars", () => {
     expect(premiumCheck(c("call", 780, 1.9, 2))).toMatchObject({ perContract: 200, over: false });
     expect(premiumCheck(c("call", 780, 1.9, 2.01))).toMatchObject({ perContract: 201, over: true });
-    expect(premiumCheck(c("call", 780, 0.1, 0.155))?.line).toBe("ATM call 780 ask $0.15: $16 a contract, under the $2.00 cap");
+    expect(premiumCheck(c("call", 780, 0.1, 0.155))?.line).toBe("ATM call 780 ask $0.15 ($16 a contract), within the $2.00 cap ($200)");
   });
 
   it("takes an ask with no bid, as the Brief does, but nothing without an ask or from a crossed quote", () => {
@@ -266,6 +293,43 @@ describe("the manage card's estimate", () => {
     expect(stopDistance("call", 753, null)).toBeNull();
   });
 
+  it("measures entry to stop on the losing side only, for a call and a put", () => {
+    expect(entryStopDistance("call", 752.95, 752.01)).toBe(0.94);
+    expect(entryStopDistance("put", 779.1, 780)).toBe(0.9);
+    // a stop on the wrong side of the entry is not given a size, nor a stop at the entry
+    expect(entryStopDistance("call", 752.01, 752.95)).toBeNull();
+    expect(entryStopDistance("put", 780, 779.1)).toBeNull();
+    expect(entryStopDistance("call", 752.01, 752.01)).toBeNull();
+    expect(entryStopDistance("call", null, 752.01)).toBeNull();
+    expect(entryStopDistance("put", 780, undefined)).toBeNull();
+  });
+
+  it("estimates the loss at the stop from the entry, with a delta of either sign", () => {
+    expect(lossFromEntry("call", 752.95, 752.01, 0.5)).toBeCloseTo(47, 10);
+    expect(lossFromEntry("put", 779.1, 780, -0.4)).toBeCloseTo(36, 10);
+    expect(lossFromEntry("call", 752.01, 752.95, 0.5)).toBeNull();
+    expect(lossFromEntry("call", 752.95, 752.01, null)).toBeNull();
+  });
+
+  it("says the same loss for a trade already under water: the live price is not an input", () => {
+    // a call in at 752.95 with the stock now at 752.40, still above the stop at 752.01: the stop costs the trade the
+    // whole entry-to-stop move, not the 0.39 left from the price
+    const live = 752.4;
+    expect(stopDistance("call", live, 752.01)).toBe(0.39);
+    expect(lossFromEntry("call", 752.95, 752.01, 0.5)).toBeCloseTo(47, 10);
+    expect(lossFromEntry("call", 752.95, 752.01, 0.5)).not.toBeCloseTo(optionAtStop(stopDistance("call", live, 752.01), 0.5)!, 1);
+  });
+
+  it("agrees with the hero's which-stop line, which measures the same distance", () => {
+    const d = entryStopDistance("call", 752.95, 752.01);
+    expect(whichStopFirst(d, 0.5, 1.5)!.atChart).toBeCloseTo(lossFromEntry("call", 752.95, 752.01, 0.5)!, 10);
+  });
+
+  it("names whose entry the estimate is from", () => {
+    expect(fromEntryLabel(false)).toBe("At the stop, from your entry");
+    expect(fromEntryLabel(true)).toBe("At the stop, from the card entry");
+  });
+
   it("estimates the option's $ at the stop from delta, for either sign", () => {
     expect(optionAtStop(1.42, 0.24)).toBeCloseTo(34.08, 10);
     expect(optionAtStop(1.42, -0.24)).toBeCloseTo(34.08, 10);
@@ -297,5 +361,13 @@ describe("the day's room after a stop", () => {
     expect(dayRoom({ ...base, status: "stop", net: -110 })).toBeNull();
     expect(dayRoom({ ...base, openLine: "1 position open: its open loss isn't priced here, and rule 7 counts it; check Webull." })).toBeNull();
     expect(dayRoom({ ...base, used: Number.NaN })).toBeNull();
+  });
+
+  it("is not shown while any trade card is open: a noted trade is not in the journal's numbers", () => {
+    const room = dayRoom(base);
+    expect(roomShown(room, 0)).toBe(room);
+    expect(roomShown(room, 1)).toBeNull();
+    expect(roomShown(room, 2)).toBeNull();
+    expect(roomShown(null, 0)).toBeNull();
   });
 });

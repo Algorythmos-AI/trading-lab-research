@@ -39,6 +39,8 @@ const FILES = [
   "../src/components/client/focus-card-live.tsx",
   "../src/lib/what-if.ts",
   "../src/components/client/use-chain.ts",
+  "../src/components/client/use-now.ts",
+  "../src/lib/chain.ts",
 ];
 
 const BANNED = [

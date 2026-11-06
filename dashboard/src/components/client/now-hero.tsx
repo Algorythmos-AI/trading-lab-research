@@ -23,11 +23,11 @@ import { type BoardRow, rowView, type RowView, STATE_WORD } from "@/lib/trade-no
 import type { NameStateName } from "@/lib/trade-state";
 import { cn } from "@/lib/utils";
 import { bellMinute } from "@/lib/contract";
-import { atmContract, chainFresh, chainPx, chainStamp, premiumCheck, UNLIKELY_WORDS, whichStopFirst } from "@/lib/what-if";
+import { atmContract, chainFresh, chainPx, chainStamp, entryStopDistance, premiumCheck, roomShown, UNLIKELY_WORDS, whichStopFirst } from "@/lib/what-if";
 import { useLadderLive } from "./ladder-live";
-import { useLive } from "./live-layer";
 import { type Board, openFocusCard, TestingTag, useBoard } from "./trade-now";
 import { useChain } from "./use-chain";
+import { usePerfNow } from "./use-now";
 
 const STATE_ICON: Record<NameStateName, LucideIcon> = {
   no_trade: Ban,
@@ -117,21 +117,24 @@ function usePriceView(b: Board, symbol: string | null): LadderLiveView {
  * The hero's what-if lines, small, under the tiles: the at-the-money option's cost against the premium cap and which
  * stop comes first (from one option chain, for the hero's name only and only in the live mode with the board pointing
  * at a side), then the day's room after a stop. Each line shows only when its inputs are present and fresh: the chain
- * no older than STALE_SAME_DAY_MIN, labelled with its time and "15 min behind"; nothing at all on old prices.
+ * no older than STALE_SAME_DAY_MIN, for this very name, labelled with its time and "15 min behind"; nothing at all on
+ * old prices. The which-stop line measures entry to stop (entryStopDistance, as the manage card does), and is left out
+ * when the stop is on the wrong side of the entry.
  */
 function HeroChecks({ b, row, view, side, room }: { b: Board; row: BoardRow; view: LadderLiveView; side: "call" | "put" | null; room: string | null }) {
-  const { now: browserNow } = useLive();
+  const perfNow = usePerfNow(1_000);
   const price = view.dot?.kind === "live" ? view.dot.price : null;
   const close = b.ticker(row.symbol)?.last?.close ?? null;
   const on = side !== null && price !== null;
   const { feed } = useChain(row.symbol, on ? chainPx(close, price) : null, on);
   if (!on) return null;
-  const fresh = feed.status === "ok" && chainFresh(feed.chain, feed.receivedAt, browserNow);
+  // The answer must be this name's: a chain for the last hero name is never priced against this one.
+  const fresh = feed.status === "ok" && feed.chain.symbol === row.symbol && chainFresh(feed.chain, feed.receivedPerf, perfNow);
   const chain = feed.status === "ok" && fresh ? feed.chain : null;
   const atm = chain && b.now !== null ? atmContract(chain, side, price, b.now, (x) => bellMinute(x, b.session, b.halfDay)) : null;
   const premium = premiumCheck(atm?.contract);
   const plan = row.state?.plan;
-  const dist = plan && plan.entry !== null && plan.stop !== null ? Math.abs(plan.entry - plan.stop) : null;
+  const dist = plan ? entryStopDistance(side, plan.entry, plan.stop) : null;
   const first = premium ? whichStopFirst(dist, atm?.contract.delta, premium.ask) : null;
   if (!premium && !room) return null;
   return (
@@ -243,7 +246,7 @@ function Live({ b, row, room }: { b: Board; row: BoardRow; room: string | null }
           </dl>
         </div>
       ) : null}
-      <HeroChecks b={b} row={row} view={view} side={side} room={room} />
+      <HeroChecks b={b} row={row} view={view} side={side} room={roomShown(room, b.manage.views.length)} />
       {!paused && s.cautions.length ? (
         <ul className="flex flex-wrap items-center gap-2" data-hero-cautions={s.cautions.length + s.moreCautions} aria-label="Cautions">
           {s.cautions.slice(0, 2).map((c) => (
@@ -342,7 +345,7 @@ function BeforeLive({ b }: { b: Board }) {
 
 /**
  * The hero at the top of the page; nothing for an older edition or one without focus names. `room` is the server's
- * day-room line (what-if's dayRoom), shown only with the board pointing at a side.
+ * day-room line (what-if's dayRoom), shown only with the board pointing at a side and no trade card open (roomShown).
  */
 export function NowHero({ room = null }: { room?: string | null }) {
   const b = useBoard();

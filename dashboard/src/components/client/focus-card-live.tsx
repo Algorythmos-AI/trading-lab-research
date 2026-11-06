@@ -36,9 +36,9 @@ export function FocusStateChip({ symbol, live }: { symbol: string; live: LiveInp
   const v = r?.view;
   if (!r || !s || !v) return null;
   const icon = r.paused ? Pause : v.badge.alt ? GitBranch : STATE_ICON[s.state];
-  // "INSIDE BOX · wait": only on the ladder's live dot, beside a watch or a no trade (never an entry, a get-ready or an
-  // alternative), with the price strictly between the floor and the ceiling.
-  const inside = showInsideBox({ dot: view.dot, paused: r.paused, state: s.state, alt: !!v.badge.alt, floor: live.floor, ceiling: live.ceiling });
+  // "INSIDE BOX · wait": only on the ladder's live dot, beside a watch or a no trade for the middle of yesterday's
+  // range (never a closed window, an entry, a get-ready or an alternative), with the price strictly inside the box.
+  const inside = showInsideBox({ dot: view.dot, paused: r.paused, state: s.state, why: s.why, alt: !!v.badge.alt, floor: live.floor, ceiling: live.ceiling });
   return (
     <div className="flex flex-wrap items-center gap-1.5" data-focus-state={r.paused ? "paused" : s.state}>
       {/* text-sm (14 px) and its own icon size: the board's badge, at the card's reading size. */}

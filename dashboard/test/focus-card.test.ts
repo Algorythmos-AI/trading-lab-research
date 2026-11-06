@@ -74,7 +74,7 @@ describe("the rules as chips", () => {
     expect(ruleChips("2026-10-19", false).map((c) => c.text)).toEqual([
       "No entries before 09:35",
       "No entries 11:30–13:00",
-      "Option under $2.00",
+      "Option under $2.00 ($200 a contract)",
       "Out after 5 min",
       "Max 5 a day",
     ]);

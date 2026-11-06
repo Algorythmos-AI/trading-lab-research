@@ -36,10 +36,10 @@ import { nyClock } from "@/lib/options";
 import type { Bar2 } from "@/lib/trade-state";
 import { cn } from "@/lib/utils";
 import { bellMinute } from "@/lib/contract";
-import { chainFresh, chainPx, heldOrAtm, optionAtStop, stopDistance } from "@/lib/what-if";
-import { useLive } from "./live-layer";
+import { chainFresh, chainPx, chainStamp, entryStopDistance, fromEntryLabel, heldOrAtm, lossFromEntry, stopDistance } from "@/lib/what-if";
 import { TestingTag } from "./trade-now";
 import { useChain } from "./use-chain";
+import { usePerfNow } from "./use-now";
 
 type Item = NonNullable<Options["focus"]>["items"][number];
 
@@ -154,34 +154,36 @@ export interface ChainContext {
 }
 
 /**
- * The option's estimated $ at the stop: |delta| × the stock's distance to the stop × 100, from the held contract's
- * delta (the journal names it) or, failing that, the at-the-money one on that side. One chain for this card's name,
- * asked for only while the card has a fresh price; shown only on an answer no older than STALE_SAME_DAY_MIN, and
- * always said to be an estimate on quotes 15 minutes behind. Nothing otherwise.
+ * The option's estimated loss if the stop is hit: |delta| × |entry − stop| × 100 (what-if's lossFromEntry), measured
+ * from the trade's entry and not from the live price, so it says what the stop costs the trade and agrees with the
+ * hero's which-stop line, which measures the same way. The delta is the held contract's (the journal names it) or,
+ * failing that, the at-the-money one on that side. One chain for this card's name, asked for only while the card has a
+ * fresh price and is not a CHECK; shown only on this name's answer no older than STALE_SAME_DAY_MIN, labelled with
+ * the chain's own time and delay. Nothing once the stop is the entry, or with a stop on the wrong side of it.
  */
-function OptionAtStop({ v, dist, ctx }: { v: ManageView; dist: number | null; ctx: ChainContext }) {
-  const { now: browserNow } = useLive();
-  const on = dist !== null && dist > 0 && v.price !== null && ctx.now !== null;
+function OptionAtStop({ v, ctx }: { v: ManageView; ctx: ChainContext }) {
+  const perfNow = usePerfNow(1_000);
+  const on = v.action !== "check" && v.price !== null && ctx.now !== null && entryStopDistance(v.side, v.entry, v.m.stop) !== null;
   const keep = v.contract ? `${v.contract.expiry}:${v.contract.strike}` : "";
   const { feed } = useChain(v.symbol, on ? chainPx(ctx.close, v.price) : null, on, keep);
-  if (!on || feed.status !== "ok" || !chainFresh(feed.chain, feed.receivedAt, browserNow)) return null;
+  if (!on || feed.status !== "ok" || feed.chain.symbol !== v.symbol || !chainFresh(feed.chain, feed.receivedPerf, perfNow)) return null;
   const c = heldOrAtm(feed.chain, v.side, v.contract, v.price!, ctx.now!, (x) => bellMinute(x, ctx.session, ctx.halfDay));
-  const est = optionAtStop(dist, c?.contract.delta);
+  const est = lossFromEntry(v.side, v.entry, v.m.stop, c?.contract.delta);
   if (!c || est === null) return null;
   return (
     <div className="min-w-0" data-manage-big="option" data-manage-option={c.held ? "held" : "atm"}>
-      <dt className="text-explain text-muted-foreground truncate font-medium">On the option at the stop</dt>
+      <dt className="text-explain text-muted-foreground truncate font-medium">{fromEntryLabel(v.cardEntry)}</dt>
       <dd className="text-live font-mono tabular-nums">≈ −${Math.round(est)}</dd>
       <dd className="text-muted-foreground text-[0.6875rem]">
-        a contract, est. from {c.held ? "your contract's" : "the at-the-money"} delta, 15 min behind
+        on the option, a contract (est. from {c.held ? "your contract's" : "the at-the-money"} delta) · {chainStamp(feed.chain)}
       </dd>
     </div>
   );
 }
 
 /**
- * One open trade: the header, then big the action word, the stop, the distance to it on the stock and the estimated $
- * on the option, and the "not working in" countdown while it runs; small the trail, the flat-by time and where the
+ * One open trade: the header, then big the action word, the stop, the live distance to it on the stock, the option's
+ * estimated loss at the stop from the entry, and the "not working in" countdown while it runs; small the trail, the flat-by time and where the
  * card's numbers come from. No live option P&L: the option feed is 15 minutes behind, so the card says "P&L: see
  * Webull". A journal card adds a CHECK line (its fill is the card's entry) with "Set my fill"; `children` is the form
  * it opens.
@@ -276,7 +278,7 @@ export function ManageCard({
         {dist !== null ? (
           <Big label={`${v.symbol} to the stop`} value={dist > 0 ? `$${dist.toFixed(2)}` : "at the stop"} size="live" tone={dist > 0 ? undefined : "text-bad"} data="distance" />
         ) : null}
-        {ctx ? <OptionAtStop v={v} dist={dist} ctx={ctx} /> : null}
+        {ctx ? <OptionAtStop v={v} ctx={ctx} /> : null}
         {counting ? (
           <Big
             label="Not working in"

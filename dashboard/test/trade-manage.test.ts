@@ -8,6 +8,7 @@ import { SCRIPT_ANSWER_LAG_MS, scriptBars, scriptQuote, stepInstant } from "@/li
 import { focusPlan } from "@/lib/focus-plan";
 import type { Lot, Trade } from "@/lib/journal";
 import { nyInstant, type Options } from "@/lib/options";
+import { fromEntryLabel, lossFromEntry } from "@/lib/what-if";
 import {
   altPlan,
   CARD_ENTRY,
@@ -114,6 +115,41 @@ describe("the manage card on the scripted morning", () => {
     const v = viewAt(3, [note()], [], { rowState: "paused" });
     expect(v.action).toBe("check");
     expect(v.line).toBe("Prices paused: manage this one on your platform");
+  });
+});
+
+describe("the manage card's option estimate, from the entry", () => {
+  it("carries the trade's entry: the note's fill, or the card's entry for a journal lot", () => {
+    expect(viewAt(3).entry).toBe(note().price);
+    const lot: Lot = { symbol: "QQQ", kind: "call", strike: 753, expiry: S, side: "long", qty: 1, entry: 1.2, opened_at: new Date(clock(3)).toISOString() };
+    const j = viewAt(3, [], [lot]);
+    expect(j.cardEntry).toBe(true);
+    expect(j.entry).toBe(CALL.entry);
+    expect(fromEntryLabel(j.cardEntry)).toBe("At the stop, from the card entry");
+    expect(fromEntryLabel(viewAt(3).cardEntry)).toBe("At the stop, from your entry");
+  });
+
+  it("measures entry to stop on a trade already under water, not the live price's distance", () => {
+    const live = scriptQuote("QQQ", S, 3)!.price;
+    // in 0.30 above where the stock is now, still above the stop
+    const under = { ...note(), price: Math.round((live + 0.3) * 100) / 100 };
+    const v = viewAt(3, [under]);
+    expect(v.price).toBe(live);
+    expect(v.price!).toBeLessThan(v.entry);
+    expect(v.m.stop).toBe(CALL.stop);
+    expect(lossFromEntry(v.side, v.entry, v.m.stop, 0.5)).toBeCloseTo(0.5 * (v.entry - CALL.stop!) * 100, 6);
+    expect(lossFromEntry(v.side, v.entry, v.m.stop, 0.5)).toBeGreaterThan(0.5 * (live - CALL.stop!) * 100);
+  });
+
+  it("has no estimate once the stop is the entry (target 1 hit)", () => {
+    const v = viewAt(4);
+    expect(v.stopAtEntry).toBe(true);
+    expect(lossFromEntry(v.side, v.entry, v.m.stop, 0.5)).toBeNull();
+  });
+
+  it("works the same on a put", () => {
+    expect(lossFromEntry("put", 779.1, 780, -0.45)).toBeCloseTo(40.5, 6);
+    expect(lossFromEntry("put", 780, 779.1, -0.45)).toBeNull();
   });
 });
 
