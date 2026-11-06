@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  altTriggers,
   chartLevels,
   CHART_LINES_MAX,
   expiryNote,
@@ -7,7 +8,9 @@ import {
   levelWords,
   noEntryTimes,
 } from "@/lib/focus-plan";
+import { BAR_MINUTES, FAIL_WITHIN_BARS, SWEEP_MIN_ATR } from "@/lib/entry-checks";
 import { focusOptions } from "@/lib/fixture-variants";
+import { runnerLine } from "@/lib/trade-now";
 import type { Options } from "@/lib/options";
 import optionsJson from "./fixtures/options.v1.json";
 
@@ -234,5 +237,54 @@ describe("chart lines", () => {
       "call target 2",
       "put target 2",
     ]);
+  });
+});
+
+// "Also watch" on the focus card: the two other triggers under test, as conditions, with the engine's own numbers.
+describe("the card's other triggers", () => {
+  const item = {
+    symbol: "QQQ",
+    rank: 1,
+    bias: "breakout" as const,
+    atr: 9.1,
+    resistance: { price: 412.3, name: "PDH" },
+    support: { price: 405.1, name: "PDL" },
+  };
+
+  it("describes the failed break at the ceiling and the sweep at the floor in plain words", () => {
+    const alts = altTriggers(focusPlan(item), item.atr);
+    expect(alts.map((a) => [a.kind, a.side, a.level])).toEqual([
+      ["failed_break", "put", 412.3],
+      ["sweep_reclaim", "call", 405.1],
+    ]);
+    expect(alts[0]!.line).toBe(
+      "Failed break: if it closes above 412.30 and back below within 3 bars (6 min), a put under 412.30, stop above the push high",
+    );
+    expect(alts[1]!.line).toBe(
+      "Sweep: if it drops 0.25 × the 2-min ATR under 405.10 and closes back above, a call above 405.10, stop below the sweep low",
+    );
+  });
+
+  it("uses the engine's constants", () => {
+    const line = altTriggers(focusPlan(item), item.atr)[0]!.line;
+    expect(line).toContain(`within ${FAIL_WITHIN_BARS} bars (${FAIL_WITHIN_BARS * BAR_MINUTES} min)`);
+    expect(altTriggers(focusPlan(item), item.atr)[1]!.line).toContain(`${SWEEP_MIN_ATR} × the`);
+  });
+
+  it("has one per level present, and none without the plan's ATR", () => {
+    expect(altTriggers({ ...focusPlan(item), put: null }, 9.1).map((a) => a.kind)).toEqual(["failed_break"]);
+    expect(altTriggers({ ...focusPlan(item), call: null }, 9.1).map((a) => a.kind)).toEqual(["sweep_reclaim"]);
+    expect(altTriggers(focusPlan(item), null)).toEqual([]);
+    expect(altTriggers(focusPlan(item), 0)).toEqual([]);
+  });
+
+  it("writes the runner line from the side's own plan, with the half-day flat time", () => {
+    const { call, put } = focusPlan(item);
+    expect(runnerLine(call, false)).toBe(
+      `Sell half at ${call!.target1!.toFixed(2)}, stop to ${call!.entry!.toFixed(2)}, trail the rest under the 2-min EMA9 to the next level or 15:10. Needs 2 contracts within your $50 risk; otherwise skip.`,
+    );
+    expect(runnerLine(put, true)).toContain("or 12:10.");
+    expect(runnerLine({ ...call!, target1: null }, false)).toBeNull();
+    expect(runnerLine(null, false)).toBeNull();
   });
 });

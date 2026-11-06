@@ -13,6 +13,11 @@ const FILES = [
   "../src/lib/fixture-script.ts",
   "../src/components/client/trade-now.tsx",
   "../src/components/client/use-bars.ts",
+  "../src/lib/focus-plan.ts",
+  "../src/components/options-focus.tsx",
+  "../src/components/client/contract-iv.tsx",
+  "../src/lib/trade-manage.ts",
+  "../src/components/client/trade-manage.tsx",
 ];
 
 const BANNED = [

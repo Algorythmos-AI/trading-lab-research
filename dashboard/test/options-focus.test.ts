@@ -155,3 +155,60 @@ describe("the trading screen", () => {
     expect(html).toContain("$0 of $100");
   });
 });
+
+describe("the focus card as steps", () => {
+  const html = () => renderToStaticMarkup(createElement(FocusStrip, { e: withFocus() }));
+  /** The QQQ card's markup (QQQ has an ATR, so every step is there). */
+  const qqq = () => {
+    const h = html();
+    return h.slice(h.indexOf('id="focus-card-QQQ"'));
+  };
+
+  it("numbers each side's steps in order: trigger, enter, stop, targets, runner", () => {
+    const h = qqq();
+    const call = h.slice(h.indexOf('data-side="call"'), h.indexOf('data-side="put"'));
+    const order = [...call.matchAll(/data-step="(\w+)"/g)].map((m) => m[1]);
+    expect(order).toEqual(["trigger", "enter", "stop", "targets", "runner"]);
+    expect(call).toContain('aria-label="Call plan, in order"');
+    // the price first on each line
+    expect(call).toMatch(/Trigger<\/span><span class="min-w-0"><span class="text-foreground font-mono font-semibold">712.50<\/span>/);
+    expect(call).toContain("A 2-min candle closes above it, then a dip holds it");
+    expect(call).toContain("Limit order about here");
+    expect(call).toContain("711.59");
+    expect(call).toContain("−25% on the option");
+    expect(call).toContain("714.59");
+  });
+
+  it("keeps the runner plan folded, with its Testing tag", () => {
+    const h = qqq();
+    const runner = h.slice(h.indexOf('data-step="runner"'));
+    expect(runner.startsWith('data-step="runner" class')).toBe(true);
+    expect(h).not.toMatch(/<details[^>]*open/);
+    expect(runner).toContain("Runner plan");
+    expect(runner.indexOf("data-testing-tag")).toBeLessThan(runner.indexOf("Sell half at 714.59"));
+  });
+
+  it("lists the two other triggers under Also watch, one line each, tagged as testing", () => {
+    const h = qqq();
+    const also = h.slice(h.indexOf("data-also-watch"));
+    expect(also).toContain("Also watch");
+    expect(also).toContain(
+      "Failed break: if it closes above 712.50 and back below within 3 bars (6 min), a put under 712.50, stop above the push high",
+    );
+    expect(also).toContain("Sweep: if it drops 0.25 × the 2-min ATR under 704.10 and closes back above, a call above 704.10, stop below the sweep low");
+    expect(also.match(/data-testing-tag/g)?.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("without an ATR there is no entry, runner or also-watch, and the stop is said in words", () => {
+    const h = html();
+    const spy = h.slice(h.indexOf('id="focus-card-SPY"'), h.indexOf('id="focus-card-QQQ"'));
+    const order = [...spy.matchAll(/data-step="(\w+)"/g)].map((m) => m[1]);
+    expect(order).toEqual(["trigger", "stop", "trigger", "stop"]);
+    expect(spy).toContain("A 2-min close back below the level, or −25% on the option");
+    expect(spy).not.toContain("data-also-watch");
+  });
+
+  it("adds no separate cautions line: the board shows the live ones", () => {
+    expect(html()).not.toContain("Before you enter");
+  });
+});

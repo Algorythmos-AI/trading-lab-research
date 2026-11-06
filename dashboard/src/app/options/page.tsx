@@ -17,6 +17,7 @@ import { builtFromOld, editionState, isDeskView, isHalfDay, mapView, viewForCloc
 import { showReview } from "@/lib/ledger";
 import { withLeaders } from "@/lib/entry-checks";
 import { boardDay } from "@/lib/trade-now";
+import { sessionView } from "@/lib/journal";
 import { listOptionsDates, loadJournal, loadLedger, loadOptions, loadOptionsLive, pageTime } from "@/lib/snapshot";
 
 export const dynamic = "force-dynamic";
@@ -130,7 +131,7 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
         {/* Top of the trading screen: what to do now, the few names to watch, then the desk; the day's limits sit
             straight under it. The board and the cards share the page's one live feed. */}
         <PaneBoundary name="Trade now">
-          <TradeNow e={full} live={!date} {...day} />
+          <TradeNow e={full} live={!date} {...day} openLots={journal.status === "ok" ? (sessionView(journal.doc, now)?.open ?? []) : []} />
         </PaneBoundary>
         <PaneBoundary name="Today's focus">
           <FocusStrip e={full} />

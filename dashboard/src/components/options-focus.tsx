@@ -14,7 +14,9 @@ import {
 } from "lucide-react";
 import { sydney, weekDate } from "@/lib/format";
 import { sessionView, type JournalDoc } from "@/lib/journal";
+import { TestingTag } from "@/components/client/trade-now";
 import {
+  altTriggers,
   CHART_CODE,
   chartLevels,
   expiryNote,
@@ -36,7 +38,8 @@ import {
   RISK_PER_TRADE,
   TIME_STOP_MINUTES,
 } from "@/lib/trade-rules";
-import type { Options, OptionsTicker } from "@/lib/options";
+import { isHalfDay, type Options, type OptionsTicker } from "@/lib/options";
+import { runnerLine } from "@/lib/trade-now";
 import { cn } from "@/lib/utils";
 
 type Focus = NonNullable<Options["focus"]>;
@@ -91,12 +94,38 @@ function Level({
   );
 }
 
-function Step({ label, children }: { label: string; children: ReactNode }) {
+/** One numbered step of a side's plan: the number, the step's name, then the price first and its words after. */
+function Step({
+  n,
+  label,
+  price,
+  children,
+}: {
+  n: number;
+  label: string;
+  price?: ReactNode;
+  children?: ReactNode;
+}) {
   return (
-    <div className="grid grid-cols-[4.25rem_1fr] gap-x-2">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd>{children}</dd>
-    </div>
+    <li
+      data-step={label.toLowerCase()}
+      className="grid grid-cols-[1rem_3.75rem_1fr] items-baseline gap-x-1.5"
+    >
+      <span
+        aria-hidden
+        className="text-muted-foreground bg-muted flex size-4 items-center justify-center rounded-full font-mono text-[0.625rem] font-semibold"
+      >
+        {n}
+      </span>
+      <span className="text-muted-foreground">{label}</span>
+      <span className="min-w-0">
+        {price}
+        {price && children ? " " : null}
+        {children ? (
+          <span className="text-muted-foreground">{children}</span>
+        ) : null}
+      </span>
+    </li>
   );
 }
 
@@ -119,52 +148,103 @@ const SIDE = {
   },
 } as const;
 
-function SideBlock({ plan }: { plan: SidePlan }) {
+const Price = ({ v }: { v: number | null | undefined }) => (
+  <span className="text-foreground font-mono font-semibold">{px(v)}</span>
+);
+
+/**
+ * One side of a focus name as numbered steps, one line each with the price first: 1 Trigger, 2 Enter, 3 Stop,
+ * 4 Targets, then 5 Runner, an exit plan under test, folded like the board's runner plan.
+ */
+function SideBlock({ plan, halfDay }: { plan: SidePlan; halfDay: boolean }) {
   const s = SIDE[plan.side];
   const stopPct = Math.round(PREMIUM_STOP * 100);
+  const runner = runnerLine(plan, halfDay);
+  let n = 0;
   return (
-    <div className={cn("rounded border border-l-4 px-2 py-1.5", s.edge)}>
+    <div
+      className={cn("rounded border border-l-4 px-2 py-1.5", s.edge)}
+      data-side={plan.side}
+    >
       <p className={cn("mb-1 text-xs font-semibold", s.text)}>{s.title}</p>
-      <dl className="grid gap-0.5 text-xs leading-snug">
-        <Step label="Trigger">
-          A {CONFIRM_BAR_MINUTES}-min candle closes {s.over}{" "}
-          <span className="font-mono font-semibold">{px(plan.level)}</span>,
-          then {s.retest}
+      <ol
+        aria-label={`${plan.side === "call" ? "Call" : "Put"} plan, in order`}
+        className="grid gap-0.5 text-xs leading-snug"
+      >
+        <Step n={++n} label="Trigger" price={<Price v={plan.level} />}>
+          A {CONFIRM_BAR_MINUTES}-min candle closes {s.over} it, then {s.retest}
         </Step>
         {plan.entry != null ? (
-          <Step label="Enter">
-            Limit order about{" "}
-            <span className="font-mono font-semibold">{px(plan.entry)}</span>
+          <Step n={++n} label="Enter" price={<Price v={plan.entry} />}>
+            Limit order about here
           </Step>
         ) : null}
-        <Step label="Stop">
-          {plan.stop != null ? (
-            <>
-              A {CONFIRM_BAR_MINUTES}-min close {s.back}{" "}
-              <span className="font-mono font-semibold">{px(plan.stop)}</span>,
-              or −{stopPct}% on the option
-            </>
-          ) : (
-            <>
-              A {CONFIRM_BAR_MINUTES}-min close back {s.back} the level, or −
-              {stopPct}% on the option
-            </>
-          )}
+        <Step
+          n={++n}
+          label="Stop"
+          price={plan.stop != null ? <Price v={plan.stop} /> : null}
+        >
+          {plan.stop != null
+            ? `A ${CONFIRM_BAR_MINUTES}-min close ${s.back} it, or −${stopPct}% on the option`
+            : `A ${CONFIRM_BAR_MINUTES}-min close back ${s.back} the level, or −${stopPct}% on the option`}
         </Step>
         {plan.target1 != null || plan.target2 ? (
-          <Step label="Targets">
-            {plan.target1 != null ? (
-              <span className="font-mono font-semibold">
-                {px(plan.target1)}
-              </span>
-            ) : null}
-            {plan.target1 != null && plan.target2 ? ", then " : null}
-            {plan.target2 ? (
-              <Level price={plan.target2.price} name={plan.target2.name} />
-            ) : null}
-          </Step>
+          <Step
+            n={++n}
+            label="Targets"
+            price={
+              <>
+                {plan.target1 != null ? <Price v={plan.target1} /> : null}
+                {plan.target1 != null && plan.target2 ? ", then " : null}
+                {plan.target2 ? (
+                  <Level price={plan.target2.price} name={plan.target2.name} />
+                ) : null}
+              </>
+            }
+          />
         ) : null}
-      </dl>
+        {runner ? (
+          <li className="grid grid-cols-[1rem_1fr] items-baseline gap-x-1.5">
+            <span
+              aria-hidden
+              className="text-muted-foreground bg-muted flex size-4 items-center justify-center rounded-full font-mono text-[0.625rem] font-semibold"
+            >
+              {++n}
+            </span>
+            <details data-step="runner" className="text-muted-foreground">
+              <summary className="hover:text-foreground flex w-fit cursor-pointer items-center gap-1.5 select-none">
+                Runner plan <TestingTag />
+              </summary>
+              <p className="mt-0.5">{runner}</p>
+            </details>
+          </li>
+        ) : null}
+      </ol>
+    </div>
+  );
+}
+
+/** The two other triggers at the name's levels, one line each, under test. The board shows them live. */
+function AlsoWatch({ item }: { item: Item }) {
+  const alts = altTriggers(focusPlan(item), item.atr);
+  if (!alts.length) return null;
+  return (
+    <div className="grid gap-0.5 text-xs leading-snug" data-also-watch>
+      <p className="text-muted-foreground text-[0.6875rem] font-semibold tracking-wide uppercase">
+        Also watch
+      </p>
+      <ul className="grid gap-0.5">
+        {alts.map((a) => (
+          <li
+            key={a.kind}
+            data-alt={a.kind}
+            className="flex items-start gap-1.5"
+          >
+            <span className="min-w-0 flex-1">{a.line}</span>
+            <TestingTag />
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -343,11 +423,13 @@ function FocusCard({
   pre,
   levels,
   session,
+  halfDay,
 }: {
   item: Item;
   pre: Pre | undefined;
   levels: OptionsTicker["levels"];
   session: string;
+  halfDay: boolean;
 }) {
   const b = BIAS[item.bias];
   const plan = focusPlan(item);
@@ -399,8 +481,9 @@ function FocusCard({
       {expiry ? (
         <p className="text-warn text-xs leading-snug">{expiry}</p>
       ) : null}
-      {plan.call ? <SideBlock plan={plan.call} /> : null}
-      {plan.put ? <SideBlock plan={plan.put} /> : null}
+      {plan.call ? <SideBlock plan={plan.call} halfDay={halfDay} /> : null}
+      {plan.put ? <SideBlock plan={plan.put} halfDay={halfDay} /> : null}
+      <AlsoWatch item={item} />
     </li>
   );
 }
@@ -488,6 +571,7 @@ export function FocusStrip({ e }: { e: Options }) {
             pre={pre.get(i.symbol)}
             levels={levels.get(i.symbol)}
             session={e.session}
+            halfDay={isHalfDay(e)}
           />
         ))}
       </ul>

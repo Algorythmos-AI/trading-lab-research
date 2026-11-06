@@ -2,13 +2,15 @@
 // browser tests and the design screenshots can show every state of the "Trade now" board with no network. Synthetic
 // numbers; nothing here is market data. Pure: no I/O and no clock (the caller passes the step).
 //
-// Five steps, each a New York time on the fixture's session:
+// Six steps, each a New York time on the fixture's session:
 //   0 09:45  the opening range is forming
 //   1 10:10  QQQ and SPY watch their ceilings; AAPL sits in the middle of yesterday's range
 //   2 10:22:30  QQQ has broken its ceiling and waits for a dip; SPY is above its ceiling with no 2-min close yet
 //   3 10:28:30  QQQ's dip held inside the retest window (enter zone, with SMH below its VWAP against calls); SPY fell
 //               back (plan off, with a live failed break)
-//   4 10:41  QQQ ran past target 1 without you (missed); SPY's failed break has expired
+//   4 10:41  QQQ ran past target 1 without you (missed); SPY's failed break has expired. A trade noted at step 3
+//            reads "Target 1 hit: sell half"
+//   5 10:47:30  QQQ has fallen back under the step-3 price: that trade reads "Below the stop: exit"
 // AAPL stays in the middle third of yesterday's range throughout.
 import { nyInstant } from "./options";
 import type { Bar2 } from "./trade-state";
@@ -17,7 +19,14 @@ import type { Bar2 } from "./trade-state";
 export const STEP_COOKIE = "fxstep";
 export const SCRIPT_STEP_MS = 6_000;
 /** Seconds after New York midnight of each step. */
-export const SCRIPT_STEPS: readonly number[] = [9 * 3600 + 45 * 60, 10 * 3600 + 10 * 60, 10 * 3600 + 22 * 60 + 30, 10 * 3600 + 28 * 60 + 30, 10 * 3600 + 41 * 60];
+export const SCRIPT_STEPS: readonly number[] = [
+  9 * 3600 + 45 * 60,
+  10 * 3600 + 10 * 60,
+  10 * 3600 + 22 * 60 + 30,
+  10 * 3600 + 28 * 60 + 30,
+  10 * 3600 + 41 * 60,
+  10 * 3600 + 47 * 60 + 30,
+];
 /** The feed answers this long after the step's last trade. */
 export const SCRIPT_ANSWER_LAG_MS = 3_000;
 /** The focus names the script adds beside the fixture's SPY and QQQ. */
@@ -39,8 +48,11 @@ const PATHS: Readonly<Record<string, readonly (readonly [number, number])[]>> = 
     [hms(10, 26), 753.3],
     [hms(10, 30), 753.5],
     [hms(10, 36), 754.6],
-    [hms(10, 40), 755.2],
-    [hms(10, 50), 755.0],
+    [hms(10, 39, 45), 754.8],
+    [hms(10, 41), 755.1],
+    [hms(10, 43), 754.0],
+    [hms(10, 47), 752.6],
+    [hms(10, 50), 752.4],
   ],
   SPY: [
     [hms(9, 30), 778.3],

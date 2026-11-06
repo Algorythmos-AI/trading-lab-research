@@ -132,3 +132,38 @@ test("fits a 375 px screen with no sideways scroll", async ({ page, context, bas
   expect(box!.x).toBeGreaterThanOrEqual(0);
   expect(box!.x + box!.width).toBeLessThanOrEqual(375);
 });
+
+test("I'm in at the entry opens the manage card, which reads target 1 hit and then exit", async ({ page, context, baseURL }) => {
+  await at(context, baseURL, 3);
+  await page.goto("/options");
+  const entry = rows(page).first();
+  await expect(entry).toHaveAttribute("data-board-state", "enter_zone");
+  await entry.getByRole("button", { name: "I'm in" }).click();
+  const form = page.locator('[data-im-in-form="QQQ"]');
+  const price = form.getByLabel("QQQ price at your fill");
+  await expect(price).toHaveValue(/^753\.\d\d$/);
+  // a price far from the live one is refused in place
+  await price.fill("900");
+  await form.getByRole("button", { name: "Save note" }).click();
+  await expect(form.getByRole("alert")).toContainText("more than 5% from the live price");
+  await expect(price).toHaveAttribute("aria-invalid", "true");
+  await price.fill("753.43");
+  await form.getByRole("button", { name: "Save note" }).click();
+  const card = page.locator('[data-manage="QQQ"]');
+  await expect(card).toContainText("In a trade · QQQ call");
+  await expect(card).toContainText("Your own note in this browser");
+  await expect(card).toHaveAttribute("data-manage-action", "hold");
+  await expect(card.locator("[data-manage-line]")).toContainText("Holding: stop 752.01");
+  await at(context, baseURL, 4);
+  await expect(card).toHaveAttribute("data-manage-action", "sell_half", { timeout: 15_000 });
+  await expect(card.locator("[data-manage-line]")).toContainText("Target 1 hit: sell half, stop to 753.43");
+  await expect(page.locator('[data-manage-notice="QQQ"]')).toContainText("QQQ call: SELL HALF");
+  await at(context, baseURL, 5);
+  await expect(card).toHaveAttribute("data-manage-action", "exit", { timeout: 15_000 });
+  await expect(card.locator("[data-manage-line]")).toContainText("Below the stop 753.43: exit");
+  // the note outlives a reload, and Clear ends it
+  await page.reload();
+  await expect(card).toHaveAttribute("data-manage-action", "exit");
+  await card.getByRole("button", { name: "Clear" }).click();
+  await expect(card).toHaveCount(0);
+});
