@@ -1,5 +1,6 @@
 import "server-only";
 import { FIXTURE_OFFSET_ATR, flagsFromCookieHeader, tickPrice } from "./fixture-variants";
+import { SCRIPT_ANSWER_LAG_MS, scriptQuote, scriptStep, stepFromCookieHeader, stepInstant } from "./fixture-script";
 import { logEvent } from "./log";
 import type { OptionsEdition } from "./options.types";
 import { alpacaKeys, fetchQuotes, parseSymbols, type Quote, type QuoteResponse } from "./quote";
@@ -38,9 +39,29 @@ async function fixtureQuotes(symbols: string[], now: Date, tick = false): Promis
       low: Math.min(price, close),
       day: e.session,
       prev_close: close,
+      // Halfway between the open and the price: a VWAP that sits on the side the session has moved to.
+      vwap: Math.round(((close + price) / 2) * 100) / 100,
     };
   }
   return { as_of: now.toISOString(), feed: "iex", quotes, missing, fixture: true };
+}
+
+/**
+ * Fixture mode with `quotes-script`: the scripted names' quotes at the step (the `fxstep` cookie's, or one that
+ * follows the server's clock), the leader SMH among them. The answer is dated the step, a few seconds after its last
+ * trade, so the page's clock (the feed's `as_of`) stands at the step whatever the browser's clock says.
+ */
+async function scriptedQuotes(symbols: string[], step: number): Promise<QuoteResponse> {
+  const mod = await import("../../test/fixtures/options.v1.json");
+  const e = (mod.default ?? mod) as unknown as OptionsEdition;
+  const quotes: Record<string, Quote> = {};
+  const missing: string[] = [];
+  for (const s of symbols) {
+    const q = scriptQuote(s, e.session, step, e.tickers.find((x) => x.symbol === s)?.last?.close ?? null);
+    if (q) quotes[s] = q;
+    else missing.push(s);
+  }
+  return { as_of: new Date(stepInstant(e.session, step) + SCRIPT_ANSWER_LAG_MS).toISOString(), feed: "iex", quotes, missing, fixture: true };
 }
 
 /** GET /api/quote?s=SPY,QQQ: live last trades from Alpaca's IEX feed. 503 until the keys are set. */
@@ -51,6 +72,7 @@ export async function handleQuote(req: Request, now: Date = new Date()): Promise
     const flags = flagsFromCookieHeader(req.headers.get("cookie"));
     if (flags.has("quotes-off")) return json(503, { error: "not-configured" });
     if (flags.has("quotes-error")) return json(502, { error: "upstream" });
+    if (flags.has("quotes-script")) return json(200, await scriptedQuotes(symbols, scriptStep(stepFromCookieHeader(req.headers.get("cookie")), now.getTime())));
     return json(200, await fixtureQuotes(symbols, now, flags.has("quotes-tick")));
   }
   const keys = alpacaKeys();

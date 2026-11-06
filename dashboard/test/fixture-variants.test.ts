@@ -32,6 +32,7 @@ function quoteAt(t: OptionsTicker, session: string, second: number): LiveQuote |
     low: Math.min(price, close),
     day: session,
     prev_close: close,
+    vwap: Math.round(((close + price) / 2) * 100) / 100,
   };
 }
 

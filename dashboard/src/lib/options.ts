@@ -178,6 +178,8 @@ export interface LiveQuote {
   low: number | null;
   day: string | null;
   prev_close: number | null;
+  /** The session's VWAP so far on IEX, or null when the feed gives none. */
+  vwap: number | null;
 }
 
 /** New York date and minutes after midnight of an instant. Null for an unreadable time. */

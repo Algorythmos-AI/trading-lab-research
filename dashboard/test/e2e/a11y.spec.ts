@@ -115,6 +115,39 @@ for (const theme of ["light", "dark"] as const) {
     expect(await scan(page)).toEqual([]);
   });
 
+  test(`the "Trade now" board passes the accessibility scan in ${theme}, with an entry, a plan off and a notice`, async ({ page, context, baseURL }) => {
+    await useTheme(context, theme);
+    await context.addCookies([
+      { name: "fx", value: "focus.quotes-script", url: baseURL! },
+      { name: "fxstep", value: "2", url: baseURL! },
+    ]);
+    await page.goto("/options");
+    await expect(page.locator("[data-board-row]").first()).toHaveAttribute("data-board-state", "get_ready");
+    await context.addCookies([{ name: "fxstep", value: "3", url: baseURL! }]);
+    await expect(page.locator("[data-board-notice]")).toHaveCount(2, { timeout: 15_000 });
+    await page.locator("[data-board-runner] summary").click();
+    expect(await scan(page)).toEqual([]);
+  });
+
+  test(`the "I'm in" form and the manage card pass the accessibility scan in ${theme}`, async ({ page, context, baseURL }) => {
+    await useTheme(context, theme);
+    await context.addCookies([
+      { name: "fx", value: "focus.quotes-script", url: baseURL! },
+      { name: "fxstep", value: "3", url: baseURL! },
+    ]);
+    await page.goto("/options");
+    await page.getByRole("button", { name: "I'm in" }).first().click();
+    const form = page.locator("[data-im-in-form]");
+    await form.getByLabel(/price at your fill/).fill("900");
+    await form.getByRole("button", { name: "Save note" }).click();
+    await expect(form.getByRole("alert")).toBeVisible();
+    expect(await scan(page)).toEqual([]);
+    await form.getByLabel(/price at your fill/).fill("753.43");
+    await form.getByRole("button", { name: "Save note" }).click();
+    await expect(page.locator("[data-manage]")).toBeVisible();
+    expect(await scan(page)).toEqual([]);
+  });
+
   for (const fx of OPTIONS_STATES) {
     test(`/options in the ${fx} state passes the accessibility scan in ${theme}`, async ({ page, context, baseURL }) => {
       await useTheme(context, theme);

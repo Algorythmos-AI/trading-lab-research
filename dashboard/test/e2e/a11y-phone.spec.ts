@@ -21,6 +21,39 @@ for (const theme of ["light", "dark"] as const) {
     });
   }
 
+  test(`the "Trade now" board, its alert menu and a notice pass the accessibility scan on a phone in ${theme}`, async ({ page, context, baseURL }) => {
+    await useTheme(context, theme);
+    await context.addCookies([
+      { name: "fx", value: "focus.quotes-script", url: baseURL! },
+      { name: "fxstep", value: "2", url: baseURL! },
+    ]);
+    await page.goto("/options");
+    await expect(page.locator("[data-board-row]").first()).toHaveAttribute("data-board-state", "get_ready");
+    await context.addCookies([{ name: "fxstep", value: "3", url: baseURL! }]);
+    await expect(page.locator("[data-board-notice]")).toHaveCount(2, { timeout: 15_000 });
+    await page.getByRole("button", { name: "Alerts: sound and browser notification" }).click();
+    expect(await scan(page)).toEqual([]);
+  });
+
+  test(`the "I'm in" form and the manage card pass the accessibility scan on a phone in ${theme}`, async ({ page, context, baseURL }) => {
+    await useTheme(context, theme);
+    await context.addCookies([
+      { name: "fx", value: "focus.quotes-script", url: baseURL! },
+      { name: "fxstep", value: "3", url: baseURL! },
+    ]);
+    await page.goto("/options");
+    await page.getByRole("button", { name: "I'm in" }).first().click();
+    const form = page.locator("[data-im-in-form]");
+    await form.getByLabel(/price at your fill/).fill("900");
+    await form.getByRole("button", { name: "Save note" }).click();
+    await expect(form.getByRole("alert")).toBeVisible();
+    expect(await scan(page)).toEqual([]);
+    await form.getByLabel(/price at your fill/).fill("753.43");
+    await form.getByRole("button", { name: "Save note" }).click();
+    await expect(page.locator("[data-manage]")).toBeVisible();
+    expect(await scan(page)).toEqual([]);
+  });
+
   test(`the contract pane passes the accessibility scan on a phone in ${theme}`, async ({ page, context }) => {
     await useTheme(context, theme);
     await page.goto("/options?view=live&pane=name");

@@ -9,7 +9,7 @@ const KEYS = { id: "test-key-id", secret: "test-key-secret" };
 const snap = (p: number) => ({
   latestTrade: { t: "2026-10-12T14:59:58.123456789Z", p, s: 100 },
   latestQuote: { ap: p + 0.01, bp: p - 0.01 },
-  dailyBar: { t: "2026-10-12T04:00:00Z", o: 779, h: 781, l: 777.5, c: p, v: 1 },
+  dailyBar: { t: "2026-10-12T04:00:00Z", o: 779, h: 781, l: 777.5, c: p, v: 1, vw: 779.42 },
   prevDailyBar: { t: "2026-10-09T04:00:00Z", o: 776.24, h: 779.4, l: 775.16, c: 778.55, v: 1 },
 });
 
@@ -61,7 +61,16 @@ describe("normalise", () => {
       low: 777.5,
       day: "2026-10-12",
       prev_close: 778.55,
+      vwap: 779.42,
     });
+  });
+
+  it("reads the day bar's VWAP only when it is a positive number", () => {
+    const base = snap(779.1);
+    for (const vw of [0, -1, Number.NaN, "779", null, undefined]) {
+      expect(normalise({ ...base, dailyBar: { ...base.dailyBar, vw } })!.vwap).toBeNull();
+    }
+    expect(normalise({ ...base, dailyBar: null })!.vwap).toBeNull();
   });
 
   it("is null without a usable trade", () => {
