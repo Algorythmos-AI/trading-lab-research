@@ -51,7 +51,7 @@ function ClassicOptions({ e, dates, date, now }: { e: Options; dates: string[]; 
             </PaneBoundary>
           </div>
           <PaneBoundary name="At a glance">
-            <OptionsGlance tickers={e.tickers} live={!date}>
+            <OptionsGlance tickers={e.tickers} live={!date} focus={e.focus ?? null}>
               <BoardTable e={e} />
             </OptionsGlance>
           </PaneBoundary>

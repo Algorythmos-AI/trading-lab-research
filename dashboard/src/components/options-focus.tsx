@@ -12,7 +12,7 @@ import {
   MoveHorizontal,
   Target,
 } from "lucide-react";
-import { sydney, weekDate } from "@/lib/format";
+import { newYork, weekDate } from "@/lib/format";
 import { sessionView, type JournalDoc } from "@/lib/journal";
 import { TestingTag } from "@/components/client/trade-now";
 import {
@@ -489,7 +489,7 @@ function FocusCard({
   );
 }
 
-/** The rules that hold for every name, said once under the cards, with the no-entry times in Sydney for this session. */
+/** The rules that hold for every name, said once under the cards, with the no-entry times (New York) for this session. */
 function Always({ session }: { session: string }) {
   const t = noEntryTimes(session);
   const premium = (MAX_PREMIUM / 100).toFixed(2);
@@ -499,7 +499,7 @@ function Always({ session }: { session: string }) {
         <span className="text-foreground font-semibold">Skip</span> a name while
         it chops between its ceiling and floor
         {t
-          ? `, and take no entries before ${t.firstEntry} or between ${t.lunchFrom} and ${t.lunchTo} Sydney`
+          ? `, and take no entries before ${t.firstEntry} or between ${t.lunchFrom} and ${t.lunchTo} New York`
           : ""}
         . <span className="text-foreground font-semibold">Size:</span> an option
         under ${premium}, so the −{Math.round(PREMIUM_STOP * 100)}% stop loses
@@ -556,9 +556,9 @@ export function FocusStrip({ e }: { e: Options }) {
         </div>
         <p className="text-muted-foreground text-xs">
           {f.premarket
-            ? `Pre-market check ${sydney(f.premarket.as_of)} Sydney. `
+            ? `Pre-market check ${newYork(f.premarket.as_of)} New York. `
             : f.picked_at
-              ? `Picked ${sydney(f.picked_at)} Sydney. `
+              ? `Picked ${newYork(f.picked_at)} New York. `
               : ""}
           Enter only on a break then retest.
         </p>
@@ -653,7 +653,15 @@ export function DayBar({
           ${loss.toFixed(0)} of ${DAY_LOSS_LIMIT}
         </span>
       </span>
-      <span className="text-muted-foreground text-xs">{c.line}</span>
+      <span className="text-muted-foreground text-xs">
+        {c.openLine ? c.line.replace(c.openLine, "").replace(/\s{2,}/g, " ").trim() : c.line}
+      </span>
+      {/* Open positions: rule 7 counts their open loss, which the journal cannot price. A caution, never a count. */}
+      {c.openLine ? (
+        <span data-day-open className="text-warn text-xs font-medium">
+          {c.openLine}
+        </span>
+      ) : null}
     </div>
   );
 }

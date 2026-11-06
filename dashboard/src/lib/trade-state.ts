@@ -13,7 +13,9 @@
 import {
   BAR_MINUTES,
   type CheckInput,
+  type CheckResult,
   type Caution,
+  deskCautions,
   entryChecks,
   FAIL_WITHIN_BARS,
   levelOf,
@@ -36,8 +38,9 @@ const BAR_MS = BAR_MINUTES * 60_000;
 export const RETEST_ATR = 0.1;
 /** The trail after target 1: the EMA of this many 2-minute closes (bars.ema_fast). */
 export const EMA_FAST = 9;
-/** First entries from 10:00 New York. */
-export const FIRST_ENTRY_MIN = 10 * 60;
+/** First entries from 09:35 New York: the owner's rule (DEC-0043). 09:35 to 10:00 carries the desk's own "early"
+ * caution (entry-checks' deskCautions); the clone's tested window still starts at 10:00. */
+export const FIRST_ENTRY_MIN = 9 * 60 + 35;
 /** Flat by 15:10 New York. */
 export const FLAT_MIN = 15 * 60 + 10;
 /** On a half day, flat this many minutes before the 13:00 close: 12:10, the clone's `day.half_day.flatten`. */
@@ -495,7 +498,7 @@ const dist = (x: SideState) => (x.distAtr !== null ? ` (${x.distAtr.toFixed(1)} 
 
 /**
  * The one row for a focus name. `n.now` is the feed's (server) clock. In order: a stale feed in the session pauses
- * it; before 10:00, from the flat time (15:10, or 50 minutes before a half day's 13:00 close: 12:10) or with the
+ * it; before 09:35 (FIRST_ENTRY_MIN), from the flat time (15:10, or 50 minutes before a half day's 13:00 close: 12:10) or with the
  * day's limit used it is no trade; with the price in the
  * middle third of yesterday's range and nothing broken, no trade; otherwise the more urgent side: enter zone, then a
  * live alternative trigger, get ready, watch, plan off and missed.
@@ -526,7 +529,10 @@ export function nameState(n: NameInput): NameState {
       now: n.now,
       wonToday: n.wonToday,
     };
-    const checks = pick && state !== "paused" && state !== "no_trade" ? entryChecks(checkIn, pick.alt && pick.state !== "enter_zone" && pick.state !== "get_ready" ? pick.alt.side : pick.side) : { cautions: [], unknown: [] };
+    const active = pick && state !== "paused" && state !== "no_trade";
+    const clone: CheckResult = active ? entryChecks(checkIn, pick.alt && pick.state !== "enter_zone" && pick.state !== "get_ready" ? pick.alt.side : pick.side) : { cautions: [], unknown: [] };
+    // The desk's own caution (09:35 to 10:00) goes after the clone-mirroring checks, computed apart from them.
+    const checks: CheckResult = { ...clone, cautions: [...clone.cautions, ...(active ? deskCautions(n.now, n.halfDay, FIRST_ENTRY_MIN) : [])] };
     return {
       symbol: n.symbol,
       state,

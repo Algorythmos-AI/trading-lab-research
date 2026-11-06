@@ -2,7 +2,7 @@
 
 import { ArrowDown, ArrowUp, ChartCandlestick, ChevronLeft, ChevronRight, Keyboard, List, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { RoomBar } from "@/components/options-charts";
+import { RoomBar, roomMarks } from "@/components/options-charts";
 import { OptionsDay } from "@/components/options-day";
 import { fracPct, num, rMult, signed, weekDate } from "@/lib/format";
 import {
@@ -30,6 +30,7 @@ import {
   type Options,
   type OptionsTicker,
 } from "@/lib/options";
+import { cardMarks } from "@/lib/focus-plan";
 import { cn } from "@/lib/utils";
 import type { HourlyBar } from "@/lib/hourly";
 import type { Interest } from "@/lib/oi";
@@ -69,6 +70,8 @@ interface Row {
   moves: number | null;
   near: ReturnType<typeof nearest>;
   paper: ReturnType<typeof paperFor>;
+  /** The focus card's ceiling and floor for a focus name (empty for the others). */
+  marks: ReturnType<typeof cardMarks>;
 }
 
 interface Column {
@@ -139,8 +142,8 @@ const COLUMNS: Record<DeskView, Column[]> = {
     },
     {
       key: "support",
-      head: "Support",
-      hint: "Nearest zone below the close, and how far in ATRs",
+      head: "Support zone",
+      hint: "The edition's nearest daily zone below the close, and how far in ATRs; not the focus card's floor",
       width: "md:w-[6rem]",
       sort: (r) => r.near.support?.distAtr,
       // Without a close there is nothing to measure from: a dash, not "none near".
@@ -148,8 +151,8 @@ const COLUMNS: Record<DeskView, Column[]> = {
     },
     {
       key: "resistance",
-      head: "Resistance",
-      hint: "Nearest zone above the close, and how far in ATRs",
+      head: "Resistance zone",
+      hint: "The edition's nearest daily zone above the close, and how far in ATRs; not the focus card's ceiling",
       width: "md:w-[6rem]",
       sort: (r) => r.near.resistance?.distAtr,
       cell: (r) => (r.close === null ? dash : <Distance edge={r.near.resistance?.edge} atr={r.near.resistance?.distAtr} />),
@@ -184,7 +187,7 @@ const COLUMNS: Record<DeskView, Column[]> = {
     {
       key: "room",
       head: "Room",
-      hint: "Three ATRs each side of the price: support zones green, resistance red, the one-day expected move blue",
+      hint: "Three ATRs each side of the price: the edition's daily zones grey, the focus card's ceiling red and floor green, the one-day expected move blue",
       align: "left",
       width: "",
       wideOnly: true,
@@ -196,7 +199,8 @@ const COLUMNS: Record<DeskView, Column[]> = {
             view={view}
             live={r.read.inSession}
             stale={r.read.stale}
-            label={`${r.t.symbol}: ${view.downAtr === null ? "no support near" : `${num(view.downAtr, 1)} ATR down to support at ${num(view.down, 2)}`}, ${view.upAtr === null ? "no resistance near" : `${num(view.upAtr, 1)} ATR up to resistance at ${num(view.up, 2)}`}`}
+            marks={roomMarks(r.marks, r.read.price, r.t.atr14)}
+            label={`${r.t.symbol}: ${view.downAtr === null ? "no support zone near" : `${num(view.downAtr, 1)} ATR down to the support zone at ${num(view.down, 2)}`}, ${view.upAtr === null ? "no resistance zone near" : `${num(view.upAtr, 1)} ATR up to the resistance zone at ${num(view.up, 2)}`}${r.marks.map((m) => `; focus card ${m.word.toLowerCase()} ${num(m.price, 2)}`).join("")}`}
           />
         );
       },
@@ -368,6 +372,10 @@ export function OptionsDesk({
       moves: read.inSession ? movesFromClose(t, read.price) : null,
       near: nearest(t),
       paper: paperFor(e, t.symbol),
+      marks: (() => {
+        const item = e.focus?.items.find((i) => i.symbol === t.symbol);
+        return item ? cardMarks(item, t.levels) : [];
+      })(),
     };
   });
 
@@ -696,6 +704,12 @@ export function OptionsDesk({
               </tbody>
             </table>
           </PaneBoundary>
+          {view === "brief" ? (
+            // The zones are the edition's, not the card's triggers: said once, so a different price is never misread.
+            <p data-brief-zones className="text-muted-foreground border-t px-3 py-2 text-xs">
+              Daily zones from the edition; the focus card&apos;s triggers are marked on the map.
+            </p>
+          ) : null}
           {agree && view === "review" ? (
             <p data-agreement={agree.session} className="text-muted-foreground border-t px-3 py-2.5 text-xs">
               In-session rule states against the after-close record for {weekDate(agree.session)}:{" "}

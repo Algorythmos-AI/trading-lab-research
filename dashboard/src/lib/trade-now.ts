@@ -3,7 +3,7 @@
 // themselves come from trade-state.ts; this file only puts them on the board.
 //
 // Pure: no I/O and no clock. The caller passes `now`.
-import { weekDate } from "./format";
+import { newYork, weekDate } from "./format";
 import { focusPlan, type SidePlan } from "./focus-plan";
 import { sessionView, type JournalDoc } from "./journal";
 import { closeMinute, type LiveQuote, nyClock, OPEN_MIN, type Options, type OptionsTicker, type TrailPoint } from "./options";
@@ -29,8 +29,14 @@ export const STATE_WORD: Record<NameStateName, string> = {
   paused: "PRICES PAUSED",
 };
 
-/** When the focus card's next edition is in: the after-close build, in Sydney. */
-export const REFRESH_SYDNEY = "08:54";
+/**
+ * When the next focus card is in, in New York time: after the after-close edition, named by the clock time this
+ * edition was published (`as_of`), so the daylight-saving changes move nothing. "the after-close edition" without one.
+ */
+export function refreshWords(editionAsOf: string | null | undefined): string {
+  const t = newYork(editionAsOf, false);
+  return t === newYork(null, false) ? "the after-close edition" : `the ${t} New York edition`;
+}
 
 // ---- the header -----------------------------------------------------------------------------------------------------
 export type FeedStatus = "loading" | "off" | "error" | "ok";
@@ -44,24 +50,24 @@ export type BoardMode =
   | { kind: "loading"; line: string }
   /** Outside the session: trigger prices only. */
   | { kind: "next"; line: string }
-  /** 09:30 to 10:00: trigger prices only. */
+  /** 09:30 to the first entry (09:35): trigger prices only. */
   | { kind: "opening"; line: string }
-  /** In the session from 10:00: a state per name. */
+  /** In the session from the first entry (09:35): a state per name. */
   | { kind: "live" };
 
 /** What the board's header says, from the edition's session, the feed and the clock (New York). */
-export function boardMode(session: string, halfDay: boolean, feed: FeedStatus, now: number): BoardMode {
+export function boardMode(session: string, halfDay: boolean, feed: FeedStatus, now: number, editionAsOf: string | null = null): BoardMode {
   // Until the first answer the clock is the browser's, which may be wrong: say nothing about the day yet.
   if (feed === "loading") return { kind: "loading", line: "Connecting to live prices" };
   const clock = nyClock(new Date(now).toISOString());
   const today = clock?.day ?? null;
-  if (today !== null && session < today) return { kind: "old", line: `Focus card is for ${weekDate(session)}: refreshed after ${REFRESH_SYDNEY} Sydney` };
+  if (today !== null && session < today) return { kind: "old", line: `Focus card is for ${weekDate(session)}: refreshed after ${refreshWords(editionAsOf)}` };
   if (feed === "off" || feed === "error") return { kind: "off", line: "Live prices off: use the plans below" };
   const first = `first entries from ${hhmm(FIRST_ENTRY_MIN)} New York`;
   if (today === null || session > today) return { kind: "next", line: `Next session ${weekDate(session)}: ${first}` };
   const m = clock!.minutes;
   if (m < OPEN_MIN) return { kind: "next", line: `Next session today, opens ${hhmm(OPEN_MIN)}: ${first}` };
-  if (m >= closeMinute(halfDay)) return { kind: "next", line: `Session closed: the next focus card follows after ${REFRESH_SYDNEY} Sydney` };
+  if (m >= closeMinute(halfDay)) return { kind: "next", line: `Session closed: the next focus card follows ${refreshWords(editionAsOf)}` };
   if (m < FIRST_ENTRY_MIN) return { kind: "opening", line: `Opening range forming: ${first}` };
   return { kind: "live" };
 }

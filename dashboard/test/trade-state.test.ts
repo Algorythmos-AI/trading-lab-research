@@ -8,6 +8,7 @@ import {
   coveredSince,
   ema,
   type Entry,
+  FIRST_ENTRY_MIN,
   flatMinute,
   manage,
   MAX_BARS_TO_RETEST,
@@ -273,11 +274,21 @@ describe("the clock and the feed", () => {
     expect(nameState(input(sc, { receivedAt: null })).state).toBe("paused");
   });
 
-  it("before 10:00 there is no entry; before the open a stale quote is not a pause", () => {
-    const early = scene([["09:44", 412.5, 412.9, 412.4, 412.8]], 412.85);
-    expect(nameState(input(early))).toMatchObject({ state: "no_trade", line: "Opening range forming: first entries from 10:00" });
+  it("before 09:35 there is no entry; before the open a stale quote is not a pause", () => {
+    expect(FIRST_ENTRY_MIN).toBe(9 * 60 + 35);
+    const early = scene([["09:30", 412.5, 412.9, 412.4, 412.8]], 412.85); // 09:32 + 5 s New York
+    expect(nameState(input(early))).toMatchObject({ state: "no_trade", line: "Opening range forming: first entries from 09:35" });
     const pre = { ...early, now: new Date(nyMs("09:00")) };
-    expect(nameState(input(pre, { receivedAt: null })).line).toBe("Opening range forming: first entries from 10:00");
+    expect(nameState(input(pre, { receivedAt: null })).line).toBe("Opening range forming: first entries from 09:35");
+  });
+
+  it("from 09:35 to 10:00 a row carries the desk's own early caution, kept apart from the clone's checks", () => {
+    const sc = scene([["09:44", 412.5, 412.9, 412.4, 412.8]], 412.85); // 09:46 + 5 s New York
+    const r = nameState(input(sc));
+    expect(r.state).not.toBe("no_trade");
+    const early = r.cautions.find((c) => c.id === "before10");
+    expect(early).toMatchObject({ word: "Early: before 10:00", tone: "warn", hyp: null });
+    expect(early?.why).toMatch(/^The desk's own caution: .*the clone's tested window starts at 10:00\.$/);
   });
 
   it("from 15:10 (12:10 on a half day) no new entries; the day limit ends the day", () => {
@@ -323,8 +334,10 @@ describe("the clock and the feed", () => {
     ] as const) {
       const sc = scene([A, B, C, D, E], 412.75, { day, offset });
       expect(nameState(input(sc)).state).toBe("enter_zone");
-      const early = scene([["09:56", 412.5, 412.9, 412.4, 412.8]], 412.85, { day, offset });
-      expect(nameState(input(early)).state).toBe("no_trade"); // 09:58 + 5 s New York
+      const early = scene([["09:30", 412.5, 412.9, 412.4, 412.8]], 412.85, { day, offset });
+      expect(nameState(input(early)).state).toBe("no_trade"); // 09:32 + 5 s New York
+      const soon = scene([["09:56", 412.5, 412.9, 412.4, 412.8]], 412.85, { day, offset });
+      expect(nameState(input(soon)).state).not.toBe("no_trade"); // 09:58 + 5 s New York: from the 09:35 first entry
     }
   });
 
