@@ -1,10 +1,13 @@
 // The cautions beside an entry on the Options desk: the DEC-0041 research checks, computed live in the browser.
 // Advisory only. They never hide an entry and never change the 9 rules; each one is still under test (its HYP id).
 //
-// Pure: no I/O and no clock. The caller passes `now`. Each check mirrors `wt.options.setups.tag_decision` (and its
+// Pure: no I/O and no clock. The caller passes `now`, the feed's (server) clock: trade-state's `serverNow`, never the
+// browser's own. Each check mirrors `wt.options.setups.tag_decision` (and its
 // helpers `_mid_third` and `broken_marks`), read at the moment the owner would enter instead of at a 2-minute close:
 // the entry price is the live price, the session's open, high and low come from the quote, and the closes come from
-// the 2-minute bars the page has built since it opened. A check whose input the page does not have is left out (never
+// the 2-minute bars the page has built since it opened. dashboard/test/fixtures/entry-checks.vectors.json holds the
+// clone's own answers for a set of sessions (scripts/gen_entry_check_vectors.py), and both languages' tests assert
+// them. A check whose input the page does not have is left out (never
 // shown as clear) and named in `unknown`, so the page can say why.
 import { type LiveQuote, nyClock, nyInstant, OPEN_MIN, type OptionsTicker } from "./options";
 import type { Tone } from "./labels";
@@ -30,6 +33,16 @@ export const LEADERS: Readonly<Record<string, string>> = { QQQ: "SMH" };
 export const MARK_NAMES: readonly string[] = ["PDH", "PDL", "PWH", "PWL", "PMH", "PML", "MA20", "MA50", "PMKH", "PMKL"];
 /** The five-session range: the high and low of the five finished sessions before today (levels.SWING_SESSIONS). */
 export const SWING_SESSIONS = 5;
+/** bars.minutes: the bar every state and check is read on. */
+export const BAR_MINUTES = 2;
+/** setups.retest.max_bars_to_retest (HYP-0029): the touch must come within this many bars after the break bar, and
+ * the entry by the bar after that (the retest's window, `last - ia <= n_max + 1`). */
+export const MAX_BARS_TO_RETEST = 6;
+
+// ---- the desk's own numbers (not the clone's) ----------------------------------------------------------------------
+/** A quote whose last trade is older than this is stale: the row pauses, and the leader check is left out. */
+export const TRADE_STALE_MS = 120_000;
+const BAR_MS = BAR_MINUTES * 60_000;
 
 /** The leaders' plain names, for the caution's word. */
 const LEADER_WORD: Readonly<Record<string, string>> = { SMH: "Semis" };
@@ -101,9 +114,13 @@ export interface CheckInput {
   leaderQuote?: LiveQuote | null;
   /** The finished 2-minute bars the page has built today. */
   bars?: readonly CheckBar[];
-  /** The time of the first price the page saw today (ms), so the bars can be read as complete or not. */
+  /** The start of the page's first 2-minute bar today (ms, trade-state's `Bars2m.since`). */
   since?: number | null;
+  /** The 2-minute slots with no bar since then (`Bars2m.gaps`). The bars are complete only from the session's open
+   * with no gap: anything else, or a missing count, leaves a crossed mark unknown. */
+  gaps?: number | null;
   halfDay: boolean;
+  /** The feed's (server) clock. */
   now: Date;
   /** Whether a trade has closed green today; null when the journal cannot say. */
   wonToday: boolean | null;
@@ -166,14 +183,21 @@ export function brokenMarks(
   return unsure && out.length === 0 ? null : out;
 }
 
-/** New York HH:MM of an instant, or null. */
+/** New York HH:MM of an instant, or null. `now` is the feed's (server) clock. */
 export function nyHhmm(now: Date): string | null {
   const c = nyClock(now.toISOString());
   if (!c) return null;
   return `${String(Math.floor(c.minutes / 60)).padStart(2, "0")}:${String(c.minutes % 60).padStart(2, "0")}`;
 }
 
-/** The cautions for entering `side` now, ordered by importance, and the checks that could not run. */
+/** The end (ms) of the 2-minute bar forming at `now`: the bar an entry now would complete, as the clone reads its
+ * signal bar's end. */
+export function barEndAt(now: Date): number {
+  return Math.floor(now.getTime() / BAR_MS) * BAR_MS + BAR_MS;
+}
+
+/** The cautions for entering `side` now, ordered by importance, and the checks that could not run. `input.now` is
+ * the feed's (server) clock. */
 export function entryChecks(input: CheckInput, side: Side): CheckResult {
   const cautions: Caution[] = [];
   const unknown: string[] = [];
@@ -192,7 +216,8 @@ export function entryChecks(input: CheckInput, side: Side): CheckResult {
     const fiveR = fiveSessionRange(ticker.bars, session);
     const five = fiveR ? midThird(x, fiveR.hi, fiveR.lo) : null;
     const inZone = prior || five ? true : prior === null || five === null ? null : false;
-    const complete = isNum(input.since) && isNum(q.open) ? input.since <= (nyInstant(session, OPEN_MIN) ?? -Infinity) : false;
+    // Complete: the page's first bar starts at the session's open and no 2-minute slot since has no bar.
+    const complete = isNum(input.since) && input.gaps === 0 && isNum(q.open) ? input.since <= (nyInstant(session, OPEN_MIN) ?? -Infinity) : false;
     const broken = brokenMarks(ticker, q, input.bars ?? [], complete);
     if (inZone === null) unknown.push("Yesterday's or the five-day range is missing: the middle-of-range check is off.");
     else if (inZone && broken === null) unknown.push("A level was crossed before the page opened: confirm on your chart whether it closed through.");
@@ -220,7 +245,9 @@ export function entryChecks(input: CheckInput, side: Side): CheckResult {
   const lead = LEADERS[symbol];
   if (lead) {
     const lq = input.leaderQuote && input.leaderQuote.day === session ? input.leaderQuote : null;
+    const lqAge = lq ? input.now.getTime() - Date.parse(lq.at) : NaN;
     if (!lq || !isNum(lq.vwap)) unknown.push(`No live ${lead} price or VWAP: the ${lead} check is off.`);
+    else if (!(lqAge <= TRADE_STALE_MS)) unknown.push(`The ${lead} quote is stale: the ${lead} check is off.`);
     else {
       const d = lq.price - lq.vwap;
       const against = side === "call" ? d < 0 : d > 0;
@@ -241,10 +268,11 @@ export function entryChecks(input: CheckInput, side: Side): CheckResult {
   if (!isNum(iv)) unknown.push("No implied volatility in the edition: the IV check is off.");
   else if (iv > cap) add("iv", "IV high", `Implied volatility ${Math.round(iv * 100)}% is above the ${Math.round(cap * 100)}% cap for ${symbol}.`);
 
-  // Time (HYP-0042/43): late is [11:00, 14:30] New York; neither early nor late on a half day.
-  const t = nyHhmm(input.now);
+  // Time (HYP-0042/43): late is [11:00, 14:30] New York, read on the end of the 2-minute bar forming now (the clone
+  // reads its signal bar's end); neither early nor late on a half day.
+  const t = nyHhmm(new Date(barEndAt(input.now)));
   if (!input.halfDay && t !== null && EARLY_BEFORE <= t && t <= LATE_TO)
-    add("late", `Late: after ${EARLY_BEFORE}`, `It is ${t} New York, past the ${EARLY_FROM} to ${EARLY_BEFORE} window under test.`);
+    add("late", `Late: after ${EARLY_BEFORE}`, `This 2-min bar ends at ${t} New York, past the ${EARLY_FROM} to ${EARLY_BEFORE} window under test.`);
 
   // A winner already closed today.
   if (input.wonToday === null) unknown.push("Today's closed trades are not known: the winner check is off.");

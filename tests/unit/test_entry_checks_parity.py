@@ -1,12 +1,16 @@
 """The Options desk's live cautions (dashboard/src/lib/entry-checks.ts) use the clone's own numbers: each constant there
-equals its key in config/options_clone.yaml, so a change to the research arms cannot leave the site behind."""
+equals its key in config/options_clone.yaml, so a change to the research arms cannot leave the site behind. And they
+behave as the clone does: the shared vectors (scripts/gen_entry_check_vectors.py) hold `setups.tag_decision`'s answers,
+which dashboard/test/entry-checks-vectors.test.ts asserts for `entryChecks`."""
 from __future__ import annotations
 
+import importlib.util
 import json
 import re
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 
 from wt.options import levels
@@ -47,6 +51,11 @@ def test_iv_caps_and_times_match_the_tags():
     assert text("LATE_TO") == str(tags["late_to"])
 
 
+def test_bar_and_retest_window_match_the_clone():
+    assert num("BAR_MINUTES") == float(CFG["bars"]["minutes"])
+    assert num("MAX_BARS_TO_RETEST") == float(CFG["setups"]["retest"]["max_bars_to_retest"])
+
+
 def test_shadow_arm_numbers_match():
     shadow = ARMS["shadow"]
     assert num("FAIL_WITHIN_BARS") == float(shadow["trap"]["fail_within_bars"])
@@ -68,3 +77,28 @@ def test_marks_are_the_clones_marked_levels():
 
 def test_five_session_range_length_matches_the_clone():
     assert num("SWING_SESSIONS") == levels.SWING_SESSIONS
+
+
+# ---------------------------------------------------------------- behaviour: the shared vectors
+_spec = importlib.util.spec_from_file_location("gen_entry_check_vectors", ROOT / "scripts" / "gen_entry_check_vectors.py")
+assert _spec and _spec.loader
+GEN = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(GEN)
+VECTORS: dict[str, Any] = json.loads((ROOT / "dashboard/test/fixtures/entry-checks.vectors.json").read_text())
+
+
+def test_the_vectors_cover_the_edges():
+    names = [c["name"] for c in VECTORS["cases"]]
+    assert len(names) >= 25 and len(set(names)) == len(names)
+    for flag in GEN.FLAGS:
+        seen = {json.dumps(c["expect"][flag]) for c in VECTORS["cases"]}
+        assert {"true", "false"} <= seen, flag      # each flag is exercised both ways
+
+
+@pytest.mark.parametrize("case", VECTORS["cases"], ids=lambda c: c["name"])
+def test_tag_decision_gives_the_vectors_answers(case: dict[str, Any]):
+    assert GEN.run(case, GEN.cfg()) == case["expect"]
+
+
+def test_the_committed_vectors_are_current():
+    assert GEN.build() == VECTORS, "run scripts/gen_entry_check_vectors.py"

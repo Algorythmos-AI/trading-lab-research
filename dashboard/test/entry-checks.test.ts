@@ -11,7 +11,8 @@ import {
   midThird,
   withLeaders,
 } from "@/lib/entry-checks";
-import type { LiveQuote } from "@/lib/options";
+import type { LiveQuote, TrailPoint } from "@/lib/options";
+import { bars2m } from "@/lib/trade-state";
 
 const S = "2026-10-12"; // a Monday, New York on EDT
 const ny = (hhmm: string, day = S, offset = "-04:00") => new Date(`${day}T${hhmm}:00${offset}`);
@@ -55,7 +56,8 @@ const input = (over: Partial<CheckInput> = {}): CheckInput => ({
   session: S,
   quote: q(),
   bars: [],
-  since: OPEN - 60_000, // the page saw the whole session
+  since: OPEN, // the page's first bar starts at the open: it saw the whole session
+  gaps: 0,
   halfDay: false,
   now: ny("10:30"),
   wonToday: false,
@@ -161,6 +163,14 @@ describe("leader caution (HYP-0038)", () => {
     expect(ids(entryChecks(qqq(smh(300, 300)), "put"))).toEqual([]);
   });
 
+  it("is unknown, never clear, when the leader's last trade is stale (finding 10)", () => {
+    const old = (sec: number) => q({ price: 299.9, vwap: 300, at: new Date(ny("10:30").getTime() - sec * 1000).toISOString() });
+    expect(ids(entryChecks(qqq(old(120)), "call"))).toEqual(["leader"]);
+    const stale = entryChecks(qqq(old(121)), "call");
+    expect(ids(stale)).toEqual([]);
+    expect(stale.unknown.join(" ")).toMatch(/SMH quote is stale/);
+  });
+
   it("is unknown without the leader or its VWAP, and absent for names without a leader", () => {
     expect(entryChecks(qqq(null), "call").unknown.join(" ")).toMatch(/SMH/);
     expect(entryChecks(qqq(smh(300, null)), "call").unknown.join(" ")).toMatch(/SMH/);
@@ -192,21 +202,23 @@ describe("IV caution (HYP-0040)", () => {
 describe("late caution (HYP-0042)", () => {
   const at = (now: Date, halfDay = false, session = S) =>
     ids(entryChecks(input({ now, halfDay, session, quote: q({ day: session }) }), "call"));
-  it("late is [11:00, 14:30] New York; early and the rest are not", () => {
-    expect(at(ny("10:59"))).toEqual([]);
+  it("reads the end of the 2-minute bar forming now, as the clone reads the signal bar's end: late is [11:00, 14:30]", () => {
+    expect(at(new Date(ny("10:58").getTime() - 1))).toEqual([]); // the 10:56 bar ends 10:58
+    expect(at(ny("10:58"))).toEqual(["late"]); // the 10:58 bar ends 11:00 (finding 10)
+    expect(at(new Date(ny("10:59").getTime() + 30_000))).toEqual(["late"]);
     expect(at(ny("11:00"))).toEqual(["late"]);
-    expect(at(ny("14:30"))).toEqual(["late"]);
-    expect(at(new Date(ny("14:30").getTime() + 59_000))).toEqual(["late"]); // still the 14:30 minute
-    expect(at(ny("14:31"))).toEqual([]);
+    expect(at(new Date(ny("14:30").getTime() - 1))).toEqual(["late"]); // the 14:28 bar ends 14:30
+    expect(at(ny("14:30"))).toEqual([]); // the 14:30 bar ends 14:32 (finding 10)
+    expect(at(new Date(ny("14:30").getTime() + 10_000))).toEqual([]);
     expect(at(ny("12:00"), true)).toEqual([]); // never on a half day
   });
 
   it("follows New York across the daylight-saving changes", () => {
     // 2026-03-09: the first Monday on EDT (UTC-4). 2026-11-02: the first Monday on EST (UTC-5).
-    expect(at(new Date("2026-03-09T14:59:00Z"), false, "2026-03-09")).toEqual([]);
-    expect(at(new Date("2026-03-09T15:00:00Z"), false, "2026-03-09")).toEqual(["late"]);
-    expect(at(new Date("2026-11-02T15:59:00Z"), false, "2026-11-02")).toEqual([]);
-    expect(at(new Date("2026-11-02T16:00:00Z"), false, "2026-11-02")).toEqual(["late"]);
+    expect(at(new Date("2026-03-09T14:57:59Z"), false, "2026-03-09")).toEqual([]);
+    expect(at(new Date("2026-03-09T14:58:00Z"), false, "2026-03-09")).toEqual(["late"]);
+    expect(at(new Date("2026-11-02T15:57:59Z"), false, "2026-11-02")).toEqual([]);
+    expect(at(new Date("2026-11-02T15:58:00Z"), false, "2026-11-02")).toEqual(["late"]);
   });
 });
 
@@ -224,7 +236,7 @@ describe("winner caution and the whole list", () => {
         ticker: ticker({ expected_move: { annual_iv: 0.5 }, levels: [{ name: "PDH", price: 104 }, { name: "PDL", price: 96 }] }),
         // opened above PDH 104, never back to it; 112 sits in the five-day third (110 to 130)
         quote: q({ price: 112, open: 105, high: 112.5, low: 104.5 }),
-        leaderQuote: q({ price: 299, vwap: 300 }),
+        leaderQuote: q({ price: 299, vwap: 300, at: ny("11:30").toISOString() }),
         now: ny("11:30"),
         wonToday: true,
       }),
@@ -240,6 +252,30 @@ describe("winner caution and the whole list", () => {
     const r = entryChecks(input({ quote: q({ day: "2026-10-09", price: 105 }) }), "call");
     expect(ids(r)).toEqual([]);
     expect(r.unknown[0]).toMatch(/No live price/);
+  });
+});
+
+describe("complete coverage (finding 6)", () => {
+  it("bars built from 09:30 are complete: a print that crossed a mark with no close across it is known clear", () => {
+    const at = (hhmm: string, sec: number) => Date.parse(`${S}T${hhmm}:${String(sec).padStart(2, "0")}-04:00`);
+    // every 2-minute slot from 09:30 to 10:30, the price never closing under PWL (105.25)
+    const trail: TrailPoint[] = [];
+    for (let m = 0; m < 60; m += 2) {
+      const start = at("09:30", 0) + m * 60_000;
+      trail.push({ at: start + 1_000, p: 105.5 }, { at: start + 60_000, p: 105.4 });
+    }
+    const now = new Date(at("10:30", 3));
+    const b = bars2m(trail, null, now);
+    expect(b.since).toBe(OPEN);
+    expect(b.gaps).toBe(0);
+    const quote = q({ price: 105.4, open: 105.6, high: 105.6, low: 105.2 }); // a print under PWL, no close under it
+    const t = ticker({ levels: [{ name: "PDH", price: 110 }, { name: "PDL", price: 100 }, { name: "PWL", price: 105.25 }] });
+    const r = entryChecks(input({ ticker: t, quote, bars: b.closed, since: b.since, gaps: b.gaps, now }), "call");
+    expect(ids(r)).toEqual(["range"]);
+    // a missing slot makes the bars incomplete again
+    const holed = bars2m(trail.filter((x) => x.at < at("09:50", 0) || x.at >= at("09:52", 0)), null, now);
+    expect(holed.gaps).toBe(1);
+    expect(ids(entryChecks(input({ ticker: t, quote, bars: holed.closed, since: holed.since, gaps: holed.gaps, now }), "call"))).toEqual([]);
   });
 });
 

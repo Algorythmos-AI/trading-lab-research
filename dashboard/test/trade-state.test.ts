@@ -2,15 +2,19 @@ import { describe, expect, it } from "vitest";
 import { focusPlan, type SidePlan } from "@/lib/focus-plan";
 import { type LiveQuote, nyClock, type Options, type TrailPoint } from "@/lib/options";
 import {
+  ALT_LIVE_BARS,
   altAt,
   bars2m,
+  coveredSince,
   ema,
   type Entry,
   flatMinute,
   manage,
+  MAX_BARS_TO_RETEST,
   type NameInput,
   nameState,
   RETEST_ATR,
+  serverNow,
   sideState,
 } from "@/lib/trade-state";
 
@@ -105,10 +109,17 @@ describe("2-minute bars", () => {
     const b = bars2m(trail, quote, new Date(at("10:02", 30)));
     expect(b.closed).toEqual([{ start: at("10:00", 0), end: at("10:02", 0), o: 410, h: 411, l: 409.5, c: 409.5 }]);
     expect(b.partial).toMatchObject({ start: at("10:02", 0), o: 410.2, h: 410.4, l: 410.2, c: 410.4 });
-    expect(b.since).toBe(at("10:00", 5));
-    // a bar ends exactly at now: closed
-    expect(bars2m(trail, null, new Date(at("10:02", 0))).closed).toHaveLength(1);
-    expect(bars2m([], null, new Date(at("10:02", 0)))).toEqual({ closed: [], partial: null, since: null });
+    // the start of the first bar, on the grid (finding 6)
+    expect(b.since).toBe(at("10:00", 0));
+    expect(b.complete).toBe(false);
+    expect(b.gaps).toBe(0);
+    // a bar that ends at now with no later price is still forming for 5 s (finding 8)
+    const atEnd = bars2m(trail, null, new Date(at("10:02", 0)));
+    expect(atEnd.closed).toHaveLength(0);
+    expect(atEnd.partial).toMatchObject({ start: at("10:00", 0), c: 409.5 });
+    expect(bars2m(trail, null, new Date(at("10:02", 4))).closed).toHaveLength(0);
+    expect(bars2m(trail, null, new Date(at("10:02", 5))).closed).toHaveLength(1);
+    expect(bars2m([], null, new Date(at("10:02", 0)))).toEqual({ closed: [], partial: null, since: null, complete: false, missing: [], gaps: 0 });
   });
 
   it("is on the New York grid on both daylight-saving change days", () => {
@@ -295,7 +306,7 @@ describe("the clock and the feed", () => {
     );
     const r = nameState(input(sc));
     expect(r).toMatchObject({ state: "get_ready", brokeEarlier: true, line: "Broke above 412.30 before you opened the page: confirm the hold on your chart" });
-    expect(sc.bars.since).toBe(nyMs("11:00", S, "-04:00", 1));
+    expect(sc.bars.since).toBe(nyMs("11:00"));
     // the day's high already past target 1: don't chase
     const past = { ...sc.quote, high: 413.5 };
     expect(sideState(PLAN.call, 4, sc.bars, past, sc.now)).toMatchObject({ state: "missed", brokeEarlier: true });
@@ -318,8 +329,8 @@ describe("the clock and the feed", () => {
   });
 
   it("shows at most two cautions and counts the rest", () => {
-    const sc = scene([A, B, C, D, E], 412.75, { nowExtra: nyMs("11:30") - nyMs("10:14") });
-    const s = { ...sc, quote: { ...sc.quote, at: sc.now.toISOString() } };
+    const later = (x: Spec, min: number): Spec => [`${Number(x[0].slice(0, 2)) + 1}:${String(Number(x[0].slice(3)) + min).padStart(2, "0")}`, x[1], x[2], x[3], x[4]];
+    const s = scene([A, B, C, D, E].map((x) => later(x, 10)), 412.75); // 11:14 to 11:22
     const r = nameState(
       input(s, { receivedAt: s.now.getTime(), wonToday: true, ticker: { ...TICKER, expected_move: { annual_iv: 0.9 } } }),
     );
@@ -330,7 +341,7 @@ describe("the clock and the feed", () => {
 });
 
 describe("managing a trade", () => {
-  const entry = (over: Partial<Entry> = {}): Entry => ({ side: "call", price: 412.4, at: new Date(nyMs("10:20")).toISOString(), source: "manual", ...over });
+  const entry = (over: Partial<Entry> = {}): Entry => ({ side: "call", price: 412.4, at: new Date(nyMs("10:18", S, "-04:00", 30)).toISOString(), source: "manual", ...over });
   const run = (specs: Spec[], live: number, e: Entry = entry(), plan: SidePlan | null = PLAN.call, halfDay = false, nowExtra = 0) => {
     const sc = scene(specs, live, { nowExtra });
     return manage(e, plan, sc.bars, sc.quote, sc.now, halfDay);
@@ -338,7 +349,7 @@ describe("managing a trade", () => {
 
   it("holds with the stop, target 1, the 5-minute clock and the time to 15:10", () => {
     const m = run([["10:20", 412.4, 412.5, 412.3, 412.45]], 412.45);
-    expect(m).toMatchObject({ line: "Holding: stop 411.90 · target 1 413.22", tone: "info", stop: 411.9, target1: 413.22, trail: null, notWorkingSecLeft: 175, minToFlat: 288 });
+    expect(m).toMatchObject({ line: "Holding: stop 411.90 · target 1 413.22", tone: "info", stop: 411.9, target1: 413.22, trail: null, notWorkingSecLeft: 85, minToFlat: 288 });
   });
 
   it("a completed close under the stop: exit", () => {
@@ -359,12 +370,12 @@ describe("managing a trade", () => {
       0,
     );
     expect(m).toMatchObject({ line: "5 min, not working: exit", notWorkingSecLeft: 0 });
-    // past the entry at 5 minutes: working, the clock goes away
+    // past the entry at 5 minutes (the first price from 10:23:30, the 10:24 open): working, the clock goes away
     const ok = run(
       [
         ["10:20", 412.4, 412.5, 412.3, 412.4],
         ["10:22", 412.4, 412.45, 412.3, 412.38],
-        ["10:24", 412.38, 412.6, 412.3, 412.55],
+        ["10:24", 412.45, 412.6, 412.3, 412.55],
       ],
       412.6,
     );
@@ -412,5 +423,213 @@ describe("managing a trade", () => {
     const e = entry({ side: "put", price: 405.0 });
     expect(run([["10:20", 405.0, 405.7, 404.9, 405.6]], 405.6, e, PLAN.put)).toMatchObject({ line: "Above the stop 405.50: exit" });
     expect(run([["10:20", 405.0, 405.1, 404.1, 404.2]], 404.2, e, PLAN.put).line).toBe("Target 1 hit: sell half, stop to 405.00");
+  });
+});
+
+// ---- review findings on PR #351: the desk never says enter_zone on data it does not have or that is out of date ----
+/** The scene with more prices in it (and the quote changed), its bars rebuilt. */
+function withPoints(sc: ReturnType<typeof scene>, pts: TrailPoint[], q: Partial<LiveQuote> = {}) {
+  const trail = [...sc.trail, ...pts].sort((x, y) => x.at - y.at);
+  const quote = { ...sc.quote, ...q };
+  return { ...sc, trail, quote, bars: bars2m(trail, quote, sc.now) };
+}
+const call = (sc: { bars: ReturnType<typeof bars2m>; quote: LiveQuote; now: Date }, q: Partial<LiveQuote> = {}) =>
+  sideState(PLAN.call, 4, sc.bars, { ...sc.quote, ...q }, sc.now);
+/** Above the level with no dip: the low 0.50 over it, more than 0.1 ATR. */
+const hold = (hhmm: string): Spec => [hhmm, 412.85, 412.95, 412.8, 412.85];
+
+describe("finding 1: target 1 after the dip", () => {
+  it("a bar after the dip that reached target 1 makes the side missed, not an entry", () => {
+    const F: Spec = ["10:14", 412.7, 413.4, 412.6, 412.9];
+    expect(call(scene([A, B, C, D, E, F], 412.8))).toMatchObject({ state: "missed", missedWhy: "target" });
+  });
+
+  it("so does the bar still forming, after the dip", () => {
+    const sc = scene([A, B, C, D, E], 412.8);
+    const spiked = withPoints(sc, [{ at: nyMs("10:14", S, "-04:00", 1), p: 413.3 }]);
+    expect(spiked.bars.partial!.h).toBe(413.3);
+    expect(call(spiked).state).toBe("missed");
+  });
+});
+
+describe("finding 2: missing 2-minute slots", () => {
+  // the break at 10:10, no prices for 10:12 and 10:14, then a dip that holds at 10:16
+  const dip: Spec = ["10:16", 412.6, 412.9, 412.35, 412.7];
+  it("bars2m counts the slots with no bar, and coveredSince reads them", () => {
+    const sc = scene([A, B, C, D, dip], 412.75);
+    expect(sc.bars.gaps).toBe(2);
+    expect(sc.bars.missing).toEqual([nyMs("10:12"), nyMs("10:14")]);
+    expect(coveredSince(sc.bars, nyMs("10:10"))).toBe(false);
+    expect(coveredSince(sc.bars, nyMs("10:16"))).toBe(true);
+    expect(coveredSince(sc.bars, nyMs("10:03"))).toBe(false); // before the first bar
+    // a feed that stops leaves the slots up to now missing too
+    const quiet = { ...sc, now: new Date(nyMs("10:24", S, "-04:00", 10)) };
+    expect(bars2m(quiet.trail, quiet.quote, quiet.now).gaps).toBe(4); // 10:12, 10:14, 10:20 and 10:22
+  });
+
+  it("a missing slot after the break: get ready, flagged, and the line says confirm on your chart", () => {
+    const sc = scene([A, B, C, D, dip], 412.75);
+    expect(call(sc)).toMatchObject({ state: "get_ready", gap: true });
+    const r = nameState(input(sc));
+    expect(r.state).toBe("get_ready");
+    expect(r.line).toMatch(/confirm on your chart/);
+  });
+
+  it("the day's high past target 1 while the page was blind: missed", () => {
+    expect(call(scene([A, B, C, D, dip], 412.75), { high: 413.4 }).state).toBe("missed");
+    // the review's own case: no prices 10:12 to 10:40 while the price ran to target 1 and back
+    const rv = scene([A, B, C, D, ["10:40", 412.6, 412.9, 412.35, 412.7]], 412.75);
+    expect(call(rv, { high: 413.4 }).state).toBe("missed");
+    expect(call(rv).state).not.toBe("enter_zone");
+  });
+
+  it("with full coverage, a day high past target 1 the page's bars do not show is missed; one before the break is not", () => {
+    // the trail missed a spike inside a bar
+    expect(call(scene([A, B, C, D, E], 412.75), { high: 413.4 }).state).toBe("missed");
+    const X: Spec = ["10:04", 412.2, 413.4, 412.0, 412.1];
+    const Y: Spec = ["10:06", 412.1, 412.2, 411.9, 412.0];
+    const brk: Spec = ["10:08", 412.1, 412.8, 412.0, 412.7];
+    const dip2: Spec = ["10:10", 412.7, 412.8, 412.35, 412.7];
+    expect(call(scene([X, Y, brk, dip2], 412.75), { high: 413.4 }).state).toBe("enter_zone");
+  });
+});
+
+describe("finding 3: a break on the page's first bar", () => {
+  const first: Spec = ["11:00", 412.1, 412.6, 412.0, 412.5];
+  const second: Spec = ["11:02", 412.5, 412.6, 412.35, 412.55];
+  it("is not a break when the page opened after the open: the close before it is unknown", () => {
+    expect(call(scene([first, second], 412.6))).toMatchObject({ state: "get_ready", brokeEarlier: true, brokeAt: null });
+  });
+
+  it("is a break when the page has the session from 09:30", () => {
+    const sc = scene([["09:30", ...first.slice(1)] as Spec, ["09:32", ...second.slice(1)] as Spec], 412.6);
+    expect(sc.bars.complete).toBe(true);
+    expect(call(sc).state).toBe("enter_zone");
+  });
+});
+
+describe("finding 4: the retest window", () => {
+  it("is the clone's max_bars_to_retest", () => {
+    expect(MAX_BARS_TO_RETEST).toBe(6);
+  });
+
+  it("a touch more than 6 bars after the break is missed: the window passed", () => {
+    const sc = scene([A, B, C, D, hold("10:12"), hold("10:14"), hold("10:16"), hold("10:18"), hold("10:20"), hold("10:22"), ["10:24", 412.8, 412.9, 412.35, 412.75]], 412.8);
+    expect(call(sc)).toMatchObject({ state: "missed", missedWhy: "window" });
+    const r = nameState(input(sc, { put: null }));
+    expect(r.line).toBe("Retest window at 412.30 passed: don't chase");
+  });
+
+  it("the entry is live from the touch until 6 bars after the break, then missed", () => {
+    const touch6 = [A, B, C, D, hold("10:12"), hold("10:14"), hold("10:16"), hold("10:18"), hold("10:20"), ["10:22", 412.8, 412.9, 412.35, 412.75] as Spec];
+    expect(call(scene(touch6, 412.8)).state).toBe("enter_zone"); // the bar forming is the 7th after the break
+    const kept = [A, B, C, D, E, hold("10:14"), hold("10:16"), hold("10:18"), hold("10:20")];
+    expect(call(scene(kept, 412.8)).state).toBe("enter_zone");
+    expect(call(scene([...kept, hold("10:22")], 412.8)).state).toBe("enter_zone");
+    expect(call(scene([...kept, hold("10:22"), hold("10:24")], 412.8))).toMatchObject({ state: "missed", missedWhy: "window" });
+  });
+});
+
+describe("finding 5: alternative triggers expire", () => {
+  const back: Spec = ["10:12", 412.8, 412.9, 411.9, 412.0];
+  const under = (hhmm: string): Spec => [hhmm, 412.0, 412.1, 411.8, 411.9];
+  it("lives for 3 completed bars after the bar that completed it", () => {
+    expect(ALT_LIVE_BARS).toBe(3);
+    expect(call(scene([A, B, C, D, back, under("10:14"), under("10:16")], 411.9)).alt).not.toBeNull();
+    expect(call(scene([A, B, C, D, back, under("10:14"), under("10:16"), under("10:18")], 411.9)).alt).toBeNull();
+  });
+
+  it("ends once the live price reaches its stop or moves more than 1 ATR from the level", () => {
+    const sc = scene([A, B, C, D, back], 411.95);
+    expect(call(sc).alt).not.toBeNull();
+    expect(call(sc, { price: 411.0 }).alt).not.toBeNull();
+    expect(call(sc, { price: 412.95 }).alt).toBeNull(); // the push high 412.90 is the stop
+    expect(call(sc, { price: 408.2 }).alt).toBeNull(); // 4.1 under the level, the ATR is 4
+    expect(call(sc, { price: Number.NaN }).alt).toBeNull(); // no live price
+  });
+
+  it("is never read across a missing slot", () => {
+    const sc = scene([A, B, C, D, ["10:14", 412.8, 412.9, 411.9, 412.0]], 411.95); // 10:12 missing
+    expect(call(sc).alt).toBeNull();
+  });
+});
+
+describe("finding 6: complete coverage", () => {
+  it("a page that has prices from 09:30 has complete bars", () => {
+    const sc = scene([["09:30", 408, 408.5, 407.8, 408.2], ["09:32", 408.2, 408.4, 408.0, 408.1]], 408.1);
+    expect(sc.bars.since).toBe(nyMs("09:30"));
+    expect(sc.bars.complete).toBe(true);
+  });
+});
+
+describe("finding 7: one New York day", () => {
+  it("drops yesterday's in-session prices, and every price outside the given session", () => {
+    const y = (hhmm: string, sec: number) => nyMs(hhmm, "2026-10-09", "-04:00", sec);
+    const trail: TrailPoint[] = [
+      { at: y("15:58", 10), p: 500 },
+      { at: y("15:59", 50), p: 501 },
+      { at: nyMs("10:00", S, "-04:00", 5), p: 410 },
+      { at: nyMs("10:01", S, "-04:00", 50), p: 411 },
+      { at: nyMs("10:02", S, "-04:00", 5), p: 411.5 },
+    ];
+    const now = new Date(nyMs("10:02", S, "-04:00", 10));
+    const b = bars2m(trail, null, now);
+    expect(b.closed.map((x) => x.o)).toEqual([410]);
+    expect(b.since).toBe(nyMs("10:00"));
+    expect(bars2m(trail, null, now, false, "2026-10-09")).toMatchObject({ closed: [], partial: null, since: null });
+  });
+});
+
+describe("finding 8: the server's clock", () => {
+  it("serverNow shifts the browser clock by the feed's offset, and falls back to the browser", () => {
+    const recv = Date.parse("2026-10-12T14:00:00.000Z");
+    expect(serverNow("2026-10-12T14:00:30.000Z", recv, recv + 5_000).toISOString()).toBe("2026-10-12T14:00:35.000Z");
+    expect(serverNow("2026-10-12T13:59:50.000Z", recv, recv + 5_000).toISOString()).toBe("2026-10-12T13:59:55.000Z");
+    expect(serverNow(null, recv, recv + 5_000).getTime()).toBe(recv + 5_000);
+    expect(serverNow("not a time", recv, recv + 5_000).getTime()).toBe(recv + 5_000);
+    expect(serverNow("2026-10-12T14:00:30.000Z", null, recv).getTime()).toBe(recv);
+  });
+});
+
+describe("finding 9: managing on prices after the fill", () => {
+  const e = (at: string): Entry => ({ side: "call", price: 412.4, at, source: "manual" });
+  const iso = (hhmm: string, sec = 0) => new Date(nyMs(hhmm, S, "-04:00", sec)).toISOString();
+  it("(a) the fill bar's high before the fill is not target 1; the trail's later points in it are", () => {
+    const sc = scene([["10:20", 412.4, 413.3, 412.3, 412.5]], 412.6); // the 413.30 print is at 10:20:30
+    const m = manage(e(iso("10:20", 40)), PLAN.call, sc.bars, sc.quote, sc.now, false);
+    expect(m).toMatchObject({ line: "Holding: stop 411.90 · target 1 413.22", stop: 411.9 });
+    const withTrail = manage(e(iso("10:20", 20)), PLAN.call, sc.bars, sc.quote, sc.now, false, sc.trail);
+    expect(withTrail).toMatchObject({ line: "Target 1 hit: sell half, stop to 412.40", stop: 412.4 });
+    // nor is the fill bar's close a close under the stop
+    const low = scene([["10:20", 412.4, 412.5, 411.7, 411.8]], 412.0);
+    expect(manage(e(iso("10:20", 40)), PLAN.call, low.bars, low.quote, low.now, false).line).toBe("Holding: stop 411.90 · target 1 413.22");
+  });
+
+  it("(b) an unreadable fill time: manage it on your chart, with the stop and target still shown", () => {
+    const sc = scene([["10:20", 412.4, 412.5, 412.3, 412.45]], 412.45);
+    expect(manage(e("garbage"), PLAN.call, sc.bars, sc.quote, sc.now, false)).toMatchObject({
+      tone: "warn",
+      line: "Fill time unknown: manage this one on your chart",
+      stop: 411.9,
+      target1: 413.22,
+      notWorkingSecLeft: null,
+    });
+  });
+
+  it("(c) rule 6 is judged once, on the first price from 5 minutes in", () => {
+    const fill = e(iso("10:18", 30)); // due at 10:23:30: the first price after it is the 10:24 open
+    const base: Spec[] = [
+      ["10:20", 412.4, 412.5, 412.3, 412.4],
+      ["10:22", 412.4, 412.45, 412.3, 412.38],
+    ];
+    // not past the entry then: the exit holds though the price is past it now
+    const not = scene([...base, ["10:24", 412.35, 412.45, 412.3, 412.4], ["10:26", 412.5, 412.7, 412.5, 412.6]], 412.65);
+    expect(manage(fill, PLAN.call, not.bars, not.quote, not.now, false)).toMatchObject({ line: "5 min, not working: exit", notWorkingSecLeft: 0 });
+    // past it then: satisfied, and not shown again though the price is back under it
+    const ok = scene([...base, ["10:24", 412.5, 412.55, 412.4, 412.45], ["10:26", 412.4, 412.45, 412.2, 412.3]], 412.3);
+    expect(manage(fill, PLAN.call, ok.bars, ok.quote, ok.now, false)).toMatchObject({ line: "Holding: stop 411.90 · target 1 413.22", notWorkingSecLeft: null });
+    // the trail's first point from 10:23:30 judges it when the page has the trail
+    const t = withPoints(not, [{ at: nyMs("10:23", S, "-04:00", 40), p: 412.5 }]);
+    expect(manage(fill, PLAN.call, t.bars, t.quote, t.now, false, t.trail).notWorkingSecLeft).toBeNull();
   });
 });
