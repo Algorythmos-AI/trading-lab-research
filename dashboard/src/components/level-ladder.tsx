@@ -33,6 +33,11 @@ export interface LevelLadderProps {
   live?: boolean;
   /** The alternative trigger the board shows live, if any: drawn in the warn tone with its word. */
   liveAlt?: LiveAlt | null;
+  /**
+   * Set when the same name's ladder is drawn twice on one page (the Cockpit's beside the card's): it keeps the element
+   * ids apart, since a hatch pattern resolves to the first id in the page, which may sit in a hidden card.
+   */
+  idScope?: string;
 }
 
 export interface LiveAlt {
@@ -83,12 +88,25 @@ export function geometryFor(
   });
 }
 
+/** The ids' key: the symbol, plus the scope when the same name's ladder is drawn twice on the page. */
+const idKey = (symbol: string, scope: string | undefined) => (scope ? `${symbol}-${scope}` : symbol);
+
 // The far side is dimmed only while the board highlights one side (LadderLive sets data-highlight).
 const DIM: Record<LadderSide, string> = {
   call: "group-data-[highlight=put]/ladder:opacity-40",
   put: "group-data-[highlight=call]/ladder:opacity-40",
 };
 const dim = (side: LadderSide | null) => (side ? DIM[side] : "");
+
+// The alternative the board shows live (LadderLive sets data-live-alt, ladder-live's liveAltKey): its marker takes the
+// warn tone and bold weight. Each class is written out in full so the stylesheet keeps it, with no underscore in the
+// value (Tailwind reads one there as a space); the tone is a variable the marker's tick and word read.
+const LIT: Record<`${LiveAlt["kind"]}-${LadderSide}`, string> = {
+  "failed_break-call": "group-data-[live-alt=fail-call]/ladder:[--alt-tone:var(--warn)] group-data-[live-alt=fail-call]/ladder:font-bold",
+  "failed_break-put": "group-data-[live-alt=fail-put]/ladder:[--alt-tone:var(--warn)] group-data-[live-alt=fail-put]/ladder:font-bold",
+  "sweep_reclaim-call": "group-data-[live-alt=sweep-call]/ladder:[--alt-tone:var(--warn)] group-data-[live-alt=sweep-call]/ladder:font-bold",
+  "sweep_reclaim-put": "group-data-[live-alt=sweep-put]/ladder:[--alt-tone:var(--warn)] group-data-[live-alt=sweep-put]/ladder:font-bold",
+};
 
 const TAG_FILL: Record<LadderRow["role"], string> = {
   ceiling: LINE_SVG.ceiling.text,
@@ -198,13 +216,14 @@ export function LadderSvg({ g, f, symbol, labelledBy, liveAlt }: { g: LadderGeom
       ))}
       {/* the marker column: the alternative triggers, each with a tick at its level */}
       {g.markers.map((m) => {
-        // Muted until the board says this one is live; then the warn tone, with its word.
+        // Muted until the board says this one is live; then the warn tone, with its word. A fixed liveAlt is drawn so
+        // here; the live board's one is lit by CSS from LadderLive's data-live-alt (tone and weight; the short form stays).
         const on = !!liveAlt && liveAlt.kind === m.kind && liveAlt.side === m.side;
-        const tone = on ? "var(--warn)" : "var(--muted-foreground)";
+        const tone = on ? "var(--warn)" : "var(--alt-tone, var(--muted-foreground))";
         return (
-          <g key={m.key} data-alt={m.kind} data-alt-side={m.side} data-alt-live={on ? "yes" : undefined} className={on ? undefined : dim(m.side)}>
+          <g key={m.key} data-alt={m.kind} data-alt-side={m.side} data-alt-live={on ? "yes" : undefined} className={on ? undefined : cn(dim(m.side), LIT[`${m.kind}-${m.side}`])}>
             <line x1={f.lineFrom - 3} x2={f.lineFrom + 4} y1={m.y} y2={m.y} stroke={tone} strokeWidth={2} />
-            <text x={f.markerX} y={m.labelY} textAnchor="end" dominantBaseline="central" fontSize={f.small} fontWeight={on ? 700 : 400} style={{ fill: tone }}>
+            <text x={f.markerX} y={m.labelY} textAnchor="end" dominantBaseline="central" fontSize={f.small} fontWeight={on ? 700 : undefined} style={{ fill: tone }}>
               {on ? (f.shortMarkers ? `${m.glyph} ${m.word}` : m.label) : m.short}
             </text>
           </g>
@@ -232,7 +251,7 @@ export function LadderSvg({ g, f, symbol, labelledBy, liveAlt }: { g: LadderGeom
 }
 
 /** Every level in words, highest first, for a screen reader: price, name, role and line style. */
-export function LadderList({ g, id, highlight, liveAlt }: { g: LadderGeometry; id: string; highlight?: LadderSide | null; liveAlt?: LiveAlt | null }) {
+export function LadderList({ g, id, highlight, liveAlt, live = false }: { g: LadderGeometry; id: string; highlight?: LadderSide | null; liveAlt?: LiveAlt | null; live?: boolean }) {
   const items: { key: string; price: number; text: string }[] = g.rows.map((r) => ({
     key: r.key,
     price: r.price,
@@ -248,7 +267,13 @@ export function LadderList({ g, id, highlight, liveAlt }: { g: LadderGeometry; i
   items.sort((a, b) => b.price - a.price);
   return (
     <ol id={id} className="sr-only">
-      <li key="highlight">{highlight ? `The ${highlight} side is highlighted; the ${highlight === "call" ? "put" : "call"} side is dimmed.` : "No side is highlighted."}</li>
+      {/* With the live layer on, the board can change the side: the live layer says which (ladder-live's ladderBoardLine),
+          so this list never contradicts what is drawn. A fixed side is said here. */}
+      {highlight ? (
+        <li key="highlight">{`The ${highlight} side is highlighted; the ${highlight === "call" ? "put" : "call"} side is dimmed.`}</li>
+      ) : live ? null : (
+        <li key="highlight">No side is highlighted.</li>
+      )}
       {items.map((x) => (
         <li key={x.key}>{x.text}</li>
       ))}
@@ -260,8 +285,9 @@ function Frame({ props, f }: { props: LevelLadderProps; f: LadderFrame }) {
   const { item, ticker, session, premarket, highlight, liveAlt, live = true } = props;
   const g = geometryFor(item, ticker, premarket, f, highlight);
   const i = ladderInputs(item, ticker, premarket);
-  const ids = `ladder-title-${item.symbol} ladder-list-${item.symbol}`;
-  const svg = <LadderSvg g={g} f={f} symbol={item.symbol} labelledBy={ids} liveAlt={liveAlt} />;
+  const key = idKey(item.symbol, props.idScope);
+  const ids = `ladder-title-${key} ladder-list-${key}`;
+  const svg = <LadderSvg g={g} f={f} symbol={key} labelledBy={ids} liveAlt={liveAlt} />;
   if (!live || !ticker)
     return (
       <div className="group/ladder" data-highlight={highlight ?? "none"}>
@@ -295,12 +321,13 @@ export function LevelLadder(props: LevelLadderProps) {
   const { item, ticker, premarket, highlight, liveAlt, size = "auto" } = props;
   const g = geometryFor(item, ticker, premarket, FRAMES.desktop, highlight);
   if (!g.rows.length) return null;
+  const key = idKey(item.symbol, props.idScope);
   return (
     <figure className="grid gap-2" data-testid={`ladder-${item.symbol}`}>
-      <p id={`ladder-title-${item.symbol}`} className="sr-only">
+      <p id={`ladder-title-${key}`} className="sr-only">
         {item.symbol} price ladder, highest price first
       </p>
-      <LadderList g={g} id={`ladder-list-${item.symbol}`} highlight={highlight} liveAlt={liveAlt} />
+      <LadderList g={g} id={`ladder-list-${key}`} highlight={highlight} liveAlt={liveAlt} live={(props.live ?? true) && !!ticker} />
       {size === "phone" ? null : (
         <div className={cn(size === "auto" && "hidden sm:block")}>
           <Frame props={props} f={FRAMES.desktop} />

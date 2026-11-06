@@ -71,7 +71,10 @@ test("the whole desk fits one laptop screen", async ({ page, isMobile }) => {
   await expect(rows(page)).toHaveCount(10);
   const box = await desk(page).boundingBox();
   expect(box).not.toBeNull();
-  expect(box!.y + box!.height).toBeLessThanOrEqual(900);
+  // The hero, the glance and the cards now sit above it, so the desk starts lower; scrolled to, it still fits one
+  // screen under the sticky rail.
+  const rail = (await page.locator("[data-status-rail]").boundingBox())?.height ?? 0;
+  expect(box!.height).toBeLessThanOrEqual(900 - rail);
   expect(box!.width).toBeGreaterThan(1300);
   // Centred in the window, with nothing hanging off either side.
   expect(box!.x).toBeGreaterThanOrEqual(0);

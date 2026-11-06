@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { LadderMark, LadderNote, tagY } from "@/components/client/ladder-live";
+import { LadderMark, LadderNote, liveAltKey, tagY } from "@/components/client/ladder-live";
 import { geometryFor, LadderMini, LevelLadder } from "@/components/level-ladder";
 import { spread as ledgerSpread } from "@/components/ledger";
 import { LINE, LINE_SVG } from "@/lib/chart-code";
@@ -280,17 +280,16 @@ describe("size and colour code", () => {
     expect(Math.min(...sizes)).toBeGreaterThanOrEqual(14);
   });
 
-  it("the ladder's strokes are the card's colour code, and the copy of LINE matches the focus card's", () => {
+  it("the ladder's strokes are the card's colour code, and the focus card reads LINE from here", () => {
     for (const k of ["ceiling", "floor", "week"] as const) expect(LINE[k].ball.replace("bg-", "--")).toBe(LINE_SVG[k].stroke.replace(/^var\((.*)\)$/, "$1"));
     expect(LINE.month.ball).toBe("bg-chart-7");
     expect(LINE_SVG.month.stroke).toBe("var(--chart-7)");
     expect(LINE_SVG.ceiling.width).toBe(3);
     expect(LINE_SVG.floor.width).toBe(3);
+    // One source: the focus card draws its balls and swatches from chart-code's LINE, and keeps no copy of its own.
     const card = readFileSync(fileURLToPath(new URL("../src/components/options-focus.tsx", import.meta.url)), "utf8");
-    for (const v of Object.values(LINE)) {
-      expect(card).toContain(`"${v.ball}"`);
-      expect(card).toContain(`"${v.swatch}"`);
-    }
+    expect(card).toMatch(/import \{[^}]*\bLINE\b[^}]*\} from "@\/lib\/chart-code"/);
+    expect(card).not.toMatch(/const LINE\b/);
   });
 });
 
@@ -365,5 +364,20 @@ describe("eyeball pass", () => {
     expect(tagY(100, [], 18, 14, 306)).toBe(100);
     const y = tagY(100, [100, 91], 18, 14, 306);
     expect(Math.min(...[100, 91].map((b) => Math.abs(b - y)))).toBeGreaterThanOrEqual(18);
+  });
+});
+
+describe("the board's live alternative on the ladder", () => {
+  it("each marker is lit by the key the live layer sets, and the static list says no side unless one is fixed", () => {
+    const html = renderToStaticMarkup(createElement(LevelLadder, { item: spy, ticker: tickerOf("SPY"), session: edition.session, halfDay: false, closeDate: edition.built_from ?? null, live: false }));
+    for (const kind of ["failed_break", "sweep_reclaim"] as const)
+      for (const side of ["call", "put"] as const) {
+        const marker = html.match(new RegExp(`<g data-alt="${kind}" data-alt-side="${side}"[^>]*class="([^"]*)"`));
+        if (!marker) continue;
+        expect(marker[1]).toContain(`group-data-[live-alt=${liveAltKey({ kind, side })}]/ladder:[--alt-tone:var(--warn)]`);
+        // no underscore in the key: Tailwind reads one in a variant's value as a space
+        expect(liveAltKey({ kind, side })).not.toContain("_");
+      }
+    expect(html).toContain('data-alt="failed_break" data-alt-side="put"');
   });
 });

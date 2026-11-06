@@ -449,6 +449,23 @@ export function ladderLiveView(i: LadderLiveInput): LadderLiveView {
   }
 }
 
+/**
+ * The age "Prices paused N s" gives, whole seconds: the older of the feed's answer and the name's last trade (a quote
+ * counted only when it is from the session day), on the board's clock. Null when either is not known. One helper for
+ * the ladder's caption and the hero, so the two never give different ages for one pause.
+ */
+export function pausedAgeS(
+  now: number | null,
+  answeredAt: number | null,
+  q: { day: string | null; price: number; at: string } | undefined,
+  session: string,
+): number | null {
+  if (now === null || answeredAt === null || !q || q.day !== session || !fin(q.price)) return null;
+  const at = Date.parse(q.at);
+  if (!Number.isFinite(at)) return null;
+  return Math.max(0, Math.round(Math.max(now - answeredAt, now - at) / 1000));
+}
+
 /** The page's live feed as the ladder reads it (client/use-quotes' Feed, structurally). */
 export type LadderFeed =
   | { status: "loading" | "off" | "error" }
@@ -483,7 +500,6 @@ export function ladderLiveState(p: {
   const feedAge = now !== null && answeredAt !== null ? now - answeredAt : Infinity;
   const tradeAge = now !== null && today ? now - Date.parse(today.at) : Infinity;
   const fresh = today !== null && feedAge <= FEED_STALE_MS && tradeAge <= TRADE_STALE_MS;
-  const worst = Math.max(feedAge, tradeAge);
   const clock = now === null ? null : nyClock(new Date(now).toISOString());
   const phase: LadderLiveInput["phase"] =
     !clock || clock.day < p.session || (clock.day === p.session && clock.minutes < OPEN_MIN)
@@ -496,7 +512,7 @@ export function ladderLiveState(p: {
     phase,
     today,
     fresh,
-    ageS: Number.isFinite(worst) ? Math.max(0, Math.round(worst / 1000)) : null,
+    ageS: pausedAgeS(now, answeredAt, q, p.session),
     premarket: p.premarket,
     close: p.close,
     closeDate: p.closeDate,
