@@ -148,9 +148,13 @@ export function checkFillTime(raw: string, now: number, session: string, halfDay
 // ---- the trades to manage -------------------------------------------------------------------------------------------
 /** A note is its trade's when the broker's fill (the journal's `opened_at`) is within this of the note's fill time. */
 export const NOTE_MATCH_MS = 2 * 60_000;
+/** The journal is taken to have caught up with a fill this long after it: a note it still doesn't show is unmatched. */
+export const JOURNAL_CATCH_UP_MS = 3 * 60_000;
+/** A lot this close to an unmatched note's time is offered as the fill time the owner meant. */
+export const NOTE_HINT_MS = 10 * 60_000;
 
 export interface OpenTrade {
-  /** One trade: name, side, the plan's kind, fill time and where it comes from. */
+  /** One trade: name, side, the plan's kind, fill time (and contract) and where it comes from. */
   id: string;
   symbol: string;
   side: Side;
@@ -159,6 +163,10 @@ export interface OpenTrade {
   kind: NoteKind;
   /** The note it is managed from; null for a journal lot. */
   note: ManualNote | null;
+  /** A note the journal has caught up with but shows no trade for: its card says CHECK, never an instruction. */
+  unmatched: boolean;
+  /** For an unmatched note: the opening time of a journal lot near it, the fill time the owner may have meant. */
+  hintAt: string | null;
 }
 
 const ms = (iso: string | null | undefined) => (iso ? Date.parse(iso) : NaN);
@@ -176,24 +184,62 @@ function lotsOn(lots: readonly Lot[], symbol: string, side: Side, session: strin
 }
 
 /**
- * The notes the journal has closed out. A note's trade is the journal's on the same name and side opened within
- * NOTE_MATCH_MS of its fill time; it is retired only once that trade shows CLOSED and no lot of it is still open
- * (selling half leaves the rest open). No other trade's close retires it, and a note the journal has not shown yet
- * stays. Retired notes leave the browser, and their card goes.
+ * A note's own trade in the journal: the EARLIEST lot or closed trade on its name and side opened within NOTE_MATCH_MS
+ * of its fill time. Once that first fill shows closed (with none of it still open), the trade ended at its close, and
+ * a lot opened at or after that close is a new trade even inside the window. `lots` are the trade's lots still open;
+ * `closed` tells it showed a close. Null: the journal shows nothing near the note.
+ */
+function noteTrade(n: ManualNote, lots: readonly Lot[], closed: readonly Trade[]): { lots: Lot[]; closed: boolean } | null {
+  const ls = lots.filter((l) => onSide(l, n.symbol, n.side) && near(l.opened_at, n));
+  const cs = closed.filter((t) => onSide(t, n.symbol, n.side) && near(t.opened_at, n));
+  if (ls.length === 0 && cs.length === 0) return null;
+  const first = Math.min(...ls.map((l) => ms(l.opened_at)), ...cs.map((t) => ms(t.opened_at)));
+  const firstClosed = cs.filter((t) => ms(t.opened_at) === first);
+  const firstOpen = ls.some((l) => ms(l.opened_at) === first);
+  const end = firstClosed.length && !firstOpen ? Math.max(...firstClosed.map((t) => ms(t.closed_at))) : Infinity;
+  return { lots: ls.filter((l) => ms(l.opened_at) < end), closed: cs.length > 0 };
+}
+
+/**
+ * The notes the journal has closed out: their own trade (noteTrade) shows CLOSED and no lot of it is still open
+ * (selling half leaves the rest open). No other trade's close retires a note, and a note the journal has not shown
+ * yet stays. Retired notes leave the browser, and their card goes.
  */
 export function retiredNotes(notes: readonly ManualNote[], lots: readonly Lot[], closed: readonly Trade[], session: string, asOf: string | null = null): ManualNote[] {
-  return notes.filter(
-    (n) => closed.some((t) => onSide(t, n.symbol, n.side) && near(t.opened_at, n)) && !lotsOn(lots, n.symbol, n.side, session, asOf).some((l) => near(l.opened_at, n)),
-  );
+  return notes.filter((n) => {
+    const t = noteTrade(n, lotsOn(lots, n.symbol, n.side, session, asOf), closed);
+    return t !== null && t.closed && t.lots.length === 0;
+  });
+}
+
+const sameContract = (a: Lot, b: Lot) => (a.strike ?? null) === (b.strike ?? null) && (a.expiry ?? null) === (b.expiry ?? null);
+
+/**
+ * Lots on one name and side, as trades: each lot its own, except lots of the same contract opened within
+ * NOTE_MATCH_MS of the trade's first fill (one position added to). Lots with no opening time make one trade together.
+ */
+function lotTrades(lots: readonly Lot[]): Lot[][] {
+  const timed = lots.filter((l) => Number.isFinite(ms(l.opened_at))).sort((a, b) => ms(a.opened_at) - ms(b.opened_at));
+  const out: Lot[][] = [];
+  for (const l of timed) {
+    const g = out.find((x) => sameContract(x[0]!, l) && ms(l.opened_at) - ms(x[0]!.opened_at) <= NOTE_MATCH_MS);
+    if (g) g.push(l);
+    else out.push([l]);
+  }
+  const untimed = lots.filter((l) => !Number.isFinite(ms(l.opened_at)));
+  if (untimed.length) out.push(untimed);
+  return out;
 }
 
 /**
  * The open trades on focus names. Every note the journal has not retired is a card of its own, managed from its fill
- * price and time; the journal's lots opened within NOTE_MATCH_MS of it are that trade. The other lots on a name and
- * side (`lots`: one per fill, as the journal has them, not merged) are a separate trade, with a journal card of its
- * own from the oldest fill, never a note's history. A lot with no opening time never overrides a note: with none on
- * the name and side it gives a card whose fill time is unknown (CHECK). A journal card has no underlying fill price:
- * the focus plan's entry on its side stands in for it ("card entry"), never a live alternative's.
+ * price and time, with its own trade's lots (noteTrade). Once the journal has caught up with a note
+ * (`asOf` on the session, JOURNAL_CATCH_UP_MS or more after its fill) and shows nothing near it, the note is unmatched: CHECK, and a lot
+ * within NOTE_HINT_MS is offered as the time meant. Every other lot on a name and side (`lots`: one per fill, as the
+ * journal has them, not merged) is a separate trade (lotTrades) with a journal card of its own, from its own first
+ * fill, never a note's history. A lot with no opening time never overrides a note: with none on the name and side
+ * it gives a card whose fill time is unknown (CHECK). A journal card has no underlying fill price: the focus plan's
+ * entry on its side stands in for it ("card entry"), never a live alternative's.
  */
 export function openTrades(
   items: readonly Item[],
@@ -206,31 +252,59 @@ export function openTrades(
   const names = new Set(items.map((i) => i.symbol));
   const gone = new Set(retiredNotes(notes, lots, closed, session, asOf).map(noteId));
   const live = notes.filter((n) => names.has(n.symbol) && !gone.has(noteId(n))).sort((a, b) => ms(a.at) - ms(b.at));
-  const out: OpenTrade[] = live.map((n) => ({
-    id: `${noteId(n)}|${n.kind}|manual`,
-    symbol: n.symbol,
-    side: n.side,
-    kind: n.kind,
-    plan: n.plan,
-    note: n,
-    entry: { side: n.side, price: n.price, at: n.at, source: "manual" },
-  }));
+  // a journal read on another day says nothing about this session's fills
+  const asOfToday = asOf ? nyClock(asOf)?.day === session : false;
+  const caughtUp = (n: ManualNote) => asOfToday && ms(asOf) >= ms(n.at) + JOURNAL_CATCH_UP_MS;
+  const taken = new Set<Lot>();
+  const out: OpenTrade[] = live.map((n) => {
+    const mine = lotsOn(lots, n.symbol, n.side, session, asOf);
+    const t = noteTrade(n, mine, closed);
+    for (const l of t?.lots ?? []) taken.add(l);
+    const unmatched = t === null && caughtUp(n);
+    const hint = unmatched
+      ? mine
+          .filter((l) => Math.abs(ms(l.opened_at) - ms(n.at)) <= NOTE_HINT_MS)
+          .sort((a, b) => Math.abs(ms(a.opened_at) - ms(n.at)) - Math.abs(ms(b.opened_at) - ms(n.at)))[0]
+      : undefined;
+    return {
+      id: `${noteId(n)}|${n.kind}|manual`,
+      symbol: n.symbol,
+      side: n.side,
+      kind: n.kind,
+      plan: n.plan,
+      note: n,
+      unmatched,
+      hintAt: hint?.opened_at ?? null,
+      entry: { side: n.side, price: n.price, at: n.at, source: "manual" },
+    };
+  });
 
   const pairs: { symbol: string; side: Side }[] = [];
   for (const l of lots)
     if (names.has(l.symbol) && (l.kind === "call" || l.kind === "put") && !pairs.some((p) => p.symbol === l.symbol && p.side === l.kind)) pairs.push({ symbol: l.symbol, side: l.kind });
   for (const { symbol, side } of pairs) {
-    const mine = live.filter((n) => n.symbol === symbol && n.side === side);
-    const own = lotsOn(lots, symbol, side, session, asOf).filter((l) => !mine.some((n) => near(l.opened_at, n)));
+    const noted = live.some((n) => n.symbol === symbol && n.side === side);
+    const own = lotsOn(lots, symbol, side, session, asOf).filter((l) => !taken.has(l));
     // a lot with no time never overrides a note
-    const rest = mine.length ? own.filter((l) => l.opened_at) : own;
-    if (rest.length === 0) continue;
-    const times = rest.map((l) => ms(l.opened_at));
-    const at = times.every(Number.isFinite) ? new Date(Math.min(...times)).toISOString() : "";
+    const rest = noted ? own.filter((l) => l.opened_at) : own;
     const plan = focusPlan(items.find((i) => i.symbol === symbol)!)[side];
     const ref = plan ? (plan.entry ?? plan.level) : null;
     if (ref === null) continue;
-    out.push({ id: `${symbol}|${side}|plan|${at}|journal`, symbol, side, kind: "plan", plan, note: null, entry: { side, price: ref, at, source: "journal" } });
+    for (const g of lotTrades(rest)) {
+      const at = g[0]!.opened_at ? new Date(ms(g[0]!.opened_at)).toISOString() : "";
+      const contract = `${g[0]!.strike ?? ""}/${g[0]!.expiry ?? ""}`;
+      out.push({
+        id: `${symbol}|${side}|plan|${at}|${contract}|journal`,
+        symbol,
+        side,
+        kind: "plan",
+        plan,
+        note: null,
+        unmatched: false,
+        hintAt: null,
+        entry: { side, price: ref, at, source: "journal" },
+      });
+    }
   }
   return out;
 }
@@ -303,11 +377,14 @@ export const OFF_LINE = "Live prices off: manage this one on your platform";
 export const FILLS_LINE = "From your fills: set your fill for exact levels";
 export const CARD_ENTRY = "(card entry)";
 export const FILL_MINUTE = "fill time to the minute";
+export const UNMATCHED_LINE = "Your fills don't show this trade: check the fill time, or Clear";
+/** The hint on an unmatched note's card: a journal lot near it. */
+export const hintLine = (symbol: string, side: Side, at: string) => `Your fills show a ${symbol} ${side} at ${nyHhmm(Date.parse(at))}: use that time?`;
 
 export interface ManageView {
   /** The trade (OpenTrade.id): the notices' memory. */
   id: string;
-  /** The name and side: one card, and one notice, each. */
+  /** The name and side (a name and side can have more than one card: a note and a separate trade). */
   key: string;
   symbol: string;
   side: Side;
@@ -323,6 +400,8 @@ export interface ManageView {
   fillLine: string | null;
   /** A note's fill time is typed to the minute: the card says so. */
   fillNote: string | null;
+  /** An unmatched note's offer of a journal lot's time: the line and the time to use. */
+  hint: { line: string; at: string } | null;
   /** The stop is the entry (target 1 hit). */
   stopAtEntry: boolean;
   /** The trail level; "after target 1", or "after 9 bars" once target 1 is hit and the trail has too few bars. */
@@ -411,8 +490,9 @@ export function manageView(t: OpenTrade, x: ManageInput): ManageView {
   // After target 1 `manage` moves the stop to the entry: that is how the card knows it was hit.
   const hit = t.plan?.target1 != null && m.stop === t.entry.price && t.plan.stop !== t.entry.price;
   const ownLine = cardEntry && hit ? m.line.split(p2(t.entry.price)).join(`${p2(t.entry.price)} ${CARD_ENTRY}`) : m.line;
-  const line = off ? OFF_LINE : paused ? PAUSED_LINE : ownLine;
-  const tone: Tone = off || paused ? "warn" : m.tone;
+  const check = t.unmatched || off || paused;
+  const line = t.unmatched ? UNMATCHED_LINE : off ? OFF_LINE : paused ? PAUSED_LINE : ownLine;
+  const tone: Tone = check ? "warn" : m.tone;
   return {
     id: t.id,
     key: `${t.symbol}|${t.side}`,
@@ -420,13 +500,14 @@ export function manageView(t: OpenTrade, x: ManageInput): ManageView {
     side: t.side,
     source: t.entry.source,
     kind: t.kind,
-    action: off || paused ? "check" : actionOf(m),
+    action: check ? "check" : actionOf(m),
     tone,
     line,
     m,
     cardEntry,
     fillLine: cardEntry ? FILLS_LINE : null,
     fillNote: cardEntry ? null : FILL_MINUTE,
+    hint: t.hintAt ? { line: hintLine(t.symbol, t.side, t.hintAt), at: t.hintAt } : null,
     stopAtEntry: hit,
     trailText: m.trail !== null ? p2(m.trail) : hit ? `after ${EMA_FAST} bars` : "after target 1",
     notWorkingText:
@@ -439,7 +520,7 @@ export function manageView(t: OpenTrade, x: ManageInput): ManageView {
 // ---- the notices ----------------------------------------------------------------------------------------------------
 export interface ManageNotice {
   id: string;
-  /** The name and side. */
+  /** The trade (ManageView.id): two cards on one name and side never replace each other's notice. */
   key: string;
   symbol: string;
   action: ManageAction;
@@ -464,18 +545,18 @@ export function manageNotices(
     if (v.action === "check") continue;
     const was = last[v.id];
     if (was !== undefined && was !== v.action)
-      fresh.push({ id: `${v.key}:${v.action}:${seq}`, key: v.key, symbol: v.symbol, action: v.action, title: `${v.symbol} ${v.side}: ${ACTION_WORD[v.action]}`, line: v.line, tone: v.tone });
+      fresh.push({ id: `${v.id}:${v.action}:${seq}`, key: v.id, symbol: v.symbol, action: v.action, title: `${v.symbol} ${v.side}: ${ACTION_WORD[v.action]}`, line: v.line, tone: v.tone });
     next[v.id] = v.action;
   }
   return { last: next, fresh };
 }
 
-/** The new notices first, each replacing the older one for its name and side. */
+/** The new notices first, each replacing the older one for its trade. */
 export function mergeNotices(old: readonly ManageNotice[], fresh: readonly ManageNotice[]): ManageNotice[] {
   return [...fresh, ...old.filter((n) => !fresh.some((f) => f.key === n.key))];
 }
 
 /** The notices to show: only while their card still says their word. */
 export function shownNotices(notices: readonly ManageNotice[], views: readonly ManageView[]): ManageNotice[] {
-  return notices.filter((n) => views.some((v) => v.key === n.key && v.action === n.action));
+  return notices.filter((n) => views.some((v) => v.id === n.key && v.action === n.action));
 }

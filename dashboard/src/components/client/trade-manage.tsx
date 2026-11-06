@@ -124,7 +124,20 @@ function Cell({ label, value, note, tone }: { label: string; value: string; note
  * One open trade: the header, one instruction line, then the stop, the trail, the 5-minute check and the flat time. A
  * journal card adds a CHECK line (its fill is the card's entry) with "Set my fill"; `children` is the form it opens.
  */
-export function ManageCard({ v, onClear, onSetFill, children }: { v: ManageView; onClear?: () => void; onSetFill?: () => void; children?: React.ReactNode }) {
+export function ManageCard({
+  v,
+  onClear,
+  onSetFill,
+  onUseTime,
+  children,
+}: {
+  v: ManageView;
+  onClear?: () => void;
+  onSetFill?: () => void;
+  /** An unmatched note: take the journal lot's time offered in `v.hint`. */
+  onUseTime?: () => void;
+  children?: React.ReactNode;
+}) {
   const Icon = ACTION_ICON[v.action];
   const exit = v.action === "exit";
   const counting = v.notWorkingText !== "working" && v.notWorkingText !== "done" && v.notWorkingText !== "–";
@@ -169,6 +182,16 @@ export function ManageCard({ v, onClear, onSetFill, children }: { v: ManageView;
         </StatusBadge>
         <span>{v.line}</span>
       </p>
+      {v.hint ? (
+        <p data-manage-hint className="text-warn flex flex-wrap items-center gap-2 text-xs font-medium">
+          <span>{v.hint.line}</span>
+          {onUseTime ? (
+            <button type="button" onClick={onUseTime} className="text-foreground hover:bg-muted rounded border px-2 py-0.5 font-medium">
+              Use that time
+            </button>
+          ) : null}
+        </p>
+      ) : null}
       {v.fillLine ? (
         <p data-manage-fills className="text-warn flex flex-wrap items-center gap-2 text-xs font-medium">
           <TriangleAlert aria-hidden className="size-3.5 shrink-0" />
@@ -448,6 +471,7 @@ export function useTradeManage(x: TradeManageInput): {
             v={v}
             onClear={t.note ? () => save(notes.filter((n) => noteId(n) !== noteId(t.note!))) : undefined}
             onSetFill={v.source === "journal" && x.now !== null ? () => setForm(formFromTrade(t, x.now!)) : undefined}
+            onUseTime={t.note && v.hint ? () => save([...notes.filter((n) => noteId(n) !== noteId(t.note!)), { ...t.note!, at: v.hint!.at }]) : undefined}
           >
             {open ? formEl(form, feed === "live" ? (rowOf(v.symbol)?.price ?? null) : null, null) : null}
           </ManageCard>

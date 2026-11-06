@@ -32,6 +32,7 @@ import {
   noteKey,
   NOTE_MATCH_MS,
   OFF_LINE,
+  UNMATCHED_LINE,
   openTrades,
   PAUSED_LINE,
   parseNotes,
@@ -333,6 +334,56 @@ describe("a note's lifecycle: matched to its own trade by the broker's fill time
   });
 });
 
+describe("a re-entry inside the window", () => {
+  it("note 10:28 (stored 10:29:00), stopped 10:29:30, re-bought 10:30:30: the new lot is its own card and the note retires", () => {
+    const n = { ...note(), at: new Date(nyInstant(S, 629)!).toISOString() };
+    const closed = [closedAt(new Date(nyInstant(S, 628)! + 20_000).toISOString(), new Date(nyInstant(S, 629)! + 30_000).toISOString())];
+    const lots = [lotAt(new Date(nyInstant(S, 630)! + 30_000).toISOString())];
+    expect(retiredNotes([n], lots, closed, S)).toEqual([n]);
+    expect(openTrades(ITEMS, lots, [n], S, closed)).toMatchObject([{ note: null, entry: { source: "journal", at: lots[0]!.opened_at } }]);
+  });
+
+  it("an add before the first fill closed stays the note's trade", () => {
+    const n = { ...note(), at: new Date(nyInstant(S, 629)!).toISOString() };
+    const closed = [closedAt(new Date(nyInstant(S, 628)! + 20_000).toISOString(), new Date(nyInstant(S, 629)! + 30_000).toISOString())];
+    const lots = [lotAt(new Date(nyInstant(S, 628)! + 50_000).toISOString())];
+    expect(retiredNotes([n], lots, closed, S)).toEqual([]);
+    expect(openTrades(ITEMS, lots, [n], S, closed)).toMatchObject([{ note: n }]);
+  });
+});
+
+describe("a note the journal does not show", () => {
+  const after = (min: number) => new Date(nyInstant(S, 628)! + min * 60_000).toISOString();
+
+  it("a mistyped 10:24 for a 10:28 fill: CHECK once the journal has caught up, with the lot's time offered", () => {
+    const n = { ...note(), at: ny(10, 24) };
+    const lots = [lotAt(ny(10, 28))];
+    const [own, other] = openTrades(ITEMS, lots, [n], S, [], after(4));
+    expect(own).toMatchObject({ note: n, unmatched: true, hintAt: ny(10, 28) });
+    expect(other).toMatchObject({ note: null, entry: { at: ny(10, 28) } }); // the lot keeps its own card meanwhile
+    const v = viewAt(3, [n], lots, { asOf: after(4) });
+    expect(v).toMatchObject({ action: "check", tone: "warn", line: UNMATCHED_LINE });
+    expect(v.hint).toEqual({ line: "Your fills show a QQQ call at 10:28: use that time?", at: ny(10, 28) });
+    const html = renderToStaticMarkup(createElement(ManageCard, { v, onUseTime: () => {} }));
+    expect(html).toContain("Use that time");
+    // taking the lot's time: the note matches it, one card
+    expect(openTrades(ITEMS, lots, [{ ...n, at: ny(10, 28) }], S, [], after(4))).toMatchObject([{ unmatched: false, entry: { source: "manual" } }]);
+  });
+
+  it("a note for a fill that never happened: CHECK, never HOLD, and no hint", () => {
+    const v = viewAt(3, [note()], [], { asOf: after(4) });
+    expect(v).toMatchObject({ action: "check", line: UNMATCHED_LINE, hint: null });
+    for (const step of [4, 5]) expect(viewAt(step, [note()], [], { asOf: after(20) }).action).toBe("check");
+  });
+
+  it("waits for the journal to catch up before calling a note unmatched", () => {
+    expect(viewAt(3, [note()], [], { asOf: after(2) }).action).toBe("hold");
+    expect(viewAt(3, [note()], [], { asOf: null }).action).toBe("hold");
+    expect(viewAt(3, [note()], [], { asOf: "2026-10-16T21:05:00Z" }).action).toBe("hold"); // read on another day
+    expect(openTrades(ITEMS, [lotAt(ny(10, 45))], [{ ...note(), at: ny(10, 24) }], S, [], after(30))[0]!.hintAt).toBeNull(); // beyond 10 min
+  });
+});
+
 describe("a lot with no opening time", () => {
   const asOf = new Date(clock(3)).toISOString();
 
@@ -411,7 +462,7 @@ describe("a journal lot with no note", () => {
   it("uses the focus plan's side only, never the board's live alternative, and names the kind in its id", () => {
     const [t] = openTrades(ITEMS, [lotAt(ny(10, 28))], [], S);
     expect(t).toMatchObject({ kind: "plan", plan: CALL, entry: { price: CALL.entry } });
-    expect(t!.id).toBe(`QQQ|call|plan|${ny(10, 28)}|journal`);
+    expect(t!.id).toBe(`QQQ|call|plan|${ny(10, 28)}|753/${S}|journal`);
   });
 
   it("says its levels are the card's, labels the card entry and offers Set my fill", () => {
@@ -436,9 +487,19 @@ describe("a journal lot with no note", () => {
     expect(formFromTrade(t!, clock(4))).toMatchObject({ symbol: "QQQ", side: "call", kind: "plan", plan: CALL, time: "10:28", origin: "card", state: null });
   });
 
-  it("reads the fill time from the oldest of the lots the position is made of", () => {
-    const [t] = openTrades(ITEMS, [lotAt(ny(10, 35)), lotAt(ny(10, 28), { strike: 754 }), lotAt(ny(10, 31))], [], S);
-    expect(t!.entry.at).toBe(ny(10, 28));
+  it("reads one position added to (the same contract within NOTE_MATCH_MS) from its first fill", () => {
+    const ts = openTrades(ITEMS, [lotAt(ny(10, 29)), lotAt(ny(10, 28)), lotAt(ny(10, 30))], [], S);
+    expect(ts.map((t) => t.entry.at)).toEqual([ny(10, 28)]);
+  });
+
+  it("keeps separate journal trades apart: A at 10:00 and B at 10:40 both open are two cards, each from its own fill", () => {
+    const ts = openTrades(ITEMS, [lotAt(ny(10, 40)), lotAt(ny(10, 0))], [], S);
+    expect(ts.map((t) => [t.entry.source, t.entry.at])).toEqual([
+      ["journal", ny(10, 0)],
+      ["journal", ny(10, 40)],
+    ]);
+    // another contract inside the window is another trade too
+    expect(openTrades(ITEMS, [lotAt(ny(10, 28)), lotAt(ny(10, 29), { strike: 754 })], [], S)).toHaveLength(2);
   });
 });
 
@@ -484,15 +545,17 @@ describe("the note's fill time", () => {
 describe("the manage notices", () => {
   const as = (v: ManageView, over: Partial<ManageView>): ManageView => ({ ...v, ...over });
 
-  it("are keyed by name and side, so a put's notice never replaces the call's", () => {
-    const call = viewAt(3);
-    const put = as(call, { id: "QQQ|put|x", key: "QQQ|put", side: "put" });
-    let r = manageNotices({}, [call, put], 0);
-    r = manageNotices(r.last, [as(call, { action: "sell_half" }), put], 1);
+  it("are keyed by trade, so two cards on one name and side never replace each other's notice", () => {
+    const noteCard = viewAt(3);
+    const lotCard = as(noteCard, { id: `QQQ|call|plan|${ny(10, 50)}|753/${S}|journal`, source: "journal" });
+    expect(lotCard.key).toBe(noteCard.key); // the same name and side
+    let r = manageNotices({}, [noteCard, lotCard], 0);
+    r = manageNotices(r.last, [as(noteCard, { action: "sell_half" }), lotCard], 1);
     const one = mergeNotices([], r.fresh);
-    r = manageNotices(r.last, [as(call, { action: "sell_half" }), as(put, { action: "exit" })], 2);
+    r = manageNotices(r.last, [as(noteCard, { action: "sell_half" }), as(lotCard, { action: "exit" })], 2);
     const both = mergeNotices(one, r.fresh);
-    expect(both.map((n) => n.key)).toEqual(["QQQ|put", "QQQ|call"]);
+    expect(both.map((n) => n.key)).toEqual([lotCard.id, noteCard.id]);
+    expect(shownNotices(both, [as(noteCard, { action: "sell_half" }), as(lotCard, { action: "exit" })])).toHaveLength(2);
   });
 
   it("do not count a CHECK as a change: a brief pause neither announces nor re-announces EXIT", () => {
