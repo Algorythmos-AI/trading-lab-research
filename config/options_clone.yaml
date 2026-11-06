@@ -125,7 +125,7 @@ costs:
 # wt.options.shadow books virtual trades in var/options/shadow/<date>.jsonl (the shadow arms). Every number below is
 # frozen by its hypothesis; turning the block on is the owner's step and starts each arm's window (never backfilled).
 research_arms:
-  enabled: false
+  enabled: true
   tags:
     iv_cap_index: 0.35          # HYP-0040/41: chain.Quote.iv of the contract bought, SPY and QQQ
     iv_cap_single: 0.70         # every other name
