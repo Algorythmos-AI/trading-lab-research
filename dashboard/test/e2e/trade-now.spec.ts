@@ -262,9 +262,14 @@ test("fits a 375 px screen with no sideways scroll", async ({ page, context, bas
           break;
         }
       if (clipped) continue;
-      const cls = typeof e.className === "string" ? e.className : "";
-      const data = [...e.attributes].filter((a) => a.name.startsWith("data-")).map((a) => a.name).join(" ");
-      out.push(`${e.tagName.toLowerCase()} [${data}] ${cls.slice(0, 80)} → ${Math.round(r.right)}px`);
+      // the element and its parents up to the nearest one with a data- attribute, each with its width
+      const chain: string[] = [];
+      for (let a: Element | null = e; a && chain.length < 8; a = a.parentElement) {
+        const data = [...a.attributes].filter((x) => x.name.startsWith("data-")).map((x) => `${x.name}=${x.value}`).join(",");
+        chain.push(`${a.tagName.toLowerCase()}${data ? `[${data}]` : ""}@${Math.round(a.getBoundingClientRect().width)}`);
+        if (data && a !== e) break;
+      }
+      out.push(`${Math.round(r.right)}px ${chain.join(" < ")}`);
     }
     return out.slice(0, 8);
   });
