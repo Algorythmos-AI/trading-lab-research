@@ -328,8 +328,9 @@ export function sideState(plan: SidePlan | null, atr: number | null | undefined,
     const b = closed[i]!;
     if (!beyond(b.c)) continue;
     if (i === 0) {
-      if (bars.complete && !beyond(b.o)) ia = 0;
-      else if (!bars.complete) unknownAt = 0;
+      // Python's retest never breaks on the session's first bar (it needs the close before it); the page does
+      // likewise, and with bars missing before it the break is unknown.
+      if (!bars.complete) unknownAt = 0;
       break;
     }
     const p = closed[i - 1]!;
@@ -653,7 +654,10 @@ export function manage(
   const hitIdx = t1 === null ? -1 : live.findIndex((b) => reached(s > 0 ? b.h : b.l));
   const hit = t1 !== null && (inFillBar || hitIdx >= 0 || (price !== null && reached(price)));
   const stop = hit ? entry.price : (plan?.stop ?? null);
-  const closesAfterHit = !hit ? [] : inFillBar ? since : hitIdx >= 0 ? since.slice(hitIdx + 1) : [];
+  // Closes that printed after the fill: the fill's own bar closes after it, so its close counts for the stop (only
+  // its high and low are cut, above).
+  const closesAfterFill = closedNow.filter((b) => b.end > at);
+  const closesAfterHit = !hit ? [] : inFillBar ? closesAfterFill : hitIdx >= 0 ? since.slice(hitIdx + 1) : [];
   const trailRaw = hit ? ema(closedNow.map((b) => b.c), EMA_FAST) : null;
   const trailLevel = trailRaw !== null ? Math.round(trailRaw * 100) / 100 : null;
 
@@ -670,7 +674,7 @@ export function manage(
   const word = s > 0 ? "Below" : "Above";
 
   // the plan's stop until target 1, the entry after it; any completed close beyond it since then ends the trade
-  const stopped = stop !== null && (hit ? closesAfterHit : since).some((b) => (b.c - stop) * s < 0);
+  const stopped = stop !== null && (hit ? closesAfterHit : closesAfterFill).some((b) => (b.c - stop) * s < 0);
   if (stopped) return { ...base, line: `${word} the stop ${p2(stop)}: exit`, tone: "bad" };
   if (hit && trailLevel !== null && closesAfterHit.length > 0) {
     const lc = closesAfterHit[closesAfterHit.length - 1]!;

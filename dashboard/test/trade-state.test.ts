@@ -501,10 +501,10 @@ describe("finding 3: a break on the page's first bar", () => {
     expect(call(scene([first, second], 412.6))).toMatchObject({ state: "get_ready", brokeEarlier: true, brokeAt: null });
   });
 
-  it("is a break when the page has the session from 09:30", () => {
+  it("is not a break even with the session from 09:30: the clone's retest needs the close before it", () => {
     const sc = scene([["09:30", ...first.slice(1)] as Spec, ["09:32", ...second.slice(1)] as Spec], 412.6);
     expect(sc.bars.complete).toBe(true);
-    expect(call(sc).state).toBe("enter_zone");
+    expect(call(sc).state).not.toBe("enter_zone");
   });
 });
 
@@ -599,10 +599,11 @@ describe("finding 9: managing on prices after the fill", () => {
     const m = manage(e(iso("10:20", 40)), PLAN.call, sc.bars, sc.quote, sc.now, false);
     expect(m).toMatchObject({ line: "Holding: stop 411.90 · target 1 413.22", stop: 411.9 });
     const withTrail = manage(e(iso("10:20", 20)), PLAN.call, sc.bars, sc.quote, sc.now, false, sc.trail);
-    expect(withTrail).toMatchObject({ line: "Target 1 hit: sell half, stop to 412.40", stop: 412.4 });
-    // nor is the fill bar's close a close under the stop
+    // target 1 printed inside the fill's bar; that bar has closed since, so the stop is at the entry and the trail waits
+    expect(withTrail).toMatchObject({ line: "Stop at 412.40: trail starts after 9 bars", stop: 412.4 });
+    // but the fill bar's close prints after the fill: a close under the stop there is an exit at once, not 2 min later
     const low = scene([["10:20", 412.4, 412.5, 411.7, 411.8]], 412.0);
-    expect(manage(e(iso("10:20", 40)), PLAN.call, low.bars, low.quote, low.now, false).line).toBe("Holding: stop 411.90 · target 1 413.22");
+    expect(manage(e(iso("10:20", 40)), PLAN.call, low.bars, low.quote, low.now, false)).toMatchObject({ line: "Below the stop 411.90: exit", tone: "bad" });
   });
 
   it("(b) an unreadable fill time: manage it on your chart, with the stop and target still shown", () => {
