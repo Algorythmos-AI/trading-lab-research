@@ -287,10 +287,11 @@ function Row({ row, mode, paused, onOpen }: { row: BoardRow; mode: BoardMode; pa
     // Outside the live mode: the two trigger prices only.
     return (
       <li data-board-row={row.symbol} data-board-state="plan">
-        <button type="button" onClick={() => onOpen(row.symbol)} aria-label={`${row.symbol}: ${row.triggers}. ${label}`} className={cn(base, "flex items-baseline gap-x-3")}>
+        <button type="button" onClick={() => onOpen(row.symbol)} className={cn(base, "flex items-baseline gap-x-3")}>
           <span className="w-12 shrink-0 font-mono font-semibold">{row.symbol}</span>
           <span className="text-muted-foreground min-w-0 flex-1">{row.triggers}</span>
           <span className="text-muted-foreground shrink-0 font-mono">{mode.kind === "next" ? "" : px(row.price)}</span>
+          <span className="sr-only">. {label}</span>
         </button>
       </li>
     );
@@ -317,12 +318,13 @@ function Row({ row, mode, paused, onOpen }: { row: BoardRow; mode: BoardMode; pa
         data-expanded="true"
         className={cn("grid gap-1.5 rounded-md border px-1 pb-2", entry ? "bg-good-soft/60 border-good-fill/40" : "bg-warn-soft/40 border-warn-fill/40")}
       >
-        <button type="button" onClick={() => onOpen(row.symbol)} aria-label={`${row.symbol}, ${noticeTitle(s).split(": ")[1]}. ${label}`} className={cn(base, "grid gap-1 pt-2")}>
+        <button type="button" onClick={() => onOpen(row.symbol)} className={cn(base, "grid gap-1 pt-2")}>
           <span className="flex items-start gap-x-3">
             <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">{head}</span>
             <span className="shrink-0 font-mono font-semibold">{px(row.price)}</span>
           </span>
           <span className="text-sm leading-snug font-medium">{v.headline}</span>
+          <span className="sr-only">. {label}</span>
         </button>
         <div className="grid gap-1.5 px-2">
           <ValueGrid grid={v.grid} />
@@ -354,7 +356,6 @@ function Row({ row, mode, paused, onOpen }: { row: BoardRow; mode: BoardMode; pa
       <button
         type="button"
         onClick={() => onOpen(row.symbol)}
-        aria-label={`${row.symbol}, ${v.badge.word}. ${label}`}
         className={cn(base, "flex flex-wrap items-center gap-x-3 gap-y-1", quiet && "text-muted-foreground")}
       >
         {head}
@@ -362,6 +363,7 @@ function Row({ row, mode, paused, onOpen }: { row: BoardRow; mode: BoardMode; pa
           {v.headline}
         </span>
         <span className="ml-auto shrink-0 font-mono sm:ml-0">{px(row.price)}</span>
+        <span className="sr-only">. {label}</span>
       </button>
     </li>
   );
@@ -514,8 +516,10 @@ function BoardNotices({ notices, onOpen, onDrop }: { notices: NameState[]; onOpe
   return (
     <div
       data-board-notices={notices.length}
-      style={{ top }}
-      className="pointer-events-none fixed inset-x-3 z-40 flex flex-col gap-2 sm:right-3 sm:left-auto sm:w-[22rem]"
+      // On a phone the stack sits in the page's flow straight under the board, so it can never cover it; from sm up it is
+      // fixed at the top right, under the sticky header and clear of the board (useNoticeTop).
+      style={{ ["--notice-top" as string]: `${top}px` }}
+      className="z-40 mt-2 flex flex-col gap-2 sm:pointer-events-none sm:fixed sm:top-[var(--notice-top)] sm:right-3 sm:left-auto sm:mt-0 sm:w-[22rem]"
     >
       {shown.map(one)}
       {notices.length > 1 ? (
