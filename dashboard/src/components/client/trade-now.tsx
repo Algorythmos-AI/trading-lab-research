@@ -44,6 +44,8 @@ import { type NameState, type NameStateName, serverNow } from "@/lib/trade-state
 import { cn } from "@/lib/utils";
 import { useLive } from "./live-layer";
 import { useBars } from "./use-bars";
+import { useTradeManage } from "./trade-manage";
+import type { Lot, Trade } from "@/lib/journal";
 
 const STATE_ICON: Record<NameStateName, LucideIcon> = {
   no_trade: Ban,
@@ -302,7 +304,7 @@ function ValueGrid({ grid }: { grid: NonNullable<RowView["grid"]> }) {
   );
 }
 
-function Row({ row, mode, paused, onOpen }: { row: BoardRow; mode: BoardMode; paused: boolean; onOpen: (s: string) => void }) {
+function Row({ row, mode, paused, onOpen, extra }: { row: BoardRow; mode: BoardMode; paused: boolean; onOpen: (s: string) => void; extra?: React.ReactNode }) {
   const s = row.state;
   const base = "hover:bg-muted/60 w-full rounded px-2 py-1.5 text-left text-[0.8125rem]";
   const label = `Show the ${row.symbol} focus card`;
@@ -316,6 +318,7 @@ function Row({ row, mode, paused, onOpen }: { row: BoardRow; mode: BoardMode; pa
           <span className="text-muted-foreground shrink-0 font-mono">{mode.kind === "next" ? "" : px(row.price)}</span>
           <span className="sr-only">. {label}</span>
         </button>
+        {extra ? <div className="px-2 pb-1.5">{extra}</div> : null}
       </li>
     );
   }
@@ -369,6 +372,7 @@ function Row({ row, mode, paused, onOpen }: { row: BoardRow; mode: BoardMode; pa
               <p className="mt-1 leading-snug">{row.runner}</p>
             </details>
           ) : null}
+          {extra}
         </div>
       </li>
     );
@@ -388,6 +392,8 @@ function Row({ row, mode, paused, onOpen }: { row: BoardRow; mode: BoardMode; pa
         <span className="ml-auto shrink-0 font-mono sm:ml-0">{px(row.price)}</span>
         <span className="sr-only">. {label}</span>
       </button>
+      {/* an "I'm in" form opened while the row was an entry stays open as the row moves on */}
+      {extra ? <div className="px-2 pb-1.5">{extra}</div> : null}
     </li>
   );
 }
@@ -404,6 +410,8 @@ export function TradeNowBoard({
   barsDelayed = false,
   onOpen,
   switches,
+  rowExtra,
+  after,
 }: {
   mode: BoardMode;
   rows: BoardRow[];
@@ -414,6 +422,10 @@ export function TradeNowBoard({
   barsDelayed?: boolean;
   onOpen: (symbol: string) => void;
   switches?: React.ReactNode;
+  /** Drawn inside a row (an expanded one under its numbers): the manage card's "I'm in" and its form (trade-manage.tsx). */
+  rowExtra?: (row: BoardRow, paused: boolean) => React.ReactNode;
+  /** Drawn under the rows, and kept while the live prices are off: the manage cards (trade-manage.tsx). */
+  after?: React.ReactNode;
 }) {
   const showRows = mode.kind !== "old" && mode.kind !== "off";
   const status = mode.kind === "live" ? (paused ? "paused" : "live") : mode.kind === "loading" ? "connecting" : mode.kind === "off" ? "off" : "waiting";
@@ -462,10 +474,11 @@ export function TradeNowBoard({
       {showRows && rows.length ? (
         <ul className="grid gap-1" aria-label="Focus names, most urgent first">
           {rows.map((r) => (
-            <Row key={r.symbol} row={r} mode={mode} paused={paused} onOpen={onOpen} />
+            <Row key={r.symbol} row={r} mode={mode} paused={paused} onOpen={onOpen} extra={rowExtra?.(r, paused)} />
           ))}
         </ul>
       ) : null}
+      {after}
       <p className="text-muted-foreground text-[0.6875rem]">Advisory states from the study under test; the 9 rules are unchanged. Read only: nothing here places an order.</p>
     </section>
   );
@@ -502,7 +515,7 @@ function useNoticeTop(): number {
   return top;
 }
 
-function BoardNotices({ notices, onOpen, onDrop }: { notices: NameState[]; onOpen: (s: string) => void; onDrop: (s: NameState) => void }) {
+function BoardNotices({ notices, onOpen, onDrop, extra }: { notices: NameState[]; onOpen: (s: string) => void; onDrop: (s: NameState) => void; extra?: React.ReactNode }) {
   const top = useNoticeTop();
   const one = (s: NameState, i: number) => {
     const v = rowView(s);
@@ -552,6 +565,7 @@ function BoardNotices({ notices, onOpen, onDrop }: { notices: NameState[]; onOpe
       style={{ ["--notice-top" as string]: `${top}px` }}
       className="z-40 mt-2 flex flex-col gap-2 sm:pointer-events-none sm:fixed sm:top-[var(--notice-top)] sm:right-3 sm:left-auto sm:mt-0 sm:w-[22rem]"
     >
+      {extra}
       {shown.map(one)}
       {notices.length > 1 ? (
         <p className="bg-popover text-muted-foreground pointer-events-auto w-fit rounded-md border px-2.5 py-1 text-xs shadow-md sm:hidden" data-board-more>
@@ -573,7 +587,26 @@ function BoardNotices({ notices, onOpen, onDrop }: { notices: NameState[]; onOpe
  * in the browser from the focus card's levels, the live quotes and the session's 2-minute bars. Advisory and read
  * only. Nothing is drawn for an older edition or an edition without a focus card.
  */
-export function TradeNow({ e, live, dayLimitUsed, wonToday }: { e: Options; live: boolean; dayLimitUsed: boolean; wonToday: boolean | null }) {
+export function TradeNow({
+  e,
+  live,
+  dayLimitUsed,
+  wonToday,
+  openLots = [],
+  closedTrades = [],
+  journalAsOf = null,
+}: {
+  e: Options;
+  live: boolean;
+  dayLimitUsed: boolean;
+  wonToday: boolean | null;
+  /** The journal's open lots as it has them, one per fill (`doc.open`, not merged), for the manage card. */
+  openLots?: readonly Lot[];
+  /** The journal's closed trades (`doc.trades`), for the manage card: a note whose trade has closed is retired. */
+  closedTrades?: readonly Trade[];
+  /** When the journal was read (`doc.as_of`), for the manage card. */
+  journalAsOf?: string | null;
+}) {
   const { feed, now: browserNow } = useLive();
   const items = e.focus?.items ?? [];
   const symbols = [...items].sort((a, b) => a.rank - b.rank).map((i) => i.symbol).join(",");
@@ -643,6 +676,25 @@ export function TradeNow({ e, live, dayLimitUsed, wonToday }: { e: Options; live
   // shown: the screen never says "enter" for a state that is not live.
   const liveKeys = new Set(states.map(noticeKey).filter((k): k is string => k !== null));
   const shown = mode.kind === "live" ? book.kept.filter((k) => liveKeys.has(noticeKey(k) ?? "")) : [];
+  const manageUi = useTradeManage({
+    items,
+    session: e.session,
+    halfDay,
+    lots: openLots,
+    closed: closedTrades,
+    journalAsOf,
+    // each card reads its own name's row: paused or not
+    rows,
+    quotes: ok ? feed.quotes : {},
+    trails: ok ? feed.trails : {},
+    // the same session bars the rows read: none once they are stale or a poll failed, each with its fetch time
+    serverBars: used.bars,
+    serverFetchedAt: used.fetchedAt,
+    now,
+    mode: mode.kind,
+    // first shown once the bars have answered: a card read without them could flip its word, and announce it, a moment later
+    barsLoading: bars.status === "loading",
+  });
 
   if (!live || items.length === 0) return null;
   return (
@@ -654,6 +706,8 @@ export function TradeNow({ e, live, dayLimitUsed, wonToday }: { e: Options; live
         paused={paused}
         barsDelayed={mode.kind === "live" && used.delayed}
         onOpen={openFocusCard}
+        rowExtra={manageUi.rowExtra}
+        after={manageUi.cards}
         switches={
           <>
             <AlertButtons className="hidden sm:flex" />
@@ -664,7 +718,7 @@ export function TradeNow({ e, live, dayLimitUsed, wonToday }: { e: Options; live
       <p aria-live="polite" role="status" className="sr-only">
         {spoken}
       </p>
-      <BoardNotices notices={shown} onOpen={openFocusCard} onDrop={(s) => setBook((b) => ({ ...b, kept: b.kept.filter((x) => x !== s) }))} />
+      <BoardNotices notices={shown} onOpen={openFocusCard} onDrop={(s) => setBook((b) => ({ ...b, kept: b.kept.filter((x) => x !== s) }))} extra={manageUi.notices} />
     </>
   );
 }

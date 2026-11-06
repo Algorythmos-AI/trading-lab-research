@@ -2,6 +2,7 @@
 // where to enter, where it is wrong and where to take profit, and the short level codes written out.
 // Pure: no I/O. The same arithmetic prints the thread's focus card (skills/options-levels/scripts/focus.py card).
 import { NEW_YORK, SYDNEY } from "./format";
+import { BAR_MINUTES, FAIL_WITHIN_BARS, SWEEP_MIN_ATR } from "./entry-checks";
 import type { Options, OptionsTicker } from "./options";
 import { MAX_PREMIUM, MIN_ROOM_MULTIPLE } from "./trade-rules";
 
@@ -136,6 +137,65 @@ export function focusPlan(item: Item): {
       item.target_down,
     ),
   };
+}
+
+// ---- Also watch: the other triggers under test ------------------------------------------------------------------
+/** A trigger the card's plan does not take, described as a condition: the board shows it live once it has printed. */
+export interface AltCondition {
+  kind: "failed_break" | "sweep_reclaim";
+  /** The side it would be: a put at the ceiling, a call at the floor. */
+  side: "call" | "put";
+  level: number;
+  /** One line, plain words, prices to 2 decimals. */
+  line: string;
+}
+
+/**
+ * The other triggers at a focus name's levels, as conditions in plain words, with the engine's own numbers
+ * (FAIL_WITHIN_BARS, SWEEP_MIN_ATR). The engine (trade-state's altAt) reads both patterns at both levels, each on the
+ * side opposite to the plan there, so there are four, in this order: a failed break above the ceiling (a put) and below
+ * the floor (a call), then a sweep above the ceiling (a put) and below the floor (a call). As altAt reads them:
+ * - failed break: a 2-minute close beyond the level (the close before not beyond it), then within FAIL_WITHIN_BARS
+ *   bars the first close back inside it; the stop is past the push's extreme;
+ * - sweep: a bar that reaches at least SWEEP_MIN_ATR 2-minute ATRs past the level and closes at it or back inside; the
+ *   stop is past that bar's extreme.
+ * Static: the board reads them live. None without the plan's ATR: the board never shows one live without it.
+ */
+export function altTriggers(plan: { call: SidePlan | null; put: SidePlan | null }, atr: number | null | undefined): AltCondition[] {
+  if (!(typeof atr === "number" && Number.isFinite(atr) && atr > 0)) return [];
+  const out: AltCondition[] = [];
+  const mins = FAIL_WITHIN_BARS * BAR_MINUTES;
+  const ceiling = plan.call ? { level: plan.call.level, L: plan.call.level.toFixed(2) } : null;
+  const floor = plan.put ? { level: plan.put.level, L: plan.put.level.toFixed(2) } : null;
+  if (ceiling)
+    out.push({
+      kind: "failed_break",
+      side: "put",
+      level: ceiling.level,
+      line: `Failed break: if it closes above ${ceiling.L} and back below within ${FAIL_WITHIN_BARS} bars (${mins} min), a put under ${ceiling.L}, stop above the push high`,
+    });
+  if (floor)
+    out.push({
+      kind: "failed_break",
+      side: "call",
+      level: floor.level,
+      line: `Failed break: if it closes below ${floor.L} and back above within ${FAIL_WITHIN_BARS} bars (${mins} min), a call above ${floor.L}, stop below the push low`,
+    });
+  if (ceiling)
+    out.push({
+      kind: "sweep_reclaim",
+      side: "put",
+      level: ceiling.level,
+      line: `Sweep: if it rises at least ${SWEEP_MIN_ATR} × the ${BAR_MINUTES}-min ATR over ${ceiling.L} and closes back at or below it, a put under ${ceiling.L}, stop above the sweep high`,
+    });
+  if (floor)
+    out.push({
+      kind: "sweep_reclaim",
+      side: "call",
+      level: floor.level,
+      line: `Sweep: if it drops at least ${SWEEP_MIN_ATR} × the ${BAR_MINUTES}-min ATR under ${floor.L} and closes back at or above it, a call above ${floor.L}, stop below the sweep low`,
+    });
+  return out;
 }
 
 // ---- The lines to draw on the chart --------------------------------------------------------------------------------

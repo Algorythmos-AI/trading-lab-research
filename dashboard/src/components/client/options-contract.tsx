@@ -13,6 +13,7 @@ import { volShape } from "@/lib/volshape";
 import { VolShape } from "../options-vol-shape";
 import { useLive, useLiveRead } from "./live-layer";
 import { useChain } from "./use-chain";
+import { ContractIvLine } from "./contract-iv";
 import { Notice } from "@/components/ui/notice";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -338,6 +339,8 @@ export function OptionsContract({
               />
             </label>
           </div>
+
+          <ContractIvLine symbol={t.symbol} iv={view.contract?.iv} />
 
           {view.expired ? (
             <Empty title="This contract has expired">Choose another expiry, or clear it.</Empty>
