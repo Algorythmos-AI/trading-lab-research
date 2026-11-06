@@ -38,6 +38,8 @@ async function fixtureQuotes(symbols: string[], now: Date, tick = false): Promis
       low: Math.min(price, close),
       day: e.session,
       prev_close: close,
+      // Halfway between the open and the price: a VWAP that sits on the side the session has moved to.
+      vwap: Math.round(((close + price) / 2) * 100) / 100,
     };
   }
   return { as_of: now.toISOString(), feed: "iex", quotes, missing, fixture: true };

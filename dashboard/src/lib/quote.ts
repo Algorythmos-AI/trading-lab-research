@@ -15,6 +15,8 @@ export interface Quote {
   low: number | null;
   day: string | null;
   prev_close: number | null;
+  /** The session's volume-weighted average price so far on IEX (the day bar's `vw`), or null when Alpaca gives none. */
+  vwap: number | null;
 }
 
 export interface QuoteResponse {
@@ -63,7 +65,7 @@ function nyDay(iso: unknown): string | null {
   );
 }
 
-type Bar = { t?: unknown; o?: unknown; h?: unknown; l?: unknown; c?: unknown } | null | undefined;
+type Bar = { t?: unknown; o?: unknown; h?: unknown; l?: unknown; c?: unknown; vw?: unknown } | null | undefined;
 type RawSnapshot = { latestTrade?: { t?: unknown; p?: unknown } | null; dailyBar?: Bar; prevDailyBar?: Bar } | null;
 
 /** Alpaca's snapshot -> Quote, or null without a usable last trade. Unknown fields are ignored. */
@@ -80,6 +82,7 @@ export function normalise(raw: RawSnapshot): Quote | null {
     low: isNum(d?.l) ? d.l : null,
     day: nyDay(d?.t),
     prev_close: isNum(p?.c) ? p.c : null,
+    vwap: isNum(d?.vw) && d.vw > 0 ? d.vw : null,
   };
 }
 
