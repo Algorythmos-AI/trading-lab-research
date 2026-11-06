@@ -34,7 +34,7 @@ import {
 } from "@/lib/trade-manage";
 import type { BoardRow } from "@/lib/trade-now";
 import { nyClock } from "@/lib/options";
-import type { AltTrigger, Bar2 } from "@/lib/trade-state";
+import type { Bar2 } from "@/lib/trade-state";
 import { cn } from "@/lib/utils";
 import { TestingTag } from "./trade-now";
 
@@ -152,6 +152,7 @@ export function ManageCard({ v, onClear, onSetFill, children }: { v: ManageView;
                 <NotebookPen aria-hidden className="size-3" />
                 Your own note in this browser
               </span>
+              {v.fillNote ? <span data-manage-fill-note>{v.fillNote}</span> : null}
               {onClear ? (
                 <button type="button" onClick={onClear} className="hover:text-foreground flex items-center gap-1 rounded border px-1.5 py-0.5">
                   <X aria-hidden className="size-3" />
@@ -267,7 +268,7 @@ export function ImInForm({
           />
         </label>
         <label className="grid gap-0.5" htmlFor={`${id}-at`}>
-          <span className="text-muted-foreground text-[0.6875rem]">Filled at (New York)</span>
+          <span className="text-muted-foreground text-[0.6875rem]">Filled at (New York, to the minute)</span>
           <input
             id={`${id}-at`}
             type="text"
@@ -313,9 +314,11 @@ export interface TradeManageInput {
   halfDay: boolean;
   /** The journal's open lots as it has them, one per fill (`doc.open`, not merged); empty without a journal. */
   lots: readonly Lot[];
-  /** The journal's closed trades (`doc.trades`): a note whose trade has closed is retired. */
+  /** The journal's closed trades (`doc.trades`): a note whose own trade has closed is retired. */
   closed: readonly Trade[];
-  /** The board's rows: each card reads its own name's state (paused or not) and live alternative. */
+  /** When the journal was read (`doc.as_of`): a lot with no opening time counts only when that is today. */
+  journalAsOf: string | null;
+  /** The board's rows: each card reads its own name's state (paused or not). */
   rows: readonly BoardRow[];
   quotes: Readonly<Record<string, LiveQuote>>;
   trails: Readonly<Record<string, readonly TrailPoint[]>>;
@@ -328,16 +331,6 @@ export interface TradeManageInput {
   mode: string;
   /** The server's bars have not answered yet. */
   barsLoading: boolean;
-}
-
-/** The live alternative on each row, as the rows show it (a plan that is off, watching or missed). */
-function rowAlts(rows: readonly BoardRow[]): Record<string, AltTrigger | null> {
-  return Object.fromEntries(
-    rows.map((r) => {
-      const s = r.state;
-      return [r.symbol, s?.alt && (s.state === "plan_off" || s.state === "watch" || s.state === "missed") ? s.alt : null];
-    }),
-  );
 }
 
 /**
@@ -362,7 +355,7 @@ export function useTradeManage(x: TradeManageInput): {
   const feed = today && x.now !== null ? cardFeed(x.mode, x.barsLoading, wasLive) : null;
   if (feed === "live" && !wasLive) setWasLive(true);
   const rowOf = (symbol: string) => x.rows.find((r) => r.symbol === symbol);
-  const trades = feed ? openTrades(x.items, x.lots, notes, x.session, x.closed, rowAlts(x.rows)) : [];
+  const trades = feed ? openTrades(x.items, x.lots, notes, x.session, x.closed, x.journalAsOf) : [];
   const views = trades.map((t) =>
     manageView(t, {
       session: x.session,
@@ -378,7 +371,7 @@ export function useTradeManage(x: TradeManageInput): {
   );
 
   // The notes the journal has closed out leave this browser (their cards are already gone).
-  const retire = today ? retiredNotes(notes, x.lots, x.closed, x.session) : [];
+  const retire = today ? retiredNotes(notes, x.lots, x.closed, x.session, x.journalAsOf) : [];
   const retireSig = retire.map(noteId).join(",");
   useEffect(() => {
     if (!today || !retireSig) return;
@@ -451,7 +444,7 @@ export function useTradeManage(x: TradeManageInput): {
         const open = form && form.origin === "card" && form.symbol === v.symbol && form.side === v.side;
         return (
           <ManageCard
-            key={v.key}
+            key={v.id}
             v={v}
             onClear={t.note ? () => save(notes.filter((n) => noteId(n) !== noteId(t.note!))) : undefined}
             onSetFill={v.source === "journal" && x.now !== null ? () => setForm(formFromTrade(t, x.now!)) : undefined}

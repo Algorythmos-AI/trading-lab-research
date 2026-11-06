@@ -149,7 +149,7 @@ test("I'm in at the entry opens the manage card, which reads target 1 hit and th
   await expect(price).toHaveAttribute("aria-invalid", "true");
   await price.fill("753.43");
   // the fill time starts at the minute the form opened, and a time still to come is refused in place
-  const time = form.getByLabel("Filled at (New York)");
+  const time = form.getByLabel("Filled at (New York, to the minute)");
   await expect(time).toHaveValue("10:28");
   await time.fill("10:59");
   await form.getByRole("button", { name: "Save note" }).click();
@@ -160,6 +160,7 @@ test("I'm in at the entry opens the manage card, which reads target 1 hit and th
   const card = page.locator('[data-manage="QQQ"]');
   await expect(card).toContainText("In a trade · QQQ call");
   await expect(card).toContainText("Your own note in this browser");
+  await expect(card).toContainText("fill time to the minute");
   await expect(card).toHaveAttribute("data-manage-action", "hold");
   await expect(card.locator("[data-manage-line]")).toContainText("Holding: stop 752.01");
   await at(context, baseURL, 4);

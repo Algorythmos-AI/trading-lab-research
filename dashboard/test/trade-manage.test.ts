@@ -1,4 +1,4 @@
-import { type AltTrigger, type NameState, type NameStateName, SERVER_SETTLE_MS, TRADE_STALE_MS } from "@/lib/trade-state";
+import { type AltTrigger, bars2m, manage, type NameState, type NameStateName, SERVER_SETTLE_MS, TRADE_STALE_MS } from "@/lib/trade-state";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -30,6 +30,7 @@ import {
   movedOnLine,
   noteFromForm,
   noteKey,
+  NOTE_MATCH_MS,
   OFF_LINE,
   openTrades,
   PAUSED_LINE,
@@ -58,12 +59,12 @@ interface ViewOpts {
   rowState?: NameStateName | null;
   feed?: CardFeed;
   closed?: Trade[];
-  alts?: Record<string, AltTrigger | null>;
+  asOf?: string | null;
   quote?: ReturnType<typeof scriptQuote> | null;
 }
 
 function viewAt(step: number, notes: ManualNote[] = [note()], lots: Lot[] = [], o: ViewOpts = {}) {
-  const [t] = openTrades(ITEMS, lots, notes, S, o.closed ?? [], o.alts ?? {});
+  const [t] = openTrades(ITEMS, lots, notes, S, o.closed ?? [], o.asOf ?? null);
   const quote = o.quote !== undefined ? o.quote : scriptQuote("QQQ", S, step);
   return manageView(t!, {
     session: S,
@@ -163,7 +164,7 @@ describe("the I'm in form", () => {
     const html = renderToStaticMarkup(createElement(ImInForm, { f, live: 753.43, now: clock(3), session: S, halfDay: false, onSave: () => {}, onCancel: () => {} }));
     expect(html).toContain('value="753.43"');
     expect(html).toContain("QQQ call");
-    expect(html).toContain("Filled at (New York)");
+    expect(html).toContain("Filled at (New York, to the minute)");
     expect(html).toContain('value="10:28"');
     expect(html).toContain("Save note");
     expect(html).toContain("Nothing is sent anywhere");
@@ -287,47 +288,64 @@ describe("a card pauses on its own row and its own quote", () => {
   });
 });
 
-describe("a note's lifecycle", () => {
-  it("the review's case: noted 10:28, stopped 10:40, a new lot at 11:30 is managed as its own trade and the note retires", () => {
+describe("a note's lifecycle: matched to its own trade by the broker's fill time", () => {
+  it("(1) noted 10:28, its trade closed 10:31, a new lot at 10:35: the note retires and the lot gets its own journal card", () => {
     const n = note(); // 10:28
-    const closed = [closedAt(ny(10, 28), ny(10, 40))];
-    const lots = [lotAt(ny(11, 30))];
+    const closed = [closedAt(ny(10, 28), ny(10, 31))];
+    const lots = [lotAt(ny(10, 35))];
     expect(retiredNotes([n], lots, closed, S)).toEqual([n]);
     const ts = openTrades(ITEMS, lots, [n], S, closed);
     expect(ts).toHaveLength(1);
-    expect(ts[0]).toMatchObject({ note: null, entry: { source: "journal", at: ny(11, 30), price: CALL.entry } });
-    expect(ts[0]!.entry.price).not.toBe(n.price);
+    expect(ts[0]).toMatchObject({ note: null, entry: { source: "journal", at: ny(10, 35), price: CALL.entry } });
   });
 
-  it("retires a note once its trade has closed, and the card goes", () => {
-    const closed = [closedAt(ny(10, 28), ny(10, 40))];
-    expect(openTrades(ITEMS, [], [note()], S, closed)).toEqual([]);
+  it("(2) another trade's close never retires a note the journal has not shown yet", () => {
+    const n = { ...note(), at: ny(10, 40) };
+    const closed = [closedAt(ny(10, 30), new Date(nyInstant(S, 10 * 60 + 40)! + 20_000).toISOString())];
+    expect(retiredNotes([n], [], closed, S)).toEqual([]);
+    expect(openTrades(ITEMS, [], [n], S, closed)).toMatchObject([{ note: n, entry: { source: "manual" } }]);
   });
 
-  it("keeps a note while part of its trade is still open, or when the closed trade is another side or closed before it", () => {
+  it("(3) a note at 10:28 manages the lot opened at 10:29, with no second card", () => {
+    const ts = openTrades(ITEMS, [lotAt(ny(10, 29))], [note()], S);
+    expect(ts).toHaveLength(1);
+    expect(ts[0]).toMatchObject({ entry: { source: "manual", price: note().price } });
+  });
+
+  it("matches within NOTE_MATCH_MS only, and a lot further off is a separate trade with its own card", () => {
+    expect(NOTE_MATCH_MS).toBe(120_000);
+    const ts = openTrades(ITEMS, [lotAt(ny(10, 31))], [note()], S); // 2 min 34 s after the note
+    expect(ts.map((t) => t.entry.source)).toEqual(["manual", "journal"]);
+    expect(ts[1]!.entry.at).toBe(ny(10, 31));
+    expect(retiredNotes([note()], [], [closedAt(ny(10, 31), ny(10, 40))], S)).toEqual([]);
+  });
+
+  it("keeps a note while part of its own trade is still open, or when the closed trade is another side or name", () => {
     expect(retiredNotes([note()], [lotAt(ny(10, 28))], [closedAt(ny(10, 28), ny(10, 40))], S)).toEqual([]); // sold half
-    expect(retiredNotes([note()], [], [closedAt(ny(10, 0), ny(10, 20))], S)).toEqual([]);
     expect(retiredNotes([note()], [], [closedAt(ny(10, 28), ny(10, 40), { kind: "put" })], S)).toEqual([]);
     expect(retiredNotes([note()], [], [closedAt(ny(10, 28), ny(10, 40), { symbol: "SPY" })], S)).toEqual([]);
   });
 
-  it("yields to a journal lot opened more than 10 minutes after its fill, and never lends it its entry", () => {
-    const [own] = openTrades(ITEMS, [lotAt(ny(10, 30))], [note()], S);
-    expect(own).toMatchObject({ entry: { source: "manual", price: note().price } });
-    const [other] = openTrades(ITEMS, [lotAt(ny(10, 50))], [note()], S);
-    expect(other).toMatchObject({ note: null, entry: { source: "journal", price: CALL.entry, at: ny(10, 50) } });
-    // a lot with no time is not provably the note's trade: the journal card, with the fill time unknown
-    const [unknown] = openTrades(ITEMS, [lotAt(null)], [note()], S);
-    expect(unknown).toMatchObject({ entry: { source: "journal", at: "" } });
+  it("keeps several notes, each its own card, and retires each only by its own trade", () => {
+    const later = { ...note(), price: 754, at: ny(10, 45) };
+    expect(openTrades(ITEMS, [], [note(), later], S).map((t) => t.entry.at)).toEqual([note().at, ny(10, 45)]);
+    expect(retiredNotes([note(), later], [], [closedAt(ny(10, 28), ny(10, 40))], S)).toEqual([note()]);
+  });
+});
+
+describe("a lot with no opening time", () => {
+  const asOf = new Date(clock(3)).toISOString();
+
+  it("never overrides a note", () => {
+    expect(openTrades(ITEMS, [lotAt(null)], [note()], S, [], asOf)).toMatchObject([{ entry: { source: "manual" } }]);
   });
 
-  it("keeps several notes and manages the newest on a name and side", () => {
-    const later = { ...note(), price: 754, at: ny(10, 45) };
-    const ts = openTrades(ITEMS, [], [note(), later], S);
-    expect(ts).toHaveLength(1);
-    expect(ts[0]!.entry).toMatchObject({ price: 754, at: ny(10, 45) });
-    // the first one closed at 10:40: it retires, the 10:45 one stays
-    expect(retiredNotes([note(), later], [], [closedAt(ny(10, 28), ny(10, 40))], S)).toEqual([note()]);
+  it("with no note gives the fill time unknown CHECK, only when the journal says it is open today", () => {
+    const [t] = openTrades(ITEMS, [lotAt(null)], [], S, [], asOf);
+    expect(t).toMatchObject({ entry: { source: "journal", at: "" } });
+    expect(viewAt(3, [], [lotAt(null)], { asOf })).toMatchObject({ action: "check", line: "Fill time unknown: manage this one on your chart" });
+    expect(openTrades(ITEMS, [lotAt(null)], [], S, [], "2026-10-09T20:00:00Z")).toEqual([]);
+    expect(openTrades(ITEMS, [lotAt(null)], [], S)).toEqual([]);
   });
 });
 
@@ -390,12 +408,10 @@ describe("the feed off", () => {
 });
 
 describe("a journal lot with no note", () => {
-  it("takes a live alternative's levels on its side, else the focus plan's", () => {
-    const callAlt: AltTrigger = { kind: "sweep_reclaim", side: "call", level: 748.4, stop: 747.9, entry: 748.6, at: 0 };
-    const [a] = openTrades(ITEMS, [lotAt(ny(10, 28))], [], S, [], { QQQ: callAlt });
-    expect(a).toMatchObject({ kind: "sweep_reclaim", plan: altPlan(callAlt), entry: { price: 748.6 } });
-    const [b] = openTrades(ITEMS, [lotAt(ny(10, 28))], [], S, [], { QQQ: FAILED_PUT });
-    expect(b).toMatchObject({ kind: "plan", plan: CALL, entry: { price: CALL.entry } });
+  it("uses the focus plan's side only, never the board's live alternative, and names the kind in its id", () => {
+    const [t] = openTrades(ITEMS, [lotAt(ny(10, 28))], [], S);
+    expect(t).toMatchObject({ kind: "plan", plan: CALL, entry: { price: CALL.entry } });
+    expect(t!.id).toBe(`QQQ|call|plan|${ny(10, 28)}|journal`);
   });
 
   it("says its levels are the card's, labels the card entry and offers Set my fill", () => {
@@ -427,15 +443,41 @@ describe("a journal lot with no note", () => {
 });
 
 describe("the note's fill time", () => {
-  it("takes HH:MM New York within today's session and not in the future", () => {
-    expect(checkFillTime("10:28", clock(3), S, false)).toEqual({ ok: true, at: ny(10, 28) });
-    expect(checkFillTime(" 9:45 ", clock(3), S, false)).toEqual({ ok: true, at: ny(9, 45) });
+  const end = (h: number, m: number) => new Date(nyInstant(S, h * 60 + m)! + 60_000).toISOString();
+
+  it("takes HH:MM New York within today's session and not in the future, as the end of that minute", () => {
+    expect(checkFillTime("10:28", clock(3), S, false)).toEqual({ ok: true, at: end(10, 28) });
+    expect(checkFillTime(" 9:45 ", clock(3), S, false)).toEqual({ ok: true, at: end(9, 45) });
     expect(checkFillTime("10:29", clock(3), S, false)).toEqual({ ok: false, error: "That time is still to come: type the time of your fill" });
     expect(checkFillTime("09:29", clock(3), S, false)).toEqual({ ok: false, error: "The fill must be in today's session, 09:30 to 16:00 New York" });
     expect(checkFillTime("13:00", clock(3), S, true)).toMatchObject({ ok: false });
     expect(checkFillTime("1028", clock(3), S, false)).toEqual({ ok: false, error: "Type the time of your fill, like 10:28" });
     expect(checkFillTime("25:00", clock(3), S, false)).toMatchObject({ ok: false });
     expect(checkFillTime("10:28", clock(3) + 86_400_000, S, false)).toEqual({ ok: false, error: "A note is for today's session only" });
+  });
+
+  it("never counts a price from before the end of the typed minute, and rule 6 is due at most 60 s late, never early", () => {
+    const r = checkFillTime("10:28", clock(3) + 120_000, S, false);
+    if (!r.ok) throw new Error(r.error);
+    const at = Date.parse(r.at);
+    for (const fill of [nyInstant(S, 628)!, nyInstant(S, 628)! + 30_000, nyInstant(S, 628)! + 59_999]) {
+      expect(at - fill).toBeGreaterThan(0);
+      expect(at - fill).toBeLessThanOrEqual(60_000);
+    }
+    const now = new Date(at + 60_000);
+    const early = [{ at: nyInstant(S, 628)! + 40_000, p: CALL.target1! + 1 }]; // inside the typed minute
+    const m = manage({ side: "call", price: 753, at: r.at, source: "manual" }, CALL, bars2m([], null, now, false, S), null, now, false, early);
+    expect(m.tone).not.toBe("good");
+    expect(m.stop).toBe(CALL.stop);
+  });
+
+  it("says in the label and on the card that it is to the minute", () => {
+    const f = formFromRow("QQQ", entryState, QQQ, clock(3))!;
+    expect(renderToStaticMarkup(createElement(ImInForm, { f, live: 753.4, now: clock(3), session: S, halfDay: false, onSave: () => {}, onCancel: () => {} }))).toContain(
+      "Filled at (New York, to the minute)",
+    );
+    expect(renderToStaticMarkup(createElement(ManageCard, { v: viewAt(3) }))).toContain("fill time to the minute");
+    expect(viewAt(3, [], [lotAt(ny(10, 28))]).fillNote).toBeNull();
   });
 });
 

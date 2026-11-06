@@ -130,7 +130,7 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
         {/* Top of the trading screen: what to do now, the few names to watch, then the desk; the day's limits sit
             straight under it. The board and the cards share the page's one live feed. */}
         <PaneBoundary name="Trade now">
-          <TradeNow e={full} live={!date} {...day} openLots={journal.status === "ok" ? (journal.doc.open ?? []) : []} closedTrades={journal.status === "ok" ? journal.doc.trades : []} />
+          <TradeNow e={full} live={!date} {...day} openLots={journal.status === "ok" ? (journal.doc.open ?? []) : []} closedTrades={journal.status === "ok" ? journal.doc.trades : []} journalAsOf={journal.status === "ok" ? journal.doc.as_of : null} />
         </PaneBoundary>
         <PaneBoundary name="Today's focus">
           <FocusStrip e={full} />

@@ -594,6 +594,7 @@ export function TradeNow({
   wonToday,
   openLots = [],
   closedTrades = [],
+  journalAsOf = null,
 }: {
   e: Options;
   live: boolean;
@@ -603,6 +604,8 @@ export function TradeNow({
   openLots?: readonly Lot[];
   /** The journal's closed trades (`doc.trades`), for the manage card: a note whose trade has closed is retired. */
   closedTrades?: readonly Trade[];
+  /** When the journal was read (`doc.as_of`), for the manage card. */
+  journalAsOf?: string | null;
 }) {
   const { feed, now: browserNow } = useLive();
   const items = e.focus?.items ?? [];
@@ -679,7 +682,8 @@ export function TradeNow({
     halfDay,
     lots: openLots,
     closed: closedTrades,
-    // each card reads its own name's row: paused or not, and its live alternative
+    journalAsOf,
+    // each card reads its own name's row: paused or not
     rows,
     quotes: ok ? feed.quotes : {},
     trails: ok ? feed.trails : {},
