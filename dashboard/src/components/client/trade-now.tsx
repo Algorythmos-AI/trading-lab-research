@@ -35,6 +35,7 @@ import {
   boardNotices,
   boardRows,
   type NoticeBook,
+  noticeKey,
   noticeTitle,
   rowView,
   type RowView,
@@ -625,7 +626,7 @@ export function TradeNow({ e, live, dayLimitUsed, wonToday }: { e: Options; live
   const settled = mode.kind === "live" && bars.status !== "loading";
   if (settled) {
     // Announces what is new and withdraws, for good, every notice whose state has left the board.
-    const next = boardNotices(book, e.session, states);
+    const next = boardNotices(book, e.session, states, now ?? undefined);
     if (next.book !== book) {
       setBook(next.book);
       if (next.fresh.length) setRing({ n: ring.n + 1, fresh: next.fresh });
@@ -638,7 +639,10 @@ export function TradeNow({ e, live, dayLimitUsed, wonToday }: { e: Options; live
     }
   }
   // A notice goes with its state: once the name has left the zone (or its alternative has ended), it is withdrawn.
-  const shown = mode.kind === "live" ? [...book.kept] : [];
+  // A notice whose state is off the board is kept for a moment (so a brief blip doesn't ring it again) but never
+  // shown: the screen never says "enter" for a state that is not live.
+  const liveKeys = new Set(states.map(noticeKey).filter((k): k is string => k !== null));
+  const shown = mode.kind === "live" ? book.kept.filter((k) => liveKeys.has(noticeKey(k) ?? "")) : [];
 
   if (!live || items.length === 0) return null;
   return (

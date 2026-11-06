@@ -2,6 +2,7 @@ import "server-only";
 import { type BarsResponse, fetchBars } from "./bars";
 import { FIXTURE_OFFSET_ATR, flagsFromCookieHeader } from "./fixture-variants";
 import { scriptBars, scriptStep, stepFromCookieHeader, stepInstant } from "./fixture-script";
+import { SERVER_SETTLE_MS } from "./trade-state";
 import { logEvent } from "./log";
 import { nyInstant, OPEN_MIN } from "./options";
 import type { OptionsEdition } from "./options.types";
@@ -50,7 +51,8 @@ async function fixtureBars(symbols: string[], now: Date, script: { step: number 
     });
   }
   const asOf = script ? stepInstant(e.session, script.step) : now.getTime();
-  const fetchedAt = Object.fromEntries(Object.keys(bars).map((s) => [s, asOf]));
+  // The scripted bars are the session as it was, final: they read as settled (SERVER_SETTLE_MS) at the step's clock.
+  const fetchedAt = Object.fromEntries(Object.keys(bars).map((s) => [s, asOf + SERVER_SETTLE_MS]));
   return { as_of: new Date(asOf).toISOString(), feed: "iex", bars, fetchedAt, missing, fixture: true };
 }
 

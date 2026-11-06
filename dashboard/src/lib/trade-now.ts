@@ -8,7 +8,7 @@ import { focusPlan, type SidePlan } from "./focus-plan";
 import { sessionView, type JournalDoc } from "./journal";
 import { closeMinute, type LiveQuote, nyClock, OPEN_MIN, type Options, type OptionsTicker, type TrailPoint } from "./options";
 import { DAY_LOSS_LIMIT, dayCheck, MAX_TRADES_PER_DAY, MIN_ROOM_MULTIPLE, PREMIUM_STOP, RISK_PER_TRADE } from "./trade-rules";
-import { type AltTrigger, atr2m, BAR_MINUTES, type Bar2, bars2m, CLOSE_GRACE_MS, flatMinute, FIRST_ENTRY_MIN, mergeBars, type NameState, type NameStateName, nameState } from "./trade-state";
+import { type AltTrigger, atr2m, BAR_MINUTES, type Bar2, bars2m, flatMinute, FIRST_ENTRY_MIN, mergeBars, MAX_BARS_TO_RETEST, type NameState, type NameStateName, nameState, SERVER_SETTLE_MS } from "./trade-state";
 import { BARS_STALE_MS, type BarsFeed } from "./bars-feed";
 import { LEADERS, type Side } from "./entry-checks";
 import type { Tone } from "./labels";
@@ -132,7 +132,7 @@ export function boardRows(input: BoardInput, live: boolean): BoardRow[] {
       // A server bar counts only if it had closed (and its grace passed) when the server read it: a snapshot taken
       // mid-bar is not a close. Where the server has no complete bar, the page's own bar is used.
       const fetchedAt = input.serverFetchedAt[item.symbol] ?? null;
-      const serverDone = fetchedAt === null ? [] : (input.serverBars[item.symbol] ?? []).filter((b) => b.end <= fetchedAt - CLOSE_GRACE_MS);
+      const serverDone = fetchedAt === null ? [] : (input.serverBars[item.symbol] ?? []).filter((b) => b.end <= fetchedAt - SERVER_SETTLE_MS);
       const bars = mergeBars(serverDone, trail, fetchedAt);
       const lead = LEADERS[item.symbol];
       const state = nameState({
@@ -196,7 +196,26 @@ export function boardAnnounce(seen: SeenStates | null, session: string, states: 
 export interface NoticeBook {
   seen: SeenStates | null;
   kept: readonly NameState[];
+  /** When each notice family (a name, side and level, without the bar) was last told (ms, the board's clock). */
+  told?: ReadonlyMap<string, number>;
+  /** When each kept notice's state was first missing from the board (ms): it is withdrawn only after WITHDRAW_AFTER_MS. */
+  gone?: ReadonlyMap<string, number>;
 }
+
+/**
+ * A kept notice is withdrawn only once its state has been off the board this long: a single render without it (one
+ * failed bars poll, a brief price pause, the bar source switching) must not take a live entry's notice away.
+ */
+export const WITHDRAW_AFTER_MS = 30_000;
+/**
+ * The same name, side and level is told again only after this long: a break bar that shifts by a slot when the bars
+ * switch between the server's and the page's own is the same entry, not a new one. The retest window (the clone's
+ * max_bars_to_retest, 6 bars after the break bar: 14 minutes), so a genuinely new break later is still told.
+ */
+export const RETELL_AFTER_MS = (MAX_BARS_TO_RETEST + 1) * BAR_MINUTES * 60_000;
+
+/** A notice key without its bar: the same name, side and level. */
+const family = (key: string) => key.split("|").slice(0, -1).join("|");
 
 /**
  * One step of the notices as states reach the board: announce what is new (boardAnnounce), keep it in front of the
@@ -204,21 +223,50 @@ export interface NoticeBook {
  * key stays told, so the old notice can never come back with an old state. `book` comes back as the same object
  * when nothing changed.
  */
-export function boardNotices(book: NoticeBook, session: string, states: readonly NameState[]): { book: NoticeBook; fresh: NameState[] } {
+export function boardNotices(book: NoticeBook, session: string, states: readonly NameState[], now?: number): { book: NoticeBook; fresh: NameState[] } {
   const next = boardAnnounce(book.seen, session, states);
   const live = new Set(states.map(noticeKey).filter((k): k is string => k !== null));
-  const merged = next.fresh.length ? [...next.fresh, ...book.kept.filter((k) => !next.fresh.some((f) => f.symbol === k.symbol))] : book.kept;
-  const kept = merged.filter((k) => live.has(noticeKey(k) ?? ""));
+  // Without a clock (the older callers), every new key is told and a missing state is withdrawn at once.
+  const timed = typeof now === "number" && Number.isFinite(now);
+  const told = new Map(book.seen?.session === session ? (book.told ?? []) : []);
+  const fresh = timed
+    ? next.fresh.filter((f) => {
+        const fam = family(noticeKey(f) ?? "");
+        const last = told.get(fam);
+        return last === undefined || now - last >= RETELL_AFTER_MS;
+      })
+    : next.fresh;
+  if (timed) for (const f of fresh) told.set(family(noticeKey(f) ?? ""), now);
+  // Shown: the newly told in front, then the older ones (one per name). A re-keyed entry inside the retell window
+  // replaces its old notice quietly, so the notice follows the live state without ringing again.
+  const shownNew = next.fresh;
+  const merged = shownNew.length ? [...shownNew, ...book.kept.filter((k) => !shownNew.some((f) => f.symbol === k.symbol))] : book.kept;
+  const gone = new Map(book.gone ?? []);
+  const kept = merged.filter((k) => {
+    const key = noticeKey(k) ?? "";
+    if (live.has(key)) {
+      gone.delete(key);
+      return true;
+    }
+    if (!timed) return false;
+    const since = gone.get(key) ?? now;
+    gone.set(key, since);
+    return now - since < WITHDRAW_AFTER_MS;
+  });
+  for (const key of [...gone.keys()]) if (!kept.some((k) => noticeKey(k) === key)) gone.delete(key);
   const keptSame = kept.length === book.kept.length && kept.every((k, i) => k === book.kept[i]);
-  if (next.seen === book.seen && keptSame) return { book, fresh: [] };
-  return { book: { seen: next.seen, kept: keptSame ? book.kept : kept }, fresh: next.fresh };
+  const goneSame = gone.size === (book.gone?.size ?? 0) && [...gone].every(([k, v]) => book.gone?.get(k) === v);
+  const toldSame = told.size === (book.told?.size ?? 0) && [...told].every(([k, v]) => book.told?.get(k) === v);
+  if (next.seen === book.seen && keptSame && goneSame && toldSame) return { book, fresh: [] };
+  return { book: { seen: next.seen, kept: keptSame ? book.kept : kept, told, gone }, fresh };
 }
 
 /**
  * Which of the server's bars the board may use, from the bars feed and the browser's clock: all of them while the
  * last poll succeeded within BARS_STALE_MS; none once it is older or a poll has failed, and then the board says the
- * session bars are delayed (`delayed`), and every state reads the page's own prices only (a slot it lacks is a gap,
- * never an entry). None, quietly, while loading or not configured.
+ * session bars are delayed (`delayed`), and every state reads the page's own prices only: the engine then judges
+ * a break from what this page saw, and a slot it lacks around the break is a gap (no entry). None, quietly, while
+ * loading or not configured.
  */
 export function barsInUse(feed: BarsFeed, browserNow: number | null): { bars: Record<string, Bar2[]>; fetchedAt: Record<string, number>; delayed: boolean } {
   if (feed.status === "ok" && !feed.failed && browserNow !== null && browserNow - feed.receivedAt <= BARS_STALE_MS)

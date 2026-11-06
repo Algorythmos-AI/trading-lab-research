@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { alertMenuKey, alertMenuOutside, TradeNowBoard } from "@/components/client/trade-now";
 import { BARS_STALE_MS, type BarsFeed } from "@/lib/bars-feed";
-import type { Bar2, NameState } from "@/lib/trade-state";
+import { type Bar2, type NameState, SERVER_SETTLE_MS } from "@/lib/trade-state";
 import { focusOptions } from "@/lib/fixture-variants";
 import { SCRIPT_ANSWER_LAG_MS, SCRIPT_SYMBOLS, scriptBars, scriptQuote, stepInstant } from "@/lib/fixture-script";
 import type { LiveQuote, Options } from "@/lib/options";
@@ -13,6 +13,8 @@ import {
   boardAnnounce,
   boardNotices,
   type NoticeBook,
+  RETELL_AFTER_MS,
+  WITHDRAW_AFTER_MS,
   boardDay,
   type BoardInput,
   boardMode,
@@ -45,7 +47,7 @@ function atStep(step: number, over: Partial<BoardInput> = {}): BoardInput {
     quotes,
     trails: {},
     serverBars: Object.fromEntries(ITEMS.map((i) => [i.symbol, scriptBars(i.symbol, S, step)])),
-    serverFetchedAt: Object.fromEntries(ITEMS.map((i) => [i.symbol, stepInstant(S, step)])),
+    serverFetchedAt: Object.fromEntries(ITEMS.map((i) => [i.symbol, stepInstant(S, step) + SERVER_SETTLE_MS])), // the script's bars are final
     now: at + 1_000,
     receivedAt: at,
     dayLimitUsed: false,
@@ -308,8 +310,8 @@ describe("a server bar still forming when the server read it", () => {
     expect(st.state).not.toBe("enter_zone");
   });
 
-  it("uses the server's bar once it had closed when the server read it", () => {
-    expect(boardRows(input(ny("10:22:05")), true)[0]!.state!.call.brokeAt).toBe(ny("10:22:00"));
+  it("uses the server's bar once it had settled when the server read it", () => {
+    expect(boardRows(input(ny("10:22:00") + SERVER_SETTLE_MS), true)[0]!.state!.call.brokeAt).toBe(ny("10:22:00"));
   });
 
   it("uses no server bar for a name without a fetch time", () => {
@@ -392,6 +394,39 @@ describe("notices over a session", () => {
     const back = boardNotices(b, S, [{ ...first, line: "newer" }]);
     expect(back.fresh).toEqual([]);
     expect(back.book.kept).toEqual([]);
+  });
+
+  it("with the board's clock: a one-render blip neither rings the entry again nor loses it", () => {
+    const first = enterAt(ny("10:28:00"));
+    const t0 = ny("10:28:05");
+    let b = boardNotices(empty, S, [watching], t0).book;
+    const r1 = boardNotices(b, S, [first], t0 + 1_000);
+    expect(r1.fresh).toEqual([first]);
+    b = boardNotices(r1.book, S, [watching], t0 + 2_000).book; // one bars poll failed: off the board for a moment
+    expect(b.kept).toEqual([first]); // kept (not shown: the board shows only live keys)
+    const back = boardNotices(b, S, [first], t0 + 3_000);
+    expect(back.fresh).toEqual([]);
+    expect(back.book.kept).toEqual([first]);
+    // gone for longer than WITHDRAW_AFTER_MS: withdrawn
+    let g = boardNotices(back.book, S, [watching], t0 + 4_000).book;
+    g = boardNotices(g, S, [watching], t0 + 4_000 + WITHDRAW_AFTER_MS).book;
+    expect(g.kept).toEqual([]);
+  });
+
+  it("with the board's clock: a break bar that shifts by one slot is the same entry; a new break past the window rings", () => {
+    const t0 = ny("10:28:05");
+    let b = boardNotices(empty, S, [watching], t0).book;
+    const r1 = boardNotices(b, S, [enterAt(ny("10:28:00"))], t0 + 1_000);
+    expect(r1.fresh).toHaveLength(1);
+    // the bars switched source and the break now reads one bar later: not told again, but shown with the live state
+    const shifted = enterAt(ny("10:30:00"));
+    const r2 = boardNotices(r1.book, S, [shifted], t0 + 60_000);
+    expect(r2.fresh).toEqual([]);
+    expect(r2.book.kept).toEqual([shifted]);
+    // a genuinely new break later in the session, past the retest window: told
+    b = boardNotices(r2.book, S, [watching], t0 + 120_000).book;
+    const later = enterAt(ny("11:42:00"));
+    expect(boardNotices(b, S, [later], t0 + RETELL_AFTER_MS + 120_000).fresh).toEqual([later]);
   });
 
   it("comes back as the same book when nothing changed", () => {

@@ -3,7 +3,7 @@ import { BARS_CACHE_MS, fetchBars, MAX_PAGES, normaliseBar, resetBarsCache } fro
 import { handleBars } from "@/lib/bars-route";
 import { handleQuote } from "@/lib/quote-route";
 import { scriptBars, SCRIPT_STEPS, stepInstant } from "@/lib/fixture-script";
-import { atr2m, type Bar2, type Bars2m, mergeBars } from "@/lib/trade-state";
+import { SERVER_SETTLE_MS, atr2m, type Bar2, type Bars2m, mergeBars } from "@/lib/trade-state";
 
 const NOW = new Date("2026-10-12T15:00:00Z"); // 11:00 New York, EDT
 const OPEN = Date.parse("2026-10-12T13:30:00Z");
@@ -214,7 +214,8 @@ describe("GET /api/bars", () => {
     expect(scripted.bars.QQQ).toEqual(scriptBars("QQQ", "2026-10-12", 3));
     expect(scripted.missing).toEqual(["MSFT"]);
     // each name's fetch time is the step's instant: the bar forming then is not complete
-    expect(scripted.fetchedAt).toEqual({ QQQ: stepInstant("2026-10-12", 3), AAPL: stepInstant("2026-10-12", 3) });
+    // the script's bars are final: they read as settled at the step's clock
+    expect(scripted.fetchedAt).toEqual({ QQQ: stepInstant("2026-10-12", 3) + SERVER_SETTLE_MS, AAPL: stepInstant("2026-10-12", 3) + SERVER_SETTLE_MS });
   });
 });
 
@@ -297,6 +298,21 @@ describe("mergeBars", () => {
     expect(m.gaps).toBe(0);
   });
 
+  it("waits SERVER_SETTLE_MS before an ended server bar may stand for its slot: the trail's close wins until then", () => {
+    const at = (hhmm: string, sec = 0) => Date.parse(`2026-10-12T${hhmm}:${String(sec).padStart(2, "0")}-04:00`);
+    // fetched 6 s after the 10:20 bar ended: upstream may not yet hold its last minute (c 752.95 is the first minute's)
+    const server = [bar(at("10:18"), 752.8), { ...bar(at("10:20"), 752.95) }];
+    const mine = trail([bar(at("10:20"), 752.7)], null, at("10:20"));
+    const early = mergeBars(server, mine, at("10:22", 6));
+    expect(early.closed.find((b) => b.start === at("10:20"))!.c).toBe(752.7);
+    // without the page's bar for that slot it is missing (a gap), never the unsettled server close
+    const none = mergeBars(server, trail([], null, null), at("10:22", 6));
+    expect(none.closed.some((b) => b.start === at("10:20"))).toBe(false);
+    expect(SERVER_SETTLE_MS).toBe(60_000);
+    // a minute later the server's bar is settled and wins
+    expect(mergeBars(server, mine, at("10:22") + SERVER_SETTLE_MS).closed.find((b) => b.start === at("10:20"))!.c).toBe(752.95);
+  });
+
   it("never takes a server bar still forming at its fetch as closed: the trail's bar wins that slot", () => {
     const at = (hms: string) => Date.parse(`2026-10-12T${hms}-04:00`);
     const forming = { start: at("10:20:00"), end: at("10:22:00"), o: 752.0, h: 752.95, l: 751.9, c: 752.95 };
@@ -308,7 +324,7 @@ describe("mergeBars", () => {
     // and no fetch time: no server bar at all
     expect(mergeBars([forming], mine, null)).toEqual(mine);
     // complete at its fetch: the server's wins
-    expect(mergeBars([forming], mine, at("10:22:05")).closed.map((b) => b.c)).toEqual([752.95]);
+    expect(mergeBars([forming], mine, at("10:23:00")).closed.map((b) => b.c)).toEqual([752.95]); // settled: SERVER_SETTLE_MS after its end
   });
 
   it("is the trail alone without server bars, and the server alone without a trail", () => {

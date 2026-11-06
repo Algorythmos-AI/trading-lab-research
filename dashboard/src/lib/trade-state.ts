@@ -49,6 +49,12 @@ export const MAX_CAUTIONS_SHOWN = 2;
 /** A bar whose end has passed is still forming until a later price arrives, or this long after its end: a trade
  * stamped inside it can still reach the page. */
 export const CLOSE_GRACE_MS = 5_000;
+/**
+ * A bar the server read from Alpaca is taken as complete only this long after it ended: an upstream 2-minute bar may
+ * not yet hold its last minute a few seconds after the slot. Until then the page's own bar for the slot is used, or
+ * the slot is missing (a gap, never an entry).
+ */
+export const SERVER_SETTLE_MS = 60_000;
 /** The desk's own number, not a clone parameter: an alternative trigger is shown for this many completed 2-minute
  * bars (6 minutes) after the bar that completed it, then dropped. */
 export const ALT_LIVE_BARS = 3;
@@ -696,8 +702,8 @@ export function manage(
 /**
  * The session's 2-minute bars from the server (`/api/bars`) joined to the page's own (bars2m of the price trail).
  * `fetchedAt` is when the server read its bars upstream (ms, the server's clock): a server bar counts only if it had
- * ended at least CLOSE_GRACE_MS before that, so a bar still forming when the server read it is never taken as a
- * completed close. Null (unknown) uses no server bar. The server wins every slot it has a completed bar for: it saw
+ * ended at least SERVER_SETTLE_MS before that, so a bar still forming (or not yet holding its last minute upstream)
+ * when the server read it is never taken as a completed close. Null (unknown) uses no server bar. The server wins every slot it has a completed bar for: it saw
  * every print since 09:30, the page only the ones it polled. The trail fills every other slot (a hole inside the
  * server's range, the slots after its last one) and supplies the bar still forming. `since` is the earlier of the two
  * first bars, so a page that has the server's bars from the open reads as having seen the whole session. `missing`
@@ -705,7 +711,7 @@ export function manage(
  */
 export function mergeBars(serverBars: readonly Bar2[], trail: Bars2m, fetchedAt: number | null): Bars2m {
   if (fetchedAt === null || !isNum(fetchedAt)) return trail;
-  const cut = fetchedAt - CLOSE_GRACE_MS;
+  const cut = fetchedAt - SERVER_SETTLE_MS;
   const bySlot = new Map<number, Bar2>();
   for (const b of serverBars)
     if (isNum(b.start) && isNum(b.end) && isNum(b.o) && isNum(b.h) && isNum(b.l) && isNum(b.c) && b.end <= cut) bySlot.set(b.start, { ...b });
