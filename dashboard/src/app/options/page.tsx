@@ -2,7 +2,7 @@ import { PageHeading } from "@/components/page-heading";
 import { TradeRulesFor } from "@/components/trade-rules";
 import { BoardTable, EditionPanel, HowToRead, NoOptions, PaperPanel, RulesPanel, StructurePanel, TickerCards } from "@/components/options";
 import { FocusScope, LiveQuotes } from "@/components/client/live-layer";
-import { TradeNow } from "@/components/client/trade-now";
+import { BoardProvider, TradeNow } from "@/components/client/trade-now";
 import { DayBar, FocusStrip, focusOnly } from "@/components/options-focus";
 import { LedgerReview } from "@/components/ledger";
 import { OptionsDesk } from "@/components/client/options-desk";
@@ -127,10 +127,11 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
         </PaneBoundary>
       ) : null}
       <LiveQuotes symbols={withLeaders(e.tickers.map((t) => t.symbol)).join(",")} session={e.session} enabled={!date}>
+        <BoardProvider e={full} live={!date} {...day} openLots={journal.status === "ok" ? (journal.doc.open ?? []) : []} closedTrades={journal.status === "ok" ? journal.doc.trades : []} journalAsOf={journal.status === "ok" ? journal.doc.as_of : null}>
         {/* Top of the trading screen: what to do now, the few names to watch, then the desk; the day's limits sit
             straight under it. The board and the cards share the page's one live feed. */}
         <PaneBoundary name="Trade now">
-          <TradeNow e={full} live={!date} {...day} openLots={journal.status === "ok" ? (journal.doc.open ?? []) : []} closedTrades={journal.status === "ok" ? journal.doc.trades : []} journalAsOf={journal.status === "ok" ? journal.doc.as_of : null} />
+          <TradeNow />
         </PaneBoundary>
         <PaneBoundary name="Today's focus">
           <FocusStrip e={full} />
@@ -200,6 +201,7 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
           </PaneBoundary>
           </section>
         </details>
+        </BoardProvider>
       </LiveQuotes>
     </>
   );

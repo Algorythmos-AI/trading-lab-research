@@ -23,7 +23,7 @@ import {
   Zap,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { StatusBadge } from "@/components/status";
 import { newYork } from "@/lib/format";
 import { isHalfDay, type Options } from "@/lib/options";
@@ -61,7 +61,7 @@ const STATE_ICON: Record<NameStateName, LucideIcon> = {
 export const OPEN_NAME_EVENT = "options-open-name";
 
 /** Bring a name's focus card into view and select the name on the desk. */
-function openFocusCard(symbol: string) {
+export function openFocusCard(symbol: string) {
   window.dispatchEvent(new CustomEvent(OPEN_NAME_EVENT, { detail: symbol }));
   const card = document.getElementById(`focus-card-${symbol}`);
   if (!card) return;
@@ -152,7 +152,7 @@ function systemNotice(s: NameState) {
 }
 
 /** The two opt-in switches. Both start off; permission is asked for only on the owner's click. */
-function AlertButtons({ className }: { className?: string }) {
+export function AlertButtons({ className }: { className?: string }) {
   const alerts = useAlerts();
   const [blocked, setBlocked] = useState(false);
   const toggleNotify = async () => {
@@ -206,7 +206,7 @@ const CONTROL = "a[href], button, input, select, textarea, summary, [tabindex]";
  * Esc (with the focus in the menu or on the bell) or a click outside closes it and gives the focus back to the bell.
  * The listeners are on only while it is open.
  */
-function AlertMenu() {
+export function AlertMenu() {
   const alerts = useAlerts();
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLSpanElement>(null);
@@ -582,12 +582,87 @@ function BoardNotices({ notices, onOpen, onDrop, extra }: { notices: NameState[]
 }
 
 // ---- the board, live -----------------------------------------------------------------------------------------------
+/** One line of the "Today" change log: a name's state word changed, at the board's (server) clock. */
+export interface BoardLogEntry {
+  at: number;
+  symbol: string;
+  word: string;
+  side: "call" | "put" | null;
+  tone: RowView["badge"]["tone"];
+}
+/** The log keeps this many lines; the newest first. */
+export const BOARD_LOG_MAX = 30;
+const LOG_KEY = (session: string) => `trade-now-log:${session}`;
+
+/** The log saved in this browser for the session, if any; [] when storage is off or the text is not a log. */
+export function parseBoardLog(raw: string | null): BoardLogEntry[] {
+  if (!raw) return [];
+  try {
+    const v: unknown = JSON.parse(raw);
+    if (!Array.isArray(v)) return [];
+    return v
+      .filter((x): x is BoardLogEntry => !!x && typeof x === "object" && typeof (x as BoardLogEntry).at === "number" && typeof (x as BoardLogEntry).symbol === "string" && typeof (x as BoardLogEntry).word === "string")
+      .slice(0, BOARD_LOG_MAX);
+  } catch {
+    return [];
+  }
+}
+
+/** What the whole page reads of the board: one computation, so the hero, the glance, the ladders, the cards and the rows always agree. */
+export interface Board {
+  /** The board is drawn at all: a live edition with focus names. */
+  on: boolean;
+  session: string;
+  halfDay: boolean;
+  mode: BoardMode;
+  /** The board's (server) clock, ms; null before the browser has read it. */
+  now: number | null;
+  rows: BoardRow[];
+  states: NameState[];
+  paused: boolean;
+  barsDelayed: boolean;
+  /** The manage card's pieces (trade-manage.tsx), and each open trade's action word for the hero. */
+  manage: ReturnType<typeof useTradeManage>;
+  /** The notices to show now, and how to drop one. */
+  notices: NameState[];
+  dropNotice: (s: NameState) => void;
+  /** The last state changes this session, newest first (kept in this browser). */
+  log: BoardLogEntry[];
+  /** The screen-reader line for the latest changes. */
+  spoken: string;
+}
+
+const BoardContext = createContext<Board | null>(null);
+
+/** The page's board; null outside a BoardProvider. */
+export function useBoard(): Board | null {
+  return useContext(BoardContext);
+}
+
+/** One name's live row on the board, or null (no board, not live, or the name is not on it). */
+export function useBoardRow(symbol: string): { row: BoardRow; view: RowView | null; paused: boolean } | null {
+  const b = useBoard();
+  const row = b?.rows.find((r) => r.symbol === symbol);
+  if (!b || !row) return null;
+  return { row, view: row.state ? rowView(row.state) : null, paused: b.paused };
+}
+
 /**
- * "Trade now" at the top of the Options desk: one state, one sentence and one next action per focus name, worked out
- * in the browser from the focus card's levels, the live quotes and the session's 2-minute bars. Advisory and read
- * only. Nothing is drawn for an older edition or an edition without a focus card.
+ * The side the board points at for a name, for the ladder and the card's strips: the side of an entry, a get-ready or
+ * a live alternative. None while prices are paused, or for a state without a side.
  */
-export function TradeNow({
+export function boardSide(r: ReturnType<typeof useBoardRow>): "call" | "put" | null {
+  if (!r || r.paused || !r.row.state) return null;
+  const s = r.row.state;
+  if (s.state === "enter_zone" || s.state === "get_ready") return s.side ?? null;
+  return r.view?.badge.alt ? (r.view.badge.side ?? null) : null;
+}
+
+/**
+ * Works the board out once for the page, from the focus card's levels, the live quotes and the session's 2-minute
+ * bars, and shares it (useBoard). It also rings the notices and keeps the "Today" log. Advisory and read only.
+ */
+export function BoardProvider({
   e,
   live,
   dayLimitUsed,
@@ -595,6 +670,7 @@ export function TradeNow({
   openLots = [],
   closedTrades = [],
   journalAsOf = null,
+  children,
 }: {
   e: Options;
   live: boolean;
@@ -606,6 +682,7 @@ export function TradeNow({
   closedTrades?: readonly Trade[];
   /** When the journal was read (`doc.as_of`), for the manage card. */
   journalAsOf?: string | null;
+  children: React.ReactNode;
 }) {
   const { feed, now: browserNow } = useLive();
   const items = e.focus?.items ?? [];
@@ -649,6 +726,15 @@ export function TradeNow({
   const [spoken, setSpoken] = useState("");
   const [last, setLast] = useState<Record<string, string>>({});
   const [ring, setRing] = useState<{ n: number; fresh: NameState[] }>({ n: 0, fresh: [] });
+  const [log, setLog] = useState<BoardLogEntry[]>([]);
+  // The log saved for this session, read once in the browser (never during the server render).
+  useEffect(() => {
+    try {
+      setLog(parseBoardLog(window.localStorage.getItem(LOG_KEY(e.session))));
+    } catch {
+      /* storage off: the log starts empty */
+    }
+  }, [e.session]);
   useEffect(() => {
     if (ring.n === 0) return;
     if (alerts.sound) beep();
@@ -668,7 +754,21 @@ export function TradeNow({
     const changed = states.filter((s) => last[s.symbol] !== undefined && last[s.symbol] !== words[s.symbol]);
     if (Object.keys(words).some((k) => words[k] !== last[k]) || Object.keys(last).length !== Object.keys(words).length) {
       setLast(words);
-      if (changed.length) setSpoken(changed.map((s) => `${s.symbol} ${words[s.symbol]!.toLowerCase()}`).join("; "));
+      if (changed.length) {
+        setSpoken(changed.map((s) => `${s.symbol} ${words[s.symbol]!.toLowerCase()}`).join("; "));
+        const at = now ?? Date.now();
+        const add = changed.map((s): BoardLogEntry => {
+          const v = rowView(s);
+          return { at, symbol: s.symbol, word: v.badge.word, side: v.badge.side, tone: v.badge.tone };
+        });
+        const nextLog = [...add, ...log].slice(0, BOARD_LOG_MAX);
+        setLog(nextLog);
+        try {
+          window.localStorage.setItem(LOG_KEY(e.session), JSON.stringify(nextLog));
+        } catch {
+          /* storage off: the log lives for this page only */
+        }
+      }
     }
   }
   // A notice goes with its state: once the name has left the zone (or its alternative has ended), it is withdrawn.
@@ -676,7 +776,7 @@ export function TradeNow({
   // shown: the screen never says "enter" for a state that is not live.
   const liveKeys = new Set(states.map(noticeKey).filter((k): k is string => k !== null));
   const shown = mode.kind === "live" ? book.kept.filter((k) => liveKeys.has(noticeKey(k) ?? "")) : [];
-  const manageUi = useTradeManage({
+  const manage = useTradeManage({
     items,
     session: e.session,
     halfDay,
@@ -696,18 +796,43 @@ export function TradeNow({
     barsLoading: bars.status === "loading",
   });
 
-  if (!live || items.length === 0) return null;
+  const board: Board = {
+    on: live && items.length > 0,
+    session: e.session,
+    halfDay,
+    mode,
+    now,
+    rows,
+    states,
+    paused,
+    barsDelayed: mode.kind === "live" && used.delayed,
+    manage,
+    notices: shown,
+    dropNotice: (s) => setBook((b) => ({ ...b, kept: b.kept.filter((x) => x !== s) })),
+    log,
+    spoken,
+  };
+  return <BoardContext.Provider value={board}>{children}</BoardContext.Provider>;
+}
+
+/**
+ * "Trade now": one state, one sentence and one next action per focus name, from the page's board (BoardProvider).
+ * Advisory and read only. Nothing is drawn for an older edition or an edition without a focus card.
+ */
+export function TradeNow() {
+  const b = useBoard();
+  if (!b || !b.on) return null;
   return (
     <>
       <TradeNowBoard
-        mode={mode}
-        rows={rows}
-        now={now}
-        paused={paused}
-        barsDelayed={mode.kind === "live" && used.delayed}
+        mode={b.mode}
+        rows={b.rows}
+        now={b.now}
+        paused={b.paused}
+        barsDelayed={b.barsDelayed}
         onOpen={openFocusCard}
-        rowExtra={manageUi.rowExtra}
-        after={manageUi.cards}
+        rowExtra={b.manage.rowExtra}
+        after={b.manage.cards}
         switches={
           <>
             <AlertButtons className="hidden sm:flex" />
@@ -716,9 +841,9 @@ export function TradeNow({
         }
       />
       <p aria-live="polite" role="status" className="sr-only">
-        {spoken}
+        {b.spoken}
       </p>
-      <BoardNotices notices={shown} onOpen={openFocusCard} onDrop={(s) => setBook((b) => ({ ...b, kept: b.kept.filter((x) => x !== s) }))} extra={manageUi.notices} />
+      <BoardNotices notices={b.notices} onOpen={openFocusCard} onDrop={b.dropNotice} extra={b.manage.notices} />
     </>
   );
 }

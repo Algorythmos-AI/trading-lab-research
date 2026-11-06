@@ -15,6 +15,7 @@ import type { ReactNode } from "react";
 import { type LadderFrame, type LadderLiveView, ladderLiveState } from "@/lib/level-ladder";
 import { cn } from "@/lib/utils";
 import { useLive } from "./live-layer";
+import { boardSide, useBoardRow } from "./trade-now";
 
 export interface LadderLiveProps {
   symbol: string;
@@ -145,7 +146,10 @@ export function LadderNote({ view }: { view: LadderLiveView }) {
 /** The static ladder with the live dot over it, and the note under it (not on the mini). */
 export function LadderLive(props: LadderLiveProps) {
   const view = useLadderLive(props);
-  const { frame, domain, highlight, busy, children } = props;
+  // The side the page's board points at (an entry, a get-ready, a live alternative), unless the caller fixed one.
+  const fromBoard = boardSide(useBoardRow(props.symbol));
+  const { frame, domain, busy, children } = props;
+  const highlight = props.highlight ?? fromBoard ?? undefined;
   return (
     <div className="grid gap-2">
       <div className="group/ladder relative" data-highlight={highlight ?? "none"} style={frame.size === "mini" ? { maxWidth: frame.width } : undefined}>
