@@ -190,9 +190,16 @@ function lotsOn(lots: readonly Lot[], symbol: string, side: Side, session: strin
  * `closed` tells it showed a close. Null: the journal shows nothing near the note.
  */
 function noteTrade(n: ManualNote, lots: readonly Lot[], closed: readonly Trade[]): { lots: Lot[]; closed: boolean } | null {
-  const ls = lots.filter((l) => onSide(l, n.symbol, n.side) && near(l.opened_at, n));
-  const cs = closed.filter((t) => onSide(t, n.symbol, n.side) && near(t.opened_at, n));
-  if (ls.length === 0 && cs.length === 0) return null;
+  const ls0 = lots.filter((l) => onSide(l, n.symbol, n.side) && near(l.opened_at, n));
+  const cs0 = closed.filter((t) => onSide(t, n.symbol, n.side) && near(t.opened_at, n));
+  if (ls0.length === 0 && cs0.length === 0) return null;
+  // The note's contract is the one filled nearest its time: another contract opened inside the window is another,
+  // un-noted trade, never this note's.
+  const gap = (x: { opened_at?: string | null }) => Math.abs(ms(x.opened_at) - ms(n.at));
+  const anchor = [...ls0, ...cs0].sort((a, b) => gap(a) - gap(b))[0]!;
+  const same = (x: { strike?: number | null; expiry?: string | null }) => (x.strike ?? null) === (anchor.strike ?? null) && (x.expiry ?? null) === (anchor.expiry ?? null);
+  const ls = ls0.filter(same);
+  const cs = cs0.filter(same);
   const first = Math.min(...ls.map((l) => ms(l.opened_at)), ...cs.map((t) => ms(t.opened_at)));
   const firstClosed = cs.filter((t) => ms(t.opened_at) === first);
   const firstOpen = ls.some((l) => ms(l.opened_at) === first);
@@ -255,15 +262,16 @@ export function openTrades(
   // a journal read on another day says nothing about this session's fills
   const asOfToday = asOf ? nyClock(asOf)?.day === session : false;
   const caughtUp = (n: ManualNote) => asOfToday && ms(asOf) >= ms(n.at) + JOURNAL_CATCH_UP_MS;
-  const taken = new Set<Lot>();
+  // Every note's own lots first, so a note's hint can never offer a lot another note already manages.
+  const own = new Map(live.map((n) => [noteId(n), noteTrade(n, lotsOn(lots, n.symbol, n.side, session, asOf), closed)] as const));
+  const taken = new Set<Lot>([...own.values()].flatMap((t) => t?.lots ?? []));
   const out: OpenTrade[] = live.map((n) => {
     const mine = lotsOn(lots, n.symbol, n.side, session, asOf);
-    const t = noteTrade(n, mine, closed);
-    for (const l of t?.lots ?? []) taken.add(l);
+    const t = own.get(noteId(n)) ?? null;
     const unmatched = t === null && caughtUp(n);
     const hint = unmatched
       ? mine
-          .filter((l) => Math.abs(ms(l.opened_at) - ms(n.at)) <= NOTE_HINT_MS)
+          .filter((l) => !taken.has(l) && Math.abs(ms(l.opened_at) - ms(n.at)) <= NOTE_HINT_MS)
           .sort((a, b) => Math.abs(ms(a.opened_at) - ms(n.at)) - Math.abs(ms(b.opened_at) - ms(n.at)))[0]
       : undefined;
     return {

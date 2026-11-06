@@ -370,6 +370,26 @@ describe("a note the journal does not show", () => {
     expect(openTrades(ITEMS, lots, [{ ...n, at: ny(10, 28) }], S, [], after(4))).toMatchObject([{ unmatched: false, entry: { source: "manual" } }]);
   });
 
+  it("an un-noted trade on another contract inside the window never joins the note", () => {
+    // A: a 750 call at 10:27:30, not noted; B: a 753 call filled 10:28:40, noted as 10:28 (stored 10:29:00)
+    const plus = (iso: string, sec: number) => new Date(Date.parse(iso) + sec * 1000).toISOString();
+    const a = lotAt(plus(ny(10, 27), 30), { strike: 750 });
+    const b = lotAt(plus(ny(10, 28), 40), { strike: 753 });
+    const n = { ...note(), at: ny(10, 29) };
+    const trades = openTrades(ITEMS, [a, b], [n], S, [], after(4));
+    expect(trades.filter((t) => t.note)).toHaveLength(1);
+    // A keeps a journal card of its own, from its own fill, never the note's
+    expect(trades.filter((t) => !t.note)).toMatchObject([{ entry: { at: a.opened_at } }]);
+  });
+
+  it("a note's hint never offers a lot another note already manages", () => {
+    const b = lotAt(ny(10, 28));
+    const mine = { ...note(), at: ny(10, 28) };
+    const other = { ...note(), at: ny(10, 22) }; // mistyped, unmatched, within NOTE_HINT_MS of b
+    const t = openTrades(ITEMS, [b], [mine, other], S, [], after(4));
+    expect(t.find((x) => x.note?.at === ny(10, 22))).toMatchObject({ unmatched: true, hintAt: null });
+  });
+
   it("a note for a fill that never happened: CHECK, never HOLD, and no hint", () => {
     const v = viewAt(3, [note()], [], { asOf: after(4) });
     expect(v).toMatchObject({ action: "check", line: UNMATCHED_LINE, hint: null });
