@@ -23,10 +23,10 @@ import {
   Zap,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { StatusBadge } from "@/components/status";
 import { newYork } from "@/lib/format";
-import { isHalfDay, type Options } from "@/lib/options";
+import { isHalfDay, type Options, type OptionsTicker } from "@/lib/options";
 import {
   barsInUse,
   boardMode,
@@ -40,6 +40,7 @@ import {
   rowView,
   type RowView,
 } from "@/lib/trade-now";
+import { pausedAgeS } from "@/lib/level-ladder";
 import { type NameState, type NameStateName, serverNow } from "@/lib/trade-state";
 import { cn } from "@/lib/utils";
 import { useLive } from "./live-layer";
@@ -61,7 +62,7 @@ const STATE_ICON: Record<NameStateName, LucideIcon> = {
 export const OPEN_NAME_EVENT = "options-open-name";
 
 /** Bring a name's focus card into view and select the name on the desk. */
-function openFocusCard(symbol: string) {
+export function openFocusCard(symbol: string) {
   window.dispatchEvent(new CustomEvent(OPEN_NAME_EVENT, { detail: symbol }));
   const card = document.getElementById(`focus-card-${symbol}`);
   if (!card) return;
@@ -152,7 +153,7 @@ function systemNotice(s: NameState) {
 }
 
 /** The two opt-in switches. Both start off; permission is asked for only on the owner's click. */
-function AlertButtons({ className }: { className?: string }) {
+export function AlertButtons({ className }: { className?: string }) {
   const alerts = useAlerts();
   const [blocked, setBlocked] = useState(false);
   const toggleNotify = async () => {
@@ -188,9 +189,13 @@ function AlertButtons({ className }: { className?: string }) {
   );
 }
 
-/** The bell menu's Escape: it closes the menu only with the focus inside it or on the bell. */
-export function alertMenuKey(key: string, focusInside: boolean): boolean {
-  return key === "Escape" && focusInside;
+/**
+ * The bell menu's Escape. While the menu is open it claims every Escape, wherever the focus is: it closes the menu (and
+ * stops the cockpit from leaving on the same key), so an Escape never leaves the menu open with the cockpit gone. The
+ * focus goes back to the bell only when it was in the menu or on the bell, so it is never pulled from elsewhere.
+ */
+export function alertMenuKey(key: string, focusInside: boolean): { close: boolean; refocus: boolean } {
+  return key === "Escape" ? { close: true, refocus: focusInside } : { close: false, refocus: false };
 }
 
 /** A pointer down while the menu is open: outside it closes the menu, and the focus goes back to the bell unless the
@@ -203,10 +208,10 @@ const CONTROL = "a[href], button, input, select, textarea, summary, [tabindex]";
 
 /**
  * On a phone the two switches fold into one bell with a small menu. Opening it moves the focus to its first switch;
- * Esc (with the focus in the menu or on the bell) or a click outside closes it and gives the focus back to the bell.
+ * Esc (wherever the focus is) or a click outside closes it, and gives the focus back to the bell when it was there.
  * The listeners are on only while it is open.
  */
-function AlertMenu() {
+export function AlertMenu() {
   const alerts = useAlerts();
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLSpanElement>(null);
@@ -216,9 +221,11 @@ function AlertMenu() {
     if (!open) return;
     menu.current?.querySelector<HTMLButtonElement>("button")?.focus();
     const onKey = (ev: KeyboardEvent) => {
-      if (!alertMenuKey(ev.key, !!box.current && box.current.contains(document.activeElement))) return;
+      const k = alertMenuKey(ev.key, !!box.current && box.current.contains(document.activeElement));
+      if (!k.close) return;
+      ev.preventDefault(); // this Escape closes the menu only, not the cockpit too
       setOpen(false);
-      button.current?.focus();
+      if (k.refocus) button.current?.focus();
     };
     const onDown = (ev: PointerEvent) => {
       const target = ev.target instanceof Element ? ev.target : null;
@@ -399,8 +406,27 @@ function Row({ row, mode, paused, onOpen, extra }: { row: BoardRow; mode: BoardM
 }
 
 /**
- * The board as drawn from what it was given: the header, the line for a mode without states, and one row per name.
- * Separate from the live wiring so it can be drawn in a test.
+ * A live row worth acting on: an entry, a get-ready or a live alternative (a row with numbers). Never a paused one:
+ * the board shows no numbers on old prices.
+ */
+export function actionableRow(row: BoardRow): boolean {
+  const s = row.state;
+  if (!s || s.state === "paused") return false;
+  return s.state === "get_ready" || rowView(s).grid !== null;
+}
+
+/**
+ * Before the open (and while connecting) the board folds into the status rail, which carries its line: the trigger
+ * prices are on the ladders and the cards. It stays while a manage card is open, so a trade is never out of sight.
+ */
+export function boardCollapsed(mode: BoardMode, manageCards: number): boolean {
+  return (mode.kind === "next" || mode.kind === "opening" || mode.kind === "loading") && manageCards === 0;
+}
+
+/**
+ * The board as drawn from what it was given: the header, the line for a mode without states, and, in the live mode,
+ * only the rows worth acting on (an entry, a get-ready, a live alternative, or a row holding an open "I'm in" form);
+ * the rest are counted in one line. Separate from the live wiring so it can be drawn in a test.
  */
 export function TradeNowBoard({
   mode,
@@ -428,6 +454,13 @@ export function TradeNowBoard({
   after?: React.ReactNode;
 }) {
   const showRows = mode.kind !== "old" && mode.kind !== "off";
+  // Live: only what is worth acting on, plus a row that holds an open form (it stays as it was opened).
+  const drawn = rows.map((r) => ({ r, extra: rowExtra?.(r, paused) ?? null }));
+  const listed = mode.kind === "live" ? drawn.filter(({ r, extra }) => actionableRow(r) || extra !== null) : drawn;
+  // A name paused on its own (the others live) is never "watching": it is named apart, with what to do.
+  const shown = new Set(listed.map(({ r }) => r.symbol));
+  const pausedNames = mode.kind === "live" && !paused ? rows.filter((r) => r.state?.state === "paused" && !shown.has(r.symbol)).map((r) => r.symbol) : [];
+  const watching = rows.length - listed.length - pausedNames.length;
   const status = mode.kind === "live" ? (paused ? "paused" : "live") : mode.kind === "loading" ? "connecting" : mode.kind === "off" ? "off" : "waiting";
   return (
     <section aria-labelledby="trade-now-title" data-trade-now={mode.kind} data-board-status={status} className="bg-card grid gap-2 rounded-lg border px-3 py-2.5">
@@ -471,12 +504,29 @@ export function TradeNowBoard({
           Session bars delayed: states use this page&apos;s prices only
         </p>
       ) : null}
-      {showRows && rows.length ? (
-        <ul className="grid gap-1" aria-label="Focus names, most urgent first">
-          {rows.map((r) => (
-            <Row key={r.symbol} row={r} mode={mode} paused={paused} onOpen={onOpen} extra={rowExtra?.(r, paused)} />
+      {showRows && listed.length ? (
+        <ul className="grid gap-1" aria-label="Focus names worth acting on, most urgent first">
+          {listed.map(({ r, extra }) => (
+            <Row key={r.symbol} row={r} mode={mode} paused={paused} onOpen={onOpen} extra={extra} />
           ))}
         </ul>
+      ) : null}
+      {pausedNames.length ? (
+        <p data-board-paused={pausedNames.length} className="text-warn text-[0.8125rem] font-medium">
+          <Pause aria-hidden className="mr-1 inline size-3.5 align-[-2px]" />
+          {pausedNames.join(", ")}: prices paused, check your platform
+        </p>
+      ) : null}
+      {mode.kind === "live" && !paused && watching > 0 ? (
+        listed.length === 0 ? (
+          <p data-board-none className="text-explain font-medium">
+            Nothing to act on: {watching} name{watching === 1 ? "" : "s"} watching
+          </p>
+        ) : (
+          <p data-board-hidden={watching} className="text-muted-foreground text-xs">
+            {watching} more name{watching === 1 ? "" : "s"} watching: see the glance above
+          </p>
+        )
       ) : null}
       {after}
       <p className="text-muted-foreground text-[0.6875rem]">Advisory states from the study under test; the 9 rules are unchanged. Read only: nothing here places an order.</p>
@@ -488,35 +538,7 @@ export function TradeNowBoard({
 /** At most this many notices at once on a wide screen; one on a phone. */
 export const NOTICES_WIDE = 2;
 
-/**
- * Where the notices sit: the top of the screen under the sticky header, but never over the board. While the board is
- * on screen they sit just below it. Read on scroll and resize.
- */
-function useNoticeTop(): number {
-  const [top, setTop] = useState(12);
-  useEffect(() => {
-    const read = () => {
-      const header = document.querySelector("header");
-      const hb = header && getComputedStyle(header).position === "sticky" ? header.getBoundingClientRect().bottom : 0;
-      const board = document.querySelector("[data-trade-now]")?.getBoundingClientRect();
-      const below = board && board.bottom > 0 ? board.bottom : 0;
-      setTop(Math.round(Math.max(hb, below, 0) + 12));
-    };
-    read();
-    window.addEventListener("scroll", read, { passive: true });
-    window.addEventListener("resize", read);
-    const id = window.setInterval(read, 1_000); // the board grows and shrinks as states change
-    return () => {
-      window.removeEventListener("scroll", read);
-      window.removeEventListener("resize", read);
-      window.clearInterval(id);
-    };
-  }, []);
-  return top;
-}
-
 function BoardNotices({ notices, onOpen, onDrop, extra }: { notices: NameState[]; onOpen: (s: string) => void; onDrop: (s: NameState) => void; extra?: React.ReactNode }) {
-  const top = useNoticeTop();
   const one = (s: NameState, i: number) => {
     const v = rowView(s);
     return (
@@ -560,10 +582,10 @@ function BoardNotices({ notices, onOpen, onDrop, extra }: { notices: NameState[]
   return (
     <div
       data-board-notices={notices.length}
-      // On a phone the stack sits in the page's flow straight under the board, so it can never cover it; from sm up it is
-      // fixed at the top right, under the sticky header and clear of the board (useNoticeTop).
-      style={{ ["--notice-top" as string]: `${top}px` }}
-      className="z-40 mt-2 flex flex-col gap-2 sm:pointer-events-none sm:fixed sm:top-[var(--notice-top)] sm:right-3 sm:left-auto sm:mt-0 sm:w-[22rem]"
+      // On a phone the stack sits in the page's flow straight under the board, so it can never cover it. From sm up it is
+      // fixed at the bottom right of the screen: always in view wherever the board is (it now sits below the hero and
+      // the glance, often under the fold), and clear of the rail and the hero's prices at the top.
+      className="z-40 mt-2 flex flex-col gap-2 sm:pointer-events-none sm:fixed sm:right-3 sm:bottom-3 sm:left-auto sm:mt-0 sm:w-[22rem]"
     >
       {extra}
       {shown.map(one)}
@@ -582,12 +604,123 @@ function BoardNotices({ notices, onOpen, onDrop, extra }: { notices: NameState[]
 }
 
 // ---- the board, live -----------------------------------------------------------------------------------------------
+/** One line of the "Today" change log: a name's state word changed, at the board's (server) clock. */
+export interface BoardLogEntry {
+  at: number;
+  symbol: string;
+  word: string;
+  side: "call" | "put" | null;
+  tone: RowView["badge"]["tone"];
+}
+/** The log keeps this many lines; the newest first. */
+export const BOARD_LOG_MAX = 30;
+const LOG_KEY = (session: string) => `trade-now-log:${session}`;
+
+// The tones a log line may carry (labels.ts Tone): a line with any other is dropped, never drawn in a guessed colour.
+const LOG_TONES: ReadonlySet<string> = new Set<BoardLogEntry["tone"]>(["good", "warn", "bad", "neutral", "info"]);
+
+/** One saved line, checked field by field: the storage is the browser's, and anything may be in it. */
+function isLogEntry(x: unknown): x is BoardLogEntry {
+  if (!x || typeof x !== "object") return false;
+  const e = x as Record<string, unknown>;
+  return (
+    typeof e.at === "number" &&
+    Number.isFinite(e.at) &&
+    typeof e.symbol === "string" &&
+    typeof e.word === "string" &&
+    (e.side === "call" || e.side === "put" || e.side === null) &&
+    typeof e.tone === "string" &&
+    LOG_TONES.has(e.tone)
+  );
+}
+
+/** The log saved in this browser for the session, if any; [] when storage is off or the text is not a log. */
+export function parseBoardLog(raw: string | null): BoardLogEntry[] {
+  if (!raw) return [];
+  try {
+    const v: unknown = JSON.parse(raw);
+    if (!Array.isArray(v)) return [];
+    return v.filter(isLogEntry).slice(0, BOARD_LOG_MAX);
+  } catch {
+    return [];
+  }
+}
+
+type Item = NonNullable<Options["focus"]>["items"][number];
+
+/** What the whole page reads of the board: one computation, so the hero, the glance, the ladders, the cards and the rows always agree. */
+export interface Board {
+  /** The board is drawn at all: a live edition with focus names. */
+  on: boolean;
+  session: string;
+  halfDay: boolean;
+  /** The focus names in the card's rank order, and each one's row on the edition, for the hero's plan and price. */
+  items: readonly Item[];
+  ticker: (symbol: string) => OptionsTicker | undefined;
+  /** The pre-market price on the focus card per name, if any. */
+  premarket: Readonly<Record<string, number | null>>;
+  /** The day the edition's close is from (its built_from). */
+  closeDate: string | null;
+  /** Per focus name: the older of the feed's and the last trade's age, whole seconds, on the board's clock; null when
+   * not known. What "Prices paused N s" says. */
+  ageS: Readonly<Record<string, number | null>>;
+  mode: BoardMode;
+  /** The board's (server) clock, ms; null before the browser has read it. */
+  now: number | null;
+  rows: BoardRow[];
+  states: NameState[];
+  paused: boolean;
+  barsDelayed: boolean;
+  /** The manage card's pieces (trade-manage.tsx), and each open trade's action word for the hero. */
+  manage: ReturnType<typeof useTradeManage>;
+  /** The notices to show now, and how to drop one. */
+  notices: NameState[];
+  dropNotice: (s: NameState) => void;
+  /** The last state changes this session, newest first (kept in this browser). */
+  log: BoardLogEntry[];
+  /** The screen-reader line for the latest changes. */
+  spoken: string;
+}
+
+const BoardContext = createContext<Board | null>(null);
+
+/** The page's board; null outside a BoardProvider. */
+export function useBoard(): Board | null {
+  return useContext(BoardContext);
+}
+
+/** One name's live row on the board, or null (no board, not live, or the name is not on it). */
+export function useBoardRow(symbol: string): { row: BoardRow; view: RowView | null; paused: boolean } | null {
+  const b = useBoard();
+  const row = b?.rows.find((r) => r.symbol === symbol);
+  if (!b || !row) return null;
+  return { row, view: row.state ? rowView(row.state) : null, paused: b.paused };
+}
+
 /**
- * "Trade now" at the top of the Options desk: one state, one sentence and one next action per focus name, worked out
- * in the browser from the focus card's levels, the live quotes and the session's 2-minute bars. Advisory and read
- * only. Nothing is drawn for an older edition or an edition without a focus card.
+ * The side the board points at for a name, for the ladder and the card's strips: the side of an entry or a get-ready
+ * only. None while prices are paused, and none for a live alternative: its numbers are its own, not the plan strip's
+ * on that side, so emphasising that strip (or dimming the far side of the ladder, where an alternative at the ceiling
+ * sits) would put the wrong numbers in front of the owner. The lit alternative chip and the ladder's marker are its cue.
  */
-export function TradeNow({
+export function boardSide(r: ReturnType<typeof useBoardRow>): "call" | "put" | null {
+  if (!r || r.paused || !r.row.state) return null;
+  const s = r.row.state;
+  return s.state === "enter_zone" || s.state === "get_ready" ? (s.side ?? null) : null;
+}
+
+/** The alternative trigger the board shows live for a name, if any (never while prices are paused). */
+export function boardAlt(r: ReturnType<typeof useBoardRow>): { kind: NonNullable<RowView["badge"]["alt"]>; side: "call" | "put" } | null {
+  if (!r || r.paused || !r.row.state || r.row.state.state === "paused") return null;
+  const b = r.view?.badge;
+  return b?.alt && b.side ? { kind: b.alt, side: b.side } : null;
+}
+
+/**
+ * Works the board out once for the page, from the focus card's levels, the live quotes and the session's 2-minute
+ * bars, and shares it (useBoard). It also rings the notices and keeps the "Today" log. Advisory and read only.
+ */
+export function BoardProvider({
   e,
   live,
   dayLimitUsed,
@@ -595,6 +728,7 @@ export function TradeNow({
   openLots = [],
   closedTrades = [],
   journalAsOf = null,
+  children,
 }: {
   e: Options;
   live: boolean;
@@ -606,6 +740,7 @@ export function TradeNow({
   closedTrades?: readonly Trade[];
   /** When the journal was read (`doc.as_of`), for the manage card. */
   journalAsOf?: string | null;
+  children: React.ReactNode;
 }) {
   const { feed, now: browserNow } = useLive();
   const items = e.focus?.items ?? [];
@@ -642,6 +777,12 @@ export function TradeNow({
         );
   const states = rows.map((r) => r.state).filter((s): s is NameState => s !== null);
   const paused = mode.kind === "live" && states.length > 0 && states.every((s) => s.state === "paused");
+  // "Prices paused N s": the older of the feed's answer and the name's last trade, as the ladder's caption reads it, so
+  // the hero and the ladder never give two ages for one pause.
+  const ageS: Record<string, number | null> = {};
+  for (const i of items) {
+    ageS[i.symbol] = pausedAgeS(now, answeredAt, ok ? feed.quotes[i.symbol] : undefined, e.session);
+  }
 
   // Notices: states seen once the bars have answered; what was there when the page opened is not announced.
   const alerts = useAlerts();
@@ -649,6 +790,20 @@ export function TradeNow({
   const [spoken, setSpoken] = useState("");
   const [last, setLast] = useState<Record<string, string>>({});
   const [ring, setRing] = useState<{ n: number; fresh: NameState[] }>({ n: 0, fresh: [] });
+  const [log, setLog] = useState<BoardLogEntry[]>([]);
+  // The log saved for this session, read once in the browser: the browser's clock is null in the server render and on
+  // hydration, so storage is never read before the page is the browser's own.
+  const [logFor, setLogFor] = useState<string | null>(null);
+  if (browserNow !== null && logFor !== e.session) {
+    setLogFor(e.session);
+    let saved: BoardLogEntry[] = [];
+    try {
+      saved = parseBoardLog(window.localStorage.getItem(LOG_KEY(e.session)));
+    } catch {
+      /* storage off: the log starts empty */
+    }
+    setLog(saved);
+  }
   useEffect(() => {
     if (ring.n === 0) return;
     if (alerts.sound) beep();
@@ -668,7 +823,21 @@ export function TradeNow({
     const changed = states.filter((s) => last[s.symbol] !== undefined && last[s.symbol] !== words[s.symbol]);
     if (Object.keys(words).some((k) => words[k] !== last[k]) || Object.keys(last).length !== Object.keys(words).length) {
       setLast(words);
-      if (changed.length) setSpoken(changed.map((s) => `${s.symbol} ${words[s.symbol]!.toLowerCase()}`).join("; "));
+      if (changed.length) {
+        setSpoken(changed.map((s) => `${s.symbol} ${words[s.symbol]!.toLowerCase()}`).join("; "));
+        const at = now ?? 0; // settled implies the live mode, which has a clock
+        const add = changed.map((s): BoardLogEntry => {
+          const v = rowView(s);
+          return { at, symbol: s.symbol, word: v.badge.word, side: v.badge.side, tone: v.badge.tone };
+        });
+        const nextLog = [...add, ...log].slice(0, BOARD_LOG_MAX);
+        setLog(nextLog);
+        try {
+          window.localStorage.setItem(LOG_KEY(e.session), JSON.stringify(nextLog));
+        } catch {
+          /* storage off: the log lives for this page only */
+        }
+      }
     }
   }
   // A notice goes with its state: once the name has left the zone (or its alternative has ended), it is withdrawn.
@@ -676,7 +845,7 @@ export function TradeNow({
   // shown: the screen never says "enter" for a state that is not live.
   const liveKeys = new Set(states.map(noticeKey).filter((k): k is string => k !== null));
   const shown = mode.kind === "live" ? book.kept.filter((k) => liveKeys.has(noticeKey(k) ?? "")) : [];
-  const manageUi = useTradeManage({
+  const manage = useTradeManage({
     items,
     session: e.session,
     halfDay,
@@ -696,29 +865,69 @@ export function TradeNow({
     barsLoading: bars.status === "loading",
   });
 
-  if (!live || items.length === 0) return null;
+  const ranked = [...items].sort((a, b) => a.rank - b.rank);
+  const board: Board = {
+    on: live && items.length > 0,
+    session: e.session,
+    halfDay,
+    items: ranked,
+    ticker: (symbol) => e.tickers.find((t) => t.symbol === symbol),
+    premarket: Object.fromEntries(items.map((i) => [i.symbol, e.focus?.premarket?.items.find((p) => p.symbol === i.symbol)?.price ?? null])),
+    closeDate: e.built_from ?? null,
+    ageS,
+    mode,
+    now,
+    rows,
+    states,
+    paused,
+    barsDelayed: mode.kind === "live" && used.delayed,
+    manage,
+    notices: shown,
+    dropNotice: (s) => setBook((b) => ({ ...b, kept: b.kept.filter((x) => x !== s) })),
+    log,
+    spoken,
+  };
+  return <BoardContext.Provider value={board}>{children}</BoardContext.Provider>;
+}
+
+/**
+ * "Trade now": one state, one sentence and one next action per focus name, from the page's board (BoardProvider).
+ * Advisory and read only. Nothing is drawn for an older edition or an edition without a focus card. Its notices and
+ * spoken line are TradeNowNotices, placed apart so the cockpit can hide the board and keep them.
+ */
+export function TradeNow() {
+  const b = useBoard();
+  if (!b || !b.on) return null;
+  // Before the open the rail carries the board's line (status-rail.tsx).
+  if (boardCollapsed(b.mode, b.manage.views.length)) return null;
+  return (
+    <TradeNowBoard
+      mode={b.mode}
+      rows={b.rows}
+      now={b.now}
+      paused={b.paused}
+      barsDelayed={b.barsDelayed}
+      onOpen={openFocusCard}
+      rowExtra={b.manage.rowExtra}
+      after={b.manage.cards}
+    />
+  );
+}
+
+/**
+ * The board's notices (an entry, a live alternative, the manage card's SELL HALF and EXIT) and the screen-reader line
+ * for each change. Rendered once on the page, outside anything the cockpit hides, and whether or not the board itself
+ * is drawn (folded before the open, hidden in the cockpit).
+ */
+export function TradeNowNotices() {
+  const b = useBoard();
+  if (!b || !b.on) return null;
   return (
     <>
-      <TradeNowBoard
-        mode={mode}
-        rows={rows}
-        now={now}
-        paused={paused}
-        barsDelayed={mode.kind === "live" && used.delayed}
-        onOpen={openFocusCard}
-        rowExtra={manageUi.rowExtra}
-        after={manageUi.cards}
-        switches={
-          <>
-            <AlertButtons className="hidden sm:flex" />
-            <AlertMenu />
-          </>
-        }
-      />
       <p aria-live="polite" role="status" className="sr-only">
-        {spoken}
+        {b.spoken}
       </p>
-      <BoardNotices notices={shown} onOpen={openFocusCard} onDrop={(s) => setBook((b) => ({ ...b, kept: b.kept.filter((x) => x !== s) }))} extra={manageUi.notices} />
+      <BoardNotices notices={b.notices} onOpen={openFocusCard} onDrop={b.dropNotice} extra={b.manage.notices} />
     </>
   );
 }

@@ -26,6 +26,7 @@ import {
   type OptionsTicker,
   type Rung,
   volRead, zoneKey } from "@/lib/options";
+import { cardMarks } from "@/lib/focus-plan";
 import { withHourly, type HourlyBar } from "@/lib/hourly";
 import type { Interest } from "@/lib/oi";
 import { STATE_LABEL, type RuleState } from "@/lib/triggers";
@@ -74,7 +75,7 @@ function ZoneRow({ r, side, hot, onZone }: { r: Rung; side: "above" | "at" | "be
     >
       <span
         aria-hidden
-        className={cn("h-2.5 w-1 self-center rounded-full", side === "above" ? "bg-bad-fill" : side === "below" ? "bg-good-fill" : "bg-warn-fill", !z.big && "opacity-50")}
+        className={cn("h-2.5 w-1 self-center rounded-full", side === "at" ? "bg-warn-fill" : "bg-neutral-fill", !z.big && "opacity-50")}
       />
       <span className="min-w-0">
         <span className="font-mono text-[0.8125rem]">{z.lo === z.hi ? num(z.lo, 2) : `${num(z.lo, 2)} to ${num(z.hi, 2)}`}</span>
@@ -143,6 +144,9 @@ export function OptionsDetail({
   const hasMap = view !== null && close !== null;
   const strength = t.close_strength?.chip;
   const phone = usePhone();
+  // The focus card's ceiling and floor for this name, when it is a focus name: the map marks the card's own prices.
+  const item = e.focus?.items.find((i) => i.symbol === t.symbol);
+  const marks = item ? cardMarks(item) : [];
 
   // Kept with the name it was priced for, so the line never lingers on the next name's map.
   const [mark, setMark] = useState<{ symbol: string; at: BreakevenMark } | null>(null);
@@ -249,7 +253,7 @@ export function OptionsDetail({
               </div>
             ) : null}
             <div data-hide={[...hiddenLayers].join(" ") || undefined} data-map-range={range}>
-              <LevelMap phone={phone} t={drawn} unit={range} closeDay={e.built_from ?? null} interactive breakeven={mark?.symbol === t.symbol ? mark.at : null} interest={interest} hotZone={hotKey} onZone={onZone} />
+              <LevelMap phone={phone} t={drawn} unit={range} closeDay={e.built_from ?? null} interactive breakeven={mark?.symbol === t.symbol ? mark.at : null} interest={interest} hotZone={hotKey} onZone={onZone} cardMarks={marks} />
             </div>
           </div>
         ) : (
@@ -302,11 +306,11 @@ export function OptionsDetail({
       </PaneBoundary>
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 border-t pt-3 sm:grid-cols-5">
-        <Stat label="Support" title="Nearest zone below the close, and how far in ATRs">
+        <Stat label="Support zone" title="The edition's nearest daily zone below the close, and how far in ATRs">
           {near.support ? num(near.support.edge, 2) : close === null ? "—" : "none near"}
           {near.support?.distAtr != null ? <span className="text-muted-foreground"> · {num(near.support.distAtr, 1)} ATR</span> : null}
         </Stat>
-        <Stat label="Resistance" title="Nearest zone above the close, and how far in ATRs">
+        <Stat label="Resistance zone" title="The edition's nearest daily zone above the close, and how far in ATRs">
           {near.resistance ? num(near.resistance.edge, 2) : close === null ? "—" : "none near"}
           {near.resistance?.distAtr != null ? <span className="text-muted-foreground"> · {num(near.resistance.distAtr, 1)} ATR</span> : null}
         </Stat>

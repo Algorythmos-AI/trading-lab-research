@@ -3,7 +3,7 @@
 // numbers; nothing here is market data. Pure: no I/O and no clock (the caller passes the step).
 //
 // Six steps, each a New York time on the fixture's session:
-//   0 09:45  the opening range is forming
+//   0 09:32  the opening range is forming (first entries from 09:35)
 //   1 10:10  QQQ and SPY watch their ceilings; AAPL sits in the middle of yesterday's range
 //   2 10:22:30  QQQ has broken its ceiling and waits for a dip; SPY is above its ceiling with no 2-min close yet
 //   3 10:28:30  QQQ's dip held inside the retest window (enter zone, with SMH below its VWAP against calls); SPY fell
@@ -20,7 +20,7 @@ export const STEP_COOKIE = "fxstep";
 export const SCRIPT_STEP_MS = 6_000;
 /** Seconds after New York midnight of each step. */
 export const SCRIPT_STEPS: readonly number[] = [
-  9 * 3600 + 45 * 60,
+  9 * 3600 + 32 * 60,
   10 * 3600 + 10 * 60,
   10 * 3600 + 22 * 60 + 30,
   10 * 3600 + 28 * 60 + 30,

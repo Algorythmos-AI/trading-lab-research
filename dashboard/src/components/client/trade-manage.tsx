@@ -365,6 +365,8 @@ export function useTradeManage(x: TradeManageInput): {
   cards: React.ReactNode;
   rowExtra: (row: BoardRow, paused: boolean) => React.ReactNode;
   notices: React.ReactNode;
+  /** Each open trade's name, side and action, for the page's hero. */
+  views: readonly ManageView[];
 } {
   const day = x.now !== null ? (nyClock(new Date(x.now).toISOString())?.day ?? null) : null;
   const today = day === x.session ? day : null;
@@ -503,5 +505,5 @@ export function useTradeManage(x: TradeManageInput): {
       ))
     : null;
 
-  return { cards, rowExtra, notices: noticeEls };
+  return { cards, rowExtra, notices: noticeEls, views };
 }
