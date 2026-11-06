@@ -139,10 +139,10 @@ def test_the_research_arms_freeze_the_numbers_the_record_states():
     assert by["OC-RECLAIM-FAST"]["sweep_min_atr"] == 0.25 and by["OC-TRAP"]["fail_within_bars"] == 3
 
 
-def test_the_research_arms_block_is_off_by_default_and_carries_the_frozen_numbers():
+def test_the_research_arms_block_is_on_and_carries_the_frozen_numbers():
     by = {h["trial"]: h["frozen"] for h in ARMS}
     ra = CONFIG["research_arms"]
-    assert ra["enabled"] is False                           # the owner turns it on; each arm's window starts then
+    assert ra["enabled"] is True                            # the owner turned it on 2026-11-06; each arm's window starts then
     t = ra["tags"]
     iv = by["OC-IVGATE-REJECT"]
     assert (t["iv_cap_index"], t["iv_cap_single"]) == (iv["cap_index"], iv["cap_single"]) == (0.35, 0.70)
