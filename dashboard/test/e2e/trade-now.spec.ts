@@ -42,11 +42,11 @@ test("shows a row per focus name, most urgent first, with only the entry expande
   await expect(board(page).getByRole("link", { name: /Testing · not proven yet/ })).toHaveAttribute("href", "/strategies");
 });
 
-test("before 10:00 it shows the trigger prices only", async ({ page, context, baseURL }) => {
+test("before 09:35 it shows the trigger prices only", async ({ page, context, baseURL }) => {
   await at(context, baseURL, 0);
   await page.goto("/options");
   await expect(board(page)).toHaveAttribute("data-trade-now", "opening");
-  await expect(board(page)).toContainText("Opening range forming: first entries from 10:00");
+  await expect(board(page)).toContainText("Opening range forming: first entries from 09:35");
   await expect(board(page).locator('[data-board-state="plan"]')).toHaveCount(3);
 });
 

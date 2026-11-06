@@ -1,10 +1,11 @@
 "use client";
 
 import { Gauge } from "lucide-react";
-import { RoomBar } from "@/components/options-charts";
+import { RoomBar, roomMarks } from "@/components/options-charts";
 import { Panel } from "@/components/panel";
 import { fracPct, newYork, num, signed } from "@/lib/format";
-import { CHEAP_IVP, CHIP_LABEL, liveRead, needsALook, RICH_IVP, roomView, ROOM_REACH, type OptionsTicker } from "@/lib/options";
+import { cardMarks } from "@/lib/focus-plan";
+import { CHEAP_IVP, CHIP_LABEL, liveRead, needsALook, RICH_IVP, roomView, ROOM_REACH, type Options, type OptionsTicker } from "@/lib/options";
 import { cn } from "@/lib/utils";
 import { FeedPill, FocusButton, StateChip, useLive } from "./live-layer";
 
@@ -19,7 +20,18 @@ const CHIP_DOT: Record<string, string> = { STRONG: "bg-good-fill", MID: "bg-neut
  * shared live feed every 2 seconds, and while the session trades the names that need a look (testing a major
  * zone, then gaps) sort to the top. `children` is the same data as a table, folded away.
  */
-export function OptionsGlance({ tickers, live, children }: { tickers: OptionsTicker[]; live: boolean; children?: React.ReactNode }) {
+export function OptionsGlance({
+  tickers,
+  live,
+  focus = null,
+  children,
+}: {
+  tickers: OptionsTicker[];
+  live: boolean;
+  /** The edition's focus card: its ceiling and floor are marked on each focus name's bar. */
+  focus?: Options["focus"] | null;
+  children?: React.ReactNode;
+}) {
   const { feed, session, now } = useLive();
   const ok = feed.status === "ok";
   const reads = new Map(tickers.map((t) => [t.symbol, liveRead(t, ok ? feed.quotes[t.symbol] : undefined, session, now, ok ? feed.receivedAt : null)]));
@@ -50,13 +62,21 @@ export function OptionsGlance({ tickers, live, children }: { tickers: OptionsTic
       <div className="grid gap-3">
         <ul className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs" aria-label="Key" data-explain>
           <li className="flex items-center gap-1.5">
-            <span className="bg-good-fill inline-block h-2 w-3.5 rounded-[2px]" />
-            support zone
+            <span className="bg-neutral-fill inline-block h-2 w-3.5 rounded-[2px]" />
+            daily zone (support below, resistance above)
           </li>
-          <li className="flex items-center gap-1.5">
-            <span className="bg-bad-fill inline-block h-2 w-3.5 rounded-[2px]" />
-            resistance zone
-          </li>
+          {focus?.items.length ? (
+            <>
+              <li className="flex items-center gap-1.5">
+                <span className="bg-bad inline-block h-3 w-[3px] rounded-[1px]" />
+                focus card ceiling
+              </li>
+              <li className="flex items-center gap-1.5">
+                <span className="bg-good inline-block h-3 w-[3px] rounded-[1px]" />
+                focus card floor
+              </li>
+            </>
+          ) : null}
           <li className="flex items-center gap-1.5">
             <span className="bg-info-fill/40 inline-block h-2 w-3.5 rounded-[2px]" />
             1-day expected move
@@ -79,6 +99,8 @@ export function OptionsGlance({ tickers, live, children }: { tickers: OptionsTic
             const close = t.last?.close ?? null;
             const price = read.price;
             const view = price !== null ? roomView(t, price) : null;
+            const item = focus?.items.find((i) => i.symbol === t.symbol);
+            const marks = item && view ? roomMarks(cardMarks(item), price, t.atr14) : [];
             const ref = close ?? q?.prev_close ?? null;
             const change = q && read.inSession && ref ? ((q.price - ref) / ref) * 100 : null;
             const chip = t.close_strength?.chip;
@@ -122,11 +144,12 @@ export function OptionsGlance({ tickers, live, children }: { tickers: OptionsTic
                         trail={trailAtr}
                         live={read.inSession}
                         stale={read.stale}
-                        label={`${t.symbol}: ${view.downAtr === null ? "no support near" : `${num(view.downAtr, 1)} ATR down to support at ${num(view.down, 2)}`}, ${view.upAtr === null ? "no resistance near" : `${num(view.upAtr, 1)} ATR up to resistance at ${num(view.up, 2)}`}`}
+                        marks={marks}
+                        label={`${t.symbol}: ${view.downAtr === null ? "no support zone near" : `${num(view.downAtr, 1)} ATR down to the support zone at ${num(view.down, 2)}`}, ${view.upAtr === null ? "no resistance zone near" : `${num(view.upAtr, 1)} ATR up to the resistance zone at ${num(view.up, 2)}`}${marks.map((m) => `; focus card ${m.word.toLowerCase()} ${num(m.price, 2)}`).join("")}`}
                       />
-                      <div className="flex justify-between gap-2 font-mono text-[0.6875rem]">
-                        <span className="text-good">{view.down === null ? "↓ none near" : `↓ ${num(view.downAtr, 1)} ATR · ${num(view.down, 2)}`}</span>
-                        <span className="text-bad text-right">{view.up === null ? "none near ↑" : `${num(view.up, 2)} · ${num(view.upAtr, 1)} ATR ↑`}</span>
+                      <div className="text-muted-foreground flex justify-between gap-2 font-mono text-[0.6875rem]">
+                        <span>{view.down === null ? "↓ none near" : `↓ ${num(view.downAtr, 1)} ATR · ${num(view.down, 2)}`}</span>
+                        <span className="text-right">{view.up === null ? "none near ↑" : `${num(view.up, 2)} · ${num(view.upAtr, 1)} ATR ↑`}</span>
                       </div>
                     </>
                   ) : (

@@ -1,10 +1,10 @@
 // A focus name's levels turned into a plan in plain words: a call if it breaks up, a put if it breaks down, each with
 // where to enter, where it is wrong and where to take profit, and the short level codes written out.
 // Pure: no I/O. The same arithmetic prints the thread's focus card (skills/options-levels/scripts/focus.py card).
-import { NEW_YORK, SYDNEY } from "./format";
 import { BAR_MINUTES, FAIL_WITHIN_BARS, SWEEP_MIN_ATR } from "./entry-checks";
 import type { Options, OptionsTicker } from "./options";
 import { MAX_PREMIUM, MIN_ROOM_MULTIPLE } from "./trade-rules";
+import { FIRST_ENTRY_MIN, LUNCH_FROM_MIN, LUNCH_TO_MIN, lunchBlock } from "./trade-state";
 
 type Item = NonNullable<Options["focus"]>["items"][number];
 
@@ -363,6 +363,27 @@ export function chartLevels(
     }));
 }
 
+/** One of the focus card's two triggers, as a map marks it: the card's own price, colour and word. */
+export interface CardMark {
+  price: number;
+  kind: "ceiling" | "floor";
+  /** The card's word for it: "Ceiling" or "Floor" (CHART_CODE). */
+  word: string;
+}
+
+/**
+ * The focus card's ceiling and floor for a name, highest first: the plan's own trigger levels (focusPlan), the same
+ * prices the card's steps and the board's triggers use, so every map that marks them shows the card's price, in the
+ * card's red and green, under the card's word. Never a merged chart line: two triggers a cent apart are two marks.
+ */
+export function cardMarks(item: Item): CardMark[] {
+  const { call, put } = focusPlan(item);
+  const out: CardMark[] = [];
+  if (call) out.push({ price: call.level, kind: "ceiling", word: CHART_CODE.ceiling.what });
+  if (put) out.push({ price: put.level, kind: "floor", word: CHART_CODE.floor.what });
+  return out.sort((a, b) => b.price - a.price);
+}
+
 /** Names whose options expire on Monday, Wednesday and Friday only (the broker's listing, checked 2026-10-27). */
 export const MWF_ONLY: ReadonlySet<string> = new Set(["AVGO", "AMD"]);
 
@@ -386,49 +407,26 @@ export function expiryNote(
   return `${today} Premiums near the money usually run over $${(MAX_PREMIUM / 100).toFixed(2)}, so go further out or skip.`;
 }
 
-/** The UTC instant of a New York wall time on a day. */
-function nyInstant(ymd: string, hh: number, mm: number): Date {
-  const [y, m, d] = ymd.split("-").map(Number);
-  const guess = Date.UTC(y!, m! - 1, d!, hh, mm);
-  const p = Object.fromEntries(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: NEW_YORK,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-    })
-      .formatToParts(new Date(guess))
-      .map((x) => [x.type, x.value]),
-  );
-  const wall = Date.UTC(
-    Number(p.year),
-    Number(p.month) - 1,
-    Number(p.day),
-    Number(p.hour),
-    Number(p.minute),
-  );
-  return new Date(guess - (wall - guess));
-}
+/** The no-entry lunch window, New York: 11:30 to 13:00 (trade-state's, where the board's gate reads it). */
+export { LUNCH_FROM_MIN, LUNCH_TO_MIN };
 
-const sydClock = (d: Date) =>
-  new Intl.DateTimeFormat("en-GB", {
-    timeZone: SYDNEY,
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).format(d);
+const hhmm = (min: number) =>
+  `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 
-/** The no-entry times in Sydney for a session: the first 5 minutes, and 11:30 to 13:00 New York. Null for a bad day. */
+/**
+ * The no-entry times for a session, New York: none before the first entry (FIRST_ENTRY_MIN, 09:35, the owner's rule,
+ * DEC-0043) and none from 11:30 to 13:00, which a half day (closing at 13:00) does not have (`lunchBlock`). New York
+ * wall times, so the daylight-saving changes move nothing. Null for a bad day.
+ */
 export function noEntryTimes(
   session: string | null | undefined,
-): { firstEntry: string; lunchFrom: string; lunchTo: string } | null {
+  halfDay = false,
+): { firstEntry: string; lunchFrom: string | null; lunchTo: string | null } | null {
   if (!session || !/^\d{4}-\d{2}-\d{2}$/.test(session)) return null;
+  const lunch = lunchBlock(halfDay);
   return {
-    firstEntry: sydClock(nyInstant(session, 9, 35)),
-    lunchFrom: sydClock(nyInstant(session, 11, 30)),
-    lunchTo: sydClock(nyInstant(session, 13, 0)),
+    firstEntry: hhmm(FIRST_ENTRY_MIN),
+    lunchFrom: lunch ? hhmm(LUNCH_FROM_MIN) : null,
+    lunchTo: lunch ? hhmm(LUNCH_TO_MIN) : null,
   };
 }

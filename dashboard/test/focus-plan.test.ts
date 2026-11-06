@@ -95,22 +95,14 @@ describe("focus plan", () => {
     expect(levelWords("ATH")).toBe("14-month high");
   });
 
-  it("puts the no-entry times in Sydney, across both daylight-saving changes", () => {
-    expect(noEntryTimes("2026-10-23")).toEqual({
-      firstEntry: "00:35",
-      lunchFrom: "02:30",
-      lunchTo: "04:00",
-    });
-    expect(noEntryTimes("2026-11-03")).toEqual({
-      firstEntry: "01:35",
-      lunchFrom: "03:30",
-      lunchTo: "05:00",
-    });
-    expect(noEntryTimes("2026-07-01")).toEqual({
-      firstEntry: "23:35",
-      lunchFrom: "01:30",
-      lunchTo: "03:00",
-    });
+  it("puts the no-entry times in New York, the same on both sides of the daylight-saving changes", () => {
+    for (const day of ["2026-10-23", "2026-11-03", "2026-07-01"])
+      expect(noEntryTimes(day)).toEqual({
+        firstEntry: "09:35",
+        lunchFrom: "11:30",
+        lunchTo: "13:00",
+      });
+    expect(noEntryTimes("2026-11-27", true)).toEqual({ firstEntry: "09:35", lunchFrom: null, lunchTo: null }); // a half day closes at 13:00
     expect(noEntryTimes("bad")).toBeNull();
   });
 });

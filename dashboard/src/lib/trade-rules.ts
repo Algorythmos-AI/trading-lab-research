@@ -412,6 +412,9 @@ export interface DayCheck {
   line: string;
   /** False when the journal was not read recently enough to judge today (see `journalCheck`). */
   current: boolean;
+  /** The open positions' note inside `line` (see `openNote`), on its own for a page that shows it as a caution; empty
+   * or absent when there is none. */
+  openLine?: string;
 }
 
 /** When the journal was last read, to judge whether today can be read from it. Absent: not judged (tests, previews). */
@@ -493,10 +496,15 @@ export function meterToneFor<T extends string>(tone: T, check: Pick<DayCheck, "c
   return check.current || tone === "bad" ? tone : "neutral";
 }
 
-/** The open positions' note: the journal has no current price, so an open loss is not in the day's figure. */
+/**
+ * The open positions' note: the journal has no current price, so an open loss is not in the day's figure here, but
+ * rule 7 counts it ("Open losses count too"). A caution to check the broker; the count itself is unchanged.
+ */
 function openNote(view: SessionView | null): string {
   const n = view?.open.length ?? 0;
-  return n ? ` ${n} position${n === 1 ? "" : "s"} still open: an open loss is not counted until it closes.` : "";
+  if (!n) return "";
+  const rule = RULES.find((r) => r.id === "day-stop")!.n;
+  return ` ${n} position${n === 1 ? "" : "s"} open: ${n === 1 ? "its" : "their"} open loss isn't priced here, and rule ${rule} counts it; check Webull.`;
 }
 
 /** Today's trading measured against the day rules. */
@@ -506,9 +514,10 @@ export function dayCheck(view: SessionView | null, journal?: JournalAge): DayChe
     // A journal that is not current can only be missing trades, so a stop it already shows stands.
     if (judged.status === "stop") return { ...judged, current: false, line: `${judged.line} Your Webull trades ${staleRead(journal.asOf, journal.now)}.` };
     // Anything short of a stop cannot be judged: no trade from today may only mean today was not read yet.
-    return { ...judged, status: "unknown", current: false, line: staleLine(journal.asOf, journal.now) + openNote(view) };
+    return { ...judged, status: "unknown", current: false, line: staleLine(journal.asOf, journal.now) + openNote(view), openLine: openNote(view).trim() };
   }
-  return { ...judged, line: judged.line + (judged.status === "stop" ? "" : openNote(view)) + readNote(journal) };
+  const open = judged.status === "stop" ? "" : openNote(view);
+  return { ...judged, line: judged.line + open + readNote(journal), openLine: open.trim() };
 }
 
 function baseCheck(view: SessionView | null): DayCheck {

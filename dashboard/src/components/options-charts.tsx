@@ -25,14 +25,28 @@ import { Badge } from "./ui/badge";
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
-const TONE_FILL = { support: "var(--good-fill)", resistance: "var(--bad-fill)", at: "var(--warn-fill)" } as const;
+/** One colour per role, as on the level map: the edition's zones are neutral (amber while price sits inside one); red
+ * and green are only the focus card's ceiling and floor. */
+const TONE_FILL = { support: "var(--neutral-fill)", resistance: "var(--neutral-fill)", at: "var(--warn-fill)" } as const;
 
 /** Left offset on the room bar for an ATR offset from price. */
 const roomAt = (v: number) => `${((v + ROOM_REACH) / (2 * ROOM_REACH)) * 100}%`;
 
+/** A card mark placed on a room bar: its offset from the bar's price in ATRs (clamped to the bar's reach). */
+export function roomMarks(marks: readonly MapCardMark[], price: number | null, atr: number | null | undefined): (MapCardMark & { at: number; beyond: boolean })[] {
+  if (price === null || !isNum(price) || !isNum(atr) || atr <= 0) return [];
+  return marks
+    .filter((m) => isNum(m.price))
+    .map((m) => {
+      const at = (m.price - price) / atr;
+      return { ...m, at: Math.max(-ROOM_REACH, Math.min(ROOM_REACH, at)), beyond: Math.abs(at) > ROOM_REACH };
+    });
+}
+
 /**
- * One name's room bar: price in the middle, every zone within three ATRs each way (green below, red above, amber
- * when price sits inside one), and the one-day expected move as a blue band. Heavier zones are drawn stronger.
+ * One name's room bar: price in the middle, every zone within three ATRs each way (neutral grey, amber when price
+ * sits inside one), the focus card's ceiling and floor as red and green ticks, and the one-day expected move as a
+ * blue band. Heavier zones are drawn stronger.
  */
 export function RoomBar({
   view,
@@ -40,9 +54,12 @@ export function RoomBar({
   trail = [],
   live = false,
   stale = false,
+  marks = [],
 }: {
   view: NonNullable<ReturnType<typeof roomView>>;
   label: string;
+  /** The focus card's ceiling and floor on this bar (`roomMarks`). */
+  marks?: readonly (MapCardMark & { at: number; beyond: boolean })[];
   /** Recent live prices as ATR offsets from the current one, oldest first: drawn as fading dots behind it. */
   trail?: number[];
   live?: boolean;
@@ -67,6 +84,16 @@ export function RoomBar({
             background: TONE_FILL[z.tone],
             opacity: z.big ? 0.8 : 0.4,
           }}
+        />
+      ))}
+      {marks.map((m) => (
+        <span
+          key={m.kind}
+          data-room-mark={m.kind}
+          data-price={m.price.toFixed(2)}
+          title={`${m.word} ${num(m.price, 2)}${m.beyond ? `, beyond ${ROOM_REACH} ATR` : ""}`}
+          className={cn("absolute inset-y-0 w-[3px] -translate-x-1/2 rounded-[1px]", m.kind === "ceiling" ? "bg-bad" : "bg-good", m.beyond && "opacity-50")}
+          style={{ left: roomAt(m.at) }}
         />
       ))}
       {[-2, -1, 1, 2].map((k) => (
@@ -119,7 +146,9 @@ const PHONE: MapGeometry = { W: 410, H: 470, TOP: 12, X0: 4, X1: 316, XD: 328, X
  * Recent candles, each nearby zone as one thin line at the edge price meets first (with a faint band behind it for
  * the zone's width), the close, and the options market's expected move as a cone into the next day and the week.
  * Green and red candles, as on a broker's chart; the price axis on the right carries a tag at the close and at the
- * nearest two levels each side, so the numbers that matter are read where a trader looks for them.
+ * nearest two levels each side, so the numbers that matter are read where a trader looks for them. The zones are
+ * neutral grey with a word ("Support zone", "Demand zone"); red and green lines are only the focus card's ceiling and
+ * floor (`cardMarks`), at the card's own prices and under its words.
  *
  * The zones, the candles, the expected move and the tags are each a layer (`data-layer`), so a wrapper can hide one
  * with `data-hide`. With `interactive` the map carries a crosshair that reads a price and a candle off it.
@@ -133,6 +162,24 @@ export interface BreakevenMark {
 /** How long the longest open-interest bar is drawn, in the map's units. */
 const OI_BAR = 54;
 
+/** The focus card's trigger a map marks: its price, and the card's own word and colour (focus-plan's cardMarks). */
+export interface MapCardMark {
+  price: number;
+  kind: "ceiling" | "floor";
+  word: string;
+}
+
+/** One colour per role: red is the card's ceiling and green its floor, on every map. The edition's daily zones are
+ * a neutral grey with a word, so a zone is never read as a trigger at a different price. */
+const CARD_INK = { ceiling: "var(--bad)", floor: "var(--good)" } as const;
+const ZONE_INK = "var(--neutral)";
+const ZONE_FILL = "var(--neutral-fill)";
+/** A zone's word: "Support zone" below the close, "Resistance zone" above it. */
+export const zoneWord = (tone: MapZone["tone"]) => (tone === "support" ? "Support zone" : "Resistance zone");
+/** A zone's member codes for the map, with the supply and demand bases written as words. */
+export const zoneMembers = (members: readonly string[] | null | undefined) =>
+  (members ?? []).map((m) => (m === "DEMAND" ? "Demand zone" : m === "SUPPLY" ? "Supply zone" : m));
+
 export function LevelMap({
   t,
   interactive = false,
@@ -143,6 +190,7 @@ export function LevelMap({
   unit = "daily",
   closeDay = null,
   phone = false,
+  cardMarks = [],
 }: {
   t: OptionsTicker;
   interactive?: boolean;
@@ -159,6 +207,8 @@ export function LevelMap({
   closeDay?: string | null;
   /** Draw the phone's geometry: taller, with larger text. */
   phone?: boolean;
+  /** The focus card's ceiling and floor for this name, marked in the card's colour and word. */
+  cardMarks?: readonly MapCardMark[];
 }) {
   const { W, H, TOP, X0, X1, XD, XW, AX, TAG_H, VOL_H, DATE_H, LABELS_EACH_SIDE, F } = phone ? PHONE : WIDE;
   /** Where the open-interest bars start: clear of the plot's left edge. */
@@ -195,18 +245,28 @@ export function LevelMap({
 
   // Each zone is drawn at the edge price reaches first: the bottom of one above, the top of one below.
   const edge = ({ zone, tone }: MapZone) => (tone === "resistance" ? zone.lo : zone.hi);
-  const toneColor = (tone: MapZone["tone"]) => (tone === "support" ? "var(--good)" : "var(--bad)");
   const above = v.zones.filter((z) => z.tone === "resistance").sort((a, b) => a.zone.lo - b.zone.lo).slice(0, LABELS_EACH_SIDE);
   const below = v.zones.filter((z) => z.tone === "support").sort((a, b) => b.zone.hi - a.zone.hi).slice(0, LABELS_EACH_SIDE);
   const tagged = new Set([...above, ...below]);
+  const marks = cardMarks.filter((m) => isNum(m.price));
   const tags = [
     ...[...above, ...below].map((z) => ({
       y: y(edge(z)),
       text: num(edge(z), 2),
-      title: `${z.tone === "support" ? "Support" : "Resistance"} ${z.zone.lo === z.zone.hi ? num(z.zone.lo, 2) : `${num(z.zone.lo, 2)} to ${num(z.zone.hi, 2)}`}: ${(z.zone.members ?? []).join(" + ")}`,
-      fill: toneColor(z.tone),
+      title: `${zoneWord(z.tone)} ${z.zone.lo === z.zone.hi ? num(z.zone.lo, 2) : `${num(z.zone.lo, 2)} to ${num(z.zone.hi, 2)}`}: ${zoneMembers(z.zone.members).join(" + ")}`,
+      fill: ZONE_INK,
       ink: "var(--card)",
     })),
+    // The card's triggers on the map's range: tagged on the axis in the card's colour.
+    ...marks
+      .filter((m) => m.price >= v.lo && m.price <= v.hi)
+      .map((m) => ({
+        y: y(m.price),
+        text: num(m.price, 2),
+        title: `${m.word} ${num(m.price, 2)}: the focus card's ${m.kind === "ceiling" ? "call" : "put"} trigger`,
+        fill: CARD_INK[m.kind],
+        ink: "var(--card)",
+      })),
     {
       y: y(close),
       text: num(close, 2),
@@ -227,7 +287,7 @@ export function LevelMap({
   return (
     <MapFrame
       t={{ ...t, bars: undefined }}
-      label={`${t.symbol}: last ${n} ${unit} bars with support and resistance levels and the expected move`}
+      label={`${t.symbol}: last ${n} ${unit} bars with the edition's daily support and resistance zones${marks.length ? `, the focus card's ${marks.map((m) => `${m.word.toLowerCase()} ${num(m.price, 2)}`).join(" and ")}` : ""} and the expected move`}
       w={W}
       h={H}
       top={TOP}
@@ -257,7 +317,7 @@ export function LevelMap({
             const h = Math.max(0, y(zone.lo) - y1);
             const key = zoneKey(zone);
             const hot = hotZone === key;
-            const color = toneColor(tone);
+            const color = ZONE_INK;
             const at = y(edge(z));
             return (
               <g key={i}>
@@ -268,13 +328,13 @@ export function LevelMap({
                   y={h < 4 ? at - 2 : y1}
                   width={XW - X0}
                   height={Math.max(4, h)}
-                  fill={color}
-                  fillOpacity={hot ? 0.22 : h < 4 ? 0 : 0.06}
+                  fill={ZONE_FILL}
+                  fillOpacity={hot ? 0.3 : h < 4 ? 0 : 0.12}
                   stroke={hot ? color : "none"}
                   strokeOpacity={0.6}
                 >
                   <title>
-                    {`${tone === "support" ? "Support" : "Resistance"} ${num(zone.lo, 2)}${zone.lo === zone.hi ? "" : `–${num(zone.hi, 2)}`}: ${(zone.members ?? []).join(" + ")}`}
+                    {`${zoneWord(tone)} ${num(zone.lo, 2)}${zone.lo === zone.hi ? "" : `–${num(zone.hi, 2)}`}: ${zoneMembers(zone.members).join(" + ")}`}
                   </title>
                 </rect>
                 <line
@@ -297,7 +357,7 @@ export function LevelMap({
                     style={{ fill: color, paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 3 }}
                     className="font-mono"
                   >
-                    {(zone.members ?? []).slice(0, 3).join(" · ")}
+                    {zoneMembers(zone.members).slice(0, 3).join(" · ")}
                   </text>
                 ) : null}
               </g>
@@ -416,6 +476,37 @@ export function LevelMap({
             >
               {`Breakeven ${num(breakeven.price, 2)}${breakeven.price > v.hi ? " ↑ above this range" : breakeven.price < v.lo ? " ↓ below this range" : ""}`}
             </text>
+          </g>
+        ) : null}
+        {marks.length ? (
+          // The focus card's ceiling and floor: thick and solid, in the card's red and green and under its word, so
+          // the map and the card read as one. Off this range, named at the edge it lies beyond.
+          <g data-card-marks={marks.length}>
+            {marks.map((m) => {
+              const off = m.price > v.hi ? "above" : m.price < v.lo ? "below" : null;
+              // Marks off the same edge stack, nearest the edge first, so their labels never overlap.
+              const LINE_H = 13 * F;
+              const nth = off === null ? 0 : marks.filter((o) => (off === "above" ? o.price > v.hi && o.price > m.price : o.price < v.lo && o.price < m.price)).length;
+              const at =
+                off === "above" ? TOP + 11 + nth * LINE_H : off === "below" ? BOTTOM - 5 - nth * LINE_H : y(m.price) < TOP + 15 ? y(m.price) + 12 : y(m.price) - 4;
+              return (
+                <g key={m.kind} data-card-mark={m.kind} data-price={m.price.toFixed(2)}>
+                  <title>{`${m.word} ${num(m.price, 2)}: the focus card's ${m.kind === "ceiling" ? "call" : "put"} trigger`}</title>
+                  {off === null ? <line x1={X0} x2={AX - 2} y1={y(m.price)} y2={y(m.price)} stroke={CARD_INK[m.kind]} strokeWidth={2.5} /> : null}
+                  <text
+                    x={AX - 6}
+                    y={at}
+                    textAnchor="end"
+                    fontSize={10.5 * F}
+                    fontWeight={600}
+                    style={{ fill: CARD_INK[m.kind], paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 3 }}
+                    className="font-mono"
+                  >
+                    {`${m.word} ${num(m.price, 2)}${off === "above" ? " ↑ above this range" : off === "below" ? " ↓ below this range" : ""}`}
+                  </text>
+                </g>
+              );
+            })}
           </g>
         ) : null}
         <line x1={X0} x2={AX - 2} y1={y(close)} y2={y(close)} stroke="var(--foreground)" strokeOpacity={0.55} strokeDasharray="3 3" />
