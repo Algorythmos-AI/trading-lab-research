@@ -231,8 +231,9 @@ function HostPanel({ s }: { s: Snapshot }) {
               <TableBody>
                 {jobs.map((j, i) => (
                   <TableRow key={`${j.label}-${i}`}>
-                    <TableCell>{j.name || jobName(jobKey(j.label))}</TableCell>
-                    <TableCell>{txt(j.local_time)}</TableCell>
+                    {/* The two text columns wrap so the status and exit columns stay inside a half-width card. */}
+                    <TableCell className="whitespace-normal">{j.name || jobName(jobKey(j.label))}</TableCell>
+                    <TableCell className="text-muted-foreground whitespace-normal">{txt(j.local_time)}</TableCell>
                     <TableCell>
                       {j.loaded === true ? (
                         <StatusBadge tone="good">{j.running ? "Running" : "Loaded"}</StatusBadge>

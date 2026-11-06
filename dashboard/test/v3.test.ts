@@ -47,6 +47,10 @@ describe("v3 helpers", () => {
   it("colours audit events by what they mean", () => {
     expect(auditTone("job_failed")).toBe("bad");
     expect(auditTone("kill_on")).toBe("warn");
+    // Alerts by how much they ask of the owner: a page is red, a warning amber, a notice (summary, a clone fill) plain.
+    expect(auditTone("alert_fired")).toBe("bad");
+    expect(auditTone("alert_warn")).toBe("warn");
+    expect(auditTone("alert_notice")).toBe("info");
     expect(auditTone("alert_resolved")).toBe("good");
     expect(auditTone("deploy")).toBe("info");
   });

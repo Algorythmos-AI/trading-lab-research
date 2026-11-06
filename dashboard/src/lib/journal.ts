@@ -603,14 +603,36 @@ export interface SessionView {
   /** The day's closed trades, newest first. */
   trades: Trade[];
   summary: Summary;
-  /** Lots still open now, newest first. */
+  /** Positions still open now, newest first: the open lots merged by holding (see `openPositions`). */
   open: Lot[];
+}
+
+/**
+ * Open lots merged into positions: one per symbol, kind, strike, expiry and side, with the quantities summed, the
+ * entry averaged by quantity and the newest opening kept. Several fills of one holding are one position, so every
+ * page counts what the Risk page lists.
+ */
+export function openPositions(lots: readonly Lot[]): Lot[] {
+  const by = new Map<string, Lot>();
+  for (const l of lots) {
+    const key = [l.symbol, l.kind, l.strike ?? "", l.expiry ?? "", l.side].join("|");
+    const m = by.get(key);
+    if (!m) {
+      by.set(key, { ...l });
+      continue;
+    }
+    const qty = m.qty + l.qty;
+    m.entry = qty ? (m.entry * m.qty + l.entry * l.qty) / qty : m.entry;
+    m.qty = qty;
+    if ((l.opened_at ?? "") > (m.opened_at ?? "")) m.opened_at = l.opened_at;
+  }
+  return [...by.values()];
 }
 
 /** Today's trades in New York, or the latest session with trades when today has none yet. Null with no trades at all. */
 export function sessionView(doc: Pick<JournalDoc, "trades" | "open">, now: Date): SessionView | null {
   const today = nyTime(now.toISOString()).day;
-  const open = [...(doc.open ?? [])].sort((a, b) => (b.opened_at ?? "").localeCompare(a.opened_at ?? ""));
+  const open = openPositions(doc.open ?? []).sort((a, b) => (b.opened_at ?? "").localeCompare(a.opened_at ?? ""));
   let day = today;
   let trades = doc.trades.filter((t) => closeDay(t) === today);
   if (trades.length === 0 && open.every((l) => !l.opened_at || nyTime(l.opened_at).day !== today)) {

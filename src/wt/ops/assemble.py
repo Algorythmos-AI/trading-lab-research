@@ -67,12 +67,24 @@ def owner_actions(sources: dict, cfg: dict) -> list[dict]:
                      "severity": "blocker"})
     dep = _d(sources, "deployed")
     if dep and dep.get("behind"):
-        acts.append({"id": "deployed", "title": f"Deploy to the host: it is {dep['behind']} commit(s) behind GitHub main",
-                     "why": f"The host runs its own checkout: {dep['behind']} newer reviewed commit(s) on main are not "
-                            "live yet. The deploy gate refuses while a job runs or in the trading window.",
-                     "blocks": "Correct live runs", "command": "sudo -u wt /usr/local/bin/wt-deploy \"deploy <sha>\"",
-                     "when": "When the deploy gate is open (no job running, outside the trading window)", "link": None,
-                     "severity": "high"})
+        n = dep["behind"]
+        commits = f"{n} newer reviewed commit{'' if n == 1 else 's'}"
+        if dep.get("auto"):
+            # The hourly automatic deploy takes it once the gate opens: nothing to do unless it is held for the owner.
+            acts.append({"id": "deployed", "title": f"Waiting for the automatic deploy: {commits} on main",
+                         "why": f"The host runs its own checkout and {commits} on main are not live yet. The hourly "
+                                "automatic deploy takes them once the deploy gate opens, unless they change the units, "
+                                "the host helpers or the deploy itself; those wait for you and the deploy notice says so.",
+                         "blocks": "Nothing yet", "command": None,
+                         "when": "The first hourly run after the gate opens (no job running, outside the trading window)",
+                         "link": None, "severity": "low"})
+        else:
+            acts.append({"id": "deployed", "title": f"Deploy to the host: it is {n} commit{'' if n == 1 else 's'} behind GitHub main",
+                         "why": f"The host runs its own checkout: {commits} on main are not live yet. The deploy gate "
+                                "refuses while a job runs or in the trading window.",
+                         "blocks": "Correct live runs", "command": "sudo -u wt /usr/local/bin/wt-deploy deploy",
+                         "when": "When the deploy gate is open (no job running, outside the trading window)", "link": None,
+                         "severity": "high"})
     host = _d(sources, "host")
     if host:
         if host["disk_free_gb"] < thresholds.DISK_TARGET_GB:

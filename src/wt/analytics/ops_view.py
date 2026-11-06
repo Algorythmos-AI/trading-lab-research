@@ -143,6 +143,24 @@ def digest(now_metrics: Mapping[str, Any], daily_dir: Path, today: dt.date) -> d
     return {"since": earlier[-1].stem, "items": items}
 
 
+# Pages that report a trade, not a fault: the clone's fills and exits (wt.live.runner_o).
+NOTICE_KEYS = ("options-clone:entry-", "options-clone:exit-")
+
+
+def alert_kind(a: Mapping[str, Any]) -> str:
+    """An alert's audit kind by how much it asks of the owner (wt.ops.alerts' priorities): 4-5 or unknown a fired
+    alert, 3 a warning, 2 and below, and the clone's trade reports, a notice. A resolved alert stays resolved."""
+    event = a.get("event")
+    if event != "fired":
+        return f"alert_{event}"
+    if str(a.get("key") or "").startswith(NOTICE_KEYS):
+        return "alert_notice"
+    p = a.get("priority")
+    if not isinstance(p, int) or isinstance(p, bool) or p >= 4:
+        return "alert_fired"
+    return "alert_warn" if p == 3 else "alert_notice"
+
+
 def audit_trail(*, deploys: Iterable[Path], account: Mapping[str, Any] | None, runs: Sequence[dict[str, Any]],
                 alert_history: Sequence[dict[str, Any]], audit_rows: Sequence[dict[str, Any]],
                 keep: int = 200) -> list[dict[str, Any]]:
@@ -169,7 +187,7 @@ def audit_trail(*, deploys: Iterable[Path], account: Mapping[str, Any] | None, r
             ev.append({"at": str(r.get("started")), "kind": f"job_{r.get('status')}", "source": "runs",
                        "detail": str(r.get("job"))})
     for a in alert_history:
-        ev.append({"at": str(a.get("at")), "kind": f"alert_{a.get('event')}", "source": "alerts",
+        ev.append({"at": str(a.get("at")), "kind": alert_kind(a), "source": "alerts",
                    "detail": str(a.get("title") or a.get("key") or "")})
     for a in audit_rows:
         if "kind" in a:
