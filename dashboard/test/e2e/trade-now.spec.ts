@@ -254,13 +254,11 @@ test("fits a 375 px screen with no sideways scroll", async ({ page, context, bas
     for (const e of document.querySelectorAll("body *")) {
       const r = e.getBoundingClientRect();
       if (r.width === 0 || r.right <= w + 1) continue;
-      let p = e.parentElement;
+      // clipped by any parent that scrolls or hides its overflow and itself ends inside the screen (the focus cards'
+      // swipe strip runs past the edge on purpose, inside its own scroller)
       let clipped = false;
-      for (; p; p = p.parentElement)
-        if (getComputedStyle(p).overflowX !== "visible") {
-          clipped = p.getBoundingClientRect().right <= w + 1;
-          break;
-        }
+      for (let p = e.parentElement; p && !clipped; p = p.parentElement)
+        clipped = getComputedStyle(p).overflowX !== "visible" && p.getBoundingClientRect().right <= w + 1;
       if (clipped) continue;
       // the element and its parents up to the nearest one with a data- attribute, each with its width
       const chain: string[] = [];
