@@ -70,8 +70,11 @@ for (const theme of ["dark", "light"] as const) {
     await expect(page.locator("[data-board-row]").first()).toHaveAttribute("data-board-state", "enter_zone");
     await expect(page.locator("[data-hero-word]")).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
+    // A desktop is pictured from the top to the first row of cards (the desk below has its own pictures): the whole
+    // page is over the repository's 500 KB limit for a file. A phone's whole page fits under it.
+    if (!isMobile) await page.setViewportSize({ width: 1280, height: 2000 });
     await expect(page).toHaveScreenshot(`glance-live-${theme}.png`, {
-      fullPage: true,
+      fullPage: isMobile,
       mask: [page.getByRole("banner"), page.locator("[data-rail-countdown]"), page.locator("[data-session-bar]")],
     });
   });
