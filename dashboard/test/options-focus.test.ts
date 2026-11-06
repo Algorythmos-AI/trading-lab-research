@@ -188,15 +188,23 @@ describe("the focus card as steps", () => {
     expect(runner.indexOf("data-testing-tag")).toBeLessThan(runner.indexOf("Sell half at 714.59"));
   });
 
-  it("lists the two other triggers under Also watch, one line each, tagged as testing", () => {
+  it("lists the four other triggers under Also watch, one line each, tagged as testing", () => {
     const h = qqq();
     const also = h.slice(h.indexOf("data-also-watch"));
     expect(also).toContain("Also watch");
     expect(also).toContain(
       "Failed break: if it closes above 712.50 and back below within 3 bars (6 min), a put under 712.50, stop above the push high",
     );
-    expect(also).toContain("Sweep: if it drops 0.25 × the 2-min ATR under 704.10 and closes back above, a call above 704.10, stop below the sweep low");
-    expect(also.match(/data-testing-tag/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(also).toContain("Failed break: if it closes below 704.10 and back above within 3 bars (6 min), a call above 704.10, stop below the push low");
+    expect(also).toContain(
+      "Sweep: if it rises at least 0.25 × the 2-min ATR over 712.50 and closes back at or below it, a put under 712.50, stop above the sweep high",
+    );
+    expect(also).toContain(
+      "Sweep: if it drops at least 0.25 × the 2-min ATR under 704.10 and closes back at or above it, a call above 704.10, stop below the sweep low",
+    );
+    const list = also.slice(0, also.indexOf("</ul>"));
+    expect(list.match(/<li/g)?.length).toBe(4);
+    expect(list.match(/data-testing-tag/g)?.length).toBe(4);
   });
 
   it("without an ATR there is no entry, runner or also-watch, and the stop is said in words", () => {

@@ -224,7 +224,7 @@ function SideBlock({ plan, halfDay }: { plan: SidePlan; halfDay: boolean }) {
   );
 }
 
-/** The two other triggers at the name's levels, one line each, under test. The board shows them live. */
+/** The other triggers at the name's levels (both patterns at both levels), one line each, under test. The board shows them live. */
 function AlsoWatch({ item }: { item: Item }) {
   const alts = altTriggers(focusPlan(item), item.atr);
   if (!alts.length) return null;
@@ -236,8 +236,9 @@ function AlsoWatch({ item }: { item: Item }) {
       <ul className="grid gap-0.5">
         {alts.map((a) => (
           <li
-            key={a.kind}
+            key={`${a.kind}-${a.side}`}
             data-alt={a.kind}
+            data-alt-side={a.side}
             className="flex items-start gap-1.5"
           >
             <span className="min-w-0 flex-1">{a.line}</span>

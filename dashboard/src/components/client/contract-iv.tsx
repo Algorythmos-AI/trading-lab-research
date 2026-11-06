@@ -6,8 +6,11 @@ import { TestingTag } from "./trade-now";
 export const ivCap = (symbol: string) => (INDEX_NAMES.includes(symbol) ? IV_CAP_INDEX : IV_CAP_SINGLE);
 
 /**
- * The Contract pane's one line on an expensive option: the picked contract's own implied volatility above the cap for
- * its name (the same cap as the board's caution: at the cap is not above it). Null when the IV is unknown or within it.
+ * The Contract pane's one line on an expensive option. It reads the picked contract's own implied volatility (`iv`,
+ * from that option's quote). The board's IV caution (entry-checks) reads the name's IV from the edition instead
+ * (`expected_move.annual_iv`). Both are held against the same caps (IV_CAP_INDEX for the index names, IV_CAP_SINGLE
+ * for the rest), and at the cap is not above it, so the two differ only because they read different IVs. Null when
+ * the IV is unknown or within the cap.
  */
 export function ivLine(symbol: string, iv: number | null | undefined): string | null {
   if (typeof iv !== "number" || !Number.isFinite(iv) || iv <= 0) return null;

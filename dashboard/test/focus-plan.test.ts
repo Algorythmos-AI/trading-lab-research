@@ -11,6 +11,7 @@ import {
 import { BAR_MINUTES, FAIL_WITHIN_BARS, SWEEP_MIN_ATR } from "@/lib/entry-checks";
 import { focusOptions } from "@/lib/fixture-variants";
 import { runnerLine } from "@/lib/trade-now";
+import { altAt, type Bar2 } from "@/lib/trade-state";
 import type { Options } from "@/lib/options";
 import optionsJson from "./fixtures/options.v1.json";
 
@@ -251,29 +252,57 @@ describe("the card's other triggers", () => {
     support: { price: 405.1, name: "PDL" },
   };
 
-  it("describes the failed break at the ceiling and the sweep at the floor in plain words", () => {
+  it("lists all four the engine can raise, in order: both failed breaks, then both sweeps", () => {
     const alts = altTriggers(focusPlan(item), item.atr);
     expect(alts.map((a) => [a.kind, a.side, a.level])).toEqual([
       ["failed_break", "put", 412.3],
+      ["failed_break", "call", 405.1],
+      ["sweep_reclaim", "put", 412.3],
       ["sweep_reclaim", "call", 405.1],
     ]);
-    expect(alts[0]!.line).toBe(
+    expect(alts.map((a) => a.line)).toEqual([
       "Failed break: if it closes above 412.30 and back below within 3 bars (6 min), a put under 412.30, stop above the push high",
-    );
-    expect(alts[1]!.line).toBe(
-      "Sweep: if it drops 0.25 × the 2-min ATR under 405.10 and closes back above, a call above 405.10, stop below the sweep low",
-    );
+      "Failed break: if it closes below 405.10 and back above within 3 bars (6 min), a call above 405.10, stop below the push low",
+      "Sweep: if it rises at least 0.25 × the 2-min ATR over 412.30 and closes back at or below it, a put under 412.30, stop above the sweep high",
+      "Sweep: if it drops at least 0.25 × the 2-min ATR under 405.10 and closes back at or above it, a call above 405.10, stop below the sweep low",
+    ]);
+  });
+
+  it("mirrors the engine: altAt raises each one, at that level and on that side", () => {
+    const plan = focusPlan(item);
+    const t0 = Date.parse("2026-10-12T14:00:00Z");
+    const bars = (cs: [number, number, number][]): Bar2[] =>
+      cs.map(([h, l, c], i) => ({ start: t0 + i * 120_000, end: t0 + (i + 1) * 120_000, o: c, h, l, c }));
+    const raised = (level: number, planSide: "call" | "put", b: Bar2[]) => {
+      const a = altAt(level, planSide, b, 1);
+      return a ? [a.kind, a.side, a.level] : null;
+    };
+    const C = plan.call!.level;
+    const F = plan.put!.level;
+    const got = [
+      raised(C, "call", bars([[C, C - 0.5, C - 0.2], [C + 0.4, C - 0.1, C + 0.3], [C + 0.1, C - 0.4, C - 0.2]])), // closes above, then back below
+      raised(F, "put", bars([[F + 0.5, F, F + 0.2], [F + 0.1, F - 0.4, F - 0.3], [F + 0.4, F - 0.1, F + 0.2]])), // closes below, then back above
+      raised(C, "call", bars([[C, C - 0.5, C - 0.2], [C + SWEEP_MIN_ATR, C - 0.3, C]])), // reaches the ATR share over it, closes at it
+      raised(F, "put", bars([[F + 0.5, F, F + 0.2], [F + 0.3, F - SWEEP_MIN_ATR, F]])), // reaches the ATR share under it, closes at it
+    ];
+    expect(got).toEqual(altTriggers(plan, item.atr).map((a) => [a.kind, a.side, a.level]));
   });
 
   it("uses the engine's constants", () => {
-    const line = altTriggers(focusPlan(item), item.atr)[0]!.line;
-    expect(line).toContain(`within ${FAIL_WITHIN_BARS} bars (${FAIL_WITHIN_BARS * BAR_MINUTES} min)`);
-    expect(altTriggers(focusPlan(item), item.atr)[1]!.line).toContain(`${SWEEP_MIN_ATR} × the`);
+    const alts = altTriggers(focusPlan(item), item.atr);
+    for (const a of alts.filter((x) => x.kind === "failed_break")) expect(a.line).toContain(`within ${FAIL_WITHIN_BARS} bars (${FAIL_WITHIN_BARS * BAR_MINUTES} min)`);
+    for (const a of alts.filter((x) => x.kind === "sweep_reclaim")) expect(a.line).toContain(`at least ${SWEEP_MIN_ATR} × the ${BAR_MINUTES}-min ATR`);
   });
 
   it("has one per level present, and none without the plan's ATR", () => {
-    expect(altTriggers({ ...focusPlan(item), put: null }, 9.1).map((a) => a.kind)).toEqual(["failed_break"]);
-    expect(altTriggers({ ...focusPlan(item), call: null }, 9.1).map((a) => a.kind)).toEqual(["sweep_reclaim"]);
+    expect(altTriggers({ ...focusPlan(item), put: null }, 9.1).map((a) => [a.kind, a.side])).toEqual([
+      ["failed_break", "put"],
+      ["sweep_reclaim", "put"],
+    ]);
+    expect(altTriggers({ ...focusPlan(item), call: null }, 9.1).map((a) => [a.kind, a.side])).toEqual([
+      ["failed_break", "call"],
+      ["sweep_reclaim", "call"],
+    ]);
     expect(altTriggers(focusPlan(item), null)).toEqual([]);
     expect(altTriggers(focusPlan(item), 0)).toEqual([]);
   });

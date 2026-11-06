@@ -1,28 +1,40 @@
 "use client";
 
 import { Activity, CircleCheck, Hand, type LucideIcon, NotebookPen, OctagonX, Shield, TriangleAlert, X } from "lucide-react";
-import { useId, useState, useSyncExternalStore } from "react";
+import { useEffect, useId, useState, useSyncExternalStore } from "react";
 import { StatusBadge } from "@/components/status";
-import { newYork } from "@/lib/format";
-import type { Lot } from "@/lib/journal";
+import type { Lot, Trade } from "@/lib/journal";
 import type { LiveQuote, Options, TrailPoint } from "@/lib/options";
 import {
   ACTION_WORD,
-  altPlan,
+  CARD_ENTRY,
+  cardFeed,
   checkFill,
+  checkFillTime,
+  type FormCapture,
+  formFromRow,
+  formFromTrade,
+  formMovedOn,
   type ManageAction,
+  type ManageNotice,
+  manageNotices,
   type ManageView,
   manageView,
   type ManualNote,
+  mergeNotices,
+  movedOnLine,
   NOTE_PREFIX,
+  noteFromForm,
+  noteId,
   noteKey,
   openTrades,
   parseNotes,
+  retiredNotes,
+  shownNotices,
 } from "@/lib/trade-manage";
 import type { BoardRow } from "@/lib/trade-now";
-import { focusPlan } from "@/lib/focus-plan";
 import { nyClock } from "@/lib/options";
-import type { Bar2 } from "@/lib/trade-state";
+import type { AltTrigger, Bar2 } from "@/lib/trade-state";
 import { cn } from "@/lib/utils";
 import { TestingTag } from "./trade-now";
 
@@ -108,14 +120,19 @@ function Cell({ label, value, note, tone }: { label: string; value: string; note
   );
 }
 
-/** One open trade: the header, one instruction line, then the stop, the trail, the 5-minute check and the flat time. */
-export function ManageCard({ v, onClear }: { v: ManageView; onClear?: () => void }) {
+/**
+ * One open trade: the header, one instruction line, then the stop, the trail, the 5-minute check and the flat time. A
+ * journal card adds a CHECK line (its fill is the card's entry) with "Set my fill"; `children` is the form it opens.
+ */
+export function ManageCard({ v, onClear, onSetFill, children }: { v: ManageView; onClear?: () => void; onSetFill?: () => void; children?: React.ReactNode }) {
   const Icon = ACTION_ICON[v.action];
   const exit = v.action === "exit";
+  const counting = v.notWorkingText !== "working" && v.notWorkingText !== "done" && v.notWorkingText !== "–";
   return (
     <article
       aria-label={`In a trade: ${v.symbol} ${v.side}`}
       data-manage={v.symbol}
+      data-manage-side={v.side}
       data-manage-action={v.action}
       data-manage-source={v.source}
       className={cn("grid gap-2 rounded-md border px-3 py-2", exit ? "bg-bad-soft border-bad-fill/60" : "bg-muted/40")}
@@ -151,46 +168,76 @@ export function ManageCard({ v, onClear }: { v: ManageView; onClear?: () => void
         </StatusBadge>
         <span>{v.line}</span>
       </p>
+      {v.fillLine ? (
+        <p data-manage-fills className="text-warn flex flex-wrap items-center gap-2 text-xs font-medium">
+          <TriangleAlert aria-hidden className="size-3.5 shrink-0" />
+          <span>{v.fillLine}</span>
+          {onSetFill ? (
+            <button type="button" onClick={onSetFill} className="text-foreground hover:bg-muted rounded border px-2 py-0.5 font-medium">
+              Set my fill
+            </button>
+          ) : null}
+        </p>
+      ) : null}
       <dl className="grid max-w-xl grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-4" data-manage-grid>
-        <Cell label="Stop" value={v.m.stop !== null ? v.m.stop.toFixed(2) : "–"} />
+        <Cell label="Stop" value={v.m.stop !== null ? v.m.stop.toFixed(2) : "–"} note={v.cardEntry && v.stopAtEntry ? CARD_ENTRY : undefined} />
         <Cell label="Trail (EMA9)" value={v.m.trail !== null ? v.trailText : "–"} note={v.m.trail !== null ? undefined : v.trailText} />
-        <Cell label="Not working in" value={v.notWorkingText} tone={v.notWorkingText === "now" ? "text-bad" : undefined} />
+        <Cell
+          label="Not working in"
+          value={v.notWorkingText}
+          note={v.cardEntry && counting ? CARD_ENTRY : undefined}
+          tone={v.notWorkingText === "now" ? "text-bad" : undefined}
+        />
         <Cell label={`Flat by ${v.flatAt}`} value={v.flatText} />
       </dl>
+      {children}
     </article>
   );
 }
 
-/** The inline "I'm in" form: the side as given, the fill price (the live price to start), the time now. */
+/**
+ * The inline "I'm in" form: the side, trigger and levels as captured when it opened (`f`), the fill price (the live
+ * price to start) and the fill time (HH:MM New York, the minute it opened to start). `movedOn` is the muted line for
+ * a row that has changed since.
+ */
 export function ImInForm({
-  symbol,
-  side,
+  f,
   live,
   now,
+  session,
+  halfDay,
+  movedOn = null,
   onSave,
   onCancel,
 }: {
-  symbol: string;
-  side: "call" | "put";
+  f: FormCapture;
   live: number | null;
   /** The feed's clock, ms. */
   now: number;
-  onSave: (price: number) => void;
+  session: string;
+  halfDay: boolean;
+  movedOn?: string | null;
+  onSave: (note: ManualNote) => void;
   onCancel: () => void;
 }) {
   const id = useId();
   const [typed, setTyped] = useState(live !== null ? live.toFixed(2) : "");
-  const [error, setError] = useState<string | null>(null);
+  const [time, setTime] = useState(f.time);
+  const [error, setError] = useState<{ field: "px" | "at"; text: string } | null>(null);
   const save = () => {
     const r = checkFill(typed, live);
-    if (!r.ok) return setError(r.error);
+    if (!r.ok) return setError({ field: "px", text: r.error });
+    const t = checkFillTime(time, now, session, halfDay);
+    if (!t.ok) return setError({ field: "at", text: t.error });
     setError(null);
-    onSave(r.price);
+    onSave(noteFromForm(f, r.price, t.at));
   };
+  const input = "bg-background h-8 rounded border px-2 font-mono text-[0.8125rem]";
   return (
     <form
-      data-im-in-form={symbol}
-      aria-label={`Note your ${symbol} ${side} fill`}
+      data-im-in-form={f.symbol}
+      data-im-in-side={f.side}
+      aria-label={`Note your ${f.symbol} ${f.side} fill`}
       onSubmit={(ev) => {
         ev.preventDefault();
         save();
@@ -200,28 +247,40 @@ export function ImInForm({
       <div className="flex flex-wrap items-end gap-x-3 gap-y-1.5">
         <span className="grid gap-0.5">
           <span className="text-muted-foreground text-[0.6875rem]">Side</span>
-          <span className="font-semibold">
-            {symbol} {side}
+          <span className="flex items-center gap-1 font-semibold">
+            {f.symbol} {f.side}
+            {f.kind !== "plan" ? <TestingTag /> : null}
           </span>
         </span>
         <label className="grid gap-0.5" htmlFor={`${id}-px`}>
-          <span className="text-muted-foreground text-[0.6875rem]">{symbol} price at your fill</span>
+          <span className="text-muted-foreground text-[0.6875rem]">{f.symbol} price at your fill</span>
           <input
             id={`${id}-px`}
             type="text"
             inputMode="decimal"
             autoComplete="off"
             value={typed}
-            aria-invalid={error ? true : undefined}
-            aria-describedby={error ? `${id}-err` : undefined}
+            aria-invalid={error?.field === "px" ? true : undefined}
+            aria-describedby={error?.field === "px" ? `${id}-err` : undefined}
             onChange={(ev) => setTyped(ev.target.value)}
-            className={cn("bg-background h-8 w-28 rounded border px-2 font-mono text-[0.8125rem]", error && "border-bad-fill")}
+            className={cn(input, "w-28", error?.field === "px" && "border-bad-fill")}
           />
         </label>
-        <span className="grid gap-0.5">
-          <span className="text-muted-foreground text-[0.6875rem]">Time</span>
-          <span className="font-mono">{newYork(new Date(now).toISOString(), false)} New York</span>
-        </span>
+        <label className="grid gap-0.5" htmlFor={`${id}-at`}>
+          <span className="text-muted-foreground text-[0.6875rem]">Filled at (New York)</span>
+          <input
+            id={`${id}-at`}
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            placeholder="HH:MM"
+            value={time}
+            aria-invalid={error?.field === "at" ? true : undefined}
+            aria-describedby={error?.field === "at" ? `${id}-err` : undefined}
+            onChange={(ev) => setTime(ev.target.value)}
+            className={cn(input, "w-20", error?.field === "at" && "border-bad-fill")}
+          />
+        </label>
         <span className="flex gap-1.5">
           <button type="submit" className="bg-primary text-primary-foreground rounded px-2.5 py-1 font-medium">
             Save note
@@ -234,7 +293,12 @@ export function ImInForm({
       {error ? (
         <p id={`${id}-err`} role="alert" className="text-bad flex items-center gap-1">
           <TriangleAlert aria-hidden className="size-3.5" />
-          {error}
+          {error.text}
+        </p>
+      ) : null}
+      {movedOn ? (
+        <p data-im-in-moved className="text-muted-foreground text-[0.6875rem]">
+          {movedOn}
         </p>
       ) : null}
       <p className="text-muted-foreground text-[0.6875rem]">Your own note in this browser, to manage the trade here. Nothing is sent anywhere.</p>
@@ -243,20 +307,16 @@ export function ImInForm({
 }
 
 // ---- the board's hook-in --------------------------------------------------------------------------------------------
-export interface ManageNotice {
-  id: string;
-  symbol: string;
-  title: string;
-  line: string;
-  tone: ManageView["tone"];
-}
-
 export interface TradeManageInput {
   items: readonly Item[];
   session: string;
   halfDay: boolean;
-  /** The journal's open lots (`sessionView(journal).open`); empty without a journal. */
+  /** The journal's open lots as it has them, one per fill (`doc.open`, not merged); empty without a journal. */
   lots: readonly Lot[];
+  /** The journal's closed trades (`doc.trades`): a note whose trade has closed is retired. */
+  closed: readonly Trade[];
+  /** The board's rows: each card reads its own name's state (paused or not) and live alternative. */
+  rows: readonly BoardRow[];
   quotes: Readonly<Record<string, LiveQuote>>;
   trails: Readonly<Record<string, readonly TrailPoint[]>>;
   serverBars: Readonly<Record<string, readonly Bar2[]>>;
@@ -264,14 +324,26 @@ export interface TradeManageInput {
   serverFetchedAt: Readonly<Record<string, number>>;
   /** The feed's (server) clock, ms; null before the browser has read it. */
   now: number | null;
-  /** The board is in its live mode. */
-  live: boolean;
-  paused: boolean;
+  /** The board's mode (BoardMode["kind"]). */
+  mode: string;
+  /** The server's bars have not answered yet. */
+  barsLoading: boolean;
+}
+
+/** The live alternative on each row, as the rows show it (a plan that is off, watching or missed). */
+function rowAlts(rows: readonly BoardRow[]): Record<string, AltTrigger | null> {
+  return Object.fromEntries(
+    rows.map((r) => {
+      const s = r.state;
+      return [r.symbol, s?.alt && (s.state === "plan_off" || s.state === "watch" || s.state === "missed") ? s.alt : null];
+    }),
+  );
 }
 
 /**
  * The manage card for the board: the cards to draw under its rows, the "I'm in" control for an entry row (or a live
- * alternative), and the notices for when a card's instruction changes. Shown only in the board's live mode.
+ * alternative), and the notices for when a card's instruction changes. The cards show in the board's live mode, and
+ * stay (saying CHECK) while the feed is off or reconnecting after it.
  */
 export function useTradeManage(x: TradeManageInput): {
   cards: React.ReactNode;
@@ -281,97 +353,117 @@ export function useTradeManage(x: TradeManageInput): {
   const day = x.now !== null ? (nyClock(new Date(x.now).toISOString())?.day ?? null) : null;
   const today = day === x.session ? day : null;
   const notes = useNotes(today);
-  const [formFor, setFormFor] = useState<string | null>(null);
+  const [form, setForm] = useState<FormCapture | null>(null);
   const [last, setLast] = useState<Record<string, ManageAction>>({});
   const [notices, setNotices] = useState<ManageNotice[]>([]);
+  const [wasLive, setWasLive] = useState(false);
+  const [seq, setSeq] = useState(0);
 
-  const views =
-    x.live && x.now !== null && today
-      ? openTrades(x.items, x.lots, notes, x.session).map((t) =>
-          manageView(t, {
-            session: x.session,
-            halfDay: x.halfDay,
-            quote: x.quotes[t.symbol] ?? null,
-            trail: x.trails[t.symbol] ?? [],
-            serverBars: x.serverBars[t.symbol] ?? [],
-            serverFetchedAt: x.serverFetchedAt[t.symbol] ?? null,
-            now: x.now!,
-            paused: x.paused,
-          }),
-        )
-      : [];
+  const feed = today && x.now !== null ? cardFeed(x.mode, x.barsLoading, wasLive) : null;
+  if (feed === "live" && !wasLive) setWasLive(true);
+  const rowOf = (symbol: string) => x.rows.find((r) => r.symbol === symbol);
+  const trades = feed ? openTrades(x.items, x.lots, notes, x.session, x.closed, rowAlts(x.rows)) : [];
+  const views = trades.map((t) =>
+    manageView(t, {
+      session: x.session,
+      halfDay: x.halfDay,
+      quote: feed === "live" ? (x.quotes[t.symbol] ?? null) : null,
+      trail: feed === "live" ? (x.trails[t.symbol] ?? []) : [],
+      serverBars: x.serverBars[t.symbol] ?? [],
+      serverFetchedAt: x.serverFetchedAt[t.symbol] ?? null,
+      now: x.now!,
+      rowState: rowOf(t.symbol)?.state?.state ?? null,
+      feed: feed!,
+    }),
+  );
 
-  // A notice once a card's instruction changes to another word; the first one seen is not announced.
-  const sig = views.map((v) => `${v.key}=${v.action}`).join(",");
-  // Worked out while rendering, as the board does its notices (a state from the last render, not an effect).
+  // The notes the journal has closed out leave this browser (their cards are already gone).
+  const retire = today ? retiredNotes(notes, x.lots, x.closed, x.session) : [];
+  const retireSig = retire.map(noteId).join(",");
+  useEffect(() => {
+    if (!today || !retireSig) return;
+    const gone = new Set(retireSig.split(","));
+    writeNotes(today, parseNotes(readNotes(today)).filter((n) => !gone.has(noteId(n))));
+  }, [today, retireSig]);
+
+  // A notice once a card's word changes (CHECK aside); worked out while rendering, as the board does its notices.
+  const sig = views.map((v) => `${v.id}=${v.action}`).join(",");
   const [seenSig, setSeenSig] = useState("");
   if (sig !== seenSig) {
     setSeenSig(sig);
-    const next: Record<string, ManageAction> = {};
-    const fresh: ManageNotice[] = [];
-    for (const v of views) {
-      next[v.key] = v.action;
-      if (last[v.key] !== undefined && last[v.key] !== v.action)
-        fresh.push({ id: `${v.key}:${v.action}:${sig}`, symbol: v.symbol, title: `${v.symbol} ${v.side}: ${ACTION_WORD[v.action]}`, line: v.line, tone: v.tone });
+    const r = manageNotices(last, views, seq);
+    setLast(r.last);
+    if (r.fresh.length) {
+      setSeq(seq + 1);
+      setNotices(mergeNotices(notices, r.fresh));
     }
-    setLast(next);
-    if (fresh.length) setNotices([...fresh, ...notices.filter((n) => !fresh.some((f) => f.symbol === n.symbol))]);
   }
 
   const save = (notesNow: ManualNote[]) => {
     if (today) writeNotes(today, notesNow);
   };
-  const clear = (symbol: string) => save(notes.filter((n) => n.symbol !== symbol));
+  const add = (note: ManualNote) => {
+    save([...notes.filter((n) => noteId(n) !== noteId(note)), note]);
+    setForm(null);
+  };
+
+  const formEl = (f: FormCapture, live: number | null, movedOn: string | null) => (
+    <ImInForm
+      key={`${f.symbol}|${f.side}|${f.origin}`}
+      f={f}
+      live={live}
+      now={x.now!}
+      session={x.session}
+      halfDay={x.halfDay}
+      movedOn={movedOn}
+      onCancel={() => setForm(null)}
+      onSave={add}
+    />
+  );
 
   const rowExtra = (row: BoardRow, paused: boolean): React.ReactNode => {
-    const s = row.state;
-    if (!s || paused || !today || x.now === null) return null;
-    const alt = s.alt && (s.state === "plan_off" || s.state === "watch" || s.state === "missed") ? s.alt : null;
-    const entry = s.state === "enter_zone" && s.side ? s.side : null;
-    if (!entry && !alt) return null;
-    if (notes.some((n) => n.symbol === row.symbol)) return <p className="text-muted-foreground text-xs">Noted: see In a trade below.</p>;
-    const side = entry ?? alt!.side;
-    if (formFor !== row.symbol)
-      return (
-        <button
-          type="button"
-          data-im-in={row.symbol}
-          onClick={() => setFormFor(row.symbol)}
-          className="hover:bg-muted flex w-fit items-center gap-1.5 rounded border px-2 py-1 text-xs font-medium"
-        >
-          <Hand aria-hidden className="size-3.5" />
-          I&apos;m in
-        </button>
-      );
+    if (!today || x.now === null) return null;
     const item = x.items.find((i) => i.symbol === row.symbol);
-    const plan = alt ? altPlan(alt) : item ? focusPlan(item)[side] : null;
-    if (!plan) return null;
+    // An open form stays as it was opened, whatever the row does next.
+    if (form && form.origin === "row" && form.symbol === row.symbol) return formEl(form, row.price, formMovedOn(form, row.state, item) ? movedOnLine(form) : null);
+    if (paused || feed !== "live") return null;
+    const offer = formFromRow(row.symbol, row.state, item, x.now);
+    if (!offer) return null;
+    if (views.some((v) => v.symbol === row.symbol && v.side === offer.side && v.source === "manual"))
+      return <p className="text-muted-foreground text-xs">Noted: see In a trade below.</p>;
     return (
-      <ImInForm
-        symbol={row.symbol}
-        side={side}
-        live={row.price}
-        now={x.now}
-        onCancel={() => setFormFor(null)}
-        onSave={(price) => {
-          const note: ManualNote = { symbol: row.symbol, side, price, at: new Date(x.now!).toISOString(), kind: alt ? alt.kind : "plan", plan };
-          save([...notes.filter((n) => n.symbol !== row.symbol), note]);
-          setFormFor(null);
-        }}
-      />
+      <button
+        type="button"
+        data-im-in={row.symbol}
+        onClick={() => setForm(formFromRow(row.symbol, row.state, item, x.now!))}
+        className="hover:bg-muted flex w-fit items-center gap-1.5 rounded border px-2 py-1 text-xs font-medium"
+      >
+        <Hand aria-hidden className="size-3.5" />
+        I&apos;m in
+      </button>
     );
   };
 
   const cards = views.length ? (
     <div className="grid gap-2" data-manage-cards={views.length}>
-      {views.map((v) => (
-        <ManageCard key={v.key} v={v} onClear={v.source === "manual" ? () => clear(v.symbol) : undefined} />
-      ))}
+      {views.map((v, i) => {
+        const t = trades[i]!;
+        const open = form && form.origin === "card" && form.symbol === v.symbol && form.side === v.side;
+        return (
+          <ManageCard
+            key={v.key}
+            v={v}
+            onClear={t.note ? () => save(notes.filter((n) => noteId(n) !== noteId(t.note!))) : undefined}
+            onSetFill={v.source === "journal" && x.now !== null ? () => setForm(formFromTrade(t, x.now!)) : undefined}
+          >
+            {open ? formEl(form, feed === "live" ? (rowOf(v.symbol)?.price ?? null) : null, null) : null}
+          </ManageCard>
+        );
+      })}
     </div>
   ) : null;
 
-  const live = new Set(views.map((v) => v.symbol));
-  const shown = notices.filter((n) => live.has(n.symbol));
+  const shown = shownNotices(notices, views);
   const noticeEls = shown.length
     ? shown.slice(0, 1).map((n) => (
         <div key={n.id} data-manage-notice={n.symbol} role="status" className="bg-popover text-popover-foreground pointer-events-auto rounded-md border p-2.5 text-xs shadow-md">

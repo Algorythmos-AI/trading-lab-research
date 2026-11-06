@@ -148,6 +148,14 @@ test("I'm in at the entry opens the manage card, which reads target 1 hit and th
   await expect(form.getByRole("alert")).toContainText("more than 5% from the live price");
   await expect(price).toHaveAttribute("aria-invalid", "true");
   await price.fill("753.43");
+  // the fill time starts at the minute the form opened, and a time still to come is refused in place
+  const time = form.getByLabel("Filled at (New York)");
+  await expect(time).toHaveValue("10:28");
+  await time.fill("10:59");
+  await form.getByRole("button", { name: "Save note" }).click();
+  await expect(form.getByRole("alert")).toContainText("That time is still to come");
+  await expect(time).toHaveAttribute("aria-invalid", "true");
+  await time.fill("10:28");
   await form.getByRole("button", { name: "Save note" }).click();
   const card = page.locator('[data-manage="QQQ"]');
   await expect(card).toContainText("In a trade · QQQ call");
@@ -164,6 +172,28 @@ test("I'm in at the entry opens the manage card, which reads target 1 hit and th
   // the note outlives a reload, and Clear ends it
   await page.reload();
   await expect(card).toHaveAttribute("data-manage-action", "exit");
+  await card.getByRole("button", { name: "Clear" }).click();
+  await expect(card).toHaveCount(0);
+});
+
+test("the I'm in form keeps the side it opened on after the row moves on", async ({ page, context, baseURL }) => {
+  await at(context, baseURL, 3);
+  await page.goto("/options");
+  const entry = rows(page).first();
+  await expect(entry).toHaveAttribute("data-board-state", "enter_zone");
+  await entry.getByRole("button", { name: "I'm in" }).click();
+  const form = page.locator('[data-im-in-form="QQQ"]');
+  await expect(form).toHaveAttribute("data-im-in-side", "call");
+  await at(context, baseURL, 4);
+  // QQQ ran past target 1 without you: the row is missed, the form stays as it was opened
+  await expect(rows(page).filter({ hasText: "QQQ" })).toHaveAttribute("data-board-state", "missed", { timeout: 15_000 });
+  await expect(form).toContainText("The board has moved on: this note keeps the call you opened");
+  await expect(form).toHaveAttribute("data-im-in-side", "call");
+  await form.getByLabel("QQQ price at your fill").fill("753.43");
+  await form.getByRole("button", { name: "Save note" }).click();
+  const card = page.locator('[data-manage="QQQ"]');
+  await expect(card).toContainText("In a trade · QQQ call");
+  await expect(card).toHaveAttribute("data-manage-side", "call");
   await card.getByRole("button", { name: "Clear" }).click();
   await expect(card).toHaveCount(0);
 });
