@@ -3,7 +3,8 @@
 // themselves come from trade-state.ts; this file only puts them on the board.
 //
 // Pure: no I/O and no clock. The caller passes `now`.
-import { weekDate } from "./format";
+import { OPTIONS_SLOT_UTC } from "./feeds";
+import { newYork, weekDate } from "./format";
 import { focusPlan, type SidePlan } from "./focus-plan";
 import { sessionView, type JournalDoc } from "./journal";
 import { closeMinute, type LiveQuote, nyClock, OPEN_MIN, type Options, type OptionsTicker, type TrailPoint } from "./options";
@@ -29,8 +30,23 @@ export const STATE_WORD: Record<NameStateName, string> = {
   paused: "PRICES PAUSED",
 };
 
-/** When the focus card's next edition is in: the after-close build, in Sydney. */
-export const REFRESH_SYDNEY = "08:54";
+/**
+ * When the next focus card is built: the evening edition, at OPTIONS_SLOT_UTC (21:52 UTC) on the first weekday at or
+ * after `nowMs` whose build time has not passed. A US holiday can make it a day later.
+ */
+export function nextEditionAt(nowMs: number): number {
+  const DAY = 86_400_000;
+  for (let d = Math.floor(nowMs / DAY) * DAY; ; d += DAY) {
+    const dow = new Date(d).getUTCDay();
+    const at = d + OPTIONS_SLOT_UTC * 60_000;
+    if (dow >= 1 && dow <= 5 && at > nowMs) return at;
+  }
+}
+
+/** The next focus card in words, in New York time: "the evening edition, Mon 2 Nov, 16:52 New York". */
+export function refreshWords(nowMs: number): string {
+  return `the evening edition, ${newYork(new Date(nextEditionAt(nowMs)).toISOString())} New York`;
+}
 
 // ---- the header -----------------------------------------------------------------------------------------------------
 export type FeedStatus = "loading" | "off" | "error" | "ok";
@@ -44,9 +60,9 @@ export type BoardMode =
   | { kind: "loading"; line: string }
   /** Outside the session: trigger prices only. */
   | { kind: "next"; line: string }
-  /** 09:30 to 10:00: trigger prices only. */
+  /** 09:30 to the first entry (09:35): trigger prices only. */
   | { kind: "opening"; line: string }
-  /** In the session from 10:00: a state per name. */
+  /** In the session from the first entry (09:35): a state per name. */
   | { kind: "live" };
 
 /** What the board's header says, from the edition's session, the feed and the clock (New York). */
@@ -55,13 +71,13 @@ export function boardMode(session: string, halfDay: boolean, feed: FeedStatus, n
   if (feed === "loading") return { kind: "loading", line: "Connecting to live prices" };
   const clock = nyClock(new Date(now).toISOString());
   const today = clock?.day ?? null;
-  if (today !== null && session < today) return { kind: "old", line: `Focus card is for ${weekDate(session)}: refreshed after ${REFRESH_SYDNEY} Sydney` };
+  if (today !== null && session < today) return { kind: "old", line: `Focus card is for ${weekDate(session)}: refreshed after ${refreshWords(now)}` };
   if (feed === "off" || feed === "error") return { kind: "off", line: "Live prices off: use the plans below" };
   const first = `first entries from ${hhmm(FIRST_ENTRY_MIN)} New York`;
   if (today === null || session > today) return { kind: "next", line: `Next session ${weekDate(session)}: ${first}` };
   const m = clock!.minutes;
   if (m < OPEN_MIN) return { kind: "next", line: `Next session today, opens ${hhmm(OPEN_MIN)}: ${first}` };
-  if (m >= closeMinute(halfDay)) return { kind: "next", line: `Session closed: the next focus card follows after ${REFRESH_SYDNEY} Sydney` };
+  if (m >= closeMinute(halfDay)) return { kind: "next", line: `Session closed: the next focus card follows ${refreshWords(now)}` };
   if (m < FIRST_ENTRY_MIN) return { kind: "opening", line: `Opening range forming: ${first}` };
   return { kind: "live" };
 }

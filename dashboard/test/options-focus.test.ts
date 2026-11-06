@@ -156,6 +156,26 @@ describe("the trading screen", () => {
   });
 });
 
+describe("New York times and the open-position caution", () => {
+  it("says the no-entry times in New York, from the 09:35 first entry, and no Sydney time", () => {
+    const html = renderToStaticMarkup(createElement(FocusStrip, { e: withFocus() }));
+    expect(html).toContain("take no entries before 09:35 or between 11:30 and 13:00 New York");
+    expect(html).toContain("Pre-market check");
+    expect(html).not.toContain("Sydney");
+  });
+
+  it("says an open position's loss is counted by rule 7, as a caution beside the day line, without changing the count", () => {
+    const now = new Date("2026-10-16T15:00:00Z");
+    const lot = { symbol: "SPY", kind: "call", strike: 760, expiry: "2026-10-16", side: "long", qty: 1, entry: 1.2, opened_at: "2026-10-16T14:45:00Z" };
+    const doc = { as_of: now.toISOString(), trades: [], open: [lot] } as unknown as Parameters<typeof DayBar>[0]["doc"];
+    const html = renderToStaticMarkup(createElement(DayBar, { doc, now, session: "2026-10-16" }));
+    const open = html.slice(html.indexOf("data-day-open"));
+    expect(open).toMatch(/^data-day-open="true" class="text-warn[^"]*">1 position open: its open loss isn&#x27;t priced here, and rule 7 counts it; check Webull\.</);
+    expect(html.split("1 position open").length).toBe(2); // said once, not also in the grey line
+    expect(html).toContain("1 of 5");
+  });
+});
+
 describe("the focus card as steps", () => {
   const html = () => renderToStaticMarkup(createElement(FocusStrip, { e: withFocus() }));
   /** The QQQ card's markup (QQQ has an ATR, so every step is there). */

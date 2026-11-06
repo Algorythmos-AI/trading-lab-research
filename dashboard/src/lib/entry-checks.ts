@@ -62,6 +62,8 @@ export function withLeaders(symbols: readonly string[]): string[] {
 }
 
 export type CheckId = "range" | "gap" | "leader" | "iv" | "late" | "winner";
+/** The desk's own cautions, not the clone's (see deskCautions). */
+export type DeskCheckId = "before10";
 export type Side = "call" | "put";
 
 /** Which DEC-0041 hypothesis tests each check, for the break-and-hold entry the desk shows (the retest arm). */
@@ -84,7 +86,7 @@ export const CHECK_HYP_PAIR: Readonly<Record<CheckId, string | null>> = {
 };
 
 export interface Caution {
-  id: CheckId;
+  id: CheckId | DeskCheckId;
   /** Set when the caution is about one side only. */
   side?: Side;
   tone: Tone;
@@ -279,4 +281,27 @@ export function entryChecks(input: CheckInput, side: Side): CheckResult {
   else if (input.wonToday) add("winner", "Winner already today", "You already closed a winning trade today: done for the day?", "info");
 
   return { cautions, unknown };
+}
+
+// ---- the desk's own caution (DEC-0043), not a clone check ------------------------------------------------------------
+// Kept apart from entryChecks on purpose: entryChecks mirrors the clone's tag_decision, and the DEC-0041 vectors
+// (entry-checks.vectors.json, test_entry_checks_parity.py) hold it to the clone's answers. The clone has no such flag
+// and its early window is unchanged; this caution only marks the owner's 09:35 first entry as before that window.
+
+/** The desk's early caution: the 2-minute bar forming now ends at or after the first entry (`firstEntryMin`, New York
+ * minutes) and before EARLY_FROM (10:00), on a full day. `now` is the feed's (server) clock. */
+export function deskCautions(now: Date, halfDay: boolean, firstEntryMin: number): Caution[] {
+  const end = nyClock(new Date(barEndAt(now)).toISOString());
+  const t = nyHhmm(new Date(barEndAt(now)));
+  const [eh, em] = EARLY_FROM.split(":").map(Number) as [number, number];
+  if (halfDay || !end || t === null || end.minutes < firstEntryMin || end.minutes >= eh * 60 + em) return [];
+  return [
+    {
+      id: "before10",
+      tone: "warn",
+      word: `Early: before ${EARLY_FROM}`,
+      why: `The desk's own caution: this 2-min bar ends at ${t} New York, and the clone's tested window starts at ${EARLY_FROM}.`,
+      hyp: null,
+    },
+  ];
 }

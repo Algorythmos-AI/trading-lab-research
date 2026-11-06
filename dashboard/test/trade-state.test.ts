@@ -8,7 +8,10 @@ import {
   coveredSince,
   ema,
   type Entry,
+  FIRST_ENTRY_MIN,
   flatMinute,
+  LUNCH_FROM_MIN,
+  LUNCH_TO_MIN,
   manage,
   MAX_BARS_TO_RETEST,
   type NameInput,
@@ -273,11 +276,21 @@ describe("the clock and the feed", () => {
     expect(nameState(input(sc, { receivedAt: null })).state).toBe("paused");
   });
 
-  it("before 10:00 there is no entry; before the open a stale quote is not a pause", () => {
-    const early = scene([["09:44", 412.5, 412.9, 412.4, 412.8]], 412.85);
-    expect(nameState(input(early))).toMatchObject({ state: "no_trade", line: "Opening range forming: first entries from 10:00" });
+  it("before 09:35 there is no entry; before the open a stale quote is not a pause", () => {
+    expect(FIRST_ENTRY_MIN).toBe(9 * 60 + 35);
+    const early = scene([["09:30", 412.5, 412.9, 412.4, 412.8]], 412.85); // 09:32 + 5 s New York
+    expect(nameState(input(early))).toMatchObject({ state: "no_trade", line: "Opening range forming: first entries from 09:35" });
     const pre = { ...early, now: new Date(nyMs("09:00")) };
-    expect(nameState(input(pre, { receivedAt: null })).line).toBe("Opening range forming: first entries from 10:00");
+    expect(nameState(input(pre, { receivedAt: null })).line).toBe("Opening range forming: first entries from 09:35");
+  });
+
+  it("from 09:35 to 10:00 a row carries the desk's own early caution, kept apart from the clone's checks", () => {
+    const sc = scene([["09:44", 412.5, 412.9, 412.4, 412.8]], 412.85); // 09:46 + 5 s New York
+    const r = nameState(input(sc));
+    expect(r.state).not.toBe("no_trade");
+    const early = r.cautions.find((c) => c.id === "before10");
+    expect(early).toMatchObject({ word: "Early: before 10:00", tone: "warn", hyp: null });
+    expect(early?.why).toMatch(/^The desk's own caution: .*the clone's tested window starts at 10:00\.$/);
   });
 
   it("from 15:10 (12:10 on a half day) no new entries; the day limit ends the day", () => {
@@ -323,9 +336,39 @@ describe("the clock and the feed", () => {
     ] as const) {
       const sc = scene([A, B, C, D, E], 412.75, { day, offset });
       expect(nameState(input(sc)).state).toBe("enter_zone");
-      const early = scene([["09:56", 412.5, 412.9, 412.4, 412.8]], 412.85, { day, offset });
-      expect(nameState(input(early)).state).toBe("no_trade"); // 09:58 + 5 s New York
+      const early = scene([["09:30", 412.5, 412.9, 412.4, 412.8]], 412.85, { day, offset });
+      expect(nameState(input(early)).state).toBe("no_trade"); // 09:32 + 5 s New York
+      const soon = scene([["09:56", 412.5, 412.9, 412.4, 412.8]], 412.85, { day, offset });
+      expect(nameState(input(soon)).state).not.toBe("no_trade"); // 09:58 + 5 s New York: from the 09:35 first entry
     }
+  });
+
+  it("takes no new entries from 11:30 to 13:00 New York, except on a half day", () => {
+    const sc = (hhmm: string) => scene([A], 411.1, { nowExtra: nyMs(hhmm) - nyMs("10:04") - 125_000 });
+    const at = (hhmm: string, halfDay = false) => {
+      const s = sc(hhmm);
+      return nameState(input(s, { receivedAt: s.now.getTime(), quote: { ...s.quote, at: s.now.toISOString() }, halfDay }));
+    };
+    const block = "No new entries 11:30–13:00 New York: next entries from 13:00";
+    expect(LUNCH_FROM_MIN).toBe(11 * 60 + 30);
+    expect(LUNCH_TO_MIN).toBe(13 * 60);
+    expect(at("11:29").state).not.toBe("no_trade");
+    expect(at("11:30")).toMatchObject({ state: "no_trade", line: block, cautions: [] });
+    expect(at("12:59")).toMatchObject({ state: "no_trade", line: block });
+    expect(at("13:00").state).not.toBe("no_trade");
+    expect(at("11:45", true).line).not.toBe(block); // a half day closes at 13:00: no block, flat from 12:10
+    expect(at("11:45", true).state).not.toBe("no_trade");
+  });
+
+  it("never hides the desk's early caution behind the two clone cautions", () => {
+    const early = (x: Spec): Spec => [`09:${40 + Number(x[0].slice(3))}`, x[1], x[2], x[3], x[4]];
+    const s = scene([A, B, C, D, E].map(early), 412.75); // 09:44 to 09:52
+    const r = nameState(
+      input(s, { receivedAt: s.now.getTime(), wonToday: true, ticker: { ...TICKER, expected_move: { annual_iv: 0.9 } } }),
+    );
+    expect(r.state).toBe("enter_zone");
+    expect(r.cautions.map((c) => c.id)).toEqual(["iv", "winner", "before10"]);
+    expect(r.moreCautions).toBe(0);
   });
 
   it("shows at most two cautions and counts the rest", () => {

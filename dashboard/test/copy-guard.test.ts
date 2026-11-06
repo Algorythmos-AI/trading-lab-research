@@ -18,6 +18,12 @@ const FILES = [
   "../src/components/client/contract-iv.tsx",
   "../src/lib/trade-manage.ts",
   "../src/components/client/trade-manage.tsx",
+  "../src/lib/trade-rules.ts",
+  "../src/components/client/options-desk.tsx",
+  "../src/components/client/options-detail.tsx",
+  "../src/components/client/map-frame.tsx",
+  "../src/components/options-charts.tsx",
+  "../src/components/client/options-glance.tsx",
 ];
 
 const BANNED = [

@@ -3,7 +3,6 @@
 import { useRef, useState } from "react";
 import { num, signed } from "@/lib/format";
 import { mapReadout, priceAtY, zoneKey, type MapZone, type OptionsTicker } from "@/lib/options";
-import { cn } from "@/lib/utils";
 
 /**
  * The level map's frame: the picture itself, and when `interactive` a crosshair that reads a price off it. Move
@@ -129,8 +128,8 @@ export function MapFrame({
               {read.atrs !== null ? <span className="text-muted-foreground font-mono">{signed(read.atrs, 2)} ATR</span> : null}
               {read.moves !== null ? <span className="text-muted-foreground font-mono">{signed(read.moves, 2)} expected moves</span> : null}
               {z ? (
-                <span className={cn("max-w-full truncate", z.tone === "support" ? "text-good" : "text-bad")}>
-                  inside {z.tone} {z.zone.lo === z.zone.hi ? num(z.zone.lo, 2) : `${num(z.zone.lo, 2)} to ${num(z.zone.hi, 2)}`}
+                <span className="max-w-full truncate text-neutral">
+                  inside the {z.tone} zone {z.zone.lo === z.zone.hi ? num(z.zone.lo, 2) : `${num(z.zone.lo, 2)} to ${num(z.zone.hi, 2)}`}
                   {(z.zone.members ?? []).length > 0 ? ` (${(z.zone.members ?? []).join(" + ")})` : ""}
                 </span>
               ) : null}

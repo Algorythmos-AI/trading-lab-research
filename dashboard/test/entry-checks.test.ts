@@ -3,6 +3,7 @@ import {
   brokenMarks,
   CHECK_HYP,
   type CheckInput,
+  deskCautions,
   entryChecks,
   fiveSessionRange,
   IV_CAP_INDEX,
@@ -12,7 +13,7 @@ import {
   withLeaders,
 } from "@/lib/entry-checks";
 import type { LiveQuote, TrailPoint } from "@/lib/options";
-import { bars2m } from "@/lib/trade-state";
+import { bars2m, FIRST_ENTRY_MIN } from "@/lib/trade-state";
 
 const S = "2026-10-12"; // a Monday, New York on EDT
 const ny = (hhmm: string, day = S, offset = "-04:00") => new Date(`${day}T${hhmm}:00${offset}`);
@@ -219,6 +220,31 @@ describe("late caution (HYP-0042)", () => {
     expect(at(new Date("2026-03-09T14:58:00Z"), false, "2026-03-09")).toEqual(["late"]);
     expect(at(new Date("2026-11-02T15:57:59Z"), false, "2026-11-02")).toEqual([]);
     expect(at(new Date("2026-11-02T15:58:00Z"), false, "2026-11-02")).toEqual(["late"]);
+  });
+});
+
+describe("the desk's own early caution (DEC-0043, not a clone check)", () => {
+  const early = (hhmm: string, halfDay = false, day = S, offset = "-04:00") =>
+    deskCautions(new Date(ny(hhmm, day, offset).getTime() + 5_000), halfDay, FIRST_ENTRY_MIN).map((c) => c.id);
+  it("marks a 2-min bar ending from 09:35 to before 10:00, on a full day only", () => {
+    expect(early("09:32")).toEqual([]); // the bar ends 09:34
+    expect(early("09:34")).toEqual(["before10"]); // ends 09:36
+    expect(early("09:57")).toEqual(["before10"]); // ends 09:58
+    expect(early("09:58")).toEqual([]); // ends 10:00, the clone's window
+    expect(early("09:46", true)).toEqual([]);
+    expect(early("09:46", false, "2026-11-02", "-05:00")).toEqual(["before10"]); // after the daylight-saving change
+  });
+  it("says it is the desk's, with no hypothesis, and never comes from the clone's checks", () => {
+    const [c] = deskCautions(new Date(ny("09:46").getTime() + 5_000), false, FIRST_ENTRY_MIN);
+    expect(c).toEqual({
+      id: "before10",
+      tone: "warn",
+      word: "Early: before 10:00",
+      why: "The desk's own caution: this 2-min bar ends at 09:48 New York, and the clone's tested window starts at 10:00.",
+      hyp: null,
+    });
+    const r = entryChecks(input({ now: ny("09:46"), quote: q({ at: ny("09:46").toISOString() }) }), "call");
+    expect(r.cautions.some((x) => x.id === "before10")).toBe(false);
   });
 });
 

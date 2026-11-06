@@ -18,6 +18,8 @@ import {
   boardDay,
   type BoardInput,
   boardMode,
+  nextEditionAt,
+  refreshWords,
   type BoardMode,
   type BoardRow,
   boardRows,
@@ -128,15 +130,22 @@ describe("the scripted morning", () => {
 describe("the header", () => {
   const at = (iso: string) => Date.parse(iso);
   it("says what the board can show", () => {
-    expect(boardMode(S, false, "ok", at("2026-10-13T14:00:00Z"))).toEqual({ kind: "old", line: "Focus card is for Mon 12 Oct: refreshed after 08:54 Sydney" });
+    // The next card follows the evening edition (built 21:52 UTC on weekdays), named in New York time.
+    expect(boardMode(S, false, "ok", at("2026-10-13T14:00:00Z"))).toEqual({ kind: "old", line: "Focus card is for Mon 12 Oct: refreshed after the evening edition, Tue 13 Oct, 17:52 New York" });
+    expect(boardMode(S, false, "ok", at("2026-10-12T20:05:00Z"))).toEqual({ kind: "next", line: "Session closed: the next focus card follows the evening edition, Mon 12 Oct, 17:52 New York" });
+    // Across the November change: Friday after the build, so Monday's, an hour earlier in New York.
+    expect(nextEditionAt(Date.parse("2026-10-30T22:00:00Z"))).toBe(Date.parse("2026-11-02T21:52:00Z"));
+    expect(refreshWords(Date.parse("2026-10-30T22:00:00Z"))).toBe("the evening edition, Mon 2 Nov, 16:52 New York");
+    expect(refreshWords(Date.parse("2026-10-30T21:00:00Z"))).toBe("the evening edition, Fri 30 Oct, 17:52 New York");
     expect(boardMode(S, false, "off", at("2026-10-12T14:30:00Z")).kind).toBe("off");
     expect(boardMode(S, false, "error", at("2026-10-12T14:30:00Z"))).toEqual({ kind: "off", line: "Live prices off: use the plans below" });
-    expect(boardMode(S, false, "ok", at("2026-10-11T14:30:00Z"))).toEqual({ kind: "next", line: "Next session Mon 12 Oct: first entries from 10:00 New York" });
+    expect(boardMode(S, false, "ok", at("2026-10-11T14:30:00Z"))).toEqual({ kind: "next", line: "Next session Mon 12 Oct: first entries from 09:35 New York" });
     expect(boardMode(S, false, "ok", at("2026-10-12T13:00:00Z")).kind).toBe("next");
     expect(boardMode(S, false, "ok", at("2026-10-12T20:05:00Z"))).toMatchObject({ kind: "next", line: expect.stringMatching(/^Session closed/) });
     expect(boardMode(S, true, "ok", at("2026-10-12T17:05:00Z")).kind).toBe("next"); // 13:05 on a half day
     expect(boardMode(S, false, "loading", at("2026-10-12T14:30:00Z")).kind).toBe("loading");
-    expect(boardMode(S, false, "ok", at("2026-10-12T13:45:00Z"))).toEqual({ kind: "opening", line: "Opening range forming: first entries from 10:00 New York" });
+    expect(boardMode(S, false, "ok", at("2026-10-12T13:33:00Z"))).toEqual({ kind: "opening", line: "Opening range forming: first entries from 09:35 New York" });
+    expect(boardMode(S, false, "ok", at("2026-10-12T13:35:00Z"))).toEqual({ kind: "live" }); // 09:35, the first entry
     expect(boardMode(S, false, "ok", at("2026-10-12T14:30:00Z"))).toEqual({ kind: "live" });
   });
 
@@ -243,11 +252,11 @@ describe("TradeNowBoard", () => {
 
   it("shows the trigger prices only before 10:00 and outside the session", () => {
     const rows = boardRows(atStep(0), false);
-    const opening = draw({ kind: "opening", line: "Opening range forming: first entries from 10:00 New York" }, rows);
-    expect(opening).toContain("Opening range forming: first entries from 10:00");
+    const opening = draw({ kind: "opening", line: "Opening range forming: first entries from 09:35 New York" }, rows);
+    expect(opening).toContain("Opening range forming: first entries from 09:35");
     expect(opening).toContain("Calls above 752.86 · Puts below 748.39");
     expect(opening).not.toContain("NO TRADE");
-    const next = draw({ kind: "next", line: "Next session Mon 12 Oct: first entries from 10:00 New York" }, rows);
+    const next = draw({ kind: "next", line: "Next session Mon 12 Oct: first entries from 09:35 New York" }, rows);
     expect(next).toContain("Next session Mon 12 Oct");
     expect(next.match(/data-board-state="plan"/g)).toHaveLength(3);
   });

@@ -13,7 +13,9 @@
 import {
   BAR_MINUTES,
   type CheckInput,
+  type CheckResult,
   type Caution,
+  deskCautions,
   entryChecks,
   FAIL_WITHIN_BARS,
   levelOf,
@@ -36,15 +38,20 @@ const BAR_MS = BAR_MINUTES * 60_000;
 export const RETEST_ATR = 0.1;
 /** The trail after target 1: the EMA of this many 2-minute closes (bars.ema_fast). */
 export const EMA_FAST = 9;
-/** First entries from 10:00 New York. */
-export const FIRST_ENTRY_MIN = 10 * 60;
+/** First entries from 09:35 New York: the owner's rule (DEC-0043). 09:35 to 10:00 carries the desk's own "early"
+ * caution (entry-checks' deskCautions); the clone's tested window still starts at 10:00. */
+export const FIRST_ENTRY_MIN = 9 * 60 + 35;
+/** No new entries from 11:30 to 13:00 New York (the owner's rule), New York minutes after midnight. On a half day the
+ * session closes at 13:00 and the block does not apply (flat from 12:10 instead). */
+export const LUNCH_FROM_MIN = 11 * 60 + 30;
+export const LUNCH_TO_MIN = 13 * 60;
 /** Flat by 15:10 New York. */
 export const FLAT_MIN = 15 * 60 + 10;
 /** On a half day, flat this many minutes before the 13:00 close: 12:10, the clone's `day.half_day.flatten`. */
 export const HALF_DAY_FLAT_BEFORE_CLOSE = 50;
 /** The browser's last answer from the feed is stale after this long. */
 export const FEED_STALE_MS = 20_000;
-/** Cautions shown on a row; the rest are counted. */
+/** The clone cautions shown on a row; the rest are counted. The desk's early caution is always shown besides. */
 export const MAX_CAUTIONS_SHOWN = 2;
 /** A bar whose end has passed is still forming until a later price arrives, or this long after its end: a trade
  * stamped inside it can still reach the page. */
@@ -61,6 +68,11 @@ export const ALT_LIVE_BARS = 3;
 /** The desk's own number, not a clone parameter: an alternative trigger is dropped once the live price is more than
  * this many ATRs (the plan's) from its level. */
 export const ALT_MAX_ATR = 1;
+
+/** Whether the 11:30 to 13:00 block applies: not on a half day, which closes at 13:00. */
+export function lunchBlock(halfDay: boolean): boolean {
+  return !halfDay && closeMinute(halfDay) > LUNCH_TO_MIN;
+}
 
 /** The minute (New York) to be flat by, and after which no new entry is suggested. */
 export function flatMinute(halfDay: boolean): number {
@@ -495,7 +507,7 @@ const dist = (x: SideState) => (x.distAtr !== null ? ` (${x.distAtr.toFixed(1)} 
 
 /**
  * The one row for a focus name. `n.now` is the feed's (server) clock. In order: a stale feed in the session pauses
- * it; before 10:00, from the flat time (15:10, or 50 minutes before a half day's 13:00 close: 12:10) or with the
+ * it; before 09:35 (FIRST_ENTRY_MIN), from 11:30 to 13:00 on a full day, from the flat time (15:10, or 50 minutes before a half day's 13:00 close: 12:10) or with the
  * day's limit used it is no trade; with the price in the
  * middle third of yesterday's range and nothing broken, no trade; otherwise the more urgent side: enter zone, then a
  * live alternative trigger, get ready, watch, plan off and missed.
@@ -526,7 +538,12 @@ export function nameState(n: NameInput): NameState {
       now: n.now,
       wonToday: n.wonToday,
     };
-    const checks = pick && state !== "paused" && state !== "no_trade" ? entryChecks(checkIn, pick.alt && pick.state !== "enter_zone" && pick.state !== "get_ready" ? pick.alt.side : pick.side) : { cautions: [], unknown: [] };
+    const active = pick && state !== "paused" && state !== "no_trade";
+    const clone: CheckResult = active ? entryChecks(checkIn, pick.alt && pick.state !== "enter_zone" && pick.state !== "get_ready" ? pick.alt.side : pick.side) : { cautions: [], unknown: [] };
+    // The desk's own caution (09:35 to 10:00) goes after the clone-mirroring checks, computed apart from them.
+    // The desk's own caution (09:35 to 10:00) comes after the clone-mirroring checks and is never cut by the cap.
+    const desk = active ? deskCautions(n.now, n.halfDay, FIRST_ENTRY_MIN) : [];
+    const checks: CheckResult = { ...clone, cautions: [...clone.cautions.slice(0, MAX_CAUTIONS_SHOWN), ...desk] };
     return {
       symbol: n.symbol,
       state,
@@ -538,8 +555,8 @@ export function nameState(n: NameInput): NameState {
         : null,
       alt: pick?.alt ?? null,
       brokeEarlier: pick?.brokeEarlier ?? false,
-      cautions: checks.cautions.slice(0, MAX_CAUTIONS_SHOWN),
-      moreCautions: Math.max(0, checks.cautions.length - MAX_CAUTIONS_SHOWN),
+      cautions: checks.cautions,
+      moreCautions: Math.max(0, clone.cautions.length - MAX_CAUTIONS_SHOWN),
       unknown: checks.unknown,
       rank: (pick ? sideRank(pick) : STATE_RANK[state]) * 1000 + rankExtra,
       call,
@@ -562,6 +579,8 @@ export function nameState(n: NameInput): NameState {
   if (minute === null) return row("no_trade", clock && clock.day < n.session ? `Next session: first entries from ${hhmm(FIRST_ENTRY_MIN)}` : "Session closed", null);
   if (minute >= closeMinute(n.halfDay)) return row("no_trade", "Session closed", null);
   if (minute < FIRST_ENTRY_MIN) return row("no_trade", opening, null);
+  if (lunchBlock(n.halfDay) && minute >= LUNCH_FROM_MIN && minute < LUNCH_TO_MIN)
+    return row("no_trade", `No new entries ${hhmm(LUNCH_FROM_MIN)}–${hhmm(LUNCH_TO_MIN)} New York: next entries from ${hhmm(LUNCH_TO_MIN)}`, null);
   if (minute >= flat) return row("no_trade", `After ${hhmm(flat)}: no new entries, be flat`, null);
   if (n.dayLimitUsed) return row("no_trade", "Day limit reached: no more trades today", null);
 

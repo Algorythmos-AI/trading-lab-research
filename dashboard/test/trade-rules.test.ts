@@ -216,15 +216,20 @@ describe("dayCheck", () => {
     expect(dayCheck(null, { asOf: "2026-10-14T21:38:00Z", now: at }).line).toMatch(/last read 2 days ago \(Wed, 14 Oct, 17:38 New York\)/);
   });
 
-  it("names open positions, whose loss is not counted until they close", () => {
+  it("names open positions: their open loss is not priced here, rule 7 counts it, and the count is unchanged", () => {
     const lot = { symbol: "SPY", kind: "call" as const, strike: 760, expiry: "2026-10-16", side: "long" as const, qty: 1, entry: 1.2, opened_at: "2026-10-16T14:45:00Z" };
     const one = dayCheck(sessionView({ trades: [], open: [lot] }, now));
     expect(one.status).toBe("clear");
-    expect(one.line).toMatch(/ 1 position still open: an open loss is not counted until it closes\.$/);
-    expect(dayCheck(sessionView({ trades: [], open: [lot, { ...lot, strike: 765 }] }, now)).line).toMatch(/2 positions still open/);
+    expect(one.used).toBe(1);
+    expect(one.line).toMatch(/ 1 position open: its open loss isn't priced here, and rule 7 counts it; check Webull\.$/);
+    expect(one.openLine).toBe("1 position open: its open loss isn't priced here, and rule 7 counts it; check Webull.");
+    const two = dayCheck(sessionView({ trades: [], open: [lot, { ...lot, strike: 765 }] }, now));
+    expect(two.line).toMatch(/2 positions open: their open loss isn't priced here, and rule 7 counts it; check Webull\./);
+    expect(two).toMatchObject({ status: "clear", used: 2, net: 0 });
+    expect(dayCheck(sessionView({ trades: [], open: [] }, now)).openLine).toBe("");
     const stale = dayCheck(sessionView({ trades: [], open: [lot] }, now), { asOf: "2026-10-16T13:24:00Z", now });
     expect(stale).toMatchObject({ status: "unknown" });
-    expect(stale.line).toMatch(/Check Webull before an entry\. 1 position still open/);
+    expect(stale.line).toMatch(/Check Webull before an entry\. 1 position open/);
   });
 
   it("says when a current journal read the trades, so one placed since is not forgotten", () => {
