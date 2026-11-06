@@ -344,7 +344,7 @@ function FocusCard({
       id={`focus-card-${item.symbol}`}
       tabIndex={-1}
       className={cn(
-        "bg-card grid w-[92%] shrink-0 snap-start content-start gap-3 rounded-lg border border-t-4 px-2.5 py-2.5 focus:ring-ring focus:ring-2 focus:outline-none sm:w-auto sm:px-3",
+        "bg-card relative grid w-[92%] shrink-0 snap-start content-start gap-3 rounded-lg border border-t-4 px-2.5 py-2.5 focus:ring-ring focus:ring-2 focus:outline-none sm:w-auto sm:px-3",
         b.edge,
       )}
     >
@@ -535,7 +535,10 @@ export function FocusStrip({ e }: { e: Options }) {
       </div>
       {/* On a phone the cards sit side by side and swipe. From sm one card per row, two from xl: the ladder is drawn
           530 px wide and its labels shrink below 14 px in a narrower card. */}
-      <ul className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-px-4 px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-1 sm:overflow-visible sm:px-0 sm:pb-0 xl:grid-cols-2">
+      {/* relative: the strip (and each card) is the containing block of the ladders' screen-reader text (sr-only is
+          absolutely positioned), so the strip clips it; without it the third card's hidden labels sat 300 px past a
+          phone's right edge and the page scrolled sideways. */}
+      <ul className="relative -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-px-4 px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-1 sm:overflow-visible sm:px-0 sm:pb-0 xl:grid-cols-2">
         {items.map((i) => (
           <FocusCard
             key={i.symbol}
