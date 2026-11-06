@@ -226,6 +226,7 @@ describe("options view helpers", () => {
       low: null,
       day,
       prev_close: 778.55,
+      vwap: null,
     });
     const S = "2026-10-12";
     const at = (ny: string) => `2026-10-12T${ny}:00-04:00`; // New York is on EDT in October
@@ -325,7 +326,7 @@ describe("options view helpers", () => {
     const e = optionsJson as unknown as Options;
     const spy = e.tickers.find((t) => t.symbol === "SPY")!;
     const S = e.session;
-    const q = (price: number, at: string): LiveQuote => ({ price, at, open: 778.55, high: null, low: null, day: S, prev_close: 778.55 });
+    const q = (price: number, at: string): LiveQuote => ({ price, at, open: 778.55, high: null, low: null, day: S, prev_close: 778.55, vwap: null });
     const at = (ny: string) => `${S}T${ny}-04:00`;
     const ms = (iso: string) => Date.parse(iso);
 
