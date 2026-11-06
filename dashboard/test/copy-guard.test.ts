@@ -4,7 +4,16 @@ import { describe, expect, it } from "vitest";
 
 // The desk shows the study's practices in our own words only (AGENTS.md data classes): no handle, no setup name from
 // the record's glossary, in the source text of the files that write the desk's copy.
-const FILES = ["../src/lib/entry-checks.ts", "../src/lib/trade-state.ts"];
+const FILES = [
+  "../src/lib/entry-checks.ts",
+  "../src/lib/trade-state.ts",
+  "../src/lib/trade-now.ts",
+  "../src/lib/bars.ts",
+  "../src/lib/bars-route.ts",
+  "../src/lib/fixture-script.ts",
+  "../src/components/client/trade-now.tsx",
+  "../src/components/client/use-bars.ts",
+];
 
 const BANNED = [
   "Desi",

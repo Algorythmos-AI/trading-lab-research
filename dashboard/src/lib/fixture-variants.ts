@@ -16,6 +16,9 @@ export const VARIANT_COOKIE = "fx";
  * - `poison`: a stored edition that no longer matches its schema, as after corruption. One pane must fail alone.
  * - `quotes-off`: the live feed has no keys. `quotes-error`: Alpaca is failing.
  * - `quotes-tick`: the live price flips by one cent every three seconds, without changing any name's state.
+ * - `quotes-script`: the quotes and the session's bars walk a fixed morning (fixture-script.ts), one step every
+ *   few seconds of the server's clock or the step in the `fxstep` cookie, so the "Trade now" board shows every state.
+ *   With `focus`, AAPL joins the focus names.
  * - `chain-off`: the option feed has no keys. `chain-error`: Alpaca is failing.
  * - `chain-thin`: the nearest expiry's first calls come without a volatility, without a market, and crossed.
  * - `v2`: the edition in its second format, with the day's context, events and each name's volatility block.
@@ -37,6 +40,7 @@ export const VARIANT_FLAGS = [
   "quotes-off",
   "quotes-error",
   "quotes-tick",
+  "quotes-script",
   "chain-off",
   "chain-error",
   "chain-thin",
@@ -128,7 +132,7 @@ const plus = (day: string, days: number) =>
     .slice(0, 10);
 
 /** The edition with a Today's focus block: SPY and QQQ, with levels taken from their own fixture levels. Synthetic. */
-export function focusOptions(e: OptionsEdition): OptionsEdition {
+export function focusOptions(e: OptionsEdition, script = false): OptionsEdition {
   const out = structuredClone(e);
   out.focus = {
     picked_at: `${e.session}T21:54:00Z`,
@@ -156,6 +160,22 @@ export function focusOptions(e: OptionsEdition): OptionsEdition {
         target_up: { price: 762.86, name: "PWH/52WH" },
         target_down: { price: 743.23, name: "PWL" },
       },
+      // The scripted morning's third name: it stays in the middle of yesterday's range.
+      ...(script
+        ? [
+            {
+              symbol: "AAPL",
+              rank: 3,
+              bias: "breakout" as const,
+              resistance: { price: 338.6, name: "PDH" },
+              support: { price: 330.7, name: "PDL" },
+              close: 336.62,
+              atr: 6.46,
+              target_up: { price: 341.57, name: "PWH" },
+              target_down: { price: 330.62, name: "PWL" },
+            },
+          ]
+        : []),
     ],
   };
   return out;

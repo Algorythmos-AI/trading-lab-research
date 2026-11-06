@@ -354,8 +354,10 @@ function FocusCard({
   const expiry = expiryNote(item.symbol, session);
   return (
     <li
+      id={`focus-card-${item.symbol}`}
+      tabIndex={-1}
       className={cn(
-        "bg-card grid w-[88%] shrink-0 snap-start content-start gap-2 rounded-lg border border-t-4 px-3 py-2.5 sm:w-auto",
+        "bg-card grid w-[88%] shrink-0 snap-start content-start gap-2 rounded-lg border border-t-4 px-3 py-2.5 focus:ring-ring focus:ring-2 focus:outline-none sm:w-auto",
         b.edge,
       )}
     >

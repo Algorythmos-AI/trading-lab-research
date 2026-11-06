@@ -689,3 +689,48 @@ export function manage(
   const parts = [stop !== null ? `stop ${p2(stop)}` : null, t1 !== null ? `target 1 ${p2(t1)}` : null].filter(Boolean);
   return { ...base, line: parts.length ? `Holding: ${parts.join(" · ")}` : "Holding: confirm the stop on your chart", tone: "info" };
 }
+
+// ---- the session's bars from the server -----------------------------------------------------------------------------
+/**
+ * The session's 2-minute bars from the server (`/api/bars`, completed bars only) joined to the page's own (bars2m of
+ * the price trail). The server wins every slot it has: it saw every print since 09:30, the page only the ones it
+ * polled. The trail supplies the slots after the server's last one and the bar still forming. `since` is the earlier
+ * of the two first bars, so a page that has the server's bars from the open reads as having seen the whole session.
+ * `missing` holds the slots from `since` with no bar in either: those between the bars, and the trail's own after its
+ * last bar.
+ */
+export function mergeBars(serverClosed: readonly Bar2[], trail: Bars2m): Bars2m {
+  const server = serverClosed
+    .filter((b) => isNum(b.start) && isNum(b.end) && isNum(b.o) && isNum(b.h) && isNum(b.l) && isNum(b.c))
+    .map((b) => ({ ...b }))
+    .sort((a, b) => a.start - b.start);
+  if (server.length === 0) return trail;
+  const lastStart = server[server.length - 1]!.start;
+  const closed = [...server, ...trail.closed.filter((b) => b.start > lastStart).map((b) => ({ ...b }))];
+  const partial = trail.partial && trail.partial.start > lastStart ? { ...trail.partial } : null;
+  const since = Math.min(server[0]!.start, ...(isNum(trail.since) ? [trail.since] : []));
+  const have = new Set([...closed.map((b) => b.start), ...(partial ? [partial.start] : [])]);
+  const last = Math.max(...have);
+  const missing: number[] = [];
+  for (let s0 = since; s0 < last; s0 += BAR_MS) if (!have.has(s0)) missing.push(s0);
+  for (const m of trail.missing) if (m > last && !have.has(m)) missing.push(m);
+  const day = nyClock(new Date(since).toISOString())?.day;
+  const open = day ? nyInstant(day, OPEN_MIN) : null;
+  return { closed, partial, since, complete: open !== null && since <= open, missing, gaps: missing.length };
+}
+
+/**
+ * The average true range of the last `n` completed 2-minute bars, as the clone reads it (wt.options.regime.atr: the
+ * plain mean of the true ranges, each against the bar before). Null with fewer than `n + 1` bars. The sweep's unit.
+ */
+export function atr2m(closed: readonly Bar2[], n = 14): number | null {
+  if (n < 1 || closed.length < n + 1) return null;
+  const tail = closed.slice(-n - 1);
+  let sum = 0;
+  for (let i = 1; i < tail.length; i++) {
+    const a = tail[i - 1]!;
+    const b = tail[i]!;
+    sum += Math.max(b.h - b.l, Math.abs(b.h - a.c), Math.abs(b.l - a.c));
+  }
+  return sum / n;
+}

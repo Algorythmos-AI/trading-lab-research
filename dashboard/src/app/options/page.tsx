@@ -2,6 +2,7 @@ import { PageHeading } from "@/components/page-heading";
 import { TradeRulesFor } from "@/components/trade-rules";
 import { BoardTable, EditionPanel, HowToRead, NoOptions, PaperPanel, RulesPanel, StructurePanel, TickerCards } from "@/components/options";
 import { FocusScope, LiveQuotes } from "@/components/client/live-layer";
+import { TradeNow } from "@/components/client/trade-now";
 import { DayBar, FocusStrip, focusOnly } from "@/components/options-focus";
 import { LedgerReview } from "@/components/ledger";
 import { OptionsDesk } from "@/components/client/options-desk";
@@ -14,6 +15,8 @@ import { hourlyBySymbol } from "@/lib/hourly";
 import { interestBySymbol } from "@/lib/oi";
 import { builtFromOld, editionState, isDeskView, isHalfDay, mapView, viewForClock, type DeskPane, type Options } from "@/lib/options";
 import { showReview } from "@/lib/ledger";
+import { withLeaders } from "@/lib/entry-checks";
+import { boardDay } from "@/lib/trade-now";
 import { listOptionsDates, loadJournal, loadLedger, loadOptions, loadOptionsLive, pageTime } from "@/lib/snapshot";
 
 export const dynamic = "force-dynamic";
@@ -38,7 +41,7 @@ function ClassicOptions({ e, dates, date, now }: { e: Options; dates: string[]; 
     <>
       <PageHeading title="Options" intro={INTRO} />
       <OldCloseNotice e={e} />
-      <LiveQuotes symbols={e.tickers.map((t) => t.symbol).join(",")} session={e.session} enabled={!date}>
+      <LiveQuotes symbols={withLeaders(e.tickers.map((t) => t.symbol)).join(",")} session={e.session} enabled={!date}>
         <FocusScope>
           <EditionPicker dates={dates} current={e.session} base="/options" />
           {/* Each pane sits behind its own boundary: one that cannot be drawn says so and the rest keep working. */}
@@ -110,6 +113,8 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
   // Only a phone shows one pane at a time; the address remembers which, so a reload lands on the same one.
   const initialPane: DeskPane = one(sp.pane) === "name" ? "name" : "names";
   const stale = !date && editionState(e.session, now) === "stale";
+  // The board's day: rules 7 and 8 from the journal, and whether a trade has closed green today.
+  const day = boardDay(journal.status === "ok" ? journal.doc : null, now);
 
   return (
     <>
@@ -121,11 +126,15 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
           <LedgerReview e={ledger.edition} />
         </PaneBoundary>
       ) : null}
-      {/* Top of the trading screen: the few names to watch, then the desk; the day's limits sit straight under it. */}
-      <PaneBoundary name="Today's focus">
-        <FocusStrip e={full} />
-      </PaneBoundary>
-      <LiveQuotes symbols={e.tickers.map((t) => t.symbol).join(",")} session={e.session} enabled={!date}>
+      <LiveQuotes symbols={withLeaders(e.tickers.map((t) => t.symbol)).join(",")} session={e.session} enabled={!date}>
+        {/* Top of the trading screen: what to do now, the few names to watch, then the desk; the day's limits sit
+            straight under it. The board and the cards share the page's one live feed. */}
+        <PaneBoundary name="Trade now">
+          <TradeNow e={full} live={!date} {...day} />
+        </PaneBoundary>
+        <PaneBoundary name="Today's focus">
+          <FocusStrip e={full} />
+        </PaneBoundary>
         <PaneBoundary name="The options desk">
           {/* Keyed by edition: opening another edition starts the desk afresh, so a view or a sort chosen on one
               never carries over to another. */}
