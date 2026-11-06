@@ -277,9 +277,10 @@ test("fits a 375 px screen with no sideways scroll", async ({ page, context, bas
     }
     return out.slice(0, 8);
   });
-  expect(sticking).toEqual([]);
+  // The verdict is the page's own scroll width; the list of what reaches past the edge is only the message, since
+  // telling from the outside which scroller clips a box (SVGs have no offsetParent, for one) is not exact.
   const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-  expect(over).toBeLessThanOrEqual(0);
+  expect(over, `the page scrolls sideways by ${over} px; reaching past the edge:\n${sticking.join("\n")}`).toBeLessThanOrEqual(0);
   for (const part of [board(page), hero(page), rail(page), page.locator("[data-focus-glance]")]) {
     const box = await part.boundingBox();
     expect(box!.x).toBeGreaterThanOrEqual(0);
