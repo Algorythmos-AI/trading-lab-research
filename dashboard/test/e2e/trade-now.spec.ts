@@ -247,6 +247,28 @@ test("fits a 375 px screen with no sideways scroll", async ({ page, context, bas
   await at(context, baseURL, 3);
   await page.goto("/options");
   await expect(rows(page).first()).toHaveAttribute("data-board-state", "enter_zone");
+  // Names whatever sticks out past the right edge (and is not clipped by a scrolling parent), so a failure says where.
+  const sticking = await page.evaluate(() => {
+    const w = document.documentElement.clientWidth;
+    const out: string[] = [];
+    for (const e of document.querySelectorAll("body *")) {
+      const r = e.getBoundingClientRect();
+      if (r.width === 0 || r.right <= w + 1) continue;
+      let p = e.parentElement;
+      let clipped = false;
+      for (; p; p = p.parentElement)
+        if (getComputedStyle(p).overflowX !== "visible") {
+          clipped = p.getBoundingClientRect().right <= w + 1;
+          break;
+        }
+      if (clipped) continue;
+      const cls = typeof e.className === "string" ? e.className : "";
+      const data = [...e.attributes].filter((a) => a.name.startsWith("data-")).map((a) => a.name).join(" ");
+      out.push(`${e.tagName.toLowerCase()} [${data}] ${cls.slice(0, 80)} → ${Math.round(r.right)}px`);
+    }
+    return out.slice(0, 8);
+  });
+  expect(sticking).toEqual([]);
   const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(over).toBeLessThanOrEqual(0);
   for (const part of [board(page), hero(page), rail(page), page.locator("[data-focus-glance]")]) {
