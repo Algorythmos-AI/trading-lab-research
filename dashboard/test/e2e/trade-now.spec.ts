@@ -256,16 +256,15 @@ test("fits a 375 px screen with no sideways scroll", async ({ page, context, bas
       if (r.width === 0 || r.right <= w + 1) continue;
       // clipped by any parent that scrolls or hides its overflow and itself ends inside the screen (the focus cards'
       // swipe strip runs past the edge on purpose, inside its own scroller)
-      // An absolutely or fixed positioned box is clipped only by scrollers between it and its containing block (its
-      // offsetParent): a scroller further out does not clip it, which is how hidden screen-reader text once escaped
-      // the cards' strip and widened the page.
+      // A scroller clips a box only when it is the box's containing block or an ancestor of it. For an absolutely
+      // positioned box that chain starts at its offsetParent (the nearest positioned ancestor), so a scroller between
+      // the box and that parent does not clip it: that is how the ladders' hidden screen-reader text once escaped the
+      // cards' strip and widened the page. A fixed box is clipped by none.
       const pos = getComputedStyle(e).position;
-      const stop = pos === "absolute" ? ((e as HTMLElement).offsetParent ?? null) : null;
+      const start = pos === "fixed" ? null : pos === "absolute" ? ((e as HTMLElement).offsetParent ?? null) : e.parentElement;
       let clipped = false;
-      for (let p = pos === "fixed" ? null : e.parentElement; p && !clipped; p = p.parentElement) {
+      for (let p = start; p && !clipped; p = p.parentElement)
         clipped = getComputedStyle(p).overflowX !== "visible" && p.getBoundingClientRect().right <= w + 1;
-        if (p === stop) break;
-      }
       if (clipped) continue;
       // the element and its parents up to the nearest one with a data- attribute, each with its width
       const chain: string[] = [];
