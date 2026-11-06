@@ -95,6 +95,8 @@ export const AUDIT_LABEL: Record<string, string> = {
   job_killed: "Job killed",
   job_timeout: "Job timed out",
   alert_fired: "Alert fired",
+  alert_warn: "Warning",
+  alert_notice: "Notice",
   alert_resolved: "Alert resolved",
   kill_on: "Kill switch on",
   kill_off: "Kill switch off",
@@ -110,6 +112,7 @@ export function auditTone(kind: string | null | undefined): Tone {
     case "alert_fired":
       return "bad";
     case "job_refused":
+    case "alert_warn":
     case "kill_on":
     case "latch_reset":
     case "override":

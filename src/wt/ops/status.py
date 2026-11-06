@@ -374,7 +374,9 @@ def src_deployed(ctx: Ctx) -> dict:
     out = {"head": head[:7], "branch": branch, "subject": subject[:120], "committed": committed,
            "modified": sum(1 for x in lines if not x.startswith("??")),
            "untracked": sum(1 for x in lines if x.startswith("??")),
-           "main": None, "behind": None, "missing": [], "compare_error": None}
+           "main": None, "behind": None, "missing": [], "compare_error": None,
+           # The owner's switch for the hourly automatic deploy (wt.ops.deploy.AUTO_ON, ADR 0008).
+           "auto": (repo / "var" / "deploy" / "AUTO_ON").exists()}
     try:
         repo_name = ctx.cfg["repos"]["research"]
         cmp = ctx.gh_json(["api", f"repos/{repo_name}/compare/{head}...main"])

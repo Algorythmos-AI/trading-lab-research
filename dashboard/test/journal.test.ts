@@ -235,6 +235,19 @@ describe("the session", () => {
   it("returns nothing for an empty journal", () => {
     expect(sessionView({ trades: [], open: [] }, new Date("2026-10-16T14:00:00Z"))).toBeNull();
   });
+
+  it("counts several fills of one holding as one open position, as the Risk page lists them", () => {
+    const old = trade(10, "2026-10-15T14:00:00Z", "2026-10-15T14:30:00Z");
+    const fill = (qty: number, entry: number, at: string) => ({ symbol: "SIRI", kind: "stock" as const, side: "long" as const, qty, entry, opened_at: at });
+    const other = { symbol: "CBAKOQ", kind: "stock" as const, side: "long" as const, qty: 1, entry: 23, opened_at: "2026-10-14T15:00:00Z" };
+    const v = sessionView({ trades: [old], open: [fill(10, 3, "2026-10-13T14:00:00Z"), fill(5, 3.6, "2026-10-14T14:00:00Z"), fill(4, 3, "2026-10-14T16:00:00Z"), other] }, new Date("2026-10-16T14:00:00Z"))!;
+    expect(v.open).toHaveLength(2);
+    const siri = v.open.find((l) => l.symbol === "SIRI")!;
+    expect(siri.qty).toBe(19);
+    expect(siri.entry).toBeCloseTo((30 + 18 + 12) / 19);
+    expect(siri.opened_at).toBe("2026-10-14T16:00:00Z");
+    expect(v.open[0]!.symbol).toBe("SIRI");     // newest first by its newest fill
+  });
 });
 
 describe("money in and out", () => {

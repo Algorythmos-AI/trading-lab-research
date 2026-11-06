@@ -116,3 +116,12 @@ def test_a_torn_audit_line_is_ended_and_skipped(tmp_path):
 def test_blotter_counts_a_replayed_close_once():
     row = {"event": "trade_closed", "day": "2026-10-01", "trade_id": "t1", "R": 1.0}
     assert len(ov.blotter([row, dict(row), {**row, "trade_id": "t2"}])) == 2
+
+def test_an_alert_is_filed_by_how_much_it_asks_of_the_owner():
+    def kind(**a):
+        return ov.alert_kind({"event": "fired", **a})
+    assert kind(priority=5) == kind(priority=4) == kind() == "alert_fired"
+    assert kind(priority=3, key="disk") == "alert_warn"
+    assert kind(priority=2, key="summary") == "alert_notice"
+    assert kind(priority=3, key="options-clone:entry-OC-1") == kind(priority=3, key="options-clone:exit-OC-1") == "alert_notice"
+    assert ov.alert_kind({"event": "resolved", "priority": 5}) == "alert_resolved"
