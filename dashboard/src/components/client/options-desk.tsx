@@ -45,6 +45,7 @@ import { OptionsDetail, Tick } from "./options-detail";
 import { OptionsPositions } from "./options-positions";
 import { OptionsTriggers, TriggerNotices } from "./options-triggers";
 import { PaneBoundary } from "./pane-boundary";
+import { OPEN_NAME_EVENT } from "./trade-now";
 import { Notice } from "@/components/ui/notice";
 import { Kbd } from "@/components/ui/kbd";
 
@@ -425,6 +426,19 @@ export function OptionsDesk({
     select(s, false);
     show("name");
   };
+  // The "Trade now" board above the desk opens a name by an event: select it here, and keep the phone's pane.
+  const selectRef = useRef(select);
+  useEffect(() => {
+    selectRef.current = select;
+  });
+  useEffect(() => {
+    const onOpen = (ev: Event) => {
+      const s = (ev as CustomEvent<unknown>).detail;
+      if (typeof s === "string" && e.tickers.some((t) => t.symbol === s)) selectRef.current(s, false);
+    };
+    window.addEventListener(OPEN_NAME_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_NAME_EVENT, onOpen);
+  }, [e.tickers]);
   const choose = (v: DeskView) => {
     setPicked(v);
     remember({ view: v });

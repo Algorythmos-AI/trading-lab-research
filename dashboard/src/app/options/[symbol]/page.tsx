@@ -8,6 +8,7 @@ import { PageHeading } from "@/components/page-heading";
 import { sydney, weekDate } from "@/lib/format";
 import { hourlyBySymbol } from "@/lib/hourly";
 import { interestBySymbol } from "@/lib/oi";
+import { withLeaders } from "@/lib/entry-checks";
 import { editionState, mapView } from "@/lib/options";
 import { loadOptions, loadOptionsLive, pageTime } from "@/lib/snapshot";
 
@@ -57,7 +58,7 @@ export default async function OptionsNamePage({ params, searchParams }: Props) {
           All names
         </Link>
       </nav>
-      <LiveQuotes symbols={symbol} session={e.session} enabled={!date}>
+      <LiveQuotes symbols={withLeaders([symbol]).join(",")} session={e.session} enabled={!date}>
         <PaneBoundary name={symbol}>
           <OptionsName e={e} t={t} live={!date} positions={live ? { ...live, open_interest: null, hourly: null } : null} interest={interest} hourly={hourlyBySymbol(live, [symbol], now.getTime())[symbol] ?? null} stale={!date && editionState(e.session, now) === "stale"} />
         </PaneBoundary>

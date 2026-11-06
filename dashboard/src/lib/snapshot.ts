@@ -285,7 +285,7 @@ export const loadOptions = cache(
       const mod = await import("../../test/fixtures/options.v1.json");
       const base = (mod.default ?? mod) as unknown as OptionsEdition;
       const versioned = flags.has("v2") ? v2Options(base) : base;
-      const shaped = flags.has("focus") ? focusOptions(versioned) : versioned;
+      const shaped = flags.has("focus") ? focusOptions(versioned, flags.has("quotes-script")) : versioned;
       const edition = flags.has("poison")
         ? poisonedOptions(shaped)
         : flags.has("partial")

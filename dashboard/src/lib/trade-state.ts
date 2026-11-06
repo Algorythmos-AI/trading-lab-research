@@ -49,6 +49,12 @@ export const MAX_CAUTIONS_SHOWN = 2;
 /** A bar whose end has passed is still forming until a later price arrives, or this long after its end: a trade
  * stamped inside it can still reach the page. */
 export const CLOSE_GRACE_MS = 5_000;
+/**
+ * A bar the server read from Alpaca is taken as complete only this long after it ended: an upstream 2-minute bar may
+ * not yet hold its last minute a few seconds after the slot. Until then the page's own bar for the slot is used, or
+ * the slot is missing (a gap, never an entry).
+ */
+export const SERVER_SETTLE_MS = 60_000;
 /** The desk's own number, not a clone parameter: an alternative trigger is shown for this many completed 2-minute
  * bars (6 minutes) after the bar that completed it, then dropped. */
 export const ALT_LIVE_BARS = 3;
@@ -191,6 +197,8 @@ export interface AltTrigger {
   stop: number;
   /** The close of the bar that completed it. */
   entry: number;
+  /** The start (ms) of the bar that completed it: tells one printing of the pattern from a later one. */
+  at: number;
 }
 
 export interface SideState {
@@ -255,7 +263,7 @@ export function altAt(level: number, planSide: Side, closed: readonly Bar2[], at
           if (joined(ia - 1, k) && !closed.slice(ia + 1, k).some((b) => inside(b.c))) {
             const span = closed.slice(ia, k + 1);
             const stop = s > 0 ? Math.max(...span.map((b) => b.h)) : Math.min(...span.map((b) => b.l));
-            best = { at: k, from: ia - 1, alt: { kind: "failed_break", side: altSide, level, stop, entry: closed[k]!.c } };
+            best = { at: k, from: ia - 1, alt: { kind: "failed_break", side: altSide, level, stop, entry: closed[k]!.c, at: closed[k]!.start } };
           }
           break;
         }
@@ -267,7 +275,7 @@ export function altAt(level: number, planSide: Side, closed: readonly Bar2[], at
       const sw = closed[k]!;
       const far = s > 0 ? sw.h - level : level - sw.l;
       if (!beyond(pre.c) && far >= SWEEP_MIN_ATR * atr && !beyond(sw.c))
-        best = { at: k, from: k - 1, alt: { kind: "sweep_reclaim", side: altSide, level, stop: s > 0 ? sw.h : sw.l, entry: sw.c } };
+        best = { at: k, from: k - 1, alt: { kind: "sweep_reclaim", side: altSide, level, stop: s > 0 ? sw.h : sw.l, entry: sw.c, at: sw.start } };
     }
   }
   if (!best) return null;
@@ -688,4 +696,54 @@ export function manage(
   if (hit) return { ...base, line: `Stop at ${p2(entry.price)}: trail starts after ${EMA_FAST} bars`, tone: "info" };
   const parts = [stop !== null ? `stop ${p2(stop)}` : null, t1 !== null ? `target 1 ${p2(t1)}` : null].filter(Boolean);
   return { ...base, line: parts.length ? `Holding: ${parts.join(" · ")}` : "Holding: confirm the stop on your chart", tone: "info" };
+}
+
+// ---- the session's bars from the server -----------------------------------------------------------------------------
+/**
+ * The session's 2-minute bars from the server (`/api/bars`) joined to the page's own (bars2m of the price trail).
+ * `fetchedAt` is when the server read its bars upstream (ms, the server's clock): a server bar counts only if it had
+ * ended at least SERVER_SETTLE_MS before that, so a bar still forming (or not yet holding its last minute upstream)
+ * when the server read it is never taken as a completed close. Null (unknown) uses no server bar. The server wins every slot it has a completed bar for: it saw
+ * every print since 09:30, the page only the ones it polled. The trail fills every other slot (a hole inside the
+ * server's range, the slots after its last one) and supplies the bar still forming. `since` is the earlier of the two
+ * first bars, so a page that has the server's bars from the open reads as having seen the whole session. `missing`
+ * holds the slots from `since` with no bar in either: those between the bars, and the trail's own after its last bar.
+ */
+export function mergeBars(serverBars: readonly Bar2[], trail: Bars2m, fetchedAt: number | null): Bars2m {
+  if (fetchedAt === null || !isNum(fetchedAt)) return trail;
+  const cut = fetchedAt - SERVER_SETTLE_MS;
+  const bySlot = new Map<number, Bar2>();
+  for (const b of serverBars)
+    if (isNum(b.start) && isNum(b.end) && isNum(b.o) && isNum(b.h) && isNum(b.l) && isNum(b.c) && b.end <= cut) bySlot.set(b.start, { ...b });
+  if (bySlot.size === 0) return trail;
+  const serverFirst = Math.min(...bySlot.keys());
+  for (const b of trail.closed) if (!bySlot.has(b.start)) bySlot.set(b.start, { ...b });
+  const closed = [...bySlot.values()].sort((a, b) => a.start - b.start);
+  const lastClosed = closed[closed.length - 1]!.start;
+  const partial = trail.partial && trail.partial.start > lastClosed ? { ...trail.partial } : null;
+  const since = Math.min(serverFirst, ...(isNum(trail.since) ? [trail.since] : []));
+  const have = new Set([...closed.map((b) => b.start), ...(partial ? [partial.start] : [])]);
+  const last = Math.max(...have);
+  const missing: number[] = [];
+  for (let s0 = since; s0 < last; s0 += BAR_MS) if (!have.has(s0)) missing.push(s0);
+  for (const m of trail.missing) if (m > last && !have.has(m)) missing.push(m);
+  const day = nyClock(new Date(since).toISOString())?.day;
+  const open = day ? nyInstant(day, OPEN_MIN) : null;
+  return { closed, partial, since, complete: open !== null && since <= open, missing, gaps: missing.length };
+}
+
+/**
+ * The average true range of the last `n` completed 2-minute bars, as the clone reads it (wt.options.regime.atr: the
+ * plain mean of the true ranges, each against the bar before). Null with fewer than `n + 1` bars. The sweep's unit.
+ */
+export function atr2m(closed: readonly Bar2[], n = 14): number | null {
+  if (n < 1 || closed.length < n + 1) return null;
+  const tail = closed.slice(-n - 1);
+  let sum = 0;
+  for (let i = 1; i < tail.length; i++) {
+    const a = tail[i - 1]!;
+    const b = tail[i]!;
+    sum += Math.max(b.h - b.l, Math.abs(b.h - a.c), Math.abs(b.l - a.c));
+  }
+  return sum / n;
 }
