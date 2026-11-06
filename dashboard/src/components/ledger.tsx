@@ -27,6 +27,7 @@ import {
   type LedgerSide,
 } from "@/lib/ledger";
 import { cn } from "@/lib/utils";
+import { spread } from "@/lib/chart-geometry";
 
 const NO_ENTRY: [number, number][] = [
   [0, 5],
@@ -186,12 +187,8 @@ export function priceLabels(n: LedgerName): PriceLabel[] {
   return out;
 }
 
-/** Moves labels apart so none overlaps, keeping their order and staying inside [top, bottom]. */
-export function spread(ls: { y: number }[], gap: number, top: number, bottom: number): void {
-  const sorted = [...ls].sort((a, b) => a.y - b.y);
-  for (let i = 0; i < sorted.length; i++) sorted[i]!.y = Math.max(sorted[i]!.y, i ? sorted[i - 1]!.y + gap : top);
-  for (let i = sorted.length - 1; i >= 0; i--) sorted[i]!.y = Math.min(sorted[i]!.y, i < sorted.length - 1 ? sorted[i + 1]!.y - gap : bottom);
-}
+// Moved to lib/chart-geometry.ts (the price ladder uses it too); re-exported so existing imports keep working.
+export { spread };
 
 const px = (v: number | null | undefined) => (typeof v === "number" ? v.toFixed(2) : DASH);
 const premium = (v: number | null | undefined) => (typeof v === "number" ? `$${v.toFixed(2)}` : DASH);

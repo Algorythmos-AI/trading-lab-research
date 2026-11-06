@@ -24,6 +24,12 @@ const FILES = [
   "../src/components/client/map-frame.tsx",
   "../src/components/options-charts.tsx",
   "../src/components/client/options-glance.tsx",
+  "../src/lib/level-ladder.ts",
+  "../src/lib/chart-code.ts",
+  "../src/lib/chart-geometry.ts",
+  "../src/components/level-ladder.tsx",
+  "../src/components/client/ladder-live.tsx",
+  "../src/app/options/ladder-preview/page.tsx",
 ];
 
 const BANNED = [
