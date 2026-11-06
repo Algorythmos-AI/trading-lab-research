@@ -53,3 +53,27 @@ for (const theme of ["dark", "light"] as const) {
     });
   });
 }
+
+// The Options page as it reads in the session (the scripted morning at step 3: QQQ in its entry zone, SPY's failed
+// break live, AAPL with no trade): the status rail, the hero, the glance, the board and the cards with their ladders.
+// The rail's countdown and the session bar's now tick follow the running clock, so they are masked.
+for (const theme of ["dark", "light"] as const) {
+  test(`the glance page in the session, ${theme}`, async ({ page, context, baseURL, isMobile }) => {
+    test.skip(isMobile && theme === "light", "the phone is pictured once");
+    await useTheme(context, theme);
+    await context.addCookies([
+      { name: "fx", value: "focus.quotes-script.chain-off", url: baseURL! },
+      { name: "fxstep", value: "3", url: baseURL! },
+    ]);
+    await page.goto("/options");
+    await expect(page.locator("section[data-trade-now]")).toHaveAttribute("data-trade-now", "live", { timeout: 20_000 });
+    await expect(page.locator("[data-board-row]").first()).toHaveAttribute("data-board-state", "enter_zone");
+    await expect(page.locator("[data-hero-word]")).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    await expect(page).toHaveScreenshot(`glance-live-${theme}.png`, {
+      fullPage: true,
+      mask: [page.getByRole("banner"), page.locator("[data-rail-countdown]"), page.locator("[data-session-bar]")],
+    });
+  });
+}
+
