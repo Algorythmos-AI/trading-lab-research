@@ -615,7 +615,7 @@ export function TradeNow({
   // Every time on the board is the feed's (server) clock; the browser's only until the feed has answered.
   const now = browserNow === null ? null : serverNow(ok ? feed.asOf : null, ok ? feed.receivedAt : null, browserNow).getTime();
   const answeredAt = ok && Number.isFinite(Date.parse(feed.asOf)) ? Date.parse(feed.asOf) : null;
-  const mode: BoardMode = now === null ? { kind: "loading", line: "Connecting to live prices" } : boardMode(e.session, halfDay, feed.status, now, e.as_of ?? null);
+  const mode: BoardMode = now === null ? { kind: "loading", line: "Connecting to live prices" } : boardMode(e.session, halfDay, feed.status, now);
   const newest = ok ? Math.max(0, ...items.map((i) => Date.parse(feed.quotes[i.symbol]?.at ?? "") || 0)) : 0;
   const bars = useBars(symbols, live && items.length > 0 && (mode.kind === "live" || mode.kind === "opening"), newest > 0 ? Math.floor(newest / 120_000) : null, halfDay);
   // Late or failing bars are not used: the states fall back to the page's own prices, and the header says so.

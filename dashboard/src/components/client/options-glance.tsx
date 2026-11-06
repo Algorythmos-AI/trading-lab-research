@@ -100,7 +100,7 @@ export function OptionsGlance({
             const price = read.price;
             const view = price !== null ? roomView(t, price) : null;
             const item = focus?.items.find((i) => i.symbol === t.symbol);
-            const marks = item && view ? roomMarks(cardMarks(item, t.levels), price, t.atr14) : [];
+            const marks = item && view ? roomMarks(cardMarks(item), price, t.atr14) : [];
             const ref = close ?? q?.prev_close ?? null;
             const change = q && read.inSession && ref ? ((q.price - ref) / ref) * 100 : null;
             const chip = t.close_strength?.chip;

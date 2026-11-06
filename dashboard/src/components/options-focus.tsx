@@ -490,8 +490,8 @@ function FocusCard({
 }
 
 /** The rules that hold for every name, said once under the cards, with the no-entry times (New York) for this session. */
-function Always({ session }: { session: string }) {
-  const t = noEntryTimes(session);
+function Always({ session, halfDay }: { session: string; halfDay: boolean }) {
+  const t = noEntryTimes(session, halfDay);
   const premium = (MAX_PREMIUM / 100).toFixed(2);
   return (
     <div className="text-muted-foreground grid gap-1 text-xs">
@@ -499,7 +499,7 @@ function Always({ session }: { session: string }) {
         <span className="text-foreground font-semibold">Skip</span> a name while
         it chops between its ceiling and floor
         {t
-          ? `, and take no entries before ${t.firstEntry} or between ${t.lunchFrom} and ${t.lunchTo} New York`
+          ? `, and take no entries before ${t.firstEntry}${t.lunchFrom && t.lunchTo ? ` or between ${t.lunchFrom} and ${t.lunchTo}` : ""} New York`
           : ""}
         . <span className="text-foreground font-semibold">Size:</span> an option
         under ${premium}, so the −{Math.round(PREMIUM_STOP * 100)}% stop loses
@@ -576,7 +576,7 @@ export function FocusStrip({ e }: { e: Options }) {
           />
         ))}
       </ul>
-      <Always session={e.session} />
+      <Always session={e.session} halfDay={isHalfDay(e)} />
     </section>
   );
 }

@@ -146,7 +146,7 @@ export function OptionsDetail({
   const phone = usePhone();
   // The focus card's ceiling and floor for this name, when it is a focus name: the map marks the card's own prices.
   const item = e.focus?.items.find((i) => i.symbol === t.symbol);
-  const marks = item ? cardMarks(item, t.levels) : [];
+  const marks = item ? cardMarks(item) : [];
 
   // Kept with the name it was priced for, so the line never lingers on the next name's map.
   const [mark, setMark] = useState<{ symbol: string; at: BreakevenMark } | null>(null);

@@ -10,6 +10,8 @@ import {
   type Entry,
   FIRST_ENTRY_MIN,
   flatMinute,
+  LUNCH_FROM_MIN,
+  LUNCH_TO_MIN,
   manage,
   MAX_BARS_TO_RETEST,
   type NameInput,
@@ -339,6 +341,34 @@ describe("the clock and the feed", () => {
       const soon = scene([["09:56", 412.5, 412.9, 412.4, 412.8]], 412.85, { day, offset });
       expect(nameState(input(soon)).state).not.toBe("no_trade"); // 09:58 + 5 s New York: from the 09:35 first entry
     }
+  });
+
+  it("takes no new entries from 11:30 to 13:00 New York, except on a half day", () => {
+    const sc = (hhmm: string) => scene([A], 411.1, { nowExtra: nyMs(hhmm) - nyMs("10:04") - 125_000 });
+    const at = (hhmm: string, halfDay = false) => {
+      const s = sc(hhmm);
+      return nameState(input(s, { receivedAt: s.now.getTime(), quote: { ...s.quote, at: s.now.toISOString() }, halfDay }));
+    };
+    const block = "No new entries 11:30–13:00 New York: next entries from 13:00";
+    expect(LUNCH_FROM_MIN).toBe(11 * 60 + 30);
+    expect(LUNCH_TO_MIN).toBe(13 * 60);
+    expect(at("11:29").state).not.toBe("no_trade");
+    expect(at("11:30")).toMatchObject({ state: "no_trade", line: block, cautions: [] });
+    expect(at("12:59")).toMatchObject({ state: "no_trade", line: block });
+    expect(at("13:00").state).not.toBe("no_trade");
+    expect(at("11:45", true).line).not.toBe(block); // a half day closes at 13:00: no block, flat from 12:10
+    expect(at("11:45", true).state).not.toBe("no_trade");
+  });
+
+  it("never hides the desk's early caution behind the two clone cautions", () => {
+    const early = (x: Spec): Spec => [`09:${40 + Number(x[0].slice(3))}`, x[1], x[2], x[3], x[4]];
+    const s = scene([A, B, C, D, E].map(early), 412.75); // 09:44 to 09:52
+    const r = nameState(
+      input(s, { receivedAt: s.now.getTime(), wonToday: true, ticker: { ...TICKER, expected_move: { annual_iv: 0.9 } } }),
+    );
+    expect(r.state).toBe("enter_zone");
+    expect(r.cautions.map((c) => c.id)).toEqual(["iv", "winner", "before10"]);
+    expect(r.moreCautions).toBe(0);
   });
 
   it("shows at most two cautions and counts the rest", () => {

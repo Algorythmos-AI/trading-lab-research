@@ -4,7 +4,7 @@
 import { BAR_MINUTES, FAIL_WITHIN_BARS, SWEEP_MIN_ATR } from "./entry-checks";
 import type { Options, OptionsTicker } from "./options";
 import { MAX_PREMIUM, MIN_ROOM_MULTIPLE } from "./trade-rules";
-import { FIRST_ENTRY_MIN } from "./trade-state";
+import { FIRST_ENTRY_MIN, LUNCH_FROM_MIN, LUNCH_TO_MIN, lunchBlock } from "./trade-state";
 
 type Item = NonNullable<Options["focus"]>["items"][number];
 
@@ -372,16 +372,16 @@ export interface CardMark {
 }
 
 /**
- * The focus card's ceiling and floor for a name, highest first: the same lines as the card's chart list
- * (chartLevels), so every map that marks them shows the card's price, in the card's red and green, under the
- * card's word. One source of truth: the Brief map, the card and the board's trigger prices never disagree.
+ * The focus card's ceiling and floor for a name, highest first: the plan's own trigger levels (focusPlan), the same
+ * prices the card's steps and the board's triggers use, so every map that marks them shows the card's price, in the
+ * card's red and green, under the card's word. Never a merged chart line: two triggers a cent apart are two marks.
  */
-export function cardMarks(item: Item, levels: readonly Level[] | null | undefined): CardMark[] {
-  return chartLevels(item, levels).flatMap((l) =>
-    l.kind === "ceiling" || l.kind === "floor"
-      ? [{ price: l.price, kind: l.kind, word: CHART_CODE[l.kind].what }]
-      : [],
-  );
+export function cardMarks(item: Item): CardMark[] {
+  const { call, put } = focusPlan(item);
+  const out: CardMark[] = [];
+  if (call) out.push({ price: call.level, kind: "ceiling", word: CHART_CODE.ceiling.what });
+  if (put) out.push({ price: put.level, kind: "floor", word: CHART_CODE.floor.what });
+  return out.sort((a, b) => b.price - a.price);
 }
 
 /** Names whose options expire on Monday, Wednesday and Friday only (the broker's listing, checked 2026-10-27). */
@@ -407,25 +407,26 @@ export function expiryNote(
   return `${today} Premiums near the money usually run over $${(MAX_PREMIUM / 100).toFixed(2)}, so go further out or skip.`;
 }
 
-/** The no-entry lunch window, New York minutes after midnight: 11:30 to 13:00. */
-export const LUNCH_FROM_MIN = 11 * 60 + 30;
-export const LUNCH_TO_MIN = 13 * 60;
+/** The no-entry lunch window, New York: 11:30 to 13:00 (trade-state's, where the board's gate reads it). */
+export { LUNCH_FROM_MIN, LUNCH_TO_MIN };
 
 const hhmm = (min: number) =>
   `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 
 /**
  * The no-entry times for a session, New York: none before the first entry (FIRST_ENTRY_MIN, 09:35, the owner's rule,
- * DEC-0043) and none from 11:30 to 13:00. New York wall times, so the daylight-saving changes move nothing. Null for a
- * bad day.
+ * DEC-0043) and none from 11:30 to 13:00, which a half day (closing at 13:00) does not have (`lunchBlock`). New York
+ * wall times, so the daylight-saving changes move nothing. Null for a bad day.
  */
 export function noEntryTimes(
   session: string | null | undefined,
-): { firstEntry: string; lunchFrom: string; lunchTo: string } | null {
+  halfDay = false,
+): { firstEntry: string; lunchFrom: string | null; lunchTo: string | null } | null {
   if (!session || !/^\d{4}-\d{2}-\d{2}$/.test(session)) return null;
+  const lunch = lunchBlock(halfDay);
   return {
     firstEntry: hhmm(FIRST_ENTRY_MIN),
-    lunchFrom: hhmm(LUNCH_FROM_MIN),
-    lunchTo: hhmm(LUNCH_TO_MIN),
+    lunchFrom: lunch ? hhmm(LUNCH_FROM_MIN) : null,
+    lunchTo: lunch ? hhmm(LUNCH_TO_MIN) : null,
   };
 }

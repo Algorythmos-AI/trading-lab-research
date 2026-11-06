@@ -374,7 +374,7 @@ export function OptionsDesk({
       paper: paperFor(e, t.symbol),
       marks: (() => {
         const item = e.focus?.items.find((i) => i.symbol === t.symbol);
-        return item ? cardMarks(item, t.levels) : [];
+        return item ? cardMarks(item) : [];
       })(),
     };
   });

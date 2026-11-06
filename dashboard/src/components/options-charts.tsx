@@ -484,7 +484,11 @@ export function LevelMap({
           <g data-card-marks={marks.length}>
             {marks.map((m) => {
               const off = m.price > v.hi ? "above" : m.price < v.lo ? "below" : null;
-              const at = off === "above" ? TOP + 11 : off === "below" ? BOTTOM - 5 : y(m.price) < TOP + 15 ? y(m.price) + 12 : y(m.price) - 4;
+              // Marks off the same edge stack, nearest the edge first, so their labels never overlap.
+              const LINE_H = 13 * F;
+              const nth = off === null ? 0 : marks.filter((o) => (off === "above" ? o.price > v.hi && o.price > m.price : o.price < v.lo && o.price < m.price)).length;
+              const at =
+                off === "above" ? TOP + 11 + nth * LINE_H : off === "below" ? BOTTOM - 5 - nth * LINE_H : y(m.price) < TOP + 15 ? y(m.price) + 12 : y(m.price) - 4;
               return (
                 <g key={m.kind} data-card-mark={m.kind} data-price={m.price.toFixed(2)}>
                   <title>{`${m.word} ${num(m.price, 2)}: the focus card's ${m.kind === "ceiling" ? "call" : "put"} trigger`}</title>

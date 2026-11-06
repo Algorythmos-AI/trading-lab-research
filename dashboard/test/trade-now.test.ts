@@ -18,6 +18,7 @@ import {
   boardDay,
   type BoardInput,
   boardMode,
+  nextEditionAt,
   refreshWords,
   type BoardMode,
   type BoardRow,
@@ -129,11 +130,13 @@ describe("the scripted morning", () => {
 describe("the header", () => {
   const at = (iso: string) => Date.parse(iso);
   it("says what the board can show", () => {
-    expect(boardMode(S, false, "ok", at("2026-10-13T14:00:00Z"), "2026-10-09T21:54:00Z")).toEqual({ kind: "old", line: "Focus card is for Mon 12 Oct: refreshed after the 17:54 New York edition" });
-    expect(boardMode(S, false, "ok", at("2026-11-03T15:00:00Z"), "2026-11-02T21:54:00Z")).toMatchObject({ line: expect.stringMatching(/the 16:54 New York edition$/) }); // after the change
-    expect(boardMode(S, false, "ok", at("2026-10-13T14:00:00Z"))).toEqual({ kind: "old", line: "Focus card is for Mon 12 Oct: refreshed after the after-close edition" });
-    expect(boardMode(S, false, "ok", at("2026-10-12T20:05:00Z"), "2026-10-09T21:54:00Z")).toEqual({ kind: "next", line: "Session closed: the next focus card follows the 17:54 New York edition" });
-    expect(refreshWords("2026-10-09T21:54:00Z")).not.toMatch(/Sydney/);
+    // The next card follows the evening edition (built 21:52 UTC on weekdays), named in New York time.
+    expect(boardMode(S, false, "ok", at("2026-10-13T14:00:00Z"))).toEqual({ kind: "old", line: "Focus card is for Mon 12 Oct: refreshed after the evening edition, Tue 13 Oct, 17:52 New York" });
+    expect(boardMode(S, false, "ok", at("2026-10-12T20:05:00Z"))).toEqual({ kind: "next", line: "Session closed: the next focus card follows the evening edition, Mon 12 Oct, 17:52 New York" });
+    // Across the November change: Friday after the build, so Monday's, an hour earlier in New York.
+    expect(nextEditionAt(Date.parse("2026-10-30T22:00:00Z"))).toBe(Date.parse("2026-11-02T21:52:00Z"));
+    expect(refreshWords(Date.parse("2026-10-30T22:00:00Z"))).toBe("the evening edition, Mon 2 Nov, 16:52 New York");
+    expect(refreshWords(Date.parse("2026-10-30T21:00:00Z"))).toBe("the evening edition, Fri 30 Oct, 17:52 New York");
     expect(boardMode(S, false, "off", at("2026-10-12T14:30:00Z")).kind).toBe("off");
     expect(boardMode(S, false, "error", at("2026-10-12T14:30:00Z"))).toEqual({ kind: "off", line: "Live prices off: use the plans below" });
     expect(boardMode(S, false, "ok", at("2026-10-11T14:30:00Z"))).toEqual({ kind: "next", line: "Next session Mon 12 Oct: first entries from 09:35 New York" });

@@ -102,6 +102,7 @@ describe("focus plan", () => {
         lunchFrom: "11:30",
         lunchTo: "13:00",
       });
+    expect(noEntryTimes("2026-11-27", true)).toEqual({ firstEntry: "09:35", lunchFrom: null, lunchTo: null }); // a half day closes at 13:00
     expect(noEntryTimes("bad")).toBeNull();
   });
 });
