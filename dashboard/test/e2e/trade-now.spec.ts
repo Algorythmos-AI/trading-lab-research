@@ -269,8 +269,9 @@ test("fits a 375 px screen with no sideways scroll", async ({ page, context, bas
     expect(b.x + b.width).toBeLessThanOrEqual(375);
     expect(await tile.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
   }
-  // the rail stays compact on a phone: no more than a third of the screen
-  expect((await rail(page).boundingBox())!.height).toBeLessThanOrEqual(812 / 3);
+  // on a phone the rail is not sticky (it scrolls away with the page), but it still leaves the hero room on the
+  // first screen: no more than 40% of it
+  expect((await rail(page).boundingBox())!.height).toBeLessThanOrEqual(812 * 0.4);
 });
 
 test("I'm in at the entry opens the manage card, which reads target 1 hit and then exit", async ({ page, context, baseURL }) => {

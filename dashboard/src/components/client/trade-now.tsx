@@ -538,38 +538,7 @@ export function TradeNowBoard({
 /** At most this many notices at once on a wide screen; one on a phone. */
 export const NOTICES_WIDE = 2;
 
-/**
- * Where the notices sit: the top of the screen under the sticky header, but never over the board. While the board is
- * on screen they sit just below it. Read on scroll and resize.
- */
-function useNoticeTop(): number {
-  const [top, setTop] = useState(12);
-  useEffect(() => {
-    const read = () => {
-      const header = document.querySelector("header");
-      const hb = header && getComputedStyle(header).position === "sticky" ? header.getBoundingClientRect().bottom : 0;
-      const board = document.querySelector("section[data-trade-now]")?.getBoundingClientRect();
-      const below = board && board.bottom > 0 ? board.bottom : 0;
-      // The status rail sticks under the header: a notice never covers it either.
-      const rail = document.querySelector("[data-status-rail]")?.getBoundingClientRect();
-      const railBottom = rail && rail.bottom > 0 ? rail.bottom : 0;
-      setTop(Math.round(Math.max(hb, below, railBottom, 0) + 12));
-    };
-    read();
-    window.addEventListener("scroll", read, { passive: true });
-    window.addEventListener("resize", read);
-    const id = window.setInterval(read, 1_000); // the board grows and shrinks as states change
-    return () => {
-      window.removeEventListener("scroll", read);
-      window.removeEventListener("resize", read);
-      window.clearInterval(id);
-    };
-  }, []);
-  return top;
-}
-
 function BoardNotices({ notices, onOpen, onDrop, extra }: { notices: NameState[]; onOpen: (s: string) => void; onDrop: (s: NameState) => void; extra?: React.ReactNode }) {
-  const top = useNoticeTop();
   const one = (s: NameState, i: number) => {
     const v = rowView(s);
     return (
@@ -613,10 +582,10 @@ function BoardNotices({ notices, onOpen, onDrop, extra }: { notices: NameState[]
   return (
     <div
       data-board-notices={notices.length}
-      // On a phone the stack sits in the page's flow straight under the board, so it can never cover it; from sm up it is
-      // fixed at the top right, under the sticky header and clear of the board (useNoticeTop).
-      style={{ ["--notice-top" as string]: `${top}px` }}
-      className="z-40 mt-2 flex flex-col gap-2 sm:pointer-events-none sm:fixed sm:top-[var(--notice-top)] sm:right-3 sm:left-auto sm:mt-0 sm:w-[22rem]"
+      // On a phone the stack sits in the page's flow straight under the board, so it can never cover it. From sm up it is
+      // fixed at the bottom right of the screen: always in view wherever the board is (it now sits below the hero and
+      // the glance, often under the fold), and clear of the rail and the hero's prices at the top.
+      className="z-40 mt-2 flex flex-col gap-2 sm:pointer-events-none sm:fixed sm:right-3 sm:bottom-3 sm:left-auto sm:mt-0 sm:w-[22rem]"
     >
       {extra}
       {shown.map(one)}
