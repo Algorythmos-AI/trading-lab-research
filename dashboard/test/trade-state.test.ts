@@ -210,7 +210,7 @@ describe("a failed break and a sweep", () => {
     const r = nameState(input(scene([A, B, C, D, back], 411.95)));
     expect(r.state).toBe("plan_off");
     expect(r.tone).toBe("bad");
-    expect(r.alt).toEqual({ kind: "failed_break", side: "put", level: 412.3, stop: 412.9, entry: 412.0 });
+    expect(r.alt).toEqual({ kind: "failed_break", side: "put", level: 412.3, stop: 412.9, entry: 412.0, at: nyMs("10:12") });
     expect(r.line).toBe("Fell back below 412.30: call plan off · Failed break: put under 412.30, stop above 412.90 (push high) · testing");
     // ranked above a plain watch
     expect(r.rank).toBeLessThan(nameState(input(scene([A, B], 411.1))).rank);
@@ -235,7 +235,7 @@ describe("a failed break and a sweep", () => {
       405.4,
     );
     const r = nameState(input(sc));
-    expect(r.alt).toEqual({ kind: "sweep_reclaim", side: "call", level: 405.1, stop: 404.0, entry: 405.3 });
+    expect(r.alt).toEqual({ kind: "sweep_reclaim", side: "call", level: 405.1, stop: 404.0, entry: 405.3, at: nyMs("10:06") });
     expect(r.line).toBe("Sweep and reclaim: call above 405.10, stop below 404.00 (sweep low) · testing");
     expect(r.side).toBe("put");
     // the sweep is measured in the 2-minute bars' ATR: without one it is not looked for

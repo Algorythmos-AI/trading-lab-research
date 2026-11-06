@@ -50,13 +50,21 @@ async function fixtureBars(symbols: string[], now: Date, script: { step: number 
     });
   }
   const asOf = script ? stepInstant(e.session, script.step) : now.getTime();
-  return { as_of: new Date(asOf).toISOString(), feed: "iex", bars, missing, fixture: true };
+  const fetchedAt = Object.fromEntries(Object.keys(bars).map((s) => [s, asOf]));
+  return { as_of: new Date(asOf).toISOString(), feed: "iex", bars, fetchedAt, missing, fixture: true };
 }
 
-/** GET /api/bars?s=SPY,QQQ: today's regular-session 2-minute bars from Alpaca's IEX feed. 503 until the keys are set. */
+/**
+ * GET /api/bars?s=SPY,QQQ[&half=1]: today's regular-session 2-minute bars from Alpaca's IEX feed, to 13:00 New York
+ * with `half=1` (the edition's half-day flag). 503 until the keys are set.
+ */
 export async function handleBars(req: Request, now: Date = new Date()): Promise<Response> {
-  const symbols = parseSymbols(new URL(req.url).searchParams.get("s"));
+  const params = new URL(req.url).searchParams;
+  const symbols = parseSymbols(params.get("s"));
   if (!symbols) return json(400, { error: "give ?s= with one or more ticker symbols" });
+  const half = params.get("half");
+  if (half !== null && half !== "1") return json(400, { error: "half is 1 or absent" });
+  const halfDay = half === "1";
   if (fixtureMode()) {
     const cookie = req.headers.get("cookie");
     const flags = flagsFromCookieHeader(cookie);
@@ -68,7 +76,7 @@ export async function handleBars(req: Request, now: Date = new Date()): Promise<
   const keys = alpacaKeys();
   if (!keys) return json(503, { error: "not-configured" });
   try {
-    return json(200, await fetchBars(symbols, keys, now));
+    return json(200, await fetchBars(symbols, keys, now, fetch, undefined, halfDay));
   } catch (e) {
     logEvent("bars.fetch", { outcome: "error", error: e instanceof Error ? e.name : "unknown" });
     return json(502, { error: "upstream" });

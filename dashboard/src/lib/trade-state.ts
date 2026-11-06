@@ -191,6 +191,8 @@ export interface AltTrigger {
   stop: number;
   /** The close of the bar that completed it. */
   entry: number;
+  /** The start (ms) of the bar that completed it: tells one printing of the pattern from a later one. */
+  at: number;
 }
 
 export interface SideState {
@@ -255,7 +257,7 @@ export function altAt(level: number, planSide: Side, closed: readonly Bar2[], at
           if (joined(ia - 1, k) && !closed.slice(ia + 1, k).some((b) => inside(b.c))) {
             const span = closed.slice(ia, k + 1);
             const stop = s > 0 ? Math.max(...span.map((b) => b.h)) : Math.min(...span.map((b) => b.l));
-            best = { at: k, from: ia - 1, alt: { kind: "failed_break", side: altSide, level, stop, entry: closed[k]!.c } };
+            best = { at: k, from: ia - 1, alt: { kind: "failed_break", side: altSide, level, stop, entry: closed[k]!.c, at: closed[k]!.start } };
           }
           break;
         }
@@ -267,7 +269,7 @@ export function altAt(level: number, planSide: Side, closed: readonly Bar2[], at
       const sw = closed[k]!;
       const far = s > 0 ? sw.h - level : level - sw.l;
       if (!beyond(pre.c) && far >= SWEEP_MIN_ATR * atr && !beyond(sw.c))
-        best = { at: k, from: k - 1, alt: { kind: "sweep_reclaim", side: altSide, level, stop: s > 0 ? sw.h : sw.l, entry: sw.c } };
+        best = { at: k, from: k - 1, alt: { kind: "sweep_reclaim", side: altSide, level, stop: s > 0 ? sw.h : sw.l, entry: sw.c, at: sw.start } };
     }
   }
   if (!best) return null;
@@ -692,23 +694,28 @@ export function manage(
 
 // ---- the session's bars from the server -----------------------------------------------------------------------------
 /**
- * The session's 2-minute bars from the server (`/api/bars`, completed bars only) joined to the page's own (bars2m of
- * the price trail). The server wins every slot it has: it saw every print since 09:30, the page only the ones it
- * polled. The trail supplies the slots after the server's last one and the bar still forming. `since` is the earlier
- * of the two first bars, so a page that has the server's bars from the open reads as having seen the whole session.
- * `missing` holds the slots from `since` with no bar in either: those between the bars, and the trail's own after its
- * last bar.
+ * The session's 2-minute bars from the server (`/api/bars`) joined to the page's own (bars2m of the price trail).
+ * `fetchedAt` is when the server read its bars upstream (ms, the server's clock): a server bar counts only if it had
+ * ended at least CLOSE_GRACE_MS before that, so a bar still forming when the server read it is never taken as a
+ * completed close. Null (unknown) uses no server bar. The server wins every slot it has a completed bar for: it saw
+ * every print since 09:30, the page only the ones it polled. The trail fills every other slot (a hole inside the
+ * server's range, the slots after its last one) and supplies the bar still forming. `since` is the earlier of the two
+ * first bars, so a page that has the server's bars from the open reads as having seen the whole session. `missing`
+ * holds the slots from `since` with no bar in either: those between the bars, and the trail's own after its last bar.
  */
-export function mergeBars(serverClosed: readonly Bar2[], trail: Bars2m): Bars2m {
-  const server = serverClosed
-    .filter((b) => isNum(b.start) && isNum(b.end) && isNum(b.o) && isNum(b.h) && isNum(b.l) && isNum(b.c))
-    .map((b) => ({ ...b }))
-    .sort((a, b) => a.start - b.start);
-  if (server.length === 0) return trail;
-  const lastStart = server[server.length - 1]!.start;
-  const closed = [...server, ...trail.closed.filter((b) => b.start > lastStart).map((b) => ({ ...b }))];
-  const partial = trail.partial && trail.partial.start > lastStart ? { ...trail.partial } : null;
-  const since = Math.min(server[0]!.start, ...(isNum(trail.since) ? [trail.since] : []));
+export function mergeBars(serverBars: readonly Bar2[], trail: Bars2m, fetchedAt: number | null): Bars2m {
+  if (fetchedAt === null || !isNum(fetchedAt)) return trail;
+  const cut = fetchedAt - CLOSE_GRACE_MS;
+  const bySlot = new Map<number, Bar2>();
+  for (const b of serverBars)
+    if (isNum(b.start) && isNum(b.end) && isNum(b.o) && isNum(b.h) && isNum(b.l) && isNum(b.c) && b.end <= cut) bySlot.set(b.start, { ...b });
+  if (bySlot.size === 0) return trail;
+  const serverFirst = Math.min(...bySlot.keys());
+  for (const b of trail.closed) if (!bySlot.has(b.start)) bySlot.set(b.start, { ...b });
+  const closed = [...bySlot.values()].sort((a, b) => a.start - b.start);
+  const lastClosed = closed[closed.length - 1]!.start;
+  const partial = trail.partial && trail.partial.start > lastClosed ? { ...trail.partial } : null;
+  const since = Math.min(serverFirst, ...(isNum(trail.since) ? [trail.since] : []));
   const have = new Set([...closed.map((b) => b.start), ...(partial ? [partial.start] : [])]);
   const last = Math.max(...have);
   const missing: number[] = [];

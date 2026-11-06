@@ -28,16 +28,16 @@ import { StatusBadge } from "@/components/status";
 import { newYork } from "@/lib/format";
 import { isHalfDay, type Options } from "@/lib/options";
 import {
-  boardAnnounce,
+  barsInUse,
   boardMode,
   type BoardMode,
   type BoardRow,
+  boardNotices,
   boardRows,
-  noticeKey,
+  type NoticeBook,
   noticeTitle,
   rowView,
   type RowView,
-  type SeenStates,
 } from "@/lib/trade-now";
 import { type NameState, type NameStateName, serverNow } from "@/lib/trade-state";
 import { cn } from "@/lib/utils";
@@ -185,22 +185,44 @@ function AlertButtons({ className }: { className?: string }) {
   );
 }
 
-/** On a phone the two switches fold into one bell with a small menu; Esc or a click outside closes it. */
+/** The bell menu's Escape: it closes the menu only with the focus inside it or on the bell. */
+export function alertMenuKey(key: string, focusInside: boolean): boolean {
+  return key === "Escape" && focusInside;
+}
+
+/** A pointer down while the menu is open: outside it closes the menu, and the focus goes back to the bell unless the
+ * click landed on another control (which takes the focus itself). */
+export function alertMenuOutside(inside: boolean, onControl: boolean): { close: boolean; refocus: boolean } {
+  return inside ? { close: false, refocus: false } : { close: true, refocus: !onControl };
+}
+
+const CONTROL = "a[href], button, input, select, textarea, summary, [tabindex]";
+
+/**
+ * On a phone the two switches fold into one bell with a small menu. Opening it moves the focus to its first switch;
+ * Esc (with the focus in the menu or on the bell) or a click outside closes it and gives the focus back to the bell.
+ * The listeners are on only while it is open.
+ */
 function AlertMenu() {
   const alerts = useAlerts();
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLSpanElement>(null);
   const button = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     if (!open) return;
+    menu.current?.querySelector<HTMLButtonElement>("button")?.focus();
     const onKey = (ev: KeyboardEvent) => {
-      if (ev.key === "Escape") {
-        setOpen(false);
-        button.current?.focus();
-      }
+      if (!alertMenuKey(ev.key, !!box.current && box.current.contains(document.activeElement))) return;
+      setOpen(false);
+      button.current?.focus();
     };
     const onDown = (ev: PointerEvent) => {
-      if (box.current && !box.current.contains(ev.target as Node)) setOpen(false);
+      const target = ev.target instanceof Element ? ev.target : null;
+      const r = alertMenuOutside(!!box.current && !!target && box.current.contains(target), !!target?.closest(CONTROL));
+      if (!r.close) return;
+      setOpen(false);
+      if (r.refocus) button.current?.focus();
     };
     document.addEventListener("keydown", onKey);
     document.addEventListener("pointerdown", onDown);
@@ -224,7 +246,7 @@ function AlertMenu() {
         {on ? <Bell aria-hidden className="size-4" /> : <BellOff aria-hidden className="size-4" />}
       </button>
       {open ? (
-        <span id="trade-now-alerts" className="bg-popover absolute top-9 right-0 z-30 rounded-md border p-2 shadow-md">
+        <span ref={menu} id="trade-now-alerts" className="bg-popover absolute top-9 right-0 z-30 rounded-md border p-2 shadow-md">
           <AlertButtons className="flex-col items-stretch" />
         </span>
       ) : null}
@@ -378,6 +400,7 @@ export function TradeNowBoard({
   rows,
   now,
   paused,
+  barsDelayed = false,
   onOpen,
   switches,
 }: {
@@ -386,6 +409,8 @@ export function TradeNowBoard({
   /** The board's clock, ms; null before the browser has read it. */
   now: number | null;
   paused: boolean;
+  /** The server's session bars are late or failing: the states use the page's own prices only. */
+  barsDelayed?: boolean;
   onOpen: (symbol: string) => void;
   switches?: React.ReactNode;
 }) {
@@ -426,6 +451,11 @@ export function TradeNowBoard({
       ) : paused ? (
         <p data-board-line className="text-warn text-[0.8125rem] font-medium">
           Prices paused: no entry is shown on old prices. Check your platform.
+        </p>
+      ) : null}
+      {mode.kind === "live" && barsDelayed ? (
+        <p data-board-bars="delayed" className="text-muted-foreground text-[0.6875rem]">
+          Session bars delayed: states use this page&apos;s prices only
         </p>
       ) : null}
       {showRows && rows.length ? (
@@ -553,7 +583,9 @@ export function TradeNow({ e, live, dayLimitUsed, wonToday }: { e: Options; live
   const answeredAt = ok && Number.isFinite(Date.parse(feed.asOf)) ? Date.parse(feed.asOf) : null;
   const mode: BoardMode = now === null ? { kind: "loading", line: "Connecting to live prices" } : boardMode(e.session, halfDay, feed.status, now);
   const newest = ok ? Math.max(0, ...items.map((i) => Date.parse(feed.quotes[i.symbol]?.at ?? "") || 0)) : 0;
-  const bars = useBars(symbols, live && items.length > 0 && (mode.kind === "live" || mode.kind === "opening"), newest > 0 ? Math.floor(newest / 120_000) : null);
+  const bars = useBars(symbols, live && items.length > 0 && (mode.kind === "live" || mode.kind === "opening"), newest > 0 ? Math.floor(newest / 120_000) : null, halfDay);
+  // Late or failing bars are not used: the states fall back to the page's own prices, and the header says so.
+  const used = barsInUse(bars, browserNow);
   const rows =
     now === null
       ? []
@@ -565,7 +597,8 @@ export function TradeNow({ e, live, dayLimitUsed, wonToday }: { e: Options; live
             tickers: e.tickers,
             quotes: ok ? feed.quotes : {},
             trails: ok ? feed.trails : {},
-            serverBars: bars.status === "ok" ? bars.bars : {},
+            serverBars: used.bars,
+            serverFetchedAt: used.fetchedAt,
             now,
             receivedAt: answeredAt,
             dayLimitUsed,
@@ -578,8 +611,7 @@ export function TradeNow({ e, live, dayLimitUsed, wonToday }: { e: Options; live
 
   // Notices: states seen once the bars have answered; what was there when the page opened is not announced.
   const alerts = useAlerts();
-  const [seen, setSeen] = useState<SeenStates | null>(null);
-  const [kept, setKept] = useState<NameState[]>([]);
+  const [book, setBook] = useState<NoticeBook>({ seen: null, kept: [] });
   const [spoken, setSpoken] = useState("");
   const [last, setLast] = useState<Record<string, string>>({});
   const [ring, setRing] = useState<{ n: number; fresh: NameState[] }>({ n: 0, fresh: [] });
@@ -592,13 +624,11 @@ export function TradeNow({ e, live, dayLimitUsed, wonToday }: { e: Options; live
   }, [ring.n]);
   const settled = mode.kind === "live" && bars.status !== "loading";
   if (settled) {
-    const next = boardAnnounce(seen, e.session, states);
-    if (next.seen !== seen) {
-      setSeen(next.seen);
-      if (next.fresh.length) {
-        setKept([...next.fresh, ...kept.filter((k) => !next.fresh.some((f) => f.symbol === k.symbol))]);
-        setRing({ n: ring.n + 1, fresh: next.fresh });
-      }
+    // Announces what is new and withdraws, for good, every notice whose state has left the board.
+    const next = boardNotices(book, e.session, states);
+    if (next.book !== book) {
+      setBook(next.book);
+      if (next.fresh.length) setRing({ n: ring.n + 1, fresh: next.fresh });
     }
     const words = Object.fromEntries(states.map((s) => [s.symbol, rowView(s).badge.word]));
     const changed = states.filter((s) => last[s.symbol] !== undefined && last[s.symbol] !== words[s.symbol]);
@@ -608,8 +638,7 @@ export function TradeNow({ e, live, dayLimitUsed, wonToday }: { e: Options; live
     }
   }
   // A notice goes with its state: once the name has left the zone (or its alternative has ended), it is withdrawn.
-  const liveKeys = new Set(states.map(noticeKey));
-  const shown = mode.kind === "live" ? kept.filter((k) => liveKeys.has(noticeKey(k))) : [];
+  const shown = mode.kind === "live" ? [...book.kept] : [];
 
   if (!live || items.length === 0) return null;
   return (
@@ -619,6 +648,7 @@ export function TradeNow({ e, live, dayLimitUsed, wonToday }: { e: Options; live
         rows={rows}
         now={now}
         paused={paused}
+        barsDelayed={mode.kind === "live" && used.delayed}
         onOpen={openFocusCard}
         switches={
           <>
@@ -630,7 +660,7 @@ export function TradeNow({ e, live, dayLimitUsed, wonToday }: { e: Options; live
       <p aria-live="polite" role="status" className="sr-only">
         {spoken}
       </p>
-      <BoardNotices notices={shown} onOpen={openFocusCard} onDrop={(s) => setKept((all) => all.filter((x) => x !== s))} />
+      <BoardNotices notices={shown} onOpen={openFocusCard} onDrop={(s) => setBook((b) => ({ ...b, kept: b.kept.filter((x) => x !== s) }))} />
     </>
   );
 }

@@ -1,13 +1,18 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { TradeNowBoard } from "@/components/client/trade-now";
+import { alertMenuKey, alertMenuOutside, TradeNowBoard } from "@/components/client/trade-now";
+import { BARS_STALE_MS, type BarsFeed } from "@/lib/bars-feed";
+import type { Bar2, NameState } from "@/lib/trade-state";
 import { focusOptions } from "@/lib/fixture-variants";
 import { SCRIPT_ANSWER_LAG_MS, SCRIPT_SYMBOLS, scriptBars, scriptQuote, stepInstant } from "@/lib/fixture-script";
 import type { LiveQuote, Options } from "@/lib/options";
 import { focusPlan } from "@/lib/focus-plan";
 import {
+  barsInUse,
   boardAnnounce,
+  boardNotices,
+  type NoticeBook,
   boardDay,
   type BoardInput,
   boardMode,
@@ -40,6 +45,7 @@ function atStep(step: number, over: Partial<BoardInput> = {}): BoardInput {
     quotes,
     trails: {},
     serverBars: Object.fromEntries(ITEMS.map((i) => [i.symbol, scriptBars(i.symbol, S, step)])),
+    serverFetchedAt: Object.fromEntries(ITEMS.map((i) => [i.symbol, stepInstant(S, step)])),
     now: at + 1_000,
     receivedAt: at,
     dayLimitUsed: false,
@@ -258,5 +264,152 @@ describe("TradeNowBoard", () => {
     const rows = boardRows(atStep(3), true);
     expect(rows.map((r) => noticeKey(r.state!) !== null)).toEqual([true, true, false]);
     expect(boardRows(atStep(4), true).every((r) => noticeKey(r.state!) === null)).toBe(true);
+  });
+});
+
+// ---- the review's findings ------------------------------------------------------------------------------------------
+const ny = (hms: string) => Date.parse(`${S}T${hms}-04:00`);
+
+describe("a server bar still forming when the server read it", () => {
+  // QQQ's call is above 752.86. The server read its bars at 10:21:45, mid-bar: its 10:20 bar then closed at 752.95.
+  // The bar really closed at 752.70 (the page's own prices), so there is no break.
+  const qqq = ITEMS.find((i) => i.symbol === "QQQ")!;
+  const level = focusPlan(qqq).call!.level;
+  const server: Bar2[] = [];
+  for (let t = ny("09:30:00"); t < ny("10:20:00"); t += 120_000) server.push({ start: t, end: t + 120_000, o: 752.0, h: 752.3, l: 751.7, c: 752.0 });
+  server.push({ start: ny("10:20:00"), end: ny("10:22:00"), o: 752.0, h: 752.95, l: 751.9, c: 752.95 });
+  const quote: LiveQuote = { price: 752.75, at: new Date(ny("10:22:02")).toISOString(), open: 752, high: 752.95, low: 751.7, day: S, prev_close: 751, vwap: 752.1 };
+  const input = (fetchedAt: number): BoardInput => ({
+    session: S,
+    halfDay: false,
+    items: [qqq],
+    tickers: E.tickers,
+    quotes: { QQQ: quote },
+    trails: {
+      QQQ: [
+        { at: ny("10:20:10"), p: 752.1 },
+        { at: ny("10:21:44"), p: 752.95 },
+        { at: ny("10:21:58"), p: 752.7 },
+      ],
+    },
+    serverBars: { QQQ: server },
+    serverFetchedAt: { QQQ: fetchedAt },
+    now: ny("10:22:06"),
+    receivedAt: ny("10:22:03"),
+    dayLimitUsed: false,
+    wonToday: false,
+  });
+
+  it("reads the trail's close for that slot, not the server's snapshot: no break", () => {
+    expect(level).toBe(752.86);
+    const st = boardRows(input(ny("10:21:45")), true)[0]!.state!;
+    expect(st.call.brokeAt).toBeNull();
+    expect(st.call.state).toBe("watch");
+    expect(st.state).not.toBe("enter_zone");
+  });
+
+  it("uses the server's bar once it had closed when the server read it", () => {
+    expect(boardRows(input(ny("10:22:05")), true)[0]!.state!.call.brokeAt).toBe(ny("10:22:00"));
+  });
+
+  it("uses no server bar for a name without a fetch time", () => {
+    const st = boardRows({ ...input(ny("10:22:05")), serverFetchedAt: {} }, true)[0]!.state!;
+    expect(st.call.brokeAt).toBeNull();
+  });
+});
+
+describe("the session bars' age", () => {
+  const ok = (receivedAt: number, failed = false): BarsFeed => ({ status: "ok", asOf: "x", bars: { SPY: [] }, fetchedAt: { SPY: 1 }, receivedAt, failed });
+
+  it("uses the server's bars while they are fresh", () => {
+    expect(barsInUse(ok(1_000), 1_000 + BARS_STALE_MS)).toEqual({ bars: { SPY: [] }, fetchedAt: { SPY: 1 }, delayed: false });
+  });
+
+  it("drops them, and says so, once they are older than BARS_STALE_MS or the last poll failed", () => {
+    expect(barsInUse(ok(1_000), 1_001 + BARS_STALE_MS)).toEqual({ bars: {}, fetchedAt: {}, delayed: true });
+    expect(barsInUse(ok(1_000, true), 2_000)).toEqual({ bars: {}, fetchedAt: {}, delayed: true });
+    expect(barsInUse({ status: "error" }, 2_000)).toEqual({ bars: {}, fetchedAt: {}, delayed: true });
+    expect(barsInUse(ok(1_000), null).delayed).toBe(true);
+  });
+
+  it("says nothing while loading or with the bars not configured", () => {
+    expect(barsInUse({ status: "loading" }, 2_000)).toEqual({ bars: {}, fetchedAt: {}, delayed: false });
+    expect(barsInUse({ status: "off" }, 2_000)).toEqual({ bars: {}, fetchedAt: {}, delayed: false });
+  });
+
+  it("falls back to the page's own prices: what the trail lacks reads as a gap, never an entry", () => {
+    // step 3 without the server's bars and with no trail: QQQ's entry cannot be read
+    const used = barsInUse(ok(0, true), 1);
+    const rows = boardRows(atStep(3, { serverBars: used.bars, serverFetchedAt: used.fetchedAt }), true);
+    expect(rows.some((r) => r.state!.state === "enter_zone")).toBe(false);
+  });
+
+  it("draws a muted line in the header while they are delayed", () => {
+    const html = renderToStaticMarkup(
+      createElement(TradeNowBoard, { mode: { kind: "live" }, rows: boardRows(atStep(3), true), now: Date.parse("2026-10-12T14:28:34Z"), paused: false, barsDelayed: true, onOpen: () => undefined }),
+    );
+    expect(html).toMatch(/text-muted-foreground[^"]*"[^>]*>Session bars delayed: states use this page&#x27;s prices only/);
+    expect(draw({ kind: "live" }, boardRows(atStep(3), true))).not.toContain("Session bars delayed");
+  });
+});
+
+describe("notices over a session", () => {
+  const base = boardRows(atStep(3), true).find((r) => r.symbol === "QQQ")!.state!; // enter zone, call
+  const watching = boardRows(atStep(1), true).find((r) => r.symbol === "QQQ")!.state!;
+  const enterAt = (breakEnd: number): NameState => ({ ...base, call: { ...base.call, brokeAt: breakEnd } });
+  const empty: NoticeBook = { seen: null, kept: [] };
+
+  it("keys an entry on its break bar, so a new break at the same level is a new notice", () => {
+    const first = enterAt(ny("10:28:00"));
+    const again = enterAt(ny("11:42:00"));
+    expect(noticeKey(first)).not.toBe(noticeKey(again));
+    expect(noticeKey(first)).toContain(String(ny("10:26:00"))); // the break bar's start
+    let b = boardNotices(empty, S, [watching]).book; // opened while watching: nothing told
+    const r1 = boardNotices(b, S, [first]);
+    expect(r1.fresh).toEqual([first]);
+    b = boardNotices(r1.book, S, [watching]).book; // the entry failed
+    const r2 = boardNotices(b, S, [again]);
+    expect(r2.fresh).toEqual([again]);
+    expect(r2.book.kept).toEqual([again]);
+  });
+
+  it("keys a live alternative on the bar that completed it", () => {
+    const spy = boardRows(atStep(3), true).find((r) => r.symbol === "SPY")!.state!;
+    expect(spy.alt).not.toBeNull();
+    const later: NameState = { ...spy, alt: { ...spy.alt!, at: spy.alt!.at + 40 * 120_000 } };
+    expect(noticeKey(spy)).toContain(String(spy.alt!.at));
+    expect(noticeKey(later)).not.toBe(noticeKey(spy));
+  });
+
+  it("withdraws a notice once its state has gone, and never brings it back", () => {
+    const first = enterAt(ny("10:28:00"));
+    let b = boardNotices(empty, S, [watching]).book;
+    b = boardNotices(b, S, [first]).book;
+    expect(b.kept).toEqual([first]);
+    b = boardNotices(b, S, [watching]).book;
+    expect(b.kept).toEqual([]);
+    // the same break back in the zone: already told, and the old notice does not reappear
+    const back = boardNotices(b, S, [{ ...first, line: "newer" }]);
+    expect(back.fresh).toEqual([]);
+    expect(back.book.kept).toEqual([]);
+  });
+
+  it("comes back as the same book when nothing changed", () => {
+    const b = boardNotices(empty, S, [watching]).book;
+    expect(boardNotices(b, S, [watching]).book).toBe(b);
+  });
+});
+
+describe("the alerts bell", () => {
+  it("closes on Escape only with the focus in the menu or on the bell", () => {
+    expect(alertMenuKey("Escape", true)).toBe(true);
+    expect(alertMenuKey("Escape", false)).toBe(false);
+    expect(alertMenuKey("Enter", true)).toBe(false);
+  });
+
+  it("closes on a click outside and gives the focus back to the bell, unless the click lands on another control", () => {
+    expect(alertMenuOutside(true, false)).toEqual({ close: false, refocus: false });
+    expect(alertMenuOutside(false, false)).toEqual({ close: true, refocus: true });
+    expect(alertMenuOutside(false, true)).toEqual({ close: true, refocus: false });
   });
 });

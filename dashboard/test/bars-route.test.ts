@@ -8,6 +8,7 @@ import { atr2m, type Bar2, type Bars2m, mergeBars } from "@/lib/trade-state";
 const NOW = new Date("2026-10-12T15:00:00Z"); // 11:00 New York, EDT
 const OPEN = Date.parse("2026-10-12T13:30:00Z");
 const KEYS = { id: "test-key-id", secret: "test-key-secret" };
+const DONE = NOW.getTime(); // a server fetch well after every bar below had closed
 
 const raw = (min: number, c: number) => ({ t: new Date(OPEN + min * 60_000).toISOString(), o: c - 0.1, h: c + 0.2, l: c - 0.3, c, v: 10, n: 2, vw: c });
 
@@ -32,6 +33,11 @@ describe("normaliseBar", () => {
     expect(normaliseBar(raw(-2, 100))).toBeNull(); // 09:28
     expect(normaliseBar(raw(390, 100))).toBeNull(); // 16:00
     expect(normaliseBar(null)).toBeNull();
+  });
+  it("ends a half day's session at 13:00", () => {
+    expect(normaliseBar(raw(208, 100), true)).not.toBeNull(); // 12:58
+    expect(normaliseBar(raw(210, 100), true)).toBeNull(); // 13:00
+    expect(normaliseBar(raw(210, 100))).not.toBeNull();
   });
 });
 
@@ -63,10 +69,55 @@ describe("fetchBars", () => {
     expect(res.feed).toBe("iex");
   });
 
-  it("stops after MAX_PAGES even if Alpaca keeps paging", async () => {
+  it("stops after MAX_PAGES even if Alpaca keeps paging, and reports those names missing, not cached as complete", async () => {
     const f = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ bars: { SPY: [raw(0, 1)] }, next_page_token: "again" }), { status: 200 }));
-    await fetchBars(["SPY"], KEYS, NOW, f, "https://data.example");
+    const res = await fetchBars(["SPY"], KEYS, NOW, f, "https://data.example");
     expect(f).toHaveBeenCalledTimes(MAX_PAGES);
+    expect(res.bars.SPY).toBeUndefined();
+    expect(res.missing).toEqual(["SPY"]);
+    expect(res.fetchedAt.SPY).toBeUndefined();
+    // nothing cached: the next answer asks again
+    await fetchBars(["SPY"], KEYS, new Date(NOW.getTime() + 1_000), f, "https://data.example");
+    expect(f).toHaveBeenCalledTimes(2 * MAX_PAGES);
+    // logged without the token, the keys or the body
+    const logged = JSON.stringify(vi.mocked(console.log).mock.calls);
+    expect(logged).toContain("page-limit");
+    expect(logged).not.toContain("again");
+    expect(logged).not.toContain("test-key");
+  });
+
+  it("carries each name's fetch time, from the cache entry and not the request", async () => {
+    const f = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ bars: { SPY: [raw(0, 1)] } }), { status: 200 }));
+    const a = await fetchBars(["SPY"], KEYS, NOW, f, "https://data.example");
+    expect(a.fetchedAt).toEqual({ SPY: NOW.getTime() });
+    const b = await fetchBars(["SPY"], KEYS, new Date(NOW.getTime() + 3_000), f, "https://data.example");
+    expect(f).toHaveBeenCalledTimes(1);
+    expect(b.fetchedAt).toEqual({ SPY: NOW.getTime() });
+  });
+
+  it("drops a cached name at each 2-minute boundary, and again once the closed bar's grace has passed", async () => {
+    const f = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ bars: { SPY: [raw(0, 1)] } }), { status: 200 }));
+    const at = (hms: string) => new Date(`2026-10-12T${hms}-04:00`);
+    await fetchBars(["SPY"], KEYS, at("10:21:55"), f, "https://data.example");
+    expect(f).toHaveBeenCalledTimes(1);
+    await fetchBars(["SPY"], KEYS, at("10:22:01"), f, "https://data.example"); // inside BARS_CACHE_MS, but a new slot
+    expect(f).toHaveBeenCalledTimes(2);
+    await fetchBars(["SPY"], KEYS, at("10:22:04"), f, "https://data.example"); // still inside the grace: cached
+    expect(f).toHaveBeenCalledTimes(2);
+    await fetchBars(["SPY"], KEYS, at("10:22:06"), f, "https://data.example"); // the 10:20 bar is complete now
+    expect(f).toHaveBeenCalledTimes(3);
+    await fetchBars(["SPY"], KEYS, at("10:22:10"), f, "https://data.example");
+    expect(f).toHaveBeenCalledTimes(3);
+  });
+
+  it("on a half day keeps no bar from 13:00 on", async () => {
+    const f = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ bars: { SPY: [raw(0, 1), raw(208, 2), raw(210, 3), raw(300, 4)] } }), { status: 200 }));
+    const late = new Date("2026-10-12T19:00:00Z"); // 15:00 New York
+    const half = await fetchBars(["SPY"], KEYS, late, f, "https://data.example", true);
+    expect(half.bars.SPY!.map((b) => b.c)).toEqual([1, 2]);
+    resetBarsCache();
+    const full = await fetchBars(["SPY"], KEYS, late, f, "https://data.example");
+    expect(full.bars.SPY!.map((b) => b.c)).toEqual([1, 2, 3, 4]);
   });
 
   it("asks nothing before the open, and caches each name for a while", async () => {
@@ -74,10 +125,11 @@ describe("fetchBars", () => {
     const early = await fetchBars(["SPY"], KEYS, new Date("2026-10-12T13:00:00Z"), f, "https://data.example");
     expect(f).not.toHaveBeenCalled();
     expect(early.bars).toEqual({});
-    await fetchBars(["SPY"], KEYS, NOW, f, "https://data.example");
-    await fetchBars(["SPY"], KEYS, new Date(NOW.getTime() + BARS_CACHE_MS - 1), f, "https://data.example");
+    const mid = NOW.getTime() + 30_000; // inside a 2-minute slot, past its grace
+    await fetchBars(["SPY"], KEYS, new Date(mid), f, "https://data.example");
+    await fetchBars(["SPY"], KEYS, new Date(mid + BARS_CACHE_MS - 1), f, "https://data.example");
     expect(f).toHaveBeenCalledTimes(1);
-    await fetchBars(["SPY"], KEYS, new Date(NOW.getTime() + BARS_CACHE_MS), f, "https://data.example");
+    await fetchBars(["SPY"], KEYS, new Date(mid + BARS_CACHE_MS), f, "https://data.example");
     expect(f).toHaveBeenCalledTimes(2);
   });
 
@@ -121,6 +173,19 @@ describe("GET /api/bars", () => {
     expect(res.headers.get("cache-control")).toBe("no-store");
   });
 
+  it("passes the half-day flag through, and refuses any other value", async () => {
+    vi.stubEnv("DASHBOARD_FIXTURE", "");
+    vi.stubEnv("ALPACA_API_KEY_ID", "test-key-id");
+    vi.stubEnv("ALPACA_API_SECRET_KEY", "test-key-secret");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ bars: { SPY: [raw(0, 779), raw(210, 780)] } }), { status: 200 })));
+    const late = (q: string) => handleBars(new Request(`https://lab.example/api/bars${q}`), new Date("2026-10-12T19:00:00Z"));
+    expect((await (await late("?s=SPY&half=1")).json()).bars.SPY.map((b: Bar2) => b.c)).toEqual([779]);
+    resetBarsCache();
+    expect((await (await late("?s=SPY")).json()).bars.SPY.map((b: Bar2) => b.c)).toEqual([779, 780]);
+    expect((await late("?s=SPY&half=yes")).status).toBe(400);
+    expect((await late("?s=SPY&half=0")).status).toBe(400);
+  });
+
   it("200 with bars when configured", async () => {
     vi.stubEnv("DASHBOARD_FIXTURE", "");
     vi.stubEnv("ALPACA_API_KEY_ID", "test-key-id");
@@ -148,6 +213,8 @@ describe("GET /api/bars", () => {
     expect(scripted.as_of).toBe(new Date(stepInstant("2026-10-12", 3)).toISOString());
     expect(scripted.bars.QQQ).toEqual(scriptBars("QQQ", "2026-10-12", 3));
     expect(scripted.missing).toEqual(["MSFT"]);
+    // each name's fetch time is the step's instant: the bar forming then is not complete
+    expect(scripted.fetchedAt).toEqual({ QQQ: stepInstant("2026-10-12", 3), AAPL: stepInstant("2026-10-12", 3) });
   });
 });
 
@@ -195,7 +262,7 @@ describe("mergeBars", () => {
   it("lets the server win every slot it has and the trail fill the rest", () => {
     const server = [bar(OPEN, 10), bar(OPEN + 120_000, 11)];
     const mine = trail([bar(OPEN + 120_000, 99), bar(OPEN + 240_000, 12)], bar(OPEN + 360_000, 13), OPEN + 130_000);
-    const m = mergeBars(server, mine);
+    const m = mergeBars(server, mine, DONE);
     expect(m.closed.map((b) => b.c)).toEqual([10, 11, 12]);
     expect(m.partial?.c).toBe(13);
     expect(m.since).toBe(OPEN);
@@ -206,25 +273,49 @@ describe("mergeBars", () => {
 
   it("counts the slots no one has, between the bars and after them", () => {
     const server = [bar(OPEN, 10), bar(OPEN + 240_000, 12)];
-    const m = mergeBars(server, trail([bar(OPEN + 360_000, 13)], null, OPEN + 360_000, [OPEN + 480_000]));
+    const m = mergeBars(server, trail([bar(OPEN + 360_000, 13)], null, OPEN + 360_000, [OPEN + 480_000]), DONE);
     expect(m.missing).toEqual([OPEN + 120_000, OPEN + 480_000]);
     expect(m.gaps).toBe(2);
     expect(m.since).toBe(OPEN);
-    expect(mergeBars([bar(OPEN + 120_000, 1)], trail([], null, null)).complete).toBe(false);
+    expect(mergeBars([bar(OPEN + 120_000, 1)], trail([], null, null), DONE).complete).toBe(false);
   });
 
   it("drops the trail's partial when the server already has that slot, and bad bars", () => {
     const server = [bar(OPEN, 10), { ...bar(OPEN + 120_000, 11), c: Number.NaN }];
-    const m = mergeBars(server, trail([], bar(OPEN, 9), OPEN + 5_000));
+    const m = mergeBars(server, trail([], bar(OPEN, 9), OPEN + 5_000), DONE);
     expect(m.closed.map((b) => b.c)).toEqual([10]);
     expect(m.partial).toBeNull();
   });
 
+  it("fills a slot the server lacks inside its range from the trail's completed bar: no gap", () => {
+    const at = (hhmm: string) => Date.parse(`2026-10-12T${hhmm}:00-04:00`);
+    // IEX printed nothing in the 10:14 slot; the page saw prices in it
+    const server = [bar(at("10:10"), 10), bar(at("10:12"), 11), bar(at("10:16"), 13)];
+    const m = mergeBars(server, trail([bar(at("10:14"), 12)], null, at("10:14")), at("10:20"));
+    expect(m.closed.map((b) => b.c)).toEqual([10, 11, 12, 13]);
+    expect(m.missing).toEqual([]);
+    expect(m.gaps).toBe(0);
+  });
+
+  it("never takes a server bar still forming at its fetch as closed: the trail's bar wins that slot", () => {
+    const at = (hms: string) => Date.parse(`2026-10-12T${hms}-04:00`);
+    const forming = { start: at("10:20:00"), end: at("10:22:00"), o: 752.0, h: 752.95, l: 751.9, c: 752.95 };
+    const mine = trail([{ start: at("10:20:00"), end: at("10:22:00"), o: 752.1, h: 752.95, l: 752.0, c: 752.7 }], null, at("10:20:00"));
+    const m = mergeBars([bar(at("10:18:00"), 752), forming], mine, at("10:21:45"));
+    expect(m.closed.map((b) => b.c)).toEqual([752, 752.7]);
+    // fetched 4 s after its end: still inside the grace, not complete either
+    expect(mergeBars([forming], trail([], null, null), at("10:22:04")).closed).toEqual([]);
+    // and no fetch time: no server bar at all
+    expect(mergeBars([forming], mine, null)).toEqual(mine);
+    // complete at its fetch: the server's wins
+    expect(mergeBars([forming], mine, at("10:22:05")).closed.map((b) => b.c)).toEqual([752.95]);
+  });
+
   it("is the trail alone without server bars, and the server alone without a trail", () => {
     const t = trail([bar(OPEN, 1)], bar(OPEN + 120_000, 2), OPEN + 1);
-    expect(mergeBars([], t)).toEqual(t);
-    expect(mergeBars([bar(OPEN, 1)], trail([], null, null))).toEqual({ closed: [bar(OPEN, 1)], partial: null, since: OPEN, complete: true, missing: [], gaps: 0 });
-    expect(mergeBars([], trail([], null, null))).toEqual(trail([], null, null));
+    expect(mergeBars([], t, DONE)).toEqual(t);
+    expect(mergeBars([bar(OPEN, 1)], trail([], null, null), DONE)).toEqual({ closed: [bar(OPEN, 1)], partial: null, since: OPEN, complete: true, missing: [], gaps: 0 });
+    expect(mergeBars([], trail([], null, null), DONE)).toEqual(trail([], null, null));
   });
 });
 

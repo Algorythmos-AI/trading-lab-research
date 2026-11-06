@@ -8,7 +8,8 @@ import { focusPlan, type SidePlan } from "./focus-plan";
 import { sessionView, type JournalDoc } from "./journal";
 import { closeMinute, type LiveQuote, nyClock, OPEN_MIN, type Options, type OptionsTicker, type TrailPoint } from "./options";
 import { DAY_LOSS_LIMIT, dayCheck, MAX_TRADES_PER_DAY, MIN_ROOM_MULTIPLE, PREMIUM_STOP, RISK_PER_TRADE } from "./trade-rules";
-import { type AltTrigger, atr2m, type Bar2, bars2m, flatMinute, FIRST_ENTRY_MIN, mergeBars, type NameState, type NameStateName, nameState } from "./trade-state";
+import { type AltTrigger, atr2m, BAR_MINUTES, type Bar2, bars2m, CLOSE_GRACE_MS, flatMinute, FIRST_ENTRY_MIN, mergeBars, type NameState, type NameStateName, nameState } from "./trade-state";
+import { BARS_STALE_MS, type BarsFeed } from "./bars-feed";
 import { LEADERS, type Side } from "./entry-checks";
 import type { Tone } from "./labels";
 
@@ -99,8 +100,10 @@ export interface BoardInput {
   tickers: readonly OptionsTicker[];
   quotes: Readonly<Record<string, LiveQuote>>;
   trails: Readonly<Record<string, readonly TrailPoint[]>>;
-  /** The server's session bars per name (`/api/bars`); the completed ones are used. */
+  /** The server's session bars per name (`/api/bars`); only those complete when the server read them are used. */
   serverBars: Readonly<Record<string, readonly Bar2[]>>;
+  /** When the server read each name's bars (ms, the server's clock); a name without one uses no server bar. */
+  serverFetchedAt: Readonly<Record<string, number>>;
   /** The feed's (server) clock (trade-state's serverNow), ms. */
   now: number;
   /** The feed's last answer on the same clock (its `as_of`). */
@@ -126,8 +129,11 @@ export function boardRows(input: BoardInput, live: boolean): BoardRow[] {
       const price = quote && quote.day === input.session ? quote.price : null;
       if (!live) return { symbol: item.symbol, focusRank: item.rank, price, state: null, triggers, runner: null };
       const trail = bars2m(input.trails[item.symbol] ?? [], quote, now, input.halfDay, input.session);
-      const serverClosed = (input.serverBars[item.symbol] ?? []).filter((b) => b.end <= input.now);
-      const bars = mergeBars(serverClosed, trail);
+      // A server bar counts only if it had closed (and its grace passed) when the server read it: a snapshot taken
+      // mid-bar is not a close. Where the server has no complete bar, the page's own bar is used.
+      const fetchedAt = input.serverFetchedAt[item.symbol] ?? null;
+      const serverDone = fetchedAt === null ? [] : (input.serverBars[item.symbol] ?? []).filter((b) => b.end <= fetchedAt - CLOSE_GRACE_MS);
+      const bars = mergeBars(serverDone, trail, fetchedAt);
       const lead = LEADERS[item.symbol];
       const state = nameState({
         symbol: item.symbol,
@@ -158,10 +164,18 @@ export interface SeenStates {
   keys: ReadonlySet<string>;
 }
 
-/** The rows worth a notice: an entry zone, or a plan off with a live alternative trigger. Keyed so each is told once. */
+/**
+ * The rows worth a notice: an entry zone, or a plan off with a live alternative trigger. Keyed so each is told once:
+ * an entry by its side, level and break bar (its start), an alternative by the bar that completed it. A new break at
+ * the same level later in the session is a new notice.
+ */
 export function noticeKey(s: NameState): string | null {
-  if (s.state === "enter_zone") return `${s.symbol}|enter_zone|${s.side ?? ""}|${s.plan?.level ?? ""}`;
-  if (s.state === "plan_off" && s.alt) return `${s.symbol}|plan_off|${s.alt.kind}|${s.alt.side}|${s.alt.level}`;
+  if (s.state === "enter_zone") {
+    const brokeAt = s.side ? s[s.side].brokeAt : null;
+    const breakStart = brokeAt === null ? "" : brokeAt - BAR_MINUTES * 60_000;
+    return `${s.symbol}|enter_zone|${s.side ?? ""}|${s.plan?.level ?? ""}|${breakStart}`;
+  }
+  if (s.state === "plan_off" && s.alt) return `${s.symbol}|plan_off|${s.alt.kind}|${s.alt.side}|${s.alt.level}|${s.alt.at}`;
   return null;
 }
 
@@ -176,6 +190,40 @@ export function boardAnnounce(seen: SeenStates | null, session: string, states: 
   const fresh = keyed.filter(([k]) => !seen.keys.has(k));
   if (fresh.length === 0) return { seen, fresh: [] };
   return { seen: { session, keys: new Set([...seen.keys, ...fresh.map(([k]) => k)]) }, fresh: fresh.map(([, s]) => s) };
+}
+
+/** The notices on screen, and what has been told this session. */
+export interface NoticeBook {
+  seen: SeenStates | null;
+  kept: readonly NameState[];
+}
+
+/**
+ * One step of the notices as states reach the board: announce what is new (boardAnnounce), keep it in front of the
+ * older notices (one per name), and withdraw every kept notice whose state is no longer on the board, for good: its
+ * key stays told, so the old notice can never come back with an old state. `book` comes back as the same object
+ * when nothing changed.
+ */
+export function boardNotices(book: NoticeBook, session: string, states: readonly NameState[]): { book: NoticeBook; fresh: NameState[] } {
+  const next = boardAnnounce(book.seen, session, states);
+  const live = new Set(states.map(noticeKey).filter((k): k is string => k !== null));
+  const merged = next.fresh.length ? [...next.fresh, ...book.kept.filter((k) => !next.fresh.some((f) => f.symbol === k.symbol))] : book.kept;
+  const kept = merged.filter((k) => live.has(noticeKey(k) ?? ""));
+  const keptSame = kept.length === book.kept.length && kept.every((k, i) => k === book.kept[i]);
+  if (next.seen === book.seen && keptSame) return { book, fresh: [] };
+  return { book: { seen: next.seen, kept: keptSame ? book.kept : kept }, fresh: next.fresh };
+}
+
+/**
+ * Which of the server's bars the board may use, from the bars feed and the browser's clock: all of them while the
+ * last poll succeeded within BARS_STALE_MS; none once it is older or a poll has failed, and then the board says the
+ * session bars are delayed (`delayed`), and every state reads the page's own prices only (a slot it lacks is a gap,
+ * never an entry). None, quietly, while loading or not configured.
+ */
+export function barsInUse(feed: BarsFeed, browserNow: number | null): { bars: Record<string, Bar2[]>; fetchedAt: Record<string, number>; delayed: boolean } {
+  if (feed.status === "ok" && !feed.failed && browserNow !== null && browserNow - feed.receivedAt <= BARS_STALE_MS)
+    return { bars: feed.bars, fetchedAt: feed.fetchedAt, delayed: false };
+  return { bars: {}, fetchedAt: {}, delayed: feed.status === "ok" || feed.status === "error" };
 }
 
 /** A notice's title: "QQQ: ENTER ZONE, call", or "SPY: FAILED BREAK, put" (the alternative, under test). */
