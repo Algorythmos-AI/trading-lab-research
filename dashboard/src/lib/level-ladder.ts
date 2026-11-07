@@ -11,6 +11,7 @@ import { DASH, newYork, weekDate } from "./format";
 import { closeMinute, type LiveQuote, nyClock, OPEN_MIN } from "./options";
 import { type BoardMode, boardMode } from "./trade-now";
 import { FEED_STALE_MS, serverNow, TRADE_STALE_MS } from "./trade-state";
+import { moveWords } from "./what-if";
 
 /** The axis never spans less than this many ATRs: a narrow day still reads as a narrow day, not a cliff. */
 export const LADDER_MIN_ATR = 1.5;
@@ -347,6 +348,8 @@ export interface LadderDistance {
   dist: number;
   /** The nearer of the two triggers (listed first). */
   near: boolean;
+  /** 3 or more 1-day moves away (what-if's moveWords): shown with "unlikely today", muted. */
+  unlikely: boolean;
 }
 
 export interface LadderLiveView {
@@ -377,11 +380,21 @@ export function triggerDistances(
 ): LadderDistance[] {
   const a = posAtr(atr);
   const m = posAtr(move);
-  const away = (d: number) => `${d.toFixed(2)} away${m ? ` · ${(d / m).toFixed(1)}× move` : a ? ` · ${(d / a).toFixed(1)} ATR` : ""}`;
+  const away = (d: number) => {
+    const w = m ? moveWords(d, m) : null;
+    return `${d.toFixed(2)} away${w ? ` · ${w.text}` : a ? ` · ${(d / a).toFixed(1)} ATR` : ""}`;
+  };
+  const unlikely = (d: number) => !!m && !!moveWords(d, m)?.unlikely;
   const past = (d: number) => (a ? `+${(d / a).toFixed(1)} ATR past` : `+${d.toFixed(2)} past`);
   const out: LadderDistance[] = [];
-  if (fin(ceiling)) out.push({ to: "ceiling", level: ceiling, text: price > ceiling ? past(price - ceiling) : away(ceiling - price), dist: Math.max(0, ceiling - price), near: false });
-  if (fin(floor)) out.push({ to: "floor", level: floor, text: price < floor ? past(floor - price) : away(price - floor), dist: Math.max(0, price - floor), near: false });
+  if (fin(ceiling)) {
+    const thru = price > ceiling;
+    out.push({ to: "ceiling", level: ceiling, text: thru ? past(price - ceiling) : away(ceiling - price), dist: Math.max(0, ceiling - price), near: false, unlikely: !thru && unlikely(ceiling - price) });
+  }
+  if (fin(floor)) {
+    const thru = price < floor;
+    out.push({ to: "floor", level: floor, text: thru ? past(floor - price) : away(price - floor), dist: Math.max(0, price - floor), near: false, unlikely: !thru && unlikely(price - floor) });
+  }
   out.sort((a, b) => a.dist - b.dist);
   if (out[0]) out[0].near = true;
   return out;

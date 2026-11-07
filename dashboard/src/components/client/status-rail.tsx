@@ -1,10 +1,11 @@
 "use client";
 
 // The status rail: one strip under the site header, sticky while the page scrolls, that says where the day stands at a
-// glance. The day's limits ("Clear · 0/5 trades · $0 of $100"), the New York clock with the next boundary ("First
+// glance. The day's limits ("Clear · 0/5 trades · $0 of $100") and what one more stop would leave, the New York clock with the next boundary ("First
 // entries in 3:12"), the session as a thin bar with its no-entry windows shaded and a "now" tick, the Today log of the
-// board's changes, the Cockpit switch and the alert switches. Before the open it also carries the "Trade now" board's
-// line, since the board folds away until its first entries.
+// board's changes, the Cockpit switch and the alert switches. Before the open the "Trade now" board folds away until
+// its first entries; its line is then the hero's headline, so the rail does not repeat it, and the rail's countdown
+// carries the board's marks instead.
 //
 // Every time is New York, on the board's (server) clock. Nothing is read from the clock or from storage in the server
 // render. Read only: nothing here places an order.
@@ -15,6 +16,7 @@ import { newYork } from "@/lib/format";
 import type { Tone } from "@/lib/labels";
 import { type RailDay, sessionClock, sessionTimeline, type Timeline } from "@/lib/session-timeline";
 import { cn } from "@/lib/utils";
+import { roomShown } from "@/lib/what-if";
 import { CockpitSwitch } from "./cockpit";
 import { AlertButtons, AlertMenu, type BoardLogEntry, boardCollapsed, useBoard } from "./trade-now";
 
@@ -174,6 +176,10 @@ export function StatusRail({ day }: { day: RailDay | null }) {
   // The bar follows the clock's day: today's half day for an older card, the edition's otherwise.
   const t = sessionTimeline(clock?.halfDay ?? b.halfDay, clock?.minute ?? null);
   const collapsed = b.on && boardCollapsed(b.mode, b.manage.views.length);
+  // Folded, the board's line is the hero's headline (the hero shows the mode's line whenever the board is folded).
+  const folded = collapsed && b.mode.kind !== "live";
+  // A noted "I'm in" trade is unpriced and may not be in the journal yet: no room line while any trade card is open.
+  const shownRoom = roomShown(day?.room ?? null, b.manage.views.length);
   const switches = b.on && b.mode.kind !== "old" && b.mode.kind !== "off";
   return (
     <div
@@ -188,13 +194,23 @@ export function StatusRail({ day }: { day: RailDay | null }) {
             <span className="font-mono tabular-nums">{day.line.slice(day.word.length)}</span>
           </p>
         ) : null}
+        {/* Next to the day: what one more stop would leave. Only when the journal is current and nothing is open. */}
+        {shownRoom ? (
+          <p data-rail-room className="text-explain text-muted-foreground">
+            {shownRoom}
+          </p>
+        ) : null}
         {b.on ? (
           <p data-rail-clock className="text-explain flex min-w-0 items-center gap-1.5">
             <Clock aria-hidden className="text-muted-foreground size-4 shrink-0" />
             <span className="font-mono font-semibold tabular-nums">{b.now !== null ? newYork(new Date(b.now).toISOString(), false) : "–"}</span>
             <span className="text-muted-foreground">New York</span>
             <span aria-hidden className="text-muted-foreground">·</span>
-            <span data-rail-countdown={clock?.phase ?? "loading"} className={cn("font-medium", clock && !clock.entries && clock.phase !== "closed" && clock.phase !== "next" && "text-warn")}>
+            <span
+              data-rail-countdown={clock?.phase ?? "loading"}
+              // While the board is folded into the rail, its marks ride on the countdown: its line is the hero's.
+              {...(folded ? { "data-trade-now": b.mode.kind, "data-board-status": b.mode.kind === "loading" ? "connecting" : "waiting" } : {})}
+              className={cn("font-medium", clock && !clock.entries && clock.phase !== "closed" && clock.phase !== "next" && "text-warn")}>
               {clock?.line ?? "Reading the clock"}
             </span>
           </p>
@@ -222,12 +238,6 @@ export function StatusRail({ day }: { day: RailDay | null }) {
             {hhmmOf(t.close)}
           </span>
         </div>
-      ) : null}
-      {/* Before the open the board is folded into the rail: its line, with the board's own marks. */}
-      {collapsed && b.mode.kind !== "live" ? (
-        <p data-trade-now={b.mode.kind} data-board-status={b.mode.kind === "loading" ? "connecting" : "waiting"} data-board-line className="text-explain font-medium">
-          {b.mode.line}
-        </p>
       ) : null}
       {day?.open ? (
         <p data-day-open className="text-explain text-warn font-medium">

@@ -13,6 +13,7 @@ import { volShape } from "@/lib/volshape";
 import { VolShape } from "../options-vol-shape";
 import { useLive, useLiveRead } from "./live-layer";
 import { useChain } from "./use-chain";
+import { chainPx } from "@/lib/what-if";
 import { ContractIvLine } from "./contract-iv";
 import { Notice } from "@/components/ui/notice";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -145,8 +146,7 @@ export function OptionsContract({
   const active = live && (opened || kept !== null);
   // The strikes are asked for around the stock's price, in steps of half a percent of the close: near enough to
   // follow a move, coarse enough that a ticking price does not ask again every two seconds.
-  const step = close !== null ? close * 0.005 : null;
-  const px = close === null || step === null || spot === null ? close : Math.round((Math.round(spot / step) * step) * 100) / 100;
+  const px = chainPx(close, spot);
   const { feed, retry, reset } = useChain(t.symbol, px, active, kept ? `${kept.expiry}:${kept.strike}` : "");
   // An expiry whose bell has rung can linger in the feed for the rest of that day. It is not offered.
   const chain: ChainResponse | null = useMemo(() => {

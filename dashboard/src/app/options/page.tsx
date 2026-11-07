@@ -149,7 +149,7 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
               <OldCloseNotice e={e} />
             </div>
             <PaneBoundary name="Now">
-              <NowHero />
+              <NowHero room={rail.room} />
             </PaneBoundary>
             {four.length ? (
               <PaneBoundary name="Cockpit ladders">

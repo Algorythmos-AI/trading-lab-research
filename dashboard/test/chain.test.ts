@@ -3,6 +3,7 @@ import {
   addDays,
   CHAIN_CACHE_MS,
   fetchChain,
+  KEEP_CARRY_MS,
   NEAR_EXPIRIES,
   normaliseContract,
   nyDate,
@@ -246,13 +247,62 @@ describe("fetching a chain", () => {
     const own = f.mock.calls.map((c) => new URL(String(c[0])).searchParams).find((q) => q.get("expiration_date_gte") === "2026-10-22")!;
     expect([own.get("expiration_date_lte"), own.get("strike_price_gte"), own.get("strike_price_lte")]).toEqual(["2026-10-22", "700.000", "700.000"]);
     expect(got.expiries.map((x) => x.date)).toEqual(["2026-10-12", "2026-10-22", "2026-10-30"]);
-    // The same contract again is answered from memory; another contract, or none, is not.
+    // The same contract again is answered from memory; another contract the answer does not quote is not.
     await fetchChain("SPY", 780, KEYS, new Date(NOW.getTime() + 1000), f, "https://data.example", keep);
     expect(f).toHaveBeenCalledTimes(3);
     await fetchChain("SPY", 780, KEYS, new Date(NOW.getTime() + 2000), f, "https://data.example", { expiry: "2026-10-22", strike: 705 });
     expect(f).toHaveBeenCalledTimes(6);
-    await fetchChain("SPY", 780, KEYS, new Date(NOW.getTime() + 3000), f, "https://data.example");
-    expect(f).toHaveBeenCalledTimes(8);
+  });
+
+  describe("one answer for every reader of a name", () => {
+    const mine = { [occ("2026-10-22", "C", 700)]: snap(), [occ("2026-10-22", "P", 700)]: snap() };
+    const f = () =>
+      vi.fn<typeof fetch>(async (input) => {
+        const q = new URL(String(input)).searchParams;
+        return q.get("expiration_date_gte") === "2026-10-22" ? body(mine) : q.get("expiration_date_gte") === "2026-10-12" ? body(near) : body(far);
+      });
+    const keep = { expiry: "2026-10-22", strike: 700 };
+    const at = (ms: number) => new Date(NOW.getTime() + ms);
+
+    it("answers a request with no contract from an answer that carries one, and of the same name only", async () => {
+      const up = f();
+      await fetchChain("SPY", 780, KEYS, NOW, up, "https://data.example", keep);
+      expect(up).toHaveBeenCalledTimes(3);
+      const hero = await fetchChain("SPY", 780, KEYS, at(1000), up, "https://data.example");
+      expect(up).toHaveBeenCalledTimes(3);
+      expect(hero.symbol).toBe("SPY");
+      expect(hero.expiries.map((x) => x.date)).toEqual(["2026-10-12", "2026-10-22", "2026-10-30"]);
+      // another name is asked for on its own
+      await fetchChain("QQQ", 780, KEYS, at(1000), up, "https://data.example");
+      expect(up).toHaveBeenCalledTimes(5);
+    });
+
+    it("answers a contract the last answer already quotes, whoever asked for it", async () => {
+      const up = f();
+      await fetchChain("SPY", 780, KEYS, NOW, up, "https://data.example");
+      expect(up).toHaveBeenCalledTimes(2);
+      // 780 on the nearest expiry is in the base chain: no third call
+      await fetchChain("SPY", 780, KEYS, at(1000), up, "https://data.example", { expiry: "2026-10-12", strike: 780 });
+      expect(up).toHaveBeenCalledTimes(2);
+      // one it does not quote is fetched
+      await fetchChain("SPY", 780, KEYS, at(2000), up, "https://data.example", keep);
+      expect(up).toHaveBeenCalledTimes(5);
+    });
+
+    it("keeps carrying a contract asked for lately when a request without one refreshes, and stops a minute after", async () => {
+      const up = f();
+      await fetchChain("SPY", 780, KEYS, NOW, up, "https://data.example", keep);
+      // the cache has run out; the hero's refresh carries the card's contract, so the card is then answered from memory
+      const hero = await fetchChain("SPY", 780, KEYS, at(CHAIN_CACHE_MS), up, "https://data.example");
+      expect(up).toHaveBeenCalledTimes(6);
+      expect(hero.expiries.map((x) => x.date)).toContain("2026-10-22");
+      await fetchChain("SPY", 780, KEYS, at(CHAIN_CACHE_MS + 1000), up, "https://data.example", keep);
+      expect(up).toHaveBeenCalledTimes(6);
+      // nobody has asked for it for over KEEP_CARRY_MS: a refresh asks for the two windows only
+      const later = await fetchChain("SPY", 780, KEYS, at(CHAIN_CACHE_MS + 1000 + KEEP_CARRY_MS + 1), up, "https://data.example");
+      expect(up).toHaveBeenCalledTimes(8);
+      expect(later.expiries.map((x) => x.date)).toEqual(["2026-10-12", "2026-10-30"]);
+    });
   });
 
   it("follows further pages, but not for ever", async () => {

@@ -167,7 +167,13 @@ export interface OpenTrade {
   unmatched: boolean;
   /** For an unmatched note: the opening time of a journal lot near it, the fill time the owner may have meant. */
   hintAt: string | null;
+  /** The contract held, when the journal's lot names it (a note's own lot, or the journal trade's first); else null. */
+  contract?: { expiry: string; strike: number } | null;
 }
+
+/** A lot's contract, when it names both its expiry and its strike. */
+const lotContract = (l: Lot | undefined): { expiry: string; strike: number } | null =>
+  l && typeof l.expiry === "string" && typeof l.strike === "number" && l.strike > 0 ? { expiry: l.expiry, strike: l.strike } : null;
 
 const ms = (iso: string | null | undefined) => (iso ? Date.parse(iso) : NaN);
 const onSide = (x: { symbol: string; side: string; kind: string }, symbol: string, side: Side) => x.symbol === symbol && x.side === "long" && x.kind === side;
@@ -283,6 +289,7 @@ export function openTrades(
       note: n,
       unmatched,
       hintAt: hint?.opened_at ?? null,
+      contract: lotContract(t?.lots[0]),
       entry: { side: n.side, price: n.price, at: n.at, source: "manual" },
     };
   });
@@ -310,6 +317,7 @@ export function openTrades(
         note: null,
         unmatched: false,
         hintAt: null,
+        contract: lotContract(g[0]),
         entry: { side, price: ref, at, source: "journal" },
       });
     }
@@ -420,6 +428,12 @@ export interface ManageView {
   flatText: string;
   /** "15:10", or "12:10" on a half day. */
   flatAt: string;
+  /** The live price the card read, only while it is fresh (feed live, quote of the session day, trade not stale); else null. */
+  price: number | null;
+  /** The contract held, when known (OpenTrade.contract). */
+  contract: { expiry: string; strike: number } | null;
+  /** The stock price the trade is managed from: the note's fill, or the card's entry for a journal lot (`cardEntry`). */
+  entry: number;
 }
 
 export function mmss(sec: number): string {
@@ -522,6 +536,10 @@ export function manageView(t: OpenTrade, x: ManageInput): ManageView {
       m.notWorkingSecLeft === null ? (hit ? "done" : Number.isFinite(Date.parse(t.entry.at)) ? "working" : "–") : m.notWorkingSecLeft === 0 ? "now" : mmss(Math.min(m.notWorkingSecLeft, TIME_STOP_MINUTES * 60)),
     flatText: m.minToFlat === null ? "–" : hoursMin(m.minToFlat),
     flatAt: hhmm(flatMinute(x.halfDay)),
+    // Never the price of a paused card, even one that says EXIT: a distance from it would be an old number.
+    price: !off && !t.unmatched && !cardPaused(x.rowState, x.quote, x.now, x.session) ? x.quote!.price : null,
+    contract: t.contract ?? null,
+    entry: t.entry.price,
   };
 }
 

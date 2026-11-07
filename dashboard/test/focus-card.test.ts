@@ -22,8 +22,8 @@ describe("strip emphasis", () => {
 
 describe("the strip's live distance", () => {
   it("reads the call's distance to the ceiling and the put's to the floor, split into the big and the small part", () => {
-    expect(stripDistance(view("live"), "call")).toEqual({ away: "0.50 away", move: "0.1× move", past: false, from: "live", near: true });
-    expect(stripDistance(view("live"), "put")).toEqual({ away: "3.74 away", move: "0.7× move", past: false, from: "live", near: false });
+    expect(stripDistance(view("live"), "call")).toEqual({ away: "0.50 away", move: "0.1× move", past: false, from: "live", near: true, unlikely: false });
+    expect(stripDistance(view("live"), "put")).toEqual({ away: "3.74 away", move: "0.7× move", past: false, from: "live", near: false, unlikely: false });
   });
 
   it("says past once the price is through the trigger", () => {
@@ -74,7 +74,7 @@ describe("the rules as chips", () => {
     expect(ruleChips("2026-10-19", false).map((c) => c.text)).toEqual([
       "No entries before 09:35",
       "No entries 11:30–13:00",
-      "Option under $2.00",
+      "Option under $2.00 ($200 a contract)",
       "Out after 5 min",
       "Max 5 a day",
     ]);

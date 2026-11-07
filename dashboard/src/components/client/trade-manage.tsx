@@ -2,7 +2,6 @@
 
 import { Activity, CircleCheck, Hand, type LucideIcon, NotebookPen, OctagonX, Shield, TriangleAlert, X } from "lucide-react";
 import { useEffect, useId, useState, useSyncExternalStore } from "react";
-import { StatusBadge } from "@/components/status";
 import type { Lot, Trade } from "@/lib/journal";
 import type { LiveQuote, Options, TrailPoint } from "@/lib/options";
 import {
@@ -36,7 +35,11 @@ import type { BoardRow } from "@/lib/trade-now";
 import { nyClock } from "@/lib/options";
 import type { Bar2 } from "@/lib/trade-state";
 import { cn } from "@/lib/utils";
+import { bellMinute } from "@/lib/contract";
+import { chainFresh, chainPx, chainStamp, entryStopDistance, fromEntryLabel, heldOrAtm, lossFromEntry, stopDistance } from "@/lib/what-if";
 import { TestingTag } from "./trade-now";
+import { useChain } from "./use-chain";
+import { usePerfNow } from "./use-now";
 
 type Item = NonNullable<Options["focus"]>["items"][number];
 
@@ -47,6 +50,15 @@ const ACTION_ICON: Record<ManageAction, LucideIcon> = {
   hold: Shield,
   check: TriangleAlert,
 };
+
+/** The action word's chip: the word in the page's text colour, the tone in the tint and the bar (as the hero's). */
+const WORD_CHIP = {
+  bad: "bg-bad-soft border-bad-fill",
+  good: "bg-good-soft border-good-fill",
+  warn: "bg-warn-soft border-warn-fill",
+  info: "bg-info-soft border-info-fill",
+  neutral: "bg-neutral-soft border-neutral-fill",
+} as const;
 
 const TONE_LINE = {
   bad: "text-bad",
@@ -108,11 +120,12 @@ function useNotes(day: string | null): ManualNote[] {
 }
 
 // ---- the card as drawn ----------------------------------------------------------------------------------------------
-function Cell({ label, value, note, tone }: { label: string; value: string; note?: string; tone?: string }) {
+/** One small figure: the trail, the flat-by time. */
+function Small({ label, value, note, tone, data }: { label: string; value: string; note?: string; tone?: string; data?: string }) {
   return (
-    <div className="min-w-0">
+    <div className="min-w-0" data-manage-small={data}>
       <dt className="text-muted-foreground truncate text-[0.6875rem]">{label}</dt>
-      <dd className={cn("font-mono text-sm font-semibold sm:text-base", tone)}>
+      <dd className={cn("text-explain font-mono font-semibold", tone)}>
         {value}
         {note ? <span className="text-muted-foreground ml-1 font-sans text-[0.6875rem] font-normal">{note}</span> : null}
       </dd>
@@ -120,18 +133,72 @@ function Cell({ label, value, note, tone }: { label: string; value: string; note
   );
 }
 
+/** One big figure: the stop, the distance to it, the countdown. */
+function Big({ label, value, size, note, tone, data }: { label: string; value: string; size: "price" | "live"; note?: string; tone?: string; data?: string }) {
+  return (
+    <div className="min-w-0" data-manage-big={data}>
+      <dt className="text-explain text-muted-foreground truncate font-medium">{label}</dt>
+      <dd className={cn("font-mono tabular-nums", size === "price" ? "text-price" : "text-live", tone)}>{value}</dd>
+      {note ? <dd className="text-muted-foreground text-[0.6875rem]">{note}</dd> : null}
+    </div>
+  );
+}
+
+/** What the card needs to read an option chain for its estimate: the name's close and the board's clock and session. */
+export interface ChainContext {
+  close: number | null;
+  /** The board's (server) clock, ms. */
+  now: number | null;
+  session: string;
+  halfDay: boolean;
+}
+
 /**
- * One open trade: the header, one instruction line, then the stop, the trail, the 5-minute check and the flat time. A
- * journal card adds a CHECK line (its fill is the card's entry) with "Set my fill"; `children` is the form it opens.
+ * The option's estimated loss if the stop is hit: |delta| × |entry − stop| × 100 (what-if's lossFromEntry), measured
+ * from the trade's entry and not from the live price, so it says what the stop costs the trade and agrees with the
+ * hero's which-stop line, which measures the same way. The delta is the held contract's (the journal names it) or,
+ * failing that, the at-the-money one on that side. One chain for this card's name, asked for only while the card has a
+ * fresh price and is not a CHECK; shown only on this name's answer no older than STALE_SAME_DAY_MIN, labelled with
+ * the chain's own time and delay. Nothing once the stop is the entry, or with a stop on the wrong side of it.
+ */
+function OptionAtStop({ v, ctx }: { v: ManageView; ctx: ChainContext }) {
+  const perfNow = usePerfNow(1_000);
+  const on = v.action !== "check" && v.price !== null && ctx.now !== null && entryStopDistance(v.side, v.entry, v.m.stop) !== null;
+  const keep = v.contract ? `${v.contract.expiry}:${v.contract.strike}` : "";
+  const { feed } = useChain(v.symbol, on ? chainPx(ctx.close, v.price) : null, on, keep);
+  if (!on || feed.status !== "ok" || feed.chain.symbol !== v.symbol || !chainFresh(feed.chain, feed.receivedPerf, perfNow)) return null;
+  const c = heldOrAtm(feed.chain, v.side, v.contract, v.price!, ctx.now!, (x) => bellMinute(x, ctx.session, ctx.halfDay));
+  const est = lossFromEntry(v.side, v.entry, v.m.stop, c?.contract.delta);
+  if (!c || est === null) return null;
+  return (
+    <div className="min-w-0" data-manage-big="option" data-manage-option={c.held ? "held" : "atm"}>
+      <dt className="text-explain text-muted-foreground truncate font-medium">{fromEntryLabel(v.cardEntry)}</dt>
+      <dd className="text-live font-mono tabular-nums">≈ −${Math.round(est)}</dd>
+      <dd className="text-muted-foreground text-[0.6875rem]">
+        on the option, a contract (est. from {c.held ? "your contract's" : "the at-the-money"} delta) · {chainStamp(feed.chain)}
+      </dd>
+    </div>
+  );
+}
+
+/**
+ * One open trade: the header, then big the action word, the stop, the live distance to it on the stock, the option's
+ * estimated loss at the stop from the entry, and the "not working in" countdown while it runs; small the trail, the flat-by time and where the
+ * card's numbers come from. No live option P&L: the option feed is 15 minutes behind, so the card says "P&L: see
+ * Webull". A journal card adds a CHECK line (its fill is the card's entry) with "Set my fill"; `children` is the form
+ * it opens.
  */
 export function ManageCard({
   v,
+  ctx,
   onClear,
   onSetFill,
   onUseTime,
   children,
 }: {
   v: ManageView;
+  /** For the option estimate; without it the card shows none. */
+  ctx?: ChainContext;
   onClear?: () => void;
   onSetFill?: () => void;
   /** An unmatched note: take the journal lot's time offered in `v.hint`. */
@@ -141,6 +208,8 @@ export function ManageCard({
   const Icon = ACTION_ICON[v.action];
   const exit = v.action === "exit";
   const counting = v.notWorkingText !== "working" && v.notWorkingText !== "done" && v.notWorkingText !== "–";
+  // The distance to the stop: only from a fresh price, never on a CHECK card.
+  const dist = v.action !== "check" && v.price !== null ? stopDistance(v.side, v.price, v.m.stop) : null;
   return (
     <article
       aria-label={`In a trade: ${v.symbol} ${v.side}`}
@@ -176,10 +245,11 @@ export function ManageCard({
           )}
         </span>
       </div>
-      <p data-manage-line className={cn("flex flex-wrap items-center gap-2 text-base leading-snug font-semibold", TONE_LINE[v.tone])}>
-        <StatusBadge tone={v.tone} icon={Icon} className="font-sans text-[0.625rem]">
+      <p data-manage-line className={cn("flex flex-wrap items-center gap-x-3 gap-y-1 text-base leading-snug font-semibold", TONE_LINE[v.tone])}>
+        <span data-manage-word className={cn("text-decision text-foreground inline-flex items-center gap-2 rounded-md border border-l-[6px] px-2.5 py-0.5 whitespace-nowrap", WORD_CHIP[v.tone])}>
+          <Icon aria-hidden className={cn("size-6 shrink-0", TONE_LINE[v.tone])} />
           {ACTION_WORD[v.action]}
-        </StatusBadge>
+        </span>
         <span>{v.line}</span>
       </p>
       {v.hint ? (
@@ -203,16 +273,28 @@ export function ManageCard({
           ) : null}
         </p>
       ) : null}
-      <dl className="grid max-w-xl grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-4" data-manage-grid>
-        <Cell label="Stop" value={v.m.stop !== null ? v.m.stop.toFixed(2) : "–"} note={v.cardEntry && v.stopAtEntry ? CARD_ENTRY : undefined} />
-        <Cell label="Trail (EMA9)" value={v.m.trail !== null ? v.trailText : "–"} note={v.m.trail !== null ? undefined : v.trailText} />
-        <Cell
-          label="Not working in"
-          value={v.notWorkingText}
-          note={v.cardEntry && counting ? CARD_ENTRY : undefined}
-          tone={v.notWorkingText === "now" ? "text-bad" : undefined}
-        />
-        <Cell label={`Flat by ${v.flatAt}`} value={v.flatText} />
+      <dl className="grid max-w-2xl grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4" data-manage-grid>
+        <Big label="Stop" value={v.m.stop !== null ? v.m.stop.toFixed(2) : "–"} size="price" note={v.cardEntry && v.stopAtEntry ? CARD_ENTRY : undefined} data="stop" />
+        {dist !== null ? (
+          <Big label={`${v.symbol} to the stop`} value={dist > 0 ? `$${dist.toFixed(2)}` : "at the stop"} size="live" tone={dist > 0 ? undefined : "text-bad"} data="distance" />
+        ) : null}
+        {ctx ? <OptionAtStop v={v} ctx={ctx} /> : null}
+        {counting ? (
+          <Big
+            label="Not working in"
+            value={v.notWorkingText}
+            size="live"
+            note={v.cardEntry ? CARD_ENTRY : undefined}
+            tone={v.notWorkingText === "now" ? "text-bad" : undefined}
+            data="not-working"
+          />
+        ) : null}
+      </dl>
+      <dl className="grid max-w-2xl grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-4" data-manage-small-grid>
+        <Small label="Trail (EMA9)" value={v.m.trail !== null ? v.trailText : "–"} note={v.m.trail !== null ? undefined : v.trailText} data="trail" />
+        {counting ? null : <Small label="Not working in" value={v.notWorkingText} data="not-working" />}
+        <Small label={`Flat by ${v.flatAt}`} value={v.flatText} data="flat" />
+        <Small label="P&L" value="see Webull" data="pnl" />
       </dl>
       {children}
     </article>
@@ -471,6 +553,7 @@ export function useTradeManage(x: TradeManageInput): {
           <ManageCard
             key={v.id}
             v={v}
+            ctx={{ close: x.items.find((it) => it.symbol === v.symbol)?.close ?? null, now: x.now, session: x.session, halfDay: x.halfDay }}
             onClear={t.note ? () => save(notes.filter((n) => noteId(n) !== noteId(t.note!))) : undefined}
             onSetFill={v.source === "journal" && x.now !== null ? () => setForm(formFromTrade(t, x.now!)) : undefined}
             onUseTime={t.note && v.hint ? () => save([...notes.filter((n) => noteId(n) !== noteId(t.note!)), { ...t.note!, at: v.hint!.at }]) : undefined}

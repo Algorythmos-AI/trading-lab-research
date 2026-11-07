@@ -208,6 +208,14 @@ describe("the price dot", () => {
     expect(after.distances).toEqual([]);
   });
 
+  it("adds 'unlikely today', muted, to a trigger 3 or more 1-day moves away", () => {
+    const html = renderToStaticMarkup(createElement(LadderNote, { view: ladderLiveView({ ...base, ceiling: 800 }) }));
+    // 21.00 to the ceiling is 4.2 moves; 3.84 to the floor is 0.8
+    expect(html).toMatch(/Ceiling 800.00 · 21.00 away · 4.2× move<span class="text-muted-foreground font-medium"> · unlikely today<\/span>/);
+    expect(html.match(/unlikely today/g)).toHaveLength(1);
+    expect(renderToStaticMarkup(createElement(LadderNote, { view: ladderLiveView(base) }))).not.toContain("unlikely today");
+  });
+
   it("renders each mode: filled, diamond, hollow last trade, or nothing", () => {
     const domain = { lo: 770, hi: 785 };
     const f = FRAMES.desktop;
