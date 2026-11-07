@@ -421,7 +421,15 @@ export interface NameState {
   rank: number;
   call: SideState;
   put: SideState;
+  /** Why the row says no trade, on a no-trade row only: the page tells a closed window from a quiet range by this. */
+  why?: NoTradeWhy;
 }
+
+/**
+ * Why a row says no trade: the session closed (or the next not begun), the opening range, the lunch block, after the
+ * flat time, the day's limit, the middle of yesterday's range, or no plan for the name.
+ */
+export type NoTradeWhy = "closed" | "opening" | "lunch" | "late" | "day_limit" | "range_middle" | "no_plan";
 
 export const STATE_TONE: Record<NameStateName, Tone> = {
   no_trade: "neutral",
@@ -523,7 +531,7 @@ export function nameState(n: NameInput): NameState {
   const inSession = minute !== null && minute >= OPEN_MIN && minute < closeMinute(n.halfDay);
   const q = n.quote && n.quote.day === n.session ? n.quote : null;
   const triggers = [n.put, n.call].filter((x): x is SidePlan => x !== null).map((x) => p2(x.level));
-  const row = (state: NameStateName, line: string, pick: SideState | null, rankExtra = 0): NameState => {
+  const row = (state: NameStateName, line: string, pick: SideState | null, rankExtra = 0, why?: NoTradeWhy): NameState => {
     const plan = pick ? plans[pick.side] : null;
     const checkIn: CheckInput = {
       symbol: n.symbol,
@@ -561,6 +569,7 @@ export function nameState(n: NameInput): NameState {
       rank: (pick ? sideRank(pick) : STATE_RANK[state]) * 1000 + rankExtra,
       call,
       put,
+      ...(why ? { why } : {}),
     };
   };
 
@@ -576,24 +585,24 @@ export function nameState(n: NameInput): NameState {
   }
   // 2. the clock and the day's limit
   const opening = `Opening range forming: first entries from ${hhmm(FIRST_ENTRY_MIN)}`;
-  if (minute === null) return row("no_trade", clock && clock.day < n.session ? `Next session: first entries from ${hhmm(FIRST_ENTRY_MIN)}` : "Session closed", null);
-  if (minute >= closeMinute(n.halfDay)) return row("no_trade", "Session closed", null);
-  if (minute < FIRST_ENTRY_MIN) return row("no_trade", opening, null);
+  if (minute === null) return row("no_trade", clock && clock.day < n.session ? `Next session: first entries from ${hhmm(FIRST_ENTRY_MIN)}` : "Session closed", null, 0, "closed");
+  if (minute >= closeMinute(n.halfDay)) return row("no_trade", "Session closed", null, 0, "closed");
+  if (minute < FIRST_ENTRY_MIN) return row("no_trade", opening, null, 0, "opening");
   if (lunchBlock(n.halfDay) && minute >= LUNCH_FROM_MIN && minute < LUNCH_TO_MIN)
-    return row("no_trade", `No new entries ${hhmm(LUNCH_FROM_MIN)}–${hhmm(LUNCH_TO_MIN)} New York: next entries from ${hhmm(LUNCH_TO_MIN)}`, null);
-  if (minute >= flat) return row("no_trade", `After ${hhmm(flat)}: no new entries, be flat`, null);
-  if (n.dayLimitUsed) return row("no_trade", "Day limit reached: no more trades today", null);
+    return row("no_trade", `No new entries ${hhmm(LUNCH_FROM_MIN)}–${hhmm(LUNCH_TO_MIN)} New York: next entries from ${hhmm(LUNCH_TO_MIN)}`, null, 0, "lunch");
+  if (minute >= flat) return row("no_trade", `After ${hhmm(flat)}: no new entries, be flat`, null, 0, "late");
+  if (n.dayLimitUsed) return row("no_trade", "Day limit reached: no more trades today", null, 0, "day_limit");
 
   // 3. the middle of yesterday's range with nothing broken
   const pdh = levelOf(n.ticker, "PDH");
   const pdl = levelOf(n.ticker, "PDL");
   const quiet = (x: SideState) => (x.state === "watch" || x.state === "no_trade") && !x.brokeEarlier && !x.alt;
   if (q && pdh !== null && pdl !== null && midThird(q.price, pdh, pdl) && quiet(call) && quiet(put))
-    return row("no_trade", `In the middle of yesterday's range: wait for ${triggers.join(" or ")}`, null);
+    return row("no_trade", `In the middle of yesterday's range: wait for ${triggers.join(" or ")}`, null, 0, "range_middle");
 
   // 4. the more urgent side
   const sides = [call, put].filter((x) => plans[x.side] !== null);
-  if (sides.length === 0) return row("no_trade", "No plan for this name today", null);
+  if (sides.length === 0) return row("no_trade", "No plan for this name today", null, 0, "no_plan");
   const pick = [...sides].sort((x, y) => sideRank(x) - sideRank(y) || (x.distAtr ?? Infinity) - (y.distAtr ?? Infinity))[0]!;
   const tenths = pick.distAtr !== null ? Math.min(999, Math.round(pick.distAtr * 10)) : 999;
   if (pick.state === "watch" && !pick.alt) {

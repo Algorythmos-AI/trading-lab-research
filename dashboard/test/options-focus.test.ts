@@ -162,7 +162,7 @@ describe("New York times and the open-position caution", () => {
   it("says the no-entry times in New York, from the 09:35 first entry, as chips, and no Sydney time", () => {
     const rules = renderToStaticMarkup(createElement(RulesStrip, { session: "2026-10-19", halfDay: false }));
     const chips = [...rules.matchAll(/data-rule="(\w+)"[^>]*><span[^>]*>([^<]+)<\/span>/g)].map((m) => m[2]);
-    expect(chips).toEqual(["No entries before 09:35", "No entries 11:30–13:00", "Option under $2.00", "Out after 5 min", "Max 5 a day"]);
+    expect(chips).toEqual(["No entries before 09:35", "No entries 11:30–13:00", "Option under $2.00 ($200 a contract)", "Out after 5 min", "Max 5 a day"]);
     expect(rules).toContain('data-testid="rules-strip"');
     expect(rules).toContain("loses at most $50");
     expect(rules).toContain("New York");

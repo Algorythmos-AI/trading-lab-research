@@ -178,8 +178,24 @@ export function selectChain(snapshots: Record<string, RawSnapshot>, symbol: stri
   });
 }
 
-/** One name's last answer: what was offered, the price and the contract it was chosen around, and when it was fetched. */
-const cache = new Map<string, { at: number; px: number; own: string; expiries: ChainExpiry[] }>();
+/**
+ * One name's last answer: what was offered, the price and the contract it was chosen around, when it was fetched, and
+ * when a reader last asked for that contract (`keptAt`).
+ */
+const cache = new Map<string, { at: number; px: number; keep: Keep | null; keptAt: number; expiries: ChainExpiry[] }>();
+
+/**
+ * How long a reader's own contract keeps riding along on a name's answer after the last request that named it. The
+ * page reads one name from up to three places (the hero with no contract, the manage card and the contract pane with
+ * the held one), each polling on its own; carrying the held contract for a minute lets a refresh from one serve the
+ * others, rather than each asking upstream in turn.
+ */
+export const KEEP_CARRY_MS = 60_000;
+
+const keepKey = (k: Keep | null) => (k ? `${k.expiry}:${k.strike}` : "");
+
+/** Whether an answer already quotes a contract on that expiry and strike. */
+const carries = (expiries: readonly ChainExpiry[], k: Keep) => expiries.some((x) => x.date === k.expiry && x.contracts.some((c) => c.strike === k.strike));
 
 /** Test hook: forget the shared cache. */
 export function resetChainCache(): void {
@@ -221,9 +237,11 @@ async function page(
  * The option chain for `symbol` around `px`, from Alpaca's indicative feed. Two calls upstream: the expiries of the
  * coming week, and those a fortnight to three weeks out; a third, for one expiry and one strike, when the reader
  * has a contract of their own (`keep`), so it is quoted wherever it sits. The answer is shared for CHAIN_CACHE_MS,
- * unless the price asked around has moved more than a percent since or the contract kept has changed. Throws on a
- * transport or HTTP error (the route answers 502) and caches nothing from it; the keys and the response body are
- * never logged.
+ * unless the price asked around has moved more than a percent since, or a contract is asked for that the answer does
+ * not already quote. A request with no contract of its own takes an answer that carries someone else's, and a
+ * refresh keeps carrying a contract asked for within KEEP_CARRY_MS, so one answer serves every reader of the name:
+ * the extra contract is a real quote of that name, never another name's. Throws on a transport or HTTP error (the
+ * route answers 502) and caches nothing from it; the keys and the response body are never logged.
  */
 export async function fetchChain(
   symbol: string,
@@ -236,22 +254,28 @@ export async function fetchChain(
 ): Promise<ChainResponse> {
   const t = now.getTime();
   const hit = cache.get(symbol);
-  const own = keep ? `${keep.expiry}:${keep.strike}` : "";
   // An entry stamped after `now` (a clock that stepped back) is not trusted either.
-  const fresh = hit && t >= hit.at && t - hit.at < CHAIN_CACHE_MS && Math.abs(hit.px - px) <= 0.01 * px && hit.own === own;
+  const timely = !!hit && t >= hit.at && t - hit.at < CHAIN_CACHE_MS && Math.abs(hit.px - px) <= 0.01 * px;
+  const fresh = timely && (!keep || keepKey(hit!.keep) === keepKey(keep) || carries(hit!.expiries, keep));
+  if (fresh && keep && keepKey(hit!.keep) === keepKey(keep)) hit!.keptAt = t;
   if (!fresh) {
     const today = nyDate(now);
+    // With no contract of its own, the request carries the one another reader asked for lately, while it still trades;
+    // carried, it keeps the time it was last asked for, so it stops riding along a minute after its reader went.
+    const carry = !keep && hit?.keep && t >= hit.keptAt && t - hit.keptAt <= KEEP_CARRY_MS && hit.keep.expiry >= today ? hit : null;
+    const ask = carry ? carry.keep : keep;
+    const keptAt = carry ? carry.keptAt : t;
     const strikes = { strike_price_gte: (px * (1 - STRIKE_WINDOW)).toFixed(2), strike_price_lte: (px * (1 + STRIKE_WINDOW)).toFixed(2) };
-    const k = keep ? keep.strike.toFixed(3) : "";
+    const k = ask ? ask.strike.toFixed(3) : "";
     const [near, far, mine] = await Promise.all([
       page(symbol, { ...strikes, expiration_date_gte: today, expiration_date_lte: addDays(today, NEAR_DAYS) }, keys, fetchImpl, baseUrl),
       page(symbol, { ...strikes, expiration_date_gte: addDays(today, SWING_MIN_DAYS), expiration_date_lte: addDays(today, FAR_DAYS) }, keys, fetchImpl, baseUrl),
-      keep
-        ? page(symbol, { strike_price_gte: k, strike_price_lte: k, expiration_date_gte: keep.expiry, expiration_date_lte: keep.expiry }, keys, fetchImpl, baseUrl)
+      ask
+        ? page(symbol, { strike_price_gte: k, strike_price_lte: k, expiration_date_gte: ask.expiry, expiration_date_lte: ask.expiry }, keys, fetchImpl, baseUrl)
         : Promise.resolve({}),
     ]);
     cache.delete(symbol);
-    cache.set(symbol, { at: t, px, own, expiries: selectChain({ ...near, ...far, ...mine }, symbol, px, today, keep) });
+    cache.set(symbol, { at: t, px, keep: ask, keptAt, expiries: selectChain({ ...near, ...far, ...mine }, symbol, px, today, ask) });
     // A Map iterates in insertion order, and a refreshed name was just re-inserted: the first keys are the oldest.
     for (const s of cache.keys()) {
       if (cache.size <= CHAIN_MAX_CACHED) break;

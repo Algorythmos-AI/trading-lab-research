@@ -8,6 +8,7 @@ import { SCRIPT_ANSWER_LAG_MS, scriptBars, scriptQuote, stepInstant } from "@/li
 import { focusPlan } from "@/lib/focus-plan";
 import type { Lot, Trade } from "@/lib/journal";
 import { nyInstant, type Options } from "@/lib/options";
+import { fromEntryLabel, lossFromEntry } from "@/lib/what-if";
 import {
   altPlan,
   CARD_ENTRY,
@@ -114,6 +115,88 @@ describe("the manage card on the scripted morning", () => {
     const v = viewAt(3, [note()], [], { rowState: "paused" });
     expect(v.action).toBe("check");
     expect(v.line).toBe("Prices paused: manage this one on your platform");
+  });
+});
+
+describe("the manage card's option estimate, from the entry", () => {
+  it("carries the trade's entry: the note's fill, or the card's entry for a journal lot", () => {
+    expect(viewAt(3).entry).toBe(note().price);
+    const lot: Lot = { symbol: "QQQ", kind: "call", strike: 753, expiry: S, side: "long", qty: 1, entry: 1.2, opened_at: new Date(clock(3)).toISOString() };
+    const j = viewAt(3, [], [lot]);
+    expect(j.cardEntry).toBe(true);
+    expect(j.entry).toBe(CALL.entry);
+    expect(fromEntryLabel(j.cardEntry)).toBe("At the stop, from the card entry");
+    expect(fromEntryLabel(viewAt(3).cardEntry)).toBe("At the stop, from your entry");
+  });
+
+  it("measures entry to stop on a trade already under water, not the live price's distance", () => {
+    const live = scriptQuote("QQQ", S, 3)!.price;
+    // in 0.30 above where the stock is now, still above the stop
+    const under = { ...note(), price: Math.round((live + 0.3) * 100) / 100 };
+    const v = viewAt(3, [under]);
+    expect(v.price).toBe(live);
+    expect(v.price!).toBeLessThan(v.entry);
+    expect(v.m.stop).toBe(CALL.stop);
+    expect(lossFromEntry(v.side, v.entry, v.m.stop, 0.5)).toBeCloseTo(0.5 * (v.entry - CALL.stop!) * 100, 6);
+    expect(lossFromEntry(v.side, v.entry, v.m.stop, 0.5)).toBeGreaterThan(0.5 * (live - CALL.stop!) * 100);
+  });
+
+  it("has no estimate once the stop is the entry (target 1 hit)", () => {
+    const v = viewAt(4);
+    expect(v.stopAtEntry).toBe(true);
+    expect(lossFromEntry(v.side, v.entry, v.m.stop, 0.5)).toBeNull();
+  });
+
+  it("works the same on a put", () => {
+    expect(lossFromEntry("put", 779.1, 780, -0.45)).toBeCloseTo(40.5, 6);
+    expect(lossFromEntry("put", 780, 779.1, -0.45)).toBeNull();
+  });
+});
+
+describe("the manage card, drawn big and small", () => {
+  const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  const lot = (over: Partial<Lot> = {}): Lot => ({ symbol: "QQQ", kind: "call", strike: 753, expiry: S, side: "long", qty: 2, entry: 1.2, opened_at: new Date(clock(3)).toISOString(), ...over });
+  const esc = (v: string) => v.replace(/[.$]/g, (m) => `\\${m}`);
+
+  it("reads the fresh price only, and the held contract when the journal names it", () => {
+    expect(viewAt(3).price).toBe(scriptQuote("QQQ", S, 3)!.price);
+    expect(viewAt(3, [note()], [], { rowState: "paused" }).price).toBeNull();
+    expect(viewAt(3, [note()], [], { feed: "off" }).price).toBeNull();
+    expect(viewAt(3, [note()], [], { quote: null }).price).toBeNull();
+    expect(viewAt(3, [], [lot()]).contract).toEqual({ expiry: S, strike: 753 });
+    expect(viewAt(3, [], [lot({ strike: null })]).contract).toBeNull();
+    // a note takes its own lot's contract
+    expect(viewAt(3, [note()], [lot({ strike: 755 })]).contract).toEqual({ expiry: S, strike: 755 });
+    expect(viewAt(3).contract).toBeNull();
+  });
+
+  it("draws the action word, the stop, the distance to it and the countdown big; the trail, the flat time and P&L small", () => {
+    const html = renderToStaticMarkup(createElement(ManageCard, { v: viewAt(3) }));
+    expect(html).toMatch(/data-manage-word[^>]*text-decision[^>]*>.*HOLD/);
+    expect(html).toMatch(new RegExp(`data-manage-big="stop".*?text-price[^>]*>${esc(CALL.stop!.toFixed(2))}<`));
+    const dist = (scriptQuote("QQQ", S, 3)!.price - CALL.stop!).toFixed(2);
+    expect(html).toMatch(new RegExp(`data-manage-big="distance".*?QQQ to the stop.*?text-live[^>]*>${esc(`$${dist}`)}<`));
+    expect(html).toMatch(/data-manage-big="not-working".*?text-live[^>]*>(5:00|4:5\d)</);
+    expect(html).toContain('data-manage-small="trail"');
+    expect(html).toContain('data-manage-small="flat"');
+    expect(text(html)).toContain("P&amp;L see Webull");
+    // no live option P&L, and no estimate without a chain answer
+    expect(html).not.toContain("data-manage-option");
+    expect(text(html)).not.toMatch(/\b(Buy|Order|Place)\b/);
+  });
+
+  it("shows no distance on a CHECK card, and says at the stop once the price is through it", () => {
+    const paused = renderToStaticMarkup(createElement(ManageCard, { v: viewAt(3, [note()], [], { rowState: "paused" }) }));
+    expect(paused).not.toContain('data-manage-big="distance"');
+    expect(paused).toContain("CHECK");
+    const exit = renderToStaticMarkup(createElement(ManageCard, { v: viewAt(5) }));
+    expect(exit).toMatch(/data-manage-big="distance".*?>at the stop</);
+  });
+
+  it("puts the countdown small once it no longer runs", () => {
+    const html = renderToStaticMarkup(createElement(ManageCard, { v: viewAt(4) }));
+    expect(html).not.toContain('data-manage-big="not-working"');
+    expect(html).toMatch(/data-manage-small="not-working".*?>done</);
   });
 });
 

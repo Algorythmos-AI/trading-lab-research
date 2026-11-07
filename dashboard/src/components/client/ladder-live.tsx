@@ -16,6 +16,7 @@
 import type { ReactNode } from "react";
 import { type LadderFrame, type LadderLiveView, ladderLiveState } from "@/lib/level-ladder";
 import { cn } from "@/lib/utils";
+import { UNLIKELY_WORDS } from "@/lib/what-if";
 import { useLive } from "./live-layer";
 import { boardAlt, boardSide, useBoardRow } from "./trade-now";
 
@@ -137,6 +138,7 @@ export function LadderNote({ view }: { view: LadderLiveView }) {
           {view.distances.map((d) => (
             <li key={d.to} data-near={d.near ? "yes" : undefined} className={cn("text-[15px] tabular-nums sm:text-[20px]", d.near ? "font-bold" : "text-muted-foreground font-medium")}>
               {TO[d.to]} {d.level.toFixed(2)} · {d.text}
+              {d.unlikely ? <span className="text-muted-foreground font-medium"> · {UNLIKELY_WORDS}</span> : null}
             </li>
           ))}
         </ul>

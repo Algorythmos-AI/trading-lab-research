@@ -173,6 +173,17 @@ describe("one name through the session", () => {
       expect({ state: r.state, tone: r.tone, line: r.line, side: r.side }).toEqual({ state: st.state, tone: st.tone, line: st.line, side: st.side });
     });
 
+  it("says why a row is no trade: the middle of yesterday's range, no plan, or the session's clock", () => {
+    expect(nameState(input(scene([A], 408.4))).why).toBe("range_middle");
+    expect(nameState(input(scene([A], 408.4), { call: null, put: null, ticker: { ...TICKER, levels: [] } })).why).toBe("no_plan");
+    // a row with a state other than no trade carries no reason
+    expect(nameState(input(scene([A, B], 411.1))).why).toBeUndefined();
+    // after the close, and on a day before the session
+    const after = scene([A], 408.4);
+    expect(nameState(input({ ...after, now: new Date(nyMs("16:30")) }, { receivedAt: null })).why).toBe("closed");
+    expect(nameState(input({ ...after, now: new Date(nyMs("12:00", "2026-10-09")) }, { receivedAt: null })).why).toBe("closed");
+  });
+
   it("ranks an entry above a watch, and hands back the plan's prices", () => {
     const enter = nameState(input(scene([A, B, C, D, E], 412.75)));
     const watch = nameState(input(scene([A, B], 411.1)));
@@ -279,7 +290,7 @@ describe("the clock and the feed", () => {
   it("before 09:35 there is no entry; before the open a stale quote is not a pause", () => {
     expect(FIRST_ENTRY_MIN).toBe(9 * 60 + 35);
     const early = scene([["09:30", 412.5, 412.9, 412.4, 412.8]], 412.85); // 09:32 + 5 s New York
-    expect(nameState(input(early))).toMatchObject({ state: "no_trade", line: "Opening range forming: first entries from 09:35" });
+    expect(nameState(input(early))).toMatchObject({ state: "no_trade", line: "Opening range forming: first entries from 09:35", why: "opening" });
     const pre = { ...early, now: new Date(nyMs("09:00")) };
     expect(nameState(input(pre, { receivedAt: null })).line).toBe("Opening range forming: first entries from 09:35");
   });
@@ -307,6 +318,11 @@ describe("the clock and the feed", () => {
     expect(at("12:10", true).line).toBe("After 12:10: no new entries, be flat");
     expect(at("13:00", true).line).toBe("Session closed");
     expect(nameState(input(scene([A, B], 411.1), { dayLimitUsed: true })).line).toBe("Day limit reached: no more trades today");
+    // each says why, so the page never reads a closed window as a quiet range
+    expect(at("15:10").why).toBe("late");
+    expect(at("13:00", true).why).toBe("closed");
+    expect(nameState(input(scene([A, B], 411.1), { dayLimitUsed: true })).why).toBe("day_limit");
+    expect(at("15:09").why).toBeUndefined();
   });
 
   it("a page opened after the break says so and never claims a dip from bars it does not have", () => {
@@ -353,7 +369,7 @@ describe("the clock and the feed", () => {
     expect(LUNCH_FROM_MIN).toBe(11 * 60 + 30);
     expect(LUNCH_TO_MIN).toBe(13 * 60);
     expect(at("11:29").state).not.toBe("no_trade");
-    expect(at("11:30")).toMatchObject({ state: "no_trade", line: block, cautions: [] });
+    expect(at("11:30")).toMatchObject({ state: "no_trade", line: block, cautions: [], why: "lunch" });
     expect(at("12:59")).toMatchObject({ state: "no_trade", line: block });
     expect(at("13:00").state).not.toBe("no_trade");
     expect(at("11:45", true).line).not.toBe(block); // a half day closes at 13:00: no block, flat from 12:10

@@ -119,7 +119,7 @@ describe("the clock's next boundary", () => {
 describe("the day's limits in one line", () => {
   const base = { isToday: true, current: true, used: 0, net: 0, openLine: "" };
   it("reads the status, the trades and the loss against the limits", () => {
-    expect(railDay({ ...base, status: "clear" })).toEqual({ word: "Clear", tone: "good", line: "Clear · 0/5 trades · $0 of $100", open: null });
+    expect(railDay({ ...base, status: "clear" })).toEqual({ word: "Clear", tone: "good", line: "Clear · 0/5 trades · $0 of $100", open: null, room: "A stop now leaves $50 of $100 and 4 trades." });
     expect(railDay({ ...base, status: "careful", used: 4, net: -12.4 }).line).toBe("Careful · 4/5 trades · $12 of $100");
     expect(railDay({ ...base, status: "stop", net: -104 })).toMatchObject({ tone: "bad", line: "Stop for today · 0/5 trades · $104 of $100" });
     // a profit is no loss
