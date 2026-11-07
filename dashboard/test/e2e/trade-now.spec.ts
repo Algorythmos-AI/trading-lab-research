@@ -54,7 +54,7 @@ test("before 09:35 the board folds into the rail, and the hero shows the #1 name
   await expect(board(page)).toHaveAttribute("data-trade-now", "opening");
   await expect(rail(page).locator("[data-trade-now]")).toHaveAttribute("data-board-status", "waiting");
   // the board's line is said once, as the hero's headline, not again on the rail
-  await expect(hero(page).locator("[data-hero-line]")).toHaveText("Opening range forming: first entries from 09:35");
+  await expect(hero(page).locator("[data-hero-line]")).toHaveText("Opening range forming: first entries from 09:35 New York");
   await expect(rail(page)).not.toContainText("Opening range forming");
   await expect(boardSection(page)).toHaveCount(0);
   await expect(rows(page)).toHaveCount(0);

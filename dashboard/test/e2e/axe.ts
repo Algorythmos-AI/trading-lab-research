@@ -17,6 +17,9 @@ export async function liveChips(page: Page) {
 }
 
 export async function scan(page: Page): Promise<string[]> {
+  // A background refresh (auto-refresh.tsx, router.refresh) streams the page's metadata again, and for a moment the
+  // document has no <title>; a scan that lands then reports document-title on a page that has one. Scan the settled page.
+  await page.waitForFunction(() => document.title.trim().length > 0);
   const { violations } = await new AxeBuilder({ page }).withTags(TAGS).analyze();
   return violations.map((v) => `${v.id} x${v.nodes.length}: ${v.nodes[0]?.target.join(" ") ?? ""}`);
 }
