@@ -1,0 +1,122 @@
+{
+  "date": "2026-11-04",
+  "top": [
+    {
+      "symbol": "VSH",
+      "score": 41.12,
+      "subscores": {
+        "catalyst": 0.9,
+        "rvol": 0.456,
+        "float": 0.0,
+        "gap": 0.152,
+        "price": 0.3,
+        "liquidity": 0.184,
+        "spread": 0.5,
+        "float_rotation": 0.0
+      },
+      "features": {
+        "price": 28.95,
+        "gap_pct": 6.355620867009559,
+        "rvol_tod": 2.8602104664391352,
+        "pm_dollar_vol": 1735814.4941000002,
+        "spread_pct": null,
+        "float_shares": null
+      },
+      "rank": 1
+    },
+    {
+      "symbol": "DFDV",
+      "score": 39.147,
+      "subscores": {
+        "catalyst": 0.0,
+        "rvol": 0.784,
+        "float": 0.5,
+        "gap": 0.155,
+        "price": 1.0,
+        "liquidity": 0.047,
+        "spread": 0.5,
+        "float_rotation": 0.109
+      },
+      "features": {
+        "price": 3.4713,
+        "gap_pct": 6.48159509202455,
+        "rvol_tod": 6.080315453557095,
+        "pm_dollar_vol": 1150767.9144,
+        "spread_pct": null,
+        "float_shares": 30118205.0
+      },
+      "rank": 2
+    },
+    {
+      "symbol": "FLNC",
+      "score": 35.656,
+      "subscores": {
+        "catalyst": 0.0,
+        "rvol": 0.887,
+        "float": 0.0,
+        "gap": 0.223,
+        "price": 1.0,
+        "liquidity": 0.706,
+        "spread": 0.005,
+        "float_rotation": 0.0
+      },
+      "features": {
+        "price": 6.02,
+        "gap_pct": 9.45454545454545,
+        "rvol_tod": 7.7104843997346855,
+        "pm_dollar_vol": 8300429.5788,
+        "spread_pct": 0.9950248756218841,
+        "float_shares": null
+      },
+      "rank": 3
+    },
+    {
+      "symbol": "TRLV",
+      "score": 30.71,
+      "subscores": {
+        "catalyst": 0.0,
+        "rvol": 1.0,
+        "float": 0.0,
+        "gap": 0.105,
+        "price": 0.7,
+        "liquidity": 0.182,
+        "spread": 0.173,
+        "float_rotation": 0.0
+      },
+      "features": {
+        "price": 12.04,
+        "gap_pct": 4.33275563258233,
+        "rvol_tod": 25.433689365548837,
+        "pm_dollar_vol": 1723542.5299,
+        "spread_pct": 0.8271298593879357,
+        "float_shares": null
+      },
+      "rank": 4
+    },
+    {
+      "symbol": "RKT",
+      "score": 27.099,
+      "subscores": {
+        "catalyst": 0.0,
+        "rvol": 0.421,
+        "float": 0.0,
+        "gap": 0.12,
+        "price": 0.7,
+        "liquidity": 0.677,
+        "spread": 0.724,
+        "float_rotation": 0.0
+      },
+      "features": {
+        "price": 14.5,
+        "gap_pct": 4.996379435191889,
+        "rvol_tod": 2.634915066959828,
+        "pm_dollar_vol": 7595610.7798,
+        "spread_pct": 0.276243093922646,
+        "float_shares": null
+      },
+      "rank": 5
+    }
+  ],
+  "forward": true,
+  "strategy": "watchlist_bull_flag_atr_M1_v2"
+}
