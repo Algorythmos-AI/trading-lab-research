@@ -1,0 +1,76 @@
+{
+  "date": "2026-11-02",
+  "top": [
+    {
+      "symbol": "CLRO",
+      "score": 81.427,
+      "subscores": {
+        "catalyst": 0.3,
+        "rvol": 1.0,
+        "float": 1.0,
+        "gap": 1.0,
+        "price": 1.0,
+        "liquidity": 1.0,
+        "spread": 0.847,
+        "float_rotation": 1.0
+      },
+      "features": {
+        "price": 6.5215,
+        "gap_pct": 91.24633431085043,
+        "rvol_tod": 10.548150527782768,
+        "pm_dollar_vol": 103526864.5556,
+        "spread_pct": 0.15325670498085325,
+        "float_shares": 2675412.0
+      },
+      "rank": 1
+    },
+    {
+      "symbol": "RIVN",
+      "score": 57.086,
+      "subscores": {
+        "catalyst": 0.9,
+        "rvol": 0.66,
+        "float": 0.0,
+        "gap": 0.103,
+        "price": 0.7,
+        "liquidity": 1.0,
+        "spread": 0.764,
+        "float_rotation": 0.0
+      },
+      "features": {
+        "price": 12.68,
+        "gap_pct": 4.2763157894736725,
+        "rvol_tod": 4.574554448249923,
+        "pm_dollar_vol": 25134838.5603,
+        "spread_pct": 0.2363135092556214,
+        "float_shares": null
+      },
+      "rank": 2
+    },
+    {
+      "symbol": "FLNC",
+      "score": 39.352,
+      "subscores": {
+        "catalyst": 0.0,
+        "rvol": 1.0,
+        "float": 0.0,
+        "gap": 0.159,
+        "price": 1.0,
+        "liquidity": 0.669,
+        "spread": 0.344,
+        "float_rotation": 0.0
+      },
+      "features": {
+        "price": 6.1,
+        "gap_pct": 6.643356643356646,
+        "rvol_tod": 10.982959576309959,
+        "pm_dollar_vol": 7429056.559,
+        "spread_pct": 0.6557377049180334,
+        "float_shares": null
+      },
+      "rank": 3
+    }
+  ],
+  "forward": true,
+  "strategy": "watchlist_bull_flag_atr_M1_v2"
+}
