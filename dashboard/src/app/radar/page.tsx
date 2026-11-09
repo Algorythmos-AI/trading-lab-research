@@ -13,6 +13,7 @@ import {
   WatchlistPanel,
 } from "@/components/radar";
 import { MoversPanel, OpenMapPanel, SessionPanel, VerdictPanel, WeekPanel, YourNamesPanel } from "@/components/radar-brief";
+import { RadarSchedulePanel } from "@/components/radar-schedule";
 import { Notice } from "@/components/ui/notice";
 import { sydney, weekDate } from "@/lib/format";
 import { radarStale, type Radar } from "@/lib/radar";
@@ -58,6 +59,7 @@ export default async function RadarPage({ searchParams }: { searchParams: Promis
         title="Radar"
         intro="Your pre-market brief: the day, where SPY opens against your levels, and the names you trade. Research only; nothing here is an order."
       />
+      <RadarSchedulePanel latest={dates[0] ?? r.edition_date} now={now} />
       <EditionPicker dates={dates} current={r.edition_date} />
       {!date && radarStale(r.edition_date, now) ? (
         <Notice tone="bad" size="sm" role="alert">

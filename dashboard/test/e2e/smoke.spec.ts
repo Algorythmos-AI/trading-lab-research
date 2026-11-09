@@ -116,6 +116,13 @@ test("a live quote older than 30 seconds reads as stale", async ({ page }) => {
 
 test("the radar leads with the brief: the day, SPY's open, the session, your names, the week", async ({ page }) => {
   await page.goto("/radar");
+  // The update card leads: where the newest edition stands, the day's timeline, and the cloud jobs behind it.
+  await expect(page.getByRole("status", { name: /^Radar schedule: (Up to date|Building|Late)$/ })).toBeVisible();
+  await expect(page.getByRole("list", { name: /^The schedule for / }).getByRole("listitem")).toHaveCount(6);
+  const jobs = page.getByRole("list", { name: "The cloud jobs behind the Radar, in order" });
+  await expect(jobs.getByRole("listitem")).toHaveCount(3);
+  await expect(jobs).toContainText("Radar build");
+  await expect(jobs).toContainText("trig_01B1TN3d4x7dZ3Wxad2LmYgb");
   await expect(page.getByRole("group", { name: /^The day: ((Normal|Careful|Event) day|Not fully checked)$/ })).toBeVisible();
   await expect(page.getByRole("img", { name: /^SPY close 778\.55, expected move ±5\.85\. Levels: PML 749\.60/ })).toBeVisible();
   await expect(page.getByRole("img", { name: /^The New York session on 2026-09-21: no entries 09:30 to 09:35/ })).toBeVisible();
