@@ -1,0 +1,53 @@
+{
+  "date": "2026-11-06",
+  "top": [
+    {
+      "symbol": "CIIT",
+      "score": 72.172,
+      "subscores": {
+        "catalyst": 0.0,
+        "rvol": 1.0,
+        "float": 1.0,
+        "gap": 1.0,
+        "price": 1.0,
+        "liquidity": 1.0,
+        "spread": 0.596,
+        "float_rotation": 1.0
+      },
+      "features": {
+        "price": 2.4799,
+        "gap_pct": 59.99354838709679,
+        "rvol_tod": 6152.696545878364,
+        "pm_dollar_vol": 76091261.3636,
+        "spread_pct": 0.40404040404039543,
+        "float_shares": 9673907.0
+      },
+      "rank": 1
+    },
+    {
+      "symbol": "HIMS",
+      "score": 36.574,
+      "subscores": {
+        "catalyst": 0.0,
+        "rvol": 0.88,
+        "float": 0.0,
+        "gap": 0.179,
+        "price": 0.3,
+        "liquidity": 1.0,
+        "spread": 0.884,
+        "float_rotation": 0.0
+      },
+      "features": {
+        "price": 25.87,
+        "gap_pct": 7.522859517871994,
+        "rvol_tod": 7.583064845383271,
+        "pm_dollar_vol": 34075360.322900005,
+        "spread_pct": 0.11598685482311069,
+        "float_shares": null
+      },
+      "rank": 2
+    }
+  ],
+  "forward": true,
+  "strategy": "watchlist_bull_flag_atr_M1_v2"
+}

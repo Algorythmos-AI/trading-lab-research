@@ -1,0 +1,53 @@
+{
+  "date": "2026-11-03",
+  "top": [
+    {
+      "symbol": "BLZE",
+      "score": 71.335,
+      "subscores": {
+        "catalyst": 0.9,
+        "rvol": 1.0,
+        "float": 0.2,
+        "gap": 0.777,
+        "price": 0.7,
+        "liquidity": 0.617,
+        "spread": 0.803,
+        "float_rotation": 0.102
+      },
+      "features": {
+        "price": 10.14,
+        "gap_pct": 37.027027027027025,
+        "rvol_tod": 67.3160582159425,
+        "pm_dollar_vol": 6346073.459199999,
+        "spread_pct": 0.1972386587771161,
+        "float_shares": 61900000.0
+      },
+      "rank": 1
+    },
+    {
+      "symbol": "PARA",
+      "score": 60.641,
+      "subscores": {
+        "catalyst": 0.3,
+        "rvol": 1.0,
+        "float": 0.0,
+        "gap": 1.0,
+        "price": 1.0,
+        "liquidity": 1.0,
+        "spread": 0.734,
+        "float_rotation": 0.0
+      },
+      "features": {
+        "price": 3.75,
+        "gap_pct": 121.89349112426035,
+        "rvol_tod": 2496.1929556337623,
+        "pm_dollar_vol": 51296651.7636,
+        "spread_pct": 0.26560424966800084,
+        "float_shares": null
+      },
+      "rank": 2
+    }
+  ],
+  "forward": true,
+  "strategy": "watchlist_bull_flag_atr_M1_v2"
+}
