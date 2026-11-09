@@ -1,6 +1,6 @@
 # AGENTS.md: rules for automated contributors in trading-lab-research
 
-Read the org rules first (`Algorythmos-AI/.github-private` AGENTS.md and `catalog.yaml`). This file adds the rules
+Read the org rules first (`Algorythmos-AI/algorythmos-handbook` AGENTS.md and `catalog.yaml`). This file adds the rules
 specific to this repository. Where the two conflict, the org file's "Never" sections win.
 
 ## Hard rules
