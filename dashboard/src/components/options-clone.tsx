@@ -111,7 +111,7 @@ function CloneBody({ d }: { d: OptionsClone }) {
           Trades this session
         </h3>
         {d.trades.length ? (
-          <Table>
+          <Table label="Trades this session">
             <TableHeader>
               <TableRow>
                 <TableHead>Trade</TableHead>
@@ -151,7 +151,7 @@ function CloneBody({ d }: { d: OptionsClone }) {
           Decisions by name
         </h3>
         {d.gates.length ? (
-          <Table>
+          <Table label="Decisions by name">
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
@@ -182,7 +182,7 @@ function CloneBody({ d }: { d: OptionsClone }) {
         <h3 id="clone-setups" className="text-sm font-medium">
           Every trade so far, by hypothesis
         </h3>
-        <Table>
+        <Table label="Every trade so far, by hypothesis">
           <TableHeader>
             <TableRow>
               <TableHead>Hypothesis</TableHead>
