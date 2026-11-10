@@ -74,8 +74,8 @@ function TodayStrip({ check }: { check: DayCheck }) {
   const tradesFill = check.used >= MAX_TRADES_PER_DAY ? "bg-bad-fill" : check.used >= MAX_TRADES_PER_DAY - 1 ? "bg-warn-fill" : "bg-good-fill";
   const lossFill = lossUsed >= DAY_LOSS_LIMIT ? "bg-bad-fill" : lossUsed >= DAY_LOSS_LIMIT * 0.6 ? "bg-warn-fill" : "bg-good-fill";
   return (
-    <div className={cn("grid items-center gap-3 rounded-lg border px-3.5 py-3 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto]", s.soft)} role="status">
-      <div className="flex min-w-0 items-center gap-2.5 sm:pr-2">
+    <div className={cn("grid items-center gap-3 rounded-lg border px-3.5 py-3 lg:grid-cols-[minmax(0,2fr)_minmax(9rem,1fr)_minmax(9rem,1fr)_auto]", s.soft)} role="status">
+      <div className="flex min-w-0 items-center gap-2.5 lg:pr-2">
         <s.icon aria-hidden className={cn("size-6 shrink-0", s.text)} />
         <div className="grid min-w-0 leading-tight">
           <span className={cn("text-sm font-semibold", s.text)}>{check.isToday || !check.current ? s.word : "New day"}</span>
@@ -90,7 +90,7 @@ function TodayStrip({ check }: { check: DayCheck }) {
         text={`${check.net < 0 ? money(check.net) : check.net > 0 ? money(check.net) : "$0"} of −$${DAY_LOSS_LIMIT}`}
         fill={lossFill}
       />
-      <div className="flex items-baseline justify-between gap-2 text-xs sm:grid sm:justify-items-end sm:gap-0.5">
+      <div className="flex items-baseline justify-between gap-2 text-xs lg:grid lg:justify-items-end lg:gap-0.5">
         <span className="text-muted-foreground">Rule breaks today</span>
         <span className={cn("font-mono text-sm font-semibold", check.brokenRules.length ? "text-bad" : "text-good")}>
           {check.brokenRules.length ? `${check.brokenRules.length > 1 ? "Rules" : "Rule"} ${check.brokenRules.join(", ")}` : "None"}

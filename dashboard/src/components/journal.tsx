@@ -225,7 +225,7 @@ export function LossSizePanel({ positions }: { positions: OwnerPosition[] }) {
         </Empty>
       ) : (
         <div className="grid gap-3">
-          <StatTiles className="sm:grid-cols-3 lg:grid-cols-5">
+          <StatTiles className="sm:grid-cols-2 lg:grid-cols-3">
             <StatTile
               label={`Losers past the −${stopPct}% stop`}
               icon={TrendingDown}
