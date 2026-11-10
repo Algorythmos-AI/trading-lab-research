@@ -164,7 +164,13 @@ export interface Summary {
   last: string | null;
 }
 
-export function summarize(trades: readonly Trade[]): Summary {
+/**
+ * Totals of these trades. When `dayTrades` is given (the pieces closed in the same view, each booked to its own
+ * close day), the money figures come from them: `net`, and the day figures (days, green days, the best and worst
+ * day, the deepest fall), so they always add up to the calendar. The per-trade figures (counts, win rate, the
+ * average per trade, profit factor) stay on `trades`.
+ */
+export function summarize(trades: readonly Trade[], dayTrades?: readonly Trade[]): Summary {
   const sorted = sortByClose(trades);
   let net = 0;
   let wins = 0;
@@ -190,7 +196,7 @@ export function summarize(trades: readonly Trade[]): Summary {
     if (!best || t.pnl > best.pnl) best = t;
     if (!worst || t.pnl < worst.pnl) worst = t;
   }
-  const days = daily(sorted);
+  const days = daily(dayTrades ?? sorted);
   const n = sorted.length;
   return {
     trades: n,
@@ -205,6 +211,7 @@ export function summarize(trades: readonly Trade[]): Summary {
     payoff: wins && losses ? grossWin / wins / Math.abs(grossLoss / losses) : null,
     profitFactor: grossLoss < 0 ? grossWin / Math.abs(grossLoss) : null,
     expectancy: n ? net / n : null,
+    ...(dayTrades ? { net: dayTrades.reduce((s, t) => s + t.pnl, 0) } : {}),
     best,
     worst,
     maxDrawdown: Math.min(0, ...days.map((d) => d.dd)),
@@ -383,7 +390,8 @@ const median = (xs: number[]) => {
 
 /** Minutes after a losing close within which a new entry counts as "straight back in". */
 export const REVENGE_MINUTES = 10;
-const MIN_SAMPLE = 8;
+/** The fewest trades any figure on the Trades page is averaged over. */
+export const MIN_SAMPLE = 8;
 
 /**
  * Patterns in the trades worth knowing, each measured, never guessed: a lesson is only drawn when its sample is big
@@ -605,6 +613,8 @@ export interface SessionView {
   summary: Summary;
   /** Positions still open now, newest first: the open lots merged by holding (see `openPositions`). */
   open: Lot[];
+  /** The journal's open lots as it lists them, one per buy fill, for the day's entry count (`dayCheck`). */
+  lots: Lot[];
 }
 
 /**
@@ -632,17 +642,18 @@ export function openPositions(lots: readonly Lot[]): Lot[] {
 /** Today's trades in New York, or the latest session with trades when today has none yet. Null with no trades at all. */
 export function sessionView(doc: Pick<JournalDoc, "trades" | "open">, now: Date): SessionView | null {
   const today = nyTime(now.toISOString()).day;
-  const open = openPositions(doc.open ?? []).sort((a, b) => (b.opened_at ?? "").localeCompare(a.opened_at ?? ""));
+  const lots = [...(doc.open ?? [])];
+  const open = openPositions(lots).sort((a, b) => (b.opened_at ?? "").localeCompare(a.opened_at ?? ""));
   let day = today;
   let trades = doc.trades.filter((t) => closeDay(t) === today);
   if (trades.length === 0 && open.every((l) => !l.opened_at || nyTime(l.opened_at).day !== today)) {
     const last = doc.trades.reduce<string | null>((m, t) => (m === null || t.closed_at > m ? t.closed_at : m), null);
-    if (last === null) return open.length ? { day, isToday: true, trades, summary: summarize(trades), open } : null;
+    if (last === null) return open.length ? { day, isToday: true, trades, summary: summarize(trades), open, lots } : null;
     day = nyTime(last).day;
     trades = doc.trades.filter((t) => closeDay(t) === day);
   }
   trades = [...trades].sort((a, b) => b.closed_at.localeCompare(a.closed_at) || a.id.localeCompare(b.id));
-  return { day, isToday: day === today, trades, summary: summarize(trades), open };
+  return { day, isToday: day === today, trades, summary: summarize(trades), open, lots };
 }
 
 // ── Money in and out ─────────────────────────────────────────────────────────────────────────────────────────────

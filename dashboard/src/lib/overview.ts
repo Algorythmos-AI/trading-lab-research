@@ -1,7 +1,7 @@
 // The Overview page's arithmetic on the owner's own trades. Pure: no I/O; the clock is passed in. Built on the
 // journal helpers, so every figure matches the Trades page.
 import { closeDay, daily, groupBy, HOUR_ORDER, hourKey, holdMinutes, nyTime, type DayRow, type GroupRow, type Lot, type Trade } from "./journal";
-import { DAY_LOSS_LIMIT, MAX_TRADES_PER_DAY, TIME_STOP_MINUTES } from "./trade-rules";
+import { DAY_LOSS_LIMIT, entriesByDay, MAX_TRADES_PER_DAY, TIME_STOP_MINUTES } from "./trade-rules";
 
 export interface PeriodTotal {
   key: "week" | "month" | "year" | "all";
@@ -51,15 +51,38 @@ export interface RuleDay extends DayRow {
 
 /** The latest `count` trading days, oldest first, each marked kept or broken against the two day rules. */
 export function ruleDays(trades: readonly Trade[], count = 20): RuleDay[] {
-  return daily(trades)
+  return daysWithEntries(trades)
     .slice(-count)
     .map((d) => ({ ...d, ...judgeDay(d) }));
 }
 
-/** One day against the two day rules: the test behind the strip on Overview and the "!" on the Calendar. */
-export function judgeDay(d: Pick<DayRow, "pnl" | "trades">): Pick<RuleDay, "kept" | "broke"> {
+/**
+ * One row per New York day with a closed trade or an entry, oldest first: the closed result booked by close day (as
+ * `daily`, with its running total), and the entries made that day (`entriesByDay`). A day of entries that all closed
+ * later is a row with no result, so the cap is judged on the day the entries were made.
+ */
+export function daysWithEntries(trades: readonly Trade[]): (DayRow & { entries: number })[] {
+  const entries = entriesByDay(trades);
+  const rows = new Map(daily(trades).map((d) => [d.day, d]));
+  let cum = 0;
+  let peak = 0;
+  return [...new Set([...rows.keys(), ...entries.keys()])].sort().map((day) => {
+    const r = rows.get(day);
+    const pnl = r?.pnl ?? 0;
+    cum += pnl;
+    peak = Math.max(peak, cum);
+    return { day, pnl, trades: r?.trades ?? 0, wins: r?.wins ?? 0, cum, dd: cum - peak, entries: entries.get(day) ?? 0 };
+  });
+}
+
+/**
+ * One day against the two day rules: the test behind the strip on Overview and the "!" on the Calendar. `pnl` is the
+ * day's closed result before fees, as `dayCheck` reads it; `entries` the entries made that day as the cap counts them
+ * (`entriesByDay`: each distinct buy fill, so a buy sold in halves is one).
+ */
+export function judgeDay(d: { pnl: number; entries: number }): Pick<RuleDay, "kept" | "broke"> {
   const loss = d.pnl <= -DAY_LOSS_LIMIT;
-  const many = d.trades > MAX_TRADES_PER_DAY;
+  const many = d.entries > MAX_TRADES_PER_DAY;
   return { kept: !loss && !many, broke: loss && many ? "both" : loss ? "loss" : many ? "count" : null };
 }
 

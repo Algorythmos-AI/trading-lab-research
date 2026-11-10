@@ -14,6 +14,7 @@ const PAGES = [
   "/options/AAPL",
   "/calendar",
   "/calendar?y=2027",
+  "/trades",
   "/strategies",
   "/research",
   "/operations",

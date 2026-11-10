@@ -21,6 +21,17 @@ for (const theme of ["light", "dark"] as const) {
     });
   }
 
+  test(`the Trades page and its jump bar pass the accessibility scan on a phone in ${theme}`, async ({ page, context }) => {
+    await useTheme(context, theme);
+    await page.goto("/trades");
+    expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(theme === "dark");
+    const bar = page.getByRole("navigation", { name: "On this page" });
+    await expect(bar).toBeVisible();
+    // The bar scrolls sideways inside itself; the page does not.
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    expect(await scan(page)).toEqual([]);
+  });
+
   test(`the "Trade now" board, its alert menu and a notice pass the accessibility scan on a phone in ${theme}`, async ({ page, context, baseURL }) => {
     await useTheme(context, theme);
     await context.addCookies([

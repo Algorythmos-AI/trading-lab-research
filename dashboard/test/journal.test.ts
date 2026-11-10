@@ -22,6 +22,11 @@ import {
   type Trade,
 } from "@/lib/journal";
 import { validateJournal } from "@/lib/validate";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { feeNote, JournalTiles, LossSizePanel, TodayPanel, toRows } from "@/components/journal";
+import { dayCheck } from "@/lib/trade-rules";
+import { ownerPositions, positionTrade, tradeUnits } from "@/lib/owner-positions";
 
 let n = 0;
 const trade = (pnl: number, opened: string, closed: string, extra: Partial<Trade> = {}): Trade => ({
@@ -307,5 +312,90 @@ describe("money in and out", () => {
     expect(validateJournal(fixtureDoc).ok).toBe(true);
     const bad = { ...fixtureDoc, money: { ...money, balance_by_account: 1 } };
     expect(validateJournal(bad).ok).toBe(false);
+  });
+});
+
+describe("the Trades page counts positions, after fees", () => {
+  const doc = fixtureDoc as unknown as JournalDoc;
+  const units = tradeUnits(doc.trades, { basis: "net", open: doc.open, gaps: doc.gaps, feesIncluded: doc.fees_included });
+  const positions = units.flatMap((u) => (u.position ? [u.position] : []));
+
+  it("summarises trades, not pieces, and takes the fees off options only", () => {
+    const net = summarize(units.map((u) => u.unit));
+    const gross = summarize(units.map((u) => (u.position ? positionTrade(u.position, "gross") : u.unit)));
+    expect([doc.trades.length, net.trades]).toEqual([259, 256]); // three scale-outs of two pieces each
+    expect(gross.net).toBeCloseTo(doc.trades.reduce((s, t) => s + t.pnl, 0));
+    const fees = positions.reduce((s, p) => s + p.fees, 0);
+    expect(fees).toBeGreaterThan(0);
+    expect(gross.net - net.net).toBeCloseTo(fees);
+  });
+
+  it("filters a position by the day of its last close", () => {
+    const kept = applyFilter(units.map((u) => u.unit), { period: "2026", symbol: "SPY", kind: "call" }, new Date("2026-10-16T20:00:00Z"));
+    expect(kept.some((t) => t.id === "fx-pos-1")).toBe(true);
+    expect(kept.some((t) => t.id === "fx-pos-2")).toBe(false); // a piece of fx-pos-1's position, not a trade of its own
+  });
+
+  it("lists a scale-out once, with its pieces, its fees, and its result before and after them", () => {
+    const row = toRows(units).find((r) => r.id === "fx-pos-1")!;
+    expect(row.pieces).toHaveLength(2);
+    expect(row.qty).toBe(2);
+    expect(row.fees).toBeCloseTo(2 * 0.55 + 2 * 0.56);
+    expect(row.gross).toBeCloseTo(80);
+    expect(row.pnl).toBeCloseTo(80 - 2.22);
+    expect(row.r25).toBeCloseTo((80 - 2.22) / 60);
+    const share = toRows(units).find((r) => r.kind === "stock")!;
+    expect([share.fees, share.r25, share.pieces]).toEqual([null, null, []]);
+  });
+
+  it("shows the before-fees result beside the headline and says what the fees are", () => {
+    const s = summarize(units.map((u) => u.unit));
+    const g = summarize(units.map((u) => (u.position ? positionTrade(u.position, "gross") : u.unit)));
+    const html = renderToStaticMarkup(createElement(JournalTiles, { s, gross: g, fees: { included: false, total: 12.34 } }));
+    expect(html).toContain("after fees");
+    expect(html).toContain("before fees");
+    expect(html).toContain("$0.55 in, $0.56 out per contract");
+    expect(feeNote({ included: true, total: 0 })).toMatch(/already carry fees/);
+  });
+
+  it("counts today's closed trades as the day's rules do, after fees, with the pieces one click away", () => {
+    const now = new Date("2026-09-16T20:30:00Z");
+    const today = { ...doc, trades: doc.trades.filter((t) => t.opened_at.startsWith("2026-09-16")), open: [] };
+    const view = sessionView(today, now)!;
+    expect(view.trades).toHaveLength(7);
+    const used = dayCheck(view).used;
+    expect(used).toBe(4);
+    const html = renderToStaticMarkup(createElement(TodayPanel, { view, asOf: "2026-09-16T20:25:00Z", now, market: "after", feesIncluded: false }));
+    expect(html).toMatch(new RegExp(`Closed trades</span></p><p[^>]*>${used}</p>`));
+    expect(html).toContain("Day result, after fees");
+    expect(html).toContain("before fees −\u2060$75"); // the seven pieces' results, as the broker reports them
+    expect(html).toContain("2 pieces");
+  });
+
+  it("measures loss size with its n, and says when there are too few to average", () => {
+    const few = renderToStaticMarkup(createElement(LossSizePanel, { positions: positions.slice(0, 5) }));
+    expect(few).toMatch(/n = \d+ over \d+ sessions?: too few to average/);
+    expect(few).toMatch(/Losers n = \d+, winners n = \d+: too few to average/);
+    expect(few).not.toMatch(/target 1|would have made/i);
+    const all = renderToStaticMarkup(createElement(LossSizePanel, { positions }));
+    expect(all).toMatch(/after fees, n = \d+ over \d+ sessions/);
+    expect(renderToStaticMarkup(createElement(LossSizePanel, { positions: [] }))).toContain("No option trades to measure");
+  });
+
+  it("holds the average loser and winner to the overall mean's sample, since together they give it back", () => {
+    // 9 losers and 8 winners on one session: enough of each, but not 20 trades over 10 sessions.
+    let k = 0;
+    const p = (sym: string, m: number, exit: number) => trade(Math.round((exit - 1) * 100), `2026-10-14T14:${String(m).padStart(2, "0")}:00Z`, `2026-10-14T14:${String(m).padStart(2, "0")}:30Z`, { id: `e${++k}`, symbol: sym, entry: 1, exit });
+    const few = ownerPositions({ trades: [...Array.from({ length: 9 }, (_, i) => p(`S${i}`, i, 0.8)), ...Array.from({ length: 8 }, (_, i) => p(`W${i}`, 20 + i, 1.3))] }).positions;
+    const html = renderToStaticMarkup(createElement(LossSizePanel, { positions: few }));
+    expect(html).toContain("Losers n = 9, winners n = 8: too few to average");
+    expect(html).not.toMatch(/[−+]\d\.\d\dR \/ /);
+    expect(html).toContain("Winners closed under +50% on premium");
+    expect(html).not.toMatch(/rule 3|2:1|target/i);
+  });
+
+  it("says how many trades were left out when every one in view was", () => {
+    const flagged = ownerPositions({ trades: [trade(10, "2026-10-14T14:00:00Z", "2026-10-14T14:01:00Z", { entry: 0, exit: 0.1 })] }).positions;
+    expect(renderToStaticMarkup(createElement(LossSizePanel, { positions: flagged }))).toContain("1 option trade was left out");
   });
 });

@@ -1,0 +1,2830 @@
+{
+ "schema": "wt/owner-vectors",
+ "version": 1,
+ "note": "Written by scripts/gen_owner_vectors.py from wt.owner.positions. Do not edit by hand.",
+ "fees": {
+  "open_per_contract": 0.55,
+  "close_per_contract": 0.56,
+  "expired_close": 0.0
+ },
+ "cases": [
+  {
+   "name": "a single piece",
+   "doc": {
+    "trades": [
+     {
+      "id": "v001",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T14:00:00.000Z",
+      "closed_at": "2026-10-14T14:04:00.000Z",
+      "entry": 1.0,
+      "exit": 1.2,
+      "multiplier": 100,
+      "pnl": 20.0,
+      "close": "order"
+     }
+    ],
+    "open": null,
+    "gaps": null,
+    "fees_included": false
+   },
+   "expect": {
+    "positions": [
+     {
+      "id": "v001",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600.0,
+      "expiry": "2026-10-16",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v001"
+      ],
+      "t0": "2026-10-14T14:00:00.000Z",
+      "last_close": "2026-10-14T14:04:00.000Z",
+      "hold_minutes": 4.0,
+      "contracts_opened": 1.0,
+      "contracts_closed": 1.0,
+      "contracts_expired": 0.0,
+      "cost": 100.0,
+      "proceeds": 120.0,
+      "gross": 20.0,
+      "fees": 1.11,
+      "net": 18.89,
+      "option_pct": 0.1889,
+      "gross_pct": 0.2,
+      "r25": 0.7556,
+      "r50": 0.3778,
+      "r25_gross": 0.8,
+      "r50_gross": 0.4,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     }
+    ],
+    "excluded": {
+     "stock": 0,
+     "short": 0,
+     "other": 0
+    },
+    "left_out": {
+     "zero_cost": 0,
+     "gap_piece": 0,
+     "open_lot": 0
+    },
+    "fees_included": false
+   }
+  },
+  {
+   "name": "a scale-out: one buy of 2, two sells, is one position",
+   "doc": {
+    "trades": [
+     {
+      "id": "v002",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T14:00:00.000Z",
+      "closed_at": "2026-10-14T14:05:00.000Z",
+      "entry": 1.0,
+      "exit": 1.2,
+      "multiplier": 100,
+      "pnl": 20.0,
+      "close": "order"
+     },
+     {
+      "id": "v003",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T14:00:00.000Z",
+      "closed_at": "2026-10-14T14:20:00.000Z",
+      "entry": 1.0,
+      "exit": 1.4,
+      "multiplier": 100,
+      "pnl": 40.0,
+      "close": "order"
+     }
+    ],
+    "open": null,
+    "gaps": null,
+    "fees_included": false
+   },
+   "expect": {
+    "positions": [
+     {
+      "id": "v002",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600.0,
+      "expiry": "2026-10-16",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v002",
+       "v003"
+      ],
+      "t0": "2026-10-14T14:00:00.000Z",
+      "last_close": "2026-10-14T14:20:00.000Z",
+      "hold_minutes": 20.0,
+      "contracts_opened": 2.0,
+      "contracts_closed": 2.0,
+      "contracts_expired": 0.0,
+      "cost": 200.0,
+      "proceeds": 260.0,
+      "gross": 60.0,
+      "fees": 2.22,
+      "net": 57.78,
+      "option_pct": 0.2889,
+      "gross_pct": 0.3,
+      "r25": 1.1556,
+      "r50": 1.1556,
+      "r25_gross": 1.2,
+      "r50_gross": 1.2,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     }
+    ],
+    "excluded": {
+     "stock": 0,
+     "short": 0,
+     "other": 0
+    },
+    "left_out": {
+     "zero_cost": 0,
+     "gap_piece": 0,
+     "open_lot": 0
+    },
+    "fees_included": false
+   }
+  },
+  {
+   "name": "a scale-in: two buys closed by one sell, is one position",
+   "doc": {
+    "trades": [
+     {
+      "id": "v004",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T14:00:00.000Z",
+      "closed_at": "2026-10-14T14:10:00.000Z",
+      "entry": 1.0,
+      "exit": 0.9,
+      "multiplier": 100,
+      "pnl": -10.0,
+      "close": "order"
+     },
+     {
+      "id": "v005",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T14:03:00.000Z",
+      "closed_at": "2026-10-14T14:10:00.000Z",
+      "entry": 0.95,
+      "exit": 0.9,
+      "multiplier": 100,
+      "pnl": -5.0,
+      "close": "order"
+     }
+    ],
+    "open": null,
+    "gaps": null,
+    "fees_included": false
+   },
+   "expect": {
+    "positions": [
+     {
+      "id": "v004",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600.0,
+      "expiry": "2026-10-16",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v004",
+       "v005"
+      ],
+      "t0": "2026-10-14T14:00:00.000Z",
+      "last_close": "2026-10-14T14:10:00.000Z",
+      "hold_minutes": 10.0,
+      "contracts_opened": 2.0,
+      "contracts_closed": 2.0,
+      "contracts_expired": 0.0,
+      "cost": 195.0,
+      "proceeds": 180.0,
+      "gross": -15.0,
+      "fees": 2.22,
+      "net": -17.22,
+      "option_pct": -0.0883076923076923,
+      "gross_pct": -0.07692307692307693,
+      "r25": -0.3532307692307692,
+      "r50": -0.3444,
+      "r25_gross": -0.3076923076923077,
+      "r50_gross": -0.3,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     }
+    ],
+    "excluded": {
+     "stock": 0,
+     "short": 0,
+     "other": 0
+    },
+    "left_out": {
+     "zero_cost": 0,
+     "gap_piece": 0,
+     "open_lot": 0
+    },
+    "fees_included": false
+   }
+  },
+  {
+   "name": "a re-entry after a full exit the same day is a second position",
+   "doc": {
+    "trades": [
+     {
+      "id": "v006",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T14:00:00.000Z",
+      "closed_at": "2026-10-14T14:05:00.000Z",
+      "entry": 1.0,
+      "exit": 0.8,
+      "multiplier": 100,
+      "pnl": -20.0,
+      "close": "order"
+     },
+     {
+      "id": "v007",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T14:20:00.000Z",
+      "closed_at": "2026-10-14T14:25:00.000Z",
+      "entry": 0.9,
+      "exit": 1.1,
+      "multiplier": 100,
+      "pnl": 20.0,
+      "close": "order"
+     }
+    ],
+    "open": null,
+    "gaps": null,
+    "fees_included": false
+   },
+   "expect": {
+    "positions": [
+     {
+      "id": "v006",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600.0,
+      "expiry": "2026-10-16",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v006"
+      ],
+      "t0": "2026-10-14T14:00:00.000Z",
+      "last_close": "2026-10-14T14:05:00.000Z",
+      "hold_minutes": 5.0,
+      "contracts_opened": 1.0,
+      "contracts_closed": 1.0,
+      "contracts_expired": 0.0,
+      "cost": 100.0,
+      "proceeds": 80.0,
+      "gross": -20.0,
+      "fees": 1.11,
+      "net": -21.11,
+      "option_pct": -0.21109999999999998,
+      "gross_pct": -0.2,
+      "r25": -0.8443999999999999,
+      "r50": -0.42219999999999996,
+      "r25_gross": -0.8,
+      "r50_gross": -0.4,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     },
+     {
+      "id": "v007",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600.0,
+      "expiry": "2026-10-16",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v007"
+      ],
+      "t0": "2026-10-14T14:20:00.000Z",
+      "last_close": "2026-10-14T14:25:00.000Z",
+      "hold_minutes": 5.0,
+      "contracts_opened": 1.0,
+      "contracts_closed": 1.0,
+      "contracts_expired": 0.0,
+      "cost": 90.0,
+      "proceeds": 110.00000000000001,
+      "gross": 20.0,
+      "fees": 1.11,
+      "net": 18.89,
+      "option_pct": 0.2098888888888889,
+      "gross_pct": 0.2222222222222222,
+      "r25": 0.8395555555555556,
+      "r50": 0.3778,
+      "r25_gross": 0.8888888888888888,
+      "r50_gross": 0.4,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     }
+    ],
+    "excluded": {
+     "stock": 0,
+     "short": 0,
+     "other": 0
+    },
+    "left_out": {
+     "zero_cost": 0,
+     "gap_piece": 0,
+     "open_lot": 0
+    },
+    "fees_included": false
+   }
+  },
+  {
+   "name": "opened at the very instant of the latest close starts a new position; equal opens join",
+   "doc": {
+    "trades": [
+     {
+      "id": "v008",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T14:00:00.000Z",
+      "closed_at": "2026-10-14T14:05:00.000Z",
+      "entry": 1.0,
+      "exit": 1.1,
+      "multiplier": 100,
+      "pnl": 10.0,
+      "close": "order"
+     },
+     {
+      "id": "v009",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T14:05:00.000Z",
+      "closed_at": "2026-10-14T14:09:00.000Z",
+      "entry": 1.1,
+      "exit": 1.0,
+      "multiplier": 100,
+      "pnl": -10.0,
+      "close": "order"
+     },
+     {
+      "id": "v010",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T14:05:00.000Z",
+      "closed_at": "2026-10-14T14:12:00.000Z",
+      "entry": 1.1,
+      "exit": 1.3,
+      "multiplier": 100,
+      "pnl": 20.0,
+      "close": "order"
+     }
+    ],
+    "open": null,
+    "gaps": null,
+    "fees_included": false
+   },
+   "expect": {
+    "positions": [
+     {
+      "id": "v008",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600.0,
+      "expiry": "2026-10-16",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v008"
+      ],
+      "t0": "2026-10-14T14:00:00.000Z",
+      "last_close": "2026-10-14T14:05:00.000Z",
+      "hold_minutes": 5.0,
+      "contracts_opened": 1.0,
+      "contracts_closed": 1.0,
+      "contracts_expired": 0.0,
+      "cost": 100.0,
+      "proceeds": 110.00000000000001,
+      "gross": 10.0,
+      "fees": 1.11,
+      "net": 8.89,
+      "option_pct": 0.0889,
+      "gross_pct": 0.1,
+      "r25": 0.3556,
+      "r50": 0.1778,
+      "r25_gross": 0.4,
+      "r50_gross": 0.2,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     },
+     {
+      "id": "v009",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600.0,
+      "expiry": "2026-10-16",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v009",
+       "v010"
+      ],
+      "t0": "2026-10-14T14:05:00.000Z",
+      "last_close": "2026-10-14T14:12:00.000Z",
+      "hold_minutes": 7.0,
+      "contracts_opened": 2.0,
+      "contracts_closed": 2.0,
+      "contracts_expired": 0.0,
+      "cost": 220.00000000000003,
+      "proceeds": 230.0,
+      "gross": 10.0,
+      "fees": 2.22,
+      "net": 7.779999999999999,
+      "option_pct": 0.035363636363636354,
+      "gross_pct": 0.04545454545454545,
+      "r25": 0.14145454545454542,
+      "r50": 0.1556,
+      "r25_gross": 0.1818181818181818,
+      "r50_gross": 0.2,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     }
+    ],
+    "excluded": {
+     "stock": 0,
+     "short": 0,
+     "other": 0
+    },
+    "left_out": {
+     "zero_cost": 0,
+     "gap_piece": 0,
+     "open_lot": 0
+    },
+    "fees_included": false
+   }
+  },
+  {
+   "name": "a joining piece extends the latest close, so a later open inside it still joins",
+   "doc": {
+    "trades": [
+     {
+      "id": "v011",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T14:00:00.000Z",
+      "closed_at": "2026-10-14T14:05:00.000Z",
+      "entry": 1.0,
+      "exit": 1.1,
+      "multiplier": 100,
+      "pnl": 10.0,
+      "close": "order"
+     },
+     {
+      "id": "v012",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T14:04:00.000Z",
+      "closed_at": "2026-10-14T14:30:00.000Z",
+      "entry": 1.05,
+      "exit": 0.7,
+      "multiplier": 100,
+      "pnl": -35.0,
+      "close": "order"
+     },
+     {
+      "id": "v013",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T14:20:00.000Z",
+      "closed_at": "2026-10-14T14:30:00.000Z",
+      "entry": 0.8,
+      "exit": 0.7,
+      "multiplier": 100,
+      "pnl": -10.0,
+      "close": "order"
+     }
+    ],
+    "open": null,
+    "gaps": null,
+    "fees_included": false
+   },
+   "expect": {
+    "positions": [
+     {
+      "id": "v011",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600.0,
+      "expiry": "2026-10-16",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v011",
+       "v012",
+       "v013"
+      ],
+      "t0": "2026-10-14T14:00:00.000Z",
+      "last_close": "2026-10-14T14:30:00.000Z",
+      "hold_minutes": 30.0,
+      "contracts_opened": 3.0,
+      "contracts_closed": 3.0,
+      "contracts_expired": 0.0,
+      "cost": 285.0,
+      "proceeds": 250.0,
+      "gross": -35.0,
+      "fees": 3.33,
+      "net": -38.33,
+      "option_pct": -0.13449122807017544,
+      "gross_pct": -0.12280701754385964,
+      "r25": -0.5379649122807018,
+      "r50": -0.7666,
+      "r25_gross": -0.49122807017543857,
+      "r50_gross": -0.7,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     }
+    ],
+    "excluded": {
+     "stock": 0,
+     "short": 0,
+     "other": 0
+    },
+    "left_out": {
+     "zero_cost": 0,
+     "gap_piece": 0,
+     "open_lot": 0
+    },
+    "fees_included": false
+   }
+  },
+  {
+   "name": "a piece left to expire pays no closing fee",
+   "doc": {
+    "trades": [
+     {
+      "id": "v014",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-14",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T19:00:00.000Z",
+      "closed_at": "2026-10-14T19:30:00.000Z",
+      "entry": 0.5,
+      "exit": 0.6,
+      "multiplier": 100,
+      "pnl": 10.0,
+      "close": "order"
+     },
+     {
+      "id": "v015",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-14",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T19:00:00.000Z",
+      "closed_at": "2026-10-14T20:00:00.000Z",
+      "entry": 0.5,
+      "exit": 0.0,
+      "multiplier": 100,
+      "pnl": -50.0,
+      "close": "expired"
+     }
+    ],
+    "open": null,
+    "gaps": null,
+    "fees_included": false
+   },
+   "expect": {
+    "positions": [
+     {
+      "id": "v014",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600.0,
+      "expiry": "2026-10-14",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v014",
+       "v015"
+      ],
+      "t0": "2026-10-14T19:00:00.000Z",
+      "last_close": "2026-10-14T20:00:00.000Z",
+      "hold_minutes": 60.0,
+      "contracts_opened": 2.0,
+      "contracts_closed": 1.0,
+      "contracts_expired": 1.0,
+      "cost": 100.0,
+      "proceeds": 60.0,
+      "gross": -40.0,
+      "fees": 1.6600000000000001,
+      "net": -41.66,
+      "option_pct": -0.41659999999999997,
+      "gross_pct": -0.4,
+      "r25": -1.6663999999999999,
+      "r50": -0.8331999999999999,
+      "r25_gross": -1.6,
+      "r50_gross": -0.8,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     }
+    ],
+    "excluded": {
+     "stock": 0,
+     "short": 0,
+     "other": 0
+    },
+    "left_out": {
+     "zero_cost": 0,
+     "gap_piece": 0,
+     "open_lot": 0
+    },
+    "fees_included": false
+   }
+  },
+  {
+   "name": "every piece expired",
+   "doc": {
+    "trades": [
+     {
+      "id": "v016",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-14",
+      "side": "long",
+      "qty": 3,
+      "opened_at": "2026-10-14T19:00:00.000Z",
+      "closed_at": "2026-10-14T20:00:00.000Z",
+      "entry": 0.4,
+      "exit": 0.0,
+      "multiplier": 100,
+      "pnl": -120.0,
+      "close": "expired"
+     }
+    ],
+    "open": null,
+    "gaps": null,
+    "fees_included": false
+   },
+   "expect": {
+    "positions": [
+     {
+      "id": "v016",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600.0,
+      "expiry": "2026-10-14",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v016"
+      ],
+      "t0": "2026-10-14T19:00:00.000Z",
+      "last_close": "2026-10-14T20:00:00.000Z",
+      "hold_minutes": 60.0,
+      "contracts_opened": 3.0,
+      "contracts_closed": 0.0,
+      "contracts_expired": 3.0,
+      "cost": 120.0,
+      "proceeds": 0.0,
+      "gross": -120.0,
+      "fees": 1.6500000000000001,
+      "net": -121.65,
+      "option_pct": -1.0137500000000002,
+      "gross_pct": -1.0,
+      "r25": -4.055000000000001,
+      "r50": -2.4330000000000003,
+      "r25_gross": -4.0,
+      "r50_gross": -2.4,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     }
+    ],
+    "excluded": {
+     "stock": 0,
+     "short": 0,
+     "other": 0
+    },
+    "left_out": {
+     "zero_cost": 0,
+     "gap_piece": 0,
+     "open_lot": 0
+    },
+    "fees_included": false
+   }
+  },
+  {
+   "name": "a piece closed on a later New York day",
+   "doc": {
+    "trades": [
+     {
+      "id": "v017",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-17",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T19:30:00.000Z",
+      "closed_at": "2026-10-15T14:00:00.000Z",
+      "entry": 2.0,
+      "exit": 1.5,
+      "multiplier": 100,
+      "pnl": -50.0,
+      "close": "order"
+     }
+    ],
+    "open": null,
+    "gaps": null,
+    "fees_included": false
+   },
+   "expect": {
+    "positions": [
+     {
+      "id": "v017",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600.0,
+      "expiry": "2026-10-17",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v017"
+      ],
+      "t0": "2026-10-14T19:30:00.000Z",
+      "last_close": "2026-10-15T14:00:00.000Z",
+      "hold_minutes": 1110.0,
+      "contracts_opened": 1.0,
+      "contracts_closed": 1.0,
+      "contracts_expired": 0.0,
+      "cost": 200.0,
+      "proceeds": 150.0,
+      "gross": -50.0,
+      "fees": 1.11,
+      "net": -51.11,
+      "option_pct": -0.25555,
+      "gross_pct": -0.25,
+      "r25": -1.0222,
+      "r50": -1.0222,
+      "r25_gross": -1.0,
+      "r50_gross": -1.0,
+      "closed_later_day": true,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     }
+    ],
+    "excluded": {
+     "stock": 0,
+     "short": 0,
+     "other": 0
+    },
+    "left_out": {
+     "zero_cost": 0,
+     "gap_piece": 0,
+     "open_lot": 0
+    },
+    "fees_included": false
+   }
+  },
+  {
+   "name": "shares and short pieces are not positions",
+   "doc": {
+    "trades": [
+     {
+      "id": "v018",
+      "symbol": "AAPL",
+      "kind": "stock",
+      "strike": null,
+      "expiry": null,
+      "side": "long",
+      "qty": 10,
+      "opened_at": "2026-10-14T14:00:00.000Z",
+      "closed_at": "2026-10-14T15:00:00.000Z",
+      "entry": 210.0,
+      "exit": 212.0,
+      "multiplier": 1,
+      "pnl": 20.0,
+      "close": "order"
+     },
+     {
+      "id": "v019",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "short",
+      "qty": 1,
+      "opened_at": "2026-10-14T14:00:00.000Z",
+      "closed_at": "2026-10-14T14:30:00.000Z",
+      "entry": 1.5,
+      "exit": 1.0,
+      "multiplier": 100,
+      "pnl": 50.0,
+      "close": "order"
+     },
+     {
+      "id": "v020",
+      "symbol": "SPY",
+      "kind": "put",
+      "strike": 590,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T14:00:00.000Z",
+      "closed_at": "2026-10-14T14:30:00.000Z",
+      "entry": 1.5,
+      "exit": 1.0,
+      "multiplier": 100,
+      "pnl": -50.0,
+      "close": "order"
+     }
+    ],
+    "open": null,
+    "gaps": null,
+    "fees_included": false
+   },
+   "expect": {
+    "positions": [
+     {
+      "id": "v020",
+      "symbol": "SPY",
+      "kind": "put",
+      "strike": 590.0,
+      "expiry": "2026-10-16",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v020"
+      ],
+      "t0": "2026-10-14T14:00:00.000Z",
+      "last_close": "2026-10-14T14:30:00.000Z",
+      "hold_minutes": 30.0,
+      "contracts_opened": 1.0,
+      "contracts_closed": 1.0,
+      "contracts_expired": 0.0,
+      "cost": 150.0,
+      "proceeds": 100.0,
+      "gross": -50.0,
+      "fees": 1.11,
+      "net": -51.11,
+      "option_pct": -0.34073333333333333,
+      "gross_pct": -0.3333333333333333,
+      "r25": -1.3629333333333333,
+      "r50": -1.0222,
+      "r25_gross": -1.3333333333333333,
+      "r50_gross": -1.0,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     }
+    ],
+    "excluded": {
+     "stock": 1,
+     "short": 1,
+     "other": 0
+    },
+    "left_out": {
+     "zero_cost": 0,
+     "gap_piece": 0,
+     "open_lot": 0
+    },
+    "fees_included": false
+   }
+  },
+  {
+   "name": "cost zero, a gap piece and a lot still open are flagged and left out",
+   "doc": {
+    "trades": [
+     {
+      "id": "v021",
+      "symbol": "QQQ",
+      "kind": "call",
+      "strike": 500,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T14:00:00.000Z",
+      "closed_at": "2026-10-14T14:02:00.000Z",
+      "entry": 0.0,
+      "exit": 0.81,
+      "multiplier": 100,
+      "pnl": 81,
+      "close": "order"
+     },
+     {
+      "id": "v022",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-07-17",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-07-15T14:00:00.000Z",
+      "closed_at": "2026-07-15T14:02:00.000Z",
+      "entry": 1.0,
+      "exit": 1.2,
+      "multiplier": 100,
+      "pnl": 20.0,
+      "close": "order"
+     },
+     {
+      "id": "v023",
+      "symbol": "IWM",
+      "kind": "call",
+      "strike": 220,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T15:00:00.000Z",
+      "closed_at": "2026-10-14T15:10:00.000Z",
+      "entry": 1.0,
+      "exit": 1.1,
+      "multiplier": 100,
+      "pnl": 10.0,
+      "close": "order"
+     },
+     {
+      "id": "v024",
+      "symbol": "IWM",
+      "kind": "call",
+      "strike": 221,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T15:00:00.000Z",
+      "closed_at": "2026-10-14T15:10:00.000Z",
+      "entry": 1.0,
+      "exit": 1.1,
+      "multiplier": 100,
+      "pnl": 10.0,
+      "close": "order"
+     }
+    ],
+    "open": [
+     {
+      "symbol": "IWM",
+      "kind": "call",
+      "strike": 220,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 2,
+      "entry": 1.0,
+      "opened_at": "2026-10-14T15:00:00.000Z"
+     },
+     {
+      "symbol": "IWM",
+      "kind": "call",
+      "strike": 221,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "entry": 1.0,
+      "opened_at": "2026-10-13T15:00:00.000Z"
+     }
+    ],
+    "gaps": [
+     {
+      "date": "2026-07-15",
+      "kind": "close-without-open",
+      "symbol": "SPY",
+      "pnl": 81
+     }
+    ],
+    "fees_included": false
+   },
+   "expect": {
+    "positions": [
+     {
+      "id": "v022",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600.0,
+      "expiry": "2026-07-17",
+      "day": "2026-07-15",
+      "piece_ids": [
+       "v022"
+      ],
+      "t0": "2026-07-15T14:00:00.000Z",
+      "last_close": "2026-07-15T14:02:00.000Z",
+      "hold_minutes": 2.0,
+      "contracts_opened": 1.0,
+      "contracts_closed": 1.0,
+      "contracts_expired": 0.0,
+      "cost": 100.0,
+      "proceeds": 120.0,
+      "gross": 20.0,
+      "fees": 1.11,
+      "net": 18.89,
+      "option_pct": 0.1889,
+      "gross_pct": 0.2,
+      "r25": 0.7556,
+      "r50": 0.3778,
+      "r25_gross": 0.8,
+      "r50_gross": 0.4,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": true,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": false
+     },
+     {
+      "id": "v021",
+      "symbol": "QQQ",
+      "kind": "call",
+      "strike": 500.0,
+      "expiry": "2026-10-16",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v021"
+      ],
+      "t0": "2026-10-14T14:00:00.000Z",
+      "last_close": "2026-10-14T14:02:00.000Z",
+      "hold_minutes": 2.0,
+      "contracts_opened": 1.0,
+      "contracts_closed": 1.0,
+      "contracts_expired": 0.0,
+      "cost": 0.0,
+      "proceeds": 81.0,
+      "gross": 81.0,
+      "fees": 1.11,
+      "net": 79.89,
+      "option_pct": null,
+      "gross_pct": null,
+      "r25": null,
+      "r50": 1.5978,
+      "r25_gross": null,
+      "r50_gross": 1.62,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": true,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": false
+     },
+     {
+      "id": "v023",
+      "symbol": "IWM",
+      "kind": "call",
+      "strike": 220.0,
+      "expiry": "2026-10-16",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v023"
+      ],
+      "t0": "2026-10-14T15:00:00.000Z",
+      "last_close": "2026-10-14T15:10:00.000Z",
+      "hold_minutes": 10.0,
+      "contracts_opened": 1.0,
+      "contracts_closed": 1.0,
+      "contracts_expired": 0.0,
+      "cost": 100.0,
+      "proceeds": 110.00000000000001,
+      "gross": 10.0,
+      "fees": 1.11,
+      "net": 8.89,
+      "option_pct": 0.0889,
+      "gross_pct": 0.1,
+      "r25": 0.3556,
+      "r50": 0.1778,
+      "r25_gross": 0.4,
+      "r50_gross": 0.2,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": true,
+       "fees_included": false
+      },
+      "counts": false
+     },
+     {
+      "id": "v024",
+      "symbol": "IWM",
+      "kind": "call",
+      "strike": 221.0,
+      "expiry": "2026-10-16",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v024"
+      ],
+      "t0": "2026-10-14T15:00:00.000Z",
+      "last_close": "2026-10-14T15:10:00.000Z",
+      "hold_minutes": 10.0,
+      "contracts_opened": 1.0,
+      "contracts_closed": 1.0,
+      "contracts_expired": 0.0,
+      "cost": 100.0,
+      "proceeds": 110.00000000000001,
+      "gross": 10.0,
+      "fees": 1.11,
+      "net": 8.89,
+      "option_pct": 0.0889,
+      "gross_pct": 0.1,
+      "r25": 0.3556,
+      "r50": 0.1778,
+      "r25_gross": 0.4,
+      "r50_gross": 0.2,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     }
+    ],
+    "excluded": {
+     "stock": 0,
+     "short": 0,
+     "other": 0
+    },
+    "left_out": {
+     "zero_cost": 1,
+     "gap_piece": 1,
+     "open_lot": 1
+    },
+    "fees_included": false
+   }
+  },
+  {
+   "name": "a held lot with no open time flags every position of its contract (the cautious reading)",
+   "doc": {
+    "trades": [
+     {
+      "id": "v025",
+      "symbol": "IWM",
+      "kind": "call",
+      "strike": 222,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T15:00:00.000Z",
+      "closed_at": "2026-10-14T15:10:00.000Z",
+      "entry": 1.0,
+      "exit": 1.1,
+      "multiplier": 100,
+      "pnl": 10.0,
+      "close": "order"
+     },
+     {
+      "id": "v026",
+      "symbol": "IWM",
+      "kind": "call",
+      "strike": 222,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-13T15:00:00.000Z",
+      "closed_at": "2026-10-13T15:10:00.000Z",
+      "entry": 1.0,
+      "exit": 1.1,
+      "multiplier": 100,
+      "pnl": 10.0,
+      "close": "order"
+     },
+     {
+      "id": "v027",
+      "symbol": "IWM",
+      "kind": "call",
+      "strike": 223,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T15:00:00.000Z",
+      "closed_at": "2026-10-14T15:10:00.000Z",
+      "entry": 1.0,
+      "exit": 1.1,
+      "multiplier": 100,
+      "pnl": 10.0,
+      "close": "order"
+     }
+    ],
+    "open": [
+     {
+      "symbol": "IWM",
+      "kind": "call",
+      "strike": 222,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "entry": 1.0,
+      "opened_at": null
+     },
+     {
+      "symbol": "IWM",
+      "kind": "call",
+      "strike": 223,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "entry": 1.0
+     }
+    ],
+    "gaps": null,
+    "fees_included": false
+   },
+   "expect": {
+    "positions": [
+     {
+      "id": "v026",
+      "symbol": "IWM",
+      "kind": "call",
+      "strike": 222.0,
+      "expiry": "2026-10-16",
+      "day": "2026-10-13",
+      "piece_ids": [
+       "v026"
+      ],
+      "t0": "2026-10-13T15:00:00.000Z",
+      "last_close": "2026-10-13T15:10:00.000Z",
+      "hold_minutes": 10.0,
+      "contracts_opened": 1.0,
+      "contracts_closed": 1.0,
+      "contracts_expired": 0.0,
+      "cost": 100.0,
+      "proceeds": 110.00000000000001,
+      "gross": 10.0,
+      "fees": 1.11,
+      "net": 8.89,
+      "option_pct": 0.0889,
+      "gross_pct": 0.1,
+      "r25": 0.3556,
+      "r50": 0.1778,
+      "r25_gross": 0.4,
+      "r50_gross": 0.2,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": true,
+       "fees_included": false
+      },
+      "counts": false
+     },
+     {
+      "id": "v025",
+      "symbol": "IWM",
+      "kind": "call",
+      "strike": 222.0,
+      "expiry": "2026-10-16",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v025"
+      ],
+      "t0": "2026-10-14T15:00:00.000Z",
+      "last_close": "2026-10-14T15:10:00.000Z",
+      "hold_minutes": 10.0,
+      "contracts_opened": 1.0,
+      "contracts_closed": 1.0,
+      "contracts_expired": 0.0,
+      "cost": 100.0,
+      "proceeds": 110.00000000000001,
+      "gross": 10.0,
+      "fees": 1.11,
+      "net": 8.89,
+      "option_pct": 0.0889,
+      "gross_pct": 0.1,
+      "r25": 0.3556,
+      "r50": 0.1778,
+      "r25_gross": 0.4,
+      "r50_gross": 0.2,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": true,
+       "fees_included": false
+      },
+      "counts": false
+     },
+     {
+      "id": "v027",
+      "symbol": "IWM",
+      "kind": "call",
+      "strike": 223.0,
+      "expiry": "2026-10-16",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v027"
+      ],
+      "t0": "2026-10-14T15:00:00.000Z",
+      "last_close": "2026-10-14T15:10:00.000Z",
+      "hold_minutes": 10.0,
+      "contracts_opened": 1.0,
+      "contracts_closed": 1.0,
+      "contracts_expired": 0.0,
+      "cost": 100.0,
+      "proceeds": 110.00000000000001,
+      "gross": 10.0,
+      "fees": 1.11,
+      "net": 8.89,
+      "option_pct": 0.0889,
+      "gross_pct": 0.1,
+      "r25": 0.3556,
+      "r50": 0.1778,
+      "r25_gross": 0.4,
+      "r50_gross": 0.2,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": true,
+       "fees_included": false
+      },
+      "counts": false
+     }
+    ],
+    "excluded": {
+     "stock": 0,
+     "short": 0,
+     "other": 0
+    },
+    "left_out": {
+     "zero_cost": 0,
+     "gap_piece": 0,
+     "open_lot": 3
+    },
+    "fees_included": false
+   }
+  },
+  {
+   "name": "fees on partial closes: a buy of 5 closed in three sells",
+   "doc": {
+    "trades": [
+     {
+      "id": "v028",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 2,
+      "opened_at": "2026-10-14T14:00:00.000Z",
+      "closed_at": "2026-10-14T14:03:00.000Z",
+      "entry": 0.8,
+      "exit": 1.0,
+      "multiplier": 100,
+      "pnl": 40.0,
+      "close": "order"
+     },
+     {
+      "id": "v029",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 2,
+      "opened_at": "2026-10-14T14:00:00.000Z",
+      "closed_at": "2026-10-14T14:06:00.000Z",
+      "entry": 0.8,
+      "exit": 0.6,
+      "multiplier": 100,
+      "pnl": -40.0,
+      "close": "order"
+     },
+     {
+      "id": "v030",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T14:00:00.000Z",
+      "closed_at": "2026-10-14T14:09:00.000Z",
+      "entry": 0.8,
+      "exit": 0.5,
+      "multiplier": 100,
+      "pnl": -30.0,
+      "close": "order"
+     }
+    ],
+    "open": null,
+    "gaps": null,
+    "fees_included": false
+   },
+   "expect": {
+    "positions": [
+     {
+      "id": "v028",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600.0,
+      "expiry": "2026-10-16",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v028",
+       "v029",
+       "v030"
+      ],
+      "t0": "2026-10-14T14:00:00.000Z",
+      "last_close": "2026-10-14T14:09:00.000Z",
+      "hold_minutes": 9.0,
+      "contracts_opened": 5.0,
+      "contracts_closed": 5.0,
+      "contracts_expired": 0.0,
+      "cost": 400.0,
+      "proceeds": 370.0,
+      "gross": -30.0,
+      "fees": 5.550000000000001,
+      "net": -35.55,
+      "option_pct": -0.088875,
+      "gross_pct": -0.075,
+      "r25": -0.3555,
+      "r50": -0.711,
+      "r25_gross": -0.3,
+      "r50_gross": -0.6,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     }
+    ],
+    "excluded": {
+     "stock": 0,
+     "short": 0,
+     "other": 0
+    },
+    "left_out": {
+     "zero_cost": 0,
+     "gap_piece": 0,
+     "open_lot": 0
+    },
+    "fees_included": false
+   }
+  },
+  {
+   "name": "an oversized entry closed in halves is one position of its whole cost",
+   "doc": {
+    "trades": [
+     {
+      "id": "v031",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 2,
+      "opened_at": "2026-10-14T14:00:00.000Z",
+      "closed_at": "2026-10-14T14:06:00.000Z",
+      "entry": 1.5,
+      "exit": 1.0,
+      "multiplier": 100,
+      "pnl": -100.0,
+      "close": "order"
+     },
+     {
+      "id": "v032",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 2,
+      "opened_at": "2026-10-14T14:00:00.000Z",
+      "closed_at": "2026-10-14T14:08:00.000Z",
+      "entry": 1.5,
+      "exit": 0.9,
+      "multiplier": 100,
+      "pnl": -120.0,
+      "close": "order"
+     }
+    ],
+    "open": null,
+    "gaps": null,
+    "fees_included": false
+   },
+   "expect": {
+    "positions": [
+     {
+      "id": "v031",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600.0,
+      "expiry": "2026-10-16",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v031",
+       "v032"
+      ],
+      "t0": "2026-10-14T14:00:00.000Z",
+      "last_close": "2026-10-14T14:08:00.000Z",
+      "hold_minutes": 8.0,
+      "contracts_opened": 4.0,
+      "contracts_closed": 4.0,
+      "contracts_expired": 0.0,
+      "cost": 600.0,
+      "proceeds": 380.0,
+      "gross": -220.0,
+      "fees": 4.44,
+      "net": -224.44,
+      "option_pct": -0.37406666666666666,
+      "gross_pct": -0.36666666666666664,
+      "r25": -1.4962666666666666,
+      "r50": -4.4888,
+      "r25_gross": -1.4666666666666666,
+      "r50_gross": -4.4,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     }
+    ],
+    "excluded": {
+     "stock": 0,
+     "short": 0,
+     "other": 0
+    },
+    "left_out": {
+     "zero_cost": 0,
+     "gap_piece": 0,
+     "open_lot": 0
+    },
+    "fees_included": false
+   }
+  },
+  {
+   "name": "the New York day turns at local midnight, either side of a clock change",
+   "doc": {
+    "trades": [
+     {
+      "id": "v033",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-03-13",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-03-10T03:30:00.000Z",
+      "closed_at": "2026-03-10T05:00:00.000Z",
+      "entry": 1.0,
+      "exit": 1.1,
+      "multiplier": 100,
+      "pnl": 10.0,
+      "close": "order"
+     },
+     {
+      "id": "v034",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-03-13",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-03-10T04:30:00.000Z",
+      "closed_at": "2026-03-10T05:00:00.000Z",
+      "entry": 1.0,
+      "exit": 1.1,
+      "multiplier": 100,
+      "pnl": 10.0,
+      "close": "order"
+     },
+     {
+      "id": "v035",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-03-13",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-03-06T04:30:00.000Z",
+      "closed_at": "2026-03-06T05:30:00.000Z",
+      "entry": 1.0,
+      "exit": 0.9,
+      "multiplier": 100,
+      "pnl": -10.0,
+      "close": "order"
+     },
+     {
+      "id": "v036",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-03-13",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-03-06T05:10:00.000Z",
+      "closed_at": "2026-03-06T05:40:00.000Z",
+      "entry": 1.0,
+      "exit": 0.9,
+      "multiplier": 100,
+      "pnl": -10.0,
+      "close": "order"
+     },
+     {
+      "id": "v037",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-11-06",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-11-03T04:30:00.000Z",
+      "closed_at": "2026-11-03T05:30:00.000Z",
+      "entry": 1.0,
+      "exit": 1.2,
+      "multiplier": 100,
+      "pnl": 20.0,
+      "close": "order"
+     },
+     {
+      "id": "v038",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-11-06",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-11-03T05:10:00.000Z",
+      "closed_at": "2026-11-03T05:40:00.000Z",
+      "entry": 1.0,
+      "exit": 1.2,
+      "multiplier": 100,
+      "pnl": 20.0,
+      "close": "order"
+     }
+    ],
+    "open": null,
+    "gaps": null,
+    "fees_included": false
+   },
+   "expect": {
+    "positions": [
+     {
+      "id": "v035",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600.0,
+      "expiry": "2026-03-13",
+      "day": "2026-03-05",
+      "piece_ids": [
+       "v035"
+      ],
+      "t0": "2026-03-06T04:30:00.000Z",
+      "last_close": "2026-03-06T05:30:00.000Z",
+      "hold_minutes": 60.0,
+      "contracts_opened": 1.0,
+      "contracts_closed": 1.0,
+      "contracts_expired": 0.0,
+      "cost": 100.0,
+      "proceeds": 90.0,
+      "gross": -10.0,
+      "fees": 1.11,
+      "net": -11.11,
+      "option_pct": -0.11109999999999999,
+      "gross_pct": -0.1,
+      "r25": -0.44439999999999996,
+      "r50": -0.22219999999999998,
+      "r25_gross": -0.4,
+      "r50_gross": -0.2,
+      "closed_later_day": true,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     },
+     {
+      "id": "v036",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600.0,
+      "expiry": "2026-03-13",
+      "day": "2026-03-06",
+      "piece_ids": [
+       "v036"
+      ],
+      "t0": "2026-03-06T05:10:00.000Z",
+      "last_close": "2026-03-06T05:40:00.000Z",
+      "hold_minutes": 30.0,
+      "contracts_opened": 1.0,
+      "contracts_closed": 1.0,
+      "contracts_expired": 0.0,
+      "cost": 100.0,
+      "proceeds": 90.0,
+      "gross": -10.0,
+      "fees": 1.11,
+      "net": -11.11,
+      "option_pct": -0.11109999999999999,
+      "gross_pct": -0.1,
+      "r25": -0.44439999999999996,
+      "r50": -0.22219999999999998,
+      "r25_gross": -0.4,
+      "r50_gross": -0.2,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     },
+     {
+      "id": "v033",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600.0,
+      "expiry": "2026-03-13",
+      "day": "2026-03-09",
+      "piece_ids": [
+       "v033"
+      ],
+      "t0": "2026-03-10T03:30:00.000Z",
+      "last_close": "2026-03-10T05:00:00.000Z",
+      "hold_minutes": 90.0,
+      "contracts_opened": 1.0,
+      "contracts_closed": 1.0,
+      "contracts_expired": 0.0,
+      "cost": 100.0,
+      "proceeds": 110.00000000000001,
+      "gross": 10.0,
+      "fees": 1.11,
+      "net": 8.89,
+      "option_pct": 0.0889,
+      "gross_pct": 0.1,
+      "r25": 0.3556,
+      "r50": 0.1778,
+      "r25_gross": 0.4,
+      "r50_gross": 0.2,
+      "closed_later_day": true,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     },
+     {
+      "id": "v034",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600.0,
+      "expiry": "2026-03-13",
+      "day": "2026-03-10",
+      "piece_ids": [
+       "v034"
+      ],
+      "t0": "2026-03-10T04:30:00.000Z",
+      "last_close": "2026-03-10T05:00:00.000Z",
+      "hold_minutes": 30.0,
+      "contracts_opened": 1.0,
+      "contracts_closed": 1.0,
+      "contracts_expired": 0.0,
+      "cost": 100.0,
+      "proceeds": 110.00000000000001,
+      "gross": 10.0,
+      "fees": 1.11,
+      "net": 8.89,
+      "option_pct": 0.0889,
+      "gross_pct": 0.1,
+      "r25": 0.3556,
+      "r50": 0.1778,
+      "r25_gross": 0.4,
+      "r50_gross": 0.2,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     },
+     {
+      "id": "v037",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600.0,
+      "expiry": "2026-11-06",
+      "day": "2026-11-02",
+      "piece_ids": [
+       "v037"
+      ],
+      "t0": "2026-11-03T04:30:00.000Z",
+      "last_close": "2026-11-03T05:30:00.000Z",
+      "hold_minutes": 60.0,
+      "contracts_opened": 1.0,
+      "contracts_closed": 1.0,
+      "contracts_expired": 0.0,
+      "cost": 100.0,
+      "proceeds": 120.0,
+      "gross": 20.0,
+      "fees": 1.11,
+      "net": 18.89,
+      "option_pct": 0.1889,
+      "gross_pct": 0.2,
+      "r25": 0.7556,
+      "r50": 0.3778,
+      "r25_gross": 0.8,
+      "r50_gross": 0.4,
+      "closed_later_day": true,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     },
+     {
+      "id": "v038",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600.0,
+      "expiry": "2026-11-06",
+      "day": "2026-11-03",
+      "piece_ids": [
+       "v038"
+      ],
+      "t0": "2026-11-03T05:10:00.000Z",
+      "last_close": "2026-11-03T05:40:00.000Z",
+      "hold_minutes": 30.0,
+      "contracts_opened": 1.0,
+      "contracts_closed": 1.0,
+      "contracts_expired": 0.0,
+      "cost": 100.0,
+      "proceeds": 120.0,
+      "gross": 20.0,
+      "fees": 1.11,
+      "net": 18.89,
+      "option_pct": 0.1889,
+      "gross_pct": 0.2,
+      "r25": 0.7556,
+      "r50": 0.3778,
+      "r25_gross": 0.8,
+      "r50_gross": 0.4,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     }
+    ],
+    "excluded": {
+     "stock": 0,
+     "short": 0,
+     "other": 0
+    },
+    "left_out": {
+     "zero_cost": 0,
+     "gap_piece": 0,
+     "open_lot": 0
+    },
+    "fees_included": false
+   }
+  },
+  {
+   "name": "offsets and odd precision are read as the instant they name, in whole milliseconds",
+   "doc": {
+    "trades": [
+     {
+      "id": "v039",
+      "symbol": "QQQ",
+      "kind": "call",
+      "strike": 500,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T10:00:00-04:00",
+      "closed_at": "2026-10-14T10:05:00.5-04:00",
+      "entry": 1.0,
+      "exit": 1.1,
+      "multiplier": 100,
+      "pnl": 10.0,
+      "close": "order"
+     },
+     {
+      "id": "v040",
+      "symbol": "QQQ",
+      "kind": "call",
+      "strike": 500,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T14:04:59.9999Z",
+      "closed_at": "2026-10-14T14:06:00Z",
+      "entry": 1.0,
+      "exit": 1.2,
+      "multiplier": 100,
+      "pnl": 20.0,
+      "close": "order"
+     },
+     {
+      "id": "v041",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T14:00:00Z",
+      "closed_at": "2026-10-14T14:05:00.0009Z",
+      "entry": 1.0,
+      "exit": 1.1,
+      "multiplier": 100,
+      "pnl": 10.0,
+      "close": "order"
+     },
+     {
+      "id": "v042",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T14:05:00.0001Z",
+      "closed_at": "2026-10-14T14:07:00Z",
+      "entry": 1.0,
+      "exit": 1.2,
+      "multiplier": 100,
+      "pnl": 20.0,
+      "close": "order"
+     }
+    ],
+    "open": null,
+    "gaps": null,
+    "fees_included": false
+   },
+   "expect": {
+    "positions": [
+     {
+      "id": "v039",
+      "symbol": "QQQ",
+      "kind": "call",
+      "strike": 500.0,
+      "expiry": "2026-10-16",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v039",
+       "v040"
+      ],
+      "t0": "2026-10-14T10:00:00-04:00",
+      "last_close": "2026-10-14T14:06:00Z",
+      "hold_minutes": 6.0,
+      "contracts_opened": 2.0,
+      "contracts_closed": 2.0,
+      "contracts_expired": 0.0,
+      "cost": 200.0,
+      "proceeds": 230.0,
+      "gross": 30.0,
+      "fees": 2.22,
+      "net": 27.78,
+      "option_pct": 0.1389,
+      "gross_pct": 0.15,
+      "r25": 0.5556,
+      "r50": 0.5556,
+      "r25_gross": 0.6,
+      "r50_gross": 0.6,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     },
+     {
+      "id": "v041",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600.0,
+      "expiry": "2026-10-16",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v041"
+      ],
+      "t0": "2026-10-14T14:00:00Z",
+      "last_close": "2026-10-14T14:05:00.0009Z",
+      "hold_minutes": 5.0,
+      "contracts_opened": 1.0,
+      "contracts_closed": 1.0,
+      "contracts_expired": 0.0,
+      "cost": 100.0,
+      "proceeds": 110.00000000000001,
+      "gross": 10.0,
+      "fees": 1.11,
+      "net": 8.89,
+      "option_pct": 0.0889,
+      "gross_pct": 0.1,
+      "r25": 0.3556,
+      "r50": 0.1778,
+      "r25_gross": 0.4,
+      "r50_gross": 0.2,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     },
+     {
+      "id": "v042",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600.0,
+      "expiry": "2026-10-16",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v042"
+      ],
+      "t0": "2026-10-14T14:05:00.0001Z",
+      "last_close": "2026-10-14T14:07:00Z",
+      "hold_minutes": 2.0,
+      "contracts_opened": 1.0,
+      "contracts_closed": 1.0,
+      "contracts_expired": 0.0,
+      "cost": 100.0,
+      "proceeds": 120.0,
+      "gross": 20.0,
+      "fees": 1.11,
+      "net": 18.89,
+      "option_pct": 0.1889,
+      "gross_pct": 0.2,
+      "r25": 0.7556,
+      "r50": 0.3778,
+      "r25_gross": 0.8,
+      "r50_gross": 0.4,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     }
+    ],
+    "excluded": {
+     "stock": 0,
+     "short": 0,
+     "other": 0
+    },
+    "left_out": {
+     "zero_cost": 0,
+     "gap_piece": 0,
+     "open_lot": 0
+    },
+    "fees_included": false
+   }
+  },
+  {
+   "name": "a journal that already carries fees takes none off",
+   "doc": {
+    "trades": [
+     {
+      "id": "v043",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 2,
+      "opened_at": "2026-10-14T14:00:00.000Z",
+      "closed_at": "2026-10-14T14:04:00.000Z",
+      "entry": 1.0,
+      "exit": 0.7,
+      "multiplier": 100,
+      "pnl": -60.0,
+      "close": "order"
+     }
+    ],
+    "open": null,
+    "gaps": null,
+    "fees_included": true
+   },
+   "expect": {
+    "positions": [
+     {
+      "id": "v043",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600.0,
+      "expiry": "2026-10-16",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v043"
+      ],
+      "t0": "2026-10-14T14:00:00.000Z",
+      "last_close": "2026-10-14T14:04:00.000Z",
+      "hold_minutes": 4.0,
+      "contracts_opened": 2.0,
+      "contracts_closed": 2.0,
+      "contracts_expired": 0.0,
+      "cost": 200.0,
+      "proceeds": 140.0,
+      "gross": -60.0,
+      "fees": 0.0,
+      "net": -60.0,
+      "option_pct": -0.3,
+      "gross_pct": -0.3,
+      "r25": -1.2,
+      "r50": -1.2,
+      "r25_gross": -1.2,
+      "r50_gross": -1.2,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": true
+      },
+      "counts": true
+     }
+    ],
+    "excluded": {
+     "stock": 0,
+     "short": 0,
+     "other": 0
+    },
+    "left_out": {
+     "zero_cost": 0,
+     "gap_piece": 0,
+     "open_lot": 0
+    },
+    "fees_included": true
+   }
+  },
+  {
+   "name": "a tie on opened_at is ordered by id, so a zero-length lower id stands alone",
+   "doc": {
+    "trades": [
+     {
+      "id": "v044",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T14:00:00.000Z",
+      "closed_at": "2026-10-14T14:00:00.000Z",
+      "entry": 1.0,
+      "exit": 1.0,
+      "multiplier": 100,
+      "pnl": 0.0,
+      "close": "order"
+     },
+     {
+      "id": "v045",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T14:00:00.000Z",
+      "closed_at": "2026-10-14T14:05:00.000Z",
+      "entry": 1.0,
+      "exit": 1.2,
+      "multiplier": 100,
+      "pnl": 20.0,
+      "close": "order"
+     }
+    ],
+    "open": null,
+    "gaps": null,
+    "fees_included": false
+   },
+   "expect": {
+    "positions": [
+     {
+      "id": "v044",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600.0,
+      "expiry": "2026-10-16",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v044"
+      ],
+      "t0": "2026-10-14T14:00:00.000Z",
+      "last_close": "2026-10-14T14:00:00.000Z",
+      "hold_minutes": 0.0,
+      "contracts_opened": 1.0,
+      "contracts_closed": 1.0,
+      "contracts_expired": 0.0,
+      "cost": 100.0,
+      "proceeds": 100.0,
+      "gross": 0.0,
+      "fees": 1.11,
+      "net": -1.11,
+      "option_pct": -0.0111,
+      "gross_pct": 0.0,
+      "r25": -0.0444,
+      "r50": -0.0222,
+      "r25_gross": 0.0,
+      "r50_gross": 0.0,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     },
+     {
+      "id": "v045",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600.0,
+      "expiry": "2026-10-16",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v045"
+      ],
+      "t0": "2026-10-14T14:00:00.000Z",
+      "last_close": "2026-10-14T14:05:00.000Z",
+      "hold_minutes": 5.0,
+      "contracts_opened": 1.0,
+      "contracts_closed": 1.0,
+      "contracts_expired": 0.0,
+      "cost": 100.0,
+      "proceeds": 120.0,
+      "gross": 20.0,
+      "fees": 1.11,
+      "net": 18.89,
+      "option_pct": 0.1889,
+      "gross_pct": 0.2,
+      "r25": 0.7556,
+      "r50": 0.3778,
+      "r25_gross": 0.8,
+      "r50_gross": 0.4,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     }
+    ],
+    "excluded": {
+     "stock": 0,
+     "short": 0,
+     "other": 0
+    },
+    "left_out": {
+     "zero_cost": 0,
+     "gap_piece": 0,
+     "open_lot": 0
+    },
+    "fees_included": false
+   }
+  },
+  {
+   "name": "a time without a zone is not read: the piece is skipped and a held lot so stamped flags its contract",
+   "doc": {
+    "trades": [
+     {
+      "id": "v046",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T10:00:00",
+      "closed_at": "2026-10-14T10:05:00",
+      "entry": 1.0,
+      "exit": 1.1,
+      "multiplier": 100,
+      "pnl": 10.0,
+      "close": "order"
+     },
+     {
+      "id": "v047",
+      "symbol": "IWM",
+      "kind": "call",
+      "strike": 230,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T15:00:00.000Z",
+      "closed_at": "2026-10-14T15:10:00.000Z",
+      "entry": 1.0,
+      "exit": 1.1,
+      "multiplier": 100,
+      "pnl": 10.0,
+      "close": "order"
+     },
+     {
+      "id": "v048",
+      "symbol": "DIA",
+      "kind": "call",
+      "strike": 420,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T15:20:00.000Z",
+      "closed_at": "2026-10-14T15:30:00.000Z",
+      "entry": 1.0,
+      "exit": 1.1,
+      "multiplier": 100,
+      "pnl": 10.0,
+      "close": "order"
+     }
+    ],
+    "open": [
+     {
+      "symbol": "IWM",
+      "kind": "call",
+      "strike": 230,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "entry": 1.0,
+      "opened_at": "2026-10-14T11:00:00"
+     }
+    ],
+    "gaps": null,
+    "fees_included": false
+   },
+   "expect": {
+    "positions": [
+     {
+      "id": "v047",
+      "symbol": "IWM",
+      "kind": "call",
+      "strike": 230.0,
+      "expiry": "2026-10-16",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v047"
+      ],
+      "t0": "2026-10-14T15:00:00.000Z",
+      "last_close": "2026-10-14T15:10:00.000Z",
+      "hold_minutes": 10.0,
+      "contracts_opened": 1.0,
+      "contracts_closed": 1.0,
+      "contracts_expired": 0.0,
+      "cost": 100.0,
+      "proceeds": 110.00000000000001,
+      "gross": 10.0,
+      "fees": 1.11,
+      "net": 8.89,
+      "option_pct": 0.0889,
+      "gross_pct": 0.1,
+      "r25": 0.3556,
+      "r50": 0.1778,
+      "r25_gross": 0.4,
+      "r50_gross": 0.2,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": true,
+       "fees_included": false
+      },
+      "counts": false
+     },
+     {
+      "id": "v048",
+      "symbol": "DIA",
+      "kind": "call",
+      "strike": 420.0,
+      "expiry": "2026-10-16",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v048"
+      ],
+      "t0": "2026-10-14T15:20:00.000Z",
+      "last_close": "2026-10-14T15:30:00.000Z",
+      "hold_minutes": 10.0,
+      "contracts_opened": 1.0,
+      "contracts_closed": 1.0,
+      "contracts_expired": 0.0,
+      "cost": 100.0,
+      "proceeds": 110.00000000000001,
+      "gross": 10.0,
+      "fees": 1.11,
+      "net": 8.89,
+      "option_pct": 0.0889,
+      "gross_pct": 0.1,
+      "r25": 0.3556,
+      "r50": 0.1778,
+      "r25_gross": 0.4,
+      "r50_gross": 0.2,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     }
+    ],
+    "excluded": {
+     "stock": 0,
+     "short": 0,
+     "other": 0
+    },
+    "left_out": {
+     "zero_cost": 0,
+     "gap_piece": 0,
+     "open_lot": 1
+    },
+    "fees_included": false
+   }
+  },
+  {
+   "name": "zones written +0000 or +00, and basic-format times, are not read in either language",
+   "doc": {
+    "trades": [
+     {
+      "id": "v049",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T14:00:00+0000",
+      "closed_at": "2026-10-14T14:05:00+0000",
+      "entry": 1.0,
+      "exit": 1.1,
+      "multiplier": 100,
+      "pnl": 10.0,
+      "close": "order"
+     },
+     {
+      "id": "v050",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T14:00:00+00",
+      "closed_at": "2026-10-14T14:05:00+00",
+      "entry": 1.0,
+      "exit": 1.1,
+      "multiplier": 100,
+      "pnl": 10.0,
+      "close": "order"
+     },
+     {
+      "id": "v051",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "20261014T140000Z",
+      "closed_at": "20261014T140500Z",
+      "entry": 1.0,
+      "exit": 1.1,
+      "multiplier": 100,
+      "pnl": 10.0,
+      "close": "order"
+     },
+     {
+      "id": "v052",
+      "symbol": "DIA",
+      "kind": "call",
+      "strike": 420,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T14:00:00.000Z",
+      "closed_at": "2026-10-14T14:05:00.000Z",
+      "entry": 1.0,
+      "exit": 1.1,
+      "multiplier": 100,
+      "pnl": 10.0,
+      "close": "order"
+     }
+    ],
+    "open": null,
+    "gaps": null,
+    "fees_included": false
+   },
+   "expect": {
+    "positions": [
+     {
+      "id": "v052",
+      "symbol": "DIA",
+      "kind": "call",
+      "strike": 420.0,
+      "expiry": "2026-10-16",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v052"
+      ],
+      "t0": "2026-10-14T14:00:00.000Z",
+      "last_close": "2026-10-14T14:05:00.000Z",
+      "hold_minutes": 5.0,
+      "contracts_opened": 1.0,
+      "contracts_closed": 1.0,
+      "contracts_expired": 0.0,
+      "cost": 100.0,
+      "proceeds": 110.00000000000001,
+      "gross": 10.0,
+      "fees": 1.11,
+      "net": 8.89,
+      "option_pct": 0.0889,
+      "gross_pct": 0.1,
+      "r25": 0.3556,
+      "r50": 0.1778,
+      "r25_gross": 0.4,
+      "r50_gross": 0.2,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     }
+    ],
+    "excluded": {
+     "stock": 0,
+     "short": 0,
+     "other": 0
+    },
+    "left_out": {
+     "zero_cost": 0,
+     "gap_piece": 0,
+     "open_lot": 0
+    },
+    "fees_included": false
+   }
+  },
+  {
+   "name": "a long piece of a kind that is not an option or a share is left out, not filed as short",
+   "doc": {
+    "trades": [
+     {
+      "id": "v053",
+      "symbol": "SPY",
+      "kind": "future",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T14:00:00.000Z",
+      "closed_at": "2026-10-14T14:05:00.000Z",
+      "entry": 1.0,
+      "exit": 1.1,
+      "multiplier": 100,
+      "pnl": 10.0,
+      "close": "order"
+     }
+    ],
+    "open": null,
+    "gaps": null,
+    "fees_included": false
+   },
+   "expect": {
+    "positions": [],
+    "excluded": {
+     "stock": 0,
+     "short": 0,
+     "other": 1
+    },
+    "left_out": {
+     "zero_cost": 0,
+     "gap_piece": 0,
+     "open_lot": 0
+    },
+    "fees_included": false
+   }
+  },
+  {
+   "name": "malformed entries are skipped",
+   "doc": {
+    "trades": [
+     null,
+     {
+      "id": "x"
+     },
+     {
+      "id": "v054",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600,
+      "expiry": "2026-10-16",
+      "side": "long",
+      "qty": 1,
+      "opened_at": "2026-10-14T14:00:00.000Z",
+      "closed_at": "2026-10-14T14:01:00.000Z",
+      "entry": 1.0,
+      "exit": 1.0,
+      "multiplier": 100,
+      "pnl": 0.0,
+      "close": "order"
+     }
+    ],
+    "open": null,
+    "gaps": null,
+    "fees_included": false
+   },
+   "expect": {
+    "positions": [
+     {
+      "id": "v054",
+      "symbol": "SPY",
+      "kind": "call",
+      "strike": 600.0,
+      "expiry": "2026-10-16",
+      "day": "2026-10-14",
+      "piece_ids": [
+       "v054"
+      ],
+      "t0": "2026-10-14T14:00:00.000Z",
+      "last_close": "2026-10-14T14:01:00.000Z",
+      "hold_minutes": 1.0,
+      "contracts_opened": 1.0,
+      "contracts_closed": 1.0,
+      "contracts_expired": 0.0,
+      "cost": 100.0,
+      "proceeds": 100.0,
+      "gross": 0.0,
+      "fees": 1.11,
+      "net": -1.11,
+      "option_pct": -0.0111,
+      "gross_pct": 0.0,
+      "r25": -0.0444,
+      "r50": -0.0222,
+      "r25_gross": 0.0,
+      "r50_gross": 0.0,
+      "closed_later_day": false,
+      "flags": {
+       "gap_piece": false,
+       "zero_cost": false,
+       "open_lot": false,
+       "fees_included": false
+      },
+      "counts": true
+     }
+    ],
+    "excluded": {
+     "stock": 0,
+     "short": 0,
+     "other": 0
+    },
+    "left_out": {
+     "zero_cost": 0,
+     "gap_piece": 0,
+     "open_lot": 0
+    },
+    "fees_included": false
+   }
+  }
+ ]
+}
