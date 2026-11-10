@@ -1,10 +1,10 @@
 // The Calendar page's arithmetic. Pure: no I/O; the clock is passed in. The market days come from
 // market-calendar.json, which scripts/build_market_calendar.py builds from the XNYS exchange calendar and checks
 // against NYSE's published list; nothing here guesses a holiday, and a day outside the file's range says so.
-import { daily, nyTime, type Trade } from "./journal";
+import { nyTime, type Trade } from "./journal";
 import data from "./market-calendar.json";
 import { EVENT_LABEL, eventLabel, nyInstant } from "./options";
-import { judgeDay } from "./overview";
+import { daysWithEntries, judgeDay } from "./overview";
 import { RULES, tradeBreaks } from "./trade-rules";
 
 const SYD = "Australia/Sydney";
@@ -432,7 +432,7 @@ export function yourDays(trades: readonly Trade[]): Map<string, YourDay> {
     rulesByOpenDay.set(d, set);
   }
   const out = new Map<string, YourDay>();
-  for (const d of daily(trades)) {
+  for (const d of daysWithEntries(trades)) {
     const j = judgeDay(d);
     out.set(d.day, { pnl: d.pnl, trades: d.trades, wins: d.wins, broke: j.broke, rules: [] });
   }

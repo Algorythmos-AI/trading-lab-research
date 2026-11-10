@@ -1,7 +1,9 @@
 // The owner's own account measured against the risk limits in trade-rules.ts. Pure: no I/O; the clock is passed in.
 // Every number is computed from the journal at render time, so none of the owner's results is written into the repo.
-import { closeDay, daily, holdMinutes, nyTime, sessionView, type DayRow, type JournalDoc, type Lot, type Trade } from "./journal";
-import { dayCheck, DAY_LOSS_LIMIT, MAX_PREMIUM, MAX_TRADES_PER_DAY, PREMIUM_STOP, RISK_PER_TRADE, TIME_STOP_MINUTES, type DayCheck } from "./trade-rules";
+import { closeDay, daily, nyTime, sessionView, type DayRow, type JournalDoc, type Lot, type Trade } from "./journal";
+import { daysWithEntries } from "./overview";
+import { tradeUnits } from "./owner-positions";
+import { dayCheck, DAY_LOSS_LIMIT, entriesByDay, judgeDays, MAX_PREMIUM, MAX_TRADES_PER_DAY, PREMIUM_STOP, RISK_PER_TRADE, TIME_STOP_MINUTES, type DayCheck } from "./trade-rules";
 
 /** How many recent trading days the usage counts and the day chart cover. */
 export const RECENT_SESSIONS = 20;
@@ -67,7 +69,6 @@ export interface AccountRisk {
 
 const money0 = (v: number) => `${v < 0 ? "−" : ""}$${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 const isOption = (k: Trade["kind"]) => k !== "stock";
-const cost = (t: Pick<Trade, "entry" | "qty" | "multiplier">) => t.entry * t.qty * t.multiplier;
 const lotLabel = (l: Lot) => (l.kind === "stock" ? l.symbol : `${l.symbol} ${l.strike ?? ""}${l.kind === "call" ? "C" : "P"}${l.expiry ? ` ${l.expiry.slice(5)}` : ""}`);
 
 /** Open lots: what they cost, which were held overnight and which cost more than the premium limit. */
@@ -121,24 +122,35 @@ export function drawdown(days: readonly DayRow[]): Drawdown {
  */
 export function limitRows(trades: readonly Trade[], check: DayCheck, open: OpenRisk, todayTrades: readonly Trade[], sessions = RECENT_SESSIONS): { rows: LimitRow[]; recent: DayRow[] } {
   const recent = daily(trades).slice(-sessions);
-  const from = recent[0]?.day ?? "9999";
-  const window = trades.filter((t) => closeDay(t) >= from);
-  const longOpts = window.filter((t) => isOption(t.kind) && t.side === "long");
+  // The window starts at the first of the last `sessions` days with a close or an entry, so a day of entries that
+  // all closed later is in it.
+  const sessionDays = daysWithEntries(trades).slice(-sessions);
+  const from = sessionDays[0]?.day ?? "9999";
+  // The trade rules as the rules panel and the day check judge them: per trade (a position for options), a break when
+  // the whole trade or any one of its pieces breaks the rule, and the cap on entries.
+  const { verdicts, breaks } = judgeDays(tradeUnits(trades));
+  const window = verdicts.filter((v) => closeDay(v.unit.unit) >= from);
+  const has = (id: string) => window.filter((v) => breaks.get(v.unit.unit.id)?.includes(id));
+  const pnlOf = (vs: readonly { unit: { unit: Trade } }[]) => vs.reduce((s, v) => s + v.unit.unit.pnl, 0);
 
-  const bigLoss = window.filter((t) => t.pnl < -RISK_PER_TRADE - 1e-9);
-  const worstTrade = window.reduce<Trade | null>((m, t) => (m === null || t.pnl < m.pnl ? t : m), null);
-  const overPremium = longOpts.filter((t) => cost(t) > MAX_PREMIUM + 1e-9);
-  const pastStop = longOpts.filter((t) => t.entry > 0 && 1 - t.exit / t.entry > PREMIUM_STOP + 1e-9);
-  const slow = window.filter((t) => t.pnl < 0 && holdMinutes(t) > TIME_STOP_MINUTES);
+  const bigLoss = window.filter((v) => v.loss);
+  const worstTrade = window.reduce<Trade | null>((m, v) => (m === null || v.unit.unit.pnl < m.pnl ? v.unit.unit : m), null);
+  const overPremium = window.filter((v) => v.premium);
+  const pastStop = has("stop");
+  const slow = has("time");
+  const overnight = has("flat");
   const lossDays = recent.filter((d) => d.pnl <= -DAY_LOSS_LIMIT);
-  const busyDays = recent.filter((d) => d.trades > MAX_TRADES_PER_DAY);
-  const overnight = window.filter((t) => isOption(t.kind) && closeDay(t) !== nyTime(t.opened_at).day);
+  const entries = entriesByDay(trades);
+  // The cap is judged on the day the entries were made, which may have no close of its own.
+  const entryDays = sessionDays.map((d): [string, number] => [d.day, entries.get(d.day) ?? 0]);
+  const busyDays = entryDays.filter(([, c]) => c > MAX_TRADES_PER_DAY);
   const worstDay = recent.reduce<DayRow | null>((m, d) => (m === null || d.pnl < m.pnl ? d : m), null);
-  const busiest = recent.reduce<DayRow | null>((m, d) => (m === null || d.trades > m.trades ? d : m), null);
+  const busiest = Math.max(0, ...entryDays.map(([, c]) => c));
 
   const today = check.isToday;
-  const todayWorst = todayTrades.reduce<number | null>((m, t) => (m === null || t.pnl < m ? t.pnl : m), null);
-  const todayMaxCost = Math.max(0, ...todayTrades.filter((t) => isOption(t.kind) && t.side === "long").map(cost), ...open.lots.map((l) => l.cost));
+  const todayUnits = judgeDays(tradeUnits(todayTrades)).verdicts;
+  const todayWorst = todayUnits.reduce<number | null>((m, v) => (m === null || v.unit.unit.pnl < m ? v.unit.unit.pnl : m), null);
+  const todayMaxCost = Math.max(0, ...todayUnits.map((v) => v.peak), ...open.lots.map((l) => l.cost));
   const lossUsed = Math.max(0, -check.net);
 
   const rows: LimitRow[] = [
@@ -163,7 +175,7 @@ export function limitRows(trades: readonly Trade[], check: DayCheck, open: OpenR
       todayShare: today ? check.used / MAX_TRADES_PER_DAY : null,
       broken: busyDays.length,
       unit: "days",
-      worst: busiest && busiest.trades > MAX_TRADES_PER_DAY ? `most ${busiest.trades}` : null,
+      worst: busiest > MAX_TRADES_PER_DAY ? `most ${busiest}` : null,
       heldBy: "flagged",
     },
     {
@@ -187,7 +199,7 @@ export function limitRows(trades: readonly Trade[], check: DayCheck, open: OpenR
       todayShare: today && todayMaxCost > 0 ? todayMaxCost / MAX_PREMIUM : null,
       broken: overPremium.length,
       unit: "trades",
-      worst: overPremium.length ? `largest ${money0(Math.max(...overPremium.map(cost)))}` : null,
+      worst: overPremium.length ? `largest ${money0(Math.max(...overPremium.map((v) => v.peak)))}` : null,
       heldBy: "you",
     },
     {
@@ -199,7 +211,7 @@ export function limitRows(trades: readonly Trade[], check: DayCheck, open: OpenR
       todayShare: null,
       broken: pastStop.length,
       unit: "trades",
-      worst: pastStop.length ? `${money0(pastStop.reduce((s, t) => s + t.pnl, 0))} in all` : null,
+      worst: pastStop.length ? `${money0(pnlOf(pastStop))} in all` : null,
       heldBy: "broker",
     },
     {
@@ -211,7 +223,7 @@ export function limitRows(trades: readonly Trade[], check: DayCheck, open: OpenR
       todayShare: null,
       broken: slow.length,
       unit: "trades",
-      worst: slow.length ? `${money0(slow.reduce((s, t) => s + t.pnl, 0))} in all` : null,
+      worst: slow.length ? `${money0(pnlOf(slow))} in all` : null,
       heldBy: "flagged",
     },
     {
@@ -223,7 +235,7 @@ export function limitRows(trades: readonly Trade[], check: DayCheck, open: OpenR
       todayShare: null,
       broken: overnight.length,
       unit: "trades",
-      worst: overnight.length ? `${money0(overnight.reduce((s, t) => s + t.pnl, 0))} in all` : null,
+      worst: overnight.length ? `${money0(pnlOf(overnight))} in all` : null,
       heldBy: "flagged",
     },
   ];

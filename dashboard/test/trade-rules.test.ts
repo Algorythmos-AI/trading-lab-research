@@ -113,6 +113,79 @@ describe("tradeBreaks", () => {
   });
 });
 
+describe("the rules judge positions, not the journal's pieces", () => {
+  // One buy of `qty` contracts at `entry`, sold in pieces at the given minutes and prices (DEC-0045 section 1).
+  const sold = (day: string, at: number, entry: number, sells: [minute: number, exit: number, qty: number][], extra: Partial<Trade> = {}) =>
+    sells.map(([m, exit, qty]) =>
+      trade(Math.round((exit - entry) * 100 * qty), `${day}T14:${String(at).padStart(2, "0")}:00Z`, `${day}T14:${String(m).padStart(2, "0")}:00Z`, { entry, exit, qty, strike: 700 + at, ...extra }),
+    );
+
+  it("counts a sell-half once against the day's cap (rule 8)", () => {
+    const day = "2026-10-14";
+    // Five entries, each closed in two halves: ten pieces, five trades, no break.
+    const ts = [0, 6, 12, 18, 24].flatMap((m) => sold(day, m, 0.5, [[m + 1, 0.55, 1], [m + 2, 0.55, 1]]));
+    expect(ts).toHaveLength(10);
+    expect(tradeBreaks(ts).size).toBe(0);
+    const sixth = sold(day, 30, 0.5, [[31, 0.55, 1]]);
+    expect(tradeBreaks([...ts, ...sixth]).get(sixth[0]!.id)).toEqual(["day-cap"]);
+  });
+
+  it("flags an oversized entry closed in halves on its whole cost (rule 4), and every piece carries it", () => {
+    const ts = sold("2026-10-14", 0, 1.5, [[3, 1.45, 1], [4, 1.4, 1]]); // $300 of premium, each half $150
+    const b = tradeBreaks(ts);
+    expect(b.get(ts[0]!.id)).toEqual(["risk"]);
+    expect(b.get(ts[1]!.id)).toEqual(["risk"]);
+    expect(breakSummary(ts)).toMatchObject({ trades: 1, byRule: { risk: 1 } });
+  });
+
+  it("judges the whole loss against $50 (rule 4) and the whole result against the −25% stop (rule 5)", () => {
+    // Two halves losing $30 each: neither over $50 alone, $60 together. Sold at 0.8 and 0.7 of 1.00: −25% together.
+    const ts = sold("2026-10-14", 0, 1, [[2, 0.7, 1], [3, 0.7, 1]]);
+    expect(tradeBreaks(ts).get(ts[0]!.id)!.sort()).toEqual(["risk", "stop"]);
+    const kept = sold("2026-10-14", 0, 1, [[2, 0.9, 1], [3, 0.8, 1]]); // −10% and −20%: −15% together, −$30
+    expect(tradeBreaks(kept).size).toBe(0);
+  });
+
+  it("flags rule 5 when any part is sold past −25% of the average entry, whatever the whole made", () => {
+    // Half sold +20%, half −40%: −10% together, inside the stop as a whole, but the second half was held past it.
+    const ts = sold("2026-10-14", 0, 1, [[2, 1.2, 1], [3, 0.6, 1]]);
+    expect(tradeBreaks(ts).get(ts[1]!.id)).toEqual(["stop"]);
+    // A part left to expire counts as sold at 0.
+    const expired = sold("2026-10-14", 0, 1, [[2, 1.3, 1], [3, 0.9, 1]]);
+    expired[1]!.close = "expired";
+    expect(tradeBreaks(expired).get(expired[0]!.id)).toEqual(["stop"]);
+    // One piece: the same test as before, on its own entry and exit.
+    expect(tradeBreaks(sold("2026-10-14", 0, 1, [[2, 0.74, 1]])).size).toBe(1);
+    expect(tradeBreaks(sold("2026-10-14", 0, 1, [[2, 0.76, 1]])).size).toBe(0);
+  });
+
+  it("times a losing position from its first open to its last close (rule 6)", () => {
+    const ts = sold("2026-10-14", 0, 1, [[2, 0.95, 1], [7, 0.95, 1]]); // the last piece out at 7 minutes
+    expect(tradeBreaks(ts).get(ts[0]!.id)).toEqual(["time"]);
+  });
+
+  it("flags a position when any piece is held overnight (rule 9)", () => {
+    const ts = [
+      trade(5, "2026-10-14T19:00:00Z", "2026-10-14T19:30:00Z", { strike: 701, entry: 0.5, exit: 0.55, expiry: "2026-10-16" }),
+      trade(5, "2026-10-14T19:00:00Z", "2026-10-15T14:00:00Z", { strike: 701, entry: 0.5, exit: 0.55, expiry: "2026-10-16" }),
+    ];
+    expect(tradeBreaks(ts).get(ts[0]!.id)).toEqual(["flat"]);
+  });
+
+  it("counts today's entries as positions, and a lot still held as the rest of the position it belongs to", () => {
+    const now = new Date("2026-10-16T16:00:00Z");
+    const half = sold("2026-10-16", 0, 0.6, [[3, 0.65, 1]]);
+    const rest = { symbol: "SPY", kind: "call" as const, strike: 700, expiry: half[0]!.expiry, side: "long" as const, qty: 1, entry: 0.6, opened_at: "2026-10-16T14:00:00Z" };
+    // The other half, bought in the same order and still held, opened before the first half was sold: one entry.
+    expect(dayCheck(sessionView({ trades: half, open: [rest] }, now)).used).toBe(1);
+    // A lot of the same contract bought after the position was closed is a new entry.
+    expect(dayCheck(sessionView({ trades: half, open: [{ ...rest, opened_at: "2026-10-16T14:10:00Z" }] }, now)).used).toBe(2);
+    // The held half and the sold half of a $300 entry together break rule 4 before it is closed.
+    const big = sold("2026-10-16", 0, 1.5, [[3, 1.55, 1]]);
+    expect(dayCheck(sessionView({ trades: big, open: [{ ...rest, entry: 1.5 }] }, now)).brokenRules).toEqual([4]);
+  });
+});
+
 describe("ruleEvidence", () => {
   it("always has the backtest rules, and nothing of the owner's with too few trades", () => {
     const ev = ruleEvidence([trade(10, "2026-10-14T14:00:00Z", "2026-10-14T14:01:00Z")]);

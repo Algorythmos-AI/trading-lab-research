@@ -41,6 +41,10 @@ const FILES = [
   "../src/components/client/use-chain.ts",
   "../src/components/client/use-now.ts",
   "../src/lib/chain.ts",
+  "../src/lib/owner-positions.ts",
+  "../src/lib/trades-view.ts",
+  "../src/components/journal.tsx",
+  "../src/components/client/journal-table.tsx",
 ];
 
 const BANNED = [

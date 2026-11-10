@@ -17,7 +17,19 @@ export interface JournalRow {
   qty: number;
   entry: number;
   exit: number;
+  /** After fees, for an option position; before fees for shares, which carry no known fee. */
   pnl: number;
+  /** Before fees. */
+  gross: number;
+  /** Fees taken off; null for shares. */
+  fees: number | null;
+  /** The result as a share of the premium, after fees; null for shares or a trade that cost nothing. */
+  optionPct: number | null;
+  /** The result in quarters of the premium (−1 is the −25% stop) and in $50s, after fees; null for shares. */
+  r25: number | null;
+  r50: number | null;
+  /** The matched pieces of a position bought or sold in more than one fill, in words; empty for a single piece. */
+  pieces: { id: string; text: string }[];
   /** "3 min" */
   held: string;
   holdMin: number;
@@ -27,9 +39,14 @@ export interface JournalRow {
 type SortKey = "at" | "pnl" | "holdMin" | "qty";
 
 const usd2 = (v: number) => `${v > 0 ? "+" : v < 0 ? "−" : ""}$${Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const pctOf = (v: number | null) => (v === null ? "—" : `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(Math.round(v * 100))}%`);
+const rOf = (v: number | null) => (v === null ? "—" : `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(2)}`);
 const PAGE = 50;
 
-/** Every closed trade in the filter, newest first, with a search box, sorting and a "show more". Read only. */
+/**
+ * Every closed trade in the filter, newest first, with a search box, sorting and a "show more". Read only. A trade of
+ * several pieces lists them under its contract in a native disclosure.
+ */
 export function JournalTable({ rows }: { rows: JournalRow[] }) {
   const [q, setQ] = useState("");
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "at", dir: -1 });
@@ -104,7 +121,15 @@ export function JournalTable({ rows }: { rows: JournalRow[] }) {
               {head("qty", "Qty", "text-right")}
               <TableHead className="text-right">In → out</TableHead>
               {head("holdMin", "Held", "text-right")}
+              <TableHead className="text-right">Fees</TableHead>
               {head("pnl", "Result", "text-right")}
+              <TableHead className="text-right">On premium</TableHead>
+              <TableHead className="text-right">
+                R25<span className="sr-only">: the result after fees in quarters of the premium, where −1 is the −25% stop</span>
+              </TableHead>
+              <TableHead className="text-right">
+                R50<span className="sr-only">: the result after fees in units of $50, the most one trade may risk</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -118,18 +143,40 @@ export function JournalTable({ rows }: { rows: JournalRow[] }) {
                       Expired
                     </Badge>
                   ) : null}
+                  {r.pieces.length ? (
+                    <details className="text-muted-foreground mt-0.5 text-xs">
+                      <summary className="hover:text-foreground cursor-pointer">{r.pieces.length} pieces</summary>
+                      <ul className="mt-1 grid gap-0.5">
+                        {r.pieces.map((p) => (
+                          <li key={p.id} className="font-mono text-[0.6875rem]">
+                            {p.text}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  ) : null}
                 </TableCell>
                 <TableCell className="text-right font-mono text-xs">{r.qty.toLocaleString("en-US")}</TableCell>
                 <TableCell className="text-right font-mono text-xs whitespace-nowrap">
                   {r.entry.toFixed(2)} → {r.exit.toFixed(2)}
                 </TableCell>
                 <TableCell className="text-muted-foreground text-right text-xs whitespace-nowrap">{r.held}</TableCell>
-                <TableCell className={cn("text-right font-mono text-xs font-semibold whitespace-nowrap", r.pnl > 0 ? "text-good" : r.pnl < 0 ? "text-bad" : "")}>{usd2(r.pnl)}</TableCell>
+                <TableCell className="text-muted-foreground text-right font-mono text-xs whitespace-nowrap">{r.fees === null ? "—" : `$${r.fees.toFixed(2)}`}</TableCell>
+                <TableCell className="text-right whitespace-nowrap">
+                  <span className={cn("block font-mono text-xs font-semibold", r.pnl > 0 ? "text-good" : r.pnl < 0 ? "text-bad" : "")}>{usd2(r.pnl)}</span>
+                  {r.fees !== null && r.fees > 0 ? <span className="text-muted-foreground block font-mono text-[0.6875rem]">{usd2(r.gross)} before fees</span> : null}
+                </TableCell>
+                <TableCell className="text-right font-mono text-xs whitespace-nowrap">{pctOf(r.optionPct)}</TableCell>
+                <TableCell className="text-right font-mono text-xs whitespace-nowrap">{rOf(r.r25)}</TableCell>
+                <TableCell className="text-right font-mono text-xs whitespace-nowrap">{rOf(r.r50)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
+      <p className="text-muted-foreground text-xs">
+        R25 is the result after fees in quarters of the premium, so −1 is the −25% stop; R50 is the result in units of $50, the most one trade may risk.
+      </p>
       {shown < list.length ? (
         <button type="button" onClick={() => setShown((n) => n + PAGE * 4)} className="text-muted-foreground hover:text-foreground mx-auto h-8 rounded-md border px-3 text-xs">
           Show more ({(list.length - shown).toLocaleString("en-US")} left)

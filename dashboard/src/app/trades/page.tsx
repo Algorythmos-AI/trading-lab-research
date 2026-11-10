@@ -6,6 +6,7 @@ import {
   JournalFilters,
   JournalTiles,
   LessonsPanel,
+  LossSizePanel,
   MoneyPanel,
   MonthsPanel,
   NoJournal,
@@ -19,7 +20,8 @@ import { PageHeading } from "@/components/page-heading";
 import { TradeRulesFor } from "@/components/trade-rules";
 import { Notice } from "@/components/ui/notice";
 import { newYork } from "@/lib/format";
-import { applyFilter, contractLabel, daily, groupBy, journalStale, lessons, marketState, moneyView, parseFilter, sessionView, shortDay, summarize, yearsOf, type JournalDoc } from "@/lib/journal";
+import { contractLabel, groupBy, journalStale, lessons, marketState, moneyView, parseFilter, sessionView, shortDay, yearsOf, type JournalDoc } from "@/lib/journal";
+import { tradesView } from "@/lib/trades-view";
 import { loadJournal, loadOptionsClone, pageTime } from "@/lib/snapshot";
 
 export const dynamic = "force-dynamic";
@@ -50,9 +52,9 @@ export default async function TradesPage({ searchParams }: { searchParams: Promi
 function JournalBody({ doc, q, now }: { doc: JournalDoc; q: Record<string, string | string[] | undefined>; now: Date }) {
   const filter = parseFilter(q);
   const all = doc.trades;
-  const trades = applyFilter(all, filter, now);
-  const s = summarize(trades);
-  const days = daily(trades);
+  // Money figures add up the pieces sold in the view, after fees, each on its own close day; per-trade figures count
+  // each trade once, a position for options, on the day it finished (see `tradesView`).
+  const { trades, units: shown, positions, pieces, days, s, gross, fees, empty } = tradesView(doc, filter, now);
   // The tickers worth a chip: the twelve most traded, plus the one in the address.
   const symbols = groupBy(all, (t) => t.symbol)
     .sort((a, b) => b.trades - a.trades)
@@ -80,23 +82,24 @@ function JournalBody({ doc, q, now }: { doc: JournalDoc; q: Record<string, strin
         </Notice>
       ) : null}
       <TradeRulesFor doc={doc} now={now} />
-      {session ? <TodayPanel view={session} asOf={doc.as_of} now={now} market={marketState(now)} /> : null}
+      {session ? <TodayPanel view={session} asOf={doc.as_of} now={now} market={marketState(now)} feesIncluded={doc.fees_included} /> : null}
       {doc.money ? <MoneyPanel m={moneyView(doc.money, all.reduce((sum, t) => sum + t.pnl, 0))} /> : null}
       <JournalFilters filter={filter} years={yearsOf(all)} symbols={symbols.sort()} />
-      {trades.length === 0 ? (
+      {empty ? (
         <Empty title="No trades in this view">Pick another period, ticker or kind.</Empty>
       ) : (
         <>
-          <JournalTiles s={s} />
+          <JournalTiles s={s} gross={gross} fees={fees} />
+          <LossSizePanel positions={positions} />
           <CurvePanel days={days} />
           <div className="grid gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-            <MonthsPanel trades={trades} />
+            <MonthsPanel trades={pieces} />
             <DayList days={days} />
           </div>
           <CalendarPanel days={days} />
           <LessonsPanel lessons={lessons(trades)} />
           <BreakdownPanel trades={trades} />
-          <TradesPanel trades={trades} />
+          <TradesPanel units={shown} feesIncluded={fees.included} />
         </>
       )}
       {open.size > 0 ? (
@@ -108,7 +111,11 @@ function JournalBody({ doc, q, now }: { doc: JournalDoc; q: Record<string, strin
       <p className="text-muted-foreground max-w-prose text-xs">
         Read from the broker ({doc.source === "webull-au" ? "Webull Australia" : doc.source}) on {newYork(doc.as_of)} New York time
         {doc.history_from ? `, history from ${shortDay(doc.history_from)}` : ""}. {doc.fills ? `${doc.fills.toLocaleString("en-US")} filled orders were matched first in, first out. ` : ""}
-        Results are in US dollars{doc.fees_included === false ? " and before commissions and fees, which the broker's history does not carry" : ""}. Days are New York trading days.
+        Results are in US dollars.{" "}
+        {doc.fees_included === true
+          ? "The broker's results already carry its fees."
+          : `${doc.fees_included === false ? "The broker's history carries no commissions or fees" : "The broker's history is not known to include commissions or fees"}, so the trades above take off your Webull fees per option contract, an estimate that can drift by a cent. The day loss limit and the money panel are before fees.`}{" "}
+        Days are New York trading days.
         {gapCount > 0
           ? ` ${gapCount} close${gapCount === 1 ? "" : "s"} had no matching open in the broker's history (${[...gaps]
               .slice(0, 4)

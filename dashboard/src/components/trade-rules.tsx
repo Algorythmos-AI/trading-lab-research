@@ -3,6 +3,7 @@
 import { ChevronDown, CircleCheck, Crosshair, Lock, OctagonX, ScanEye, ShieldCheck, Square, TriangleAlert, UserCheck, Wallet } from "lucide-react";
 import { DivergingBars } from "@/components/charts/diverging-bars";
 import { sessionView, shortDay, type JournalDoc } from "@/lib/journal";
+import { tradeUnits } from "@/lib/owner-positions";
 import {
   breakSummary,
   dayCheck,
@@ -344,7 +345,7 @@ export function TradeRulesFor({ doc, now }: { doc: JournalDoc | null; now: Date 
       check={doc ? dayCheck(sessionView(doc, now), { asOf: doc.as_of, now }) : null}
       evidence={ruleEvidence(trades)}
       breaks={trades.length ? breakSummary(trades) : null}
-      tradeCount={trades.length}
+      tradeCount={tradeUnits(trades).length}
       since={first ? shortDay(first.slice(0, 10)) : null}
     />
   );

@@ -27,7 +27,8 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
                  src/wt/options/clone_site.py \
                  src/wt/options/dryrun.py \
                  src/wt/options/pipeline_check.py src/wt/research/external_posts.py \
-                 src/wt/options/shadow.py src/wt/options/arms_verdict.py
+                 src/wt/options/shadow.py src/wt/options/arms_verdict.py \
+                 src/wt/owner/positions.py
 JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
