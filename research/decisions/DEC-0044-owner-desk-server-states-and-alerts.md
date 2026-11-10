@@ -1,0 +1,79 @@
+# DEC-0044: The owner's desk states may also be worked out on the site's server, logged, and later sent as phone alerts
+
+- **Status: ACCEPTED on 2026-11-11.** approved_by: owner. The owner approved the plan on 2026-11-11 to have the
+  site's server work out the Options desk's advisory states each settled 2-minute slot, log them, and, after a
+  log-only shadow period whose numbers the owner sees first, send entry alerts to his phone. The merge of the pull
+  request that carries this line accepts it.
+- **Written before any affected P&L is viewed.** None of what is described below exists on the site yet: there is no
+  server evaluator, no state log and no alert. The author did not read the owner's journal, the clone's results
+  for EXP-0029 or EXP-0030, or any replay while writing this record; the one trade the owner showed in session that
+  day is noted in DEC-0045.
+- **Amends DEC-0042 in one place only:** section 1 said the desk is computed in the browser. The same states may now
+  also be computed on the site's server, as below. Everything else in DEC-0042 and DEC-0043 stands. The owner's nine
+  trade rules, the card plan's numbers (DEC-0035), the options clone (EXP-0029, frozen by DEC-0040) and the research
+  arms (DEC-0041, EXP-0030) are unchanged.
+- **Depends on:** DEC-0028, DEC-0035, DEC-0041, DEC-0042, DEC-0043.
+
+## Why
+
+The desk only helps while the Options page is open and in front. The owner trades from his phone as well, and a
+state he does not see is no help. The same pure engine the page runs (`dashboard/src/lib/trade-state.ts`) can run on
+the server from the same edition and the same 2-minute bars, so the phone can be told when a name reaches the entry
+zone. A phone alert also invites a late chase, or a trade after the owner has stopped for the day, so what may be
+sent and when is fixed here before any of it is built.
+
+Two facts from the owner on 2026-11-11 shape it. Webull lets him rest a stop or stop-limit order on a long option;
+the stop to place stays on the page's manage card, and ntfy carries no level. The lab's ntfy notes already reach his
+iPhone, so ntfy is the first alert channel.
+
+## Decision
+
+1. **The server evaluator.** From the release that carries it, the site's server may run the desk's own pure
+   functions (the board of `dashboard/src/lib/trade-now.ts` over `trade-state.ts`), unchanged, once a minute in
+   session.
+   - Each run evaluates **as of the last settled 2-minute slot**: a bar counts only once `SERVER_SETTLE_MS` (60 s)
+     have passed since its end, as the page already reads the server's bars. Two runs inside the same slot give the
+     same answer.
+   - Each evaluated slot is written once to a state log (one file per slot, never overwritten): per focus name and
+     side, the state word, the bar time and the evaluation time, enum values and numbers only.
+   - It is not a host job. It runs on the site, places no order, stages no order and suggests no order, as DEC-0028
+     section 1 and DEC-0042 require.
+2. **Shadow first, logs only.** The evaluator writes its log and sends nothing for **at least 8 sessions and 10
+   enter-zone events**. Then its numbers go to the owner: the share of slots logged, how often the server's states
+   match the open page's, and the median and worst delay from bar end to evaluation. Alerts can be switched on only
+   after the owner has seen them.
+3. **What an alert may carry:**
+   - the symbol, the side (call or put) and the state word;
+   - the bar time the state comes from and the time the alert was sent;
+   - the day's usage as last read from the journal (trades taken of 5, and the share of the day's loss limit used,
+     in %) and the time of that read.
+
+   Levels and prices go only over an end-to-end encrypted channel to the owner's own device. Through ntfy, the first
+   channel, no level, price or dollar amount is sent, as the lab's ntfy notes already carry R and % only.
+4. **Guards.** No entry alert is sent:
+   - after the owner sets his "done for today" flag;
+   - beyond **5 entry alerts in a session**, the day's most entries (rule 8, `MAX_TRADES_PER_DAY`);
+   - when the journal is not current by the board's own test (`journalCurrent`), or shows a rule break today
+     (`tradeBreaks`);
+   - from degraded data: a gap in the bars, a break the page could not see the close of (`brokeEarlier`), or a stale
+     quote;
+   - in fixture mode, or anywhere but production.
+
+   There are no "ended" messages: only the page shows that a state has ended. The flags that switch the evaluator and
+   the alerts on and off are read every run from the site's own store and can be changed without a deploy, so either
+   can be stopped at once.
+5. **Manage alerts stay in the browser.** The manage card (stop, target 1, the trail, the five-minute rule, the close)
+   stays on the page. Sending a position's entry or stop to the server, so the phone could also say "exit", is not
+   allowed by this record and needs its own.
+6. **What this does not start.** It starts no trial and adds nothing to `config/trial_registry.yaml`. Comparing the
+   owner's trades by what the board showed is DEC-0045's, and the live log written here is not the source of its
+   labels.
+
+## Consequences
+
+- A phone alert arrives a minute or more after the bar it comes from. The bar time and the send time it carries let
+  the owner see how old it is; the shadow period measures the delay before the first one is sent.
+- The server can differ from the page by a slot when the page saw a print the server's bars do not yet hold. The
+  shadow comparison measures this. When in doubt the engine says get ready, never enter zone, on both.
+- If a DEC-0041 arm's verdict removes a caution or line from the desk (DEC-0042, Consequences), it leaves the server's
+  evaluation in the same pull request.
