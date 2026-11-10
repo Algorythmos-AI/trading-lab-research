@@ -85,7 +85,8 @@ This is honest about what is not new:
        own VWAPs; stored bars without volume leave the leader check unknown;
      - the 2-minute bars (`Bars2m`) come from the settled bars alone; receivedAt = now;
      - wonToday comes from the journal pieces closed before now that New York day, and dayLimitUsed from the
-       journal pieces closed (for the loss) or opened (for the cap) before now that day.
+       journal pieces closed before now that day (for the loss) and the buy fills before now that day (for the
+       cap: each distinct `opened_at` of one contract is one entry, so one buy sold in parts counts once).
    - **A side's state** at an instant is `nameState(...)[side].state` while the row's state is neither `no_trade`
      nor `paused`, and `no_trade` otherwise. It holds from now (the bar's end + 5 s) until the next evaluation.
      Intervals are half-open, [from, until).
@@ -139,10 +140,12 @@ This is honest about what is not new:
    closes **inconclusive**, neither passed nor failed. Otherwise it passes the gate or is falsified. Only the
    verdict script computes group statistics; the site shows its report after the verdict.
 8. **What the site may show before a verdict:** each position's label and R, the count of positions per label, the
-   owner's overall mean R (only once there are 20 positions over 10 sessions), a rules-kept score, and progress
+   owner's overall mean R and his average winner and average loser in R (each only once there are 20 positions
+   over 10 sessions), a rules-kept score, and progress
    toward the gate ("off-plan 12 of 30"). It may also show, over all positions together and never by label, how
    the exits kept the rules: the count of losers closed past the −25% stop, the count of losers held past the chart
-   stop, the count of winners closed before target 1, and the dollars lost beyond the −25% stop (rule 5 applied
+   stop, the count of winners closed before target 1, the count of winners closed under +50% on premium, the count
+   of positions where a part was held past −25%, and the dollars lost beyond the −25% stop (rule 5 applied
    to each loser, as the Trades page already replays the day stop).
 
    It may **not** show the mean R, dollars, win rate or profit factor by label, by caution or by time window, or any

@@ -94,7 +94,9 @@ labels:
       volume leave the leader check unknown
     bars: Bars2m from the settled bars alone; receivedAt = now
     won_today: from the journal pieces closed before now that New York day
-    day_limit_used: from the journal pieces closed (for the loss) or opened (for the cap) before now that day
+    day_limit_used: >-
+      from the journal pieces closed before now that day (for the loss) and the buy fills before now that day (for
+      the cap: each distinct opened_at of one contract is one entry, so one buy sold in parts counts once)
   side_state: >-
     nameState(...)[side].state while the row's state is neither no_trade nor paused, and no_trade otherwise; it holds
     from now until the next evaluation
@@ -185,11 +187,13 @@ site_before_verdict:
     - per-position R
     - count per label
     - overall mean R, once there are 20 positions over 10 sessions
+    - average winner and average loser in R, under the same minimum
     - rules-kept score
     - progress toward the gate
     - >-
       over all positions and never by label: count of losers past the -25% stop, count of losers held past the chart
-      stop, count of winners closed before target 1, dollars lost beyond the -25% stop
+      stop, count of winners closed before target 1, count of winners closed under +50% on premium, count of
+      positions where a part was held past -25%, dollars lost beyond the -25% stop
   may_not_show:
     - mean R, dollars, win rate or profit factor by label, by caution or by time window
     - what-if P&L of an exit not taken, other than the rule 5 figure above (never what a winner would have made if held)
