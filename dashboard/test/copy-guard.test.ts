@@ -45,6 +45,10 @@ const FILES = [
   "../src/lib/trades-view.ts",
   "../src/components/journal.tsx",
   "../src/components/client/journal-table.tsx",
+  "../src/components/trades-page.tsx",
+  "../src/components/trades-jump-bar.tsx",
+  "../src/components/trade-rules.tsx",
+  "../src/components/panel.tsx",
 ];
 
 const BANNED = [

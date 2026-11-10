@@ -143,6 +143,14 @@ export function feeNote(fees: FeeBasis): string {
   return `After fees (${feeRate}) on options, ${usd(-fees.total)} on the trades in view; shares are before fees. ${what}`;
 }
 
+/** The fee words a panel's intro carries, in step with `feeNote`: after fees on options, unless Webull's results already carry them. */
+export function feeWords(included: boolean): string {
+  return included ? "Webull's results already carry its fees." : "After fees on options; shares are before fees.";
+}
+
+/** What a trade is, for the panels that count trades rather than add up dollars. */
+const WHOLE_POSITION = "A trade is a whole position, however many fills it took.";
+
 /** The headline, after fees, with the figure before fees beside the net result. `s` and `gross` count the same trades. */
 export function JournalTiles({ s, gross, fees }: { s: Summary; gross: Summary; fees: FeeBasis }) {
   return (
@@ -170,9 +178,9 @@ export function JournalTiles({ s, gross, fees }: { s: Summary; gross: Summary; f
           hint={`Dollars won for each dollar lost. Above 1 makes money.${gross.profitFactor === null || fees.included ? "" : ` Before fees ${gross.profitFactor.toFixed(2)}.`}`}
         />
         <StatTile label="Per trade" icon={Layers} tone={toneOf(s.expectancy)} value={usd(s.expectancy, 2)} hint={`The average result of one trade${fees.included ? "" : ` · before fees ${usd(gross.expectancy, 2)}`}`} />
-        <StatTile label="Average win" icon={TrendingUp} tone="good" value={usd(s.avgWin, 2)} hint={s.best ? `Best: ${usd(s.best.pnl)} · ${contractLabel(s.best)}` : undefined} />
+        <StatTile label={fees.included ? "Average win" : "Average win, after fees"} icon={TrendingUp} tone="good" value={usd(s.avgWin, 2)} hint={s.best ? `Best: ${usd(s.best.pnl)} · ${contractLabel(s.best)}` : undefined} />
         <StatTile
-          label="Average loss"
+          label={fees.included ? "Average loss" : "Average loss, after fees"}
           icon={TrendingDown}
           tone="bad"
           value={usd(s.avgLoss, 2)}
@@ -225,7 +233,7 @@ export function LossSizePanel({ positions }: { positions: OwnerPosition[] }) {
         </Empty>
       ) : (
         <div className="grid gap-3">
-          <StatTiles className="sm:grid-cols-2 lg:grid-cols-3">
+          <StatTiles className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             <StatTile
               label={`Losers past the −${stopPct}% stop`}
               icon={TrendingDown}
@@ -335,7 +343,11 @@ export function TodayPanel({ view, asOf, now, market, feesIncluded }: { view: Se
   const grossNet = view.summary.net;
   // The count the day's rules use: trades opened this session. One opened on an earlier day and closed in this one is
   // listed, and named apart.
-  const opened = units.filter((u) => nyTime(u.unit.opened_at).day === view.day).length;
+  // The tile counts those, and its won and lost count the same ones, so the value and the hint agree; the day result
+  // beside it still adds up every trade closed today.
+  const openedUnits = units.filter((u) => nyTime(u.unit.opened_at).day === view.day);
+  const opened = openedUnits.length;
+  const os = summarize(openedUnits.map((u) => u.unit));
   const carried = units.length - opened;
   const rows = new Map(toRows(units).map((r) => [r.id, r]));
   const ago = Number.isFinite(Date.parse(asOf)) ? Math.max(0, Math.floor((now.getTime() - Date.parse(asOf)) / 60_000)) : null;
@@ -366,7 +378,7 @@ export function TodayPanel({ view, asOf, now, market, feesIncluded }: { view: Se
             value={opened.toLocaleString("en-US")}
             hint={
               s.trades
-                ? `${s.wins} won · ${s.losses} lost${s.winRate === null ? "" : ` · ${pct(s.winRate)}`}${carried ? ` · and ${carried} opened on an earlier day` : ""}`
+                ? `${opened ? `Opened this session: ${os.wins} won · ${os.losses} lost${os.winRate === null ? "" : ` · ${pct(os.winRate)}`}` : "None opened this session"}${carried ? ` · ${carried} more opened on an earlier day, not counted here` : ""}`
                 : view.isToday
                   ? "None closed yet today"
                   : undefined
@@ -422,7 +434,7 @@ export function TodayPanel({ view, asOf, now, market, feesIncluded }: { view: Se
         )}
         {units.length > shown.length ? (
           <p className="text-muted-foreground text-xs">
-            {units.length - shown.length} more in <a href="#trades" className="underline underline-offset-2">every trade</a> below.
+            {units.length - shown.length} more in <a href="#trades" className="underline underline-offset-2">every trade</a>, in the record below.
           </p>
         ) : null}
         <p className="text-muted-foreground text-xs">
@@ -494,20 +506,25 @@ export function MoneyPanel({ m }: { m: MoneyView }) {
 
 // ── Curve and months ─────────────────────────────────────────────────────────────────────────────────────────────
 
-export function CurvePanel({ days }: { days: DayRow[] }) {
+export function CurvePanel({ days, feesIncluded }: { days: DayRow[]; feesIncluded: boolean }) {
   return (
-    <Panel id="curve" title="Running total" icon={ChartLine} means="Every closed trade added up, day by day. The shaded band above the line is how far the total stood below its best so far.">
+    <Panel
+      id="curve"
+      title="Running total"
+      icon={ChartLine}
+      means={`Every closed trade added up, day by day. The shaded band above the line is how far the total stood below its best so far. ${feeWords(feesIncluded)}`}
+    >
       <PnlCurve points={days.map((d) => ({ day: d.day, pnl: d.pnl, cum: d.cum, dd: d.dd, trades: d.trades }))} />
     </Panel>
   );
 }
 
-export function MonthsPanel({ trades }: { trades: Trade[] }) {
+export function MonthsPanel({ trades, feesIncluded }: { trades: Trade[]; feesIncluded: boolean }) {
   const months = groupBy(trades, MONTH)
     .sort((a, b) => a.key.localeCompare(b.key))
     .map((g) => ({ month: g.key, pnl: g.pnl, trades: g.trades, winRate: g.winRate }));
   return (
-    <Panel id="months" title="Month by month" icon={ChartColumn} means="What each month made or lost. Months with no trades are left out.">
+    <Panel id="months" title="Month by month" icon={ChartColumn} means={`What each month made or lost. Months with no trades are left out. ${feeWords(feesIncluded)}`}>
       <MonthBars months={months} />
     </Panel>
   );
@@ -523,11 +540,12 @@ function heat(pnl: number | null, reach: number): string {
   return pnl > 0 ? ["", "bg-good-fill/30", "bg-good-fill/60", "bg-good-fill"][step]! : ["", "bg-bad-fill/30", "bg-bad-fill/60", "bg-bad-fill"][step]!;
 }
 
-export function CalendarPanel({ days }: { days: DayRow[] }) {
+export function CalendarPanel({ days, feesIncluded }: { days: DayRow[]; feesIncluded: boolean }) {
   const months = calendar(days, 6);
   const reach = Math.max(1, ...days.slice(-130).map((d) => Math.abs(d.pnl)));
   return (
-    <Panel id="calendar" title="Trading calendar" icon={CalendarDays} means="The latest months with trades, Monday to Friday. Green made money that day, red lost it; the stronger the colour, the bigger the day.">
+    <Panel id="calendar" title="Trading calendar" icon={CalendarDays} means={`The latest months with trades, Monday to Friday. Green made money that day, red lost it; the stronger the colour, the bigger the day. ${feeWords(feesIncluded)}`}
+    >
       <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
         {months.map((m, i) => (
           // A phone shows the latest three months; the rest would be a long scroll.
@@ -571,9 +589,10 @@ const LESSON_EDGE = { good: "before:bg-good-fill", bad: "before:bg-bad-fill", wa
 const LESSON_TAG = { good: "Keep doing", bad: "Costing you", warn: "Watch", info: "Worth knowing" } as const;
 const LESSON_TAG_TONE = { good: "text-good", bad: "text-bad", warn: "text-warn", info: "text-info" } as const;
 
-export function LessonsPanel({ lessons }: { lessons: Lesson[] }) {
+export function LessonsPanel({ lessons, feesIncluded }: { lessons: Lesson[]; feesIncluded: boolean }) {
   return (
-    <Panel id="lessons" title="What the record says" icon={Lightbulb} means="Patterns measured from these trades, each comparing like with like. They describe what happened; they do not predict anything.">
+    <Panel id="lessons" title="What the record says" icon={Lightbulb} means={`Patterns measured from these trades, each comparing like with like. They describe what happened; they do not predict anything. ${WHOLE_POSITION} ${feeWords(feesIncluded)}`}
+    >
       {lessons.length === 0 ? (
         <Empty title="Not enough trades in this view">Pick a wider period to see patterns.</Empty>
       ) : (
@@ -635,13 +654,14 @@ function Breakdown({ title, rows, note }: { title: string; rows: GroupRow[]; not
   );
 }
 
-export function BreakdownPanel({ trades }: { trades: Trade[] }) {
+export function BreakdownPanel({ trades, feesIncluded }: { trades: Trade[]; feesIncluded: boolean }) {
   const bySymbol = groupBy(trades, (t) => t.symbol);
   const worst = bySymbol.slice(0, 6);
   const best = bySymbol.slice(-6).reverse().filter((r) => !worst.some((w) => w.key === r.key));
   const symbols = [...best, ...worst.reverse()].sort((a, b) => b.pnl - a.pnl);
   return (
-    <Panel id="breakdown" title="Where it was made and lost" icon={Layers} means="The same trades cut six ways. Each bar is the dollars made or lost; the small numbers are how many trades and the share that won.">
+    <Panel id="breakdown" title="Where it was made and lost" icon={Layers} means={`The same trades cut six ways. Each bar is the dollars made or lost; the small numbers are how many trades and the share that won. ${WHOLE_POSITION} ${feeWords(feesIncluded)}`}
+    >
       <div className="grid gap-x-8 gap-y-6 md:grid-cols-2">
         <Breakdown title="By ticker" rows={symbols} note="The best and the worst" />
         <Breakdown title="Calls, puts and shares" rows={groupBy(trades, (t) => t.kind, KIND_ORDER)} />
@@ -705,7 +725,7 @@ export function TradesPanel({ units, feesIncluded }: { units: TradeUnit[]; feesI
   );
 }
 
-export function DayList({ days }: { days: DayRow[] }) {
+export function DayList({ days, feesIncluded }: { days: DayRow[]; feesIncluded: boolean }) {
   const sorted = [...days].sort((a, b) => a.pnl - b.pnl);
   const worst = sorted.slice(0, 5);
   const best = sorted.slice(-5).reverse();
@@ -721,7 +741,7 @@ export function DayList({ days }: { days: DayRow[] }) {
     </li>
   );
   return (
-    <Panel id="days" title="Best and worst days" icon={Clock} means="The five biggest days each way. Open the calendar above to see when they fell.">
+    <Panel id="days" title="Best and worst days" icon={Clock} means={`The five biggest days each way; the calendar under History shows when they fell. ${feeWords(feesIncluded)}`}>
       <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
         <div className="grid content-start gap-1">
           <p className="text-good text-xs font-medium">Best</p>

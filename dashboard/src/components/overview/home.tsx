@@ -8,7 +8,7 @@ import { Panel } from "@/components/panel";
 import { StatTile, StatTiles } from "@/components/stat-tile";
 import { StatusBadge, TONE_TEXT, ToneIcon } from "@/components/status";
 import type { Health } from "@/lib/health";
-import { lessons, marketState, moneyView, sessionView, shortDay, summarize, type JournalDoc, type Trade } from "@/lib/journal";
+import { ALL, filterHref, lessons, marketState, moneyView, sessionView, shortDay, summarize, type JournalDoc, type Trade } from "@/lib/journal";
 import type { Tone } from "@/lib/labels";
 import type { OptionsEdition } from "@/lib/options.types";
 import { hourBands, keptStreak, keptVsBroken, nextOpen, periodTotals, quickVsSlow, ruleDays, since, tickerEnds, untilText, withRun } from "@/lib/overview";
@@ -288,7 +288,7 @@ export function PatternsPanel({ trades, now }: { trades: readonly Trade[]; now: 
               rows={ends.map((g) => ({
                 key: g.key,
                 label: (
-                  <Link href={`/trades?symbol=${encodeURIComponent(g.key)}`} className="font-mono underline-offset-2 hover:underline" title={`${g.trades} trades`}>
+                  <Link href={filterHref({ ...ALL, symbol: g.key })} className="font-mono underline-offset-2 hover:underline" title={`${g.trades} trades`}>
                     {g.key}
                   </Link>
                 ),

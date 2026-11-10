@@ -2,6 +2,7 @@
 // and the evidence one click away. Server-rendered; the evidence opens with a native <details>, so it needs no script.
 import { ChevronDown, CircleCheck, Crosshair, Lock, OctagonX, ScanEye, ShieldCheck, Square, TriangleAlert, UserCheck, Wallet } from "lucide-react";
 import { DivergingBars } from "@/components/charts/diverging-bars";
+import { ANCHOR_MARGIN } from "@/components/panel";
 import { sessionView, shortDay, type JournalDoc } from "@/lib/journal";
 import { tradeUnits } from "@/lib/owner-positions";
 import {
@@ -45,18 +46,21 @@ const STATUS = {
   unknown: { word: "Journal not current", icon: TriangleAlert, text: "text-warn", soft: "bg-warn-soft border-warn-fill/50", fill: "bg-warn-fill" },
 } as const;
 
-function DayMeter({ label, used, max, text, fill }: { label: string; used: number; max: number; text: string; fill: string }) {
+function DayMeter({ label, note, used, max, text, fill }: { label: string; note?: string; used: number; max: number; text: string; fill: string }) {
   const share = Math.min(1, Math.max(0, used / max));
   return (
     <div className="grid min-w-0 gap-1">
       <div className="flex items-baseline justify-between gap-2 text-xs">
-        <span className="text-muted-foreground">{label}</span>
+        <span className="text-muted-foreground">
+          {label}
+          {note ? ` · ${note}` : null}
+        </span>
         <span className="font-mono font-semibold">{text}</span>
       </div>
       <div
         className="bg-track/70 h-2 overflow-hidden rounded-full"
         role="meter"
-        aria-label={label}
+        aria-label={note ? `${label}, ${note}` : label}
         aria-valuemin={0}
         aria-valuemax={max}
         aria-valuenow={Math.min(max, used)}
@@ -82,7 +86,8 @@ function TodayStrip({ check }: { check: DayCheck }) {
           <span className="text-muted-foreground text-xs">{check.line}</span>
         </div>
       </div>
-      <DayMeter label="Trades today" used={check.used} max={MAX_TRADES_PER_DAY} text={`${check.used} of ${MAX_TRADES_PER_DAY}`} fill={tradesFill} />
+      {/* Entries, not positions: the Today panel's "Closed trades" counts each position once, this counts each buy. */}
+      <DayMeter label="Trades today" note="each buy counts" used={check.used} max={MAX_TRADES_PER_DAY} text={`${check.used} of ${MAX_TRADES_PER_DAY}`} fill={tradesFill} />
       <DayMeter
         label="Day loss limit"
         used={lossUsed}
@@ -245,7 +250,10 @@ export function TradeRules({
     <section
       id="rules"
       aria-labelledby="rules-title"
-      className="bg-card relative overflow-hidden rounded-xl border shadow-sm before:absolute before:inset-x-0 before:top-0 before:h-1 before:bg-[linear-gradient(90deg,var(--info-fill),var(--warn-fill),var(--bad-fill))]"
+      className={cn(
+        ANCHOR_MARGIN,
+        "bg-card relative overflow-hidden rounded-xl border shadow-sm before:absolute before:inset-x-0 before:top-0 before:h-1 before:bg-[linear-gradient(90deg,var(--info-fill),var(--warn-fill),var(--bad-fill))]",
+      )}
     >
       <div className="grid gap-4 p-4 sm:p-5">
         <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
