@@ -25,7 +25,7 @@ def run(tmp_path: Path, unit: str | None) -> tuple[list[str], str]:
     curl.chmod(0o755)
     paging = tmp_path / "paging"
     paging.write_text("NTFY_TOPIC=test-topic\nNTFY_SERVER=https://ntfy.invalid\n")
-    env = {**os.environ, "PATH": f"{bin_}:{os.environ['PATH']}", "WT_PAGING_FILE": str(paging)}
+    env = {**os.environ, "PATH": f"{bin_}:{os.environ['PATH']}", "WT_PAGING_FILE": str(paging), "WT_ALERT_TEST": "1"}
     args = ["bash", str(SCRIPT)] + ([] if unit is None else [unit])
     r = subprocess.run(args, env=env, capture_output=True, text=True, timeout=30, cwd=tmp_path)
     assert r.returncode == 0
@@ -56,7 +56,20 @@ def test_every_page_keeps_to_the_allowlist(tmp_path, unit):
     if unit and unit.startswith("wt-") and "\n" not in unit:
         assert title == f"Trading host: {unit.removesuffix('.service')} failed" and unit in body
     else:
-        assert "a unit" in title and "a unit" in body
+        assert title == "Trading host: a unit failed"
+        assert body == "systemd reports a unit failed. Check: make status and the journal for the failed unit."
+
+
+def test_the_paging_file_is_overridden_only_in_a_test_and_says_so(tmp_path):
+    argv, err = run(tmp_path, "wt-backup.service")
+    assert argv and "paging file overridden for a test" in err
+    bin_ = tmp_path / "bin"
+    env = {**os.environ, "PATH": f"{bin_}:{os.environ['PATH']}", "WT_PAGING_FILE": str(tmp_path / "paging")}
+    (tmp_path / "curl-args").unlink()
+    r = subprocess.run(["bash", str(SCRIPT), "wt-backup.service"], env=env, capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0 and "overridden" not in r.stderr
+    if not Path("/etc/wt/paging").exists():                     # without the test switch it reads /etc/wt/paging only
+        assert not (tmp_path / "curl-args").exists() and "no ntfy topic configured" in r.stderr
 
 
 def test_paper_b_pages_at_priority_five(tmp_path):
