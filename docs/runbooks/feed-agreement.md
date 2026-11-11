@@ -7,7 +7,8 @@ fixes, before any number is seen, how that comparison is made and how it is read
 `make feed-agreement` (below).
 
 Written 2026-11-11, before any comparison was run on real data; revised the same day (revisions 1 and 2, below),
-still before any real-data count existed. The thresholds below are fixed. Changing any of them needs a new dated revision
+still before any real-data count existed, and again (revision 3) after the first session's count, without changing
+the reading. The thresholds below are fixed. Changing any of them needs a new dated revision
 of this page, committed before the next run; runs made before it are read under the rules they were run under.
 
 ## Revisions
@@ -46,6 +47,16 @@ report and no number were produced. What changed, and why:
 3. **Drift of the history.** Bars can change after the session (late and corrected prints). The report records when
    its bars were fetched, and a recheck mode measures how many units change word when the same day is fetched again.
    The recheck never replaces a report or a summary row.
+
+**Revision 3, 2026-11-11 (New York).** Written **after a real-data count existed**: session 1, 2026-11-11 (engine
+`e-5f6c5cbf0639`), comparable 976, identical 952 (97.541%), enter-zone events IEX 5 and SIP 3, matched 3, IEX-only 2,
+SIP-only 0; the owner keeps it as session 1. **The reading is unchanged**: the unit, the comparable set, the 98%
+threshold, the enter-zone event rule and the five-session rule are exactly as in revision 2. This revision adds
+facts reported beside the reading (disagreement runs, the split of disagreements by bar, re-entries after no state),
+rewords limitation 1 and the plan check, and fixes the tool's safety (a failed re-run never destroys an earlier
+report, an unreadable summary is never replaced, the keys go only to Alpaca, the recheck checks the edition and the
+engine first). None of these facts is part of the reading; where a report written before this revision lacks one,
+it is computed offline from that report's stored per-unit words, or shown as "not recorded".
 
 ## What it is, and what it is not
 
@@ -144,8 +155,31 @@ Per session:
 6. **Bars missing per slot**: for every slot of the session, how many focus names have no bar for that slot on IEX,
    and how many on SIP; and the totals.
 7. **Provenance**: when the bars were fetched (`fetched_at`), the `X-RateLimit-Limit` of each feed's first answer
-   (`rate_limit`, a number, or null when Alpaca sent none) and the keys' source (`keys`: `env-file` or
-   `environment`). These describe the run, not the feeds, and are not part of any reading.
+   (`rate_limit`, a number, or null when Alpaca sent none), the keys' source (`keys`: `env-file` or `environment`)
+   and, from revision 3, the SHA-256 of the edition file's bytes (`edition_sha256`). These describe the run, not the
+   feeds, and are not part of any reading.
+8. **Disagreement runs** (from revision 3; context, not part of the reading). One differing close can make a side
+   differ for the rest of the session: `plan_off` and `missed` hold, and after a break a missing slot leaves the
+   side with no state (`none`) from then on. So a few moments can use up the 2% allowance on their own, and the share
+   alone cannot tell "one event, sticky afterwards" from "many independent differences". For each name and side,
+   walking its comparable units in live-slot order (an excluded unit neither breaks nor extends a run), a **run** is
+   a maximal stretch of consecutive disagreeing units. Reported: the number of runs (`disagreement_runs`), the longest
+   (`longest_run`), the sides with any disagreement, and for every run its onset slot, onset pair of words, length
+   and most common pair. The summary pools the number of runs and the longest run. The 98% threshold was fixed before
+   this was understood and is not changed: the runs are context for the owner's dated decision, not part of the
+   reading.
+9. **Disagreements by bar** (from revision 3). The disagreements are split into those where one feed lacked the
+   slot's bar and those where both had it. In this replay a unit lacking its bar on one feed always reads `paused`
+   or `none` on that feed (its last bar ended at least 2 minutes before the slot's end, so the quote is at least
+   125 s old and the board pauses, or a gap leaves no state). It matches only when the other feed also reads
+   `paused` or `none`; those units are counted too ("lacked but matched"). So the share can never exceed
+   1 − (IEX-lacks + SIP-lacks − lacked-but-matched) / comparable, and with no lacked-but-matched unit it can never
+   exceed 1 − (IEX-lacks + SIP-lacks) / comparable.
+10. **Re-entries after no state** (from revision 3). A `paused` or `none` inside an enter-zone run ends it, so the
+    return to `enter_zone` is a second event on that feed, which the other feed (whose run did not break) cannot
+    match: IEX `enter_zone, enter_zone, paused, enter_zone` against SIP `enter_zone` four times gives one IEX-only
+    event. The event rule is not changed. Reported per feed: `reentries_after_no_state`, the events whose previous
+    comparable unit on that side was `paused` or `none` and the one before that `enter_zone`.
 
 A report is written for one session at a time. Its share and its unmatched events are shown, but **a single session
 is never read** as equivalent or different.
@@ -198,10 +232,11 @@ These are listed in every report's output as well.
 1. **The run-time snapshot is not reproduced, and this cuts both ways.** It **removes pauses**: in the replay a
    slot that has its own bar is dated inside that bar, so it is never stale; live, a slot's only trade can come early
    in the bar and be more than `TRADE_STALE_MS` (120 s) old when the board judges it, and the board pauses. It
-   **adds pauses**: in the replay a slot without its own bar is dated at the last bar's start, which is older than
-   the true last trade (that bar may have traded up to its end), so the replay can pause where the live board did
-   not. It also drops a `missed` that only a snapshot high or low printed after the slot would cause. Both replays
-   are treated alike, but the pauses counted are the replay's, not the live board's.
+   **dates a slot without its own bar earlier than the truth**: it uses the last bar's start, while the true last
+   trade may be as late as that bar's end. This changes no outcome: that bar ended at least 2 minutes before the
+   slot's end, so the quote is at least 125 s old either way and the board pauses either way. It also drops a
+   `missed` that only a snapshot high or low printed after the slot would cause. Both replays are treated alike, but
+   the pauses counted are the replay's, not the live board's.
 2. **Historical bars, not the bars the server read.** The replay reads each feed's bars after the session. A late
    or corrected print can make them differ from what the live server read a minute after the slot. Both feeds are
    read the same way, so the comparison is fair between them, but it is not a re-run of the live records.
@@ -253,20 +288,26 @@ The edition is PRIVATE (it names the focus names and their levels). Keep it unde
 
 ### What the runner does
 
-- Refuses a malformed day, a day that is not a session (weekend, holiday), a session until **20 minutes after its
-  close** (16:20 New York, 13:20 on a half day, so the historical bars have settled), and an edition whose `session`
-  is not that day or which has no focus names. Nothing is read upstream before these checks pass.
+- Refuses a malformed day, a day outside the exchange calendar's range (its own line), a day that is not a session
+  (weekend, holiday), a session until **20 minutes after its close** (16:20 New York, 13:20 on a half day, so the
+  historical bars have settled), an edition whose `session` is not that day or which has no focus names, and a data
+  URL that is not `https` on `data.alpaca.markets` (or another host ending in `.alpaca.markets`): the keys go only to
+  Alpaca. It prints the host it reads from. Nothing is read upstream before these checks pass.
 - Reads, for the focus names only, that session's 2-minute bars from `iex` and from SIP (the consolidated tape),
   from 09:30 to the close: read-only `GET /v2/stocks/bars` on `data.alpaca.markets`, one feed at a time, every
   request naming its `feed` explicitly, following `next_page_token` (at most 20 pages). It reads
-  `X-RateLimit-Limit` on each feed's first answer and stops when SIP's is under 1000. It keeps under 200 calls a minute (180), waits for `Retry-After` (seconds or an HTTP date; 5 s when
+  `X-RateLimit-Limit` on each feed's first answer and, when Alpaca sends the header, stops when SIP's is under 1000.
+  The check catches wrong keys or a changed plan; it says nothing about the data's quality. Every Alpaca request
+  refuses redirects. It keeps under 200 calls a minute (180), waits for `Retry-After` (seconds or an HTTP date; 5 s when
   absent) on a 429 and retries a 429 at most **5 times**, and stops at a hard time budget (`BUDGET_S`, 120 s by
   default), never starting a wait that would end past it. The keys are sent only in Alpaca's headers; they are never
   printed or logged, and neither is a page token or a response body.
 - Replays both feeds through `evaluateSlot` and writes, under `var/feed-agreement/` (git-ignored): `<day>.json` (the
   full report), `<day>.txt` (a short table) and the running summary `summary.jsonl` with one row for the session.
-  Each file is written to a temporary name and renamed into place, the summary last, so a failure leaves no partial
-  file. It then prints the table and the summary's reading.
+  Each file is written to a temporary name and renamed into place, the summary last; any earlier report of the day
+  is kept aside until every rename has succeeded and put back if one fails, so a failure leaves no partial file and
+  never destroys an earlier report. A summary that exists but cannot be read is never replaced: the run stops
+  (exit 9) and writes nothing. It then prints the table and the summary's reading.
 - The output holds counts, state words, slot times (New York `HHMM`), symbols and the engine label only: no level, no
   price, no amount. Nothing is sent anywhere: no ntfy, no Blob write, no publish.
 
@@ -284,9 +325,10 @@ report file and no new summary row.
 | 6 | `no bars:` | a feed returned no bars for any focus name that session |
 | 7 | `time budget:` | the budget ran out: a call or its body still arriving, a `Retry-After` or a call-limit wait longer than what is left |
 | 8 | `upstream:` | any other HTTP or network failure (the status only; 401 says keys rejected), a body that is not JSON, still paging after 20 pages, or a 429 after 5 retries |
-| 9 | `write failed:` | a report file or the summary could not be written; the new files are removed |
+| 9 | `write failed:` | a report file or the summary could not be written (the new files are removed, an earlier report is put back), or the summary exists but cannot be read |
 | 10 | `failed:` | anything else unexpected (the error's name only) |
 | 11 | `sip plan:` | SIP's first answer carried an `X-RateLimit-Limit` under 1000: the plan no longer includes real-time SIP, or the wrong keys |
+| 12 | `data url:` | `ALPACA_DATA_URL` is not `https` on an `alpaca.markets` host: nothing is sent |
 
 A 401 reads `upstream: … HTTP 401: the keys were rejected (keys from the env file)` (or `from the environment`),
 exit 8: check the named source's pair.
@@ -298,11 +340,14 @@ make feed-agreement-recheck DAY=2026-11-12 EDITION=var/feed-agreement/editions/2
 ```
 
 It fetches the day's bars again from both feeds, replays them through the same engine, and compares every unit's
-word on each feed with the stored report's (`<day>.json`). It prints, and writes to `<day>.recheck.json`, only
-counts: the units compared, how many changed word on IEX and on SIP, and how many changed set (comparable, both
-lack). It never replaces the stored report or its summary row, and the reading never uses it. It refuses when there
-is no stored report for the day, or when the stored report was made under another engine label (the change could not
-be told from an engine change). Run it **once, the day after the first session**, to learn how much a session's
+word on each feed with the stored report's (`<day>.json`). It prints, and writes to
+`<day>.recheck-<fetch time>.json` (a second recheck never overwrites the first), only counts: the units compared, how
+many changed word on IEX and on SIP, and how many changed set (comparable, both lack). It never replaces the stored
+report or its summary row, and the reading never uses it. Before any fetch it refuses when there is no stored report
+for the day, or when the stored report was made under another engine label (the change could not be told from an
+engine change). It refuses an edition file whose SHA-256 differs from the stored report's; a report made before
+revision 3 has no hash, so its edition's build time and focus names are compared instead and the output says
+"edition hash not recorded". Run it **once, the day after the first session**, to learn how much a session's
 history drifts after the fact; if it drifts, that is a limitation of every report (limitation 2) and is said so
 beside the reading, not corrected for.
 
