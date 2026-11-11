@@ -29,6 +29,8 @@ jobs:
       TZ: UTC
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0          # the restricted-path check reads every commit of the change, not only its tip
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       - name: Install the locked environment
         run: |
@@ -39,6 +41,19 @@ jobs:
         run: |
           uv pip install --dry-run --require-hashes --no-deps --python-platform aarch64-unknown-linux-gnu \
             --python-version 3.12 --target "$RUNNER_TEMP/arm64" -r requirements.lock.txt
+      - name: No restricted or runtime paths (the pre-commit hook's own pattern, at HEAD and in every commit of the change)
+        # The local hook (check-restricted) is skipped by anyone without `make hooks`; this step is not.
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ -n "$BASE_REF" ]; then base="origin/$BASE_REF"; else base="$BEFORE"; fi
+          if [ -n "$base" ] && git rev-parse --verify --quiet "$base^{commit}" >/dev/null; then
+            .venv/bin/python scripts/check_restricted_paths.py --base "$base"
+          else
+            echo "no usable base: checking the tree at HEAD only"
+            .venv/bin/python scripts/check_restricted_paths.py
+          fi
       - name: Lint (ruff)
         run: .venv/bin/ruff check .
       - name: Lint workflows (actionlint + shellcheck)
