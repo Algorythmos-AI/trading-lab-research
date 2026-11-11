@@ -471,8 +471,8 @@ prints a secret; it prints only the ntfy topic and how to subscribe to it.
     bypass refused as for eval-status, `no-store`, the day a real `YYYY-MM-DD` (400 otherwise; today in New York when
     left out). Unlike eval-status it **lists** a day's records: one listing of `desk/log/<day>/` and one read per
     server record (`HHMM.json` only, at most 256, 8 at a time; page records are never read). It answers counts,
-    enums and numbers per name only (`quote-probe.ts` summariseProbe), never a record's text, and `503
-    read-failed` without detail when the listing fails. A HEAD answers from validation alone and reads nothing. A past
+    enums and numbers per name only, grouped by the record's feed (`quote-probe.ts` summariseProbe), never a
+    record's text, and `503 read-failed` without detail when the listing fails. A HEAD answers from validation alone and reads nothing. A past
     day's summary is kept in the instance's memory (at most 5 days; never today, never a day with an unreadable
     record). Read only when the owner opens it; dry (no store call) in fixture mode and anywhere but production.
   - The Options page's server render reads the switch; while it is off the browser makes no request about the check

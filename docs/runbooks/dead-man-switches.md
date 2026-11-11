@@ -84,17 +84,30 @@ and it sends nothing (ntfy is a public topic).
   `below-low`, and by how many basis points, only when the daily bar and the trade are both today's; otherwise
   `stale-day`, or `no-daily-bar`, `no-trade`), the move from the prior close (`within`, `at-limit` for exactly 25%,
   `beyond`, `unknown`, in basis points), and the quote (`absent`, `invalid`, `empty`, `one-sided`, `crossed`,
-  `locked`, `normal`, `quote_time`, its spread in basis points, its age). Ages are stored as seconds from server
+  `locked`, `normal`, `quote_time`, its spread in basis points, its age; a side with a zero price or a zero size is
+  no active side). Also per name: `trade_class`, what the last trade's condition codes say about the last price,
+  strictest first (`other-non-updating`, `odd-lot`, `derivatively-priced`, `extended-hours`, `unknown`, `regular`,
+  from the condition table in Alpaca's market-data FAQ, "How are bars aggregated"); `trade_vs_minute_s`, the
+  finished minute bar's end minus the last trade's time; and `daily_session` and `prev_session`, the New York days
+  of `dailyBar` and `prevDailyBar` against the exchange calendar (`today`, `previous-session`, `older`,
+  `off-session`, `future`, `absent`, `invalid`, `unknown`). Per run: `phase` (`pre-open`, `regular`,
+  `after-close`, `closed`, `unknown`, by New York time and the calendar, half days included) and Alpaca's
+  `X-RateLimit-Limit` and `X-RateLimit-Remaining` on the snapshot response (`rate_limit`, `rate_remaining`). The
+  cron's run idles before the first 2-minute bar has settled (09:32) and from the close, so this record never shows
+  `pre-open`: whether `dailyBar` is still yesterday's before 09:30 needs a probe somewhere else. Ages are stored as
+  seconds from server
   time, floored to one decimal (times are SAFE); a time before 1970 (Go's zero time `0001-01-01`) or more than 7 days
   from server time is `invalid` and gives no age. Enums, ages, basis points, codes and symbols only: never a price, a
   size or text. `probe` is null when the snapshot read did not answer, every name came from the cache, or the probe
   failed; records written before it existed have none.
 - **What it costs.** No extra store operation and no extra Alpaca call: it reads the snapshot answer the run already
   fetched and rides on the slot's one create-only put (about 195 a session, as before). The record grows by roughly
-  400 bytes per focus name.
+  550 bytes per focus name.
 - **How to read it.** Signed in to the dashboard, open `/api/desk/probe?day=YYYY-MM-DD` (New York date; today when
   left out). It answers JSON: `listed` server records, `unreadable`, `cached`, and `summary` with counts per fact and
-  value, per number its count, smallest, largest and fixed buckets (ages: negative, 0-5, 5-20, 20-120, 120+ s; day
+  value, grouped by the record's `feed` (`by_feed.iex`, `by_feed.sip`, `by_feed.unknown`; IEX and SIP days are
+  never pooled), each with its runs per `phase`, the rate-limit values seen, per number its count, smallest,
+  largest and fixed buckets (ages: negative, 0-5, 5-20, 20-120, 120+ s; day
   range and spread: negative, 0-10, 10-50, 50-250, 250+ bps; prior close: 0-100, 100-500, 500-1000, 1000-2500,
   2500+ bps), and the condition and exchange codes seen, per name (`by_symbol`) and in `total`. A view of today costs
   one listing of that day's folder and one read per server record (about 195 for a full session); a past day is
