@@ -12,13 +12,38 @@ import { fixtureMode } from "./snapshot";
 //  * Same origin only: a write must carry an Origin whose host is the request's own (or, with no Origin,
 //    Sec-Fetch-Site: same-origin), and JSON; there are no CORS headers, so no other site can send one or read one.
 //  * A fixed path, a body of at most MAX_BODY bytes, one key, an enum value; nothing from the request is echoed.
-//  * A request carrying the deployment-protection bypass header is refused: that secret is the publisher's, and it
+//  * A request presenting the deployment-protection bypass (presentsBypass: the header or query forms) is refused: that secret is the publisher's, and it
 //    must never set or clear the owner's flag.
 
 export const MAX_BODY = 256;
 const ALLOW = "GET, HEAD, POST";
 /** Vercel's deployment-protection bypass header (the publisher's automation secret). */
 export const BYPASS_HEADER = "x-vercel-protection-bypass";
+/** Vercel's ask to keep the bypass as a cookie for follow-up requests; it only ever comes with the bypass secret. */
+export const SET_BYPASS_COOKIE = "x-vercel-set-bypass-cookie";
+
+/**
+ * Whether a request presents Vercel's protection bypass in a form its documentation names
+ * (vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection/protection-bypass-automation): the
+ * `x-vercel-protection-bypass` header or query parameter, or `x-vercel-set-bypass-cookie` as a header or query
+ * parameter. The cookie that last one sets is not named in the documentation, so it is not read here: guessing a
+ * name could refuse the owner's own Vercel Authentication cookie. Used by every route that refuses the bypass:
+ * /api/desk/flags, /api/desk/page-state, /api/desk/eval-status and /api/desk/probe.
+ */
+export function presentsBypass(req: Request): boolean {
+  if (req.headers.has(BYPASS_HEADER) || req.headers.has(SET_BYPASS_COOKIE)) return true;
+  let q: URLSearchParams;
+  try {
+    q = new URL(req.url).searchParams;
+  } catch {
+    return false;
+  }
+  for (const k of q.keys()) {
+    const key = k.toLowerCase();
+    if (key === BYPASS_HEADER || key === SET_BYPASS_COOKIE) return true;
+  }
+  return false;
+}
 
 /** Everything a request touches, injectable so tests run the real logic with no store. */
 export interface DeskFlagsDeps {
@@ -224,7 +249,7 @@ async function handlePost(req: Request, deps: DeskFlagsDeps): Promise<Response> 
 
 /** The route: GET reads, POST changes, every other method is refused. */
 export async function handleDeskFlags(req: Request, deps: DeskFlagsDeps = defaultDeps()): Promise<Response> {
-  if (req.headers.has(BYPASS_HEADER)) return fail(403, "forbidden");
+  if (presentsBypass(req)) return fail(403, "forbidden");
   if (req.method === "GET") return handleGet(req, deps);
   if (req.method === "HEAD") {
     const res = await handleGet(req, deps);
