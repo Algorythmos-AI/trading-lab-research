@@ -158,7 +158,10 @@ describe("events", () => {
     const rows = mergeEarnings([{ date: "2026-12-10", symbol: "AVGO", when: "amc" }, { date: "2026-12-10", symbol: "ZZZZ", when: "amc" }]);
     const by = eventsByDay(rows);
     expect(by.get("2026-12-10")?.filter((e) => e.group === "earnings").map((e) => e.label)).toEqual(["AVGO earnings, after the close"]);
-    expect(rows.find((r) => r.symbol === "NVDA")?.expected).toBe(true);
+    // The repo's quality word: an expected row says so, a confirmed one does not.
+    for (const e of data.earnings) expect(rows.find((r) => r.date === e.date && r.symbol === e.symbol)?.expected).toBe(e.quality !== "confirmed");
+    expect(rows.some((r) => r.expected)).toBe(true);
+    expect(rows.find((r) => r.symbol === "NVDA" && r.date === "2026-11-17")?.expected).toBe(false);
   });
 
   it("gives every Options name its next date or none", () => {
@@ -221,13 +224,32 @@ describe("the year in the address", () => {
 describe("releases not listed yet", () => {
   it("flags every month after a release's last listed date, and none before", () => {
     const by = unlistedByMonth();
-    const lastCpi = data.macro.filter((e) => e.code === "cpi").map((e) => e.date).sort().at(-1)!;
-    const after = addDays(`${lastCpi.slice(0, 7)}-28`, 7).slice(0, 7);
-    expect(by.get(after)).toContain("CPI");
-    expect(by.get("2027-12")).toContain("CPI");
-    expect(by.get(lastCpi.slice(0, 7)) ?? []).not.toContain("CPI");
+    const flagged = (label: string) => [...by].filter(([, labels]) => labels.includes(label)).map(([month]) => month).sort();
+    for (const [code, label] of [["cpi", "CPI"], ["nfp", "Jobs report"]] as const) {
+      const last = data.macro.filter((e) => e.code === code).map((e) => e.date).sort().at(-1)!;
+      const want: string[] = [];
+      for (let m = addDays(`${last.slice(0, 7)}-28`, 7).slice(0, 7); `${m}-01` <= RANGE.end; m = addDays(`${m}-28`, 7).slice(0, 7)) want.push(m);
+      expect(flagged(label)).toEqual(want);
+      expect(by.get(last.slice(0, 7)) ?? []).not.toContain(label);
+    }
     // The Fed's 2027 meetings are listed, so a month without one is not flagged.
     expect([...by.values()].flat()).not.toContain("Fed decisions");
+  });
+
+  it("flags the months after a synthetic calendar's last CPI date, not the months up to it", () => {
+    const macro = [
+      { code: "cpi", date: "2027-03-10" },
+      { code: "cpi", date: "2027-01-13" },
+      { code: "nfp", date: "2027-12-03" },
+      { code: "fomc_decision", date: "2027-12-08" },
+    ];
+    const by = unlistedByMonth(undefined, macro);
+    expect(by.get("2027-04")).toEqual(["CPI"]);
+    expect(by.get("2027-12")).toEqual(["CPI"]);
+    for (const m of ["2027-01", "2027-02", "2027-03"]) expect(by.has(m)).toBe(false);
+    // No row at all: every month of the range is flagged.
+    const none = unlistedByMonth(undefined, [{ code: "nfp", date: "2027-12-03" }, { code: "fomc_decision", date: "2027-12-08" }]);
+    expect(none.get(RANGE.start.slice(0, 7))).toEqual(["CPI"]);
   });
 });
 
@@ -247,7 +269,8 @@ describe("the published economic calendar", () => {
   it("says where the trading calendar differs from the official dates", () => {
     expect(tradingCalendarDiffs([off("2026-11-10", "cpi")])).toEqual([]);
     expect(tradingCalendarDiffs([off("2026-11-12", "cpi")])).toEqual([{ code: "cpi", month: "2026-11", official: ["2026-11-12"], trading: ["2026-11-10"] }]);
-    expect(tradingCalendarDiffs([off("2027-01-08", "nfp")])).toEqual([{ code: "nfp", month: "2027-01", official: ["2027-01-08"], trading: [] }]);
+    // A month the trading calendar does not list yet (it reaches the end of 2027).
+    expect(tradingCalendarDiffs([off("2028-01-07", "nfp")])).toEqual([{ code: "nfp", month: "2028-01", official: ["2028-01-07"], trading: [] }]);
     // A release the trading calendar never carries is not a difference.
     expect(tradingCalendarDiffs([off("2026-11-13", "ppi")])).toEqual([]);
   });
