@@ -1,6 +1,6 @@
 import "server-only";
 import { listPaths, readText } from "./blob";
-import { BYPASS_HEADER } from "./desk-flags-run";
+import { presentsBypass } from "./desk-flags-run";
 import { logEvent } from "./log";
 import { nyClock } from "./options";
 import { type ProbeSummary, summariseProbe } from "./quote-probe";
@@ -9,16 +9,27 @@ import { fixtureMode } from "./snapshot";
 // GET /api/desk/probe?day=YYYY-MM-DD: the owner's view of the snapshot probe (quote-probe.ts) for one New York day,
 // read from the server check's own records (desk/log/<day>/HHMM.json, desk-run.ts), as counts per fact, per name
 // and in total. Temporary evidence for the board's bad-data guards. Behind Vercel Authentication like every page,
-// hardened like /api/desk/eval-status (GET and HEAD only, cross-site refused, the bypass header refused, no-store).
+// hardened like /api/desk/eval-status (GET and HEAD only, cross-site refused, Vercel's protection bypass refused in
+// every documented form, no-store).
 //
 // It is read only when the owner opens it, never by a page or a cron: one listing of the day's folder and one read per
-// server record (about 195 on a full session, at most MAX_RECORDS). It writes nothing. In fixture mode and anywhere
+// server record (about 195 on a full session, at most MAX_RECORDS). A HEAD answers from validation alone and reads
+// nothing. A past New York day's summary is kept in this instance's memory (at most CACHED_DAYS days), since its
+// create-only records can no longer change; today's is never kept. It writes nothing. In fixture mode and anywhere
 // but production it never touches the store and answers an empty summary with `"dry": true`.
 
 /** A full session has 195 two-minute slots; the folder also holds the page's records, which are not read. */
 export const MAX_RECORDS = 256;
 /** Reads in flight at once. */
 export const READ_CONCURRENCY = 8;
+/** Past days whose summary this instance keeps; the oldest kept is dropped first. */
+export const CACHED_DAYS = 5;
+const pastDays = new Map<string, ProbeDay>();
+
+/** For tests: forget the kept past days. */
+export function resetProbeCache(): void {
+  pastDays.clear();
+}
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const SERVER_RECORD_RE = /^desk\/log\/\d{4}-\d{2}-\d{2}\/\d{4}\.json$/;
 
@@ -93,22 +104,30 @@ export async function readProbeDay(deps: ProbeReadDeps, day: string): Promise<Pr
 
 /** GET and HEAD /api/desk/probe[?day=YYYY-MM-DD], today's New York day by default. */
 export async function handleProbeSummary(req: Request, deps: ProbeReadDeps = defaultProbeReadDeps()): Promise<Response> {
-  if (req.headers.has(BYPASS_HEADER)) return fail(403, "forbidden");
+  if (presentsBypass(req)) return fail(403, "forbidden");
   if (req.method !== "GET" && req.method !== "HEAD") return fail(405, "method-not-allowed", { allow: "GET, HEAD" });
   const site = req.headers.get("sec-fetch-site");
   if (site !== null && site !== "same-origin" && site !== "none") return fail(403, "forbidden");
-  const answer = async (): Promise<Response> => {
-    const raw = new URL(req.url).searchParams.get("day");
-    const day = raw === null ? (nyClock(new Date(deps.now()).toISOString())?.day ?? null) : parseDay(raw);
-    if (day === null) return fail(400, "bad-day");
-    if (deps.dry) return json(200, { day, listed: 0, unreadable: 0, capped: false, summary: summariseProbe([]), dry: true });
-    try {
-      return json(200, { ...(await readProbeDay(deps, day)) });
-    } catch (e) {
-      logEvent("desk-probe", { outcome: "error", error: errName(e) });
-      return fail(503, "read-failed");
-    }
-  };
-  const res = await answer();
-  return req.method === "HEAD" ? new Response(null, { status: res.status, headers: res.headers }) : res;
+  const today = nyClock(new Date(deps.now()).toISOString())?.day ?? null;
+  const raw = new URL(req.url).searchParams.get("day");
+  const day = raw === null ? today : parseDay(raw);
+  if (day === null) return fail(400, "bad-day");
+  // HEAD: the checks above are the whole answer; nothing is listed or read.
+  if (req.method === "HEAD") return new Response(null, { status: 200, headers: NO_STORE });
+  if (deps.dry) return json(200, { day, listed: 0, unreadable: 0, capped: false, summary: summariseProbe([]), dry: true });
+  const kept = pastDays.get(day);
+  if (kept) return json(200, { ...kept, cached: true });
+  let got: ProbeDay;
+  try {
+    got = await readProbeDay(deps, day);
+  } catch (e) {
+    logEvent("desk-probe", { outcome: "error", error: errName(e) });
+    return fail(503, "read-failed");
+  }
+  // Only a day before today in New York, read whole: a later read of it would find the same records.
+  if (today !== null && day < today && got.unreadable === 0) {
+    pastDays.set(day, got);
+    while (pastDays.size > CACHED_DAYS) pastDays.delete(pastDays.keys().next().value!);
+  }
+  return json(200, { ...got, cached: false });
 }

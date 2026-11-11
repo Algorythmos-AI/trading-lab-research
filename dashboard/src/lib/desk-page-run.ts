@@ -22,7 +22,7 @@ import {
   type StateRow,
   SYMBOL_RE,
 } from "./desk-eval";
-import { BYPASS_HEADER, isJson, readCapped, sameOrigin } from "./desk-flags-run";
+import { BYPASS_HEADER, isJson, presentsBypass, readCapped, sameOrigin } from "./desk-flags-run";
 import { type EditionRead, parseEdition } from "./desk-run";
 import { logEvent } from "./log";
 import { nyClock } from "./options";
@@ -259,7 +259,7 @@ export async function lastLoggedSlot(deps: EvalStatusDeps, now: number): Promise
 
 /** GET and HEAD /api/desk/eval-status: `{ eval, last_slot_end }` only. */
 export async function handleEvalStatus(req: Request, deps: EvalStatusDeps = defaultEvalStatusDeps()): Promise<Response> {
-  if (req.headers.has(BYPASS_HEADER)) return fail(403, "forbidden");
+  if (presentsBypass(req)) return fail(403, "forbidden");
   if (req.method !== "GET" && req.method !== "HEAD") return fail(405, "method-not-allowed", { allow: "GET, HEAD" });
   const site = req.headers.get("sec-fetch-site");
   if (site !== null && site !== "same-origin" && site !== "none") return fail(403, "forbidden");

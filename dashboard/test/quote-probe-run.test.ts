@@ -2,7 +2,19 @@
 // server check's own records. Hardened like /api/desk/eval-status; reads only the server records of the day asked for;
 // never touches the store when dry; a failed read is counted, never thrown.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { handleProbeSummary, MAX_RECORDS, parseDay, type ProbeReadDeps, READ_CONCURRENCY, readProbeDay, defaultProbeReadDeps } from "@/lib/quote-probe-run";
+import { handleEvalStatus } from "@/lib/desk-page-run";
+import { presentsBypass } from "@/lib/desk-flags-run";
+import {
+  CACHED_DAYS,
+  defaultProbeReadDeps,
+  handleProbeSummary,
+  MAX_RECORDS,
+  parseDay,
+  type ProbeReadDeps,
+  READ_CONCURRENCY,
+  readProbeDay,
+  resetProbeCache,
+} from "@/lib/quote-probe-run";
 import { probeSnapshot } from "@/lib/quote-probe";
 
 const HOST = "desk.example";
@@ -27,6 +39,7 @@ function deps(store: Record<string, string | Error>, over: Partial<ProbeReadDeps
 
 beforeEach(() => {
   vi.spyOn(console, "log").mockImplementation(() => undefined);
+  resetProbeCache();
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -104,6 +117,11 @@ describe("GET /api/desk/probe", () => {
     const head = await handleProbeSummary(req(`?day=${DAY}`, {}, "HEAD"), f.d);
     expect(head.status).toBe(200);
     expect(await head.text()).toBe("");
+    expect(head.headers.get("cache-control")).toBe("no-store");
+    // a HEAD answers from validation alone: nothing listed, nothing read
+    expect(f.list).not.toHaveBeenCalled();
+    expect(f.read).not.toHaveBeenCalled();
+    expect((await handleProbeSummary(req("?day=nope", {}, "HEAD"), f.d)).status).toBe(400);
     expect(parseDay("2026-02-28")).toBe("2026-02-28");
     expect(parseDay(null)).toBeNull();
   });
@@ -121,5 +139,76 @@ describe("GET /api/desk/probe", () => {
     await handleProbeSummary(req(), f.d);
     expect(f.list).not.toHaveBeenCalled();
     expect(f.read).not.toHaveBeenCalled();
+  });
+
+  it("keeps a past New York day's summary in memory (a handful of days); today's is read every time", async () => {
+    const past = "2026-10-09";
+    const store: Record<string, string> = { [`desk/log/${past}/1030.json`]: record(100), [`desk/log/${DAY}/1030.json`]: record(100) };
+    const f = deps(store);
+    const first = await (await handleProbeSummary(req(`?day=${past}`), f.d)).json();
+    expect(first.cached).toBe(false);
+    const again = await (await handleProbeSummary(req(`?day=${past}`), f.d)).json();
+    expect(again.cached).toBe(true);
+    expect({ ...again, cached: false }).toEqual(first);
+    expect(f.list).toHaveBeenCalledTimes(1);
+    expect(f.read).toHaveBeenCalledTimes(1);
+    // today, by name or by default, is never kept
+    for (const q of [`?day=${DAY}`, `?day=${DAY}`, ""]) expect((await (await handleProbeSummary(req(q), f.d)).json()).cached).toBe(false);
+    expect(f.list).toHaveBeenCalledTimes(4);
+    // a future day is not kept either
+    await handleProbeSummary(req("?day=2026-10-20"), f.d);
+    await handleProbeSummary(req("?day=2026-10-20"), f.d);
+    expect(f.list).toHaveBeenCalledTimes(6);
+  });
+
+  it("keeps at most CACHED_DAYS past days, and never a day read with a failed record", async () => {
+    const f = deps({ "desk/log/2026-09-30/1030.json": new Error("blob 500") });
+    await handleProbeSummary(req("?day=2026-09-30"), f.d);
+    expect((await (await handleProbeSummary(req("?day=2026-09-30"), f.d)).json()).cached).toBe(false);
+    const days = Array.from({ length: CACHED_DAYS + 1 }, (_, i) => `2026-10-0${i + 1}`);
+    for (const d of days) await handleProbeSummary(req(`?day=${d}`), f.d);
+    const calls = f.list.mock.calls.length;
+    // the newest CACHED_DAYS are kept; the first was dropped and is read again
+    for (const d of days.slice(1)) expect((await (await handleProbeSummary(req(`?day=${d}`), f.d)).json()).cached, d).toBe(true);
+    expect(f.list).toHaveBeenCalledTimes(calls);
+    expect((await (await handleProbeSummary(req(`?day=${days[0]}`), f.d)).json()).cached).toBe(false);
+    expect(f.list).toHaveBeenCalledTimes(calls + 1);
+  });
+});
+
+describe("the protection bypass, in every form Vercel documents, on both routes", () => {
+  const forms: [string, string, Record<string, string>][] = [
+    ["the header", "", { "x-vercel-protection-bypass": "secret" }],
+    ["the header, any case", "", { "X-Vercel-Protection-Bypass": "secret" }],
+    ["the query parameter", "x-vercel-protection-bypass=secret", {}],
+    ["the query parameter, any case", "X-Vercel-Protection-Bypass=secret", {}],
+    ["the set-cookie ask as a header", "", { "x-vercel-set-bypass-cookie": "true" }],
+    ["the set-cookie ask as a query parameter", "x-vercel-set-bypass-cookie=samesitenone", {}],
+  ];
+  const evalDeps = () => {
+    const exists = vi.fn(async () => true);
+    const readSwitch = vi.fn(async () => '{"v":1,"eval":"log"}');
+    return { d: { now: () => NOW, dry: false, readSwitch, exists }, exists, readSwitch };
+  };
+
+  for (const [what, query, headers] of forms) {
+    it(`refuses ${what} before anything is read`, async () => {
+      const f = deps({ [`desk/log/${DAY}/1030.json`]: record(100) });
+      const probe = await handleProbeSummary(req(`?day=${DAY}${query ? `&${query}` : ""}`, headers), f.d);
+      expect(probe.status).toBe(403);
+      expect(f.list).not.toHaveBeenCalled();
+      const e = evalDeps();
+      const status = await handleEvalStatus(new Request(`https://${HOST}/api/desk/eval-status${query ? `?${query}` : ""}`, { headers: { "sec-fetch-site": "same-origin", ...headers } }), e.d);
+      expect(status.status).toBe(403);
+      expect(e.readSwitch).not.toHaveBeenCalled();
+    });
+  }
+
+  it("lets an ordinary request through on both routes", async () => {
+    expect(presentsBypass(req())).toBe(false);
+    expect(presentsBypass(new Request(`https://${HOST}/api/desk/probe?day=${DAY}&x=x-vercel-protection-bypass`))).toBe(false);
+    expect((await handleProbeSummary(req(), deps({}).d)).status).toBe(200);
+    const e = evalDeps();
+    expect((await handleEvalStatus(new Request(`https://${HOST}/api/desk/eval-status`, { headers: { "sec-fetch-site": "same-origin" } }), e.d)).status).toBe(200);
   });
 });

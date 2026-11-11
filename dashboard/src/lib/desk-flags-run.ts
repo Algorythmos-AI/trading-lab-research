@@ -19,6 +19,29 @@ export const MAX_BODY = 256;
 const ALLOW = "GET, HEAD, POST";
 /** Vercel's deployment-protection bypass header (the publisher's automation secret). */
 export const BYPASS_HEADER = "x-vercel-protection-bypass";
+/** Vercel's ask to keep the bypass as a cookie for follow-up requests; it only ever comes with the bypass secret. */
+export const SET_BYPASS_COOKIE = "x-vercel-set-bypass-cookie";
+
+/**
+ * Whether a request presents Vercel's protection bypass in a form its documentation names
+ * (vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection/protection-bypass-automation): the
+ * `x-vercel-protection-bypass` header or query parameter, or `x-vercel-set-bypass-cookie` as a header or query
+ * parameter. The cookie that last one sets is not named in the documentation, so it is not looked for here.
+ */
+export function presentsBypass(req: Request): boolean {
+  if (req.headers.has(BYPASS_HEADER) || req.headers.has(SET_BYPASS_COOKIE)) return true;
+  let q: URLSearchParams;
+  try {
+    q = new URL(req.url).searchParams;
+  } catch {
+    return false;
+  }
+  for (const k of q.keys()) {
+    const key = k.toLowerCase();
+    if (key === BYPASS_HEADER || key === SET_BYPASS_COOKIE) return true;
+  }
+  return false;
+}
 
 /** Everything a request touches, injectable so tests run the real logic with no store. */
 export interface DeskFlagsDeps {
