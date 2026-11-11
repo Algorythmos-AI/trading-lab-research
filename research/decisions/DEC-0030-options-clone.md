@@ -99,3 +99,10 @@ hash-chained; its report is written once, by a script that refuses to overwrite 
 
 ## What this record does not do
 It changes no probation rule, no page claim of DEC-0028, and nothing of strategy B or the crypto desk.
+
+## Note on the earnings dates (added 2026-11-11; nothing above is changed)
+The events gate's earnings skip (`session.event_block`) reads `config/events/earnings.csv`. On 2026-11-11 that file's
+data was completed from the companies' own announcements: rows added for AMD (2026-11-03) and AVGO (2026-12-09),
+and NVDA's 2026-11-17 row changed from expected to confirmed. The AMD row is in the past and changes no future run:
+the 2026-11-03 and 2026-11-04 sessions ran without that skip. The rule and its numbers are unchanged. No clone
+journal, trade or result was viewed for this change.
