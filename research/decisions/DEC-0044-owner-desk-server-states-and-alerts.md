@@ -77,3 +77,28 @@ iPhone, so ntfy is the first alert channel.
   shadow comparison measures this. When in doubt the engine says get ready, never enter zone, on both.
 - If a DEC-0041 arm's verdict removes a caution or line from the desk (DEC-0042, Consequences), it leaves the server's
   evaluation in the same pull request.
+
+## Note on the engine label (added 2026-11-12; nothing above is changed)
+
+Every record the evaluator and the page write to the state log carries an engine label: a hash of the code the
+server's evaluation runs (`dashboard/scripts/gen-engine.mjs`, every file `desk-eval.ts` reaches). A new label means
+a line of that code changed, not that a rule did. The next release to `main` changes it once:
+
+| Release | Label before | Label after | Engine files changed | Change to a state, a level or a guard |
+|---|---|---|---|---|
+| Robustness wave 1 (#375 to #381) | `e-c0b7d260245b` | `e-5f6c5cbf0639` | `market-calendar.json`, `market-calendar.ts` (#376); `bars-feed.ts` (#378) | None |
+
+- `market-calendar.json` gained 2027 macro rows and three earnings rows, and one 2027 date was corrected. The
+  evaluator reads only the session calendar from this file (`sessionOf`: holidays and half days), which did not
+  change.
+- `market-calendar.ts`: one function took a second argument for its tests. The evaluator does not call it.
+- `bars-feed.ts`: the browser's polling loop moved to `bars-poller.ts`. The functions the evaluator uses were not
+  edited.
+- #375, #377, #379, #380 and #381 changed no file the label covers.
+
+**For the owner to decide here:** whether the shadow count of section 2 (at least 8 sessions and 10 enter-zone
+events) carries on across this label or restarts at it. Since no state, level or guard changed, the two labels
+evaluate identically, and the proposal is that the count carries on, with both labels named in the shadow report.
+Until the owner writes an answer under this note, the report keeps the two labels apart.
+
+No state log, owner trade or result was viewed for this note.
