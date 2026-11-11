@@ -7,7 +7,11 @@ The radar and the options edition are built in the cloud from IBKR; the options 
 checked their claims. This reads both back from the site (signed GET /api/editions/<kind>), recomputes what they
 claim from the consolidated tape (closes, the day, week and month levels, the moving averages) and the broker's
 option listings (the expiries the clone may trade), and writes one report per run to var/pipeline-check/. A failed
-check pages the owner once a day per run with the check ids. It reads only; it never changes an edition or trades.
+check pages the owner once a day per run with counts per check family only (ntfy is a public topic: no symbol, price
+or level is ever in the page; the report has the detail). Market data that cannot be fetched is itself a failed
+check (`data.reachable`): the editions are then unverified, which is when the owner most needs to know. A failed
+check exits 0; only a crash of the job itself exits non-zero (the job runner then pings healthchecks' /fail). It
+reads only; it never changes an edition or trades.
 """
 from __future__ import annotations
 
@@ -18,9 +22,11 @@ import os
 import re
 import sys
 import time
+from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
-from typing import Any
+from pathlib import Path
+from typing import Any, NamedTuple
 from zoneinfo import ZoneInfo
 
 import requests
@@ -48,6 +54,37 @@ class Check:
     severity: str           # fail | warn | info
     ok: bool
     detail: str
+
+
+# Every check's family: its id without a symbol. The page names only these (alert_text); a test keeps every id the
+# module can emit inside one of them.
+FAMILIES = ("data.reachable", "data.snapshot",
+            "options.present", "options.session", "options.built_from", "options.tape", "options.close",
+            "options.levels",
+            "focus.present", "focus.premarket", "focus.tradeable", "focus.earnings",
+            "radar.present", "radar.date", "radar.fresh", "radar.close", "radar.premarket")
+SLOTS = ("pre-open", "after-close")
+
+
+def family(check_id: str) -> str:
+    """A check id's family (`options.close.SPY` -> `options.close`); `other` for an id outside FAMILIES."""
+    fam = ".".join(check_id.split(".")[:2])
+    return fam if fam in FAMILIES else "other"
+
+
+def alert_text(slot: str, session_date: str, checks: Sequence[Check]) -> tuple[str, str]:
+    """The ntfy title and message for a run's failed checks. ntfy.sh is a public topic whose name is the only secret,
+    so the text is built only from fixed words, the slot, the session date and counts per family: never a check's
+    id (ids carry symbols), its detail (prices, levels, error text) or anything read from an edition."""
+    fails = [c for c in checks if not c.ok and c.severity == "fail"]
+    counts = Counter(family(c.id) for c in fails)
+    order = {f: i for i, f in enumerate((*FAMILIES, "other"))}
+    slot_s = slot if slot in SLOTS else "unknown slot"
+    date_s = session_date if re.fullmatch(r"\d{4}-\d{2}-\d{2}", session_date) else "unknown date"
+    parts = [f"{fam}: {n} failed" for fam, n in sorted(counts.items(), key=lambda kv: order[kv[0]])]
+    title = f"Pipeline check {slot_s}: {len(fails)} failed"
+    message = f"Session {date_s}, {slot_s}. {'; '.join(parts) or 'nothing failed'}. The run's report has the detail."
+    return title, message
 
 
 def edition_signature(secret: str, kind: str, ts: int) -> str:
@@ -94,7 +131,10 @@ def _num(v: Any) -> float | None:
 
 
 TOP_UP = ("SPY", "QQQ")   # config/options_clone.yaml names.top_up (DEC-0032)
-MIN_NAMES = 2
+MIN_NAMES = 2             # names.min_names: the clone's top-up target. Shared with the clone; not this check's bar
+# focus.tradeable's own bar: how many focus names need a contract the clone may trade. One is a legitimate night (the
+# clone tops up with SPY and QQQ to MIN_NAMES, DEC-0032); none still warns. Separate from MIN_NAMES on purpose.
+FOCUS_TRADEABLE_MIN = 1
 MAX_NAMES = 6             # names.max_names
 EXPIRY = "nearest"        # names.expiry (DEC-0034): `same_day`, or `nearest` within WITHIN_DAYS calendar days
 WITHIN_DAYS = 7           # names.nearest_within_days
@@ -125,14 +165,39 @@ def eligible(options: Mapping[str, Any] | None, target: str, expiries: Mapping[s
     return set(out)
 
 
+# The market-data sources a run reads (Alpaca): the consolidated daily bars, the broker's option listings, and the
+# pre-market snapshot (pre-open only). These words are the only ones `data.reachable` puts in its detail.
+BARS, LISTINGS, SNAPSHOT = "daily bars", "option listings", "pre-market prices"
+NOT_HERE = ("a warning only: the pre-open refresh passes are due after this 08:55 run, and the dashboard's own "
+            "watcher pages on them")
+
+
+def premarket_refresh(pre: Any, target: str) -> tuple[bool, str]:
+    """focus.premarket: whether the focus block's pre-open refresh is for `target`, and why.
+
+    Always a warning, never a page, by design: the pre-market publication is moving to two passes due at 08:56 and
+    09:25 New York, both after this job's 08:55 run, and a dashboard-side watcher owns alerting on them. Paging
+    here would be a false alarm every morning. Any shape this check does not know (absent, not a mapping, a newer
+    block without a readable `as_of`) is reported as "not checked here" and never raises."""
+    if pre is None:
+        return False, f"no pre-open refresh in the edition yet; not checked here ({NOT_HERE})"
+    at = pre.get("as_of") if isinstance(pre, Mapping) else None
+    if not isinstance(at, str) or not re.match(r"\d{4}-\d{2}-\d{2}", at):
+        return False, f"pre-open refresh in a shape this check does not read; not checked here ({NOT_HERE})"
+    return at[:10] == target, f"pre-open refresh as_of {at} ({NOT_HERE})"
+
+
 def assess(slot: str, now: dt.datetime, radar: Mapping[str, Any] | None, options: Mapping[str, Any] | None,
            daily: Mapping[str, Sequence[Mapping[str, Any]]], expiries: Mapping[str, Sequence[str]],
-           live: Mapping[str, float], earnings: Sequence[Mapping[str, Any]]) -> list[Check]:
+           live: Mapping[str, float], earnings: Sequence[Mapping[str, Any]],
+           unreachable: Sequence[str] = ()) -> list[Check]:
     """Every check for one run. Pure: the editions and the market data come in, the checks go out.
 
     `daily`: each symbol's consolidated-tape daily bars, split-adjusted, up to the last finished session.
     `expiries`: each symbol's listed expiry dates from `target` to WITHIN_DAYS later. `live`: the latest price per
-    symbol (pre-open)."""
+    symbol (pre-open). `unreachable`: the market-data sources (BARS, LISTINGS, SNAPSHOT) that gave no usable answer.
+    A source that answered and says something (an empty tape, no contract) is judged by the checks themselves; one
+    that did not answer fails `data.reachable` (BARS, LISTINGS) and the checks that depend on it warn "not verified"."""
     out: list[Check] = []
     target = target_session(slot, now)
     prev = lv.prev_session(target)
@@ -140,6 +205,12 @@ def assess(slot: str, now: dt.datetime, radar: Mapping[str, Any] | None, options
     def add(cid: str, ok: bool, detail: str, sev: str = "fail") -> None:
         out.append(Check(cid, sev if not ok else "info", ok, detail))
 
+    no_bars, no_listings = BARS in unreachable, LISTINGS in unreachable
+    blind = [s for s in (BARS, LISTINGS) if s in unreachable]
+    add("data.reachable", not blind, f"unreachable: {', '.join(blind)}; the editions are not verified" if blind
+        else "daily bars and option listings fetched")
+    if slot == "pre-open" and SNAPSHOT in unreachable:
+        add("data.snapshot", False, "pre-market prices unreachable: the radar's overnight move is not checked", "warn")
     tradeable_names = eligible(options, target, expiries)
 
     def sev(sym: str) -> str:
@@ -155,7 +226,12 @@ def assess(slot: str, now: dt.datetime, radar: Mapping[str, Any] | None, options
         tickers = options.get("tickers")
         rows = tickers if isinstance(tickers, list) else list(tickers.values()) if isinstance(tickers, dict) else []
         for t in rows:
+            if not isinstance(t, Mapping):
+                continue
             sym = str(t.get("symbol"))
+            if no_bars:
+                add(f"options.tape.{sym}", False, "not verified: the daily bars were unreachable", "warn")
+                continue
             bars = [b for b in daily.get(sym, []) if isinstance(b, Mapping)]
             loaded = lv.load_ibkr(daily_raw(bars))
             if loaded.problems or not loaded.bars or loaded.bars[-1].d != prev:
@@ -179,18 +255,23 @@ def assess(slot: str, now: dt.datetime, radar: Mapping[str, Any] | None, options
                    if n in mine and (theirs.get(n) is None or abs((theirs.get(n) or 0) - mine[n]) > LEVEL_TOL)]
             add(f"options.levels.{sym}", not off, "; ".join(off) or "all levels agree", sev(sym))
         # ---- its focus names
-        focus = options.get("focus") or {}
-        items = [i for i in focus.get("items") or [] if isinstance(i, Mapping) and isinstance(i.get("symbol"), str)]
+        focus = options.get("focus")
+        focus = focus if isinstance(focus, Mapping) else {}
+        raw_items = focus.get("items")
+        items = [i for i in (raw_items if isinstance(raw_items, list) else [])
+                 if isinstance(i, Mapping) and isinstance(i.get("symbol"), str)]
         add("focus.present", bool(items), f"{len(items)} focus names")
         if slot == "pre-open":
-            pre = focus.get("premarket") or {}
-            at = str(pre.get("as_of") or "")
-            add("focus.premarket", at[:10] == target, f"pre-open refresh as_of {at or 'missing'}", "warn")
+            fresh, why = premarket_refresh(focus.get("premarket"), target)
+            add("focus.premarket", fresh, why, "warn")          # a warning by design: see premarket_refresh
         can = [str(i["symbol"]) for i in items if tradeable(str(i["symbol"]), target, expiries)]
         what = f"expiring {target}" if EXPIRY == "same_day" else f"expiring within {WITHIN_DAYS} days of {target}"
-        add("focus.tradeable", len(can) >= 2,
-            f"{len(can)} of {len(items)} focus names have a contract {what}: {', '.join(can) or 'none'}"
-            " (the clone tops up with SPY and QQQ)", "warn")
+        if no_listings:
+            add("focus.tradeable", False, "not verified: the option listings were unreachable", "warn")
+        else:
+            add("focus.tradeable", len(can) >= FOCUS_TRADEABLE_MIN,
+                f"{len(can)} of {len(items)} focus names have a contract {what}: {', '.join(can) or 'none'}"
+                " (the clone tops up with SPY and QQQ)", "warn")
         for i in items:
             sym = str(i["symbol"])
             hit = [r for r in earnings if str(r.get("symbol", "")).upper() == sym and (
@@ -215,6 +296,9 @@ def assess(slot: str, now: dt.datetime, radar: Mapping[str, Any] | None, options
                 if not isinstance(t, Mapping):
                     continue
                 sym = str(t.get("symbol"))
+                if no_bars:
+                    add(f"radar.close.{sym}", False, "not verified: the daily bars were unreachable", "warn")
+                    continue
                 bars = [b for b in daily.get(sym, []) if isinstance(b, Mapping)]
                 if not bars:
                     continue
@@ -233,45 +317,99 @@ def assess(slot: str, now: dt.datetime, radar: Mapping[str, Any] | None, options
 
 
 # ---------------------------------------------------------------- the run
-def _alpaca_get(url: str, params: dict[str, str]) -> Any:
+RETRY_WAIT_S = 3.0        # one short retry per call: a blip does not page, and a dead feed costs one wait
+Get = Callable[..., Any]  # requests.get's shape (tests pass a fake)
+Sleep = Callable[[float], None]
+
+
+def _transient(e: requests.RequestException) -> bool:
+    """Worth one more try: no connection, a timeout, or the server's own trouble (5xx, 429). A 4xx (bad keys, a bad
+    request) or an unreadable body will not mend in seconds."""
+    if isinstance(e, requests.HTTPError):
+        code = e.response.status_code if e.response is not None else 0
+        return code >= 500 or code == 429
+    return isinstance(e, requests.ConnectionError | requests.Timeout)
+
+
+def _alpaca_get(url: str, params: dict[str, str], get: Get = requests.get, sleep: Sleep = time.sleep) -> Any:
+    """One Alpaca GET, tried at most twice: a transient failure is retried once after RETRY_WAIT_S, anything else
+    (and a second failure) raises."""
     h = {"APCA-API-KEY-ID": os.environ.get("APCA_API_KEY_ID", ""), "APCA-API-SECRET-KEY": os.environ.get("APCA_API_SECRET_KEY", "")}
-    r = requests.get(url, params=params, headers=h, timeout=(5.0, 20.0), allow_redirects=False)
+    try:
+        r = get(url, params=params, headers=h, timeout=(5.0, 20.0), allow_redirects=False)
+        r.raise_for_status()
+        return r.json()
+    except requests.RequestException as e:
+        if not _transient(e):
+            raise
+    sleep(RETRY_WAIT_S)
+    r = get(url, params=params, headers=h, timeout=(5.0, 20.0), allow_redirects=False)
     r.raise_for_status()
     return r.json()
 
 
-def market_data(symbols: Sequence[str], target: str, slot: str) -> tuple[dict[str, list[Any]], dict[str, list[str]], dict[str, float]]:
+class MarketData(NamedTuple):
+    daily: dict[str, list[Any]]
+    expiries: dict[str, list[str]]
+    live: dict[str, float]
+    unreachable: tuple[str, ...] = ()     # BARS, LISTINGS, SNAPSHOT: the sources that gave no usable answer
+
+
+# A source's answer that is not usable: no connection, an HTTP error, a timeout (requests.RequestException, which
+# includes an unreadable JSON body), or JSON of the wrong shape.
+_UNUSABLE = (requests.RequestException, AttributeError, KeyError, TypeError, ValueError)
+
+
+def market_data(symbols: Sequence[str], target: str, slot: str, get: Get = requests.get,
+                sleep: Sleep = time.sleep) -> MarketData:
+    """The daily bars, option listings and (pre-open) latest prices for `symbols`. A source with no usable answer,
+    after its one retry, is named in `unreachable` and left empty: nothing is judged on half an answer, and it is
+    not asked again for the next symbol, so a dead feed costs one retry, not one per symbol."""
+    unreachable: list[str] = []
     prev = dt.date.fromisoformat(lv.prev_session(target))
     daily: dict[str, list[Any]] = {}
     params = {"symbols": ",".join(symbols), "timeframe": "1Day", "feed": "sip", "adjustment": "split", "limit": "10000",
               "start": (prev - dt.timedelta(days=420)).isoformat(), "end": f"{prev.isoformat()}T23:59:00Z"}
-    for _ in range(30):
-        j = _alpaca_get(f"{DATA}/v2/stocks/bars", params)
-        for s, rows in (j.get("bars") or {}).items():
-            daily.setdefault(s, []).extend(rows)
-        if not j.get("next_page_token"):
-            break
-        params["page_token"] = j["next_page_token"]
+    try:
+        for _ in range(30):
+            j = _alpaca_get(f"{DATA}/v2/stocks/bars", params, get, sleep)
+            for s, rows in (j.get("bars") or {}).items():
+                daily.setdefault(s, []).extend(rows)
+            if not j.get("next_page_token"):
+                break
+            params["page_token"] = j["next_page_token"]
+    except _UNUSABLE as e:
+        daily = {}
+        unreachable.append(BARS)
+        print(f"market data unavailable ({BARS}): {e.__class__.__name__}", file=sys.stderr)
     expiries: dict[str, list[str]] = {}
     week_end = (dt.date.fromisoformat(target) + dt.timedelta(days=WITHIN_DAYS)).isoformat()
-    for s in symbols:
-        try:
+    try:
+        for s in symbols:
             j = _alpaca_get(f"{PAPER}/v2/options/contracts", {"underlying_symbols": s, "expiration_date_gte": target,
-                                                                 "expiration_date_lte": week_end, "limit": "10000"})
-            expiries[s] = sorted({c["expiration_date"] for c in j.get("option_contracts", [])})
-        except (requests.RequestException, KeyError, ValueError):
-            expiries[s] = []
+                                                                 "expiration_date_lte": week_end, "limit": "10000"},
+                            get, sleep)
+            expiries[s] = sorted({str(c["expiration_date"]) for c in j.get("option_contracts") or []})
+    except _UNUSABLE as e:
+        expiries = {}
+        unreachable.append(LISTINGS)
+        print(f"market data unavailable ({LISTINGS}): {e.__class__.__name__}", file=sys.stderr)
     live: dict[str, float] = {}
     if slot == "pre-open":
-        try:
-            j = _alpaca_get(f"{DATA}/v2/stocks/snapshots", {"symbols": ",".join(symbols), "feed": "iex"})
-            for s, snap in j.items():
-                p = _num(((snap or {}).get("latestTrade") or {}).get("p"))
-                if p:
-                    live[s] = p
-        except (requests.RequestException, ValueError, AttributeError):
-            pass
-    return daily, expiries, live
+        if BARS in unreachable:                     # the same host: not asked again
+            unreachable.append(SNAPSHOT)
+        else:
+            try:
+                j = _alpaca_get(f"{DATA}/v2/stocks/snapshots", {"symbols": ",".join(symbols), "feed": "iex"}, get, sleep)
+                for s, snap in j.items():
+                    p = _num(((snap or {}).get("latestTrade") or {}).get("p"))
+                    if p:
+                        live[s] = p
+            except _UNUSABLE as e:
+                live = {}
+                unreachable.append(SNAPSHOT)
+                print(f"market data unavailable ({SNAPSHOT}): {e.__class__.__name__}", file=sys.stderr)
+    return MarketData(daily, expiries, live, tuple(unreachable))
 
 
 TAPE_TRIES, TAPE_WAIT_S = 3, 180.0        # after the close the day's daily bar can lag the check by minutes
@@ -283,57 +421,76 @@ def last_bar_date(bars: Sequence[Mapping[str, Any]]) -> str:
     return loaded.bars[-1].d if loaded.bars else ""
 
 
-def wait_for_the_days_bar(symbols: Sequence[str], target: str, daily: dict[str, list[Any]],
-                          expiries: Mapping[str, Sequence[str]], options: Mapping[str, Any] | None,
-                          sleep: Callable[[float], None] = time.sleep,
-                          fetch: Callable[[Sequence[str], str, str], tuple[dict[str, list[Any]], Any, Any]] = market_data,
-                          ) -> dict[str, list[Any]]:
+def wait_for_the_days_bar(symbols: Sequence[str], target: str, md: MarketData, options: Mapping[str, Any] | None,
+                          sleep: Sleep = time.sleep,
+                          fetch: Callable[[Sequence[str], str, str], MarketData] = market_data) -> MarketData:
     """After the close the consolidated daily bar of the session just finished can arrive after the check starts.
-    While a name the clone can trade still lacks it, fetch again a few times before judging the tape; the names
-    that never get it are reported with the date their tape ends."""
+    While a name the clone can trade still lacks it, fetch the bars again a few times before judging the tape; the
+    names that never get it are reported with the date their tape ends. Only the daily bars are replaced. A re-fetch
+    with no usable answer stops the wait and marks the bars unreachable: the session's bar could not be verified."""
+    if BARS in md.unreachable:
+        return md
     prev = lv.prev_session(target)
-    wanted = [s for s in eligible(options, target, expiries) if s in symbols] or list(symbols)
+    wanted = [s for s in eligible(options, target, md.expiries) if s in symbols] or list(symbols)
     for _ in range(TAPE_TRIES - 1):
-        if all(last_bar_date(daily.get(s, [])) >= prev for s in wanted):
-            return daily
+        if all(last_bar_date(md.daily.get(s, [])) >= prev for s in wanted):
+            return md
         sleep(TAPE_WAIT_S)
-        daily, _, _ = fetch(symbols, target, "after-close")
-    return daily
+        again = fetch(symbols, target, "after-close")
+        if BARS in again.unreachable:
+            return md._replace(unreachable=(*md.unreachable, BARS))
+        md = md._replace(daily=again.daily)
+    return md
 
 
-def run(slot: str, now: dt.datetime | None = None) -> int:
+def _read_twice(read: Callable[[str], dict[str, Any] | None], kind: str, sleep: Sleep) -> dict[str, Any] | None:
+    """read_edition answers None both for no edition and for a site it could not reach. Read once more after a short
+    wait, so a blip does not page as a missing edition. (read_edition is shared with the clone and stays as it is.)"""
+    got = read(kind)
+    if got is None:
+        sleep(RETRY_WAIT_S)
+        got = read(kind)
+    return got
+
+
+def run(slot: str, now: dt.datetime | None = None, *, get: Get = requests.get, sleep: Sleep = time.sleep,
+        read: Callable[[str], dict[str, Any] | None] = read_edition, alerts: Any = None, out: Path | None = None,
+        earnings_path: Path | None = None) -> int:
+    """One run. Returns 0 whether or not a check failed: a failed check pages through ntfy, and the report says
+    which. An exception of the job itself is deliberately not caught: the process exits non-zero and the job runner
+    pings healthchecks' /fail and alerts "pipeline-check failed" (docs/runbooks/dead-man-switches.md)."""
     import csv
     from wt.core.config import CONFIG_DIR
     from wt.ops.alerts import Alerts
     now = now or dt.datetime.now(dt.UTC)
     target = target_session(slot, now)
-    radar, options = read_edition("radar"), read_edition("options")
+    radar, options = _read_twice(read, "radar", sleep), _read_twice(read, "options", sleep)
     symbols = sorted({str(t.get("symbol")) for t in ((options or {}).get("tickers") or []) if isinstance(t, Mapping)}
                      | {str(t.get("symbol")) for t in ((radar or {}).get("tickers") or []) if isinstance(t, Mapping)}
                      | {"SPY", "QQQ"})
-    try:
-        daily, expiries, live = market_data(symbols, target, slot)
-        if slot == "after-close":
-            daily = wait_for_the_days_bar(symbols, target, daily, expiries, options)
-    except requests.RequestException as e:
-        daily, expiries, live = {}, {}, {}
-        print(f"market data unavailable: {e.__class__.__name__}", file=sys.stderr)
-    with open(CONFIG_DIR / "events" / "earnings.csv") as fh:
+
+    def fetch(syms: Sequence[str], tgt: str, sl: str) -> MarketData:
+        return market_data(syms, tgt, sl, get, sleep)
+    md = fetch(symbols, target, slot)
+    if slot == "after-close":
+        md = wait_for_the_days_bar(symbols, target, md, options, sleep, fetch)
+    with open(earnings_path or CONFIG_DIR / "events" / "earnings.csv") as fh:
         earnings = list(csv.DictReader(line for line in fh if not line.startswith("#")))
-    checks = assess(slot, now, radar, options, daily, expiries, live, earnings)
+    checks = assess(slot, now, radar, options, md.daily, md.expiries, md.live, earnings, md.unreachable)
     fails = [c for c in checks if not c.ok and c.severity == "fail"]
     warns = [c for c in checks if not c.ok and c.severity == "warn"]
     report = {"slot": slot, "session": target, "checked_at": now.isoformat(), "fails": len(fails), "warns": len(warns),
-              "checks": [asdict(c) for c in checks]}
-    OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / f"{target}-{slot}.json").write_text(json.dumps(report, indent=1))
+              "unreachable": list(md.unreachable), "checks": [asdict(c) for c in checks]}
+    dest = out or OUT
+    dest.mkdir(parents=True, exist_ok=True)
+    (dest / f"{target}-{slot}.json").write_text(json.dumps(report, indent=1))
     for c in checks:
         if not c.ok:
             print(f"{c.severity.upper()} {c.id}: {c.detail}")
     print(f"pipeline check {slot} for {target}: {len(checks)} checks, {len(fails)} failed, {len(warns)} warnings")
     if fails:
-        Alerts().once_per_day(f"pipeline-check:{slot}", f"Pipeline check {slot}: {len(fails)} failed",
-                              ", ".join(c.id for c in fails)[:300], 4)
+        title, message = alert_text(slot, target, checks)
+        (alerts if alerts is not None else Alerts()).once_per_day(f"pipeline-check:{slot}", title, message, 4)
     return 0
 
 
