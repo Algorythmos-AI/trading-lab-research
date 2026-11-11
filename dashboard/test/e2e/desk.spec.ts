@@ -55,7 +55,7 @@ test("the desk shows every name and the selected name's map, and takes live pric
   // The chip is not clipped off the side of a narrow monitor. Brought into view first: on a phone the rail above the
   // desk can put the first row's chip a few pixels under the fold, which is not what this guards.
   const chip = row(page, "SPY").getByText("TESTING RESISTANCE");
-  await chip.scrollIntoViewIfNeeded();
+  await chip.evaluate((el) => el.scrollIntoView({ block: "center" }));
   await expect(chip).toBeInViewport({ ratio: 1 });
   // The first name is selected until another is chosen, and its level map is drawn.
   await showPane(page, "SPY");
