@@ -64,3 +64,34 @@ slugs: the ping body says which host and role sent it.
 
 Open the job's log (`make status`, then `logs/<job>_<date>.log`) and the journal. The ping body shows the host
 and the exit code. A page on a US holiday means a job didn't run at all (they still start and exit early).
+
+## The snapshot probe (temporary evidence for the board's bad-data guards)
+
+Before the Options board learns to pause on a snapshot that looks wrong (high below low, an open outside the day's
+range, a last trade outside the day's high and low or more than 25% from the prior close, a crossed quote), the
+desk's shadow evaluator records how often real IEX snapshots show those shapes in normal conditions, so the guards
+are not tuned to pause the board falsely. It is log only: no page, value, alert or evaluation changes because of it,
+and it sends nothing (ntfy is a public topic).
+
+- **What it records.** On each slot's server record (`desk/log/YYYY-MM-DD/HHMM.json`, the record the evaluator
+  already writes, as its last key `probe`): per focus name, from the snapshot answer that run already fetched,
+  `source` (`fetched`, `cached` when the 1.5 s quote cache served it, `missing` when Alpaca left it out), the last
+  trade (`trade`, its age in seconds, its exchange code and condition codes, each 1-2 characters of `A-Z`, `0-9`,
+  space or `@`, anything else dropped and counted), the minute bar (`absent`, `invalid`, `forming`, `finished`, and
+  its age from the minute's start), the daily bar (`daily`, `daily_day` same or another New York day than the trade,
+  `high_below_low`, `open_outside`), the trade against the day's range (`inside`, `above-high`, `below-low`,
+  `other-day`, `no-daily-bar`, `no-trade`, and by how many basis points), the move from the prior close (`within`,
+  `at-limit` for exactly 25%, `beyond`, `unknown`, in basis points), and the quote (`absent`, `invalid`, `empty`,
+  `one-sided`, `crossed`, `locked`, `normal`, its spread in basis points, its age). Enums, numbers and symbols only:
+  never a price, a size or text. `probe` is null when the snapshot read did not answer, every name came from the
+  cache, or the probe failed; records written before it existed have none.
+- **What it costs.** No extra store operation and no extra Alpaca call: it reads the snapshot answer the run already
+  fetched and rides on the slot's one create-only put (about 195 a session, as before). The record grows by roughly
+  400 bytes per focus name.
+- **How to read it.** Signed in to the dashboard, open `/api/desk/probe?day=YYYY-MM-DD` (New York date; today when
+  left out). It answers JSON: `listed` server records, `unreadable`, and `summary` with counts per fact and value, the
+  largest number seen per fact, and the condition and exchange codes seen, per name (`by_symbol`) and in `total`.
+  Each view costs one listing of that day's folder and one read per server record (about 195 for a full session).
+  Outside production and in fixture mode it reads nothing and answers `"dry": true`.
+- **When to remove it.** Once the guards (the next pull request after the probe) are set from a few weeks of
+  counts, the probe, its route and this section go.
