@@ -92,7 +92,7 @@ function LevelBar({ t }: { t: RadarTicker }) {
         <div className="bg-primary/40 absolute inset-y-0 left-0 rounded-full" style={{ width: `${pos * 100}%` }} />
         <div className="bg-primary absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full" style={{ left: `${pos * 100}%` }} />
       </div>
-      <div className="text-muted-foreground flex justify-between font-mono text-[0.6875rem]">
+      <div className="text-muted-foreground flex justify-between font-mono text-[0.6875rem] max-sm:text-xs">
         <span>support {num(t.support, 2)}</span>
         <span>52w high {num(t.high_52w, 2)}</span>
       </div>

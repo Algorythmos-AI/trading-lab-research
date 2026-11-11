@@ -38,7 +38,8 @@ export function StatTile({
     >
       <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
         {Icon ? <Icon aria-hidden className={cn("size-3.5 shrink-0", TONE_TEXT[tone])} /> : null}
-        <span className="truncate">{label}</span>
+        {/* On a phone a title wraps to a second line rather than lose its end. */}
+        <span className="truncate max-sm:overflow-visible max-sm:whitespace-normal">{label}</span>
       </p>
       <p className="mt-1 font-mono text-[1.0625rem] leading-tight font-semibold tracking-tight break-words sm:text-xl">{value}</p>
       {hint ? <p className="text-muted-foreground mt-1 text-xs leading-snug">{hint}</p> : null}

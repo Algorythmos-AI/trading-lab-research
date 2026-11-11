@@ -65,6 +65,22 @@ export function SessionBar({ t }: { t: Timeline }) {
 }
 const hhmmOf = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 
+/**
+ * The day pill's line after its word: " · 0/5 trades · $0 of $100". On a phone " trades" is read out but not shown, so
+ * the pill keeps to one line ("Clear · 0/5 · $0 of $100").
+ */
+function DayLine({ rest }: { rest: string }) {
+  const at = rest.indexOf(" trades");
+  if (at < 0) return <span className="font-mono tabular-nums">{rest}</span>;
+  return (
+    <span className="font-mono tabular-nums">
+      {rest.slice(0, at)}
+      <span className="max-sm:sr-only">{" trades"}</span>
+      {rest.slice(at + " trades".length)}
+    </span>
+  );
+}
+
 /** One log line: "10:14 QQQ ENTER ZONE · CALL". */
 export function logLine(e: BoardLogEntry): string {
   return `${newYork(new Date(e.at).toISOString(), false)} ${e.symbol} ${e.word}${e.side ? ` · ${e.side.toUpperCase()}` : ""}`;
@@ -106,13 +122,17 @@ export function TodayLog({ log }: { log: readonly BoardLogEntry[] }) {
         aria-controls="today-log"
         data-today-log-button
         onClick={() => setOpen((o) => !o)}
-        className="text-muted-foreground hover:text-foreground aria-expanded:text-foreground aria-expanded:bg-muted inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2 text-sm font-medium whitespace-nowrap"
+        className="text-muted-foreground hover:text-foreground aria-expanded:text-foreground aria-expanded:bg-muted inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2 text-sm font-medium whitespace-nowrap max-sm:min-h-11 max-sm:min-w-11 max-sm:justify-center max-sm:px-2"
       >
         <History aria-hidden className="size-4" />
-        Today · {log.length}
+        {/* On a phone the icon and the count; "Today" is still the button's name. */}
+        <span>
+          <span className="max-sm:sr-only">Today · </span>
+          {log.length}
+        </span>
       </button>
       {open ? (
-        <div id="today-log" data-today-log={log.length} role="region" aria-label="Today's state changes, newest first" className="bg-popover text-popover-foreground absolute top-10 right-0 z-40 w-72 max-w-[calc(100vw-2rem)] rounded-md border p-2 shadow-md">
+        <div id="today-log" data-today-log={log.length} role="region" aria-label="Today's state changes, newest first" className="bg-popover text-popover-foreground absolute top-10 right-0 z-40 max-sm:top-12 w-72 max-w-[calc(100vw-2rem)] rounded-md border p-2 shadow-md">
           {log.length ? (
             <ol className="grid max-h-80 gap-0.5 overflow-y-auto">
               {log.map((e, i) => (
@@ -186,36 +206,49 @@ export function StatusRail({ day: server, facts = null }: { day: RailDay | null;
   // Never beside notes the journal does not show yet, nor once the journal has gone stale in this browser: a reason instead.
   const shownRoom = roomShown(server?.room ?? null, b.manage.views.length, b.manage.provisional, b.manage.journalLive);
   const switches = b.on && b.mode.kind !== "old" && b.mode.kind !== "off";
+  const nyNow = b.now !== null ? newYork(new Date(b.now).toISOString(), false) : "–";
+  // On a phone the clock's time moves to the fills-read line, when there is one.
+  const merged = Boolean(facts?.readLine);
   return (
     <div
       data-status-rail
       style={{ top }}
-      className="bg-background/95 supports-[backdrop-filter]:bg-background/85 relative z-20 sm:sticky -mx-4 grid gap-1.5 border-b px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6"
+      className="bg-background/95 supports-[backdrop-filter]:bg-background/85 relative z-20 sm:sticky -mx-4 grid gap-1.5 border-b px-4 py-2 backdrop-blur max-sm:gap-0.5 max-sm:py-1.5 sm:-mx-6 sm:px-6"
     >
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+      {/* On a phone the row is a two-column grid: the day across the top; then the New York time and when the fills
+          were read, beside the three icon buttons; then the next boundary across the whole width. From sm up it is
+          the one wrapping row. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 max-sm:grid max-sm:grid-cols-[minmax(0,1fr)_auto] max-sm:gap-x-2 max-sm:gap-y-0.5">
         {day ? (
-          <p role="status" data-rail-day={day.tone} className={cn("text-explain rounded-md border px-2 py-0.5 font-medium sm:whitespace-nowrap", DAY_TONE[day.tone])}>
+          <p role="status" data-rail-day={day.tone} className={cn("text-explain rounded-md border px-2 py-0.5 font-medium sm:whitespace-nowrap max-sm:col-span-2 max-sm:justify-self-start max-sm:py-0", DAY_TONE[day.tone])}>
             <span className="font-semibold">{day.word}</span>
-            <span className="font-mono tabular-nums">{day.line.slice(day.word.length)}</span>
+            <DayLine rest={day.line.slice(day.word.length)} />
           </p>
         ) : null}
         {facts?.readLine ? (
-          <p data-rail-read className="text-explain text-muted-foreground sm:whitespace-nowrap">
-            {facts.readLine}
+          <p data-rail-read className="text-explain text-muted-foreground sm:whitespace-nowrap max-sm:col-start-1 max-sm:row-start-2 max-sm:text-[0.8125rem] max-sm:leading-snug">
+            {/* The phone's clock time rides here, so when the fills were read costs no line of its own. */}
+            {b.on && merged ? (
+              <span className="sm:hidden">
+                <span className="text-foreground font-mono font-semibold tabular-nums">{nyNow}</span> NY ·{" "}
+              </span>
+            ) : null}
+            <span className={facts.readShort ? "max-sm:hidden" : undefined}>{facts.readLine}</span>
+            {facts.readShort ? <span className="sm:hidden">{facts.readShort}</span> : null}
           </p>
         ) : null}
         {/* Next to the day: what one more stop would leave. Only when the journal is current and nothing is open. */}
         {shownRoom ? (
-          <p data-rail-room className="text-explain text-muted-foreground">
+          <p data-rail-room className="text-explain text-muted-foreground max-sm:col-span-2">
             {shownRoom}
           </p>
         ) : null}
         {b.on ? (
-          <p data-rail-clock className="text-explain flex min-w-0 items-center gap-1.5">
-            <Clock aria-hidden className="text-muted-foreground size-4 shrink-0" />
-            <span className="font-mono font-semibold tabular-nums">{b.now !== null ? newYork(new Date(b.now).toISOString(), false) : "–"}</span>
-            <span className="text-muted-foreground">New York</span>
-            <span aria-hidden className="text-muted-foreground">·</span>
+          <p data-rail-clock className="text-explain flex min-w-0 items-center gap-1.5 max-sm:col-span-2">
+            <Clock aria-hidden className={cn("text-muted-foreground size-4 shrink-0", merged && "max-sm:hidden")} />
+            <span className={cn("font-mono font-semibold tabular-nums", merged && "max-sm:hidden")}>{nyNow}</span>
+            <span className={cn("text-muted-foreground", merged && "max-sm:hidden")}>New York</span>
+            <span aria-hidden className={cn("text-muted-foreground", merged && "max-sm:hidden")}>·</span>
             <span
               data-rail-countdown={clock?.phase ?? "loading"}
               // While the board is folded into the rail, its marks ride on the countdown: its line is the hero's.
@@ -225,7 +258,7 @@ export function StatusRail({ day: server, facts = null }: { day: RailDay | null;
             </span>
           </p>
         ) : null}
-        <div className="ml-auto flex items-center gap-1.5">
+        <div className="ml-auto flex items-center gap-1.5 max-sm:col-start-2 max-sm:row-start-2">
           {b.on ? <TodayLog log={b.log} /> : null}
           {switches ? (
             <>
@@ -233,7 +266,7 @@ export function StatusRail({ day: server, facts = null }: { day: RailDay | null;
               <AlertMenu />
             </>
           ) : null}
-          {b.on ? <CockpitSwitch /> : null}
+          {b.on ? <CockpitSwitch className="max-sm:min-h-11 max-sm:min-w-11 max-sm:justify-center max-sm:px-2" /> : null}
         </div>
       </div>
       {b.on ? (

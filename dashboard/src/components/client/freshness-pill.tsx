@@ -4,10 +4,16 @@ import { Archive, CircleCheck, MoonStar, OctagonX, TriangleAlert, CircleDashed }
 import { usePathname } from "next/navigation";
 import { deskOfPath, type DeskName } from "@/lib/desk";
 import { deskNote } from "@/lib/desk-state";
-import { describeAge, freshness, type FreshState } from "@/lib/freshness";
+import { describeAge, freshness, type FreshState, shortAge } from "@/lib/freshness";
 import type { ExpectedWindow } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useNow } from "./use-now";
+
+/**
+ * On a phone the pill shares the header's first row, which never wraps: there it shows a short word that fits
+ * (pillWord) and the full words are read out instead. Never an ellipsis.
+ */
+const PILL = "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium whitespace-nowrap max-sm:min-w-0";
 
 const STYLE: Record<FreshState, { cls: string; Icon: typeof CircleCheck }> = {
   fresh: { cls: "bg-good-soft text-good border-good/30", Icon: CircleCheck },
@@ -32,6 +38,35 @@ function label(state: FreshState, ageMin: number | null): string {
   }
 }
 
+/** The phone's word for the pill, or null where the full words are short enough already. */
+export function pillWord(state: FreshState, ageMin: number | null): string | null {
+  switch (state) {
+    case "fresh":
+      return `Updated ${shortAge(ageMin ?? 0)}`;
+    case "late":
+      return `Late ${shortAge(ageMin ?? 0)}`;
+    case "stopped":
+      return `Stopped ${shortAge(ageMin ?? 0)}`;
+    case "asleep":
+      return "Between";
+    default:
+      return null;
+  }
+}
+
+/** The full words, then the phone's short word in their place below sm (the full words still read out there). */
+function Words({ full, short }: { full: string; short: string | null }) {
+  if (short === null) return <>{full}</>;
+  return (
+    <>
+      <span className="max-sm:sr-only">{full}</span>
+      <span aria-hidden className="sm:hidden">
+        {short}
+      </span>
+    </>
+  );
+}
+
 /** Header freshness pill. The server passes its own reading; the browser keeps it current. */
 export function FreshnessPill({
   asOf,
@@ -45,16 +80,15 @@ export function FreshnessPill({
   const nowMs = useNow(15_000);
   const f = nowMs === null ? initial : freshness(asOf, windows, nowMs);
   const { cls, Icon } = STYLE[f.state];
-  const text = label(f.state, f.ageMin);
   return (
     <span
       role="status"
       aria-live="polite"
       title={asOf ? `Snapshot time ${asOf}` : undefined}
-      className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium whitespace-nowrap", cls)}
+      className={cn(PILL, cls)}
     >
-      <Icon aria-hidden className="size-3.5" />
-      {text}
+      <Icon aria-hidden className="size-3.5 shrink-0" />
+      <Words full={label(f.state, f.ageMin)} short={pillWord(f.state, f.ageMin)} />
     </span>
   );
 }
@@ -75,9 +109,9 @@ export function DeskFreshnessPill({ desks }: { desks: Record<DeskName, DeskFresh
     return (
       <span
         role="status"
-        className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium whitespace-nowrap", STYLE.unknown.cls)}
+        className={cn(PILL, STYLE.unknown.cls)}
       >
-        <Archive aria-hidden className="size-3.5" />
+        <Archive aria-hidden className="size-3.5 shrink-0" />
         Desk closed
       </span>
     );

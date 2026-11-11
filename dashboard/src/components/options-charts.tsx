@@ -558,7 +558,7 @@ export function RuleRanges({ rules }: { rules: OptionsRule[] }) {
           <div key={r.id} className="grid items-center gap-x-4 gap-y-1.5 md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_8rem]">
             <div className="min-w-0">
               <p className="text-[0.8125rem] font-medium break-words">{r.label ?? r.id}</p>
-              <p className="text-muted-foreground font-mono text-[0.6875rem]">
+              <p className="text-muted-foreground font-mono text-[0.6875rem] max-sm:text-xs">
                 <span className={r.status === "proven" ? "text-good" : r.status === "probation" ? "text-warn" : ""}>
                   {r.status === "proven" ? "PROVEN" : r.status === "probation" ? "ON PROBATION" : "RETIRED"}
                 </span>
@@ -594,14 +594,14 @@ export function RuleRanges({ rules }: { rules: OptionsRule[] }) {
                   style={{ width: `${Math.min(100, (paperN / PROMOTION_CASES) * 100)}%` }}
                 />
               </span>
-              <span className="text-muted-foreground font-mono text-[0.6875rem]">
+              <span className="text-muted-foreground font-mono text-[0.6875rem] max-sm:text-xs">
                 {paperN} of {PROMOTION_CASES} paper cases
               </span>
             </div>
           </div>
         );
       })}
-      <div className="text-muted-foreground grid font-mono text-[0.6875rem] md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_8rem] md:gap-x-4" aria-hidden>
+      <div className="text-muted-foreground grid font-mono text-[0.6875rem] md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_8rem] md:gap-x-4 max-sm:text-xs" aria-hidden>
         <span className="hidden md:block" />
         <span className="flex justify-between">
           {ticks.map((v) => (

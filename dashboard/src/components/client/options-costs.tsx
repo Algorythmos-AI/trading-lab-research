@@ -16,7 +16,7 @@ function Side({ s }: { s: CostSide | null }) {
   return (
     <>
       {num(s.ask, 2)}
-      <span className="text-muted-foreground block text-[0.6875rem]">
+      <span className="text-muted-foreground block text-[0.6875rem] max-sm:text-xs">
         {s.moves === null ? "—" : s.moves <= 0 ? "past" : `${num(s.moves, 1)} mv`}
         {s.spreadPct !== null ? ` · ${num(s.spreadPct, 0)}%` : ""}
       </span>
@@ -108,7 +108,7 @@ export function OptionsCosts({ tickers, session, halfDay }: { tickers: OptionsTi
     <section aria-label="Option costs" data-costs={off ? "off" : busy ? "loading" : "ready"} className="border-t px-3 py-2.5">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3">
         <h3 className="text-[0.8125rem] font-medium">What a call or put costs</h3>
-        <button type="button" onClick={() => void load()} disabled={busy} className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-[0.6875rem] disabled:opacity-50">
+        <button type="button" onClick={() => void load()} disabled={busy} className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-[0.6875rem] disabled:opacity-50 max-sm:text-xs">
           <RotateCw aria-hidden className="size-3" /> Refresh
         </button>
       </div>
@@ -118,7 +118,7 @@ export function OptionsCosts({ tickers, session, halfDay }: { tickers: OptionsTi
         <div className="mt-1 overflow-x-auto">
           <table className="w-full text-[0.8125rem]">
             <thead>
-              <tr className="text-muted-foreground text-left text-[0.6875rem]">
+              <tr className="text-muted-foreground text-left text-[0.6875rem] max-sm:text-xs">
                 <th scope="col" className="py-1 pr-2 font-normal">
                   Name, expiry
                 </th>
@@ -150,7 +150,7 @@ export function OptionsCosts({ tickers, session, halfDay }: { tickers: OptionsTi
                         <tr key={l.expiry} className={i === 0 ? "border-border/60 border-t" : undefined} data-cost-row={t.symbol}>
                           <th scope="row" className="py-1.5 pr-2 text-left font-normal">
                             {i === 0 ? <span className="font-mono font-semibold">{t.symbol} </span> : null}
-                            <span className="text-muted-foreground text-[0.6875rem] whitespace-nowrap">
+                            <span className="text-muted-foreground text-[0.6875rem] whitespace-nowrap max-sm:text-xs">
                               {weekDate(l.expiry)}
                               {l.days === 0 ? ", today" : l.days !== null ? `, ${l.days}d` : ""}
                               {strikes(l)}
@@ -173,7 +173,7 @@ export function OptionsCosts({ tickers, session, halfDay }: { tickers: OptionsTi
         </div>
       )}
       {!off && askedAt !== null ? (
-        <p data-costs-age={now !== null && (now - askedAt) / 60_000 > COSTS_OLD_MIN ? "old" : "fresh"} className="mt-1.5 text-[0.6875rem]">
+        <p data-costs-age={now !== null && (now - askedAt) / 60_000 > COSTS_OLD_MIN ? "old" : "fresh"} className="mt-1.5 text-[0.6875rem] max-sm:text-xs">
           {now !== null && (now - askedAt) / 60_000 > COSTS_OLD_MIN ? (
             <span className="text-warn">
               Read at {newYork(new Date(askedAt).toISOString(), false)} ET, {num((now - askedAt) / 60_000, 0)} minutes ago. Refresh before relying on these.
@@ -183,7 +183,7 @@ export function OptionsCosts({ tickers, session, halfDay }: { tickers: OptionsTi
           )}
         </p>
       ) : null}
-      <p className="text-muted-foreground mt-1 text-[0.6875rem]">
+      <p className="text-muted-foreground mt-1 text-[0.6875rem] max-sm:text-xs">
         At the strike nearest the last close. Under each ask: expected day&apos;s moves from the close to breakeven at expiry (mv), and the bid-ask spread. Quotes run 15 minutes
         behind the market.
       </p>

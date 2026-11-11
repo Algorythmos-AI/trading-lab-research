@@ -234,7 +234,7 @@ function SizeBlock({ size }: { size: Size }) {
         <div className="grid gap-0.5 border-t py-1" data-ticket-stop>
           <div className="flex items-baseline justify-between gap-3">
             <dt className="text-muted-foreground">Stop to place (−{stopPct}%, rounded up)</dt>
-            <dd className="text-foreground text-right font-mono text-lg font-semibold tabular-nums">{usd(size.stopCents)}</dd>
+            <dd className="text-foreground text-right font-mono text-lg font-semibold tabular-nums max-sm:shrink-0 max-sm:whitespace-nowrap">{usd(size.stopCents)}</dd>
           </div>
           <dd className={SMALL}>
             On a ${(size.tick / 100).toFixed(2)} tick: check the tick in Webull.
@@ -409,9 +409,9 @@ function EstimateBlock({
                   {r.label} {r.stockPrice.toFixed(2)}
                 </dt>
                 <dd className="text-foreground text-right font-mono tabular-nums">
-                  ≈ {usd(r.valueCents)}
-                  <span className="text-muted-foreground">
-                    {" "}
+                  {/* On a phone neither part breaks inside itself: "≈ $1.40" and "(+$15.00 on 3)" stay whole. */}
+                  <span className="max-sm:whitespace-nowrap">≈ {usd(r.valueCents)}</span>{" "}
+                  <span className="text-muted-foreground max-sm:whitespace-nowrap">
                     ({r.pnlCents >= 0 ? "+" : ""}
                     {usd(r.pnlCents)} on {contracts})
                   </span>

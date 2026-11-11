@@ -13,7 +13,7 @@ function subscribe(onChange: () => void) {
 }
 const current = () => (document.documentElement.classList.contains("dark") ? "dark" : "light");
 
-export function ThemeToggle() {
+export function ThemeToggle({ className }: { className?: string }) {
   const theme = useSyncExternalStore(subscribe, current, () => null);
   const next = theme === "dark" ? "light" : "dark";
   const toggle = () => {
@@ -28,6 +28,7 @@ export function ThemeToggle() {
     <Button
       variant="ghost"
       size="icon-sm"
+      className={className}
       onClick={toggle}
       aria-label={theme ? `Switch to ${next} theme` : "Switch theme"}
       title={theme ? `Switch to ${next} theme` : "Switch theme"}

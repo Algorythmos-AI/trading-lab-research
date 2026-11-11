@@ -186,6 +186,8 @@ export interface DayFacts {
   current: boolean;
   /** "Fills read 10:21 New York" (with the day when not read today), or null with no read time. */
   readLine: string | null;
+  /** The same, shorter, for the phone's rail: "Fills read 10:21 NY", "Fills read 17:05 NY, Fri 16 Oct". */
+  readShort: string | null;
   /** When the fills were read, for the browser's own re-check of `current` (journalLive). */
   asOf: string | null;
   /** The journal's open positions, one per contract held, any name and any day. */
@@ -207,9 +209,16 @@ export function dayFacts(
     net: c.net,
     current: c.current && read !== null && !journalStale({ as_of: read }, now),
     readLine: read ? `Fills read ${newYork(read, !sameDay)} New York` : null,
+    readShort: read ? readShortLine(read, sameDay) : null,
     asOf: read,
     openLots: openPositions(lots).length,
   };
+}
+
+/** "Fills read 10:21 NY", or with the New York day when the read was not today: "Fills read 17:05 NY, Fri 16 Oct". */
+export function readShortLine(read: string, sameDay: boolean): string {
+  const day = sameDay ? null : nyClock(read)?.day;
+  return `Fills read ${newYork(read, false)} NY${day ? `, ${weekDate(day)}` : ""}`;
 }
 
 /**

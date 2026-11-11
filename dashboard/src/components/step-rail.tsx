@@ -32,7 +32,7 @@ export function StepRail({ steps, label }: { steps: RailStep[]; label: string })
               <look.Icon aria-hidden className="size-3.5" strokeWidth={3} />
             </span>
             <span className="px-0.5 text-xs leading-tight font-medium">{s.label}</span>
-            <span className={cn("text-[0.6875rem] leading-none", look.text)}>{look.words}</span>
+            <span className={cn("text-[0.6875rem] leading-none max-sm:text-xs", look.text)}>{look.words}</span>
           </li>
         );
       })}

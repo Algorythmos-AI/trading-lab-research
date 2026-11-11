@@ -46,3 +46,10 @@ describe("assumed weekday windows (after the published horizon)", () => {
     expect(inside).toMatchObject({ state: "late", assumed: false });
   });
 });
+
+describe("the header pill's phone word", () => {
+  it("says an age in the fewest characters", async () => {
+    const { shortAge } = await import("@/lib/freshness");
+    expect([0.5, 12, 65, 47 * 60, 42 * 24 * 60].map(shortAge)).toEqual(["now", "12m", "1h", "47h", "42d"]);
+  });
+});

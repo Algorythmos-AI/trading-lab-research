@@ -75,7 +75,7 @@ function Month({ month, selected, onPick, results }: { month: MonthView; selecte
       </p>
       <div className="grid grid-cols-[repeat(5,minmax(0,1fr))_repeat(2,minmax(0,0.55fr))] gap-1" role="presentation">
         {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
-          <span key={i} aria-hidden className="text-muted-foreground text-center text-[0.625rem]">
+          <span key={i} aria-hidden className="text-muted-foreground text-center text-[0.625rem] max-sm:text-xs">
             {d}
           </span>
         ))}
@@ -83,7 +83,7 @@ function Month({ month, selected, onPick, results }: { month: MonthView; selecte
       </div>
       {selected ? <Detail cell={selected} results={results} /> : null}
       {month.notes.length ? (
-        <ul className="text-muted-foreground grid gap-0.5 text-[0.6875rem] leading-snug">
+        <ul className="text-muted-foreground grid gap-0.5 text-[0.6875rem] leading-snug max-sm:text-xs">
           {month.notes.map((n) => (
             <li key={n}>{n}</li>
           ))}
@@ -97,7 +97,7 @@ function Day({ cell: c, selected, onPick }: { cell: DayCell; selected: boolean; 
   const d = Number(c.day.slice(8));
   if (c.kind === "weekend" || c.kind === "out_of_range") {
     return (
-      <span className="text-muted-foreground relative flex h-9 items-start justify-center pt-1 text-[0.625rem]" aria-hidden={!c.clocks}>
+      <span className="text-muted-foreground relative flex h-9 items-start justify-center pt-1 text-[0.625rem] max-sm:text-xs" aria-hidden={!c.clocks}>
         {d}
         {c.clocks ? (
           <>
@@ -119,7 +119,7 @@ function Day({ cell: c, selected, onPick }: { cell: DayCell; selected: boolean; 
       aria-pressed={selected}
       aria-label={dayLabel(c)}
       className={cn(
-        "relative flex h-9 min-w-0 items-start justify-start rounded-[5px] border px-1 pt-0.5 text-[0.6875rem] leading-none",
+        "relative flex h-9 min-w-0 items-start justify-start rounded-[5px] border px-1 pt-0.5 text-[0.6875rem] leading-none max-sm:text-xs",
         "focus-visible:ring-ring outline-none focus-visible:ring-2",
         base,
         tone?.ink ?? (c.kind === "closed" || c.kind === "half" ? undefined : "text-foreground"),
@@ -130,7 +130,7 @@ function Day({ cell: c, selected, onPick }: { cell: DayCell; selected: boolean; 
     >
       <span aria-hidden>{Number(c.day.slice(8))}</span>
       {traded?.broke ? (
-        <span aria-hidden className={cn("absolute top-0 right-1 text-[0.6875rem] font-bold", tone?.ink ?? "text-bad")}>
+        <span aria-hidden className={cn("absolute top-0 right-1 text-[0.6875rem] font-bold max-sm:text-xs", tone?.ink ?? "text-bad")}>
           !
         </span>
       ) : null}

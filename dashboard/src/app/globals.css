@@ -372,6 +372,16 @@
   }
 }
 
+/* Form fields at 16 px on a phone: iOS zooms the page into any field with smaller text when it takes the focus.
+   Unlayered, so it wins over a field's own text-sm; from sm up the fields keep their sizes. */
+@media (width < 40rem) {
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="hidden"]),
+  select,
+  textarea {
+    font-size: 1rem;
+  }
+}
+
 /* The phone sizes of the Options page's scale (below the sm breakpoint, 40rem). */
 @media (width < 40rem) {
   :root {

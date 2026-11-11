@@ -71,7 +71,7 @@ export function Forest({
           );
         })}
       </div>
-      <div className="text-muted-foreground grid font-mono text-[0.6875rem] sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)_7.5rem] sm:gap-x-3" aria-hidden>
+      <div className="text-muted-foreground grid font-mono text-[0.6875rem] sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)_7.5rem] sm:gap-x-3 max-sm:text-xs" aria-hidden>
         <span className="hidden sm:block" />
         <span className="flex justify-between">
           <span>{format(-reach)}</span>

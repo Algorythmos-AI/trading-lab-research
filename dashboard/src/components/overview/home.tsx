@@ -148,7 +148,7 @@ function RuleStreak({ trades }: { trades: readonly Trade[] }) {
             key={d.day}
             title={`${shortDay(d.day)}: ${usd(d.pnl)} · ${d.trades} trade${d.trades === 1 ? "" : "s"} · ${d.kept ? "rules kept" : d.broke === "loss" ? `lost more than $${DAY_LOSS_LIMIT}` : d.broke === "count" ? `more than ${MAX_TRADES_PER_DAY} trades` : "both rules broken"}`}
             className={cn(
-              "grid size-6 place-items-center rounded-full text-[0.625rem] font-semibold",
+              "grid size-6 place-items-center rounded-full text-[0.625rem] font-semibold max-sm:text-xs",
               d.kept ? (d.pnl >= 0 ? "bg-good-fill text-white" : "bg-good-fill/35 text-foreground") : "bg-bad-fill text-white",
             )}
           >
@@ -354,7 +354,7 @@ export function NextSessionPanel({ options, radar }: { options: OptionsEdition |
                 <RoomStrip f={f} />
                 <StatusBadge tone={BIAS[f.bias].tone}>{BIAS[f.bias].word}</StatusBadge>
                 <span />
-                <span className="text-muted-foreground font-mono text-[0.6875rem]">
+                <span className="text-muted-foreground font-mono text-[0.6875rem] max-sm:text-xs">
                   <span className="text-good">S {p(f.support?.price)}</span> · close {p(f.close)} · <span className="text-bad">R {p(f.resistance?.price)}</span>
                 </span>
                 <span />

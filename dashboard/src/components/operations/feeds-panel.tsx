@@ -230,7 +230,7 @@ export function FeedsPanel(input: FeedsInput) {
               {f.strip ? (
                 <div className="grid gap-1">
                   <Strip strip={f.strip} todayDue={f.state !== "late"} />
-                  <div className="text-muted-foreground flex justify-between text-[0.6875rem] tabular-nums">
+                  <div className="text-muted-foreground flex justify-between text-[0.6875rem] tabular-nums max-sm:text-xs">
                     <span>{shortDate(f.strip.dates[0])}</span>
                     <span>last 10 weekdays</span>
                     <span>{shortDate(f.strip.today)}</span>

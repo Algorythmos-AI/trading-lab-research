@@ -39,37 +39,65 @@ const SESSION: Record<DeskName, { badge: string; title: string } | null> = {
   hft: { badge: "24/5", title: "Currencies trade around the clock on weekdays, from Sunday evening to Friday evening in New York" },
 };
 
+/** "Market open" shows as "Open" on a phone's chip and is still read out whole; every other phase is short already. */
+function PhaseWord({ phase }: { phase: string }) {
+  if (phase !== "Market open") return <>{phase}</>;
+  return (
+    <>
+      <span aria-hidden className="sm:hidden">
+        Open
+      </span>
+      <span className="max-sm:sr-only">Market open</span>
+    </>
+  );
+}
+
 export function Clocks() {
   const nowMs = useNow(1000);
   const now = nowMs === null ? null : new Date(nowMs);
   const session = SESSION[deskOfPath(usePathname())];
   return (
-    <div className="flex items-center gap-3 text-xs" aria-label="Local clocks">
+    // On a phone the clocks are one compact chip at the end of the tab row: a two-row grid, New York over Sydney, with
+    // the session word beside them. The names shorten there ("NY", "Syd"); a screen reader still hears them whole.
+    <div
+      className="flex items-center gap-3 text-xs max-sm:grid max-sm:grid-flow-col max-sm:grid-rows-2 max-sm:items-center max-sm:gap-x-1.5 max-sm:gap-y-0.5"
+      aria-label="Local clocks"
+    >
       {/* One colour per city, so the two clocks tell apart at a glance. leading-4 keeps each chip as tall as the badge beside it. */}
-      <span className="bg-clock-syd-chip text-clock-syd flex items-baseline gap-1.5 rounded px-1.5 py-0.5 leading-4">
-        <span className="font-medium">Sydney</span>
+      <span className="bg-clock-syd-chip text-clock-syd flex items-baseline gap-1.5 rounded px-1.5 py-0.5 leading-4 max-sm:gap-1 max-sm:px-1 max-sm:py-0">
+        <span className="font-medium">
+          <span className="sm:hidden" aria-hidden>
+            Syd
+          </span>
+          <span className="max-sm:sr-only">Sydney</span>
+        </span>
         <time className="font-mono text-[0.8125rem] font-bold">{now ? SYD.format(now) : "--:--"}</time>
       </span>
-      <span className="bg-clock-ny-chip text-clock-ny flex items-baseline gap-1.5 rounded px-1.5 py-0.5 leading-4">
-        <span className="font-medium">New York</span>
+      <span className="bg-clock-ny-chip text-clock-ny flex items-baseline gap-1.5 rounded px-1.5 py-0.5 leading-4 max-sm:order-first max-sm:gap-1 max-sm:px-1 max-sm:py-0">
+        <span className="font-medium">
+          <span className="sm:hidden" aria-hidden>
+            NY
+          </span>
+          <span className="max-sm:sr-only">New York</span>
+        </span>
         <time className="font-mono text-[0.8125rem] font-bold">{now ? NY.format(now) : "--:--"}</time>
       </span>
       {session ? (
         <>
-          <span className="flex items-baseline gap-1.5">
+          <span className="flex items-baseline gap-1.5 max-sm:gap-1 max-sm:px-1">
             <span className="text-muted-foreground">UTC</span>
             <time className="font-mono text-[0.8125rem] font-medium">{now ? UTC.format(now) : "--:--"}</time>
           </span>
-          <span className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 whitespace-nowrap" title={session.title}>
+          <span className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 whitespace-nowrap max-sm:px-1 max-sm:py-0 max-sm:leading-4" title={session.title}>
             {session.badge}
           </span>
         </>
       ) : (
         <span
-          className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 whitespace-nowrap"
+          className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 whitespace-nowrap max-sm:row-span-2"
           title="From the New York clock; exchange holidays are not shown"
         >
-          {now ? marketPhase(now) : "Market"}
+          {now ? <PhaseWord phase={marketPhase(now)} /> : "Market"}
         </span>
       )}
     </div>

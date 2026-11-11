@@ -53,11 +53,11 @@ function DayMeter({ label, note, used, max, text, fill }: { label: string; note?
   return (
     <div className="grid min-w-0 gap-1">
       <div className="flex items-baseline justify-between gap-2 text-xs">
-        <span className="text-muted-foreground">
+        <span className="text-muted-foreground max-sm:text-[0.8125rem]">
           {label}
           {note ? ` · ${note}` : null}
         </span>
-        <span className="font-mono font-semibold">{text}</span>
+        <span className="font-mono font-semibold max-sm:text-sm">{text}</span>
       </div>
       <div
         className="bg-track/70 h-2 overflow-hidden rounded-full"
@@ -85,7 +85,7 @@ function TodayStrip({ check }: { check: DayCheck }) {
         <s.icon aria-hidden className={cn("size-6 shrink-0", s.text)} />
         <div className="grid min-w-0 leading-tight">
           <span className={cn("text-sm font-semibold", s.text)}>{check.isToday || !check.current ? s.word : "New day"}</span>
-          <span className="text-muted-foreground text-xs">{check.line}</span>
+          <span className="text-muted-foreground text-xs max-sm:text-[0.8125rem]">{check.line}</span>
         </div>
       </div>
       {/* Entries, not positions: the Today panel's "Closed trades" counts each position once, this counts each buy. */}
@@ -115,12 +115,12 @@ function EvidenceRow({ n, title, group, ev }: { n: number; title: string; group:
     <li className="grid gap-2 py-3 not-last:border-b sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:gap-x-6">
       <div className="grid content-start gap-1">
         <p className="flex items-start gap-2 text-sm leading-snug font-semibold">
-          <span className={cn("mt-px inline-flex size-5 shrink-0 items-center justify-center rounded-full font-mono text-[0.6875rem]", g.badge)}>{n}</span>
+          <span className={cn("mt-px inline-flex size-5 shrink-0 items-center justify-center rounded-full font-mono text-[0.6875rem] max-sm:text-xs", g.badge)}>{n}</span>
           {title}
         </p>
         {ev ? (
           <p className="text-muted-foreground text-[0.8125rem] leading-snug">
-            <span className={cn("mr-1.5 rounded px-1 py-px text-[0.625rem] font-semibold tracking-wide uppercase", ev.source === "yours" ? "bg-info-soft text-info" : "bg-muted text-muted-foreground")}>
+            <span className={cn("mr-1.5 rounded px-1 py-px text-[0.625rem] font-semibold tracking-wide uppercase max-sm:text-xs", ev.source === "yours" ? "bg-info-soft text-info" : "bg-muted text-muted-foreground")}>
               {ev.source === "yours" ? "Your trades" : ev.source === "backtest" ? "Backtest" : "Not measured"}
             </span>
             {ev.finding}
@@ -140,7 +140,7 @@ function EvidenceRow({ n, title, group, ev }: { n: number; title: string; group:
               { key: "b", label: ev.compare.b.label, value: ev.compare.b.value },
             ]}
           />
-          <p className="text-muted-foreground mt-1 text-[0.6875rem]">{ev.compare.unit[0]!.toUpperCase() + ev.compare.unit.slice(1)}, before fees</p>
+          <p className="text-muted-foreground mt-1 text-[0.6875rem] max-sm:text-xs">{ev.compare.unit[0]!.toUpperCase() + ev.compare.unit.slice(1)}, before fees</p>
         </div>
       ) : null}
     </li>
@@ -154,6 +154,58 @@ function CheckIcon({ check }: { check: RuleCheck }) {
       <c.icon aria-hidden className="size-3.5" />
       <span className="sr-only">{c.word}</span>
     </span>
+  );
+}
+
+/** The nine rules by group, and what each rule's icon means. Two siblings: they sit in the panel's own grid. */
+function NineRules() {
+  return (
+    <>
+      <ol className="grid gap-3 md:grid-cols-3" aria-label="The nine rules">
+        {GROUPS.map((group) => {
+          const g = GROUP_STYLE[group.id];
+          return (
+            <li key={group.id} className={cn("bg-background/40 grid content-start gap-2.5 rounded-lg border border-t-4 p-3", g.edge)}>
+              <p className={cn("flex items-center gap-1.5 text-[0.6875rem] font-semibold tracking-wide uppercase max-sm:text-xs", g.text)}>
+                <g.icon aria-hidden className="size-3.5" />
+                {group.title}
+                <span className="text-muted-foreground font-normal normal-case tracking-normal">· {group.means}</span>
+              </p>
+              <ol className="grid gap-2.5">
+                {RULES.filter((r) => r.group === group.id).map((r) => (
+                  <li key={r.id} className="flex items-start gap-2.5">
+                    <span className={cn("mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full font-mono text-xs font-bold", g.badge)} aria-hidden>
+                      {r.n}
+                    </span>
+                    <span className="grid min-w-0 gap-0.5 leading-snug">
+                      <span className="text-[0.875rem] font-semibold">
+                        <span className="sr-only">Rule {r.n}: </span>
+                        {r.title}
+                      </span>
+                      <span className="text-muted-foreground text-xs">{r.detail}</span>
+                    </span>
+                    <CheckIcon check={r.check} />
+                  </li>
+                ))}
+              </ol>
+            </li>
+          );
+        })}
+      </ol>
+
+      <p className="text-muted-foreground -mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.6875rem] max-sm:text-xs">
+        {(Object.keys(CHECK) as RuleCheck[]).map((k) => {
+          const c = CHECK[k];
+          return (
+            <span key={k} className="inline-flex items-center gap-1">
+              <c.icon aria-hidden className="size-3.5" />
+              {c.word}
+            </span>
+          );
+        })}
+        <span>Nothing on this page can block an order.</span>
+      </p>
+    </>
   );
 }
 
@@ -174,7 +226,7 @@ function BeforeYouBuy() {
   return (
     <section aria-labelledby="before-buy" className="grid gap-3 rounded-lg border p-3 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] md:gap-6">
       <div className="grid content-start gap-2">
-        <h3 id="before-buy" className="text-[0.6875rem] font-semibold tracking-wide uppercase">
+        <h3 id="before-buy" className="text-[0.6875rem] font-semibold tracking-wide uppercase max-sm:text-xs">
           Before you press buy
         </h3>
         <ul className="grid gap-1.5 sm:grid-cols-2 sm:gap-x-4">
@@ -187,16 +239,16 @@ function BeforeYouBuy() {
         </ul>
       </div>
       <div className="grid content-start gap-1.5" data-ticket-example>
-        <p className="text-[0.6875rem] font-semibold tracking-wide uppercase">Size it first: the trade ticket</p>
-        <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-0.5 text-xs">
+        <p className="text-[0.6875rem] font-semibold tracking-wide uppercase max-sm:text-xs">Size it first: the trade ticket</p>
+        <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-0.5 text-xs max-sm:gap-y-1 max-sm:text-sm">
           {rows.map(([k, v]) => (
             <div key={k} className="contents">
               <dt className="text-muted-foreground">{k}</dt>
-              <dd className="text-right font-mono font-semibold">{v}</dd>
+              <dd className="text-right font-mono font-semibold max-sm:whitespace-nowrap">{v}</dd>
             </div>
           ))}
         </dl>
-        <p className="text-muted-foreground text-[0.6875rem] leading-snug">
+        <p className="text-muted-foreground text-[0.6875rem] leading-snug max-sm:text-xs">
           Example at {usd(EXAMPLE_CENTS)}. Open &ldquo;Size this call&rdquo; or &ldquo;Size this put&rdquo; under a side on the Options desk and type the price you see: it works out a size within ${MAX_PREMIUM} of premium and ${RISK_PER_TRADE} lost at the stop with fees, if the stop fills at its price. The chart stop may come first.
         </p>
       </div>
@@ -275,57 +327,28 @@ export function TradeRules({
 
         {check ? <TodayStrip check={check} /> : null}
 
-        <ol className="grid gap-3 md:grid-cols-3" aria-label="The nine rules">
-          {GROUPS.map((group) => {
-            const g = GROUP_STYLE[group.id];
-            return (
-              <li key={group.id} className={cn("bg-background/40 grid content-start gap-2.5 rounded-lg border border-t-4 p-3", g.edge)}>
-                <p className={cn("flex items-center gap-1.5 text-[0.6875rem] font-semibold tracking-wide uppercase", g.text)}>
-                  <g.icon aria-hidden className="size-3.5" />
-                  {group.title}
-                  <span className="text-muted-foreground font-normal normal-case tracking-normal">· {group.means}</span>
-                </p>
-                <ol className="grid gap-2.5">
-                  {RULES.filter((r) => r.group === group.id).map((r) => (
-                    <li key={r.id} className="flex items-start gap-2.5">
-                      <span className={cn("mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full font-mono text-xs font-bold", g.badge)} aria-hidden>
-                        {r.n}
-                      </span>
-                      <span className="grid min-w-0 gap-0.5 leading-snug">
-                        <span className="text-[0.875rem] font-semibold">
-                          <span className="sr-only">Rule {r.n}: </span>
-                          {r.title}
-                        </span>
-                        <span className="text-muted-foreground text-xs">{r.detail}</span>
-                      </span>
-                      <CheckIcon check={r.check} />
-                    </li>
-                  ))}
-                </ol>
-              </li>
-            );
-          })}
-        </ol>
-
-        <p className="text-muted-foreground -mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.6875rem]">
-          {(Object.keys(CHECK) as RuleCheck[]).map((k) => {
-            const c = CHECK[k];
-            return (
-              <span key={k} className="inline-flex items-center gap-1">
-                <c.icon aria-hidden className="size-3.5" />
-                {c.word}
-              </span>
-            );
-          })}
-          <span>Nothing on this page can block an order.</span>
-        </p>
+        {/* The nine rules. On a phone they sit in a fold under the day strip, closed until opened, so today's trades
+            are not three screens down; from sm up they are always open. Both are drawn on the server and CSS shows
+            one: the hidden one is display:none, so a screen reader hears the rules once, and neither carries an id. */}
+        <details data-rules-fold className="group/rules rounded-lg border sm:hidden">
+          <summary className="hover:bg-muted/50 flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-3.5 py-2 text-sm font-medium [&::-webkit-details-marker]:hidden">
+            The 9 rules
+            <ChevronDown aria-hidden className="text-muted-foreground size-4 shrink-0 transition-transform group-open/rules:rotate-180" />
+          </summary>
+          <div className="grid gap-4 border-t p-3">
+            <NineRules />
+          </div>
+        </details>
+        <div className="contents max-sm:hidden">
+          <NineRules />
+        </div>
 
         <BeforeYouBuy />
 
         {breaks && breaks.sessions > 0 ? <BreakRow s={breaks} /> : null}
 
         <details className="group rounded-lg border">
-          <summary className="hover:bg-muted/50 flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-3.5 py-2.5 text-sm font-medium [&::-webkit-details-marker]:hidden">
+          <summary className="hover:bg-muted/50 flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-3.5 py-2.5 text-sm font-medium max-sm:min-h-11 [&::-webkit-details-marker]:hidden">
             <span>
               Why each rule: the evidence
               <span className="text-muted-foreground font-normal">

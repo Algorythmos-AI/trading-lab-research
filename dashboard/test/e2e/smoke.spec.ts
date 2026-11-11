@@ -524,7 +524,8 @@ test("on a phone the three desks stay on one line, nothing scrolls sideways, and
       expect(h.desk!.right, at).toBeLessThanOrEqual(h.width);
       expect(h.pill!.right, at).toBeLessThanOrEqual(h.width);
       // The Options desk pins its own bars to the top and bottom of a phone screen, so the site header must scroll away.
-      expect(h.position, at).toBe("static");
+      // Static or relative both scroll with the page; sticky or fixed would not.
+      expect(["static", "relative"], at).toContain(h.position);
     }
   }
 });

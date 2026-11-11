@@ -73,7 +73,7 @@ function Chip({ href, on, children }: { href: string; on: boolean; children: Rea
       aria-current={on ? "true" : undefined}
       scroll={false}
       className={cn(
-        "inline-flex h-7 items-center rounded-full border px-2.5 text-xs transition-colors",
+        "inline-flex h-7 items-center rounded-full border px-2.5 text-xs transition-colors max-sm:h-11 max-sm:px-3.5 max-sm:text-sm",
         on ? "bg-foreground text-background border-foreground font-medium" : "text-muted-foreground hover:text-foreground",
       )}
     >
@@ -398,20 +398,20 @@ export function TodayPanel({ view, asOf, now, market, feesIncluded }: { view: Se
             {shown.map(({ unit: t }) => {
               const row = rows.get(t.id)!;
               return (
-                <li key={t.id} className="grid grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-x-3 py-1.5 text-[0.8125rem] not-last:border-b">
-                  <span className="text-muted-foreground font-mono text-xs">{nyClock.format(new Date(t.closed_at))}</span>
+                <li key={t.id} className="grid grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-x-3 py-1.5 text-[0.8125rem] not-last:border-b max-sm:text-sm">
+                  <span className="text-muted-foreground font-mono text-xs max-sm:text-[0.8125rem]">{nyClock.format(new Date(t.closed_at))}</span>
                   <div className="grid min-w-0 leading-tight">
                     <span className="truncate font-medium">{contractLabel(t)}</span>
-                    <span className="text-muted-foreground truncate text-xs">
+                    <span className="text-muted-foreground truncate text-xs max-sm:whitespace-normal max-sm:text-[0.8125rem]">
                       {t.qty.toLocaleString("en-US")} × {price(t.entry)} → {price(t.exit)} · {t.close === "expired" ? "held to expiry" : `held ${fmtMinutes(holdMinutes(t))}`}
                       {row.fees !== null && row.fees > 0 ? ` · ${usd(row.gross, 0)} before fees` : ""}
                     </span>
                     {row.pieces.length ? (
                       <details className="text-muted-foreground mt-0.5 text-xs">
-                        <summary className="hover:text-foreground cursor-pointer">{row.pieces.length} pieces</summary>
+                        <summary className="hover:text-foreground cursor-pointer max-sm:text-sm">{row.pieces.length} pieces</summary>
                         <ul className="mt-1 grid gap-0.5">
                           {row.pieces.map((p) => (
-                            <li key={p.id} className="font-mono text-[0.6875rem]">
+                            <li key={p.id} className="font-mono text-[0.6875rem] max-sm:text-xs">
                               {p.text}
                             </li>
                           ))}
@@ -554,7 +554,7 @@ export function CalendarPanel({ days, feesIncluded }: { days: DayRow[]; feesIncl
               <span className="font-medium">{new Date(`${m.month}-15T12:00:00Z`).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" })}</span>
               <span className={cn("font-mono text-xs", m.pnl > 0 ? "text-good" : m.pnl < 0 ? "text-bad" : "text-muted-foreground")}>{usd(m.pnl)}</span>
             </p>
-            <div className="text-muted-foreground grid grid-cols-5 gap-1 text-center text-[0.625rem]">
+            <div className="text-muted-foreground grid grid-cols-5 gap-1 text-center text-[0.625rem] max-sm:text-xs">
               {["M", "T", "W", "T", "F"].map((d, i) => (
                 <span key={i}>{d}</span>
               ))}
@@ -566,7 +566,7 @@ export function CalendarPanel({ days, feesIncluded }: { days: DayRow[]; feesIncl
                     <span
                       key={j}
                       title={c.pnl === null ? `${shortDay(c.day)}: no trades` : `${shortDay(c.day)}: ${usd(c.pnl, 2)} · ${c.trades} trade${c.trades === 1 ? "" : "s"}`}
-                      className={cn("relative flex h-8 items-end justify-end rounded-[3px] px-1 pb-0.5 text-[0.5625rem]", heat(c.pnl, reach), c.pnl !== null && Math.abs(c.pnl) / reach > 0.66 ? "text-white" : "text-muted-foreground")}
+                      className={cn("relative flex h-8 items-end justify-end rounded-[3px] px-1 pb-0.5 text-[0.5625rem] max-sm:text-xs", heat(c.pnl, reach), c.pnl !== null && Math.abs(c.pnl) / reach > 0.66 ? "text-white" : "text-muted-foreground")}
                     >
                       {Number(c.day.slice(8))}
                     </span>
@@ -599,7 +599,7 @@ export function LessonsPanel({ lessons, feesIncluded }: { lessons: Lesson[]; fee
         <div className="grid gap-3 md:grid-cols-2">
           {lessons.map((l) => (
             <div key={l.id} className={cn("bg-card relative grid content-start gap-2 overflow-hidden rounded-lg border py-3 pr-3.5 pl-4", "before:absolute before:inset-y-0 before:left-0 before:w-1", LESSON_EDGE[l.tone])}>
-              <p className={cn("text-[0.6875rem] font-medium tracking-wide uppercase", LESSON_TAG_TONE[l.tone])}>{LESSON_TAG[l.tone]}</p>
+              <p className={cn("text-[0.6875rem] font-medium tracking-wide uppercase max-sm:text-xs", LESSON_TAG_TONE[l.tone])}>{LESSON_TAG[l.tone]}</p>
               <p className="text-sm leading-snug font-semibold">{l.title}</p>
               <p className="text-muted-foreground text-[0.8125rem] leading-snug">{l.finding}</p>
               {l.compare ? (
@@ -641,7 +641,7 @@ function Breakdown({ title, rows, note }: { title: string; rows: GroupRow[]; not
             label: (
               <span className="flex items-baseline justify-between gap-2">
                 <span className="truncate">{r.label}</span>
-                <span className="text-muted-foreground shrink-0 font-mono text-[0.6875rem]">
+                <span className="text-muted-foreground shrink-0 font-mono text-[0.6875rem] max-sm:text-xs">
                   {r.trades} · {pct(r.winRate)}
                 </span>
               </span>

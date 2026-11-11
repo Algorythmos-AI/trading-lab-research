@@ -100,7 +100,7 @@ function Distance({ edge, atr }: { edge: number | null | undefined; atr: number 
   return (
     <>
       {num(edge, 2)}
-      {atr != null ? <span className="text-muted-foreground block text-[0.6875rem]">{num(atr, 1)} ATR</span> : null}
+      {atr != null ? <span className="text-muted-foreground block text-[0.6875rem] max-sm:text-xs">{num(atr, 1)} ATR</span> : null}
     </>
   );
 }
@@ -130,7 +130,7 @@ const COLUMNS: Record<DeskView, Column[]> = {
         return (
           <span className="grid gap-1">
             <span className="flex items-baseline justify-end gap-1.5">
-              <span className="text-muted-foreground font-sans text-[0.6875rem]">{ivp >= RICH_IVP ? "rich" : ivp <= CHEAP_IVP ? "cheap" : ""}</span>
+              <span className="text-muted-foreground font-sans text-[0.6875rem] max-sm:text-xs">{ivp >= RICH_IVP ? "rich" : ivp <= CHEAP_IVP ? "cheap" : ""}</span>
               {fracPct(ivp, 0)}
             </span>
             <span className="bg-track relative h-1 overflow-hidden rounded-full">
@@ -193,7 +193,7 @@ const COLUMNS: Record<DeskView, Column[]> = {
       wideOnly: true,
       cell: (r) => {
         const view = r.read.price !== null ? roomView(r.t, r.read.price) : null;
-        if (!view) return <span className="text-muted-foreground font-sans text-[0.6875rem]">no ATR, so no bar</span>;
+        if (!view) return <span className="text-muted-foreground font-sans text-[0.6875rem] max-sm:text-xs">no ATR, so no bar</span>;
         return (
           <RoomBar
             view={view}
@@ -562,7 +562,7 @@ export function OptionsDesk({
         </div>
         <SessionLine session={e.session} halfDay={halfDay} />
         <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1">
-          <span className="text-muted-foreground flex items-center gap-1.5 font-mono text-[0.6875rem]">
+          <span className="text-muted-foreground flex items-center gap-1.5 font-mono text-[0.6875rem] max-sm:text-xs">
             <span className={cn("inline-block size-2 rounded-full", stale ? "bg-bad-fill" : "bg-good-fill")} />
             Levels {weekDate(e.built_from)} close
           </span>
@@ -573,7 +573,7 @@ export function OptionsDesk({
             aria-keyshortcuts="Meta+K Control+K"
             title="Search names and actions (Cmd K or Ctrl K)"
             onClick={() => setPalette(true)}
-            className="text-muted-foreground hover:text-foreground flex items-center gap-1 rounded px-1 text-[0.6875rem]"
+            className="text-muted-foreground hover:text-foreground flex items-center gap-1 rounded px-1 text-[0.6875rem] max-sm:text-xs"
           >
             <Search aria-hidden className="size-3.5" />
             Search
@@ -584,14 +584,14 @@ export function OptionsDesk({
             aria-expanded={help}
             aria-controls="desk-shortcuts"
             onClick={() => setHelp((h) => !h)}
-            className="text-muted-foreground hover:text-foreground flex items-center gap-1 rounded px-1 text-[0.6875rem]"
+            className="text-muted-foreground hover:text-foreground flex items-center gap-1 rounded px-1 text-[0.6875rem] max-sm:text-xs"
           >
             <Keyboard aria-hidden className="size-3.5" />
             Shortcuts
           </button>
         </div>
         {help ? (
-          <div id="desk-shortcuts" className="text-muted-foreground flex basis-full flex-wrap items-baseline gap-x-6 gap-y-1 text-[0.6875rem]">
+          <div id="desk-shortcuts" className="text-muted-foreground flex basis-full flex-wrap items-baseline gap-x-6 gap-y-1 text-[0.6875rem] max-sm:text-xs">
             <dl className="flex flex-wrap gap-x-6 gap-y-1">
               {SHORTCUTS.map(([keys, what]) => (
                 <div key={keys} className="flex items-baseline gap-2">
@@ -631,7 +631,7 @@ export function OptionsDesk({
               </colgroup>
               <thead className="bg-card sticky top-0 z-10">
                 <tr className="border-b">
-                  <th scope="col" className="text-muted-foreground px-2 py-2 text-left text-[0.6875rem] font-medium md:px-3">
+                  <th scope="col" className="text-muted-foreground px-2 py-2 text-left text-[0.6875rem] font-medium md:px-3 max-sm:text-xs">
                     Name
                   </th>
                   {columns.map((c) => {
@@ -642,7 +642,7 @@ export function OptionsDesk({
                         scope="col"
                         title={c.hint}
                         aria-sort={dir === "asc" ? "ascending" : dir === "desc" ? "descending" : undefined}
-                        className={cn("text-muted-foreground px-1 py-2 text-[0.6875rem] font-medium sm:px-1.5 md:px-2", c.align === "left" ? "text-left" : "text-right", c.wideOnly && "max-md:hidden")}
+                        className={cn("text-muted-foreground px-1 py-2 text-[0.6875rem] font-medium sm:px-1.5 md:px-2 max-sm:text-xs", c.align === "left" ? "text-left" : "text-right", c.wideOnly && "max-md:hidden")}
                       >
                         {c.sort ? (
                           <button type="button" onClick={() => cycleSort(c)} className={cn("hover:text-foreground inline-flex items-center gap-0.5 rounded", dir && "text-foreground")}>
