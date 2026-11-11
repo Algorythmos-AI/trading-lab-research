@@ -11,6 +11,20 @@ import { type BackoffOptions, capDelay, retryDelay } from "./backoff";
  */
 export type PollResult = "ok" | "off" | "error" | "limited";
 
+/**
+ * What an HTTP status from our own route means for the poll: 503 is the feed not configured (stop for good), 429 is
+ * upstream's rate limit (wait the cap), any other failure is an error (the doubling wait), and a success is "ok". A
+ * transport failure never reaches here: the caller's catch counts it as "error".
+ */
+export function statusResult(status: number): PollResult {
+  if (status === 503) return "off";
+  if (status === 429) return "limited";
+  return status >= 200 && status < 300 ? "ok" : "error";
+}
+
+/** Retry now goes out at most once in this long, however fast it is pressed. */
+export const MANUAL_GAP_MS = 1_000;
+
 /** The poll is waiting to try again after failing. */
 export interface Backoff {
   /** Failures in a row so far. */
@@ -48,12 +62,22 @@ export interface PollDeps {
   backoff: BackoffOptions;
   /** Told when a wait after a failure starts, when its attempt goes out, and (null) when the poll is healthy again. */
   onBackoff?: (b: Backoff | null) => void;
+  /**
+   * Optional: true while the last good answer is still young enough to stand. A tab shown again then fetches nothing
+   * (the timer keeps its turn), outside a run of failures only.
+   */
+  fresh?: () => boolean;
 }
 
 export interface Poll {
   stop: () => void;
-  /** While waiting after a failure: one attempt now, keeping the count of failures. Otherwise nothing. */
+  /**
+   * While waiting after a failure: one attempt now, keeping the count of failures, at most once a second (MANUAL_GAP_MS).
+   * Nothing while healthy, in flight, hidden, or waiting out a rate limit.
+   */
   retryNow: () => void;
+  /** In a run of failures (waiting, or its attempt in flight). */
+  failing: () => boolean;
 }
 
 /**
@@ -76,6 +100,8 @@ export function startPoll(d: PollDeps): Poll {
   let retryAt = -Infinity;
   /** This run of failures has had its one early attempt from the tab being shown. */
   let earlyUsed = false;
+  /** When Retry now last sent an attempt (the `now` clock). */
+  let lastManual = -Infinity;
 
   const emit = (b: Backoff | null) => {
     if (!stopped) d.onBackoff?.(b);
@@ -135,10 +161,11 @@ export function startPoll(d: PollDeps): Poll {
   const onVisible = () => {
     if (stopped || done || inFlight || d.page.visibilityState !== "visible") return;
     if (d.now() < retryAt) {
-      // Waiting after a failure: one attempt at once per run of failures, then the wait stands.
-      if (earlyUsed) return;
+      // Waiting after a failure: one attempt at once per run of failures, then the wait stands. A rate limit's wait
+      // always stands: upstream asked us to slow down.
+      if (limited || earlyUsed) return;
       earlyUsed = true;
-    }
+    } else if (failures === 0 && d.fresh?.()) return; // healthy, and the last answer is young: its timer keeps its turn
     now();
   };
 
@@ -158,7 +185,12 @@ export function startPoll(d: PollDeps): Poll {
     },
     retryNow: () => {
       if (stopped || done || inFlight || failures === 0 || d.page.visibilityState !== "visible") return;
+      const t = d.now();
+      if (limited && t < retryAt) return; // a rate limit's wait stands
+      if (t - lastManual < MANUAL_GAP_MS) return; // at most one press a second goes out
+      lastManual = t;
       now();
     },
+    failing: () => failures > 0,
   };
 }

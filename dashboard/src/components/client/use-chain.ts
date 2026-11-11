@@ -1,13 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChainResponse } from "@/lib/chain";
-import { type PollResult, startPoll } from "@/lib/quote-poll";
+import { type Poll, type PollResult, startPoll, statusResult } from "@/lib/quote-poll";
 
 /** The feed is 15 minutes behind the market, so asking twice a minute loses nothing. */
 export const CHAIN_POLL_MS = 30_000;
 /** After failures in a row it asks again in 2, 4, 8, 16 s, then never later than its own interval. */
 export const CHAIN_RETRY_CAP_MS = CHAIN_POLL_MS;
+
+/** A good answer this young (the monotonic clock, ms) stands when the tab is shown again: nothing is asked for. */
+export function chainFresh(lastOkAt: number, now: number): boolean {
+  return now - lastOkAt < CHAIN_POLL_MS;
+}
 
 export type ChainFeed =
   | { status: "idle" }
@@ -45,7 +50,11 @@ export function useChain(
 ): { feed: ChainFeed; retry: () => void; reset: () => void } {
   const [held, setHeld] = useState<Held>({ symbol, feed: { status: "idle" } });
   const [attempt, setAttempt] = useState(0);
+  const poll = useRef<Poll | null>(null);
   const retry = useCallback(() => {
+    // In a run of failures the poll's own Retry now (at most once a second, never inside a rate limit's wait): a fresh
+    // poll here would forget the failures and ask at once. Otherwise start again from loading.
+    if (poll.current?.failing()) return poll.current.retryNow();
     setHeld({ symbol, feed: { status: "loading" } });
     setAttempt((n) => n + 1);
   }, [symbol]);
@@ -55,6 +64,8 @@ export function useChain(
   useEffect(() => {
     if (!enabled || px === null) return;
     let stopped = false;
+    /** When this poll last had a good answer (the monotonic clock). */
+    let lastOk = -Infinity;
     // A good answer is kept through a failure only for the name it was asked for.
     const failed = () => {
       if (!stopped) setHeld((h) => (h.symbol === symbol && h.feed.status === "ok" ? h : { symbol, feed: { status: "error" } }));
@@ -64,17 +75,18 @@ export function useChain(
         const [x, k] = keep.split(":");
         const own = x && k ? `&x=${encodeURIComponent(x)}&k=${encodeURIComponent(k)}` : "";
         const res = await fetch(`/api/chain?s=${encodeURIComponent(symbol)}&px=${px.toFixed(2)}${own}`, { cache: "no-store" });
-        if (res.status === 503) {
+        const r = statusResult(res.status);
+        if (r === "off") {
           if (!stopped) setHeld({ symbol, feed: { status: "off" } });
           return "off"; // not configured: no point asking again until the page is reloaded
         }
-        if (res.status === 429) {
+        if (r !== "ok") {
           failed();
-          return "limited"; // upstream asks us to slow down: the longest wait
+          return r; // "limited" (429) waits the longest; anything else the doubling wait
         }
-        if (!res.ok) throw new Error(String(res.status));
         const chain = (await res.json()) as ChainResponse;
         if (!stopped) setHeld({ symbol, feed: { status: "ok", chain, receivedAt: Date.now(), receivedPerf: performance.now() } });
+        lastOk = performance.now();
         return "ok";
       } catch {
         failed();
@@ -83,7 +95,7 @@ export function useChain(
     };
     // While the tab is hidden nothing is asked for, and a reader coming back to it gets a fresh answer at once rather
     // than a wait for the next half minute to come round (lib/quote-poll.ts).
-    const poll = startPoll({
+    const p = startPoll({
       run,
       page: document,
       show: window,
@@ -92,10 +104,14 @@ export function useChain(
       clearTimer: (id) => window.clearTimeout(id as number),
       pollMs: CHAIN_POLL_MS,
       backoff: { capMs: CHAIN_RETRY_CAP_MS },
+      // A tab shown again within the half minute of a good answer asks for nothing: the quotes are 15 minutes behind.
+      fresh: () => chainFresh(lastOk, performance.now()),
     });
+    poll.current = p;
     return () => {
       stopped = true;
-      poll.stop();
+      p.stop();
+      if (poll.current === p) poll.current = null;
     };
   }, [symbol, px, enabled, keep, attempt]);
 

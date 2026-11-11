@@ -33,7 +33,8 @@ export interface BarsPollerDeps {
  * it back on its interval. A 503 means not configured: it stops. A failure after good bars keeps them marked `failed`,
  * so the board can stop using them. `kick` fetches now; a kick while a fetch is in flight is not dropped: one more
  * fetch follows straight after it, unless that fetch failed (then the wait stands). While waiting after a failure,
- * only the first kick of the run of failures fetches early (a tab shown again, or a new slot); the rest leave the wait.
+ * only the first kick of the run of failures fetches early (a tab shown again, or a new slot); the rest leave the wait,
+ * and after a rate limit none does.
  */
 export function barsPoller(d: BarsPollerDeps): { start: () => void; stop: () => void; kick: () => void } {
   const backoff: BackoffOptions = { capMs: BARS_RETRY_CAP_MS, rand: d.rand };
@@ -45,6 +46,8 @@ export function barsPoller(d: BarsPollerDeps): { start: () => void; stop: () => 
   /** After a failure, no fetch before this (the `now` clock), except one early kick. */
   let retryAt = -Infinity;
   let earlyUsed = false;
+  /** The last failure was upstream's rate limit: its wait always stands. */
+  let limited = false;
   let feed: BarsFeed = { status: "loading" };
   const emit = (f: BarsFeed) => {
     feed = f;
@@ -63,7 +66,7 @@ export function barsPoller(d: BarsPollerDeps): { start: () => void; stop: () => 
     }
     busy = true;
     let next = BARS_POLL_MS;
-    let limited = false;
+    limited = false; // a transport failure below is not a rate limit
     try {
       const res = await d.fetch(d.url, { cache: "no-store" });
       if (res.status === 503) {
@@ -103,8 +106,9 @@ export function barsPoller(d: BarsPollerDeps): { start: () => void; stop: () => 
     kick: () => {
       if (stopped) return;
       if (!busy && d.now() < retryAt) {
-        // Waiting after a failure: one early fetch per run of failures, and only for a page that can be seen.
-        if (earlyUsed || !d.visible()) return;
+        // Waiting after a failure: one early fetch per run of failures, only for a page that can be seen, and never
+        // while waiting out a rate limit.
+        if (limited || earlyUsed || !d.visible()) return;
         earlyUsed = true;
       }
       void load();

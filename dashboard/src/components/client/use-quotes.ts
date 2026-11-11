@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { extendTrail, type LiveQuote, type TrailPoint } from "@/lib/options";
-import { type Backoff, type Poll, type PollResult, startPoll } from "@/lib/quote-poll";
+import { type Backoff, type Poll, type PollResult, startPoll, statusResult } from "@/lib/quote-poll";
 
 export const POLL_MS = 2_000;
 /** The longest wait after failures in a row (2, 4, 8, 16 s, then this). */
@@ -50,15 +50,15 @@ export function useQuoteFeed(symbols: string, enabled = true): QuoteFeed {
     const run = async (): Promise<PollResult> => {
       try {
         const res = await fetch(`/api/quote?s=${encodeURIComponent(symbols)}`, { cache: "no-store" });
-        if (res.status === 503) {
+        const r = statusResult(res.status);
+        if (r === "off") {
           if (!stopped) setFeed({ status: "off" });
           return "off"; // not configured: no point polling until the page is reloaded
         }
-        if (res.status === 429) {
+        if (r !== "ok") {
           if (!stopped) setFeed((f) => (f.status === "ok" ? f : { status: "error" }));
-          return "limited";
+          return r; // "limited" (429) waits the cap; anything else the doubling wait
         }
-        if (!res.ok) throw new Error(String(res.status));
         const body = (await res.json()) as { as_of: string; quotes: Record<string, LiveQuote>; missing?: string[] };
         const quotes = body.quotes ?? {};
         if (!stopped)

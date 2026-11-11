@@ -141,10 +141,15 @@ export function LiveCardChip({ t }: { t: OptionsTicker }) {
   );
 }
 
-/** Whole seconds until a retry is due, from the page's clock; null while the attempt is going out (or no clock yet). */
+/**
+ * Whole seconds until a retry is due, as the page's one-second clock (useNow, floored to the second, so up to a second
+ * behind) reads it: rounded down, so the first reading of a 2 s wait is 2, and never below 1 while any of the wait
+ * remains. 0 once it is due; null while the attempt is going out, or before the page has a clock.
+ */
 export function retryInS(b: Backoff, now: number | null): number | null {
   if (b.at === null || now === null) return null;
-  return Math.max(0, Math.ceil((b.at - now) / 1000));
+  const left = b.at - now;
+  return left <= 0 ? 0 : Math.max(1, Math.floor(left / 1000));
 }
 
 /** A small "is the feed alive" pill: live with the time of the last answer, off, or retrying (and in how long). */
@@ -177,30 +182,51 @@ export function FeedPill() {
   );
 }
 
+/** What the retry line announces: once when it appears, and again only when the reason changes, never each second. */
+export function retrySpoken(b: Backoff | null): string {
+  if (!b) return "";
+  return b.limited ? "Live prices busy. Trying again in about 30 seconds." : "Live prices did not answer. Trying again shortly.";
+}
+
 /**
  * One quiet line while the live prices are being tried again after failing: why, in how many seconds, and a button
- * that tries once now (keeping the count of failures, so the waits after it still grow). Nothing while they answer.
+ * that tries once now (keeping the count of failures, so the waits after it still grow). After a rate limit the button
+ * is off and the line says the wait stands. Laid over the board's header row (`absolute inset-0`, the row is
+ * `relative`), so nothing on the board moves when it comes or goes. Its live region is always there and changes only
+ * with retrySpoken, so a reader hears it once, not every second. Nothing drawn while the prices answer.
  */
 export function FeedRetry() {
   const { backoff, now, retryNow } = useLive();
-  if (!backoff) return null;
-  const inS = retryInS(backoff, now);
-  const going = backoff.at === null;
+  const spoken = retrySpoken(backoff);
+  const inS = backoff ? retryInS(backoff, now) : null;
+  const going = backoff?.at === null;
   return (
-    <div data-feed-retry={going ? "now" : "waiting"} className="text-warn flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.6875rem] font-medium max-sm:text-xs">
-      <RotateCw aria-hidden className={cn("size-3", going && "motion-safe:animate-spin")} />
-      <span>
-        {backoff.limited ? "Live prices busy" : "Live prices did not answer"}: {going || !inS ? "trying again now" : `trying again in ${inS}s`}
-      </span>
-      <button
-        type="button"
-        onClick={retryNow}
-        disabled={going}
-        className="text-foreground hover:bg-accent rounded border px-2 py-0.5 font-medium disabled:opacity-50 max-sm:min-h-11 max-sm:px-3"
-      >
-        Retry now
-      </button>
-    </div>
+    <>
+      <p data-feed-retry-spoken role="status" aria-live="polite" className="sr-only">
+        {spoken}
+      </p>
+      {backoff ? (
+        <div
+          data-feed-retry={going ? "now" : backoff.limited ? "limited" : "waiting"}
+          className="bg-card text-warn absolute inset-0 z-10 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[0.6875rem] font-medium max-sm:text-xs"
+        >
+          <RotateCw aria-hidden className={cn("size-3 shrink-0", going && "motion-safe:animate-spin")} />
+          {/* The count is for the eye; the live region above says it once in words. */}
+          <span aria-hidden className="min-w-0">
+            {backoff.limited ? "Live prices busy" : "Live prices did not answer"}: {going || !inS ? "trying again now" : `trying again in ${inS}s`}
+          </span>
+          {/* 44 px to touch: on a phone's width, and on any screen whose main pointer is a finger (a tablet). */}
+          <button
+            type="button"
+            onClick={retryNow}
+            disabled={going || backoff.limited}
+            className="text-foreground hover:bg-accent rounded border px-2 py-0.5 font-medium disabled:opacity-50 max-sm:min-h-11 max-sm:px-3 pointer-coarse:min-h-11 pointer-coarse:px-3"
+          >
+            Retry now
+          </button>
+        </div>
+      ) : null}
+    </>
   );
 }
 

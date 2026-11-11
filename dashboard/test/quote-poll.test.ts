@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { type Backoff, type PollResult, startPoll } from "@/lib/quote-poll";
+import { type Backoff, MANUAL_GAP_MS, type PollResult, startPoll, statusResult } from "@/lib/quote-poll";
 
 const CAP = 30_000;
 
 /** The loop on fake timers: each request waits for the test to answer it. Jitter is fixed at none unless asked. */
-function setup(o: { rand?: () => number } = {}) {
+function setup(o: { rand?: () => number; fresh?: () => boolean } = {}) {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-10-12T15:00:00Z"));
   const listeners = new Set<() => void>();
@@ -40,6 +40,7 @@ function setup(o: { rand?: () => number } = {}) {
     pollMs: 2_000,
     backoff: { capMs: CAP, rand: o.rand ?? (() => 0) },
     onBackoff: (b) => backoffs.push(b),
+    fresh: o.fresh,
   });
   const show = (state: string) => {
     page.visibilityState = state;
@@ -53,6 +54,7 @@ function setup(o: { rand?: () => number } = {}) {
   return {
     stop: poll.stop,
     retryNow: poll.retryNow,
+    failing: poll.failing,
     show,
     answer,
     restore,
@@ -155,6 +157,43 @@ describe("the quotes poll's visibility kick", () => {
     t.show("hidden");
     t.show("visible");
     expect(t.calls()).toBe(3); // the early attempt was still there to use
+    t.stop();
+  });
+
+  it("after a rate limit (429), hiding and showing the tab sends nothing until the cap has run out", async () => {
+    const t = setup();
+    await t.answer("limited");
+    for (let i = 0; i < 30; i++) {
+      t.show("hidden");
+      t.show("visible");
+      t.restore(true);
+      await vi.advanceTimersByTimeAsync(i === 29 ? 999 : 1_000);
+    }
+    expect(t.calls()).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(t.calls()).toBe(2);
+    t.stop();
+  });
+
+  it("with a fresh answer standing, a tab shown again asks for nothing; with an old one, or failing, it asks at once", async () => {
+    let fresh = true;
+    const t = setup({ fresh: () => fresh });
+    await t.answer("ok");
+    t.show("hidden");
+    t.show("visible");
+    expect(t.calls()).toBe(1); // young answer: the timer keeps its turn
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(t.calls()).toBe(2); // and it does come
+    await t.answer("ok");
+    fresh = false;
+    t.show("hidden");
+    t.show("visible");
+    expect(t.calls()).toBe(3); // old answer: at once
+    await t.answer("error");
+    fresh = true; // a run of failures: freshness does not hold back the early attempt
+    t.show("hidden");
+    t.show("visible");
+    expect(t.calls()).toBe(4);
     t.stop();
   });
 
@@ -335,15 +374,65 @@ describe("Retry now", () => {
     t.stop();
   });
 
-  it("each press after a failed one tries once more; it is not used up like the tab's early attempt", async () => {
+  it("each press a second or more after the last tries once more; it is not used up like the tab's early attempt", async () => {
     const t = setup();
     await t.answer("error");
     for (let i = 0; i < 3; i++) {
       t.retryNow();
       await t.answer("error");
+      await vi.advanceTimersByTimeAsync(MANUAL_GAP_MS);
     }
     expect(t.calls()).toBe(4);
-    expect(t.backoffs.at(-1)).toEqual({ failures: 4, at: Date.now() + 16_000, limited: false });
+    expect(t.backoffs.at(-1)).toEqual({ failures: 4, at: Date.now() - MANUAL_GAP_MS + 16_000, limited: false });
+    t.stop();
+  });
+
+  it("a held finger during a plain outage sends at most one attempt a second, to the millisecond", async () => {
+    const t = setup();
+    await t.answer("error"); // waits 2 s
+    t.retryNow(); // at 0: goes
+    expect(t.calls()).toBe(2);
+    await t.answer("error"); // answered at once: the press could go again but for the gap
+    for (let i = 0; i < 99; i++) {
+      t.retryNow();
+      await vi.advanceTimersByTimeAsync(10);
+    }
+    await vi.advanceTimersByTimeAsync(MANUAL_GAP_MS - 1 - t.elapsed());
+    expect(t.elapsed()).toBe(MANUAL_GAP_MS - 1);
+    t.retryNow(); // 999 ms after the last: still nothing
+    expect(t.calls()).toBe(2);
+    await vi.advanceTimersByTimeAsync(1);
+    t.retryNow(); // 1000 ms: goes
+    expect(t.calls()).toBe(3);
+    await t.answer("error");
+    // pressed every 10 ms for 10 s while every attempt fails at once: about one a second, plus the timers' own
+    const before = t.calls();
+    const start = t.elapsed();
+    while (t.elapsed() - start < 10_000) {
+      t.retryNow();
+      while (t.pending()) await t.answer("error");
+      await vi.advanceTimersByTimeAsync(10);
+    }
+    expect(t.calls() - before).toBeLessThanOrEqual(10 + 2);
+    expect(t.calls() - before).toBeGreaterThanOrEqual(9);
+    t.stop();
+  });
+
+  it("after a rate limit (429) does nothing until the cap has run out, however often it is pressed", async () => {
+    const t = setup();
+    await t.answer("limited");
+    for (let i = 0; i < 300; i++) {
+      t.retryNow();
+      await vi.advanceTimersByTimeAsync(CAP / 300 - (i === 299 ? 1 : 0));
+    }
+    expect(t.calls()).toBe(1); // 29 999 ms: not one request
+    await vi.advanceTimersByTimeAsync(1);
+    expect(t.calls()).toBe(2); // the cap's own attempt
+    t.retryNow(); // in flight
+    expect(t.calls()).toBe(2);
+    await t.answer("error"); // a plain failure now: Retry now works again
+    t.retryNow();
+    expect(t.calls()).toBe(3);
     t.stop();
   });
 
@@ -366,6 +455,20 @@ describe("Retry now", () => {
     expect(t.calls()).toBe(3);
   });
 
+  it("says whether it is in a run of failures, so the chain's Try again uses it instead of starting afresh", async () => {
+    const t = setup();
+    await t.answer("ok");
+    expect(t.failing()).toBe(false);
+    await vi.advanceTimersByTimeAsync(2_000);
+    await t.answer("limited");
+    expect(t.failing()).toBe(true);
+    await vi.advanceTimersByTimeAsync(CAP);
+    expect(t.failing()).toBe(true); // its attempt in flight
+    await t.answer("ok");
+    expect(t.failing()).toBe(false);
+    t.stop();
+  });
+
   it("drops the pending timer: no second request follows at the old time", async () => {
     const t = setup();
     await t.answer("error"); // due at 2 s
@@ -377,5 +480,14 @@ describe("Retry now", () => {
     await vi.advanceTimersByTimeAsync(1_000); // 3 s: the 2 s interval after the answer at 1 s
     expect(t.calls()).toBe(3);
     t.stop();
+  });
+});
+
+describe("statusResult", () => {
+  it("maps our routes' statuses: 503 stops, 429 waits the cap, other failures retry, 2xx answers", () => {
+    expect(statusResult(503)).toBe("off");
+    expect(statusResult(429)).toBe("limited");
+    for (const s of [400, 401, 403, 404, 500, 502, 504, 301, 199]) expect(statusResult(s)).toBe("error");
+    for (const s of [200, 204, 299]) expect(statusResult(s)).toBe("ok");
   });
 });

@@ -241,4 +241,36 @@ describe("the bars poll's waits after failures", () => {
     expect(u.f).toHaveBeenCalledTimes(2);
     p.stop();
   });
+
+  it("after a rate limit (429) no kick fetches until the cap has run out: not a shown tab, not a new slot", async () => {
+    const u = flaky();
+    u.status(429);
+    const { p } = rig(u.f);
+    p.start();
+    await vi.advanceTimersByTimeAsync(0);
+    for (let i = 0; i < 30; i++) {
+      p.kick();
+      p.kick();
+      await vi.advanceTimersByTimeAsync(i === 29 ? 999 : 1_000);
+    }
+    expect(u.f).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(u.f).toHaveBeenCalledTimes(2);
+    p.stop();
+  });
+
+  it("a transport failure after a rate limit is a plain failure again: its early kick is allowed", async () => {
+    const u = flaky();
+    u.status(429);
+    const { p } = rig(u.f);
+    p.start();
+    await vi.advanceTimersByTimeAsync(0);
+    u.f.mockRejectedValueOnce(new TypeError("offline"));
+    await vi.advanceTimersByTimeAsync(BARS_RETRY_CAP_MS);
+    expect(u.f).toHaveBeenCalledTimes(2);
+    p.kick();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(u.f).toHaveBeenCalledTimes(3);
+    p.stop();
+  });
 });
