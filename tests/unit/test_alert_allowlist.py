@@ -412,3 +412,14 @@ def test_subprocess_is_not_used_to_send(monkeypatch):
     """Belt and braces: nothing in this module's drivers reaches the network or a shell."""
     monkeypatch.setattr(subprocess, "run", lambda *a, **k: pytest.fail("no subprocess in the allowlist drivers"))
     assert drive_stop_page() and drive_visibility() and drive_pipeline_check()
+
+
+def test_a_job_failed_page_names_its_dated_log_and_how_it_ended():
+    from wt.ops import jobs
+    name = next(iter(sorted(jobs.KNOWN_LOGS)))
+    assert jobs.log_page(Path(f"/x/logs/{name}_20261112.log")) == f"logs/{name}_20261112.log"
+    assert jobs.log_page(Path("/x/logs/NVDA_20261112.log")) == "the job's log"
+    assert jobs.log_page(Path(f"/x/logs/{name}_2026111.log")) == "the job's log"
+    assert jobs.failed_how(True, False, 124) == "was stopped at its deadline"
+    assert jobs.failed_how(False, True, 143) == "was stopped by the system (SIGTERM)"
+    assert jobs.failed_how(False, False, 2) == "exited with code 2" and jobs.failed_how(False, False, T) == "exited with code ?"

@@ -373,3 +373,48 @@ def test_a_crash_still_exits_non_zero(monkeypatch, tmp_path):
     monkeypatch.setattr(evidence, "plan_copies", lambda wt, week, **kw: 1 / 0)
     with pytest.raises(ZeroDivisionError):
         evidence.run(today=dt.date(2026, 10, 23), alerts=FakeAlerts(), vis_state=tmp_path / "v.json")
+
+
+# ---- the weekly job's side (wt.ops.jobs.publish_evidence) ---------------------------------------------------------
+
+class _Log:
+    def __init__(self):
+        self.lines: list[str] = []
+
+    def __call__(self, msg):
+        self.lines.append(msg)
+
+
+class _Daily(FakeAlerts):
+    def once_per_day(self, key, title, message, priority=3, day=None):
+        self.fired.append((key, title, message))
+        return True
+
+
+def test_the_weekly_job_logs_the_evidence_outcome_and_pages_only_a_crash_or_a_hang(monkeypatch, tmp_path):
+    from wt.ops import jobs
+
+    class R:
+        def __init__(self, code, out, err=""):
+            self.returncode, self.stdout, self.stderr = code, out, err
+
+    out = "\n".join([f"  research/forward/archive/2026-W46/file{i}.md" for i in range(60)]
+                    + ["repo visibility: public (last confirmed public on 2026-11-13)",
+                       "evidence 2026-W46: outcome parked, the repository is public, not private; nothing pushed"])
+    for result, paged in ((R(0, out), False), (R(1, "", "Traceback ... ZeroDivisionError"), True)):
+        log, a = _Log(), _Daily()
+        monkeypatch.setattr(jobs.subprocess, "run", lambda *x, r=result, **k: r)
+        jobs.publish_evidence(tmp_path, log, a)
+        assert bool(a.fired) is paged
+        if not paged:
+            assert log.lines[-1].endswith("nothing pushed") and any("repo visibility: public" in x for x in log.lines)
+        else:
+            assert a.fired[0][2] == "See the scorecard log." and "ZeroDivisionError" in log.lines[-1]
+
+    def hang(*x, **k):
+        raise subprocess.TimeoutExpired(["python"], 600)
+    log, a = _Log(), _Daily()
+    monkeypatch.setattr(jobs.subprocess, "run", hang)
+    jobs.publish_evidence(tmp_path, log, a)                # before: a log line and no page at all
+    assert [k for k, _, _ in a.fired] == ["evidence"] and "did not finish" in a.fired[0][2]
+    assert "TimeoutExpired" in log.lines[-1]
