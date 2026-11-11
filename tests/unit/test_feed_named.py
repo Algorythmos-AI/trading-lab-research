@@ -2,28 +2,35 @@
 
 Alpaca's default for an omitted `feed` is the best one the subscription allows (IEX on the free plan, SIP on a paid
 one, IEX again after a lapse), so a request that leaves it out changes its data source with the plan. Two guards:
-`AlpacaREST.get` refuses such a request (wt.data.feeds.require_feed), and the scan below covers the modules that
-call Alpaca with their own HTTP session, and the alpaca-py data request classes, whose `feed=None` is left out of
-the query.
+`AlpacaREST.get` refuses such a request at run time (wt.data.feeds.require_feed), and the static scan
+(tests/unit/feed_scan.py) checks every call in src/, scripts/ and deploy/ that sends one, including the modules with
+their own HTTP session (runner_o, options.live, pipeline_check: the scan is their only guard for now), and every
+alpaca-py data request class, whose `feed=None` is left out of the query.
+
+Known limits of the scan, each covered as stated:
+- A URL whose data base and path both come from elsewhere (a function parameter, or a constant imported from another
+  module and joined to nothing visible): the scan cannot see it is a data request. Anything sent through
+  `AlpacaREST.get` is still refused at run time; the three own-session modules are not, until they call
+  `require_feed` (scheduled after #386).
+- A params dict built in another function, returned and passed in: the scan sees a name with no visible feed and
+  flags it (a false positive is preferred to a miss); the runtime guard covers it through `AlpacaREST.get`.
+- Anything dynamic (getattr, eval, a dict built in a loop from data): not followed.
 """
 from __future__ import annotations
 
-import ast
 import inspect
-import re
 from pathlib import Path
 
 import pytest
 
 import alpaca.data.requests as sdk_requests
+from feed_scan import scan
 from wt.data import alpaca as alpaca_data
 from wt.data.alpaca import AlpacaREST, HybridFeed, RateLimiter
 from wt.data.feeds import FeedNotNamed, feeds_for, require_feed
 
 ROOT = Path(__file__).resolve().parents[2]
 SCAN = ("src", "scripts", "deploy")
-# A data path that takes a feed: every stock endpoint, and the option quote endpoints (snapshots and latest).
-FEED_PATH = re.compile(r"/v2/stocks/|/v1beta1/options/(snapshots|(quotes|trades|bars)/latest)")
 EXEMPT = {"src/wt/data/feeds.py"}          # the rule's own home names the paths it checks
 # The alpaca-py request classes with a `feed` field (read from the installed SDK, never listed by hand) and the
 # streams, whose own default is a fixed feed but which must still name it here.
@@ -32,124 +39,158 @@ SDK_FEED_CALLS = {name for name, cls in vars(sdk_requests).items()
                                                                                           "OptionDataStream"}
 
 # Requests that do not name their feed, each awaiting the owner's decision. Phase 1 of B9 found none, so the list is
-# empty. An entry is "path::function" (or "path:line: Class" for an SDK call) with the comment
-# "implicit: awaiting the owner's decision (B9)". The scan fails on a new one, and on an entry that no longer exists.
+# empty. An entry is the scan's "path:line: why" with the comment "implicit: awaiting the owner's decision (B9)".
+# The scan fails on a new one, and on an entry that no longer exists.
 KNOWN_IMPLICIT: dict[str, str] = {}
-
-
-def _text(node: ast.AST) -> str | None:
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return node.value
-    if isinstance(node, ast.JoinedStr):
-        return "".join(v.value if isinstance(v, ast.Constant) and isinstance(v.value, str) else "{}"
-                       for v in node.values)
-    return None
-
-
-def _names_feed(n: ast.AST) -> bool:
-    """`n` is `{"feed": ...}`, `feed=...` or `x["feed"] = ...`."""
-    if isinstance(n, ast.Dict):
-        return any(isinstance(k, ast.Constant) and k.value == "feed" for k in n.keys)
-    if isinstance(n, ast.keyword):
-        return n.arg == "feed"
-    return isinstance(n, ast.Assign) and any(isinstance(t, ast.Subscript) and isinstance(t.slice, ast.Constant)
-                                             and t.slice.value == "feed" for t in n.targets)
-
-
-def unnamed(rel: str, source: str) -> list[str]:
-    """Each function that writes a feed-taking data path but names no feed, and each SDK data call without `feed=`."""
-    tree = ast.parse(source)
-    out: list[str] = []
-
-    def scope(node: ast.AST, qual: str) -> None:
-        own: list[ast.AST] = []                  # this scope's nodes, nested functions and classes left out
-        stack = list(ast.iter_child_nodes(node))
-        while stack:
-            n = stack.pop()
-            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                scope(n, f"{qual}.{n.name}" if qual else n.name)
-                continue
-            if isinstance(n, ast.Expr) and _text(n.value) is not None:
-                continue                         # a docstring or a bare string sends nothing
-            own.append(n)
-            stack.extend(ast.iter_child_nodes(n))
-        if any((t := _text(n)) is not None and FEED_PATH.search(t) for n in own):
-            if not any(_names_feed(n) for n in own):
-                out.append(f"{rel}::{qual or '<module>'}")
-
-    scope(tree, "")
-    for n in ast.walk(tree):
-        if isinstance(n, ast.Call):
-            name = n.func.id if isinstance(n.func, ast.Name) else n.func.attr if isinstance(n.func, ast.Attribute) else ""
-            if name in SDK_FEED_CALLS and not any(k.arg == "feed" for k in n.keywords):
-                out.append(f"{rel}:{n.lineno}: {name}")
-    return out
+# The raw data requests the B9 inventory found: the scan must keep seeing each one (by file), or it passes vacuously.
+KNOWN_REQUESTS = {"scripts/r3_run.py": 1, "src/wt/data/alpaca.py": 1, "src/wt/data/tape.py": 1,
+                  "src/wt/live/runner_b.py": 2, "src/wt/live/runner_o.py": 4, "src/wt/options/live.py": 2,
+                  "src/wt/options/pipeline_check.py": 2, "src/wt/scanner/features.py": 1}
 
 
 def _sources() -> list[Path]:
     return sorted(p for d in SCAN for p in (ROOT / d).rglob("*") if p.is_file() and "__pycache__" not in p.parts)
 
 
-def _found() -> list[str]:
-    out: list[str] = []
+def _scan_tree() -> tuple[list[str], list[str]]:
+    problems: list[str] = []
+    seen: list[str] = []
     for p in _sources():
         rel = p.relative_to(ROOT).as_posix()
         if rel in EXEMPT:
             continue
         if p.suffix == ".py":
-            out += unnamed(rel, p.read_text())
+            problems += scan(rel, p.read_text(), SDK_FEED_CALLS, seen)
         elif "data.alpaca.markets" in p.read_text(errors="replace"):
-            out.append(f"{rel}: a data request outside Python")       # deploy's shell scripts call no data host
-    return out
+            problems.append(f"{rel}: a data request outside Python")     # deploy's shell scripts call no data host
+    return problems, seen
 
 
-def test_scan_reads_the_modules_with_their_own_http() -> None:
-    rels = {p.relative_to(ROOT).as_posix() for p in _sources()}
-    for f in ("src/wt/live/runner_o.py", "src/wt/live/runner_b.py", "src/wt/options/live.py",
-              "src/wt/options/pipeline_check.py", "src/wt/data/alpaca.py", "src/wt/data/tape.py",
-              "scripts/r3_run.py", "scripts/options_clone_dry_run.py"):
-        assert f in rels
+def _scan(src: str) -> list[str]:
+    return scan("x.py", src, SDK_FEED_CALLS)
+
+
+def test_scan_sees_every_known_request() -> None:
+    _, seen = _scan_tree()
+    counts: dict[str, int] = {}
+    for x in seen:
+        counts[x.rsplit(":", 1)[0]] = counts.get(x.rsplit(":", 1)[0], 0) + 1
+    assert counts == KNOWN_REQUESTS
     assert {"StockBarsRequest", "StockSnapshotRequest", "StockLatestQuoteRequest", "OptionChainRequest",
             "OptionSnapshotRequest"} <= SDK_FEED_CALLS
     assert "OptionBarsRequest" not in SDK_FEED_CALLS and "NewsRequest" not in SDK_FEED_CALLS
 
 
 def test_no_new_request_without_a_feed() -> None:
-    assert [x for x in _found() if x not in KNOWN_IMPLICIT] == []
+    problems, _ = _scan_tree()
+    assert [x for x in problems if x not in KNOWN_IMPLICIT] == []
 
 
 def test_every_known_exception_still_exists() -> None:
-    found = set(_found())
-    assert [x for x in KNOWN_IMPLICIT if x not in found] == []
+    problems, _ = _scan_tree()
+    assert [x for x in KNOWN_IMPLICIT if x not in problems] == []
 
 
-def test_the_scan_flags_a_missing_feed() -> None:
-    bad = '''
-def snap(s, syms):
-    return s.get("https://data.alpaca.markets/v2/stocks/snapshots", {"symbols": ",".join(syms)})
+# The cases the B9 review found the first scan missed (one function scope, a leading slash, one piece): each must now
+# be caught.
+MISSED = {
+    "two requests in one function, only one names a feed": """
+def f(s):
+    a = s.get(f"{DATA}/v2/stocks/bars", {"symbols": "SPY", "feed": "iex"})
+    b = s.get(f"{DATA}/v2/stocks/snapshots", {"symbols": "SPY"})
+""",
+    "an unrelated feed= elsewhere hides a request": """
+def f(s, cfg):
+    log(feed=cfg.feed)
+    return s.get(DATA + "/v2/stocks/quotes/latest", {"symbols": "SPY"})
+""",
+    "no leading slash": """
+def f(s):
+    return s.get(DATA_URL + "v2/stocks/bars", {"symbols": "SPY"})
+""",
+    "the path in pieces beside a data base": """
+def f(s):
+    return s.get(DATA + "/v2/" + "stocks/bars", {"symbols": "SPY"})
+""",
+    "a path through a module constant and a loop variable": """
+PATH = "v1beta1/options/snapshots/SPY"
+def f(s, paths):
+    s.get(f"https://data.alpaca.markets/{PATH}", {"limit": "1000"})
+    for p in paths:
+        s.get(DATA_HOST + p, {"limit": "1000"})
+""",
+    '"feed": None': """
+def f(s):
+    return s.get(f"{DATA}/v2/stocks/bars", {"symbols": "SPY", "feed": None})
+""",
+    "a feed set only under a condition": """
+def f(s, feed):
+    p = {"symbols": "SPY"}
+    if feed:
+        p["feed"] = feed
+    return s.get(f"{DATA}/v2/stocks/bars", p)
+""",
+    "a later update, pop or del on the same dict": """
+def f(s, extra):
+    p = {"symbols": "SPY", "feed": "iex"}
+    p.update(extra)
+    q = {"symbols": "SPY", "feed": "iex"}
+    q.pop("feed")
+    r = {"symbols": "SPY", "feed": "iex"}
+    del r["feed"]
+    return s.get(f"{DATA}/v2/stocks/bars", p), s.get(f"{DATA}/v2/stocks/bars", q), s.get(f"{DATA}/v2/stocks/bars", r)
+""",
+    "an aliased SDK request class": """
+from alpaca.data.requests import StockBarsRequest as Bars
+def f(c):
+    return c.get_stock_bars(Bars(symbol_or_symbols="SPY", timeframe=tf))
+""",
+    "model_validate without a feed, and feed=None": """
+from alpaca.data.requests import StockLatestQuoteRequest
+def f(c):
+    a = StockLatestQuoteRequest.model_validate({"symbol_or_symbols": "SPY"})
+    b = StockLatestQuoteRequest(symbol_or_symbols="SPY", feed=None)
+""",
+}
 
-def chain(s, root):
-    return s.get(f"{HOST}/v1beta1/options/snapshots/{root}", {"limit": "1000"})
 
-def bars(c):
-    return c.get_stock_bars(StockBarsRequest(symbol_or_symbols="SPY", timeframe=TimeFrame.Minute))
-'''
-    assert sorted(unnamed("x.py", bad)) == ["x.py:9: StockBarsRequest", "x.py::chain", "x.py::snap"]
-    good = '''
+@pytest.mark.parametrize("case", list(MISSED))
+def test_a_missed_case_is_now_caught(case: str) -> None:
+    got = _scan(MISSED[case])
+    assert got, case
+    if case == "a later update, pop or del on the same dict":
+        assert len(got) == 3
+    if case == "two requests in one function, only one names a feed":
+        assert got == ["x.py:4: a data request names no feed (f)"]
+    if case in ("model_validate without a feed, and feed=None",
+                "a path through a module constant and a loop variable"):
+        assert len(got) == 2
+
+
+def test_the_scan_passes_requests_that_name_their_feed() -> None:
+    good = """
+from alpaca.data.requests import StockBarsRequest as Bars
 def snap(s, syms, feed):
     return s.get("https://data.alpaca.markets/v2/stocks/snapshots", {"symbols": ",".join(syms), "feed": feed})
 
-def page(s, p):
+def page(s, p, token):
     p["feed"] = "iex"
-    return s.get(f"{HOST}/v2/stocks/bars", p)
+    while token:
+        p = {**p, "page_token": token}
+        token = s.get(f"{DATA}/v2/stocks/bars", p)
 
-def news(s):
-    return s.get(f"{HOST}/v1beta1/news", {}), s.get(f"{HOST}/v1beta1/options/bars", {})
+def query(s, feed):
+    return s.get(f"{DATA}/v2/stocks/quotes/latest?symbols=SPY&feed={feed}")
 
-def stream(k, s):
-    return StockDataStream(k, s, feed=DataFeed.IEX), StockBarsRequest(symbol_or_symbols="SPY", feed="sip")
-'''
-    assert unnamed("y.py", good) == []
+def unrelated(s, extra):
+    p = {"feed": "iex"}
+    p.update({"page_token": "t"})
+    return s.get(f"{DATA}/v1beta1/news", {}), s.get(f"{DATA}/v1beta1/options/bars", {}), s.get(DATA + "/v2/stocks/meta/exchanges", {})
+
+def sdk(k, s):
+    return StockDataStream(k, s, feed=DataFeed.IEX), Bars(symbol_or_symbols="SPY", feed="sip"), Bars.model_validate({"feed": "iex"})
+"""
+    assert _scan(good) == []
 
 
 def test_the_bars_default_is_a_named_feed() -> None:
@@ -161,11 +202,13 @@ def test_the_bars_default_is_a_named_feed() -> None:
 def test_feeds_for_paths() -> None:
     d = alpaca_data.DATA
     assert feeds_for(f"{d}/v2/stocks/bars") == feeds_for(f"{d}/v2/stocks/quotes/latest")
-    assert "iex" in (feeds_for(f"{d}/v2/stocks/snapshots") or ()) and "sip" in (feeds_for(f"{d}/v2/stocks/x") or ())
+    for path in ("snapshots", "trades", "quotes", "bars/latest", "SPY/bars", "SPY/snapshot", "SPY/quotes/latest"):
+        assert {"iex", "sip"} <= set(feeds_for(f"{d}/v2/stocks/{path}") or ())
     assert feeds_for(f"{d}/v1beta1/options/snapshots/SPY") == ("indicative", "opra")
     assert feeds_for(f"{d}/v1beta1/options/quotes/latest") == ("indicative", "opra")
     for none in (f"{d}/v1beta1/news", f"{d}/v1beta1/options/bars", f"{alpaca_data.TRADING}/v2/calendar",
-                 "https://example.test/v2/stocks/bars"):
+                 "https://example.test/v2/stocks/bars", f"{d}/v2/stocks/meta/exchanges",
+                 f"{d}/v2/stocks/meta/conditions/trade", f"{d}/v2/stocks/auctions"):
         assert feeds_for(none) is None
 
 
@@ -174,9 +217,14 @@ def test_require_feed() -> None:
     require_feed(f"{d}/v2/stocks/bars", {"feed": "iex"})
     require_feed(f"{d}/v1beta1/options/snapshots/SPY", {"feed": "indicative"})
     require_feed(f"{d}/v1beta1/news", None)
+    require_feed(f"{d}/v2/stocks/meta/exchanges", None)                   # metadata takes no feed
+    require_feed(f"{d}/v2/stocks/bars?symbols=SPY&feed=sip", {"symbols": "SPY"})     # a feed in the query
+    require_feed(f"{d}/v1beta1/options/snapshots/SPY?feed=opra", None)
     for url, params in ((f"{d}/v2/stocks/bars", None), (f"{d}/v2/stocks/bars", {"symbols": "SPY"}),
                         (f"{d}/v2/stocks/bars", {"feed": ""}), (f"{d}/v2/stocks/bars", {"feed": "opra"}),
-                        (f"{d}/v1beta1/options/snapshots/SPY", {"feed": "iex"})):
+                        (f"{d}/v1beta1/options/snapshots/SPY", {"feed": "iex"}),
+                        (f"{d}/v2/stocks/bars?feed=", None), (f"{d}/v2/stocks/bars?feed=opra", None),
+                        (f"{d}/v2/stocks/bars?feed=sip", {"feed": "bogus"})):
         with pytest.raises(FeedNotNamed, match="must name its feed"):
             require_feed(url, params)
 
