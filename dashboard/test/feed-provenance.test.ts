@@ -4,15 +4,15 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
-import { configuredFeed, DEFAULT_FEED, FEED_REFUSED, FeedMisconfigured, feedSetting, requireFeed, resetFeedWarning } from "@/lib/alpaca-feed";
+import { configuredFeed, DEFAULT_FEED, FEED_PLAN_REFUSED, FEED_REFUSED, FeedMisconfigured, feedSetting, requireFeed, resetFeedWarning } from "@/lib/alpaca-feed";
 import { type BarsResponse, fetchBars, resetBarsCache } from "@/lib/bars";
 import { handleBars } from "@/lib/bars-route";
 import { TRADE_STALE_MS } from "@/lib/entry-checks";
-import { ageSeconds, ageStale, ageText, type DataFeed, feedAges, feedLabel, isDataFeed, newestTradeAt, recordFeed } from "@/lib/feed-provenance";
+import { ageSeconds, ageStale, ageText, type DataFeed, feedAges, feedLabel, isDataFeed, recordFeed, tradeAgeRange } from "@/lib/feed-provenance";
 import { fetchQuotes, type QuoteResponse, resetQuoteCache } from "@/lib/quote";
 import { handleQuote } from "@/lib/quote-route";
 import { FEED_STALE_MS, serverNow } from "@/lib/trade-state";
-import { FeedFacts, LiveContext } from "@/components/client/live-layer";
+import { FeedFacts, FeedPill, LiveContext } from "@/components/client/live-layer";
 import type { Feed } from "@/components/client/use-quotes";
 
 const KEYS = { id: "test-key-id", secret: "test-key-secret" };
@@ -172,6 +172,54 @@ describe("the routes with a refused ALPACA_FEED", () => {
   });
 });
 
+describe("sip refused by the data plan", () => {
+  const quote = () => handleQuote(new Request("https://lab.example/api/quote?s=SPY"), NOW);
+  const bars = () => handleBars(new Request("https://lab.example/api/bars?s=SPY"), NOW);
+  const live = (feed: string, status: number) => {
+    vi.stubEnv("DASHBOARD_FIXTURE", "");
+    vi.stubEnv("ALPACA_API_KEY_ID", "test-key-id");
+    vi.stubEnv("ALPACA_API_SECRET_KEY", "test-key-secret");
+    vi.stubEnv("ALPACA_FEED", feed);
+    const f = vi.fn<typeof fetch>(async () => new Response("upstream-body", { status }));
+    vi.stubGlobal("fetch", f);
+    resetQuoteCache();
+    resetBarsCache();
+    return f;
+  };
+  const planLines = () => logged.filter((l) => l.includes('"outcome":"plan"'));
+
+  it("sip with a 403 is not configured, why plan (the page shows off and stops), logged once as its own outcome", async () => {
+    const f = live("sip", 403);
+    for (const res of [await quote(), await bars(), await quote()]) {
+      expect(res.status).toBe(503);
+      expect(await res.json()).toEqual(FEED_PLAN_REFUSED);
+    }
+    expect(new URL(String(f.mock.calls[0]![0])).searchParams.get("feed")).toBe("sip");
+    expect(planLines()).toHaveLength(1);
+    expect(JSON.parse(planLines()[0]!)).toMatchObject({ evt: "alpaca.feed", outcome: "plan", feed: "sip", status: 403 });
+    expect(logged.join("\n")).not.toContain("upstream-body");
+  });
+
+  it("a 403 on iex stays a failure (502), as before", async () => {
+    live("iex", 403);
+    expect((await quote()).status).toBe(502);
+    expect((await bars()).status).toBe(502);
+    expect(planLines()).toHaveLength(0);
+  });
+
+  it("a 401 on sip stays a failure (502): bad keys are not the plan", async () => {
+    live("sip", 401);
+    expect((await quote()).status).toBe(502);
+    expect((await bars()).status).toBe(502);
+    expect(planLines()).toHaveLength(0);
+  });
+
+  it("a 429 on sip is still the rate limit", async () => {
+    live("sip", 429);
+    expect((await quote()).status).toBe(429);
+  });
+});
+
 // ---- the two ages ---------------------------------------------------------------------------------------------------
 const TRADE = Date.parse("2026-10-12T15:00:00Z");
 const quoteAt = (ms: number) => ({ at: new Date(ms).toISOString() });
@@ -201,11 +249,17 @@ describe("the age words", () => {
   });
 });
 
+/** One name's ages, flat: its last trade and the answer. */
+const flat = (a: ReturnType<typeof feedAges>) => {
+  expect(a.trade.newestMs).toBe(a.trade.oldestMs);
+  return { lastTradeMs: a.trade.newestMs, checkedMs: a.checkedMs };
+};
+
 describe("feedAges", () => {
   it("measures the last trade from Alpaca's trade time on the server's clock (trade-state's serverNow)", () => {
     for (const age of [0, 1_000, 59_000, 60_000, TRADE_STALE_MS, FEED_STALE_MS]) {
       const asOf = new Date(TRADE + age).toISOString();
-      const a = feedAges({ asOf, receivedAt: 5_000_000, quotes: { SPY: quoteAt(TRADE) } }, ["SPY"], 5_000_000);
+      const a = flat(feedAges({ asOf, receivedAt: 5_000_000, quotes: { SPY: quoteAt(TRADE) } }, ["SPY"], 5_000_000));
       expect(a).toEqual({ lastTradeMs: age, checkedMs: 0 });
       expect(a.lastTradeMs).toBe(serverNow(asOf, 5_000_000, 5_000_000).getTime() - TRADE);
     }
@@ -215,7 +269,7 @@ describe("feedAges", () => {
     // The server answered at TRADE + 12 s; the browser got it, and looks again 3 s later, on its own clock.
     const asOf = new Date(TRADE + 12_000).toISOString();
     const real = Date.parse("2026-10-12T15:00:12Z");
-    const read = (skew: number) => feedAges({ asOf, receivedAt: real + skew, quotes: { SPY: quoteAt(TRADE) } }, ["SPY"], real + skew + 3_000);
+    const read = (skew: number) => flat(feedAges({ asOf, receivedAt: real + skew, quotes: { SPY: quoteAt(TRADE) } }, ["SPY"], real + skew + 3_000, "2026-10-12"));
     const right = read(0);
     expect(right).toEqual({ lastTradeMs: 15_000, checkedMs: 3_000 });
     expect(read(5 * 60_000)).toEqual(right);
@@ -229,32 +283,68 @@ describe("feedAges", () => {
     for (let i = 0; i < 30; i++) {
       const srv = TRADE + 10_000 + i * 2_000;
       const browser = srv - 7 * 60_000;
-      seen.push(feedAges({ asOf: new Date(srv).toISOString(), receivedAt: browser, quotes }, ["SPY"], browser + 1_000));
+      seen.push(flat(feedAges({ asOf: new Date(srv).toISOString(), receivedAt: browser, quotes }, ["SPY"], browser + 1_000)));
     }
     expect(seen.every((a) => a.checkedMs === 1_000)).toBe(true);
     expect(seen.map((a) => a.lastTradeMs)).toEqual(seen.map((_, i) => 11_000 + i * 2_000));
     expect(ageStale("trade", seen.at(-1)!.lastTradeMs!)).toBe(false);
     // and once the answers stop, both grow
     const last = { asOf: new Date(TRADE + 10_000).toISOString(), receivedAt: 1_000_000, quotes };
-    expect(feedAges(last, ["SPY"], 1_000_000 + 30_000)).toEqual({ lastTradeMs: 40_000, checkedMs: 30_000 });
+    expect(flat(feedAges(last, ["SPY"], 1_000_000 + 30_000))).toEqual({ lastTradeMs: 40_000, checkedMs: 30_000 });
     expect(ageStale("checked", 30_000)).toBe(true);
   });
 
-  it("takes the newest trade among the names asked for, and nothing it cannot read", () => {
-    const quotes = { SPY: quoteAt(TRADE - 30_000), QQQ: quoteAt(TRADE - 5_000), AAPL: quoteAt(TRADE), BAD: { at: "x" } };
-    expect(newestTradeAt(quotes, ["SPY", "QQQ"])).toBe(TRADE - 5_000);
-    expect(newestTradeAt(quotes, null)).toBe(TRADE);
-    expect(newestTradeAt(quotes, ["BAD", "NONE"])).toBeNull();
-    const asOf = new Date(TRADE).toISOString();
-    expect(feedAges({ asOf, receivedAt: 0, quotes }, ["NONE"], 0)).toEqual({ lastTradeMs: null, checkedMs: 0 });
+  it("reads every quote in the answer when no names are given", () => {
+    const quotes = { SPY: quoteAt(TRADE - 30_000), QQQ: quoteAt(TRADE - 5_000) };
+    const a = feedAges({ asOf: new Date(TRADE).toISOString(), receivedAt: 0, quotes }, null, 0);
+    expect(a.trade).toEqual({ newestMs: 5_000, oldestMs: 30_000, traded: 2, noTrade: 0 });
   });
 
   it("knows nothing before the browser has a clock, or from an unreadable answer; never below zero", () => {
     const quotes = { SPY: quoteAt(TRADE + 5_000) };
-    expect(feedAges({ asOf: new Date(TRADE).toISOString(), receivedAt: 0, quotes }, null, null)).toEqual({ lastTradeMs: null, checkedMs: null });
-    expect(feedAges({ asOf: "nope", receivedAt: 0, quotes }, null, 0)).toEqual({ lastTradeMs: null, checkedMs: null });
+    expect(flat(feedAges({ asOf: new Date(TRADE).toISOString(), receivedAt: 0, quotes }, null, null))).toEqual({ lastTradeMs: null, checkedMs: null });
+    expect(flat(feedAges({ asOf: "nope", receivedAt: 0, quotes }, null, 0))).toEqual({ lastTradeMs: null, checkedMs: null });
     // a trade stamped a moment after the server's answer reads 0, not a negative age
-    expect(feedAges({ asOf: new Date(TRADE).toISOString(), receivedAt: 0, quotes }, null, 0)).toEqual({ lastTradeMs: 0, checkedMs: 0 });
+    expect(flat(feedAges({ asOf: new Date(TRADE).toISOString(), receivedAt: 0, quotes }, null, 0))).toEqual({ lastTradeMs: 0, checkedMs: 0 });
+  });
+});
+
+describe("tradeAgeRange: the spread of last-trade ages across the board's names", () => {
+  const S = "2026-10-12";
+  const NOW = TRADE + 60_000;
+  it("one name: both ends are its age", () => {
+    expect(tradeAgeRange({ SPY: quoteAt(TRADE) }, ["SPY"], NOW, S)).toEqual({ newestMs: 60_000, oldestMs: 60_000, traded: 1, noTrade: 0 });
+  });
+
+  it("several names: the newest and the oldest, so a busy name never hides a quiet one", () => {
+    const q = { SPY: quoteAt(NOW - 1_000), QQQ: quoteAt(NOW - 90_000), AAPL: quoteAt(NOW - 20_000) };
+    expect(tradeAgeRange(q, ["SPY", "QQQ", "AAPL"], NOW, S)).toEqual({ newestMs: 1_000, oldestMs: 90_000, traded: 3, noTrade: 0 });
+  });
+
+  it("equal times give equal ends", () => {
+    const q = { SPY: quoteAt(TRADE), QQQ: quoteAt(TRADE) };
+    expect(tradeAgeRange(q, ["SPY", "QQQ"], NOW, S)).toEqual({ newestMs: 60_000, oldestMs: 60_000, traded: 2, noTrade: 0 });
+  });
+
+  it("a name with no quote, an unreadable time or yesterday's trade is counted apart, never as fresh", () => {
+    const q = { SPY: quoteAt(NOW - 2_000), BAD: { at: "x" }, OLD: quoteAt(Date.parse("2026-10-09T19:59:00Z")) };
+    expect(tradeAgeRange(q, ["SPY", "QQQ", "BAD", "OLD"], NOW, S)).toEqual({ newestMs: 2_000, oldestMs: 2_000, traded: 1, noTrade: 3 });
+    expect(tradeAgeRange(q, ["QQQ"], NOW, S)).toEqual({ newestMs: null, oldestMs: null, traded: 0, noTrade: 1 });
+    // without a session every readable trade counts
+    expect(tradeAgeRange(q, ["SPY", "OLD"], NOW, null).traded).toBe(2);
+  });
+
+  it("one name past the stale limit makes the oldest end stale while the newest is fresh", () => {
+    const q = { SPY: quoteAt(NOW - 1_000), QQQ: quoteAt(NOW - TRADE_STALE_MS - 1_000) };
+    const r = tradeAgeRange(q, ["SPY", "QQQ"], NOW, S);
+    expect(ageStale("trade", r.newestMs!)).toBe(false);
+    expect(ageStale("trade", r.oldestMs!)).toBe(true);
+  });
+
+  it("a provider time ahead of the server's clock reads 0, and no clock reads nothing", () => {
+    const q = { SPY: quoteAt(NOW + 4_000), QQQ: quoteAt(NOW - 10_000) };
+    expect(tradeAgeRange(q, ["SPY", "QQQ"], NOW, S)).toEqual({ newestMs: 0, oldestMs: 10_000, traded: 2, noTrade: 0 });
+    expect(tradeAgeRange(q, ["SPY", "QQQ"], null, S)).toEqual({ newestMs: null, oldestMs: null, traded: 2, noTrade: 0 });
   });
 });
 
@@ -281,10 +371,11 @@ describe("FeedFacts", () => {
     trails: {},
     ...over,
   });
-  const draw = (feed: Feed, now: number | null) =>
+  const draw = (feed: Feed, now: number | null, symbols: string[] = ["SPY"]) =>
     renderToStaticMarkup(
-      createElement(LiveContext.Provider, { value: { feed, session: "2026-10-12", now, backoff: null, retryNow: () => undefined } }, createElement(FeedFacts, { where: "board", symbols: ["SPY"] })),
+      createElement(LiveContext.Provider, { value: { feed, session: "2026-10-12", now, backoff: null, retryNow: () => undefined } }, createElement(FeedFacts, { where: "board", symbols })),
     );
+  const q = (at: number) => ({ price: 1, at: new Date(at).toISOString(), open: null, high: null, low: null, day: "2026-10-12", prev_close: null, vwap: null });
   const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 
   it("names the feed the answer reported, says it is fetched every 2 s, and gives both ages apart", () => {
@@ -312,7 +403,44 @@ describe("FeedFacts", () => {
     for (const feed of [{ status: "off" }, { status: "off", why: "feed" }, { status: "error" }, { status: "loading" }] as Feed[]) expect(draw(feed, 1_000_000)).toBe("");
   });
 
+  it("several names show the spread, newest to oldest, coloured by the oldest end", () => {
+    // the browser looks 3 s after the answer: the server's now is TRADE + 15 s
+    const feed = okFeed({ quotes: { SPY: q(TRADE + 14_000), QQQ: q(TRADE - 75_000) } });
+    const html = draw(feed, 1_003_000, ["SPY", "QQQ"]);
+    expect(text(html)).toBe("IEX · fetched every 2 s, not streamed last trades 1 s to 1 min ago checked 3 s ago");
+    expect(html).toContain('data-age-range="two"');
+    expect(html).toContain('data-trade-stale="false"');
+    const stale = draw(okFeed({ quotes: { SPY: q(TRADE + 14_000), QQQ: q(TRADE - 200_000) } }), 1_003_000, ["SPY", "QQQ"]);
+    expect(stale).toContain('data-trade-stale="true"');
+    expect(stale.match(/text-warn/g)).toHaveLength(1);
+  });
+
+  it("both ends reading the same show one value, the other end's room kept but hidden", () => {
+    const html = draw(okFeed({ quotes: { SPY: q(TRADE), QQQ: q(TRADE) } }), 1_003_000, ["SPY", "QQQ"]);
+    expect(html).toContain('data-age-range="one"');
+    expect(html).toMatch(/data-age-range="one" aria-hidden="true" class="[^"]*invisible/);
+  });
+
+  it("a name with no trade today is said apart, in the warning colour, and never freshens the spread", () => {
+    const html = draw(okFeed({ quotes: { SPY: q(TRADE), OLD: q(Date.parse("2026-10-09T19:59:00Z")) } }), 1_003_000, ["SPY", "OLD", "QQQ"]);
+    expect(text(html)).toBe("IEX · fetched every 2 s, not streamed last trade 15 s ago 2 names with no trade today checked 3 s ago");
+    expect(html).toContain('data-feed-no-trade="2"');
+    const none = draw(okFeed({ quotes: {} }), 1_003_000, ["SPY"]);
+    expect(text(none)).toBe("IEX · fetched every 2 s, not streamed no trade today checked 3 s ago");
+    expect(none).not.toContain('data-feed-age="trade"');
+  });
+
   it("before the browser has a clock the slots hold a dash, never a made-up age", () => {
     expect(text(draw(okFeed(), null))).toBe("IEX · fetched every 2 s, not streamed last trade – ago checked – ago");
+  });
+
+  it("the pill says why the prices are off when it is the setting or the plan, and stays as it was for missing keys", () => {
+    const pill = (feed: Feed) =>
+      renderToStaticMarkup(createElement(LiveContext.Provider, { value: { feed, session: "2026-10-12", now: 1, backoff: null, retryNow: () => undefined } }, createElement(FeedPill)))
+        .replace(/<[^>]+>/g, "")
+        .trim();
+    expect(pill({ status: "off" })).toBe("Live off");
+    expect(pill({ status: "off", why: "feed" })).toBe("Live off: ALPACA_FEED is not iex or sip");
+    expect(pill({ status: "off", why: "plan" })).toBe("Live off: SIP is not on this data plan");
   });
 });

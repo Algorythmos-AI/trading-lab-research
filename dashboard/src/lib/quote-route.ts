@@ -1,5 +1,5 @@
 import "server-only";
-import { configuredFeed, type DataFeed, FEED_REFUSED } from "./alpaca-feed";
+import { configuredFeed, type DataFeed, FEED_PLAN_REFUSED, FEED_REFUSED, planRefused } from "./alpaca-feed";
 import { FIXTURE_OFFSET_ATR, FLAKY_COOKIE, flagsFromCookieHeader, flakyCountFromCookieHeader, flakyFails, tickPrice, type VariantFlag } from "./fixture-variants";
 import { SCRIPT_ANSWER_LAG_MS, scriptQuote, scriptStep, stepFromCookieHeader, stepInstant } from "./fixture-script";
 import { logEvent } from "./log";
@@ -74,8 +74,9 @@ async function fixtureAnswer(symbols: string[], now: Date, flags: ReadonlySet<Va
 
 /**
  * GET /api/quote?s=SPY,QQQ: live last trades from the configured Alpaca feed (alpaca-feed.ts), named in the answer's
- * `feed`. 503 until the keys are set, or while ALPACA_FEED is not a feed, in fixture mode too (the page then stops
- * asking), 429 when Alpaca rate-limits us (the page waits its longest), 502 for any other upstream failure.
+ * `feed`. 503 until the keys are set, while ALPACA_FEED is not a feed (in fixture mode too), or when it is sip and
+ * Alpaca refuses it with 403 (not on the data plan): the page then stops asking. 429 when Alpaca rate-limits us (the
+ * page waits its longest), 502 for any other upstream failure.
  */
 export async function handleQuote(req: Request, now: Date = new Date()): Promise<Response> {
   const symbols = parseSymbols(new URL(req.url).searchParams.get("s"));
@@ -101,6 +102,8 @@ export async function handleQuote(req: Request, now: Date = new Date()): Promise
   try {
     return json(200, await fetchQuotes(symbols, keys, now, fetch, undefined, { feed }));
   } catch (e) {
+    // SIP set but not on the data plan: off, as for a refused setting, never a retry for ever.
+    if (planRefused(feed, e)) return json(503, FEED_PLAN_REFUSED);
     logEvent("quote.fetch", { outcome: "error", error: e instanceof Error ? e.name : "unknown" });
     // A rate limit is passed on as one, so the page waits its longest; anything else is 502.
     const status = upstreamStatus(e);

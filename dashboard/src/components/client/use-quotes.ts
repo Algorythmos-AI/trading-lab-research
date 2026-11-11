@@ -11,8 +11,9 @@ export const QUOTES_RETRY_CAP_MS = 30_000;
 
 export type Feed =
   | { status: "loading" }
-  /** `why` "feed": the server refused its ALPACA_FEED setting; otherwise the keys are not set. */
-  | { status: "off"; why?: "feed" }
+  /** `why` "feed": the server refused its ALPACA_FEED setting; "plan": SIP is set but not on the data plan; otherwise
+   * the keys are not set. */
+  | { status: "off"; why?: "feed" | "plan" }
   | { status: "error" }
   | {
       status: "ok";
@@ -59,7 +60,7 @@ export function useQuoteFeed(symbols: string, enabled = true): QuoteFeed {
           // not configured: no point polling until the page is reloaded. Any prices held are dropped with it.
           const why = await res
             .json()
-            .then((b: { why?: unknown }) => (b?.why === "feed" ? ("feed" as const) : undefined))
+            .then((b: { why?: unknown }) => (b?.why === "feed" || b?.why === "plan" ? (b.why as "feed" | "plan") : undefined))
             .catch(() => undefined);
           if (!stopped) setFeed(why ? { status: "off", why } : { status: "off" });
           return "off";

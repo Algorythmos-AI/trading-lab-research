@@ -1,6 +1,7 @@
 import "server-only";
 import { type DataFeed, isDataFeed } from "./feed-provenance";
 import { logEvent } from "./log";
+import { UpstreamError } from "./upstream";
 
 // Which Alpaca stock feed the live prices, the session bars and the server's shadow check read: ALPACA_FEED, one
 // place for all of them (quote.ts, bars.ts, desk-run.ts). `iex` (the free plan's one exchange) when unset or empty;
@@ -26,10 +27,12 @@ export function feedSetting(env: Record<string, string | undefined> = process.en
 }
 
 let warned = false;
+let warnedPlan = false;
 
-/** Test hook: let the next refusal log again. */
+/** Test hook: let the next refusal (of the setting, or by the plan) log again. */
 export function resetFeedWarning(): void {
   warned = false;
+  warnedPlan = false;
 }
 
 /**
@@ -52,6 +55,25 @@ export function configuredFeed(env: Record<string, string | undefined> = process
  * keep the last prices on screen, greying, while it retried every 30 s against a setting that cannot heal by itself.
  */
 export const FEED_REFUSED = { error: "not-configured", why: "feed" } as const;
+
+/**
+ * The same answer, why "plan", when ALPACA_FEED is sip and Alpaca refuses it (403): the free plan has no recent SIP
+ * data. Not configured either, so the page shows the prices as off and stops, rather than retry for ever.
+ */
+export const FEED_PLAN_REFUSED = { error: "not-configured", why: "plan" } as const;
+
+/**
+ * Alpaca refused the configured SIP feed (HTTP 403): the data plan does not include it. Logs one line the first time
+ * on an instance. A 403 on iex, a 401 (bad keys) and every other failure are not this, and keep their usual answers.
+ */
+export function planRefused(feed: DataFeed, e: unknown): boolean {
+  if (feed !== "sip" || !(e instanceof UpstreamError) || e.status !== 403) return false;
+  if (!warnedPlan) {
+    warnedPlan = true;
+    logEvent("alpaca.feed", { outcome: "plan", feed, status: 403, answer: "not-configured" });
+  }
+  return true;
+}
 
 /** ALPACA_FEED holds a value that is not a feed: nothing may be read upstream. */
 export class FeedMisconfigured extends Error {

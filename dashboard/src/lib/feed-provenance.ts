@@ -26,39 +26,67 @@ export function feedLabel(v: unknown): "IEX" | "SIP" | null {
   return isDataFeed(v) ? (v === "iex" ? "IEX" : "SIP") : null;
 }
 
-/** The newest last-trade time (ms) among `symbols` (every quote when null), or null when none has a readable one. */
-export function newestTradeAt(quotes: Readonly<Record<string, { at: string } | undefined>>, symbols: readonly string[] | null): number | null {
+/** A quote as the ages read it: its last trade's time. */
+type TradeQuote = { at: string } | undefined;
+
+const NY_DAY = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
+
+export interface TradeAgeRange {
+  /** ms since the newest and the oldest last trade among the names that have one today; null when none has, or no clock. */
+  newestMs: number | null;
+  oldestMs: number | null;
+  /** Names with a usable trade today. */
+  traded: number;
+  /** Names asked for with no usable trade today (no quote, an unreadable time, or a last trade on another New York day). */
+  noTrade: number;
+}
+
+/**
+ * The spread of last-trade ages across `symbols` on the server's clock `now`: the newest and the oldest, so one busy
+ * name cannot make a quiet one read as fresh. A name with no trade today (its last trade on a New York day other than
+ * `session`, when a session is given) is left out of the spread and counted apart, so it never makes the spread read fresher than it is. A trade
+ * stamped after `now` reads 0.
+ */
+export function tradeAgeRange(quotes: Readonly<Record<string, TradeQuote>>, symbols: readonly string[], now: number | null, session: string | null): TradeAgeRange {
   let newest: number | null = null;
-  for (const s of symbols ?? Object.keys(quotes)) {
-    const t = Date.parse(quotes[s]?.at ?? "");
-    if (Number.isFinite(t) && (newest === null || t > newest)) newest = t;
+  let oldest: number | null = null;
+  let traded = 0;
+  for (const s of symbols) {
+    const q = quotes[s];
+    const t = Date.parse(q?.at ?? "");
+    if (!q || !Number.isFinite(t) || (session !== null && NY_DAY.format(new Date(t)) !== session)) continue;
+    traded++;
+    if (newest === null || t > newest) newest = t;
+    if (oldest === null || t < oldest) oldest = t;
   }
-  return newest;
+  const age = (t: number | null) => (t === null || now === null ? null : Math.max(0, now - t));
+  return { newestMs: age(newest), oldestMs: age(oldest), traded, noTrade: symbols.length - traded };
 }
 
 export interface FeedAges {
-  /** ms since the newest trade printed, on the server's clock; null when not known. */
-  lastTradeMs: number | null;
+  /** The last trades' ages across the names, on the server's clock. */
+  trade: TradeAgeRange;
   /** ms since the page last got an answer; null when not known. */
   checkedMs: number | null;
 }
 
 /**
  * Both ages from the page's last answer and the browser's clock. The board's clock is the browser's shifted by the
- * server-minus-browser offset seen at that answer (serverNow), so the last trade's age is the server's now minus
- * Alpaca's trade time, whatever the device's clock says; "checked" is the server's now minus the answer's `as_of`,
- * which is the browser's time since the answer arrived. Neither goes below 0.
+ * server-minus-browser offset seen at that answer (serverNow), so a trade's age is the server's now minus Alpaca's
+ * trade time, whatever the device's clock says; "checked" is the server's now minus the answer's `as_of`, which is the
+ * browser's time since the answer arrived. Neither goes below 0. `symbols` null reads every quote in the answer.
  */
 export function feedAges(
-  answer: { asOf: string; receivedAt: number; quotes: Readonly<Record<string, { at: string } | undefined>> },
+  answer: { asOf: string; receivedAt: number; quotes: Readonly<Record<string, TradeQuote>> },
   symbols: readonly string[] | null,
   browserNow: number | null,
+  session: string | null = null,
 ): FeedAges {
+  const names = symbols ?? Object.keys(answer.quotes);
   const asOf = Date.parse(answer.asOf);
-  if (browserNow === null || !Number.isFinite(asOf) || !Number.isFinite(answer.receivedAt)) return { lastTradeMs: null, checkedMs: null };
-  const now = serverNow(answer.asOf, answer.receivedAt, browserNow).getTime();
-  const trade = newestTradeAt(answer.quotes, symbols);
-  return { lastTradeMs: trade === null ? null : Math.max(0, now - trade), checkedMs: Math.max(0, now - asOf) };
+  const known = browserNow !== null && Number.isFinite(asOf) && Number.isFinite(answer.receivedAt);
+  const now = known ? serverNow(answer.asOf, answer.receivedAt, browserNow).getTime() : null;
+  return { trade: tradeAgeRange(answer.quotes, names, now, session), checkedMs: now === null ? null : Math.max(0, now - asOf) };
 }
 
 /** Whole seconds, rounded as the board's other ages ("No new price for N s", "STALE Ns") are. */

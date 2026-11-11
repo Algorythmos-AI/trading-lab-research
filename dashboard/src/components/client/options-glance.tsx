@@ -47,7 +47,9 @@ export function OptionsGlance({
       : feed.status === "off"
         ? feed.why === "feed"
           ? "Live prices are off (ALPACA_FEED in Vercel is not iex or sip), so each bar is centred on the close."
-          : "Live prices are off (no Alpaca keys in Vercel), so each bar is centred on the close."
+          : feed.why === "plan"
+            ? "Live prices are off: ALPACA_FEED asks for the full-market feed (SIP), which this Alpaca data plan does not include. Each bar is centred on the close."
+            : "Live prices are off (no Alpaca keys in Vercel), so each bar is centred on the close."
         : feed.status === "error"
           ? "Live prices did not answer; each bar is centred on the close until they do."
           : "Centred on the close until the first live price arrives. The bar is measured in ATRs.";

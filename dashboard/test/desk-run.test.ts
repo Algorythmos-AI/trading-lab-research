@@ -4,6 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PreconditionFailed } from "@/lib/blob";
 import { fetchBars, fetchSettledBars, resetBarsCache, type BarsResponse } from "@/lib/bars";
+import { resetQuoteCache } from "@/lib/quote";
 import { BAR_MS, type ServerRecord } from "@/lib/desk-eval";
 import { BarsOff, defaultDeskRunDeps, type DeskRunDeps, runDeskEval, TIMEOUT_MS } from "@/lib/desk-run";
 import { shadowSummary } from "@/lib/desk-shadow";
@@ -338,19 +339,28 @@ describe("the record's feed", () => {
     expect(rec.status).toBe("ok");
   });
 
-  it("falls back to the bars' feed, then to the configured one, and is null when ALPACA_FEED was refused", async () => {
-    const noSnap = fakeDeps({ fetchSnapshots: () => Promise.reject(new Error("alpaca 500")), feed: () => "sip" });
+  it("is the bars' feed when only the bars answered, and null whenever nothing was read", async () => {
+    const noSnap = fakeDeps({ fetchSnapshots: () => Promise.reject(new Error("alpaca 500")) });
     noSnap.store.set("desk/eval.json", LOG);
     await runDeskEval(noSnap.deps);
     expect(recordFeed(noSnap.records()[0]![1])).toBe("iex"); // the bars answered, from iex
-    const none = fakeDeps({ fetchBars: () => Promise.reject(new BarsOff()), fetchSnapshots: () => Promise.reject(new BarsOff()), feed: () => "sip" });
-    none.store.set("desk/eval.json", LOG);
-    await runDeskEval(none.deps);
-    expect(recordFeed(none.records()[0]![1])).toBe("sip");
-    const refused = fakeDeps({ fetchBars: () => Promise.reject(new BarsOff()), fetchSnapshots: () => Promise.reject(new BarsOff()), feed: () => null });
-    refused.store.set("desk/eval.json", LOG);
-    await runDeskEval(refused.deps);
-    expect(refused.records()[0]![1]).toMatchObject({ status: "degraded", reason: "bars-off", feed: null });
+    const timeout = () => Promise.reject(Object.assign(new Error("aborted"), { name: "TimeoutError" }));
+    const cases: [string, Partial<DeskRunDeps>][] = [
+      ["no keys, or the setting refused", { fetchBars: () => Promise.reject(new BarsOff()), fetchSnapshots: () => Promise.reject(new BarsOff()) }],
+      ["both reads timed out", { fetchBars: timeout, fetchSnapshots: timeout }],
+      ["both reads failed", { fetchBars: () => Promise.reject(new Error("alpaca 500")), fetchSnapshots: () => Promise.reject(new Error("alpaca 500")) }],
+      ["no edition", { loadEdition: async () => ({ status: "missing" }) }],
+      ["an unreadable edition", { loadEdition: async () => ({ status: "error" }) }],
+      ["an edition for another day", { loadEdition: async () => ({ status: "ok", edition: { ...E, session: "2026-10-09" } }) }],
+      ["no focus names", { loadEdition: async () => ({ status: "ok", edition: { ...E, focus: { ...E.focus!, items: [] } } }) }],
+    ];
+    for (const [what, over] of cases) {
+      const f = fakeDeps(over);
+      f.store.set("desk/eval.json", LOG);
+      await runDeskEval(f.deps);
+      const raw = JSON.parse([...f.store.entries()].find(([k]) => k.startsWith("desk/log/"))![1]) as Record<string, unknown>;
+      expect(raw, what).toHaveProperty("feed", null);
+    }
   });
 
   it("the deployed reads refuse a bad ALPACA_FEED as not configured, before anything goes upstream", async () => {
@@ -364,10 +374,31 @@ describe("the record's feed", () => {
     const d = defaultDeskRunDeps();
     await expect(d.fetchBars(["SPY"], { now: new Date(ny("10:31:01")), minFetchedAt: 0, timeoutMs: 100, halfDay: false })).rejects.toBeInstanceOf(BarsOff);
     await expect(d.fetchSnapshots(["SPY"], { now: new Date(ny("10:31:01")), timeoutMs: 100 })).rejects.toBeInstanceOf(BarsOff);
-    expect(d.feed?.()).toBeNull();
     expect(f).not.toHaveBeenCalled();
-    vi.stubEnv("ALPACA_FEED", "sip");
-    expect(d.feed?.()).toBe("sip");
+    vi.unstubAllGlobals();
+  });
+
+  it("the deployed reads take sip refused by the plan (403) as not configured; a 403 on iex or a 401 stays a failure", async () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("DASHBOARD_FIXTURE", "");
+    vi.stubEnv("ALPACA_API_KEY_ID", "k");
+    vi.stubEnv("ALPACA_API_SECRET_KEY", "s");
+    const now = new Date(ny("10:31:01"));
+    const read = async (feed: string, status: number) => {
+      resetBarsCache();
+      resetQuoteCache();
+      vi.stubEnv("ALPACA_FEED", feed);
+      vi.stubGlobal("fetch", vi.fn(async () => new Response("no", { status })));
+      const d = defaultDeskRunDeps();
+      const errs = await Promise.all([
+        d.fetchBars(["SPY"], { now, minFetchedAt: 0, timeoutMs: 1_000, halfDay: false }).catch((e: unknown) => e),
+        d.fetchSnapshots(["SPY"], { now, timeoutMs: 1_000 }).catch((e: unknown) => e),
+      ]);
+      return errs.map((e) => (e instanceof BarsOff ? "off" : "failed"));
+    };
+    expect(await read("sip", 403)).toEqual(["off", "off"]);
+    expect(await read("iex", 403)).toEqual(["failed", "failed"]);
+    expect(await read("sip", 401)).toEqual(["failed", "failed"]);
     vi.unstubAllGlobals();
   });
 

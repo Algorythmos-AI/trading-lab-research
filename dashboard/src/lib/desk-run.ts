@@ -1,5 +1,5 @@
 import "server-only";
-import { configuredFeed, type DataFeed } from "./alpaca-feed";
+import { configuredFeed, type DataFeed, planRefused } from "./alpaca-feed";
 import { exists, PreconditionFailed, readText, readTextIfChanged, writeText } from "./blob";
 import { type BarsResponse, fetchSettledBars } from "./bars";
 import { JOURNAL_PATHS, OPTIONS_PATHS } from "./desk";
@@ -52,13 +52,14 @@ export const TIMEOUT_MS = { switch: 1_500, exists: 1_500, edition: 1_500, reads:
 
 /**
  * What a run writes for its slot: the engine's record (desk-eval.ts serverRecord, whose code the engine label hashes)
- * and, after it, the stock feed the run's upstream reads used (alpaca-feed.ts), so shadow sessions can be counted per
- * feed. `feed` is null when ALPACA_FEED was refused (nothing was read). Records written before it existed have no
- * `feed`; read them with feed-provenance's recordFeed, which gives null for those.
+ * and, after it, the stock feed an upstream read of the run answered from (alpaca-feed.ts), so shadow sessions can be
+ * counted per feed. `feed` is null whenever nothing was read: no keys, ALPACA_FEED refused or not on the data plan,
+ * both reads failed or timed out, no edition, a wrong day or no focus names. Records written before it existed have
+ * no `feed`; read them with feed-provenance's recordFeed, which gives null for those.
  */
 export type DeskLogRecord = ServerRecord & { feed: DataFeed | null };
 
-/** The bars or the snapshots cannot be read at all: no keys, or ALPACA_FEED is not a feed. */
+/** The bars or the snapshots cannot be read at all: no keys, ALPACA_FEED is not a feed, or its feed is not on the plan. */
 export class BarsOff extends Error {
   constructor() {
     super("bars not configured");
@@ -90,8 +91,6 @@ export interface DeskRunDeps {
   fetchBars(symbols: string[], opts: { now: Date; minFetchedAt: number; timeoutMs: number; halfDay: boolean }): Promise<BarsResponse>;
   /** The snapshot per name, as the page's quote route reads it (last trade, day high and low). Throws BarsOff without keys. */
   fetchSnapshots(symbols: string[], opts: { now: Date; timeoutMs: number }): Promise<QuoteResponse>;
-  /** The configured stock feed, null when ALPACA_FEED is refused; for the record when no upstream read answered. */
-  feed?(): DataFeed | null;
 }
 
 export type DeskRunResult =
@@ -149,7 +148,6 @@ export function defaultDeskRunDeps(): DeskRunDeps {
       readDone: refuse,
       fetchBars: refuse,
       fetchSnapshots: refuse,
-      feed: () => configuredFeed(),
     };
   return {
     now: () => Date.now(),
@@ -172,17 +170,23 @@ export function defaultDeskRunDeps(): DeskRunDeps {
       const keys = alpacaKeys();
       const feed = configuredFeed();
       if (!keys || !feed) return Promise.reject(new BarsOff());
-      return fetchSettledBars(symbols, keys, o.now, o.minFetchedAt, o.timeoutMs, o.halfDay, fetch, undefined, feed);
+      return fetchSettledBars(symbols, keys, o.now, o.minFetchedAt, o.timeoutMs, o.halfDay, fetch, undefined, feed).catch(offOnPlan(feed));
     },
     fetchSnapshots: (symbols, o) => {
       const keys = alpacaKeys();
       const feed = configuredFeed();
       if (!keys || !feed) return Promise.reject(new BarsOff());
-      return fetchQuotes(symbols, keys, o.now, fetch, undefined, { timeoutMs: o.timeoutMs, feed });
+      return fetchQuotes(symbols, keys, o.now, fetch, undefined, { timeoutMs: o.timeoutMs, feed }).catch(offOnPlan(feed));
     },
-    feed: () => configuredFeed(),
   };
 }
+
+/** SIP refused by the data plan (alpaca-feed's planRefused) reads as not configured, like a refused ALPACA_FEED. */
+const offOnPlan =
+  (feed: DataFeed) =>
+  (e: unknown): never => {
+    throw planRefused(feed, e) ? new BarsOff() : e;
+  };
 
 const errName = (e: unknown) => (e instanceof Error ? e.name : "unknown");
 
@@ -264,8 +268,8 @@ export async function runDeskEval(deps: DeskRunDeps = defaultDeskRunDeps()): Pro
     else evaluation = evaluateSlot({ slot, edition: ed, journal, done, bars: barsGot.ok.bars, fetchedAt: barsGot.ok.fetchedAt, snapshots: snapGot.ok.quotes });
   }
 
-  // The engine's record first, unchanged; the feed after it (outside the hashed code).
-  const record: DeskLogRecord = { ...serverRecord(evaluation, slot, deps.now(), edition), feed: readFeed ?? deps.feed?.() ?? null };
+  // The engine's record first, unchanged; the feed after it (outside the hashed code), only when a read answered.
+  const record: DeskLogRecord = { ...serverRecord(evaluation, slot, deps.now(), edition), feed: readFeed };
   if (deps.dry) return { ok: true, outcome: "dry", slot: hhmm, path, record };
   try {
     await within(deps.write(path, JSON.stringify(record)), TIMEOUT_MS.write);

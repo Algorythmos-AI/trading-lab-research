@@ -1,5 +1,5 @@
 import "server-only";
-import { configuredFeed, type DataFeed, FEED_REFUSED } from "./alpaca-feed";
+import { configuredFeed, type DataFeed, FEED_PLAN_REFUSED, FEED_REFUSED, planRefused } from "./alpaca-feed";
 import { type BarsResponse, fetchBars } from "./bars";
 import { FIXTURE_OFFSET_ATR, flagsFromCookieHeader } from "./fixture-variants";
 import { scriptBars, scriptStep, stepFromCookieHeader, stepInstant } from "./fixture-script";
@@ -61,7 +61,7 @@ async function fixtureBars(symbols: string[], now: Date, script: { step: number 
 /**
  * GET /api/bars?s=SPY,QQQ[&half=1]: today's regular-session 2-minute bars from the configured Alpaca feed
  * (alpaca-feed.ts), to 13:00 New York with `half=1` (the edition's half-day flag). 503 until the keys are set, or
- * while ALPACA_FEED is not a feed (in fixture mode too).
+ * while ALPACA_FEED is not a feed (in fixture mode too) or is sip and not on the data plan.
  */
 export async function handleBars(req: Request, now: Date = new Date()): Promise<Response> {
   const params = new URL(req.url).searchParams;
@@ -85,6 +85,8 @@ export async function handleBars(req: Request, now: Date = new Date()): Promise<
   try {
     return json(200, await fetchBars(symbols, keys, now, fetch, undefined, halfDay, { feed }));
   } catch (e) {
+    // SIP set but not on the data plan: off, as for a refused setting, never a retry for ever.
+    if (planRefused(feed, e)) return json(503, FEED_PLAN_REFUSED);
     logEvent("bars.fetch", { outcome: "error", error: e instanceof Error ? e.name : "unknown" });
     // A rate limit is passed on as one, so the page waits its longest; anything else is 502.
     const status = upstreamStatus(e);

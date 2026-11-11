@@ -158,7 +158,8 @@ export function retryInS(b: Backoff, now: number | null): number | null {
 
 /**
  * A small "is the feed alive" pill: live with the time of the last answer and the feed it named (nothing when it named
- * none), off, or retrying (and in how long).
+ * none), off (and why, when it is the feed setting or the data plan rather than missing keys), or retrying (and in how
+ * long).
  */
 export function FeedPill() {
   const { feed, backoff, now } = useLive();
@@ -172,7 +173,11 @@ export function FeedPill() {
       : feed.status === "ok"
         ? `Live ${newYork(feed.asOf, false)}${feedLabel(feed.source) ? ` · ${feedLabel(feed.source)}` : ""}`
         : feed.status === "off"
-          ? "Live off"
+          ? feed.why === "plan"
+            ? "Live off: SIP is not on this data plan"
+            : feed.why === "feed"
+              ? "Live off: ALPACA_FEED is not iex or sip"
+              : "Live off"
           : feed.status === "error"
             ? "Retrying"
             : "Connecting";
@@ -190,29 +195,42 @@ export function FeedPill() {
 }
 
 /** One age in a slot of fixed width with even digits, so the text around it never moves as it ticks. */
-function AgeSlot({ ms }: { ms: number | null }) {
+function AgeSlot({ ms, end }: { ms: number | null; end?: "newest" | "oldest" }) {
   return (
-    <span data-age-slot data-age-s={ms === null ? undefined : ageSeconds(ms)} className="inline-block min-w-[6ch] text-right font-mono tabular-nums">
+    <span
+      data-age-slot
+      data-age-end={end}
+      data-age-s={ms === null ? undefined : ageSeconds(ms)}
+      className="inline-block min-w-[6ch] text-right font-mono tabular-nums"
+    >
       {ms === null ? "–" : ageText(ms)}
     </span>
   );
 }
 
+/** "1 name" / "2 names". */
+const names = (n: number) => `${n} name${n === 1 ? "" : "s"}`;
+
 /**
  * What the live prices are and how old: the feed the last answer named ("IEX" or "SIP"; nothing when it named none),
  * that the page asks for them every 2 s rather than being sent each trade, and two ages on the board's (server) clock
- * (feed-provenance.ts): when the newest trade among `symbols` printed, and when the page last got an answer. A price
- * re-fetched a second ago can be a minute-old trade, so they are drawn apart; past the board's limits each turns to a
- * warning colour. Nothing while the feed has not answered or is off. Not a live region: the ages tick every second
- * and are never announced; a reader finds them in place. Each piece keeps to one line and the ages to fixed slots, so
- * the line wraps the same way whatever they read and nothing under it moves.
+ * (feed-provenance.ts). The last trades as a spread across `symbols`, newest to oldest, so a busy name cannot make a
+ * quiet one look fresh (one value for one name, or when both ends read the same); names with no trade today are left
+ * out of it and counted beside it. And when the page last got an answer: a price re-fetched a second ago can be a
+ * minute-old trade, so the two are drawn apart. The spread turns to a warning colour when its oldest end passes the
+ * board's trade limit, the answer when it passes the feed limit. Nothing while the feed has not answered or is off.
+ * Not a live region: the ages tick every second and are never announced; a reader finds them in place. Each piece
+ * keeps to one line and the ages to fixed slots (the second end keeps its room while hidden), so the line wraps the
+ * same way whatever they read and nothing under it moves.
  */
 export function FeedFacts({ symbols, where }: { symbols?: readonly string[]; where: "board" | "glance" }) {
-  const { feed, now } = useLive();
+  const { feed, now, session } = useLive();
   if (feed.status !== "ok") return null;
   const name = feedLabel(feed.source);
-  const ages = feedAges(feed, symbols ?? null, now);
-  const tone = (kind: "trade" | "checked", ms: number | null) => (ms !== null && ageStale(kind, ms) ? "text-warn" : undefined);
+  const ages = feedAges(feed, symbols ?? null, now, session || null);
+  const { newestMs, oldestMs, traded, noTrade } = ages.trade;
+  const tradeStale = oldestMs !== null && ageStale("trade", oldestMs);
+  const oneEnd = traded <= 1 || (newestMs !== null && oldestMs !== null && ageText(newestMs) === ageText(oldestMs));
   return (
     <p
       data-feed-facts={where}
@@ -230,11 +248,28 @@ export function FeedFacts({ symbols, where }: { symbols?: readonly string[]; whe
         ) : null}
         fetched every {POLL_MS / 1000} s, not streamed
       </span>
-      <span data-feed-age="trade" className={cn("text-foreground flex items-center gap-1 whitespace-nowrap font-medium", tone("trade", ages.lastTradeMs))}>
-        <Activity aria-hidden className="size-3 shrink-0" />
-        last trade <AgeSlot ms={ages.lastTradeMs} /> ago
-      </span>
-      <span data-feed-age="checked" className={cn("flex items-center gap-1 whitespace-nowrap", tone("checked", ages.checkedMs))}>
+      {traded > 0 ? (
+        <span
+          data-feed-age="trade"
+          data-trade-stale={tradeStale ? "true" : "false"}
+          className={cn("text-foreground flex items-center gap-1 whitespace-nowrap font-medium", tradeStale && "text-warn")}
+        >
+          <Activity aria-hidden className="size-3 shrink-0" />
+          {traded > 1 ? "last trades" : "last trade"} <AgeSlot ms={newestMs} end="newest" />{" "}
+          {traded > 1 ? (
+            <span data-age-range={oneEnd ? "one" : "two"} aria-hidden={oneEnd || undefined} className={cn("flex items-center gap-1", oneEnd && "invisible")}>
+              to <AgeSlot ms={oldestMs} end="oldest" />
+            </span>
+          ) : null}{" "}
+          ago
+        </span>
+      ) : null}
+      {noTrade > 0 ? (
+        <span data-feed-no-trade={noTrade} className="text-warn whitespace-nowrap font-medium">
+          {traded > 0 ? `${names(noTrade)} with no trade today` : "no trade today"}
+        </span>
+      ) : null}
+      <span data-feed-age="checked" className={cn("flex items-center gap-1 whitespace-nowrap", ages.checkedMs !== null && ageStale("checked", ages.checkedMs) && "text-warn")}>
         <RefreshCw aria-hidden className="size-3 shrink-0" />
         checked <AgeSlot ms={ages.checkedMs} /> ago
       </span>
