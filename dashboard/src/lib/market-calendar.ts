@@ -1,6 +1,7 @@
 // The Calendar page's arithmetic. Pure: no I/O; the clock is passed in. The market days come from
 // market-calendar.json, which scripts/build_market_calendar.py builds from the XNYS exchange calendar and checks
-// against NYSE's published list; nothing here guesses a holiday, and a day outside the file's range says so.
+// against NYSE's published list and Alpaca's calendar; nothing here guesses a holiday, and a day outside the file's
+// range says so. A holiday or half day in a year NYSE has not published yet is marked "expected" in the file.
 import { nyTime, type Trade } from "./journal";
 import data from "./market-calendar.json";
 import { EVENT_LABEL, eventLabel, nyInstant } from "./options";
@@ -22,6 +23,9 @@ export const OPTIONS_NAMES: string[] = data.options_names;
 const SESSIONS = new Set<string>(data.sessions);
 const HOLIDAYS = new Map<string, string>(data.holidays.map((h) => [h.date, h.name]));
 const HALF_DAYS = new Map<string, { label: string; close: number }>(data.half_days.map((h) => [h.date, { label: h.label, close: hhmm(h.close_et) }]));
+/** Holidays and half days the exchange has not published yet (the file's quality "expected"). */
+const EXPECTED_DAYS = new Set<string>([...data.holidays, ...data.half_days].filter((h) => h.quality === "expected").map((h) => h.date));
+export const isExpectedDay = (day: string): boolean => EXPECTED_DAYS.has(day);
 const OPEN_MIN = hhmm(data.open_et);
 const CLOSE_MIN = hhmm(data.close_et);
 
@@ -520,8 +524,9 @@ export function yearView(year: number, now: Date, you: ReadonlyMap<string, YourD
         if (mine.broke) view.ruleDays++;
       }
       const d = Number(day.slice(8));
-      if (s.kind === "closed") view.notes.push(`${d}: ${s.name}, closed`);
-      if (s.kind === "half") view.notes.push(`${d}: ${s.name}, closes 1 pm New York`);
+      const expected = EXPECTED_DAYS.has(day) ? " (expected: NYSE has not published this year yet)" : "";
+      if (s.kind === "closed") view.notes.push(`${d}: ${s.name}, closed${expected}`);
+      if (s.kind === "half") view.notes.push(`${d}: ${s.name}, closes 1 pm New York${expected}`);
       if (cell.clocks) view.notes.push(`${d}: ${cell.clocks.where} clocks go ${cell.clocks.direction}`);
       if (cell.move) view.notes.push(`${d}: the open moves to ${cell.move.to} Sydney (was ${cell.move.from})`);
       cells.push(cell);
