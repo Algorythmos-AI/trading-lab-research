@@ -46,6 +46,7 @@ import {
 import { pausedAgeS } from "@/lib/level-ladder";
 import { type NameState, type NameStateName, serverNow } from "@/lib/trade-state";
 import { cn } from "@/lib/utils";
+import { useDeskShadow } from "./desk-shadow";
 import { useDone } from "./done-today";
 import { useLive } from "./live-layer";
 import { useBars } from "./use-bars";
@@ -760,6 +761,7 @@ export function BoardProvider({
   closedTrades = [],
   journalAsOf = null,
   dayFacts = null,
+  evalOn = false,
   children,
 }: {
   e: Options;
@@ -774,6 +776,8 @@ export function BoardProvider({
   journalAsOf?: string | null;
   /** The server's day check, for the room left after a note's stop (session-timeline's dayFacts). */
   dayFacts?: DayFacts | null;
+  /** The server's shadow check is switched on (desk/eval.json, read by the server render); off by default. */
+  evalOn?: boolean;
   children: React.ReactNode;
 }) {
   const { feed, now: browserNow } = useLive();
@@ -849,6 +853,17 @@ export function BoardProvider({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ring.n]);
   const settled = mode.kind === "live" && bars.status !== "loading";
+  // The server's shadow check (DEC-0044): with its switch off, one status read and nothing else.
+  useDeskShadow({
+    enabled: evalOn,
+    reading: live && items.length > 0 && (mode.kind === "live" || mode.kind === "opening"),
+    live: settled,
+    session: e.session,
+    states,
+    now,
+    browserNow,
+    barsDelayed: mode.kind === "live" && used.delayed,
+  });
   if (settled) {
     // Announces what is new and withdraws, for good, every notice whose state has left the board.
     const next = boardNotices(book, e.session, states, now ?? undefined);

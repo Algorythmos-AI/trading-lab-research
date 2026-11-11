@@ -114,6 +114,8 @@ export async function fetchQuotes(
   now: Date = new Date(),
   fetchImpl: typeof fetch = fetch,
   baseUrl: string = process.env.ALPACA_DATA_URL || DEFAULT_DATA_URL,
+  /** For the server's desk evaluator only: a tighter bound on the upstream call. The page's route passes none. */
+  opts: { timeoutMs?: number } = {},
 ): Promise<QuoteResponse> {
   const t = now.getTime();
   // An entry stamped after `now` (a clock that stepped back) is not trusted either.
@@ -126,7 +128,7 @@ export async function fetchQuotes(
     const res = await fetchImpl(url, {
       headers: { "APCA-API-KEY-ID": keys.id, "APCA-API-SECRET-KEY": keys.secret, accept: "application/json" },
       cache: "no-store",
-      signal: AbortSignal.timeout(8_000),
+      signal: AbortSignal.timeout(opts.timeoutMs ?? 8_000),
     });
     if (!res.ok) {
       logEvent("quote.fetch", { outcome: "http-error", status: res.status });
