@@ -23,6 +23,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -35,7 +36,8 @@ from wt.core.clock import ET, et
 from wt.core.config import DATA_DIR, FORWARD_LEDGER, ROOT
 from wt.core.desk import DESKS, installed, moved, moved_marker
 from wt.ops import hc, host, preflight
-from wt.ops.alerts import Alerts
+from wt.ops.alerts import Alerts, count, ratio, word
+from wt.ops.alerts import day as page_day
 from wt.ops.heartbeat import Heartbeat, last_runs, ok_runs_since
 from wt.ops.locks import DEPLOY_LOCK, job_lock
 from wt.ops.schedule import JOBS, PY, SYDNEY, Job
@@ -190,11 +192,11 @@ def alert_paper(o: dict[str, Any], alerts: Alerts) -> None:
         ("paper-b:not-flat", o["not_flat"], 5, "Paper B NOT FLAT at the close",
          "The runner ended the session with an open position. Check the broker and flatten if needed."),
         ("paper-b:unknown-position", o["unknown_positions"] > 0, 5, "Paper B: unknown position",
-         f"Reconcile found {o['unknown_positions']} unprotected position(s) it does not manage."),
+         f"Reconcile found {count(o['unknown_positions'])} unprotected position(s) it does not manage."),
         ("paper-b:latched", o["latched"], 5, "Paper B loss limit latched",
-         f"The virtual account latched ({o['latch_reason'] or 'loss limit'}). Entries stay off until reset."),
+         "The virtual account latched; the session's journal (session_end) says why. Entries stay off until reset."),
         ("paper-b:loop-errors", o["loop_errors"] >= 3, 4, "Paper B: repeated loop errors",
-         f"{o['loop_errors']} loop errors in tonight's session. See logs/paper_b_*.log."),
+         f"{count(o['loop_errors'])} loop errors in tonight's session. See logs/paper_b_*.log."),
     ]
     for key, bad, prio, title, msg in pairs:
         if bad:
@@ -206,7 +208,9 @@ def alert_paper(o: dict[str, Any], alerts: Alerts) -> None:
 
 
 def forward_summary(ledger: Path = FORWARD_LEDGER) -> str | None:
-    """One line on the latest completed forward session: trades and R by strategy (R only, plan R13)."""
+    """One line on the latest completed forward session: trades and total R (R only, plan R13). Never a strategy's
+    name: the names carry setups (restricted) and symbols, and the page goes to a public topic. The dashboard has the
+    split by strategy."""
     try:
         rows = [json.loads(x) for x in ledger.read_text().splitlines() if x.strip()]
     except (OSError, json.JSONDecodeError):
@@ -218,12 +222,15 @@ def forward_summary(ledger: Path = FORWARD_LEDGER) -> str | None:
     trades = [r for r in rows if str(r.get("session")) == last and isinstance(r.get("R"), int | float)
               and not r.get("session_marker") and not r.get("strategy_marker")]
     total = sum(float(r["R"]) for r in trades)
-    by: dict[str, float] = {}
-    for r in trades:
-        by[str(r.get("strategy"))] = by.get(str(r.get("strategy")), 0.0) + float(r["R"])
-    top = ", ".join(f"{k} {v:+.2f}R" for k, v in sorted(by.items(), key=lambda kv: -abs(kv[1]))[:4])
-    return (f"Forward {last}: {len(trades)} trade(s), {total:+.2f}R total" + (f" ({top})" if top else "") +
-            f". Sessions recorded: {len(done)}.")
+    strategies = len({str(r.get("strategy")) for r in trades})
+    return (f"Forward {page_day(last)}: {count(len(trades))} trade(s), {ratio(total, '+.2f')}R total, over "
+            f"{count(strategies)} strategy(ies). Sessions recorded: {count(len(done))}.")
+
+
+# The codes a blocked signal can carry (wt.live.runner_b, `blockers`); the summary names the code, never what follows
+# it (a latch's reason, an event's name). A test keeps runner_b's blockers inside this set.
+BLOCKER_CODES = frozenset({"entries_off", "plan_not_persisted", "account_not_persisted", "kill_file", "latched",
+                           "max_1_trade_per_day", "exposure_exists", "event", "stale_signal_data", "spread_or_no_quote"})
 
 
 OUTCOME_WORDS = {"traded": "traded", "no_signal": "no signal", "signal_not_acted": "a signal fired and was NOT acted on",
@@ -239,10 +246,10 @@ def paper_summary(rows: list[dict[str, Any]]) -> str | None:
     outcome = str((end or {}).get("outcome") or "")
     rs = [float(r["R"]) for r in rows if r.get("event") == "trade_closed" and isinstance(r.get("R"), int | float)]
     if outcome.startswith("blocked"):
-        words = f"a signal was blocked ({outcome.split(':', 1)[-1]})"
+        words = f"a signal was blocked ({word(outcome.split(':')[1] if ':' in outcome else '', BLOCKER_CODES, 'a block')})"
     else:
         words = OUTCOME_WORDS.get(outcome, "session not finished" if end is None else "no trade")
-    return f"Paper B: {words}" + (f", {sum(rs):+.2f}R on {len(rs)} closed trade(s)" if rs else "") + "."
+    return f"Paper B: {words}" + (f", {ratio(sum(rs), '+.2f')}R on {count(len(rs))} closed trade(s)" if rs else "") + "."
 
 
 def daily_summary(start: dt.datetime) -> str | None:
@@ -278,11 +285,29 @@ def publish_evidence(root: Path, log: Log, alerts: Alerts) -> None:
     try:
         r = subprocess.run([str(root / PY), "-m", "wt.ops.evidence"], cwd=root, capture_output=True, text=True,
                            timeout=600, env={**os.environ, "PYTHONPATH": "src"})
-        log(f"evidence: {(r.stdout or r.stderr).strip()[-300:]}")
+        for line in redact_tokens(r.stdout or "").strip().splitlines()[-40:]:   # the outcome lines come last
+            log(f"evidence: {line[:300]}")
         if r.returncode != 0:
+            log(f"evidence: exit {r.returncode}: {redact_tokens((r.stderr or '').strip()[-600:])}")
             alerts.once_per_day("evidence", "Weekly evidence PR failed", "See the scorecard log.", 2)
     except (OSError, subprocess.SubprocessError) as e:
+        # evidence keeps to its own budget (wt.ops.evidence.BUDGET_S) and pages a step that hangs; this is the case
+        # it could not. What the run had printed is kept for the log, tokens redacted.
         log(f"evidence: could not run ({e.__class__.__name__})")
+        for name in ("stdout", "stderr"):
+            got = getattr(e, name, None)
+            text = got.decode("utf-8", "replace") if isinstance(got, bytes) else got if isinstance(got, str) else ""
+            for line in redact_tokens(text).strip().splitlines()[-40:]:
+                log(f"evidence {name}: {line[:300]}")
+        alerts.once_per_day("evidence", "Weekly evidence PR failed",
+                            "The evidence run could not be started or did not finish. See the scorecard log.", 2)
+
+
+def redact_tokens(text: str) -> str:
+    """No token reaches a log line, whatever a child printed (wt.ops.alerts.redact: the environment's own values and
+    anything shaped like a GitHub token, a URL credential or a bearer header)."""
+    from wt.ops.alerts import redact
+    return redact(text)
 
 
 def exits_only_allowed(fails: list[preflight.Check]) -> bool:
@@ -312,14 +337,33 @@ HC_JOBS = frozenset({"routine", "paper-b", "forward", "weekly", "paper-o", "pipe
 RETIRED_JOBS = frozenset({"crypto", "dashboard-crypto", "crypto-challengers", "crypto-learn"})
 
 
+KNOWN_JOBS = frozenset(JOBS) | RETIRED_JOBS      # the job names a page may carry
+KNOWN_LOGS = frozenset(j.log for j in JOBS.values())
+_LOG_NAME = re.compile(r"([a-z0-9_]+)_\d{8}\.log")
+
+
+def failed_how(killed: bool, terminated: bool, code: object) -> str:
+    return ("was stopped at its deadline" if killed is True else
+            "was stopped by the system (SIGTERM)" if terminated is True else f"exited with code {count(code)}")
+
+
+def log_page(path: Path) -> str:
+    """A job's log as a page names it: logs/<job log>_<YYYYMMDD>.log, for a log name the schedule defines."""
+    m = _LOG_NAME.fullmatch(path.name)
+    return f"logs/{path.name}" if m and m.group(1) in KNOWN_LOGS else "the job's log"
+
+
 def hc_slug(job: Job) -> str:
     return f"wt-{job.name}"
 
 
-def refuse(job: Job, reason: str, alerts: Alerts, log: Log, hb: Heartbeat | None = None, ping: bool = True) -> int:
-    """A refusal exits 0 (launchd/systemd must not retry it) but is not a success: it pings the check's /fail."""
+def refuse(job: Job, reason: str, alerts: Alerts, log: Log, hb: Heartbeat | None = None, ping: bool = True,
+           page: str | None = None) -> int:
+    """A refusal exits 0 (launchd/systemd must not retry it) but is not a success: it pings the check's /fail.
+    `page`: the alert's text when `reason` is not fixed words (a preflight detail); the log always gets `reason`."""
     log(f"REFUSED {job.name}: {reason}")
-    alerts.once_per_day(f"refuse:{job.name}", f"{job.name} refused to run", reason, 3)
+    alerts.once_per_day(f"refuse:{job.name}", f"{word(job.name, KNOWN_JOBS, 'a job')} refused to run",
+                        page if page is not None else reason, 3)
     if hb:
         hb.finish("refused", 0, reason)
     if ping and job.name in HC_JOBS:
@@ -363,9 +407,10 @@ def run_job(job: Job, root: Path = ROOT, preflight_only: bool = False, alerts: A
         if fails:
             reason = "; ".join(f"{c.name}: {c.detail}" for c in fails)
             if not (job.name == "paper-b" and exits_only_allowed(fails) and b_exposure()):
-                return refuse(job, reason, alerts, log, hb)
+                return refuse(job, reason, alerts, log, hb, page=preflight.page_reason(fails))
             log(f"preflight refused ({reason}), but strategy B holds a position: starting in exits-only mode")
-            alerts.once_per_day(f"refuse:{job.name}", f"{job.name}: entries off, exits only", reason, 4)
+            alerts.once_per_day(f"refuse:{job.name}", f"{word(job.name, KNOWN_JOBS, 'a job')}: entries off, exits only",
+                                preflight.page_reason(fails), 4)
             extra_env["WT_EXITS_ONLY"] = "1"
 
         start = _now()
@@ -405,7 +450,8 @@ def run_job(job: Job, root: Path = ROOT, preflight_only: bool = False, alerts: A
             hc.ping(hc_slug(job), "" if code == 0 else "fail", f"exit {code}")
         key = f"job:{job.name}"
         if code == 0:
-            alerts.resolve(key, f"{job.name} recovered", f"{job.name} completed normally.")
+            alerts.resolve(key, f"{word(job.name, KNOWN_JOBS, 'a job')} recovered",
+                           f"{word(job.name, KNOWN_JOBS, 'a job')} completed normally.")
             if job.name == "forward" and (line := daily_summary(start)):
                 paused = " Paper B entries are paused (KILL file present)." if KILL.exists() else ""
                 alerts.once_per_day("summary", "Trading Lab daily summary", line + paused, 2)
@@ -413,10 +459,10 @@ def run_job(job: Job, root: Path = ROOT, preflight_only: bool = False, alerts: A
                 publish_evidence(root, log, alerts)
             hb.finish("ok", 0)
         else:
-            what = ("was stopped at its deadline" if killed else
-                    "was stopped by the system (SIGTERM)" if terminated else f"exited with code {code}")
             prio = 5 if ((killed or terminated) and job.name == "paper-b") else 4
-            alerts.fire(key, f"{job.name} failed", f"{job.name} {what}. See {log.path.relative_to(root)}.", prio)
+            alerts.fire(key, f"{word(job.name, KNOWN_JOBS, 'a job')} failed",
+                        f"{word(job.name, KNOWN_JOBS, 'a job')} {failed_how(killed, terminated, code)}. "
+                        f"See {log_page(log.path)}.", prio)
             hb.finish("timeout" if killed else "terminated" if terminated else "failed", code)
     run_followers(job, root, alerts, log)
     return code

@@ -169,6 +169,9 @@ lapses, and `sudo wt-set-secrets` with a new token is the fix. Then go to step 4
    with `sudo wt-set-secrets` (Enter keeps every other value). The evidence job pushes to GitHub over HTTPS with
    this token; it never pushes through `origin`. Its pull requests target `integration`; they merge on their own
    only when the repository setting "Allow auto-merge" is on, otherwise you merge them like any other.
+   While the repository is not private the job pushes nothing and says so in its log each week; it pages once when
+   the visibility changes, and once for any publishing step that fails (`public-repo-guards.md`). `make status`
+   shows the last answer and when it was confirmed.
    Weeks the job could not push while the repository was public are archived one at a time, oldest first, each
    after the previous one has merged:
    ```

@@ -12,7 +12,7 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
                  src/wt/ops/heartbeat.py src/wt/ops/preflight.py src/wt/ops/jobs.py src/wt/ops/migrate.py \
                  src/wt/ops/agents.py src/wt/ops/deploy.py src/wt/ops/ci.py src/wt/risk/stop_rule.py src/wt/core/safety.py src/wt/core/ids.py \
                  src/wt/brokers/base.py src/wt/brokers/sim.py src/wt/brokers/alpaca_paper.py src/wt/risk/pretrade.py \
-                 src/wt/oms/manager.py src/wt/risk/virtual_account.py src/wt/ops/publish.py src/wt/brokers/alpaca_read.py src/wt/ops/evidence.py \
+                 src/wt/oms/manager.py src/wt/risk/virtual_account.py src/wt/ops/publish.py src/wt/brokers/alpaca_read.py src/wt/ops/evidence.py src/wt/ops/visibility.py \
                  src/wt/research/manifest.py src/wt/research/method.py src/wt/research/trials.py \
                  src/wt/ops/thresholds.py src/wt/analytics/g2.py src/wt/analytics/b_replay.py src/wt/risk/mandate.py src/wt/scanner/explain.py \
                  src/wt/ops/dashguard.py src/wt/ops/drill.py src/wt/brokers/cancel_only.py src/wt/ops/host.py \
@@ -32,10 +32,10 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
 JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
-.PHONY: seed-vm help bootstrap research-index lint typecheck test ci hooks status gate deploy rollback migrate-state preflight publish-verify \
+.PHONY: seed-vm help bootstrap research-index lint typecheck restricted test ci hooks status gate deploy rollback migrate-state preflight publish-verify \
         uninstall-agents lease-break \
         watchdog-drill feed-watch-drill feed-agreement feed-agreement-recheck feed-agreement-summary feed-agreement-edition dashboard-deploy vm-deploy \
-        agents-diff install-trading-agents install-dashboard-agent publish schema kill unkill reset-latch evidence keys-check
+        agents-diff install-trading-agents install-dashboard-agent publish schema kill unkill reset-latch evidence visibility keys-check
 
 help: ## List the tasks
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/' | sort
@@ -55,15 +55,22 @@ typecheck: ## mypy --strict on the typed modules
 test: ## Unit tests
 	$(PY) -m pytest
 
-ci: lint typecheck test ## Everything CI runs
+restricted: ## No restricted or runtime path is tracked (the pre-commit hook's pattern; CI runs it on every commit of a PR)
+	$(PY) scripts/check_restricted_paths.py
+
+ci: lint typecheck restricted test ## Everything CI runs
 
 hooks: ## Install the pre-commit hooks (gitleaks, restricted paths, ruff)
 	pre-commit install
 
 # ---- operations on the live checkout (~/trading). Every command that changes it goes through the deploy gate. ----
 
-status: ## What's going on: kill switch, last job runs, firing alerts, preflight
+status: ## What's going on: kill switch, last job runs, firing alerts, preflight, repository visibility
 	$(PY) -m wt.ops.jobs status
+	@$(PY) -m wt.ops.visibility status
+
+visibility: ## Ask GitHub now whether the repository is private, record it, and page if that changed (needs gh)
+	$(PY) -m wt.ops.visibility check
 
 gate: ## Is it safe to change the live checkout right now? (no job running, outside the trading night)
 	$(PY) -m wt.ops.deploy gate

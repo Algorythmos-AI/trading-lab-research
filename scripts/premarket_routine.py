@@ -45,6 +45,8 @@ from wt.scanner.ranking import SpecCandidate, funnel  # noqa: E402
 from wt.signals.musts import next_half_dollar_above  # noqa: E402
 from wt.signals.spec_setups import SETUPS  # noqa: E402
 from wt.specs.loader import load_spec  # noqa: E402
+from wt.ops import alerts as A  # noqa: E402
+from build_pool import SCAN_FAILURES  # noqa: E402
 
 OUT = ROUTINE_DIR
 VA_PATH = DATA_DIR / "live" / "virtual_account_gg.json"      # read-only here (D31); never B's account
@@ -93,7 +95,8 @@ def scan_note(stats) -> dict:
 
 
 def page(key: str, title: str, message: str, priority: int) -> None:
-    """One alert a day for `key`. An alert that cannot be sent never changes what the dry run writes."""
+    """One alert a day for `key`. An alert that cannot be sent never changes what the dry run writes. The text is
+    fixed words plus guarded values (wt.ops.alerts): the topic is public."""
     try:
         from wt.ops.alerts import Alerts
         Alerts().once_per_day(key, title, message, priority)
@@ -144,11 +147,12 @@ def run(d: dt.date, feed: str, replay: bool) -> Path | None:
             print(f"{d} {hhmm} {name}: the scan had no data ({failed['scan_failed']})")
         if not replay:                    # a replay describes an old morning; only today's can page
             if failed:
-                page("routine:scan-failed", "Dry run: the scan had no data", f"{d} {hhmm}: {failed['scan_failed']}. "
+                page("routine:scan-failed", "Dry run: the scan had no data",
+                     f"{A.day(d)} {A.hhmm(hhmm)}: {A.word(failed['scan_failed'], SCAN_FAILURES, 'the scan failed')}. "
                      "The stage is marked as failed, not as a quiet morning.", 4)
             elif stats.sip_fallback:
-                page("routine:sip-fallback", "Dry run: no consolidated bars", f"{d} {hhmm}: the scan read IEX bars "
-                     "only, so its volumes are one venue's. The stage is recorded as normal.", 3)
+                page("routine:sip-fallback", "Dry run: no consolidated bars", f"{A.day(d)} {A.hhmm(hhmm)}: the scan "
+                     "read IEX bars only, so its volumes are one venue's. The stage is recorded as normal.", 3)
         body = {"stage": name, "as_of_et": hhmm, "feed": feed, "sip_through_et": sip_through(a), **failed,
                 "quality": quality.codes(vars(stats)),
                 "stats": {**vars(stats), **counts}, "tier1": f["tier1"], "reached": reached}

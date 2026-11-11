@@ -66,6 +66,14 @@ export interface WatchdogDecision {
   fresh: Freshness | null;
 }
 
+/** A window's name as a page says it: its session date (an ISO week for the HFT desk), or "current". The page goes
+ * to a public topic, so nothing
+ * else read from a snapshot reaches it. The episode key (AlertState.window) is unchanged: it still falls back to the
+ * window's start. */
+function sessionWord(w: { session?: unknown }): string {
+  return typeof w.session === "string" && /^\d{4}-(?:\d{2}-\d{2}|W\d{2})$/.test(w.session) ? w.session : "current";
+}
+
 /** Said when the window is assumed: the host's own schedule ran out, which only happens after a long silence. */
 const ASSUMED_NOTE = " The host's published schedule has run out, so a weekday window is assumed.";
 
@@ -135,7 +143,7 @@ export function evaluate(snapshot: Snapshot | null, prev: AlertState, now: Date)
       const session = w.session || w.start || "current";
       const baseline: AlertLevel = prev.window === session ? prev.level : "ok";
       if (baseline !== "stopped") {
-        notices.push(unreadable(session));
+        notices.push(unreadable(sessionWord(w)));
         if (baseline === "ok") next.since = now.toISOString();
       }
       next.level = "stopped";
@@ -158,7 +166,9 @@ export function evaluate(snapshot: Snapshot | null, prev: AlertState, now: Date)
     const baseline: AlertLevel = prev.window === session ? prev.level : "ok";
     if (RANK[level] > RANK[baseline]) {
       notices.push(
-        level === "stopped" ? stopped(minutes, session, fresh.assumed) : late(minutes, session, fresh.assumed),
+        level === "stopped"
+          ? stopped(minutes, sessionWord(fresh.window), fresh.assumed)
+          : late(minutes, sessionWord(fresh.window), fresh.assumed),
       );
       next.level = level;
       if (baseline === "ok") next.since = now.toISOString();

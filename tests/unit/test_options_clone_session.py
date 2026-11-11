@@ -663,3 +663,45 @@ def test_a_name_on_its_friday_expiry_buys_that_expiry_and_is_still_flat_by_15_10
     (row,) = events(world["rows"], "trade_closed")
     from wt.options import review
     assert review.trial_of(row["setup"], row["symbol"], "2026-10-19") == "nearest"
+
+
+def test_broker_unreachable_at_arm_writes_its_detail_to_the_log_before_the_page(world, capsys):
+    """The page says the clone's log has the detail (the topic is public); the log must have it when the page goes."""
+    from wt.brokers.base import TransportError
+    r = world["make"]()
+    world["m"].now = at("09:25")
+    seen: list[tuple[str, str, str]] = []
+
+    def reconcile(plans):
+        raise TransportError("paper-api answered 503 for https://paper-api.example/v2/positions SPY 123.45")
+
+    def fire(key, title, msg, prio=4):
+        seen.append((key, msg, capsys.readouterr().err))       # what the log holds at the moment of the page
+    r.oms.reconcile = reconcile
+    r.pager.fire = fire
+    assert r.arm() is False
+    (key, msg, log_then), = [s for s in seen if s[0] == "options-clone:broker"]
+    assert "broker unreachable at arm: TransportError: paper-api answered 503" in log_then
+    assert "TransportError" in msg and "503" not in msg and "SPY" not in msg and "https" not in msg
+
+
+def test_a_broken_stderr_at_arm_still_sends_the_page(world, monkeypatch):
+    """EPIPE or a closed stderr must not skip the page or end the run before the exit-managing loop."""
+    import sys
+
+    from wt.brokers.base import TransportError
+
+    class Broken:
+        def write(self, *a):
+            raise BrokenPipeError(32, "EPIPE")
+
+        def flush(self):
+            raise ValueError("closed")
+    r = world["make"]()
+    world["m"].now = at("09:25")
+    sent = []
+    r.oms.reconcile = lambda plans: (_ for _ in ()).throw(TransportError("down"))
+    r.pager.fire = lambda key, title, msg, prio=4: sent.append(key)
+    monkeypatch.setattr(sys, "stderr", Broken())
+    assert r.arm() is False
+    assert "options-clone:broker" in sent
