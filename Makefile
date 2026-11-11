@@ -34,7 +34,7 @@ JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 .DEFAULT_GOAL := help
 .PHONY: seed-vm help bootstrap research-index lint typecheck test ci hooks status gate deploy rollback migrate-state preflight publish-verify \
         uninstall-agents lease-break \
-        watchdog-drill feed-watch-drill dashboard-deploy vm-deploy \
+        watchdog-drill feed-watch-drill feed-agreement feed-agreement-summary feed-agreement-edition dashboard-deploy vm-deploy \
         agents-diff install-trading-agents install-dashboard-agent publish schema kill unkill reset-latch evidence
 
 help: ## List the tasks
@@ -118,6 +118,25 @@ watchdog-drill: ## Two real DRILL pages through the production watchdog path (la
 
 feed-watch-drill: ## Offline: the feed watch's real tick on in-memory state, late then recovered; prints both pages, sends nothing
 	cd dashboard && pnpm exec vitest run test/feed-watch-drill.test.ts
+
+# The feed agreement (docs/runbooks/feed-agreement.md): IEX against SIP for the Options board, one finished session at a
+# time. Read-only GETs of historical bars; reports go to the git-ignored var/feed-agreement/. Nothing is sent anywhere.
+ENV_FILE ?= .env
+feed-agreement: ## After a session: replay the board on IEX and on SIP bars and compare: make feed-agreement DAY=YYYY-MM-DD EDITION=<file> [BUDGET_S=120]
+	@test -n "$(DAY)" -a -n "$(EDITION)" || (echo "usage: make feed-agreement DAY=YYYY-MM-DD EDITION=<edition file>" && exit 2)
+	cd dashboard && node --env-file-if-exists=$(abspath $(ENV_FILE)) scripts/feed-agreement.mjs --day $(DAY) --edition $(abspath $(EDITION)) $(if $(BUDGET_S),--budget-s $(BUDGET_S),)
+
+feed-agreement-summary: ## The feed agreement's reading over the sessions run so far (5 needed)
+	cd dashboard && node scripts/feed-agreement.mjs --summary
+
+feed-agreement-edition: ## Between the close and 21:52 UTC: save that session's options edition for the feed agreement: make feed-agreement-edition DAY=YYYY-MM-DD
+	@test -n "$(DAY)" || (echo "usage: make feed-agreement-edition DAY=YYYY-MM-DD" && exit 2)
+	@set -a; if [ -f "$(ENV_FILE)" ]; then . "$(abspath $(ENV_FILE))"; fi; set +a; \
+	$(PY) -c 'import json, pathlib, sys; from wt.options.pipeline_check import read_edition; \
+	day = sys.argv[1]; ed = read_edition("options"); s = ed.get("session") if ed else None; \
+	p = pathlib.Path("var/feed-agreement/editions") / f"{day}.json"; \
+	msg = "no edition: the site did not answer (DASHBOARD_INGEST_URL and DASHBOARD_INGEST_SECRET needed)" if ed is None else (f"refused: the site holds the {s} edition, not {day}; nothing saved" if s != day else None); \
+	msg and sys.exit(msg); p.parent.mkdir(parents=True, exist_ok=True); p.write_text(json.dumps(ed)); print(f"saved {p}")' "$(DAY)"
 
 dashboard-deploy: ## OWNER: deploy origin/main's dashboard to production from a clean worktree, stamped with its commit
 	@set -e; git fetch --quiet origin main; sha=$$(git rev-parse origin/main); tmp=$$(mktemp -d); \
