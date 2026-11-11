@@ -6,9 +6,31 @@ by side for about five sessions, and that any switch is made by the owner with a
 fixes, before any number is seen, how that comparison is made and how it is read. The tool that makes it is
 `make feed-agreement` (below).
 
-Written 2026-11-11, before any comparison was run on real data. The thresholds below are fixed. Changing any of them
-needs a new dated version of this page, committed before the next run; runs made before it are read under the rules
-they were run under.
+Written 2026-11-11, before any comparison was run on real data; revised the same day (revision 1, below), still
+before any real-data count existed. The thresholds below are fixed. Changing any of them needs a new dated revision
+of this page, committed before the next run; runs made before it are read under the rules they were run under.
+
+## Revisions
+
+**Revision 1, 2026-11-11 (New York).** Made after an independent review of the first version and **before any
+real-data count existed**: the one real-data attempt was refused by Alpaca (HTTP 401) before any bar was read, so no
+report and no number were produced. What changed, and why:
+
+1. **A unit where one feed lacks the slot's bar is now comparable.** The first version set such a unit aside as "not
+   comparable". That hid the main way the feeds can differ: IEX has no print in a slot, the board on IEX pauses (or
+   carries no state), and the board on SIP does not. A review run with IEX missing every fifth bar on a quiet day
+   read 100% and "equivalent". Now each feed's word for the unit is its state word, or `none` when it carries no
+   state, and the two words are compared. Only units where **both** feeds lack the slot's bar are left out.
+2. **Clock-fixed and no-plan units are left out of the share.** About 36% of a full day's live units are `no_trade`
+   on both feeds by the clock alone (the lunch block and the flat time), and a side with no plan is `no_trade`
+   whatever the price. Counting them made agreement look higher than the prices justify. They are now counted apart.
+   The 98% threshold is unchanged and applies to the price-dependent units only.
+3. **The snapshot limitation is stated in both directions.** The first version said the replay only loses pauses; it
+   also adds them (see "Limitations").
+4. **The summary never pools engine labels.** Five sessions of the same engine label are needed for a reading.
+5. Smaller: names with no bars all day are listed; the report files are written atomically; the runner refuses until
+   20 minutes after the close; the exit codes for a 429 retry cap, a write failure and an unexpected failure are
+   listed; `make feed-agreement-edition` no longer sources the env file as shell and validates the day first.
 
 ## What it is, and what it is not
 
@@ -29,79 +51,103 @@ The same evaluation the server's shadow evaluator runs once a minute (DEC-0044):
 `dashboard/src/lib/desk-eval.ts`, which calls the board's own `boardMode` and `boardRows` (`trade-now.ts`) over
 `nameState` (`trade-state.ts`), unchanged. The comparison code (`dashboard/src/lib/feed-agreement.ts`) imports those
 functions; it holds no copy of any rule, and nothing in the engine imports it, so the engine's label
-(`ENGINE_VERSION`, `pnpm gen:engine`) does not change. The label in force is written into every report.
+(`ENGINE_VERSION`, `pnpm gen:engine`) does not change. The label in force is written into every report and every
+summary row.
 
 Each session is replayed twice, slot by slot: once with that session's IEX 2-minute bars, once with its SIP 2-minute
 bars. Everything else given to the evaluation is the same for both replays (see "The inputs").
 
 ## The unit
 
-One **unit** is one (focus name, side, 2-minute slot) of the regular session:
+One **unit** is one (focus name, side, 2-minute slot) of the regular session where the board is live:
 
 - the focus names are the session's edition's focus card (`focus.items`), in the card's order (`focusSymbols`);
-- the sides are `call` and `put` (`SIDES`); a name's two rows come from `stateRows`, as in the server's record (a
-  name the board pauses, or holds at no trade, carries that state on both sides);
+- the sides are `call` and `put` (`SIDES`); a name's two rows come from `stateRows`, as in the server's record;
 - the slots are `expectedSlots(day)`: every 2-minute bar end from 09:32 New York whose settle instant
   (end + `SERVER_SETTLE_MS`, 60 s) falls before the close (16:00, or 13:00 on a half day, from the exchange calendar
-  `market-calendar.json` via `sessionOf`). A full day has 194 slots (09:32 to 15:58), a half day 104 (09:32 to
-  12:58). Slots are New York wall-clock times, so the week of a clock change needs no special case;
+  via `sessionOf`). Slots are New York wall-clock times, so the week of a clock change needs no special case;
 - each slot is evaluated **as of the settled slot, exactly as the server does**: `evaluateSlot` with
-  `slot = { day, end }`, which reads the bars that ended by `end` and judges the board at `end + CLOSE_GRACE_MS`.
+  `slot = { day, end }`, which reads the bars that ended by `end` and judges the board at `end + CLOSE_GRACE_MS`;
+- only slots where the board is live (`board === "live"`, from 09:35, so from the 09:36 slot) have units. The 09:32
+  and 09:34 slots have no units and are not counted anywhere below.
 
-Only slots where the board is live (`board === "live"`, from 09:35 New York, so from the 09:36 slot) have units.
-The 09:32 and 09:34 slots are "opening" on both feeds by the clock alone; they are counted as slots without units.
-
-A unit **has a state** on a feed when that feed's evaluation for the slot has `status === "ok"`, its board is live,
-and it holds a row for the name and side. It has **no state** when the name is in `degraded_names` (`bars-missing`,
-`bars-gap`, `snapshot-missing`) or the evaluation is not `ok`.
+**Each feed's word** for a unit is the state word of its row (`no_trade`, `watch`, `get_ready`, `enter_zone`,
+`plan_off`, `missed`, `paused`), or **`none`** when that feed's evaluation carries no state for it (the name is in
+`degraded_names`: `bars-missing`, `bars-gap`, `snapshot-missing`; or the evaluation is not `ok`).
 
 A unit **has a bar** on a feed when that feed holds the name's bar for the slot itself (the 2-minute bar ending at
 the slot's end).
 
-A unit is **comparable** when it has a state and a bar on both feeds. A unit that has a state and a bar on one feed
-but not on the other is **one-sided**: it is reported apart, by which feed lacks it, and is never counted as agreement
-or as disagreement. A unit that lacks a state or a bar on both feeds is reported apart too ("both lack").
+Every unit falls in exactly one of these sets, tested in this order:
+
+1. **Clock-fixed**: the board's clock alone makes it `no_trade`, judged at `end + CLOSE_GRACE_MS` in New York, as
+   `nameState` judges it: from the lunch block (`lunchBlock(halfDay)`: on a full day, `LUNCH_FROM_MIN` 11:30 to
+   `LUNCH_TO_MIN` 13:00) and from the flat time (`flatMinute(halfDay)`: 15:10, or 12:10 on a half day) to the close.
+   `halfDay` is `isHalfDay(edition)`, as `evaluateSlot` uses it. Counted apart; never in the share.
+2. **No plan**: the side has no plan on the focus card (`focusPlan(item)[side] === null`), so the board holds it at
+   `no_trade` whatever the price. Counted apart; never in the share.
+3. **Both lack**: neither feed holds the slot's bar for the name. Counted apart; never in the share.
+4. **Price-dependent (comparable)**: every other unit, including one where exactly one feed lacks the slot's bar.
+   Such a unit counts by its two words: `paused` or `none` on the feed without the bar against `watch` on the other
+   is a disagreement. How many comparable units lacked the bar on IEX only and on SIP only is reported beside the
+   share as a fact.
+
+The sizes of the excluded clock-fixed set, per name and side (fixed by the clock, whatever the data):
+
+| Day | Live slots | Clock-fixed | Not clock-fixed |
+|---|---|---|---|
+| Full day | 192 (09:36 to 15:58) | 70: 45 in the lunch block (11:30 to 12:58) + 25 from the flat time (15:10 to 15:58); 36.5% | 122 |
+| Half day | 102 (09:36 to 12:58) | 25 from the flat time (12:10 to 12:58); no lunch block; 24.5% | 77 |
+
+A side with no plan adds the remaining 122 (full day) or 77 (half day) units of that side to "no plan".
 
 ## The measures
 
 Per session:
 
-1. **State agreement**: of the comparable units, how many carry the identical state word (`no_trade`, `watch`,
-   `get_ready`, `enter_zone`, `plan_off`, `missed`, `paused`) on both feeds. Reported as a count and a share, with the
-   full table of (IEX state, SIP state) pairs, and the disagreeing units listed by name, side, slot and the two states.
+1. **State agreement**: of the comparable units, how many carry the identical word on both feeds (`none` against
+   `none` is identical). Reported as a count and a share, with the full table of (IEX word, SIP word) pairs, and the
+   disagreeing units listed by name, side, slot and the two words. Beside it: the comparable units where IEX lacked
+   the slot's bar, where SIP lacked it, and the counts of the clock-fixed, no-plan and both-lack units, with the
+   clock-fixed units' own pair table (a pause inside a clock-fixed window shows there, outside the share).
 2. **Enter-zone events on each feed**: for each name and side, in slot order over the live slots, an event is a unit
-   whose state is `enter_zone` when the previous slot's state for the same name and side was not `enter_zone`. A
-   previous slot with no state counts as not `enter_zone`; the first live slot has no previous slot, so `enter_zone`
-   there is an event. Events are found on each feed's own states, comparable or not.
+   whose word is `enter_zone` when the previous slot's word for the same name and side was not `enter_zone` (`none`
+   is not `enter_zone`). The first live slot has no previous slot, so `enter_zone` there is an event. Events are found
+   on each feed's own words, in every set.
 3. **Matched events**: an IEX event and a SIP event for the same name and side match when their slots are at most
    one slot apart (plus or minus one slot, 2 minutes). Each event matches at most one other. Pairs are taken closest
    first (offset 0 before plus or minus 1), then earliest. The **offset** of a match is the SIP event's slot minus
-   the IEX event's slot, in slots (positive: SIP later).
-   Reported: matched count, **IEX-only** events (no SIP event within one slot), **SIP-only** events, and of the
-   matched events the **median offset** and the **worst offset** (the largest in size), with the count at each
-   offset (-1, 0, +1).
-4. **Not comparable**: the one-sided units, split into "IEX lacks" and "SIP lacks", and the "both lack" units.
-5. **Bars missing per slot**: for every slot of the session (live or not), how many focus names have no bar for that
-   slot on IEX, and how many on SIP; and the totals.
+   the IEX event's slot, in slots (positive: SIP later). Reported: matched count, **IEX-only** events, **SIP-only**
+   events, and of the matched events the **median offset** and the **worst offset** (the largest in size), with the
+   count at each offset (-1, 0, +1).
+4. **Names without bars**: the focus names with no bar at all that session, per feed (`names_without_bars`). The
+   report is still written: such a name's units read `none` (or `paused`) on that feed and, wherever the other feed
+   has the slot's bar, count as comparable disagreements. Read it as "that feed had no prices for that name all day",
+   a feed fact, not an engine fact.
+5. **No state**: per feed, how many (name, live slot) evaluations carried no state, by the engine's reason, and how
+   many live slots the evaluation did not answer `ok`.
+6. **Bars missing per slot**: for every slot of the session, how many focus names have no bar for that slot on IEX,
+   and how many on SIP; and the totals.
 
 A report is written for one session at a time. Its share and its unmatched events are shown, but **a single session
 is never read** as equivalent or different.
 
 ## The reading (fixed)
 
-Over **at least 5 sessions** (distinct session days in the running summary, the latest run of each day counted
-once), pooled:
+The summary reads the latest run of each session day, and **never pools sessions with different engine labels**. It
+reads the label of the most recent session, over the sessions run under that label:
 
-- the feeds are **"equivalent for the board"** when **at least 98% of the comparable units match** (identical
-  comparable units x 100 >= 98 x comparable units, so exactly 98.000% passes and anything below does not) **and every
-  enter-zone event on either feed has a match within one slot** (IEX-only + SIP-only = 0);
-- otherwise they are **"different"**. Zero comparable units over the sessions reads "different": agreement cannot be
-  shown;
-- with fewer than 5 sessions the summary says **"not enough sessions"** and gives no reading.
+- with **at least 5 sessions of that label**, pooled, the feeds are **"equivalent for the board"** when **at least
+  98% of the comparable (price-dependent) units match** (identical comparable units x 100 >= 98 x comparable units,
+  so exactly 98.000% passes and one identical unit fewer does not) **and every enter-zone event on either feed has a
+  match within one slot** (IEX-only + SIP-only = 0);
+- otherwise, with at least 5 such sessions, they are **"different"**. Zero comparable units reads "different":
+  agreement cannot be shown;
+- with fewer than 5 sessions of that label the summary says **"not enough sessions"**, or **"not enough sessions
+  (labels differ)"** when sessions under other labels exist (they are listed per label, never added in).
 
-The one-sided counts and the bars-missing counts are shown beside the reading and are not part of it. A large
-one-sided count is itself a finding about the feeds (one of them has no price in slots where the other does) and the
-owner reads it as such; it is not hidden by the reading.
+The clock-fixed, no-plan and both-lack counts, the IEX-lacks and SIP-lacks counts, the names without bars and the
+bars-missing counts are shown beside the reading and are not part of it.
 
 What follows:
 
@@ -131,9 +177,13 @@ feeds**:
 
 These are listed in every report's output as well.
 
-1. **The run-time snapshot is not reproduced.** Live, a name whose snapshot's last trade is older than the slot's
-   end can read `paused` from it, and a snapshot high or low printed after the slot can move a side to `missed`. The
-   replay sees only the bars, so neither effect appears. Both replays lack it alike.
+1. **The run-time snapshot is not reproduced, and this cuts both ways.** It **removes pauses**: in the replay a
+   slot that has its own bar is dated inside that bar, so it is never stale; live, a slot's only trade can come early
+   in the bar and be more than `TRADE_STALE_MS` (120 s) old when the board judges it, and the board pauses. It
+   **adds pauses**: in the replay a slot without its own bar is dated at the last bar's start, which is older than
+   the true last trade (that bar may have traded up to its end), so the replay can pause where the live board did
+   not. It also drops a `missed` that only a snapshot high or low printed after the slot would cause. Both replays
+   are treated alike, but the pauses counted are the replay's, not the live board's.
 2. **Historical bars, not the bars the server read.** The replay reads each feed's bars after the session. A late
    or corrected print can make them differ from what the live server read a minute after the slot. Both feeds are
    read the same way, so the comparison is fair between them, but it is not a re-run of the live records.
@@ -150,11 +200,14 @@ These are listed in every report's output as well.
 
 ## Running it
 
-After a session has closed, on a machine with the Alpaca keys in `.env` (`APCA_API_KEY_ID` and
-`APCA_API_SECRET_KEY`, or `ALPACA_API_KEY_ID` and `ALPACA_API_SECRET_KEY`):
+Run from an up-to-date worktree of `origin/main` (`git worktree add ~/trading-wt/feed-agreement origin/main`, then
+`make bootstrap` and `cd dashboard && pnpm install --frozen-lockfile`), never from the stale console checkout
+`~/trading`: the engine label in the report must be the one in production. The Alpaca keys come from the env file
+(`ENV_FILE`, `.env` by default): `APCA_API_KEY_ID` and `APCA_API_SECRET_KEY`, or `ALPACA_API_KEY_ID` and
+`ALPACA_API_SECRET_KEY`. The file is read by Node's `--env-file` parser, never sourced as shell.
 
 ```
-make feed-agreement DAY=2026-11-12 EDITION=var/feed-agreement/editions/2026-11-12.json
+make feed-agreement DAY=2026-11-12 EDITION=var/feed-agreement/editions/2026-11-12.json ENV_FILE=$HOME/trading/.env
 make feed-agreement-summary
 ```
 
@@ -163,12 +216,14 @@ make feed-agreement-summary
 The runner reads the edition from a local file (`--edition`). Two ways to get it, both with credentials the owner
 already has:
 
-- **Between the close and the evening edition** (until 21:52 UTC, `OPTIONS_SLOT_UTC`, the time the next session's
-  card replaces it): the site's latest edition is still that session's. On a machine whose `.env` has
-  `DASHBOARD_INGEST_URL` and `DASHBOARD_INGEST_SECRET` (the trading host's, which the pipeline check already uses):
-  `make feed-agreement-edition DAY=2026-11-12`. It reads the signed `GET /api/editions/options` (read only, the
-  same call `wt.options.pipeline_check` makes) and saves the edition to
+- **Between the close and the evening edition** (until 21:52 UTC, `OPTIONS_SLOT_UTC`, when the next session's card
+  replaces it): the site's latest edition is still that session's. On the **console Mac**, with the Mac's own
+  `DASHBOARD_INGEST_URL` and `DASHBOARD_INGEST_SECRET` in its env file:
+  `make feed-agreement-edition DAY=2026-11-12 ENV_FILE=$HOME/trading/.env`. It makes one signed, read-only
+  `GET /api/editions/options` (the call `wt.options.pipeline_check` makes) and saves the edition to
   `var/feed-agreement/editions/<day>.json` only when its session is that day; otherwise it saves nothing and says so.
+  **Never copy a secret off the trading host** to do this; if the Mac has no ingest secret of its own, use the next
+  way.
 - **Any later day**: the dashboard keeps one copy per session at `options/editions/<day>.json` in its private Blob
   store. The owner downloads it from the Vercel dashboard (the project's Storage, Blob, browse) with the owner's own
   login, and passes its path.
@@ -177,36 +232,43 @@ The edition is PRIVATE (it names the focus names and their levels). Keep it unde
 
 ### What the runner does
 
-- Refuses a day that is not a session (weekend, holiday), a session not yet closed (now before the close plus
-  `SERVER_SETTLE_MS`), and an edition whose `session` is not that day or which has no focus names.
+- Refuses a malformed day, a day that is not a session (weekend, holiday), a session until **20 minutes after its
+  close** (16:20 New York, 13:20 on a half day, so the historical bars have settled), and an edition whose `session`
+  is not that day or which has no focus names. Nothing is read upstream before these checks pass.
 - Reads, for the focus names only, that session's 2-minute bars from `iex` and from `sip`, from 09:30 to the close:
-  read-only `GET /v2/stocks/bars` on `data.alpaca.markets`, one feed at a time. It keeps under 200 calls a minute,
-  waits for `Retry-After` on a 429, and stops at a hard time budget (`BUDGET_S`, 120 s by default). The keys are sent
-  only in Alpaca's headers; they are never printed or logged, and neither is a page token or a response body.
-- Replays both feeds through `evaluateSlot` and writes, under `var/feed-agreement/` (git-ignored):
-  `<day>.json` (the full report), `<day>.txt` (a short table) and one row appended to `summary.jsonl`. It then prints
-  the table and the summary's reading.
-- The output holds counts, state words, slot times (New York `HHMM`) and symbols only: no level, no price, no amount.
-  Nothing is sent anywhere: no ntfy, no Blob write, no publish.
+  read-only `GET /v2/stocks/bars` on `data.alpaca.markets`, one feed at a time, following `next_page_token` (at most
+  20 pages). It keeps under 200 calls a minute (180), waits for `Retry-After` (seconds or an HTTP date; 5 s when
+  absent) on a 429 and retries a 429 at most **5 times**, and stops at a hard time budget (`BUDGET_S`, 120 s by
+  default), never starting a wait that would end past it. The keys are sent only in Alpaca's headers; they are never
+  printed or logged, and neither is a page token or a response body.
+- Replays both feeds through `evaluateSlot` and writes, under `var/feed-agreement/` (git-ignored): `<day>.json` (the
+  full report), `<day>.txt` (a short table) and the running summary `summary.jsonl` with one row for the session.
+  Each file is written to a temporary name and renamed into place, the summary last, so a failure leaves no partial
+  file. It then prints the table and the summary's reading.
+- The output holds counts, state words, slot times (New York `HHMM`), symbols and the engine label only: no level, no
+  price, no amount. Nothing is sent anywhere: no ntfy, no Blob write, no publish.
 
 ### When it stops without a report
 
-In every case below it prints one line saying exactly what happened, exits non-zero, and writes nothing (no report
-file, no summary row), so no misleading report exists.
+In every case below it prints one line saying what happened (never a stack trace), exits non-zero, and leaves no
+report file and no new summary row.
 
 | Exit | Line begins | Meaning |
 |---|---|---|
-| 2 | `usage:` | missing or malformed arguments |
-| 3 | `refused:` | not a session day, not yet closed, or an edition that is not that session's or has no focus names |
-| 4 | `no keys:` | no Alpaca keys in the environment |
-| 5 | `sip not entitled:` | Alpaca answered 403 for the SIP feed: the plan does not include it (on IEX: `iex refused:`) |
+| 2 | `usage:` | missing or malformed arguments (a day not `YYYY-MM-DD` included) |
+| 3 | `refused:` | not a session day, less than 20 minutes after the close, or an edition that is not that session's or has no focus names; for `feed-agreement-edition`, the site holds another session's edition |
+| 4 | `no keys:` | no Alpaca keys in the environment (for `feed-agreement-edition`: no ingest URL or secret) |
+| 5 | `sip not entitled:` | Alpaca answered 403 for SIP: not entitled, or recent data not permitted on this plan (on IEX: `iex refused:`) |
 | 6 | `no bars:` | a feed returned no bars for any focus name that session |
-| 7 | `time budget:` | the budget ran out, including a `Retry-After` longer than what is left |
-| 8 | `upstream:` | any other HTTP or network failure (the status only) |
+| 7 | `time budget:` | the budget ran out: a call or its body still arriving, a `Retry-After` or a call-limit wait longer than what is left |
+| 8 | `upstream:` | any other HTTP or network failure (the status only; 401 says keys rejected), a body that is not JSON, still paging after 20 pages, or a 429 after 5 retries |
+| 9 | `write failed:` | a report file or the summary could not be written; the new files are removed |
+| 10 | `failed:` | anything else unexpected (the error's name only) |
 
 ### Reading five sessions
 
-`make feed-agreement-summary` reads `summary.jsonl` and prints, over the distinct sessions (the latest run of each
-day), the pooled comparable and identical counts, the share, the IEX-only and SIP-only events, the one-sided counts,
-the engine labels seen, and the reading: "not enough sessions" (fewer than 5), "equivalent for the board" or
-"different", by the rule above.
+`make feed-agreement-summary` reads `summary.jsonl` and prints, for each engine label, the sessions run under it, the
+pooled comparable and identical counts, the share, the IEX-only and SIP-only events, the clock-fixed, no-plan,
+both-lack and one-sided counts and the names without bars; and the reading for the most recent session's label:
+"not enough sessions", "not enough sessions (labels differ)", "equivalent for the board" or "different", by the rule
+above.
