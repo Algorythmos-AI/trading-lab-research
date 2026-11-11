@@ -16,7 +16,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "gen:types": "node scripts/gen-types.mjs"
+    "gen:types": "node scripts/gen-types.mjs",
+    "gen:engine": "node scripts/gen-engine.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "1.3.1",

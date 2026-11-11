@@ -25,6 +25,21 @@ wt.ops.publish                            POST /api/ingest            (productio
                                             one "Mac offline" note a day otherwise → ntfy
                                             alert state in private Blob alerts/state.json
                                             prunes history older than 90 days, once a day
+
+                                          GET/POST /api/desk/flags    (the Options page, laptop and phone)
+                                            the owner's "done for today" flag → private Blob desk/flags.json
+                                            (ifMatch etag; production only, memory elsewhere)
+
+                                          GET /api/cron/desk          (Vercel Cron, every minute 13-21 UTC Mon-Fri)
+                                            the desk's states for the last settled 2-minute slot, in shadow
+                                            (DEC-0044): switch in private Blob desk/eval.json, one create-only
+                                            record per slot → private Blob desk/log/YYYY-MM-DD/HHMM.json; sends nothing
+
+                                          POST /api/desk/page-state   (the open Options page, while the switch is on)
+                                            the page's own states for the same slot, create-only, first page wins
+                                            → private Blob desk/log/YYYY-MM-DD/HHMM.page.json
+                                          GET /api/desk/eval-status   (the Options page's rail)
+                                            { eval, last_slot_end } only: "Server check paused since HH:MM NY"
 ```
 
 - **Contract.** `src/lib/snapshot.schema.json` is generated from the Python allowlist (`make schema`) and is
@@ -235,7 +250,7 @@ other panes keep working.
 | `RADAR_INGEST_SECRET` | Vercel production + the radar's cloud environment | HMAC key for key id `radar`. It may only publish research editions (`stocksdelta/radar`, `stocksdelta/options`, `stocksdelta/journal`); unset means the radar key is refused |
 | `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY` (or Alpaca's own `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY`) | Vercel production only | Alpaca paper-account keys, used only for the free IEX market data behind `/api/quote`; unset means the Options page shows live prices as off |
 | `ALPACA_DATA_URL` | Vercel (optional) | Market-data base URL, default `https://data.alpaca.markets` |
-| `CRON_SECRET` | Vercel production | Bearer token Vercel Cron sends to `/api/cron/watchdog` |
+| `CRON_SECRET` | Vercel production | Bearer token Vercel Cron sends to `/api/cron/watchdog` and `/api/cron/desk` |
 | `NTFY_TOPIC` | Vercel production and preview + the Mac | Secret, random ntfy topic for pages; unset means log and skip |
 | `NTFY_SERVER` | Vercel (optional) | ntfy server, default `https://ntfy.sh` |
 | `DASHBOARD_FIXTURE` | Local, CI and Vercel preview | `1` serves the fixture snapshot (ignored in production) |
@@ -255,8 +270,61 @@ prints a secret; it prints only the ntfy topic and how to subscribe to it.
   everywhere), and a server-side denylist refuses restricted keys (decision titles, hypothesis names and
   statements, spec title and open items, headlines, review URLs, subjects, statements) even if a future schema
   allowed them. Validation errors name paths, never values.
-- **Read-only UI.** No page has a control that trades, kills, resets or changes anything. The only buttons
-  switch the colour theme and copy a command to the clipboard.
+- **Read-only UI.** No page has a control that trades, kills or resets anything. The buttons switch the colour
+  theme, copy a command to the clipboard, and set the owner's own "done for today" flag (below), the one thing the
+  browser writes.
+- **The done-for-today flag** (`/api/desk/flags`, `src/lib/desk-flags-run.ts`). One private Blob document,
+  `desk/flags.json`: `{ "v": 1, "done": { "day": "<New York day>", "at": "<instant>" } | null }`. It counts only on
+  the New York day it names, so it clears itself at the next day with no job; Undo is allowed for 60 s after it is
+  set, then the day stays done. What protects the write:
+  - Vercel Authentication, which covers `/api/*` exactly as it covers the pages (`src/proxy.ts` gates nothing: it
+    only sets the pages' script policy, which is why it skips `/api/`).
+  - Same origin only: POST needs `Content-Type: application/json` (else 415) and an `Origin` whose host is the
+    request's own, or `Sec-Fetch-Site: same-origin` when there is no Origin (else 403). No CORS headers are sent.
+  - Any request carrying `x-vercel-protection-bypass` is refused (403): the publisher's bypass secret can never
+    set or clear the flag.
+  - A body of at most 256 bytes (413), exactly `{"action": "done" | "undo"}` (400), 405 for other methods, a fixed
+    path, and error answers that are codes only: nothing from the request is echoed.
+  - Writes are conditional on the store's etag; a conflict (the other device's tap first) re-reads and re-applies
+    once, then answers 409. Nothing is shown as saved before the server answers.
+  - In fixture mode and anywhere but production it never touches Blob: the flag lives in the server process's
+    memory and every answer says `"memory": true`.
+  - A read that fails counts as done for the server's alerts (`doneForAlerts`), so a failed read never lets an entry
+    alert out; the page says "Could not check" instead.
+- **The server's shadow check of the Options desk** (DEC-0044; `src/lib/desk-eval.ts`, `desk-run.ts`,
+  `desk-page-run.ts`). It works out the desk's states on the server by calling the page's own functions
+  (`boardRows`, `boardMode`, `boardDay` over `trade-state.ts`) for the last settled 2-minute slot, and logs them. It
+  sends nothing: no alert, push or message, and no order. Its Blob documents, all private:
+  - `desk/eval.json`, the switch: exactly `{ "v": 1, "eval": "off" | "log" }`, read every run and by both page
+    routes; missing or anything else is off, so it is off until the owner writes it, and a change needs no deploy.
+  - `desk/log/YYYY-MM-DD/HHMM.json` (New York day, slot end), one per slot, create-only and never overwritten: a
+    second run in the slot (or a double fire, or a late retry) finds it and stops. Enum values, booleans, symbols and
+    instants only (`v`, `engine`, `status`, `reason`, `slot_end`, `evaluated_at`, `session`, the edition's session
+    and build time, `board`, `rows: [{ symbol, side, state, bar_end }]`, `gap_symbols`, `day: { journal_current,
+    break_today, day_limit_used, done, half_day, gap, broke_earlier, stale }`, `degraded_names`, `snapshot_ok`):
+    no price, level, amount, journal trade or free text. It reads the settled bars and the same snapshot the page's
+    quote route reads (the last trade's time for staleness, the more extreme high and low). A wrong-day edition logs
+    `wrong-day`; a bars or snapshot failure or timeout logs `degraded` with its reason and no rows; a name with a gap
+    from its break on (the page's own test) is listed in `degraded_names` with no state, the others keep theirs.
+    `ENGINE_VERSION` is generated by `pnpm gen:engine` from the engine's code (a unit test fails when it is stale).
+  - `desk/log/YYYY-MM-DD/HHMM.page.json`, a visible page's states for the same slot: as of the slot's close
+    (`rows`, `as_of`, `bars_delayed`) and when sent at settle (`rows_at_settle`); create-only, first visible page
+    wins. A hidden page's record goes to `HHMM.page-hidden.json`, so it can never take a visible page's place.
+
+  What protects each route:
+  - `GET /api/cron/desk`: the bearer `CRON_SECRET`, compared in constant time exactly like the watchdog (401
+    otherwise), `no-store`. Idle with no store call outside the New York session (the exchange calendar's
+    weekends, holidays and half days).
+  - `POST /api/desk/page-state`: hardened like `/api/desk/flags` (same origin, JSON only, the bypass header
+    refused, no CORS, `no-store`), a 2 KB body, POST only, and a strict schema: `{ slot_end, engine, as_of,
+    bars_delayed, rows, rows_at_settle }` (each row `{ symbol, side, state }`) or `{ slot_end, engine, hidden: true }`,
+    the symbols today's focus names, the states the engine's words, `as_of` inside the slot's grace window, the slot
+    one of today's that has just settled, the engine the server's own; refused while the switch is off.
+  - `GET /api/desk/eval-status`: GET and HEAD only, cross-site refused, the bypass header refused, `no-store`;
+    answers `{ eval, last_slot_end }` only, from at most five head() calls (never a listing).
+  - The Options page's server render reads the switch; while it is off the browser makes no request about the check
+    at all. While it is on, the page reads the status at most once a minute and posts once per settled slot.
+  - In fixture mode and anywhere but production none of them touches Blob: the switch reads as off.
 - **No secrets client-side.** Storage, HMAC and cron checks run only in server code; nothing secret is sent to
   the browser. Logs are one JSON line per event and never include bodies, headers or secret values.
 - **Headers.** `vercel.json` sets a strict Content-Security-Policy, `X-Frame-Options: DENY`,

@@ -178,6 +178,21 @@ describe("the day from the journal", () => {
     // a journal that is not current cannot say
     expect(boardDay(doc([{ pnl: 20, at: "2026-10-12T14:40:00Z" }], "2026-10-12T11:00:00Z"), now).wonToday).toBeNull();
   });
+
+  it("counts trades against the cap, so a sell-half is one entry", () => {
+    const at = (m: number) => `2026-10-12T14:${String(m).padStart(2, "0")}:00Z`;
+    // Each buy of 2 is sold in two halves: two matched pieces of one position.
+    const halves = (buys: number) =>
+      ({
+        as_of: "2026-10-12T14:59:00Z",
+        open: [],
+        trades: Array.from({ length: buys }, (_, i) =>
+          [1, 2].map((k) => ({ id: `h${i}-${k}`, symbol: "QQQ", kind: "call", strike: 600 + i, expiry: "2026-10-12", side: "long", qty: 1, multiplier: 100, entry: 1, exit: 1.01, pnl: 1, opened_at: at(i * 5), closed_at: at(i * 5 + k), close: "order" })),
+        ).flat(),
+      }) as unknown as JournalDoc;
+    expect(boardDay(halves(4), now).dayLimitUsed).toBe(false); // 8 pieces, 4 trades
+    expect(boardDay(halves(5), now).dayLimitUsed).toBe(true);
+  });
 });
 
 // ---- the board, drawn ------------------------------------------------------------------------------------------------

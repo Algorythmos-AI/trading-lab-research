@@ -126,6 +126,16 @@ export function freshness(
   return { state, ageMin, inWindow, window, allWindowsEnded: ended, assumed };
 }
 
+/** An age in the fewest characters, for a phone's header pill: "now", "12m", "5h", "42d". */
+export function shortAge(ageMin: number): string {
+  const m = Math.floor(ageMin);
+  if (m < 1) return "now";
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 48) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
+}
+
 export function describeAge(ageMin: number): string {
   const m = Math.floor(ageMin);
   if (m < 1) return "just now";

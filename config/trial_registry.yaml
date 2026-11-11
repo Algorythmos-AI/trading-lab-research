@@ -28,3 +28,5 @@ families:
     - {decision: DEC-0039, total: 18, status: accepted}   # EXP-0028: the clone's three trials again under the $15 cap
     - {decision: DEC-0040, total: 21, status: accepted}   # EXP-0029: the clone's three trials again under the $5.00 spread cap
     - {decision: DEC-0041, total: 35, status: accepted}   # EXP-0030: 10 tag arms + 4 shadow arms (HYP-0034 to HYP-0047), no orders
+  M:                                                      # the owner's own trades, labelled by the board (DEC-0045)
+    - {decision: DEC-0045, total: 3, status: accepted}    # EXP-0031: HYP-0048 OWN-ONPLAN, HYP-0049 OWN-CAUTION, HYP-0050 OWN-EARLY

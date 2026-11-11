@@ -132,7 +132,8 @@ export function CockpitSwitch({ className }: { className?: string }) {
       )}
     >
       {on ? <X aria-hidden className="size-4" /> : <MonitorUp aria-hidden className="size-4" />}
-      Cockpit
+      {/* An icon on a phone's rail; "Cockpit" is still the button's name. */}
+      <span className="max-sm:sr-only">Cockpit</span>
     </button>
   );
 }

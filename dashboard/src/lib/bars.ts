@@ -85,6 +85,10 @@ function cacheDue(at: number, t: number): boolean {
  * error (the route answers 502) and caches nothing from it. When Alpaca is still paging after MAX_PAGES, the names
  * asked for are reported missing and nothing is cached: their bars may be cut short. The keys, the page token and the
  * response body are never logged.
+ *
+ * `opts` is for the server's desk evaluator only (desk-run.ts, through fetchSettledBars); the page's route passes
+ * none and behaves exactly as before. `minFetchedAt` refetches a cached name read before that instant, so a bar that
+ * has just settled is never hidden by a read taken before it had; `timeoutMs` bounds each upstream page.
  */
 export async function fetchBars(
   symbols: string[],
@@ -93,6 +97,7 @@ export async function fetchBars(
   fetchImpl: typeof fetch = fetch,
   baseUrl: string = process.env.ALPACA_DATA_URL || DEFAULT_DATA_URL,
   halfDay = false,
+  opts: { minFetchedAt?: number; timeoutMs?: number } = {},
 ): Promise<BarsResponse> {
   const t = now.getTime();
   const open = sessionStart(now);
@@ -101,7 +106,7 @@ export async function fetchBars(
   if (!open || t < open.ms) return { as_of: now.toISOString(), feed: "iex", bars: {}, fetchedAt: {}, missing: [...symbols] };
   const due = symbols.filter((s) => {
     const hit = cache.get(s);
-    return !hit || hit.open !== open.ms || hit.half !== halfDay || cacheDue(hit.at, t);
+    return !hit || hit.open !== open.ms || hit.half !== halfDay || cacheDue(hit.at, t) || (opts.minFetchedAt !== undefined && hit.at < opts.minFetchedAt);
   });
   if (due.length > 0) {
     const got: Record<string, Bar2[]> = Object.fromEntries(due.map((s) => [s, []]));
@@ -112,7 +117,7 @@ export async function fetchBars(
       const res = await fetchImpl(`${baseUrl}/v2/stocks/bars?${q.toString()}`, {
         headers: { "APCA-API-KEY-ID": keys.id, "APCA-API-SECRET-KEY": keys.secret, accept: "application/json" },
         cache: "no-store",
-        signal: AbortSignal.timeout(8_000),
+        signal: AbortSignal.timeout(opts.timeoutMs ?? 8_000),
       });
       if (!res.ok) {
         logEvent("bars.fetch", { outcome: "http-error", status: res.status });
@@ -156,4 +161,21 @@ export async function fetchBars(
   }
   prune();
   return { as_of: new Date(oldest).toISOString(), feed: "iex", bars, fetchedAt, missing };
+}
+
+/**
+ * The desk evaluator's read (DEC-0044): the same bars and cache, but `minFetchedAt` is required, so a cached answer
+ * read before the slot's settle instant is always fetched again, and every upstream page is bounded by `timeoutMs`.
+ */
+export function fetchSettledBars(
+  symbols: string[],
+  keys: { id: string; secret: string },
+  now: Date,
+  minFetchedAt: number,
+  timeoutMs: number,
+  halfDay: boolean,
+  fetchImpl: typeof fetch = fetch,
+  baseUrl: string = process.env.ALPACA_DATA_URL || DEFAULT_DATA_URL,
+): Promise<BarsResponse> {
+  return fetchBars(symbols, keys, now, fetchImpl, baseUrl, halfDay, { minFetchedAt, timeoutMs });
 }

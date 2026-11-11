@@ -12,6 +12,7 @@ import { ArrowDownToLine, ArrowUpFromLine, ChevronRight, MoveHorizontal, Target 
 import { newYork } from "@/lib/format";
 import { TestingTag } from "@/components/client/trade-now";
 import { AltChips, FocusStateChip, LiveDistance, type LiveInputs, SideFrame } from "@/components/client/focus-card-live";
+import { TradeTicket } from "@/components/client/ticket";
 import { ladderInputs, LevelLadder } from "@/components/level-ladder";
 import { CHART_CODE, LINE } from "@/lib/chart-code";
 import { altChips, ruleChips } from "@/lib/focus-card";
@@ -117,6 +118,16 @@ function DecisionStrip({ symbol, plan, live }: { symbol: string; plan: SidePlan;
         {plan.target1 != null ? <Cell label="T1" value={px(plan.target1)} /> : null}
       </dl>
     </SideFrame>
+  );
+}
+
+/** A side's strip with its trade ticket folded under it, outside the strip so the strip itself never changes. */
+function SideBlock({ symbol, plan, live }: { symbol: string; plan: SidePlan; live: LiveInputs }) {
+  return (
+    <div className="grid min-w-0" data-side-block={plan.side}>
+      <DecisionStrip symbol={symbol} plan={plan} live={live} />
+      <TradeTicket symbol={symbol} plan={plan} live={live} />
+    </div>
   );
 }
 
@@ -370,8 +381,8 @@ function FocusCard({
       <LevelLadder item={item} ticker={ticker} session={session} halfDay={halfDay} closeDate={closeDate} premarket={premarket} />
       {plan.call || plan.put ? (
         <div className="grid gap-2" data-strips>
-          {plan.call ? <DecisionStrip symbol={item.symbol} plan={plan.call} live={live} /> : null}
-          {plan.put ? <DecisionStrip symbol={item.symbol} plan={plan.put} live={live} /> : null}
+          {plan.call ? <SideBlock symbol={item.symbol} plan={plan.call} live={live} /> : null}
+          {plan.put ? <SideBlock symbol={item.symbol} plan={plan.put} live={live} /> : null}
         </div>
       ) : null}
       <div className="grid gap-1.5">

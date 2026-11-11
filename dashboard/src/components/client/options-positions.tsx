@@ -27,7 +27,7 @@ function Line({ r, g }: { r: PositionRow; g: PositionGreeks | null }) {
         <span className="font-mono">
           {num(r.strike, r.strike % 1 === 0 ? 0 : 2)} {r.kind}
         </span>
-        <span className="text-muted-foreground block text-[0.6875rem]">
+        <span className="text-muted-foreground block text-[0.6875rem] max-sm:text-xs">
           {weekDate(r.expiry)}
           {r.expired ? ", expired" : r.days === 0 ? ", today" : r.days === 1 ? ", 1 day" : r.days !== null ? `, ${r.days} days` : ""} ·{" "}
           {r.qty < 0 ? `short ${Math.abs(r.qty)}` : `${r.qty} ${r.qty === 1 ? "contract" : "contracts"}`}
@@ -41,7 +41,7 @@ function Line({ r, g }: { r: PositionRow; g: PositionGreeks | null }) {
       </span>
       <span className="text-right font-mono">
         {num(r.price, 2)}
-        <span className="text-muted-foreground block text-[0.6875rem]">paid {num(r.avgPrice, 2)}</span>
+        <span className="text-muted-foreground block text-[0.6875rem] max-sm:text-xs">paid {num(r.avgPrice, 2)}</span>
       </span>
       <span className={cn("min-w-14 text-right font-mono", tone(r.unrealized))}>{dollars(r.unrealized)}</span>
     </>
@@ -167,7 +167,7 @@ export function OptionsPositions({
           ))}
         </ul>
       )}
-      <p className="text-muted-foreground mt-1.5 text-[0.6875rem]">
+      <p className="text-muted-foreground mt-1.5 text-[0.6875rem] max-sm:text-xs">
         Paper account, read only. Marks and results are the broker&apos;s. Δ and what a day of waiting costs (to expiry, in a contract&apos;s last day) are estimates from option quotes 15 minutes behind the market.
       </p>
     </Pane>

@@ -79,10 +79,10 @@ function ZoneRow({ r, side, hot, onZone }: { r: Rung; side: "above" | "at" | "be
       />
       <span className="min-w-0">
         <span className="font-mono text-[0.8125rem]">{z.lo === z.hi ? num(z.lo, 2) : `${num(z.lo, 2)} to ${num(z.hi, 2)}`}</span>
-        {z.big ? <span className="ml-1.5 text-[0.6875rem] font-medium">major</span> : null}
-        <span className="text-muted-foreground block truncate text-[0.6875rem]">{(z.members ?? []).join(" + ")}</span>
+        {z.big ? <span className="ml-1.5 text-[0.6875rem] font-medium max-sm:text-xs">major</span> : null}
+        <span className="text-muted-foreground block truncate text-[0.6875rem] max-sm:text-xs">{(z.members ?? []).join(" + ")}</span>
       </span>
-      <span className="text-muted-foreground text-right font-mono text-[0.6875rem]">
+      <span className="text-muted-foreground text-right font-mono text-[0.6875rem] max-sm:text-xs">
         {r.inside ? "price inside" : r.distAtr !== null ? `${num(r.distAtr, 1)} ATR` : `${signed(r.distPct, 1)}%`}
       </span>
     </li>
@@ -175,7 +175,7 @@ export function OptionsDetail({
             {t.symbol}
           </h2>
           {fullHref ? (
-            <Link href={fullHref} prefetch={false} data-full-page className="text-muted-foreground hover:text-foreground text-[0.6875rem] underline underline-offset-2">
+            <Link href={fullHref} prefetch={false} data-full-page className="text-muted-foreground hover:text-foreground text-[0.6875rem] underline underline-offset-2 max-sm:text-xs">
               Full page
             </Link>
           ) : null}
@@ -208,7 +208,7 @@ export function OptionsDetail({
         {hasMap ? (
           <div className="mx-auto grid w-full max-w-4xl content-start gap-1.5">
             <div role="group" aria-label="Map layers" className="flex flex-wrap items-center gap-1">
-              <span className="text-muted-foreground mr-1 text-[0.6875rem]">Show</span>
+              <span className="text-muted-foreground mr-1 text-[0.6875rem] max-sm:text-xs">Show</span>
               {layers.map((k) => (
                 <button
                   key={k}
@@ -220,7 +220,7 @@ export function OptionsDetail({
                     onToggleLayer(k);
                   }}
                   className={cn(
-                    "rounded border px-1.5 py-0.5 text-[0.6875rem] transition-colors",
+                    "rounded border px-1.5 py-0.5 text-[0.6875rem] transition-colors max-sm:text-xs",
                     hiddenLayers.has(k) ? "text-muted-foreground hover:text-foreground" : "bg-accent text-foreground",
                   )}
                 >
@@ -230,7 +230,7 @@ export function OptionsDetail({
             </div>
             {hourly ? (
               <div role="group" aria-label="Map range" className="flex flex-wrap items-center gap-1">
-                <span className="text-muted-foreground mr-1 text-[0.6875rem]">Candles</span>
+                <span className="text-muted-foreground mr-1 text-[0.6875rem] max-sm:text-xs">Candles</span>
                 {(["daily", "hourly"] as const).map((k) => (
                   <button
                     key={k}
@@ -240,13 +240,13 @@ export function OptionsDetail({
                       ev.currentTarget.focus();
                       onRange?.(k);
                     }}
-                    className={cn("rounded px-2 py-0.5 text-[0.6875rem] font-medium", range === k ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground")}
+                    className={cn("rounded px-2 py-0.5 text-[0.6875rem] font-medium max-sm:text-xs", range === k ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground")}
                   >
                     {k === "daily" ? "Daily" : "Hourly"}
                   </button>
                 ))}
                 {range === "hourly" ? (
-                  <span className="text-muted-foreground text-[0.6875rem]">
+                  <span className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">
                     · {hourly.length} finished hourly bars from the delayed tape; the last began {hourly[hourly.length - 1]!.t.slice(5).replace("T", " ")} ET
                   </span>
                 ) : null}
@@ -265,7 +265,7 @@ export function OptionsDetail({
         {/* Research, folded: the probation rules are not a signal, so they stay one click away while trading. */}
         <details aria-label={`${t.symbol} rules`} className="self-start">
           <summary className="cursor-pointer text-[0.8125rem] font-medium">Rules on this name (research)</summary>
-          <p className="text-muted-foreground text-[0.6875rem]">
+          <p className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">
             {paper.n === 0
               ? "No paper trades on this name yet."
               : `${paper.n} paper ${paper.n === 1 ? "trade" : "trades"}, ${paper.wins} won, ${rMult(paper.totalR, 2)} in total. R is measured on the stock.`}
@@ -278,8 +278,8 @@ export function OptionsDetail({
                 <li key={rule.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-2 py-1.5">
                   <span className="min-w-0">
                     <span className="block text-[0.8125rem] leading-snug">{rule.label ?? rule.id}</span>
-                    <span className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-1.5 text-[0.6875rem]">
-                      <Badge variant={ruleTone(rule.status)} className="px-1 text-[0.625rem]">
+                    <span className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-1.5 text-[0.6875rem] max-sm:text-xs">
+                      <Badge variant={ruleTone(rule.status)} className="px-1 text-[0.625rem] max-sm:text-xs">
                         {RULE_STATUS_LABEL[rule.status]}
                       </Badge>
                       {rule.side ? (rule.side === "call" ? "calls" : "puts") : null}

@@ -9,7 +9,7 @@ export function Kbd({
   return (
     <kbd
       className={cn(
-        "bg-muted rounded px-1 font-mono text-[0.625rem]",
+        "bg-muted rounded px-1 font-mono text-[0.625rem] max-sm:text-xs",
         className,
       )}
       {...rest}

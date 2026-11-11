@@ -90,13 +90,14 @@ const tone = (v: number | null) => (v === null || Math.round(v) === 0 ? "text-mu
 function Figure({ label, title, children }: { label: string; title?: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0" title={title}>
-      <dt className="text-muted-foreground truncate text-[0.6875rem]">{label}</dt>
+      <dt className="text-muted-foreground truncate text-[0.6875rem] max-sm:text-xs">{label}</dt>
       <dd className="font-mono text-[0.8125rem]">{children}</dd>
     </div>
   );
 }
 
-const FIELD = "bg-background h-8 rounded border px-2 font-mono text-[0.8125rem]";
+/** 13 px from sm up; 16 px on a phone, so iOS Safari does not zoom the page into the field when it takes the focus. */
+const FIELD = "bg-background h-8 rounded border px-2 font-mono text-[0.8125rem] max-sm:text-base";
 
 /**
  * One call or put for the selected name: what it costs, where it breaks even, and what the model says it would be
@@ -217,7 +218,7 @@ export function OptionsContract({
       {onBreakeven && view && pick && view.breakeven !== null ? <ReportBreakeven price={view.breakeven} kind={pick.kind} report={onBreakeven} /> : null}
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
         {heading}
-        <span className="text-muted-foreground flex items-center gap-3 text-[0.6875rem]">
+        <span className="text-muted-foreground flex items-center gap-3 text-[0.6875rem] max-sm:text-xs">
           {chain ? <span>Option quotes run {chain.delay_min} minutes behind the market</span> : null}
           <button type="button" onClick={shut} className="hover:text-foreground flex items-center gap-1 rounded px-1">
             <X aria-hidden className="size-3" />
@@ -268,7 +269,7 @@ export function OptionsContract({
                 </button>
               ))}
             </div>
-            <label className="grid gap-0.5 text-[0.6875rem]" htmlFor={`${ids}-expiry`}>
+            <label className="grid gap-0.5 text-[0.6875rem] max-sm:text-xs" htmlFor={`${ids}-expiry`}>
               <span className="text-muted-foreground">Expiry</span>
               <select id={`${ids}-expiry`} value={pick.expiry} onChange={(ev) => change({ expiry: ev.target.value })} className={FIELD}>
                 {/* A remembered expiry the feed no longer offers still has to be the selected option. */}
@@ -284,7 +285,7 @@ export function OptionsContract({
                 })}
               </select>
             </label>
-            <label className="grid gap-0.5 text-[0.6875rem]" htmlFor={`${ids}-strike`}>
+            <label className="grid gap-0.5 text-[0.6875rem] max-sm:text-xs" htmlFor={`${ids}-strike`}>
               <span className="text-muted-foreground">Strike</span>
               <select id={`${ids}-strike`} value={String(pick.strike)} onChange={(ev) => change({ strike: Number(ev.target.value) })} className={FIELD}>
                 {!strikes.includes(pick.strike) ? <option value={String(pick.strike)}>{num(pick.strike, 2)}</option> : null}
@@ -295,7 +296,7 @@ export function OptionsContract({
                 ))}
               </select>
             </label>
-            <label className="grid gap-0.5 text-[0.6875rem]" htmlFor={`${ids}-count`}>
+            <label className="grid gap-0.5 text-[0.6875rem] max-sm:text-xs" htmlFor={`${ids}-count`}>
               <span className="text-muted-foreground">Contracts</span>
               <input
                 id={`${ids}-count`}
@@ -315,7 +316,7 @@ export function OptionsContract({
                 className={cn(FIELD, "w-16")}
               />
             </label>
-            <label className="grid gap-0.5 text-[0.6875rem]" htmlFor={`${ids}-paid`}>
+            <label className="grid gap-0.5 text-[0.6875rem] max-sm:text-xs" htmlFor={`${ids}-paid`}>
               <span className="text-muted-foreground">Paid, per share</span>
               <input
                 id={`${ids}-paid`}
@@ -398,11 +399,11 @@ export function OptionsContract({
                   </caption>
                   <thead>
                     <tr className="border-b">
-                      <th scope="col" className="text-muted-foreground py-1.5 pr-2 text-left text-[0.6875rem] font-medium">
+                      <th scope="col" className="text-muted-foreground py-1.5 pr-2 text-left text-[0.6875rem] font-medium max-sm:text-xs">
                         If {t.symbol} is at
                       </th>
                       {view.times.map((time) => (
-                        <th key={time.label} scope="col" className="text-muted-foreground px-2 py-1.5 text-right text-[0.6875rem] font-medium">
+                        <th key={time.label} scope="col" className="text-muted-foreground px-2 py-1.5 text-right text-[0.6875rem] font-medium max-sm:text-xs">
                           {time.label}
                         </th>
                       ))}
@@ -413,12 +414,12 @@ export function OptionsContract({
                       <tr key={row.level.label} className={cn("border-b last:border-b-0", row.level.label === view.here && "shadow-[inset_2px_0_0_var(--primary)]")}>
                         <th scope="row" className={cn("py-1.5 pr-2 text-left font-normal", row.level.label === view.here && "pl-2")}>
                           <span className="font-mono">{num(row.level.price, 2)}</span>
-                          <span className="text-muted-foreground ml-1.5 text-[0.6875rem]">{row.level.label}</span>
+                          <span className="text-muted-foreground ml-1.5 text-[0.6875rem] max-sm:text-xs">{row.level.label}</span>
                         </th>
                         {row.cells.map((cell, i) => (
                           <td key={view.times[i]!.label} className="px-2 py-1.5 text-right font-mono">
                             {num(cell.value, 2)}
-                            <span className={cn("ml-2 inline-block min-w-14 text-[0.6875rem]", tone(cell.pnl))}>{money(cell.pnl)}</span>
+                            <span className={cn("ml-2 inline-block min-w-14 text-[0.6875rem] max-sm:text-xs", tone(cell.pnl))}>{money(cell.pnl)}</span>
                           </td>
                         ))}
                       </tr>
@@ -431,7 +432,7 @@ export function OptionsContract({
 
           {shape && !view.stale && !view.expired ? <VolShape shape={shape} spot={spot!} strike={pick?.strike ?? null} expiry={weekDate(expiry!.date)} /> : null}
 
-          <p className="text-muted-foreground text-[0.6875rem]">
+          <p className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">
             {view.contract?.at ? `This contract's last quote: ${newYork(view.contract.at, false)} New York. ` : ""}
             {read.inSession && read.stale ? "The stock's own price has stopped updating; these numbers use its last one. " : ""}
             {view.sigma === null && !view.expired && !view.stale ? "No volatility is available for this contract, so only its value at expiry is shown. " : ""}

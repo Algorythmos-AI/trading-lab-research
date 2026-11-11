@@ -8,7 +8,7 @@ import { Panel } from "@/components/panel";
 import { StatTile, StatTiles } from "@/components/stat-tile";
 import { StatusBadge, TONE_TEXT, ToneIcon } from "@/components/status";
 import type { Health } from "@/lib/health";
-import { lessons, marketState, moneyView, sessionView, shortDay, summarize, type JournalDoc, type Trade } from "@/lib/journal";
+import { ALL, filterHref, lessons, marketState, moneyView, sessionView, shortDay, skippedLine, summarize, type JournalDoc, type Trade } from "@/lib/journal";
 import type { Tone } from "@/lib/labels";
 import type { OptionsEdition } from "@/lib/options.types";
 import { hourBands, keptStreak, keptVsBroken, nextOpen, periodTotals, quickVsSlow, ruleDays, since, tickerEnds, untilText, withRun } from "@/lib/overview";
@@ -97,6 +97,11 @@ export function AccountHero({ doc, now }: { doc: JournalDoc; now: Date }) {
               Put in {aud(money.netIn)} net · <span className={TONE_TEXT[toneOf(money.gain)]}>{aud(money.gain, true)}</span>
             </p>
           ) : null}
+          {money && money.skipped > 0 ? (
+            <p data-money-skipped={money.skipped} className="text-warn text-xs font-medium">
+              Money in and out: {skippedLine(money.skipped)}
+            </p>
+          ) : null}
         </div>
         <div className="grid content-start gap-1">
           <p className="text-muted-foreground text-xs">{view ? (view.isToday ? "Today" : `Last session · ${dayLabel(view.day)}`) : "Latest session"}</p>
@@ -148,7 +153,7 @@ function RuleStreak({ trades }: { trades: readonly Trade[] }) {
             key={d.day}
             title={`${shortDay(d.day)}: ${usd(d.pnl)} · ${d.trades} trade${d.trades === 1 ? "" : "s"} · ${d.kept ? "rules kept" : d.broke === "loss" ? `lost more than $${DAY_LOSS_LIMIT}` : d.broke === "count" ? `more than ${MAX_TRADES_PER_DAY} trades` : "both rules broken"}`}
             className={cn(
-              "grid size-6 place-items-center rounded-full text-[0.625rem] font-semibold",
+              "grid size-6 place-items-center rounded-full text-[0.625rem] font-semibold max-sm:text-xs",
               d.kept ? (d.pnl >= 0 ? "bg-good-fill text-white" : "bg-good-fill/35 text-foreground") : "bg-bad-fill text-white",
             )}
           >
@@ -288,7 +293,7 @@ export function PatternsPanel({ trades, now }: { trades: readonly Trade[]; now: 
               rows={ends.map((g) => ({
                 key: g.key,
                 label: (
-                  <Link href={`/trades?symbol=${encodeURIComponent(g.key)}`} className="font-mono underline-offset-2 hover:underline" title={`${g.trades} trades`}>
+                  <Link href={filterHref({ ...ALL, symbol: g.key })} className="font-mono underline-offset-2 hover:underline" title={`${g.trades} trades`}>
                     {g.key}
                   </Link>
                 ),
@@ -354,7 +359,7 @@ export function NextSessionPanel({ options, radar }: { options: OptionsEdition |
                 <RoomStrip f={f} />
                 <StatusBadge tone={BIAS[f.bias].tone}>{BIAS[f.bias].word}</StatusBadge>
                 <span />
-                <span className="text-muted-foreground font-mono text-[0.6875rem]">
+                <span className="text-muted-foreground font-mono text-[0.6875rem] max-sm:text-xs">
                   <span className="text-good">S {p(f.support?.price)}</span> · close {p(f.close)} · <span className="text-bad">R {p(f.resistance?.price)}</span>
                 </span>
                 <span />

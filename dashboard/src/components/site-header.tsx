@@ -31,8 +31,11 @@ export function SiteHeader({ result, crypto, hft, now }: { result: SnapshotResul
   const hwindows = list(hsnap?.expected_windows);
   const hf = freshness(hsnap?.as_of ?? null, hwindows, now);
   return (
-    <header className="bg-card/80 supports-[backdrop-filter]:bg-card/70 z-30 border-b backdrop-blur sm:sticky sm:top-0">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-1.5 px-4 pt-3 sm:gap-x-4 sm:px-6">
+    // On a phone the header is two rows: the logo, the desk switch, the feed pill and the theme button on one row
+    // that never wraps; then the section tabs, with the clocks as one chip pinned over the tab row's right end (the
+    // tab row stops short of it). From sm up nothing here changes.
+    <header className="bg-card/80 supports-[backdrop-filter]:bg-card/70 z-30 border-b backdrop-blur max-sm:relative sm:sticky sm:top-0">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-1.5 px-4 pt-3 max-sm:flex-nowrap max-sm:gap-x-2 max-sm:pt-1 sm:gap-x-4 sm:px-6">
         {/* On a phone the name gives way so the desk switch shares its row: the header is one row shorter. */}
         <div className="flex min-w-0 items-center gap-2.5 sm:mr-auto">
           <Mark />
@@ -50,13 +53,15 @@ export function SiteHeader({ result, crypto, hft, now }: { result: SnapshotResul
               hft: { asOf: hsnap?.as_of ?? null, windows: hwindows, initial: { state: hf.state, ageMin: hf.ageMin } },
             }}
           />
-          <ThemeToggle />
+          <ThemeToggle className="max-sm:ml-auto max-sm:size-11" />
         </div>
-        <div className="w-full sm:order-none sm:w-auto">
+        <div className="w-full max-sm:absolute max-sm:right-4 max-sm:bottom-0 max-sm:flex max-sm:h-11 max-sm:w-auto max-sm:items-center sm:order-none sm:w-auto">
           <Clocks />
         </div>
       </div>
-      <div className="mx-auto max-w-6xl px-2 sm:px-4">
+      {/* On a phone the tab row ends where the clock chip starts (10 rem, the widest chip: NY and Sydney over each
+          other, then "After-hours"). */}
+      <div className="mx-auto max-w-6xl px-2 max-sm:mr-40 max-sm:min-h-11 sm:px-4">
         <NavTabs />
       </div>
     </header>

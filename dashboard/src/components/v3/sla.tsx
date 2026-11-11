@@ -39,7 +39,7 @@ export function SlaPanel({ s, children }: { s: Snapshot; children?: React.ReactN
               <TableRow>
                 <TableHead>Job</TableHead>
                 {days.map((d) => (
-                  <TableHead key={d} className="px-0.5 text-center text-[0.6875rem] font-normal">
+                  <TableHead key={d} className="px-0.5 text-center text-[0.6875rem] font-normal max-sm:text-xs">
                     <span className="sr-only">{shortDate(d)}</span>
                     <span aria-hidden>{d.slice(8, 10)}</span>
                   </TableHead>
@@ -63,7 +63,7 @@ export function SlaPanel({ s, children }: { s: Snapshot; children?: React.ReactN
                           aria-label={title}
                           role="img"
                           className={cn(
-                            "inline-flex size-5 items-center justify-center rounded-sm text-[0.6875rem] font-semibold",
+                            "inline-flex size-5 items-center justify-center rounded-sm text-[0.6875rem] font-semibold max-sm:text-xs",
                             st === "none" || st === "n/a"
                               ? "bg-muted text-muted-foreground"
                               : cn(TONE_FILL[tone], tone === "warn" ? "text-black" : "text-white"),

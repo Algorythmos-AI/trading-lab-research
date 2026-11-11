@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/watchdog",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/desk",
+      "schedule": "* 13-21 * * 1-5"
     }
   ],
   "headers": [

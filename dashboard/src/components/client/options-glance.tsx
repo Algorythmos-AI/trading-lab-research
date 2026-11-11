@@ -124,7 +124,7 @@ export function OptionsGlance({
                       {t.symbol}
                     </a>
                     {chip ? (
-                      <span className="text-muted-foreground flex items-center gap-1 font-mono text-[0.6875rem]">
+                      <span className="text-muted-foreground flex items-center gap-1 font-mono text-[0.6875rem] max-sm:text-xs">
                         <span className={cn("inline-block size-2 rounded-[2px]", CHIP_DOT[chip])} />
                         {CHIP_LABEL[chip] ?? chip}
                       </span>
@@ -132,7 +132,7 @@ export function OptionsGlance({
                   </div>
                   <div className="flex items-baseline gap-2 font-mono text-sm sm:grid sm:gap-0.5">
                     <span>{num(price, 2)}</span>
-                    <span className="text-muted-foreground text-[0.6875rem]">{change !== null ? `${signed(change, 2)}%` : "close"}</span>
+                    <span className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">{change !== null ? `${signed(change, 2)}%` : "close"}</span>
                     <StateChip read={read} />
                   </div>
                 </div>
@@ -147,7 +147,7 @@ export function OptionsGlance({
                         marks={marks}
                         label={`${t.symbol}: ${view.downAtr === null ? "no support zone near" : `${num(view.downAtr, 1)} ATR down to the support zone at ${num(view.down, 2)}`}, ${view.upAtr === null ? "no resistance zone near" : `${num(view.upAtr, 1)} ATR up to the resistance zone at ${num(view.up, 2)}`}${marks.map((m) => `; focus card ${m.word.toLowerCase()} ${num(m.price, 2)}`).join("")}`}
                       />
-                      <div className="text-muted-foreground flex justify-between gap-2 font-mono text-[0.6875rem]">
+                      <div className="text-muted-foreground flex justify-between gap-2 font-mono text-[0.6875rem] max-sm:text-xs">
                         <span>{view.down === null ? "↓ none near" : `↓ ${num(view.downAtr, 1)} ATR · ${num(view.down, 2)}`}</span>
                         <span className="text-right">{view.up === null ? "none near ↑" : `${num(view.up, 2)} · ${num(view.upAtr, 1)} ATR ↑`}</span>
                       </div>
@@ -156,7 +156,7 @@ export function OptionsGlance({
                     <span className="text-muted-foreground text-xs">No ATR in this edition, so no bar.</span>
                   )}
                 </div>
-                <div className="hidden gap-1 font-mono text-[0.6875rem] sm:grid">
+                <div className="hidden gap-1 font-mono text-[0.6875rem] sm:grid max-sm:text-xs">
                   <span className="text-muted-foreground">IV pct {fracPct(ivp, 0)}</span>
                   <span className="bg-track relative h-1.5 overflow-hidden rounded-full">
                     {ivp != null ? (
@@ -170,7 +170,7 @@ export function OptionsGlance({
                 </div>
                 <div className="hidden text-right font-mono text-sm sm:block">
                   {t.expected_move?.day != null ? `±${num(t.expected_move.day, 2)}` : "—"}
-                  <span className="text-muted-foreground block text-[0.6875rem]">1-day move</span>
+                  <span className="text-muted-foreground block text-[0.6875rem] max-sm:text-xs">1-day move</span>
                 </div>
               </div>
             );

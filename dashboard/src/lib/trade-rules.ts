@@ -3,14 +3,16 @@
 // so none of it is written into this repository. The market numbers are EXP-0023's, held equal to its record by a test.
 import { INTRADAY_MAX_AGE_MIN, inUsSession, journalCheck } from "./feeds";
 import { etOffsetMin } from "./freshness";
-import { closeDay, daily, holdMinutes, nyTime, type SessionView, type Trade } from "./journal";
+import { closeDay, daily, holdMinutes, nyTime, type Lot, type SessionView, type Trade } from "./journal";
+import { partPastStop, peakPremium, premiumOverAt, tradeUnits, type TradeUnit } from "./owner-positions";
+import { PREMIUM_STOP } from "./premium-stop";
 
 /** The most a single trade may lose, in dollars. */
 export const RISK_PER_TRADE = 50;
 /** The most premium a single option may cost, in dollars. With the 25% stop it caps the loss at RISK_PER_TRADE. */
 export const MAX_PREMIUM = 200;
-/** Close an option once it has lost this share of what it cost. */
-export const PREMIUM_STOP = 0.25;
+/** Close an option once it has lost this share of what it cost (premium-stop.ts; R25 is measured in the same share). */
+export { PREMIUM_STOP } from "./premium-stop";
 /** A trade not working after this many minutes is closed. */
 export const TIME_STOP_MINUTES = 5;
 /** Stop trading for the day once the day's closed trades are down this much. */
@@ -22,8 +24,12 @@ export const MIN_ROOM_MULTIPLE = 2;
 /** The bar the entry is confirmed on, in minutes. */
 export const CONFIRM_BAR_MINUTES = 2;
 
-/** The owner's worked example of a plan written before entry: premium, the planned loss and the target as shares of it. */
-export const PLAN_EXAMPLE = { premium: 165, stopShare: 0.1, targetShare: 0.2 } as const;
+/**
+ * The rules evidence's mark for a winner that ran: an option closed +20% or more on its premium, before fees, piece by
+ * piece. Once the target share of the owner's worked $165 example; the example itself is now the trade ticket on the
+ * Options desk. Not the Loss size panel's line (owner-positions' SMALL_WIN_UNDER, +50%), which asks another question.
+ */
+export const RAN_TO_MARK = 0.2;
 
 /** What a plan comes to in dollars: the planned loss, the target and reward to risk. Before fees and slippage. */
 export function planNumbers(premium: number, stopShare: number, targetShare: number): { risk: number; reward: number; ratio: number; ok: boolean } {
@@ -219,54 +225,162 @@ export function replayDayStop(trades: readonly Trade[], limit = DAY_LOSS_LIMIT):
 
 // ── Rule breaks ──────────────────────────────────────────────────────────────────────────────────────────────────
 
+// The rules judge trades, not the journal's matched pieces (DEC-0045 section 1): long calls and puts are grouped into
+// positions (`tradeUnits` in owner-positions.ts). Grouping only stops a scale-out from counting as several entries
+// against the day's cap (rule 8). For every other rule a position breaks a rule when the position as a whole does OR
+// when any one of its pieces does by the per-piece test, so a position is never judged more kindly than its pieces
+// were. Shares and short pieces are judged one piece at a time. Results here are before fees, as the rules have
+// always been read.
+
+const OWN_ORDER = ["risk", "stop", "time", "flat"] as const;
+
+/** The per-piece tests of rules 4, 5, 6 and 9, each piece on its own entry, exit and hold. */
+function pieceOwn(t: Trade): { ids: Set<string>; loss: boolean; premium: boolean } {
+  const ids = new Set<string>();
+  const option = isOption(t);
+  const long = option && t.side === "long";
+  const loss = t.pnl < -RISK_PER_TRADE;
+  const premium = long && t.entry * t.multiplier * t.qty > MAX_PREMIUM + 1e-9;
+  if (loss || premium) ids.add("risk");
+  const exit = t.close === "expired" ? 0 : t.exit;
+  if (long && t.entry > 0 && 1 - exit / t.entry > PREMIUM_STOP + 1e-9) ids.add("stop");
+  if (t.pnl < 0 && holdMinutes(t) > TIME_STOP_MINUTES) ids.add("time");
+  if (option && closeDay(t) !== nyTime(t.opened_at).day) ids.add("flat");
+  return { ids, loss, premium };
+}
+
+/** One trade's verdict on rules 4, 5, 6 and 9, and when its first break was known. */
+export interface TradeVerdict {
+  unit: TradeUnit;
+  /** Rule ids broken, in rule order: risk, stop, time, flat. */
+  ids: string[];
+  /** Rule 4, apart: the loss over RISK_PER_TRADE, and the premium over MAX_PREMIUM. */
+  loss: boolean;
+  premium: boolean;
+  /** The most premium held at once (a position) or the piece's own cost (a long option piece); 0 for shares. */
+  peak: number;
+  /** When a break was first known, in ms: a piece's break at that piece's close, a break only the whole position shows
+   * at its last close; Infinity with none. */
+  knownAt: number;
+  /** The entries against the day's cap, in ms: each distinct opened_at. */
+  entries: number[];
+}
+
+/** A unit judged on its own (the day rules 7 and 8 need the day: see `judgeDay`). */
+export function judgeUnit(u: TradeUnit): TradeVerdict {
+  const t = u.unit;
+  const ids = new Set<string>();
+  let loss = false;
+  let premium = false;
+  let knownAt = Infinity;
+  for (const p of u.pieces) {
+    const own = pieceOwn(p);
+    for (const id of own.ids) ids.add(id);
+    loss ||= own.loss;
+    premium ||= own.premium;
+    if (own.ids.size) knownAt = Math.min(knownAt, Date.parse(p.closed_at));
+  }
+  const pieceIds = new Set(ids);
+  let peak = 0;
+  if (u.position) {
+    peak = peakPremium(u.pieces);
+    if (t.pnl < -RISK_PER_TRADE) loss = true;
+    if (peak > MAX_PREMIUM + 1e-9) premium = true;
+    if (loss || premium) ids.add("risk");
+    if (t.entry > 0 && (1 - t.exit / t.entry > PREMIUM_STOP + 1e-9 || partPastStop(u.pieces, t.entry, PREMIUM_STOP))) ids.add("stop");
+    if (t.pnl < 0 && holdMinutes(t) > TIME_STOP_MINUTES) ids.add("time");
+    if (closeDay(t) !== nyTime(t.opened_at).day) ids.add("flat");
+    // A break the pieces did not show is known when the whole shows it: a premium over the cap at the fill that took
+    // it there, anything else at the last close.
+    const added = [...ids].filter((id) => !pieceIds.has(id));
+    const byPremium = added.includes("risk") && peak > MAX_PREMIUM + 1e-9;
+    if (byPremium) knownAt = Math.min(knownAt, premiumOverAt(u.pieces, MAX_PREMIUM) ?? Infinity);
+    if (added.some((id) => id !== "risk" || !byPremium)) knownAt = Math.min(knownAt, Date.parse(t.closed_at));
+  } else if (isOption(t) && t.side === "long") {
+    peak = t.entry * t.multiplier * t.qty;
+  }
+  const entries = [...new Set(u.pieces.map((p) => Date.parse(p.opened_at)))].sort((a, b) => a - b);
+  return { unit: u, ids: OWN_ORDER.filter((id) => ids.has(id)), loss, premium, peak, knownAt, entries };
+}
+
 /**
- * The rules each trade broke, keyed by trade id; a trade that kept them all is left out. Judged from the record alone:
- * the premium paid and the loss (4), a loss past the premium stop (5), a loser held past the time stop (6), an entry
- * after the day was down the limit or after an earlier break (7), the entries past the day's cap (8), and an option
- * held overnight (9). The setup rules (1 to 3) are yours to check. Kept apart from losing: a winner can break a rule
- * and a loser can keep them all.
+ * Every trade's breaks, keyed by the trade's id (a position's is its first piece's); a trade that kept them all is
+ * left out. Rules 4, 5, 6 and 9 as `judgeUnit` reads them; then the day, entry by entry in the order they were made:
+ * an entry past the day's cap (8), and an entry made after the day was down the limit, after an earlier break was
+ * known, or past the first entry over the cap (7). A position breaks a day rule when any of its entries does. The
+ * setup rules (1 to 3) are yours to check. Kept apart from losing: a winner can break a rule and a loser can keep
+ * them all.
  */
-export function tradeBreaks(trades: readonly Trade[]): Map<string, string[]> {
+export function judgeDays(units: readonly TradeUnit[]): { verdicts: TradeVerdict[]; breaks: Map<string, string[]> } {
+  const verdicts = units.map(judgeUnit);
   const out = new Map<string, string[]>();
-  const byDay = new Map<string, Trade[]>();
-  for (const t of trades) {
-    const d = nyTime(t.opened_at).day;
+  const byDay = new Map<string, TradeVerdict[]>();
+  for (const v of verdicts) {
+    const d = nyTime(v.unit.unit.opened_at).day;
     const list = byDay.get(d) ?? [];
-    list.push(t);
+    list.push(v);
     byDay.set(d, list);
   }
-  for (const list of byDay.values()) {
-    const day = [...list].sort((a, b) => a.opened_at.localeCompare(b.opened_at) || a.id.localeCompare(b.id));
-    const own = new Map<Trade, string[]>();
-    for (const t of day) {
-      const ids: string[] = [];
-      const option = isOption(t);
-      if (t.pnl < -RISK_PER_TRADE || (option && t.side === "long" && t.entry * t.multiplier * t.qty > MAX_PREMIUM + 1e-9)) ids.push("risk");
-      if (option && t.side === "long" && t.entry > 0 && 1 - t.exit / t.entry > PREMIUM_STOP + 1e-9) ids.push("stop");
-      if (t.pnl < 0 && holdMinutes(t) > TIME_STOP_MINUTES) ids.push("time");
-      if (option && closeDay(t) !== nyTime(t.opened_at).day) ids.push("flat");
-      own.set(t, ids);
-    }
-    day.forEach((t, i) => {
-      const ids = [...own.get(t)!];
-      if (i >= MAX_TRADES_PER_DAY) ids.push("day-cap");
-      const at = Date.parse(t.opened_at);
-      const before = day.filter((p) => p !== t && Date.parse(p.closed_at) <= at);
+  for (const day of byDay.values()) {
+    const entries = day
+      .flatMap((v) => v.entries.map((at) => ({ v, at })))
+      .sort((a, b) => a.at - b.at || a.v.unit.unit.id.localeCompare(b.v.unit.unit.id));
+    const extra = new Map<TradeVerdict, Set<string>>();
+    entries.forEach(({ v, at }, k) => {
+      const set = extra.get(v) ?? new Set<string>();
+      if (k >= MAX_TRADES_PER_DAY) set.add("day-cap");
+      const mine = (p: Trade) => p.opened_at && Date.parse(p.opened_at) === at;
+      // The day's closed result at the entry: every piece of the day closed by then but the entry's own.
+      const lost = day.reduce((s, w) => s + w.unit.pieces.filter((p) => !(w === v && mine(p)) && Date.parse(p.closed_at) <= at).reduce((a, p) => a + p.pnl, 0), 0);
+      // An earlier break: another trade's, once known; or one of this position's own earlier pieces'.
+      const broke =
+        day.some((w) => w !== v && w.knownAt <= at) || v.unit.pieces.some((p) => !mine(p) && Date.parse(p.closed_at) <= at && pieceOwn(p).ids.size > 0);
       // An entry past the cap is itself a break, so every entry after the first one past it is past rule 7 too.
-      if (i > MAX_TRADES_PER_DAY || before.reduce((s, p) => s + p.pnl, 0) <= -DAY_LOSS_LIMIT || before.some((p) => own.get(p)!.length > 0)) ids.push("day-stop");
-      if (ids.length) out.set(t.id, ids);
+      if (k > MAX_TRADES_PER_DAY || lost <= -DAY_LOSS_LIMIT || broke) set.add("day-stop");
+      extra.set(v, set);
     });
+    for (const v of day) {
+      const more = extra.get(v) ?? new Set<string>();
+      const ids = [...v.ids, ...(["day-cap", "day-stop"] as const).filter((id) => more.has(id))];
+      if (ids.length) out.set(v.unit.unit.id, ids);
+    }
+  }
+  return { verdicts, breaks: out };
+}
+
+/** Entries per New York day of opening, as the day's cap counts them (each distinct buy fill of a position). */
+export function entriesByDay(trades: readonly Trade[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const v of tradeUnits(trades).map(judgeUnit)) {
+    const d = nyTime(v.unit.unit.opened_at).day;
+    out.set(d, (out.get(d) ?? 0) + v.entries.length);
+  }
+  return out;
+}
+
+/**
+ * The rules each trade broke (see `judgeDays`), keyed by piece id: every piece of a position carries the breaks of
+ * its position, so a caller that walks the journal's pieces finds them. A piece of a trade that kept them all is
+ * left out.
+ */
+export function tradeBreaks(trades: readonly Trade[]): Map<string, string[]> {
+  const units = tradeUnits(trades);
+  const { breaks } = judgeDays(units);
+  const out = new Map<string, string[]>();
+  for (const u of units) {
+    const ids = breaks.get(u.unit.id);
+    if (ids) for (const p of u.pieces) out.set(p.id, ids);
   }
   return out;
 }
 
 export interface BreakSummary {
   sessions: number;
-  /** Trades that broke at least one rule. */
+  /** Trades that broke at least one rule (positions, not pieces). */
   trades: number;
-  /** Breaks per rule id. */
+  /** Breaks per rule id, one per trade. */
   byRule: Record<string, number>;
-  /** What the trades that broke a rule made, and what the trades that kept them all made. */
+  /** What the trades that broke a rule made, and what the trades that kept them all made. Before fees. */
   brokeNet: number;
   keptNet: number;
   keptLosers: number;
@@ -277,19 +391,23 @@ export interface BreakSummary {
 export function breakSummary(trades: readonly Trade[], sessions = 20): BreakSummary {
   const days = [...new Set(trades.map((t) => nyTime(t.opened_at).day))].sort().slice(-sessions);
   const keep = new Set(days);
-  const recent = trades.filter((t) => keep.has(nyTime(t.opened_at).day));
-  const breaks = tradeBreaks(recent);
+  const units = tradeUnits(trades.filter((t) => keep.has(nyTime(t.opened_at).day)));
+  const { breaks } = judgeDays(units);
   const byRule: Record<string, number> = {};
   for (const ids of breaks.values()) for (const id of ids) byRule[id] = (byRule[id] ?? 0) + 1;
-  const broke = recent.filter((t) => breaks.has(t.id));
-  const kept = recent.filter((t) => !breaks.has(t.id));
+  const all = units.map((u) => u.unit);
+  const broke = all.filter((t) => breaks.has(t.id));
+  const kept = all.filter((t) => !breaks.has(t.id));
   const keptLosers = kept.filter((t) => t.pnl < 0);
   return { sessions: days.length, trades: broke.length, byRule, brokeNet: sumOf(broke), keptNet: sumOf(kept), keptLosers: keptLosers.length, keptLosersNet: sumOf(keptLosers) };
 }
 
 /** What the record says about each rule, keyed by rule id. A rule is missing when its sample is too small. */
-export function ruleEvidence(trades: readonly Trade[]): Record<string, Evidence> {
+export function ruleEvidence(pieces: readonly Trade[]): Record<string, Evidence> {
   const out: Record<string, Evidence> = {};
+  // Every figure counts trades: long calls and puts as positions (see `tradeUnits`), before fees.
+  const units = tradeUnits(pieces);
+  const trades = units.map((u) => u.unit);
   const x = EXP_0023;
   const r = (v: number) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(4)}R`;
   out.levels = {
@@ -309,10 +427,10 @@ export function ruleEvidence(trades: readonly Trade[]): Record<string, Evidence>
     const l = avgOf(losses);
     const share = Math.round((wins.length / trades.length) * 100);
     const optionWins = wins.filter((t) => isOption(t) && t.side === "long" && t.entry > 0);
-    const ran = optionWins.filter((t) => t.exit / t.entry - 1 >= PLAN_EXAMPLE.targetShare - 1e-9).length;
+    const ran = optionWins.filter((t) => t.exit / t.entry - 1 >= RAN_TO_MARK - 1e-9).length;
     out.room = {
       source: "yours",
-      finding: `You won ${share}% of your trades, but the average win was ${money(w)} and the average loss ${money(l)}. Winning often does not pay when losses are ${(Math.abs(l) / w).toFixed(1)}× the wins; a target twice the risk turns that around. Only ${count(ran)} of your ${count(optionWins.length)} winning options were closed ${Math.round(PLAN_EXAMPLE.targetShare * 100)}% or more up, so 2:1 means letting the winner reach the target.`,
+      finding: `You won ${share}% of your trades, but the average win was ${money(w)} and the average loss ${money(l)}. Winning often does not pay when losses are ${(Math.abs(l) / w).toFixed(1)}× the wins; a target twice the risk turns that around. Only ${count(ran)} of your ${count(optionWins.length)} winning options were closed +${Math.round(RAN_TO_MARK * 100)}% or more on premium, so 2:1 means letting the winner reach the target.`,
       compare: { unit: "average per trade", a: { label: "Average win", value: w }, b: { label: "Average loss", value: l } },
     };
   }
@@ -350,8 +468,9 @@ export function ruleEvidence(trades: readonly Trade[]): Record<string, Evidence>
     };
   }
 
+  // Days of trades by their last close, as this evidence has always been drawn (a description, not a verdict).
   const days = daily(trades);
-  const breaks = tradeBreaks(trades);
+  const breaks = judgeDays(units).breaks;
   const after = trades.filter((t) => breaks.get(t.id)?.includes("day-stop"));
   const rest = trades.filter((t) => !breaks.get(t.id)?.includes("day-stop"));
   if (days.length >= MIN_SAMPLE * 3 && after.length >= MIN_SAMPLE && rest.length >= MIN_SAMPLE) {
@@ -398,11 +517,12 @@ export type DayStatus = "clear" | "careful" | "stop" | "unknown";
 export interface DayCheck {
   /** False when the session on show is an earlier day: today has started fresh. */
   isToday: boolean;
-  /** Entries today: trades closed today that were opened today, plus lots opened today and still held. */
+  /** Entries today: trades (positions, for options) closed today that were opened today, plus lots opened today and
+   * still held that are not the rest of one of those positions. */
   used: number;
   /** The day's closed result, before fees. */
   net: number;
-  /** Trades closed today that were held longer than the time stop and lost. */
+  /** Trades (positions, for options) closed today that were held longer than the time stop and lost. */
   slowLosers: number;
   /** Today's trades that broke a rule, and the numbers of the rules broken, lowest first. */
   breaks: number;
@@ -520,19 +640,52 @@ export function dayCheck(view: SessionView | null, journal?: JournalAge): DayChe
   return { ...judged, line: judged.line + open + readNote(journal), openLine: open.trim() };
 }
 
+/** A lot and a trade of one contract: the same symbol, kind, strike and expiry. */
+function sameContract(t: Pick<Trade, "symbol" | "kind" | "strike" | "expiry">, l: Pick<Lot, "symbol" | "kind" | "strike" | "expiry">): boolean {
+  return t.symbol === l.symbol && t.kind === l.kind && (t.strike ?? null) === (l.strike ?? null) && (t.expiry ?? null) === (l.expiry ?? null);
+}
+
 function baseCheck(view: SessionView | null): DayCheck {
   if (!view || !view.isToday) {
     return { isToday: false, used: 0, net: 0, slowLosers: 0, breaks: 0, brokenRules: [], status: "clear", current: true, line: `A fresh day: ${MAX_TRADES_PER_DAY} trades and $${DAY_LOSS_LIMIT} of room.` };
   }
   const openedToday = (iso: string | null | undefined) => !!iso && nyTime(iso).day === view.day;
-  const used = view.trades.filter((t) => openedToday(t.opened_at)).length + view.open.filter((l) => openedToday(l.opened_at)).length;
+  // Trades, not pieces, and entries, not trades: each distinct buy fill of a position is one entry, so a buy sold in
+  // two halves is one and an add while holding is another.
+  const units = tradeUnits(view.trades.filter((t) => openedToday(t.opened_at)));
+  const { verdicts, breaks: found } = judgeDays(units);
+  // Held buy fills as the journal lists them, not merged into holdings: two buys of one contract are two entries.
+  const lots = view.lots.filter((l) => openedToday(l.opened_at));
+  const ofLot = (l: Lot) => verdicts.filter((v) => v.unit.position && l.side === "long" && sameContract(v.unit.unit, l));
+  // A lot still held that was bought in the same fill as a piece already sold is that fill's rest: already counted.
+  const counted = (l: Lot) => ofLot(l).some((v) => v.entries.includes(Date.parse(l.opened_at!)));
+  const used = verdicts.reduce((s, v) => s + v.entries.length, 0) + lots.filter((l) => !counted(l)).length;
   const net = view.summary.net;
-  const slowLosers = view.trades.filter((t) => t.pnl < 0 && holdMinutes(t) > TIME_STOP_MINUTES).length;
-  const found = tradeBreaks(view.trades.filter((t) => openedToday(t.opened_at)));
+  const slowLosers = tradeUnits(view.trades)
+    .map(judgeUnit)
+    .filter((v) => v.ids.includes("time")).length;
   const broken = new Set<string>([...found.values()].flat());
   if (used > MAX_TRADES_PER_DAY) broken.add("day-cap");
-  // A lot still held already shows its premium: one over the cap has broken rule 4 before it closes.
-  if (view.open.some((l) => openedToday(l.opened_at) && l.kind !== "stock" && l.side === "long" && l.entry * 100 * l.qty > MAX_PREMIUM + 1e-9)) broken.add("risk");
+  // A lot still held already shows its premium. Held with a position of its contract (bought while it was open, or in
+  // one of its fills), it adds to the most that position held at once; on its own it is judged alone. Over the cap
+  // either way, rule 4 is broken before it closes.
+  const premium = (l: Lot) => l.entry * 100 * l.qty;
+  const held = new Map<TradeVerdict, { at: number; cost: number }[]>();
+  const alone: Lot[] = [];
+  for (const l of lots) {
+    if (l.kind === "stock" || l.side !== "long") continue;
+    const at = Date.parse(l.opened_at!);
+    const v = ofLot(l).find((x) => x.entries.includes(at) || (Date.parse(x.unit.unit.opened_at) <= at && at < Date.parse(x.unit.unit.closed_at)));
+    if (v) held.set(v, [...(held.get(v) ?? []), { at, cost: premium(l) }]);
+    else alone.push(l);
+  }
+  // Lots held on their own, one contract's together: never sold, so all of them are held at once.
+  const aloneCost = new Map<string, number>();
+  for (const l of alone) {
+    const key = JSON.stringify([l.symbol, l.kind, l.strike ?? null, l.expiry ?? null]);
+    aloneCost.set(key, (aloneCost.get(key) ?? 0) + premium(l));
+  }
+  if ([...aloneCost.values()].some((c) => c > MAX_PREMIUM + 1e-9) || [...held].some(([v, hs]) => peakPremium(v.unit.pieces, hs) > MAX_PREMIUM + 1e-9)) broken.add("risk");
   const brokenRules = RULES.filter((r) => broken.has(r.id)).map((r) => r.n);
   const breaks = found.size;
   let status: DayStatus = "clear";

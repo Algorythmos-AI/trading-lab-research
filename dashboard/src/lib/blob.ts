@@ -31,6 +31,50 @@ export async function readText(pathname: string): Promise<StoredText | null> {
   return { text, etag: res.blob.etag };
 }
 
+/** Whether a blob is stored at `pathname`: one head(), the store's own metadata, no body. */
+export async function exists(pathname: string): Promise<boolean> {
+  try {
+    await head(pathname);
+    return true;
+  } catch (e) {
+    if (e instanceof BlobNotFoundError) return false;
+    throw e;
+  }
+}
+
+// The last text read per path on this instance, by its delivery etag, for readTextIfChanged. A warm instance asks
+// the store "changed since?" and gets a bodiless 304 when it has not; a cold one reads it whole. Bounded: a handful
+// of fixed paths only ever enter it.
+const lastRead = new Map<string, StoredText>();
+const LAST_READ_MAX = 8;
+
+/** For tests: forget what readTextIfChanged has kept. */
+export function resetReadCache(): void {
+  lastRead.clear();
+}
+
+/**
+ * For display, like readText, but a document read before on this instance is asked for again only if it changed
+ * (ifNoneMatch on its etag): unchanged, the store answers 304 with no body and the kept text is returned. Still one
+ * read of the store per call; what it saves is the body's transfer and parse. Null when there is no document.
+ */
+export async function readTextIfChanged(pathname: string): Promise<StoredText | null> {
+  const kept = lastRead.get(pathname);
+  const res = await get(pathname, { access: "private", useCache: false, ...(kept ? { ifNoneMatch: kept.etag } : {}) });
+  if (!res) {
+    lastRead.delete(pathname);
+    return null;
+  }
+  if (res.statusCode === 304 && kept) return kept;
+  if (res.statusCode !== 200) return null;
+  const text = await new Response(res.stream).text();
+  const read = { text, etag: res.blob.etag };
+  lastRead.delete(pathname);
+  lastRead.set(pathname, read);
+  while (lastRead.size > LAST_READ_MAX) lastRead.delete(lastRead.keys().next().value!);
+  return read;
+}
+
 /**
  * Read for a conditional write. The etag comes from head(), the store's own metadata, which is what
  * put({ ifMatch }) compares against; get()'s etag is the delivery header and never matches (the 503
@@ -68,9 +112,21 @@ export async function writeText(
   } catch (e) {
     if (e instanceof BlobPreconditionFailedError) throw new PreconditionFailed();
     // A create-only write that finds the blob already there lost a race, same as a stale etag.
-    if (opts.createOnly && e instanceof BlobError && /exist/i.test(e.message)) throw new PreconditionFailed();
+    if (opts.createOnly && alreadyThere(e)) throw new PreconditionFailed();
     throw e;
   }
+}
+
+/**
+ * A create-only put refused because the blob exists. The SDK has no class of its own for it: a precondition error, or a
+ * BlobError whose code (when it carries one) or message says so; the message is the fallback.
+ */
+export function alreadyThere(e: unknown): boolean {
+  if (e instanceof BlobPreconditionFailedError) return true;
+  if (!(e instanceof BlobError)) return false;
+  const code = (e as { code?: unknown }).code;
+  if (typeof code === "string" && /exist|conflict/i.test(code)) return true;
+  return /exist/i.test(e.message);
 }
 
 export async function listPaths(prefix: string): Promise<{ pathname: string; url: string }[]> {

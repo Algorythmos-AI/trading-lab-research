@@ -4,7 +4,7 @@
 // the board points at, the live distance in each side's strip, and the alternative chips that light up when the board
 // shows one live. Everything they read is the page's one board (trade-now's useBoardRow) and its one live feed
 // (ladder-live's useLadderLive), so the card always says what the board says. Read only: nothing here is an order.
-import { Ban, CircleCheck, Eye, GitBranch, Hourglass, type LucideIcon, Minus, OctagonX, Pause, SkipForward, TriangleAlert } from "lucide-react";
+import { Ban, CircleCheck, Eye, GitBranch, Hand, Hourglass, type LucideIcon, Minus, OctagonX, Pause, SkipForward, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { StatusBadge } from "@/components/status";
 import { altIsLive, type AltChip, type CardSide, stripDistance, stripEmphasis } from "@/lib/focus-card";
@@ -35,12 +35,14 @@ export function FocusStateChip({ symbol, live }: { symbol: string; live: LiveInp
   const s = r?.row.state;
   const v = r?.view;
   if (!r || !s || !v) return null;
-  const icon = r.paused ? Pause : v.badge.alt ? GitBranch : STATE_ICON[s.state];
+  const icon = r.paused ? Pause : r.mask === "in_trade" ? Hand : r.done ? CircleCheck : v.badge.alt ? GitBranch : STATE_ICON[s.state];
+  // Today marked done: no entry cautions, for a hidden entry prompt or a name in a managed trade alike.
+  const masked = !!r.mask;
   // "INSIDE BOX · wait": only on the ladder's live dot, beside a watch or a no trade for the middle of yesterday's
   // range (never a closed window, an entry, a get-ready or an alternative), with the price strictly inside the box.
   const inside = showInsideBox({ dot: view.dot, paused: r.paused, state: s.state, why: s.why, alt: !!v.badge.alt, floor: live.floor, ceiling: live.ceiling });
   return (
-    <div className="flex flex-wrap items-center gap-1.5" data-focus-state={r.paused ? "paused" : s.state}>
+    <div className="flex flex-wrap items-center gap-1.5" data-focus-state={r.paused ? "paused" : (r.mask ?? s.state)}>
       {/* text-sm (14 px) and its own icon size: the board's badge, at the card's reading size. */}
       <StatusBadge tone={r.paused ? "neutral" : v.badge.tone} icon={icon} className="px-2 py-0.5 text-sm font-semibold [&>svg]:size-4">
         {v.badge.word}
@@ -53,14 +55,14 @@ export function FocusStateChip({ symbol, live }: { symbol: string; live: LiveInp
         </span>
       ) : null}
       {v.testing && !r.paused ? <TestingTag /> : null}
-      {!r.paused
+      {!r.paused && !masked
         ? s.cautions.map((c) => (
             <StatusBadge key={c.id} tone="warn" icon={TriangleAlert} className="px-2 py-0.5 text-sm [&>svg]:size-4">
               <span title={c.why}>{c.word}</span>
             </StatusBadge>
           ))
         : null}
-      {!r.paused && s.moreCautions ? <span className="text-muted-foreground text-sm">+{s.moreCautions} more</span> : null}
+      {!r.paused && !masked && s.moreCautions ? <span className="text-muted-foreground text-sm">+{s.moreCautions} more</span> : null}
     </div>
   );
 }

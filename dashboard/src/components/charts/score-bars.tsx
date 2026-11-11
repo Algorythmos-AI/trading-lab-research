@@ -35,7 +35,7 @@ export function ScoreBars({ bins, cutoff, halfBelow, label }: { bins: ScoreBand[
             const total = b.kept + b.halved + b.skipped;
             return (
               <div key={b.lo} className="flex h-full min-w-0 flex-1 flex-col justify-end gap-0.5">
-                <span className="text-muted-foreground text-center font-mono text-[0.6875rem]">{total > 0 ? num(total) : ""}</span>
+                <span className="text-muted-foreground text-center font-mono text-[0.6875rem] max-sm:text-xs">{total > 0 ? num(total) : ""}</span>
                 <div className="flex flex-col-reverse overflow-hidden rounded-[2px]" style={{ height: `${(total / top) * 82}%` }}>
                   {PARTS.map((p) => (b[p.key] > 0 ? <span key={p.key} className={p.fill} style={{ flexGrow: b[p.key] }} /> : null))}
                 </div>
@@ -47,7 +47,7 @@ export function ScoreBars({ bins, cutoff, halfBelow, label }: { bins: ScoreBand[
           <span key={m.text} aria-hidden className="border-foreground/60 absolute inset-y-0 border-l border-dashed" style={{ left: at(m.v) }} />
         ))}
       </div>
-      <div className="text-muted-foreground flex justify-between font-mono text-[0.6875rem]" aria-hidden>
+      <div className="text-muted-foreground flex justify-between font-mono text-[0.6875rem] max-sm:text-xs" aria-hidden>
         <span>{lo.toFixed(2)}</span>
         <span>score</span>
         <span>{hi.toFixed(2)}</span>

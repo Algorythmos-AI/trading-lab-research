@@ -56,13 +56,13 @@ export function alpacaKeys(env: Record<string, string | undefined> = process.env
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
+const NY_DAY_FMT = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
+
 function nyDay(iso: unknown): string | null {
   if (typeof iso !== "string") return null;
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return null;
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(
-    new Date(t),
-  );
+  return NY_DAY_FMT.format(new Date(t));
 }
 
 type Bar = { t?: unknown; o?: unknown; h?: unknown; l?: unknown; c?: unknown; vw?: unknown } | null | undefined;
@@ -114,6 +114,8 @@ export async function fetchQuotes(
   now: Date = new Date(),
   fetchImpl: typeof fetch = fetch,
   baseUrl: string = process.env.ALPACA_DATA_URL || DEFAULT_DATA_URL,
+  /** For the server's desk evaluator only: a tighter bound on the upstream call. The page's route passes none. */
+  opts: { timeoutMs?: number } = {},
 ): Promise<QuoteResponse> {
   const t = now.getTime();
   // An entry stamped after `now` (a clock that stepped back) is not trusted either.
@@ -126,7 +128,7 @@ export async function fetchQuotes(
     const res = await fetchImpl(url, {
       headers: { "APCA-API-KEY-ID": keys.id, "APCA-API-SECRET-KEY": keys.secret, accept: "application/json" },
       cache: "no-store",
-      signal: AbortSignal.timeout(8_000),
+      signal: AbortSignal.timeout(opts.timeoutMs ?? 8_000),
     });
     if (!res.ok) {
       logEvent("quote.fetch", { outcome: "http-error", status: res.status });

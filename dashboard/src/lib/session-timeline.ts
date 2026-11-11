@@ -5,10 +5,13 @@
 // Every minute is the engine's own (trade-state's FIRST_ENTRY_MIN, the lunch block, the flat time, options' OPEN_MIN
 // and closeMinute), so the rail can never say a window the board does not keep. All times are New York. Pure: no I/O
 // and no clock; the caller passes `now` (the board's server clock).
-import { weekDate } from "./format";
+import { newYork, weekDate } from "./format";
+import { journalStale } from "./journal";
+import { openPositions, tradeCount } from "./manage-stop";
+import type { Lot } from "./journal";
 import { sessionOf } from "./market-calendar";
 import { closeMinute, nyClock, OPEN_MIN } from "./options";
-import { DAY_LOSS_LIMIT, type DayCheck, MAX_TRADES_PER_DAY } from "./trade-rules";
+import { DAY_LOSS_LIMIT, type DayCheck, journalCurrent, MAX_TRADES_PER_DAY } from "./trade-rules";
 import { FIRST_ENTRY_MIN, flatMinute, LUNCH_FROM_MIN, LUNCH_TO_MIN, lunchBlock } from "./trade-state";
 import type { Tone } from "./labels";
 import { dayRoom } from "./what-if";
@@ -146,6 +149,22 @@ export interface RailDay {
   open: string | null;
   /** "A stop now leaves $50 of $100 and 4 trades" (what-if's dayRoom), or null when it cannot be said. */
   room: string | null;
+  /** "2 journal rows could not be read: …" (unreadLine), or null when every row was read. */
+  unread?: string | null;
+}
+
+/** The rail's warning when rows of the journal could not be read (readableJournal's `skipped`); null with none. */
+export function unreadLine(skipped: number): string | null {
+  if (!(skipped > 0)) return null;
+  return `${skipped} journal row${skipped === 1 ? "" : "s"} could not be read: today's count and loss may be short; check Webull.`;
+}
+
+/**
+ * The day check with rows of the journal left out: it cannot be judged, exactly as a journal that is not current, so
+ * the room and the trades left (rail, hero, manage card) are withheld wherever they show.
+ */
+export function withUnread<C extends { current: boolean }>(c: C, skipped: number): C {
+  return skipped > 0 ? { ...c, current: false } : c;
 }
 
 const DAY_WORD: Record<DayCheck["status"], { word: string; tone: Tone }> = {
@@ -166,5 +185,98 @@ export function railDay(c: Pick<DayCheck, "status" | "isToday" | "current" | "us
     line: `${word} · ${c.used}/${MAX_TRADES_PER_DAY} trades · $${loss.toFixed(0)} of $${DAY_LOSS_LIMIT}`,
     open: c.openLine ? c.openLine : null,
     room: dayRoom(c),
+  };
+}
+
+// ---- the day's facts for the browser --------------------------------------------------------------------------------
+/**
+ * What the browser needs of the server's day check to count its own notes and to say the room after a stop: the
+ * journal's count and closed result, whether it can be judged now (the day check's `current`, and never a journal that
+ * is journalStale), and when the fills were last read from the broker.
+ */
+export interface DayFacts {
+  status: DayCheck["status"];
+  isToday: boolean;
+  used: number;
+  net: number;
+  current: boolean;
+  /** "Fills read 10:21 New York" (with the day when not read today), or null with no read time. */
+  readLine: string | null;
+  /** The same, shorter, for the phone's rail: "Fills read 10:21 NY", "Fills read 17:05 NY, Fri 16 Oct". */
+  readShort: string | null;
+  /** When the fills were read, for the browser's own re-check of `current` (journalLive). */
+  asOf: string | null;
+  /** The journal's open positions, one per contract held, any name and any day. */
+  openLots: number;
+}
+
+export function dayFacts(
+  c: Pick<DayCheck, "status" | "isToday" | "current" | "used" | "net">,
+  asOf: string | null | undefined,
+  now: Date,
+  lots: readonly Lot[] = [],
+): DayFacts {
+  const read = asOf && Number.isFinite(Date.parse(asOf)) ? asOf : null;
+  const sameDay = read !== null && nyClock(read)?.day === nyClock(now.toISOString())?.day;
+  return {
+    status: c.status,
+    isToday: c.isToday,
+    used: c.used,
+    net: c.net,
+    current: c.current && read !== null && !journalStale({ as_of: read }, now),
+    readLine: read ? `Fills read ${newYork(read, !sameDay)} New York` : null,
+    readShort: read ? readShortLine(read, sameDay) : null,
+    asOf: read,
+    openLots: openPositions(lots).length,
+  };
+}
+
+/** "Fills read 10:21 NY", or with the New York day when the read was not today: "Fills read 17:05 NY, Fri 16 Oct". */
+export function readShortLine(read: string, sameDay: boolean): string {
+  const day = sameDay ? null : nyClock(read)?.day;
+  return `Fills read ${newYork(read, false)} NY${day ? `, ${weekDate(day)}` : ""}`;
+}
+
+/**
+ * Whether the journal can still be judged now, on the browser's own clock (`nowMs`): the server's verdict when the
+ * page was drawn, and the same test again since (journalCurrent, journalStale). A phone that stops refreshing loses it
+ * once the read is too old. Null `nowMs` (before mount) keeps the server's verdict.
+ */
+export function journalLive(facts: Pick<DayFacts, "current" | "asOf"> | null | undefined, nowMs: number | null): boolean {
+  if (!facts || !facts.current || !facts.asOf) return false;
+  if (nowMs === null) return true;
+  const now = new Date(nowMs);
+  return journalCurrent(facts.asOf, now) && !journalStale({ as_of: facts.asOf }, now);
+}
+
+export type RailWithNotes = RailDay & {
+  /** "1 not yet in the journal", or null. */
+  notes: string | null;
+  /** The plain line once the count with the notes reaches the cap, or null. */
+  usedUp: string | null;
+};
+
+/**
+ * The rail's day with this browser's notes that the journal does not show yet: they add to the count, so they can
+ * only make it more cautious, never less. With none, the server's line as it is. At the cap with them, the word says
+ * the day's trades are used up (his own count, his own rule); one short of it, a clear day reads careful.
+ */
+export function railWithNotes(day: RailDay, facts: Pick<DayFacts, "used" | "net" | "status">, provisional: number): RailWithNotes {
+  const n = tradeCount(facts.used, provisional);
+  if (n.provisional === 0) return { ...day, notes: null, usedUp: null };
+  const already = facts.status === "stop";
+  const careful = !already && !n.usedUp && n.total >= MAX_TRADES_PER_DAY - 1 && day.tone === "good";
+  const word = already ? day.word : n.usedUp ? "Trades used up" : careful ? "Careful" : day.word === "New day" ? "Clear" : day.word;
+  const tone: Tone = already || n.usedUp ? "bad" : careful ? "warn" : day.tone;
+  const loss = Math.max(0, -facts.net);
+  return {
+    ...day,
+    word,
+    tone,
+    line: `${word} · ${n.total}/${MAX_TRADES_PER_DAY} trades · $${loss.toFixed(0)} of $${DAY_LOSS_LIMIT} · ${n.note}`,
+    // The server's "a stop now leaves … and N trades" counted without these: never shown beside them.
+    room: null,
+    notes: n.note,
+    usedUp: n.usedUpLine,
   };
 }

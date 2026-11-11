@@ -2,18 +2,21 @@
 // and the evidence one click away. Server-rendered; the evidence opens with a native <details>, so it needs no script.
 import { ChevronDown, CircleCheck, Crosshair, Lock, OctagonX, ScanEye, ShieldCheck, Square, TriangleAlert, UserCheck, Wallet } from "lucide-react";
 import { DivergingBars } from "@/components/charts/diverging-bars";
+import { ANCHOR_MARGIN } from "@/components/panel";
 import { sessionView, shortDay, type JournalDoc } from "@/lib/journal";
+import { tradeUnits } from "@/lib/owner-positions";
 import {
   breakSummary,
   dayCheck,
   GROUPS,
   RULES,
   DAY_LOSS_LIMIT,
+  MAX_PREMIUM,
   MAX_TRADES_PER_DAY,
   money,
-  PLAN_EXAMPLE,
-  planNumbers,
+  PREMIUM_STOP,
   PRE_TRADE_CHECKS,
+  RISK_PER_TRADE,
   ruleEvidence,
   type BreakSummary,
   type DayCheck,
@@ -21,6 +24,7 @@ import {
   type RuleCheck,
   type RuleGroup,
 } from "@/lib/trade-rules";
+import { sizeTicket, slipPerCent, usd } from "@/lib/ticket";
 import { cn } from "@/lib/utils";
 
 // Blue for where you enter, amber for what a trade may cost, red for when you stop.
@@ -44,18 +48,21 @@ const STATUS = {
   unknown: { word: "Journal not current", icon: TriangleAlert, text: "text-warn", soft: "bg-warn-soft border-warn-fill/50", fill: "bg-warn-fill" },
 } as const;
 
-function DayMeter({ label, used, max, text, fill }: { label: string; used: number; max: number; text: string; fill: string }) {
+function DayMeter({ label, note, used, max, text, fill }: { label: string; note?: string; used: number; max: number; text: string; fill: string }) {
   const share = Math.min(1, Math.max(0, used / max));
   return (
     <div className="grid min-w-0 gap-1">
       <div className="flex items-baseline justify-between gap-2 text-xs">
-        <span className="text-muted-foreground">{label}</span>
-        <span className="font-mono font-semibold">{text}</span>
+        <span className="text-muted-foreground max-sm:text-[0.8125rem]">
+          {label}
+          {note ? ` · ${note}` : null}
+        </span>
+        <span className="font-mono font-semibold max-sm:text-sm">{text}</span>
       </div>
       <div
         className="bg-track/70 h-2 overflow-hidden rounded-full"
         role="meter"
-        aria-label={label}
+        aria-label={note ? `${label}, ${note}` : label}
         aria-valuemin={0}
         aria-valuemax={max}
         aria-valuenow={Math.min(max, used)}
@@ -73,15 +80,16 @@ function TodayStrip({ check }: { check: DayCheck }) {
   const tradesFill = check.used >= MAX_TRADES_PER_DAY ? "bg-bad-fill" : check.used >= MAX_TRADES_PER_DAY - 1 ? "bg-warn-fill" : "bg-good-fill";
   const lossFill = lossUsed >= DAY_LOSS_LIMIT ? "bg-bad-fill" : lossUsed >= DAY_LOSS_LIMIT * 0.6 ? "bg-warn-fill" : "bg-good-fill";
   return (
-    <div className={cn("grid items-center gap-3 rounded-lg border px-3.5 py-3 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto]", s.soft)} role="status">
-      <div className="flex min-w-0 items-center gap-2.5 sm:pr-2">
+    <div className={cn("grid items-center gap-3 rounded-lg border px-3.5 py-3 lg:grid-cols-[minmax(0,2fr)_minmax(9rem,1fr)_minmax(9rem,1fr)_auto]", s.soft)} role="status">
+      <div className="flex min-w-0 items-center gap-2.5 lg:pr-2">
         <s.icon aria-hidden className={cn("size-6 shrink-0", s.text)} />
         <div className="grid min-w-0 leading-tight">
           <span className={cn("text-sm font-semibold", s.text)}>{check.isToday || !check.current ? s.word : "New day"}</span>
-          <span className="text-muted-foreground text-xs">{check.line}</span>
+          <span className="text-muted-foreground text-xs max-sm:text-[0.8125rem]">{check.line}</span>
         </div>
       </div>
-      <DayMeter label="Trades today" used={check.used} max={MAX_TRADES_PER_DAY} text={`${check.used} of ${MAX_TRADES_PER_DAY}`} fill={tradesFill} />
+      {/* Entries, not positions: the Today panel's "Closed trades" counts each position once, this counts each buy. */}
+      <DayMeter label="Trades today" note="each buy counts" used={check.used} max={MAX_TRADES_PER_DAY} text={`${check.used} of ${MAX_TRADES_PER_DAY}`} fill={tradesFill} />
       <DayMeter
         label="Day loss limit"
         used={lossUsed}
@@ -89,7 +97,7 @@ function TodayStrip({ check }: { check: DayCheck }) {
         text={`${check.net < 0 ? money(check.net) : check.net > 0 ? money(check.net) : "$0"} of −$${DAY_LOSS_LIMIT}`}
         fill={lossFill}
       />
-      <div className="flex items-baseline justify-between gap-2 text-xs sm:grid sm:justify-items-end sm:gap-0.5">
+      <div className="flex items-baseline justify-between gap-2 text-xs lg:grid lg:justify-items-end lg:gap-0.5">
         <span className="text-muted-foreground">Rule breaks today</span>
         <span className={cn("font-mono text-sm font-semibold", check.brokenRules.length ? "text-bad" : "text-good")}>
           {check.brokenRules.length ? `${check.brokenRules.length > 1 ? "Rules" : "Rule"} ${check.brokenRules.join(", ")}` : "None"}
@@ -107,12 +115,12 @@ function EvidenceRow({ n, title, group, ev }: { n: number; title: string; group:
     <li className="grid gap-2 py-3 not-last:border-b sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:gap-x-6">
       <div className="grid content-start gap-1">
         <p className="flex items-start gap-2 text-sm leading-snug font-semibold">
-          <span className={cn("mt-px inline-flex size-5 shrink-0 items-center justify-center rounded-full font-mono text-[0.6875rem]", g.badge)}>{n}</span>
+          <span className={cn("mt-px inline-flex size-5 shrink-0 items-center justify-center rounded-full font-mono text-[0.6875rem] max-sm:text-xs", g.badge)}>{n}</span>
           {title}
         </p>
         {ev ? (
           <p className="text-muted-foreground text-[0.8125rem] leading-snug">
-            <span className={cn("mr-1.5 rounded px-1 py-px text-[0.625rem] font-semibold tracking-wide uppercase", ev.source === "yours" ? "bg-info-soft text-info" : "bg-muted text-muted-foreground")}>
+            <span className={cn("mr-1.5 rounded px-1 py-px text-[0.625rem] font-semibold tracking-wide uppercase max-sm:text-xs", ev.source === "yours" ? "bg-info-soft text-info" : "bg-muted text-muted-foreground")}>
               {ev.source === "yours" ? "Your trades" : ev.source === "backtest" ? "Backtest" : "Not measured"}
             </span>
             {ev.finding}
@@ -132,7 +140,7 @@ function EvidenceRow({ n, title, group, ev }: { n: number; title: string; group:
               { key: "b", label: ev.compare.b.label, value: ev.compare.b.value },
             ]}
           />
-          <p className="text-muted-foreground mt-1 text-[0.6875rem]">{ev.compare.unit[0]!.toUpperCase() + ev.compare.unit.slice(1)}, before fees</p>
+          <p className="text-muted-foreground mt-1 text-[0.6875rem] max-sm:text-xs">{ev.compare.unit[0]!.toUpperCase() + ev.compare.unit.slice(1)}, before fees</p>
         </div>
       ) : null}
     </li>
@@ -149,21 +157,76 @@ function CheckIcon({ check }: { check: RuleCheck }) {
   );
 }
 
-const usd = (v: number) => `$${v.toFixed(v % 1 ? 2 : 0)}`;
+/** The nine rules by group, and what each rule's icon means. Two siblings: they sit in the panel's own grid. */
+function NineRules() {
+  return (
+    <>
+      <ol className="grid gap-3 md:grid-cols-3" aria-label="The nine rules">
+        {GROUPS.map((group) => {
+          const g = GROUP_STYLE[group.id];
+          return (
+            <li key={group.id} className={cn("bg-background/40 grid content-start gap-2.5 rounded-lg border border-t-4 p-3", g.edge)}>
+              <p className={cn("flex items-center gap-1.5 text-[0.6875rem] font-semibold tracking-wide uppercase max-sm:text-xs", g.text)}>
+                <g.icon aria-hidden className="size-3.5" />
+                {group.title}
+                <span className="text-muted-foreground font-normal normal-case tracking-normal">· {group.means}</span>
+              </p>
+              <ol className="grid gap-2.5">
+                {RULES.filter((r) => r.group === group.id).map((r) => (
+                  <li key={r.id} className="flex items-start gap-2.5">
+                    <span className={cn("mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full font-mono text-xs font-bold", g.badge)} aria-hidden>
+                      {r.n}
+                    </span>
+                    <span className="grid min-w-0 gap-0.5 leading-snug">
+                      <span className="text-[0.875rem] font-semibold">
+                        <span className="sr-only">Rule {r.n}: </span>
+                        {r.title}
+                      </span>
+                      <span className="text-muted-foreground text-xs">{r.detail}</span>
+                    </span>
+                    <CheckIcon check={r.check} />
+                  </li>
+                ))}
+              </ol>
+            </li>
+          );
+        })}
+      </ol>
 
-/** The checklist to tick before every order, beside a plan worked out in dollars. */
+      <p className="text-muted-foreground -mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.6875rem] max-sm:text-xs">
+        {(Object.keys(CHECK) as RuleCheck[]).map((k) => {
+          const c = CHECK[k];
+          return (
+            <span key={k} className="inline-flex items-center gap-1">
+              <c.icon aria-hidden className="size-3.5" />
+              {c.word}
+            </span>
+          );
+        })}
+        <span>Nothing on this page can block an order.</span>
+      </p>
+    </>
+  );
+}
+
+/** A price a share for the worked example, in cents: the numbers under it come from the trade ticket's own arithmetic. */
+const EXAMPLE_CENTS = 125;
+
+/** The checklist to tick before every order, beside one price worked through the trade ticket. */
 function BeforeYouBuy() {
-  const p = planNumbers(PLAN_EXAMPLE.premium, PLAN_EXAMPLE.stopShare, PLAN_EXAMPLE.targetShare);
+  const t = sizeTicket(EXAMPLE_CENTS);
   const rows: [string, string][] = [
-    ["Premium", usd(PLAN_EXAMPLE.premium)],
-    [`Planned loss (${Math.round(PLAN_EXAMPLE.stopShare * 100)}%)`, usd(p.risk)],
-    [`Target (${Math.round(PLAN_EXAMPLE.targetShare * 100)}%)`, usd(p.reward)],
-    ["Reward to risk", `${p.ratio.toFixed(p.ratio % 1 ? 1 : 0)} : 1`],
+    ["Price in Webull", `${usd(t.priceCents)} a share`],
+    ["Contracts", String(t.contracts)],
+    [`Stop to place (−${Math.round(PREMIUM_STOP * 100)}%, rounded up)`, usd(t.stopCents)],
+    ["Lost if filled at the stop, with fees", `−${usd(t.riskCents)}`],
+    ["Each cent worse on that fill", `${usd(slipPerCent(t))} more`],
+    ["Total premium", usd(t.premiumCents)],
   ];
   return (
     <section aria-labelledby="before-buy" className="grid gap-3 rounded-lg border p-3 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] md:gap-6">
       <div className="grid content-start gap-2">
-        <h3 id="before-buy" className="text-[0.6875rem] font-semibold tracking-wide uppercase">
+        <h3 id="before-buy" className="text-[0.6875rem] font-semibold tracking-wide uppercase max-sm:text-xs">
           Before you press buy
         </h3>
         <ul className="grid gap-1.5 sm:grid-cols-2 sm:gap-x-4">
@@ -175,17 +238,19 @@ function BeforeYouBuy() {
           ))}
         </ul>
       </div>
-      <div className="grid content-start gap-1.5">
-        <p className="text-[0.6875rem] font-semibold tracking-wide uppercase">The plan in dollars, written first</p>
-        <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-0.5 text-xs">
+      <div className="grid content-start gap-1.5" data-ticket-example>
+        <p className="text-[0.6875rem] font-semibold tracking-wide uppercase max-sm:text-xs">Size it first: the trade ticket</p>
+        <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-0.5 text-xs max-sm:gap-y-1 max-sm:text-sm">
           {rows.map(([k, v]) => (
             <div key={k} className="contents">
               <dt className="text-muted-foreground">{k}</dt>
-              <dd className="text-right font-mono font-semibold">{v}</dd>
+              <dd className="text-right font-mono font-semibold max-sm:whitespace-nowrap">{v}</dd>
             </div>
           ))}
         </dl>
-        <p className="text-muted-foreground text-[0.6875rem] leading-snug">Example. The real stop is where the chart proves you wrong, never past −25%. Before fees and slippage.</p>
+        <p className="text-muted-foreground text-[0.6875rem] leading-snug max-sm:text-xs">
+          Example at {usd(EXAMPLE_CENTS)}. Open &ldquo;Size this call&rdquo; or &ldquo;Size this put&rdquo; under a side on the Options desk and type the price you see: it works out a size within ${MAX_PREMIUM} of premium and ${RISK_PER_TRADE} lost at the stop with fees, if the stop fills at its price. The chart stop may come first.
+        </p>
       </div>
     </section>
   );
@@ -244,7 +309,10 @@ export function TradeRules({
     <section
       id="rules"
       aria-labelledby="rules-title"
-      className="bg-card relative overflow-hidden rounded-xl border shadow-sm before:absolute before:inset-x-0 before:top-0 before:h-1 before:bg-[linear-gradient(90deg,var(--info-fill),var(--warn-fill),var(--bad-fill))]"
+      className={cn(
+        ANCHOR_MARGIN,
+        "bg-card relative overflow-hidden rounded-xl border shadow-sm before:absolute before:inset-x-0 before:top-0 before:h-1 before:bg-[linear-gradient(90deg,var(--info-fill),var(--warn-fill),var(--bad-fill))]",
+      )}
     >
       <div className="grid gap-4 p-4 sm:p-5">
         <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
@@ -259,57 +327,28 @@ export function TradeRules({
 
         {check ? <TodayStrip check={check} /> : null}
 
-        <ol className="grid gap-3 md:grid-cols-3" aria-label="The nine rules">
-          {GROUPS.map((group) => {
-            const g = GROUP_STYLE[group.id];
-            return (
-              <li key={group.id} className={cn("bg-background/40 grid content-start gap-2.5 rounded-lg border border-t-4 p-3", g.edge)}>
-                <p className={cn("flex items-center gap-1.5 text-[0.6875rem] font-semibold tracking-wide uppercase", g.text)}>
-                  <g.icon aria-hidden className="size-3.5" />
-                  {group.title}
-                  <span className="text-muted-foreground font-normal normal-case tracking-normal">· {group.means}</span>
-                </p>
-                <ol className="grid gap-2.5">
-                  {RULES.filter((r) => r.group === group.id).map((r) => (
-                    <li key={r.id} className="flex items-start gap-2.5">
-                      <span className={cn("mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full font-mono text-xs font-bold", g.badge)} aria-hidden>
-                        {r.n}
-                      </span>
-                      <span className="grid min-w-0 gap-0.5 leading-snug">
-                        <span className="text-[0.875rem] font-semibold">
-                          <span className="sr-only">Rule {r.n}: </span>
-                          {r.title}
-                        </span>
-                        <span className="text-muted-foreground text-xs">{r.detail}</span>
-                      </span>
-                      <CheckIcon check={r.check} />
-                    </li>
-                  ))}
-                </ol>
-              </li>
-            );
-          })}
-        </ol>
-
-        <p className="text-muted-foreground -mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.6875rem]">
-          {(Object.keys(CHECK) as RuleCheck[]).map((k) => {
-            const c = CHECK[k];
-            return (
-              <span key={k} className="inline-flex items-center gap-1">
-                <c.icon aria-hidden className="size-3.5" />
-                {c.word}
-              </span>
-            );
-          })}
-          <span>Nothing on this page can block an order.</span>
-        </p>
+        {/* The nine rules. On a phone they sit in a fold under the day strip, closed until opened, so today's trades
+            are not three screens down; from sm up they are always open. Both are drawn on the server and CSS shows
+            one: the hidden one is display:none, so a screen reader hears the rules once, and neither carries an id. */}
+        <details data-rules-fold className="group/rules rounded-lg border sm:hidden">
+          <summary className="hover:bg-muted/50 flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-3.5 py-2 text-sm font-medium [&::-webkit-details-marker]:hidden">
+            The 9 rules
+            <ChevronDown aria-hidden className="text-muted-foreground size-4 shrink-0 transition-transform group-open/rules:rotate-180" />
+          </summary>
+          <div className="grid gap-4 border-t p-3">
+            <NineRules />
+          </div>
+        </details>
+        <div className="contents max-sm:hidden">
+          <NineRules />
+        </div>
 
         <BeforeYouBuy />
 
         {breaks && breaks.sessions > 0 ? <BreakRow s={breaks} /> : null}
 
         <details className="group rounded-lg border">
-          <summary className="hover:bg-muted/50 flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-3.5 py-2.5 text-sm font-medium [&::-webkit-details-marker]:hidden">
+          <summary className="hover:bg-muted/50 flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-3.5 py-2.5 text-sm font-medium max-sm:min-h-11 [&::-webkit-details-marker]:hidden">
             <span>
               Why each rule: the evidence
               <span className="text-muted-foreground font-normal">
@@ -344,7 +383,7 @@ export function TradeRulesFor({ doc, now }: { doc: JournalDoc | null; now: Date 
       check={doc ? dayCheck(sessionView(doc, now), { asOf: doc.as_of, now }) : null}
       evidence={ruleEvidence(trades)}
       breaks={trades.length ? breakSummary(trades) : null}
-      tradeCount={trades.length}
+      tradeCount={tradeUnits(trades).length}
       since={first ? shortDay(first.slice(0, 10)) : null}
     />
   );

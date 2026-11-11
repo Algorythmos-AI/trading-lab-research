@@ -1,60 +1,158 @@
 "use client";
 
+import { ChevronDown } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { listRows, type ListRow, nextSort, type Only, type PackedRow, type Piece, pieceText, type RowWords, type Sort, SORT_CHOICES, sortOf, sortValue, type SortKey, unpackRow } from "@/lib/journal-list";
 import { cn } from "@/lib/utils";
 
-export interface JournalRow {
-  id: string;
-  /** "16 Oct 26 · 14:07" in New York. */
-  when: string;
-  /** Milliseconds, for sorting. */
-  at: number;
-  symbol: string;
-  what: string;
-  kind: "call" | "put" | "stock";
-  qty: number;
-  entry: number;
-  exit: number;
-  pnl: number;
-  /** "3 min" */
-  held: string;
-  holdMin: number;
-  expired: boolean;
+const TONE: Record<RowWords["tone"], string> = { good: "text-good", bad: "text-bad", flat: "" };
+
+export type { JournalRow, PackedRow } from "@/lib/journal-list";
+
+const PAGE = 50;
+/** Cards a phone shows at first and adds with each "Show more": a card is about 100 px, the table's row about 40. */
+const CARD_PAGE = 15;
+
+/** A trade's pieces in words, written out only once its disclosure has been opened (they come as numbers). */
+function PieceList({ pieces, className, item }: { pieces: readonly Piece[]; className?: string; item: string }) {
+  return (
+    <ul className={className}>
+      {pieces.map((p, i) => (
+        <li key={i} className={item}>
+          {pieceText(p)}
+        </li>
+      ))}
+    </ul>
+  );
 }
 
-type SortKey = "at" | "pnl" | "holdMin" | "qty";
+/** A native disclosure that draws its contents the first time it is opened, and keeps them after. */
+function Lazy({ className, summary, summaryClass, children }: { className?: string; summary: React.ReactNode; summaryClass?: string; children: () => React.ReactNode }) {
+  const [opened, setOpened] = useState(false);
+  return (
+    <details className={className} onToggle={(e) => (e.currentTarget.open ? setOpened(true) : undefined)}>
+      <summary className={summaryClass}>{summary}</summary>
+      {opened ? children() : null}
+    </details>
+  );
+}
 
-const usd2 = (v: number) => `${v > 0 ? "+" : v < 0 ? "−" : ""}$${Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const PAGE = 50;
+/** A trade of several pieces, in the table: the pieces under its contract, in a native disclosure. */
+function Pieces({ r, className }: { r: ListRow; className?: string }) {
+  if (!r.pieces.length) return null;
+  return (
+    <Lazy className={cn("text-muted-foreground text-xs", className)} summaryClass="hover:text-foreground cursor-pointer" summary={`${r.pieces.length} pieces`}>
+      {() => <PieceList pieces={r.pieces} className="mt-1 grid gap-0.5" item="font-mono text-[0.6875rem]" />}
+    </Lazy>
+  );
+}
 
-/** Every closed trade in the filter, newest first, with a search box, sorting and a "show more". Read only. */
-export function JournalTable({ rows }: { rows: JournalRow[] }) {
+/**
+ * One trade as a card, for a phone, in three lines: the contract and the result after fees, large, coloured and
+ * signed; when, how long, how many and in → out; the result on the premium and in R25, the Expired badge, and a
+ * "More" fold with the rest (before fees, R50, fees, the pieces). The same row and the same words as the table.
+ */
+function TradeCard({ r }: { r: ListRow }) {
+  const w = r.words;
+  return (
+    <li data-trade-card={r.id} className="grid rounded-lg border px-3 pt-2">
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="min-w-0 text-sm font-medium break-words">{r.what}</p>
+        <p className={cn("shrink-0 font-mono text-lg leading-tight font-semibold whitespace-nowrap", TONE[w.tone])}>
+          <span className="sr-only">Result </span>
+          {w.result}
+        </p>
+      </div>
+      <p className="text-muted-foreground text-[0.8125rem] tabular-nums">
+        <span className="sr-only">Closed </span>
+        <span className="whitespace-nowrap">{r.when}</span> · <span className="whitespace-nowrap">held {r.held}</span> ·{" "}
+        <span className="whitespace-nowrap">
+          {w.qty} × {w.inOut}
+        </span>
+      </p>
+      <div className="flex flex-wrap items-center gap-x-3 text-[0.8125rem] tabular-nums">
+        <span className="whitespace-nowrap">
+          <span className="font-mono">{w.onPremium}</span> <span className="text-muted-foreground">on premium</span>
+        </span>
+        <span className="whitespace-nowrap">
+          <span className="text-muted-foreground">R25</span> <span className="font-mono">{w.r25}</span>
+        </span>
+        {r.expired ? <Badge variant="warn">Expired</Badge> : null}
+        <Lazy
+          className="group/more ml-auto open:ml-0 open:basis-full"
+          summaryClass="text-muted-foreground hover:text-foreground ml-auto flex min-h-11 w-fit cursor-pointer list-none items-center gap-1 [&::-webkit-details-marker]:hidden"
+          summary={
+            <>
+              More
+              <ChevronDown aria-hidden className="size-4 transition-transform group-open/more:rotate-180" />
+            </>
+          }
+        >
+          {() => (
+          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 pb-2">
+            {w.beforeFees ? (
+              <>
+                <dt className="text-muted-foreground">Before fees</dt>
+                <dd className="font-mono">{w.beforeFees.replace(" before fees", "")}</dd>
+              </>
+            ) : null}
+            <dt className="text-muted-foreground">Fees</dt>
+            <dd className="font-mono">{w.fees}</dd>
+            <dt className="text-muted-foreground">R50</dt>
+            <dd className="font-mono">{w.r50}</dd>
+            {r.pieces.length ? (
+              <>
+                <dt className="text-muted-foreground">{r.pieces.length} pieces</dt>
+                <dd>
+                  <PieceList pieces={r.pieces} className="grid gap-0.5" item="font-mono text-xs" />
+                </dd>
+              </>
+            ) : null}
+          </dl>
+          )}
+        </Lazy>
+      </div>
+    </li>
+  );
+}
+
+/**
+ * Every closed trade in the filter, newest first, with a search box, sorting and a "show more". Read only. A trade of
+ * several pieces lists them under its contract in a native disclosure. From sm up a table; on a phone a card per
+ * trade, with a sort menu in place of the column headers: one list and one state, drawn twice, one of them hidden.
+ * The rows come packed (journal-list's packRow): every row of the view, so the search and the sort cover all of it
+ * without asking the server, with its words already written and its pieces as numbers.
+ */
+export function JournalTable({ rows: packed, feesIncluded = false }: { rows: PackedRow[]; feesIncluded?: boolean }) {
+  const rows = useMemo(() => packed.map(unpackRow), [packed]);
+  const after = feesIncluded ? "after fees" : "after est. fees";
   const [q, setQ] = useState("");
-  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "at", dir: -1 });
+  const [sort, setSort] = useState<Sort>({ key: "at", dir: -1 });
   const [shown, setShown] = useState(PAGE);
-  const [only, setOnly] = useState<"all" | "win" | "loss">("all");
+  const [cardsShown, setCardsShown] = useState(CARD_PAGE);
+  const [only, setOnly] = useState<Only>("all");
 
-  const list = useMemo(() => {
-    const needle = q.trim().toUpperCase();
-    const kept = rows.filter((r) => {
-      if (only === "win" && r.pnl <= 0) return false;
-      if (only === "loss" && r.pnl >= 0) return false;
-      return !needle || r.what.toUpperCase().includes(needle) || r.when.toUpperCase().includes(needle);
-    });
-    return kept.sort((a, b) => (a[sort.key] - b[sort.key]) * sort.dir);
-  }, [rows, q, sort, only]);
+  const list = useMemo(() => listRows(rows, q, only, sort), [rows, q, sort, only]);
+  // Both renderings come from the one sorted list; each draws only its own page of it (CSS shows one of them). Both
+  // counts start the same on the server and in the browser, so nothing differs at hydration.
+  const page = list.slice(0, shown);
+  const cards = list.slice(0, cardsShown);
+  const reset = () => {
+    setShown(PAGE);
+    setCardsShown(CARD_PAGE);
+  };
 
   const head = (key: SortKey, label: string, className?: string) => (
     <TableHead className={className} aria-sort={sort.key === key ? (sort.dir === 1 ? "ascending" : "descending") : "none"}>
       <button
         type="button"
         className="hover:text-foreground inline-flex items-center gap-1"
-        onClick={() => setSort((s) => (s.key === key ? { key, dir: s.dir === 1 ? -1 : 1 } : { key, dir: -1 }))}
+        onClick={() => setSort((s) => nextSort(s, key))}
       >
         {label}
-        <span aria-hidden className="text-[0.625rem]">
+        <span aria-hidden className="text-[0.625rem] max-sm:text-xs">
           {sort.key === key ? (sort.dir === 1 ? "▲" : "▼") : ""}
         </span>
       </button>
@@ -69,11 +167,11 @@ export function JournalTable({ rows }: { rows: JournalRow[] }) {
           value={q}
           onChange={(e) => {
             setQ(e.target.value);
-            setShown(PAGE);
+            reset();
           }}
           placeholder="Find a ticker, strike or date"
           aria-label="Find a trade"
-          className="bg-background h-8 w-full max-w-64 rounded-md border px-2.5 text-sm"
+          className="bg-background h-8 w-full max-w-64 rounded-md border px-2.5 text-sm max-sm:h-11 max-sm:max-w-none max-sm:text-base"
         />
         <div className="flex gap-1" role="group" aria-label="Show">
           {(["all", "win", "loss"] as const).map((k) => (
@@ -83,19 +181,43 @@ export function JournalTable({ rows }: { rows: JournalRow[] }) {
               aria-pressed={only === k}
               onClick={() => {
                 setOnly(k);
-                setShown(PAGE);
+                reset();
               }}
-              className={cn("h-8 rounded-md border px-2.5 text-xs", only === k ? "bg-secondary text-foreground font-medium" : "text-muted-foreground")}
+              className={cn("h-8 rounded-md border px-2.5 text-xs max-sm:h-11 max-sm:px-3 max-sm:text-sm", only === k ? "bg-secondary text-foreground font-medium" : "text-muted-foreground")}
             >
               {k === "all" ? "All" : k === "win" ? "Winners" : "Losers"}
             </button>
           ))}
         </div>
-        <span className="text-muted-foreground ml-auto text-xs">
+        {/* The table's column sorts, as one menu: a phone has no column headers to press. */}
+        <label className="text-muted-foreground flex items-center gap-1.5 text-sm sm:hidden">
+          Sort
+          <select
+            value={sortValue(sort)}
+            onChange={(e) => {
+              const next = sortOf(e.target.value);
+              if (next) setSort(next);
+              setCardsShown(CARD_PAGE);
+            }}
+            className="bg-background text-foreground h-11 rounded-md border px-2 text-base"
+          >
+            {SORT_CHOICES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <span className="text-muted-foreground ml-auto text-xs max-sm:text-sm">
           {list.length.toLocaleString("en-US")} trade{list.length === 1 ? "" : "s"}
         </span>
       </div>
-      <div className="overflow-x-auto">
+      <ul aria-label="Every trade" className="grid gap-2 sm:hidden">
+        {cards.map((r) => (
+          <TradeCard key={r.id} r={r} />
+        ))}
+      </ul>
+      <div className="overflow-x-auto max-sm:hidden">
         <Table>
           <TableHeader>
             <TableRow>
@@ -104,34 +226,63 @@ export function JournalTable({ rows }: { rows: JournalRow[] }) {
               {head("qty", "Qty", "text-right")}
               <TableHead className="text-right">In → out</TableHead>
               {head("holdMin", "Held", "text-right")}
+              <TableHead className="text-right">Fees</TableHead>
               {head("pnl", "Result", "text-right")}
+              <TableHead className="text-right">On premium</TableHead>
+              <TableHead className="text-right">
+                R25<span className="sr-only">: the result {after} in quarters of the premium, where −1 is the −25% stop</span>
+              </TableHead>
+              <TableHead className="text-right">
+                R50<span className="sr-only">: the result {after} in units of $50, the most one trade may risk</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {list.slice(0, shown).map((r) => (
-              <TableRow key={r.id}>
-                <TableCell className="text-muted-foreground font-mono text-xs whitespace-nowrap">{r.when}</TableCell>
-                <TableCell className="whitespace-nowrap">
-                  <span className="font-medium">{r.what}</span>
-                  {r.expired ? (
-                    <Badge variant="warn" className="ml-1.5">
-                      Expired
-                    </Badge>
-                  ) : null}
-                </TableCell>
-                <TableCell className="text-right font-mono text-xs">{r.qty.toLocaleString("en-US")}</TableCell>
-                <TableCell className="text-right font-mono text-xs whitespace-nowrap">
-                  {r.entry.toFixed(2)} → {r.exit.toFixed(2)}
-                </TableCell>
-                <TableCell className="text-muted-foreground text-right text-xs whitespace-nowrap">{r.held}</TableCell>
-                <TableCell className={cn("text-right font-mono text-xs font-semibold whitespace-nowrap", r.pnl > 0 ? "text-good" : r.pnl < 0 ? "text-bad" : "")}>{usd2(r.pnl)}</TableCell>
-              </TableRow>
-            ))}
+            {page.map((r) => {
+              const w = r.words;
+              return (
+                <TableRow key={r.id}>
+                  <TableCell className="text-muted-foreground font-mono text-xs whitespace-nowrap">{r.when}</TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    <span className="font-medium">{r.what}</span>
+                    {r.expired ? (
+                      <Badge variant="warn" className="ml-1.5">
+                        Expired
+                      </Badge>
+                    ) : null}
+                    <Pieces r={r} className="mt-0.5" />
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-xs">{w.qty}</TableCell>
+                  <TableCell className="text-right font-mono text-xs whitespace-nowrap">{w.inOut}</TableCell>
+                  <TableCell className="text-muted-foreground text-right text-xs whitespace-nowrap">{r.held}</TableCell>
+                  <TableCell className="text-muted-foreground text-right font-mono text-xs whitespace-nowrap">{w.fees}</TableCell>
+                  <TableCell className="text-right whitespace-nowrap">
+                    <span className={cn("block font-mono text-xs font-semibold", TONE[w.tone])}>{w.result}</span>
+                    {w.beforeFees ? <span className="text-muted-foreground block font-mono text-[0.6875rem] max-sm:text-xs">{w.beforeFees}</span> : null}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-xs whitespace-nowrap">{w.onPremium}</TableCell>
+                  <TableCell className="text-right font-mono text-xs whitespace-nowrap">{w.r25}</TableCell>
+                  <TableCell className="text-right font-mono text-xs whitespace-nowrap">{w.r50}</TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>
+      <p className="text-muted-foreground text-xs max-sm:text-[0.8125rem]">
+        R25 is the result {after} in quarters of the premium, so −1 is the −25% stop; R50 is the result in units of $50, the most one trade may risk.
+      </p>
+      {cardsShown < list.length ? (
+        <button
+          type="button"
+          onClick={() => setCardsShown((n) => n + CARD_PAGE)}
+          className="text-muted-foreground hover:text-foreground min-h-11 w-full rounded-md border px-3 text-sm sm:hidden"
+        >
+          Show more ({(list.length - cardsShown).toLocaleString("en-US")} left)
+        </button>
+      ) : null}
       {shown < list.length ? (
-        <button type="button" onClick={() => setShown((n) => n + PAGE * 4)} className="text-muted-foreground hover:text-foreground mx-auto h-8 rounded-md border px-3 text-xs">
+        <button type="button" onClick={() => setShown((n) => n + PAGE * 4)} className="text-muted-foreground hover:text-foreground mx-auto h-8 rounded-md border px-3 text-xs max-sm:hidden">
           Show more ({(list.length - shown).toLocaleString("en-US")} left)
         </button>
       ) : null}

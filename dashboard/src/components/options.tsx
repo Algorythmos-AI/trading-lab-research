@@ -97,8 +97,8 @@ function Distance({ r }: { r: Rung | null }) {
   return (
     <span className="grid justify-items-end">
       <span>{num(r.edge, 2)}</span>
-      <span className="text-muted-foreground text-[0.6875rem]">{signed(r.distPct, 1)}%</span>
-      {r.distAtr !== null ? <span className="text-muted-foreground text-[0.6875rem]">{num(r.distAtr, 1)} ATR</span> : null}
+      <span className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">{signed(r.distPct, 1)}%</span>
+      {r.distAtr !== null ? <span className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">{num(r.distAtr, 1)} ATR</span> : null}
     </span>
   );
 }
@@ -134,7 +134,7 @@ export function BoardTable({ e }: { e: Options }) {
                   <span className="grid justify-items-end">
                     <span>{num(t.last?.close, 2)}</span>
                     {t.expected_move?.day != null ? (
-                      <span className="text-muted-foreground text-[0.6875rem] sm:hidden">±{num(t.expected_move.day, 2)}/day</span>
+                      <span className="text-muted-foreground text-[0.6875rem] sm:hidden max-sm:text-xs">±{num(t.expected_move.day, 2)}/day</span>
                     ) : null}
                   </span>
                 </TableCell>
@@ -463,7 +463,7 @@ export function StructurePanel({ e }: { e: Options }) {
             {CORNERS.map((c) => (
               <li key={c.key} className={cn("rounded-md border p-2", c.tone)}>
                 <span className="block text-xs font-medium">{c.title}</span>
-                <span className="text-muted-foreground block text-[0.6875rem]">{CORNER_COST[c.key]}</span>
+                <span className="text-muted-foreground block text-[0.6875rem] max-sm:text-xs">{CORNER_COST[c.key]}</span>
                 <span className="mt-1 block font-mono text-sm font-semibold">
                   {view.corners[c.key].length > 0 ? view.corners[c.key].join(" · ") : <span className="text-muted-foreground font-normal">none</span>}
                 </span>

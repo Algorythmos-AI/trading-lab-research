@@ -1,7 +1,7 @@
 "use client";
 
 import { Activity, CircleCheck, Hand, type LucideIcon, NotebookPen, OctagonX, Shield, TriangleAlert, X } from "lucide-react";
-import { useEffect, useId, useState, useSyncExternalStore } from "react";
+import { useEffect, useId, useMemo, useState, useSyncExternalStore } from "react";
 import type { Lot, Trade } from "@/lib/journal";
 import type { LiveQuote, Options, TrailPoint } from "@/lib/options";
 import {
@@ -21,14 +21,14 @@ import {
   manageView,
   type ManualNote,
   mergeNotices,
+  type OptionFill,
   movedOnLine,
   NOTE_PREFIX,
   noteFromForm,
   noteId,
   noteKey,
-  openTrades,
+  type OpenTrade,
   parseNotes,
-  retiredNotes,
   shownNotices,
 } from "@/lib/trade-manage";
 import type { BoardRow } from "@/lib/trade-now";
@@ -36,10 +36,14 @@ import { nyClock } from "@/lib/options";
 import type { Bar2 } from "@/lib/trade-state";
 import { cn } from "@/lib/utils";
 import { bellMinute } from "@/lib/contract";
-import { chainFresh, chainPx, chainStamp, entryStopDistance, fromEntryLabel, heldOrAtm, lossFromEntry, stopDistance } from "@/lib/what-if";
+import { chainFresh, chainPx, chainStamp, entryStopDistance, fromEntryLabel, heldOrAtm, lossFromEntry, type RoomAfterStop, roomAfterStop, stopDistance } from "@/lib/what-if";
+import { checkOptionFill, type FillStop, fillStop, INVITE_LINE, journalDayCache, lossLine, nickelLine, prefillFrom, otherOpenPositions, STOP_OWN_TICK, STOP_PLACED, STOP_REMINDER, stopFromLine, tickLine } from "@/lib/manage-stop";
+import { type DayFacts, journalLive } from "@/lib/session-timeline";
+import { usd } from "@/lib/ticket";
+import { ticketPrice } from "./ticket-memo";
 import { TestingTag } from "./trade-now";
 import { useChain } from "./use-chain";
-import { usePerfNow } from "./use-now";
+import { useNow, usePerfNow } from "./use-now";
 
 type Item = NonNullable<Options["focus"]>["items"][number];
 
@@ -116,7 +120,9 @@ function useNotes(day: string | null): ManualNote[] {
     () => (day ? readNotes(day) : ""),
     () => "",
   );
-  return parseNotes(raw);
+  // Parsed once per change of what is stored: the board renders every second, and a new array each time would make
+  // the journal's side of the card (journalDayCache) work itself out again on every tick.
+  return useMemo(() => parseNotes(raw), [raw]);
 }
 
 // ---- the card as drawn ----------------------------------------------------------------------------------------------
@@ -124,10 +130,10 @@ function useNotes(day: string | null): ManualNote[] {
 function Small({ label, value, note, tone, data }: { label: string; value: string; note?: string; tone?: string; data?: string }) {
   return (
     <div className="min-w-0" data-manage-small={data}>
-      <dt className="text-muted-foreground truncate text-[0.6875rem]">{label}</dt>
+      <dt className="text-muted-foreground truncate text-[0.6875rem] max-sm:text-xs">{label}</dt>
       <dd className={cn("text-explain font-mono font-semibold", tone)}>
         {value}
-        {note ? <span className="text-muted-foreground ml-1 font-sans text-[0.6875rem] font-normal">{note}</span> : null}
+        {note ? <span className="text-muted-foreground ml-1 font-sans text-[0.6875rem] font-normal max-sm:text-xs">{note}</span> : null}
       </dd>
     </div>
   );
@@ -137,9 +143,10 @@ function Small({ label, value, note, tone, data }: { label: string; value: strin
 function Big({ label, value, size, note, tone, data }: { label: string; value: string; size: "price" | "live"; note?: string; tone?: string; data?: string }) {
   return (
     <div className="min-w-0" data-manage-big={data}>
-      <dt className="text-explain text-muted-foreground truncate font-medium">{label}</dt>
-      <dd className={cn("font-mono tabular-nums", size === "price" ? "text-price" : "text-live", tone)}>{value}</dd>
-      {note ? <dd className="text-muted-foreground text-[0.6875rem]">{note}</dd> : null}
+      {/* On a phone a label wraps rather than squeeze or cut the figure under it, and a figure never breaks. */}
+      <dt className="text-explain text-muted-foreground truncate font-medium max-sm:overflow-visible max-sm:whitespace-normal">{label}</dt>
+      <dd className={cn("font-mono tabular-nums max-sm:whitespace-nowrap", size === "price" ? "text-price" : "text-live", tone)}>{value}</dd>
+      {note ? <dd className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">{note}</dd> : null}
     </div>
   );
 }
@@ -172,9 +179,9 @@ function OptionAtStop({ v, ctx }: { v: ManageView; ctx: ChainContext }) {
   if (!c || est === null) return null;
   return (
     <div className="min-w-0" data-manage-big="option" data-manage-option={c.held ? "held" : "atm"}>
-      <dt className="text-explain text-muted-foreground truncate font-medium">{fromEntryLabel(v.cardEntry)}</dt>
-      <dd className="text-live font-mono tabular-nums">≈ −${Math.round(est)}</dd>
-      <dd className="text-muted-foreground text-[0.6875rem]">
+      <dt className="text-explain text-muted-foreground truncate font-medium max-sm:overflow-visible max-sm:whitespace-normal">{fromEntryLabel(v.cardEntry)}</dt>
+      <dd className="text-live font-mono tabular-nums max-sm:whitespace-nowrap">≈ −${Math.round(est)}</dd>
+      <dd className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">
         on the option, a contract (est. from {c.held ? "your contract's" : "the at-the-money"} delta) · {chainStamp(feed.chain)}
       </dd>
     </div>
@@ -194,9 +201,12 @@ export function ManageCard({
   onClear,
   onSetFill,
   onUseTime,
+  stop,
   children,
 }: {
   v: ManageView;
+  /** A note's option stop (or the invite to add the fill); none on a journal card. */
+  stop?: CardStop;
   /** For the option estimate; without it the card shows none. */
   ctx?: ChainContext;
   onClear?: () => void;
@@ -225,7 +235,7 @@ export function ManageCard({
           In a trade · {v.symbol} {v.side}
           {v.kind !== "plan" ? <TestingTag /> : null}
         </h3>
-        <span className="text-muted-foreground flex items-center gap-2 text-[0.6875rem]">
+        <span className="text-muted-foreground flex items-center gap-2 text-[0.6875rem] max-sm:text-xs">
           {v.source === "journal" ? (
             <span>From your Webull fills, up to 2 min behind; price levels from the card</span>
           ) : (
@@ -236,7 +246,7 @@ export function ManageCard({
               </span>
               {v.fillNote ? <span data-manage-fill-note>{v.fillNote}</span> : null}
               {onClear ? (
-                <button type="button" onClick={onClear} className="hover:text-foreground flex items-center gap-1 rounded border px-1.5 py-0.5">
+                <button type="button" onClick={onClear} className="hover:text-foreground flex items-center gap-1 rounded border px-1.5 py-0.5 max-sm:min-h-11 max-sm:px-3 max-sm:text-sm">
                   <X aria-hidden className="size-3" />
                   Clear
                 </button>
@@ -256,7 +266,7 @@ export function ManageCard({
         <p data-manage-hint className="text-warn flex flex-wrap items-center gap-2 text-xs font-medium">
           <span>{v.hint.line}</span>
           {onUseTime ? (
-            <button type="button" onClick={onUseTime} className="text-foreground hover:bg-muted rounded border px-2 py-0.5 font-medium">
+            <button type="button" onClick={onUseTime} className="text-foreground hover:bg-muted rounded border px-2 py-0.5 font-medium max-sm:min-h-11 max-sm:px-3 max-sm:text-sm">
               Use that time
             </button>
           ) : null}
@@ -267,12 +277,13 @@ export function ManageCard({
           <TriangleAlert aria-hidden className="size-3.5 shrink-0" />
           <span>{v.fillLine}</span>
           {onSetFill ? (
-            <button type="button" onClick={onSetFill} className="text-foreground hover:bg-muted rounded border px-2 py-0.5 font-medium">
+            <button type="button" onClick={onSetFill} className="text-foreground hover:bg-muted rounded border px-2 py-0.5 font-medium max-sm:min-h-11 max-sm:px-3 max-sm:text-sm">
               Set my fill
             </button>
           ) : null}
         </p>
       ) : null}
+      {stop ? <StopBlock v={v} s={stop} /> : null}
       <dl className="grid max-w-2xl grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4" data-manage-grid>
         <Big label="Stop" value={v.m.stop !== null ? v.m.stop.toFixed(2) : "–"} size="price" note={v.cardEntry && v.stopAtEntry ? CARD_ENTRY : undefined} data="stop" />
         {dist !== null ? (
@@ -329,16 +340,24 @@ export function ImInForm({
   const id = useId();
   const [typed, setTyped] = useState(live !== null ? live.toFixed(2) : "");
   const [time, setTime] = useState(f.time);
-  const [error, setError] = useState<{ field: "px" | "at"; text: string } | null>(null);
+  // Opened by a click, so this reads the tab's memory only in the browser: the ticket's price for this name and side.
+  const [pre] = useState(() => prefillFrom(ticketPrice(f.symbol, f.side)));
+  const [opt, setOpt] = useState(pre?.price ?? "");
+  const [count, setCount] = useState(pre?.contracts ?? "");
+  const [error, setError] = useState<{ field: "px" | "at" | "opt" | "n"; text: string } | null>(null);
   const save = () => {
     const r = checkFill(typed, live);
     if (!r.ok) return setError({ field: "px", text: r.error });
     const t = checkFillTime(time, now, session, halfDay);
     if (!t.ok) return setError({ field: "at", text: t.error });
+    const o = checkOptionFill(opt, count);
+    if (!o.ok) return setError({ field: o.field, text: o.error });
     setError(null);
-    onSave(noteFromForm(f, r.price, t.at));
+    onSave(noteFromForm(f, r.price, t.at, o.fill));
   };
-  const input = "bg-background h-8 rounded border px-2 font-mono text-[0.8125rem]";
+  // On a phone a field is 44 px tall at 16 px, so iOS Safari does not zoom the page into it when it takes the focus
+  // (globals.css says the same for every field; the class keeps it true whatever the cascade does). 13 px from sm up.
+  const input = "bg-background h-8 rounded border px-2 font-mono text-[0.8125rem] max-sm:h-11 max-sm:text-base";
   return (
     <form
       data-im-in-form={f.symbol}
@@ -352,14 +371,14 @@ export function ImInForm({
     >
       <div className="flex flex-wrap items-end gap-x-3 gap-y-1.5">
         <span className="grid gap-0.5">
-          <span className="text-muted-foreground text-[0.6875rem]">Side</span>
+          <span className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">Side</span>
           <span className="flex items-center gap-1 font-semibold">
             {f.symbol} {f.side}
             {f.kind !== "plan" ? <TestingTag /> : null}
           </span>
         </span>
         <label className="grid gap-0.5" htmlFor={`${id}-px`}>
-          <span className="text-muted-foreground text-[0.6875rem]">{f.symbol} price at your fill</span>
+          <span className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">{f.symbol} price at your fill</span>
           <input
             id={`${id}-px`}
             type="text"
@@ -373,7 +392,7 @@ export function ImInForm({
           />
         </label>
         <label className="grid gap-0.5" htmlFor={`${id}-at`}>
-          <span className="text-muted-foreground text-[0.6875rem]">Filled at (New York, to the minute)</span>
+          <span className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">Filled at (New York, to the minute)</span>
           <input
             id={`${id}-at`}
             type="text"
@@ -387,11 +406,20 @@ export function ImInForm({
             className={cn(input, "w-20", error?.field === "at" && "border-bad-fill")}
           />
         </label>
+        <OptionFillFields
+          id={id}
+          price={opt}
+          contracts={count}
+          onPrice={setOpt}
+          onContracts={setCount}
+          bad={error?.field === "opt" ? "opt" : error?.field === "n" ? "n" : null}
+          errId={`${id}-err`}
+        />
         <span className="flex gap-1.5">
-          <button type="submit" className="bg-primary text-primary-foreground rounded px-2.5 py-1 font-medium">
+          <button type="submit" className="bg-primary text-primary-foreground rounded px-2.5 py-1 font-medium max-sm:min-h-11 max-sm:px-4 max-sm:text-sm">
             Save note
           </button>
-          <button type="button" onClick={onCancel} className="rounded border px-2.5 py-1">
+          <button type="button" onClick={onCancel} className="rounded border px-2.5 py-1 max-sm:min-h-11 max-sm:px-4 max-sm:text-sm">
             Cancel
           </button>
         </span>
@@ -403,14 +431,243 @@ export function ImInForm({
         </p>
       ) : null}
       {movedOn ? (
-        <p data-im-in-moved className="text-muted-foreground text-[0.6875rem]">
+        <p data-im-in-moved className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">
           {movedOn}
         </p>
       ) : null}
-      <p className="text-muted-foreground text-[0.6875rem]">Your own note in this browser, to manage the trade here. Nothing is sent anywhere.</p>
+      {pre ? (
+        <p data-im-in-prefill className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">
+          Option fill from your trade ticket in this tab: check it against Webull.
+        </p>
+      ) : null}
+      <p className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">Your own note in this browser, to manage the trade here. Nothing is sent anywhere.</p>
     </form>
   );
 }
+
+/**
+ * The two optional boxes for the option fill: the price a share paid in Webull and the contracts. Both are always
+ * drawn, so nothing moves when they are filled in.
+ */
+function OptionFillFields({
+  id,
+  price,
+  contracts,
+  onPrice,
+  onContracts,
+  bad,
+  errId,
+}: {
+  id: string;
+  price: string;
+  contracts: string;
+  onPrice: (v: string) => void;
+  onContracts: (v: string) => void;
+  bad: "opt" | "n" | null;
+  errId: string;
+}) {
+  const box = "bg-background text-foreground h-11 rounded-md border px-2 font-mono text-base tabular-nums";
+  return (
+    <>
+      <label className="grid gap-0.5" htmlFor={`${id}-opt`}>
+        <span className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">Option fill, a share (optional)</span>
+        <input
+          id={`${id}-opt`}
+          data-im-in-option
+          type="text"
+          inputMode="decimal"
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
+          placeholder="1.25"
+          value={price}
+          aria-invalid={bad === "opt" ? true : undefined}
+          aria-describedby={bad === "opt" ? errId : undefined}
+          onChange={(ev) => onPrice(ev.target.value)}
+          className={cn(box, "w-28", bad === "opt" && "border-bad-fill")}
+        />
+      </label>
+      <label className="grid gap-0.5" htmlFor={`${id}-n`}>
+        <span className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">Contracts</span>
+        <input
+          id={`${id}-n`}
+          data-im-in-contracts
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          placeholder="1"
+          value={contracts}
+          aria-invalid={bad === "n" ? true : undefined}
+          aria-describedby={bad === "n" ? errId : undefined}
+          onChange={(ev) => onContracts(ev.target.value)}
+          className={cn(box, "w-20", bad === "n" && "border-bad-fill")}
+        />
+      </label>
+    </>
+  );
+}
+
+/** The card's own small form to add the option fill to a note, or to correct the one it has (`initial`). */
+function FillForm({ v, initial = null, onSave, onCancel }: { v: ManageView; initial?: OptionFill | null; onSave: (fill: OptionFill) => void; onCancel: () => void }) {
+  const id = useId();
+  // Correcting a fill starts from it; adding one starts from the ticket's price in this tab (the price only).
+  const [pre] = useState(() => (initial ? null : prefillFrom(ticketPrice(v.symbol, v.side))));
+  const [opt, setOpt] = useState(initial ? usd(initial.priceCents).slice(1) : (pre?.price ?? ""));
+  const [count, setCount] = useState(initial ? String(initial.contracts) : (pre?.contracts ?? ""));
+  const [error, setError] = useState<{ field: "opt" | "n"; text: string } | null>(null);
+  return (
+    <form
+      data-manage-fill-form={v.symbol}
+      aria-label={`${initial ? "Edit" : "Add"} your ${v.symbol} ${v.side} option fill`}
+      onSubmit={(ev) => {
+        ev.preventDefault();
+        const o = checkOptionFill(opt, count);
+        if (!o.ok) return setError({ field: o.field, text: o.error });
+        if (!o.fill) return setError({ field: "opt", text: "Type the option price a share you paid, like 1.25." });
+        setError(null);
+        onSave(o.fill);
+      }}
+      className="bg-card grid gap-1.5 rounded border p-2 text-xs"
+    >
+      <div className="flex flex-wrap items-end gap-x-3 gap-y-1.5">
+        <OptionFillFields id={id} price={opt} contracts={count} onPrice={setOpt} onContracts={setCount} bad={error?.field ?? null} errId={`${id}-err`} />
+        <span className="flex gap-1.5">
+          <button type="submit" className="bg-primary text-primary-foreground min-h-11 rounded px-3 font-medium">
+            Save fill
+          </button>
+          <button type="button" onClick={onCancel} className="min-h-11 rounded border px-3">
+            Cancel
+          </button>
+        </span>
+      </div>
+      {error ? (
+        <p id={`${id}-err`} role="alert" className="text-bad flex items-center gap-1">
+          <TriangleAlert aria-hidden className="size-3.5" />
+          {error.text}
+        </p>
+      ) : null}
+      {pre ? <p className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">Price from your trade ticket in this tab: check it against Webull.</p> : null}
+      <p className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">Kept with your note in this browser. Nothing is sent anywhere.</p>
+    </form>
+  );
+}
+
+/** What the card shows for a note's option stop: its fill's stop, or the line inviting the fill. */
+export interface CardStop {
+  stop: FillStop | null;
+  placed: boolean;
+  room: RoomAfterStop | null;
+  /** "Fills read 10:21 New York", or null. */
+  readLine: string | null;
+  onPlaced?: (placed: boolean) => void;
+  /** Adds the fill, or replaces it ("Edit fill"). */
+  onAddFill?: (fill: OptionFill) => void;
+}
+
+const SMALL_BUTTON = "text-foreground hover:bg-muted min-h-11 rounded border px-3 font-medium";
+
+/**
+ * The stop to rest in Webull for a note with an option fill: big, from the ticket's arithmetic, with the tick caveat
+ * and the nickel alternative, the dollars lost there with fees on his contracts, any rule 4 limit his fill is over (said
+ * with the numbers; the stop is shown whatever), his own "Stop placed in Webull" tick, and the day's room after it.
+ * A fill too cheap for a stop under it shows that line alone. Without a fill: one line inviting it, and a small form;
+ * with one, "Edit fill" reopens its two boxes.
+ */
+export function StopBlock({ v, s }: { v: ManageView; s: CardStop }) {
+  const id = useId();
+  const [editing, setEditing] = useState(false);
+  const form =
+    editing && s.onAddFill ? (
+      <FillForm
+        v={v}
+        initial={s.stop?.fill ?? null}
+        onCancel={() => setEditing(false)}
+        onSave={(fill) => {
+          setEditing(false);
+          s.onAddFill!(fill);
+        }}
+      />
+    ) : null;
+  const editButton =
+    s.onAddFill && !editing ? (
+      <button type="button" data-manage-fill-edit onClick={() => setEditing(true)} className={SMALL_BUTTON}>
+        {s.stop ? "Edit fill" : "Add option fill"}
+      </button>
+    ) : null;
+  if (!s.stop) {
+    return (
+      <div data-manage-stop-invite className="grid gap-1.5">
+        <p className="text-explain text-muted-foreground flex flex-wrap items-center gap-2">
+          <span>{INVITE_LINE}</span>
+          {editButton}
+        </p>
+        {form}
+      </div>
+    );
+  }
+  const f = s.stop;
+  if (f.noStop) {
+    return (
+      <section aria-label="No stop to place" data-manage-stop-none className="bg-card grid gap-1.5 rounded-md border px-3 py-2">
+        <p className="text-explain text-warn flex flex-wrap items-center gap-2 font-medium">
+          <TriangleAlert aria-hidden className="size-3.5 shrink-0" />
+          <span>{f.noStop}</span>
+          {editButton}
+        </p>
+        {form}
+      </section>
+    );
+  }
+  const nickel = nickelLine(f);
+  return (
+    <section aria-labelledby={`${id}-stop`} data-manage-stop={f.stopCents} data-manage-stop-placed={s.placed ? "yes" : "no"} className="bg-card grid gap-1.5 rounded-md border px-3 py-2">
+      <p id={`${id}-stop`} className="text-foreground flex flex-wrap items-baseline gap-x-2 text-lg leading-snug font-semibold">
+        <span>Stop to place in Webull:</span>
+        <span className="text-price font-mono tabular-nums">{usd(f.stopCents)}</span>
+      </p>
+      <p className="text-explain text-muted-foreground">
+        On the option, {stopFromLine(f)}. {tickLine(f)}
+        {nickel ? <span data-manage-stop-nickel> {nickel}</span> : null}
+      </p>
+      <p data-manage-stop-loss className="text-explain text-foreground font-medium">
+        {lossLine(f)}
+      </p>
+      {f.breaks.map((b) => (
+        <p key={b} data-manage-stop-break className="text-explain text-warn flex items-start gap-1.5 font-medium">
+          <TriangleAlert aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+          <span>{b}</span>
+        </p>
+      ))}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <label htmlFor={`${id}-placed`} className="text-foreground flex min-h-11 w-fit cursor-pointer items-center gap-3 font-medium">
+          <input
+            id={`${id}-placed`}
+            data-manage-stop-check
+            type="checkbox"
+            checked={s.placed}
+            onChange={(ev) => s.onPlaced?.(ev.target.checked)}
+            className="accent-foreground size-5 shrink-0"
+          />
+          {STOP_PLACED}
+        </label>
+        {editButton}
+      </div>
+      {form}
+      <p data-manage-stop-reminder={s.placed ? "own" : "unticked"} className="text-explain text-muted-foreground">
+        {s.placed ? STOP_OWN_TICK : STOP_REMINDER}
+      </p>
+      {s.room ? (
+        <p data-manage-room={s.room.kind} className={cn("text-explain", s.room.kind === "over" ? "text-warn font-medium" : s.room.kind === "withheld" ? "text-muted-foreground" : "text-foreground")}>
+          {s.room.line}
+          {s.room.kind !== "withheld" && s.readLine ? <span className="text-muted-foreground"> {s.readLine}.</span> : null}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+const NO_TRADES: readonly OpenTrade[] = [];
+const NO_NOTES: readonly ManualNote[] = [];
 
 // ---- the board's hook-in --------------------------------------------------------------------------------------------
 export interface TradeManageInput {
@@ -436,6 +693,8 @@ export interface TradeManageInput {
   mode: string;
   /** The server's bars have not answered yet. */
   barsLoading: boolean;
+  /** The server's day check, for the room after a note's stop; null without a journal. */
+  day?: DayFacts | null;
 }
 
 /**
@@ -449,6 +708,10 @@ export function useTradeManage(x: TradeManageInput): {
   notices: React.ReactNode;
   /** Each open trade's name, side and action, for the page's hero. */
   views: readonly ManageView[];
+  /** Today's notes in this browser that the journal shows no fill for yet: the rail counts them. */
+  provisional: number;
+  /** The journal can still be judged, re-checked on this browser's clock: the room shows only while it is. */
+  journalLive: boolean;
 } {
   const day = x.now !== null ? (nyClock(new Date(x.now).toISOString())?.day ?? null) : null;
   const today = day === x.session ? day : null;
@@ -458,11 +721,14 @@ export function useTradeManage(x: TradeManageInput): {
   const [notices, setNotices] = useState<ManageNotice[]>([]);
   const [wasLive, setWasLive] = useState(false);
   const [seq, setSeq] = useState(0);
+  // The journal's side of the card, kept between renders: a tick of the clock with the same day's trades, lots, notes
+  // and session reads no row of the journal.
+  const [journal] = useState(() => journalDayCache());
 
   const feed = today && x.now !== null ? cardFeed(x.mode, x.barsLoading, wasLive) : null;
   if (feed === "live" && !wasLive) setWasLive(true);
   const rowOf = (symbol: string) => x.rows.find((r) => r.symbol === symbol);
-  const trades = feed ? openTrades(x.items, x.lots, notes, x.session, x.closed, x.journalAsOf) : [];
+  const trades = feed ? journal.openTrades(x.items, x.lots, notes, x.session, x.closed, x.journalAsOf) : NO_TRADES;
   const views = trades.map((t) =>
     manageView(t, {
       session: x.session,
@@ -478,7 +744,7 @@ export function useTradeManage(x: TradeManageInput): {
   );
 
   // The notes the journal has closed out leave this browser (their cards are already gone).
-  const retire = today ? retiredNotes(notes, x.lots, x.closed, x.session, x.journalAsOf) : [];
+  const retire = today ? journal.retired(notes, x.lots, x.closed, x.session, x.journalAsOf) : NO_NOTES;
   const retireSig = retire.map(noteId).join(",");
   useEffect(() => {
     if (!today || !retireSig) return;
@@ -501,6 +767,41 @@ export function useTradeManage(x: TradeManageInput): {
 
   const save = (notesNow: ManualNote[]) => {
     if (today) writeNotes(today, notesNow);
+  };
+  /** One note changed in place (its fill, its stop tick), by its id. */
+  const patch = (n: ManualNote, change: Partial<Pick<ManualNote, "fill" | "stopPlaced">>) => {
+    const next: ManualNote = { ...n, ...change };
+    if (!next.stopPlaced) delete next.stopPlaced;
+    save(notes.map((x) => (noteId(x) === noteId(n) ? next : x)));
+  };
+  // The notes the journal shows no fill for yet: the rail adds them to the day's count.
+  const match = today ? journal.match(notes, x.closed, x.lots, x.session) : null;
+  const provisional = match?.provisional.length ?? 0;
+  // The server judged the journal when it drew the page; this browser checks its age again every half minute.
+  const liveNow = useNow(30_000);
+  const live = journalLive(x.day, liveNow);
+  const cardStop = (t: (typeof trades)[number]): CardStop | undefined => {
+    const n = t.note;
+    if (!n) return undefined;
+    const st = n.fill ? fillStop(n.fill) : null;
+    return {
+      stop: st,
+      placed: n.stopPlaced === true,
+      // Never from an old journal, never beside another open trade or position whose loss is not priced here, never
+      // for a fill already over rule 4, and none at all for a fill too cheap for a stop.
+      room:
+        st && !st.noStop
+          ? roomAfterStop(
+              x.day ? { current: live, net: x.day.net } : null,
+              st.lossCents,
+              Math.max(views.length - 1, otherOpenPositions(x.lots, match?.matched.get(noteId(n))), x.lots.length === 0 ? (x.day?.openLots ?? 0) : 0),
+              st.breaks.length,
+            )
+          : null,
+      readLine: x.day?.readLine ?? null,
+      onPlaced: (placed) => patch(n, { stopPlaced: placed }),
+      onAddFill: (fill) => patch(n, { fill }),
+    };
   };
   const add = (note: ManualNote) => {
     save([...notes.filter((n) => noteId(n) !== noteId(note)), note]);
@@ -536,7 +837,7 @@ export function useTradeManage(x: TradeManageInput): {
         type="button"
         data-im-in={row.symbol}
         onClick={() => setForm(formFromRow(row.symbol, row.state, item, x.now!))}
-        className="hover:bg-muted flex w-fit items-center gap-1.5 rounded border px-2 py-1 text-xs font-medium"
+        className="hover:bg-muted flex w-fit items-center gap-1.5 rounded border px-2 py-1 text-xs font-medium max-sm:min-h-11 max-sm:px-3 max-sm:text-sm"
       >
         <Hand aria-hidden className="size-3.5" />
         I&apos;m in
@@ -557,6 +858,7 @@ export function useTradeManage(x: TradeManageInput): {
             onClear={t.note ? () => save(notes.filter((n) => noteId(n) !== noteId(t.note!))) : undefined}
             onSetFill={v.source === "journal" && x.now !== null ? () => setForm(formFromTrade(t, x.now!)) : undefined}
             onUseTime={t.note && v.hint ? () => save([...notes.filter((n) => noteId(n) !== noteId(t.note!)), { ...t.note!, at: v.hint!.at }]) : undefined}
+            stop={cardStop(t)}
           >
             {open ? formEl(form, feed === "live" ? (rowOf(v.symbol)?.price ?? null) : null, null) : null}
           </ManageCard>
@@ -573,13 +875,13 @@ export function useTradeManage(x: TradeManageInput): {
             <div className="min-w-0 flex-1">
               <p className={cn("text-[0.8125rem] font-medium", TONE_LINE[n.tone])}>{n.title}</p>
               <p className="mt-0.5">{n.line}</p>
-              <p className="text-muted-foreground mt-0.5 text-[0.6875rem]">Advisory: confirm on your chart.</p>
+              <p className="text-muted-foreground mt-0.5 text-[0.6875rem] max-sm:text-xs">Advisory: confirm on your chart.</p>
             </div>
             <button
               type="button"
               aria-label={`Dismiss the ${n.symbol} trade notice`}
               onClick={() => setNotices((all) => all.filter((y) => y.id !== n.id))}
-              className="text-muted-foreground hover:text-foreground -m-1 flex size-7 shrink-0 items-center justify-center rounded"
+              className="text-muted-foreground hover:text-foreground -m-1 flex size-7 shrink-0 items-center justify-center rounded max-sm:size-11"
             >
               <X aria-hidden className="size-4" />
             </button>
@@ -588,5 +890,5 @@ export function useTradeManage(x: TradeManageInput): {
       ))
     : null;
 
-  return { cards, rowExtra, notices: noticeEls, views };
+  return { cards, rowExtra, notices: noticeEls, views, provisional, journalLive: live };
 }

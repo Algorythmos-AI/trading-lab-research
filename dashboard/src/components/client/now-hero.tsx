@@ -11,6 +11,10 @@
 // Every state is read from the board, never worked out here, so the hero always says what the board says. Prices that
 // have stopped grey the whole hero and say for how long: no entry and no reassuring manage word is ever shown on old
 // prices. Read only: the tiles are labelled In, Stop and T1, and nothing here places an order.
+//
+// Once the owner has marked today done (done-today.tsx), every entry prompt here gives way to one calm line: no state
+// word for a get-ready or an entry, no tiles, no sizing button, no what-if lines, no cautions. The manage words for an
+// open trade, and the paused-prices line, stay exactly as they are: nothing that helps him out of a trade is hidden.
 import { CircleCheck, Eye, GitBranch, Hourglass, Ban, OctagonX, Pause, SkipForward, TriangleAlert, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { TONE_TEXT } from "@/components/status";
@@ -19,12 +23,14 @@ import { focusPlan } from "@/lib/focus-plan";
 import type { Tone } from "@/lib/labels";
 import { type LadderLiveView } from "@/lib/level-ladder";
 import { ACTION_WORD, type ManageView, PAUSED_LINE } from "@/lib/trade-manage";
-import { type BoardRow, rowView, type RowView, STATE_WORD } from "@/lib/trade-now";
+import { type BoardRow, entryPrompt, rowView, type RowView, STATE_WORD } from "@/lib/trade-now";
 import type { NameStateName } from "@/lib/trade-state";
 import { cn } from "@/lib/utils";
 import { bellMinute } from "@/lib/contract";
 import { atmContract, chainFresh, chainPx, chainStamp, entryStopDistance, premiumCheck, roomShown, UNLIKELY_WORDS, whichStopFirst } from "@/lib/what-if";
 import { useLadderLive } from "./ladder-live";
+import { openTicket } from "./ticket";
+import { DONE_LINE, useDone } from "./done-today";
 import { type Board, openFocusCard, TestingTag, useBoard } from "./trade-now";
 import { useChain } from "./use-chain";
 import { usePerfNow } from "./use-now";
@@ -57,13 +63,21 @@ function WordChip({ word, tone, icon: Icon, data }: { word: string; tone: Tone; 
   );
 }
 
+/**
+ * The live hero's tile price on a phone, three across: the page's price size, or less on a narrow screen so a
+ * seven-character price ("~752.95", 4.2 em in the mono face) fits its tile. The 112 px are the page, card and tile
+ * paddings, the card's and the tiles' borders and the two gaps; a third of what is left, over 4.2, is 12.6.
+ */
+const TILE_PRICE_PHONE = "max-sm:text-[length:min(var(--fs-price),calc((100vw_-_112px)_/_12.6))] max-sm:whitespace-nowrap";
+
 /** One number as a tile: "Stop 752.01", with an option's stop beside it as a note ("or −25%"). */
-function Tile({ label, value, data }: { label: string; value: string; data: string }) {
+/** `three`: one of the live hero's three tiles, which sit three across on a phone too. */
+function Tile({ label, value, data, three }: { label: string; value: string; data: string; three?: boolean }) {
   const [price, ...rest] = value.split(" or ");
   return (
-    <div data-hero-tile={data} className="bg-muted/40 min-w-0 rounded-md border px-2.5 py-2 sm:px-3">
-      <dt className="text-explain text-muted-foreground font-medium">{label}</dt>
-      <dd className="text-price font-mono tabular-nums">{price}</dd>
+    <div data-hero-tile={data} className={cn("bg-muted/40 min-w-0 rounded-md border px-2.5 py-2 sm:px-3", three && "max-sm:px-1.5 max-sm:py-1.5")}>
+      <dt className={cn("text-explain text-muted-foreground font-medium", three && "max-sm:text-xs")}>{label}</dt>
+      <dd className={cn("text-price font-mono tabular-nums", three && TILE_PRICE_PHONE)}>{price}</dd>
       {rest.length ? <dd className="text-explain text-muted-foreground">or {rest.join(" or ")}</dd> : null}
     </div>
   );
@@ -182,6 +196,26 @@ export function heroTiles(row: BoardRow, v: RowView, paused: boolean): { enter: 
   return null;
 }
 
+const sameCent = (a: number | null | undefined, b: number | null | undefined) => a == null || b == null ? a == null && b == null : Math.round(a * 100) === Math.round(b * 100);
+
+/**
+ * The side the hero's "Size the …" button opens a ticket for, or null for no button. Only when the card has a plan for
+ * that side, the hero is not showing an alternative trigger (its own stop and target), and the row's plan has the
+ * card's stop and T1 to the cent: the ticket estimates from the card's levels, so it is hidden rather than ever showing
+ * numbers that disagree with the hero's tiles.
+ */
+export function heroTicketSide(
+  side: "call" | "put" | null,
+  row: Pick<BoardRow, "state">,
+  v: Pick<RowView, "badge">,
+  card: { stop: number | null; target1: number | null } | null | undefined,
+): "call" | "put" | null {
+  if (!side || !card || v.badge.alt) return null;
+  const p = row.state?.plan;
+  if (p && (!sameCent(p.stop, card.stop) || !sameCent(p.target1, card.target1))) return null;
+  return side;
+}
+
 /** A one-off highlight when the hero's name changes (motion-safe only); the first name on screen plays none. */
 const FLASH = `
 @keyframes now-hero-in { from { box-shadow: 0 0 0 4px var(--ring); } to { box-shadow: 0 0 0 0 transparent; } }
@@ -198,7 +232,17 @@ function useFlash(key: string | null): number {
   return n;
 }
 
+/** The hero's line once today is marked done. */
+function DoneLine() {
+  return (
+    <p data-hero-done className="text-base leading-snug font-medium sm:text-lg">
+      {DONE_LINE}
+    </p>
+  );
+}
+
 function Live({ b, row, room }: { b: Board; row: BoardRow; room: string | null }) {
+  const done = useDone();
   const s = row.state!;
   const v = rowView(s);
   const paused = b.paused || s.state === "paused";
@@ -213,18 +257,22 @@ function Live({ b, row, room }: { b: Board; row: BoardRow; room: string | null }
   const icon = paused ? Pause : v.badge.alt ? GitBranch : STATE_ICON[s.state];
   // The side the board points at (an entry or a get-ready), as the ladder and the cards read it: none while paused.
   const side = !paused && (s.state === "enter_zone" || s.state === "get_ready") ? (s.side ?? null) : null;
+  const cardItem = b.items.find((i) => i.symbol === row.symbol);
+  const ticketSide = done ? null : heroTicketSide(side, row, v, side && cardItem ? focusPlan(cardItem)[side] : null);
+  // Done for today: a get-ready's, an entry's or a live alternative's word is a prompt to enter, so it is not shown.
+  const hideWord = done && !paused && entryPrompt(s);
   return (
     <div data-hero-paused={paused ? "true" : undefined} className={cn("grid gap-3", paused && "grayscale")}>
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <span data-hero-symbol className="text-decision font-mono">{row.symbol}</span>
-          <WordChip word={word} tone={tone} icon={icon} data={{ "data-hero-word": shownState }} />
-          {v.badge.side && !paused ? (
+          {hideWord ? null : <WordChip word={word} tone={tone} icon={icon} data={{ "data-hero-word": shownState }} />}
+          {v.badge.side && !paused && !hideWord ? (
             <span data-hero-side={v.badge.side} className="text-decision">
               {v.badge.side.toUpperCase()}
             </span>
           ) : null}
-          {v.testing && !paused ? <TestingTag /> : null}
+          {v.testing && !paused && !hideWord ? <TestingTag /> : null}
         </div>
         <PriceLine view={view} />
       </div>
@@ -232,22 +280,35 @@ function Live({ b, row, room }: { b: Board; row: BoardRow; room: string | null }
         <p role="status" data-hero-stale className="text-live text-foreground font-medium">
           Prices paused{age !== null ? ` ${age} s` : ""}: no entry is shown on old prices. Check your platform.
         </p>
-      ) : (
+      ) : done ? null : (
         <p className="text-base leading-snug font-medium sm:text-lg">{v.headline}</p>
       )}
-      {tiles ? (
+      {done ? <DoneLine /> : null}
+      {tiles && !done ? (
         <div className="grid gap-1">
           {tiles.plan ? <p className="text-explain text-muted-foreground">The {s.side} plan, if the break holds:</p> : null}
-          {/* Two and one on a phone: three 22 px prices side by side do not fit 375 px. */}
-          <dl data-hero-tiles className="grid max-w-2xl grid-cols-2 gap-2 sm:grid-cols-3">
-            <Tile label="In" value={tiles.enter} data="in" />
-            <Tile label="Stop" value={tiles.stop} data="stop" />
-            {tiles.target !== null ? <Tile label="T1" value={tiles.target} data="t1" /> : null}
+          {/* Three across on a phone too, with tighter tiles and a price that fits its tile (TILE_PRICE_PHONE). */}
+          <dl data-hero-tiles className="grid max-w-2xl grid-cols-3 gap-2 max-sm:gap-1.5">
+            <Tile label="In" value={tiles.enter} data="in" three />
+            <Tile label="Stop" value={tiles.stop} data="stop" three />
+            {tiles.target !== null ? <Tile label="T1" value={tiles.target} data="t1" three /> : null}
           </dl>
         </div>
       ) : null}
-      <HeroChecks b={b} row={row} view={view} side={side} room={roomShown(room, b.manage.views.length)} />
-      {!paused && s.cautions.length ? (
+      {ticketSide ? (
+        // Hidden in the cockpit, which hides the cards the ticket sits on.
+        <button
+          type="button"
+          data-cockpit-hide
+          data-hero-ticket={ticketSide}
+          onClick={() => openTicket(row.symbol, ticketSide)}
+          className="text-explain hover:bg-muted/50 inline-flex min-h-11 w-fit items-center rounded-md border px-3 font-medium max-sm:w-full max-sm:justify-center"
+        >
+          Size the {ticketSide} from your Webull price
+        </button>
+      ) : null}
+      {done ? null : <HeroChecks b={b} row={row} view={view} side={side} room={roomShown(room, b.manage.views.length, b.manage.provisional, b.manage.journalLive)} />}
+      {!paused && !done && s.cautions.length ? (
         <ul className="flex flex-wrap items-center gap-2" data-hero-cautions={s.cautions.length + s.moreCautions} aria-label="Cautions">
           {s.cautions.slice(0, 2).map((c) => (
             <li key={c.id} title={c.why} className="text-explain bg-warn-soft border-warn-fill inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 font-semibold">
@@ -301,6 +362,7 @@ export function heroTriggers(mode: Board["mode"]["kind"]): "full" | "grey" | "no
 }
 
 function BeforeLive({ b }: { b: Board }) {
+  const done = useDone();
   const item = b.items[0] ?? null;
   const plan = item ? focusPlan(item) : { call: null, put: null };
   const view = usePriceView(b, item?.symbol ?? null);
@@ -308,9 +370,13 @@ function BeforeLive({ b }: { b: Board }) {
   const triggers = heroTriggers(b.mode.kind);
   return (
     <div className="grid gap-3">
-      <p data-hero-line className="text-price leading-tight">
-        {line}
-      </p>
+      {done ? (
+        <DoneLine />
+      ) : (
+        <p data-hero-line className="text-price leading-tight">
+          {line}
+        </p>
+      )}
       {item ? (
         <div className="grid gap-2">
           <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
@@ -322,7 +388,7 @@ function BeforeLive({ b }: { b: Board }) {
             </p>
             <PriceLine view={view} />
           </div>
-          {triggers === "none" ? (
+          {done ? null : triggers === "none" ? (
             <p data-hero-triggers="none" className="text-explain text-muted-foreground">
               This card is for an earlier day: its triggers are not shown.
             </p>
@@ -349,6 +415,7 @@ function BeforeLive({ b }: { b: Board }) {
  */
 export function NowHero({ room = null }: { room?: string | null }) {
   const b = useBoard();
+  const done = useDone();
   const live = !!b && b.on && b.mode.kind === "live" && b.rows.length > 0 && b.rows[0]!.state !== null;
   const top = live ? `${b.rows[0]!.symbol}` : b?.on ? `pre:${b.mode.kind}` : null;
   const flash = useFlash(top);
@@ -361,6 +428,7 @@ export function NowHero({ room = null }: { room?: string | null }) {
       data-hero-for={row?.symbol ?? b.items[0]?.symbol}
       data-hero-state={row?.state ? (b.paused ? "paused" : row.state.state) : undefined}
       data-hero-flash={flash > 0 ? "on" : undefined}
+      data-hero-today={done ? "done" : undefined}
       key={flash}
       className="bg-card grid gap-3 rounded-lg border p-3 sm:p-4"
     >
@@ -371,7 +439,7 @@ export function NowHero({ room = null }: { room?: string | null }) {
         </h2>
         {row ? (
           // Hidden in the cockpit, which hides the cards it would scroll to.
-          <button type="button" data-cockpit-hide onClick={() => openFocusCard(row.symbol)} className="text-explain text-muted-foreground hover:text-foreground underline-offset-4 hover:underline">
+          <button type="button" data-cockpit-hide onClick={() => openFocusCard(row.symbol)} className="text-explain text-muted-foreground hover:text-foreground underline-offset-4 hover:underline max-sm:inline-flex max-sm:min-h-11 max-sm:items-center">
             Show the {row.symbol} card
           </button>
         ) : null}

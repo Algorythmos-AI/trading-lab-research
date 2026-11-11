@@ -39,6 +39,93 @@ export function nyTime(iso: string): NyTime {
   return out;
 }
 
+// ── Rows that can be read ────────────────────────────────────────────────────────────────────────────────────────
+// The stored journal is checked only for being an object when it is read (snapshot.ts), so one row written wrong (a
+// piece with no opened_at, a null in gaps, money without transfers) would otherwise throw in the arithmetic below and
+// take the whole page with it. A row that cannot be read is left out and counted, never guessed at.
+
+const isStr = (v: unknown): v is string => typeof v === "string";
+const isTime = (v: unknown): v is string => isStr(v) && Number.isFinite(Date.parse(v));
+const optNum = (v: unknown) => v === undefined || v === null || isNum(v);
+const optStr = (v: unknown) => v === undefined || v === null || isStr(v);
+
+/** A closed piece with every field the page's arithmetic reads, of the right type. */
+export function isTrade(t: unknown): t is Trade {
+  if (!t || typeof t !== "object") return false;
+  const p = t as Record<string, unknown>;
+  return (
+    isStr(p.id) &&
+    isStr(p.symbol) &&
+    (p.kind === "call" || p.kind === "put" || p.kind === "stock") &&
+    (p.side === "long" || p.side === "short") &&
+    isNum(p.qty) &&
+    isNum(p.entry) &&
+    isNum(p.exit) &&
+    isNum(p.multiplier) &&
+    isNum(p.pnl) &&
+    isTime(p.opened_at) &&
+    isTime(p.closed_at) &&
+    optNum(p.strike) &&
+    optStr(p.expiry)
+  );
+}
+
+/** An open lot the page can read: its opening time may be missing, never unreadable. */
+export function isLot(l: unknown): l is Lot {
+  if (!l || typeof l !== "object") return false;
+  const p = l as Record<string, unknown>;
+  return (
+    isStr(p.symbol) &&
+    (p.kind === "call" || p.kind === "put" || p.kind === "stock") &&
+    (p.side === "long" || p.side === "short") &&
+    isNum(p.qty) &&
+    isNum(p.entry) &&
+    (p.opened_at === undefined || p.opened_at === null || isTime(p.opened_at)) &&
+    optNum(p.strike) &&
+    optStr(p.expiry)
+  );
+}
+
+type Gap = NonNullable<JournalDoc["gaps"]>[number];
+const isGap = (g: unknown): g is Gap => !!g && typeof g === "object" && isStr((g as Gap).date) && isStr((g as Gap).symbol);
+
+/** The rows of a list that can be read, and how many could not. Not a list at all reads as empty. */
+function keep<T>(list: unknown, ok: (x: unknown) => x is T): { rows: T[]; skipped: number } {
+  if (!Array.isArray(list)) return { rows: [], skipped: 0 };
+  const rows = list.filter(ok);
+  return { rows, skipped: list.length - rows.length };
+}
+
+/**
+ * The journal with only the rows the page can read: the trades, open lots and gaps that are whole, and the money block
+ * if it has its list of transfers (its own rows are checked by moneyView). `skipped` counts the rows left out, the
+ * money block counting as one when it is dropped. Nothing is changed in a row that is kept.
+ */
+export function readableJournal<D extends Pick<JournalDoc, "trades"> & Partial<Pick<JournalDoc, "open" | "gaps" | "money">>>(doc: D): { doc: D; skipped: number } {
+  const trades = keep(doc.trades, isTrade);
+  const open = doc.open === undefined || doc.open === null ? null : keep(doc.open, isLot);
+  const gaps = doc.gaps === undefined || doc.gaps === null ? null : keep(doc.gaps, isGap);
+  const m = doc.money;
+  const moneyOk = m === undefined || m === null || (typeof m === "object" && Array.isArray(m.transfers));
+  const skipped = trades.skipped + (open?.skipped ?? 0) + (gaps?.skipped ?? 0) + (moneyOk ? 0 : 1);
+  if (skipped === 0 && Array.isArray(doc.trades)) return { doc, skipped: 0 };
+  return {
+    doc: {
+      ...doc,
+      trades: trades.rows,
+      ...(open ? { open: open.rows } : {}),
+      ...(gaps ? { gaps: gaps.rows } : {}),
+      ...(moneyOk ? {} : { money: null }),
+    },
+    skipped,
+  };
+}
+
+/** "3 rows could not be read and are left out", or null with none. */
+export function skippedLine(n: number): string | null {
+  return n > 0 ? `${n.toLocaleString("en-US")} row${n === 1 ? "" : "s"} could not be read and ${n === 1 ? "is" : "are"} left out.` : null;
+}
+
 /** The New York day a trade closed on: the day its result is booked to. */
 export const closeDay = (t: Trade) => nyTime(t.closed_at).day;
 
@@ -164,7 +251,13 @@ export interface Summary {
   last: string | null;
 }
 
-export function summarize(trades: readonly Trade[]): Summary {
+/**
+ * Totals of these trades. When `dayTrades` is given (the pieces closed in the same view, each booked to its own
+ * close day), the money figures come from them: `net`, and the day figures (days, green days, the best and worst
+ * day, the deepest fall), so they always add up to the calendar. The per-trade figures (counts, win rate, the
+ * average per trade, profit factor) stay on `trades`.
+ */
+export function summarize(trades: readonly Trade[], dayTrades?: readonly Trade[]): Summary {
   const sorted = sortByClose(trades);
   let net = 0;
   let wins = 0;
@@ -190,7 +283,7 @@ export function summarize(trades: readonly Trade[]): Summary {
     if (!best || t.pnl > best.pnl) best = t;
     if (!worst || t.pnl < worst.pnl) worst = t;
   }
-  const days = daily(sorted);
+  const days = daily(dayTrades ?? sorted);
   const n = sorted.length;
   return {
     trades: n,
@@ -205,6 +298,7 @@ export function summarize(trades: readonly Trade[]): Summary {
     payoff: wins && losses ? grossWin / wins / Math.abs(grossLoss / losses) : null,
     profitFactor: grossLoss < 0 ? grossWin / Math.abs(grossLoss) : null,
     expectancy: n ? net / n : null,
+    ...(dayTrades ? { net: dayTrades.reduce((s, t) => s + t.pnl, 0) } : {}),
     best,
     worst,
     maxDrawdown: Math.min(0, ...days.map((d) => d.dd)),
@@ -383,7 +477,8 @@ const median = (xs: number[]) => {
 
 /** Minutes after a losing close within which a new entry counts as "straight back in". */
 export const REVENGE_MINUTES = 10;
-const MIN_SAMPLE = 8;
+/** The fewest trades any figure on the Trades page is averaged over. */
+export const MIN_SAMPLE = 8;
 
 /**
  * Patterns in the trades worth knowing, each measured, never guessed: a lesson is only drawn when its sample is big
@@ -605,6 +700,8 @@ export interface SessionView {
   summary: Summary;
   /** Positions still open now, newest first: the open lots merged by holding (see `openPositions`). */
   open: Lot[];
+  /** The journal's open lots as it lists them, one per buy fill, for the day's entry count (`dayCheck`). */
+  lots: Lot[];
 }
 
 /**
@@ -632,17 +729,18 @@ export function openPositions(lots: readonly Lot[]): Lot[] {
 /** Today's trades in New York, or the latest session with trades when today has none yet. Null with no trades at all. */
 export function sessionView(doc: Pick<JournalDoc, "trades" | "open">, now: Date): SessionView | null {
   const today = nyTime(now.toISOString()).day;
-  const open = openPositions(doc.open ?? []).sort((a, b) => (b.opened_at ?? "").localeCompare(a.opened_at ?? ""));
+  const lots = [...(doc.open ?? [])];
+  const open = openPositions(lots).sort((a, b) => (b.opened_at ?? "").localeCompare(a.opened_at ?? ""));
   let day = today;
   let trades = doc.trades.filter((t) => closeDay(t) === today);
   if (trades.length === 0 && open.every((l) => !l.opened_at || nyTime(l.opened_at).day !== today)) {
     const last = doc.trades.reduce<string | null>((m, t) => (m === null || t.closed_at > m ? t.closed_at : m), null);
-    if (last === null) return open.length ? { day, isToday: true, trades, summary: summarize(trades), open } : null;
+    if (last === null) return open.length ? { day, isToday: true, trades, summary: summarize(trades), open, lots } : null;
     day = nyTime(last).day;
     trades = doc.trades.filter((t) => closeDay(t) === day);
   }
   trades = [...trades].sort((a, b) => b.closed_at.localeCompare(a.closed_at) || a.id.localeCompare(b.id));
-  return { day, isToday: day === today, trades, summary: summarize(trades), open };
+  return { day, isToday: day === today, trades, summary: summarize(trades), open, lots };
 }
 
 // ── Money in and out ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -679,10 +777,23 @@ export interface MoneyView {
   /** Transfers newest first. */
   transfers: Money["transfers"];
   series: MoneyPoint[];
+  /** Transfers and days' values left out because they could not be read (the list itself missing counts as one). */
+  skipped: number;
 }
 
-/** Totals and a day-by-day series from the published money block and the trading result in US dollars. */
-export function moneyView(m: Money, tradingUsd: number): MoneyView {
+type Transfer = Money["transfers"][number];
+const isTransfer = (t: unknown): t is Transfer => !!t && typeof t === "object" && isStr((t as Transfer).date) && isNum((t as Transfer).amount);
+const isValue = (v: unknown): v is { date: string; value: number } => !!v && typeof v === "object" && isStr((v as { date: unknown }).date) && isNum((v as { value: unknown }).value);
+
+/**
+ * Totals and a day-by-day series from the published money block and the trading result in US dollars. A transfer or
+ * a day's value that cannot be read is left out and counted in `skipped`; a block without its list of transfers reads
+ * as one with none.
+ */
+export function moneyView(raw: Money, tradingUsd: number): MoneyView {
+  const tr = keep(raw.transfers, isTransfer);
+  const vs = keep(raw.values, isValue);
+  const m = { ...raw, transfers: tr.rows, values: vs.rows };
   let deposits = 0;
   let withdrawals = 0;
   let depositCount = 0;
@@ -731,5 +842,6 @@ export function moneyView(m: Money, tradingUsd: number): MoneyView {
     complete: Boolean(m.complete_from),
     transfers: [...m.transfers].sort((a, b) => b.date.localeCompare(a.date)),
     series,
+    skipped: tr.skipped + vs.skipped + (Array.isArray(raw.transfers) ? 0 : 1),
   };
 }

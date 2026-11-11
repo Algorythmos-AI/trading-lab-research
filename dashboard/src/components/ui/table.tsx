@@ -1,10 +1,17 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-/** Tables scroll inside their card on narrow screens; the page itself never scrolls sideways. */
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+/**
+ * Tables scroll inside their card on narrow screens; the page itself never scrolls sideways. Give a wide table a
+ * `label` and its scrolling box becomes a named region the keyboard can reach and scroll.
+ */
+function Table({ className, label, ...props }: React.ComponentProps<"table"> & { label?: string }) {
   return (
-    <div data-slot="table-container" className="relative w-full overflow-x-auto">
+    <div
+      data-slot="table-container"
+      className="focus-visible:outline-ring relative w-full overflow-x-auto focus-visible:outline-2"
+      {...(label ? { tabIndex: 0, role: "region", "aria-label": label } : {})}
+    >
       <table data-slot="table" className={cn("w-full caption-bottom text-[0.8125rem]", className)} {...props} />
     </div>
   );

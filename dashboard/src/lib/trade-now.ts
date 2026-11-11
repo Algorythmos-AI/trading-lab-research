@@ -354,6 +354,67 @@ export function rowView(s: NameState): RowView {
   return { badge: badge(STATE_WORD[s.state], s.tone, side), testing: false, headline: plain, grid: null };
 }
 
+// ---- the owner's "done for today" -----------------------------------------------------------------------------------
+/** A state that asks for an entry: a get-ready, an entry zone, or a live alternative trigger. Never a paused row. */
+export function entryPrompt(s: NameState | null | undefined): boolean {
+  if (!s || s.state === "paused") return false;
+  return s.state === "get_ready" || s.state === "enter_zone" || rowView(s).badge.alt !== null;
+}
+
+/** The chip's word on a row whose entry prompt is hidden because the owner marked today done. */
+export const DONE_WORD = "DONE TODAY";
+
+/** A hidden entry prompt's view: a neutral chip, no side, no alternative, no numbers. */
+export const DONE_ROW_VIEW: RowView = {
+  badge: { word: DONE_WORD, tone: "neutral", side: null, alt: null },
+  testing: false,
+  headline: "You marked today done. Manage open trades only.",
+  grid: null,
+};
+
+/** The chip's word on a name in a trade being managed once the owner has marked today done. */
+export const IN_TRADE_WORD = "IN A TRADE";
+
+/**
+ * A managed name's view once today is marked done: a neutral chip, no side, no entry sentence and no Enter, Stop or
+ * Target figures. The trade itself is managed on its own card (trade-manage.tsx), which is not touched.
+ */
+export const IN_TRADE_ROW_VIEW: RowView = {
+  badge: { word: IN_TRADE_WORD, tone: "neutral", side: null, alt: null },
+  testing: false,
+  headline: "You marked today done. Manage this trade on its card below.",
+  grid: null,
+};
+
+/** What a name shows once today is marked done: its entry prompt hidden ("done"), a managed trade ("in_trade"), or as it is. */
+export type DoneMask = "done" | "in_trade" | null;
+
+/**
+ * How today's "done" changes a row, for display only (the states themselves, and what the page reports to the server's
+ * shadow check, are never masked). Not done, or a row that asks for no entry (watch, no trade, plan off, missed,
+ * paused): nothing, so it keeps its real state. An entry prompt (get ready, an entry, a live alternative) reads "In a
+ * trade" on a name in a trade being managed, whose manage card, stop and notices stay as they are, and "done" on any
+ * other name.
+ */
+export function doneMask(done: boolean, row: Pick<BoardRow, "symbol" | "state">, managed: ReadonlySet<string>): DoneMask {
+  if (!done || !entryPrompt(row.state)) return null;
+  return managed.has(row.symbol) ? "in_trade" : "done";
+}
+
+/** Whether a row's entry prompt is hidden because today is marked done (doneMask's "done"; a managed name is "in_trade"). */
+export function doneMasked(done: boolean, row: Pick<BoardRow, "symbol" | "state">, managed: ReadonlySet<string>): boolean {
+  return doneMask(done, row, managed) === "done";
+}
+
+/**
+ * The screen-reader line for the names whose word changed: "QQQ enter zone; SPY watch". Once today is marked done an
+ * entry's word is not spoken; null when nothing is left to say.
+ */
+export function spokenChanges(changed: readonly NameState[], words: Readonly<Record<string, string>>, done: boolean): string | null {
+  const said = done ? changed.filter((s) => !entryPrompt(s)) : changed;
+  return said.length ? said.map((s) => `${s.symbol} ${(words[s.symbol] ?? "").toLowerCase()}`).join("; ") : null;
+}
+
 // ---- the day, from the journal --------------------------------------------------------------------------------------
 /**
  * The day's limits for the board, from the owner's journal: rules 7 and 8 (the day's loss limit and the trade cap)

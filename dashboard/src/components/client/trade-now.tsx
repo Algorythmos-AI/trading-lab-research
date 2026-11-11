@@ -11,6 +11,7 @@ import {
   Eye,
   GitBranch,
   FlaskConical,
+  Hand,
   Hourglass,
   type LucideIcon,
   OctagonX,
@@ -34,19 +35,27 @@ import {
   type BoardRow,
   boardNotices,
   boardRows,
+  DONE_ROW_VIEW,
+  type DoneMask,
+  doneMask,
+  IN_TRADE_ROW_VIEW,
   type NoticeBook,
   noticeKey,
   noticeTitle,
   rowView,
   type RowView,
+  spokenChanges,
 } from "@/lib/trade-now";
 import { pausedAgeS } from "@/lib/level-ladder";
 import { type NameState, type NameStateName, serverNow } from "@/lib/trade-state";
 import { cn } from "@/lib/utils";
+import { useDeskShadow } from "./desk-shadow";
+import { useDone } from "./done-today";
 import { useLive } from "./live-layer";
 import { useBars } from "./use-bars";
 import { useTradeManage } from "./trade-manage";
 import type { Lot, Trade } from "@/lib/journal";
+import type { DayFacts } from "@/lib/session-timeline";
 
 const STATE_ICON: Record<NameStateName, LucideIcon> = {
   no_trade: Ban,
@@ -165,7 +174,8 @@ export function AlertButtons({ className }: { className?: string }) {
     setBlocked(false);
     writeAlerts({ ...alerts, notify: true });
   };
-  const btn = "text-muted-foreground hover:text-foreground inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[0.6875rem] whitespace-nowrap aria-pressed:text-foreground aria-pressed:bg-muted";
+  // On a phone (the bell's menu) each switch is 44 px tall at 14 px.
+  const btn = "text-muted-foreground hover:text-foreground inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[0.6875rem] whitespace-nowrap aria-pressed:text-foreground aria-pressed:bg-muted max-sm:min-h-11 max-sm:px-3 max-sm:text-sm";
   return (
     <span className={cn("flex items-center gap-1.5", className)}>
       <button
@@ -184,7 +194,7 @@ export function AlertButtons({ className }: { className?: string }) {
         {alerts.notify ? <Bell aria-hidden className="size-3.5" /> : <BellOff aria-hidden className="size-3.5" />}
         Browser notification
       </button>
-      {blocked ? <span className="text-warn text-[0.6875rem]">Blocked in this browser</span> : null}
+      {blocked ? <span className="text-warn text-[0.6875rem] max-sm:text-xs">Blocked in this browser</span> : null}
     </span>
   );
 }
@@ -251,12 +261,12 @@ export function AlertMenu() {
         aria-expanded={open}
         aria-controls="trade-now-alerts"
         onClick={() => setOpen((o) => !o)}
-        className="text-muted-foreground hover:text-foreground flex size-8 items-center justify-center rounded border"
+        className="text-muted-foreground hover:text-foreground flex size-11 items-center justify-center rounded-md border"
       >
         {on ? <Bell aria-hidden className="size-4" /> : <BellOff aria-hidden className="size-4" />}
       </button>
       {open ? (
-        <span ref={menu} id="trade-now-alerts" className="bg-popover absolute top-9 right-0 z-30 rounded-md border p-2 shadow-md">
+        <span ref={menu} id="trade-now-alerts" className="bg-popover absolute top-12 right-0 z-30 rounded-md border p-2 shadow-md">
           <AlertButtons className="flex-col items-stretch" />
         </span>
       ) : null}
@@ -270,7 +280,7 @@ const px = (v: number | null) => (v === null ? "–" : v.toFixed(2));
 /** The one mark for an idea still under test. Never written into a sentence. */
 export function TestingTag() {
   return (
-    <span data-testing-tag className="text-muted-foreground bg-neutral-soft inline-flex shrink-0 items-center gap-0.5 rounded border px-1 py-px text-[0.625rem] font-medium">
+    <span data-testing-tag className="text-muted-foreground bg-neutral-soft inline-flex shrink-0 items-center gap-0.5 rounded border px-1 py-px text-[0.625rem] font-medium max-sm:text-xs">
       <FlaskConical aria-hidden className="size-3" />
       Testing
     </span>
@@ -280,7 +290,7 @@ export function TestingTag() {
 function Badge({ v, paused, state }: { v: RowView; paused: boolean; state: NameStateName }) {
   const icon = paused ? Pause : v.badge.alt ? GitBranch : STATE_ICON[state];
   return (
-    <StatusBadge tone={paused ? "neutral" : v.badge.tone} icon={icon} className="font-sans text-[0.625rem]">
+    <StatusBadge tone={paused ? "neutral" : v.badge.tone} icon={icon} className="font-sans text-[0.625rem] max-sm:text-xs">
       {v.badge.word}
       {v.badge.side && !paused ? ` · ${v.badge.side.toUpperCase()}` : ""}
     </StatusBadge>
@@ -294,10 +304,10 @@ function ValueGrid({ grid }: { grid: NonNullable<RowView["grid"]> }) {
     const [price, ...rest] = value.split(" or ");
     return (
       <div className="min-w-0">
-        <dt className="text-muted-foreground text-[0.6875rem]">{label}</dt>
+        <dt className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">{label}</dt>
         <dd className="font-mono text-sm font-semibold sm:text-base">
           {price}
-          {rest.length ? <span className="text-muted-foreground ml-1 font-sans text-[0.6875rem] font-normal whitespace-nowrap">or {rest.join(" or ")}</span> : null}
+          {rest.length ? <span className="text-muted-foreground ml-1 font-sans text-[0.6875rem] font-normal whitespace-nowrap max-sm:text-xs">or {rest.join(" or ")}</span> : null}
         </dd>
       </div>
     );
@@ -311,9 +321,10 @@ function ValueGrid({ grid }: { grid: NonNullable<RowView["grid"]> }) {
   );
 }
 
-function Row({ row, mode, paused, onOpen, extra }: { row: BoardRow; mode: BoardMode; paused: boolean; onOpen: (s: string) => void; extra?: React.ReactNode }) {
+function Row({ row, mode, paused, onOpen, extra, mask = null }: { row: BoardRow; mode: BoardMode; paused: boolean; onOpen: (s: string) => void; extra?: React.ReactNode; mask?: DoneMask }) {
   const s = row.state;
-  const base = "hover:bg-muted/60 w-full rounded px-2 py-1.5 text-left text-[0.8125rem]";
+  // 14 px on a phone: the row's price is something he acts on.
+  const base = "hover:bg-muted/60 w-full rounded px-2 py-1.5 text-left text-[0.8125rem] max-sm:text-sm";
   const label = `Show the ${row.symbol} focus card`;
   if (!s) {
     // Outside the live mode: the two trigger prices only.
@@ -323,6 +334,23 @@ function Row({ row, mode, paused, onOpen, extra }: { row: BoardRow; mode: BoardM
           <span className="w-12 shrink-0 font-mono font-semibold">{row.symbol}</span>
           <span className="text-muted-foreground min-w-0 flex-1">{row.triggers}</span>
           <span className="text-muted-foreground shrink-0 font-mono">{mode.kind === "next" ? "" : px(row.price)}</span>
+          <span className="sr-only">. {label}</span>
+        </button>
+        {extra ? <div className="px-2 pb-1.5">{extra}</div> : null}
+      </li>
+    );
+  }
+  // Today marked done: the entry prompt gives way to a neutral chip ("done", or "in a trade" for a managed name, whose
+  // card below keeps everything); the row's own manage form (extra) stays. No entry sentence, no Enter figures.
+  if (mask && !paused) {
+    return (
+      <li data-board-row={row.symbol} data-board-state={mask}>
+        <button type="button" onClick={() => onOpen(row.symbol)} className={cn(base, "text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1")}>
+          <span className="w-12 shrink-0 font-mono font-semibold">{row.symbol}</span>
+          <StatusBadge tone="neutral" icon={mask === "in_trade" ? Hand : CircleCheck} className="font-sans text-[0.625rem] max-sm:text-xs">
+            {(mask === "in_trade" ? IN_TRADE_ROW_VIEW : DONE_ROW_VIEW).badge.word}
+          </StatusBadge>
+          <span className="ml-auto shrink-0 font-mono sm:ml-0">{px(row.price)}</span>
           <span className="sr-only">. {label}</span>
         </button>
         {extra ? <div className="px-2 pb-1.5">{extra}</div> : null}
@@ -364,11 +392,11 @@ function Row({ row, mode, paused, onOpen, extra }: { row: BoardRow; mode: BoardM
           {s.cautions.length ? (
             <span className="flex flex-wrap items-center gap-1" data-board-cautions={s.cautions.length + s.moreCautions}>
               {s.cautions.map((c) => (
-                <StatusBadge key={c.id} tone="warn" icon={TriangleAlert} className="font-sans text-[0.625rem]">
+                <StatusBadge key={c.id} tone="warn" icon={TriangleAlert} className="font-sans text-[0.625rem] max-sm:text-xs">
                   <span title={c.why}>{c.word}</span>
                 </StatusBadge>
               ))}
-              {s.moreCautions ? <span className="text-muted-foreground text-[0.6875rem]">+{s.moreCautions} more</span> : null}
+              {s.moreCautions ? <span className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">+{s.moreCautions} more</span> : null}
             </span>
           ) : null}
           {row.runner ? (
@@ -438,6 +466,8 @@ export function TradeNowBoard({
   switches,
   rowExtra,
   after,
+  doneFor,
+  maskFor,
 }: {
   mode: BoardMode;
   rows: BoardRow[];
@@ -452,6 +482,10 @@ export function TradeNowBoard({
   rowExtra?: (row: BoardRow, paused: boolean) => React.ReactNode;
   /** Drawn under the rows, and kept while the live prices are off: the manage cards (trade-manage.tsx). */
   after?: React.ReactNode;
+  /** True for a row whose entry prompt is hidden because today is marked done (the board's doneFor). */
+  doneFor?: (symbol: string) => boolean;
+  /** What today's "done" makes of a row (the board's maskFor); without it, doneFor alone. */
+  maskFor?: (symbol: string) => DoneMask;
 }) {
   const showRows = mode.kind !== "old" && mode.kind !== "off";
   // Live: only what is worth acting on, plus a row that holds an open form (it stays as it was opened).
@@ -471,18 +505,18 @@ export function TradeNowBoard({
             Trade now
           </h2>
           {now !== null ? (
-            <span className="text-muted-foreground flex items-center gap-1 font-mono text-[0.6875rem]">
+            <span className="text-muted-foreground flex items-center gap-1 font-mono text-[0.6875rem] max-sm:text-xs">
               <Clock aria-hidden className="size-3" />
               {newYork(new Date(now).toISOString(), false)} New York
             </span>
           ) : null}
           {mode.kind === "live" ? (
-            <span className={cn("flex items-center gap-1 text-[0.6875rem] font-medium", paused ? "text-warn" : "text-good")}>
+            <span className={cn("flex items-center gap-1 text-[0.6875rem] font-medium max-sm:text-xs", paused ? "text-warn" : "text-good")}>
               {paused ? <CircleDashed aria-hidden className="size-3" /> : <span aria-hidden className="bg-good-fill inline-block size-2 rounded-full motion-safe:animate-pulse" />}
               {paused ? "paused" : "live"}
             </span>
           ) : null}
-          <Link href="/strategies" className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-[0.6875rem] underline-offset-4 hover:underline">
+          <Link href="/strategies" className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-[0.6875rem] underline-offset-4 hover:underline max-sm:text-xs">
             <FlaskConical aria-hidden className="size-3" />
             Testing · not proven yet
             <ChevronRight aria-hidden className="size-3" />
@@ -500,14 +534,14 @@ export function TradeNowBoard({
         </p>
       ) : null}
       {mode.kind === "live" && barsDelayed ? (
-        <p data-board-bars="delayed" className="text-muted-foreground text-[0.6875rem]">
+        <p data-board-bars="delayed" className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">
           Session bars delayed: states use this page&apos;s prices only
         </p>
       ) : null}
       {showRows && listed.length ? (
         <ul className="grid gap-1" aria-label="Focus names worth acting on, most urgent first">
           {listed.map(({ r, extra }) => (
-            <Row key={r.symbol} row={r} mode={mode} paused={paused} onOpen={onOpen} extra={extra} />
+            <Row key={r.symbol} row={r} mode={mode} paused={paused} onOpen={onOpen} extra={extra} mask={maskFor ? maskFor(r.symbol) : doneFor?.(r.symbol) ? "done" : null} />
           ))}
         </ul>
       ) : null}
@@ -529,7 +563,7 @@ export function TradeNowBoard({
         )
       ) : null}
       {after}
-      <p className="text-muted-foreground text-[0.6875rem]">Advisory states from the study under test; the 9 rules are unchanged. Read only: nothing here places an order.</p>
+      <p className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">Advisory states from the study under test; the 9 rules are unchanged. Read only: nothing here places an order.</p>
     </section>
   );
 }
@@ -554,13 +588,13 @@ function BoardNotices({ notices, onOpen, onDrop, extra }: { notices: NameState[]
               {v.testing ? <TestingTag /> : null}
             </p>
             <p className="mt-0.5">{v.headline}</p>
-            <p className="text-muted-foreground mt-0.5 text-[0.6875rem]">Advisory: confirm on your chart.</p>
+            <p className="text-muted-foreground mt-0.5 text-[0.6875rem] max-sm:text-xs">Advisory: confirm on your chart.</p>
           </div>
           <button
             type="button"
             aria-label={`Dismiss the notice for ${s.symbol}`}
             onClick={() => onDrop(s)}
-            className="text-muted-foreground hover:text-foreground -m-1 flex size-7 shrink-0 items-center justify-center rounded"
+            className="text-muted-foreground hover:text-foreground -m-1 flex size-7 shrink-0 items-center justify-center rounded max-sm:size-11"
           >
             <X aria-hidden className="size-4" />
           </button>
@@ -571,7 +605,7 @@ function BoardNotices({ notices, onOpen, onDrop, extra }: { notices: NameState[]
             onOpen(s.symbol);
             onDrop(s);
           }}
-          className="text-foreground mt-1.5 rounded border px-2 py-1 text-xs font-medium"
+          className="text-foreground mt-1.5 rounded border px-2 py-1 text-xs font-medium max-sm:min-h-11 max-sm:px-3 max-sm:text-sm"
         >
           Show {s.symbol}
         </button>
@@ -680,9 +714,14 @@ export interface Board {
   log: BoardLogEntry[];
   /** The screen-reader line for the latest changes. */
   spoken: string;
+  /** True for a name whose entry prompt is hidden: today is marked done and the name is not in a managed trade. */
+  doneFor: (symbol: string) => boolean;
+  /** What today's "done" makes of a name: "done", "in_trade" (a managed trade), or null (doneMask). */
+  maskFor?: (symbol: string) => DoneMask;
 }
 
-const BoardContext = createContext<Board | null>(null);
+/** Exported for the render tests only; the page reads it through useBoard. */
+export const BoardContext = createContext<Board | null>(null);
 
 /** The page's board; null outside a BoardProvider. */
 export function useBoard(): Board | null {
@@ -690,11 +729,16 @@ export function useBoard(): Board | null {
 }
 
 /** One name's live row on the board, or null (no board, not live, or the name is not on it). */
-export function useBoardRow(symbol: string): { row: BoardRow; view: RowView | null; paused: boolean } | null {
+export function useBoardRow(symbol: string): { row: BoardRow; view: RowView | null; paused: boolean; done?: boolean; mask?: DoneMask } | null {
   const b = useBoard();
   const row = b?.rows.find((r) => r.symbol === symbol);
   if (!b || !row) return null;
-  return { row, view: row.state ? rowView(row.state) : null, paused: b.paused };
+  // Today marked done: the name's entry prompt reads as the neutral done view everywhere it is drawn, and a name in a
+  // managed trade as the neutral "In a trade" one (its manage card is drawn apart and keeps everything).
+  const mask: DoneMask = b.paused ? null : (b.maskFor?.(symbol) ?? (b.doneFor(symbol) ? "done" : null));
+  const done = mask === "done";
+  const view = row.state ? (mask === "done" ? DONE_ROW_VIEW : mask === "in_trade" ? IN_TRADE_ROW_VIEW : rowView(row.state)) : null;
+  return { row, view, paused: b.paused, done, mask };
 }
 
 /**
@@ -704,17 +748,23 @@ export function useBoardRow(symbol: string): { row: BoardRow; view: RowView | nu
  * sits) would put the wrong numbers in front of the owner. The lit alternative chip and the ladder's marker are its cue.
  */
 export function boardSide(r: ReturnType<typeof useBoardRow>): "call" | "put" | null {
-  if (!r || r.paused || !r.row.state) return null;
+  if (!r || r.paused || r.done || r.mask || !r.row.state) return null;
   const s = r.row.state;
   return s.state === "enter_zone" || s.state === "get_ready" ? (s.side ?? null) : null;
 }
 
 /** The alternative trigger the board shows live for a name, if any (never while prices are paused). */
 export function boardAlt(r: ReturnType<typeof useBoardRow>): { kind: NonNullable<RowView["badge"]["alt"]>; side: "call" | "put" } | null {
-  if (!r || r.paused || !r.row.state || r.row.state.state === "paused") return null;
+  if (!r || r.paused || r.done || r.mask || !r.row.state || r.row.state.state === "paused") return null;
   const b = r.view?.badge;
   return b?.alt && b.side ? { kind: b.alt, side: b.side } : null;
 }
+
+// Fixed empty lists: a default written as `[]` would be a new array on every render, and the manage card keeps its
+// journal work only while its inputs are the same values (journalDayCache).
+const NO_LOTS: readonly Lot[] = [];
+const NO_TRADES: readonly Trade[] = [];
+const NO_ITEMS: NonNullable<Options["focus"]>["items"] = [];
 
 /**
  * Works the board out once for the page, from the focus card's levels, the live quotes and the session's 2-minute
@@ -725,9 +775,11 @@ export function BoardProvider({
   live,
   dayLimitUsed,
   wonToday,
-  openLots = [],
-  closedTrades = [],
+  openLots = NO_LOTS,
+  closedTrades = NO_TRADES,
   journalAsOf = null,
+  dayFacts = null,
+  evalOn = false,
   children,
 }: {
   e: Options;
@@ -736,14 +788,21 @@ export function BoardProvider({
   wonToday: boolean | null;
   /** The journal's open lots as it has them, one per fill (`doc.open`, not merged), for the manage card. */
   openLots?: readonly Lot[];
-  /** The journal's closed trades (`doc.trades`), for the manage card: a note whose trade has closed is retired. */
+  /**
+   * The journal's closed pieces opened on the session's day (manage-stop's dayJournal), for the manage card: a note
+   * whose trade has closed is retired. Never the whole history: the board renders every second.
+   */
   closedTrades?: readonly Trade[];
   /** When the journal was read (`doc.as_of`), for the manage card. */
   journalAsOf?: string | null;
+  /** The server's day check, for the room left after a note's stop (session-timeline's dayFacts). */
+  dayFacts?: DayFacts | null;
+  /** The server's shadow check is switched on (desk/eval.json, read by the server render); off by default. */
+  evalOn?: boolean;
   children: React.ReactNode;
 }) {
   const { feed, now: browserNow } = useLive();
-  const items = e.focus?.items ?? [];
+  const items = e.focus?.items ?? NO_ITEMS;
   const symbols = [...items].sort((a, b) => a.rank - b.rank).map((i) => i.symbol).join(",");
   const halfDay = isHalfDay(e);
   const ok = feed.status === "ok";
@@ -786,6 +845,9 @@ export function BoardProvider({
 
   // Notices: states seen once the bars have answered; what was there when the page opened is not announced.
   const alerts = useAlerts();
+  // The owner marked today done (done-today.tsx): entry notices are neither shown nor rung. The manage card's own
+  // notices (SELL HALF, EXIT) are not these and keep working.
+  const done = useDone();
   const [book, setBook] = useState<NoticeBook>({ seen: null, kept: [] });
   const [spoken, setSpoken] = useState("");
   const [last, setLast] = useState<Record<string, string>>({});
@@ -805,13 +867,24 @@ export function BoardProvider({
     setLog(saved);
   }
   useEffect(() => {
-    if (ring.n === 0) return;
+    if (ring.n === 0 || done) return;
     if (alerts.sound) beep();
     if (alerts.notify) ring.fresh.forEach(systemNotice);
     // Only a new ring sounds: a change of the switches alone must not.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ring.n]);
   const settled = mode.kind === "live" && bars.status !== "loading";
+  // The server's shadow check (DEC-0044): with its switch off, one status read and nothing else.
+  useDeskShadow({
+    enabled: evalOn,
+    reading: live && items.length > 0 && (mode.kind === "live" || mode.kind === "opening"),
+    live: settled,
+    session: e.session,
+    states,
+    now,
+    browserNow,
+    barsDelayed: mode.kind === "live" && used.delayed,
+  });
   if (settled) {
     // Announces what is new and withdraws, for good, every notice whose state has left the board.
     const next = boardNotices(book, e.session, states, now ?? undefined);
@@ -824,7 +897,9 @@ export function BoardProvider({
     if (Object.keys(words).some((k) => words[k] !== last[k]) || Object.keys(last).length !== Object.keys(words).length) {
       setLast(words);
       if (changed.length) {
-        setSpoken(changed.map((s) => `${s.symbol} ${words[s.symbol]!.toLowerCase()}`).join("; "));
+        // Today marked done: an entry's word is not spoken; the manage card's own notices still are.
+        const said = spokenChanges(changed, words, done);
+        if (said) setSpoken(said);
         const at = now ?? 0; // settled implies the live mode, which has a clock
         const add = changed.map((s): BoardLogEntry => {
           const v = rowView(s);
@@ -863,9 +938,16 @@ export function BoardProvider({
     mode: mode.kind,
     // first shown once the bars have answered: a card read without them could flip its word, and announce it, a moment later
     barsLoading: bars.status === "loading",
+    day: dayFacts,
   });
 
   const ranked = [...items].sort((a, b) => a.rank - b.rank);
+  const managed = new Set(manage.views.map((m) => m.symbol));
+  const maskFor = (symbol: string): DoneMask => {
+    const row = rows.find((r) => r.symbol === symbol);
+    return row ? doneMask(done, row, managed) : null;
+  };
+  const doneFor = (symbol: string) => maskFor(symbol) === "done";
   const board: Board = {
     on: live && items.length > 0,
     session: e.session,
@@ -882,10 +964,12 @@ export function BoardProvider({
     paused,
     barsDelayed: mode.kind === "live" && used.delayed,
     manage,
-    notices: shown,
+    notices: done ? [] : shown,
     dropNotice: (s) => setBook((b) => ({ ...b, kept: b.kept.filter((x) => x !== s) })),
     log,
     spoken,
+    doneFor,
+    maskFor,
   };
   return <BoardContext.Provider value={board}>{children}</BoardContext.Provider>;
 }
@@ -910,6 +994,8 @@ export function TradeNow() {
       onOpen={openFocusCard}
       rowExtra={b.manage.rowExtra}
       after={b.manage.cards}
+      doneFor={b.doneFor}
+      maskFor={b.maskFor}
     />
   );
 }
