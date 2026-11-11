@@ -65,9 +65,9 @@ describe("feed watch drill", () => {
     process.stdout.write(`\nfeed watch drill\n${recorded.map((l) => `  ${l}`).join("\n")}\n\n`);
   });
 
-  it("reports a failed page instead of hiding it: the incident is put back and the recovery has nothing to clear", async () => {
+  it("reports a failed page instead of hiding it: it is tried again, and the recovery is sent too", async () => {
     const r = await runFeedDrill(async () => "failed");
-    expect(r.pages.map((n) => n.kind)).toEqual(["feed-late"]);
+    expect(r.pages.map((n) => n.kind)).toEqual(["feed-late", "feed-late", "feed-recovered"]);
     expect(io.calls).toEqual([]);
   });
 });

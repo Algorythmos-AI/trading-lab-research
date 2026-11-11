@@ -30,6 +30,11 @@ import {
   journalShown,
   summaryNotice,
   refusedNotice,
+  claimOutbox,
+  type FeedDecision,
+  type Outgoing,
+  unsentFeeds,
+  withOutbox,
 } from "@/lib/feed-watch";
 import { journalCurrent } from "@/lib/trade-rules";
 import { DAILY_GRACE_MIN, INTRADAY_MAX_AGE_MIN, JOURNAL_SLOT_UTC, OPTIONS_SLOT_UTC, RADAR_SLOT_UTC } from "@/lib/feeds";
@@ -625,5 +630,50 @@ describe("the journal's evening sync is assumed (its stamping rule cannot be che
     expect(evening).toMatchObject({ state: "late", assumed: true, alerting: false });
     // Friday morning: the 09:24 and 10:24 live runs missed too (verified): it pages.
     expect(view("journal", j, "2026-11-13T16:10:00Z")).toMatchObject({ state: "late", alerting: true, assumed: false });
+  });
+});
+
+describe("the outbox rules", () => {
+  const now = new Date("2026-11-12T23:10:00Z");
+  const late: Outgoing = {
+    key: "options-edition|2026-11-12|feed-late",
+    feeds: ["options-edition"],
+    notice: { kind: "feed-late", title: "Options edition late by 8 min", message: "x", priority: 4, tags: [] },
+    attempts: 0,
+    tries: 0,
+    last_tick: null,
+    tried: null,
+    claimed_by: null,
+    status: "pending",
+    since: "2026-11-12T23:00:00.000Z",
+  };
+  const recovered: FeedDecision = {
+    next: { ...EMPTY_FEED_STATE, alerts: "on" },
+    notices: [{ kind: "feed-recovered", title: "Options edition back on time", message: "x", priority: 2, tags: [] }],
+    noticeFeeds: ["options-edition"],
+    summaryFeeds: [],
+  };
+  const withPrev = (o: Outgoing) => ({ ...recovered, next: { ...recovered.next, outbox: [o] } });
+  it("a recovery of a late page never claimed drops both", () => {
+    expect(withOutbox(withPrev(late).next, withPrev(late), now).outbox).toEqual([]);
+  });
+  it("a late page claimed (perhaps sent, perhaps by an overlapping run this tick) keeps both", () => {
+    const claimed = { ...late, attempts: 1, last_tick: 2_942_946, claimed_by: "other" };
+    const out = withOutbox(withPrev(claimed).next, withPrev(claimed), now).outbox;
+    expect(out.map((o) => o.notice.kind)).toEqual(["feed-late", "feed-recovered"]);
+  });
+  it("a late page that could not be sent becomes one combined page", () => {
+    const failed = { ...late, attempts: 3, tries: 3, status: "sent_failed" as const };
+    const out = withOutbox(withPrev(failed).next, withPrev(failed), now).outbox;
+    expect(out.map((o) => o.notice.title)).toEqual(["Options edition was late, now back on time"]);
+  });
+  it("a page past its age or its claims is marked sent_failed, never dropped silently", () => {
+    const old = { ...late, since: "2026-11-12T20:00:00.000Z" };
+    const r = claimOutbox({ ...EMPTY_FEED_STATE, outbox: [old] }, 1, true, "run", now.getTime());
+    expect(r.gaveUp).toEqual([late.key]);
+    expect(r.state.outbox[0]!.status).toBe("sent_failed");
+    const capped = claimOutbox({ ...EMPTY_FEED_STATE, outbox: [{ ...late, attempts: 10 }] }, 1, true, "run", now.getTime());
+    expect(capped.state.outbox[0]!.status).toBe("sent_failed");
+    expect(unsentFeeds(capped.state)).toEqual(["options-edition"]);
   });
 });

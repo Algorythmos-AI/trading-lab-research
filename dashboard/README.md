@@ -228,19 +228,32 @@ wt.ops.publish                            POST /api/ingest            (productio
   watch keeps a two-phase record: every page it decides goes into an outbox in the state as `pending`, and the attempt
   is claimed (attempts + 1, this tick, this run) in the same ifMatch commit, before anything is sent; a write whose
   reply is lost is confirmed by reading the state back; a lost race is decided again once on the other run's state,
-  then skipped (never reported as a store failure). The claimed pages are then sent and the outbox settled. A page
+  then skipped (never reported as a store failure). The claimed pages are then sent and each outcome recorded. A page
   still pending (its record was lost, the run died, the send failed) is sent again by a later run, no sooner than the
-  next tick, at most 3 times in all, then marked `sent_failed`. **Guarantee:** while the store works a decided page is
-  never lost, and it is sent at most 3 times (at most 2 duplicates, when sends succeed but their records do not). A
-  late page still undelivered when its feed recovers is dropped with its recovery. When the alert state cannot be
+  next tick. Only recorded failed sends count as tries (a claim whose run never sent, for want of time or of a
+  confirmed commit, uses none): 3 quick tries, one a tick; then the page is `sent_failed` (logged as
+  `feed-watch.outbox` with the feed id, and said on the Operations page's card: "An alert about this feed could not be
+  sent to your phone") and tried again once every 30 minutes until it is 2 hours old (3 more, 6 tries in all). A page
+  that reaches 2 hours or 10 claims unsent is marked `sent_failed` and logged, never dropped silently. **Guarantee:**
+  while the store works a decided page is never lost: it goes out, or it is recorded and shown as not sent. It is
+  sent at most 10 times (one per stored claim) even if every record of a send were lost; normally at most 6 tries. A
+  recovery meets the page it answers: one never claimed is dropped with it; one that could not be sent is replaced
+  by a single "was late for N min, now back on time" page; one claimed (perhaps delivered) is kept and the recovery
+  sent too. The remaining case: a late page delivered and then a recovery that fails all its tries leaves the owner
+  with the late page only; the Operations card says an alert could not be sent. Pages still pending from before an
+  off-to-on switch go out with the switch-on summary if they are under 2 hours old; older ones are marked
+  `sent_failed`. The run's answer and log list only what was actually sent. When the alert state cannot be
   read (two tries, 500 ms apart) or a decision cannot be confirmed, the run sends no feed page at all. Instead, with
   alerts on, a run in either of the first two 10-minute ticks of each 2-hour UTC block (tick index mod 12 is 0 or 1,
   from the run's execution time: Vercel's cron sends no scheduled time) sends "Feed watch cannot read its store": a
   total outage pages within 2 hours 10 minutes even if one of those runs is skipped, at most 2 per block (4 hours, 24
-  ticks: 4), and an incident paged before the outage is never paged again after it. Each tick of the cron has its own
-  time budget (`cron-watchdog.ts`: stocks 12 s, each added desk 8 s, feeds 28 s), so a hanging store in an earlier
-  tick cannot starve the feed watch. It runs inside `/api/cron/watchdog` after the desks'
-  ticks, isolated from them, within a 25-second budget of its own.
+  ticks: 4, and up to 4 per block if the cron delivers both of those ticks twice: on a public topic a 12-hour outage
+  can send 12 to 24; the rule stays stateless on purpose), and an incident paged before the outage is never paged
+  again after it. In the cron (`cron-watchdog.ts`) the feed watch's tick starts at once beside the desks' ticks, so
+  a hanging store in a desk's tick cannot starve it; the desks run one after another, each one's budget (14 s, over
+  ntfy's 10 s send timeout plus two writes) deciding when the next may start; no started tick is abandoned: the reply
+  waits for all of them up to 55 s and hands any still running to Next's `after()` (Vercel's waitUntil), inside the
+  route's 60 s. The feed watch's own run keeps a 25-second budget.
 
   **Refusals.** One refusal record covers a whole kind, and the pre-open refresh posts a whole edition under the
   `options` kind, so a refusal quietens a document row's lateness page only for the run it belongs to: refused at or

@@ -74,11 +74,30 @@ export interface FeedsInput {
   radar: RadarResult;
   /** The feed watch's stamps (feed-watch-run.ts loadPageFeeds), from the same documents. */
   feeds: StampedInputs;
+  /** Feeds with an alert that could not be sent (feed-watch-run.ts loadUnsentFeeds). */
+  unsent?: readonly string[];
   optionsDates: string[];
   radarDates: string[];
 }
 
+/** The feed watch rows each card stands for: an alert about any of them that could not be sent is said on the card. */
+const CARD_FEEDS: Record<string, readonly string[]> = {
+  journal: ["journal", "refusal-journal"],
+  options: ["options-edition", "refusal-options"],
+  focus: ["pre-open", "refusal-options"],
+  radar: ["radar", "refusal-radar"],
+  ledger: ["ledger-morning", "ledger-afternoon", "refusal-ledger"],
+  shadow: ["shadow"],
+  "options-live": ["refusal-options-live"],
+};
+export const UNSENT_NOTE = "An alert about this feed could not be sent to your phone.";
+
 export function buildFeeds(i: FeedsInput): Feed[] {
+  const unsent = new Set(i.unsent ?? []);
+  return buildCards(i).map((f) => ((CARD_FEEDS[f.key] ?? []).some((id) => unsent.has(id)) ? { ...f, note: UNSENT_NOTE } : f));
+}
+
+function buildCards(i: FeedsInput): Feed[] {
   const nowMs = i.now.getTime();
   const days = lastWeekdays(nowMs, 10);
   const today = days.at(-1)!;

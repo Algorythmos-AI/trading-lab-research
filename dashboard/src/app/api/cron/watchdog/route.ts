@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { bearerMatches } from "@/lib/auth";
 import { runCronTicks } from "@/lib/cron-watchdog";
 import { runFeedWatch } from "@/lib/feed-watch-run";
@@ -15,14 +16,15 @@ export async function GET(req: Request): Promise<Response> {
     logEvent("watchdog", { outcome: "unauthorized", configured: Boolean(process.env.CRON_SECRET) });
     return Response.json({ error: "unauthorized" }, { status: 401, headers: NO_STORE });
   }
-  // Every tick is separate and in its own time budget (cron-watchdog.ts): the stocks desk's first, then each added
-  // desk's, then the feed watch (feed-watch-run.ts). A tick that throws or hangs is logged and reported, and the next
-  // one still runs.
+  // Every tick is separate (cron-watchdog.ts): the feed watch (feed-watch-run.ts) from the start, beside the stocks desk's
+  // and then each added desk's, each desk's budget deciding when the next may start. No started tick is abandoned:
+  // the reply waits for all of them up to the cap, and `after` keeps any still running alive past the reply.
   const { stocks, desks, feeds } = await runCronTicks({
     stocks: () => runWatchdog(),
     desks: (Object.keys(DESK_DEPS) as AddedDesk[]).map((desk) => [desk, () => runDeskWatchdog(desk)] as const),
     feeds: () => runFeedWatch(),
     log: logEvent,
+    defer: (work) => after(work),
   });
   if (!stocks) return Response.json({ ok: false, error: "watchdog failed", desks, feeds }, { status: 500, headers: NO_STORE });
   return Response.json({ ...stocks, desks, feeds }, { headers: NO_STORE });

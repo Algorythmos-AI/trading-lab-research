@@ -681,17 +681,30 @@ export interface FeedAlertState {
 }
 
 /**
- * A page in the outbox. Phase 1 stores it as `pending` together with the decision that made it, claiming an attempt
- * (attempts + 1, last_tick = this run's tick) before anything is sent; phase 2 sends it and removes it. A later run
- * re-sends a pending page whose claim is from an earlier tick, until OUTBOX_MAX_ATTEMPTS, then marks it `sent_failed`.
+ * A page in the outbox. Phase 1 stores it as `pending` together with the decision that made it, and claims each send
+ * before it is made (claims + 1, last_tick = this run's tick, claimed_by = this run); phase 2 records the outcome: a
+ * page that went leaves the outbox, a failed send counts as a try (tries + 1, tried = that tick).
+ *
+ * The send rules. A claim that was never followed by a recorded try (its run could not confirm phase 1, or died) does
+ * not use up a try: only recorded tries count. Quick tries, one per tick, until OUTBOX_QUICK_TRIES (3) have failed; the
+ * page is then `sent_failed` (logged, shown on the Operations page) and still tried once every OUTBOX_SLOW_EVERY_TICKS
+ * (30 minutes) until OUTBOX_MAX_AGE_MS (2 hours) after it was decided: 3 quick (0, 10, 20 min) + 3 slow (50, 80,
+ * 110 min) = at most 6 recorded tries. Every send follows a stored claim and claims stop at OUTBOX_MAX_CLAIMS (10), so a page is sent at most 10
+ * times even if every phase-2 record were lost. A page that reaches its age or the claim cap unsent is marked
+ * sent_failed and logged, never dropped silently. Records are kept OUTBOX_KEEP_FAILED_MS (24 hours).
  */
 export interface Outgoing {
   /** feed id(s) | episode | kind: one page per incident and kind. */
   key: string;
   feeds: string[];
   notice: Notice;
+  /** Claims made for it (each one before a send). */
   attempts: number;
+  /** Sends that were made and recorded as failed. */
+  tries: number;
   last_tick: number | null;
+  /** The tick of the last recorded try, or null. */
+  tried: number | null;
   /** The run that made the last claim: two runs that decide alike still tell their own claim from the other's. */
   claimed_by: string | null;
   status: "pending" | "sent_failed";
@@ -699,11 +712,14 @@ export interface Outgoing {
   since: string;
 }
 
-/** Attempts a page gets before it is given up as sent_failed: a broken ntfy never causes endless retries. */
-export const OUTBOX_MAX_ATTEMPTS = 3;
-/** A page still pending this long after it was decided is dropped: it would no longer be news. */
+export const OUTBOX_QUICK_TRIES = 3;
+/** Kept for the callers that name the quick tries by their old name. */
+export const OUTBOX_MAX_ATTEMPTS = OUTBOX_QUICK_TRIES;
+export const OUTBOX_SLOW_EVERY_TICKS = 3;
+export const OUTBOX_MAX_CLAIMS = 10;
+/** Past this age (from its decision) a page is no longer tried: it would no longer be news. */
 export const OUTBOX_MAX_AGE_MS = 2 * 3_600_000;
-/** sent_failed records are kept this long, for the logs and the tests to read. */
+/** Records (sent_failed, or pending while alerts are off) are kept this long. */
 export const OUTBOX_KEEP_FAILED_MS = 24 * 3_600_000;
 
 export const FEED_ALERT_INITIAL: FeedAlert = { open: false, episode: null, since: null, sent: false, unknown_runs: 0, unknown_episode: null, unknown_sent: false };
@@ -763,59 +779,106 @@ function parseOutgoing(o: unknown): Outgoing[] {
   if (o.status !== "pending" && o.status !== "sent_failed") return [];
   const lastTick = typeof o.last_tick === "number" && Number.isInteger(o.last_tick) ? o.last_tick : null;
   const claimedBy = typeof o.claimed_by === "string" ? o.claimed_by : null;
-  return [{ key: o.key, feeds: o.feeds as string[], notice: n as unknown as Notice, attempts: o.attempts, last_tick: lastTick, claimed_by: claimedBy, status: o.status, since: o.since }];
+  const tries = typeof o.tries === "number" && Number.isInteger(o.tries) && o.tries >= 0 ? o.tries : 0;
+  const tried = typeof o.tried === "number" && Number.isInteger(o.tried) ? o.tried : null;
+  return [{ key: o.key, feeds: o.feeds as string[], notice: n as unknown as Notice, attempts: o.attempts, tries, last_tick: lastTick, tried, claimed_by: claimedBy, status: o.status, since: o.since }];
 }
 
+/** A page about a feed alone (not the summary), late or refused: what a recovery answers. */
+const aboutAlone = (o: Outgoing, id: string) => o.feeds.length === 1 && o.feeds[0] === id && o.notice.kind !== "feed-recovered";
+
 /**
- * The next state's outbox: what was pending before (pending pages older than OUTBOX_MAX_AGE_MS and sent_failed records
- * older than OUTBOX_KEEP_FAILED_MS dropped), plus this run's new pages as pending, one per key.
+ * The next state's outbox: what was there before (records older than OUTBOX_KEEP_FAILED_MS dropped), plus this run's
+ * new pages as pending, one per key. A recovery meets the page it answers:
+ *  - never tried at all (no claim yet): neither is news, both are dropped;
+ *  - sent_failed (it could not be sent): one combined page goes instead, "was late for N min, now back on time";
+ *  - anything else (claimed, maybe delivered): both stay, and the recovery is sent.
  */
-export function withOutbox(next: FeedAlertState, decision: FeedDecision, now: Date): FeedAlertState {
+export function withOutbox(next: FeedAlertState, decision: FeedDecision, now: Date, table: readonly FeedRow[] = FEEDS): FeedAlertState {
   const t = now.getTime();
-  const kept = (next.outbox ?? []).filter((o) => {
-    const age = t - Date.parse(o.since);
-    return o.status === "pending" ? !(age > OUTBOX_MAX_AGE_MS) : !(age > OUTBOX_KEEP_FAILED_MS);
-  });
-  let kept2 = kept;
+  let kept = (next.outbox ?? []).filter((o) => !(t - Date.parse(o.since) > OUTBOX_KEEP_FAILED_MS));
   const keys = new Set(kept.map((o) => o.key));
   const added: Outgoing[] = [];
-  decision.notices.forEach((notice, i) => {
+  decision.notices.forEach((original, i) => {
+    let notice = original;
     const id = decision.noticeFeeds[i]!;
-    // A recovery of a page that never went out: neither is news any more, so both are dropped.
-    if (notice.kind === "feed-recovered" && kept2.some((o) => o.status === "pending" && o.feeds.length === 1 && o.feeds[0] === id)) {
-      kept2 = kept2.filter((o) => !(o.status === "pending" && o.feeds.length === 1 && o.feeds[0] === id));
-      return;
+    if (notice.kind === "feed-recovered") {
+      if (kept.some((o) => aboutAlone(o, id) && o.status === "pending" && o.attempts === 0)) {
+        kept = kept.filter((o) => !(aboutAlone(o, id) && o.status === "pending" && o.attempts === 0));
+        return;
+      }
+      const failed = kept.find((o) => aboutAlone(o, id) && o.status === "sent_failed");
+      if (failed) {
+        kept = kept.filter((o) => o !== failed);
+        notice = lateThenBackNotice(id, Math.max(0, Math.floor((t - Date.parse(failed.since)) / MIN)), now, table);
+      }
     }
     const feeds = id === SUMMARY_ID ? decision.summaryFeeds : [id];
     const episode = id === SUMMARY_ID ? now.toISOString() : (next.feeds[id]?.episode ?? next.feeds[id]?.unknown_episode ?? now.toISOString());
     const key = `${feeds.join(",")}|${episode}|${notice.kind}`;
     if (keys.has(key)) return;
     keys.add(key);
-    added.push({ key, feeds, notice, attempts: 0, last_tick: null, claimed_by: null, status: "pending", since: now.toISOString() });
+    added.push({ key, feeds, notice, attempts: 0, tries: 0, last_tick: null, tried: null, claimed_by: null, status: "pending", since: now.toISOString() });
   });
-  return { ...next, outbox: [...kept2, ...added] };
+  return { ...next, outbox: [...kept, ...added] };
 }
 
-/** The pages this run may send (pending, alerts on, not already tried this tick, attempts left), claimed. */
-export function claimOutbox(state: FeedAlertState, tick: number, alertsOn: boolean, runId: string): { state: FeedAlertState; claimed: string[] } {
+/**
+ * The sends this run may make, claimed (see Outgoing for the rules), and the pages given up this run (`gaveUp`: past
+ * their age or their claims, never tried successfully), which become sent_failed. Nothing is claimed with alerts off.
+ */
+export function claimOutbox(
+  state: FeedAlertState,
+  tick: number,
+  alertsOn: boolean,
+  runId: string,
+  nowMs: number = tick * 600_000,
+): { state: FeedAlertState; claimed: string[]; gaveUp: string[] } {
   const claimed: string[] = [];
-  const outbox = state.outbox.map((o) => {
-    if (!alertsOn || o.status !== "pending" || o.attempts >= OUTBOX_MAX_ATTEMPTS || (o.last_tick !== null && o.last_tick >= tick)) return o;
+  const gaveUp: string[] = [];
+  const outbox = state.outbox.map((o): Outgoing => {
+    if (!alertsOn) return o;
+    const old = nowMs - Date.parse(o.since) > OUTBOX_MAX_AGE_MS;
+    if (old || o.attempts >= OUTBOX_MAX_CLAIMS) {
+      if (o.status === "pending") {
+        gaveUp.push(o.key);
+        return { ...o, status: "sent_failed" };
+      }
+      return o;
+    }
+    // A claim from an earlier tick with no try recorded for it was never sent: it does not count as a try.
+    const due = o.tries < OUTBOX_QUICK_TRIES ? o.last_tick === null || o.last_tick < tick : o.tried === null || tick - o.tried >= OUTBOX_SLOW_EVERY_TICKS;
+    if (!due || (o.last_tick !== null && o.last_tick >= tick)) return o;
     claimed.push(o.key);
     return { ...o, attempts: o.attempts + 1, last_tick: tick, claimed_by: runId };
   });
-  return { state: { ...state, outbox }, claimed };
+  return { state: { ...state, outbox }, claimed, gaveUp };
 }
 
-/** After the sends: sent pages leave the outbox; a failed one that has used its attempts becomes sent_failed. */
-export function settleOutbox(state: FeedAlertState, results: Readonly<Record<string, "sent" | "skipped" | "failed">>): FeedAlertState {
+/**
+ * After the sends: a page that went leaves the outbox; a failed send is a recorded try, and the third makes the page
+ * sent_failed (`failedNow`: the pages that became so here, for the log). Slow tries go on (claimOutbox).
+ */
+export function settleOutbox(
+  state: FeedAlertState,
+  results: Readonly<Record<string, "sent" | "skipped" | "failed">>,
+): FeedAlertState & { failedNow?: string[] } {
+  const failedNow: string[] = [];
   const outbox = state.outbox.flatMap((o) => {
     const r = results[o.key];
     if (r === undefined) return [o];
     if (r !== "failed") return [];
-    return [o.attempts >= OUTBOX_MAX_ATTEMPTS ? { ...o, status: "sent_failed" as const } : o];
+    const tries = o.tries + 1;
+    const status = tries >= OUTBOX_QUICK_TRIES ? ("sent_failed" as const) : o.status;
+    if (status === "sent_failed" && o.status !== "sent_failed") failedNow.push(o.key);
+    return [{ ...o, tries, tried: o.last_tick, status }];
   });
-  return { ...state, outbox };
+  return { ...state, outbox, failedNow };
+}
+
+/** The feeds with a page that could not be sent (sent_failed and still kept): the Operations page says so. */
+export function unsentFeeds(state: FeedAlertState): string[] {
+  return [...new Set(state.outbox.filter((o) => o.status === "sent_failed").flatMap((o) => o.feeds))];
 }
 
 export function serializeFeedState(s: FeedAlertState): string {
@@ -829,7 +892,9 @@ export function serializeFeedState(s: FeedAlertState): string {
     feeds: o.feeds,
     notice: { kind: o.notice.kind, title: o.notice.title, message: o.notice.message, priority: o.notice.priority, tags: o.notice.tags },
     attempts: o.attempts,
+    tries: o.tries,
     last_tick: o.last_tick,
+    tried: o.tried,
     claimed_by: o.claimed_by,
     status: o.status,
     since: o.since,
@@ -1063,6 +1128,18 @@ export function recoveredNotice(v: FeedView, now: Date, table: readonly FeedRow[
     title: `${name} back on time`,
     message: `${name} recovered: ${what}${day ? `, for the session of ${day}` : ""}. Checked ${nyHm(now.getTime())} New York. The earlier alert is cleared.`,
     priority: 2,
+    tags: ["white_check_mark"],
+  };
+}
+
+/** A recovery whose late page could not be sent: what happened, in one page. */
+export function lateThenBackNotice(id: string, lateMin: number, now: Date, table: readonly FeedRow[] = FEEDS): Notice {
+  const name = nameOf(id, table);
+  return {
+    kind: "feed-recovered",
+    title: `${name} was late, now back on time`,
+    message: `${name} was late for ${whole(lateMin)} min and is back on time. The page about it could not be sent. Checked ${nyHm(now.getTime())} New York.`,
+    priority: 3,
     tags: ["white_check_mark"],
   };
 }

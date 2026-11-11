@@ -136,12 +136,107 @@ describe("a tick", () => {
     expect(JSON.parse(store.get()!.text).outbox).toEqual([]);
   });
 
-  it("a page whose send fails three times stops and says so", async () => {
+  it("a page whose send keeps failing: 3 quick tries, sent_failed (logged), then one try every 30 min until 2 h: 6 at most", async () => {
     const w: World = { docs: { ...stale } };
     const { d, sent, store } = deps(w, memStore(), { send: async () => "failed" });
+    const log = vi.mocked(console.log);
     for (let i = 0; i < 6; i++) await runFeedWatch(new Date(LATE_AT.getTime() + i * 10 * 60_000), d, only("options-edition"));
-    expect(sent).toHaveLength(3);
-    expect(JSON.parse(store.get()!.text).outbox).toMatchObject([{ status: "sent_failed", attempts: 3 }]);
+    expect(sent).toHaveLength(4); // ticks 0, 1, 2, then 5
+    expect(JSON.parse(store.get()!.text).outbox).toMatchObject([{ status: "sent_failed", tries: 4 }]);
+    expect(log.mock.calls.map((c) => String(c[0])).filter((l) => l.includes('"evt":"feed-watch.outbox"') && l.includes('"sent_failed"'))).toHaveLength(1);
+    for (let i = 6; i < 20; i++) await runFeedWatch(new Date(LATE_AT.getTime() + i * 10 * 60_000), d, only("options-edition"));
+    expect(sent).toHaveLength(6); // 3 quick (0, 10, 20 min) + 3 slow (50, 80, 110 min); at 140 min it is 2 h old: no more
+    expect(JSON.parse(store.get()!.text).outbox).toMatchObject([{ status: "sent_failed", tries: 6 }]);
+  });
+
+  it("a short ntfy outage does not lose the alert: it goes out on a slow retry", async () => {
+    const w: World = { docs: { ...stale } };
+    let up = false;
+    const { d, sent, store } = deps(w, memStore(), { send: async () => (up ? "sent" : "failed") });
+    for (let i = 0; i < 4; i++) await runFeedWatch(new Date(LATE_AT.getTime() + i * 10 * 60_000), d, only("options-edition"));
+    up = true;
+    for (let i = 4; i < 8; i++) await runFeedWatch(new Date(LATE_AT.getTime() + i * 10 * 60_000), d, only("options-edition"));
+    expect(sent).toHaveLength(4); // 3 failed quick tries, then the slow one at tick 5 goes
+    expect(JSON.parse(store.get()!.text).outbox).toEqual([]);
+  });
+
+  it("a late page that went out, then a lost record, then recovery: the recovery is still sent", async () => {
+    const w: World = { docs: { ...stale } };
+    const store = memStore();
+    const { d, sent } = deps(w, store);
+    let writes = 0;
+    d.writeState = async (body, opts) => {
+      writes++;
+      if (writes === 2) throw new Error("store down"); // run 1's phase 2: the late page's record is lost
+      return store.writeState(body, opts);
+    };
+    await runFeedWatch(LATE_AT, d, only("options-edition"));
+    w.docs = { ...fresh };
+    await runFeedWatch(new Date(LATE_AT.getTime() + 10 * 60_000), d, only("options-edition"));
+    expect(sent.map((n) => n.kind)).toContain("feed-recovered");
+  });
+
+  it("a late page claimed but not sent for want of time, then recovery: both go out (a claim may have been sent)", async () => {
+    const w: World = { docs: { ...stale } };
+    const store = memStore();
+    const { d, sent } = deps(w, store);
+    let t = 0;
+    d.clock = () => t;
+    const read = store.readState;
+    d.readState = async () => {
+      t += FEED_RUN_BUDGET_MS; // no time left to send: the claim records no try
+      return read();
+    };
+    await runFeedWatch(LATE_AT, d, only("options-edition"));
+    d.readState = read;
+    // A claim was stored, so the page counts as claimed (maybe sent): its recovery is still sent.
+    w.docs = { ...fresh };
+    await runFeedWatch(new Date(LATE_AT.getTime() + 10 * 60_000), d, only("options-edition"));
+    expect(sent.map((n) => n.kind)).toEqual(["feed-late", "feed-recovered"]);
+  });
+
+  it("a late page that could not be sent, then recovery: one combined page says what happened", async () => {
+    const w: World = { docs: { ...stale } };
+    let up = false;
+    const { d, sent } = deps(w, memStore(), { send: async () => (up ? "sent" : "failed") });
+    for (let i = 0; i < 3; i++) await runFeedWatch(new Date(LATE_AT.getTime() + i * 10 * 60_000), d, only("options-edition"));
+    up = true;
+    w.docs = { ...fresh };
+    await runFeedWatch(new Date(LATE_AT.getTime() + 30 * 60_000), d, only("options-edition"));
+    expect(sent.slice(3).map((n) => n.title)).toEqual(["Options edition was late, now back on time"]);
+    expect(sent[3]!.message).toContain("was late for 30 min and is back on time. The page about it could not be sent.");
+  });
+
+  it("three unconfirmed phase-1 writes in a row, then a healthy run: the alert is sent once", async () => {
+    const w: World = { docs: { ...stale } };
+    const store = memStore();
+    const { d, sent } = deps(w, store);
+    let bad = 3;
+    const write = store.writeState;
+    d.writeState = async (body, opts) => {
+      if (bad > 0) {
+        bad--;
+        await write(body, opts); // it lands, late...
+        throw new Error("timed out"); // ...after the run gave up on it
+      }
+      return write(body, opts);
+    };
+    const read = store.readState;
+    for (let i = 0; i < 3; i++) {
+      // The re-read after the timeout fails too: the run cannot confirm, and sends nothing.
+      d.readState = async () => {
+        d.readState = async () => {
+          throw new Error("store down");
+        };
+        return read(); // the run's first read works
+      };
+      const r = await runFeedWatch(new Date(LATE_AT.getTime() + i * 10 * 60_000), d, only("options-edition"));
+      expect(r).toMatchObject({ state: "write-failed" });
+      d.readState = read;
+    }
+    expect(sent).toEqual([]);
+    await runFeedWatch(new Date(LATE_AT.getTime() + 30 * 60_000), d, only("options-edition"));
+    expect(sent.map((n) => n.kind)).toEqual(["feed-late"]);
   });
 
   it("a page is not re-sent within the tick that claimed it", async () => {
@@ -198,6 +293,31 @@ describe("a tick", () => {
     expect(a.sent.length + b.sent.length).toBe(1);
   });
 
+  it("a phase-1 write that throws, then a re-read that fails: nothing sent, and the next run pages once", async () => {
+    const w: World = { docs: { ...stale } };
+    const store = memStore();
+    const { d, sent } = deps(w, store);
+    const read = store.readState;
+    const write = store.writeState;
+    d.writeState = async () => {
+      throw new Error("store down"); // nothing lands
+    };
+    d.readState = async () => {
+      d.readState = async () => {
+        throw new Error("store down");
+      };
+      return read();
+    };
+    const r = await runFeedWatch(new Date("2026-11-12T23:25:00Z"), d, only("options-edition"));
+    expect(r).toMatchObject({ state: "write-failed", sent: 0 });
+    expect(sent).toEqual([]);
+    expect(store.get()).toBeNull();
+    d.readState = read;
+    d.writeState = write;
+    await runFeedWatch(new Date("2026-11-12T23:35:00Z"), d, only("options-edition"));
+    expect(sent.map((n) => n.kind)).toEqual(["feed-late"]);
+  });
+
   it("fails closed when the state cannot be written: no feed page, so a refusing store cannot loop a page", async () => {
     const w: World = { docs: { ...stale } };
     const { d, sent } = deps(w);
@@ -220,7 +340,7 @@ describe("a tick", () => {
     };
     const r = await runFeedWatch(LATE_AT, d, only("options-edition"));
     expect(sent).toEqual([]);
-    expect(r).toMatchObject({ failed: 1 });
+    expect(r).toMatchObject({ failed: 0, sent: 0 }); // no send was made, so no try is used
     d.readState = read;
     await runFeedWatch(new Date(LATE_AT.getTime() + 10 * 60_000), d, only("options-edition"));
     expect(sent.map((n) => n.kind)).toEqual(["feed-late"]);

@@ -19,7 +19,7 @@ import { AuditPanel } from "@/components/v3/audit";
 import { SlaPanel } from "@/components/v3/sla";
 import { duration, newYork, num, pct, shortDate, shortSha, sydney, txt } from "@/lib/format";
 import { humanize, jobKey, jobName, jobTone, sortJobKeys } from "@/lib/labels";
-import { loadPageFeeds } from "@/lib/feed-watch-run";
+import { loadPageFeeds, loadUnsentFeeds } from "@/lib/feed-watch-run";
 import { JOURNAL_PATHS, LEDGER_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "@/lib/desk";
 import { FEEDS } from "@/lib/feed-watch";
 import { listOptionsDates, listRadarDates, loadJournal, loadLedger, loadOptions, loadOptionsLive, loadRadar, loadSnapshot } from "@/lib/snapshot";
@@ -50,6 +50,7 @@ export default async function OperationsPage() {
     },
     now,
   );
+  const unsent = await loadUnsentFeeds();
   return (
     <>
       <PageHeading
@@ -59,6 +60,7 @@ export default async function OperationsPage() {
       <FeedsPanel
         now={now}
         feeds={feeds}
+        unsent={unsent}
         snapshot={result}
         journal={journal}
         options={options}

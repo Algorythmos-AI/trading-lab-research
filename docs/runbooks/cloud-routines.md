@@ -36,10 +36,7 @@ checked; the feed watch shows them as assumed and never pages for them (below).
   in a row. The evening rule (only a stamp at most 10 minutes before 21:38 UTC counts) assumes the after-close routine
   stamps its own read time and never fires over 10 minutes early; neither is recorded here, so that run is marked
   assumed and a missed evening sync is shown, not paged, until the owner confirms both (then drop `verified: false`
-  from that schedule in `FEEDS`). The evening rule (only a stamp at most 10 minutes before 21:38 UTC counts) assumes the after-close routine
-  stamps its own read time and never fires over 10 minutes early; neither is recorded here, so that run is marked
-  assumed and a missed evening sync is shown, not paged, until the owner confirms both (then set `verified` on that
-  schedule in `FEEDS`). The day check (`trade-rules.ts`, `journalCurrent`, inside the shadow evaluator's engine) is stricter and
+  from that schedule in `FEEDS`). The day check (`trade-rules.ts`, `journalCurrent`, inside the shadow evaluator's engine) is stricter and
   says "Journal not current" when a read is missing; it still reads `feeds.ts`'s `journalCheck`, unchanged.
 - **The options desk and the clone** read the edition and its focus block. The pre-open routine replaces only the
   focus block.

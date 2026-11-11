@@ -21,6 +21,7 @@ import {
   claimOutbox,
   type FeedAlertState,
   settleOutbox,
+  unsentFeeds,
   withOutbox,
 } from "./feed-watch";
 import { feedVariant } from "./fixture-variants";
@@ -263,53 +264,77 @@ export async function runFeedWatch(
   };
   if (!state.ok) return storeDown("read");
 
-  let made: string[] = [];
   let claimed: string[] = [];
+  let gaveUp: string[] = [];
   const p1 = await phase1(deps, state.stored, (prev) => {
     const decision = decideFeedAlerts(views, prev, now, deps.alertsOn, table);
-    const next = withOutbox(decision.next, decision, now);
-    made = decision.notices.map((n) => n.kind);
-    const c = claimOutbox(next, tick, deps.alertsOn, runId);
+    const next = withOutbox(decision.next, decision, now, table);
+    const c = claimOutbox(next, tick, deps.alertsOn, runId, now.getTime());
     claimed = c.claimed;
+    gaveUp = c.gaveUp;
     return c.state;
   });
   if (p1.kind === "skipped") return { ...summary, skipped: "concurrent run" };
   if (p1.kind === "unconfirmed") return storeDown("write");
+  for (const key of gaveUp) logEvent("feed-watch.outbox", { outcome: "sent_failed", reason: "expired", feeds: outboxFeeds(p1.state, key) });
 
-  // Phase 2: send what was claimed, within the run's budget; then record what went.
+  // Phase 2: send what was claimed, within the run's budget; then record what went. A claim skipped for want of time
+  // records no try, so it does not use one up.
   const results: Record<string, "sent" | "skipped" | "failed"> = {};
+  const sentKinds: string[] = [];
+  let retried = 0;
   for (const key of claimed) {
     const o = p1.state.outbox.find((x) => x.key === key)!;
-    if (deps.clock() - startedAt >= FEED_RUN_BUDGET_MS) {
-      results[key] = "failed";
-      continue;
-    }
+    if (deps.clock() - startedAt >= FEED_RUN_BUDGET_MS) continue;
+    if (o.attempts > 1) retried++;
     results[key] = await deps.send(o.notice);
+    if (results[key] === "sent") sentKinds.push(o.notice.kind);
   }
-  let recorded = claimed.length === 0;
-  if (claimed.length) {
+  let recorded = Object.keys(results).length === 0;
+  if (!recorded) {
     const settled = settleOutbox(p1.state, results);
+    for (const key of settled.failedNow ?? []) logEvent("feed-watch.outbox", { outcome: "sent_failed", reason: "tries", feeds: outboxFeeds(settled, key) });
     try {
       await within(deps.writeState(serializeFeedState(settled), { ifMatch: p1.etag }), FEED_READ_MS);
       recorded = true;
     } catch (e) {
-      // The claims are already stored: a later run sends what is still pending (bounded by OUTBOX_MAX_ATTEMPTS).
+      // The claims are already stored: a later run sends what is still pending (bounded: see Outgoing in feed-watch.ts).
       logEvent("feed-watch.state", { outcome: "phase2-write-failed", error: errName(e) });
     }
   }
   const values = Object.values(results);
   const result = {
     ...summary,
-    notices: made,
+    // What was actually sent this run, by kind, and how many of those sends were retries of an earlier claim.
+    notices: sentKinds,
     sent: values.filter((r) => r === "sent").length,
     failed: values.filter((r) => r === "failed").length,
-    resent: claimed.length - made.length > 0 ? claimed.length - made.length : 0,
+    retried,
     committed: true,
     recorded,
     ms: deps.clock() - startedAt,
   };
   logEvent("feed-watch", result);
   return result;
+}
+
+/** The feed ids of an outbox entry, for a log line (ids only, never text). */
+function outboxFeeds(s: FeedAlertState, key: string): string[] {
+  return s.outbox.find((o) => o.key === key)?.feeds ?? [];
+}
+
+/**
+ * The feeds with a page that could not be sent, for the Operations page: one read of the state document. Empty in
+ * fixture mode and when the state cannot be read (the panel then says nothing about it).
+ */
+export async function loadUnsentFeeds(): Promise<string[]> {
+  if (fixtureMode()) return [];
+  try {
+    const stored = await within(readText(FEED_ALERT_PATH), FEED_READ_MS);
+    return unsentFeeds(parseFeedState(stored?.text));
+  } catch {
+    return [];
+  }
 }
 
 /**
