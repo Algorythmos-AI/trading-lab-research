@@ -42,6 +42,8 @@ wt.ops.publish                            POST /api/ingest            (productio
                                             → private Blob desk/log/YYYY-MM-DD/HHMM.page.json
                                           GET /api/desk/eval-status   (the Options page's rail)
                                             { eval, last_slot_end } only: "Server check paused since HH:MM NY"
+                                          GET /api/desk/probe         (the owner, by hand; temporary)
+                                            one New York day's snapshot-probe counts from desk/log/YYYY-MM-DD/HHMM.json
 ```
 
 - **Contract.** `src/lib/snapshot.schema.json` is generated from the Python allowlist (`make schema`) and is
@@ -461,8 +463,18 @@ prints a secret; it prints only the ntfy topic and how to subscribe to it.
     bars_delayed, rows, rows_at_settle }` (each row `{ symbol, side, state }`) or `{ slot_end, engine, hidden: true }`,
     the symbols today's focus names, the states the engine's words, `as_of` inside the slot's grace window, the slot
     one of today's that has just settled, the engine the server's own; refused while the switch is off.
-  - `GET /api/desk/eval-status`: GET and HEAD only, cross-site refused, the bypass header refused, `no-store`;
-    answers `{ eval, last_slot_end }` only, from at most five head() calls (never a listing).
+  - `GET /api/desk/eval-status`: GET and HEAD only, cross-site refused, Vercel's protection bypass refused in every
+    documented form (the `x-vercel-protection-bypass` header or query parameter, `x-vercel-set-bypass-cookie` as a
+    header or query parameter; `presentsBypass` in desk-flags-run.ts), `no-store`; answers `{ eval, last_slot_end }`
+    only, from at most five head() calls (never a listing).
+  - `GET /api/desk/probe?day=YYYY-MM-DD` (`src/lib/quote-probe-run.ts`): GET and HEAD only, cross-site refused, the
+    bypass refused as for eval-status, `no-store`, the day a real `YYYY-MM-DD` (400 otherwise; today in New York when
+    left out). Unlike eval-status it **lists** a day's records: one listing of `desk/log/<day>/` and one read per
+    server record (`HHMM.json` only, at most 256, 8 at a time; page records are never read). It answers counts,
+    enums and numbers per name only (`quote-probe.ts` summariseProbe), never a record's text, and `503
+    read-failed` without detail when the listing fails. A HEAD answers from validation alone and reads nothing. A past
+    day's summary is kept in the instance's memory (at most 5 days; never today, never a day with an unreadable
+    record). Read only when the owner opens it; dry (no store call) in fixture mode and anywhere but production.
   - The Options page's server render reads the switch; while it is off the browser makes no request about the check
     at all. While it is on, the page reads the status at most once a minute and posts once per settled slot.
   - In fixture mode and anywhere but production none of them touches Blob: the switch reads as off.
