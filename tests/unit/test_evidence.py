@@ -2,10 +2,35 @@
 from __future__ import annotations
 
 import datetime as dt
+import re
+import subprocess
 
 import pytest
 
 from wt.ops import evidence
+from wt.ops.visibility import Probe
+
+
+class FakeAlerts:
+    """Records what would be paged; sends nothing."""
+
+    def __init__(self):
+        self.fired: list[tuple[str, str, str]] = []
+        self.resolved: list[str] = []
+        self.firing: set[str] = set()
+
+    def fire(self, key, title, message, priority=4, tags=()):
+        self.fired.append((key, title, message))
+        new = key not in self.firing
+        self.firing.add(key)
+        return new
+
+    def resolve(self, key, title, message, priority=2):
+        if key in self.firing:
+            self.firing.discard(key)
+            self.resolved.append(key)
+            return True
+        return False
 
 
 def test_iso_week():
@@ -42,16 +67,16 @@ def test_run_is_skipped_without_a_token(monkeypatch, capsys):
     assert evidence.run() == 0 and "skipped" in capsys.readouterr().out
 
 
-def test_evidence_never_pushes_unless_the_repo_is_confirmed_private(monkeypatch, capsys):
-    from wt.ops import evidence
+def test_evidence_never_pushes_unless_the_repo_is_confirmed_private(monkeypatch, capsys, tmp_path):
     calls = []
     monkeypatch.setattr(evidence, "_git", lambda *a, **k: calls.append(a) or "")
     monkeypatch.setattr(evidence, "plan_copies", lambda wt, week, **kw: [])
     for vis in ("public", "unknown", "internal"):
-        monkeypatch.setattr(evidence, "repo_visibility", lambda token, v=vis: v)
+        monkeypatch.setattr(evidence, "probe", lambda token, v=vis: Probe(v, "ok" if v != "unknown" else "error"))
         monkeypatch.setenv("GH_TOKEN", "t")
-        assert evidence.run() == 0
-        assert "evidence PR parked" in capsys.readouterr().out
+        assert evidence.run(alerts=FakeAlerts(), vis_state=tmp_path / f"{vis}.json") == 0
+        out = capsys.readouterr().out
+        assert "evidence PR parked" in out and out.strip().splitlines()[-1].endswith("not private; nothing pushed")
     assert not [a for a in calls if "push" in a]
 
 
@@ -62,7 +87,7 @@ def test_evidence_pushes_over_https_with_the_token_never_through_origin(monkeypa
     src = tmp_path / "scorecard_2026-10-23.md"
     src.write_text("# card")
     monkeypatch.setattr(evidence, "plan_copies", lambda wt, week, **kw: [(src, wt / "research/forward/archive/x/scorecard_2026-10-23.md")])
-    monkeypatch.setattr(evidence, "repo_visibility", lambda token: "private")
+    monkeypatch.setattr(evidence, "probe", lambda token: Probe("private", "ok"))
     monkeypatch.setattr(evidence, "WT_ROOT", tmp_path / "wt")
     monkeypatch.setenv("GH_TOKEN", "ghp-distinctive-token")
     done: list[list[str]] = []
@@ -72,8 +97,8 @@ def test_evidence_pushes_over_https_with_the_token_never_through_origin(monkeypa
         stderr = stdout = ""
 
     monkeypatch.setattr(evidence.subprocess, "run", lambda cmd, **k: done.append(cmd) or R())
-    monkeypatch.setattr(evidence, "open_evidence_prs", lambda token: [])
-    assert evidence.run(today=dt.date(2026, 10, 23)) == 0
+    monkeypatch.setattr(evidence, "open_evidence_prs", lambda token, timeout=60.0: [])
+    assert evidence.run(today=dt.date(2026, 10, 23), alerts=FakeAlerts(), vis_state=tmp_path / "vis.json") == 0
     assert any("fetch" in a and "integration" in a for a in calls)             # work lands on integration (ADR 0009)
     assert any("worktree" in a and "origin/integration" in a for a in calls)
     create = next(c for c in done if c[:3] == ["gh", "pr", "create"])
@@ -153,8 +178,8 @@ def _stubbed_run(monkeypatch, tmp_path, prs):
     calls: list[tuple[str, ...]] = []
     done: list[list[str]] = []
     monkeypatch.setattr(evidence, "_git", lambda *a, **k: calls.append(a) or "")
-    monkeypatch.setattr(evidence, "repo_visibility", lambda token: "private")
-    monkeypatch.setattr(evidence, "open_evidence_prs", lambda token: prs)
+    monkeypatch.setattr(evidence, "probe", lambda token: Probe("private", "ok"))
+    monkeypatch.setattr(evidence, "open_evidence_prs", lambda token, timeout=60.0: prs)
     monkeypatch.setattr(evidence, "WT_ROOT", tmp_path / "wt")
     monkeypatch.setenv("GH_TOKEN", "ghp-distinctive-token")
 
@@ -168,11 +193,16 @@ def _stubbed_run(monkeypatch, tmp_path, prs):
 
 def test_a_run_stops_and_alerts_while_an_evidence_pull_request_is_open_or_unlistable(monkeypatch, tmp_path, capsys):
     calls, _ = _stubbed_run(monkeypatch, tmp_path, ["evidence/2026-W42"])
-    assert evidence.run(today=dt.date(2026, 10, 23)) == 1
+    a = FakeAlerts()
+    assert evidence.run(today=dt.date(2026, 10, 23), alerts=a, vis_state=tmp_path / "v.json") == 0   # a check, not a crash
     assert "needs the owner's merge" in capsys.readouterr().out and calls == []
+    assert [k for k, _, _ in a.fired] == ["evidence-pr:pr-open"]
+    assert "still open and needs your merge" in a.fired[0][2] and "evidence/2026-W42" not in a.fired[0][2]
     calls, _ = _stubbed_run(monkeypatch, tmp_path, None)                    # gh failed: never "none open"
-    assert evidence.run(today=dt.date(2026, 10, 23)) == 1
+    a = FakeAlerts()
+    assert evidence.run(today=dt.date(2026, 10, 23), alerts=a, vis_state=tmp_path / "v.json") == 0
     assert "could not be listed" in capsys.readouterr().out and calls == []
+    assert [k for k, _, _ in a.fired] == ["evidence-pr:pr-list"] and "the pr-list step failed" in a.fired[0][2]
 
 
 def test_a_catch_up_run_stages_that_weeks_scorecards_and_nothing_else(monkeypatch, tmp_path, capsys):
@@ -181,7 +211,8 @@ def test_a_catch_up_run_stages_that_weeks_scorecards_and_nothing_else(monkeypatc
     monkeypatch.setattr(evidence, "FORWARD_LEDGER", var / "forward" / "forward_trades.jsonl")
     monkeypatch.setattr(evidence, "FORWARD_WATCHLIST_DIR", var / "watchlist")
     monkeypatch.setattr(evidence, "SCORECARD_DIR", var / "scorecards")
-    assert evidence.run(today=dt.date(2026, 10, 23), week="2026-W41") == 0
+    assert evidence.run(today=dt.date(2026, 10, 23), week="2026-W41", alerts=FakeAlerts(),
+                        vis_state=tmp_path / "v.json") == 0
     added = next(a for a in calls if a[0] == "add")
     assert list(added[2:]) == ["research/forward/archive/2026-W41/scorecard_2026-10-09.md"]
     assert any("fetch" in a and "--prune" in a and "+refs/heads/evidence/*:refs/remotes/origin/evidence/*" in a
@@ -194,10 +225,151 @@ def test_a_catch_up_run_stages_that_weeks_scorecards_and_nothing_else(monkeypatc
 
 def test_a_future_week_is_refused(monkeypatch, tmp_path, capsys):
     calls, _ = _stubbed_run(monkeypatch, tmp_path, [])
-    assert evidence.run(today=dt.date(2026, 10, 23), week="2026-W50") == 1
+    assert evidence.run(today=dt.date(2026, 10, 23), week="2026-W50", alerts=FakeAlerts(),
+                        vis_state=tmp_path / "v.json") == 1
     assert "has not happened yet" in capsys.readouterr().out and calls == []
 
 
 def test_the_catch_up_flag_is_a_week():
     with pytest.raises(ValueError):
         evidence.main(["--week", "last"])
+
+
+# ---- every way a publishing run can stop: one alert each, allowlist-clean, exit 0 ---------------------------------
+
+PAGE = re.compile(r"[A-Za-z0-9 .,:;()'+%/_>?-]*")
+
+
+def _failing_git(fail_on: str, exc: Exception):
+    calls: list[tuple[str, ...]] = []
+
+    def git(*a, **k):
+        calls.append(a)
+        if fail_on in a:
+            raise exc
+        return ""
+    return git, calls
+
+
+@pytest.mark.parametrize(("fail_on", "exc", "step", "outcome"), [
+    ("fetch", RuntimeError("git fetch failed: fatal: unable to access 'https://x-access-token:ghp-distinctive-token@github.com/' /home/wt/trading/var/x"), "fetch", "failed"),
+    ("commit", RuntimeError("git commit failed: error: /home/wt/trading/knowledge/a.md"), "commit", "failed"),
+    ("push", RuntimeError("git push failed: remote: Permission to Algorythmos-AI/trading-lab-research.git denied to ***. https://github.com/"), "push", "failed"),
+    ("push", subprocess.TimeoutExpired(["git", "push"], 120), "push", "timed out"),
+])
+def test_a_failed_step_alerts_once_with_clean_text_and_exits_zero(monkeypatch, tmp_path, capsys, fail_on, exc, step,
+                                                                  outcome):
+    _stubbed_run(monkeypatch, tmp_path, [])
+    git, calls = _failing_git(fail_on, exc)
+    monkeypatch.setattr(evidence, "_git", git)
+    src = tmp_path / "scorecard_2026-10-23.md"
+    src.write_text("# card")
+    monkeypatch.setattr(evidence, "plan_copies", lambda wt, week, **kw: [(src, wt / "research/forward/archive/x/scorecard_2026-10-23.md")])
+    a = FakeAlerts()
+    assert evidence.run(today=dt.date(2026, 10, 23), alerts=a, vis_state=tmp_path / "v.json") == 0
+    assert [k for k, _, _ in a.fired] == [f"evidence-pr:{step}"]
+    _, title, msg = a.fired[0]
+    assert title == "Weekly evidence not published"
+    assert f"the {step} step {outcome}" in msg and "2026-W43" in msg
+    for text in (title, msg):
+        assert PAGE.fullmatch(text), text
+        for bad in ("ghp-", "https", "github.com", "/home", "var/", "knowledge", "Permission", "fatal", "***"):
+            assert bad not in text
+    out = capsys.readouterr().out
+    assert f"stopped at {step}" in out and "ghp-distinctive-token" not in out    # the detail goes to the log, redacted
+    assert not a.resolved
+
+
+def test_a_commit_with_one_new_file_says_so(monkeypatch, tmp_path):
+    _stubbed_run(monkeypatch, tmp_path, [])
+    git, _ = _failing_git("push", RuntimeError("x"))
+    monkeypatch.setattr(evidence, "_git", git)
+    src = tmp_path / "scorecard_2026-10-23.md"
+    src.write_text("# card")
+    monkeypatch.setattr(evidence, "plan_copies", lambda wt, week, **kw: [(src, wt / "a.md")])
+    a = FakeAlerts()
+    evidence.run(today=dt.date(2026, 10, 23), alerts=a, vis_state=tmp_path / "v.json")
+    assert "1 new file(s) wait for the next run" in a.fired[0][2]
+
+
+@pytest.mark.parametrize(("exc", "outcome"), [(FileNotFoundError("gh"), "gh missing"),
+                                              (subprocess.TimeoutExpired(["gh"], 120), "timed out")])
+def test_gh_missing_or_hanging_at_pr_create(monkeypatch, tmp_path, exc, outcome):
+    _stubbed_run(monkeypatch, tmp_path, [])
+    src = tmp_path / "scorecard_2026-10-23.md"
+    src.write_text("# card")
+    monkeypatch.setattr(evidence, "plan_copies", lambda wt, week, **kw: [(src, wt / "a.md")])
+
+    def run(cmd, **k):
+        raise exc
+    monkeypatch.setattr(evidence.subprocess, "run", run)
+    a = FakeAlerts()
+    assert evidence.run(today=dt.date(2026, 10, 23), alerts=a, vis_state=tmp_path / "v.json") == 0
+    assert [k for k, _, _ in a.fired] == ["evidence-pr:pr-create"]
+    assert f"the pr-create step {outcome}. The branch was pushed; the pull request was not opened." in a.fired[0][2]
+
+
+def test_pr_create_refused_by_github(monkeypatch, tmp_path):
+    _stubbed_run(monkeypatch, tmp_path, [])
+    src = tmp_path / "scorecard_2026-10-23.md"
+    src.write_text("# card")
+    monkeypatch.setattr(evidence, "plan_copies", lambda wt, week, **kw: [(src, wt / "a.md")])
+
+    class R:
+        returncode = 1
+        stdout = ""
+        stderr = "GraphQL: Resource not accessible by integration https://api.github.com/graphql"
+    monkeypatch.setattr(evidence.subprocess, "run", lambda cmd, **k: R())
+    a = FakeAlerts()
+    assert evidence.run(today=dt.date(2026, 10, 23), alerts=a, vis_state=tmp_path / "v.json") == 0
+    assert "GraphQL" not in a.fired[0][2] and "the pr-create step failed" in a.fired[0][2]
+
+
+def test_the_runs_time_budget_stops_it_with_its_own_alert(monkeypatch, tmp_path):
+    _stubbed_run(monkeypatch, tmp_path, [])
+    t = iter([0.0, 0.0, 0.0, 600.0, 600.0, 600.0, 600.0])
+    budget = evidence.Budget(480.0, clock=lambda: next(t))
+    a = FakeAlerts()
+    assert evidence.run(today=dt.date(2026, 10, 23), alerts=a, vis_state=tmp_path / "v.json", budget=budget) == 0
+    assert len(a.fired) == 1 and "step timed out" in a.fired[0][2]
+
+
+def test_a_clean_run_resolves_every_evidence_alert(monkeypatch, tmp_path):
+    _stubbed_run(monkeypatch, tmp_path, [])
+    monkeypatch.setattr(evidence, "plan_copies", lambda wt, week, **kw: [])
+    a = FakeAlerts()
+    a.firing = {"evidence-pr:push", "evidence-pr:pr-open"}
+    assert evidence.run(today=dt.date(2026, 10, 23), alerts=a, vis_state=tmp_path / "v.json") == 0
+    assert sorted(a.resolved) == ["evidence-pr:pr-open", "evidence-pr:push"] and not a.fired
+
+
+def test_a_dry_run_never_pages_and_reports_a_failed_step(monkeypatch, tmp_path, capsys):
+    git, _ = _failing_git("fetch", RuntimeError("git fetch failed: x"))
+    monkeypatch.setattr(evidence, "_git", git)
+    monkeypatch.setattr(evidence, "WT_ROOT", tmp_path / "wt")
+    monkeypatch.setattr(evidence, "probe", lambda token: pytest.fail("a dry run asks nothing"))
+    assert evidence.run(dry_run=True, today=dt.date(2026, 10, 23)) == 1
+    assert "stopped at fetch" in capsys.readouterr().out
+
+
+def test_a_parked_run_pages_the_visibility_once_then_stays_quiet(monkeypatch, tmp_path, capsys):
+    """Case (c): a public repository is a standing state. One page when it is first seen, none the next weeks."""
+    _stubbed_run(monkeypatch, tmp_path, [])
+    monkeypatch.setattr(evidence, "plan_copies", lambda wt, week, **kw: [])
+    monkeypatch.setattr(evidence, "probe", lambda token: Probe("public", "ok"))
+    a = FakeAlerts()
+    for week_day in (dt.date(2026, 10, 23), dt.date(2026, 10, 30), dt.date(2026, 11, 6)):
+        assert evidence.run(today=week_day, alerts=a, vis_state=tmp_path / "v.json") == 0
+        out = capsys.readouterr().out
+        assert "repo visibility: public" in out and "evidence PR parked" in out     # said in the log every run
+    assert [k for k, _, _ in a.fired] == ["repo-visibility:not-private"]
+    monkeypatch.setattr(evidence, "probe", lambda token: Probe("private", "ok"))
+    assert evidence.run(today=dt.date(2026, 11, 13), alerts=a, vis_state=tmp_path / "v.json") == 0
+    assert "repo-visibility:not-private" in a.resolved
+
+
+def test_a_crash_still_exits_non_zero(monkeypatch, tmp_path):
+    _stubbed_run(monkeypatch, tmp_path, [])
+    monkeypatch.setattr(evidence, "plan_copies", lambda wt, week, **kw: 1 / 0)
+    with pytest.raises(ZeroDivisionError):
+        evidence.run(today=dt.date(2026, 10, 23), alerts=FakeAlerts(), vis_state=tmp_path / "v.json")

@@ -30,3 +30,46 @@ already be copied.
 
 Locally: `make restricted` (HEAD only), or `.venv/bin/python scripts/check_restricted_paths.py --base origin/integration`.
 `make ci` runs it.
+
+## Repository visibility (`make status`)
+
+**You'll see:** the last line of `make status` (and `wt-deploy status` on the host):
+
+```
+repo visibility: public (last confirmed public on 2026-11-13)
+repo visibility: unknown (last confirmed public on 2026-11-13; 2 unknown answer(s) in a row, last cause timeout)
+repo visibility: unknown (never checked: the weekly evidence job checks it, or run make visibility)
+```
+
+- One place answers "is the repository private?": `wt.ops.visibility` (`gh api repos/<repo> --jq .visibility`).
+  Every job that publishes to GitHub asks it afresh (today only the weekly evidence job does); a remembered answer is
+  never used to publish. The answer is `private`, `public`, `internal` or `unknown`.
+- `make status` reads the record `var/repo-visibility.json` and asks nothing. The weekly evidence job refreshes it
+  every Friday evening (New York). `make visibility` asks now (needs gh and `GH_TOKEN` on the host), records the
+  answer and pages if it changed.
+- `unknown` (no network, a timeout, a refused token) is never taken for private, and on its own is not an alarm.
+  The third `unknown` in a row pages once, **"Repository visibility unknown"**, naming the last cause (`timeout` or
+  `error`); the next known answer resolves it. With a weekly check, that is three weeks without an answer: run
+  `make visibility` by hand to look sooner.
+- gh missing pages once, **"gh is not installed on the host"**, and does not count towards the unknown streak.
+  `sudo wt-tune-host` installs it on the GCP host.
+
+## Weekly evidence and visibility alerts
+
+The weekly job (`wt-weekly`) runs `wt.ops.evidence` after the scorecard. What you can get:
+
+| Page | When | What to do |
+|---|---|---|
+| "Repository is not private" (priority 3) | The first run that sees `public` or `internal`, after `private` or on the first check ever. Then nothing more while it stays so; the weekly log still says `evidence PR parked` and `repo visibility: ...` each run | Nothing, while the repository is meant to be public: the weeks wait in `var/` and are archived one at a time later (gcp-host.md, step 3). A move between `public` and `internal` is not paged |
+| "Repository is private again" (priority 2) | The first `private` after that | The next weekly run publishes |
+| "Weekly evidence not published" (priority 3) | A publishing run stopped. The message says the step and its outcome: `pr-list`, `pr-open`, `fetch`, `worktree`, `commit`, `push`, `pr-create`; `failed`, `timed out`, `gh missing`, `still open` | Read `logs/scorecard_<date>.log` (the weekly job's log) for the detail (the remote's own text, token redacted). `pr-open`: merge the open `evidence/*` pull request. `push` or `fetch`: check `GH_TOKEN` (expiry, *Contents: write*). `pr-create`: the branch is on GitHub; open the pull request by hand or let the next run do it |
+| "Weekly evidence published again" (priority 2) | The next run that publishes or finds nothing new, after a stop | Nothing |
+| "Weekly evidence PR failed" (priority 2) | The evidence run crashed (a bug, not a failed step), or could not be started | Read `logs/scorecard_<date>.log`; the traceback is there |
+
+Each stop pages once per step until a run succeeds (the keys are `evidence-pr:<step>`): a push that fails three weeks
+running pages once. The run gives itself 480 s, under the 600 s the weekly job allows, so a hanging gh or git stops
+it with its own page instead of the job killing it with none. A dry run (`make evidence`) never pages; a failed step
+there prints the step and exits 1.
+
+The pages carry only the step, an outcome word, the ISO week and a file count: never the remote's error text, a
+path or a token.

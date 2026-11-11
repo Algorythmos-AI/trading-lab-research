@@ -13,6 +13,12 @@ Rules:
 
 Priorities: 5 trading-critical (not flat, unknown or short position, latch) · 4 job failed ·
 3 refusal / disk / late · 2 daily summary.
+
+What a page may carry. The ntfy topic is public: anyone who knows its name reads every page. So a title and a
+message are fixed words from the code plus values that went through one of the guards below: counts, enum words
+from a closed set, dates and times, short commit ids, R and %. Never a symbol, a price, an amount, an account value,
+a host path or the text of an error (an exception's class name is fine). tests/unit/test_alert_allowlist.py drives
+every alert the code can send with hostile inputs and holds the result to `PAGE_CHARS` and the rules there.
 """
 from __future__ import annotations
 
@@ -20,13 +26,14 @@ import contextlib
 import datetime as dt
 import fcntl
 import json
+import math
 import os
 import queue
 import re
 import threading
 import time
 import uuid
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -42,11 +49,79 @@ LATE_AFTER = dt.timedelta(minutes=2)
 _MONEY = re.compile(r"(?:US|A|AU)?\$\s?-?[\d,]+(?:\.\d+)?|\b\d[\d,]*(?:\.\d+)?\s?(?:USD|AUD)\b", re.I)
 # Alpaca paper account ids (PA + alphanumerics) and any bare number of 10+ digits; 8-digit dates survive.
 _ACCOUNT = re.compile(r"\bPA[0-9A-Z]{6,}\b|\b\d{10,}\b")
+_URL = re.compile(r"\b[a-z][a-z0-9+.-]*://\S+", re.I)
+TITLE_MAX, MESSAGE_MAX = 120, 1000
+# The characters a page may hold. No "$", "@", quotes, brackets, "=", "<" or a backslash: a scrubbed amount ("[$]")
+# or URL ("[url]") fails it too, so a test sees the attempt instead of a quietly cleaned page.
+PAGE_CHARS = re.compile(r"[A-Za-z0-9 .,:;()'+%/_>?-]*")
 
 
 def scrub(text: str) -> str:
-    """Remove dollar amounts and long account-like numbers (R13: R and % only)."""
-    return _ACCOUNT.sub("[id]", _MONEY.sub("[$]", text))
+    """Remove URLs, dollar amounts and long account-like numbers (R13: R and % only). The last line of defence:
+    a page is built from guarded values (below) in the first place."""
+    return _ACCOUNT.sub("[id]", _MONEY.sub("[$]", _URL.sub("[url]", text)))
+
+
+def render(title: str, message: str) -> tuple[str, str]:
+    """What is actually sent for a title and a message (and recorded in the spool and the history)."""
+    return scrub(title)[:TITLE_MAX], scrub(message)[:MESSAGE_MAX]
+
+
+# ---- guards: the only way a value that is not a fixed word gets into a page ----------------------------------------
+_HEX = re.compile(r"[0-9a-f]{7,40}")
+_DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
+_HHMM = re.compile(r"\d{2}:\d{2}")
+_IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,60}")
+
+
+def count(x: object) -> str:
+    """A whole number (a count, a quantity, an exit code), or "?"."""
+    if isinstance(x, bool):
+        return "?"
+    if isinstance(x, int):
+        return str(x)
+    if isinstance(x, float) and math.isfinite(x) and x.is_integer() and abs(x) < 1e9:
+        return str(int(x))
+    return "?"
+
+
+def word(x: object, allowed: Collection[str], other: str = "other") -> str:
+    """`x` when it is one of the closed set `allowed` (enum words the code itself defines), else `other`."""
+    return x if isinstance(x, str) and x in allowed else other
+
+
+def sha(x: object) -> str:
+    """A short commit id (8 hex digits), or "unknown"."""
+    return x[:8] if isinstance(x, str) and _HEX.fullmatch(x) else "unknown"
+
+
+def day(x: object) -> str:
+    """A date as YYYY-MM-DD, or "unknown date"."""
+    if isinstance(x, dt.datetime):
+        return x.date().isoformat()
+    if isinstance(x, dt.date):
+        return x.isoformat()
+    return x if isinstance(x, str) and _DAY.fullmatch(x) else "unknown date"
+
+
+def hhmm(x: object) -> str:
+    """A time of day as HH:MM, or "?"."""
+    if isinstance(x, dt.datetime | dt.time):
+        return f"{x:%H:%M}"
+    return x if isinstance(x, str) and _HHMM.fullmatch(x) else "?"
+
+
+def exc_name(e: object) -> str:
+    """An exception's class name, never its text (which can hold a path, a URL or a remote's answer)."""
+    name = type(e).__name__ if isinstance(e, BaseException) else ""
+    return name if _IDENT.fullmatch(name) else "an error"
+
+
+def ratio(x: object, fmt: str) -> str:
+    """A finite number in one of the formats a page may show: "+.2f" (with an R after it), "+.0%", "+.1f", ".0f"."""
+    if fmt not in ("+.2f", "+.0%", "+.1f", ".0f") or isinstance(x, bool) or not isinstance(x, int | float):
+        return "?"
+    return format(x, fmt) if math.isfinite(x) else "?"
 
 
 def _now() -> dt.datetime:
@@ -143,8 +218,9 @@ class Alerts:
     # ---- delivery -------------------------------------------------------------------------------
     def notify(self, title: str, message: str, priority: int = 3, tags: tuple[str, ...] = ()) -> bool:
         """Send now (after flushing older spooled messages). Returns True when delivered."""
-        msg: dict[str, Any] = {"id": uuid.uuid4().hex, "at": _now().isoformat(), "title": scrub(title)[:120],
-               "message": scrub(message)[:1000], "priority": max(1, min(5, int(priority))), "tags": list(tags)}
+        title, message = render(title, message)
+        msg: dict[str, Any] = {"id": uuid.uuid4().hex, "at": _now().isoformat(), "title": title,
+               "message": message, "priority": max(1, min(5, int(priority))), "tags": list(tags)}
         if not self.topic:
             return False                     # alerts are off; spooling would only grow without bound
         self.flush()
