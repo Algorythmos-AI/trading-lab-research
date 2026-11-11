@@ -324,7 +324,8 @@ describe("the trade journal (stocksdelta/journal)", () => {
       const res = await handleIngest(asRadar(journal("j3", "2026-09-29T21:40:00Z", (d) => Object.assign(d, extra))), NOW);
       expect(res.status).toBe(422);
     }
-    expect(blob.store.size).toBe(0);
+    // Nothing is stored but the refusal's record (./ingest-reject), which carries no content.
+    expect([...blob.store.keys()]).toEqual(["ops/ingest-rejects/journal.json"]);
   });
 
   it("refuses a trade with a field it does not know", async () => {
@@ -383,6 +384,7 @@ describe("the economic calendar (stocksdelta/calendar)", () => {
       calendar("c6", "2026-09-30T21:40:00Z"),
     ];
     for (const body of bad) expect((await handleIngest(signed(body), NOW)).status).toBe(422);
-    expect(blob.store.size).toBe(0);
+    // Nothing is stored but the refusal's record (./ingest-reject), which carries no content.
+    expect([...blob.store.keys()]).toEqual(["ops/ingest-rejects/calendar.json"]);
   });
 });
