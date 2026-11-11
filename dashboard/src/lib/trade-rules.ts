@@ -23,8 +23,11 @@ export const MIN_ROOM_MULTIPLE = 2;
 /** The bar the entry is confirmed on, in minutes. */
 export const CONFIRM_BAR_MINUTES = 2;
 
-/** The owner's worked example of a plan written before entry: premium, the planned loss and the target as shares of it. */
-export const PLAN_EXAMPLE = { premium: 165, stopShare: 0.1, targetShare: 0.2 } as const;
+/**
+ * The gain, as a share of the premium, that the evidence counts a winning option as having run to (20% up). Once the
+ * target share of the owner's worked $165 example; the example itself is now the trade ticket on the Options desk.
+ */
+export const WIN_SHARE_MARK = 0.2;
 
 /** What a plan comes to in dollars: the planned loss, the target and reward to risk. Before fees and slippage. */
 export function planNumbers(premium: number, stopShare: number, targetShare: number): { risk: number; reward: number; ratio: number; ok: boolean } {
@@ -422,10 +425,10 @@ export function ruleEvidence(pieces: readonly Trade[]): Record<string, Evidence>
     const l = avgOf(losses);
     const share = Math.round((wins.length / trades.length) * 100);
     const optionWins = wins.filter((t) => isOption(t) && t.side === "long" && t.entry > 0);
-    const ran = optionWins.filter((t) => t.exit / t.entry - 1 >= PLAN_EXAMPLE.targetShare - 1e-9).length;
+    const ran = optionWins.filter((t) => t.exit / t.entry - 1 >= WIN_SHARE_MARK - 1e-9).length;
     out.room = {
       source: "yours",
-      finding: `You won ${share}% of your trades, but the average win was ${money(w)} and the average loss ${money(l)}. Winning often does not pay when losses are ${(Math.abs(l) / w).toFixed(1)}× the wins; a target twice the risk turns that around. Only ${count(ran)} of your ${count(optionWins.length)} winning options were closed ${Math.round(PLAN_EXAMPLE.targetShare * 100)}% or more up, so 2:1 means letting the winner reach the target.`,
+      finding: `You won ${share}% of your trades, but the average win was ${money(w)} and the average loss ${money(l)}. Winning often does not pay when losses are ${(Math.abs(l) / w).toFixed(1)}× the wins; a target twice the risk turns that around. Only ${count(ran)} of your ${count(optionWins.length)} winning options were closed ${Math.round(WIN_SHARE_MARK * 100)}% or more up, so 2:1 means letting the winner reach the target.`,
       compare: { unit: "average per trade", a: { label: "Average win", value: w }, b: { label: "Average loss", value: l } },
     };
   }

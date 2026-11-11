@@ -11,11 +11,12 @@ import {
   GROUPS,
   RULES,
   DAY_LOSS_LIMIT,
+  MAX_PREMIUM,
   MAX_TRADES_PER_DAY,
   money,
-  PLAN_EXAMPLE,
-  planNumbers,
+  PREMIUM_STOP,
   PRE_TRADE_CHECKS,
+  RISK_PER_TRADE,
   ruleEvidence,
   type BreakSummary,
   type DayCheck,
@@ -23,6 +24,7 @@ import {
   type RuleCheck,
   type RuleGroup,
 } from "@/lib/trade-rules";
+import { sizeTicket, slipPerCent, usd } from "@/lib/ticket";
 import { cn } from "@/lib/utils";
 
 // Blue for where you enter, amber for what a trade may cost, red for when you stop.
@@ -155,16 +157,19 @@ function CheckIcon({ check }: { check: RuleCheck }) {
   );
 }
 
-const usd = (v: number) => `$${v.toFixed(v % 1 ? 2 : 0)}`;
+/** A price a share for the worked example, in cents: the numbers under it come from the trade ticket's own arithmetic. */
+const EXAMPLE_CENTS = 125;
 
-/** The checklist to tick before every order, beside a plan worked out in dollars. */
+/** The checklist to tick before every order, beside one price worked through the trade ticket. */
 function BeforeYouBuy() {
-  const p = planNumbers(PLAN_EXAMPLE.premium, PLAN_EXAMPLE.stopShare, PLAN_EXAMPLE.targetShare);
+  const t = sizeTicket(EXAMPLE_CENTS);
   const rows: [string, string][] = [
-    ["Premium", usd(PLAN_EXAMPLE.premium)],
-    [`Planned loss (${Math.round(PLAN_EXAMPLE.stopShare * 100)}%)`, usd(p.risk)],
-    [`Target (${Math.round(PLAN_EXAMPLE.targetShare * 100)}%)`, usd(p.reward)],
-    ["Reward to risk", `${p.ratio.toFixed(p.ratio % 1 ? 1 : 0)} : 1`],
+    ["Price in Webull", `${usd(t.priceCents)} a share`],
+    ["Contracts", String(t.contracts)],
+    [`Stop to place (−${Math.round(PREMIUM_STOP * 100)}%, rounded up)`, usd(t.stopCents)],
+    ["Lost if filled at the stop, with fees", `−${usd(t.riskCents)}`],
+    ["Each cent worse on that fill", `${usd(slipPerCent(t))} more`],
+    ["Total premium", usd(t.premiumCents)],
   ];
   return (
     <section aria-labelledby="before-buy" className="grid gap-3 rounded-lg border p-3 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] md:gap-6">
@@ -181,8 +186,8 @@ function BeforeYouBuy() {
           ))}
         </ul>
       </div>
-      <div className="grid content-start gap-1.5">
-        <p className="text-[0.6875rem] font-semibold tracking-wide uppercase">The plan in dollars, written first</p>
+      <div className="grid content-start gap-1.5" data-ticket-example>
+        <p className="text-[0.6875rem] font-semibold tracking-wide uppercase">Size it first: the trade ticket</p>
         <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-0.5 text-xs">
           {rows.map(([k, v]) => (
             <div key={k} className="contents">
@@ -191,7 +196,9 @@ function BeforeYouBuy() {
             </div>
           ))}
         </dl>
-        <p className="text-muted-foreground text-[0.6875rem] leading-snug">Example. The real stop is where the chart proves you wrong, never past −25%. Before fees and slippage.</p>
+        <p className="text-muted-foreground text-[0.6875rem] leading-snug">
+          Example at {usd(EXAMPLE_CENTS)}. Open &ldquo;Size this call&rdquo; or &ldquo;Size this put&rdquo; under a side on the Options desk and type the price you see: it works out a size within ${MAX_PREMIUM} of premium and ${RISK_PER_TRADE} lost at the stop with fees, if the stop fills at its price. The chart stop may come first.
+        </p>
       </div>
     </section>
   );

@@ -49,6 +49,8 @@ const FILES = [
   "../src/components/trades-jump-bar.tsx",
   "../src/components/trade-rules.tsx",
   "../src/components/panel.tsx",
+  "../src/lib/ticket.ts",
+  "../src/components/client/ticket.tsx",
 ];
 
 const BANNED = [

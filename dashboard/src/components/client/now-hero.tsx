@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { bellMinute } from "@/lib/contract";
 import { atmContract, chainFresh, chainPx, chainStamp, entryStopDistance, premiumCheck, roomShown, UNLIKELY_WORDS, whichStopFirst } from "@/lib/what-if";
 import { useLadderLive } from "./ladder-live";
+import { openTicket } from "./ticket";
 import { type Board, openFocusCard, TestingTag, useBoard } from "./trade-now";
 import { useChain } from "./use-chain";
 import { usePerfNow } from "./use-now";
@@ -182,6 +183,26 @@ export function heroTiles(row: BoardRow, v: RowView, paused: boolean): { enter: 
   return null;
 }
 
+const sameCent = (a: number | null | undefined, b: number | null | undefined) => a == null || b == null ? a == null && b == null : Math.round(a * 100) === Math.round(b * 100);
+
+/**
+ * The side the hero's "Size the …" button opens a ticket for, or null for no button. Only when the card has a plan for
+ * that side, the hero is not showing an alternative trigger (its own stop and target), and the row's plan has the
+ * card's stop and T1 to the cent: the ticket estimates from the card's levels, so it is hidden rather than ever showing
+ * numbers that disagree with the hero's tiles.
+ */
+export function heroTicketSide(
+  side: "call" | "put" | null,
+  row: Pick<BoardRow, "state">,
+  v: Pick<RowView, "badge">,
+  card: { stop: number | null; target1: number | null } | null | undefined,
+): "call" | "put" | null {
+  if (!side || !card || v.badge.alt) return null;
+  const p = row.state?.plan;
+  if (p && (!sameCent(p.stop, card.stop) || !sameCent(p.target1, card.target1))) return null;
+  return side;
+}
+
 /** A one-off highlight when the hero's name changes (motion-safe only); the first name on screen plays none. */
 const FLASH = `
 @keyframes now-hero-in { from { box-shadow: 0 0 0 4px var(--ring); } to { box-shadow: 0 0 0 0 transparent; } }
@@ -213,6 +234,8 @@ function Live({ b, row, room }: { b: Board; row: BoardRow; room: string | null }
   const icon = paused ? Pause : v.badge.alt ? GitBranch : STATE_ICON[s.state];
   // The side the board points at (an entry or a get-ready), as the ladder and the cards read it: none while paused.
   const side = !paused && (s.state === "enter_zone" || s.state === "get_ready") ? (s.side ?? null) : null;
+  const cardItem = b.items.find((i) => i.symbol === row.symbol);
+  const ticketSide = heroTicketSide(side, row, v, side && cardItem ? focusPlan(cardItem)[side] : null);
   return (
     <div data-hero-paused={paused ? "true" : undefined} className={cn("grid gap-3", paused && "grayscale")}>
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
@@ -245,6 +268,18 @@ function Live({ b, row, room }: { b: Board; row: BoardRow; room: string | null }
             {tiles.target !== null ? <Tile label="T1" value={tiles.target} data="t1" /> : null}
           </dl>
         </div>
+      ) : null}
+      {ticketSide ? (
+        // Hidden in the cockpit, which hides the cards the ticket sits on.
+        <button
+          type="button"
+          data-cockpit-hide
+          data-hero-ticket={ticketSide}
+          onClick={() => openTicket(row.symbol, ticketSide)}
+          className="text-explain hover:bg-muted/50 inline-flex min-h-11 w-fit items-center rounded-md border px-3 font-medium"
+        >
+          Size the {ticketSide} from your Webull price
+        </button>
       ) : null}
       <HeroChecks b={b} row={row} view={view} side={side} room={roomShown(room, b.manage.views.length)} />
       {!paused && s.cautions.length ? (
