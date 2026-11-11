@@ -231,20 +231,44 @@ class Get:
 class FakeAlerts:
     def __init__(self) -> None:
         self.sent: list[tuple[str, str, str, int]] = []
+        self.days: list[str | None] = []
 
-    def once_per_day(self, key: str, title: str, message: str, priority: int = 3) -> bool:
+    def once_per_day(self, key: str, title: str, message: str, priority: int = 3, day: str | None = None) -> bool:
         self.sent.append((key, title, message, priority))
+        self.days.append(day)
         return True
 
 
-def go(tmp_path, get, slot="pre-open", now=NOW_PRE, read=None):
+MACRO_HEADER = "date,time_et,type,severity,policy,source,quality\n"
+EARNINGS_HEADER = "# a comment line, as in the real file\nsymbol,date,when,source,quality\n"
+
+
+def macro_csv(last: dict[str, str] | None = None) -> str:
+    """A macro calendar whose every recurring type ends on 2027-06-01, or on the date `last` gives it."""
+    last = last or {}
+    return MACRO_HEADER + "".join(f"{last.get(t, '2027-06-01')},08:30,{t},high,reduce,a named source,exact\n"
+                                  for t in pc.ev.RECURRING_TYPES)
+
+
+def earnings_csv(latest: dict[str, str] | None = None, names: list[str] | None = None) -> str:
+    """An earnings file with one row per desk single name on 2026-10-01, or on the date `latest` gives it."""
+    latest = latest or {}
+    return EARNINGS_HEADER + "".join(f"{n},{latest.get(n, '2026-10-01')},amc,company press release,confirmed\n"
+                                     for n in (names or pc.ev.desk_single_names()))
+
+
+def calendars(tmp_path, macro: str | None = None, earnings: str | None = None) -> dict:
+    (tmp_path / "macro.csv").write_text(macro_csv() if macro is None else macro)
+    (tmp_path / "earnings.csv").write_text(earnings_csv() if earnings is None else earnings)
+    return {"macro_path": tmp_path / "macro.csv", "earnings_path": tmp_path / "earnings.csv"}
+
+
+def go(tmp_path, get, slot="pre-open", now=NOW_PRE, read=None, alerts=None, **cal):
     import json
-    earnings = tmp_path / "earnings.csv"
-    earnings.write_text("symbol,date,when\n")
-    alerts, naps = FakeAlerts(), []
+    alerts, naps = alerts or FakeAlerts(), []
     editions = {"radar": radar(), "options": options()}
     code = pc.run(slot, now, get=get, sleep=naps.append, read=read or editions.get, alerts=alerts,
-                  out=tmp_path / "out", earnings_path=earnings)
+                  out=tmp_path / "out", **calendars(tmp_path, **cal))
     target = pc.target_session(slot, now)
     report = json.loads((tmp_path / "out" / f"{target}-{slot}.json").read_text())
     return code, report, alerts, naps
@@ -347,16 +371,24 @@ def test_the_page_never_carries_a_symbol_a_price_or_error_text():
     from collections import Counter
     names = _desk_names()
     assert len(names) >= 10
-    by_family = {pc.family(i): i for i in _emitted_ids()}
+    kinds = list(pc.ev.RECURRING_TYPES) + ["fomc_emergency"]
+    per_symbol = {"options.tape", "options.close", "options.levels", "options.listing", "focus.earnings",
+                  "radar.close", "radar.premarket", "calendar.earnings"}
+    ids = _emitted_ids()
+    assert {"calendar.macro", "calendar.macro.rows", "calendar.earnings", "calendar.earnings.rows"} <= set(ids)
     every: list[pc.Check] = []
-    for fam, prefix in by_family.items():
-        for sym in names:
-            cid = f"{prefix}.{sym}" if prefix.count(".") == 1 and fam in {
-                "options.tape", "options.close", "options.levels", "focus.earnings", "radar.close",
-                "radar.premarket"} else prefix
+    for prefix in ids:
+        fam = pc.family(prefix)
+        suffixes = [""] + ((names if fam in per_symbol else kinds if fam == "calendar.macro" else [])
+                           if prefix == fam else [])
+        for suffix in suffixes:
+            cid = f"{prefix}.{suffix}" if suffix else prefix
+            sym = suffix or names[0]
             every.append(pc.Check(cid, "fail", False,
                                   f"{sym} edition 571.23 vs tape 571.20; PDH $572.10; ConnectionError: Max retries "
-                                  f"exceeded with url /v2/stocks/bars?symbols={sym}"))
+                                  f"exceeded with url /v2/stocks/bars?symbols={sym}; {sym}: latest row 2026-08-27, "
+                                  f"86 days before the session; cpi: last row 2026-12-10; line 7: unreadable date"))
+    assert {pc.family(c.id) for c in every} == set(pc.FAMILIES)
     noise = [pc.Check("options.close.SPY", "warn", False, "SPY 1.5"), pc.Check("options.levels.QQQ", "info", True, "ok")]
     fam_re = "|".join(re.escape(f) for f in (*pc.FAMILIES, "other"))
     body = re.compile(rf"^Session (\d{{4}}-\d{{2}}-\d{{2}}), (pre-open|after-close)\. "
@@ -374,6 +406,7 @@ def test_the_page_never_carries_a_symbol_a_price_or_error_text():
             assert got == dict(Counter(pc.family(c.id) for c in fails))
             text = title + " " + message
             assert not any(re.search(rf"\b{re.escape(n)}\b", text) for n in names)
+            assert not any(re.search(rf"\b{re.escape(k)}\b", text) for k in kinds)   # event types: report only
             assert not re.search(r"\d+\.\d+|\$", text)
             assert not re.search(r"(?i)error|retries|url|vs|tape |PDH", text)
 
@@ -435,9 +468,11 @@ def test_a_crash_of_the_job_is_not_swallowed(tmp_path):
         raise RuntimeError("the reader broke")
     with pytest.raises(RuntimeError):
         go(tmp_path, Get(), read=broken)
-    with pytest.raises(FileNotFoundError):
-        pc.run("pre-open", NOW_PRE, get=Get(), sleep=lambda s: None, read={"radar": radar(), "options": options()}.get,
-               alerts=FakeAlerts(), out=tmp_path / "out", earnings_path=tmp_path / "missing.csv")
+    # a missing calendar file is a failed check with a page, not a crash (calendar.earnings below)
+    code = pc.run("pre-open", NOW_PRE, get=Get(), sleep=lambda s: None,
+                  read={"radar": radar(), "options": options()}.get, alerts=FakeAlerts(), out=tmp_path / "out",
+                  earnings_path=tmp_path / "missing.csv", macro_path=tmp_path / "missing-macro.csv")
+    assert code == 0
 
 
 def test_a_crash_exits_the_process_non_zero(tmp_path):
@@ -695,11 +730,9 @@ def test_the_worst_run_stays_inside_the_budget_for_each_slot(tmp_path):
                         return Resp(200, {"bars": {s: DAILY[s][:-1] for s in DAILY}})
                     return market(url, params) if "contracts" not in url or params["underlying_symbols"] in EXP \
                         else Resp(200, {"option_contracts": []})
-            earnings = tmp_path / "earnings.csv"
-            earnings.write_text("symbol,date,when\n")
             alerts = FakeAlerts()
             pc.run(slot, now, get=Slow(), sleep=clock.sleep, read=read, alerts=alerts, out=tmp_path / "out",
-                   earnings_path=earnings, clock=clock)
+                   clock=clock, **calendars(tmp_path))
             assert clock.t <= pc.RUN_BUDGET_S, (slot, fail, clock.t)
             import json
             report = json.loads((tmp_path / "out" / f"{pc.target_session(slot, now)}-{slot}.json").read_text())
@@ -712,3 +745,237 @@ def test_the_worst_run_stays_inside_the_budget_for_each_slot(tmp_path):
                 assert any(v == "budget" for v in report["unlisted"].values())
                 assert all(by[f"options.listing.{s}"]["severity"] == "warn"
                            for s, v in report["unlisted"].items() if v == "budget")
+
+
+# ---------------------------------------------------------------- the hand-kept event calendars
+DAY = dt.date(2026, 11, 11)                                        # a Wednesday session
+NAMES = ["AVGO", "AMD", "TSLA"]
+
+
+def ahead(days: int) -> str:
+    return (DAY + dt.timedelta(days=days)).isoformat()
+
+
+def judge(tmp_path, macro: str | None = None, earnings: str | None = None, names=NAMES,
+          day: str = DAY.isoformat()) -> dict[str, pc.Check]:
+    paths = calendars(tmp_path, macro=macro, earnings=earnings if earnings is not None else earnings_csv(
+        {n: ahead(-19) for n in NAMES}, NAMES))
+    m, e = pc.read_calendars(**paths)
+    return {c.id: c for c in pc.assess_calendars(day, m, e, names)}
+
+
+def failing(got: dict[str, pc.Check]) -> list[str]:
+    return sorted(i for i, c in got.items() if not c.ok and c.severity == "fail")
+
+
+def test_the_calendar_thresholds_are_named_and_ordered():
+    assert (pc.MACRO_WARN_DAYS, pc.MACRO_FAIL_DAYS) == (45, 35)
+    assert (pc.EARNINGS_WARN_DAYS, pc.EARNINGS_FAIL_DAYS) == (75, 85)
+    assert pc.EARNINGS_WARN_DAYS == pc.ev.EARNINGS_MAX_AGE_DAYS        # the CI warning's horizon
+    # the page comes before the paper runner refuses to arm (coverage_ok: a row 30 days ahead)
+    assert pc.MACRO_FAIL_DAYS > 30 and pc.MACRO_WARN_DAYS > pc.MACRO_FAIL_DAYS
+
+
+def test_macro_all_covered_is_ok(tmp_path):
+    got = judge(tmp_path, macro_csv({t: ahead(200) for t in pc.ev.RECURRING_TYPES}))
+    macro = {i: c for i, c in got.items() if i.startswith("calendar.macro")}
+    assert set(macro) == {f"calendar.macro.{t}" for t in pc.ev.RECURRING_TYPES}
+    assert all(c.ok and c.severity == "info" for c in macro.values())
+    assert "last row " + ahead(200) in got["calendar.macro.cpi"].detail
+
+
+def test_macro_warns_inside_45_days_and_fails_inside_35_with_exact_boundaries(tmp_path):
+    def cpi(days: int) -> pc.Check:
+        return judge(tmp_path, macro_csv({"cpi": ahead(days)}))["calendar.macro.cpi"]
+    assert cpi(45).ok                                               # exactly 45 days ahead: covered
+    assert not cpi(44).ok and cpi(44).severity == "warn" and "44 days after" in cpi(44).detail
+    assert cpi(35).severity == "warn"                               # exactly 35: still only a warning
+    assert not cpi(34).ok and cpi(34).severity == "fail"
+    assert cpi(-3).severity == "fail" and "-3 days after" in cpi(-3).detail      # already run out
+    got = judge(tmp_path, macro_csv({"nfp": ahead(20)}))
+    assert failing(got) == ["calendar.macro.nfp"] and got["calendar.macro.cpi"].ok
+
+
+def test_a_macro_type_with_no_rows_fails(tmp_path):
+    text = macro_csv().replace("2027-06-01,08:30,quad_witching,high,reduce,a named source,exact\n", "")
+    assert "quad_witching" not in text
+    got = judge(tmp_path, text)
+    assert failing(got) == ["calendar.macro.quad_witching"]
+    assert "no row" in got["calendar.macro.quad_witching"].detail
+
+
+def test_the_one_off_macro_type_is_ignored(tmp_path):
+    text = macro_csv() + f"{ahead(1)},10:00,fomc_emergency,high,skip,federalreserve.gov,exact\n"
+    got = judge(tmp_path, text)
+    assert failing(got) == [] and not any("fomc_emergency" in i for i in got)
+    # and a far one-off row does not cover a recurring type that has run out
+    text = macro_csv({"cpi": ahead(10)}) + "2030-01-01,10:00,fomc_emergency,high,skip,federalreserve.gov,exact\n"
+    assert failing(judge(tmp_path, text)) == ["calendar.macro.cpi"]
+
+
+def test_earnings_fresh_is_ok_and_a_future_row_is_fresh(tmp_path):
+    got = judge(tmp_path, earnings=earnings_csv({"AVGO": ahead(28), "AMD": ahead(-8), "TSLA": ahead(-21)}, NAMES))
+    assert all(got[f"calendar.earnings.{n}"].ok for n in NAMES)
+    assert "28 days after" in got["calendar.earnings.AVGO"].detail and "8 days before" in got["calendar.earnings.AMD"].detail
+
+
+def test_earnings_warns_past_75_days_and_fails_past_85_with_exact_boundaries(tmp_path):
+    def amd(age: int) -> pc.Check:
+        return judge(tmp_path, earnings=earnings_csv({"AMD": ahead(-age)}, NAMES))["calendar.earnings.AMD"]
+    assert amd(75).ok
+    assert not amd(76).ok and amd(76).severity == "warn" and "76 days before" in amd(76).detail
+    assert amd(85).severity == "warn"
+    assert not amd(86).ok and amd(86).severity == "fail"
+    assert amd(200).severity == "fail"
+    # the latest of a name's rows counts
+    text = earnings_csv({n: ahead(-19) for n in NAMES}, NAMES) + f"AMD,{ahead(-200)},amc,old release,confirmed\n"
+    assert judge(tmp_path, earnings=text)["calendar.earnings.AMD"].ok
+
+
+def test_a_desk_name_with_no_earnings_row_fails(tmp_path):
+    got = judge(tmp_path, earnings=earnings_csv({}, ["AVGO", "TSLA"]))
+    assert failing(got) == ["calendar.earnings.AMD"] and "no row" in got["calendar.earnings.AMD"].detail
+
+
+def test_an_index_name_is_never_required_an_earnings_row(tmp_path):
+    assert pc.ev.single_names(["SPY", "QQQ", "AVGO"], ["SPY", "QQQ"]) == ["AVGO"]
+    desk = pc.desk_names()
+    assert desk is not None and "SPY" not in desk and "QQQ" not in desk and "AVGO" in desk
+    got = judge(tmp_path, earnings=earnings_csv({}, desk), names=desk)       # no row for SPY or QQQ
+    assert failing(got) == [] and "calendar.earnings.SPY" not in got and "calendar.earnings.QQQ" not in got
+
+
+def test_the_desk_names_that_cannot_be_read_fail_rather_than_pass(tmp_path):
+    got = judge(tmp_path, names=None)
+    assert failing(got) == ["calendar.earnings"] and "cannot be read" in got["calendar.earnings"].detail
+
+
+def test_an_unreadable_or_odd_calendar_file_fails_with_its_reason(tmp_path):
+    m, e = pc.read_calendars(tmp_path / "nope.csv", tmp_path / "nope2.csv")
+    got = {c.id: c for c in pc.assess_calendars(DAY.isoformat(), m, e, NAMES)}
+    assert failing(got) == ["calendar.earnings", "calendar.macro"]
+    assert "config/events/macro_events.csv cannot be read (FileNotFoundError)" in got["calendar.macro"].detail
+    (tmp_path / "dir.csv").mkdir()
+    (tmp_path / "latin.csv").write_bytes(b"date,type\n\xff\xfe\n")
+    (tmp_path / "header.csv").write_text("day,kind\n2027-01-01,cpi\n")
+    for path, why in ((tmp_path / "dir.csv", "cannot be read"), (tmp_path / "latin.csv", "UnicodeDecodeError"),
+                      (tmp_path / "header.csv", "has no column date")):
+        cal = pc.read_calendar(path, "x.csv", pc.ev.MACRO_COLUMNS, comments=False)
+        assert cal.error and why in cal.error and cal.rows == (), path
+        got = {c.id: c for c in pc.assess_calendars(DAY.isoformat(), cal, cal, NAMES)}
+        assert failing(got) == ["calendar.earnings", "calendar.macro"]
+
+
+def test_a_malformed_row_fails_and_is_named_by_line(tmp_path):
+    text = macro_csv() + "2027-13-01,08:30,cpi,high,reduce,bls.gov,exact\n# a comment is not a macro row\n"
+    got = judge(tmp_path, text)
+    rows = got["calendar.macro.rows"]
+    assert not rows.ok and rows.severity == "fail"
+    assert "2 malformed rows" in rows.detail and "line 7: unreadable date" in rows.detail and "line 8" in rows.detail
+    assert got["calendar.macro.cpi"].ok                            # the good rows are still judged
+    text = earnings_csv({n: ahead(-19) for n in ("AMD", "TSLA")}, ["AMD", "TSLA"]) + \
+        f"AVGO,{ahead(28)},pm,company press release,confirmed\n"
+    got = judge(tmp_path, earnings=text)
+    assert failing(got) == ["calendar.earnings.AVGO", "calendar.earnings.rows"]
+    assert "line 5: unknown when" in got["calendar.earnings.rows"].detail    # two comment/header lines, then rows
+    assert "no row" in got["calendar.earnings.AVGO"].detail        # its only row does not count
+
+
+def test_the_repositorys_calendars_today_are_ok():
+    m, e = pc.read_calendars()
+    got = pc.assess_calendars("2026-11-11", m, e, pc.desk_names())
+    assert got and [c for c in got if not c.ok] == []
+    assert {c.id for c in got} >= {f"calendar.macro.{t}" for t in pc.ev.RECURRING_TYPES}
+
+
+def test_the_calendars_run_and_page_when_market_data_is_unreachable(tmp_path):
+    stale = macro_csv({"cpi": "2026-11-01"})                       # before the session: run out
+    code, report, alerts, _ = go(tmp_path, Get(failures=99, error=pc.requests.ConnectionError("down")), macro=stale,
+                                 earnings=earnings_csv({"AVGO": "2026-01-02"}))
+    by = {c["id"]: c for c in report["checks"]}
+    assert code == 0 and not by["data.reachable"]["ok"]
+    assert by["calendar.macro.cpi"]["severity"] == "fail" and by["calendar.earnings.AVGO"]["severity"] == "fail"
+    assert "cpi: last row 2026-11-01" in by["calendar.macro.cpi"]["detail"]          # the detail is in the report
+    keys = [k for k, *_ in alerts.sent]
+    assert keys == ["pipeline-check:pre-open", pc.CALENDAR_ALERT_KEY]
+    (_, _, slot_msg, _), (_, cal_title, cal_msg, prio) = alerts.sent
+    assert "calendar" not in slot_msg and "data.reachable: 1 failed" in slot_msg
+    assert cal_msg == "Session 2026-10-20, pre-open. calendar.macro: 1 failed; calendar.earnings: 1 failed. " \
+                      "The run's report has the detail."
+    assert prio == pc.CALENDAR_ALERT_PRIORITY and alerts.days == [None, "2026-10-20"]
+    assert "AVGO" not in cal_title + cal_msg and "cpi" not in cal_title + cal_msg
+
+
+def test_a_stale_calendar_does_not_trip_data_reachable_or_the_slots_page(tmp_path):
+    _, report, alerts, _ = go(tmp_path, Get(), macro=macro_csv({"nfp": "2026-11-20"}))
+    by = {c["id"]: c for c in report["checks"]}
+    assert by["data.reachable"]["ok"] and report["fails"] == 1 and by["calendar.macro.nfp"]["severity"] == "fail"
+    assert [k for k, *_ in alerts.sent] == [pc.CALENDAR_ALERT_KEY]
+
+
+def test_the_calendars_need_no_time_from_the_budget(tmp_path):
+    ticks = iter([0.0])
+
+    def spent() -> float:                                          # the budget is gone after its first reading
+        return next(ticks, 1e9)
+    alerts = FakeAlerts()
+    pc.run("pre-open", NOW_PRE, get=Get(), sleep=lambda s: None, read={"radar": radar(), "options": options()}.get,
+           alerts=alerts, out=tmp_path / "out", clock=spent,
+           **calendars(tmp_path, macro=macro_csv({"cpi": "2026-11-01"})))
+    import json
+    report = json.loads((tmp_path / "out" / f"{TARGET}-pre-open.json").read_text())
+    by = {c["id"]: c for c in report["checks"]}
+    assert by["calendar.macro.cpi"]["severity"] == "fail" and pc.CALENDAR_ALERT_KEY in [k for k, *_ in alerts.sent]
+
+
+def test_an_unchanged_stale_calendar_pages_once_a_new_york_day_across_both_slots(tmp_path, monkeypatch):
+    from wt.ops import alerts as alerts_mod
+    from wt.ops.alerts import Alerts
+    monkeypatch.setattr(alerts_mod, "_now", lambda: NOW_PRE)      # its state is pruned against its own clock
+
+    class Recording(Alerts):                                       # the real once-per-day state; nothing is sent
+        def __init__(self, root):
+            super().__init__(root=root, topic="")
+            self.got: list[tuple[str, str]] = []
+
+        def notify(self, title, message, priority=3, tags=()):
+            if "calendar." in message:                         # the slot's own page (the fixtures are a
+                self.got.append((title, message))              # morning's editions) is another key
+            return True
+    alerts = Recording(tmp_path / "alerts")
+    stale = {"macro": macro_csv({"cpi": "2026-11-01"})}
+    evening = dt.datetime(2026, 10, 20, 22, 30, tzinfo=dt.UTC)        # 18:30 New York, the same day
+    next_morning = dt.datetime(2026, 10, 21, 12, 55, tzinfo=dt.UTC)
+    for slot, now in (("pre-open", NOW_PRE), ("after-close", evening)):
+        (tmp_path / slot).mkdir()
+        go(tmp_path / slot, Get(), slot=slot, now=now, alerts=alerts, **stale)
+    assert len(alerts.got) == 1 and "calendar.macro: 1 failed" in alerts.got[0][1]
+    (tmp_path / "next").mkdir()
+    go(tmp_path / "next", Get(), now=next_morning, alerts=alerts, **stale)
+    assert len(alerts.got) == 2                                    # a new New York day: one more
+    state = (tmp_path / "alerts" / "state.json").read_text()
+    assert f"{pc.CALENDAR_ALERT_KEY}:2026-10-20" in state and f"{pc.CALENDAR_ALERT_KEY}:2026-10-21" in state
+
+
+def test_an_unreadable_calendar_pages_counts_only_and_keeps_the_detail_in_the_report(tmp_path):
+    bad = earnings_csv() + "AVGO,2027-02-30,amc,company press release,confirmed\n"
+    _, report, alerts, _ = go(tmp_path, Get(), macro="date,type\n", earnings=bad)
+    by = {c["id"]: c for c in report["checks"]}
+    assert "has no column time_et" in by["calendar.macro"]["detail"]
+    assert "unreadable date" in by["calendar.earnings.rows"]["detail"]
+    [(key, title, message, _)] = alerts.sent
+    assert key == pc.CALENDAR_ALERT_KEY
+    assert message == "Session 2026-10-20, pre-open. calendar.macro: 1 failed; calendar.earnings: 1 failed. " \
+                      "The run's report has the detail."
+    assert not any(n in title + message for n in _desk_names())
+
+
+def test_focus_earnings_reads_only_the_well_formed_rows(tmp_path):
+    # A malformed row fails calendar.earnings; the same row cannot make focus.earnings say the clone skips a name.
+    bad = earnings_csv() + f"AMZN,{PREV},amc,,confirmed\n"          # no source: malformed
+    _, report, _, _ = go(tmp_path, Get(), earnings=bad)
+    ids = {c["id"] for c in report["checks"]}
+    assert "calendar.earnings.rows" in ids and "focus.earnings.AMZN" not in ids
+    good = earnings_csv() + f"AMZN,{PREV},amc,company press release,confirmed\n"
+    _, report, _, _ = go(tmp_path, Get(), earnings=good)
+    assert "focus.earnings.AMZN" in {c["id"] for c in report["checks"]}

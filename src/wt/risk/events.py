@@ -56,6 +56,92 @@ def coverage_by_type(today: dt.date, days_ahead: int, types: Iterable[str] = REC
 
 EARNINGS_MAX_AGE_DAYS = 75
 
+# The columns of each hand-kept file, as csv.DictReader reads them, and what a well-formed row holds. Shared by the
+# CI checks (tests/unit/test_event_coverage.py) and the nightly host check (wt.options.pipeline_check), so the two
+# never disagree on what counts as a row. Neither `events()` nor `coverage_ok` uses them: the paper runner reads
+# the macro file as it always has.
+MACRO_COLUMNS = ("date", "time_et", "type", "severity", "policy", "source", "quality")
+EARNINGS_COLUMNS = ("symbol", "date", "when", "source", "quality")
+
+
+def _blank(v: Any) -> bool:
+    return not isinstance(v, str) or not v.strip()
+
+
+def macro_row_problem(r: Mapping[str, Any]) -> str | None:
+    """Why a macro_events.csv row (a csv.DictReader row) is malformed, in fixed words, or None when it is not."""
+    if None in r or any(r.get(c) is None for c in MACRO_COLUMNS):
+        return "wrong number of fields"
+    try:
+        dt.date.fromisoformat(str(r["date"]))
+    except ValueError:
+        return "unreadable date"
+    try:
+        h, m = (int(x) for x in str(r["time_et"]).split(":"))
+    except ValueError:
+        return "unreadable time_et"
+    if not (0 <= h < 24 and 0 <= m < 60):
+        return "unreadable time_et"
+    if _blank(r["type"]):
+        return "no type"
+    if r["severity"] not in ("high", "medium"):
+        return "unknown severity"
+    if r["policy"] not in ("reduce", "blackout_window", "skip"):
+        return "unknown policy"
+    if r["quality"] not in ("exact", "approx", "derived"):
+        return "unknown quality"
+    if _blank(r["source"]):
+        return "no source"
+    return None
+
+
+def earnings_row_problem(r: Mapping[str, Any]) -> str | None:
+    """Why an earnings.csv row (a csv.DictReader row, comment lines skipped) is malformed, in fixed words, or None."""
+    if None in r or any(r.get(c) is None for c in EARNINGS_COLUMNS):
+        return "wrong number of fields"
+    try:
+        dt.date.fromisoformat(str(r["date"]).strip())
+    except ValueError:
+        return "unreadable date"
+    if _blank(r["symbol"]):
+        return "no symbol"
+    if r["when"] not in ("bmo", "amc", "during"):
+        return "unknown when"
+    if r["quality"] not in ("confirmed", "expected"):
+        return "unknown quality"
+    if _blank(r["source"]):
+        return "no source"
+    return None
+
+
+def single_names(names: Iterable[Any], index_names: Iterable[Any]) -> list[str]:
+    """The desk's single-stock names, in order: `names` less the index funds (options_clone.yaml
+    contract.index_names, SPY and QQQ), which report no earnings and are never required a row."""
+    index = {str(n).strip().upper() for n in index_names}
+    return [str(n) for n in names if str(n).strip().upper() not in index]
+
+
+def desk_single_names() -> list[str]:
+    """The Options desk's single-stock names: config/options_desk.yaml `names` less the clone's index names.
+    Raises (OSError, KeyError, TypeError, yaml.YAMLError) when either file cannot be read as expected."""
+    import yaml
+    desk = yaml.safe_load((CONFIG_DIR / "options_desk.yaml").read_text())["names"]
+    index = yaml.safe_load((CONFIG_DIR / "options_clone.yaml").read_text())["contract"]["index_names"]
+    return single_names(desk, index)
+
+
+def latest_earnings(rows: Iterable[Mapping[str, Any]]) -> dict[str, dt.date]:
+    """Each symbol's latest earnings date (upper-cased, trimmed), passing over a row whose date cannot be read."""
+    latest: dict[str, dt.date] = {}
+    for r in rows:
+        try:
+            d = dt.date.fromisoformat(str(r.get("date") or "").strip())
+        except ValueError:
+            continue
+        sym = str(r.get("symbol") or "").strip().upper()
+        latest[sym] = max(d, latest.get(sym, d))
+    return latest
+
 
 def earnings_gaps(rows: Iterable[Mapping[str, Any]], names: Iterable[str], today: dt.date,
                   max_age_days: int = EARNINGS_MAX_AGE_DAYS) -> dict[str, dt.date | None]:
@@ -67,14 +153,7 @@ def earnings_gaps(rows: Iterable[Mapping[str, Any]], names: Iterable[str], today
     gap means its next date was never added."""
     if isinstance(names, str):
         raise TypeError("names must be a collection of symbols, not one string")
-    latest: dict[str, dt.date] = {}
-    for r in rows:
-        try:
-            d = dt.date.fromisoformat(str(r.get("date") or "").strip())
-        except ValueError:
-            continue
-        sym = str(r.get("symbol") or "").strip().upper()
-        latest[sym] = max(d, latest.get(sym, d))
+    latest = latest_earnings(rows)
     oldest = today - dt.timedelta(days=max_age_days)
     return {n: latest.get(n) for n in names if n not in latest or latest[n] < oldest}
 

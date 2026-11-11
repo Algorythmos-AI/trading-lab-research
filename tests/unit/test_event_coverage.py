@@ -121,19 +121,19 @@ def _macro_rows() -> list[dict[str, str]]:
 
 
 def test_every_macro_row_is_well_formed():
-    bad = []
-    for r in _macro_rows():
-        try:
-            dt.date.fromisoformat(r["date"])
-            h, m = (int(x) for x in r["time_et"].split(":"))
-            ok = (0 <= h < 24 and 0 <= m < 60 and r["severity"] in ("high", "medium")
-                  and r["policy"] in ("reduce", "blackout_window", "skip") and r["quality"] in ("exact", "approx", "derived")
-                  and bool((r["source"] or "").strip()) and None not in r)
-        except (ValueError, AttributeError):
-            ok = False
-        if not ok:
-            bad.append(r)
-    assert not bad
+    assert [(r, events.macro_row_problem(r)) for r in _macro_rows() if events.macro_row_problem(r)] == []
+
+
+def test_a_malformed_macro_row_is_named_for_what_is_wrong():
+    good = {"date": "2027-01-13", "time_et": "08:30", "type": "cpi", "severity": "high", "policy": "reduce",
+            "source": "bls.gov/schedule/2027", "quality": "exact"}
+    assert events.macro_row_problem(good) is None
+    for bad, why in (({"date": "13/01/2027"}, "unreadable date"), ({"time_et": "25:00"}, "unreadable time_et"),
+                     ({"time_et": "soon"}, "unreadable time_et"), ({"severity": "huge"}, "unknown severity"),
+                     ({"policy": "panic"}, "unknown policy"), ({"quality": "guess"}, "unknown quality"),
+                     ({"source": " "}, "no source"), ({"type": ""}, "no type"), ({"source": None}, "wrong number of fields"),
+                     ({None: ["extra"]}, "wrong number of fields")):
+        assert events.macro_row_problem({**good, **bad}) == why, bad
 
 
 def test_no_expiry_row_falls_on_a_day_the_market_is_shut():
@@ -163,18 +163,11 @@ def _earnings_rows() -> list[dict[str, str]]:
 
 
 def _single_names() -> list[str]:
-    names = yaml.safe_load((CONFIG_DIR / "options_desk.yaml").read_text())["names"]
-    index = yaml.safe_load((CONFIG_DIR / "options_clone.yaml").read_text())["contract"]["index_names"]
-    return [str(n) for n in names if n not in index]
+    return events.desk_single_names()
 
 
 def _malformed(r: dict[str, str]) -> bool:
-    try:
-        dt.date.fromisoformat((r["date"] or "").strip())
-    except (ValueError, AttributeError):
-        return True
-    return (None in r or r["when"] not in ("bmo", "amc", "during") or r["quality"] not in ("confirmed", "expected")
-            or not (r["source"] or "").strip() or not (r["symbol"] or "").strip())
+    return events.earnings_row_problem(r) is not None
 
 
 def _missing(rows: list[dict[str, str]], names: list[str]) -> list[str]:
@@ -185,6 +178,10 @@ def _missing(rows: list[dict[str, str]], names: list[str]) -> list[str]:
 def test_the_single_names_are_read_from_the_desk_and_leave_out_the_index_funds():
     names = _single_names()
     assert "AVGO" in names and "AMD" in names and "SPY" not in names and "QQQ" not in names
+    desk = yaml.safe_load((CONFIG_DIR / "options_desk.yaml").read_text())["names"]
+    index = yaml.safe_load((CONFIG_DIR / "options_clone.yaml").read_text())["contract"]["index_names"]
+    assert names == [n for n in desk if n not in index]
+    assert events.single_names(["SPY", "AVGO", "qqq", "AMD"], ["SPY", "QQQ"]) == ["AVGO", "AMD"]
 
 
 def test_every_earnings_row_is_well_formed():
