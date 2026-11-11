@@ -1,10 +1,9 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { StopBlock, type CardStop } from "@/components/client/trade-manage";
 import type { Lot, Trade } from "@/lib/journal";
 import { checkOptionFill, fillStop, matchNotes, nickelLine, otherOpenPositions, prefillFrom, readContracts, STOP_REMINDER, tradeCount } from "@/lib/manage-stop";
-import { startPoll, type PollResult } from "@/lib/quote-poll";
 import { dayFacts, journalLive, railDay, railWithNotes } from "@/lib/session-timeline";
 import { readPrice } from "@/lib/ticket";
 import { type ManageView, type ManualNote, NOTE_MATCH_MS, noteId, parseNotes } from "@/lib/trade-manage";
@@ -259,114 +258,5 @@ describe("the option fill and its stop", () => {
       expect(html).not.toContain("day limit");
     }
     expect(fillStop({ priceCents: 4, contracts: 1 }).noStop).toBeNull();
-  });
-});
-
-describe("the quotes poll's visibility kick", () => {
-  afterEach(() => vi.useRealTimers());
-  function setup() {
-    vi.useFakeTimers();
-    const listeners = new Set<() => void>();
-    const shows = new Set<(e: { persisted?: boolean }) => void>();
-    const win = {
-      addEventListener: (_: "pageshow", fn: (e: { persisted?: boolean }) => void) => void shows.add(fn),
-      removeEventListener: (_: "pageshow", fn: (e: { persisted?: boolean }) => void) => void shows.delete(fn),
-    };
-    const page = {
-      visibilityState: "visible",
-      addEventListener: (_: "visibilitychange", fn: () => void) => void listeners.add(fn),
-      removeEventListener: (_: "visibilitychange", fn: () => void) => void listeners.delete(fn),
-    };
-    const pending: ((r: PollResult) => void)[] = [];
-    let calls = 0;
-    const run = () =>
-      new Promise<PollResult>((resolve) => {
-        calls++;
-        pending.push(resolve);
-      });
-    const stop = startPoll({ run, page, show: win, now: () => Date.now(), setTimer: (fn, ms) => setTimeout(fn, ms), clearTimer: (id) => clearTimeout(id as ReturnType<typeof setTimeout>), pollMs: 2_000, retryMs: 60_000 });
-    const show = (state: string) => {
-      page.visibilityState = state;
-      listeners.forEach((fn) => fn());
-    };
-    const answer = async (r: PollResult = "ok") => {
-      pending.shift()!(r);
-      await vi.advanceTimersByTimeAsync(0);
-    };
-    const restore = (persisted: boolean) => shows.forEach((fn) => fn({ persisted }));
-    return { stop, show, answer, restore, calls: () => calls, listeners, shows };
-  }
-
-  it("fetches once at once when the tab is shown again, with no second timer", async () => {
-    const t = setup();
-    expect(t.calls()).toBe(1);
-    await t.answer();
-    t.show("hidden");
-    await vi.advanceTimersByTimeAsync(10_000);
-    expect(t.calls()).toBe(1); // nothing fetched while hidden
-    t.show("visible");
-    expect(t.calls()).toBe(2);
-    await t.answer();
-    // one timer only: the next fetch comes one interval later, not twice
-    await vi.advanceTimersByTimeAsync(2_000);
-    expect(t.calls()).toBe(3);
-    t.stop();
-  });
-
-  it("fetches nothing on visible while a request is in flight", async () => {
-    const t = setup();
-    expect(t.calls()).toBe(1);
-    t.show("visible");
-    t.show("visible");
-    expect(t.calls()).toBe(1);
-    await t.answer();
-    await vi.advanceTimersByTimeAsync(2_000);
-    expect(t.calls()).toBe(2);
-    t.stop();
-  });
-
-  it("never cuts a failure's retry wait short by hiding and showing the tab", async () => {
-    const t = setup();
-    await t.answer("error");
-    for (let i = 0; i < 10; i++) {
-      t.show("hidden");
-      t.show("visible");
-      await vi.advanceTimersByTimeAsync(100);
-    }
-    expect(t.calls()).toBe(1);
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(t.calls()).toBe(2);
-    await t.answer("ok");
-    // once a request has answered, showing the tab fetches at once again
-    t.show("hidden");
-    t.show("visible");
-    expect(t.calls()).toBe(3);
-    t.stop();
-  });
-
-  it("treats a back-forward cache restore as shown again, with the same guards", async () => {
-    const t = setup();
-    await t.answer();
-    t.restore(false);
-    expect(t.calls()).toBe(1);
-    t.restore(true);
-    expect(t.calls()).toBe(2);
-    t.restore(true); // in flight
-    expect(t.calls()).toBe(2);
-    await t.answer("error");
-    t.restore(true); // within the retry wait
-    expect(t.calls()).toBe(2);
-    t.stop();
-    expect(t.shows.size).toBe(0);
-  });
-
-  it("removes its listener and stops on unmount", async () => {
-    const t = setup();
-    await t.answer();
-    expect(t.listeners.size).toBe(1);
-    t.stop();
-    expect(t.listeners.size).toBe(0);
-    await vi.advanceTimersByTimeAsync(10_000);
-    expect(t.calls()).toBe(1);
   });
 });

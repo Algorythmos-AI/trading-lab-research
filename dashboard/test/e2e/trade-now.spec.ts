@@ -419,3 +419,74 @@ test("the I'm in form keeps the side it opened on after the row moves on", async
   await card.getByRole("button", { name: "Clear" }).click();
   await expect(card).toHaveCount(0);
 });
+
+// `quotes-flaky`: the first quote answers, the next three fail, then every one answers (the route counts them in the
+// `fxflaky` cookie). The page tries again at about 2, 4 and 8 s, so it is back well inside the 20 s after which the
+// board would pause.
+async function flaky(context: BrowserContext, baseURL: string | undefined) {
+  await context.addCookies([
+    { name: "fx", value: "focus.quotes-script.quotes-flaky", url: baseURL! },
+    { name: "fxstep", value: "3", url: baseURL! },
+  ]);
+}
+
+/** Every paused mark the page draws, watched from its first paint: the board, its rows, the glance chips and the hero. */
+async function watchForPaused(page: Page) {
+  await page.addInitScript(() => {
+    const w = window as unknown as { __paused: string[] };
+    w.__paused = [];
+    const sel = '[data-board-status="paused"],[data-board-state="paused"],[data-chip-state="paused"],[data-hero-state="paused"],[data-board-paused]';
+    window.setInterval(() => {
+      for (const e of document.querySelectorAll(sel)) w.__paused.push(e.outerHTML.slice(0, 120));
+    }, 100);
+  });
+  return () => page.evaluate(() => (window as unknown as { __paused: string[] }).__paused);
+}
+
+const retryLine = (page: Page) => board(page).locator("[data-feed-retry]");
+
+test("a short outage of the live prices is retried within seconds: the board never pauses and ends up live", async ({ page, context, baseURL }) => {
+  await flaky(context, baseURL);
+  const paused = await watchForPaused(page);
+  await page.goto("/options");
+  await expect(board(page)).toHaveAttribute("data-board-status", "live");
+  // the notice says it is trying again, and in how long, with a button to try now
+  await expect(retryLine(page)).toBeVisible({ timeout: 10_000 });
+  await expect(retryLine(page)).toContainText(/Live prices did not answer: trying again (now|in \d+s)/);
+  await expect(retryLine(page).getByRole("button", { name: "Retry now" })).toBeVisible();
+  // three failures wait about 2 + 4 + 8 s: the notice goes, and the board was live throughout
+  await expect(retryLine(page)).toHaveCount(0, { timeout: 20_000 });
+  await expect(board(page)).toHaveAttribute("data-board-status", "live");
+  await expect(rows(page).first()).toHaveAttribute("data-board-state", "enter_zone");
+  expect(await paused()).toEqual([]);
+  // and it keeps answering every 2 s from then on
+  await page.waitForTimeout(5_000);
+  await expect(retryLine(page)).toHaveCount(0);
+  expect(await paused()).toEqual([]);
+});
+
+test("Retry now tries at once: pressed through the outage, the prices are back in a few seconds", async ({ page, context, baseURL }) => {
+  await flaky(context, baseURL);
+  await page.goto("/options");
+  await expect(retryLine(page)).toBeVisible({ timeout: 10_000 });
+  const started = Date.now();
+  // each press is one attempt (the button waits while one is out); three failures, then an answer
+  while (await retryLine(page).count()) {
+    const button = retryLine(page).getByRole("button", { name: "Retry now" });
+    await button.click({ timeout: 2_000 }).catch(() => undefined); // the line may go between the check and the press
+    await page.waitForTimeout(150);
+    expect(Date.now() - started, "the presses alone should bring the prices back").toBeLessThan(8_000);
+  }
+  await expect(board(page)).toHaveAttribute("data-board-status", "live");
+});
+
+test("the retry notice fits a 375 px screen with no sideways scroll", async ({ page, context, baseURL }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await flaky(context, baseURL);
+  await page.goto("/options");
+  await expect(retryLine(page)).toBeVisible({ timeout: 10_000 });
+  const box = (await retryLine(page).boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(375);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+});

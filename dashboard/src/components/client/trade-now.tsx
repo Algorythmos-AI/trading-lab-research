@@ -51,7 +51,7 @@ import { type NameState, type NameStateName, serverNow } from "@/lib/trade-state
 import { cn } from "@/lib/utils";
 import { useDeskShadow } from "./desk-shadow";
 import { useDone } from "./done-today";
-import { useLive } from "./live-layer";
+import { FeedRetry, useLive } from "./live-layer";
 import { useBars } from "./use-bars";
 import { useTradeManage } from "./trade-manage";
 import type { Lot, Trade } from "@/lib/journal";
@@ -464,6 +464,7 @@ export function TradeNowBoard({
   barsDelayed = false,
   onOpen,
   switches,
+  retry,
   rowExtra,
   after,
   doneFor,
@@ -478,6 +479,8 @@ export function TradeNowBoard({
   barsDelayed?: boolean;
   onOpen: (symbol: string) => void;
   switches?: React.ReactNode;
+  /** Drawn under the header while the live prices are being tried again after failing (live-layer's FeedRetry). */
+  retry?: React.ReactNode;
   /** Drawn inside a row (an expanded one under its numbers): the manage card's "I'm in" and its form (trade-manage.tsx). */
   rowExtra?: (row: BoardRow, paused: boolean) => React.ReactNode;
   /** Drawn under the rows, and kept while the live prices are off: the manage cards (trade-manage.tsx). */
@@ -524,6 +527,7 @@ export function TradeNowBoard({
         </div>
         {showRows ? switches : null}
       </div>
+      {retry}
       {mode.kind !== "live" ? (
         <p data-board-line className={cn("text-[0.8125rem]", mode.kind === "off" || mode.kind === "old" ? "text-muted-foreground" : "font-medium")}>
           {mode.line}
@@ -992,6 +996,7 @@ export function TradeNow() {
       paused={b.paused}
       barsDelayed={b.barsDelayed}
       onOpen={openFocusCard}
+      retry={<FeedRetry />}
       rowExtra={b.manage.rowExtra}
       after={b.manage.cards}
       doneFor={b.doneFor}

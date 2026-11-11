@@ -1,5 +1,6 @@
 import "server-only";
 import { logEvent } from "./log";
+import { UpstreamError } from "./upstream";
 import { closeMinute, nyClock, nyInstant, OPEN_MIN } from "./options";
 import { type Bar2, CLOSE_GRACE_MS } from "./trade-state";
 
@@ -121,7 +122,7 @@ export async function fetchBars(
       });
       if (!res.ok) {
         logEvent("bars.fetch", { outcome: "http-error", status: res.status });
-        throw new Error(`alpaca ${res.status}`);
+        throw new UpstreamError(res.status);
       }
       const body = (await res.json()) as { bars?: Record<string, RawBar[]> | null; next_page_token?: unknown };
       for (const [s, list] of Object.entries(body?.bars ?? {})) {

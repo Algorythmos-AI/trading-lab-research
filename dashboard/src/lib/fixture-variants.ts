@@ -16,6 +16,8 @@ export const VARIANT_COOKIE = "fx";
  * - `poison`: a stored edition that no longer matches its schema, as after corruption. One pane must fail alone.
  * - `quotes-off`: the live feed has no keys. `quotes-error`: Alpaca is failing.
  * - `quotes-tick`: the live price flips by one cent every three seconds, without changing any name's state.
+ * - `quotes-flaky`: a short outage of the live feed. The first request answers, the next FLAKY_FAILS fail (502), and
+ *   every one after answers again; the count is kept per browser in the `fxflaky` cookie the route sets.
  * - `quotes-script`: the quotes and the session's bars walk a fixed morning (fixture-script.ts), one step every
  *   few seconds of the server's clock or the step in the `fxstep` cookie, so the "Trade now" board shows every state.
  *   With `focus`, AAPL joins the focus names.
@@ -41,6 +43,7 @@ export const VARIANT_FLAGS = [
   "quotes-error",
   "quotes-tick",
   "quotes-script",
+  "quotes-flaky",
   "chain-off",
   "chain-error",
   "chain-thin",
@@ -69,6 +72,27 @@ export type VariantFlag = (typeof VARIANT_FLAGS)[number];
 export const FROZEN_NOW = "2026-10-12T15:01:00Z";
 
 const KNOWN = new Set<string>(VARIANT_FLAGS);
+
+/** `quotes-flaky`: the cookie holding how many quote requests this browser has made, and how many fail in a row. */
+export const FLAKY_COOKIE = "fxflaky";
+export const FLAKY_FAILS = 3;
+
+/** The count in a request's `Cookie` header: 0 when missing or not a whole number. */
+export function flakyCountFromCookieHeader(header: string | null | undefined): number {
+  for (const part of (header ?? "").split(";")) {
+    const eq = part.indexOf("=");
+    if (eq > 0 && part.slice(0, eq).trim() === FLAKY_COOKIE) {
+      const n = Number(part.slice(eq + 1).trim());
+      return Number.isInteger(n) && n >= 0 ? n : 0;
+    }
+  }
+  return 0;
+}
+
+/** Whether the request with this count (0 for the first) fails: the 2nd to the (FLAKY_FAILS + 1)th do. */
+export function flakyFails(count: number): boolean {
+  return count >= 1 && count <= FLAKY_FAILS;
+}
 
 /** The flags in a cookie value such as `partial.quotes-tick`. Unknown words are ignored. */
 export function parseFlags(raw: string | null | undefined): Set<VariantFlag> {

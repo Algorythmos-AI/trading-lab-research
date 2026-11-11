@@ -13,6 +13,7 @@ import {
   Focus,
   Minus,
   Moon,
+  RotateCw,
   type LucideIcon,
 } from "lucide-react";
 import { createContext, useContext, useSyncExternalStore } from "react";
@@ -21,16 +22,21 @@ import { Button } from "@/components/ui/button";
 import { newYork, num } from "@/lib/format";
 import { liveRead, sessionShare, TRAIL_MS, type LiveRead, type LiveStateName, type OptionsTicker } from "@/lib/options";
 import { cn } from "@/lib/utils";
+import type { Backoff } from "@/lib/quote-poll";
 import { useNow } from "./use-now";
-import { useQuotes, type Feed } from "./use-quotes";
+import { useQuoteFeed, type Feed } from "./use-quotes";
 
 interface Live {
   feed: Feed;
   session: string;
   now: number | null;
+  /** Waiting to try again after the feed failed; null while it is healthy. */
+  backoff: Backoff | null;
+  /** One attempt now while waiting; nothing otherwise. */
+  retryNow: () => void;
 }
 
-const LiveContext = createContext<Live>({ feed: { status: "off" }, session: "", now: null });
+const LiveContext = createContext<Live>({ feed: { status: "off" }, session: "", now: null, backoff: null, retryNow: () => undefined });
 
 /**
  * One live feed for the whole Options page, so the glance strip, the level maps and the state chips all move on the
@@ -47,9 +53,9 @@ export function LiveQuotes({
   enabled: boolean;
   children: React.ReactNode;
 }) {
-  const feed = useQuotes(symbols, enabled);
+  const { feed, backoff, retryNow } = useQuoteFeed(symbols, enabled);
   const now = useNow(1_000);
-  return <LiveContext.Provider value={{ feed, session, now }}>{children}</LiveContext.Provider>;
+  return <LiveContext.Provider value={{ feed, session, now, backoff, retryNow }}>{children}</LiveContext.Provider>;
 }
 
 export function useLive(): Live {
@@ -135,27 +141,66 @@ export function LiveCardChip({ t }: { t: OptionsTicker }) {
   );
 }
 
-/** A small "is the feed alive" pill: live with the time of the last answer, off, or retrying. */
+/** Whole seconds until a retry is due, from the page's clock; null while the attempt is going out (or no clock yet). */
+export function retryInS(b: Backoff, now: number | null): number | null {
+  if (b.at === null || now === null) return null;
+  return Math.max(0, Math.ceil((b.at - now) / 1000));
+}
+
+/** A small "is the feed alive" pill: live with the time of the last answer, off, or retrying (and in how long). */
 export function FeedPill() {
-  const { feed } = useLive();
+  const { feed, backoff, now } = useLive();
+  const inS = backoff ? retryInS(backoff, now) : null;
+  const retrying = feed.status === "error" || backoff !== null;
   const label =
-    feed.status === "ok"
-      ? `Live ${newYork(feed.asOf, false)}`
-      : feed.status === "off"
-        ? "Live off"
-        : feed.status === "error"
-          ? "Retrying"
-          : "Connecting";
+    backoff !== null
+      ? inS
+        ? `Retrying in ${inS}s`
+        : "Retrying"
+      : feed.status === "ok"
+        ? `Live ${newYork(feed.asOf, false)}`
+        : feed.status === "off"
+          ? "Live off"
+          : feed.status === "error"
+            ? "Retrying"
+            : "Connecting";
   return (
     <span className="text-muted-foreground flex items-center gap-1.5 font-mono text-[0.6875rem] max-sm:text-xs" aria-live="off">
       <span
         className={cn(
           "inline-block size-2 rounded-full",
-          feed.status === "ok" ? "bg-good-fill motion-safe:animate-pulse" : feed.status === "error" ? "bg-warn-fill" : "bg-neutral-fill",
+          retrying ? "bg-warn-fill" : feed.status === "ok" ? "bg-good-fill motion-safe:animate-pulse" : "bg-neutral-fill",
         )}
       />
       {label}
     </span>
+  );
+}
+
+/**
+ * One quiet line while the live prices are being tried again after failing: why, in how many seconds, and a button
+ * that tries once now (keeping the count of failures, so the waits after it still grow). Nothing while they answer.
+ */
+export function FeedRetry() {
+  const { backoff, now, retryNow } = useLive();
+  if (!backoff) return null;
+  const inS = retryInS(backoff, now);
+  const going = backoff.at === null;
+  return (
+    <div data-feed-retry={going ? "now" : "waiting"} className="text-warn flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.6875rem] font-medium max-sm:text-xs">
+      <RotateCw aria-hidden className={cn("size-3", going && "motion-safe:animate-spin")} />
+      <span>
+        {backoff.limited ? "Live prices busy" : "Live prices did not answer"}: {going || !inS ? "trying again now" : `trying again in ${inS}s`}
+      </span>
+      <button
+        type="button"
+        onClick={retryNow}
+        disabled={going}
+        className="text-foreground hover:bg-accent rounded border px-2 py-0.5 font-medium disabled:opacity-50 max-sm:min-h-11 max-sm:px-3"
+      >
+        Retry now
+      </button>
+    </div>
   );
 }
 

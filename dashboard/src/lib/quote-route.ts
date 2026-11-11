@@ -1,7 +1,8 @@
 import "server-only";
-import { FIXTURE_OFFSET_ATR, flagsFromCookieHeader, tickPrice } from "./fixture-variants";
+import { FIXTURE_OFFSET_ATR, FLAKY_COOKIE, flagsFromCookieHeader, flakyCountFromCookieHeader, flakyFails, tickPrice, type VariantFlag } from "./fixture-variants";
 import { SCRIPT_ANSWER_LAG_MS, scriptQuote, scriptStep, stepFromCookieHeader, stepInstant } from "./fixture-script";
 import { logEvent } from "./log";
+import { upstreamBody, upstreamStatus } from "./upstream";
 import type { OptionsEdition } from "./options.types";
 import { alpacaKeys, fetchQuotes, parseSymbols, type Quote, type QuoteResponse } from "./quote";
 import { fixtureMode } from "./snapshot";
@@ -64,16 +65,32 @@ async function scriptedQuotes(symbols: string[], step: number): Promise<QuoteRes
   return { as_of: new Date(stepInstant(e.session, step) + SCRIPT_ANSWER_LAG_MS).toISOString(), feed: "iex", quotes, missing, fixture: true };
 }
 
-/** GET /api/quote?s=SPY,QQQ: live last trades from Alpaca's IEX feed. 503 until the keys are set. */
+/** Fixture mode's answer: the scripted morning with `quotes-script`, else the fixture prices (ticking with `quotes-tick`). */
+async function fixtureAnswer(symbols: string[], now: Date, flags: ReadonlySet<VariantFlag>, cookie: string | null): Promise<Response> {
+  if (flags.has("quotes-script")) return json(200, await scriptedQuotes(symbols, scriptStep(stepFromCookieHeader(cookie), now.getTime())));
+  return json(200, await fixtureQuotes(symbols, now, flags.has("quotes-tick")));
+}
+
+/**
+ * GET /api/quote?s=SPY,QQQ: live last trades from Alpaca's IEX feed. 503 until the keys are set (the page then stops
+ * asking), 429 when Alpaca rate-limits us (the page waits its longest), 502 for any other upstream failure.
+ */
 export async function handleQuote(req: Request, now: Date = new Date()): Promise<Response> {
   const symbols = parseSymbols(new URL(req.url).searchParams.get("s"));
   if (!symbols) return json(400, { error: "give ?s= with one or more ticker symbols" });
   if (fixtureMode()) {
-    const flags = flagsFromCookieHeader(req.headers.get("cookie"));
+    const cookie = req.headers.get("cookie");
+    const flags = flagsFromCookieHeader(cookie);
     if (flags.has("quotes-off")) return json(503, { error: "not-configured" });
     if (flags.has("quotes-error")) return json(502, { error: "upstream" });
-    if (flags.has("quotes-script")) return json(200, await scriptedQuotes(symbols, scriptStep(stepFromCookieHeader(req.headers.get("cookie")), now.getTime())));
-    return json(200, await fixtureQuotes(symbols, now, flags.has("quotes-tick")));
+    if (flags.has("quotes-flaky")) {
+      // A short outage: this browser's count of requests rides in a cookie, so parallel tests never share it.
+      const n = flakyCountFromCookieHeader(cookie);
+      const res = flakyFails(n) ? json(502, { error: "upstream" }) : await fixtureAnswer(symbols, now, flags, cookie);
+      res.headers.append("set-cookie", `${FLAKY_COOKIE}=${n + 1}; Path=/; SameSite=Strict`);
+      return res;
+    }
+    return fixtureAnswer(symbols, now, flags, cookie);
   }
   const keys = alpacaKeys();
   if (!keys) return json(503, { error: "not-configured" });
@@ -81,6 +98,8 @@ export async function handleQuote(req: Request, now: Date = new Date()): Promise
     return json(200, await fetchQuotes(symbols, keys, now));
   } catch (e) {
     logEvent("quote.fetch", { outcome: "error", error: e instanceof Error ? e.name : "unknown" });
-    return json(502, { error: "upstream" });
+    // A rate limit is passed on as one, so the page waits its longest; anything else is 502.
+    const status = upstreamStatus(e);
+    return json(status, upstreamBody(status));
   }
 }

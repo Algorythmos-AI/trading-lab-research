@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { ChainResponse } from "@/lib/chain";
+import { type PollResult, startPoll } from "@/lib/quote-poll";
 
 /** The feed is 15 minutes behind the market, so asking twice a minute loses nothing. */
 export const CHAIN_POLL_MS = 30_000;
-const RETRY_MS = 60_000;
+/** After failures in a row it asks again in 2, 4, 8, 16 s, then never later than its own interval. */
+export const CHAIN_RETRY_CAP_MS = CHAIN_POLL_MS;
 
 export type ChainFeed =
   | { status: "idle" }
@@ -28,7 +30,8 @@ interface Held {
 
 /**
  * One name's option chain from /api/chain (same origin, so the page's connect-src 'self' holds), asked for again
- * every 30 seconds while the tab is visible, and at once when a hidden tab comes back. Nothing is fetched until
+ * every 30 seconds while the tab is visible, and at once when a hidden tab comes back; after a failure in 2 s, doubling
+ * up to 30 s while the failures go on (lib/quote-poll.ts, which also runs the live prices). Nothing is fetched until
  * `enabled`: the contract pane asks only for the name it is open on. A failure after a good answer keeps the good
  * answer; its quotes then read as old. When `symbol` changes the last name's answer is dropped at once: until the new
  * name answers, the feed reads as loading, never as the old name's chain.
@@ -51,47 +54,48 @@ export function useChain(
 
   useEffect(() => {
     if (!enabled || px === null) return;
-    let timer: number | undefined;
     let stopped = false;
-    // While the tab is hidden nothing is asked for. It waits here, not on a timer, so the first thing a reader
-    // coming back to the tab sees is a fresh answer and not a wait for the next half minute to come round.
-    let parked = false;
-    const load = async () => {
-      if (stopped) return;
-      if (document.visibilityState !== "visible") {
-        parked = true;
-        return;
-      }
-      let next = CHAIN_POLL_MS;
+    // A good answer is kept through a failure only for the name it was asked for.
+    const failed = () => {
+      if (!stopped) setHeld((h) => (h.symbol === symbol && h.feed.status === "ok" ? h : { symbol, feed: { status: "error" } }));
+    };
+    const run = async (): Promise<PollResult> => {
       try {
         const [x, k] = keep.split(":");
         const own = x && k ? `&x=${encodeURIComponent(x)}&k=${encodeURIComponent(k)}` : "";
         const res = await fetch(`/api/chain?s=${encodeURIComponent(symbol)}&px=${px.toFixed(2)}${own}`, { cache: "no-store" });
         if (res.status === 503) {
           if (!stopped) setHeld({ symbol, feed: { status: "off" } });
-          return; // not configured: no point asking again until the page is reloaded
+          return "off"; // not configured: no point asking again until the page is reloaded
+        }
+        if (res.status === 429) {
+          failed();
+          return "limited"; // upstream asks us to slow down: the longest wait
         }
         if (!res.ok) throw new Error(String(res.status));
         const chain = (await res.json()) as ChainResponse;
         if (!stopped) setHeld({ symbol, feed: { status: "ok", chain, receivedAt: Date.now(), receivedPerf: performance.now() } });
+        return "ok";
       } catch {
-        // A good answer is kept through a failure only for the name it was asked for.
-        if (!stopped) setHeld((h) => (h.symbol === symbol && h.feed.status === "ok" ? h : { symbol, feed: { status: "error" } }));
-        next = RETRY_MS;
+        failed();
+        return "error";
       }
-      if (!stopped) timer = window.setTimeout(load, next);
     };
-    const onVisible = () => {
-      if (document.visibilityState !== "visible" || !parked) return;
-      parked = false;
-      void load();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    void load();
+    // While the tab is hidden nothing is asked for, and a reader coming back to it gets a fresh answer at once rather
+    // than a wait for the next half minute to come round (lib/quote-poll.ts).
+    const poll = startPoll({
+      run,
+      page: document,
+      show: window,
+      now: () => Date.now(),
+      setTimer: (fn, ms) => window.setTimeout(fn, ms),
+      clearTimer: (id) => window.clearTimeout(id as number),
+      pollMs: CHAIN_POLL_MS,
+      backoff: { capMs: CHAIN_RETRY_CAP_MS },
+    });
     return () => {
       stopped = true;
-      document.removeEventListener("visibilitychange", onVisible);
-      if (timer !== undefined) window.clearTimeout(timer);
+      poll.stop();
     };
   }, [symbol, px, enabled, keep, attempt]);
 
