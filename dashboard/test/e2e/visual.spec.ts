@@ -24,7 +24,13 @@ async function draw(page: Page, url: string, ready: string) {
 }
 
 /** The site's own header shows two running clocks and the feed's age: it is not the desk, and is left out. */
-const shot = (page: Page, name: string) => expect(page).toHaveScreenshot(name, { fullPage: true, mask: [page.getByRole("banner")] });
+const shot = (page: Page, name: string) => expect(page).toHaveScreenshot(name, { fullPage: true, mask: [page.getByRole("banner")], stylePath: NO_STRIP });
+
+/**
+ * The feed health strip is pictured on its own (below), in a fixed state: in the desk's pictures it is taken out of
+ * the page, so they show the desk exactly as before it and a feed's state never changes a picture of the desk.
+ */
+const NO_STRIP = path.join(__dirname, "no-strip.css");
 
 for (const theme of ["dark", "light"] as const) {
   test.describe(`the options desk, ${theme}`, () => {
@@ -76,7 +82,21 @@ for (const theme of ["dark", "light"] as const) {
     await expect(page).toHaveScreenshot(`glance-live-${theme}.png`, {
       fullPage: isMobile,
       mask: [page.getByRole("banner"), page.locator("[data-rail-countdown]"), page.locator("[data-session-bar]")],
+      stylePath: NO_STRIP,
     });
   });
 }
 
+
+// The feed health strip on its own, stood still with a mix of states: the edition late (for an earlier session), the
+// pre-open refresh on time, the prices failed (no keys), the bars not due, the journal late and the server check late.
+for (const theme of ["dark", "light"] as const) {
+  test(`the feed health strip, ${theme}`, async ({ page, context, baseURL, isMobile }) => {
+    test.skip(isMobile && theme === "light", "the phone is pictured once");
+    await useTheme(context, theme);
+    await context.addCookies([{ name: "fx", value: "frozen.quotes-off.chain-off.feeds-late", url: baseURL! }]);
+    await draw(page, "/options?view=brief&s=SPY", '[aria-label="Options desk"]');
+    await expect(page.locator('[data-feed-chip="shadow"]')).toHaveAttribute("data-feed-state", "late");
+    await expect(page.locator("[data-feed-strip]")).toHaveScreenshot(`feed-strip-${theme}.png`);
+  });
+}

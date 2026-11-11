@@ -4,15 +4,8 @@ import { RelativeTime } from "@/components/client/relative-time";
 import { Panel } from "@/components/panel";
 import { StatusBadge } from "@/components/status";
 import { describeAge, freshness, OFFLINE_HOURS } from "@/lib/freshness";
-import {
-  dailyCheck,
-  journalCheck,
-  lastWeekdays,
-  OPTIONS_SLOT_UTC,
-  RADAR_SLOT_UTC,
-  type FeedCheck,
-  type FeedState,
-} from "@/lib/feeds";
+import { evaluateStamped, FEEDS, type FeedView, nextDueOf, type StampedInputs, worstOf } from "@/lib/feed-watch";
+import { lastWeekdays } from "@/lib/feeds";
 import { shortDate, sydney, weekDate } from "@/lib/format";
 import type { Tone } from "@/lib/labels";
 import { editionState } from "@/lib/options";
@@ -20,12 +13,19 @@ import type { JournalResult, OptionsLiveResult, OptionsResult, RadarResult, Snap
 import { list } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+// The panel's rules are the feed watch's (src/lib/feed-watch.ts): the same table and evaluator the watchdog's feed
+// alerts use, so this panel and a page can never disagree. Times are Sydney; the routines' own zones are in the table.
+
+export type FeedState = "ok" | "due" | "late" | "missing" | "error" | "failed" | "idle" | "info";
+
 const STATE: Record<FeedState, { tone: Tone; label: string }> = {
   ok: { tone: "good", label: "On time" },
   due: { tone: "info", label: "Running now" },
   late: { tone: "warn", label: "Late" },
   missing: { tone: "neutral", label: "Nothing yet" },
   error: { tone: "bad", label: "Can't read" },
+  failed: { tone: "bad", label: "Refused" },
+  idle: { tone: "neutral", label: "Not due" },
   info: { tone: "neutral", label: "No fixed time" },
 };
 
@@ -41,13 +41,29 @@ interface Feed {
   strip?: { dates: string[]; have: Set<string>; today: string; label: string };
 }
 
-const sydTime = (iso: string | null) => (iso ? sydney(iso, false) : "—");
+const sydTime = (ms: number | null) => (ms === null ? "—" : sydney(new Date(ms).toISOString(), false));
 
-/** Late, missing or unreadable: what to do about a feed in a few words. */
-function stateOf(status: "ok" | "missing" | "error", check: FeedCheck | null): FeedState {
-  if (status !== "ok") return status;
-  return check?.state ?? "info";
+/** The panel's word for a feed watch view. Missing data is never "on time": an absent document is "nothing yet"
+ * until its run is due, then late. */
+export function panelState(v: FeedView | null | undefined): FeedState {
+  if (!v) return "error";
+  switch (v.state) {
+    case "on_time":
+      return "ok";
+    case "late":
+      return "late";
+    case "failed":
+      return "failed";
+    case "unknown":
+      return "error";
+    case "waiting":
+      return v.reason === "running" && v.age_min === null ? "missing" : "due";
+    case "not_expected":
+      return v.age_min === null && v.type === "doc" ? "missing" : "idle";
+  }
 }
+
+const assumedNote = (v: FeedView | null | undefined) => (v?.assumed ? " (assumed time)" : "");
 
 export interface FeedsInput {
   now: Date;
@@ -56,6 +72,8 @@ export interface FeedsInput {
   options: OptionsResult;
   optionsLive: OptionsLiveResult;
   radar: RadarResult;
+  /** The feed watch's stamps (feed-watch-run.ts loadPageFeeds), from the same documents. */
+  feeds: StampedInputs;
   optionsDates: string[];
   radarDates: string[];
 }
@@ -64,31 +82,42 @@ export function buildFeeds(i: FeedsInput): Feed[] {
   const nowMs = i.now.getTime();
   const days = lastWeekdays(nowMs, 10);
   const today = days.at(-1)!;
+  const views = new Map(evaluateStamped(i.feeds, nowMs).map((v) => [v.id, v]));
+  const view = (id: string) => views.get(id) ?? null;
+  const row = (id: string) => FEEDS.find((f) => f.id === id);
 
   const j = i.journal.status === "ok" ? i.journal.doc : null;
-  const jCheck = j ? journalCheck(j.as_of, nowMs) : null;
-  const jState = stateOf(i.journal.status, jCheck);
+  const jView = view("journal");
+  const jState = panelState(jView);
+  const jRow = row("journal");
+  const evening = jRow?.type === "doc" ? nextDueOf(jRow, nowMs, 1) : null;
 
   const o = i.options.status === "ok" ? i.options.edition : null;
-  const oCheck = o ? dailyCheck(o.as_of, nowMs, OPTIONS_SLOT_UTC) : null;
-  const oState = stateOf(i.options.status, oCheck);
+  const oView = view("options-edition");
+  const oState = panelState(oView);
   const oSession = o ? editionState(o.session, i.now) : null;
 
   const focus = o?.focus ?? null;
-  const fCheck = focus?.picked_at ? dailyCheck(focus.picked_at, nowMs, OPTIONS_SLOT_UTC) : null;
-  const fState: FeedState = i.options.status !== "ok" ? i.options.status : !focus ? "missing" : (fCheck?.state ?? "info");
   const pre = focus?.premarket?.as_of ?? null;
+  const fView = view("pre-open");
+  const fState = panelState(fView);
 
   const r = i.radar.status === "ok" ? i.radar.edition : null;
-  const rCheck = r ? dailyCheck(r.as_of, nowMs, RADAR_SLOT_UTC) : null;
-  const rState = stateOf(i.radar.status, rCheck);
+  const rView = view("radar");
+  const rState = panelState(rView);
+
+  const lView = worstOf([view("ledger-morning"), view("ledger-afternoon")].filter((v): v is FeedView => v !== null));
+  const shadow = view("shadow");
 
   const live = i.optionsLive.status === "ok" ? i.optionsLive.doc : null;
+  const liveRefused = view("refusal-options-live")?.state === "failed";
 
   const s = i.snapshot.status === "ok" ? i.snapshot.snapshot : null;
   const sf = s ? freshness(s.as_of, list(s.expected_windows), nowMs) : null;
   const sState: FeedState =
     i.snapshot.status === "missing" ? "missing" : i.snapshot.status !== "ok" ? "error" : sf?.state === "late" || sf?.state === "stopped" || (sf?.ageMin ?? 0) > OFFLINE_HOURS * 60 ? "late" : sf?.state === "unknown" ? "missing" : "ok";
+
+  const refusedNote = (v: FeedView | null) => (v?.reason === "refused" ? "The last edition sent was refused at ingest, and nothing newer is stored." : undefined);
 
   return [
     {
@@ -97,13 +126,14 @@ export function buildFeeds(i: FeedsInput): Feed[] {
       href: "/trades",
       state: jState,
       asOf: j?.as_of ?? null,
-      schedule: `Every 2 min in US market hours, then the evening sync at ${sydTime(jCheck?.nextDue ?? null)} Sydney`,
+      schedule: `Every hour in US market hours, then the evening sync at ${sydTime(evening)} Sydney${assumedNote(jView)}`,
       note:
-        jState === "late"
+        refusedNote(jView) ??
+        (jState === "late"
           ? "If Webull wants a sign-in approval in your app, the sync waits until you approve it."
           : j?.fills != null
             ? `${j.fills.toLocaleString("en-US")} fills on file`
-            : undefined,
+            : undefined),
     },
     {
       key: "options",
@@ -111,12 +141,14 @@ export function buildFeeds(i: FeedsInput): Feed[] {
       href: "/options",
       state: oState,
       asOf: o?.as_of ?? null,
-      schedule: `After each close, ${sydTime(oCheck?.nextDue ?? null)} Sydney`,
-      note: o
-        ? oSession === "stale"
-          ? `Levels are for ${weekDate(o.session)}, an earlier session`
-          : `Levels for ${oSession === "today" ? "today" : "the next session"}, ${weekDate(o.session)}`
-        : undefined,
+      schedule: `After each close, ${sydTime(oView?.next_due ?? null)} Sydney${assumedNote(oView)}`,
+      note:
+        refusedNote(oView) ??
+        (o
+          ? oSession === "stale"
+            ? `Levels are for ${weekDate(o.session)}, an earlier session`
+            : `Levels for ${oSession === "today" ? "today" : "the next session"}, ${weekDate(o.session)}`
+          : undefined),
       strip: i.optionsDates.length === 0 ? undefined : { dates: days, have: new Set(i.optionsDates), today, label: "Levels on file for each session" },
     },
     {
@@ -124,8 +156,8 @@ export function buildFeeds(i: FeedsInput): Feed[] {
       name: "Top 4 focus card",
       href: "/options",
       state: fState,
-      asOf: focus?.picked_at ?? null,
-      schedule: "Picked after each close, with a heads-up before the open",
+      asOf: pre ?? focus?.picked_at ?? null,
+      schedule: `Picked after each close, with a heads-up before the open, due by 09:05 New York${assumedNote(fView)}`,
       note: focus
         ? pre
           ? <>Pre-open heads-up <RelativeTime iso={pre} fallback={sydney(pre)} /></>
@@ -140,15 +172,35 @@ export function buildFeeds(i: FeedsInput): Feed[] {
       href: "/radar",
       state: rState,
       asOf: r?.as_of ?? null,
-      schedule: `Each weekday, sent ${sydTime(rCheck?.nextDue ?? null)} Sydney`,
-      note: r ? `Edition for ${weekDate(r.edition_date)}` : undefined,
-      strip: i.radarDates.length === 0 ? undefined : { dates: days, have: new Set(i.radarDates), today, label: "Radar editions on file for each day" },
+      schedule: `Each weekday, sent ${sydTime(rView?.next_due ?? null)} Sydney${assumedNote(rView)}`,
+      note: refusedNote(rView) ?? (r ? `Edition for ${weekDate(r.edition_date)}` : undefined),
+    },
+    {
+      key: "ledger",
+      name: "Focus card ledger",
+      href: "/options/record",
+      state: panelState(lView),
+      asOf: (() => {
+        const st = i.feeds.stamps["ledger-afternoon"];
+        return st?.status === "ok" && st.value.at !== null ? new Date(st.value.at).toISOString() : null;
+      })(),
+      schedule: "Saved before the open and scored after the close (assumed 09:11 and 16:21 New York)",
+      note: lView?.reason === "refused" ? "The last edition sent was refused at ingest, and nothing newer is stored." : undefined,
+    },
+    {
+      key: "shadow",
+      name: "Server check",
+      href: "/options",
+      state: panelState(shadow),
+      asOf: shadow?.age_min != null ? new Date(nowMs - shadow.age_min * 60_000).toISOString() : null,
+      schedule: "A record every 2 minutes in the session, while its switch is on",
+      note: shadow?.reason === "switch-off" ? "Switched off" : shadow?.reason === "outside-session" ? "Outside the session: quiet is normal" : undefined,
     },
     {
       key: "options-live",
       name: "Options live data",
       href: "/options",
-      state: i.optionsLive.status === "ok" ? "info" : i.optionsLive.status,
+      state: liveRefused ? "failed" : i.optionsLive.status === "ok" ? "info" : i.optionsLive.status,
       asOf: live?.as_of ?? null,
       schedule: "Paper positions and open interest, from the host",
     },
@@ -188,14 +240,14 @@ function Strip({ strip, todayDue }: { strip: NonNullable<Feed["strip"]>; todayDu
 
 export function FeedsPanel(input: FeedsInput) {
   const feeds = buildFeeds(input);
-  const bad = feeds.filter((f) => f.state === "late" || f.state === "error").length;
+  const bad = feeds.filter((f) => f.state === "late" || f.state === "error" || f.state === "failed").length;
   const nowMs = input.now.getTime();
   return (
     <Panel
       id="feeds"
       title="Your feeds"
       icon={Radio}
-      means="What your trading pages are built from, and whether each one arrived on schedule. Times are Sydney. A US holiday can show a feed as late."
+      means="What your trading pages are built from, and whether each one arrived on schedule. Times are Sydney; market holidays and half days come from the exchange calendar."
       action={<StatusBadge tone={bad === 0 ? "good" : "warn"}>{bad === 0 ? "All on schedule" : `${bad} need a look`}</StatusBadge>}
     >
       <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -207,7 +259,7 @@ export function FeedsPanel(input: FeedsInput) {
               key={f.key}
               className={cn(
                 "grid content-start gap-2 rounded-lg border p-3",
-                f.state === "late" || f.state === "error" ? "border-warn/60 bg-warn-soft" : "border-border",
+                f.state === "late" || f.state === "error" || f.state === "failed" ? "border-warn/60 bg-warn-soft" : "border-border",
               )}
             >
               <div className="flex items-start gap-2">

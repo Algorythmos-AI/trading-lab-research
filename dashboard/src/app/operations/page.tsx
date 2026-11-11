@@ -19,7 +19,9 @@ import { AuditPanel } from "@/components/v3/audit";
 import { SlaPanel } from "@/components/v3/sla";
 import { duration, newYork, num, pct, shortDate, shortSha, sydney, txt } from "@/lib/format";
 import { humanize, jobKey, jobName, jobTone, sortJobKeys } from "@/lib/labels";
-import { listOptionsDates, listRadarDates, loadJournal, loadOptions, loadOptionsLive, loadRadar, loadSnapshot } from "@/lib/snapshot";
+import { loadPageFeeds } from "@/lib/feed-watch-run";
+import { INGEST_REJECT_KINDS } from "@/lib/ingest-reject";
+import { listOptionsDates, listRadarDates, loadJournal, loadLedger, loadOptions, loadOptionsLive, loadRadar, loadSnapshot } from "@/lib/snapshot";
 import { DISK_FLOOR_GB, DISK_TARGET_GB } from "@/lib/thresholds.gen";
 import { entries, list, type LogInfo, type Snapshot } from "@/lib/types";
 import { sectionState } from "@/lib/v3";
@@ -28,15 +30,19 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Operations" };
 
 export default async function OperationsPage() {
-  const [result, journal, options, optionsLive, radar, optionsDates, radarDates] = await Promise.all([
+  const now = requestTime();
+  const [result, journal, options, optionsLive, radar, ledger, optionsDates, radarDates] = await Promise.all([
     loadSnapshot(),
     loadJournal(),
     loadOptions(),
     loadOptionsLive(),
     loadRadar(),
+    loadLedger(),
     listOptionsDates(14),
     listRadarDates(14),
   ]);
+  // The feed watch's view of the same documents, with every refusal record and the server check's records.
+  const feeds = await loadPageFeeds({ options, journal, ledger, radar, refusals: INGEST_REJECT_KINDS, shadow: true }, now);
   return (
     <>
       <PageHeading
@@ -44,7 +50,8 @@ export default async function OperationsPage() {
         intro="Whether everything your pages are built from arrived on time: your Webull trades, the options levels and focus card, the radar, and the paper lab host with its jobs, checks, disk, deploys and data sources."
       />
       <FeedsPanel
-        now={requestTime()}
+        now={now}
+        feeds={feeds}
         snapshot={result}
         journal={journal}
         options={options}

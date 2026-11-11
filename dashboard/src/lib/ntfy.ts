@@ -1,7 +1,14 @@
 import { logEvent } from "./log";
 
+/**
+ * What a page is about. The snapshot watchdog's: late, stopped, recovered, offline. The feed watch's (feed-watch.ts):
+ * feed-late (a routine's document did not arrive, or could not be checked), feed-recovered, rejected (ingest refused
+ * an edition and nothing newer is stored).
+ */
+export type NoticeKind = "late" | "stopped" | "recovered" | "offline" | "feed-late" | "feed-recovered" | "rejected";
+
 export interface Notice {
-  kind: "late" | "stopped" | "recovered" | "offline";
+  kind: NoticeKind;
   title: string;
   message: string;
   priority: 1 | 2 | 3 | 4 | 5;

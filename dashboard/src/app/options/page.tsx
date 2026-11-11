@@ -10,6 +10,7 @@ import { CockpitLadders, CockpitShell } from "@/components/client/cockpit";
 import { BoardChip, FocusGlance, GlanceTile } from "@/components/client/focus-glance";
 import { NowHero } from "@/components/client/now-hero";
 import { StatusRail } from "@/components/client/status-rail";
+import { FeedStrip } from "@/components/client/feed-strip";
 import { LedgerReview } from "@/components/ledger";
 import { OptionsDesk } from "@/components/client/options-desk";
 import { OptionsGlance } from "@/components/client/options-glance";
@@ -29,6 +30,7 @@ import { dayFacts, railDay, unreadLine, withUnread } from "@/lib/session-timelin
 import { dayCheck } from "@/lib/trade-rules";
 import { loadFlagsView } from "@/lib/desk-flags-run";
 import { loadEvalSwitch } from "@/lib/desk-page-run";
+import { loadPageFeeds } from "@/lib/feed-watch-run";
 import { listOptionsDates, loadJournal, loadLedger, loadOptions, loadOptionsLive, pageTime } from "@/lib/snapshot";
 
 export const dynamic = "force-dynamic";
@@ -112,6 +114,8 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
     );
   }
   const full = result.edition;
+  // The feed health strip's server-known feeds, from the documents read above (a past edition has no strip).
+  const feeds = date ? null : await loadPageFeeds({ options: result, journal, refusals: ["options", "journal"], shadow: true }, now);
   // While trading the desk shows only the focus names; ?all=1 brings back the whole board.
   const showAll = one(sp.all) === "1";
   const e = showAll ? full : focusOnly(full);
@@ -164,6 +168,11 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
               <PaneBoundary name="Status rail">
                 <StatusRail day={rail} facts={facts} />
               </PaneBoundary>
+              {feeds ? (
+                <PaneBoundary name="Feed health">
+                  <FeedStrip stamps={feeds} serverNow={now.getTime()} evalOn={evalSwitch === "log"} />
+                </PaneBoundary>
+              ) : null}
               <div data-cockpit-hide className="contents">
                 <OldCloseNotice e={e} />
               </div>

@@ -25,6 +25,8 @@ wt.ops.publish                            POST /api/ingest            (productio
                                             one "Mac offline" note a day otherwise → ntfy
                                             alert state in private Blob alerts/state.json
                                             prunes history older than 90 days, once a day
+                                            then the feed watch: every routine's document on time?
+                                            → ntfy only with FEED_WATCH_ALERTS=on; state ops/feeds-alert.json
 
                                           GET/POST /api/desk/flags    (the Options page, laptop and phone)
                                             the owner's "done for today" flag → private Blob desk/flags.json
@@ -179,6 +181,57 @@ wt.ops.publish                            POST /api/ingest            (productio
   and older than 90 min is stopped (both priority 4); a fresh snapshot after an alert sends "recovered"
   (priority 2). Outside every window nothing pages. The alert state is committed with `ifMatch` before paging,
   so a double cron fire pages once. Page text carries R and % only, never currency amounts.
+- **Feed watch** (`src/lib/feed-watch.ts`, pure; `src/lib/feed-watch-run.ts`, the tick): one table of every
+  document a cloud routine or the desk's own cron must publish (`FEEDS`): its store path, how to read which session
+  it is for, its schedule in the zone the routine's cron really uses, a grace, and whether it pages. A new feed is one
+  more row: the runner reads each row's path, the pages draw each row, nothing else changes (a unit test adds one).
+
+  | Feed | Due | Zone | Grace | Wants | Pages |
+  |---|---|---|---|---|---|
+  | Options edition | 21:52 Mon–Fri | UTC (runbook) | 60 min | `session` = the next session | yes |
+  | Pre-open refresh | 08:50 Mon–Fri, until the close | New York (runbook) | 15 min (by 09:05) | `focus.premarket.as_of` on today's New York date | yes |
+  | Trade journal | :24 hourly 09:24–15:24 before the close; 21:38 | New York; UTC (runbook) | 45 min; 60 min (stamp may be 60 min early) | `as_of` at or after the run | after two missed runs |
+  | Card ledger, morning | 09:11 | New York, **assumed** | 60 min | `session` = the last session | no (display only) |
+  | Card ledger, after close | 16:21 | New York, **assumed** | 60 min | `session` = today | no (display only) |
+  | Radar edition | 11:12 Mon–Fri | UTC (runbook) | 60 min (stamp may be 60 min early) | `as_of` at or after the run | yes |
+  | Server check | every settled slot in the session, switch `desk/eval.json` exactly `log` | the exchange calendar | 10 min without a record | a record under `desk/log/<day>/` | yes |
+  | Refusals | a refusal at `/api/ingest` with nothing newer stored (`readIngestRejectStatus`) | — | — | — | options, journal, radar; the rest display only |
+
+  Runs exist only on market days of the exchange calendar (`market-calendar.ts`): weekends, holidays and a half day's
+  afternoon never expect anything, "the next session" comes from the session list, and every New York time goes
+  through `nyInstant` (both clock changes, New York and UTC schedules alike). Past the calendar file's end a weekday
+  is assumed and the page and the alert say so. States: `on_time`, `waiting` (the run's grace is still open),
+  `late`, `failed` (a refusal still stands), `not_expected` and `unknown` (the store could not be read: never late,
+  never on time). Episodes mirror the snapshot watchdog's: one page per feed per incident, one "back on time", nothing
+  repeated, a new incident only after a recovery or on a new session day; the journal and the ledger only after two
+  runs in a row are missed; a refused edition pages once as "refused", not again as "late"; "unknown" pages only after
+  three runs in a row (20 to 30 minutes: one failed read clears itself, three is an outage). Its state is one Blob
+  document, `ops/feeds-alert.json`, committed with the snapshot watchdog's own `commitThenSend` (ifMatch, fail-open,
+  rollback of a failed page), so two overlapping runs page once. It runs inside `/api/cron/watchdog` after the desks'
+  ticks, isolated from them, within a 25-second budget.
+
+  **Display only until the owner says so.** Pages are sent only when `FEED_WATCH_ALERTS` is exactly `on` (the owner
+  sets it in Vercel; nobody else). Off, every run still reads, evaluates and stores its incidents, marked unsent, and
+  the pages show everything. At switch-on: an incident already under way stays quiet (it was opened while off), its
+  recovery is not announced (nobody received the page), and the first page is the next new incident; nothing that
+  happened while off is sent in a burst. `make feed-watch-drill` runs the real tick offline through late and recovered
+  and prints both pages.
+
+  **Division of labour with the host's pipeline check** (`src/wt/options/pipeline_check.py`, 08:55 and 18:30 New
+  York): the feed watch owns timeliness (did the document for the right session arrive by its time); the pipeline
+  check owns content (closes, levels, expiries against the market's own data). A missing or late edition also fails
+  the pipeline check's `options.present`, `options.session` or `options.built_from`: when the feed watch has paged
+  the options edition late or refused for that session, those ids in a pipeline-check page are the same incident;
+  only its content ids (`options.close.*`, `options.levels.*`, `focus.*`) are new. The edition's deadline is 22:52
+  UTC, 17:52 New York in winter (before the 18:30 check) and 18:52 in summer (after it, so in summer the pipeline
+  check reports a missing edition first). The pre-open refresh's `focus.premarket` is only a warning there, so only
+  the feed watch pages for it.
+
+  The Operations page's "Your feeds" panel and the Options page's health strip (`components/client/feed-strip.tsx`:
+  the edition, the pre-open refresh, the live prices, the session bars, the journal and the server check, each with
+  its state and age, fixed-size chips) are drawn from the same table and evaluator. `feeds.ts` keeps the constants
+  and `journalCheck` the shadow evaluator's engine reads (it is inside `gen:engine`'s hash), unchanged; the feed
+  watch imports from it and is outside the engine's import closure.
 - **Health** (`src/lib/health.ts`) and the top-of-page **summary** sentence (`src/lib/summary.ts`) are pure
   functions of the snapshot and the current time.
 
@@ -246,8 +299,10 @@ Fixture mode is refused on production deployments, and the page shows a banner w
 **Fixture variants.** In fixture mode only, the `fx` cookie bends the fixtures into the states a pane must survive
 (`src/lib/fixture-variants.ts`): `empty` (nothing published), `error` (storage down), `partial` (a valid but sparse
 edition), `poison` (a stored edition that no longer matches its schema), `quotes-off`, `quotes-error` and
-`quotes-tick` (the live price flips by a cent every three seconds) and `quotes-flaky` (the first quote answers, the next
-three fail, then every one answers; counted per browser in the `fxflaky` cookie). Join several with a dot:
+`quotes-tick` (the live price flips by a cent every three seconds), `quotes-flaky` (the first quote answers, the next
+three fail, then every one answers; counted per browser in the `fxflaky` cookie), and `feeds-ok`, `feeds-late`,
+`feeds-failed`, `feeds-unknown` (the feed watch's inputs only, for the health strip and the feeds panel). Join several
+with a dot:
 `fx=partial.quotes-tick`.
 Outside fixture mode the cookie is never read.
 
@@ -270,6 +325,7 @@ other panes keep working.
 | `CRON_SECRET` | Vercel production | Bearer token Vercel Cron sends to `/api/cron/watchdog` and `/api/cron/desk` |
 | `NTFY_TOPIC` | Vercel production and preview + the Mac | Secret, random ntfy topic for pages; unset means log and skip |
 | `NTFY_SERVER` | Vercel (optional) | ntfy server, default `https://ntfy.sh` |
+| `FEED_WATCH_ALERTS` | Vercel production (the owner sets it) | Exactly `on`: the feed watch sends its pages. Unset or anything else: display only (state still kept, nothing sent) |
 | `DASHBOARD_FIXTURE` | Local, CI and Vercel preview | `1` serves the fixture snapshot (ignored in production) |
 | `DASHBOARD_INGEST_URL` | The Mac | `https://lab.algorythmos.com/api/ingest` |
 | `VERCEL_AUTOMATION_BYPASS_SECRET` | The Mac | Lets the publisher through Vercel Authentication |

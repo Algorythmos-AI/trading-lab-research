@@ -73,6 +73,11 @@ const FILES = [
   "../src/app/api/cron/desk/route.ts",
   "../src/app/api/desk/page-state/route.ts",
   "../src/app/api/desk/eval-status/route.ts",
+  "../src/lib/feed-watch.ts",
+  "../src/lib/feed-watch-run.ts",
+  "../src/components/client/feed-strip.tsx",
+  "../src/components/operations/feeds-panel.tsx",
+  "../src/app/api/cron/watchdog/route.ts",
 ];
 
 const BANNED = [
