@@ -10,6 +10,8 @@ import pytest
 from wt.ops import evidence
 from wt.ops.visibility import Probe
 
+_REAL_OPEN_PRS = evidence.open_evidence_prs
+
 
 class FakeAlerts:
     """Records what would be paged; sends nothing."""
@@ -72,7 +74,7 @@ def test_evidence_never_pushes_unless_the_repo_is_confirmed_private(monkeypatch,
     monkeypatch.setattr(evidence, "_git", lambda *a, **k: calls.append(a) or "")
     monkeypatch.setattr(evidence, "plan_copies", lambda wt, week, **kw: [])
     for vis in ("public", "unknown", "internal"):
-        monkeypatch.setattr(evidence, "probe", lambda token, v=vis: Probe(v, "ok" if v != "unknown" else "error"))
+        monkeypatch.setattr(evidence, "probe", lambda token, timeout_s=60.0, v=vis: Probe(v, "ok" if v != "unknown" else "error"))
         monkeypatch.setenv("GH_TOKEN", "t")
         assert evidence.run(alerts=FakeAlerts(), vis_state=tmp_path / f"{vis}.json") == 0
         out = capsys.readouterr().out
@@ -87,7 +89,7 @@ def test_evidence_pushes_over_https_with_the_token_never_through_origin(monkeypa
     src = tmp_path / "scorecard_2026-10-23.md"
     src.write_text("# card")
     monkeypatch.setattr(evidence, "plan_copies", lambda wt, week, **kw: [(src, wt / "research/forward/archive/x/scorecard_2026-10-23.md")])
-    monkeypatch.setattr(evidence, "probe", lambda token: Probe("private", "ok"))
+    monkeypatch.setattr(evidence, "probe", lambda token, timeout_s=60.0: Probe("private", "ok"))
     monkeypatch.setattr(evidence, "WT_ROOT", tmp_path / "wt")
     monkeypatch.setenv("GH_TOKEN", "ghp-distinctive-token")
     done: list[list[str]] = []
@@ -178,7 +180,7 @@ def _stubbed_run(monkeypatch, tmp_path, prs):
     calls: list[tuple[str, ...]] = []
     done: list[list[str]] = []
     monkeypatch.setattr(evidence, "_git", lambda *a, **k: calls.append(a) or "")
-    monkeypatch.setattr(evidence, "probe", lambda token: Probe("private", "ok"))
+    monkeypatch.setattr(evidence, "probe", lambda token, timeout_s=60.0: Probe("private", "ok"))
     monkeypatch.setattr(evidence, "open_evidence_prs", lambda token, timeout=60.0: prs)
     monkeypatch.setattr(evidence, "WT_ROOT", tmp_path / "wt")
     monkeypatch.setenv("GH_TOKEN", "ghp-distinctive-token")
@@ -347,7 +349,7 @@ def test_a_dry_run_never_pages_and_reports_a_failed_step(monkeypatch, tmp_path, 
     git, _ = _failing_git("fetch", RuntimeError("git fetch failed: x"))
     monkeypatch.setattr(evidence, "_git", git)
     monkeypatch.setattr(evidence, "WT_ROOT", tmp_path / "wt")
-    monkeypatch.setattr(evidence, "probe", lambda token: pytest.fail("a dry run asks nothing"))
+    monkeypatch.setattr(evidence, "probe", lambda token, timeout_s=60.0: pytest.fail("a dry run asks nothing"))
     assert evidence.run(dry_run=True, today=dt.date(2026, 10, 23)) == 1
     assert "stopped at fetch" in capsys.readouterr().out
 
@@ -356,14 +358,14 @@ def test_a_parked_run_pages_the_visibility_once_then_stays_quiet(monkeypatch, tm
     """Case (c): a public repository is a standing state. One page when it is first seen, none the next weeks."""
     _stubbed_run(monkeypatch, tmp_path, [])
     monkeypatch.setattr(evidence, "plan_copies", lambda wt, week, **kw: [])
-    monkeypatch.setattr(evidence, "probe", lambda token: Probe("public", "ok"))
+    monkeypatch.setattr(evidence, "probe", lambda token, timeout_s=60.0: Probe("public", "ok"))
     a = FakeAlerts()
     for week_day in (dt.date(2026, 10, 23), dt.date(2026, 10, 30), dt.date(2026, 11, 6)):
         assert evidence.run(today=week_day, alerts=a, vis_state=tmp_path / "v.json") == 0
         out = capsys.readouterr().out
         assert "repo visibility: public" in out and "evidence PR parked" in out     # said in the log every run
     assert [k for k, _, _ in a.fired] == ["repo-visibility:not-private"]
-    monkeypatch.setattr(evidence, "probe", lambda token: Probe("private", "ok"))
+    monkeypatch.setattr(evidence, "probe", lambda token, timeout_s=60.0: Probe("private", "ok"))
     assert evidence.run(today=dt.date(2026, 11, 13), alerts=a, vis_state=tmp_path / "v.json") == 0
     assert "repo-visibility:not-private" in a.resolved
 
@@ -418,3 +420,122 @@ def test_the_weekly_job_logs_the_evidence_outcome_and_pages_only_a_crash_or_a_ha
     jobs.publish_evidence(tmp_path, log, a)                # before: a log line and no page at all
     assert [k for k, _, _ in a.fired] == ["evidence"] and "did not finish" in a.fired[0][2]
     assert "TimeoutExpired" in log.lines[-1]
+
+
+# ---- review round: the parked path never fails the weekly job, and the budget holds ------------------------------
+
+def test_a_parked_run_touches_no_git_and_no_network_and_never_fails_whatever_breaks(monkeypatch, tmp_path, capsys):
+    """The repository is public today: this is the live path every week."""
+    git_calls: list[tuple] = []
+
+    def git(*a, **k):
+        git_calls.append(a)
+        raise RuntimeError("git fetch failed: fatal https://x-access-token:ghp-distinctive-token@github.com/")
+
+    def no_subprocess(*a, **k):
+        raise AssertionError("a parked run runs no subprocess")
+
+    monkeypatch.setattr(evidence, "_git", git)
+    monkeypatch.setattr(evidence.subprocess, "run", no_subprocess)
+    monkeypatch.setattr(evidence, "open_evidence_prs", lambda *a, **k: pytest.fail("no pull-request listing"))
+    monkeypatch.setattr(evidence, "probe", lambda token, timeout_s=60.0: Probe("public", "ok"))
+    monkeypatch.setattr(evidence, "plan_copies", lambda wt, week, **kw: [(tmp_path / "s.md", evidence.ROOT / "research/x.md")])
+    monkeypatch.setenv("GH_TOKEN", "ghp-distinctive-token")
+    a = FakeAlerts()
+    for d in (dt.date(2026, 11, 13), dt.date(2026, 11, 20), dt.date(2026, 11, 27)):
+        assert evidence.run(today=d, alerts=a, vis_state=tmp_path / "v.json") == 0
+        out = capsys.readouterr().out
+        assert out.strip().splitlines()[-1].endswith("not private; nothing pushed") and "research/x.md" in out
+    assert git_calls == []                                          # no fetch with the token, no worktree
+    assert [k for k, _, _ in a.fired] == ["repo-visibility:not-private"]   # the one state-change page, then nothing
+
+
+def test_a_parked_runs_local_listing_failing_still_exits_zero(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(evidence, "probe", lambda token, timeout_s=60.0: Probe("unknown", "timeout"))
+    monkeypatch.setattr(evidence, "plan_copies", lambda *a, **k: (_ for _ in ()).throw(OSError("disk")))
+    monkeypatch.setattr(evidence, "_git", lambda *a, **k: pytest.fail("no git"))
+    monkeypatch.setenv("GH_TOKEN", "t")
+    a = FakeAlerts()
+    assert evidence.run(today=dt.date(2026, 11, 13), alerts=a, vis_state=tmp_path / "v.json") == 0
+    assert "could not be made (OSError)" in capsys.readouterr().out and a.fired == []      # one unknown: no page
+
+
+def test_only_a_manual_dry_run_returns_one_for_a_failed_step(monkeypatch, tmp_path):
+    monkeypatch.setattr(evidence, "_git", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")))
+    monkeypatch.setattr(evidence, "WT_ROOT", tmp_path / "wt")
+    assert evidence.run(dry_run=True, today=dt.date(2026, 11, 13)) == 1
+
+
+def test_pr_list_timing_out_reads_as_timed_out(monkeypatch, tmp_path):
+    _stubbed_run(monkeypatch, tmp_path, [])
+
+    def hang(*a, **k):
+        raise subprocess.TimeoutExpired(["gh"], 60)
+    monkeypatch.setattr(evidence, "open_evidence_prs", _REAL_OPEN_PRS)      # the real one, not the stub
+    monkeypatch.setattr(evidence.subprocess, "run", hang)
+    a = FakeAlerts()
+    assert evidence.run(today=dt.date(2026, 11, 13), alerts=a, vis_state=tmp_path / "v.json") == 0
+    assert [k for k, _, _ in a.fired] == ["evidence-pr:pr-list"] and "the pr-list step timed out" in a.fired[0][2]
+
+
+
+
+class FakeClock:
+    def __init__(self):
+        self.t = 0.0
+
+    def __call__(self):
+        return self.t
+
+
+def test_the_budget_arithmetic_every_step_and_the_removal_draw_from_one_clock(monkeypatch, tmp_path):
+    """Every step takes its whole timeout: the run stops on its own, and the worst case, the stop alert and the
+    worktree removal included, stays clearly under the weekly job's 600 s."""
+    _stubbed_run(monkeypatch, tmp_path, [])
+    clock = FakeClock()
+    budget = evidence.Budget(clock=clock)
+    granted: list[float] = []
+
+    def slow_git(*a, timeout=120.0, **k):
+        granted.append(timeout)
+        clock.t += timeout
+        return ""
+
+    def slow_run(cmd, timeout=120.0, **k):
+        granted.append(timeout)
+        clock.t += timeout
+        raise subprocess.TimeoutExpired(cmd, timeout)
+
+    src = tmp_path / "scorecard_2026-11-13.md"
+    src.write_text("# card")
+    monkeypatch.setattr(evidence, "_git", slow_git)
+    monkeypatch.setattr(evidence.subprocess, "run", slow_run)
+    monkeypatch.setattr(evidence, "plan_copies", lambda wt, week, **kw: [(src, wt / "a.md")])
+
+    def probe(token, timeout_s=60.0):
+        granted.append(timeout_s)
+        clock.t += timeout_s
+        return Probe("private", "ok")
+    monkeypatch.setattr(evidence, "probe", probe)
+    a = FakeAlerts()
+    assert evidence.run(today=dt.date(2026, 11, 13), alerts=a, vis_state=tmp_path / "v.json", budget=budget) == 0
+    assert len(a.fired) == 1 and "timed out" in a.fired[0][2]
+    assert clock.t <= evidence.BUDGET_S + evidence.REMOVE_MIN_S             # the removal had what was left, or 5 s
+    worst = evidence.BUDGET_S + evidence.REMOVE_MIN_S + evidence.ALERT_WORST_S
+    assert worst <= 420 < evidence.PARENT_TIMEOUT_S - 150
+    assert granted[0] == 60.0 and all(g > 0 for g in granted)
+
+
+def test_the_weekly_job_logs_a_hung_runs_output_with_the_token_redacted(monkeypatch, tmp_path):
+    from wt.ops import jobs
+    monkeypatch.setenv("GH_TOKEN", "ghp-distinctive-token")
+
+    def hang(*a, **k):
+        raise subprocess.TimeoutExpired(["python"], 600, output=b"repo visibility: private\nfetch ghp-distinctive-token",
+                                        stderr="Traceback: stuck")
+    monkeypatch.setattr(jobs.subprocess, "run", hang)
+    log, a = _Log(), _Daily()
+    jobs.publish_evidence(tmp_path, log, a)
+    text = "\n".join(log.lines)
+    assert "evidence stdout: repo visibility: private" in text and "evidence stderr: Traceback: stuck" in text
+    assert "ghp-distinctive-token" not in text and "***" in text and len(a.fired) == 1

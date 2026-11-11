@@ -149,7 +149,8 @@ def test_missing_or_corrupt_records_start_again(tmp_path):
     p = tmp_path / "vis.json"
     assert v.load(p) == State()
     for bad in ("{not json", "[]", '{"last": "maybe"}', '{"unknown_streak": -1}', '{"unknown_streak": true}',
-                '{"confirmed": "unknown"}', '{"last": 3}'):
+                '{"confirmed": "unknown"}', '{"last": 3}', '{"confirmed_at": 123}', '{"last_at": [1]}',
+                '{"last_cause": {"a": 1}}', '{"last": "public", "confirmed": "public", "confirmed_at": 123}'):
         p.write_text(bad)
         assert v.load(p) == State(), bad
 
@@ -201,3 +202,11 @@ def test_status_reads_the_record_and_asks_nothing(tmp_path, monkeypatch, capsys)
     monkeypatch.setattr(v, "probe", lambda *a, **k: pytest.fail("status must not ask GitHub"))
     assert v.main(["status"]) == 0
     assert capsys.readouterr().out.strip() == "repo visibility: private (last confirmed private on 2026-11-12)"
+
+
+def test_a_corrupt_record_never_crashes_status_or_a_check(tmp_path, monkeypatch, capsys):
+    path = tmp_path / "vis.json"
+    path.write_text('{"last": "public", "confirmed": "public", "confirmed_at": 123, "last_cause": 5}')
+    monkeypatch.setattr(v, "STATE", path)
+    assert v.main(["status"]) == 0 and "never checked" in capsys.readouterr().out
+    assert v.check("t", FakeAlerts(), path=path, now=T0, ask=lambda t: Probe("public", "ok")).answer == "public"

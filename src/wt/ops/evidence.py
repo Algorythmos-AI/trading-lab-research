@@ -60,9 +60,15 @@ DENIED_KEYS = frozenset({"headlines", "review_url", "subject", "statement", "set
                          "catalyst_category", "catalyst_type"})
 SCORECARD_DATE = re.compile(r"scorecard_(\d{4}-\d{2}-\d{2})\.md$")
 # The run's own time budget, under the 600 s the weekly job gives it (wt.ops.jobs.publish_evidence): a step that
-# would run past it stops the run with its own alert instead of the job killing it with none.
-BUDGET_S = 480.0
+# would run past it stops the run with its own alert instead of the job killing it with none. Everything after the
+# visibility probe draws from it, the final worktree removal included (at least REMOVE_MIN_S). What runs after the
+# budget is spent is bounded too: one stop alert (wt.ops.alerts: a spool flush that stops at the first failed send
+# and the send itself, 5 s each). Worst case: BUDGET_S + REMOVE_MIN_S + ALERT_WORST_S, about 420 s.
+BUDGET_S = 400.0
 STEP_TIMEOUT_S = 120.0
+REMOVE_MIN_S = 5.0
+ALERT_WORST_S = 10.0
+PARENT_TIMEOUT_S = 600.0                 # wt.ops.jobs.publish_evidence
 # The steps a publishing run can stop at, and the alert key of each (evidence-pr:<step>).
 STEPS = ("pr-list", "pr-open", "fetch", "worktree", "commit", "push", "pr-create")
 OUTCOMES = ("failed", "timed out", "gh missing", "still open")
@@ -91,8 +97,11 @@ class Budget:
     def __init__(self, seconds: float = BUDGET_S, clock: Callable[[], float] = time.monotonic) -> None:
         self.clock, self.end = clock, clock() + seconds
 
+    def left(self) -> float:
+        return self.end - self.clock()
+
     def timeout(self, step: str, cap: float = STEP_TIMEOUT_S) -> float:
-        left = self.end - self.clock()
+        left = self.left()
         if left < 5:
             raise Stop(step, "timed out", "the run's time budget is spent")
         return min(cap, left)
@@ -109,7 +118,7 @@ def stop_page(stop: Stop, week: str, files: int) -> tuple[str, str]:
         pushed = ("The branch was pushed; the pull request was not opened." if step == "pr-create" else
                   "Nothing was pushed.")
         waiting = f" {count(files)} new file(s) wait for the next run." if isinstance(files, int) and files > 0 else ""
-        msg = f"Week {wk}: the {step} step {outcome}. {pushed}{waiting} The weekly log has the detail."
+        msg = f"Week {wk}: the {step} step {outcome}. {pushed}{waiting} The scorecard log has the detail."
     return "Weekly evidence not published", msg
 
 
@@ -223,6 +232,8 @@ def open_evidence_prs(token: str | None, timeout: float = 60.0) -> list[str] | N
         r = subprocess.run(["gh", "pr", "list", "-R", REPO, "--state", "open", "--limit", "200", "--json",
                             "headRefName", "--jq", ".[].headRefName"], env=env, capture_output=True, text=True,
                            timeout=timeout)
+    except subprocess.TimeoutExpired as e:
+        raise Stop("pr-list", "timed out", "gh pr list did not answer") from e
     except (OSError, subprocess.SubprocessError):
         return None
     if r.returncode != 0:
@@ -230,9 +241,24 @@ def open_evidence_prs(token: str | None, timeout: float = 60.0) -> list[str] | N
     return [b for b in r.stdout.split() if b.startswith("evidence/")]
 
 
-def probe(token: str | None) -> Probe:
+def probe(token: str | None, timeout_s: float = visibility.PROBE_TIMEOUT_S) -> Probe:
     """The visibility answer this run acts on (wt.ops.visibility.probe; a test replaces it)."""
-    return visibility.probe(token)
+    return visibility.probe(token, timeout_s=timeout_s)
+
+
+def parked_listing(week: str, catch_up: bool, vis: str) -> int:
+    """While the repository is not private: what would be copied, judged against the local checkout only. No fetch,
+    no token, no worktree, no network: nothing in it can fail the weekly job. Always 0."""
+    try:
+        pairs = plan_copies(ROOT, week, catch_up=catch_up)
+        rels = [str(d.relative_to(ROOT)) for _, d in pairs]
+        print(f"evidence {week}: {len(rels)} new file(s) against the local checkout")
+        print("\n".join(f"  {r}" for r in rels))
+    except (OSError, ValueError) as e:
+        print(f"evidence {week}: the local listing could not be made ({e.__class__.__name__})")
+    # the last line, so the weekly job's log always carries it
+    print(f"evidence {week}: outcome parked, the repository is {vis}, not private; nothing pushed")
+    return 0
 
 
 def _step(step: str, fn: Any, *args: Any, **kw: Any) -> Any:
@@ -251,37 +277,35 @@ def _step(step: str, fn: Any, *args: Any, **kw: Any) -> Any:
 
 def run(dry_run: bool = False, today: dt.date | None = None, week: str | None = None, alerts: Sender | None = None,
         vis_state: Path | None = None, budget: Budget | None = None) -> int:
+    budget = budget or Budget()                # first: the probe and every step draw from it
     token = os.environ.get("GH_TOKEN")
     if not token and not dry_run:
         print("evidence PR skipped: GH_TOKEN is not set (fine-grained token, contents + pull-requests write)")
         return 0
-    publishing = not dry_run
-    if publishing:
-        if alerts is None:
-            from wt.ops.alerts import Alerts
-            alerts = Alerts()
-        vis = visibility.check(token, alerts, path=vis_state, ask=probe).answer
-        if vis != "private":
-            # The scorecards and watchlists name setups (restricted, NOTICE.md): never push them to a repository
-            # that is, or might be, public. The run continues as a dry run so the week's list is still logged; the
-            # owner was paged once when the answer changed (wt.ops.visibility), not every week.
-            print(f"evidence PR parked: the repository is {vis}, not private; listing only (dry run)")
-            dry_run = True
     today = today or dt.datetime.now(ET).date()
     if week is not None and week_date(week) > today:
         print(f"evidence {week}: that week has not happened yet")
         return 1
     catch_up = week is not None and week != iso_week(today)
     week = week or iso_week(today)
-    parked = publishing and dry_run
+    if not dry_run:
+        if alerts is None:
+            from wt.ops.alerts import Alerts
+            alerts = Alerts()
+        wait = max(5.0, min(visibility.PROBE_TIMEOUT_S, budget.left()))
+        vis = visibility.check(token, alerts, path=vis_state, ask=lambda t: probe(t, wait)).answer
+        if vis != "private":
+            # The scorecards and watchlists name setups (restricted, NOTICE.md): never push them to a repository
+            # that is, or might be, public. A parked run lists from the local checkout and stops there; the owner
+            # was paged once when the answer changed (wt.ops.visibility), not every week.
+            print(f"evidence PR parked: the repository is {vis}, not private; listing only")
+            return parked_listing(week, catch_up, vis)
     try:
-        _publish(token, week, today, catch_up, dry_run, budget or Budget())
-        if parked:                       # the last line, so the weekly job's log tail always carries it
-            print(f"evidence {week}: outcome parked, the repository is {vis}, not private; nothing pushed")
+        _publish(token, week, today, catch_up, dry_run, budget)
     except Stop as e:
         print(f"evidence {week}: stopped at {e.step} ({e.outcome})" + (f": {e.detail}" if e.detail else ""))
         if dry_run:
-            return 1                     # by hand, or parked: nothing is paged from a run that publishes nothing
+            return 1                     # a manual --dry-run whose step failed: nothing is paged
         title, msg = stop_page(e, week, e.files)
         assert alerts is not None
         alerts.fire(ALERT_PREFIX + word(e.step, STEPS, "other"), title, msg, 3)
@@ -361,7 +385,8 @@ def _publish(token: str | None, week: str, today: dt.date, catch_up: bool, dry_r
         raise
     finally:
         try:
-            _git("worktree", "remove", "--force", str(wt), cwd=ROOT, check=False, timeout=60.0)
+            _git("worktree", "remove", "--force", str(wt), cwd=ROOT, check=False,
+                 timeout=max(REMOVE_MIN_S, min(60.0, budget.left())))
         except (OSError, subprocess.SubprocessError):
             pass                         # a worktree left behind is removed by the next run
 

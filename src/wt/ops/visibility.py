@@ -109,7 +109,9 @@ def load(path: Path | None = None) -> State:
         st = State(**{k: v for k, v in raw.items() if k in fields})
     except TypeError:
         return State()
-    ok = (st.last in (*ANSWERS, None) and st.confirmed in (*KNOWN, None) and isinstance(st.unknown_streak, int)
+    texts = (st.last_at, st.confirmed_at, st.last_cause)
+    ok = (all(t is None or type(t) is str for t in texts)
+          and st.last in (*ANSWERS, None) and st.confirmed in (*KNOWN, None) and isinstance(st.unknown_streak, int)
           and not isinstance(st.unknown_streak, bool) and st.unknown_streak >= 0 and isinstance(st.unknown_alerted, bool))
     return st if ok else State()
 
