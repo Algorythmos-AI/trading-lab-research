@@ -60,7 +60,7 @@ export function VolShape({ shape, spot, strike, expiry }: { shape: Shape; spot: 
           {strikeText(last)}
         </text>
       </svg>
-      <p className="text-muted-foreground text-[0.6875rem]">
+      <p className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">
         Filled: calls. Outlined: puts.{spotShown ? " Dashed line: the stock's price." : " The stock's price is outside these strikes."}
         {strikeShown ? " The tick under the axis is the strike being priced." : ""}
       </p>
@@ -68,7 +68,7 @@ export function VolShape({ shape, spot, strike, expiry }: { shape: Shape; spot: 
         <summary className="text-muted-foreground cursor-pointer">The same as a table ({shape.points.length} strikes)</summary>
         <table className="mt-1 w-full max-w-xs font-mono">
           <thead>
-            <tr className="text-muted-foreground text-left font-sans text-[0.6875rem]">
+            <tr className="text-muted-foreground text-left font-sans text-[0.6875rem] max-sm:text-xs">
               <th scope="col" className="py-0.5 pr-2 font-normal">
                 Strike
               </th>

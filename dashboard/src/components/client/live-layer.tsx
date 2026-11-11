@@ -109,12 +109,12 @@ export function StateChip({ read, className }: { read: LiveRead; className?: str
   const variant = read.stale ? "neutral" : STATE_VARIANT[read.state];
   return (
     <span className={cn("flex flex-wrap items-center gap-1", className)}>
-      <Badge variant={variant} style={chipStyle(variant)} className={cn("chip-solid px-1 font-sans text-[0.625rem]", testing && !read.stale && "chip-pulse")}>
+      <Badge variant={variant} style={chipStyle(variant)} className={cn("chip-solid px-1 font-sans text-[0.625rem] max-sm:text-xs", testing && !read.stale && "chip-pulse")}>
         <Icon aria-hidden />
         {read.state}
       </Badge>
       {read.stale ? (
-        <Badge variant="warn" style={chipStyle("warn")} className="chip-solid px-1 font-sans text-[0.625rem]">
+        <Badge variant="warn" style={chipStyle("warn")} className="chip-solid px-1 font-sans text-[0.625rem] max-sm:text-xs">
           <CircleDashed aria-hidden />
           STALE {read.ageS !== null ? `${read.ageS}s` : ""}
         </Badge>
@@ -147,7 +147,7 @@ export function FeedPill() {
           ? "Retrying"
           : "Connecting";
   return (
-    <span className="text-muted-foreground flex items-center gap-1.5 font-mono text-[0.6875rem]" aria-live="off">
+    <span className="text-muted-foreground flex items-center gap-1.5 font-mono text-[0.6875rem] max-sm:text-xs" aria-live="off">
       <span
         className={cn(
           "inline-block size-2 rounded-full",

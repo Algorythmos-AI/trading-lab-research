@@ -10,7 +10,7 @@ export function Stat({
 }) {
   return (
     <div className="min-w-0" title={title}>
-      <dt className="text-muted-foreground truncate text-[0.6875rem]">
+      <dt className="text-muted-foreground truncate text-[0.6875rem] max-sm:text-xs">
         {label}
       </dt>
       <dd className="truncate font-mono text-[0.8125rem]">{children}</dd>

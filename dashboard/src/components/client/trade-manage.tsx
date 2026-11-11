@@ -129,10 +129,10 @@ function useNotes(day: string | null): ManualNote[] {
 function Small({ label, value, note, tone, data }: { label: string; value: string; note?: string; tone?: string; data?: string }) {
   return (
     <div className="min-w-0" data-manage-small={data}>
-      <dt className="text-muted-foreground truncate text-[0.6875rem]">{label}</dt>
+      <dt className="text-muted-foreground truncate text-[0.6875rem] max-sm:text-xs">{label}</dt>
       <dd className={cn("text-explain font-mono font-semibold", tone)}>
         {value}
-        {note ? <span className="text-muted-foreground ml-1 font-sans text-[0.6875rem] font-normal">{note}</span> : null}
+        {note ? <span className="text-muted-foreground ml-1 font-sans text-[0.6875rem] font-normal max-sm:text-xs">{note}</span> : null}
       </dd>
     </div>
   );
@@ -142,9 +142,10 @@ function Small({ label, value, note, tone, data }: { label: string; value: strin
 function Big({ label, value, size, note, tone, data }: { label: string; value: string; size: "price" | "live"; note?: string; tone?: string; data?: string }) {
   return (
     <div className="min-w-0" data-manage-big={data}>
-      <dt className="text-explain text-muted-foreground truncate font-medium">{label}</dt>
-      <dd className={cn("font-mono tabular-nums", size === "price" ? "text-price" : "text-live", tone)}>{value}</dd>
-      {note ? <dd className="text-muted-foreground text-[0.6875rem]">{note}</dd> : null}
+      {/* On a phone a label wraps rather than squeeze or cut the figure under it, and a figure never breaks. */}
+      <dt className="text-explain text-muted-foreground truncate font-medium max-sm:overflow-visible max-sm:whitespace-normal">{label}</dt>
+      <dd className={cn("font-mono tabular-nums max-sm:whitespace-nowrap", size === "price" ? "text-price" : "text-live", tone)}>{value}</dd>
+      {note ? <dd className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">{note}</dd> : null}
     </div>
   );
 }
@@ -177,9 +178,9 @@ function OptionAtStop({ v, ctx }: { v: ManageView; ctx: ChainContext }) {
   if (!c || est === null) return null;
   return (
     <div className="min-w-0" data-manage-big="option" data-manage-option={c.held ? "held" : "atm"}>
-      <dt className="text-explain text-muted-foreground truncate font-medium">{fromEntryLabel(v.cardEntry)}</dt>
-      <dd className="text-live font-mono tabular-nums">≈ −${Math.round(est)}</dd>
-      <dd className="text-muted-foreground text-[0.6875rem]">
+      <dt className="text-explain text-muted-foreground truncate font-medium max-sm:overflow-visible max-sm:whitespace-normal">{fromEntryLabel(v.cardEntry)}</dt>
+      <dd className="text-live font-mono tabular-nums max-sm:whitespace-nowrap">≈ −${Math.round(est)}</dd>
+      <dd className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">
         on the option, a contract (est. from {c.held ? "your contract's" : "the at-the-money"} delta) · {chainStamp(feed.chain)}
       </dd>
     </div>
@@ -233,7 +234,7 @@ export function ManageCard({
           In a trade · {v.symbol} {v.side}
           {v.kind !== "plan" ? <TestingTag /> : null}
         </h3>
-        <span className="text-muted-foreground flex items-center gap-2 text-[0.6875rem]">
+        <span className="text-muted-foreground flex items-center gap-2 text-[0.6875rem] max-sm:text-xs">
           {v.source === "journal" ? (
             <span>From your Webull fills, up to 2 min behind; price levels from the card</span>
           ) : (
@@ -244,7 +245,7 @@ export function ManageCard({
               </span>
               {v.fillNote ? <span data-manage-fill-note>{v.fillNote}</span> : null}
               {onClear ? (
-                <button type="button" onClick={onClear} className="hover:text-foreground flex items-center gap-1 rounded border px-1.5 py-0.5">
+                <button type="button" onClick={onClear} className="hover:text-foreground flex items-center gap-1 rounded border px-1.5 py-0.5 max-sm:min-h-11 max-sm:px-3 max-sm:text-sm">
                   <X aria-hidden className="size-3" />
                   Clear
                 </button>
@@ -264,7 +265,7 @@ export function ManageCard({
         <p data-manage-hint className="text-warn flex flex-wrap items-center gap-2 text-xs font-medium">
           <span>{v.hint.line}</span>
           {onUseTime ? (
-            <button type="button" onClick={onUseTime} className="text-foreground hover:bg-muted rounded border px-2 py-0.5 font-medium">
+            <button type="button" onClick={onUseTime} className="text-foreground hover:bg-muted rounded border px-2 py-0.5 font-medium max-sm:min-h-11 max-sm:px-3 max-sm:text-sm">
               Use that time
             </button>
           ) : null}
@@ -275,7 +276,7 @@ export function ManageCard({
           <TriangleAlert aria-hidden className="size-3.5 shrink-0" />
           <span>{v.fillLine}</span>
           {onSetFill ? (
-            <button type="button" onClick={onSetFill} className="text-foreground hover:bg-muted rounded border px-2 py-0.5 font-medium">
+            <button type="button" onClick={onSetFill} className="text-foreground hover:bg-muted rounded border px-2 py-0.5 font-medium max-sm:min-h-11 max-sm:px-3 max-sm:text-sm">
               Set my fill
             </button>
           ) : null}
@@ -353,7 +354,8 @@ export function ImInForm({
     setError(null);
     onSave(noteFromForm(f, r.price, t.at, o.fill));
   };
-  const input = "bg-background h-8 rounded border px-2 font-mono text-[0.8125rem]";
+  // On a phone a field is 44 px tall at 16 px (globals.css), so iOS does not zoom into it.
+  const input = "bg-background h-8 rounded border px-2 font-mono text-[0.8125rem] max-sm:h-11";
   return (
     <form
       data-im-in-form={f.symbol}
@@ -367,14 +369,14 @@ export function ImInForm({
     >
       <div className="flex flex-wrap items-end gap-x-3 gap-y-1.5">
         <span className="grid gap-0.5">
-          <span className="text-muted-foreground text-[0.6875rem]">Side</span>
+          <span className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">Side</span>
           <span className="flex items-center gap-1 font-semibold">
             {f.symbol} {f.side}
             {f.kind !== "plan" ? <TestingTag /> : null}
           </span>
         </span>
         <label className="grid gap-0.5" htmlFor={`${id}-px`}>
-          <span className="text-muted-foreground text-[0.6875rem]">{f.symbol} price at your fill</span>
+          <span className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">{f.symbol} price at your fill</span>
           <input
             id={`${id}-px`}
             type="text"
@@ -388,7 +390,7 @@ export function ImInForm({
           />
         </label>
         <label className="grid gap-0.5" htmlFor={`${id}-at`}>
-          <span className="text-muted-foreground text-[0.6875rem]">Filled at (New York, to the minute)</span>
+          <span className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">Filled at (New York, to the minute)</span>
           <input
             id={`${id}-at`}
             type="text"
@@ -412,10 +414,10 @@ export function ImInForm({
           errId={`${id}-err`}
         />
         <span className="flex gap-1.5">
-          <button type="submit" className="bg-primary text-primary-foreground rounded px-2.5 py-1 font-medium">
+          <button type="submit" className="bg-primary text-primary-foreground rounded px-2.5 py-1 font-medium max-sm:min-h-11 max-sm:px-4 max-sm:text-sm">
             Save note
           </button>
-          <button type="button" onClick={onCancel} className="rounded border px-2.5 py-1">
+          <button type="button" onClick={onCancel} className="rounded border px-2.5 py-1 max-sm:min-h-11 max-sm:px-4 max-sm:text-sm">
             Cancel
           </button>
         </span>
@@ -427,16 +429,16 @@ export function ImInForm({
         </p>
       ) : null}
       {movedOn ? (
-        <p data-im-in-moved className="text-muted-foreground text-[0.6875rem]">
+        <p data-im-in-moved className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">
           {movedOn}
         </p>
       ) : null}
       {pre ? (
-        <p data-im-in-prefill className="text-muted-foreground text-[0.6875rem]">
+        <p data-im-in-prefill className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">
           Option fill from your trade ticket in this tab: check it against Webull.
         </p>
       ) : null}
-      <p className="text-muted-foreground text-[0.6875rem]">Your own note in this browser, to manage the trade here. Nothing is sent anywhere.</p>
+      <p className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">Your own note in this browser, to manage the trade here. Nothing is sent anywhere.</p>
     </form>
   );
 }
@@ -466,7 +468,7 @@ function OptionFillFields({
   return (
     <>
       <label className="grid gap-0.5" htmlFor={`${id}-opt`}>
-        <span className="text-muted-foreground text-[0.6875rem]">Option fill, a share (optional)</span>
+        <span className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">Option fill, a share (optional)</span>
         <input
           id={`${id}-opt`}
           data-im-in-option
@@ -484,7 +486,7 @@ function OptionFillFields({
         />
       </label>
       <label className="grid gap-0.5" htmlFor={`${id}-n`}>
-        <span className="text-muted-foreground text-[0.6875rem]">Contracts</span>
+        <span className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">Contracts</span>
         <input
           id={`${id}-n`}
           data-im-in-contracts
@@ -542,8 +544,8 @@ function FillForm({ v, initial = null, onSave, onCancel }: { v: ManageView; init
           {error.text}
         </p>
       ) : null}
-      {pre ? <p className="text-muted-foreground text-[0.6875rem]">Price from your trade ticket in this tab: check it against Webull.</p> : null}
-      <p className="text-muted-foreground text-[0.6875rem]">Kept with your note in this browser. Nothing is sent anywhere.</p>
+      {pre ? <p className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">Price from your trade ticket in this tab: check it against Webull.</p> : null}
+      <p className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">Kept with your note in this browser. Nothing is sent anywhere.</p>
     </form>
   );
 }
@@ -827,7 +829,7 @@ export function useTradeManage(x: TradeManageInput): {
         type="button"
         data-im-in={row.symbol}
         onClick={() => setForm(formFromRow(row.symbol, row.state, item, x.now!))}
-        className="hover:bg-muted flex w-fit items-center gap-1.5 rounded border px-2 py-1 text-xs font-medium"
+        className="hover:bg-muted flex w-fit items-center gap-1.5 rounded border px-2 py-1 text-xs font-medium max-sm:min-h-11 max-sm:px-3 max-sm:text-sm"
       >
         <Hand aria-hidden className="size-3.5" />
         I&apos;m in
@@ -865,13 +867,13 @@ export function useTradeManage(x: TradeManageInput): {
             <div className="min-w-0 flex-1">
               <p className={cn("text-[0.8125rem] font-medium", TONE_LINE[n.tone])}>{n.title}</p>
               <p className="mt-0.5">{n.line}</p>
-              <p className="text-muted-foreground mt-0.5 text-[0.6875rem]">Advisory: confirm on your chart.</p>
+              <p className="text-muted-foreground mt-0.5 text-[0.6875rem] max-sm:text-xs">Advisory: confirm on your chart.</p>
             </div>
             <button
               type="button"
               aria-label={`Dismiss the ${n.symbol} trade notice`}
               onClick={() => setNotices((all) => all.filter((y) => y.id !== n.id))}
-              className="text-muted-foreground hover:text-foreground -m-1 flex size-7 shrink-0 items-center justify-center rounded"
+              className="text-muted-foreground hover:text-foreground -m-1 flex size-7 shrink-0 items-center justify-center rounded max-sm:size-11"
             >
               <X aria-hidden className="size-4" />
             </button>

@@ -19,7 +19,7 @@ export function Pane({
       <div className="flex flex-wrap items-baseline justify-between gap-x-3">
         <h3 className="text-[0.8125rem] font-medium">{title}</h3>
         {meta != null ? (
-          <span className="text-muted-foreground text-[0.6875rem]">{meta}</span>
+          <span className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">{meta}</span>
         ) : null}
       </div>
       {children}

@@ -54,7 +54,7 @@ export function OptionsDay({ e }: { e: Options }) {
   );
   const hasRest = Boolean(hours) || Boolean(day && (day.ahead.length > 0 || day.earnings.length > 0));
   return (
-    <div data-desk-day className="text-muted-foreground flex basis-full flex-wrap items-center gap-x-5 gap-y-1.5 text-[0.6875rem]">
+    <div data-desk-day className="text-muted-foreground flex basis-full flex-wrap items-center gap-x-5 gap-y-1.5 text-[0.6875rem] max-sm:text-xs">
       {vix ? (
         <span title="The VIX at the close the levels were built from, its change on the day, and where it sits in its own last year">
           VIX <span className="text-foreground font-mono">{num(vix.close, 2)}</span>
@@ -70,7 +70,7 @@ export function OptionsDay({ e }: { e: Options }) {
           ) : (
             // The index is part of the key: nothing stops an edition listing the same release twice.
             day.onTheDay.map((ev, i) => (
-              <Badge key={`${i}:${ev.type}`} variant={ev.severity === "high" ? "warn" : "neutral"} className="px-1.5 text-[0.6875rem]">
+              <Badge key={`${i}:${ev.type}`} variant={ev.severity === "high" ? "warn" : "neutral"} className="px-1.5 text-[0.6875rem] max-sm:text-xs">
                 {eventLabel(ev.type)}
                 {at(ev)}
               </Badge>

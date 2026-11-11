@@ -205,7 +205,7 @@ export function moveAShare(s: LedgerSide): number | null {
 function Cell({ label, v, when, mark }: { label: string; v: number | null | undefined; when?: string; mark: string }) {
   return (
     <div className="bg-muted/40 grid min-w-0 gap-0.5 rounded-md border-t-2 px-2 py-1.5" style={{ borderTopColor: mark }}>
-      <span className="text-muted-foreground flex items-baseline justify-between gap-1 text-[0.6875rem]">
+      <span className="text-muted-foreground flex items-baseline justify-between gap-1 text-[0.6875rem] max-sm:text-xs">
         {label}
         {when ? <span className="font-mono">{when}</span> : null}
       </span>
@@ -227,7 +227,7 @@ function Ticket({ s }: { s: LedgerSide }) {
   return (
     <div className="grid gap-1.5 rounded-lg border p-2.5" data-testid="ledger-ticket">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <span className="text-[0.6875rem] font-semibold tracking-wider uppercase">{s.side}</span>
+        <span className="text-[0.6875rem] font-semibold tracking-wider uppercase max-sm:text-xs">{s.side}</span>
         <StatusBadge tone={res.tone}>{res.label}</StatusBadge>
         <span className={cn("ml-auto font-mono text-[0.9375rem] font-semibold tabular-nums", toneOf(s.r))}>{r2(s.r)}</span>
       </div>
@@ -264,7 +264,7 @@ function NotTaken({ s }: { s: LedgerSide }) {
   const where = s.side === "call" ? "ceiling" : "floor";
   return (
     <p className="text-muted-foreground flex flex-wrap items-baseline gap-x-2 text-xs">
-      <span className="text-[0.6875rem] font-semibold tracking-wider uppercase">{s.side}</span>
+      <span className="text-[0.6875rem] font-semibold tracking-wider uppercase max-sm:text-xs">{s.side}</span>
       <span>
         Not taken: {s.triggered ? `crossed the ${where} ` : `price never reached the ${where} `}
         <span className="text-foreground font-mono">{px(s.level)}</span>
@@ -714,7 +714,7 @@ function DayCalendar({ days, current, base }: { days: readonly LedgerDay[]; curr
   const reach = Math.max(0.01, ...days.map((d) => Math.abs(d.r)));
   return (
     <div className="grid gap-1.5">
-      <div className="text-muted-foreground grid grid-cols-5 gap-1.5 text-center text-[0.6875rem]">
+      <div className="text-muted-foreground grid grid-cols-5 gap-1.5 text-center text-[0.6875rem] max-sm:text-xs">
         {["Mon", "Tue", "Wed", "Thu", "Fri"].map((w) => (
           <span key={w}>{w}</span>
         ))}
@@ -733,14 +733,14 @@ function DayCalendar({ days, current, base }: { days: readonly LedgerDay[]; curr
                   background: `color-mix(in srgb, ${day.r >= 0 ? "var(--good-fill)" : "var(--bad-fill)"} ${Math.round(10 + (30 * Math.abs(day.r)) / reach)}%, var(--card))`,
                 }}
               >
-                <span className="text-[0.6875rem]">{shortDate(date)}</span>
+                <span className="text-[0.6875rem] max-sm:text-xs">{shortDate(date)}</span>
                 <span className="font-mono font-medium">{r2(day.r)}</span>
-                <span className="text-[0.6875rem]">
+                <span className="text-[0.6875rem] max-sm:text-xs">
                   {day.filled} fill{day.filled === 1 ? "" : "s"}
                 </span>
               </Link>
             ) : (
-              <span key={date} className="text-muted-foreground grid rounded-md border border-dashed px-1 py-1.5 text-center text-[0.6875rem]">
+              <span key={date} className="text-muted-foreground grid rounded-md border border-dashed px-1 py-1.5 text-center text-[0.6875rem] max-sm:text-xs">
                 {shortDate(date)}
               </span>
             ),

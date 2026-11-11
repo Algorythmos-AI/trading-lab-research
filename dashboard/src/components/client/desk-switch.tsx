@@ -16,7 +16,7 @@ export function DeskSwitch() {
           href={DESK_HOME[d]}
           aria-current={d === active ? "true" : undefined}
           className={cn(
-            "rounded px-2.5 py-1 text-xs font-medium transition-colors",
+            "rounded px-2.5 py-1 text-xs font-medium transition-colors max-sm:inline-flex max-sm:min-h-11 max-sm:items-center max-sm:px-2",
             d === active ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
           )}
         >

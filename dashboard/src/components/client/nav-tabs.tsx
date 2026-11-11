@@ -86,7 +86,7 @@ export function NavTabs() {
                 href={item.href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "inline-flex h-10 items-center border-b-2 px-2.5 text-sm transition-colors",
+                  "inline-flex h-10 items-center border-b-2 px-2.5 text-sm transition-colors max-sm:h-11",
                   active
                     ? "border-primary text-foreground font-medium"
                     : "text-muted-foreground hover:text-foreground border-transparent",

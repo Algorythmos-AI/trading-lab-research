@@ -71,7 +71,7 @@ export function JobHeatmap({ runs, asOf, extraJobs = [] }: { runs: JobRun[]; asO
               role="columnheader"
               key={d}
               title={d}
-              className={cn("text-center text-[0.6875rem] tabular-nums", weekday(d) % 6 === 0 ? "text-muted-foreground/60" : "text-muted-foreground")}
+              className={cn("text-center text-[0.6875rem] tabular-nums max-sm:text-xs", weekday(d) % 6 === 0 ? "text-muted-foreground/60" : "text-muted-foreground")}
             >
               {i % 2 === (days.length - 1) % 2 ? Number(d.slice(8, 10)) : ""}
             </span>

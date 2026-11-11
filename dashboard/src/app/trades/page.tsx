@@ -11,6 +11,7 @@ export default async function TradesPage({ searchParams }: { searchParams: Promi
     <>
       <PageHeading
         title="Trades"
+        phoneIntro="Every trade from your own brokerage account, today and back to the first one. A record only; nothing here can trade."
         intro="Every trade from your own brokerage account, live through the trading day and back to the first one: what each one made or lost, where the money was made and lost, and the patterns worth learning from. A record only; nothing here can trade."
       />
       <TradesBody result={result} clone={clone} q={q} now={now} />

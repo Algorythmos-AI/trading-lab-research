@@ -52,7 +52,7 @@ export function OptionsTriggers({
       }
     >
       {nextClose && !rules.complete ? (
-        <p data-next-hourly={nextClose.label} className="text-muted-foreground text-[0.6875rem]">
+        <p data-next-hourly={nextClose.label} className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">
           Next hourly close {nextClose.label} ET in <span className="text-foreground font-mono">{clockSpan(nextClose.ms)}</span>
           {rules.delayMin ? `; its states follow about ${rules.delayMin} min later` : ""}
         </p>
@@ -85,21 +85,21 @@ export function OptionsTriggers({
               >
                 <span className="min-w-0">
                   <span className="font-mono font-semibold">{t.symbol}</span> <span>{t.label}</span>
-                  <span className="text-muted-foreground block text-[0.6875rem]">
+                  <span className="text-muted-foreground block text-[0.6875rem] max-sm:text-xs">
                     {t.bar ? `on the ${t.bar} ET hourly close` : "time not given"}
                     {t.side ? ` · ${t.side === "call" ? "calls" : "puts"}` : ""}
                   </span>
                 </span>
                 <span className={cn("text-right font-mono", tone(t))}>
                   {STATE_LABEL[t.state]}
-                  <span className="block text-[0.6875rem]">{t.r === null ? "—" : rMult(t.r, 2)}</span>
+                  <span className="block text-[0.6875rem] max-sm:text-xs">{t.r === null ? "—" : rMult(t.r, 2)}</span>
                 </span>
               </button>
             </li>
           ))}
         </ul>
       )}
-      <p className="text-muted-foreground mt-1.5 text-[0.6875rem]">
+      <p className="text-muted-foreground mt-1.5 text-[0.6875rem] max-sm:text-xs">
         Paper rules on probation, replayed on delayed data: provisional, and not a signal to trade. R is on the stock, before any option cost. The after-close edition is the
         record.
       </p>
@@ -166,7 +166,7 @@ export function TriggerNotices({
             <p className="min-w-0 flex-1 text-xs">
               <span className="text-[0.8125rem] font-medium">{t.symbol}</span> <span className="text-muted-foreground">paper rule triggered {when(t)}</span>
               <span className="mt-0.5 block">{t.label}</span>
-              <span className="text-muted-foreground mt-0.5 block text-[0.6875rem]">Provisional, on delayed bars, and not a signal to trade.</span>
+              <span className="text-muted-foreground mt-0.5 block text-[0.6875rem] max-sm:text-xs">Provisional, on delayed bars, and not a signal to trade.</span>
             </p>
             <button
               type="button"

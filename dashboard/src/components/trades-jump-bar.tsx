@@ -5,9 +5,9 @@ import { cn } from "@/lib/utils";
 /** The page's groups, in order. Each id is rendered by `TradesGroup`; the bar links to them by these ids. */
 export const TRADES_GROUPS = {
   today: { id: "today-group", label: "Today" },
-  record: { id: "record", label: "The record" },
+  record: { id: "record", label: "The record", short: "Record" },
   history: { id: "history", label: "History" },
-  clone: { id: "clone-group", label: "The clone" },
+  clone: { id: "clone-group", label: "The clone", short: "Clone" },
 } as const;
 
 /** Panels worth a link of their own, by the id their panel already carries (journal.tsx). */
@@ -20,6 +20,8 @@ export const TRADES_QUICK = {
 export interface JumpLink {
   href: `#${string}`;
   label: string;
+  /** A shorter label for a phone ("Record"), so the bar's first four links fit 390 px; the full one is read out. */
+  short?: string;
   /** 1 for a group, 2 for a panel inside one. */
   level: 1 | 2;
 }
@@ -29,7 +31,10 @@ export interface JumpLink {
  * size panel and no list of trades; no money record, no money panel and, with no calendar either, no History group.
  */
 export function jumpLinks({ journal, record = false, money = false }: { journal: boolean; record?: boolean; money?: boolean }): JumpLink[] {
-  const g = (k: keyof typeof TRADES_GROUPS): JumpLink => ({ href: `#${TRADES_GROUPS[k].id}`, label: TRADES_GROUPS[k].label, level: 1 });
+  const g = (k: keyof typeof TRADES_GROUPS): JumpLink => {
+    const group: { id: string; label: string; short?: string } = TRADES_GROUPS[k];
+    return { href: `#${group.id}`, label: group.label, level: 1, ...(group.short ? { short: group.short } : {}) };
+  };
   const q = (k: keyof typeof TRADES_QUICK): JumpLink => ({ href: `#${TRADES_QUICK[k].id}`, label: TRADES_QUICK[k].label, level: 2 });
   if (!journal) return [g("clone")];
   return [
@@ -65,7 +70,16 @@ export function TradesJumpBar({ links }: { links: JumpLink[] }) {
                 href={l.href}
                 className="text-muted-foreground hover:text-foreground focus-visible:outline-ring inline-flex h-11 items-center rounded px-3 text-sm font-medium whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 sm:h-8 sm:px-2.5 sm:text-xs"
               >
-                {l.label}
+                {l.short ? (
+                  <>
+                    <span aria-hidden className="sm:hidden">
+                      {l.short}
+                    </span>
+                    <span className="max-sm:sr-only">{l.label}</span>
+                  </>
+                ) : (
+                  l.label
+                )}
               </a>
             </span>
           ))}

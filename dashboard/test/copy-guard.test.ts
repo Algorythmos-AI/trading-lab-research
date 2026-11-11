@@ -43,6 +43,7 @@ const FILES = [
   "../src/lib/chain.ts",
   "../src/lib/owner-positions.ts",
   "../src/lib/trades-view.ts",
+  "../src/lib/journal-list.ts",
   "../src/components/journal.tsx",
   "../src/components/client/journal-table.tsx",
   "../src/components/trades-page.tsx",

@@ -185,7 +185,7 @@ const TILE_TEXT: Record<Tone, string> = { good: "text-good", warn: "text-warn", 
 function Tile({ label, value, sub, tone, className = "" }: { label: string; value: string; sub?: string; tone: Tone; className?: string }) {
   return (
     <li className={`bg-card grid min-w-0 gap-0.5 rounded-lg border px-3.5 py-3 ${className}`}>
-      <span className="text-muted-foreground text-[0.6875rem] tracking-wider uppercase">{label}</span>
+      <span className="text-muted-foreground text-[0.6875rem] tracking-wider uppercase max-sm:text-xs">{label}</span>
       <span className={`text-base font-semibold ${TILE_TEXT[tone]}`}>{value}</span>
       {sub ? <span className="text-muted-foreground text-xs">{sub}</span> : null}
     </li>
@@ -942,7 +942,7 @@ export function RunbooksSection() {
     >
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <div className="bg-card rounded-lg border p-4">
-          <p className="text-muted-foreground mb-2 text-[0.6875rem] tracking-wider uppercase">You see → open</p>
+          <p className="text-muted-foreground mb-2 text-[0.6875rem] tracking-wider uppercase max-sm:text-xs">You see → open</p>
           <ul className="grid gap-1.5 text-sm">
             {RUNBOOKS.map((r) => (
               <li key={r.file} className="flex flex-wrap items-baseline gap-x-2">
@@ -953,7 +953,7 @@ export function RunbooksSection() {
           </ul>
         </div>
         <div className="bg-card rounded-lg border p-4">
-          <p className="text-muted-foreground mb-2 text-[0.6875rem] tracking-wider uppercase">Architecture decisions</p>
+          <p className="text-muted-foreground mb-2 text-[0.6875rem] tracking-wider uppercase max-sm:text-xs">Architecture decisions</p>
           <ul className="grid gap-2 text-sm">
             {ADRS.map((a) => (
               <li key={a.id} className="flex flex-wrap items-baseline gap-x-2 gap-y-1">

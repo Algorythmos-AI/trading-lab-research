@@ -21,7 +21,7 @@ function TocLinks({ groups }: { groups: TocGroup[] }) {
     <div className="grid gap-4">
       {groups.map((g) => (
         <div key={g.title} className="grid gap-1">
-          <p className="text-muted-foreground text-[0.6875rem] font-medium tracking-wider uppercase">{g.title}</p>
+          <p className="text-muted-foreground text-[0.6875rem] font-medium tracking-wider uppercase max-sm:text-xs">{g.title}</p>
           <ul className="border-border grid border-l">
             {g.items.map((it) => (
               <li key={it.id}>
@@ -87,7 +87,7 @@ export function WikiSection({
   return (
     <section id={id} aria-labelledby={`${id}-title`} className="grid min-w-0 scroll-mt-32 gap-4">
       <header className="grid gap-1">
-        {eyebrow ? <p className="text-muted-foreground font-mono text-[0.6875rem] tracking-wider uppercase">{eyebrow}</p> : null}
+        {eyebrow ? <p className="text-muted-foreground font-mono text-[0.6875rem] tracking-wider uppercase max-sm:text-xs">{eyebrow}</p> : null}
         <h3 id={`${id}-title`} className="text-lg font-semibold tracking-tight">
           {title}
         </h3>

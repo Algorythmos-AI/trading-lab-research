@@ -166,7 +166,8 @@ export function AlertButtons({ className }: { className?: string }) {
     setBlocked(false);
     writeAlerts({ ...alerts, notify: true });
   };
-  const btn = "text-muted-foreground hover:text-foreground inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[0.6875rem] whitespace-nowrap aria-pressed:text-foreground aria-pressed:bg-muted";
+  // On a phone (the bell's menu) each switch is 44 px tall at 14 px.
+  const btn = "text-muted-foreground hover:text-foreground inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[0.6875rem] whitespace-nowrap aria-pressed:text-foreground aria-pressed:bg-muted max-sm:min-h-11 max-sm:px-3 max-sm:text-sm";
   return (
     <span className={cn("flex items-center gap-1.5", className)}>
       <button
@@ -185,7 +186,7 @@ export function AlertButtons({ className }: { className?: string }) {
         {alerts.notify ? <Bell aria-hidden className="size-3.5" /> : <BellOff aria-hidden className="size-3.5" />}
         Browser notification
       </button>
-      {blocked ? <span className="text-warn text-[0.6875rem]">Blocked in this browser</span> : null}
+      {blocked ? <span className="text-warn text-[0.6875rem] max-sm:text-xs">Blocked in this browser</span> : null}
     </span>
   );
 }
@@ -252,12 +253,12 @@ export function AlertMenu() {
         aria-expanded={open}
         aria-controls="trade-now-alerts"
         onClick={() => setOpen((o) => !o)}
-        className="text-muted-foreground hover:text-foreground flex size-8 items-center justify-center rounded border"
+        className="text-muted-foreground hover:text-foreground flex size-11 items-center justify-center rounded-md border"
       >
         {on ? <Bell aria-hidden className="size-4" /> : <BellOff aria-hidden className="size-4" />}
       </button>
       {open ? (
-        <span ref={menu} id="trade-now-alerts" className="bg-popover absolute top-9 right-0 z-30 rounded-md border p-2 shadow-md">
+        <span ref={menu} id="trade-now-alerts" className="bg-popover absolute top-12 right-0 z-30 rounded-md border p-2 shadow-md">
           <AlertButtons className="flex-col items-stretch" />
         </span>
       ) : null}
@@ -271,7 +272,7 @@ const px = (v: number | null) => (v === null ? "–" : v.toFixed(2));
 /** The one mark for an idea still under test. Never written into a sentence. */
 export function TestingTag() {
   return (
-    <span data-testing-tag className="text-muted-foreground bg-neutral-soft inline-flex shrink-0 items-center gap-0.5 rounded border px-1 py-px text-[0.625rem] font-medium">
+    <span data-testing-tag className="text-muted-foreground bg-neutral-soft inline-flex shrink-0 items-center gap-0.5 rounded border px-1 py-px text-[0.625rem] font-medium max-sm:text-xs">
       <FlaskConical aria-hidden className="size-3" />
       Testing
     </span>
@@ -281,7 +282,7 @@ export function TestingTag() {
 function Badge({ v, paused, state }: { v: RowView; paused: boolean; state: NameStateName }) {
   const icon = paused ? Pause : v.badge.alt ? GitBranch : STATE_ICON[state];
   return (
-    <StatusBadge tone={paused ? "neutral" : v.badge.tone} icon={icon} className="font-sans text-[0.625rem]">
+    <StatusBadge tone={paused ? "neutral" : v.badge.tone} icon={icon} className="font-sans text-[0.625rem] max-sm:text-xs">
       {v.badge.word}
       {v.badge.side && !paused ? ` · ${v.badge.side.toUpperCase()}` : ""}
     </StatusBadge>
@@ -295,10 +296,10 @@ function ValueGrid({ grid }: { grid: NonNullable<RowView["grid"]> }) {
     const [price, ...rest] = value.split(" or ");
     return (
       <div className="min-w-0">
-        <dt className="text-muted-foreground text-[0.6875rem]">{label}</dt>
+        <dt className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">{label}</dt>
         <dd className="font-mono text-sm font-semibold sm:text-base">
           {price}
-          {rest.length ? <span className="text-muted-foreground ml-1 font-sans text-[0.6875rem] font-normal whitespace-nowrap">or {rest.join(" or ")}</span> : null}
+          {rest.length ? <span className="text-muted-foreground ml-1 font-sans text-[0.6875rem] font-normal whitespace-nowrap max-sm:text-xs">or {rest.join(" or ")}</span> : null}
         </dd>
       </div>
     );
@@ -314,7 +315,8 @@ function ValueGrid({ grid }: { grid: NonNullable<RowView["grid"]> }) {
 
 function Row({ row, mode, paused, onOpen, extra }: { row: BoardRow; mode: BoardMode; paused: boolean; onOpen: (s: string) => void; extra?: React.ReactNode }) {
   const s = row.state;
-  const base = "hover:bg-muted/60 w-full rounded px-2 py-1.5 text-left text-[0.8125rem]";
+  // 14 px on a phone: the row's price is something he acts on.
+  const base = "hover:bg-muted/60 w-full rounded px-2 py-1.5 text-left text-[0.8125rem] max-sm:text-sm";
   const label = `Show the ${row.symbol} focus card`;
   if (!s) {
     // Outside the live mode: the two trigger prices only.
@@ -365,11 +367,11 @@ function Row({ row, mode, paused, onOpen, extra }: { row: BoardRow; mode: BoardM
           {s.cautions.length ? (
             <span className="flex flex-wrap items-center gap-1" data-board-cautions={s.cautions.length + s.moreCautions}>
               {s.cautions.map((c) => (
-                <StatusBadge key={c.id} tone="warn" icon={TriangleAlert} className="font-sans text-[0.625rem]">
+                <StatusBadge key={c.id} tone="warn" icon={TriangleAlert} className="font-sans text-[0.625rem] max-sm:text-xs">
                   <span title={c.why}>{c.word}</span>
                 </StatusBadge>
               ))}
-              {s.moreCautions ? <span className="text-muted-foreground text-[0.6875rem]">+{s.moreCautions} more</span> : null}
+              {s.moreCautions ? <span className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">+{s.moreCautions} more</span> : null}
             </span>
           ) : null}
           {row.runner ? (
@@ -472,18 +474,18 @@ export function TradeNowBoard({
             Trade now
           </h2>
           {now !== null ? (
-            <span className="text-muted-foreground flex items-center gap-1 font-mono text-[0.6875rem]">
+            <span className="text-muted-foreground flex items-center gap-1 font-mono text-[0.6875rem] max-sm:text-xs">
               <Clock aria-hidden className="size-3" />
               {newYork(new Date(now).toISOString(), false)} New York
             </span>
           ) : null}
           {mode.kind === "live" ? (
-            <span className={cn("flex items-center gap-1 text-[0.6875rem] font-medium", paused ? "text-warn" : "text-good")}>
+            <span className={cn("flex items-center gap-1 text-[0.6875rem] font-medium max-sm:text-xs", paused ? "text-warn" : "text-good")}>
               {paused ? <CircleDashed aria-hidden className="size-3" /> : <span aria-hidden className="bg-good-fill inline-block size-2 rounded-full motion-safe:animate-pulse" />}
               {paused ? "paused" : "live"}
             </span>
           ) : null}
-          <Link href="/strategies" className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-[0.6875rem] underline-offset-4 hover:underline">
+          <Link href="/strategies" className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-[0.6875rem] underline-offset-4 hover:underline max-sm:text-xs">
             <FlaskConical aria-hidden className="size-3" />
             Testing · not proven yet
             <ChevronRight aria-hidden className="size-3" />
@@ -501,7 +503,7 @@ export function TradeNowBoard({
         </p>
       ) : null}
       {mode.kind === "live" && barsDelayed ? (
-        <p data-board-bars="delayed" className="text-muted-foreground text-[0.6875rem]">
+        <p data-board-bars="delayed" className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">
           Session bars delayed: states use this page&apos;s prices only
         </p>
       ) : null}
@@ -530,7 +532,7 @@ export function TradeNowBoard({
         )
       ) : null}
       {after}
-      <p className="text-muted-foreground text-[0.6875rem]">Advisory states from the study under test; the 9 rules are unchanged. Read only: nothing here places an order.</p>
+      <p className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">Advisory states from the study under test; the 9 rules are unchanged. Read only: nothing here places an order.</p>
     </section>
   );
 }
@@ -555,13 +557,13 @@ function BoardNotices({ notices, onOpen, onDrop, extra }: { notices: NameState[]
               {v.testing ? <TestingTag /> : null}
             </p>
             <p className="mt-0.5">{v.headline}</p>
-            <p className="text-muted-foreground mt-0.5 text-[0.6875rem]">Advisory: confirm on your chart.</p>
+            <p className="text-muted-foreground mt-0.5 text-[0.6875rem] max-sm:text-xs">Advisory: confirm on your chart.</p>
           </div>
           <button
             type="button"
             aria-label={`Dismiss the notice for ${s.symbol}`}
             onClick={() => onDrop(s)}
-            className="text-muted-foreground hover:text-foreground -m-1 flex size-7 shrink-0 items-center justify-center rounded"
+            className="text-muted-foreground hover:text-foreground -m-1 flex size-7 shrink-0 items-center justify-center rounded max-sm:size-11"
           >
             <X aria-hidden className="size-4" />
           </button>
@@ -572,7 +574,7 @@ function BoardNotices({ notices, onOpen, onDrop, extra }: { notices: NameState[]
             onOpen(s.symbol);
             onDrop(s);
           }}
-          className="text-foreground mt-1.5 rounded border px-2 py-1 text-xs font-medium"
+          className="text-foreground mt-1.5 rounded border px-2 py-1 text-xs font-medium max-sm:min-h-11 max-sm:px-3 max-sm:text-sm"
         >
           Show {s.symbol}
         </button>
