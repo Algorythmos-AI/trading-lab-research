@@ -73,6 +73,10 @@ const FILES = [
   "../src/app/api/cron/desk/route.ts",
   "../src/app/api/desk/page-state/route.ts",
   "../src/app/api/desk/eval-status/route.ts",
+  "../src/lib/alpaca-feed.ts",
+  "../src/lib/feed-provenance.ts",
+  "../src/lib/quote.ts",
+  "../src/lib/quote-route.ts",
 ];
 
 const BANNED = [

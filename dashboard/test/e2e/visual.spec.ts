@@ -56,7 +56,7 @@ for (const theme of ["dark", "light"] as const) {
 
 // The Options page as it reads in the session (the scripted morning at step 3: QQQ in its entry zone, SPY's failed
 // break live, AAPL with no trade): the status rail, the hero, the glance, the board and the cards with their ladders.
-// The rail's countdown and the session bar's now tick follow the running clock, so they are masked.
+// The rail's countdown, the session bar's now tick and the feed line's ages follow the running clock, so they are masked.
 for (const theme of ["dark", "light"] as const) {
   test(`the glance page in the session, ${theme}`, async ({ page, context, baseURL, isMobile }) => {
     test.skip(isMobile && theme === "light", "the phone is pictured once");
@@ -75,7 +75,8 @@ for (const theme of ["dark", "light"] as const) {
     if (!isMobile) await page.setViewportSize({ width: 1280, height: 2000 });
     await expect(page).toHaveScreenshot(`glance-live-${theme}.png`, {
       fullPage: isMobile,
-      mask: [page.getByRole("banner"), page.locator("[data-rail-countdown]"), page.locator("[data-session-bar]")],
+      // The feed line's two ages follow the running clock too: masked, the words around them pictured.
+      mask: [page.getByRole("banner"), page.locator("[data-rail-countdown]"), page.locator("[data-session-bar]"), page.locator("[data-age-slot]")],
     });
   });
 }
