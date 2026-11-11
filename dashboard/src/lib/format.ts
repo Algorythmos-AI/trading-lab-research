@@ -81,11 +81,18 @@ export function zoned(iso: string | null | undefined, tz: string, withDate = tru
 export const sydney = (iso: string | null | undefined, withDate = true) => zoned(iso, SYDNEY, withDate);
 export const newYork = (iso: string | null | undefined, withDate = true) => zoned(iso, NEW_YORK, withDate);
 
+const dayFormatters = new Map<string, Intl.DateTimeFormat>();
+
 /** "YYYY-MM-DD" of an instant in a zone (en-CA formats dates that way). */
 export function dayIn(iso: string | null | undefined, tz: string): string | null {
   const d = parse(iso);
   if (!d) return null;
-  return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+  let f = dayFormatters.get(tz);
+  if (!f) {
+    f = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" });
+    dayFormatters.set(tz, f);
+  }
+  return f.format(d);
 }
 
 /** Duration between two instants: "4 h 01 min", "51 s". */
@@ -100,19 +107,20 @@ export function duration(startIso: string | null | undefined, endIso: string | n
   return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min`;
 }
 
+const SHORT_DATE_FMT = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "numeric", month: "short" });
+const WEEK_DATE_FMT = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" });
+
 /** "Sep 29" style short date from "YYYY-MM-DD" without timezone drift. */
 export function shortDate(ymd: string | null | undefined): string {
   if (typeof ymd !== "string" || !/^\d{4}-\d{2}-\d{2}/.test(ymd)) return txt(ymd);
   const [y, m, d] = ymd.slice(0, 10).split("-").map(Number);
   const date = new Date(Date.UTC(y!, m! - 1, d!));
-  return new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "numeric", month: "short" }).format(date);
+  return SHORT_DATE_FMT.format(date);
 }
 
 /** "Mon 12 Oct" from YYYY-MM-DD, without timezone drift. A dash for a missing or unreadable day. */
 export function weekDate(ymd: string | null | undefined): string {
   if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return DASH;
   const [y, m, d] = ymd.split("-").map(Number);
-  return new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" }).format(
-    new Date(Date.UTC(y!, m! - 1, d!)),
-  );
+  return WEEK_DATE_FMT.format(new Date(Date.UTC(y!, m! - 1, d!)));
 }

@@ -182,19 +182,22 @@ export interface LiveQuote {
   vwap: number | null;
 }
 
+/** One formatter for every nyClock call: building an Intl.DateTimeFormat costs far more than using one. */
+const NY_CLOCK_FMT = new Intl.DateTimeFormat("en-CA", {
+  timeZone: NEW_YORK,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
 /** New York date and minutes after midnight of an instant. Null for an unreadable time. */
 export function nyClock(iso: string): { day: string; minutes: number } | null {
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return null;
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: NEW_YORK,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(new Date(t));
+  const parts = NY_CLOCK_FMT.formatToParts(new Date(t));
   const get = (k: string) => parts.find((p) => p.type === k)?.value ?? "";
   return { day: `${get("year")}-${get("month")}-${get("day")}`, minutes: Number(get("hour")) * 60 + Number(get("minute")) };
 }

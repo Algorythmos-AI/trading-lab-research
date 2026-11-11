@@ -4,7 +4,7 @@
 //   up the journal's pieces closed in the view, each after its own fees, on the day it was sold;
 // - per-trade figures (the trade count, win rate, the average per trade, profit factor, R, loss size) count each
 //   trade once, a position for options, on the day it finished: its last close.
-import { applyFilter, daily, summarize, type DayRow, type Filter, type JournalDoc, type Summary, type Trade } from "./journal";
+import { applyFilter, daily, readableJournal, summarize, type DayRow, type Filter, type JournalDoc, type Summary, type Trade } from "./journal";
 import { netPieces, positionTrade, tradeUnits, type OwnerPosition, type TradeUnit } from "./owner-positions";
 
 export interface TradesView {
@@ -21,9 +21,13 @@ export interface TradesView {
   fees: { included: boolean; total: number };
   /** Nothing in view at all: no trade finished and no piece sold in it. */
   empty: boolean;
+  /** Rows of the journal (pieces, open lots, gaps) that could not be read and are left out of every figure. */
+  skipped: number;
 }
 
-export function tradesView(doc: Pick<JournalDoc, "trades" | "open" | "gaps" | "fees_included">, filter: Filter, now: Date): TradesView {
+export function tradesView(raw: Pick<JournalDoc, "trades" | "open" | "gaps" | "fees_included">, filter: Filter, now: Date): TradesView {
+  // A row written wrong is left out and counted, never thrown on (readableJournal).
+  const { doc, skipped } = readableJournal(raw);
   const all = doc.trades;
   const included = doc.fees_included === true;
   const allUnits = tradeUnits(all, { basis: "net", open: doc.open, gaps: doc.gaps, feesIncluded: doc.fees_included });
@@ -51,5 +55,6 @@ export function tradesView(doc: Pick<JournalDoc, "trades" | "open" | "gaps" | "f
     ),
     fees: { included, total: fees },
     empty: trades.length === 0 && pieces.length === 0,
+    skipped,
   };
 }

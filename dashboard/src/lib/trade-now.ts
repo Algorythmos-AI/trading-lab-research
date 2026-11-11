@@ -372,12 +372,38 @@ export const DONE_ROW_VIEW: RowView = {
   grid: null,
 };
 
+/** The chip's word on a name in a trade being managed once the owner has marked today done. */
+export const IN_TRADE_WORD = "IN A TRADE";
+
 /**
- * Whether a row's entry prompt is hidden: today is marked done, the row asks for an entry, and the name is not in a
- * trade being managed (that row keeps exactly what it shows, so nothing that helps an exit is hidden).
+ * A managed name's view once today is marked done: a neutral chip, no side, no entry sentence and no Enter, Stop or
+ * Target figures. The trade itself is managed on its own card (trade-manage.tsx), which is not touched.
  */
+export const IN_TRADE_ROW_VIEW: RowView = {
+  badge: { word: IN_TRADE_WORD, tone: "neutral", side: null, alt: null },
+  testing: false,
+  headline: "You marked today done. Manage this trade on its card below.",
+  grid: null,
+};
+
+/** What a name shows once today is marked done: its entry prompt hidden ("done"), a managed trade ("in_trade"), or as it is. */
+export type DoneMask = "done" | "in_trade" | null;
+
+/**
+ * How today's "done" changes a row, for display only (the states themselves, and what the page reports to the server's
+ * shadow check, are never masked). Not done, or a row that asks for no entry (watch, no trade, plan off, missed,
+ * paused): nothing, so it keeps its real state. An entry prompt (get ready, an entry, a live alternative) reads "In a
+ * trade" on a name in a trade being managed, whose manage card, stop and notices stay as they are, and "done" on any
+ * other name.
+ */
+export function doneMask(done: boolean, row: Pick<BoardRow, "symbol" | "state">, managed: ReadonlySet<string>): DoneMask {
+  if (!done || !entryPrompt(row.state)) return null;
+  return managed.has(row.symbol) ? "in_trade" : "done";
+}
+
+/** Whether a row's entry prompt is hidden because today is marked done (doneMask's "done"; a managed name is "in_trade"). */
 export function doneMasked(done: boolean, row: Pick<BoardRow, "symbol" | "state">, managed: ReadonlySet<string>): boolean {
-  return done && !managed.has(row.symbol) && entryPrompt(row.state);
+  return doneMask(done, row, managed) === "done";
 }
 
 /**

@@ -5,13 +5,14 @@ import { INTRADAY_MAX_AGE_MIN, inUsSession, journalCheck } from "./feeds";
 import { etOffsetMin } from "./freshness";
 import { closeDay, daily, holdMinutes, nyTime, type Lot, type SessionView, type Trade } from "./journal";
 import { partPastStop, peakPremium, premiumOverAt, tradeUnits, type TradeUnit } from "./owner-positions";
+import { PREMIUM_STOP } from "./premium-stop";
 
 /** The most a single trade may lose, in dollars. */
 export const RISK_PER_TRADE = 50;
 /** The most premium a single option may cost, in dollars. With the 25% stop it caps the loss at RISK_PER_TRADE. */
 export const MAX_PREMIUM = 200;
-/** Close an option once it has lost this share of what it cost. */
-export const PREMIUM_STOP = 0.25;
+/** Close an option once it has lost this share of what it cost (premium-stop.ts; R25 is measured in the same share). */
+export { PREMIUM_STOP } from "./premium-stop";
 /** A trade not working after this many minutes is closed. */
 export const TIME_STOP_MINUTES = 5;
 /** Stop trading for the day once the day's closed trades are down this much. */
@@ -24,10 +25,11 @@ export const MIN_ROOM_MULTIPLE = 2;
 export const CONFIRM_BAR_MINUTES = 2;
 
 /**
- * The gain, as a share of the premium, that the evidence counts a winning option as having run to (20% up). Once the
- * target share of the owner's worked $165 example; the example itself is now the trade ticket on the Options desk.
+ * The rules evidence's mark for a winner that ran: an option closed +20% or more on its premium, before fees, piece by
+ * piece. Once the target share of the owner's worked $165 example; the example itself is now the trade ticket on the
+ * Options desk. Not the Loss size panel's line (owner-positions' SMALL_WIN_UNDER, +50%), which asks another question.
  */
-export const WIN_SHARE_MARK = 0.2;
+export const RAN_TO_MARK = 0.2;
 
 /** What a plan comes to in dollars: the planned loss, the target and reward to risk. Before fees and slippage. */
 export function planNumbers(premium: number, stopShare: number, targetShare: number): { risk: number; reward: number; ratio: number; ok: boolean } {
@@ -425,10 +427,10 @@ export function ruleEvidence(pieces: readonly Trade[]): Record<string, Evidence>
     const l = avgOf(losses);
     const share = Math.round((wins.length / trades.length) * 100);
     const optionWins = wins.filter((t) => isOption(t) && t.side === "long" && t.entry > 0);
-    const ran = optionWins.filter((t) => t.exit / t.entry - 1 >= WIN_SHARE_MARK - 1e-9).length;
+    const ran = optionWins.filter((t) => t.exit / t.entry - 1 >= RAN_TO_MARK - 1e-9).length;
     out.room = {
       source: "yours",
-      finding: `You won ${share}% of your trades, but the average win was ${money(w)} and the average loss ${money(l)}. Winning often does not pay when losses are ${(Math.abs(l) / w).toFixed(1)}× the wins; a target twice the risk turns that around. Only ${count(ran)} of your ${count(optionWins.length)} winning options were closed ${Math.round(WIN_SHARE_MARK * 100)}% or more up, so 2:1 means letting the winner reach the target.`,
+      finding: `You won ${share}% of your trades, but the average win was ${money(w)} and the average loss ${money(l)}. Winning often does not pay when losses are ${(Math.abs(l) / w).toFixed(1)}× the wins; a target twice the risk turns that around. Only ${count(ran)} of your ${count(optionWins.length)} winning options were closed +${Math.round(RAN_TO_MARK * 100)}% or more on premium, so 2:1 means letting the winner reach the target.`,
       compare: { unit: "average per trade", a: { label: "Average win", value: w }, b: { label: "Average loss", value: l } },
     };
   }

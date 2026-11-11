@@ -4,7 +4,7 @@
 // dot, the name and the board's state chip, in the same word and colour as the board. Tapping one brings its focus card
 // into view. The ladders are the page's own (server-drawn LadderMini), passed in as children; the chip is read from the
 // board, never worked out here. Read only.
-import { CircleCheck, Ban, Eye, GitBranch, Hourglass, OctagonX, Pause, SkipForward, type LucideIcon } from "lucide-react";
+import { CircleCheck, Ban, Eye, GitBranch, Hand, Hourglass, OctagonX, Pause, SkipForward, type LucideIcon } from "lucide-react";
 import { StatusBadge } from "@/components/status";
 import type { NameStateName } from "@/lib/trade-state";
 import { cn } from "@/lib/utils";
@@ -26,12 +26,13 @@ export function BoardChip({ symbol, className }: { symbol: string; className?: s
   if (!r || !r.view || !r.row.state) return null;
   const paused = r.paused || r.row.state.state === "paused";
   const v = r.view;
-  // Today marked done: the entry prompt reads as the neutral done chip (the board's own DONE_ROW_VIEW).
-  const icon = paused ? Pause : r.done ? CircleCheck : v.badge.alt ? GitBranch : STATE_ICON[r.row.state.state];
+  // Today marked done: the entry prompt reads as the neutral done chip (the board's own DONE_ROW_VIEW), and a managed
+  // name as the neutral "In a trade" chip (IN_TRADE_ROW_VIEW).
+  const icon = paused ? Pause : r.mask === "in_trade" ? Hand : r.done ? CircleCheck : v.badge.alt ? GitBranch : STATE_ICON[r.row.state.state];
   return (
     // The chip may wrap: "FAILED BREAK · PUT" is wider than a phone's glance tile (about 150 px), and a badge that
     // cannot shrink pushes the tile sideways or is clipped. The side wraps as one piece, never split from its dot.
-    <span data-chip-state={paused ? "paused" : r.done ? "done" : r.row.state.state} className="max-w-full min-w-0">
+    <span data-chip-state={paused ? "paused" : (r.mask ?? r.row.state.state)} className="max-w-full min-w-0">
       <StatusBadge
         tone={paused ? "neutral" : v.badge.tone}
         icon={icon}
@@ -48,7 +49,7 @@ export function BoardChip({ symbol, className }: { symbol: string; className?: s
 /** One tile of the glance: a button that opens the name's focus card. */
 export function GlanceTile({ symbol, children }: { symbol: string; children: React.ReactNode }) {
   const r = useBoardRow(symbol);
-  const state = r?.row.state ? (r.paused ? "paused" : r.done ? "done" : r.row.state.state) : "plan";
+  const state = r?.row.state ? (r.paused ? "paused" : (r.mask ?? r.row.state.state)) : "plan";
   return (
     <li data-glance={symbol} data-glance-state={state} className="min-w-0">
       <button

@@ -8,7 +8,7 @@ import { Panel } from "@/components/panel";
 import { StatTile, StatTiles } from "@/components/stat-tile";
 import { StatusBadge, TONE_TEXT, ToneIcon } from "@/components/status";
 import type { Health } from "@/lib/health";
-import { ALL, filterHref, lessons, marketState, moneyView, sessionView, shortDay, summarize, type JournalDoc, type Trade } from "@/lib/journal";
+import { ALL, filterHref, lessons, marketState, moneyView, sessionView, shortDay, skippedLine, summarize, type JournalDoc, type Trade } from "@/lib/journal";
 import type { Tone } from "@/lib/labels";
 import type { OptionsEdition } from "@/lib/options.types";
 import { hourBands, keptStreak, keptVsBroken, nextOpen, periodTotals, quickVsSlow, ruleDays, since, tickerEnds, untilText, withRun } from "@/lib/overview";
@@ -95,6 +95,11 @@ export function AccountHero({ doc, now }: { doc: JournalDoc; now: Date }) {
           {money && money.gain !== null ? (
             <p className="text-muted-foreground text-xs">
               Put in {aud(money.netIn)} net · <span className={TONE_TEXT[toneOf(money.gain)]}>{aud(money.gain, true)}</span>
+            </p>
+          ) : null}
+          {money && money.skipped > 0 ? (
+            <p data-money-skipped={money.skipped} className="text-warn text-xs font-medium">
+              Money in and out: {skippedLine(money.skipped)}
             </p>
           ) : null}
         </div>

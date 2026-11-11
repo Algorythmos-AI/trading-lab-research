@@ -145,6 +145,7 @@ export function monthlyExpiry(year: number, month: number, open: (day: string) =
 // ── Sydney ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
 const sydFmt = new Intl.DateTimeFormat("en-AU", { timeZone: SYD, weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const sydDayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: SYD, year: "numeric", month: "2-digit", day: "2-digit" });
 
 export interface SydneyTime {
   /** "Fri" */
@@ -157,7 +158,7 @@ export interface SydneyTime {
 
 function sydney(ms: number): SydneyTime {
   const p = Object.fromEntries(sydFmt.formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
-  const d = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: SYD, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
+  const d = Object.fromEntries(sydDayFmt.formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
   return { weekday: String(p.weekday), time: `${p.hour}:${p.minute}`, day: `${d.year}-${d.month}-${d.day}` };
 }
 
@@ -170,12 +171,15 @@ export function sydneySession(day: string): { open: SydneyTime; close: SydneyTim
   return o === null || c === null ? null : { open: sydney(o), close: sydney(c) };
 }
 
+const offsetFormatters = new Map<string, Intl.DateTimeFormat>();
+
 function offsetMin(tz: string, ms: number): number {
-  const p = Object.fromEntries(
-    new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
-      .formatToParts(new Date(ms))
-      .map((x) => [x.type, x.value]),
-  );
+  let f = offsetFormatters.get(tz);
+  if (!f) {
+    f = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    offsetFormatters.set(tz, f);
+  }
+  const p = Object.fromEntries(f.formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
   return (Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day), Number(p.hour), Number(p.minute)) - ms) / 60_000;
 }
 

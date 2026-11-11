@@ -96,7 +96,8 @@ function Figure({ label, title, children }: { label: string; title?: string; chi
   );
 }
 
-const FIELD = "bg-background h-8 rounded border px-2 font-mono text-[0.8125rem]";
+/** 13 px from sm up; 16 px on a phone, so iOS Safari does not zoom the page into the field when it takes the focus. */
+const FIELD = "bg-background h-8 rounded border px-2 font-mono text-[0.8125rem] max-sm:text-base";
 
 /**
  * One call or put for the selected name: what it costs, where it breaks even, and what the model says it would be
