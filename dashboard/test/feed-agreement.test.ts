@@ -21,8 +21,8 @@ import {
   type SummaryRow,
   type Word,
 } from "@/lib/feed-agreement";
-import { CallLimiter, type Clock, fetchSessionBars, FetchStop, MAX_RETRIES, retryAfterMs } from "@/lib/feed-agreement-fetch";
-import { EDITION_SIGNED, EXIT, main, parseArgs, type RunDeps } from "@/lib/feed-agreement-run";
+import { barsUrl, CallLimiter, type Clock, fetchSessionBars, FetchStop, MAX_RETRIES, rateLimitOf, retryAfterMs } from "@/lib/feed-agreement-fetch";
+import { EDITION_SIGNED, EXIT, main, parseArgs, resolveKeys, type RunDeps } from "@/lib/feed-agreement-run";
 import { focusOptions } from "@/lib/fixture-variants";
 import { verify } from "@/lib/hmac";
 import type { Options, TrailPoint } from "@/lib/options";
@@ -474,8 +474,8 @@ describe("the bars fetch", () => {
     }) as unknown as typeof fetch;
     const got = await fetchSessionBars("iex", SYMS, bounds, opts(f));
     expect(tokens).toEqual([null, "p2"]);
-    expect(got[SYMS[0]!]!.map((b) => b.start)).toEqual([all[0]!.start, all[1]!.start, all[2]!.start, all[5]!.start]);
-    expect(got[SYMS[1]!]).toEqual([]);
+    expect(got.bars[SYMS[0]!]!.map((b) => b.start)).toEqual([all[0]!.start, all[1]!.start, all[2]!.start, all[5]!.start]);
+    expect(got.bars[SYMS[1]!]).toEqual([]);
   });
 
   it("on a half day keeps bars before 13:00 only", async () => {
@@ -484,7 +484,7 @@ describe("the bars fetch", () => {
     const bar = (hhmm: string) => ({ t: new Date(ny(H, `${hhmm}:00`, "-05:00")).toISOString(), o: 1, h: 1, l: 1, c: 1 });
     const f = (async () => jsonRes({ bars: { [SYMS[0]!]: [bar("12:56"), bar("12:58"), bar("13:00"), bar("13:02")] } })) as unknown as typeof fetch;
     const got = await fetchSessionBars("sip", SYMS, hb, opts(f, fakeClock(ny(H, "18:00:00", "-05:00"))));
-    expect(got[SYMS[0]!]!.map((b) => nyHhmm(b.end))).toEqual(["1258", "1300"]);
+    expect(got.bars[SYMS[0]!]!.map((b) => nyHhmm(b.end))).toEqual(["1258", "1300"]);
   });
 
   it("a winter (EST) day asks from 14:30 to 21:00 UTC", async () => {
@@ -497,7 +497,7 @@ describe("the bars fetch", () => {
     const got = await fetchSessionBars("iex", SYMS, sessionBounds(W)!, opts(f, fakeClock(ny(W, "18:00:00", "-05:00"))));
     expect(q!.get("start")).toBe("2026-11-11T14:30:00.000Z");
     expect(q!.get("end")).toBe("2026-11-11T21:00:00.000Z");
-    expect(got[SYMS[0]!]).toHaveLength(1);
+    expect(got.bars[SYMS[0]!]).toHaveLength(1);
   });
 
   const stop = async (p: Promise<unknown>) => {
@@ -511,7 +511,7 @@ describe("the bars fetch", () => {
 
   it("a 401 is upstream with keys rejected; a body that is not JSON is upstream", async () => {
     const e401 = await stop(fetchSessionBars("iex", SYMS, bounds, opts((async () => jsonRes({}, 401)) as unknown as typeof fetch)));
-    expect([e401.kind, e401.line]).toEqual(["upstream", "upstream: iex bars answered HTTP 401 (keys rejected); no report written"]);
+    expect([e401.kind, e401.line]).toEqual(["upstream", "upstream: iex bars answered HTTP 401: the keys were rejected (keys of unknown source); no report written"]);
     const bad = await stop(fetchSessionBars("iex", SYMS, bounds, opts((async () => new Response("<html>", { status: 200 })) as unknown as typeof fetch)));
     expect(bad.kind).toBe("upstream");
     expect(bad.line).toMatch(/not JSON/);
@@ -663,21 +663,21 @@ describe("the runner", () => {
   it("an empty SIP answer: says so, exits no-bars, writes nothing", async () => {
     const h = harness({ iex: [ok(BARS)], sip: [{ status: 200, body: { bars: {}, next_page_token: null } }], site: [] });
     expect(await main(ARGV, h.deps)).toBe(EXIT.noBars);
-    expect(h.printed[0]).toMatch(/^no bars: the sip feed returned no bars for any focus name on 2026-10-12/);
+    expect(h.printed.at(-1)).toMatch(/^no bars: the sip feed returned no bars for any focus name on 2026-10-12/);
     expect(h.written()).toEqual([]);
   });
 
   it("SIP answers 403: sip not entitled, worded for both causes, exit 5, nothing written, no body printed", async () => {
     const h = harness({ iex: [ok(BARS)], sip: [{ status: 403, body: { message: "subscription does not permit querying recent SIP data" } }], site: [] });
     expect(await main(ARGV, h.deps)).toBe(EXIT.plan);
-    expect(h.printed[0]).toBe("sip not entitled: Alpaca answered 403 (not entitled, or recent data not permitted on this plan) for the SIP feed; no report written");
+    expect(h.printed.at(-1)).toBe("sip not entitled: Alpaca answered 403 (not entitled, or recent data not permitted on this plan) for the SIP feed; no report written");
     expect(h.written()).toEqual([]);
   });
 
   it("a 401: upstream, exit 8, nothing written", async () => {
     const h = harness({ iex: [{ status: 401 }], sip: [], site: [] });
     expect(await main(ARGV, h.deps)).toBe(EXIT.upstream);
-    expect(h.printed[0]).toMatch(/401 \(keys rejected\)/);
+    expect(h.printed).toEqual(["keys from the environment", "upstream: iex bars answered HTTP 401: the keys were rejected (keys from the environment); no report written"]);
     expect(h.written()).toEqual([]);
   });
 
@@ -690,7 +690,7 @@ describe("the runner", () => {
   it("a 429 whose Retry-After outlasts the budget: time budget, exit 7, nothing written", async () => {
     const h = harness({ iex: [ok(BARS)], sip: [{ status: 429, headers: { "retry-after": "500" } }], site: [] });
     expect(await main(ARGV, h.deps)).toBe(EXIT.budget);
-    expect(h.printed[0]).toMatch(/^time budget: a 429 Retry-After on sip/);
+    expect(h.printed.at(-1)).toMatch(/^time budget: a 429 Retry-After on sip/);
     expect(h.written()).toEqual([]);
   });
 
@@ -705,14 +705,14 @@ describe("the runner", () => {
   it("a call that runs past the time budget: time budget, exit 7, nothing written", async () => {
     const h = harness({ iex: ["hang"], sip: [], site: [] });
     expect(await main(ARGV, h.deps)).toBe(EXIT.budget);
-    expect(h.printed[0]).toMatch(/^time budget:/);
+    expect(h.printed.at(-1)).toMatch(/^time budget:/);
     expect(h.written()).toEqual([]);
   });
 
   it("a failed report write: exit 9, one line, no file and no temporary file left", async () => {
     const h = harness({ iex: [ok(BARS)], sip: [ok(BARS)], site: [] }, { failWrite: (p) => p.includes(".txt") });
     expect(await main(ARGV, h.deps)).toBe(EXIT.write);
-    expect(h.printed).toEqual(["write failed: ENOSPC; nothing was left behind"]);
+    expect(h.printed).toEqual(["keys from the environment", "write failed: ENOSPC; nothing was left behind"]);
     expect(h.written()).toEqual([]);
   });
 
@@ -797,5 +797,126 @@ describe("saving the session's edition", () => {
     const none = harness({ iex: NO, sip: NO, site: [] }, { env: {} });
     expect(await main(["--save-edition", "--day", S], none.deps)).toBe(EXIT.noKeys);
     expect(none.urls).toEqual([]);
+  });
+});
+
+// ---- revision 2: the keys' source, the plan, the drift ------------------------------------------------------------------
+describe("the keys' source", () => {
+  const FILE = 'APCA_API_KEY_ID="FILE-ID"\nAPCA_API_SECRET_KEY=FILE-SECRET\n# a comment\nOTHER=1\n';
+
+  it("the env file's pair wins over a pair the shell exports; the source is printed, never a value", async () => {
+    const h = harness({ iex: [ok(BARS)], sip: [ok(BARS)], site: [] }, { env: { APCA_API_KEY_ID: "DEAD-ID", APCA_API_SECRET_KEY: "DEAD-SECRET" } });
+    h.files.set("/x.env", FILE);
+    expect(await main([...ARGV, "--env-file", "/x.env"], h.deps)).toBe(EXIT.ok);
+    expect(h.headersSeen.every((x) => x["APCA-API-KEY-ID"] === "FILE-ID" && x["APCA-API-SECRET-KEY"] === "FILE-SECRET")).toBe(true);
+    expect(h.printed[0]).toBe("keys from the env file");
+    expect((JSON.parse(h.files.get("/out/2026-10-12.json")!) as SessionReport).keys).toBe("env-file");
+    const all = [...h.printed, ...h.written().map((k) => h.files.get(k)!)].join("\n");
+    for (const v of ["FILE-ID", "FILE-SECRET", "DEAD-ID", "DEAD-SECRET"]) expect(all).not.toContain(v);
+  });
+
+  it("without the file, or a file with no pair, the environment's pair is used and named", async () => {
+    const h = harness({ iex: NO, sip: NO, site: [] }, { env: { APCA_API_KEY_ID: "ENV-ID", APCA_API_SECRET_KEY: "ENV-SECRET" } });
+    h.files.set("/empty.env", "OTHER=1\n");
+    expect((await resolveKeys(h.deps, "/missing.env"))?.source).toBe("environment");
+    expect((await resolveKeys(h.deps, "/empty.env"))?.source).toBe("environment");
+    expect((await resolveKeys(h.deps, null))?.keys.id).toBe("ENV-ID");
+    h.files.set("/x.env", FILE);
+    expect(await resolveKeys(h.deps, "/x.env")).toEqual({ keys: { id: "FILE-ID", secret: "FILE-SECRET" }, source: "env-file" });
+  });
+
+  it("a 401 says the keys were rejected and names the env file as their source", async () => {
+    const h = harness({ iex: [{ status: 401 }], sip: NO, site: [] });
+    h.files.set("/x.env", FILE);
+    expect(await main([...ARGV, "--env-file", "/x.env"], h.deps)).toBe(EXIT.upstream);
+    expect(h.printed.at(-1)).toBe("upstream: iex bars answered HTTP 401: the keys were rejected (keys from the env file); no report written");
+    expect(h.written()).toEqual([]);
+  });
+});
+
+describe("the plan: every request names its feed, SIP's rate limit is checked", () => {
+  it("every request of a run carries feed=iex or feed=sip, and a request cannot be built without one", async () => {
+    const h = harness({ iex: [ok(BARS)], sip: [ok(BARS)], site: [] });
+    await main(ARGV, h.deps);
+    expect(h.urls.length).toBeGreaterThan(0);
+    for (const u of h.urls) expect(["iex", "sip"]).toContain(new URL(u).searchParams.get("feed"));
+    const b = sessionBounds(S)!;
+    expect(new URL(barsUrl("https://x.test", "sip", SYMS, b, "t")).searchParams.get("feed")).toBe("sip");
+    expect(() => barsUrl("https://x.test", undefined as unknown as Feed, SYMS, b, null)).toThrow(/must name its feed/);
+    expect(() => barsUrl("https://x.test", "delayed_sip" as Feed, SYMS, b, null)).toThrow(/must name its feed/);
+  });
+
+  it("records each feed's first X-RateLimit-Limit in the report", async () => {
+    const lim = (n: string): Answer => ({ status: 200, body: { bars: rawBars(BARS), next_page_token: null }, headers: { "x-ratelimit-limit": n } });
+    const h = harness({ iex: [lim("10000")], sip: [lim("10000")], site: [] });
+    expect(await main(ARGV, h.deps)).toBe(EXIT.ok);
+    const r = JSON.parse(h.files.get("/out/2026-10-12.json")!) as SessionReport;
+    expect(r.rate_limit).toEqual({ iex: 10000, sip: 10000 });
+    expect(r.fetched_at).toBe(new Date(ny(S, "18:00:00")).toISOString());
+    expect(rateLimitOf("200")).toBe(200);
+    expect(rateLimitOf("lots")).toBeNull();
+    expect(rateLimitOf(null)).toBeNull();
+  });
+
+  it("SIP's rate limit under 1000: stops with exit 11, nothing written", async () => {
+    const h = harness({ iex: [ok(BARS)], sip: [{ status: 200, body: { bars: rawBars(BARS) }, headers: { "x-ratelimit-limit": "200" } }], site: [] });
+    expect(await main(ARGV, h.deps)).toBe(EXIT.sipPlan);
+    expect(h.printed.at(-1)).toBe("sip plan: X-RateLimit-Limit is 200 (under 1000): the plan no longer includes real-time SIP, or the wrong keys; no report written");
+    expect(h.written()).toEqual([]);
+    // IEX's own limit is never judged
+    const iexLow = harness({ iex: [{ status: 200, body: { bars: rawBars(BARS) }, headers: { "x-ratelimit-limit": "200" } }], sip: [ok(BARS)], site: [] });
+    expect(await main(ARGV, iexLow.deps)).toBe(EXIT.ok);
+  });
+});
+
+describe("the recheck", () => {
+  async function reported() {
+    const h = harness({ iex: [ok(BARS)], sip: [ok(BARS)], site: [] });
+    expect(await main(ARGV, h.deps)).toBe(EXIT.ok);
+    return h;
+  }
+
+  it("the same bars again: zero units changed; the stored report and its summary row untouched", async () => {
+    const first = await reported();
+    const h = harness({ iex: [ok(BARS)], sip: [ok(BARS)], site: [] }, { now: ny(S, "18:00:00") + 86_400_000 });
+    for (const [k, v] of first.files) h.files.set(k, v);
+    const before = new Map(h.files);
+    expect(await main(["--recheck", ...ARGV], h.deps)).toBe(EXIT.ok);
+    const r = JSON.parse(h.files.get("/out/2026-10-12.recheck.json")!);
+    expect(r).toMatchObject({ kind: "feed-agreement-recheck", units: FULL.live * 6, iex_changed: 0, sip_changed: 0, set_changed: 0 });
+    for (const k of ["/out/2026-10-12.json", "/out/2026-10-12.txt", "/out/summary.jsonl"]) expect(h.files.get(k)).toBe(before.get(k));
+    expect(h.printed.join("\n")).toContain("changed word: IEX 0, SIP 0");
+  });
+
+  it("history that drifted: counts the units whose word or set changed", async () => {
+    const first = await reported();
+    const sip = clone(BARS);
+    const end = ny(S, "10:30:00");
+    sip[SYMS[0]!] = sip[SYMS[0]!]!.filter((b) => b.end !== end); // a bar gone from SIP since
+    const h = harness({ iex: [ok(BARS)], sip: [ok(sip)], site: [] });
+    for (const [k, v] of first.files) h.files.set(k, v);
+    expect(await main(["--recheck", ...ARGV], h.deps)).toBe(EXIT.ok);
+    const r = JSON.parse(h.files.get("/out/2026-10-12.recheck.json")!);
+    expect(r.iex_changed).toBe(0);
+    expect(r.sip_changed).toBeGreaterThanOrEqual(2);
+    expect(r.set_changed).toBe(0); // IEX still has the bar: the unit stays comparable
+    expect(h.files.get("/out/summary.jsonl")!.trim().split("\n")).toHaveLength(1);
+  });
+
+  it("refuses without a stored report, and before any call", async () => {
+    const h = harness({ iex: NO, sip: NO, site: [] });
+    expect(await main(["--recheck", ...ARGV], h.deps)).toBe(EXIT.refused);
+    expect(h.printed[0]).toBe("refused: no stored report for 2026-10-12 to recheck (run make feed-agreement first)");
+    expect(h.urls).toEqual([]);
+  });
+
+  it("refuses a stored report made under another engine label", async () => {
+    const first = await reported();
+    const stored = JSON.parse(first.files.get("/out/2026-10-12.json")!);
+    const h = harness({ iex: [ok(BARS)], sip: [ok(BARS)], site: [] });
+    h.files.set("/out/2026-10-12.json", JSON.stringify({ ...stored, engine: "e-000000000000" }));
+    expect(await main(["--recheck", ...ARGV], h.deps)).toBe(EXIT.refused);
+    expect(h.printed.at(-1)).toMatch(/^refused: the stored report is under engine e-000000000000/);
+    expect(h.files.has("/out/2026-10-12.recheck.json")).toBe(false);
   });
 });

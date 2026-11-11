@@ -3,6 +3,7 @@
 //   make feed-agreement DAY=2026-11-12 EDITION=var/feed-agreement/editions/2026-11-12.json
 //   make feed-agreement-summary
 //   make feed-agreement-edition DAY=2026-11-12      (between the close and the evening edition)
+//   make feed-agreement-recheck DAY=2026-11-12 EDITION=...   (once, the next day: how much the history drifts)
 //
 // It reads the session's edition from a local file, the session's 2-minute bars for the focus names from IEX and
 // from SIP (read-only GETs of historical bars), replays both through the server's evaluation (feed-agreement.ts) and
@@ -10,16 +11,24 @@
 // nothing anywhere. When it cannot make a faithful report it prints why, exits non-zero and writes nothing.
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { parseEnv } from "node:util";
 import { focusSymbols, sessionBounds, SYMBOL_RE } from "./desk-eval";
-import { type Feed, feedAgreement, FEEDS, readSummary, reportText, summaryRow, summaryText } from "./feed-agreement";
-import { CallLimiter, type Clock, DEFAULT_DATA_URL, fetchSessionBars, FetchStop, type StopKind } from "./feed-agreement-fetch";
+import { type Feed, feedAgreement, FEEDS, parseStoredReport, readSummary, recheck, recheckText, reportText, type SessionReport, summaryRow, summaryText } from "./feed-agreement";
+import { CallLimiter, type Clock, DEFAULT_DATA_URL, fetchSessionBars, FetchStop, KEY_SOURCE_WORDS, type KeySource, type StopKind } from "./feed-agreement-fetch";
 import type { Options } from "./options";
 import { sign } from "./hmac";
 import { alpacaKeys } from "./quote";
 import type { Bar2 } from "./trade-state";
 
-export const EXIT = { ok: 0, usage: 2, refused: 3, noKeys: 4, plan: 5, noBars: 6, budget: 7, upstream: 8, write: 9, failed: 10 } as const;
-const STOP_EXIT: Record<StopKind, number> = { "sip-not-entitled": EXIT.plan, "iex-refused": EXIT.plan, "no-bars": EXIT.noBars, "time-budget": EXIT.budget, upstream: EXIT.upstream };
+export const EXIT = { ok: 0, usage: 2, refused: 3, noKeys: 4, plan: 5, noBars: 6, budget: 7, upstream: 8, write: 9, failed: 10, sipPlan: 11 } as const;
+const STOP_EXIT: Record<StopKind, number> = {
+  "sip-not-entitled": EXIT.plan,
+  "sip-plan": EXIT.sipPlan,
+  "iex-refused": EXIT.plan,
+  "no-bars": EXIT.noBars,
+  "time-budget": EXIT.budget,
+  upstream: EXIT.upstream,
+};
 
 /** The hard time budget for the whole run's upstream reads, by default. */
 export const DEFAULT_BUDGET_S = 120;
@@ -47,25 +56,28 @@ export interface RunDeps {
 }
 
 export interface Args {
-  mode: "run" | "summary" | "save-edition";
+  mode: "run" | "recheck" | "summary" | "save-edition";
   day: string | null;
   edition: string | null;
   out: string | null;
   budgetS: number;
+  /** The env file whose Alpaca key pair, when it defines one, wins over the inherited environment's. */
+  envFile: string | null;
 }
 
 const USAGE =
-  "usage: feed-agreement --day YYYY-MM-DD --edition <file> [--out <dir>] [--budget-s <seconds>] | --summary [--out <dir>] | --save-edition --day YYYY-MM-DD [--out <dir>]";
+  "usage: feed-agreement [--recheck] --day YYYY-MM-DD --edition <file> [--env-file <file>] [--out <dir>] [--budget-s <seconds>] | --summary [--out <dir>] | --save-edition --day YYYY-MM-DD [--out <dir>]";
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** The arguments, or null when they are malformed. */
 export function parseArgs(argv: readonly string[]): Args | null {
-  const a: Args = { mode: "run", day: null, edition: null, out: null, budgetS: DEFAULT_BUDGET_S };
+  const a: Args = { mode: "run", day: null, edition: null, out: null, budgetS: DEFAULT_BUDGET_S, envFile: null };
+  const modes: Record<string, Args["mode"]> = { "--summary": "summary", "--save-edition": "save-edition", "--recheck": "recheck" };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i]!;
-    if (k === "--summary" || k === "--save-edition") {
+    if (modes[k]) {
       if (a.mode !== "run") return null;
-      a.mode = k === "--summary" ? "summary" : "save-edition";
+      a.mode = modes[k]!;
       continue;
     }
     const v = argv[i + 1];
@@ -74,6 +86,7 @@ export function parseArgs(argv: readonly string[]): Args | null {
     if (k === "--day") a.day = v;
     else if (k === "--edition") a.edition = v;
     else if (k === "--out") a.out = v;
+    else if (k === "--env-file") a.envFile = v;
     else if (k === "--budget-s") {
       const n = Number(v);
       if (!Number.isFinite(n) || n <= 0 || n > 600) return null;
@@ -128,31 +141,52 @@ export async function writeAll(deps: RunDeps, dir: string, files: readonly { pat
   }
 }
 
-async function runSession(args: Args, deps: RunDeps, out: string): Promise<number> {
+/**
+ * The Alpaca keys: the env file's pair when the file is named and defines one (a shell profile can export a dead
+ * pair, and Node's --env-file never overrides it), else the environment's. Read with Node's own env-file parser.
+ */
+export async function resolveKeys(deps: RunDeps, envFile: string | null): Promise<{ keys: { id: string; secret: string }; source: KeySource } | null> {
+  if (envFile) {
+    const text = await deps.readText(envFile);
+    if (text !== null) {
+      const fromFile = alpacaKeys(parseEnv(text));
+      if (fromFile) return { keys: fromFile, source: "env-file" };
+    }
+  }
+  const fromEnv = alpacaKeys(deps.env);
+  return fromEnv ? { keys: fromEnv, source: "environment" } : null;
+}
+
+type Fetched = { ok: true; edition: Options; bars: Record<Feed, Record<string, Bar2[]>>; report: SessionReport } | { ok: false; code: number };
+
+/** The checks, both feeds' bars and the replay; prints and returns the exit code when it cannot go on. */
+async function fetchAndReplay(args: Args, deps: RunDeps): Promise<Fetched> {
   const day = args.day!;
   const bounds = sessionBounds(day);
   if (!bounds) {
     deps.print(`refused: ${day} is not a session day (weekend or exchange holiday)`);
-    return EXIT.refused;
+    return { ok: false, code: EXIT.refused };
   }
   const started = deps.clock.now();
   if (started < bounds.close + AFTER_CLOSE_MS) {
     deps.print(`refused: run from 20 minutes after the ${day} close, when its bars have settled`);
-    return EXIT.refused;
+    return { ok: false, code: EXIT.refused };
   }
   const ed = readEdition(await deps.readText(args.edition!), day);
   if (!ed.ok) {
     deps.print(ed.line);
-    return EXIT.refused;
+    return { ok: false, code: EXIT.refused };
   }
-  const keys = alpacaKeys(deps.env);
-  if (!keys) {
-    deps.print("no keys: set APCA_API_KEY_ID and APCA_API_SECRET_KEY (or ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY) in the environment");
-    return EXIT.noKeys;
+  const got = await resolveKeys(deps, args.envFile);
+  if (!got) {
+    deps.print("no keys: set APCA_API_KEY_ID and APCA_API_SECRET_KEY (or ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY) in the env file or the environment");
+    return { ok: false, code: EXIT.noKeys };
   }
+  deps.print(KEY_SOURCE_WORDS[got.source]);
   const symbols = focusSymbols(ed.edition);
   const opts = {
-    keys,
+    keys: got.keys,
+    keySource: got.source,
     clock: deps.clock,
     deadline: started + args.budgetS * 1000,
     limiter: new CallLimiter(),
@@ -160,18 +194,31 @@ async function runSession(args: Args, deps: RunDeps, out: string): Promise<numbe
     baseUrl: deps.env.ALPACA_DATA_URL || DEFAULT_DATA_URL,
   };
   const bars = {} as Record<Feed, Record<string, Bar2[]>>;
+  const rateLimit: Record<Feed, number | null> = { iex: null, sip: null };
   try {
-    for (const feed of FEEDS) bars[feed] = await fetchSessionBars(feed, symbols, bounds, opts);
+    for (const feed of FEEDS) {
+      const r = await fetchSessionBars(feed, symbols, bounds, opts);
+      bars[feed] = r.bars;
+      rateLimit[feed] = r.rateLimit;
+    }
   } catch (e) {
     if (e instanceof FetchStop) {
       deps.print(e.line);
-      return STOP_EXIT[e.kind];
+      return { ok: false, code: STOP_EXIT[e.kind] };
     }
     deps.print(`upstream: the bars could not be read (${e instanceof Error ? e.name : "unknown"}); no report written`);
-    return EXIT.upstream;
+    return { ok: false, code: EXIT.upstream };
   }
 
-  const report = feedAgreement(ed.edition, day, bars);
+  const report = feedAgreement(ed.edition, day, bars, undefined, { fetched_at: new Date(deps.clock.now()).toISOString(), rate_limit: rateLimit, keys: got.source });
+  return { ok: true, edition: ed.edition, bars, report };
+}
+
+async function runSession(args: Args, deps: RunDeps, out: string): Promise<number> {
+  const day = args.day!;
+  const f = await fetchAndReplay(args, deps);
+  if (!f.ok) return f.code;
+  const report = f.report;
   const text = reportText(report);
   const summaryPath = join(out, SUMMARY_FILE);
   const before = (await deps.readText(summaryPath)) ?? "";
@@ -189,6 +236,33 @@ async function runSession(args: Args, deps: RunDeps, out: string): Promise<numbe
   deps.print(text);
   deps.print("");
   deps.print(summaryText(readSummary(summary.split("\n"))));
+  return EXIT.ok;
+}
+
+/**
+ * The same day fetched again and replayed; only how many units changed word (or set) against the stored report is
+ * printed and written to <day>.recheck.json. The stored report and the summary are never touched.
+ */
+async function recheckSession(args: Args, deps: RunDeps, out: string): Promise<number> {
+  const day = args.day!;
+  const stored = parseStoredReport(await deps.readText(join(out, `${day}.json`)), day);
+  if (!stored.ok) {
+    deps.print(stored.line);
+    return EXIT.refused;
+  }
+  const f = await fetchAndReplay(args, deps);
+  if (!f.ok) return f.code;
+  const r = recheck(stored.report, f.report);
+  if ("refused" in r) {
+    deps.print(r.refused);
+    return EXIT.refused;
+  }
+  const failed = await writeAll(deps, out, [{ path: join(out, `${day}.recheck.json`), text: `${JSON.stringify(r, null, 2)}\n` }]);
+  if (failed) {
+    deps.print(failed);
+    return EXIT.write;
+  }
+  deps.print(recheckText(r));
   return EXIT.ok;
 }
 
@@ -253,6 +327,7 @@ export async function main(argv: readonly string[], deps: RunDeps): Promise<numb
       return EXIT.ok;
     }
     if (args.mode === "save-edition") return await saveEdition(args.day!, deps, out);
+    if (args.mode === "recheck") return await recheckSession(args, deps, out);
     return await runSession(args, deps, out);
   } catch (e) {
     deps.print(`failed: ${e instanceof Error ? e.name : "unknown"}; no report written`);

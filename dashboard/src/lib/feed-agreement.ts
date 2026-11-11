@@ -172,9 +172,25 @@ export interface SessionReport {
   /** Per feed, over the live slots: (name, slot) evaluations with no state by the engine's reason; slots not "ok". */
   no_state: Record<Feed, { names: Record<NameWhy, number>; slots_not_ok: number }>;
   bars_missing: { iex: number; sip: number; by_slot: { slot: string; iex: number; sip: number }[] };
+  /** When the bars were fetched, each feed's first X-RateLimit-Limit, and where the keys came from (never a value). */
+  fetched_at: string | null;
+  rate_limit: Record<Feed, number | null>;
+  keys: "env-file" | "environment" | null;
+  /** The live slots (New York HHMM), and per "SYM|side" each feed's word and the unit's set at each of them, for a recheck. */
+  live_slot_times: string[];
+  words: Record<Feed, Record<string, Word[]>>;
+  /** One letter per live slot: c clock-fixed, n no plan, b both lack, p price-dependent (comparable). */
+  sets: Record<string, string>;
   inputs: readonly string[];
   limitations: readonly string[];
 }
+
+export interface Provenance {
+  fetched_at: string | null;
+  rate_limit: Record<Feed, number | null>;
+  keys: "env-file" | "environment" | null;
+}
+const NO_PROVENANCE: Provenance = { fetched_at: null, rate_limit: { iex: null, sip: null }, keys: null };
 
 export interface CompareInput {
   edition: Options;
@@ -183,6 +199,7 @@ export interface CompareInput {
   slots: readonly number[];
   evals: Record<Feed, readonly Evaluation[]>;
   bars: Record<Feed, Readonly<Record<string, readonly Bar2[]>>>;
+  provenance?: Provenance;
 }
 
 function key(symbol: string, side: RowSide): string {
@@ -250,10 +267,15 @@ export function compareFeeds(input: CompareInput): SessionReport {
   const fixedPairs: Record<string, number> = {};
   const disagreements: Disagreement[] = [];
   const events: Record<Feed, Map<string, number[]>> = { iex: new Map(), sip: new Map() };
+  const words: Record<Feed, Record<string, Word[]>> = { iex: {}, sip: {} };
+  const sets: Record<string, string> = {};
 
   for (const symbol of names) {
     for (const side of SIDES) {
       const k = key(symbol, side);
+      words.iex[k] = [];
+      words.sip[k] = [];
+      sets[k] = "";
       const prev: Record<Feed, Word | null> = { iex: null, sip: null };
       for (let i = 0; i < slots.length; i++) {
         if (!live[i]) continue;
@@ -270,15 +292,22 @@ export function compareFeeds(input: CompareInput): SessionReport {
             events[f].set(k, list);
           }
           prev[f] = word[f];
+          words[f][k]!.push(word[f]);
         }
         const pk = `${word.iex}|${word.sip}`;
         if (fixed[i]) {
           u.clock_fixed++;
+          sets[k] += "c";
           bump(fixedPairs, pk);
-        } else if (noPlan.has(k)) u.no_plan++;
-        else if (!bar.iex && !bar.sip) u.both_lack++;
-        else {
+        } else if (noPlan.has(k)) {
+          u.no_plan++;
+          sets[k] += "n";
+        } else if (!bar.iex && !bar.sip) {
+          u.both_lack++;
+          sets[k] += "b";
+        } else {
           u.comparable++;
+          sets[k] += "p";
           if (!bar.iex) u.iex_lacks++;
           if (!bar.sip) u.sip_lacks++;
           bump(pairs, pk);
@@ -364,15 +393,97 @@ export function compareFeeds(input: CompareInput): SessionReport {
     names_without_bars: { iex: without("iex"), sip: without("sip") },
     no_state: noState,
     bars_missing: { iex: missIex, sip: missSip, by_slot: bySlot },
+    ...(input.provenance ?? NO_PROVENANCE),
+    live_slot_times: hhmm.filter((_, i) => live[i]),
+    words,
+    sets,
     inputs: NEUTRAL_INPUTS,
     limitations: LIMITATIONS,
   };
 }
 
 /** The whole session: both replays over the session's own slots (expectedSlots, New York time), then compared. */
-export function feedAgreement(edition: Options, day: string, bars: Record<Feed, Readonly<Record<string, readonly Bar2[]>>>, slots: readonly number[] = expectedSlots(day)): SessionReport {
+export function feedAgreement(
+  edition: Options,
+  day: string,
+  bars: Record<Feed, Readonly<Record<string, readonly Bar2[]>>>,
+  slots: readonly number[] = expectedSlots(day),
+  provenance: Provenance = NO_PROVENANCE,
+): SessionReport {
   const evals = { iex: replayFeed(edition, day, slots, bars.iex), sip: replayFeed(edition, day, slots, bars.sip) };
-  return compareFeeds({ edition, day, slots, evals, bars });
+  return compareFeeds({ edition, day, slots, evals, bars, provenance });
+}
+
+// ---- the recheck ------------------------------------------------------------------------------------------------------------
+export interface Recheck {
+  v: typeof REPORT_V;
+  kind: "feed-agreement-recheck";
+  day: string;
+  engine: string;
+  stored_fetched_at: string | null;
+  fetched_at: string | null;
+  /** Units compared (every name, side and live slot). */
+  units: number;
+  iex_changed: number;
+  sip_changed: number;
+  /** Units whose set (clock-fixed, no plan, both lack, comparable) changed: a bar appeared or went. */
+  set_changed: number;
+}
+
+/** A stored report as read back for a recheck: this version, the words and sets present, or why not. */
+export function parseStoredReport(text: string | null, day: string): { ok: true; report: SessionReport } | { ok: false; line: string } {
+  if (text === null) return { ok: false, line: `refused: no stored report for ${day} to recheck (run make feed-agreement first)` };
+  let v: unknown;
+  try {
+    v = JSON.parse(text);
+  } catch {
+    return { ok: false, line: `refused: the stored ${day} report is not JSON` };
+  }
+  const r = v as Partial<SessionReport> | null;
+  if (!r || typeof r !== "object" || r.v !== REPORT_V || r.kind !== "feed-agreement" || r.day !== day || !r.words || !r.sets || !Array.isArray(r.live_slot_times))
+    return { ok: false, line: `refused: the stored ${day} report is not one this version can recheck` };
+  return { ok: true, report: r as SessionReport };
+}
+
+/** How many units changed word (per feed) or set between the stored report and a fresh replay of the same day. */
+export function recheck(stored: SessionReport, fresh: SessionReport): Recheck | { refused: string } {
+  if (stored.engine !== fresh.engine) return { refused: `refused: the stored report is under engine ${stored.engine}, this one is ${fresh.engine}; a change could not be told from an engine change` };
+  if (stored.live_slot_times.join() !== fresh.live_slot_times.join() || Object.keys(stored.sets).sort().join() !== Object.keys(fresh.sets).sort().join())
+    return { refused: "refused: the stored report covers other names or slots (another edition?)" };
+  let units = 0;
+  let iex = 0;
+  let sip = 0;
+  let set = 0;
+  for (const k of Object.keys(fresh.sets)) {
+    const a = stored.sets[k] ?? "";
+    const b = fresh.sets[k]!;
+    for (let i = 0; i < b.length; i++) {
+      units++;
+      if (stored.words.iex[k]?.[i] !== fresh.words.iex[k]![i]) iex++;
+      if (stored.words.sip[k]?.[i] !== fresh.words.sip[k]![i]) sip++;
+      if (a[i] !== b[i]) set++;
+    }
+  }
+  return {
+    v: REPORT_V,
+    kind: "feed-agreement-recheck",
+    day: fresh.day,
+    engine: fresh.engine,
+    stored_fetched_at: stored.fetched_at ?? null,
+    fetched_at: fresh.fetched_at,
+    units,
+    iex_changed: iex,
+    sip_changed: sip,
+    set_changed: set,
+  };
+}
+
+export function recheckText(r: Recheck): string {
+  return [
+    `Feed agreement recheck ${r.day}, engine ${r.engine}: the bars fetched again (${r.fetched_at ?? "?"}) against the stored report's (${r.stored_fetched_at ?? "?"})`,
+    `units ${r.units} · changed word: IEX ${r.iex_changed}, SIP ${r.sip_changed} · changed set ${r.set_changed}`,
+    "the stored report and its summary row are unchanged; a recheck is never part of the reading",
+  ].join("\n");
 }
 
 // ---- the running summary ------------------------------------------------------------------------------------------------
@@ -537,6 +648,7 @@ export function reportText(r: SessionReport): string {
       .map(([d, n]) => `${d}: ${n}`)
       .join(", ")}`,
     `bars missing (name-slots): IEX ${r.bars_missing.iex} · SIP ${r.bars_missing.sip}`,
+    `fetched ${r.fetched_at ?? "?"} · X-RateLimit-Limit IEX ${r.rate_limit.iex ?? "none sent"}, SIP ${r.rate_limit.sip ?? "none sent"} · ${r.keys === "env-file" ? "keys from the env file" : r.keys === "environment" ? "keys from the environment" : "keys: not recorded"}`,
     `no state (name-slots, live): IEX ${fmtWhy(r.no_state.iex.names)} · SIP ${fmtWhy(r.no_state.sip.names)}`,
   ];
   const fixedOff = Object.entries(r.clock_fixed_pairs).filter(([k]) => k.split("|")[0] !== k.split("|")[1]);

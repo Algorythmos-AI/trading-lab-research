@@ -22,7 +22,12 @@ export const MAX_RETRIES = 5;
 /** The wait after a 429 without a readable Retry-After. */
 export const DEFAULT_RETRY_MS = 5_000;
 
-export type StopKind = "sip-not-entitled" | "iex-refused" | "no-bars" | "time-budget" | "upstream";
+export type StopKind = "sip-not-entitled" | "sip-plan" | "iex-refused" | "no-bars" | "time-budget" | "upstream";
+/** SIP's X-RateLimit-Limit below this means the plan no longer includes real-time SIP, or the keys are the wrong ones. */
+export const MIN_SIP_RATE_LIMIT = 1000;
+/** Where the keys came from, named in a 401's line (never a value). */
+export type KeySource = "env-file" | "environment";
+export const KEY_SOURCE_WORDS: Record<KeySource, string> = { "env-file": "keys from the env file", environment: "keys from the environment" };
 
 /** Why the runner stops without a report: its kind and a line safe to print (no key, no token, no body). */
 export class FetchStop extends Error {
@@ -70,6 +75,8 @@ export interface FetchSessionOpts {
   deadline: number;
   limiter: CallLimiter;
   fetchImpl?: typeof fetch;
+  /** Named in a 401's line. */
+  keySource?: KeySource;
   baseUrl?: string;
 }
 
@@ -82,7 +89,13 @@ async function waitWithin(ms: number, o: FetchSessionOpts, what: string): Promis
 }
 
 /** One GET, inside the limiter and the deadline, retrying a 429 after its Retry-After. */
-async function getJson(url: string, feed: Feed, o: FetchSessionOpts): Promise<unknown> {
+/** X-RateLimit-Limit as a whole number, or null when absent or unreadable. */
+export function rateLimitOf(h: string | null): number | null {
+  if (h === null || !/^\s*\d+\s*$/.test(h)) return null;
+  return Number(h.trim());
+}
+
+async function getJson(url: string, feed: Feed, o: FetchSessionOpts): Promise<{ body: unknown; rateLimit: number | null }> {
   const fetchImpl = o.fetchImpl ?? fetch;
   for (let attempt = 0; ; attempt++) {
     await waitWithin(o.limiter.waitMs(o.clock.now()), o, "the call limit");
@@ -112,9 +125,12 @@ async function getJson(url: string, feed: Feed, o: FetchSessionOpts): Promise<un
       throw feed === "sip"
         ? new FetchStop("sip-not-entitled", "sip not entitled: Alpaca answered 403 (not entitled, or recent data not permitted on this plan) for the SIP feed; no report written")
         : new FetchStop("iex-refused", "iex refused: Alpaca answered 403 (not entitled, or recent data not permitted on this plan) for the IEX feed; no report written");
-    if (!res.ok) throw new FetchStop("upstream", `upstream: ${feed} bars answered HTTP ${res.status}${res.status === 401 ? " (keys rejected)" : ""}; no report written`);
+    if (res.status === 401)
+      throw new FetchStop("upstream", `upstream: ${feed} bars answered HTTP 401: the keys were rejected (${o.keySource ? KEY_SOURCE_WORDS[o.keySource] : "keys of unknown source"}); no report written`);
+    if (!res.ok) throw new FetchStop("upstream", `upstream: ${feed} bars answered HTTP ${res.status}; no report written`);
+    const rateLimit = rateLimitOf(res.headers.get("x-ratelimit-limit"));
     try {
-      return await res.json();
+      return { body: await res.json(), rateLimit };
     } catch (e) {
       // The call's own timeout (bounded by the deadline) can fire while the body is still arriving: that is the budget.
       if (timedOut(e) && (budgetBound || o.deadline - o.clock.now() <= 0))
@@ -131,23 +147,42 @@ async function getJson(url: string, feed: Feed, o: FetchSessionOpts): Promise<un
  * when it lies inside the session. Throws FetchStop: "no-bars" when no name has a single bar, or when Alpaca is still
  * paging after MAX_PAGES ("upstream"), never a partial answer.
  */
-export async function fetchSessionBars(feed: Feed, symbols: readonly string[], bounds: SessionBounds, o: FetchSessionOpts): Promise<Record<string, Bar2[]>> {
+/** One feed's request URL: always naming the feed (Alpaca's default silently becomes IEX without the subscription). */
+export function barsUrl(base: string, feed: Feed, symbols: readonly string[], bounds: SessionBounds, token: string | null): string {
+  if (feed !== "iex" && feed !== "sip") throw new Error("a bars request must name its feed");
+  const q = new URLSearchParams({
+    symbols: symbols.join(","),
+    timeframe: "2Min",
+    start: new Date(bounds.open).toISOString(),
+    end: new Date(bounds.close).toISOString(),
+    feed,
+    limit: "10000",
+    adjustment: "raw",
+    sort: "asc",
+  });
+  if (token) q.set("page_token", token);
+  return `${base}/v2/stocks/bars?${q.toString()}`;
+}
+
+export interface FeedBars {
+  bars: Record<string, Bar2[]>;
+  /** X-RateLimit-Limit on the feed's first answer. */
+  rateLimit: number | null;
+}
+
+export async function fetchSessionBars(feed: Feed, symbols: readonly string[], bounds: SessionBounds, o: FetchSessionOpts): Promise<FeedBars> {
   const base = o.baseUrl ?? DEFAULT_DATA_URL;
   const got: Record<string, Map<number, Bar2>> = Object.fromEntries(symbols.map((s) => [s, new Map()]));
   let token: string | null = null;
+  let rateLimit: number | null = null;
   for (let page = 0; page < MAX_PAGES; page++) {
-    const q = new URLSearchParams({
-      symbols: symbols.join(","),
-      timeframe: "2Min",
-      start: new Date(bounds.open).toISOString(),
-      end: new Date(bounds.close).toISOString(),
-      feed,
-      limit: "10000",
-      adjustment: "raw",
-      sort: "asc",
-    });
-    if (token) q.set("page_token", token);
-    const body = (await getJson(`${base}/v2/stocks/bars?${q.toString()}`, feed, o)) as { bars?: Record<string, RawBar[]> | null; next_page_token?: unknown } | null;
+    const answer = await getJson(barsUrl(base, feed, symbols, bounds, token), feed, o);
+    if (page === 0) {
+      rateLimit = answer.rateLimit;
+      if (feed === "sip" && rateLimit !== null && rateLimit < MIN_SIP_RATE_LIMIT)
+        throw new FetchStop("sip-plan", `sip plan: X-RateLimit-Limit is ${rateLimit} (under ${MIN_SIP_RATE_LIMIT}): the plan no longer includes real-time SIP, or the wrong keys; no report written`);
+    }
+    const body = answer.body as { bars?: Record<string, RawBar[]> | null; next_page_token?: unknown } | null;
     for (const [s, list] of Object.entries(body?.bars ?? {})) {
       const into = got[s];
       if (!into || !Array.isArray(list)) continue;
@@ -163,5 +198,5 @@ export async function fetchSessionBars(feed: Feed, symbols: readonly string[], b
   const out: Record<string, Bar2[]> = {};
   for (const s of symbols) out[s] = [...got[s]!.values()].sort((a, b) => a.start - b.start);
   if (symbols.every((s) => out[s]!.length === 0)) throw new FetchStop("no-bars", `no bars: the ${feed} feed returned no bars for any focus name on ${bounds.day}; no report written`);
-  return out;
+  return { bars: out, rateLimit };
 }
