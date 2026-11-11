@@ -2,7 +2,8 @@
 
 These fire during the session, not only after it (the runner pages through a background queue, so an alert can
 never delay an exit). The ntfy topic is public, so a page carries counts and fixed words only: it never names the
-symbol, a price or an error's text. The `paper_b` log and the journal name them (`public-repo-guards.md`).
+symbol, a price or an error's text. The session's journal (`data/live/journal.jsonl`, echoed to `logs/paper_b_<date>.log`)
+names them, by the event the page gives (`public-repo-guards.md`).
 
 ## "Paper B adopted a position it did not open" (priority 4, key `paper-b:orphan`)
 - **Meaning:** QQQM was held and no plan explains it (a manual buy, or a plan file lost). The runner took it over
@@ -13,7 +14,7 @@ symbol, a price or an error's text. The `paper_b` log and the journal name them 
 
 ## "Position outside strategy B's mandate" (priority 3, once a day, key `paper-b:out-of-mandate:<SYMBOL>`)
 - **Meaning:** the paper account holds a symbol B never trades (B's allowlist is in `config/risk.yaml`). The page
-  gives the share count; the symbol is in the alert key (on the dashboard's alert log) and in the `paper_b` log
+  gives the share count; the symbol is in the alert key (on the dashboard's alert log) and in the session's journal
   (`out_of_mandate`). The runner never touches it, and it no longer blocks `make rollback`.
 - **Do:** close it in the Alpaca UI, or accept it as legacy by recording it in `config/legacy_positions.yaml`:
   ```yaml

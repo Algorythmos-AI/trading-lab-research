@@ -11,12 +11,15 @@ sees the visibility the publishing jobs act on.
 - The pattern is the pre-commit hook's own: `.pre-commit-config.yaml`, hook id `check-restricted`, its `files:`
   regex. `scripts/check_restricted_paths.py` reads it from that file, so the two cannot disagree; a test fails if the
   hook disappears, stops being `language: fail`, or the CI step is removed. Change the pattern in that one place.
-- It checks every path tracked at HEAD (`git ls-files`) and every path added or renamed by any commit of the pull
-  request (`origin/<base>..HEAD`; a push checks `before..HEAD`). A file added and deleted again inside the same pull
-  request still fails it: the branch's history is public too. The `test` job checks out the full history for this.
+- It checks every path tracked at HEAD (`git ls-files`) and every path added, renamed, changed in type or modified by
+  any commit of the pull request (`origin/<base>..HEAD`; a push checks `before..HEAD`). A file added and deleted
+  again inside the same pull request still fails it, and so does a symlink retargeted and put back: the branch's
+  history is public too. The `test` job checks out the full history for this.
 - Case-insensitive, like the hook: `Knowledge/`, `DATA/`, `x.PDF`. `.env.example` stays allowed.
-- A tracked symlink whose target resolves to a restricted path fails it (`docs/k -> ../knowledge`, or an absolute
-  target such as `/home/wt/trading/var/...`). The output names the link, never the target or any file's contents.
+- A tracked symlink whose target resolves to a restricted path inside the repository fails it (`docs/k ->
+  ../knowledge`, or an absolute target under the checkout). A target outside the repository is not matched: it is
+  not this repository's material. The output names the link, never the target or any file's contents.
+- Exit 2 (fails closed) when `.pre-commit-config.yaml` cannot be read or parsed, PyYAML is missing, or git fails.
 - Only the top-level `knowledge/`, `data/`, `var/`, `logs/` and `build/` directories match, as in the hook:
   `src/wt/data/` is code.
 - **Out of scope:** content. A PDF renamed to another extension, or restricted prose pasted into a tracked file, is
@@ -60,16 +63,19 @@ The weekly job (`wt-weekly`) runs `wt.ops.evidence` after the scorecard. What yo
 
 | Page | When | What to do |
 |---|---|---|
-| "Repository is not private" (priority 3) | The first run that sees `public` or `internal`, after `private` or on the first check ever. Then nothing more while it stays so; the weekly log still says `evidence PR parked` and `repo visibility: ...` each run | Nothing, while the repository is meant to be public: the weeks wait in `var/` and are archived one at a time later (gcp-host.md, step 3). A move between `public` and `internal` is not paged |
+| "Repository is not private" (priority 3) | The first run that sees `public` or `internal`, after `private` or on the first check ever. Then nothing more while it stays so. A parked run fetches nothing, uses no token and adds no worktree: it lists what would be copied against the local checkout, logs `repo visibility: ...` and, last, `outcome parked`, and exits 0, so nothing in it can make the weekly job page | Nothing, while the repository is meant to be public: the weeks wait in `var/` and are archived one at a time later (gcp-host.md, step 3). A move between `public` and `internal` is not paged |
 | "Repository is private again" (priority 2) | The first `private` after that | The next weekly run publishes |
 | "Weekly evidence not published" (priority 3) | A publishing run stopped. The message says the step and its outcome: `pr-list`, `pr-open`, `fetch`, `worktree`, `commit`, `push`, `pr-create`; `failed`, `timed out`, `gh missing`, `still open` | Read `logs/scorecard_<date>.log` (the weekly job's log) for the detail (the remote's own text, token redacted). `pr-open`: merge the open `evidence/*` pull request. `push` or `fetch`: check `GH_TOKEN` (expiry, *Contents: write*). `pr-create`: the branch is on GitHub; open the pull request by hand or let the next run do it |
 | "Weekly evidence published again" (priority 2) | The next run that publishes or finds nothing new, after a stop | Nothing |
 | "Weekly evidence PR failed" (priority 2) | The evidence run crashed (a bug, not a failed step), or could not be started | Read `logs/scorecard_<date>.log`; the traceback is there |
 
 Each stop pages once per step until a run succeeds (the keys are `evidence-pr:<step>`): a push that fails three weeks
-running pages once. The run gives itself 480 s, under the 600 s the weekly job allows, so a hanging gh or git stops
-it with its own page instead of the job killing it with none. A dry run (`make evidence`) never pages; a failed step
-there prints the step and exits 1.
+running pages once. The run gives itself 400 s, made first: the visibility probe, every step and the final worktree
+removal draw from it (the removal gets at least 5 s), and the one stop alert after it is bounded at about 10 s, so
+the worst case is about 420 s against the 600 s the weekly job allows. A hanging gh or git stops it with its own
+page instead of the job killing it with none; if the job does kill it, the job pages and logs what the run had
+printed, tokens redacted. A manual dry run (`make evidence`) never pages; a failed step there prints the step and
+exits 1, the only case that returns 1.
 
 The pages carry only the step, an outcome word, the ISO week and a file count: never the remote's error text, a
 path or a token.
@@ -96,3 +102,22 @@ it also scrubs amounts, account ids and URLs, as the last line of defence. The c
   the record's exception, not a wider rule.
 - The log, the journal, the dashboard (behind the owner's login) and the alert key (the dashboard's alert log) still
   name what a page leaves out.
+
+- **Where the removed detail is.** Each page that names a record names the real one: paper B's session journal
+  (`data/live/journal.jsonl`, also echoed to `logs/paper_b_<date>.log`) by event (`out_of_mandate`, `reconcile`,
+  `stop_rule`, `refuse_to_arm`, `session_end`); the clone's journal (`filled`, `trade_closed`) and its plan files;
+  the job's own log under `logs/` (refusals, the clone's broker error at arm, the options job's rule triggers, the
+  forward test's thin counts); `journalctl -u wt-backup` for the anchor; the chain flag file for a broken chain; the
+  deploy's output for the ML sync. `tests/unit/test_alert_allowlist.py` (RECORDS) checks each record is written
+  before its page, and the session tests check it at run time for paper B and the clone.
+- **The send path.** `alerts.render` cuts a title to 120 and a message to 1000 characters, and a delayed page from
+  the spool is cut again after its `(delayed: ...)` prefix. A page whose text is outside `PAGE_CHARS` is still sent
+  (a page is never dropped), but the job's log says `alerts: a page outside the allowlist was sent` and
+  `alerts.OFF_ALLOWLIST` counts it: that line in a log is a leak to fix.
+- **Before deploying this release:** pages spooled before it (`var/alerts/spool/*.json`, written when ntfy was
+  unreachable) keep their old text and are sent as they are. Check the spool is empty on the host
+  (`ls /home/wt/trading/var/alerts/spool`) before deploying. Nothing deletes them automatically.
+- **The systemd failure page** (`deploy/oci/bin/wt-alert`, `OnFailure=`) says "Trading host: <unit> failed" and
+  "systemd reports <unit> failed. Check: journalctl -u <unit> and make status." It no longer names the host. A unit
+  name outside `[A-Za-z0-9._-]` (80 characters at most) reads "a unit". `tests/unit/test_wt_alert.py` runs it with
+  hostile unit names against a fake curl.
