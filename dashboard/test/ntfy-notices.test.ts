@@ -20,6 +20,7 @@ import {
   refusedNotice,
   type StampedInputs,
   unreadableNotice,
+  summaryNotice,
 } from "@/lib/feed-watch";
 import { OPTIONS_NAMES } from "@/lib/market-calendar";
 import type { Notice, NoticeKind } from "@/lib/ntfy";
@@ -34,7 +35,7 @@ const VOCAB = new Set(
    published publisher radar readable read record recovered refresh refused reminder repeats row rows run runs running
    schedule server session snapshot so status stopped store stored than that the them there this time to trade trading
    up update was weekday window windows york yet record written unknown been checked ahead were arrived sent good again
-   assumed market job may say past could an accepted unknown`.split(/\s+/).filter(Boolean),
+   assumed market job may say past could an accepted unknown feed alerts each sends own when already checkable`.split(/\s+/).filter(Boolean),
 );
 // The desks' prefixes and the drill's, and the feed table's names, are part of the grammar: they are fixed words too.
 for (const label of Object.values(DESK_LABEL)) VOCAB.add(label.toLowerCase());
@@ -95,6 +96,7 @@ function feedNotices(): Notice[] {
   const out: Notice[] = [];
   for (const v of views) {
     out.push(lateNotice(v, now), unreadableNotice(v, 3, now), recoveredNotice(v, now));
+    out.push(summaryNotice([v.id], now));
     if (v.type === "refusal") {
       out.push(refusedNotice(v, now));
       out.push(refusedNotice({ ...v, outcome: "ahead-of-clock" }, now), refusedNotice({ ...v, outcome: null, due: null }, now));
@@ -109,7 +111,42 @@ const withPrefixes = (ns: Notice[]): Notice[] => [
   ...Object.values(DESK_LABEL).flatMap((label) => ns.map((n) => ({ ...n, title: `${label} desk: ${n.title}` }))),
 ];
 
+/** A view whose every field carries something that must never be sent: a ticker, a price, a URL, an error text. */
+function hostile(base: FeedView): FeedView {
+  return {
+    ...base,
+    id: "SPY $512.40",
+    name: "AAPL broke 512.40",
+    short: "TSLA",
+    reason: "SPY" as FeedView["reason"],
+    for_session: "NVDA https://lab.example",
+    outcome: "TypeError: x" as FeedView["outcome"],
+    late_min: Number.NaN,
+    age_min: Number.POSITIVE_INFINITY,
+    deadline: Number.NaN,
+    due: Number.NaN,
+    misses: Number.NaN,
+    assumed: "yes" as unknown as boolean,
+  };
+}
+
 describe("ntfy notices", () => {
+  it("every value a page carries comes from a closed set: hostile views cannot put anything else in", () => {
+    const now = new Date("2026-11-12T23:00:00Z");
+    const base = evaluateStamped({ stamps: {}, refusals: {}, shadow: null }, now.getTime());
+    const ns: Notice[] = [];
+    for (const v of base) {
+      const h = hostile(v);
+      ns.push(lateNotice(h, now), unreadableNotice(h, Number.NaN, now), recoveredNotice(h, now), refusedNotice(h, now), summaryNotice([h.id, "MSFT"], now));
+      // The same views with their own id: the name is the table's, never the view's text.
+      const own = { ...h, id: v.id };
+      ns.push(lateNotice(own, now), recoveredNotice(own, now), refusedNotice(own, now), summaryNotice([v.id], now));
+    }
+    const bad = ns.flatMap((n) => badTokens(n).map((t) => `${n.kind}: ${t}`));
+    expect([...new Set(bad)]).toEqual([]);
+    for (const n of ns) expect(`${n.title} ${n.message}`).not.toMatch(/SPY|AAPL|TSLA|NVDA|MSFT|512|https|TypeError|NaN|Infinity|undefined|null/);
+  });
+
   const all = withPrefixes([...watchdogNotices(), ...feedNotices()]);
 
   it("drives every notice kind there is", () => {

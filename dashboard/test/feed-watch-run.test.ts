@@ -158,31 +158,67 @@ describe("a tick", () => {
   });
 });
 
-describe("display only (FEED_WATCH_ALERTS unset)", () => {
-  it("sends nothing in either mode change, stores the incident, and switch-on does not burst", async () => {
+describe("display only (FEED_WATCH_ALERTS unset) and switch-on", () => {
+  const ids = ["options-edition", "refusal-options"];
+  it("sends nothing while off and stores the incident; at switch-on one summary, then the usual pages", async () => {
     const w: World = { docs: { ...stale } };
     const store = memStore();
     const off = deps(w, store, { alertsOn: false });
-    for (let i = 0; i < 5; i++) await runFeedWatch(new Date(LATE_AT.getTime() + i * 10 * 60_000), off.d, only("options-edition", "refusal-options"));
+    for (let i = 0; i < 5; i++) await runFeedWatch(new Date(LATE_AT.getTime() + i * 10 * 60_000), off.d, only(...ids));
     expect(off.sent).toEqual([]);
-    expect(JSON.parse(store.get()!.text).feeds["options-edition"]).toMatchObject({ open: true, sent: false });
-    // The owner switches it on with the incident still under way: nothing is sent for it.
+    expect(JSON.parse(store.get()!.text)).toMatchObject({ alerts: "off", feeds: { "options-edition": { open: true, sent: false } } });
     const on = deps(w, store, { alertsOn: true });
-    for (let i = 5; i < 10; i++) await runFeedWatch(new Date(LATE_AT.getTime() + i * 10 * 60_000), on.d, only("options-edition", "refusal-options"));
-    expect(on.sent).toEqual([]);
-    // Its recovery is silent too; the next incident pages.
+    for (let i = 5; i < 10; i++) await runFeedWatch(new Date(LATE_AT.getTime() + i * 10 * 60_000), on.d, only(...ids));
+    expect(on.sent.map((n) => n.title)).toEqual(["Feed alerts on: 1 already late"]);
+    expect(JSON.parse(store.get()!.text)).toMatchObject({ alerts: "on", feeds: { "options-edition": { open: true, sent: true } } });
     w.docs = { ...fresh };
-    await runFeedWatch(new Date(LATE_AT.getTime() + 120 * 60_000), on.d, only("options-edition", "refusal-options"));
-    expect(on.sent).toEqual([]);
-    w.docs = { ...fresh };
-    w.refused = { options: "2026-11-13T22:30:00Z" };
-    await runFeedWatch(new Date("2026-11-13T22:40:00Z"), on.d, only("options-edition", "refusal-options"));
-    expect(on.sent.map((n) => n.kind)).toEqual(["rejected"]);
+    await runFeedWatch(new Date(LATE_AT.getTime() + 120 * 60_000), on.d, only(...ids));
+    expect(on.sent.map((n) => n.kind)).toEqual(["feed-late", "feed-recovered"]);
+  });
+
+  it("two overlapping runs at switch-on send one summary", async () => {
+    const w: World = { docs: { ...stale } };
+    const store = memStore();
+    await runFeedWatch(LATE_AT, deps(w, store, { alertsOn: false }).d, only(...ids));
+    const a = deps(w, store);
+    const b = deps(w, store);
+    const t = new Date(LATE_AT.getTime() + 10 * 60_000);
+    await Promise.all([runFeedWatch(t, a.d, only(...ids)), runFeedWatch(t, b.d, only(...ids))]);
+    expect([...a.sent, ...b.sent].map((n) => n.title)).toEqual(["Feed alerts on: 1 already late"]);
+  });
+
+  it("a failed summary is sent again on the next run", async () => {
+    const w: World = { docs: { ...stale } };
+    const store = memStore();
+    await runFeedWatch(LATE_AT, deps(w, store, { alertsOn: false }).d, only(...ids));
+    let result: "sent" | "failed" = "failed";
+    const on = deps(w, store, { send: async () => result });
+    await runFeedWatch(new Date(LATE_AT.getTime() + 10 * 60_000), on.d, only(...ids));
+    expect(JSON.parse(store.get()!.text).alerts).toBe("off");
+    result = "sent";
+    await runFeedWatch(new Date(LATE_AT.getTime() + 20 * 60_000), on.d, only(...ids));
+    expect(on.sent.map((n) => n.title)).toEqual(["Feed alerts on: 1 already late", "Feed alerts on: 1 already late"]);
+    expect(JSON.parse(store.get()!.text).alerts).toBe("on");
   });
 });
 
-describe("the table is the only place a feed is defined", () => {
-  it("a new row (an after-close selection pass) is read, evaluated and paged with no other change", async () => {
+describe("overlapping runs on clocks a few milliseconds apart", () => {
+  it("page once: the second sees the first's commit as the same decision", async () => {
+    const w: World = { docs: { ...stale } };
+    const store = memStore();
+    const a = deps(w, store);
+    const b = deps(w, store);
+    const [ra, rb] = await Promise.all([
+      runFeedWatch(new Date(LATE_AT.getTime() + 3), a.d, only("options-edition")),
+      runFeedWatch(new Date(LATE_AT.getTime() + 41), b.d, only("options-edition")),
+    ]);
+    expect(a.sent.length + b.sent.length).toBe(1);
+    expect([ra.skipped, rb.skipped].filter(Boolean)).toEqual(["concurrent run"]);
+  });
+});
+
+describe("a new row is read, evaluated and alerted with no other change", () => {
+  it("a new row (an after-close selection pass) is read by the runner, evaluated and paged", async () => {
     const stage: DocFeed = {
       type: "doc",
       id: "selection-stage-1",
@@ -210,5 +246,32 @@ describe("the table is the only place a feed is defined", () => {
 
   it("the state document has its own path", () => {
     expect(FEED_ALERT_PATH).toBe("ops/feeds-alert.json");
+  });
+});
+
+describe("the pages' loader derives what it reads from the table", () => {
+  it("a new row's document is read by its path, its refusal kind and the shadow records only when asked for", async () => {
+    vi.stubEnv("DASHBOARD_FIXTURE", "1");
+    vi.stubEnv("VERCEL_ENV", "preview");
+    const { loadPageFeeds } = await import("@/lib/feed-watch-run");
+    const stage: DocFeed = {
+      type: "doc",
+      id: "selection-stage-1",
+      name: "Selection stage 1",
+      short: "Stage 1",
+      path: "selection/stage1.json",
+      ingest_kind: "options",
+      stamp: () => ({ session: null, at: null }),
+      want: "next-session",
+      schedules: [{ zone: "America/New_York", times: ["16:30"], grace_min: 30 }],
+      severity: "alert",
+      verified: true,
+      misses_to_alert: 1,
+    };
+    const table: FeedRow[] = [...FEEDS, stage];
+    const s = await loadPageFeeds({ ids: ["selection-stage-1"] }, LATE_AT, table);
+    expect(s.stamps).toEqual({ "selection-stage-1": { status: "missing" } }); // fixture mode: nothing in the store
+    expect(Object.keys(s.refusals)).toEqual(["options"]);
+    expect(s.shadow).toBeNull();
   });
 });

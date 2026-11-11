@@ -20,6 +20,7 @@ import type { IngestRejectKind } from "./ingest-reject";
 import { addDays, nyNow, sessionOf } from "./market-calendar";
 import type { Notice } from "./ntfy";
 import { nyInstant } from "./options";
+import { journalCurrent } from "./trade-rules";
 import { SERVER_SETTLE_MS } from "./trade-state";
 
 // ---- the table ------------------------------------------------------------------------------------------------------
@@ -38,6 +39,12 @@ export interface Schedule {
   grace_min: number;
   /** since-slot only: a stamp this many minutes before the run's time still counts for it (a run that stamps early). */
   early_min?: number;
+  /**
+   * since-slot only: a stamp must also be later than this New York time on the run's day (HH:MM). The journal's
+   * evening sync uses it: the last live run reads until 16:20 New York, so only a stamp after that can come from the
+   * evening sync, in winter (21:38 UTC is 16:38) and in summer (17:38) alike.
+   */
+  after_ny?: string;
   /** When a run stops being the one in force: at the next run (default), or at the session's close. */
   until?: "next" | "close";
   /** Only runs before the session's close count (the live journal reads). */
@@ -137,6 +144,9 @@ const hhmm = (minute: number) => `${String(Math.floor(minute / 60)).padStart(2, 
 /** The live journal runs: :24 every hour from 09:24 to 15:24 New York (docs/runbooks/cloud-routines.md). */
 const JOURNAL_LIVE_NY = [9, 10, 11, 12, 13, 14, 15].map((h) => hhmm(h * 60 + 24));
 
+/** The live journal runs read until 16:20 New York (docs/runbooks/cloud-routines.md): the evening sync's stamps come later. */
+export const JOURNAL_LIVE_ENDS_NY = "16:20";
+
 /** The pre-open refresh runs at 08:50 New York; its prices must be in by 09:05. */
 export const PREOPEN_NY = "08:50";
 export const PREOPEN_GRACE_MIN = 15;
@@ -144,8 +154,9 @@ export const PREOPEN_GRACE_MIN = 15;
 export const SHADOW_GRACE_MIN = 10;
 
 /**
- * Every feed watched. A new feed is one more row: the runner reads each row's `path`, the pages draw each row, and
- * the evaluator needs nothing else.
+ * Every feed watched. A new feed is one more row: the runner reads its `path`, evaluates and alerts it, and the pages'
+ * loader reads what any requested row needs, with no change elsewhere. Which rows a page draws is that page's choice
+ * (STRIP_FEED_IDS for the Options page's strip; the Operations panel's cards).
  */
 export const FEEDS: readonly FeedRow[] = [
   {
@@ -187,7 +198,7 @@ export const FEEDS: readonly FeedRow[] = [
     want: "since-slot",
     schedules: [
       { zone: "America/New_York", times: JOURNAL_LIVE_NY, grace_min: INTRADAY_MAX_AGE_MIN, in_session: true },
-      { zone: "UTC", times: [hhmm(JOURNAL_SLOT_UTC)], grace_min: DAILY_GRACE_MIN, early_min: 60 },
+      { zone: "UTC", times: [hhmm(JOURNAL_SLOT_UTC)], grace_min: DAILY_GRACE_MIN, early_min: 60, after_ny: JOURNAL_LIVE_ENDS_NY },
     ],
     severity: "alert",
     verified: true,
@@ -236,7 +247,7 @@ export const FEEDS: readonly FeedRow[] = [
     misses_to_alert: 1,
   },
   { type: "shadow", id: "shadow", name: "Server check", short: "Server check", grace_min: SHADOW_GRACE_MIN, severity: "alert", verified: true },
-  { type: "refusal", id: "refusal-options", name: "Options edition", short: "Levels", kind: "options", severity: "alert", verified: true },
+  { type: "refusal", id: "refusal-options", name: "Options edition or pre-open refresh", short: "Levels", kind: "options", severity: "alert", verified: true },
   { type: "refusal", id: "refusal-journal", name: "Trade journal", short: "Journal", kind: "journal", severity: "alert", verified: true },
   { type: "refusal", id: "refusal-radar", name: "Radar edition", short: "Radar", kind: "radar", severity: "alert", verified: true },
   { type: "refusal", id: "refusal-ledger", name: "Card ledger", short: "Ledger", kind: "ledger", severity: "display", verified: true },
@@ -244,6 +255,9 @@ export const FEEDS: readonly FeedRow[] = [
   { type: "refusal", id: "refusal-options-clone", name: "Options clone", short: "Clone", kind: "options-clone", severity: "display", verified: true },
   { type: "refusal", id: "refusal-calendar", name: "Economic calendar", short: "Calendar", kind: "calendar", severity: "display", verified: true },
 ];
+
+/** The feeds the Options page's health strip draws from the server (the prices and the bars are the page's own). */
+export const STRIP_FEED_IDS = ["options-edition", "pre-open", "journal", "shadow"] as const;
 
 export function feedById(id: string, table: readonly FeedRow[] = FEEDS): FeedRow | undefined {
   return table.find((f) => f.id === id);
@@ -413,7 +427,11 @@ export function satisfies(feed: DocFeed, stamp: Stamp | null, slot: Slot): boole
       return stamp.session !== null && stamp.session >= prev;
     }
     case "since-slot":
-      return stamp.at !== null && stamp.at >= slot.due - (slot.schedule.early_min ?? 0) * MIN;
+    {
+      if (stamp.at === null || stamp.at < slot.due - (slot.schedule.early_min ?? 0) * MIN) return false;
+      const after = slot.schedule.after_ny ? nyInstant(slot.day, toMin(slot.schedule.after_ny)) : null;
+      return after === null || stamp.at > after;
+    }
   }
 }
 
@@ -514,7 +532,7 @@ export function evaluateDoc(f: DocFeed, read: StampRead | undefined, refusal: Re
   // close, like the pre-open refresh, does not carry yesterday's miss into today).
   let misses = 0;
   let firstMissedDeadline: number | null = null;
-  let latestMissedDay: string | null = null;
+  let latestMissed: number | null = null;
   for (let i = ci; i >= 0; i--) {
     const s = slots[i]!;
     if (i < ci && s.expires < slots[i + 1]!.due) break;
@@ -522,7 +540,7 @@ export function evaluateDoc(f: DocFeed, read: StampRead | undefined, refusal: Re
     if (nowMs > s.deadline) {
       misses++;
       firstMissedDeadline = s.deadline;
-      latestMissedDay ??= s.day;
+      latestMissed ??= i;
     }
   }
   if (satisfies(f, stamp, cur)) return { ...nothing(f, "on_time", "arrived", at), assumed };
@@ -534,47 +552,70 @@ export function evaluateDoc(f: DocFeed, read: StampRead | undefined, refusal: Re
   else if (f.want === "since-slot" || stamp.session === null) why = "old-stamp";
   else why = "wrong-session";
   if (misses === 0) return { ...nothing(f, "waiting", "running", at), assumed };
-  const refused = refusal?.status === "ok" && refusal.value.current;
+  const m = slots[latestMissed!]!;
+  const refused = refusalForSlot(refusal, m.due, slots[latestMissed! + 1]?.due ?? Number.POSITIVE_INFINITY);
   const state: FeedStateName = refused ? "failed" : "late";
   const lateMin = firstMissedDeadline === null ? null : Math.max(0, Math.floor((nowMs - firstMissedDeadline) / MIN));
-  // A refusal that still stands pages on its own row (refusal-*): this row stays quiet until it is replaced, so one
-  // incident pages once.
+  // A refusal of THIS run's document pages on its own row (refusal-*), so this row stays quiet for this run only:
+  // every later run that is missed pages as late in its own right, refusal or not.
   // Outside the calendar's range a weekday schedule stands in and still pages, saying so; an unverified row never does.
   const alerting = !refused && f.severity === "alert" && f.verified && misses >= f.misses_to_alert;
   return {
     ...nothing(f, state, refused ? "refused" : why, at),
     late_min: lateMin,
     misses,
-    episode: latestMissedDay,
+    episode: m.day,
     assumed,
     alerting,
   };
 }
 
-/** Whether the shadow evaluator is expected to be logging at `nowMs`: inside the regular session of a market day. */
-export function shadowWindow(nowMs: number): { open: number; close: number; day: string } | null {
+/**
+ * The refusal suppression rule. A refusal still standing quietens a document row's lateness alert only for the run it
+ * belongs to: refused at or after that run's time and before the row's next run. One refusal of the shared `options`
+ * kind (the pre-open refresh posts a whole edition) therefore covers the refresh it refused, never the evening's
+ * build or the next morning's refresh. A run whose document did not arrive always has a page: the refusal's or its own.
+ */
+export function refusalForSlot(refusal: Read<RefusalRead> | undefined, slotDue: number, nextDue: number): boolean {
+  if (refusal?.status !== "ok" || !refusal.value.current || refusal.value.at === null) return false;
+  const at = Date.parse(refusal.value.at);
+  return Number.isFinite(at) && at >= slotDue && at < nextDue;
+}
+
+/**
+ * The regular session around `nowMs`, or null outside it: from the exchange calendar, and past the calendar file's end
+ * 09:30 to 16:00 New York on a weekday, marked assumed.
+ */
+export function shadowWindow(nowMs: number): { open: number; close: number; day: string; assumed: boolean } | null {
   const d = nyDayOf(nowMs);
   const b = sessionBounds(d);
-  if (!b || nowMs < b.open || nowMs >= b.close) return null;
-  return { open: b.open, close: b.close, day: d };
+  let w: { open: number; close: number; assumed: boolean } | null = b ? { open: b.open, close: b.close, assumed: false } : null;
+  if (!w && sessionOf(d).kind === "out_of_range" && isWeekdayDay(d)) {
+    const open = nyInstant(d, 9 * 60 + 30);
+    const close = nyInstant(d, 16 * 60);
+    if (open !== null && close !== null) w = { open, close, assumed: true };
+  }
+  if (!w || nowMs < w.open || nowMs >= w.close) return null;
+  return { ...w, day: d };
 }
 
 export function evaluateShadow(f: ShadowFeed, read: Read<ShadowRead> | null, nowMs: number): FeedView {
   const w = shadowWindow(nowMs);
   if (!w) return nothing(f, "not_expected", "outside-session");
+  const assumed = w.assumed || !f.verified;
   if (!read || read.status === "error" || read.status === "unreadable")
-    return nothing(f, "unknown", read ? "storage-error" : "not-read", { for_session: w.day, episode: `unknown:${w.day}` });
-  if (read.status === "missing" || !read.value.on) return nothing(f, "not_expected", "switch-off", { for_session: w.day });
+    return nothing(f, "unknown", read ? "storage-error" : "not-read", { for_session: w.day, episode: `unknown:${w.day}`, assumed });
+  if (read.status === "missing" || !read.value.on) return nothing(f, "not_expected", "switch-off", { for_session: w.day, assumed });
   const v = read.value;
   // The first record is written once the first 2-minute bar has settled; a switch turned on later starts its clock.
   const first = w.open + BAR_MS + SERVER_SETTLE_MS;
   const base = Math.max(first, v.switched_at ?? first);
-  if (nowMs < base && v.last_slot_end === null) return nothing(f, "not_expected", "before-first-slot", { for_session: w.day, next_due: base });
+  if (nowMs < base && v.last_slot_end === null) return nothing(f, "not_expected", "before-first-slot", { for_session: w.day, next_due: base, assumed });
   const lastWrite = v.last_slot_end === null ? null : v.last_slot_end + SERVER_SETTLE_MS;
   const ref = Math.max(base, lastWrite ?? base);
   const deadline = ref + f.grace_min * MIN;
   const age = minutesSince(v.last_slot_end, nowMs);
-  const at = { due: ref, deadline, for_session: w.day, age_min: age };
+  const at = { due: ref, deadline, for_session: w.day, age_min: age, assumed };
   if (nowMs <= deadline) return nothing(f, lastWrite === null ? "waiting" : "on_time", lastWrite === null ? "running" : "recording", at);
   return {
     ...nothing(f, "late", "no-record", at),
@@ -595,7 +636,8 @@ export function evaluateRefusal(f: RefusalFeed, read: Read<RefusalRead> | undefi
     ...nothing(f, "failed", "refusal-current", { outcome: read.value.outcome, age_min: minutesSince(at, nowMs) }),
     late_min: minutesSince(at, nowMs),
     misses: 1,
-    episode: Number.isFinite(at) ? nyDayOf(at) : null,
+    // Each refusal is its own incident: a second one, even the same day, pages again.
+    episode: Number.isFinite(at) ? `refusal:${new Date(at).toISOString()}` : null,
     for_session: Number.isFinite(at) ? nyDayOf(at) : null,
     due: Number.isFinite(at) ? at : null,
     alerting: f.severity === "alert" && f.verified,
@@ -622,14 +664,19 @@ export interface FeedAlert {
   sent: boolean;
   /** Runs in a row the feed could not be read. */
   unknown_runs: number;
+  /** The "cannot be checked" incident, apart from the late one so an outage never replaces (and re-pages) it. */
+  unknown_episode: string | null;
+  unknown_sent: boolean;
 }
 export interface FeedAlertState {
   v: 1;
+  /** Whether the last run ran with alerts on: the first run with them on after a run with them off sends the summary. */
+  alerts: "on" | "off" | null;
   feeds: Record<string, FeedAlert>;
 }
 
-export const FEED_ALERT_INITIAL: FeedAlert = { open: false, episode: null, since: null, sent: false, unknown_runs: 0 };
-export const EMPTY_FEED_STATE: FeedAlertState = { v: 1, feeds: {} };
+export const FEED_ALERT_INITIAL: FeedAlert = { open: false, episode: null, since: null, sent: false, unknown_runs: 0, unknown_episode: null, unknown_sent: false };
+export const EMPTY_FEED_STATE: FeedAlertState = { v: 1, alerts: null, feeds: {} };
 
 /**
  * Runs in a row a feed must be unreadable before it pages: three, i.e. 20 to 30 minutes at the watchdog's 10-minute
@@ -638,58 +685,97 @@ export const EMPTY_FEED_STATE: FeedAlertState = { v: 1, feeds: {} };
  */
 export const UNKNOWN_RUNS_TO_ALERT = 3;
 
+/** The id a switch-on summary is filed under in FeedDecision.noticeFeeds. */
+export const SUMMARY_ID = "*switch-on-summary*";
+
+const str = (v: unknown) => (typeof v === "string" ? v : null);
+
 export function parseFeedState(text: string | null | undefined): FeedAlertState {
-  if (!text) return { v: 1, feeds: {} };
+  const empty = (): FeedAlertState => ({ v: 1, alerts: null, feeds: {} });
+  if (!text) return empty();
   try {
     const raw: unknown = JSON.parse(text);
-    if (!isObj(raw) || !isObj(raw.feeds)) return { v: 1, feeds: {} };
+    if (!isObj(raw) || !isObj(raw.feeds)) return empty();
     const feeds: Record<string, FeedAlert> = {};
     for (const [id, v] of Object.entries(raw.feeds)) {
       if (!isObj(v)) continue;
       feeds[id] = {
         open: v.open === true,
-        episode: typeof v.episode === "string" ? v.episode : null,
-        since: typeof v.since === "string" ? v.since : null,
+        episode: str(v.episode),
+        since: str(v.since),
         sent: v.sent === true,
         unknown_runs: typeof v.unknown_runs === "number" && Number.isInteger(v.unknown_runs) && v.unknown_runs >= 0 ? v.unknown_runs : 0,
+        unknown_episode: str(v.unknown_episode),
+        unknown_sent: v.unknown_sent === true,
       };
     }
-    return { v: 1, feeds };
+    return { v: 1, alerts: raw.alerts === "on" || raw.alerts === "off" ? raw.alerts : null, feeds };
   } catch {
-    return { v: 1, feeds: {} };
+    return empty();
   }
 }
 
-/** The state as stored: feeds in table order, keys sorted, so two runs that decide alike write the same bytes. */
+const FIELDS = ["open", "episode", "since", "sent", "unknown_runs", "unknown_episode", "unknown_sent"] as const;
+
+/** The state as stored: keys sorted, so two runs that decide alike write the same bytes. */
 export function serializeFeedState(s: FeedAlertState): string {
-  const feeds: Record<string, FeedAlert> = {};
+  const feeds: Record<string, Partial<FeedAlert>> = {};
   for (const id of Object.keys(s.feeds).sort()) {
     const a = s.feeds[id]!;
-    feeds[id] = { open: a.open, episode: a.episode, since: a.since, sent: a.sent, unknown_runs: a.unknown_runs };
+    feeds[id] = Object.fromEntries(FIELDS.map((k) => [k, a[k]]));
   }
-  return JSON.stringify({ v: 1, feeds });
+  return JSON.stringify({ v: 1, alerts: s.alerts, feeds });
 }
 
+/** Every byte the same (what decides whether a run writes at all). */
 export function sameFeedState(a: FeedAlertState, b: FeedAlertState): boolean {
   return serializeFeedState(a) === serializeFeedState(b);
+}
+
+/**
+ * Whether two decisions page the same: the alert switch and, per feed, what is open and what was sent. The times and
+ * counters are left out, so two overlapping runs on clocks a few milliseconds apart see one another's commit as
+ * "already handled" and the second sends nothing.
+ */
+export function sameFeedDecision(a: FeedAlertState, b: FeedAlertState): boolean {
+  const key = (s: FeedAlertState) =>
+    JSON.stringify([
+      s.alerts,
+      Object.keys(s.feeds)
+        .sort()
+        .map((id) => {
+          const f = s.feeds[id]!;
+          return [id, f.open, f.episode, f.sent, f.unknown_episode, f.unknown_sent];
+        })
+        .filter((x) => x[1] || x[4] !== null),
+    ]);
+  return key(a) === key(b);
 }
 
 export interface FeedDecision {
   next: FeedAlertState;
   notices: Notice[];
-  /** The feed id each notice is for, index for index: a page that fails puts that feed's state back. */
+  /** The feed id each notice is for, index for index (SUMMARY_ID for the switch-on summary). */
   noticeFeeds: string[];
+  /** The feeds the switch-on summary covered, if one was sent. */
+  summaryFeeds: string[];
 }
 
 /**
  * The episode logic, mirroring the snapshot watchdog's (watchdog.ts evaluate): one page per feed per incident, one
  * "back on time" when it recovers, nothing repeated run after run, and a new incident only after a recovery or on a
- * new session day. With alerts off (`alertsOn` false) every transition still happens and is stored, but nothing is
- * sent and the incident is marked unsent: switching alerts on later never pages an incident already under way, and
- * never announces the recovery of a page nobody received. The first page after switch-on is the next new incident.
+ * new session day (a refusal: a new refusal). An outage of the store ("cannot be checked") is its own incident beside
+ * a late one and never re-opens it.
+ *
+ * The switch-on rule. With alerts off every transition still happens and is stored, marked unsent, and nothing is
+ * sent. The stored state says which way the last run ran (`alerts`). On the first run with alerts on after one with
+ * them off (or after a state that predates the flag), every incident still open and unsent is listed in ONE summary
+ * page, by feed name, and marked sent; from then on each recovers with its own "back on time" page, and each new
+ * incident pages on its own. Switching off and on again later does the same: one summary of what opened meanwhile.
+ * With nothing open at switch-on, nothing is sent.
  */
-export function decideFeedAlerts(views: readonly FeedView[], prev: FeedAlertState, now: Date, alertsOn: boolean): FeedDecision {
-  const next: FeedAlertState = { v: 1, feeds: {} };
+export function decideFeedAlerts(views: readonly FeedView[], prev: FeedAlertState, now: Date, alertsOn: boolean, table: readonly FeedRow[] = FEEDS): FeedDecision {
+  const next: FeedAlertState = { v: 1, alerts: alertsOn ? "on" : "off", feeds: {} };
   const notices: Notice[] = [];
   const noticeFeeds: string[] = [];
   const iso = now.toISOString();
@@ -703,15 +789,14 @@ export function decideFeedAlerts(views: readonly FeedView[], prev: FeedAlertStat
     const a: FeedAlert = { ...p };
     if (v.state === "unknown") {
       // Unknown is not late: it pages only after UNKNOWN_RUNS_TO_ALERT runs in a row, for a feed that would page,
-      // while a run is in force, and once per day. The count stops there, so a long outage writes no new state.
+      // while a run is in force, and once per day. The count stops there, so a long outage writes no new state. A
+      // late incident already open stays open, untouched: it is not paged again once the store reads again.
       const eligible = v.severity === "alert" && v.verified && v.episode !== null && v.type !== "refusal";
       a.unknown_runs = eligible ? Math.min(p.unknown_runs + 1, UNKNOWN_RUNS_TO_ALERT) : 0;
-      if (eligible && a.unknown_runs >= UNKNOWN_RUNS_TO_ALERT && !(p.open && p.episode === v.episode)) {
-        a.open = true;
-        a.episode = v.episode;
-        a.since = iso;
-        a.sent = alertsOn;
-        push(v.id, unreadableNotice(v, a.unknown_runs, now));
+      if (eligible && a.unknown_runs >= UNKNOWN_RUNS_TO_ALERT && p.unknown_episode !== v.episode) {
+        a.unknown_episode = v.episode;
+        a.unknown_sent = alertsOn;
+        push(v.id, unreadableNotice(v, a.unknown_runs, now, table));
       }
     } else {
       a.unknown_runs = 0;
@@ -721,26 +806,53 @@ export function decideFeedAlerts(views: readonly FeedView[], prev: FeedAlertStat
           a.episode = v.episode;
           a.since = iso;
           a.sent = alertsOn;
-          push(v.id, v.type === "refusal" ? refusedNotice(v, now) : lateNotice(v, now));
+          push(v.id, v.type === "refusal" ? refusedNotice(v, now, table) : lateNotice(v, now, table));
         }
-      } else if (v.state === "on_time" && p.open) {
-        if (p.sent) push(v.id, recoveredNotice(v, now));
-        a.open = false;
-        a.episode = null;
-        a.since = null;
-        a.sent = false;
+      } else if (v.state === "on_time" && (p.open || p.unknown_episode !== null)) {
+        // One "back on time" for whatever was paged: the late page, the "cannot be checked" page, or both.
+        if ((p.open && p.sent) || (p.unknown_episode !== null && p.unknown_sent)) push(v.id, recoveredNotice(v, now, table));
+        Object.assign(a, FEED_ALERT_INITIAL);
       }
       // Anything else (waiting, not expected, late but not yet paging, display only) leaves the incident as it is.
     }
-    if (a.open || a.unknown_runs > 0) next.feeds[v.id] = a;
+    if (a.open || a.unknown_runs > 0 || a.unknown_episode !== null) next.feeds[v.id] = a;
   }
-  return { next, notices, noticeFeeds };
+
+  // The switch-on summary: the first run with alerts on after a run with them off.
+  const summaryFeeds: string[] = [];
+  if (alertsOn && prev.alerts !== "on") {
+    for (const v of views) {
+      const a = next.feeds[v.id];
+      if (!a) continue;
+      const unsent = (a.open && !a.sent) || (a.unknown_episode !== null && !a.unknown_sent);
+      if (!unsent) continue;
+      summaryFeeds.push(v.id);
+      next.feeds[v.id] = { ...a, sent: a.open ? true : a.sent, unknown_sent: a.unknown_episode !== null ? true : a.unknown_sent };
+    }
+    if (summaryFeeds.length) {
+      notices.push(summaryNotice(summaryFeeds, now, table));
+      noticeFeeds.push(SUMMARY_ID);
+    }
+  }
+  return { next, notices, noticeFeeds, summaryFeeds };
 }
 
-/** The state to store when some pages failed: those feeds go back to how they were, so the next run pages again. */
-export function rollbackFeeds(prev: FeedAlertState, next: FeedAlertState, failedIds: readonly string[]): FeedAlertState {
-  const out: FeedAlertState = { v: 1, feeds: { ...next.feeds } };
+/**
+ * The state to store when some pages failed: those feeds go back to how they were, so the next run pages again. A
+ * failed summary puts its feeds back to unsent and the switch back to how the last run left it, so the next run sends
+ * the summary again.
+ */
+export function rollbackFeeds(prev: FeedAlertState, next: FeedAlertState, failedIds: readonly string[], summaryFeeds: readonly string[] = []): FeedAlertState {
+  const out: FeedAlertState = { v: 1, alerts: next.alerts, feeds: { ...next.feeds } };
   for (const id of failedIds) {
+    if (id === SUMMARY_ID) {
+      out.alerts = prev.alerts;
+      for (const f of summaryFeeds) {
+        const a = out.feeds[f];
+        if (a) out.feeds[f] = { ...a, sent: a.open ? false : a.sent, unknown_sent: a.unknown_episode !== null ? false : a.unknown_sent };
+      }
+      continue;
+    }
     const p = prev.feeds[id];
     if (p) out.feeds[id] = p;
     else delete out.feeds[id];
@@ -749,6 +861,9 @@ export function rollbackFeeds(prev: FeedAlertState, next: FeedAlertState, failed
 }
 
 // ---- the notices ----------------------------------------------------------------------------------------------------
+// Every value a page carries comes from a closed set: a feed's name from the table (by id, never the view's own
+// text), a date that is a date, whole minutes, New York times worked out here, and fixed words for the reason and the
+// outcome. Anything else is left out.
 
 /** Said when the calendar file has run out and a weekday schedule stands in for it (the watchdog's ASSUMED_NOTE pattern). */
 export const FEED_ASSUMED_NOTE = " The market calendar has run out, so a weekday schedule is assumed.";
@@ -757,6 +872,11 @@ export const FEED_ASSUMED_NOTE = " The market calendar has run out, so a weekday
 export function nyHm(t: number): string {
   return hhmm(nyNow(new Date(t)).minute);
 }
+
+const nameOf = (id: string, table: readonly FeedRow[]) => table.find((f) => f.id === id)?.name ?? "A feed";
+const dayOf = (d: string | null | undefined) => (typeof d === "string" && DAY_RE.test(d) ? d : null);
+const whole = (n: number | null | undefined) => (typeof n === "number" && Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0);
+const instant = (t: number | null | undefined) => (typeof t === "number" && Number.isFinite(t) ? t : null);
 
 const REASON_WORDS: Partial<Record<Reason, string>> = {
   "no-document": "Nothing is stored for it.",
@@ -767,31 +887,35 @@ const REASON_WORDS: Partial<Record<Reason, string>> = {
   "no-record": "No record was written in that time.",
 };
 
-export function lateNotice(v: FeedView, now: Date): Notice {
-  const late = v.late_min ?? 0;
-  const deadline = v.deadline === null ? null : nyHm(v.deadline);
-  const runs = v.misses >= 2 ? ` ${v.misses} runs in a row were missed.` : "";
-  const why = REASON_WORDS[v.reason] ? ` ${REASON_WORDS[v.reason]}` : "";
-  const session = v.for_session ? `, for the session of ${v.for_session}` : "";
-  const by = deadline ? ` past its ${deadline} New York deadline` : " past its deadline";
+export function lateNotice(v: FeedView, now: Date, table: readonly FeedRow[] = FEEDS): Notice {
+  const name = nameOf(v.id, table);
+  const late = whole(v.late_min);
+  const dl = instant(v.deadline);
+  const day = dayOf(v.for_session);
+  const runs = whole(v.misses) >= 2 ? ` ${whole(v.misses)} runs in a row were missed.` : "";
+  const why = Object.hasOwn(REASON_WORDS, v.reason) ? ` ${REASON_WORDS[v.reason]}` : "";
+  const session = day ? `, for the session of ${day}` : "";
+  const by = dl !== null ? ` past its ${nyHm(dl)} New York deadline` : " past its deadline";
   const message =
     v.type === "shadow"
-      ? `${v.name} is late: no record for ${SHADOW_GRACE_MIN + late} min${session}. Checked ${nyHm(now.getTime())} New York.${why}`
-      : `${v.name} is late: ${late} min${by}${session}. Checked ${nyHm(now.getTime())} New York.${runs}${why}`;
+      ? `${name} is late: no record for ${SHADOW_GRACE_MIN + late} min${session}. Checked ${nyHm(now.getTime())} New York.${why}`
+      : `${name} is late: ${late} min${by}${session}. Checked ${nyHm(now.getTime())} New York.${runs}${why}`;
   return {
     kind: "feed-late",
-    title: `${v.name} late by ${late} min`,
-    message: `${message}${v.assumed ? FEED_ASSUMED_NOTE : ""}`,
+    title: `${name} late by ${late} min`,
+    message: `${message}${v.assumed === true ? FEED_ASSUMED_NOTE : ""}`,
     priority: 4,
     tags: ["warning"],
   };
 }
 
-export function unreadableNotice(v: FeedView, runs: number, now: Date): Notice {
+export function unreadableNotice(v: FeedView, runs: number, now: Date, table: readonly FeedRow[] = FEEDS): Notice {
+  const name = nameOf(v.id, table);
+  const day = dayOf(v.for_session);
   return {
     kind: "feed-late",
-    title: `${v.name} cannot be checked`,
-    message: `${v.name} is unknown: the store could not be read on ${runs} checks in a row${v.for_session ? `, for the session of ${v.for_session}` : ""}. Checked ${nyHm(now.getTime())} New York.`,
+    title: `${name} cannot be checked`,
+    message: `${name} is unknown: the store could not be read on ${whole(runs)} checks in a row${day ? `, for the session of ${day}` : ""}. Checked ${nyHm(now.getTime())} New York.`,
     priority: 4,
     tags: ["warning"],
   };
@@ -802,28 +926,44 @@ const OUTCOME_WORDS: Record<NonNullable<RefusalRead["outcome"]>, string> = {
   "ahead-of-clock": "its time was ahead of the clock",
 };
 
-export function refusedNotice(v: FeedView, now: Date): Notice {
-  const at = v.due === null ? "an unknown time" : `${nyHm(v.due)} New York`;
-  const why = v.outcome ? OUTCOME_WORDS[v.outcome] : "it was not accepted";
+export function refusedNotice(v: FeedView, now: Date, table: readonly FeedRow[] = FEEDS): Notice {
+  const name = nameOf(v.id, table);
+  const due = instant(v.due);
+  const at = due === null ? "an unknown time" : `${nyHm(due)} New York`;
+  const why = v.outcome && Object.hasOwn(OUTCOME_WORDS, v.outcome) ? OUTCOME_WORDS[v.outcome] : "it was not accepted";
+  const day = dayOf(v.for_session);
   return {
     kind: "rejected",
-    title: `${v.name} refused`,
-    message: `${v.name} was refused at ${at} because ${why}, and nothing newer is stored${v.for_session ? `, on ${v.for_session}` : ""}. Checked ${nyHm(now.getTime())} New York.`,
+    title: `${name} refused`,
+    message: `${name} was refused at ${at} because ${why}, and nothing newer is stored${day ? `, on ${day}` : ""}. Checked ${nyHm(now.getTime())} New York.`,
     priority: 4,
     tags: ["no_entry"],
   };
 }
 
-export function recoveredNotice(v: FeedView, now: Date): Notice {
-  const age = v.age_min === null ? "" : ` (${v.age_min} min old)`;
+export function recoveredNotice(v: FeedView, now: Date, table: readonly FeedRow[] = FEEDS): Notice {
+  const name = nameOf(v.id, table);
+  const age = v.age_min === null || !Number.isFinite(v.age_min) ? "" : ` (${whole(v.age_min)} min old)`;
   const what = v.type === "refusal" ? "a good copy is stored again" : `it is on time${age}`;
-  const session = v.for_session ? `, for the session of ${v.for_session}` : "";
+  const day = dayOf(v.for_session);
   return {
     kind: "feed-recovered",
-    title: `${v.name} back on time`,
-    message: `${v.name} recovered: ${what}${session}. Checked ${nyHm(now.getTime())} New York. The earlier alert is cleared.`,
+    title: `${name} back on time`,
+    message: `${name} recovered: ${what}${day ? `, for the session of ${day}` : ""}. Checked ${nyHm(now.getTime())} New York. The earlier alert is cleared.`,
     priority: 2,
     tags: ["white_check_mark"],
+  };
+}
+
+/** The one page at switch-on: how many incidents are already under way, by feed name (each name once). */
+export function summaryNotice(ids: readonly string[], now: Date, table: readonly FeedRow[] = FEEDS): Notice {
+  const names = [...new Set(ids.map((id) => nameOf(id, table)))];
+  return {
+    kind: "feed-late",
+    title: `Feed alerts on: ${ids.length} already late`,
+    message: `Feed alerts are on. Already late, refused or not checkable: ${names.join(", ")}. Each sends its own page when it is back on time. Checked ${nyHm(now.getTime())} New York.`,
+    priority: 4,
+    tags: ["warning"],
   };
 }
 
@@ -862,6 +1002,8 @@ export interface PolledRead {
   receivedAt: number | null;
   /** The latest poll failed and the last good answer is kept for its age only. */
   failed?: boolean;
+  /** The page is trying again after a failure (the retry line is up), or the board has paused on the prices. */
+  failing?: boolean;
 }
 
 /**
@@ -879,10 +1021,26 @@ export function polledState(
   offState: "failed" | "not_expected",
 ): { state: FeedStateName; age_s: number | null } {
   const age_s = r.status === "ok" && r.receivedAt !== null && browserNow !== null ? Math.max(0, Math.floor((browserNow - r.receivedAt) / 1000)) : null;
+  // Never green beside "trying again": a feed being retried, or paused on, is late wherever the clock stands.
+  if (r.failing) return { state: "late", age_s };
   if (shadowWindow(serverNow) === null) return { state: "not_expected", age_s };
   if (r.status === "loading") return { state: "waiting", age_s };
   if (r.status === "off") return { state: offState, age_s };
   if (r.status === "error") return { state: "failed", age_s };
   if (r.failed || age_s === null || age_s * 1000 > staleMs) return { state: "late", age_s };
   return { state: "on_time", age_s };
+}
+
+/**
+ * The journal's state as a page shows it: the board's own day check (trade-rules.ts journalCurrent, read only), so the
+ * strip and the day check can never give two answers. On time exactly when journalCurrent says the journal is
+ * current; otherwise the feed watch's word (late, waiting, unknown...), and never "on time". The two-missed-runs rule
+ * is for the alert alone (decideFeedAlerts).
+ */
+export function journalShown(v: FeedView, read: StampRead | undefined, nowMs: number): FeedStateName {
+  if (v.state === "unknown") return "unknown";
+  const at = read?.status === "ok" ? read.value.at : null;
+  const current = at !== null && journalCurrent(new Date(at).toISOString(), new Date(nowMs));
+  if (current) return "on_time";
+  return v.state === "on_time" ? "late" : v.state;
 }

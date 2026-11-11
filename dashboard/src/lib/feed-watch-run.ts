@@ -1,6 +1,5 @@
 import "server-only";
 import { exists, readForUpdate, readText, readTextIfChanged, storedAt, writeText, type StoredText } from "./blob";
-import { JOURNAL_PATHS, LEDGER_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
 import { DESK_EVAL_PATH, parseEvalSwitch } from "./desk-eval";
 import { lastLoggedSlot } from "./desk-page-run";
 import {
@@ -14,6 +13,7 @@ import {
   type Read,
   type RefusalRead,
   rollbackFeeds,
+  sameFeedDecision,
   sameFeedState,
   serializeFeedState,
   shadowWindow,
@@ -169,16 +169,17 @@ export async function runFeedWatch(
   ]);
   const views = evaluateStamped(stampInputs(inputs, table), now.getTime(), table);
   const prev = parseFeedState(stored?.text);
-  const decision = decideFeedAlerts(views, prev, now, deps.alertsOn);
+  const decision = decideFeedAlerts(views, prev, now, deps.alertsOn, table);
   const summary = { ok: true, alerts: deps.alertsOn ? "on" : "off", states: statesOf(views) };
   const r = await commitThenSend({
     deps,
     stored,
     unchanged: sameFeedState(prev, decision.next),
     nextText: serializeFeedState(decision.next),
-    committedByOther: (text) => sameFeedState(parseFeedState(text), decision.next),
+    committedByOther: (text) => sameFeedDecision(parseFeedState(text), decision.next),
     notices: decision.notices,
-    rollbackText: (failedAt) => serializeFeedState(rollbackFeeds(prev, decision.next, failedAt.map((i) => decision.noticeFeeds[i]!))),
+    rollbackText: (failedAt) =>
+      serializeFeedState(rollbackFeeds(prev, decision.next, failedAt.map((i) => decision.noticeFeeds[i]!), decision.summaryFeeds)),
     event: "feed-watch",
     deadline: startedAt + FEED_RUN_BUDGET_MS,
     clock: deps.clock,
@@ -248,41 +249,38 @@ function fromResult(r: DocResult | null | undefined): Read<unknown> | null {
 }
 
 export interface PageFeedSources {
-  options?: OptionsResult | null;
-  journal?: JournalResult | null;
-  ledger?: LedgerResult | null;
-  radar?: RadarResult | null;
-  /** The refusal records to read (one get and one head each). */
-  refusals: readonly IngestRejectKind[];
-  /** Read the shadow evaluator's switch and newest records (in the session only). */
-  shadow: boolean;
+  /** The rows the page draws (feed-watch.ts FEEDS ids). Everything read follows from these rows. */
+  ids: readonly string[];
+  /** Documents the page has already loaded (snapshot.ts), by store path; any other row's document is read here. */
+  loaded?: Readonly<Record<string, DocResult | null | undefined>>;
 }
 
 /**
- * The stamps a page draws its feeds from: the documents the page has already loaded (snapshot.ts), plus the refusal
- * records and the shadow records it asks for. In fixture mode nothing is read from the store (no refusal, the switch
- * off), and the `feeds-*` variants bend the stamps (fixture-variants.ts feedVariant).
+ * The stamps a page draws its feeds from, all derived from the table: each requested doc row's document (the page's
+ * own load when it has one, otherwise one read of the row's path), the refusal record of each kind those rows name,
+ * and, in the session, the shadow evaluator's switch and newest records when a shadow row is asked for. In fixture
+ * mode nothing is read from the store (no refusal, the switch off, any other document missing), and the `feeds-*`
+ * variants bend the stamps (fixture-variants.ts feedVariant).
  */
-export async function loadPageFeeds(src: PageFeedSources, now: Date): Promise<StampedInputs> {
-  const docs: Record<string, Read<unknown>> = {};
-  const byPath: [string, DocResult | null | undefined][] = [
-    [OPTIONS_PATHS.latest, src.options],
-    [JOURNAL_PATHS.latest, src.journal],
-    [LEDGER_PATHS.latest, src.ledger],
-    [RADAR_PATHS.latest, src.radar],
-  ];
-  for (const [path, r] of byPath) {
-    const read = fromResult(r);
-    if (read) docs[path] = read;
-  }
+export async function loadPageFeeds(src: PageFeedSources, now: Date, table: readonly FeedRow[] = FEEDS): Promise<StampedInputs> {
+  const rows = table.filter((f) => src.ids.includes(f.id));
   const dry = fixtureMode();
-  const refusals: FeedInputs["refusals"] = Object.fromEntries(
+  const paths = [...new Set(rows.flatMap((f) => (f.type === "doc" ? [f.path] : [])))];
+  const kinds = [...new Set(rows.flatMap((f) => (f.type === "refusal" ? [f.kind] : f.type === "doc" && f.ingest_kind ? [f.ingest_kind] : [])))];
+  const docs: Record<string, Read<unknown>> = Object.fromEntries(
     await Promise.all(
-      src.refusals.map(async (k) => [k, dry ? ({ status: "missing" } as const) : await readValue(readRefusalFromStore(k))] as const),
+      paths.map(async (p) => {
+        const mine = fromResult(src.loaded?.[p]);
+        if (mine) return [p, mine] as const;
+        return [p, dry ? ({ status: "missing" } as const) : await readJson(readTextIfChanged(p).then((r) => r?.text ?? null))] as const;
+      }),
     ),
   );
-  const inSession = shadowWindow(now.getTime()) !== null;
-  const shadow: FeedInputs["shadow"] = !src.shadow || !inSession ? null : dry ? { status: "missing" } : await readValue(readShadowFromStore(now.getTime()));
-  const stamped = stampInputs({ docs, refusals, shadow });
+  const refusals: FeedInputs["refusals"] = Object.fromEntries(
+    await Promise.all(kinds.map(async (k) => [k, dry ? ({ status: "missing" } as const) : await readValue(readRefusalFromStore(k))] as const)),
+  );
+  const wantShadow = rows.some((f) => f.type === "shadow") && shadowWindow(now.getTime()) !== null;
+  const shadow: FeedInputs["shadow"] = !wantShadow ? null : dry ? { status: "missing" } : await readValue(readShadowFromStore(now.getTime()));
+  const stamped = stampInputs({ docs, refusals, shadow }, table);
   return dry ? feedVariant(stamped, await fixtureFlags(), now.getTime()) : stamped;
 }

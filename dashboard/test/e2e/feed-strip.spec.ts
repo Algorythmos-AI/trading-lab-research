@@ -39,6 +39,8 @@ test("all on time: six chips, one per feed, in order", async ({ page, context, b
     "journal",
     "shadow",
   ]);
+  // The prices chip waits for the page's first poll (no keys here: it answers "off").
+  await expect(chip(page, "prices")).toHaveAttribute("data-feed-state", "failed");
   expect(await states(page)).toEqual({
     "options-edition": "on_time",
     "pre-open": "on_time",
@@ -136,7 +138,28 @@ test("at 375 px the strip and the live prices' retry line are both drawn and nev
   const r = await box(page, "[data-feed-retry]");
   const overlap = s.x < r.x + r.width && r.x < s.x + s.width && s.y < r.y + r.height && r.y < s.y + s.height;
   expect(overlap).toBe(false);
-  expect(await page.locator('[data-feed-chip="prices"]').getAttribute("data-feed-state")).not.toBeNull();
+  // Never green beside "trying again".
+  expect(await page.locator('[data-feed-chip="prices"]').getAttribute("data-feed-state")).not.toBe("on_time");
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
 });
+
+for (const offset of [-3_600_000, 3_600_000]) {
+  test(`a device clock ${offset < 0 ? "an hour slow" : "an hour fast"} changes no chip: the strip runs on the server's time`, async ({ page, context, baseURL }) => {
+    await context.addCookies([{ name: "fx", value: "frozen.quotes-off.chain-off.feeds-ok", url: baseURL! }]);
+    await page.clock.install({ time: new Date(Date.parse(FROZEN_NOW) + offset) });
+    await page.goto("/options");
+    await expect(strip(page)).toBeVisible();
+    // Long enough for the strip to have redrawn on the browser's side (it ticks every 15 s).
+    await page.clock.runFor(31_000);
+    await expect(chip(page, "prices")).toHaveAttribute("data-feed-state", "failed");
+    expect(await states(page)).toEqual({
+      "options-edition": "on_time",
+      "pre-open": "on_time",
+      prices: "failed",
+      bars: "not_expected",
+      journal: "on_time",
+      shadow: "on_time",
+    });
+  });
+}

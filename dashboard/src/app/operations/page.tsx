@@ -20,7 +20,8 @@ import { SlaPanel } from "@/components/v3/sla";
 import { duration, newYork, num, pct, shortDate, shortSha, sydney, txt } from "@/lib/format";
 import { humanize, jobKey, jobName, jobTone, sortJobKeys } from "@/lib/labels";
 import { loadPageFeeds } from "@/lib/feed-watch-run";
-import { INGEST_REJECT_KINDS } from "@/lib/ingest-reject";
+import { JOURNAL_PATHS, LEDGER_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "@/lib/desk";
+import { FEEDS } from "@/lib/feed-watch";
 import { listOptionsDates, listRadarDates, loadJournal, loadLedger, loadOptions, loadOptionsLive, loadRadar, loadSnapshot } from "@/lib/snapshot";
 import { DISK_FLOOR_GB, DISK_TARGET_GB } from "@/lib/thresholds.gen";
 import { entries, list, type LogInfo, type Snapshot } from "@/lib/types";
@@ -42,7 +43,13 @@ export default async function OperationsPage() {
     listRadarDates(14),
   ]);
   // The feed watch's view of the same documents, with every refusal record and the server check's records.
-  const feeds = await loadPageFeeds({ options, journal, ledger, radar, refusals: INGEST_REJECT_KINDS, shadow: true }, now);
+  const feeds = await loadPageFeeds(
+    {
+      ids: FEEDS.map((f) => f.id),
+      loaded: { [OPTIONS_PATHS.latest]: options, [JOURNAL_PATHS.latest]: journal, [LEDGER_PATHS.latest]: ledger, [RADAR_PATHS.latest]: radar },
+    },
+    now,
+  );
   return (
     <>
       <PageHeading

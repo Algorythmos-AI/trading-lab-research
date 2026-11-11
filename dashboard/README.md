@@ -184,13 +184,15 @@ wt.ops.publish                            POST /api/ingest            (productio
 - **Feed watch** (`src/lib/feed-watch.ts`, pure; `src/lib/feed-watch-run.ts`, the tick): one table of every
   document a cloud routine or the desk's own cron must publish (`FEEDS`): its store path, how to read which session
   it is for, its schedule in the zone the routine's cron really uses, a grace, and whether it pages. A new feed is one
-  more row: the runner reads each row's path, the pages draw each row, nothing else changes (a unit test adds one).
+  more row: the runner reads its path, evaluates it and pages for it, and the pages' loader (`loadPageFeeds`) reads
+  whatever the rows a page asks for need, with no other change (unit tests add one). Drawing a new row on a page is
+  that page's choice: the strip lists its chips (`STRIP_FEED_IDS`) and the panel its cards.
 
   | Feed | Due | Zone | Grace | Wants | Pages |
   |---|---|---|---|---|---|
   | Options edition | 21:52 Mon–Fri | UTC (runbook) | 60 min | `session` = the next session | yes |
   | Pre-open refresh | 08:50 Mon–Fri, until the close | New York (runbook) | 15 min (by 09:05) | `focus.premarket.as_of` on today's New York date | yes |
-  | Trade journal | :24 hourly 09:24–15:24 before the close; 21:38 | New York; UTC (runbook) | 45 min; 60 min (stamp may be 60 min early) | `as_of` at or after the run | after two missed runs |
+  | Trade journal | :24 hourly 09:24–15:24 before the close; 21:38 | New York; UTC (runbook) | 45 min; 60 min (stamp may be 60 min early, and must be after 16:20 New York, when the last live run stops reading) | `as_of` at or after the run | after two missed runs |
   | Card ledger, morning | 09:11 | New York, **assumed** | 60 min | `session` = the last session | no (display only) |
   | Card ledger, after close | 16:21 | New York, **assumed** | 60 min | `session` = today | no (display only) |
   | Radar edition | 11:12 Mon–Fri | UTC (runbook) | 60 min (stamp may be 60 min early) | `as_of` at or after the run | yes |
@@ -208,13 +210,24 @@ wt.ops.publish                            POST /api/ingest            (productio
   three runs in a row (20 to 30 minutes: one failed read clears itself, three is an outage). Its state is one Blob
   document, `ops/feeds-alert.json`, committed with the snapshot watchdog's own `commitThenSend` (ifMatch, fail-open,
   rollback of a failed page), so two overlapping runs page once. It runs inside `/api/cron/watchdog` after the desks'
-  ticks, isolated from them, within a 25-second budget.
+  ticks, isolated from them, within a 25-second budget. Two runs decide alike when what is open and what was sent
+  agree (times and counters are left out), so runs on clocks a few milliseconds apart page once too.
+
+  **Refusals.** One refusal record covers a whole kind, and the pre-open refresh posts a whole edition under the
+  `options` kind, so a refusal quietens a document row's lateness page only for the run it belongs to: refused at or
+  after that run's time and before the row's next run (`refusalForSlot`). That run is shown "failed" and pages once, as
+  "refused", on its refusal row; every later missed run (the evening build, the next morning's refresh) pages as late
+  in its own right. Each refusal (a new refusal time) is a new incident; a good store after it sends one "back on
+  time". A storage outage ("cannot be checked") is its own incident beside a late one: it never replaces it, so a feed
+  already paged late is not paged late again when the store reads again; one "back on time" closes both.
 
   **Display only until the owner says so.** Pages are sent only when `FEED_WATCH_ALERTS` is exactly `on` (the owner
   sets it in Vercel; nobody else). Off, every run still reads, evaluates and stores its incidents, marked unsent, and
-  the pages show everything. At switch-on: an incident already under way stays quiet (it was opened while off), its
-  recovery is not announced (nobody received the page), and the first page is the next new incident; nothing that
-  happened while off is sent in a burst. `make feed-watch-drill` runs the real tick offline through late and recovered
+  the pages show everything; the state records `alerts: "off"`. At switch-on (the first run with it on after a run
+  with it off, read from `ops/feeds-alert.json`, not from memory) exactly one summary page lists the incidents still
+  open by feed name, and they are marked sent; each then pages "back on time" when it recovers, and every new incident
+  pages on its own. Nothing open: nothing sent. Off and on again later: the same, one summary of what opened while it
+  was off. Recoveries while off are not sent. A summary that fails to send is sent again on the next run. `make feed-watch-drill` runs the real tick offline through late and recovered
   and prints both pages.
 
   **Division of labour with the host's pipeline check** (`src/wt/options/pipeline_check.py`, 08:55 and 18:30 New
@@ -229,7 +242,10 @@ wt.ops.publish                            POST /api/ingest            (productio
 
   The Operations page's "Your feeds" panel and the Options page's health strip (`components/client/feed-strip.tsx`:
   the edition, the pre-open refresh, the live prices, the session bars, the journal and the server check, each with
-  its state and age, fixed-size chips) are drawn from the same table and evaluator. `feeds.ts` keeps the constants
+  its state and age, fixed-size chips) are drawn from the same table and evaluator. Both show the journal by the
+  board's own day check (`trade-rules.ts` `journalCurrent`, read only), so a page never gives two answers; the
+  two-missed-runs rule decides only whether to send an alert. The strip runs on the server render's time moved on by the browser's
+  monotonic clock, never the device's wall clock, and its prices chip is never "on time" while the retry line is up. `feeds.ts` keeps the constants
   and `journalCheck` the shadow evaluator's engine reads (it is inside `gen:engine`'s hash), unchanged; the feed
   watch imports from it and is outside the engine's import closure.
 - **Health** (`src/lib/health.ts`) and the top-of-page **summary** sentence (`src/lib/summary.ts`) are pure

@@ -30,7 +30,7 @@ checked; the feed watch shows them as assumed and never pages for them (below).
   ledger routines (assumed, display only) and the desk's own shadow evaluator. It is the one source for the
   Operations page's "Your feeds", the Options page's health strip and the feed alerts (`/api/cron/watchdog`, pages
   only with `FEED_WATCH_ALERTS=on`). **A change of a routine's schedule or zone here must change its row there**, in
-  the same pull request; a new routine that publishes is one more row.
+  the same pull request; a new routine that publishes is one more row (and, to show it, a chip or a card).
 - **The journal's freshness**: the feed watch expects a read at or after each live run within 45 minutes (the
   routine publishes at least every 30 minutes) and the 21:38 UTC sync within an hour, and pages after two missed runs
   in a row. The day check (`trade-rules.ts`, `journalCurrent`, inside the shadow evaluator's engine) is stricter and

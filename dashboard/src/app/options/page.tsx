@@ -31,6 +31,8 @@ import { dayCheck } from "@/lib/trade-rules";
 import { loadFlagsView } from "@/lib/desk-flags-run";
 import { loadEvalSwitch } from "@/lib/desk-page-run";
 import { loadPageFeeds } from "@/lib/feed-watch-run";
+import { STRIP_FEED_IDS } from "@/lib/feed-watch";
+import { JOURNAL_PATHS, OPTIONS_PATHS } from "@/lib/desk";
 import { listOptionsDates, loadJournal, loadLedger, loadOptions, loadOptionsLive, pageTime } from "@/lib/snapshot";
 
 export const dynamic = "force-dynamic";
@@ -115,7 +117,9 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
   }
   const full = result.edition;
   // The feed health strip's server-known feeds, from the documents read above (a past edition has no strip).
-  const feeds = date ? null : await loadPageFeeds({ options: result, journal, refusals: ["options", "journal"], shadow: true }, now);
+  const feeds = date
+    ? null
+    : await loadPageFeeds({ ids: STRIP_FEED_IDS, loaded: { [OPTIONS_PATHS.latest]: result, [JOURNAL_PATHS.latest]: journal } }, now);
   // While trading the desk shows only the focus names; ?all=1 brings back the whole board.
   const showAll = one(sp.all) === "1";
   const e = showAll ? full : focusOnly(full);

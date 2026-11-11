@@ -4,7 +4,7 @@ import { RelativeTime } from "@/components/client/relative-time";
 import { Panel } from "@/components/panel";
 import { StatusBadge } from "@/components/status";
 import { describeAge, freshness, OFFLINE_HOURS } from "@/lib/freshness";
-import { evaluateStamped, FEEDS, type FeedView, nextDueOf, type StampedInputs, worstOf } from "@/lib/feed-watch";
+import { evaluateStamped, FEEDS, type FeedView, journalShown, nextDueOf, type StampedInputs, worstOf } from "@/lib/feed-watch";
 import { lastWeekdays } from "@/lib/feeds";
 import { shortDate, sydney, weekDate } from "@/lib/format";
 import type { Tone } from "@/lib/labels";
@@ -88,7 +88,8 @@ export function buildFeeds(i: FeedsInput): Feed[] {
 
   const j = i.journal.status === "ok" ? i.journal.doc : null;
   const jView = view("journal");
-  const jState = panelState(jView);
+  // The journal's word is the board's own day check (journalShown): the panel, the strip and the day check agree.
+  const jState = jView ? panelState({ ...jView, state: journalShown(jView, i.feeds.stamps.journal, nowMs) }) : panelState(jView);
   const jRow = row("journal");
   const evening = jRow?.type === "doc" ? nextDueOf(jRow, nowMs, 1) : null;
 
@@ -99,8 +100,13 @@ export function buildFeeds(i: FeedsInput): Feed[] {
 
   const focus = o?.focus ?? null;
   const pre = focus?.premarket?.as_of ?? null;
-  const fView = view("pre-open");
-  const fState = panelState(fView);
+  // The focus card is picked with the evening's edition and refreshed before the open: from 08:50 to the close it is
+  // judged by its pre-open refresh, the rest of the day by the edition it came with (what its picked_at used to be
+  // checked against: the edition's own run). The table has no row of its own for picked_at, which only ever moves with
+  // the edition.
+  const pView = view("pre-open");
+  const fView = pView && pView.state !== "not_expected" ? pView : oView;
+  const fState = focus || !o ? panelState(fView) : "missing";
 
   const r = i.radar.status === "ok" ? i.radar.edition : null;
   const rView = view("radar");
@@ -156,7 +162,7 @@ export function buildFeeds(i: FeedsInput): Feed[] {
       name: "Top 4 focus card",
       href: "/options",
       state: fState,
-      asOf: pre ?? focus?.picked_at ?? null,
+      asOf: focus?.picked_at ?? null,
       schedule: `Picked after each close, with a heads-up before the open, due by 09:05 New York${assumedNote(fView)}`,
       note: focus
         ? pre
@@ -174,6 +180,7 @@ export function buildFeeds(i: FeedsInput): Feed[] {
       asOf: r?.as_of ?? null,
       schedule: `Each weekday, sent ${sydTime(rView?.next_due ?? null)} Sydney${assumedNote(rView)}`,
       note: refusedNote(rView) ?? (r ? `Edition for ${weekDate(r.edition_date)}` : undefined),
+      strip: i.radarDates.length === 0 ? undefined : { dates: days, have: new Set(i.radarDates), today, label: "Radar editions on file for each day" },
     },
     {
       key: "ledger",

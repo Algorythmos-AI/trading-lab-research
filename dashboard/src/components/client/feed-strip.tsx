@@ -9,14 +9,15 @@
 // Every chip has the same fixed size whatever it says, so a state change never moves the board below it.
 import { TONE_ICON, TONE_TEXT } from "@/components/status";
 import { BARS_STALE_MS } from "@/lib/bars-feed";
-import { chipAge, evaluateStamped, type FeedStateName, polledState, STATE_WORD, type StampedInputs } from "@/lib/feed-watch";
+import { useState } from "react";
+import { chipAge, evaluateStamped, type FeedStateName, journalShown, polledState, shadowWindow, STATE_WORD, type StampedInputs } from "@/lib/feed-watch";
 import type { Tone } from "@/lib/labels";
 import { STALE_MS } from "@/lib/options";
 import { cn } from "@/lib/utils";
 import { useEvalStatus } from "./desk-shadow";
 import { useLive } from "./live-layer";
 import { useBoard } from "./trade-now";
-import { useNow } from "./use-now";
+import { usePerfNow } from "./use-now";
 
 const TONE: Record<FeedStateName, Tone> = {
   on_time: "good",
@@ -41,6 +42,8 @@ export interface Chip {
   short: string;
   state: FeedStateName;
   age: string;
+  /** Its schedule is assumed (the calendar has run out, or the routine's time is not verified). */
+  assumed: boolean;
 }
 
 /** Seconds as a chip's age: "now", "12s", then minutes and up as chipAge says them. */
@@ -71,15 +74,18 @@ export function stripChips(a: {
   const views = new Map(evaluateStamped({ ...a.stamps, shadow }, a.now).map((v) => [v.id, v]));
   const server = (id: string): Chip => {
     const v = views.get(id)!;
-    return { id, name: v.name, short: v.short, state: v.state, age: chipAge(v.age_min) };
+    // The journal shows the board's own day check (journalShown), so the strip and the day check agree.
+    const state = id === "journal" ? journalShown(v, a.stamps.stamps.journal, a.now) : v.state;
+    return { id, name: v.name, short: v.short, state, age: chipAge(v.age_min), assumed: v.assumed };
   };
+  const assumed = shadowWindow(a.now)?.assumed ?? false;
   const prices = polledState(a.prices, a.browserNow, a.now, STALE_MS, "failed");
   const bars = polledState(a.bars, a.browserNow, a.now, BARS_STALE_MS, "not_expected");
   return [
     server("options-edition"),
     server("pre-open"),
-    { id: "prices", name: "Live prices", short: "Prices", state: prices.state, age: secondsAge(prices.age_s) },
-    { id: "bars", name: "Session bars", short: "Bars", state: bars.state, age: secondsAge(bars.age_s) },
+    { id: "prices", name: "Live prices", short: "Prices", state: prices.state, age: secondsAge(prices.age_s), assumed },
+    { id: "bars", name: "Session bars", short: "Bars", state: bars.state, age: secondsAge(bars.age_s), assumed },
     server("journal"),
     server("shadow"),
   ];
@@ -96,7 +102,9 @@ export function FeedChips({ chips }: { chips: readonly Chip[] }) {
             key={c.id}
             data-feed-chip={c.id}
             data-feed-state={c.state}
-            aria-label={`${c.name}: ${STATE_WORD[c.state]}, ${c.age === "—" ? "age not known" : c.age === "now" ? "just now" : `${c.age} old`}`}
+            data-feed-assumed={c.assumed ? "true" : undefined}
+            title={c.assumed ? "Assumed schedule" : undefined}
+            aria-label={`${c.name}: ${STATE_WORD[c.state]}, ${c.age === "—" ? "age not known" : c.age === "now" ? "just now" : `${c.age} old`}${c.assumed ? ", assumed schedule" : ""}`}
             className={cn("grid h-12 min-w-0 content-center gap-0.5 rounded-md border px-2", CHIP_TONE[tone])}
           >
             <span className="text-muted-foreground truncate text-[0.6875rem] leading-tight font-medium max-sm:text-xs">{c.short}</span>
@@ -114,20 +122,30 @@ export function FeedChips({ chips }: { chips: readonly Chip[] }) {
   );
 }
 
+/** The strip's clock (ms): the server's render time plus the monotonic time since hydration; the render time alone
+ * while either monotonic reading is missing. */
+export function stripNow(serverNow: number, perf0: number | null, perf: number | null): number {
+  return perf0 === null || perf === null ? serverNow : serverNow + Math.max(0, perf - perf0);
+}
+
 /**
  * The strip on the Options page, inside its live feed and board. `serverNow` is the server render's clock (ms).
  * `evalOn`: the server check's switch as the render read it. Off, and with no record read for it (outside the session
  * at render), the server check is "not due" for the whole of the page's life: the page asks nothing about it.
  */
 export function FeedStrip({ stamps, serverNow, evalOn }: { stamps: StampedInputs; serverNow: number; evalOn: boolean }) {
-  const { feed, now: browserNow } = useLive();
+  const { feed, now: browserNow, backoff } = useLive();
   const board = useBoard();
   const status = useEvalStatus();
-  // The board's (server) clock once the feed has answered; the browser's before; the server render's until hydrated.
-  const ticking = useNow(15_000);
-  const now = board?.now ?? ticking ?? serverNow;
-  const prices = feed.status === "ok" ? { status: "ok" as const, receivedAt: feed.receivedAt } : { status: feed.status, receivedAt: null };
+  // The strip's clock is the server render's, moved on by the browser's monotonic clock since hydration: never the
+  // device's wall clock, which may be wrong. Until the monotonic clock is read, the server render's state stands.
+  const [perf0] = useState(() => (typeof performance === "undefined" ? null : performance.now()));
+  const perf = usePerfNow(15_000);
+  const now = stripNow(serverNow, perf0, perf);
   const shadow: StampedInputs["shadow"] = stamps.shadow ?? (evalOn ? null : { status: "ok", value: { on: false, switched_at: null, last_slot_end: null } });
+  // The prices are failing while the retry line is up (backoff) or the board has paused on them.
+  const failing = backoff !== null || board?.paused === true;
+  const prices = feed.status === "ok" ? { status: "ok" as const, receivedAt: feed.receivedAt, failing } : { status: feed.status, receivedAt: null, failing };
   const chips = stripChips({
     stamps: { ...stamps, shadow },
     now,

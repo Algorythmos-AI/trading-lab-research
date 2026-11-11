@@ -25,7 +25,11 @@ import {
   type StampedInputs,
   UNKNOWN_RUNS_TO_ALERT,
   type DocFeed,
+  SUMMARY_ID,
+  shadowWindow,
+  journalShown,
 } from "@/lib/feed-watch";
+import { journalCurrent } from "@/lib/trade-rules";
 import { DAILY_GRACE_MIN, INTRADAY_MAX_AGE_MIN, JOURNAL_SLOT_UTC, OPTIONS_SLOT_UTC, RADAR_SLOT_UTC } from "@/lib/feeds";
 import { INGEST_REJECT_KINDS } from "@/lib/ingest-reject";
 import { RANGE } from "@/lib/market-calendar";
@@ -167,10 +171,23 @@ describe("the options edition (after the close, 21:52 UTC, an hour's grace)", ()
     expect(lateNotice(v, new Date("2028-01-04T23:30:00Z")).message.endsWith(FEED_ASSUMED_NOTE)).toBe(true);
     expect(view("options-edition", { "options-edition": ok("2028-01-10", "2028-01-07T22:00:00Z") }, "2028-01-08T15:00:00Z")).toMatchObject({ state: "on_time", assumed: true });
   });
-  it("a refusal that still stands makes it failed, and leaves the page to the refusal's own row", () => {
+  it("a refusal of this run's edition makes it failed, and leaves the page to the refusal's own row", () => {
     const r = { refusals: { options: refused("2026-11-12T22:05:00Z") } };
     expect(view("options-edition", forThursday, "2026-11-12T23:00:00Z", r)).toMatchObject({ state: "failed", reason: "refused", alerting: false });
-    expect(view("refusal-options", {}, "2026-11-12T23:00:00Z", r)).toMatchObject({ state: "failed", reason: "refusal-current", alerting: true, episode: "2026-11-12" });
+    expect(view("refusal-options", {}, "2026-11-12T23:00:00Z", r)).toMatchObject({
+      state: "failed",
+      reason: "refusal-current",
+      alerting: true,
+      episode: "refusal:2026-11-12T22:05:00.000Z",
+    });
+  });
+  it("a refusal from before this run (the morning's refresh) does not quieten it: it is late and pages", () => {
+    const r = { refusals: { options: refused("2026-11-12T13:52:00Z") } };
+    expect(view("options-edition", forThursday, "2026-11-12T23:00:00Z", r)).toMatchObject({ state: "late", reason: "wrong-session", alerting: true });
+    // ...and the next morning's refresh, missed too, is late in its own right.
+    expect(view("pre-open", { "pre-open": ok(null, null) }, "2026-11-13T14:06:00Z", r)).toMatchObject({ state: "late", alerting: true });
+    // The morning it was refused, the refresh itself is failed and quiet: the refusal pages.
+    expect(view("pre-open", { "pre-open": ok(null, null) }, "2026-11-12T14:06:00Z", r)).toMatchObject({ state: "failed", alerting: false });
   });
 });
 
@@ -217,11 +234,19 @@ describe("the trade journal (hourly live runs, the evening sync; pages after two
     expect(view("journal", j, "2026-11-12T16:10:00Z")).toMatchObject({ state: "late", misses: 1, alerting: false });
     expect(view("journal", j, "2026-11-12T17:10:00Z")).toMatchObject({ state: "late", misses: 2, alerting: true, late_min: 61 });
   });
-  it("on time with a read in this run; the evening sync is due 21:38 UTC with an hour's grace and an hour's early slack", () => {
+  it("on time with a read in this run; the evening sync is due 21:38 UTC with an hour's grace", () => {
     expect(view("journal", { journal: ok(null, "2026-11-12T16:30:00Z") }, "2026-11-12T16:40:00Z").state).toBe("on_time");
-    const evening = { journal: ok(null, "2026-11-12T20:40:00Z") };
-    expect(view("journal", evening, "2026-11-12T22:38:00Z").state).toBe("on_time"); // 20:40 is within 60 min before 21:38
+    expect(view("journal", { journal: ok(null, "2026-11-12T21:45:00Z") }, "2026-11-12T22:38:00Z").state).toBe("on_time");
     expect(view("journal", { journal: ok(null, "2026-11-12T20:30:00Z") }, "2026-11-12T22:39:00Z")).toMatchObject({ state: "late", misses: 1 });
+  });
+  it("a dead evening sync is noticed in winter: the last live run's 16:20 New York read does not count for it", () => {
+    // Standard time: 16:20 New York is 21:20 UTC, inside the hour before 21:38 UTC, yet not the evening sync's read.
+    expect(view("journal", { journal: ok(null, "2026-11-12T21:20:00Z") }, "2026-11-12T22:39:00Z")).toMatchObject({ state: "late", misses: 1 });
+    expect(view("journal", { journal: ok(null, "2026-11-12T21:21:00Z") }, "2026-11-12T22:39:00Z").state).toBe("on_time");
+  });
+  it("and in summer: 16:20 New York is 20:20 UTC, before the hour's slack; a read after 16:20 within it counts", () => {
+    expect(view("journal", { journal: ok(null, "2026-10-29T20:20:00Z") }, "2026-10-29T22:39:00Z")).toMatchObject({ state: "late", misses: 1 });
+    expect(view("journal", { journal: ok(null, "2026-10-29T20:45:00Z") }, "2026-10-29T22:39:00Z").state).toBe("on_time");
   });
   it("the evening sync is 16:38 New York in winter and 17:38 in summer, at the same UTC time", () => {
     const due = (now: string, at: string) => new Date(view("journal", { journal: ok(null, at) }, now).due!).toISOString();
@@ -325,19 +350,80 @@ describe("the episodes (one page per incident, one recovery, no repeats)", () =>
     expect(tick(d1.next, stale, new Date("2026-11-13T23:00:00Z")).notices.map((n) => n.kind)).toEqual(["feed-late"]);
   });
 
-  it("display only: nothing is sent, the state still advances, and switching on does not page an incident under way", () => {
+  it("display only: nothing is sent and the state still advances; switch-on sends one summary, then recoveries as usual", () => {
     const off = tick(EMPTY_FEED_STATE, stale, at(0), false);
     expect(off.notices).toEqual([]);
+    expect(off.next.alerts).toBe("off");
     expect(off.next.feeds["options-edition"]).toMatchObject({ open: true, sent: false, episode: "2026-11-12" });
-    // Switched on ten minutes later: the same incident, already under way. Nothing is sent.
+    // Switched on ten minutes later with the incident under way: one summary, naming it; it is now marked sent.
     const on1 = tick(off.next, stale, at(10), true);
-    expect(on1.notices).toEqual([]);
-    // Its recovery is not announced either: nobody received the page.
+    expect(on1.notices.map((n) => n.title)).toEqual(["Feed alerts on: 1 already late"]);
+    expect(on1.notices[0]!.message).toContain("Already late, refused or not checkable: Options edition.");
+    expect(on1.noticeFeeds).toEqual([SUMMARY_ID]);
+    expect(on1.next).toMatchObject({ alerts: "on", feeds: { "options-edition": { open: true, sent: true } } });
+    // No repeat on the next run; the recovery is announced like any other.
+    expect(tick(on1.next, stale, at(20), true).notices).toEqual([]);
     const rec = tick(on1.next, fresh, at(60), true);
-    expect(rec.notices).toEqual([]);
-    expect(rec.next.feeds["options-edition"]).toBeUndefined();
-    // The first page after switch-on is the next new incident.
-    expect(tick(rec.next, fresh, new Date("2026-11-13T23:00:00Z"), true).notices.map((n) => n.kind)).toEqual(["feed-late"]);
+    expect(rec.notices.map((n) => n.kind)).toEqual(["feed-recovered"]);
+  });
+
+  it("switch-on with nothing open sends nothing", () => {
+    const off = tick(EMPTY_FEED_STATE, fresh, at(30), false);
+    expect(tick(off.next, fresh, at(40), true).notices).toEqual([]);
+  });
+
+  it("switch-on with three incidents open sends one summary naming all three", () => {
+    const now = new Date("2026-11-12T23:00:00Z");
+    const views = evaluateStamped(
+      inputs(
+        { "options-edition": ok("2026-11-12", "2026-11-11T22:10:00Z"), radar: ok(null, "2026-11-11T10:45:00Z") },
+        { refusals: { journal: refused("2026-11-12T22:30:00Z") } },
+      ),
+      now.getTime(),
+    ).filter((v) => ["options-edition", "radar", "refusal-journal", "pre-open"].includes(v.id));
+    const off = decideFeedAlerts(views, EMPTY_FEED_STATE, now, false);
+    expect(off.notices).toEqual([]);
+    const on = decideFeedAlerts(views, off.next, new Date(now.getTime() + 600_000), true);
+    expect(on.notices).toHaveLength(1);
+    expect(on.notices[0]!.title).toBe("Feed alerts on: 3 already late");
+    expect(on.notices[0]!.message).toContain("Options edition, Radar edition, Trade journal");
+    expect(on.summaryFeeds).toEqual(["options-edition", "radar", "refusal-journal"]);
+    // A failed summary is put back: the next run sends it again.
+    const back = rollbackFeeds(off.next, on.next, [SUMMARY_ID], on.summaryFeeds);
+    expect(back.alerts).toBe("off");
+    expect(back.feeds["radar"]).toMatchObject({ open: true, sent: false });
+    expect(decideFeedAlerts(views, back, new Date(now.getTime() + 1_200_000), true).notices).toHaveLength(1);
+  });
+
+  it("off and on again later: one summary of what opened meanwhile, nothing for what was already paged", () => {
+    const on = tick(EMPTY_FEED_STATE, stale, at(0), true);
+    expect(on.notices.map((n) => n.kind)).toEqual(["feed-late"]); // the first state has no flag: paged on its own
+    const off = tick(on.next, stale, at(10), false);
+    expect(off.next.alerts).toBe("off");
+    expect(tick(off.next, stale, at(20), true).notices).toEqual([]); // already sent before: no summary
+    // Off overnight; Friday's edition is late while off: on again, one summary for it.
+    const offFri = tick(off.next, stale, new Date("2026-11-13T23:00:00Z"), false);
+    expect(offFri.notices).toEqual([]);
+    const onFri = tick(offFri.next, stale, new Date("2026-11-13T23:10:00Z"), true);
+    expect(onFri.notices.map((n) => n.title)).toEqual(["Feed alerts on: 1 already late"]);
+  });
+
+  it("an outage after a late page: late, then cannot be checked, then nothing until it truly recovers once", () => {
+    let s: FeedAlertState = EMPTY_FEED_STATE;
+    const pages: string[] = [];
+    const run = (stamps: Record<string, StampRead>, min: number) => {
+      const d = tick(s, stamps, at(min));
+      pages.push(...d.notices.map((n) => n.title));
+      s = d.next;
+    };
+    run(stale, 7); // 23:00 UTC: late
+    for (const m of [17, 27, 37]) run({ "options-edition": { status: "error" } }, m); // three unreadable runs
+    run(stale, 47); // readable again, still late
+    run(stale, 57);
+    expect(pages).toEqual(["Options edition late by 8 min", "Options edition cannot be checked"]);
+    run(fresh, 67);
+    run(fresh, 77);
+    expect(pages.slice(2)).toEqual(["Options edition back on time"]);
   });
 
   it("an incident under way on a new day after switch-on pages once", () => {
@@ -368,6 +454,7 @@ describe("the episodes (one page per incident, one recovery, no repeats)", () =>
   });
 
   it("a refused edition pages once (the refusal), and a good one closes it once", () => {
+    // (See the trace below for a refusal that outlives its run.)
     const r = { refusals: { options: refused("2026-11-12T22:30:00Z") } };
     const d = tick(EMPTY_FEED_STATE, stale, at(0), true, r);
     expect(d.notices.map((n) => n.kind)).toEqual(["rejected"]);
@@ -401,4 +488,90 @@ describe("the page's own polls", () => {
     expect(polledState({ status: "ok", receivedAt: inSession, failed: true }, inSession, inSession, 90_000, "not_expected").state).toBe("late");
     expect(polledState({ status: "off", receivedAt: null }, inSession, inSession, 90_000, "not_expected").state).toBe("not_expected");
   });
+});
+
+describe("a refusal outliving its run (the shared options kind)", () => {
+  // Tuesday 10 November 2026: the pre-open refresh is refused at 08:52 New York (13:52 UTC); nothing is stored after
+  // it, the evening build never runs, and Wednesday's refresh never comes either.
+  const ids = ["options-edition", "pre-open", "refusal-options"];
+  const mondayBuild = { "options-edition": ok("2026-11-10", "2026-11-09T22:10:00Z"), "pre-open": ok(null, null) };
+  const r = { refusals: { options: refused("2026-11-10T13:52:00Z") } };
+  const run = (s: FeedAlertState, now: string) => {
+    const views = evaluateStamped(inputs(mondayBuild, r), T(now)).filter((v) => ids.includes(v.id));
+    return decideFeedAlerts(views, s, new Date(now), true);
+  };
+
+  it("pages the refusal Tuesday morning, the late build Tuesday evening and the late refresh Wednesday morning", () => {
+    let s: FeedAlertState = { ...EMPTY_FEED_STATE, alerts: "on" };
+    const pages: string[] = [];
+    for (let t = T("2026-11-10T14:00:00Z"); t <= T("2026-11-11T23:00:00Z"); t += 10 * 60_000) {
+      const d = run(s, new Date(t).toISOString());
+      pages.push(...d.notices.map((n) => `${new Date(t).toISOString().slice(0, 16)} ${n.title}`));
+      s = d.next;
+    }
+    expect(pages).toEqual([
+      "2026-11-10T14:00 Options edition or pre-open refresh refused",
+      "2026-11-10T23:00 Options edition late by 8 min",
+      "2026-11-11T14:10 Pre-open refresh late by 5 min",
+      "2026-11-11T23:00 Options edition late by 1448 min", // a new day: a new page, late since Tuesday
+    ]);
+  });
+
+  it("two refusals in one day page twice", () => {
+    const one = decideFeedAlerts(evaluateStamped(inputs({}, { refusals: { journal: refused("2026-11-12T15:00:00Z") } }), T("2026-11-12T15:10:00Z")).filter((v) => v.id === "refusal-journal"), EMPTY_FEED_STATE, new Date("2026-11-12T15:10:00Z"), true);
+    const two = decideFeedAlerts(evaluateStamped(inputs({}, { refusals: { journal: refused("2026-11-12T18:00:00Z") } }), T("2026-11-12T18:10:00Z")).filter((v) => v.id === "refusal-journal"), one.next, new Date("2026-11-12T18:10:00Z"), true);
+    expect([...one.notices, ...two.notices].map((n) => n.kind)).toEqual(["rejected", "rejected"]);
+  });
+
+  it("a refusal and then a good store: recovered once", () => {
+    const at = (now: string, current: boolean) =>
+      evaluateStamped(inputs({}, { refusals: { journal: refused("2026-11-12T15:00:00Z", current) } }), T(now)).filter((v) => v.id === "refusal-journal");
+    const a = decideFeedAlerts(at("2026-11-12T15:10:00Z", true), EMPTY_FEED_STATE, new Date("2026-11-12T15:10:00Z"), true);
+    const b = decideFeedAlerts(at("2026-11-12T15:20:00Z", false), a.next, new Date("2026-11-12T15:20:00Z"), true);
+    const c = decideFeedAlerts(at("2026-11-12T15:30:00Z", false), b.next, new Date("2026-11-12T15:30:00Z"), true);
+    expect([a, b, c].map((d) => d.notices.map((n) => n.kind))).toEqual([["rejected"], ["feed-recovered"], []]);
+  });
+});
+
+describe("past the calendar's end", () => {
+  it("the session is assumed to be 09:30 to 16:00 New York on a weekday, and says so", () => {
+    expect(shadowWindow(T("2028-01-04T15:00:00Z"))).toMatchObject({ day: "2028-01-04", assumed: true });
+    expect(shadowWindow(T("2028-01-04T21:30:00Z"))).toBeNull();
+    expect(shadowWindow(T("2028-01-08T15:00:00Z"))).toBeNull(); // a Saturday
+    const v = view("shadow", {}, "2028-01-04T16:00:00Z", { shadow: { status: "ok", value: { on: true, switched_at: null, last_slot_end: T("2028-01-04T15:00:00Z") } } });
+    expect(v).toMatchObject({ state: "late", assumed: true, alerting: true });
+    expect(polledState({ status: "ok", receivedAt: T("2028-01-04T15:59:58Z") }, T("2028-01-04T16:00:00Z"), T("2028-01-04T16:00:00Z"), 30_000, "failed").state).toBe("on_time");
+  });
+});
+
+describe("the page's own polls, failing", () => {
+  it("never on time while the page is trying again or the board has paused", () => {
+    const n = T("2026-11-12T16:00:00Z");
+    expect(polledState({ status: "ok", receivedAt: n - 1_000, failing: true }, n, n, 30_000, "failed").state).toBe("late");
+    expect(polledState({ status: "ok", receivedAt: n - 1_000, failing: false }, n, n, 30_000, "failed").state).toBe("on_time");
+    expect(polledState({ status: "error", receivedAt: null, failing: true }, n, T("2026-11-14T16:00:00Z"), 30_000, "failed").state).toBe("late");
+  });
+});
+
+describe("the journal as a page shows it agrees with the board's day check", () => {
+  it("on time exactly when journalCurrent says so, over a grid of times and stamps", () => {
+    const days = ["2026-11-12", "2026-11-13", "2026-11-14", "2026-11-26", "2026-11-27", "2026-03-09"];
+    let checked = 0;
+    for (const d of days)
+      for (let h = 0; h < 24; h++)
+        for (const back of [1, 10, 30, 44, 46, 60, 120, 600, 3000]) {
+          const now = T(`${d}T${String(h).padStart(2, "0")}:20:00Z`);
+          const stamp = ok(null, new Date(now - back * 60_000).toISOString());
+          const v = evaluateStamped(inputs({ journal: stamp }), now).find((x) => x.id === "journal")!;
+          const shown = journalShown(v, stamp, now);
+          const current = journalCurrent(new Date(now - back * 60_000).toISOString(), new Date(now));
+          expect(`${d} ${h} ${back} ${shown === "on_time"}`).toBe(`${d} ${h} ${back} ${current}`);
+          checked++;
+        }
+    expect(checked).toBe(days.length * 24 * 9);
+    // The case from the review: 10:20 New York, a stamp from 09:30. The day check says not current: neither is the chip.
+    const now = T("2026-11-12T15:20:00Z");
+    const stamp = ok(null, "2026-11-12T14:30:00Z");
+    expect(journalShown(evaluateStamped(inputs({ journal: stamp }), now).find((x) => x.id === "journal")!, stamp, now)).toBe("late");
+  }, 60_000); // 1,296 evaluations: slow on a loaded machine, so it has its own limit
 });
