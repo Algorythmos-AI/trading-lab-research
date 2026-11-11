@@ -189,7 +189,12 @@ test("the what-if checks: the hero prices the at-the-money option against the ca
   await expect(checks.locator("[data-hero-premium]")).toHaveAttribute("data-hero-premium", /^(over|under)$/, { timeout: 15_000 });
   await expect(checks.locator("[data-hero-premium]")).toContainText(/^ATM call \d+ ask \$\d+\.\d\d \(\$[\d,]+ a contract\), (within|over) the \$2\.00 cap \(\$200\)/);
   await expect(checks.locator("[data-hero-chain]")).toContainText(/^Option chain \d\d:\d\d NY · 15 min behind$/);
-  await expect(checks.locator("[data-hero-stop-first]")).toContainText(/comes first/);
+  // Which stop comes first follows the same clock (the option's premium and delta shrink toward the bell), and at
+  // some times of day the two land within half a cent of each other: all three answers are right, so only the shape
+  // is asserted here. test/what-if.test.ts pins each answer on fixed numbers.
+  const stopFirst = checks.locator("[data-hero-stop-first]");
+  await expect(stopFirst).toHaveAttribute("data-hero-stop-first", /^(option|chart|together)$/);
+  await expect(stopFirst).toContainText(/(option stop comes first|chart stop comes first|land about together)/);
   // the checks sit under the tiles, never above the state word
   const word = (await hero(page).locator('[data-hero-word="enter_zone"]').boundingBox())!;
   const tiles = (await hero(page).locator("[data-hero-tiles]").boundingBox())!;
