@@ -34,7 +34,7 @@ JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 .DEFAULT_GOAL := help
 .PHONY: seed-vm help bootstrap research-index lint typecheck test ci hooks status gate deploy rollback migrate-state preflight publish-verify \
         uninstall-agents lease-break \
-        watchdog-drill dashboard-deploy vm-deploy \
+        watchdog-drill feed-watch-drill dashboard-deploy vm-deploy \
         agents-diff install-trading-agents install-dashboard-agent publish schema kill unkill reset-latch evidence
 
 help: ## List the tasks
@@ -115,6 +115,9 @@ seed-vm: ## From the Mac: copy runtime state to the GCP host and verify it (APPL
 
 watchdog-drill: ## Two real DRILL pages through the production watchdog path (late, then recovered); no state touched
 	$(PY) -m wt.ops.drill
+
+feed-watch-drill: ## Offline: the feed watch's real tick on in-memory state, late then recovered; prints both pages, sends nothing
+	cd dashboard && pnpm exec vitest run test/feed-watch-drill.test.ts
 
 dashboard-deploy: ## OWNER: deploy origin/main's dashboard to production from a clean worktree, stamped with its commit
 	@set -e; git fetch --quiet origin main; sha=$$(git rev-parse origin/main); tmp=$$(mktemp -d); \

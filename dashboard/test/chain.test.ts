@@ -419,6 +419,16 @@ describe("GET /api/chain", () => {
     expect(await res.text()).not.toContain("upstream-secret-body");
   });
 
+  it("answers 429 when upstream rate-limits us, without passing its body on", async () => {
+    vi.stubEnv("DASHBOARD_FIXTURE", "");
+    vi.stubEnv("ALPACA_API_KEY_ID", "test-key-id");
+    vi.stubEnv("ALPACA_API_SECRET_KEY", "test-key-secret");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("upstream-secret-body", { status: 429 })));
+    const res = await get("?s=SPY&px=780");
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({ error: "rate-limited" });
+  });
+
   it("serves the fixture chain in fixture mode, bent by the cookie, and never in production", async () => {
     vi.stubEnv("DASHBOARD_FIXTURE", "1");
     vi.stubEnv("VERCEL_ENV", "");

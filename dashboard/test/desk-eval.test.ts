@@ -316,5 +316,7 @@ describe("ENGINE_VERSION", () => {
     const files = gen.engineFiles().map((f) => f.split("/src/lib/")[1]);
     for (const f of ["desk-eval.ts", "trade-state.ts", "trade-now.ts", "entry-checks.ts", "focus-plan.ts", "trade-rules.ts", "options.ts", "journal.ts", "market-calendar.ts", "market-calendar.json"]) expect(files).toContain(f);
     expect(files).not.toContain("engine-version.gen.ts");
+    // The browser's polls (their timers and waits after failures) are not engine code: editing them keeps the label.
+    for (const f of ["bars-poller.ts", "quote-poll.ts", "backoff.ts"]) expect(files).not.toContain(f);
   });
 });

@@ -1,9 +1,11 @@
 import "server-only";
+import { configuredFeed, type DataFeed, FEED_PLAN_REFUSED, FEED_REFUSED, planRefused } from "./alpaca-feed";
 import { type BarsResponse, fetchBars } from "./bars";
 import { FIXTURE_OFFSET_ATR, flagsFromCookieHeader } from "./fixture-variants";
 import { scriptBars, scriptStep, stepFromCookieHeader, stepInstant } from "./fixture-script";
 import { SERVER_SETTLE_MS } from "./trade-state";
 import { logEvent } from "./log";
+import { upstreamBody, upstreamStatus } from "./upstream";
 import { nyInstant, OPEN_MIN } from "./options";
 import type { OptionsEdition } from "./options.types";
 import { alpacaKeys, parseSymbols } from "./quote";
@@ -21,7 +23,7 @@ const r2 = (v: number) => Math.round(v * 100) / 100;
  * its close to the fixture quote's price (a fixed fraction of an ATR above it), so the bars meet the quote. With
  * `quotes-script`, the scripted names' bars up to the step instead. No network and no keys.
  */
-async function fixtureBars(symbols: string[], now: Date, script: { step: number } | null): Promise<BarsResponse> {
+async function fixtureBars(symbols: string[], now: Date, script: { step: number } | null, feed: DataFeed): Promise<BarsResponse> {
   const mod = await import("../../test/fixtures/options.v1.json");
   const e = (mod.default ?? mod) as unknown as OptionsEdition;
   const bars: Record<string, Bar2[]> = {};
@@ -53,12 +55,13 @@ async function fixtureBars(symbols: string[], now: Date, script: { step: number 
   const asOf = script ? stepInstant(e.session, script.step) : now.getTime();
   // The scripted bars are the session as it was, final: they read as settled (SERVER_SETTLE_MS) at the step's clock.
   const fetchedAt = Object.fromEntries(Object.keys(bars).map((s) => [s, asOf + SERVER_SETTLE_MS]));
-  return { as_of: new Date(asOf).toISOString(), feed: "iex", bars, fetchedAt, missing, fixture: true };
+  return { as_of: new Date(asOf).toISOString(), feed, bars, fetchedAt, missing, fixture: true };
 }
 
 /**
- * GET /api/bars?s=SPY,QQQ[&half=1]: today's regular-session 2-minute bars from Alpaca's IEX feed, to 13:00 New York
- * with `half=1` (the edition's half-day flag). 503 until the keys are set.
+ * GET /api/bars?s=SPY,QQQ[&half=1]: today's regular-session 2-minute bars from the configured Alpaca feed
+ * (alpaca-feed.ts), to 13:00 New York with `half=1` (the edition's half-day flag). 503 until the keys are set, or
+ * while ALPACA_FEED is not a feed (in fixture mode too) or is sip and not on the data plan.
  */
 export async function handleBars(req: Request, now: Date = new Date()): Promise<Response> {
   const params = new URL(req.url).searchParams;
@@ -67,20 +70,26 @@ export async function handleBars(req: Request, now: Date = new Date()): Promise<
   const half = params.get("half");
   if (half !== null && half !== "1") return json(400, { error: "half is 1 or absent" });
   const halfDay = half === "1";
+  const feed = configuredFeed();
+  if (feed === null) return json(503, FEED_REFUSED);
   if (fixtureMode()) {
     const cookie = req.headers.get("cookie");
     const flags = flagsFromCookieHeader(cookie);
     if (flags.has("quotes-off")) return json(503, { error: "not-configured" });
     if (flags.has("quotes-error")) return json(502, { error: "upstream" });
     const script = flags.has("quotes-script") ? { step: scriptStep(stepFromCookieHeader(cookie), now.getTime()) } : null;
-    return json(200, await fixtureBars(symbols, now, script));
+    return json(200, await fixtureBars(symbols, now, script, feed));
   }
   const keys = alpacaKeys();
   if (!keys) return json(503, { error: "not-configured" });
   try {
-    return json(200, await fetchBars(symbols, keys, now, fetch, undefined, halfDay));
+    return json(200, await fetchBars(symbols, keys, now, fetch, undefined, halfDay, { feed }));
   } catch (e) {
+    // SIP set but not on the data plan: off, as for a refused setting, never a retry for ever.
+    if (planRefused(feed, e)) return json(503, FEED_PLAN_REFUSED);
     logEvent("bars.fetch", { outcome: "error", error: e instanceof Error ? e.name : "unknown" });
-    return json(502, { error: "upstream" });
+    // A rate limit is passed on as one, so the page waits its longest; anything else is 502.
+    const status = upstreamStatus(e);
+    return json(status, upstreamBody(status));
   }
 }

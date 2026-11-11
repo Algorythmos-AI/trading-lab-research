@@ -17,11 +17,27 @@ its status line and stays quiet.
 
 All of them are read-only toward the brokers: none places, changes or cancels an order.
 
+Two more routines, outside this list, publish the focus card ledger (`stocksdelta/ledger`) from the
+`focus-card-ledger` repository: one saves the card before the open (about 09:11 New York) and one scores it after
+the close (about 16:21 New York). Their ids and the zone of their schedules are not recorded here and have not been
+checked; the feed watch shows them as assumed and never pages for them (below).
+
 ## What depends on what
 
-- **The journal's freshness** on the dashboard (`dashboard/src/lib/feeds.ts`, `journalCheck`) assumes the live
-  routine's rhythm: under 45 minutes old in the session, and the 21:38 UTC slot otherwise. The day check
-  (`trade-rules.ts`, `journalCurrent`) is stricter and says "Journal not current" when a read is missing.
+- **The feed watch** (`dashboard/src/lib/feed-watch.ts`, its table `FEEDS`) holds every routine above that publishes
+  a document, with the schedule and zone in this table: the options edition (21:52 UTC), the pre-open refresh
+  (08:50 New York, due by 09:05), the journal (the hourly live runs and 21:38 UTC), the radar (11:12 UTC), the two
+  ledger routines (assumed, display only) and the desk's own shadow evaluator. It is the one source for the
+  Operations page's "Your feeds", the Options page's health strip and the feed alerts (`/api/cron/watchdog`, pages
+  only with `FEED_WATCH_ALERTS=on`). **A change of a routine's schedule or zone here must change its row there**, in
+  the same pull request; a new routine that publishes is one more row (and, to show it, a chip or a card).
+- **The journal's freshness**: the feed watch expects a read at or after each live run within 45 minutes (the
+  routine publishes at least every 30 minutes) and the 21:38 UTC sync within an hour, and pages after two missed runs
+  in a row. The evening rule (only a stamp at most 10 minutes before 21:38 UTC counts) assumes the after-close routine
+  stamps its own read time and never fires over 10 minutes early; neither is recorded here, so that run is marked
+  assumed and a missed evening sync is shown, not paged, until the owner confirms both (then drop `verified: false`
+  from that schedule in `FEEDS`). The day check (`trade-rules.ts`, `journalCurrent`, inside the shadow evaluator's engine) is stricter and
+  says "Journal not current" when a read is missing; it still reads `feeds.ts`'s `journalCheck`, unchanged.
 - **The options desk and the clone** read the edition and its focus block. The pre-open routine replaces only the
   focus block.
 - **The IBKR paper login** is shared by the options routines and the HFT desk's runner. Two sessions on one login end
@@ -38,7 +54,8 @@ All of them are read-only toward the brokers: none places, changes or cancels an
 - On claude.ai: the routine's page shows its schedule, its last run and the thread.
 - From a Claude session: `RemoteTrigger` `get` (schedule, `enabled`, `next_run_at`, last run) and `get_run_log` on
   the run's session id. A fire that was skipped before a session existed leaves no run; `get` still shows it.
-- On the dashboard: Operations, "Your feeds", says whether each feed arrived on schedule.
+- On the dashboard: Operations, "Your feeds", says whether each feed arrived on schedule; the Options page's strip
+  says the same for the feeds the morning trades from. Both use the exchange calendar, so a holiday is not late.
 
 ## The weekly supervisor report (plan step D2, created 2026-10-25)
 

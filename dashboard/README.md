@@ -25,6 +25,8 @@ wt.ops.publish                            POST /api/ingest            (productio
                                             one "Mac offline" note a day otherwise → ntfy
                                             alert state in private Blob alerts/state.json
                                             prunes history older than 90 days, once a day
+                                            then the feed watch: every routine's document on time?
+                                            → ntfy only with FEED_WATCH_ALERTS=on; state ops/feeds-alert.json
 
                                           GET/POST /api/desk/flags    (the Options page, laptop and phone)
                                             the owner's "done for today" flag → private Blob desk/flags.json
@@ -47,6 +49,17 @@ wt.ops.publish                            POST /api/ingest            (productio
   missing, and every page renders "—" for missing values instead of failing.
 - **Ingest** (`src/lib/ingest.ts`): previews never accept writes. Accepted outcomes are `stored`, `duplicate`
   (same `run_id`) and `older` (409, `as_of` not newer than the stored one); an etag conflict is retried once.
+  Every edition kind (radar, options, ledger, journal, options live, options clone, calendar) whose `as_of` is more
+  than ten minutes ahead of the server's clock is refused (422 `ahead-of-clock`). Any value that carries a zone
+  (`Z`, `z`, `+00:00`, `+0000`, with `T` or a space) is compared exactly; only a date alone or a wall time with no
+  zone counts as ahead just when no zone on Earth has reached it, and is ordered as UTC. A stored edition whose
+  ordering time is beyond the ten minutes gives way to the next valid one even though that one's `as_of` is
+  "older" (logged `superseded-ahead`), so a stored document can refuse a true edition as older only while it is
+  within the allowance. A refusal of an edition's content (`invalid`, `ahead-of-clock`) leaves a record at
+  `ops/ingest-rejects/<kind>.json` with only the time, the kind, the outcome and the number of errors
+  (`src/lib/ingest-reject.ts`); its write is best effort and never changes the answer. `readIngestRejectStatus`
+  returns that record with the kind's latest.json upload time (the store's own metadata) and whether the refusal
+  still stands, i.e. nothing of the kind was stored after it.
 - **Radar** (`/radar`): the daily pre-market radar's editions, signed with key id `radar` and validated against
   `src/lib/radar.schema.json` (owned here; `pnpm gen:types` regenerates `radar.types.ts`). Stored at
   `radar/latest.json` plus `radar/editions/YYYY-MM-DD.json`, where a same-day refresh replaces that date's copy.
@@ -155,15 +168,134 @@ wt.ops.publish                            POST /api/ingest            (productio
   the recorded sources); `calendar-off`, `calendar-stale` and `calendar-poison` bend it.
 - **Live prices** (`/api/quote?s=SPY,QQQ`, read by the Options page every 2 s while it is open, one poll shared by the
   glance strip, the level maps' live dot and the state chips; a quote older than 30 s shows as stale): last trades from
-  Alpaca's free IEX feed, fetched on the server so the page keeps `connect-src 'self'` and never sees the keys. At most
+  Alpaca's stock feed named by `ALPACA_FEED` (`src/lib/alpaca-feed.ts`; the free IEX feed by default), fetched on the
+  server so the page keeps `connect-src 'self'` and never sees the keys. Every answer names its feed (`feed`), and the
+  session bars (`/api/bars`) and the server's shadow check (`desk-run.ts`, which writes on each slot's record the feed its reads answered from, null when nothing was read)
+  read the same one. IEX is one exchange, a small share of US volume, so a high or low printed elsewhere can be
+  missing from it. At most
   60 symbols (as many as one options edition may carry), each cached 1.5 s per instance on its own, so two pages
-  asking for different names share what overlaps; 503 until the keys are set, 502 when Alpaca fails. Fixture mode answers from
+  asking for different names share what overlaps; 503 until the keys are set (the page then stops asking), 429 when Alpaca
+  rate-limits us, 502 when Alpaca fails otherwise. After a failure the page tries again in 2 s, then 4, 8, 16 and at most
+  30 s (`src/lib/backoff.ts`), at 30 s straight away after a 429, and back to every 2 s on the first answer; while it
+  waits the board says so, with the seconds left and a Retry now button, and a tab shown again tries once at once. The
+  session bars and the option chain wait the same way, capped at their own 30 s interval.
+  **What the page says about them.** The page asks for prices every 2 s; it is not sent each trade. The board's feed
+  line (and the classic view's glance) says so, names the feed the last answer reported ("IEX" or "SIP"; nothing at
+  all for an answer that names none, never a guess), and gives two ages apart (`src/lib/feed-provenance.ts`): **last
+  trades N to M ago**, the newest and the oldest last trade across the names (one value for one name, or when both
+  ends read the same), from Alpaca's own trade times measured on the server's clock (the board's `serverNow`), so a
+  phone whose clock is minutes out reads the same ages and one busy name never makes a quiet one look fresh; and
+  **checked N ago**, when the page last got an answer. A name with no trade today is left out of the spread and said
+  apart ("1 name with no trade today"). A price checked a second ago can still be a trade from a minute ago: the
+  first grows while the second stays small. The spread turns to the warning colour once its oldest end passes 120 s
+  and the answer once it passes 20 s, the board's own limits, where the rows and the board pause; the per-name stale
+  marks are unchanged. The last-trade ages can read up to about 1.5 s younger than they are, since the server shares
+  each name's answer for 1.5 s and the board's clock is set from that answer's time. Fixture mode answers from
   the options fixture with no keys and no network. Research only: the keys are market-data keys and nothing here
   can trade.
 - **Watchdog** (`src/lib/watchdog.ts`, pure and unit-tested): in a window a snapshot older than 35 min is late
   and older than 90 min is stopped (both priority 4); a fresh snapshot after an alert sends "recovered"
   (priority 2). Outside every window nothing pages. The alert state is committed with `ifMatch` before paging,
   so a double cron fire pages once. Page text carries R and % only, never currency amounts.
+- **Feed watch** (`src/lib/feed-watch.ts`, pure; `src/lib/feed-watch-run.ts`, the tick): one table of every
+  document a cloud routine or the desk's own cron must publish (`FEEDS`): its store path, how to read which session
+  it is for, its schedule in the zone the routine's cron really uses, a grace, and whether it pages. A new feed is one
+  more row: the runner reads its path, evaluates it and pages for it, and the pages' loader (`loadPageFeeds`) reads
+  whatever the rows a page asks for need, with no other change (unit tests add one). Drawing a new row on a page is
+  that page's choice: the strip lists its chips (`STRIP_FEED_IDS`) and the panel its cards.
+
+  | Feed | Due | Zone | Grace | Wants | Pages |
+  |---|---|---|---|---|---|
+  | Options edition | 21:52 Mon–Fri | UTC (runbook) | 60 min | `session` = the next session | yes |
+  | Pre-open refresh | 08:50 Mon–Fri, until the close | New York (runbook) | 15 min (by 09:05) | `focus.premarket.as_of` on today's New York date | yes |
+  | Trade journal | :24 hourly 09:24–15:24 before the close; 21:38 | New York; UTC (runbook) | 45 min; 60 min (only the evening run's own read counts: at most 10 min before 21:38 UTC; the last live run reads until about 16:20:30 New York). The evening rule is **assumed** (how the routine stamps and how early it may fire cannot be checked here): a missed evening sync is shown, not paged | `as_of` at or after the run | after two missed runs |
+  | Card ledger, morning | 09:11 | New York, **assumed** | 60 min | `session` = the last session | no (display only) |
+  | Card ledger, after close | 16:21 | New York, **assumed** | 60 min | `session` = today | no (display only) |
+  | Radar edition | 11:12 Mon–Fri | UTC (runbook) | 60 min (stamp may be 60 min early) | `as_of` at or after the run | yes |
+  | Server check | every settled slot in the session, switch `desk/eval.json` exactly `log` | the exchange calendar | 10 min without a record | a record under `desk/log/<day>/` | yes |
+  | Refusals | a refusal at `/api/ingest` with nothing newer stored (`readIngestRejectStatus`) | — | — | — | options, journal, radar; the rest display only |
+
+  Runs exist only on market days of the exchange calendar (`market-calendar.ts`): weekends, holidays and a half day's
+  afternoon never expect anything, "the next session" comes from the session list, and every New York time goes
+  through `nyInstant` (both clock changes, New York and UTC schedules alike). Past the calendar file's end a weekday
+  is assumed and the page and the alert say so. States: `on_time`, `waiting` (the run's grace is still open),
+  `late`, `failed` (a refusal still stands), `not_expected` and `unknown` (the store could not be read: never late,
+  never on time). Episodes mirror the snapshot watchdog's: one page per feed per incident, one "back on time", nothing
+  repeated, a new incident only after a recovery or on a new session day; the journal and the ledger only after two
+  runs in a row are missed; a refused edition pages once as "refused", not again as "late"; "unknown" pages only after
+  three runs in a row (20 to 30 minutes: one failed read clears itself, three is an outage). Its state is one Blob
+  document, `ops/feeds-alert.json`. Unlike the snapshot watchdog (whose `commitThenSend` is unchanged) the feed
+  watch keeps a two-phase record: every page it decides goes into an outbox in the state as `pending`, and the attempt
+  is claimed (attempts + 1, this tick, this run) in the same ifMatch commit, before anything is sent; a write whose
+  reply is lost is confirmed by reading the state back; a lost race is decided again once on the other run's state,
+  then skipped (never reported as a store failure). The claimed pages are then sent and each outcome recorded. A page
+  still pending (its record was lost, the run died, the send failed) is sent again by a later run, no sooner than the
+  next tick. Only recorded failed sends count as tries (a claim whose run never sent, for want of time or of a
+  confirmed commit, uses none): 3 quick tries, one a tick; then the page is `sent_failed` (logged as
+  `feed-watch.outbox` with the feed id, and said on the Operations page's card: "An alert about this feed could not be
+  sent to your phone") and tried again once every 30 minutes until it is 2 hours old (3 more, 6 tries in all). A page
+  that reaches 2 hours or 10 claims unsent is marked `sent_failed` and logged, never dropped silently. **Guarantee:**
+  while the store works a decided page is never lost: it goes out, or it is recorded and shown as not sent. It is
+  sent at most 10 times (one per stored claim) even if every record of a send were lost; normally at most 6 tries. A
+  recovery meets the page it answers: one never claimed is dropped with it; one that could not be sent is replaced
+  by a single "was late for N min, now back on time" page; one claimed (perhaps delivered) is kept and the recovery
+  sent too. The remaining case: a late page delivered and then a recovery that fails all its tries leaves the owner
+  with the late page only; the Operations card says an alert could not be sent. Pages still pending from before an
+  off-to-on switch go out with the switch-on summary if they are under 2 hours old; older ones are marked
+  `sent_failed`. The run's answer and log list only what was actually sent. When the alert state cannot be
+  read (two tries, 500 ms apart) or a decision cannot be confirmed, the run sends no feed page at all. Instead, with
+  alerts on, a run in either of the first two 10-minute ticks of each 2-hour UTC block (tick index mod 12 is 0 or 1,
+  from the run's execution time: Vercel's cron sends no scheduled time) sends "Feed watch cannot read its store": a
+  total outage pages within 2 hours 10 minutes even if one of those runs is skipped, at most 2 per block (4 hours, 24
+  ticks: 4, and up to 4 per block if the cron delivers both of those ticks twice: on a public topic a 12-hour outage
+  can send 12 to 24; the rule stays stateless on purpose), and an incident paged before the outage is never paged
+  again after it. In the cron (`cron-watchdog.ts`) the feed watch's tick starts at once beside the desks' ticks, so
+  a hanging store in a desk's tick cannot starve it; the desks run one after another, each one's budget (14 s, over
+  ntfy's 10 s send timeout plus two writes) deciding when the next may start; no started tick is abandoned: the reply
+  waits for all of them up to 55 s and hands any still running to Next's `after()` (Vercel's waitUntil), inside the
+  route's 60 s. The feed watch's own run keeps a 25-second budget.
+
+  **Refusals.** One refusal record covers a whole kind, and the pre-open refresh posts a whole edition under the
+  `options` kind, so a refusal quietens a document row's lateness page only for the run it belongs to: refused at or
+  after that run's time and before the row's next run (`refusalForSlot`). That run is shown "failed" and pages once, as
+  "refused", on its refusal row; every later missed run (the evening build, the next morning's refresh) pages as late
+  in its own right. Each refusal (a new refusal time) is a new incident; a good store after it sends one "back on
+  time". A storage outage ("cannot be checked") is its own incident beside a late one: it never replaces it, so a feed
+  already paged late is not paged late again when the store reads again; one "back on time" closes both.
+
+  **Display only until the owner says so.** Pages are sent only when `FEED_WATCH_ALERTS` is exactly `on` (the owner
+  sets it in Vercel; nobody else). Off, every run still reads, evaluates and stores its incidents, marked unsent, and
+  the pages show everything; the state records `alerts: "off"`. At switch-on (the first run with it on after a run
+  with it off, read from `ops/feeds-alert.json`, not from memory) exactly one summary page lists the incidents still
+  open by feed name, and they are marked sent; each then pages "back on time" when it recovers, and every new incident
+  pages on its own. Nothing open: nothing sent. Off and on again later: the same, one summary of what opened while it
+  was off. Recoveries while off are not sent. A summary that fails to send is sent again on the next run. `make feed-watch-drill` runs the real tick offline through late and recovered
+  and prints both pages.
+
+  **Division of labour with the host's pipeline check** (`src/wt/options/pipeline_check.py`, 08:55 and 18:30 New
+  York): the feed watch owns timeliness (did the document for the right session arrive by its time); the pipeline
+  check owns content (closes, levels, expiries against the market's own data). A missing or late edition also fails
+  the pipeline check's `options.present`, `options.session` or `options.built_from`: when the feed watch has paged
+  the options edition late or refused for that session, those ids in a pipeline-check page are the same incident;
+  only its content ids (`options.close.*`, `options.levels.*`, `focus.*`) are new. The edition's deadline is 22:52
+  UTC, 17:52 New York in winter (before the 18:30 check) and 18:52 in summer (after it, so in summer the pipeline
+  check reports a missing edition first). The pre-open refresh's `focus.premarket` is only a warning there, so only
+  the feed watch pages for it.
+
+  The Operations page's "Your feeds" panel and the Options page's health strip (`components/client/feed-strip.tsx`:
+  the edition, the pre-open refresh, the live prices, the session bars, the journal and the server check, each with
+  its state and age, fixed-size chips) are drawn from the same table and evaluator. Both show the journal by the
+  board's own day check (`trade-rules.ts` `journalCurrent`, read only), so a page never gives two answers; the
+  two-missed-runs rule decides only whether to send an alert. The strip runs on the server render's time moved on by the browser's
+  monotonic clock since that time arrived, re-anchored by every refresh (each server time keeps its first anchor, and
+  the shown time never goes backwards), never the device's wall clock; it is read once a second. It runs behind true
+  time by the age of the server render when it arrived (render, transfer and hydration: usually under a few seconds,
+  more on a slow connection) plus at most a second of sampling. When no new server time has come for 3 minutes, or the
+  wall and monotonic clocks disagree by over 30 seconds (the machine slept, the clock was changed), the chips that read
+  well (on time, not due, waiting) read "Checking" until the layout's refresh brings one; a late or failed chip keeps
+  its warning. A failure (prices off, failing, being retried) always wins over "not due". `feeds.ts` keeps the constants
+  and `journalCheck` the shadow evaluator's engine reads (it is inside `gen:engine`'s hash), unchanged; the feed
+  watch imports from it and is outside the engine's import closure.
 - **Health** (`src/lib/health.ts`) and the top-of-page **summary** sentence (`src/lib/summary.ts`) are pure
   functions of the snapshot and the current time.
 
@@ -231,7 +363,11 @@ Fixture mode is refused on production deployments, and the page shows a banner w
 **Fixture variants.** In fixture mode only, the `fx` cookie bends the fixtures into the states a pane must survive
 (`src/lib/fixture-variants.ts`): `empty` (nothing published), `error` (storage down), `partial` (a valid but sparse
 edition), `poison` (a stored edition that no longer matches its schema), `quotes-off`, `quotes-error` and
-`quotes-tick` (the live price flips by a cent every three seconds). Join several with a dot: `fx=partial.quotes-tick`.
+`quotes-tick` (the live price flips by a cent every three seconds), `quotes-flaky` (the first quote answers, the next
+three fail, then every one answers; counted per browser in the `fxflaky` cookie), and `feeds-ok`, `feeds-late`,
+`feeds-failed`, `feeds-unknown` (the feed watch's inputs only, for the health strip and the feeds panel). Join several
+with a dot:
+`fx=partial.quotes-tick`.
 Outside fixture mode the cookie is never read.
 
 **One pane fails alone.** Each pane of the Options page sits in a `PaneBoundary`
@@ -248,11 +384,13 @@ other panes keep working.
 | `PRIMARY_HOST` | Vercel production (optional) | The key id whose snapshots are the visible ones; default `default`. Every other key's go to the shadow slots |
 | `DASHBOARD_INGEST_SCOPES` | Vercel production (optional) | JSON map `{"<key id>": {"desks": ["hft"]}}`: that key is the primary publisher of those desks and may publish nothing else (see Desks). Holds no secret |
 | `RADAR_INGEST_SECRET` | Vercel production + the radar's cloud environment | HMAC key for key id `radar`. It may only publish research editions (`stocksdelta/radar`, `stocksdelta/options`, `stocksdelta/journal`); unset means the radar key is refused |
-| `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY` (or Alpaca's own `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY`) | Vercel production only | Alpaca paper-account keys, used only for the free IEX market data behind `/api/quote`; unset means the Options page shows live prices as off |
+| `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY` (or Alpaca's own `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY`) | Vercel production only | Alpaca paper-account keys, used only for the market data behind `/api/quote` and `/api/bars` (the feed is `ALPACA_FEED`'s); unset means the Options page shows live prices as off |
 | `ALPACA_DATA_URL` | Vercel (optional) | Market-data base URL, default `https://data.alpaca.markets` |
+| `ALPACA_FEED` | Vercel (optional) | The stock feed for the live prices, the session bars and the shadow check: `iex` (default when unset or empty; free, one exchange) or `sip` (every US exchange). Case and surrounding spaces are ignored. `sip` needs a paid Alpaca market-data plan and is the owner's decision alone. Any other value is refused: `/api/quote` and `/api/bars` answer 503 `not-configured` (in fixture mode too), so the page drops its prices and shows them as off until it is reloaded, the shadow check logs `bars-off`, and one log line `alpaca.feed` gives the bad value's length, never the value. With `sip` on a plan that does not include it, Alpaca answers 403: the routes then answer 503 `not-configured` with `why: "plan"`, the page shows the prices as off and says SIP is not on this data plan, the shadow check logs `bars-off`, and one `alpaca.feed` line with outcome `plan` is logged (a 403 on `iex`, or a 401, stays a 502 failure). The option chain's feed is separate and not set by it |
 | `CRON_SECRET` | Vercel production | Bearer token Vercel Cron sends to `/api/cron/watchdog` and `/api/cron/desk` |
 | `NTFY_TOPIC` | Vercel production and preview + the Mac | Secret, random ntfy topic for pages; unset means log and skip |
 | `NTFY_SERVER` | Vercel (optional) | ntfy server, default `https://ntfy.sh` |
+| `FEED_WATCH_ALERTS` | Vercel production (the owner sets it) | Exactly `on`: the feed watch sends its pages. Unset or anything else: display only (state still kept, nothing sent) |
 | `DASHBOARD_FIXTURE` | Local, CI and Vercel preview | `1` serves the fixture snapshot (ignored in production) |
 | `DASHBOARD_INGEST_URL` | The Mac | `https://lab.algorythmos.com/api/ingest` |
 | `VERCEL_AUTOMATION_BYPASS_SECRET` | The Mac | Lets the publisher through Vercel Authentication |

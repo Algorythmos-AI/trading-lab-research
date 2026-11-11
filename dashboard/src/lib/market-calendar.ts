@@ -556,9 +556,13 @@ const EXPECTED: readonly { code: string; label: string }[] = [
 /**
  * By month, the releases with no date published yet. With the economic calendar, its own "not yet announced"
  * months. Without it, from the repo's macro calendar: every month after a release's last listed date, to the end of
- * the range. Months before that date with no release are left alone (the Fed meets eight times a year).
+ * the range. Months before that date with no release are left alone (the Fed meets eight times a year). `macro` is
+ * the repo's macro calendar unless a test hands it other rows.
  */
-export function unlistedByMonth(notAnnounced?: readonly { code: string; month: string }[]): Map<string, string[]> {
+export function unlistedByMonth(
+  notAnnounced?: readonly { code: string; month: string }[],
+  macro: readonly { code: string; date: string }[] = data.macro,
+): Map<string, string[]> {
   if (notAnnounced) {
     const out = new Map<string, string[]>();
     for (const n of notAnnounced) {
@@ -569,7 +573,7 @@ export function unlistedByMonth(notAnnounced?: readonly { code: string; month: s
   }
   const out = new Map<string, string[]>();
   for (const { code, label } of EXPECTED) {
-    const last = data.macro.filter((e) => e.code === code).reduce((m, e) => (e.date > m ? e.date : m), "");
+    const last = macro.filter((e) => e.code === code).reduce((m, e) => (e.date > m ? e.date : m), "");
     let month = last ? last.slice(0, 7) : RANGE.start.slice(0, 7);
     if (last) month = addDays(`${month}-28`, 7).slice(0, 7);
     for (; `${month}-01` <= RANGE.end; month = addDays(`${month}-28`, 7).slice(0, 7)) out.set(month, [...(out.get(month) ?? []), label]);

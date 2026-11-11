@@ -166,7 +166,8 @@ describe("POST /api/ingest with the clone's document", () => {
   it("refuses a document dated ahead of the server's clock", async () => {
     const ahead = doc((d) => (d.as_of = "2026-10-13T20:00:00+00:00"));
     expect((await handleIngest(post(ahead), NOW)).status).toBe(422);
-    expect(blob.store.size).toBe(0);
+    // Nothing is stored but the refusal's record (./ingest-reject), which carries no content.
+    expect([...blob.store.keys()]).toEqual(["ops/ingest-rejects/options-clone.json"]);
   });
 
   it("is never taken for a desk snapshot by a key scoped to a desk", async () => {

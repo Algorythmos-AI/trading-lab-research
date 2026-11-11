@@ -56,6 +56,10 @@ const FILES = [
   "../src/lib/quote-poll.ts",
   "../src/components/client/ticket-memo.ts",
   "../src/components/client/use-quotes.ts",
+  "../src/components/client/live-layer.tsx",
+  "../src/lib/backoff.ts",
+  "../src/lib/bars-poller.ts",
+  "../src/lib/upstream.ts",
   "../src/lib/desk-flags.ts",
   "../src/lib/desk-flags-run.ts",
   "../src/components/client/done-today.tsx",
@@ -69,6 +73,16 @@ const FILES = [
   "../src/app/api/cron/desk/route.ts",
   "../src/app/api/desk/page-state/route.ts",
   "../src/app/api/desk/eval-status/route.ts",
+  "../src/lib/feed-watch.ts",
+  "../src/lib/feed-watch-run.ts",
+  "../src/components/client/feed-strip.tsx",
+  "../src/components/operations/feeds-panel.tsx",
+  "../src/app/api/cron/watchdog/route.ts",
+  "../src/lib/cron-watchdog.ts",
+  "../src/lib/alpaca-feed.ts",
+  "../src/lib/feed-provenance.ts",
+  "../src/lib/quote.ts",
+  "../src/lib/quote-route.ts",
 ];
 
 const BANNED = [

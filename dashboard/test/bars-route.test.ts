@@ -173,6 +173,20 @@ describe("GET /api/bars", () => {
     expect(res.headers.get("cache-control")).toBe("no-store");
   });
 
+  it("429 when Alpaca rate-limits us, so the page waits its longest; any other failure stays 502", async () => {
+    vi.stubEnv("DASHBOARD_FIXTURE", "");
+    vi.stubEnv("ALPACA_API_KEY_ID", "test-key-id");
+    vi.stubEnv("ALPACA_API_SECRET_KEY", "test-key-secret");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("upstream-secret-body", { status: 429 })));
+    const res = await get("?s=SPY");
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({ error: "rate-limited" });
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    resetBarsCache();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("x", { status: 503 })));
+    expect((await get("?s=SPY")).status).toBe(502); // upstream's own 503 is a failure, not "not configured"
+  });
+
   it("passes the half-day flag through, and refuses any other value", async () => {
     vi.stubEnv("DASHBOARD_FIXTURE", "");
     vi.stubEnv("ALPACA_API_KEY_ID", "test-key-id");

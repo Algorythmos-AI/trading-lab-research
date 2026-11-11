@@ -18,6 +18,7 @@ import {
 } from "./chain";
 import { FIXTURE_OFFSET_ATR, flagsFromCookieHeader } from "./fixture-variants";
 import { logEvent } from "./log";
+import { upstreamBody, upstreamStatus } from "./upstream";
 import { nyInstant } from "./options";
 import type { OptionsEdition } from "./options.types";
 import { alpacaKeys } from "./quote";
@@ -127,6 +128,8 @@ export async function handleChain(req: Request, now: Date = new Date()): Promise
     return json(200, await fetchChain(symbol, px, keys, now, fetch, undefined, keep));
   } catch (e) {
     logEvent("chain.fetch", { outcome: "error", error: e instanceof Error ? e.name : "unknown" });
-    return json(502, { error: "upstream" });
+    // A rate limit is passed on as one, so the page waits its longest; anything else is 502.
+    const status = upstreamStatus(e);
+    return json(status, upstreamBody(status));
   }
 }
