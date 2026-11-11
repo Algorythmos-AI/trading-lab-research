@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # Page the owner that a unit failed (wt-alert@<unit>.service, OnFailure=). Reads only /etc/wt/paging, so it works
 # when the secrets fetch is what failed. Never fails its caller.
+# The ntfy topic is public: the page carries the unit's name (repo-public) and fixed words only, never the host's
+# name. A unit name outside [A-Za-z0-9._-] (at most 80 characters) is replaced by "a unit" (wt.ops.alerts.PAGE_CHARS).
 set -uo pipefail
-unit="${1:-a unit}"
+raw="${1:-}"
+if [[ "$raw" =~ ^[A-Za-z0-9._-]{1,80}$ ]]; then unit="$raw"; else unit="a unit"; fi
+paging="${WT_PAGING_FILE:-/etc/wt/paging}"
 topic=""
 server="https://ntfy.sh"
-if [[ -r /etc/wt/paging ]]; then
-  topic=$(sed -n 's/^NTFY_TOPIC=//p' /etc/wt/paging | head -1)
-  s=$(sed -n 's/^NTFY_SERVER=//p' /etc/wt/paging | head -1); [[ -n "$s" ]] && server="$s"
+if [[ -r "$paging" ]]; then
+  topic=$(sed -n 's/^NTFY_TOPIC=//p' "$paging" | head -1)
+  s=$(sed -n 's/^NTFY_SERVER=//p' "$paging" | head -1); [[ -n "$s" ]] && server="$s"
 fi
 if [[ -z "$topic" ]]; then
   echo "wt-alert: no ntfy topic configured; $unit failed" >&2
@@ -15,6 +19,6 @@ if [[ -z "$topic" ]]; then
 fi
 prio=4; [[ "$unit" == wt-paper-b* ]] && prio=5
 curl -fsS --max-time 10 -H "Title: Trading host: ${unit%.service} failed" -H "Priority: $prio" \
-  -d "systemd reports ${unit} failed on $(hostname -s). Check: journalctl -u ${unit} and make status." \
+  -d "systemd reports ${unit} failed. Check: journalctl -u ${unit} and make status." \
   "${server%/}/${topic}" >/dev/null || echo "wt-alert: ntfy unreachable; $unit failed" >&2
 exit 0
