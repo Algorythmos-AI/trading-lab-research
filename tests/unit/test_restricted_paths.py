@@ -167,13 +167,14 @@ def test_a_symlink_to_a_restricted_path_fails(tmp_path):
     r = repo(tmp_path)
     link(r, "docs/k", "../knowledge")                                # a directory
     link(r, "docs/j.json", "../data/live/journal.jsonl")             # a file
-    link(r, "docs/abs", f"{r}/var/alerts/state.json")               # absolute, inside the checkout
-    link(r, "docs/away", "/home/wt/trading/var/alerts/state.json")    # outside the repository: not its material
-    link(r, "docs/up", "../../outside/var/x")                         # above the root: not its material
-    link(r, "docs/ok", "../README.md")
+    link(r, "docs/abs", f"{r}/README.md")                              # absolute: flagged wherever it points
+    link(r, "docs/away", "/home/wt/trading/var/alerts/state.json")    # absolute, outside
+    link(r, "docs/up", "../../outside/readme.md")                     # climbs above the root
+    link(r, "docs/ok", "../README.md")                                # relative, inside, harmless
     bad = guard.check(r)
-    assert bad == ["docs/abs -> (a restricted path)", "docs/j.json -> (a restricted path)",
-                   "docs/k -> (a restricted path)"]
+    assert bad == ["docs/abs -> (a target outside the repository)", "docs/away -> (a target outside the repository)",
+                   "docs/j.json -> (a restricted path)", "docs/k -> (a restricted path)",
+                   "docs/up -> (a target outside the repository)"]
     assert all("var/" not in b for b in bad)                          # the target itself is not printed
 
 
@@ -201,11 +202,10 @@ def test_link_resolution(tmp_path):
     assert guard.link_target("docs/k", "../knowledge") == "knowledge"
     assert guard.link_target("a/b/c", "../../var/x") == "var/x"
     assert guard.link_target("a", "/abs/var/x") == "/abs/var/x"
-    assert guard.target_restricted(PATTERN, f"{tmp_path}/var/x", tmp_path)          # absolute, inside
-    assert not guard.target_restricted(PATTERN, "/abs/var/x", tmp_path)            # absolute, outside
-    assert not guard.target_restricted(PATTERN, f"{tmp_path}var/x", tmp_path)      # a sibling with the same prefix
-    assert not guard.target_restricted(PATTERN, "../outside/logs/x", tmp_path)
-    assert guard.target_restricted(PATTERN, "knowledge", tmp_path)                 # the directory itself
+    assert guard.leaves_repo("/abs/readme.md") and guard.leaves_repo("../outside/x")
+    assert not guard.leaves_repo("docs/x") and not guard.leaves_repo("a/../b")
+    assert guard.target_restricted(PATTERN, "knowledge")                            # the directory itself
+    assert guard.target_restricted(PATTERN, "var/x") and not guard.target_restricted(PATTERN, "docs/x")
     assert re.search(PATTERN, "x.pdf")
 
 

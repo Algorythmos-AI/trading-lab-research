@@ -12,9 +12,9 @@ What it checks, case-insensitively like the hook (the regex carries `(?i)`):
   * with `--base`, every path added, renamed, changed in type or modified by any commit in `<base>..HEAD`,
     including commits whose file was deleted again later in the same pull request (the branch's history is public
     too), so a symlink retargeted inside the range is seen;
-  * a tracked symlink whose target resolves to a restricted path inside the repository (`docs/k -> ../knowledge`,
-    or an absolute target under the checkout), at HEAD and in the range. A target outside the repository is not
-    material of this repository and is not matched.
+  * a tracked symlink whose target is absolute, or leaves the repository (`..` above the root), wherever it points:
+    a checkout elsewhere (a host's `/home/wt/trading/var`) resolves it there. A relative link that stays inside is
+    matched on the path it resolves to (`docs/k -> ../knowledge`). At HEAD and in the range.
 
 It prints the offending paths only, never a file's contents. Exit codes: 0 clean, 1 restricted paths found,
 2 the check could not run: the config unreadable, PyYAML missing, or git failing (a broken check fails closed).
@@ -93,20 +93,16 @@ def _as_target(pattern: re.Pattern[str], path: str) -> bool:
     return restricted(pattern, path) or (bool(path) and restricted(pattern, path.rstrip("/") + "/x"))
 
 
-def target_restricted(pattern: re.Pattern[str], resolved: str, root: Path | None = None) -> bool:
-    """A symlink target, matched only where it resolves inside the repository: a relative one that stays below the
-    root, or an absolute one under the checkout (`root`). Anything outside is not this repository's material."""
-    if resolved.startswith("/"):
-        base = root or ROOT
-        tops = sorted({posixpath.normpath(str(base)), posixpath.normpath(str(base.resolve()))}, key=len, reverse=True)
-        top = next((t for t in tops if (resolved + "/").startswith(t.rstrip("/") + "/")), None)
-        if top is None:
-            return False
-        resolved = resolved[len(top):].lstrip("/")
+def leaves_repo(resolved: str) -> bool:
+    """An absolute target, or one that climbs above the repository's root."""
     parts = [p for p in resolved.split("/") if p not in ("", ".")]
-    if parts and parts[0] == "..":
-        return False
-    return _as_target(pattern, "/".join(parts))
+    return resolved.startswith("/") or bool(parts and parts[0] == "..")
+
+
+def target_restricted(pattern: re.Pattern[str], resolved: str) -> bool:
+    """A relative target that stays inside the repository, matched on the path it resolves to."""
+    parts = [p for p in resolved.split("/") if p not in ("", ".")]
+    return not leaves_repo(resolved) and _as_target(pattern, "/".join(parts))
 
 
 def tracked(root: Path) -> list[tuple[str, str, str]]:
@@ -149,7 +145,10 @@ def offending(root: Path, pattern: re.Pattern[str], entries: Iterable[tuple[str,
             bad.add(path)
         elif mode == SYMLINK_MODE:
             target = _git(root, "cat-file", "blob", blob).decode("utf-8", "surrogateescape")
-            if target_restricted(pattern, link_target(path, target), root):
+            resolved = link_target(path, target)
+            if leaves_repo(resolved):
+                bad.add(f"{path} -> (a target outside the repository)")
+            elif target_restricted(pattern, resolved):
                 bad.add(f"{path} -> (a restricted path)")
     return sorted(bad)
 
