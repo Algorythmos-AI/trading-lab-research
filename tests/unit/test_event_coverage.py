@@ -128,12 +128,36 @@ def test_a_malformed_macro_row_is_named_for_what_is_wrong():
     good = {"date": "2027-01-13", "time_et": "08:30", "type": "cpi", "severity": "high", "policy": "reduce",
             "source": "bls.gov/schedule/2027", "quality": "exact"}
     assert events.macro_row_problem(good) is None
-    for bad, why in (({"date": "13/01/2027"}, "unreadable date"), ({"time_et": "25:00"}, "unreadable time_et"),
-                     ({"time_et": "soon"}, "unreadable time_et"), ({"severity": "huge"}, "unknown severity"),
+    no_date, no_time = "date not exactly YYYY-MM-DD", "time_et not exactly HH:MM"
+    for bad, why in (({"date": "13/01/2027"}, no_date), ({"date": " 2027-01-13"}, no_date),
+                     ({"date": "2027-01-13 "}, no_date), ({"date": "20270113"}, no_date),
+                     ({"date": "2027-02-30"}, no_date), ({"time_et": "25:00"}, no_time),
+                     ({"time_et": "soon"}, no_time), ({"time_et": "8:30"}, no_time), ({"time_et": "08:30 "}, no_time),
+                     ({"type": "CPI"}, "type not a bare code"), ({"type": " cpi"}, "type not a bare code"),
+                     ({"severity": "huge"}, "unknown severity"),
                      ({"policy": "panic"}, "unknown policy"), ({"quality": "guess"}, "unknown quality"),
-                     ({"source": " "}, "no source"), ({"type": ""}, "no type"), ({"source": None}, "wrong number of fields"),
-                     ({None: ["extra"]}, "wrong number of fields")):
+                     ({"source": " "}, "no source"), ({"type": ""}, "type not a bare code"),
+                     ({"source": None}, "wrong number of fields"), ({None: ["extra"]}, "wrong number of fields")):
         assert events.macro_row_problem({**good, **bad}) == why, bad
+    # a row too far ahead of the session is taken for a typo (only when the session date is given)
+    today = dt.date(2027, 1, 13) - dt.timedelta(days=events.MACRO_MAX_AHEAD_DAYS)
+    assert events.macro_row_problem(good, today) is None
+    assert events.macro_row_problem(good, today - dt.timedelta(days=1)) == \
+        f"date more than {events.MACRO_MAX_AHEAD_DAYS} days ahead"
+
+
+def test_an_earnings_row_is_well_formed_only_in_the_exact_form_the_clone_matches():
+    good = _e("NVDA", "2027-02-25")
+    assert events.earnings_row_problem(good) is None
+    no_date = "date not exactly YYYY-MM-DD"
+    for bad, why in (({"date": " 2027-02-25"}, no_date), ({"date": "2027-02-25 "}, no_date),
+                     ({"date": "20270225"}, no_date), ({"symbol": " NVDA"}, "symbol not exactly upper case without spaces"),
+                     ({"symbol": "nvda"}, "symbol not exactly upper case without spaces"), ({"symbol": ""}, "no symbol"),
+                     ({"when": "AMC"}, "unknown when")):
+        assert events.earnings_row_problem({**good, **bad}) == why, bad
+    today = dt.date(2027, 2, 25) - dt.timedelta(days=events.EARNINGS_MAX_AHEAD_DAYS)
+    assert events.earnings_row_problem(good, today) is None
+    assert events.earnings_row_problem(good, today - dt.timedelta(days=1)) == "date more than 120 days ahead"
 
 
 def test_no_expiry_row_falls_on_a_day_the_market_is_shut():
