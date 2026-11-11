@@ -167,12 +167,14 @@ def test_a_symlink_to_a_restricted_path_fails(tmp_path):
     r = repo(tmp_path)
     link(r, "docs/k", "../knowledge")                                # a directory
     link(r, "docs/j.json", "../data/live/journal.jsonl")             # a file
-    link(r, "docs/abs", "/home/wt/trading/var/alerts/state.json")    # leaves the repository
+    link(r, "docs/abs", f"{r}/var/alerts/state.json")               # absolute, inside the checkout
+    link(r, "docs/away", "/home/wt/trading/var/alerts/state.json")    # outside the repository: not its material
+    link(r, "docs/up", "../../outside/var/x")                         # above the root: not its material
     link(r, "docs/ok", "../README.md")
     bad = guard.check(r)
     assert bad == ["docs/abs -> (a restricted path)", "docs/j.json -> (a restricted path)",
                    "docs/k -> (a restricted path)"]
-    assert all("home/wt" not in b for b in bad)                       # the target itself is not printed
+    assert all("var/" not in b for b in bad)                          # the target itself is not printed
 
 
 def test_a_symlink_added_in_the_range_is_checked_too(tmp_path):
@@ -195,11 +197,47 @@ def test_the_repository_itself_is_clean():
     assert guard.check(ROOT) == []
 
 
-def test_link_resolution():
+def test_link_resolution(tmp_path):
     assert guard.link_target("docs/k", "../knowledge") == "knowledge"
     assert guard.link_target("a/b/c", "../../var/x") == "var/x"
     assert guard.link_target("a", "/abs/var/x") == "/abs/var/x"
-    assert guard.target_restricted(PATTERN, "/abs/var/x")
-    assert guard.target_restricted(PATTERN, "../outside/logs/x")
-    assert not guard.target_restricted(PATTERN, "../outside/readme.md")
+    assert guard.target_restricted(PATTERN, f"{tmp_path}/var/x", tmp_path)          # absolute, inside
+    assert not guard.target_restricted(PATTERN, "/abs/var/x", tmp_path)            # absolute, outside
+    assert not guard.target_restricted(PATTERN, f"{tmp_path}var/x", tmp_path)      # a sibling with the same prefix
+    assert not guard.target_restricted(PATTERN, "../outside/logs/x", tmp_path)
+    assert guard.target_restricted(PATTERN, "knowledge", tmp_path)                 # the directory itself
     assert re.search(PATTERN, "x.pdf")
+
+
+def test_a_symlink_retargeted_or_a_file_turned_into_a_link_inside_the_range_fails(tmp_path):
+    r = repo(tmp_path)
+    link(r, "docs/l", "../README.md")
+    add(r, "docs/f", "plain")
+    base = git(r, "rev-parse", "HEAD").strip()
+    (r / "docs/l").unlink()
+    (r / "docs/l").symlink_to("../knowledge/a.md")                   # retargeted: a modification (M)
+    git(r, "add", "-A")
+    git(r, "commit", "-q", "-m", "retarget")
+    (r / "docs/f").unlink()
+    (r / "docs/f").symlink_to("../data/live/journal.jsonl")          # a file turned into a link: a type change (T)
+    git(r, "add", "-A")
+    git(r, "commit", "-q", "-m", "type change")
+    for rel in ("docs/l", "docs/f"):                                  # and both put back before the tip
+        (r / rel).unlink()
+        (r / rel).write_text("plain again")
+    git(r, "add", "-A")
+    git(r, "commit", "-q", "-m", "back")
+    assert guard.check(r) == []
+    assert guard.check(r, base) == ["docs/f -> (a restricted path)", "docs/l -> (a restricted path)"]
+
+
+def test_an_unreadable_config_or_missing_yaml_exits_two(tmp_path, monkeypatch, capsys):
+    r = repo(tmp_path)
+    (r / ".pre-commit-config.yaml").write_bytes(b"\xff\xfe not text")
+    assert guard.main(["--root", str(r)]) == 2
+    (r / ".pre-commit-config.yaml").write_text("repos: [\n")                     # not YAML
+    assert guard.main(["--root", str(r)]) == 2
+    (r / ".pre-commit-config.yaml").write_text((ROOT / ".pre-commit-config.yaml").read_text())
+    monkeypatch.setitem(__import__("sys").modules, "yaml", None)                 # PyYAML missing
+    assert guard.main(["--root", str(r)]) == 2
+    assert "PyYAML is not installed" in capsys.readouterr().err

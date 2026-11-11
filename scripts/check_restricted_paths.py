@@ -9,13 +9,15 @@ branch either way.
 
 What it checks, case-insensitively like the hook (the regex carries `(?i)`):
   * every path tracked at HEAD (`git ls-files`);
-  * with `--base`, every path added or renamed by any commit in `<base>..HEAD`, including commits whose file was
-    deleted again later in the same pull request (the branch's history is public too);
-  * a tracked symlink whose target resolves to a restricted path (`docs/k -> ../knowledge`), at HEAD and in the
-    range.
+  * with `--base`, every path added, renamed, changed in type or modified by any commit in `<base>..HEAD`,
+    including commits whose file was deleted again later in the same pull request (the branch's history is public
+    too), so a symlink retargeted inside the range is seen;
+  * a tracked symlink whose target resolves to a restricted path inside the repository (`docs/k -> ../knowledge`,
+    or an absolute target under the checkout), at HEAD and in the range. A target outside the repository is not
+    material of this repository and is not matched.
 
 It prints the offending paths only, never a file's contents. Exit codes: 0 clean, 1 restricted paths found,
-2 the pattern or git could not be read (a broken check fails closed).
+2 the check could not run: the config unreadable, PyYAML missing, or git failing (a broken check fails closed).
 
 Out of scope: content. A PDF renamed to another extension, or restricted prose pasted into a tracked file, is not a
 path match; gitleaks and review catch secrets and prose, not this check.
@@ -30,8 +32,6 @@ import sys
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 
-import yaml
-
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ".pre-commit-config.yaml"
 HOOK_ID = "check-restricted"
@@ -45,8 +45,12 @@ class GuardError(Exception):
 def load_pattern(config: Path) -> re.Pattern[str]:
     """The `files:` regex of the `check-restricted` hook. Raises GuardError when it is missing or invalid."""
     try:
+        import yaml
+    except ImportError as e:
+        raise GuardError("PyYAML is not installed") from e
+    try:
         doc = yaml.safe_load(config.read_text())
-    except (OSError, yaml.YAMLError) as e:
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as e:
         raise GuardError(f"{config.name} unreadable ({e.__class__.__name__})") from e
     hooks = [h for r in (doc or {}).get("repos") or [] for h in (r or {}).get("hooks") or []]
     found = [h for h in hooks if isinstance(h, dict) and h.get("id") == HOOK_ID]
@@ -89,13 +93,20 @@ def _as_target(pattern: re.Pattern[str], path: str) -> bool:
     return restricted(pattern, path) or (bool(path) and restricted(pattern, path.rstrip("/") + "/x"))
 
 
-def target_restricted(pattern: re.Pattern[str], resolved: str) -> bool:
-    """A symlink target. Inside the repository it is tried as is; one that leaves it (absolute, or `../` above the
-    root) is tried on every tail of its components, so `/home/wt/trading/var/x` still counts as `var/x`."""
+def target_restricted(pattern: re.Pattern[str], resolved: str, root: Path | None = None) -> bool:
+    """A symlink target, matched only where it resolves inside the repository: a relative one that stays below the
+    root, or an absolute one under the checkout (`root`). Anything outside is not this repository's material."""
+    if resolved.startswith("/"):
+        base = root or ROOT
+        tops = sorted({posixpath.normpath(str(base)), posixpath.normpath(str(base.resolve()))}, key=len, reverse=True)
+        top = next((t for t in tops if (resolved + "/").startswith(t.rstrip("/") + "/")), None)
+        if top is None:
+            return False
+        resolved = resolved[len(top):].lstrip("/")
     parts = [p for p in resolved.split("/") if p not in ("", ".")]
-    if not resolved.startswith("/") and (not parts or parts[0] != ".."):
-        return _as_target(pattern, "/".join(parts))
-    return any(_as_target(pattern, "/".join(parts[i:])) for i in range(len(parts)) if parts[i] != "..")
+    if parts and parts[0] == "..":
+        return False
+    return _as_target(pattern, "/".join(parts))
 
 
 def tracked(root: Path) -> list[tuple[str, str, str]]:
@@ -109,8 +120,9 @@ def tracked(root: Path) -> list[tuple[str, str, str]]:
 
 
 def added_in_range(root: Path, base: str) -> list[tuple[str, str, str]]:
-    """(mode, blob, path) for every path added or renamed (its new name) by any commit in base..HEAD."""
-    fields = _split(_git(root, "log", "--format=", "--raw", "--no-abbrev", "-M", "--diff-filter=AR", "-z",
+    """(mode, blob, path) for every path added, renamed (its new name), changed in type or modified by any commit
+    in base..HEAD: a modification of a symlink is a retarget."""
+    fields = _split(_git(root, "log", "--format=", "--raw", "--no-abbrev", "-M", "--diff-filter=ARTM", "-z",
                          f"{base}..HEAD"))
     out: list[tuple[str, str, str]] = []
     i = 0
@@ -137,7 +149,7 @@ def offending(root: Path, pattern: re.Pattern[str], entries: Iterable[tuple[str,
             bad.add(path)
         elif mode == SYMLINK_MODE:
             target = _git(root, "cat-file", "blob", blob).decode("utf-8", "surrogateescape")
-            if target_restricted(pattern, link_target(path, target)):
+            if target_restricted(pattern, link_target(path, target), root):
                 bad.add(f"{path} -> (a restricted path)")
     return sorted(bad)
 
