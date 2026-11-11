@@ -11,6 +11,19 @@ import type { Feed } from "./feed-agreement";
 import type { Bar2 } from "./trade-state";
 
 export const DEFAULT_DATA_URL = "https://data.alpaca.markets";
+
+/** The data URL's host when it is https on data.alpaca.markets or another alpaca.markets host; null otherwise. */
+export function alpacaHost(url: string): string | null {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return null;
+  }
+  const h = u.hostname.toLowerCase();
+  if (u.protocol !== "https:" || u.username || u.password || u.port) return null;
+  return h === "data.alpaca.markets" || h.endsWith(".alpaca.markets") ? h : null;
+}
 /** Alpaca's limit is 200 calls a minute; this stays under it. */
 export const ALPACA_CALLS_PER_MIN = 180;
 /** The longest one call may take (less when the deadline is nearer). */
@@ -110,6 +123,8 @@ async function getJson(url: string, feed: Feed, o: FetchSessionOpts): Promise<{ 
       res = await fetchImpl(url, {
         headers: { "APCA-API-KEY-ID": o.keys.id, "APCA-API-SECRET-KEY": o.keys.secret, accept: "application/json" },
         cache: "no-store",
+        // The keys go to Alpaca only: a redirect anywhere else is refused, never followed.
+        redirect: "error",
         signal: AbortSignal.timeout(Math.min(CALL_TIMEOUT_MS, left)),
       });
     } catch (e) {

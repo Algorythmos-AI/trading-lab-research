@@ -181,11 +181,117 @@ export interface SessionReport {
   words: Record<Feed, Record<string, Word[]>>;
   /** One letter per live slot: c clock-fixed, n no plan, b both lack, p price-dependent (comparable). */
   sets: Record<string, string>;
+  /** From revision 3: one letter per live slot: - both had the bar, i IEX lacked it, s SIP lacked it, b both lacked it. */
+  lacks?: Record<string, string>;
+  /** From revision 3: the SHA-256 of the edition file's bytes. */
+  edition_sha256?: string | null;
+  /** From revision 3: facts reported beside the reading (factsOf); a report made before has none stored. */
+  facts?: Facts;
   inputs: readonly string[];
   limitations: readonly string[];
 }
 
+/** One maximal stretch of consecutive disagreeing comparable units on one side. */
+export interface DisagreementRun {
+  symbol: string;
+  side: RowSide;
+  /** The run's first slot (New York HHMM) and its pair of words ("IEX|SIP"). */
+  onset: string;
+  onset_pair: string;
+  length: number;
+  /** The pair met most often in the run (the earliest on a tie). */
+  dominant_pair: string;
+}
+
+/** Facts beside the reading (revision 3). None of them is part of the reading. */
+export interface Facts {
+  disagreement_runs: number;
+  longest_run: number;
+  sides_with_disagreement: number;
+  runs: DisagreementRun[];
+  /** Disagreements where one feed lacked the slot's bar, and where both had it; null when the report cannot say. */
+  disagree_one_lacked: number | null;
+  disagree_both_had: number | null;
+  /** Comparable units where one feed lacked the slot's bar and the two words still matched. */
+  lacked_but_matched: number | null;
+  /** Events whose previous comparable unit on the side was paused or none, and the one before that enter_zone. */
+  reentries_after_no_state: Record<Feed, number>;
+}
+
+const NO_STATE_WORDS: ReadonlySet<Word> = new Set<Word>(["paused", "none"]);
+
+/**
+ * The facts of a report, from its stored per-unit words and sets alone (so a report written before revision 3 gets
+ * them offline). The split by bar needs the per-unit `lacks`; without it, it is known only when no unit lacked a bar.
+ */
+export function factsOf(r: Pick<SessionReport, "live_slot_times" | "words" | "sets" | "units"> & { lacks?: Record<string, string> }): Facts {
+  const runs: DisagreementRun[] = [];
+  let sides = 0;
+  let oneLacked = 0;
+  let bothHad = 0;
+  let lackedMatched = 0;
+  const reentries: Record<Feed, number> = { iex: 0, sip: 0 };
+  for (const k of Object.keys(r.sets)) {
+    const [symbol, side] = k.split("|") as [string, RowSide];
+    const set = r.sets[k]!;
+    const wi = r.words.iex[k] ?? [];
+    const ws = r.words.sip[k] ?? [];
+    const lack = r.lacks?.[k];
+    let open: { at: number; len: number; pairs: Map<string, number> } | null = null;
+    let any = false;
+    const close = () => {
+      if (!open) return;
+      let dom = "";
+      let n = 0;
+      for (const [pk, c] of open.pairs) if (c > n) [dom, n] = [pk, c];
+      runs.push({ symbol, side, onset: r.live_slot_times[open.at]!, onset_pair: `${wi[open.at]}|${ws[open.at]}`, length: open.len, dominant_pair: dom });
+      open = null;
+    };
+    for (let i = 0; i < set.length; i++) {
+      if (set[i] !== "p") continue; // an excluded unit neither breaks nor extends a run
+      const differ = wi[i] !== ws[i];
+      const lacked = lack ? lack[i] === "i" || lack[i] === "s" : false;
+      if (differ) {
+        any = true;
+        if (lacked) oneLacked++;
+        else bothHad++;
+        const pk = `${wi[i]}|${ws[i]}`;
+        if (!open) open = { at: i, len: 0, pairs: new Map() };
+        open.len++;
+        open.pairs.set(pk, (open.pairs.get(pk) ?? 0) + 1);
+      } else {
+        if (lacked) lackedMatched++;
+        close();
+      }
+    }
+    close();
+    if (any) sides++;
+    // Re-entries: an event (enter_zone after anything else, over the live slots) right after a no-state comparable unit
+    // that itself followed an enter_zone comparable unit.
+    for (const [f, w] of [["iex", wi], ["sip", ws]] as const) {
+      for (let i = 0; i < w.length; i++) {
+        if (w[i] !== ENTER || (i > 0 && w[i - 1] === ENTER)) continue;
+        const before: number[] = [];
+        for (let j = i - 1; j >= 0 && before.length < 2; j--) if (set[j] === "p") before.push(j);
+        if (before.length === 2 && NO_STATE_WORDS.has(w[before[0]!]!) && w[before[1]!] === ENTER) reentries[f]++;
+      }
+    }
+  }
+  const known = r.lacks !== undefined || r.units.iex_lacks + r.units.sip_lacks === 0;
+  return {
+    disagreement_runs: runs.length,
+    longest_run: runs.reduce((m, x) => Math.max(m, x.length), 0),
+    sides_with_disagreement: sides,
+    runs,
+    disagree_one_lacked: known ? oneLacked : null,
+    disagree_both_had: known ? bothHad : null,
+    lacked_but_matched: known ? lackedMatched : null,
+    reentries_after_no_state: reentries,
+  };
+}
+
 export interface Provenance {
+  edition_sha256?: string | null;
   fetched_at: string | null;
   rate_limit: Record<Feed, number | null>;
   keys: "env-file" | "environment" | null;
@@ -269,6 +375,7 @@ export function compareFeeds(input: CompareInput): SessionReport {
   const events: Record<Feed, Map<string, number[]>> = { iex: new Map(), sip: new Map() };
   const words: Record<Feed, Record<string, Word[]>> = { iex: {}, sip: {} };
   const sets: Record<string, string> = {};
+  const lacks: Record<string, string> = {};
 
   for (const symbol of names) {
     for (const side of SIDES) {
@@ -276,6 +383,7 @@ export function compareFeeds(input: CompareInput): SessionReport {
       words.iex[k] = [];
       words.sip[k] = [];
       sets[k] = "";
+      lacks[k] = "";
       const prev: Record<Feed, Word | null> = { iex: null, sip: null };
       for (let i = 0; i < slots.length; i++) {
         if (!live[i]) continue;
@@ -295,6 +403,7 @@ export function compareFeeds(input: CompareInput): SessionReport {
           words[f][k]!.push(word[f]);
         }
         const pk = `${word.iex}|${word.sip}`;
+        lacks[k] += bar.iex && bar.sip ? "-" : !bar.iex && !bar.sip ? "b" : !bar.iex ? "i" : "s";
         if (fixed[i]) {
           u.clock_fixed++;
           sets[k] += "c";
@@ -371,6 +480,7 @@ export function compareFeeds(input: CompareInput): SessionReport {
     if (iex || sip) bySlot.push({ slot: hhmm[i]!, iex, sip });
   });
   const without = (f: Feed) => names.filter((s) => (input.bars[f][s] ?? []).length === 0);
+  const liveTimes = hhmm.filter((_, i) => live[i]);
 
   return {
     v: REPORT_V,
@@ -393,10 +503,14 @@ export function compareFeeds(input: CompareInput): SessionReport {
     names_without_bars: { iex: without("iex"), sip: without("sip") },
     no_state: noState,
     bars_missing: { iex: missIex, sip: missSip, by_slot: bySlot },
-    ...(input.provenance ?? NO_PROVENANCE),
-    live_slot_times: hhmm.filter((_, i) => live[i]),
+    ...NO_PROVENANCE,
+    ...input.provenance,
+    edition_sha256: input.provenance?.edition_sha256 ?? null,
+    live_slot_times: liveTimes,
     words,
     sets,
+    lacks,
+    facts: factsOf({ live_slot_times: liveTimes, words, sets, lacks, units: u }),
     inputs: NEUTRAL_INPUTS,
     limitations: LIMITATIONS,
   };
@@ -428,6 +542,8 @@ export interface Recheck {
   sip_changed: number;
   /** Units whose set (clock-fixed, no plan, both lack, comparable) changed: a bar appeared or went. */
   set_changed: number;
+  /** How the edition was checked against the stored report's. */
+  edition_check: string;
 }
 
 /** A stored report as read back for a recheck: this version, the words and sets present, or why not. */
@@ -446,7 +562,7 @@ export function parseStoredReport(text: string | null, day: string): { ok: true;
 }
 
 /** How many units changed word (per feed) or set between the stored report and a fresh replay of the same day. */
-export function recheck(stored: SessionReport, fresh: SessionReport): Recheck | { refused: string } {
+export function recheck(stored: SessionReport, fresh: SessionReport, editionCheck: string): Recheck | { refused: string } {
   if (stored.engine !== fresh.engine) return { refused: `refused: the stored report is under engine ${stored.engine}, this one is ${fresh.engine}; a change could not be told from an engine change` };
   if (stored.live_slot_times.join() !== fresh.live_slot_times.join() || Object.keys(stored.sets).sort().join() !== Object.keys(fresh.sets).sort().join())
     return { refused: "refused: the stored report covers other names or slots (another edition?)" };
@@ -475,13 +591,14 @@ export function recheck(stored: SessionReport, fresh: SessionReport): Recheck | 
     iex_changed: iex,
     sip_changed: sip,
     set_changed: set,
+    edition_check: editionCheck,
   };
 }
 
 export function recheckText(r: Recheck): string {
   return [
     `Feed agreement recheck ${r.day}, engine ${r.engine}: the bars fetched again (${r.fetched_at ?? "?"}) against the stored report's (${r.stored_fetched_at ?? "?"})`,
-    `units ${r.units} · changed word: IEX ${r.iex_changed}, SIP ${r.sip_changed} · changed set ${r.set_changed}`,
+    `units ${r.units} · changed word: IEX ${r.iex_changed}, SIP ${r.sip_changed} · changed set ${r.set_changed} · ${r.edition_check}`,
     "the stored report and its summary row are unchanged; a recheck is never part of the reading",
   ].join("\n");
 }
@@ -505,7 +622,16 @@ const COUNT_KEYS = [
 ] as const;
 type CountKey = (typeof COUNT_KEYS)[number];
 
-export type SummaryRow = { v: typeof REPORT_V; day: string; engine: string; run_at: string; names_without_bars: Record<Feed, string[]> } & Record<CountKey, number>;
+export type SummaryRow = {
+  v: typeof REPORT_V;
+  day: string;
+  engine: string;
+  run_at: string;
+  names_without_bars: Record<Feed, string[]>;
+  /** From revision 3 (optional: a row written before has neither; they are then taken from the stored report). */
+  disagreement_runs?: number;
+  longest_run?: number;
+} & Record<CountKey, number>;
 
 export function summaryRow(r: SessionReport, runAt: number): SummaryRow {
   return {
@@ -528,6 +654,8 @@ export function summaryRow(r: SessionReport, runAt: number): SummaryRow {
     bars_missing_iex: r.bars_missing.iex,
     bars_missing_sip: r.bars_missing.sip,
     names_without_bars: r.names_without_bars,
+    disagreement_runs: (r.facts ?? factsOf(r)).disagreement_runs,
+    longest_run: (r.facts ?? factsOf(r)).longest_run,
   };
 }
 
@@ -548,6 +676,7 @@ export function parseSummaryRow(line: string): SummaryRow | null {
   if (!COUNT_KEYS.every((k) => Number.isInteger(o[k]) && (o[k] as number) >= 0)) return null;
   const nb = o.names_without_bars as Record<string, unknown> | null | undefined;
   if (!nb || typeof nb !== "object" || !SYMBOL_LIST(nb.iex) || !SYMBOL_LIST(nb.sip)) return null;
+  for (const k of ["disagreement_runs", "longest_run"]) if (o[k] !== undefined && !(Number.isInteger(o[k]) && (o[k] as number) >= 0)) return null;
   return o as unknown as SummaryRow;
 }
 
@@ -572,6 +701,8 @@ export interface LabelGroup {
   share: number | null;
   /** "SYM day" for each name with no bars all day, per feed. */
   names_without_bars: Record<Feed, string[]>;
+  /** Pooled disagreement runs (summed) and the longest run (the most), over the sessions that have them. */
+  runs: { disagreement_runs: number; longest_run: number; from_stored_report: string[]; not_recorded: string[] };
 }
 
 export interface SummaryReading {
@@ -584,7 +715,15 @@ export interface SummaryReading {
   unreadable: number;
 }
 
-function group(engine: string, rows: readonly SummaryRow[]): LabelGroup {
+/** A row's runs: its own fields, else those computed offline from that day's stored report, else none. */
+function runsOf(r: SummaryRow, stored: Readonly<Record<string, Facts>>): { runs: number; longest: number; source: "row" | "report" } | null {
+  if (r.disagreement_runs !== undefined && r.longest_run !== undefined) return { runs: r.disagreement_runs, longest: r.longest_run, source: "row" };
+  const f = stored[r.day];
+  return f ? { runs: f.disagreement_runs, longest: f.longest_run, source: "report" } : null;
+}
+
+function group(engine: string, rows: readonly SummaryRow[], stored: Readonly<Record<string, Facts>>): LabelGroup {
+  const got = rows.map((r) => [r, runsOf(r, stored)] as const);
   const totals = Object.fromEntries(COUNT_KEYS.map((k) => [k, rows.reduce((s, r) => s + r[k], 0)])) as Record<CountKey, number>;
   return {
     engine,
@@ -596,11 +735,20 @@ function group(engine: string, rows: readonly SummaryRow[]): LabelGroup {
       iex: rows.flatMap((r) => r.names_without_bars.iex.map((s) => `${s} ${r.day}`)),
       sip: rows.flatMap((r) => r.names_without_bars.sip.map((s) => `${s} ${r.day}`)),
     },
+    runs: {
+      disagreement_runs: got.reduce((n, [, x]) => n + (x?.runs ?? 0), 0),
+      longest_run: got.reduce((n, [, x]) => Math.max(n, x?.longest ?? 0), 0),
+      from_stored_report: got.filter(([, x]) => x?.source === "report").map(([r]) => r.day),
+      not_recorded: got.filter(([, x]) => x === null).map(([r]) => r.day),
+    },
   };
 }
 
-/** The runbook's reading over the running summary: the latest run of each day, read per engine label, never pooled. */
-export function readSummary(lines: readonly string[]): SummaryReading {
+/**
+ * The runbook's reading over the running summary: the latest run of each day, read per engine label, never pooled.
+ * `stored` holds facts computed offline from stored reports, for rows written before revision 3 (context only).
+ */
+export function readSummary(lines: readonly string[], stored: Readonly<Record<string, Facts>> = {}): SummaryReading {
   const byDay = new Map<string, SummaryRow>();
   let unreadable = 0;
   for (const line of lines) {
@@ -614,7 +762,7 @@ export function readSummary(lines: readonly string[]): SummaryReading {
   }
   const rows = [...byDay.values()].sort((a, b) => a.day.localeCompare(b.day));
   const engines = [...new Set(rows.map((r) => r.engine))];
-  const labels = engines.map((e) => group(e, rows.filter((r) => r.engine === e)));
+  const labels = engines.map((e) => group(e, rows.filter((r) => r.engine === e), stored));
   const engine = rows.at(-1)?.engine ?? null;
   const current = labels.find((g) => g.engine === engine);
   let reading: Reading;
@@ -626,6 +774,13 @@ export function readSummary(lines: readonly string[]): SummaryReading {
 // ---- text ---------------------------------------------------------------------------------------------------------------
 const pct = (x: number | null) => (x === null ? "n/a" : `${(x * 100).toFixed(3)}%`);
 const listOr = (xs: readonly string[]) => (xs.length ? xs.join(" ") : "none");
+
+/** The matched offsets in the order -1, 0, +1 (a record's integer keys would print 0 and 1 before -1). */
+export function offsetsText(by: Readonly<Record<string, number>>): string {
+  const out: string[] = [];
+  for (let d = -MATCH_WITHIN_SLOTS; d <= MATCH_WITHIN_SLOTS; d++) out.push(`${d > 0 ? `+${d}` : d}: ${by[String(d)] ?? 0}`);
+  return out.join(", ");
+}
 
 function fmtWhy(w: Record<NameWhy, number>): string {
   return Object.entries(w)
@@ -644,15 +799,24 @@ export function reportText(r: SessionReport): string {
     `comparable ${u.comparable} · identical ${u.identical} (${pct(r.share)}; one session is never read) · of them IEX lacked the bar ${u.iex_lacks}, SIP ${u.sip_lacks}`,
     `names without bars: IEX ${listOr(r.names_without_bars.iex)} · SIP ${listOr(r.names_without_bars.sip)}`,
     `enter-zone events: IEX ${e.iex} · SIP ${e.sip} · matched ${e.matched} · IEX-only ${e.iex_only} · SIP-only ${e.sip_only}`,
-    `matched offsets (SIP minus IEX, slots): median ${e.median_offset ?? "n/a"} · worst ${e.worst_offset ?? "n/a"} · ${Object.entries(e.by_offset)
-      .map(([d, n]) => `${d}: ${n}`)
-      .join(", ")}`,
+    `matched offsets (SIP minus IEX, slots): median ${e.median_offset ?? "n/a"} · worst ${e.worst_offset ?? "n/a"} · ${offsetsText(e.by_offset)}`,
     `bars missing (name-slots): IEX ${r.bars_missing.iex} · SIP ${r.bars_missing.sip}`,
     `fetched ${r.fetched_at ?? "?"} · X-RateLimit-Limit IEX ${r.rate_limit.iex ?? "none sent"}, SIP ${r.rate_limit.sip ?? "none sent"} · ${r.keys === "env-file" ? "keys from the env file" : r.keys === "environment" ? "keys from the environment" : "keys: not recorded"}`,
     `no state (name-slots, live): IEX ${fmtWhy(r.no_state.iex.names)} · SIP ${fmtWhy(r.no_state.sip.names)}`,
   ];
   const fixedOff = Object.entries(r.clock_fixed_pairs).filter(([k]) => k.split("|")[0] !== k.split("|")[1]);
   if (fixedOff.length) lines.push(`clock-fixed units that differ (outside the share): ${fixedOff.map(([k, n]) => `${k.replace("|", " / ")} ${n}`).join(", ")}`);
+  const f = r.facts ?? factsOf(r);
+  const nr = (x: number | null) => (x === null ? "not recorded" : String(x));
+  lines.push(
+    `disagreements ${r.disagreements.length}: one feed lacked the bar ${nr(f.disagree_one_lacked)} · both had it ${nr(f.disagree_both_had)} · lacked but matched ${nr(f.lacked_but_matched)}`,
+    `disagreement runs ${f.disagreement_runs} · longest ${f.longest_run} · sides with a disagreement ${f.sides_with_disagreement}${r.facts ? "" : " (computed from the stored words)"}`,
+    `re-entries after no state: IEX ${f.reentries_after_no_state.iex} · SIP ${f.reentries_after_no_state.sip}`,
+  );
+  if (f.runs.length) {
+    lines.push("runs (name side onset: onset pair, length, most common pair):");
+    for (const x of f.runs) lines.push(`  ${x.symbol} ${x.side} ${x.onset}: ${x.onset_pair.replace("|", " / ")}, ${x.length}, ${x.dominant_pair.replace("|", " / ")}`);
+  }
   if (r.disagreements.length) {
     lines.push("disagreements (name side slot: IEX / SIP):");
     for (const d of r.disagreements.slice(0, 40)) lines.push(`  ${d.symbol} ${d.side} ${d.slot}: ${d.iex} / ${d.sip}`);
@@ -679,6 +843,9 @@ export function summaryText(s: SummaryReading): string {
       `  enter-zone events: IEX ${t.events_iex} · SIP ${t.events_sip} · matched ${t.matched} · unmatched ${t.iex_only + t.sip_only} (0 allowed)`,
       `  left out: clock-fixed ${t.clock_fixed} · no plan ${t.no_plan} · both lack ${t.both_lack} · bars missing IEX ${t.bars_missing_iex}, SIP ${t.bars_missing_sip}`,
       `  names without bars: IEX ${listOr(g.names_without_bars.iex)} · SIP ${listOr(g.names_without_bars.sip)}`,
+      `  disagreement runs ${g.runs.disagreement_runs} · longest ${g.runs.longest_run} (context, not part of the reading)${
+        g.runs.from_stored_report.length ? ` · computed from the stored report for ${g.runs.from_stored_report.join(" ")}` : ""
+      }${g.runs.not_recorded.length ? ` · not recorded for ${g.runs.not_recorded.join(" ")}` : ""}`,
     );
   }
   if (s.unreadable) out.push(`${s.unreadable} unreadable line(s) not counted`);

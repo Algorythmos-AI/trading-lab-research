@@ -6,23 +6,26 @@ import { BAR_MS, type Evaluation, evaluateSlot, expectedSlots, nyHhmm, type RowS
 import {
   clockFixed,
   compareFeeds,
+  factsOf,
   type Feed,
   feedAgreement,
   LIMITATIONS,
   matchEvents,
+  offsetsText,
   MATCH_PCT,
   MIN_SESSIONS,
   readSummary,
   replayFeed,
   replayInput,
+  reportText,
   type SessionReport,
   shareMeets,
   summaryRow,
   type SummaryRow,
   type Word,
 } from "@/lib/feed-agreement";
-import { barsUrl, CallLimiter, type Clock, fetchSessionBars, FetchStop, MAX_RETRIES, rateLimitOf, retryAfterMs } from "@/lib/feed-agreement-fetch";
-import { EDITION_SIGNED, EXIT, main, parseArgs, resolveKeys, type RunDeps } from "@/lib/feed-agreement-run";
+import { alpacaHost, barsUrl, CallLimiter, type Clock, fetchSessionBars, FetchStop, MAX_RETRIES, rateLimitOf, retryAfterMs } from "@/lib/feed-agreement-fetch";
+import { EDITION_SIGNED, editionHash, EXIT, main, parseArgs, resolveKeys, type RunDeps } from "@/lib/feed-agreement-run";
 import { focusOptions } from "@/lib/fixture-variants";
 import { verify } from "@/lib/hmac";
 import type { Options, TrailPoint } from "@/lib/options";
@@ -567,7 +570,7 @@ function rawBars(bars: Record<string, Bar2[]>) {
 }
 
 /** A fake run: in-memory files, a clock that moves only when the runner sleeps or a call hangs, scripted answers. */
-function harness(answers: Record<Feed | "site", Answer[]>, opts: { now?: number; edition?: unknown; env?: Record<string, string>; failWrite?: (p: string) => boolean; failRename?: (p: string) => boolean } = {}) {
+function harness(answers: Record<Feed | "site", Answer[]>, opts: { now?: number; edition?: unknown; env?: Record<string, string>; failWrite?: (p: string) => boolean; failRename?: (from: string, to: string) => boolean } = {}) {
   let now = opts.now ?? ny(S, "18:00:00");
   const files = new Map<string, string>();
   files.set("/ed.json", JSON.stringify(opts.edition ?? E));
@@ -604,13 +607,14 @@ function harness(answers: Record<Feed | "site", Answer[]>, opts: { now?: number;
       files.set(p, t);
     },
     rename: async (a, b) => {
-      if (opts.failRename?.(b)) throw Object.assign(new Error("no"), { name: "EACCES" });
+      if (opts.failRename?.(a, b)) throw Object.assign(new Error("no"), { name: "EACCES" });
       const t = files.get(a);
       if (t === undefined) throw new Error("missing");
       files.delete(a);
       files.set(b, t);
     },
     remove: async (p) => void files.delete(p),
+    exists: async (p) => files.has(p),
     mkdirp: async () => {},
     print: (l) => printed.push(l),
     defaultOut: "/out",
@@ -677,7 +681,7 @@ describe("the runner", () => {
   it("a 401: upstream, exit 8, nothing written", async () => {
     const h = harness({ iex: [{ status: 401 }], sip: [], site: [] });
     expect(await main(ARGV, h.deps)).toBe(EXIT.upstream);
-    expect(h.printed).toEqual(["keys from the environment", "upstream: iex bars answered HTTP 401: the keys were rejected (keys from the environment); no report written"]);
+    expect(h.printed).toEqual(["keys from the environment; data from data.alpaca.markets", "upstream: iex bars answered HTTP 401: the keys were rejected (keys from the environment); no report written"]);
     expect(h.written()).toEqual([]);
   });
 
@@ -712,12 +716,12 @@ describe("the runner", () => {
   it("a failed report write: exit 9, one line, no file and no temporary file left", async () => {
     const h = harness({ iex: [ok(BARS)], sip: [ok(BARS)], site: [] }, { failWrite: (p) => p.includes(".txt") });
     expect(await main(ARGV, h.deps)).toBe(EXIT.write);
-    expect(h.printed).toEqual(["keys from the environment", "write failed: ENOSPC; nothing was left behind"]);
+    expect(h.printed).toEqual(["keys from the environment; data from data.alpaca.markets", "write failed: ENOSPC; nothing new was left behind and any earlier report is as it was"]);
     expect(h.written()).toEqual([]);
   });
 
   it("a failed summary append: exit 9, the new report files removed, the old summary untouched", async () => {
-    const h = harness({ iex: [ok(BARS)], sip: [ok(BARS)], site: [] }, { failRename: (p) => p.endsWith("summary.jsonl") });
+    const h = harness({ iex: [ok(BARS)], sip: [ok(BARS)], site: [] }, { failRename: (from, to) => to.endsWith("summary.jsonl") && from.endsWith(".tmp") });
     h.files.set("/out/summary.jsonl", `${row("2026-10-09")}\n`);
     expect(await main(ARGV, h.deps)).toBe(EXIT.write);
     expect(h.written()).toEqual(["/out/summary.jsonl"]);
@@ -809,7 +813,7 @@ describe("the keys' source", () => {
     h.files.set("/x.env", FILE);
     expect(await main([...ARGV, "--env-file", "/x.env"], h.deps)).toBe(EXIT.ok);
     expect(h.headersSeen.every((x) => x["APCA-API-KEY-ID"] === "FILE-ID" && x["APCA-API-SECRET-KEY"] === "FILE-SECRET")).toBe(true);
-    expect(h.printed[0]).toBe("keys from the env file");
+    expect(h.printed[0]).toBe("keys from the env file; data from data.alpaca.markets");
     expect((JSON.parse(h.files.get("/out/2026-10-12.json")!) as SessionReport).keys).toBe("env-file");
     const all = [...h.printed, ...h.written().map((k) => h.files.get(k)!)].join("\n");
     for (const v of ["FILE-ID", "FILE-SECRET", "DEAD-ID", "DEAD-SECRET"]) expect(all).not.toContain(v);
@@ -869,6 +873,8 @@ describe("the plan: every request names its feed, SIP's rate limit is checked", 
   });
 });
 
+const recheckFile = (files: Map<string, string>) => [...files].find(([k]) => /^\/out\/2026-10-12\.recheck-[0-9T-]+Z\.json$/.test(k))?.[1];
+
 describe("the recheck", () => {
   async function reported() {
     const h = harness({ iex: [ok(BARS)], sip: [ok(BARS)], site: [] });
@@ -882,7 +888,7 @@ describe("the recheck", () => {
     for (const [k, v] of first.files) h.files.set(k, v);
     const before = new Map(h.files);
     expect(await main(["--recheck", ...ARGV], h.deps)).toBe(EXIT.ok);
-    const r = JSON.parse(h.files.get("/out/2026-10-12.recheck.json")!);
+    const r = JSON.parse(recheckFile(h.files)!);
     expect(r).toMatchObject({ kind: "feed-agreement-recheck", units: FULL.live * 6, iex_changed: 0, sip_changed: 0, set_changed: 0 });
     for (const k of ["/out/2026-10-12.json", "/out/2026-10-12.txt", "/out/summary.jsonl"]) expect(h.files.get(k)).toBe(before.get(k));
     expect(h.printed.join("\n")).toContain("changed word: IEX 0, SIP 0");
@@ -896,7 +902,7 @@ describe("the recheck", () => {
     const h = harness({ iex: [ok(BARS)], sip: [ok(sip)], site: [] });
     for (const [k, v] of first.files) h.files.set(k, v);
     expect(await main(["--recheck", ...ARGV], h.deps)).toBe(EXIT.ok);
-    const r = JSON.parse(h.files.get("/out/2026-10-12.recheck.json")!);
+    const r = JSON.parse(recheckFile(h.files)!);
     expect(r.iex_changed).toBe(0);
     expect(r.sip_changed).toBeGreaterThanOrEqual(2);
     expect(r.set_changed).toBe(0); // IEX still has the bar: the unit stays comparable
@@ -917,6 +923,227 @@ describe("the recheck", () => {
     h.files.set("/out/2026-10-12.json", JSON.stringify({ ...stored, engine: "e-000000000000" }));
     expect(await main(["--recheck", ...ARGV], h.deps)).toBe(EXIT.refused);
     expect(h.printed.at(-1)).toMatch(/^refused: the stored report is under engine e-000000000000/);
-    expect(h.files.has("/out/2026-10-12.recheck.json")).toBe(false);
+    expect(recheckFile(h.files)).toBeUndefined();
+  });
+});
+
+// ---- revision 3: facts beside the reading, and the tool's safety ----------------------------------------------------
+const at = (hhmm: string) => SLOTS.findIndex((end) => nyHhmm(end) === hhmm);
+
+describe("facts beside the reading (revision 3)", () => {
+  it("a sticky difference is one run; excluded units neither break nor extend it", () => {
+    const k = `${SYMS[0]}|call`;
+    // SIP reads plan_off from 11:24 to 11:28, the lunch block is clock-fixed, and again from 13:00 to 13:02
+    const over: Record<number, Partial<Record<string, Word>>> = {};
+    for (const t of ["1124", "1126", "1128", "1300", "1302"]) over[at(t)] = { [k]: "plan_off" };
+    over[at("1124")] = { [k]: "missed" }; // the onset pair differs from the most common one
+    const r = cmp(evals("watch"), evals("watch", over));
+    const f = r.facts!;
+    expect(f.disagreement_runs).toBe(1);
+    expect(f.longest_run).toBe(5);
+    expect(f.sides_with_disagreement).toBe(1);
+    expect(f.runs).toEqual([{ symbol: SYMS[0], side: "call", onset: "1124", onset_pair: "watch|missed", length: 5, dominant_pair: "watch|plan_off" }]);
+    // a matching comparable unit between two differences makes two runs
+    const two = cmp(evals("watch"), evals("watch", { [AT]: { [k]: "get_ready" }, [AT + 2]: { [k]: "get_ready" } }));
+    expect(two.facts!.disagreement_runs).toBe(2);
+    expect(two.facts!.longest_run).toBe(1);
+    expect(reportText(two)).toContain(`runs (name side onset: onset pair, length, most common pair):\n  ${SYMS[0]} call ${nyHhmm(SLOTS[AT]!)}: watch / get_ready, 1, watch / get_ready`);
+  });
+
+  it("every run is listed in the table, past the 40-line cap on single units", () => {
+    const over: Record<number, Partial<Record<string, Word>>> = {};
+    const free = SLOTS.map((end, i) => i).filter((i) => i >= LIVE_FROM && !GATED(SLOTS[i]!));
+    for (let n = 0; n < 50; n++) over[free[2 * n]!] = { [`${SYMS[1]}|put`]: "get_ready" };
+    const r = cmp(evals("watch"), evals("watch", over));
+    const text = reportText(r);
+    expect(r.facts!.disagreement_runs).toBeGreaterThan(40);
+    expect(text.split("\n").filter((l) => /^  \S+ put \d{4}: watch \/ get_ready, 1,/.test(l))).toHaveLength(r.facts!.disagreement_runs);
+    expect(text).toContain("more in the JSON report");
+  });
+
+  it("splits disagreements by bar and counts the lacked-but-matched units", () => {
+    const k0 = SYMS[0]!;
+    // SIP lacks k0's bar at AT: SIP reads paused (a disagreement); IEX lacks SYMS[1]'s bar at AT+1 and both read none
+    const iex = evals("watch", { [AT + 1]: { [`${SYMS[1]}|call`]: "none", [`${SYMS[1]}|put`]: "none" } });
+    const sip = evals("watch", { [AT]: { [`${k0}|call`]: "paused", [`${k0}|put`]: "paused" }, [AT + 1]: { [`${SYMS[1]}|call`]: "none", [`${SYMS[1]}|put`]: "none" } });
+    const r = cmp(iex, sip, { iex: fullBars({ [SYMS[1]!]: [SLOTS[AT + 1]!] }), sip: fullBars({ [k0]: [SLOTS[AT]!] }) });
+    expect(r.facts).toMatchObject({ disagree_one_lacked: 2, disagree_both_had: 0, lacked_but_matched: 2 });
+    expect(1 - r.units.identical / r.units.comparable).toBeGreaterThanOrEqual((r.units.iex_lacks + r.units.sip_lacks - r.facts!.lacked_but_matched!) / r.units.comparable);
+  });
+
+  it("a paused inside an enter-zone run is a re-entry, reported; the event rule is unchanged", () => {
+    const k = `${SYMS[2]}|call`;
+    const iex = evals("watch", { [AT]: { [k]: "enter_zone" }, [AT + 1]: { [k]: "enter_zone" }, [AT + 2]: { [k]: "paused" }, [AT + 3]: { [k]: "enter_zone" } });
+    const sip = evals("watch", enterAt(SYMS[2]!, AT, 4));
+    const r = cmp(iex, sip);
+    expect(r.events).toMatchObject({ iex: 2, sip: 1, matched: 1, iex_only: 1 });
+    expect(r.facts!.reentries_after_no_state).toEqual({ iex: 1, sip: 0 });
+  });
+
+  it("prints the offsets in the order -1, 0, +1", () => {
+    expect(offsetsText({ "0": 3, "1": 2, "-1": 1 })).toBe("-1: 1, 0: 3, +1: 2");
+    const r = cmp(evals("watch", enterAt(SYMS[0]!, AT)), evals("watch", enterAt(SYMS[0]!, AT + 1)));
+    expect(reportText(r)).toContain("-1: 0, 0: 0, +1: 1");
+  });
+
+  it("a version-2 row and report written before this revision are still read and counted, the runs computed offline", async () => {
+    const report = feedAgreement(E, S, { iex: clone(BARS), sip: (() => {
+      const x = clone(BARS);
+      x[SYMS[0]!] = x[SYMS[0]!]!.filter((b) => b.end !== ny(S, "10:30:00"));
+      return x;
+    })() });
+    const old = { ...report } as Partial<SessionReport>;
+    delete old.facts;
+    delete old.lacks;
+    delete old.edition_sha256;
+    const row = { ...summaryRow(report, 0) } as Partial<SummaryRow>;
+    delete row.disagreement_runs;
+    delete row.longest_run;
+    const h = harness({ iex: NO, sip: NO, site: [] });
+    h.files.set("/out/summary.jsonl", `${JSON.stringify(row)}\n`);
+    h.files.set(`/out/${S}.json`, JSON.stringify(old));
+    expect(await main(["--summary"], h.deps)).toBe(EXIT.ok);
+    const text = h.printed.join("\n");
+    const offline = factsOf(old as SessionReport);
+    expect(offline.disagreement_runs).toBe(report.facts!.disagreement_runs);
+    expect(offline.disagree_one_lacked).toBeNull(); // a unit lacked a bar, and the old report has no per-unit lacks
+    expect(text).toContain(`1 session (5 needed): ${S}`);
+    expect(text).toContain(`disagreement runs ${offline.disagreement_runs} · longest ${offline.longest_run} (context, not part of the reading) · computed from the stored report for ${S}`);
+    expect(readSummary([JSON.stringify(row)]).labels[0]!.runs.not_recorded).toEqual([S]);
+    expect(h.urls).toEqual([]);
+  });
+});
+
+describe("the tool's safety (revision 3)", () => {
+  it("a failed re-run over an existing report leaves the earlier files and the summary byte-for-byte as they were", async () => {
+    const first = harness({ iex: [ok(BARS)], sip: [ok(BARS)], site: [] });
+    expect(await main(ARGV, first.deps)).toBe(EXIT.ok);
+    for (const failOn of [".json", ".txt", "summary.jsonl"]) {
+      const sip = clone(BARS);
+      for (const b of sip[SYMS[1]!]!) b.c += 0.37;
+      const h = harness({ iex: [ok(BARS)], sip: [ok(sip)], site: [] }, { now: ny(S, "19:00:00"), failRename: (from, to) => from.endsWith(".tmp") && to.endsWith(failOn) });
+      for (const [k, v] of first.files) h.files.set(k, v);
+      expect(await main(ARGV, h.deps), failOn).toBe(EXIT.write);
+      expect(h.written(), failOn).toEqual(first.written());
+      for (const k of first.written()) expect(h.files.get(k), `${failOn} ${k}`).toBe(first.files.get(k));
+    }
+  });
+
+  it("an unreadable summary (EACCES) refuses with exit 9 before any call, writes nothing, never replaces the history", async () => {
+    const h = harness({ iex: [ok(BARS)], sip: [ok(BARS)], site: [] });
+    const read = h.deps.readText;
+    h.deps.readText = async (p) => {
+      if (p.endsWith("summary.jsonl")) throw Object.assign(new Error("denied"), { code: "EACCES" });
+      return read(p);
+    };
+    expect(await main(ARGV, h.deps)).toBe(EXIT.write);
+    expect(h.printed.at(-1)).toBe("write failed: /out/summary.jsonl exists but cannot be read (EACCES); nothing written, the history is not replaced");
+    expect(h.urls).toEqual([]);
+    expect(h.written()).toEqual([]);
+    expect(await main(["--summary"], h.deps)).toBe(EXIT.write);
+  });
+
+  it("every Alpaca request refuses redirects; a redirect answer stops the run", async () => {
+    const h = harness({ iex: [], sip: [], site: [] });
+    const inits: RequestInit[] = [];
+    h.deps.fetchImpl = (async (_url: string, init: RequestInit) => {
+      inits.push(init);
+      if (init.redirect === "error") throw new TypeError("fetch failed: redirect mode is set to error");
+      return new Response("", { status: 302, headers: { location: "https://elsewhere.test/" } });
+    }) as unknown as typeof fetch;
+    expect(await main(ARGV, h.deps)).toBe(EXIT.upstream);
+    expect(inits.length).toBeGreaterThan(0);
+    expect(inits.every((i) => i.redirect === "error")).toBe(true);
+    expect(h.written()).toEqual([]);
+    const ok2 = harness({ iex: [ok(BARS)], sip: [ok(BARS)], site: [] });
+    const seen: RequestInit[] = [];
+    const inner = ok2.deps.fetchImpl;
+    ok2.deps.fetchImpl = (async (u: string, i: RequestInit) => {
+      seen.push(i);
+      return inner(u, i);
+    }) as unknown as typeof fetch;
+    await main(ARGV, ok2.deps);
+    expect(seen.every((i) => i.redirect === "error")).toBe(true);
+  });
+
+  it("a foreign or plain-http ALPACA_DATA_URL is refused with exit 12 before any call; the host used is printed", async () => {
+    for (const url of ["https://evil.example.com", "http://data.alpaca.markets", "https://data.alpaca.markets.evil.com", "https://user:pw@data.alpaca.markets"]) {
+      const h = harness({ iex: [], sip: [], site: [] }, { env: { APCA_API_KEY_ID: "a", APCA_API_SECRET_KEY: "b", ALPACA_DATA_URL: url } });
+      expect(await main(ARGV, h.deps), url).toBe(EXIT.dataUrl);
+      expect(h.urls, url).toEqual([]);
+    }
+    expect(alpacaHost("https://data.sandbox.alpaca.markets")).toBe("data.sandbox.alpaca.markets");
+    expect(alpacaHost("https://data.alpaca.markets")).toBe("data.alpaca.markets");
+    const h = harness({ iex: [ok(BARS)], sip: [ok(BARS)], site: [] });
+    await main(ARGV, h.deps);
+    expect(h.printed[0]).toBe("keys from the environment; data from data.alpaca.markets");
+  });
+
+  it("a day outside the calendar's range gets its own line", async () => {
+    const h = harness({ iex: [], sip: [], site: [] });
+    expect(await main(["--day", "2025-12-31", "--edition", "/ed.json"], h.deps)).toBe(EXIT.refused);
+    expect(h.printed).toEqual(["refused: 2025-12-31 is outside the exchange calendar's range (2026-01-01 to 2027-12-31)"]);
+  });
+
+  it("a half day is accepted from 13:20 and refused at 13:19", async () => {
+    const H = "2026-11-27";
+    const hb: Record<string, Bar2[]> = Object.fromEntries(SYMS.map((s, i) => [s, sessionBars(pricePath(s, i + 1, Date.parse(`${H}T14:30:00Z`), 210))]));
+    const late = harness({ iex: [ok(hb)], sip: [ok(hb)], site: [] }, { now: ny(H, "13:20:00", "-05:00"), edition: on(H, true) });
+    expect(await main(["--day", H, "--edition", "/ed.json"], late.deps)).toBe(EXIT.ok);
+    const r = JSON.parse(late.files.get(`/out/${H}.json`)!) as SessionReport;
+    expect(r.units.clock_fixed).toBe(HALF.fixed * 6);
+    const early = harness({ iex: [], sip: [], site: [] }, { now: ny(H, "13:19:00", "-05:00"), edition: on(H, true) });
+    expect(await main(["--day", H, "--edition", "/ed.json"], early.deps)).toBe(EXIT.refused);
+  });
+
+  it("an env file with export, CRLF and quotes gives its pair", async () => {
+    const h = harness({ iex: NO, sip: NO, site: [] }, { env: { APCA_API_KEY_ID: "DEAD", APCA_API_SECRET_KEY: "DEAD" } });
+    h.files.set("/w.env", 'export APCA_API_KEY_ID="Q-ID"\r\nexport APCA_API_SECRET_KEY=\'Q SECRET\'\r\n');
+    expect(await resolveKeys(h.deps, "/w.env")).toEqual({ keys: { id: "Q-ID", secret: "Q SECRET" }, source: "env-file" });
+  });
+});
+
+describe("the recheck's edition and engine checks (revision 3)", () => {
+  async function reported() {
+    const h = harness({ iex: [ok(BARS)], sip: [ok(BARS)], site: [] });
+    expect(await main(ARGV, h.deps)).toBe(EXIT.ok);
+    return h;
+  }
+
+  it("records the edition's hash; refuses an edition file whose hash differs, before any call", async () => {
+    const first = await reported();
+    const stored = JSON.parse(first.files.get("/out/2026-10-12.json")!) as SessionReport;
+    expect(stored.edition_sha256).toBe(editionHash(first.files.get("/ed.json")!));
+    const h = harness({ iex: [ok(BARS)], sip: [ok(BARS)], site: [] }, { edition: { ...E, as_of: "2026-10-12T12:00:00Z" } });
+    for (const [k, v] of first.files) if (k.startsWith("/out")) h.files.set(k, v);
+    expect(await main(["--recheck", ...ARGV], h.deps)).toBe(EXIT.refused);
+    expect(h.printed.at(-1)).toMatch(/SHA-256 differs/);
+    expect(h.urls).toEqual([]);
+  });
+
+  it("a stored report without a hash compares build time and names, and says the hash was not recorded", async () => {
+    const first = await reported();
+    const stored = JSON.parse(first.files.get("/out/2026-10-12.json")!) as Partial<SessionReport>;
+    delete stored.edition_sha256;
+    const h = harness({ iex: [ok(BARS)], sip: [ok(BARS)], site: [] }, { now: ny(S, "18:00:00") + 86_400_000 });
+    h.files.set("/out/2026-10-12.json", JSON.stringify(stored));
+    expect(await main(["--recheck", ...ARGV], h.deps)).toBe(EXIT.ok);
+    expect(JSON.parse(recheckFile(h.files)!).edition_check).toBe("edition hash not recorded: build time and focus names match");
+    expect(h.printed.join("\n")).toContain("edition hash not recorded");
+  });
+
+  it("the engine label is compared before any fetch; a second recheck never overwrites the first", async () => {
+    const first = await reported();
+    const stored = JSON.parse(first.files.get("/out/2026-10-12.json")!);
+    const bad = harness({ iex: [ok(BARS)], sip: [ok(BARS)], site: [] });
+    bad.files.set("/out/2026-10-12.json", JSON.stringify({ ...stored, engine: "e-000000000000" }));
+    expect(await main(["--recheck", ...ARGV], bad.deps)).toBe(EXIT.refused);
+    expect(bad.urls).toEqual([]);
+    const h = harness({ iex: [ok(BARS), ok(BARS)], sip: [ok(BARS), ok(BARS)], site: [] });
+    for (const [k, v] of first.files) if (k.startsWith("/out")) h.files.set(k, v);
+    expect(await main(["--recheck", ...ARGV], h.deps)).toBe(EXIT.ok);
+    h.deps.clock.sleep(60_000);
+    expect(await main(["--recheck", ...ARGV], h.deps)).toBe(EXIT.ok);
+    expect([...h.files.keys()].filter((k) => k.includes(".recheck-"))).toHaveLength(2);
   });
 });
