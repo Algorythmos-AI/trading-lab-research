@@ -876,9 +876,33 @@
    "quality": "derived"
   },
   {
+   "date": "2027-01-08",
+   "time_et": "08:30",
+   "code": "nfp",
+   "quality": "exact"
+  },
+  {
+   "date": "2027-01-13",
+   "time_et": "08:30",
+   "code": "cpi",
+   "quality": "exact"
+  },
+  {
    "date": "2027-01-27",
    "time_et": "14:00",
    "code": "fomc_decision",
+   "quality": "exact"
+  },
+  {
+   "date": "2027-02-05",
+   "time_et": "08:30",
+   "code": "nfp",
+   "quality": "exact"
+  },
+  {
+   "date": "2027-02-11",
+   "time_et": "08:30",
+   "code": "cpi",
    "quality": "exact"
   },
   {
@@ -886,6 +910,18 @@
    "time_et": "14:00",
    "code": "fomc_minutes",
    "quality": "derived"
+  },
+  {
+   "date": "2027-03-05",
+   "time_et": "08:30",
+   "code": "nfp",
+   "quality": "exact"
+  },
+  {
+   "date": "2027-03-10",
+   "time_et": "08:30",
+   "code": "cpi",
+   "quality": "exact"
   },
   {
    "date": "2027-03-17",
@@ -900,15 +936,39 @@
    "quality": "exact"
   },
   {
+   "date": "2027-04-02",
+   "time_et": "08:30",
+   "code": "nfp",
+   "quality": "exact"
+  },
+  {
    "date": "2027-04-07",
    "time_et": "14:00",
    "code": "fomc_minutes",
    "quality": "derived"
   },
   {
+   "date": "2027-04-13",
+   "time_et": "08:30",
+   "code": "cpi",
+   "quality": "exact"
+  },
+  {
    "date": "2027-04-28",
    "time_et": "14:00",
    "code": "fomc_decision",
+   "quality": "exact"
+  },
+  {
+   "date": "2027-05-07",
+   "time_et": "08:30",
+   "code": "nfp",
+   "quality": "exact"
+  },
+  {
+   "date": "2027-05-12",
+   "time_et": "08:30",
+   "code": "cpi",
    "quality": "exact"
   },
   {
@@ -918,9 +978,21 @@
    "quality": "derived"
   },
   {
+   "date": "2027-06-04",
+   "time_et": "08:30",
+   "code": "nfp",
+   "quality": "exact"
+  },
+  {
    "date": "2027-06-09",
    "time_et": "14:00",
    "code": "fomc_decision",
+   "quality": "exact"
+  },
+  {
+   "date": "2027-06-10",
+   "time_et": "08:30",
+   "code": "cpi",
    "quality": "exact"
   },
   {
@@ -936,9 +1008,33 @@
    "quality": "derived"
   },
   {
+   "date": "2027-07-02",
+   "time_et": "08:30",
+   "code": "nfp",
+   "quality": "exact"
+  },
+  {
+   "date": "2027-07-14",
+   "time_et": "08:30",
+   "code": "cpi",
+   "quality": "exact"
+  },
+  {
    "date": "2027-07-28",
    "time_et": "14:00",
    "code": "fomc_decision",
+   "quality": "exact"
+  },
+  {
+   "date": "2027-08-06",
+   "time_et": "08:30",
+   "code": "nfp",
+   "quality": "exact"
+  },
+  {
+   "date": "2027-08-11",
+   "time_et": "08:30",
+   "code": "cpi",
    "quality": "exact"
   },
   {
@@ -946,6 +1042,18 @@
    "time_et": "14:00",
    "code": "fomc_minutes",
    "quality": "derived"
+  },
+  {
+   "date": "2027-09-03",
+   "time_et": "08:30",
+   "code": "nfp",
+   "quality": "exact"
+  },
+  {
+   "date": "2027-09-14",
+   "time_et": "08:30",
+   "code": "cpi",
+   "quality": "exact"
   },
   {
    "date": "2027-09-15",
@@ -966,9 +1074,33 @@
    "quality": "derived"
   },
   {
+   "date": "2027-10-08",
+   "time_et": "08:30",
+   "code": "nfp",
+   "quality": "exact"
+  },
+  {
+   "date": "2027-10-14",
+   "time_et": "08:30",
+   "code": "cpi",
+   "quality": "exact"
+  },
+  {
    "date": "2027-10-27",
    "time_et": "14:00",
    "code": "fomc_decision",
+   "quality": "exact"
+  },
+  {
+   "date": "2027-11-05",
+   "time_et": "08:30",
+   "code": "nfp",
+   "quality": "exact"
+  },
+  {
+   "date": "2027-11-10",
+   "time_et": "08:30",
+   "code": "cpi",
    "quality": "exact"
   },
   {
@@ -978,9 +1110,21 @@
    "quality": "derived"
   },
   {
+   "date": "2027-12-03",
+   "time_et": "08:30",
+   "code": "nfp",
+   "quality": "exact"
+  },
+  {
    "date": "2027-12-08",
    "time_et": "14:00",
    "code": "fomc_decision",
+   "quality": "exact"
+  },
+  {
+   "date": "2027-12-10",
+   "time_et": "08:30",
+   "code": "cpi",
    "quality": "exact"
   },
   {
@@ -1040,10 +1184,22 @@
    "quality": "confirmed"
   },
   {
+   "date": "2026-11-03",
+   "symbol": "AMD",
+   "when": "amc",
+   "quality": "confirmed"
+  },
+  {
    "date": "2026-11-17",
    "symbol": "NVDA",
    "when": "amc",
-   "quality": "expected"
+   "quality": "confirmed"
+  },
+  {
+   "date": "2026-12-09",
+   "symbol": "AVGO",
+   "when": "amc",
+   "quality": "confirmed"
   }
  ],
  "options_names": [

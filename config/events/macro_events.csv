@@ -267,23 +267,47 @@ date,time_et,type,severity,policy,source,quality
 2026-12-10,08:30,cpi,high,reduce,bls.gov/schedule/news_release,exact
 2026-12-18,16:00,quad_witching,medium,reduce,3rd Friday Mar/Jun/Sep/Dec,exact
 2026-12-30,14:00,fomc_minutes,medium,blackout_window,decision+21d (Fed practice),derived
+2027-01-08,08:30,nfp,high,reduce,bls.gov/schedule/news_release,exact
+2027-01-13,08:30,cpi,high,reduce,bls.gov/schedule/news_release,exact
 2027-01-27,14:00,fomc_decision,high,blackout_window,federalreserve.gov/monetarypolicy/fomccalendars.htm,exact
+2027-02-05,08:30,nfp,high,reduce,bls.gov/schedule/news_release,exact
+2027-02-11,08:30,cpi,high,reduce,bls.gov/schedule/news_release,exact
 2027-02-17,14:00,fomc_minutes,medium,blackout_window,decision+21d (Fed practice),derived
+2027-03-05,08:30,nfp,high,reduce,bls.gov/schedule/news_release,exact
+2027-03-10,08:30,cpi,high,reduce,bls.gov/schedule/news_release,exact
 2027-03-17,14:00,fomc_decision,high,blackout_window,federalreserve.gov/monetarypolicy/fomccalendars.htm,exact
 2027-03-19,16:00,quad_witching,medium,reduce,3rd Friday Mar/Jun/Sep/Dec,exact
+2027-04-02,08:30,nfp,high,reduce,bls.gov/schedule/news_release,exact
 2027-04-07,14:00,fomc_minutes,medium,blackout_window,decision+21d (Fed practice),derived
+2027-04-13,08:30,cpi,high,reduce,bls.gov/schedule/news_release,exact
 2027-04-28,14:00,fomc_decision,high,blackout_window,federalreserve.gov/monetarypolicy/fomccalendars.htm,exact
+2027-05-07,08:30,nfp,high,reduce,bls.gov/schedule/news_release,exact
+2027-05-12,08:30,cpi,high,reduce,bls.gov/schedule/news_release,exact
 2027-05-19,14:00,fomc_minutes,medium,blackout_window,decision+21d (Fed practice),derived
+2027-06-04,08:30,nfp,high,reduce,bls.gov/schedule/news_release,exact
 2027-06-09,14:00,fomc_decision,high,blackout_window,federalreserve.gov/monetarypolicy/fomccalendars.htm,exact
+2027-06-10,08:30,cpi,high,reduce,bls.gov/schedule/news_release,exact
 2027-06-18,16:00,quad_witching,medium,reduce,3rd Friday Mar/Jun/Sep/Dec,exact
 2027-06-30,14:00,fomc_minutes,medium,blackout_window,decision+21d (Fed practice),derived
+2027-07-02,08:30,nfp,high,reduce,bls.gov/schedule/news_release,exact
+2027-07-14,08:30,cpi,high,reduce,bls.gov/schedule/news_release,exact
 2027-07-28,14:00,fomc_decision,high,blackout_window,federalreserve.gov/monetarypolicy/fomccalendars.htm,exact
+2027-08-06,08:30,nfp,high,reduce,bls.gov/schedule/news_release,exact
+2027-08-11,08:30,cpi,high,reduce,bls.gov/schedule/news_release,exact
 2027-08-18,14:00,fomc_minutes,medium,blackout_window,decision+21d (Fed practice),derived
+2027-09-03,08:30,nfp,high,reduce,bls.gov/schedule/news_release,exact
+2027-09-14,08:30,cpi,high,reduce,bls.gov/schedule/news_release,exact
 2027-09-15,14:00,fomc_decision,high,blackout_window,federalreserve.gov/monetarypolicy/fomccalendars.htm,exact
 2027-09-17,16:00,quad_witching,medium,reduce,3rd Friday Mar/Jun/Sep/Dec,exact
 2027-10-06,14:00,fomc_minutes,medium,blackout_window,decision+21d (Fed practice),derived
+2027-10-08,08:30,nfp,high,reduce,bls.gov/schedule/news_release,exact
+2027-10-14,08:30,cpi,high,reduce,bls.gov/schedule/news_release,exact
 2027-10-27,14:00,fomc_decision,high,blackout_window,federalreserve.gov/monetarypolicy/fomccalendars.htm,exact
+2027-11-05,08:30,nfp,high,reduce,bls.gov/schedule/news_release,exact
+2027-11-10,08:30,cpi,high,reduce,bls.gov/schedule/news_release,exact
 2027-11-17,14:00,fomc_minutes,medium,blackout_window,decision+21d (Fed practice),derived
+2027-12-03,08:30,nfp,high,reduce,bls.gov/schedule/news_release,exact
 2027-12-08,14:00,fomc_decision,high,blackout_window,federalreserve.gov/monetarypolicy/fomccalendars.htm,exact
+2027-12-10,08:30,cpi,high,reduce,bls.gov/schedule/news_release,exact
 2027-12-17,16:00,quad_witching,medium,reduce,3rd Friday Mar/Jun/Sep/Dec,exact
 2027-12-29,14:00,fomc_minutes,medium,blackout_window,decision+21d (Fed practice),derived
