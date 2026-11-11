@@ -521,8 +521,8 @@ def test_the_budget_arithmetic_every_step_and_the_removal_draw_from_one_clock(mo
     assert evidence.run(today=dt.date(2026, 11, 13), alerts=a, vis_state=tmp_path / "v.json", budget=budget) == 0
     assert len(a.fired) == 1 and "timed out" in a.fired[0][2]
     assert clock.t <= evidence.BUDGET_S + evidence.REMOVE_MIN_S             # the removal had what was left, or 5 s
-    worst = evidence.BUDGET_S + evidence.REMOVE_MIN_S + evidence.ALERT_WORST_S
-    assert worst <= 420 < evidence.PARENT_TIMEOUT_S - 150
+    worst = evidence.BUDGET_S + evidence.REMOVE_MIN_S + 2 * evidence.ALERT_S
+    assert worst <= 440 < evidence.PARENT_TIMEOUT_S - 150
     assert granted[0] == 60.0 and all(g > 0 for g in granted)
 
 
@@ -539,3 +539,42 @@ def test_the_weekly_job_logs_a_hung_runs_output_with_the_token_redacted(monkeypa
     text = "\n".join(log.lines)
     assert "evidence stdout: repo visibility: private" in text and "evidence stderr: Traceback: stuck" in text
     assert "ghp-distinctive-token" not in text and "***" in text and len(a.fired) == 1
+
+
+TOKEN_FORMS = ["ghp_" + "A1b2" * 6, "github_pat_" + "11AB_" * 6, "https://x-access-token:sekritvalue@github.com/",
+               "Bearer abc.def.ghi"]
+SECRETS = ("A1b2A1b2", "11AB_11AB", "sekritvalue", "abc.def.ghi")
+
+
+@pytest.mark.parametrize("tok", TOKEN_FORMS)
+def test_tokens_are_redacted_on_every_path(monkeypatch, tmp_path, tok):
+    from wt.ops import jobs
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+    # evidence: a git error that echoes the remote (a header form cannot be part of a remote, so it is fed directly)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
+    remote = tok.replace("/", "_") if " " not in tok else "plain"
+    with pytest.raises(RuntimeError) as e:
+        evidence._git("push", f"{tmp_path}/no-such-{remote}.git", "main", cwd=repo)
+    assert not any(s in str(e.value) for s in SECRETS)
+    assert not any(s in evidence._redact(f"remote: {tok}") for s in SECRETS)
+
+    class R:
+        def __init__(self, code, out, err):
+            self.returncode, self.stdout, self.stderr = code, out, err
+    # the weekly job: a run that exits non-zero, then one that hangs
+    for result in (R(1, f"evidence: pushing with {tok}", f"Traceback: {tok}"), R(0, f"fine {tok}", "")):
+        log, a = _Log(), _Daily()
+        monkeypatch.setattr(jobs.subprocess, "run", lambda *x, r=result, **k: r)
+        jobs.publish_evidence(tmp_path, log, a)
+        text = "\n".join(log.lines)
+        assert not any(s in text for s in SECRETS) and "***" in text
+
+    def hang(*x, **k):
+        raise subprocess.TimeoutExpired(["python"], 600, output=f"out {tok}".encode(), stderr=f"err {tok}")
+    monkeypatch.setattr(jobs.subprocess, "run", hang)
+    log, a = _Log(), _Daily()
+    jobs.publish_evidence(tmp_path, log, a)
+    text = "\n".join(log.lines)
+    assert not any(s in text for s in SECRETS) and "***" in text

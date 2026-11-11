@@ -387,7 +387,7 @@ class Runner:
         except TransportError as e:
             self.off["broker"] = "broker unreachable at arm"
             # The detail goes to the job's log, never to the page (the topic is public).
-            print(f"broker unreachable at arm: {e.__class__.__name__}: {str(e)[:300]}", file=sys.stderr, flush=True)
+            pg.say(f"broker unreachable at arm: {e.__class__.__name__}: {str(e)[:300]}", err=True)
             self.page("broker", "Options clone: broker unreachable at arm",
                       f"{pg.exc_name(e)}; entries are off today. The clone's log has the detail.", 4)
             return False
@@ -714,7 +714,7 @@ class Runner:
         if p.state == "unresolved":
             self.page("lot-taken-by-hand", "Options clone: a lot was sold by hand",
                       "The account holds less of one name than the clone bought. Booked as unresolved; the clone "
-                      "journal's trade_closed record names it.", 4)
+                      "journal's trade_closed record and its plan file name it.", 4)
         if self.shadow is not None:
             self.arms_guard("control-closed", self.arms_control_closed, p)
         rop = p.return_on_premium(self.fee)

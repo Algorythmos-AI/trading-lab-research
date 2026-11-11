@@ -324,7 +324,7 @@ def test_the_checker_refuses_what_must_never_be_sent():
 
 
 @pytest.mark.parametrize(("fn", "good", "out"), [
-    (alerts.count, 3, "3"), (alerts.count, 3.0, "3"), (alerts.count, "12", "12"), (alerts.count, N, "?"),
+    (alerts.count, 3, "3"), (alerts.count, 3.0, "3"), (alerts.count, "12", "?"), (alerts.count, N, "?"),
     (alerts.count, True, "?"), (alerts.count, "1e9", "?"), (alerts.count, float("nan"), "?"),
     (alerts.sha, "0123abcd" * 5, "0123abcd"), (alerts.sha, T, "unknown"), (alerts.sha, "XYZ12345", "unknown"),
     (alerts.day, "2026-11-12", "2026-11-12"), (alerts.day, dt.date(2026, 11, 12), "2026-11-12"),
@@ -519,7 +519,8 @@ def test_a_page_outside_the_allowlist_is_still_sent_and_said_in_the_log(tmp_path
 
 
 # Every rewritten page points at where its removed detail is. Each row: (file, function, the page's title, the call
-# that writes the detail, which must come before the page in the same function). The session tests
+# that writes the detail, which must come earlier, on a branch that also holds the page). The routine's dry-run pages
+# are not here: they removed nothing (the scan's reason is a closed set and stays on the page). The session tests
 # (test_runner_session.py, test_options_clone_session.py) check the same at run time for the paper B and clone pages.
 RECORDS = [
     ("src/wt/live/runner_b.py", "_session.adopt_orphan", "Paper B adopted a position", 'log("adopted_orphan"'),
@@ -527,9 +528,9 @@ RECORDS = [
     ("src/wt/live/runner_b.py", "_session", "stopped by its stop rule", "log('stop_rule'"),
     ("src/wt/live/runner_b.py", "_session", "no primary lease", "refuse(f'primary lease not held"),
     ("src/wt/live/runner_b.py", "_session", "'Paper B is SHORT'", "log('short_position'"),
-    ("src/wt/live/runner_b.py", "_session", "NOT FLAT at the close", "log('END_OF_DAY_NOT_FLAT'"),
-    ("src/wt/live/runner_b.py", "_session", "SHORT at the close", "log('END_OF_DAY_NOT_FLAT'"),
-    ("src/wt/live/runner_o.py", "Runner.arm", "broker unreachable at arm", "print(f'broker unreachable at arm"),
+    ("src/wt/live/runner_b.py", "_session", "NOT FLAT at the close", "log('END_OF_DAY_NOT_FLAT', qty=qty, plan="),
+    ("src/wt/live/runner_b.py", "_session", "SHORT at the close", "log('END_OF_DAY_NOT_FLAT', qty=qty, short=True"),
+    ("src/wt/live/runner_o.py", "Runner.arm", "broker unreachable at arm", "pg.say(f'broker unreachable at arm"),
     ("src/wt/live/runner_o.py", "Runner.on_fill", "Options clone entered", "self.write('filled'"),
     ("src/wt/live/runner_o.py", "Runner.finish", "Options clone exited", "book(p"),
     ("src/wt/live/runner_o.py", "Runner.finish", "a lot was sold by hand", "book(p"),
@@ -539,12 +540,11 @@ RECORDS = [
     ("src/wt/ops/jobs.py", "run_job", "entries off, exits only", "log(f'preflight refused"),
     ("src/wt/ops/backup.py", "flag_chain", "title", "flag.write_text("),
     ("src/wt/ops/backup.py", "nightly", "Daily evidence anchor failed", "print(f'anchor: {why}')"),
-    ("src/wt/ops/deploy.py", "sync_ml", "ML environment did not sync", "print(f'ML environment did not sync"),
+    ("src/wt/ops/deploy.py", "sync_ml", "ML environment did not sync", "say(f'ML environment did not sync"),
     ("src/wt/ops/deploy.py", "auto.wait", "", "print(f'auto deploy: {target[:12]} waits: {reason}')"),
-    ("src/wt/ops/evidence.py", "run", "ALERT_PREFIX + word(e.step", "print(f'evidence {week}: stopped at"),
+    ("src/wt/ops/evidence.py", "run", "ALERT_PREFIX + word(e.step", "say(f'evidence {week}: stopped at"),
     ("src/wt/options/live.py", "announce", "a probation rule triggered", "print(f'rule triggered:"),
-    ("scripts/forward_test.py", "Context.ensure_pool", "the scan looks thin", "print(f'{d}: the scan looks thin"),
-    ("scripts/premarket_routine.py", "run", "the scan had no data", "print(f'{d} {hhmm} {name}: the scan had no data"),
+    ("scripts/forward_test.py", "Context.ensure_pool", "the scan looks thin", "say(f'{d}: the scan looks thin"),
 ]
 
 
@@ -565,16 +565,130 @@ def _functions(tree):
 
 
 
-@pytest.mark.parametrize(("rel", "func", "title", "record"), RECORDS, ids=[f"{r[0]}::{r[1]}::{r[2]}" for r in RECORDS])
-def test_the_detail_a_page_leaves_out_is_written_before_it(rel, func, title, record):
-    fn = _functions(ast.parse((ROOT / rel).read_text()))[func]
+_BLOCKS = (ast.If, ast.Try, ast.ExceptHandler, ast.For, ast.AsyncFor, ast.While, ast.With, ast.AsyncWith,
+           ast.FunctionDef, ast.AsyncFunctionDef)
+
+
+def _block_of(node: ast.AST, parents: dict[ast.AST, ast.AST]) -> list[ast.stmt]:
+    """The statement list `node` sits in, nearest first: the body of its if / elif / else / try / except / loop / with
+    branch, or of its function."""
+    child, up = node, parents.get(node)
+    while up is not None:
+        if isinstance(up, _BLOCKS):
+            for field in ("body", "orelse", "finalbody"):
+                stmts = getattr(up, field, None) or []
+                if child in stmts:
+                    return stmts
+        child, up = up, parents.get(up)
+    raise AssertionError("no enclosing block")
+
+
+def record_problem(source: str, func: str, title: str, record: str) -> str | None:
+    """Why the page with `title` in `func` is not preceded, on its own branch, by the call `record` (None: it is).
+    The write must come earlier and sit in a branch that also holds the page."""
+    fn = _functions(ast.parse(source))[func]
+    parents = {c: p for p in ast.walk(fn) for c in ast.iter_child_nodes(p)}
     calls = [n for n in ast.walk(fn) if isinstance(n, ast.Call)]
+
     def name(c):
         return c.func.attr if isinstance(c.func, ast.Attribute) else getattr(c.func, "id", "")
-    sinks = [c for c in calls if name(c) in {*alert_sites.SINKS, "page"} and title in ast.unparse(c)] if title else [c for c in calls if isinstance(c.func, ast.Name)
-                                                         and c.func.id == "_stuck"]
-    assert sinks, f"no page with {title!r} in {func}"
-    writes = [c for c in calls if ast.unparse(c).replace('"', "'").startswith(record.replace('"', "'"))]
-    assert writes, f"{func} writes no {record!r}"
-    for s in sinks:
-        assert any(w.lineno <= s.lineno for w in writes), f"{func}: {record!r} must come before the page at {s.lineno}"
+    if title:
+        sinks = [c for c in calls if name(c) in {*alert_sites.SINKS, "page"} and title in ast.unparse(c)]
+    else:
+        sinks = [c for c in calls if name(c) == "_stuck"]
+    if not sinks:
+        return f"no page with {title!r} in {func}"
+    want = record.replace('"', "'")
+    writes = [c for c in calls if ast.unparse(c).replace('"', "'").startswith(want)]
+    if not writes:
+        return f"{func} writes no {record!r}"
+    for sink in sinks:
+        ok = False
+        for w in writes:
+            block = _block_of(w, parents)
+            inside = any(sink is n for st in block for n in ast.walk(st))
+            if inside and w.lineno <= sink.lineno:
+                ok = True
+        if not ok:
+            return f"{func}: no {record!r} before the page at line {sink.lineno} on its branch"
+    return None
+
+
+@pytest.mark.parametrize(("rel", "func", "title", "record"), RECORDS, ids=[f"{r[0]}::{r[1]}::{r[2]}" for r in RECORDS])
+def test_the_detail_a_page_leaves_out_is_written_before_it(rel, func, title, record):
+    assert record_problem((ROOT / rel).read_text(), func, title, record) is None
+
+
+def test_the_record_check_is_branch_aware():
+    """Removing one branch's record must fail the check, even though the other branch writes the same event."""
+    src = (ROOT / "src" / "wt" / "live" / "runner_b.py").read_text()
+    row = next(r for r in RECORDS if r[2] == "SHORT at the close")
+    assert record_problem(src, row[1], row[2], row[3]) is None
+    cut = src.replace('log("END_OF_DAY_NOT_FLAT", qty=qty, short=True, cancelled=cancelled)', "pass", 1)
+    assert cut != src
+    assert record_problem(cut, row[1], row[2], row[3]) is not None
+    # the other at-close write (the long one) is on another branch and does not count for this page
+    loose = (row[0], row[1], row[2], "log('END_OF_DAY_NOT_FLAT'")
+    assert record_problem(cut, loose[1], loose[2], loose[3]) is not None
+    toy = ("def f(x, a, log):\n    if x:\n        log('rec')\n    else:\n        a.fire('k', 'T page', 'm')\n")
+    assert record_problem(toy, "f", "T page", "log('rec'") is not None
+    toy_ok = ("def f(x, a, log):\n    log('rec')\n    if x:\n        a.fire('k', 'T page', 'm')\n")
+    assert record_problem(toy_ok, "f", "T page", "log('rec'") is None
+
+
+def test_say_never_raises(monkeypatch):
+    import sys
+
+    class Broken:
+        def write(self, *a):
+            raise BrokenPipeError(32, "EPIPE")
+
+        def flush(self):
+            raise ValueError("closed")
+    monkeypatch.setattr(sys, "stdout", Broken())
+    monkeypatch.setattr(sys, "stderr", Broken())
+    alerts.say("x")
+    alerts.say("x", err=True)
+
+
+def test_no_negative_zero_and_no_digit_strings():
+    assert alerts.ratio(-0.0, "+.2f") == "+0.00" and alerts.ratio(-0.001, "+.0%") == "+0%"
+    assert alerts.ratio(-0.04, ".0f") == "0" and alerts.ratio(-1.0, "+.2f") == "-1.00"
+    assert alerts.count("3") == "?" and alerts.count(" 3") == "?" and alerts.count(3) == "3"
+    from wt.ops import deploy
+    assert deploy._digits("12") == 12 and deploy._digits(T) is None and deploy._digits(12) is None
+
+
+TOKENS = ["ghp_" + "A1b2" * 6, "gho_" + "x" * 24, "ghs_" + "y" * 30, "github_pat_" + "11AB_" * 6,
+          "https://x-access-token:sekritvalue@github.com/o/r.git", "Authorization: Bearer abc.def.ghi"]
+
+
+@pytest.mark.parametrize("tok", TOKENS)
+def test_redact_takes_every_token_form(tok, monkeypatch):
+    monkeypatch.setenv("GH_TOKEN", "env-exact-value-123")
+    out = alerts.redact(f"fatal: {tok} and env-exact-value-123")
+    assert "env-exact-value-123" not in out and "***" in out
+    for secret in ("A1b2A1b2", "xxxxxxxx", "yyyyyyyy", "11AB_11AB", "sekritvalue", "abc.def.ghi"):
+        assert secret not in out
+
+
+def test_a_bounded_sender_spools_once_its_time_is_up(tmp_path, monkeypatch):
+    """The evidence run's Alerts: a slow ntfy cannot hold it past send_until; what is left waits in the spool."""
+    t = {"now": 0.0}
+    calls = []
+
+    def slow(msg, topic, server, timeout=5.0):
+        calls.append(timeout)
+        t["now"] += timeout                   # every send takes its whole timeout
+        return False
+    monkeypatch.setattr(alerts, "_send", slow)
+    a = alerts.Alerts(root=tmp_path, topic="t", send_until=12.0, clock=lambda: t["now"])
+    spool = tmp_path / "spool"
+    spool.mkdir()
+    for i in range(50):                        # a backed-up spool
+        (spool / f"{i:04d}-x.json").write_text(json.dumps({"id": str(i), "at": alerts._now().isoformat(),
+                                                             "title": "t", "message": "m", "priority": 4}))
+    for _ in range(5):
+        a.notify("Weekly evidence not published", "Week 2026-W46: the push step failed.")
+    assert t["now"] <= 12.0 + 1.0 and all(c <= 5.0 for c in calls)
+    assert len(list(spool.glob("*.json"))) == 55                    # nothing lost: spooled for the next job

@@ -683,3 +683,25 @@ def test_broker_unreachable_at_arm_writes_its_detail_to_the_log_before_the_page(
     (key, msg, log_then), = [s for s in seen if s[0] == "options-clone:broker"]
     assert "broker unreachable at arm: TransportError: paper-api answered 503" in log_then
     assert "TransportError" in msg and "503" not in msg and "SPY" not in msg and "https" not in msg
+
+
+def test_a_broken_stderr_at_arm_still_sends_the_page(world, monkeypatch):
+    """EPIPE or a closed stderr must not skip the page or end the run before the exit-managing loop."""
+    import sys
+
+    from wt.brokers.base import TransportError
+
+    class Broken:
+        def write(self, *a):
+            raise BrokenPipeError(32, "EPIPE")
+
+        def flush(self):
+            raise ValueError("closed")
+    r = world["make"]()
+    world["m"].now = at("09:25")
+    sent = []
+    r.oms.reconcile = lambda plans: (_ for _ in ()).throw(TransportError("down"))
+    r.pager.fire = lambda key, title, msg, prio=4: sent.append(key)
+    monkeypatch.setattr(sys, "stderr", Broken())
+    assert r.arm() is False
+    assert "options-clone:broker" in sent

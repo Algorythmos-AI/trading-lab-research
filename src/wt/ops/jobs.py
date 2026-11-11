@@ -285,10 +285,10 @@ def publish_evidence(root: Path, log: Log, alerts: Alerts) -> None:
     try:
         r = subprocess.run([str(root / PY), "-m", "wt.ops.evidence"], cwd=root, capture_output=True, text=True,
                            timeout=600, env={**os.environ, "PYTHONPATH": "src"})
-        for line in (r.stdout or "").strip().splitlines()[-40:]:     # its outcome and visibility lines come last
+        for line in redact_tokens(r.stdout or "").strip().splitlines()[-40:]:   # the outcome lines come last
             log(f"evidence: {line[:300]}")
         if r.returncode != 0:
-            log(f"evidence: exit {r.returncode}: {(r.stderr or '').strip()[-600:]}")
+            log(f"evidence: exit {r.returncode}: {redact_tokens((r.stderr or '').strip()[-600:])}")
             alerts.once_per_day("evidence", "Weekly evidence PR failed", "See the scorecard log.", 2)
     except (OSError, subprocess.SubprocessError) as e:
         # evidence keeps to its own budget (wt.ops.evidence.BUDGET_S) and pages a step that hangs; this is the case
@@ -304,12 +304,10 @@ def publish_evidence(root: Path, log: Log, alerts: Alerts) -> None:
 
 
 def redact_tokens(text: str) -> str:
-    """No GitHub token reaches a log line, whatever a child printed."""
-    for name in ("GH_TOKEN", "GITHUB_TOKEN"):
-        tok = os.environ.get(name)
-        if tok:
-            text = text.replace(tok, "***")
-    return text
+    """No token reaches a log line, whatever a child printed (wt.ops.alerts.redact: the environment's own values and
+    anything shaped like a GitHub token, a URL credential or a bearer header)."""
+    from wt.ops.alerts import redact
+    return redact(text)
 
 
 def exits_only_allowed(fails: list[preflight.Check]) -> bool:

@@ -61,7 +61,7 @@ from wt.core.config import DATA_DIR, FORWARD_LEDGER, FORWARD_WATCHLIST_DIR, ROOT
 from wt.data.alpaca import SIP_DELAY_MIN, AlpacaREST  # noqa: E402
 from wt.data.edgar import SharesOutstanding  # noqa: E402
 from wt.data.universe import DAILY, TailMeta, TailWindowExceeded, load_daily, load_daily_tail, tail_rows_for  # noqa: E402
-from wt.ops.alerts import Alerts, count, day, word  # noqa: E402
+from wt.ops.alerts import Alerts, count, day, say, word  # noqa: E402
 from wt.ops.locks import job_lock  # noqa: E402
 from wt.ops.safeio import atomic_replace  # noqa: E402
 from wt.scanner.explain import explain, from_pool, pool_musts  # noqa: E402
@@ -273,7 +273,7 @@ class Context:
         cache.save()
         low = collapse(d, vars(st))
         if low:
-            print(f"{d}: the scan looks thin: {'; '.join(low)}")
+            say(f"{d}: the scan looks thin: {'; '.join(low)}")
             page("forward:scan-thin", "Forward test: the scan looks thin", f"{day(d)}: {count(len(low))} of the "
                  "scan's counts are far under their usual level (the forward log lists them). The session is "
                  "recorded as normal; check the data feed.", 3)

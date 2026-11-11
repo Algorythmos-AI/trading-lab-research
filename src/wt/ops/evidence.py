@@ -46,7 +46,7 @@ from typing import Any, Protocol
 from wt.core.clock import ET
 from wt.core.config import FORWARD_LEDGER, FORWARD_WATCHLIST_DIR, ROOT, SCORECARD_DIR
 from wt.ops import visibility
-from wt.ops.alerts import count, word
+from wt.ops.alerts import count, redact, say, word
 from wt.ops.visibility import Probe, repo_visibility  # noqa: F401 — repo_visibility: the one answer, re-exported
 
 REPO = "Algorythmos-AI/trading-lab-research"
@@ -60,14 +60,16 @@ DENIED_KEYS = frozenset({"headlines", "review_url", "subject", "statement", "set
                          "catalyst_category", "catalyst_type"})
 SCORECARD_DATE = re.compile(r"scorecard_(\d{4}-\d{2}-\d{2})\.md$")
 # The run's own time budget, under the 600 s the weekly job gives it (wt.ops.jobs.publish_evidence): a step that
-# would run past it stops the run with its own alert instead of the job killing it with none. Everything after the
-# visibility probe draws from it, the final worktree removal included (at least REMOVE_MIN_S). What runs after the
-# budget is spent is bounded too: one stop alert (wt.ops.alerts: a spool flush that stops at the first failed send
-# and the send itself, 5 s each). Worst case: BUDGET_S + REMOVE_MIN_S + ALERT_WORST_S, about 420 s.
+# would run past it stops the run with its own alert instead of the job killing it with none. It is made first:
+# the visibility probe, every step and the final worktree removal (at least REMOVE_MIN_S) draw from it. The run's
+# own alerts may use the network only until ALERT_S after the budget ends (wt.ops.alerts send_until): past it a page
+# is spooled for the next job's flush, and a flush stops. Typical: a stop page takes well under a second. The bound
+# that holds: one HTTP send can take up to twice its timeout (connect, then read), so
+# BUDGET_S + REMOVE_MIN_S + 2 * ALERT_S = 435 s, against the parent's 600 s.
 BUDGET_S = 400.0
 STEP_TIMEOUT_S = 120.0
 REMOVE_MIN_S = 5.0
-ALERT_WORST_S = 10.0
+ALERT_S = 15.0
 PARENT_TIMEOUT_S = 600.0                 # wt.ops.jobs.publish_evidence
 # The steps a publishing run can stop at, and the alert key of each (evidence-pr:<step>).
 STEPS = ("pr-list", "pr-open", "fetch", "worktree", "commit", "push", "pr-create")
@@ -166,12 +168,8 @@ def copy_clean(src: Path, dst: Path) -> int:
 
 
 def _redact(text: str) -> str:
-    """A token must never reach a log line, whatever git puts in its error text."""
-    for name in ("GH_TOKEN", "GITHUB_TOKEN"):
-        tok = os.environ.get(name)
-        if tok:
-            text = text.replace(tok, "***")
-    return text
+    """A token must never reach a log line, whatever git puts in its error text (wt.ops.alerts.redact)."""
+    return redact(text)
 
 
 def _git(*args: str, cwd: Path, env: dict[str, str] | None = None, check: bool = True,
@@ -252,12 +250,12 @@ def parked_listing(week: str, catch_up: bool, vis: str) -> int:
     try:
         pairs = plan_copies(ROOT, week, catch_up=catch_up)
         rels = [str(d.relative_to(ROOT)) for _, d in pairs]
-        print(f"evidence {week}: {len(rels)} new file(s) against the local checkout")
-        print("\n".join(f"  {r}" for r in rels))
+        say(f"evidence {week}: {len(rels)} new file(s) against the local checkout")
+        say("\n".join(f"  {r}" for r in rels))
     except (OSError, ValueError) as e:
-        print(f"evidence {week}: the local listing could not be made ({e.__class__.__name__})")
+        say(f"evidence {week}: the local listing could not be made ({e.__class__.__name__})")
     # the last line, so the weekly job's log always carries it
-    print(f"evidence {week}: outcome parked, the repository is {vis}, not private; nothing pushed")
+    say(f"evidence {week}: outcome parked, the repository is {vis}, not private; nothing pushed")
     return 0
 
 
@@ -280,36 +278,36 @@ def run(dry_run: bool = False, today: dt.date | None = None, week: str | None = 
     budget = budget or Budget()                # first: the probe and every step draw from it
     token = os.environ.get("GH_TOKEN")
     if not token and not dry_run:
-        print("evidence PR skipped: GH_TOKEN is not set (fine-grained token, contents + pull-requests write)")
+        say("evidence PR skipped: GH_TOKEN is not set (fine-grained token, contents + pull-requests write)")
         return 0
     today = today or dt.datetime.now(ET).date()
     if week is not None and week_date(week) > today:
-        print(f"evidence {week}: that week has not happened yet")
+        say(f"evidence {week}: that week has not happened yet")
         return 1
     catch_up = week is not None and week != iso_week(today)
     week = week or iso_week(today)
     if not dry_run:
         if alerts is None:
             from wt.ops.alerts import Alerts
-            alerts = Alerts()
+            alerts = Alerts(send_until=budget.end + ALERT_S, clock=budget.clock)
         wait = max(5.0, min(visibility.PROBE_TIMEOUT_S, budget.left()))
         vis = visibility.check(token, alerts, path=vis_state, ask=lambda t: probe(t, wait)).answer
         if vis != "private":
             # The scorecards and watchlists name setups (restricted, NOTICE.md): never push them to a repository
             # that is, or might be, public. A parked run lists from the local checkout and stops there; the owner
             # was paged once when the answer changed (wt.ops.visibility), not every week.
-            print(f"evidence PR parked: the repository is {vis}, not private; listing only")
+            say(f"evidence PR parked: the repository is {vis}, not private; listing only")
             return parked_listing(week, catch_up, vis)
     try:
         _publish(token, week, today, catch_up, dry_run, budget)
     except Stop as e:
-        print(f"evidence {week}: stopped at {e.step} ({e.outcome})" + (f": {e.detail}" if e.detail else ""))
+        say(f"evidence {week}: stopped at {e.step} ({e.outcome})" + (f": {e.detail}" if e.detail else ""))
         if dry_run:
             return 1                     # a manual --dry-run whose step failed: nothing is paged
         title, msg = stop_page(e, week, e.files)
         assert alerts is not None
         alerts.fire(ALERT_PREFIX + word(e.step, STEPS, "other"), title, msg, 3)
-        print(f"evidence {week}: outcome stopped-{e.step}; the owner is alerted")
+        say(f"evidence {week}: outcome stopped-{e.step}; the owner is alerted")
         return 0
     if not dry_run and alerts is not None:
         for step in STEPS:
@@ -343,14 +341,14 @@ def _publish(token: str | None, week: str, today: dt.date, catch_up: bool, dry_r
     try:
         pairs = plan_copies(wt, week, catch_up=catch_up)
         if not pairs:
-            print(f"evidence {week}: nothing new")
+            say(f"evidence {week}: nothing new")
             return 0
         files = len(pairs)
         dropped = sum(copy_clean(src, dst) for src, dst in pairs)
         rels = [str(d.relative_to(wt)) for _, d in pairs]
-        print(f"evidence {week}: {len(rels)} new file(s)" + (f", {dropped} denied key(s) stripped" if dropped else ""))
+        say(f"evidence {week}: {len(rels)} new file(s)" + (f", {dropped} denied key(s) stripped" if dropped else ""))
         if dry_run:
-            print("\n".join(f"  {r}" for r in rels))
+            say("\n".join(f"  {r}" for r in rels))
             return files
         what = (f"catch-up: the scorecards of {week}" if catch_up else
                 f"the forward ledger, scorecards and forward watchlists as of {today}")
@@ -374,11 +372,11 @@ def _publish(token: str | None, week: str, today: dt.date, catch_up: bool, dry_r
             m = subprocess.run(["gh", "pr", "merge", branch, "-R", REPO, "--auto", "--squash", "--delete-branch"],
                                env=gh, capture_output=True, text=True, timeout=budget.timeout("pr-create"))
             if m.returncode != 0:
-                print(f"auto-merge not enabled for {branch} (repository setting \"Allow auto-merge\"; the owner "
+                say(f"auto-merge not enabled for {branch} (repository setting \"Allow auto-merge\"; the owner "
                       f"merges by hand until it is on): {_redact((m.stderr or m.stdout).strip())[-200:]}")
         except (OSError, subprocess.SubprocessError, Stop) as e:     # the pull request is open: the week is done
-            print(f"auto-merge not requested for {branch} ({e.__class__.__name__}); the owner merges by hand")
-        print(f"evidence {week}: outcome published, {files} file(s)")
+            say(f"auto-merge not requested for {branch} ({e.__class__.__name__}); the owner merges by hand")
+        say(f"evidence {week}: outcome published, {files} file(s)")
         return files
     except Stop as e:
         e.files = files

@@ -937,17 +937,21 @@ class JournalRec(Rec):
     def __init__(self, env) -> None:
         super().__init__()
         self.env = env
-        self.at_page: list[tuple[str, str, list[dict]]] = []
+        self.pages: list[tuple[str, str, str, list[dict]]] = []      # (key, title, message, journal then), in order
 
-    def _snap(self, key, message):
-        self.at_page.append((key, message, journal(self.env, allow_errors=True)))
+    def _snap(self, key, title, message):
+        self.pages.append((key, title, message, journal(self.env, allow_errors=True)))
+
+    @property
+    def at_page(self) -> list[tuple[str, str, list[dict]]]:
+        return [(k, m, rows) for k, _, m, rows in self.pages]
 
     def fire(self, key, title, message, priority=4, tags=()):
-        self._snap(key, message)
+        self._snap(key, title, message)
         super().fire(key, title, message, priority, tags)
 
     def once_per_day(self, key, title, message, priority=3, day=None):
-        self._snap(key, message)
+        self._snap(key, title, message)
         super().once_per_day(key, title, message, priority, day)
 
 
@@ -963,10 +967,14 @@ def test_a_short_is_paged_without_its_symbol_and_the_journal_already_names_it(en
     rec = JournalRec(env)
     runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep, alerts=rec)
     j = journal(env)
-    pages = {k: (m, rows) for k, m, rows in rec.at_page}
-    msg, rows = pages["paper-b:not-flat"]
-    assert "QQQM" not in msg and "share(s)" in msg
-    assert any(r["event"] in ("short_position", "END_OF_DAY_NOT_FLAT") and r.get("qty") == -2 for r in rows)
+    mid = [(m, rows) for k, t, m, rows in rec.pages if t == "Paper B is SHORT"]
+    close = [(m, rows) for k, t, m, rows in rec.pages if t == "Paper B is SHORT at the close"]
+    assert mid and close
+    for m, rows in mid:
+        assert "QQQM" not in m and any(r["event"] == "short_position" and r.get("qty") == -2 for r in rows)
+    for m, rows in close:                    # its own record, not the mid-session short_position before it
+        assert "QQQM" not in m and "Short 2 share(s)" in m
+        assert any(r["event"] == "END_OF_DAY_NOT_FLAT" and r.get("short") is True and r.get("qty") == -2 for r in rows)
     # reconcile: the page points at the reconcile event, which is the only line a flagged poll adds (no second one)
     assert not [r for r in j if r["event"] == "position_needs_attention"]
     flagged = [r for r in j if r["event"] in ("reconcile", "reconcile_startup")

@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from wt.core.config import STATE_DIR
-from wt.ops.alerts import count
+from wt.ops.alerts import count, say
 
 REPO = "Algorythmos-AI/trading-lab-research"
 STATE = STATE_DIR / "repo-visibility.json"
@@ -205,14 +205,14 @@ def check(token: str | None, alerts: Sender | None = None, path: Path | None = N
     try:
         save(state, path)
     except OSError as e:                  # paged anyway: the alert state (wt.ops.alerts) still sends each key once
-        print(f"repo visibility record not written ({e.__class__.__name__})")
+        say(f"repo visibility record not written ({e.__class__.__name__})")
     if alerts is None and events:
         from wt.ops.alerts import Alerts
         alerts = Alerts()
     for ev in events:
         if alerts is not None:
             page(ev, state, alerts)
-    print(line(state))
+    say(line(state))
     return p
 
 
@@ -221,7 +221,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("cmd", choices=("status", "check"))
     a = ap.parse_args(argv)
     if a.cmd == "status":
-        print(line(load()))
+        say(line(load()))
         return 0
     check(os.environ.get("GH_TOKEN"))
     return 0

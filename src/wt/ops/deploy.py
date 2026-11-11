@@ -40,7 +40,7 @@ from typing import Any
 
 from wt.core.config import ROOT, STATE_DIR
 from wt.ops import agents, ci, dashguard, host, migrate, preflight, safeio, units
-from wt.ops.alerts import Alerts, count, exc_name
+from wt.ops.alerts import Alerts, count, exc_name, say
 from wt.ops.alerts import sha as short_sha
 from wt.ops.alerts import tag as tag_word
 from wt.ops.heartbeat import ok_runs_since
@@ -172,7 +172,7 @@ def sync_ml(swap_wait_s: float | None = None) -> str:
                 with contextlib.suppress(OSError):
                     os.rename(prev, live)
             shutil.rmtree(nxt, ignore_errors=True)
-            print(f"ML environment did not sync: {e.__class__.__name__}: {str(e)[:400]}", flush=True)   # the deploy log
+            say(f"ML environment did not sync: {e.__class__.__name__}: {str(e)[:400]}")   # the deploy log
             Alerts().fire("deploy-ml", "ML environment did not sync",
                           f"{exc_name(e)}; the deploy log has the detail. Trading is unaffected; models are not scored "
                         "until the next deploy fixes it.", 3)
@@ -488,7 +488,7 @@ def ready(now: dt.datetime | None = None) -> int:
         n = _run("git", "rev-list", "--count", f"{head}..{target}").stdout.strip()
         sent = alerts.once_per_day(
             NOTIFY_KEY, "A deploy is ready",
-            f"main is green and {count(n)} commit{'' if n == '1' else 's'} ahead of the host ({short_sha(head)} -> "
+            f"main is green and {count(_digits(n))} commit{'' if n == '1' else 's'} ahead of the host ({short_sha(head)} -> "
             f"{short_sha(target)}); "
             "the gate is open. To deploy: sudo -u wt /usr/local/bin/wt-deploy deploy", 3)
         print(f"deploy notice: {target[:12]} is ready, {n} ahead ({'sent' if sent else 'already said today'})")
@@ -550,6 +550,11 @@ OWNER_PAGES = (("it changes the units", "it changes the units, the host helpers 
                 "then deploy"))
 
 
+def _digits(x: object) -> int | None:
+    """git's counts arrive as text: a page's count() takes numbers only, so the digits are read here."""
+    return int(x) if isinstance(x, str) and x.isascii() and x.isdigit() and len(x) <= 9 else None
+
+
 def stuck_page(why: str) -> str:
     return next((page for start, page in STUCK_PAGES if why.startswith(start)), "see the log")
 
@@ -559,7 +564,7 @@ def owner_page(owner: str) -> str:
     page = next((page for start, page in OWNER_PAGES if owner.startswith(start)), "it needs the owner")
     m = re.search(r"\((\d{1,4}) files?\)", owner)
     if m and page.startswith("it changes"):
-        n = count(m.group(1))
+        n = count(_digits(m.group(1)))
         page = page.replace(" itself:", f" itself ({n} file{'' if n == '1' else 's'}):", 1)
     return page
 
@@ -687,7 +692,7 @@ def auto(now: dt.datetime | None = None) -> int:
         after = _run("git", "rev-parse", "HEAD").stdout.strip()
         if code == 0 and after == target:
             alerts.notify("Deployed automatically", f"The host moved {short_sha(head)} -> {short_sha(target)} "
-                          f"({count(n)} commit{'' if n == '1' else 's'}): tests "
+                          f"({count(_digits(n))} commit{'' if n == '1' else 's'}): tests "
                           "passed here before the switch and the smoke test after it. To go back: sudo -u wt "
                           "/usr/local/bin/wt-deploy 'rollback TAG' (TAG is the runtime tag in the newest record in var/deploy). "
                           f"To stop automatic deploys: remove var/deploy/{AUTO_ON}", 3)

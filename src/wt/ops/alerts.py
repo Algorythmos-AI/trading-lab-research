@@ -103,7 +103,8 @@ def _total(fallback: str) -> Callable[[_F], _F]:
 
 
 def _whole(x: object) -> int | None:
-    """`x` as a whole number when it is one (int, numpy integer, a whole float or Decimal, digits), else None."""
+    """`x` as a whole number when it is one (int, numpy integer, a whole float or Decimal), else None. A string is
+    never a number here: a caller that read digits converts them itself."""
     if isinstance(x, bool) or x is None:
         return None
     if isinstance(x, numbers.Integral):
@@ -117,8 +118,6 @@ def _whole(x: object) -> int | None:
         if not math.isfinite(f) or not f.is_integer():
             return None
         n = int(f)
-    elif isinstance(x, str) and x.isascii() and x.isdigit() and len(x) <= 9:
-        n = int(x)
     else:
         return None
     return n if abs(n) < _COUNT_MAX else None
@@ -126,7 +125,7 @@ def _whole(x: object) -> int | None:
 
 @_total("?")
 def count(x: object) -> str:
-    """A whole number (a count, a quantity, an exit code; numpy, Decimal and digit strings too), or "?"."""
+    """A whole number (a count, a quantity, an exit code; numpy and whole Decimal values too), or "?"."""
     n = _whole(x)
     return "?" if n is None else str(n)
 
@@ -190,7 +189,10 @@ def ratio(x: object, fmt: str) -> str:
     f = float(x)                                        # 10**400 raises OverflowError: "?"
     if not math.isfinite(f) or abs(f) >= 1e9:
         return "?"
-    return format(f, fmt)
+    out = format(f, fmt)
+    if not any(ch in "123456789" for ch in out):        # -0.0, or a tiny negative: never a negative zero
+        out = format(0.0, fmt)
+    return out
 
 
 def _now() -> dt.datetime:
@@ -262,6 +264,33 @@ def _write_state(root: Path, state: dict[str, Any]) -> None:
     os.replace(tmp, root / "state.json")
 
 
+_SECRET = re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|x-access-token:[^@\s]+@|"
+                     r"(?i:bearer)\s+\S+")
+SECRET_ENV = ("GH_TOKEN", "GITHUB_TOKEN")
+
+
+def redact(text: str) -> str:
+    """No token reaches a log line: the environment's own token values, and anything shaped like a GitHub token,
+    an `x-access-token:` URL credential or a bearer header. One function for every job that logs a child's output."""
+    try:
+        for name in SECRET_ENV:
+            tok = os.environ.get(name)
+            if tok:
+                text = text.replace(tok, "***")
+        return _SECRET.sub(lambda m: "x-access-token:***@" if m.group(0).startswith("x-access-token:") else "***",
+                           text)
+    except Exception:  # noqa: BLE001 — never raise from a log path
+        return "[unloggable text]"
+
+
+def say(text: str, err: bool = False) -> None:
+    """print() that never raises: a closed stdout or stderr, or EPIPE, must not cost a page or a runner's loop."""
+    try:
+        print(text, file=sys.stderr if err else sys.stdout, flush=True)
+    except (OSError, ValueError):
+        pass
+
+
 OFF_ALLOWLIST = {"count": 0}             # pages sent whose text was outside PAGE_CHARS (this process)
 
 
@@ -274,11 +303,8 @@ def _check_page(msg: dict[str, Any]) -> None:
         ok = False
     if not ok:
         OFF_ALLOWLIST["count"] += 1
-        try:
-            print(f"alerts: a page outside the allowlist was sent ({OFF_ALLOWLIST['count']} in this run); see "
-                  "docs/runbooks/public-repo-guards.md", file=sys.stderr, flush=True)
-        except (OSError, ValueError):
-            pass
+        say(f"alerts: a page outside the allowlist was sent ({OFF_ALLOWLIST['count']} in this run); see "
+            "docs/runbooks/public-repo-guards.md", err=True)
 
 
 def _send(msg: dict[str, Any], topic: str | None, server: str, timeout: float = 5.0) -> bool:
@@ -299,10 +325,25 @@ def _send(msg: dict[str, Any], topic: str | None, server: str, timeout: float = 
 class Alerts:
     """ntfy delivery with a spool and transition state under ``root`` (default ``var/alerts``)."""
 
-    def __init__(self, root: Path | None = None, topic: str | None = None, server: str | None = None) -> None:
+    def __init__(self, root: Path | None = None, topic: str | None = None, server: str | None = None,
+                 send_until: float | None = None, clock: Callable[[], float] = time.monotonic) -> None:
+        """`send_until`: a `clock()` time after which nothing more goes on the network (a job with a hard limit,
+        such as the evidence run, uses it): a page is spooled instead, for the next job's flush, and a flush stops.
+        Each send's timeout is cut to what is left."""
         self.root = root or ALERT_DIR
         self.topic = topic if topic is not None else os.environ.get("NTFY_TOPIC") or None
         self.server = server or os.environ.get("NTFY_SERVER") or "https://ntfy.sh"
+        self.send_until, self.clock = send_until, clock
+
+    def _left(self) -> float | None:
+        """Seconds of network time left (None: no limit)."""
+        return None if self.send_until is None else self.send_until - self.clock()
+
+    def _post(self, msg: dict[str, Any]) -> bool:
+        left = self._left()
+        if left is not None and left < 1.0:
+            return False
+        return _send(msg, self.topic, self.server, 5.0 if left is None else min(5.0, left))
 
     # ---- delivery -------------------------------------------------------------------------------
     def notify(self, title: str, message: str, priority: int = 3, tags: tuple[str, ...] = ()) -> bool:
@@ -313,7 +354,7 @@ class Alerts:
         if not self.topic:
             return False                     # alerts are off; spooling would only grow without bound
         self.flush()
-        if _send(msg, self.topic, self.server):
+        if self._post(msg):
             return True
         spool = self.root / "spool"
         try:
@@ -333,6 +374,9 @@ class Alerts:
             return 0
         sent = 0
         for f in sorted(spool.glob("*.json")):
+            left = self._left()
+            if left is not None and left < 1.0:
+                break                       # out of network time: the next job's flush sends the rest
             try:
                 msg = json.loads(f.read_text())
                 raised = dt.datetime.fromisoformat(msg["at"])
@@ -346,7 +390,7 @@ class Alerts:
                 continue
             if age > LATE_AFTER:
                 msg = {**msg, "message": f"(delayed: raised {raised:%Y-%m-%d %H:%M} UTC) {msg['message']}"[:MESSAGE_MAX]}
-            if not _send(msg, self.topic, self.server):
+            if not self._post(msg):
                 break                       # still offline: keep order, try again next time
             f.unlink(missing_ok=True)
             sent += 1
