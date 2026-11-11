@@ -31,6 +31,7 @@ import { chainFresh, chainPx } from "@/lib/what-if";
 import { cn } from "@/lib/utils";
 import type { LiveInputs } from "./focus-card-live";
 import { useLadderLive } from "./ladder-live";
+import { rememberTicketPrice } from "./ticket-memo";
 import { openFocusCard } from "./trade-now";
 import { useChain } from "./use-chain";
 import { useNow, usePerfNow } from "./use-now";
@@ -80,6 +81,12 @@ export function TradeTicket({ symbol, plan, live }: TicketProps) {
     window.addEventListener(OPEN_TICKET_EVENT, on);
     return () => window.removeEventListener(OPEN_TICKET_EVENT, on);
   }, [symbol, plan.side]);
+
+  // While open with a price typed, the "I'm in" form in this tab may start from it (memory only, ticket-memo.ts).
+  useEffect(() => {
+    rememberTicketPrice(symbol, plan.side, open ? typed.price : null);
+    return () => rememberTicketPrice(symbol, plan.side, null);
+  }, [symbol, plan.side, open, typed.price]);
 
   return (
     <details

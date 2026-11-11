@@ -47,6 +47,7 @@ import { useLive } from "./live-layer";
 import { useBars } from "./use-bars";
 import { useTradeManage } from "./trade-manage";
 import type { Lot, Trade } from "@/lib/journal";
+import type { DayFacts } from "@/lib/session-timeline";
 
 const STATE_ICON: Record<NameStateName, LucideIcon> = {
   no_trade: Ban,
@@ -728,6 +729,7 @@ export function BoardProvider({
   openLots = [],
   closedTrades = [],
   journalAsOf = null,
+  dayFacts = null,
   children,
 }: {
   e: Options;
@@ -740,6 +742,8 @@ export function BoardProvider({
   closedTrades?: readonly Trade[];
   /** When the journal was read (`doc.as_of`), for the manage card. */
   journalAsOf?: string | null;
+  /** The server's day check, for the room left after a note's stop (session-timeline's dayFacts). */
+  dayFacts?: DayFacts | null;
   children: React.ReactNode;
 }) {
   const { feed, now: browserNow } = useLive();
@@ -863,6 +867,7 @@ export function BoardProvider({
     mode: mode.kind,
     // first shown once the bars have answered: a card read without them could flip its word, and announce it, a moment later
     barsLoading: bars.status === "loading",
+    day: dayFacts,
   });
 
   const ranked = [...items].sort((a, b) => a.rank - b.rank);

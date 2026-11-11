@@ -23,7 +23,7 @@ import { showReview } from "@/lib/ledger";
 import { withLeaders } from "@/lib/entry-checks";
 import { boardDay } from "@/lib/trade-now";
 import { sessionView } from "@/lib/journal";
-import { railDay } from "@/lib/session-timeline";
+import { dayFacts, railDay } from "@/lib/session-timeline";
 import { dayCheck } from "@/lib/trade-rules";
 import { listOptionsDates, loadJournal, loadLedger, loadOptions, loadOptionsLive, pageTime } from "@/lib/snapshot";
 
@@ -125,7 +125,10 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
   // The board's day: rules 7 and 8 from the journal, and whether a trade has closed green today.
   const day = boardDay(doc, now);
   // The rail's short day line, from the same check as the rules (the day bar it replaces).
-  const rail = railDay(dayCheck(doc ? sessionView(doc, now) : null, { asOf: doc?.as_of ?? null, now }));
+  const check = dayCheck(doc ? sessionView(doc, now) : null, { asOf: doc?.as_of ?? null, now });
+  const rail = railDay(check);
+  // What the browser needs to count its own notes and to say the room after a stop; null without a journal.
+  const facts = doc ? dayFacts(check, doc.as_of, now, doc.open ?? []) : null;
   const halfDay = isHalfDay(full);
   // The four focus names, in the card's order: the glance, and the cockpit's large ladders.
   const four = [...(full.focus?.items ?? [])].sort((a, b) => a.rank - b.rank).slice(0, 4);
@@ -137,13 +140,13 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
     <>
       <h1 className="sr-only">Options</h1>
       <LiveQuotes symbols={withLeaders(e.tickers.map((t) => t.symbol)).join(",")} session={e.session} enabled={!date}>
-        <BoardProvider e={full} live={!date} {...day} openLots={doc?.open ?? []} closedTrades={doc?.trades ?? []} journalAsOf={doc?.as_of ?? null}>
+        <BoardProvider e={full} live={!date} {...day} openLots={doc?.open ?? []} closedTrades={doc?.trades ?? []} journalAsOf={doc?.as_of ?? null} dayFacts={facts}>
           {/* Top to bottom: what the day allows and the clock, the one name that matters now, the four at a glance, what
               to act on, the cards, the rules strip, then the desk. Cockpit keeps only the rail, the hero and the four
               ladders (everything else carries data-cockpit-hide). The parts share the page's one live feed and board. */}
           <CockpitShell>
             <PaneBoundary name="Status rail">
-              <StatusRail day={rail} />
+              <StatusRail day={rail} facts={facts} />
             </PaneBoundary>
             <div data-cockpit-hide className="contents">
               <OldCloseNotice e={e} />
