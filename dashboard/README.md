@@ -421,8 +421,11 @@ prints a secret; it prints only the ntfy topic and how to subscribe to it.
     only sets the pages' script policy, which is why it skips `/api/`).
   - Same origin only: POST needs `Content-Type: application/json` (else 415) and an `Origin` whose host is the
     request's own, or `Sec-Fetch-Site: same-origin` when there is no Origin (else 403). No CORS headers are sent.
-  - Any request carrying `x-vercel-protection-bypass` is refused (403): the publisher's bypass secret can never
-    set or clear the flag.
+  - Any request presenting Vercel's protection bypass is refused (403): the `x-vercel-protection-bypass` header or
+    query parameter, or `x-vercel-set-bypass-cookie` as a header or query parameter (`presentsBypass`, shared by
+    `/api/desk/flags`, `/api/desk/page-state`, `/api/desk/eval-status` and `/api/desk/probe`). The cookie Vercel then
+    sets is not read: its documentation does not name it, and guessing could refuse the owner's own login cookie.
+    So the publisher's bypass secret can never set or clear the flag.
   - A body of at most 256 bytes (413), exactly `{"action": "done" | "undo"}` (400), 405 for other methods, a fixed
     path, and error answers that are codes only: nothing from the request is echoed.
   - Writes are conditional on the store's etag; a conflict (the other device's tap first) re-reads and re-applies
@@ -458,23 +461,23 @@ prints a secret; it prints only the ntfy topic and how to subscribe to it.
   - `GET /api/cron/desk`: the bearer `CRON_SECRET`, compared in constant time exactly like the watchdog (401
     otherwise), `no-store`. Idle with no store call outside the New York session (the exchange calendar's
     weekends, holidays and half days).
-  - `POST /api/desk/page-state`: hardened like `/api/desk/flags` (same origin, JSON only, the bypass header
-    refused, no CORS, `no-store`), a 2 KB body, POST only, and a strict schema: `{ slot_end, engine, as_of,
+  - `POST /api/desk/page-state`: hardened like `/api/desk/flags` (same origin, JSON only, the bypass refused
+    as there, no CORS, `no-store`), a 2 KB body, POST only, and a strict schema: `{ slot_end, engine, as_of,
     bars_delayed, rows, rows_at_settle }` (each row `{ symbol, side, state }`) or `{ slot_end, engine, hidden: true }`,
     the symbols today's focus names, the states the engine's words, `as_of` inside the slot's grace window, the slot
     one of today's that has just settled, the engine the server's own; refused while the switch is off.
-  - `GET /api/desk/eval-status`: GET and HEAD only, cross-site refused, Vercel's protection bypass refused in every
-    documented form (the `x-vercel-protection-bypass` header or query parameter, `x-vercel-set-bypass-cookie` as a
-    header or query parameter; `presentsBypass` in desk-flags-run.ts), `no-store`; answers `{ eval, last_slot_end }`
-    only, from at most five head() calls (never a listing).
+  - `GET /api/desk/eval-status`: GET and HEAD only, cross-site refused, the bypass refused as for `/api/desk/flags`
+    (its header and query forms; no cookie is read), `no-store`; answers `{ eval, last_slot_end }` only, from at
+    most five head() calls (never a listing).
   - `GET /api/desk/probe?day=YYYY-MM-DD` (`src/lib/quote-probe-run.ts`): GET and HEAD only, cross-site refused, the
     bypass refused as for eval-status, `no-store`, the day a real `YYYY-MM-DD` (400 otherwise; today in New York when
     left out). Unlike eval-status it **lists** a day's records: one listing of `desk/log/<day>/` and one read per
     server record (`HHMM.json` only, at most 256, 8 at a time; page records are never read). It answers counts,
     enums and numbers per name only, grouped by the record's feed (`quote-probe.ts` summariseProbe), never a
-    record's text, and `503 read-failed` without detail when the listing fails. A HEAD answers from validation alone and reads nothing. A past
-    day's summary is kept in the instance's memory (at most 5 days; never today, never a day with an unreadable
-    record). Read only when the owner opens it; dry (no store call) in fixture mode and anywhere but production.
+    record's text, and `503 read-failed` without detail when the listing fails. A HEAD answers from validation
+    alone and reads nothing. A past day's summary is kept in the instance's memory (at most 5 days; never today,
+    never a day with an unreadable record or an empty listing). Read only when the owner opens it; dry (no store
+    call) in fixture mode and anywhere but production.
   - The Options page's server render reads the switch; while it is off the browser makes no request about the check
     at all. While it is on, the page reads the status at most once a minute and posts once per settled slot.
   - In fixture mode and anywhere but production none of them touches Blob: the switch reads as off.
