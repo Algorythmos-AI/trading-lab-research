@@ -451,7 +451,7 @@ def announce(fresh: list[tuple[str, str, str]], mode: str, labels: dict[str, str
             # The topic is public: the page names neither the stock nor the rule (labels come from the edition).
             Alerts().once_per_day(f"options:rule:{sym}:{rule}", "Options: a probation rule triggered",
                                   f"Triggered on the {hhmm(bar)} ET hourly close, from data 15 minutes behind the "
-                                  "market. The Options page names the stock and the rule. A paper rule on probation: "
+                                  "market. The options job's log names the stock and the rule. A paper rule on probation: "
                                   "not a signal to trade.", 3, day=session)
         except Exception as e:  # noqa: BLE001 — an alert that cannot be sent must not stop the positions
             print(f"rule alert not sent ({e.__class__.__name__})", file=sys.stderr)

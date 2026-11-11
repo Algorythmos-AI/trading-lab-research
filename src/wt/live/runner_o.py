@@ -386,6 +386,8 @@ class Runner:
             self.account_holds = {x.symbol for x in self.broker.positions() if x.qty}
         except TransportError as e:
             self.off["broker"] = "broker unreachable at arm"
+            # The detail goes to the job's log, never to the page (the topic is public).
+            print(f"broker unreachable at arm: {e.__class__.__name__}: {str(e)[:300]}", file=sys.stderr, flush=True)
             self.page("broker", "Options clone: broker unreachable at arm",
                       f"{pg.exc_name(e)}; entries are off today. The clone's log has the detail.", 4)
             return False
@@ -630,8 +632,8 @@ class Runner:
         self.write("filled", trade_id=p.trade_id, symbol=p.symbol, setup=p.setup, side=p.side, fill=p.fill,
                    quoted_ask=p.quoted_ask, slippage_pct=slip)
         self.pager.fire(f"options-clone:entry-{p.trade_id}", "Options clone entered",
-                        f"A paper {pg.word(p.side, SIDES, 'option')} entry filled. The clone page has the name, the "
-                        "setup and the level.", 3)
+                        f"A paper {pg.word(p.side, SIDES, 'option')} entry filled. The clone journal's filled "
+                        "record and the plan file have the name, the setup and the level.", 3)
         if self.shadow is not None and p.fill is not None:
             self.arms_guard("runner", self.arms_runner, p)
         if p.fill is not None and p.fill > float(self.cfg["contract"]["max_ask"]) + 1e-9:
@@ -703,23 +705,23 @@ class Runner:
             self.oms.note(p, "exit-failed-paged")
             self.page("exit-failed", "Options clone: an exit has not filled",
                       f"A paper {pg.word(p.side, SIDES, 'option')} exit: {pg.count(len(tries))} tries since "
-                      f"{pg.hhmm(tries[0])}. The clone page names the position.", 4)
+                      f"{pg.hhmm(tries[0])}. The clone's plan file names the position.", 4)
 
     def finish(self, p: OptionPlan) -> None:
+        if book(p, self.journaled, self.write, self.fee):     # first: the pages below point at this record
+            p.recorded = True
+            self.store.save(p)
         if p.state == "unresolved":
             self.page("lot-taken-by-hand", "Options clone: a lot was sold by hand",
                       "The account holds less of one name than the clone bought. Booked as unresolved; the clone "
-                      "page names it.", 4)
-        if book(p, self.journaled, self.write, self.fee):
-            p.recorded = True
-            self.store.save(p)
+                      "journal's trade_closed record names it.", 4)
         if self.shadow is not None:
             self.arms_guard("control-closed", self.arms_control_closed, p)
         rop = p.return_on_premium(self.fee)
         self.pager.fire(f"options-clone:exit-{p.trade_id}", "Options clone exited",
                         f"A paper {pg.word(p.side, SIDES, 'option')} position closed"
                         + ("" if rop is None else f", {pg.ratio(rop, '+.0%')} on premium")
-                        + ". The clone page has the reason.", 3)
+                        + ". The clone journal's trade_closed record has the name and the reason.", 3)
         if p.state == "closed" and (p.pnl(self.fee) or 0.0) < 0 and p.root in self.names:
             self.names[p.root].cooldown_until = self.now() + dt.timedelta(
                 minutes=float(self.cfg["day"]["name_cooldown_after_loss_min"]))

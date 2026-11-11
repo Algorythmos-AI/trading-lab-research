@@ -10,6 +10,7 @@ what it is, and the guard it goes through is what the test proves.
 """
 from __future__ import annotations
 
+import ast
 import datetime as dt
 import json
 import re
@@ -423,3 +424,157 @@ def test_a_job_failed_page_names_its_dated_log_and_how_it_ended():
     assert jobs.failed_how(True, False, 124) == "was stopped at its deadline"
     assert jobs.failed_how(False, True, 143) == "was stopped by the system (SIGTERM)"
     assert jobs.failed_how(False, False, 2) == "exited with code 2" and jobs.failed_how(False, False, T) == "exited with code ?"
+
+
+def test_a_sink_whose_text_is_passed_by_keyword_fails_the_scan(tmp_path):
+    probe = tmp_path / "probe.py"
+    probe.write_text("def f(a, sym):\n    a.fire('k', title=f'{sym}', message='m')\n")
+    with pytest.raises(ValueError, match="by keyword"):
+        alert_sites.sites([probe])
+
+
+def test_the_scan_reads_scripts_recursively():
+    assert all(p.suffix == ".py" for p in alert_sites.source_files())
+    nested = [p for p in (ROOT / "scripts").rglob("*.py") if p.parent != ROOT / "scripts"]
+    assert set(nested) <= set(alert_sites.source_files())
+
+
+class _Evil:
+    def __str__(self):
+        raise RuntimeError("str")
+
+    def __format__(self, spec):
+        raise RuntimeError("format")
+
+    def __repr__(self):
+        raise RuntimeError("repr")
+
+
+class _EvilStr(str):
+    def __format__(self, spec):
+        raise RuntimeError("format")
+
+
+def _hostile_values():
+    import numpy as np
+    from decimal import Decimal
+    return [None, True, False, -1, -3.0, float("nan"), float("inf"), -float("inf"), 10**400, -(10**400), b"SPY",
+            np.int64(3), np.float64(2.0), np.float64("nan"), Decimal("3"), Decimal("3.5"), Decimal("NaN"),
+            Decimal("1e400"), [1], {"a": 1}, _Evil(), _EvilStr("09:30"), T, "", object(), dt.datetime.max]
+
+
+def test_every_guard_is_total():
+    import inspect
+    guards = [alerts.count, alerts.sha, alerts.day, alerts.hhmm, alerts.record, alerts.tag, alerts.exc_name]
+    for g in guards:
+        for x in _hostile_values():
+            out = g(x)
+            assert type(out) is str and PAGE_CHARS.fullmatch(out), (g.__name__, x, out)
+    for x in _hostile_values():
+        for fmt in (*alerts.RATIO_FORMATS, "s", _Evil()):
+            out = alerts.ratio(x, fmt)
+            assert type(out) is str and PAGE_CHARS.fullmatch(out), (x, fmt, out)
+        for allowed in (("call",), [_Evil()], _Evil(), None):
+            out = alerts.word(x, allowed)
+            assert type(out) is str
+    wrapped = {n for n, f in inspect.getmembers(alerts, inspect.isfunction) if getattr(f, "__wrapped__", None)}
+    assert wrapped - {"_locked"} == {"count", "word", "sha", "day", "hhmm", "record", "tag", "exc_name", "ratio"}
+
+
+def test_numpy_and_decimal_quantities_are_counts():
+    import numpy as np
+    from decimal import Decimal
+    assert alerts.count(np.int64(3)) == "3" and alerts.count(np.float64(4.0)) == "4" and alerts.count(Decimal("5")) == "5"
+    assert alerts.count(Decimal("5.5")) == "?" and alerts.count(np.int64(-2)) == "-2" and alerts.count(10**400) == "?"
+    assert alerts.ratio(np.float64(1.234), "+.2f") == "+1.23" and alerts.ratio(Decimal("0.5"), "+.0%") == "+50%"
+    assert alerts.ratio(10**400, "+.2f") == "?" and alerts.ratio(-(10**400), ".0f") == "?"
+
+
+def test_a_delayed_page_is_cut_to_the_cap_again(tmp_path, monkeypatch):
+    sent = []
+    monkeypatch.setattr(alerts, "_send", lambda msg, topic, server, timeout=5.0: sent.append(msg) or True)
+    spool = tmp_path / "spool"
+    spool.mkdir()
+    old = (alerts._now() - dt.timedelta(hours=1)).isoformat()
+    (spool / "0001-x.json").write_text(json.dumps({"id": "x", "at": old, "title": "t", "message": "m" * 1000,
+                                                    "priority": 4, "tags": []}))
+    assert alerts.Alerts(root=tmp_path, topic="t").flush() == 1
+    assert sent[0]["message"].startswith("(delayed: raised ") and len(sent[0]["message"]) == MESSAGE_MAX
+
+
+def test_a_page_outside_the_allowlist_is_still_sent_and_said_in_the_log(tmp_path, monkeypatch, capsys):
+    posted = []
+
+    class Resp:
+        status_code = 200
+
+    monkeypatch.setattr(alerts.requests, "post", lambda *a, **k: posted.append(k) or Resp())
+    before = alerts.OFF_ALLOWLIST["count"]
+    a = alerts.Alerts(root=tmp_path, topic="t")
+    assert a.notify("Paper B", "plain words") is True and alerts.OFF_ALLOWLIST["count"] == before
+    assert a.notify("Paper B", 'a "quoted" <tag>') is True                       # sent all the same, never dropped
+    assert alerts.OFF_ALLOWLIST["count"] == before + 1 and len(posted) == 2
+    err = capsys.readouterr().err
+    assert "outside the allowlist" in err and "quoted" not in err                  # the text itself is not logged
+
+
+# Every rewritten page points at where its removed detail is. Each row: (file, function, the page's title, the call
+# that writes the detail, which must come before the page in the same function). The session tests
+# (test_runner_session.py, test_options_clone_session.py) check the same at run time for the paper B and clone pages.
+RECORDS = [
+    ("src/wt/live/runner_b.py", "_session.adopt_orphan", "Paper B adopted a position", 'log("adopted_orphan"'),
+    ("src/wt/live/runner_b.py", "_session.check_positions", "outside strategy B", 'log("out_of_mandate"'),
+    ("src/wt/live/runner_b.py", "_session", "stopped by its stop rule", "log('stop_rule'"),
+    ("src/wt/live/runner_b.py", "_session", "no primary lease", "refuse(f'primary lease not held"),
+    ("src/wt/live/runner_b.py", "_session", "'Paper B is SHORT'", "log('short_position'"),
+    ("src/wt/live/runner_b.py", "_session", "NOT FLAT at the close", "log('END_OF_DAY_NOT_FLAT'"),
+    ("src/wt/live/runner_b.py", "_session", "SHORT at the close", "log('END_OF_DAY_NOT_FLAT'"),
+    ("src/wt/live/runner_o.py", "Runner.arm", "broker unreachable at arm", "print(f'broker unreachable at arm"),
+    ("src/wt/live/runner_o.py", "Runner.on_fill", "Options clone entered", "self.write('filled'"),
+    ("src/wt/live/runner_o.py", "Runner.finish", "Options clone exited", "book(p"),
+    ("src/wt/live/runner_o.py", "Runner.finish", "a lot was sold by hand", "book(p"),
+    ("src/wt/live/runner_o.py", "Runner.exit", "an exit has not filled", "self.oms.note(p, 'exit-failed-paged')"),
+    ("src/wt/live/runner_o.py", "Runner.check_feed_fit", "feed unfit", "self.write('feed_unfit'"),
+    ("src/wt/ops/jobs.py", "refuse", "refused to run", "log(f'REFUSED"),
+    ("src/wt/ops/jobs.py", "run_job", "entries off, exits only", "log(f'preflight refused"),
+    ("src/wt/ops/backup.py", "flag_chain", "title", "flag.write_text("),
+    ("src/wt/ops/backup.py", "nightly", "Daily evidence anchor failed", "print(f'anchor: {why}')"),
+    ("src/wt/ops/deploy.py", "sync_ml", "ML environment did not sync", "print(f'ML environment did not sync"),
+    ("src/wt/ops/deploy.py", "auto.wait", "", "print(f'auto deploy: {target[:12]} waits: {reason}')"),
+    ("src/wt/ops/evidence.py", "run", "ALERT_PREFIX + word(e.step", "print(f'evidence {week}: stopped at"),
+    ("src/wt/options/live.py", "announce", "a probation rule triggered", "print(f'rule triggered:"),
+    ("scripts/forward_test.py", "Context.ensure_pool", "the scan looks thin", "print(f'{d}: the scan looks thin"),
+    ("scripts/premarket_routine.py", "run", "the scan had no data", "print(f'{d} {hhmm} {name}: the scan had no data"),
+]
+
+
+def _functions(tree):
+    out = {}
+
+    def walk(node, prefix):
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+                q = f"{prefix}.{child.name}" if prefix else child.name
+                if not isinstance(child, ast.ClassDef):
+                    out[q] = child
+                walk(child, q)
+            else:
+                walk(child, prefix)
+    walk(tree, "")
+    return out
+
+
+
+@pytest.mark.parametrize(("rel", "func", "title", "record"), RECORDS, ids=[f"{r[0]}::{r[1]}::{r[2]}" for r in RECORDS])
+def test_the_detail_a_page_leaves_out_is_written_before_it(rel, func, title, record):
+    fn = _functions(ast.parse((ROOT / rel).read_text()))[func]
+    calls = [n for n in ast.walk(fn) if isinstance(n, ast.Call)]
+    def name(c):
+        return c.func.attr if isinstance(c.func, ast.Attribute) else getattr(c.func, "id", "")
+    sinks = [c for c in calls if name(c) in {*alert_sites.SINKS, "page"} and title in ast.unparse(c)] if title else [c for c in calls if isinstance(c.func, ast.Name)
+                                                         and c.func.id == "_stuck"]
+    assert sinks, f"no page with {title!r} in {func}"
+    writes = [c for c in calls if ast.unparse(c).replace('"', "'").startswith(record.replace('"', "'"))]
+    assert writes, f"{func} writes no {record!r}"
+    for s in sinks:
+        assert any(w.lineno <= s.lineno for w in writes), f"{func}: {record!r} must come before the page at {s.lineno}"

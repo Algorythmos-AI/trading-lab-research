@@ -194,7 +194,7 @@ def alert_paper(o: dict[str, Any], alerts: Alerts) -> None:
         ("paper-b:unknown-position", o["unknown_positions"] > 0, 5, "Paper B: unknown position",
          f"Reconcile found {count(o['unknown_positions'])} unprotected position(s) it does not manage."),
         ("paper-b:latched", o["latched"], 5, "Paper B loss limit latched",
-         "The virtual account latched; the paper_b log says why. Entries stay off until reset."),
+         "The virtual account latched; the session's journal (session_end) says why. Entries stay off until reset."),
         ("paper-b:loop-errors", o["loop_errors"] >= 3, 4, "Paper B: repeated loop errors",
          f"{count(o['loop_errors'])} loop errors in tonight's session. See logs/paper_b_*.log."),
     ]
@@ -291,10 +291,25 @@ def publish_evidence(root: Path, log: Log, alerts: Alerts) -> None:
             log(f"evidence: exit {r.returncode}: {(r.stderr or '').strip()[-600:]}")
             alerts.once_per_day("evidence", "Weekly evidence PR failed", "See the scorecard log.", 2)
     except (OSError, subprocess.SubprocessError) as e:
-        # evidence keeps to its own budget (480 s) and pages a step that hangs; this is the case it could not.
+        # evidence keeps to its own budget (wt.ops.evidence.BUDGET_S) and pages a step that hangs; this is the case
+        # it could not. What the run had printed is kept for the log, tokens redacted.
         log(f"evidence: could not run ({e.__class__.__name__})")
+        for name in ("stdout", "stderr"):
+            got = getattr(e, name, None)
+            text = got.decode("utf-8", "replace") if isinstance(got, bytes) else got if isinstance(got, str) else ""
+            for line in redact_tokens(text).strip().splitlines()[-40:]:
+                log(f"evidence {name}: {line[:300]}")
         alerts.once_per_day("evidence", "Weekly evidence PR failed",
                             "The evidence run could not be started or did not finish. See the scorecard log.", 2)
+
+
+def redact_tokens(text: str) -> str:
+    """No GitHub token reaches a log line, whatever a child printed."""
+    for name in ("GH_TOKEN", "GITHUB_TOKEN"):
+        tok = os.environ.get(name)
+        if tok:
+            text = text.replace(tok, "***")
+    return text
 
 
 def exits_only_allowed(fails: list[preflight.Check]) -> bool:

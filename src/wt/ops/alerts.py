@@ -25,17 +25,21 @@ from __future__ import annotations
 import contextlib
 import datetime as dt
 import fcntl
+import functools
 import json
 import math
+import numbers
 import os
 import queue
 import re
+import sys
 import threading
 import time
 import uuid
-from collections.abc import Collection, Iterator
+from collections.abc import Callable, Collection, Iterator
+from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 import requests
 
@@ -79,67 +83,114 @@ _RECORD = re.compile(r"(?:DEC|HYP|EXP|ADR)-\d{4}")
 _TAG = re.compile(r"runtime-[A-Za-z0-9._-]{1,40}")
 
 
+_COUNT_MAX = 10**9                       # a count larger than this is not a count (and would read as an account id)
+_F = TypeVar("_F", bound=Callable[..., str])
+
+
+def _total(fallback: str) -> Callable[[_F], _F]:
+    """A guard never raises: whatever it is given (a numpy scalar, a Decimal, an object whose __str__ or
+    __format__ raises, 10**400), it answers its value or `fallback`."""
+    def wrap(fn: _F) -> _F:
+        @functools.wraps(fn)
+        def inner(*args: Any, **kw: Any) -> str:
+            try:
+                out = fn(*args, **kw)
+            except Exception:  # noqa: BLE001 — a page must never be the thing that crashes a job
+                return fallback
+            return out if type(out) is str else fallback
+        return inner  # type: ignore[return-value]
+    return wrap
+
+
+def _whole(x: object) -> int | None:
+    """`x` as a whole number when it is one (int, numpy integer, a whole float or Decimal, digits), else None."""
+    if isinstance(x, bool) or x is None:
+        return None
+    if isinstance(x, numbers.Integral):
+        n = int(x)
+    elif isinstance(x, Decimal):
+        if not x.is_finite() or x != x.to_integral_value():
+            return None
+        n = int(x)
+    elif isinstance(x, numbers.Real):
+        f = float(x)
+        if not math.isfinite(f) or not f.is_integer():
+            return None
+        n = int(f)
+    elif isinstance(x, str) and x.isascii() and x.isdigit() and len(x) <= 9:
+        n = int(x)
+    else:
+        return None
+    return n if abs(n) < _COUNT_MAX else None
+
+
+@_total("?")
 def count(x: object) -> str:
-    """A whole number (a count, a quantity, an exit code; digits in a string too), or "?"."""
-    if isinstance(x, bool):
-        return "?"
-    if isinstance(x, int):
-        return str(x)
-    if isinstance(x, str) and x.isascii() and x.isdigit() and len(x) <= 9:
-        return str(int(x))
-    if isinstance(x, float) and math.isfinite(x) and x.is_integer() and abs(x) < 1e9:
-        return str(int(x))
-    return "?"
+    """A whole number (a count, a quantity, an exit code; numpy, Decimal and digit strings too), or "?"."""
+    n = _whole(x)
+    return "?" if n is None else str(n)
 
 
+@_total("other")
 def word(x: object, allowed: Collection[str], other: str = "other") -> str:
     """`x` when it is one of the closed set `allowed` (enum words the code itself defines), else `other`."""
-    return x if isinstance(x, str) and x in allowed else other
+    return x if type(x) is str and x in allowed else other
 
 
+@_total("unknown")
 def sha(x: object) -> str:
     """A short commit id (8 hex digits), or "unknown"."""
-    return x[:8] if isinstance(x, str) and _HEX.fullmatch(x) else "unknown"
+    return x[:8] if type(x) is str and _HEX.fullmatch(x) else "unknown"
 
 
+@_total("unknown date")
 def day(x: object) -> str:
     """A date as YYYY-MM-DD, or "unknown date"."""
     if isinstance(x, dt.datetime):
         return x.date().isoformat()
     if isinstance(x, dt.date):
         return x.isoformat()
-    return x if isinstance(x, str) and _DAY.fullmatch(x) else "unknown date"
+    return x if type(x) is str and _DAY.fullmatch(x) else "unknown date"
 
 
+@_total("?")
 def hhmm(x: object) -> str:
     """A time of day as HH:MM, or "?"."""
     if isinstance(x, dt.datetime | dt.time):
-        return f"{x:%H:%M}"
-    return x if isinstance(x, str) and _HHMM.fullmatch(x) else "?"
+        out = f"{x.hour:02d}:{x.minute:02d}"
+        return out if _HHMM.fullmatch(out) else "?"
+    return x if type(x) is str and _HHMM.fullmatch(x) else "?"
 
 
+@_total("a decision record")
 def record(x: object) -> str:
     """A research record id (DEC-0041, HYP-0032, EXP-0027, ADR-0008), or "a decision record"."""
-    return x if isinstance(x, str) and _RECORD.fullmatch(x) else "a decision record"
+    return x if type(x) is str and _RECORD.fullmatch(x) else "a decision record"
 
 
+@_total("the last good tag")
 def tag(x: object) -> str:
     """A deploy's runtime tag (runtime-20261112-1), or "the last good tag"."""
-    return x if isinstance(x, str) and _TAG.fullmatch(x) else "the last good tag"
+    return x if type(x) is str and _TAG.fullmatch(x) else "the last good tag"
 
 
+@_total("an error")
 def exc_name(e: object) -> str:
     """An exception's class name, never its text (which can hold a path, a URL or a remote's answer)."""
     name = type(e).__name__ if isinstance(e, BaseException) else ""
     return name if _IDENT.fullmatch(name) else "an error"
 
 
+@_total("?")
 def ratio(x: object, fmt: str) -> str:
     """A finite number in one of the formats a page may show: "+.2f" (with an R after it), "+.0%", "+.1f", ".1f",
     ".0f". Never a price: a page has no amount and no level (R13, DEC-0044 section 3)."""
-    if fmt not in RATIO_FORMATS or isinstance(x, bool) or not isinstance(x, int | float):
+    if fmt not in RATIO_FORMATS or isinstance(x, bool) or not isinstance(x, numbers.Real | Decimal):
         return "?"
-    return format(x, fmt) if math.isfinite(x) else "?"
+    f = float(x)                                        # 10**400 raises OverflowError: "?"
+    if not math.isfinite(f) or abs(f) >= 1e9:
+        return "?"
+    return format(f, fmt)
 
 
 def _now() -> dt.datetime:
@@ -211,9 +262,29 @@ def _write_state(root: Path, state: dict[str, Any]) -> None:
     os.replace(tmp, root / "state.json")
 
 
+OFF_ALLOWLIST = {"count": 0}             # pages sent whose text was outside PAGE_CHARS (this process)
+
+
+def _check_page(msg: dict[str, Any]) -> None:
+    """A page whose text is outside the allowlist is still sent (a page must never be lost), but the job's log says
+    so and the counter grows, so a future leak is visible. The text itself is not logged here."""
+    try:
+        ok = all(isinstance(msg.get(k), str) and PAGE_CHARS.fullmatch(msg[k]) for k in ("title", "message"))
+    except Exception:  # noqa: BLE001
+        ok = False
+    if not ok:
+        OFF_ALLOWLIST["count"] += 1
+        try:
+            print(f"alerts: a page outside the allowlist was sent ({OFF_ALLOWLIST['count']} in this run); see "
+                  "docs/runbooks/public-repo-guards.md", file=sys.stderr, flush=True)
+        except (OSError, ValueError):
+            pass
+
+
 def _send(msg: dict[str, Any], topic: str | None, server: str, timeout: float = 5.0) -> bool:
     if not topic:
         return False
+    _check_page(msg)
     headers = {"Title": msg["title"], "Priority": str(msg["priority"])}
     if msg.get("tags"):
         headers["Tags"] = ",".join(msg["tags"])
@@ -274,7 +345,7 @@ class Alerts:
                 f.unlink(missing_ok=True)
                 continue
             if age > LATE_AFTER:
-                msg = {**msg, "message": f"(delayed: raised {raised:%Y-%m-%d %H:%M} UTC) {msg['message']}"}
+                msg = {**msg, "message": f"(delayed: raised {raised:%Y-%m-%d %H:%M} UTC) {msg['message']}"[:MESSAGE_MAX]}
             if not _send(msg, self.topic, self.server):
                 break                       # still offline: keep order, try again next time
             f.unlink(missing_ok=True)

@@ -36,7 +36,7 @@ def rel(path: Path) -> str:
 
 
 def source_files() -> list[Path]:
-    return sorted(p for p in [*(ROOT / "src").rglob("*.py"), *(ROOT / "scripts").glob("*.py")] if p != SENDER)
+    return sorted(p for p in [*(ROOT / "src").rglob("*.py"), *(ROOT / "scripts").rglob("*.py")] if p != SENDER)
 
 
 def _names(*nodes: ast.AST) -> set[str]:
@@ -156,6 +156,10 @@ def sites(files: list[Path] | None = None) -> list[Site]:
             if not (isinstance(fn, ast.Attribute) and fn.attr in SINKS):
                 continue
             ti, mi = SINKS[fn.attr]
+            if {k.arg for k in call.keywords} & {"title", "message", "msg", "key"}:
+                # never skipped: a text the scan cannot see is a text the allowlist test cannot hold
+                raise ValueError(f"{rel(path)}:{call.lineno}: {fn.attr}() gets its title or message by keyword; "
+                                 "pass them by position so tests/unit/test_alert_allowlist.py can find them")
             if len(call.args) <= mi:
                 continue
             todo.append(Site(path, q, [Level(call, f, call.args[ti], call.args[mi])]))

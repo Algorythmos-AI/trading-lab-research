@@ -514,7 +514,8 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         else:
             refuse(f"primary lease not held: {held.reason}")
             pager.fire("paper-b:lease", "Paper B: no primary lease, entries off",
-                       "The lease was not held; the paper_b log says why. Exits are still managed. See "
+                       "The lease was not held; the session's journal (refuse_to_arm) says why. Exits are still "
+                       "managed. See "
                        "docs/runbooks/oci-host.md.", 4)
     a = rest if rest is not None else AlpacaREST(per_minute=150)
     try:
@@ -587,7 +588,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                 _echo(f"STOP RULE LATCH NOT SAVED ({e.__class__.__name__})", sys.stderr)
             log("stop_rule", kind=fired.kind, detail=fired.detail, decision=rule.decision)
             pager.once_per_day("paper-b:stop-rule", f"paper-b stopped by its stop rule ({page.record(rule.decision)})",
-                               "The rule fired; the paper_b log has its numbers. Entries stay off until a new "
+                               "The rule fired; the session's journal (stop_rule) has its numbers. Entries stay off until a new "
                                "decision record changes B.stop_rule or retires B and clears the latch (make "
                                "reset-latch with a REASON that names the record); a reset alone brings the latch "
                                "back at the next arming.", 4)
@@ -688,16 +689,17 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                 log("out_of_mandate", symbol=sym, qty=qty)
                 pager.once_per_day(f"paper-b:out-of-mandate:{sym}", "Position outside strategy B's mandate",
                                    f"The paper account holds {page.count(qty)} share(s) of a name outside B's "
-                                   "allowlist; the paper_b log names it. The runner never touches it. Close it in "
+                                   "allowlist; the session's journal (out_of_mandate) names it. The runner never "
+                                   "touches it. Close it in "
                                    "the Alpaca UI, or record it in config/legacy_positions.yaml.", 3)
 
     def page_reconcile(acts: list[str]) -> None:
         bad = [x for x in acts if any(k in x for k in ("UNKNOWN", "SHORT", "UNPROTECTED"))]
         if bad:
-            log("position_needs_attention", actions=bad)
+            # the reconcile event just written (reconcile, reconcile_startup) already holds the actions
             pager.fire("paper-b:unknown-position", "Paper B: position needs attention",
                        f"Reconcile found {page.count(len(bad))} unknown, short or unprotected position(s); the "
-                       "paper_b log names them. Check the broker.", 5)
+                       "session's journal (reconcile) names them. Check the broker.", 5)
 
     # ---- startup: adopt, reconcile and protect before anything that could fail (L1) ----
     try:

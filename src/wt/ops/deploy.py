@@ -172,6 +172,7 @@ def sync_ml(swap_wait_s: float | None = None) -> str:
                 with contextlib.suppress(OSError):
                     os.rename(prev, live)
             shutil.rmtree(nxt, ignore_errors=True)
+            print(f"ML environment did not sync: {e.__class__.__name__}: {str(e)[:400]}", flush=True)   # the deploy log
             Alerts().fire("deploy-ml", "ML environment did not sync",
                           f"{exc_name(e)}; the deploy log has the detail. Trading is unaffected; models are not scored "
                         "until the next deploy fixes it.", 3)

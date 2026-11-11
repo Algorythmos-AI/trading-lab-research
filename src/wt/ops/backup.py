@@ -97,8 +97,9 @@ def anchor_page(why: str) -> str:
     if "not configured" in why:
         return "R2 is not configured on this host: nothing was anchored."
     if "HTTP" in why:
-        return "The anchor store answered with an error; nothing new was anchored. The backup log has the answer."
-    return "The anchor could not be written. The backup log says why."
+        return ("The anchor store answered with an error; nothing new was anchored. journalctl -u wt-backup has the "
+                "answer.")
+    return "The anchor could not be written. journalctl -u wt-backup says why."
 
 
 def flag_chain(problems: list[str], alerts: Alerts, desk: Desk = DESKS["stocks"]) -> None:
@@ -111,8 +112,8 @@ def flag_chain(problems: list[str], alerts: Alerts, desk: Desk = DESKS["stocks"]
     else:
         key, title = f"{desk.alert_prefix}evidence-chain", f"Evidence chain broken: {word(desk.name, DESKS)} entries off"
     alerts.fire(key, title,
-                f"{count(len(problems))} problem(s) in the ledger hash chain; exits are still managed. The flag file "
-                "and the backup log name them.", 4)
+                f"{count(len(problems))} problem(s) in the ledger hash chain; exits are still managed. The chain "
+                "flag file names them.", 4)
 
 
 def extends(anchored: Any, paths: dict[str, Path]) -> bool:

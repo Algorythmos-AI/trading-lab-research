@@ -928,3 +928,77 @@ def test_a_desk_with_no_stop_rule_or_an_unreadable_one_does_not_arm_for_entries(
     j = journal(env)
     assert any(r["event"] == "refuse_to_arm" and "stop rule unreadable (ValueError)" in r["reason"] for r in j)
     assert j[-1]["event"] == "session_end" and b2.placed == []
+
+
+class JournalRec(Rec):
+    """Also keeps the message and the journal's events at the moment of each page (the detail a page leaves out
+    must already be on the record it points to)."""
+
+    def __init__(self, env) -> None:
+        super().__init__()
+        self.env = env
+        self.at_page: list[tuple[str, str, list[dict]]] = []
+
+    def _snap(self, key, message):
+        self.at_page.append((key, message, journal(self.env, allow_errors=True)))
+
+    def fire(self, key, title, message, priority=4, tags=()):
+        self._snap(key, message)
+        super().fire(key, title, message, priority, tags)
+
+    def once_per_day(self, key, title, message, priority=3, day=None):
+        self._snap(key, message)
+        super().once_per_day(key, title, message, priority, day)
+
+
+def test_a_short_is_paged_without_its_symbol_and_the_journal_already_names_it(env):
+    (env / "KILL").write_text("paused")
+    b = SimBroker()
+
+    def hook(now):
+        if now >= at(15, 56) and "QQQM" not in b.pos:
+            b.pos["QQQM"] = Position("QQQM", -2, 250.00)
+    clk = Clock(at(8, 0), hook)
+    synced(b, clk)
+    rec = JournalRec(env)
+    runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep, alerts=rec)
+    j = journal(env)
+    pages = {k: (m, rows) for k, m, rows in rec.at_page}
+    msg, rows = pages["paper-b:not-flat"]
+    assert "QQQM" not in msg and "share(s)" in msg
+    assert any(r["event"] in ("short_position", "END_OF_DAY_NOT_FLAT") and r.get("qty") == -2 for r in rows)
+    # reconcile: the page points at the reconcile event, which is the only line a flagged poll adds (no second one)
+    assert not [r for r in j if r["event"] == "position_needs_attention"]
+    flagged = [r for r in j if r["event"] in ("reconcile", "reconcile_startup")
+               and any(w in str(r.get("actions")) for w in ("UNKNOWN", "SHORT", "UNPROTECTED"))]
+    paged = [(m, rows) for k, m, rows in rec.at_page if k == "paper-b:unknown-position"]
+    assert flagged and len(paged) == len(flagged)
+    for m, rows in paged:
+        assert "QQQM" not in m and "journal (reconcile)" in m
+        assert any(r["event"] in ("reconcile", "reconcile_startup") and "SHORT" in str(r.get("actions")) for r in rows)
+
+
+def test_an_out_of_mandate_page_points_at_a_journal_line_that_names_the_symbol(env):
+    (env / "KILL").write_text("paused")
+    b = SimBroker()
+    b.pos["AAPL"] = Position("AAPL", 1, 200.0)
+    clk = Clock(at(8, 0))
+    synced(b, clk)
+    rec = JournalRec(env)
+    runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep, alerts=rec)
+    (msg, rows), = [(m, rows) for k, m, rows in rec.at_page if k.startswith("paper-b:out-of-mandate")]
+    assert "AAPL" not in msg and "journal (out_of_mandate)" in msg
+    assert any(r["event"] == "out_of_mandate" and r.get("symbol") == "AAPL" for r in rows)
+
+
+def test_an_orphan_page_follows_its_adoption_record(env):
+    (env / "KILL").write_text("paused")
+    b = SimBroker()
+    b.pos["QQQM"] = Position("QQQM", 3, 250.00)
+    clk = Clock(at(8, 0), fill_market_sells(b, 250.50))
+    synced(b, clk)
+    rec = JournalRec(env)
+    runner_b.run(DAY, broker=b, rest=FakeREST(clk), now_fn=clk.now, sleep_fn=clk.sleep, alerts=rec)
+    (msg, rows), = [(m, rows) for k, m, rows in rec.at_page if k == "paper-b:orphan"]
+    assert "QQQM" not in msg and "3 share(s)" in msg
+    assert any(r["event"] == "adopted_orphan" and r.get("qty") == 3 for r in rows)
