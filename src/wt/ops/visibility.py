@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from wt.core.config import STATE_DIR
+from wt.ops.alerts import count
 
 REPO = "Algorythmos-AI/trading-lab-research"
 STATE = STATE_DIR / "repo-visibility.json"
@@ -167,7 +168,7 @@ def page(event: str, state: State, alerts: Sender) -> None:
     elif event == "unknown":
         cause = state.last_cause if state.last_cause in CAUSES else "error"
         alerts.fire(KEY_UNKNOWN, "Repository visibility unknown",
-                    f"{state.unknown_streak} checks in a row could not read it (last cause: {cause}). Nothing is "
+                    f"{count(state.unknown_streak)} checks in a row could not read it (last cause: {cause}). Nothing is "
                     "published until GitHub answers private. Sent once.", 3)
     elif event == "known-again":
         alerts.resolve(KEY_UNKNOWN, "Repository visibility readable again", f"GitHub answers {answer}.", 2)

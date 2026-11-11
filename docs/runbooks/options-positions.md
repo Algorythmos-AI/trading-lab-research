@@ -58,7 +58,7 @@ bars, which run 16 minutes behind the market. What it says is provisional: the a
 |---|---|
 | `off` | Not worked out, nothing sent |
 | `log` | Worked out and sent; a rule that triggers is written to the job's log (`rule triggered: SPY ...`) |
-| `phone` | The same, and it pages the phone: the stock and the rule, never a price. One page per name and rule a session |
+| `phone` | The same, and it pages the phone that a probation rule triggered, with the bar's time: never the stock, the rule or a price (the ntfy topic is public; the Options page and the log name them). One page per name and rule a session |
 
 It is sent only once the dashboard reports it accepts version 2 of the document (asked once an hour). If the
 bars cannot be read, the positions go out as usual and the document's `problems` says `rules-unavailable`.

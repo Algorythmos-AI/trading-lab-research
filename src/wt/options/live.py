@@ -439,17 +439,20 @@ def new_triggers(block: dict[str, Any] | None, seen_path: Path) -> list[tuple[st
 
 
 def announce(fresh: list[tuple[str, str, str]], mode: str, labels: dict[str, str], session: str) -> None:
-    """Say that a rule triggered: always in the job's log, and on the phone when `mode` is "phone". Names the
-    stock and the rule and nothing else: no price, no size, no result. It is a paper rule on probation."""
+    """Say that a rule triggered: always in the job's log (the stock and the rule), and on the phone when `mode` is
+    "phone" (only that one triggered, and the bar's time: the topic is public). No price, no size, no result. It is a
+    paper rule on probation."""
     for sym, rule, bar in fresh:
         print(f"rule triggered: {sym} {rule} at the {bar or '?'} ET hourly close (provisional)")
         if mode != "phone":
             continue
         try:
-            from wt.ops.alerts import Alerts
-            Alerts().once_per_day(f"options:rule:{sym}:{rule}", f"{sym}: {labels.get(rule, 'a probation rule')}",
-                                  f"Triggered on the {bar or '?'} ET hourly close, from data 15 minutes behind the market. "
-                                  "A paper rule on probation: not a signal to trade.", 3, day=session)
+            from wt.ops.alerts import Alerts, hhmm
+            # The topic is public: the page names neither the stock nor the rule (labels come from the edition).
+            Alerts().once_per_day(f"options:rule:{sym}:{rule}", "Options: a probation rule triggered",
+                                  f"Triggered on the {hhmm(bar)} ET hourly close, from data 15 minutes behind the "
+                                  "market. The Options page names the stock and the rule. A paper rule on probation: "
+                                  "not a signal to trade.", 3, day=session)
         except Exception as e:  # noqa: BLE001 — an alert that cannot be sent must not stop the positions
             print(f"rule alert not sent ({e.__class__.__name__})", file=sys.stderr)
 

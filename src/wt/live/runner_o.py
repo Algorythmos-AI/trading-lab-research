@@ -36,12 +36,17 @@ from wt.core import ledger
 from wt.core.config import CONFIG_DIR, DATA_DIR, ROOT, STATE_DIR, env, load_yaml
 from wt.oms.options import OptionPlan, OptionsOMS, PlanStore, book
 from wt.ops import hc, locks
+from wt.ops import alerts as pg
 from wt.ops.alerts import Alerts, Pager
 from wt.options import chain, clone_site, regime, session, setups, shadow
 from wt.options import levels as lv
 from wt.options.intraday import daily_raw
 from wt.options.regime import NEW_YORK
+from wt.risk.options_guard import KINDS as LATCH_KINDS
 from wt.risk.options_guard import Context, Latches, Limits, week_key
+
+SIDES = ("call", "put")                    # what a page may say about a position (wt.ops.alerts)
+FEED_UNFIT = ("quote age", "entry slippage")
 
 OPT = STATE_DIR / "options"
 JOURNAL = DATA_DIR / "live" / "options_journal.jsonl"
@@ -360,7 +365,7 @@ class Runner:
             self.plans = self.store.load_all()
         except (OSError, ValueError, TypeError) as e:
             self.off["plans"] = "plans unreadable"
-            self.page("plans-unreadable", "Options clone: plan files unreadable", e.__class__.__name__, 5)
+            self.page("plans-unreadable", "Options clone: plan files unreadable", pg.exc_name(e), 5)
             return False
         self.journaled = journaled_trades()
         for p in self.plans:
@@ -375,13 +380,14 @@ class Runner:
         if level is not None and level < int(self.cfg["account"]["min_options_level"]):
             self.off["level"] = f"options level {level}"
             self.page("options-level", "Options clone: account cannot buy options",
-                      f"Options level {level}; buying calls and puts needs 2.", 5)
+                      f"Options level {pg.count(level)}; buying calls and puts needs 2.", 5)
         try:
             rep = self.oms.reconcile(self.plans)
             self.account_holds = {x.symbol for x in self.broker.positions() if x.qty}
         except TransportError as e:
             self.off["broker"] = "broker unreachable at arm"
-            self.page("broker", "Options clone: broker unreachable at arm", str(e)[:80], 4)
+            self.page("broker", "Options clone: broker unreachable at arm",
+                      f"{pg.exc_name(e)}; entries are off today. The clone's log has the detail.", 4)
             return False
         own = getattr(self.broker, "own_account", False)
         stock = [s for s in self.account_holds if chain.parse_occ(s) is None]
@@ -435,7 +441,7 @@ class Runner:
             pre = self.feeds.minutes(every, pre_start, min(self.now(), self.ck.open))
         except (TransportError, requests.RequestException) as e:
             self.off["levels"] = "levels unavailable"
-            self.page("levels", "Options clone: no levels today", e.__class__.__name__, 4)
+            self.page("levels", "Options clone: no levels today", pg.exc_name(e), 4)
             return
         dropped: dict[str, str] = {}
         ed = self.feeds.edition() if hasattr(self.feeds, "edition") else None
@@ -527,14 +533,14 @@ class Runner:
             self.write("latched", kind=latched, day=round(day_pnl, 2), week=round(week_pnl, 2),
                        from_peak=round(from_peak, 2))
             self.pager.once_per_day(f"options-clone:latched-{latched}", "Options clone latched",
-                                    f"The {latched} loss latch is on; no new entries.", 4)
+                                    f"The {pg.word(latched, LATCH_KINDS, 'loss')} loss latch is on; no new entries.", 4)
             self.publish()
         if now >= self.ck.verify_flat and not self.verified:
             self.verify(now)
         if now >= self.ck.critical:
             held = [p for p in self.plans if p.state in ("open", "exiting")]
             if held:
-                self.critical(f"{len(held)} position still open at {self.ck.critical:%H:%M}")
+                self.critical(f"{pg.count(len(held))} position still open at {pg.hhmm(self.ck.critical)}")
         if self.ck.first_entry <= now <= self.ck.last_entry:
             self.look_for_entries(now, bars, tapes, stalled)
         if self.shadow is not None:                      # last: the control has managed and entered for this poll
@@ -624,7 +630,8 @@ class Runner:
         self.write("filled", trade_id=p.trade_id, symbol=p.symbol, setup=p.setup, side=p.side, fill=p.fill,
                    quoted_ask=p.quoted_ask, slippage_pct=slip)
         self.pager.fire(f"options-clone:entry-{p.trade_id}", "Options clone entered",
-                        f"{p.root} {p.side}, {p.setup} at {p.level}", 3)
+                        f"A paper {pg.word(p.side, SIDES, 'option')} entry filled. The clone page has the name, the "
+                        "setup and the level.", 3)
         if self.shadow is not None and p.fill is not None:
             self.arms_guard("runner", self.arms_runner, p)
         if p.fill is not None and p.fill > float(self.cfg["contract"]["max_ask"]) + 1e-9:
@@ -695,12 +702,14 @@ class Runner:
             self.paged_exit.add(p.trade_id)
             self.oms.note(p, "exit-failed-paged")
             self.page("exit-failed", "Options clone: an exit has not filled",
-                      f"{p.root} {p.side}: {len(tries)} tries since {tries[0]:%H:%M:%S}.", 4)
+                      f"A paper {pg.word(p.side, SIDES, 'option')} exit: {pg.count(len(tries))} tries since "
+                      f"{pg.hhmm(tries[0])}. The clone page names the position.", 4)
 
     def finish(self, p: OptionPlan) -> None:
         if p.state == "unresolved":
             self.page("lot-taken-by-hand", "Options clone: a lot was sold by hand",
-                      f"{p.root}: the account holds less than the clone bought. Booked as unresolved.", 4)
+                      "The account holds less of one name than the clone bought. Booked as unresolved; the clone "
+                      "page names it.", 4)
         if book(p, self.journaled, self.write, self.fee):
             p.recorded = True
             self.store.save(p)
@@ -708,7 +717,9 @@ class Runner:
             self.arms_guard("control-closed", self.arms_control_closed, p)
         rop = p.return_on_premium(self.fee)
         self.pager.fire(f"options-clone:exit-{p.trade_id}", "Options clone exited",
-                        f"{p.root} {p.side}: {p.exit_reason}" + ("" if rop is None else f", {rop:+.0%} on premium"), 3)
+                        f"A paper {pg.word(p.side, SIDES, 'option')} position closed"
+                        + ("" if rop is None else f", {pg.ratio(rop, '+.0%')} on premium")
+                        + ". The clone page has the reason.", 3)
         if p.state == "closed" and (p.pnl(self.fee) or 0.0) < 0 and p.root in self.names:
             self.names[p.root].cooldown_until = self.now() + dt.timedelta(
                 minutes=float(self.cfg["day"]["name_cooldown_after_loss_min"]))
@@ -720,7 +731,7 @@ class Runner:
         held = own & self.account_holds
         self.write("verify_flat", flat=not own, own_open=sorted(own), held=sorted(held))
         if own:
-            self.page("not-flat", "Options clone NOT FLAT", f"{len(own)} open at {now:%H:%M}; retrying.", 5)
+            self.page("not-flat", "Options clone NOT FLAT", f"{pg.count(len(own))} open at {pg.hhmm(now)}; retrying.", 5)
 
     def check_feed_fit(self) -> None:
         now = self.now()
@@ -728,15 +739,19 @@ class Runner:
         slips = [(p.fill - p.quoted_ask) / p.quoted_ask * 100 for p in self.today()
                  if p.fill is not None and p.quoted_ask][-10:]
         f = self.cfg["feeds"]
-        why = None
+        why, what, value = None, "", 0.0
         if len(recent) >= 5 and statistics.median(recent) > float(f["unfit_median_quote_age_s"]):
-            why = f"median quote age {statistics.median(recent):.1f}s"
+            what, value = "quote age", statistics.median(recent)
+            why = f"median quote age {value:.1f}s"
         elif len(slips) >= 3 and statistics.median(slips) > float(f["unfit_median_slippage_pct"]):
-            why = f"median entry slippage {statistics.median(slips):.1f}%"
+            what, value = "entry slippage", statistics.median(slips)
+            why = f"median entry slippage {value:.1f}%"
         if why and "feed" not in self.off:
             self.off["feed"] = "feed-unfit"
             self.write("feed_unfit", why=why)
-            self.pager.once_per_day("options-clone:feed-unfit", "Options clone: feed unfit, entries off", why, 4)
+            self.pager.once_per_day("options-clone:feed-unfit", "Options clone: feed unfit, entries off",
+                                    f"Median {pg.word(what, FEED_UNFIT, 'feed measure')} "
+                                    f"{pg.ratio(value, '.1f')}{'%' if what == 'entry slippage' else ' s'}.", 4)
             self.publish()
 
     # ---- entries -----------------------------------------------------------------------------

@@ -47,7 +47,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from build_pool import ScanFailed, SplitStore, build_one, scan_failure, universe_symbols  # noqa: E402
+from build_pool import SCAN_FAILURES, ScanFailed, SplitStore, build_one, scan_failure, universe_symbols  # noqa: E402
 from r3_intraday import intraday_day  # noqa: E402
 from r3_run import GG, SpreadAt, admit, gg_day, set_names, trade_row  # noqa: E402
 
@@ -61,7 +61,7 @@ from wt.core.config import DATA_DIR, FORWARD_LEDGER, FORWARD_WATCHLIST_DIR, ROOT
 from wt.data.alpaca import SIP_DELAY_MIN, AlpacaREST  # noqa: E402
 from wt.data.edgar import SharesOutstanding  # noqa: E402
 from wt.data.universe import DAILY, TailMeta, TailWindowExceeded, load_daily, load_daily_tail, tail_rows_for  # noqa: E402
-from wt.ops.alerts import Alerts  # noqa: E402
+from wt.ops.alerts import Alerts, count, day, word  # noqa: E402
 from wt.ops.locks import job_lock  # noqa: E402
 from wt.ops.safeio import atomic_replace  # noqa: E402
 from wt.scanner.explain import explain, from_pool, pool_musts  # noqa: E402
@@ -265,13 +265,17 @@ class Context:
             st = build_one(self.a, d, self.sessions, self.daily, universe_symbols(), self.splits, cache, self.shares,
                            PoolConfig(), refuse_failed=True)
         except ScanFailed as e:
-            page("forward:scan-failed", "Forward test: the scan had no data", f"{e}. The round-3 trials recorded an "
-                 "error for this session, not a day without trades, and it will be retried on the next run.", 4)
+            page("forward:scan-failed", "Forward test: the scan had no data",
+                 f"{day(d)}: {word(str(e).split(': ', 1)[-1], SCAN_FAILURES, 'the scan had no data')}. The round-3 "
+                 "trials recorded an error for this session, not a day without trades, and it will be retried on the "
+                 "next run.", 4)
             raise
         cache.save()
         low = collapse(d, vars(st))
         if low:
-            page("forward:scan-thin", "Forward test: the scan looks thin", f"{d}: {'; '.join(low)}. The session is "
+            print(f"{d}: the scan looks thin: {'; '.join(low)}")
+            page("forward:scan-thin", "Forward test: the scan looks thin", f"{day(d)}: {count(len(low))} of the "
+                 "scan's counts are far under their usual level (the forward log lists them). The session is "
                  "recorded as normal; check the data feed.", 3)
 
     def close(self) -> None:

@@ -163,14 +163,18 @@ class ScanFailed(RuntimeError):
     """The day's scan had no data to scan: not a day with nothing to trade (DEC-0024, decision 2)."""
 
 
+# Every reason scan_failure gives: the only words of it a page may carry (wt.ops.alerts).
+SCAN_FAILURES = ("the universe is empty (no symbol had a prior-day bar)", "no symbol had a pre-market bar")
+
+
 def scan_failure(stats) -> str | None:
     """Why a pool's own counts say its scan failed, or None. `stats`: PoolStats, or the dict saved with a pool.
     A real universe with nothing kept is a legitimate day and is not a failure."""
     get = stats.get if isinstance(stats, dict) else lambda k: getattr(stats, k, None)
     if get("universe") == 0:
-        return "the universe is empty (no symbol had a prior-day bar)"
+        return SCAN_FAILURES[0]
     if get("snapshot_symbols") == 0:
-        return "no symbol had a pre-market bar"
+        return SCAN_FAILURES[1]
     return None
 
 

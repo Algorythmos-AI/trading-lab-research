@@ -53,7 +53,7 @@ _URL = re.compile(r"\b[a-z][a-z0-9+.-]*://\S+", re.I)
 TITLE_MAX, MESSAGE_MAX = 120, 1000
 # The characters a page may hold. No "$", "@", quotes, brackets, "=", "<" or a backslash: a scrubbed amount ("[$]")
 # or URL ("[url]") fails it too, so a test sees the attempt instead of a quietly cleaned page.
-PAGE_CHARS = re.compile(r"[A-Za-z0-9 .,:;()'+%/_>?-]*")
+PAGE_CHARS = re.compile(r"[A-Za-z0-9 .,:;()'+%/_>?*-]*")
 
 
 def scrub(text: str) -> str:
@@ -74,12 +74,19 @@ _HHMM = re.compile(r"\d{2}:\d{2}")
 _IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,60}")
 
 
+RATIO_FORMATS = ("+.2f", "+.0%", "+.1f", ".1f", ".0f")
+_RECORD = re.compile(r"(?:DEC|HYP|EXP|ADR)-\d{4}")
+_TAG = re.compile(r"runtime-[A-Za-z0-9._-]{1,40}")
+
+
 def count(x: object) -> str:
-    """A whole number (a count, a quantity, an exit code), or "?"."""
+    """A whole number (a count, a quantity, an exit code; digits in a string too), or "?"."""
     if isinstance(x, bool):
         return "?"
     if isinstance(x, int):
         return str(x)
+    if isinstance(x, str) and x.isascii() and x.isdigit() and len(x) <= 9:
+        return str(int(x))
     if isinstance(x, float) and math.isfinite(x) and x.is_integer() and abs(x) < 1e9:
         return str(int(x))
     return "?"
@@ -111,6 +118,16 @@ def hhmm(x: object) -> str:
     return x if isinstance(x, str) and _HHMM.fullmatch(x) else "?"
 
 
+def record(x: object) -> str:
+    """A research record id (DEC-0041, HYP-0032, EXP-0027, ADR-0008), or "a decision record"."""
+    return x if isinstance(x, str) and _RECORD.fullmatch(x) else "a decision record"
+
+
+def tag(x: object) -> str:
+    """A deploy's runtime tag (runtime-20261112-1), or "the last good tag"."""
+    return x if isinstance(x, str) and _TAG.fullmatch(x) else "the last good tag"
+
+
 def exc_name(e: object) -> str:
     """An exception's class name, never its text (which can hold a path, a URL or a remote's answer)."""
     name = type(e).__name__ if isinstance(e, BaseException) else ""
@@ -118,8 +135,9 @@ def exc_name(e: object) -> str:
 
 
 def ratio(x: object, fmt: str) -> str:
-    """A finite number in one of the formats a page may show: "+.2f" (with an R after it), "+.0%", "+.1f", ".0f"."""
-    if fmt not in ("+.2f", "+.0%", "+.1f", ".0f") or isinstance(x, bool) or not isinstance(x, int | float):
+    """A finite number in one of the formats a page may show: "+.2f" (with an R after it), "+.0%", "+.1f", ".1f",
+    ".0f". Never a price: a page has no amount and no level (R13, DEC-0044 section 3)."""
+    if fmt not in RATIO_FORMATS or isinstance(x, bool) or not isinstance(x, int | float):
         return "?"
     return format(x, fmt) if math.isfinite(x) else "?"
 

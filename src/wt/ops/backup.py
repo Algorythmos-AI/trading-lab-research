@@ -40,7 +40,7 @@ from wt.core.clock import ET
 from wt.core.config import DATA_DIR, FORWARD_LEDGER, ROOT, STATE_DIR
 from wt.core.desk import DESKS, Desk, installed
 from wt.ops import hc
-from wt.ops.alerts import Alerts
+from wt.ops.alerts import Alerts, count, word
 from wt.ops.r2 import R2
 
 JOURNAL = DATA_DIR / "live" / "journal.jsonl"
@@ -89,6 +89,18 @@ def chains() -> dict[str, dict[str, Any]]:
     return out
 
 
+def anchor_page(why: str) -> str:
+    """The page for a failed anchor: what kind of failure, never the object key or the store's answer (both stay in
+    the backup log). The anchor's own words (anchor) are matched, most serious first."""
+    if "DIFFERENT" in why:
+        return "A day is already anchored with DIFFERENT heads: the ledger was rewritten. See the backups runbook."
+    if "not configured" in why:
+        return "R2 is not configured on this host: nothing was anchored."
+    if "HTTP" in why:
+        return "The anchor store answered with an error; nothing new was anchored. The backup log has the answer."
+    return "The anchor could not be written. The backup log says why."
+
+
 def flag_chain(problems: list[str], alerts: Alerts, desk: Desk = DESKS["stocks"]) -> None:
     """A broken chain switches off entries on the desk that owns the ledger, and on no other."""
     flag = CHAIN_FLAG if desk.name == "stocks" else desk.chain_flag
@@ -97,9 +109,10 @@ def flag_chain(problems: list[str], alerts: Alerts, desk: Desk = DESKS["stocks"]
     if desk.name == "stocks":
         key, title = "evidence:chain", "Evidence chain broken: paper-B entries off"
     else:
-        key, title = f"{desk.alert_prefix}evidence-chain", f"Evidence chain broken: {desk.name} entries off"
+        key, title = f"{desk.alert_prefix}evidence-chain", f"Evidence chain broken: {word(desk.name, DESKS)} entries off"
     alerts.fire(key, title,
-                f"{len(problems)} problem(s) in the ledger hash chain; exits are still managed. First: {problems[0]}", 4)
+                f"{count(len(problems))} problem(s) in the ledger hash chain; exits are still managed. The flag file "
+                "and the backup log name them.", 4)
 
 
 def extends(anchored: Any, paths: dict[str, Path]) -> bool:
@@ -184,7 +197,7 @@ def nightly(alerts: Alerts | None = None, weekly: bool | None = None, client: R2
     r = restic("backup", "--host", host(), "--tag", "nightly", "--tag", f"role:{role()}", "--exclude-caches",
                *[p for p in paths if (ROOT / p).exists()])
     if r.returncode not in (0, 3):                       # 3 = snapshot made, some files unreadable
-        alerts.fire("backup", "Nightly backup failed", f"restic exit {r.returncode}; see the backup log.", 4)
+        alerts.fire("backup", "Nightly backup failed", f"restic exit {count(r.returncode)}; see the backup log.", 4)
         print((r.stderr or r.stdout)[-800:], file=sys.stderr)
         code = 1
     elif r.returncode == 3:
@@ -192,14 +205,14 @@ def nightly(alerts: Alerts | None = None, weekly: bool | None = None, client: R2
     ok, why = anchor_desks(today, state, client)
     print(f"anchor: {why}")
     if not ok:
-        alerts.fire("anchor", "Daily evidence anchor failed", why, 4 if "DIFFERENT" in why else 3)
+        alerts.fire("anchor", "Daily evidence anchor failed", anchor_page(why), 4 if "DIFFERENT" in why else 3)
         code = code or 1
     DIGEST.parent.mkdir(parents=True, exist_ok=True)
     DIGEST.write_text(json.dumps({"day": today.isoformat(), "verified": not problems, "anchored": ok,
                                   **{k: {"lines": v["lines"], "head": v["head"]} for k, v in state.items()}},
                                  indent=1))
     if ok:
-        alerts.resolve("anchor", "Daily evidence anchor: ok", why)       # nothing else ever cleared this one
+        alerts.resolve("anchor", "Daily evidence anchor: ok", "Every desk's heads are anchored.")  # nothing else cleared it
     if code == 0 and not problems:
         alerts.resolve("backup", "Nightly backup: ok", "Backed up and anchored.")
     hc.ping("wt-backup", "" if code == 0 and not problems else "fail", f"anchor: {why}")

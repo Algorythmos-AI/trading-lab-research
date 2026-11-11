@@ -73,3 +73,26 @@ there prints the step and exits 1.
 
 The pages carry only the step, an outcome word, the ISO week and a file count: never the remote's error text, a
 path or a token.
+
+## What a phone alert may carry
+
+The ntfy topic (ntfy.sh) is public: anyone who knows its name reads every page. A title and a message are fixed
+words from the code, plus values that went through a guard in `wt.ops.alerts`: `count` (whole numbers), `word`
+(enum words from a closed set the code defines), `day`, `hhmm`, `sha` (8 hex digits), `tag` (a `runtime-*` tag),
+`record` (a DEC/HYP/EXP/ADR id), `exc_name` (an exception's class, never its text) and `ratio` (R and %). Never a
+symbol, a price, a dollar amount, an account value, a host path or an error's text. `alerts.render` is what is sent:
+it also scrubs amounts, account ids and URLs, as the last line of defence. The characters allowed are
+`alerts.PAGE_CHARS`; titles stop at 120 characters, messages at 1000.
+
+- `tests/unit/test_alert_allowlist.py` finds every alert the code can send, from the code itself
+  (`tests/unit/alert_sites.py` follows wrappers such as the clone's `page` to where the text is made). Each needs an
+  entry there, with hostile values for every name its text uses (every name in `config/options_desk.yaml` and B's
+  allowlist, `123.45`, `US$1,234.56`, an exception with a path and a URL, a 4000-character string). A new alert
+  without an entry fails the test. A new kind of value needs a guard, not a wider allowlist.
+- The dashboard's pages (`dashboard/src/lib/ntfy.ts`, `NOTICE_KINDS`) are held to the same rules by
+  `dashboard/test/ntfy-notices.test.ts`, with a word vocabulary as well.
+- The one place a decision record lets more through is DEC-0044 section 3 (the server entry alert: a symbol, a side
+  and a state word). It is not switched on and is not in this code yet; when it is, its page needs its own entry and
+  the record's exception, not a wider rule.
+- The log, the journal, the dashboard (behind the owner's login) and the alert key (the dashboard's alert log) still
+  name what a page leaves out.
