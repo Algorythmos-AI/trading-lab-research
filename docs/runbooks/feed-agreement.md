@@ -6,8 +6,8 @@ by side for about five sessions, and that any switch is made by the owner with a
 fixes, before any number is seen, how that comparison is made and how it is read. The tool that makes it is
 `make feed-agreement` (below).
 
-Written 2026-11-11, before any comparison was run on real data; revised the same day (revision 1, below), still
-before any real-data count existed. The thresholds below are fixed. Changing any of them needs a new dated revision
+Written 2026-11-11, before any comparison was run on real data; revised the same day (revisions 1 and 2, below),
+still before any real-data count existed. The thresholds below are fixed. Changing any of them needs a new dated revision
 of this page, committed before the next run; runs made before it are read under the rules they were run under.
 
 ## Revisions
@@ -31,6 +31,21 @@ report and no number were produced. What changed, and why:
 5. Smaller: names with no bars all day are listed; the report files are written atomically; the runner refuses until
    20 minutes after the close; the exit codes for a 429 retry cap, a write failure and an unexpected failure are
    listed; `make feed-agreement-edition` no longer sources the env file as shell and validates the day first.
+
+**Revision 2, 2026-11-11 (New York).** Also made **before any real-data count existed** (no bar had been read).
+
+1. **The keys' source.** The earlier 401 came from a dead key pair exported by the shell; Node's `--env-file` does
+   not override a variable already in the environment, so the runner used it silently. Now, when an env file is
+   named and defines an Alpaca key pair, the file's pair wins over the inherited environment (for the key names
+   only), and the runner prints which source it used ("keys from the env file" or "keys from the environment"),
+   never a value. A 401 names that source.
+2. **The plan.** The owner's plan includes real-time SIP (the consolidated tape). Every request names its feed
+   explicitly (Alpaca's default silently becomes IEX without the subscription). The report records the
+   `X-RateLimit-Limit` Alpaca sends on each feed's first answer, and the runner stops when SIP's is under 1000: the
+   plan no longer includes real-time SIP, or the keys are the wrong ones.
+3. **Drift of the history.** Bars can change after the session (late and corrected prints). The report records when
+   its bars were fetched, and a recheck mode measures how many units change word when the same day is fetched again.
+   The recheck never replaces a report or a summary row.
 
 ## What it is, and what it is not
 
@@ -128,6 +143,9 @@ Per session:
    many live slots the evaluation did not answer `ok`.
 6. **Bars missing per slot**: for every slot of the session, how many focus names have no bar for that slot on IEX,
    and how many on SIP; and the totals.
+7. **Provenance**: when the bars were fetched (`fetched_at`), the `X-RateLimit-Limit` of each feed's first answer
+   (`rate_limit`, a number, or null when Alpaca sent none) and the keys' source (`keys`: `env-file` or
+   `environment`). These describe the run, not the feeds, and are not part of any reading.
 
 A report is written for one session at a time. Its share and its unmatched events are shown, but **a single session
 is never read** as equivalent or different.
@@ -204,7 +222,10 @@ Run from an up-to-date worktree of `origin/main` (`git worktree add ~/trading-wt
 `make bootstrap` and `cd dashboard && pnpm install --frozen-lockfile`), never from the stale console checkout
 `~/trading`: the engine label in the report must be the one in production. The Alpaca keys come from the env file
 (`ENV_FILE`, `.env` by default): `APCA_API_KEY_ID` and `APCA_API_SECRET_KEY`, or `ALPACA_API_KEY_ID` and
-`ALPACA_API_SECRET_KEY`. The file is read by Node's `--env-file` parser, never sourced as shell.
+`ALPACA_API_SECRET_KEY`. The file is read with Node's own env-file parser, never sourced as shell. When the file
+defines a key pair, that pair is used even if the shell exports another one (a shell profile can export a dead
+pair); otherwise the environment's pair is used. The runner's first line says which: "keys from the env file" or
+"keys from the environment".
 
 ```
 make feed-agreement DAY=2026-11-12 EDITION=var/feed-agreement/editions/2026-11-12.json ENV_FILE=$HOME/trading/.env
@@ -235,9 +256,10 @@ The edition is PRIVATE (it names the focus names and their levels). Keep it unde
 - Refuses a malformed day, a day that is not a session (weekend, holiday), a session until **20 minutes after its
   close** (16:20 New York, 13:20 on a half day, so the historical bars have settled), and an edition whose `session`
   is not that day or which has no focus names. Nothing is read upstream before these checks pass.
-- Reads, for the focus names only, that session's 2-minute bars from `iex` and from `sip`, from 09:30 to the close:
-  read-only `GET /v2/stocks/bars` on `data.alpaca.markets`, one feed at a time, following `next_page_token` (at most
-  20 pages). It keeps under 200 calls a minute (180), waits for `Retry-After` (seconds or an HTTP date; 5 s when
+- Reads, for the focus names only, that session's 2-minute bars from `iex` and from SIP (the consolidated tape),
+  from 09:30 to the close: read-only `GET /v2/stocks/bars` on `data.alpaca.markets`, one feed at a time, every
+  request naming its `feed` explicitly, following `next_page_token` (at most 20 pages). It reads
+  `X-RateLimit-Limit` on each feed's first answer and stops when SIP's is under 1000. It keeps under 200 calls a minute (180), waits for `Retry-After` (seconds or an HTTP date; 5 s when
   absent) on a 429 and retries a 429 at most **5 times**, and stops at a hard time budget (`BUDGET_S`, 120 s by
   default), never starting a wait that would end past it. The keys are sent only in Alpaca's headers; they are never
   printed or logged, and neither is a page token or a response body.
@@ -264,6 +286,25 @@ report file and no new summary row.
 | 8 | `upstream:` | any other HTTP or network failure (the status only; 401 says keys rejected), a body that is not JSON, still paging after 20 pages, or a 429 after 5 retries |
 | 9 | `write failed:` | a report file or the summary could not be written; the new files are removed |
 | 10 | `failed:` | anything else unexpected (the error's name only) |
+| 11 | `sip plan:` | SIP's first answer carried an `X-RateLimit-Limit` under 1000: the plan no longer includes real-time SIP, or the wrong keys |
+
+A 401 reads `upstream: … HTTP 401: the keys were rejected (keys from the env file)` (or `from the environment`),
+exit 8: check the named source's pair.
+
+### Rechecking a day (how much the history drifts)
+
+```
+make feed-agreement-recheck DAY=2026-11-12 EDITION=var/feed-agreement/editions/2026-11-12.json ENV_FILE=$HOME/trading/.env
+```
+
+It fetches the day's bars again from both feeds, replays them through the same engine, and compares every unit's
+word on each feed with the stored report's (`<day>.json`). It prints, and writes to `<day>.recheck.json`, only
+counts: the units compared, how many changed word on IEX and on SIP, and how many changed set (comparable, both
+lack). It never replaces the stored report or its summary row, and the reading never uses it. It refuses when there
+is no stored report for the day, or when the stored report was made under another engine label (the change could not
+be told from an engine change). Run it **once, the day after the first session**, to learn how much a session's
+history drifts after the fact; if it drifts, that is a limitation of every report (limitation 2) and is said so
+beside the reading, not corrected for.
 
 ### Reading five sessions
 
