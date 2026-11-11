@@ -19,6 +19,7 @@ import { type DayFacts, type RailDay, railWithNotes, sessionClock, sessionTimeli
 import { cn } from "@/lib/utils";
 import { roomShown } from "@/lib/what-if";
 import { CockpitSwitch } from "./cockpit";
+import { ServerCheckNote } from "./desk-shadow";
 import { DoneControl, DonePill, UncheckedNote, useDone, useDonePolling } from "./done-today";
 import { AlertButtons, AlertMenu, type BoardLogEntry, boardCollapsed, useBoard } from "./trade-now";
 
@@ -270,6 +271,8 @@ export function StatusRail({ day: server, facts = null }: { day: RailDay | null;
             </span>
           </p>
         ) : null}
+        {/* The server's shadow check, only when it has stopped logging: nothing at all otherwise, so no row on a phone. */}
+        {b.on ? <ServerCheckNote /> : null}
         {/* On a phone the Done control ends the countdown's row, so the day pill and the three buttons keep theirs. */}
         {b.on ? <DoneControl id="done-today-confirm-phone" className="sm:hidden max-sm:col-start-2 max-sm:justify-self-end" /> : null}
         <div className="ml-auto flex items-center gap-1.5 max-sm:col-start-2 max-sm:row-start-2">

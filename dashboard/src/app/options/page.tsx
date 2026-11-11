@@ -27,6 +27,7 @@ import { sessionView } from "@/lib/journal";
 import { dayFacts, railDay } from "@/lib/session-timeline";
 import { dayCheck } from "@/lib/trade-rules";
 import { loadFlagsView } from "@/lib/desk-flags-run";
+import { loadEvalSwitch } from "@/lib/desk-page-run";
 import { listOptionsDates, loadJournal, loadLedger, loadOptions, loadOptionsLive, pageTime } from "@/lib/snapshot";
 
 export const dynamic = "force-dynamic";
@@ -97,7 +98,8 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
   const date = rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : undefined;
   // The paper positions are a view of now, so an older edition is drawn without them.
   // The owner's "done for today" flag, read with the page for a live edition (null when it could not be read).
-  const [result, dates, positions, journal, ledger, flags] = await Promise.all([loadOptions(date), listOptionsDates(), date ? null : loadOptionsLive(), loadJournal(), date ? null : loadLedger(), date ? null : loadFlagsView()]);
+  // The server's shadow check's switch (DEC-0044): off unless the store says "log"; while off the page asks nothing about it.
+  const [result, dates, positions, journal, ledger, flags, evalSwitch] = await Promise.all([loadOptions(date), listOptionsDates(), date ? null : loadOptionsLive(), loadJournal(), date ? null : loadLedger(), date ? null : loadFlagsView(), date ? "off" : loadEvalSwitch()]);
   const now = await pageTime();
   const live = positions?.status === "ok" ? positions.doc : null;
   if (result.status !== "ok") {
@@ -144,7 +146,7 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
       <h1 className="sr-only">Options</h1>
       <LiveQuotes symbols={withLeaders(e.tickers.map((t) => t.symbol)).join(",")} session={e.session} enabled={!date}>
         <DoneTodayProvider initial={flags}>
-          <BoardProvider e={full} live={!date} {...day} openLots={doc?.open ?? []} closedTrades={doc?.trades ?? []} journalAsOf={doc?.as_of ?? null} dayFacts={facts}>
+          <BoardProvider e={full} live={!date} {...day} openLots={doc?.open ?? []} closedTrades={doc?.trades ?? []} journalAsOf={doc?.as_of ?? null} dayFacts={facts} evalOn={evalSwitch === "log"}>
             {/* Top to bottom: what the day allows and the clock, the one name that matters now, the four at a glance, what
                 to act on, the cards, the rules strip, then the desk. Cockpit keeps only the rail, the hero and the four
                 ladders (everything else carries data-cockpit-hide). The parts share the page's one live feed and board. */}

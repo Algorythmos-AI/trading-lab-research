@@ -60,6 +60,15 @@ const FILES = [
   "../src/lib/desk-flags-run.ts",
   "../src/components/client/done-today.tsx",
   "../src/lib/done-sync.ts",
+  "../src/lib/desk-eval.ts",
+  "../src/lib/desk-run.ts",
+  "../src/lib/desk-page-run.ts",
+  "../src/lib/desk-shadow.ts",
+  "../src/components/client/desk-shadow.tsx",
+  "../src/lib/desk-shadow-client.ts",
+  "../src/app/api/cron/desk/route.ts",
+  "../src/app/api/desk/page-state/route.ts",
+  "../src/app/api/desk/eval-status/route.ts",
 ];
 
 const BANNED = [

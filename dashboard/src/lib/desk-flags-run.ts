@@ -114,10 +114,10 @@ export function sameOrigin(req: Request): boolean {
   }
 }
 
-const isJson = (ct: string | null) => !!ct && /^application\/json\s*(;\s*charset=utf-8\s*)?$/i.test(ct.trim());
+export const isJson = (ct: string | null) => !!ct && /^application\/json\s*(;\s*charset=utf-8\s*)?$/i.test(ct.trim());
 
 /** The body as text; "too-large" once it passes `max` bytes (read no further); "bad" when it is not UTF-8. */
-async function readCapped(req: Request, max: number): Promise<{ text: string } | "too-large" | "bad"> {
+export async function readCapped(req: Request, max: number): Promise<{ text: string } | "too-large" | "bad"> {
   const declared = req.headers.get("content-length");
   if (declared !== null && !(Number(declared) <= max)) return "too-large";
   if (!req.body) return { text: "" };

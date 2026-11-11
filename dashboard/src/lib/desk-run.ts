@@ -1,0 +1,262 @@
+import "server-only";
+import { exists, PreconditionFailed, readText, readTextIfChanged, writeText } from "./blob";
+import { type BarsResponse, fetchSettledBars } from "./bars";
+import { JOURNAL_PATHS, OPTIONS_PATHS } from "./desk";
+import { defaultDeps as flagsDeps, doneForAlerts, readFlags, type FlagsRead } from "./desk-flags-run";
+import {
+  DESK_EVAL_PATH,
+  type DegradedWhy,
+  type Evaluation,
+  evaluateSlot,
+  focusSymbols,
+  notEvaluated,
+  nyHhmm,
+  parseEvalSwitch,
+  type ServerRecord,
+  serverLogPath,
+  serverRecord,
+  slotAt,
+  SYMBOL_RE,
+} from "./desk-eval";
+import type { JournalDoc } from "./journal";
+import { logEvent } from "./log";
+import { isHalfDay, type Options } from "./options";
+import { alpacaKeys, fetchQuotes, type QuoteResponse } from "./quote";
+import { fixtureMode } from "./snapshot";
+import { CLOSE_GRACE_MS, SERVER_SETTLE_MS } from "./trade-state";
+
+// GET /api/cron/desk: the server's shadow evaluation of the Options desk (DEC-0044, sections 1 and 2). Once a minute
+// in the New York session it works out the board for the last settled 2-minute slot (desk-eval.ts) and writes one
+// private, create-only record per slot to desk/log/YYYY-MM-DD/HHMM.json. It logs only: nothing here sends an alert,
+// a push or any message, and nothing places, stages or suggests an order.
+//
+// What one run does, cheapest first, and what it costs in store operations:
+//  * outside the session (weekend, holiday, before 09:30, from the close, or before the first bar has settled): idle,
+//    no store operation at all;
+//  * the switch, desk/eval.json: one read every run. Off, missing or malformed: nothing else happens;
+//  * the slot's record: one head(). Already there (the run a minute later in the same slot, a double fire, a late
+//    retry): a no-op success, nothing more read;
+//  * otherwise the edition and the journal (one read each, a bodiless 304 when unchanged on a warm instance), the
+//    done-for-today flag (one read), two upstream calls to Alpaca side by side (the 2-minute bars, and the same
+//    snapshot the page's quote route reads), and one create-only put.
+// About 390 runs a session: 390 switch reads and 390 heads, then for about 194 slots three reads, two upstream
+// calls and one put.
+//
+// Every upstream call has its own hard timeout inside RUN_BUDGET_MS; a timed-out edition or bars read is written as a
+// degraded record, never guessed. In fixture mode and anywhere but production it never touches the store: the switch
+// reads as off, and a test's injected dry run returns the record it would have written.
+
+/** The most one step may take; the steps together stay under 10 s. */
+export const TIMEOUT_MS = { switch: 1_500, exists: 1_500, edition: 1_500, reads: 3_000, barsPage: 2_500, write: 1_500 } as const;
+
+export class BarsOff extends Error {
+  constructor() {
+    super("bars not configured");
+    this.name = "BarsOff";
+  }
+}
+class TimedOut extends Error {
+  constructor() {
+    super("timed out");
+    this.name = "TimedOut";
+  }
+}
+
+export type EditionRead = { status: "ok"; edition: Options } | { status: "missing" } | { status: "error" };
+
+/** Everything a run touches, injectable so tests run the real logic with no store and no network. */
+export interface DeskRunDeps {
+  now(): number;
+  /** Fixture mode or anywhere but production: the store is never read or written. */
+  dry: boolean;
+  readSwitch(): Promise<string | null>;
+  exists(path: string): Promise<boolean>;
+  /** Create-only: throws PreconditionFailed when the record is already there. Never overwrites. */
+  write(path: string, body: string): Promise<void>;
+  loadEdition(): Promise<EditionRead>;
+  loadJournal(): Promise<JournalDoc | null>;
+  readDone(): Promise<FlagsRead>;
+  /** The settled bars: a cached read older than `minFetchedAt` is fetched again. Throws BarsOff without keys. */
+  fetchBars(symbols: string[], opts: { now: Date; minFetchedAt: number; timeoutMs: number; halfDay: boolean }): Promise<BarsResponse>;
+  /** The snapshot per name, as the page's quote route reads it (last trade, day high and low). Throws BarsOff without keys. */
+  fetchSnapshots(symbols: string[], opts: { now: Date; timeoutMs: number }): Promise<QuoteResponse>;
+}
+
+export type DeskRunResult =
+  | { ok: true; outcome: "idle"; why: string }
+  | { ok: true; outcome: "off" }
+  | { ok: true; outcome: "already-logged"; slot: string }
+  | { ok: true; outcome: "logged"; slot: string; status: ServerRecord["status"]; reason: DegradedWhy | null }
+  | { ok: true; outcome: "dry"; slot: string; path: string; record: ServerRecord }
+  | { ok: false; outcome: "write-failed"; slot: string };
+
+function within<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const t = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new TimedOut()), ms);
+  });
+  return Promise.race([p, t]).finally(() => clearTimeout(timer));
+}
+
+const isObj = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v);
+
+/** A stored edition the board can read: an object with a session and tickers. */
+export function parseEdition(text: string): EditionRead {
+  try {
+    const v: unknown = JSON.parse(text);
+    if (!isObj(v) || typeof v.session !== "string" || !Array.isArray(v.tickers)) return { status: "error" };
+    return { status: "ok", edition: v as unknown as Options };
+  } catch {
+    return { status: "error" };
+  }
+}
+
+function parseJournal(text: string): JournalDoc | null {
+  try {
+    const v: unknown = JSON.parse(text);
+    return isObj(v) && Array.isArray(v.trades) ? (v as unknown as JournalDoc) : null;
+  } catch {
+    return null;
+  }
+}
+
+const refuse = () => Promise.reject(new Error("dry run: the store is not touched"));
+
+/** The deployed dependencies: the private store and Alpaca in production; nothing at all anywhere else. */
+export function defaultDeskRunDeps(): DeskRunDeps {
+  const dry = fixtureMode() || process.env.VERCEL_ENV !== "production";
+  if (dry)
+    return {
+      now: () => Date.now(),
+      dry: true,
+      readSwitch: async () => null, // off: nothing is read, nothing is written
+      exists: refuse,
+      write: refuse,
+      loadEdition: refuse,
+      loadJournal: refuse,
+      readDone: refuse,
+      fetchBars: refuse,
+      fetchSnapshots: refuse,
+    };
+  return {
+    now: () => Date.now(),
+    dry: false,
+    readSwitch: async () => (await readText(DESK_EVAL_PATH))?.text ?? null,
+    exists: (path) => exists(path),
+    write: async (path, body) => {
+      await writeText(path, body, { createOnly: true });
+    },
+    loadEdition: async () => {
+      const r = await readTextIfChanged(OPTIONS_PATHS.latest);
+      return r ? parseEdition(r.text) : { status: "missing" };
+    },
+    loadJournal: async () => {
+      const r = await readTextIfChanged(JOURNAL_PATHS.latest);
+      return r ? parseJournal(r.text) : null;
+    },
+    readDone: () => readFlags(flagsDeps()),
+    fetchBars: (symbols, o) => {
+      const keys = alpacaKeys();
+      if (!keys) return Promise.reject(new BarsOff());
+      return fetchSettledBars(symbols, keys, o.now, o.minFetchedAt, o.timeoutMs, o.halfDay);
+    },
+    fetchSnapshots: (symbols, o) => {
+      const keys = alpacaKeys();
+      if (!keys) return Promise.reject(new BarsOff());
+      return fetchQuotes(symbols, keys, o.now, fetch, undefined, { timeoutMs: o.timeoutMs });
+    },
+  };
+}
+
+const errName = (e: unknown) => (e instanceof Error ? e.name : "unknown");
+
+/** One run: idle, off, already logged, or one record written for the last settled slot. */
+export async function runDeskEval(deps: DeskRunDeps = defaultDeskRunDeps()): Promise<DeskRunResult> {
+  const startedAt = deps.now();
+  const at = slotAt(startedAt);
+  if (at.kind === "idle") return { ok: true, outcome: "idle", why: at.why };
+
+  // The switch, every run, from the store: anything but a readable "log" is off.
+  let raw: string | null = null;
+  try {
+    raw = await within(deps.readSwitch(), TIMEOUT_MS.switch);
+  } catch (e) {
+    logEvent("desk-eval.switch", { outcome: "read-failed", error: errName(e) });
+  }
+  if (parseEvalSwitch(raw) !== "log") return { ok: true, outcome: "off" };
+
+  const slot = { day: at.day, end: at.end };
+  const hhmm = nyHhmm(slot.end);
+  const path = serverLogPath(slot.day, slot.end);
+  if (!deps.dry) {
+    try {
+      if (await within(deps.exists(path), TIMEOUT_MS.exists)) return { ok: true, outcome: "already-logged", slot: hhmm };
+    } catch (e) {
+      // Unknown: carry on; the create-only write still refuses a second record.
+      logEvent("desk-eval.exists", { outcome: "error", error: errName(e) });
+    }
+  }
+
+  // The day's facts are read at the slot's own instant, so two runs of the slot read them alike.
+  const slotNow = new Date(slot.end + CLOSE_GRACE_MS);
+  let edition: Options | null = null;
+  let evaluation: Evaluation;
+  let read: EditionRead | "timeout";
+  try {
+    read = await within(deps.loadEdition(), TIMEOUT_MS.edition);
+  } catch (e) {
+    read = e instanceof TimedOut ? "timeout" : { status: "error" };
+  }
+  if (read === "timeout") evaluation = notEvaluated("degraded", "store-timeout", at.bounds.halfDay, true);
+  else if (read.status !== "ok") evaluation = notEvaluated("degraded", read.status === "missing" ? "edition-missing" : "edition-error", at.bounds.halfDay, true);
+  else {
+    const ed = read.edition;
+    edition = ed;
+    const symbols = focusSymbols(ed).filter((s) => SYMBOL_RE.test(s));
+    const halfDay = isHalfDay(ed);
+    // The journal, the done flag and the bars are read side by side, each within its own timeout.
+    const facts = Promise.all([
+      within(deps.loadJournal(), TIMEOUT_MS.reads).catch(() => null),
+      within(deps.readDone(), TIMEOUT_MS.reads)
+        .then((r) => doneForAlerts(r, slotNow))
+        .catch(() => true), // could not read: counts as done, as doneForAlerts does
+    ]);
+    // A wrong day or an empty card needs no bars: nothing is asked for upstream.
+    const needsBars = ed.session === slot.day && symbols.length > 0;
+    const upstream = <T,>(p: () => Promise<T>, kind: "bars" | "snapshot"): Promise<{ ok: T } | { why: DegradedWhy }> =>
+      within(p(), TIMEOUT_MS.reads).then(
+        (ok) => ({ ok }),
+        (e: unknown) => {
+          const why: DegradedWhy = e instanceof BarsOff ? `${kind}-off` : e instanceof TimedOut || errName(e) === "TimeoutError" ? `${kind}-timeout` : `${kind}-failed`;
+          logEvent("desk-eval.upstream", { outcome: why });
+          return { why };
+        },
+      );
+    const runAt = new Date(deps.now());
+    const [[journal, done], barsGot, snapGot] = await Promise.all([
+      facts,
+      needsBars ? upstream(() => deps.fetchBars(symbols, { now: runAt, minFetchedAt: slot.end + SERVER_SETTLE_MS, timeoutMs: TIMEOUT_MS.barsPage, halfDay }), "bars") : null,
+      needsBars ? upstream(() => deps.fetchSnapshots(symbols, { now: runAt, timeoutMs: TIMEOUT_MS.barsPage }), "snapshot") : null,
+    ]);
+    if (barsGot === null || snapGot === null) evaluation = evaluateSlot({ slot, edition: ed, journal, done, bars: {}, fetchedAt: {}, snapshots: {} }); // wrong-day or no-focus
+    else if ("why" in barsGot) evaluation = notEvaluated("degraded", barsGot.why, halfDay, done, !("why" in snapGot));
+    // Never bars alone: without the snapshot an entry could be read past a high the page sees.
+    else if ("why" in snapGot) evaluation = notEvaluated("degraded", snapGot.why, halfDay, done, false);
+    else evaluation = evaluateSlot({ slot, edition: ed, journal, done, bars: barsGot.ok.bars, fetchedAt: barsGot.ok.fetchedAt, snapshots: snapGot.ok.quotes });
+  }
+
+  const record = serverRecord(evaluation, slot, deps.now(), edition);
+  if (deps.dry) return { ok: true, outcome: "dry", slot: hhmm, path, record };
+  try {
+    await within(deps.write(path, JSON.stringify(record)), TIMEOUT_MS.write);
+  } catch (e) {
+    if (e instanceof PreconditionFailed) {
+      logEvent("desk-eval", { outcome: "already-logged", slot: hhmm });
+      return { ok: true, outcome: "already-logged", slot: hhmm };
+    }
+    logEvent("desk-eval", { outcome: "write-failed", slot: hhmm, error: errName(e) });
+    return { ok: false, outcome: "write-failed", slot: hhmm };
+  }
+  logEvent("desk-eval", { outcome: "logged", slot: hhmm, status: record.status, reason: record.reason, rows: record.rows.length, ms: deps.now() - startedAt });
+  return { ok: true, outcome: "logged", slot: hhmm, status: record.status, reason: record.reason };
+}
