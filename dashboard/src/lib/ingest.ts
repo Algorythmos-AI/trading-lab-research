@@ -36,26 +36,52 @@ export const EDITION_AHEAD_MS = OPTIONS_LIVE_AHEAD_MS;
 /** UTC+14 (the Line Islands): no wall time anywhere on Earth is further ahead of UTC than this. */
 const WIDEST_ZONE_AHEAD_MS = 14 * 3_600_000;
 
-const ZONED_ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
-const ZONELESS_ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
+/** A wall time with no zone, with "T" or a space between date and time (Python's str(datetime)). */
+const ZONELESS_ISO_RE = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/i;
 
-/**
- * The earliest real instant an as_of can stand for; null when it stands for none. A time with its zone is exact.
- * A date alone, or a wall time with no zone, names a different instant in every zone: it is read as UTC (never as
- * this server's zone) and moved back by the widest offset, so it counts as ahead only when no publisher anywhere
- * could have written it yet. Any other form Date.parse takes is judged as leniently.
- */
-export function earliestInstant(asOf: string): number | null {
-  if (ZONED_ISO_RE.test(asOf)) return parseTime(asOf);
-  const asUtc = DATE_ONLY_RE.test(asOf) ? parseTime(`${asOf}T00:00:00Z`) : ZONELESS_ISO_RE.test(asOf) ? parseTime(`${asOf}Z`) : parseTime(asOf);
-  return asUtc === null ? null : asUtc - WIDEST_ZONE_AHEAD_MS;
+/** Whether an as_of names no instant of its own: a date alone, or a wall time with no zone. */
+function zoneless(asOf: string): boolean {
+  return DATE_ONLY_RE.test(asOf) || ZONELESS_ISO_RE.test(asOf);
 }
 
-/** Whether an as_of is dated later than this clock allows (EDITION_AHEAD_MS). Exactly at the allowance is not. */
+/**
+ * The instant editions are ordered by, and the only one this file compares. A date alone or a zoneless wall time is
+ * read as UTC, never in this server's zone, so the order does not depend on where it runs. Every other form
+ * Date.parse takes (a zone written as Z, z, +00:00 or +0000, with "T" or a space) is its exact instant.
+ */
+export function orderInstant(asOf: string | null | undefined): number | null {
+  if (typeof asOf !== "string" || asOf.length === 0) return null;
+  if (DATE_ONLY_RE.test(asOf)) return parseTime(`${asOf}T00:00:00Z`);
+  if (ZONELESS_ISO_RE.test(asOf)) return parseTime(`${asOf.slice(0, 10)}T${asOf.slice(11)}Z`);
+  return parseTime(asOf);
+}
+
+/**
+ * The earliest real instant an as_of can stand for; null when it stands for none. A value with its zone is exact.
+ * Only a date alone or a zoneless wall time is given the widest offset: it names a different instant in every
+ * zone, so it counts as ahead only when no publisher anywhere could have written it yet.
+ */
+export function earliestInstant(asOf: string): number | null {
+  const at = orderInstant(asOf);
+  return at === null || !zoneless(asOf) ? at : at - WIDEST_ZONE_AHEAD_MS;
+}
+
+/** Whether an incoming as_of is dated later than this clock allows (EDITION_AHEAD_MS). Exactly at it is not. */
 export function isAheadOfClock(asOf: string | null, nowMs: number): boolean {
   const at = asOf === null ? null : earliestInstant(asOf);
   return at !== null && at > nowMs + EDITION_AHEAD_MS;
+}
+
+/**
+ * Whether a stored document's ordering instant is beyond the allowance, so that it gives way to a newer edition
+ * whatever their order. Decided on the very instant the "older" rule compares, which is what guarantees the
+ * invariant: a stored document can refuse an edition as older only while its ordering instant is within
+ * now + EDITION_AHEAD_MS, so it can hold up a true edition for no longer than the allowance. (A zoneless value the
+ * lenient guard took, ordered as UTC, may be stored ahead: it then gives way to the next edition.)
+ */
+function storedAhead(storedAsOf: number | null, nowMs: number): boolean {
+  return storedAsOf !== null && storedAsOf > nowMs + EDITION_AHEAD_MS;
 }
 
 function json(status: number, body: Record<string, unknown>): Response {
@@ -95,16 +121,15 @@ export function historyPath(asOfMs: number, prefix: string = HISTORY_PREFIX): st
   return `${prefix}${iso.slice(0, 10)}/${iso.slice(11, 13)}.json`;
 }
 
-function currentMeta(text: string): { runId: string | null; asOf: number | null; asOfText: string | null } {
+function currentMeta(text: string): { runId: string | null; asOf: number | null } {
   try {
     const cur = JSON.parse(text) as { run_id?: unknown; as_of?: unknown };
     return {
       runId: typeof cur.run_id === "string" ? cur.run_id : null,
-      asOf: typeof cur.as_of === "string" ? parseTime(cur.as_of) : null,
-      asOfText: typeof cur.as_of === "string" ? cur.as_of : null,
+      asOf: typeof cur.as_of === "string" ? orderInstant(cur.as_of) : null,
     };
   } catch {
-    return { runId: null, asOf: null, asOfText: null };
+    return { runId: null, asOf: null };
   }
 }
 
@@ -236,7 +261,7 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
     return done(422, "invalid", { error: "invalid", errors: result.errors }, { bytes: bytes.byteLength, n_errors: result.errors.length });
   }
   const runId = result.snapshot.run_id;
-  const asOf = parseTime(result.snapshot.as_of ?? null);
+  const asOf = orderInstant(result.snapshot.as_of);
   if (!runId || asOf === null) {
     return done(422, "invalid", { error: "invalid", errors: ["/run_id and /as_of must be set; as_of must be a timestamp"] });
   }
@@ -376,7 +401,7 @@ async function storeEdition(kind: EditionKind, text: string, data: unknown, done
   const result = kind.validate(data);
   if (!result.ok) return refuse("invalid", result.errors, { desk, n_errors: result.errors.length });
   const { runId, date } = result;
-  const asOf = parseTime(result.asOf);
+  const asOf = orderInstant(result.asOf);
   if (!runId || asOf === null) {
     return refuse("invalid", ["/run_id and /as_of must be set; as_of must be a timestamp"], {});
   }
@@ -389,8 +414,8 @@ async function storeEdition(kind: EditionKind, text: string, data: unknown, done
         const meta = currentMeta(current.text);
         if (meta.runId === runId) return done(200, "duplicate", { status: "duplicate", run_id: runId }, { run_id: runId, desk });
         if (meta.asOf !== null && asOf <= meta.asOf) {
-          // Only a stored as_of beyond the clock's allowance gives way; every other older edition is refused.
-          if (!isAheadOfClock(meta.asOfText, nowMs)) return done(409, "older", { status: "older", run_id: runId }, { run_id: runId, desk });
+          // Only a stored document ordered beyond the clock's allowance gives way; every other older edition is refused.
+          if (!storedAhead(meta.asOf, nowMs)) return done(409, "older", { status: "older", run_id: runId }, { run_id: runId, desk });
           supersedes = true;
         }
       }
@@ -425,7 +450,7 @@ async function writeDated(path: string, text: string, asOf: number, nowMs: numbe
     const current = await readForUpdate(path);
     const stored = current ? currentMeta(current.text) : null;
     // A copy dated ahead of the clock is not newer: it gives way, as latest.json does (storeEdition).
-    if (stored && stored.asOf !== null && stored.asOf >= asOf && !isAheadOfClock(stored.asOfText, nowMs)) return;
+    if (stored && stored.asOf !== null && stored.asOf >= asOf && !storedAhead(stored.asOf, nowMs)) return;
     try {
       await writeText(path, text, current ? { ifMatch: current.etag } : { createOnly: true });
       return;

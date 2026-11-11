@@ -1,5 +1,6 @@
 import "server-only";
-import { readText, writeText } from "./blob";
+import { readText, storedAt, writeText } from "./blob";
+import { CALENDAR_PATHS, JOURNAL_PATHS, LEDGER_PATHS, OPTIONS_CLONE_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
 import { logEvent } from "./log";
 
 // The last edition /api/ingest refused for its content, one record per kind, for the monitoring to read. PRIVATE
@@ -80,4 +81,41 @@ export function parseIngestReject(text: string): IngestReject | null {
 export async function readIngestReject(kind: IngestRejectKind): Promise<IngestReject | null> {
   const stored = await readText(ingestRejectPath(kind));
   return stored ? parseIngestReject(stored.text) : null;
+}
+
+/** Where each kind's accepted document is stored: the same latest.json ingest.ts writes. */
+const LATEST_OF: Record<IngestRejectKind, string> = {
+  radar: RADAR_PATHS.latest,
+  options: OPTIONS_PATHS.latest,
+  ledger: LEDGER_PATHS.latest,
+  journal: JOURNAL_PATHS.latest,
+  "options-live": OPTIONS_LIVE_PATHS.latest,
+  "options-clone": OPTIONS_CLONE_PATHS.latest,
+  calendar: CALENDAR_PATHS.latest,
+};
+
+export interface IngestRejectStatus {
+  /** The last refusal recorded for the kind, or null. */
+  reject: IngestReject | null;
+  /** When the kind's latest document was last stored (the store's own upload time), or null before the first. */
+  stored_at: string | null;
+  /** True when a refusal is recorded and no document of the kind has been stored since it. */
+  current: boolean;
+}
+
+/** Whether a refusal is still the latest word for its kind: nothing was stored at or after it. */
+export function rejectIsCurrent(reject: IngestReject | null, storedAtIso: string | null): boolean {
+  if (!reject) return false;
+  if (storedAtIso === null) return true;
+  return Date.parse(reject.at) > Date.parse(storedAtIso);
+}
+
+/**
+ * The last refusal for `kind` with when its latest document was last stored, so a monitor can tell a refusal that
+ * still stands from one a later good edition has since replaced. The stored-at time is the store's own metadata for
+ * latest.json (one head() here, nothing written by ingest). A storage failure is thrown.
+ */
+export async function readIngestRejectStatus(kind: IngestRejectKind): Promise<IngestRejectStatus> {
+  const [reject, stored_at] = await Promise.all([readIngestReject(kind), storedAt(LATEST_OF[kind])]);
+  return { reject, stored_at, current: rejectIsCurrent(reject, stored_at) };
 }

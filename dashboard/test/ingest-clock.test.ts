@@ -9,14 +9,21 @@ import { OPTIONS_LIVE_SCHEMA } from "@/lib/validate";
 const blob = vi.hoisted(() => {
   class PreconditionFailed extends Error {}
   const store = new Map<string, { text: string; etag: string }>();
+  /** When each path was last written, by a clock the tests set. */
+  const uploaded = new Map<string, string>();
+  const clock = { now: "2026-11-11T15:00:00.000Z" };
   let seq = 0;
   const state = { rejects: "ok" as "ok" | "fail" | "hang", reads: "ok" as "ok" | "fail" };
   return {
     store,
+    uploaded,
+    clock,
     state,
     PreconditionFailed,
     reset() {
       store.clear();
+      uploaded.clear();
+      clock.now = "2026-11-11T15:00:00.000Z";
       seq = 0;
       state.rejects = "ok";
       state.reads = "ok";
@@ -24,6 +31,7 @@ const blob = vi.hoisted(() => {
     put(pathname: string, text: string) {
       const etag = `"e${++seq}"`;
       store.set(pathname, { text, etag });
+      uploaded.set(pathname, clock.now);
       return etag;
     },
   };
@@ -39,6 +47,10 @@ vi.mock("@/lib/blob", () => ({
     if (blob.state.reads === "fail") throw new Error("store down");
     return blob.store.get(pathname) ?? null;
   }),
+  storedAt: vi.fn(async (pathname: string) => {
+    if (blob.state.reads === "fail") throw new Error("store down");
+    return blob.uploaded.get(pathname) ?? null;
+  }),
   readForUpdate: vi.fn(async (pathname: string) => blob.store.get(pathname) ?? null),
   writeText: vi.fn(async (pathname: string, body: string, opts: { ifMatch?: string | null; createOnly?: boolean } = {}) => {
     if (pathname.startsWith("ops/ingest-rejects/")) {
@@ -52,8 +64,9 @@ vi.mock("@/lib/blob", () => ({
   }),
 }));
 
-const { handleIngest, EDITION_AHEAD_MS, OPTIONS_LIVE_AHEAD_MS, earliestInstant, isAheadOfClock } = await import("@/lib/ingest");
-const { INGEST_REJECT_KINDS, INGEST_REJECT_WRITE_MS, ingestRejectPath, parseIngestReject, readIngestReject } = await import("@/lib/ingest-reject");
+const { handleIngest, EDITION_AHEAD_MS, OPTIONS_LIVE_AHEAD_MS, earliestInstant, isAheadOfClock, orderInstant } = await import("@/lib/ingest");
+const { INGEST_REJECT_KINDS, INGEST_REJECT_WRITE_MS, ingestRejectPath, parseIngestReject, readIngestReject, readIngestRejectStatus, rejectIsCurrent } =
+  await import("@/lib/ingest-reject");
 
 const DEFAULT_SECRET = "test-default-secret";
 const RADAR_SECRET = "test-radar-secret";
@@ -134,13 +147,28 @@ describe("the allowance", () => {
     expect(EDITION_AHEAD_MS).toBe(10 * 60_000);
   });
 
-  it("reads a zoned time exactly, and a date or a zoneless wall time as early as any zone could mean it", () => {
-    expect(earliestInstant("2026-11-11T15:00:00Z")).toBe(Date.parse("2026-11-11T15:00:00Z"));
-    expect(earliestInstant("2026-11-12T02:00:00+11:00")).toBe(Date.parse("2026-11-11T15:00:00Z"));
-    expect(earliestInstant("2026-11-11T15:00Z")).toBe(Date.parse("2026-11-11T15:00:00Z"));
-    // Never this server's zone: the same answer wherever it runs.
+  it("reads every form that carries a zone exactly, and only a date or a zoneless wall time as early as any zone could mean it", () => {
+    const exact = Date.parse("2026-11-11T15:00:00Z");
+    for (const zoned of [
+      "2026-11-11T15:00:00Z",
+      "2026-11-12T02:00:00+11:00",
+      "2026-11-11T15:00Z",
+      "2026-11-11 15:00:00+00:00", // Python's str(datetime)
+      "2026-11-11T15:00:00+0000",
+      "2026-11-11T15:00:00z",
+      "2026-11-11t15:00:00Z",
+      "Wed, 11 Nov 2026 15:00:00 GMT",
+    ]) {
+      expect(earliestInstant(zoned), zoned).toBe(exact);
+      expect(orderInstant(zoned), zoned).toBe(exact);
+    }
+    // Never this server's zone: the same answer wherever it runs; ordered as UTC, guarded 14 hours earlier.
+    expect(orderInstant("2026-11-12")).toBe(Date.parse("2026-11-12T00:00:00Z"));
     expect(earliestInstant("2026-11-12")).toBe(Date.parse("2026-11-11T10:00:00Z"));
+    expect(orderInstant("2026-11-12T02:00:00")).toBe(Date.parse("2026-11-12T02:00:00Z"));
+    expect(orderInstant("2026-11-12 02:00:00")).toBe(Date.parse("2026-11-12T02:00:00Z"));
     expect(earliestInstant("2026-11-12T02:00:00")).toBe(Date.parse("2026-11-11T12:00:00Z"));
+    expect(earliestInstant("2026-11-12 02:00:00")).toBe(Date.parse("2026-11-11T12:00:00Z"));
     expect(earliestInstant("not a time")).toBeNull();
     expect(isAheadOfClock(null, NOW.getTime())).toBe(false);
     expect(isAheadOfClock("not a time", NOW.getTime())).toBe(false);
@@ -247,6 +275,65 @@ describe("the forms of as_of the research editions carry", () => {
   });
 });
 
+describe("every as_of form, as an incoming edition and as a stored one", () => {
+  const options = KINDS.find((k) => k.kind === "options")!;
+  const H = 3_600_000;
+  // [form, incoming ahead?] at NOW = 2026-11-11T15:00Z.
+  const forms: [string, boolean][] = [
+    ["2026-11-12 04:00:00+00:00", true], // Python's str(datetime), 13 h ahead
+    ["2026-11-11 15:05:00+00:00", false],
+    ["2026-11-12T04:00:00+0000", true],
+    ["2026-11-11T15:05:00+0000", false],
+    ["2026-11-12T04:00:00z", true],
+    ["2026-11-11T15:05:00z", false],
+    ["Thu, 12 Nov 2026 04:00:00 GMT", true],
+    ["2026-11-13", true], // no zone has reached it
+    ["2026-11-12", false], // begun east of UTC+5, but ordered as 00:00Z on the 12th: stored, it is ahead
+    ["2026-11-11", false],
+    ["2026-11-12T06:00:00", true],
+    ["2026-11-12T02:00:00", false], // a Sydney wall time, ordered as 02:00Z: stored, it is ahead
+    ["2026-11-12 02:00:00", false],
+    ["2026-11-11T15:05:00", false],
+    [at(EDITION_AHEAD_MS), false],
+    [at(EDITION_AHEAD_MS + 1000), true],
+  ];
+
+  it.each(forms)("incoming %s: ahead is %s", async (asOf, ahead) => {
+    const res = await send(options, doc(options, "in", asOf));
+    expect(res.status).toBe(ahead ? 422 : 200);
+    if (ahead) expect(outcomes()).toEqual(["ahead-of-clock"]);
+  });
+
+  it.each(forms)("stored %s: a true edition at now is stored, directly or by superseding it, unless the stored one is within the allowance", async (asOf) => {
+    seed(options.latest, doc(options, "stored", asOf));
+    if (options.dated) seed(options.dated, doc(options, "stored", asOf));
+    const res = await send(options, doc(options, "true", at(0)));
+    const storedOrder = orderInstant(asOf)!;
+    // The invariant: a 409 only ever comes from a stored document ordered within now + the allowance.
+    if (storedOrder > NOW.getTime() + EDITION_AHEAD_MS) {
+      expect(res.status).toBe(200);
+      expect(outcomes()).toEqual(["superseded-ahead"]);
+      expect(runIdAt(options.latest)).toBe("true");
+      if (options.dated) expect(runIdAt(options.dated)).toBe("true");
+    } else if (storedOrder < NOW.getTime()) {
+      expect(res.status).toBe(200);
+      expect(outcomes()).toEqual(["stored"]);
+    } else {
+      expect(res.status).toBe(409);
+      expect(storedOrder).toBeLessThanOrEqual(NOW.getTime() + EDITION_AHEAD_MS);
+    }
+  });
+
+  it("a stored zoneless or zone-carrying value 13 h ahead never holds up the next true edition", async () => {
+    for (const asOf of ["2026-11-12 04:00:00+00:00", "2026-11-12T04:00:00+0000", "2026-11-12T04:00:00z", "2026-11-12", "2026-11-12T02:00:00"]) {
+      blob.reset();
+      seed(options.latest, doc(options, "stored", asOf));
+      expect((await send(options, doc(options, "true", at(-H)))).status, asOf).toBe(200);
+      expect(runIdAt(options.latest)).toBe("true");
+    }
+  });
+});
+
 describe("the refusal's record", () => {
   const options = KINDS.find((k) => k.kind === "options")!;
   const radar = KINDS.find((k) => k.kind === "radar")!;
@@ -349,6 +436,37 @@ describe("readIngestReject", () => {
   it("throws when the store cannot be read, so a caller can tell that from nothing recorded", async () => {
     blob.state.reads = "fail";
     await expect(readIngestReject("options")).rejects.toThrow("store down");
+  });
+
+  it("says whether a refusal still stands: true until an edition of the kind is stored after it", async () => {
+    expect(await readIngestRejectStatus("options")).toEqual({ reject: null, stored_at: null, current: false });
+    blob.clock.now = "2026-11-11T14:00:00.000Z";
+    await send(options, doc(options, "good", at(-2 * 3_600_000)));
+    blob.clock.now = NOW.toISOString();
+    await send(options, doc(options, "ahead", at(3_600_000)));
+    expect(await readIngestRejectStatus("options")).toEqual({
+      reject: { at: NOW.toISOString(), kind: "options", outcome: "ahead-of-clock", n_errors: 1 },
+      stored_at: "2026-11-11T14:00:00.000Z",
+      current: true,
+    });
+    blob.clock.now = "2026-11-11T15:01:00.000Z";
+    await send(options, doc(options, "next", at(-60_000)));
+    expect(await readIngestRejectStatus("options")).toMatchObject({ stored_at: "2026-11-11T15:01:00.000Z", current: false });
+    // A refusal is never undone by another kind's edition.
+    expect((await readIngestRejectStatus("radar")).current).toBe(false);
+  });
+
+  it("a refusal with nothing ever stored stands; one at or before the last store does not", () => {
+    const r = { at: "2026-11-11T15:00:00.000Z", kind: "options" as const, outcome: "invalid" as const, n_errors: 1 };
+    expect(rejectIsCurrent(r, null)).toBe(true);
+    expect(rejectIsCurrent(r, "2026-11-11T14:59:59.000Z")).toBe(true);
+    expect(rejectIsCurrent(r, "2026-11-11T15:00:00.000Z")).toBe(false);
+    expect(rejectIsCurrent(null, null)).toBe(false);
+  });
+
+  it("the status throws when the store cannot be read", async () => {
+    blob.state.reads = "fail";
+    await expect(readIngestRejectStatus("options")).rejects.toThrow("store down");
   });
 
   it("has one path per kind under ops/ingest-rejects/", () => {

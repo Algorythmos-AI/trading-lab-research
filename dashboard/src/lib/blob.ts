@@ -42,6 +42,19 @@ export async function exists(pathname: string): Promise<boolean> {
   }
 }
 
+/**
+ * When the blob at `pathname` was last written, from the store's own metadata (one head(), no body); null when there
+ * is none. Every write replaces the blob, so for a latest.json this is when the last accepted document was stored.
+ */
+export async function storedAt(pathname: string): Promise<string | null> {
+  try {
+    return new Date((await head(pathname)).uploadedAt).toISOString();
+  } catch (e) {
+    if (e instanceof BlobNotFoundError) return null;
+    throw e;
+  }
+}
+
 // The last text read per path on this instance, by its delivery etag, for readTextIfChanged. A warm instance asks
 // the store "changed since?" and gets a bodiless 304 when it has not; a cold one reads it whole. Bounded: a handful
 // of fixed paths only ever enter it.

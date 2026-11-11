@@ -48,12 +48,16 @@ wt.ops.publish                            POST /api/ingest            (productio
 - **Ingest** (`src/lib/ingest.ts`): previews never accept writes. Accepted outcomes are `stored`, `duplicate`
   (same `run_id`) and `older` (409, `as_of` not newer than the stored one); an etag conflict is retried once.
   Every edition kind (radar, options, ledger, journal, options live, options clone, calendar) whose `as_of` is more
-  than ten minutes ahead of the server's clock is refused (422 `ahead-of-clock`); a date alone or a time with no
-  zone counts as ahead only when no zone on Earth has reached it. A stored edition dated beyond that allowance gives
-  way to the next valid one even though its `as_of` is "older" (logged `superseded-ahead`); otherwise the ordering
-  rule is unchanged. A refusal of an edition's content (`invalid`, `ahead-of-clock`) leaves a record at
+  than ten minutes ahead of the server's clock is refused (422 `ahead-of-clock`). Any value that carries a zone
+  (`Z`, `z`, `+00:00`, `+0000`, with `T` or a space) is compared exactly; only a date alone or a wall time with no
+  zone counts as ahead just when no zone on Earth has reached it, and is ordered as UTC. A stored edition whose
+  ordering time is beyond the ten minutes gives way to the next valid one even though that one's `as_of` is
+  "older" (logged `superseded-ahead`), so a stored document can refuse a true edition as older only while it is
+  within the allowance. A refusal of an edition's content (`invalid`, `ahead-of-clock`) leaves a record at
   `ops/ingest-rejects/<kind>.json` with only the time, the kind, the outcome and the number of errors
-  (`src/lib/ingest-reject.ts`, read with `readIngestReject`); its write is best effort and never changes the answer.
+  (`src/lib/ingest-reject.ts`); its write is best effort and never changes the answer. `readIngestRejectStatus`
+  returns that record with the kind's latest.json upload time (the store's own metadata) and whether the refusal
+  still stands, i.e. nothing of the kind was stored after it.
 - **Radar** (`/radar`): the daily pre-market radar's editions, signed with key id `radar` and validated against
   `src/lib/radar.schema.json` (owned here; `pnpm gen:types` regenerates `radar.types.ts`). Stored at
   `radar/latest.json` plus `radar/editions/YYYY-MM-DD.json`, where a same-day refresh replaces that date's copy.
