@@ -235,6 +235,22 @@ describe("releases not listed yet", () => {
     // The Fed's 2027 meetings are listed, so a month without one is not flagged.
     expect([...by.values()].flat()).not.toContain("Fed decisions");
   });
+
+  it("flags the months after a synthetic calendar's last CPI date, not the months up to it", () => {
+    const macro = [
+      { code: "cpi", date: "2027-03-10" },
+      { code: "cpi", date: "2027-01-13" },
+      { code: "nfp", date: "2027-12-03" },
+      { code: "fomc_decision", date: "2027-12-08" },
+    ];
+    const by = unlistedByMonth(undefined, macro);
+    expect(by.get("2027-04")).toEqual(["CPI"]);
+    expect(by.get("2027-12")).toEqual(["CPI"]);
+    for (const m of ["2027-01", "2027-02", "2027-03"]) expect(by.has(m)).toBe(false);
+    // No row at all: every month of the range is flagged.
+    const none = unlistedByMonth(undefined, [{ code: "nfp", date: "2027-12-03" }, { code: "fomc_decision", date: "2027-12-08" }]);
+    expect(none.get(RANGE.start.slice(0, 7))).toEqual(["CPI"]);
+  });
 });
 
 describe("the published economic calendar", () => {

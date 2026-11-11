@@ -287,7 +287,7 @@ date,time_et,type,severity,policy,source,quality
 2027-06-04,08:30,nfp,high,reduce,bls.gov/schedule/news_release,exact
 2027-06-09,14:00,fomc_decision,high,blackout_window,federalreserve.gov/monetarypolicy/fomccalendars.htm,exact
 2027-06-10,08:30,cpi,high,reduce,bls.gov/schedule/news_release,exact
-2027-06-18,16:00,quad_witching,medium,reduce,3rd Friday Mar/Jun/Sep/Dec,exact
+2027-06-17,16:00,quad_witching,medium,reduce,3rd Friday closed (Juneteenth observed: nyse.com/markets/hours-calendars; cboe.com/about/hours/us-options) so the Thursday (SR-CBOE-2026-007),exact
 2027-06-30,14:00,fomc_minutes,medium,blackout_window,decision+21d (Fed practice),derived
 2027-07-02,08:30,nfp,high,reduce,bls.gov/schedule/news_release,exact
 2027-07-14,08:30,cpi,high,reduce,bls.gov/schedule/news_release,exact
