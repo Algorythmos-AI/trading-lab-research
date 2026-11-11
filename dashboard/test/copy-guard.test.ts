@@ -56,6 +56,10 @@ const FILES = [
   "../src/lib/quote-poll.ts",
   "../src/components/client/ticket-memo.ts",
   "../src/components/client/use-quotes.ts",
+  "../src/lib/desk-flags.ts",
+  "../src/lib/desk-flags-run.ts",
+  "../src/components/client/done-today.tsx",
+  "../src/lib/done-sync.ts",
 ];
 
 const BANNED = [

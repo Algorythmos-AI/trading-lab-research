@@ -26,11 +26,12 @@ export function BoardChip({ symbol, className }: { symbol: string; className?: s
   if (!r || !r.view || !r.row.state) return null;
   const paused = r.paused || r.row.state.state === "paused";
   const v = r.view;
-  const icon = paused ? Pause : v.badge.alt ? GitBranch : STATE_ICON[r.row.state.state];
+  // Today marked done: the entry prompt reads as the neutral done chip (the board's own DONE_ROW_VIEW).
+  const icon = paused ? Pause : r.done ? CircleCheck : v.badge.alt ? GitBranch : STATE_ICON[r.row.state.state];
   return (
     // The chip may wrap: "FAILED BREAK · PUT" is wider than a phone's glance tile (about 150 px), and a badge that
     // cannot shrink pushes the tile sideways or is clipped. The side wraps as one piece, never split from its dot.
-    <span data-chip-state={paused ? "paused" : r.row.state.state} className="max-w-full min-w-0">
+    <span data-chip-state={paused ? "paused" : r.done ? "done" : r.row.state.state} className="max-w-full min-w-0">
       <StatusBadge
         tone={paused ? "neutral" : v.badge.tone}
         icon={icon}
@@ -47,7 +48,7 @@ export function BoardChip({ symbol, className }: { symbol: string; className?: s
 /** One tile of the glance: a button that opens the name's focus card. */
 export function GlanceTile({ symbol, children }: { symbol: string; children: React.ReactNode }) {
   const r = useBoardRow(symbol);
-  const state = r?.row.state ? (r.paused ? "paused" : r.row.state.state) : "plan";
+  const state = r?.row.state ? (r.paused ? "paused" : r.done ? "done" : r.row.state.state) : "plan";
   return (
     <li data-glance={symbol} data-glance-state={state} className="min-w-0">
       <button

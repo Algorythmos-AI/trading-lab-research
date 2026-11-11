@@ -5,10 +5,11 @@
 // entries in 3:12"), the session as a thin bar with its no-entry windows shaded and a "now" tick, the Today log of the
 // board's changes, the Cockpit switch and the alert switches. Before the open the "Trade now" board folds away until
 // its first entries; its line is then the hero's headline, so the rail does not repeat it, and the rail's countdown
-// carries the board's marks instead.
+// carries the board's marks instead. The owner's "Done for today" (done-today.tsx) sits in the button group, and once
+// set takes the day pill's place: "Done for today · set 10:42 NY".
 //
 // Every time is New York, on the board's (server) clock. Nothing is read from the clock or from storage in the server
-// render. Read only: nothing here places an order.
+// render. Read only: nothing here places an order; the one thing it writes is the owner's own done-for-today flag.
 import { History, Clock } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { TONE_TEXT } from "@/components/status";
@@ -18,6 +19,7 @@ import { type DayFacts, type RailDay, railWithNotes, sessionClock, sessionTimeli
 import { cn } from "@/lib/utils";
 import { roomShown } from "@/lib/what-if";
 import { CockpitSwitch } from "./cockpit";
+import { DoneControl, DonePill, UncheckedNote, useDone, useDonePolling } from "./done-today";
 import { AlertButtons, AlertMenu, type BoardLogEntry, boardCollapsed, useBoard } from "./trade-now";
 
 const DAY_TONE: Record<Tone, string> = {
@@ -191,6 +193,9 @@ function useRailTop(): number {
 export function StatusRail({ day: server, facts = null }: { day: RailDay | null; facts?: DayFacts | null }) {
   const b = useBoard();
   const top = useRailTop();
+  const done = useDone();
+  // Both devices keep reading the flag while the live board is drawn; with prices off or an older card, once is enough.
+  useDonePolling(!!b && b.on && b.mode.kind !== "off" && b.mode.kind !== "old");
   if (!b) return null;
   // This browser's "I'm in" notes the journal does not show yet add to the count (read after mount, so the server's
   // render and the first one in the browser agree).
@@ -219,12 +224,19 @@ export function StatusRail({ day: server, facts = null }: { day: RailDay | null;
           were read, beside the three icon buttons; then the next boundary across the whole width. From sm up it is
           the one wrapping row. */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 max-sm:grid max-sm:grid-cols-[minmax(0,1fr)_auto] max-sm:gap-x-2 max-sm:gap-y-0.5">
-        {day ? (
-          <p role="status" data-rail-day={day.tone} className={cn("text-explain rounded-md border px-2 py-0.5 font-medium sm:whitespace-nowrap max-sm:col-span-2 max-sm:justify-self-start max-sm:py-0", DAY_TONE[day.tone])}>
-            <span className="font-semibold">{day.word}</span>
-            <DayLine rest={day.line.slice(day.word.length)} />
-          </p>
-        ) : null}
+        {/* The day pill's area: the owner's own "Done for today" takes the pill's place once the server has it. On a
+            phone the area is the grid's top row; from sm up it adds no box of its own. */}
+        <div data-rail-day-area className="contents max-sm:col-span-2 max-sm:flex max-sm:flex-wrap max-sm:items-center max-sm:gap-x-2 max-sm:gap-y-0.5">
+          {done ? (
+            <DonePill className="max-sm:py-0" />
+          ) : day ? (
+            <p role="status" data-rail-day={day.tone} className={cn("text-explain rounded-md border px-2 py-0.5 font-medium sm:whitespace-nowrap max-sm:col-span-2 max-sm:justify-self-start max-sm:py-0", DAY_TONE[day.tone])}>
+              <span className="font-semibold">{day.word}</span>
+              <DayLine rest={day.line.slice(day.word.length)} />
+            </p>
+          ) : null}
+          {b.on ? <UncheckedNote /> : null}
+        </div>
         {facts?.readLine ? (
           <p data-rail-read className="text-explain text-muted-foreground sm:whitespace-nowrap max-sm:col-start-1 max-sm:row-start-2 max-sm:text-[0.8125rem] max-sm:leading-snug">
             {/* The phone's clock time rides here, so when the fills were read costs no line of its own. */}
@@ -244,7 +256,7 @@ export function StatusRail({ day: server, facts = null }: { day: RailDay | null;
           </p>
         ) : null}
         {b.on ? (
-          <p data-rail-clock className="text-explain flex min-w-0 items-center gap-1.5 max-sm:col-span-2">
+          <p data-rail-clock className="text-explain flex min-w-0 items-center gap-1.5 max-sm:col-start-1 max-sm:self-center">
             <Clock aria-hidden className={cn("text-muted-foreground size-4 shrink-0", merged && "max-sm:hidden")} />
             <span className={cn("font-mono font-semibold tabular-nums", merged && "max-sm:hidden")}>{nyNow}</span>
             <span className={cn("text-muted-foreground", merged && "max-sm:hidden")}>New York</span>
@@ -258,7 +270,10 @@ export function StatusRail({ day: server, facts = null }: { day: RailDay | null;
             </span>
           </p>
         ) : null}
+        {/* On a phone the Done control ends the countdown's row, so the day pill and the three buttons keep theirs. */}
+        {b.on ? <DoneControl id="done-today-confirm-phone" className="sm:hidden max-sm:col-start-2 max-sm:justify-self-end" /> : null}
         <div className="ml-auto flex items-center gap-1.5 max-sm:col-start-2 max-sm:row-start-2">
+          {b.on ? <DoneControl className="max-sm:hidden" /> : null}
           {b.on ? <TodayLog log={b.log} /> : null}
           {switches ? (
             <>

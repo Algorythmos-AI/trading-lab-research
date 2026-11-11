@@ -25,6 +25,10 @@ wt.ops.publish                            POST /api/ingest            (productio
                                             one "Mac offline" note a day otherwise → ntfy
                                             alert state in private Blob alerts/state.json
                                             prunes history older than 90 days, once a day
+
+                                          GET/POST /api/desk/flags    (the Options page, laptop and phone)
+                                            the owner's "done for today" flag → private Blob desk/flags.json
+                                            (ifMatch etag; production only, memory elsewhere)
 ```
 
 - **Contract.** `src/lib/snapshot.schema.json` is generated from the Python allowlist (`make schema`) and is
@@ -255,8 +259,27 @@ prints a secret; it prints only the ntfy topic and how to subscribe to it.
   everywhere), and a server-side denylist refuses restricted keys (decision titles, hypothesis names and
   statements, spec title and open items, headlines, review URLs, subjects, statements) even if a future schema
   allowed them. Validation errors name paths, never values.
-- **Read-only UI.** No page has a control that trades, kills, resets or changes anything. The only buttons
-  switch the colour theme and copy a command to the clipboard.
+- **Read-only UI.** No page has a control that trades, kills or resets anything. The buttons switch the colour
+  theme, copy a command to the clipboard, and set the owner's own "done for today" flag (below), the one thing the
+  browser writes.
+- **The done-for-today flag** (`/api/desk/flags`, `src/lib/desk-flags-run.ts`). One private Blob document,
+  `desk/flags.json`: `{ "v": 1, "done": { "day": "<New York day>", "at": "<instant>" } | null }`. It counts only on
+  the New York day it names, so it clears itself at the next day with no job; Undo is allowed for 60 s after it is
+  set, then the day stays done. What protects the write:
+  - Vercel Authentication, which covers `/api/*` exactly as it covers the pages (`src/proxy.ts` gates nothing: it
+    only sets the pages' script policy, which is why it skips `/api/`).
+  - Same origin only: POST needs `Content-Type: application/json` (else 415) and an `Origin` whose host is the
+    request's own, or `Sec-Fetch-Site: same-origin` when there is no Origin (else 403). No CORS headers are sent.
+  - Any request carrying `x-vercel-protection-bypass` is refused (403): the publisher's bypass secret can never
+    set or clear the flag.
+  - A body of at most 256 bytes (413), exactly `{"action": "done" | "undo"}` (400), 405 for other methods, a fixed
+    path, and error answers that are codes only: nothing from the request is echoed.
+  - Writes are conditional on the store's etag; a conflict (the other device's tap first) re-reads and re-applies
+    once, then answers 409. Nothing is shown as saved before the server answers.
+  - In fixture mode and anywhere but production it never touches Blob: the flag lives in the server process's
+    memory and every answer says `"memory": true`.
+  - A read that fails counts as done for the server's alerts (`doneForAlerts`), so a failed read never lets an entry
+    alert out; the page says "Could not check" instead.
 - **No secrets client-side.** Storage, HMAC and cron checks run only in server code; nothing secret is sent to
   the browser. Logs are one JSON line per event and never include bodies, headers or secret values.
 - **Headers.** `vercel.json` sets a strict Content-Security-Policy, `X-Frame-Options: DENY`,

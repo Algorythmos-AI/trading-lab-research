@@ -47,6 +47,7 @@ import { OptionsPositions } from "./options-positions";
 import { OptionsTriggers, TriggerNotices } from "./options-triggers";
 import { PaneBoundary } from "./pane-boundary";
 import { OPEN_NAME_EVENT } from "./trade-now";
+import { useDone } from "./done-today";
 import { Notice } from "@/components/ui/notice";
 import { Kbd } from "@/components/ui/kbd";
 
@@ -316,6 +317,7 @@ export function OptionsDesk({
   stale: boolean;
 }) {
   const { feed, session, now } = useLive();
+  const done = useDone();
   const halfDay = isHalfDay(e);
   // Until the browser's clock is read, the document's own time stands in, as the positions pane does.
   const rules = rulesToday(positions, e, now ?? (positions ? Date.parse(positions.as_of) : 0));
@@ -796,7 +798,8 @@ export function OptionsDesk({
           </span>
         </div>
       ) : null}
-      <TriggerNotices session={live ? e.session : null} rules={live ? rules : null} onOpen={openName} onDismissed={focusSelected} />
+      {/* Today marked done (done-today.tsx): no paper-rule notice pops up or is spoken; "Rules today" keeps its record. */}
+      {done ? null : <TriggerNotices session={live ? e.session : null} rules={live ? rules : null} onOpen={openName} onDismissed={focusSelected} />}
       <DeskPalette
         open={palette}
         onOpenChange={setPalette}

@@ -354,6 +354,41 @@ export function rowView(s: NameState): RowView {
   return { badge: badge(STATE_WORD[s.state], s.tone, side), testing: false, headline: plain, grid: null };
 }
 
+// ---- the owner's "done for today" -----------------------------------------------------------------------------------
+/** A state that asks for an entry: a get-ready, an entry zone, or a live alternative trigger. Never a paused row. */
+export function entryPrompt(s: NameState | null | undefined): boolean {
+  if (!s || s.state === "paused") return false;
+  return s.state === "get_ready" || s.state === "enter_zone" || rowView(s).badge.alt !== null;
+}
+
+/** The chip's word on a row whose entry prompt is hidden because the owner marked today done. */
+export const DONE_WORD = "DONE TODAY";
+
+/** A hidden entry prompt's view: a neutral chip, no side, no alternative, no numbers. */
+export const DONE_ROW_VIEW: RowView = {
+  badge: { word: DONE_WORD, tone: "neutral", side: null, alt: null },
+  testing: false,
+  headline: "You marked today done. Manage open trades only.",
+  grid: null,
+};
+
+/**
+ * Whether a row's entry prompt is hidden: today is marked done, the row asks for an entry, and the name is not in a
+ * trade being managed (that row keeps exactly what it shows, so nothing that helps an exit is hidden).
+ */
+export function doneMasked(done: boolean, row: Pick<BoardRow, "symbol" | "state">, managed: ReadonlySet<string>): boolean {
+  return done && !managed.has(row.symbol) && entryPrompt(row.state);
+}
+
+/**
+ * The screen-reader line for the names whose word changed: "QQQ enter zone; SPY watch". Once today is marked done an
+ * entry's word is not spoken; null when nothing is left to say.
+ */
+export function spokenChanges(changed: readonly NameState[], words: Readonly<Record<string, string>>, done: boolean): string | null {
+  const said = done ? changed.filter((s) => !entryPrompt(s)) : changed;
+  return said.length ? said.map((s) => `${s.symbol} ${(words[s.symbol] ?? "").toLowerCase()}`).join("; ") : null;
+}
+
 // ---- the day, from the journal --------------------------------------------------------------------------------------
 /**
  * The day's limits for the board, from the owner's journal: rules 7 and 8 (the day's loss limit and the trade cap)
