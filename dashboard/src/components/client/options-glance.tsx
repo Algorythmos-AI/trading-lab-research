@@ -44,7 +44,7 @@ export function OptionsGlance({
       : feed.status === "off"
         ? "Live prices are off (no Alpaca keys in Vercel), so each bar is centred on the close."
         : feed.status === "error"
-          ? "Live prices did not answer; each bar is centred on the close and retries every minute."
+          ? "Live prices did not answer; each bar is centred on the close until they do."
           : "Centred on the close until the first live price arrives. The bar is measured in ATRs.";
 
   return (

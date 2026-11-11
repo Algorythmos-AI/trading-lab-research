@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { extendTrail, type LiveQuote, type TrailPoint } from "@/lib/options";
-import { type PollResult, startPoll } from "@/lib/quote-poll";
+import { type Backoff, type Poll, type PollResult, startPoll, statusResult } from "@/lib/quote-poll";
 
 export const POLL_MS = 2_000;
-const RETRY_MS = 60_000;
+/** The longest wait after failures in a row (2, 4, 8, 16 s, then this). */
+export const QUOTES_RETRY_CAP_MS = 30_000;
 
 export type Feed =
   | { status: "loading" }
@@ -22,13 +23,26 @@ export type Feed =
       trails: Record<string, TrailPoint[]>;
     };
 
+export interface QuoteFeed {
+  feed: Feed;
+  /** Waiting to try again after failing (the browser's clock); null while the feed is healthy. */
+  backoff: Backoff | null;
+  /** One attempt now while waiting after a failure; nothing otherwise. */
+  retryNow: () => void;
+}
+
 /**
  * Polls /api/quote (same origin, so the page's connect-src 'self' holds) every 2 seconds while the tab is visible,
- * and at once when it is shown again (lib/quote-poll.ts: one request at a time). `enabled` false (an old edition)
- * never polls. Research only.
+ * and at once when it is shown again (lib/quote-poll.ts: one request at a time). After a failure it tries again in
+ * 2 s, then 4, 8, 16 and at most 30 s while the failures go on, and at the 30 s straight away when upstream asks it to
+ * slow down (429); the first answer puts it back on 2 seconds. `enabled` false (an old edition) never polls.
+ * Research only.
  */
-export function useQuotes(symbols: string, enabled = true): Feed {
+export function useQuoteFeed(symbols: string, enabled = true): QuoteFeed {
   const [feed, setFeed] = useState<Feed>({ status: enabled ? "loading" : "off" });
+  const [backoff, setBackoff] = useState<Backoff | null>(null);
+  const poll = useRef<Poll | null>(null);
+  const retryNow = useCallback(() => poll.current?.retryNow(), []);
 
   useEffect(() => {
     if (!enabled) return;
@@ -36,11 +50,15 @@ export function useQuotes(symbols: string, enabled = true): Feed {
     const run = async (): Promise<PollResult> => {
       try {
         const res = await fetch(`/api/quote?s=${encodeURIComponent(symbols)}`, { cache: "no-store" });
-        if (res.status === 503) {
+        const r = statusResult(res.status);
+        if (r === "off") {
           if (!stopped) setFeed({ status: "off" });
           return "off"; // not configured: no point polling until the page is reloaded
         }
-        if (!res.ok) throw new Error(String(res.status));
+        if (r !== "ok") {
+          if (!stopped) setFeed((f) => (f.status === "ok" ? f : { status: "error" }));
+          return r; // "limited" (429) waits the cap; anything else the doubling wait
+        }
         const body = (await res.json()) as { as_of: string; quotes: Record<string, LiveQuote>; missing?: string[] };
         const quotes = body.quotes ?? {};
         if (!stopped)
@@ -56,7 +74,7 @@ export function useQuotes(symbols: string, enabled = true): Feed {
         return "error";
       }
     };
-    const stop = startPoll({
+    const p = startPoll({
       run,
       page: document,
       show: window,
@@ -64,13 +82,22 @@ export function useQuotes(symbols: string, enabled = true): Feed {
       setTimer: (fn, ms) => window.setTimeout(fn, ms),
       clearTimer: (id) => window.clearTimeout(id as number),
       pollMs: POLL_MS,
-      retryMs: RETRY_MS,
+      backoff: { capMs: QUOTES_RETRY_CAP_MS },
+      onBackoff: setBackoff,
     });
+    poll.current = p;
     return () => {
       stopped = true;
-      stop();
+      p.stop();
+      if (poll.current === p) poll.current = null;
+      setBackoff(null);
     };
   }, [symbols, enabled]);
 
-  return feed;
+  return { feed, backoff: enabled ? backoff : null, retryNow };
+}
+
+/** The feed alone, for a part of a page that only reads prices. */
+export function useQuotes(symbols: string, enabled = true): Feed {
+  return useQuoteFeed(symbols, enabled).feed;
 }

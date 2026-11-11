@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { stepInstant } from "@/lib/fixture-script";
 import { handleQuote } from "@/lib/quote-route";
 import { CACHE_MS, MAX_CACHED, MAX_SYMBOLS, alpacaKeys, fetchQuotes, normalise, parseSymbols, resetQuoteCache } from "@/lib/quote";
 import optionsSchema from "@/lib/options.schema.json";
@@ -211,6 +212,26 @@ describe("GET /api/quote", () => {
     expect(res.headers.get("cache-control")).toBe("no-store");
   });
 
+  it("429 when Alpaca rate-limits us, so the page waits its longest; still without its body or the keys", async () => {
+    vi.stubEnv("DASHBOARD_FIXTURE", "");
+    vi.stubEnv("ALPACA_API_KEY_ID", "test-key-id");
+    vi.stubEnv("ALPACA_API_SECRET_KEY", "test-key-secret");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("upstream-secret-body", { status: 429 })));
+    const res = await get("?s=SPY");
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({ error: "rate-limited" });
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    // any other status, and a transport failure, stay 502
+    for (const status of [400, 401, 403, 404, 500, 503]) {
+      resetQuoteCache();
+      vi.stubGlobal("fetch", vi.fn(async () => new Response("x", { status })));
+      expect((await get("?s=SPY")).status).toBe(502);
+    }
+    resetQuoteCache();
+    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("offline"))));
+    expect((await get("?s=SPY")).status).toBe(502);
+  });
+
   it("200 with quotes when configured", async () => {
     vi.stubEnv("DASHBOARD_FIXTURE", "");
     vi.stubEnv("ALPACA_API_KEY_ID", "test-key-id");
@@ -235,6 +256,31 @@ describe("GET /api/quote", () => {
     expect(Math.round((flipped.quotes.SPY.price - held.quotes.SPY.price) * 100)).toBe(1);
     expect(flipped.quotes.SPY.at).toBe("2026-10-12T15:00:03.000Z");
     expect(plain.quotes.SPY.at).toBe("2026-10-12T15:00:00.000Z");
+  });
+
+  it("quotes-flaky: the first request answers, the next three fail, then every one answers, counted per browser", async () => {
+    vi.stubEnv("DASHBOARD_FIXTURE", "1");
+    vi.stubEnv("VERCEL_ENV", "");
+    let jar = "";
+    const statuses: number[] = [];
+    for (let i = 0; i < 7; i++) {
+      const res = await handleQuote(new Request("https://lab.example/api/quote?s=SPY", { headers: { cookie: `fx=quotes-flaky${jar ? `; ${jar}` : ""}` } }), NOW);
+      statuses.push(res.status);
+      const set = res.headers.getSetCookie();
+      expect(set).toEqual([`fxflaky=${i + 1}; Path=/; SameSite=Strict`]);
+      jar = set[0]!.split(";")[0]!;
+      if (res.status === 200) expect((await res.json()).quotes.SPY.price).toBeGreaterThan(0);
+      else expect(await res.json()).toEqual({ error: "upstream" });
+    }
+    expect(statuses).toEqual([200, 502, 502, 502, 200, 200, 200]);
+    // another browser starts its own count; the scripted morning answers through it
+    const other = await handleQuote(new Request("https://lab.example/api/quote?s=QQQ", { headers: { cookie: "fx=focus.quotes-script.quotes-flaky; fxstep=3; fxflaky=1" } }), NOW);
+    expect(other.status).toBe(502);
+    const healed = await handleQuote(new Request("https://lab.example/api/quote?s=QQQ", { headers: { cookie: "fx=focus.quotes-script.quotes-flaky; fxstep=3; fxflaky=4" } }), NOW);
+    expect((await healed.json()).as_of).toBe(new Date(stepInstant("2026-10-12", 3) + 3_000).toISOString());
+    // off and failing still win over it
+    expect((await handleQuote(new Request("https://lab.example/api/quote?s=SPY", { headers: { cookie: "fx=quotes-flaky.quotes-off" } }), NOW)).status).toBe(503);
+    expect((await handleQuote(new Request("https://lab.example/api/quote?s=SPY", { headers: { cookie: "fx=quotes-flaky.quotes-error; fxflaky=9" } }), NOW)).status).toBe(502);
   });
 
   it("the fx cookie does nothing outside fixture mode, and fixture mode is refused in production", async () => {

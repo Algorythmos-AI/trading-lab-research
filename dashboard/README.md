@@ -168,7 +168,11 @@ wt.ops.publish                            POST /api/ingest            (productio
   glance strip, the level maps' live dot and the state chips; a quote older than 30 s shows as stale): last trades from
   Alpaca's free IEX feed, fetched on the server so the page keeps `connect-src 'self'` and never sees the keys. At most
   60 symbols (as many as one options edition may carry), each cached 1.5 s per instance on its own, so two pages
-  asking for different names share what overlaps; 503 until the keys are set, 502 when Alpaca fails. Fixture mode answers from
+  asking for different names share what overlaps; 503 until the keys are set (the page then stops asking), 429 when Alpaca
+  rate-limits us, 502 when Alpaca fails otherwise. After a failure the page tries again in 2 s, then 4, 8, 16 and at most
+  30 s (`src/lib/backoff.ts`), at 30 s straight away after a 429, and back to every 2 s on the first answer; while it
+  waits the board says so, with the seconds left and a Retry now button, and a tab shown again tries once at once. The
+  session bars and the option chain wait the same way, capped at their own 30 s interval. Fixture mode answers from
   the options fixture with no keys and no network. Research only: the keys are market-data keys and nothing here
   can trade.
 - **Watchdog** (`src/lib/watchdog.ts`, pure and unit-tested): in a window a snapshot older than 35 min is late
@@ -242,7 +246,9 @@ Fixture mode is refused on production deployments, and the page shows a banner w
 **Fixture variants.** In fixture mode only, the `fx` cookie bends the fixtures into the states a pane must survive
 (`src/lib/fixture-variants.ts`): `empty` (nothing published), `error` (storage down), `partial` (a valid but sparse
 edition), `poison` (a stored edition that no longer matches its schema), `quotes-off`, `quotes-error` and
-`quotes-tick` (the live price flips by a cent every three seconds). Join several with a dot: `fx=partial.quotes-tick`.
+`quotes-tick` (the live price flips by a cent every three seconds) and `quotes-flaky` (the first quote answers, the next
+three fail, then every one answers; counted per browser in the `fxflaky` cookie). Join several with a dot:
+`fx=partial.quotes-tick`.
 Outside fixture mode the cookie is never read.
 
 **One pane fails alone.** Each pane of the Options page sits in a `PaneBoundary`

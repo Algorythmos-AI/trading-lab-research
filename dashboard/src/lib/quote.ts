@@ -1,5 +1,6 @@
 import "server-only";
 import { logEvent } from "./log";
+import { UpstreamError } from "./upstream";
 
 // Live prices for the Options page: Alpaca's free IEX feed, read on the server so the browser keeps its
 // connect-src 'self' policy and never sees the keys. Research only; nothing here can place an order.
@@ -132,7 +133,7 @@ export async function fetchQuotes(
     });
     if (!res.ok) {
       logEvent("quote.fetch", { outcome: "http-error", status: res.status });
-      throw new Error(`alpaca ${res.status}`);
+      throw new UpstreamError(res.status);
     }
     const body = (await res.json()) as Record<string, unknown>;
     // Older API versions nest the map under "snapshots"; current ones return it at the top level.

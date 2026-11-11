@@ -4,6 +4,7 @@ import { FIXTURE_OFFSET_ATR, flagsFromCookieHeader } from "./fixture-variants";
 import { scriptBars, scriptStep, stepFromCookieHeader, stepInstant } from "./fixture-script";
 import { SERVER_SETTLE_MS } from "./trade-state";
 import { logEvent } from "./log";
+import { upstreamBody, upstreamStatus } from "./upstream";
 import { nyInstant, OPEN_MIN } from "./options";
 import type { OptionsEdition } from "./options.types";
 import { alpacaKeys, parseSymbols } from "./quote";
@@ -81,6 +82,8 @@ export async function handleBars(req: Request, now: Date = new Date()): Promise<
     return json(200, await fetchBars(symbols, keys, now, fetch, undefined, halfDay));
   } catch (e) {
     logEvent("bars.fetch", { outcome: "error", error: e instanceof Error ? e.name : "unknown" });
-    return json(502, { error: "upstream" });
+    // A rate limit is passed on as one, so the page waits its longest; anything else is 502.
+    const status = upstreamStatus(e);
+    return json(status, upstreamBody(status));
   }
 }

@@ -1,5 +1,6 @@
 import "server-only";
 import { logEvent } from "./log";
+import { UpstreamError } from "./upstream";
 
 // Option quotes for the Options desk's contract pane: Alpaca's indicative feed, which is 15 minutes behind the
 // market, read on the server so the browser keeps its connect-src 'self' policy and never sees the keys. Market
@@ -223,7 +224,7 @@ async function page(
     });
     if (!res.ok) {
       logEvent("chain.fetch", { outcome: "http-error", status: res.status });
-      throw new Error(`alpaca ${res.status}`);
+      throw new UpstreamError(res.status);
     }
     const body = (await res.json()) as { snapshots?: unknown; next_page_token?: unknown };
     if (body && typeof body.snapshots === "object" && body.snapshots !== null) Object.assign(out, body.snapshots as Record<string, RawSnapshot>);

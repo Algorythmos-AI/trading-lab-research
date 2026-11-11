@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FIXTURE_OFFSET_ATR, flagsFromCookieHeader, parseFlags, partialOptions, poisonedOptions, tickPrice, VARIANT_FLAGS } from "@/lib/fixture-variants";
+import { FIXTURE_OFFSET_ATR, FLAKY_FAILS, flagsFromCookieHeader, flakyCountFromCookieHeader, flakyFails, parseFlags, partialOptions, poisonedOptions, tickPrice, VARIANT_FLAGS } from "@/lib/fixture-variants";
 import {
   findingsOf,
   ladder,
@@ -48,6 +48,15 @@ describe("fixture variant flags", () => {
     expect(parseFlags("").size).toBe(0);
     expect(parseFlags(null).size).toBe(0);
     for (const f of VARIANT_FLAGS) expect(parseFlags(f).has(f)).toBe(true);
+  });
+
+  it("quotes-flaky: reads its count from its own cookie, and fails the 2nd to the 4th request only", () => {
+    expect(parseFlags("focus.quotes-script.quotes-flaky").has("quotes-flaky")).toBe(true);
+    expect(flakyCountFromCookieHeader("fx=quotes-flaky; fxflaky=3")).toBe(3);
+    expect(flakyCountFromCookieHeader("fxflakyx=3; xfxflaky=2")).toBe(0);
+    for (const bad of [null, "", "fxflaky=", "fxflaky=-1", "fxflaky=1.5", "fxflaky=abc"]) expect(flakyCountFromCookieHeader(bad)).toBe(0);
+    expect(FLAKY_FAILS).toBe(3);
+    expect([0, 1, 2, 3, 4, 5].map(flakyFails)).toEqual([false, true, true, true, false, false]);
   });
 
   it("finds the fx cookie among others, and only that cookie", () => {
