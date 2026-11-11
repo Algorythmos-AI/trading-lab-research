@@ -39,12 +39,6 @@ export interface Schedule {
   grace_min: number;
   /** since-slot only: a stamp this many minutes before the run's time still counts for it (a run that stamps early). */
   early_min?: number;
-  /**
-   * since-slot only: a stamp must also be later than this New York time on the run's day (HH:MM). The journal's
-   * evening sync uses it: the last live run reads until 16:20 New York, so only a stamp after that can come from the
-   * evening sync, in winter (21:38 UTC is 16:38) and in summer (17:38) alike.
-   */
-  after_ny?: string;
   /** When a run stops being the one in force: at the next run (default), or at the session's close. */
   until?: "next" | "close";
   /** Only runs before the session's close count (the live journal reads). */
@@ -144,8 +138,8 @@ const hhmm = (minute: number) => `${String(Math.floor(minute / 60)).padStart(2, 
 /** The live journal runs: :24 every hour from 09:24 to 15:24 New York (docs/runbooks/cloud-routines.md). */
 const JOURNAL_LIVE_NY = [9, 10, 11, 12, 13, 14, 15].map((h) => hhmm(h * 60 + 24));
 
-/** The live journal runs read until 16:20 New York (docs/runbooks/cloud-routines.md): the evening sync's stamps come later. */
-export const JOURNAL_LIVE_ENDS_NY = "16:20";
+/** How early a stamp may be and still be the journal's evening sync (21:38 UTC): ten minutes. */
+export const JOURNAL_EVENING_EARLY_MIN = 10;
 
 /** The pre-open refresh runs at 08:50 New York; its prices must be in by 09:05. */
 export const PREOPEN_NY = "08:50";
@@ -198,7 +192,9 @@ export const FEEDS: readonly FeedRow[] = [
     want: "since-slot",
     schedules: [
       { zone: "America/New_York", times: JOURNAL_LIVE_NY, grace_min: INTRADAY_MAX_AGE_MIN, in_session: true },
-      { zone: "UTC", times: [hhmm(JOURNAL_SLOT_UTC)], grace_min: DAILY_GRACE_MIN, early_min: 60, after_ny: JOURNAL_LIVE_ENDS_NY },
+      // Only the evening routine's own read counts for it: at most 10 minutes before 21:38 UTC. The last live run reads
+      // until about 16:20:30 New York (21:20 UTC in winter, 20:20 in summer), always earlier than that.
+      { zone: "UTC", times: [hhmm(JOURNAL_SLOT_UTC)], grace_min: DAILY_GRACE_MIN, early_min: JOURNAL_EVENING_EARLY_MIN },
     ],
     severity: "alert",
     verified: true,
@@ -427,11 +423,7 @@ export function satisfies(feed: DocFeed, stamp: Stamp | null, slot: Slot): boole
       return stamp.session !== null && stamp.session >= prev;
     }
     case "since-slot":
-    {
-      if (stamp.at === null || stamp.at < slot.due - (slot.schedule.early_min ?? 0) * MIN) return false;
-      const after = slot.schedule.after_ny ? nyInstant(slot.day, toMin(slot.schedule.after_ny)) : null;
-      return after === null || stamp.at > after;
-    }
+      return stamp.at !== null && stamp.at >= slot.due - (slot.schedule.early_min ?? 0) * MIN;
   }
 }
 
@@ -521,6 +513,9 @@ export function evaluateDoc(f: DocFeed, read: StampRead | undefined, refusal: Re
   const ci = slots.findLastIndex((s) => s.due <= nowMs && nowMs < s.expires);
   const stamp = read?.status === "ok" ? read.value : null;
   const age = minutesSince(stamp?.at ?? null, nowMs);
+  // A store that could not be read is unknown, never "not due": with no run in force it pages nothing (no episode),
+  // but the page says it cannot check.
+  if (ci < 0 && read?.status === "error") return nothing(f, "unknown", "storage-error", { next_due: nextDue });
   if (ci < 0) return nothing(f, "not_expected", "no-run-now", { age_min: age, next_due: nextDue });
   const cur = slots[ci]!;
   const at = { due: cur.due, deadline: cur.deadline, for_session: cur.for_session, next_due: nextDue, age_min: age };
@@ -601,6 +596,7 @@ export function shadowWindow(nowMs: number): { open: number; close: number; day:
 
 export function evaluateShadow(f: ShadowFeed, read: Read<ShadowRead> | null, nowMs: number): FeedView {
   const w = shadowWindow(nowMs);
+  if (!w && (read?.status === "error" || read?.status === "unreadable")) return nothing(f, "unknown", "storage-error");
   if (!w) return nothing(f, "not_expected", "outside-session");
   const assumed = w.assumed || !f.verified;
   if (!read || read.status === "error" || read.status === "unreadable")
@@ -870,13 +866,15 @@ export const FEED_ASSUMED_NOTE = " The market calendar has run out, so a weekday
 
 /** HH:MM New York of an instant. */
 export function nyHm(t: number): string {
-  return hhmm(nyNow(new Date(t)).minute);
+  const at = instant(t);
+  return at === null ? "--:--" : hhmm(nyNow(new Date(at)).minute);
 }
 
 const nameOf = (id: string, table: readonly FeedRow[]) => table.find((f) => f.id === id)?.name ?? "A feed";
 const dayOf = (d: string | null | undefined) => (typeof d === "string" && DAY_RE.test(d) ? d : null);
 const whole = (n: number | null | undefined) => (typeof n === "number" && Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0);
-const instant = (t: number | null | undefined) => (typeof t === "number" && Number.isFinite(t) ? t : null);
+/** An instant a Date can hold (±8.64e15 ms); anything else is left out rather than thrown on. */
+const instant = (t: number | null | undefined) => (typeof t === "number" && Number.isFinite(t) && Math.abs(t) <= 8.64e15 ? t : null);
 
 const REASON_WORDS: Partial<Record<Reason, string>> = {
   "no-document": "Nothing is stored for it.",
@@ -960,7 +958,7 @@ export function summaryNotice(ids: readonly string[], now: Date, table: readonly
   const names = [...new Set(ids.map((id) => nameOf(id, table)))];
   return {
     kind: "feed-late",
-    title: `Feed alerts on: ${ids.length} already late`,
+    title: `Feed alerts on: ${names.length} not on time`,
     message: `Feed alerts are on. Already late, refused or not checkable: ${names.join(", ")}. Each sends its own page when it is back on time. Checked ${nyHm(now.getTime())} New York.`,
     priority: 4,
     tags: ["warning"],
@@ -1021,13 +1019,15 @@ export function polledState(
   offState: "failed" | "not_expected",
 ): { state: FeedStateName; age_s: number | null } {
   const age_s = r.status === "ok" && r.receivedAt !== null && browserNow !== null ? Math.max(0, Math.floor((browserNow - r.receivedAt) / 1000)) : null;
-  // Never green beside "trying again": a feed being retried, or paused on, is late wherever the clock stands.
-  if (r.failing) return { state: "late", age_s };
+  // A failure always wins over "not due": whatever the clock says, a feed that is failing, being retried, paused on or
+  // off for want of keys is shown so. Only then does the session decide whether a quiet feed is expected at all.
+  if (r.failing || (r.status === "ok" && r.failed)) return { state: "late", age_s };
+  if (r.status === "error") return { state: "failed", age_s };
+  if (r.status === "off" && offState === "failed") return { state: "failed", age_s };
   if (shadowWindow(serverNow) === null) return { state: "not_expected", age_s };
   if (r.status === "loading") return { state: "waiting", age_s };
   if (r.status === "off") return { state: offState, age_s };
-  if (r.status === "error") return { state: "failed", age_s };
-  if (r.failed || age_s === null || age_s * 1000 > staleMs) return { state: "late", age_s };
+  if (age_s === null || age_s * 1000 > staleMs) return { state: "late", age_s };
   return { state: "on_time", age_s };
 }
 
@@ -1043,4 +1043,15 @@ export function journalShown(v: FeedView, read: StampRead | undefined, nowMs: nu
   const current = at !== null && journalCurrent(new Date(at).toISOString(), new Date(nowMs));
   if (current) return "on_time";
   return v.state === "on_time" ? "late" : v.state;
+}
+
+/** The feed watch's own outage page (feed-watch-run.ts storeNoticeTick): plain words, nothing from any feed. */
+export function storeNotice(now: Date): Notice {
+  return {
+    kind: "feed-late",
+    title: "Feed watch cannot read its store",
+    message: `Feed watch cannot read or write its own state, so it sends no feed alerts until the store answers. Checked ${nyHm(now.getTime())} New York.`,
+    priority: 4,
+    tags: ["warning"],
+  };
 }

@@ -21,6 +21,7 @@ import {
   type StampedInputs,
   unreadableNotice,
   summaryNotice,
+  storeNotice,
 } from "@/lib/feed-watch";
 import { OPTIONS_NAMES } from "@/lib/market-calendar";
 import type { Notice, NoticeKind } from "@/lib/ntfy";
@@ -35,7 +36,7 @@ const VOCAB = new Set(
    published publisher radar readable read record recovered refresh refused reminder repeats row rows run runs running
    schedule server session snapshot so status stopped store stored than that the them there this time to trade trading
    up update was weekday window windows york yet record written unknown been checked ahead were arrived sent good again
-   assumed market job may say past could an accepted unknown feed alerts each sends own when already checkable`.split(/\s+/).filter(Boolean),
+   assumed market job may say past could an accepted unknown feed alerts each sends own when already checkable watch write state until answers`.split(/\s+/).filter(Boolean),
 );
 // The desks' prefixes and the drill's, and the feed table's names, are part of the grammar: they are fixed words too.
 for (const label of Object.values(DESK_LABEL)) VOCAB.add(label.toLowerCase());
@@ -93,7 +94,7 @@ function feedNotices(): Notice[] {
     ...evaluateStamped(empty, Date.parse("2026-11-12T20:00:00Z")), // in the session: the server check is late
     ...evaluateStamped(empty, Date.parse("2028-01-04T23:30:00Z")), // outside the calendar: assumed
   ];
-  const out: Notice[] = [];
+  const out: Notice[] = [storeNotice(now)];
   for (const v of views) {
     out.push(lateNotice(v, now), unreadableNotice(v, 3, now), recoveredNotice(v, now));
     out.push(summaryNotice([v.id], now));

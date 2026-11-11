@@ -95,13 +95,18 @@ test("a chip changing state moves nothing: the strip and the board below it keep
   expect(await box(page, '[aria-label="Options desk"]')).toEqual(okDesk);
 });
 
-test("in place, as the clock moves on: the server check goes late and nothing below it moves", async ({ page, context, baseURL }) => {
+test("in place, with no new server time for minutes: the chips go to checking and nothing below them moves", async ({ page, context, baseURL }) => {
+  // `frozen` stands the server's clock still, so every refresh brings the same server time: past three minutes the
+  // strip can no longer vouch for its time and shows its time-dependent chips as "checking" (never "on time").
   await open(page, context, baseURL, "feeds-ok", true);
   await expect(chip(page, "shadow")).toHaveAttribute("data-feed-state", "on_time");
+  await expect(chip(page, "prices")).toHaveAttribute("data-feed-state", "failed");
   const before = { strip: await box(page, "[data-feed-strip]"), desk: await box(page, '[aria-label="Options desk"]') };
-  // Its last record ended at 11:00 New York; ten minutes after it settled with nothing new, it is late.
-  await page.clock.fastForward("15:00");
-  await expect(chip(page, "shadow")).toHaveAttribute("data-feed-state", "late");
+  await page.clock.fastForward("04:00");
+  await expect(chip(page, "shadow")).toHaveAttribute("data-feed-state", "checking");
+  await expect(chip(page, "options-edition")).toHaveAttribute("data-feed-state", "checking");
+  await expect(chip(page, "prices")).toHaveAttribute("data-feed-state", "failed"); // a failure still shows as one
+  await expect(chip(page, "shadow")).toContainText("Checking");
   expect(await box(page, "[data-feed-strip]")).toEqual(before.strip);
   expect(await box(page, '[aria-label="Options desk"]')).toEqual(before.desk);
 });
@@ -163,3 +168,27 @@ for (const offset of [-3_600_000, 3_600_000]) {
     });
   });
 }
+
+test("across several minute refreshes the strip keeps true time: no chip changes state, none goes to checking", async ({ page, context, baseURL }) => {
+  // The server's own clock here (no `frozen`): each refresh of the layout (every 60 s while visible) brings a new
+  // server time, while the browser's faked clock runs on. A strip that counted the time since its first hydration on
+  // top of each new server time would run ahead by minutes per refresh.
+  await context.addCookies([{ name: "fx", value: "quotes-off.chain-off.feeds-ok", url: baseURL! }]);
+  await page.clock.install();
+  await page.goto("/options");
+  await expect(strip(page)).toBeVisible();
+  await expect(chip(page, "prices")).toHaveAttribute("data-feed-state", "failed");
+  const before = await states(page);
+  let refreshes = 0;
+  page.on("request", (r) => {
+    if (r.headers()["rsc"] === "1" && new URL(r.url()).pathname === "/options") refreshes++;
+  });
+  for (let i = 0; i < 5; i++) {
+    await page.clock.fastForward("01:00");
+    await page.waitForTimeout(500);
+  }
+  expect(refreshes).toBeGreaterThanOrEqual(3);
+  const after = await states(page);
+  expect(after).toEqual(before);
+  expect(Object.values(after)).not.toContain("checking");
+});

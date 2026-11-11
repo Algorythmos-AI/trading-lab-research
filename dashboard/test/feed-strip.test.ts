@@ -2,7 +2,7 @@
 // order with their states, the server check redrawn from the page's own status poll, and the panel's words, which
 // never turn missing or unreadable data into "on time".
 import { describe, expect, it } from "vitest";
-import { stripChips, stripNow } from "@/components/client/feed-strip";
+import { type Anchor, stripChips, stripClock, withStaleClock } from "@/components/client/feed-strip";
 import { panelState } from "@/components/operations/feeds-panel";
 import { evaluateStamped, type StampedInputs } from "@/lib/feed-watch";
 
@@ -54,17 +54,64 @@ describe("the strip", () => {
 });
 
 describe("the strip's clock and its failing polls", () => {
-  it("runs on the server's render time and the monotonic clock: a device clock an hour off changes nothing", () => {
-    expect(stripNow(NOW, 1_000, 61_000)).toBe(NOW + 60_000);
-    expect(stripNow(NOW, null, 61_000)).toBe(NOW);
-    expect(stripNow(NOW, 1_000, null)).toBe(NOW);
-    expect(stripNow(NOW, 5_000, 4_000)).toBe(NOW); // never backwards
-    // The chips are the same whatever the device's wall clock says; only browserNow (for the polls' ages) is the
-    // device's, and the ages there are differences of the device's own readings.
-    const base = { stamps, now: stripNow(NOW, 0, 0), prices: { status: "loading" as const, receivedAt: null }, bars: { status: "off" as const, receivedAt: null }, evalStatus: null };
-    const states = (browserNow: number) => stripChips({ ...base, browserNow }).map((c) => c.state);
-    expect(states(NOW - 3_600_000)).toEqual(states(NOW));
-    expect(states(NOW + 3_600_000)).toEqual(states(NOW));
+  it("stays on true time across four hours of 60 s refreshes, each bringing a new server time", () => {
+    // The page opens at 08:30 New York; true time, the server's clock and the monotonic clock all advance together, and
+    // every minute a refresh re-renders with a new server time (a little later than the refresh started).
+    const open = Date.parse("2026-11-12T13:30:00Z");
+    let anchor: Anchor | null = null;
+    let worst = 0;
+    for (let s2 = 0; s2 <= 4 * 3600; s2 += 5) {
+      const trueNow = open + s2 * 1000;
+      const perf = 10_000 + s2 * 1000; // the monotonic clock started before the page
+      if (s2 % 60 === 0) anchor = { server: trueNow - 250, perf, wall: trueNow + 7_000 }; // the server render is 250 ms old; the device 7 s fast
+      const c = stripClock(anchor, anchor!.server, perf, trueNow + 7_000);
+      worst = Math.max(worst, Math.abs(c.now - trueNow));
+      expect(c.stale).toBe(false);
+    }
+    expect(worst).toBeLessThanOrEqual(2_000);
+  });
+
+  it("before any anchor (server render, hydration) it is the server's own time", () => {
+    expect(stripClock(null, NOW, 123, 456)).toEqual({ now: NOW, stale: false });
+    expect(stripClock({ server: NOW, perf: 0, wall: 0 }, NOW, null, null)).toEqual({ now: NOW, stale: false });
+  });
+
+  it("goes stale with no new server time for five minutes", () => {
+    const a = { server: NOW, perf: 1_000, wall: NOW };
+    expect(stripClock(a, NOW, 1_000 + 170_000, NOW + 170_000).stale).toBe(false);
+    expect(stripClock(a, NOW, 1_000 + 300_000, NOW + 300_000)).toEqual({ now: NOW + 300_000, stale: true });
+  });
+
+  it("goes stale when the machine slept: the monotonic clock stood still while the wall clock moved eight hours", () => {
+    const a = { server: NOW, perf: 1_000, wall: NOW };
+    expect(stripClock(a, NOW, 1_000 + 5_000, NOW + 8 * 3_600_000)).toEqual({ now: NOW + 5_000, stale: true });
+  });
+
+  it("goes stale when the device's clock is changed by hand while the monotonic clock runs on", () => {
+    const a = { server: NOW, perf: 1_000, wall: NOW };
+    expect(stripClock(a, NOW, 61_000, NOW + 60_000 - 3_600_000).stale).toBe(true);
+    expect(stripClock(a, NOW, 61_000, NOW + 60_000 + 20_000).stale).toBe(false); // 20 s of drift: within the limit
+  });
+
+  it("with a stale clock nothing time-dependent is presented as current, and nothing as on time", () => {
+    const chips = stripChips({
+      stamps,
+      now: NOW,
+      browserNow: NOW,
+      prices: { status: "ok", receivedAt: NOW - 1_000 },
+      bars: { status: "error", receivedAt: null },
+      evalStatus: null,
+    });
+    const stale = withStaleClock(chips);
+    expect(stale.map((c) => [c.id, c.state])).toEqual([
+      ["options-edition", "checking"],
+      ["pre-open", "checking"],
+      ["prices", "checking"],
+      ["bars", "failed"], // a failure is still shown as one
+      ["journal", "checking"],
+      ["shadow", "checking"],
+    ]);
+    expect(stale.some((c) => c.state === "on_time")).toBe(false);
   });
 
   it("the prices chip is never on time while the page is trying again (the retry line is up)", () => {

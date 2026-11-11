@@ -117,6 +117,8 @@ export interface CommitResult {
   failed: number;
   /** The index of each notice that failed (or was not sent before the deadline). */
   failedAt: number[];
+  /** failClosed only: the state could not be committed, so nothing was sent. */
+  blocked?: true;
 }
 
 /**
@@ -140,6 +142,12 @@ export async function commitThenSend(a: {
   event: string;
   deadline?: number;
   clock?: () => number;
+  /**
+   * Fail closed instead of open (the feed watch): when the new state cannot be committed (one retry), send nothing, so
+   * a store that keeps refusing writes can never make the same page go out run after run. The snapshot watchdog keeps
+   * failing open: it pages one level per window, and a silent dead-man's switch is worse than a duplicate.
+   */
+  failClosed?: boolean;
 }): Promise<CommitResult> {
   let etag: string | null = a.stored?.etag ?? null;
   let committed = a.unchanged;
@@ -156,9 +164,19 @@ export async function commitThenSend(a: {
           return { committed: false, skipped: "concurrent run", sent: 0, failed: 0, failedAt: [] };
         }
       }
-      logEvent(`${a.event}.state`, { outcome: "write-failed", error: e instanceof Error ? e.name : "unknown" });
+      if (a.failClosed && !(e instanceof PreconditionFailed)) {
+        // One more try, then give up on this run's pages.
+        try {
+          etag = (await a.deps.writeState(a.nextText, a.stored ? { ifMatch: a.stored.etag } : { createOnly: true })).etag;
+          committed = true;
+        } catch {
+          /* still failing: blocked below */
+        }
+      }
+      if (!committed) logEvent(`${a.event}.state`, { outcome: "write-failed", error: e instanceof Error ? e.name : "unknown" });
     }
   }
+  if (!committed && a.failClosed) return { committed: false, sent: 0, failed: 0, failedAt: [], blocked: true };
 
   let sent = 0;
   const failedAt: number[] = [];

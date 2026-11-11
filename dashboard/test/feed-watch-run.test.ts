@@ -132,15 +132,18 @@ describe("a tick", () => {
     expect(JSON.parse(store.get()!.text).feeds["options-edition"]).toMatchObject({ open: true });
   });
 
-  it("still pages when the state cannot be written (fails open)", async () => {
+  it("fails closed when the state cannot be written: no feed page, so a refusing store cannot loop a page", async () => {
     const w: World = { docs: { ...stale } };
     const { d, sent } = deps(w);
+    let writes = 0;
     d.writeState = async () => {
+      writes++;
       throw new Error("store down");
     };
     const r = await runFeedWatch(LATE_AT, d, only("options-edition"));
-    expect(sent).toHaveLength(1);
-    expect(r).toMatchObject({ committed: false });
+    expect(sent).toEqual([]);
+    expect(writes).toBe(2); // one retry in the run
+    expect(r).toMatchObject({ committed: false, state: "write-failed" });
   });
 
   it("a page not sent within the run's budget counts as failed and is retried", async () => {
@@ -169,7 +172,7 @@ describe("display only (FEED_WATCH_ALERTS unset) and switch-on", () => {
     expect(JSON.parse(store.get()!.text)).toMatchObject({ alerts: "off", feeds: { "options-edition": { open: true, sent: false } } });
     const on = deps(w, store, { alertsOn: true });
     for (let i = 5; i < 10; i++) await runFeedWatch(new Date(LATE_AT.getTime() + i * 10 * 60_000), on.d, only(...ids));
-    expect(on.sent.map((n) => n.title)).toEqual(["Feed alerts on: 1 already late"]);
+    expect(on.sent.map((n) => n.title)).toEqual(["Feed alerts on: 1 not on time"]);
     expect(JSON.parse(store.get()!.text)).toMatchObject({ alerts: "on", feeds: { "options-edition": { open: true, sent: true } } });
     w.docs = { ...fresh };
     await runFeedWatch(new Date(LATE_AT.getTime() + 120 * 60_000), on.d, only(...ids));
@@ -184,7 +187,7 @@ describe("display only (FEED_WATCH_ALERTS unset) and switch-on", () => {
     const b = deps(w, store);
     const t = new Date(LATE_AT.getTime() + 10 * 60_000);
     await Promise.all([runFeedWatch(t, a.d, only(...ids)), runFeedWatch(t, b.d, only(...ids))]);
-    expect([...a.sent, ...b.sent].map((n) => n.title)).toEqual(["Feed alerts on: 1 already late"]);
+    expect([...a.sent, ...b.sent].map((n) => n.title)).toEqual(["Feed alerts on: 1 not on time"]);
   });
 
   it("a failed summary is sent again on the next run", async () => {
@@ -197,7 +200,7 @@ describe("display only (FEED_WATCH_ALERTS unset) and switch-on", () => {
     expect(JSON.parse(store.get()!.text).alerts).toBe("off");
     result = "sent";
     await runFeedWatch(new Date(LATE_AT.getTime() + 20 * 60_000), on.d, only(...ids));
-    expect(on.sent.map((n) => n.title)).toEqual(["Feed alerts on: 1 already late", "Feed alerts on: 1 already late"]);
+    expect(on.sent.map((n) => n.title)).toEqual(["Feed alerts on: 1 not on time", "Feed alerts on: 1 not on time"]);
     expect(JSON.parse(store.get()!.text).alerts).toBe("on");
   });
 });
@@ -273,5 +276,68 @@ describe("the pages' loader derives what it reads from the table", () => {
     expect(s.stamps).toEqual({ "selection-stage-1": { status: "missing" } }); // fixture mode: nothing in the store
     expect(Object.keys(s.refusals)).toEqual(["options"]);
     expect(s.shadow).toBeNull();
+  });
+});
+
+describe("when the alert state itself cannot be read or written", () => {
+  // Ticks every 10 minutes from 00:00 UTC on Friday 13 November 2026: tick 0 and tick 12 open a 2-hour block.
+  const BLOCK = new Date("2026-11-13T00:00:00Z").getTime();
+  const tickAt = (i: number) => new Date(BLOCK + i * 10 * 60_000 + 4_000); // each run starts a few seconds after its tick
+
+  it("24 ticks with the read failing: exactly 2 store notices, no late page", async () => {
+    const w: World = { docs: { ...stale } };
+    const { d, sent } = deps(w);
+    let reads = 0;
+    d.readState = async () => {
+      reads++;
+      throw new Error("store down");
+    };
+    for (let i = 0; i < 24; i++) await runFeedWatch(tickAt(i), d, only("options-edition"));
+    expect(sent.map((n) => n.title)).toEqual(["Feed watch cannot read its store", "Feed watch cannot read its store"]);
+    expect(reads).toBe(48); // one retry per run
+  });
+
+  it("with alerts off it sends nothing at all", async () => {
+    const { d, sent } = deps({ docs: { ...stale } }, memStore(), { alertsOn: false });
+    d.readState = async () => {
+      throw new Error("store down");
+    };
+    for (let i = 0; i < 24; i++) await runFeedWatch(tickAt(i), d, only("options-edition"));
+    expect(sent).toEqual([]);
+  });
+
+  it("a read that fails once and recovers never re-sends the incident paged before it", async () => {
+    for (const failAt of [0, 5]) {
+      const w: World = { docs: { ...stale } };
+      const store = memStore();
+      const { d, sent } = deps(w, store);
+      await runFeedWatch(new Date(BLOCK - 50 * 60_000), d, only("options-edition")); // Thursday 23:10 UTC: late, paged
+      expect(sent.map((n) => n.kind)).toEqual(["feed-late"]);
+      for (let i = 0; i < 8; i++) {
+        d.readState = i === failAt ? async () => Promise.reject(new Error("store down")) : store.readState;
+        await runFeedWatch(tickAt(i), d, only("options-edition"));
+      }
+      const titles = sent.map((n) => n.title);
+      expect(titles.filter((t) => t.includes("late by"))).toHaveLength(1);
+      expect(titles.filter((t) => t === "Feed watch cannot read its store")).toHaveLength(failAt === 0 ? 1 : 0);
+    }
+  });
+
+  it("two overlapping invocations of one tick decide alike", async () => {
+    const { storeNoticeTick } = await import("@/lib/feed-watch-run");
+    expect(storeNoticeTick(tickAt(0).getTime())).toBe(true);
+    expect(storeNoticeTick(tickAt(0).getTime() + 30_000)).toBe(true);
+    expect(storeNoticeTick(tickAt(1).getTime())).toBe(false);
+    expect(storeNoticeTick(tickAt(12).getTime())).toBe(true);
+  });
+
+  it("a write that keeps failing while reads work: no feed page loops, at most one store notice per block", async () => {
+    const w: World = { docs: { ...stale } };
+    const { d, sent } = deps(w);
+    d.writeState = async () => {
+      throw new Error("store down");
+    };
+    for (let i = 0; i < 24; i++) await runFeedWatch(tickAt(i), d, only("options-edition"));
+    expect(sent.map((n) => n.title)).toEqual(["Feed watch cannot read its store", "Feed watch cannot read its store"]);
   });
 });

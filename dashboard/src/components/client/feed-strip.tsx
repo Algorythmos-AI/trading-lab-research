@@ -9,7 +9,7 @@
 // Every chip has the same fixed size whatever it says, so a state change never moves the board below it.
 import { TONE_ICON, TONE_TEXT } from "@/components/status";
 import { BARS_STALE_MS } from "@/lib/bars-feed";
-import { useState } from "react";
+import { useSyncExternalStore } from "react";
 import { chipAge, evaluateStamped, type FeedStateName, journalShown, polledState, shadowWindow, STATE_WORD, type StampedInputs } from "@/lib/feed-watch";
 import type { Tone } from "@/lib/labels";
 import { STALE_MS } from "@/lib/options";
@@ -17,9 +17,13 @@ import { cn } from "@/lib/utils";
 import { useEvalStatus } from "./desk-shadow";
 import { useLive } from "./live-layer";
 import { useBoard } from "./trade-now";
-import { usePerfNow } from "./use-now";
+import { useNow, usePerfNow } from "./use-now";
 
-const TONE: Record<FeedStateName, Tone> = {
+/** A chip's state: the feed watch's, or "checking" while the strip's own clock cannot be trusted (stripClock). */
+export type ChipState = FeedStateName | "checking";
+
+const TONE: Record<ChipState, Tone> = {
+  checking: "info",
   on_time: "good",
   waiting: "info",
   late: "warn",
@@ -36,11 +40,13 @@ const CHIP_TONE: Record<Tone, string> = {
   neutral: "border-border bg-card",
 };
 
+const WORD: Record<ChipState, string> = { ...STATE_WORD, checking: "Checking" };
+
 export interface Chip {
   id: string;
   name: string;
   short: string;
-  state: FeedStateName;
+  state: ChipState;
   age: string;
   /** Its schedule is assumed (the calendar has run out, or the routine's time is not verified). */
   assumed: boolean;
@@ -104,13 +110,13 @@ export function FeedChips({ chips }: { chips: readonly Chip[] }) {
             data-feed-state={c.state}
             data-feed-assumed={c.assumed ? "true" : undefined}
             title={c.assumed ? "Assumed schedule" : undefined}
-            aria-label={`${c.name}: ${STATE_WORD[c.state]}, ${c.age === "—" ? "age not known" : c.age === "now" ? "just now" : `${c.age} old`}${c.assumed ? ", assumed schedule" : ""}`}
+            aria-label={`${c.name}: ${WORD[c.state]}, ${c.age === "—" ? "age not known" : c.age === "now" ? "just now" : `${c.age} old`}${c.assumed ? ", assumed schedule" : ""}`}
             className={cn("grid h-12 min-w-0 content-center gap-0.5 rounded-md border px-2", CHIP_TONE[tone])}
           >
             <span className="text-muted-foreground truncate text-[0.6875rem] leading-tight font-medium max-sm:text-xs">{c.short}</span>
             <span className="flex min-w-0 items-center gap-1 text-xs leading-tight font-semibold">
               <Icon aria-hidden className={cn("size-3.5 shrink-0", TONE_TEXT[tone])} />
-              <span className="truncate">{STATE_WORD[c.state]}</span>
+              <span className="truncate">{WORD[c.state]}</span>
               {/* A fixed box pinned right, its text set from the left: an age that ticks from "now" to "1s" or "10s"
                   moves no text on the page (a right-set text would start somewhere else each second). */}
               <span className="text-muted-foreground ml-auto w-[4ch] shrink-0 text-left font-mono font-normal tabular-nums">{c.age}</span>
@@ -122,10 +128,48 @@ export function FeedChips({ chips }: { chips: readonly Chip[] }) {
   );
 }
 
-/** The strip's clock (ms): the server's render time plus the monotonic time since hydration; the render time alone
- * while either monotonic reading is missing. */
-export function stripNow(serverNow: number, perf0: number | null, perf: number | null): number {
-  return perf0 === null || perf === null ? serverNow : serverNow + Math.max(0, perf - perf0);
+/** Where the strip's clock was last set: a server time, and the monotonic and wall clocks at the moment it arrived. */
+export interface Anchor {
+  server: number;
+  perf: number;
+  wall: number;
+}
+
+/** Past this long without a new server time (the layout refreshes every 60 s while visible), the clock is stale. */
+export const ANCHOR_MAX_AGE_MS = 3 * 60_000;
+/** The wall clock and the monotonic clock may drift apart by this much before the clock is stale (sleep, a clock change). */
+export const ANCHOR_DRIFT_MS = 30_000;
+
+/**
+ * The strip's clock: the server time of the latest render (`anchor.server`, re-anchored each time a refresh brings a
+ * new one) plus the monotonic time since it arrived, never the device's wall clock. Before any anchor (the server
+ * render, hydration) it is the server render's own time. Stale when no new server time has come for
+ * ANCHOR_MAX_AGE_MS (a refresh failed, offline) or when the wall clock and the monotonic clock disagree about the time
+ * since the anchor by more than ANCHOR_DRIFT_MS (the machine slept and the monotonic clock stood still, or the device's
+ * clock was changed): then the server-derived chips are shown as "checking" until a new server time arrives.
+ */
+export function stripClock(anchor: Anchor | null, serverNow: number, perf: number | null, wall: number | null): { now: number; stale: boolean } {
+  if (!anchor || perf === null) return { now: anchor?.server ?? serverNow, stale: false };
+  const byPerf = Math.max(0, perf - anchor.perf);
+  const drift = wall === null ? 0 : Math.abs(wall - anchor.wall - (perf - anchor.perf));
+  return { now: anchor.server + byPerf, stale: byPerf > ANCHOR_MAX_AGE_MS || drift > ANCHOR_DRIFT_MS };
+}
+
+// The anchor for the page's one strip: kept until a different server time is rendered, so the same server time always
+// gives the same anchor (a stable snapshot for useSyncExternalStore).
+let anchorCache: Anchor | null = null;
+function anchorFor(serverNow: number): Anchor {
+  if (anchorCache?.server !== serverNow) anchorCache = { server: serverNow, perf: performance.now(), wall: Date.now() };
+  return anchorCache;
+}
+const noSubscribe = () => () => undefined;
+
+/** The chips with a stale clock: nothing that depends on the time is presented as current, and nothing as on time. */
+export function withStaleClock(chips: readonly Chip[]): Chip[] {
+  const polled = new Set(["prices", "bars"]);
+  return chips.map((c) =>
+    polled.has(c.id) ? (c.state === "on_time" || c.state === "not_expected" ? { ...c, state: "checking" } : c) : { ...c, state: "checking" },
+  );
 }
 
 /**
@@ -137,11 +181,15 @@ export function FeedStrip({ stamps, serverNow, evalOn }: { stamps: StampedInputs
   const { feed, now: browserNow, backoff } = useLive();
   const board = useBoard();
   const status = useEvalStatus();
-  // The strip's clock is the server render's, moved on by the browser's monotonic clock since hydration: never the
-  // device's wall clock, which may be wrong. Until the monotonic clock is read, the server render's state stands.
-  const [perf0] = useState(() => (typeof performance === "undefined" ? null : performance.now()));
-  const perf = usePerfNow(15_000);
-  const now = stripNow(serverNow, perf0, perf);
+  // The anchor moves with every new server time (the layout's refresh every minute brings one), the moment the render
+  // carrying it reads the store below, rather than by remounting the strip on a key: a remount would drop the chips to
+  // the server render's state for a frame (a flash) and gains nothing. The server render and hydration have no anchor
+  // and show the server's own state.
+  const anchor = useSyncExternalStore(noSubscribe, () => anchorFor(serverNow), () => null);
+  const perf = usePerfNow(5_000);
+  const wall = useNow(5_000);
+  const clock = stripClock(anchor, serverNow, perf, wall);
+  const now = clock.now;
   const shadow: StampedInputs["shadow"] = stamps.shadow ?? (evalOn ? null : { status: "ok", value: { on: false, switched_at: null, last_slot_end: null } });
   // The prices are failing while the retry line is up (backoff) or the board has paused on them.
   const failing = backoff !== null || board?.paused === true;
@@ -154,5 +202,7 @@ export function FeedStrip({ stamps, serverNow, evalOn }: { stamps: StampedInputs
     bars: board?.barsRead ?? { status: "off", receivedAt: null },
     evalStatus: status,
   });
-  return <FeedChips chips={chips} />;
+  // A stale clock: the layout's own refresh (on every return to the tab, and each minute while visible) brings the
+  // next server time; nothing more is polled here.
+  return <FeedChips chips={clock.stale ? withStaleClock(chips) : chips} />;
 }

@@ -20,6 +20,7 @@ import {
   type ShadowRead,
   type StampedInputs,
   stampInputs,
+  storeNotice,
 } from "./feed-watch";
 import { feedVariant } from "./fixture-variants";
 import { type IngestRejectKind, readIngestRejectStatus } from "./ingest-reject";
@@ -154,23 +155,56 @@ function statesOf(views: readonly FeedView[]): Record<string, string> {
 }
 
 /** One tick: read, evaluate, commit, page. Never throws for a store failure: an unreadable input is "unknown". */
+/**
+ * The store-outage rule, which needs no stored state. When the alert state cannot be read (after one retry in the run)
+ * or the new state cannot be committed (fail closed: commitThenSend `failClosed`), the run sends no feed page at all:
+ * it cannot know what was already sent. Instead, with alerts on, the run of the first 10-minute tick of each fixed
+ * 2-hour UTC block (tick index floor(t / 10 min) ≡ 0 mod 12, from the run's own scheduled time, so overlapping
+ * invocations of one tick decide alike) sends one "Feed watch cannot read its store".
+ *
+ * Worst cases: a total outage pages within 2 hours of starting and then once per 2-hour block (24 ticks of 10 minutes,
+ * 4 hours: exactly 2 pages); one block never has more than one, or two if the cron delivers that very tick twice; no
+ * late, refused or recovered page is ever sent from a run that cannot see its state, so an incident paged before the
+ * outage is not paged again after it.
+ */
+export const STORE_NOTICE_EVERY_TICKS = 12;
+export const TICK_MS = 10 * 60_000;
+export function storeNoticeTick(nowMs: number): boolean {
+  return Math.floor(nowMs / TICK_MS) % STORE_NOTICE_EVERY_TICKS === 0;
+}
+
+async function readStateTwice(deps: FeedWatchDeps): Promise<{ ok: true; stored: StoredText | null } | { ok: false }> {
+  for (let i = 0; i < 2; i++) {
+    try {
+      return { ok: true, stored: await within(deps.readState(), FEED_READ_MS) };
+    } catch (e) {
+      logEvent("feed-watch.state", { outcome: "read-failed", attempt: i + 1, error: errName(e) });
+    }
+  }
+  return { ok: false };
+}
+
+/** One tick: read, evaluate, commit, page. Never throws for a store failure: an unreadable input is "unknown". */
 export async function runFeedWatch(
   now: Date = new Date(),
   deps: FeedWatchDeps = blobFeedDeps(),
   table: readonly FeedRow[] = FEEDS,
 ): Promise<Record<string, unknown>> {
   const startedAt = deps.clock();
-  const [inputs, stored] = await Promise.all([
-    readFeedInputs(deps, now.getTime(), table),
-    within(deps.readState(), FEED_READ_MS).catch((e: unknown) => {
-      logEvent("feed-watch.state", { outcome: "read-failed", error: errName(e) });
-      return null; // decide from the initial state: at worst a duplicate page
-    }),
-  ]);
+  const [inputs, state] = await Promise.all([readFeedInputs(deps, now.getTime(), table), readStateTwice(deps)]);
   const views = evaluateStamped(stampInputs(inputs, table), now.getTime(), table);
+  const summary = { ok: true, alerts: deps.alertsOn ? "on" : "off", states: statesOf(views) };
+  const storeDown = async (why: "read" | "write") => {
+    const due = deps.alertsOn && storeNoticeTick(now.getTime());
+    const r = due ? await deps.send(storeNotice(now)) : null;
+    const result = { ...summary, state: `${why}-failed`, notices: due ? ["feed-late"] : [], sent: r === "sent" ? 1 : 0, committed: false };
+    logEvent("feed-watch", result);
+    return result;
+  };
+  if (!state.ok) return storeDown("read");
+  const stored = state.stored;
   const prev = parseFeedState(stored?.text);
   const decision = decideFeedAlerts(views, prev, now, deps.alertsOn, table);
-  const summary = { ok: true, alerts: deps.alertsOn ? "on" : "off", states: statesOf(views) };
   const r = await commitThenSend({
     deps,
     stored,
@@ -183,8 +217,10 @@ export async function runFeedWatch(
     event: "feed-watch",
     deadline: startedAt + FEED_RUN_BUDGET_MS,
     clock: deps.clock,
+    failClosed: true,
   });
   if (r.skipped) return { ...summary, skipped: r.skipped };
+  if (r.blocked) return storeDown("write");
   const result = {
     ...summary,
     notices: decision.notices.map((n) => n.kind),

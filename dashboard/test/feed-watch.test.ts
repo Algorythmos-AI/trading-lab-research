@@ -28,6 +28,8 @@ import {
   SUMMARY_ID,
   shadowWindow,
   journalShown,
+  summaryNotice,
+  refusedNotice,
 } from "@/lib/feed-watch";
 import { journalCurrent } from "@/lib/trade-rules";
 import { DAILY_GRACE_MIN, INTRADAY_MAX_AGE_MIN, JOURNAL_SLOT_UTC, OPTIONS_SLOT_UTC, RADAR_SLOT_UTC } from "@/lib/feeds";
@@ -239,15 +241,20 @@ describe("the trade journal (hourly live runs, the evening sync; pages after two
     expect(view("journal", { journal: ok(null, "2026-11-12T21:45:00Z") }, "2026-11-12T22:38:00Z").state).toBe("on_time");
     expect(view("journal", { journal: ok(null, "2026-11-12T20:30:00Z") }, "2026-11-12T22:39:00Z")).toMatchObject({ state: "late", misses: 1 });
   });
-  it("a dead evening sync is noticed in winter: the last live run's 16:20 New York read does not count for it", () => {
-    // Standard time: 16:20 New York is 21:20 UTC, inside the hour before 21:38 UTC, yet not the evening sync's read.
-    expect(view("journal", { journal: ok(null, "2026-11-12T21:20:00Z") }, "2026-11-12T22:39:00Z")).toMatchObject({ state: "late", misses: 1 });
-    expect(view("journal", { journal: ok(null, "2026-11-12T21:21:00Z") }, "2026-11-12T22:39:00Z").state).toBe("on_time");
-  });
-  it("and in summer: 16:20 New York is 20:20 UTC, before the hour's slack; a read after 16:20 within it counts", () => {
-    expect(view("journal", { journal: ok(null, "2026-10-29T20:20:00Z") }, "2026-10-29T22:39:00Z")).toMatchObject({ state: "late", misses: 1 });
-    expect(view("journal", { journal: ok(null, "2026-10-29T20:45:00Z") }, "2026-10-29T22:39:00Z").state).toBe("on_time");
-  });
+  // Only the evening routine's own read counts for 21:38 UTC: at most 10 minutes early. The last live run's reads
+  // (until about 16:20:30 New York) and anything up to 21:28 UTC are not it, in winter and in summer.
+  for (const [season, day, liveEnd, five] of [
+    ["winter", "2026-11-12", "21:20:30", "21:25:00"], // 16:20:30 and 16:25 New York, standard time
+    ["summer", "2026-10-29", "20:20:30", "20:25:00"], // the same, daylight time
+  ] as const)
+    it(`a dead evening sync is noticed in ${season}: 16:20:30 and 16:25 New York do not count, the evening run's read does`, () => {
+      const at = (t: string) => view("journal", { journal: ok(null, `${day}T${t}Z`) }, `${day}T22:39:00Z`);
+      expect(at(liveEnd)).toMatchObject({ state: "late", misses: 1 });
+      expect(at(five)).toMatchObject({ state: "late", misses: 1 });
+      expect(at("21:27:59").state).toBe("late");
+      expect(at("21:28:00").state).toBe("on_time");
+      expect(at("21:40:00").state).toBe("on_time");
+    });
   it("the evening sync is 16:38 New York in winter and 17:38 in summer, at the same UTC time", () => {
     const due = (now: string, at: string) => new Date(view("journal", { journal: ok(null, at) }, now).due!).toISOString();
     expect(due("2026-10-30T22:00:00Z", "2026-10-30T21:40:00Z")).toBe("2026-10-30T21:38:00.000Z");
@@ -357,7 +364,7 @@ describe("the episodes (one page per incident, one recovery, no repeats)", () =>
     expect(off.next.feeds["options-edition"]).toMatchObject({ open: true, sent: false, episode: "2026-11-12" });
     // Switched on ten minutes later with the incident under way: one summary, naming it; it is now marked sent.
     const on1 = tick(off.next, stale, at(10), true);
-    expect(on1.notices.map((n) => n.title)).toEqual(["Feed alerts on: 1 already late"]);
+    expect(on1.notices.map((n) => n.title)).toEqual(["Feed alerts on: 1 not on time"]);
     expect(on1.notices[0]!.message).toContain("Already late, refused or not checkable: Options edition.");
     expect(on1.noticeFeeds).toEqual([SUMMARY_ID]);
     expect(on1.next).toMatchObject({ alerts: "on", feeds: { "options-edition": { open: true, sent: true } } });
@@ -385,7 +392,7 @@ describe("the episodes (one page per incident, one recovery, no repeats)", () =>
     expect(off.notices).toEqual([]);
     const on = decideFeedAlerts(views, off.next, new Date(now.getTime() + 600_000), true);
     expect(on.notices).toHaveLength(1);
-    expect(on.notices[0]!.title).toBe("Feed alerts on: 3 already late");
+    expect(on.notices[0]!.title).toBe("Feed alerts on: 3 not on time");
     expect(on.notices[0]!.message).toContain("Options edition, Radar edition, Trade journal");
     expect(on.summaryFeeds).toEqual(["options-edition", "radar", "refusal-journal"]);
     // A failed summary is put back: the next run sends it again.
@@ -405,7 +412,7 @@ describe("the episodes (one page per incident, one recovery, no repeats)", () =>
     const offFri = tick(off.next, stale, new Date("2026-11-13T23:00:00Z"), false);
     expect(offFri.notices).toEqual([]);
     const onFri = tick(offFri.next, stale, new Date("2026-11-13T23:10:00Z"), true);
-    expect(onFri.notices.map((n) => n.title)).toEqual(["Feed alerts on: 1 already late"]);
+    expect(onFri.notices.map((n) => n.title)).toEqual(["Feed alerts on: 1 not on time"]);
   });
 
   it("an outage after a late page: late, then cannot be checked, then nothing until it truly recovers once", () => {
@@ -574,4 +581,38 @@ describe("the journal as a page shows it agrees with the board's day check", () 
     const stamp = ok(null, "2026-11-12T14:30:00Z");
     expect(journalShown(evaluateStamped(inputs({ journal: stamp }), now).find((x) => x.id === "journal")!, stamp, now)).toBe("late");
   }, 60_000); // 1,296 evaluations: slow on a loaded machine, so it has its own limit
+});
+
+describe("review fixes", () => {
+  it("a refusal of today's run never turns yesterday's still-missing edition into refused", () => {
+    // Wednesday's build is missing (Thursday 22:30 UTC: Thursday's run is not past its deadline yet); a refusal
+    // arrived at 22:05 UTC for Thursday's run. Wednesday's miss stays late and pages.
+    const stale = { "options-edition": ok("2026-11-11", "2026-11-10T22:10:00Z") };
+    const v = view("options-edition", stale, "2026-11-12T22:30:00Z", { refusals: { options: refused("2026-11-12T22:05:00Z") } });
+    expect(v).toMatchObject({ state: "late", episode: "2026-11-11", alerting: true });
+  });
+
+  it("a failure beats not due: failing prices outside the session read failed or late, never not due", () => {
+    const weekend = T("2026-11-14T16:00:00Z");
+    expect(polledState({ status: "error", receivedAt: null }, weekend, weekend, 30_000, "failed").state).toBe("failed");
+    expect(polledState({ status: "off", receivedAt: null }, weekend, weekend, 30_000, "failed").state).toBe("failed");
+    expect(polledState({ status: "ok", receivedAt: weekend, failed: true }, weekend, weekend, 90_000, "not_expected").state).toBe("late");
+    expect(polledState({ status: "off", receivedAt: null }, weekend, weekend, 90_000, "not_expected").state).toBe("not_expected");
+    // A store that cannot be read is "can't check", even when no run is in force.
+    expect(view("pre-open", { "pre-open": { status: "error" } }, "2026-11-14T15:00:00Z").state).toBe("unknown");
+    expect(view("shadow", {}, "2026-11-14T15:00:00Z", { shadow: { status: "error" } }).state).toBe("unknown");
+  });
+
+  it("the switch-on summary counts distinct feeds and covers late, refused and not checkable", () => {
+    const n = summaryNotice(["options-edition", "pre-open", "options-edition", "radar"], new Date("2026-11-12T23:00:00Z"));
+    expect(n.title).toBe("Feed alerts on: 3 not on time");
+    expect(n.message).toContain("Already late, refused or not checkable: Options edition, Pre-open refresh, Radar edition.");
+  });
+
+  it("an instant out of a Date's range is left out, not thrown on", () => {
+    const v = { ...view("options-edition", { "options-edition": ok("2026-11-12", "2026-11-11T22:10:00Z") }, "2026-11-12T23:00:00Z"), deadline: 1e300, due: -1e300 };
+    expect(() => lateNotice(v, new Date("2026-11-12T23:00:00Z"))).not.toThrow();
+    expect(lateNotice(v, new Date("2026-11-12T23:00:00Z")).message).toContain("past its deadline");
+    expect(refusedNotice({ ...v, type: "refusal" }, new Date("2026-11-12T23:00:00Z")).message).toContain("an unknown time");
+  });
 });
