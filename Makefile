@@ -34,7 +34,7 @@ JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 .DEFAULT_GOAL := help
 .PHONY: seed-vm help bootstrap research-index lint typecheck test ci hooks status gate deploy rollback migrate-state preflight publish-verify \
         uninstall-agents lease-break \
-        watchdog-drill feed-watch-drill feed-agreement feed-agreement-summary feed-agreement-edition dashboard-deploy vm-deploy \
+        watchdog-drill feed-watch-drill feed-agreement feed-agreement-recheck feed-agreement-summary feed-agreement-edition dashboard-deploy vm-deploy \
         agents-diff install-trading-agents install-dashboard-agent publish schema kill unkill reset-latch evidence
 
 help: ## List the tasks
@@ -127,7 +127,11 @@ export ENV_FILE ?= .env
 FA_DAY_OK = [[ "$$DAY" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$$ ]] || { echo "usage: DAY=YYYY-MM-DD"; exit 2; }
 feed-agreement: ## After a session: replay the board on IEX and on SIP bars and compare: make feed-agreement DAY=YYYY-MM-DD EDITION=<file> [BUDGET_S=120] [ENV_FILE=.env]
 	@$(FA_DAY_OK); [ -n "$$EDITION" ] || { echo "usage: make feed-agreement DAY=YYYY-MM-DD EDITION=<edition file>"; exit 2; }; \
-	node --env-file-if-exists="$$ENV_FILE" dashboard/scripts/feed-agreement.mjs --day "$$DAY" --edition "$$EDITION" $${BUDGET_S:+--budget-s "$$BUDGET_S"}
+	node --env-file-if-exists="$$ENV_FILE" dashboard/scripts/feed-agreement.mjs --day "$$DAY" --edition "$$EDITION" --env-file "$$ENV_FILE" $${BUDGET_S:+--budget-s "$$BUDGET_S"}
+
+feed-agreement-recheck: ## Once, the day after the first session: fetch a reported day again and count the units whose word changed: make feed-agreement-recheck DAY=YYYY-MM-DD EDITION=<file>
+	@$(FA_DAY_OK); [ -n "$$EDITION" ] || { echo "usage: make feed-agreement-recheck DAY=YYYY-MM-DD EDITION=<edition file>"; exit 2; }; \
+	node --env-file-if-exists="$$ENV_FILE" dashboard/scripts/feed-agreement.mjs --recheck --day "$$DAY" --edition "$$EDITION" --env-file "$$ENV_FILE" $${BUDGET_S:+--budget-s "$$BUDGET_S"}
 
 feed-agreement-summary: ## The feed agreement's reading over the sessions run so far (5 of one engine label needed)
 	node dashboard/scripts/feed-agreement.mjs --summary
