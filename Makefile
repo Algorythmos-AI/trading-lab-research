@@ -32,7 +32,7 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
 JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
-.PHONY: seed-vm help bootstrap research-index lint typecheck test ci hooks status gate deploy rollback migrate-state preflight publish-verify \
+.PHONY: seed-vm help bootstrap research-index lint typecheck restricted test ci hooks status gate deploy rollback migrate-state preflight publish-verify \
         uninstall-agents lease-break \
         watchdog-drill feed-watch-drill dashboard-deploy vm-deploy \
         agents-diff install-trading-agents install-dashboard-agent publish schema kill unkill reset-latch evidence
@@ -55,7 +55,10 @@ typecheck: ## mypy --strict on the typed modules
 test: ## Unit tests
 	$(PY) -m pytest
 
-ci: lint typecheck test ## Everything CI runs
+restricted: ## No restricted or runtime path is tracked (the pre-commit hook's pattern; CI runs it on every commit of a PR)
+	$(PY) scripts/check_restricted_paths.py
+
+ci: lint typecheck restricted test ## Everything CI runs
 
 hooks: ## Install the pre-commit hooks (gitleaks, restricted paths, ruff)
 	pre-commit install
