@@ -78,6 +78,7 @@ const FILES = [
   "../src/components/client/feed-strip.tsx",
   "../src/components/operations/feeds-panel.tsx",
   "../src/app/api/cron/watchdog/route.ts",
+  "../src/lib/cron-watchdog.ts",
   "../src/lib/alpaca-feed.ts",
   "../src/lib/feed-provenance.ts",
   "../src/lib/quote.ts",

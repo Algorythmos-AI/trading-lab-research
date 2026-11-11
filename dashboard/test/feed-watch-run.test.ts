@@ -38,6 +38,7 @@ interface World {
 function deps(world: World, store = memStore(), opts: { alertsOn?: boolean; send?: (n: Notice) => Promise<"sent" | "failed" | "skipped">; clock?: () => number } = {}) {
   const sent: Notice[] = [];
   const reads: string[] = [];
+  const sleeps: number[] = [];
   const d: FeedWatchDeps = {
     readDoc: async (path) => {
       reads.push(path);
@@ -57,8 +58,11 @@ function deps(world: World, store = memStore(), opts: { alertsOn?: boolean; send
     },
     alertsOn: opts.alertsOn ?? true,
     clock: opts.clock ?? (() => Date.now()),
+    sleep: async (ms) => {
+      sleeps.push(ms);
+    },
   };
-  return { d, sent, reads, store };
+  return { d, sent, reads, store, sleeps };
 }
 
 const only = (...ids: string[]) => FEEDS.filter((f) => ids.includes(f.id));
@@ -66,6 +70,7 @@ const OPTIONS = "options/latest.json";
 const LATE_AT = new Date("2026-11-12T23:00:00Z"); // after the 22:52 UTC deadline
 const stale = { [OPTIONS]: { session: "2026-11-12", as_of: "2026-11-11T22:10:00Z" } };
 const fresh = { [OPTIONS]: { session: "2026-11-13", as_of: "2026-11-12T23:05:00Z" } };
+const BLOCK0 = new Date("2026-11-13T00:00:00Z").getTime(); // the first tick of a 2-hour block
 
 describe("the switch", () => {
   it("is on only for exactly FEED_WATCH_ALERTS=on", () => {
@@ -114,50 +119,144 @@ describe("a tick", () => {
     const store = memStore();
     const a = deps(w, store);
     const b = deps(w, store);
-    const [ra, rb] = await Promise.all([runFeedWatch(LATE_AT, a.d, only("options-edition")), runFeedWatch(LATE_AT, b.d, only("options-edition"))]);
+    await Promise.all([runFeedWatch(LATE_AT, a.d, only("options-edition")), runFeedWatch(LATE_AT, b.d, only("options-edition"))]);
     expect(a.sent.length + b.sent.length).toBe(1);
-    expect([ra.skipped, rb.skipped].filter(Boolean)).toEqual(["concurrent run"]);
-    expect(store.writes).toHaveLength(1);
   });
 
-  it("a page that fails puts that feed back, so the next run pages again", async () => {
+  it("a page whose send fails stays pending and is sent on the next run, once", async () => {
     const w: World = { docs: { ...stale } };
     let result: "sent" | "failed" = "failed";
     const { d, sent, store } = deps(w, memStore(), { send: async () => result });
     await runFeedWatch(LATE_AT, d, only("options-edition"));
-    expect(JSON.parse(store.get()!.text).feeds["options-edition"]).toBeUndefined();
+    expect(JSON.parse(store.get()!.text).outbox).toMatchObject([{ status: "pending", attempts: 1 }]);
     result = "sent";
     await runFeedWatch(new Date(LATE_AT.getTime() + 10 * 60_000), d, only("options-edition"));
+    await runFeedWatch(new Date(LATE_AT.getTime() + 20 * 60_000), d, only("options-edition"));
+    expect(sent.map((n) => n.kind)).toEqual(["feed-late", "feed-late"]); // one failed try, one delivery
+    expect(JSON.parse(store.get()!.text).outbox).toEqual([]);
+  });
+
+  it("a page whose send fails three times stops and says so", async () => {
+    const w: World = { docs: { ...stale } };
+    const { d, sent, store } = deps(w, memStore(), { send: async () => "failed" });
+    for (let i = 0; i < 6; i++) await runFeedWatch(new Date(LATE_AT.getTime() + i * 10 * 60_000), d, only("options-edition"));
+    expect(sent).toHaveLength(3);
+    expect(JSON.parse(store.get()!.text).outbox).toMatchObject([{ status: "sent_failed", attempts: 3 }]);
+  });
+
+  it("a page is not re-sent within the tick that claimed it", async () => {
+    const w: World = { docs: { ...stale } };
+    const { d, sent } = deps(w, memStore(), { send: async () => "failed" });
+    await runFeedWatch(LATE_AT, d, only("options-edition"));
+    await runFeedWatch(new Date(LATE_AT.getTime() + 60_000), d, only("options-edition")); // the same 10-minute tick
+    expect(sent).toHaveLength(1);
+  });
+
+  it("the reproduced loss: the first write lands but its reply is lost; the page is still sent, exactly once", async () => {
+    const w: World = { docs: { ...stale } };
+    const store = memStore();
+    const { d, sent } = deps(w, store);
+    let first = true;
+    d.writeState = async (body, opts) => {
+      const r = await store.writeState(body, opts);
+      if (first) {
+        first = false;
+        throw new Error("reply lost");
+      }
+      return r;
+    };
+    for (let i = 0; i < 7; i++) await runFeedWatch(new Date(LATE_AT.getTime() + i * 10 * 60_000), d, only("options-edition"));
+    expect(sent.map((n) => n.kind)).toEqual(["feed-late"]);
+  });
+
+  it("a phase-2 record that fails after a good send: at most one duplicate, then it settles", async () => {
+    const w: World = { docs: { ...stale } };
+    const store = memStore();
+    const { d, sent } = deps(w, store);
+    let writes = 0;
+    d.writeState = async (body, opts) => {
+      writes++;
+      if (writes === 2) throw new Error("store down"); // run 1's phase 2
+      return store.writeState(body, opts);
+    };
+    for (let i = 0; i < 5; i++) await runFeedWatch(new Date(LATE_AT.getTime() + i * 10 * 60_000), d, only("options-edition"));
     expect(sent.map((n) => n.kind)).toEqual(["feed-late", "feed-late"]);
-    expect(JSON.parse(store.get()!.text).feeds["options-edition"]).toMatchObject({ open: true });
+    expect(JSON.parse(store.get()!.text).outbox).toEqual([]);
+  });
+
+  it("two overlapping runs on a pending page send it once between them", async () => {
+    const w: World = { docs: { ...stale } };
+    const store = memStore();
+    let result: "sent" | "failed" = "failed";
+    const first = deps(w, store, { send: async () => result });
+    await runFeedWatch(LATE_AT, first.d, only("options-edition")); // pending, attempt 1 failed
+    result = "sent";
+    const a = deps(w, store);
+    const b = deps(w, store);
+    const t = new Date(LATE_AT.getTime() + 10 * 60_000);
+    await Promise.all([runFeedWatch(t, a.d, only("options-edition")), runFeedWatch(t, b.d, only("options-edition"))]);
+    expect(a.sent.length + b.sent.length).toBe(1);
   });
 
   it("fails closed when the state cannot be written: no feed page, so a refusing store cannot loop a page", async () => {
     const w: World = { docs: { ...stale } };
     const { d, sent } = deps(w);
-    let writes = 0;
     d.writeState = async () => {
-      writes++;
       throw new Error("store down");
     };
-    const r = await runFeedWatch(LATE_AT, d, only("options-edition"));
+    const r = await runFeedWatch(new Date("2026-11-12T23:25:00Z"), d, only("options-edition")); // not a notice tick
     expect(sent).toEqual([]);
-    expect(writes).toBe(2); // one retry in the run
     expect(r).toMatchObject({ committed: false, state: "write-failed" });
   });
 
-  it("a page not sent within the run's budget counts as failed and is retried", async () => {
+  it("a page not sent within the run's budget stays pending and is sent next run", async () => {
     const w: World = { docs: { ...stale } };
     let t = 0;
     const { d, sent, store } = deps(w, memStore(), { clock: () => t });
+    const read = store.readState;
     d.readState = async () => {
       t += FEED_RUN_BUDGET_MS; // the reads used the whole budget
-      return store.get();
+      return read();
     };
     const r = await runFeedWatch(LATE_AT, d, only("options-edition"));
     expect(sent).toEqual([]);
     expect(r).toMatchObject({ failed: 1 });
-    expect(JSON.parse(store.get()!.text).feeds["options-edition"]).toBeUndefined();
+    d.readState = read;
+    await runFeedWatch(new Date(LATE_AT.getTime() + 10 * 60_000), d, only("options-edition"));
+    expect(sent.map((n) => n.kind)).toEqual(["feed-late"]);
+  });
+
+  it("a lost precondition race is another run, never a store failure, and never a store notice", async () => {
+    const w: World = { docs: { ...stale } };
+    const store = memStore();
+    const { d, sent } = deps(w, store);
+    let raced = false;
+    d.writeState = async (body, opts) => {
+      if (!raced) {
+        raced = true;
+        // Another run commits a different decision in between (its own incident state for another feed).
+        await store.writeState(JSON.stringify({ v: 1, alerts: "on", feeds: { radar: { open: true, episode: "2026-11-12", since: null, sent: true, unknown_runs: 0, unknown_episode: null, unknown_sent: false } }, outbox: [] }), { createOnly: true });
+      }
+      return store.writeState(body, opts);
+    };
+    const r = await runFeedWatch(new Date(BLOCK0), d, only("options-edition", "radar")); // a notice tick
+    expect(r.state).toBeUndefined();
+    expect(sent.map((n) => n.title)).not.toContain("Feed watch cannot read its store");
+    expect(sent.map((n) => n.kind)).toEqual(["feed-late"]); // decided again on the other run's state: only the edition
+  });
+
+  it("a read that fails once is tried again after a short pause", async () => {
+    const w: World = { docs: { ...stale } };
+    const store = memStore();
+    const { d, sent, sleeps } = deps(w, store);
+    let fails = 1;
+    d.readState = async () => {
+      if (fails-- > 0) throw new Error("blip");
+      return store.readState();
+    };
+    await runFeedWatch(LATE_AT, d, only("options-edition"));
+    expect(sleeps).toEqual([500]);
+    expect(sent.map((n) => n.kind)).toEqual(["feed-late"]);
   });
 });
 
@@ -173,7 +272,6 @@ describe("display only (FEED_WATCH_ALERTS unset) and switch-on", () => {
     const on = deps(w, store, { alertsOn: true });
     for (let i = 5; i < 10; i++) await runFeedWatch(new Date(LATE_AT.getTime() + i * 10 * 60_000), on.d, only(...ids));
     expect(on.sent.map((n) => n.title)).toEqual(["Feed alerts on: 1 not on time"]);
-    expect(JSON.parse(store.get()!.text)).toMatchObject({ alerts: "on", feeds: { "options-edition": { open: true, sent: true } } });
     w.docs = { ...fresh };
     await runFeedWatch(new Date(LATE_AT.getTime() + 120 * 60_000), on.d, only(...ids));
     expect(on.sent.map((n) => n.kind)).toEqual(["feed-late", "feed-recovered"]);
@@ -190,33 +288,32 @@ describe("display only (FEED_WATCH_ALERTS unset) and switch-on", () => {
     expect([...a.sent, ...b.sent].map((n) => n.title)).toEqual(["Feed alerts on: 1 not on time"]);
   });
 
-  it("a failed summary is sent again on the next run", async () => {
+  it("a summary whose send fails is sent again on the next run", async () => {
     const w: World = { docs: { ...stale } };
     const store = memStore();
     await runFeedWatch(LATE_AT, deps(w, store, { alertsOn: false }).d, only(...ids));
     let result: "sent" | "failed" = "failed";
     const on = deps(w, store, { send: async () => result });
     await runFeedWatch(new Date(LATE_AT.getTime() + 10 * 60_000), on.d, only(...ids));
-    expect(JSON.parse(store.get()!.text).alerts).toBe("off");
     result = "sent";
     await runFeedWatch(new Date(LATE_AT.getTime() + 20 * 60_000), on.d, only(...ids));
+    await runFeedWatch(new Date(LATE_AT.getTime() + 30 * 60_000), on.d, only(...ids));
     expect(on.sent.map((n) => n.title)).toEqual(["Feed alerts on: 1 not on time", "Feed alerts on: 1 not on time"]);
-    expect(JSON.parse(store.get()!.text).alerts).toBe("on");
+    expect(JSON.parse(store.get()!.text).outbox).toEqual([]);
   });
 });
 
 describe("overlapping runs on clocks a few milliseconds apart", () => {
-  it("page once: the second sees the first's commit as the same decision", async () => {
+  it("page once", async () => {
     const w: World = { docs: { ...stale } };
     const store = memStore();
     const a = deps(w, store);
     const b = deps(w, store);
-    const [ra, rb] = await Promise.all([
+    await Promise.all([
       runFeedWatch(new Date(LATE_AT.getTime() + 3), a.d, only("options-edition")),
       runFeedWatch(new Date(LATE_AT.getTime() + 41), b.d, only("options-edition")),
     ]);
     expect(a.sent.length + b.sent.length).toBe(1);
-    expect([ra.skipped, rb.skipped].filter(Boolean)).toEqual(["concurrent run"]);
   });
 });
 
@@ -280,11 +377,10 @@ describe("the pages' loader derives what it reads from the table", () => {
 });
 
 describe("when the alert state itself cannot be read or written", () => {
-  // Ticks every 10 minutes from 00:00 UTC on Friday 13 November 2026: tick 0 and tick 12 open a 2-hour block.
-  const BLOCK = new Date("2026-11-13T00:00:00Z").getTime();
-  const tickAt = (i: number) => new Date(BLOCK + i * 10 * 60_000 + 4_000); // each run starts a few seconds after its tick
+  // Ticks every 10 minutes from 00:00 UTC on Friday 13 November 2026: ticks 0 and 1 of each 2-hour block may notify.
+  const tickAt = (i: number) => new Date(BLOCK0 + i * 10 * 60_000 + 4_000); // each run starts a few seconds after its tick
 
-  it("24 ticks with the read failing: exactly 2 store notices, no late page", async () => {
+  it("24 ticks with the read failing: 4 store notices (ticks 0 and 1 of each block), no late page", async () => {
     const w: World = { docs: { ...stale } };
     const { d, sent } = deps(w);
     let reads = 0;
@@ -293,15 +389,21 @@ describe("when the alert state itself cannot be read or written", () => {
       throw new Error("store down");
     };
     for (let i = 0; i < 24; i++) await runFeedWatch(tickAt(i), d, only("options-edition"));
-    expect(sent.map((n) => n.title)).toEqual(["Feed watch cannot read its store", "Feed watch cannot read its store"]);
-    expect(reads).toBe(48); // one retry per run
+    expect(sent.map((n) => n.title)).toEqual(Array(4).fill("Feed watch cannot read its store"));
+    expect(reads).toBe(48); // two tries per run
+  });
+
+  it("a skipped notice run is covered by the block's other one: silence never passes 2 hours 10 minutes", async () => {
+    const w: World = { docs: { ...stale } };
+    const { d, sent } = deps(w);
+    d.readState = async () => Promise.reject(new Error("store down"));
+    for (let i = 0; i < 24; i++) if (i !== 12) await runFeedWatch(tickAt(i), d, only("options-edition")); // tick 12 never ran
+    expect(sent).toHaveLength(3);
   });
 
   it("with alerts off it sends nothing at all", async () => {
     const { d, sent } = deps({ docs: { ...stale } }, memStore(), { alertsOn: false });
-    d.readState = async () => {
-      throw new Error("store down");
-    };
+    d.readState = async () => Promise.reject(new Error("store down"));
     for (let i = 0; i < 24; i++) await runFeedWatch(tickAt(i), d, only("options-edition"));
     expect(sent).toEqual([]);
   });
@@ -311,7 +413,7 @@ describe("when the alert state itself cannot be read or written", () => {
       const w: World = { docs: { ...stale } };
       const store = memStore();
       const { d, sent } = deps(w, store);
-      await runFeedWatch(new Date(BLOCK - 50 * 60_000), d, only("options-edition")); // Thursday 23:10 UTC: late, paged
+      await runFeedWatch(new Date(BLOCK0 - 50 * 60_000), d, only("options-edition")); // Thursday 23:10 UTC: late, paged
       expect(sent.map((n) => n.kind)).toEqual(["feed-late"]);
       for (let i = 0; i < 8; i++) {
         d.readState = i === failAt ? async () => Promise.reject(new Error("store down")) : store.readState;
@@ -323,21 +425,22 @@ describe("when the alert state itself cannot be read or written", () => {
     }
   });
 
-  it("two overlapping invocations of one tick decide alike", async () => {
+  it("the notice ticks are 0 and 1 of each block, by the run's own time", async () => {
     const { storeNoticeTick } = await import("@/lib/feed-watch-run");
     expect(storeNoticeTick(tickAt(0).getTime())).toBe(true);
     expect(storeNoticeTick(tickAt(0).getTime() + 30_000)).toBe(true);
-    expect(storeNoticeTick(tickAt(1).getTime())).toBe(false);
+    expect(storeNoticeTick(tickAt(1).getTime())).toBe(true);
+    expect(storeNoticeTick(tickAt(2).getTime())).toBe(false);
     expect(storeNoticeTick(tickAt(12).getTime())).toBe(true);
   });
 
-  it("a write that keeps failing while reads work: no feed page loops, at most one store notice per block", async () => {
+  it("a write that keeps failing while reads work: no feed page loops, store notices on the notice ticks only", async () => {
     const w: World = { docs: { ...stale } };
     const { d, sent } = deps(w);
     d.writeState = async () => {
       throw new Error("store down");
     };
     for (let i = 0; i < 24; i++) await runFeedWatch(tickAt(i), d, only("options-edition"));
-    expect(sent.map((n) => n.title)).toEqual(["Feed watch cannot read its store", "Feed watch cannot read its store"]);
+    expect(sent.map((n) => n.title)).toEqual(Array(4).fill("Feed watch cannot read its store"));
   });
 });

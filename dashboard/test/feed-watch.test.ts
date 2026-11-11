@@ -616,3 +616,14 @@ describe("review fixes", () => {
     expect(refusedNotice({ ...v, type: "refusal" }, new Date("2026-11-12T23:00:00Z")).message).toContain("an unknown time");
   });
 });
+
+describe("the journal's evening sync is assumed (its stamping rule cannot be checked here)", () => {
+  it("a missed evening sync is late on the page, assumed, and never pages; the next morning's verified runs do", () => {
+    // Thursday 12 November: the 15:24 live run read at 20:30 UTC, then nothing.
+    const j = { journal: ok(null, "2026-11-12T20:30:00Z") };
+    const evening = view("journal", j, "2026-11-12T22:39:00Z");
+    expect(evening).toMatchObject({ state: "late", assumed: true, alerting: false });
+    // Friday morning: the 09:24 and 10:24 live runs missed too (verified): it pages.
+    expect(view("journal", j, "2026-11-13T16:10:00Z")).toMatchObject({ state: "late", alerting: true, assumed: false });
+  });
+});

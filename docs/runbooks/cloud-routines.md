@@ -33,7 +33,13 @@ checked; the feed watch shows them as assumed and never pages for them (below).
   the same pull request; a new routine that publishes is one more row (and, to show it, a chip or a card).
 - **The journal's freshness**: the feed watch expects a read at or after each live run within 45 minutes (the
   routine publishes at least every 30 minutes) and the 21:38 UTC sync within an hour, and pages after two missed runs
-  in a row. The day check (`trade-rules.ts`, `journalCurrent`, inside the shadow evaluator's engine) is stricter and
+  in a row. The evening rule (only a stamp at most 10 minutes before 21:38 UTC counts) assumes the after-close routine
+  stamps its own read time and never fires over 10 minutes early; neither is recorded here, so that run is marked
+  assumed and a missed evening sync is shown, not paged, until the owner confirms both (then drop `verified: false`
+  from that schedule in `FEEDS`). The evening rule (only a stamp at most 10 minutes before 21:38 UTC counts) assumes the after-close routine
+  stamps its own read time and never fires over 10 minutes early; neither is recorded here, so that run is marked
+  assumed and a missed evening sync is shown, not paged, until the owner confirms both (then set `verified` on that
+  schedule in `FEEDS`). The day check (`trade-rules.ts`, `journalCurrent`, inside the shadow evaluator's engine) is stricter and
   says "Journal not current" when a read is missing; it still reads `feeds.ts`'s `journalCheck`, unchanged.
 - **The options desk and the clone** read the edition and its focus block. The pre-open routine replaces only the
   focus block.

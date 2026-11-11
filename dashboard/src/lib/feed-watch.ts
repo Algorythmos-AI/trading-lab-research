@@ -43,6 +43,11 @@ export interface Schedule {
   until?: "next" | "close";
   /** Only runs before the session's close count (the live journal reads). */
   in_session?: boolean;
+  /**
+   * false: this schedule's rule could not be checked from this repository (the routine's zone, how it stamps, how
+   * early it may fire). Its runs are shown as assumed and a miss of one never pages, as for an unverified row.
+   */
+  verified?: boolean;
 }
 
 /** What a stored document must say to count for a run. */
@@ -193,8 +198,10 @@ export const FEEDS: readonly FeedRow[] = [
     schedules: [
       { zone: "America/New_York", times: JOURNAL_LIVE_NY, grace_min: INTRADAY_MAX_AGE_MIN, in_session: true },
       // Only the evening routine's own read counts for it: at most 10 minutes before 21:38 UTC. The last live run reads
-      // until about 16:20:30 New York (21:20 UTC in winter, 20:20 in summer), always earlier than that.
-      { zone: "UTC", times: [hhmm(JOURNAL_SLOT_UTC)], grace_min: DAILY_GRACE_MIN, early_min: JOURNAL_EVENING_EARLY_MIN },
+      // until about 16:20:30 New York (21:20 UTC in winter, 20:20 in summer), always earlier than that. Assumed: that
+      // the routine stamps its own read time and never fires over 10 minutes early cannot be checked from here, so a
+      // missed evening sync is shown, not paged, until the owner confirms it (docs/runbooks/cloud-routines.md).
+      { zone: "UTC", times: [hhmm(JOURNAL_SLOT_UTC)], grace_min: DAILY_GRACE_MIN, early_min: JOURNAL_EVENING_EARLY_MIN, verified: false },
     ],
     severity: "alert",
     verified: true,
@@ -519,7 +526,7 @@ export function evaluateDoc(f: DocFeed, read: StampRead | undefined, refusal: Re
   if (ci < 0) return nothing(f, "not_expected", "no-run-now", { age_min: age, next_due: nextDue });
   const cur = slots[ci]!;
   const at = { due: cur.due, deadline: cur.deadline, for_session: cur.for_session, next_due: nextDue, age_min: age };
-  const assumed = !f.verified || cur.assumed;
+  const assumed = !f.verified || cur.assumed || cur.schedule.verified === false;
   if (!read) return nothing(f, "unknown", "not-read", { ...at, assumed, episode: `unknown:${cur.day}` });
   if (read.status === "error") return nothing(f, "unknown", "storage-error", { ...at, assumed, episode: `unknown:${cur.day}` });
 
@@ -554,7 +561,7 @@ export function evaluateDoc(f: DocFeed, read: StampRead | undefined, refusal: Re
   // A refusal of THIS run's document pages on its own row (refusal-*), so this row stays quiet for this run only:
   // every later run that is missed pages as late in its own right, refusal or not.
   // Outside the calendar's range a weekday schedule stands in and still pages, saying so; an unverified row never does.
-  const alerting = !refused && f.severity === "alert" && f.verified && misses >= f.misses_to_alert;
+  const alerting = !refused && f.severity === "alert" && f.verified && m.schedule.verified !== false && misses >= f.misses_to_alert;
   return {
     ...nothing(f, state, refused ? "refused" : why, at),
     late_min: lateMin,
@@ -669,10 +676,38 @@ export interface FeedAlertState {
   /** Whether the last run ran with alerts on: the first run with them on after a run with them off sends the summary. */
   alerts: "on" | "off" | null;
   feeds: Record<string, FeedAlert>;
+  /** Pages decided and not yet confirmed sent (the two-phase record: see feed-watch-run.ts runFeedWatch). */
+  outbox: Outgoing[];
 }
 
+/**
+ * A page in the outbox. Phase 1 stores it as `pending` together with the decision that made it, claiming an attempt
+ * (attempts + 1, last_tick = this run's tick) before anything is sent; phase 2 sends it and removes it. A later run
+ * re-sends a pending page whose claim is from an earlier tick, until OUTBOX_MAX_ATTEMPTS, then marks it `sent_failed`.
+ */
+export interface Outgoing {
+  /** feed id(s) | episode | kind: one page per incident and kind. */
+  key: string;
+  feeds: string[];
+  notice: Notice;
+  attempts: number;
+  last_tick: number | null;
+  /** The run that made the last claim: two runs that decide alike still tell their own claim from the other's. */
+  claimed_by: string | null;
+  status: "pending" | "sent_failed";
+  /** When it was decided (ISO). */
+  since: string;
+}
+
+/** Attempts a page gets before it is given up as sent_failed: a broken ntfy never causes endless retries. */
+export const OUTBOX_MAX_ATTEMPTS = 3;
+/** A page still pending this long after it was decided is dropped: it would no longer be news. */
+export const OUTBOX_MAX_AGE_MS = 2 * 3_600_000;
+/** sent_failed records are kept this long, for the logs and the tests to read. */
+export const OUTBOX_KEEP_FAILED_MS = 24 * 3_600_000;
+
 export const FEED_ALERT_INITIAL: FeedAlert = { open: false, episode: null, since: null, sent: false, unknown_runs: 0, unknown_episode: null, unknown_sent: false };
-export const EMPTY_FEED_STATE: FeedAlertState = { v: 1, alerts: null, feeds: {} };
+export const EMPTY_FEED_STATE: FeedAlertState = { v: 1, alerts: null, feeds: {}, outbox: [] };
 
 /**
  * Runs in a row a feed must be unreadable before it pages: three, i.e. 20 to 30 minutes at the watchdog's 10-minute
@@ -687,7 +722,7 @@ export const SUMMARY_ID = "*switch-on-summary*";
 const str = (v: unknown) => (typeof v === "string" ? v : null);
 
 export function parseFeedState(text: string | null | undefined): FeedAlertState {
-  const empty = (): FeedAlertState => ({ v: 1, alerts: null, feeds: {} });
+  const empty = (): FeedAlertState => ({ v: 1, alerts: null, feeds: {}, outbox: [] });
   if (!text) return empty();
   try {
     const raw: unknown = JSON.parse(text);
@@ -705,7 +740,8 @@ export function parseFeedState(text: string | null | undefined): FeedAlertState 
         unknown_sent: v.unknown_sent === true,
       };
     }
-    return { v: 1, alerts: raw.alerts === "on" || raw.alerts === "off" ? raw.alerts : null, feeds };
+    const outbox: Outgoing[] = Array.isArray(raw.outbox) ? raw.outbox.flatMap((o) => parseOutgoing(o)) : [];
+    return { v: 1, alerts: raw.alerts === "on" || raw.alerts === "off" ? raw.alerts : null, feeds, outbox };
   } catch {
     return empty();
   }
@@ -714,13 +750,91 @@ export function parseFeedState(text: string | null | undefined): FeedAlertState 
 const FIELDS = ["open", "episode", "since", "sent", "unknown_runs", "unknown_episode", "unknown_sent"] as const;
 
 /** The state as stored: keys sorted, so two runs that decide alike write the same bytes. */
+const NOTICE_KINDS = new Set(["late", "stopped", "recovered", "offline", "feed-late", "feed-recovered", "rejected"]);
+function parseOutgoing(o: unknown): Outgoing[] {
+  if (!isObj(o) || !isObj(o.notice)) return [];
+  const n = o.notice;
+  const okNotice =
+    typeof n.kind === "string" && NOTICE_KINDS.has(n.kind) && typeof n.title === "string" && typeof n.message === "string" &&
+    typeof n.priority === "number" && [1, 2, 3, 4, 5].includes(n.priority) && Array.isArray(n.tags) && n.tags.every((t) => typeof t === "string");
+  if (!okNotice || typeof o.key !== "string" || typeof o.since !== "string") return [];
+  if (!Array.isArray(o.feeds) || !o.feeds.every((f) => typeof f === "string")) return [];
+  if (typeof o.attempts !== "number" || !Number.isInteger(o.attempts) || o.attempts < 0) return [];
+  if (o.status !== "pending" && o.status !== "sent_failed") return [];
+  const lastTick = typeof o.last_tick === "number" && Number.isInteger(o.last_tick) ? o.last_tick : null;
+  const claimedBy = typeof o.claimed_by === "string" ? o.claimed_by : null;
+  return [{ key: o.key, feeds: o.feeds as string[], notice: n as unknown as Notice, attempts: o.attempts, last_tick: lastTick, claimed_by: claimedBy, status: o.status, since: o.since }];
+}
+
+/**
+ * The next state's outbox: what was pending before (pending pages older than OUTBOX_MAX_AGE_MS and sent_failed records
+ * older than OUTBOX_KEEP_FAILED_MS dropped), plus this run's new pages as pending, one per key.
+ */
+export function withOutbox(next: FeedAlertState, decision: FeedDecision, now: Date): FeedAlertState {
+  const t = now.getTime();
+  const kept = (next.outbox ?? []).filter((o) => {
+    const age = t - Date.parse(o.since);
+    return o.status === "pending" ? !(age > OUTBOX_MAX_AGE_MS) : !(age > OUTBOX_KEEP_FAILED_MS);
+  });
+  let kept2 = kept;
+  const keys = new Set(kept.map((o) => o.key));
+  const added: Outgoing[] = [];
+  decision.notices.forEach((notice, i) => {
+    const id = decision.noticeFeeds[i]!;
+    // A recovery of a page that never went out: neither is news any more, so both are dropped.
+    if (notice.kind === "feed-recovered" && kept2.some((o) => o.status === "pending" && o.feeds.length === 1 && o.feeds[0] === id)) {
+      kept2 = kept2.filter((o) => !(o.status === "pending" && o.feeds.length === 1 && o.feeds[0] === id));
+      return;
+    }
+    const feeds = id === SUMMARY_ID ? decision.summaryFeeds : [id];
+    const episode = id === SUMMARY_ID ? now.toISOString() : (next.feeds[id]?.episode ?? next.feeds[id]?.unknown_episode ?? now.toISOString());
+    const key = `${feeds.join(",")}|${episode}|${notice.kind}`;
+    if (keys.has(key)) return;
+    keys.add(key);
+    added.push({ key, feeds, notice, attempts: 0, last_tick: null, claimed_by: null, status: "pending", since: now.toISOString() });
+  });
+  return { ...next, outbox: [...kept2, ...added] };
+}
+
+/** The pages this run may send (pending, alerts on, not already tried this tick, attempts left), claimed. */
+export function claimOutbox(state: FeedAlertState, tick: number, alertsOn: boolean, runId: string): { state: FeedAlertState; claimed: string[] } {
+  const claimed: string[] = [];
+  const outbox = state.outbox.map((o) => {
+    if (!alertsOn || o.status !== "pending" || o.attempts >= OUTBOX_MAX_ATTEMPTS || (o.last_tick !== null && o.last_tick >= tick)) return o;
+    claimed.push(o.key);
+    return { ...o, attempts: o.attempts + 1, last_tick: tick, claimed_by: runId };
+  });
+  return { state: { ...state, outbox }, claimed };
+}
+
+/** After the sends: sent pages leave the outbox; a failed one that has used its attempts becomes sent_failed. */
+export function settleOutbox(state: FeedAlertState, results: Readonly<Record<string, "sent" | "skipped" | "failed">>): FeedAlertState {
+  const outbox = state.outbox.flatMap((o) => {
+    const r = results[o.key];
+    if (r === undefined) return [o];
+    if (r !== "failed") return [];
+    return [o.attempts >= OUTBOX_MAX_ATTEMPTS ? { ...o, status: "sent_failed" as const } : o];
+  });
+  return { ...state, outbox };
+}
+
 export function serializeFeedState(s: FeedAlertState): string {
   const feeds: Record<string, Partial<FeedAlert>> = {};
   for (const id of Object.keys(s.feeds).sort()) {
     const a = s.feeds[id]!;
     feeds[id] = Object.fromEntries(FIELDS.map((k) => [k, a[k]]));
   }
-  return JSON.stringify({ v: 1, alerts: s.alerts, feeds });
+  const outbox = (s.outbox ?? []).map((o) => ({
+    key: o.key,
+    feeds: o.feeds,
+    notice: { kind: o.notice.kind, title: o.notice.title, message: o.notice.message, priority: o.notice.priority, tags: o.notice.tags },
+    attempts: o.attempts,
+    last_tick: o.last_tick,
+    claimed_by: o.claimed_by,
+    status: o.status,
+    since: o.since,
+  }));
+  return JSON.stringify({ v: 1, alerts: s.alerts, feeds, outbox });
 }
 
 /** Every byte the same (what decides whether a run writes at all). */
@@ -771,7 +885,7 @@ export interface FeedDecision {
  * With nothing open at switch-on, nothing is sent.
  */
 export function decideFeedAlerts(views: readonly FeedView[], prev: FeedAlertState, now: Date, alertsOn: boolean, table: readonly FeedRow[] = FEEDS): FeedDecision {
-  const next: FeedAlertState = { v: 1, alerts: alertsOn ? "on" : "off", feeds: {} };
+  const next: FeedAlertState = { v: 1, alerts: alertsOn ? "on" : "off", feeds: {}, outbox: prev.outbox ?? [] };
   const notices: Notice[] = [];
   const noticeFeeds: string[] = [];
   const iso = now.toISOString();
@@ -839,7 +953,7 @@ export function decideFeedAlerts(views: readonly FeedView[], prev: FeedAlertStat
  * the summary again.
  */
 export function rollbackFeeds(prev: FeedAlertState, next: FeedAlertState, failedIds: readonly string[], summaryFeeds: readonly string[] = []): FeedAlertState {
-  const out: FeedAlertState = { v: 1, alerts: next.alerts, feeds: { ...next.feeds } };
+  const out: FeedAlertState = { v: 1, alerts: next.alerts, feeds: { ...next.feeds }, outbox: next.outbox };
   for (const id of failedIds) {
     if (id === SUMMARY_ID) {
       out.alerts = prev.alerts;

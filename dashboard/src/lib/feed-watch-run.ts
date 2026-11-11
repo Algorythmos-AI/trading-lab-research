@@ -1,5 +1,5 @@
 import "server-only";
-import { exists, readForUpdate, readText, readTextIfChanged, storedAt, writeText, type StoredText } from "./blob";
+import { exists, PreconditionFailed, readForUpdate, readText, readTextIfChanged, storedAt, writeText, type StoredText } from "./blob";
 import { DESK_EVAL_PATH, parseEvalSwitch } from "./desk-eval";
 import { lastLoggedSlot } from "./desk-page-run";
 import {
@@ -12,27 +12,28 @@ import {
   parseFeedState,
   type Read,
   type RefusalRead,
-  rollbackFeeds,
-  sameFeedDecision,
-  sameFeedState,
   serializeFeedState,
   shadowWindow,
   type ShadowRead,
   type StampedInputs,
   stampInputs,
   storeNotice,
+  claimOutbox,
+  type FeedAlertState,
+  settleOutbox,
+  withOutbox,
 } from "./feed-watch";
 import { feedVariant } from "./fixture-variants";
 import { type IngestRejectKind, readIngestRejectStatus } from "./ingest-reject";
 import { logEvent } from "./log";
 import { sendNtfy, type Notice } from "./ntfy";
 import { fixtureFlags, fixtureMode, type JournalResult, type LedgerResult, type OptionsResult, type RadarResult } from "./snapshot";
-import { commitThenSend } from "./watchdog-run";
 
 // The feed watch's tick (GET /api/cron/watchdog, after the desks' ticks): read every document the feed table names,
 // each kind's refusal record and, in the session, the shadow evaluator's switch and newest records; evaluate them
-// (feed-watch.ts); commit the alert state; page. One state document for every feed, committed with ifMatch exactly
-// like the snapshot watchdog's (commitThenSend), so two overlapping runs page once.
+// (feed-watch.ts); commit the alert state; page. One state document for every feed, committed with ifMatch in two
+// phases (phase1 below: decide and claim, then send and settle), so two overlapping runs page once and a decided page
+// is never lost while the store works.
 //
 // Display only until the owner switches it on: FEED_WATCH_ALERTS=on. Off, the tick reads, evaluates and stores the
 // state as it would with alerts on, and sends nothing (decideFeedAlerts says what happens at switch-on).
@@ -58,6 +59,8 @@ export interface FeedWatchDeps {
   /** FEED_WATCH_ALERTS=on: pages are sent. Otherwise the state still advances and nothing is sent. */
   alertsOn: boolean;
   clock(): number;
+  /** A short pause between two tries of the state read (injected so tests run instantly). */
+  sleep?(ms: number): Promise<void>;
 }
 
 /** The owner's switch for the feed watch's pages. Anything but exactly "on" is off. */
@@ -146,6 +149,7 @@ export function blobFeedDeps(): FeedWatchDeps {
     send: (notice) => sendNtfy(notice),
     alertsOn: feedAlertsOn(),
     clock: () => Date.now(),
+    sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
   };
 }
 
@@ -154,27 +158,33 @@ function statesOf(views: readonly FeedView[]): Record<string, string> {
   return Object.fromEntries(views.map((v) => [v.id, v.state]));
 }
 
-/** One tick: read, evaluate, commit, page. Never throws for a store failure: an unreadable input is "unknown". */
 /**
- * The store-outage rule, which needs no stored state. When the alert state cannot be read (after one retry in the run)
- * or the new state cannot be committed (fail closed: commitThenSend `failClosed`), the run sends no feed page at all:
- * it cannot know what was already sent. Instead, with alerts on, the run of the first 10-minute tick of each fixed
- * 2-hour UTC block (tick index floor(t / 10 min) ≡ 0 mod 12, from the run's own scheduled time, so overlapping
- * invocations of one tick decide alike) sends one "Feed watch cannot read its store".
+ * The store-outage rule, which needs no stored state. When the alert state cannot be read (two tries, a short pause
+ * between them) or this run's decision cannot be confirmed in the store (phase 1 below), the run sends no feed page at
+ * all: it cannot know what was already sent. Instead, with alerts on, a run in either of the first two 10-minute ticks
+ * of each fixed 2-hour UTC block (tick index floor(t / 10 min) mod 12 is 0 or 1) sends one "Feed watch cannot read
+ * its store". `t` is the run's execution time: Vercel's cron sends no scheduled time with its request, and a run starts
+ * within seconds of its tick, so two overlapping invocations of one tick decide alike.
  *
- * Worst cases: a total outage pages within 2 hours of starting and then once per 2-hour block (24 ticks of 10 minutes,
- * 4 hours: exactly 2 pages); one block never has more than one, or two if the cron delivers that very tick twice; no
- * late, refused or recovered page is ever sent from a run that cannot see its state, so an incident paged before the
- * outage is not paged again after it.
+ * Worst cases: a total outage pages within 2 hours 10 minutes of starting, even if one of the two notice runs of a
+ * block is skipped; at most 2 notices per 2-hour block (4 if the cron delivers both of those ticks twice), so 24 ticks
+ * over 4 hours send 4; no late, refused or recovered page is ever sent from a run that cannot see its state, so an
+ * incident paged before the outage is not paged again after it.
  */
 export const STORE_NOTICE_EVERY_TICKS = 12;
 export const TICK_MS = 10 * 60_000;
-export function storeNoticeTick(nowMs: number): boolean {
-  return Math.floor(nowMs / TICK_MS) % STORE_NOTICE_EVERY_TICKS === 0;
+export function tickOf(nowMs: number): number {
+  return Math.floor(nowMs / TICK_MS);
 }
+export function storeNoticeTick(nowMs: number): boolean {
+  return tickOf(nowMs) % STORE_NOTICE_EVERY_TICKS <= 1;
+}
+/** The pause between the two tries of a read. */
+export const STATE_RETRY_MS = 500;
 
 async function readStateTwice(deps: FeedWatchDeps): Promise<{ ok: true; stored: StoredText | null } | { ok: false }> {
   for (let i = 0; i < 2; i++) {
+    if (i > 0) await (deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms))))(STATE_RETRY_MS);
     try {
       return { ok: true, stored: await within(deps.readState(), FEED_READ_MS) };
     } catch (e) {
@@ -184,6 +194,53 @@ async function readStateTwice(deps: FeedWatchDeps): Promise<{ ok: true; stored: 
   return { ok: false };
 }
 
+type Phase1 = { kind: "committed"; etag: string; state: FeedAlertState } | { kind: "skipped" } | { kind: "unconfirmed" };
+
+/**
+ * The two-phase record (the feed watch only; the snapshot watchdog's commitThenSend is unchanged).
+ *
+ * Phase 1: the decision, with every page it makes stored as `pending` and each page this run will send claimed
+ * (attempts + 1, last_tick = this tick), is committed with ifMatch before anything is sent. A write that throws is
+ * not taken as failed: the state is read again, and if it holds exactly this run's decision, it was committed. A
+ * PreconditionFailed means another run was here: the decision is made again once against what it stored, and if that
+ * conflicts too, this run is skipped. Anything it cannot confirm, it does not send (fail closed).
+ * Phase 2: the claimed pages are sent; each one sent leaves the outbox, and the new state is committed.
+ *
+ * The guarantee: while the store works, a decided page is never lost: if phase 2's commit is lost, or a run dies
+ * between the two phases, the page is still pending in the store and a later run (no sooner than the next tick)
+ * sends it again. Every send is preceded by a committed claim, so a page is sent at most OUTBOX_MAX_ATTEMPTS (3)
+ * times: at most 2 duplicates in the worst case, when a send succeeds but its record does not. After 3 failed sends
+ * it is marked sent_failed and never tried again. Overlapping runs cannot both claim one attempt (ifMatch).
+ */
+async function phase1(
+  deps: FeedWatchDeps,
+  stored: StoredText | null,
+  decide: (prev: FeedAlertState) => FeedAlertState,
+): Promise<Phase1> {
+  let base = stored;
+  for (let round = 0; round < 2; round++) {
+    const next = decide(parseFeedState(base?.text));
+    const text = serializeFeedState(next);
+    if (base && base.text === text) return { kind: "committed", etag: base.etag, state: next };
+    try {
+      const { etag } = await within(deps.writeState(text, base ? { ifMatch: base.etag } : { createOnly: true }), FEED_READ_MS);
+      return { kind: "committed", etag, state: next };
+    } catch (e) {
+      const again = await readStateTwice(deps);
+      if (!again.ok) return { kind: "unconfirmed" };
+      if (again.stored && again.stored.text === text) return { kind: "committed", etag: again.stored.etag, state: next };
+      if (!(e instanceof PreconditionFailed)) {
+        logEvent("feed-watch.state", { outcome: "write-failed", error: errName(e) });
+        return { kind: "unconfirmed" };
+      }
+      // Another run was here: decide again on what it stored (once).
+      base = again.stored;
+    }
+  }
+  logEvent("feed-watch", { outcome: "skipped", reason: "concurrent run" });
+  return { kind: "skipped" };
+}
+
 /** One tick: read, evaluate, commit, page. Never throws for a store failure: an unreadable input is "unknown". */
 export async function runFeedWatch(
   now: Date = new Date(),
@@ -191,6 +248,9 @@ export async function runFeedWatch(
   table: readonly FeedRow[] = FEEDS,
 ): Promise<Record<string, unknown>> {
   const startedAt = deps.clock();
+  const tick = tickOf(now.getTime());
+  // This run's own name for its claims (phase 1): never shown anywhere, only compared.
+  const runId = globalThis.crypto.randomUUID();
   const [inputs, state] = await Promise.all([readFeedInputs(deps, now.getTime(), table), readStateTwice(deps)]);
   const views = evaluateStamped(stampInputs(inputs, table), now.getTime(), table);
   const summary = { ok: true, alerts: deps.alertsOn ? "on" : "off", states: statesOf(views) };
@@ -202,32 +262,50 @@ export async function runFeedWatch(
     return result;
   };
   if (!state.ok) return storeDown("read");
-  const stored = state.stored;
-  const prev = parseFeedState(stored?.text);
-  const decision = decideFeedAlerts(views, prev, now, deps.alertsOn, table);
-  const r = await commitThenSend({
-    deps,
-    stored,
-    unchanged: sameFeedState(prev, decision.next),
-    nextText: serializeFeedState(decision.next),
-    committedByOther: (text) => sameFeedDecision(parseFeedState(text), decision.next),
-    notices: decision.notices,
-    rollbackText: (failedAt) =>
-      serializeFeedState(rollbackFeeds(prev, decision.next, failedAt.map((i) => decision.noticeFeeds[i]!), decision.summaryFeeds)),
-    event: "feed-watch",
-    deadline: startedAt + FEED_RUN_BUDGET_MS,
-    clock: deps.clock,
-    failClosed: true,
+
+  let made: string[] = [];
+  let claimed: string[] = [];
+  const p1 = await phase1(deps, state.stored, (prev) => {
+    const decision = decideFeedAlerts(views, prev, now, deps.alertsOn, table);
+    const next = withOutbox(decision.next, decision, now);
+    made = decision.notices.map((n) => n.kind);
+    const c = claimOutbox(next, tick, deps.alertsOn, runId);
+    claimed = c.claimed;
+    return c.state;
   });
-  if (r.skipped) return { ...summary, skipped: r.skipped };
-  if (r.blocked) return storeDown("write");
+  if (p1.kind === "skipped") return { ...summary, skipped: "concurrent run" };
+  if (p1.kind === "unconfirmed") return storeDown("write");
+
+  // Phase 2: send what was claimed, within the run's budget; then record what went.
+  const results: Record<string, "sent" | "skipped" | "failed"> = {};
+  for (const key of claimed) {
+    const o = p1.state.outbox.find((x) => x.key === key)!;
+    if (deps.clock() - startedAt >= FEED_RUN_BUDGET_MS) {
+      results[key] = "failed";
+      continue;
+    }
+    results[key] = await deps.send(o.notice);
+  }
+  let recorded = claimed.length === 0;
+  if (claimed.length) {
+    const settled = settleOutbox(p1.state, results);
+    try {
+      await within(deps.writeState(serializeFeedState(settled), { ifMatch: p1.etag }), FEED_READ_MS);
+      recorded = true;
+    } catch (e) {
+      // The claims are already stored: a later run sends what is still pending (bounded by OUTBOX_MAX_ATTEMPTS).
+      logEvent("feed-watch.state", { outcome: "phase2-write-failed", error: errName(e) });
+    }
+  }
+  const values = Object.values(results);
   const result = {
     ...summary,
-    notices: decision.notices.map((n) => n.kind),
-    noticeFeeds: decision.noticeFeeds,
-    sent: r.sent,
-    failed: r.failed,
-    committed: r.committed,
+    notices: made,
+    sent: values.filter((r) => r === "sent").length,
+    failed: values.filter((r) => r === "failed").length,
+    resent: claimed.length - made.length > 0 ? claimed.length - made.length : 0,
+    committed: true,
+    recorded,
     ms: deps.clock() - startedAt,
   };
   logEvent("feed-watch", result);

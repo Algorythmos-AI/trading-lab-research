@@ -2,7 +2,7 @@
 // order with their states, the server check redrawn from the page's own status poll, and the panel's words, which
 // never turn missing or unreadable data into "on time".
 import { describe, expect, it } from "vitest";
-import { type Anchor, stripChips, stripClock, withStaleClock } from "@/components/client/feed-strip";
+import { type Chip, anchorFor, forward, readStripClock, resetStripClock, stripChips, stripClock, withStaleClock } from "@/components/client/feed-strip";
 import { panelState } from "@/components/operations/feeds-panel";
 import { evaluateStamped, type StampedInputs } from "@/lib/feed-watch";
 
@@ -54,21 +54,42 @@ describe("the strip", () => {
 });
 
 describe("the strip's clock and its failing polls", () => {
-  it("stays on true time across four hours of 60 s refreshes, each bringing a new server time", () => {
-    // The page opens at 08:30 New York; true time, the server's clock and the monotonic clock all advance together, and
-    // every minute a refresh re-renders with a new server time (a little later than the refresh started).
+  it("stays on true time across four hours of 60 s refreshes, through the real anchorFor and readStripClock", () => {
+    // True time runs on; the monotonic clock runs 1% slow (a sleeping tab, a throttled timer) and its readings are not
+    // on whole seconds; every 60 s a refresh renders a new server time (250 ms old when it arrives). A strip that never
+    // re-anchors, or re-anchors but keeps its first monotonic reading, ends hours or minutes off: these fail here.
+    resetStripClock();
     const open = Date.parse("2026-11-12T13:30:00Z");
-    let anchor: Anchor | null = null;
+    const perfAt = (ms: number) => 12_345.678 + ms * 0.99;
+    let server = open - 250;
     let worst = 0;
-    for (let s2 = 0; s2 <= 4 * 3600; s2 += 5) {
-      const trueNow = open + s2 * 1000;
-      const perf = 10_000 + s2 * 1000; // the monotonic clock started before the page
-      if (s2 % 60 === 0) anchor = { server: trueNow - 250, perf, wall: trueNow + 7_000 }; // the server render is 250 ms old; the device 7 s fast
-      const c = stripClock(anchor, anchor!.server, perf, trueNow + 7_000);
-      worst = Math.max(worst, Math.abs(c.now - trueNow));
+    for (let ms = 0; ms <= 4 * 3_600_000; ms += 1_337) {
+      if (Math.floor(ms / 60_000) !== Math.floor((ms - 1_337) / 60_000) || ms === 0) server = open + Math.floor(ms / 60_000) * 60_000 - 250;
+      const c = readStripClock(server, perfAt(ms), open + ms);
+      worst = Math.max(worst, Math.abs(c.now - (open + ms)));
       expect(c.stale).toBe(false);
     }
-    expect(worst).toBeLessThanOrEqual(2_000);
+    expect(worst).toBeLessThanOrEqual(2_500); // 250 ms of render age, plus up to 1% of the minute between refreshes
+  });
+
+  it("an older server time rendered after a newer one gets its own first anchor back: the clock never jumps back", () => {
+    resetStripClock();
+    const s1 = Date.parse("2026-11-12T15:00:00Z");
+    const s2 = s1 + 60_000;
+    expect(anchorFor(s1, 1_000.5, s1)).toEqual({ server: s1, perf: 1_000.5, wall: s1 });
+    const a2 = anchorFor(s2, 61_000.5, s2); // the refresh's render (a transition)
+    expect(anchorFor(s1, 61_500.5, s2 + 500)).toEqual({ server: s1, perf: 1_000.5, wall: s1 }); // the quote poll's re-render
+    expect(anchorFor(s2, 62_000.5, s2 + 1_000)).toBe(a2);
+    const t = s2 + 1_500;
+    const r1 = readStripClock(s1, 62_500.5, t);
+    expect(Math.abs(r1.now - t)).toBeLessThanOrEqual(1);
+    const r2 = readStripClock(s2, 63_500.5, t + 1_000);
+    expect(r2.now).toBeGreaterThanOrEqual(r1.now);
+    // and the shown time never goes below what was shown
+    resetStripClock();
+    expect(forward(1_000_000)).toBe(1_000_000);
+    expect(forward(999_000)).toBe(1_000_000);
+    expect(forward(1_000_000 - 200_000)).toBe(800_000); // further back than FORWARD_HOLD_MS: the clock is trusted
   });
 
   it("before any anchor (server render, hydration) it is the server's own time", () => {
@@ -109,7 +130,17 @@ describe("the strip's clock and its failing polls", () => {
       ["prices", "checking"],
       ["bars", "failed"], // a failure is still shown as one
       ["journal", "checking"],
-      ["shadow", "checking"],
+      ["shadow", "late"], // already late: it keeps its warning
+    ]);
+    // Only what reads well becomes "checking"; every bad state is kept.
+    const mk = (state: Chip["state"]): Chip => ({ id: "x", name: "x", short: "x", state, age: "—", assumed: false });
+    expect(withStaleClock(["on_time", "not_expected", "waiting", "late", "failed", "unknown"].map((x) => mk(x as Chip["state"]))).map((c) => c.state)).toEqual([
+      "checking",
+      "checking",
+      "checking",
+      "late",
+      "failed",
+      "unknown",
     ]);
     expect(stale.some((c) => c.state === "on_time")).toBe(false);
   });
