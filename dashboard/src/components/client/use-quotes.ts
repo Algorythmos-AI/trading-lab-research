@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { type DataFeed, isDataFeed } from "@/lib/feed-provenance";
 import { extendTrail, type LiveQuote, type TrailPoint } from "@/lib/options";
 import { type Backoff, type Poll, type PollResult, startPoll, statusResult } from "@/lib/quote-poll";
 
@@ -10,11 +11,14 @@ export const QUOTES_RETRY_CAP_MS = 30_000;
 
 export type Feed =
   | { status: "loading" }
-  | { status: "off" }
+  /** `why` "feed": the server refused its ALPACA_FEED setting; otherwise the keys are not set. */
+  | { status: "off"; why?: "feed" }
   | { status: "error" }
   | {
       status: "ok";
       asOf: string;
+      /** The stock feed the answer says it was read from; null when it named none (an older answer): never guessed. */
+      source: DataFeed | null;
       quotes: Record<string, LiveQuote>;
       missing: string[];
       /** Browser time of the last answer, so a feed that stops answering reads as stale. */
@@ -52,21 +56,27 @@ export function useQuoteFeed(symbols: string, enabled = true): QuoteFeed {
         const res = await fetch(`/api/quote?s=${encodeURIComponent(symbols)}`, { cache: "no-store" });
         const r = statusResult(res.status);
         if (r === "off") {
-          if (!stopped) setFeed({ status: "off" });
-          return "off"; // not configured: no point polling until the page is reloaded
+          // not configured: no point polling until the page is reloaded. Any prices held are dropped with it.
+          const why = await res
+            .json()
+            .then((b: { why?: unknown }) => (b?.why === "feed" ? ("feed" as const) : undefined))
+            .catch(() => undefined);
+          if (!stopped) setFeed(why ? { status: "off", why } : { status: "off" });
+          return "off";
         }
         if (r !== "ok") {
           if (!stopped) setFeed((f) => (f.status === "ok" ? f : { status: "error" }));
           return r; // "limited" (429) waits the cap; anything else the doubling wait
         }
-        const body = (await res.json()) as { as_of: string; quotes: Record<string, LiveQuote>; missing?: string[] };
+        const body = (await res.json()) as { as_of: string; feed?: unknown; quotes: Record<string, LiveQuote>; missing?: string[] };
         const quotes = body.quotes ?? {};
         if (!stopped)
           setFeed((f) => {
             const before = f.status === "ok" ? f.trails : {};
             const trails: Record<string, TrailPoint[]> = {};
             for (const [s, q] of Object.entries(quotes)) trails[s] = extendTrail(before[s] ?? [], q);
-            return { status: "ok", asOf: body.as_of, quotes, missing: body.missing ?? [], receivedAt: Date.now(), trails };
+            const source = isDataFeed(body.feed) ? body.feed : null;
+            return { status: "ok", asOf: body.as_of, source, quotes, missing: body.missing ?? [], receivedAt: Date.now(), trails };
           });
         return "ok";
       } catch {

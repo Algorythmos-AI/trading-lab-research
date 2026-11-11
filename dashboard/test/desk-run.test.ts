@@ -6,6 +6,8 @@ import { PreconditionFailed } from "@/lib/blob";
 import { fetchBars, fetchSettledBars, resetBarsCache, type BarsResponse } from "@/lib/bars";
 import { BAR_MS, type ServerRecord } from "@/lib/desk-eval";
 import { BarsOff, defaultDeskRunDeps, type DeskRunDeps, runDeskEval, TIMEOUT_MS } from "@/lib/desk-run";
+import { shadowSummary } from "@/lib/desk-shadow";
+import { recordFeed } from "@/lib/feed-provenance";
 import { focusOptions } from "@/lib/fixture-variants";
 import type { Options } from "@/lib/options";
 import { type Bar2, SERVER_SETTLE_MS } from "@/lib/trade-state";
@@ -313,5 +315,74 @@ describe("the settled bars read", () => {
     // and a read already at or after the settle instant is shared, not fetched again
     await fetchSettledBars(["SPY"], KEYS, new Date(end + 65_000), end + SERVER_SETTLE_MS, 2_500, false, f, "https://data.example");
     expect(f).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ---- the feed on the record -----------------------------------------------------------------------------------------
+describe("the record's feed", () => {
+  it("is written after the engine's record, as the snapshot answer named it, so slots can be counted per feed", async () => {
+    const f = fakeDeps();
+    const inner = f.deps.fetchSnapshots;
+    f.deps.fetchSnapshots = async (s, o) => ({ ...(await inner(s, o)), feed: "sip" });
+    f.store.set("desk/eval.json", LOG);
+    await runDeskEval(f.deps);
+    const [path, rec] = f.records()[0]!;
+    const raw = JSON.parse(f.store.get(path)!) as Record<string, unknown>;
+    expect(recordFeed(raw)).toBe("sip");
+    // the engine's fields come first and are unchanged; the feed is the one key after them
+    const keys = Object.keys(raw);
+    expect(keys.at(-1)).toBe("feed");
+    const { feed: _feed, ...engine } = raw;
+    void _feed;
+    expect(Object.keys(engine)).toEqual(["v", "engine", "source", "status", "reason", "slot_end", "evaluated_at", "session", "edition_session", "edition_as_of", "board", "rows", "degraded_names", "snapshot_ok", "day"]);
+    expect(rec.status).toBe("ok");
+  });
+
+  it("falls back to the bars' feed, then to the configured one, and is null when ALPACA_FEED was refused", async () => {
+    const noSnap = fakeDeps({ fetchSnapshots: () => Promise.reject(new Error("alpaca 500")), feed: () => "sip" });
+    noSnap.store.set("desk/eval.json", LOG);
+    await runDeskEval(noSnap.deps);
+    expect(recordFeed(noSnap.records()[0]![1])).toBe("iex"); // the bars answered, from iex
+    const none = fakeDeps({ fetchBars: () => Promise.reject(new BarsOff()), fetchSnapshots: () => Promise.reject(new BarsOff()), feed: () => "sip" });
+    none.store.set("desk/eval.json", LOG);
+    await runDeskEval(none.deps);
+    expect(recordFeed(none.records()[0]![1])).toBe("sip");
+    const refused = fakeDeps({ fetchBars: () => Promise.reject(new BarsOff()), fetchSnapshots: () => Promise.reject(new BarsOff()), feed: () => null });
+    refused.store.set("desk/eval.json", LOG);
+    await runDeskEval(refused.deps);
+    expect(refused.records()[0]![1]).toMatchObject({ status: "degraded", reason: "bars-off", feed: null });
+  });
+
+  it("the deployed reads refuse a bad ALPACA_FEED as not configured, before anything goes upstream", async () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("DASHBOARD_FIXTURE", "");
+    vi.stubEnv("ALPACA_API_KEY_ID", "k");
+    vi.stubEnv("ALPACA_API_SECRET_KEY", "s");
+    vi.stubEnv("ALPACA_FEED", "nonsense");
+    const f = vi.fn();
+    vi.stubGlobal("fetch", f);
+    const d = defaultDeskRunDeps();
+    await expect(d.fetchBars(["SPY"], { now: new Date(ny("10:31:01")), minFetchedAt: 0, timeoutMs: 100, halfDay: false })).rejects.toBeInstanceOf(BarsOff);
+    await expect(d.fetchSnapshots(["SPY"], { now: new Date(ny("10:31:01")), timeoutMs: 100 })).rejects.toBeInstanceOf(BarsOff);
+    expect(d.feed?.()).toBeNull();
+    expect(f).not.toHaveBeenCalled();
+    vi.stubEnv("ALPACA_FEED", "sip");
+    expect(d.feed?.()).toBe("sip");
+    vi.unstubAllGlobals();
+  });
+
+  it("the shadow numbers read records with and without the field alike", async () => {
+    const f = fakeDeps();
+    f.store.set("desk/eval.json", LOG);
+    await runDeskEval(f.deps);
+    const withFeed = f.records().map(([, r]) => r);
+    const old = withFeed.map((r) => {
+      const { feed: _feed, ...rest } = r as ServerRecord & { feed?: unknown };
+      void _feed;
+      return rest as ServerRecord;
+    });
+    expect(old.every((r) => recordFeed(r) === null)).toBe(true);
+    expect(shadowSummary([S], withFeed, [])).toEqual(shadowSummary([S], old, []));
+    expect(shadowSummary([S], withFeed, []).logged).toBe(1);
   });
 });

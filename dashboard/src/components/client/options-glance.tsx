@@ -4,10 +4,11 @@ import { Gauge } from "lucide-react";
 import { RoomBar, roomMarks } from "@/components/options-charts";
 import { Panel } from "@/components/panel";
 import { fracPct, newYork, num, signed } from "@/lib/format";
+import { feedLabel } from "@/lib/feed-provenance";
 import { cardMarks } from "@/lib/focus-plan";
 import { CHEAP_IVP, CHIP_LABEL, liveRead, needsALook, RICH_IVP, roomView, ROOM_REACH, type Options, type OptionsTicker } from "@/lib/options";
 import { cn } from "@/lib/utils";
-import { FeedPill, FocusButton, StateChip, useLive } from "./live-layer";
+import { FeedFacts, FeedPill, FocusButton, StateChip, useLive } from "./live-layer";
 
 /** At most this many trail dots behind the live dot on a room bar. */
 const TRAIL_DOTS = 12;
@@ -37,12 +38,16 @@ export function OptionsGlance({
   const reads = new Map(tickers.map((t) => [t.symbol, liveRead(t, ok ? feed.quotes[t.symbol] : undefined, session, now, ok ? feed.receivedAt : null)]));
   const trading = [...reads.values()].some((r) => r.inSession);
   const rows = needsALook(tickers, (t) => reads.get(t.symbol)!);
+  // The feed the last answer named, never a fixed one: nothing when it named none.
+  const source = ok ? feedLabel(feed.source) : null;
   const means = !live
     ? "Every name at its close for this edition: the bar is centred on the close and measured in ATRs."
     : feed.status === "ok"
-      ? `Centred on the live price (Alpaca IEX, checked ${newYork(feed.asOf, false)} New York; IEX can lag the tape). The bar is measured in ATRs, so every name reads on one scale.${trading ? " Names that need a look come first." : ""}`
+      ? `Centred on the live price (Alpaca${source ? ` ${source}` : ""}, checked ${newYork(feed.asOf, false)} New York${source === "IEX" ? "; IEX is one exchange, so a high or low printed elsewhere can be missing" : ""}). The bar is measured in ATRs, so every name reads on one scale.${trading ? " Names that need a look come first." : ""}`
       : feed.status === "off"
-        ? "Live prices are off (no Alpaca keys in Vercel), so each bar is centred on the close."
+        ? feed.why === "feed"
+          ? "Live prices are off (ALPACA_FEED in Vercel is not iex or sip), so each bar is centred on the close."
+          : "Live prices are off (no Alpaca keys in Vercel), so each bar is centred on the close."
         : feed.status === "error"
           ? "Live prices did not answer; each bar is centred on the close until they do."
           : "Centred on the close until the first live price arrives. The bar is measured in ATRs.";
@@ -60,6 +65,7 @@ export function OptionsGlance({
       }
     >
       <div className="grid gap-3">
+        {live ? <FeedFacts where="glance" symbols={tickers.map((t) => t.symbol)} /> : null}
         <ul className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs" aria-label="Key" data-explain>
           <li className="flex items-center gap-1.5">
             <span className="bg-neutral-fill inline-block h-2 w-3.5 rounded-[2px]" />

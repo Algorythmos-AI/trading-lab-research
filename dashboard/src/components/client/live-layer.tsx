@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Activity,
   ArrowDown,
   ArrowDownToLine,
   ArrowUp,
@@ -13,18 +14,20 @@ import {
   Focus,
   Minus,
   Moon,
+  RefreshCw,
   RotateCw,
   type LucideIcon,
 } from "lucide-react";
 import { createContext, useContext, useSyncExternalStore } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ageSeconds, ageStale, ageText, feedAges, feedLabel } from "@/lib/feed-provenance";
 import { newYork, num } from "@/lib/format";
 import { liveRead, sessionShare, TRAIL_MS, type LiveRead, type LiveStateName, type OptionsTicker } from "@/lib/options";
 import { cn } from "@/lib/utils";
 import type { Backoff } from "@/lib/quote-poll";
 import { useNow } from "./use-now";
-import { useQuoteFeed, type Feed } from "./use-quotes";
+import { POLL_MS, useQuoteFeed, type Feed } from "./use-quotes";
 
 interface Live {
   feed: Feed;
@@ -36,7 +39,8 @@ interface Live {
   retryNow: () => void;
 }
 
-const LiveContext = createContext<Live>({ feed: { status: "off" }, session: "", now: null, backoff: null, retryNow: () => undefined });
+/** Exported for the render tests only; the page reads it through useLive. */
+export const LiveContext = createContext<Live>({ feed: { status: "off" }, session: "", now: null, backoff: null, retryNow: () => undefined });
 
 /**
  * One live feed for the whole Options page, so the glance strip, the level maps and the state chips all move on the
@@ -152,7 +156,10 @@ export function retryInS(b: Backoff, now: number | null): number | null {
   return left <= 0 ? 0 : Math.max(1, Math.floor(left / 1000));
 }
 
-/** A small "is the feed alive" pill: live with the time of the last answer, off, or retrying (and in how long). */
+/**
+ * A small "is the feed alive" pill: live with the time of the last answer and the feed it named (nothing when it named
+ * none), off, or retrying (and in how long).
+ */
 export function FeedPill() {
   const { feed, backoff, now } = useLive();
   const inS = backoff ? retryInS(backoff, now) : null;
@@ -163,7 +170,7 @@ export function FeedPill() {
         ? `Retrying in ${inS}s`
         : "Retrying"
       : feed.status === "ok"
-        ? `Live ${newYork(feed.asOf, false)}`
+        ? `Live ${newYork(feed.asOf, false)}${feedLabel(feed.source) ? ` · ${feedLabel(feed.source)}` : ""}`
         : feed.status === "off"
           ? "Live off"
           : feed.status === "error"
@@ -179,6 +186,59 @@ export function FeedPill() {
       />
       {label}
     </span>
+  );
+}
+
+/** One age in a slot of fixed width with even digits, so the text around it never moves as it ticks. */
+function AgeSlot({ ms }: { ms: number | null }) {
+  return (
+    <span data-age-slot data-age-s={ms === null ? undefined : ageSeconds(ms)} className="inline-block min-w-[6ch] text-right font-mono tabular-nums">
+      {ms === null ? "–" : ageText(ms)}
+    </span>
+  );
+}
+
+/**
+ * What the live prices are and how old: the feed the last answer named ("IEX" or "SIP"; nothing when it named none),
+ * that the page asks for them every 2 s rather than being sent each trade, and two ages on the board's (server) clock
+ * (feed-provenance.ts): when the newest trade among `symbols` printed, and when the page last got an answer. A price
+ * re-fetched a second ago can be a minute-old trade, so they are drawn apart; past the board's limits each turns to a
+ * warning colour. Nothing while the feed has not answered or is off. Not a live region: the ages tick every second
+ * and are never announced; a reader finds them in place. Each piece keeps to one line and the ages to fixed slots, so
+ * the line wraps the same way whatever they read and nothing under it moves.
+ */
+export function FeedFacts({ symbols, where }: { symbols?: readonly string[]; where: "board" | "glance" }) {
+  const { feed, now } = useLive();
+  if (feed.status !== "ok") return null;
+  const name = feedLabel(feed.source);
+  const ages = feedAges(feed, symbols ?? null, now);
+  const tone = (kind: "trade" | "checked", ms: number | null) => (ms !== null && ageStale(kind, ms) ? "text-warn" : undefined);
+  return (
+    <p
+      data-feed-facts={where}
+      aria-live="off"
+      className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[0.6875rem] max-sm:text-xs"
+    >
+      <span data-feed-source className="whitespace-nowrap">
+        {name ? (
+          <>
+            <span data-feed-name className="text-foreground font-medium">
+              {name}
+            </span>{" "}
+            ·{" "}
+          </>
+        ) : null}
+        fetched every {POLL_MS / 1000} s, not streamed
+      </span>
+      <span data-feed-age="trade" className={cn("text-foreground flex items-center gap-1 whitespace-nowrap font-medium", tone("trade", ages.lastTradeMs))}>
+        <Activity aria-hidden className="size-3 shrink-0" />
+        last trade <AgeSlot ms={ages.lastTradeMs} /> ago
+      </span>
+      <span data-feed-age="checked" className={cn("flex items-center gap-1 whitespace-nowrap", tone("checked", ages.checkedMs))}>
+        <RefreshCw aria-hidden className="size-3 shrink-0" />
+        checked <AgeSlot ms={ages.checkedMs} /> ago
+      </span>
+    </p>
   );
 }
 
@@ -208,11 +268,12 @@ export function FeedRetry() {
       {backoff ? (
         <div
           data-feed-retry={going ? "now" : backoff.limited ? "limited" : "waiting"}
-          className="bg-card text-warn absolute inset-0 z-10 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[0.6875rem] font-medium max-sm:text-xs"
+          className="bg-card text-warn absolute inset-0 z-10 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[0.6875rem] font-medium max-sm:flex-nowrap max-sm:text-xs"
         >
           <RotateCw aria-hidden className={cn("size-3 shrink-0", going && "motion-safe:animate-spin")} />
           {/* The count is for the eye; the live region above says it once in words. */}
-          <span aria-hidden className="min-w-0">
+          {/* On a phone the words wrap beside the button rather than above it, so the line stays inside the row. */}
+          <span aria-hidden className="min-w-0 max-sm:flex-1">
             {backoff.limited ? "Live prices busy" : "Live prices did not answer"}: {going || !inS ? "trying again now" : `trying again in ${inS}s`}
           </span>
           {/* 44 px to touch: on a phone's width, and on any screen whose main pointer is a finger (a tablet). */}
@@ -220,7 +281,7 @@ export function FeedRetry() {
             type="button"
             onClick={retryNow}
             disabled={going || backoff.limited}
-            className="text-foreground hover:bg-accent rounded border px-2 py-0.5 font-medium disabled:opacity-50 max-sm:min-h-11 max-sm:px-3 pointer-coarse:min-h-11 pointer-coarse:px-3"
+            className="text-foreground hover:bg-accent shrink-0 rounded border px-2 py-0.5 font-medium disabled:opacity-50 max-sm:min-h-11 max-sm:px-3 pointer-coarse:min-h-11 pointer-coarse:px-3"
           >
             Retry now
           </button>

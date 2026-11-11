@@ -1,28 +1,31 @@
 import "server-only";
+import { type DataFeed, requireFeed } from "./alpaca-feed";
 import { logEvent } from "./log";
 import { UpstreamError } from "./upstream";
 
-// Live prices for the Options page: Alpaca's free IEX feed, read on the server so the browser keeps its
-// connect-src 'self' policy and never sees the keys. Research only; nothing here can place an order.
+// Live prices for the Options page: Alpaca's stock feed (ALPACA_FEED, alpaca-feed.ts; the free IEX one by default),
+// read on the server so the browser keeps its connect-src 'self' policy and never sees the keys. Research only;
+// nothing here can place an order.
 
 /** One name's live snapshot, normalised from Alpaca's. Prices in US dollars; times ISO 8601. */
 export interface Quote {
   price: number;
   /** When the last trade printed. */
   at: string;
-  /** The current (or most recent) session's open, high and low on IEX, and its date in New York. */
+  /** The current (or most recent) session's open, high and low on the feed, and its date in New York. */
   open: number | null;
   high: number | null;
   low: number | null;
   day: string | null;
   prev_close: number | null;
-  /** The session's volume-weighted average price so far on IEX (the day bar's `vw`), or null when Alpaca gives none. */
+  /** The session's volume-weighted average price so far on the feed (the day bar's `vw`), or null when Alpaca gives none. */
   vwap: number | null;
 }
 
 export interface QuoteResponse {
   as_of: string;
-  feed: "iex";
+  /** The feed these prices were read from: what the page names, never a constant of its own. */
+  feed: DataFeed;
   quotes: Record<string, Quote>;
   /** Symbols asked for that came back without a usable price. */
   missing: string[];
@@ -87,8 +90,8 @@ export function normalise(raw: RawSnapshot): Quote | null {
   };
 }
 
-/** One name's last answer: its quote (null when Alpaca had no usable price) and when it was fetched. */
-const cache = new Map<string, { at: number; quote: Quote | null }>();
+/** One name's last answer: its quote (null when Alpaca had no usable price), when it was fetched, and from which feed. */
+const cache = new Map<string, { at: number; feed: DataFeed; quote: Quote | null }>();
 
 /** Test hook: forget the shared cache. */
 export function resetQuoteCache(): void {
@@ -104,10 +107,11 @@ function prune(): void {
 }
 
 /**
- * Snapshots for `symbols` from Alpaca's IEX feed. Each name is cached for CACHE_MS on its own, so two pages asking
- * for different names share what overlaps instead of evicting each other; only the names past their time go
- * upstream, in one call. `as_of` is the oldest fetch among the names answered. Throws on a transport or HTTP error
- * (the route answers 502) and caches nothing from it; the keys and the response body are never logged.
+ * Snapshots for `symbols` from the configured Alpaca feed (or `opts.feed`). Each name is cached for CACHE_MS on its
+ * own, so two pages asking for different names share what overlaps instead of evicting each other; only the names
+ * past their time go upstream, in one call. `as_of` is the oldest fetch among the names answered. Throws on a transport or HTTP error
+ * (the route answers 502) and caches nothing from it; the keys and the response body are never logged. A cached
+ * answer from another feed is never served. Throws FeedMisconfigured when ALPACA_FEED is refused (alpaca-feed.ts).
  */
 export async function fetchQuotes(
   symbols: string[],
@@ -116,16 +120,17 @@ export async function fetchQuotes(
   fetchImpl: typeof fetch = fetch,
   baseUrl: string = process.env.ALPACA_DATA_URL || DEFAULT_DATA_URL,
   /** For the server's desk evaluator only: a tighter bound on the upstream call. The page's route passes none. */
-  opts: { timeoutMs?: number } = {},
+  opts: { timeoutMs?: number; feed?: DataFeed } = {},
 ): Promise<QuoteResponse> {
+  const feed = opts.feed ?? requireFeed();
   const t = now.getTime();
   // An entry stamped after `now` (a clock that stepped back) is not trusted either.
   const due = symbols.filter((s) => {
     const hit = cache.get(s);
-    return !hit || t < hit.at || t - hit.at >= CACHE_MS;
+    return !hit || hit.feed !== feed || t < hit.at || t - hit.at >= CACHE_MS;
   });
   if (due.length > 0) {
-    const url = `${baseUrl}/v2/stocks/snapshots?symbols=${encodeURIComponent(due.join(","))}&feed=iex`;
+    const url = `${baseUrl}/v2/stocks/snapshots?symbols=${encodeURIComponent(due.join(","))}&feed=${feed}`;
     const res = await fetchImpl(url, {
       headers: { "APCA-API-KEY-ID": keys.id, "APCA-API-SECRET-KEY": keys.secret, accept: "application/json" },
       cache: "no-store",
@@ -140,7 +145,7 @@ export async function fetchQuotes(
     const map = (body && typeof body.snapshots === "object" && body.snapshots !== null ? body.snapshots : body) as Record<string, RawSnapshot>;
     for (const s of due) {
       cache.delete(s);
-      cache.set(s, { at: t, quote: normalise(map[s] ?? null) });
+      cache.set(s, { at: t, feed, quote: normalise(map[s] ?? null) });
     }
   }
   const quotes: Record<string, Quote> = {};
@@ -155,5 +160,5 @@ export async function fetchQuotes(
   }
   // Only after the answer is read: pruning first could drop a fresh name this answer still needs.
   prune();
-  return { as_of: new Date(oldest).toISOString(), feed: "iex", quotes, missing };
+  return { as_of: new Date(oldest).toISOString(), feed, quotes, missing };
 }
