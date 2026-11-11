@@ -16,9 +16,10 @@ sees the visibility the publishing jobs act on.
   again inside the same pull request still fails it, and so does a symlink retargeted and put back: the branch's
   history is public too. The `test` job checks out the full history for this.
 - Case-insensitive, like the hook: `Knowledge/`, `DATA/`, `x.PDF`. `.env.example` stays allowed.
-- A tracked symlink whose target resolves to a restricted path inside the repository fails it (`docs/k ->
-  ../knowledge`, or an absolute target under the checkout). A target outside the repository is not matched: it is
-  not this repository's material. The output names the link, never the target or any file's contents.
+- Any tracked symlink whose target is absolute, or climbs above the repository's root (`..`), fails it, wherever it
+  points: on another checkout (the host's `/home/wt/trading`) it can resolve into `var/` or `knowledge/`. A relative
+  link that stays inside fails it when the path it resolves to is restricted (`docs/k -> ../knowledge`). The output
+  names the link, never the target or any file's contents.
 - Exit 2 (fails closed) when `.pre-commit-config.yaml` cannot be read or parsed, PyYAML is missing, or git fails.
 - Only the top-level `knowledge/`, `data/`, `var/`, `logs/` and `build/` directories match, as in the hook:
   `src/wt/data/` is code.
@@ -71,10 +72,15 @@ The weekly job (`wt-weekly`) runs `wt.ops.evidence` after the scorecard. What yo
 
 Each stop pages once per step until a run succeeds (the keys are `evidence-pr:<step>`): a push that fails three weeks
 running pages once. The run gives itself 400 s, made first: the visibility probe, every step and the final worktree
-removal draw from it (the removal gets at least 5 s), and the one stop alert after it is bounded at about 10 s, so
-the worst case is about 420 s against the 600 s the weekly job allows. A hanging gh or git stops it with its own
+removal draw from it (the removal gets at least 5 s). Its alerts may use the network until 15 s after the budget
+ends; past that a page waits in the spool for the next job, and a flush stops. Typically a stop page takes well
+under a second. The bound that holds: one HTTP send can take up to twice its timeout (connect, then read), so
+400 + 5 + 2 × 15 = 435 s, against the 600 s the weekly job allows. A hanging gh or git stops it with its own
 page instead of the job killing it with none; if the job does kill it, the job pages and logs what the run had
-printed, tokens redacted. A manual dry run (`make evidence`) never pages; a failed step there prints the step and
+printed. Every line the weekly job logs from the run (its output, the stderr tail of a crash, the output of a hung
+run) goes through one redaction (`wt.ops.alerts.redact`): the environment's token values, and anything shaped like
+a GitHub token (`ghp_…`, `gho_…`, `github_pat_…`), an `x-access-token:…@` URL credential or a bearer header. A manual
+dry run (`make evidence`) never pages; a failed step there prints the step and
 exits 1, the only case that returns 1.
 
 The pages carry only the step, an outcome word, the ISO week and a file count: never the remote's error text, a
@@ -119,5 +125,7 @@ it also scrubs amounts, account ids and URLs, as the last line of defence. The c
   (`ls /home/wt/trading/var/alerts/spool`) before deploying. Nothing deletes them automatically.
 - **The systemd failure page** (`deploy/oci/bin/wt-alert`, `OnFailure=`) says "Trading host: <unit> failed" and
   "systemd reports <unit> failed. Check: journalctl -u <unit> and make status." It no longer names the host. A unit
-  name outside `[A-Za-z0-9._-]` (80 characters at most) reads "a unit". `tests/unit/test_wt_alert.py` runs it with
+  name outside `[A-Za-z0-9._-]` (80 characters at most) reads "a unit", with "Check: make status and the journal for
+  the failed unit." It reads only `/etc/wt/paging`; the test's override works only with `WT_ALERT_TEST=1` set too,
+  and says so on stderr. `tests/unit/test_wt_alert.py` runs it with
   hostile unit names against a fake curl.
