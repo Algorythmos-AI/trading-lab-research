@@ -250,6 +250,12 @@ export function StatusRail({ day: server, facts = null }: { day: RailDay | null;
             {facts.readShort ? <span className="sm:hidden">{facts.readShort}</span> : null}
           </p>
         ) : null}
+        {/* Rows of the journal could not be read: the count and the loss may be short, and no room is said. */}
+        {server?.unread ? (
+          <p data-rail-unread className="text-explain text-warn font-medium max-sm:col-span-2">
+            {server.unread}
+          </p>
+        ) : null}
         {/* Next to the day: what one more stop would leave. Only when the journal is current and nothing is open. */}
         {shownRoom ? (
           <p data-rail-room className="text-explain text-muted-foreground max-sm:col-span-2">

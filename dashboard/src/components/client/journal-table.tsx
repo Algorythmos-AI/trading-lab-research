@@ -4,31 +4,48 @@ import { ChevronDown } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { type JournalRow, listRows, nextSort, type Only, rowWords, type RowWords, type Sort, SORT_CHOICES, sortOf, sortValue, type SortKey } from "@/lib/journal-list";
+import { listRows, type ListRow, nextSort, type Only, type PackedRow, type Piece, pieceText, type RowWords, type Sort, SORT_CHOICES, sortOf, sortValue, type SortKey, unpackRow } from "@/lib/journal-list";
 import { cn } from "@/lib/utils";
 
 const TONE: Record<RowWords["tone"], string> = { good: "text-good", bad: "text-bad", flat: "" };
 
-export type { JournalRow } from "@/lib/journal-list";
+export type { JournalRow, PackedRow } from "@/lib/journal-list";
 
 const PAGE = 50;
 /** Cards a phone shows at first and adds with each "Show more": a card is about 100 px, the table's row about 40. */
 const CARD_PAGE = 15;
 
+/** A trade's pieces in words, written out only once its disclosure has been opened (they come as numbers). */
+function PieceList({ pieces, className, item }: { pieces: readonly Piece[]; className?: string; item: string }) {
+  return (
+    <ul className={className}>
+      {pieces.map((p, i) => (
+        <li key={i} className={item}>
+          {pieceText(p)}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** A native disclosure that draws its contents the first time it is opened, and keeps them after. */
+function Lazy({ className, summary, summaryClass, children }: { className?: string; summary: React.ReactNode; summaryClass?: string; children: () => React.ReactNode }) {
+  const [opened, setOpened] = useState(false);
+  return (
+    <details className={className} onToggle={(e) => (e.currentTarget.open ? setOpened(true) : undefined)}>
+      <summary className={summaryClass}>{summary}</summary>
+      {opened ? children() : null}
+    </details>
+  );
+}
+
 /** A trade of several pieces, in the table: the pieces under its contract, in a native disclosure. */
-function Pieces({ r, className }: { r: JournalRow; className?: string }) {
+function Pieces({ r, className }: { r: ListRow; className?: string }) {
   if (!r.pieces.length) return null;
   return (
-    <details className={cn("text-muted-foreground text-xs", className)}>
-      <summary className="hover:text-foreground cursor-pointer">{r.pieces.length} pieces</summary>
-      <ul className="mt-1 grid gap-0.5">
-        {r.pieces.map((p) => (
-          <li key={p.id} className="font-mono text-[0.6875rem]">
-            {p.text}
-          </li>
-        ))}
-      </ul>
-    </details>
+    <Lazy className={cn("text-muted-foreground text-xs", className)} summaryClass="hover:text-foreground cursor-pointer" summary={`${r.pieces.length} pieces`}>
+      {() => <PieceList pieces={r.pieces} className="mt-1 grid gap-0.5" item="font-mono text-[0.6875rem]" />}
+    </Lazy>
   );
 }
 
@@ -37,8 +54,8 @@ function Pieces({ r, className }: { r: JournalRow; className?: string }) {
  * signed; when, how long, how many and in → out; the result on the premium and in R25, the Expired badge, and a
  * "More" fold with the rest (before fees, R50, fees, the pieces). The same row and the same words as the table.
  */
-function TradeCard({ r }: { r: JournalRow }) {
-  const w = rowWords(r);
+function TradeCard({ r }: { r: ListRow }) {
+  const w = r.words;
   return (
     <li data-trade-card={r.id} className="grid rounded-lg border px-3 pt-2">
       <div className="flex items-baseline justify-between gap-3">
@@ -63,11 +80,17 @@ function TradeCard({ r }: { r: JournalRow }) {
           <span className="text-muted-foreground">R25</span> <span className="font-mono">{w.r25}</span>
         </span>
         {r.expired ? <Badge variant="warn">Expired</Badge> : null}
-        <details className="group/more ml-auto open:ml-0 open:basis-full">
-          <summary className="text-muted-foreground hover:text-foreground ml-auto flex min-h-11 w-fit cursor-pointer list-none items-center gap-1 [&::-webkit-details-marker]:hidden">
-            More
-            <ChevronDown aria-hidden className="size-4 transition-transform group-open/more:rotate-180" />
-          </summary>
+        <Lazy
+          className="group/more ml-auto open:ml-0 open:basis-full"
+          summaryClass="text-muted-foreground hover:text-foreground ml-auto flex min-h-11 w-fit cursor-pointer list-none items-center gap-1 [&::-webkit-details-marker]:hidden"
+          summary={
+            <>
+              More
+              <ChevronDown aria-hidden className="size-4 transition-transform group-open/more:rotate-180" />
+            </>
+          }
+        >
+          {() => (
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 pb-2">
             {w.beforeFees ? (
               <>
@@ -83,18 +106,13 @@ function TradeCard({ r }: { r: JournalRow }) {
               <>
                 <dt className="text-muted-foreground">{r.pieces.length} pieces</dt>
                 <dd>
-                  <ul className="grid gap-0.5">
-                    {r.pieces.map((p) => (
-                      <li key={p.id} className="font-mono text-xs">
-                        {p.text}
-                      </li>
-                    ))}
-                  </ul>
+                  <PieceList pieces={r.pieces} className="grid gap-0.5" item="font-mono text-xs" />
                 </dd>
               </>
             ) : null}
           </dl>
-        </details>
+          )}
+        </Lazy>
       </div>
     </li>
   );
@@ -104,8 +122,12 @@ function TradeCard({ r }: { r: JournalRow }) {
  * Every closed trade in the filter, newest first, with a search box, sorting and a "show more". Read only. A trade of
  * several pieces lists them under its contract in a native disclosure. From sm up a table; on a phone a card per
  * trade, with a sort menu in place of the column headers: one list and one state, drawn twice, one of them hidden.
+ * The rows come packed (journal-list's packRow): every row of the view, so the search and the sort cover all of it
+ * without asking the server, with its words already written and its pieces as numbers.
  */
-export function JournalTable({ rows }: { rows: JournalRow[] }) {
+export function JournalTable({ rows: packed, feesIncluded = false }: { rows: PackedRow[]; feesIncluded?: boolean }) {
+  const rows = useMemo(() => packed.map(unpackRow), [packed]);
+  const after = feesIncluded ? "after fees" : "after est. fees";
   const [q, setQ] = useState("");
   const [sort, setSort] = useState<Sort>({ key: "at", dir: -1 });
   const [shown, setShown] = useState(PAGE);
@@ -208,16 +230,16 @@ export function JournalTable({ rows }: { rows: JournalRow[] }) {
               {head("pnl", "Result", "text-right")}
               <TableHead className="text-right">On premium</TableHead>
               <TableHead className="text-right">
-                R25<span className="sr-only">: the result after fees in quarters of the premium, where −1 is the −25% stop</span>
+                R25<span className="sr-only">: the result {after} in quarters of the premium, where −1 is the −25% stop</span>
               </TableHead>
               <TableHead className="text-right">
-                R50<span className="sr-only">: the result after fees in units of $50, the most one trade may risk</span>
+                R50<span className="sr-only">: the result {after} in units of $50, the most one trade may risk</span>
               </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {page.map((r) => {
-              const w = rowWords(r);
+              const w = r.words;
               return (
                 <TableRow key={r.id}>
                   <TableCell className="text-muted-foreground font-mono text-xs whitespace-nowrap">{r.when}</TableCell>
@@ -248,7 +270,7 @@ export function JournalTable({ rows }: { rows: JournalRow[] }) {
         </Table>
       </div>
       <p className="text-muted-foreground text-xs max-sm:text-[0.8125rem]">
-        R25 is the result after fees in quarters of the premium, so −1 is the −25% stop; R50 is the result in units of $50, the most one trade may risk.
+        R25 is the result {after} in quarters of the premium, so −1 is the −25% stop; R50 is the result in units of $50, the most one trade may risk.
       </p>
       {cardsShown < list.length ? (
         <button

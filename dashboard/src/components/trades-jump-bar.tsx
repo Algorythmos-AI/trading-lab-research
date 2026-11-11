@@ -89,13 +89,17 @@ export function TradesJumpBar({ links }: { links: JumpLink[] }) {
   );
 }
 
-/** One group of the page: a heading with a one-line intro (the pattern of the wiki's `WikiPart`), then its panels. */
-export function TradesGroup({ group, intro, children }: { group: keyof typeof TRADES_GROUPS; intro: React.ReactNode; children: React.ReactNode }) {
+/**
+ * One group of the page: a heading with a one-line intro (the pattern of the wiki's `WikiPart`), then its panels.
+ * `hideHeading` keeps the heading for a screen reader only, for a group whose one panel carries the same title (the
+ * clone): one visible heading, not the same words twice in a row.
+ */
+export function TradesGroup({ group, intro, hideHeading = false, children }: { group: keyof typeof TRADES_GROUPS; intro: React.ReactNode; hideHeading?: boolean; children: React.ReactNode }) {
   const { id, label } = TRADES_GROUPS[group];
   return (
     <section id={id} aria-labelledby={`${id}-title`} className={cn(ANCHOR_MARGIN, "grid min-w-0 gap-5")}>
       <div className="border-foreground/80 grid gap-1 border-t-2 pt-4">
-        <h2 id={`${id}-title`} className="text-xl font-semibold tracking-tight">
+        <h2 id={`${id}-title`} data-group-heading={hideHeading ? "hidden" : undefined} className={cn("text-xl font-semibold tracking-tight", hideHeading && "sr-only")}>
           {label}
         </h2>
         <p className="text-muted-foreground max-w-prose text-sm">{intro}</p>

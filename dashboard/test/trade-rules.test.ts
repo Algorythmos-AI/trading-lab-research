@@ -20,7 +20,7 @@ import {
   ruleEvidence,
   RULES,
   tradeBreaks,
-  WIN_SHARE_MARK,
+  RAN_TO_MARK,
 } from "@/lib/trade-rules";
 
 let n = 0;
@@ -55,7 +55,7 @@ describe("the rules", () => {
   });
 
   it("work out the owner's example plan: $165 premium, $16.50 at risk, $33 target, 2:1", () => {
-    const p = planNumbers(165, 0.1, WIN_SHARE_MARK);
+    const p = planNumbers(165, 0.1, RAN_TO_MARK);
     expect(p.risk).toBeCloseTo(16.5);
     expect(p.reward).toBeCloseTo(33);
     expect(p.ratio).toBeCloseTo(2);

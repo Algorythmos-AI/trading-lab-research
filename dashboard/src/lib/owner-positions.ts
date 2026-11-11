@@ -8,16 +8,19 @@
 // time: a piece joins while it opens strictly before the latest close so far, so a re-entry after a full exit is a
 // position of its own. Stock and short pieces are not positions.
 import { nyTime, type JournalDoc, type Lot, type Trade } from "./journal";
+import { PREMIUM_STOP } from "./premium-stop";
 
 /**
  * The owner's own Webull costs per option contract, given by the owner in session on 2026-11-11 (commission $0.50
  * plus the regulatory, OCC and SEC fees, about $1.11 a round trip). DEC-0045 section 2 freezes them; a change is a
- * dated amendment to that record. An estimate: it can drift by a cent. A piece left to expire pays no closing fee.
+ * dated amendment to that record. They are today's rates, applied to every piece back to 2023: what was charged in
+ * earlier years has not been established, so every figure after them is an estimate and the page says so. A piece
+ * left to expire pays no closing fee.
  */
 export const OWNER_FEES = { openPerContract: 0.55, closePerContract: 0.56, expiredClose: 0 } as const;
 
-/** R25 measures a result in units of a quarter of the premium (rule 5's −25% stop), so −1 is the stop. */
-export const R25_SHARE = 0.25;
+/** R25 measures a result in units of a quarter of the premium (rule 5's −25% stop, the same number), so −1 is the stop. */
+export const R25_SHARE = PREMIUM_STOP;
 /** R50 measures a result in units of $50 (rule 4's risk per trade). */
 export const R50_DOLLARS = 50;
 
@@ -379,8 +382,12 @@ export function tradeUnits(trades: readonly Trade[], opts: { basis?: "gross" | "
 // ── What the Trades page may show before any verdict (DEC-0045 section 8) ─────────────────────────────────────────
 // Over all positions together, never split by any label: how the exits kept the rules, and the overall mean R25.
 
-/** The share of its premium a winner's option gained when sold: the loss-size panel counts winners under it. */
-export const WIN_SHARE = 0.5;
+/**
+ * The Loss size panel's line for a small win: a winner (after fees) whose option was sold up less than +50% on its
+ * premium, the position taken whole. Not the rules evidence's +20% mark (trade-rules' RAN_TO_MARK), which counts
+ * winners that ran, piece by piece, before fees.
+ */
+export const SMALL_WIN_UNDER = 0.5;
 /** The overall mean R25 is shown only from this many positions over this many New York sessions. */
 export const MEAN_MIN_POSITIONS = 20;
 export const MEAN_MIN_SESSIONS = 10;
@@ -399,7 +406,7 @@ export interface ExitStats {
   beyondStop: number;
   /** Positions with a part sold (or expired) more than 25% below the average entry, whole result aside. */
   partPastStop: number;
-  /** Winners sold up less than 50% of their cost. */
+  /** Winners sold up less than SMALL_WIN_UNDER (+50%) of their cost. */
   smallWins: number;
   /** Mean R25 after fees of the losers and of the winners; null under `minSample` of them. */
   avgLoserR25: number | null;
@@ -430,7 +437,7 @@ export function exitStats(positions: readonly OwnerPosition[], minSample: number
     pastStop: past.length,
     partPastStop: counted.filter((p) => partPastStop(p.pieces, averageEntry(p), R25_SHARE)).length,
     beyondStop: beyond,
-    smallWins: winners.filter((p) => kept(p) - 1 < WIN_SHARE - EPS).length,
+    smallWins: winners.filter((p) => kept(p) - 1 < SMALL_WIN_UNDER - EPS).length,
     avgLoserR25: mean(losers),
     avgWinnerR25: mean(winners),
   };

@@ -1,7 +1,7 @@
 "use client";
 
 import { Activity, CircleCheck, Hand, type LucideIcon, NotebookPen, OctagonX, Shield, TriangleAlert, X } from "lucide-react";
-import { useEffect, useId, useState, useSyncExternalStore } from "react";
+import { useEffect, useId, useMemo, useState, useSyncExternalStore } from "react";
 import type { Lot, Trade } from "@/lib/journal";
 import type { LiveQuote, Options, TrailPoint } from "@/lib/options";
 import {
@@ -27,9 +27,8 @@ import {
   noteFromForm,
   noteId,
   noteKey,
-  openTrades,
+  type OpenTrade,
   parseNotes,
-  retiredNotes,
   shownNotices,
 } from "@/lib/trade-manage";
 import type { BoardRow } from "@/lib/trade-now";
@@ -38,7 +37,7 @@ import type { Bar2 } from "@/lib/trade-state";
 import { cn } from "@/lib/utils";
 import { bellMinute } from "@/lib/contract";
 import { chainFresh, chainPx, chainStamp, entryStopDistance, fromEntryLabel, heldOrAtm, lossFromEntry, type RoomAfterStop, roomAfterStop, stopDistance } from "@/lib/what-if";
-import { checkOptionFill, type FillStop, fillStop, INVITE_LINE, lossLine, matchNotes, nickelLine, prefillFrom, otherOpenPositions, STOP_OWN_TICK, STOP_PLACED, STOP_REMINDER, stopFromLine, tickLine } from "@/lib/manage-stop";
+import { checkOptionFill, type FillStop, fillStop, INVITE_LINE, journalDayCache, lossLine, nickelLine, prefillFrom, otherOpenPositions, STOP_OWN_TICK, STOP_PLACED, STOP_REMINDER, stopFromLine, tickLine } from "@/lib/manage-stop";
 import { type DayFacts, journalLive } from "@/lib/session-timeline";
 import { usd } from "@/lib/ticket";
 import { ticketPrice } from "./ticket-memo";
@@ -121,7 +120,9 @@ function useNotes(day: string | null): ManualNote[] {
     () => (day ? readNotes(day) : ""),
     () => "",
   );
-  return parseNotes(raw);
+  // Parsed once per change of what is stored: the board renders every second, and a new array each time would make
+  // the journal's side of the card (journalDayCache) work itself out again on every tick.
+  return useMemo(() => parseNotes(raw), [raw]);
 }
 
 // ---- the card as drawn ----------------------------------------------------------------------------------------------
@@ -354,8 +355,9 @@ export function ImInForm({
     setError(null);
     onSave(noteFromForm(f, r.price, t.at, o.fill));
   };
-  // On a phone a field is 44 px tall at 16 px (globals.css), so iOS does not zoom into it.
-  const input = "bg-background h-8 rounded border px-2 font-mono text-[0.8125rem] max-sm:h-11";
+  // On a phone a field is 44 px tall at 16 px, so iOS Safari does not zoom the page into it when it takes the focus
+  // (globals.css says the same for every field; the class keeps it true whatever the cascade does). 13 px from sm up.
+  const input = "bg-background h-8 rounded border px-2 font-mono text-[0.8125rem] max-sm:h-11 max-sm:text-base";
   return (
     <form
       data-im-in-form={f.symbol}
@@ -664,6 +666,9 @@ export function StopBlock({ v, s }: { v: ManageView; s: CardStop }) {
   );
 }
 
+const NO_TRADES: readonly OpenTrade[] = [];
+const NO_NOTES: readonly ManualNote[] = [];
+
 // ---- the board's hook-in --------------------------------------------------------------------------------------------
 export interface TradeManageInput {
   items: readonly Item[];
@@ -716,11 +721,14 @@ export function useTradeManage(x: TradeManageInput): {
   const [notices, setNotices] = useState<ManageNotice[]>([]);
   const [wasLive, setWasLive] = useState(false);
   const [seq, setSeq] = useState(0);
+  // The journal's side of the card, kept between renders: a tick of the clock with the same day's trades, lots, notes
+  // and session reads no row of the journal.
+  const [journal] = useState(() => journalDayCache());
 
   const feed = today && x.now !== null ? cardFeed(x.mode, x.barsLoading, wasLive) : null;
   if (feed === "live" && !wasLive) setWasLive(true);
   const rowOf = (symbol: string) => x.rows.find((r) => r.symbol === symbol);
-  const trades = feed ? openTrades(x.items, x.lots, notes, x.session, x.closed, x.journalAsOf) : [];
+  const trades = feed ? journal.openTrades(x.items, x.lots, notes, x.session, x.closed, x.journalAsOf) : NO_TRADES;
   const views = trades.map((t) =>
     manageView(t, {
       session: x.session,
@@ -736,7 +744,7 @@ export function useTradeManage(x: TradeManageInput): {
   );
 
   // The notes the journal has closed out leave this browser (their cards are already gone).
-  const retire = today ? retiredNotes(notes, x.lots, x.closed, x.session, x.journalAsOf) : [];
+  const retire = today ? journal.retired(notes, x.lots, x.closed, x.session, x.journalAsOf) : NO_NOTES;
   const retireSig = retire.map(noteId).join(",");
   useEffect(() => {
     if (!today || !retireSig) return;
@@ -767,7 +775,7 @@ export function useTradeManage(x: TradeManageInput): {
     save(notes.map((x) => (noteId(x) === noteId(n) ? next : x)));
   };
   // The notes the journal shows no fill for yet: the rail adds them to the day's count.
-  const match = today ? matchNotes(notes, x.closed, x.lots, x.session) : null;
+  const match = today ? journal.match(notes, x.closed, x.lots, x.session) : null;
   const provisional = match?.provisional.length ?? 0;
   // The server judged the journal when it drew the page; this browser checks its age again every half minute.
   const liveNow = useNow(30_000);

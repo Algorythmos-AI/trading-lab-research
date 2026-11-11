@@ -56,13 +56,13 @@ export function alpacaKeys(env: Record<string, string | undefined> = process.env
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
+const NY_DAY_FMT = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
+
 function nyDay(iso: unknown): string | null {
   if (typeof iso !== "string") return null;
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return null;
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(
-    new Date(t),
-  );
+  return NY_DAY_FMT.format(new Date(t));
 }
 
 type Bar = { t?: unknown; o?: unknown; h?: unknown; l?: unknown; c?: unknown; vw?: unknown } | null | undefined;

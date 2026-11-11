@@ -10,7 +10,7 @@ import { StatusBadge, TONE_TEXT } from "@/components/status";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { type AccountRisk, type HeldBy, type LimitRow } from "@/lib/account-risk";
 import { newYork } from "@/lib/format";
-import { shortDay, type MoneyView } from "@/lib/journal";
+import { shortDay, skippedLine, type MoneyView } from "@/lib/journal";
 import type { Tone } from "@/lib/labels";
 import { DAY_LOSS_LIMIT, MAX_PREMIUM, MAX_TRADES_PER_DAY, meterToneFor } from "@/lib/trade-rules";
 import { cn } from "@/lib/utils";
@@ -240,6 +240,11 @@ export function AccountRecentPanel({ r, money }: { r: AccountRisk; money: MoneyV
               />
             ) : null}
           </StatTiles>
+          {money && money.skipped > 0 ? (
+            <p data-money-skipped={money.skipped} className="text-warn text-xs font-medium">
+              Money in and out: {skippedLine(money.skipped)}
+            </p>
+          ) : null}
           <p className="text-muted-foreground text-xs">
             Your {r.tradeCount.toLocaleString("en-US")} closed trades, matched first in, first out from Webull&apos;s history, in US dollars before fees. Days are New York trading days.
           </p>

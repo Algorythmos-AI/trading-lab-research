@@ -26,8 +26,13 @@ import { NowHero } from "@/components/client/now-hero";
 import { focusOptions } from "@/lib/fixture-variants";
 import { SCRIPT_ANSWER_LAG_MS, SCRIPT_SYMBOLS, scriptBars, scriptQuote, stepInstant } from "@/lib/fixture-script";
 import type { LiveQuote, Options } from "@/lib/options";
-import { type BoardInput, boardRows, DONE_ROW_VIEW, DONE_WORD, doneMasked, entryPrompt, rowView, spokenChanges } from "@/lib/trade-now";
-import { SERVER_SETTLE_MS } from "@/lib/trade-state";
+import { type BoardInput, boardRows, DONE_ROW_VIEW, DONE_WORD, doneMask, doneMasked, entryPrompt, IN_TRADE_WORD, rowView, spokenChanges } from "@/lib/trade-now";
+import { SERVER_SETTLE_MS, type NameState, type NameStateName } from "@/lib/trade-state";
+import { stateRows } from "@/lib/desk-eval";
+import { pageBody } from "@/lib/desk-shadow-client";
+import { StatusRail } from "@/components/client/status-rail";
+import { dayFacts, journalLive, railDay, unreadLine, withUnread } from "@/lib/session-timeline";
+import { roomAfterStop } from "@/lib/what-if";
 import type { ManageView } from "@/lib/trade-manage";
 import optionsJson from "./fixtures/options.v1.json";
 
@@ -614,6 +619,10 @@ function board(done: boolean, managed: readonly string[] = ["QQQ"], first?: stri
       const row = rows.find((r) => r.symbol === symbol);
       return !!row && doneMasked(done, row, held);
     },
+    maskFor: (symbol) => {
+      const row = rows.find((r) => r.symbol === symbol);
+      return row ? doneMask(done, row, held) : null;
+    },
   };
 }
 
@@ -692,12 +701,35 @@ describe("the board, the glance and the ladders once today is done", () => {
     expect(html).toContain(DONE_WORD);
   });
 
-  it("a row in a managed trade keeps exactly what it shows", () => {
+  it("a name in a managed trade reads In a trade once today is done: no entry sentence, no Enter figures, its card as it was", () => {
     const managed = draw(board(true, ["QQQ"]), flags(true), createElement(TradeNow));
-    const same = draw(board(false, ["QQQ"]), flags(false), createElement(TradeNow));
+    const open = draw(board(false, ["QQQ"]), flags(false), createElement(TradeNow));
     const row = (h: string) => h.slice(h.indexOf('data-board-row="QQQ"'), h.indexOf("</li>", h.indexOf('data-board-row="QQQ"')));
-    expect(row(managed)).toBe(row(same));
-    expect(row(managed)).toContain('data-board-state="enter_zone"');
+    // Not done: unchanged, the entry with its numbers.
+    expect(row(open)).toContain('data-board-state="enter_zone"');
+    expect(row(open)).toContain("data-board-grid");
+    // Done: the neutral chip, no entry word, no headline, no Enter, Stop or Target.
+    expect(row(managed)).toContain('data-board-state="in_trade"');
+    expect(row(managed)).toContain(IN_TRADE_WORD);
+    expect(row(managed)).not.toContain("ENTER");
+    expect(row(managed)).not.toContain("data-board-grid");
+    expect(row(managed)).not.toContain(rowView(board(false, ["QQQ"]).rows.find((r) => r.symbol === "QQQ")!.state!).headline);
+    // The manage card is drawn exactly as it was.
+    const card = (h: string) => h.slice(h.indexOf('data-manage-card="t1"'), h.indexOf("</div>", h.indexOf('data-manage-card="t1"')));
+    expect(card(managed)).toBe(card(open));
+    expect(card(managed)).toContain("Stop 600.00");
+  });
+
+  it("a managed name's glance tile and focus chip read in_trade once done, and their entry state while open", () => {
+    const tile = (done: boolean) => draw(board(done, ["QQQ"]), flags(done), createElement(GlanceTile as (p: { symbol: string; children?: ReactNode }) => ReactNode, { symbol: "QQQ" }));
+    expect(tile(false)).toContain('data-glance-state="enter_zone"');
+    expect(tile(false)).toContain("ENTER");
+    expect(tile(true)).toContain('data-glance-state="in_trade"');
+    expect(tile(true)).toContain('data-chip-state="in_trade"');
+    expect(tile(true)).toContain(IN_TRADE_WORD);
+    expect(tile(true)).not.toContain("ENTER");
+    expect(doneMask(true, { symbol: "QQQ", state: null }, new Set(["QQQ"]))).toBeNull();
+    expect(doneMask(false, board(false, ["QQQ"]).rows[0]!, new Set(["QQQ"]))).toBeNull();
   });
 
   it("the glance tile and its chip (also the cockpit's) read done, not the entry", () => {
@@ -715,13 +747,15 @@ describe("the board, the glance and the ladders once today is done", () => {
     const read = (b: Board, symbol: string) => {
       const row = b.rows.find((r) => r.symbol === symbol)!;
       const done = b.doneFor(symbol);
-      return { row, view: done ? DONE_ROW_VIEW : rowView(row.state!), paused: false, done };
+      return { row, view: done ? DONE_ROW_VIEW : rowView(row.state!), paused: false, done, mask: b.maskFor?.(symbol) ?? null };
     };
     expect(boardSide(read(board(false, []), "QQQ"))).toBe("call");
     expect(boardSide(read(board(true, []), "QQQ"))).toBeNull();
     expect(boardAlt(read(board(false, []), "SPY"))).not.toBeNull();
     expect(boardAlt(read(board(true, []), "SPY"))).toBeNull();
-    expect(boardSide(read(board(true, ["QQQ"]), "QQQ"))).toBe("call"); // in a trade: unchanged
+    // In a trade with today done: the chip says IN A TRADE, so no strip or ladder points at the entry side either.
+    expect(boardSide(read(board(true, ["QQQ"]), "QQQ"))).toBeNull();
+    expect(boardSide(read(board(false, ["QQQ"]), "QQQ"))).toBe("call");
   });
 
   it("entry words are not spoken; other changes still are", () => {
@@ -853,5 +887,59 @@ describe("DoneSync", () => {
     const before = sync.state;
     await sync.reread();
     expect(sync.state.spoken).toBe(before.spoken);
+  });
+});
+
+const NAME_STATES: readonly NameStateName[] = ["no_trade", "watch", "get_ready", "enter_zone", "plan_off", "missed", "paused"];
+
+describe("today done is display only, and only over entry prompts", () => {
+  it("what the page posts to the server's shadow check is the engine's own states, never done or in_trade", () => {
+    const b = board(true, ["QQQ"]);
+    expect(b.maskFor!("QQQ")).toBe("in_trade");
+    expect(b.rows.some((r) => b.maskFor!(r.symbol) === "done")).toBe(true);
+    // BoardProvider hands the shadow hook `states`, the rows' own NameStates; the mask lives in the views only.
+    const body = JSON.parse(pageBody(Date.parse("2026-10-12T14:32:00Z"), { rows: b.states.flatMap(stateRows), asOf: b.now!, barsDelayed: false }, b.states));
+    const posted = [...body.rows, ...body.rows_at_settle] as { symbol: string; state: string }[];
+    expect(posted.length).toBeGreaterThan(0);
+    expect(posted.every((r) => (NAME_STATES as readonly string[]).includes(r.state))).toBe(true);
+    expect(posted.some((r) => r.state === "done" || r.state === "in_trade")).toBe(false);
+    expect((body.rows_at_settle as { symbol: string; state: string }[]).filter((r) => r.symbol === "QQQ").map((r) => r.state)).toEqual(stateRows(b.rows.find((r) => r.symbol === "QQQ")!.state!).map((r) => r.state));
+  });
+
+  it("a managed name keeps its real state unless it asks for an entry", () => {
+    const qqq = board(false, ["QQQ"]).rows.find((r) => r.symbol === "QQQ")!;
+    const held = new Set(["QQQ"]);
+    const as = (state: NameStateName) => ({ symbol: "QQQ", state: { ...qqq.state!, state, alt: null } as NameState });
+    for (const st of ["plan_off", "missed", "watch", "no_trade", "paused"] as const) expect(doneMask(true, as(st), held)).toBeNull();
+    for (const st of ["get_ready", "enter_zone"] as const) expect(doneMask(true, as(st), held)).toBe("in_trade");
+    // A live alternative on a plan that is off is an entry prompt too.
+    const spy = board(false, []).rows.find((r) => r.symbol === "SPY")!;
+    expect(doneMask(true, spy, new Set(["SPY"]))).toBe("in_trade");
+    expect(doneMask(false, as("enter_zone"), held)).toBeNull();
+  });
+});
+
+describe("journal rows that could not be read (the Options page)", () => {
+  const n = new Date("2026-10-12T14:30:00Z");
+  const check = { status: "clear" as const, isToday: true, current: true, used: 1, net: -10, openLine: undefined };
+
+  it("the rail says so in the warning style, and no room is said", () => {
+    const rail = { ...railDay(withUnread(check, 2)), unread: unreadLine(2) };
+    expect(railDay(check).room).not.toBeNull();
+    expect(rail.room).toBeNull();
+    const html = draw(board(false, []), flags(false), createElement(StatusRail, { day: rail, facts: dayFacts(withUnread(check, 2), n.toISOString(), n) }));
+    expect(html).toContain("2 journal rows could not be read: today&#x27;s count and loss may be short; check Webull.");
+    expect(html).toMatch(/data-rail-unread[^>]*text-warn/);
+    expect(html).not.toContain("data-rail-room");
+    expect(unreadLine(0)).toBeNull();
+    expect(withUnread(check, 0)).toBe(check);
+  });
+
+  it("the hero and the manage card withhold the room as for a journal that is not current", () => {
+    const facts = dayFacts(withUnread(check, 1), n.toISOString(), n);
+    expect(facts.current).toBe(false);
+    expect(journalLive(facts, n.getTime())).toBe(false);
+    expect(roomAfterStop({ current: journalLive(facts, n.getTime()), net: facts.net }, 5000).kind).toBe("withheld");
+    expect(railDay(withUnread(check, 1)).room).toBeNull(); // the hero's room is the rail's
   });
 });

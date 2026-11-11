@@ -149,6 +149,22 @@ export interface RailDay {
   open: string | null;
   /** "A stop now leaves $50 of $100 and 4 trades" (what-if's dayRoom), or null when it cannot be said. */
   room: string | null;
+  /** "2 journal rows could not be read: …" (unreadLine), or null when every row was read. */
+  unread?: string | null;
+}
+
+/** The rail's warning when rows of the journal could not be read (readableJournal's `skipped`); null with none. */
+export function unreadLine(skipped: number): string | null {
+  if (!(skipped > 0)) return null;
+  return `${skipped} journal row${skipped === 1 ? "" : "s"} could not be read: today's count and loss may be short; check Webull.`;
+}
+
+/**
+ * The day check with rows of the journal left out: it cannot be judged, exactly as a journal that is not current, so
+ * the room and the trades left (rail, hero, manage card) are withheld wherever they show.
+ */
+export function withUnread<C extends { current: boolean }>(c: C, skipped: number): C {
+  return skipped > 0 ? { ...c, current: false } : c;
 }
 
 const DAY_WORD: Record<DayCheck["status"], { word: string; tone: Tone }> = {

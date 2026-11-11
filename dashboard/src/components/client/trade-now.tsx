@@ -11,6 +11,7 @@ import {
   Eye,
   GitBranch,
   FlaskConical,
+  Hand,
   Hourglass,
   type LucideIcon,
   OctagonX,
@@ -35,7 +36,9 @@ import {
   boardNotices,
   boardRows,
   DONE_ROW_VIEW,
-  doneMasked,
+  type DoneMask,
+  doneMask,
+  IN_TRADE_ROW_VIEW,
   type NoticeBook,
   noticeKey,
   noticeTitle,
@@ -318,7 +321,7 @@ function ValueGrid({ grid }: { grid: NonNullable<RowView["grid"]> }) {
   );
 }
 
-function Row({ row, mode, paused, onOpen, extra, masked = false }: { row: BoardRow; mode: BoardMode; paused: boolean; onOpen: (s: string) => void; extra?: React.ReactNode; masked?: boolean }) {
+function Row({ row, mode, paused, onOpen, extra, mask = null }: { row: BoardRow; mode: BoardMode; paused: boolean; onOpen: (s: string) => void; extra?: React.ReactNode; mask?: DoneMask }) {
   const s = row.state;
   // 14 px on a phone: the row's price is something he acts on.
   const base = "hover:bg-muted/60 w-full rounded px-2 py-1.5 text-left text-[0.8125rem] max-sm:text-sm";
@@ -337,14 +340,15 @@ function Row({ row, mode, paused, onOpen, extra, masked = false }: { row: BoardR
       </li>
     );
   }
-  // Today marked done: the entry prompt gives way to a neutral chip; the row's own manage form (extra) stays.
-  if (masked && !paused) {
+  // Today marked done: the entry prompt gives way to a neutral chip ("done", or "in a trade" for a managed name, whose
+  // card below keeps everything); the row's own manage form (extra) stays. No entry sentence, no Enter figures.
+  if (mask && !paused) {
     return (
-      <li data-board-row={row.symbol} data-board-state="done">
+      <li data-board-row={row.symbol} data-board-state={mask}>
         <button type="button" onClick={() => onOpen(row.symbol)} className={cn(base, "text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1")}>
           <span className="w-12 shrink-0 font-mono font-semibold">{row.symbol}</span>
-          <StatusBadge tone="neutral" icon={CircleCheck} className="font-sans text-[0.625rem] max-sm:text-xs">
-            {DONE_ROW_VIEW.badge.word}
+          <StatusBadge tone="neutral" icon={mask === "in_trade" ? Hand : CircleCheck} className="font-sans text-[0.625rem] max-sm:text-xs">
+            {(mask === "in_trade" ? IN_TRADE_ROW_VIEW : DONE_ROW_VIEW).badge.word}
           </StatusBadge>
           <span className="ml-auto shrink-0 font-mono sm:ml-0">{px(row.price)}</span>
           <span className="sr-only">. {label}</span>
@@ -463,6 +467,7 @@ export function TradeNowBoard({
   rowExtra,
   after,
   doneFor,
+  maskFor,
 }: {
   mode: BoardMode;
   rows: BoardRow[];
@@ -479,6 +484,8 @@ export function TradeNowBoard({
   after?: React.ReactNode;
   /** True for a row whose entry prompt is hidden because today is marked done (the board's doneFor). */
   doneFor?: (symbol: string) => boolean;
+  /** What today's "done" makes of a row (the board's maskFor); without it, doneFor alone. */
+  maskFor?: (symbol: string) => DoneMask;
 }) {
   const showRows = mode.kind !== "old" && mode.kind !== "off";
   // Live: only what is worth acting on, plus a row that holds an open form (it stays as it was opened).
@@ -534,7 +541,7 @@ export function TradeNowBoard({
       {showRows && listed.length ? (
         <ul className="grid gap-1" aria-label="Focus names worth acting on, most urgent first">
           {listed.map(({ r, extra }) => (
-            <Row key={r.symbol} row={r} mode={mode} paused={paused} onOpen={onOpen} extra={extra} masked={doneFor?.(r.symbol) ?? false} />
+            <Row key={r.symbol} row={r} mode={mode} paused={paused} onOpen={onOpen} extra={extra} mask={maskFor ? maskFor(r.symbol) : doneFor?.(r.symbol) ? "done" : null} />
           ))}
         </ul>
       ) : null}
@@ -709,6 +716,8 @@ export interface Board {
   spoken: string;
   /** True for a name whose entry prompt is hidden: today is marked done and the name is not in a managed trade. */
   doneFor: (symbol: string) => boolean;
+  /** What today's "done" makes of a name: "done", "in_trade" (a managed trade), or null (doneMask). */
+  maskFor?: (symbol: string) => DoneMask;
 }
 
 /** Exported for the render tests only; the page reads it through useBoard. */
@@ -720,13 +729,16 @@ export function useBoard(): Board | null {
 }
 
 /** One name's live row on the board, or null (no board, not live, or the name is not on it). */
-export function useBoardRow(symbol: string): { row: BoardRow; view: RowView | null; paused: boolean; done?: boolean } | null {
+export function useBoardRow(symbol: string): { row: BoardRow; view: RowView | null; paused: boolean; done?: boolean; mask?: DoneMask } | null {
   const b = useBoard();
   const row = b?.rows.find((r) => r.symbol === symbol);
   if (!b || !row) return null;
-  // Today marked done: the name's entry prompt reads as the neutral done view everywhere it is drawn.
-  const done = !b.paused && b.doneFor(symbol);
-  return { row, view: row.state ? (done ? DONE_ROW_VIEW : rowView(row.state)) : null, paused: b.paused, done };
+  // Today marked done: the name's entry prompt reads as the neutral done view everywhere it is drawn, and a name in a
+  // managed trade as the neutral "In a trade" one (its manage card is drawn apart and keeps everything).
+  const mask: DoneMask = b.paused ? null : (b.maskFor?.(symbol) ?? (b.doneFor(symbol) ? "done" : null));
+  const done = mask === "done";
+  const view = row.state ? (mask === "done" ? DONE_ROW_VIEW : mask === "in_trade" ? IN_TRADE_ROW_VIEW : rowView(row.state)) : null;
+  return { row, view, paused: b.paused, done, mask };
 }
 
 /**
@@ -736,17 +748,23 @@ export function useBoardRow(symbol: string): { row: BoardRow; view: RowView | nu
  * sits) would put the wrong numbers in front of the owner. The lit alternative chip and the ladder's marker are its cue.
  */
 export function boardSide(r: ReturnType<typeof useBoardRow>): "call" | "put" | null {
-  if (!r || r.paused || r.done || !r.row.state) return null;
+  if (!r || r.paused || r.done || r.mask || !r.row.state) return null;
   const s = r.row.state;
   return s.state === "enter_zone" || s.state === "get_ready" ? (s.side ?? null) : null;
 }
 
 /** The alternative trigger the board shows live for a name, if any (never while prices are paused). */
 export function boardAlt(r: ReturnType<typeof useBoardRow>): { kind: NonNullable<RowView["badge"]["alt"]>; side: "call" | "put" } | null {
-  if (!r || r.paused || r.done || !r.row.state || r.row.state.state === "paused") return null;
+  if (!r || r.paused || r.done || r.mask || !r.row.state || r.row.state.state === "paused") return null;
   const b = r.view?.badge;
   return b?.alt && b.side ? { kind: b.alt, side: b.side } : null;
 }
+
+// Fixed empty lists: a default written as `[]` would be a new array on every render, and the manage card keeps its
+// journal work only while its inputs are the same values (journalDayCache).
+const NO_LOTS: readonly Lot[] = [];
+const NO_TRADES: readonly Trade[] = [];
+const NO_ITEMS: NonNullable<Options["focus"]>["items"] = [];
 
 /**
  * Works the board out once for the page, from the focus card's levels, the live quotes and the session's 2-minute
@@ -757,8 +775,8 @@ export function BoardProvider({
   live,
   dayLimitUsed,
   wonToday,
-  openLots = [],
-  closedTrades = [],
+  openLots = NO_LOTS,
+  closedTrades = NO_TRADES,
   journalAsOf = null,
   dayFacts = null,
   evalOn = false,
@@ -770,7 +788,10 @@ export function BoardProvider({
   wonToday: boolean | null;
   /** The journal's open lots as it has them, one per fill (`doc.open`, not merged), for the manage card. */
   openLots?: readonly Lot[];
-  /** The journal's closed trades (`doc.trades`), for the manage card: a note whose trade has closed is retired. */
+  /**
+   * The journal's closed pieces opened on the session's day (manage-stop's dayJournal), for the manage card: a note
+   * whose trade has closed is retired. Never the whole history: the board renders every second.
+   */
   closedTrades?: readonly Trade[];
   /** When the journal was read (`doc.as_of`), for the manage card. */
   journalAsOf?: string | null;
@@ -781,7 +802,7 @@ export function BoardProvider({
   children: React.ReactNode;
 }) {
   const { feed, now: browserNow } = useLive();
-  const items = e.focus?.items ?? [];
+  const items = e.focus?.items ?? NO_ITEMS;
   const symbols = [...items].sort((a, b) => a.rank - b.rank).map((i) => i.symbol).join(",");
   const halfDay = isHalfDay(e);
   const ok = feed.status === "ok";
@@ -922,10 +943,11 @@ export function BoardProvider({
 
   const ranked = [...items].sort((a, b) => a.rank - b.rank);
   const managed = new Set(manage.views.map((m) => m.symbol));
-  const doneFor = (symbol: string) => {
+  const maskFor = (symbol: string): DoneMask => {
     const row = rows.find((r) => r.symbol === symbol);
-    return !!row && doneMasked(done, row, managed);
+    return row ? doneMask(done, row, managed) : null;
   };
+  const doneFor = (symbol: string) => maskFor(symbol) === "done";
   const board: Board = {
     on: live && items.length > 0,
     session: e.session,
@@ -947,6 +969,7 @@ export function BoardProvider({
     log,
     spoken,
     doneFor,
+    maskFor,
   };
   return <BoardContext.Provider value={board}>{children}</BoardContext.Provider>;
 }
@@ -972,6 +995,7 @@ export function TradeNow() {
       rowExtra={b.manage.rowExtra}
       after={b.manage.cards}
       doneFor={b.doneFor}
+      maskFor={b.maskFor}
     />
   );
 }

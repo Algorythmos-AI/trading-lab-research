@@ -15,7 +15,7 @@ import {
   R25_SHARE,
   R50_DOLLARS,
   tradeUnits,
-  WIN_SHARE,
+  SMALL_WIN_UNDER,
   type OwnerPosition,
 } from "@/lib/owner-positions";
 import { PREMIUM_STOP, RISK_PER_TRADE } from "@/lib/trade-rules";
@@ -32,7 +32,7 @@ describe("the fixed numbers", () => {
     expect(OWNER_FEES).toEqual({ openPerContract: 0.55, closePerContract: 0.56, expiredClose: 0 });
     expect(R25_SHARE).toBe(PREMIUM_STOP);
     expect(R50_DOLLARS).toBe(RISK_PER_TRADE);
-    expect(WIN_SHARE).toBe(0.5);
+    expect(SMALL_WIN_UNDER).toBe(0.5);
   });
 });
 

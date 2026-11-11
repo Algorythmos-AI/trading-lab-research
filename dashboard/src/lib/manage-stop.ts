@@ -8,7 +8,7 @@ import type { Lot, Trade } from "./journal";
 import { nyClock } from "./options";
 import { failWords, nickelStop, readPrice, type Size, sizeTicket, usd } from "./ticket";
 import { MAX_PREMIUM, MAX_TRADES_PER_DAY, PREMIUM_STOP, RISK_PER_TRADE } from "./trade-rules";
-import { MAX_CONTRACTS, NOTE_MATCH_MS, type ManualNote, noteId, type OptionFill } from "./trade-manage";
+import { MAX_CONTRACTS, NOTE_MATCH_MS, type ManualNote, noteId, openTrades, type OptionFill, retiredNotes } from "./trade-manage";
 
 // ---- the option fill as typed ---------------------------------------------------------------------------------------
 export { MAX_CONTRACTS, type OptionFill, parseFill } from "./trade-manage";
@@ -105,7 +105,7 @@ export const STOP_OWN_TICK = "Marked placed by you; this page cannot see Webull.
 
 // ---- notes against the journal --------------------------------------------------------------------------------------
 /** One entry in the journal: a buy fill of a long option, as both a closed piece and an open lot may show it. */
-interface Entry {
+export interface Entry {
   key: string;
   symbol: string;
   side: "call" | "put";
@@ -113,17 +113,21 @@ interface Entry {
   day: string;
 }
 
+/** The New York day of an instant, or undefined for an unreadable one. */
+export type DayOf = (iso: string) => string | undefined;
+const nyDayOf: DayOf = (iso) => nyClock(iso)?.day;
+
 /**
  * Today's buy fills of long options in the journal, one per fill: the pieces of a fill sold in parts, and the lot left
  * open from it, share its contract and opening time and are one entry. A lot with no opening time is no entry (the
- * day check does not count it either).
+ * day check does not count it either). A malformed row is skipped.
  */
-function entries(trades: readonly Trade[], lots: readonly Lot[], session: string): Entry[] {
+export function noteEntries(trades: readonly Trade[], lots: readonly Lot[], session: string, dayOf: DayOf = nyDayOf): Entry[] {
   const out = new Map<string, Entry>();
-  for (const x of [...trades, ...lots] as { symbol: string; kind: string; side: string; strike?: number | null; expiry?: string | null; opened_at?: string | null }[]) {
-    if (x.side !== "long" || (x.kind !== "call" && x.kind !== "put") || !x.opened_at) continue;
+  for (const x of [...trades, ...lots] as ({ symbol: string; kind: string; side: string; strike?: number | null; expiry?: string | null; opened_at?: string | null } | null)[]) {
+    if (!x || typeof x !== "object" || x.side !== "long" || (x.kind !== "call" && x.kind !== "put") || typeof x.opened_at !== "string") continue;
     const at = Date.parse(x.opened_at);
-    const day = Number.isFinite(at) ? nyClock(x.opened_at)?.day : undefined;
+    const day = Number.isFinite(at) ? dayOf(x.opened_at) : undefined;
     if (!day || day !== session) continue;
     const key = `${x.symbol}|${x.kind}|${x.strike ?? ""}|${x.expiry ?? ""}|${at}`;
     if (!out.has(key)) out.set(key, { key, symbol: x.symbol, side: x.kind, at, day });
@@ -168,11 +172,15 @@ export interface NoteMatch {
  * the noted fill, and the noted one, once it reaches the journal, is then counted there and not as a note.
  */
 export function matchNotes(notes: readonly ManualNote[], trades: readonly Trade[], lots: readonly Lot[], session: string): NoteMatch {
-  const es = entries(trades, lots, session);
+  return matchEntries(notes, noteEntries(trades, lots, session), session);
+}
+
+/** matchNotes on journal entries already worked out (noteEntries). */
+export function matchEntries(notes: readonly ManualNote[], es: readonly Entry[], session: string, dayOf: DayOf = nyDayOf): NoteMatch {
   const taken = new Set<string>();
   const matched = new Map<string, string>();
   const provisional: ManualNote[] = [];
-  const today = notes.filter((n) => Number.isFinite(Date.parse(n.at)) && nyClock(n.at)?.day === session).sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+  const today = notes.filter((n) => Number.isFinite(Date.parse(n.at)) && dayOf(n.at) === session).sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
   for (const n of today) {
     const from = Date.parse(n.at) - NOTE_MATCH_MS;
     const e = es.find((x) => !taken.has(x.key) && x.symbol === n.symbol && x.side === n.side && x.at >= from);
@@ -183,6 +191,54 @@ export function matchNotes(notes: readonly ManualNote[], trades: readonly Trade[
   }
   return { matched, provisional };
 }
+
+/** The last result of `fn`, kept while every argument is the same value (Object.is) as on the call before. */
+function keepLast<A extends unknown[], R>(fn: (...args: A) => R): (...args: A) => R {
+  let last: { args: A; out: R } | null = null;
+  return (...args: A) => {
+    if (last && last.args.length === args.length && last.args.every((a, i) => Object.is(a, args[i]))) return last.out;
+    const out = fn(...args);
+    last = { args, out };
+    return out;
+  };
+}
+
+/**
+ * The journal's side of the manage card, worked out once per change of its inputs and not on every tick of the
+ * board's clock: the day's entries and the notes matched to them, the open trades and the retired notes. Each part
+ * is kept until one of its own inputs is a different value, so a re-render with the same day's trades, lots, notes
+ * and session returns the same objects and reads no row of the journal. One per board (the hook keeps it in state).
+ */
+export function journalDayCache(dayOf: DayOf = nyDayOf) {
+  const entries = keepLast((trades: readonly Trade[], lots: readonly Lot[], session: string) => noteEntries(trades, lots, session, dayOf));
+  const match = keepLast((notes: readonly ManualNote[], es: readonly Entry[], session: string) => matchEntries(notes, es, session, dayOf));
+  return {
+    match: (notes: readonly ManualNote[], trades: readonly Trade[], lots: readonly Lot[], session: string): NoteMatch => match(notes, entries(trades, lots, session), session),
+    openTrades: keepLast(openTrades),
+    retired: keepLast(retiredNotes),
+  };
+}
+
+/**
+ * What the Options page's browser needs from the journal, worked out on the server: the closed pieces opened on the
+ * session's New York day (a note is matched only to a fill of its own day, and a note's own trade opens within minutes
+ * of it), and every open lot (an open position counts whatever day it was opened). Rows that cannot be read are left
+ * out. The whole history stays on the server: the board would otherwise scan it on every tick.
+ */
+export function dayJournal(trades: readonly unknown[], lots: readonly unknown[] | null | undefined, session: string): { closed: Trade[]; lots: Lot[] } {
+  const closed = trades.filter((t): t is Trade => {
+    if (!isRow(t)) return false;
+    const { opened_at, closed_at } = t as Partial<Trade>;
+    return typeof opened_at === "string" && typeof closed_at === "string" && Number.isFinite(Date.parse(closed_at)) && nyClock(opened_at)?.day === session;
+  });
+  return { closed, lots: (lots ?? []).filter((l): l is Lot => isRow(l)) };
+}
+
+const isRow = (x: unknown) => {
+  if (!x || typeof x !== "object") return false;
+  const r = x as Partial<Trade>;
+  return typeof r.symbol === "string" && typeof r.kind === "string" && typeof r.side === "string";
+};
 
 export interface TradeCount {
   /** Journal entries and this browser's notes not yet in it. */

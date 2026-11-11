@@ -6,6 +6,7 @@ import { MoneyChart } from "@/components/charts/money-chart";
 import { MonthBars } from "@/components/charts/month-bars";
 import { PnlCurve } from "@/components/charts/pnl-curve";
 import { JournalTable, type JournalRow } from "@/components/client/journal-table";
+import { packRow, type Piece, pieceText, whenText } from "@/lib/journal-list";
 import { Empty } from "@/components/empty";
 import { Panel } from "@/components/panel";
 import { StatTile, StatTiles } from "@/components/stat-tile";
@@ -42,8 +43,9 @@ import {
   type Summary,
   type Trade,
 } from "@/lib/journal";
-import { exitStats, MEAN_MIN_POSITIONS, MEAN_MIN_SESSIONS, meanR25, OWNER_FEES, R25_SHARE, WIN_SHARE, netPieces, tradeUnits, type OwnerPosition, type TradeUnit } from "@/lib/owner-positions";
+import { exitStats, MEAN_MIN_POSITIONS, MEAN_MIN_SESSIONS, meanR25, OWNER_FEES, R25_SHARE, SMALL_WIN_UNDER, netPieces, tradeUnits, type OwnerPosition, type TradeUnit } from "@/lib/owner-positions";
 import type { JournalResult } from "@/lib/snapshot";
+import { RAN_TO_MARK } from "@/lib/trade-rules";
 import { cn } from "@/lib/utils";
 
 const usd = (v: number | null | undefined, digits = 0) => {
@@ -133,19 +135,34 @@ export interface FeeBasis {
   total: number;
 }
 
-const feeRate = `$${OWNER_FEES.openPerContract.toFixed(2)} in, $${OWNER_FEES.closePerContract.toFixed(2)} out per contract`;
+const feeRate = `$${OWNER_FEES.openPerContract.toFixed(2)} in, $${OWNER_FEES.closePerContract.toFixed(2)} out a contract`;
 
-/** The line under the headline: what "after fees" means, and what a trade is. */
+/**
+ * The fees taken off are an estimate: today's Webull rates, applied to every piece back to 2023. What earlier years
+ * were charged has not been established, so every label that rests on the deduction says "est.", and only a journal
+ * whose results already carry the broker's fees (`fees_included`) says plain "after fees" or nothing.
+ */
+export const EST = "after est. fees";
+/**
+ * A tile's label: "Net result, after fees" (or the plain label when the broker's results already carry the fees). The
+ * label keeps its old length so it never truncates in the four-column grid; the estimate is said in the tile's hint
+ * (feeHint), in the same tile.
+ */
+export const feeLabel = (label: string, included: boolean) => (included ? label : `${label}, after fees`);
+/** A tile's hint, led by "After est. fees" when the fees taken off are the estimate; the hint alone otherwise. */
+export const feeHint = (hint: string | undefined, included: boolean) => (included ? hint : hint ? `After est. fees · ${hint}` : "After est. fees");
+
+/** The line under the headline: what the fees taken off are, and what a trade is. */
 export function feeNote(fees: FeeBasis): string {
   const what =
     "A trade is a position: an option bought and sold in several fills counts once, and buying it again after selling it all is a new trade. Trades are counted on the day they finished; dollars on the day each part was sold.";
   if (fees.included) return `Webull's results already carry fees, so none are taken off. ${what}`;
-  return `After fees (${feeRate}) on options, ${usd(-fees.total)} on the trades in view; shares are before fees. ${what}`;
+  return `After estimated fees on options, ${usd(-fees.total)} on the trades in view: today's Webull rates (${feeRate}) are applied to every year, and older years may have differed. Shares are before fees. ${what}`;
 }
 
-/** The fee words a panel's intro carries, in step with `feeNote`: after fees on options, unless Webull's results already carry them. */
+/** The fee words a panel's intro carries, in step with `feeNote`: estimated fees off options, unless Webull's results already carry them. */
 export function feeWords(included: boolean): string {
-  return included ? "Webull's results already carry its fees." : "After fees on options; shares are before fees.";
+  return included ? "Webull's results already carry its fees." : "After estimated fees on options (today's rates for every year); shares are before fees.";
 }
 
 /** What a trade is, for the panels that count trades rather than add up dollars. */
@@ -157,11 +174,11 @@ export function JournalTiles({ s, gross, fees }: { s: Summary; gross: Summary; f
     <div className="grid gap-2">
       <StatTiles className="lg:grid-cols-4">
         <StatTile
-          label={fees.included ? "Net result" : "Net result, after fees"}
+          label={feeLabel("Net result", fees.included)}
           icon={Wallet}
           tone={toneOf(s.net)}
           value={usd(s.net)}
-          hint={`${s.trades.toLocaleString("en-US")} closed trades${fees.included ? "" : ` · before fees ${usd(gross.net)}`}`}
+          hint={feeHint(`${s.trades.toLocaleString("en-US")} closed trades${fees.included ? "" : ` · before fees ${usd(gross.net)}`}`, fees.included)}
         />
         <StatTile
           label="Won"
@@ -178,13 +195,13 @@ export function JournalTiles({ s, gross, fees }: { s: Summary; gross: Summary; f
           hint={`Dollars won for each dollar lost. Above 1 makes money.${gross.profitFactor === null || fees.included ? "" : ` Before fees ${gross.profitFactor.toFixed(2)}.`}`}
         />
         <StatTile label="Per trade" icon={Layers} tone={toneOf(s.expectancy)} value={usd(s.expectancy, 2)} hint={`The average result of one trade${fees.included ? "" : ` · before fees ${usd(gross.expectancy, 2)}`}`} />
-        <StatTile label={fees.included ? "Average win" : "Average win, after fees"} icon={TrendingUp} tone="good" value={usd(s.avgWin, 2)} hint={s.best ? `Best: ${usd(s.best.pnl)} · ${contractLabel(s.best)}` : undefined} />
+        <StatTile label={feeLabel("Average win", fees.included)} icon={TrendingUp} tone="good" value={usd(s.avgWin, 2)} hint={feeHint(s.best ? `Best: ${usd(s.best.pnl)} · ${contractLabel(s.best)}` : undefined, fees.included)} />
         <StatTile
-          label={fees.included ? "Average loss" : "Average loss, after fees"}
+          label={feeLabel("Average loss", fees.included)}
           icon={TrendingDown}
           tone="bad"
           value={usd(s.avgLoss, 2)}
-          hint={s.payoff === null ? undefined : `A win is ${s.payoff.toFixed(2)}× a loss · worst ${usd(s.worst?.pnl)}`}
+          hint={feeHint(s.payoff === null ? undefined : `A win is ${s.payoff.toFixed(2)}× a loss · worst ${usd(s.worst?.pnl)}`, fees.included)}
         />
         <StatTile label="Deepest fall" icon={ChartLine} tone={s.maxDrawdown < 0 ? "bad" : "neutral"} value={usd(s.maxDrawdown)} hint={`From a high, by day · ${s.lossStreak} losses in a row at most`} />
         <StatTile
@@ -205,15 +222,17 @@ export function JournalTiles({ s, gross, fees }: { s: Summary; gross: Summary; f
 const r = (v: number | null | undefined) => (v === null || v === undefined || !Number.isFinite(v) ? "—" : `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(2)}R`);
 const share = (part: number, of: number) => (of >= MIN_SAMPLE ? ` (${Math.round((part / of) * 100)}% of ${of.toLocaleString("en-US")})` : ` of ${of.toLocaleString("en-US")}`);
 const stopPct = Math.round(R25_SHARE * 100);
-const winPct = Math.round(WIN_SHARE * 100);
+const smallWinPct = Math.round(SMALL_WIN_UNDER * 100);
 
 /**
  * How big the losses are against the wins, over every position in view together: the losers sold past the −25% stop
  * and what that cost beyond it, the winners sold before twice that risk, and the average loser and winner in R25.
  * Never split by any label. A figure needs its own n of at least MIN_SAMPLE to be averaged or shared out.
  */
-export function LossSizePanel({ positions }: { positions: OwnerPosition[] }) {
+export function LossSizePanel({ positions, feesIncluded }: { positions: OwnerPosition[]; feesIncluded?: boolean }) {
   const x = exitStats(positions, MIN_SAMPLE);
+  // The R25 figures rest on the fees taken off: an estimate unless the broker's results carry them.
+  const after = (feesIncluded ?? (positions.length > 0 && positions.every((p) => p.flags.feesIncluded))) ? "after fees" : EST;
   const m = meanR25(positions);
   const n = (v: number) => v.toLocaleString("en-US");
   // The two averages together give back the overall mean, so they wait for the same sample as the mean does.
@@ -223,7 +242,7 @@ export function LossSizePanel({ positions }: { positions: OwnerPosition[] }) {
       id="loss-size"
       title="Loss size"
       icon={Ruler}
-      means={`How big your losses ran against your wins, over the option trades in view. R25 is a result in units of a quarter of the premium: −1R is the −${stopPct}% stop, after fees.`}
+      means={`How big your losses ran against your wins, over the option trades in view. R25 is a result in units of a quarter of the premium: −1R is the −${stopPct}% stop, ${after}.`}
     >
       {x.n === 0 ? (
         <Empty title="No option trades to measure in this view">
@@ -256,11 +275,11 @@ export function LossSizePanel({ positions }: { positions: OwnerPosition[] }) {
               hint={`Over ${n(x.losers)} losers: what each lost past ${stopPct}% of its cost, added up. A replay of the stop, not a forecast.`}
             />
             <StatTile
-              label={`Winners closed under +${winPct}% on premium`}
+              label={`Winners closed under +${smallWinPct}% on premium`}
               icon={TrendingUp}
               tone="neutral"
               value={n(x.smallWins)}
-              hint={`${n(x.smallWins)}${share(x.smallWins, x.winners)} winners: the option gained less than half its cost when sold`}
+              hint={`${n(x.smallWins)}${share(x.smallWins, x.winners)} winners: the whole trade sold up less than +${smallWinPct}% on its premium (not the rules' +${Math.round(RAN_TO_MARK * 100)}% mark)`}
             />
             <StatTile
               label="Average loser and winner"
@@ -269,12 +288,12 @@ export function LossSizePanel({ positions }: { positions: OwnerPosition[] }) {
               value={pairShown ? `${r(x.avgLoserR25)} / ${r(x.avgWinnerR25)}` : "—"}
               hint={
                 pairShown
-                  ? `R25 after fees, losers (n = ${n(x.losers)}) against winners (n = ${n(x.winners)})`
+                  ? `R25 ${after}, losers (n = ${n(x.losers)}) against winners (n = ${n(x.winners)})`
                   : `Losers n = ${n(x.losers)}, winners n = ${n(x.winners)}: too few to average (it needs ${MEAN_MIN_POSITIONS} trades over ${MEAN_MIN_SESSIONS} sessions, and ${MIN_SAMPLE} of each)`
               }
             />
           </StatTiles>
-          <p className="text-sm" role="status">
+          <p className="text-sm">
             Your average trade:{" "}
             {m.mean === null ? (
               <span className="text-muted-foreground">
@@ -282,7 +301,7 @@ export function LossSizePanel({ positions }: { positions: OwnerPosition[] }) {
               </span>
             ) : (
               <span>
-                <span className={cn("font-mono font-semibold", m.mean > 0 ? "text-good" : m.mean < 0 ? "text-bad" : "")}>{r(m.mean)}</span> after fees, n = {n(m.n)} over {n(m.sessions)} sessions.
+                <span className={cn("font-mono font-semibold", m.mean > 0 ? "text-good" : m.mean < 0 ? "text-bad" : "")}>{r(m.mean)}</span> {after}, n = {n(m.n)} over {n(m.sessions)} sessions.
               </span>
             )}
           </p>
@@ -366,11 +385,11 @@ export function TodayPanel({ view, asOf, now, market, feesIncluded }: { view: Se
         <SyncLine asOf={asOf} market={market} ago={ago} />
         <StatTiles className="lg:grid-cols-4">
           <StatTile
-            label={included ? "Day result" : "Day result, after fees"}
+            label={feeLabel("Day result", included)}
             icon={Wallet}
             tone={toneOf(s.trades ? s.net : null)}
             value={s.trades ? usd(s.net) : "—"}
-            hint={s.trades ? (included ? "Closed trades" : `Closed trades · before fees ${usd(grossNet)}`) : "Closed trades"}
+            hint={feeHint(s.trades ? (included ? "Closed trades" : `Closed trades · before fees ${usd(grossNet)}`) : "Closed trades", included)}
           />
           <StatTile
             label="Closed trades"
@@ -438,7 +457,7 @@ export function TodayPanel({ view, asOf, now, market, feesIncluded }: { view: Se
           </p>
         ) : null}
         <p className="text-muted-foreground text-xs">
-          Times are New York. {included ? "" : `Option results are after fees (${feeRate}); the day's loss limit reads the result before fees. `}The broker is read every two minutes from 9:24 to 16:20 New York on weekdays, and once more after the close.
+          Times are New York. {included ? "" : `Option results are after estimated fees (today's rates, ${feeRate}); the day's loss limit reads the result before fees. `}The broker is read every two minutes from 9:24 to 16:20 New York on weekdays, and once more after the close.
         </p>
       </div>
     </Panel>
@@ -474,7 +493,7 @@ export function MoneyPanel({ m }: { m: MoneyView }) {
             icon={Scale}
             tone={toneOf(m.gain)}
             value={amt(m.gain, true)}
-            hint={m.gainPct === null ? "Needs the full transfer history" : `${m.gainPct >= 0 ? "+" : "−"}${Math.abs(Math.round(m.gainPct * 100))}% of the money put in, after fees`}
+            hint={m.gainPct === null ? "Needs the full transfer history" : `${m.gainPct >= 0 ? "+" : "−"}${Math.abs(Math.round(m.gainPct * 100))}% of the money put in, the broker's own figure`}
           />
         </StatTiles>
         {m.series.length >= 2 ? <MoneyChart points={m.series} symbol={sym} /> : null}
@@ -677,15 +696,11 @@ export function BreakdownPanel({ trades, feesIncluded }: { trades: Trade[]; fees
 
 // ── Trades ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
-const whenFmt = new Intl.DateTimeFormat("en-AU", { timeZone: "America/New_York", day: "numeric", month: "short", year: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-
-const signed2 = (v: number) => usd(v, 2);
-
 /** One row per trade, after fees: a position for options (its pieces under it), the piece itself for shares. */
 export function toRows(units: readonly TradeUnit[]): JournalRow[] {
   return units.map(({ unit: t, pieces, position: p }) => ({
     id: t.id,
-    when: whenFmt.format(new Date(t.closed_at)).replace(",", " ·"),
+    when: whenText(Date.parse(t.closed_at)),
     at: Date.parse(t.closed_at),
     symbol: t.symbol,
     what: contractLabel(t),
@@ -704,10 +719,10 @@ export function toRows(units: readonly TradeUnit[]): JournalRow[] {
     expired: t.close === "expired",
     pieces:
       pieces.length > 1
-        ? pieces.map((x) => ({
-            id: x.id,
-            text: `${x.qty.toLocaleString("en-US")} × ${price(x.entry)} → ${price(x.exit)}, ${x.close === "expired" ? "expired" : `sold ${whenFmt.format(new Date(x.closed_at)).replace(",", " ·")}`}: ${signed2(x.pnl)} before fees`,
-          }))
+        ? pieces.map((x) => {
+            const n: Piece = { qty: x.qty, entry: x.entry, exit: x.exit, closedAt: x.close === "expired" ? null : Date.parse(x.closed_at), pnl: x.pnl };
+            return { id: x.id, text: pieceText(n), n };
+          })
         : [],
   }));
 }
@@ -718,9 +733,10 @@ export function TradesPanel({ units, feesIncluded }: { units: TradeUnit[]; feesI
       id="trades"
       title="Every trade"
       icon={ListOrdered}
-      means={`Each closed trade. An option bought and sold in several fills is one trade; open it to see the pieces the broker's fills were matched into, first in, first out. Buying it again after selling it all is a new trade. ${feesIncluded ? "Results already carry Webull's fees." : `Results are after fees (${feeRate}) on options; shares are before fees.`}`}
+      means={`Each closed trade. An option bought and sold in several fills is one trade; open it to see the pieces the broker's fills were matched into, first in, first out. Buying it again after selling it all is a new trade. ${feesIncluded ? "Results already carry Webull's fees." : `Results are after estimated fees on options (today's rates, ${feeRate}, for every year); shares are before fees.`}`}
     >
-      <JournalTable rows={toRows(units)} />
+      {/* Every row of the view, for the search and the sort, packed short; a trade's pieces are written out when opened. */}
+      <JournalTable rows={toRows(units).map(packRow)} feesIncluded={feesIncluded} />
     </Panel>
   );
 }

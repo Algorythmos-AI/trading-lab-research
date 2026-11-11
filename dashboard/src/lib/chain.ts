@@ -87,9 +87,11 @@ export function parsePrice(raw: string | null): number | null {
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const price = (v: unknown): number | null => (isNum(v) && v >= 0 ? v : null);
 
+const NY_DATE_FMT = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
+
 /** The date in New York at `at`, YYYY-MM-DD. */
 export function nyDate(at: Date): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(at);
+  return NY_DATE_FMT.format(at);
 }
 
 /** `days` calendar days after a YYYY-MM-DD date. */

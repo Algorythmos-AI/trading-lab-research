@@ -352,10 +352,29 @@ describe("the Trades page counts positions, after fees", () => {
     const s = summarize(units.map((u) => u.unit));
     const g = summarize(units.map((u) => (u.position ? positionTrade(u.position, "gross") : u.unit)));
     const html = renderToStaticMarkup(createElement(JournalTiles, { s, gross: g, fees: { included: false, total: 12.34 } }));
-    expect(html).toContain("after fees");
+    // The fees taken off are today's rates applied to every year: every label resting on them says it is an estimate.
+    // The labels keep their length (they must not truncate in the four-column grid); each tile's hint says estimate.
+    expect(html).toContain(">Net result, after fees<");
+    expect(html).toContain(">Average win, after fees<");
+    expect(html).toContain(">Average loss, after fees<");
+    expect(html.match(/After est\. fees · /g)?.length).toBe(3);
     expect(html).toContain("before fees");
-    expect(html).toContain("$0.55 in, $0.56 out per contract");
+    expect(html).toContain("$0.55 in, $0.56 out a contract) are applied to every year, and older years may have differed");
+    expect(feeNote({ included: false, total: 1 })).not.toContain("by a cent");
     expect(feeNote({ included: true, total: 0 })).toMatch(/already carry fees/);
+  });
+
+  it("says nothing of an estimate when the broker's results already carry the fees", () => {
+    const s = summarize(units.map((u) => u.unit));
+    const html = renderToStaticMarkup(createElement(JournalTiles, { s, gross: s, fees: { included: true, total: 0 } }));
+    expect(html).toContain(">Net result<");
+    expect(html).not.toMatch(/est\.|estimate/i);
+    const loss = renderToStaticMarkup(createElement(LossSizePanel, { positions, feesIncluded: true }));
+    expect(loss).not.toMatch(/est\.|estimate/i);
+    const now = new Date("2026-09-16T20:30:00Z");
+    const view = sessionView({ ...doc, trades: doc.trades.filter((t) => t.opened_at.startsWith("2026-09-16")), open: [] }, now)!;
+    const day = renderToStaticMarkup(createElement(TodayPanel, { view, asOf: "2026-09-16T20:25:00Z", now, market: "after", feesIncluded: true }));
+    expect(day).not.toMatch(/est\.|estimated/i);
   });
 
   it("counts today's closed trades as the day's rules do, after fees, with the pieces one click away", () => {
@@ -367,7 +386,9 @@ describe("the Trades page counts positions, after fees", () => {
     expect(used).toBe(4);
     const html = renderToStaticMarkup(createElement(TodayPanel, { view, asOf: "2026-09-16T20:25:00Z", now, market: "after", feesIncluded: false }));
     expect(html).toMatch(new RegExp(`Closed trades</span></p><p[^>]*>${used}</p>`));
-    expect(html).toContain("Day result, after fees");
+    expect(html).toContain(">Day result, after fees<");
+    expect(html).toContain("After est. fees · Closed trades");
+    expect(html).toContain("Option results are after estimated fees");
     expect(html).toContain("before fees −\u2060$75"); // the seven pieces' results, as the broker reports them
     expect(html).toContain("2 pieces");
   });
@@ -378,7 +399,9 @@ describe("the Trades page counts positions, after fees", () => {
     expect(few).toMatch(/Losers n = \d+, winners n = \d+: too few to average/);
     expect(few).not.toMatch(/target 1|would have made/i);
     const all = renderToStaticMarkup(createElement(LossSizePanel, { positions }));
-    expect(all).toMatch(/after fees, n = \d+ over \d+ sessions/);
+    expect(all).toMatch(/after est\. fees, n = \d+ over \d+ sessions/);
+    // The panel's line is plain text, not a live region: it never changes while the page is open.
+    expect(all).not.toContain('role="status"');
     expect(renderToStaticMarkup(createElement(LossSizePanel, { positions: [] }))).toContain("No option trades to measure");
   });
 
