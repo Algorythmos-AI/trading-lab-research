@@ -60,7 +60,7 @@ class Check:
 # module can emit inside one of them.
 FAMILIES = ("data.reachable", "data.snapshot",
             "options.present", "options.session", "options.built_from", "options.tape", "options.close",
-            "options.levels",
+            "options.levels", "options.listing",
             "focus.present", "focus.premarket", "focus.tradeable", "focus.earnings",
             "radar.present", "radar.date", "radar.fresh", "radar.close", "radar.premarket")
 SLOTS = ("pre-open", "after-close")
@@ -190,14 +190,18 @@ def premarket_refresh(pre: Any, target: str) -> tuple[bool, str]:
 def assess(slot: str, now: dt.datetime, radar: Mapping[str, Any] | None, options: Mapping[str, Any] | None,
            daily: Mapping[str, Sequence[Mapping[str, Any]]], expiries: Mapping[str, Sequence[str]],
            live: Mapping[str, float], earnings: Sequence[Mapping[str, Any]],
-           unreachable: Sequence[str] = ()) -> list[Check]:
+           unreachable: Sequence[str] = (), unlisted: Mapping[str, str] | None = None) -> list[Check]:
     """Every check for one run. Pure: the editions and the market data come in, the checks go out.
 
     `daily`: each symbol's consolidated-tape daily bars, split-adjusted, up to the last finished session.
     `expiries`: each symbol's listed expiry dates from `target` to WITHIN_DAYS later. `live`: the latest price per
     symbol (pre-open). `unreachable`: the market-data sources (BARS, LISTINGS, SNAPSHOT) that gave no usable answer.
     A source that answered and says something (an empty tape, no contract) is judged by the checks themselves; one
-    that did not answer fails `data.reachable` (BARS, LISTINGS) and the checks that depend on it warn "not verified"."""
+    that did not answer fails `data.reachable` (BARS, LISTINGS) and the checks that depend on it warn "not verified".
+    `unlisted`: names whose own option listing was unusable while the others answered (symbol -> a SAFE reason).
+    Each gets an `options.listing.<SYM>` warning ("not verified"), never a page; whether the clone may trade it is
+    unknown, so its close and levels are judged as if it may (a mismatch on it still fails), and it does not count
+    as tradeable in focus.tradeable."""
     out: list[Check] = []
     target = target_session(slot, now)
     prev = lv.prev_session(target)
@@ -211,7 +215,14 @@ def assess(slot: str, now: dt.datetime, radar: Mapping[str, Any] | None, options
         else "daily bars and option listings fetched")
     if slot == "pre-open" and SNAPSHOT in unreachable:
         add("data.snapshot", False, "pre-market prices unreachable: the radar's overnight move is not checked", "warn")
+    unlisted = dict(unlisted or {})
+    for sym, why in sorted(unlisted.items()):
+        add(f"options.listing.{sym}", False, f"not verified: this name's option listing was not usable ({why})", "warn")
+    # The names the clone may trade: as listed, and as if every unlisted name had a contract (the union of both, so
+    # an unknown listing never turns a mismatch on a name the clone may trade into a mere warning).
     tradeable_names = eligible(options, target, expiries)
+    if unlisted:
+        tradeable_names |= eligible(options, target, {**expiries, **{s: [target] for s in unlisted}})
 
     def sev(sym: str) -> str:
         return "fail" if sym in tradeable_names else "warn"
@@ -265,13 +276,14 @@ def assess(slot: str, now: dt.datetime, radar: Mapping[str, Any] | None, options
             fresh, why = premarket_refresh(focus.get("premarket"), target)
             add("focus.premarket", fresh, why, "warn")          # a warning by design: see premarket_refresh
         can = [str(i["symbol"]) for i in items if tradeable(str(i["symbol"]), target, expiries)]
+        unknown = sum(1 for i in items if str(i["symbol"]) in unlisted)
         what = f"expiring {target}" if EXPIRY == "same_day" else f"expiring within {WITHIN_DAYS} days of {target}"
         if no_listings:
             add("focus.tradeable", False, "not verified: the option listings were unreachable", "warn")
         else:
             add("focus.tradeable", len(can) >= FOCUS_TRADEABLE_MIN,
                 f"{len(can)} of {len(items)} focus names have a contract {what}: {', '.join(can) or 'none'}"
-                " (the clone tops up with SPY and QQQ)", "warn")
+                " (the clone tops up with SPY and QQQ)" + (f"; {unknown} not verified" if unknown else ""), "warn")
         for i in items:
             sym = str(i["symbol"])
             hit = [r for r in earnings if str(r.get("symbol", "")).upper() == sym and (
@@ -317,33 +329,74 @@ def assess(slot: str, now: dt.datetime, radar: Mapping[str, Any] | None, options
 
 
 # ---------------------------------------------------------------- the run
-RETRY_WAIT_S = 3.0        # one short retry per call: a blip does not page, and a dead feed costs one wait
 Get = Callable[..., Any]  # requests.get's shape (tests pass a fake)
 Sleep = Callable[[float], None]
+Clock = Callable[[], float]
+
+# The run's time, bounded from these constants (the job's deadline is 10 minutes, src/wt/ops/schedule.py).
+CONNECT_S, READ_S = 5.0, 20.0          # each Alpaca call's connect and read timeouts
+EDITION_CALL_S = 5.0 + 15.0            # read_edition's own timeouts (shared with the clone, not changed here)
+RETRY_WAIT_S = 3.0                     # one short retry per call: a blip does not page, and a dead feed costs one wait
+RETRY_AFTER_MAX_S = 10.0               # a 429's Retry-After is honoured up to this
+CALL_WORST_S = 2 * (CONNECT_S + READ_S) + max(RETRY_WAIT_S, RETRY_AFTER_MAX_S)   # one call and its retry
+EDITIONS_WORST_S = 2 * (2 * EDITION_CALL_S + RETRY_WAIT_S)   # two kinds, each read twice
+BAR_PAGES = 3                          # pages of daily bars; 30,000 bars is about 100 names
+RUN_BUDGET_S = 540.0                   # no call or wait starts unless its worst case ends inside this
+TAPE_TRIES, TAPE_WAIT_S = 3, 180.0     # after the close the day's daily bar can lag the check by minutes
+
+
+class OutOfTime(requests.Timeout):
+    """A call not started because its worst case would end past the run's budget: treated like a timeout."""
+
+
+class Budget:
+    """The run's wall-clock budget, from its start. `fits(s)`: whether something taking at most `s` ends inside it."""
+
+    def __init__(self, seconds: float = RUN_BUDGET_S, clock: Clock = time.monotonic) -> None:
+        self.clock, self.end = clock, clock() + seconds
+
+    def fits(self, s: float) -> bool:
+        return self.clock() + s <= self.end
 
 
 def _transient(e: requests.RequestException) -> bool:
-    """Worth one more try: no connection, a timeout, or the server's own trouble (5xx, 429). A 4xx (bad keys, a bad
-    request) or an unreadable body will not mend in seconds."""
+    """Worth one more try: no connection, a timeout, a connection dropped mid-body, or the server's own trouble
+    (5xx, 429). A 4xx (bad keys, a bad request) or an unreadable body will not mend in seconds."""
     if isinstance(e, requests.HTTPError):
         code = e.response.status_code if e.response is not None else 0
         return code >= 500 or code == 429
-    return isinstance(e, requests.ConnectionError | requests.Timeout)
+    return isinstance(e, requests.ConnectionError | requests.Timeout | requests.exceptions.ChunkedEncodingError
+                      | requests.exceptions.ContentDecodingError)
 
 
-def _alpaca_get(url: str, params: dict[str, str], get: Get = requests.get, sleep: Sleep = time.sleep) -> Any:
-    """One Alpaca GET, tried at most twice: a transient failure is retried once after RETRY_WAIT_S, anything else
-    (and a second failure) raises."""
+def _retry_wait(e: requests.RequestException) -> float:
+    """RETRY_WAIT_S, or a 429's Retry-After (whole seconds) capped at RETRY_AFTER_MAX_S."""
+    resp = e.response if isinstance(e, requests.HTTPError) else None
+    if resp is not None and resp.status_code == 429:
+        raw = str((getattr(resp, "headers", None) or {}).get("Retry-After") or "").strip()
+        if raw.isdigit():
+            return min(float(raw), RETRY_AFTER_MAX_S)
+    return RETRY_WAIT_S
+
+
+def _alpaca_get(url: str, params: dict[str, str], get: Get = requests.get, sleep: Sleep = time.sleep,
+                budget: Budget | None = None) -> Any:
+    """One Alpaca GET, tried at most twice: a transient failure is retried once (RETRY_WAIT_S, or a 429's capped
+    Retry-After), anything else and a second failure raise. Not started at all (OutOfTime) when the call and its
+    retry, at worst CALL_WORST_S, would end past the run's budget."""
+    if budget is not None and not budget.fits(CALL_WORST_S):
+        raise OutOfTime("the run's time budget is spent")
     h = {"APCA-API-KEY-ID": os.environ.get("APCA_API_KEY_ID", ""), "APCA-API-SECRET-KEY": os.environ.get("APCA_API_SECRET_KEY", "")}
     try:
-        r = get(url, params=params, headers=h, timeout=(5.0, 20.0), allow_redirects=False)
+        r = get(url, params=params, headers=h, timeout=(CONNECT_S, READ_S), allow_redirects=False)
         r.raise_for_status()
         return r.json()
     except requests.RequestException as e:
         if not _transient(e):
             raise
-    sleep(RETRY_WAIT_S)
-    r = get(url, params=params, headers=h, timeout=(5.0, 20.0), allow_redirects=False)
+        wait = _retry_wait(e)
+    sleep(wait)
+    r = get(url, params=params, headers=h, timeout=(CONNECT_S, READ_S), allow_redirects=False)
     r.raise_for_status()
     return r.json()
 
@@ -353,6 +406,7 @@ class MarketData(NamedTuple):
     expiries: dict[str, list[str]]
     live: dict[str, float]
     unreachable: tuple[str, ...] = ()     # BARS, LISTINGS, SNAPSHOT: the sources that gave no usable answer
+    unlisted: tuple[tuple[str, str], ...] = ()   # (symbol, why): one name's listing unusable, the others fine
 
 
 # A source's answer that is not usable: no connection, an HTTP error, a timeout (requests.RequestException, which
@@ -360,59 +414,102 @@ class MarketData(NamedTuple):
 _UNUSABLE = (requests.RequestException, AttributeError, KeyError, TypeError, ValueError)
 
 
-def market_data(symbols: Sequence[str], target: str, slot: str, get: Get = requests.get,
-                sleep: Sleep = time.sleep) -> MarketData:
-    """The daily bars, option listings and (pre-open) latest prices for `symbols`. A source with no usable answer,
-    after its one retry, is named in `unreachable` and left empty: nothing is judged on half an answer, and it is
-    not asked again for the next symbol, so a dead feed costs one retry, not one per symbol."""
-    unreachable: list[str] = []
+def _why(e: BaseException) -> str:
+    """A SAFE reason for the report: the error's class, and an HTTP status when there is one."""
+    resp = e.response if isinstance(e, requests.HTTPError) else None
+    return f"{e.__class__.__name__} {resp.status_code}" if resp is not None else e.__class__.__name__
+
+
+def fetch_bars(symbols: Sequence[str], target: str, get: Get = requests.get, sleep: Sleep = time.sleep,
+               budget: Budget | None = None) -> dict[str, list[Any]] | None:
+    """The daily bars for `symbols` up to the session before `target`, or None when they gave no usable answer
+    (after the one retry), or did not fit in BAR_PAGES pages."""
     prev = dt.date.fromisoformat(lv.prev_session(target))
     daily: dict[str, list[Any]] = {}
     params = {"symbols": ",".join(symbols), "timeframe": "1Day", "feed": "sip", "adjustment": "split", "limit": "10000",
               "start": (prev - dt.timedelta(days=420)).isoformat(), "end": f"{prev.isoformat()}T23:59:00Z"}
     try:
-        for _ in range(30):
-            j = _alpaca_get(f"{DATA}/v2/stocks/bars", params, get, sleep)
+        for _ in range(BAR_PAGES):
+            j = _alpaca_get(f"{DATA}/v2/stocks/bars", params, get, sleep, budget)
             for s, rows in (j.get("bars") or {}).items():
                 daily.setdefault(s, []).extend(rows)
             if not j.get("next_page_token"):
-                break
+                return daily
             params["page_token"] = j["next_page_token"]
+        raise ValueError(f"more than {BAR_PAGES} pages of daily bars")
     except _UNUSABLE as e:
-        daily = {}
-        unreachable.append(BARS)
-        print(f"market data unavailable ({BARS}): {e.__class__.__name__}", file=sys.stderr)
-    expiries: dict[str, list[str]] = {}
+        print(f"market data unavailable ({BARS}): {_why(e)}", file=sys.stderr)
+        return None
+
+
+def fetch_listings(symbols: Sequence[str], target: str, get: Get = requests.get, sleep: Sleep = time.sleep,
+                   budget: Budget | None = None) -> tuple[dict[str, list[str]] | None, dict[str, str]]:
+    """Each symbol's listed expiries from `target` to WITHIN_DAYS later, and the symbols whose own listing was not
+    usable (symbol -> a SAFE reason). Per symbol:
+      * a usable answer: its expiries (none listed is an answer: []);
+      * a non-transient error of that symbol alone (a 4xx, unreadable JSON, a contract row without a date): [] for
+        it, named in the second map, and the next symbol is asked;
+      * a transient failure that survives its retry (or a budget spent): the host is down. None: the listings are
+        unreachable, and no further symbol is asked.
+    When every symbol failed on its own, the listings are unreachable too (None)."""
     week_end = (dt.date.fromisoformat(target) + dt.timedelta(days=WITHIN_DAYS)).isoformat()
-    try:
-        for s in symbols:
+    expiries: dict[str, list[str]] = {}
+    bad: dict[str, str] = {}
+    for s in symbols:
+        try:
             j = _alpaca_get(f"{PAPER}/v2/options/contracts", {"underlying_symbols": s, "expiration_date_gte": target,
                                                                  "expiration_date_lte": week_end, "limit": "10000"},
-                            get, sleep)
+                            get, sleep, budget)
             expiries[s] = sorted({str(c["expiration_date"]) for c in j.get("option_contracts") or []})
+        except _UNUSABLE as e:
+            if isinstance(e, requests.RequestException) and _transient(e):
+                print(f"market data unavailable ({LISTINGS}): {_why(e)}", file=sys.stderr)
+                return None, {}
+            expiries[s], bad[s] = [], _why(e)
+    if symbols and len(bad) == len(symbols):
+        print(f"market data unavailable ({LISTINGS}): every name failed", file=sys.stderr)
+        return None, {}
+    return expiries, bad
+
+
+def fetch_snapshot(symbols: Sequence[str], get: Get = requests.get, sleep: Sleep = time.sleep,
+                   budget: Budget | None = None) -> dict[str, float] | None:
+    """The latest trade price per symbol, or None when the snapshot gave no usable answer."""
+    try:
+        j = _alpaca_get(f"{DATA}/v2/stocks/snapshots", {"symbols": ",".join(symbols), "feed": "iex"}, get, sleep, budget)
+        live: dict[str, float] = {}
+        for s, snap in j.items():
+            p = _num(((snap or {}).get("latestTrade") or {}).get("p"))
+            if p:
+                live[s] = p
+        return live
     except _UNUSABLE as e:
+        print(f"market data unavailable ({SNAPSHOT}): {_why(e)}", file=sys.stderr)
+        return None
+
+
+def market_data(symbols: Sequence[str], target: str, slot: str, get: Get = requests.get,
+                sleep: Sleep = time.sleep, budget: Budget | None = None) -> MarketData:
+    """The daily bars, option listings and (pre-open) latest prices for `symbols`. A source with no usable answer
+    is named in `unreachable` and left empty: nothing is judged on half an answer. One name's own listing error
+    is not the source's: it is named in `unlisted` and the other names are checked as usual."""
+    unreachable: list[str] = []
+    daily = fetch_bars(symbols, target, get, sleep, budget)
+    if daily is None:
+        daily = {}
+        unreachable.append(BARS)
+    expiries, bad = fetch_listings(symbols, target, get, sleep, budget)
+    if expiries is None:
         expiries = {}
         unreachable.append(LISTINGS)
-        print(f"market data unavailable ({LISTINGS}): {e.__class__.__name__}", file=sys.stderr)
     live: dict[str, float] = {}
     if slot == "pre-open":
-        if BARS in unreachable:                     # the same host: not asked again
+        got = None if BARS in unreachable else fetch_snapshot(symbols, get, sleep, budget)   # same host as the bars
+        if got is None:
             unreachable.append(SNAPSHOT)
         else:
-            try:
-                j = _alpaca_get(f"{DATA}/v2/stocks/snapshots", {"symbols": ",".join(symbols), "feed": "iex"}, get, sleep)
-                for s, snap in j.items():
-                    p = _num(((snap or {}).get("latestTrade") or {}).get("p"))
-                    if p:
-                        live[s] = p
-            except _UNUSABLE as e:
-                live = {}
-                unreachable.append(SNAPSHOT)
-                print(f"market data unavailable ({SNAPSHOT}): {e.__class__.__name__}", file=sys.stderr)
-    return MarketData(daily, expiries, live, tuple(unreachable))
-
-
-TAPE_TRIES, TAPE_WAIT_S = 3, 180.0        # after the close the day's daily bar can lag the check by minutes
+            live = got
+    return MarketData(daily, expiries, live, tuple(unreachable), tuple(sorted(bad.items())))
 
 
 def last_bar_date(bars: Sequence[Mapping[str, Any]]) -> str:
@@ -423,11 +520,13 @@ def last_bar_date(bars: Sequence[Mapping[str, Any]]) -> str:
 
 def wait_for_the_days_bar(symbols: Sequence[str], target: str, md: MarketData, options: Mapping[str, Any] | None,
                           sleep: Sleep = time.sleep,
-                          fetch: Callable[[Sequence[str], str, str], MarketData] = market_data) -> MarketData:
+                          fetch: Callable[[Sequence[str], str], dict[str, list[Any]] | None] = fetch_bars,
+                          budget: Budget | None = None) -> MarketData:
     """After the close the consolidated daily bar of the session just finished can arrive after the check starts.
-    While a name the clone can trade still lacks it, fetch the bars again a few times before judging the tape; the
-    names that never get it are reported with the date their tape ends. Only the daily bars are replaced. A re-fetch
-    with no usable answer stops the wait and marks the bars unreachable: the session's bar could not be verified."""
+    While a name the clone can trade still lacks it, fetch the bars again (only the bars) a few times before judging
+    the tape; the names that never get it are reported with the date their tape ends. A round starts only when its
+    wait and one call fit in the run's budget. A re-fetch with no usable answer stops the wait and marks the bars
+    unreachable: the session's bar could not be verified."""
     if BARS in md.unreachable:
         return md
     prev = lv.prev_session(target)
@@ -435,11 +534,13 @@ def wait_for_the_days_bar(symbols: Sequence[str], target: str, md: MarketData, o
     for _ in range(TAPE_TRIES - 1):
         if all(last_bar_date(md.daily.get(s, [])) >= prev for s in wanted):
             return md
+        if budget is not None and not budget.fits(TAPE_WAIT_S + CALL_WORST_S):
+            return md
         sleep(TAPE_WAIT_S)
-        again = fetch(symbols, target, "after-close")
-        if BARS in again.unreachable:
+        again = fetch(symbols, target)
+        if again is None:
             return md._replace(unreachable=(*md.unreachable, BARS))
-        md = md._replace(daily=again.daily)
+        md = md._replace(daily=again)
     return md
 
 
@@ -455,13 +556,14 @@ def _read_twice(read: Callable[[str], dict[str, Any] | None], kind: str, sleep: 
 
 def run(slot: str, now: dt.datetime | None = None, *, get: Get = requests.get, sleep: Sleep = time.sleep,
         read: Callable[[str], dict[str, Any] | None] = read_edition, alerts: Any = None, out: Path | None = None,
-        earnings_path: Path | None = None) -> int:
+        earnings_path: Path | None = None, clock: Clock = time.monotonic) -> int:
     """One run. Returns 0 whether or not a check failed: a failed check pages through ntfy, and the report says
     which. An exception of the job itself is deliberately not caught: the process exits non-zero and the job runner
     pings healthchecks' /fail and alerts "pipeline-check failed" (docs/runbooks/dead-man-switches.md)."""
     import csv
     from wt.core.config import CONFIG_DIR
     from wt.ops.alerts import Alerts
+    budget = Budget(RUN_BUDGET_S, clock)
     now = now or dt.datetime.now(dt.UTC)
     target = target_session(slot, now)
     radar, options = _read_twice(read, "radar", sleep), _read_twice(read, "options", sleep)
@@ -469,18 +571,19 @@ def run(slot: str, now: dt.datetime | None = None, *, get: Get = requests.get, s
                      | {str(t.get("symbol")) for t in ((radar or {}).get("tickers") or []) if isinstance(t, Mapping)}
                      | {"SPY", "QQQ"})
 
-    def fetch(syms: Sequence[str], tgt: str, sl: str) -> MarketData:
-        return market_data(syms, tgt, sl, get, sleep)
-    md = fetch(symbols, target, slot)
+    def bars(syms: Sequence[str], tgt: str) -> dict[str, list[Any]] | None:
+        return fetch_bars(syms, tgt, get, sleep, budget)
+    md = market_data(symbols, target, slot, get, sleep, budget)
     if slot == "after-close":
-        md = wait_for_the_days_bar(symbols, target, md, options, sleep, fetch)
+        md = wait_for_the_days_bar(symbols, target, md, options, sleep, bars, budget)
     with open(earnings_path or CONFIG_DIR / "events" / "earnings.csv") as fh:
         earnings = list(csv.DictReader(line for line in fh if not line.startswith("#")))
-    checks = assess(slot, now, radar, options, md.daily, md.expiries, md.live, earnings, md.unreachable)
+    checks = assess(slot, now, radar, options, md.daily, md.expiries, md.live, earnings, md.unreachable,
+                    dict(md.unlisted))
     fails = [c for c in checks if not c.ok and c.severity == "fail"]
     warns = [c for c in checks if not c.ok and c.severity == "warn"]
     report = {"slot": slot, "session": target, "checked_at": now.isoformat(), "fails": len(fails), "warns": len(warns),
-              "unreachable": list(md.unreachable), "checks": [asdict(c) for c in checks]}
+              "unreachable": list(md.unreachable), "unlisted": dict(md.unlisted), "checks": [asdict(c) for c in checks]}
     dest = out or OUT
     dest.mkdir(parents=True, exist_ok=True)
     (dest / f"{target}-{slot}.json").write_text(json.dumps(report, indent=1))

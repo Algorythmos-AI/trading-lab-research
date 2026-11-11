@@ -70,7 +70,7 @@ listings:
 
 | Check | Fails when |
 |---|---|
-| `data.reachable` | the daily bars or the option listings gave no usable answer (no connection, HTTP error, timeout, unreadable body), after one retry 3 seconds later; the checks that need them then warn "not verified" |
+| `data.reachable` | the daily bars or the option listings gave no usable answer: no connection, a timeout, a dropped body or a 5xx/429 that is still failing after one retry (3 seconds later, or a 429's Retry-After up to 10 seconds), any other HTTP error or an unreadable body (not retried), or every name's listing failing; the checks that need them then warn "not verified". One name's own listing error is not this: it warns `options.listing.<SYM>` ("not verified") and the other names are checked as usual |
 | `options.session`, `options.built_from` | the edition is not for the coming session, or not built from the last close |
 | `options.close.<SYM>` | the edition's close is more than $0.02 from the tape's |
 | `options.levels.<SYM>` | PDH, PDL, PWH, PWL, PMH, PML, MA20 or MA50 is more than $0.05 from the same level recomputed |
@@ -87,5 +87,11 @@ unreachable, so that move is not checked).
 Each run writes `var/pipeline-check/<session>-<slot>.json`. Any failed check pages once a day per run with counts per
 check family only (for example `options.close: 2 failed`), the slot and the session date: never a symbol, price or
 level, since ntfy is a public topic. The report has the ids and the detail. A failed check exits 0; a crash of the
-job exits non-zero, and the job runner pings `wt-pipeline-check/fail` and alerts "pipeline-check failed".
+job exits non-zero, and the job runner pings `wt-pipeline-check/fail` and alerts "pipeline-check failed". No call or
+wait starts unless it ends within 540 seconds of the start, inside the job's 10-minute deadline; an after-close wait
+round that would not fit is skipped.
+
+Owner note: pages raised before this change and still spooled on the host can carry check ids with symbols, and are
+sent when ntfy next accepts them. To look: `grep -l "Pipeline check" /home/wt/trading/var/alerts/spool/*.json`
+(each file is one message); deleting a file drops that message.
 Read the report: `cat /home/wt/trading/var/pipeline-check/$(date +%F)-pre-open.json`.

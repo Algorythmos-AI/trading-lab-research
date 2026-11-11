@@ -158,12 +158,12 @@ def test_after_the_close_the_check_waits_for_the_days_bar_before_judging_the_tap
     stale = {s: [b for b in rows if str(b.get("t", ""))[:10] < prev] for s, rows in DAILY.items()}
     calls, naps = [], []
 
-    def fetch(symbols, target, slot):
-        calls.append(slot)
-        return pc.MarketData((DAILY if len(calls) >= 2 else stale), EXP, {})
+    def fetch(symbols, target):
+        calls.append(target)
+        return DAILY if len(calls) >= 2 else stale
     first = pc.MarketData(stale, EXP, {})
     got = pc.wait_for_the_days_bar(list(DAILY), TARGET, first, options(), sleep=naps.append, fetch=fetch)
-    assert got.daily is DAILY and calls == ["after-close", "after-close"] and naps == [pc.TAPE_WAIT_S] * 2
+    assert got.daily is DAILY and calls == [TARGET, TARGET] and naps == [pc.TAPE_WAIT_S] * 2
     assert got.expiries is EXP and got.unreachable == ()
     # a tape that is already complete is not fetched again
     calls.clear(); naps.clear()
@@ -173,7 +173,7 @@ def test_after_the_close_the_check_waits_for_the_days_bar_before_judging_the_tap
     # a re-fetch with no usable answer stops the wait: the session's bar is unverified
     calls.clear(); naps.clear()
     got = pc.wait_for_the_days_bar(list(DAILY), TARGET, first, options(), sleep=naps.append,
-                                   fetch=lambda *a: pc.MarketData({}, {}, {}, (pc.BARS,)))
+                                   fetch=lambda *a: None)
     assert got.daily is stale and got.unreachable == (pc.BARS,) and naps == [pc.TAPE_WAIT_S]
 
 
@@ -188,14 +188,16 @@ def test_a_tape_that_ends_early_says_so_in_the_detail():
 
 # ---------------------------------------------------------------- market data that cannot be fetched
 class Resp:
-    def __init__(self, status: int, body: object) -> None:
-        self.status_code, self.body = status, body
+    def __init__(self, status: int, body: object, headers: dict | None = None) -> None:
+        self.status_code, self.body, self.headers = status, body, headers or {}
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
             raise pc.requests.HTTPError(f"{self.status_code}", response=self)
 
     def json(self) -> object:
+        if isinstance(self.body, Exception):
+            raise self.body
         return self.body
 
 
@@ -280,7 +282,7 @@ def test_a_server_error_is_retried_and_a_refusal_is_not(tmp_path):
     get = Get(failures=99, error=401)                             # bad keys do not mend in three seconds
     _, report, alerts, naps = go(tmp_path, get)
     assert report["unreachable"][:2] == [pc.BARS, pc.LISTINGS] and len(alerts.sent) == 1 and naps == []
-    assert len(get.calls) == 2                                    # one call per source, not one per name
+    assert len(get.calls) == 1 + 3                                # bars once; each of the three names once, no retry
 
 
 def test_listings_unreachable_alone_still_fails_and_its_dependents_are_not_verified():
@@ -414,7 +416,7 @@ def test_an_odd_focus_block_does_not_crash_the_check():
 
 
 # ---------------------------------------------------------------- focus.tradeable: one name is a legitimate night
-def test_focus_tradeable_fails_on_none_and_passes_on_one_or_more():
+def test_focus_tradeable_warns_on_none_and_passes_on_one_or_more():
     o = options()                                                  # AMZN (within 7 days) and SPY (same day)
     assert run(options=o)["focus.tradeable"].ok
     o["focus"]["items"] = [{"symbol": "AMZN", "rank": 1}]
@@ -450,3 +452,146 @@ def test_a_crash_exits_the_process_non_zero(tmp_path):
     env = {**os.environ, "PYTHONPATH": str(root / "src"), "WT_STATE": str(tmp_path)}
     r = subprocess.run([sys.executable, "-c", code], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=60)
     assert r.returncode != 0 and "RuntimeError" in r.stderr
+
+
+# ---------------------------------------------------------------- one name's listing is not the whole source
+class OneBadListing(Get):
+    """Every endpoint answers, except the option listing of `bad`, which answers with `resp`."""
+
+    def __init__(self, bad: str, resp: Resp) -> None:
+        super().__init__()
+        self.bad, self.resp = bad, resp
+
+    def __call__(self, url, params, **kw):
+        self.calls.append(url)
+        if url.endswith("/v2/options/contracts") and params["underlying_symbols"] == self.bad:
+            return self.resp
+        return market(url, params)
+
+
+def test_one_names_listing_error_does_not_page_as_unreachable(tmp_path):
+    import json
+    bad_json = json.JSONDecodeError("no", "x", 0)
+    for resp in (Resp(422, {}), Resp(200, {"option_contracts": [{"strike_price": "1"}]}),
+                 Resp(200, pc.requests.JSONDecodeError(bad_json.msg, bad_json.doc, bad_json.pos))):
+        code, report, alerts, naps = go(tmp_path, OneBadListing("QQQ", resp))
+        by = {c["id"]: c for c in report["checks"]}
+        assert by["data.reachable"]["ok"] and report["unreachable"] == [] and alerts.sent == [] and naps == []
+        assert list(report["unlisted"]) == ["QQQ"]
+        assert by["options.listing.QQQ"]["severity"] == "warn" and "not verified" in by["options.listing.QQQ"]["detail"]
+        assert "options.listing.SPY" not in by and "options.listing.AMZN" not in by
+        assert by["focus.tradeable"]["ok"] and by["options.close.SPY"]["ok"] and by["options.levels.AMZN"]["ok"]
+
+
+def test_the_other_names_keep_their_severity_and_an_unlisted_name_may_still_fail():
+    o = options()
+    o["tickers"][1]["levels"][0]["price"] += 0.30                 # AMZN, a name the clone trades
+    o["tickers"][0]["last"]["close"] += 0.10                      # SPY
+    got = run(options=o, expiries={k: v for k, v in EXP.items() if k != "AMZN"} | {"AMZN": []},
+              unlisted={"AMZN": "HTTPError 422"})
+    assert got["options.close.SPY"].severity == "fail"
+    assert got["options.levels.AMZN"].severity == "fail"          # unknown listing: judged as if it may be traded
+    assert got["options.listing.AMZN"].severity == "warn" and "HTTPError 422" in got["options.listing.AMZN"].detail
+    assert got["data.reachable"].ok and "1 not verified" in got["focus.tradeable"].detail
+
+
+def test_every_name_failing_or_a_lasting_blip_makes_the_listings_unreachable():
+    class AllBad(Get):
+        def __call__(self, url, params, **kw):
+            self.calls.append(url)
+            return Resp(422, {}) if "contracts" in url else market(url, params)
+    exp, bad = pc.fetch_listings(["SPY", "QQQ"], TARGET, AllBad(), lambda s: None)
+    assert exp is None and bad == {}
+
+    class Blip(Get):
+        def __call__(self, url, params, **kw):
+            self.calls.append(url)
+            if "contracts" in url and params["underlying_symbols"] == "QQQ":
+                raise pc.requests.ConnectionError("down")
+            return market(url, params)
+    blip, naps = Blip(), []
+    exp, bad = pc.fetch_listings(["QQQ", "SPY"], TARGET, blip, naps.append)
+    assert exp is None and naps == [pc.RETRY_WAIT_S] and len(blip.calls) == 2   # retried once, SPY not asked
+    md = pc.market_data(["QQQ", "SPY"], TARGET, "pre-open", Blip(), lambda s: None)
+    assert md.unreachable == (pc.LISTINGS,) and md.expiries == {} and md.unlisted == ()
+
+
+# ---------------------------------------------------------------- transient errors and Retry-After
+def test_a_connection_dropped_mid_body_is_retried():
+    for err in (pc.requests.exceptions.ChunkedEncodingError("cut"), pc.requests.exceptions.ContentDecodingError("gz")):
+        naps = []
+        assert pc.fetch_bars(["SPY"], TARGET, Get(failures=1, error=err), naps.append) is not None
+        assert naps == [pc.RETRY_WAIT_S]
+
+
+def test_a_429_honours_retry_after_capped():
+    for header, want in (({"Retry-After": "7"}, 7.0), ({"Retry-After": "600"}, pc.RETRY_AFTER_MAX_S),
+                         ({}, pc.RETRY_WAIT_S), ({"Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"}, pc.RETRY_WAIT_S)):
+        class Busy(Get):
+            def __call__(self, url, params, header=header, **kw):
+                self.calls.append(url)
+                return Resp(429, {}, header) if len(self.calls) == 1 else market(url, params)
+        naps = []
+        assert pc.fetch_bars(["SPY"], TARGET, Busy(), naps.append) is not None and naps == [want]
+
+
+# ---------------------------------------------------------------- the run fits in the job's deadline
+class FakeClock:
+    def __init__(self) -> None:
+        self.t = 0.0
+
+    def __call__(self) -> float:
+        return self.t
+
+    def sleep(self, s: float) -> None:
+        self.t += s
+
+
+def test_the_budget_fits_the_jobs_deadline_with_margin():
+    from wt.ops.schedule import JOBS
+    deadline = JOBS["pipeline-check"].deadline_min * 60
+    assert pc.RUN_BUDGET_S <= deadline - 60                       # a minute for start-up and the checks themselves
+    assert pc.EDITIONS_WORST_S + pc.CALL_WORST_S <= pc.RUN_BUDGET_S
+    # with the reads and first fetch quick, as on a normal evening, both rounds of the after-close wait still fit
+    assert 2 * (pc.TAPE_WAIT_S + pc.CALL_WORST_S) <= pc.RUN_BUDGET_S - 30
+
+
+def test_edition_call_timeouts_match_the_bound():
+    seen = []
+
+    class S:
+        def get(self, url, **kw):
+            seen.append(kw["timeout"])
+            raise pc.requests.ConnectionError("x")
+    env = {"DASHBOARD_INGEST_URL": "https://example.test/api/ingest", "DASHBOARD_INGEST_SECRET": "s"}
+    assert pc.read_edition("radar", env=env, session_=S(), now=lambda: 1.0) is None
+    assert sum(seen[0]) == pc.EDITION_CALL_S
+
+
+def test_the_worst_run_stays_inside_the_budget_for_each_slot(tmp_path):
+    """Every call takes its full timeouts and then fails transiently, or crawls to a success; many names; the site
+    down. No slot may run past RUN_BUDGET_S."""
+    many = {f"N{i}": {"symbol": f"N{i}"} for i in range(60)}
+    for slot, now in (("pre-open", NOW_PRE), ("after-close", dt.datetime(2026, 10, 19, 22, 30, tzinfo=dt.UTC))):
+        for fail in (True, False):
+            clock = FakeClock()
+
+            def read(kind, clock=clock):
+                clock.t += pc.EDITION_CALL_S
+                return None if kind == "radar" else {**options(), "tickers": [*options()["tickers"], *many.values()]}
+
+            class Slow(Get):
+                def __call__(self, url, params, clock=clock, fail=fail, **kw):
+                    self.calls.append(url)
+                    clock.t += pc.CONNECT_S + pc.READ_S
+                    if fail:
+                        raise pc.requests.Timeout("slow")
+                    if url.endswith("/v2/stocks/bars"):            # never the day's bar: the wait runs every round
+                        return Resp(200, {"bars": {s: DAILY[s][:-1] for s in DAILY}})
+                    return market(url, params) if "contracts" not in url or params["underlying_symbols"] in EXP \
+                        else Resp(200, {"option_contracts": []})
+            earnings = tmp_path / "earnings.csv"
+            earnings.write_text("symbol,date,when\n")
+            pc.run(slot, now, get=Slow(), sleep=clock.sleep, read=read, alerts=FakeAlerts(), out=tmp_path / "out",
+                   earnings_path=earnings, clock=clock)
+            assert clock.t <= pc.RUN_BUDGET_S, (slot, fail, clock.t)
