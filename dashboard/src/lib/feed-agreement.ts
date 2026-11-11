@@ -5,9 +5,10 @@
 //
 // Pure: no I/O and no clock. Nothing in the engine imports this file, so the engine's label does not change with it.
 // What it returns holds counts, state words, New York slot times, symbols and the engine's label: no level, no price.
-import { ENGINE_VERSION, type EvalInput, type Evaluation, evaluateSlot, expectedSlots, focusSymbols, type NameWhy, nyHhmm, type RowSide, sessionBounds, SIDES } from "./desk-eval";
-import type { LiveQuote, Options } from "./options";
-import { type Bar2, type NameStateName, SERVER_SETTLE_MS } from "./trade-state";
+import { ENGINE_VERSION, type EvalInput, type Evaluation, evaluateSlot, expectedSlots, focusSymbols, type NameWhy, nyHhmm, type RowSide, SIDES } from "./desk-eval";
+import { focusPlan } from "./focus-plan";
+import { closeMinute, isHalfDay, type LiveQuote, nyClock, type Options } from "./options";
+import { type Bar2, CLOSE_GRACE_MS, FIRST_ENTRY_MIN, flatMinute, LUNCH_FROM_MIN, LUNCH_TO_MIN, lunchBlock, type NameStateName, SERVER_SETTLE_MS } from "./trade-state";
 
 export const FEEDS = ["iex", "sip"] as const;
 export type Feed = (typeof FEEDS)[number];
@@ -20,7 +21,7 @@ export const MATCH_PCT = 98;
 /** An enter-zone event on one feed matches one on the other at most this many slots away. */
 export const MATCH_WITHIN_SLOTS = 1;
 /** The report's own version. */
-export const REPORT_V = 1;
+export const REPORT_V = 2;
 
 const ENTER: NameStateName = "enter_zone";
 
@@ -36,7 +37,7 @@ export const NEUTRAL_INPUTS: readonly string[] = [
 
 /** What the replay cannot reproduce (the runbook's limitations), written into every report. */
 export const LIMITATIONS: readonly string[] = [
-  "the run-time snapshot is not reproduced: a paused read from a stale last trade, or a missed read from a high or low printed after the slot, does not appear",
+  "the run-time snapshot is not reproduced, both ways: it removes pauses (a slot with its own bar is dated inside it, never stale, though live its only trade can be over 120 s old) and adds pauses (a slot without its own bar is dated at the last bar's start, older than the true last trade); a missed read only from a snapshot high or low printed after the slot does not appear",
   "historical bars read after the session, not the bars the live server read a minute after each slot; both feeds are read alike",
   "no journal: a day-limit no_trade is not reproduced, and today's wins read as unknown (cautions only)",
   "one edition per session: an edition replaced during the session is not followed",
@@ -72,13 +73,40 @@ export function replayFeed(edition: Options, day: string, slots: readonly number
   return slots.map((end) => evaluateSlot(replayInput(edition, day, end, bars)));
 }
 
+// ---- the sets a unit falls in -------------------------------------------------------------------------------------------
+/** A feed's word for a unit: its state word, or "none" when it carries no state. */
+export type Word = NameStateName | "none";
+export const NONE: Word = "none";
+
+/**
+ * The board's clock alone holds every name at no trade in this slot: judged at end + CLOSE_GRACE_MS in New York, as
+ * nameState judges it, from the engine's own constants and helpers: before the first entry or from the close, the
+ * lunch block (lunchBlock), and from the flat time (flatMinute).
+ */
+export function clockFixed(end: number, halfDay: boolean): boolean {
+  const m = nyClock(new Date(end + CLOSE_GRACE_MS).toISOString())?.minutes ?? null;
+  if (m === null || m < FIRST_ENTRY_MIN || m >= closeMinute(halfDay)) return true;
+  if (lunchBlock(halfDay) && m >= LUNCH_FROM_MIN && m < LUNCH_TO_MIN) return true;
+  return m >= flatMinute(halfDay);
+}
+
+/** The sides the focus card gives no plan, per name ("SYM|side"): the board holds them at no trade whatever the price. */
+export function noPlanSides(edition: Options): Set<string> {
+  const out = new Set<string>();
+  for (const item of Array.isArray(edition.focus?.items) ? edition.focus.items : []) {
+    const plan = focusPlan(item);
+    for (const side of SIDES) if (plan[side] === null) out.add(key(item.symbol, side));
+  }
+  return out;
+}
+
 // ---- the comparison ---------------------------------------------------------------------------------------------------
 export interface Disagreement {
   symbol: string;
   side: RowSide;
   slot: string;
-  iex: NameStateName;
-  sip: NameStateName;
+  iex: Word;
+  sip: Word;
 }
 
 export interface EventPair {
@@ -97,6 +125,7 @@ export interface SessionReport {
   day: string;
   engine: string;
   feeds: typeof FEEDS;
+  /** isHalfDay(edition), as evaluateSlot uses it. */
   half_day: boolean;
   /** The edition named by its session and build time only. */
   edition_session: string;
@@ -107,16 +136,25 @@ export interface SessionReport {
   units: {
     /** Every (name, side, live slot). */
     total: number;
+    /** Held at no trade by the clock alone: never in the share. */
+    clock_fixed: number;
+    /** A side the card gives no plan: never in the share. */
+    no_plan: number;
+    /** Neither feed has the slot's bar: never in the share. */
+    both_lack: number;
+    /** The price-dependent units: everything else, one feed lacking the slot's bar included. */
     comparable: number;
     identical: number;
-    /** A state and a bar on one feed only: never agreement, never disagreement. */
-    one_sided: { iex_lacks: number; sip_lacks: number };
-    both_lack: number;
+    /** Of the comparable units, those where only IEX, or only SIP, lacked the slot's bar. Facts, beside the share. */
+    iex_lacks: number;
+    sip_lacks: number;
   };
   /** identical / comparable, or null with no comparable unit. Shown, never read on one session. */
   share: number | null;
-  /** (IEX state, SIP state) -> count, over the comparable units. */
+  /** "IEX word|SIP word" -> count, over the comparable units. */
   pairs: Record<string, number>;
+  /** The same over the clock-fixed units (a pause there shows here, outside the share). */
+  clock_fixed_pairs: Record<string, number>;
   disagreements: Disagreement[];
   events: {
     iex: number;
@@ -129,7 +167,9 @@ export interface SessionReport {
     by_offset: Record<string, number>;
     list: EventPair[];
   };
-  /** Per feed: how many (name, slot) evaluations carried no state, by the engine's reason; slots not evaluated "ok". */
+  /** The focus names with no bar at all that session, per feed. */
+  names_without_bars: Record<Feed, string[]>;
+  /** Per feed, over the live slots: (name, slot) evaluations with no state by the engine's reason; slots not "ok". */
   no_state: Record<Feed, { names: Record<NameWhy, number>; slots_not_ok: number }>;
   bars_missing: { iex: number; sip: number; by_slot: { slot: string; iex: number; sip: number }[] };
   inputs: readonly string[];
@@ -145,12 +185,14 @@ export interface CompareInput {
   bars: Record<Feed, Readonly<Record<string, readonly Bar2[]>>>;
 }
 
-const key = (symbol: string, side: RowSide) => `${symbol}|${side}`;
+function key(symbol: string, side: RowSide): string {
+  return `${symbol}|${side}`;
+}
 
-/** The state per (name, side) of one evaluation, when the board is live and the evaluation ok; empty otherwise. */
+/** The state per (name, side) of one evaluation, when it is ok; empty otherwise (every word then reads "none"). */
 function statesOf(ev: Evaluation | undefined): Map<string, NameStateName> {
   const out = new Map<string, NameStateName>();
-  if (!ev || ev.status !== "ok" || ev.board !== "live") return out;
+  if (!ev || ev.status !== "ok") return out;
   for (const r of ev.rows) out.set(key(r.symbol, r.side), r.state);
   return out;
 }
@@ -188,55 +230,61 @@ export function matchEvents(iex: readonly number[], sip: readonly number[]): { p
   return { pairs, iexOnly: iex.map((_, i) => i).filter((i) => !usedI.has(i)), sipOnly: sip.map((_, j) => j).filter((j) => !usedJ.has(j)) };
 }
 
+const bump = (r: Record<string, number>, k: string) => (r[k] = (r[k] ?? 0) + 1);
+
 /** The two replays of one session compared: the runbook's measures. */
 export function compareFeeds(input: CompareInput): SessionReport {
   const { edition, day, slots } = input;
+  const halfDay = isHalfDay(edition);
   const names = focusSymbols(edition);
+  const noPlan = noPlanSides(edition);
   const ends = { iex: barEnds(input.bars.iex, names), sip: barEnds(input.bars.sip, names) };
   const states = { iex: slots.map((_, i) => statesOf(input.evals.iex[i])), sip: slots.map((_, i) => statesOf(input.evals.sip[i])) };
+  // The board's mode comes from the clock alone, the same on both feeds.
   const live = slots.map((_, i) => input.evals.iex[i]?.board === "live" || input.evals.sip[i]?.board === "live");
+  const fixed = slots.map((end) => clockFixed(end, halfDay));
   const hhmm = slots.map((end) => nyHhmm(end));
 
-  let total = 0;
-  let comparable = 0;
-  let identical = 0;
-  let iexLacks = 0;
-  let sipLacks = 0;
-  let bothLack = 0;
+  const u = { total: 0, clock_fixed: 0, no_plan: 0, both_lack: 0, comparable: 0, identical: 0, iex_lacks: 0, sip_lacks: 0 };
   const pairs: Record<string, number> = {};
+  const fixedPairs: Record<string, number> = {};
   const disagreements: Disagreement[] = [];
   const events: Record<Feed, Map<string, number[]>> = { iex: new Map(), sip: new Map() };
 
   for (const symbol of names) {
     for (const side of SIDES) {
       const k = key(symbol, side);
-      const prev: Record<Feed, NameStateName | null> = { iex: null, sip: null };
+      const prev: Record<Feed, Word | null> = { iex: null, sip: null };
       for (let i = 0; i < slots.length; i++) {
         if (!live[i]) continue;
-        total++;
+        u.total++;
         const end = slots[i]!;
-        const got = {} as Record<Feed, NameStateName | null>;
-        const ok = {} as Record<Feed, boolean>;
+        const word = {} as Record<Feed, Word>;
+        const bar = {} as Record<Feed, boolean>;
         for (const f of FEEDS) {
-          const s = states[f][i]!.get(k) ?? null;
-          got[f] = s;
-          ok[f] = s !== null && (ends[f].get(symbol)?.has(end) ?? false);
-          if (s === ENTER && prev[f] !== ENTER) {
+          word[f] = states[f][i]!.get(k) ?? NONE;
+          bar[f] = ends[f].get(symbol)?.has(end) ?? false;
+          if (word[f] === ENTER && prev[f] !== ENTER) {
             const list = events[f].get(k) ?? [];
             list.push(i);
             events[f].set(k, list);
           }
-          prev[f] = s;
+          prev[f] = word[f];
         }
-        if (ok.iex && ok.sip) {
-          comparable++;
-          const pk = `${got.iex}|${got.sip}`;
-          pairs[pk] = (pairs[pk] ?? 0) + 1;
-          if (got.iex === got.sip) identical++;
-          else disagreements.push({ symbol, side, slot: hhmm[i]!, iex: got.iex!, sip: got.sip! });
-        } else if (ok.iex) sipLacks++;
-        else if (ok.sip) iexLacks++;
-        else bothLack++;
+        const pk = `${word.iex}|${word.sip}`;
+        if (fixed[i]) {
+          u.clock_fixed++;
+          bump(fixedPairs, pk);
+        } else if (noPlan.has(k)) u.no_plan++;
+        else if (!bar.iex && !bar.sip) u.both_lack++;
+        else {
+          u.comparable++;
+          if (!bar.iex) u.iex_lacks++;
+          if (!bar.sip) u.sip_lacks++;
+          bump(pairs, pk);
+          if (word.iex === word.sip) u.identical++;
+          else disagreements.push({ symbol, side, slot: hhmm[i]!, iex: word.iex, sip: word.sip });
+        }
       }
     }
   }
@@ -269,15 +317,16 @@ export function compareFeeds(input: CompareInput): SessionReport {
   for (let d = -MATCH_WITHIN_SLOTS; d <= MATCH_WITHIN_SLOTS; d++) byOffset[String(d)] = offsets.filter((o) => o === d).length;
   const worst = offsets.length ? offsets.reduce((w, o) => (Math.abs(o) > Math.abs(w) ? o : w), 0) : null;
 
-  // No-state reasons per feed, and slots the evaluation did not answer "ok".
+  // No-state reasons per feed, over the live slots only (the slots that have units).
   const noState = {} as SessionReport["no_state"];
   for (const f of FEEDS) {
     const why: Record<NameWhy, number> = { "bars-missing": 0, "bars-gap": 0, "snapshot-missing": 0 };
     let notOk = 0;
-    for (const ev of input.evals[f]) {
+    input.evals[f].forEach((ev, i) => {
+      if (!live[i]) return;
       if (ev.status !== "ok") notOk++;
       for (const d of ev.degraded_names) why[d.reason]++;
-    }
+    });
     noState[f] = { names: why, slots_not_ok: notOk };
   }
 
@@ -292,6 +341,7 @@ export function compareFeeds(input: CompareInput): SessionReport {
     missSip += sip;
     if (iex || sip) bySlot.push({ slot: hhmm[i]!, iex, sip });
   });
+  const without = (f: Feed) => names.filter((s) => (input.bars[f][s] ?? []).length === 0);
 
   return {
     v: REPORT_V,
@@ -299,17 +349,19 @@ export function compareFeeds(input: CompareInput): SessionReport {
     day,
     engine: ENGINE_VERSION,
     feeds: FEEDS,
-    half_day: sessionBounds(day)?.halfDay ?? false,
+    half_day: halfDay,
     edition_session: edition.session,
     edition_as_of: typeof edition.as_of === "string" && Number.isFinite(Date.parse(edition.as_of)) ? new Date(Date.parse(edition.as_of)).toISOString() : null,
     names,
     slots: slots.length,
     live_slots: live.filter(Boolean).length,
-    units: { total, comparable, identical, one_sided: { iex_lacks: iexLacks, sip_lacks: sipLacks }, both_lack: bothLack },
-    share: comparable > 0 ? identical / comparable : null,
+    units: u,
+    share: u.comparable > 0 ? u.identical / u.comparable : null,
     pairs,
+    clock_fixed_pairs: fixedPairs,
     disagreements,
     events: { iex: nIex, sip: nSip, matched: offsets.length, iex_only: nIex - offsets.length, sip_only: nSip - offsets.length, median_offset: median(offsets), worst_offset: worst, by_offset: byOffset, list },
+    names_without_bars: { iex: without("iex"), sip: without("sip") },
     no_state: noState,
     bars_missing: { iex: missIex, sip: missSip, by_slot: bySlot },
     inputs: NEUTRAL_INPUTS,
@@ -324,24 +376,25 @@ export function feedAgreement(edition: Options, day: string, bars: Record<Feed, 
 }
 
 // ---- the running summary ------------------------------------------------------------------------------------------------
-export interface SummaryRow {
-  v: typeof REPORT_V;
-  day: string;
-  engine: string;
-  run_at: string;
-  comparable: number;
-  identical: number;
-  events_iex: number;
-  events_sip: number;
-  matched: number;
-  iex_only: number;
-  sip_only: number;
-  iex_lacks: number;
-  sip_lacks: number;
-  both_lack: number;
-  bars_missing_iex: number;
-  bars_missing_sip: number;
-}
+const COUNT_KEYS = [
+  "comparable",
+  "identical",
+  "events_iex",
+  "events_sip",
+  "matched",
+  "iex_only",
+  "sip_only",
+  "iex_lacks",
+  "sip_lacks",
+  "both_lack",
+  "clock_fixed",
+  "no_plan",
+  "bars_missing_iex",
+  "bars_missing_sip",
+] as const;
+type CountKey = (typeof COUNT_KEYS)[number];
+
+export type SummaryRow = { v: typeof REPORT_V; day: string; engine: string; run_at: string; names_without_bars: Record<Feed, string[]> } & Record<CountKey, number>;
 
 export function summaryRow(r: SessionReport, runAt: number): SummaryRow {
   return {
@@ -356,18 +409,21 @@ export function summaryRow(r: SessionReport, runAt: number): SummaryRow {
     matched: r.events.matched,
     iex_only: r.events.iex_only,
     sip_only: r.events.sip_only,
-    iex_lacks: r.units.one_sided.iex_lacks,
-    sip_lacks: r.units.one_sided.sip_lacks,
+    iex_lacks: r.units.iex_lacks,
+    sip_lacks: r.units.sip_lacks,
     both_lack: r.units.both_lack,
+    clock_fixed: r.units.clock_fixed,
+    no_plan: r.units.no_plan,
     bars_missing_iex: r.bars_missing.iex,
     bars_missing_sip: r.bars_missing.sip,
+    names_without_bars: r.names_without_bars,
   };
 }
 
-const COUNT_KEYS = ["comparable", "identical", "events_iex", "events_sip", "matched", "iex_only", "sip_only", "iex_lacks", "sip_lacks", "both_lack", "bars_missing_iex", "bars_missing_sip"] as const;
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const SYMBOL_LIST = (v: unknown): v is string[] => Array.isArray(v) && v.every((s) => typeof s === "string" && /^[A-Z][A-Z0-9.]{0,9}$/.test(s));
 
-/** A summary line as read back: a row with every count a whole number, or null. */
+/** A summary line as read back: a row of this version with every count a whole number, or null. */
 export function parseSummaryRow(line: string): SummaryRow | null {
   let v: unknown;
   try {
@@ -379,6 +435,8 @@ export function parseSummaryRow(line: string): SummaryRow | null {
   const o = v as Record<string, unknown>;
   if (o.v !== REPORT_V || typeof o.day !== "string" || !DAY_RE.test(o.day) || typeof o.engine !== "string" || typeof o.run_at !== "string") return null;
   if (!COUNT_KEYS.every((k) => Number.isInteger(o[k]) && (o[k] as number) >= 0)) return null;
+  const nb = o.names_without_bars as Record<string, unknown> | null | undefined;
+  if (!nb || typeof nb !== "object" || !SYMBOL_LIST(nb.iex) || !SYMBOL_LIST(nb.sip)) return null;
   return o as unknown as SummaryRow;
 }
 
@@ -387,25 +445,50 @@ export function shareMeets(identical: number, comparable: number): boolean {
   return comparable > 0 && identical * 100 >= MATCH_PCT * comparable;
 }
 
-export type Reading = "not-enough-sessions" | "equivalent" | "different";
+export type Reading = "not-enough-sessions" | "not-enough-sessions-labels-differ" | "equivalent" | "different";
 export const READING_WORDS: Record<Reading, string> = {
   "not-enough-sessions": "not enough sessions",
+  "not-enough-sessions-labels-differ": "not enough sessions (labels differ)",
   equivalent: "equivalent for the board",
   different: "different",
 };
 
-export interface SummaryReading {
-  reading: Reading;
+export interface LabelGroup {
+  engine: string;
   sessions: number;
   days: string[];
-  engines: string[];
-  totals: Record<(typeof COUNT_KEYS)[number], number>;
+  totals: Record<CountKey, number>;
   share: number | null;
+  /** "SYM day" for each name with no bars all day, per feed. */
+  names_without_bars: Record<Feed, string[]>;
+}
+
+export interface SummaryReading {
+  reading: Reading;
+  /** The label read: the most recent session's. Null with no session. */
+  engine: string | null;
+  /** Every label seen, in order of its first session; never added together. */
+  labels: LabelGroup[];
   /** Lines that could not be read (never counted). */
   unreadable: number;
 }
 
-/** The runbook's reading over the running summary: the latest run of each session day, pooled. */
+function group(engine: string, rows: readonly SummaryRow[]): LabelGroup {
+  const totals = Object.fromEntries(COUNT_KEYS.map((k) => [k, rows.reduce((s, r) => s + r[k], 0)])) as Record<CountKey, number>;
+  return {
+    engine,
+    sessions: rows.length,
+    days: rows.map((r) => r.day),
+    totals,
+    share: totals.comparable > 0 ? totals.identical / totals.comparable : null,
+    names_without_bars: {
+      iex: rows.flatMap((r) => r.names_without_bars.iex.map((s) => `${s} ${r.day}`)),
+      sip: rows.flatMap((r) => r.names_without_bars.sip.map((s) => `${s} ${r.day}`)),
+    },
+  };
+}
+
+/** The runbook's reading over the running summary: the latest run of each day, read per engine label, never pooled. */
 export function readSummary(lines: readonly string[]): SummaryReading {
   const byDay = new Map<string, SummaryRow>();
   let unreadable = 0;
@@ -419,23 +502,25 @@ export function readSummary(lines: readonly string[]): SummaryReading {
     byDay.set(r.day, r); // a later run of the same day replaces the earlier one
   }
   const rows = [...byDay.values()].sort((a, b) => a.day.localeCompare(b.day));
-  const totals = Object.fromEntries(COUNT_KEYS.map((k) => [k, rows.reduce((s, r) => s + r[k], 0)])) as SummaryReading["totals"];
-  const sessions = rows.length;
-  const reading: Reading =
-    sessions < MIN_SESSIONS ? "not-enough-sessions" : shareMeets(totals.identical, totals.comparable) && totals.iex_only + totals.sip_only === 0 ? "equivalent" : "different";
-  return {
-    reading,
-    sessions,
-    days: rows.map((r) => r.day),
-    engines: [...new Set(rows.map((r) => r.engine))],
-    totals,
-    share: totals.comparable > 0 ? totals.identical / totals.comparable : null,
-    unreadable,
-  };
+  const engines = [...new Set(rows.map((r) => r.engine))];
+  const labels = engines.map((e) => group(e, rows.filter((r) => r.engine === e)));
+  const engine = rows.at(-1)?.engine ?? null;
+  const current = labels.find((g) => g.engine === engine);
+  let reading: Reading;
+  if (!current || current.sessions < MIN_SESSIONS) reading = labels.length > 1 ? "not-enough-sessions-labels-differ" : "not-enough-sessions";
+  else reading = shareMeets(current.totals.identical, current.totals.comparable) && current.totals.iex_only + current.totals.sip_only === 0 ? "equivalent" : "different";
+  return { reading, engine, labels, unreadable };
 }
 
 // ---- text ---------------------------------------------------------------------------------------------------------------
 const pct = (x: number | null) => (x === null ? "n/a" : `${(x * 100).toFixed(3)}%`);
+const listOr = (xs: readonly string[]) => (xs.length ? xs.join(" ") : "none");
+
+function fmtWhy(w: Record<NameWhy, number>): string {
+  return Object.entries(w)
+    .map(([k, n]) => `${k} ${n}`)
+    .join(", ");
+}
 
 /** The session's short table. */
 export function reportText(r: SessionReport): string {
@@ -444,13 +529,18 @@ export function reportText(r: SessionReport): string {
   const lines = [
     `Feed agreement ${r.day}${r.half_day ? " (half day)" : ""}: IEX against SIP, engine ${r.engine}`,
     `names ${r.names.join(" ")} · slots ${r.slots}, live ${r.live_slots}`,
-    `units ${u.total} · comparable ${u.comparable} · identical ${u.identical} (${pct(r.share)}; one session is never read)`,
-    `not comparable: IEX lacks ${u.one_sided.iex_lacks} · SIP lacks ${u.one_sided.sip_lacks} · both lack ${u.both_lack}`,
+    `units ${u.total}: clock-fixed ${u.clock_fixed} · no plan ${u.no_plan} · both lack ${u.both_lack} · comparable ${u.comparable}`,
+    `comparable ${u.comparable} · identical ${u.identical} (${pct(r.share)}; one session is never read) · of them IEX lacked the bar ${u.iex_lacks}, SIP ${u.sip_lacks}`,
+    `names without bars: IEX ${listOr(r.names_without_bars.iex)} · SIP ${listOr(r.names_without_bars.sip)}`,
     `enter-zone events: IEX ${e.iex} · SIP ${e.sip} · matched ${e.matched} · IEX-only ${e.iex_only} · SIP-only ${e.sip_only}`,
-    `matched offsets (SIP minus IEX, slots): median ${e.median_offset ?? "n/a"} · worst ${e.worst_offset ?? "n/a"} · ${Object.entries(e.by_offset).map(([d, n]) => `${d}: ${n}`).join(", ")}`,
+    `matched offsets (SIP minus IEX, slots): median ${e.median_offset ?? "n/a"} · worst ${e.worst_offset ?? "n/a"} · ${Object.entries(e.by_offset)
+      .map(([d, n]) => `${d}: ${n}`)
+      .join(", ")}`,
     `bars missing (name-slots): IEX ${r.bars_missing.iex} · SIP ${r.bars_missing.sip}`,
-    `no state (name-slots): IEX ${fmtWhy(r.no_state.iex.names)} · SIP ${fmtWhy(r.no_state.sip.names)}`,
+    `no state (name-slots, live): IEX ${fmtWhy(r.no_state.iex.names)} · SIP ${fmtWhy(r.no_state.sip.names)}`,
   ];
+  const fixedOff = Object.entries(r.clock_fixed_pairs).filter(([k]) => k.split("|")[0] !== k.split("|")[1]);
+  if (fixedOff.length) lines.push(`clock-fixed units that differ (outside the share): ${fixedOff.map(([k, n]) => `${k.replace("|", " / ")} ${n}`).join(", ")}`);
   if (r.disagreements.length) {
     lines.push("disagreements (name side slot: IEX / SIP):");
     for (const d of r.disagreements.slice(0, 40)) lines.push(`  ${d.symbol} ${d.side} ${d.slot}: ${d.iex} / ${d.sip}`);
@@ -465,21 +555,21 @@ export function reportText(r: SessionReport): string {
   return lines.join("\n");
 }
 
-function fmtWhy(w: Record<NameWhy, number>): string {
-  return Object.entries(w)
-    .map(([k, n]) => `${k} ${n}`)
-    .join(", ");
-}
-
-/** The running summary's reading in words. */
+/** The running summary's reading in words, one block per engine label. */
 export function summaryText(s: SummaryReading): string {
-  const t = s.totals;
-  return [
-    `Summary over ${s.sessions} session${s.sessions === 1 ? "" : "s"} (${MIN_SESSIONS} needed): ${s.days.join(" ") || "none"}`,
-    `comparable ${t.comparable} · identical ${t.identical} (${pct(s.share)}, at least ${MATCH_PCT}% needed)`,
-    `enter-zone events: IEX ${t.events_iex} · SIP ${t.events_sip} · matched ${t.matched} · unmatched ${t.iex_only + t.sip_only} (0 allowed)`,
-    `not comparable: IEX lacks ${t.iex_lacks} · SIP lacks ${t.sip_lacks} · both lack ${t.both_lack} · bars missing IEX ${t.bars_missing_iex}, SIP ${t.bars_missing_sip}`,
-    `engines: ${s.engines.join(" ") || "none"}${s.unreadable ? ` · ${s.unreadable} unreadable line(s) not counted` : ""}`,
-    `reading: ${READING_WORDS[s.reading]}`,
-  ].join("\n");
+  const out: string[] = [];
+  if (s.labels.length === 0) out.push(`Summary: no sessions yet (${MIN_SESSIONS} of one engine label needed)`);
+  for (const g of s.labels) {
+    const t = g.totals;
+    out.push(
+      `Engine ${g.engine}${g.engine === s.engine ? " (read)" : " (not pooled)"}: ${g.sessions} session${g.sessions === 1 ? "" : "s"} (${MIN_SESSIONS} needed): ${g.days.join(" ")}`,
+      `  comparable ${t.comparable} · identical ${t.identical} (${pct(g.share)}, at least ${MATCH_PCT}% needed) · IEX lacked the bar ${t.iex_lacks}, SIP ${t.sip_lacks}`,
+      `  enter-zone events: IEX ${t.events_iex} · SIP ${t.events_sip} · matched ${t.matched} · unmatched ${t.iex_only + t.sip_only} (0 allowed)`,
+      `  left out: clock-fixed ${t.clock_fixed} · no plan ${t.no_plan} · both lack ${t.both_lack} · bars missing IEX ${t.bars_missing_iex}, SIP ${t.bars_missing_sip}`,
+      `  names without bars: IEX ${listOr(g.names_without_bars.iex)} · SIP ${listOr(g.names_without_bars.sip)}`,
+    );
+  }
+  if (s.unreadable) out.push(`${s.unreadable} unreadable line(s) not counted`);
+  out.push(`reading: ${READING_WORDS[s.reading]}`);
+  return out.join("\n");
 }

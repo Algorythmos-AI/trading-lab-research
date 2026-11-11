@@ -89,6 +89,9 @@ async function getJson(url: string, feed: Feed, o: FetchSessionOpts): Promise<un
     const left = o.deadline - o.clock.now();
     if (left <= 0) throw new FetchStop("time-budget", `time budget: spent before the ${feed} bars were read; no report written`);
     o.limiter.record(o.clock.now());
+    // When the deadline is nearer than a call's own limit, the call's timeout is the deadline: its firing is the budget.
+    const budgetBound = left <= CALL_TIMEOUT_MS;
+    const timedOut = (e: unknown) => e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
     let res: Response;
     try {
       res = await fetchImpl(url, {
@@ -97,9 +100,8 @@ async function getJson(url: string, feed: Feed, o: FetchSessionOpts): Promise<un
         signal: AbortSignal.timeout(Math.min(CALL_TIMEOUT_MS, left)),
       });
     } catch (e) {
-      const name = e instanceof Error ? e.name : "unknown";
-      if (name === "TimeoutError" && o.deadline - o.clock.now() <= 0) throw new FetchStop("time-budget", `time budget: the ${feed} bars did not arrive in time; no report written`);
-      throw new FetchStop("upstream", `upstream: the ${feed} bars could not be read (${name}); no report written`);
+      if (timedOut(e) && (budgetBound || o.deadline - o.clock.now() <= 0)) throw new FetchStop("time-budget", `time budget: the ${feed} bars did not arrive in time; no report written`);
+      throw new FetchStop("upstream", `upstream: the ${feed} bars could not be read (${e instanceof Error ? e.name : "unknown"}); no report written`);
     }
     if (res.status === 429) {
       if (attempt >= MAX_RETRIES) throw new FetchStop("upstream", `upstream: ${feed} bars still rate-limited (429) after ${MAX_RETRIES} retries; no report written`);
@@ -108,12 +110,16 @@ async function getJson(url: string, feed: Feed, o: FetchSessionOpts): Promise<un
     }
     if (res.status === 403)
       throw feed === "sip"
-        ? new FetchStop("sip-not-entitled", "sip not entitled: Alpaca answered 403 for the SIP feed (the data plan does not include it); no report written")
-        : new FetchStop("iex-refused", "iex refused: Alpaca answered 403 for the IEX feed; no report written");
+        ? new FetchStop("sip-not-entitled", "sip not entitled: Alpaca answered 403 (not entitled, or recent data not permitted on this plan) for the SIP feed; no report written")
+        : new FetchStop("iex-refused", "iex refused: Alpaca answered 403 (not entitled, or recent data not permitted on this plan) for the IEX feed; no report written");
     if (!res.ok) throw new FetchStop("upstream", `upstream: ${feed} bars answered HTTP ${res.status}${res.status === 401 ? " (keys rejected)" : ""}; no report written`);
     try {
       return await res.json();
-    } catch {
+    } catch (e) {
+      // The call's own timeout (bounded by the deadline) can fire while the body is still arriving: that is the budget.
+      if (timedOut(e) && (budgetBound || o.deadline - o.clock.now() <= 0))
+        throw new FetchStop("time-budget", `time budget: the ${feed} bars' body was still arriving when the budget ran out; no report written`);
+      if (timedOut(e)) throw new FetchStop("upstream", `upstream: the ${feed} bars' body timed out; no report written`);
       throw new FetchStop("upstream", `upstream: ${feed} bars answered with a body that is not JSON; no report written`);
     }
   }
