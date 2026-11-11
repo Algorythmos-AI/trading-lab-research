@@ -14,7 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import { TONE_TEXT } from "@/components/status";
 import { newYork } from "@/lib/format";
 import type { Tone } from "@/lib/labels";
-import { type RailDay, sessionClock, sessionTimeline, type Timeline } from "@/lib/session-timeline";
+import { type DayFacts, type RailDay, railWithNotes, sessionClock, sessionTimeline, type Timeline } from "@/lib/session-timeline";
 import { cn } from "@/lib/utils";
 import { roomShown } from "@/lib/what-if";
 import { CockpitSwitch } from "./cockpit";
@@ -168,10 +168,14 @@ function useRailTop(): number {
  * The rail itself. `day` is the server's day check, shortened (session-timeline's railDay); the clock, the bar and the
  * log are the board's.
  */
-export function StatusRail({ day }: { day: RailDay | null }) {
+export function StatusRail({ day: server, facts = null }: { day: RailDay | null; facts?: DayFacts | null }) {
   const b = useBoard();
   const top = useRailTop();
   if (!b) return null;
+  // This browser's "I'm in" notes the journal does not show yet add to the count (read after mount, so the server's
+  // render and the first one in the browser agree).
+  const withNotes = server && facts ? railWithNotes(server, facts, b.manage.provisional) : null;
+  const day = withNotes ?? server;
   const clock = b.on && b.now !== null && b.mode.kind !== "loading" ? sessionClock(b.session, b.halfDay, b.now) : null;
   // The bar follows the clock's day: today's half day for an older card, the edition's otherwise.
   const t = sessionTimeline(clock?.halfDay ?? b.halfDay, clock?.minute ?? null);
@@ -179,7 +183,8 @@ export function StatusRail({ day }: { day: RailDay | null }) {
   // Folded, the board's line is the hero's headline (the hero shows the mode's line whenever the board is folded).
   const folded = collapsed && b.mode.kind !== "live";
   // A noted "I'm in" trade is unpriced and may not be in the journal yet: no room line while any trade card is open.
-  const shownRoom = roomShown(day?.room ?? null, b.manage.views.length);
+  // Never beside notes the journal does not show yet, nor once the journal has gone stale in this browser: a reason instead.
+  const shownRoom = roomShown(server?.room ?? null, b.manage.views.length, b.manage.provisional, b.manage.journalLive);
   const switches = b.on && b.mode.kind !== "old" && b.mode.kind !== "off";
   return (
     <div
@@ -192,6 +197,11 @@ export function StatusRail({ day }: { day: RailDay | null }) {
           <p role="status" data-rail-day={day.tone} className={cn("text-explain rounded-md border px-2 py-0.5 font-medium sm:whitespace-nowrap", DAY_TONE[day.tone])}>
             <span className="font-semibold">{day.word}</span>
             <span className="font-mono tabular-nums">{day.line.slice(day.word.length)}</span>
+          </p>
+        ) : null}
+        {facts?.readLine ? (
+          <p data-rail-read className="text-explain text-muted-foreground sm:whitespace-nowrap">
+            {facts.readLine}
           </p>
         ) : null}
         {/* Next to the day: what one more stop would leave. Only when the journal is current and nothing is open. */}
@@ -238,6 +248,11 @@ export function StatusRail({ day }: { day: RailDay | null }) {
             {hhmmOf(t.close)}
           </span>
         </div>
+      ) : null}
+      {withNotes?.usedUp ? (
+        <p data-rail-used-up className="text-explain text-bad font-medium">
+          {withNotes.usedUp}
+        </p>
       ) : null}
       {day?.open ? (
         <p data-day-open className="text-explain text-warn font-medium">

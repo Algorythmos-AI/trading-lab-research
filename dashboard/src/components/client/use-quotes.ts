@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { extendTrail, type LiveQuote, type TrailPoint } from "@/lib/options";
+import { type PollResult, startPoll } from "@/lib/quote-poll";
 
 export const POLL_MS = 2_000;
 const RETRY_MS = 60_000;
@@ -22,28 +23,22 @@ export type Feed =
     };
 
 /**
- * Polls /api/quote (same origin, so the page's connect-src 'self' holds) every 2 seconds while the tab is visible.
- * `enabled` false (an old edition) never polls. Research only.
+ * Polls /api/quote (same origin, so the page's connect-src 'self' holds) every 2 seconds while the tab is visible,
+ * and at once when it is shown again (lib/quote-poll.ts: one request at a time). `enabled` false (an old edition)
+ * never polls. Research only.
  */
 export function useQuotes(symbols: string, enabled = true): Feed {
   const [feed, setFeed] = useState<Feed>({ status: enabled ? "loading" : "off" });
 
   useEffect(() => {
     if (!enabled) return;
-    let timer: number | undefined;
     let stopped = false;
-    const load = async () => {
-      if (stopped) return;
-      if (document.visibilityState !== "visible") {
-        timer = window.setTimeout(load, POLL_MS);
-        return;
-      }
-      let next = POLL_MS;
+    const run = async (): Promise<PollResult> => {
       try {
         const res = await fetch(`/api/quote?s=${encodeURIComponent(symbols)}`, { cache: "no-store" });
         if (res.status === 503) {
           if (!stopped) setFeed({ status: "off" });
-          return; // not configured: no point polling until the page is reloaded
+          return "off"; // not configured: no point polling until the page is reloaded
         }
         if (!res.ok) throw new Error(String(res.status));
         const body = (await res.json()) as { as_of: string; quotes: Record<string, LiveQuote>; missing?: string[] };
@@ -55,16 +50,25 @@ export function useQuotes(symbols: string, enabled = true): Feed {
             for (const [s, q] of Object.entries(quotes)) trails[s] = extendTrail(before[s] ?? [], q);
             return { status: "ok", asOf: body.as_of, quotes, missing: body.missing ?? [], receivedAt: Date.now(), trails };
           });
+        return "ok";
       } catch {
         if (!stopped) setFeed((f) => (f.status === "ok" ? f : { status: "error" }));
-        next = RETRY_MS;
+        return "error";
       }
-      if (!stopped) timer = window.setTimeout(load, next);
     };
-    void load();
+    const stop = startPoll({
+      run,
+      page: document,
+      show: window,
+      now: () => Date.now(),
+      setTimer: (fn, ms) => window.setTimeout(fn, ms),
+      clearTimer: (id) => window.clearTimeout(id as number),
+      pollMs: POLL_MS,
+      retryMs: RETRY_MS,
+    });
     return () => {
       stopped = true;
-      window.clearTimeout(timer);
+      stop();
     };
   }, [symbols, enabled]);
 

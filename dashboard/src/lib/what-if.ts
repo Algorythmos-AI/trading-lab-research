@@ -291,11 +291,51 @@ export function dayRoom(c: Pick<DayCheck, "status" | "current" | "used" | "net" 
   return `A stop now leaves ${room} and ${trades} trade${trades === 1 ? "" : "s"}.`;
 }
 
+export type RoomAfterStop =
+  | { kind: "left"; cents: number; line: string }
+  | { kind: "over"; cents: number; line: string }
+  | { kind: "withheld"; line: string };
+
+export const ROOM_STALE = "Room left today not shown: your fills have not been read recently, and an old count could be too generous.";
+export const ROOM_NO_JOURNAL = "Room left today not shown: no fills read from Webull.";
+export const ROOM_OTHER_OPEN = "Room left today not shown: another position is open, and its loss is not priced here.";
+export const ROOM_BROKEN = "Room left today not shown: this fill breaks your rule 4, above.";
+
 /**
- * The day's room line as the page shows it (the rail and the hero alike): none while the board has any open trade card.
+ * The day's room if this trade's stop fills: DAY_LOSS_LIMIT less today's realised loss (dayRoom's `min(0, net)`), less
+ * this trade's loss at its stop with fees (`lossCents`). In whole cents: at exactly the limit $0 is left, a cent more
+ * is over. Withheld, with the reason, when it cannot be said truthfully: no journal, a journal that is not current (the
+ * day check's `current`, which also takes journalStale, and the browser's own re-check), another open position whose
+ * loss is not priced here, or a fill that already breaks rule 4 (`broken`: room to spare would read as fine).
+ */
+export function roomAfterStop(day: { current: boolean; net: number } | null | undefined, lossCents: number, otherOpen = 0, broken = 0): RoomAfterStop {
+  if (broken > 0) return { kind: "withheld", line: ROOM_BROKEN };
+  if (!day) return { kind: "withheld", line: ROOM_NO_JOURNAL };
+  if (!day.current || !fin(day.net)) return { kind: "withheld", line: ROOM_STALE };
+  if (otherOpen > 0) return { kind: "withheld", line: ROOM_OTHER_OPEN };
+  if (!Number.isSafeInteger(lossCents) || lossCents < 0) return { kind: "withheld", line: ROOM_STALE };
+  const limit = DAY_LOSS_LIMIT * 100;
+  const left = limit + Math.min(0, Math.round(day.net * 100)) - lossCents;
+  if (left >= 0) return { kind: "left", cents: left, line: `If this stop fills: ${cents(left)} of your ${whole(DAY_LOSS_LIMIT)} day limit left.` };
+  return { kind: "over", cents: -left, line: `This stop would take you past your ${whole(DAY_LOSS_LIMIT)} day limit by ${cents(-left)}.` };
+}
+
+const cents = (c: number) => `$${Math.floor(c / 100).toLocaleString("en-US")}.${String(c % 100).padStart(2, "0")}`;
+
+/**
+ * The day's room line as the page shows it (the rail and the hero alike): none while the board has any open trade card,
+ * a short reason instead while any note is not yet in the journal or the journal has gone stale in this browser.
  * The server builds the line from the journal alone, and an "I'm in" note lives only in this browser: its trade is
  * not priced, and its fill may not have reached the journal yet, so a room worked out without it would be too generous.
  */
-export function roomShown(room: string | null | undefined, openCards: number): string | null {
-  return room && openCards === 0 ? room : null;
+export function roomShown(room: string | null | undefined, openCards: number, provisional = 0, current = true): string | null {
+  if (!room) return null;
+  // Trades this browser noted that the journal does not show yet: the room and the trades left would be too generous.
+  if (provisional > 0) return roomNotShown(provisional);
+  // The browser's own re-check of the journal's age (the server decided `room` when the page was drawn).
+  if (!current) return ROOM_LATE;
+  return openCards === 0 ? room : null;
 }
+
+export const roomNotShown = (n: number) => `Room not shown: ${n} trade${n === 1 ? "" : "s"} not yet in the journal.`;
+export const ROOM_LATE = "Room not shown: your fills have not been read recently.";

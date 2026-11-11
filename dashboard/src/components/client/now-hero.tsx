@@ -281,7 +281,7 @@ function Live({ b, row, room }: { b: Board; row: BoardRow; room: string | null }
           Size the {ticketSide} from your Webull price
         </button>
       ) : null}
-      <HeroChecks b={b} row={row} view={view} side={side} room={roomShown(room, b.manage.views.length)} />
+      <HeroChecks b={b} row={row} view={view} side={side} room={roomShown(room, b.manage.views.length, b.manage.provisional, b.manage.journalLive)} />
       {!paused && s.cautions.length ? (
         <ul className="flex flex-wrap items-center gap-2" data-hero-cautions={s.cautions.length + s.moreCautions} aria-label="Cautions">
           {s.cautions.slice(0, 2).map((c) => (

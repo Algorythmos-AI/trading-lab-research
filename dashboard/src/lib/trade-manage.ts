@@ -49,6 +49,27 @@ export interface ManualNote {
   kind: NoteKind;
   /** The levels it is managed against, kept with the note so an alternative that ends on the board still has them. */
   plan: SidePlan;
+  /** The option fill he typed, if any (a note saved before it existed has none). */
+  fill?: OptionFill;
+  /** He ticked "Stop placed in Webull" on the card; absent is unticked. */
+  stopPlaced?: boolean;
+}
+
+/** More contracts than this in one long option trade is a typing slip on this account. */
+export const MAX_CONTRACTS = 99;
+
+/** The option fill kept with a note: the price a share, in whole cents, and the contracts bought. */
+export interface OptionFill {
+  priceCents: number;
+  contracts: number;
+}
+
+/** A stored fill, or null for anything that is not one. */
+export function parseFill(v: unknown): OptionFill | null {
+  if (!v || typeof v !== "object") return null;
+  const f = v as Record<string, unknown>;
+  const ok = (x: unknown, max: number): x is number => typeof x === "number" && Number.isSafeInteger(x) && x >= 1 && x <= max;
+  return ok(f.priceCents, 1_000_000) && ok(f.contracts, MAX_CONTRACTS) ? { priceCents: f.priceCents, contracts: f.contracts } : null;
 }
 
 const isSide = (v: unknown): v is Side => v === "call" || v === "put";
@@ -92,6 +113,10 @@ export function parseNotes(raw: string | null | undefined): ManualNote[] {
     if (typeof n.symbol !== "string" || !isSide(n.side) || !isNum(n.price) || !(n.price > 0) || typeof n.at !== "string" || !Number.isFinite(Date.parse(n.at))) continue;
     if (!KINDS.includes(n.kind as NoteKind) || !plan || plan.side !== n.side) continue;
     const note: ManualNote = { symbol: n.symbol, side: n.side, price: n.price, at: n.at, kind: n.kind as NoteKind, plan };
+    // Added later: an old note has neither, and a malformed one is dropped without dropping the note.
+    const fill = parseFill(n.fill);
+    if (fill) note.fill = fill;
+    if (n.stopPlaced === true) note.stopPlaced = true;
     if (out.some((o) => noteId(o) === noteId(note))) continue; // one note a name, side and fill time
     out.push(note);
   }
@@ -372,8 +397,10 @@ export function formMovedOn(f: FormCapture, state: NameState | null | undefined,
 export const movedOnLine = (f: FormCapture) => `The board has moved on: this note keeps the ${f.side} you opened`;
 
 /** The note Save writes: what the form captured, the typed price and fill time. */
-export function noteFromForm(f: FormCapture, price: number, at: string): ManualNote {
-  return { symbol: f.symbol, side: f.side, price, at, kind: f.kind, plan: f.plan };
+export function noteFromForm(f: FormCapture, price: number, at: string, fill: OptionFill | null = null): ManualNote {
+  const n: ManualNote = { symbol: f.symbol, side: f.side, price, at, kind: f.kind, plan: f.plan };
+  if (fill) n.fill = fill;
+  return n;
 }
 
 // ---- the card -------------------------------------------------------------------------------------------------------
