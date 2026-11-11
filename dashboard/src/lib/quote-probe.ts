@@ -3,9 +3,9 @@
 // last trade outside the day's high and low or far from the prior close, a crossed quote) in normal conditions.
 //
 // Pure and total: every input may be missing, null or of the wrong type, and nothing here throws on it; a field it
-// cannot read is reported "absent" or "invalid". It returns enums, booleans, whole and decimal numbers (ages in
-// seconds, distances in basis points), symbols and short validated exchange and condition codes only: never a price,
-// a level, an amount or free text. Nothing here reads the store, sends anything or changes what the page or the
+// cannot read is reported "absent" or "invalid". It returns enums, booleans, numbers (ages in seconds, which are
+// SAFE times, and distances in basis points), symbols and short validated exchange and condition codes only: never a
+// price, a level, an amount or free text. Nothing here reads the store, sends anything or changes what the page or the
 // server's evaluator sees (desk-run.ts gathers it beside the evaluation; quote.ts hands it the raw answer).
 //
 // Field names are Alpaca's stock snapshot (v2/stocks/snapshots): `latestTrade` {t, x, p, s, c[], i, z},
@@ -15,6 +15,8 @@
 export const PROBE_V = 1;
 /** One minute bar's length. */
 export const MINUTE_MS = 60_000;
+/** A time further than this from server time, either way, is unreadable (as is one before 1970, e.g. Go's zero time). */
+export const MAX_STAMP_SKEW_MS = 7 * 24 * 60 * 60 * 1000;
 /** The move from the prior close the guard would pause beyond (more than 25%; exactly 25% is "at-limit"). */
 export const PRIOR_CLOSE_LIMIT = 0.25;
 /** A relative tolerance for "exactly at the limit", so a float's last bit cannot move a boundary case. */
@@ -31,23 +33,27 @@ export const PRESENCE = ["ok", "absent", "invalid"] as const;
 export type Presence = (typeof PRESENCE)[number];
 export const MINUTE_STATES = ["absent", "invalid", "forming", "finished"] as const;
 export type MinuteState = (typeof MINUTE_STATES)[number];
-export const DAILY_DAYS = ["same", "other", "unknown"] as const;
-export type DailyDay = (typeof DAILY_DAYS)[number];
-export const TRADE_VS_DAY = ["inside", "above-high", "below-low", "other-day", "no-daily-bar", "no-trade"] as const;
+/** A New York day against the server's New York day. */
+export const DAYS = ["today", "other", "unknown"] as const;
+export type DayVsToday = (typeof DAYS)[number];
+export const TRADE_VS_DAY = ["inside", "above-high", "below-low", "stale-day", "no-daily-bar", "no-trade"] as const;
 export type TradeVsDay = (typeof TRADE_VS_DAY)[number];
 export const PRIOR_MOVES = ["within", "at-limit", "beyond", "unknown"] as const;
 export type PriorMove = (typeof PRIOR_MOVES)[number];
 export const QUOTE_STATES = ["absent", "invalid", "empty", "one-sided", "crossed", "locked", "normal"] as const;
 export type QuoteState = (typeof QUOTE_STATES)[number];
-export const SOURCES = ["fetched", "cached", "missing"] as const;
+export const SOURCES = ["fetched", "cached", "missing", "invalid"] as const;
 export type ProbeSource = (typeof SOURCES)[number];
 
 /** One name's facts from one fetched snapshot. */
 export interface NameFacts {
   symbol: string;
   source: "fetched";
+  /** "invalid" for a price that is not positive or a time that is unreadable (MAX_STAMP_SKEW_MS, before 1970). */
   trade: Presence;
-  /** Server time minus the trade's time, whole seconds (negative when the trade is stamped after server time). */
+  /** The trade's New York day against the server's. */
+  trade_day: DayVsToday;
+  /** Server time minus the trade's time, in seconds floored to one decimal (negative when stamped ahead of server time). */
   trade_age_s: number | null;
   /** The trade's exchange code, when it is a safe short code. */
   trade_x: string | null;
@@ -56,13 +62,17 @@ export interface NameFacts {
   /** Condition entries dropped (not a safe short code, or past MAX_CODES); -1 when `c` is present but not an array. */
   trade_c_dropped: number;
   minute: MinuteState;
-  /** Server time minus the minute bar's start, whole seconds: below 60 it is still forming. */
+  /** Server time minus the minute bar's start, seconds floored to one decimal: below 60 it is still forming. */
   minute_age_s: number | null;
   daily: Presence;
-  /** The daily bar's New York date against the trade's. */
-  daily_day: DailyDay;
+  /**
+   * The daily bar's New York day against the server's: the page's own test (quote.ts' `day`, the New York day of
+   * `dailyBar.t`, against today), so the probe counts what the page's guard would see.
+   */
+  daily_day: DayVsToday;
   high_below_low: boolean | null;
   open_outside: boolean | null;
+  /** Compared only when the daily bar and the trade are both today's; otherwise "stale-day". */
   trade_vs_day: TradeVsDay;
   /** How far outside the day's range the trade is, in basis points of the side it crossed; null when inside or unknown. */
   trade_outside_bps: number | null;
@@ -71,16 +81,21 @@ export interface NameFacts {
   /** |trade - prior close| / prior close, in basis points; null when unknown. */
   prior_move_bps: number | null;
   quote: QuoteState;
+  /** The quote's time: an unreadable one gives no age. */
+  quote_time: Presence;
   /** (ask - bid) / mid in basis points, negative when crossed; null unless both sides are there. */
   spread_bps: number | null;
-  /** Server time minus the quote's time, whole seconds; null when it has none. */
+  /** Server time minus the quote's time, seconds floored to one decimal; null without a readable time. */
   quote_age_s: number | null;
 }
 
-/** A name the answer did not fetch (served from quote.ts' 1.5 s cache) or fetched with no snapshot at all. */
+/**
+ * A name with no facts: served from quote.ts' 1.5 s cache ("cached"), left out of Alpaca's answer ("missing"), or
+ * answered with something that is not a snapshot object at all, an array or a primitive ("invalid").
+ */
 export interface NameSkipped {
   symbol: string;
-  source: "cached" | "missing";
+  source: "cached" | "missing" | "invalid";
 }
 
 export type NameProbe = NameFacts | NameSkipped;
@@ -96,15 +111,27 @@ const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFin
 const isPos = (v: unknown): v is number => isNum(v) && v > 0;
 /** One decimal place, so the stored numbers stay short. */
 const r1 = (x: number) => Math.round(x * 10) / 10;
-const secs = (ms: number) => Math.round(ms / 1000);
+/** An age in seconds, floored to one decimal for every age alike: 59.999 s is 59.9, never 60. */
+export const ageSeconds = (ms: number) => Math.floor(ms / 100) / 10;
 
 const NY_DAY_FMT = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
-function instant(v: unknown): number | null {
-  if (typeof v !== "string") return null;
-  const t = Date.parse(v);
-  return Number.isFinite(t) ? t : null;
-}
 const nyDay = (t: number) => NY_DAY_FMT.format(new Date(t));
+
+/**
+ * A time as Alpaca sends it, against server time `now`: "absent" when missing or null; "invalid" when not a string,
+ * unparseable, before 1970, or further than MAX_STAMP_SKEW_MS from `now` (not checked when `now` is unusable).
+ */
+function stamp(v: unknown, now: number): { state: Presence; t: number | null } {
+  if (v === undefined || v === null) return { state: "absent", t: null };
+  if (typeof v !== "string") return { state: "invalid", t: null };
+  const t = Date.parse(v);
+  if (!Number.isFinite(t) || t < 0) return { state: "invalid", t: null };
+  if (Number.isFinite(now) && Math.abs(now - t) > MAX_STAMP_SKEW_MS) return { state: "invalid", t: null };
+  return { state: "ok", t };
+}
+
+const age = (t: number | null, now: number) => (t === null || !Number.isFinite(now) ? null : ageSeconds(now - t));
+const dayVsToday = (t: number | null, now: number): DayVsToday => (t === null || !Number.isFinite(now) ? "unknown" : nyDay(t) === nyDay(now) ? "today" : "other");
 
 /** A short code as stored, or null. */
 export function safeCode(v: unknown): string | null {
@@ -126,12 +153,12 @@ function codes(v: unknown): { kept: string[]; dropped: number } {
 
 type Bar = { t: number; o: number; h: number; l: number; c: number };
 /** A bar is "ok" with a readable start and positive o, h, l, c; "absent" when missing or null; "invalid" otherwise. */
-function bar(v: unknown): { presence: Presence; bar: Bar | null } {
-  if (v === undefined || v === null) return { presence: "absent", bar: null };
-  if (!isObj(v)) return { presence: "invalid", bar: null };
-  const t = instant(v.t);
-  if (t === null || !isPos(v.o) || !isPos(v.h) || !isPos(v.l) || !isPos(v.c)) return { presence: "invalid", bar: null };
-  return { presence: "ok", bar: { t, o: v.o, h: v.h, l: v.l, c: v.c } };
+function bar(v: unknown, now: number): { presence: Presence; bar: Bar | null; t: number | null } {
+  if (v === undefined || v === null) return { presence: "absent", bar: null, t: null };
+  if (!isObj(v)) return { presence: "invalid", bar: null, t: null };
+  const s = stamp(v.t, now);
+  if (s.t === null || !isPos(v.o) || !isPos(v.h) || !isPos(v.l) || !isPos(v.c)) return { presence: "invalid", bar: null, t: s.t };
+  return { presence: "ok", bar: { t: s.t, o: v.o, h: v.h, l: v.l, c: v.c }, t: s.t };
 }
 
 /** The move from the prior close against PRIOR_CLOSE_LIMIT: exactly 25% (within a float's tolerance) is "at-limit". */
@@ -142,18 +169,18 @@ export function priorMove(price: number, prior: number): { move: Exclude<PriorMo
   return { move, bps: r1((dist / prior) * 10_000) };
 }
 
-function quoteFacts(v: unknown, now: number): { quote: QuoteState; spread_bps: number | null; quote_age_s: number | null } {
-  if (v === undefined || v === null) return { quote: "absent", spread_bps: null, quote_age_s: null };
-  if (!isObj(v)) return { quote: "invalid", spread_bps: null, quote_age_s: null };
-  const t = instant(v.t);
-  const age = t === null || !Number.isFinite(now) ? null : secs(now - t);
+function quoteFacts(v: unknown, now: number): Pick<NameFacts, "quote" | "quote_time" | "spread_bps" | "quote_age_s"> {
+  if (v === undefined || v === null) return { quote: "absent", quote_time: "absent", spread_bps: null, quote_age_s: null };
+  if (!isObj(v)) return { quote: "invalid", quote_time: "absent", spread_bps: null, quote_age_s: null };
+  const s = stamp(v.t, now);
+  const base = { quote_time: s.state, quote_age_s: age(s.t, now) };
   const { bp, ap } = v;
   // 0 is Alpaca's "no active side"; anything that is not a number of 0 or more is unreadable.
-  if (!isNum(bp) || !isNum(ap) || bp < 0 || ap < 0) return { quote: "invalid", spread_bps: null, quote_age_s: age };
-  if (bp === 0 && ap === 0) return { quote: "empty", spread_bps: null, quote_age_s: age };
-  if (bp === 0 || ap === 0) return { quote: "one-sided", spread_bps: null, quote_age_s: age };
+  if (!isNum(bp) || !isNum(ap) || bp < 0 || ap < 0) return { quote: "invalid", spread_bps: null, ...base };
+  if (bp === 0 && ap === 0) return { quote: "empty", spread_bps: null, ...base };
+  if (bp === 0 || ap === 0) return { quote: "one-sided", spread_bps: null, ...base };
   const spread = r1(((ap - bp) / ((ap + bp) / 2)) * 10_000);
-  return { quote: bp > ap ? "crossed" : bp === ap ? "locked" : "normal", spread_bps: spread, quote_age_s: age };
+  return { quote: bp > ap ? "crossed" : bp === ap ? "locked" : "normal", spread_bps: spread, ...base };
 }
 
 /**
@@ -162,7 +189,8 @@ function quoteFacts(v: unknown, now: number): { quote: QuoteState; spread_bps: n
  */
 export function probeSnapshot(symbol: string, raw: unknown, now: number): NameProbe {
   if (raw === undefined || raw === null) return { symbol, source: "missing" };
-  const snap = isObj(raw) ? raw : {};
+  if (!isObj(raw)) return { symbol, source: "invalid" };
+  const snap = raw;
   const serverNow = isNum(now) ? now : Number.NaN;
 
   // The last trade.
@@ -171,30 +199,34 @@ export function probeSnapshot(symbol: string, raw: unknown, now: number): NamePr
   let price: number | null = null;
   let tradeAt: number | null = null;
   if (tr !== undefined && tr !== null) {
-    if (isObj(tr) && isPos(tr.p) && instant(tr.t) !== null) {
+    const s = isObj(tr) ? stamp(tr.t, serverNow) : null;
+    if (isObj(tr) && isPos(tr.p) && s && s.t !== null) {
       trade = "ok";
       price = tr.p;
-      tradeAt = instant(tr.t);
+      tradeAt = s.t;
     } else trade = "invalid";
   }
   const trObj = isObj(tr) ? tr : {};
   const c = codes(trObj.c);
+  const trade_day = dayVsToday(tradeAt, serverNow);
 
   // The forming (or last finished) minute.
-  const mb = bar(snap.minuteBar);
+  const mb = bar(snap.minuteBar, serverNow);
   const minuteAge = mb.bar && Number.isFinite(serverNow) ? serverNow - mb.bar.t : null;
   // A bar whose minute ends exactly at server time has finished.
   const minute: MinuteState = mb.presence !== "ok" ? mb.presence : minuteAge === null ? "invalid" : minuteAge >= MINUTE_MS ? "finished" : "forming";
 
-  // The day's bar.
-  const db = bar(snap.dailyBar);
+  // The day's bar. Its day is read from its stamp alone, as quote.ts' `day` is, even when its prices are unusable.
+  const db = bar(snap.dailyBar, serverNow);
   const d = db.bar;
-  const daily_day: DailyDay = d && tradeAt !== null ? (nyDay(d.t) === nyDay(tradeAt) ? "same" : "other") : "unknown";
+  const daily_day = dayVsToday(db.t, serverNow);
   let trade_vs_day: TradeVsDay;
   let outside: number | null = null;
   if (price === null) trade_vs_day = "no-trade";
   else if (!d) trade_vs_day = "no-daily-bar";
-  else if (daily_day !== "same") trade_vs_day = "other-day";
+  // Yesterday's bar with yesterday's last trade (an illiquid name early in the session, or pre-market) is not a trade
+  // outside today's range: it is counted apart, so it cannot inflate the counts the guards are set from.
+  else if (daily_day !== "today" || trade_day !== "today") trade_vs_day = "stale-day";
   else if (price > d.h) {
     trade_vs_day = "above-high";
     outside = r1(((price - d.h) / d.h) * 10_000);
@@ -204,20 +236,20 @@ export function probeSnapshot(symbol: string, raw: unknown, now: number): NamePr
   } else trade_vs_day = "inside";
 
   // The prior session's close.
-  const pb = bar(snap.prevDailyBar);
+  const pb = bar(snap.prevDailyBar, serverNow);
   const pm = price !== null && pb.bar ? priorMove(price, pb.bar.c) : null;
 
-  const q = quoteFacts(snap.latestQuote, serverNow);
   return {
     symbol,
     source: "fetched",
     trade,
-    trade_age_s: tradeAt !== null && Number.isFinite(serverNow) ? secs(serverNow - tradeAt) : null,
+    trade_day,
+    trade_age_s: age(tradeAt, serverNow),
     trade_x: safeCode(trObj.x),
     trade_c: c.kept,
     trade_c_dropped: c.dropped,
     minute,
-    minute_age_s: minuteAge === null ? null : secs(minuteAge),
+    minute_age_s: minuteAge === null ? null : ageSeconds(minuteAge),
     daily: db.presence,
     daily_day,
     high_below_low: d ? d.h < d.l : null,
@@ -227,9 +259,7 @@ export function probeSnapshot(symbol: string, raw: unknown, now: number): NamePr
     prev: pb.presence,
     prior_move: pm ? pm.move : "unknown",
     prior_move_bps: pm ? pm.bps : null,
-    quote: q.quote,
-    spread_bps: q.spread_bps,
-    quote_age_s: q.quote_age_s,
+    ...quoteFacts(snap.latestQuote, serverNow),
   };
 }
 
@@ -263,29 +293,77 @@ export function probeSnapshots(symbols: readonly string[], raw: RawSnapshots | n
 const ENUM_FACTS = {
   source: SOURCES,
   trade: PRESENCE,
+  trade_day: DAYS,
   minute: MINUTE_STATES,
   daily: PRESENCE,
-  daily_day: DAILY_DAYS,
+  daily_day: DAYS,
   trade_vs_day: TRADE_VS_DAY,
   prev: PRESENCE,
   prior_move: PRIOR_MOVES,
   quote: QUOTE_STATES,
+  quote_time: PRESENCE,
 } as const;
 type EnumFact = keyof typeof ENUM_FACTS;
 /** The yes/no facts, counted as "yes", "no" or "unknown". */
 const BOOL_FACTS = ["high_below_low", "open_outside"] as const;
-/** The numbers whose largest value is kept (the worst seen). */
-const MAX_FACTS = ["trade_outside_bps", "prior_move_bps", "spread_bps", "trade_age_s", "quote_age_s", "minute_age_s"] as const;
-type MaxFact = (typeof MAX_FACTS)[number];
+
+/**
+ * Fixed buckets per number, chosen for the guards: each is [lower, upper) and the last is open. A value below the
+ * first bound (a negative age is clock skew; a negative spread is a crossed quote) is "negative".
+ */
+export const AGE_BUCKETS = [
+  ["0-5", 0],
+  ["5-20", 5],
+  ["20-120", 20],
+  ["120+", 120],
+] as const;
+export const BPS_BUCKETS = [
+  ["0-10", 0],
+  ["10-50", 10],
+  ["50-250", 50],
+  ["250+", 250],
+] as const;
+/** For the move from the prior close, whose guard is at 2500 bps (25%). */
+export const PRIOR_BUCKETS = [
+  ["0-100", 0],
+  ["100-500", 100],
+  ["500-1000", 500],
+  ["1000-2500", 1000],
+  ["2500+", 2500],
+] as const;
+type Buckets = readonly (readonly [string, number])[];
+export const NUM_FACTS: Record<string, Buckets> = {
+  trade_age_s: AGE_BUCKETS,
+  quote_age_s: AGE_BUCKETS,
+  minute_age_s: AGE_BUCKETS,
+  trade_outside_bps: BPS_BUCKETS,
+  spread_bps: BPS_BUCKETS,
+  prior_move_bps: PRIOR_BUCKETS,
+};
+
+export interface NumStats {
+  /** Values seen, the smallest and the largest, and the count per bucket ("negative" first). */
+  n: number;
+  min: number | null;
+  max: number | null;
+  buckets: Record<string, number>;
+}
+
+/** The bucket a value falls in. */
+export function bucketOf(v: number, buckets: Buckets): string {
+  if (v < buckets[0]![1]) return "negative";
+  let name = buckets[0]![0];
+  for (const [b, lo] of buckets) if (v >= lo) name = b;
+  return name;
+}
 
 export interface FactCounts {
   /** Probed names in the records (every source). */
   samples: number;
   /** Per fact, the count per value; a stored value that is not one of the fact's words counts as "invalid-record". */
   counts: Record<EnumFact | (typeof BOOL_FACTS)[number], Record<string, number>>;
-  /** The worst (largest) value of each number seen; for spread_bps also the smallest (the most crossed). */
-  max: Record<MaxFact, number | null>;
-  min_spread_bps: number | null;
+  /** Per number: how many, the smallest, the largest and the fixed buckets, so one bad value cannot hide the rest. */
+  numbers: Record<string, NumStats>;
   /** Trade condition codes and exchange codes seen, with their counts. */
   conditions: Record<string, number>;
   exchanges: Record<string, number>;
@@ -306,8 +384,9 @@ function emptyCounts(): FactCounts {
   const counts = {} as FactCounts["counts"];
   for (const f of Object.keys(ENUM_FACTS) as EnumFact[]) counts[f] = Object.fromEntries(ENUM_FACTS[f].map((v) => [v, 0]));
   for (const f of BOOL_FACTS) counts[f] = { yes: 0, no: 0, unknown: 0 };
-  const max = Object.fromEntries(MAX_FACTS.map((f) => [f, null])) as FactCounts["max"];
-  return { samples: 0, counts, max, min_spread_bps: null, conditions: {}, exchanges: {}, conditions_dropped: 0 };
+  const numbers: Record<string, NumStats> = {};
+  for (const [f, b] of Object.entries(NUM_FACTS)) numbers[f] = { n: 0, min: null, max: null, buckets: Object.fromEntries([["negative", 0], ...b.map(([name]) => [name, 0])]) };
+  return { samples: 0, counts, numbers, conditions: {}, exchanges: {}, conditions_dropped: 0 };
 }
 
 const bump = (m: Record<string, number>, k: string) => {
@@ -324,11 +403,15 @@ function add(c: FactCounts, n: Record<string, unknown>): void {
   }
   if (n.source !== "fetched") return;
   for (const f of BOOL_FACTS) bump(c.counts[f], n[f] === true ? "yes" : n[f] === false ? "no" : "unknown");
-  for (const f of MAX_FACTS) {
+  for (const [f, b] of Object.entries(NUM_FACTS)) {
     const v = n[f];
-    if (isNum(v)) c.max[f] = c.max[f] === null ? v : Math.max(c.max[f], v);
+    if (!isNum(v)) continue;
+    const s = c.numbers[f]!;
+    s.n++;
+    s.min = s.min === null ? v : Math.min(s.min, v);
+    s.max = s.max === null ? v : Math.max(s.max, v);
+    bump(s.buckets, bucketOf(v, b));
   }
-  if (isNum(n.spread_bps)) c.min_spread_bps = c.min_spread_bps === null ? n.spread_bps : Math.min(c.min_spread_bps, n.spread_bps);
   if (Array.isArray(n.trade_c)) for (const code of n.trade_c) if (safeCode(code) !== null) bump(c.conditions, code as string);
   const x = safeCode(n.trade_x);
   if (x !== null) bump(c.exchanges, x);
