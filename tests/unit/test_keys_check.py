@@ -68,12 +68,13 @@ def test_mixed_and_empty(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> 
 def test_no_file_and_the_host_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     host = _env_file(tmp_path, f"APCA_API_KEY_ID={OLD_ID}\nAPCA_API_SECRET_KEY={OLD_SECRET}\n", "secrets.env")
     out = _run(capsys, tmp_path, {"WT_ENV_FILE": str(host)})
-    assert ".env: " in out and "(not found)" in out
+    assert ".env: " in out and "(not found; Python tools skip it)" in out
     assert "the shell sets neither name: Python tools use WT_ENV_FILE's pair" in out
     _no_values(out)
     other = _env_file(tmp_path, f"APCA_API_KEY_ID={ID}\nAPCA_API_SECRET_KEY={SECRET}\n", "other.env")
     out = _run(capsys, tmp_path, {"WT_ENV_FILE": str(host)}, ["--env-file", str(other)])
-    assert "WT_ENV_FILE's pair differs from .env's; .env's wins (loaded first)" in out
+    assert f"WT_ENV_FILE's pair differs from {other}'s; {other}'s wins (loaded first)" in out
+    assert "shown for comparison only" in out and f"{other} (read)" in out
     _no_values(out)
 
 
@@ -89,3 +90,70 @@ def test_offline_and_never_loads_the_config() -> None:
     mods = {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
     mods |= {n.module or "" for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
     assert not any(m.split(".")[0] in {"wt", "requests", "urllib", "http", "socket", "alpaca"} for m in mods)
+
+
+def _never_fails(capsys: pytest.CaptureFixture[str], tmp_path: Path, environ: dict[str, str],
+                 argv: list[str] | None = None) -> str:
+    out = _run(capsys, tmp_path, environ, argv)
+    err = capsys.readouterr().err
+    assert not any(w in out + err for w in ("Traceback", "Error", "decode", "byte", "in position"))
+    return out
+
+
+@pytest.mark.parametrize("body", [b"APCA_API_KEY_ID=ok\nAPCA_API_SECRET_KEY=\xff\xfe\n",
+                                  b"\x89PNG\r\n\x1a\n\x00\x00\xff\xd8binary"])
+def test_an_undecodable_file_is_unreadable(tmp_path: Path, capsys: pytest.CaptureFixture[str], body: bytes) -> None:
+    (tmp_path / ".env").write_bytes(body)
+    out = _never_fails(capsys, tmp_path, {"APCA_API_KEY_ID": ID, "APCA_API_SECRET_KEY": SECRET})
+    assert "exists but cannot be read" in out
+    assert ".env cannot be read: a Python tool that loads it would fail to start" in out
+    assert "only the shell defines the pair" not in out
+    _no_values(out)
+
+
+def test_binary_but_decodable_content_does_not_fail(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    (tmp_path / ".env").write_bytes(b"\x00\x01\x02 junk = = \x7f\n" + f"APCA_API_KEY_ID={ID}\n".encode())
+    out = _never_fails(capsys, tmp_path, {})
+    assert "(read)" in out
+    _no_values(out)
+
+
+def test_a_directory_is_not_a_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    (tmp_path / ".env").mkdir()
+    out = _never_fails(capsys, tmp_path, {"APCA_API_KEY_ID": ID, "APCA_API_SECRET_KEY": SECRET})
+    assert "not a regular file; Python tools skip it" in out
+    assert "only the shell defines the pair: Python tools use the shell's" in out     # load_dotenv skips it too
+
+
+def test_a_file_without_read_permission(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    p = _env_file(tmp_path, f"APCA_API_KEY_ID={ID}\nAPCA_API_SECRET_KEY={SECRET}\n")
+    p.chmod(0)
+    try:
+        if p.open("rb").readable():                      # root can still read it: nothing to test
+            pytest.skip("running as root")
+    except PermissionError:
+        pass
+    try:
+        out = _never_fails(capsys, tmp_path, {"APCA_API_KEY_ID": OLD_ID, "APCA_API_SECRET_KEY": OLD_SECRET})
+    finally:
+        p.chmod(0o600)
+    assert ".env cannot be read: a Python tool that loads it would fail to start" in out
+    assert "no readable file defines the pair; the shell sets it" in out
+    assert "only the shell defines the pair" not in out
+    _no_values(out)
+
+
+@pytest.mark.parametrize("argv", [["--bogus"], ["--env-file"], ["extra"], ["--help"]])
+def test_bad_arguments_exit_0(tmp_path: Path, capsys: pytest.CaptureFixture[str], argv: list[str]) -> None:
+    out = _never_fails(capsys, tmp_path, {}, argv)
+    assert "usage" in out.lower()
+
+
+def test_an_unexpected_failure_still_exits_0(tmp_path: Path, capsys: pytest.CaptureFixture[str],
+                                              monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(*a: object, **k: object) -> list[str]:
+        raise RuntimeError(SECRET)
+    monkeypatch.setattr(kc, "report", boom)
+    out = _never_fails(capsys, tmp_path, {})
+    assert "could not finish" in out
+    _no_values(out)

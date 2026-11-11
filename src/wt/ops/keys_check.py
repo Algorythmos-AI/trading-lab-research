@@ -19,6 +19,7 @@ import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import NoReturn
 
 from dotenv import dotenv_values
 
@@ -44,14 +45,34 @@ PAIRS = (
 )
 
 
-def read_env_file(path: Path) -> dict[str, str] | None:
-    """The file's names and values as `load_dotenv` would read them, or None when it is missing or unreadable."""
+@dataclass(frozen=True)
+class EnvFile:
+    """One env file as `load_dotenv` would meet it. `status`: read, missing, not a file, or unreadable."""
+    label: str
+    path: Path
+    status: str
+    values: Mapping[str, str] | None = None
+
+
+def read_env_file(label: str, path: Path) -> EnvFile:
+    """The file read as `load_dotenv` reads it. Never raises; an error's text is never kept (it could carry an offset
+    into the file). python-dotenv skips a path that is not a file and raises on one it cannot open or decode."""
     try:
+        if not path.exists():
+            return EnvFile(label, path, "missing")
         if not path.is_file():
-            return None
-        return {k: v for k, v in dotenv_values(path).items() if v is not None}
-    except OSError:
-        return None
+            return EnvFile(label, path, "not a file")
+        return EnvFile(label, path, "read", {k: v for k, v in dotenv_values(path).items() if v is not None})
+    except (OSError, UnicodeError, ValueError):
+        return EnvFile(label, path, "unreadable")
+
+
+STATUS_WORDS = {
+    "read": "read",
+    "missing": "not found; Python tools skip it",
+    "not a file": "not a regular file; Python tools skip it",
+    "unreadable": "exists but cannot be read; a Python tool that loads it fails before it uses any key",
+}
 
 
 def _where(name: str, env: Mapping[str, str]) -> str:
@@ -71,10 +92,15 @@ def _same(p: Pair, x: Mapping[str, str], y: Mapping[str, str]) -> bool:
     return x.get(p.id_name) == y.get(p.id_name) and x.get(p.secret_name) == y.get(p.secret_name)
 
 
-def verdict(p: Pair, shell: Mapping[str, str], files: Sequence[tuple[str, Mapping[str, str] | None]]) -> list[str]:
+def verdict(p: Pair, shell: Mapping[str, str], env_files: Sequence[EnvFile]) -> list[str]:
     """What a Python tool started from this shell gets for `p`, in words. No value appears in the result."""
     names = (p.id_name, p.secret_name)
     out: list[str] = []
+    broken = [e.label for e in env_files if e.status == "unreadable"]
+    if broken:
+        out.append(f"{', '.join(broken)} cannot be read: a Python tool that loads it would fail to start, whatever "
+                   "the shell sets; the verdicts below ignore it")
+    files = [(e.label, e.values) for e in env_files]
     in_shell = [n for n in names if n in shell]
     defining = [(label, f) for label, f in files if f is not None and any(n in f for n in names)]
     if p.id_name.startswith("ALPACA_"):
@@ -87,7 +113,8 @@ def verdict(p: Pair, shell: Mapping[str, str], files: Sequence[tuple[str, Mappin
             else:
                 out.append(f"{label} defines only part of the pair; Python tools use the shell's")
         if not defining:
-            out.append("only the shell defines the pair: Python tools use the shell's")
+            out.append("only the shell defines the pair: Python tools use the shell's" if not broken else
+                       "no readable file defines the pair; the shell sets it")
         if any(not shell[n] for n in names):
             out.append("the shell holds an empty value, and an empty name in the shell still wins over every file")
     elif len(in_shell) == 1:
@@ -97,7 +124,8 @@ def verdict(p: Pair, shell: Mapping[str, str], files: Sequence[tuple[str, Mappin
                    if src else f"the shell sets only {in_shell[0]} and no file defines {rest}: the pair is incomplete")
     else:
         if not defining:
-            out.append("not set anywhere: a tool that needs this pair stops or does nothing")
+            out.append("not set anywhere: a tool that needs this pair stops or does nothing" if not broken else
+                       "not set in the shell or in any readable file")
         else:
             label, f = defining[0]
             if all(n in f for n in names):
@@ -111,37 +139,63 @@ def verdict(p: Pair, shell: Mapping[str, str], files: Sequence[tuple[str, Mappin
     return out
 
 
-def report(shell: Mapping[str, str], files: Sequence[tuple[str, Path | None]]) -> list[str]:
+def report(shell: Mapping[str, str], files: Sequence[tuple[str, Path]], compare_only: bool = False) -> list[str]:
     """The whole report, as lines. `files`: (label, path) in the order `wt.core.config` loads them."""
-    read = [(label, read_env_file(path) if path is not None else None) for label, path in files]
+    env_files = [read_env_file(label, path) for label, path in files]
     lines = ["Alpaca keys by name only: no value, part or hash of a value is shown, and nothing is sent anywhere.",
              "Python tools: a name in the shell wins; otherwise the first file below that defines it.", ""]
-    for (label, path), (_, f) in zip(files, read, strict=True):
-        lines.append(f"{label}: {path if path is not None else 'not named'} ({'read' if f is not None else 'not found'})")
+    if compare_only:
+        lines += ["The file named with --env-file (KEYS_ENV_FILE) is shown for comparison only: the tools in a checkout",
+                  "load that checkout's .env, then WT_ENV_FILE.", ""]
+    for e in env_files:
+        name = str(e.path) if e.label == str(e.path) else f"{e.label}: {e.path}"
+        lines.append(f"{name} ({STATUS_WORDS[e.status]})")
     for p in PAIRS:
         lines += ["", f"{p.id_name} / {p.secret_name}", f"  who reads it: {p.who}",
                   f"  shell: {_pair_state(p, shell)}"]
-        for label, f in read:
-            if f is not None:
-                lines.append(f"  {label}: {_pair_state(p, f)}")
-        lines += [f"  -> {v}" for v in verdict(p, shell, read)]
+        for e in env_files:
+            if e.values is not None:
+                lines.append(f"  {e.label}: {_pair_state(p, e.values)}")
+        lines += [f"  -> {v}" for v in verdict(p, shell, env_files)]
     lines += ["", "make feed-agreement reads its env file's pair first (ALPACA_API_, then APCA_API_), then the shell's.",
               "A reset of a paper account revokes its key pair for every consumer that shares it.",
               "To drop a stale exported pair from this shell: unset the names (the values are not shown here)."]
     return lines
 
 
-def main(argv: Sequence[str] | None = None, environ: Mapping[str, str] | None = None, root: Path = ROOT) -> int:
-    ap = argparse.ArgumentParser(prog="python -m wt.ops.keys_check", description=__doc__.split("\n")[0])
-    ap.add_argument("--env-file", default=None, help="the env file to compare with (default: the checkout's .env)")
-    a = ap.parse_args(argv)
+class _Usage(Exception):
+    pass
+
+
+class _Parser(argparse.ArgumentParser):
+    def error(self, message: str) -> NoReturn:          # never exit non-zero: it is advice
+        raise _Usage
+
+
+def _run(argv: Sequence[str] | None, environ: Mapping[str, str] | None, root: Path) -> None:
+    ap = _Parser(prog="python -m wt.ops.keys_check", description="Which Alpaca key pair Python tools will use.")
+    ap.add_argument("--env-file", default=None, help="another env file to compare with (default: the checkout's .env)")
+    try:
+        a = ap.parse_args(argv)
+    except _Usage:
+        print("usage: python -m wt.ops.keys_check [--env-file PATH]   (make keys-check [KEYS_ENV_FILE=PATH])")
+        return
     shell = dict(os.environ if environ is None else environ)
-    first = Path(a.env_file) if a.env_file else root / ".env"
-    files: list[tuple[str, Path | None]] = [(".env", first)]
+    files: list[tuple[str, Path]] = [(a.env_file, Path(a.env_file)) if a.env_file else (".env", root / ".env")]
     if shell.get("WT_ENV_FILE"):
         files.append(("WT_ENV_FILE", Path(shell["WT_ENV_FILE"])))
-    for line in report(shell, files):
+    for line in report(shell, files, compare_only=bool(a.env_file)):
         print(line)
+
+
+def main(argv: Sequence[str] | None = None, environ: Mapping[str, str] | None = None, root: Path = ROOT) -> int:
+    """Always 0, and never a traceback: a failure prints one line with no exception text."""
+    try:
+        _run(argv, environ, root)
+    except SystemExit:                                   # --help, or anything else that tries to exit
+        pass
+    except Exception:  # noqa: BLE001 — advice must not fail; the error's text could carry file content
+        print("keys-check: the check could not finish (no detail is shown, so that no value can leak)")
     return 0
 
 
