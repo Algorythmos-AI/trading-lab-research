@@ -76,6 +76,11 @@ listings:
 | `options.levels.<SYM>` | PDH, PDL, PWH, PWL, PMH, PML, MA20 or MA50 is more than $0.05 from the same level recomputed |
 | `radar.date`, `radar.fresh` (before the open) | the radar is not for today, or is more than 6 hours old |
 | `radar.close.<SYM>` (before the open) | the radar's price is more than $0.02 from the last close |
+| `calendar.macro.<type>` (both runs) | the last row of a recurring type in `config/events/macro_events.csv` (cpi, nfp, fomc_decision, fomc_minutes, quad_witching) is fewer than 35 days after the session, or the type has no row; it warns from 45 days. 35 leaves a week before the paper runner refuses to arm (it needs a row 30 days ahead). `fomc_emergency` is never required |
+| `calendar.earnings.<SYM>` (both runs) | the latest row in `config/events/earnings.csv` of a desk single name (`config/options_desk.yaml` less SPY and QQQ) is more than 85 days old, or the name has no row; it warns past 75 days. Reports come about 91 days apart and are announced two to five weeks ahead, so 85 pages before the next report and after most companies have announced |
+| `calendar.macro`, `calendar.earnings` | a calendar file is missing or unreadable or lacks a column, or the desk's names cannot be read. Pages at priority 4 (with the earnings file missing the clone makes no earnings skips at all); the run still exits 0 |
+| `calendar.macro.rows`, `calendar.earnings.rows` | a row is malformed (the report names the line and what is wrong) and is not counted. A row is well-formed only in the exact form the clone matches as a string: the date exactly `YYYY-MM-DD` (no space, not `20270225`), the symbol exactly upper case, the type a bare lower-case code, the time exactly `HH:MM`. A date more than 120 days after the session (earnings) or three years (macro) is taken for a typo |
+| `calendar.sessions` (both runs) | the exchange calendar in `wt.options.levels` (`CALENDAR_THROUGH`) ends fewer than 45 days after the session; it warns from 90 days |
 
 Warnings, never a page: `focus.tradeable` (no focus name has a contract the clone may trade that session; one is
 enough, the clone tops up with SPY and QQQ, DEC-0032), `focus.premarket` (the pre-open refresh is not for today, or
@@ -86,12 +91,34 @@ unreachable, so that move is not checked).
 
 Each run writes `var/pipeline-check/<session>-<slot>.json`. Any failed check pages once a day per run with counts per
 check family only (for example `options.close: 2 failed`), the slot and the session date: never a symbol, price or
-level, since ntfy is a public topic. The report has the ids and the detail. A failed check exits 0; a crash of the
+level, since ntfy is a public topic. The calendar checks are the exception to "per run": they read only the
+checkout's files (no network, no share of the time budget, still judged when market data is unreachable), and their
+page is sent before any network call, on a key of its own: `pipeline-check:calendar:` plus the failing families
+(`macro`, `earnings`, `sessions`, with `-file` for a file-level failure; never a type or a symbol). An unchanged
+condition pages at most once a New York day, from whichever run sees it first; a family that starts failing later
+that day pages again. Priority 4 for a file-level failure, 3 for a calendar running short. The run's own page leaves
+the calendar families out. The report has the ids and the detail. A failed check exits 0; a crash of the
 job exits non-zero, and the job runner pings `wt-pipeline-check/fail` and alerts "pipeline-check failed". No call or
 wait starts unless it ends within 540 seconds of the start, inside the job's 10-minute deadline. When the budget runs
 out, what was fetched is kept: the names whose listing was not reached warn `options.listing.<SYM>` (budget), an
 after-close wait round that would not fit is skipped and the tape checks say so, and the report's
 `cut_short_by_budget` names what was cut.
+
+When a calendar check pages (`calendar.macro` or `calendar.earnings` in the message), the report's `calendar.*`
+details name the type or ticker and its last date. Add the next dates from the source each file's rule names: CPI and
+the jobs report from the BLS release schedule (bls.gov/schedule), FOMC decisions from the Fed's calendar
+(federalreserve.gov/monetarypolicy/fomccalendars.htm, minutes three weeks after), quad witching by the third-Friday
+rule (the session before when that Friday is a market holiday), and an earnings date only from the company's own
+announcement or a source named in the row's `source` (the header of `earnings.csv`; a wrong date is worse than a
+missing one, so never guess). Regenerate the dashboard's calendar (`make schema`, which rewrites
+`dashboard/src/lib/market-calendar.json`) in the same pull request.
+
+Owner note, the end of 2027: `wt.options.levels.is_session` raises for any date after its `CALENDAR_THROUGH`
+(2027-12-31). The first run to fail is the after-close pipeline check on Friday 2027-12-31 at 18:30 New York (it
+asks for the next session); the after-close edition, the clone runner and `wt.options.live` hit the same wall.
+`calendar.sessions` warns from Friday 2027-10-01 (after the close) and pages from Tuesday 2027-11-16. The fix is to
+extend the exchange holiday list (`HOLIDAYS`, `HALF_DAYS`) and `CALENDAR_THROUGH` in `wt.options.levels` once
+NYSE publishes the 2028 holidays.
 
 Owner note: pages raised before this change and still spooled on the host can carry check ids with symbols, and are
 sent when ntfy next accepts them. To look: `grep -l "Pipeline check" /home/wt/trading/var/alerts/spool/*.json`

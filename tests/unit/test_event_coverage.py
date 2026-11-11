@@ -121,19 +121,43 @@ def _macro_rows() -> list[dict[str, str]]:
 
 
 def test_every_macro_row_is_well_formed():
-    bad = []
-    for r in _macro_rows():
-        try:
-            dt.date.fromisoformat(r["date"])
-            h, m = (int(x) for x in r["time_et"].split(":"))
-            ok = (0 <= h < 24 and 0 <= m < 60 and r["severity"] in ("high", "medium")
-                  and r["policy"] in ("reduce", "blackout_window", "skip") and r["quality"] in ("exact", "approx", "derived")
-                  and bool((r["source"] or "").strip()) and None not in r)
-        except (ValueError, AttributeError):
-            ok = False
-        if not ok:
-            bad.append(r)
-    assert not bad
+    assert [(r, events.macro_row_problem(r)) for r in _macro_rows() if events.macro_row_problem(r)] == []
+
+
+def test_a_malformed_macro_row_is_named_for_what_is_wrong():
+    good = {"date": "2027-01-13", "time_et": "08:30", "type": "cpi", "severity": "high", "policy": "reduce",
+            "source": "bls.gov/schedule/2027", "quality": "exact"}
+    assert events.macro_row_problem(good) is None
+    no_date, no_time = "date not exactly YYYY-MM-DD", "time_et not exactly HH:MM"
+    for bad, why in (({"date": "13/01/2027"}, no_date), ({"date": " 2027-01-13"}, no_date),
+                     ({"date": "2027-01-13 "}, no_date), ({"date": "20270113"}, no_date),
+                     ({"date": "2027-02-30"}, no_date), ({"time_et": "25:00"}, no_time),
+                     ({"time_et": "soon"}, no_time), ({"time_et": "8:30"}, no_time), ({"time_et": "08:30 "}, no_time),
+                     ({"type": "CPI"}, "type not a bare code"), ({"type": " cpi"}, "type not a bare code"),
+                     ({"severity": "huge"}, "unknown severity"),
+                     ({"policy": "panic"}, "unknown policy"), ({"quality": "guess"}, "unknown quality"),
+                     ({"source": " "}, "no source"), ({"type": ""}, "type not a bare code"),
+                     ({"source": None}, "wrong number of fields"), ({None: ["extra"]}, "wrong number of fields")):
+        assert events.macro_row_problem({**good, **bad}) == why, bad
+    # a row too far ahead of the session is taken for a typo (only when the session date is given)
+    today = dt.date(2027, 1, 13) - dt.timedelta(days=events.MACRO_MAX_AHEAD_DAYS)
+    assert events.macro_row_problem(good, today) is None
+    assert events.macro_row_problem(good, today - dt.timedelta(days=1)) == \
+        f"date more than {events.MACRO_MAX_AHEAD_DAYS} days ahead"
+
+
+def test_an_earnings_row_is_well_formed_only_in_the_exact_form_the_clone_matches():
+    good = _e("NVDA", "2027-02-25")
+    assert events.earnings_row_problem(good) is None
+    no_date = "date not exactly YYYY-MM-DD"
+    for bad, why in (({"date": " 2027-02-25"}, no_date), ({"date": "2027-02-25 "}, no_date),
+                     ({"date": "20270225"}, no_date), ({"symbol": " NVDA"}, "symbol not exactly upper case without spaces"),
+                     ({"symbol": "nvda"}, "symbol not exactly upper case without spaces"), ({"symbol": ""}, "no symbol"),
+                     ({"when": "AMC"}, "unknown when")):
+        assert events.earnings_row_problem({**good, **bad}) == why, bad
+    today = dt.date(2027, 2, 25) - dt.timedelta(days=events.EARNINGS_MAX_AHEAD_DAYS)
+    assert events.earnings_row_problem(good, today) is None
+    assert events.earnings_row_problem(good, today - dt.timedelta(days=1)) == "date more than 120 days ahead"
 
 
 def test_no_expiry_row_falls_on_a_day_the_market_is_shut():
@@ -163,18 +187,11 @@ def _earnings_rows() -> list[dict[str, str]]:
 
 
 def _single_names() -> list[str]:
-    names = yaml.safe_load((CONFIG_DIR / "options_desk.yaml").read_text())["names"]
-    index = yaml.safe_load((CONFIG_DIR / "options_clone.yaml").read_text())["contract"]["index_names"]
-    return [str(n) for n in names if n not in index]
+    return events.desk_single_names()
 
 
 def _malformed(r: dict[str, str]) -> bool:
-    try:
-        dt.date.fromisoformat((r["date"] or "").strip())
-    except (ValueError, AttributeError):
-        return True
-    return (None in r or r["when"] not in ("bmo", "amc", "during") or r["quality"] not in ("confirmed", "expected")
-            or not (r["source"] or "").strip() or not (r["symbol"] or "").strip())
+    return events.earnings_row_problem(r) is not None
 
 
 def _missing(rows: list[dict[str, str]], names: list[str]) -> list[str]:
@@ -185,6 +202,10 @@ def _missing(rows: list[dict[str, str]], names: list[str]) -> list[str]:
 def test_the_single_names_are_read_from_the_desk_and_leave_out_the_index_funds():
     names = _single_names()
     assert "AVGO" in names and "AMD" in names and "SPY" not in names and "QQQ" not in names
+    desk = yaml.safe_load((CONFIG_DIR / "options_desk.yaml").read_text())["names"]
+    index = yaml.safe_load((CONFIG_DIR / "options_clone.yaml").read_text())["contract"]["index_names"]
+    assert names == [n for n in desk if n not in index]
+    assert events.single_names(["SPY", "AVGO", "qqq", "AMD"], ["SPY", "QQQ"]) == ["AVGO", "AMD"]
 
 
 def test_every_earnings_row_is_well_formed():

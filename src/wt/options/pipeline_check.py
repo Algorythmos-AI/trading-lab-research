@@ -9,7 +9,9 @@ claim from the consolidated tape (closes, the day, week and month levels, the mo
 option listings (the expiries the clone may trade), and writes one report per run to var/pipeline-check/. A failed
 check pages the owner once a day per run with counts per check family only (ntfy is a public topic: no symbol, price
 or level is ever in the page; the report has the detail). Market data that cannot be fetched is itself a failed
-check (`data.reachable`): the editions are then unverified, which is when the owner most needs to know. A failed
+check (`data.reachable`): the editions are then unverified, which is when the owner most needs to know. It also
+judges, from the checkout's own files, how far ahead the hand-kept macro and earnings calendars reach
+(`calendar.macro`, `calendar.earnings`); those page on a key of their own, at most once a New York day. A failed
 check exits 0; only a crash of the job itself exits non-zero (the job runner then pings healthchecks' /fail). It
 reads only; it never changes an edition or trades.
 """
@@ -36,6 +38,7 @@ from wt.ops import publish
 from wt.options import levels as lv
 from wt.options import session
 from wt.options.intraday import daily_raw
+from wt.risk import events as ev
 
 NEW_YORK = ZoneInfo("America/New_York")
 OUT = STATE_DIR / "pipeline-check"
@@ -62,8 +65,10 @@ FAMILIES = ("data.reachable", "data.snapshot",
             "options.present", "options.session", "options.built_from", "options.tape", "options.close",
             "options.levels", "options.listing",
             "focus.present", "focus.premarket", "focus.tradeable", "focus.earnings",
-            "radar.present", "radar.date", "radar.fresh", "radar.close", "radar.premarket")
+            "radar.present", "radar.date", "radar.fresh", "radar.close", "radar.premarket",
+            "calendar.macro", "calendar.earnings", "calendar.sessions")
 SLOTS = ("pre-open", "after-close")
+CALENDAR_FAMILIES = ("calendar.macro", "calendar.earnings", "calendar.sessions")   # paged on their own key
 
 
 def family(check_id: str) -> str:
@@ -131,6 +136,7 @@ def _num(v: Any) -> float | None:
 
 
 TOP_UP = ("SPY", "QQQ")   # config/options_clone.yaml names.top_up (DEC-0032)
+INDEX_NAMES = ("SPY", "QQQ")   # config/options_clone.yaml contract.index_names: never skipped for earnings
 MIN_NAMES = 2             # names.min_names: the clone's top-up target. Shared with the clone; not this check's bar
 # focus.tradeable's own bar: how many focus names need a contract the clone may trade. One is a legitimate night (the
 # clone tops up with SPY and QQQ to MIN_NAMES, DEC-0032); none still warns. Separate from MIN_NAMES on purpose.
@@ -290,13 +296,14 @@ def assess(slot: str, now: dt.datetime, radar: Mapping[str, Any] | None, options
             add("focus.tradeable", len(can) >= FOCUS_TRADEABLE_MIN,
                 f"{len(can)} of {len(items)} focus names have a contract {what}: {', '.join(can) or 'none'}"
                 " (the clone tops up with SPY and QQQ)" + (f"; {unknown} not verified" if unknown else ""), "warn")
+        # The clone's own earnings rule (session.event_block), on the rows exactly as the clone reads them, at a
+        # moment of the target session: no copy of its matching to drift from it.
+        during = dt.datetime.combine(dt.date.fromisoformat(target), dt.time(10, 0), NEW_YORK)
         for i in items:
             sym = str(i["symbol"])
-            hit = [r for r in earnings if str(r.get("symbol", "")).upper() == sym and (
-                str(r.get("date")) == target or (str(r.get("date")) == prev and str(r.get("when")) == "amc"))]
-            if hit:
-                add(f"focus.earnings.{sym}", False, f"{sym} reports {hit[0].get('date')} {hit[0].get('when')}: the clone skips it",
-                    "warn")
+            if session.event_block(during, sym, [], earnings, {}, INDEX_NAMES) == "earnings":
+                add(f"focus.earnings.{sym}", False, f"{sym} reports on {target}, or after the close before it: "
+                    "the clone skips it", "warn")
     # ---- the radar (built once, before the open)
     if slot == "pre-open":
         if not radar:
@@ -332,6 +339,189 @@ def assess(slot: str, now: dt.datetime, radar: Mapping[str, Any] | None, options
                     add(f"radar.premarket.{sym}", drift <= PREMARKET_DRIFT_PCT,
                         f"radar pre-market {pm} vs now {round(now_px, 2)} ({drift:.2f}%): moved since the radar", "warn")
     return out
+
+
+# ---------------------------------------------------------------- the hand-kept event calendars
+# config/events/macro_events.csv (the paper runners' risk rules, the dashboard's cautions) and earnings.csv (the
+# clone's earnings skip, the desk's page) are kept by hand and run out quietly. Each run reads both from the
+# checkout, no network, and judges how far ahead they reach from the session date. A warning is in the report only;
+# a failure pages at once, on its own key, at most once a New York day per set of failing families (calendar_alert).
+#
+# Macro: per recurring type (cpi, nfp, fomc_decision, fomc_minutes, quad_witching), how many days past the session
+# its last row lies. BLS and the Fed publish a year's dates at a time, months ahead, so a warning six weeks out
+# leaves ample time. The page must come before the paper runner refuses to arm: wt.risk.events.coverage_ok needs a
+# row 30 days ahead, and when the file is extended a year at a time every type runs out within the same few weeks.
+# 35 days leaves a week of sessions between the page and that refusal (21 would page after it).
+MACRO_WARN_DAYS = 45     # warn when a type's last row is fewer than this many days after the session
+MACRO_FAIL_DAYS = 35     # page when fewer than this
+# Earnings: per desk single name, how old its latest row is (a future row is fresh). Reports come about 91 days
+# apart (84 to 98); a company announces its date two to five weeks ahead. Warn from 75 days, when most have
+# announced. Page past 85 days: by then nearly every company has announced, and the report is still a few days to
+# two weeks away, in time to add the row before the clone would trade through it. 95, the first idea, pages after
+# most next reports have already happened. Not earlier than 85 either: a page before the company has announced
+# invites a guessed date, and a wrong date is worse than a missing one (the clone skips the wrong day and the page
+# shows it).
+EARNINGS_WARN_DAYS = ev.EARNINGS_MAX_AGE_DAYS    # 75: the same horizon as the CI warning (test_event_coverage.py)
+EARNINGS_FAIL_DAYS = 85
+# The exchange calendar (wt.options.levels HOLIDAYS, CALENDAR_THROUGH) is kept by hand too: NYSE publishes the
+# holidays years ahead, so a warning three months before the end and a page six weeks before leave time for a PR.
+SESSIONS_WARN_DAYS = 90
+SESSIONS_FAIL_DAYS = 45
+CALENDAR_ALERT_KEY = "pipeline-check:calendar"
+CALENDAR_ALERT_PRIORITY = 3                      # running short: not trading-critical today, acted on within days
+
+
+class Calendar(NamedTuple):
+    """One hand-kept CSV as read: its rows with their line numbers, or why it could not be read (fixed words)."""
+    name: str                                    # e.g. config/events/earnings.csv
+    rows: tuple[tuple[int, dict[str, Any]], ...] = ()
+    error: str | None = None
+
+
+def read_calendar(path: Path, name: str, columns: Sequence[str], comments: bool) -> Calendar:
+    """Read a calendar CSV. `comments`: whether `#` lines are comments (earnings.csv) or rows (macro_events.csv,
+    which the paper runner reads with no such rule, so a `#` line there is malformed). Never raises: a missing or
+    unreadable file, or a header without `columns`, comes back as an error."""
+    import csv
+    try:
+        text = path.read_text(encoding="utf-8")
+        kept = [(i, line) for i, line in enumerate(text.splitlines(), 1)
+                if line.strip() and not (comments and line.startswith("#"))]
+        reader = csv.DictReader(line for _, line in kept)
+        rows = []
+        for r in reader:
+            rows.append((kept[min(reader.line_num, len(kept)) - 1][0], dict(r)))
+        header = reader.fieldnames or []
+    except (OSError, UnicodeDecodeError, csv.Error) as e:
+        return Calendar(name, error=f"{name} cannot be read ({e.__class__.__name__})")
+    missing = [c for c in columns if c not in header]
+    if missing:
+        return Calendar(name, error=f"{name} has no column {', '.join(missing)}")
+    return Calendar(name, tuple(rows))
+
+
+def _malformed(cal: Calendar, problem: Callable[[Mapping[str, Any], dt.date], str | None],
+               day: dt.date) -> tuple[list[dict[str, Any]], str]:
+    """The well-formed rows, and a report detail naming each malformed one by line ("" when none is). `problem` is
+    the shared row rule (wt.risk.events), given the session date so a date too far ahead counts as malformed."""
+    good, bad = [], []
+    for line, r in cal.rows:
+        why = problem(r, day)
+        if why:
+            bad.append(f"line {line}: {why}")
+        else:
+            good.append(r)
+    more = f"; and {len(bad) - 10} more" if len(bad) > 10 else ""
+    return good, (f"{len(bad)} malformed rows in {cal.name}, left out: {'; '.join(bad[:10])}{more}" if bad else "")
+
+
+def assess_calendars(session_date: str, macro: Calendar, earnings: Calendar,
+                     names: Sequence[str] | None, through: str = lv.CALENDAR_THROUGH) -> list[Check]:
+    """calendar.macro, calendar.earnings and calendar.sessions for one run. Pure: the files as read come in, the
+    checks go out.
+
+    `session_date`: the session the run checks (target_session). `names`: the desk's single-stock names, or None
+    when they could not be read. `through`: the last day the exchange calendar (wt.options.levels) knows. A file
+    that cannot be read, a malformed row, a type with no row and a name with no row each fail. The details name
+    types, names and dates for the report; the page carries counts only."""
+    out: list[Check] = []
+    day = dt.date.fromisoformat(session_date)
+
+    def add(cid: str, ok: bool, detail: str, sev: str = "fail") -> None:
+        out.append(Check(cid, sev if not ok else "info", ok, detail))
+
+    # ---- macro
+    if macro.error:
+        add("calendar.macro", False, f"{macro.error}: no event type is covered")
+    else:
+        good, bad = _malformed(macro, ev.macro_row_problem, day)
+        if bad:
+            add("calendar.macro.rows", False, bad)
+        rows = [{"type": r["type"], "date": dt.date.fromisoformat(r["date"])} for r in good]
+        for t, cov in ev.coverage_by_type(day, MACRO_FAIL_DAYS, rows=rows).items():
+            rule = f"warn under {MACRO_WARN_DAYS} days, page under {MACRO_FAIL_DAYS}"
+            if cov.last is None:
+                add(f"calendar.macro.{t}", False, f"{t}: no row in {macro.name}")
+                continue
+            ahead = (cov.last - day).days
+            what = f"{t}: last row {cov.last}, {ahead} days after the session {session_date} ({rule})"
+            if not cov.ok:
+                add(f"calendar.macro.{t}", False, what)
+            else:
+                add(f"calendar.macro.{t}", ahead >= MACRO_WARN_DAYS, what, "warn")
+    # ---- earnings
+    if names is None:
+        add("calendar.earnings", False, "the desk's names cannot be read (config/options_desk.yaml, "
+            "config/options_clone.yaml contract.index_names): no name is checked")
+    elif earnings.error:
+        add("calendar.earnings", False, f"{earnings.error}: no name is checked")
+    else:
+        good, bad = _malformed(earnings, ev.earnings_row_problem, day)
+        if bad:
+            add("calendar.earnings.rows", False, bad)
+        warn = ev.earnings_gaps(good, names, day, EARNINGS_WARN_DAYS)
+        fail = ev.earnings_gaps(good, names, day, EARNINGS_FAIL_DAYS)
+        latest = ev.latest_earnings(good)
+        rule = f"warn past {EARNINGS_WARN_DAYS} days, page past {EARNINGS_FAIL_DAYS}"
+        for n in names:
+            last = latest.get(n)
+            if last is None:
+                add(f"calendar.earnings.{n}", False, f"{n}: no row in {earnings.name}")
+                continue
+            age = (day - last).days
+            what = (f"{n}: latest row {last}, " + (f"{-age} days after" if age < 0 else f"{age} days before")
+                    + f" the session {session_date} ({rule})")
+            if n in fail:
+                add(f"calendar.earnings.{n}", False, what)
+            else:
+                add(f"calendar.earnings.{n}", n not in warn, what, "warn")
+    # ---- the exchange calendar: past `through`, levels.is_session raises and this job, the edition and the clone
+    # stop. Extended by hand once the next year's holidays are published.
+    left = (dt.date.fromisoformat(through) - day).days
+    what = (f"the exchange calendar (wt.options.levels CALENDAR_THROUGH) ends {through}, {left} days after the "
+            f"session {session_date} (warn under {SESSIONS_WARN_DAYS} days, page under {SESSIONS_FAIL_DAYS})")
+    if left < SESSIONS_FAIL_DAYS:
+        add("calendar.sessions", False, what)
+    else:
+        add("calendar.sessions", left >= SESSIONS_WARN_DAYS, what, "warn")
+    return out
+
+
+def calendar_alert(checks: Sequence[Check]) -> tuple[str, int] | None:
+    """The once-a-day key and the priority of the calendar page for a run's checks, or None when no calendar check
+    failed. The key names the set of failing families at a coarse level (`macro`, `earnings`, `sessions`, with
+    `-file` when the file or the desk's names could not be read at all), never a type or a symbol: an unchanged
+    condition pages once a New York day, and a family that starts failing later that day pages again.
+    A file-level failure pages at priority 4 (the clone then runs with no earnings skips, or the runner's calendar
+    is unread: as urgent as the crash it replaced, and kept a week in the spool); a calendar running short, 3."""
+    tokens = set()
+    for c in checks:
+        fam = family(c.id)
+        if c.ok or c.severity != "fail" or fam not in CALENDAR_FAMILIES:
+            continue
+        tokens.add(fam.split(".")[1] + ("-file" if c.id == fam and fam != "calendar.sessions" else ""))
+    if not tokens:
+        return None
+    priority = 4 if any(t.endswith("-file") for t in tokens) else CALENDAR_ALERT_PRIORITY
+    return f"{CALENDAR_ALERT_KEY}:{'+'.join(sorted(tokens))}", priority
+
+
+def read_calendars(macro_path: Path | None = None, earnings_path: Path | None = None) -> tuple[Calendar, Calendar]:
+    """Both hand-kept calendars from the checkout (or the given paths, for tests)."""
+    from wt.core.config import CONFIG_DIR
+    return (read_calendar(macro_path or CONFIG_DIR / "events" / "macro_events.csv", "config/events/macro_events.csv",
+                          ev.MACRO_COLUMNS, comments=False),
+            read_calendar(earnings_path or CONFIG_DIR / "events" / "earnings.csv", "config/events/earnings.csv",
+                          ev.EARNINGS_COLUMNS, comments=True))
+
+
+def desk_names() -> list[str] | None:
+    """The desk's single-stock names, or None when the config cannot be read (reported, never raised)."""
+    import yaml
+    try:
+        return ev.desk_single_names()
+    except (OSError, KeyError, TypeError, yaml.YAMLError):
+        return None
 
 
 # ---------------------------------------------------------------- the run
@@ -573,16 +763,34 @@ def _read_twice(read: Callable[[str], dict[str, Any] | None], kind: str, sleep: 
 
 def run(slot: str, now: dt.datetime | None = None, *, get: Get = requests.get, sleep: Sleep = time.sleep,
         read: Callable[[str], dict[str, Any] | None] = read_edition, alerts: Any = None, out: Path | None = None,
-        earnings_path: Path | None = None, clock: Clock = time.monotonic) -> int:
+        earnings_path: Path | None = None, macro_path: Path | None = None,
+        names: Sequence[str] | None | Callable[[], list[str] | None] = desk_names,
+        clock: Clock = time.monotonic) -> int:
     """One run. Returns 0 whether or not a check failed: a failed check pages through ntfy, and the report says
     which. An exception of the job itself is deliberately not caught: the process exits non-zero and the job runner
-    pings healthchecks' /fail and alerts "pipeline-check failed" (docs/runbooks/dead-man-switches.md)."""
-    import csv
-    from wt.core.config import CONFIG_DIR
+    pings healthchecks' /fail and alerts "pipeline-check failed" (docs/runbooks/dead-man-switches.md).
+
+    The calendars are read and judged first, from local files, and their page is sent at once, before any network
+    call: a crash or a deadline later in the run cannot lose it, and neither the market data nor the time budget
+    touch it. It pages once a New York day per set of failing families (calendar_alert), whichever slot sees it
+    first; the slot's own page counts only the other families. `names`: the desk's single names, or a function
+    that reads them (the default reads the desk config)."""
     from wt.ops.alerts import Alerts
     budget = Budget(RUN_BUDGET_S, clock)
     now = now or dt.datetime.now(dt.UTC)
     target = target_session(slot, now)
+    macro_cal, earnings_cal = read_calendars(macro_path, earnings_path)
+    desk = names() if callable(names) else names
+    calendar = assess_calendars(target, macro_cal, earnings_cal, desk)
+    sender = alerts
+    if (cal_alert := calendar_alert(calendar)) is not None:
+        sender = sender if sender is not None else Alerts()
+        key, priority = cal_alert
+        title, message = alert_text(slot, target, calendar)
+        sender.once_per_day(key, title, message, priority, day=now.astimezone(NEW_YORK).date().isoformat())
+    # focus.earnings reads every row, malformed ones included, exactly as the clone does (runner_o.load_events:
+    # comment lines skipped, nothing else; no rows when the file cannot be read).
+    earnings = [r for _, r in earnings_cal.rows]
     radar, options = _read_twice(read, "radar", sleep), _read_twice(read, "options", sleep)
     symbols = sorted({str(t.get("symbol")) for t in ((options or {}).get("tickers") or []) if isinstance(t, Mapping)}
                      | {str(t.get("symbol")) for t in ((radar or {}).get("tickers") or []) if isinstance(t, Mapping)}
@@ -593,10 +801,8 @@ def run(slot: str, now: dt.datetime | None = None, *, get: Get = requests.get, s
     md = market_data(symbols, target, slot, get, sleep, budget)
     if slot == "after-close":
         md = wait_for_the_days_bar(symbols, target, md, options, sleep, bars, budget)
-    with open(earnings_path or CONFIG_DIR / "events" / "earnings.csv") as fh:
-        earnings = list(csv.DictReader(line for line in fh if not line.startswith("#")))
     checks = assess(slot, now, radar, options, md.daily, md.expiries, md.live, earnings, md.unreachable,
-                    dict(md.unlisted), md.cut)
+                    dict(md.unlisted), md.cut) + calendar
     fails = [c for c in checks if not c.ok and c.severity == "fail"]
     warns = [c for c in checks if not c.ok and c.severity == "warn"]
     report = {"slot": slot, "session": target, "checked_at": now.isoformat(), "fails": len(fails), "warns": len(warns),
@@ -609,9 +815,10 @@ def run(slot: str, now: dt.datetime | None = None, *, get: Get = requests.get, s
         if not c.ok:
             print(f"{c.severity.upper()} {c.id}: {c.detail}")
     print(f"pipeline check {slot} for {target}: {len(checks)} checks, {len(fails)} failed, {len(warns)} warnings")
-    if fails:
-        title, message = alert_text(slot, target, checks)
-        (alerts if alerts is not None else Alerts()).once_per_day(f"pipeline-check:{slot}", title, message, 4)
+    pipeline = [c for c in fails if family(c.id) not in CALENDAR_FAMILIES]   # the calendars paged above
+    if pipeline:
+        title, message = alert_text(slot, target, pipeline)
+        (sender if sender is not None else Alerts()).once_per_day(f"pipeline-check:{slot}", title, message, 4)
     return 0
 
 
