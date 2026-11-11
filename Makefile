@@ -34,7 +34,7 @@ JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 .DEFAULT_GOAL := help
 .PHONY: seed-vm help bootstrap research-index lint typecheck restricted test ci hooks status gate deploy rollback migrate-state preflight publish-verify \
         uninstall-agents lease-break \
-        watchdog-drill feed-watch-drill dashboard-deploy vm-deploy \
+        watchdog-drill feed-watch-drill feed-agreement feed-agreement-recheck feed-agreement-summary feed-agreement-edition dashboard-deploy vm-deploy \
         agents-diff install-trading-agents install-dashboard-agent publish schema kill unkill reset-latch evidence visibility
 
 help: ## List the tasks
@@ -125,6 +125,26 @@ watchdog-drill: ## Two real DRILL pages through the production watchdog path (la
 
 feed-watch-drill: ## Offline: the feed watch's real tick on in-memory state, late then recovered; prints both pages, sends nothing
 	cd dashboard && pnpm exec vitest run test/feed-watch-drill.test.ts
+
+# The feed agreement (docs/runbooks/feed-agreement.md): IEX against SIP for the Options board, one finished session at a
+# time. Read-only GETs; reports go to the git-ignored var/feed-agreement/. Nothing is sent anywhere. DAY, EDITION and
+# BUDGET_S reach the recipes as environment variables (make exports command-line variables) and are always quoted; DAY
+# is checked against YYYY-MM-DD first. The env file is read by Node's --env-file parser, never sourced as shell.
+export ENV_FILE ?= .env
+FA_DAY_OK = [[ "$$DAY" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$$ ]] || { echo "usage: DAY=YYYY-MM-DD"; exit 2; }
+feed-agreement: ## After a session: replay the board on IEX and on SIP bars and compare: make feed-agreement DAY=YYYY-MM-DD EDITION=<file> [BUDGET_S=120] [ENV_FILE=.env]
+	@$(FA_DAY_OK); [ -n "$$EDITION" ] || { echo "usage: make feed-agreement DAY=YYYY-MM-DD EDITION=<edition file>"; exit 2; }; \
+	node --env-file-if-exists="$$ENV_FILE" dashboard/scripts/feed-agreement.mjs --day "$$DAY" --edition "$$EDITION" --env-file "$$ENV_FILE" $${BUDGET_S:+--budget-s "$$BUDGET_S"}
+
+feed-agreement-recheck: ## Once, the day after the first session: fetch a reported day again and count the units whose word changed: make feed-agreement-recheck DAY=YYYY-MM-DD EDITION=<file>
+	@$(FA_DAY_OK); [ -n "$$EDITION" ] || { echo "usage: make feed-agreement-recheck DAY=YYYY-MM-DD EDITION=<edition file>"; exit 2; }; \
+	node --env-file-if-exists="$$ENV_FILE" dashboard/scripts/feed-agreement.mjs --recheck --day "$$DAY" --edition "$$EDITION" --env-file "$$ENV_FILE" $${BUDGET_S:+--budget-s "$$BUDGET_S"}
+
+feed-agreement-summary: ## The feed agreement's reading over the sessions run so far (5 of one engine label needed)
+	node dashboard/scripts/feed-agreement.mjs --summary
+
+feed-agreement-edition: ## On the console Mac, between the close and 21:52 UTC: save that session's options edition: make feed-agreement-edition DAY=YYYY-MM-DD [ENV_FILE=.env]
+	@$(FA_DAY_OK); node --env-file-if-exists="$$ENV_FILE" dashboard/scripts/feed-agreement.mjs --save-edition --day "$$DAY"
 
 dashboard-deploy: ## OWNER: deploy origin/main's dashboard to production from a clean worktree, stamped with its commit
 	@set -e; git fetch --quiet origin main; sha=$$(git rev-parse origin/main); tmp=$$(mktemp -d); \

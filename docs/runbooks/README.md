@@ -21,4 +21,5 @@ One page per incident. Each starts with how you'll notice it.
 | [Ruleset emergency](ruleset-emergency.md) | CI is down and a fix must land |
 | [Options clone](options-clone.md) | ntfy "Options clone ...": entered, exited, latched, feed unfit, exit not filled, NOT FLAT, FLATTEN REQUIRED |
 | [Cloud routines](cloud-routines.md) | A feed is late, a routine replied in its thread, or you want to know what runs outside the host |
+| [Feed agreement, IEX against SIP](feed-agreement.md) | You want to compare the board on the two stock feeds after a session, or read five sessions together |
 | [Public-repository guards](public-repo-guards.md) | CI fails at "No restricted or runtime paths"; ntfy "Weekly evidence not published" or "Repository is not private"; `make status` says `repo visibility: ...` |
