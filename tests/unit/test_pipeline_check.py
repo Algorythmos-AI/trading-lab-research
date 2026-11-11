@@ -263,8 +263,8 @@ def test_market_data_unreachable_fails_the_run_and_pages_once(tmp_path):
     key, title, message, prio = alerts.sent[0]
     assert key == "pipeline-check:pre-open" and prio == 4 and "data.reachable: 1 failed" in message
     assert "SPY" not in title + message and "AMZN" not in title + message
-    # one retry per source, no more: bars twice, listings twice (then not asked for the next name), no snapshot
-    assert naps == [pc.RETRY_WAIT_S, pc.RETRY_WAIT_S]
+    # bars: one call and its retry; listings: two names in a row, each retried once, then no more; no snapshot
+    assert naps == [pc.RETRY_WAIT_S] * 3
 
 
 def test_a_transient_blip_is_retried_once_and_does_not_page(tmp_path):
@@ -495,25 +495,129 @@ def test_the_other_names_keep_their_severity_and_an_unlisted_name_may_still_fail
     assert got["data.reachable"].ok and "1 not verified" in got["focus.tradeable"].detail
 
 
-def test_every_name_failing_or_a_lasting_blip_makes_the_listings_unreachable():
-    class AllBad(Get):
-        def __call__(self, url, params, **kw):
-            self.calls.append(url)
-            return Resp(422, {}) if "contracts" in url else market(url, params)
-    exp, bad = pc.fetch_listings(["SPY", "QQQ"], TARGET, AllBad(), lambda s: None)
-    assert exp is None and bad == {}
+class Listings(Get):
+    """The listings endpoint answers per name from `plan` (a status, an exception, or absent: the fixture)."""
 
-    class Blip(Get):
-        def __call__(self, url, params, **kw):
-            self.calls.append(url)
-            if "contracts" in url and params["underlying_symbols"] == "QQQ":
-                raise pc.requests.ConnectionError("down")
-            return market(url, params)
-    blip, naps = Blip(), []
-    exp, bad = pc.fetch_listings(["QQQ", "SPY"], TARGET, blip, naps.append)
-    assert exp is None and naps == [pc.RETRY_WAIT_S] and len(blip.calls) == 2   # retried once, SPY not asked
-    md = pc.market_data(["QQQ", "SPY"], TARGET, "pre-open", Blip(), lambda s: None)
+    def __init__(self, plan: dict) -> None:
+        super().__init__()
+        self.plan, self.asked = plan, []
+
+    def __call__(self, url, params, **kw):
+        self.calls.append(url)
+        if "contracts" in url:
+            sym = params["underlying_symbols"]
+            self.asked.append(sym)
+            how = self.plan.get(sym)
+            if isinstance(how, Exception):
+                raise how
+            if isinstance(how, int):
+                return Resp(how, {})
+        return market(url, params)
+
+
+def test_every_name_failing_makes_the_listings_unreachable():
+    exp, bad, cut = pc.fetch_listings(["SPY", "QQQ"], TARGET, Listings({"SPY": 422, "QQQ": 404}), lambda s: None)
+    assert exp is None and bad == {} and not cut
+
+
+def test_one_names_lasting_5xx_does_not_page():
+    down = pc.requests.ConnectionError("down")
+    get, naps = Listings({"QQQ": 503}), []
+    exp, bad, cut = pc.fetch_listings(["AMZN", "QQQ", "SPY"], TARGET, get, naps.append)
+    assert exp is not None and bad == {"QQQ": "HTTPError 503"} and exp["SPY"] == EXP["SPY"] and not cut
+    assert get.asked == ["AMZN", "QQQ", "QQQ", "SPY"] and naps == [pc.RETRY_WAIT_S]
+    md = pc.market_data(["AMZN", "QQQ", "SPY"], TARGET, "pre-open", Listings({"QQQ": down}), lambda s: None)
+    assert md.unreachable == () and dict(md.unlisted) == {"QQQ": "ConnectionError"}
+
+
+def test_two_names_in_a_row_failing_transiently_make_the_listings_unreachable():
+    down = pc.requests.ConnectionError("down")
+    get = Listings({"AMZN": down, "QQQ": 503})
+    exp, bad, cut = pc.fetch_listings(["AMZN", "QQQ", "SPY"], TARGET, get, lambda s: None)
+    assert exp is None and "SPY" not in get.asked                  # later names are not asked
+    md = pc.market_data(["AMZN", "QQQ", "SPY"], TARGET, "pre-open", Listings({"AMZN": down, "QQQ": down}),
+                        lambda s: None)
     assert md.unreachable == (pc.LISTINGS,) and md.expiries == {} and md.unlisted == ()
+
+
+def test_a_failure_either_side_of_a_good_answer_is_not_unreachable():
+    down = pc.requests.ConnectionError("down")
+    exp, bad, _ = pc.fetch_listings(["AMZN", "QQQ", "SPY"], TARGET, Listings({"AMZN": down, "SPY": down}),
+                                    lambda s: None)
+    assert exp is not None and set(bad) == {"AMZN", "SPY"} and exp["QQQ"] == EXP["QQQ"]
+
+
+def test_the_budget_running_out_keeps_the_listings_already_fetched():
+    clock = FakeClock()
+
+    class Slow(Listings):
+        def __call__(self, url, params, **kw):
+            clock.t += 100.0
+            return super().__call__(url, params, **kw)
+    budget = pc.Budget(150.0, clock)                              # one call's worst case fits; after it, not another
+    exp, bad, cut = pc.fetch_listings(["AMZN", "QQQ", "SPY"], TARGET, Slow({}), clock.sleep, budget)
+    assert cut and exp is not None and exp["AMZN"] == EXP["AMZN"] and bad == {"QQQ": "budget", "SPY": "budget"}
+    got = run(expiries=exp, unlisted=bad, cut=(pc.LISTINGS,))
+    assert got["data.reachable"].ok and "cut short by the run's time budget" in got["data.reachable"].detail
+    assert got["options.listing.SPY"].severity == "warn" and "(budget)" in got["options.listing.SPY"].detail
+    # nothing fetched before the budget ran out: unreachable
+    exp, bad, cut = pc.fetch_listings(["AMZN"], TARGET, Slow({}), clock.sleep, pc.Budget(10.0, clock))
+    assert exp is None and cut
+
+
+def test_a_wait_cut_short_by_the_budget_says_so():
+    prev = lv.prev_session(TARGET)
+    stale = {s: [b for b in rows if str(b.get("t", ""))[:10] < prev] for s, rows in DAILY.items()}
+    clock = FakeClock()
+    md = pc.wait_for_the_days_bar(list(DAILY), TARGET, pc.MarketData(stale, EXP, {}), options(), clock.sleep,
+                                  fetch=lambda *a: stale, budget=pc.Budget(100.0, clock))
+    assert md.cut == (pc.TAPE_WAIT,) and clock.t == 0.0           # no round started
+    now = dt.datetime(2026, 10, 19, 22, 30, tzinfo=dt.UTC)
+    got = {c.id: c for c in pc.assess("after-close", now, radar(), options(), stale, EXP, {}, [], cut=md.cut)}
+    assert "cut short by the time budget" in got["options.tape.SPY"].detail
+    assert "cut short by the run's time budget" in got["data.reachable"].detail
+
+
+# ---------------------------------------------------------------- bar pages are followed to the end
+class Paged(Get):
+    """The bars endpoint answers `per_page` bars a page, across the names in order, with a next_page_token until
+    the end (or forever, with `endless`)."""
+
+    def __init__(self, daily: dict, per_page: int, endless: bool = False) -> None:
+        super().__init__()
+        self.rows = [(s, b) for s in sorted(daily) for b in daily[s]]
+        self.per_page, self.endless = per_page, endless
+
+    def __call__(self, url, params, **kw):
+        self.calls.append(url)
+        assert url.endswith("/v2/stocks/bars")
+        start = int(params.get("page_token") or 0)
+        page = self.rows[start:start + self.per_page]
+        out: dict = {}
+        for s, b in page:
+            out.setdefault(s, []).append(b)
+        more = self.endless or start + self.per_page < len(self.rows)
+        return Resp(200, {"bars": out, "next_page_token": str(start + self.per_page) if more else None})
+
+
+def test_four_pages_for_more_than_a_hundred_names_are_all_read():
+    many = {f"N{i:03d}": DAILY["SPY"] for i in range(110)}         # 110 x 80 bars
+    get = Paged(many, 10000 // 4 + 1)                              # four pages
+    got = pc.fetch_bars(sorted(many), TARGET, get, lambda s: None)
+    assert got is not None and len(get.calls) == 4 and {k: len(v) for k, v in got.items()} == {k: 80 for k in many}
+
+
+def test_short_pages_with_a_token_are_followed():
+    get = Paged(DAILY, 25)                                         # far below the limit, yet more to come
+    got = pc.fetch_bars(sorted(DAILY), TARGET, get, lambda s: None)
+    assert got is not None and {k: len(v) for k, v in got.items()} == {k: len(v) for k, v in DAILY.items()}
+    assert len(get.calls) == -(-sum(len(v) for v in DAILY.values()) // 25) > 1
+
+
+def test_the_page_safety_cap_stops_an_endless_answer():
+    get = Paged(DAILY, 1, endless=True)
+    assert pc.fetch_bars(sorted(DAILY), TARGET, get, lambda s: None) is None
+    assert len(get.calls) == pc.BAR_PAGES == 30
 
 
 # ---------------------------------------------------------------- transient errors and Retry-After
@@ -526,7 +630,8 @@ def test_a_connection_dropped_mid_body_is_retried():
 
 def test_a_429_honours_retry_after_capped():
     for header, want in (({"Retry-After": "7"}, 7.0), ({"Retry-After": "600"}, pc.RETRY_AFTER_MAX_S),
-                         ({}, pc.RETRY_WAIT_S), ({"Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"}, pc.RETRY_WAIT_S)):
+                         ({}, pc.RETRY_WAIT_S), ({"Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"}, pc.RETRY_WAIT_S),
+                         ({"Retry-After": "\u00b2"}, pc.RETRY_WAIT_S), ({"Retry-After": "\u0663"}, pc.RETRY_WAIT_S)):
         class Busy(Get):
             def __call__(self, url, params, header=header, **kw):
                 self.calls.append(url)
@@ -592,6 +697,18 @@ def test_the_worst_run_stays_inside_the_budget_for_each_slot(tmp_path):
                         else Resp(200, {"option_contracts": []})
             earnings = tmp_path / "earnings.csv"
             earnings.write_text("symbol,date,when\n")
-            pc.run(slot, now, get=Slow(), sleep=clock.sleep, read=read, alerts=FakeAlerts(), out=tmp_path / "out",
+            alerts = FakeAlerts()
+            pc.run(slot, now, get=Slow(), sleep=clock.sleep, read=read, alerts=alerts, out=tmp_path / "out",
                    earnings_path=earnings, clock=clock)
             assert clock.t <= pc.RUN_BUDGET_S, (slot, fail, clock.t)
+            import json
+            report = json.loads((tmp_path / "out" / f"{pc.target_session(slot, now)}-{slot}.json").read_text())
+            by = {c["id"]: c for c in report["checks"]}
+            if fail:                                               # every call times out: unreachable, and a page
+                assert not by["data.reachable"]["ok"] and pc.BARS in report["unreachable"] and len(alerts.sent) == 1
+            else:                                                  # slow but healthy: no page for the data
+                assert by["data.reachable"]["ok"] and not {pc.BARS, pc.LISTINGS} & set(report["unreachable"])
+                assert report["cut_short_by_budget"] and "cut short" in by["data.reachable"]["detail"]
+                assert any(v == "budget" for v in report["unlisted"].values())
+                assert all(by[f"options.listing.{s}"]["severity"] == "warn"
+                           for s, v in report["unlisted"].items() if v == "budget")

@@ -168,6 +168,7 @@ def eligible(options: Mapping[str, Any] | None, target: str, expiries: Mapping[s
 # The market-data sources a run reads (Alpaca): the consolidated daily bars, the broker's option listings, and the
 # pre-market snapshot (pre-open only). These words are the only ones `data.reachable` puts in its detail.
 BARS, LISTINGS, SNAPSHOT = "daily bars", "option listings", "pre-market prices"
+TAPE_WAIT = "the wait for the day's bar"   # cut short by the time budget (after the close)
 NOT_HERE = ("a warning only: the pre-open refresh passes are due after this 08:55 run, and the dashboard's own "
             "watcher pages on them")
 
@@ -190,7 +191,8 @@ def premarket_refresh(pre: Any, target: str) -> tuple[bool, str]:
 def assess(slot: str, now: dt.datetime, radar: Mapping[str, Any] | None, options: Mapping[str, Any] | None,
            daily: Mapping[str, Sequence[Mapping[str, Any]]], expiries: Mapping[str, Sequence[str]],
            live: Mapping[str, float], earnings: Sequence[Mapping[str, Any]],
-           unreachable: Sequence[str] = (), unlisted: Mapping[str, str] | None = None) -> list[Check]:
+           unreachable: Sequence[str] = (), unlisted: Mapping[str, str] | None = None,
+           cut: Sequence[str] = ()) -> list[Check]:
     """Every check for one run. Pure: the editions and the market data come in, the checks go out.
 
     `daily`: each symbol's consolidated-tape daily bars, split-adjusted, up to the last finished session.
@@ -201,7 +203,8 @@ def assess(slot: str, now: dt.datetime, radar: Mapping[str, Any] | None, options
     `unlisted`: names whose own option listing was unusable while the others answered (symbol -> a SAFE reason).
     Each gets an `options.listing.<SYM>` warning ("not verified"), never a page; whether the clone may trade it is
     unknown, so its close and levels are judged as if it may (a mismatch on it still fails), and it does not count
-    as tradeable in focus.tradeable."""
+    as tradeable in focus.tradeable. `cut`: what the run's time budget cut short (LISTINGS, TAPE_WAIT), said in
+    the details of `data.reachable` and of the tape checks it touches."""
     out: list[Check] = []
     target = target_session(slot, now)
     prev = lv.prev_session(target)
@@ -211,8 +214,9 @@ def assess(slot: str, now: dt.datetime, radar: Mapping[str, Any] | None, options
 
     no_bars, no_listings = BARS in unreachable, LISTINGS in unreachable
     blind = [s for s in (BARS, LISTINGS) if s in unreachable]
-    add("data.reachable", not blind, f"unreachable: {', '.join(blind)}; the editions are not verified" if blind
-        else "daily bars and option listings fetched")
+    short = f"; cut short by the run's time budget: {', '.join(cut)}" if cut else ""
+    add("data.reachable", not blind, (f"unreachable: {', '.join(blind)}; the editions are not verified" if blind
+        else "daily bars and option listings fetched") + short)
     if slot == "pre-open" and SNAPSHOT in unreachable:
         add("data.snapshot", False, "pre-market prices unreachable: the radar's overnight move is not checked", "warn")
     unlisted = dict(unlisted or {})
@@ -250,6 +254,8 @@ def assess(slot: str, now: dt.datetime, radar: Mapping[str, Any] | None, options
                 why = ("; ".join(loaded.problems[:3]) if loaded.problems else
                        f"the tape ends {ends}, the day's bar is not published yet" if ends < prev else
                        f"the tape ends {ends}")
+                if TAPE_WAIT in cut and ends < prev:
+                    why += "; the wait for it was cut short by the time budget"
                 add(f"options.tape.{sym}", False, f"no clean tape through {prev}: {why}", "warn")
                 continue
             close = _num((t.get("last") or {}).get("close"))
@@ -340,7 +346,7 @@ RETRY_WAIT_S = 3.0                     # one short retry per call: a blip does n
 RETRY_AFTER_MAX_S = 10.0               # a 429's Retry-After is honoured up to this
 CALL_WORST_S = 2 * (CONNECT_S + READ_S) + max(RETRY_WAIT_S, RETRY_AFTER_MAX_S)   # one call and its retry
 EDITIONS_WORST_S = 2 * (2 * EDITION_CALL_S + RETRY_WAIT_S)   # two kinds, each read twice
-BAR_PAGES = 3                          # pages of daily bars; 30,000 bars is about 100 names
+BAR_PAGES = 30                         # loop safety only: pages are followed to the end; the budget bounds the time
 RUN_BUDGET_S = 540.0                   # no call or wait starts unless its worst case ends inside this
 TAPE_TRIES, TAPE_WAIT_S = 3, 180.0     # after the close the day's daily bar can lag the check by minutes
 
@@ -374,7 +380,7 @@ def _retry_wait(e: requests.RequestException) -> float:
     resp = e.response if isinstance(e, requests.HTTPError) else None
     if resp is not None and resp.status_code == 429:
         raw = str((getattr(resp, "headers", None) or {}).get("Retry-After") or "").strip()
-        if raw.isdigit():
+        if raw.isascii() and raw.isdigit():
             return min(float(raw), RETRY_AFTER_MAX_S)
     return RETRY_WAIT_S
 
@@ -407,6 +413,7 @@ class MarketData(NamedTuple):
     live: dict[str, float]
     unreachable: tuple[str, ...] = ()     # BARS, LISTINGS, SNAPSHOT: the sources that gave no usable answer
     unlisted: tuple[tuple[str, str], ...] = ()   # (symbol, why): one name's listing unusable, the others fine
+    cut: tuple[str, ...] = ()             # what the run's time budget cut short: LISTINGS, TAPE_WAIT
 
 
 # A source's answer that is not usable: no connection, an HTTP error, a timeout (requests.RequestException, which
@@ -443,33 +450,43 @@ def fetch_bars(symbols: Sequence[str], target: str, get: Get = requests.get, sle
 
 
 def fetch_listings(symbols: Sequence[str], target: str, get: Get = requests.get, sleep: Sleep = time.sleep,
-                   budget: Budget | None = None) -> tuple[dict[str, list[str]] | None, dict[str, str]]:
-    """Each symbol's listed expiries from `target` to WITHIN_DAYS later, and the symbols whose own listing was not
-    usable (symbol -> a SAFE reason). Per symbol:
+                   budget: Budget | None = None) -> tuple[dict[str, list[str]] | None, dict[str, str], bool]:
+    """Each symbol's listed expiries from `target` to WITHIN_DAYS later; the symbols whose own listing was not
+    usable (symbol -> a SAFE reason); and whether the run's time budget cut the loop short. Per symbol:
       * a usable answer: its expiries (none listed is an answer: []);
-      * a non-transient error of that symbol alone (a 4xx, unreadable JSON, a contract row without a date): [] for
-        it, named in the second map, and the next symbol is asked;
-      * a transient failure that survives its retry (or a budget spent): the host is down. None: the listings are
-        unreachable, and no further symbol is asked.
-    When every symbol failed on its own, the listings are unreachable too (None)."""
+      * any error of that symbol alone, a transient one still failing after its retry included: [] for it, named in
+        the second map, and the next symbol is asked;
+      * two symbols in a row failing transiently: the host is down. None: the listings are unreachable, and no
+        further symbol is asked;
+      * the budget spent before a call: the listings fetched so far are kept, every symbol not reached is named
+        with reason "budget", and the third value is True.
+    When no symbol gave a usable answer (every one failed, or the budget left none), the listings are unreachable."""
     week_end = (dt.date.fromisoformat(target) + dt.timedelta(days=WITHIN_DAYS)).isoformat()
     expiries: dict[str, list[str]] = {}
     bad: dict[str, str] = {}
-    for s in symbols:
+    cut, in_a_row = False, 0
+    for n, s in enumerate(symbols):
         try:
             j = _alpaca_get(f"{PAPER}/v2/options/contracts", {"underlying_symbols": s, "expiration_date_gte": target,
                                                                  "expiration_date_lte": week_end, "limit": "10000"},
                             get, sleep, budget)
             expiries[s] = sorted({str(c["expiration_date"]) for c in j.get("option_contracts") or []})
+            in_a_row = 0
+        except OutOfTime:
+            cut = True
+            for rest in symbols[n:]:
+                expiries[rest], bad[rest] = [], "budget"
+            break
         except _UNUSABLE as e:
-            if isinstance(e, requests.RequestException) and _transient(e):
-                print(f"market data unavailable ({LISTINGS}): {_why(e)}", file=sys.stderr)
-                return None, {}
             expiries[s], bad[s] = [], _why(e)
+            in_a_row = in_a_row + 1 if isinstance(e, requests.RequestException) and _transient(e) else 0
+            if in_a_row >= 2:
+                print(f"market data unavailable ({LISTINGS}): {_why(e)}, twice in a row", file=sys.stderr)
+                return None, {}, False
     if symbols and len(bad) == len(symbols):
-        print(f"market data unavailable ({LISTINGS}): every name failed", file=sys.stderr)
-        return None, {}
-    return expiries, bad
+        print(f"market data unavailable ({LISTINGS}): no name answered", file=sys.stderr)
+        return None, {}, cut
+    return expiries, bad, cut
 
 
 def fetch_snapshot(symbols: Sequence[str], get: Get = requests.get, sleep: Sleep = time.sleep,
@@ -498,7 +515,7 @@ def market_data(symbols: Sequence[str], target: str, slot: str, get: Get = reque
     if daily is None:
         daily = {}
         unreachable.append(BARS)
-    expiries, bad = fetch_listings(symbols, target, get, sleep, budget)
+    expiries, bad, cut = fetch_listings(symbols, target, get, sleep, budget)
     if expiries is None:
         expiries = {}
         unreachable.append(LISTINGS)
@@ -509,7 +526,7 @@ def market_data(symbols: Sequence[str], target: str, slot: str, get: Get = reque
             unreachable.append(SNAPSHOT)
         else:
             live = got
-    return MarketData(daily, expiries, live, tuple(unreachable), tuple(sorted(bad.items())))
+    return MarketData(daily, expiries, live, tuple(unreachable), tuple(sorted(bad.items())), (LISTINGS,) if cut else ())
 
 
 def last_bar_date(bars: Sequence[Mapping[str, Any]]) -> str:
@@ -535,7 +552,7 @@ def wait_for_the_days_bar(symbols: Sequence[str], target: str, md: MarketData, o
         if all(last_bar_date(md.daily.get(s, [])) >= prev for s in wanted):
             return md
         if budget is not None and not budget.fits(TAPE_WAIT_S + CALL_WORST_S):
-            return md
+            return md._replace(cut=(*md.cut, TAPE_WAIT))
         sleep(TAPE_WAIT_S)
         again = fetch(symbols, target)
         if again is None:
@@ -579,11 +596,12 @@ def run(slot: str, now: dt.datetime | None = None, *, get: Get = requests.get, s
     with open(earnings_path or CONFIG_DIR / "events" / "earnings.csv") as fh:
         earnings = list(csv.DictReader(line for line in fh if not line.startswith("#")))
     checks = assess(slot, now, radar, options, md.daily, md.expiries, md.live, earnings, md.unreachable,
-                    dict(md.unlisted))
+                    dict(md.unlisted), md.cut)
     fails = [c for c in checks if not c.ok and c.severity == "fail"]
     warns = [c for c in checks if not c.ok and c.severity == "warn"]
     report = {"slot": slot, "session": target, "checked_at": now.isoformat(), "fails": len(fails), "warns": len(warns),
-              "unreachable": list(md.unreachable), "unlisted": dict(md.unlisted), "checks": [asdict(c) for c in checks]}
+              "unreachable": list(md.unreachable), "unlisted": dict(md.unlisted),
+              "cut_short_by_budget": list(md.cut), "checks": [asdict(c) for c in checks]}
     dest = out or OUT
     dest.mkdir(parents=True, exist_ok=True)
     (dest / f"{target}-{slot}.json").write_text(json.dumps(report, indent=1))
