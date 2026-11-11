@@ -95,6 +95,9 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+  resetQuoteCache();
 });
 
 describe("a run", () => {
@@ -376,7 +379,6 @@ describe("the record's feed", () => {
     await expect(d.fetchBars(["SPY"], { now: new Date(ny("10:31:01")), minFetchedAt: 0, timeoutMs: 100, halfDay: false })).rejects.toBeInstanceOf(BarsOff);
     await expect(d.fetchSnapshots(["SPY"], { now: new Date(ny("10:31:01")), timeoutMs: 100 })).rejects.toBeInstanceOf(BarsOff);
     expect(f).not.toHaveBeenCalled();
-    vi.unstubAllGlobals();
   });
 
   it("the deployed reads take sip refused by the plan (403) as not configured; a 403 on iex or a 401 stays a failure", async () => {
@@ -400,7 +402,6 @@ describe("the record's feed", () => {
     expect(await read("sip", 403)).toEqual(["off", "off"]);
     expect(await read("iex", 403)).toEqual(["failed", "failed"]);
     expect(await read("sip", 401)).toEqual(["failed", "failed"]);
-    vi.unstubAllGlobals();
   });
 
   it("the shadow numbers read records with and without the field alike", async () => {
@@ -483,22 +484,50 @@ describe("the snapshot probe", () => {
     for (const n of probe.names) expect(n).toMatchObject({ source: "fetched", trade_vs_day: "inside", quote: "normal" });
   });
 
-  it("is null when the snapshot read failed or timed out, even if a raw answer arrived", async () => {
-    for (const fail of [() => Promise.reject(new Error("alpaca 500")), () => Promise.reject(new BarsOff())]) {
-      const f = tapped({ fetchSnapshots: fail });
+  it("is null when the snapshot read failed, even though a raw answer was handed over first", async () => {
+    const cases: [Error, string][] = [
+      [new Error("alpaca 500"), "snapshot-failed"],
+      [new BarsOff(), "snapshot-off"],
+      [Object.assign(new Error("aborted"), { name: "TimeoutError" }), "snapshot-timeout"],
+    ];
+    for (const [err, reason] of cases) {
+      let handed = 0;
+      const f = fakeDeps({
+        fetchSnapshots: async (_s, o) => {
+          o.onRaw?.({ fetched: rawFor(o.now.getTime()), at: o.now.getTime() });
+          handed++;
+          throw err;
+        },
+      });
+      f.store.set("desk/eval.json", LOG);
       await runDeskEval(f.deps);
-      expect(stored(f).probe).toBeNull();
+      expect(handed, reason).toBe(1);
+      expect(stored(f), reason).toMatchObject({ status: "degraded", reason, probe: null });
     }
-    // An answer handed over, then the read rejected: the probe does not use it.
-    const late = fakeDeps({
-      fetchSnapshots: async (_s, o) => {
+  });
+
+  it("is null when the raw answer was handed over and the read then hung past TIMEOUT_MS.reads", async () => {
+    vi.useFakeTimers();
+    let handed = 0;
+    const f = fakeDeps({
+      fetchSnapshots: (_s, o) => {
         o.onRaw?.({ fetched: rawFor(o.now.getTime()), at: o.now.getTime() });
-        throw new Error("alpaca 500");
+        handed++;
+        return new Promise(() => undefined); // never answers
       },
     });
-    late.store.set("desk/eval.json", LOG);
-    await runDeskEval(late.deps);
-    expect(stored(late)).toMatchObject({ status: "degraded", reason: "snapshot-failed", probe: null });
+    f.store.set("desk/eval.json", LOG);
+    let settled = false;
+    const run = runDeskEval(f.deps).finally(() => {
+      settled = true;
+    });
+    await vi.advanceTimersByTimeAsync(TIMEOUT_MS.reads - 1);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(2);
+    const r = await run;
+    expect(handed).toBe(1);
+    expect(r).toMatchObject({ ok: true, outcome: "logged", status: "degraded", reason: "snapshot-timeout" });
+    expect(stored(f)).toMatchObject({ status: "degraded", reason: "snapshot-timeout", probe: null });
   });
 
   it("a probe that throws, or gives something that cannot be written, leaves the run, its outcome and its record unchanged", async () => {
@@ -557,7 +586,6 @@ describe("the snapshot probe", () => {
     vi.stubEnv("ALPACA_API_KEY_ID", "k");
     vi.stubEnv("ALPACA_API_SECRET_KEY", "s");
     vi.stubEnv("ALPACA_FEED", "iex");
-    resetQuoteCache();
     const raw = rawFor(ny("10:31:01"));
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(raw), { status: 200 })));
     const got: unknown[] = [];
@@ -565,6 +593,5 @@ describe("the snapshot probe", () => {
     const ans = await defaultDeskRunDeps().fetchSnapshots(SYMS, { now, timeoutMs: 1_000, onRaw: (r) => got.push(r) });
     expect(got).toEqual([{ fetched: raw, at: now.getTime() }]);
     expect(Object.keys(ans.quotes)).toEqual(SYMS);
-    vi.unstubAllGlobals();
   });
 });
