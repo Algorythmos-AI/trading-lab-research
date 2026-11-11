@@ -70,15 +70,30 @@ listings:
 
 | Check | Fails when |
 |---|---|
+| `data.reachable` | the daily bars or the option listings gave no usable answer: for the bars, no connection, a timeout, a dropped body or a 5xx/429 still failing after one retry (3 seconds later, or a 429's Retry-After up to 10 seconds), any other HTTP error or an unreadable body (not retried); for the listings, two names in a row failing that way, or no name answering at all. The checks that need them then warn "not verified". One name's own listing error, a lasting one included, is not this: it warns `options.listing.<SYM>` ("not verified") and the other names are checked as usual. Bar pages are followed to the end (at most 30) |
 | `options.session`, `options.built_from` | the edition is not for the coming session, or not built from the last close |
 | `options.close.<SYM>` | the edition's close is more than $0.02 from the tape's |
 | `options.levels.<SYM>` | PDH, PDL, PWH, PWL, PMH, PML, MA20 or MA50 is more than $0.05 from the same level recomputed |
 | `radar.date`, `radar.fresh` (before the open) | the radar is not for today, or is more than 6 hours old |
 | `radar.close.<SYM>` (before the open) | the radar's price is more than $0.02 from the last close |
 
-Warnings, never a page: `focus.tradeable` (fewer than two focus names have a contract expiring that session; the
-clone tops up with SPY and QQQ, DEC-0032), `focus.premarket` (the 08:50 refresh did not land), `focus.earnings.<SYM>`
-(a focus name reports, so the clone skips it), `radar.premarket.<SYM>` (price moved more than 0.5% since the radar).
+Warnings, never a page: `focus.tradeable` (no focus name has a contract the clone may trade that session; one is
+enough, the clone tops up with SPY and QQQ, DEC-0032), `focus.premarket` (the pre-open refresh is not for today, or
+is in a shape this check does not read; always a warning, because the refresh passes are due after this 08:55 run and
+the dashboard's own watcher pages on them), `focus.earnings.<SYM>` (a focus name reports, so the clone skips it),
+`radar.premarket.<SYM>` (price moved more than 0.5% since the radar), `data.snapshot` (the pre-market prices were
+unreachable, so that move is not checked).
 
-Each run writes `var/pipeline-check/<session>-<slot>.json`. Any failed check pages once a day per run with the ids.
+Each run writes `var/pipeline-check/<session>-<slot>.json`. Any failed check pages once a day per run with counts per
+check family only (for example `options.close: 2 failed`), the slot and the session date: never a symbol, price or
+level, since ntfy is a public topic. The report has the ids and the detail. A failed check exits 0; a crash of the
+job exits non-zero, and the job runner pings `wt-pipeline-check/fail` and alerts "pipeline-check failed". No call or
+wait starts unless it ends within 540 seconds of the start, inside the job's 10-minute deadline. When the budget runs
+out, what was fetched is kept: the names whose listing was not reached warn `options.listing.<SYM>` (budget), an
+after-close wait round that would not fit is skipped and the tape checks say so, and the report's
+`cut_short_by_budget` names what was cut.
+
+Owner note: pages raised before this change and still spooled on the host can carry check ids with symbols, and are
+sent when ntfy next accepts them. To look: `grep -l "Pipeline check" /home/wt/trading/var/alerts/spool/*.json`
+(each file is one message); deleting a file drops that message.
 Read the report: `cat /home/wt/trading/var/pipeline-check/$(date +%F)-pre-open.json`.
