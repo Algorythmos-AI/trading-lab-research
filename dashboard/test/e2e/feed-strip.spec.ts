@@ -141,8 +141,20 @@ test("at 375 px the strip and the live prices' retry line are both drawn and nev
   await expect(strip(page)).toBeVisible();
   const s = await box(page, "[data-feed-strip]");
   const r = await box(page, "[data-feed-retry]");
-  const overlap = s.x < r.x + r.width && r.x < s.x + s.width && s.y < r.y + r.height && r.y < s.y + s.height;
-  expect(overlap).toBe(false);
+  const overlaps = (a: typeof s, b: typeof s) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+  expect(overlaps(s, r)).toBe(false);
+  // The board's feed line (IEX · fetched every 2 s ... · last trades · checked), wrapping under the header: clear of
+  // the strip and of the retry line.
+  const facts = page.locator('[data-feed-facts="board"]');
+  if (await facts.count()) {
+    const f = await box(page, '[data-feed-facts="board"]');
+    expect(overlaps(s, f)).toBe(false);
+  }
+  // A late or failed chip is still in view without scrolling, with every line the board header now carries.
+  for (const id of ["prices", "options-edition", "journal"]) {
+    const c = await box(page, `[data-feed-chip="${id}"]`);
+    expect(c.y + c.height).toBeLessThanOrEqual(812);
+  }
   // Never green beside "trying again".
   expect(await page.locator('[data-feed-chip="prices"]').getAttribute("data-feed-state")).not.toBe("on_time");
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

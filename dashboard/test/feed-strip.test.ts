@@ -134,6 +134,19 @@ describe("the strip's clock and its failing polls", () => {
   });
 });
 
+describe("prices off for a reason the server gives (use-quotes.ts `why`)", () => {
+  it("off because of the feed setting or the data plan is failed, in the session and outside it, never not due", () => {
+    for (const t of [NOW, Date.parse("2026-11-14T16:00:00Z")]) {
+      // FeedStrip passes the poll's status through; `why` ("feed" | "plan") never turns off into anything but failed.
+      for (const why of ["feed", "plan", undefined]) {
+        const feed = { status: "off" as const, why };
+        const chips = stripChips({ stamps, now: t, browserNow: t, prices: { status: feed.status, receivedAt: null }, bars: { status: "off", receivedAt: null }, evalStatus: null });
+        expect(chips.find((c) => c.id === "prices")!.state).toBe("failed");
+      }
+    }
+  });
+});
+
 describe("the Operations panel's words", () => {
   it("never says on time for a missing, unreadable or unread feed", () => {
     const missing = evaluateStamped({ stamps: { "options-edition": { status: "missing" } }, refusals: {}, shadow: null }, Date.parse("2026-11-12T23:00:00Z"));

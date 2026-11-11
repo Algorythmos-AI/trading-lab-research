@@ -1,4 +1,5 @@
 import "server-only";
+import { configuredFeed, type DataFeed, FEED_PLAN_REFUSED, FEED_REFUSED, planRefused } from "./alpaca-feed";
 import { FIXTURE_OFFSET_ATR, FLAKY_COOKIE, flagsFromCookieHeader, flakyCountFromCookieHeader, flakyFails, tickPrice, type VariantFlag } from "./fixture-variants";
 import { SCRIPT_ANSWER_LAG_MS, scriptQuote, scriptStep, stepFromCookieHeader, stepInstant } from "./fixture-script";
 import { logEvent } from "./log";
@@ -16,7 +17,7 @@ function json(status: number, body: unknown): Response {
  * session at 11:00 New York. Lets the browser tests drive the live panel with no network and no keys. With `tick`
  * the price flips by a cent and its time advances every second, so a test can watch the page take live updates.
  */
-async function fixtureQuotes(symbols: string[], now: Date, tick = false): Promise<QuoteResponse> {
+async function fixtureQuotes(symbols: string[], now: Date, feed: DataFeed, tick = false): Promise<QuoteResponse> {
   const mod = await import("../../test/fixtures/options.v1.json");
   const e = (mod.default ?? mod) as unknown as OptionsEdition;
   const quotes: Record<string, Quote> = {};
@@ -44,7 +45,7 @@ async function fixtureQuotes(symbols: string[], now: Date, tick = false): Promis
       vwap: Math.round(((close + price) / 2) * 100) / 100,
     };
   }
-  return { as_of: now.toISOString(), feed: "iex", quotes, missing, fixture: true };
+  return { as_of: now.toISOString(), feed, quotes, missing, fixture: true };
 }
 
 /**
@@ -52,7 +53,7 @@ async function fixtureQuotes(symbols: string[], now: Date, tick = false): Promis
  * follows the server's clock), the leader SMH among them. The answer is dated the step, a few seconds after its last
  * trade, so the page's clock (the feed's `as_of`) stands at the step whatever the browser's clock says.
  */
-async function scriptedQuotes(symbols: string[], step: number): Promise<QuoteResponse> {
+async function scriptedQuotes(symbols: string[], step: number, feed: DataFeed): Promise<QuoteResponse> {
   const mod = await import("../../test/fixtures/options.v1.json");
   const e = (mod.default ?? mod) as unknown as OptionsEdition;
   const quotes: Record<string, Quote> = {};
@@ -62,22 +63,26 @@ async function scriptedQuotes(symbols: string[], step: number): Promise<QuoteRes
     if (q) quotes[s] = q;
     else missing.push(s);
   }
-  return { as_of: new Date(stepInstant(e.session, step) + SCRIPT_ANSWER_LAG_MS).toISOString(), feed: "iex", quotes, missing, fixture: true };
+  return { as_of: new Date(stepInstant(e.session, step) + SCRIPT_ANSWER_LAG_MS).toISOString(), feed, quotes, missing, fixture: true };
 }
 
 /** Fixture mode's answer: the scripted morning with `quotes-script`, else the fixture prices (ticking with `quotes-tick`). */
-async function fixtureAnswer(symbols: string[], now: Date, flags: ReadonlySet<VariantFlag>, cookie: string | null): Promise<Response> {
-  if (flags.has("quotes-script")) return json(200, await scriptedQuotes(symbols, scriptStep(stepFromCookieHeader(cookie), now.getTime())));
-  return json(200, await fixtureQuotes(symbols, now, flags.has("quotes-tick")));
+async function fixtureAnswer(symbols: string[], now: Date, flags: ReadonlySet<VariantFlag>, cookie: string | null, feed: DataFeed): Promise<Response> {
+  if (flags.has("quotes-script")) return json(200, await scriptedQuotes(symbols, scriptStep(stepFromCookieHeader(cookie), now.getTime()), feed));
+  return json(200, await fixtureQuotes(symbols, now, feed, flags.has("quotes-tick")));
 }
 
 /**
- * GET /api/quote?s=SPY,QQQ: live last trades from Alpaca's IEX feed. 503 until the keys are set (the page then stops
- * asking), 429 when Alpaca rate-limits us (the page waits its longest), 502 for any other upstream failure.
+ * GET /api/quote?s=SPY,QQQ: live last trades from the configured Alpaca feed (alpaca-feed.ts), named in the answer's
+ * `feed`. 503 until the keys are set, while ALPACA_FEED is not a feed (in fixture mode too), or when it is sip and
+ * Alpaca refuses it with 403 (not on the data plan): the page then stops asking. 429 when Alpaca rate-limits us (the
+ * page waits its longest), 502 for any other upstream failure.
  */
 export async function handleQuote(req: Request, now: Date = new Date()): Promise<Response> {
   const symbols = parseSymbols(new URL(req.url).searchParams.get("s"));
   if (!symbols) return json(400, { error: "give ?s= with one or more ticker symbols" });
+  const feed = configuredFeed();
+  if (feed === null) return json(503, FEED_REFUSED);
   if (fixtureMode()) {
     const cookie = req.headers.get("cookie");
     const flags = flagsFromCookieHeader(cookie);
@@ -86,17 +91,19 @@ export async function handleQuote(req: Request, now: Date = new Date()): Promise
     if (flags.has("quotes-flaky")) {
       // A short outage: this browser's count of requests rides in a cookie, so parallel tests never share it.
       const n = flakyCountFromCookieHeader(cookie);
-      const res = flakyFails(n) ? json(502, { error: "upstream" }) : await fixtureAnswer(symbols, now, flags, cookie);
+      const res = flakyFails(n) ? json(502, { error: "upstream" }) : await fixtureAnswer(symbols, now, flags, cookie, feed);
       res.headers.append("set-cookie", `${FLAKY_COOKIE}=${n + 1}; Path=/; SameSite=Strict`);
       return res;
     }
-    return fixtureAnswer(symbols, now, flags, cookie);
+    return fixtureAnswer(symbols, now, flags, cookie, feed);
   }
   const keys = alpacaKeys();
   if (!keys) return json(503, { error: "not-configured" });
   try {
-    return json(200, await fetchQuotes(symbols, keys, now));
+    return json(200, await fetchQuotes(symbols, keys, now, fetch, undefined, { feed }));
   } catch (e) {
+    // SIP set but not on the data plan: off, as for a refused setting, never a retry for ever.
+    if (planRefused(feed, e)) return json(503, FEED_PLAN_REFUSED);
     logEvent("quote.fetch", { outcome: "error", error: e instanceof Error ? e.name : "unknown" });
     // A rate limit is passed on as one, so the page waits its longest; anything else is 502.
     const status = upstreamStatus(e);

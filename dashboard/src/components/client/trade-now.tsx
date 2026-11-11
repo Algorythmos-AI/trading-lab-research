@@ -51,7 +51,7 @@ import { type NameState, type NameStateName, serverNow } from "@/lib/trade-state
 import { cn } from "@/lib/utils";
 import { useDeskShadow } from "./desk-shadow";
 import { useDone } from "./done-today";
-import { FeedRetry, useLive } from "./live-layer";
+import { FeedFacts, FeedRetry, useLive } from "./live-layer";
 import { useBars } from "./use-bars";
 import type { PolledRead } from "@/lib/feed-watch";
 import { useTradeManage } from "./trade-manage";
@@ -466,6 +466,7 @@ export function TradeNowBoard({
   onOpen,
   switches,
   retry,
+  facts,
   rowExtra,
   after,
   doneFor,
@@ -482,6 +483,8 @@ export function TradeNowBoard({
   switches?: React.ReactNode;
   /** Laid over the header row while the live prices are being tried again after failing (live-layer's FeedRetry). */
   retry?: React.ReactNode;
+  /** Under the header row, outside the retry line, so it is never covered: the feed's name and ages (FeedFacts). */
+  facts?: React.ReactNode;
   /** Drawn inside a row (an expanded one under its numbers): the manage card's "I'm in" and its form (trade-manage.tsx). */
   rowExtra?: (row: BoardRow, paused: boolean) => React.ReactNode;
   /** Drawn under the rows, and kept while the live prices are off: the manage cards (trade-manage.tsx). */
@@ -502,8 +505,9 @@ export function TradeNowBoard({
   const status = mode.kind === "live" ? (paused ? "paused" : "live") : mode.kind === "loading" ? "connecting" : mode.kind === "off" ? "off" : "waiting";
   return (
     <section aria-labelledby="trade-now-title" data-trade-now={mode.kind} data-board-status={status} className="bg-card grid gap-2 rounded-lg border px-3 py-2.5">
-      {/* relative: the retry line (FeedRetry) is laid over this row, so it never moves the rows below. */}
-      <div data-board-header className="relative flex items-center justify-between gap-x-4 gap-y-1.5">
+      {/* relative: the retry line (FeedRetry) is laid over this row, so it never moves the rows below. At least 44 px
+          tall on a phone, the height of its Retry now button, so the line never reaches past the row onto the feed line. */}
+      <div data-board-header className="relative flex items-center justify-between gap-x-4 gap-y-1.5 max-sm:min-h-11">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h2 id="trade-now-title" className="flex items-center gap-2 text-sm font-semibold">
             <Zap aria-hidden className="text-muted-foreground size-4" />
@@ -530,6 +534,7 @@ export function TradeNowBoard({
         {showRows ? switches : null}
         {retry}
       </div>
+      {facts}
       {mode.kind !== "live" ? (
         <p data-board-line className={cn("text-[0.8125rem]", mode.kind === "off" || mode.kind === "old" ? "text-muted-foreground" : "font-medium")}>
           {mode.line}
@@ -1002,6 +1007,7 @@ export function TradeNow() {
       barsDelayed={b.barsDelayed}
       onOpen={openFocusCard}
       retry={<FeedRetry />}
+      facts={<FeedFacts where="board" symbols={b.items.map((i) => i.symbol)} />}
       rowExtra={b.manage.rowExtra}
       after={b.manage.cards}
       doneFor={b.doneFor}

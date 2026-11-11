@@ -168,13 +168,29 @@ wt.ops.publish                            POST /api/ingest            (productio
   the recorded sources); `calendar-off`, `calendar-stale` and `calendar-poison` bend it.
 - **Live prices** (`/api/quote?s=SPY,QQQ`, read by the Options page every 2 s while it is open, one poll shared by the
   glance strip, the level maps' live dot and the state chips; a quote older than 30 s shows as stale): last trades from
-  Alpaca's free IEX feed, fetched on the server so the page keeps `connect-src 'self'` and never sees the keys. At most
+  Alpaca's stock feed named by `ALPACA_FEED` (`src/lib/alpaca-feed.ts`; the free IEX feed by default), fetched on the
+  server so the page keeps `connect-src 'self'` and never sees the keys. Every answer names its feed (`feed`), and the
+  session bars (`/api/bars`) and the server's shadow check (`desk-run.ts`, which writes on each slot's record the feed its reads answered from, null when nothing was read)
+  read the same one. IEX is one exchange, a small share of US volume, so a high or low printed elsewhere can be
+  missing from it. At most
   60 symbols (as many as one options edition may carry), each cached 1.5 s per instance on its own, so two pages
   asking for different names share what overlaps; 503 until the keys are set (the page then stops asking), 429 when Alpaca
   rate-limits us, 502 when Alpaca fails otherwise. After a failure the page tries again in 2 s, then 4, 8, 16 and at most
   30 s (`src/lib/backoff.ts`), at 30 s straight away after a 429, and back to every 2 s on the first answer; while it
   waits the board says so, with the seconds left and a Retry now button, and a tab shown again tries once at once. The
-  session bars and the option chain wait the same way, capped at their own 30 s interval. Fixture mode answers from
+  session bars and the option chain wait the same way, capped at their own 30 s interval.
+  **What the page says about them.** The page asks for prices every 2 s; it is not sent each trade. The board's feed
+  line (and the classic view's glance) says so, names the feed the last answer reported ("IEX" or "SIP"; nothing at
+  all for an answer that names none, never a guess), and gives two ages apart (`src/lib/feed-provenance.ts`): **last
+  trades N to M ago**, the newest and the oldest last trade across the names (one value for one name, or when both
+  ends read the same), from Alpaca's own trade times measured on the server's clock (the board's `serverNow`), so a
+  phone whose clock is minutes out reads the same ages and one busy name never makes a quiet one look fresh; and
+  **checked N ago**, when the page last got an answer. A name with no trade today is left out of the spread and said
+  apart ("1 name with no trade today"). A price checked a second ago can still be a trade from a minute ago: the
+  first grows while the second stays small. The spread turns to the warning colour once its oldest end passes 120 s
+  and the answer once it passes 20 s, the board's own limits, where the rows and the board pause; the per-name stale
+  marks are unchanged. The last-trade ages can read up to about 1.5 s younger than they are, since the server shares
+  each name's answer for 1.5 s and the board's clock is set from that answer's time. Fixture mode answers from
   the options fixture with no keys and no network. Research only: the keys are market-data keys and nothing here
   can trade.
 - **Watchdog** (`src/lib/watchdog.ts`, pure and unit-tested): in a window a snapshot older than 35 min is late
@@ -344,8 +360,9 @@ other panes keep working.
 | `PRIMARY_HOST` | Vercel production (optional) | The key id whose snapshots are the visible ones; default `default`. Every other key's go to the shadow slots |
 | `DASHBOARD_INGEST_SCOPES` | Vercel production (optional) | JSON map `{"<key id>": {"desks": ["hft"]}}`: that key is the primary publisher of those desks and may publish nothing else (see Desks). Holds no secret |
 | `RADAR_INGEST_SECRET` | Vercel production + the radar's cloud environment | HMAC key for key id `radar`. It may only publish research editions (`stocksdelta/radar`, `stocksdelta/options`, `stocksdelta/journal`); unset means the radar key is refused |
-| `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY` (or Alpaca's own `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY`) | Vercel production only | Alpaca paper-account keys, used only for the free IEX market data behind `/api/quote`; unset means the Options page shows live prices as off |
+| `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY` (or Alpaca's own `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY`) | Vercel production only | Alpaca paper-account keys, used only for the market data behind `/api/quote` and `/api/bars` (the feed is `ALPACA_FEED`'s); unset means the Options page shows live prices as off |
 | `ALPACA_DATA_URL` | Vercel (optional) | Market-data base URL, default `https://data.alpaca.markets` |
+| `ALPACA_FEED` | Vercel (optional) | The stock feed for the live prices, the session bars and the shadow check: `iex` (default when unset or empty; free, one exchange) or `sip` (every US exchange). Case and surrounding spaces are ignored. `sip` needs a paid Alpaca market-data plan and is the owner's decision alone. Any other value is refused: `/api/quote` and `/api/bars` answer 503 `not-configured` (in fixture mode too), so the page drops its prices and shows them as off until it is reloaded, the shadow check logs `bars-off`, and one log line `alpaca.feed` gives the bad value's length, never the value. With `sip` on a plan that does not include it, Alpaca answers 403: the routes then answer 503 `not-configured` with `why: "plan"`, the page shows the prices as off and says SIP is not on this data plan, the shadow check logs `bars-off`, and one `alpaca.feed` line with outcome `plan` is logged (a 403 on `iex`, or a 401, stays a 502 failure). The option chain's feed is separate and not set by it |
 | `CRON_SECRET` | Vercel production | Bearer token Vercel Cron sends to `/api/cron/watchdog` and `/api/cron/desk` |
 | `NTFY_TOPIC` | Vercel production and preview + the Mac | Secret, random ntfy topic for pages; unset means log and skip |
 | `NTFY_SERVER` | Vercel (optional) | ntfy server, default `https://ntfy.sh` |

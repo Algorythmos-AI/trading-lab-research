@@ -510,3 +510,126 @@ test("the retry notice fits a 375 px screen with no sideways scroll, moves no ro
   expect(box.x + box.width).toBeLessThanOrEqual(375);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
 });
+
+// ---- where the prices come from, and how old they are ---------------------------------------------------------------
+const facts = (page: Page) => board(page).locator("[data-feed-facts]");
+/** An age in whole seconds: the newest or the oldest end of the last trades, or the answer's. */
+const ageS = async (page: Page, kind: "newest" | "oldest" | "checked") =>
+  Number(await facts(page).locator(kind === "checked" ? '[data-feed-age="checked"] [data-age-slot]' : `[data-age-end="${kind}"]`).getAttribute("data-age-s"));
+const rowBoxes = (page: Page) => rows(page).evaluateAll((els) => els.map((e) => JSON.stringify(e.getBoundingClientRect())));
+
+/** Every answer as the server sent it, but dated on by the time since the first one: the same trade, fetched again and again. */
+async function sameTradeAgain(page: Page, edit: (body: Record<string, unknown>) => void = () => undefined) {
+  let first = 0;
+  await page.route("**/api/quote**", async (route) => {
+    const res = await route.fetch();
+    const body = (await res.json()) as Record<string, unknown>;
+    first ||= Date.now();
+    body.as_of = new Date(Date.parse(String(body.as_of)) + (Date.now() - first)).toISOString();
+    edit(body);
+    await route.fulfill({ response: res, json: body });
+  });
+}
+
+test("the board names the feed the server reported, says it is fetched every 2 s, and gives both ages apart", async ({ page, context, baseURL }) => {
+  await at(context, baseURL, 3);
+  await page.goto("/options");
+  await expect(rows(page).first()).toHaveAttribute("data-board-state", "enter_zone");
+  await expect(facts(page)).toBeVisible();
+  await expect(facts(page).locator("[data-feed-name]")).toHaveText("IEX");
+  await expect(facts(page).locator("[data-feed-source]")).toHaveText("IEX · fetched every 2 s, not streamed");
+  await expect(facts(page).locator('[data-feed-age="trade"]')).toHaveText(/^last trades +\d+ s( +to +\d+ s)? +ago$/);
+  await expect(facts(page).locator('[data-feed-age="checked"]')).toHaveText(/^checked +\d+ s ago$/);
+  // the scripted answer comes 3 s after its trade (the page's one-second clock can read up to a second short)
+  expect(await ageS(page, "newest")).toBeGreaterThanOrEqual(2);
+  expect(await ageS(page, "oldest")).toBeGreaterThanOrEqual(await ageS(page, "newest"));
+  expect(await ageS(page, "checked")).toBeLessThanOrEqual(3);
+  // the desk's pill names it too
+  await expect(page.getByText(/^Live \d{2}:\d{2} · IEX$/).first()).toBeVisible();
+  // never read out each second
+  expect(await facts(page).getAttribute("aria-live")).toBe("off");
+});
+
+test("the same stale trade fetched again: checked stays fresh while the last trade grows, and no row moves", async ({ page, context, baseURL }) => {
+  await at(context, baseURL, 3);
+  await sameTradeAgain(page);
+  await page.goto("/options");
+  await expect(rows(page).first()).toHaveAttribute("data-board-state", "enter_zone");
+  await expect(facts(page)).toBeVisible();
+  const before = await rowBoxes(page);
+  const trade0 = await ageS(page, "newest");
+  // past 10 s, so the number gains a digit: the slot keeps its width
+  await expect.poll(() => ageS(page, "newest"), { timeout: 20_000 }).toBeGreaterThanOrEqual(Math.max(trade0 + 6, 10));
+  expect(await ageS(page, "checked")).toBeLessThanOrEqual(3);
+  expect(await rowBoxes(page)).toEqual(before);
+  await expect(board(page)).toHaveAttribute("data-board-status", "live");
+});
+
+test("an answer that names no feed shows no feed name, only the ages", async ({ page, context, baseURL }) => {
+  await at(context, baseURL, 3);
+  await sameTradeAgain(page, (body) => delete body.feed);
+  await page.goto("/options");
+  await expect(facts(page)).toBeVisible();
+  await expect(facts(page).locator("[data-feed-source]")).toHaveText("fetched every 2 s, not streamed");
+  await expect(page.locator("[data-feed-name]")).toHaveCount(0);
+  await expect(page.getByText(/· (IEX|SIP)$/)).toHaveCount(0);
+  await expect(facts(page).locator('[data-age-end="newest"]')).toHaveAttribute("data-age-s", /\d+/);
+});
+
+test("while the prices are retried the ages stay in sight, and checked grows", async ({ page, context, baseURL }) => {
+  await flaky(context, baseURL);
+  await page.goto("/options");
+  await expect(rows(page).first()).toHaveAttribute("data-board-state", "enter_zone");
+  await expect(retryLine(page)).toBeVisible({ timeout: 10_000 });
+  await expect(facts(page)).toBeVisible();
+  // under the retry line and all it draws (its button may reach past the header row on a phone), never covered by it
+  const drawnTo = await retryLine(page).evaluate((el) => Math.max(el.getBoundingClientRect().bottom, ...[...el.querySelectorAll("*")].map((c) => c.getBoundingClientRect().bottom)));
+  const ages = (await facts(page).boundingBox())!;
+  expect(ages.y).toBeGreaterThanOrEqual(drawnTo - 1);
+  await expect.poll(() => ageS(page, "checked"), { timeout: 10_000 }).toBeGreaterThanOrEqual(3);
+  await expect(retryLine(page)).toHaveCount(0, { timeout: 20_000 });
+  await expect.poll(() => ageS(page, "checked"), { timeout: 5_000 }).toBeLessThanOrEqual(2);
+});
+
+test("the feed line fits a 375 px screen, keeps its shape as the ages tick, and moves no row", async ({ page, context, baseURL }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await at(context, baseURL, 3);
+  await sameTradeAgain(page);
+  await page.goto("/options");
+  await expect(rows(page).first()).toHaveAttribute("data-board-state", "enter_zone");
+  const box = (await facts(page).boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(375);
+  for (const part of await facts(page).locator(":scope > span").all()) {
+    const b = (await part.boundingBox())!;
+    expect(b.x + b.width).toBeLessThanOrEqual(box.x + box.width + 0.5);
+    expect(await part.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+  }
+  const before = await rowBoxes(page);
+  const height = box.height;
+  await expect.poll(() => ageS(page, "newest"), { timeout: 20_000 }).toBeGreaterThanOrEqual(10);
+  expect((await facts(page).boundingBox())!.height).toBe(height);
+  expect(await rowBoxes(page)).toEqual(before);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+});
+
+test("one quiet name is not hidden by a busy one: the line gives both ends, warns by the oldest, and names a name with no trade", async ({ page, context, baseURL }) => {
+  await at(context, baseURL, 3);
+  await sameTradeAgain(page, (body) => {
+    const quotes = body.quotes as Record<string, { at: string }>;
+    // QQQ last printed 150 s before the answer (past the 120 s limit); AAPL has no quote at all
+    quotes.QQQ!.at = new Date(Date.parse(String(body.as_of)) - 150_000).toISOString();
+    delete quotes.AAPL;
+  });
+  await page.goto("/options");
+  await expect(facts(page)).toBeVisible();
+  const trade = facts(page).locator('[data-feed-age="trade"]');
+  await expect(trade).toHaveAttribute("data-trade-stale", "true");
+  await expect(trade.locator("[data-age-range]")).toHaveAttribute("data-age-range", "two");
+  await expect(trade).toHaveText(/^last trades +\d+ s +to +\d+ min +ago$/);
+  expect(await ageS(page, "newest")).toBeLessThanOrEqual(6);
+  // 150 s before the answer; the page's one-second clock can read up to a second short
+  expect(await ageS(page, "oldest")).toBeGreaterThanOrEqual(149);
+  await expect(trade).toHaveClass(/text-warn/);
+  await expect(facts(page).locator("[data-feed-no-trade]")).toHaveText("1 name with no trade today");
+});
