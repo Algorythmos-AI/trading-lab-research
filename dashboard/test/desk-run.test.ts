@@ -330,11 +330,12 @@ describe("the record's feed", () => {
     const [path, rec] = f.records()[0]!;
     const raw = JSON.parse(f.store.get(path)!) as Record<string, unknown>;
     expect(recordFeed(raw)).toBe("sip");
-    // the engine's fields come first and are unchanged; the feed is the one key after them
+    // the engine's fields come first and are unchanged; the feed is the key after them, then the snapshot probe
     const keys = Object.keys(raw);
-    expect(keys.at(-1)).toBe("feed");
-    const { feed: _feed, ...engine } = raw;
+    expect(keys.slice(-2)).toEqual(["feed", "probe"]);
+    const { feed: _feed, probe: _probe, ...engine } = raw;
     void _feed;
+    void _probe;
     expect(Object.keys(engine)).toEqual(["v", "engine", "source", "status", "reason", "slot_end", "evaluated_at", "session", "edition_session", "edition_as_of", "board", "rows", "degraded_names", "snapshot_ok", "day"]);
     expect(rec.status).toBe("ok");
   });
@@ -415,5 +416,155 @@ describe("the record's feed", () => {
     expect(old.every((r) => recordFeed(r) === null)).toBe(true);
     expect(shadowSummary([S], withFeed, [])).toEqual(shadowSummary([S], old, []));
     expect(shadowSummary([S], withFeed, []).logged).toBe(1);
+  });
+});
+
+// ---- the snapshot probe on the record -------------------------------------------------------------------------------
+describe("the snapshot probe", () => {
+  /** A raw Alpaca snapshot per name, consistent with what fakeDeps' snapshot answer says. */
+  const rawFor = (t: number) =>
+    Object.fromEntries(
+      SYMS.map((s) => {
+        const c = E.focus!.items.find((i) => i.symbol === s)!.close ?? 100;
+        return [
+          s,
+          {
+            latestTrade: { t: new Date(t - 1_000).toISOString(), x: "V", p: c, s: 1, c: ["@"], i: 1, z: "B" },
+            latestQuote: { t: new Date(t - 1_000).toISOString(), ax: "V", ap: c + 0.01, as: 1, bx: "V", bp: c - 0.01, bs: 1, c: ["R"], z: "B" },
+            minuteBar: { t: new Date(t - (t % 60_000)).toISOString(), o: c, h: c, l: c, c, v: 1, n: 1, vw: c },
+            dailyBar: { t: `${S}T04:00:00Z`, o: c, h: c + 0.1, l: c - 0.1, c, v: 1, n: 1, vw: c },
+            prevDailyBar: { t: "2026-10-09T04:00:00Z", o: c, h: c, l: c, c, v: 1, n: 1, vw: c },
+          },
+        ];
+      }),
+    );
+  /** fakeDeps whose snapshot read also hands the raw answer to the probe, as the deployed fetchQuotes does. */
+  const tapped = (over: Partial<DeskRunDeps> = {}) => {
+    const f = fakeDeps(over);
+    const inner = f.deps.fetchSnapshots;
+    f.deps.fetchSnapshots = async (s, o) => {
+      const r = await inner(s, o);
+      o.onRaw?.({ fetched: rawFor(o.now.getTime()), at: o.now.getTime() });
+      return r;
+    };
+    f.store.set("desk/eval.json", LOG);
+    return f;
+  };
+  const stored = (f: ReturnType<typeof fakeDeps>) => JSON.parse([...f.store.entries()].find(([k]) => k.startsWith("desk/log/"))![1]) as Record<string, unknown>;
+  const withoutProbe = (r: Record<string, unknown>) => {
+    const { probe: _p, ...rest } = r;
+    void _p;
+    return rest;
+  };
+
+  it("rides on the slot's one put: no extra store call and no extra upstream call", async () => {
+    const plain = fakeDeps();
+    plain.store.set("desk/eval.json", LOG);
+    await runDeskEval(plain.deps);
+    const f = tapped();
+    await runDeskEval(f.deps);
+    expect(f.calls).toEqual(plain.calls);
+    expect([...f.store.keys()].sort()).toEqual([...plain.store.keys()].sort());
+  });
+
+  it("records the facts of each focus name, and leaves the engine's record and the feed exactly as they are without it", async () => {
+    const plain = fakeDeps();
+    plain.store.set("desk/eval.json", LOG);
+    const a = await runDeskEval(plain.deps);
+    const f = tapped();
+    const b = await runDeskEval(f.deps);
+    expect(b).toEqual(a);
+    const rec = stored(f);
+    expect(withoutProbe(rec)).toEqual(withoutProbe(stored(plain)));
+    expect(stored(plain).probe).toBeNull();
+    const probe = rec.probe as { v: number; names: { symbol: string; source: string; trade_vs_day: string; quote: string; minute: string }[] };
+    expect(probe.v).toBe(1);
+    expect(probe.names.map((n) => n.symbol)).toEqual(SYMS);
+    for (const n of probe.names) expect(n).toMatchObject({ source: "fetched", trade_vs_day: "inside", quote: "normal" });
+  });
+
+  it("is null when the snapshot read failed or timed out, even if a raw answer arrived", async () => {
+    for (const fail of [() => Promise.reject(new Error("alpaca 500")), () => Promise.reject(new BarsOff())]) {
+      const f = tapped({ fetchSnapshots: fail });
+      await runDeskEval(f.deps);
+      expect(stored(f).probe).toBeNull();
+    }
+    // An answer handed over, then the read rejected: the probe does not use it.
+    const late = fakeDeps({
+      fetchSnapshots: async (_s, o) => {
+        o.onRaw?.({ fetched: rawFor(o.now.getTime()), at: o.now.getTime() });
+        throw new Error("alpaca 500");
+      },
+    });
+    late.store.set("desk/eval.json", LOG);
+    await runDeskEval(late.deps);
+    expect(stored(late)).toMatchObject({ status: "degraded", reason: "snapshot-failed", probe: null });
+  });
+
+  it("a probe that throws, or gives something that cannot be written, leaves the run, its outcome and its record unchanged", async () => {
+    const plain = fakeDeps();
+    plain.store.set("desk/eval.json", LOG);
+    const expected = await runDeskEval(plain.deps);
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    const bad: DeskRunDeps["probe"][] = [
+      () => {
+        throw new Error("probe bug");
+      },
+      () => {
+        throw "not even an error";
+      },
+      () => circular as never,
+      () => ({ v: 1, names: [{ symbol: "SPY", source: "cached", n: BigInt(1) as never }] }),
+    ];
+    for (const probe of bad) {
+      const f = tapped({ probe });
+      expect(await runDeskEval(f.deps)).toEqual(expected);
+      expect(stored(f)).toEqual(stored(plain));
+      expect(f.calls).toEqual(plain.calls);
+    }
+  });
+
+  it("when the record's write rejects, the outcome is the same with or without the probe, and a throwing probe changes nothing", async () => {
+    const rejecting = { write: () => Promise.reject(new Error("blob 500")) };
+    const plain = fakeDeps(rejecting);
+    plain.store.set("desk/eval.json", LOG);
+    const expected = await runDeskEval(plain.deps);
+    expect(expected).toEqual({ ok: false, outcome: "write-failed", slot: "1030" });
+    expect(await runDeskEval(tapped(rejecting).deps)).toEqual(expected);
+    const both = tapped({
+      ...rejecting,
+      probe: () => {
+        throw new Error("probe bug");
+      },
+    });
+    expect(await runDeskEval(both.deps)).toEqual(expected);
+    expect(both.store.has(`desk/log/${S}/1030.json`)).toBe(false);
+  });
+
+  it("a dry run touches no store and carries no probe (its reads are refused)", async () => {
+    vi.stubEnv("DASHBOARD_FIXTURE", "1");
+    const d = defaultDeskRunDeps();
+    expect(d.dry).toBe(true);
+    const r = await runDeskEval({ ...d, now: () => ny("10:31:01"), readSwitch: async () => LOG });
+    expect(r.outcome).toBe("dry");
+    expect(r.outcome === "dry" && r.record.probe).toBeNull();
+  });
+
+  it("the deployed snapshot read hands the raw answer of the names it fetched to the probe", async () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("DASHBOARD_FIXTURE", "");
+    vi.stubEnv("ALPACA_API_KEY_ID", "k");
+    vi.stubEnv("ALPACA_API_SECRET_KEY", "s");
+    vi.stubEnv("ALPACA_FEED", "iex");
+    resetQuoteCache();
+    const raw = rawFor(ny("10:31:01"));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(raw), { status: 200 })));
+    const got: unknown[] = [];
+    const now = new Date(ny("10:31:01"));
+    const ans = await defaultDeskRunDeps().fetchSnapshots(SYMS, { now, timeoutMs: 1_000, onRaw: (r) => got.push(r) });
+    expect(got).toEqual([{ fetched: raw, at: now.getTime() }]);
+    expect(Object.keys(ans.quotes)).toEqual(SYMS);
+    vi.unstubAllGlobals();
   });
 });
