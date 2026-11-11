@@ -167,6 +167,7 @@ def p_obj() -> NS:
 S: dict[str, Any] = {}           # site id -> bindings dict, or a callable(tmp_path, monkeypatch) -> pages
 
 def site(sid: str, value: Any) -> None:
+    sid = alert_sites.norm_id(sid)
     assert sid not in S, sid
     S[sid] = value
 
@@ -593,7 +594,8 @@ def record_problem(source: str, func: str, title: str, record: str) -> str | Non
     def name(c):
         return c.func.attr if isinstance(c.func, ast.Attribute) else getattr(c.func, "id", "")
     if title:
-        sinks = [c for c in calls if name(c) in {*alert_sites.SINKS, "page"} and title in ast.unparse(c)]
+        sinks = [c for c in calls if name(c) in {*alert_sites.SINKS, "page"}
+                 and alert_sites.norm_id(title) in alert_sites.norm_id(ast.unparse(c))]
     else:
         sinks = [c for c in calls if name(c) == "_stuck"]
     if not sinks:

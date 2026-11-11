@@ -28,6 +28,11 @@ NOT_WRAPPERS = frozenset({"src/wt/ops/jobs.py::run_job", "src/wt/live/runner_b.p
 Func = ast.FunctionDef | ast.AsyncFunctionDef
 
 
+def norm_id(text: str) -> str:
+    """A site id with its quote marks folded to one kind, so it reads the same on every Python release."""
+    return text.replace('"', "'")
+
+
 def rel(path: Path) -> str:
     try:
         return str(path.relative_to(ROOT))
@@ -184,7 +189,9 @@ def sites(files: list[Path] | None = None) -> list[Site]:
     seen: dict[str, int] = {}
     for s in sorted(found, key=lambda s: (s.rel, s.chain[0].call.lineno)):
         call = s.chain[0].call
-        head = " | ".join(ast.unparse(a)[:50] for a in call.args[:2])
+        # Quote marks are folded to one kind: which one ast.unparse picks for an f-string differs between Python
+        # releases, and a site's id must not.
+        head = " | ".join(norm_id(ast.unparse(a))[:50] for a in call.args[:2])
         base = f"{s.rel}::{s.qualname}::{head}"
         seen[base] = seen.get(base, 0) + 1
         s.id = base if seen[base] == 1 else f"{base}#{seen[base]}"
