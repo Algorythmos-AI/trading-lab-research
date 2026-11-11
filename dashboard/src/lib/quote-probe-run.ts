@@ -124,8 +124,9 @@ export async function handleProbeSummary(req: Request, deps: ProbeReadDeps = def
     logEvent("desk-probe", { outcome: "error", error: errName(e) });
     return fail(503, "read-failed");
   }
-  // Only a day before today in New York, read whole: a later read of it would find the same records.
-  if (today !== null && day < today && got.unreadable === 0) {
+  // Only a day before today in New York, read whole and with records: a later read of it would find the same ones.
+  // An empty listing is not kept (a store that answered late, or a day the owner asked for too early).
+  if (today !== null && day < today && got.unreadable === 0 && got.listed > 0) {
     pastDays.set(day, got);
     while (pastDays.size > CACHED_DAYS) pastDays.delete(pastDays.keys().next().value!);
   }

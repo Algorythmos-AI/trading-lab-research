@@ -2,8 +2,8 @@
 // server check's own records. Hardened like /api/desk/eval-status; reads only the server records of the day asked for;
 // never touches the store when dry; a failed read is counted, never thrown.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { handleEvalStatus } from "@/lib/desk-page-run";
-import { presentsBypass } from "@/lib/desk-flags-run";
+import { handleEvalStatus, handlePageState } from "@/lib/desk-page-run";
+import { handleDeskFlags, presentsBypass } from "@/lib/desk-flags-run";
 import {
   CACHED_DAYS,
   defaultProbeReadDeps,
@@ -161,11 +161,21 @@ describe("GET /api/desk/probe", () => {
     expect(f.list).toHaveBeenCalledTimes(6);
   });
 
+  it("never keeps a past day whose listing was empty", async () => {
+    const f = deps({});
+    const a = await (await handleProbeSummary(req("?day=2026-10-09"), f.d)).json();
+    expect(a).toMatchObject({ listed: 0, cached: false });
+    expect((await (await handleProbeSummary(req("?day=2026-10-09"), f.d)).json()).cached).toBe(false);
+    expect(f.list).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps at most CACHED_DAYS past days, and never a day read with a failed record", async () => {
-    const f = deps({ "desk/log/2026-09-30/1030.json": new Error("blob 500") });
+    const days = Array.from({ length: CACHED_DAYS + 1 }, (_, i) => `2026-10-0${i + 1}`);
+    const store: Record<string, string | Error> = { "desk/log/2026-09-30/1030.json": new Error("blob 500") };
+    for (const d of days) store[`desk/log/${d}/1030.json`] = record(100);
+    const f = deps(store);
     await handleProbeSummary(req("?day=2026-09-30"), f.d);
     expect((await (await handleProbeSummary(req("?day=2026-09-30"), f.d)).json()).cached).toBe(false);
-    const days = Array.from({ length: CACHED_DAYS + 1 }, (_, i) => `2026-10-0${i + 1}`);
     for (const d of days) await handleProbeSummary(req(`?day=${d}`), f.d);
     const calls = f.list.mock.calls.length;
     // the newest CACHED_DAYS are kept; the first was dropped and is read again
@@ -176,7 +186,7 @@ describe("GET /api/desk/probe", () => {
   });
 });
 
-describe("the protection bypass, in every form Vercel documents, on both routes", () => {
+describe("the protection bypass, in every form Vercel documents, on all four routes that refuse it", () => {
   const forms: [string, string, Record<string, string>][] = [
     ["the header", "", { "x-vercel-protection-bypass": "secret" }],
     ["the header, any case", "", { "X-Vercel-Protection-Bypass": "secret" }],
@@ -201,6 +211,26 @@ describe("the protection bypass, in every form Vercel documents, on both routes"
       const status = await handleEvalStatus(new Request(`https://${HOST}/api/desk/eval-status${query ? `?${query}` : ""}`, { headers: { "sec-fetch-site": "same-origin", ...headers } }), e.d);
       expect(status.status).toBe(403);
       expect(e.readSwitch).not.toHaveBeenCalled();
+      // the done-for-today flag (GET and POST) and the page's state post: refused before any store call
+      const touched = vi.fn(async () => {
+        throw new Error("the store must not be touched");
+      });
+      const flagsDeps = { readView: touched, read: touched, write: touched, now: () => new Date(NOW), memory: false };
+      for (const method of ["GET", "POST"]) {
+        const fr = new Request(`https://${HOST}/api/desk/flags${query ? `?${query}` : ""}`, {
+          method,
+          headers: { "sec-fetch-site": "same-origin", origin: `https://${HOST}`, "content-type": "application/json", ...headers },
+          ...(method === "POST" ? { body: '{"action":"done"}' } : {}),
+        });
+        expect((await handleDeskFlags(fr, flagsDeps)).status, `flags ${method}`).toBe(403);
+      }
+      const pr = new Request(`https://${HOST}/api/desk/page-state${query ? `?${query}` : ""}`, {
+        method: "POST",
+        headers: { "sec-fetch-site": "same-origin", origin: `https://${HOST}`, "content-type": "application/json", ...headers },
+        body: "{}",
+      });
+      expect((await handlePageState(pr, { now: () => NOW, dry: false, readSwitch: touched, loadEdition: touched, write: touched })).status).toBe(403);
+      expect(touched).not.toHaveBeenCalled();
     });
   }
 

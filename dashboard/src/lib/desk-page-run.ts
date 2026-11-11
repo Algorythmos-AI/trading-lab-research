@@ -22,7 +22,7 @@ import {
   type StateRow,
   SYMBOL_RE,
 } from "./desk-eval";
-import { BYPASS_HEADER, isJson, presentsBypass, readCapped, sameOrigin } from "./desk-flags-run";
+import { isJson, presentsBypass, readCapped, sameOrigin } from "./desk-flags-run";
 import { type EditionRead, parseEdition } from "./desk-run";
 import { logEvent } from "./log";
 import { nyClock } from "./options";
@@ -168,7 +168,7 @@ export async function loadEvalSwitch(): Promise<EvalSwitch> {
 
 /** POST /api/desk/page-state. Every other method is 405. */
 export async function handlePageState(req: Request, deps: PageStateDeps = defaultPageStateDeps()): Promise<Response> {
-  if (req.headers.has(BYPASS_HEADER)) return fail(403, "forbidden");
+  if (presentsBypass(req)) return fail(403, "forbidden");
   if (req.method !== "POST") return fail(405, "method-not-allowed", { allow: "POST" });
   if (!sameOrigin(req)) return fail(403, "forbidden");
   if (!isJson(req.headers.get("content-type"))) return fail(415, "json-only");
