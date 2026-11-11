@@ -84,6 +84,7 @@ const FILES = [
   "../src/lib/quote.ts",
   "../src/lib/quote-route.ts",
   "../src/lib/quote-probe.ts",
+  "../src/lib/quote-conditions.ts",
   "../src/lib/quote-probe-run.ts",
   "../src/app/api/desk/probe/route.ts",
 ];

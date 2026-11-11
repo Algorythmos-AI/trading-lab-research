@@ -3,6 +3,7 @@
 // to the ask), the session's edges (pre-market, the first minute, a half day), and the reader's counts.
 import { describe, expect, it } from "vitest";
 import { normalise } from "@/lib/quote";
+import { CONDITION_TABLE, ruleFor, setsPrice } from "@/lib/quote-conditions";
 import {
   AGE_BUCKETS,
   bucketOf,
@@ -11,7 +12,7 @@ import {
   phaseAt,
   previousSession,
   rateHeader,
-  tradeClass,
+  priorBucket,
   MAX_PROBED,
   type NameFacts,
   type NameProbe,
@@ -30,7 +31,7 @@ const NOW = at("10:30:30");
 
 function snap(over: Record<string, unknown> = {}) {
   return {
-    latestTrade: { t: iso(NOW - 1_000), x: "V", p: 100, s: 10, c: ["@"], i: 1, z: "B" },
+    latestTrade: { t: iso(NOW - 1_000), x: "V", p: 100, s: 10, c: ["@"], i: 1, z: "C" },
     latestQuote: { t: iso(NOW - 2_000), ax: "V", ap: 100.02, as: 1, bx: "V", bp: 99.98, bs: 1, c: ["R"], z: "B" },
     minuteBar: { t: iso(at("10:30:00")), o: 100, h: 100.1, l: 99.9, c: 100, v: 5, n: 2, vw: 100 },
     dailyBar: { t: "2026-10-12T04:00:00Z", o: 99, h: 101, l: 98, c: 100, v: 1000, n: 50, vw: 99.5 },
@@ -55,7 +56,10 @@ const KEYS = [
   "trade_x",
   "trade_c",
   "trade_c_dropped",
-  "trade_class",
+  "trade_sets_minute_price",
+  "trade_sets_daily_price",
+  "trade_odd_lot",
+  "trade_extended_hours",
   "minute",
   "minute_age_s",
   "trade_vs_minute_s",
@@ -74,6 +78,7 @@ const KEYS = [
   "spread_bps",
   "quote_time",
   "quote_age_s",
+  "age_out_of_range",
 ];
 
 describe("a normal snapshot", () => {
@@ -87,7 +92,10 @@ describe("a normal snapshot", () => {
       trade_x: "V",
       trade_c: ["@"],
       trade_c_dropped: 0,
-      trade_class: "regular",
+      trade_sets_minute_price: "yes",
+      trade_sets_daily_price: "yes",
+      trade_odd_lot: false,
+      trade_extended_hours: false,
       minute: "forming",
       minute_age_s: 30,
       trade_vs_minute_s: null,
@@ -106,6 +114,7 @@ describe("a normal snapshot", () => {
       quote_time: "ok",
       spread_bps: 4,
       quote_age_s: 2,
+      age_out_of_range: [],
     });
   });
 
@@ -318,6 +327,8 @@ describe("the latest quote", () => {
     }
     expect(facts(withQuote(q(99.98, 100.02, "later")))).toMatchObject({ quote: "normal", quote_time: "invalid", quote_age_s: null });
     expect(facts(withQuote(q(99.98, 100.02, null)))).toMatchObject({ quote: "normal", quote_time: "absent", quote_age_s: null });
+    // a primitive or array quote: both the quote and its time are unreadable
+    for (const prim of ["q", 1, true, []]) expect(facts(withQuote(prim)), JSON.stringify(prim)).toMatchObject({ quote: "invalid", quote_time: "invalid", quote_age_s: null });
   });
 });
 
@@ -409,15 +420,44 @@ describe("missing data and wrong types", () => {
 describe("unreadable times", () => {
   const ZERO = "0001-01-01T00:00:00Z"; // Go's zero time
 
-  it("Go's zero time, a time before 1970, or one more than 7 days away is invalid, never an age", () => {
-    for (const t of [ZERO, "1969-12-31T23:59:59Z", iso(NOW - 8 * 86_400_000), iso(NOW + 8 * 86_400_000)]) {
+  it("Go's zero time, a time before 1970 or an unparseable one is invalid, never an age or a day", () => {
+    for (const t of [ZERO, "1969-12-31T23:59:59Z", "yesterday"]) {
       expect(facts(snap({ latestTrade: { t, x: "V", p: 100, c: ["@"] } })), t).toMatchObject({ trade: "invalid", trade_age_s: null, trade_day: "unknown", trade_vs_day: "no-trade" });
       expect(facts(withQuote({ t, bp: 99.98, ap: 100.02 })), t).toMatchObject({ quote: "normal", quote_time: "invalid", quote_age_s: null });
       expect(facts(snap({ minuteBar: { t, o: 1, h: 1, l: 1, c: 1 } })), t).toMatchObject({ minute: "invalid", minute_age_s: null });
       expect(facts(snap({ dailyBar: { t, o: 99, h: 101, l: 98, c: 100 } })), t).toMatchObject({ daily: "invalid", daily_day: "unknown", trade_vs_day: "no-daily-bar" });
     }
-    // within the window is read: 6 days back is a usable (if old) prior bar
-    expect(facts(snap({ prevDailyBar: { t: iso(NOW - 6 * 86_400_000), o: 1, h: 1, l: 1, c: 98 } })).prev).toBe("ok");
+  });
+
+  it("a time 10 days old is a real, stale day (as quote.ts reads it): its age alone is left out and marked", () => {
+    const old = iso(NOW - 10 * 86_400_000);
+    const raw = snap({
+      latestTrade: { t: old, x: "V", p: 100, c: ["@"], z: "C" },
+      latestQuote: { t: old, bp: 99.98, ap: 100.02 },
+      minuteBar: { t: old, o: 1, h: 1, l: 1, c: 1 },
+      dailyBar: { t: "2026-10-02T04:00:00Z", o: 99, h: 101, l: 98, c: 100 },
+    });
+    expect(facts(raw)).toMatchObject({
+      trade: "ok",
+      trade_day: "other",
+      trade_age_s: null,
+      quote_time: "ok",
+      quote_age_s: null,
+      minute: "finished",
+      minute_age_s: null,
+      daily: "ok",
+      daily_day: "other",
+      daily_session: "older",
+      trade_vs_day: "stale-day",
+      age_out_of_range: ["trade", "minute", "quote"],
+    });
+    // the same snapshot through quote.ts: a quote with that day, not refused
+    const q = normalise(raw as never)!;
+    expect(q.day).toBe("2026-10-02");
+    expect(q.at).toBe(old);
+    // and 8 days ahead is out of range the other way; 6 days back is still an age
+    expect(facts(withTrade(100, NOW + 8 * 86_400_000))).toMatchObject({ trade: "ok", trade_age_s: null, age_out_of_range: ["trade"] });
+    expect(facts(withTrade(100, NOW - 6 * 86_400_000))).toMatchObject({ trade_age_s: 6 * 86_400, age_out_of_range: [] });
   });
 
   it("a stamp 30 s ahead of server time is read, with a negative age (clock skew), never rounded to 0", () => {
@@ -578,41 +618,82 @@ describe("summariseProbe", () => {
 });
 
 describe("the trade's conditions (Alpaca's market-data FAQ, how bars are aggregated)", () => {
-  const cls = (c: unknown, z: unknown = "B") => facts(snap({ latestTrade: { t: iso(NOW - 1_000), x: "V", p: 100, s: 1, c, i: 1, z } })).trade_class;
+  const sets = (c: unknown, z: unknown = "C") => {
+    const f = facts(snap({ latestTrade: { t: iso(NOW - 1_000), x: "V", p: 100, s: 1, c, i: 1, z } }));
+    return [f.trade_sets_minute_price, f.trade_sets_daily_price] as const;
+  };
+  const Y = { open_close: "yes", high_low: "yes", volume: "yes" };
+  const V = { open_close: "no", high_low: "no", volume: "yes" };
+  const N = { open_close: "no", high_low: "no", volume: "no" };
+  const F = { open_close: "first-only", high_low: "yes", volume: "yes" };
+  const PNV = { open_close: "yes", high_low: "yes", volume: "no" };
 
-  it("regular codes update the price", () => {
-    for (const c of [["@"], [" "], ["@", "F"], ["O"], ["6"], ["@", "5"], ["E", "K", "L", "X", "Y", "A", "D"]]) expect(cls(c), JSON.stringify(c)).toBe("regular");
+  it("pins the FAQ's whole table (read from its HTML on 2026-11-12), so a change is deliberate", () => {
+    const r = (code: string, tapes: string, minute: object, daily: object = minute) => ({ code, tapes, minute, daily });
+    expect(CONDITION_TABLE).toEqual([
+      r(" ", "AB", Y), r("@", "CO", Y), r("A", "C", Y), r("B", "AB", V), r("B", "C", Y), r("C", "ABCO", V), r("D", "C", Y), r("E", "AB", Y),
+      r("F", "ABC", Y), r("G", "C", V, F), r("H", "ABC", V), r("I", "ABCO", V), r("K", "ABC", Y), r("L", "ABC", Y), r("M", "ABC", N),
+      r("N", "ABCO", V), r("O", "ABC", Y), r("P", "ABCO", V, F), r("Q", "ABC", N), r("R", "ABCO", V), r("T", "ABCO", Y, V), r("U", "ABCO", V),
+      r("V", "ABC", V), r("W", "CO", V), r("X", "ABC", Y), r("Y", "C", Y), r("Z", "ABC", V, F), r("4", "ABC", V, F), r("5", "ABC", Y),
+      r("6", "ABC", Y), r("7", "ABC", V), r("9", "ABC", N, PNV),
+    ]);
   });
 
-  it("each class by its codes, with B by its tape (average price on A and B, bunched on C)", () => {
-    expect(cls(["@", "T"])).toBe("extended-hours");
-    expect(cls(["U"])).toBe("extended-hours");
-    expect(cls(["@", "I"])).toBe("odd-lot");
-    expect(cls(["4"])).toBe("derivatively-priced");
-    for (const c of ["7", "9", "C", "G", "H", "M", "N", "P", "Q", "R", "V", "W", "Z"]) expect(cls(["@", c]), c).toBe("other-non-updating");
-    expect(cls(["B"], "A")).toBe("other-non-updating");
-    expect(cls(["B"], "B")).toBe("other-non-updating");
-    expect(cls(["B"], "C")).toBe("regular");
-    expect(cls(["B"], null)).toBe("unknown");
+  it("every code in the table alone, on a tape its row covers, sets each bar's price as the row says", () => {
+    const want = (rule: { open_close: string; high_low: string }) => (rule.high_low === "no" ? "no" : rule.open_close === "yes" ? "yes" : "first-only");
+    for (const row of CONDITION_TABLE) {
+      for (const tape of row.tapes) {
+        expect(sets([row.code], tape), `${JSON.stringify(row.code)} on ${tape}`).toEqual([want(row.minute), want(row.daily)]);
+        expect(ruleFor(row.code, tape, "daily")).toEqual(row.daily);
+      }
+    }
   });
 
-  it("strictest first, whatever the order", () => {
-    expect(cls(["T", "I"])).toBe("odd-lot");
-    expect(cls(["I", "T"])).toBe("odd-lot");
-    expect(cls(["I", "M"])).toBe("other-non-updating");
-    expect(cls(["T", "4"])).toBe("derivatively-priced");
-    expect(cls(["@", "S"])).toBe("unknown"); // S is not in the FAQ's table
-    expect(cls(["S", "T"])).toBe("extended-hours"); // a known stricter class wins over an unknown code
+  it("the cases the review named", () => {
+    expect(sets(["U", "4"])).toEqual(["no", "no"]);
+    expect(sets(["T", "4"])).toEqual(["no", "no"]); // 4 stops the minute bar, T stops the daily
+    expect(sets(["Z"])).toEqual(["no", "first-only"]);
+    expect(sets(["4"])).toEqual(["no", "first-only"]);
+    expect(sets(["9"])).toEqual(["no", "yes"]);
+    expect(sets(["I"])).toEqual(["no", "no"]);
+    expect(sets(["@", "F", "T"])).toEqual(["yes", "no"]);
+    expect(sets([" ", "T"], "A")).toEqual(["yes", "no"]);
+    expect(sets([" ", "T"], "C")).toEqual(["unknown", "no"]); // " " has no row for tape C
+    expect(sets(["@", "4", "I"])).toEqual(["no", "no"]); // the FAQ's own example
+    expect(sets(["@", "4"])).toEqual(["no", "first-only"]);
   });
 
-  it("unknown with nothing to read: no codes, not an array, a dropped code, or no trade", () => {
-    expect(cls([])).toBe("unknown");
-    expect(cls(undefined)).toBe("unknown");
-    expect(cls("@")).toBe("unknown");
-    expect(cls(["@", "<x>"])).toBe("unknown");
-    expect(cls(["I", "<x>"])).toBe("odd-lot");
-    expect(facts(snap({ latestTrade: null })).trade_class).toBe("unknown");
-    expect(tradeClass(["@"], 0, "C")).toBe("regular");
+  it("B by its tape: average price on A and B, bunched on C; no tape, or one outside the row, is unknown", () => {
+    expect(sets(["B"], "A")).toEqual(["no", "no"]);
+    expect(sets(["B"], "B")).toEqual(["no", "no"]);
+    expect(sets(["B"], "C")).toEqual(["yes", "yes"]);
+    for (const z of ["O", "N", null, "", "CC", 3]) expect(sets(["B"], z), String(z)).toEqual(["unknown", "unknown"]);
+  });
+
+  it("an unknown code alone is unknown; beside a code that makes it no, it is no", () => {
+    expect(sets(["S"])).toEqual(["unknown", "unknown"]);
+    expect(sets(["S", "I"])).toEqual(["no", "no"]);
+    expect(sets(["S", "T"])).toEqual(["unknown", "no"]);
+    expect(sets(["@", "S"])).toEqual(["unknown", "unknown"]);
+    expect(sets(["@", "<x>"])).toEqual(["unknown", "unknown"]); // a dropped code could be anything
+    expect(sets(["I", "<x>"])).toEqual(["no", "no"]);
+    expect(sets([])).toEqual(["unknown", "unknown"]);
+    expect(sets(undefined)).toEqual(["unknown", "unknown"]);
+    expect(sets("@")).toEqual(["unknown", "unknown"]);
+    expect(setsPrice(["@"], 0, "C", "daily")).toBe("yes");
+    const none = facts(snap({ latestTrade: null }));
+    expect([none.trade_sets_minute_price, none.trade_sets_daily_price, none.trade_odd_lot, none.trade_extended_hours]).toEqual(["unknown", "unknown", false, false]);
+  });
+
+  it("the odd-lot and extended-hours flags", () => {
+    const flags = (c: string[]) => {
+      const f = facts(snap({ latestTrade: { t: iso(NOW - 1_000), x: "V", p: 100, c, z: "C" } }));
+      return [f.trade_odd_lot, f.trade_extended_hours];
+    };
+    expect(flags(["@"])).toEqual([false, false]);
+    expect(flags(["@", "I"])).toEqual([true, false]);
+    expect(flags(["T"])).toEqual([false, true]);
+    expect(flags(["U", "I"])).toEqual([true, true]);
   });
 });
 
@@ -668,6 +749,10 @@ describe("the last trade against the finished minute bar", () => {
     expect(vs(start, start + 59_000, at("10:30:30"))).toMatchObject({ minute: "finished", trade_vs_minute_s: 1 });
     expect(vs(start, start + 60_000, at("10:30:30"))).toMatchObject({ trade_vs_minute_s: 0 });
     expect(vs(start, start + 72_500, at("10:30:30"))).toMatchObject({ trade_vs_minute_s: -12.5 });
+    // truncated toward zero: 1 ms after the bar's end is 0 (never -0.1), 199 ms after is -0.1, 99 ms before is 0
+    expect(Object.is(vs(start, start + 60_001, at("10:30:30")).trade_vs_minute_s, 0)).toBe(true);
+    expect(vs(start, start + 60_199, at("10:30:30")).trade_vs_minute_s).toBe(-0.1);
+    expect(vs(start, start + 59_901, at("10:30:30")).trade_vs_minute_s).toBe(0);
     expect(vs(start, start - 300_000, at("10:30:30"))).toMatchObject({ trade_vs_minute_s: 360 });
   });
 
@@ -698,7 +783,62 @@ describe("the rate-limit headers and zero sizes", () => {
     expect(q(100, 1, 100, 1)).toBe("locked");
     expect(q(100.02, 1, 99.98, 1)).toBe("crossed");
     expect(q(100.02, 0, 99.98, 1)).toBe("one-sided"); // a zero-size side cannot cross the book
-    for (const bad of [-1, "1", null, Number.NaN]) expect(q(99.98, bad, 100.02, 1), String(bad)).toBe("invalid");
+    for (const bad of [-1, "1", Number.NaN, {}]) expect(q(99.98, bad, 100.02, 1), String(bad)).toBe("invalid");
+    // a missing size, absent or null, leaves the side to its price
     expect(q(99.98, undefined, 100.02, undefined)).toBe("normal");
+    expect(q(99.98, null, 100.02, null)).toBe("normal");
+    expect(q(0, null, 100.02, null)).toBe("one-sided");
+  });
+});
+
+describe("second review", () => {
+  it("a finite server time a Date cannot hold (1e16) never throws: phase unknown, every fetched name invalid", () => {
+    expect(() => phaseAt(1e16)).not.toThrow();
+    expect(phaseAt(1e16)).toBe("unknown");
+    expect(phaseAt(-1e16)).toBe("unknown");
+    expect(phaseAt(8.64e15)).not.toBe(undefined);
+    const r = probeSnapshots(["SPY", "QQQ"], { fetched: { SPY: snap() }, at: 1e16 })!;
+    expect(r.phase).toBe("unknown");
+    expect(r.names).toEqual([
+      { symbol: "SPY", source: "invalid" },
+      { symbol: "QQQ", source: "cached" },
+    ]);
+    expect(() => probeSnapshot("SPY", snap(), 1e16)).not.toThrow();
+    expect(facts(snap(), 1e16)).toMatchObject({ trade_age_s: null, trade_day: "unknown", daily_session: "unknown" });
+  });
+
+  it("a move within the 25% rule never lands in a bucket at or past the limit, even when it rounds to 2500.0 bps", () => {
+    const n = probeSnapshot("SPY", snap({ ...withTrade(124.99999), prevDailyBar: { t: "2026-10-09T04:00:00Z", o: 1, h: 1, l: 1, c: 100 } }), NOW) as NameFacts;
+    expect(n).toMatchObject({ prior_move: "within", prior_move_bps: 2500 });
+    expect(priorBucket(2500, "within")).toBe("1000-2500");
+    expect(priorBucket(2500, "at-limit")).toBe("at-limit");
+    expect(priorBucket(2500.1, "beyond")).toBe("beyond-2500");
+    expect(priorBucket(3000, "invalid-record")).toBe("beyond-2500");
+    expect(priorBucket(50, "within")).toBe("0-100");
+    const s = summariseProbe([{ feed: "iex", probe: { v: PROBE_V, phase: "regular", names: [n] } }]);
+    expect(s.by_feed.iex.total.numbers.prior_move_bps!.buckets).toEqual({ negative: 0, "0-100": 0, "100-500": 0, "500-1000": 0, "1000-2500": 1, "at-limit": 0, "beyond-2500": 0 });
+  });
+
+  it("crosses the trade against the day's range with whether that trade sets the daily price: the guard's own count", () => {
+    const t = (p: number, c: string[]) => probeSnapshot("SPY", snap({ latestTrade: { t: iso(NOW - 1_000), x: "V", p, c, z: "C" } }), NOW);
+    const s = summariseProbe([
+      {
+        feed: "iex",
+        probe: { v: PROBE_V, phase: "regular", names: [t(102, ["@"]), t(102, ["@", "I"]), t(97, ["@", "4"]), t(100, ["@"]), t(102, ["S"]), { symbol: "QQQ", source: "cached" }] },
+      },
+    ]);
+    const x = s.by_feed.iex.total.day_range_by_daily_price;
+    expect(x["above-high"]).toEqual({ yes: 1, "first-only": 0, no: 1, unknown: 1 });
+    expect(x["below-low"]).toEqual({ yes: 0, "first-only": 1, no: 0, unknown: 0 });
+    expect(x.inside).toEqual({ yes: 1, "first-only": 0, no: 0, unknown: 0 });
+    expect(Object.keys(x)).toEqual(["inside", "above-high", "below-low", "stale-day", "no-daily-bar", "no-trade"]);
+    expect(s.by_feed.iex.total.counts.trade_odd_lot).toEqual({ yes: 1, no: 4, unknown: 0 });
+    expect(s.by_feed.iex.total.counts.trade_sets_daily_price).toEqual({ yes: 2, "first-only": 1, no: 1, unknown: 1 });
+  });
+
+  it("counts the ages left out as out of range", () => {
+    const old = probeSnapshot("SPY", withTrade(100, NOW - 10 * 86_400_000), NOW);
+    const s = summariseProbe([{ feed: "sip", probe: { v: PROBE_V, phase: "regular", names: [old, probeSnapshot("SPY", snap(), NOW)] } }]);
+    expect(s.by_feed.sip.total.ages_out_of_range).toEqual({ trade: 1, quote: 0, minute: 0 });
   });
 });

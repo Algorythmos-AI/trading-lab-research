@@ -14,12 +14,18 @@
 
 import { isDataFeed } from "./feed-provenance";
 import { addDays, nyNow, sessionOf } from "./market-calendar";
+import { SETS_PRICE, type SetsPrice, setsPrice } from "./quote-conditions";
 
 export const PROBE_V = 1;
 /** One minute bar's length. */
 export const MINUTE_MS = 60_000;
-/** A time further than this from server time, either way, is unreadable (as is one before 1970, e.g. Go's zero time). */
+/**
+ * An age further than this from server time, either way, is not stored (the name is marked in `age_out_of_range`).
+ * It applies to ages only: the time itself still gives its New York day, as quote.ts reads it.
+ */
 export const MAX_STAMP_SKEW_MS = 7 * 24 * 60 * 60 * 1000;
+/** The largest time a JavaScript Date holds; a server time beyond it is unusable. */
+export const MAX_TIME_MS = 8.64e15;
 /** The move from the prior close the guard would pause beyond (more than 25%; exactly 25% is "at-limit"). */
 export const PRIOR_CLOSE_LIMIT = 0.25;
 /** A relative tolerance for "exactly at the limit", so a float's last bit cannot move a boundary case. */
@@ -54,38 +60,52 @@ export type ProbeSource = (typeof SOURCES)[number];
  */
 export const SESSION_DAYS = ["today", "previous-session", "older", "off-session", "future", "absent", "invalid", "unknown"] as const;
 export type SessionDayVs = (typeof SESSION_DAYS)[number];
-/** The run's phase by New York time and the exchange calendar (half days included). */
+/**
+ * The run's phase by New York time and the exchange calendar (half days included). The server check writes its record
+ * only in the regular session (and at most a moment after the close), so on that record this is "regular" in
+ * practice and cannot answer what a snapshot looks like before 09:30; it is kept to catch a run outside the session.
+ */
 export const PHASES = ["pre-open", "regular", "after-close", "closed", "unknown"] as const;
 export type Phase = (typeof PHASES)[number];
-/** What the last trade's conditions say about the last price, strictest first (see TRADE_CLASS_ORDER). */
-export const TRADE_CLASSES = ["other-non-updating", "odd-lot", "derivatively-priced", "extended-hours", "unknown", "regular"] as const;
-export type TradeClass = (typeof TRADE_CLASSES)[number];
+/** The ages that can be out of range (MAX_STAMP_SKEW_MS). */
+export const AGED = ["trade", "quote", "minute"] as const;
+export type Aged = (typeof AGED)[number];
 
 /** One name's facts from one fetched snapshot. */
 export interface NameFacts {
   symbol: string;
   source: "fetched";
-  /** "invalid" for a price that is not positive or a time that is unreadable (MAX_STAMP_SKEW_MS, before 1970). */
+  /** "invalid" for a price that is not positive or a time that is unparseable or before 1970 (Go's zero time). */
   trade: Presence;
   /** The trade's New York day against the server's. */
   trade_day: DayVsToday;
-  /** Server time minus the trade's time, in seconds floored to one decimal (negative when stamped ahead of server time). */
+  /**
+   * Server time minus the trade's time, in seconds floored to one decimal (negative when stamped ahead of server time);
+   * null, with "trade" in `age_out_of_range`, beyond MAX_STAMP_SKEW_MS.
+   */
   trade_age_s: number | null;
   /** The trade's exchange code, when it is a safe short code. */
   trade_x: string | null;
   /** The trade's condition codes that are safe short codes, in Alpaca's order, at most MAX_CODES. */
   trade_c: string[];
-  /** What those codes say about the last price (tradeClass). */
-  trade_class: TradeClass;
+  /**
+   * Whether this trade sets a minute bar's, and a daily bar's, price, from Alpaca's condition table
+   * (quote-conditions.ts setsPrice): the strictest rule across its codes on its tape (`z`).
+   */
+  trade_sets_minute_price: SetsPrice;
+  trade_sets_daily_price: SetsPrice;
+  /** An odd lot (code I); extended hours (T or U). */
+  trade_odd_lot: boolean;
+  trade_extended_hours: boolean;
   /** Condition entries dropped (not a safe short code, or past MAX_CODES); -1 when `c` is present but not an array. */
   trade_c_dropped: number;
   minute: MinuteState;
   /** Server time minus the minute bar's start, seconds floored to one decimal: below 60 it is still forming. */
   minute_age_s: number | null;
   /**
-   * The last trade's age minus the finished minute bar's end age, seconds floored to one decimal (the bar's end minus
-   * the trade's time): negative when the trade printed after that bar ended. Null unless both are readable and the
-   * bar has finished.
+   * The last trade's age minus the finished minute bar's end age (the bar's end minus the trade's time), in seconds
+   * truncated toward zero to one decimal, so a trade 1 ms after the bar's end reads 0, not -0.1: negative when the
+   * trade printed after that bar ended. Null unless both are readable and the bar has finished.
    */
   trade_vs_minute_s: number | null;
   daily: Presence;
@@ -94,7 +114,10 @@ export interface NameFacts {
    * `dailyBar.t`, against today), so the probe counts what the page's guard would see.
    */
   daily_day: DayVsToday;
-  /** The daily bar's and the prior daily bar's New York days against the calendar: before 09:30, is dailyBar still yesterday's? */
+  /**
+   * The daily bar's and the prior daily bar's New York days against the calendar. On the server check's record (written
+   * only in session) they catch a wrong-day bar in session; they cannot say what dailyBar is before 09:30.
+   */
   daily_session: SessionDayVs;
   prev_session: SessionDayVs;
   high_below_low: boolean | null;
@@ -114,6 +137,8 @@ export interface NameFacts {
   spread_bps: number | null;
   /** Server time minus the quote's time, seconds floored to one decimal; null without a readable time. */
   quote_age_s: number | null;
+  /** The ages left null because their time is more than MAX_STAMP_SKEW_MS from server time. */
+  age_out_of_range: Aged[];
 }
 
 /**
@@ -150,19 +175,31 @@ const NY_DAY_FMT = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_Yor
 const nyDay = (t: number) => NY_DAY_FMT.format(new Date(t));
 
 /**
- * A time as Alpaca sends it, against server time `now`: "absent" when missing or null; "invalid" when not a string,
- * unparseable, before 1970, or further than MAX_STAMP_SKEW_MS from `now` (not checked when `now` is unusable).
+ * A time as Alpaca sends it: "absent" when missing or null; "invalid" when not a string, unparseable or before 1970
+ * (Go's zero time `0001-01-01T00:00:00Z`). Any other parseable time is read, however old: its New York day is a real
+ * (if stale) day, as quote.ts' nyDay reads it; only its age is limited (ageOf).
  */
-function stamp(v: unknown, now: number): { state: Presence; t: number | null } {
+function stamp(v: unknown): { state: Presence; t: number | null } {
   if (v === undefined || v === null) return { state: "absent", t: null };
   if (typeof v !== "string") return { state: "invalid", t: null };
   const t = Date.parse(v);
   if (!Number.isFinite(t) || t < 0) return { state: "invalid", t: null };
-  if (Number.isFinite(now) && Math.abs(now - t) > MAX_STAMP_SKEW_MS) return { state: "invalid", t: null };
   return { state: "ok", t };
 }
 
-const age = (t: number | null, now: number) => (t === null || !Number.isFinite(now) ? null : ageSeconds(now - t));
+/** A usable server time: finite and within what a Date holds; NaN otherwise. */
+const usableNow = (now: unknown): number => (isNum(now) && Math.abs(now) <= MAX_TIME_MS ? now : Number.NaN);
+
+/** Server time minus `t` in seconds, or null: without a time, without a server time, or (marked) beyond MAX_STAMP_SKEW_MS. */
+function ageOf(t: number | null, now: number, which: Aged, out: Aged[]): number | null {
+  if (t === null || !Number.isFinite(now)) return null;
+  if (Math.abs(now - t) > MAX_STAMP_SKEW_MS) {
+    out.push(which);
+    return null;
+  }
+  return ageSeconds(now - t);
+}
+/** The New York day of `t` against the server's: quote.ts' own test (its `day` is nyDay(dailyBar.t)). */
 const dayVsToday = (t: number | null, now: number): DayVsToday => (t === null || !Number.isFinite(now) ? "unknown" : nyDay(t) === nyDay(now) ? "today" : "other");
 
 /** A short code as stored, or null. */
@@ -185,53 +222,12 @@ function codes(v: unknown): { kept: string[]; dropped: number } {
 
 type Bar = { t: number; o: number; h: number; l: number; c: number };
 /** A bar is "ok" with a readable start and positive o, h, l, c; "absent" when missing or null; "invalid" otherwise. */
-function bar(v: unknown, now: number): { presence: Presence; bar: Bar | null; t: number | null } {
+function bar(v: unknown): { presence: Presence; bar: Bar | null; t: number | null } {
   if (v === undefined || v === null) return { presence: "absent", bar: null, t: null };
   if (!isObj(v)) return { presence: "invalid", bar: null, t: null };
-  const s = stamp(v.t, now);
+  const s = stamp(v.t);
   if (s.t === null || !isPos(v.o) || !isPos(v.h) || !isPos(v.l) || !isPos(v.c)) return { presence: "invalid", bar: null, t: s.t };
   return { presence: "ok", bar: { t: s.t, o: v.o, h: v.h, l: v.l, c: v.c }, t: s.t };
-}
-
-// Alpaca's market-data FAQ, "How are bars aggregated" (docs.alpaca.markets/docs/market-data-faq, read 2026-11-12):
-// minute and daily bars are built from trades, a trade with several conditions takes the strictest rule, and its
-// condition table says which codes do not update open/close (the last price) or high/low:
-//  * I (odd lot), and C, H, M, N, Q, R, U, V, W, 7, and B on tapes A and B (average price): never update the price;
-//    M and Q do not even update volume;
-//  * G, P, Z: not on minute bars, and on daily bars only as a bar's first trade; 9 (corrected consolidated close): not
-//    on minute bars; so none of them sets the last price as it moves;
-//  * 4 (derivatively priced): not on minute bars; on daily bars high/low, and open/close only as the first trade;
-//  * T (extended hours): updates minute bars, not daily bars; U as above;
-//  * blank, @, A, D, E, F, K, L, O, X, Y, 5, 6, and B on tape C (bunched): update everything.
-// G, P and 9 are not on the list the probe was specified with; the FAQ's table puts them with the non-updating codes,
-// so they are counted there. A code outside the table is "unknown".
-const ODD_LOT = new Set(["I"]);
-const EXTENDED = new Set(["T", "U"]);
-const DERIVED = new Set(["4"]);
-const NON_UPDATING = new Set(["7", "9", "C", "G", "H", "M", "N", "P", "Q", "R", "V", "W", "Z"]);
-const REGULAR = new Set([" ", "@", "A", "D", "E", "F", "K", "L", "O", "X", "Y", "5", "6"]);
-/** Strictest first: a trade takes the first class any of its codes falls in. */
-export const TRADE_CLASS_ORDER = TRADE_CLASSES;
-
-/**
- * The last trade's class from its condition codes and its tape (`z`), strictest first. "unknown" when there is no
- * code to read (none sent, or every one dropped as unsafe) or a code is outside the FAQ's table and nothing stricter
- * is there; a dropped code also makes an otherwise regular trade "unknown", since it could be anything.
- */
-export function tradeClass(codesIn: readonly string[], dropped: number, tape: unknown): TradeClass {
-  const found = new Set<TradeClass>();
-  for (const c of codesIn) {
-    if (ODD_LOT.has(c)) found.add("odd-lot");
-    else if (EXTENDED.has(c)) found.add("extended-hours");
-    else if (DERIVED.has(c)) found.add("derivatively-priced");
-    else if (NON_UPDATING.has(c)) found.add("other-non-updating");
-    else if (c === "B") found.add(tape === "C" ? "regular" : tape === "A" || tape === "B" ? "other-non-updating" : "unknown");
-    else if (REGULAR.has(c)) found.add("regular");
-    else found.add("unknown");
-  }
-  if (dropped !== 0 || codesIn.length === 0) found.add("unknown");
-  for (const k of TRADE_CLASS_ORDER) if (found.has(k)) return k;
-  return "unknown";
 }
 
 const isSessionDay = (day: string) => {
@@ -265,7 +261,7 @@ function sessionDay(presence: "absent" | "readable" | "invalid", t: number | nul
 
 /** The phase at `now` by New York time and the calendar. */
 export function phaseAt(now: number): Phase {
-  if (!Number.isFinite(now)) return "unknown";
+  if (!Number.isFinite(usableNow(now))) return "unknown";
   const { day, minute } = nyNow(new Date(now));
   const s = sessionOf(day);
   if (s.kind === "out_of_range") return "unknown";
@@ -287,16 +283,17 @@ export function priorMove(price: number, prior: number): { move: Exclude<PriorMo
   return { move, bps: r1((dist / prior) * 10_000) };
 }
 
-function quoteFacts(v: unknown, now: number): Pick<NameFacts, "quote" | "quote_time" | "spread_bps" | "quote_age_s"> {
+function quoteFacts(v: unknown, now: number, aged: Aged[]): Pick<NameFacts, "quote" | "quote_time" | "spread_bps" | "quote_age_s"> {
   if (v === undefined || v === null) return { quote: "absent", quote_time: "absent", spread_bps: null, quote_age_s: null };
-  if (!isObj(v)) return { quote: "invalid", quote_time: "absent", spread_bps: null, quote_age_s: null };
-  const s = stamp(v.t, now);
-  const base = { quote_time: s.state, quote_age_s: age(s.t, now) };
+  // Not an object at all: the quote and its time are both unreadable.
+  if (!isObj(v)) return { quote: "invalid", quote_time: "invalid", spread_bps: null, quote_age_s: null };
+  const s = stamp(v.t);
+  const base = { quote_time: s.state, quote_age_s: ageOf(s.t, now, "quote", aged) };
   const { bp, ap, bs, as: asz } = v;
   // A price of 0 is Alpaca's "no active side"; anything that is not a number of 0 or more is unreadable. A size of 0
-  // (sizes are in shares) is no active side too; a size that is sent but not a number of 0 or more is unreadable,
-  // and a missing size leaves the side to its price.
-  const sizeOk = (z: unknown) => z === undefined || (isNum(z) && z >= 0);
+  // (sizes are in shares) is no active side too. A missing size (absent or null) leaves the side to its price; a size
+  // that is sent but is not a number of 0 or more makes the quote unreadable.
+  const sizeOk = (z: unknown) => z === undefined || z === null || (isNum(z) && z >= 0);
   if (!isNum(bp) || !isNum(ap) || bp < 0 || ap < 0 || !sizeOk(bs) || !sizeOk(asz)) return { quote: "invalid", spread_bps: null, ...base };
   const bid = bp > 0 && bs !== 0;
   const ask = ap > 0 && asz !== 0;
@@ -314,7 +311,8 @@ export function probeSnapshot(symbol: string, raw: unknown, now: number): NamePr
   if (raw === undefined || raw === null) return { symbol, source: "missing" };
   if (!isObj(raw)) return { symbol, source: "invalid" };
   const snap = raw;
-  const serverNow = isNum(now) ? now : Number.NaN;
+  const serverNow = usableNow(now);
+  const aged: Aged[] = [];
 
   // The last trade.
   const tr = snap.latestTrade;
@@ -322,7 +320,7 @@ export function probeSnapshot(symbol: string, raw: unknown, now: number): NamePr
   let price: number | null = null;
   let tradeAt: number | null = null;
   if (tr !== undefined && tr !== null) {
-    const s = isObj(tr) ? stamp(tr.t, serverNow) : null;
+    const s = isObj(tr) ? stamp(tr.t) : null;
     if (isObj(tr) && isPos(tr.p) && s && s.t !== null) {
       trade = "ok";
       price = tr.p;
@@ -334,14 +332,15 @@ export function probeSnapshot(symbol: string, raw: unknown, now: number): NamePr
   const trade_day = dayVsToday(tradeAt, serverNow);
 
   // The forming (or last finished) minute.
-  const mb = bar(snap.minuteBar, serverNow);
-  const minuteAge = mb.bar && Number.isFinite(serverNow) ? serverNow - mb.bar.t : null;
-  // A bar whose minute ends exactly at server time has finished.
-  const minute: MinuteState = mb.presence !== "ok" ? mb.presence : minuteAge === null ? "invalid" : minuteAge >= MINUTE_MS ? "finished" : "forming";
-  const tradeVsMinute = minute === "finished" && mb.bar && tradeAt !== null ? ageSeconds(mb.bar.t + MINUTE_MS - tradeAt) : null;
+  const mb = bar(snap.minuteBar);
+  const minuteMs = mb.bar && Number.isFinite(serverNow) ? serverNow - mb.bar.t : null;
+  // A bar whose minute ends exactly at server time has finished. Its state is read from the raw difference; only its
+  // stored age is limited to MAX_STAMP_SKEW_MS.
+  const minute: MinuteState = mb.presence !== "ok" ? mb.presence : minuteMs === null ? "invalid" : minuteMs >= MINUTE_MS ? "finished" : "forming";
+  const tradeVsMinute = minute === "finished" && mb.bar && tradeAt !== null ? Math.trunc((mb.bar.t + MINUTE_MS - tradeAt) / 100) / 10 || 0 : null;
 
   // The day's bar. Its day is read from its stamp alone, as quote.ts' `day` is, even when its prices are unusable.
-  const db = bar(snap.dailyBar, serverNow);
+  const db = bar(snap.dailyBar);
   const d = db.bar;
   const daily_day = dayVsToday(db.t, serverNow);
   let trade_vs_day: TradeVsDay;
@@ -360,22 +359,29 @@ export function probeSnapshot(symbol: string, raw: unknown, now: number): NamePr
   } else trade_vs_day = "inside";
 
   // The prior session's close.
-  const pb = bar(snap.prevDailyBar, serverNow);
+  const pb = bar(snap.prevDailyBar);
   const sess = (b: { presence: Presence; t: number | null }) => sessionDay(b.presence === "absent" ? "absent" : b.t === null ? "invalid" : "readable", b.t, serverNow);
   const pm = price !== null && pb.bar ? priorMove(price, pb.bar.c) : null;
 
+  const trade_age_s = ageOf(tradeAt, serverNow, "trade", aged);
+  const minute_age_s = mb.bar ? ageOf(mb.bar.t, serverNow, "minute", aged) : null;
+  const q = quoteFacts(snap.latestQuote, serverNow, aged);
+  const hasTrade = trade !== "absent";
   return {
     symbol,
     source: "fetched",
     trade,
     trade_day,
-    trade_age_s: age(tradeAt, serverNow),
+    trade_age_s,
     trade_x: safeCode(trObj.x),
     trade_c: c.kept,
     trade_c_dropped: c.dropped,
-    trade_class: trade === "absent" ? "unknown" : tradeClass(c.kept, c.dropped, trObj.z),
+    trade_sets_minute_price: hasTrade ? setsPrice(c.kept, c.dropped, trObj.z, "minute") : "unknown",
+    trade_sets_daily_price: hasTrade ? setsPrice(c.kept, c.dropped, trObj.z, "daily") : "unknown",
+    trade_odd_lot: c.kept.includes("I"),
+    trade_extended_hours: c.kept.includes("T") || c.kept.includes("U"),
     minute,
-    minute_age_s: minuteAge === null ? null : ageSeconds(minuteAge),
+    minute_age_s,
     trade_vs_minute_s: tradeVsMinute,
     daily: db.presence,
     daily_day,
@@ -388,7 +394,8 @@ export function probeSnapshot(symbol: string, raw: unknown, now: number): NamePr
     prev: pb.presence,
     prior_move: pm ? pm.move : "unknown",
     prior_move_bps: pm ? pm.bps : null,
-    ...quoteFacts(snap.latestQuote, serverNow),
+    ...q,
+    age_out_of_range: aged,
   };
 }
 
@@ -407,13 +414,16 @@ export interface RawSnapshots {
  */
 export function probeSnapshots(symbols: readonly string[], raw: RawSnapshots | null): ProbeRecord | null {
   if (!raw || !isObj(raw.fetched)) return null;
+  // A server time a Date cannot hold: nothing can be judged, so every fetched name is recorded as invalid.
+  const timeOk = Number.isFinite(usableNow(raw.at));
   const names: NameProbe[] = [];
   const seen = new Set<string>();
   for (const s of symbols) {
     if (typeof s !== "string" || !SYMBOL_RE.test(s) || seen.has(s)) continue;
     seen.add(s);
     if (names.length >= MAX_PROBED) break;
-    names.push(Object.hasOwn(raw.fetched, s) ? probeSnapshot(s, raw.fetched[s], raw.at) : { symbol: s, source: "cached" });
+    if (!Object.hasOwn(raw.fetched, s)) names.push({ symbol: s, source: "cached" });
+    else names.push(timeOk ? probeSnapshot(s, raw.fetched[s], raw.at) : { symbol: s, source: "invalid" });
   }
   return { v: PROBE_V, phase: phaseAt(raw.at), rate_limit: rateHeader(raw.rate?.limit), rate_remaining: rateHeader(raw.rate?.remaining), names };
 }
@@ -425,7 +435,8 @@ const ENUM_FACTS = {
   source: SOURCES,
   trade: PRESENCE,
   trade_day: DAYS,
-  trade_class: TRADE_CLASSES,
+  trade_sets_minute_price: SETS_PRICE,
+  trade_sets_daily_price: SETS_PRICE,
   minute: MINUTE_STATES,
   daily: PRESENCE,
   daily_day: DAYS,
@@ -439,7 +450,7 @@ const ENUM_FACTS = {
 } as const;
 type EnumFact = keyof typeof ENUM_FACTS;
 /** The yes/no facts, counted as "yes", "no" or "unknown". */
-const BOOL_FACTS = ["high_below_low", "open_outside"] as const;
+const BOOL_FACTS = ["high_below_low", "open_outside", "trade_odd_lot", "trade_extended_hours"] as const;
 
 /**
  * Fixed buckets per number, chosen for the guards: each is [lower, upper) and the last is open. A value below the
@@ -457,14 +468,27 @@ export const BPS_BUCKETS = [
   ["50-250", 50],
   ["250+", 250],
 ] as const;
-/** For the move from the prior close, whose guard is at 2500 bps (25%). */
+/**
+ * For the move from the prior close, whose guard is at 2500 bps (25%). The last two buckets come from the name's own
+ * `prior_move`, not from the rounded number: "at-limit" is exactly 25% and "beyond-2500" is more, so a move "within"
+ * the rule that rounds to 2500.0 bps stays in "1000-2500" (priorBucket).
+ */
 export const PRIOR_BUCKETS = [
   ["0-100", 0],
   ["100-500", 100],
   ["500-1000", 500],
   ["1000-2500", 1000],
-  ["2500+", 2500],
+  ["at-limit", Number.POSITIVE_INFINITY],
+  ["beyond-2500", Number.POSITIVE_INFINITY],
 ] as const;
+
+/** The prior-move bucket: by the name's `prior_move` at and past the limit, by its value below it. */
+export function priorBucket(v: number, move: unknown): string {
+  if (move === "at-limit") return "at-limit";
+  if (move === "beyond") return "beyond-2500";
+  if (move !== "within" && v >= 2500) return "beyond-2500";
+  return bucketOf(v, PRIOR_BUCKETS.slice(0, 4));
+}
 type Buckets = readonly (readonly [string, number])[];
 export const NUM_FACTS: Record<string, Buckets> = {
   trade_age_s: AGE_BUCKETS,
@@ -504,6 +528,14 @@ export interface FactCounts {
   exchanges: Record<string, number>;
   /** Fetched samples with at least one condition code dropped (unsafe, too many, or not an array). */
   conditions_dropped: number;
+  /** Ages left out as beyond MAX_STAMP_SKEW_MS, per age. */
+  ages_out_of_range: Record<string, number>;
+  /**
+   * The guard's question, as a first-class count: the trade against the day's range (`trade_vs_day`) crossed with
+   * whether that trade sets the daily bar's price (`trade_sets_daily_price`). "How often is a trade that does set the
+   * daily high/low outside the daily range" is `above-high` and `below-low` under `yes` and `first-only`.
+   */
+  day_range_by_daily_price: Record<string, Record<string, number>>;
 }
 
 /** For the snapshot call's remaining requests in the rate-limit window (200 a minute on the free plan). */
@@ -539,11 +571,11 @@ export interface ProbeSummary {
 }
 
 const emptyNum = (b: Buckets): NumStats => ({ n: 0, min: null, max: null, buckets: Object.fromEntries([["negative", 0], ...b.map(([name]) => [name, 0])]) });
-function addNum(s: NumStats, v: number, b: Buckets): void {
+function addNum(s: NumStats, v: number, b: Buckets, bucket: string = bucketOf(v, b)): void {
   s.n++;
   s.min = s.min === null ? v : Math.min(s.min, v);
   s.max = s.max === null ? v : Math.max(s.max, v);
-  s.buckets[bucketOf(v, b)] = (s.buckets[bucketOf(v, b)] ?? 0) + 1;
+  s.buckets[bucket] = (s.buckets[bucket] ?? 0) + 1;
 }
 const emptyGroup = (): FeedGroup => ({
   records: 0,
@@ -560,7 +592,8 @@ function emptyCounts(): FactCounts {
   for (const f of BOOL_FACTS) counts[f] = { yes: 0, no: 0, unknown: 0 };
   const numbers: Record<string, NumStats> = {};
   for (const [f, b] of Object.entries(NUM_FACTS)) numbers[f] = emptyNum(b);
-  return { samples: 0, counts, numbers, conditions: {}, exchanges: {}, conditions_dropped: 0 };
+  const cross = Object.fromEntries(TRADE_VS_DAY.map((v) => [v, Object.fromEntries(SETS_PRICE.map((p) => [p, 0]))]));
+  return { samples: 0, counts, numbers, conditions: {}, exchanges: {}, conditions_dropped: 0, ages_out_of_range: Object.fromEntries(AGED.map((a) => [a, 0])), day_range_by_daily_price: cross };
 }
 
 const bump = (m: Record<string, number>, k: string) => {
@@ -579,7 +612,13 @@ function add(c: FactCounts, n: Record<string, unknown>): void {
   for (const f of BOOL_FACTS) bump(c.counts[f], n[f] === true ? "yes" : n[f] === false ? "no" : "unknown");
   for (const [f, b] of Object.entries(NUM_FACTS)) {
     const v = n[f];
-    if (isNum(v)) addNum(c.numbers[f]!, v, b);
+    if (isNum(v)) addNum(c.numbers[f]!, v, b, f === "prior_move_bps" ? priorBucket(v, n.prior_move) : undefined);
+  }
+  if (Array.isArray(n.age_out_of_range)) for (const a of n.age_out_of_range) if ((AGED as readonly unknown[]).includes(a)) bump(c.ages_out_of_range, a as string);
+  const vs = typeof n.trade_vs_day === "string" && (TRADE_VS_DAY as readonly string[]).includes(n.trade_vs_day) ? n.trade_vs_day : null;
+  if (vs) {
+    const sets = typeof n.trade_sets_daily_price === "string" && (SETS_PRICE as readonly string[]).includes(n.trade_sets_daily_price) ? n.trade_sets_daily_price : "unknown";
+    bump(c.day_range_by_daily_price[vs]!, sets);
   }
   if (Array.isArray(n.trade_c)) for (const code of n.trade_c) if (safeCode(code) !== null) bump(c.conditions, code as string);
   const x = safeCode(n.trade_x);
