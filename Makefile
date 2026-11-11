@@ -120,23 +120,20 @@ feed-watch-drill: ## Offline: the feed watch's real tick on in-memory state, lat
 	cd dashboard && pnpm exec vitest run test/feed-watch-drill.test.ts
 
 # The feed agreement (docs/runbooks/feed-agreement.md): IEX against SIP for the Options board, one finished session at a
-# time. Read-only GETs of historical bars; reports go to the git-ignored var/feed-agreement/. Nothing is sent anywhere.
-ENV_FILE ?= .env
-feed-agreement: ## After a session: replay the board on IEX and on SIP bars and compare: make feed-agreement DAY=YYYY-MM-DD EDITION=<file> [BUDGET_S=120]
-	@test -n "$(DAY)" -a -n "$(EDITION)" || (echo "usage: make feed-agreement DAY=YYYY-MM-DD EDITION=<edition file>" && exit 2)
-	cd dashboard && node --env-file-if-exists=$(abspath $(ENV_FILE)) scripts/feed-agreement.mjs --day $(DAY) --edition $(abspath $(EDITION)) $(if $(BUDGET_S),--budget-s $(BUDGET_S),)
+# time. Read-only GETs; reports go to the git-ignored var/feed-agreement/. Nothing is sent anywhere. DAY, EDITION and
+# BUDGET_S reach the recipes as environment variables (make exports command-line variables) and are always quoted; DAY
+# is checked against YYYY-MM-DD first. The env file is read by Node's --env-file parser, never sourced as shell.
+export ENV_FILE ?= .env
+FA_DAY_OK = [[ "$$DAY" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$$ ]] || { echo "usage: DAY=YYYY-MM-DD"; exit 2; }
+feed-agreement: ## After a session: replay the board on IEX and on SIP bars and compare: make feed-agreement DAY=YYYY-MM-DD EDITION=<file> [BUDGET_S=120] [ENV_FILE=.env]
+	@$(FA_DAY_OK); [ -n "$$EDITION" ] || { echo "usage: make feed-agreement DAY=YYYY-MM-DD EDITION=<edition file>"; exit 2; }; \
+	node --env-file-if-exists="$$ENV_FILE" dashboard/scripts/feed-agreement.mjs --day "$$DAY" --edition "$$EDITION" $${BUDGET_S:+--budget-s "$$BUDGET_S"}
 
-feed-agreement-summary: ## The feed agreement's reading over the sessions run so far (5 needed)
-	cd dashboard && node scripts/feed-agreement.mjs --summary
+feed-agreement-summary: ## The feed agreement's reading over the sessions run so far (5 of one engine label needed)
+	node dashboard/scripts/feed-agreement.mjs --summary
 
-feed-agreement-edition: ## Between the close and 21:52 UTC: save that session's options edition for the feed agreement: make feed-agreement-edition DAY=YYYY-MM-DD
-	@test -n "$(DAY)" || (echo "usage: make feed-agreement-edition DAY=YYYY-MM-DD" && exit 2)
-	@set -a; if [ -f "$(ENV_FILE)" ]; then . "$(abspath $(ENV_FILE))"; fi; set +a; \
-	$(PY) -c 'import json, pathlib, sys; from wt.options.pipeline_check import read_edition; \
-	day = sys.argv[1]; ed = read_edition("options"); s = ed.get("session") if ed else None; \
-	p = pathlib.Path("var/feed-agreement/editions") / f"{day}.json"; \
-	msg = "no edition: the site did not answer (DASHBOARD_INGEST_URL and DASHBOARD_INGEST_SECRET needed)" if ed is None else (f"refused: the site holds the {s} edition, not {day}; nothing saved" if s != day else None); \
-	msg and sys.exit(msg); p.parent.mkdir(parents=True, exist_ok=True); p.write_text(json.dumps(ed)); print(f"saved {p}")' "$(DAY)"
+feed-agreement-edition: ## On the console Mac, between the close and 21:52 UTC: save that session's options edition: make feed-agreement-edition DAY=YYYY-MM-DD [ENV_FILE=.env]
+	@$(FA_DAY_OK); node --env-file-if-exists="$$ENV_FILE" dashboard/scripts/feed-agreement.mjs --save-edition --day "$$DAY"
 
 dashboard-deploy: ## OWNER: deploy origin/main's dashboard to production from a clean worktree, stamped with its commit
 	@set -e; git fetch --quiet origin main; sha=$$(git rev-parse origin/main); tmp=$$(mktemp -d); \
