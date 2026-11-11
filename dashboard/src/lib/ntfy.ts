@@ -5,7 +5,8 @@ import { logEvent } from "./log";
  * feed-late (a routine's document did not arrive, or could not be checked), feed-recovered, rejected (ingest refused
  * an edition and nothing newer is stored).
  */
-export type NoticeKind = "late" | "stopped" | "recovered" | "offline" | "feed-late" | "feed-recovered" | "rejected";
+export const NOTICE_KINDS = ["late", "stopped", "recovered", "offline", "feed-late", "feed-recovered", "rejected"] as const;
+export type NoticeKind = (typeof NOTICE_KINDS)[number];
 
 export interface Notice {
   kind: NoticeKind;

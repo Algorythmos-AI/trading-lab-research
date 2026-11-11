@@ -124,6 +124,18 @@ def run_checks(root: Path | None = None, min_free_gb: float = MIN_FREE_GB, remot
     return checks
 
 
+# Every check's name: the only words of a check a page may carry (a detail can hold a branch name, a path or an
+# error's text). tests/unit/test_alert_allowlist.py keeps every Check(...) above inside it.
+CHECK_NAMES = frozenset({"on main", "reviewed commit", "clean code", "git", "runtime state migrated",
+                         "venv matches lockfile", "free disk", ".env private", "origin reachable", "paging configured"})
+
+
+def page_reason(fails: list[Check]) -> str:
+    """A refusal's page: the failed checks by name. The details stay in the job's log."""
+    names = sorted({c.name if c.name in CHECK_NAMES else "a check" for c in fails})
+    return f"Preflight failed: {', '.join(names) or 'a check'}. The job's log has the detail."
+
+
 def failures(checks: list[Check]) -> list[Check]:
     return [c for c in checks if not c.ok]
 

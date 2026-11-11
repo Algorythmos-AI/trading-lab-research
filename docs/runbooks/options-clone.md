@@ -45,7 +45,7 @@ Its numbers are frozen in `config/options_clone.yaml` and `config/risk.yaml` key
 
 | Page | Meaning | What to do |
 |---|---|---|
-| Options clone entered / exited | A trade, with its setup and result on premium | Nothing |
+| Options clone entered / exited | A trade: the side (call or put) and, on exit, the result on premium in %. The name, the setup and the fill are in the clone journal's `filled` record, the level in the plan file, the exit reason in the `trade_closed` record; never on the phone (the topic is public) | Nothing |
 | Options clone latched | The day ($100), week ($300) or drawdown ($500) latch is on; no new entries | The day latch clears itself next session. Week and drawdown latches wait for you: read the trades, then reset |
 | Feed unfit, entries off | The option quotes were too old (median over 5 s in ten minutes) or entry fills too far from them (median over 3%) | Nothing today. If it repeats, consider Algo Trader Plus (exact OPRA quotes) and the `opra` switch |
 | An exit has not filled | Three tries, or 60 s past the trigger | Watch the next page. The clone keeps trying |

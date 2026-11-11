@@ -47,6 +47,7 @@ from wt.core.config import DATA_DIR, ROOT, STATE_DIR, env
 from wt.data.alpaca import DATA, AlpacaREST
 from wt.oms.manager import ACTIVE_POSITION, OMS, PlanStore, TradePlan
 from wt.ops import hc, locks
+from wt.ops import alerts as page
 from wt.ops.alerts import Alerts, Pager
 from wt.risk import events
 from wt.risk.mandate import out_of_mandate
@@ -513,7 +514,9 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         else:
             refuse(f"primary lease not held: {held.reason}")
             pager.fire("paper-b:lease", "Paper B: no primary lease, entries off",
-                       f"{held.reason}. Exits are still managed. See docs/runbooks/oci-host.md.", 4)
+                       "The lease was not held; the session's journal (refuse_to_arm) says why. Exits are still "
+                       "managed. See "
+                       "docs/runbooks/oci-host.md.", 4)
     a = rest if rest is not None else AlpacaREST(per_minute=150)
     try:
         acct = broker.account()
@@ -584,10 +587,11 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             except OSError as e:
                 _echo(f"STOP RULE LATCH NOT SAVED ({e.__class__.__name__})", sys.stderr)
             log("stop_rule", kind=fired.kind, detail=fired.detail, decision=rule.decision)
-            pager.once_per_day("paper-b:stop-rule", f"paper-b stopped by its stop rule ({rule.decision})",
-                               f"{fired.kind}: {fired.detail}. Entries stay off until a new decision record "
-                               "changes B.stop_rule or retires B and clears the latch (make reset-latch "
-                               "REASON=\"... DEC-NNNN\"); a reset alone brings the latch back at the next arming.", 4)
+            pager.once_per_day("paper-b:stop-rule", f"paper-b stopped by its stop rule ({page.record(rule.decision)})",
+                               "The rule fired; the session's journal (stop_rule) has its numbers. Entries stay off until a new "
+                               "decision record changes B.stop_rule or retires B and clears the latch (make "
+                               "reset-latch with a REASON that names the record); a reset alone brings the latch "
+                               "back at the next arming.", 4)
         refuse(f"stop rule {fired.kind} ({rule.decision}): {fired.detail}")
     chain_flag = STATE_DIR / "evidence" / "chain-broken"      # wt.ops.backup: the evidence can't be trusted
     if chain_flag.exists():
@@ -675,8 +679,8 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         oms.ensure_stop(o)
         log("adopted_orphan", trade_id=o.trade_id, qty=qty, stop=stop)
         pager.fire("paper-b:orphan", "Paper B adopted a position it did not open",
-                   f"{TRADE} x{qty} had no plan. It is protected by a stop and will be exited at the open "
-                   "(or at once if the session is under way).", 4)
+                   f"A long position of {page.count(qty)} share(s) had no plan. It is protected by a stop and will "
+                   "be exited at the open (or at once if the session is under way).", 4)
         return o
 
     def check_positions(positions: list[Any]) -> None:
@@ -684,13 +688,18 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             if not legacy:
                 log("out_of_mandate", symbol=sym, qty=qty)
                 pager.once_per_day(f"paper-b:out-of-mandate:{sym}", "Position outside strategy B's mandate",
-                                   f"The paper account holds {sym} x{qty}. The runner never touches it. Close it in "
+                                   f"The paper account holds {page.count(qty)} share(s) of a name outside B's "
+                                   "allowlist; the session's journal (out_of_mandate) names it. The runner never "
+                                   "touches it. Close it in "
                                    "the Alpaca UI, or record it in config/legacy_positions.yaml.", 3)
 
     def page_reconcile(acts: list[str]) -> None:
         bad = [x for x in acts if any(k in x for k in ("UNKNOWN", "SHORT", "UNPROTECTED"))]
         if bad:
-            pager.fire("paper-b:unknown-position", "Paper B: position needs attention", "; ".join(bad)[:300], 5)
+            # the reconcile event just written (reconcile, reconcile_startup) already holds the actions
+            pager.fire("paper-b:unknown-position", "Paper B: position needs attention",
+                       f"Reconcile found {page.count(len(bad))} unknown, short or unprotected position(s); the "
+                       "session's journal (reconcile) names them. Check the broker.", 5)
 
     # ---- startup: adopt, reconcile and protect before anything that could fail (L1) ----
     try:
@@ -813,8 +822,9 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                     cancelled = oms.cancel_resting(TRADE)       # this strategy's sells would deepen the short
                     log("short_position", qty=qty, cancelled=cancelled)
                     pager.fire("paper-b:not-flat", "Paper B is SHORT",
-                               f"{TRADE} x{qty}. This account must never be short. This strategy's sell orders were "
-                               "cancelled; nothing is bought back automatically. Follow the not-flat runbook.", 5)
+                               f"Short {page.count(abs(qty))} share(s). This account must never be short. This "
+                               "strategy's sell orders were cancelled; nothing is bought back automatically. Follow "
+                               "the not-flat runbook.", 5)
             if plan is not None and plan.state == "entry_working" and now >= et(day, "15:30"):
                 oms.cancel_entry_remainder(plan)
             # ---- entries (at most one per day; never while any exposure exists) ----
@@ -859,7 +869,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                         pager.fire("paper-b:clock-skew", "Paper B skipped an entry: clock check failed",
                                    "The local clock is more than 2 s off the broker's, or the broker clock could "
                                    "not be read." if skew is None else
-                                   f"The local clock is {skew:+.1f} s off the broker's (limit 2 s).", 4)
+                                   f"The local clock is {page.ratio(skew, '+.1f')} s off the broker's (limit 2 s).", 4)
                         sig = None
                     else:
                         pager.resolve("paper-b:clock-skew", "Paper B clock check: ok", "Clock skew is back in range.")
@@ -902,13 +912,14 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                 oms.ensure_stop(h)                       # GTC stop keeps protecting overnight
             log("END_OF_DAY_NOT_FLAT", qty=qty, plan=h.log if h else None)
             pager.fire("paper-b:not-flat", "Paper B NOT FLAT at the close",
-                       f"{TRADE} x{qty} is still open after the close. A GTC stop protects it overnight; the next "
-                       "session exits it at the open. Check the broker.", 5)
+                       f"{page.count(qty)} share(s) still open after the close. A GTC stop protects them "
+                       "overnight; the next session exits them at the open. Check the broker.", 5)
         elif qty < 0:
             cancelled = oms.cancel_resting(TRADE)        # never cover automatically; sells would deepen it
             log("END_OF_DAY_NOT_FLAT", qty=qty, short=True, cancelled=cancelled)
             pager.fire("paper-b:not-flat", "Paper B is SHORT at the close",
-                       f"{TRADE} x{qty}. Nothing is bought back automatically. Follow the not-flat runbook.", 5)
+                       f"Short {page.count(abs(qty))} share(s). Nothing is bought back automatically. Follow the "
+                       "not-flat runbook.", 5)
         else:
             cancelled = oms.cancel_resting(TRADE)        # flat: no GTC stop may outlive the position
             if cancelled:

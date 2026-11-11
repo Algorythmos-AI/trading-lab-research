@@ -5,7 +5,9 @@
 // title and message to an allowlist grammar: plain ASCII letters, digits and a little punctuation (no "$", no "/", no
 // "@", no quotes: no amount, no URL, no host, no address), and words from a fixed vocabulary, numbers, HH:MM times and
 // YYYY-MM-DD dates only. And no name the options desk trades (config/options_desk.yaml and the dashboard's own list)
-// may appear. A new word in a page is a decision: add it here.
+// may appear. A new word in a page is a decision: add it here. Every kind in NOTICE_KINDS (ntfy.ts) must be driven
+// here: a new kind without a builder below fails "drives every notice kind there is". Hostile inputs carry every name
+// the desks trade (read from config), a price, a dollar amount, an error with a path and a URL, and a very long string.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -25,7 +27,7 @@ import {
   lateThenBackNotice,
 } from "@/lib/feed-watch";
 import { OPTIONS_NAMES } from "@/lib/market-calendar";
-import type { Notice, NoticeKind } from "@/lib/ntfy";
+import { NOTICE_KINDS, type Notice } from "@/lib/ntfy";
 import { evaluate, INITIAL_STATE } from "@/lib/watchdog";
 import { cleanSnapshot } from "./helpers";
 
@@ -37,7 +39,8 @@ const VOCAB = new Set(
    published publisher radar readable read record recovered refresh refused reminder repeats row rows run runs running
    schedule server session snapshot so status stopped store stored than that the them there this time to trade trading
    up update was weekday window windows york yet record written unknown been checked ahead were arrived sent good again
-   assumed market job may say past could an accepted unknown feed alerts each sends own when already checkable watch write state until answers now about`.split(/\s+/).filter(Boolean),
+   assumed market job may say past could an accepted unknown feed alerts each sends own when already checkable watch write state until answers now about
+   current`.split(/\s+/).filter(Boolean),
 );
 // The desks' prefixes and the drill's, and the feed table's names, are part of the grammar: they are fixed words too.
 for (const label of Object.values(DESK_LABEL)) VOCAB.add(label.toLowerCase());
@@ -46,7 +49,8 @@ VOCAB.add("drill");
 for (const f of FEEDS) for (const w of f.name.toLowerCase().split(/[\s,]+/)) if (w) VOCAB.add(w);
 
 const CHARS = /^[A-Za-z0-9 :;.,()'-]*$/;
-const TOKEN_OK = (t: string) => VOCAB.has(t.toLowerCase()) || /^\d+$/.test(t) || /^\d{4}-\d{2}-\d{2}$/.test(t);
+const TOKEN_OK = (t: string) =>
+  VOCAB.has(t.toLowerCase()) || /^\d+$/.test(t) || /^\d{4}-\d{2}-\d{2}$/.test(t) || /^\d{4}-W\d{2}$/.test(t);
 
 /** The options desk's names, from the repository's own config and the dashboard's calendar file: never hard-coded. */
 function deskNames(): string[] {
@@ -54,6 +58,19 @@ function deskNames(): string[] {
   const line = /^names:\s*\[([^\]]*)\]/m.exec(yaml);
   const fromYaml = line ? line[1]!.split(",").map((s) => s.trim()).filter(Boolean) : [];
   return [...new Set([...fromYaml, ...OPTIONS_NAMES])];
+}
+
+/** What the page would actually carry (sendNtfy scrubs money) checked for every hostile marker and the caps. */
+function leaks(n: Notice): string[] {
+  const out: string[] = [];
+  if (n.title.length > TITLE_MAX) out.push(`title length ${n.title.length}`);
+  if (n.message.length > MESSAGE_MAX) out.push(`message length ${n.message.length}`);
+  if (!n.title.trim() || !n.message.trim()) out.push("empty");
+  for (const text of [n.title, n.message]) {
+    for (const m of MARKERS) if (m.test(text)) out.push(`carries ${m}`);
+    for (const name of deskNames()) if (new RegExp(`\\b${name}\\b`).test(text)) out.push(`names ${name}`);
+  }
+  return out;
 }
 
 function badTokens(n: Notice): string[] {
@@ -113,16 +130,23 @@ const withPrefixes = (ns: Notice[]): Notice[] => [
   ...Object.values(DESK_LABEL).flatMap((label) => ns.map((n) => ({ ...n, title: `${label} desk: ${n.title}` }))),
 ];
 
+const TITLE_MAX = 120;
+const MESSAGE_MAX = 1000;
+/** Everything a page must never carry, in one string: every desk name, a price, an amount, an error with a path and
+ * a URL, and a very long tail. */
+const HOSTILE = `${deskNames().join(" ")} broke 123.45 for US$1,234.56; TypeError: ENOENT: no such file, open '/home/wt/trading/var/x.json' https://lab.example/api?token=sekrit ${"Z".repeat(4000)}`;
+const MARKERS = [/123\.45/, /1,234/, /\$/, /\/home\//, /:\/\//, /lab\.example/, /sekrit/, /ENOENT/, /TypeError/, /Z{20}/, /NaN|Infinity|undefined|null/];
+
 /** A view whose every field carries something that must never be sent: a ticker, a price, a URL, an error text. */
 function hostile(base: FeedView): FeedView {
   return {
     ...base,
-    id: "SPY $512.40",
-    name: "AAPL broke 512.40",
-    short: "TSLA",
-    reason: "SPY" as FeedView["reason"],
-    for_session: "NVDA https://lab.example",
-    outcome: "TypeError: x" as FeedView["outcome"],
+    id: HOSTILE,
+    name: HOSTILE,
+    short: HOSTILE,
+    reason: HOSTILE as FeedView["reason"],
+    for_session: HOSTILE,
+    outcome: HOSTILE as FeedView["outcome"],
     late_min: Number.NaN,
     age_min: Number.POSITIVE_INFINITY,
     deadline: Number.NaN,
@@ -139,28 +163,46 @@ describe("ntfy notices", () => {
     const ns: Notice[] = [];
     for (const v of base) {
       const h = hostile(v);
-      ns.push(lateNotice(h, now), unreadableNotice(h, Number.NaN, now), recoveredNotice(h, now), refusedNotice(h, now), summaryNotice([h.id, "MSFT"], now), lateThenBackNotice(h.id, Number.NaN, now));
+      ns.push(lateNotice(h, now), unreadableNotice(h, Number.NaN, now), recoveredNotice(h, now), refusedNotice(h, now), summaryNotice([h.id, ...deskNames()], now), lateThenBackNotice(h.id, Number.NaN, now));
+      ns.push(unreadableNotice(h, 123.45, now), lateThenBackNotice(h.id, 123.45, now));
       // The same views with their own id: the name is the table's, never the view's text.
       const own = { ...h, id: v.id };
       ns.push(lateNotice(own, now), recoveredNotice(own, now), refusedNotice(own, now), summaryNotice([v.id], now));
     }
     const bad = ns.flatMap((n) => badTokens(n).map((t) => `${n.kind}: ${t}`));
     expect([...new Set(bad)]).toEqual([]);
-    for (const n of ns) expect(`${n.title} ${n.message}`).not.toMatch(/SPY|AAPL|TSLA|NVDA|MSFT|512|https|TypeError|NaN|Infinity|undefined|null/);
+    for (const n of ns) expect(leaks(n)).toEqual([]);
+  });
+
+  it("the snapshot watchdog's pages carry nothing a hostile snapshot holds", () => {
+    const at = (iso: string) => new Date(iso);
+    const windows = [{ session: HOSTILE, start: HOSTILE, end: "2026-09-29T22:00:00Z" }];
+    const windows2 = [{ session: "", start: "2026-09-29T11:30:00Z", end: "2026-09-29T22:00:00Z" }];
+    const windows3 = [{ session: "2026-W40", start: "2026-09-29T11:30:00Z", end: "2026-09-29T22:00:00Z" }];
+    const ns: Notice[] = [];
+    for (const w of [windows, windows2, windows3]) {
+      for (const asOf of ["2026-09-29T12:00:00Z", HOSTILE]) {
+        for (const t of ["2026-09-29T12:40:00Z", "2026-09-29T14:00:00Z"]) {
+          const d = evaluate(cleanSnapshot({ as_of: asOf, expected_windows: w }), INITIAL_STATE, at(t));
+          ns.push(...d.notices);
+        }
+      }
+    }
+    expect(ns.length).toBeGreaterThan(0);
+    for (const n of ns) expect([...badTokens(n), ...leaks(n)]).toEqual([]);
   });
 
   const all = withPrefixes([...watchdogNotices(), ...feedNotices()]);
 
-  it("drives every notice kind there is", () => {
+  it("drives every notice kind there is (the kinds come from ntfy.ts, not from this test)", () => {
     const kinds = new Set(all.map((n) => n.kind));
-    const every: NoticeKind[] = ["late", "stopped", "recovered", "offline", "feed-late", "feed-recovered", "rejected"];
-    expect([...kinds].sort()).toEqual([...every].sort());
+    expect([...kinds].sort()).toEqual([...NOTICE_KINDS].sort());
     expect(all.some((n) => n.message.includes("weekday window is assumed"))).toBe(true);
     expect(all.some((n) => n.message.endsWith(FEED_ASSUMED_NOTE))).toBe(true);
   });
 
-  it("every title and message keeps to the allowlist grammar", () => {
-    const bad = all.flatMap((n) => badTokens(n).map((t) => `${n.kind}: ${t}`));
+  it("every title and message keeps to the allowlist grammar and the length caps", () => {
+    const bad = all.flatMap((n) => [...badTokens(n), ...leaks(n)].map((t) => `${n.kind}: ${t}`));
     expect([...new Set(bad)]).toEqual([]);
   });
 

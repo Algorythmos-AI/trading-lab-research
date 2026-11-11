@@ -447,7 +447,8 @@ def test_the_rules_block_is_built_from_two_requests_and_the_site_accepts_it():
          "complete": False, "names": []}, ["rules-skipped:1"])
 
 
-def test_a_trigger_is_announced_once_a_session_by_name_and_rule_and_never_with_a_price(tmp_path, capsys, monkeypatch):
+def test_a_trigger_is_announced_once_a_session_by_name_and_rule_in_the_log_and_without_either_on_the_phone(
+        tmp_path, capsys, monkeypatch):
     block, _ = live.rules_block(rule_account(), ["SPY"], ny("11:16"))
     seen = tmp_path / "seen.json"
     fresh = live.new_triggers(block, seen)
@@ -467,8 +468,11 @@ def test_a_trigger_is_announced_once_a_session_by_name_and_rule_and_never_with_a
     assert sent == [] and "rule triggered: SPY brk_PDH_close at the 11:00 ET hourly close" in capsys.readouterr().out
     live.announce(fresh, "phone", {"brk_PDH_close": "Hourly close above yesterday's high"}, SESSION)
     (key, title, message, priority), = sent
-    assert key == f"options:rule:SPY:brk_PDH_close:{SESSION}" and title == "SPY: Hourly close above yesterday's high" and priority == 3
-    assert "not a signal to trade" in message and not any(ch.isdigit() for ch in message.replace("11:00", "").replace("15 minutes", ""))
+    # The ntfy topic is public: the page names neither the stock nor the rule (the key, which is not sent, does).
+    assert key == f"options:rule:SPY:brk_PDH_close:{SESSION}" and title == "Options: a probation rule triggered" and priority == 3
+    assert "SPY" not in title + message and "yesterday's high" not in title + message
+    assert "11:00 ET" in message and "not a signal to trade" in message
+    assert not any(ch.isdigit() for ch in message.replace("11:00", "").replace("15 minutes", ""))
 
 
 def test_rule_states_are_sent_only_to_a_dashboard_that_accepts_them_and_never_stop_the_positions(tmp_path, monkeypatch, capsys):
