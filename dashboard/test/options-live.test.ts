@@ -164,7 +164,8 @@ describe("POST /api/ingest with an options live document", () => {
     const res = await handleIngest(post(ahead), NOW);
     expect(res.status).toBe(422);
     expect(await res.text()).toContain("as_of");
-    expect(blob.store.size).toBe(0);
+    // Nothing is stored but the refusal's record (./ingest-reject), which carries no content.
+    expect([...blob.store.keys()]).toEqual(["ops/ingest-rejects/options-live.json"]);
   });
 
   it("is refused from the research environment's key: positions come from the trading host", async () => {
@@ -180,7 +181,9 @@ describe("POST /api/ingest with an options live document", () => {
     const text = await res.text();
     expect(text).toContain("account_number");
     expect(text).not.toContain("PA123456");
-    expect(blob.store.size).toBe(0);
+    // Nothing is stored but the refusal's record (./ingest-reject), which carries no content.
+    expect([...blob.store.keys()]).toEqual(["ops/ingest-rejects/options-live.json"]);
+    expect(blob.store.get("ops/ingest-rejects/options-live.json")!.text).not.toContain("PA123456");
   });
 });
 

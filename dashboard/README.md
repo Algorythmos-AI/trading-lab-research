@@ -47,6 +47,13 @@ wt.ops.publish                            POST /api/ingest            (productio
   missing, and every page renders "—" for missing values instead of failing.
 - **Ingest** (`src/lib/ingest.ts`): previews never accept writes. Accepted outcomes are `stored`, `duplicate`
   (same `run_id`) and `older` (409, `as_of` not newer than the stored one); an etag conflict is retried once.
+  Every edition kind (radar, options, ledger, journal, options live, options clone, calendar) whose `as_of` is more
+  than ten minutes ahead of the server's clock is refused (422 `ahead-of-clock`); a date alone or a time with no
+  zone counts as ahead only when no zone on Earth has reached it. A stored edition dated beyond that allowance gives
+  way to the next valid one even though its `as_of` is "older" (logged `superseded-ahead`); otherwise the ordering
+  rule is unchanged. A refusal of an edition's content (`invalid`, `ahead-of-clock`) leaves a record at
+  `ops/ingest-rejects/<kind>.json` with only the time, the kind, the outcome and the number of errors
+  (`src/lib/ingest-reject.ts`, read with `readIngestReject`); its write is best effort and never changes the answer.
 - **Radar** (`/radar`): the daily pre-market radar's editions, signed with key id `radar` and validated against
   `src/lib/radar.schema.json` (owned here; `pnpm gen:types` regenerates `radar.types.ts`). Stored at
   `radar/latest.json` plus `radar/editions/YYYY-MM-DD.json`, where a same-day refresh replaces that date's copy.

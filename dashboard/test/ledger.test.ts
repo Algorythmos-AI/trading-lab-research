@@ -124,7 +124,8 @@ describe("POST /api/ingest with a ledger edition", () => {
     blob.reset();
     const bad = edition((e) => ((e as { day: unknown }).day = null));
     expect((await handleIngest(post(bad), NOW)).status).toBe(422);
-    expect(blob.store.size).toBe(0);
+    // Nothing is stored but the refusal's record (./ingest-reject), which carries no content.
+    expect([...blob.store.keys()]).toEqual(["ops/ingest-rejects/ledger.json"]);
   });
 });
 
