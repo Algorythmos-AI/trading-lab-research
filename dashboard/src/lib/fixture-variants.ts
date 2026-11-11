@@ -3,6 +3,10 @@
 // (DASHBOARD_FIXTURE=1, refused in production) and are chosen per request by the `fx` cookie, so the browser tests
 // can put any page into any state. Pure: no I/O.
 import type { CalendarDoc } from "./calendar.types";
+import { settledSlotEnd } from "./desk-eval";
+import { adjacentSession, type DocFeed, FEEDS, slotsAround, type StampedInputs } from "./feed-watch";
+import { nyNow } from "./market-calendar";
+import { nyInstant } from "./options";
 import type { OptionsClone } from "./options-clone.types";
 import type { OptionsLive } from "./options-live.types";
 import type { OptionsEdition } from "./options.types";
@@ -32,6 +36,12 @@ export const VARIANT_COOKIE = "fx";
  * - `calendar-off`: no economic calendar has been published. `calendar-stale`: the last one is three weeks old and
  *   FRED could not be read for it. `calendar-poison`: the stored one no longer matches its schema.
  * - `focus`: the options edition with a Today's focus block on SPY and QQQ, so the chart lines can be scanned.
+ * - `feeds-ok`, `feeds-late`, `feeds-failed`, `feeds-unknown`: the feed watch's inputs (feed-watch.ts) bent for the
+ *   Options page's health strip and the Operations page's feeds, and nothing else: the board, the cards and the desk
+ *   are drawn from the same documents as without them. `feeds-ok`: every server-known feed on time (meant for a
+ *   session clock, e.g. with `frozen`). `feeds-late`: the edition is for an earlier session, the journal has missed two
+ *   runs, the server check has been silent for half an hour. `feeds-failed`: the edition was refused and nothing newer
+ *   is stored. `feeds-unknown`: the store could not be read for the edition and the journal.
  */
 export const VARIANT_FLAGS = [
   "empty",
@@ -62,6 +72,10 @@ export const VARIANT_FLAGS = [
   "calendar-poison",
   "frozen",
   "focus",
+  "feeds-ok",
+  "feeds-late",
+  "feeds-failed",
+  "feeds-unknown",
 ] as const;
 export type VariantFlag = (typeof VARIANT_FLAGS)[number];
 
@@ -634,4 +648,42 @@ export function fixtureCalendar(
       ...(stale && s.id === "fred" ? { ok: false, stale_since: asOf } : {}),
     })),
   };
+}
+
+/**
+ * The feed watch's stamps under the `feeds-*` flags (see VARIANT_FLAGS). Untouched without one. The times are read
+ * from `nowMs`, so with `frozen` the strip is the same picture on every run.
+ */
+export function feedVariant(s: StampedInputs, flags: ReadonlySet<VariantFlag>, nowMs: number): StampedInputs {
+  const any = flags.has("feeds-ok") || flags.has("feeds-late") || flags.has("feeds-failed") || flags.has("feeds-unknown");
+  if (!any) return s;
+  const today = nyNow(new Date(nowMs)).day;
+  const preAt = nyInstant(today, 8 * 60 + 52) ?? nowMs;
+  const ok = (session: string | null, at: number | null) => ({ status: "ok" as const, value: { session, at } });
+  // The session the edition in force should be for: the run before now (the evening's build is for the next session).
+  const edition = FEEDS.find((f): f is DocFeed => f.id === "options-edition")!;
+  const due = slotsAround(edition, nowMs).filter((x) => x.due <= nowMs).at(-1);
+  const want = due?.for_session ?? today;
+  const stamps: StampedInputs["stamps"] = {
+    ...s.stamps,
+    "options-edition": ok(want, nowMs - 14 * 3_600_000),
+    "pre-open": ok(today, preAt),
+    journal: ok(today, nowMs - 5 * 60_000),
+  };
+  let refusals: StampedInputs["refusals"] = { ...s.refusals, options: { status: "missing" }, journal: { status: "missing" } };
+  let shadow: StampedInputs["shadow"] = { status: "ok", value: { on: true, switched_at: null, last_slot_end: settledSlotEnd(nowMs) } };
+  const out = { ...stamps };
+  if (flags.has("feeds-late") || flags.has("feeds-failed")) out["options-edition"] = ok(adjacentSession(want, -1).day, nowMs - 38 * 3_600_000);
+  if (flags.has("feeds-late")) {
+    out.journal = ok(today, nowMs - 3 * 3_600_000);
+    shadow = { status: "ok", value: { on: true, switched_at: null, last_slot_end: settledSlotEnd(nowMs) - 30 * 60_000 } };
+  }
+  if (flags.has("feeds-failed"))
+    refusals = { ...refusals, options: { status: "ok", value: { current: true, at: new Date(nowMs - 20 * 60_000).toISOString(), outcome: "invalid" } } };
+  if (flags.has("feeds-unknown")) {
+    out["options-edition"] = { status: "error" };
+    out["pre-open"] = { status: "error" };
+    out.journal = { status: "error" };
+  }
+  return { stamps: out, refusals, shadow };
 }

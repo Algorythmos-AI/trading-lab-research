@@ -53,6 +53,7 @@ import { useDeskShadow } from "./desk-shadow";
 import { useDone } from "./done-today";
 import { FeedFacts, FeedRetry, useLive } from "./live-layer";
 import { useBars } from "./use-bars";
+import type { PolledRead } from "@/lib/feed-watch";
 import { useTradeManage } from "./trade-manage";
 import type { Lot, Trade } from "@/lib/journal";
 import type { DayFacts } from "@/lib/session-timeline";
@@ -715,6 +716,8 @@ export interface Board {
   states: NameState[];
   paused: boolean;
   barsDelayed: boolean;
+  /** The session bars' poll as the feed health strip reads it (feed-strip.tsx): its status and when it last answered. */
+  barsRead?: PolledRead;
   /** The manage card's pieces (trade-manage.tsx), and each open trade's action word for the hero. */
   manage: ReturnType<typeof useTradeManage>;
   /** The notices to show now, and how to drop one. */
@@ -973,6 +976,7 @@ export function BoardProvider({
     states,
     paused,
     barsDelayed: mode.kind === "live" && used.delayed,
+    barsRead: bars.status === "ok" ? { status: "ok", receivedAt: bars.receivedAt, failed: bars.failed } : { status: bars.status, receivedAt: null },
     manage,
     notices: done ? [] : shown,
     dropNotice: (s) => setBook((b) => ({ ...b, kept: b.kept.filter((x) => x !== s) })),

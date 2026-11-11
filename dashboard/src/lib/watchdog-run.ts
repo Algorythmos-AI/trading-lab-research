@@ -102,6 +102,82 @@ function parseSnapshot(text: string): Snapshot | null {
   }
 }
 
+/** What commitThenSend needs of a tick's dependencies: its state document and the pager. */
+export interface CommitDeps {
+  readState(): Promise<StoredText | null>;
+  writeState(body: string, opts: { ifMatch?: string; createOnly?: boolean }): Promise<{ etag: string }>;
+  send(notice: Notice): Promise<"sent" | "skipped" | "failed">;
+}
+
+export interface CommitResult {
+  committed: boolean;
+  /** Another tick already committed this very transition and paged: nothing was sent. */
+  skipped?: "concurrent run";
+  sent: number;
+  failed: number;
+  /** The index of each notice that failed (or was not sent before the deadline). */
+  failedAt: number[];
+}
+
+/**
+ * The commit-then-page step shared by every tick (the desks' watchdog and the feed watch): commit the new state with
+ * ifMatch (create-only the first time), then page.
+ *
+ * Paging fails open. A state write that fails for any reason other than "another tick already committed this very
+ * transition" still pages: a duplicate page is acceptable, a silent dead-man's switch is not. When a page fails after
+ * the commit, `rollbackText(failedAt)` is written back (ifMatch the new etag) so the next tick pages again.
+ * `deadline` (ms, `clock`'s time): a notice not yet sent by then is not sent and counts as failed, so a slow pager
+ * cannot hold the cron function past its limit.
+ */
+export async function commitThenSend(a: {
+  deps: CommitDeps;
+  stored: StoredText | null;
+  unchanged: boolean;
+  nextText: string;
+  committedByOther: (storedText: string) => boolean;
+  notices: readonly Notice[];
+  rollbackText: (failedAt: number[]) => string;
+  event: string;
+  deadline?: number;
+  clock?: () => number;
+}): Promise<CommitResult> {
+  let etag: string | null = a.stored?.etag ?? null;
+  let committed = a.unchanged;
+  if (!committed) {
+    try {
+      etag = (await a.deps.writeState(a.nextText, a.stored ? { ifMatch: a.stored.etag } : { createOnly: true })).etag;
+      committed = true;
+    } catch (e) {
+      if (e instanceof PreconditionFailed) {
+        // Another tick wrote first. If it committed this same transition it has paged: stay quiet.
+        const now2 = await a.deps.readState().catch(() => null);
+        if (now2 && a.committedByOther(now2.text)) {
+          logEvent(a.event, { outcome: "skipped", reason: "concurrent run" });
+          return { committed: false, skipped: "concurrent run", sent: 0, failed: 0, failedAt: [] };
+        }
+      }
+      logEvent(`${a.event}.state`, { outcome: "write-failed", error: e instanceof Error ? e.name : "unknown" });
+    }
+  }
+
+  let sent = 0;
+  const failedAt: number[] = [];
+  const clock = a.clock ?? Date.now;
+  for (const [i, notice] of a.notices.entries()) {
+    if (a.deadline !== undefined && clock() >= a.deadline) {
+      failedAt.push(i);
+      continue;
+    }
+    const r = await a.deps.send(notice);
+    if (r === "failed") failedAt.push(i);
+    else if (r === "sent") sent++;
+  }
+  if (failedAt.length > 0 && committed && etag) {
+    await a.deps.writeState(a.rollbackText(failedAt), { ifMatch: etag }).catch(() => undefined);
+  }
+  return { committed, sent, failed: failedAt.length, failedAt };
+}
+
 /**
  * One watchdog tick: evaluate, try to commit the new state (ifMatch), then page.
  *
@@ -137,39 +213,20 @@ export async function runWatchdog(
     has_snapshot: snapshot !== null,
   };
 
-  let etag: string | null = stored?.etag ?? null;
-  let committed = sameState(prev, decision.next);
-  if (!committed) {
-    try {
-      etag = (
-        await deps.writeState(JSON.stringify(decision.next), stored ? { ifMatch: stored.etag } : { createOnly: true })
-      ).etag;
-      committed = true;
-    } catch (e) {
-      if (e instanceof PreconditionFailed) {
-        // Another tick wrote first. If it committed this same transition it has paged: stay quiet.
-        const now2 = await deps.readState().catch(() => null);
-        if (now2 && sameState(parseState(now2.text), decision.next)) {
-          logEvent("watchdog", { outcome: "skipped", reason: "concurrent run" });
-          return { ...summary, skipped: "concurrent run" };
-        }
-      }
-      logEvent("watchdog.state", { outcome: "write-failed", error: e instanceof Error ? e.name : "unknown" });
-    }
-  }
-
-  let sent = 0;
-  let failed = 0;
-  for (const notice of decision.notices) {
-    const r = await deps.send(notice);
-    if (r === "failed") failed++;
-    else if (r === "sent") sent++;
-  }
-  if (failed > 0 && committed && etag) {
+  const rollback = JSON.stringify({ ...prev, last_prune_day: decision.next.last_prune_day });
+  const sent = await commitThenSend({
+    deps,
+    stored,
+    unchanged: sameState(prev, decision.next),
+    nextText: JSON.stringify(decision.next),
+    committedByOther: (text) => sameState(parseState(text), decision.next),
+    notices: decision.notices,
     // Put the alert level back so the next tick retries the page (prune bookkeeping is kept).
-    const rollback = { ...prev, last_prune_day: decision.next.last_prune_day };
-    await deps.writeState(JSON.stringify(rollback), { ifMatch: etag }).catch(() => undefined);
-  }
+    rollbackText: () => rollback,
+    event: "watchdog",
+  });
+  if (sent.skipped) return { ...summary, skipped: sent.skipped };
+  const committed = sent.committed;
 
   let pruned = 0;
   if (decision.prune && deps.prune) {
@@ -182,7 +239,7 @@ export async function runWatchdog(
     }
   }
 
-  const result = { ...summary, notices: decision.notices.map((n) => n.kind), sent, failed, pruned, committed };
+  const result = { ...summary, notices: decision.notices.map((n) => n.kind), sent: sent.sent, failed: sent.failed, pruned, committed };
   logEvent("watchdog", result);
   return result;
 }

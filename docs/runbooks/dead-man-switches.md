@@ -1,12 +1,29 @@
 # Dead-man's switches: who notices when the host goes quiet
 
-Three independent monitors, none of them on the trading host:
+Four independent monitors, none of them on the trading host:
 
 1. **The Vercel watchdog** (`/api/cron/watchdog`, every 10 minutes): pages when the dashboard snapshot goes stale
    inside an expected trading window. Proven by `make watchdog-drill` (see dashboard-deploy.md).
 2. **healthchecks.io** (free plan): each job pings its own check by slug when it finishes, and `/fail` when it
    fails or refuses. A check that doesn't hear from its job in time pages (ntfy + email).
 3. **OCI alarm + Cloudflare tunnel notification** (VM only, ADR 0004): instance down, tunnel down.
+4. **The feed watch**, in the same cron run, beside the desks' ticks (`dashboard/src/lib/feed-watch-run.ts`): whether
+   each cloud routine's document arrived for the right session by its time (the options edition, the pre-open
+   refresh, the journal, the radar, the ledger as display only), whether the desk's shadow evaluator is still writing
+   its records while its switch is on, and whether `/api/ingest` refused an edition that nothing has replaced. It
+   pages through ntfy (`feed-late`, `rejected`, `feed-recovered`) only once the owner sets `FEED_WATCH_ALERTS=on` in
+   Vercel; until then it keeps its state and shows everything on the pages. Its rules, the switch-on behaviour and
+   the division of labour with the pipeline check are in `dashboard/README.md` ("Feed watch").
+   `make feed-watch-drill` runs it offline through late and recovered and prints both pages. When its own state
+   cannot be read or written it sends no feed alert and, with alerts on, "Feed watch cannot read its store" from the
+   first two ticks of each 2-hour UTC block: up to 2 a block (4 if the cron delivers a tick twice), so a 12-hour
+   outage can send 12 to 24 on the topic. An alert ntfy could not take is retried (3 quick tries, then every 30 minutes
+   for 2 hours) and, if it still did not go, shown on the Operations page's "Your feeds" card.
+
+The pipeline check (`wt-pipeline-check`, below) checks the options edition's **content** against the market's own
+data; the feed watch checks its **timeliness**. A pipeline-check page whose failed ids are only `options.present`,
+`options.session` or `options.built_from` for a session the feed watch has already paged late or refused is the same
+incident, not a second one.
 
 ## healthchecks.io setup (owner, once)
 
