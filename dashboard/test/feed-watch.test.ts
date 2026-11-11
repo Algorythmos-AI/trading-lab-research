@@ -1,6 +1,6 @@
 // The feed watch's table, calendar and evaluator (src/lib/feed-watch.ts): pure, the clock passed in. Every date here
 // is checked against src/lib/market-calendar.json: 2026-11-26 is Thanksgiving, 2026-11-27 a half day (13:00), Good
-// Friday is 2026-04-03, New York changes its clocks on 2026-03-08 and 2026-11-01, and the file ends 2027-12-31.
+// Friday is 2026-04-03, New York changes its clocks on 2026-03-08 and 2026-11-01, and the file ends 2029-12-24 (Alpaca's calendar stops there).
 import { describe, expect, it } from "vitest";
 import {
   adjacentSession,
@@ -88,16 +88,20 @@ describe("the calendar", () => {
     expect(marketDay("2026-11-26")).toEqual({ open: false, assumed: false });
     expect(marketDay("2026-11-27")).toEqual({ open: true, assumed: false });
     expect(marketDay("2026-11-14")).toEqual({ open: false, assumed: false });
-    expect(RANGE.end).toBe("2027-12-31");
-    expect(marketDay("2028-01-04")).toEqual({ open: true, assumed: true });
-    expect(marketDay("2028-01-08")).toEqual({ open: false, assumed: true });
+    expect(RANGE.end).toBe("2029-12-24");
+    expect(marketDay("2029-12-24")).toEqual({ open: true, assumed: false });
+    expect(marketDay("2029-12-25")).toEqual({ open: true, assumed: true }); // Christmas, but past the file: assumed
+    expect(marketDay("2030-01-08")).toEqual({ open: true, assumed: true });
+    expect(marketDay("2030-01-12")).toEqual({ open: false, assumed: true });
   });
 
   it("the next and the last session come from the session list", () => {
     expect(adjacentSession("2026-11-25", 1)).toEqual({ day: "2026-11-27", assumed: false });
     expect(adjacentSession("2026-04-02", 1)).toEqual({ day: "2026-04-06", assumed: false });
     expect(adjacentSession("2026-04-06", -1)).toEqual({ day: "2026-04-02", assumed: false });
-    expect(adjacentSession("2027-12-31", 1).assumed).toBe(true);
+    expect(adjacentSession("2027-12-31", 1)).toEqual({ day: "2028-01-03", assumed: false });
+    expect(adjacentSession("2029-12-21", 1)).toEqual({ day: "2029-12-24", assumed: false });
+    expect(adjacentSession("2029-12-24", 1).assumed).toBe(true);
   });
 
   it("no run is due on a weekend or a holiday, for any feed", () => {
@@ -173,10 +177,10 @@ describe("the options edition (after the close, 21:52 UTC, an hour's grace)", ()
     expect(lateNotice(after, new Date("2026-03-09T23:00:00Z")).message).toContain("18:52 New York deadline");
   });
   it("outside the calendar's range a weekday is assumed, said so, and still pages", () => {
-    const v = view("options-edition", { "options-edition": ok("2028-01-04", "2028-01-03T22:00:00Z") }, "2028-01-04T23:30:00Z");
-    expect(v).toMatchObject({ state: "late", assumed: true, alerting: true, for_session: "2028-01-05" });
-    expect(lateNotice(v, new Date("2028-01-04T23:30:00Z")).message.endsWith(FEED_ASSUMED_NOTE)).toBe(true);
-    expect(view("options-edition", { "options-edition": ok("2028-01-10", "2028-01-07T22:00:00Z") }, "2028-01-08T15:00:00Z")).toMatchObject({ state: "on_time", assumed: true });
+    const v = view("options-edition", { "options-edition": ok("2030-01-08", "2030-01-07T22:00:00Z") }, "2030-01-08T23:30:00Z");
+    expect(v).toMatchObject({ state: "late", assumed: true, alerting: true, for_session: "2030-01-09" });
+    expect(lateNotice(v, new Date("2030-01-08T23:30:00Z")).message.endsWith(FEED_ASSUMED_NOTE)).toBe(true);
+    expect(view("options-edition", { "options-edition": ok("2030-01-14", "2030-01-11T22:00:00Z") }, "2030-01-12T15:00:00Z")).toMatchObject({ state: "on_time", assumed: true });
   });
   it("a refusal of this run's edition makes it failed, and leaves the page to the refusal's own row", () => {
     const r = { refusals: { options: refused("2026-11-12T22:05:00Z") } };
@@ -547,12 +551,12 @@ describe("a refusal outliving its run (the shared options kind)", () => {
 
 describe("past the calendar's end", () => {
   it("the session is assumed to be 09:30 to 16:00 New York on a weekday, and says so", () => {
-    expect(shadowWindow(T("2028-01-04T15:00:00Z"))).toMatchObject({ day: "2028-01-04", assumed: true });
-    expect(shadowWindow(T("2028-01-04T21:30:00Z"))).toBeNull();
-    expect(shadowWindow(T("2028-01-08T15:00:00Z"))).toBeNull(); // a Saturday
-    const v = view("shadow", {}, "2028-01-04T16:00:00Z", { shadow: { status: "ok", value: { on: true, switched_at: null, last_slot_end: T("2028-01-04T15:00:00Z") } } });
+    expect(shadowWindow(T("2030-01-08T15:00:00Z"))).toMatchObject({ day: "2030-01-08", assumed: true });
+    expect(shadowWindow(T("2030-01-08T21:30:00Z"))).toBeNull();
+    expect(shadowWindow(T("2030-01-12T15:00:00Z"))).toBeNull(); // a Saturday
+    const v = view("shadow", {}, "2030-01-08T16:00:00Z", { shadow: { status: "ok", value: { on: true, switched_at: null, last_slot_end: T("2030-01-08T15:00:00Z") } } });
     expect(v).toMatchObject({ state: "late", assumed: true, alerting: true });
-    expect(polledState({ status: "ok", receivedAt: T("2028-01-04T15:59:58Z") }, T("2028-01-04T16:00:00Z"), T("2028-01-04T16:00:00Z"), 30_000, "failed").state).toBe("on_time");
+    expect(polledState({ status: "ok", receivedAt: T("2030-01-08T15:59:58Z") }, T("2030-01-08T16:00:00Z"), T("2030-01-08T16:00:00Z"), 30_000, "failed").state).toBe("on_time");
   });
 });
 

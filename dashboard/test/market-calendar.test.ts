@@ -48,10 +48,14 @@ const trade = (pnl: number, opened: string, closed: string, extra: Partial<Trade
 });
 
 describe("the market days", () => {
-  it("covers 2026 and 2027 and nothing past them", () => {
-    expect(RANGE).toEqual({ start: "2026-01-01", end: "2027-12-31" });
+  it("covers 2026 to 24 December 2029, where Alpaca's calendar ends, and nothing past it", () => {
+    expect(RANGE).toEqual({ start: "2026-01-01", end: "2029-12-24" });
     expect(sessionOf("2025-12-31").kind).toBe("out_of_range");
-    expect(sessionOf("2028-01-03").kind).toBe("out_of_range");
+    expect(sessionOf("2028-01-03")).toEqual({ kind: "open", name: null, open: 570, close: 960 });
+    expect(sessionOf("2029-12-24")).toEqual({ kind: "half", name: "Christmas Eve", open: 570, close: 780 });
+    // Christmas Day 2029 is a holiday by every rule, but past the file the page says it does not know.
+    expect(sessionOf("2029-12-25").kind).toBe("out_of_range");
+    expect(sessionOf("2029-12-26").kind).toBe("out_of_range");
   });
 
   it("names the holidays and the half days", () => {
@@ -85,7 +89,10 @@ describe("trading days left", () => {
   it("reaches zero after the last close, and refuses a year past the file", () => {
     expect(tradingDaysLeft(ny("2026-12-31", "15:00"))).toBe(1);
     expect(tradingDaysLeft(ny("2026-12-31", "16:30"))).toBe(0);
-    expect(tradingDaysLeft(ny("2028-01-04", "10:00"))).toBeNull();
+    expect(tradingDaysLeft(ny("2028-12-29", "15:00"))).toBe(1);
+    // 2029 ends past the file (24 December), so no count is given for it rather than a short one.
+    expect(tradingDaysLeft(ny("2029-06-01", "10:00", 4))).toBeNull();
+    expect(tradingDaysLeft(ny("2030-01-08", "10:00"))).toBeNull();
   });
 });
 
@@ -99,7 +106,9 @@ describe("what comes next", () => {
   it("drops a half day once its 1 pm close has passed", () => {
     expect(nextHalfDay(ny("2026-11-27", "12:59"))?.day).toBe("2026-11-27");
     expect(nextHalfDay(ny("2026-11-27", "13:00"))?.day).toBe("2026-12-24");
-    expect(nextHalfDay(ny("2027-11-26", "13:30"))).toBeNull();
+    expect(nextHalfDay(ny("2027-11-26", "13:30"))?.day).toBe("2028-07-03");
+    expect(nextHalfDay(ny("2029-12-24", "12:59"))?.day).toBe("2029-12-24");
+    expect(nextHalfDay(ny("2029-12-24", "13:00"))).toBeNull();
   });
 });
 
@@ -215,9 +224,11 @@ describe("the year in the address", () => {
   const now = ny("2026-11-05", "10:00");
   it("takes a covered year and nothing else", () => {
     expect(pickYear("2027", now)).toBe(2027);
+    expect(pickYear("2029", now)).toBe(2029);
     expect(pickYear(["2026", "2027"], now)).toBe(2026);
-    for (const bad of [undefined, "", "2025", "2028", "abc", "2026.5", "1e3"]) expect(pickYear(bad, now)).toBe(2026);
-    expect(pickYear(undefined, ny("2029-01-02", "10:00"))).toBe(2026);
+    for (const bad of [undefined, "", "2025", "2030", "abc", "2026.5", "1e3"]) expect(pickYear(bad, now)).toBe(2026);
+    expect(pickYear(undefined, ny("2029-01-02", "10:00"))).toBe(2029);
+    expect(pickYear(undefined, ny("2030-01-02", "10:00"))).toBe(2026);
   });
 });
 
@@ -225,15 +236,17 @@ describe("releases not listed yet", () => {
   it("flags every month after a release's last listed date, and none before", () => {
     const by = unlistedByMonth();
     const flagged = (label: string) => [...by].filter(([, labels]) => labels.includes(label)).map(([month]) => month).sort();
-    for (const [code, label] of [["cpi", "CPI"], ["nfp", "Jobs report"]] as const) {
+    for (const [code, label] of [["cpi", "CPI"], ["nfp", "Jobs report"], ["fomc_decision", "Fed decisions"]] as const) {
       const last = data.macro.filter((e) => e.code === code).map((e) => e.date).sort().at(-1)!;
       const want: string[] = [];
       for (let m = addDays(`${last.slice(0, 7)}-28`, 7).slice(0, 7); `${m}-01` <= RANGE.end; m = addDays(`${m}-28`, 7).slice(0, 7)) want.push(m);
       expect(flagged(label)).toEqual(want);
       expect(by.get(last.slice(0, 7)) ?? []).not.toContain(label);
     }
-    // The Fed's 2027 meetings are listed, so a month without one is not flagged.
-    expect([...by.values()].flat()).not.toContain("Fed decisions");
+    // The Fed's 2027 meetings are listed, so a month of 2027 without one is not flagged; the calendar reaches 2029,
+    // past the macro rows, so 2028 and 2029 are not yet announced rather than missing.
+    expect(flagged("Fed decisions").filter((m) => m <= "2027-12")).toEqual([]);
+    expect(flagged("Fed decisions")).toEqual([...Array(24)].map((_, i) => `${2028 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, "0")}`));
   });
 
   it("flags the months after a synthetic calendar's last CPI date, not the months up to it", () => {

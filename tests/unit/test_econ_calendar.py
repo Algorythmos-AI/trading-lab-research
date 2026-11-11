@@ -68,6 +68,26 @@ def test_fed_skips_unscheduled_and_reads_a_meeting_across_two_months():
     assert "2030-05-01" in got and "2030-08-12" not in got and "2030-12-20" not in got and len(got) == 8
 
 
+def test_fed_reads_a_later_year_only_when_published_and_needs_the_years_begun():
+    page = _panel([("January", "28-29"), ("March", "18-19"), ("April/May", "30-1"), ("June", "17-18"),
+                   ("July", "29-30"), ("September", "16-17"), ("October", "28-29"), ("December", "9-10")])
+    assert len(ec.parse_fed(page, [2030, 2031], required=[2030])) == 8      # 2031 has no panel yet: no rows
+    with pytest.raises(ec.SourceError, match="no 2031 panel"):
+        ec.parse_fed(page, [2030, 2031])                                    # unless it is required
+    with pytest.raises(ec.SourceError, match="no 2032 panel"):
+        ec.parse_fed(page, [2030, 2032], required=[2030, 2032])
+
+
+def test_the_whole_market_range_fits_the_schema_even_with_nothing_announced():
+    """The worst case for the range to 2029: every code's last date in the first month, the rest not announced."""
+    start, end = ec.market_range()
+    one = {(c, start) for c in [*ec.FRED_RELEASES, "fomc_decision"]}
+    rows = {"fred": one, "fed": {r for r in one if r[0] == "fomc_decision"}, "bls": set(), "bea": set()}
+    doc = ec.build(rows, [], start, end, "r", "2026-11-12T00:00:00Z")
+    assert len(doc["not_announced"]) == (len(ec.FRED_RELEASES) + 1) * (len(ec._months(start, end)) - 1)
+    assert ec.validate({**doc, "sources": []}) == []
+
+
 def test_fed_fails_on_a_page_it_cannot_read():
     with pytest.raises(ec.SourceError):
         ec.parse_fed(_panel([("January", "28-29")]), [2030])
@@ -113,9 +133,13 @@ def test_every_source_read_gives_a_valid_checked_document(tmp_path):
 def test_months_past_the_last_published_date_are_not_yet_announced(tmp_path):
     _, doc = run(tmp_path, fake_get())
     cpi = [n["month"] for n in doc["not_announced"] if n["code"] == "cpi"]
-    assert cpi == [f"2027-{m:02d}" for m in range(1, 13)]
-    # The Fed has published all of 2027: no month of it is flagged.
-    assert not [n for n in doc["not_announced"] if n["code"] == "fomc_decision"]
+    assert cpi == [f"{y}-{m:02d}" for y in (2027, 2028, 2029) for m in range(1, 13)]
+    # The Fed has published all of 2027 and nothing later: the market calendar reaches 2029, so 2028 and 2029 are
+    # not yet announced, and the source is not failed for it.
+    fomc = [n["month"] for n in doc["not_announced"] if n["code"] == "fomc_decision"]
+    assert fomc == [f"{y}-{m:02d}" for y in (2028, 2029) for m in range(1, 13)]
+    assert next(s for s in doc["sources"] if s["id"] == "fed")["ok"]
+    assert ec.validate(doc) == []
 
 
 def test_without_a_fred_key_the_agencies_stand_in(tmp_path):
@@ -232,4 +256,4 @@ def test_the_trading_calendar_is_never_written(tmp_path):
 
 
 def test_the_range_is_the_market_calendars():
-    assert ec.market_range() == ("2026-01-01", "2027-12-31")
+    assert ec.market_range() == ("2026-01-01", "2029-12-24")

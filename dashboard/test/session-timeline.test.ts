@@ -103,7 +103,7 @@ describe("the clock's next boundary", () => {
     // a weekend and a holiday are closed; a day past the calendar says the card is old instead of guessing
     expect(sessionClock(S, false, at("10:30:00", "2026-10-17")).line).toBe("Closed");
     expect(sessionClock("2026-11-25", false, at("10:30:00", "2026-11-26", "-05:00")).line).toBe("Closed");
-    expect(sessionClock("2027-12-31", false, Date.parse("2028-01-04T15:30:00Z"))).toMatchObject({ phase: "closed", line: "Old focus card", minute: null });
+    expect(sessionClock("2029-12-24", true, Date.parse("2030-01-08T15:30:00Z"))).toMatchObject({ phase: "closed", line: "Old focus card", minute: null });
   });
 
   it("follows New York across the clock change", () => {

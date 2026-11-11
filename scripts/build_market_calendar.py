@@ -3,7 +3,13 @@
 The Calendar page's open days, holidays and half days come from here, never typed by hand. The range is fixed
 (START..END), not the library's default window, so the output does not depend on the day it is run; the drift test
 in tests/unit/test_market_calendar.py regenerates it and compares byte for byte, and checks it against NYSE's
-published list (tests/fixtures/nyse/published_2026_2027.json). Needs the dev lock (exchange-calendars).
+published list (tests/fixtures/nyse/published_2026_2028.json) and against Alpaca's trading calendar as fetched once
+by hand (tests/fixtures/alpaca/calendar_2026_2029.json). Needs the dev lock (exchange-calendars).
+
+The range ends on the last day Alpaca's calendar answered, Monday 2029-12-24: its 2029 stops there, so the last four
+sessions of 2029 are left out rather than taken from the library's rules alone. Each holiday and half day carries a
+quality: "confirmed" through PUBLISHED_THROUGH, the end of the last year NYSE's own page lists, and "expected" after
+it (the library's rules and Alpaca agree, but the exchange has not published the year).
 
 It also carries, for the same range, the repo's own event calendars as they stand: config/events/macro_events.csv
 (the dates the paper runners trade around), config/events/earnings.csv and the Options desk's names
@@ -21,7 +27,14 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "dashboard" / "src" / "lib" / "market-calendar.json"
-START, END = "2026-01-01", "2027-12-31"
+START, END = "2026-01-01", "2029-12-24"
+# The last day of the last year NYSE publishes (its Holidays and Trading Hours page, read 2026-11-12: 2026 to 2028).
+PUBLISHED_THROUGH = "2028-12-31"
+# What the generated days were checked against, for the reader of the file. The checks themselves are the tests.
+CHECKED_AGAINST = [
+    {"source": "NYSE Holidays and Trading Hours", "read_on": "2026-11-12", "through": PUBLISHED_THROUGH},
+    {"source": "Alpaca /v2/calendar", "read_on": "2026-11-12", "through": END},
+]
 MACRO = ROOT / "config" / "events" / "macro_events.csv"
 EARNINGS = ROOT / "config" / "events" / "earnings.csv"
 DESK = ROOT / "config" / "options_desk.yaml"
@@ -63,6 +76,11 @@ def _half_label(raw: str, day: dt.date) -> str:
     if raw not in HALF_DAY_NAMES:
         raise SystemExit(f"unknown XNYS early close {raw!r} on {day}: add it to HALF_DAY_NAMES")
     return HALF_DAY_NAMES[raw]
+
+
+def _quality(day: dt.date) -> str:
+    """Whether NYSE has published the day's year: "confirmed" if it has, else "expected"."""
+    return "confirmed" if day.isoformat() <= PUBLISHED_THROUGH else "expected"
 
 
 def _rows(path: Path) -> list[dict[str, str]]:
@@ -120,9 +138,9 @@ def build() -> dict[str, Any]:
     while day <= dt.date.fromisoformat(END):
         if day.weekday() < 5 and day not in session_set:
             if day in regular:
-                holidays.append({"date": day.isoformat(), "name": _name(regular[day], day)})
+                holidays.append({"date": day.isoformat(), "name": _name(regular[day], day), "quality": _quality(day)})
             elif day in adhoc:
-                holidays.append({"date": day.isoformat(), "name": "Special closure"})
+                holidays.append({"date": day.isoformat(), "name": "Special closure", "quality": _quality(day)})
             else:
                 raise SystemExit(f"{day} is a weekday with no session and no XNYS holiday rule")
         day += dt.timedelta(days=1)
@@ -135,12 +153,14 @@ def build() -> dict[str, Any]:
             "date": d.isoformat(),
             "close_et": close.strftime("%H:%M"),
             "label": _half_label(named_closes.get(d, ""), d),
+            "quality": _quality(d),
         })
 
     return {
         "source": "exchange_calendars XNYS",
         "generated_with": f"exchange-calendars {xcals.__version__}",
         "range": {"start": START, "end": END},
+        "checked_against": CHECKED_AGAINST,
         "open_et": "09:30",
         "close_et": "16:00",
         "sessions": [d.isoformat() for d in sessions],

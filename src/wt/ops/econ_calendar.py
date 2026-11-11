@@ -87,14 +87,21 @@ _MONTHS = {m: i for i, m in enumerate(
      "december"], 1)}
 
 
-def parse_fed(page: str, years: Iterable[int]) -> Rows:
+def parse_fed(page: str, years: Iterable[int], required: Iterable[int] | None = None) -> Rows:
     """FOMC decision days from the Fed's calendar page, for `years`. A scheduled meeting's decision is on its last
-    day; an unscheduled meeting or a notation vote is skipped. Fails when a year has fewer than eight meetings."""
+    day; an unscheduled meeting or a notation vote is skipped. Fails when a year has fewer than eight meetings.
+
+    `required`: the years whose panel must be there (all of `years` when None). The page lists about two years, and
+    the market calendar reaches further, so a later year with no panel yet gives no rows: its months are then not
+    yet announced, never a failed source."""
+    must = set(years if required is None else required)
     out: Rows = set()
     for year in years:
         m = re.search(rf">\s*{year} FOMC Meetings\s*<", page)
         if not m:
-            raise SourceError(f"fed: no {year} panel")
+            if year in must:
+                raise SourceError(f"fed: no {year} panel")
+            continue
         end = re.search(r">\s*\d{4} FOMC Meetings\s*<", page[m.end():])
         panel = page[m.end(): m.end() + end.start()] if end else page[m.end():]
         n = 0
@@ -304,9 +311,11 @@ def collect(get: Get, env: dict[str, str], state: dict[str, Any], start: str, en
     status: list[dict[str, Any]] = []
     problems: list[str] = []
     years = range(int(start[:4]), int(end[:4]) + 1)
+    # The years that have begun must have a panel; a later one is read when the Fed has published it.
+    begun = [y for y in years if y <= int(today[:4])]
     readers: dict[str, Callable[[], Rows] | None] = {
         "fred": (lambda: read_fred(get, env["FRED_API_KEY"], start, end)) if env.get("FRED_API_KEY") else None,
-        "fed": lambda: parse_fed(get(FED_URL, {}), years),
+        "fed": lambda: parse_fed(get(FED_URL, {}), years, begun),
         # BLS answers only a caller that leaves a contact address (its published policy).
         "bls": (lambda: parse_bls(get(BLS_URL, {}))) if env.get("WT_CONTACT_EMAIL") else None,
         "bea": lambda: parse_bea(get(BEA_URL, {})),
