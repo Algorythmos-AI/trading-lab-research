@@ -61,7 +61,7 @@ describe("GET /api/desk/probe", () => {
     const body = await res.json();
     expect(body).toMatchObject({ day: DAY, listed: 2, unreadable: 0, capped: false });
     expect(body.summary).toMatchObject({ records: 2, with_probe: 2, without_probe: 0 });
-    expect(body.summary.by_symbol.SPY.counts.trade_vs_day).toMatchObject({ inside: 1, "above-high": 1 });
+    expect(body.summary.by_feed.iex.by_symbol.SPY.counts.trade_vs_day).toMatchObject({ inside: 1, "above-high": 1 });
     expect(f.list).toHaveBeenCalledWith(`desk/log/${DAY}/`);
     expect(f.read.mock.calls.map(([p]) => p)).toEqual([`desk/log/${DAY}/1030.json`, `desk/log/${DAY}/1032.json`]);
   });

@@ -544,7 +544,7 @@ describe("the snapshot probe", () => {
         throw "not even an error";
       },
       () => circular as never,
-      () => ({ v: 1, names: [{ symbol: "SPY", source: "cached", n: BigInt(1) as never }] }),
+      () => ({ v: 1, phase: "regular", rate_limit: null, rate_remaining: null, names: [{ symbol: "SPY", source: "cached", n: BigInt(1) as never }] }),
     ];
     for (const probe of bad) {
       const f = tapped({ probe });
@@ -591,7 +591,7 @@ describe("the snapshot probe", () => {
     const got: unknown[] = [];
     const now = new Date(ny("10:31:01"));
     const ans = await defaultDeskRunDeps().fetchSnapshots(SYMS, { now, timeoutMs: 1_000, onRaw: (r) => got.push(r) });
-    expect(got).toEqual([{ fetched: raw, at: now.getTime() }]);
+    expect(got).toEqual([{ fetched: raw, at: now.getTime(), rate: { limit: null, remaining: null } }]);
     expect(Object.keys(ans.quotes)).toEqual(SYMS);
   });
 });

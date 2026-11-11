@@ -157,7 +157,7 @@ export async function fetchQuotes(
         const fetched: Record<string, unknown> = {};
         // A name Alpaca left out of its answer is handed over as null: fetched, with no snapshot.
         for (const s of due) fetched[s] = Object.hasOwn(map, s) ? map[s] : null;
-        opts.onRaw({ fetched, at: t });
+        opts.onRaw({ fetched, at: t, rate: { limit: res.headers.get("x-ratelimit-limit"), remaining: res.headers.get("x-ratelimit-remaining") } });
       } catch {
         // The probe is log-only: its failure never touches the answer.
       }

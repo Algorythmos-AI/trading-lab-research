@@ -12,6 +12,9 @@
 // `latestQuote` {t, ax, ap, as, bx, bp, bs, c[], z} (a price of 0 means no active bid or ask), and the bars
 // `minuteBar`, `dailyBar`, `prevDailyBar` {t, o, h, l, c, v, n, vw}, each bar stamped with its start (as bars.ts reads it).
 
+import { isDataFeed } from "./feed-provenance";
+import { addDays, nyNow, sessionOf } from "./market-calendar";
+
 export const PROBE_V = 1;
 /** One minute bar's length. */
 export const MINUTE_MS = 60_000;
@@ -44,6 +47,19 @@ export const QUOTE_STATES = ["absent", "invalid", "empty", "one-sided", "crossed
 export type QuoteState = (typeof QUOTE_STATES)[number];
 export const SOURCES = ["fetched", "cached", "missing", "invalid"] as const;
 export type ProbeSource = (typeof SOURCES)[number];
+/**
+ * A bar's New York day against the exchange calendar (market-calendar.ts): the server's day, the session before it,
+ * an older day, a non-session day between the two, a day after today, or not readable. "unknown" when the calendar
+ * does not cover the day.
+ */
+export const SESSION_DAYS = ["today", "previous-session", "older", "off-session", "future", "absent", "invalid", "unknown"] as const;
+export type SessionDayVs = (typeof SESSION_DAYS)[number];
+/** The run's phase by New York time and the exchange calendar (half days included). */
+export const PHASES = ["pre-open", "regular", "after-close", "closed", "unknown"] as const;
+export type Phase = (typeof PHASES)[number];
+/** What the last trade's conditions say about the last price, strictest first (see TRADE_CLASS_ORDER). */
+export const TRADE_CLASSES = ["other-non-updating", "odd-lot", "derivatively-priced", "extended-hours", "unknown", "regular"] as const;
+export type TradeClass = (typeof TRADE_CLASSES)[number];
 
 /** One name's facts from one fetched snapshot. */
 export interface NameFacts {
@@ -59,17 +75,28 @@ export interface NameFacts {
   trade_x: string | null;
   /** The trade's condition codes that are safe short codes, in Alpaca's order, at most MAX_CODES. */
   trade_c: string[];
+  /** What those codes say about the last price (tradeClass). */
+  trade_class: TradeClass;
   /** Condition entries dropped (not a safe short code, or past MAX_CODES); -1 when `c` is present but not an array. */
   trade_c_dropped: number;
   minute: MinuteState;
   /** Server time minus the minute bar's start, seconds floored to one decimal: below 60 it is still forming. */
   minute_age_s: number | null;
+  /**
+   * The last trade's age minus the finished minute bar's end age, seconds floored to one decimal (the bar's end minus
+   * the trade's time): negative when the trade printed after that bar ended. Null unless both are readable and the
+   * bar has finished.
+   */
+  trade_vs_minute_s: number | null;
   daily: Presence;
   /**
    * The daily bar's New York day against the server's: the page's own test (quote.ts' `day`, the New York day of
    * `dailyBar.t`, against today), so the probe counts what the page's guard would see.
    */
   daily_day: DayVsToday;
+  /** The daily bar's and the prior daily bar's New York days against the calendar: before 09:30, is dailyBar still yesterday's? */
+  daily_session: SessionDayVs;
+  prev_session: SessionDayVs;
   high_below_low: boolean | null;
   open_outside: boolean | null;
   /** Compared only when the daily bar and the trade are both today's; otherwise "stale-day". */
@@ -103,6 +130,11 @@ export type NameProbe = NameFacts | NameSkipped;
 /** What one run stores beside its record (desk-run.ts `probe`). */
 export interface ProbeRecord {
   v: typeof PROBE_V;
+  /** The run's phase at the snapshot's server time. */
+  phase: Phase;
+  /** Alpaca's X-RateLimit-Limit and X-RateLimit-Remaining on the snapshot response; null when absent or unreadable. */
+  rate_limit: number | null;
+  rate_remaining: number | null;
   names: NameProbe[];
 }
 
@@ -161,6 +193,92 @@ function bar(v: unknown, now: number): { presence: Presence; bar: Bar | null; t:
   return { presence: "ok", bar: { t: s.t, o: v.o, h: v.h, l: v.l, c: v.c }, t: s.t };
 }
 
+// Alpaca's market-data FAQ, "How are bars aggregated" (docs.alpaca.markets/docs/market-data-faq, read 2026-11-12):
+// minute and daily bars are built from trades, a trade with several conditions takes the strictest rule, and its
+// condition table says which codes do not update open/close (the last price) or high/low:
+//  * I (odd lot), and C, H, M, N, Q, R, U, V, W, 7, and B on tapes A and B (average price): never update the price;
+//    M and Q do not even update volume;
+//  * G, P, Z: not on minute bars, and on daily bars only as a bar's first trade; 9 (corrected consolidated close): not
+//    on minute bars; so none of them sets the last price as it moves;
+//  * 4 (derivatively priced): not on minute bars; on daily bars high/low, and open/close only as the first trade;
+//  * T (extended hours): updates minute bars, not daily bars; U as above;
+//  * blank, @, A, D, E, F, K, L, O, X, Y, 5, 6, and B on tape C (bunched): update everything.
+// G, P and 9 are not on the list the probe was specified with; the FAQ's table puts them with the non-updating codes,
+// so they are counted there. A code outside the table is "unknown".
+const ODD_LOT = new Set(["I"]);
+const EXTENDED = new Set(["T", "U"]);
+const DERIVED = new Set(["4"]);
+const NON_UPDATING = new Set(["7", "9", "C", "G", "H", "M", "N", "P", "Q", "R", "V", "W", "Z"]);
+const REGULAR = new Set([" ", "@", "A", "D", "E", "F", "K", "L", "O", "X", "Y", "5", "6"]);
+/** Strictest first: a trade takes the first class any of its codes falls in. */
+export const TRADE_CLASS_ORDER = TRADE_CLASSES;
+
+/**
+ * The last trade's class from its condition codes and its tape (`z`), strictest first. "unknown" when there is no
+ * code to read (none sent, or every one dropped as unsafe) or a code is outside the FAQ's table and nothing stricter
+ * is there; a dropped code also makes an otherwise regular trade "unknown", since it could be anything.
+ */
+export function tradeClass(codesIn: readonly string[], dropped: number, tape: unknown): TradeClass {
+  const found = new Set<TradeClass>();
+  for (const c of codesIn) {
+    if (ODD_LOT.has(c)) found.add("odd-lot");
+    else if (EXTENDED.has(c)) found.add("extended-hours");
+    else if (DERIVED.has(c)) found.add("derivatively-priced");
+    else if (NON_UPDATING.has(c)) found.add("other-non-updating");
+    else if (c === "B") found.add(tape === "C" ? "regular" : tape === "A" || tape === "B" ? "other-non-updating" : "unknown");
+    else if (REGULAR.has(c)) found.add("regular");
+    else found.add("unknown");
+  }
+  if (dropped !== 0 || codesIn.length === 0) found.add("unknown");
+  for (const k of TRADE_CLASS_ORDER) if (found.has(k)) return k;
+  return "unknown";
+}
+
+const isSessionDay = (day: string) => {
+  const k = sessionOf(day).kind;
+  return k === "open" || k === "half";
+};
+
+/** The last session before `day` by the calendar, or null when the calendar does not reach it. */
+export function previousSession(day: string): string | null {
+  for (let i = 1; i <= 14; i++) {
+    const d = addDays(day, -i);
+    if (sessionOf(d).kind === "out_of_range") return null;
+    if (isSessionDay(d)) return d;
+  }
+  return null;
+}
+
+/** A bar's day (from a readable stamp) against the server's New York day and the session before it. */
+function sessionDay(presence: "absent" | "readable" | "invalid", t: number | null, now: number): SessionDayVs {
+  if (presence === "absent") return "absent";
+  if (presence === "invalid" || t === null) return "invalid";
+  if (!Number.isFinite(now)) return "unknown";
+  const today = nyDay(now);
+  const day = nyDay(t);
+  if (day === today) return "today";
+  if (day > today) return "future";
+  const prev = previousSession(today);
+  if (prev === null) return "unknown";
+  return day === prev ? "previous-session" : day < prev ? "older" : "off-session";
+}
+
+/** The phase at `now` by New York time and the calendar. */
+export function phaseAt(now: number): Phase {
+  if (!Number.isFinite(now)) return "unknown";
+  const { day, minute } = nyNow(new Date(now));
+  const s = sessionOf(day);
+  if (s.kind === "out_of_range") return "unknown";
+  if ((s.kind !== "open" && s.kind !== "half") || s.open === null || s.close === null) return "closed";
+  return minute < s.open ? "pre-open" : minute < s.close ? "regular" : "after-close";
+}
+
+/** A rate-limit header's value: a whole number of 0 or more, else null. */
+export function rateHeader(v: unknown): number | null {
+  if (typeof v !== "string" || !/^\d{1,9}$/.test(v.trim())) return null;
+  return Number(v.trim());
+}
+
 /** The move from the prior close against PRIOR_CLOSE_LIMIT: exactly 25% (within a float's tolerance) is "at-limit". */
 export function priorMove(price: number, prior: number): { move: Exclude<PriorMove, "unknown">; bps: number } {
   const dist = Math.abs(price - prior);
@@ -174,11 +292,16 @@ function quoteFacts(v: unknown, now: number): Pick<NameFacts, "quote" | "quote_t
   if (!isObj(v)) return { quote: "invalid", quote_time: "absent", spread_bps: null, quote_age_s: null };
   const s = stamp(v.t, now);
   const base = { quote_time: s.state, quote_age_s: age(s.t, now) };
-  const { bp, ap } = v;
-  // 0 is Alpaca's "no active side"; anything that is not a number of 0 or more is unreadable.
-  if (!isNum(bp) || !isNum(ap) || bp < 0 || ap < 0) return { quote: "invalid", spread_bps: null, ...base };
-  if (bp === 0 && ap === 0) return { quote: "empty", spread_bps: null, ...base };
-  if (bp === 0 || ap === 0) return { quote: "one-sided", spread_bps: null, ...base };
+  const { bp, ap, bs, as: asz } = v;
+  // A price of 0 is Alpaca's "no active side"; anything that is not a number of 0 or more is unreadable. A size of 0
+  // (sizes are in shares) is no active side too; a size that is sent but not a number of 0 or more is unreadable,
+  // and a missing size leaves the side to its price.
+  const sizeOk = (z: unknown) => z === undefined || (isNum(z) && z >= 0);
+  if (!isNum(bp) || !isNum(ap) || bp < 0 || ap < 0 || !sizeOk(bs) || !sizeOk(asz)) return { quote: "invalid", spread_bps: null, ...base };
+  const bid = bp > 0 && bs !== 0;
+  const ask = ap > 0 && asz !== 0;
+  if (!bid && !ask) return { quote: "empty", spread_bps: null, ...base };
+  if (!bid || !ask) return { quote: "one-sided", spread_bps: null, ...base };
   const spread = r1(((ap - bp) / ((ap + bp) / 2)) * 10_000);
   return { quote: bp > ap ? "crossed" : bp === ap ? "locked" : "normal", spread_bps: spread, ...base };
 }
@@ -215,6 +338,7 @@ export function probeSnapshot(symbol: string, raw: unknown, now: number): NamePr
   const minuteAge = mb.bar && Number.isFinite(serverNow) ? serverNow - mb.bar.t : null;
   // A bar whose minute ends exactly at server time has finished.
   const minute: MinuteState = mb.presence !== "ok" ? mb.presence : minuteAge === null ? "invalid" : minuteAge >= MINUTE_MS ? "finished" : "forming";
+  const tradeVsMinute = minute === "finished" && mb.bar && tradeAt !== null ? ageSeconds(mb.bar.t + MINUTE_MS - tradeAt) : null;
 
   // The day's bar. Its day is read from its stamp alone, as quote.ts' `day` is, even when its prices are unusable.
   const db = bar(snap.dailyBar, serverNow);
@@ -237,6 +361,7 @@ export function probeSnapshot(symbol: string, raw: unknown, now: number): NamePr
 
   // The prior session's close.
   const pb = bar(snap.prevDailyBar, serverNow);
+  const sess = (b: { presence: Presence; t: number | null }) => sessionDay(b.presence === "absent" ? "absent" : b.t === null ? "invalid" : "readable", b.t, serverNow);
   const pm = price !== null && pb.bar ? priorMove(price, pb.bar.c) : null;
 
   return {
@@ -248,10 +373,14 @@ export function probeSnapshot(symbol: string, raw: unknown, now: number): NamePr
     trade_x: safeCode(trObj.x),
     trade_c: c.kept,
     trade_c_dropped: c.dropped,
+    trade_class: trade === "absent" ? "unknown" : tradeClass(c.kept, c.dropped, trObj.z),
     minute,
     minute_age_s: minuteAge === null ? null : ageSeconds(minuteAge),
+    trade_vs_minute_s: tradeVsMinute,
     daily: db.presence,
     daily_day,
+    daily_session: sess(db),
+    prev_session: sess(pb),
     high_below_low: d ? d.h < d.l : null,
     open_outside: d ? d.o < d.l || d.o > d.h : null,
     trade_vs_day,
@@ -268,6 +397,8 @@ export interface RawSnapshots {
   /** The names this call fetched; any other name asked for was served from the cache. */
   fetched: Readonly<Record<string, unknown>>;
   at: number;
+  /** The response's X-RateLimit-Limit and X-RateLimit-Remaining as sent (strings), or null without them. */
+  rate?: { limit: string | null; remaining: string | null };
 }
 
 /**
@@ -284,7 +415,7 @@ export function probeSnapshots(symbols: readonly string[], raw: RawSnapshots | n
     if (names.length >= MAX_PROBED) break;
     names.push(Object.hasOwn(raw.fetched, s) ? probeSnapshot(s, raw.fetched[s], raw.at) : { symbol: s, source: "cached" });
   }
-  return { v: PROBE_V, names };
+  return { v: PROBE_V, phase: phaseAt(raw.at), rate_limit: rateHeader(raw.rate?.limit), rate_remaining: rateHeader(raw.rate?.remaining), names };
 }
 
 // ---- the reader -------------------------------------------------------------------------------------------------------
@@ -294,9 +425,12 @@ const ENUM_FACTS = {
   source: SOURCES,
   trade: PRESENCE,
   trade_day: DAYS,
+  trade_class: TRADE_CLASSES,
   minute: MINUTE_STATES,
   daily: PRESENCE,
   daily_day: DAYS,
+  daily_session: SESSION_DAYS,
+  prev_session: SESSION_DAYS,
   trade_vs_day: TRADE_VS_DAY,
   prev: PRESENCE,
   prior_move: PRIOR_MOVES,
@@ -336,6 +470,7 @@ export const NUM_FACTS: Record<string, Buckets> = {
   trade_age_s: AGE_BUCKETS,
   quote_age_s: AGE_BUCKETS,
   minute_age_s: AGE_BUCKETS,
+  trade_vs_minute_s: AGE_BUCKETS,
   trade_outside_bps: BPS_BUCKETS,
   spread_bps: BPS_BUCKETS,
   prior_move_bps: PRIOR_BUCKETS,
@@ -371,21 +506,60 @@ export interface FactCounts {
   conditions_dropped: number;
 }
 
+/** For the snapshot call's remaining requests in the rate-limit window (200 a minute on the free plan). */
+export const REMAINING_BUCKETS = [
+  ["0-10", 0],
+  ["10-50", 10],
+  ["50-100", 50],
+  ["100+", 100],
+] as const;
+
+/** One feed's counts: never pooled with another feed's. */
+export interface FeedGroup {
+  /** Records of this feed carrying a probe. */
+  records: number;
+  /** Runs per phase, and the rate-limit headers seen (the limit's values counted; the remaining as a number). */
+  phase: Record<string, number>;
+  rate_limit: Record<string, number>;
+  rate_remaining: NumStats;
+  total: FactCounts;
+  by_symbol: Record<string, FactCounts>;
+}
+
+/** The record's `feed` as grouped: "iex" or "sip", and "unknown" for a record without a readable one. */
+export const FEED_GROUPS = ["iex", "sip", "unknown"] as const;
+
 export interface ProbeSummary {
   /** Records read, those carrying a probe, and those without (written before the probe, or no answer in that run). */
   records: number;
   with_probe: number;
   without_probe: number;
-  total: FactCounts;
-  by_symbol: Record<string, FactCounts>;
+  /** Per feed the snapshot was requested from (the record's `feed`), so IEX and SIP days are never pooled. */
+  by_feed: Record<(typeof FEED_GROUPS)[number], FeedGroup>;
 }
+
+const emptyNum = (b: Buckets): NumStats => ({ n: 0, min: null, max: null, buckets: Object.fromEntries([["negative", 0], ...b.map(([name]) => [name, 0])]) });
+function addNum(s: NumStats, v: number, b: Buckets): void {
+  s.n++;
+  s.min = s.min === null ? v : Math.min(s.min, v);
+  s.max = s.max === null ? v : Math.max(s.max, v);
+  s.buckets[bucketOf(v, b)] = (s.buckets[bucketOf(v, b)] ?? 0) + 1;
+}
+const emptyGroup = (): FeedGroup => ({
+  records: 0,
+  phase: Object.fromEntries(PHASES.map((p) => [p, 0])),
+  rate_limit: {},
+  rate_remaining: emptyNum(REMAINING_BUCKETS),
+  total: emptyCounts(),
+  by_symbol: {},
+});
 
 function emptyCounts(): FactCounts {
   const counts = {} as FactCounts["counts"];
   for (const f of Object.keys(ENUM_FACTS) as EnumFact[]) counts[f] = Object.fromEntries(ENUM_FACTS[f].map((v) => [v, 0]));
   for (const f of BOOL_FACTS) counts[f] = { yes: 0, no: 0, unknown: 0 };
   const numbers: Record<string, NumStats> = {};
-  for (const [f, b] of Object.entries(NUM_FACTS)) numbers[f] = { n: 0, min: null, max: null, buckets: Object.fromEntries([["negative", 0], ...b.map(([name]) => [name, 0])]) };
+  for (const [f, b] of Object.entries(NUM_FACTS)) numbers[f] = emptyNum(b);
   return { samples: 0, counts, numbers, conditions: {}, exchanges: {}, conditions_dropped: 0 };
 }
 
@@ -405,12 +579,7 @@ function add(c: FactCounts, n: Record<string, unknown>): void {
   for (const f of BOOL_FACTS) bump(c.counts[f], n[f] === true ? "yes" : n[f] === false ? "no" : "unknown");
   for (const [f, b] of Object.entries(NUM_FACTS)) {
     const v = n[f];
-    if (!isNum(v)) continue;
-    const s = c.numbers[f]!;
-    s.n++;
-    s.min = s.min === null ? v : Math.min(s.min, v);
-    s.max = s.max === null ? v : Math.max(s.max, v);
-    bump(s.buckets, bucketOf(v, b));
+    if (isNum(v)) addNum(c.numbers[f]!, v, b);
   }
   if (Array.isArray(n.trade_c)) for (const code of n.trade_c) if (safeCode(code) !== null) bump(c.conditions, code as string);
   const x = safeCode(n.trade_x);
@@ -424,7 +593,7 @@ function add(c: FactCounts, n: Record<string, unknown>): void {
  * readable is skipped; nothing throws.
  */
 export function summariseProbe(records: readonly unknown[]): ProbeSummary {
-  const out: ProbeSummary = { records: 0, with_probe: 0, without_probe: 0, total: emptyCounts(), by_symbol: {} };
+  const out: ProbeSummary = { records: 0, with_probe: 0, without_probe: 0, by_feed: { iex: emptyGroup(), sip: emptyGroup(), unknown: emptyGroup() } };
   for (const r of records) {
     out.records++;
     const p = isObj(r) ? r.probe : undefined;
@@ -433,10 +602,15 @@ export function summariseProbe(records: readonly unknown[]): ProbeSummary {
       continue;
     }
     out.with_probe++;
+    const g = out.by_feed[isObj(r) && isDataFeed(r.feed) ? r.feed : "unknown"];
+    g.records++;
+    bump(g.phase, typeof p.phase === "string" && (PHASES as readonly string[]).includes(p.phase) ? p.phase : "invalid-record");
+    if (isNum(p.rate_limit) && Number.isInteger(p.rate_limit) && p.rate_limit >= 0) bump(g.rate_limit, String(p.rate_limit));
+    if (isNum(p.rate_remaining)) addNum(g.rate_remaining, p.rate_remaining, REMAINING_BUCKETS);
     for (const n of p.names) {
       if (!isObj(n) || typeof n.symbol !== "string" || !SYMBOL_RE.test(n.symbol)) continue;
-      add(out.total, n);
-      add((out.by_symbol[n.symbol] ??= emptyCounts()), n);
+      add(g.total, n);
+      add((g.by_symbol[n.symbol] ??= emptyCounts()), n);
     }
   }
   return out;

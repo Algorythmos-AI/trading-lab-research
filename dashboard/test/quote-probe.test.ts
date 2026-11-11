@@ -8,6 +8,10 @@ import {
   bucketOf,
   BPS_BUCKETS,
   MAX_CODES,
+  phaseAt,
+  previousSession,
+  rateHeader,
+  tradeClass,
   MAX_PROBED,
   type NameFacts,
   type NameProbe,
@@ -51,10 +55,14 @@ const KEYS = [
   "trade_x",
   "trade_c",
   "trade_c_dropped",
+  "trade_class",
   "minute",
   "minute_age_s",
+  "trade_vs_minute_s",
   "daily",
   "daily_day",
+  "daily_session",
+  "prev_session",
   "high_below_low",
   "open_outside",
   "trade_vs_day",
@@ -79,10 +87,14 @@ describe("a normal snapshot", () => {
       trade_x: "V",
       trade_c: ["@"],
       trade_c_dropped: 0,
+      trade_class: "regular",
       minute: "forming",
       minute_age_s: 30,
+      trade_vs_minute_s: null,
       daily: "ok",
       daily_day: "today",
+      daily_session: "today",
+      prev_session: "previous-session",
       high_below_low: false,
       open_outside: false,
       trade_vs_day: "inside",
@@ -454,7 +466,7 @@ describe("probeSnapshots", () => {
 });
 
 describe("summariseProbe", () => {
-  const rec = (names: NameProbe[]) => ({ v: 1, status: "ok", feed: "iex", probe: { v: PROBE_V, names } });
+  const rec = (names: NameProbe[], feed: unknown = "iex", extra: Record<string, unknown> = {}) => ({ v: 1, status: "ok", feed, probe: { v: PROBE_V, phase: "regular", rate_limit: 200, rate_remaining: 150, names, ...extra } });
   const n = (sym: string, raw: unknown, now = NOW) => probeSnapshot(sym, raw, now);
 
   it("counts every fact per name and in total, and keeps the worst numbers", () => {
@@ -467,22 +479,46 @@ describe("summariseProbe", () => {
     ];
     const s = summariseProbe(records);
     expect(s).toMatchObject({ records: 5, with_probe: 3, without_probe: 2 });
-    expect(s.total.samples).toBe(6);
-    expect(s.total.counts.source).toEqual({ fetched: 4, cached: 1, missing: 1, invalid: 0 });
-    expect(s.by_symbol.SPY!.counts.quote).toMatchObject({ normal: 2, crossed: 1 });
-    expect(s.by_symbol.SPY!.counts.high_below_low).toEqual({ yes: 1, no: 2, unknown: 0 });
-    expect(s.by_symbol.SPY!.counts.open_outside).toEqual({ yes: 1, no: 2, unknown: 0 });
-    expect(s.by_symbol.QQQ!.counts.trade_vs_day).toMatchObject({ "above-high": 1, inside: 0 });
-    expect(s.by_symbol.QQQ!.counts.source).toEqual({ fetched: 1, cached: 1, missing: 1, invalid: 0 });
+    const g = s.by_feed.iex;
+    expect(g.records).toBe(3);
+    expect(g.total.samples).toBe(6);
+    expect(g.total.counts.source).toEqual({ fetched: 4, cached: 1, missing: 1, invalid: 0 });
+    expect(g.by_symbol.SPY!.counts.quote).toMatchObject({ normal: 2, crossed: 1 });
+    expect(g.by_symbol.SPY!.counts.high_below_low).toEqual({ yes: 1, no: 2, unknown: 0 });
+    expect(g.by_symbol.SPY!.counts.open_outside).toEqual({ yes: 1, no: 2, unknown: 0 });
+    expect(g.by_symbol.QQQ!.counts.trade_vs_day).toMatchObject({ "above-high": 1, inside: 0 });
+    expect(g.by_symbol.QQQ!.counts.source).toEqual({ fetched: 1, cached: 1, missing: 1, invalid: 0 });
     // skipped names count only towards their source
-    expect(s.by_symbol.QQQ!.counts.quote.normal).toBe(1);
+    expect(g.by_symbol.QQQ!.counts.quote.normal).toBe(1);
     // the worst is SPY's last trade above a day bar whose high is below its low: (100 - 98) / 98
-    expect(s.total.numbers.trade_outside_bps).toEqual({ n: 2, min: 99, max: 204.1, buckets: { negative: 0, "0-10": 0, "10-50": 0, "50-250": 2, "250+": 0 } });
-    expect(s.by_symbol.QQQ!.numbers.trade_outside_bps!.max).toBe(99);
-    expect(s.total.numbers.spread_bps).toMatchObject({ n: 4, min: -4, max: 4, buckets: { negative: 1, "0-10": 3 } });
-    expect(s.total.conditions).toEqual({ "@": 3 });
-    expect(s.total.exchanges).toEqual({ V: 4 });
-    expect(s.total.conditions_dropped).toBe(0);
+    expect(g.total.numbers.trade_outside_bps).toEqual({ n: 2, min: 99, max: 204.1, buckets: { negative: 0, "0-10": 0, "10-50": 0, "50-250": 2, "250+": 0 } });
+    expect(g.by_symbol.QQQ!.numbers.trade_outside_bps!.max).toBe(99);
+    expect(g.total.numbers.spread_bps).toMatchObject({ n: 4, min: -4, max: 4, buckets: { negative: 1, "0-10": 3 } });
+    expect(g.total.conditions).toEqual({ "@": 3 });
+    expect(g.total.exchanges).toEqual({ V: 4 });
+    expect(g.total.conditions_dropped).toBe(0);
+    expect(g.phase).toMatchObject({ regular: 3, "pre-open": 0 });
+    expect(g.rate_limit).toEqual({ "200": 3 });
+    expect(g.rate_remaining).toMatchObject({ n: 3, min: 150, max: 150, buckets: { "100+": 3 } });
+    expect(s.by_feed.sip.records).toBe(0);
+    expect(s.by_feed.unknown.records).toBe(0);
+  });
+
+  it("groups by the record's feed: IEX and SIP are never pooled, and a record with no readable feed is 'unknown'", () => {
+    const s = summariseProbe([
+      rec([n("SPY", snap())], "iex"),
+      rec([n("SPY", withQuote({ t: iso(NOW), bp: 100, ap: 100 }))], "sip"),
+      rec([n("SPY", withQuote({ t: iso(NOW), bp: 100.02, ap: 99.98 }))], "sip", { phase: "pre-open", rate_limit: 10_000, rate_remaining: 5 }),
+      rec([n("SPY", snap())], null),
+      rec([n("SPY", snap())], "SIP"),
+    ]);
+    expect(s.by_feed.iex.total.counts.quote).toMatchObject({ normal: 1, locked: 0, crossed: 0 });
+    expect(s.by_feed.sip.total.counts.quote).toMatchObject({ normal: 0, locked: 1, crossed: 1 });
+    expect(s.by_feed.sip.phase).toMatchObject({ regular: 1, "pre-open": 1 });
+    expect(s.by_feed.sip.rate_limit).toEqual({ "200": 1, "10000": 1 });
+    expect(s.by_feed.sip.rate_remaining).toMatchObject({ n: 2, min: 5, max: 150 });
+    expect(s.by_feed.unknown.records).toBe(2);
+    expect(Object.keys(s)).not.toContain("total");
   });
 
   it("is lenient with what it reads: junk records and entries are counted or skipped, never thrown on", () => {
@@ -494,32 +530,175 @@ describe("summariseProbe", () => {
       { probe: "x" },
       { probe: { v: 2, names: [] } },
       { probe: { v: 1, names: "x" } },
-      { probe: { v: 1, names: [null, 5, { symbol: "bad name", source: "fetched" }, { symbol: "__proto__" }, { symbol: "SPY", source: "fetched", quote: "weird", trade_c: ["@", "<script>"], trade_x: "<", trade_c_dropped: 2, spread_bps: "9" }] } },
+      {
+        probe: {
+          v: 1,
+          phase: "lunch",
+          rate_limit: -1,
+          rate_remaining: "9",
+          names: [null, 5, { symbol: "bad name", source: "fetched" }, { symbol: "__proto__" }, { symbol: "SPY", source: "fetched", quote: "weird", trade_c: ["@", "<script>"], trade_x: "<", trade_c_dropped: 2, spread_bps: "9" }],
+        },
+      },
     ]);
     expect(s).toMatchObject({ records: 8, with_probe: 1, without_probe: 7 });
-    expect(Object.keys(s.by_symbol)).toEqual(["SPY"]);
-    expect(s.total.samples).toBe(1);
-    expect(s.total.counts.quote["invalid-record"]).toBe(1);
-    expect(s.total.conditions).toEqual({ "@": 1 });
-    expect(s.total.exchanges).toEqual({});
-    expect(s.total.conditions_dropped).toBe(1);
-    expect(s.total.numbers.spread_bps).toEqual({ n: 0, min: null, max: null, buckets: { negative: 0, "0-10": 0, "10-50": 0, "50-250": 0, "250+": 0 } });
+    const g = s.by_feed.unknown;
+    expect(Object.keys(g.by_symbol)).toEqual(["SPY"]);
+    expect(g.total.samples).toBe(1);
+    expect(g.total.counts.quote["invalid-record"]).toBe(1);
+    expect(g.total.conditions).toEqual({ "@": 1 });
+    expect(g.total.exchanges).toEqual({});
+    expect(g.total.conditions_dropped).toBe(1);
+    expect(g.total.numbers.spread_bps).toEqual({ n: 0, min: null, max: null, buckets: { negative: 0, "0-10": 0, "10-50": 0, "50-250": 0, "250+": 0 } });
+    expect(g.phase["invalid-record"]).toBe(1);
+    expect(g.rate_limit).toEqual({});
+    expect(g.rate_remaining.n).toBe(0);
   });
 
   it("keeps the smallest, the largest and fixed buckets per number, so clock skew and one bad stamp cannot hide the rest", () => {
     const ages = [-30, -0.5, 0, 4.9, 5, 19.9, 20, 119.9, 120, 3_600];
     const s = summariseProbe([rec(ages.map((a) => n("SPY", withTrade(100, NOW - a * 1_000))))]);
-    expect(s.total.numbers.trade_age_s).toEqual({ n: 10, min: -30, max: 3_600, buckets: { negative: 2, "0-5": 2, "5-20": 2, "20-120": 2, "120+": 2 } });
+    const g = s.by_feed.iex;
+    expect(g.total.numbers.trade_age_s).toEqual({ n: 10, min: -30, max: 3_600, buckets: { negative: 2, "0-5": 2, "5-20": 2, "20-120": 2, "120+": 2 } });
     expect(bucketOf(0, AGE_BUCKETS)).toBe("0-5");
     expect(bucketOf(250, BPS_BUCKETS)).toBe("250+");
     expect(bucketOf(-0.1, BPS_BUCKETS)).toBe("negative");
-    expect(s.total.numbers.prior_move_bps!.buckets["100-500"]).toBe(10);
+    expect(g.total.numbers.prior_move_bps!.buckets["100-500"]).toBe(10);
+    expect(g.total.numbers.trade_vs_minute_s!.n).toBe(0); // the minute bar is forming in every sample
   });
 
   it("an empty session is all zeros", () => {
     const s = summariseProbe([]);
-    expect(s).toMatchObject({ records: 0, with_probe: 0, without_probe: 0, by_symbol: {} });
-    expect(s.total.samples).toBe(0);
-    expect(Object.values(s.total.counts.quote).every((c) => c === 0)).toBe(true);
+    expect(s).toMatchObject({ records: 0, with_probe: 0, without_probe: 0 });
+    for (const g of Object.values(s.by_feed)) {
+      expect(g.records).toBe(0);
+      expect(g.total.samples).toBe(0);
+      expect(Object.values(g.total.counts.quote).every((c) => c === 0)).toBe(true);
+    }
+  });
+});
+
+describe("the trade's conditions (Alpaca's market-data FAQ, how bars are aggregated)", () => {
+  const cls = (c: unknown, z: unknown = "B") => facts(snap({ latestTrade: { t: iso(NOW - 1_000), x: "V", p: 100, s: 1, c, i: 1, z } })).trade_class;
+
+  it("regular codes update the price", () => {
+    for (const c of [["@"], [" "], ["@", "F"], ["O"], ["6"], ["@", "5"], ["E", "K", "L", "X", "Y", "A", "D"]]) expect(cls(c), JSON.stringify(c)).toBe("regular");
+  });
+
+  it("each class by its codes, with B by its tape (average price on A and B, bunched on C)", () => {
+    expect(cls(["@", "T"])).toBe("extended-hours");
+    expect(cls(["U"])).toBe("extended-hours");
+    expect(cls(["@", "I"])).toBe("odd-lot");
+    expect(cls(["4"])).toBe("derivatively-priced");
+    for (const c of ["7", "9", "C", "G", "H", "M", "N", "P", "Q", "R", "V", "W", "Z"]) expect(cls(["@", c]), c).toBe("other-non-updating");
+    expect(cls(["B"], "A")).toBe("other-non-updating");
+    expect(cls(["B"], "B")).toBe("other-non-updating");
+    expect(cls(["B"], "C")).toBe("regular");
+    expect(cls(["B"], null)).toBe("unknown");
+  });
+
+  it("strictest first, whatever the order", () => {
+    expect(cls(["T", "I"])).toBe("odd-lot");
+    expect(cls(["I", "T"])).toBe("odd-lot");
+    expect(cls(["I", "M"])).toBe("other-non-updating");
+    expect(cls(["T", "4"])).toBe("derivatively-priced");
+    expect(cls(["@", "S"])).toBe("unknown"); // S is not in the FAQ's table
+    expect(cls(["S", "T"])).toBe("extended-hours"); // a known stricter class wins over an unknown code
+  });
+
+  it("unknown with nothing to read: no codes, not an array, a dropped code, or no trade", () => {
+    expect(cls([])).toBe("unknown");
+    expect(cls(undefined)).toBe("unknown");
+    expect(cls("@")).toBe("unknown");
+    expect(cls(["@", "<x>"])).toBe("unknown");
+    expect(cls(["I", "<x>"])).toBe("odd-lot");
+    expect(facts(snap({ latestTrade: null })).trade_class).toBe("unknown");
+    expect(tradeClass(["@"], 0, "C")).toBe("regular");
+  });
+});
+
+describe("the daily bars' days against the calendar, and the run's phase", () => {
+  // 2026-10-12 is a Monday: the previous session is Friday 2026-10-09.
+  const sess = (dailyT: unknown, prevT: unknown, now = NOW) =>
+    facts(snap({ dailyBar: dailyT === undefined ? undefined : { t: dailyT, o: 99, h: 101, l: 98, c: 100 }, prevDailyBar: prevT === undefined ? undefined : { t: prevT, o: 1, h: 1, l: 1, c: 98 } }), now);
+
+  it("today, the previous session, older, a non-session day between, a day ahead, absent and unreadable", () => {
+    expect(sess("2026-10-12T04:00:00Z", "2026-10-09T04:00:00Z")).toMatchObject({ daily_session: "today", prev_session: "previous-session" });
+    expect(sess("2026-10-09T04:00:00Z", "2026-10-08T04:00:00Z")).toMatchObject({ daily_session: "previous-session", prev_session: "older" });
+    expect(sess("2026-10-10T04:00:00Z", "2026-10-11T04:00:00Z")).toMatchObject({ daily_session: "off-session", prev_session: "off-session" });
+    expect(sess("2026-10-13T04:00:00Z", undefined)).toMatchObject({ daily_session: "future", prev_session: "absent" });
+    expect(sess("0001-01-01T00:00:00Z", "soon")).toMatchObject({ daily_session: "invalid", prev_session: "invalid" });
+    expect(facts(snap({ dailyBar: null, prevDailyBar: "x" }))).toMatchObject({ daily_session: "absent", prev_session: "invalid" });
+    expect(sess("2026-10-12T04:00:00Z", "2026-10-09T04:00:00Z", Number.NaN)).toMatchObject({ daily_session: "unknown", prev_session: "unknown" });
+  });
+
+  it("before 09:30 the daily bar can still be the previous session's: that is what the field answers", () => {
+    expect(sess("2026-10-09T04:00:00Z", "2026-10-08T04:00:00Z", at("09:00:00")).daily_session).toBe("previous-session");
+    expect(sess("2026-10-12T04:00:00Z", "2026-10-09T04:00:00Z", at("09:00:00")).daily_session).toBe("today");
+  });
+
+  it("the previous session skips weekends and holidays, by the calendar", () => {
+    expect(previousSession("2026-10-12")).toBe("2026-10-09");
+    expect(previousSession("2026-11-27")).toBe("2026-11-25"); // Thanksgiving, 2026-11-26, is closed
+    const fri = at("10:00:00", "2026-11-27", "-05:00");
+    expect(sess("2026-11-25T05:00:00Z", "2026-11-24T05:00:00Z", fri)).toMatchObject({ daily_session: "previous-session", prev_session: "older" });
+    expect(sess("2026-11-26T05:00:00Z", undefined, fri).daily_session).toBe("off-session");
+  });
+
+  it("the phase: pre-open before 09:30, regular to the close (13:00 on a half day), after-close from it, closed on a non-session day", () => {
+    expect(phaseAt(at("09:29:59"))).toBe("pre-open");
+    expect(phaseAt(at("09:30:00"))).toBe("regular");
+    expect(phaseAt(at("15:59:59"))).toBe("regular");
+    expect(phaseAt(at("16:00:00"))).toBe("after-close");
+    expect(phaseAt(at("12:59:59", "2026-11-27", "-05:00"))).toBe("regular");
+    expect(phaseAt(at("13:00:00", "2026-11-27", "-05:00"))).toBe("after-close");
+    expect(phaseAt(at("12:00:00", "2026-11-26", "-05:00"))).toBe("closed");
+    expect(phaseAt(at("12:00:00", "2026-10-10"))).toBe("closed");
+    expect(phaseAt(Number.NaN)).toBe("unknown");
+    expect(phaseAt(Date.parse("2099-06-01T15:00:00Z"))).toBe("unknown");
+    expect(probeSnapshots(["SPY"], { fetched: { SPY: snap() }, at: at("09:00:00") })!.phase).toBe("pre-open");
+  });
+});
+
+describe("the last trade against the finished minute bar", () => {
+  const vs = (barStart: number, tradeAt: number, now: number) =>
+    facts(snap({ minuteBar: { t: iso(barStart), o: 1, h: 1, l: 1, c: 1 }, latestTrade: { t: iso(tradeAt), x: "V", p: 100, c: ["@"] } }), now);
+  const start = at("10:29:00");
+
+  it("the bar's end minus the trade's time, in seconds: positive when the trade is inside the bar, negative when after it", () => {
+    expect(vs(start, start + 59_000, at("10:30:30"))).toMatchObject({ minute: "finished", trade_vs_minute_s: 1 });
+    expect(vs(start, start + 60_000, at("10:30:30"))).toMatchObject({ trade_vs_minute_s: 0 });
+    expect(vs(start, start + 72_500, at("10:30:30"))).toMatchObject({ trade_vs_minute_s: -12.5 });
+    expect(vs(start, start - 300_000, at("10:30:30"))).toMatchObject({ trade_vs_minute_s: 360 });
+  });
+
+  it("null while the bar is forming, or without a readable bar or trade", () => {
+    expect(vs(at("10:30:00"), at("10:30:10"), at("10:30:30")).trade_vs_minute_s).toBeNull();
+    expect(facts(snap({ minuteBar: null })).trade_vs_minute_s).toBeNull();
+    expect(facts(snap({ minuteBar: { t: iso(start), o: 1, h: 1, l: 1, c: 1 }, latestTrade: null }), at("10:30:30")).trade_vs_minute_s).toBeNull();
+  });
+});
+
+describe("the rate-limit headers and zero sizes", () => {
+  it("reads the headers as whole numbers of 0 or more, else null", () => {
+    const r = (limit: string | null, remaining: string | null) => probeSnapshots(["SPY"], { fetched: { SPY: snap() }, at: NOW, rate: { limit, remaining } })!;
+    expect(r("200", "187")).toMatchObject({ rate_limit: 200, rate_remaining: 187 });
+    expect(r(" 200 ", "0")).toMatchObject({ rate_limit: 200, rate_remaining: 0 });
+    for (const bad of [null, "", "-1", "1.5", "abc", "1e3", "9999999999"]) expect(r(bad, bad), String(bad)).toMatchObject({ rate_limit: null, rate_remaining: null });
+    expect(probeSnapshots(["SPY"], { fetched: { SPY: snap() }, at: NOW })).toMatchObject({ rate_limit: null, rate_remaining: null });
+    expect(rateHeader(5 as unknown)).toBeNull();
+  });
+
+  it("a zero size on a side is no active side, as a zero price is; a bad size is invalid; a missing size leaves it to the price", () => {
+    const q = (bp: number, bs: unknown, ap: number, as: unknown) => facts(withQuote({ t: iso(NOW), bp, bs, ap, as })).quote;
+    expect(q(99.98, 100, 100.02, 100)).toBe("normal");
+    expect(q(99.98, 0, 100.02, 100)).toBe("one-sided");
+    expect(q(99.98, 100, 100.02, 0)).toBe("one-sided");
+    expect(q(99.98, 0, 100.02, 0)).toBe("empty");
+    expect(q(0, 100, 100.02, 0)).toBe("empty");
+    expect(q(100, 1, 100, 1)).toBe("locked");
+    expect(q(100.02, 1, 99.98, 1)).toBe("crossed");
+    expect(q(100.02, 0, 99.98, 1)).toBe("one-sided"); // a zero-size side cannot cross the book
+    for (const bad of [-1, "1", null, Number.NaN]) expect(q(99.98, bad, 100.02, 1), String(bad)).toBe("invalid");
+    expect(q(99.98, undefined, 100.02, undefined)).toBe("normal");
   });
 });

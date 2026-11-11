@@ -340,7 +340,12 @@ describe("fetchQuotes' raw hand-over for the snapshot probe (quote-probe.ts)", (
     const onRaw = (r: { fetched: Record<string, unknown>; at: number }) => seen.push(r);
     const f = okFetch({ SPY: snap(779.1), QQQ: snap(751.2) });
     await fetchQuotes(["SPY", "ZZZZ"], KEYS, NOW, f, "https://data.example", { onRaw });
-    expect(seen).toEqual([{ fetched: { SPY: snap(779.1), ZZZZ: null }, at: NOW.getTime() }]);
+    expect(seen).toEqual([{ fetched: { SPY: snap(779.1), ZZZZ: null }, at: NOW.getTime(), rate: { limit: null, remaining: null } }]);
+    // the rate-limit headers are handed over as sent
+    const withHeaders = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ MSFT: snap(1) }), { status: 200, headers: { "X-RateLimit-Limit": "200", "X-RateLimit-Remaining": "187" } }));
+    const rated: unknown[] = [];
+    await fetchQuotes(["MSFT"], KEYS, NOW, withHeaders, "https://data.example", { onRaw: (r) => rated.push(r.rate) });
+    expect(rated).toEqual([{ limit: "200", remaining: "187" }]);
     // only the names past their time are fetched, so only those are handed over
     await fetchQuotes(["SPY", "QQQ"], KEYS, new Date(NOW.getTime() + 500), f, "https://data.example", { onRaw });
     expect(Object.keys(seen[1]!.fetched)).toEqual(["QQQ"]);
