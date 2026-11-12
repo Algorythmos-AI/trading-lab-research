@@ -5,7 +5,8 @@
 import type { CalendarDoc } from "./calendar.types";
 import { settledSlotEnd } from "./desk-eval";
 import { adjacentSession, type DocFeed, FEEDS, slotsAround, type StampedInputs } from "./feed-watch";
-import { nyNow } from "./market-calendar";
+import type { Lot } from "./journal.types";
+import { addDays, nyNow } from "./market-calendar";
 import { nyInstant } from "./options";
 import type { OptionsClone } from "./options-clone.types";
 import type { OptionsLive } from "./options-live.types";
@@ -45,6 +46,10 @@ export const VARIANT_COOKIE = "fx";
  *   session clock, e.g. with `frozen`). `feeds-late`: the edition is for an earlier session, the journal has missed two
  *   runs, the server check has been silent for half an hour. `feeds-failed`: the edition was refused and nothing newer
  *   is stored. `feeds-unknown`: the store could not be read for the edition and the journal.
+ * - `journal-option-lot`: the journal holds one open long QQQ call bought at the scripted morning's second step (2
+ *   contracts at $1.20), on the strike nearest the fixture chain's QQQ price and an expiry three weeks after the
+ *   server's day, so the chain lists it exactly once (fixtureOptionLot); the journal reads a few minutes after the
+ *   fill. With `chain-opra` and `quotes-script` the manage card shows its live value. Off by default.
  */
 export const VARIANT_FLAGS = [
   "empty",
@@ -81,6 +86,7 @@ export const VARIANT_FLAGS = [
   "feeds-late",
   "feeds-failed",
   "feeds-unknown",
+  "journal-option-lot",
 ] as const;
 export type VariantFlag = (typeof VARIANT_FLAGS)[number];
 
@@ -691,4 +697,20 @@ export function feedVariant(s: StampedInputs, flags: ReadonlySet<VariantFlag>, n
     out.journal = { status: "error" };
   }
   return { stamps: out, refusals, shadow };
+}
+
+/**
+ * `journal-option-lot`: one open long QQQ call, 2 contracts at $1.20 a share, opened at `openedAt`. Its strike is the
+ * fixture chain's centre strike for QQQ (chain-route.ts fixtureChain: the close plus FIXTURE_OFFSET_ATR of an ATR, on
+ * its strike step), so it is listed once; its expiry is three weeks after `now`'s New York day, which the chain and
+ * the contract route add as the held contract wherever it sits. Null when the edition has no QQQ close.
+ */
+export function fixtureOptionLot(e: OptionsEdition, now: Date, openedAt: number): Lot | null {
+  const t = e.tickers.find((x) => x.symbol === "QQQ");
+  const close = t?.last?.close;
+  if (typeof close !== "number") return null;
+  const spot = Math.round((close + FIXTURE_OFFSET_ATR * (t?.atr14 ?? 0)) * 100) / 100;
+  const step = spot < 50 ? 0.5 : spot < 300 ? 1 : 5;
+  const strike = Math.round((Math.round(spot / step) * step) * 100) / 100;
+  return { symbol: "QQQ", kind: "call", strike, expiry: addDays(nyNow(now).day, 21), side: "long", qty: 2, entry: 1.2, opened_at: new Date(openedAt).toISOString() };
 }

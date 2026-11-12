@@ -39,10 +39,12 @@ import { bellMinute } from "@/lib/contract";
 import { chainFresh, chainPx, chainStamp, contractQuoteTime, entryStopDistance, fromEntryLabel, heldOrAtm, lossFromEntry, type RoomAfterStop, roomAfterStop, stopDistance } from "@/lib/what-if";
 import { checkOptionFill, type FillStop, fillStop, INVITE_LINE, journalDayCache, lossLine, nickelLine, prefillFrom, otherOpenPositions, STOP_OWN_TICK, STOP_PLACED, STOP_REMINDER, stopFromLine, tickLine } from "@/lib/manage-stop";
 import { type DayFacts, journalLive } from "@/lib/session-timeline";
+import { heldContract, heldLines, heldValue, judgeQuote, lotsContract, notAvailable, quoteLine } from "@/lib/option-value";
 import { usd } from "@/lib/ticket";
 import { ticketPrice } from "./ticket-memo";
 import { TestingTag } from "./trade-now";
-import { useChain } from "./use-chain";
+import { type ChainFeed, useChain } from "./use-chain";
+import { useContractQuote } from "./use-contract-quote";
 import { useNow, usePerfNow } from "./use-now";
 
 type Item = NonNullable<Options["focus"]>["items"][number];
@@ -165,14 +167,12 @@ export interface ChainContext {
  * from the trade's entry and not from the live price, so it says what the stop costs the trade and agrees with the
  * hero's which-stop line, which measures the same way. The delta is the held contract's (the journal names it) or,
  * failing that, the at-the-money one on that side. One chain for this card's name, asked for only while the card has a
- * fresh price and is not a CHECK; shown only on this name's answer no older than its feed's same-day limit (staleLimits), labelled with
+ * fresh price and is not a CHECK (chainOn; the card's one chain feed, shared with the held value); shown only on this name's answer no older than its feed's same-day limit (staleLimits), labelled with
  * the chain's own time and delay. Nothing once the stop is the entry, or with a stop on the wrong side of it.
  */
-function OptionAtStop({ v, ctx }: { v: ManageView; ctx: ChainContext }) {
+function OptionAtStop({ v, ctx, feed }: { v: ManageView; ctx: ChainContext; feed: ChainFeed }) {
   const perfNow = usePerfNow(1_000);
-  const on = v.action !== "check" && v.price !== null && ctx.now !== null && entryStopDistance(v.side, v.entry, v.m.stop) !== null;
-  const keep = v.contract ? `${v.contract.expiry}:${v.contract.strike}` : "";
-  const { feed } = useChain(v.symbol, on ? chainPx(ctx.close, v.price) : null, on, keep);
+  const on = chainOn(v, ctx) && entryStopDistance(v.side, v.entry, v.m.stop) !== null;
   if (!on || feed.status !== "ok" || feed.chain.symbol !== v.symbol || !chainFresh(feed.chain, feed.receivedPerf, perfNow)) return null;
   const c = heldOrAtm(feed.chain, v.side, v.contract, v.price!, ctx.now!, (x) => bellMinute(x, ctx.session, ctx.halfDay));
   const est = lossFromEntry(v.side, v.entry, v.m.stop, c?.contract.delta);
@@ -189,11 +189,84 @@ function OptionAtStop({ v, ctx }: { v: ManageView; ctx: ChainContext }) {
   );
 }
 
+/** The trade's own journal lots, for the live option value, and whether the journal is current enough for a position total. */
+export interface CardHeld {
+  lots: readonly Lot[];
+  journalCurrent: boolean;
+}
+
+/** The held contract's live value, or why it is withheld; null when the journal names no one contract (no line at all). */
+type HeldShown = { kind: "ok"; lines: ReturnType<typeof heldLines>; quote: string } | { kind: "withheld"; line: string } | null;
+
+/**
+ * The live value of the one contract a journal position names (option-value.ts): its OCC symbol built from the lots'
+ * kind, strike and expiry, listed exactly once in this name's chain, quoted from /api/contract every 2 s. At the bid,
+ * the mid second, fees in; withheld (with the reason) on anything but a fresh, sane OPRA quote in the regular session.
+ * Never the at-the-money contract: a hand note without a contract, or lots naming two contracts, give nothing.
+ */
+function useHeldValue(v: ManageView, held: CardHeld | undefined, ctx: ChainContext | undefined, chain: ChainFeed): HeldShown {
+  const perfNow = usePerfNow(1_000);
+  // Rounded down to the second by useNow, so a second is added: the wall-clock age may read old, never young.
+  const wall = useNow(1_000);
+  const pre = held && ctx ? lotsContract(v.symbol, v.side, held.lots) : null;
+  const named = pre?.ok ? pre.held : null;
+  const r = named && chain.status === "ok" ? heldContract(v.symbol, v.side, held!.lots, chain.chain) : null;
+  const occ = r?.ok ? r.held.occ : "";
+  const { feed, shownPerf } = useContractQuote(occ, occ !== "");
+  if (!r?.ok) return null;
+  const j = judgeQuote({ feed, occ, perfNow, wallNow: wall === null ? null : wall + 1_000, shownPerf });
+  if (!j.ok) return { kind: "withheld", line: notAvailable(j.why) };
+  return { kind: "ok", lines: heldLines(heldValue(r.held, j.q, held!.journalCurrent)), quote: quoteLine(j.q) };
+}
+
+/**
+ * Whether the card asks for its name's chain: only with a fresh price and the board's clock, never on a CHECK card.
+ * One chain feed per card serves the estimate at the stop and the held contract's check alike.
+ */
+function chainOn(v: ManageView, ctx: ChainContext | undefined): ctx is ChainContext {
+  return !!ctx && v.action !== "check" && v.price !== null && ctx.now !== null;
+}
+
+/**
+ * Whether the card polls its one chain feed: chainOn, and either a stop to estimate from the entry (OptionAtStop) or
+ * a contract the journal's lots name (the held value). Never on a CHECK card or one without a fresh price.
+ */
+export function cardAsksChain(v: ManageView, ctx: ChainContext | undefined, held: CardHeld | undefined): boolean {
+  if (!chainOn(v, ctx)) return false;
+  return entryStopDistance(v.side, v.entry, v.m.stop) !== null || (held ? lotsContract(v.symbol, v.side, held.lots).ok : false);
+}
+
+/** The held contract's value block: the value, the P&L (and the total when the journal is current), the stop room, the quote line. */
+function HeldBlock({ shown }: { shown: NonNullable<HeldShown> }) {
+  if (shown.kind === "withheld")
+    return (
+      <p data-manage-value="withheld" className="text-explain text-muted-foreground">
+        {shown.line}
+      </p>
+    );
+  const l = shown.lines;
+  return (
+    <div data-manage-value="live" className="text-explain grid gap-0.5">
+      <p className="text-foreground font-medium">
+        Live option value: <span className="font-mono tabular-nums">{l.value}</span>
+      </p>
+      <p data-manage-value-pnl className="text-foreground">
+        P&amp;L <span className="font-mono tabular-nums">{l.pnl}</span>
+        {l.total ? <span data-manage-value-total className="font-mono tabular-nums"> · {l.total}</span> : null}
+      </p>
+      {l.stop ? <p data-manage-value-stop className="text-muted-foreground">{l.stop}</p> : null}
+      <p data-manage-value-quote className="text-muted-foreground font-mono text-[0.6875rem] tabular-nums max-sm:text-xs">
+        {shown.quote}
+      </p>
+    </div>
+  );
+}
+
 /**
  * One open trade: the header, then big the action word, the stop, the live distance to it on the stock, the option's
  * estimated loss at the stop from the entry, and the "not working in" countdown while it runs; small the trail, the flat-by time and where the
- * card's numbers come from. No live option P&L: the card does not mark the option, so it says "P&L: see
- * Webull". A journal card adds a CHECK line (its fill is the card's entry) with "Set my fill"; `children` is the form
+ * card's numbers come from. The option's P&L only for a contract the journal names exactly (`held`, useHeldValue),
+ * from a live OPRA bid; otherwise "P&L: see Webull". A journal card adds a CHECK line (its fill is the card's entry) with "Set my fill"; `children` is the form
  * it opens.
  */
 export function ManageCard({
@@ -203,9 +276,12 @@ export function ManageCard({
   onSetFill,
   onUseTime,
   stop,
+  held,
   children,
 }: {
   v: ManageView;
+  /** The trade's own journal lots, for the live option value; without them the card shows none. */
+  held?: CardHeld;
   /** A note's option stop (or the invite to add the fill); none on a journal card. */
   stop?: CardStop;
   /** For the option estimate; without it the card shows none. */
@@ -221,6 +297,12 @@ export function ManageCard({
   const counting = v.notWorkingText !== "working" && v.notWorkingText !== "done" && v.notWorkingText !== "–";
   // The distance to the stop: only from a fresh price, never on a CHECK card.
   const dist = v.action !== "check" && v.price !== null ? stopDistance(v.side, v.price, v.m.stop) : null;
+  // The card's one chain feed, for the estimate at the stop and for the held contract's check: asked for while the
+  // card has a fresh price and is not a CHECK, and either has a stop to measure or holds a contract the journal names.
+  const asks = cardAsksChain(v, ctx, held);
+  const keep = v.contract ? `${v.contract.expiry}:${v.contract.strike}` : "";
+  const { feed: chain } = useChain(v.symbol, asks ? chainPx(ctx!.close, v.price) : null, asks, keep);
+  const value = useHeldValue(v, held, ctx, chain);
   return (
     <article
       aria-label={`In a trade: ${v.symbol} ${v.side}`}
@@ -290,7 +372,7 @@ export function ManageCard({
         {dist !== null ? (
           <Big label={`${v.symbol} to the stop`} value={dist > 0 ? `$${dist.toFixed(2)}` : "at the stop"} size="live" tone={dist > 0 ? undefined : "text-bad"} data="distance" />
         ) : null}
-        {ctx ? <OptionAtStop v={v} ctx={ctx} /> : null}
+        {ctx ? <OptionAtStop v={v} ctx={ctx} feed={chain} /> : null}
         {counting ? (
           <Big
             label="Not working in"
@@ -306,8 +388,9 @@ export function ManageCard({
         <Small label="Trail (EMA9)" value={v.m.trail !== null ? v.trailText : "–"} note={v.m.trail !== null ? undefined : v.trailText} data="trail" />
         {counting ? null : <Small label="Not working in" value={v.notWorkingText} data="not-working" />}
         <Small label={`Flat by ${v.flatAt}`} value={v.flatText} data="flat" />
-        <Small label="P&L" value="see Webull" data="pnl" />
+        <Small label="P&L" value={value?.kind === "ok" ? "at the bid, below" : "see Webull"} data="pnl" />
       </dl>
+      {value ? <HeldBlock shown={value} /> : null}
       {children}
     </article>
   );
@@ -861,6 +944,7 @@ export function useTradeManage(x: TradeManageInput): {
             onSetFill={v.source === "journal" && x.now !== null ? () => setForm(formFromTrade(t, x.now!)) : undefined}
             onUseTime={t.note && v.hint ? () => save([...notes.filter((n) => noteId(n) !== noteId(t.note!)), { ...t.note!, at: v.hint!.at }]) : undefined}
             stop={cardStop(t)}
+            held={{ lots: t.lots ?? [], journalCurrent: live }}
           >
             {open ? formEl(form, feed === "live" ? (rowOf(v.symbol)?.price ?? null) : null, null) : null}
           </ManageCard>
