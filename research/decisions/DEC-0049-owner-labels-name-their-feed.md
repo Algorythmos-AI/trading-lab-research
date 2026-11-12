@@ -194,3 +194,31 @@ frozen. The header of `config.yaml` now allows an amendment made by a decision r
   with its file and its pass rule, in a dated note here by the pull request that adds entry alerts.
 - With fewer fields, a phone alert says less. The symbol and the levels stay on the site, behind the login, and go
   on the encrypted channel once it exists.
+
+## Note on how the fill-time check reads point 4 (added 2026-11-12; nothing above is changed)
+
+Written before any run of the check. Where point 4 is silent, the code (`dashboard/src/lib/fill-check.ts` and
+`fill-check-run.ts`) reads it as follows.
+
+- A session is picked when it holds at least one opening side that can be checked, that is, a standard contract with
+  a readable time and price; a day holding only open lots or adjusted contracts is not picked.
+- "Full" means a regular session of `market-calendar.json` that has ended at the time of the first attempt, and not a
+  half day.
+- A unit belongs to the New York day of its own time, and closing sides are checked only on the picked sessions.
+- A contract is adjusted when its multiplier is not 100, its symbol is not 1 to 6 capital letters, or it cannot be
+  written in the standard OCC form.
+- A side with no time is counted on the New York day of the piece's other time, only when that day is a picked
+  session; a piece with neither time usable is counted once, overall, under a reason of its own.
+- The excluded condition codes are exactly the letters point 4 names (A to G, f to m, n to s); any other single letter
+  is eligible whatever its description, and a code that is not a single letter is not eligible and is counted.
+- "No prints for the contract" means no print of any code in the span; a unit whose prints all carry excluded codes is
+  checked and not matched.
+- "At least 3 sessions" counts the sessions with at least one opening side checked.
+- Prices are compared exactly in whole millionths of a dollar and times in whole nanoseconds, and the median and the
+  10th and 90th percentiles use linear interpolation between the nearest ranks (numpy's default method).
+- The session list is fixed and stored at the first attempt; an attempt that fails on transport, a rate limit or time
+  stores no result and is not a run, and no outcome of it is logged or shown.
+- Each span is read in pages of at most 10,000 prints and at most 5 pages; a span still paging after 50,000 prints is
+  "Alpaca's answer incomplete", and that unit is not checked.
+
+No journal, print or result was viewed for this note.
