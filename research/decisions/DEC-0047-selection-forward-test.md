@@ -1,8 +1,10 @@
 # DEC-0047: Whether the two-stage selection picks better names is measured once, forward, from the switch
 
-- **Status: PROPOSED on 2026-11-12.** Drafted for the owner to change or accept. It becomes ACCEPTED only when the
-  owner merges a pull request that says so in this line. Nothing below starts before that, and nothing starts before
-  DEC-0048's switch either: no session is counted, no outcome is scored for this experiment and nothing is read.
+- **Status: ACCEPTED on 2026-11-12.** approved_by: owner. Proposed on 2026-11-12 (#406) and accepted by the owner's
+  merge of the pull request that changed this line, which also accepts the proposals listed under "Choices the owner
+  makes by accepting this record". Acceptance registers the experiment; it starts nothing. Nothing below starts before
+  the four preconditions of section 10 are met, DEC-0048's switch among them: no session is counted, no outcome is
+  scored for this experiment and nothing is read.
 - **Authority.** This is the registration DEC-0035 section 3 requires before the card plan is evaluated, and the only
   place a claim about the selection's accuracy may come from (DEC-0046's opening lines and section 8). The five-session
   gate of DEC-0046 section 7 is an operational release gate and is not evidence of accuracy.
@@ -44,7 +46,7 @@
   DEC-0035 is not amended: its numbers and its section 1 stay as they are. So no early end that names an amendment to
   DEC-0035 (EXP-0031, EXP-0033) is triggered. **It changes no rule of DEC-0046.**
 - **Registers** EXP-0032 with HYP-0051 to HYP-0055: a new trial family F, total 5, counted apart from the global, C, O
-  and M families (`config/trial_registry.yaml`, a `proposed` row until this record is accepted).
+  and M families (`config/trial_registry.yaml`, an `accepted` row since this record was accepted).
 - **Depends on:** DEC-0005, DEC-0032, DEC-0035, DEC-0042, DEC-0044, DEC-0045, DEC-0046, DEC-0049, DEC-0050.
 - **Experiment:** EXP-0032. **Hypotheses:** HYP-0051, HYP-0052, HYP-0053, HYP-0054, HYP-0055.
 

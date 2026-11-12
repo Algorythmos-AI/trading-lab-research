@@ -32,4 +32,4 @@ families:
     - {decision: DEC-0045, total: 3, status: accepted}    # EXP-0031: HYP-0048 OWN-ONPLAN, HYP-0049 OWN-CAUTION, HYP-0050 OWN-EARLY
     - {decision: DEC-0050, total: 6, status: accepted}    # EXP-0033: the three asked again on SIP bars (HYP-0056 to HYP-0058)
   F:                                                      # the two-stage selection's accuracy, forward from the switch (DEC-0047)
-    - {decision: DEC-0047, total: 5, status: proposed}    # EXP-0032: HYP-0051 SEL-PICKED, HYP-0053 SEL-FIXED (co-primary for the action), HYP-0052, HYP-0054, HYP-0055 (Holm across the three)
+    - {decision: DEC-0047, total: 5, status: accepted}    # EXP-0032: HYP-0051 SEL-PICKED, HYP-0053 SEL-FIXED (co-primary for the action), HYP-0052, HYP-0054, HYP-0055 (Holm across the three)
