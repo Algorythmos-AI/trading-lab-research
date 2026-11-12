@@ -35,10 +35,11 @@ without fixing it. Read the records themselves for what they decide.
 
 | Consumer | What it reads | Feed | Where the feed is set | Bound by | Described in |
 |---|---|---|---|---|---|
-| Owner's board, live prices (site, `/api/quote`) | stock snapshots | `ALPACA_FEED`, default iex (check the site's setting) | `ALPACA_FEED` on Vercel (`alpaca-feed.ts`) | DEC-0042 | DEC-0049, feed-agreement runbook |
-| Owner's board, session bars (site, `/api/bars`) | 2-minute stock bars | `ALPACA_FEED`, default iex (check the site's setting) | the same | none | DEC-0044, DEC-0049, feed-agreement runbook |
-| Shadow evaluator (site, `/api/cron/desk`) | 2-minute bars and snapshots | `ALPACA_FEED`, default iex (check the site's setting) | the same | none | DEC-0044, DEC-0049, EXP-0031, feed-agreement runbook |
+| Owner's board, live prices (site, `/api/quote`) | stock snapshots | `ALPACA_FEED`, default iex; sip on production by DEC-0050 once the owner sets it | `ALPACA_FEED` on Vercel (`alpaca-feed.ts`) | DEC-0042, DEC-0050 | DEC-0049, board-feed and feed-agreement runbooks |
+| Owner's board, session bars (site, `/api/bars`) | 2-minute stock bars | `ALPACA_FEED`, default iex; sip on production by DEC-0050 once the owner sets it | the same | DEC-0050 | DEC-0044, DEC-0049, feed-agreement runbook, board-feed runbook |
+| Shadow evaluator (site, `/api/cron/desk`) | 2-minute bars and snapshots | `ALPACA_FEED`, default iex; sip on production by DEC-0050 once the owner sets it | the same | DEC-0050 | DEC-0044, DEC-0049, EXP-0031, feed-agreement runbook, board-feed runbook |
 | Owner-trade labeller (EXP-0031 labels; not built yet) | settled 2-minute bars | iex, asked for by name, never from `ALPACA_FEED` | its own pull request | DEC-0049 | EXP-0031 |
+| Owner-trade labeller (EXP-0033 labels; not built yet) | settled 2-minute bars | sip, asked for by name, never from `ALPACA_FEED` | its own pull request | DEC-0050 | EXP-0033 |
 | Contract pane and chain (site, `/api/chain`) | option snapshots | `ALPACA_OPTION_FEED`, default indicative; opra on the owner's setting (check the site's setting) | `ALPACA_OPTION_FEED` on Vercel (`option-feed.ts`) | DEC-0050 (point 6) | none |
 | Feed agreement (hand, `make feed-agreement`) | 2-minute stock bars | iex and sip | literal per run (`barsUrl`) | none | feed-agreement runbook |
 | Paper runner B, signal bars (host, `paper-b`) | 1-minute bars | iex | literal default in `runner_b.py` | DEC-0037 | none |

@@ -9,7 +9,7 @@ import { sydney, weekDate } from "@/lib/format";
 import { hourlyBySymbol } from "@/lib/hourly";
 import { interestBySymbol } from "@/lib/oi";
 import { withLeaders } from "@/lib/entry-checks";
-import { editionState, mapView } from "@/lib/options";
+import { builtFromWords, editionState, mapView } from "@/lib/options";
 import { loadOptions, loadOptionsLive, pageTime } from "@/lib/snapshot";
 
 export const dynamic = "force-dynamic";
@@ -63,7 +63,7 @@ export default async function OptionsNamePage({ params, searchParams }: Props) {
           <OptionsName e={e} t={t} live={!date} positions={live ? { ...live, open_interest: null, hourly: null } : null} interest={interest} hourly={hourlyBySymbol(live, [symbol], now.getTime())[symbol] ?? null} stale={!date && editionState(e.session, now) === "stale"} />
         </PaneBoundary>
         <p className="text-muted-foreground w-[min(calc(100vw-2rem),72rem)] justify-self-center text-xs">
-          Levels for {weekDate(e.session)}, built from the {weekDate(e.built_from)} close. Source: {e.source ?? "not stated"}. Published {sydney(e.as_of)} Sydney.
+          Levels for {weekDate(e.session)}, built from {builtFromWords(e.built_from)}. Source: {e.source ?? "not stated"}. Published {sydney(e.as_of)} Sydney.
           Research only; nothing here is an order.
         </p>
       </LiveQuotes>
