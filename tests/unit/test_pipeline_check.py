@@ -1171,3 +1171,45 @@ def test_a_refused_request_is_unusable_market_data_it_fails_the_check_pages_and_
     err = capsys.readouterr().err
     assert "pipeline check: a market-data request named no feed" in err
     assert f"market data unavailable ({pc.BARS}): FeedNotNamed" in err
+
+
+class BarsRejected(Get):
+    """The bars answer 401; the listings and the snapshot are answered."""
+
+    def __call__(self, url: str, params: dict, **kw: object) -> Resp:
+        self.calls.append(url)
+        return Resp(401, {}) if url.endswith("/v2/stocks/bars") else market(url, params)
+
+
+def test_a_refused_data_request_with_the_listings_answered_judges_and_pages_as_a_401_on_the_bars(
+        tmp_path, monkeypatch, capsys):
+    """The realistic case: the guard can only refuse a data-host request, never the paper host's listings. The bars
+    are unreachable, the listings fine, `data.reachable` fails, the snapshot (same host as the bars) is skipped,
+    exit 0, the same checks and page as a 401 on the bars alone."""
+    for d in ("rejected", "refused"):
+        (tmp_path / d).mkdir()
+    rejected_get = BarsRejected()
+    _, rejected, rejected_alerts, _ = go(tmp_path / "rejected", rejected_get)
+    assert rejected["unreachable"] == [pc.BARS, pc.SNAPSHOT]
+    capsys.readouterr()
+    real = pc.require_feed
+
+    def refuse_data(url, params):
+        real(url, params)
+        if str(url).startswith(pc.DATA):
+            raise pc.FeedNotNamed("no feed")
+    monkeypatch.setattr(pc, "require_feed", refuse_data)
+    get = Get()
+    code, report, alerts, naps = go(tmp_path / "refused", get)
+    by = {c["id"]: c for c in report["checks"]}
+    assert code == 0 and naps == []
+    assert get.calls and all(u.startswith(pc.PAPER) for u in get.calls)          # only the listings went out
+    assert get.calls == [u for u in rejected_get.calls if u.startswith(pc.PAPER)]
+    assert report["unreachable"] == [pc.BARS, pc.SNAPSHOT] and report["unlisted"] == {}
+    assert not by["data.reachable"]["ok"] and by["data.reachable"]["severity"] == "fail"
+    assert [(c["id"], c["ok"], c["severity"]) for c in report["checks"]] == \
+        [(c["id"], c["ok"], c["severity"]) for c in rejected["checks"]]
+    (key, _, message, prio), = alerts.sent
+    assert alerts.sent == rejected_alerts.sent and key == "pipeline-check:pre-open" and prio == 4
+    assert "data.reachable: 1 failed" in message
+    assert "pipeline check: a market-data request named no feed" in capsys.readouterr().err

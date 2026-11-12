@@ -8,15 +8,17 @@ as well as in the static scan (test_feed_named.py).
 from __future__ import annotations
 
 import datetime as dt
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
 import pytest
 import requests
+import yaml
 
 from wt.data import tape
 from wt.data.alpaca import DATA, AlpacaREST, HybridFeed, RateLimiter
-from wt.data.feeds import FeedNotNamed, require_feed
+from wt.data.feeds import OPTION_FEEDS, FeedNotNamed, require_feed
 from wt.live.runner_b import LiveData
 from wt.live import runner_o
 from wt.live.runner_o import AlpacaFeeds
@@ -270,3 +272,11 @@ def test_the_own_session_guard_lets_every_request_out_unchanged(site: str, monke
     assert len(checked) == len(after) - retried and all(c in after for c in checked)
     pages = [p for _, p in after if p and "page_token" in p]
     assert pages and all(p["page_token"] == "page-2" for p in pages)     # the follow-ups were sent and checked too
+
+
+def test_the_clones_committed_option_feed_is_exactly_one_the_guard_accepts() -> None:
+    """runner_o passes `feeds.option` through str() unchanged and require_feed matches exactly: `Indicative`, a stray
+    space or an empty value would be refused before every chain and quote request. A bad edit fails here, not in a
+    session (the clone is not changed to tidy the value: that would be a new behaviour in a live job)."""
+    cfg = yaml.safe_load((Path(__file__).resolve().parents[2] / "config" / "options_clone.yaml").read_text())
+    assert str(cfg["feeds"]["option"]) in OPTION_FEEDS
