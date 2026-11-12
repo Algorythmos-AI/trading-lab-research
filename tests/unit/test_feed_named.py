@@ -24,6 +24,7 @@ from pathlib import Path
 import pytest
 
 import alpaca.data.requests as sdk_requests
+from alpaca.data.enums import DataFeed
 from feed_scan import scan
 from wt.data import alpaca as alpaca_data
 from wt.data.alpaca import AlpacaREST, HybridFeed, RateLimiter
@@ -204,11 +205,12 @@ def test_feeds_for_paths() -> None:
     assert feeds_for(f"{d}/v2/stocks/bars") == feeds_for(f"{d}/v2/stocks/quotes/latest")
     for path in ("snapshots", "trades", "quotes", "bars/latest", "SPY/bars", "SPY/snapshot", "SPY/quotes/latest"):
         assert {"iex", "sip"} <= set(feeds_for(f"{d}/v2/stocks/{path}") or ())
+    assert feeds_for(f"{d}/v2/stocks/auctions") == ("sip",) == feeds_for(f"{d}/v2/stocks/SPY/auctions")
     assert feeds_for(f"{d}/v1beta1/options/snapshots/SPY") == ("indicative", "opra")
     assert feeds_for(f"{d}/v1beta1/options/quotes/latest") == ("indicative", "opra")
     for none in (f"{d}/v1beta1/news", f"{d}/v1beta1/options/bars", f"{alpaca_data.TRADING}/v2/calendar",
                  "https://example.test/v2/stocks/bars", f"{d}/v2/stocks/meta/exchanges",
-                 f"{d}/v2/stocks/meta/conditions/trade", f"{d}/v2/stocks/auctions"):
+                 f"{d}/v2/stocks/meta/conditions/trade", "https://[data.alpaca.markets/v2/stocks/bars"):
         assert feeds_for(none) is None
 
 
@@ -220,13 +222,52 @@ def test_require_feed() -> None:
     require_feed(f"{d}/v2/stocks/meta/exchanges", None)                   # metadata takes no feed
     require_feed(f"{d}/v2/stocks/bars?symbols=SPY&feed=sip", {"symbols": "SPY"})     # a feed in the query
     require_feed(f"{d}/v1beta1/options/snapshots/SPY?feed=opra", None)
+    require_feed(f"{d}/v2/stocks/bars?feed=iex", {"feed": "iex"})         # the same feed twice is not ambiguous
+    require_feed(f"{d}/v2/stocks/auctions", {"feed": "sip"})
     for url, params in ((f"{d}/v2/stocks/bars", None), (f"{d}/v2/stocks/bars", {"symbols": "SPY"}),
                         (f"{d}/v2/stocks/bars", {"feed": ""}), (f"{d}/v2/stocks/bars", {"feed": "opra"}),
                         (f"{d}/v1beta1/options/snapshots/SPY", {"feed": "iex"}),
                         (f"{d}/v2/stocks/bars?feed=", None), (f"{d}/v2/stocks/bars?feed=opra", None),
-                        (f"{d}/v2/stocks/bars?feed=sip", {"feed": "bogus"})):
+                        (f"{d}/v2/stocks/bars?feed=sip", {"feed": "bogus"}),
+                        (f"{d}/v2/stocks/bars?feed=sip", {"feed": "iex"}),            # two different feeds
+                        (f"{d}/v2/stocks/auctions", {"feed": "iex"})):
         with pytest.raises(FeedNotNamed, match="must name its feed"):
             require_feed(url, params)
+
+
+@pytest.mark.parametrize("params", [[("symbols", "SPY"), ("feed", "iex")], (("feed", "sip"),),
+                                    "symbols=SPY&feed=iex", b"feed=sip", {"feed": ["iex"]}, {b"feed": b"iex"},
+                                    {"feed": DataFeed.IEX}])
+def test_every_params_shape_requests_accepts(params: object) -> None:
+    require_feed(f"{alpaca_data.DATA}/v2/stocks/bars", params)
+
+
+@pytest.mark.parametrize("params", [[("symbols", "SPY")], "symbols=SPY", b"", [("feed", "iex"), ("feed", "sip")],
+                                    [1, 2, 3], object(), 42, [("a", "b", "c")]])
+def test_unreadable_or_featureless_params_give_feed_not_named_only(params: object) -> None:
+    with pytest.raises(FeedNotNamed):
+        require_feed(f"{alpaca_data.DATA}/v2/stocks/bars", params)
+    require_feed(f"{alpaca_data.TRADING}/v2/calendar", params)       # not a data path: passed untouched
+
+
+@pytest.mark.parametrize("url", [b"https://data.alpaca.markets/v2/stocks/bars",
+                                 "https://DATA.alpaca.markets./v2/stocks/bars",
+                                 "https://data.alpaca.markets//v2//stocks/bars",
+                                 "https://data.alpaca.markets/v2/stocks/%62ars",
+                                 "https://data.alpaca.markets/v2/stocks/spy/bars",
+                                 "https://data.alpaca.markets/V2/Stocks/SPY/Snapshot",
+                                 "  https://data.alpaca.markets/v2/stocks/bars  "])
+def test_the_url_is_normalised_before_matching(url: object) -> None:
+    with pytest.raises(FeedNotNamed):
+        require_feed(url, {"symbols": "SPY"})
+    require_feed(url, {"feed": "iex"})
+
+
+def test_a_malformed_url_raises_only_feed_not_named() -> None:
+    with pytest.raises(FeedNotNamed, match="cannot be read"):
+        require_feed("https://[data.alpaca.markets/v2/stocks/bars", {"feed": "iex"})
+    for other in ("https://[::1/x", "http://[bad", None, 12, object()):
+        require_feed(other, None)                       # not clearly a data request: untouched
 
 
 class _Session:
