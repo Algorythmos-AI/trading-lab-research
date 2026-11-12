@@ -1,0 +1,264 @@
+{
+ "counts": {
+  "data_valid": 5,
+  "eligible": 3,
+  "names": 6,
+  "picked": 3,
+  "ranked": 4
+ },
+ "market_notes": [
+  {
+   "code": "macro_high_next_session",
+   "types": [
+    "cpi"
+   ]
+  }
+ ],
+ "names": [
+  {
+   "benchmark": "SPY",
+   "cautions": [],
+   "data_valid": true,
+   "eligibility": "eligible",
+   "eligible": true,
+   "error_class": null,
+   "f3_distance_atr": 0.0,
+   "factors": {
+    "F1": {
+     "rank": 4.0,
+     "value": 0.020564
+    },
+    "F2": {
+     "rank": 1.0,
+     "value": 0.868607
+    },
+    "F3": {
+     "rank": 1.5,
+     "value": 0.0
+    },
+    "F4": {
+     "rank": 4.0,
+     "value": 0.828571
+    },
+    "F5": {
+     "rank": 1.0,
+     "value": 0.525507
+    }
+   },
+   "final_rank": 1,
+   "median_dollar_volume": 1674231084.76,
+   "picked": true,
+   "reason": null,
+   "score": 11.5,
+   "shown": {
+    "atr14": 4.684286,
+    "atr_pct": 0.020021,
+    "close": 233.97,
+    "direction": "up",
+    "trend": {
+     "ma20": "below",
+     "ma200": "above",
+     "ma50": "above"
+    }
+   },
+   "symbol": "NVDA"
+  },
+  {
+   "benchmark": "SPY",
+   "cautions": [],
+   "data_valid": true,
+   "eligibility": "eligible",
+   "eligible": true,
+   "error_class": null,
+   "f3_distance_atr": 1.553231,
+   "factors": {
+    "F1": {
+     "rank": 1.0,
+     "value": 1.122762
+    },
+    "F2": {
+     "rank": 2.0,
+     "value": 0.800513
+    },
+    "F3": {
+     "rank": 4.0,
+     "value": -1.553231
+    },
+    "F4": {
+     "rank": 1.0,
+     "value": 0.995413
+    },
+    "F5": {
+     "rank": 4.0,
+     "value": 0.004739
+    }
+   },
+   "final_rank": 2,
+   "median_dollar_volume": 1171384987.35,
+   "picked": true,
+   "reason": null,
+   "score": 12.0,
+   "shown": {
+    "atr14": 3.824286,
+    "atr_pct": 0.026113,
+    "close": 146.45,
+    "direction": "down",
+    "trend": {
+     "ma20": "below",
+     "ma200": "below",
+     "ma50": "below"
+    }
+   },
+   "symbol": "QQQ"
+  },
+  {
+   "benchmark": "SPY",
+   "cautions": [],
+   "data_valid": true,
+   "eligibility": "earnings_gap",
+   "eligible": false,
+   "error_class": null,
+   "f3_distance_atr": 0.0,
+   "factors": {
+    "F1": {
+     "rank": 3.0,
+     "value": 0.300398
+    },
+    "F2": {
+     "rank": 3.0,
+     "value": 0.75836
+    },
+    "F3": {
+     "rank": 1.5,
+     "value": 0.0
+    },
+    "F4": {
+     "rank": 2.0,
+     "value": 0.952996
+    },
+    "F5": {
+     "rank": 3.0,
+     "value": 0.268416
+    }
+   },
+   "final_rank": 3,
+   "median_dollar_volume": 2133794246.25,
+   "picked": false,
+   "reason": null,
+   "score": 12.5,
+   "shown": {
+    "atr14": 6.390714,
+    "atr_pct": 0.021904,
+    "close": 291.76,
+    "direction": "up",
+    "trend": {
+     "ma20": "above",
+     "ma200": "above",
+     "ma50": "below"
+    }
+   },
+   "symbol": "TSLA"
+  },
+  {
+   "benchmark": "SPY",
+   "cautions": [
+    "earnings_later"
+   ],
+   "data_valid": true,
+   "eligibility": "eligible",
+   "eligible": true,
+   "error_class": null,
+   "f3_distance_atr": 0.880869,
+   "factors": {
+    "F1": {
+     "rank": 2.0,
+     "value": 0.356902
+    },
+    "F2": {
+     "rank": 4.0,
+     "value": 0.756856
+    },
+    "F3": {
+     "rank": 3.0,
+     "value": -0.880869
+    },
+    "F4": {
+     "rank": 3.0,
+     "value": 0.936128
+    },
+    "F5": {
+     "rank": 2.0,
+     "value": 0.4296
+    }
+   },
+   "final_rank": 4,
+   "median_dollar_volume": 1692080404.93,
+   "picked": true,
+   "reason": null,
+   "score": 14.0,
+   "shown": {
+    "atr14": 5.324286,
+    "atr_pct": 0.022782,
+    "close": 233.71,
+    "direction": "up",
+    "trend": {
+     "ma20": "above",
+     "ma200": "above",
+     "ma50": "above"
+    }
+   },
+   "symbol": "AAPL"
+  },
+  {
+   "benchmark": "SPY",
+   "cautions": [],
+   "data_valid": false,
+   "eligibility": "stale_bar",
+   "eligible": false,
+   "error_class": null,
+   "f3_distance_atr": null,
+   "factors": null,
+   "final_rank": null,
+   "median_dollar_volume": null,
+   "picked": false,
+   "reason": "stale_bar",
+   "score": null,
+   "shown": null,
+   "symbol": "AMD"
+  },
+  {
+   "benchmark": "QQQ",
+   "cautions": [],
+   "data_valid": true,
+   "eligibility": "no_zone",
+   "eligible": false,
+   "error_class": null,
+   "f3_distance_atr": null,
+   "factors": null,
+   "final_rank": null,
+   "median_dollar_volume": null,
+   "picked": false,
+   "reason": "no_zone",
+   "score": null,
+   "shown": null,
+   "symbol": "SPY"
+  }
+ ],
+ "next_session": "2026-11-12",
+ "params_sha": "316cfd1e3d13e53ee21cc23ab2b1199a1cb36a2b52db8f9734981a0a0d32d6ce",
+ "picker_ref": "s1-golden",
+ "picks": [
+  "NVDA",
+  "QQQ",
+  "AAPL"
+ ],
+ "schema": "wt.options.select/stage1",
+ "selection_note": null,
+ "session": "2026-11-11",
+ "status": "ok",
+ "unreadable_event_rows": {
+  "earnings_rows": 0,
+  "macro_rows": 0
+ },
+ "version": 1
+}
