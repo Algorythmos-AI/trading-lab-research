@@ -87,6 +87,10 @@ const FILES = [
   "../src/lib/quote-conditions.ts",
   "../src/lib/quote-probe-run.ts",
   "../src/app/api/desk/probe/route.ts",
+  "../src/lib/fill-check.ts",
+  "../src/lib/fill-check-fetch.ts",
+  "../src/lib/fill-check-run.ts",
+  "../src/app/api/desk/fill-check/route.ts",
 ];
 
 const BANNED = [
