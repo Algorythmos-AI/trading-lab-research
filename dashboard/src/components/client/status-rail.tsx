@@ -306,7 +306,7 @@ export function StatusRail({ day: server, facts = null }: { day: RailDay | null;
           </span>
         </div>
       ) : null}
-      {/* The board's event line while the board is folded into the rail; once it unfolds, the board draws it instead. */}
+      {/* The board's event line while the board is folded into the rail or the cockpit is on; otherwise the board draws it. */}
       <BoardEvents where="rail" />
       {withNotes?.usedUp ? (
         <p data-rail-used-up className="text-explain text-bad font-medium">

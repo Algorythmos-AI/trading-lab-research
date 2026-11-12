@@ -3,10 +3,10 @@
 // The calendar here is the repo's own with two synthetic earnings rows added on days the fixtures never use.
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { DoneTodayContext, type DoneToday } from "@/components/client/done-today";
 import { StatusRail } from "@/components/client/status-rail";
-import { BoardContext, TradeNow, type Board } from "@/components/client/trade-now";
+import { BoardContext, eventsPlace, TradeNow, type Board } from "@/components/client/trade-now";
 import { FROZEN_NOW, focusOptions } from "@/lib/fixture-variants";
 import { SCRIPT_ANSWER_LAG_MS, SCRIPT_STEPS, SCRIPT_SYMBOLS, scriptBars, scriptQuote, stepInstant } from "@/lib/fixture-script";
 import { nyInstant, type LiveQuote, type Options } from "@/lib/options";
@@ -14,6 +14,10 @@ import { type BoardInput, boardMode, boardRows } from "@/lib/trade-now";
 import { SERVER_SETTLE_MS } from "@/lib/trade-state";
 import type { ManageView } from "@/lib/trade-manage";
 import optionsJson from "./fixtures/options.v1.json";
+
+// The page's cockpit switch, set by each test (the real one reads this browser's storage, off in a server render).
+const cockpit = vi.hoisted(() => ({ on: false }));
+vi.mock("@/components/client/cockpit-state", () => ({ useCockpit: () => cockpit.on, setCockpit: () => undefined }));
 
 vi.mock("@/lib/market-calendar.json", async (importOriginal) => {
   const real = ((await importOriginal()) as { default: { earnings: unknown[] } }).default;
@@ -120,7 +124,7 @@ describe("folded before the open: the line is in the rail", () => {
     expect(count(rail)).toBe(1);
     expect(rail).toContain('data-board-events-where="rail"');
     expect(rail).toContain("<span>Jobs report today at 08:30 New York</span>");
-    expect(rail).toContain("<span>MSFT earnings were before today's open</span>");
+    expect(rail).toContain("<span>MSFT earnings today before the open</span>");
     expect(rail).toContain("<span>AAPL earnings today after the close (16:00 New York)</span>");
   });
 
@@ -212,4 +216,48 @@ describe("the fixtures draw no line in any state", () => {
       expect(count(rail) + count(drawn)).toBe(0);
     });
   }
+});
+
+describe("the cockpit: it hides the board, so the line stays in the rail", () => {
+  afterEach(() => {
+    cockpit.on = false;
+  });
+  const D = "2026-12-09";
+
+  it("eventsPlace: the rail while folded or in the cockpit, the board otherwise", () => {
+    expect(eventsPlace(false, false)).toBe("board");
+    expect(eventsPlace(true, false)).toBe("rail");
+    expect(eventsPlace(false, true)).toBe("rail");
+    expect(eventsPlace(true, true)).toBe("rail");
+  });
+
+  for (const [what, b] of [
+    ["the board live", board(D, at(D, "10:00"), ["AVGO"])],
+    ["a manage card open", board(D, at(D, "10:00"), ["AVGO"], "ok", ["AVGO"])],
+    ["a manage card open before the open", board(D, at(D, "08:00"), ["AVGO"], "ok", ["AVGO"])],
+    ["before the open", board(D, at(D, "08:00"), ["AVGO"])],
+  ] as const) {
+    it(`cockpit on, ${what}: once, in the rail`, () => {
+      cockpit.on = true;
+      const { rail, board: drawn } = page(b);
+      expect(count(rail)).toBe(1);
+      expect(count(drawn)).toBe(0);
+      expect(rail).toContain('data-board-events-where="rail"');
+    });
+  }
+
+  it("cockpit off: unchanged (the live board draws it, the rail does not)", () => {
+    const { rail, board: drawn } = page(board(D, at(D, "10:00"), ["AVGO"]));
+    expect(count(rail)).toBe(0);
+    expect(count(drawn)).toBe(1);
+  });
+
+  it("the fixtures draw no line with the cockpit on either", () => {
+    cockpit.on = true;
+    const names = E.focus!.items.map((i) => i.symbol);
+    for (const b of [board(S, Date.parse(FROZEN_NOW), names), board(S, at(S, "08:00"), names), board(S, Date.parse(FROZEN_NOW), names, "ok", ["QQQ"])]) {
+      const { rail, board: drawn } = page(b);
+      expect(count(rail) + count(drawn)).toBe(0);
+    }
+  });
 });

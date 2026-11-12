@@ -4,9 +4,9 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { BoardEventsLine } from "@/components/board-events";
 import { TradeNowBoard } from "@/components/client/trade-now";
-import { boardEvents, type BoardEvent, type EventCalendar, REPO_CALENDAR, releaseTiming, SOON_MIN } from "@/lib/board-events";
+import { BoardEventsLine, MAX_SHOWN } from "@/components/board-events";
+import { boardEvents, type BoardEvent, EARNINGS_MAX_AGE_DAYS, type EventCalendar, INDEX_NAMES, NOTE_KINDS, RELEASE_COVERAGE, REPO_CALENDAR, releaseTiming, SOON_MIN } from "@/lib/board-events";
 import { FROZEN_NOW, focusOptions } from "@/lib/fixture-variants";
 import { SCRIPT_EXTRA_FOCUS } from "@/lib/fixture-script";
 import { nyInstant, type Options } from "@/lib/options";
@@ -72,9 +72,11 @@ describe("releases on the board's day", () => {
 });
 
 describe("each focus name's earnings", () => {
-  it("before today's open, already out", () => {
+  it("before today's open: still ahead until 09:30 New York, out from 09:30:00", () => {
     const cal = withEarnings({ date: "2026-11-12", symbol: "MSFT", when: "bmo", quality: "confirmed" });
-    expect(run("2026-11-12", "10:00", ["MSFT"], cal)).toEqual([
+    expect(texts(run("2026-11-12", "05:00", ["MSFT"], cal))).toEqual(["MSFT earnings today before the open"]);
+    expect(texts(run("2026-11-12", "09:29:59", ["MSFT"], cal))).toEqual(["MSFT earnings today before the open"]);
+    expect(run("2026-11-12", "09:30:00", ["MSFT"], cal)).toEqual([
       { kind: "earnings_before_open", key: "earnings_before_open:MSFT", symbol: "MSFT", timing: null, expected: false, text: "MSFT earnings were before today's open" },
     ]);
   });
@@ -138,7 +140,7 @@ describe("what the calendar does not cover", () => {
   });
 
   it("a month after the calendar's last listed releases says which are missing", () => {
-    expect(texts(run("2028-01-14", "10:00", []))).toEqual(["The event calendar lists no dates yet for CPI, Jobs report and Fed decisions in January 2028"]);
+    expect(texts(run("2028-01-14", "10:00", []))).toEqual(["The event calendar lists no dates yet for CPI inflation, Jobs report and Fed decision in January 2028"]);
   });
 
   it("a focus name whose earnings dates the calendar does not keep is named", () => {
@@ -266,7 +268,7 @@ describe("BoardEventsLine", () => {
       [run("2026-11-12", "10:00", ["TSLA"], cal), "earnings_last_close", "TSLA earnings were after the last close (Wed 11 Nov)"],
       [run("2026-11-12", "10:00", ["NVDA"], cal), "earnings_next_open", "NVDA earnings tomorrow before the open"],
       [run("2030-03-11", "10:00", []), "not_covered", "The event calendar does not cover Mon 11 Mar 2030"],
-      [run("2028-01-14", "10:00", []), "not_covered", "The event calendar lists no dates yet for CPI, Jobs report and Fed decisions in January 2028"],
+      [run("2028-01-14", "10:00", []), "not_covered", "The event calendar lists no dates yet for CPI inflation, Jobs report and Fed decision in January 2028"],
       [run("2026-11-12", "10:00", ["ZZZZ"], cal), "earnings_not_kept", "The event calendar keeps no earnings dates for ZZZZ"],
     ];
     for (const [evs, kind, text] of cases) {
@@ -287,10 +289,13 @@ describe("BoardEventsLine", () => {
     expect(out.indexOf("Fed decision at 14:00 New York, in 15 min")).toBeLessThan(out.indexOf("AVGO earnings today after the close (16:00 New York)"));
     expect(out).toContain('data-board-event-timing="soon"');
     expect(out).toContain('data-board-event-symbol="AVGO"');
-    expect(out).toContain('<span class="sr-only">; </span>');
+    // A screen reader hears the whole list once, after what the calendar covers; the drawn items are hidden from it.
+    expect(out).toContain(`<span class="sr-only">${RELEASE_COVERAGE}: Fed decision at 14:00 New York, in 15 min; AVGO earnings today after the close (16:00 New York)</span>`);
+    expect(out).toContain(`title="${RELEASE_COVERAGE}: Fed decision at 14:00 New York, in 15 min; AVGO earnings today after the close (16:00 New York)"`);
+    expect(out).toMatch(/<span aria-hidden="true" data-board-event="release"/);
   });
 
-  it("on the board: under the header, before the rows; the board without the line is drawn exactly as before", () => {
+  it("on the board: under the header, before the rows; events={null} draws the same board as no events prop, and removing the line from a board that has one gives that board back", () => {
     const props = { mode: { kind: "next", line: "Next session" } as const, rows: [], now: at("2026-12-09", "09:00"), paused: false, onOpen: () => undefined };
     const without = renderToStaticMarkup(createElement(TradeNowBoard, props));
     expect(renderToStaticMarkup(createElement(TradeNowBoard, { ...props, events: null }))).toBe(without);
@@ -299,7 +304,115 @@ describe("BoardEventsLine", () => {
     expect(withLine).toContain("data-board-events");
     expect(withLine.indexOf("data-board-header")).toBeLessThan(withLine.indexOf("data-board-events"));
     expect(withLine.indexOf("data-board-events")).toBeLessThan(withLine.indexOf("data-board-line"));
-    // Taking the line out gives back the board as it was, to the character.
+    // Taking the line out gives back the board drawn without one, to the character.
     expect(withLine.replace(/<p data-board-events.*?<\/p>/, "")).toBe(without);
+  });
+});
+
+describe("names whose dates have run out (the repo's own rows; the last is AVGO on 2026-12-09)", () => {
+  const SINGLES = ["AAPL", "MSFT", "META", "TSLA"];
+  it("mirrors the host's horizon and the index names", () => {
+    expect(EARNINGS_MAX_AGE_DAYS).toBe(75);
+    expect(INDEX_NAMES).toEqual(["SPY", "QQQ"]);
+  });
+
+  it("2026-11-17, a listed date: shows it, and nothing about the others, all inside the window", () => {
+    expect(texts(run("2026-11-17", "10:00", ["NVDA", ...SINGLES, "SPY"]))).toEqual(["NVDA earnings today after the close (16:00 New York)"]);
+  });
+
+  it("2026-12-10, just after the last row: AVGO's report is the last close's, the others are quiet", () => {
+    expect(texts(run("2026-12-10", "10:00", ["AVGO", ...SINGLES]))).toEqual(["CPI inflation was at 08:30 New York today", "AVGO earnings were after the last close (Wed 9 Dec)"]);
+  });
+
+  it("2027-01-28 and 2027-03-01: says no upcoming date is listed, naming the single names in focus, never SPY or QQQ", () => {
+    const jan = run("2027-01-28", "10:00", ["SPY", "QQQ", ...SINGLES]);
+    expect(jan.filter((e) => e.kind === "earnings_not_listed")).toEqual([
+      { kind: "earnings_not_listed", key: "earnings_not_listed", symbol: null, timing: null, expected: false, text: "The event calendar lists no upcoming earnings date for AAPL, MSFT, META and TSLA" },
+    ]);
+    expect(texts(run("2027-03-01", "10:00", ["QQQ", "AAPL", "MSFT"]))).toContain("The event calendar lists no upcoming earnings date for AAPL and MSFT");
+    expect(run("2027-03-01", "10:00", ["SPY", "QQQ"])).toEqual([]);
+  });
+
+  it("the window's edge: quiet on the 75th day after a name's last row, named on the 76th; a name with no row at all is named", () => {
+    const cal: EventCalendar = { ...REPO_CALENDAR, earnings: [{ date: "2027-01-04", symbol: "AAPL", when: "amc", quality: "confirmed" }] };
+    // 2027-03-20 is the 75th day after 2027-01-04, 2027-03-21 the 76th (a weekend: the arithmetic is by day, not session).
+    // Only the names' notes are read here (2027-03-19 is also quad witching).
+    const note = (day: string, names: string[]) => texts(run(day, "10:00", names, cal).filter((e) => e.kind === "earnings_not_listed"));
+    expect(note("2027-03-19", ["AAPL"])).toEqual([]);
+    expect(note("2027-03-20", ["AAPL"])).toEqual([]);
+    expect(note("2027-03-21", ["AAPL"])).toEqual(["The event calendar lists no upcoming earnings date for AAPL"]);
+    expect(note("2027-03-22", ["AAPL"])).toEqual(["The event calendar lists no upcoming earnings date for AAPL"]);
+    expect(note("2027-03-19", ["MSFT"])).toEqual(["The event calendar lists no upcoming earnings date for MSFT"]);
+  });
+});
+
+describe("repeated rows and names", () => {
+  it("two rows for one name, day and time of day are one item, the confirmed one; a name listed twice is one name", () => {
+    const cal = withEarnings(
+      { date: "2026-11-12", symbol: "MSFT", when: "amc", quality: "expected" },
+      { date: "2026-11-12", symbol: "MSFT", when: "amc", quality: "confirmed" },
+      { date: "2026-11-12", symbol: "MSFT", when: "amc", quality: "expected" },
+    );
+    expect(run("2026-11-12", "10:00", ["MSFT", "MSFT"], cal)).toEqual([
+      { kind: "earnings_after_close", key: "earnings_after_close:MSFT", symbol: "MSFT", timing: null, expected: false, text: "MSFT earnings today after the close (16:00 New York)" },
+    ]);
+  });
+
+  it("keys are unique whatever the rows hold (a release listed twice)", () => {
+    const cal: EventCalendar = { ...REPO_CALENDAR, macro: [...REPO_CALENDAR.macro, { date: "2026-12-09", time_et: "14:00", code: "fomc_decision", quality: "exact" }] };
+    const evs = run("2026-12-09", "10:00", ["AVGO"], cal);
+    const keys = evs.map((e) => e.key);
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(keys).toEqual(["release:fomc_decision:14:00", "release:fomc_decision:14:00#2", "earnings_after_close:AVGO"]);
+  });
+});
+
+describe("a long line", () => {
+  // Eight items: two releases, three earnings, three notes (synthetic rows on a day in a month with no listed releases).
+  const cal: EventCalendar = {
+    macro: [
+      ...REPO_CALENDAR.macro,
+      { date: "2028-01-14", time_et: "08:30", code: "cpi", quality: "exact" },
+      { date: "2028-01-14", time_et: "14:00", code: "fomc_minutes", quality: "derived" },
+    ],
+    earnings: [
+      { date: "2028-01-14", symbol: "AAPL", when: "bmo", quality: "confirmed" },
+      { date: "2028-01-14", symbol: "MSFT", when: "amc", quality: "confirmed" },
+      { date: "2028-01-13", symbol: "META", when: "amc", quality: "confirmed" },
+    ],
+    options_names: REPO_CALENDAR.options_names,
+  };
+  const evs = run("2028-01-14", "10:00", ["AAPL", "MSFT", "META", "TSLA", "ZZZZ"], cal);
+
+  it("has eight items, the events first and the three notes last", () => {
+    expect(evs).toHaveLength(8);
+    expect(evs.map((e) => NOTE_KINDS.has(e.kind))).toEqual([false, false, false, false, false, true, true, true]);
+  });
+
+  it("draws five and '+3 more', folding notes only; the title and the screen reader have all eight", () => {
+    expect(MAX_SHOWN).toBe(5);
+    const out = html(evs);
+    const drawn = [...out.matchAll(/data-board-event="([a-z_]+)"/g)].map((m) => m[1]);
+    expect(drawn).toHaveLength(5);
+    expect(drawn.every((k) => !NOTE_KINDS.has(k as BoardEvent["kind"]))).toBe(true);
+    expect(out).toContain('data-board-events-more="3"');
+    expect(out).toContain("+3 more");
+    const all = `${RELEASE_COVERAGE}: ${evs.map((e) => e.text).join("; ")}`;
+    expect(out).toContain(`title="${all}"`);
+    expect(out).toContain(`<span class="sr-only">${all}</span>`);
+  });
+
+  it("an event is never the one folded while a note is drawn, whatever order the items come in", () => {
+    const out = html([...evs].reverse());
+    const drawn = [...out.matchAll(/data-board-event="([a-z_]+)"/g)].map((m) => m[1]);
+    expect(drawn.filter((k) => NOTE_KINDS.has(k as BoardEvent["kind"]))).toEqual([]);
+    expect(drawn).toHaveLength(5);
+  });
+});
+
+describe("what the line covers", () => {
+  it("the coverage words match the releases the repo's calendar holds", () => {
+    expect(new Set(REPO_CALENDAR.macro.map((r) => r.code))).toEqual(new Set(["cpi", "nfp", "fomc_decision", "fomc_minutes", "quad_witching"]));
+    expect(RELEASE_COVERAGE).toBe("Calendar of CPI, jobs, Fed decisions and minutes, quad witching, and the desk names' earnings");
   });
 });

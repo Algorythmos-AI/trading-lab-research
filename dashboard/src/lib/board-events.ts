@@ -9,14 +9,16 @@
 //
 // Data honesty. A release the calendar does not list is not shown, and the line never says that a day has no event:
 // an empty answer means only that the calendar lists nothing. When the calendar does not cover the day, or has no
-// dates yet for a month's releases, or keeps no earnings dates for a focus name, it says so. A date the calendar marks
-// as not confirmed is shown as expected.
+// dates yet for a month's releases, keeps no earnings dates for a focus name, or has let a focus name's dates run out,
+// it says so. A date the calendar marks as not confirmed is shown as expected. The calendar holds only CPI, the jobs
+// report, Fed decisions and minutes, quad witching and the desk names' earnings (RELEASE_COVERAGE): other releases
+// (PCE, GDP, ...) are never on the line, and the line's title and screen-reader text say what it covers.
 //
 // Severity. The dashboard's copy of the calendar carries no severity (the source file's column is not copied into
 // market-calendar.json), so nothing here ranks or filters releases by one: every release the copy lists for the day is
 // shown, by its own label. Adding the severity to that file would change the engine's label; it is not done here.
 import data from "./market-calendar.json";
-import { addDays, sessionOf, unlistedByMonth } from "./market-calendar";
+import { addDays, SHORT_LABEL, sessionOf, unlistedByMonth } from "./market-calendar";
 import { eventLabel, nyInstant } from "./options";
 import { weekDate } from "./format";
 
@@ -26,6 +28,20 @@ import { weekDate } from "./format";
  * broker by hand. It changes the wording only: no state, level, guard or alert reads it.
  */
 export const SOON_MIN = 30;
+
+/**
+ * A kept name whose latest earnings row is more than this many days before the session, with none after it, is named
+ * as having no upcoming date listed. The same horizon as the host's calendar check: EARNINGS_MAX_AGE_DAYS in
+ * src/wt/risk/events.py (tests/unit/test_board_events_parity.py holds the two equal). A name reports about once a
+ * quarter, so inside this window a quiet name is one whose next date is not due yet, not one that was never added.
+ */
+export const EARNINGS_MAX_AGE_DAYS = 75;
+
+/** The names that report no earnings: config/options_clone.yaml's contract.index_names (the parity test holds them). */
+export const INDEX_NAMES: readonly string[] = ["SPY", "QQQ"];
+
+/** What the calendar this line reads covers, for the line's title and its screen-reader text. */
+export const RELEASE_COVERAGE = "Calendar of CPI, jobs, Fed decisions and minutes, quad witching, and the desk names' earnings";
 
 /** The calendar rows this line reads. The default is the repo's own file; a test hands it other rows. */
 export interface EventCalendar {
@@ -46,7 +62,7 @@ export type BoardEventKind =
   | "earnings_during"
   /** A focus name reports today, at a time of day the calendar does not give. */
   | "earnings_today"
-  /** A focus name reported before today's open. */
+  /** A focus name reports before today's open: "today before the open" until 09:30, "were before" from then. */
   | "earnings_before_open"
   /** A focus name reported after the last session's close. */
   | "earnings_last_close"
@@ -55,10 +71,15 @@ export type BoardEventKind =
   /** The calendar does not cover the day, or has no dates yet for some of the month's releases. */
   | "not_covered"
   /** The calendar keeps no earnings dates for these focus names. */
-  | "earnings_not_kept";
+  | "earnings_not_kept"
+  /** The calendar's dates for these focus names have run out: none upcoming, the last one older than the window. */
+  | "earnings_not_listed";
 
 /** Where a release stands against the board's clock. Wording only. */
 export type ReleaseTiming = "ahead" | "soon" | "now" | "past";
+
+/** The kinds that say what the calendar does not cover: drawn after every event, and the first folded away. */
+export const NOTE_KINDS: ReadonlySet<BoardEventKind> = new Set<BoardEventKind>(["not_covered", "earnings_not_kept", "earnings_not_listed"]);
 
 export interface BoardEvent {
   kind: BoardEventKind;
@@ -109,7 +130,9 @@ export function releaseTiming(at: number, now: number): { timing: ReleaseTiming;
  * unless `now` falls on the session's own New York day: the line is about the day the board is trading. Releases
  * first (earliest first), then each focus name in the order given, then what the calendar does not cover.
  */
-export function boardEvents({ session, now, names, calendar = REPO_CALENDAR }: { session: string; now: number; names: readonly string[]; calendar?: EventCalendar }): BoardEvent[] {
+export function boardEvents({ session, now, names: given, calendar = REPO_CALENDAR }: { session: string; now: number; names: readonly string[]; calendar?: EventCalendar }): BoardEvent[] {
+  // A name listed twice is one name.
+  const names = [...new Set(given)];
   const open = nyInstant(session, 0);
   const next = nyInstant(addDays(session, 1), 0);
   if (open === null || next === null || !(now >= open && now < next)) return [];
@@ -146,23 +169,35 @@ export function boardEvents({ session, now, names, calendar = REPO_CALENDAR }: {
     out.push({ kind: "release", key: `release:${r.code}:${r.time_et}`, symbol: null, timing: t.timing, expected, text: `${text}${tail}` });
   }
 
-  // Each focus name's earnings around the day.
+  // Each focus name's earnings around the day. One row per name, day and time of day: a confirmed row before an
+  // expected one.
+  const byKey = new Map<string, EventCalendar["earnings"][number]>();
+  for (const r of calendar.earnings) {
+    const k = `${r.symbol}|${r.date}|${r.when ?? ""}`;
+    const had = byKey.get(k);
+    if (!had || (had.quality !== "confirmed" && r.quality === "confirmed")) byKey.set(k, r);
+  }
+  const earnings = [...byKey.values()];
   const kept = new Set(calendar.options_names);
+  const index = new Set(INDEX_NAMES);
   const prev = sessionFrom(session, -1);
   const after = sessionFrom(session, 1);
+  const openAt = day.open === null ? null : nyInstant(session, day.open);
+  const oldest = addDays(session, -EARNINGS_MAX_AGE_DAYS);
   const notKept: string[] = [];
+  const notListed: string[] = [];
   for (const symbol of names) {
     if (!kept.has(symbol)) {
       notKept.push(symbol);
       continue;
     }
-    const rows = calendar.earnings.filter((r) => r.symbol === symbol);
+    const rows = earnings.filter((r) => r.symbol === symbol);
     const add = (kind: BoardEventKind, row: { quality: string }, words: string) => {
       const expected = row.quality !== "confirmed";
       out.push({ kind, key: `${kind}:${symbol}`, symbol, timing: null, expected, text: `${symbol} ${words}${expected ? ", date expected" : ""}` });
     };
     for (const r of rows.filter((x) => x.date === session)) {
-      if (r.when === "bmo") add("earnings_before_open", r, "earnings were before today's open");
+      if (r.when === "bmo") add("earnings_before_open", r, openAt !== null && now < openAt ? "earnings today before the open" : "earnings were before today's open");
       else if (r.when === "amc") add("earnings_after_close", r, `earnings today after the close (${day.close === null ? "close" : hhmm(day.close)} New York)`);
       else if (r.when === "during") add("earnings_during", r, "earnings today during the session");
       else add("earnings_today", r, "earnings today, time of day not listed");
@@ -173,15 +208,32 @@ export function boardEvents({ session, now, names, calendar = REPO_CALENDAR }: {
         add("earnings_next_open", r, after === addDays(session, 1) ? "earnings tomorrow before the open" : `earnings ${weekDate(after)} before the open, the next session`);
       }
     }
+    // A single name whose dates have run out: none from the last session on, and the latest older than the window.
+    if (!index.has(symbol) && !rows.some((r) => r.date >= (prev ?? session))) {
+      const latest = rows.reduce((m, r) => (r.date > m ? r.date : m), "");
+      if (latest === "" || latest < oldest) notListed.push(symbol);
+    }
   }
 
-  // What the calendar does not cover.
-  const unlisted = unlistedByMonth(undefined, calendar.macro).get(session.slice(0, 7)) ?? [];
+  // What the calendar does not cover, after every event. Labels as the items name the same releases.
+  const unlisted = (unlistedByMonth(undefined, calendar.macro).get(session.slice(0, 7)) ?? []).map((label) => {
+    const code = Object.keys(SHORT_LABEL).find((c) => SHORT_LABEL[c] === label);
+    return code ? eventLabel(code) : label;
+  });
   if (unlisted.length) {
     out.push({ kind: "not_covered", key: "not_covered:month", symbol: null, timing: null, expected: false, text: `The event calendar lists no dates yet for ${listWords(unlisted)} in ${monthWords(session.slice(0, 7))}` });
+  }
+  if (notListed.length) {
+    out.push({ kind: "earnings_not_listed", key: "earnings_not_listed", symbol: null, timing: null, expected: false, text: `The event calendar lists no upcoming earnings date for ${listWords(notListed)}` });
   }
   if (notKept.length) {
     out.push({ kind: "earnings_not_kept", key: "earnings_not_kept", symbol: null, timing: null, expected: false, text: `The event calendar keeps no earnings dates for ${listWords(notKept)}` });
   }
-  return out;
+  // Keys unique whatever the rows hold: a repeat gets a count.
+  const seen = new Map<string, number>();
+  return out.map((e) => {
+    const n = seen.get(e.key) ?? 0;
+    seen.set(e.key, n + 1);
+    return n === 0 ? e : { ...e, key: `${e.key}#${n + 1}` };
+  });
 }

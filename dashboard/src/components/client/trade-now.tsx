@@ -51,6 +51,7 @@ import {
 import { pausedAgeS } from "@/lib/level-ladder";
 import { type NameState, type NameStateName, serverNow } from "@/lib/trade-state";
 import { cn } from "@/lib/utils";
+import { useCockpit } from "./cockpit-state";
 import { useDeskShadow } from "./desk-shadow";
 import { useDone } from "./done-today";
 import { FeedFacts, FeedRetry, useLive } from "./live-layer";
@@ -1024,14 +1025,22 @@ export function TradeNow() {
 }
 
 /**
- * The board's event line (BoardEventsLine), drawn in one place at a time: inside the board while it is drawn, and in
- * the status rail while the board is folded into it (before the open, while connecting, after the close). Display
- * only: worked out here from the board's day, clock and focus names, never handed to the board's states.
+ * Where the board's event line goes: the status rail while the board is folded into it (before the open, while
+ * connecting, after the close) or while the cockpit is on (it hides the board, never the rail); the board otherwise.
+ */
+export function eventsPlace(collapsed: boolean, cockpit: boolean): "board" | "rail" {
+  return collapsed || cockpit ? "rail" : "board";
+}
+
+/**
+ * The board's event line (BoardEventsLine), drawn in exactly one place at a time (eventsPlace). Display only: worked
+ * out here from the board's day, clock and focus names, never handed to the board's states.
  */
 export function BoardEvents({ where }: { where: "board" | "rail" }) {
   const b = useBoard();
+  const cockpit = useCockpit();
   if (!b || !b.on || b.now === null) return null;
-  if ((where === "rail") !== boardCollapsed(b.mode, b.manage.views.length)) return null;
+  if (eventsPlace(boardCollapsed(b.mode, b.manage.views.length), cockpit) !== where) return null;
   return <BoardEventsLine where={where} events={boardEvents({ session: b.session, now: b.now, names: b.items.map((i) => i.symbol) })} />;
 }
 
