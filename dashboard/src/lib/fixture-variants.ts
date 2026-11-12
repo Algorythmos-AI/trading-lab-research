@@ -22,6 +22,8 @@ export const VARIANT_COOKIE = "fx";
  * - `quotes-tick`: the live price flips by one cent every three seconds, without changing any name's state.
  * - `quotes-flaky`: a short outage of the live feed. The first request answers, the next FLAKY_FAILS fail (502), and
  *   every one after answers again; the count is kept per browser in the `fxflaky` cookie the route sets.
+ * - `quotes-suspect`: each fixture name's quote trips the board's bad-data guards in turn (fixture-suspect.ts). The
+ *   guards' switches are off in fixture mode, so the board reads as with the plain fixture.
  * - `quotes-script`: the quotes and the session's bars walk a fixed morning (fixture-script.ts), one step every
  *   few seconds of the server's clock or the step in the `fxstep` cookie, so the "Trade now" board shows every state.
  *   With `focus`, AAPL joins the focus names.
@@ -55,6 +57,7 @@ export const VARIANT_FLAGS = [
   "quotes-tick",
   "quotes-script",
   "quotes-flaky",
+  "quotes-suspect",
   "chain-off",
   "chain-error",
   "chain-thin",
