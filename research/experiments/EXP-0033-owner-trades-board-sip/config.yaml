@@ -1,0 +1,322 @@
+# EXP-0033: the owner's own option positions, labelled by the board's end-of-day replay on SIP bars (DEC-0050).
+# EXP-0031's three questions asked again after the board moved to SIP: every frozen value of EXP-0031 (DEC-0045 as
+# amended by DEC-0049) is carried over unchanged except where a line below says otherwise (the feed, the window's
+# start, its early ends and its feed rule, the labeller rules, the seed, the close date). Design only: no label, no position split and no result exists
+# when this was written. A changed value is a dated amendment (the fees) or a new experiment and new trials
+# (everything else), except that a decision record may amend it before the window starts.
+experiment: EXP-0033
+status: registered                  # design only; no results file until the verdict script writes it once
+decision: DEC-0050
+family: M                           # the owner's own trades; total 6 with these three (config/trial_registry.yaml)
+trials:                             # every difference is a minus b
+  - {hypothesis: HYP-0056, trial: OWN-ONPLAN-SIP, a: on_plan, b: off_plan, difference: a_minus_b}
+  - {hypothesis: HYP-0057, trial: OWN-CAUTION-SIP, a: no_caution_no_unknown, b: at_least_one_caution, difference: a_minus_b}
+  - {hypothesis: HYP-0058, trial: OWN-EARLY-SIP, a: mid_window, b: open_window, difference: a_minus_b}
+# OWN-EARLY-SIP, like OWN-EARLY, is named for the open window it questions; it tests late minus early (mid_window minus open_window).
+
+positions:
+  source: the owner's journal (dashboard/src/lib/journal.schema.json, stocksdelta/journal), matched pieces
+  include: {kind: [call, put], side: long}
+  exclude: [stock, short]
+  contract_key: [symbol, kind, strike, expiry]
+  day: opened_at, New York date
+  grouping:
+    - pieces of one contract and New York day of opened_at, sorted by opened_at
+    - >-
+      a piece joins the current group while its opened_at is strictly before the group's latest closed_at so far
+      (an expired piece's closed_at as the journal gives it)
+    - a piece opened at or after it starts a new position, so a re-entry after a full exit is its own position
+  open_lot: >-
+    a position counts only once no lot of that contract opened that New York day remains in the journal's open;
+    one still open when the verdict is read is left out and counted
+  zero_cost_or_gap: a position with cost 0, or with a piece listed in the journal's gaps, is left out and counted
+  t0: the position's first opened_at
+
+unit:
+  cost: "sum of entry x multiplier x qty over the pieces; premium only, fees not added"
+  gross_pnl: "sum of the pieces' pnl as the journal reports it (before fees)"
+  fees:
+    open_per_contract: 0.55         # USD, the owner's own Webull figure, 2026-11-11
+    close_per_contract: 0.56        # USD, the same; about 1.11 a round trip (commission 0.50 + regulatory, OCC, SEC)
+    expired_close: 0                # a piece left to expire (close: expired) pays no closing fee
+    source: "the owner, in session, 2026-11-11; an estimate that can drift by a cent"
+    change: >-
+      a dated amendment to DEC-0050 (or one to DEC-0045 that names EXP-0033); the verdict is read on the fees
+      registered here, and any amended fees are reported beside it, so an amendment timed after seeing results moves
+      nothing
+    fees_included: >-
+      the subtraction assumes the journal's fees_included is false or null; a journal with it true ends the window
+      (an importer change)
+  net_pnl: gross_pnl - fees
+  R25: net_pnl / (0.25 * cost)      # rule 5's cap: -1 is the -25% stop (a little below it, by the fees)
+  R50: net_pnl / 50                 # rule 4's risk, RISK_PER_TRADE
+  primary: R25
+  also_reported: [R50, R25 before fees, R50 before fees]
+
+labels:
+  method: end_of_day_replay         # never the live server log of DEC-0044
+  inputs: [the stored edition for the session, the session's settled 2-minute SIP bars asked for by name, the journal]
+  feed: >-
+    SIP by name (DEC-0050, as DEC-0049 point 1 does for IEX), never through ALPACA_FEED or a default; no SIP bars
+    for a session follows labeller_rules fetch; a test proves a run with ALPACA_FEED=iex still asks for SIP; IEX
+    bars are never read for a label of this experiment
+  row_stores: [feed asked for, ENGINE_VERSION, time the bars were fetched]   # DEC-0049, carried over
+  engine:
+    files:                          # in dashboard/src/lib/
+      - trade-state.ts
+      - trade-now.ts
+      - entry-checks.ts
+      - focus-plan.ts
+      - options.ts
+    engine_version: a content hash of those files in the release that first writes labels
+    frozen_copy: >-
+      the replay runs a frozen copy of those files; later changes to the desk (a DEC-0041 removal among them) do not
+      reach the labels
+    written: once per session, never worked out again
+    other_engine_version: a change to the frozen copy's hash after the start ends the window with no verdict
+  frozen_numbers:                   # the values in the engine at registration (DEC-0035 section 3)
+    ENTRY_ATR: 0.01
+    STOP_ATR: 0.1
+    MIN_ROOM_MULTIPLE: 2
+    RETEST_ATR: 0.1
+    MAX_BARS_TO_RETEST: 6
+    ALT_LIVE_BARS: 3
+    ALT_MAX_ATR: 1
+    FAIL_WITHIN_BARS: 3
+    SWEEP_MIN_ATR: 0.25
+    FIRST_ENTRY_MIN: "09:35"
+    LUNCH: ["11:30", "13:00"]
+    FLAT_MIN: "15:10"
+    CLOSE_GRACE_MS: 5000
+    IV_CAP_INDEX: 0.35
+    IV_CAP_SINGLE: 0.7
+    LATE: ["11:00", "14:30"]
+    MAX_TRADES_PER_DAY: 5
+  evaluation:
+    when: once per 2-minute bar, at now = the bar's end + CLOSE_GRACE_MS, and at the extra instants of labeller_rules
+    function: nameState
+    inputs_from: only bars that ended at or before now
+    quote: >-
+      day: the session; price: the last close; open: the first bar's open; high and low: the highest high and lowest
+      low since the open; prev_close: null; at: now
+    leader_quote: >-
+      built the same way from SMH's bars, vwap the volume-weighted mean of the bars' own VWAPs; stored bars without
+      volume leave the leader check unknown
+    bars: Bars2m from the settled bars alone; receivedAt = now
+    won_today: from the journal pieces closed before now that New York day
+    day_limit_used: >-
+      from the journal pieces closed before now that day (for the loss) and the buy fills before now that day (for
+      the cap: each distinct opened_at of one contract is one entry, so one buy sold in parts counts once)
+  side_state: >-
+    nameState(...)[side].state while the row's state is neither no_trade nor paused, and no_trade otherwise; it holds
+    from now until the next evaluation
+  intervals: half-open, [from, until)
+  side: the position's own (call side for a call, put side for a put)
+  order:                            # the first that applies
+    - label: no_record
+      when: >-
+        the session's stored edition is missing; or the symbol's (or, for the leader check, SMH's) settled bars from
+        09:30 to the bar holding t0 are not complete (since after the open, or gaps above 0); or the position's side
+        at t0 carries gap or brokeEarlier; or a reason of labeller_rules or board_feed applies (no_edition,
+        half_day_mismatch, feed_unknown, board_off)
+    - {label: not_focus, when: "the symbol is not a focus name in that session's edition"}
+    - {label: in_zone, when: "t0 lies in an enter_zone interval extended by 60 s at its end, [from, until + 60 s)"}
+    - {label: early, when: "t0 lies in a get_ready interval"}
+    - label: alt
+      when: >-
+        some side of that name at t0 has alt non-null with alt.side equal to the position's kind, live as altAt with
+        its live check, while the row's state is neither no_trade nor paused (labeller_rules alt_gate)
+    - {label: off_plan, when: otherwise}
+  zone_extend_s: 60
+  on_plan: [in_zone, early]
+  cautions:                         # HYP-0049: entryChecks(input, kind) at now = t0, inputs built as in evaluation
+    counted: [range, gap, leader, iv, late, winner]
+    all_returned_count: true        # not only the two the desk shows
+    not_counted: [before10]         # the desk-only early caution of DEC-0043
+    no_caution_with_unknown: excluded_and_counted
+  windows:                          # HYP-0050, New York, full sessions only
+    open_window: ["09:35", "10:00"] # from, before
+    mid_window: ["10:00", "11:30"]
+    half_days: excluded             # as dashboard/src/lib/market-calendar.json marks them
+
+labeller_rules:                     # DEC-0050 point 3: settled here at registration, where EXP-0031's text left a gap
+  rows: >-
+    one label row per buy fill: each distinct (contract key, opened_at) among the long call and put pieces, lots still
+    held included; a position (grouping above) takes the row of its first fill, so a later close of an earlier lot
+    never moves its t0 or its label
+  row_stores_also: [the caution ids returned at t0 (cautions.counted), the count of unknown checks at t0]
+  instants: >-
+    the evaluation grid is every 2-minute bar's end + CLOSE_GRACE_MS, plus 09:35:00, 11:30:00, 13:00:00 and 15:10:00
+    New York (the board's own boundaries, from FIRST_ENTRY_MIN, LUNCH and FLAT_MIN), each read from the bars ended by
+    then; a side state holds from its instant to the next
+  alt_gate: an alternative counts only while the row's state is neither no_trade nor paused, as the side state is masked
+  edition: >-
+    each position is labelled against the edition in force at t0: the copy for the session that the store received
+    last at or before t0, by the store's own receipt time (never the publisher's as_of); the release that first writes
+    labels waits until the edition store keeps every same-session copy with its receipt time (none is overwritten); a
+    position with no copy received by t0 is no_record with the reason no_edition, counted
+  bars_complete: >-
+    for a focus name, the bars the evaluation holding t0 reads (from 09:30) are complete with no gap; one empty
+    2-minute slot therefore makes that name's later positions that day no_record, kept knowingly
+  half_day_mismatch: >-
+    a session that dashboard/src/lib/market-calendar.json and the edition disagree on as a half day is no_record,
+    counted
+  calendar: >-
+    dashboard/src/lib/market-calendar.json is frozen by content hash in the release that first writes labels, as the
+    engine files are; a change to any entry for a session on or before the day of the change ends the window with no
+    verdict (adding later sessions is not a change)
+  fetch: >-
+    bars are fetched no sooner than 20 minutes after the close, and again at each later session's close + 20 minutes
+    while the fetch fails or its answer does not run through the close for every focus name and SMH; a 2-minute slot
+    left empty inside a full answer is final (bars_complete handles it per position); a session whose fetch still
+    fails, or still does not reach the close, when 5 later sessions have closed ends the window with no verdict
+  version: DEC-0045's content hash of the five engine files (labels.engine.files), not the shadow evaluator's label
+
+window:
+  start: >-
+    the first New York session after the release that first writes this experiment's labels reaches production; that
+    release waits until the cutover note (DEC-0050 point 1) is merged, and before it no one runs the labeller on the
+    owner's journal
+  backfill: never
+  ends_early_on:                    # every early end closes all three trials inconclusive with no verdict
+    - an amendment to DEC-0035
+    - a change to the value of a rule limit in dashboard/src/lib/trade-rules.ts (a rename or moved code is not one)
+    - a change to how the journal importer matches fills
+    - a journal with fees_included true
+    - a stamp reading other than sip after the start (board_feed not_sip)
+    - a gap in the stamps across which the deployment changed (board_feed hidden_change)
+    - a session's fetch still failing, or not reaching the close, 5 sessions later (labeller_rules fetch)
+    - a change to the frozen engine copy's hash, or to a past session's entry in the frozen calendar (labeller_rules)
+    - a broken stamp chain or a missing or mismatched session manifest (board_feed chain)
+  early_end_outcome: >-
+    no verdict is worked out, whatever the counts, and the three trials stay counted: each of these ends can be timed
+    by the owner or a contributor after seeing per-position results on the site, so none may produce a verdict
+    (DEC-0049 point 2's reason; a change from EXP-0031, where the first four ended with whatever it had)
+  board_feed:                       # DEC-0050 point 4; the mirror of EXP-0031's feed_change, so IEX and SIP never mix
+    stamp: >-
+      from the release that adds it onward, whatever the window's state, the production desk cron (/api/cron/desk)
+      writes one stamp per minute of a session's regular hours, before and independently of the DEC-0044 eval switch
+      and of every early return of the evaluator; preview, staging and local deployments write none
+    path: "desk/feeds/board/<New York date>/<HHMM New York>.json in the PRIVATE Blob store"
+    body: >-
+      {v, feed (the resolved ALPACA_FEED: iex, sip or refused), answered (ok, plan, error: the outcome of one SPY
+      snapshot read on that feed in the same minute), at (server time), deployment (VERCEL_DEPLOYMENT_ID), commit,
+      prev (the SHA-256 of the session's previous stamp body, or null for the first)}
+    chain: >-
+      at the session's close the cron writes desk/feeds/board/<New York date>/manifest.json with the stamp count and
+      the hash of the last stamp; a stamp whose prev does not match, a count that differs, or no manifest by the next
+      session's open ends the window with no verdict; the owner holds every key and could rewrite the whole chain, so
+      the chain catches a deletion or an edit inside the chain, not a forgery (deleting the newest stamps can only
+      end the window, through covered and the manifest), and an edit to the store is a breach of this record
+    minutes: >-
+      the regular session as dashboard/src/lib/market-calendar.json gives it, half-open [open, close); half days
+      close early
+    sessions_counted: every New York regular session, full or half, on or after the start, whatever the positions
+    covered: >-
+      a position's t0 is covered when a stamp reading sip lies in [t0 - 2 min, t0], or when t0 lies between two
+      consecutive stamps of the session that both read sip (whatever their deployments; a gap over 10 minutes with a
+      deployment change ends the window under hidden_change); withholding or deleting the stamps after t0 therefore
+      cannot uncover it: the next stamp written still brackets t0, and with none written there is no manifest, which
+      ends the window
+    otherwise:
+      not_sip: >-
+        any stamp after the start reading feed iex or refused (a setting change) ends the window: no verdict
+      hidden_change: >-
+        two consecutive stamps after the start more than 10 minutes apart with different deployments (a switch could
+        hide in the gap) end the window: no verdict; the gap between one session's last stamp and the next session's
+        first is not checked (releases go out after the close)
+      feed_unknown: >-
+        a position whose t0 is not covered (before the session's first stamp, or after its last) is no_record with
+        the reason feed_unknown, counted
+      board_off: >-
+        reading only stamps at or before t0: a run of consecutive stamps answering other than ok, whose last stamp's
+        at minus its first stamp's at is 10 minutes or more, and whose last stamp lies in [t0 - 2 min, t0], makes the
+        position no_record with the reason board_off, counted (the board showed no SIP prices then); an outage does
+        not end the window
+    known_gap: >-
+      a promote to an older deployment and back inside a gap of 10 minutes or less is not seen by the stamps; the
+      runbook asks for no production promote during a session
+    not_a_change: [the option chain's feed]
+    rollback: >-
+      a production switch away from sip is recorded by a dated note on DEC-0050 and a dated line in README.md; it
+      ends the window under not_sip
+  close_date: "2027-11-12"
+
+gate:                               # the same for all three trials; each trial is read on its own
+  min_positions_per_group: 30
+  min_sessions: 20                  # the distinct New York days of t0 of the positions in either group
+  max_positions_per_group: 150
+  cap_rule: >-
+    a group's members are its first 150 positions by t0 (ties by contract key, then by the first piece's id) among
+    positions with no open lot; the rest are not taken
+  measure: difference in mean R25 (net), a minus b
+  sessions: >-
+    the distinct New York dates of t0 of the positions in either group (after the cap), sorted ascending
+  resample: >-
+    by session: each resample draws n_sessions sessions with replacement; every position of a drawn session comes
+    with it
+  resamples: 5000
+  empty_group: >-
+    a resample with an empty group is discarded and not counted; resampling continues until 5,000 are kept; the
+    generator runs on through discarded draws
+  prng: mulberry32                  # portable 32-bit generator, so the result can be reproduced
+  prng_step:
+    - a = (a + 0x6D2B79F5) >>> 0
+    - t = imul(a ^ (a >>> 15), a | 1)
+    - t ^= t + imul(t ^ (t >>> 7), t | 61)
+    - next = (t ^ (t >>> 14)) >>> 0
+  seed: 20261112                    # the initial a; reseeded for each trial (EXP-0031's was 20261111)
+  draw_index: floor(u * n_sessions), u = next() / 2**32
+  interval: [2.5, 97.5]
+  percentile: >-
+    on the 5,000 sorted differences d: h = (N - 1) * p / 100; q = d[floor(h)] + (h - floor(h)) *
+    (d[floor(h) + 1] - d[floor(h)]) (numpy's linear)
+  halves: >-
+    pool both groups' positions, sort by t0 (ties by contract key, then by the first piece's id), split at floor(n/2);
+    in each half work out mean(a) - mean(b); a half with an empty group fails the condition
+  pass: the whole 95% range above 0, and the difference above 0 in each half
+  level: one-sided 2.5% per trial, no correction across the three
+  read: once, at the first of both groups at 150 or the close date; an early end (window.ends_early_on) is read as no verdict
+  falsified: "minimums met and the pass condition not met"
+  inconclusive: "fewer than 30 positions in a group or fewer than 20 sessions when read"
+  report_sign: the report gives the sign of the point estimate beside the verdict
+  computed_by: only the verdict script computes group statistics; the site shows its report after the verdict
+
+site_before_verdict:
+  may_show:
+    - per-position label
+    - per-position R
+    - count per label
+    - overall mean R, once there are 20 positions over 10 sessions
+    - average winner and average loser in R, under the same minimum
+    - rules-kept score
+    - progress toward the gate
+    - "per-position fill-time check: yes, no or not checked (DEC-0049)"
+    - >-
+      over all positions and never by label: count of losers past the -25% stop, count of losers held past the chart
+      stop, count of winners closed before target 1, count of winners closed under +50% on premium, count of
+      positions where a part was held past -25%, dollars lost beyond the -25% stop
+  may_not_show:
+    - mean R, dollars, win rate or profit factor by label, by caution or by time window
+    - what-if P&L of an exit not taken, other than the rule 5 figure above (never what a winner would have made if held)
+    - per position or grouped, how far the stock was from the card's entry level when he opened, on any feed (DEC-0049)
+    - per position or grouped, a label or a board state worked out on IEX bars (DEC-0050; no second set of labels)
+    - during a session, any IEX price, bar, ladder, candle or state; after the close, IEX comparison counts only (DEC-0050 point 5)
+    - whether a stop price traded before he closed (DEC-0049; a what-if exit)
+  note: >-
+    per-position views allow informal summing, and the shown figures, including the overall mean, let a group's
+    result be guessed; only the aggregate is sealed
+
+report: "written once into this folder by the verdict script the code pull request adds; it refuses to overwrite"
+report_also: >-
+  as DEC-0049 point 8 sets it for EXP-0031: the number of positions in each group before and after the date entry alerts were first switched on in
+  production (a dated line in README.md, written by the pull request that switches them on); no difference, mean, R
+  or other result by that split (that would be new trials, none registered)
+
+fill_time_check:                    # DEC-0049 point 4, shared with EXP-0031; a check of timestamps, not a trial
+  reuse: >-
+    the check DEC-0049 point 4 defines is run once, as that record says; its result (pass, fail or too few) gates the
+    release that first writes this experiment's labels exactly as it gates EXP-0031's; it is not run again for this
+    experiment, except under DEC-0049's own too-few and re-run rules
+  definition: DEC-0049 point 4 and the dated note under it; nothing in it is changed here
+  class: PRIVATE                    # journal-derived, behind the owner's login only
