@@ -46,6 +46,9 @@ export const VARIANT_COOKIE = "fx";
  *   session clock, e.g. with `frozen`). `feeds-late`: the edition is for an earlier session, the journal has missed two
  *   runs, the server check has been silent for half an hour. `feeds-failed`: the edition was refused and nothing newer
  *   is stored. `feeds-unknown`: the store could not be read for the edition and the journal.
+ * - `flow-off`, `flow-error`, `flow-thin`, `flow-stale`, `flow-crossed`: /api/flow only (flow-route.ts), and nothing
+ *   else. `flow-off`: no keys (503). `flow-error`: Alpaca is failing (502). `flow-thin`: the baseline has 9 sessions.
+ *   `flow-stale`: the baseline is for another session. `flow-crossed`: the first name's quote is crossed.
  * - `journal-option-lot`: the journal holds one open long QQQ call bought at the scripted morning's second step (2
  *   contracts at $1.20), on the strike nearest the fixture chain's QQQ price and an expiry three weeks after the
  *   server's day, so the chain lists it exactly once (fixtureOptionLot); the journal reads a few minutes after the
@@ -86,6 +89,11 @@ export const VARIANT_FLAGS = [
   "feeds-late",
   "feeds-failed",
   "feeds-unknown",
+  "flow-off",
+  "flow-error",
+  "flow-thin",
+  "flow-stale",
+  "flow-crossed",
   "journal-option-lot",
 ] as const;
 export type VariantFlag = (typeof VARIANT_FLAGS)[number];

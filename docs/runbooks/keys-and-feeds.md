@@ -55,6 +55,8 @@ without fixing it. Read the records themselves for what they decide.
 | Feed agreement (hand, `make feed-agreement`) | 2-minute stock bars | iex and sip | literal per run (`barsUrl`) | none | feed-agreement runbook |
 | Feed comparison sampler (site, `/api/cron/feeds`) | stock snapshots of the focus names and SPY | iex and sip, one request each a minute | literals in `feed-compare-sample.ts` (`askFeed("iex")`, `askFeed("sip")`), never `ALPACA_FEED` | DEC-0050 | feed-agreement runbook, "Server comparison" |
 | Feed comparison report (site, `/api/cron/feeds-report`) | the session's 2-minute and settled 1-minute stock bars of the focus names | iex and sip | literals in `feed-compare-report.ts` (`fetchSessionBars("iex")` / `("sip")` through `barsUrl`; `fetchMinuteBars("iex")` / `("sip")` through `minuteBarsUrl` in `feed-compare-bars.ts`), never `ALPACA_FEED` | DEC-0050 | feed-agreement runbook, "Server comparison" |
+| Flow data (site, `/api/flow`) | stock snapshots and today's 2-minute bars with volume, of the allowed names only (today's focus names, SPY and QQQ; EXP-0032) | sip | literal in `flow-route.ts`, never `ALPACA_FEED` | DEC-0050 | none |
+| Flow baseline (site, `/api/cron/flow-baseline`) | split-adjusted 2-minute bars of the previous 20 full sessions, for the same names (today's bars in `/api/flow` stay raw) | sip | literal in `flow-baseline-run.ts`, never `ALPACA_FEED` | DEC-0050 | none |
 | Paper runner B, signal bars (host, `paper-b`) | 1-minute bars | iex | literal default in `runner_b.py` | DEC-0037 | none |
 | Paper runner B, latest quotes (host) | latest quote of the signal and trade names | iex | literal | none | DEC-0024 |
 | Paper runner B, sigma (host) | 1-minute bars of the 14 prior sessions | sip | literal | none | none: set in code |
@@ -143,6 +145,8 @@ of 2026-11-12, assuming each answer fits on one page.
 | Feed comparison sampler (site's pair) | every minute in the regular session, 13:00 to 21:59 UTC on weekdays (`* 13-21 * * 1-5`), runs only from the open to the close | snapshots 1 on iex + snapshots 1 on sip, never cached, never paged; a 400 is asked once more on that feed | **2** (4 at most) | 2 (one run a minute; a second run in the same minute finds the sample and asks nothing) |
 | Feeds page live book (site's pair, `/api/feeds/live`) | while a signed-in Feeds page is open and visible, every 5 s; nothing while hidden | snapshots 1 + 2-minute bars 1 on the board's feed (`ALPACA_FEED`), cached 5 s per instance and name set with one read in flight; bars only after the open, at most 4 pages | **24** | 24 per instance whatever the number of tabs (60 at most if bars page) |
 | Feed comparison report (site's pair) | once a day after close + 20 min (`*/10 20-23 * * 1-5`; later ticks find the report and ask nothing) | 4 reads, N pages each: 2-minute bars per feed, N = 1 (about 4 names x 195 bars = about 800, under `limit=10000`); 1-minute bars per feed, N = 1 (about 4 names x 390 bars = about 1,560, under `limit=10000`; a card of up to 25 names fits in one page) | 4 calls in that one minute, about **0** a minute over the day | 80 (20 pages x 4 reads, `MAX_PAGES`), all under one shared 180-a-minute limiter and one 150 s budget; a build that may heal retries at the next 10-minute tick, until 23:50 UTC |
+| Site, flow (site's pair, `/api/flow`) | per request; no page polls it yet (B1 adds the data only); 3 s cache per instance and set of names, one read in flight per set | snapshots 1 + 2-minute bars 1 (about 6 names x 195 bars = about 1,170, under `limit=10000`: 1 page; none before the open); the edition and the baseline come from the store | at most 2 per 3 s per set of names and instance: **40** a minute while a caller asks more often than every 3 s | 21 per 3 s per set (420 a minute) if every bars answer paged to `MAX_BAR_PAGES` (20); a read still paging there answers bars null |
+| Flow baseline (site's pair, `/api/cron/flow-baseline`) | every 10 minutes 11:00 to 13:50 UTC on weekdays (`*/10 11-13 * * 1-5`); the run idles from 09:30 New York and off session days, and once the day's baseline is stored a tick asks nothing (one head) | one 2-minute bars read per session for the previous 20 full sessions, each about 1,170 bars: 20 calls, 4 at a time, in one run | **20** once a day, in the first tick that finds today's edition; 0 otherwise | 400 (20 pages x 20 sessions, `MAX_PAGES`), cut by the run's 40 s budget; a partial run writes nothing and the next tick asks again: up to 18 ticks a day on EST, 15 on EDT |
 
 Arithmetic for the host's stocks pair (`APCA_API_`):
 
@@ -160,6 +164,11 @@ The clone's pair: 18 + 0.6, so about 19 a minute, plus chain reads on a signal.
 The site's pair: one open Options page costs 30 + 2 + 6 = 38 (53 with a held contract's live quote, 68 with a ticket's on another contract too; the manage card shares the name's chain feed, so it adds no chain calls), plus the evaluator's 2 and the feed comparison
 sampler's 2, so 42 a minute. Four pages on separate instances would cost 4 x 38 + 2 + 2 = 156, near the free plan's
 200. The comparison report adds 4 calls once a day after the close (80 pages at worst, plus 429 retries, all under its own 180-a-minute limiter), when no page polls in the session.
+The flow baseline's bars are split-adjusted (`adjustment=split`): a split inside the 20 sessions would otherwise leave the
+older volumes in pre-split shares, not comparable with today's raw bars. The baseline records the names it was built
+for (`built_for`); a name added to the focus list after the build has no baseline that day, and its relative volume
+answers `no-baseline`. The flow baseline adds about 20 calls once a day before the open, when nothing else on the site's pair is busy. `/api/flow`
+adds up to 40 a minute per instance and set of names while something asks for it every 3 s or faster; no page does yet.
 That pair is shared with whatever else uses it.
 
 ## After a plan change or a lapse
