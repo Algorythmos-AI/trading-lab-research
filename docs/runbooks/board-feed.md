@@ -13,6 +13,8 @@ experiment).
 
 - DEC-0050's pull request is merged.
 - The board-feed stamp (DEC-0050 point 4) is released and running, so the cutover session shows in the stamps.
+- On the stamp's first session, the site's logs show no `board-feed.stamp` line with outcome `no-deployment-id`.
+  Each stamp must name its deployment, or a stamp gap would read as a hidden change.
 - No production promote or redeploy during a session: a stamp gap over 10 minutes with a deployment change ends
   EXP-0033's window (DEC-0050 point 4).
 - The switch is made after the US close, so no session is read on two feeds.
