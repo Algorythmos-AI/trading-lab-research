@@ -37,7 +37,8 @@ export function usePerfNow(intervalMs = 1000): number | null {
   );
   const bucket = useSyncExternalStore(
     subscribe,
-    () => Math.floor(performance.now() / intervalMs),
+    // Rounded up, not down: an age measured against this clock may read up to one interval old, never young.
+    () => Math.ceil(performance.now() / intervalMs),
     () => null,
   );
   return bucket === null ? null : bucket * intervalMs;

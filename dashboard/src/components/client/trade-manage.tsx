@@ -36,7 +36,7 @@ import { nyClock } from "@/lib/options";
 import type { Bar2 } from "@/lib/trade-state";
 import { cn } from "@/lib/utils";
 import { bellMinute } from "@/lib/contract";
-import { chainFresh, chainPx, chainStamp, entryStopDistance, fromEntryLabel, heldOrAtm, lossFromEntry, type RoomAfterStop, roomAfterStop, stopDistance } from "@/lib/what-if";
+import { chainFresh, chainPx, chainStamp, contractQuoteTime, entryStopDistance, fromEntryLabel, heldOrAtm, lossFromEntry, type RoomAfterStop, roomAfterStop, stopDistance } from "@/lib/what-if";
 import { checkOptionFill, type FillStop, fillStop, INVITE_LINE, journalDayCache, lossLine, nickelLine, prefillFrom, otherOpenPositions, STOP_OWN_TICK, STOP_PLACED, STOP_REMINDER, stopFromLine, tickLine } from "@/lib/manage-stop";
 import { type DayFacts, journalLive } from "@/lib/session-timeline";
 import { usd } from "@/lib/ticket";
@@ -165,7 +165,7 @@ export interface ChainContext {
  * from the trade's entry and not from the live price, so it says what the stop costs the trade and agrees with the
  * hero's which-stop line, which measures the same way. The delta is the held contract's (the journal names it) or,
  * failing that, the at-the-money one on that side. One chain for this card's name, asked for only while the card has a
- * fresh price and is not a CHECK; shown only on this name's answer no older than STALE_SAME_DAY_MIN, labelled with
+ * fresh price and is not a CHECK; shown only on this name's answer no older than its feed's same-day limit (staleLimits), labelled with
  * the chain's own time and delay. Nothing once the stop is the entry, or with a stop on the wrong side of it.
  */
 function OptionAtStop({ v, ctx }: { v: ManageView; ctx: ChainContext }) {
@@ -183,6 +183,7 @@ function OptionAtStop({ v, ctx }: { v: ManageView; ctx: ChainContext }) {
       <dd className="text-live font-mono tabular-nums max-sm:whitespace-nowrap">≈ −${Math.round(est)}</dd>
       <dd className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">
         on the option, a contract (est. from {c.held ? "your contract's" : "the at-the-money"} delta) · {chainStamp(feed.chain)}
+        {contractQuoteTime(c.contract) ? ` · ${contractQuoteTime(c.contract)}` : ""}
       </dd>
     </div>
   );
@@ -191,7 +192,7 @@ function OptionAtStop({ v, ctx }: { v: ManageView; ctx: ChainContext }) {
 /**
  * One open trade: the header, then big the action word, the stop, the live distance to it on the stock, the option's
  * estimated loss at the stop from the entry, and the "not working in" countdown while it runs; small the trail, the flat-by time and where the
- * card's numbers come from. No live option P&L: the option feed is 15 minutes behind, so the card says "P&L: see
+ * card's numbers come from. No live option P&L: the card does not mark the option, so it says "P&L: see
  * Webull". A journal card adds a CHECK line (its fill is the card's entry) with "Set my fill"; `children` is the form
  * it opens.
  */

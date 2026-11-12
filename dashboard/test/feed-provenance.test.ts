@@ -379,14 +379,25 @@ describe("FeedFacts", () => {
   const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 
   it("names the feed the answer reported, says it is fetched every 2 s, and gives both ages apart", () => {
-    const html = draw(okFeed(), 1_003_000);
-    expect(text(html)).toBe("IEX · fetched every 2 s, not streamed last trade 15 s ago checked 3 s ago");
+    const html = draw(okFeed({ source: "sip" }), 1_003_000);
+    expect(text(html)).toBe("SIP · authoritative · fetched every 2 s, not streamed last trade 15 s ago checked 3 s ago");
     expect(html).toContain('data-feed-age="trade"');
     expect(html).toContain('data-age-s="15"');
     expect(html).toContain('data-age-s="3"');
     expect(html).toContain('aria-live="off"');
     expect(html).not.toContain("text-warn");
     expect(text(draw(okFeed({ source: "sip" }), 1_003_000))).toMatch(/^SIP · /);
+  });
+
+  it("DEC-0050: SIP reads as authoritative, IEX in the warning tone with the decision as its title", () => {
+    const sip = draw(okFeed({ source: "sip" }), 1_003_000);
+    expect(sip).toContain('data-feed-name="SIP"');
+    expect(text(sip)).toMatch(/^SIP · authoritative · fetched/);
+    expect(sip).not.toContain("text-warn");
+    const iex = draw(okFeed({ source: "iex" }), 1_003_000);
+    expect(iex).toMatch(/<span data-feed-name="IEX" title="DEC-0050: the board should read SIP" aria-description="DEC-0050: the board should read SIP" class="text-warn font-medium">IEX<\/span>/);
+    expect(text(iex)).toMatch(/^IEX · fetched/);
+    expect(iex.match(/text-warn/g)).toHaveLength(1);
   });
 
   it("names no feed when the answer named none", () => {
@@ -397,9 +408,9 @@ describe("FeedFacts", () => {
   });
 
   it("warns past the limits, and draws nothing while the feed is off, failing before any answer, or loading", () => {
-    const old = draw(okFeed(), 1_000_000 + 25_000); // answer 25 s old, trade 37 s old
+    const old = draw(okFeed({ source: "sip" }), 1_000_000 + 25_000); // answer 25 s old, trade 37 s old
     expect(old.match(/text-warn/g)).toHaveLength(1);
-    expect(draw(okFeed(), 1_000_000 + 200_000).match(/text-warn/g)).toHaveLength(2);
+    expect(draw(okFeed({ source: "sip" }), 1_000_000 + 200_000).match(/text-warn/g)).toHaveLength(2);
     for (const feed of [{ status: "off" }, { status: "off", why: "feed" }, { status: "error" }, { status: "loading" }] as Feed[]) expect(draw(feed, 1_000_000)).toBe("");
   });
 
@@ -410,7 +421,7 @@ describe("FeedFacts", () => {
     expect(text(html)).toBe("IEX · fetched every 2 s, not streamed last trades 1 s to 1 min ago checked 3 s ago");
     expect(html).toContain('data-age-range="two"');
     expect(html).toContain('data-trade-stale="false"');
-    const stale = draw(okFeed({ quotes: { SPY: q(TRADE + 14_000), QQQ: q(TRADE - 200_000) } }), 1_003_000, ["SPY", "QQQ"]);
+    const stale = draw(okFeed({ source: "sip", quotes: { SPY: q(TRADE + 14_000), QQQ: q(TRADE - 200_000) } }), 1_003_000, ["SPY", "QQQ"]);
     expect(stale).toContain('data-trade-stale="true"');
     expect(stale.match(/text-warn/g)).toHaveLength(1);
   });
@@ -442,5 +453,20 @@ describe("FeedFacts", () => {
     expect(pill({ status: "off" })).toBe("Live off");
     expect(pill({ status: "off", why: "feed" })).toBe("Live off: ALPACA_FEED is not iex or sip");
     expect(pill({ status: "off", why: "plan" })).toBe("Live off: SIP is not on this data plan");
+  });
+
+  it("DEC-0050: the pill names SIP as authoritative, and IEX in the warning tone with the decision as its title", () => {
+    const html = (feed: Feed) =>
+      renderToStaticMarkup(createElement(LiveContext.Provider, { value: { feed, session: "2026-10-12", now: 1, backoff: null, retryNow: () => undefined } }, createElement(FeedPill)));
+    const asOf = "2026-10-12T14:31:00Z"; // 10:31 New York
+    const sip = html(okFeed({ source: "sip", asOf }));
+    expect(text(sip)).toBe("Live 10:31 · SIP · authoritative");
+    expect(sip).not.toContain("text-warn");
+    const iex = html(okFeed({ source: "iex", asOf }));
+    expect(text(iex)).toBe("Live 10:31 · IEX");
+    expect(iex).toContain('title="DEC-0050: the board should read SIP"');
+    expect(iex).toContain('aria-description="DEC-0050: the board should read SIP"');
+    expect(iex).toContain("text-warn");
+    expect(text(html(okFeed({ source: null, asOf })))).toBe("Live 10:31");
   });
 });

@@ -4,7 +4,7 @@ import { Calculator, RotateCw, TriangleAlert, X } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Empty } from "@/components/empty";
 import { fracPct, newYork, num, signed, weekDate } from "@/lib/format";
-import { bellMinute, contractView, daysToExpiry, defaultPick, MAX_CONTRACTS, minutesToExpiry, parsePick, pickKey, type Pick, type VolSource } from "@/lib/contract";
+import { bellMinute, chainFeedWords, contractView, staleLimits, daysToExpiry, defaultPick, MAX_CONTRACTS, minutesToExpiry, parsePick, pickKey, type Pick, type VolSource } from "@/lib/contract";
 import type { ChainResponse } from "@/lib/chain";
 import { MULTIPLIER } from "@/lib/longopt";
 import { sessionClock, type OptionsTicker } from "@/lib/options";
@@ -13,6 +13,7 @@ import { volShape } from "@/lib/volshape";
 import { VolShape } from "../options-vol-shape";
 import { useLive, useLiveRead } from "./live-layer";
 import { useChain } from "./use-chain";
+import { usePerfNow } from "./use-now";
 import { chainPx } from "@/lib/what-if";
 import { ContractIvLine } from "./contract-iv";
 import { Notice } from "@/components/ui/notice";
@@ -149,6 +150,8 @@ export function OptionsContract({
   // follow a move, coarse enough that a ticking price does not ask again every two seconds.
   const px = chainPx(close, spot);
   const { feed, retry, reset } = useChain(t.symbol, px, active, kept ? `${kept.expiry}:${kept.strike}` : "");
+  // The quotes' age is read on the monotonic clock from the answer's receipt, never off the wall clock (contract.ts viewAge).
+  const perfNow = usePerfNow(1_000);
   // An expiry whose bell has rung can linger in the feed for the rest of that day. It is not offered.
   const chain: ChainResponse | null = useMemo(() => {
     if (feed.status !== "ok" || now === null) return null;
@@ -202,7 +205,12 @@ export function OptionsContract({
     feed.status === "off" ? "off" : feed.status === "error" ? "error" : feed.status !== "ok" || now === null ? "loading" : pick === null || spot === null ? "empty" : "ready";
   // Open by the clock, not by a quote: a last trade stamped before the bell would read as "in session" all evening.
   const marketOpen = now !== null && sessionClock(session, Boolean(t.half_day), new Date(now))?.phase === "open";
-  const view = state === "ready" ? contractView(pick!, chain, t, spot!, now!, session, { marketOpen, priceIsLive: read.inSession }) : null;
+  const view = state === "ready" ? contractView(pick!, chain, t, spot!, now!, session, {
+          marketOpen,
+          priceIsLive: read.inSession,
+          receivedPerf: feed.status === "ok" ? feed.receivedPerf : null,
+          perfNow,
+        }) : null;
 
   /** Change part of the pick. A new kind or expiry keeps the strike when it exists there, else takes the nearest. */
   const change = (part: Partial<Pick>) => {
@@ -219,7 +227,7 @@ export function OptionsContract({
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
         {heading}
         <span className="text-muted-foreground flex items-center gap-3 text-[0.6875rem] max-sm:text-xs">
-          {chain ? <span>Option quotes run {chain.delay_min} minutes behind the market</span> : null}
+          {chain ? <span data-chain-feed={chain.feed}>{chainFeedWords(chain, !view || view.ageMin === null || view.ageMin > staleLimits(chain.feed).sameDay)}</span> : null}
           <button type="button" onClick={shut} className="hover:text-foreground flex items-center gap-1 rounded px-1">
             <X aria-hidden className="size-3" />
             {kept ? "Clear" : "Close"}

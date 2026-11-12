@@ -27,7 +27,7 @@ const at = (iso: string) => Date.parse(iso);
 const NOON = at("2026-10-12T16:00:00Z"); // 12:00 in New York, four hours before the bell
 
 const row = (over: Partial<ChainContract> = {}): ChainContract => ({
-  kind: "call", strike: 780, bid: 2.95, ask: 3.1, last: 3.0, at: "2026-10-12T15:45:00Z", iv: 0.12, delta: 0.5, volume: 100, ...over,
+  kind: "call", strike: 780, bid: 2.95, ask: 3.1, last: 3.0, at: "2026-10-12T15:45:00Z", iv: 0.12, delta: 0.5, volume: 100, bid_size: null, ask_size: null, ...over,
 });
 const chainOf = (contracts: ChainContract[], date = SESSION): ChainResponse => ({
   as_of: "2026-10-12T16:00:00Z", feed: "indicative", delay_min: 15, symbol: "SPY", expiries: [{ date, contracts }],
