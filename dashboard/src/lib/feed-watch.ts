@@ -6,9 +6,12 @@
 // Pure: no I/O, the clock is passed in. Every New York time goes through the exchange calendar (market-calendar.ts)
 // and nyInstant, never a fixed offset: weekends, holidays and half days come from the session list, "the next
 // session" is the next day the market opens, and both clock changes are right for New York and UTC schedules alike.
-// Outside the calendar file's range a weekday schedule is assumed and every result says so, but nothing pages on it:
-// the day may be a holiday the file does not know. The calendar's own end is warned and paged once a day, ahead of
-// time, by the pipeline check's calendar.sessions (wt.options.pipeline_check), not here per feed.
+// A run on a day outside the calendar file's range is assumed (a weekday is taken for a session) and every result says
+// so, but nothing pages on it: the day may be a holiday the file does not know. "Assumed" is decided by the run's own
+// day: a run on the file's last session is judged and pages as usual, and when the session it is for lies past the
+// file, it says so rather than naming a guessed day. The calendar's own end is warned and paged ahead of time, once a
+// day, by the pipeline check's calendar.sessions (wt.options.pipeline_check), and the Operations panel says when today
+// itself is outside the file (calendarNotice).
 //
 // This module is outside the shadow evaluator's engine (scripts/gen-engine.mjs walks the imports of desk-eval.ts):
 // it imports from the engine's files, and nothing in the engine imports it.
@@ -19,7 +22,7 @@ import { BAR_MS, sessionBounds } from "./desk-eval";
 import { JOURNAL_PATHS, LEDGER_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
 import { DAILY_GRACE_MIN, INTRADAY_MAX_AGE_MIN, JOURNAL_SLOT_UTC, OPTIONS_SLOT_UTC, RADAR_SLOT_UTC } from "./feeds";
 import type { IngestRejectKind } from "./ingest-reject";
-import { addDays, nyNow, sessionOf } from "./market-calendar";
+import { addDays, nyNow, RANGE, sessionOf } from "./market-calendar";
 import type { Notice } from "./ntfy";
 import { nyInstant } from "./options";
 import { journalCurrent } from "./trade-rules";
@@ -367,10 +370,11 @@ export interface Slot {
   expires: number;
   /** The New York market day the run belongs to. */
   day: string;
-  /** The session the document must be for (next-session: the day after; otherwise the run's day). */
-  for_session: string;
+  /** The session the document must be for (next-session: the day after; otherwise the run's day). Null when the next
+   * session lies past the calendar file: then any session after the run's day will do, and none is named. */
+  for_session: string | null;
   schedule: Schedule;
-  /** The calendar ran out for this run: its day was taken to be a market day because it is a weekday. */
+  /** The calendar ran out for this run's own day: it was taken to be a market day because it is a weekday. */
   assumed: boolean;
 }
 
@@ -390,17 +394,19 @@ export function slotsAround(feed: DocFeed, nowMs: number, back = 12, ahead = 8):
         const sday = nyDayOf(due);
         const m = marketDay(sday);
         if (!m.open) continue;
-        let assumed = m.assumed;
+        const assumed = m.assumed;
         if (s.in_session) {
           const close = closeOf(sday);
           if (close === null || due >= close) continue;
         }
-        let forSession = sday;
+        let forSession: string | null = sday;
         if (feed.want === "next-session") {
           const n = adjacentSession(sday, 1);
-          forSession = n.day;
-          assumed ||= n.assumed;
+          // Past the file the next session is not known (2030-01-01 is a holiday a weekday guess would name).
+          forSession = n.assumed ? null : n.day;
         }
+        // A run on a day past the file names no session either: its day is only taken to be one.
+        if (assumed) forSession = null;
         raw.push({ due, deadline: due + s.grace_min * MIN, day: sday, for_session: forSession, schedule: s, assumed });
       }
     }
@@ -424,7 +430,7 @@ export function satisfies(feed: DocFeed, stamp: Stamp | null, slot: Slot): boole
   if (!stamp) return false;
   switch (feed.want) {
     case "next-session":
-      return stamp.session !== null && stamp.session >= slot.for_session;
+      return stamp.session !== null && stamp.session >= (slot.for_session ?? addDays(slot.day, 1));
     case "this-session":
       return stamp.session !== null && stamp.session >= slot.day;
     case "previous-session": {
@@ -487,6 +493,8 @@ export interface FeedView {
   assumed: boolean;
   /** Late or failed enough to page (before the alert switch and the state machine). */
   alerting: boolean;
+  /** A next-session run whose next session lies past the calendar file (for_session is then null). */
+  next_past_end?: boolean;
   /** Refusal rows: the refusal's outcome code. */
   outcome?: RefusalRead["outcome"];
 }
@@ -527,7 +535,7 @@ export function evaluateDoc(f: DocFeed, read: StampRead | undefined, refusal: Re
   if (ci < 0 && read?.status === "error") return nothing(f, "unknown", "storage-error", { next_due: nextDue });
   if (ci < 0) return nothing(f, "not_expected", "no-run-now", { age_min: age, next_due: nextDue });
   const cur = slots[ci]!;
-  const at = { due: cur.due, deadline: cur.deadline, for_session: cur.for_session, next_due: nextDue, age_min: age };
+  const at = { due: cur.due, deadline: cur.deadline, for_session: cur.for_session, next_due: nextDue, age_min: age, ...(f.want === "next-session" && cur.for_session === null ? { next_past_end: true } : {}) };
   const assumed = !f.verified || cur.assumed || cur.schedule.verified === false;
   // Past the calendar's end no incident is opened (no episode): the run may be on a holiday the file does not know.
   const unknownEpisode = cur.assumed ? null : `unknown:${cur.day}`;
@@ -611,19 +619,21 @@ export function evaluateShadow(f: ShadowFeed, read: Read<ShadowRead> | null, now
   if (!w && (read?.status === "error" || read?.status === "unreadable")) return nothing(f, "unknown", "storage-error");
   if (!w) return nothing(f, "not_expected", "outside-session");
   const assumed = w.assumed || !f.verified;
+  // A day past the calendar file is only taken to be a session: it is not named as one.
+  const forDay = w.assumed ? null : w.day;
   if (!read || read.status === "error" || read.status === "unreadable")
-    return nothing(f, "unknown", read ? "storage-error" : "not-read", { for_session: w.day, episode: w.assumed ? null : `unknown:${w.day}`, assumed });
-  if (read.status === "missing" || !read.value.on) return nothing(f, "not_expected", "switch-off", { for_session: w.day, assumed });
+    return nothing(f, "unknown", read ? "storage-error" : "not-read", { for_session: forDay, episode: w.assumed ? null : `unknown:${w.day}`, assumed });
+  if (read.status === "missing" || !read.value.on) return nothing(f, "not_expected", "switch-off", { for_session: forDay, assumed });
   const v = read.value;
   // The first record is written once the first 2-minute bar has settled; a switch turned on later starts its clock.
   const first = w.open + BAR_MS + SERVER_SETTLE_MS;
   const base = Math.max(first, v.switched_at ?? first);
-  if (nowMs < base && v.last_slot_end === null) return nothing(f, "not_expected", "before-first-slot", { for_session: w.day, next_due: base, assumed });
+  if (nowMs < base && v.last_slot_end === null) return nothing(f, "not_expected", "before-first-slot", { for_session: forDay, next_due: base, assumed });
   const lastWrite = v.last_slot_end === null ? null : v.last_slot_end + SERVER_SETTLE_MS;
   const ref = Math.max(base, lastWrite ?? base);
   const deadline = ref + f.grace_min * MIN;
   const age = minutesSince(v.last_slot_end, nowMs);
-  const at = { due: ref, deadline, for_session: w.day, age_min: age, assumed };
+  const at = { due: ref, deadline, for_session: forDay, age_min: age, assumed };
   if (nowMs <= deadline) return nothing(f, lastWrite === null ? "waiting" : "on_time", lastWrite === null ? "running" : "recording", at);
   return {
     ...nothing(f, "late", "no-record", at),
@@ -1047,6 +1057,19 @@ export function rollbackFeeds(prev: FeedAlertState, next: FeedAlertState, failed
 // outcome. Anything else is left out.
 
 /** Said when the calendar file has run out and a weekday schedule stands in for it (the watchdog's ASSUMED_NOTE pattern). */
+/** The Operations panel's line when today (New York) is outside the calendar file: runs on such a day are assumed and
+ * never page, so a wrong clock must not silence the feed alerts out of sight. Null inside the file. */
+export function calendarNotice(nowMs: number): string | null {
+  const day = nyDayOf(nowMs);
+  const words = (d: string) => {
+    const x = new Date(`${d}T12:00:00Z`);
+    return `${x.getUTCDate()} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][x.getUTCMonth()]} ${x.getUTCFullYear()}`;
+  };
+  if (day > RANGE.end) return `Today is outside the session calendar (ends ${words(RANGE.end)}): feed alerts for late runs are off.`;
+  if (day < RANGE.start) return `Today is outside the session calendar (starts ${words(RANGE.start)}): feed alerts for late runs are off.`;
+  return null;
+}
+
 export const FEED_ASSUMED_NOTE = " The market calendar has run out, so a weekday schedule is assumed.";
 
 /** HH:MM New York of an instant. */
@@ -1077,7 +1100,7 @@ export function lateNotice(v: FeedView, now: Date, table: readonly FeedRow[] = F
   const day = dayOf(v.for_session);
   const runs = whole(v.misses) >= 2 ? ` ${whole(v.misses)} runs in a row were missed.` : "";
   const why = Object.hasOwn(REASON_WORDS, v.reason) ? ` ${REASON_WORDS[v.reason]}` : "";
-  const session = day ? `, for the session of ${day}` : "";
+  const session = day ? `, for the session of ${day}` : v.next_past_end ? ", for the session after it" : "";
   const by = dl !== null ? ` past its ${nyHm(dl)} New York deadline` : " past its deadline";
   const message =
     v.type === "shadow"

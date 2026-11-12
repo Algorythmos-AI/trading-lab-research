@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 import {
   adjacentSession,
+  calendarNotice,
   decideFeedAlerts,
   EMPTY_FEED_STATE,
   evaluateStamped,
@@ -180,7 +181,7 @@ describe("the options edition (after the close, 21:52 UTC, an hour's grace)", ()
   });
   it("outside the calendar's range a weekday is assumed and said so, and never pages", () => {
     const v = view("options-edition", { "options-edition": ok("2030-01-08", "2030-01-07T22:00:00Z") }, "2030-01-08T23:30:00Z");
-    expect(v).toMatchObject({ state: "late", assumed: true, alerting: false, for_session: "2030-01-09" });
+    expect(v).toMatchObject({ state: "late", assumed: true, alerting: false, for_session: null });
     // The notice still says so if it is ever drawn; decideFeedAlerts does not send it.
     expect(lateNotice(v, new Date("2030-01-08T23:30:00Z")).message.endsWith(FEED_ASSUMED_NOTE)).toBe(true);
     expect(view("options-edition", { "options-edition": ok("2030-01-14", "2030-01-11T22:00:00Z") }, "2030-01-12T15:00:00Z")).toMatchObject({ state: "on_time", assumed: true });
@@ -567,11 +568,13 @@ describe("New Year's Day 2030, the first day past the file", () => {
   // Every document missing: on a real session that pages; on 2030-01-01 (a holiday the file does not know) nothing
   // pages, however many runs go by. The calendar's end is paged ahead of time by the pipeline check instead.
   const missing = Object.fromEntries(FEEDS.filter((f) => f.type === "doc").map((f) => [f.id, { status: "missing" } as StampRead]));
-  const runs = (times: readonly string[]) => {
+  // Every run of Monday 2029-12-31 (the file's last session) delivered, the last at 23:59 New York; nothing after.
+  const lastDayDone = Object.fromEntries(FEEDS.filter((f) => f.type === "doc").map((f) => [f.id, ok("2030-01-02", "2030-01-01T04:59:00Z")]));
+  const runs = (times: readonly string[], stamps: Record<string, StampRead> = missing) => {
     let s: FeedAlertState = EMPTY_FEED_STATE;
     const sent: string[] = [];
     for (const t of times) {
-      const views = evaluateStamped(inputs(missing, { shadow: { status: "ok", value: { on: true, switched_at: null, last_slot_end: null } } }), T(t));
+      const views = evaluateStamped(inputs(stamps, { shadow: { status: "ok", value: { on: true, switched_at: null, last_slot_end: null } } }), T(t));
       const d = decideFeedAlerts(views, s, new Date(t), true);
       sent.push(...d.notices.map((n) => n.title));
       s = d.next;
@@ -581,14 +584,58 @@ describe("New Year's Day 2030, the first day past the file", () => {
   const day = (d: string) => Array.from({ length: UNKNOWN_RUNS_TO_ALERT + 20 }, (_, i) => new Date(Date.parse(`${d}T13:00:00Z`) + i * 30 * 60_000).toISOString());
 
   it("is assumed open, shown late, and pages nothing", () => {
-    const views = evaluateStamped(inputs(missing), T("2030-01-01T17:00:00Z"));
-    expect(views.some((v) => v.assumed && (v.state === "late" || v.state === "unknown"))).toBe(true);
+    const views = evaluateStamped(inputs(lastDayDone), T("2030-01-01T17:00:00Z"));
+    expect(views.some((v) => v.assumed && v.state === "late")).toBe(true);
     expect(views.filter((v) => v.alerting)).toEqual([]);
-    expect(runs(day("2030-01-01"))).toEqual([]);
+    expect(runs(day("2030-01-01"), lastDayDone)).toEqual([]);
   });
 
   it("while the same day in the file's last week pages", () => {
     expect(runs(day("2029-12-31")).length).toBeGreaterThan(0);
+  });
+});
+
+describe("the file's last session and its next session past the file", () => {
+  const edition = (stamp: StampRead, now: string) => view("options-edition", { "options-edition": stamp }, now);
+
+  it("the build of Monday 2029-12-31 is judged by its own day: missed, it pages, and names no session", () => {
+    const v = edition(ok("2029-12-31", "2029-12-28T22:10:00Z"), "2029-12-31T23:30:00Z");
+    expect(v).toMatchObject({ state: "late", assumed: false, alerting: true, for_session: null, next_past_end: true });
+    const n = lateNotice(v, new Date("2029-12-31T23:30:00Z"));
+    expect(n.message).toContain(", for the session after it.");
+    expect(n.message).not.toContain("2030-01-01");
+    expect(n.message.endsWith(FEED_ASSUMED_NOTE)).toBe(false);
+  });
+
+  it("is satisfied by a build for any session after its day, whatever the date turns out to be", () => {
+    expect(edition(ok("2030-01-02", "2029-12-31T22:10:00Z"), "2029-12-31T23:30:00Z")).toMatchObject({ state: "on_time", for_session: null });
+    expect(edition(ok("2029-12-31", "2029-12-28T22:10:00Z"), "2029-12-31T23:30:00Z").state).toBe("late");
+  });
+
+  it("the same run on Wednesday 2030-01-02, past the file, is assumed and does not page", () => {
+    const v = edition(ok("2029-12-31", "2029-12-28T22:10:00Z"), "2030-01-02T23:30:00Z");
+    expect(v).toMatchObject({ state: "late", assumed: true, alerting: false });
+  });
+
+  it("never names 2030-01-01 as a session", () => {
+    for (let t = Date.parse("2029-12-31T12:00:00Z"); t <= Date.parse("2030-01-03T12:00:00Z"); t += 30 * 60_000) {
+      for (const v of evaluateStamped(inputs({}), t)) {
+        expect(v.for_session).not.toBe("2030-01-01");
+        expect(lateNotice(v, new Date(t)).message).not.toContain("2030-01-01");
+      }
+      for (const f of FEEDS) if (f.type === "doc") for (const s of slotsAround(f, t)) expect(s.for_session).not.toBe("2030-01-01");
+    }
+  });
+});
+
+describe("today outside the calendar file", () => {
+  it("the Operations panel says feed alerts for late runs are off, before 2026 and after 2029", () => {
+    expect(calendarNotice(T("2030-01-08T15:00:00Z"))).toBe("Today is outside the session calendar (ends 31 Dec 2029): feed alerts for late runs are off.");
+    expect(calendarNotice(T("2025-12-15T15:00:00Z"))).toBe("Today is outside the session calendar (starts 1 Jan 2026): feed alerts for late runs are off.");
+    expect(calendarNotice(T("2026-11-12T15:00:00Z"))).toBeNull();
+    // New York's day decides: 03:00 UTC on 1 January 2030 is still 31 December 2029 there.
+    expect(calendarNotice(T("2030-01-01T03:00:00Z"))).toBeNull();
+    expect(calendarNotice(T("2030-01-01T05:30:00Z"))).not.toBeNull();
   });
 });
 

@@ -111,7 +111,7 @@ def events() -> dict[str, Any]:
         late = [r[col] for r in _rows(path) if r[col] > END]
         if late:
             raise SystemExit(f"{path.name}: {len(late)} rows after the calendar's end {END} ({', '.join(late[:5])}): "
-                             "extend START, END first")
+                             "extend END first")
     macro = []
     for r in _rows(MACRO):
         if START <= r["date"] <= END:

@@ -644,7 +644,7 @@ const list = (ds: readonly string[]) => (ds.length ? ds.map(dayWords).join(" and
 /** The minimum a page needs of the published calendar to say how far to trust it. */
 export interface CalendarState {
   as_of: string;
-  sources: readonly { id: string; configured: boolean; ok: boolean; fetched_at: string | null; stale_since: string | null; note?: string }[];
+  sources: readonly { id: string; configured: boolean; ok: boolean; fetched_at: string | null; stale_since: string | null }[];
   disagreements: readonly { code: string; month: string; source: string; dates: readonly string[]; other_source: string; other_dates: readonly string[] }[];
 }
 
@@ -672,8 +672,6 @@ export function releaseNotes(status: "ok" | "missing" | "error", doc: CalendarSt
         text: s.fetched_at ? `${name} could not be read on the last run; its dates from ${dayWords(s.fetched_at.slice(0, 10))} are shown.` : `${name} could not be read, and has never been: its releases are missing.`,
       });
     }
-    // What a good read did not cover, as the job says it (the Fed: the years it has not published yet).
-    if (s.ok && s.note) out.push({ tone: "info", text: `${name}: ${s.note}.` });
   }
   for (const d of doc.disagreements) {
     out.push({ tone: "warn", text: `${SHORT_LABEL[d.code] ?? d.code}, ${monthWords(d.month)}: ${SOURCE_NAME[d.source] ?? d.source} gives ${list(d.dates)}, ${SOURCE_NAME[d.other_source] ?? d.other_source} gives ${list(d.other_dates)}. Check before trading around it.` });

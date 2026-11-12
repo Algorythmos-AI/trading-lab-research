@@ -4,7 +4,7 @@
 // calendar (wt.options.levels) day by day; this file ties the TypeScript reading of it to the file.
 import { describe, expect, it } from "vitest";
 import data from "@/lib/market-calendar.json";
-import { clockSwitches, isExpectedDay, PAST_END, RANGE, releaseNotes, sessionMoves, sessionOf, sydneySession, tradingDaysLeft, yearView } from "@/lib/market-calendar";
+import { clockSwitches, isExpectedDay, PAST_END, RANGE, sessionMoves, sessionOf, sydneySession, tradingDaysLeft, yearView } from "@/lib/market-calendar";
 import { nyInstant } from "@/lib/options";
 
 const HOLIDAYS: Record<string, string> = {
@@ -131,10 +131,6 @@ describe("2028 and 2029", () => {
     expect(jan.notes).toEqual(["1–31: past the calendar's end (31 Dec 2029)"]);
   });
 
-  it("the economic calendar's note on a year the Fed has not published is shown, not dropped", () => {
-    const doc = { as_of: "2026-11-12T00:00:00Z", disagreements: [], sources: [{ id: "fed", configured: true, ok: true, fetched_at: "2026-11-12T00:00:00Z", stale_since: null, note: "no panel yet for 2028, 2029: those months are not yet announced, not missing" }] };
-    expect(releaseNotes("ok", doc, [], new Date("2026-11-12T01:00:00Z"))).toContainEqual({ tone: "info", text: "Federal Reserve: no panel yet for 2028, 2029: those months are not yet announced, not missing." });
-  });
 });
 
 describe("New York session times across the clock changes of 2028 and 2029", () => {

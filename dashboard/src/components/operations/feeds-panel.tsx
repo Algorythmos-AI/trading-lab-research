@@ -4,7 +4,7 @@ import { RelativeTime } from "@/components/client/relative-time";
 import { Panel } from "@/components/panel";
 import { StatusBadge } from "@/components/status";
 import { describeAge, freshness, OFFLINE_HOURS } from "@/lib/freshness";
-import { evaluateStamped, FEEDS, type FeedView, journalShown, nextDueOf, type StampedInputs, worstOf } from "@/lib/feed-watch";
+import { calendarNotice, evaluateStamped, FEEDS, type FeedView, journalShown, nextDueOf, type StampedInputs, worstOf } from "@/lib/feed-watch";
 import { lastWeekdays } from "@/lib/feeds";
 import { shortDate, sydney, weekDate } from "@/lib/format";
 import type { Tone } from "@/lib/labels";
@@ -166,7 +166,7 @@ function buildCards(i: FeedsInput): Feed[] {
       href: "/options",
       state: oState,
       asOf: o?.as_of ?? null,
-      schedule: `After each close, ${sydTime(oView?.next_due ?? null)} Sydney${assumedNote(oView)}`,
+      schedule: `After each close, ${sydTime(oView?.next_due ?? null)} Sydney${assumedNote(oView)}${oView?.next_past_end ? "; next session: past the calendar's end" : ""}`,
       note:
         refusedNote(oView) ??
         (o
@@ -268,6 +268,7 @@ export function FeedsPanel(input: FeedsInput) {
   const feeds = buildFeeds(input);
   const bad = feeds.filter((f) => f.state === "late" || f.state === "error" || f.state === "failed").length;
   const nowMs = input.now.getTime();
+  const outside = calendarNotice(nowMs);
   return (
     <Panel
       id="feeds"
@@ -276,6 +277,11 @@ export function FeedsPanel(input: FeedsInput) {
       means="What your trading pages are built from, and whether each one arrived on schedule. Times are Sydney; market holidays and half days come from the exchange calendar."
       action={<StatusBadge tone={bad === 0 ? "good" : "warn"}>{bad === 0 ? "All on schedule" : `${bad} need a look`}</StatusBadge>}
     >
+      {outside ? (
+        <p data-calendar-outside className="border-warn/60 bg-warn-soft mb-3 rounded-lg border p-3 text-sm">
+          {outside}
+        </p>
+      ) : null}
       <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {feeds.map((f) => {
           const st = STATE[f.state];
