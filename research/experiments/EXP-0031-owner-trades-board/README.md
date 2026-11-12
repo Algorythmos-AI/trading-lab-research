@@ -34,6 +34,10 @@ OWN-EARLY is named for the open window it questions; it tests late minus early.
   inconclusive with no verdict; the release that first writes labels waits for the fill-time check to pass.
 - Board's feed switched to `sip` in production: not yet (DEC-0049 point 2; the date goes here, written by the pull
   request or note that records the owner's feed decision).
+- 2026-11-12: the owner decided the board reads SIP (DEC-0050). This window ends, with no verdict and no session, on
+  the first session in which the production setting resolves to `sip` for any part of it (DEC-0049 point 2), the first
+  session with any `sip` board-feed stamp, or the owner's dated switch if no stamp was running. That date goes on the next line,
+  written by the note that follows the switch.
 - Entry alerts first switched on in production: not yet (DEC-0049 point 8; the date goes here, written by the pull
   request that switches them on).
 
