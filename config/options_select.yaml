@@ -22,7 +22,8 @@ lookbacks:
   dollar_volume: 20          # tie-break: the median of close x volume over the last 20 bars
 
 zones:
-  weight_floor: 5            # F3 reads merged zones of at least this weight
+  weight_floor: 5            # F3 reads merged zones of at least this weight. A name with none is not unranked: it
+                             # takes the last places on F3 and carries the caution no_zone (owner, 2026-11-12)
   exclude_members: [PDC]     # F3's zones are merged without the prior close's own level: the close is not support
                              # or resistance for itself
 
@@ -57,8 +58,8 @@ shown:                       # shown beside the factors, never scored
   hv_year_days: 252          # times the square root of 252
   hv_stdev: sample
 
-reason_codes: [bad_bar, stale_bar, short_history, missing_session, suspect_split, no_zone, benchmark_missing, internal_error]
+reason_codes: [bad_bar, stale_bar, short_history, missing_session, suspect_split, benchmark_missing, internal_error]
 eligibility_codes: [earnings_gap]
-caution_codes: [earnings_later, earnings_date_unknown, earnings_row_unreadable]
+caution_codes: [no_zone, earnings_later, earnings_date_unknown, earnings_row_unreadable]
 note_codes: [macro_high_next_session, next_session_half_day]
 no_selection_text: "No selection tonight: data incomplete"
