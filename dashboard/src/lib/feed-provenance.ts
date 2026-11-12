@@ -8,8 +8,8 @@
 //  * checked: how long ago the page last got an answer. A price fetched a second ago can still be a trade from a
 //    minute ago, so the two are shown apart.
 //
-// The stock feed here (IEX or SIP) is not the option chain's (chain.ts asks Alpaca's `indicative` option feed, a
-// separate thing ALPACA_FEED does not touch).
+// The stock feed here (IEX or SIP) is not the option chain's (chain.ts asks Alpaca's option feed named by
+// ALPACA_OPTION_FEED, indicative or opra, a separate setting ALPACA_FEED does not touch).
 import { TRADE_STALE_MS } from "./entry-checks";
 import { FEED_STALE_MS, serverNow } from "./trade-state";
 

@@ -57,9 +57,15 @@ export interface PollDeps {
   now: () => number;
   setTimer: (fn: () => void, ms: number) => unknown;
   clearTimer: (id: unknown) => void;
-  pollMs: number;
-  /** The waits after failures in a row (lib/backoff.ts). */
-  backoff: BackoffOptions;
+  /** The wait between good answers, ms; a function is asked again each time, so the interval can follow the answers. */
+  pollMs: number | (() => number);
+  /** The waits after failures in a row (lib/backoff.ts); a function is asked again at each failure, like `pollMs`. */
+  backoff: BackoffOptions | (() => BackoffOptions);
+  /**
+   * Optional: the wait after a rate limit (429), when it must not follow a shortened cap (the option chain on OPRA
+   * caps its other retries at 10 s but waits a rate limit's full 30 s). Without it a rate limit waits the cap.
+   */
+  limitedCapMs?: number;
   /** Told when a wait after a failure starts, when its attempt goes out, and (null) when the poll is healthy again. */
   onBackoff?: (b: Backoff | null) => void;
   /**
@@ -103,6 +109,7 @@ export function startPoll(d: PollDeps): Poll {
   /** When Retry now last sent an attempt (the `now` clock). */
   let lastManual = -Infinity;
 
+  const interval = () => (typeof d.pollMs === "function" ? d.pollMs() : d.pollMs);
   const emit = (b: Backoff | null) => {
     if (!stopped) d.onBackoff?.(b);
   };
@@ -122,7 +129,7 @@ export function startPoll(d: PollDeps): Poll {
   async function tick(): Promise<void> {
     timer = undefined;
     if (stopped || done || inFlight) return;
-    if (d.page.visibilityState !== "visible") return schedule(d.pollMs);
+    if (d.page.visibilityState !== "visible") return schedule(interval());
     inFlight = true;
     if (failures > 0) emit({ failures, at: null, limited });
     let r: PollResult;
@@ -141,11 +148,12 @@ export function startPoll(d: PollDeps): Poll {
     }
     if (r === "ok") {
       healthy();
-      return schedule(d.pollMs);
+      return schedule(interval());
     }
     failures++;
     limited = r === "limited";
-    const wait = limited ? capDelay(d.backoff) : retryDelay(failures, d.backoff);
+    const b = typeof d.backoff === "function" ? d.backoff() : d.backoff;
+    const wait = limited ? capDelay(d.limitedCapMs !== undefined ? { ...b, capMs: d.limitedCapMs } : b) : retryDelay(failures, b);
     retryAt = d.now() + wait;
     emit({ failures, at: retryAt, limited });
     schedule(wait);

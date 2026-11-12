@@ -9,7 +9,7 @@ import { UpstreamError } from "./upstream";
 // guessed at: the routes answer 503 as for missing keys, so the page shows live prices as off rather than prices
 // from a feed nobody chose. Case and surrounding spaces are not part of the choice ("SIP", "sip\n" are sip), so a
 // value pasted with a trailing newline does not take the prices off; anything else, "delayed_sip" included, is
-// refused. The option chain's feed (chain.ts, `indicative`) is a different thing and is not read from here.
+// refused. The option chain's feed (ALPACA_OPTION_FEED, option-feed.ts) is a different setting and is not read from here.
 
 export type { DataFeed };
 

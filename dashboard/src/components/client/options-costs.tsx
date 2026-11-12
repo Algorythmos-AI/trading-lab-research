@@ -3,13 +3,17 @@
 import { RotateCw } from "lucide-react";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type { ChainResponse } from "@/lib/chain";
-import { bellMinute } from "@/lib/contract";
+import { bellMinute, chainAge, feedsWords, INDICATIVE_WORDS, staleLimits } from "@/lib/contract";
 import { costLines, type CostLine, type CostSide } from "@/lib/costs";
 import { newYork, num, weekDate } from "@/lib/format";
 import type { OptionsTicker } from "@/lib/options";
 import { useLive } from "./live-layer";
+import { usePerfNow } from "./use-now";
 
-type Got = { status: "loading" } | { status: "error" } | { status: "ok"; chain: ChainResponse };
+/** An answer keeps when it arrived on the browser's monotonic clock, which its age is read on. */
+type Got = { status: "loading" } | { status: "error" } | { status: "ok"; chain: ChainResponse; receivedPerf: number };
+type GotOk = Extract<Got, { status: "ok" }>;
+const answered = (got: Record<string, Got>): GotOk[] => Object.values(got).filter((g): g is GotOk => g.status === "ok");
 
 function Side({ s }: { s: CostSide | null }) {
   if (!s || s.ask === null) return <span className="text-muted-foreground">—</span>;
@@ -34,6 +38,20 @@ function Side({ s }: { s: CostSide | null }) {
 /** Quotes read this long ago are called old: the panel asks once and does not keep asking. */
 export const COSTS_OLD_MIN = 30;
 
+/**
+ * Whether the asks on show are too old to rely on. On indicative, read more than COSTS_OLD_MIN ago. On opra the limit
+ * is the feed's own (staleLimits("opra").sameDay) on each opra answer's age (chainAge, the server's reckoning plus the
+ * monotonic time since receipt); an opra answer whose age cannot be read is old. With mixed feeds, either makes it old.
+ */
+export function costsOld(answers: readonly { chain: ChainResponse; receivedPerf: number }[], minutesSinceAsked: number | null, perfNow: number | null): boolean {
+  if (minutesSinceAsked !== null && minutesSinceAsked > COSTS_OLD_MIN) return true;
+  return answers.some((g) => {
+    if (g.chain.feed !== "opra") return false;
+    const age = chainAge(g.chain, g.receivedPerf, perfNow);
+    return age === null || age > staleLimits("opra").sameDay;
+  });
+}
+
 /** The strike a line is priced at; both, when the feed listed the call and the put at different ones. */
 function strikes(l: CostLine): string {
   const s = (v: number) => num(v, v % 1 === 0 ? 0 : 2);
@@ -44,11 +62,13 @@ function strikes(l: CostLine): string {
 
 export function OptionsCosts({ tickers, session, halfDay }: { tickers: OptionsTicker[]; session: string; halfDay: boolean }) {
   const { now } = useLive();
+  const perfNow = usePerfNow(5_000);
   const [open, setOpen] = useState(false);
   const [off, setOff] = useState(false);
   const [got, setGot] = useState<Record<string, Got>>({});
-  /** When the last round of asking began: the quotes on show are at least this old. */
+  /** When the last round of asking began: the quotes on show are at least this old. Wall clock (shown), and monotonic (measured). */
   const [askedAt, setAskedAt] = useState<number | null>(null);
+  const [askedPerf, setAskedPerf] = useState<number | null>(null);
   const run = useRef(0);
   // Leaving the brief view stops the round in flight: the rest of the names are not asked for.
   useEffect(
@@ -62,6 +82,7 @@ export function OptionsCosts({ tickers, session, halfDay }: { tickers: OptionsTi
     const mine = ++run.current;
     setOff(false);
     setAskedAt(Date.now());
+    setAskedPerf(performance.now());
     setGot(Object.fromEntries(tickers.map((t) => [t.symbol, { status: "loading" } as Got])));
     for (const t of tickers) {
       const close = t.last?.close;
@@ -76,7 +97,7 @@ export function OptionsCosts({ tickers, session, halfDay }: { tickers: OptionsTi
             }
             return; // the site has no keys for the option feed: no name will answer
           }
-          if (res.ok) next = { status: "ok", chain: (await res.json()) as ChainResponse };
+          if (res.ok) next = { status: "ok", chain: (await res.json()) as ChainResponse, receivedPerf: performance.now() };
         } catch {
           // one name's failure leaves the others standing
         }
@@ -104,6 +125,9 @@ export function OptionsCosts({ tickers, session, halfDay }: { tickers: OptionsTi
     );
   }
   const busy = Object.values(got).some((g) => g.status === "loading");
+  const answers = answered(got);
+  const sinceAsked = askedPerf !== null && perfNow !== null ? Math.max(0, perfNow - askedPerf) / 60_000 : null;
+  const old = costsOld(answers, sinceAsked, perfNow);
   return (
     <section aria-label="Option costs" data-costs={off ? "off" : busy ? "loading" : "ready"} className="border-t px-3 py-2.5">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3">
@@ -150,6 +174,11 @@ export function OptionsCosts({ tickers, session, halfDay }: { tickers: OptionsTi
                         <tr key={l.expiry} className={i === 0 ? "border-border/60 border-t" : undefined} data-cost-row={t.symbol}>
                           <th scope="row" className="py-1.5 pr-2 text-left font-normal">
                             {i === 0 ? <span className="font-mono font-semibold">{t.symbol} </span> : null}
+                            {i === 0 && g?.status === "ok" && g.chain.fallback === "opra-refused" ? (
+                              <span data-opra-refused className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">
+                                (OPRA refused){" "}
+                              </span>
+                            ) : null}
                             <span className="text-muted-foreground text-[0.6875rem] whitespace-nowrap max-sm:text-xs">
                               {weekDate(l.expiry)}
                               {l.days === 0 ? ", today" : l.days !== null ? `, ${l.days}d` : ""}
@@ -173,10 +202,10 @@ export function OptionsCosts({ tickers, session, halfDay }: { tickers: OptionsTi
         </div>
       )}
       {!off && askedAt !== null ? (
-        <p data-costs-age={now !== null && (now - askedAt) / 60_000 > COSTS_OLD_MIN ? "old" : "fresh"} className="mt-1.5 text-[0.6875rem] max-sm:text-xs">
-          {now !== null && (now - askedAt) / 60_000 > COSTS_OLD_MIN ? (
+        <p data-costs-age={old ? "old" : "fresh"} className="mt-1.5 text-[0.6875rem] max-sm:text-xs">
+          {old ? (
             <span className="text-warn">
-              Read at {newYork(new Date(askedAt).toISOString(), false)} ET, {num((now - askedAt) / 60_000, 0)} minutes ago. Refresh before relying on these.
+              Read at {newYork(new Date(askedAt).toISOString(), false)} ET{sinceAsked !== null ? `, ${num(sinceAsked, 0)} minutes ago` : ""}. Refresh before relying on these.
             </span>
           ) : (
             <span className="text-muted-foreground">Read at {newYork(new Date(askedAt).toISOString(), false)} ET.</span>
@@ -184,8 +213,11 @@ export function OptionsCosts({ tickers, session, halfDay }: { tickers: OptionsTi
         </p>
       ) : null}
       <p className="text-muted-foreground mt-1 text-[0.6875rem] max-sm:text-xs">
-        At the strike nearest the last close. Under each ask: expected day&apos;s moves from the close to breakeven at expiry (mv), and the bid-ask spread. Quotes run 15 minutes
-        behind the market.
+        At the strike nearest the last close. Under each ask: expected day&apos;s moves from the close to breakeven at expiry (mv), and the bid-ask spread.{" "}
+        {(() => {
+          const words = feedsWords(answers.map((g) => ({ chain: g.chain, ageMin: chainAge(g.chain, g.receivedPerf, perfNow) })));
+          return words === INDICATIVE_WORDS ? "Quotes run 15 minutes behind the market." : `${words}.`;
+        })()}
       </p>
     </section>
   );

@@ -318,7 +318,7 @@ function EstimateBlock({
   const q = quoted ? readQuote(quoted) : null;
   const oldAsk = quoted && q && (q.state === "ok" || q.state === "no-bid") && quoted.ask !== null ? quoted.ask : null;
   // That contract's own quote time, rounded up; with none, no age and so no ask is shown.
-  const age = quoted && chain && feed.status === "ok" ? quoteAgeMin(quoted.at, chain.as_of, feed.receivedPerf, perfNow) : null;
+  const age = quoted && chain && feed.status === "ok" ? quoteAgeMin(quoted.at, chain.served_at ?? chain.as_of, feed.receivedPerf, perfNow) : null;
 
   const missing =
     spot === null

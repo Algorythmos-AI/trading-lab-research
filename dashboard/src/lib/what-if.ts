@@ -3,11 +3,11 @@
 // stop a trade would meet first, and the day's room after one more stop. Pure: no I/O; every clock is passed in.
 //
 // Every check here is shown only when its inputs are present and fresh; each function returns null otherwise, so a
-// caller has nothing old to draw. The option quotes are 15 minutes behind the market, and every chain-derived line
-// says so. Advisory and read only: nothing here is an order.
+// caller has nothing old to draw. Every chain-derived line says how old its option quotes are: 15 minutes behind the
+// market on the indicative feed, real time on OPRA. Advisory and read only: nothing here is an order.
 import type { OptionKind } from "./bs";
 import type { ChainContract, ChainResponse } from "./chain";
-import { minutesToExpiry, readQuote, STALE_SAME_DAY_MIN } from "./contract";
+import { chainAge, minutesToExpiry, readQuote, staleLimits } from "./contract";
 import { newYork } from "./format";
 import type { NameStateName, NoTradeWhy } from "./trade-state";
 import { DAY_LOSS_LIMIT, MAX_PREMIUM, MAX_TRADES_PER_DAY, PREMIUM_STOP, RISK_PER_TRADE, type DayCheck } from "./trade-rules";
@@ -92,29 +92,37 @@ export function chainPx(close: number | null | undefined, spot: number | null | 
  * new. `receivedPerf` and `perfNow` are that monotonic clock, ms. Null without a quote time or a receipt.
  */
 export function chainAgeMin(chain: ChainResponse | null | undefined, receivedPerf: number | null | undefined, perfNow: number | null | undefined): number | null {
-  if (!chain || !fin(receivedPerf) || !fin(perfNow)) return null;
-  const asOf = Date.parse(chain.as_of);
-  let newest = -Infinity;
-  for (const x of chain.expiries)
-    for (const c of x.contracts) {
-      const at = c.at ? Date.parse(c.at) : NaN;
-      if (Number.isFinite(at) && at > newest) newest = at;
-    }
-  if (!Number.isFinite(asOf) || !Number.isFinite(newest)) return null;
-  // The monotonic clock never runs backwards; the clamp only guards a caller that passes the two the wrong way round.
-  return Math.max(0, asOf - newest) / 60_000 + Math.max(0, perfNow - receivedPerf) / 60_000;
+  return chainAge(chain, receivedPerf, perfNow);
 }
 
-/** A chain answer is fresh enough for a check while its prices are no older than STALE_SAME_DAY_MIN. */
+/**
+ * A chain answer is fresh enough for a check while its prices are no older than its feed's same-day limit
+ * (contract.ts staleLimits): STALE_SAME_DAY_MIN on indicative, OPRA_STALE_SAME_DAY_MIN on opra.
+ */
 export function chainFresh(chain: ChainResponse | null | undefined, receivedPerf: number | null | undefined, perfNow: number | null | undefined): boolean {
   const age = chainAgeMin(chain, receivedPerf, perfNow);
-  return age !== null && age <= STALE_SAME_DAY_MIN;
+  return age !== null && age <= staleLimits(chain?.feed).sameDay;
 }
 
-/** "Option chain 10:14 NY · 15 min behind": the label on every chain-derived line (the chain's own time and delay). */
+/**
+ * The label on every chain-derived line, with the chain's own time (`as_of`): "Option chain 10:14 NY · 15 min behind"
+ * on indicative, "Option chain 10:14 NY · OPRA (real-time feed)" on opra (the feed's kind, not a claim about any one
+ * contract's quote), and "Option chain 10:14 NY · 15 min behind (OPRA refused)" when opra was chosen but Alpaca refused
+ * it and the answer is indicative's.
+ */
 export function chainStamp(chain: ChainResponse): string {
   const at = newYork(chain.as_of, false);
-  return `Option chain ${at} NY · ${chain.delay_min} min behind`;
+  if (chain.feed === "opra") return `Option chain ${at} NY · OPRA (real-time feed)`;
+  return `Option chain ${at} NY · ${chain.delay_min} min behind${chain.fallback === "opra-refused" ? " (OPRA refused)" : ""}`;
+}
+
+/**
+ * "Contract quote 10:13 NY": the time of the one contract's own quote a line is priced from, or null when the feed
+ * gave it none (never made up).
+ */
+export function contractQuoteTime(contract: ChainContract | null | undefined): string | null {
+  const at = contract?.at ? Date.parse(contract.at) : NaN;
+  return Number.isFinite(at) ? `Contract quote ${newYork(new Date(at).toISOString(), false)} NY` : null;
 }
 
 /**

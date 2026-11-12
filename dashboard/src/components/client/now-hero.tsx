@@ -27,7 +27,7 @@ import { type BoardRow, entryPrompt, rowView, type RowView, STATE_WORD } from "@
 import type { NameStateName } from "@/lib/trade-state";
 import { cn } from "@/lib/utils";
 import { bellMinute } from "@/lib/contract";
-import { atmContract, chainFresh, chainPx, chainStamp, entryStopDistance, premiumCheck, roomShown, UNLIKELY_WORDS, whichStopFirst } from "@/lib/what-if";
+import { atmContract, chainFresh, chainPx, chainStamp, contractQuoteTime, entryStopDistance, premiumCheck, roomShown, UNLIKELY_WORDS, whichStopFirst } from "@/lib/what-if";
 import { useLadderLive } from "./ladder-live";
 import { openTicket } from "./ticket";
 import { DONE_LINE, useDone } from "./done-today";
@@ -131,7 +131,7 @@ function usePriceView(b: Board, symbol: string | null): LadderLiveView {
  * The hero's what-if lines, small, under the tiles: the at-the-money option's cost against the premium cap and which
  * stop comes first (from one option chain, for the hero's name only and only in the live mode with the board pointing
  * at a side), then the day's room after a stop. Each line shows only when its inputs are present and fresh: the chain
- * no older than STALE_SAME_DAY_MIN, for this very name, labelled with its time and "15 min behind"; nothing at all on
+ * no older than its feed's same-day limit (staleLimits), for this very name, labelled with its time and feed (chainStamp); nothing at all on
  * old prices. The which-stop line measures entry to stop (entryStopDistance, as the manage card does), and is left out
  * when the stop is on the wrong side of the entry.
  */
@@ -166,6 +166,11 @@ function HeroChecks({ b, row, view, side, room }: { b: Board; row: BoardRow; vie
           <p data-hero-chain className="text-muted-foreground text-xs">
             {chainStamp(chain)}
           </p>
+          {contractQuoteTime(atm?.contract) ? (
+            <p data-hero-quote className="text-muted-foreground text-xs">
+              {contractQuoteTime(atm?.contract)}
+            </p>
+          ) : null}
         </>
       ) : null}
       {room ? (
