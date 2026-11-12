@@ -1,10 +1,11 @@
 // One call or put the reader is weighing or holding, and what the desk can say about it. Pure: no I/O.
 //
-// Everything here is an estimate from a flat-volatility model (bs.ts) on quotes 15 minutes behind the market. It
-// describes a contract; it never says whether to buy it.
+// Everything here is an estimate from a flat-volatility model (bs.ts) on option quotes from the chain's feed: 15
+// minutes behind the market on indicative, real time on OPRA (the answer names which). It describes a contract; it
+// never says whether to buy it.
 import { floorValue, greeks, impliedVol, type OptionKind } from "./bs";
 import type { ChainContract, ChainResponse } from "./chain";
-import { weekDate } from "./format";
+import { newYork, weekDate } from "./format";
 import { breakeven, breakevenMoves, decay, maxLoss, pnl, valueIf } from "./longopt";
 import { closeMinute, nearest, nyClock, nyInstant, type OptionsTicker } from "./options";
 
@@ -109,11 +110,95 @@ export function volFor(c: ChainContract | null, mid: number | null, spot: number
 }
 
 /**
- * While the market is open, option quotes older than this are too old to price a same-day contract from (the feed
- * itself runs 15 minutes behind); a contract with days to run can stand older ones.
+ * While the market is open, option quotes older than this are too old to price a same-day contract from (the
+ * indicative feed itself runs 15 minutes behind); a contract with days to run can stand older ones.
  */
 export const STALE_SAME_DAY_MIN = 35;
 export const STALE_LATER_MIN = 105;
+/**
+ * The same limits on the OPRA feed, which is real time: quotes a few minutes old there mean a feed in trouble, so
+ * they are withheld far sooner.
+ */
+export const OPRA_STALE_SAME_DAY_MIN = 2;
+export const OPRA_STALE_LATER_MIN = 5;
+
+/**
+ * The age limits, in minutes, for a chain's quotes: indicative's own on indicative, OPRA's on opra and on anything
+ * else, so a feed this page does not know is held to the strictest limits, never the loosest.
+ */
+export function staleLimits(feed: ChainResponse["feed"] | null | undefined): { sameDay: number; later: number } {
+  return feed === "indicative" ? { sameDay: STALE_SAME_DAY_MIN, later: STALE_LATER_MIN } : { sameDay: OPRA_STALE_SAME_DAY_MIN, later: OPRA_STALE_LATER_MIN };
+}
+
+/**
+ * The contract pane's line on where its quotes come from: "Option quotes run 15 minutes behind the market" on
+ * indicative (with "(OPRA refused)" when opra was chosen and Alpaca refused it), "Option quotes: OPRA, real time" on a
+ * fresh opra answer. On an opra answer past its limit (`stale`) nothing says real time: "Option quotes: OPRA feed, read
+ * at 10:14 NY", the answer's own time.
+ */
+export function chainFeedWords(chain: ChainResponse, stale = false): string {
+  if (chain.feed === "opra") return stale ? `Option quotes: OPRA feed, read at ${newYork(chain.as_of, false)} NY` : "Option quotes: OPRA, real time";
+  return `Option quotes run ${chain.delay_min} minutes behind the market${chain.fallback === "opra-refused" ? " (OPRA refused)" : ""}`;
+}
+
+/** feedsWords with no answer yet, or only indicative's: the words the pages have always used. */
+export const INDICATIVE_WORDS = "Option quotes run 15 minutes behind the market";
+
+/** One answer shown in a list of names (the Brief's costs, the positions), with its quotes' age (chainAge) or null. */
+export interface FeedRead {
+  chain: ChainResponse;
+  ageMin: number | null;
+}
+
+/** An opra answer is past its limit when its age is unknown or above the strictest (same-day) limit. */
+const opraOld = (r: FeedRead) => r.ageMin === null || r.ageMin > staleLimits("opra").sameDay;
+
+/**
+ * Where a list's quotes come from, from every answer shown, never "real time":
+ * - none yet, or all indicative: "Option quotes run 15 minutes behind the market", with "(OPRA refused)" when every one
+ *   is a refused opra's fallback;
+ * - all opra: "OPRA feed, read at 10:14 NY" (the earliest answer's time), with ", too old to use" when any is past its limit;
+ * - otherwise "Option quotes from mixed feeds: OPRA on some names, 15 minutes behind on the others" (the rows answered
+ *   from a refused opra say "(OPRA refused)" themselves).
+ */
+export function feedsWords(reads: readonly FeedRead[]): string {
+  if (reads.length === 0) return INDICATIVE_WORDS;
+  const opra = reads.filter((r) => r.chain.feed === "opra");
+  if (opra.length === reads.length) {
+    const first = opra.map((r) => r.chain.as_of).sort()[0]!;
+    return `OPRA feed, read at ${newYork(first, false)} NY${opra.some(opraOld) ? ", too old to use" : ""}`;
+  }
+  if (opra.length === 0) {
+    const refused = reads.every((r) => r.chain.fallback === "opra-refused");
+    const delay = Math.max(...reads.map((r) => r.chain.delay_min));
+    return `Option quotes run ${delay} minutes behind the market${refused ? " (OPRA refused)" : ""}`;
+  }
+  return "Option quotes from mixed feeds: OPRA on some names, 15 minutes behind on the others";
+}
+
+/**
+ * How old a chain answer's prices are now, in minutes: how far its newest quote was behind the moment the answer was
+ * built (`served_at`, or `as_of` when it has none; a cached answer is served after it was fetched; both on the
+ * server's clock), plus the time since it reached the browser on the browser's monotonic clock (`performance.now()`, ms). Neither a browser clock that disagrees with the server's nor one set back can make
+ * an old answer look new. Null without a quote time or a receipt.
+ */
+export function chainAge(chain: ChainResponse | null | undefined, receivedPerf: number | null | undefined, perfNow: number | null | undefined): number | null {
+  const fin = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+  if (!chain || !fin(receivedPerf) || !fin(perfNow)) return null;
+  const asOf = Date.parse(chain.as_of);
+  const servedAt = chain.served_at ? Date.parse(chain.served_at) : NaN;
+  let newest = -Infinity;
+  for (const x of chain.expiries)
+    for (const c of x.contracts) {
+      const at = c.at ? Date.parse(c.at) : NaN;
+      if (Number.isFinite(at) && at > newest) newest = at;
+    }
+  if (!Number.isFinite(asOf) || !Number.isFinite(newest)) return null;
+  // Served before it was fetched can only be a bad stamp: the later of the two counts.
+  const served = Number.isFinite(servedAt) ? Math.max(asOf, servedAt) : asOf;
+  // The monotonic clock never runs backwards; the clamp only guards a caller that passes the two the wrong way round.
+  return Math.max(0, served - newest) / 60_000 + Math.max(0, perfNow - receivedPerf) / 60_000;
+}
 
 /** How old the newest quote anywhere in the chain is, in minutes: the age of the feed, not of one quiet contract. */
 export function feedAge(chain: ChainResponse | null, now: number): number | null {
@@ -205,9 +290,33 @@ export interface ContractView {
 }
 
 /**
+ * What contractView needs to know about the moment: whether the market is open and the stock's price live, and when
+ * the chain reached the browser (`receivedPerf`) and the time now (`perfNow`), both on the browser's monotonic clock.
+ */
+export interface ViewClock {
+  marketOpen: boolean;
+  priceIsLive: boolean;
+  receivedPerf?: number | null;
+  perfNow?: number | null;
+}
+
+/**
+ * The age contractView judges a chain by. With the receipt, chainAge: the server's own reckoning plus the monotonic
+ * time since, so a browser clock running slow cannot make the quotes look young. Without one (a caller that has none),
+ * the larger of the browser clock's reading (feedAge) and the age the quotes already had when answered.
+ */
+export function viewAge(chain: ChainResponse | null, now: number, clock: ViewClock): number | null {
+  const timed = chainAge(chain, clock.receivedPerf, clock.perfNow);
+  if (timed !== null) return timed;
+  const wall = feedAge(chain, now);
+  const atAnswer = chainAge(chain, 0, 0);
+  return wall === null ? atAnswer : atAnswer === null ? wall : Math.max(wall, atAnswer);
+}
+
+/**
  * Everything the contract pane shows for one pick. `spot` is the stock's price: live in session, else the last
  * close, and `priceIsLive` says which. `marketOpen` is read off the clock, not off a quote: it is when old option
- * quotes mean a feed in trouble rather than a market that is shut.
+ * quotes mean a feed in trouble rather than a market that is shut. The quotes' age is viewAge's.
  */
 export function contractView(
   pick: Pick,
@@ -216,15 +325,16 @@ export function contractView(
   spot: number,
   now: number,
   session: string,
-  clock: { marketOpen: boolean; priceIsLive: boolean },
+  clock: ViewClock,
 ): ContractView {
   const contract = chain?.expiries.find((x) => x.date === pick.expiry)?.contracts.find((c) => c.kind === pick.kind && c.strike === pick.strike) ?? null;
   const quote = contract ? readQuote(contract) : null;
-  const ageMin = feedAge(chain, now);
+  const ageMin = viewAge(chain, now, clock);
   const minutes = minutesToExpiry(pick.expiry, now, bellMinute(pick.expiry, session, t.half_day));
   const days = daysToExpiry(pick.expiry, now);
   const expired = minutes === null || minutes <= 0;
-  const stale = clock.marketOpen && !expired && ageMin !== null && ageMin > (days === 0 ? STALE_SAME_DAY_MIN : STALE_LATER_MIN);
+  const limits = staleLimits(chain?.feed);
+  const stale = clock.marketOpen && !expired && ageMin !== null && ageMin > (days === 0 ? limits.sameDay : limits.later);
   const here = clock.priceIsLive ? "Now" : "Last close";
   const blank: ContractView = {
     contract, quote, ageMin, minutes, days, expired, stale, here,

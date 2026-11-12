@@ -407,6 +407,31 @@ test("the contract pane says so when option quotes are off, failing or damaged, 
   await expect(page.locator("[data-pane-error]")).toHaveCount(0);
 });
 
+test("the contract pane names its option feed: 15 minutes behind on indicative, real time on OPRA", async ({ page, context, baseURL }) => {
+  const openPane = async () => {
+    await open(page, "/options?view=live&s=SPY");
+    await showPane(page, "SPY");
+    await contract(page).getByRole("button", { name: "Price a call or put" }).click();
+    await expect(contract(page)).toHaveAttribute("data-contract", "ready");
+  };
+  // No flag: the fixture answers as the indicative feed.
+  await openPane();
+  await expect(contract(page).locator("[data-chain-feed]")).toHaveAttribute("data-chain-feed", "indicative");
+  await expect(contract(page)).toContainText("Option quotes run 15 minutes behind the market");
+  await expect(contract(page)).not.toContainText("OPRA");
+  // Cleared, so the pane opens shut again and is asked for afresh.
+  await contract(page).getByRole("button", { name: "Clear" }).click();
+  await expect(contract(page)).toHaveAttribute("data-contract", "closed");
+  // chain-opra: the fixture answers as OPRA, quotes a few seconds old, and the pane says real time.
+  await variant(context, baseURL, "chain-opra");
+  await openPane();
+  await expect(contract(page).locator("[data-chain-feed]")).toHaveAttribute("data-chain-feed", "opra");
+  await expect(contract(page)).toContainText("Option quotes: OPRA, real time");
+  await expect(contract(page)).not.toContainText("minutes behind the market");
+  await expect(contract(page)).toContainText("at the ask");
+  expect((await contract(page).textContent()) ?? "").not.toMatch(/NaN|undefined|Infinity/);
+});
+
 const positions = (page: Page) => page.getByRole("region", { name: "Paper option positions" });
 
 test("the paper positions sit under the list, and opening one prices the contract that is held", async ({ page }) => {

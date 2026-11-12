@@ -39,7 +39,7 @@ without fixing it. Read the records themselves for what they decide.
 | Owner's board, session bars (site, `/api/bars`) | 2-minute stock bars | `ALPACA_FEED`, default iex (check the site's setting) | the same | none | DEC-0044, DEC-0049, feed-agreement runbook |
 | Shadow evaluator (site, `/api/cron/desk`) | 2-minute bars and snapshots | `ALPACA_FEED`, default iex (check the site's setting) | the same | none | DEC-0044, DEC-0049, EXP-0031, feed-agreement runbook |
 | Owner-trade labeller (EXP-0031 labels; not built yet) | settled 2-minute bars | iex, asked for by name, never from `ALPACA_FEED` | its own pull request | DEC-0049 | EXP-0031 |
-| Contract pane and chain (site, `/api/chain`) | option snapshots | indicative | literal in `chain.ts` | none | none |
+| Contract pane and chain (site, `/api/chain`) | option snapshots | `ALPACA_OPTION_FEED`, default indicative; opra on the owner's setting (check the site's setting) | `ALPACA_OPTION_FEED` on Vercel (`option-feed.ts`) | DEC-0050 (point 6) | none |
 | Feed agreement (hand, `make feed-agreement`) | 2-minute stock bars | iex and sip | literal per run (`barsUrl`) | none | feed-agreement runbook |
 | Paper runner B, signal bars (host, `paper-b`) | 1-minute bars | iex | literal default in `runner_b.py` | DEC-0037 | none |
 | Paper runner B, latest quotes (host) | latest quote of the signal and trade names | iex | literal | none | DEC-0024 |

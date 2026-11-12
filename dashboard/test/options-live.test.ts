@@ -304,7 +304,7 @@ describe("a position's greeks", () => {
     feed: "indicative",
     delay_min: 15,
     symbol: "SPY",
-    expiries: [{ date: row.expiry, contracts: [{ kind: row.kind, strike: row.strike, bid: 3.0, ask: 3.2, last: 3.1, at: null, iv: 0.12, delta: 0.52, volume: 10, ...over }] }],
+    expiries: [{ date: row.expiry, contracts: [{ kind: row.kind, strike: row.strike, bid: 3.0, ask: 3.2, last: 3.1, at: null, iv: 0.12, delta: 0.52, volume: 10, bid_size: null, ask_size: null, ...over }] }],
   });
   const clock = { marketOpen: true, priceIsLive: true };
   const at = (c: ChainResponse | null, r = row) => positionGreeks(r, c, spy, row.strike, NOW.getTime(), e.session, clock);

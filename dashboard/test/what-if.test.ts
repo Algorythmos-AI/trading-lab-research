@@ -38,6 +38,8 @@ const c = (kind: "call" | "put", strike: number, bid: number | null, ask: number
   iv: null,
   delta,
   volume: null,
+  bid_size: null,
+  ask_size: null,
 });
 const chain = (expiries: ChainResponse["expiries"], as_of = "2026-10-12T14:30:00Z"): ChainResponse => ({ as_of, feed: "indicative", delay_min: 15, symbol: "SPY", expiries });
 const strip = [

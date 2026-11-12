@@ -100,7 +100,7 @@ describe("a contract's symbol", () => {
 describe("normalising a contract", () => {
   it("keeps what is usable", () => {
     expect(normaliseContract("call", 780, snap(2.95, 3.1))).toEqual({
-      kind: "call", strike: 780, bid: 2.95, ask: 3.1, last: 1.05, at: "2026-10-12T15:45:00.123Z", iv: 0.14, delta: 0.5, volume: 1200,
+      kind: "call", strike: 780, bid: 2.95, ask: 3.1, last: 1.05, at: "2026-10-12T15:45:00.123Z", iv: 0.14, delta: 0.5, volume: 1200, bid_size: null, ask_size: null,
     });
   });
 
@@ -110,7 +110,7 @@ describe("normalising a contract", () => {
 
   it("turns anything unusable into null, never into a number", () => {
     const junk = { latestQuote: { bp: -1, ap: "3.1", t: "yesterday" }, latestTrade: { p: 0 }, greeks: { delta: 7 }, impliedVolatility: -0.2, dailyBar: { v: -5 } };
-    expect(normaliseContract("call", 780, junk)).toEqual({ kind: "call", strike: 780, bid: null, ask: null, last: null, at: null, iv: null, delta: null, volume: null });
+    expect(normaliseContract("call", 780, junk)).toEqual({ kind: "call", strike: 780, bid: null, ask: null, last: null, at: null, iv: null, delta: null, volume: null, bid_size: null, ask_size: null });
     expect(normaliseContract("call", 780, null).ask).toBeNull();
     expect(normaliseContract("call", 780, { impliedVolatility: NaN, greeks: null }).iv).toBeNull();
     expect(normaliseContract("call", 780, { impliedVolatility: 25 }).iv).toBeNull();

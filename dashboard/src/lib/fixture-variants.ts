@@ -27,6 +27,7 @@ export const VARIANT_COOKIE = "fx";
  *   With `focus`, AAPL joins the focus names.
  * - `chain-off`: the option feed has no keys. `chain-error`: Alpaca is failing.
  * - `chain-thin`: the nearest expiry's first calls come without a volatility, without a market, and crossed.
+ * - `chain-opra`: the chain answers as Alpaca's real-time OPRA feed (no delay, quotes a few seconds old).
  * - `v2`: the edition in its second format, with the day's context, events and each name's volatility block.
  * - `positions-off`: no options live document has been published. `positions-none`: one has, with nothing open.
  * - `positions-old`: the document is three hours old.
@@ -57,6 +58,7 @@ export const VARIANT_FLAGS = [
   "chain-off",
   "chain-error",
   "chain-thin",
+  "chain-opra",
   "v2",
   "positions-off",
   "positions-none",
