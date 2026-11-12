@@ -2,7 +2,7 @@ import { type AltTrigger, bars2m, manage, type NameState, type NameStateName, SE
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ImInForm, ManageCard, readNotes, writeNotes } from "@/components/client/trade-manage";
+import { cardAsksChain, ImInForm, ManageCard, readNotes, writeNotes } from "@/components/client/trade-manage";
 import { focusOptions } from "@/lib/fixture-variants";
 import { SCRIPT_ANSWER_LAG_MS, scriptBars, scriptQuote, stepInstant } from "@/lib/fixture-script";
 import { focusPlan } from "@/lib/focus-plan";
@@ -210,6 +210,36 @@ describe("where an open trade comes from", () => {
     expect(html).toContain("In a trade · QQQ call");
     expect(html).toContain("From your Webull fills, up to 2 min behind; price levels from the card");
     expect(html).not.toContain("Clear");
+  });
+
+  it("carries each trade's own journal lots, for the live option value, and none for a note the journal does not show", () => {
+    const l = lot();
+    expect(openTrades(ITEMS, [l], [], S)[0]!.lots).toEqual([l]);
+    expect(openTrades(ITEMS, [l], [note()], S)[0]!.lots).toEqual([l]);
+    expect(openTrades(ITEMS, [], [note()], S)[0]!.lots).toEqual([]);
+  });
+
+  it("shows no live option value before the chain and the option quote have answered: P&L stays see Webull", () => {
+    const v = viewAt(3, [], [lot()]);
+    const ctx = { close: QQQ.close ?? null, now: clock(3), session: S, halfDay: false };
+    const html = renderToStaticMarkup(createElement(ManageCard, { v, ctx, held: { lots: [lot()], journalCurrent: true } }));
+    expect(html).not.toContain("data-manage-value");
+    expect(html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ")).toContain("P&amp;L see Webull");
+  });
+
+  it("polls one chain per card, never on a CHECK card or one without a fresh price", () => {
+    const ctx = { close: QQQ.close ?? null, now: clock(3), session: S, halfDay: false };
+    const held = { lots: [lot()], journalCurrent: true };
+    expect(cardAsksChain(viewAt(3, [], [lot()]), ctx, held)).toBe(true);
+    expect(cardAsksChain(viewAt(3, [], [lot()], { rowState: "paused" }), ctx, held)).toBe(false);
+    expect(cardAsksChain(viewAt(3, [], [lot()], { quote: null }), ctx, held)).toBe(false);
+    expect(cardAsksChain(viewAt(3, [], [lot()]), { ...ctx, now: null }, held)).toBe(false);
+    expect(cardAsksChain(viewAt(3, [], [lot()]), undefined, held)).toBe(false);
+    // with the stop at the entry (target 1 hit) only a contract the journal names keeps it asking
+    const t1 = viewAt(4);
+    expect(t1.stopAtEntry).toBe(true);
+    expect(cardAsksChain(t1, ctx, undefined)).toBe(false);
+    expect(cardAsksChain(t1, ctx, { lots: [lot({ symbol: "QQQ" })], journalCurrent: false })).toBe(true);
   });
 
   it("leaves out shares, short lots, other names and other days", () => {

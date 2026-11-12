@@ -1,4 +1,6 @@
 import { deskNote } from "@/lib/desk-state";
+import { after } from "next/server";
+import { entitlementForHealth } from "@/lib/entitlement";
 import { calendarHealth, journalHealth, ledgerHealth, optionsCloneHealth, optionsHealth, optionsLiveHealth, radarHealth } from "@/lib/editions";
 import { fixtureMode, loadCalendar, loadCryptoSnapshot, loadHftSnapshot, loadJournal, loadLedger, loadOptions, loadOptionsClone, loadOptionsLive, loadRadar, loadSnapshot } from "@/lib/snapshot";
 
@@ -6,7 +8,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(): Promise<Response> {
-  const [result, crypto, hft, options, radar, optionsLive, journal, optionsClone, ledger, calendar] = await Promise.all([
+  const [result, crypto, hft, options, radar, optionsLive, journal, optionsClone, ledger, calendar, plan] = await Promise.all([
     loadSnapshot(),
     loadCryptoSnapshot(),
     loadHftSnapshot(),
@@ -17,7 +19,17 @@ export async function GET(): Promise<Response> {
     loadOptionsClone(),
     loadLedger(),
     loadCalendar(),
+    // Never waits on Alpaca: the instance's last answer, or a first probe raced against 300 ms (entitlement.ts).
+    entitlementForHealth().catch(() => ({ value: null, pending: null })),
   ]);
+  // A probe still running is kept alive past the answer, so the next reader finds it done.
+  if (plan.pending) {
+    try {
+      after(plan.pending);
+    } catch {
+      // Outside a request (a unit test): the promise runs on and never rejects.
+    }
+  }
   // BUILD_SHA is inlined at build time (next.config.ts) by CI and `make dashboard-deploy`. `||`, not `??`:
   // VERCEL_GIT_COMMIT_SHA is an empty string on CLI deploys, which `??` would keep.
   const sha = process.env.BUILD_SHA || process.env.VERCEL_GIT_COMMIT_SHA || null;
@@ -56,6 +68,9 @@ export async function GET(): Promise<Response> {
         ledger: ledgerHealth(ledger),
         calendar: calendarHealth(calendar),
       },
+      // What the site's keys are entitled to, asked of Alpaca: added after every older field, and left out without
+      // keys, so nothing a reader of the fields above relies on moves.
+      ...(plan.value ? { entitlement: plan.value } : {}),
       ...(fixtureMode() ? { fixture: true } : {}),
     },
     { headers: { "cache-control": "no-store" } },

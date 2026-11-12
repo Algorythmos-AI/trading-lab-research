@@ -388,6 +388,9 @@ test("I'm in at the entry opens the manage card, which reads target 1 hit and th
   await expect(card).toContainText("fill time to the minute");
   await expect(card).toHaveAttribute("data-manage-action", "hold");
   await expect(card.locator("[data-manage-line]")).toContainText("Holding: stop 752.01");
+  // a hand note names no contract: no live option value, and the P&L stays with Webull
+  await expect(card.locator("[data-manage-value]")).toHaveCount(0);
+  await expect(card.locator('[data-manage-small="pnl"]')).toContainText("see Webull");
   await at(context, baseURL, 4);
   await expect(card).toHaveAttribute("data-manage-action", "sell_half", { timeout: 15_000 });
   await expect(card.locator("[data-manage-line]")).toContainText("Target 1 hit: sell half, stop to 753.43");
