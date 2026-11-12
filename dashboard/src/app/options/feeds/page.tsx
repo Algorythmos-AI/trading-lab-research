@@ -105,7 +105,8 @@ function cells(s: ComparedSession): string[] {
   ];
 }
 
-function ComparedTable({ rows }: { rows: ComparedSession[] }) {
+function ComparedTable({ rows }: { rows: ComparedSession[] | null }) {
+  if (rows === null) return <p data-compared-off className="text-warn text-sm">Sessions compared: not available, the report store did not answer.</p>;
   if (!rows.length) return <p className="text-muted-foreground text-sm">No compared sessions yet.</p>;
   return (
     <div className="max-w-full overflow-x-auto" tabIndex={0} role="region" aria-label="Sessions compared, scrolls sideways">

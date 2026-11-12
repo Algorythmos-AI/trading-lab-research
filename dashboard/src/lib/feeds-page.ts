@@ -1,4 +1,5 @@
 import "server-only";
+import { readCompareReports } from "./feed-compare-report";
 import { type BoardFeedDay, nextOpenAfter, readBoardFeedDay } from "./board-feed-stamp";
 import { bodyHash, type ChainReason, type JudgeStamp, sessionEnds, verifyChain } from "./board-feed-judge";
 import { FEEDS_FX_COOKIE, feedsFixtureClock, parseFeedsFx } from "./feeds-live";
@@ -114,12 +115,19 @@ export function fixtureReports(): unknown[] {
 }
 
 /**
- * The stored comparison reports, newest first. It returns [] here: the reader of the stored reports lands in its own
- * pull request, and this loader is wired to it in the follow-up commit. Fixture mode gives two synthetic sessions.
+ * The stored session reports, newest first, as table rows. Read through the compare's own reader, which already
+ * strips the replay's per-slot list (DEC-0050 point 5); a store that cannot be read gives no table and never an
+ * error page: null, which the page shows as not available. Fixture mode shows two synthetic sessions.
  */
-export async function loadComparedSessions(): Promise<ComparedSession[]> {
+export async function loadComparedSessions(): Promise<ComparedSession[] | null> {
   if (fixtureMode()) return comparedRows(fixtureReports());
-  return [];
+  try {
+    const { reports } = await readCompareReports(MAX_COMPARED);
+    return comparedRows(reports);
+  } catch {
+    // Not "none yet": the store did not answer, and the page says so.
+    return null;
+  }
 }
 
 // ---- today's board-feed stamps ---------------------------------------------------------------------------------------
