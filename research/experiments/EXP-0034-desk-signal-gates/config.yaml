@@ -194,9 +194,11 @@ preconditions:                      # each recorded with its commit by a dated R
   - board-feed stamps written in production for every minute of one full (not half-day) regular session, reading sip with SPY answering, and the session sealed
 
 window:
+  switch_to_log_allowed: only once the four preconditions are met and Amendment 1 is merged and in production
   start: >-
-    the first regular New York session that opens after: the preconditions are met, Amendment 1 is merged and in
-    production, and desk/signal.json first reads log or show in production
+    the first counted session that opens after desk/signal.json first reads log in production; its date is the
+    start date, written into README.md the same day
+  latest_start: "2027-02-28"        # not started by then: the record lapses, no verdict, the trial stays counted; a new record is needed
   backfill: never
   dry_sessions: never in the window
   counted_session: at least 90% of the session's expectedSlots (desk-eval.ts) hold a signal record and have a usable board-feed stamp (as above); else log_incomplete
@@ -216,7 +218,7 @@ window:
     run through the old and the new engine; the window ends only if any row's state, brokeAt or card numbers differ;
     it prints yes or no and counts only; its result is a dated README line
   early_end_outcome: no verdict is worked out, whatever the counts; the trial stays counted; date and cause in README.md
-  close_date: one year after the date DEC-0051 is accepted (README.md)
+  close_date: one year after the start date (same month and day); the last session is the last regular session before it
 
 unit:
   break: one (session, focus name, side, brokeAt) whose side reads enter_zone in the DEC-0044 log

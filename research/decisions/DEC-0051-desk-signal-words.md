@@ -360,12 +360,18 @@ on the stock than breaks that reach it while a market gate fails?
      been written since the open on 2026-11-12, and that the cron fires at second 47 to 49 of its minute; the writer
      writes nothing past second 45 of the minute (`board-feed-stamp.ts`). Until that is fixed and a full session is
      stamped, Amendment 1 is not written and no window starts.)
-- **The window.** It starts at the first regular session that opens after: the preconditions are met, Amendment 1
-  is merged and in production, and the switch first reads `log` or `show` in production. Forward only, never
-  backfilled. No `dry` session is ever in it.
-- **Read once,** by the read script, at the first of: 100 scored breaks in group *a*, or the fixed close date one
-  year after the date this record is accepted (written into EXP-0034's `README.md` by the pull request that accepts
-  it). The read uses the breaks up to that point; later ones are not taken.
+- **The window** (the owner's rule, second round, 2026-11-13). The switch may first be set to `log` in production only
+  once the four preconditions are met and Amendment 1 is merged and in production. The window starts on the first
+  counted session (below) that opens after the switch first reads `log` in production; that session's date is the
+  window's start date, and it is written into EXP-0034's `README.md` the same day. Forward only, never backfilled.
+  No `dry` session is ever in it.
+- **The close date** is one year after the start date (the same month and day a year later). The window's last
+  session is the last regular session before the close date.
+- **The latest start date is 2027-02-28.** If the window has not started by then, this record lapses: no session is
+  counted, nothing is read and no verdict is worked out; the trial stays counted, as an early end leaves it; the
+  date and the cause go in EXP-0034's `README.md`. Testing the signal words after that needs a new record.
+- **Read once,** by the read script, at the first of: 100 scored breaks in group *a*, or the close date. The read
+  uses the breaks up to that point; later ones are not taken.
 - **Too few to judge:** fewer than 30 scored breaks in either group, or fewer than 20 counted sessions, when it is
   read. That is an exploratory mark, not evidence either way, and it counts as not supported for the pre-set action.
 - **Secondary, descriptive only:** for each break in group *a*, the option result from the logged quotes: in at the
@@ -481,8 +487,8 @@ The pull request that accepts it changes, as #412 did for DEC-0047, and nothing 
 
 - the Status line above, to ACCEPTED with the date and `approved_by: owner`;
 - the DEC-0051 row of `config/trial_registry.yaml`, from `proposed` to `accepted`;
-- `status: proposed` in EXP-0034's `config.yaml` to `registered`, and the acceptance date and the close date in its
-  `README.md`;
+- `status: proposed` in EXP-0034's `config.yaml` to `registered`, and the acceptance date in its `README.md` (the
+  close date is not set at acceptance: it follows from the window's start date, section 8);
 - the eight assertions that pin family O at 35, to 36, with their comments naming DEC-0051: one in
   `tests/unit/test_options_records.py` (`test_the_registry_counts_family_o_as_the_decision_states`) and seven in
   `tests/unit/test_options_clone_records.py`. While the row is `proposed` they stay at 35 and pass.
