@@ -1,4 +1,5 @@
 import "server-only";
+import { alpacaNoFeedUrl } from "./alpaca-data-url";
 import { alpacaHost, retryAfterMs } from "./feed-agreement-fetch";
 import type { RawPrint } from "./fill-check";
 
@@ -63,17 +64,24 @@ export function dataBase(url: string): string | null {
   return alpacaHost(url) === null ? null : url.replace(/\/+$/, "");
 }
 
-/** The request URL for one page. `start` and `end` are the span's own bounds; nothing wider is ever asked for. */
-export function tradesUrl(base: string, q: TradeQuery, token: string | null): string {
-  const p = new URLSearchParams({
+/** The path of Alpaca's historical option trades: no feed parameter (alpaca-data-url.ts alpacaNoFeedUrl). */
+export const TRADES_PATH = "/v1beta1/options/trades";
+
+/** One page's query. `start` and `end` are the span's own bounds; nothing wider is ever asked for. */
+function tradesParams(q: TradeQuery, token: string | null): Record<string, string> {
+  return {
     symbols: q.symbol,
     start: new Date(q.startMs).toISOString(),
     end: new Date(q.endMs).toISOString(),
     limit: String(PAGE_LIMIT),
     sort: "asc",
-  });
-  if (token) p.set("page_token", token);
-  return `${base}/v1beta1/options/trades?${p.toString()}`;
+    ...(token ? { page_token: token } : {}),
+  };
+}
+
+/** The request URL for one page, built by alpacaNoFeedUrl. */
+export function tradesUrl(base: string, q: TradeQuery, token: string | null): string {
+  return alpacaNoFeedUrl(base, TRADES_PATH, tradesParams(q, token));
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -91,9 +99,10 @@ export async function fetchOptionTrades(q: TradeQuery, o: TradesFetchOpts): Prom
   const prints: RawPrint[] = [];
   let token: string | null = null;
   for (let page = 0; page < MAX_PAGES; page++) {
+    const url = alpacaNoFeedUrl(base, TRADES_PATH, tradesParams(q, token));
     let res: Response;
     try {
-      res = await fetchImpl(tradesUrl(base, q, token), {
+      res = await fetchImpl(url, {
         headers: { "APCA-API-KEY-ID": o.keys.id, "APCA-API-SECRET-KEY": o.keys.secret, accept: "application/json" },
         cache: "no-store",
         // The keys go to Alpaca only: a redirect anywhere else is refused, never followed.
