@@ -2,15 +2,21 @@ import "server-only";
 import { alpacaDataUrl } from "./alpaca-data-url";
 import { type DataFeed, requireFeed } from "./alpaca-feed";
 import { logEvent } from "./log";
+import { readBar, readStamp, type SnapshotQuoteFields } from "./quote-guards";
 import type { RawSnapshots } from "./quote-probe";
+import { quoteShape } from "./quote-shape";
 import { UpstreamError } from "./upstream";
 
 // Live prices for the Options page: Alpaca's stock feed (ALPACA_FEED, alpaca-feed.ts; the free IEX one by default),
 // read on the server so the browser keeps its connect-src 'self' policy and never sees the keys. Research only;
 // nothing here can place an order.
 
-/** One name's live snapshot, normalised from Alpaca's. Prices in US dollars; times ISO 8601. */
-export interface Quote {
+/**
+ * One name's live snapshot, normalised from Alpaca's. Prices in US dollars; times ISO 8601. The optional fields
+ * (quote-guards.ts SnapshotQuoteFields) are what the board's bad-data guards read: the quote's two sides and whether
+ * the day's and the prior day's bars are readable as the snapshot probe reads them.
+ */
+export interface Quote extends SnapshotQuoteFields {
   price: number;
   /** When the last trade printed. */
   at: string;
@@ -72,7 +78,26 @@ function nyDay(iso: unknown): string | null {
 }
 
 type Bar = { t?: unknown; o?: unknown; h?: unknown; l?: unknown; c?: unknown; vw?: unknown } | null | undefined;
-type RawSnapshot = { latestTrade?: { t?: unknown; p?: unknown } | null; dailyBar?: Bar; prevDailyBar?: Bar } | null;
+type RawQuote = { t?: unknown; bp?: unknown; ap?: unknown; bs?: unknown; as?: unknown } | null | undefined;
+type RawSnapshot = { latestTrade?: { t?: unknown; p?: unknown } | null; latestQuote?: RawQuote; dailyBar?: Bar; prevDailyBar?: Bar } | null;
+
+/**
+ * The snapshot's quote as the guards read it: its two sides only when quote-shape.ts can read them (an object whose
+ * prices and sizes are not "invalid"), each size only when Alpaca sent one, and its time only when readable. Nothing
+ * otherwise, so an unreadable quote can never trip a guard.
+ */
+function quoteSides(q: RawQuote): Pick<SnapshotQuoteFields, "bid" | "ask" | "bid_size" | "ask_size" | "quote_at"> {
+  if (q === null || typeof q !== "object" || Array.isArray(q)) return {};
+  if (quoteShape(q.bp, q.ap, q.bs, q.as).shape === "invalid") return {};
+  const t = readStamp(q.t).t;
+  return {
+    bid: q.bp as number,
+    ask: q.ap as number,
+    ...(isNum(q.bs) ? { bid_size: q.bs } : {}),
+    ...(isNum(q.as) ? { ask_size: q.as } : {}),
+    ...(t !== null ? { quote_at: new Date(t).toISOString() } : {}),
+  };
+}
 
 /** Alpaca's snapshot -> Quote, or null without a usable last trade. Unknown fields are ignored. */
 export function normalise(raw: RawSnapshot): Quote | null {
@@ -89,6 +114,10 @@ export function normalise(raw: RawSnapshot): Quote | null {
     day: nyDay(d?.t),
     prev_close: isNum(p?.c) ? p.c : null,
     vwap: isNum(d?.vw) && d.vw > 0 ? d.vw : null,
+    // For the guards (quote-guards.ts): the bars as the probe reads them, and the quote's sides.
+    bar_ok: readBar(d).presence === "ok",
+    prev_bar_ok: readBar(p).presence === "ok",
+    ...quoteSides(raw?.latestQuote),
   };
 }
 

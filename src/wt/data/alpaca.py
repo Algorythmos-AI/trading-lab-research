@@ -100,6 +100,22 @@ class AlpacaREST:
             return r.json()
         raise RuntimeError(f"GET failed after {tries} tries: {url} {params}")
 
+    def get_response(self, url: str, params: dict | None = None, timeout: float = 60, stream: bool = False,
+                     remaining=None) -> requests.Response:
+        """One GET with the feed guard and the rate limiter, and no retry: the caller reads the status and the headers
+        itself (wt.options.select_fetch counts its requests, honours Retry-After and reads X-RateLimit-Limit).
+
+        `remaining`, when given, is called after the limiter's wait and returns the seconds left in the caller's time
+        budget: at zero or below nothing is sent (requests.Timeout), otherwise the timeout is cut to it."""
+        require_feed(url, params)          # a data request without a feed would follow the subscription (B9)
+        self.rl.wait()
+        if remaining is not None:
+            left = remaining()
+            if left <= 0:
+                raise requests.Timeout("the caller's time budget ran out during the rate limiter's wait")
+            timeout = min(timeout, left)
+        return self.s.get(url, params=params, timeout=timeout, stream=stream)
+
     # ---- reference data -------------------------------------------------
     def assets(self, status: str) -> list[dict]:
         return self.get(f"{TRADING}/v2/assets", {"status": status, "asset_class": "us_equity"})

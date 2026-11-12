@@ -6,7 +6,7 @@ vi.mock("server-only", () => ({}));
 
 // Monday 12 October 2026, 11:00 in New York.
 const NOW = Date.parse("2026-10-12T15:00:00Z");
-const c = (kind: "call" | "put", strike: number, bid: number | null, ask: number | null): ChainContract => ({ kind, strike, bid, ask, last: null, at: null, iv: null, delta: null, volume: null });
+const c = (kind: "call" | "put", strike: number, bid: number | null, ask: number | null): ChainContract => ({ kind, strike, bid, ask, last: null, at: null, iv: null, delta: null, volume: null, bid_size: null, ask_size: null });
 const chain = (expiries: ChainResponse["expiries"]): ChainResponse => ({ as_of: "2026-10-12T14:45:00Z", feed: "indicative", delay_min: 15, symbol: "SPY", expiries });
 const strip = [c("call", 775, 6.1, 6.3), c("call", 780, 2.2, 2.4), c("call", 785, 0.5, 0.6), c("put", 775, 0.4, 0.5), c("put", 780, 1.9, 2.1), c("put", 785, 5.8, 6.0)];
 

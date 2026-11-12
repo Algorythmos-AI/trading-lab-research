@@ -11,45 +11,14 @@
 //
 // Read only: it changes what is on the screen, nothing else.
 import { MonitorUp, X } from "lucide-react";
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { screenKeeper, type WakeLockApi } from "@/lib/wake-lock";
+import { setCockpit, useCockpit } from "./cockpit-state";
 import { useBoard } from "./trade-now";
 
-// ---- the choice, kept in this browser (the alert switches' pattern) -------------------------------------------------
-const KEY = "options-cockpit";
-const EVENT = "options-cockpit";
-let fallback = "";
-function read(): string {
-  try {
-    return window.localStorage.getItem(KEY) ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
-/** Turn the cockpit on or off, here and in every other part of the page that reads it. */
-export function setCockpit(on: boolean) {
-  fallback = on ? "on" : "";
-  try {
-    if (on) window.localStorage.setItem(KEY, "on");
-    else window.localStorage.removeItem(KEY);
-  } catch {
-    // kept in `fallback` for this page
-  }
-  window.dispatchEvent(new Event(EVENT));
-}
-function subscribe(onChange: () => void) {
-  window.addEventListener(EVENT, onChange);
-  window.addEventListener("storage", onChange);
-  return () => {
-    window.removeEventListener(EVENT, onChange);
-    window.removeEventListener("storage", onChange);
-  };
-}
-/** Whether the cockpit is on; always off in the server render and on hydration, so the two never differ. */
-export function useCockpit(): boolean {
-  return useSyncExternalStore(subscribe, read, () => "") === "on";
-}
+// ---- the choice, kept in this browser: cockpit-state.ts (apart, so the board can read it without importing this file)
+export { setCockpit, useCockpit } from "./cockpit-state";
 
 // ---- the screen kept awake ------------------------------------------------------------------------------------------
 function useWakeLock(active: boolean) {

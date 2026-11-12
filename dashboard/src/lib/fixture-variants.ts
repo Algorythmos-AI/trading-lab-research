@@ -22,11 +22,14 @@ export const VARIANT_COOKIE = "fx";
  * - `quotes-tick`: the live price flips by one cent every three seconds, without changing any name's state.
  * - `quotes-flaky`: a short outage of the live feed. The first request answers, the next FLAKY_FAILS fail (502), and
  *   every one after answers again; the count is kept per browser in the `fxflaky` cookie the route sets.
+ * - `quotes-suspect`: each fixture name's quote trips the board's bad-data guards in turn (fixture-suspect.ts). The
+ *   guards' switches are off in fixture mode, so the board reads as with the plain fixture.
  * - `quotes-script`: the quotes and the session's bars walk a fixed morning (fixture-script.ts), one step every
  *   few seconds of the server's clock or the step in the `fxstep` cookie, so the "Trade now" board shows every state.
  *   With `focus`, AAPL joins the focus names.
  * - `chain-off`: the option feed has no keys. `chain-error`: Alpaca is failing.
  * - `chain-thin`: the nearest expiry's first calls come without a volatility, without a market, and crossed.
+ * - `chain-opra`: the chain answers as Alpaca's real-time OPRA feed (no delay, quotes a few seconds old).
  * - `v2`: the edition in its second format, with the day's context, events and each name's volatility block.
  * - `positions-off`: no options live document has been published. `positions-none`: one has, with nothing open.
  * - `positions-old`: the document is three hours old.
@@ -54,9 +57,11 @@ export const VARIANT_FLAGS = [
   "quotes-tick",
   "quotes-script",
   "quotes-flaky",
+  "quotes-suspect",
   "chain-off",
   "chain-error",
   "chain-thin",
+  "chain-opra",
   "v2",
   "positions-off",
   "positions-none",

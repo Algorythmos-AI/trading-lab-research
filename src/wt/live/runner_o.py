@@ -34,6 +34,7 @@ import requests
 from wt.brokers.base import TransportError
 from wt.core import ledger
 from wt.core.config import CONFIG_DIR, DATA_DIR, ROOT, STATE_DIR, env, load_yaml
+from wt.data.feeds import FeedNotNamed, require_feed
 from wt.oms.options import OptionPlan, OptionsOMS, PlanStore, book
 from wt.ops import hc, locks
 from wt.ops import alerts as pg
@@ -120,6 +121,14 @@ class AlpacaFeeds:
         self.feed = option_feed
 
     def _get(self, url: str, params: dict[str, str]) -> Any:
+        # A market-data request that names no feed is refused before it is sent (B9), as a TransportError: every
+        # caller already treats that as a data read that failed (no levels, a stalled tape, no quote), so entries
+        # stay off where they would for an unreachable feed and exits are still managed.
+        try:
+            require_feed(url, params)
+        except FeedNotNamed:
+            pg.say("options clone: a market-data request named no feed; refused before sending", err=True)
+            raise TransportError("feed-not-named") from None
         r = self.s.get(url, params=params, headers=self.h, timeout=(5.0, 10.0), allow_redirects=False)
         if r.status_code != 200:
             raise TransportError(f"http-{r.status_code}")

@@ -705,3 +705,71 @@ def test_a_broken_stderr_at_arm_still_sends_the_page(world, monkeypatch):
     monkeypatch.setattr(sys, "stderr", Broken())
     assert r.arm() is False
     assert "options-clone:broker" in sent
+
+
+# ---------------------------------------------------------------- a market-data request refused for naming no feed
+class _Answers503:
+    """The broker's data host answering 503 to everything: the clone's ordinary data error."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def get(self, url: str, params: Any = None, **_: Any) -> Any:
+        self.calls.append(url)
+        return type("R", (), {"status_code": 503, "json": lambda self: {}})()
+
+
+def _real_feeds(monkeypatch: pytest.MonkeyPatch, how: str) -> tuple[runner_o.AlpacaFeeds, _Answers503]:
+    """The clone's own AlpacaFeeds over a fake session: `refused`, every request is refused by the feed guard (a
+    future bug in it); `unreachable`, every request goes out and is answered 503."""
+    if how == "refused":
+        def refuse(url: object, params: object) -> None:
+            raise runner_o.FeedNotNamed("no feed")
+        monkeypatch.setattr(runner_o, "require_feed", refuse)
+    s = _Answers503()
+    f = runner_o.AlpacaFeeds("k", "s", "indicative", s)            # type: ignore[arg-type]
+    f.focus = lambda: (None, None)                                 # type: ignore[method-assign]
+    f.edition = lambda: None                                       # type: ignore[method-assign]
+    return f, s
+
+
+@pytest.mark.parametrize("how", ["refused", "unreachable"])
+def test_a_refused_request_at_arm_turns_entries_off_exactly_as_an_unreachable_feed(world, monkeypatch, capsys, how):
+    """The guard raises TransportError("feed-not-named") in AlpacaFeeds._get, the error every caller already handles
+    as a failed data read: here prepare's, so the levels are off for the day, with the same page and journal."""
+    r = world["make"]()
+    del r.prepare                                                  # the real one, reading the bars from the feed
+    r.feeds, s = _real_feeds(monkeypatch, how)
+    world["m"].now = at("09:25")
+    assert r.arm() is False
+    assert r.off == {"levels": "levels unavailable"} and r.names == {}
+    assert world["pages"] == ["options-clone:levels"]
+    assert world["rows"][0] == {"event": "page", "key": "levels", "title": "Options clone: no levels today"}
+    assert [x["event"] for x in world["rows"]] == ["page", "armed"] and world["rows"][1]["off"] == ["levels"]
+    run_until(r, world["m"], world["b"], at("10:40"))              # through the signal at 10:26: no entry
+    assert r.today() == [] and not any(o.side == "buy" for o in world["b"].orders.values())
+    assert [x["event"] for x in world["rows"]] == ["page", "armed"]
+    err = capsys.readouterr().err
+    assert (s.calls == [] and "a market-data request named no feed" in err) if how == "refused" \
+        else (s.calls and "named no feed" not in err)
+
+
+@pytest.mark.parametrize("how", ["refused", "unreachable"])
+def test_a_refused_request_with_a_trade_open_still_manages_the_exit_exactly_as_an_unreachable_feed(world, monkeypatch,
+                                                                                                    capsys, how):
+    """Mid-trade, the tape and the quote are refused: the tape reads as stalled and the bid falls back to the broker's
+    mark, so the exit rules still run and the trade is closed, with no journal line the unreachable feed lacks."""
+    r, p = entered(world)
+    before = len(world["rows"])
+    r.feeds, s = _real_feeds(monkeypatch, how)
+    world["m"].bid_fn = lambda t: 1.45
+    run_until(r, world["m"], world["b"], at("10:40"))
+    assert p.state == "closed" and p.exit_reason == "stock-feed-stalled"
+    assert world["b"].pos[p.symbol].qty == 0
+    assert len([o for o in world["b"].orders.values() if o.side == "buy"]) == 1      # no entry after it
+    after = [x["event"] for x in world["rows"][before:]]
+    assert after == ["trade_closed"]                                # no manage_fault, no new line
+    assert world["pages"][-1] == f"options-clone:exit-{p.trade_id}"
+    err = capsys.readouterr().err
+    assert (s.calls == [] and "a market-data request named no feed" in err) if how == "refused" \
+        else (s.calls and "named no feed" not in err)

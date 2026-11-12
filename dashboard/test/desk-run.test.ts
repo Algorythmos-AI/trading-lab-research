@@ -333,12 +333,15 @@ describe("the record's feed", () => {
     const [path, rec] = f.records()[0]!;
     const raw = JSON.parse(f.store.get(path)!) as Record<string, unknown>;
     expect(recordFeed(raw)).toBe("sip");
-    // the engine's fields come first and are unchanged; the feed is the key after them, then the snapshot probe
+    // the engine's fields come first and are unchanged; the feed is the key after them, then the snapshot probe, the
+    // guards' observe-mode log and the 429 count
     const keys = Object.keys(raw);
-    expect(keys.slice(-2)).toEqual(["feed", "probe"]);
-    const { feed: _feed, probe: _probe, ...engine } = raw;
+    expect(keys.slice(-4)).toEqual(["feed", "probe", "guards", "http_429"]);
+    const { feed: _feed, probe: _probe, guards: _guards, http_429: _n429, ...engine } = raw;
     void _feed;
     void _probe;
+    void _guards;
+    void _n429;
     expect(Object.keys(engine)).toEqual(["v", "engine", "source", "status", "reason", "slot_end", "evaluated_at", "session", "edition_session", "edition_as_of", "board", "rows", "degraded_names", "snapshot_ok", "day"]);
     expect(rec.status).toBe("ok");
   });

@@ -1,6 +1,8 @@
 // The options levels page's view helpers. Pure: no I/O; the clock is always passed in.
-import { dayIn, NEW_YORK, num } from "./format";
+import { dayIn, NEW_YORK, num, weekDate } from "./format";
+import calendar from "./market-calendar.json";
 import type { OptionsEdition } from "./options.types";
+import type { SnapshotQuoteFields } from "./quote-guards";
 import type { Tone } from "./radar";
 
 export type Options = OptionsEdition;
@@ -22,14 +24,135 @@ export function editionState(session: string, now: Date): "next" | "today" | "st
   return today === session ? "today" : "stale";
 }
 
-/** Calendar days a close may sit behind its session: a weekend plus a holiday (Thu close for a Mon after Good Friday). */
+/**
+ * Outside the session calendar only: calendar days a close may sit behind its session, a weekend plus a holiday
+ * (Thu close for a Mon after Good Friday).
+ */
 export const MAX_BUILD_GAP_DAYS = 4;
 
-/** True when the edition was built from a close too far behind the session it is for: a pull that missed a day. */
+// The exchange's session list, read from the Calendar page's file directly: market-calendar.ts imports this module,
+// so importing it back would make a cycle. test/audit-editions.test.ts checks the answer below against its
+// sessionOf on every session in the file.
+const CAL_START: string = calendar.range.start;
+const CAL_END: string = calendar.range.end;
+const CAL_SESSIONS = new Set<string>(calendar.sessions);
+
+/** A real calendar day written YYYY-MM-DD: "2026-02-30", "20261014" and a datetime are not. */
+function isDay(s: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const t = Date.parse(`${s}T00:00:00Z`);
+  return Number.isFinite(t) && new Date(t).toISOString().slice(0, 10) === s;
+}
+
+const dayBefore = (day: string) => new Date(Date.parse(`${day}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+
+/** The last session before `day` by the calendar file; null when the file does not reach back that far. */
+function lastSessionBefore(day: string): string | null {
+  if (day < CAL_START || day > CAL_END) return null;
+  for (let d = dayBefore(day), i = 0; d >= CAL_START && i < 14; d = dayBefore(d), i++) if (CAL_SESSIONS.has(d)) return d;
+  return null;
+}
+
+/** Saturday or Sunday: not a session whatever the calendar says, inside its range or not. */
+const isWeekend = (day: string) => [0, 6].includes(new Date(`${day}T00:00:00Z`).getUTCDay());
+
+/**
+ * What is wrong with an edition's build date, when something is:
+ * - `missing`: no build date at all (null or undefined). The host always writes one and its own check fails an
+ *   edition without it, so a missing one means something upstream broke: it warns.
+ * - `earlier`: built from a close before the last one (`last`): a pull that missed at least one session.
+ * - `same_or_later`: stamped with the session's own day or a later one.
+ * - `not_session`: stamped with a day the market was closed: a holiday or weekend inside the calendar, or a weekend
+ *   before it.
+ * - `session_closed`: the edition is for a day the market is closed, so no build date can be right.
+ * - `unreadable`: the session or the build date is not a real YYYY-MM-DD day (`""`, "2026-13-40", "20261014", a
+ *   datetime): which close it came from is unknown, so it never reads as fresh.
+ * - `far_back`: where the calendar cannot say, more than MAX_BUILD_GAP_DAYS calendar days before the session.
+ */
+export type BuildAgeProblem = "missing" | "earlier" | "same_or_later" | "not_session" | "session_closed" | "unreadable" | "far_back";
+
+/**
+ * Whether the edition was built from the right close. Inside the session calendar (the Calendar page's file) it is
+ * exact: the build date must be the session immediately before `session`. Where the file cannot give that session (a
+ * session outside its range, or its first session, whose previous session is before the file starts) the
+ * calendar-day rule applies: a gap of 1 to MAX_BUILD_GAP_DAYS days is fresh, except a build date inside the file
+ * that the file says is not a session. No build date (null, undefined) is `missing`, never fresh. Never throws.
+ * The host checks the same rule after it publishes (src/wt/options/pipeline_check.py, `options.built_from`: the
+ * edition's built_from must equal levels.prev_session of its session, and a missing one fails).
+ */
+export function builtFromProblem(session: string, builtFrom: string | null | undefined): { kind: BuildAgeProblem; last: string | null } | null {
+  if (builtFrom === null || builtFrom === undefined) return { kind: "missing", last: isDay(session) ? lastSessionBefore(session) : null };
+  if (!isDay(session) || !isDay(builtFrom)) return { kind: "unreadable", last: null };
+  const inFile = (d: string) => d >= CAL_START && d <= CAL_END;
+  const last = lastSessionBefore(session);
+  if (inFile(session) && !CAL_SESSIONS.has(session)) return { kind: "session_closed", last };
+  if (last === null) {
+    const gap = (Date.parse(`${session}T00:00:00Z`) - Date.parse(`${builtFrom}T00:00:00Z`)) / 86_400_000;
+    if (gap <= 0) return { kind: "same_or_later", last: null };
+    if (inFile(builtFrom) && !CAL_SESSIONS.has(builtFrom)) return { kind: "not_session", last: null };
+    if (gap <= MAX_BUILD_GAP_DAYS) return null;
+    return { kind: isWeekend(builtFrom) ? "not_session" : "far_back", last: null };
+  }
+  if (builtFrom === last) return null;
+  if (builtFrom >= session) return { kind: "same_or_later", last };
+  if (isWeekend(builtFrom) || (inFile(builtFrom) && !CAL_SESSIONS.has(builtFrom))) return { kind: "not_session", last };
+  return { kind: "earlier", last };
+}
+
+/** True when the edition was not built from the close just before its session (see builtFromProblem). */
 export function builtFromOld(session: string, builtFrom: string | null | undefined): boolean {
-  if (!builtFrom) return false;
-  const gap = (Date.parse(`${session}T00:00:00Z`) - Date.parse(`${builtFrom}T00:00:00Z`)) / 86_400_000;
-  return Number.isFinite(gap) && (gap <= 0 || gap > MAX_BUILD_GAP_DAYS);
+  return builtFromProblem(session, builtFrom) !== null;
+}
+
+/** The day an edition was built from, "Fri 9 Oct"; null when it is missing or not a real day. */
+export function builtFromDay(builtFrom: string | null | undefined): string | null {
+  return builtFrom != null && isDay(builtFrom) ? weekDate(builtFrom) : null;
+}
+
+/** "the Fri 9 Oct close", or, without a readable build date, "a close the edition does not name". */
+export function builtFromWords(builtFrom: string | null | undefined): string {
+  const d = builtFromDay(builtFrom);
+  return d ? `the ${d} close` : "a close the edition does not name";
+}
+
+/** The days of one sentence, "Wed 14 Oct": each with its year when they are not all in the same year. */
+function sentenceDays(...days: string[]): string[] {
+  const oneYear = new Set(days.map((d) => d.slice(0, 4))).size === 1;
+  return days.map((d) => (oneYear ? weekDate(d) : `${weekDate(d)} ${d.slice(0, 4)}`));
+}
+
+/** The Options page's warning for an edition not built from the close just before its session; null when it was. */
+export function builtFromNotice(session: string, builtFrom: string | null | undefined): string | null {
+  const p = builtFromProblem(session, builtFrom);
+  if (!p) return null;
+  const check = "so check them before use.";
+  switch (p.kind) {
+    case "missing":
+      return "These levels do not say which close they were built from. Check them against your platform before use.";
+    case "unreadable":
+      return "These levels carry a date that cannot be read, so the close they were built from is unknown. Check them before use.";
+    case "session_closed":
+      return `These levels are stamped for ${weekDate(session)}, a day the market is closed. The stamp is wrong, ${check}`;
+  }
+  const b = builtFrom!;
+  switch (p.kind) {
+    case "earlier": {
+      const [s, f, l] = sentenceDays(session, b, p.last!);
+      return `These levels for ${s} were built from the ${f} close, but the last close before ${s} was ${l}. At least one session's bars are missing, ${check}`;
+    }
+    case "far_back": {
+      const [s, f] = sentenceDays(session, b);
+      return `These levels for ${s} were built from the ${f} close, more than ${MAX_BUILD_GAP_DAYS} days earlier. A session's bars may be missing, ${check}`;
+    }
+    case "same_or_later": {
+      const [s, f] = sentenceDays(session, b);
+      return `These levels for ${s} are stamped with ${f}, which is not before that session. The stamp is wrong, ${check}`;
+    }
+    case "not_session": {
+      const [s, f] = sentenceDays(session, b);
+      return `These levels for ${s} are stamped with ${f}, which is not a session. The stamp is wrong, ${check}`;
+    }
+  }
 }
 
 /** Zones of this weight or more are "major" (the levels engine uses the same cut). */
@@ -169,8 +292,8 @@ export function levelName(code: string): string {
   return LEVEL_NAMES[code] ?? code;
 }
 
-/** A live quote as the page uses it (the /api/quote shape). */
-export interface LiveQuote {
+/** A live quote as the page uses it (the /api/quote shape), with the optional fields the bad-data guards read. */
+export interface LiveQuote extends SnapshotQuoteFields {
   price: number;
   at: string;
   open: number | null;

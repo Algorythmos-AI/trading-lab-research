@@ -23,9 +23,11 @@ import {
   SYMBOL_RE,
 } from "./desk-eval";
 import { isJson, presentsBypass, readCapped, sameOrigin } from "./desk-flags-run";
+import { parseGuardList } from "./desk-guards";
 import { type EditionRead, parseEdition } from "./desk-run";
 import { logEvent } from "./log";
 import { nyClock } from "./options";
+import type { GuardReason } from "./quote-guards";
 import { fixtureMode } from "./snapshot";
 import type { NameStateName } from "./trade-state";
 import { CLOSE_GRACE_MS, SERVER_SETTLE_MS } from "./trade-state";
@@ -61,7 +63,7 @@ const onlyKeys = (o: Record<string, unknown>, keys: readonly string[]) => Object
 
 export type PagePost =
   | { slotEnd: number; engine: string; hidden: true; asOf: null; barsDelayed: null; rows: []; rowsAtSettle: [] }
-  | { slotEnd: number; engine: string; hidden: false; asOf: number; barsDelayed: boolean; rows: StateRow[]; rowsAtSettle: StateRow[] };
+  | { slotEnd: number; engine: string; hidden: false; asOf: number; barsDelayed: boolean; rows: StateRow[]; rowsAtSettle: StateRow[]; guards: GuardReason[]; guardsUnsure: boolean };
 
 /** One row list: each a focus name, a side and a state word, each name and side at most once. Null otherwise. */
 function parseRows(v: unknown, focus: ReadonlySet<string>): StateRow[] | null {
@@ -83,12 +85,16 @@ function parseRows(v: unknown, focus: ReadonlySet<string>): StateRow[] | null {
 }
 
 const VISIBLE_KEYS = ["slot_end", "engine", "as_of", "bars_delayed", "rows", "rows_at_settle"] as const;
+/** A visible page with any bad-data guard switched on names them last (desk-shadow-client's pageBody). */
+/** The optional keys a visible page may add last, in this order: `guards` and `guards_unsure` (exactly true). */
+const VISIBLE_EXTRA = ["guards", "guards_unsure"] as const;
 const HIDDEN_KEYS = ["slot_end", "engine", "hidden"] as const;
 
 /**
- * Exactly `{ slot_end, engine, as_of, bars_delayed, rows, rows_at_settle }` or `{ slot_end, engine, hidden: true }`,
- * or null. `as_of` must fall in the slot's grace window, from its close (end + CLOSE_GRACE_MS) to its settle; both
- * row lists hold focus names, sides and state words only.
+ * Exactly `{ slot_end, engine, as_of, bars_delayed, rows, rows_at_settle }` (and `guards`, a non-empty list of guard
+ * reasons, when any was on) or `{ slot_end, engine, hidden: true }`, or null. `as_of` must fall in the slot's grace
+ * window, from its close (end + CLOSE_GRACE_MS) to its settle; both row lists hold focus names, sides and state words
+ * only.
  */
 export function parsePagePost(text: string, focus: ReadonlySet<string>): PagePost | null {
   let v: unknown;
@@ -99,7 +105,11 @@ export function parsePagePost(text: string, focus: ReadonlySet<string>): PagePos
   }
   if (!plain(v)) return null;
   const hidden = Object.hasOwn(v, "hidden");
-  if (!onlyKeys(v, hidden ? HIDDEN_KEYS : VISIBLE_KEYS)) return null;
+  const guarded = !hidden && Object.hasOwn(v, "guards");
+  const unsure = !hidden && Object.hasOwn(v, "guards_unsure");
+  const want = hidden ? [...HIDDEN_KEYS] : [...VISIBLE_KEYS, ...VISIBLE_EXTRA.filter((k) => (k === "guards" ? guarded : unsure))];
+  if (!onlyKeys(v, want)) return null;
+  if (unsure && v.guards_unsure !== true) return null;
   if (typeof v.slot_end !== "string" || !ISO_RE.test(v.slot_end) || typeof v.engine !== "string" || v.engine.length > 40) return null;
   const slotEnd = Date.parse(v.slot_end);
   if (!Number.isFinite(slotEnd) || slotEnd % BAR_MS !== 0) return null;
@@ -111,7 +121,9 @@ export function parsePagePost(text: string, focus: ReadonlySet<string>): PagePos
   const rows = parseRows(v.rows, focus);
   const rowsAtSettle = parseRows(v.rows_at_settle, focus);
   if (!rows || !rowsAtSettle) return null;
-  return { slotEnd, engine, hidden: false, asOf, barsDelayed: v.bars_delayed, rows, rowsAtSettle };
+  const guards = guarded ? parseGuardList(v.guards) : [];
+  if (guards === null || (guarded && guards.length === 0)) return null;
+  return { slotEnd, engine, hidden: false, asOf, barsDelayed: v.bars_delayed, rows, rowsAtSettle, guards, guardsUnsure: unsure };
 }
 
 /** Whether a page may send `slotEnd` at `now`: one of today's loggable slots, settled, and at most MAX_SLOT_AGE_MS past it. */
@@ -209,6 +221,8 @@ export async function handlePageState(req: Request, deps: PageStateDeps = defaul
     bars_delayed: post.barsDelayed,
     rows: post.rows,
     rows_at_settle: post.rowsAtSettle,
+    ...(!post.hidden && post.guards.length > 0 ? { guards: post.guards } : {}),
+    ...(!post.hidden && post.guardsUnsure ? { guards_unsure: true as const } : {}),
   };
   if (deps.dry) return json(200, { ok: true, saved: false, dry: true });
   try {

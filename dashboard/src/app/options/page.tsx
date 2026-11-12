@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { PageHeading } from "@/components/page-heading";
 import { TradeRulesFor } from "@/components/trade-rules";
 import { BoardTable, EditionPanel, HowToRead, NoOptions, PaperPanel, RulesPanel, StructurePanel, TickerCards } from "@/components/options";
@@ -16,11 +17,11 @@ import { OptionsDesk } from "@/components/client/options-desk";
 import { OptionsGlance } from "@/components/client/options-glance";
 import { PaneBoundary } from "@/components/client/pane-boundary";
 import { EditionPicker } from "@/components/radar";
-import { Notice } from "@/components/ui/notice";
+import { OldCloseNotice } from "@/components/old-close-notice";
 import { sydney, weekDate } from "@/lib/format";
 import { hourlyBySymbol } from "@/lib/hourly";
 import { interestBySymbol } from "@/lib/oi";
-import { builtFromOld, editionState, isDeskView, isHalfDay, mapView, viewForClock, type DeskPane, type Options } from "@/lib/options";
+import { builtFromWords, editionState, isDeskView, isHalfDay, mapView, viewForClock, type DeskPane, type Options } from "@/lib/options";
 import { showReview } from "@/lib/ledger";
 import { withLeaders } from "@/lib/entry-checks";
 import { boardDay } from "@/lib/trade-now";
@@ -29,6 +30,7 @@ import { dayJournal } from "@/lib/manage-stop";
 import { dayFacts, railDay, unreadLine, withUnread } from "@/lib/session-timeline";
 import { dayCheck } from "@/lib/trade-rules";
 import { loadFlagsView } from "@/lib/desk-flags-run";
+import { loadGuardSwitches } from "@/lib/desk-guards-run";
 import { loadEvalSwitch } from "@/lib/desk-page-run";
 import { loadPageFeeds } from "@/lib/feed-watch-run";
 import { STRIP_FEED_IDS } from "@/lib/feed-watch";
@@ -39,17 +41,6 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Options" };
 
 const INTRO = "Where each name sits against its support and resistance, rebuilt after every close. Research only; nothing here is an order.";
-
-/** Levels built from a close more than a weekend behind their session: a day's bars never arrived. */
-function OldCloseNotice({ e }: { e: Options }) {
-  if (!builtFromOld(e.session, e.built_from)) return null;
-  return (
-    <Notice tone="bad" size="sm" role="alert">
-      These levels for {weekDate(e.session)} were built from the {weekDate(e.built_from)} close, more than a weekend earlier. A
-      day&apos;s bars are missing, so check them before use.
-    </Notice>
-  );
-}
 
 /** The page as it was before the desk: one long column of panels. Kept at ?view=classic for one release. */
 function ClassicOptions({ e, dates, date, now }: { e: Options; dates: string[]; date: string | undefined; now: Date }) {
@@ -104,7 +95,8 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
   // The paper positions are a view of now, so an older edition is drawn without them.
   // The owner's "done for today" flag, read with the page for a live edition (null when it could not be read).
   // The server's shadow check's switch (DEC-0044): off unless the store says "log"; while off the page asks nothing about it.
-  const [result, dates, positions, journal, ledger, flags, evalSwitch] = await Promise.all([loadOptions(date), listOptionsDates(), date ? null : loadOptionsLive(), loadJournal(), date ? null : loadLedger(), date ? null : loadFlagsView(), date ? "off" : loadEvalSwitch()]);
+  // The bad-data guards' switches (desk/guards.json): every guard off unless the store turns it on; none for an older edition.
+  const [result, dates, positions, journal, ledger, flags, evalSwitch, guardSwitches] = await Promise.all([loadOptions(date), listOptionsDates(), date ? null : loadOptionsLive(), loadJournal(), date ? null : loadLedger(), date ? null : loadFlagsView(), date ? "off" : loadEvalSwitch(), date ? null : loadGuardSwitches()]);
   const now = await pageTime();
   const live = positions?.status === "ok" ? positions.doc : null;
   if (result.status !== "ok") {
@@ -164,7 +156,7 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
       <h1 className="sr-only">Options</h1>
       <LiveQuotes symbols={withLeaders(e.tickers.map((t) => t.symbol)).join(",")} session={e.session} enabled={!date}>
         <DoneTodayProvider initial={flags}>
-          <BoardProvider e={full} live={!date} {...day} openLots={board?.lots ?? []} closedTrades={board?.closed ?? []} journalAsOf={doc?.as_of ?? null} dayFacts={facts} evalOn={evalSwitch === "log"}>
+          <BoardProvider e={full} live={!date} {...day} openLots={board?.lots ?? []} closedTrades={board?.closed ?? []} journalAsOf={doc?.as_of ?? null} dayFacts={facts} evalOn={evalSwitch === "log"} guardsOn={guardSwitches?.on ?? []} guardsRead={guardSwitches?.status ?? "missing"}>
             {/* Top to bottom: what the day allows and the clock, the one name that matters now, the four at a glance, what
                 to act on, the cards, the rules strip, then the desk. Cockpit keeps only the rail, the hero and the four
                 ladders (everything else carries data-cockpit-hide). The parts share the page's one live feed and board. */}
@@ -175,6 +167,12 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
               {feeds ? (
                 <PaneBoundary name="Feed health">
                   <FeedStrip stamps={feeds} serverNow={now.getTime()} evalOn={evalSwitch === "log"} />
+                  {/* Which feed is authoritative and how the feeds compared (DEC-0050): its own page. */}
+                  <p data-feeds-link className="-mt-1 text-right text-xs">
+                    <Link className="text-muted-foreground hover:text-foreground underline" href="/options/feeds">
+                      Feeds
+                    </Link>
+                  </p>
                 </PaneBoundary>
               ) : null}
               <div data-cockpit-hide className="contents">
@@ -258,7 +256,7 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
                 ) : null}
                 <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-xs">
                   <p className="max-w-prose">
-                    Levels for {weekDate(e.session)}, built from the {weekDate(e.built_from)} close. Source: {e.source ?? "not stated"}. Published{" "}
+                    Levels for {weekDate(e.session)}, built from {builtFromWords(e.built_from)}. Source: {e.source ?? "not stated"}. Published{" "}
                     {sydney(e.as_of)} Sydney. Research only; nothing here is an order.
                   </p>
                   <EditionPicker dates={dates} current={e.session} base="/options" />

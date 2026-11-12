@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ChainContract, ChainExpiry } from "@/lib/chain";
 import { volShape } from "@/lib/volshape";
 
-const c = (kind: "call" | "put", strike: number, iv: number | null): ChainContract => ({ kind, strike, bid: 1, ask: 1.1, last: null, at: null, iv, delta: null, volume: null });
+const c = (kind: "call" | "put", strike: number, iv: number | null): ChainContract => ({ kind, strike, bid: 1, ask: 1.1, last: null, at: null, iv, delta: null, volume: null, bid_size: null, ask_size: null });
 const expiry = (contracts: ChainContract[]): ChainExpiry => ({ date: "2026-10-16", contracts });
 
 describe("volatility by strike", () => {

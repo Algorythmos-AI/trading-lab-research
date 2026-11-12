@@ -63,6 +63,11 @@ describe("normalise", () => {
       day: "2026-10-12",
       prev_close: 778.55,
       vwap: 779.42,
+      // for the bad-data guards: both bars readable, and the quote's two sides (this one sends no sizes and no time)
+      bar_ok: true,
+      prev_bar_ok: true,
+      bid: 779.09,
+      ask: 779.11,
     });
   });
 

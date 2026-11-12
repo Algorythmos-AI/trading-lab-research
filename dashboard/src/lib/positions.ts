@@ -3,9 +3,9 @@
 // They come from the options live document, which the trading host publishes from the paper account kept for
 // manual option trades. The desk shows them; it never places, changes or closes one.
 import { price, type OptionKind } from "./bs";
-import type { Pick } from "./contract";
+import type { Pick, ViewClock } from "./contract";
 import type { ChainResponse } from "./chain";
-import { MAX_CONTRACTS, contractView, daysToExpiry, minutesToExpiry } from "./contract";
+import { MAX_CONTRACTS, chainAge, contractView, daysToExpiry, minutesToExpiry, staleLimits } from "./contract";
 import { MULTIPLIER } from "./longopt";
 import type { OptionsTicker } from "./options";
 import type { OptionsLive } from "./options-live.types";
@@ -144,7 +144,8 @@ export function positionGreeks(
   spot: number,
   now: number,
   session: string,
-  clock: { marketOpen: boolean; priceIsLive: boolean },
+  /** As contractView's: pass the chain's receipt (`receivedPerf`, `perfNow`) so its age is not read off the wall clock. */
+  clock: ViewClock,
 ): PositionGreeks | null {
   const pick = pickFor(row);
   if (!pick || !chain || !(spot > 0)) return null;
@@ -160,4 +161,61 @@ export function positionGreeks(
   }
   if (v.delta === null && decay === null) return null;
   return { delta: v.delta, decay, toExpiry };
+}
+
+/** One position's last chain answer, with when it reached the browser on the monotonic clock (ms). */
+export interface HeldChain {
+  chain: ChainResponse;
+  receivedPerf: number;
+}
+
+/** One request of a round: a name, and the held contract it carries so the answer quotes that contract. */
+export interface ChainAsk {
+  symbol: string;
+  keep: PositionRow;
+}
+
+/** Whether an answer quotes a position's own contract. */
+export function quotes(chain: ChainResponse, row: PositionRow): boolean {
+  return chain.expiries.some((x) => x.date === row.expiry && x.contracts.some((c) => c.kind === row.kind && c.strike === row.strike));
+}
+
+/** Whether any held answer is opra's: the positions keep asking while one is. */
+export function anyOpra(held: Readonly<Record<string, HeldChain>>): boolean {
+  return Object.values(held).some((h) => h.chain.feed === "opra");
+}
+
+/**
+ * The requests of one round of the positions' chains: at most one a name, so positions on one name share an answer
+ * instead of evicting each other's. The first round of a document asks every name. A later one asks only the names
+ * with a position held on opra whose answer would pass its limit (contract.ts staleLimits: the same-day one on its
+ * expiry day, the later one before) before the next round, `intervalMs` on; indicative answers stand for the document.
+ * Each request carries the name's position whose quote is missing or oldest, so in turn every contract is quoted.
+ */
+export function chainAsks(
+  rows: readonly PositionRow[],
+  held: Readonly<Record<string, HeldChain>>,
+  perfNow: number,
+  intervalMs: number,
+  first: boolean,
+): ChainAsk[] {
+  const bySymbol = new Map<string, PositionRow[]>();
+  for (const r of rows) bySymbol.set(r.symbol, [...(bySymbol.get(r.symbol) ?? []), r]);
+  const out: ChainAsk[] = [];
+  for (const [symbol, mine] of bySymbol) {
+    const due =
+      first ||
+      mine.some((r) => {
+        const h = held[r.contract];
+        if (!h || h.chain.feed !== "opra") return false;
+        const age = chainAge(h.chain, h.receivedPerf, perfNow);
+        const limits = staleLimits("opra");
+        return age === null || age + intervalMs / 60_000 > (r.days === 0 ? limits.sameDay : limits.later);
+      });
+    if (!due) continue;
+    const missing = mine.find((r) => !held[r.contract]);
+    const keep = missing ?? [...mine].sort((a, b) => held[a.contract]!.receivedPerf - held[b.contract]!.receivedPerf)[0]!;
+    out.push({ symbol, keep });
+  }
+  return out;
 }

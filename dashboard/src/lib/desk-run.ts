@@ -4,11 +4,12 @@ import { exists, PreconditionFailed, readText, readTextIfChanged, writeText } fr
 import { type BarsResponse, fetchSettledBars } from "./bars";
 import { JOURNAL_PATHS, OPTIONS_PATHS } from "./desk";
 import { defaultDeps as flagsDeps, doneForAlerts, readFlags, type FlagsRead } from "./desk-flags-run";
+import { ALL_OFF, DESK_GUARDS_PATH, GUARD_LOG_V, type GuardLog, type GuardSwitches, parseGuardSwitches } from "./desk-guards";
 import {
   DESK_EVAL_PATH,
   type DegradedWhy,
   type Evaluation,
-  evaluateSlot,
+  evaluateSlotStates,
   focusSymbols,
   notEvaluated,
   nyHhmm,
@@ -22,10 +23,12 @@ import {
 import type { JournalDoc } from "./journal";
 import { logEvent } from "./log";
 import { isHalfDay, type Options } from "./options";
-import { alpacaKeys, fetchQuotes, type QuoteResponse } from "./quote";
+import { alpacaKeys, fetchQuotes, type Quote, type QuoteResponse } from "./quote";
+import { farFromPriorClose, quoteGuards } from "./quote-guards";
 import { type ProbeRecord, probeSnapshots, type RawSnapshots } from "./quote-probe";
 import { fixtureMode } from "./snapshot";
-import { CLOSE_GRACE_MS, SERVER_SETTLE_MS } from "./trade-state";
+import { CLOSE_GRACE_MS, type NameState, SERVER_SETTLE_MS } from "./trade-state";
+import { UpstreamError } from "./upstream";
 
 // GET /api/cron/desk: the server's shadow evaluation of the Options desk (DEC-0044, sections 1 and 2). Once a minute
 // in the New York session it works out the board for the last settled 2-minute slot (desk-eval.ts) and writes one
@@ -41,9 +44,10 @@ import { CLOSE_GRACE_MS, SERVER_SETTLE_MS } from "./trade-state";
 //  * otherwise the edition and the journal (one read each, a bodiless 304 when unchanged on a warm instance), the
 //    done-for-today flag (one read), two upstream calls to Alpaca side by side (the 2-minute bars, and the same
 //    snapshot the page's quote route reads), and one create-only put.
-// About 390 runs a session: 390 switch reads and 390 heads, then for about 194 slots three reads, two upstream
-// calls and one put. The snapshot probe (quote-probe.ts) adds none: it reads the snapshot answer already fetched and
-// rides on the same put.
+// About 390 runs a session: 390 switch reads and 390 heads, then for about 194 slots four reads (the fourth is the
+// bad-data guards' switches, desk/guards.json, read beside the journal and the done flag), two upstream calls and one
+// put. The snapshot probe (quote-probe.ts) and the guards' observe-mode log add none: they read the snapshot answer
+// already fetched and ride on the same put.
 //
 // Every upstream call has its own hard timeout inside RUN_BUDGET_MS; a timed-out edition or bars read is written as a
 // degraded record, never guessed. In fixture mode and anywhere but production it never touches the store: the switch
@@ -63,8 +67,14 @@ export const TIMEOUT_MS = { switch: 1_500, exists: 1_500, edition: 1_500, reads:
  * as enums and numbers, temporary evidence for the board's bad-data guards. Nothing reads it but summariseProbe; it
  * never changes the engine's record or the feed. Null when the snapshot read did not answer, every name came from
  * quote.ts' cache, or the probe failed. Records written before it existed have no `probe`.
+ *
+ * `guards`, after it, is the bad-data guards' observe-mode log (desk-guards.ts GuardLog): how the switches read, which
+ * were on, and per focus name with a snapshot the guards that would pause it whatever the switches say, and whether
+ * its row was paused and why. Enum words and symbols only, from what the run already read. Null when the snapshot read
+ * did not answer or the log failed; a failure here never fails the run. `http_429`, last, counts the run's upstream
+ * answers that were HTTP 429 (the bars and the snapshot: 0 to 2). Records written before them have neither.
  */
-export type DeskLogRecord = ServerRecord & { feed: DataFeed | null; probe: ProbeRecord | null };
+export type DeskLogRecord = ServerRecord & { feed: DataFeed | null; probe: ProbeRecord | null; guards: GuardLog | null; http_429: number };
 
 /** The bars or the snapshots cannot be read at all: no keys, ALPACA_FEED is not a feed, or its feed is not on the plan. */
 export class BarsOff extends Error {
@@ -103,6 +113,13 @@ export interface DeskRunDeps {
   fetchSnapshots(symbols: string[], opts: { now: Date; timeoutMs: number; onRaw?: (raw: RawSnapshots) => void }): Promise<QuoteResponse>;
   /** The probe over the raw answer; quote-probe's probeSnapshots unless a test puts another. Whatever it throws is caught. */
   probe?: (symbols: readonly string[], raw: RawSnapshots | null) => ProbeRecord | null;
+  /**
+   * The bad-data guards' switches, desk/guards.json, as stored (null when there is none). Missing (a test's deps, a dry
+   * run): no document, so every guard is off. A failed read is every guard off too, logged and written on the record.
+   */
+  readGuards?: () => Promise<string | null>;
+  /** The observe-mode log; guardLogOf unless a test puts another. Whatever it throws is caught. */
+  guardLog?: typeof guardLogOf;
 }
 
 export type DeskRunResult =
@@ -153,6 +170,7 @@ export function defaultDeskRunDeps(): DeskRunDeps {
       now: () => Date.now(),
       dry: true,
       readSwitch: async () => null, // off: nothing is read, nothing is written
+      readGuards: async () => null,
       exists: refuse,
       write: refuse,
       loadEdition: refuse,
@@ -165,6 +183,7 @@ export function defaultDeskRunDeps(): DeskRunDeps {
     now: () => Date.now(),
     dry: false,
     readSwitch: async () => (await readText(DESK_EVAL_PATH))?.text ?? null,
+    readGuards: async () => (await readText(DESK_GUARDS_PATH))?.text ?? null,
     exists: (path) => exists(path),
     write: async (path, body) => {
       await writeText(path, body, { createOnly: true });
@@ -202,6 +221,31 @@ const offOnPlan =
 
 const errName = (e: unknown) => (e instanceof Error ? e.name : "unknown");
 
+/**
+ * The observe-mode log of the bad-data guards for one run: per focus name with a snapshot (in the card's order), the
+ * guards that would pause it (quote-guards.ts on that snapshot, when it is the slot's day's, judged at `now`, the
+ * evaluation's own instant), whatever the switches say; the prior-close fact on its own (the bad-print guard also needs
+ * the print outside the day's range); and whether its row was paused and why. Pure.
+ */
+export function guardLogOf(
+  switches: GuardSwitches,
+  symbols: readonly string[],
+  snapshots: Readonly<Record<string, Quote>>,
+  day: string,
+  states: readonly NameState[],
+  now: number,
+): GuardLog {
+  const paused = new Map(states.filter((st) => st.state === "paused").map((st) => [st.symbol, st.guards?.length ? ("guard" as const) : ("stale" as const)]));
+  const names = symbols
+    .filter((sym) => Object.hasOwn(snapshots, sym))
+    .map((sym) => {
+      const q = snapshots[sym]!;
+      const today = q.day === day;
+      return { symbol: sym, would: today ? quoteGuards(q, { today: day, now }) : [], far_from_prior_close: today && farFromPriorClose(q), paused: paused.get(sym) ?? null };
+    });
+  return { v: GUARD_LOG_V, switches: switches.status, on: switches.on, names };
+}
+
 /** One run: idle, off, already logged, or one record written for the last settled slot. */
 export async function runDeskEval(deps: DeskRunDeps = defaultDeskRunDeps()): Promise<DeskRunResult> {
   const startedAt = deps.now();
@@ -238,6 +282,10 @@ export async function runDeskEval(deps: DeskRunDeps = defaultDeskRunDeps()): Pro
   /** The raw snapshot answer for the probe, and the names it is about: set only when the snapshot read answered. */
   let probeRaw: RawSnapshots | null = null;
   let probeSymbols: string[] = [];
+  /** For the guards' log: the switches read, the snapshot answer and the board's states, when the snapshot answered. */
+  let guardInput: { switches: GuardSwitches; symbols: string[]; snapshots: Record<string, Quote>; states: NameState[] } | null = null;
+  /** HTTP 429 answers from the bars and the snapshot reads. */
+  let http429 = 0;
   let read: EditionRead | "timeout";
   try {
     read = await within(deps.loadEdition(), TIMEOUT_MS.edition);
@@ -257,6 +305,11 @@ export async function runDeskEval(deps: DeskRunDeps = defaultDeskRunDeps()): Pro
       within(deps.readDone(), TIMEOUT_MS.reads)
         .then((r) => doneForAlerts(r, slotNow))
         .catch(() => true), // could not read: counts as done, as doneForAlerts does
+      // The guards' switches: missing, malformed or a failed read is every guard off; a failed read is logged.
+      (deps.readGuards ? within(deps.readGuards(), TIMEOUT_MS.reads) : Promise.resolve(null)).then(parseGuardSwitches, (e: unknown) => {
+        logEvent("desk-eval.guards", { outcome: "read-failed", error: errName(e) });
+        return ALL_OFF("error");
+      }),
     ]);
     // A wrong day or an empty card needs no bars: nothing is asked for upstream.
     const needsBars = ed.session === slot.day && symbols.length > 0;
@@ -264,6 +317,7 @@ export async function runDeskEval(deps: DeskRunDeps = defaultDeskRunDeps()): Pro
       within(p(), TIMEOUT_MS.reads).then(
         (ok) => ({ ok }),
         (e: unknown) => {
+          if (e instanceof UpstreamError && e.status === 429) http429++;
           const why: DegradedWhy = e instanceof BarsOff ? `${kind}-off` : e instanceof TimedOut || errName(e) === "TimeoutError" ? `${kind}-timeout` : `${kind}-failed`;
           logEvent("desk-eval.upstream", { outcome: why });
           return { why };
@@ -274,7 +328,7 @@ export async function runDeskEval(deps: DeskRunDeps = defaultDeskRunDeps()): Pro
     const onRaw = (r: RawSnapshots) => {
       tapped = r;
     };
-    const [[journal, done], barsGot, snapGot] = await Promise.all([
+    const [[journal, done, switches], barsGot, snapGot] = await Promise.all([
       facts,
       needsBars ? upstream(() => deps.fetchBars(symbols, { now: runAt, minFetchedAt: slot.end + SERVER_SETTLE_MS, timeoutMs: TIMEOUT_MS.barsPage, halfDay }), "bars") : null,
       needsBars ? upstream(() => deps.fetchSnapshots(symbols, { now: runAt, timeoutMs: TIMEOUT_MS.barsPage, onRaw }), "snapshot") : null,
@@ -284,11 +338,27 @@ export async function runDeskEval(deps: DeskRunDeps = defaultDeskRunDeps()): Pro
       probeRaw = tapped;
       probeSymbols = symbols;
     }
-    if (barsGot === null || snapGot === null) evaluation = evaluateSlot({ slot, edition: ed, journal, done, bars: {}, fetchedAt: {}, snapshots: {} }); // wrong-day or no-focus
+    if (barsGot === null || snapGot === null) evaluation = evaluateSlotStates({ slot, edition: ed, journal, done, bars: {}, fetchedAt: {}, snapshots: {} }).evaluation; // wrong-day or no-focus
     else if ("why" in barsGot) evaluation = notEvaluated("degraded", barsGot.why, halfDay, done, !("why" in snapGot));
     // Never bars alone: without the snapshot an entry could be read past a high the page sees.
     else if ("why" in snapGot) evaluation = notEvaluated("degraded", snapGot.why, halfDay, done, false);
-    else evaluation = evaluateSlot({ slot, edition: ed, journal, done, bars: barsGot.ok.bars, fetchedAt: barsGot.ok.fetchedAt, snapshots: snapGot.ok.quotes });
+    else {
+      // The guards switched on read every run; with none on, the evaluation is exactly as without guards.
+      const got = evaluateSlotStates({
+        slot,
+        edition: ed,
+        journal,
+        done,
+        bars: barsGot.ok.bars,
+        fetchedAt: barsGot.ok.fetchedAt,
+        snapshots: snapGot.ok.quotes,
+        ...(switches.on.length > 0 ? { guardsOn: switches.on } : {}),
+      });
+      evaluation = got.evaluation;
+      guardInput = { switches, symbols, snapshots: snapGot.ok.quotes, states: got.states };
+    }
+    // The snapshot answered but the board was not reached (the bars failed): the guards' log still counts the names.
+    if (!guardInput && snapGot && "ok" in snapGot) guardInput = { switches, symbols, snapshots: snapGot.ok.quotes, states: [] };
   }
 
   // The probe is log-only: computed after the evaluation from what was already read, and any failure leaves it null.
@@ -301,9 +371,20 @@ export async function runDeskEval(deps: DeskRunDeps = defaultDeskRunDeps()): Pro
   } catch (e) {
     logEvent("desk-eval.probe", { outcome: "error", error: errName(e) });
   }
+  // The guards' observe-mode log, the same way: from what was already read, and any failure leaves it null.
+  let guards: GuardLog | null = null;
+  try {
+    if (guardInput) {
+      const g = (deps.guardLog ?? guardLogOf)(guardInput.switches, guardInput.symbols, guardInput.snapshots, slot.day, guardInput.states, slot.end + CLOSE_GRACE_MS);
+      JSON.stringify(g);
+      guards = g ?? null;
+    }
+  } catch (e) {
+    logEvent("desk-eval.guards", { outcome: "log-error", error: errName(e) });
+  }
   // The engine's record first, unchanged; the feed after it (outside the hashed code), only when a read answered;
-  // the probe last.
-  const record: DeskLogRecord = { ...serverRecord(evaluation, slot, deps.now(), edition), feed: readFeed, probe };
+  // the probe, the guards' log and the 429 count last.
+  const record: DeskLogRecord = { ...serverRecord(evaluation, slot, deps.now(), edition), feed: readFeed, probe, guards, http_429: http429 };
   if (deps.dry) return { ok: true, outcome: "dry", slot: hhmm, path, record };
   try {
     await within(deps.write(path, JSON.stringify(record)), TIMEOUT_MS.write);

@@ -25,7 +25,9 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { BoardEventsLine } from "@/components/board-events";
 import { StatusBadge } from "@/components/status";
+import { boardEvents } from "@/lib/board-events";
 import { newYork } from "@/lib/format";
 import { isHalfDay, type Options, type OptionsTicker } from "@/lib/options";
 import {
@@ -47,9 +49,13 @@ import {
   spokenChanges,
 } from "@/lib/trade-now";
 import { pausedAgeS } from "@/lib/level-ladder";
+import type { SwitchRead } from "@/lib/desk-guards";
+import type { GuardReason } from "@/lib/quote-guards";
 import { type NameState, type NameStateName, serverNow } from "@/lib/trade-state";
 import { cn } from "@/lib/utils";
+import { useCockpit } from "./cockpit-state";
 import { useDeskShadow } from "./desk-shadow";
+import { useGuardSwitches } from "./use-guards";
 import { useDone } from "./done-today";
 import { FeedFacts, FeedRetry, useLive } from "./live-layer";
 import { useBars } from "./use-bars";
@@ -467,6 +473,7 @@ export function TradeNowBoard({
   switches,
   retry,
   facts,
+  events,
   rowExtra,
   after,
   doneFor,
@@ -485,6 +492,8 @@ export function TradeNowBoard({
   retry?: React.ReactNode;
   /** Under the header row, outside the retry line, so it is never covered: the feed's name and ages (FeedFacts). */
   facts?: React.ReactNode;
+  /** Under the feed facts: the day's scheduled releases and the focus names' earnings (BoardEventsLine). Display only. */
+  events?: React.ReactNode;
   /** Drawn inside a row (an expanded one under its numbers): the manage card's "I'm in" and its form (trade-manage.tsx). */
   rowExtra?: (row: BoardRow, paused: boolean) => React.ReactNode;
   /** Drawn under the rows, and kept while the live prices are off: the manage cards (trade-manage.tsx). */
@@ -500,8 +509,14 @@ export function TradeNowBoard({
   const listed = mode.kind === "live" ? drawn.filter(({ r, extra }) => actionableRow(r) || extra !== null) : drawn;
   // A name paused on its own (the others live) is never "watching": it is named apart, with what to do.
   const shown = new Set(listed.map(({ r }) => r.symbol));
-  const pausedNames = mode.kind === "live" && !paused ? rows.filter((r) => r.state?.state === "paused" && !shown.has(r.symbol)).map((r) => r.symbol) : [];
-  const watching = rows.length - listed.length - pausedNames.length;
+  const pausedRows = mode.kind === "live" && !paused ? rows.filter((r) => r.state?.state === "paused" && !shown.has(r.symbol)) : [];
+  // A name a switched-on bad-data guard paused says why, on a line of its own; the others share the one line.
+  const pausedNames = pausedRows.filter((r) => !r.state?.guards?.length).map((r) => r.symbol);
+  const guarded = pausedRows.filter((r) => r.state?.guards?.length);
+  // Every name paused: the board's one line names each guard that paused a name, and the rest as paused for old prices.
+  const allGuarded = paused ? rows.filter((r) => r.state?.state === "paused" && r.state.guards?.length) : [];
+  const allStale = paused ? rows.filter((r) => r.state?.state === "paused" && !r.state.guards?.length).map((r) => r.symbol) : [];
+  const watching = rows.length - listed.length - pausedRows.length;
   const status = mode.kind === "live" ? (paused ? "paused" : "live") : mode.kind === "loading" ? "connecting" : mode.kind === "off" ? "off" : "waiting";
   return (
     <section aria-labelledby="trade-now-title" data-trade-now={mode.kind} data-board-status={status} className="bg-card grid gap-2 rounded-lg border px-3 py-2.5">
@@ -535,9 +550,15 @@ export function TradeNowBoard({
         {retry}
       </div>
       {facts}
+      {events}
       {mode.kind !== "live" ? (
         <p data-board-line className={cn("text-[0.8125rem]", mode.kind === "off" || mode.kind === "old" ? "text-muted-foreground" : "font-medium")}>
           {mode.line}
+        </p>
+      ) : paused && allGuarded.length ? (
+        <p data-board-line data-board-guards={allGuarded.map((r) => r.symbol).join(" ")} className="text-warn text-[0.8125rem] font-medium">
+          Prices paused. {allGuarded.map((r) => `${r.symbol}: ${r.state!.line}.`).join(" ")}
+          {allStale.length ? ` ${allStale.join(", ")}: no entry is shown on old prices. Check your platform.` : ""}
         </p>
       ) : paused ? (
         <p data-board-line className="text-warn text-[0.8125rem] font-medium">
@@ -562,6 +583,12 @@ export function TradeNowBoard({
           {pausedNames.join(", ")}: prices paused, check your platform
         </p>
       ) : null}
+      {guarded.map((r) => (
+        <p key={r.symbol} data-board-guard={r.symbol} data-board-guards={r.state!.guards!.join(" ")} className="text-warn text-[0.8125rem] font-medium">
+          <Pause aria-hidden className="mr-1 inline size-3.5 align-[-2px]" />
+          {r.symbol}: prices paused. {r.state!.line}.
+        </p>
+      ))}
       {mode.kind === "live" && !paused && watching > 0 ? (
         listed.length === 0 ? (
           <p data-board-none className="text-explain font-medium">
@@ -778,6 +805,7 @@ export function boardAlt(r: ReturnType<typeof useBoardRow>): { kind: NonNullable
 const NO_LOTS: readonly Lot[] = [];
 const NO_TRADES: readonly Trade[] = [];
 const NO_ITEMS: NonNullable<Options["focus"]>["items"] = [];
+const NO_GUARDS: readonly GuardReason[] = [];
 
 /**
  * Works the board out once for the page, from the focus card's levels, the live quotes and the session's 2-minute
@@ -793,6 +821,8 @@ export function BoardProvider({
   journalAsOf = null,
   dayFacts = null,
   evalOn = false,
+  guardsOn = NO_GUARDS,
+  guardsRead = "missing",
   children,
 }: {
   e: Options;
@@ -812,6 +842,13 @@ export function BoardProvider({
   dayFacts?: DayFacts | null;
   /** The server's shadow check is switched on (desk/eval.json, read by the server render); off by default. */
   evalOn?: boolean;
+  /**
+   * The bad-data guards switched on (desk/guards.json, read by the server render, then again while the board is live:
+   * use-guards.ts). None by default, and with none on the board is exactly as without guards.
+   */
+  guardsOn?: readonly GuardReason[];
+  /** How the server render read them (desk-guards' SwitchRead): a failed read starts every guard off. */
+  guardsRead?: SwitchRead;
   children: React.ReactNode;
 }) {
   const { feed, now: browserNow } = useLive();
@@ -825,6 +862,7 @@ export function BoardProvider({
   const mode: BoardMode = now === null ? { kind: "loading", line: "Connecting to live prices" } : boardMode(e.session, halfDay, feed.status, now);
   const newest = ok ? Math.max(0, ...items.map((i) => Date.parse(feed.quotes[i.symbol]?.at ?? "") || 0)) : 0;
   const bars = useBars(symbols, live && items.length > 0 && (mode.kind === "live" || mode.kind === "opening"), newest > 0 ? Math.floor(newest / 120_000) : null, halfDay);
+  const guardHold = useGuardSwitches(guardsOn, guardsRead, live && items.length > 0 && (mode.kind === "live" || mode.kind === "opening"));
   // Late or failing bars are not used: the states fall back to the page's own prices, and the header says so.
   const used = barsInUse(bars, browserNow);
   const rows =
@@ -844,6 +882,7 @@ export function BoardProvider({
             receivedAt: answeredAt,
             dayLimitUsed,
             wonToday,
+            ...(guardHold.on.length > 0 ? { guards: { on: guardHold.on } } : {}),
           },
           mode.kind === "live",
         );
@@ -897,6 +936,8 @@ export function BoardProvider({
     now,
     browserNow,
     barsDelayed: mode.kind === "live" && used.delayed,
+    guards: guardHold.on,
+    guardsUnsure: guardHold.unsure,
   });
   if (settled) {
     // Announces what is new and withdraws, for good, every notice whose state has left the board.
@@ -1008,12 +1049,33 @@ export function TradeNow() {
       onOpen={openFocusCard}
       retry={<FeedRetry />}
       facts={<FeedFacts where="board" symbols={b.items.map((i) => i.symbol)} />}
+      events={<BoardEvents where="board" />}
       rowExtra={b.manage.rowExtra}
       after={b.manage.cards}
       doneFor={b.doneFor}
       maskFor={b.maskFor}
     />
   );
+}
+
+/**
+ * Where the board's event line goes: the status rail while the board is folded into it (before the open, while
+ * connecting, after the close) or while the cockpit is on (it hides the board, never the rail); the board otherwise.
+ */
+export function eventsPlace(collapsed: boolean, cockpit: boolean): "board" | "rail" {
+  return collapsed || cockpit ? "rail" : "board";
+}
+
+/**
+ * The board's event line (BoardEventsLine), drawn in exactly one place at a time (eventsPlace). Display only: worked
+ * out here from the board's day, clock and focus names, never handed to the board's states.
+ */
+export function BoardEvents({ where }: { where: "board" | "rail" }) {
+  const b = useBoard();
+  const cockpit = useCockpit();
+  if (!b || !b.on || b.now === null) return null;
+  if (eventsPlace(boardCollapsed(b.mode, b.manage.views.length), cockpit) !== where) return null;
+  return <BoardEventsLine where={where} events={boardEvents({ session: b.session, now: b.now, names: b.items.map((i) => i.symbol) })} />;
 }
 
 /**

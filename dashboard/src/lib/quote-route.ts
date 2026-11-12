@@ -2,6 +2,7 @@ import "server-only";
 import { configuredFeed, type DataFeed, FEED_PLAN_REFUSED, FEED_REFUSED, planRefused } from "./alpaca-feed";
 import { FIXTURE_OFFSET_ATR, FLAKY_COOKIE, flagsFromCookieHeader, flakyCountFromCookieHeader, flakyFails, tickPrice, type VariantFlag } from "./fixture-variants";
 import { SCRIPT_ANSWER_LAG_MS, scriptQuote, scriptStep, stepFromCookieHeader, stepInstant } from "./fixture-script";
+import { suspectQuote, suspectReasonFor } from "./fixture-suspect";
 import { logEvent } from "./log";
 import { upstreamBody, upstreamStatus } from "./upstream";
 import type { OptionsEdition } from "./options.types";
@@ -17,7 +18,7 @@ function json(status: number, body: unknown): Response {
  * session at 11:00 New York. Lets the browser tests drive the live panel with no network and no keys. With `tick`
  * the price flips by a cent and its time advances every second, so a test can watch the page take live updates.
  */
-async function fixtureQuotes(symbols: string[], now: Date, feed: DataFeed, tick = false): Promise<QuoteResponse> {
+async function fixtureQuotes(symbols: string[], now: Date, feed: DataFeed, tick = false, suspect = false): Promise<QuoteResponse> {
   const mod = await import("../../test/fixtures/options.v1.json");
   const e = (mod.default ?? mod) as unknown as OptionsEdition;
   const quotes: Record<string, Quote> = {};
@@ -44,6 +45,8 @@ async function fixtureQuotes(symbols: string[], now: Date, feed: DataFeed, tick 
       // Halfway between the open and the price: a VWAP that sits on the side the session has moved to.
       vwap: Math.round(((close + price) / 2) * 100) / 100,
     };
+    // `quotes-suspect`: each name trips the bad-data guards in turn, by its place in the request.
+    if (suspect) quotes[s] = suspectQuote(quotes[s]!, suspectReasonFor(symbols.indexOf(s)));
   }
   return { as_of: now.toISOString(), feed, quotes, missing, fixture: true };
 }
@@ -69,7 +72,7 @@ async function scriptedQuotes(symbols: string[], step: number, feed: DataFeed): 
 /** Fixture mode's answer: the scripted morning with `quotes-script`, else the fixture prices (ticking with `quotes-tick`). */
 async function fixtureAnswer(symbols: string[], now: Date, flags: ReadonlySet<VariantFlag>, cookie: string | null, feed: DataFeed): Promise<Response> {
   if (flags.has("quotes-script")) return json(200, await scriptedQuotes(symbols, scriptStep(stepFromCookieHeader(cookie), now.getTime()), feed));
-  return json(200, await fixtureQuotes(symbols, now, feed, flags.has("quotes-tick")));
+  return json(200, await fixtureQuotes(symbols, now, feed, flags.has("quotes-tick"), flags.has("quotes-suspect")));
 }
 
 /**

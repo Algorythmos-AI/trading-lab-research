@@ -12,6 +12,7 @@ import { DAY_LOSS_LIMIT, dayCheck, MAX_TRADES_PER_DAY, MIN_ROOM_MULTIPLE, PREMIU
 import { type AltTrigger, atr2m, BAR_MINUTES, type Bar2, bars2m, flatMinute, FIRST_ENTRY_MIN, mergeBars, MAX_BARS_TO_RETEST, type NameState, type NameStateName, nameState, SERVER_SETTLE_MS } from "./trade-state";
 import { BARS_STALE_MS, type BarsFeed } from "./bars-feed";
 import { LEADERS, type Side } from "./entry-checks";
+import type { GuardReason } from "./quote-guards";
 import type { Tone } from "./labels";
 
 type Item = NonNullable<Options["focus"]>["items"][number];
@@ -126,6 +127,11 @@ export interface BoardInput {
   receivedAt: number | null;
   dayLimitUsed: boolean;
   wonToday: boolean | null;
+  /**
+   * The bad-data guards switched on (desk-guards.ts), and the snapshot quotes they read when those are not `quotes`
+   * (the server evaluator's). Missing, or none on: the rows are exactly as without guards.
+   */
+  guards?: { on: readonly GuardReason[]; quotes?: Readonly<Record<string, LiveQuote>> };
 }
 
 const NO_TICKER: Pick<OptionsTicker, "levels" | "bars" | "expected_move"> = { levels: [], bars: [], expected_move: null };
@@ -167,6 +173,9 @@ export function boardRows(input: BoardInput, live: boolean): BoardRow[] {
         halfDay: input.halfDay,
         dayLimitUsed: input.dayLimitUsed,
         wonToday: input.wonToday,
+        ...(input.guards && input.guards.on.length > 0
+          ? { guardsOn: input.guards.on, ...(input.guards.quotes ? { guardQuote: input.guards.quotes[item.symbol] ?? null } : {}) }
+          : {}),
       });
       const runner = state.state === "enter_zone" && state.side ? runnerLine(plan[state.side], input.halfDay) : null;
       return { symbol: item.symbol, focusRank: item.rank, price, state, triggers, runner };
@@ -258,13 +267,16 @@ export function boardNotices(book: NoticeBook, session: string, states: readonly
   const shownNew = next.fresh;
   const merged = shownNew.length ? [...shownNew, ...book.kept.filter((k) => !shownNew.some((f) => f.symbol === k.symbol))] : book.kept;
   const gone = new Map(book.gone ?? []);
+  // A name a switched-on bad-data guard has paused: its kept notice may rest on the same suspect data, so it goes at
+  // once, without the keep below. A pause for no fresh price keeps the keep.
+  const guarded = new Set(states.filter((st) => st.state === "paused" && st.guards?.length).map((st) => st.symbol));
   const kept = merged.filter((k) => {
     const key = noticeKey(k) ?? "";
     if (live.has(key)) {
       gone.delete(key);
       return true;
     }
-    if (!timed) return false;
+    if (!timed || guarded.has(k.symbol)) return false;
     const since = gone.get(key) ?? now;
     gone.set(key, since);
     return now - since < WITHDRAW_AFTER_MS;

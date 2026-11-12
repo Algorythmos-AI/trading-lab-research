@@ -87,7 +87,9 @@ a line of that code changed, not that a rule did. The next release to `main` cha
 | Release | Label before | Label after | Engine files changed | Change to a state, a level or a guard |
 |---|---|---|---|---|
 | Robustness wave 1 (#375 to #381) | `e-c0b7d260245b` | `e-5f6c5cbf0639` | `market-calendar.json`, `market-calendar.ts` (#376); `bars-feed.ts` (#378) | None |
-| Session calendar to 2029 (this PR) | `e-5f6c5cbf0639` | `e-0615f37ee2ba` | `market-calendar.json`, `market-calendar.ts` | None up to 2027-12-31: no session, holiday, half day or close time on or before that date changed (a per-year hash in `tests/unit/test_market_calendar.py` holds it). Only dates after 2027-12-31 were added: the range now ends 2029-12-31 (first new session 2028-01-03), and on those days `sessionOf` now gives the exchange's session, holiday or 13:00 close instead of out of range. The rows' quality field, the `checked_against` header and the month notes are not read by the evaluator |
+| Session calendar to 2029 (#389) | `e-5f6c5cbf0639` | `e-0615f37ee2ba` | `market-calendar.json`, `market-calendar.ts` | None up to 2027-12-31: no session, holiday, half day or close time on or before that date changed (a per-year hash in `tests/unit/test_market_calendar.py` holds it). Only dates after 2027-12-31 were added: the range now ends 2029-12-31 (first new session 2028-01-03), and on those days `sessionOf` now gives the exchange's session, holiday or 13:00 close instead of out of range. The rows' quality field, the `checked_against` header and the month notes are not read by the evaluator |
+| Edition build-age check | `e-0615f37ee2ba` | `e-3f82b5b4b3c0` | `options.ts` | None: the evaluator does not call `builtFromOld` or the functions added beside it (`builtFromProblem`, `builtFromNotice`, `builtFromDay`, `builtFromWords`); only the Options pages' warning and their "built from" lines read them. No other function in the file changed |
+| Bad-data guards (B2) | `e-3f82b5b4b3c0` | `e-5e6df4f6a595` | `trade-state.ts`, `trade-now.ts`, `desk-eval.ts`, `options.ts`; joined: `quote-guards.ts`, `quote-shape.ts` | None while every guard is switched off, which is how it ships: no state, level, line or guard of section 4 changes (a test holds the rows, the board as drawn, the page surfaces drawn from it, the evaluation and the record's other engine fields byte-identical to `e-3f82b5b4b3c0` over every fixture). Each of the four data guards in DEC-0042's note, once the owner switches it on in `desk/guards.json`, pauses a name its check trips |
 
 - `market-calendar.json` gained 2027 macro rows and three earnings rows, and one 2027 date was corrected. The
   evaluator reads only the session calendar from this file (`sessionOf`: holidays and half days), which did not
@@ -111,3 +113,13 @@ the board's feed changes) and section 3 (an ntfy alert carries no symbol and no 
 go only over the encrypted channel). Section 4 is not amended: any further guard is named, with its file and pass
 rule, in a dated note in DEC-0049 by the pull request that adds entry alerts. It does not answer the engine-label
 question in the note above. The text above is otherwise unchanged.
+
+## Note on the bad-data guards (added 2026-11-12; nothing above is changed)
+
+- The slot record gained, after `probe`, the data guards' observe-mode counts (`guards`: how the switches read, which
+  were on, and per focus name the guards that would have paused it, the 25% move on its own, and whether its row was
+  paused and why, as enum
+  words) and the run's count of HTTP 429 answers (`http_429`); the engine's fields are unchanged. A slot whose page and
+  server ran with different switches, or that the page took while it could not confirm its switches
+  (`guards_unsure`), is counted apart in the shadow numbers, not compared. These data guards are
+  DEC-0042's; section 4's guards on alerts are not amended.

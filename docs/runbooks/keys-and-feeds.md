@@ -10,14 +10,23 @@ one the subscription allows": IEX on the free plan, SIP (the consolidated tape) 
 the subscription lapses. A request without a feed would change its data source with the plan, with no code change and
 no record. So every request here names its feed, and these guards fail on one that does not:
 
-- Python, at run time: `wt.data.feeds.require_feed`, called by `AlpacaREST.get` before anything is sent.
+- Python, at run time: `wt.data.feeds.require_feed`, called before anything is sent by `AlpacaREST.get` (and
+  `AlpacaREST.get_response`, the one-request form the selection's fetcher uses to read statuses and headers) and by the
+  request helper of each module with its own HTTP session: `AlpacaFeeds._get` in `wt.live.runner_o` (a refusal is a
+  `TransportError`, a failed data read: a refusal while preparing the levels turns entries off for the day; one on a
+  chain, quote or minute-bar read skips that entry or makes the tape read as stalled; exits are managed in every
+  case), `OptionsAccount._get` in `wt.options.live`
+  (a `BrokerFault`: the extra it was for is left out and named in `problems`, the positions still go) and
+  `_alpaca_get` in `wt.options.pipeline_check` (unusable market data: `data.reachable` fails and pages, exit 0).
+  Each refusal also writes "a market-data request named no feed" to the job's log.
 - Python, in the tests: `tests/unit/test_feed_named.py` (the scan is `tests/unit/feed_scan.py`) checks every request
   call in `src/`, `scripts/` and `deploy/`, and every use of an alpaca-py data request class (the SDK leaves
   `feed=None` out of the query: `self.model_dump(exclude_none=True)` in `NonEmptyRequest`).
 - Python, every call site: `tests/unit/test_feed_call_shapes.py` runs each request the code sends today against a
   fake session (or copies it, for two hand-run scripts) and checks it with `require_feed`.
-- `wt.live.runner_o`, `wt.options.live` and `wt.options.pipeline_check` use their own HTTP session: for now they are
-  covered by the scan only, not by `require_feed`.
+- `wt.live.runner_o`, `wt.options.live` and `wt.options.pipeline_check` use their own HTTP session: they are covered
+  by the scan and by `require_feed` in their request helpers; `test_feed_call_shapes.py` checks that every request
+  those helpers send leaves unchanged with the guard in place.
 - Dashboard: every data URL is built by `alpacaDataUrl` (`dashboard/src/lib/alpaca-data-url.ts`), which throws
   without a feed; `dashboard/test/alpaca-data-url.test.ts` fails on a data request built anywhere else.
 
@@ -35,12 +44,15 @@ without fixing it. Read the records themselves for what they decide.
 
 | Consumer | What it reads | Feed | Where the feed is set | Bound by | Described in |
 |---|---|---|---|---|---|
-| Owner's board, live prices (site, `/api/quote`) | stock snapshots | `ALPACA_FEED`, default iex (check the site's setting) | `ALPACA_FEED` on Vercel (`alpaca-feed.ts`) | DEC-0042 | DEC-0049, feed-agreement runbook |
-| Owner's board, session bars (site, `/api/bars`) | 2-minute stock bars | `ALPACA_FEED`, default iex (check the site's setting) | the same | none | DEC-0044, DEC-0049, feed-agreement runbook |
-| Shadow evaluator (site, `/api/cron/desk`) | 2-minute bars and snapshots | `ALPACA_FEED`, default iex (check the site's setting) | the same | none | DEC-0044, DEC-0049, EXP-0031, feed-agreement runbook |
+| Owner's board, live prices (site, `/api/quote`) | stock snapshots | `ALPACA_FEED`, default iex; sip on production by DEC-0050 once the owner sets it | `ALPACA_FEED` on Vercel (`alpaca-feed.ts`) | DEC-0042, DEC-0050 | DEC-0049, board-feed and feed-agreement runbooks |
+| Owner's board, session bars (site, `/api/bars`) | 2-minute stock bars | `ALPACA_FEED`, default iex; sip on production by DEC-0050 once the owner sets it | the same | DEC-0050 | DEC-0044, DEC-0049, feed-agreement runbook, board-feed runbook |
+| Shadow evaluator (site, `/api/cron/desk`) | 2-minute bars and snapshots | `ALPACA_FEED`, default iex; sip on production by DEC-0050 once the owner sets it | the same | DEC-0050 | DEC-0044, DEC-0049, EXP-0031, feed-agreement runbook, board-feed runbook |
 | Owner-trade labeller (EXP-0031 labels; not built yet) | settled 2-minute bars | iex, asked for by name, never from `ALPACA_FEED` | its own pull request | DEC-0049 | EXP-0031 |
-| Contract pane and chain (site, `/api/chain`) | option snapshots | indicative | literal in `chain.ts` | none | none |
+| Owner-trade labeller (EXP-0033 labels; not built yet) | settled 2-minute bars | sip, asked for by name, never from `ALPACA_FEED` | its own pull request | DEC-0050 | EXP-0033 |
+| Contract pane and chain (site, `/api/chain`) | option snapshots | `ALPACA_OPTION_FEED`, default indicative; opra on the owner's setting (check the site's setting) | `ALPACA_OPTION_FEED` on Vercel (`option-feed.ts`) | DEC-0050 (point 6) | none |
 | Feed agreement (hand, `make feed-agreement`) | 2-minute stock bars | iex and sip | literal per run (`barsUrl`) | none | feed-agreement runbook |
+| Feed comparison sampler (site, `/api/cron/feeds`) | stock snapshots of the focus names and SPY | iex and sip, one request each a minute | literals in `feed-compare-sample.ts` (`askFeed("iex")`, `askFeed("sip")`), never `ALPACA_FEED` | DEC-0050 | feed-agreement runbook, "Server comparison" |
+| Feed comparison report (site, `/api/cron/feeds-report`) | the session's 2-minute and settled 1-minute stock bars of the focus names | iex and sip | literals in `feed-compare-report.ts` (`fetchSessionBars("iex")` / `("sip")` through `barsUrl`; `fetchMinuteBars("iex")` / `("sip")` through `minuteBarsUrl` in `feed-compare-bars.ts`), never `ALPACA_FEED` | DEC-0050 | feed-agreement runbook, "Server comparison" |
 | Paper runner B, signal bars (host, `paper-b`) | 1-minute bars | iex | literal default in `runner_b.py` | DEC-0037 | none |
 | Paper runner B, latest quotes (host) | latest quote of the signal and trade names | iex | literal | none | DEC-0024 |
 | Paper runner B, sigma (host) | 1-minute bars of the 14 prior sessions | sip | literal | none | none: set in code |
@@ -52,13 +64,16 @@ without fixing it. Read the records themselves for what they decide.
 | Pipeline check (host) | daily bars; snapshots | sip; iex | literals in `pipeline_check.py` | none | none |
 | Pre-market routine (host, `routine`) | 1-minute bars, news | hybrid: sip to 16 minutes ago, iex after | `HybridFeed` names both; `--feed` overrides | DEC-0023 | none |
 | Forward test (host, `forward`) | daily and 1-minute bars | sip | `AlpacaREST.bars` default argument `feed="sip"` | DEC-0009 | none |
+| Selection bundles (`python -m wt.options.select_fetch`; no job runs it yet) | Stage 1: split-adjusted daily bars. Stage 2: raw daily bars, 1-minute bars, split-adjusted 5-minute bars, snapshots; corporate actions and news (counts only) take no feed | sip | literal in `select_fetch.py` | DEC-0046 | none |
 | Research scripts (hand: `build_pool`, `scan`, `r2_`, `r3_`, `g1_`, `exp*`, `options_replication`, `options_clone_dry_run`) | bars, quotes, trades | sip | literal, or the `bars` default | not reviewed per script here | - |
 | News (`AlpacaREST.news`), option bars (`options_clone_dry_run`) | news; historical option bars | none: these endpoints take no feed | - | - | - |
 
 Every request names its feed, so a plan change does not change any request's source. Two settings outside the code
 choose a feed. Check them after any plan change: `ALPACA_FEED` on Vercel (unset or `iex` keeps the board, its bars
 and the evaluator on IEX), and whether `var/options/switches/opra` exists on the host (it switches the clone's option
-quotes to OPRA).
+quotes to OPRA). The clone's `feeds.option` in `config/options_clone.yaml` must be exactly `indicative` or `opra`, lower
+case: anything else is refused before it is sent and the clone runs with no chains
+(`tests/unit/test_feed_call_shapes.py` fails on a committed value outside `wt.data.feeds.OPTION_FEEDS`).
 
 Per Alpaca's documentation, not verified by a call here: on Algo Trader Plus, SIP is not refused for the last 15
 minutes. The routine's `HybridFeed` still cuts at 16 minutes by the clock. Its fallback to IEX on a SIP 403 would not
@@ -120,11 +135,17 @@ of 2026-11-12, assuming each answer fits on one page.
 | Site, chain | each viewed name every 30 s; 20 s cache | 2 calls (3 with a held contract), up to 3 pages each | **4 to 6 per name** | 9 pages x 2 = 18 per name |
 | Shadow evaluator (site's pair) | every minute, 13:00 to 21:59 UTC on weekdays | bars 1 + snapshots 1 | **2** | 21 if the bars page to 20 |
 | Feed agreement (hand) | once after a session | 2 feeds x pages | capped at **180** (`ALPACA_CALLS_PER_MIN`) | 180 |
+| Selection fetch (`APCA_API_`; no job runs it yet) | Stage 1 once after the close; Stage 2 Pass A from 08:51 and Pass B from 09:21 ET (T + 60 s) | Stage 1: 1 (daily bars, one page). Each Stage 2 pass: 26 (daily 1, 1-minute 1, pre-market 5-minute 21, snapshots 1, corporate actions 1, news 1) plus 1 per further page | **26** in the minute a pass runs; it joins the shared limiter (`AlpacaREST(shared=True)`) | a pass stops at 100 requests (Stage 1 at 20), each retry counted (a 429 after its `Retry-After` or `X-RateLimit-Reset`; a 5xx or a timeout once); Stage 2 stops 60 s before the pass's publish-by time (08:55, 09:24), Stage 1 after 540 s. A Stage 2 fetch that stops early still saves its bundle, marked incomplete. Corporate actions are asked for by process date, 10 days before to 5 days after the session |
+| Feed comparison sampler (site's pair) | every minute in the regular session, 13:00 to 21:59 UTC on weekdays (`* 13-21 * * 1-5`), runs only from the open to the close | snapshots 1 on iex + snapshots 1 on sip, never cached, never paged; a 400 is asked once more on that feed | **2** (4 at most) | 2 (one run a minute; a second run in the same minute finds the sample and asks nothing) |
+| Feeds page live book (site's pair, `/api/feeds/live`) | while a signed-in Feeds page is open and visible, every 5 s; nothing while hidden | snapshots 1 + 2-minute bars 1 on the board's feed (`ALPACA_FEED`), cached 5 s per instance and name set with one read in flight; bars only after the open, at most 4 pages | **24** | 24 per instance whatever the number of tabs (60 at most if bars page) |
+| Feed comparison report (site's pair) | once a day after close + 20 min (`*/10 20-23 * * 1-5`; later ticks find the report and ask nothing) | 4 reads, N pages each: 2-minute bars per feed, N = 1 (about 4 names x 195 bars = about 800, under `limit=10000`); 1-minute bars per feed, N = 1 (about 4 names x 390 bars = about 1,560, under `limit=10000`; a card of up to 25 names fits in one page) | 4 calls in that one minute, about **0** a minute over the day | 80 (20 pages x 4 reads, `MAX_PAGES`), all under one shared 180-a-minute limiter and one 150 s budget; a build that may heal retries at the next 10-minute tick, until 23:50 UTC |
 
 Arithmetic for the host's stocks pair (`APCA_API_`):
 
 - 08:00 to 09:30: the routine at most 30 a minute; at about 08:30 runner B arms and reads 14 sigma calls once; at
   08:55 the pipeline check makes 2 or 3. Peak about 44 (30 + 14) in the minute runner B arms, 33 at 08:55.
+  Once the selection's fetch is scheduled, it adds about 26 in the minute after 08:51 and again after 09:21 (59 at
+  08:55 if a Pass A fetch ran into that minute with the routine and the pipeline check), still under both limits.
 - 09:30 to the close: runner B, 9 a minute, plus about 2 from the routine at 11:31. Peak 11.
 - After the close: the forward test, up to 150 a minute, plus the 18:30 pipeline check's few calls.
 
@@ -132,9 +153,10 @@ All of these fit under the free plan's 200 as well as Algo Trader Plus's 10,000.
 
 The clone's pair: 18 + 0.6, so about 19 a minute, plus chain reads on a signal.
 
-The site's pair: one open Options page costs 30 + 2 + 6 = 38, plus the evaluator's 2, so 40 a minute. Four pages on
-separate instances would cost 4 x 38 + 2 = 154, near the free plan's 200. That pair is shared with whatever else uses
-it.
+The site's pair: one open Options page costs 30 + 2 + 6 = 38, plus the evaluator's 2 and the feed comparison
+sampler's 2, so 42 a minute. Four pages on separate instances would cost 4 x 38 + 2 + 2 = 156, near the free plan's
+200. The comparison report adds 4 calls once a day after the close (80 pages at worst, plus 429 retries, all under its own 180-a-minute limiter), when no page polls in the session.
+That pair is shared with whatever else uses it.
 
 ## After a plan change or a lapse
 

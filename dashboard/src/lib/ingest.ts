@@ -1,6 +1,7 @@
 import "server-only";
-import { HISTORY_PREFIX, PreconditionFailed, readForUpdate, writeText } from "./blob";
+import { HISTORY_PREFIX, PreconditionFailed, exists, readForUpdate, storedMeta, writeText } from "./blob";
 import { CALENDAR_PATHS, DESK_PATHS, JOURNAL_PATHS, LEDGER_PATHS, OPTIONS_CLONE_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
+import { editionCopyFor, etagShape, runAndSession } from "./edition-copy";
 import { verify } from "./hmac";
 import { KEY_ID_RE, decideScope, parseScopes } from "./ingest-scope";
 import { recordIngestReject, type IngestRejectKind } from "./ingest-reject";
@@ -309,7 +310,8 @@ type Done = (status: number, outcome: string, body: Record<string, unknown>, ext
  */
 interface EditionKind {
   desk: IngestRejectKind;
-  paths: { latest: string; history?: string };
+  /** `copies`: every edition that became latest is also kept once, with the store's receipt time (writeCopy). */
+  paths: { latest: string; history?: string; copies?: string };
   validate: (data: unknown) => { ok: true; runId: string | null; asOf: string | null; date: string } | { ok: false; errors: string[] };
 }
 
@@ -384,6 +386,7 @@ const JOURNAL: EditionKind = {
 /**
  * A research edition (radar or options levels): the same duplicate / older / etag rules as a desk snapshot,
  * written to its latest.json, plus one copy per edition date. A same-day refresh (a later as_of) replaces both.
+ * A kind with `copies` (the Options edition) also keeps each edition that became latest, never replaced (writeCopy).
  * Any valid key may publish one.
  *
  * An edition dated ahead of the clock is refused: stored, it would refuse every true edition after it as older
@@ -412,19 +415,35 @@ async function storeEdition(kind: EditionKind, text: string, data: unknown, done
       let supersedes = false;
       if (current) {
         const meta = currentMeta(current.text);
-        if (meta.runId === runId) return done(200, "duplicate", { status: "duplicate", run_id: runId }, { run_id: runId, desk });
+        if (meta.runId === runId) {
+          // A retry of the run on latest: make its copy if it is missing, from what latest holds and when latest took
+          // it (the original write's time, never the retry's). Best effort: the answer is a duplicate whatever happens.
+          if (paths.copies) await writeCopy(paths.latest, paths.copies, runAndSession(current.text).session ?? date, runId, current.text, current.etag);
+          return done(200, "duplicate", { status: "duplicate", run_id: runId }, { run_id: runId, desk });
+        }
         if (meta.asOf !== null && asOf <= meta.asOf) {
           // Only a stored document ordered beyond the clock's allowance gives way; every other older edition is refused.
           if (!storedAhead(meta.asOf, nowMs)) return done(409, "older", { status: "older", run_id: runId }, { run_id: runId, desk });
           supersedes = true;
         }
       }
+      // Started beside the write, never awaited before it: whether the edition this write replaces has a copy.
+      const lost = paths.copies && current ? copyMissing(paths.copies, current) : null;
+      let written: { etag: string };
       try {
-        await writeText(paths.latest, text, current ? { ifMatch: current.etag } : { createOnly: true });
+        written = await writeText(paths.latest, text, current ? { ifMatch: current.etag } : { createOnly: true });
       } catch (e) {
         if (e instanceof PreconditionFailed && attempt === 0) continue;
         if (e instanceof PreconditionFailed) return done(503, "conflict", { status: "conflict", run_id: runId }, { run_id: runId, desk });
         throw e;
+      }
+      if (paths.copies) {
+        // Only now that a write conditioned on current.etag has succeeded is current.text known to be that write's
+        // text, so only now may the replaced edition be called lost.
+        const gone = await lost;
+        if (gone) logEvent("ingest.copy", { outcome: "lost", run_id: gone.runId, session: gone.session });
+        // Right after the write, so that latest is least likely to have moved on before its time is read.
+        await writeCopy(paths.latest, paths.copies, date, runId, text, written.etag);
       }
       if (paths.history) {
         try {
@@ -457,5 +476,68 @@ async function writeDated(path: string, text: string, asOf: number, nowMs: numbe
     } catch (e) {
       if (!(e instanceof PreconditionFailed) || attempt === 1) throw e;
     }
+  }
+}
+
+/**
+ * Keeps, best effort, the copy of the edition that latest.json holds as `latestEtag` (./edition-copy): its exact text,
+ * under a path fixed by the session, the store's receipt time and the run, written create-only. Never throws, and the
+ * ingest's answer never depends on it: a published edition must never look unpublished because its copy failed, and
+ * the edition's publishers are not all ones that retry. What this does not make, the watchdog's repair makes
+ * (./edition-copy-repair) from the store's own read of latest, while that edition is still latest.
+ *
+ * The receipt time is the store's own: latest.json's uploadedAt, read with its etag in one head() (blob.ts
+ * storedMeta), and used only when that etag is the one this write was given (the put's, or on a duplicate the
+ * head's that the text was read with). Nothing from the request (as_of, headers, body fields) enters it. One
+ * `ingest.copy` line per call, never anything of the edition:
+ *  - "stored": the copy was written; "exists": it was already there (the create-only write was refused).
+ *  - "unconfirmed": the head's etag is not this write's. Latest may have moved on to a newer run, or the store may
+ *    give the put's etag and the head's in different forms, so only the two forms are logged (length, quoted,
+ *    weak), never the values. No copy is made from it; the repair makes one while the edition is still latest.
+ *  - "error": the store failed (the head or the put), named by the error's class.
+ */
+async function writeCopy(latestPath: string, prefix: string, session: string, runId: string, editionText: string, latestEtag: string): Promise<void> {
+  let bytes = 0;
+  try {
+    const meta = await storedMeta(latestPath);
+    if (!meta || meta.etag !== latestEtag) {
+      logEvent("ingest.copy", { outcome: "unconfirmed", run_id: runId, session, bytes, written_etag: etagShape(latestEtag), head_etag: etagShape(meta?.etag) });
+      return;
+    }
+    const copy = editionCopyFor(prefix, session, meta.uploadedAt, runId, editionText);
+    if (!copy) {
+      logEvent("ingest.copy", { outcome: "error", run_id: runId, session, bytes, error: "UnusableTime" });
+      return;
+    }
+    bytes = copy.body.length;
+    try {
+      await writeText(copy.path, copy.body, { createOnly: true });
+      logEvent("ingest.copy", { outcome: "stored", run_id: runId, session, bytes });
+    } catch (e) {
+      if (!(e instanceof PreconditionFailed)) throw e;
+      logEvent("ingest.copy", { outcome: "exists", run_id: runId, session, bytes });
+    }
+  } catch (e) {
+    logEvent("ingest.copy", { outcome: "error", run_id: runId, session, bytes, error: e instanceof Error ? e.name : "unknown" });
+  }
+}
+
+/**
+ * Whether the edition about to be replaced on latest (`current`, as read for this write) has no copy: one existence
+ * check on the path its run, session and the store's time of its write fix. Resolves to that run and session when
+ * the copy is missing, null when it is there or cannot be told (no time from the store, an unreadable text, a
+ * storage error). Never rejects. Its answer counts only once the write conditioned on `current.etag` has succeeded:
+ * an edition replaced with no copy can never be given one with a true receipt time, so it is said ("lost").
+ */
+async function copyMissing(prefix: string, current: { text: string; uploadedAt?: string }): Promise<{ runId: string; session: string } | null> {
+  try {
+    if (!current.uploadedAt) return null;
+    const { runId, session } = runAndSession(current.text);
+    if (!runId || !session) return null;
+    const copy = editionCopyFor(prefix, session, current.uploadedAt, runId, "");
+    if (!copy) return null;
+    return (await exists(copy.path)) ? null : { runId, session };
+  } catch {
+    return null;
   }
 }

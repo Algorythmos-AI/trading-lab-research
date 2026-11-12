@@ -1,11 +1,16 @@
 import "server-only";
 import { alpacaDataUrl } from "./alpaca-data-url";
 import { logEvent } from "./log";
+import { DEFAULT_OPTION_FEED, type OptionFeed, opraAnswered, opraFallback, opraRefused } from "./option-feed";
 import { UpstreamError } from "./upstream";
 
-// Option quotes for the Options desk's contract pane: Alpaca's indicative feed, which is 15 minutes behind the
-// market, read on the server so the browser keeps its connect-src 'self' policy and never sees the keys. Market
-// data only; nothing here can place an order or read an account.
+// Option quotes for the Options desk's contract pane, read on the server so the browser keeps its connect-src 'self'
+// policy and never sees the keys. The feed is the owner's setting (ALPACA_OPTION_FEED, option-feed.ts): Alpaca's
+// indicative feed, 15 minutes behind the market, by default; OPRA, the real-time option tape, when the owner has
+// chosen it (DEC-0050, point 6). Every answer names the feed it came from and how far behind it runs. Market data
+// only; nothing here can place an order or read an account.
+
+export type { OptionFeed };
 
 /** One call or put, normalised from Alpaca's snapshot. Prices per share in US dollars; `at` is the quote's time. */
 export interface ChainContract {
@@ -21,6 +26,9 @@ export interface ChainContract {
   delta: number | null;
   /** Contracts traded in the current (or most recent) session. */
   volume: number | null;
+  /** Contracts bid and offered at the quote (Alpaca's `bs` and `as`). Null when the feed gave none; never made up. */
+  bid_size: number | null;
+  ask_size: number | null;
 }
 
 export interface ChainExpiry {
@@ -30,18 +38,47 @@ export interface ChainExpiry {
 }
 
 export interface ChainResponse {
+  /** When the quotes were fetched from Alpaca (an answer from the cache keeps its fetch time). */
   as_of: string;
-  feed: "indicative";
-  /** How far behind the market the feed runs, in minutes. */
+  /**
+   * When this answer was built, on the server's clock: `as_of` plus however long it sat in the cache. The quotes'
+   * age counts from their own times to here, then the browser's monotonic time since receipt (contract.ts chainAge).
+   */
+  served_at?: string;
+  /** The feed the quotes came from: indicative (15 minutes behind) or opra (real time). */
+  feed: OptionFeed;
+  /** How far behind the market the feed runs, in minutes: 15 on indicative, 0 on opra. */
   delay_min: number;
+  /**
+   * Set when opra was configured but Alpaca refused it (HTTP 403, not on the data plan): the answer is the indicative
+   * feed's instead, and says so.
+   */
+  fallback?: "opra-refused";
   symbol: string;
   expiries: ChainExpiry[];
   fixture?: true;
 }
 
+/** How far behind the market the indicative feed runs, in minutes. */
 export const CHAIN_DELAY_MIN = 15;
-/** A name's chain is shared on one instance for this long. The feed itself is 15 minutes behind, so sooner buys nothing. */
+/** OPRA is the real-time tape. */
+export const OPRA_DELAY_MIN = 0;
+/** A name's indicative chain is shared on one instance for this long. The feed itself is 15 minutes behind, so sooner buys nothing. */
 export const CHAIN_CACHE_MS = 20_000;
+/** A name's OPRA chain is shared for this long: real-time quotes are worth asking for again soon. */
+export const OPRA_CACHE_MS = 5_000;
+/** After Alpaca refuses opra (403), the chain stays on indicative this long before trying opra again. */
+export const OPRA_RETRY_MS = 10 * 60_000;
+
+/** How far behind the market a feed runs, in minutes. */
+export function delayMin(feed: OptionFeed): number {
+  return feed === "opra" ? OPRA_DELAY_MIN : CHAIN_DELAY_MIN;
+}
+
+/** How long one name's answer on a feed is shared. */
+export function cacheMs(feed: OptionFeed): number {
+  return feed === "opra" ? OPRA_CACHE_MS : CHAIN_CACHE_MS;
+}
 /** Names remembered at once: a bound, so a stream of odd symbols cannot grow the cache. */
 export const CHAIN_MAX_CACHED = 64;
 /** Expiries offered: the nearest few for same-day and next-day trades, and one a fortnight or more out for a swing. */
@@ -88,6 +125,8 @@ export function parsePrice(raw: string | null): number | null {
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const price = (v: unknown): number | null => (isNum(v) && v >= 0 ? v : null);
+/** A quote size: a whole, non-negative count of contracts, or null. */
+const size = (v: unknown): number | null => (isNum(v) && Number.isInteger(v) && v >= 0 ? v : null);
 
 const NY_DATE_FMT = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
 
@@ -120,7 +159,7 @@ export function parseOcc(occ: string, symbol: string): { expiry: string; kind: "
 }
 
 type RawSnapshot = {
-  latestQuote?: { bp?: unknown; ap?: unknown; t?: unknown } | null;
+  latestQuote?: { bp?: unknown; ap?: unknown; bs?: unknown; as?: unknown; t?: unknown } | null;
   latestTrade?: { p?: unknown } | null;
   greeks?: { delta?: unknown } | null;
   impliedVolatility?: unknown;
@@ -144,6 +183,8 @@ export function normaliseContract(kind: "call" | "put", strike: number, raw: Raw
     iv: isNum(iv) && iv > 0 && iv < 20 ? iv : null,
     delta: isNum(delta) && Math.abs(delta) <= 1 ? delta : null,
     volume: isNum(raw?.dailyBar?.v) && raw.dailyBar.v >= 0 ? raw.dailyBar.v : null,
+    bid_size: size(q?.bs),
+    ask_size: size(q?.as),
   };
 }
 
@@ -183,10 +224,16 @@ export function selectChain(snapshots: Record<string, RawSnapshot>, symbol: stri
 }
 
 /**
- * One name's last answer: what was offered, the price and the contract it was chosen around, when it was fetched, and
- * when a reader last asked for that contract (`keptAt`).
+ * One name's last answer on one feed, keyed `feed:symbol`, so an answer from one feed is never served for another:
+ * what was offered, the price and the contract it was chosen around, when it was fetched, and when a reader last
+ * asked for that contract (`keptAt`).
  */
-const cache = new Map<string, { at: number; px: number; keep: Keep | null; keptAt: number; expiries: ChainExpiry[] }>();
+const cache = new Map<string, CacheEntry>();
+const cacheKey = (feed: OptionFeed, symbol: string) => `${feed}:${symbol}`;
+
+/** When Alpaca last refused opra on this instance (ms), and until when the chain stays on indicative for it. */
+let opraRefusedAt = -Infinity;
+let opraRefusedUntil = -Infinity;
 
 /**
  * How long a reader's own contract keeps riding along on a name's answer after the last request that named it. The
@@ -201,9 +248,11 @@ const keepKey = (k: Keep | null) => (k ? `${k.expiry}:${k.strike}` : "");
 /** Whether an answer already quotes a contract on that expiry and strike. */
 const carries = (expiries: readonly ChainExpiry[], k: Keep) => expiries.some((x) => x.date === k.expiry && x.contracts.some((c) => c.strike === k.strike));
 
-/** Test hook: forget the shared cache. */
+/** Test hook: forget the shared cache, and any refusal of opra. */
 export function resetChainCache(): void {
   cache.clear();
+  opraRefusedAt = -Infinity;
+  opraRefusedUntil = -Infinity;
 }
 
 async function page(
@@ -212,11 +261,12 @@ async function page(
   keys: { id: string; secret: string },
   fetchImpl: typeof fetch,
   baseUrl: string,
+  feed: OptionFeed,
 ): Promise<Record<string, RawSnapshot>> {
   const out: Record<string, RawSnapshot> = {};
   let token: string | null = null;
   for (let i = 0; i < MAX_PAGES; i++) {
-    const params: Record<string, string> = { feed: "indicative", limit: "1000", ...query };
+    const params: Record<string, string> = { feed, limit: "1000", ...query };
     if (token) params.page_token = token;
     const res = await fetchImpl(alpacaDataUrl(baseUrl, `/v1beta1/options/snapshots/${encodeURIComponent(symbol)}`, params), {
       headers: { "APCA-API-KEY-ID": keys.id, "APCA-API-SECRET-KEY": keys.secret, accept: "application/json" },
@@ -238,13 +288,19 @@ async function page(
 }
 
 /**
- * The option chain for `symbol` around `px`, from Alpaca's indicative feed. Two calls upstream: the expiries of the
- * coming week, and those a fortnight to three weeks out; a third, for one expiry and one strike, when the reader
- * has a contract of their own (`keep`), so it is quoted wherever it sits. The answer is shared for CHAIN_CACHE_MS,
- * unless the price asked around has moved more than a percent since, or a contract is asked for that the answer does
- * not already quote. A request with no contract of its own takes an answer that carries someone else's, and a
- * refresh keeps carrying a contract asked for within KEEP_CARRY_MS, so one answer serves every reader of the name:
- * the extra contract is a real quote of that name, never another name's. Throws on a transport or HTTP error (the
+ * The option chain for `symbol` around `px`, from the option feed `feed` (indicative unless the caller names opra).
+ * Two calls upstream: the expiries of the coming week, and those a fortnight to three weeks out; a third, for one
+ * expiry and one strike, when the reader has a contract of their own (`keep`), so it is quoted wherever it sits. The
+ * answer is shared for the feed's cache time (CHAIN_CACHE_MS on indicative, OPRA_CACHE_MS on opra), unless the price
+ * asked around has moved more than a percent since, or a contract is asked for that the answer does not already
+ * quote. A request with no contract of its own takes an answer that carries someone else's, and a refresh keeps
+ * carrying a contract asked for within KEEP_CARRY_MS, so one answer serves every reader of the name: the extra
+ * contract is a real quote of that name, never another name's. Answers are kept per feed; one feed's is never served
+ * for another's.
+ *
+ * On opra, a 403 from Alpaca (the plan does not include it) is answered from indicative instead, labelled
+ * `fallback: "opra-refused"` with indicative's 15 minutes, and the chain stays on indicative for OPRA_RETRY_MS before
+ * trying opra again, so a lapsed plan does not double every call. Throws on any other transport or HTTP error (the
  * route answers 502) and caches nothing from it; the keys and the response body are never logged.
  */
 export async function fetchChain(
@@ -255,11 +311,59 @@ export async function fetchChain(
   fetchImpl: typeof fetch = fetch,
   baseUrl: string = process.env.ALPACA_DATA_URL || DEFAULT_DATA_URL,
   keep: Keep | null = null,
+  feed: OptionFeed = DEFAULT_OPTION_FEED,
 ): Promise<ChainResponse> {
   const t = now.getTime();
-  const hit = cache.get(symbol);
+  // Within the wait after a refusal (and on a clock that has not stepped back before it), opra is not asked for.
+  const refused = feed === "opra" && t >= opraRefusedAt && t < opraRefusedUntil;
+  let used: OptionFeed = refused ? "indicative" : feed;
+  let entry: CacheEntry;
+  try {
+    entry = await load(symbol, px, keys, now, fetchImpl, baseUrl, keep, used);
+  } catch (e) {
+    if (!opraRefused(used, e)) throw e;
+    opraRefusedAt = t;
+    opraRefusedUntil = t + OPRA_RETRY_MS;
+    used = "indicative";
+    try {
+      entry = await load(symbol, px, keys, now, fetchImpl, baseUrl, keep, used);
+    } catch (e2) {
+      opraFallback("error", e2);
+      throw e2;
+    }
+    opraFallback("indicative");
+  }
+  if (used === "opra") opraAnswered();
+  const answer: ChainResponse = {
+    as_of: new Date(entry.at).toISOString(),
+    served_at: new Date(Math.max(t, entry.at)).toISOString(),
+    feed: used,
+    delay_min: delayMin(used),
+    symbol,
+    expiries: entry.expiries,
+  };
+  if (feed === "opra" && used !== "opra") answer.fallback = "opra-refused";
+  return answer;
+}
+
+type CacheEntry = { at: number; px: number; keep: Keep | null; keptAt: number; expiries: ChainExpiry[] };
+
+/** One name's answer on one feed: from the cache while it stands, else from upstream. */
+async function load(
+  symbol: string,
+  px: number,
+  keys: { id: string; secret: string },
+  now: Date,
+  fetchImpl: typeof fetch,
+  baseUrl: string,
+  keep: Keep | null,
+  feed: OptionFeed,
+): Promise<CacheEntry> {
+  const t = now.getTime();
+  const key = cacheKey(feed, symbol);
+  const hit = cache.get(key);
   // An entry stamped after `now` (a clock that stepped back) is not trusted either.
-  const timely = !!hit && t >= hit.at && t - hit.at < CHAIN_CACHE_MS && Math.abs(hit.px - px) <= 0.01 * px;
+  const timely = !!hit && t >= hit.at && t - hit.at < cacheMs(feed) && Math.abs(hit.px - px) <= 0.01 * px;
   const fresh = timely && (!keep || keepKey(hit!.keep) === keepKey(keep) || carries(hit!.expiries, keep));
   if (fresh && keep && keepKey(hit!.keep) === keepKey(keep)) hit!.keptAt = t;
   if (!fresh) {
@@ -272,20 +376,19 @@ export async function fetchChain(
     const strikes = { strike_price_gte: (px * (1 - STRIKE_WINDOW)).toFixed(2), strike_price_lte: (px * (1 + STRIKE_WINDOW)).toFixed(2) };
     const k = ask ? ask.strike.toFixed(3) : "";
     const [near, far, mine] = await Promise.all([
-      page(symbol, { ...strikes, expiration_date_gte: today, expiration_date_lte: addDays(today, NEAR_DAYS) }, keys, fetchImpl, baseUrl),
-      page(symbol, { ...strikes, expiration_date_gte: addDays(today, SWING_MIN_DAYS), expiration_date_lte: addDays(today, FAR_DAYS) }, keys, fetchImpl, baseUrl),
+      page(symbol, { ...strikes, expiration_date_gte: today, expiration_date_lte: addDays(today, NEAR_DAYS) }, keys, fetchImpl, baseUrl, feed),
+      page(symbol, { ...strikes, expiration_date_gte: addDays(today, SWING_MIN_DAYS), expiration_date_lte: addDays(today, FAR_DAYS) }, keys, fetchImpl, baseUrl, feed),
       ask
-        ? page(symbol, { strike_price_gte: k, strike_price_lte: k, expiration_date_gte: ask.expiry, expiration_date_lte: ask.expiry }, keys, fetchImpl, baseUrl)
+        ? page(symbol, { strike_price_gte: k, strike_price_lte: k, expiration_date_gte: ask.expiry, expiration_date_lte: ask.expiry }, keys, fetchImpl, baseUrl, feed)
         : Promise.resolve({}),
     ]);
-    cache.delete(symbol);
-    cache.set(symbol, { at: t, px, keep: ask, keptAt, expiries: selectChain({ ...near, ...far, ...mine }, symbol, px, today, ask) });
+    cache.delete(key);
+    cache.set(key, { at: t, px, keep: ask, keptAt, expiries: selectChain({ ...near, ...far, ...mine }, symbol, px, today, ask) });
     // A Map iterates in insertion order, and a refreshed name was just re-inserted: the first keys are the oldest.
     for (const s of cache.keys()) {
       if (cache.size <= CHAIN_MAX_CACHED) break;
       cache.delete(s);
     }
   }
-  const entry = cache.get(symbol)!;
-  return { as_of: new Date(entry.at).toISOString(), feed: "indicative", delay_min: CHAIN_DELAY_MIN, symbol, expiries: entry.expiries };
+  return cache.get(key)!;
 }
