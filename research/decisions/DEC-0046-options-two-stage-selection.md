@@ -1,13 +1,13 @@
 # DEC-0046: The Options desk picks its names in two stages, after the close and before the open
 
-- **The five-session switch is an operational release gate.** It proves that the code runs correctly on real data.
-  Passing it is not evidence that the selection is better than the one it replaces. Any claim of accuracy is made
-  only by the registered forward experiment (to be DEC-0047), read once. Until that read the page shows facts, never
-  a claim of skill.
 - **Status: PROPOSED on 2026-11-12.** Drafted for the owner to change or accept. It becomes ACCEPTED only when the
   owner merges a pull request that says so in this line. The pull request that carries this draft also carries the
   Stage 1 scoring code (`src/wt/options/select.py`), which scores a saved input bundle and nothing else: no job runs
   it and nothing reads its output before this record is accepted.
+- **The five-session switch is an operational release gate.** It proves that the code runs correctly on real data.
+  Passing it is not evidence that the selection is better than the one it replaces. Any claim of accuracy is made
+  only by the registered forward experiment (to be DEC-0047), read once. Until that read the page shows facts, never
+  a claim of skill.
 - **Written before any affected P&L is viewed.** No P&L, no outcome of any pick and no backtest of this selection
   was viewed or run in writing it. The scoring code has run only on synthetic bars in the unit tests. The author read
   no result, ledger or journal file. What the author did read is listed below.
@@ -51,8 +51,11 @@ names it was built for.
 ### 2. Data
 
 - **Source.** Alpaca's consolidated tape (SIP), on the owner's Algo Trader Plus plan. Every request names its feed
-  (`feed=sip`); a request without a feed is a defect (the test merged in #388). Daily bars are fetched raw, not
-  adjusted.
+  (`feed=sip`); a request without a feed is a defect (the test merged in #388).
+- **Adjustment.** Stage 1's daily bars are split-adjusted (Alpaca `adjustment=split`), as the options clone, the
+  host's options job and the pipeline check already read daily bars for levels. The input bundle records the
+  adjustment its bars carry (`"adjustment": "split"`), and the scorer refuses a bundle that does not say `split`. Stage
+  2's prior close (G1) stays the raw daily close.
 - The selection's own data (Stage 1's daily bars, Stage 2's pre-market checks) is SIP, named on every request,
   independent of the board's feed.
 - **Where it runs (owner decision, 2026-11-12).** Stage 1 and Stage 2 run as host jobs, not cloud routines. The numbers
@@ -70,13 +73,20 @@ calendar (`levels.next_session`), never from the clock. The code is `src/wt/opti
 **Data validity.** The window is a name's last 260 daily bars. The checks run in this order and the first that fails
 gives the reason:
 
-1. `bad_bar`: a bar that cannot be read; dates not strictly increasing (a duplicate or an out-of-order date); or, in
-   the window, a bar without high ≥ low > 0, an open or close not above 0, or a negative volume. The plan names no code
-   for these failures; `bad_bar` is that code.
-2. `stale_bar`: no bar, or the last bar not dated `D`. A name with no bars in the bundle is `stale_bar`.
+1. `bad_bar`: a bar that cannot be read; dates not strictly increasing (a duplicate or an out-of-order date); a bar
+   dated after `D`; in the window, a bar without high ≥ low > 0, an open or close not above 0, or a negative volume; or
+   a rangeless window, whose ATR14, ATR5 or ATR20 is zero. These are data faults. The plan names no code for them;
+   `bad_bar` is that code.
+2. `stale_bar`: no bar, or the last bar dated before `D`. A name with no bars in the bundle is `stale_bar`.
 3. `short_history`: fewer than 260 bars. Exactly 260 is enough.
-4. `suspect_split`: in the window, a close divided by the close of the bar before it is below 0.5 or above 2.0. A ratio
-   of exactly 0.5 or exactly 2.0 is not suspect.
+4. `missing_session`: the window's 260 dates are not the 260 exchange sessions ending at `D`, walking back from `D`
+   with the session calendar (`levels.prev_session`). A missing session, or a bar dated on a day that is not a session
+   (a Saturday in place of a Friday), fails here.
+5. `suspect_split`: in the window, a close divided by the close of the bar before it is below 0.5 or above 2.0. A ratio
+   of exactly 0.5 or exactly 2.0 is not suspect. With split-adjusted bars this should never fire: it is a backstop, and
+   when it fires the adjustment was missed.
+
+A factor or shown value that is not a finite number is also a data fault, given as `bad_bar`.
 
 **ATR and returns.** ATR is `levels.atr(bars, n)`: the plain mean of the last `n` true ranges, the function the levels
 and the card already use. `ATR% = ATR14 / close`. `ret(k)` = the close on `D` ÷ the close `k` bars before it, minus 1.
@@ -87,17 +97,31 @@ and the card already use. `ATR% = ATR14 / close`. `ret(k)` = the close on `D` ÷
 |---|---|---|
 | F1 | Trend and momentum | `abs(ret(20)) / (ATR% × √20)` |
 | F2 | Range expansion | `ATR5 / ATR20` |
-| F3 | Support and resistance | `−d / ATR14`; `d` is the distance from the close to the nearest edge of the nearest merged zone of weight ≥ 5, a zone whose members are all the prior close (`PDC`) left out; `d = 0` when the close is inside a zone (edges included); no such zone gives `no_zone` |
+| F3 | Support and resistance | `−d / ATR14`; `d` is the distance from the close to the nearest edge of the nearest zone of weight ≥ 5, the zones being `levels.merge_zones` of the levels of `L = levels.levels_for(window, D+1)` without the prior close's own level: `merge_zones([x for x in L["levels"] if x.name != "PDC"], close)`; `d = 0` when the close is inside a zone (edges included); no such zone gives `no_zone` |
 | F4 | The day's high and low | `max(c, 1 − c)`, `c = (close − low) / (high − low)` of the bar of `D` (`levels.close_strength`); `c = 0.5` when high = low |
 | F5 | Relative strength | `abs(ret(5) − benchmark ret(5)) / (ATR% × √5)`; the benchmark is SPY, or QQQ when the name is SPY |
 
-- F3's zones are the levels engine's merged zones as the edition builds them: `levels.levels_for(window, D+1)`, so the
-  prior day is `D` and the prior close is the close of `D`. The engine gives `PDC` weight 1, so a zone made only of the
-  prior close never reaches the floor of 5; the rule is kept as written. A merged zone of weight 5 or more that holds
-  `PDC` with other levels holds the close, and gives `d = 0`.
+- **Why `PDC` is left out of F3's zones.** In `levels_for(window, D+1)` the `PDC` level is the close of `D`: it sits
+  exactly on the close being scored. The close's own level is not support or resistance for the close. Left in, it
+  would put the close inside whatever zone it joins (distance 0), lift a zone of weight 4 over the floor, and change
+  how its neighbours merge, which can also give a false `no_zone`. So the zones are merged again without it. Taking
+  the edition's zones and only subtracting `PDC`'s weight is not the same rule and is not used: the bounds and the
+  merging would still carry it.
+- **What F3 depends on in `levels.py`, frozen by reference** at its values on 2026-11-12. A change to any of these
+  moves F3 and needs an amendment to this record first; a unit test reads them from the code and fails until then.
+  - Merging (`merge_zones`): a level joins the current zone when its low is within 0.5% (`pct = 0.005`) of that zone's
+    lowest member; no chaining; a zone's weight is the sum of its members' weights.
+  - Level weights (`levels_for`): PDH, PDL, PDC 1; PWH, PWL 2; WTDH, WTDL 1; PMH, PML 3; 52WH, 52WL 3, over the last
+    252 bars; MA20 1, MA50 2, MA200 3 (`WEIGHTS` holds day 1, week 2, month 3, 52w 3, ma 1, sd 2); at least 30 finished
+    sessions.
+  - Supply and demand (`supply_demand`): a lookback of 120 bars, starting no earlier than bar 16; a strong day has a
+    range above 1.5 times the ATR14 before it and a close in the top quarter (0.75) above its open (demand) or the
+    bottom quarter (0.25) below its open (supply); its base is up to 3 bars just before it with a range under 0.7 times
+    that ATR, else the one bar before; a zone is dropped once a later close goes through it; weight 2.
 - **Shown, never scored:** ATR14, ATR%, the close, the close against its 20, 50 and 200-bar averages (above, below,
-  at), and the direction (the sign of `ret(20)`). Thirty-day historical volatility and the IV percentile are not in
-  Stage 1's output: the bundle holds no option data, and their definitions are left to the page's own pull request.
+  at), the direction (the sign of `ret(20)`), and the 30-day historical volatility `hv30`: the sample standard
+  deviation (n − 1) of the last 30 daily log returns, `ln(close / previous close)`, times √252. The IV percentile is not
+  in Stage 1's output: the bundle holds no option data.
 
 **Ranking.**
 
@@ -123,8 +147,8 @@ and the card already use. `ATR% = ATR14 / close`. `ret(k)` = the close on `D` ÷
   - A high-severity macro row dated `D+1` is a market-wide note, `macro_high_next_session`, with the event types. It
     makes no name ineligible. A half day on `D+1` is the note `next_session_half_day`.
 - R5. **Missing data.** A name that is not data-valid, or has a factor that cannot be worked out, is listed unranked
-  with its reason: `bad_bar`, `stale_bar`, `short_history`, `suspect_split`, `no_zone` (F3), `benchmark_missing` (F5,
-  when the benchmark's bars are not data-valid), or `internal_error`. When F3 and F5 both fail, `no_zone` is given. A
+  with its reason: `bad_bar`, `stale_bar`, `short_history`, `missing_session`, `suspect_split`, `no_zone` (F3),
+  `benchmark_missing` (F5, when the benchmark's bars are not data-valid), or `internal_error`. When F3 and F5 both fail, `no_zone` is given. A
   factor is never given a default value. The benchmark's return is used whenever its bars are data-valid, whatever its
   own eligibility or its own factors.
 - **`internal_error`.** An unexpected exception while one name is scored is that name's `internal_error`, with the
@@ -136,17 +160,32 @@ and the card already use. `ATR% = ATR14 / close`. `ret(k)` = the close on `D` ÷
 
 **Output.** Per name: validity, reason, each factor's value and rank, the score, the final rank, eligibility and its
 reason, cautions, and the shown values; for the night: the picks, the counts, the market notes, the count of
-unreadable event rows, `params_sha` and `picker_ref`. `picker_ref` is `s1-` and the first 12 hex digits of SHA-256
-over the Python tokens (comments and blank lines dropped) of `select.py`, `levels.py` and `events.py`: it names the
-code that scored, and holds no clock time or git state. The same bundle and code give byte-identical output.
+unreadable event rows, `params_sha`, `picker_ref` and `bundle_sha`.
+
+- `picker_ref` is `s1-` and the first 12 hex digits of SHA-256 over the Python tokens (comments and blank lines
+  dropped) of `select.py`, `levels.py` and `events.py`: it names the code that scored, and holds no clock time or git
+  state.
+- `bundle_sha` is SHA-256 (hex) of the input bundle's canonical form: the parsed bundle written as JSON by the same
+  rule as `params_sha` below. It names the input an output came from; the key order and spacing of the saved file do
+  not change it, any value does.
+- The same bundle and code give byte-identical output.
+- The command's exit codes: 0, the output is written and no name has `internal_error`; 1, the output is written and a
+  name has `internal_error`; 2, the bundle cannot be read or is not in the documented shape; 3, the parameters file
+  cannot be read, is not YAML, or holds what the code does not implement; 4, the output cannot be written. Each
+  failure prints one line, never a traceback, and writes no output.
 
 ### 4. The frozen parameters
 
 The numbers above live in `config/options_select.yaml`, and the code refuses a file that holds any value, code or rule
-it does not implement. Its `params_sha` is `316cfd1e3d13e53ee21cc23ab2b1199a1cb36a2b52db8f9734981a0a0d32d6ce`: SHA-256 of the
-parsed file written as JSON with keys sorted, separators `,` and `:`, ASCII only, whole numbers as integers and other
-numbers in Python's shortest round-trip form (`select.canonical_json`). A unit test fails when the file's hash
-differs from the one named here.
+it does not implement. Its `params_sha` is `b0c745efd62f1e3a69b54e55a96cb189647e9843ed3d932efe56f9979b1d7c00`.
+
+- The hash is SHA-256 (hex) of the parsed file written as JSON with keys sorted, separators `,` and `:`, ASCII only,
+  YAML integers as JSON integers and YAML floats in Python's float repr, so 2.0 stays 2.0
+  (`select.canonical_json`). Comments and layout do not enter it.
+- The same value written in the other form (260.0 for 260, or 2 for 2.0) would change the hash without changing the
+  selection, so the loader refuses it: a whole-number setting must be written as an integer and the two split bounds
+  as decimals. `version: true` is refused too.
+- A unit test fails when the file's hash differs from the one named here.
 
 - The weights are equal (each factor's rank counts once) and fixed before the selection has run on real data.
   Nothing is tuned on results.
@@ -212,6 +251,10 @@ Not built by the pull request that carries this record. Its rules are fixed here
   Entry, stop and target 1 stay in `focus-plan.ts`. DEC-0035 is not amended.
 - **The board and its experiment.** Nothing here changes the board's engine, its feed or EXP-0031. Those are governed
   by DEC-0042, DEC-0044, DEC-0045, DEC-0049 and the records that follow them.
+- **What the switch will touch, decided later.** The switch (DEC-0048) will change which names are focus names, and
+  with them the `not_focus` label of the owner-trade experiment (DEC-0045 point 3) and the per-focus-name state log of
+  the server evaluator (DEC-0044 point 1). This record decides none of that. Before it is accepted, DEC-0048 must say
+  what the switch does to each experiment then running: an early end, a separate stratum, or no effect and why.
 - **The options clone follows the new names.** DEC-0032 takes the edition's focus names in rank order, up to six, keeps
   those it can trade that day (a contract expiring that day and readable levels), and tops up with SPY then QQQ until
   two can be traded. It adds no trial for a rule that changes only the set of names each day, and its verdict reads
@@ -221,8 +264,14 @@ Not built by the pull request that carries this record. Its rules are fixed here
 ### 7. The switch and the gate
 
 The old picker keeps running beside the new one. The switch is one config value, reversible, made by DEC-0048 after
-five consecutive gate passes. `scripts/select_gate.py` prints pass or fail per criterion per night, reads no price
-outcome, and any failure resets the count:
+five consecutive gate passes.
+
+- **Order.** No gate night runs, and DEC-0048 is not proposed, before DEC-0047 is accepted.
+- **No early comparison.** Nobody compares the outcomes of the old picks with the new ones, formally or informally,
+  before DEC-0047's single read. Gate criterion 8 records the two lists of names only.
+
+The gate: `scripts/select_gate.py` prints pass or fail per criterion per night, reads no price
+outcome, and any failure resets the count.
 
 1. Stage 1, Pass A and Pass B each published on time and schema-valid.
 2. All twelve names appear in each, fully worked out or with a reason code; `internal_error` fails.
@@ -236,9 +285,23 @@ outcome, and any failure resets the count:
 7. No feed-watch alert for the selection's feeds.
 8. The old picker's four names are logged beside the new four (record only).
 
-Fault drills pass on staging first, each with a stated expected status and alert, among them a stale bar, a missing
-name, a missing benchmark, a halt, a delayed feed, a late Pass A, a missing Pass B, a Stage 1 re-run after Pass A, a
-lapsed subscription, a revoked key, a burst of rate-limit answers and a split or ex-dividend on the session.
+Fault drills pass on staging first, each with a stated expected status and alert. The list is complete; a drill added
+later is a dated amendment here:
+
+1. a stale bar;
+2. a missing name;
+3. a missing benchmark;
+4. a halt;
+5. a delayed feed;
+6. a wide spread with a fresh trade;
+7. a late Pass A after Pass B;
+8. Pass B never arriving;
+9. a Stage 1 re-run after Pass A;
+10. a 403 on SIP (the subscription lapsed);
+11. a 401 (the key was revoked);
+12. a burst of rate-limit (429) answers;
+13. a split or ex-dividend on the session;
+14. a snapshot whose daily bar is not the day expected.
 
 ### 8. Accuracy
 
@@ -260,8 +323,14 @@ page or report groups any outcome by picked, rank or status, and the Options pag
   Alpaca's corporate actions appear; how much a finished session's bars change by the next day; what a halted name's
   snapshot looks like.
 - The ledger's exact outcome rule, which DEC-0047 needs.
-- How often F3 gives `no_zone` on real nights, and how often a zone holding the prior close sets `d = 0`. Neither is a
-  reason to change a rule after the fact: a change needs an amendment, written before it is viewed.
+- **How often `no_zone` occurs.** A name with no qualifying zone is unranked. Synthetic walks in the review suggest
+  this happens more for volatile names. Before this record is accepted, the owner may ask for a count of how often
+  each reason code, `no_zone` among them, would occur per name on saved daily bars. That is a status frequency and
+  reads no outcome. If the owner then changes the rule, this record is amended before it is accepted. He has two
+  readings to choose from: unranked, as written; or ranked last on F3 (the name keeps its other four ranks). Only the
+  first is built.
+- No reason code's frequency is a reason to change a rule after the gate starts: a change needs an amendment, written
+  before it is viewed.
 
 ## Consequences
 
