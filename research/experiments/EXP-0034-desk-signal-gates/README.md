@@ -25,7 +25,8 @@
 ## Dates and commits (each written by the pull request or note that records it)
 
 - DEC-0051 accepted, and so the close date (one year later): not yet.
-- `context.ts` code pin, once #422 is merged: not yet.
+- `context.ts` code pin: 2026-11-13, #422 merged; `dashboard/src/lib/context.ts` at integration
+  `c48d3477524131794cbab1fe85cc983134b96579`. The definition copied into `config.yaml` governs.
 - Precondition 1, the per-slot range baseline in production, its commit: not yet.
 - Precondition 2, the read script merged, its commit: not yet.
 - Precondition 3, the outcome code merged and frozen, its commit: not yet.
