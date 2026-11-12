@@ -199,13 +199,18 @@ window:
       and of every early return of the evaluator; preview, staging and local deployments write none
     path: "desk/feeds/board/<New York date>/<HHMM New York>.json in the PRIVATE Blob store"
     body: >-
-      {v, feed (the resolved ALPACA_FEED: iex, sip or refused), answered (ok, plan, error: the outcome of one SPY
-      snapshot read on that feed in the same minute), at (server time), deployment (VERCEL_DEPLOYMENT_ID), commit,
+      {v, feed (the resolved ALPACA_FEED: iex, sip or refused), answered (ok, stale, plan, error: the outcome of one
+      read of SPY's latest trade on that feed in the same minute; ok only when that trade is no more than 60 s older
+      than at), at (server time, which positions the stamp in every rule below), deployment (VERCEL_DEPLOYMENT_ID), commit,
       prev (the SHA-256 of the session's previous stamp body, or null for the first)}
+    writes: >-
+      each stamp is create-only (a second write for the same minute is refused) and is written only while the run is
+      still inside its own minute and its time limit, so a slow run never lands late
     chain: >-
-      at the session's close the cron writes desk/feeds/board/<New York date>/manifest.json with the stamp count and
-      the hash of the last stamp; a stamp whose prev does not match, a count that differs, or no manifest by the next
-      session's open ends the window with no verdict; the owner holds every key and could rewrite the whole chain, so
+      at close + 2 minutes or later (or, failing that, from any run before the next open) the cron writes desk/feeds/board/<New York date>/manifest.json with the stamp count and
+      the hash of the last stamp; a stamp whose prev does not match, a count that differs, a stamp whose at does not
+      fall in its key's minute or does not increase, or no manifest written before the next session's open ends the
+      window with no verdict; the owner holds every key and could rewrite the whole chain, so
       the chain catches a deletion or an edit inside the chain, not a forgery (deleting the newest stamps can only
       end the window, through covered and the manifest), and an edit to the store is a breach of this record
     minutes: >-
@@ -213,8 +218,8 @@ window:
       close early
     sessions_counted: every New York regular session, full or half, on or after the start, whatever the positions
     covered: >-
-      a position's t0 is covered when a stamp reading sip lies in [t0 - 2 min, t0], or when t0 lies between two
-      consecutive stamps of the session that both read sip (whatever their deployments; a gap over 10 minutes with a
+      a position's t0 is covered when a stamp reading sip has its at in [t0 - 2 min, t0], or when t0 lies between the
+      at of two consecutive stamps of the session that both read sip (whatever their deployments; a gap over 10 minutes with a
       deployment change ends the window under hidden_change); withholding or deleting the stamps after t0 therefore
       cannot uncover it: the next stamp written still brackets t0, and with none written there is no manifest, which
       ends the window
@@ -222,15 +227,16 @@ window:
       not_sip: >-
         any stamp after the start reading feed iex or refused (a setting change) ends the window: no verdict
       hidden_change: >-
-        two consecutive stamps after the start more than 10 minutes apart with different deployments (a switch could
+        two consecutive stamps after the start whose at are more than 10 minutes apart, with different deployments (a switch could
         hide in the gap) end the window: no verdict; the gap between one session's last stamp and the next session's
         first is not checked (releases go out after the close)
       feed_unknown: >-
         a position whose t0 is not covered (before the session's first stamp, or after its last) is no_record with
         the reason feed_unknown, counted
       board_off: >-
-        reading only stamps at or before t0: a run of consecutive stamps answering other than ok, whose last stamp's
-        at minus its first stamp's at is 10 minutes or more, and whose last stamp lies in [t0 - 2 min, t0], makes the
+        reading only stamps whose at is at or before t0, within the same New York day: a run of consecutive stamps
+        answering other than ok (stale, plan or error), whose last stamp's
+        at minus its first stamp's at is 10 minutes or more, and whose last stamp's at lies in [t0 - 2 min, t0], makes the
         position no_record with the reason board_off, counted (the board showed no SIP prices then); an outage does
         not end the window
     known_gap: >-
