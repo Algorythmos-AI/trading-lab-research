@@ -10,14 +10,22 @@ one the subscription allows": IEX on the free plan, SIP (the consolidated tape) 
 the subscription lapses. A request without a feed would change its data source with the plan, with no code change and
 no record. So every request here names its feed, and these guards fail on one that does not:
 
-- Python, at run time: `wt.data.feeds.require_feed`, called by `AlpacaREST.get` before anything is sent.
+- Python, at run time: `wt.data.feeds.require_feed`, called before anything is sent by `AlpacaREST.get` and by the
+  request helper of each module with its own HTTP session: `AlpacaFeeds._get` in `wt.live.runner_o` (a refusal is a
+  `TransportError`, a failed data read: a refusal while preparing the levels turns entries off for the day; one on a
+  chain, quote or minute-bar read skips that entry or makes the tape read as stalled; exits are managed in every
+  case), `OptionsAccount._get` in `wt.options.live`
+  (a `BrokerFault`: the extra it was for is left out and named in `problems`, the positions still go) and
+  `_alpaca_get` in `wt.options.pipeline_check` (unusable market data: `data.reachable` fails and pages, exit 0).
+  Each refusal also writes "a market-data request named no feed" to the job's log.
 - Python, in the tests: `tests/unit/test_feed_named.py` (the scan is `tests/unit/feed_scan.py`) checks every request
   call in `src/`, `scripts/` and `deploy/`, and every use of an alpaca-py data request class (the SDK leaves
   `feed=None` out of the query: `self.model_dump(exclude_none=True)` in `NonEmptyRequest`).
 - Python, every call site: `tests/unit/test_feed_call_shapes.py` runs each request the code sends today against a
   fake session (or copies it, for two hand-run scripts) and checks it with `require_feed`.
-- `wt.live.runner_o`, `wt.options.live` and `wt.options.pipeline_check` use their own HTTP session: for now they are
-  covered by the scan only, not by `require_feed`.
+- `wt.live.runner_o`, `wt.options.live` and `wt.options.pipeline_check` use their own HTTP session: they are covered
+  by the scan and by `require_feed` in their request helpers; `test_feed_call_shapes.py` checks that every request
+  those helpers send leaves unchanged with the guard in place.
 - Dashboard: every data URL is built by `alpacaDataUrl` (`dashboard/src/lib/alpaca-data-url.ts`), which throws
   without a feed; `dashboard/test/alpaca-data-url.test.ts` fails on a data request built anywhere else.
 
@@ -59,7 +67,9 @@ without fixing it. Read the records themselves for what they decide.
 Every request names its feed, so a plan change does not change any request's source. Two settings outside the code
 choose a feed. Check them after any plan change: `ALPACA_FEED` on Vercel (unset or `iex` keeps the board, its bars
 and the evaluator on IEX), and whether `var/options/switches/opra` exists on the host (it switches the clone's option
-quotes to OPRA).
+quotes to OPRA). The clone's `feeds.option` in `config/options_clone.yaml` must be exactly `indicative` or `opra`, lower
+case: anything else is refused before it is sent and the clone runs with no chains
+(`tests/unit/test_feed_call_shapes.py` fails on a committed value outside `wt.data.feeds.OPTION_FEEDS`).
 
 Per Alpaca's documentation, not verified by a call here: on Algo Trader Plus, SIP is not refused for the last 15
 minutes. The routine's `HybridFeed` still cuts at 16 minutes by the clock. Its fallback to IEX on a SIP 403 would not

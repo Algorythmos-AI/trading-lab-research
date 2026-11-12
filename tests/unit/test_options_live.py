@@ -646,3 +646,61 @@ def test_bars_are_read_to_the_last_page_and_a_reply_cut_short_is_a_fault_not_a_s
     endless = Session(*[Reply(200, {"bars": {"AAPL": [1]}, "next_page_token": "more"}) for _ in range(live.BAR_PAGES)])
     with pytest.raises(live.BrokerFault, match="bars-truncated"):
         live.OptionsAccount("k", "s", session=endless).bars(["AAPL"], "30Min", ny("09:30"), ny("11:00"))
+
+
+# ---------------------------------------------------------------- a market-data request refused for naming no feed
+class _ByHost:
+    """A session for the real OptionsAccount: the paper host answers (one position, the clock, no listings); the data
+    host answers 503, the ordinary failed read, to whatever reaches it."""
+
+    def __init__(self):
+        self.calls = []
+
+    def get(self, url, params=None, headers=None, timeout=None, allow_redirects=True):
+        self.calls.append(url)
+        if url.startswith(live.DATA_HOST):
+            return Reply(503, {})
+        if url.endswith("/v2/positions"):
+            return Reply(200, [option()])
+        if url.endswith("/v2/clock"):
+            return Reply(200, CLOCK)
+        return Reply(200, {"option_contracts": []})
+
+
+@pytest.mark.parametrize("how", ["refused", "unreachable"])
+def test_a_refused_data_request_is_a_failed_read_the_extras_are_left_out_and_the_positions_still_go(
+        monkeypatch, capsys, how):
+    """OptionsAccount._get raises BrokerFault("feed-not-named") for a data request the guard refuses (a future bug in
+    it), before anything is sent. Every data read here is an extra, so each caller's existing BrokerFault handling
+    applies: the extra is left out and named in `problems`, the positions are sent, the run is a success."""
+    monkeypatch.setattr(live, "desk_names", lambda: ["SPY"])
+    monkeypatch.setattr(live, "load_yaml", lambda name: {"names": ["SPY"], "rule_alerts": "log", "hourly_bars": True})
+    monkeypatch.setenv("DASHBOARD_INGEST_URL", "https://x.invalid/api/ingest")
+    monkeypatch.setenv("DASHBOARD_INGEST_SECRET", "s" * 20)
+    monkeypatch.setattr(publish, "read_health", lambda *a: ({"editions": {"options_live": {"accepts": 3}}}, ""))
+    sent = []
+    monkeypatch.setattr(publish, "send", lambda body, *a, **k: sent.append(json.loads(body)) or (True, "HTTP 200"))
+
+    class Now(dt.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return ny("11:16")
+    monkeypatch.setattr(live.dt, "datetime", Now)
+    if how == "refused":
+        def refuse(url, params):
+            if str(url).startswith(live.DATA_HOST):        # the guard passes the paper host by construction
+                raise live.FeedNotNamed("no feed")
+        monkeypatch.setattr(live, "require_feed", refuse)
+    s = _ByHost()
+    assert live._publish(args(), live.OptionsAccount("k", "s", s)) == 0
+    code = "feed-not-named" if how == "refused" else "http-503"
+    (doc,) = sent
+    assert live.validate(doc) == [] and len(doc["positions"]) == 1 and doc["market"] is not None
+    assert "rules" not in doc and "hourly" not in doc and doc["open_interest"] is None
+    assert doc["problems"] == [f"open-interest-unavailable:{code}", f"rules-unavailable:{code}",
+                               f"hourly-unavailable:{code}"]
+    assert json.loads((live.OUT / "publish_state.json").read_text())["consecutive_failures"] == 0
+    data = [u for u in s.calls if u.startswith(live.DATA_HOST)]
+    err = capsys.readouterr().err
+    assert (data == [] and err.count("options live: a market-data request named no feed") == 3) if how == "refused" \
+        else (len(data) == 3 and "named no feed" not in err)

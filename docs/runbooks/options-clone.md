@@ -41,6 +41,9 @@ Its numbers are frozen in `config/options_clone.yaml` and `config/risk.yaml` key
 | Use the exact option feed after subscribing to Algo Trader Plus | `touch var/options/switches/opra` |
 | Stop sending orders at all (it still arms and journals) | `orders: off` in `config/options_clone.yaml`, through a pull request and a decision record |
 
+The option feed setting, `feeds.option` in `config/options_clone.yaml`, must be exactly `indicative` or `opra`, lower
+case: anything else is refused before it is sent and the clone runs with no chains.
+
 ## Pages and what to do
 
 | Page | Meaning | What to do |
