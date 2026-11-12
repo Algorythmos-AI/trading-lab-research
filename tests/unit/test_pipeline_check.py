@@ -1139,3 +1139,35 @@ def test_focus_earnings_reads_the_rows_exactly_as_the_clone_does(tmp_path):
     _, report, _, _ = go(tmp_path, Get(), earnings=earnings_csv() + f"AMZN, {TARGET},amc,company press release,confirmed\n")
     ids = {c["id"] for c in report["checks"]}
     assert "calendar.earnings.rows" in ids and "focus.earnings.AMZN" not in ids
+
+
+
+# ---------------------------------------------------------------- a market-data request refused for naming no feed
+def test_a_refused_request_is_unusable_market_data_it_fails_the_check_pages_and_exits_0(tmp_path, monkeypatch, capsys):
+    """_alpaca_get calls require_feed before anything is sent. Here it refuses every request (a future bug in it):
+    FeedNotNamed is a ValueError, one of _UNUSABLE, so the run takes the path of any answer that will not mend (a 401):
+    no retry, the sources unreachable, `data.reachable` failed, the same one page, exit 0 (the module's rule: a failed
+    check exits 0, only a crash of the job exits non-zero)."""
+    for d in ("rejected", "refused"):
+        (tmp_path / d).mkdir()
+    rejected_get = Get(failures=99, error=401)
+    _, rejected, rejected_alerts, _ = go(tmp_path / "rejected", rejected_get)
+    assert len(rejected_get.calls) == 1 + 3 and "named no feed" not in capsys.readouterr().err
+
+    def refuse(url, params):
+        raise pc.FeedNotNamed("no feed")
+    monkeypatch.setattr(pc, "require_feed", refuse)
+    get = Get()
+    code, report, alerts, naps = go(tmp_path / "refused", get)
+    by = {c["id"]: c for c in report["checks"]}
+    assert code == 0 and naps == [] and get.calls == []                          # nothing sent, nothing retried
+    assert not by["data.reachable"]["ok"] and by["data.reachable"]["severity"] == "fail"
+    assert report["unreachable"] == [pc.BARS, pc.LISTINGS, pc.SNAPSHOT] and report["unlisted"] == {}
+    (key, title, message, prio), = alerts.sent
+    assert key == "pipeline-check:pre-open" and prio == 4 and "data.reachable: 1 failed" in message
+    assert [(c["id"], c["ok"], c["severity"]) for c in report["checks"]] == \
+        [(c["id"], c["ok"], c["severity"]) for c in rejected["checks"]]
+    assert alerts.sent == rejected_alerts.sent
+    err = capsys.readouterr().err
+    assert "pipeline check: a market-data request named no feed" in err
+    assert f"market data unavailable ({pc.BARS}): FeedNotNamed" in err
