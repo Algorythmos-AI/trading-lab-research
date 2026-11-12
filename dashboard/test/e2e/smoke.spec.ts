@@ -266,6 +266,32 @@ test("the Trades page draws the clone's session, and its bad day, apart from the
   expect(errors).toEqual([]);
 });
 
+test("the Day review draws the journal's latest day of positions, a day by its address and a day with none", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  expect((await page.goto("/review"))?.status()).toBe(200);
+  await expect(page.getByRole("heading", { level: 1, name: "Day review" })).toBeVisible();
+  await expect(page.getByText("Fixture data (DASHBOARD_FIXTURE=1)")).toBeVisible();
+  await expect(page.getByRole("region", { name: "The day in four figures" })).toContainText("Rules kept");
+  await expect(page.getByText("Board labels are not being recorded yet.")).toBeVisible();
+  // Linked from the Trades page, and not a section tab of its own.
+  await expect(page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Day review" })).toHaveCount(0);
+  const prev = page.getByRole("link", { name: /^Previous day with positions/ });
+  await prev.click();
+  await expect(page).toHaveURL(/\/review\?day=\d{4}-\d{2}-\d{2}$/);
+  await expect(page.getByRole("link", { name: /^Next day with positions/ })).toBeVisible();
+  expect((await page.goto("/review?day=2026-10-10"))?.status()).toBe(200);
+  await expect(page.getByText("No option positions on this day")).toBeVisible();
+  // An address that is not a day is ignored.
+  expect((await page.goto("/review?day=tomorrow"))?.status()).toBe(200);
+  await expect(page.getByRole("region", { name: "The day in four figures" })).toContainText("Rules kept");
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+  await page.goto("/trades");
+  await expect(page.locator("#today-group").getByRole("link", { name: "Day review" })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
 test("ingest refuses writes outside production", async ({ request }) => {
   const res = await request.post("/api/ingest", { data: "{}" });
   expect(res.status()).toBe(403);

@@ -1,6 +1,8 @@
 import "server-only";
+import { alpacaDataUrl } from "./alpaca-data-url";
 import { type DataFeed, requireFeed } from "./alpaca-feed";
 import { logEvent } from "./log";
+import type { RawSnapshots } from "./quote-probe";
 import { UpstreamError } from "./upstream";
 
 // Live prices for the Options page: Alpaca's stock feed (ALPACA_FEED, alpaca-feed.ts; the free IEX one by default),
@@ -119,8 +121,12 @@ export async function fetchQuotes(
   now: Date = new Date(),
   fetchImpl: typeof fetch = fetch,
   baseUrl: string = process.env.ALPACA_DATA_URL || DEFAULT_DATA_URL,
-  /** For the server's desk evaluator only: a tighter bound on the upstream call. The page's route passes none. */
-  opts: { timeoutMs?: number; feed?: DataFeed } = {},
+  /**
+   * For the server's desk evaluator only: a tighter bound on the upstream call, and `onRaw`, which is handed the raw
+   * snapshot of each name this call fetched (not the cached ones) for the log-only probe (quote-probe.ts). It runs
+   * after the cache is written; whatever it does or throws, the answer and the cache are the same. The page's route passes none.
+   */
+  opts: { timeoutMs?: number; feed?: DataFeed; onRaw?: (raw: RawSnapshots) => void } = {},
 ): Promise<QuoteResponse> {
   const feed = opts.feed ?? requireFeed();
   const t = now.getTime();
@@ -130,7 +136,7 @@ export async function fetchQuotes(
     return !hit || hit.feed !== feed || t < hit.at || t - hit.at >= CACHE_MS;
   });
   if (due.length > 0) {
-    const url = `${baseUrl}/v2/stocks/snapshots?symbols=${encodeURIComponent(due.join(","))}&feed=${feed}`;
+    const url = alpacaDataUrl(baseUrl, "/v2/stocks/snapshots", { symbols: due.join(","), feed });
     const res = await fetchImpl(url, {
       headers: { "APCA-API-KEY-ID": keys.id, "APCA-API-SECRET-KEY": keys.secret, accept: "application/json" },
       cache: "no-store",
@@ -146,6 +152,16 @@ export async function fetchQuotes(
     for (const s of due) {
       cache.delete(s);
       cache.set(s, { at: t, feed, quote: normalise(map[s] ?? null) });
+    }
+    if (opts.onRaw) {
+      try {
+        const fetched: Record<string, unknown> = {};
+        // A name Alpaca left out of its answer is handed over as null: fetched, with no snapshot.
+        for (const s of due) fetched[s] = Object.hasOwn(map, s) ? map[s] : null;
+        opts.onRaw({ fetched, at: t, rate: { limit: res.headers.get("x-ratelimit-limit"), remaining: res.headers.get("x-ratelimit-remaining") } });
+      } catch {
+        // The probe is log-only: its failure never touches the answer.
+      }
     }
   }
   const quotes: Record<string, Quote> = {};

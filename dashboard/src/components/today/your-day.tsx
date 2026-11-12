@@ -103,6 +103,10 @@ export function YourDay({ doc, now }: { doc: JournalDoc; now: Date }) {
           <Link href="/trades#today" className="underline underline-offset-2">
             Every trade and the patterns on Trades
           </Link>
+          {" · "}
+          <Link href="/review" className="underline underline-offset-2">
+            Day review
+          </Link>
         </p>
       </div>
     </Panel>

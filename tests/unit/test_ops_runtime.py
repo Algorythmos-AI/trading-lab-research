@@ -492,6 +492,9 @@ def test_forward_summary_reports_r_only(tmp_path):
         {"session": "2026-09-29", "session_marker": True, "n_trades": 2}]))
     line = jobs.forward_summary(led)
     assert line.startswith("Forward 2026-09-29: 2 trade(s), +0.50R total") and "$" not in line
+    # no strategy's name: they carry setups (restricted) and symbols, and the page goes to a public topic
+    assert line == "Forward 2026-09-29: 2 trade(s), +0.50R total, over 2 strategy(ies). Sessions recorded: 1."
+    assert "MP-1" not in line and "qqq" not in line.lower() and "ABCD" not in line
 
 
 # ---- launchd agents ---------------------------------------------------------------------------------------------

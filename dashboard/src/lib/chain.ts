@@ -1,4 +1,5 @@
 import "server-only";
+import { alpacaDataUrl } from "./alpaca-data-url";
 import { logEvent } from "./log";
 import { UpstreamError } from "./upstream";
 
@@ -215,9 +216,9 @@ async function page(
   const out: Record<string, RawSnapshot> = {};
   let token: string | null = null;
   for (let i = 0; i < MAX_PAGES; i++) {
-    const params = new URLSearchParams({ feed: "indicative", limit: "1000", ...query });
-    if (token) params.set("page_token", token);
-    const res = await fetchImpl(`${baseUrl}/v1beta1/options/snapshots/${encodeURIComponent(symbol)}?${params}`, {
+    const params: Record<string, string> = { feed: "indicative", limit: "1000", ...query };
+    if (token) params.page_token = token;
+    const res = await fetchImpl(alpacaDataUrl(baseUrl, `/v1beta1/options/snapshots/${encodeURIComponent(symbol)}`, params), {
       headers: { "APCA-API-KEY-ID": keys.id, "APCA-API-SECRET-KEY": keys.secret, accept: "application/json" },
       cache: "no-store",
       signal: AbortSignal.timeout(8_000),

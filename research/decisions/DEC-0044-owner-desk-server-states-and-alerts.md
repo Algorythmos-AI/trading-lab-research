@@ -87,6 +87,7 @@ a line of that code changed, not that a rule did. The next release to `main` cha
 | Release | Label before | Label after | Engine files changed | Change to a state, a level or a guard |
 |---|---|---|---|---|
 | Robustness wave 1 (#375 to #381) | `e-c0b7d260245b` | `e-5f6c5cbf0639` | `market-calendar.json`, `market-calendar.ts` (#376); `bars-feed.ts` (#378) | None |
+| Session calendar to 2029 (this PR) | `e-5f6c5cbf0639` | `e-0615f37ee2ba` | `market-calendar.json`, `market-calendar.ts` | None up to 2027-12-31: no session, holiday, half day or close time on or before that date changed (a per-year hash in `tests/unit/test_market_calendar.py` holds it). Only dates after 2027-12-31 were added: the range now ends 2029-12-31 (first new session 2028-01-03), and on those days `sessionOf` now gives the exchange's session, holiday or 13:00 close instead of out of range. The rows' quality field, the `checked_against` header and the month notes are not read by the evaluator |
 
 - `market-calendar.json` gained 2027 macro rows and three earnings rows, and one 2027 date was corrected. The
   evaluator reads only the session calendar from this file (`sessionOf`: holidays and half days), which did not
@@ -102,3 +103,11 @@ evaluate identically, and the proposal is that the count carries on, with both l
 Until the owner writes an answer under this note, the report keeps the two labels apart.
 
 No state log, owner trade or result was viewed for this note.
+
+## Note on DEC-0049 (added 2026-11-12)
+
+DEC-0049, accepted before any alert has been sent, amends section 2 (the shadow count is per feed and restarts when
+the board's feed changes) and section 3 (an ntfy alert carries no symbol and no share of the day's loss limit; those
+go only over the encrypted channel). Section 4 is not amended: any further guard is named, with its file and pass
+rule, in a dated note in DEC-0049 by the pull request that adds entry alerts. It does not answer the engine-label
+question in the note above. The text above is otherwise unchanged.

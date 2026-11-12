@@ -12,7 +12,7 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
                  src/wt/ops/heartbeat.py src/wt/ops/preflight.py src/wt/ops/jobs.py src/wt/ops/migrate.py \
                  src/wt/ops/agents.py src/wt/ops/deploy.py src/wt/ops/ci.py src/wt/risk/stop_rule.py src/wt/core/safety.py src/wt/core/ids.py \
                  src/wt/brokers/base.py src/wt/brokers/sim.py src/wt/brokers/alpaca_paper.py src/wt/risk/pretrade.py \
-                 src/wt/oms/manager.py src/wt/risk/virtual_account.py src/wt/ops/publish.py src/wt/brokers/alpaca_read.py src/wt/ops/evidence.py \
+                 src/wt/oms/manager.py src/wt/risk/virtual_account.py src/wt/ops/publish.py src/wt/brokers/alpaca_read.py src/wt/ops/evidence.py src/wt/ops/visibility.py \
                  src/wt/research/manifest.py src/wt/research/method.py src/wt/research/trials.py \
                  src/wt/ops/thresholds.py src/wt/analytics/g2.py src/wt/analytics/b_replay.py src/wt/risk/mandate.py src/wt/scanner/explain.py \
                  src/wt/ops/dashguard.py src/wt/ops/drill.py src/wt/brokers/cancel_only.py src/wt/ops/host.py \
@@ -28,14 +28,14 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
                  src/wt/options/dryrun.py \
                  src/wt/options/pipeline_check.py src/wt/research/external_posts.py \
                  src/wt/options/shadow.py src/wt/options/arms_verdict.py \
-                 src/wt/owner/positions.py
+                 src/wt/owner/positions.py src/wt/data/feeds.py src/wt/ops/keys_check.py
 JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
-.PHONY: seed-vm help bootstrap research-index lint typecheck test ci hooks status gate deploy rollback migrate-state preflight publish-verify \
+.PHONY: seed-vm help bootstrap research-index lint typecheck restricted test ci hooks status gate deploy rollback migrate-state preflight publish-verify \
         uninstall-agents lease-break \
-        watchdog-drill feed-watch-drill dashboard-deploy vm-deploy \
-        agents-diff install-trading-agents install-dashboard-agent publish schema kill unkill reset-latch evidence
+        watchdog-drill feed-watch-drill feed-agreement feed-agreement-recheck feed-agreement-summary feed-agreement-edition dashboard-deploy vm-deploy \
+        agents-diff install-trading-agents install-dashboard-agent publish schema kill unkill reset-latch evidence visibility keys-check
 
 help: ## List the tasks
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/' | sort
@@ -55,15 +55,22 @@ typecheck: ## mypy --strict on the typed modules
 test: ## Unit tests
 	$(PY) -m pytest
 
-ci: lint typecheck test ## Everything CI runs
+restricted: ## No restricted or runtime path is tracked (the pre-commit hook's pattern; CI runs it on every commit of a PR)
+	$(PY) scripts/check_restricted_paths.py
+
+ci: lint typecheck restricted test ## Everything CI runs
 
 hooks: ## Install the pre-commit hooks (gitleaks, restricted paths, ruff)
 	pre-commit install
 
 # ---- operations on the live checkout (~/trading). Every command that changes it goes through the deploy gate. ----
 
-status: ## What's going on: kill switch, last job runs, firing alerts, preflight
+status: ## What's going on: kill switch, last job runs, firing alerts, preflight, repository visibility
 	$(PY) -m wt.ops.jobs status
+	@$(PY) -m wt.ops.visibility status
+
+visibility: ## Ask GitHub now whether the repository is private, record it, and page if that changed (needs gh)
+	$(PY) -m wt.ops.visibility check
 
 gate: ## Is it safe to change the live checkout right now? (no job running, outside the trading night)
 	$(PY) -m wt.ops.deploy gate
@@ -118,6 +125,29 @@ watchdog-drill: ## Two real DRILL pages through the production watchdog path (la
 
 feed-watch-drill: ## Offline: the feed watch's real tick on in-memory state, late then recovered; prints both pages, sends nothing
 	cd dashboard && pnpm exec vitest run test/feed-watch-drill.test.ts
+
+# The feed agreement (docs/runbooks/feed-agreement.md): IEX against SIP for the Options board, one finished session at a
+# time. Read-only GETs; reports go to the git-ignored var/feed-agreement/. Nothing is sent anywhere. DAY, EDITION and
+# BUDGET_S reach the recipes as environment variables (make exports command-line variables) and are always quoted; DAY
+# is checked against YYYY-MM-DD first. The env file is read by Node's --env-file parser, never sourced as shell.
+export ENV_FILE ?= .env
+FA_DAY_OK = [[ "$$DAY" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$$ ]] || { echo "usage: DAY=YYYY-MM-DD"; exit 2; }
+feed-agreement: ## After a session: replay the board on IEX and on SIP bars and compare: make feed-agreement DAY=YYYY-MM-DD EDITION=<file> [BUDGET_S=120] [ENV_FILE=.env]
+	@$(FA_DAY_OK); [ -n "$$EDITION" ] || { echo "usage: make feed-agreement DAY=YYYY-MM-DD EDITION=<edition file>"; exit 2; }; \
+	node --env-file-if-exists="$$ENV_FILE" dashboard/scripts/feed-agreement.mjs --day "$$DAY" --edition "$$EDITION" --env-file "$$ENV_FILE" $${BUDGET_S:+--budget-s "$$BUDGET_S"}
+
+feed-agreement-recheck: ## Once, the day after the first session: fetch a reported day again and count the units whose word changed: make feed-agreement-recheck DAY=YYYY-MM-DD EDITION=<file>
+	@$(FA_DAY_OK); [ -n "$$EDITION" ] || { echo "usage: make feed-agreement-recheck DAY=YYYY-MM-DD EDITION=<edition file>"; exit 2; }; \
+	node --env-file-if-exists="$$ENV_FILE" dashboard/scripts/feed-agreement.mjs --recheck --day "$$DAY" --edition "$$EDITION" --env-file "$$ENV_FILE" $${BUDGET_S:+--budget-s "$$BUDGET_S"}
+
+feed-agreement-summary: ## The feed agreement's reading over the sessions run so far (5 of one engine label needed)
+	node dashboard/scripts/feed-agreement.mjs --summary
+
+feed-agreement-edition: ## On the console Mac, between the close and 21:52 UTC: save that session's options edition: make feed-agreement-edition DAY=YYYY-MM-DD [ENV_FILE=.env]
+	@$(FA_DAY_OK); node --env-file-if-exists="$$ENV_FILE" dashboard/scripts/feed-agreement.mjs --save-edition --day "$$DAY"
+
+keys-check: ## Offline: which Alpaca key names the shell and .env set, and which pair Python tools use (names only, never a value)
+	@$(PY) -m wt.ops.keys_check $${KEYS_ENV_FILE:+--env-file "$$KEYS_ENV_FILE"}
 
 dashboard-deploy: ## OWNER: deploy origin/main's dashboard to production from a clean worktree, stamped with its commit
 	@set -e; git fetch --quiet origin main; sha=$$(git rev-parse origin/main); tmp=$$(mktemp -d); \

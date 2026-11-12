@@ -309,3 +309,63 @@ describe("GET /api/quote", () => {
     expect(f).not.toHaveBeenCalled();
   });
 });
+
+describe("fetchQuotes' raw hand-over for the snapshot probe (quote-probe.ts)", () => {
+  /** The same sequence of calls as the tests above, with or without a probe attached; the answers and upstream calls. */
+  async function run(onRaw?: (raw: unknown) => void) {
+    resetQuoteCache();
+    const f = okFetch({ SPY: snap(779.1), QQQ: snap(751.2), AAPL: snap(336.6) });
+    const opts = onRaw ? { onRaw } : {};
+    const answers = [];
+    answers.push(await fetchQuotes(["SPY", "QQQ", "ZZZZ"], KEYS, NOW, f, "https://data.example", opts));
+    answers.push(await fetchQuotes(["SPY"], KEYS, new Date(NOW.getTime() + 100), f, "https://data.example", opts)); // cached
+    answers.push(await fetchQuotes(["SPY", "AAPL"], KEYS, new Date(NOW.getTime() + CACHE_MS), f, "https://data.example", opts));
+    answers.push(await fetchQuotes(["SPY"], KEYS, NOW, okFetch({ snapshots: { SPY: snap(1) } }), "https://data.example", { ...opts, feed: "sip" }));
+    return { answers, urls: f.mock.calls.map(([u]) => String(u)) };
+  }
+
+  it("leaves every answer, the cache and the upstream calls exactly as they are without it", async () => {
+    const without = await run();
+    const seen: unknown[] = [];
+    const withProbe = await run((r) => seen.push(r));
+    expect(withProbe).toEqual(without);
+    expect(JSON.stringify(withProbe.answers)).toBe(JSON.stringify(without.answers));
+    // and the normalised quotes are the ones the earlier tests pin
+    expect(withProbe.answers[0]!.quotes.SPY).toEqual(normalise(snap(779.1)));
+    expect(seen).toHaveLength(3); // the cached call fetched nothing and hands nothing over
+  });
+
+  it("hands over the raw snapshot of each name it fetched, null for a name Alpaca left out, and the server time it used", async () => {
+    const seen: { fetched: Record<string, unknown>; at: number }[] = [];
+    const onRaw = (r: { fetched: Record<string, unknown>; at: number }) => seen.push(r);
+    const f = okFetch({ SPY: snap(779.1), QQQ: snap(751.2) });
+    await fetchQuotes(["SPY", "ZZZZ"], KEYS, NOW, f, "https://data.example", { onRaw });
+    expect(seen).toEqual([{ fetched: { SPY: snap(779.1), ZZZZ: null }, at: NOW.getTime(), rate: { limit: null, remaining: null } }]);
+    // the rate-limit headers are handed over as sent
+    const withHeaders = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ MSFT: snap(1) }), { status: 200, headers: { "X-RateLimit-Limit": "200", "X-RateLimit-Remaining": "187" } }));
+    const rated: unknown[] = [];
+    await fetchQuotes(["MSFT"], KEYS, NOW, withHeaders, "https://data.example", { onRaw: (r) => rated.push(r.rate) });
+    expect(rated).toEqual([{ limit: "200", remaining: "187" }]);
+    // only the names past their time are fetched, so only those are handed over
+    await fetchQuotes(["SPY", "QQQ"], KEYS, new Date(NOW.getTime() + 500), f, "https://data.example", { onRaw });
+    expect(Object.keys(seen[1]!.fetched)).toEqual(["QQQ"]);
+    // nothing on an HTTP error
+    await expect(fetchQuotes(["AAPL"], KEYS, NOW, vi.fn(async () => new Response("x", { status: 500 })), "https://data.example", { onRaw })).rejects.toThrow();
+    expect(seen).toHaveLength(2);
+  });
+
+  it("a hand-over that throws changes nothing: the same answer, and the cache still written", async () => {
+    const f = okFetch({ SPY: snap(779.1) });
+    const r = await fetchQuotes(["SPY"], KEYS, NOW, f, "https://data.example", {
+      onRaw: () => {
+        throw new Error("probe bug");
+      },
+    });
+    // the cache was written before the hand-over: the next call within CACHE_MS is served from it
+    await fetchQuotes(["SPY"], KEYS, new Date(NOW.getTime() + 100), f, "https://data.example");
+    expect(f).toHaveBeenCalledTimes(1);
+    resetQuoteCache();
+    const plain = await fetchQuotes(["SPY"], KEYS, NOW, okFetch({ SPY: snap(779.1) }), "https://data.example");
+    expect(r).toEqual(plain);
+  });
+});

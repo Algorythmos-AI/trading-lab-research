@@ -1,6 +1,10 @@
 # EXP-0031: the owner's own option positions, labelled by the board's end-of-day replay (DEC-0045).
 # Design only: no label, no position split and no result exists when this was written. Frozen with DEC-0045;
-# a changed value is a dated amendment (the fees) or a new experiment and new trials (everything else).
+# a changed value is a dated amendment (the fees) or a new experiment and new trials (everything else), except that
+# a decision record may amend it before the window starts.
+# Amended by DEC-0049 on 2026-11-12, before the window starts and before any label exists (an override of the rule
+# above, by the owner's decision): the labels' feed and two stored fields, the feed-change end (inconclusive, no
+# verdict), the fill-time check that gates the window, what the site may show of it, and one counts line in the report.
 experiment: EXP-0031
 status: registered                  # design only; no results file until the verdict script writes it once
 decision: DEC-0045
@@ -50,7 +54,11 @@ unit:
 
 labels:
   method: end_of_day_replay         # never the live server log of DEC-0044
-  inputs: [the stored edition for the session, the session's settled 2-minute IEX bars, the journal]
+  inputs: [the stored edition for the session, the session's settled 2-minute IEX bars asked for by name, the journal]
+  feed: >-
+    IEX by name (DEC-0049), never through ALPACA_FEED or a default; no IEX bars for a session makes its positions
+    no_record; a test proves a run with ALPACA_FEED=sip still asks for IEX
+  row_stores: [feed asked for, ENGINE_VERSION, time the bars were fetched]   # DEC-0049
   engine:
     files:                          # in dashboard/src/lib/
       - trade-state.ts
@@ -138,7 +146,17 @@ window:
     - a change to the value of a rule limit in dashboard/src/lib/trade-rules.ts (a rename or moved code is not one)
     - a change to how the journal importer matches fills
     - a journal with fees_included true
+    - a change of the board's feed (DEC-0049), as feed_change says
   last_session_on_early_end: the last full session before the change reaches production
+  feed_change:                      # DEC-0049 point 2
+    trigger: >-
+      the ALPACA_FEED value of the production deployment resolving to sip under dashboard/src/lib/alpaca-feed.ts
+      (the board's stock quotes and bars), for any part of a session, even if switched back
+    not_a_change: [the option chain's feed, a refused or mistyped value, an outage, a preview or staging deployment]
+    date: a dated line in README.md, by the pull request or note that records the owner's feed decision
+    outcome: >-
+      all three trials close inconclusive and no verdict is worked out, whatever the counts (with no session if the
+      change comes before the release that first writes labels); the three trials stay counted
   close_date: "2027-11-11"
 
 gate:                               # the same for all three trials; each trial is read on its own
@@ -190,6 +208,7 @@ site_before_verdict:
     - average winner and average loser in R, under the same minimum
     - rules-kept score
     - progress toward the gate
+    - "per-position fill-time check: yes, no or not checked (DEC-0049)"
     - >-
       over all positions and never by label: count of losers past the -25% stop, count of losers held past the chart
       stop, count of winners closed before target 1, count of winners closed under +50% on premium, count of
@@ -197,8 +216,44 @@ site_before_verdict:
   may_not_show:
     - mean R, dollars, win rate or profit factor by label, by caution or by time window
     - what-if P&L of an exit not taken, other than the rule 5 figure above (never what a winner would have made if held)
+    - per position or grouped, how far the stock was from the card's entry level when he opened, on any feed (DEC-0049)
+    - whether a stop price traded before he closed (DEC-0049; a what-if exit)
   note: >-
     per-position views allow informal summing, and the shown figures, including the overall mean, let a group's
     result be guessed; only the aggregate is sealed
 
 report: "written once into this folder by the verdict script the code pull request adds; it refuses to overwrite"
+report_also: >-
+  DEC-0049: the number of positions in each group before and after the date entry alerts were first switched on in
+  production (a dated line in README.md, written by the pull request that switches them on); no difference, mean, R
+  or other result by that split (that would be new trials, none registered)
+
+fill_time_check:                    # DEC-0049 point 4: a check of timestamps, not a trial; works out no result
+  unit: each distinct (contract, opened_at, entry price) among long single-leg option pieces
+  closing_sides: >-
+    each distinct (contract, closed_at, exit price) of a piece closed by an order, reported apart, not in the pass
+    rule; an expired piece has none
+  left_out_and_counted: [open lots, pieces without the time field, adjusted (non-standard) contracts]
+  contract: the standard OCC symbol from symbol, expiry, kind and strike
+  sessions: >-
+    the 10 most recent full New York sessions in the journal, at the time of the first run, holding at least one
+    opening side; run once
+  source: Alpaca historical option trades (no historical option quotes exist)
+  eligible: >-
+    a trade of the same contract whose condition code is not one Alpaca lists as a cancel, a late or out-of-sequence
+    report, a multi-leg trade or a stock-option combination (A to G, f to m, n to s)
+  match: {window_s: 10, either_side: true, price_tolerance: 0.01}
+  control: the same test moved 5 minutes earlier and 5 minutes later; control rate = the mean of the two
+  fetch_span: from 5 min 10 s before to 5 min 10 s after each unit's time; no price after it is read
+  stored: counts and seconds only; the raw prints are not kept; no P&L, R, win or loss
+  reported: >-
+    per session and overall: units checked, share matched at the true time, control rate, median and 10th to 90th
+    percentile of nearest matching print time minus journal time (s) over the units matched, units not checked with
+    the reason
+  pass: at least 30 opening sides over at least 3 sessions, true-time rate at least 50 points above the control rate
+  too_few: run again only on later sessions, under a dated note added to DEC-0049 first
+  rerun_other: only under a dated note in DEC-0049, written before it, saying why
+  gate: >-
+    on a pass the journal time is the fill time and the release that first writes labels may go ahead (so the window
+    can start); on a fail or too few, that release waits and DEC-0049 is revisited
+  class: PRIVATE                    # journal-derived, behind the owner's login only

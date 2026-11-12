@@ -23,6 +23,7 @@ import type { JournalDoc } from "./journal";
 import { logEvent } from "./log";
 import { isHalfDay, type Options } from "./options";
 import { alpacaKeys, fetchQuotes, type QuoteResponse } from "./quote";
+import { type ProbeRecord, probeSnapshots, type RawSnapshots } from "./quote-probe";
 import { fixtureMode } from "./snapshot";
 import { CLOSE_GRACE_MS, SERVER_SETTLE_MS } from "./trade-state";
 
@@ -41,7 +42,8 @@ import { CLOSE_GRACE_MS, SERVER_SETTLE_MS } from "./trade-state";
 //    done-for-today flag (one read), two upstream calls to Alpaca side by side (the 2-minute bars, and the same
 //    snapshot the page's quote route reads), and one create-only put.
 // About 390 runs a session: 390 switch reads and 390 heads, then for about 194 slots three reads, two upstream
-// calls and one put.
+// calls and one put. The snapshot probe (quote-probe.ts) adds none: it reads the snapshot answer already fetched and
+// rides on the same put.
 //
 // Every upstream call has its own hard timeout inside RUN_BUDGET_MS; a timed-out edition or bars read is written as a
 // degraded record, never guessed. In fixture mode and anywhere but production it never touches the store: the switch
@@ -56,8 +58,13 @@ export const TIMEOUT_MS = { switch: 1_500, exists: 1_500, edition: 1_500, reads:
  * counted per feed. `feed` is null whenever nothing was read: no keys, ALPACA_FEED refused or not on the data plan,
  * both reads failed or timed out, no edition, a wrong day or no focus names. Records written before it existed have
  * no `feed`; read them with feed-provenance's recordFeed, which gives null for those.
+ *
+ * `probe`, last, is the log-only snapshot probe (quote-probe.ts): facts about the raw snapshot answer this run read,
+ * as enums and numbers, temporary evidence for the board's bad-data guards. Nothing reads it but summariseProbe; it
+ * never changes the engine's record or the feed. Null when the snapshot read did not answer, every name came from
+ * quote.ts' cache, or the probe failed. Records written before it existed have no `probe`.
  */
-export type DeskLogRecord = ServerRecord & { feed: DataFeed | null };
+export type DeskLogRecord = ServerRecord & { feed: DataFeed | null; probe: ProbeRecord | null };
 
 /** The bars or the snapshots cannot be read at all: no keys, ALPACA_FEED is not a feed, or its feed is not on the plan. */
 export class BarsOff extends Error {
@@ -89,8 +96,13 @@ export interface DeskRunDeps {
   readDone(): Promise<FlagsRead>;
   /** The settled bars: a cached read older than `minFetchedAt` is fetched again. Throws BarsOff without keys. */
   fetchBars(symbols: string[], opts: { now: Date; minFetchedAt: number; timeoutMs: number; halfDay: boolean }): Promise<BarsResponse>;
-  /** The snapshot per name, as the page's quote route reads it (last trade, day high and low). Throws BarsOff without keys. */
-  fetchSnapshots(symbols: string[], opts: { now: Date; timeoutMs: number }): Promise<QuoteResponse>;
+  /**
+   * The snapshot per name, as the page's quote route reads it (last trade, day high and low). Throws BarsOff without
+   * keys. `onRaw` is handed the raw answer for the probe (fetchQuotes' own `onRaw`); the answer is the same without it.
+   */
+  fetchSnapshots(symbols: string[], opts: { now: Date; timeoutMs: number; onRaw?: (raw: RawSnapshots) => void }): Promise<QuoteResponse>;
+  /** The probe over the raw answer; quote-probe's probeSnapshots unless a test puts another. Whatever it throws is caught. */
+  probe?: (symbols: readonly string[], raw: RawSnapshots | null) => ProbeRecord | null;
 }
 
 export type DeskRunResult =
@@ -176,7 +188,7 @@ export function defaultDeskRunDeps(): DeskRunDeps {
       const keys = alpacaKeys();
       const feed = configuredFeed();
       if (!keys || !feed) return Promise.reject(new BarsOff());
-      return fetchQuotes(symbols, keys, o.now, fetch, undefined, { timeoutMs: o.timeoutMs, feed }).catch(offOnPlan(feed));
+      return fetchQuotes(symbols, keys, o.now, fetch, undefined, { timeoutMs: o.timeoutMs, feed, onRaw: o.onRaw }).catch(offOnPlan(feed));
     },
   };
 }
@@ -223,6 +235,9 @@ export async function runDeskEval(deps: DeskRunDeps = defaultDeskRunDeps()): Pro
   let evaluation: Evaluation;
   /** The feed an upstream read reported: the snapshot's, else the bars'. */
   let readFeed: DataFeed | null = null;
+  /** The raw snapshot answer for the probe, and the names it is about: set only when the snapshot read answered. */
+  let probeRaw: RawSnapshots | null = null;
+  let probeSymbols: string[] = [];
   let read: EditionRead | "timeout";
   try {
     read = await within(deps.loadEdition(), TIMEOUT_MS.edition);
@@ -255,12 +270,20 @@ export async function runDeskEval(deps: DeskRunDeps = defaultDeskRunDeps()): Pro
         },
       );
     const runAt = new Date(deps.now());
+    let tapped: RawSnapshots | null = null;
+    const onRaw = (r: RawSnapshots) => {
+      tapped = r;
+    };
     const [[journal, done], barsGot, snapGot] = await Promise.all([
       facts,
       needsBars ? upstream(() => deps.fetchBars(symbols, { now: runAt, minFetchedAt: slot.end + SERVER_SETTLE_MS, timeoutMs: TIMEOUT_MS.barsPage, halfDay }), "bars") : null,
-      needsBars ? upstream(() => deps.fetchSnapshots(symbols, { now: runAt, timeoutMs: TIMEOUT_MS.barsPage }), "snapshot") : null,
+      needsBars ? upstream(() => deps.fetchSnapshots(symbols, { now: runAt, timeoutMs: TIMEOUT_MS.barsPage, onRaw }), "snapshot") : null,
     ]);
     readFeed = snapGot && "ok" in snapGot ? snapGot.ok.feed : barsGot && "ok" in barsGot ? barsGot.ok.feed : null;
+    if (snapGot && "ok" in snapGot) {
+      probeRaw = tapped;
+      probeSymbols = symbols;
+    }
     if (barsGot === null || snapGot === null) evaluation = evaluateSlot({ slot, edition: ed, journal, done, bars: {}, fetchedAt: {}, snapshots: {} }); // wrong-day or no-focus
     else if ("why" in barsGot) evaluation = notEvaluated("degraded", barsGot.why, halfDay, done, !("why" in snapGot));
     // Never bars alone: without the snapshot an entry could be read past a high the page sees.
@@ -268,8 +291,19 @@ export async function runDeskEval(deps: DeskRunDeps = defaultDeskRunDeps()): Pro
     else evaluation = evaluateSlot({ slot, edition: ed, journal, done, bars: barsGot.ok.bars, fetchedAt: barsGot.ok.fetchedAt, snapshots: snapGot.ok.quotes });
   }
 
-  // The engine's record first, unchanged; the feed after it (outside the hashed code), only when a read answered.
-  const record: DeskLogRecord = { ...serverRecord(evaluation, slot, deps.now(), edition), feed: readFeed };
+  // The probe is log-only: computed after the evaluation from what was already read, and any failure leaves it null.
+  let probe: ProbeRecord | null = null;
+  try {
+    const p = (deps.probe ?? probeSnapshots)(probeSymbols, probeRaw);
+    // Serialised once here, so a probe that cannot be written fails here and not in the record's write.
+    JSON.stringify(p);
+    probe = p ?? null;
+  } catch (e) {
+    logEvent("desk-eval.probe", { outcome: "error", error: errName(e) });
+  }
+  // The engine's record first, unchanged; the feed after it (outside the hashed code), only when a read answered;
+  // the probe last.
+  const record: DeskLogRecord = { ...serverRecord(evaluation, slot, deps.now(), edition), feed: readFeed, probe };
   if (deps.dry) return { ok: true, outcome: "dry", slot: hhmm, path, record };
   try {
     await within(deps.write(path, JSON.stringify(record)), TIMEOUT_MS.write);

@@ -29,6 +29,7 @@ import hashlib
 import datetime as dt
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -39,7 +40,9 @@ from typing import Any
 
 from wt.core.config import ROOT, STATE_DIR
 from wt.ops import agents, ci, dashguard, host, migrate, preflight, safeio, units
-from wt.ops.alerts import Alerts
+from wt.ops.alerts import Alerts, count, exc_name, say
+from wt.ops.alerts import sha as short_sha
+from wt.ops.alerts import tag as tag_word
 from wt.ops.heartbeat import ok_runs_since
 from wt.ops.locks import DEPLOY_LOCK, RUNNER_LOCK, held, job_lock
 from wt.ops.schedule import JOBS, PY, TRADING_JOBS
@@ -169,8 +172,10 @@ def sync_ml(swap_wait_s: float | None = None) -> str:
                 with contextlib.suppress(OSError):
                     os.rename(prev, live)
             shutil.rmtree(nxt, ignore_errors=True)
+            say(f"ML environment did not sync: {e.__class__.__name__}: {str(e)[:400]}")   # the deploy log
             Alerts().fire("deploy-ml", "ML environment did not sync",
-                          f"{str(e)[:200]}. Trading is unaffected; models are not scored until the next deploy fixes it.", 3)
+                          f"{exc_name(e)}; the deploy log has the detail. Trading is unaffected; models are not scored "
+                        "until the next deploy fixes it.", 3)
             return "failed"
 
 
@@ -316,7 +321,7 @@ def deploy(sha: str | None = None, stage: bool = False, by: str = "owner", own_j
             passed, out = stage_tests(target, stage_timeout_s)
         if not passed:
             record({"target": target, "staged": False, "stage_output": out})
-            Alerts().fire("deploy", "Deploy refused: tests failed", f"The test suite failed on {target[:8]} before "
+            Alerts().fire("deploy", "Deploy refused: tests failed", f"The test suite failed on {short_sha(target)} before "
                           "the switch; the live checkout is unchanged.", 4)
             print(f"Refusing: the test suite failed on {target[:12]}; nothing changed\n{out}")
             return 1
@@ -375,17 +380,17 @@ def _switch(target: str, staged: bool, green: ci.Verdict, ci_override: str, why_
             body["rolled_back"] = False
             record(body)
             Alerts().fire("deploy-broken", "Host left between two releases",
-                          f"The switch to {after[:8]} failed and so did the way back to {tag} "
-                          f"({e.__class__.__name__}). Jobs may refuse to start. Log in and run: "
-                          f"sudo -u wt /usr/local/bin/wt-deploy 'rollback {tag}'", 5)
+                          f"The switch to {short_sha(after)} failed and so did the way back to {tag_word(tag)} "
+                          f"({exc_name(e)}). Jobs may refuse to start. Log in and run: "
+                          f"sudo -u wt /usr/local/bin/wt-deploy 'rollback {tag_word(tag)}'", 5)
             return 1, None
         body["rolled_back"] = True
         record(body)
-        Alerts().fire("deploy", "Deploy rolled back", f"Smoke test failed on {after[:8]}; live checkout restored "
-                      f"to {tag}.", 4)
+        Alerts().fire("deploy", "Deploy rolled back", f"Smoke test failed on {short_sha(after)}; live checkout restored "
+                      f"to {tag_word(tag)}.", 4)
         return 1, None
     rec = record(body)
-    Alerts().resolve("deploy", "Deploy healthy", f"Live checkout at {after[:8]}.")
+    Alerts().resolve("deploy", "Deploy healthy", f"Live checkout at {short_sha(after)}.")
     shown = rec.relative_to(ROOT) if rec.is_relative_to(ROOT) else rec          # WT_STATE may live elsewhere
     print(f"Deployed {before[:8]} -> {after[:8]} (rollback tag {tag}); record {shown}")
     if conflicts:
@@ -483,7 +488,8 @@ def ready(now: dt.datetime | None = None) -> int:
         n = _run("git", "rev-list", "--count", f"{head}..{target}").stdout.strip()
         sent = alerts.once_per_day(
             NOTIFY_KEY, "A deploy is ready",
-            f"main is green and {n} commit{'' if n == '1' else 's'} ahead of the host ({head[:8]} -> {target[:8]}); "
+            f"main is green and {count(_digits(n))} commit{'' if n == '1' else 's'} ahead of the host ({short_sha(head)} -> "
+            f"{short_sha(target)}); "
             "the gate is open. To deploy: sudo -u wt /usr/local/bin/wt-deploy deploy", 3)
         print(f"deploy notice: {target[:12]} is ready, {n} ahead ({'sent' if sent else 'already said today'})")
     except Exception as e:  # noqa: BLE001 — a notice must never fail its job or page about itself
@@ -531,6 +537,38 @@ def needs_owner(head: str, target: str) -> str | None:
     return None
 
 
+# What the deploy pages may say about why a release waits: the reason's kind, never its text (a check's detail, a
+# file list, the dashboard guard's answer stay in the deploy_auto log).
+STUCK_PAGES = (("it failed here", "it failed on the host before; a retry or a newer commit is needed"),
+               ("not green", "main is not green"),
+               ("the dashboard is behind", "the dashboard is behind it"),
+               ("its tests or its smoke test failed", "its tests or its smoke test failed on the host"),
+               ("the deploy refused it", "the deploy refused it"))
+OWNER_PAGES = (("it changes the units", "it changes the units, the host helpers or the deploy itself: deploy it, "
+                "then run sudo wt-install-units"),
+               ("the installed units differ", "the installed units differ from the code: run sudo wt-install-units, "
+                "then deploy"))
+
+
+def _digits(x: object) -> int | None:
+    """git's counts arrive as text: a page's count() takes numbers only, so the digits are read here."""
+    return int(x) if isinstance(x, str) and x.isascii() and x.isdigit() and len(x) <= 9 else None
+
+
+def stuck_page(why: str) -> str:
+    return next((page for start, page in STUCK_PAGES if why.startswith(start)), "see the log")
+
+
+def owner_page(owner: str) -> str:
+    """needs_owner's reason as a page says it: its kind, and the number of files when it names one."""
+    page = next((page for start, page in OWNER_PAGES if owner.startswith(start)), "it needs the owner")
+    m = re.search(r"\((\d{1,4}) files?\)", owner)
+    if m and page.startswith("it changes"):
+        n = count(_digits(m.group(1)))
+        page = page.replace(" itself:", f" itself ({n} file{'' if n == '1' else 's'}):", 1)
+    return page
+
+
 def _auto_state() -> dict[str, Any]:
     try:
         got = json.loads(AUTO_STATE.read_text())
@@ -570,7 +608,8 @@ def _stuck(alerts: Any, head: str, target: str, why: str, now: dt.datetime) -> N
     waited_h = (now - dt.datetime.fromtimestamp(first, dt.UTC)).total_seconds() / 3600
     if waited_h > AUTO_STUCK_H:
         alerts.once_per_day("deploy-stuck", "A release has waited for hours",
-                            f"{head[:8]} -> {target[:8]} has waited {waited_h:.0f} h and is not deployed: {why}", 3)
+                            f"{short_sha(head)} -> {short_sha(target)} has waited {count(round(waited_h))} h and is not "
+                            f"deployed: {stuck_page(why)}. The deploy_auto log has the detail.", 3)
 
 
 def auto(now: dt.datetime | None = None) -> int:
@@ -628,7 +667,7 @@ def auto(now: dt.datetime | None = None) -> int:
         if owner := needs_owner(head, target):          # only now: the owner is told of a release they could deploy
             sent = alerts.once_per_day(
                 NOTIFY_KEY, "A deploy needs you",
-                f"{head[:8]} -> {target[:8]} was not deployed automatically: {owner}. "
+                f"{short_sha(head)} -> {short_sha(target)} was not deployed automatically: {owner_page(owner)}. "
                 "The deploy: sudo -u wt /usr/local/bin/wt-deploy deploy", 3)
             print(f"auto deploy: {target[:12]} is the owner's: {owner} ({'said' if sent else 'already said today'})")
             return 0
@@ -652,12 +691,13 @@ def auto(now: dt.datetime | None = None) -> int:
         code = deploy(target, stage=True, by="auto", own_job=AUTO_JOB, stage_timeout_s=AUTO_STAGE_S, go_on=go_on, ml=False)
         after = _run("git", "rev-parse", "HEAD").stdout.strip()
         if code == 0 and after == target:
-            alerts.notify("Deployed automatically", f"The host moved {head[:8]} -> {target[:8]} ({commits}): tests "
+            alerts.notify("Deployed automatically", f"The host moved {short_sha(head)} -> {short_sha(target)} "
+                          f"({count(_digits(n))} commit{'' if n == '1' else 's'}): tests "
                           "passed here before the switch and the smoke test after it. To go back: sudo -u wt "
-                          "/usr/local/bin/wt-deploy 'rollback <tag>' (the tag is in the newest record in var/deploy). "
+                          "/usr/local/bin/wt-deploy 'rollback TAG' (TAG is the runtime tag in the newest record in var/deploy). "
                           f"To stop automatic deploys: remove var/deploy/{AUTO_ON}", 3)
             _settle_ready(alerts, now)
-            alerts.resolve("deploy-stuck", "Release deployed", f"The host is at {target[:8]}.", 1)
+            alerts.resolve("deploy-stuck", "Release deployed", f"The host is at {short_sha(target)}.", 1)
             _note_ml(LAST_RECORD)                   # last, and after the page: it can run for a long time
         elif code == 1:
             _auto_remember(target, now)             # its tests or its smoke test failed here: already paged
@@ -674,11 +714,11 @@ def auto(now: dt.datetime | None = None) -> int:
             alerts = alerts or Alerts()
             if moved:
                 alerts.fire("deploy-broken", "Automatic deploy stopped half way",
-                            f"The live checkout moved from {head[:8]} and the deploy did not finish "
-                            f"({e.__class__.__name__}). Log in and check: sudo -u wt /usr/local/bin/wt-deploy status", 5)
+                            f"The live checkout moved from {short_sha(head)} and the deploy did not finish "
+                            f"({exc_name(e)}). Log in and check: sudo -u wt /usr/local/bin/wt-deploy status", 5)
             else:
                 alerts.once_per_day("deploy-auto-fault", "Automatic deploy could not run",
-                                    f"Nothing was changed ({e.__class__.__name__}). See logs/deploy_auto_*.log", 3)
+                                    f"Nothing was changed ({exc_name(e)}). See logs/deploy_auto_*.log", 3)
         except Exception:  # noqa: BLE001
             pass
     return 0

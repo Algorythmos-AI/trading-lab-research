@@ -83,6 +83,17 @@ const FILES = [
   "../src/lib/feed-provenance.ts",
   "../src/lib/quote.ts",
   "../src/lib/quote-route.ts",
+  "../src/lib/quote-probe.ts",
+  "../src/lib/quote-conditions.ts",
+  "../src/lib/quote-probe-run.ts",
+  "../src/app/api/desk/probe/route.ts",
+  "../src/lib/day-review.ts",
+  "../src/components/day-review.tsx",
+  "../src/app/review/page.tsx",
+  "../src/lib/fill-check.ts",
+  "../src/lib/fill-check-fetch.ts",
+  "../src/lib/fill-check-run.ts",
+  "../src/app/api/desk/fill-check/route.ts",
 ];
 
 const BANNED = [

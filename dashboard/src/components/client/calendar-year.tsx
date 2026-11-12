@@ -95,7 +95,20 @@ function Month({ month, selected, onPick, results }: { month: MonthView; selecte
 
 function Day({ cell: c, selected, onPick }: { cell: DayCell; selected: boolean; onPick: (day: string) => void }) {
   const d = Number(c.day.slice(8));
-  if (c.kind === "weekend" || c.kind === "out_of_range") {
+  if (c.kind === "out_of_range") {
+    // Not a weekend: the file says nothing about this day, so the page does not draw a guess.
+    return (
+      <span
+        data-kind="out_of_range"
+        title={c.name ?? undefined}
+        className="text-muted-foreground/70 border-muted-foreground/40 relative flex h-9 items-start justify-center rounded-md border border-dashed pt-1 text-[0.625rem] max-sm:text-xs"
+      >
+        {d}
+        <span className="sr-only">{`${shortDay(c.day)}: ${c.name ?? "outside the calendar"}`}</span>
+      </span>
+    );
+  }
+  if (c.kind === "weekend") {
     return (
       <span className="text-muted-foreground relative flex h-9 items-start justify-center pt-1 text-[0.625rem] max-sm:text-xs" aria-hidden={!c.clocks}>
         {d}

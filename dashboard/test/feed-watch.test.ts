@@ -1,9 +1,10 @@
 // The feed watch's table, calendar and evaluator (src/lib/feed-watch.ts): pure, the clock passed in. Every date here
 // is checked against src/lib/market-calendar.json: 2026-11-26 is Thanksgiving, 2026-11-27 a half day (13:00), Good
-// Friday is 2026-04-03, New York changes its clocks on 2026-03-08 and 2026-11-01, and the file ends 2027-12-31.
+// Friday is 2026-04-03, New York changes its clocks on 2026-03-08 and 2026-11-01, and the file ends 2029-12-31.
 import { describe, expect, it } from "vitest";
 import {
   adjacentSession,
+  calendarNotice,
   decideFeedAlerts,
   EMPTY_FEED_STATE,
   evaluateStamped,
@@ -88,16 +89,22 @@ describe("the calendar", () => {
     expect(marketDay("2026-11-26")).toEqual({ open: false, assumed: false });
     expect(marketDay("2026-11-27")).toEqual({ open: true, assumed: false });
     expect(marketDay("2026-11-14")).toEqual({ open: false, assumed: false });
-    expect(RANGE.end).toBe("2027-12-31");
-    expect(marketDay("2028-01-04")).toEqual({ open: true, assumed: true });
-    expect(marketDay("2028-01-08")).toEqual({ open: false, assumed: true });
+    expect(RANGE.end).toBe("2029-12-31");
+    expect(marketDay("2029-12-25")).toEqual({ open: false, assumed: false }); // Christmas 2029, a holiday in the file
+    expect(marketDay("2029-12-31")).toEqual({ open: true, assumed: false });
+    expect(marketDay("2030-01-01")).toEqual({ open: true, assumed: true }); // New Year's Day, but past the file: assumed
+    expect(marketDay("2030-01-08")).toEqual({ open: true, assumed: true });
+    expect(marketDay("2030-01-12")).toEqual({ open: false, assumed: true });
   });
 
   it("the next and the last session come from the session list", () => {
     expect(adjacentSession("2026-11-25", 1)).toEqual({ day: "2026-11-27", assumed: false });
     expect(adjacentSession("2026-04-02", 1)).toEqual({ day: "2026-04-06", assumed: false });
     expect(adjacentSession("2026-04-06", -1)).toEqual({ day: "2026-04-02", assumed: false });
-    expect(adjacentSession("2027-12-31", 1).assumed).toBe(true);
+    expect(adjacentSession("2027-12-31", 1)).toEqual({ day: "2028-01-03", assumed: false });
+    expect(adjacentSession("2029-12-24", 1)).toEqual({ day: "2029-12-26", assumed: false });
+    expect(adjacentSession("2029-12-28", 1)).toEqual({ day: "2029-12-31", assumed: false });
+    expect(adjacentSession("2029-12-31", 1)).toEqual({ day: "2030-01-01", assumed: true });
   });
 
   it("no run is due on a weekend or a holiday, for any feed", () => {
@@ -172,11 +179,12 @@ describe("the options edition (after the close, 21:52 UTC, an hour's grace)", ()
     expect(lateNotice(before, new Date("2026-03-06T23:00:00Z")).message).toContain("17:52 New York deadline");
     expect(lateNotice(after, new Date("2026-03-09T23:00:00Z")).message).toContain("18:52 New York deadline");
   });
-  it("outside the calendar's range a weekday is assumed, said so, and still pages", () => {
-    const v = view("options-edition", { "options-edition": ok("2028-01-04", "2028-01-03T22:00:00Z") }, "2028-01-04T23:30:00Z");
-    expect(v).toMatchObject({ state: "late", assumed: true, alerting: true, for_session: "2028-01-05" });
-    expect(lateNotice(v, new Date("2028-01-04T23:30:00Z")).message.endsWith(FEED_ASSUMED_NOTE)).toBe(true);
-    expect(view("options-edition", { "options-edition": ok("2028-01-10", "2028-01-07T22:00:00Z") }, "2028-01-08T15:00:00Z")).toMatchObject({ state: "on_time", assumed: true });
+  it("outside the calendar's range a weekday is assumed and said so, and never pages", () => {
+    const v = view("options-edition", { "options-edition": ok("2030-01-08", "2030-01-07T22:00:00Z") }, "2030-01-08T23:30:00Z");
+    expect(v).toMatchObject({ state: "late", assumed: true, alerting: false, for_session: null });
+    // The notice still says so if it is ever drawn; decideFeedAlerts does not send it.
+    expect(lateNotice(v, new Date("2030-01-08T23:30:00Z")).message.endsWith(FEED_ASSUMED_NOTE)).toBe(true);
+    expect(view("options-edition", { "options-edition": ok("2030-01-14", "2030-01-11T22:00:00Z") }, "2030-01-12T15:00:00Z")).toMatchObject({ state: "on_time", assumed: true });
   });
   it("a refusal of this run's edition makes it failed, and leaves the page to the refusal's own row", () => {
     const r = { refusals: { options: refused("2026-11-12T22:05:00Z") } };
@@ -547,12 +555,111 @@ describe("a refusal outliving its run (the shared options kind)", () => {
 
 describe("past the calendar's end", () => {
   it("the session is assumed to be 09:30 to 16:00 New York on a weekday, and says so", () => {
-    expect(shadowWindow(T("2028-01-04T15:00:00Z"))).toMatchObject({ day: "2028-01-04", assumed: true });
-    expect(shadowWindow(T("2028-01-04T21:30:00Z"))).toBeNull();
-    expect(shadowWindow(T("2028-01-08T15:00:00Z"))).toBeNull(); // a Saturday
-    const v = view("shadow", {}, "2028-01-04T16:00:00Z", { shadow: { status: "ok", value: { on: true, switched_at: null, last_slot_end: T("2028-01-04T15:00:00Z") } } });
-    expect(v).toMatchObject({ state: "late", assumed: true, alerting: true });
-    expect(polledState({ status: "ok", receivedAt: T("2028-01-04T15:59:58Z") }, T("2028-01-04T16:00:00Z"), T("2028-01-04T16:00:00Z"), 30_000, "failed").state).toBe("on_time");
+    expect(shadowWindow(T("2030-01-08T15:00:00Z"))).toMatchObject({ day: "2030-01-08", assumed: true });
+    expect(shadowWindow(T("2030-01-08T21:30:00Z"))).toBeNull();
+    expect(shadowWindow(T("2030-01-12T15:00:00Z"))).toBeNull(); // a Saturday
+    const v = view("shadow", {}, "2030-01-08T16:00:00Z", { shadow: { status: "ok", value: { on: true, switched_at: null, last_slot_end: T("2030-01-08T15:00:00Z") } } });
+    expect(v).toMatchObject({ state: "late", assumed: true, alerting: false });
+    expect(polledState({ status: "ok", receivedAt: T("2030-01-08T15:59:58Z") }, T("2030-01-08T16:00:00Z"), T("2030-01-08T16:00:00Z"), 30_000, "failed").state).toBe("on_time");
+  });
+});
+
+describe("New Year's Day 2030, the first day past the file", () => {
+  // Every document missing: on a real session that pages; on 2030-01-01 (a holiday the file does not know) nothing
+  // pages, however many runs go by. The calendar's end is paged ahead of time by the pipeline check instead.
+  const missing = Object.fromEntries(FEEDS.filter((f) => f.type === "doc").map((f) => [f.id, { status: "missing" } as StampRead]));
+  // Every run of Monday 2029-12-31 (the file's last session) delivered, the last at 23:59 New York; nothing after.
+  const lastDayDone = Object.fromEntries(FEEDS.filter((f) => f.type === "doc").map((f) => [f.id, ok("2030-01-02", "2030-01-01T04:59:00Z")]));
+  const runs = (times: readonly string[], stamps: Record<string, StampRead> = missing) => {
+    let s: FeedAlertState = EMPTY_FEED_STATE;
+    const sent: string[] = [];
+    for (const t of times) {
+      const views = evaluateStamped(inputs(stamps, { shadow: { status: "ok", value: { on: true, switched_at: null, last_slot_end: null } } }), T(t));
+      const d = decideFeedAlerts(views, s, new Date(t), true);
+      sent.push(...d.notices.map((n) => n.title));
+      s = d.next;
+    }
+    return sent;
+  };
+  const day = (d: string) => Array.from({ length: UNKNOWN_RUNS_TO_ALERT + 20 }, (_, i) => new Date(Date.parse(`${d}T13:00:00Z`) + i * 30 * 60_000).toISOString());
+
+  it("is assumed open, shown late, and pages nothing", () => {
+    const views = evaluateStamped(inputs(lastDayDone), T("2030-01-01T17:00:00Z"));
+    expect(views.some((v) => v.assumed && v.state === "late")).toBe(true);
+    expect(views.filter((v) => v.alerting)).toEqual([]);
+    expect(runs(day("2030-01-01"), lastDayDone)).toEqual([]);
+  });
+
+  it("while the same day in the file's last week pages", () => {
+    expect(runs(day("2029-12-31")).length).toBeGreaterThan(0);
+  });
+});
+
+describe("the file's last session and its next session past the file", () => {
+  const edition = (stamp: StampRead, now: string) => view("options-edition", { "options-edition": stamp }, now);
+
+  it("the build of Monday 2029-12-31 is judged by its own day: missed, it pages, and names no session", () => {
+    const v = edition(ok("2029-12-31", "2029-12-28T22:10:00Z"), "2029-12-31T23:30:00Z");
+    expect(v).toMatchObject({ state: "late", assumed: false, alerting: true, for_session: null, next_past_end: true });
+    const n = lateNotice(v, new Date("2029-12-31T23:30:00Z"));
+    expect(n.message).toContain(", for the session after it.");
+    expect(n.message).not.toContain("2030-01-01");
+    expect(n.message.endsWith(FEED_ASSUMED_NOTE)).toBe(false);
+  });
+
+  it("is satisfied by a build for any session after its day, whatever the date turns out to be", () => {
+    expect(edition(ok("2030-01-02", "2029-12-31T22:10:00Z"), "2029-12-31T23:30:00Z")).toMatchObject({ state: "on_time", for_session: null });
+    expect(edition(ok("2029-12-31", "2029-12-28T22:10:00Z"), "2029-12-31T23:30:00Z").state).toBe("late");
+  });
+
+  it("the same run on Wednesday 2030-01-02, past the file, is assumed and does not page", () => {
+    const v = edition(ok("2029-12-31", "2029-12-28T22:10:00Z"), "2030-01-02T23:30:00Z");
+    expect(v).toMatchObject({ state: "late", assumed: true, alerting: false });
+  });
+
+  it("never names 2030-01-01 as a session", () => {
+    for (let t = Date.parse("2029-12-31T12:00:00Z"); t <= Date.parse("2030-01-03T12:00:00Z"); t += 30 * 60_000) {
+      for (const v of evaluateStamped(inputs({}), t)) {
+        expect(v.for_session).not.toBe("2030-01-01");
+        expect(lateNotice(v, new Date(t)).message).not.toContain("2030-01-01");
+      }
+      for (const f of FEEDS) if (f.type === "doc") for (const s of slotsAround(f, t)) expect(s.for_session).not.toBe("2030-01-01");
+    }
+  });
+});
+
+describe("before the file's start, a run is matched as it always was", () => {
+  // Sunday 2026-01-04: the walk back over missed runs reaches 2025-12-31 and earlier, before the file starts. The run
+  // of Friday 2025-12-26 must be matched against its weekday-guessed next session (2025-12-29), not the day after it,
+  // so a build for Saturday 2025-12-27 does not satisfy it. The figures are integration's (before #389), recorded by
+  // running its feed-watch.ts on the same inputs.
+  const edition = (session: string, at: string, now: string) => view("options-edition", { "options-edition": ok(session, at) }, now);
+
+  it("gives the same misses and minutes late as integration", () => {
+    expect(edition("2025-12-27", "2025-12-26T22:10:00Z", "2026-01-04T15:00:00Z")).toMatchObject({ state: "late", misses: 5, late_min: 12488, for_session: "2026-01-05" });
+    expect(edition("2025-12-27", "2025-12-26T22:10:00Z", "2026-01-04T23:30:00Z")).toMatchObject({ misses: 5, late_min: 12998 });
+    expect(edition("2025-12-27", "2025-12-26T22:10:00Z", "2026-01-05T23:30:00Z")).toMatchObject({ misses: 6, late_min: 14438, for_session: "2026-01-06" });
+    expect(edition("2025-12-27", "2025-12-26T22:10:00Z", "2026-01-02T23:30:00Z")).toMatchObject({ misses: 5, late_min: 10118 });
+    expect(edition("2025-12-31", "2025-12-30T22:10:00Z", "2026-01-04T15:00:00Z")).toMatchObject({ misses: 2, late_min: 5288 });
+    expect(view("options-edition", { "options-edition": { status: "missing" } }, "2026-01-04T15:00:00Z")).toMatchObject({ misses: 8, late_min: 16808 });
+  });
+
+  it("names no session before the file's start", () => {
+    for (const s of slotsAround(doc("options-edition"), T("2026-01-04T15:00:00Z"))) {
+      if (s.day < "2026-01-01") expect(s.for_session).toBeNull();
+      else expect(s.for_session).toBe(s.match_session);
+    }
+  });
+});
+
+describe("today outside the calendar file", () => {
+  it("the Operations panel says which alerts are off, before 2026 and after 2029", () => {
+    expect(calendarNotice(T("2030-01-08T15:00:00Z"))).toBe('Today is outside the session calendar (ends 31 Dec 2029): late and "cannot be checked" alerts are off; refusals still alert.');
+    expect(calendarNotice(T("2025-12-15T15:00:00Z"))).toBe('Today is outside the session calendar (starts 1 Jan 2026): late and "cannot be checked" alerts are off; refusals still alert.');
+    expect(calendarNotice(T("2026-11-12T15:00:00Z"))).toBeNull();
+    // New York's day decides: 03:00 UTC on 1 January 2030 is still 31 December 2029 there.
+    expect(calendarNotice(T("2030-01-01T03:00:00Z"))).toBeNull();
+    expect(calendarNotice(T("2030-01-01T05:30:00Z"))).not.toBeNull();
   });
 });
 

@@ -1,4 +1,5 @@
 import "server-only";
+import { alpacaDataUrl } from "./alpaca-data-url";
 import { type DataFeed, requireFeed } from "./alpaca-feed";
 import { logEvent } from "./log";
 import { UpstreamError } from "./upstream";
@@ -120,9 +121,9 @@ export async function fetchBars(
     const got: Record<string, Bar2[]> = Object.fromEntries(due.map((s) => [s, []]));
     let token: string | null = null;
     for (let page = 0; page < MAX_PAGES; page++) {
-      const q = new URLSearchParams({ symbols: due.join(","), timeframe: TIMEFRAME, start: open.iso, feed, limit: "10000", adjustment: "raw" });
-      if (token) q.set("page_token", token);
-      const res = await fetchImpl(`${baseUrl}/v2/stocks/bars?${q.toString()}`, {
+      const q: Record<string, string> = { symbols: due.join(","), timeframe: TIMEFRAME, start: open.iso, feed, limit: "10000", adjustment: "raw" };
+      if (token) q.page_token = token;
+      const res = await fetchImpl(alpacaDataUrl(baseUrl, "/v2/stocks/bars", q), {
         headers: { "APCA-API-KEY-ID": keys.id, "APCA-API-SECRET-KEY": keys.secret, accept: "application/json" },
         cache: "no-store",
         signal: AbortSignal.timeout(opts.timeoutMs ?? 8_000),

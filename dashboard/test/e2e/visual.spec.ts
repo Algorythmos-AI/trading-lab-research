@@ -89,6 +89,18 @@ for (const theme of ["dark", "light"] as const) {
 }
 
 
+// The Day review under the stood-still clock (Mon 12 Oct, 11:01 New York): the latest day of positions before it, Fri 9
+// Oct, on a desktop as a table and on a phone as cards. Server-rendered, so nothing moves once it is drawn.
+for (const theme of ["dark", "light"] as const) {
+  test(`the day review, ${theme}`, async ({ page, context, baseURL, isMobile }) => {
+    test.skip(isMobile && theme === "light", "the phone is pictured once");
+    await useTheme(context, theme);
+    await context.addCookies([{ name: "fx", value: "frozen", url: baseURL! }]);
+    await draw(page, "/review", "[data-day-review]");
+    await shot(page, `day-review-${theme}.png`);
+  });
+}
+
 // The feed health strip on its own, stood still with a mix of states: the edition late (for an earlier session), the
 // pre-open refresh on time, the prices failed (no keys), the bars not due, the journal late and the server check late.
 for (const theme of ["dark", "light"] as const) {
