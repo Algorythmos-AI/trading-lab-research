@@ -4,7 +4,7 @@
 # Frozen with DEC-0047; a changed value is a new experiment and new trials, except that a decision record may amend it
 # before the first counted session, saying that no outcome of the selection was viewed to choose the change.
 experiment: EXP-0032
-status: proposed                    # registered when DEC-0047 is accepted; no results file until the read writes it once
+status: registered                  # registered when DEC-0047 is accepted; no results file until the read writes it once
 decision: DEC-0047
 family: F                           # the selection's accuracy; total 5 (config/trial_registry.yaml)
 trials:                             # every difference is a minus b

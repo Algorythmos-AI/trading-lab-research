@@ -1,6 +1,6 @@
 # EXP-0032: whether the two-stage selection picks better names, forward from the switch
 
-- Decision: DEC-0047 (proposed). Trials: HYP-0051 to HYP-0055, family F (new, total 5).
+- Decision: DEC-0047 (accepted 2026-11-12). Trials: HYP-0051 to HYP-0055, family F (new, total 5).
 - **Design only.** Nothing here is a result. No session of the two-stage selection has been picked, scored or read
   when this was written, and no ledger outcome, scorecard, report or backtest was used to write it.
 - **Disclosure.** The first author of DEC-0047 opened three ledger files that hold results of the previous picker
