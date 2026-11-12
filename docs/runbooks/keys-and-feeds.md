@@ -14,6 +14,8 @@ no record. So every request here names its feed, and these guards fail on one th
 - Python, in the tests: `tests/unit/test_feed_named.py` (the scan is `tests/unit/feed_scan.py`) checks every request
   call in `src/`, `scripts/` and `deploy/`, and every use of an alpaca-py data request class (the SDK leaves
   `feed=None` out of the query: `self.model_dump(exclude_none=True)` in `NonEmptyRequest`).
+- Python, every call site: `tests/unit/test_feed_call_shapes.py` runs each request the code sends today against a
+  fake session (or copies it, for two hand-run scripts) and checks it with `require_feed`.
 - `wt.live.runner_o`, `wt.options.live` and `wt.options.pipeline_check` use their own HTTP session: for now they are
   covered by the scan only, not by `require_feed`.
 - Dashboard: every data URL is built by `alpacaDataUrl` (`dashboard/src/lib/alpaca-data-url.ts`), which throws
@@ -33,14 +35,15 @@ without fixing it. Read the records themselves for what they decide.
 
 | Consumer | What it reads | Feed | Where the feed is set | Bound by | Described in |
 |---|---|---|---|---|---|
-| Owner's board, live prices (site, `/api/quote`) | stock snapshots | `ALPACA_FEED`, default iex (check the site's setting) | `ALPACA_FEED` on Vercel (`alpaca-feed.ts`) | DEC-0042 | feed-agreement runbook |
-| Owner's board, session bars (site, `/api/bars`) | 2-minute stock bars | `ALPACA_FEED`, default iex (check the site's setting) | the same | none | DEC-0044 (the same bars as the page; it names no feed), feed-agreement runbook |
-| Shadow evaluator (site, `/api/cron/desk`) | 2-minute bars and snapshots | `ALPACA_FEED`, default iex (check the site's setting) | the same | none | DEC-0044 (names no feed), EXP-0031, feed-agreement runbook |
+| Owner's board, live prices (site, `/api/quote`) | stock snapshots | `ALPACA_FEED`, default iex (check the site's setting) | `ALPACA_FEED` on Vercel (`alpaca-feed.ts`) | DEC-0042 | DEC-0049, feed-agreement runbook |
+| Owner's board, session bars (site, `/api/bars`) | 2-minute stock bars | `ALPACA_FEED`, default iex (check the site's setting) | the same | none | DEC-0044, DEC-0049, feed-agreement runbook |
+| Shadow evaluator (site, `/api/cron/desk`) | 2-minute bars and snapshots | `ALPACA_FEED`, default iex (check the site's setting) | the same | none | DEC-0044, DEC-0049, EXP-0031, feed-agreement runbook |
+| Owner-trade labeller (EXP-0031 labels; not built yet) | settled 2-minute bars | iex, asked for by name, never from `ALPACA_FEED` | its own pull request | DEC-0049 | EXP-0031 |
 | Contract pane and chain (site, `/api/chain`) | option snapshots | indicative | literal in `chain.ts` | none | none |
 | Feed agreement (hand, `make feed-agreement`) | 2-minute stock bars | iex and sip | literal per run (`barsUrl`) | none | feed-agreement runbook |
 | Paper runner B, signal bars (host, `paper-b`) | 1-minute bars | iex | literal default in `runner_b.py` | DEC-0037 | none |
 | Paper runner B, latest quotes (host) | latest quote of the signal and trade names | iex | literal | none | DEC-0024 |
-| Paper runner B, sigma (host) | 1-minute bars of the 14 prior sessions | sip | literal | none | none (set in code) |
+| Paper runner B, sigma (host) | 1-minute bars of the 14 prior sessions | sip | literal | none | none: set in code |
 | Options clone, stock minute bars (host, `paper-o`) | 1-minute bars of its names and SPY | iex | literal in `runner_o.py` | set in code, no record binds it | DEC-0031 |
 | Options clone, levels (host) | daily bars | sip | literal | none | DEC-0033 |
 | Options clone, option quotes and chains (host) | option snapshots | indicative, or opra | `feeds.option` in `config/options_clone.yaml`; the file `var/options/switches/opra` selects opra | DEC-0030 section 4 | none |
@@ -52,7 +55,7 @@ without fixing it. Read the records themselves for what they decide.
 | Research scripts (hand: `build_pool`, `scan`, `r2_`, `r3_`, `g1_`, `exp*`, `options_replication`, `options_clone_dry_run`) | bars, quotes, trades | sip | literal, or the `bars` default | not reviewed per script here | - |
 | News (`AlpacaREST.news`), option bars (`options_clone_dry_run`) | news; historical option bars | none: these endpoints take no feed | - | - | - |
 
-Every request names its feed, so none of them changed source when the plan changed. Two settings outside the code
+Every request names its feed, so a plan change does not change any request's source. Two settings outside the code
 choose a feed. Check them after any plan change: `ALPACA_FEED` on Vercel (unset or `iex` keeps the board, its bars
 and the evaluator on IEX), and whether `var/options/switches/opra` exists on the host (it switches the clone's option
 quotes to OPRA).
@@ -106,7 +109,7 @@ of 2026-11-12, assuming each answer fits on one page.
 
 | Consumer (key pair) | Rhythm | Data calls per rhythm | Calls per minute | Worst case |
 |---|---|---|---|---|
-| Runner B (`APCA_API_`) | one poll every 20 s (`poll_s=20.0`), 09:30 to the close | bars 1 + trade quote 1 + signal quote 1 when a signal is on the newest bar | 3 polls x 3 = **9** | at arm, 2 x 14 sigma reads = 28 calls once; its own limiter caps it at 150/min |
+| Runner B (`APCA_API_`) | one poll every 20 s (`poll_s=20.0`), 09:30 to the close | bars 1 + trade quote 1 + signal quote 1 when a signal is on the newest bar | 3 polls x 3 = **9** | at arm (about 08:30 New York), 14 sigma reads once (one of its two branches, never both); its own limiter caps it at 150/min |
 | Routine (`APCA_API_`) | 4 stages before the open (08:00, 08:30, 09:00, 09:15 ET), then `1131_signals` at 11:31 | per stage: the universe's 1-minute snapshot in batches of 200 names (in hybrid mode twice, SIP then the IEX tail), pre-market bars of the kept names, news; at 11:31: the Tier-2 names' bars 09:30 to 11:31, SIP plus the IEX tail | before the open, capped at **30** (`AlpacaREST(per_minute=30, shared=True)`); at 11:31, about **2** | 30, while a stage runs; the shared file limiter also holds every shared process to 180 together |
 | Forward test (`APCA_API_`) | once, after the close | bars for every candidate | capped at **150** (`per_minute=150`) | 150 (own limiter only; it does not join the shared one) |
 | Pipeline check (`APCA_API_`) | 08:55 and 18:30 ET | bars (1 or more pages) + 1 snapshot; contracts go to the trading host | about 2 to 3 a run | bars pages up to 30, inside a 540 s budget |
@@ -120,9 +123,10 @@ of 2026-11-12, assuming each answer fits on one page.
 
 Arithmetic for the host's stocks pair (`APCA_API_`):
 
-- 08:00 to 09:30: the routine at most 30 a minute, plus the pipeline check's 2 or 3 calls at 08:55. Peak 33.
+- 08:00 to 09:30: the routine at most 30 a minute; at about 08:30 runner B arms and reads 14 sigma calls once; at
+  08:55 the pipeline check makes 2 or 3. Peak about 44 (30 + 14) in the minute runner B arms, 33 at 08:55.
 - 09:30 to the close: runner B, 9 a minute, plus about 2 from the routine at 11:31. Peak 11.
-- After the close: the forward test alone, up to 150.
+- After the close: the forward test, up to 150 a minute, plus the 18:30 pipeline check's few calls.
 
 All of these fit under the free plan's 200 as well as Algo Trader Plus's 10,000.
 
@@ -142,7 +146,7 @@ it.
    - The feed agreement stops with `sip not entitled` or `sip plan`.
 3. Confirm `ALPACA_FEED` on the site (unset or `iex`).
 4. Confirm that the clone's opra switch file `var/options/switches/opra` is absent on the host (OPRA needs the options
-   subscription). Record the date of this check and of step 3 below.
+   subscription). Record the date of this check and of step 3 in the table below.
 5. Run `make keys-check` on the Mac, and `sudo -u wt /usr/local/bin/wt-deploy gate` on the host, which reads Alpaca's
    calendar with the host's pair.
 6. A change of feed for any consumer bound by a record above is the owner's decision. It needs a dated decision
