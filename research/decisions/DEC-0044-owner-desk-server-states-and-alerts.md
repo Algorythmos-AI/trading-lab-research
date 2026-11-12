@@ -102,3 +102,11 @@ evaluate identically, and the proposal is that the count carries on, with both l
 Until the owner writes an answer under this note, the report keeps the two labels apart.
 
 No state log, owner trade or result was viewed for this note.
+
+## Note on DEC-0049 (added 2026-11-12)
+
+DEC-0049, accepted before any alert has been sent, amends section 2 (the shadow count is per feed and restarts when
+the board's feed changes) and section 3 (an ntfy alert carries no symbol and no share of the day's loss limit; those
+go only over the encrypted channel). Section 4 is not amended: any further guard is named, with its file and pass
+rule, in a dated note in DEC-0049 by the pull request that adds entry alerts. It does not answer the engine-label
+question in the note above. The text above is otherwise unchanged.

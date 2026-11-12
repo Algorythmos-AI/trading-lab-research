@@ -29,6 +29,13 @@ OWN-EARLY is named for the open window it questions; it tests late minus early.
 - Labels: the end-of-day replay of each session's stored edition and settled 2-minute IEX bars through a frozen copy
   of the desk's engine, whose `ENGINE_VERSION` is a content hash of its files in the release that first writes
   labels. Labels are written once per session and never worked out again. Not the live server log of DEC-0044.
+- Amended by DEC-0049 (2026-11-12, before the window starts and before any label exists): the IEX bars are asked
+  for by name, never through `ALPACA_FEED`; the production `ALPACA_FEED` resolving to `sip` closes all three trials
+  inconclusive with no verdict; the release that first writes labels waits for the fill-time check to pass.
+- Board's feed switched to `sip` in production: not yet (DEC-0049 point 2; the date goes here, written by the pull
+  request or note that records the owner's feed decision).
+- Entry alerts first switched on in production: not yet (DEC-0049 point 8; the date goes here, written by the pull
+  request that switches them on).
 
 ## Verdict
 
