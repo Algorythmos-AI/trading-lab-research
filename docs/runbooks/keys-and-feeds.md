@@ -50,6 +50,8 @@ without fixing it. Read the records themselves for what they decide.
 | Owner-trade labeller (EXP-0033 labels; not built yet) | settled 2-minute bars | sip, asked for by name, never from `ALPACA_FEED` | its own pull request | DEC-0050 | EXP-0033 |
 | Contract pane and chain (site, `/api/chain`) | option snapshots | `ALPACA_OPTION_FEED`, default indicative; opra on the owner's setting (check the site's setting) | `ALPACA_OPTION_FEED` on Vercel (`option-feed.ts`) | DEC-0050 (point 6) | none |
 | Feed agreement (hand, `make feed-agreement`) | 2-minute stock bars | iex and sip | literal per run (`barsUrl`) | none | feed-agreement runbook |
+| Feed comparison sampler (site, `/api/cron/feeds`) | stock snapshots of the focus names and SPY | iex and sip, one request each a minute | literals in `feed-compare-sample.ts` (`askFeed("iex")`, `askFeed("sip")`), never `ALPACA_FEED` | DEC-0050 | feed-agreement runbook, "Server comparison" |
+| Feed comparison report (site, `/api/cron/feeds-report`) | the session's 2-minute and settled 1-minute stock bars of the focus names | iex and sip | literals in `feed-compare-report.ts` (`fetchSessionBars("iex")` / `("sip")` through `barsUrl`; `fetchMinuteBars("iex")` / `("sip")` through `minuteBarsUrl` in `feed-compare-bars.ts`), never `ALPACA_FEED` | DEC-0050 | feed-agreement runbook, "Server comparison" |
 | Paper runner B, signal bars (host, `paper-b`) | 1-minute bars | iex | literal default in `runner_b.py` | DEC-0037 | none |
 | Paper runner B, latest quotes (host) | latest quote of the signal and trade names | iex | literal | none | DEC-0024 |
 | Paper runner B, sigma (host) | 1-minute bars of the 14 prior sessions | sip | literal | none | none: set in code |
@@ -131,6 +133,8 @@ of 2026-11-12, assuming each answer fits on one page.
 | Site, chain | each viewed name every 30 s; 20 s cache | 2 calls (3 with a held contract), up to 3 pages each | **4 to 6 per name** | 9 pages x 2 = 18 per name |
 | Shadow evaluator (site's pair) | every minute, 13:00 to 21:59 UTC on weekdays | bars 1 + snapshots 1 | **2** | 21 if the bars page to 20 |
 | Feed agreement (hand) | once after a session | 2 feeds x pages | capped at **180** (`ALPACA_CALLS_PER_MIN`) | 180 |
+| Feed comparison sampler (site's pair) | every minute in the regular session, 13:00 to 21:59 UTC on weekdays (`* 13-21 * * 1-5`), runs only from the open to the close | snapshots 1 on iex + snapshots 1 on sip, never cached, never paged; a 400 is asked once more on that feed | **2** (4 at most) | 2 (one run a minute; a second run in the same minute finds the sample and asks nothing) |
+| Feed comparison report (site's pair) | once a day after close + 20 min (`*/10 20-23 * * 1-5`; later ticks find the report and ask nothing) | 4 reads, N pages each: 2-minute bars per feed, N = 1 (about 4 names x 195 bars = about 800, under `limit=10000`); 1-minute bars per feed, N = 1 (about 4 names x 390 bars = about 1,560, under `limit=10000`; a card of up to 25 names fits in one page) | 4 calls in that one minute, about **0** a minute over the day | 80 (20 pages x 4 reads, `MAX_PAGES`), all under one shared 180-a-minute limiter and one 150 s budget; a build that may heal retries at the next 10-minute tick, until 23:50 UTC |
 
 Arithmetic for the host's stocks pair (`APCA_API_`):
 
@@ -143,9 +147,10 @@ All of these fit under the free plan's 200 as well as Algo Trader Plus's 10,000.
 
 The clone's pair: 18 + 0.6, so about 19 a minute, plus chain reads on a signal.
 
-The site's pair: one open Options page costs 30 + 2 + 6 = 38, plus the evaluator's 2, so 40 a minute. Four pages on
-separate instances would cost 4 x 38 + 2 = 154, near the free plan's 200. That pair is shared with whatever else uses
-it.
+The site's pair: one open Options page costs 30 + 2 + 6 = 38, plus the evaluator's 2 and the feed comparison
+sampler's 2, so 42 a minute. Four pages on separate instances would cost 4 x 38 + 2 + 2 = 156, near the free plan's
+200. The comparison report adds 4 calls once a day after the close (80 pages at worst, plus 429 retries, all under its own 180-a-minute limiter), when no page polls in the session.
+That pair is shared with whatever else uses it.
 
 ## After a plan change or a lapse
 

@@ -97,9 +97,17 @@ const FILES = [
   "../src/lib/fill-check-fetch.ts",
   "../src/lib/fill-check-run.ts",
   "../src/app/api/desk/fill-check/route.ts",
+  "../src/lib/feed-compare.ts",
+  "../src/lib/feed-compare-sample.ts",
+  "../src/lib/feed-compare-report.ts",
+  "../src/lib/feed-compare-bars.ts",
+  "../src/app/api/cron/feeds/route.ts",
+  "../src/app/api/cron/feeds-report/route.ts",
   "../src/lib/owner-labels.ts",
   "../src/lib/owner-labels-fetch.ts",
   "../src/lib/owner-labels-store.ts",
+  "../src/lib/board-events.ts",
+  "../src/components/board-events.tsx",
 ];
 
 const BANNED = [
