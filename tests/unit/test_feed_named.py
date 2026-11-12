@@ -4,14 +4,13 @@ Alpaca's default for an omitted `feed` is the best one the subscription allows (
 one, IEX again after a lapse), so a request that leaves it out changes its data source with the plan. Two guards:
 `AlpacaREST.get` refuses such a request at run time (wt.data.feeds.require_feed), and the static scan
 (tests/unit/feed_scan.py) checks every call in src/, scripts/ and deploy/ that sends one, including the modules with
-their own HTTP session (runner_o, options.live, pipeline_check: the scan is their only guard for now), and every
+their own HTTP session (runner_o, options.live, pipeline_check, which also call `require_feed`), and every
 alpaca-py data request class, whose `feed=None` is left out of the query.
 
 Known limits of the scan, each covered as stated:
 - A URL whose data base and path both come from elsewhere (a function parameter, or a constant imported from another
   module and joined to nothing visible): the scan cannot see it is a data request. Anything sent through
-  `AlpacaREST.get` is still refused at run time; the three own-session modules are not, until they call
-  `require_feed` (scheduled after #386).
+  `AlpacaREST.get` or the three own-session modules' request helpers is still refused at run time.
 - A params dict built in another function, returned and passed in: the scan sees a name with no visible feed and
   flags it (a false positive is preferred to a miss); the runtime guard covers it through `AlpacaREST.get`.
 - Anything dynamic (getattr, eval, a dict built in a loop from data): not followed.

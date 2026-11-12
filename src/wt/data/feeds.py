@@ -18,9 +18,9 @@ pairs, or a query string, as `requests` accepts) or in the URL's query; if both 
 `require_feed` raises FeedNotNamed and nothing else: input it cannot read is refused when the URL is a data request
 and passed through untouched otherwise.
 
-The modules that call Alpaca with their own HTTP session (wt.live.runner_o, wt.options.live,
-wt.options.pipeline_check) do not call this yet: tests/unit/test_feed_named.py holds them to the rule by scanning the
-source.
+The modules that call Alpaca with their own HTTP session call it in their request helpers (wt.live.runner_o
+AlpacaFeeds._get, wt.options.live OptionsAccount._get, wt.options.pipeline_check _alpaca_get), each turning a refusal
+into its own failed-read error; tests/unit/test_feed_named.py also holds them to the rule by scanning the source.
 """
 from __future__ import annotations
 
