@@ -4,10 +4,9 @@
   merge of the pull request that changed this line ("Accepting this record" lists what that pull request changed).
   The owner approved the plan on 2026-11-12, in chat, to add a signal layer to the Options desk: one of CALL, PUT,
   WAIT or NO TRADE per focus name and side, worked out on the server from the board's own state and a fixed list of
-  gates, logged sealed, and tested once, forward. Between the proposal and the acceptance one check was added to
-  section 2.5: the contract quote's own time is bounded as well as the chain's checked age. Acceptance registers the
-  test and fixes the definitions below; it builds nothing, switches nothing on and starts no window. The gates' numbers are not frozen by this record: they are frozen once, by its Amendment 1, under
-  the rule section 2 states now.
+  gates, logged sealed, and tested once, forward. Acceptance registers the test and fixes the definitions below; it
+  builds nothing, switches nothing on and starts no window. The gates' numbers are not frozen by this record: they
+  are frozen once, by its Amendment 1, under the rule section 2 states now.
 - **Written before any affected P&L is viewed.** No signal exists, in code or anywhere else: no gate has been worked
   out on any session, no signal has been logged and no outcome of any board state, gated or not, has been worked out
   or viewed by anyone. The author read records, configs and code only. The author opened no journal, owner trade,
