@@ -29,6 +29,7 @@ import {
   type MapLayer,
   type Options,
   type OptionsTicker,
+  builtFromDay,
 } from "@/lib/options";
 import { cardMarks } from "@/lib/focus-plan";
 import { cn } from "@/lib/utils";
@@ -566,7 +567,7 @@ export function OptionsDesk({
         <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1">
           <span className="text-muted-foreground flex items-center gap-1.5 font-mono text-[0.6875rem] max-sm:text-xs">
             <span className={cn("inline-block size-2 rounded-full", stale ? "bg-bad-fill" : "bg-good-fill")} />
-            Levels {weekDate(e.built_from)} close
+            {builtFromDay(e.built_from) ? `Levels ${builtFromDay(e.built_from)} close` : "Levels: close not named"}
           </span>
           {live ? <FeedPill /> : null}
           <button
