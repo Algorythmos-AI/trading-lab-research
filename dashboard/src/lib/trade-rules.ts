@@ -619,9 +619,11 @@ export function meterToneFor<T extends string>(tone: T, check: Pick<DayCheck, "c
 /**
  * The open positions' note: the journal has no current price, so an open loss is not in the day's figure here, but
  * rule 7 counts it ("Open losses count too"). A caution to check the broker; the count itself is unchanged.
+ * Only open options are named (owner, 2026-11-12): the day rules are about option trades, and shares left in the
+ * account would otherwise raise the caution every day. Open shares stay listed on the Trades page.
  */
 function openNote(view: SessionView | null): string {
-  const n = view?.open.length ?? 0;
+  const n = view?.open.filter((l) => l.kind !== "stock").length ?? 0;
   if (!n) return "";
   const rule = RULES.find((r) => r.id === "day-stop")!.n;
   return ` ${n} position${n === 1 ? "" : "s"} open: ${n === 1 ? "its" : "their"} open loss isn't priced here, and rule ${rule} counts it; check Webull.`;
