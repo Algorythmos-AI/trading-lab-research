@@ -16,6 +16,7 @@
 // only: nothing here places, stages, routes or sizes an order. Nothing is worked out for a name that is not one of the
 // session edition's focus names (EXP-0032's blind). The board's alternatives and the runner exit line are never read.
 // No percentage, score or confidence: a word's strength is its list of gates, each pass or fail with its value.
+import type { BoardFeedStamp } from "./board-feed-judge";
 import { boardEvents, type EventCalendar, REPO_CALENDAR } from "./board-events";
 import type { ChainResponse } from "./chain";
 import { direction, type Direction, indexInput, type IndexReading, spreadWords, STALE_MS, whyWords } from "./context";
@@ -48,7 +49,7 @@ export type GateId = "market_direction" | "volume" | "stock_bid_ask" | "shock" |
 /** The four market gates of section 2, in the record's order. The contract check is not one of them. */
 export const MARKET_GATES: readonly GateId[] = ["market_direction", "volume", "stock_bid_ask", "shock"];
 /** The test's groups (section 8): the class a slot would take were it a break's scoring slot. */
-export type ScoringClass = "a" | "b" | "not_usable" | "gate_unavailable" | "contract_only";
+export type ScoringClass = "a" | "b" | "not_usable" | "gate_unavailable" | "contract_failed";
 
 /** What each gate read: the value that produced its pass or fail. */
 export interface GateValues {
@@ -311,6 +312,11 @@ export interface UsableInput {
   edition: Pick<Options, "session" | "focus"> | null;
   flow: FlowInput | null;
   chain: Pick<ChainResponse, "feed" | "fallback"> | null;
+  /**
+   * The board-feed stamp (DEC-0050 point 4) for the minute the slot's DEC-0044 record was written; null when none was
+   * written. Without one reading `sip` that SPY answered, the board's state cannot be shown to come from SIP.
+   */
+  stamp: Pick<BoardFeedStamp, "feed" | "answered"> | null;
 }
 
 /**
@@ -337,6 +343,8 @@ export function unusable(u: UsableInput): string[] {
   else if (u.flow && asOf !== null && slotClockFromAsOf(u.flow.as_of)?.day !== u.edition.session) out.push("the edition is for another session");
   if (!u.flow || u.flow.feed !== "sip") out.push("stock prices are not from SIP");
   if (!u.chain || u.chain.feed !== "opra" || u.chain.fallback !== undefined) out.push("option quotes are not from OPRA");
+  if (!u.stamp) out.push("no board-feed stamp for the slot");
+  else if (u.stamp.feed !== "sip" || u.stamp.answered !== "ok") out.push("the board-feed stamp does not show SIP answering");
   return out;
 }
 
@@ -403,7 +411,9 @@ export function signalWord(x: WordInput): SignalWord {
     if (why.length) return "not_usable";
     if (market.some((m) => m.pass === null && !m.notYet && !(m.id === "volume" && volumeFailed))) return "gate_unavailable";
     if (word === "CALL" || word === "PUT") return "a";
-    if (allMarket && !contractOk) return "contract_only";
+    // Any break whose contract check did not pass is counted, not scored, whatever its market gates read, so group b
+    // differs from group a in the market gates only (section 8, second round).
+    if (!contractOk) return "contract_failed";
     if (volumeFailed || market.some((m) => m.pass === false)) return "b";
     return null;
   };
@@ -445,6 +455,8 @@ export interface SignalInput {
    */
   state: { slotEnd: number; name: NameState };
   record: SlotRecord | null;
+  /** The board-feed stamp for the minute the slot's DEC-0044 record was written (UsableInput.stamp). */
+  stamp: Pick<BoardFeedStamp, "feed" | "answered"> | null;
   edition: Pick<Options, "session" | "focus"> | null;
   flow: FlowInput | null;
   flowAgeMs: number | null;
@@ -481,7 +493,7 @@ export function signalFor(x: SignalInput): Signal | null {
   const sideState = x.state.name[x.side];
   const g = gates({ symbol, side: x.side, focus, sideState, flow: x.flow, flowAgeMs: x.flowAgeMs, chain: x.chain, chainAgeMs: x.chainAgeMs, calendar: x.calendar, sessions: x.sessions });
   if (!g) return null;
-  const why = unusable({ symbol, side: x.side, record: x.record, state: { slotEnd: x.state.slotEnd, rowState: row.state }, edition, flow: x.flow, chain: x.chain });
+  const why = unusable({ symbol, side: x.side, record: x.record, state: { slotEnd: x.state.slotEnd, rowState: row.state }, edition, flow: x.flow, chain: x.chain, stamp: x.stamp });
   const brokeAt = sideState.brokeAt;
   const session = x.record?.session ?? edition.session;
   const volumeFailedEarlier =

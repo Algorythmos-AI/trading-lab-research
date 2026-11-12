@@ -186,6 +186,7 @@ const signalInput = (s: NameState, over: Partial<SignalInput> = {}): SignalInput
   side: "call",
   state: { slotEnd: SLOT, name: s },
   record: record(s),
+  stamp: { feed: "sip", answered: "ok" },
   edition: edition(),
   flow: flow(),
   flowAgeMs: 500,
@@ -384,9 +385,15 @@ describe("gate: contract", () => {
 
 describe("unusable inputs", () => {
   const s = nameState(side("call", "enter_zone"));
-  const u = (over: Partial<UsableInput> = {}): UsableInput => ({ symbol: "AAPL", side: "call", record: record(s), state: { slotEnd: SLOT, rowState: "enter_zone" }, edition: edition(), flow: flow(), chain: chain(), ...over });
+  const u = (over: Partial<UsableInput> = {}): UsableInput => ({ symbol: "AAPL", side: "call", record: record(s), state: { slotEnd: SLOT, rowState: "enter_zone" }, edition: edition(), flow: flow(), chain: chain(), stamp: { feed: "sip", answered: "ok" }, ...over });
   it("all usable: no reason", () => {
     expect(unusable(u())).toEqual([]);
+  });
+  it("a board-feed stamp is required, reading SIP that SPY answered", () => {
+    expect(unusable(u({ stamp: null }))).toEqual(["no board-feed stamp for the slot"]);
+    expect(unusable(u({ stamp: { feed: "iex", answered: "ok" } }))).toEqual(["the board-feed stamp does not show SIP answering"]);
+    expect(unusable(u({ stamp: { feed: "sip", answered: "stale" } }))).toEqual(["the board-feed stamp does not show SIP answering"]);
+    expect(unusable(u({ stamp: { feed: "sip", answered: "error" } }))).toEqual(["the board-feed stamp does not show SIP answering"]);
   });
   it.each([
     ["no record", { record: null }],
@@ -438,9 +445,9 @@ const RULES: Rule[] = [
   ["two market gates failing", { set: { market_direction: false, shock: false } }, "NO TRADE", "b"],
   ["one failing, one not available", { set: { stock_bid_ask: null, shock: false } }, "NO TRADE", "gate_unavailable"],
   ["two failing in get ready", { rowState: "get_ready", set: { market_direction: false, stock_bid_ask: false } }, "NO TRADE", "b"],
-  ["no contract, every market gate passing", { set: { contract: false } }, "NO TRADE", "contract_only"],
-  ["no contract and a market gate failing", { set: { contract: false, shock: false } }, "NO TRADE", "b"],
-  ["no contract in get ready", { rowState: "get_ready", set: { contract: false } }, "NO TRADE", "contract_only"],
+  ["no contract, every market gate passing", { set: { contract: false } }, "NO TRADE", "contract_failed"],
+  ["no contract and a market gate failing: counted, not scored (second round)", { set: { contract: false, shock: false } }, "NO TRADE", "contract_failed"],
+  ["no contract in get ready", { rowState: "get_ready", set: { contract: false } }, "NO TRADE", "contract_failed"],
   ["an input not usable", { unusable: ["x"] }, "NO TRADE", "not_usable"],
   ["get ready, every gate passing: WAIT", { rowState: "get_ready" }, "WAIT", null],
   ["get ready, volume not yet: WAIT", { rowState: "get_ready", set: { volume: "not_yet" } }, "WAIT", null],
