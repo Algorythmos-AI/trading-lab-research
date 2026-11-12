@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ENTITLEMENT_EVERY_MS,
   entitlement,
@@ -36,7 +36,13 @@ function upstream(stock: number | "hang" | "throw" = 200, option: number | "hang
 }
 const urls = (f: ReturnType<typeof upstream>) => f.mock.calls.map((c) => new URL(String(c[0])));
 
-beforeEach(() => resetEntitlement());
+// The CI job runs this suite with DASHBOARD_FIXTURE=1, where the probe answers from the fixture and asks nothing: these
+// tests are about the real probe, so fixture mode is switched off for each of them.
+beforeEach(() => {
+  resetEntitlement();
+  vi.stubEnv("DASHBOARD_FIXTURE", "");
+});
+afterEach(() => vi.unstubAllEnvs());
 
 describe("reading Alpaca's answers", () => {
   it("is the feed on 200, a refusal on 403, and an error on anything else or nothing", () => {
