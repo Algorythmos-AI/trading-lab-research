@@ -458,4 +458,6 @@ export interface PageRecord {
    * shadow numbers compare a slot only against a server record with the same switches.
    */
   guards?: GuardReason[];
+  /** The page held switches it could not confirm (its last read failed after a good one): only when so. */
+  guards_unsure?: true;
 }

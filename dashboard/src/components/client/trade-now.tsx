@@ -49,6 +49,7 @@ import {
   spokenChanges,
 } from "@/lib/trade-now";
 import { pausedAgeS } from "@/lib/level-ladder";
+import type { SwitchRead } from "@/lib/desk-guards";
 import type { GuardReason } from "@/lib/quote-guards";
 import { type NameState, type NameStateName, serverNow } from "@/lib/trade-state";
 import { cn } from "@/lib/utils";
@@ -821,6 +822,7 @@ export function BoardProvider({
   dayFacts = null,
   evalOn = false,
   guardsOn = NO_GUARDS,
+  guardsRead = "missing",
   children,
 }: {
   e: Options;
@@ -845,6 +847,8 @@ export function BoardProvider({
    * use-guards.ts). None by default, and with none on the board is exactly as without guards.
    */
   guardsOn?: readonly GuardReason[];
+  /** How the server render read them (desk-guards' SwitchRead): a failed read starts every guard off. */
+  guardsRead?: SwitchRead;
   children: React.ReactNode;
 }) {
   const { feed, now: browserNow } = useLive();
@@ -858,7 +862,7 @@ export function BoardProvider({
   const mode: BoardMode = now === null ? { kind: "loading", line: "Connecting to live prices" } : boardMode(e.session, halfDay, feed.status, now);
   const newest = ok ? Math.max(0, ...items.map((i) => Date.parse(feed.quotes[i.symbol]?.at ?? "") || 0)) : 0;
   const bars = useBars(symbols, live && items.length > 0 && (mode.kind === "live" || mode.kind === "opening"), newest > 0 ? Math.floor(newest / 120_000) : null, halfDay);
-  const guards = useGuardSwitches(guardsOn, live && items.length > 0 && (mode.kind === "live" || mode.kind === "opening"));
+  const guardHold = useGuardSwitches(guardsOn, guardsRead, live && items.length > 0 && (mode.kind === "live" || mode.kind === "opening"));
   // Late or failing bars are not used: the states fall back to the page's own prices, and the header says so.
   const used = barsInUse(bars, browserNow);
   const rows =
@@ -878,7 +882,7 @@ export function BoardProvider({
             receivedAt: answeredAt,
             dayLimitUsed,
             wonToday,
-            ...(guards.length > 0 ? { guards: { on: guards } } : {}),
+            ...(guardHold.on.length > 0 ? { guards: { on: guardHold.on } } : {}),
           },
           mode.kind === "live",
         );
@@ -932,7 +936,8 @@ export function BoardProvider({
     now,
     browserNow,
     barsDelayed: mode.kind === "live" && used.delayed,
-    guards,
+    guards: guardHold.on,
+    guardsUnsure: guardHold.unsure,
   });
   if (settled) {
     // Announces what is new and withdraws, for good, every notice whose state has left the board.

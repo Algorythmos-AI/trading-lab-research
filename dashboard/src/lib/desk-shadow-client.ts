@@ -60,6 +60,8 @@ export interface Tick {
   barsDelayed: boolean;
   /** The bad-data guards the states were worked out with (desk-guards.ts); none when missing. */
   guards?: readonly GuardReason[];
+  /** The page's last read of the switches failed after a good one: `guards` is that good read's, unconfirmed. */
+  guardsUnsure?: boolean;
 }
 
 interface Snap {
@@ -68,6 +70,8 @@ interface Snap {
   barsDelayed: boolean;
   /** The guards switched on when the states were taken; sent only when there are any. */
   guards?: readonly GuardReason[];
+  /** Taken while the page held switches it could not confirm: sent as `guards_unsure`, only then. */
+  guardsUnsure?: boolean;
 }
 
 const URL_STATUS = "/api/desk/eval-status";
@@ -136,7 +140,7 @@ export class DeskShadowCore {
     // The page's states as of the slot: its first render at or after the slot's close, before the slot settles.
     const closed = Math.floor((t.now - CLOSE_GRACE_MS) / BAR_MS) * BAR_MS;
     if (slots.includes(closed) && !this.snaps.has(closed) && t.now < closed + SERVER_SETTLE_MS)
-      this.snaps.set(closed, { rows: t.states.flatMap(stateRows), asOf: t.now, barsDelayed: t.barsDelayed, ...(t.guards?.length ? { guards: [...t.guards] } : {}) });
+      this.snaps.set(closed, { rows: t.states.flatMap(stateRows), asOf: t.now, barsDelayed: t.barsDelayed, ...(t.guards?.length ? { guards: [...t.guards] } : {}), ...(t.guardsUnsure ? { guardsUnsure: true } : {}) });
     const slot = settledSlotEnd(t.now);
     if (!slots.includes(slot) || (this.lastSent !== null && slot <= this.lastSent)) return;
     this.lastSent = slot; // before the request: at most one post per slot, even when it fails
@@ -166,5 +170,6 @@ export function pageBody(slotEnd: number, snap: Snap | null, statesNow: readonly
     rows: snap.rows,
     rows_at_settle: statesNow.flatMap(stateRows),
     ...(snap.guards?.length ? { guards: snap.guards } : {}),
+    ...(snap.guardsUnsure ? { guards_unsure: true } : {}),
   });
 }

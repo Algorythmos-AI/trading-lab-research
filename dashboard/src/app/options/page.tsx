@@ -156,7 +156,7 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
       <h1 className="sr-only">Options</h1>
       <LiveQuotes symbols={withLeaders(e.tickers.map((t) => t.symbol)).join(",")} session={e.session} enabled={!date}>
         <DoneTodayProvider initial={flags}>
-          <BoardProvider e={full} live={!date} {...day} openLots={board?.lots ?? []} closedTrades={board?.closed ?? []} journalAsOf={doc?.as_of ?? null} dayFacts={facts} evalOn={evalSwitch === "log"} guardsOn={guardSwitches?.on ?? []}>
+          <BoardProvider e={full} live={!date} {...day} openLots={board?.lots ?? []} closedTrades={board?.closed ?? []} journalAsOf={doc?.as_of ?? null} dayFacts={facts} evalOn={evalSwitch === "log"} guardsOn={guardSwitches?.on ?? []} guardsRead={guardSwitches?.status ?? "missing"}>
             {/* Top to bottom: what the day allows and the clock, the one name that matters now, the four at a glance, what
                 to act on, the cards, the rules strip, then the desk. Cockpit keeps only the rail, the hero and the four
                 ladders (everything else carries data-cockpit-hide). The parts share the page's one live feed and board. */}

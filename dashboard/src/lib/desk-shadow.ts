@@ -30,7 +30,8 @@ export interface ShadowSummary {
   engineMismatch: number;
   /**
    * Of the OK slots with a visible page record of the same engine: those whose bad-data guards switched on differ
-   * between the page and the server (one read the switches before the owner changed them, the other after). Not
+   * between the page and the server (one read the switches before the owner changed them, the other after), or that
+   * the page took while it could not confirm its switches (`guards_unsure`: its last read failed). Not
    * compared: a guard can pause one and not the other for a reason that is not the data.
    */
   guardsMismatch: number;
@@ -134,7 +135,7 @@ export function shadowSummary(days: readonly string[], server: readonly ServerRe
       engineMismatch++;
       continue;
     }
-    if (guardsKey(guardsOnServer(s)) !== guardsKey(p.guards)) {
+    if (p.guards_unsure === true || guardsKey(guardsOnServer(s)) !== guardsKey(p.guards)) {
       guardsMismatch++;
       continue;
     }

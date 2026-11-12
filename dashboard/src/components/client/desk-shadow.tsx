@@ -77,6 +77,7 @@ export function useDeskShadow({
   browserNow,
   barsDelayed,
   guards = [],
+  guardsUnsure = false,
 }: {
   enabled: boolean;
   reading: boolean;
@@ -88,6 +89,8 @@ export function useDeskShadow({
   barsDelayed: boolean;
   /** The bad-data guards the board's states were worked out with: sent beside them, so a slot is compared only against a server record with the same switches. */
   guards?: readonly GuardReason[];
+  /** The page holds switches it could not confirm (use-guards.ts): the slot is sent marked so. */
+  guardsUnsure?: boolean;
 }): void {
   const core = useRef<DeskShadowCore | null>(null);
   const on = enabled && reading;
@@ -112,7 +115,7 @@ export function useDeskShadow({
     };
   }, [on]);
   useEffect(() => {
-    core.current?.tick({ live, session, states, now, browserNow, barsDelayed, guards });
+    core.current?.tick({ live, session, states, now, browserNow, barsDelayed, guards, guardsUnsure });
   });
 }
 
