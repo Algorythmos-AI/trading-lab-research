@@ -171,7 +171,7 @@ export function FeedPill() {
         ? `Retrying in ${inS}s`
         : "Retrying"
       : feed.status === "ok"
-        ? `Live ${newYork(feed.asOf, false)}${feedLabel(feed.source) ? ` · ${feedLabel(feed.source)}` : ""}`
+        ? `Live ${newYork(feed.asOf, false)}`
         : feed.status === "off"
           ? feed.why === "plan"
             ? "Live off: SIP is not on this data plan"
@@ -190,7 +190,35 @@ export function FeedPill() {
         )}
       />
       {label}
+      {backoff === null && feed.status === "ok" ? <FeedName source={feed.source} lead=" · " /> : null}
     </span>
+  );
+}
+
+/** DEC-0050: SIP is the board's stock feed; IEX is comparison-only, so the board reading it is a warning. */
+export const IEX_WARNING = "DEC-0050: the board should read SIP";
+
+/**
+ * The feed an answer named, as the pill and the facts line write it (feed-provenance.ts feedLabel): "SIP ·
+ * authoritative", or "IEX" in the warning tone with the DEC-0050 note as its title. Nothing when it named none.
+ */
+export function FeedName({ source, lead = "", trail = "" }: { source: unknown; lead?: string; trail?: string }) {
+  const name = feedLabel(source);
+  if (!name) return null;
+  return (
+    <>
+      {lead}
+      {name === "SIP" ? (
+        <span data-feed-name="SIP" className="text-foreground font-medium">
+          SIP · authoritative
+        </span>
+      ) : (
+        <span data-feed-name="IEX" title={IEX_WARNING} aria-description={IEX_WARNING} className="text-warn font-medium">
+          IEX
+        </span>
+      )}
+      {trail}
+    </>
   );
 }
 
@@ -226,7 +254,6 @@ const names = (n: number) => `${n} name${n === 1 ? "" : "s"}`;
 export function FeedFacts({ symbols, where }: { symbols?: readonly string[]; where: "board" | "glance" }) {
   const { feed, now, session } = useLive();
   if (feed.status !== "ok") return null;
-  const name = feedLabel(feed.source);
   const ages = feedAges(feed, symbols ?? null, now, session || null);
   const { newestMs, oldestMs, traded, noTrade } = ages.trade;
   const tradeStale = oldestMs !== null && ageStale("trade", oldestMs);
@@ -238,14 +265,7 @@ export function FeedFacts({ symbols, where }: { symbols?: readonly string[]; whe
       className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[0.6875rem] max-sm:text-xs"
     >
       <span data-feed-source className="whitespace-nowrap">
-        {name ? (
-          <>
-            <span data-feed-name className="text-foreground font-medium">
-              {name}
-            </span>{" "}
-            ·{" "}
-          </>
-        ) : null}
+        <FeedName source={feed.source} trail=" · " />
         fetched every {POLL_MS / 1000} s, not streamed
       </span>
       {traded > 0 ? (
