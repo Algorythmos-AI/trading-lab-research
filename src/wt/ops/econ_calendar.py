@@ -87,28 +87,46 @@ _MONTHS = {m: i for i, m in enumerate(
      "december"], 1)}
 
 
-def parse_fed(page: str, years: Iterable[int], required: Iterable[int] | None = None) -> Rows:
-    """FOMC decision days from the Fed's calendar page, for `years`. A scheduled meeting's decision is on its last
-    day; an unscheduled meeting or a notation vote is skipped. Fails when a year it reads has other than eight
-    scheduled meetings.
+# A year's panel heading on the Fed's page: "2027 FOMC Meetings", with or without words after it ("... (tentative)").
+# The one rule for where a panel starts, where it ends and whether a year has one, so the three cannot disagree. A
+# heading reworded past it is no heading: its meetings fall into the panel before, whose count then fails.
+FED_HEADING = re.compile(r">\s*(\d{4}) FOMC Meetings\b[^<]*<")
+FED_MEETINGS_PER_YEAR = 8
 
-    `required`: the years whose panel must be there (all of `years` when None). The page lists about two years, and
-    the market calendar reaches further, so a later year with no panel yet gives no rows: its months are then not
-    yet announced, never a failed source. `collect` requires every year that has begun in New York and every year
-    the last good read had rows for, so a panel once seen cannot drop out in silence."""
+
+def _fed_month(word: str) -> int | None:
+    """A month from its full name or its three-letter abbreviation ("Jan", "Sept" too), any case."""
+    w = word.lower()
+    return _MONTHS.get(w) or next((n for name, n in _MONTHS.items() if len(w) >= 3 and name.startswith(w)), None)
+
+
+def fed_panels(page: str) -> dict[int, str]:
+    """Each year's panel on the Fed's calendar page: the text from its heading to the next heading."""
+    heads = list(FED_HEADING.finditer(page))
+    out: dict[int, str] = {}
+    for i, m in enumerate(heads):
+        out.setdefault(int(m.group(1)), page[m.end(): heads[i + 1].start() if i + 1 < len(heads) else len(page)])
+    return out
+
+
+def parse_fed(page: str, years: Iterable[int], required: Iterable[int] | None = None) -> Rows:
+    """FOMC decision days from the Fed's calendar page, for `years` (those it has a panel for). A scheduled meeting's
+    decision is on its last day: "Jan/Feb" with "31-1" is decided on 1 February. An unscheduled meeting or a notation
+    vote is skipped. Fails when a year it reads has other than eight scheduled meetings, or a meeting cannot be read.
+
+    `required`: the years whose panel must be there (all of `years` when None). The page lists about two years ahead,
+    and the market calendar can reach further, so a later year with no panel yet gives no rows: its months are then
+    not yet announced, never a failed source. `collect` says which years it requires."""
     years = list(years)
     must = set(years if required is None else required)
+    panels = fed_panels(page)
     out: Rows = set()
     for year in years:
-        m = re.search(rf">\s*{year} FOMC Meetings\s*<", page)
-        if not m:
+        panel = panels.get(year)
+        if panel is None:
             if year in must:
                 raise SourceError(f"fed: no {year} panel")
             continue
-        # The panel ends at the next year's heading, however that heading is worded after the year: a renamed one
-        # must not fold the next year's meetings into this one.
-        end = re.search(r">\s*\d{4} FOMC Meetings", page[m.end():])
-        panel = page[m.end(): m.end() + end.start()] if end else page[m.end():]
         n = 0
         for month_html, date_html in re.findall(
                 r'fomc-meeting__month[^>]*>(.*?)</div>\s*<div[^>]*fomc-meeting__date[^>]*>(.*?)</div>', panel, re.S):
@@ -116,21 +134,19 @@ def parse_fed(page: str, years: Iterable[int], required: Iterable[int] | None = 
             date_txt = html.unescape(re.sub(r"<[^>]+>", " ", date_html)).strip().lower()
             if "unscheduled" in month_txt + date_txt or "notation" in month_txt + date_txt:
                 continue
-            months = [_MONTHS[w] for w in re.findall(r"[a-z]+", month_txt) if w in _MONTHS]
+            words = re.findall(r"[a-z]+", month_txt)
+            months = [_fed_month(w) for w in words]
             days = [int(d) for d in re.findall(r"\d{1,2}", date_txt)]
-            if not months or not days:
+            if not months or None in months or not days:
                 raise SourceError(f"fed: unreadable meeting {month_txt!r} {date_txt!r}")
-            # "April/May" with "30-1": the decision falls in the last month named.
-            out.add(("fomc_decision", dt.date(year, months[-1], days[-1]).isoformat()))
+            # Two months named ("Apr/May", "30-1"): the decision falls in the last month named, on the last day.
+            last_month = months[-1]
+            assert last_month is not None
+            out.add(("fomc_decision", dt.date(year, last_month, days[-1]).isoformat()))
             n += 1
-        if n != 8:
+        if n != FED_MEETINGS_PER_YEAR:
             raise SourceError(f"fed: {n} scheduled meetings in {year}")
     return out
-
-
-def fed_panels(page: str) -> set[int]:
-    """The years the Fed's calendar page has a panel for."""
-    return {int(y) for y in re.findall(r">\s*(\d{4}) FOMC Meetings\s*<", page)}
 
 
 def parse_bls(ics: str) -> Rows:
@@ -315,25 +331,29 @@ def validate(doc: dict[str, Any], schema_path: Path = SCHEMA_PATH) -> list[str]:
 # ---- main --------------------------------------------------------------------------------------------------------
 
 def collect(get: Get, env: dict[str, str], state: dict[str, Any], start: str, end: str, today: str,
-            now: str) -> tuple[dict[str, Rows], list[dict[str, Any]], list[str]]:
-    """Read every source, through the last-good guard. Returns rows by source, the status rows and the problems."""
+            now: str) -> tuple[dict[str, Rows], list[dict[str, Any]], list[str], list[str]]:
+    """Read every source, through the last-good guard. Returns rows by source, the status rows, the problems and the
+    notes (what a good read did not cover, for the job's log; never in the document)."""
     rows: dict[str, Rows] = {}
     status: list[dict[str, Any]] = []
     problems: list[str] = []
     years = list(range(int(start[:4]), int(end[:4]) + 1))
-    # Required: every year that has begun in New York (`today` is the New York day), and every year the last good read
-    # had rows for. A later year is read once the Fed publishes it; until then the status row says so.
-    seen = {int(str(d)[:4]) for _, d in (state.get("fed") or {}).get("rows", [])}
-    required = [y for y in years if y <= int(today[:4]) or y in seen]
-    notes: dict[str, str] = {}
+    this_year = int(today[:4])                               # `today` is the New York day
+    prev_fed: Rows = {(str(c), str(d)) for c, d in (state.get("fed") or {}).get("rows", [])}
+    seen = {int(d[:4]) for _, d in prev_fed}
+    # Required: the current New York year, and a later year once the last good read had rows for it. A past year
+    # that ages off the page is never required, and its last good rows are kept as they are.
+    required = [y for y in years if y == this_year or (y > this_year and y in seen)]
+    notes: list[str] = []
 
     def read_fed_page() -> Rows:
         page = get(FED_URL, {})
         got = parse_fed(page, years, required)
-        if later := [y for y in years if y not in fed_panels(page)]:
-            notes["fed"] = (f"no panel yet for {', '.join(map(str, later))}: those months are not yet announced, "
-                            "not missing")
-        return got
+        listed = fed_panels(page)
+        kept = {r for r in prev_fed if int(r[1][:4]) < this_year and int(r[1][:4]) not in listed}
+        if later := [y for y in years if y >= this_year and y not in listed]:
+            notes.append(f"fed: no panel yet for {', '.join(map(str, later))}: not yet announced, not missing")
+        return got | kept
 
     readers: dict[str, Callable[[], Rows] | None] = {
         "fred": (lambda: read_fred(get, env["FRED_API_KEY"], start, end)) if env.get("FRED_API_KEY") else None,
@@ -357,12 +377,10 @@ def collect(get: Get, env: dict[str, str], state: dict[str, Any], start: str, en
         except Exception as e:  # noqa: BLE001 — one source's fault must not stop the others
             fresh, why = None, f"{src}: {e.__class__.__name__}"
         rows[src], st, problem = accept(src, fresh, why, state, today, now)
-        if fresh is not None and src in notes and st["ok"]:
-            st["note"] = notes[src]
         status.append(st)
         if problem:
             problems.append(problem)
-    return rows, status, problems
+    return rows, status, problems, notes
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -385,7 +403,7 @@ def run(dry_run: bool, get: Get | None = None, env: dict[str, str] | None = None
     start, end = market_range()
     state_path = out / "last_good.json"
     state = load_state(state_path)
-    rows, status, problems = collect(get or http_get(e.get("WT_CONTACT_EMAIL")), e, state, start, end, today, now)
+    rows, status, problems, notes = collect(get or http_get(e.get("WT_CONTACT_EMAIL")), e, state, start, end, today, now)
     run_id = now_dt.strftime("%Y%m%dT%H%M%SZ") + "-" + hashlib.sha1(os.urandom(8)).hexdigest()[:6]
     doc = build(rows, status, start, end, run_id, now)
     if bad := validate(doc):
@@ -396,6 +414,8 @@ def run(dry_run: bool, get: Get | None = None, env: dict[str, str] | None = None
     safeio.atomic_write(out / "outbox" / "document.json", body.decode(), out)
     for p in problems:
         print(p, file=sys.stderr)
+    for n in notes:
+        print(n)
     unset = [s["id"] for s in status if not s["configured"]]
     print(f"calendar {run_id}: {len(doc['events'])} events, {len(doc['not_announced'])} months not yet announced, "
           f"{len(doc['disagreements'])} disagreements{f', not set up: {unset}' if unset else ''}, {len(body)} bytes")

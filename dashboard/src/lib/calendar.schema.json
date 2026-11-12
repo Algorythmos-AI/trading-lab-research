@@ -89,8 +89,7 @@
           "ok": { "description": "This run read the source.", "type": "boolean" },
           "fetched_at": { "description": "When the rows in use were read.", "anyOf": [{ "$ref": "#/definitions/stamp" }, { "type": "null" }] },
           "stale_since": { "description": "The first failed read since then, when the rows are carried forward.", "anyOf": [{ "$ref": "#/definitions/stamp" }, { "type": "null" }] },
-          "rows": { "type": "integer", "minimum": 0, "maximum": 2000 },
-          "note": { "description": "What this run's read did not cover, said rather than left silent (the Fed: the years it has no panel for yet).", "type": "string", "maxLength": 200 }
+          "rows": { "type": "integer", "minimum": 0, "maximum": 2000 }
         }
       }
     }
