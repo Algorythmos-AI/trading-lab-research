@@ -1,7 +1,8 @@
 # DEC-0051: The Options desk's server adds a signal word beside each side's state, logs it sealed, and tests it once
 
-- **Status: ACCEPTED on 2026-11-13.** approved_by: owner. Proposed on 2026-11-13 (#424, second round #429) and accepted by the owner's
-  merge of the pull request that changed this line ("Accepting this record" lists what that pull request changed).
+- **Status: ACCEPTED on 2026-11-13.** approved_by: owner. Proposed on 2026-11-13 (#424, second round #429) and
+  accepted by the owner's merge of the pull request that changed this line ("Accepting this record" lists what that
+  pull request changed).
   The owner approved the plan on 2026-11-12, in chat, to add a signal layer to the Options desk: one of CALL, PUT,
   WAIT or NO TRADE per focus name and side, worked out on the server from the board's own state and a fixed list of
   gates, logged sealed, and tested once, forward. Acceptance registers the test and fixes the definitions below; it
