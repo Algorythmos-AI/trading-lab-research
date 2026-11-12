@@ -361,6 +361,37 @@ def test_org_source_survives_a_token_that_cannot_read_the_project_board(tmp_path
     assert res["runs"] == [{"workflow": "ci", "conclusion": "success", "created": "x", "branch": "main"}]
 
 
+def _org_gh(milestones_error):
+    def gh_json(self, args, want=25.0):
+        if args[0] == "api" and "milestones" in args[1]:
+            raise SourceError(milestones_error)
+        if args[0] == "run":
+            return [{"workflowName": "ci", "conclusion": "success", "status": "completed", "createdAt": "x", "headBranch": "main"}]
+        return []
+    return gh_json
+
+
+@pytest.mark.parametrize("error", [
+    "gh api repos/o/planning/milestones?state=all&per_page=100 exited 1: gh: Not Found (HTTP 404)",
+    "gh failed: Resource not accessible by personal access token (HTTP 403)",
+])
+def test_org_source_survives_a_planning_repository_the_token_cannot_see(tmp_path, monkeypatch, error):
+    """The host's token covers the research repository only: no milestones, but its CI runs are still read."""
+    monkeypatch.setattr(status.Ctx, "gh_json", _org_gh(error))
+    res = status.collect("org", status.src_org, ctx(tmp_path))
+    assert res["ok"] and not res["stale"] and res["error"] is None
+    assert res["data"]["milestones"] == []
+    assert res["data"]["runs"] == [{"workflow": "ci", "conclusion": "success", "created": "x", "branch": "main"}]
+
+
+@pytest.mark.parametrize("error", ["gh api timed out after 25 s", "gh: API rate limit exceeded (HTTP 429)", "gh: Bad credentials (HTTP 401)"])
+def test_org_source_still_fails_when_the_milestones_read_fails_for_another_reason(tmp_path, monkeypatch, error):
+    """A network fault, a rate limit or a dead token is a failed read, never an empty list."""
+    monkeypatch.setattr(status.Ctx, "gh_json", _org_gh(error))
+    res = status.collect("org", status.src_org, ctx(tmp_path))
+    assert not res["ok"] and res["data"] is None and error[:20] in res["error"]
+
+
 def test_deployed_source_never_writes_to_the_live_checkout(tmp_path):
     live = tmp_path / "deployed"
     live.mkdir()

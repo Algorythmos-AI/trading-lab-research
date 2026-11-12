@@ -756,6 +756,10 @@ def src_account(ctx: Ctx) -> dict:
 # ---------------------------------------------------------------- org / GitHub
 
 
+# GitHub's answer for a repository the token cannot see: 404, or 403 "not accessible" for a fine-grained token.
+_NOT_VISIBLE = re.compile(r"HTTP 404|Not Found|Resource not accessible", re.IGNORECASE)
+
+
 def _milestone_key(title: str) -> str:
     m = re.match(r"\s*(M\d)", title or "")
     return m.group(1) if m else (title or "?")
@@ -763,7 +767,17 @@ def _milestone_key(title: str) -> str:
 
 def src_org(ctx: Ctx) -> dict:
     repo = ctx.cfg["repos"]["org"]
-    ms = ctx.gh_json(["api", f"repos/{repo}/milestones?state=all&per_page=100"]) or []
+    try:
+        ms = ctx.gh_json(["api", f"repos/{repo}/milestones?state=all&per_page=100"]) or []
+    except SourceError as e:
+        # The host's token covers the research repository only, on purpose (docs/runbooks/gcp-host.md), so GitHub
+        # answers "not found" for the organisation's private planning repository. That is a repository this run
+        # may not read, not a failed read: the milestones are shown as none, and the CI runs and releases below,
+        # which come from the research repository, are still collected. Any other failure (network, rate limit)
+        # still fails the source, so a stale page is never mistaken for an empty one.
+        if not _NOT_VISIBLE.search(str(e)):
+            raise
+        ms = []
     milestones = sorted(({"key": _milestone_key(m["title"]), "title": m["title"], "state": m["state"],
                           "open": m["open_issues"], "closed": m["closed_issues"]} for m in ms), key=lambda x: x["key"])
     proj = ctx.cfg.get("project", {})
