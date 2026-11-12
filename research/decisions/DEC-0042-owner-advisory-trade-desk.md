@@ -54,3 +54,29 @@ first.
   the pull request that records the verdict.
 - Because the states are computed from IEX last trades in the browser, they can differ from the owner's broker by
   cents and by seconds. The desk is an aid to the owner's own chart, not a substitute for it.
+
+## Note on the bad-data guards (added 2026-11-12; nothing above is changed)
+
+The desk now carries four data guards (`dashboard/src/lib/quote-guards.ts`). Each checks one focus name's snapshot
+from the board's own feed:
+
+- `bar-high-below-low`: the day's bar reads a high below its low;
+- `bar-open-outside-range`: the day's bar reads an open below its low or above its high;
+- `price-far-from-prior-close`: the last trade is more than 25% from the prior session's close (exactly 25% is not
+  far). It is a check for a bad print, not a halt or price-band rule;
+- `quote-crossed`: both sides of the quote are active and the bid is above the ask. A locked quote, or a zero price or
+  size on one side, is not crossed.
+
+A last trade outside the day's high and low is not a guard: the day's bar leaves out extended-hours and volume-only
+prints, so that happens in normal trading. A guard reads only inputs that are present and readable, so missing data
+never trips one; a missing or old price is already paused by the stale check.
+
+Each guard is off until the owner switches it on in the site's own store (`desk/guards.json`), which needs no release
+and can be undone at once. The plan is to switch one on only after its counts show how often it would have fired on
+at least three normal sessions; the server check records those counts whatever the switches say. When a guard is on
+and trips, the name reads paused ("prices paused" and "check your platform", with the reason in plain words) in the
+browser and in the server's evaluation alike, ahead of the clock gates and every state, so a paused name never shows
+an entry. With every guard off nothing on the desk changes: a test holds the board, its drawing and the server's
+evaluation byte-identical to the code before the guards, over every fixture.
+
+No owner trade, P&L, state log or result was viewed for this note.
