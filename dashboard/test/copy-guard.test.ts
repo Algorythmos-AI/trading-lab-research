@@ -103,6 +103,9 @@ const FILES = [
   "../src/lib/feed-compare-bars.ts",
   "../src/app/api/cron/feeds/route.ts",
   "../src/app/api/cron/feeds-report/route.ts",
+  "../src/lib/owner-labels.ts",
+  "../src/lib/owner-labels-fetch.ts",
+  "../src/lib/owner-labels-store.ts",
 ];
 
 const BANNED = [

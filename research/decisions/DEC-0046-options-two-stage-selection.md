@@ -1,10 +1,11 @@
 # DEC-0046: The Options desk picks its names in two stages, after the close and before the open
 
-- **Status: PROPOSED on 2026-11-12.** Drafted for the owner to change or accept. It becomes ACCEPTED only when the
-  owner merges a pull request that says so in this line. The pull request that carries this draft also carries the
-  Stage 1 scoring code (`src/wt/options/select.py`), which scores a saved input bundle and nothing else: no job runs
-  it and nothing reads its output before this record is accepted. That code has run on synthetic bars for everything,
-  and on real bars only for the count recorded under "The count on saved bars".
+- **Status: ACCEPTED on 2026-11-12.** approved_by: owner. Proposed on 2026-11-12 (#400) and accepted by the owner's
+  merge of the pull request that changed this line. Acceptance fixes the rules below; it starts no job. The Stage 1
+  scoring code (`src/wt/options/select.py`) scores a saved input bundle and nothing else, and no job runs it yet. It
+  has run on synthetic bars for everything, and on real bars only for the count recorded under "The count on saved
+  bars". Stage 2's four thresholds are still to be set by a dated amendment, and no gate night runs before DEC-0047
+  is accepted (section 7).
 - **The five-session switch is an operational release gate.** It proves that the code runs correctly on real data.
   Passing it is not evidence that the selection is better than the one it replaces. Any claim of accuracy is made
   only by the registered forward experiment (to be DEC-0047), read once. Until that read the page shows facts, never
