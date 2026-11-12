@@ -34,6 +34,8 @@ from zoneinfo import ZoneInfo
 import requests
 
 from wt.core.config import STATE_DIR
+from wt.data.feeds import FeedNotNamed, require_feed
+from wt.ops import alerts as pg
 from wt.ops import publish
 from wt.options import levels as lv
 from wt.options import session
@@ -582,6 +584,14 @@ def _alpaca_get(url: str, params: dict[str, str], get: Get = requests.get, sleep
     retry, at worst CALL_WORST_S, would end past the run's budget."""
     if budget is not None and not budget.fits(CALL_WORST_S):
         raise OutOfTime("the run's time budget is spent")
+    # A market-data request that names no feed is refused before it is sent (B9). FeedNotNamed is a ValueError, so
+    # it takes the path of any unusable answer (_UNUSABLE): the source is unreachable, `data.reachable` fails and
+    # pages, and the run still exits 0. Not retried: it would be refused again.
+    try:
+        require_feed(url, params)
+    except FeedNotNamed:
+        pg.say("pipeline check: a market-data request named no feed; refused before sending", err=True)
+        raise
     h = {"APCA-API-KEY-ID": os.environ.get("APCA_API_KEY_ID", ""), "APCA-API-SECRET-KEY": os.environ.get("APCA_API_SECRET_KEY", "")}
     try:
         r = get(url, params=params, headers=h, timeout=(CONNECT_S, READ_S), allow_redirects=False)

@@ -12,13 +12,15 @@ from typing import Any
 
 import pandas as pd
 import pytest
+import requests
 
 from wt.data import tape
 from wt.data.alpaca import DATA, AlpacaREST, HybridFeed, RateLimiter
 from wt.data.feeds import FeedNotNamed, require_feed
 from wt.live.runner_b import LiveData
+from wt.live import runner_o
 from wt.live.runner_o import AlpacaFeeds
-from wt.options import pipeline_check
+from wt.options import live, pipeline_check
 from wt.options.live import OptionsAccount
 from wt.scanner import features
 
@@ -158,3 +160,113 @@ def test_a_site_with_its_feed_dropped_is_refused() -> None:
     url, params = sent[0]
     with pytest.raises(FeedNotNamed):
         require_feed(url, {k: v for k, v in params.items() if k != "feed"})
+
+
+# ---------------------------------------------------------------- the three modules with their own HTTP session
+# Each now calls `require_feed` in its one request helper (runner_o AlpacaFeeds._get, options.live
+# OptionsAccount._get, pipeline_check._alpaca_get). Every request each helper sends is driven below through the real
+# code path, pagination follow-ups, the paper host's listings and pipeline_check's retry included, once with the guard
+# replaced by a no-op (the code as it was) and once with it in place: the requests that leave must be the same, in the
+# same order and number, and the guard must have seen each one. What a refusal does in each module is tested beside
+# that module's own failure handling (test_options_clone_session.py, test_options_live.py, test_pipeline_check.py).
+class _PagedSession:
+    """Records a copy of every GET; answers each path with the body shape its caller reads, and a next page once for
+    each request that has not asked for one yet. `fail_first` raises a ConnectionError on the first call (a retry)."""
+
+    def __init__(self, sent: Sent, fail_first: bool = False) -> None:
+        self.sent, self.fail_first = sent, fail_first
+
+    def get(self, url: str, params: Any = None, **_: Any) -> _Resp:
+        self.sent.append((url, dict(params) if params is not None else None))
+        if self.fail_first:
+            self.fail_first = False
+            raise requests.ConnectionError("blip")
+        token = None if (params or {}).get("page_token") else "page-2"
+        path = url.split("data.alpaca.markets", 1)[-1].split("paper-api.alpaca.markets", 1)[-1]
+        if path == "/v2/positions":
+            return _Resp([])
+        if path == "/v2/clock":
+            return _Resp({})
+        if path == "/v2/stocks/snapshots":
+            return _Resp({})
+        if path == "/v2/stocks/bars":
+            return _Resp({"bars": {"SPY": []}, "next_page_token": token})
+        if path.startswith("/v1beta1/options/snapshots"):
+            return _Resp({"snapshots": {}, "next_page_token": token})
+        if path == "/v2/options/contracts":
+            return _Resp({"option_contracts": [], "next_page_token": token})
+        raise AssertionError(f"unexpected request: {url}")
+
+
+def _clone_helper(sent: Sent) -> None:
+    for feed in ("indicative", "opra"):
+        f = AlpacaFeeds("k", "s", feed, _PagedSession(sent))   # type: ignore[arg-type]
+        f.minutes(["SPY", "QQQ"], T0, T0)
+        f.daily(["SPY"], T0, T0)
+        f.chain("SPY", DAY)
+        f.quotes(["SPY261112C00600000"])
+        f.contracts("SPY", DAY)
+        f.contracts("SPY", DAY, DAY + dt.timedelta(days=7))
+
+
+def _options_live_helper(sent: Sent) -> None:
+    acct = OptionsAccount("k", "s", _PagedSession(sent))        # type: ignore[arg-type]
+    acct.positions()
+    acct.clock()
+    acct.closes(["SPY", "QQQ"])
+    acct.bars(["SPY"], "1Day", T0, T0)
+    acct.bars(["SPY"], "30Min", T0, T0)
+    acct.contracts("SPY", 590.0, 610.0, DAY, DAY + dt.timedelta(days=35))
+
+
+def _pipeline_check_helper(sent: Sent) -> None:
+    s = _PagedSession(sent, fail_first=True)                    # the first call (daily bars) is retried once
+    pipeline_check.fetch_bars(["SPY"], "2026-11-12", get=s.get, sleep=lambda x: None)
+    pipeline_check.fetch_listings(["SPY", "QQQ"], "2026-11-12", get=s.get, sleep=lambda x: None)
+    pipeline_check.fetch_snapshot(["SPY"], get=s.get, sleep=lambda x: None)
+
+
+D, P = DATA, "https://paper-api.alpaca.markets"
+# (module, driver, the URL of every request sent, in order). The params are compared whole with the unguarded run.
+OWN_SESSIONS = {
+    "src/wt/live/runner_o.py": (runner_o, _clone_helper, 2 * [
+        f"{D}/v2/stocks/bars", f"{D}/v2/stocks/bars",                          # minutes, page 1 and 2 (iex)
+        f"{D}/v2/stocks/bars", f"{D}/v2/stocks/bars",                          # daily (sip)
+        f"{D}/v1beta1/options/snapshots/SPY", f"{D}/v1beta1/options/snapshots/SPY",   # chain (the option feed)
+        f"{D}/v1beta1/options/snapshots", f"{D}/v1beta1/options/snapshots",    # quotes (the option feed)
+        f"{P}/v2/options/contracts", f"{P}/v2/options/contracts",              # one expiry (paper host, no feed)
+        f"{P}/v2/options/contracts", f"{P}/v2/options/contracts"]),            # a range of expiries
+    "src/wt/options/live.py": (live, _options_live_helper, [
+        f"{P}/v2/positions", f"{P}/v2/clock",                                  # paper host, no params
+        f"{D}/v2/stocks/snapshots",                                            # closes (iex)
+        f"{D}/v2/stocks/bars", f"{D}/v2/stocks/bars",                          # daily bars, two pages (sip)
+        f"{D}/v2/stocks/bars", f"{D}/v2/stocks/bars",                          # half-hour bars, two pages (sip)
+        f"{P}/v2/options/contracts", f"{P}/v2/options/contracts"]),            # listings, two pages
+    "src/wt/options/pipeline_check.py": (pipeline_check, _pipeline_check_helper, [
+        f"{D}/v2/stocks/bars", f"{D}/v2/stocks/bars", f"{D}/v2/stocks/bars",   # bars: a blip, its retry, page 2 (sip)
+        f"{P}/v2/options/contracts", f"{P}/v2/options/contracts",              # one listing per name
+        f"{D}/v2/stocks/snapshots"]),                                          # the snapshot (iex)
+}
+
+
+@pytest.mark.parametrize("site", list(OWN_SESSIONS))
+def test_the_own_session_guard_lets_every_request_out_unchanged(site: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    module, drive, urls = OWN_SESSIONS[site]
+    before: Sent = []
+    with monkeypatch.context() as m:
+        m.setattr(module, "require_feed", lambda url, params: None)          # the helper as it was
+        drive(before)
+    checked: Sent = []
+
+    def spy(url: Any, params: Any) -> None:
+        checked.append((url, dict(params) if params is not None else None))
+        require_feed(url, params)
+    monkeypatch.setattr(module, "require_feed", spy)
+    after: Sent = []
+    drive(after)
+    assert [u for u, _ in after] == urls                                 # every request, in order, none added or lost
+    assert after == before                                               # same URL, same params, same count
+    retried = 1 if site.endswith("pipeline_check.py") else 0             # a retry resends the call already checked
+    assert len(checked) == len(after) - retried and all(c in after for c in checked)
+    pages = [p for _, p in after if p and "page_token" in p]
+    assert pages and all(p["page_token"] == "page-2" for p in pages)     # the follow-ups were sent and checked too

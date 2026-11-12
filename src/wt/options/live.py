@@ -37,6 +37,8 @@ from typing import Any
 import requests
 
 from wt.core.config import CONFIG_DIR, ROOT, STATE_DIR, load_yaml
+from wt.data.feeds import FeedNotNamed, require_feed
+from wt.ops import alerts as pg
 from wt.ops import publish, safeio
 from wt.options import intraday
 from wt.options import levels as lv
@@ -101,6 +103,14 @@ class OptionsAccount:
 
     def _get(self, path: str, params: dict[str, str] | None = None, host: str = PAPER_HOST,
              tries: int = GET_TRIES) -> Any:
+        # A market-data request that names no feed is refused before it is sent (B9), as the fault of a failed
+        # read: its caller's own BrokerFault handling applies (the extra it was for is left out and named in
+        # `problems`; the positions still go out).
+        try:
+            require_feed(host + path, params)
+        except FeedNotNamed:
+            pg.say("options live: a market-data request named no feed; refused before sending", err=True)
+            raise BrokerFault("feed-not-named") from None
         last = "network"
         for i in range(tries):
             try:
