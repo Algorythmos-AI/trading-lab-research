@@ -142,3 +142,14 @@ tiles, the status rail, each level ladder, the manage card of an open trade, and
 record's engine fields. It does not cover a live session's data, which no one has yet seen with a guard on.
 
 No owner trade, P&L, state log or result was viewed for this note.
+
+## Note on DEC-0051 (added 2026-11-13)
+
+DEC-0051, proposed on 2026-11-13, amends section 1 once it is accepted: beside each side's state the page may show
+the signal word the server logged for it (CALL, PUT, WAIT or NO TRADE), with its lifecycle and gates. The states,
+their order and their rules do not change, a signal word never changes a state, and no signal is worked out in the
+browser. Section 3's strings test is extended to the signal words, lifecycle words and gate reasons. Sections 2, 3
+and 4 otherwise stand. The exact wording is in DEC-0051, "Amendments to earlier records". The text above is otherwise
+unchanged.
+
+No owner trade, P&L, state log or result was viewed for this note.
