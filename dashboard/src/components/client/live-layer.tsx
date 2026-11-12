@@ -27,6 +27,7 @@ import { liveRead, sessionShare, TRAIL_MS, type LiveRead, type LiveStateName, ty
 import { cn } from "@/lib/utils";
 import type { Backoff } from "@/lib/quote-poll";
 import { useNow } from "./use-now";
+import { usePublishPriceStatus } from "./price-status";
 import { POLL_MS, useQuoteFeed, type Feed } from "./use-quotes";
 
 interface Live {
@@ -59,6 +60,9 @@ export function LiveQuotes({
 }) {
   const { feed, backoff, retryNow } = useQuoteFeed(symbols, enabled);
   const now = useNow(1_000);
+  // The site header shows this poll's freshness in place of the lab's status pill (price-pill.ts). An old edition
+  // never polls, so it publishes nothing and the header keeps the lab's pill.
+  usePublishPriceStatus(enabled, feed.status, feed.status === "ok" ? feed.source : null, feed.status === "ok" ? feed.receivedAt : null, backoff !== null);
   return <LiveContext.Provider value={{ feed, session, now, backoff, retryNow }}>{children}</LiveContext.Provider>;
 }
 

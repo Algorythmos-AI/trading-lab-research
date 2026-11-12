@@ -473,7 +473,7 @@ test("the HFT page is a composed empty state while the desk has not published", 
   await expect(main.locator('[data-slot="badge"]')).toHaveCount(0);
   expect(((await main.innerText()) ?? "").replace("F0 to F7", "").replace(/stopped on 14 October 2026 \(HFT-DEC-0005\)/, "")).not.toMatch(/\d|—/);
   // the header says there is no data, and the footer names no snapshot
-  await expect(page.getByRole("banner").getByRole("status")).toHaveText("No data yet");
+  await expect(page.getByRole("banner").getByRole("status")).toHaveText(/^Lab host \(VM\): no data yet/);
   await expect(page.locator("footer")).not.toContainText("Snapshot");
   await expect(page.getByRole("navigation", { name: "Desk" }).getByRole("link", { name: "HFT" })).toHaveAttribute("aria-current", "true");
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

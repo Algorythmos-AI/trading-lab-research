@@ -6,7 +6,9 @@ import { deskOfPath, type DeskName } from "@/lib/desk";
 import { deskNote } from "@/lib/desk-state";
 import { describeAge, freshness, type FreshState, shortAge } from "@/lib/freshness";
 import type { ExpectedWindow } from "@/lib/types";
+import { pricePill, type PricePillState, type PriceStatus } from "@/lib/price-pill";
 import { cn } from "@/lib/utils";
+import { usePriceStatus } from "./price-status";
 import { useNow } from "./use-now";
 
 /**
@@ -23,34 +25,43 @@ const STYLE: Record<FreshState, { cls: string; Icon: typeof CircleCheck }> = {
   unknown: { cls: "bg-neutral-soft text-neutral border-neutral/25", Icon: CircleDashed },
 };
 
+// The header is one row on a laptop (the browser tests hold it), so every wording here stays about as short as the
+// longest it replaced; the tooltip carries the longer explanation.
 function label(state: FreshState, ageMin: number | null): string {
   switch (state) {
     case "fresh":
-      return `Updated ${describeAge(ageMin ?? 0)}`;
+      return `Lab host (VM) · ${describeAge(ageMin ?? 0)}`;
     case "late":
-      return `Late: ${describeAge(ageMin ?? 0)}`;
+      return `Lab host (VM) late · ${shortAge(ageMin ?? 0)}`;
     case "stopped":
-      return `Stopped: ${describeAge(ageMin ?? 0)}`;
+      return `Lab host (VM) stopped · ${shortAge(ageMin ?? 0)}`;
     case "asleep":
-      return "Between sessions (expected)";
+      return "Lab host (VM) · resting";
     default:
-      return "No data yet";
+      return "Lab host (VM): no data yet";
   }
+}
+
+/** The tooltip: what the pill measures, and for a resting host that the quiet is expected. */
+function hostTitle(state: FreshState, asOf: string | null): string {
+  const what = "Status of the lab host, the cloud VM that runs the lab's jobs, published every few minutes. Not a price.";
+  const rest = state === "asleep" ? " Between sessions now, which is expected." : "";
+  return `${what}${rest}${asOf ? ` Last published ${asOf}.` : ""}`;
 }
 
 /** The phone's word for the pill, or null where the full words are short enough already. */
 export function pillWord(state: FreshState, ageMin: number | null): string | null {
   switch (state) {
     case "fresh":
-      return `Updated ${shortAge(ageMin ?? 0)}`;
+      return `Host ${shortAge(ageMin ?? 0)}`;
     case "late":
-      return `Late ${shortAge(ageMin ?? 0)}`;
+      return `Host late ${shortAge(ageMin ?? 0)}`;
     case "stopped":
-      return `Stopped ${shortAge(ageMin ?? 0)}`;
+      return `Host stopped ${shortAge(ageMin ?? 0)}`;
     case "asleep":
-      return "Between";
+      return "Host resting";
     default:
-      return null;
+      return "Host: no data";
   }
 }
 
@@ -67,7 +78,11 @@ function Words({ full, short }: { full: string; short: string | null }) {
   );
 }
 
-/** Header freshness pill. The server passes its own reading; the browser keeps it current. */
+/**
+ * Header freshness pill: the age of the lab's status snapshot (job health, paper accounts, research), which the host
+ * publishes every few minutes. It is not a price: it says "Lab host (VM)", the machine that runs the lab's jobs, so it is not read as the board's freshness.
+ * The server passes its own reading; the browser keeps it current.
+ */
 export function FreshnessPill({
   asOf,
   windows,
@@ -84,11 +99,33 @@ export function FreshnessPill({
     <span
       role="status"
       aria-live="polite"
-      title={asOf ? `Snapshot time ${asOf}` : undefined}
+      title={hostTitle(f.state, asOf)}
       className={cn(PILL, cls)}
     >
       <Icon aria-hidden className="size-3.5 shrink-0" />
       <Words full={label(f.state, f.ageMin)} short={pillWord(f.state, f.ageMin)} />
+    </span>
+  );
+}
+
+const PRICE_STYLE: Record<PricePillState, { cls: string; Icon: typeof CircleCheck }> = {
+  live: STYLE.fresh,
+  paused: STYLE.stopped,
+  connecting: STYLE.unknown,
+  off: STYLE.late,
+  closed: STYLE.asleep,
+};
+
+/** On a page that polls live prices: how fresh they are, in the lab pill's place (price-pill.ts). */
+function PricePillView({ status }: { status: PriceStatus }) {
+  const nowMs = useNow(1_000);
+  // Before the browser's clock is known nothing is claimed: the pill only says it is connecting.
+  const pill = nowMs === null ? null : pricePill(status, nowMs);
+  const { cls, Icon } = PRICE_STYLE[pill?.state ?? "connecting"];
+  return (
+    <span role="status" title={pill?.title} className={cn(PILL, cls)}>
+      <Icon aria-hidden className="size-3.5 shrink-0" />
+      <Words full={pill?.full ?? "Prices connecting"} short={pill?.short ?? "Connecting"} />
     </span>
   );
 }
@@ -105,6 +142,7 @@ export interface DeskFreshness {
  */
 export function DeskFreshnessPill({ desks }: { desks: Record<DeskName, DeskFreshness> }) {
   const desk = deskOfPath(usePathname());
+  const price = usePriceStatus();
   if (desk !== "stocks" && deskNote(desk).state === "closed") {
     return (
       <span
@@ -116,6 +154,7 @@ export function DeskFreshnessPill({ desks }: { desks: Record<DeskName, DeskFresh
       </span>
     );
   }
+  if (desk === "stocks" && price) return <PricePillView status={price} />;
   const d = desks[desk];
   return <FreshnessPill asOf={d.asOf} windows={d.windows} initial={d.initial} />;
 }
