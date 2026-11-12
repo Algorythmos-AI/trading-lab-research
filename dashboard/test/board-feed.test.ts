@@ -17,7 +17,17 @@ import {
   stampKey,
   verifyChain,
 } from "@/lib/board-feed-judge";
-import { dayToSeal, nextOpenAfter, probeSpy, readBoardFeedDay, resetStampWarnings, type StampDeps, type StampStore, stampBoardFeed } from "@/lib/board-feed-stamp";
+import {
+  dayToSeal,
+  nextOpenAfter,
+  probeSpy,
+  readBoardFeedDay,
+  resetStampWarnings,
+  STAMP_TIMEOUT_MS,
+  type StampDeps,
+  type StampStore,
+  stampBoardFeed,
+} from "@/lib/board-feed-stamp";
 import { resetFeedWarning } from "@/lib/alpaca-feed";
 import { fetchQuotes, resetQuoteCache } from "@/lib/quote";
 
@@ -506,20 +516,91 @@ describe("stampBoardFeed", () => {
     expect(g.writes()).toEqual([]);
   });
 
-  it("the put is not started past second 45 of the minute: 44.9 s writes, 45.0 s is late", async () => {
+  it("the put is not started at or past second 57 of the minute: 56.999 s writes, 57.000 s is late", async () => {
     const run = (iso0: string, isoPut: string) => {
       const clock = [AT(iso0), AT(iso0), AT(isoPut)];
       let i = 0;
       return stampDeps({ now: () => clock[Math.min(i++, clock.length - 1)]! });
     };
-    const ok = run("2026-11-12T14:31:44Z", "2026-11-12T14:31:44.900Z");
+    const ok = run("2026-11-12T14:31:56Z", "2026-11-12T14:31:56.999Z");
     expect(await stampBoardFeed(ok.deps)).toBe("written");
     expect(ok.writes()).toEqual(["create desk/feeds/board/2026-11-12/0931.json"]);
-    const late = run("2026-11-12T14:31:44Z", "2026-11-12T14:31:45.000Z");
+    const late = run("2026-11-12T14:31:56Z", "2026-11-12T14:31:57.000Z");
     expect(await stampBoardFeed(late.deps)).toBe("late");
     expect(late.writes()).toEqual([]);
     expect(JSON.parse(logged.at(-1)!)).toMatchObject({ evt: "board-feed.stamp", outcome: "late" });
   });
+
+  it("runs that start where the cron fires (second 47 to 50), on the real 3 s store limit, write: the 2026-11-12 case", async () => {
+    // [run start (at), the store's limit starts (after the SPY read), the check before the put], as seen in production
+    const cases = [
+      ["47.100", "47.600", "49.000"],
+      ["47.700", "48.200", "50.400"],
+      ["50.400", "51.000", "53.680"],
+    ];
+    for (const [i, secs] of cases.entries()) {
+      const minute = 31 + i;
+      const clock = secs.map((s) => AT(`2026-11-12T14:${minute}:${s}Z`));
+      let j = 0;
+      const f = stampDeps({ now: () => clock[Math.min(j++, clock.length - 1)]!, timeoutMs: STAMP_TIMEOUT_MS });
+      expect(await stampBoardFeed(f.deps)).toBe("written");
+      expect(f.writes()).toEqual([`create desk/feeds/board/2026-11-12/09${minute}.json`]);
+      expect(JSON.parse(f.store.get(`desk/feeds/board/2026-11-12/09${minute}.json`)!).at).toBe(`2026-11-12T14:${minute}:${secs[0]}Z`);
+    }
+  });
+
+  it("each late line says which check refused and at which second", async () => {
+    const run = (secs: [string, string, string], putMin = "31") => {
+      const clock = [AT(`2026-11-12T14:31:${secs[0]}Z`), AT(`2026-11-12T14:31:${secs[1]}Z`), AT(`2026-11-12T14:${putMin}:${secs[2]}Z`)];
+      let i = 0;
+      return stampDeps({ now: () => clock[Math.min(i++, clock.length - 1)]!, timeoutMs: STAMP_TIMEOUT_MS });
+    };
+    expect(await stampBoardFeed(run(["56.000", "56.000", "57.250"]).deps)).toBe("late");
+    expect(JSON.parse(logged.at(-1)!)).toMatchObject({ outcome: "late", reason: "cutoff", second: 57.25 });
+    expect(await stampBoardFeed(run(["47.000", "47.500", "50.600"]).deps)).toBe("late");
+    expect(JSON.parse(logged.at(-1)!)).toMatchObject({ outcome: "late", reason: "deadline", second: 50.6 });
+    expect(await stampBoardFeed(run(["58.000", "58.500", "00.100"], "32").deps)).toBe("late");
+    expect(JSON.parse(logged.at(-1)!)).toMatchObject({ outcome: "late", reason: "minute", second: 0.1 });
+  });
+
+  it("the write is aborted at the end of its minute: a put still open then is late, and its signal fires", async () => {
+    let seen: AbortSignal | null = null;
+    // the pre-write check at 56.95 s passes; the minute ends 3.05 s later, with the put still open
+    const clock = [AT("2026-11-12T14:31:56.900Z"), AT("2026-11-12T14:31:56.900Z"), AT("2026-11-12T14:31:56.950Z")];
+    let i = 0;
+    const f = stampDeps({ now: () => clock[Math.min(i++, clock.length - 1)]!, timeoutMs: 10_000 });
+    const store: StampStore = {
+      ...f.deps.store!,
+      create: (_p, _b, signal) => {
+        seen = signal;
+        return new Promise<void>((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason)));
+      },
+    };
+    const t0 = Date.now();
+    expect(await stampBoardFeed({ ...f.deps, store })).toBe("late");
+    const waited = Date.now() - t0;
+    expect(seen!.aborted).toBe(true);
+    expect(f.store.has("desk/feeds/board/2026-11-12/0931.json")).toBe(false);
+    // aborted by the minute's end (about 3.05 s after the check), well before the 10 s deadline
+    expect(waited).toBeGreaterThanOrEqual(2_900);
+    expect(waited).toBeLessThan(6_000);
+    expect(JSON.parse(logged.at(-1)!)).toMatchObject({ evt: "board-feed.stamp", outcome: "late", reason: "minute-end", second: 56.95 });
+  }, 15_000);
+
+  it("a refused create is still a duplicate, even when it comes back after the minute's end", async () => {
+    const f = stampDeps({ now: () => AT("2026-11-12T14:31:56.500Z") });
+    f.store.set("desk/feeds/board/2026-11-12/0931.json", "{}");
+    expect(await stampBoardFeed(f.deps)).toBe("duplicate");
+    // the store answers "already there" only after the minute-end abort has fired
+    const g = stampDeps({ now: () => AT("2026-11-12T14:31:56.950Z"), timeoutMs: 10_000 });
+    const store: StampStore = {
+      ...g.deps.store!,
+      create: (_p, _b, signal) =>
+        new Promise<void>((_resolve, reject) => signal.addEventListener("abort", () => reject(new PreconditionFailed()))),
+    };
+    expect(await stampBoardFeed({ ...g.deps, store })).toBe("duplicate");
+  }, 15_000);
+
 
   it("no VERCEL_DEPLOYMENT_ID in production: the stamp is written with deployment null, and one log line per instance", async () => {
     let now = AT("2026-11-12T14:31:20Z");
