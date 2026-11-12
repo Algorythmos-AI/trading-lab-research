@@ -20,7 +20,7 @@ import { Notice } from "@/components/ui/notice";
 import { sydney, weekDate } from "@/lib/format";
 import { hourlyBySymbol } from "@/lib/hourly";
 import { interestBySymbol } from "@/lib/oi";
-import { builtFromOld, editionState, isDeskView, isHalfDay, mapView, viewForClock, type DeskPane, type Options } from "@/lib/options";
+import { builtFromNotice, editionState, isDeskView, isHalfDay, mapView, viewForClock, type DeskPane, type Options } from "@/lib/options";
 import { showReview } from "@/lib/ledger";
 import { withLeaders } from "@/lib/entry-checks";
 import { boardDay } from "@/lib/trade-now";
@@ -40,13 +40,13 @@ export const metadata = { title: "Options" };
 
 const INTRO = "Where each name sits against its support and resistance, rebuilt after every close. Research only; nothing here is an order.";
 
-/** Levels built from a close more than a weekend behind their session: a day's bars never arrived. */
+/** Levels not built from the close just before their session: a pull that missed a session, or a wrong stamp. */
 function OldCloseNotice({ e }: { e: Options }) {
-  if (!builtFromOld(e.session, e.built_from)) return null;
+  const text = builtFromNotice(e.session, e.built_from);
+  if (!text) return null;
   return (
     <Notice tone="bad" size="sm" role="alert">
-      These levels for {weekDate(e.session)} were built from the {weekDate(e.built_from)} close, more than a weekend earlier. A
-      day&apos;s bars are missing, so check them before use.
+      {text}
     </Notice>
   );
 }
