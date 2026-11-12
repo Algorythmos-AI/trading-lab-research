@@ -97,6 +97,12 @@ const FILES = [
   "../src/lib/fill-check-fetch.ts",
   "../src/lib/fill-check-run.ts",
   "../src/app/api/desk/fill-check/route.ts",
+  "../src/lib/feeds-live.ts",
+  "../src/lib/feeds-live-route.ts",
+  "../src/lib/feeds-page.ts",
+  "../src/app/api/feeds/live/route.ts",
+  "../src/components/client/feeds-live.tsx",
+  "../src/app/options/feeds/page.tsx",
 ];
 
 const BANNED = [

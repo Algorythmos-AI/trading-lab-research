@@ -1,4 +1,6 @@
-/* The desk's pictures leave the feed health strip out (visual.spec.ts): it is pictured on its own. */
-[data-feed-strip] {
+/* The desk's pictures leave the feed health strip (and its link to the Feeds page) out (visual.spec.ts): the strip is
+   pictured on its own. */
+[data-feed-strip],
+[data-feeds-link] {
   display: none !important;
 }

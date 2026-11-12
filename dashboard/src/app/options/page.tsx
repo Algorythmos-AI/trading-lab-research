@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { PageHeading } from "@/components/page-heading";
 import { TradeRulesFor } from "@/components/trade-rules";
 import { BoardTable, EditionPanel, HowToRead, NoOptions, PaperPanel, RulesPanel, StructurePanel, TickerCards } from "@/components/options";
@@ -164,6 +165,12 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
               {feeds ? (
                 <PaneBoundary name="Feed health">
                   <FeedStrip stamps={feeds} serverNow={now.getTime()} evalOn={evalSwitch === "log"} />
+                  {/* Which feed is authoritative and how the feeds compared (DEC-0050): its own page. */}
+                  <p data-feeds-link className="-mt-1 text-right text-xs">
+                    <Link className="text-muted-foreground hover:text-foreground underline" href="/options/feeds">
+                      Feeds
+                    </Link>
+                  </p>
                 </PaneBoundary>
               ) : null}
               <div data-cockpit-hide className="contents">
