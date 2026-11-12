@@ -19,7 +19,7 @@ describe("the header on the closed crypto desk", () => {
     const html = renderToString(createElement(DeskFreshnessPill, { desks }));
     expect(text(html)).toBe("Desk closed");
     expect(html).toContain('role="status"');
-    expect(html).not.toMatch(/Stopped|Late|Updated|No data/);
+    expect(html).not.toMatch(/Lab host|Stopped|Late|Updated|No data/i);
   });
 
   it("renders no section tabs: one page, no empty landmark", () => {
@@ -30,7 +30,7 @@ describe("the header on the closed crypto desk", () => {
   it("leaves the stocks and HFT desks as they were", () => {
     for (const path of ["/", "/hft"]) {
       nav.pathname = path;
-      expect(text(renderToString(createElement(DeskFreshnessPill, { desks })))).toMatch(/^Stopped: /);
+      expect(text(renderToString(createElement(DeskFreshnessPill, { desks })))).toMatch(/^Lab host \(VM\) stopped: /);
       const tabs = renderToString(createElement(NavTabs));
       expect(tabs).toContain('aria-label="Sections"');
       expect(tabs).toContain(`href="${path}"`);
