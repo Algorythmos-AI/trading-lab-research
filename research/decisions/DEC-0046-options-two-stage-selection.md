@@ -3,21 +3,23 @@
 - **Status: PROPOSED on 2026-11-12.** Drafted for the owner to change or accept. It becomes ACCEPTED only when the
   owner merges a pull request that says so in this line. The pull request that carries this draft also carries the
   Stage 1 scoring code (`src/wt/options/select.py`), which scores a saved input bundle and nothing else: no job runs
-  it and nothing reads its output before this record is accepted.
+  it and nothing reads its output before this record is accepted. That code has run on synthetic bars for everything,
+  and on real bars only for the count recorded under "The count on saved bars".
 - **The five-session switch is an operational release gate.** It proves that the code runs correctly on real data.
   Passing it is not evidence that the selection is better than the one it replaces. Any claim of accuracy is made
   only by the registered forward experiment (to be DEC-0047), read once. Until that read the page shows facts, never
   a claim of skill.
 - **Written before any affected P&L is viewed.** No P&L, no outcome of any pick and no backtest of this selection
-  was viewed or run in writing it. The scoring code has run only on synthetic bars in the unit tests. The author read
-  no result, ledger or journal file. What the author did read is listed below.
+  was viewed or run in writing it. On real bars only the validity checks and F3's zone distance were run, for a count
+  of status frequencies (below); no pick, rank, score, eligibility, forward return or result was computed or read. The
+  author read no result, ledger or journal file. What the author did read is listed below.
 - **Starts no trial.** The forward experiment is DEC-0047. It is not written yet, because its outcome is the
   ledger's rule copied verbatim, and the owner has still to supply that rule. No hypothesis, experiment or row of
   `config/trial_registry.yaml` is added here.
 - **Amends nothing.** It does not amend DEC-0035: the card's ceiling, floor, target and bias rules stay exactly as
   they are. It does not decide the board's data feed and does not start, end or change any experiment; the status
   of EXP-0031 and the board's feed are governed by DEC-0049 and the records that follow it.
-- **Depends on:** DEC-0005, DEC-0032, DEC-0035, DEC-0038, DEC-0042, DEC-0044, DEC-0049.
+- **Depends on:** DEC-0005, DEC-0032, DEC-0035, DEC-0038, DEC-0042, DEC-0044, DEC-0045, DEC-0049.
 
 ## Why
 
@@ -25,7 +27,7 @@ The after-close edition carries four focus names. Today they are picked by a clo
 whose inputs are not saved beside its output, so a night cannot be replayed. A name can look current when its data is
 stale, the overnight gap is not checked before the open, and the page shows four names when fewer may be valid.
 
-This record fixes a selection that can be replayed from saved inputs, in two stages: a score of all twelve names
+This record sets a selection that can be replayed from saved inputs, in two stages: a score of all twelve names
 after the close (Stage 1), and a confirmation of each name before the open (Stage 2). Every rule, limit and weight is
 written here, or in a file this record names by its hash, before the selection runs on real data. Nothing in it is
 tuned on results.
@@ -36,8 +38,10 @@ tuned on results.
 - The records DEC-0032, DEC-0035, DEC-0042, DEC-0044, DEC-0045 and DEC-0049, and the repository's code for the levels
   engine (`src/wt/options/levels.py`), the edition (`src/wt/options/edition.py`), the event calendar readers
   (`src/wt/risk/events.py`) and the desk's names (`config/options_desk.yaml`).
-- **No outcome.** No pick of this selection exists. No session was scored on real bars, and no result of any picker,
-  card, clone trade or owner trade was read.
+- **The count on saved bars** (recorded below): how often each validity reason and `no_zone` would occur, per name,
+  on 250 past nights. Status frequencies only.
+- **No outcome.** No pick of this selection exists. No session was scored or ranked on real bars, and no result of any
+  picker, card, clone trade or owner trade was read.
 
 ## Decision
 
@@ -56,6 +60,13 @@ names it was built for.
   host's options job and the pipeline check already read daily bars for levels. The input bundle records the
   adjustment its bars carry (`"adjustment": "split"`), and the scorer refuses a bundle that does not say `split`. Stage
   2's prior close (G1) stays the raw daily close.
+  - The adjustment is **trusted** from that key, not verified. The `suspect_split` backstop catches only a one-day
+    close ratio outside 0.5 to 2.0, so a missed 3:2 or 5:4 split (a ratio of about 0.67 or 0.8) would pass it.
+  - `adjustment=split` does not adjust for dividends. An ex-dividend drop therefore enters the returns, the true range
+    and the levels as a price move. The effect is small for these names but systematic: it falls on every ex-date.
+- **Numbers.** A bundle holding a NaN or an infinite number anywhere is not in the documented shape and is refused (exit
+  code 2). An integer too large for a float in one name's bar is that name's `bad_bar`; the other names are scored as
+  usual.
 - The selection's own data (Stage 1's daily bars, Stage 2's pre-market checks) is SIP, named on every request,
   independent of the board's feed.
 - **Where it runs (owner decision, 2026-11-12).** Stage 1 and Stage 2 run as host jobs, not cloud routines. The numbers
@@ -74,9 +85,11 @@ calendar (`levels.next_session`), never from the clock. The code is `src/wt/opti
 gives the reason:
 
 1. `bad_bar`: a bar that cannot be read; dates not strictly increasing (a duplicate or an out-of-order date); a bar
-   dated after `D`; in the window, a bar without high ≥ low > 0, an open or close not above 0, or a negative volume; or
-   a rangeless window, whose ATR14, ATR5 or ATR20 is zero. These are data faults. The plan names no code for them;
-   `bad_bar` is that code.
+   dated after `D`; in the window, a bar without high ≥ low > 0, a bar whose open or close lies outside its own
+   high-low range (`not (low ≤ open ≤ high and low ≤ close ≤ high)`; exactly at the high or the low is inside), or a
+   negative volume; or a rangeless window, whose ATR14, ATR5 or ATR20 is zero. These are data faults. The plan names no
+   code for them; `bad_bar` is that code. The range rule is the coordinator's decision of 2026-11-12, the owner
+   informed: the count found no such bar in 6,612 (below). It keeps F4 between 0.5 and 1.
 2. `stale_bar`: no bar, or the last bar dated before `D`. A name with no bars in the bundle is `stale_bar`.
 3. `short_history`: fewer than 260 bars. Exactly 260 is enough.
 4. `missing_session`: the window's 260 dates are not the 260 exchange sessions ending at `D`, walking back from `D`
@@ -97,7 +110,7 @@ and the card already use. `ATR% = ATR14 / close`. `ret(k)` = the close on `D` ÷
 |---|---|---|
 | F1 | Trend and momentum | `abs(ret(20)) / (ATR% × √20)` |
 | F2 | Range expansion | `ATR5 / ATR20` |
-| F3 | Support and resistance | `−d / ATR14`; `d` is the distance from the close to the nearest edge of the nearest zone of weight ≥ 5, the zones being `levels.merge_zones` of the levels of `L = levels.levels_for(window, D+1)` without the prior close's own level: `merge_zones([x for x in L["levels"] if x.name != "PDC"], close)`; `d = 0` when the close is inside a zone (edges included); no such zone gives `no_zone` |
+| F3 | Support and resistance | `−d / ATR14`; `d` is the distance from the close to the nearest edge of the nearest zone of weight ≥ 5, the zones being `levels.merge_zones` of the levels of `L = levels.levels_for(window, D+1)` without the prior close's own level: `merge_zones([x for x in L["levels"] if x.name != "PDC"], close)`; `d = 0` when the close is inside a zone (edges included). With no such zone F3 has no value: the name stays ranked, takes the last places on F3 and carries the caution `no_zone` (owner decision, 2026-11-12) |
 | F4 | The day's high and low | `max(c, 1 − c)`, `c = (close − low) / (high − low)` of the bar of `D` (`levels.close_strength`); `c = 0.5` when high = low |
 | F5 | Relative strength | `abs(ret(5) − benchmark ret(5)) / (ATR% × √5)`; the benchmark is SPY, or QQQ when the name is SPY |
 
@@ -107,17 +120,21 @@ and the card already use. `ATR% = ATR14 / close`. `ret(k)` = the close on `D` ÷
   how its neighbours merge, which can also give a false `no_zone`. So the zones are merged again without it. Taking
   the edition's zones and only subtracting `PDC`'s weight is not the same rule and is not used: the bounds and the
   merging would still carry it.
-- **What F3 depends on in `levels.py`, frozen by reference** at its values on 2026-11-12. A change to any of these
-  moves F3 and needs an amendment to this record first; a unit test reads them from the code and fails until then.
-  - Merging (`merge_zones`): a level joins the current zone when its low is within 0.5% (`pct = 0.005`) of that zone's
-    lowest member; no chaining; a zone's weight is the sum of its members' weights.
-  - Level weights (`levels_for`): PDH, PDL, PDC 1; PWH, PWL 2; WTDH, WTDL 1; PMH, PML 3; 52WH, 52WL 3, over the last
-    252 bars; MA20 1, MA50 2, MA200 3 (`WEIGHTS` holds day 1, week 2, month 3, 52w 3, ma 1, sd 2); at least 30 finished
-    sessions.
-  - Supply and demand (`supply_demand`): a lookback of 120 bars, starting no earlier than bar 16; a strong day has a
-    range above 1.5 times the ATR14 before it and a close in the top quarter (0.75) above its open (demand) or the
-    bottom quarter (0.25) below its open (supply); its base is up to 3 bars just before it with a range under 0.7 times
-    that ATR, else the one bar before; a zone is dropped once a later close goes through it; weight 2.
+- **A name with no zone is ranked last on F3, not removed** (owner decision, 2026-11-12). This softens the plan's rule
+  that a factor is never defaulted: for F3 alone, a missing value is ranked last (the most conservative placement)
+  rather than removing the name, because the count below showed the unranked rule would have kept some names out of
+  contention on up to half of all nights for a reason that comes from how levels cluster. Every other factor still
+  makes the name unranked when it cannot be worked out. In the output F3's value is null and the name carries the
+  caution `no_zone`; with `n` ranked names of which `k` have no zone, each of the `k` takes the F3 rank
+  `(n − k + 1 + n) / 2`, the average of the last `k` places. A null never enters a sum, a comparison or a rounding.
+- **F3 and F4 partly count one fact, known and accepted.** Levels set by `D`'s own bar stay in F3's zones: the prior
+  day's high and low are `D`'s high and low, and the week, month and 52-week extremes include `D`. When `D` closes at
+  an extreme, such a level can put the close inside a zone (a small `d`), which is also when F4 is at its best. So the
+  two factors partly count one fact. This is known and, as written, accepted (the coordinator's decision of
+  2026-11-12, the owner informed). Leaving such levels out of F3 would be a different selection, not a correction: it
+  would change the picks on most nights and raise `no_zone`.
+- **What F3 depends on in `levels.py`** (the merge width, the level weights, the windows and the supply and demand
+  rules) is frozen by reference at its values on 2026-11-12, listed in the appendix.
 - **Shown, never scored:** ATR14, ATR%, the close, the close against its 20, 50 and 200-bar averages (above, below,
   at), the direction (the sign of `ret(20)`), and the 30-day historical volatility `hv30`: the sample standard
   deviation (n − 1) of the last 30 daily log returns, `ln(close / previous close)`, times √252. The IV percentile is not
@@ -127,10 +144,12 @@ and the card already use. `ATR% = ATR14 / close`. `ret(k)` = the close on `D` ÷
 
 - R1. Every factor value is rounded to 6 decimals, then each factor ranks every name that has all five factors,
   event-ineligible names included, so an event never moves another name's rank. Rank 1 is first; ties share the
-  average rank.
+  average rank. On F3, names with no zone share the average of the last places, as above.
 - R2. Score = the sum of the five ranks; lower is first.
-- R3. Ties on the score go, in order, to: the smaller F3 distance (`d / ATR14`, rounded); the larger median of close ×
-  volume over the last 20 bars (rounded); the symbol A to Z. Every name ranked gets a final rank, eligible or not.
+- R3. Ties on the score go, in order, to: the smaller F3 distance (`d / ATR14`, rounded; a name with no zone sorts
+  after every name with a distance, and among no-zone names this key is equal and the next decides); the larger median
+  of close × volume over the last 20 bars (rounded); the symbol A to Z. Every name ranked gets a final rank, eligible
+  or not.
 - R4. **Events**, from the bundle's rows of `config/events/earnings.csv` and `config/events/macro_events.csv`. A row
   the repository's readers call malformed (`events.earnings_row_problem`, `events.macro_row_problem`) takes no part and
   is counted in the output; a malformed earnings row naming a desk name gives that name the caution
@@ -146,11 +165,11 @@ and the card already use. `ATR% = ATR14 / close`. `ret(k)` = the close on `D` ÷
     due: it stays eligible with the caution `earnings_date_unknown`.
   - A high-severity macro row dated `D+1` is a market-wide note, `macro_high_next_session`, with the event types. It
     makes no name ineligible. A half day on `D+1` is the note `next_session_half_day`.
-- R5. **Missing data.** A name that is not data-valid, or has a factor that cannot be worked out, is listed unranked
-  with its reason: `bad_bar`, `stale_bar`, `short_history`, `missing_session`, `suspect_split`, `no_zone` (F3),
-  `benchmark_missing` (F5, when the benchmark's bars are not data-valid), or `internal_error`. When F3 and F5 both fail, `no_zone` is given. A
-  factor is never given a default value. The benchmark's return is used whenever its bars are data-valid, whatever its
-  own eligibility or its own factors.
+- R5. **Missing data.** A name that is not data-valid, or has a factor other than F3 that cannot be worked out, is
+  listed unranked with its reason: `bad_bar`, `stale_bar`, `short_history`, `missing_session`, `suspect_split`,
+  `benchmark_missing` (F5, when the benchmark's bars are not data-valid), or `internal_error`. Such a factor is never
+  given a default value; F3 with no zone is ranked last, as above. The benchmark's return is used whenever its bars
+  are data-valid, whatever its own eligibility, its own factors or its own `no_zone`.
 - **`internal_error`.** An unexpected exception while one name is scored is that name's `internal_error`, with the
   exception's class name only (never its text); the other names are scored as usual, and the run's status is
   `internal_error`, which fails the gate.
@@ -169,15 +188,19 @@ unreadable event rows, `params_sha`, `picker_ref` and `bundle_sha`.
   rule as `params_sha` below. It names the input an output came from; the key order and spacing of the saved file do
   not change it, any value does.
 - The same bundle and code give byte-identical output.
+- **The calendar's range.** The session calendar covers 2024-01-01 to 2029-12-31 (`levels.HOLIDAYS`,
+  `levels.CALENDAR_THROUGH`). A session whose 260-session window starts before 2024-01-01, or whose next session is
+  past 2029-12-31, is refused with its own message: its sessions cannot be checked.
 - The command's exit codes: 0, the output is written and no name has `internal_error`; 1, the output is written and a
-  name has `internal_error`; 2, the bundle cannot be read or is not in the documented shape; 3, the parameters file
-  cannot be read, is not YAML, or holds what the code does not implement; 4, the output cannot be written. Each
-  failure prints one line, never a traceback, and writes no output.
+  name has `internal_error`; 2, the bundle cannot be read or is not in the documented shape (a NaN or infinite number
+  included); 3, the parameters file cannot be read, is not YAML, or holds what the code does not implement; 4, the
+  output cannot be written; 5, the session lies outside the calendar's range; 6, a usage error (a missing or unknown
+  argument or command). Each failure prints one line, never a traceback, and writes no output.
 
 ### 4. The frozen parameters
 
 The numbers above live in `config/options_select.yaml`, and the code refuses a file that holds any value, code or rule
-it does not implement. Its `params_sha` is `b0c745efd62f1e3a69b54e55a96cb189647e9843ed3d932efe56f9979b1d7c00`.
+it does not implement. Its `params_sha` is `08617613bced71e4c7b7b022ca1cc34070d885d5eae17c438f39e80284e88e23`.
 
 - The hash is SHA-256 (hex) of the parsed file written as JSON with keys sorted, separators `,` and `:`, ASCII only,
   YAML integers as JSON integers and YAML floats in Python's float repr, so 2.0 stays 2.0
@@ -239,6 +262,11 @@ Not built by the pull request that carries this record. Its rules are fixed here
 - **Thresholds.** Stage 2's four thresholds (the spread limit, the two gap limits and the relative-volume limit) are
   **not set by this record**. They are frozen by a dated amendment to it, before the gate starts, from how often each
   status would occur on at least 10 saved sessions of pre-market quotes: status frequencies only, never outcomes.
+- **Open for Stage 2, not built here.** On a split ex-date, Stage 1's ATR14 and levels are in pre-split units while G1
+  adjusts the prior close, so the gap in ATR units and the ceiling and floor would be wrong by the split ratio. Stage 2
+  must either scale them by that ratio or give the name `not_confirmed`; the choice is made in the Stage 2 pull
+  request's amendment to this record, before it is built. What "the adjusted close" means for a dividend is not yet
+  defined either.
 - **Reserves.** A reserve is a Stage 1-eligible name ranked 5th or lower whose Stage 2 status is `confirmed`. Up to two,
   in Stage 1 rank order, in their own panel and their own list, never among the picks. Nothing is swapped or promoted;
   zero reserves is valid ("No reserve qualifies"). A reserve that appears or disappears at Pass B is marked. Reserves
@@ -249,12 +277,13 @@ Not built by the pull request that carries this record. Its rules are fixed here
 - **The card.** Each data-valid name's ceiling, floor, targets, bias and the names of its levels come from a copy of
   the part of today's `focus.py` that works them out, proven identical by a parity test over at least 10 saved nights.
   Entry, stop and target 1 stay in `focus-plan.ts`. DEC-0035 is not amended.
-- **The board and its experiment.** Nothing here changes the board's engine, its feed or EXP-0031. Those are governed
-  by DEC-0042, DEC-0044, DEC-0045, DEC-0049 and the records that follow them.
+- **The board and its experiments.** Nothing here changes the board's engine, its feed, EXP-0031 or EXP-0033. Those
+  are governed by DEC-0042, DEC-0044, DEC-0045, DEC-0049, DEC-0050 and the records that follow them.
 - **What the switch will touch, decided later.** The switch (DEC-0048) will change which names are focus names, and
-  with them the `not_focus` label of the owner-trade experiment (DEC-0045 point 3) and the per-focus-name state log of
-  the server evaluator (DEC-0044 point 1). This record decides none of that. Before it is accepted, DEC-0048 must say
-  what the switch does to each experiment then running: an early end, a separate stratum, or no effect and why.
+  with them the `not_focus` label of the owner-trade experiments (DEC-0045 point 3, and EXP-0033's labels under
+  DEC-0050) and the per-focus-name state log of the server evaluator (DEC-0044 point 1). This record decides none of
+  that. DEC-0048 cannot be accepted unless it states, for each experiment running at the switch, one of: an early end,
+  a separate stratum, or no effect and why.
 - **The options clone follows the new names.** DEC-0032 takes the edition's focus names in rank order, up to six, keeps
   those it can trade that day (a contract expiring that day and readable levels), and tops up with SPY then QQQ until
   two can be traded. It adds no trial for a rule that changes only the set of names each day, and its verdict reads
@@ -315,6 +344,10 @@ page or report groups any outcome by picked, rank or status, and the Options pag
   five sessions. The paper clone follows the new names. The card's ceiling, floor and target rules stay exactly as
   they are.
 - **2026-11-12.** The data is Alpaca SIP on the Algo Trader Plus plan. Stage 1 and Stage 2 run as host jobs.
+- **2026-11-12, from the count below.** A name with no qualifying zone is not unranked: it takes the last places on F3
+  and carries the caution `no_zone`.
+- **2026-11-12, the coordinator's, the owner informed.** A bar whose open or close lies outside its own high-low range
+  is `bad_bar`. Levels set by `D`'s own bar stay in F3; the overlap with F4 is known and accepted.
 
 ## Not verified yet
 
@@ -323,14 +356,34 @@ page or report groups any outcome by picked, rank or status, and the Options pag
   Alpaca's corporate actions appear; how much a finished session's bars change by the next day; what a halted name's
   snapshot looks like.
 - The ledger's exact outcome rule, which DEC-0047 needs.
-- **How often `no_zone` occurs.** A name with no qualifying zone is unranked. Synthetic walks in the review suggest
-  this happens more for volatile names. Before this record is accepted, the owner may ask for a count of how often
-  each reason code, `no_zone` among them, would occur per name on saved daily bars. That is a status frequency and
-  reads no outcome. If the owner then changes the rule, this record is amended before it is accepted. He has two
-  readings to choose from: unranked, as written; or ranked last on F3 (the name keeps its other four ranks). Only the
-  first is built.
 - No reason code's frequency is a reason to change a rule after the gate starts: a change needs an amendment, written
   before it is viewed.
+
+## The count on saved bars (2026-11-12)
+
+These are status frequencies. No outcome was read. The owner's decision on `no_zone` and the two decisions on bars
+above were taken from them.
+
+- **What was run.** On 2026-11-12, the record's own validity and F3 functions, unmodified, at `params_sha`
+  `b0c745ef…` (the version before the `no_zone` decision), on Alpaca SIP daily bars with `adjustment=split`: 551 bars
+  per name from 2024-09-03 to 2026-11-11; 250 nights from 2025-11-13 to 2026-11-11; the twelve names; 3,000
+  name-nights. One read-only request. No pick, rank, score, eligibility, forward return or result was computed or
+  read.
+- **Validity.** Every name was data-valid on all 250 nights: zero `bad_bar`, `stale_bar`, `short_history`,
+  `missing_session`, `suspect_split`, `benchmark_missing` and `internal_error`. Every name's dates matched the exchange
+  calendar exactly. No bar had its open or close outside its own high-low range (0 of 6,612).
+- **`no_zone` nights of 250, per name:**
+
+  | SPY | QQQ | AAPL | MSFT | NVDA | AMZN | GOOGL | META | TSLA | PLTR | AVGO | AMD |
+  |---|---|---|---|---|---|---|---|---|---|---|---|
+  | 1 | 30 | 13 | 40 | 27 | 74 | 33 | 116 | 88 | 125 | 73 | 84 |
+
+  Total 704 of 3,000 (23.5%); first half 388 of 1,500, second half 316 of 1,500.
+- **F3 distance in ATR14 units, where worked out** (2,296 name-nights):
+
+  | Exactly 0 | 0 to 0.25 | 0.25 to 0.5 | 0.5 to 1 | Over 1 |
+  |---|---|---|---|---|
+  | 169 (7.4%) | 347 (15.1%) | 243 (10.6%) | 363 (15.8%) | 1,174 (51.1%) |
 
 ## Consequences
 
@@ -338,3 +391,20 @@ page or report groups any outcome by picked, rank or status, and the Options pag
 - The Stage 2 release waits for the threshold amendment, and the host jobs wait for the owner to install their units.
 - A selection can pass the gate and still fail DEC-0047. What follows then is for DEC-0047 to fix before it is read;
   the gate cannot prevent it and does not try to.
+
+## Appendix: what F3 depends on in `levels.py`
+
+Frozen by reference at the values of 2026-11-12. A change to any of these moves F3 and needs an amendment to this
+record first. The numbers below are pinned by a test that reads them from the code; the comparisons are not, except
+the two boundaries the tests hold (a level exactly at the merge width merges; a later close exactly at a demand zone's
+low does not break it), and `picker_ref` changes with any code change.
+
+- Merging (`merge_zones`): a level joins the current zone when its low is within 0.5% (`pct = 0.005`) of that zone's
+  lowest member; no chaining; a zone's weight is the sum of its members' weights.
+- Level weights (`levels_for`): PDH, PDL, PDC 1; PWH, PWL 2; WTDH, WTDL 1; PMH, PML 3; 52WH, 52WL 3, over the last
+  252 bars; MA20 1, MA50 2, MA200 3 (`WEIGHTS` holds day 1, week 2, month 3, 52w 3, ma 1, sd 2); at least 30 finished
+  sessions.
+- Supply and demand (`supply_demand`): a lookback of 120 bars, starting no earlier than bar 16; a strong day has a
+  range above 1.5 times the ATR14 before it and a close in the top quarter (0.75) above its open (demand) or the
+  bottom quarter (0.25) below its open (supply); its base is up to 3 bars just before it with a range under 0.7 times
+  that ATR, else the one bar before; a zone is dropped once a later close goes through it; weight 2.
