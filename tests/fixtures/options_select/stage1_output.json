@@ -2,10 +2,10 @@
  "bundle_sha": "f34f6ec4f9e763e20e89fe42f6c9584335dfecd4dbac534acce7c33ac2a88fcc",
  "counts": {
   "data_valid": 5,
-  "eligible": 3,
+  "eligible": 4,
   "names": 6,
-  "picked": 3,
-  "ranked": 4
+  "picked": 4,
+  "ranked": 5
  },
  "market_notes": [
   {
@@ -26,11 +26,11 @@
    "f3_distance_atr": 0.0,
    "factors": {
     "F1": {
-     "rank": 4.0,
+     "rank": 5.0,
      "value": 0.020564
     },
     "F2": {
-     "rank": 1.0,
+     "rank": 2.0,
      "value": 0.868607
     },
     "F3": {
@@ -50,7 +50,7 @@
    "median_dollar_volume": 1674231084.76,
    "picked": true,
    "reason": null,
-   "score": 11.5,
+   "score": 13.5,
    "shown": {
     "atr14": 4.684286,
     "atr_pct": 0.020021,
@@ -79,7 +79,7 @@
      "value": 1.122762
     },
     "F2": {
-     "rank": 2.0,
+     "rank": 3.0,
      "value": 0.800513
     },
     "F3": {
@@ -91,7 +91,7 @@
      "value": 0.995413
     },
     "F5": {
-     "rank": 4.0,
+     "rank": 5.0,
      "value": 0.004739
     }
    },
@@ -99,7 +99,7 @@
    "median_dollar_volume": 1171384987.35,
    "picked": true,
    "reason": null,
-   "score": 12.0,
+   "score": 14.0,
    "shown": {
     "atr14": 3.824286,
     "atr_pct": 0.026113,
@@ -124,11 +124,11 @@
    "f3_distance_atr": 0.0,
    "factors": {
     "F1": {
-     "rank": 3.0,
+     "rank": 4.0,
      "value": 0.300398
     },
     "F2": {
-     "rank": 3.0,
+     "rank": 4.0,
      "value": 0.75836
     },
     "F3": {
@@ -148,7 +148,7 @@
    "median_dollar_volume": 2133794246.25,
    "picked": false,
    "reason": null,
-   "score": 12.5,
+   "score": 14.5,
    "shown": {
     "atr14": 6.390714,
     "atr_pct": 0.021904,
@@ -179,7 +179,7 @@
      "value": 0.356902
     },
     "F2": {
-     "rank": 4.0,
+     "rank": 5.0,
      "value": 0.756856
     },
     "F3": {
@@ -199,7 +199,7 @@
    "median_dollar_volume": 1692080404.93,
    "picked": true,
    "reason": null,
-   "score": 14.0,
+   "score": 15.0,
    "shown": {
     "atr14": 5.324286,
     "atr_pct": 0.022782,
@@ -213,6 +213,57 @@
     }
    },
    "symbol": "AAPL"
+  },
+  {
+   "benchmark": "QQQ",
+   "cautions": [
+    "no_zone"
+   ],
+   "data_valid": true,
+   "eligibility": "eligible",
+   "eligible": true,
+   "error_class": null,
+   "f3_distance_atr": null,
+   "factors": {
+    "F1": {
+     "rank": 3.0,
+     "value": 0.354006
+    },
+    "F2": {
+     "rank": 1.0,
+     "value": 1.034772
+    },
+    "F3": {
+     "rank": 5.0,
+     "value": null
+    },
+    "F4": {
+     "rank": 5.0,
+     "value": 0.700787
+    },
+    "F5": {
+     "rank": 4.0,
+     "value": 0.005788
+    }
+   },
+   "final_rank": 5,
+   "median_dollar_volume": 730470378.745,
+   "picked": true,
+   "reason": null,
+   "score": 18.0,
+   "shown": {
+    "atr14": 2.063571,
+    "atr_pct": 0.021382,
+    "close": 96.51,
+    "direction": "up",
+    "hv30": 0.201152,
+    "trend": {
+     "ma20": "above",
+     "ma200": "above",
+     "ma50": "above"
+    }
+   },
+   "symbol": "SPY"
   },
   {
    "benchmark": "SPY",
@@ -230,32 +281,16 @@
    "score": null,
    "shown": null,
    "symbol": "AMD"
-  },
-  {
-   "benchmark": "QQQ",
-   "cautions": [],
-   "data_valid": true,
-   "eligibility": "no_zone",
-   "eligible": false,
-   "error_class": null,
-   "f3_distance_atr": null,
-   "factors": null,
-   "final_rank": null,
-   "median_dollar_volume": null,
-   "picked": false,
-   "reason": "no_zone",
-   "score": null,
-   "shown": null,
-   "symbol": "SPY"
   }
  ],
  "next_session": "2026-11-12",
- "params_sha": "b0c745efd62f1e3a69b54e55a96cb189647e9843ed3d932efe56f9979b1d7c00",
+ "params_sha": "08617613bced71e4c7b7b022ca1cc34070d885d5eae17c438f39e80284e88e23",
  "picker_ref": "s1-golden",
  "picks": [
   "NVDA",
   "QQQ",
-  "AAPL"
+  "AAPL",
+  "SPY"
  ],
  "schema": "wt.options.select/stage1",
  "selection_note": null,

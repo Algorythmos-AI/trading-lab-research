@@ -198,13 +198,19 @@ def patch_zones(monkeypatch, close: float, zones: list[lv.Zone]) -> None:
     monkeypatch.setattr(sel, "f3_zones", fake)
 
 
-def test_no_qualifying_zone_gives_no_zone(monkeypatch):
+def test_no_qualifying_zone_ranks_last_on_f3_with_a_caution(monkeypatch):
+    # Owner decision, 2026-11-12: X has no zone of weight 5, so F3 has no value. It stays ranked: n = 3 names, k = 1
+    # with no zone, so X's F3 rank is (n - k + 1 + n) / 2 = (3 - 1 + 1 + 3) / 2 = 3. SPY and QQQ tie at F3 = 0: 1.5.
     patch_zones(monkeypatch, 102.0, [zone(101.0, 101.0, 4, ["PDL", "PWH"]), zone(103.0, 103.0, 4, ["PDH"])])
     out = run(base(X=flat(last=102.0)))
     x = row(out, "X")
-    assert x["reason"] == "no_zone" and x["data_valid"] and x["factors"] is None and x["final_rank"] is None
-    assert x["eligibility"] == "no_zone" and not x["eligible"]
+    assert x["reason"] is None and x["data_valid"] and x["final_rank"] is not None and x["eligible"]
+    assert x["factors"]["F3"] == {"value": None, "rank": 3.0} and x["f3_distance_atr"] is None
+    assert "no_zone" in x["cautions"] and x["eligibility"] == "eligible"
+    assert row(out, "SPY")["factors"]["F3"]["rank"] == 1.5
     assert out["status"] == "ok"
+    assert json.loads(sel.dumps(out))["names"][[r["symbol"] for r in out["names"]].index("X")]["factors"]["F3"] == {
+        "rank": 3.0, "value": None}
 
 
 def test_f3_hand_built_zone(monkeypatch):
@@ -500,7 +506,7 @@ def test_the_benchmark_is_used_whatever_its_own_eligibility(monkeypatch):
     assert row(out, "A")["factors"]["F5"]["value"] == 0.440428
     patch_zones(monkeypatch, 100.0, [])
     out = run({"SPY": flat(), "QQQ": flat(last=101.0), "A": flat(last=102.0)})
-    assert row(out, "SPY")["reason"] == "no_zone"
+    assert row(out, "SPY")["reason"] is None and "no_zone" in row(out, "SPY")["cautions"]
     assert row(out, "A")["factors"]["F5"]["value"] == 0.440428
 
 
@@ -684,16 +690,18 @@ def test_cli_round_trip_matches_the_golden_output(tmp_path):
         doc["picker_ref"] = "s1-golden"
     assert got == want
     assert sel.dumps(got) == (FIXTURES / "stage1_output.json").read_text()
-    # What the golden night shows: AMD stale; SPY valid but with no zone of weight 5 near it (no_zone, from the real
-    # engine), and its return still used as the others' benchmark; TSLA ranked but out on earnings; three eligible,
-    # so three picks, never filled to four.
+    # What the golden night shows: AMD stale; SPY valid with no zone of weight 5 near it (from the real engine), so
+    # it is ranked last on F3 (five ranked, one without a zone: (5 - 1 + 1 + 5) / 2 = 5) with the caution no_zone,
+    # and its return is still the others' benchmark; TSLA ranked but out on earnings; four eligible, four picks.
     assert row(got, "AMD")["reason"] == "stale_bar"
-    assert row(got, "SPY")["reason"] == "no_zone" and row(got, "SPY")["data_valid"]
+    spy = row(got, "SPY")
+    assert spy["reason"] is None and spy["cautions"] == ["no_zone"] and spy["final_rank"] == 5
+    assert spy["factors"]["F3"] == {"value": None, "rank": 5.0}
     assert all(row(got, s)["factors"] is not None for s in ("QQQ", "AAPL", "NVDA", "TSLA"))
     assert row(got, "TSLA")["eligibility"] == "earnings_gap" and row(got, "TSLA")["final_rank"] == 3
     assert row(got, "AAPL")["cautions"] == ["earnings_later"]
-    assert got["counts"] == {"names": 6, "data_valid": 5, "ranked": 4, "eligible": 3, "picked": 3}
-    assert got["picks"] == ["NVDA", "QQQ", "AAPL"]
+    assert got["counts"] == {"names": 6, "data_valid": 5, "ranked": 5, "eligible": 4, "picked": 4}
+    assert got["picks"] == ["NVDA", "QQQ", "AAPL", "SPY"]
     assert got["market_notes"] == [{"code": "macro_high_next_session", "types": ["cpi"]}]
 
 
@@ -925,27 +933,48 @@ def test_the_loader_refuses_numbers_written_in_the_other_form():
 
 # ---------------------------------------------------------------- what F3 depends on in levels.py, pinned
 
-def _numbers(fn: Any) -> list[Any]:
-    """The numeric constants in a function's body, in source order (docstrings and names left out)."""
+def _numbers(fn: Any, skip: Any = lambda n: False) -> list[Any]:
+    """The numeric constants in a function's body, depth first in source order, leaving out every subtree `skip`
+    matches (docstrings and names never count)."""
     import inspect
-    tree = ast.parse(inspect.getsource(fn).lstrip())
-    return [n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and type(n.value) in (int, float)]
+    out: list[Any] = []
+
+    def visit(n: ast.AST) -> None:
+        if skip(n):
+            return
+        if isinstance(n, ast.Constant) and type(n.value) in (int, float):
+            out.append(n.value)
+        for c in ast.iter_child_nodes(n):
+            visit(c)
+
+    visit(ast.parse(inspect.getsource(fn).lstrip()))
+    return out
+
+
+def _zone_flags_loop(n: ast.AST) -> bool:
+    """merge_zones' last loop sets each zone's side and its `big` flag: F3 reads neither."""
+    return isinstance(n, ast.For) and isinstance(n.target, ast.Name) and n.target.id == "z"
+
+
+def _rounding(n: ast.AST) -> bool:
+    """levels_for rounds the close-strength it reports: F3 does not read it."""
+    return isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "round"
 
 
 def test_the_levels_numbers_f3_depends_on_are_the_ones_dec_0046_freezes():
-    """A change here moves F3: amend DEC-0046 first, then this test."""
+    """A change here moves F3: amend DEC-0046 first, then this test. Only what F3 reads is pinned."""
     import inspect
     assert inspect.signature(lv.merge_zones).parameters["pct"].default == 0.005
     assert inspect.signature(lv.supply_demand).parameters["lookback"].default == 120
     assert inspect.signature(lv.atr).parameters["n"].default == 14
     assert lv.WEIGHTS == {"day": 1, "week": 2, "month": 3, "52w": 3, "ma": 1, "sd": 2}
-    # Every numeric constant in the three functions' bodies, read from the code (an AST walk, so the order is the
-    # walk's): the merge width, the weights, the windows and the supply/demand cut-offs among them, with the indices
-    # and divisors that go with them. Any edit to one of these numbers fails here.
-    assert _numbers(lv.merge_zones) == [0.005, 2, 5, 0, 1, 1, 1]
-    assert _numbers(lv.supply_demand) == [120, 16, 1.5, 1, 0, 1, 0.75, 4, 0.7, 1, 2, 0.25, 1, 2]
-    assert _numbers(lv.levels_for) == [30, 1, 1, 1, 1, 2, 2, 3, 3, 3, 3, 20, 1, 50, 2, 200, 3, 1, 1, 1, 1, 252, 1, 3,
-                                       0, 1]
+    # The numbers F3 reads, from the code itself: the merge width, the level weights, the windows (30 sessions, 252
+    # bars, the 20/50/200 averages) and the supply/demand cut-offs, with the indices that go with them. Left out: the
+    # zone's `big` flag and side (merge_zones' last loop) and the rounding of the reported close strength.
+    assert _numbers(lv.merge_zones, _zone_flags_loop) == [0.005, 0, 1, 1, 1]
+    assert _numbers(lv.supply_demand) == [120, 16, 1.5, 0.75, 0.25, 1, 4, 0, 1, 0.7, 1, 1, 2, 2]
+    assert _numbers(lv.levels_for, _rounding) == [30, 1, 1, 1, 1, 1, 2, 2, 1, 1, 1, 3, 3, 252, 3, 3, 20, 1, 50, 2,
+                                                  200, 3, 0, 1, 1]
     # The weights each named level carries, read from the engine's output on a synthetic series.
     got = lv.levels_for(bars_of(flat(last=102.0)), "2026-11-12")
     weights = {x.name: x.weight for x in got["levels"]}
@@ -955,6 +984,37 @@ def test_the_levels_numbers_f3_depends_on_are_the_ones_dec_0046_freezes():
     for frozen in ("`pct = 0.005`", "a lookback of 120 bars", "1.5 times", "under 0.7 times", "252 bars",
                    "MA20 1, MA50 2, MA200 3", "PMH, PML 3", "PWH, PWL 2", "starting no earlier than bar 16"):
         assert frozen in text, frozen
+
+
+def test_a_level_exactly_at_the_merge_width_merges():
+    # The comparison is "within": lo / base - 1 <= pct. With pct = 0.25, 5 / 4 - 1 = 0.25 exactly: it merges; 5.01 does
+    # not. With the frozen pct, 100.5 / 100 - 1 = 0.005 (to the float) merges with 100 and 100.51 does not.
+    a, b, c = level("A", 4.0, 3), level("B", 5.0, 2), level("C", 5.01, 2)
+    assert [z["members"] for z in lv.merge_zones([a, b], 0.0, 0.25)] == [["A", "B"]]
+    assert [z["members"] for z in lv.merge_zones([a, c], 0.0, 0.25)] == [["A"], ["C"]]
+    assert [z["members"] for z in lv.merge_zones([level("A", 100.0, 3), level("B", 100.5, 2)], 0.0)] == [["A", "B"]]
+    assert [z["members"] for z in lv.merge_zones([level("A", 100.0, 3), level("B", 100.51, 2)], 0.0)] == [["A"], ["B"]]
+
+
+def test_a_later_close_exactly_at_a_demand_zone_low_does_not_break_it():
+    # 30 bars at 100 (high 101, low 99: true range 2), three quiet bars (high 100.5, low 99.5: range 1), then a strong
+    # up day: open 100, high 104, low 99.8, close 103.9. ATR14 before it = (11 x 2 + 3 x 1) / 14 = 1.786; its range 4.2
+    # is above 1.5 x 1.786 = 2.68 and its close sits at (103.9 - 99.8) / 4.2 = 0.98 of it, above its open: a demand
+    # day. Its base is the three quiet bars (each under 0.7 x 1.786 = 1.25): the zone is [99.5, 100.5].
+    # Later closes exactly at the low (99.5) leave it standing; one close at 99.49 breaks it.
+    def hist(later_close: float) -> list[lv.Bar]:
+        days = sessions("2026-10-30", 40)
+        out = [lv.Bar(d, 100.0, 101.0, 99.0, 100.0) for d in days[:30]]
+        out += [lv.Bar(d, 100.0, 100.5, 99.5, 100.0) for d in days[30:33]]
+        out.append(lv.Bar(days[33], 100.0, 104.0, 99.8, 103.9))
+        out += [lv.Bar(d, later_close, later_close + 1, later_close - 1, later_close) for d in days[34:]]
+        return out
+
+    def demand(bars: list[lv.Bar]) -> list[tuple[float | None, float | None]]:
+        return [(x.lo, x.hi) for x in lv.supply_demand(bars) if x.name == "DEMAND"]
+
+    assert demand(hist(99.5)) == [(99.5, 100.5)]
+    assert demand(hist(99.49)) == []
 
 
 # ---------------------------------------------------------------- CLI exit codes
@@ -983,3 +1043,147 @@ def test_cli_exit_codes_for_params_and_output(tmp_path, capsys):
     assert "Traceback" not in err and len(err.strip().splitlines()) == 6
     assert not (tmp_path / "o.json").exists()
     assert sel.main(["stage1", "--bundle", str(good), "--out", str(tmp_path / "o.json")]) == sel.EXIT_OK
+
+
+# ---------------------------------------------------------------- no zone ranks last on F3 (owner, 2026-11-12)
+
+@pytest.mark.parametrize("k, want", [
+    # Five names; values 0.5, 0.4, 0.3, 0.2, 0.1 for those that have one.
+    (0, {"A": 1.0, "B": 2.0, "C": 3.0, "D": 4.0, "E": 5.0}),
+    # k = 1 (E has none): A..D rank 1..4; E takes (5 - 1 + 1 + 5) / 2 = 5.
+    (1, {"A": 1.0, "B": 2.0, "C": 3.0, "D": 4.0, "E": 5.0}),
+    # k = 3 (C, D, E have none): A 1, B 2; each of C, D, E takes (5 - 3 + 1 + 5) / 2 = 4, the mean of places 3, 4, 5.
+    (3, {"A": 1.0, "B": 2.0, "C": 4.0, "D": 4.0, "E": 4.0}),
+    # k = 5 (none has a value): all share (5 - 5 + 1 + 5) / 2 = 3, the mean of places 1 to 5.
+    (5, {"A": 3.0, "B": 3.0, "C": 3.0, "D": 3.0, "E": 3.0}),
+])
+def test_average_ranks_with_no_zone_names(k: int, want: dict[str, float]):
+    vals: dict[str, float | None] = {s: v for s, v in zip("ABCDE", (0.5, 0.4, 0.3, 0.2, 0.1), strict=True)}
+    for s in "EDCBA"[:k]:
+        vals[s] = None
+    assert sel.average_ranks(vals) == want
+
+
+def test_ties_among_valued_names_still_average_when_others_have_no_zone():
+    # A and B tie at 0.5: places 1 and 2 -> 1.5 each; C has none: (3 - 1 + 1 + 3) / 2 = 3.
+    assert sel.average_ranks({"A": 0.5, "B": 0.5, "C": None}) == {"A": 1.5, "B": 1.5, "C": 3.0}
+
+
+def test_a_no_zone_name_can_still_be_picked_and_carries_the_caution(monkeypatch):
+    # N ranks first on F1, F2, F4 and F5 and last on F3. Patched raw factors (closes pick the name):
+    #   N: F1 9, F2 9, F3 None, F4 9, F5 9; the four others: F1 = F2 = F4 = F5 = 1 and F3 = -0.1 (distance 0.1).
+    # Five names, k = 1: N's F3 rank = (5 - 1 + 1 + 5) / 2 = 5; the others tie on everything: (2 + 5) / 2 = 3.5 on
+    # F1, F2, F4, F5 (places 2 to 5) and (1 + 4) / 2 = 2.5 on F3 (places 1 to 4). N's score = 1 + 1 + 5 + 1 + 1 = 9;
+    # each other's = 4 x 3.5 + 2.5 = 16.5.
+    big = {"F1": 9.0, "F2": 9.0, "F3": None, "F4": 9.0, "F5": 9.0}
+    small = {"F1": 1.0, "F2": 1.0, "F3": -0.1, "F4": 1.0, "F5": 1.0}
+
+    def fake(window: list[lv.Bar], bench: Any, nxt: str, p: sel.Params) -> sel.Computed:
+        c = window[-1].c
+        return sel.Computed(dict(big), None, 1.0, {}) if c == 109.0 else sel.Computed(dict(small), 0.1, 1.0, {})
+
+    monkeypatch.setattr(sel, "factors", fake)
+    out = run({"N": flat(last=109.0), **{s: flat(last=101.0 + i) for i, s in enumerate("ABCD")}})
+    n = row(out, "N")
+    assert n["score"] == 9.0 and n["final_rank"] == 1 and n["picked"] and "no_zone" in n["cautions"]
+    assert n["factors"]["F3"] == {"value": None, "rank": 5.0}
+    assert {row(out, s)["score"] for s in "ABCD"} == {16.5}
+
+
+def test_tie_break_puts_no_zone_after_every_distance(monkeypatch):
+    # Three names with equal scores. X has a distance of 5.0 (far), Y and Z have none. The first key puts X first;
+    # Y and Z are equal on it, so the dollar volume decides (Z 9 before Y 5).
+    def comp(dist: float | None, dv: float) -> sel.Computed:
+        return sel.Computed({"F1": 1.0, "F2": 1.0, "F3": None if dist is None else -dist, "F4": 1.0, "F5": 1.0},
+                            dist, dv, {})
+
+    by = {101.0: comp(5.0, 1.0), 102.0: comp(None, 5.0), 103.0: comp(None, 9.0)}
+    monkeypatch.setattr(sel, "factors", lambda w, b, n, p: by[w[-1].c])
+    out = run({"X": flat(last=101.0), "Y": flat(last=102.0), "Z": flat(last=103.0)})
+    # F3 ranks: X 1, Y and Z (3 - 2 + 1 + 3) / 2 = 2.5; other factors tied at 2: X = 1 + 8 = 9, Y = Z = 2.5 + 8 = 10.5.
+    assert [(r["symbol"], r["score"]) for r in out["names"]] == [("X", 9.0), ("Z", 10.5), ("Y", 10.5)]
+    # Equal scores: X (distance) still sorts before the no-zone names on the first key.
+    by[101.0] = comp(None, 1.0)
+    out = run({"X": flat(last=101.0), "Y": flat(last=102.0), "Z": flat(last=103.0)})
+    assert [r["symbol"] for r in out["names"]] == ["Z", "Y", "X"]          # all no zone: dollar volume decides
+
+
+def test_f3_null_never_reaches_arithmetic(monkeypatch):
+    # A None that reached a sum, a negation, a comparison or a rounding would raise TypeError and show here as
+    # internal_error. The run is clean, the score is the plain sum of the ranks, and the output says null.
+    patch_zones(monkeypatch, 102.0, [])
+    out = run(base(X=flat(last=102.0)))
+    x = row(out, "X")
+    assert out["status"] == "ok" and x["error_class"] is None
+    assert x["score"] == sum(x["factors"][f]["rank"] for f in sel.FACTORS)
+    assert x["factors"]["F3"]["value"] is None and x["f3_distance_atr"] is None
+
+
+# ---------------------------------------------------------------- open and close inside the bar's own range
+
+def test_open_or_close_outside_the_bar_range_is_a_bad_bar():
+    above = flat()
+    above[-10]["c"] = above[-10]["h"] + 0.01                       # close above the high
+    below = flat()
+    below[-10]["o"] = below[-10]["l"] - 0.01                       # open below the low
+    at_high = flat()
+    at_high[-10]["c"] = at_high[-10]["h"]                          # exactly at the high: valid
+    at_low = flat()
+    at_low[-10]["o"] = at_low[-10]["l"]                            # exactly at the low: valid
+    out = run(base(A=above, B=below, C=at_high, E=at_low))
+    assert [row(out, s)["reason"] for s in "ABCE"] == ["bad_bar", "bad_bar", None, None]
+
+
+# ---------------------------------------------------------------- non-finite and huge numbers in a bundle
+
+def test_a_nan_or_infinity_anywhere_in_the_bundle_is_refused(tmp_path):
+    for where in ("bar", "row"):
+        doc = bundle(base())
+        if where == "bar":
+            doc["bars"]["SPY"][5]["v"] = float("nan")
+        else:
+            doc["earnings_rows"] = [{"symbol": "A", "x": float("inf")}]
+        with pytest.raises(sel.BundleError, match="NaN or infinite"):
+            sel.check_bundle(doc)
+    path = tmp_path / "b.json"
+    path.write_text(json.dumps(bundle(base())).replace('"v": 1000000.0', '"v": NaN', 1))
+    assert "NaN" in path.read_text()
+    assert sel.main(["stage1", "--bundle", str(path), "--out", str(tmp_path / "o.json")]) == sel.EXIT_BUNDLE
+
+
+def test_an_integer_too_large_for_a_float_is_that_names_bad_bar():
+    b = flat()
+    b[-3]["v"] = 10 ** 400                                         # float(10**400) overflows
+    out = run(base(X=b, Y=flat(last=101.0)))
+    assert row(out, "X")["reason"] == "bad_bar" and row(out, "X")["error_class"] is None
+    assert out["status"] == "ok" and row(out, "Y")["final_rank"] is not None
+
+
+# ---------------------------------------------------------------- calendar edges and usage
+
+def test_a_window_before_the_calendar_or_a_next_session_past_it_is_refused(tmp_path, capsys):
+    # 2024-06-03: its 260 sessions start in 2023, before the calendar's first covered date (2024-01-01).
+    # 2029-12-31: the session after it is in 2030, past the calendar's end (2029-12-31).
+    for d in ("2024-06-03", "2029-12-31"):
+        doc = bundle({"SPY": flat(end=d)}, session=d)
+        with pytest.raises(sel.CalendarError):
+            sel.run_bundle(doc, P, sha=SHA, ref=REF)
+        path = tmp_path / f"{d}.json"
+        path.write_text(json.dumps(doc))
+        assert sel.main(["stage1", "--bundle", str(path), "--out", str(tmp_path / "o.json")]) == sel.EXIT_CALENDAR
+    err = capsys.readouterr().err.strip().splitlines()
+    assert len(err) == 2 and all(e.startswith("stage1: calendar: ") for e in err)
+    assert "2024-01-01" in err[0] and "2029-12-31" in err[1]
+    assert not (tmp_path / "o.json").exists()
+    assert sel.CALENDAR_FROM == "2024-01-01"
+    sel.check_calendar("2025-02-03", P)                            # its window starts in 2024: accepted
+
+
+def test_a_usage_error_is_one_line_and_its_own_code(capsys):
+    assert sel.main(["stage1", "--bundle", "x.json"]) == sel.EXIT_USAGE
+    assert sel.main(["nonsense"]) == sel.EXIT_USAGE
+    assert sel.main([]) == sel.EXIT_USAGE
+    err = capsys.readouterr().err.strip().splitlines()
+    assert len(err) == 3 and all(e.startswith("stage1: usage: ") for e in err)
+    assert len({sel.EXIT_OK, sel.EXIT_INTERNAL_ERROR, sel.EXIT_BUNDLE, sel.EXIT_PARAMS, sel.EXIT_WRITE,
+                sel.EXIT_CALENDAR, sel.EXIT_USAGE}) == 7

@@ -12,7 +12,7 @@ The frozen definitions, in the order the code applies them (DEC-0046 holds the s
 
 - Validity, first failing check wins, on the window (the last `min_bars` bars):
   `bad_bar` (a bar that cannot be read; dates not strictly increasing; a bar dated after `D`; in the window a bar
-  without high >= low > 0 and open, close > 0, or a negative volume; a window whose ATR14, ATR5 or ATR20 is zero),
+  without high >= low > 0 and open, close > 0 inside its own high-low range, or a negative volume; a window whose ATR14, ATR5 or ATR20 is zero),
   `stale_bar` (no bar, or the last bar not dated `D`), `short_history` (fewer than `min_bars` bars),
   `missing_session` (the window's dates are not the `min_bars` exchange sessions ending at `D`), `suspect_split` (a
   close-to-close ratio of two adjacent bars in the window below the low bound or above the high bound; a ratio
@@ -21,13 +21,15 @@ The frozen definitions, in the order the code applies them (DEC-0046 holds the s
 - F1 `abs(ret(20)) / (ATR% * sqrt(20))`; F2 `ATR5 / ATR20`; F3 `-d / ATR14`, `d` the distance from the close to the
   nearest bound of the nearest zone of weight at least the floor, the zones merged by `levels.merge_zones` from
   `levels.levels_for(window, next session)["levels"]` without the prior close's own level (`PDC`), `d = 0` inside a
-  zone, no such zone gives `no_zone`; F4 `max(c, 1 - c)` with `c` from `levels.close_strength` of the bar of `D`; F5
+  zone. A name with no such zone keeps its place in the ranking: F3 has no value, the name carries the caution
+  `no_zone`, and it takes the last places on F3 (owner decision, 2026-11-12); F4 `max(c, 1 - c)` with `c` from `levels.close_strength` of the bar of `D`; F5
   `abs(ret(5) - benchmark ret(5)) / (ATR% * sqrt(5))`, `benchmark_missing` when the benchmark's bars are not valid.
-  A factor that cannot be worked out is never given a value: the name is listed unranked with its reason. A factor
-  or shown value that is not a finite number is a data fault (`bad_bar`).
+  Any other factor that cannot be worked out is never given a value: the name is listed unranked with its reason. A
+  factor or shown value that is not a finite number is a data fault (`bad_bar`).
 - Each factor value is rounded to `rounding_decimals` before ranking. A larger value ranks first; ties share the
-  average rank. Every name with all five factors is ranked, whatever its events, so an event never moves another
-  name's rank. Score = the sum of the five ranks, lower first; ties go to the smaller F3 distance, then the larger
+  average rank. On F3, names with no zone share the average of the last places. Every name with all five factors is ranked, whatever its events, so an event never moves another
+  name's rank. Score = the sum of the five ranks, lower first; ties go to the smaller F3 distance (no zone sorts after
+  every distance), then the larger
   20-bar median dollar volume, then the symbol A to Z.
 - Events: a report released after the close of `D` and up to the close of the next session makes the name
   ineligible (`earnings_gap`); a report after that, up to `earnings_later_days` calendar days after the next
@@ -65,9 +67,9 @@ BUNDLE_ADJUSTMENT = "split"                   # Stage 1's daily bars are split-a
 FACTORS = ("F1", "F2", "F3", "F4", "F5")
 # The order the validity checks run in; the first that fails names the reason.
 VALIDITY_CODES = ("bad_bar", "stale_bar", "short_history", "missing_session", "suspect_split")
-REASON_CODES = VALIDITY_CODES + ("no_zone", "benchmark_missing", "internal_error")
+REASON_CODES = VALIDITY_CODES + ("benchmark_missing", "internal_error")
 ELIGIBILITY_CODES = ("earnings_gap",)
-CAUTION_CODES = ("earnings_later", "earnings_date_unknown", "earnings_row_unreadable")
+CAUTION_CODES = ("no_zone", "earnings_later", "earnings_date_unknown", "earnings_row_unreadable")
 NOTE_CODES = ("macro_high_next_session", "next_session_half_day")
 TIE_BREAK = ("f3_distance_smaller", "median_dollar_volume_larger", "symbol_a_to_z")
 _WHEN_ORDER = {"bmo": 0, "during": 1, "amc": 2}
@@ -83,6 +85,10 @@ EXIT_INTERNAL_ERROR = 1     # the output is written and at least one name has `i
 EXIT_BUNDLE = 2             # the bundle could not be read or is not in the documented shape: nothing written
 EXIT_PARAMS = 3             # the parameters file could not be read or holds what the code does not implement
 EXIT_WRITE = 4              # the output could not be written
+EXIT_CALENDAR = 5           # the session's window or next session lies outside the session calendar's range
+EXIT_USAGE = 6              # the command line is not one this command takes
+# The session calendar's range (levels.HOLIDAYS covers whole years from 2024; levels.CALENDAR_THROUGH is its end).
+CALENDAR_FROM = f"{min(lv.HOLIDAYS)[:4]}-01-01"
 
 
 class ParamsError(ValueError):
@@ -91,6 +97,10 @@ class ParamsError(ValueError):
 
 class BundleError(ValueError):
     """The input bundle is not in the documented shape."""
+
+
+class CalendarError(ValueError):
+    """The session's 260-session window or its next session lies outside the session calendar's range."""
 
 
 # ---------------------------------------------------------------- parameters
@@ -275,7 +285,10 @@ def picker_ref(root: Path = ROOT, files: Sequence[str] = PICKER_FILES) -> str:
 def _price(v: Any) -> float | None:
     if isinstance(v, bool) or not isinstance(v, int | float):
         return None
-    x = float(v)
+    try:
+        x = float(v)
+    except OverflowError:                       # an integer too large for a float: a data fault, not a code error
+        return None
     return x if math.isfinite(x) else None
 
 
@@ -311,7 +324,7 @@ def validity(bars: list[lv.Bar] | None, session: str, p: Params, sessions: Seque
     if bars and bars[-1].d > session:
         return "bad_bar"
     window = bars[-p.min_bars:]
-    if any(not (b.h >= b.l > 0 and b.o > 0 and b.c > 0 and b.v >= 0) for b in window):
+    if any(not (b.h >= b.l > 0 and b.l <= b.o <= b.h and b.l <= b.c <= b.h and b.v >= 0) for b in window):
         return "bad_bar"
     longest_atr = max(p.atr, p.atr_fast, p.atr_slow)
     if len(window) > longest_atr and any(lv.atr(window, n) <= 0 for n in (p.atr, p.atr_fast, p.atr_slow)):
@@ -404,8 +417,8 @@ def hv(window: Sequence[lv.Bar], p: Params) -> float:
 @dataclass
 class Computed:
     """One name's factors as worked out, before rounding: `score_stage1` rounds them before it ranks."""
-    factors: dict[str, float]
-    f3_distance: float                 # d / ATR14
+    factors: dict[str, float | None]   # F3 is None when no zone qualifies (the caution `no_zone`)
+    f3_distance: float | None          # d / ATR14, None when no zone qualifies
     dollar_volume: float               # median of close x volume over the last `dollar_volume` bars
     shown: dict[str, Any]              # rounded already: shown, never ranked
 
@@ -413,20 +426,23 @@ class Computed:
 def _finite(x: Any) -> bool:
     if isinstance(x, dict):
         return all(_finite(v) for v in x.values())
-    return not isinstance(x, float) or math.isfinite(x)
+    return not isinstance(x, float) or math.isfinite(x)          # None (F3 with no zone) is not a number: passes
+
+
+def _rn(x: float | None, p: Params) -> float | None:
+    return None if x is None else _r(x, p)
 
 
 def factors(window: list[lv.Bar], bench: list[lv.Bar] | None, next_session: str, p: Params) -> Computed | str:
-    """The five factors of one data-valid name, or the reason code of the first that cannot be worked out. A value
-    that is not a finite number is a data fault: `bad_bar`."""
+    """The five factors of one data-valid name, or the reason code when one cannot be worked out. F3 with no zone is
+    None (the name stays ranked, last on F3). A value that is not a finite number is a data fault: `bad_bar`."""
     close = window[-1].c
     a14 = lv.atr(window, p.atr)
-    dist = f3_distance(window, next_session, p)
-    if dist is None:
-        return "no_zone"
     if bench is None:
         return "benchmark_missing"
-    vals = {"F1": f1(window, p), "F2": f2(window, p), "F3": -dist, "F4": f4(window), "F5": f5(window, bench, p)}
+    dist = f3_distance(window, next_session, p)
+    vals: dict[str, float | None] = {"F1": f1(window, p), "F2": f2(window, p), "F3": None if dist is None else -dist,
+                                     "F4": f4(window), "F5": f5(window, bench, p)}
     dv = statistics.median(b.c * b.v for b in window[-p.dollar_volume:])
     trend = {}
     for n in p.trend_averages:
@@ -436,13 +452,25 @@ def factors(window: list[lv.Bar], bench: list[lv.Bar] | None, next_session: str,
     shown = {"atr14": _r(a14, p), "atr_pct": _r(atr_pct(window, p), p), "close": _r(close, p),
              f"hv{p.hv_returns}": _r(hv(window, p), p), "trend": trend,
              "direction": "up" if rd > 0 else "down" if rd < 0 else "flat"}
-    if not (_finite(vals) and _finite(shown) and math.isfinite(dist) and math.isfinite(dv)):
+    if not (_finite(vals) and _finite(shown) and (dist is None or math.isfinite(dist)) and math.isfinite(dv)):
         return "bad_bar"
     return Computed(vals, dist, dv, shown)
 
 
-def average_ranks(values: Mapping[str, float]) -> dict[str, float]:
-    """Rank 1 for the largest value; equal values share the mean of the places they take."""
+def average_ranks(values: Mapping[str, float | None]) -> dict[str, float]:
+    """Rank 1 for the largest value; equal values share the mean of the places they take. Names whose value is None
+    (F3 with no zone) take the last places together: with n names of which k have None, each gets (n - k + 1 + n) / 2.
+    A None never enters arithmetic or a comparison of values."""
+    have = {s: v for s, v in values.items() if v is not None}
+    missing = sorted(s for s, v in values.items() if v is None)
+    out = _ranks_of(have)
+    n, k = len(values), len(missing)
+    for s in missing:
+        out[s] = (n - k + 1 + n) / 2
+    return out
+
+
+def _ranks_of(values: Mapping[str, float]) -> dict[str, float]:
     order = sorted(values, key=lambda s: (-values[s], s))
     out: dict[str, float] = {}
     i = 0
@@ -550,13 +578,17 @@ def score_stage1(session: str, names: Sequence[str], bars: Mapping[str, Any], ea
         if isinstance(got, str):
             reason[s] = got
         else:                                                     # rounded here, before any ranking
-            done[s] = Computed({f: _r(got.factors[f], p) for f in FACTORS}, _r(got.f3_distance, p),
+            done[s] = Computed({f: _rn(got.factors[f], p) for f in FACTORS}, _rn(got.f3_distance, p),
                                _r(got.dollar_volume, p), got.shown)
     events = read_events(syms, session, nxt, earnings_rows, macro_rows, p)
 
     ranks = {f: average_ranks({s: c.factors[f] for s, c in done.items()}) for f in FACTORS}
     score = {s: sum(ranks[f][s] for f in FACTORS) for s in done}
-    order = sorted(done, key=lambda s: (score[s], done[s].f3_distance, -done[s].dollar_volume, s))
+    def tie_key(s: str) -> tuple[float, bool, float, float, str]:
+        d = done[s].f3_distance                                    # no zone: after every name with a distance
+        return score[s], d is None, 0.0 if d is None else d, -done[s].dollar_volume, s
+
+    order = sorted(done, key=tie_key)
     final = {s: i + 1 for i, s in enumerate(order)}
     eligible = [s for s in order if s not in events.gap]
     picks = eligible[:min(p.pick_count, len(eligible))]
@@ -580,7 +612,8 @@ def score_stage1(session: str, names: Sequence[str], bars: Mapping[str, Any], ea
             "final_rank": final.get(s),
             "eligible": elig == "eligible",
             "eligibility": elig,
-            "cautions": events.cautions.get(s, []),
+            "cautions": sorted(events.cautions.get(s, []) + (["no_zone"] if c is not None and c.f3_distance is None
+                                                              else [])),
             "picked": s in picks,
             "shown": None if c is None else c.shown,
         })
@@ -603,6 +636,34 @@ def score_stage1(session: str, names: Sequence[str], bars: Mapping[str, Any], ea
     }
 
 
+def _all_finite(x: Any) -> bool:
+    if isinstance(x, float):
+        return math.isfinite(x)
+    if isinstance(x, Mapping):
+        return all(_all_finite(v) for v in x.values())
+    if isinstance(x, list):
+        return all(_all_finite(v) for v in x)
+    return True
+
+
+def check_calendar(session: str, p: Params) -> None:
+    """Raise CalendarError unless the `min_bars` sessions ending at `session` and the session after it all lie inside
+    the session calendar's range (CALENDAR_FROM to levels.CALENDAR_THROUGH)."""
+    if session < CALENDAR_FROM or session > lv.CALENDAR_THROUGH:
+        raise CalendarError(f"session {session} is outside the session calendar ({CALENDAR_FROM} to "
+                            f"{lv.CALENDAR_THROUGH})")
+    try:
+        nxt = lv.next_session(session)
+    except ValueError:
+        nxt = ""
+    if not nxt or nxt > lv.CALENDAR_THROUGH:
+        raise CalendarError(f"the session after {session} is past the session calendar's end ({lv.CALENDAR_THROUGH})")
+    first = session_window(session, p.min_bars)[0]
+    if first < CALENDAR_FROM:
+        raise CalendarError(f"the {p.min_bars} sessions ending at {session} start on {first}, before the session "
+                            f"calendar's first covered date ({CALENDAR_FROM})")
+
+
 def check_bundle(doc: Any) -> None:
     """Raise BundleError unless `doc` is an input bundle of the documented shape:
 
@@ -615,9 +676,12 @@ def check_bundle(doc: Any) -> None:
          "macro_rows": [{...}, ...]}              config/events/macro_events.csv rows, likewise
 
     A name in `names` with no entry in `bars` is scored as having no bars (`stale_bar`); a malformed bar list is
-    that name's `bad_bar`, not a bundle error. Bars are daily, oldest first."""
+    that name's `bad_bar`, not a bundle error. Bars are daily, oldest first. A NaN or infinite number anywhere in the
+    bundle is not the documented shape."""
     if not isinstance(doc, Mapping):
         raise BundleError("the bundle is not an object")
+    if not _all_finite(doc):
+        raise BundleError("the bundle is not in the documented shape: it holds a NaN or infinite number")
     want = {"schema", "version", "session", "adjustment", "names", "bars", "earnings_rows", "macro_rows"}
     if set(doc) != want:
         raise BundleError(f"the bundle must hold exactly the keys {sorted(want)}")
@@ -639,8 +703,9 @@ def check_bundle(doc: Any) -> None:
 
 
 def run_bundle(doc: Any, p: Params, *, sha: str, ref: str) -> dict[str, Any]:
-    """Stage 1 on an input bundle, reading nothing but the bundle."""
+    """Stage 1 on an input bundle, reading nothing but the bundle. Raises BundleError or CalendarError."""
     check_bundle(doc)
+    check_calendar(doc["session"], p)
     return score_stage1(doc["session"], doc["names"], doc["bars"], doc["earnings_rows"], doc["macro_rows"], p,
                         sha=sha, ref=ref, input_sha=bundle_sha(doc))
 
@@ -650,16 +715,28 @@ def dumps(out: Mapping[str, Any]) -> str:
     return json.dumps(out, sort_keys=True, indent=1, ensure_ascii=True, allow_nan=False) + "\n"
 
 
+class _Parser(argparse.ArgumentParser):
+    """An argument parser whose usage errors print one line and exit with EXIT_USAGE."""
+
+    def error(self, message: str) -> Any:
+        print(f"stage1: usage: {message}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+
+
 def main(argv: list[str] | None = None) -> int:
     """`stage1 --bundle <file> --out <file> [--params <file>]`. Exit codes: EXIT_OK, EXIT_INTERNAL_ERROR (output
-    written, a name failed), EXIT_BUNDLE, EXIT_PARAMS, EXIT_WRITE; each failure prints one line, never a traceback."""
-    ap = argparse.ArgumentParser(prog="python -m wt.options.select", description="Options desk selection (DEC-0046)")
-    sub = ap.add_subparsers(dest="cmd", required=True)
+    written, a name failed), EXIT_BUNDLE, EXIT_PARAMS, EXIT_WRITE, EXIT_CALENDAR, EXIT_USAGE; each failure prints one
+    line, never a traceback, and writes no output."""
+    ap = _Parser(prog="python -m wt.options.select", description="Options desk selection (DEC-0046)")
+    sub = ap.add_subparsers(dest="cmd", required=True, parser_class=_Parser)
     s1 = sub.add_parser("stage1", help="score a saved input bundle after the close")
     s1.add_argument("--bundle", type=Path, required=True)
     s1.add_argument("--out", type=Path, required=True)
     s1.add_argument("--params", type=Path, default=CONFIG_PATH)
-    a = ap.parse_args(argv)
+    try:
+        a = ap.parse_args(argv)
+    except SystemExit as e:
+        return e.code if isinstance(e.code, int) else EXIT_USAGE
     try:
         p, sha = load_params(a.params)
     except ParamsError as e:
@@ -669,6 +746,9 @@ def main(argv: list[str] | None = None) -> int:
         doc = json.loads(a.bundle.read_text(encoding="utf-8"))
         out = run_bundle(doc, p, sha=sha, ref=picker_ref())
         text = dumps(out)
+    except CalendarError as e:
+        print(f"stage1: calendar: {e}", file=sys.stderr)
+        return EXIT_CALENDAR
     except (OSError, UnicodeDecodeError, ValueError, RecursionError) as e:
         print(f"stage1: bundle: {type(e).__name__}: {e}", file=sys.stderr)
         return EXIT_BUNDLE
