@@ -1,11 +1,12 @@
 # DEC-0051: The Options desk's server adds a signal word beside each side's state, logs it sealed, and tests it once
 
-- **Status: PROPOSED on 2026-11-13.** The owner approved the plan on 2026-11-12, in chat, to add a signal layer to
-  the Options desk: one of CALL, PUT, WAIT or NO TRADE per focus name and side, worked out on the server from the
-  board's own state and a fixed list of gates, logged sealed, and tested once, forward. It is accepted by the owner's
-  merge of the pull request that changes this line to ACCEPTED ("Accepting this record" lists what that pull request
-  changes). Acceptance registers the test and fixes the definitions below; it builds nothing, switches nothing on and
-  starts no window. The gates' numbers are not frozen by this record: they are frozen once, by its Amendment 1, under
+- **Status: ACCEPTED on 2026-11-13.** approved_by: owner. Proposed on 2026-11-13 (#424) and accepted by the owner's
+  merge of the pull request that changed this line ("Accepting this record" lists what that pull request changed).
+  The owner approved the plan on 2026-11-12, in chat, to add a signal layer to the Options desk: one of CALL, PUT,
+  WAIT or NO TRADE per focus name and side, worked out on the server from the board's own state and a fixed list of
+  gates, logged sealed, and tested once, forward. Between the proposal and the acceptance one check was added to
+  section 2.5: the contract quote's own time is bounded as well as the chain's checked age. Acceptance registers the
+  test and fixes the definitions below; it builds nothing, switches nothing on and starts no window. The gates' numbers are not frozen by this record: they are frozen once, by its Amendment 1, under
   the rule section 2 states now.
 - **Written before any affected P&L is viewed.** No signal exists, in code or anywhere else: no gate has been worked
   out on any session, no signal has been logged and no outcome of any board state, gated or not, has been worked out

@@ -5,7 +5,7 @@
 # end (no verdict) and a new experiment with new trials; before it, a decision record may amend it, saying that no
 # outcome was viewed to choose the change.
 experiment: EXP-0034
-status: proposed                    # becomes registered when DEC-0051 is accepted; no results file until the read writes it once
+status: registered                  # DEC-0051 accepted on 2026-11-13; no results file until the read writes it once
 decision: DEC-0051
 family: O                           # the options desk's entry rules and their filters; total 36 (config/trial_registry.yaml)
 trials:                             # the difference is a minus b
@@ -211,7 +211,7 @@ window:
     run through the old and the new engine; the window ends only if any row's state, brokeAt or card numbers differ;
     it prints yes or no and counts only; its result is a dated README line
   early_end_outcome: no verdict is worked out, whatever the counts; the trial stays counted; date and cause in README.md
-  close_date: one year after the date DEC-0051 is accepted (README.md)
+  close_date: "2027-11-13"          # one year after DEC-0051 was accepted (README.md)
 
 unit:
   break: one (session, focus name, side, brokeAt) whose side reads enter_zone in the DEC-0044 log
