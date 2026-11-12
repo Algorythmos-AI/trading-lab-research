@@ -1,6 +1,7 @@
 import { after } from "next/server";
 import { bearerMatches } from "@/lib/auth";
 import { runCronTicks } from "@/lib/cron-watchdog";
+import { startOptionsCopyRepair } from "@/lib/edition-copy-repair";
 import { runFeedWatch } from "@/lib/feed-watch-run";
 import { logEvent } from "@/lib/log";
 import { DESK_DEPS, runDeskWatchdog, runWatchdog, type AddedDesk } from "@/lib/watchdog-run";
@@ -19,6 +20,8 @@ export async function GET(req: Request): Promise<Response> {
   // Every tick is separate (cron-watchdog.ts): the feed watch (feed-watch-run.ts) from the start, beside the stocks desk's
   // and then each added desk's, each desk's budget deciding when the next may start. No started tick is abandoned:
   // the reply waits for all of them up to the cap, and `after` keeps any still running alive past the reply.
+  // Beside the ticks, never awaited by them or by the reply (edition-copy-repair.ts): the Options edition's copy.
+  startOptionsCopyRepair((work) => after(work));
   const { stocks, desks, feeds } = await runCronTicks({
     stocks: () => runWatchdog(),
     desks: (Object.keys(DESK_DEPS) as AddedDesk[]).map((desk) => [desk, () => runDeskWatchdog(desk)] as const),
