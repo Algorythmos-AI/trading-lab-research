@@ -49,6 +49,9 @@ export const VARIANT_COOKIE = "fx";
  * - `flow-off`, `flow-error`, `flow-thin`, `flow-stale`, `flow-crossed`: /api/flow only (flow-route.ts), and nothing
  *   else. `flow-off`: no keys (503). `flow-error`: Alpaca is failing (502). `flow-thin`: the baseline has 9 sessions.
  *   `flow-stale`: the baseline is for another session. `flow-crossed`: the first name's quote is crossed.
+ * - `flow-down`, `flow-mixed`, `flow-range`: /api/flow only, the market bar's other states at FROZEN_NOW. Without them
+ *   SPY and QQQ both rise above VWAP (MARKET UP). `flow-down`: both fall below it. `flow-mixed`: SPY up, QQQ down.
+ *   `flow-range`: both drift sideways around VWAP.
  * - `journal-option-lot`: the journal holds one open long QQQ call bought at the scripted morning's second step (2
  *   contracts at $1.20), on the strike nearest the fixture chain's QQQ price and an expiry three weeks after the
  *   server's day, so the chain lists it exactly once (fixtureOptionLot); the journal reads a few minutes after the
@@ -94,6 +97,9 @@ export const VARIANT_FLAGS = [
   "flow-thin",
   "flow-stale",
   "flow-crossed",
+  "flow-down",
+  "flow-mixed",
+  "flow-range",
   "journal-option-lot",
 ] as const;
 export type VariantFlag = (typeof VARIANT_FLAGS)[number];

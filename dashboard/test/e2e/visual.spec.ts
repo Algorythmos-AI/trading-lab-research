@@ -20,7 +20,19 @@ async function draw(page: Page, url: string, ready: string) {
   await page.clock.setFixedTime(new Date(FROZEN_NOW));
   await page.goto(url);
   await expect(page.locator(ready)).toHaveAttribute("data-ready", "true");
+  await barSettled(page);
   await page.evaluate(() => document.fonts.ready);
+}
+
+/**
+ * The market bar has its first answer, so a picture never catches it loading. It must be there on the live Options
+ * page (never skipped silently) and nowhere else pictured here.
+ */
+async function barSettled(page: Page) {
+  const bar = page.locator("section[data-market-bar]");
+  if (new URL(page.url()).pathname !== "/options") return expect(bar).toHaveCount(0);
+  await expect(bar).toHaveCount(1);
+  await expect(bar).not.toHaveAttribute("data-market-read", "loading");
 }
 
 /** The site's own header shows two running clocks and the feed's age: it is not the desk, and is left out. */
@@ -75,6 +87,7 @@ for (const theme of ["dark", "light"] as const) {
     await expect(page.locator("section[data-trade-now]")).toHaveAttribute("data-trade-now", "live", { timeout: 20_000 });
     await expect(page.locator("[data-board-row]").first()).toHaveAttribute("data-board-state", "enter_zone");
     await expect(page.locator("[data-hero-word]")).toBeVisible();
+    await barSettled(page);
     await page.evaluate(() => document.fonts.ready);
     // A desktop is pictured from the top to the first row of cards (the desk below has its own pictures): the whole
     // page is over the repository's 500 KB limit for a file. A phone's whole page fits under it.

@@ -12,6 +12,7 @@ import { BoardChip, FocusGlance, GlanceTile } from "@/components/client/focus-gl
 import { NowHero } from "@/components/client/now-hero";
 import { StatusRail } from "@/components/client/status-rail";
 import { FeedStrip } from "@/components/client/feed-strip";
+import { MarketBar } from "@/components/client/market-bar";
 import { LedgerReview } from "@/components/ledger";
 import { OptionsDesk } from "@/components/client/options-desk";
 import { OptionsGlance } from "@/components/client/options-glance";
@@ -42,11 +43,21 @@ export const metadata = { title: "Options" };
 
 const INTRO = "Where each name sits against its support and resistance, rebuilt after every close. Research only; nothing here is an order.";
 
+/** The market bar (SPY and QQQ from /api/flow, facts only) behind its own boundary: on a live page only. */
+function LiveMarketBar() {
+  return (
+    <PaneBoundary name="Market bar">
+      <MarketBar />
+    </PaneBoundary>
+  );
+}
+
 /** The page as it was before the desk: one long column of panels. Kept at ?view=classic for one release. */
 function ClassicOptions({ e, dates, date, now }: { e: Options; dates: string[]; date: string | undefined; now: Date }) {
   return (
     <>
       <PageHeading title="Options" intro={INTRO} />
+      {!date ? <LiveMarketBar /> : null}
       <OldCloseNotice e={e} />
       <LiveQuotes symbols={withLeaders(e.tickers.map((t) => t.symbol)).join(",")} session={e.session} enabled={!date}>
         <FocusScope>
@@ -103,6 +114,8 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
     return (
       <>
         <PageHeading title="Options" intro={INTRO} />
+        {/* The market bar reads /api/flow, not the edition: it stands when the edition is missing or unreadable. */}
+        {!date ? <LiveMarketBar /> : null}
         <NoOptions status={result.status} date={date} />
       </>
     );
@@ -157,10 +170,12 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
       <LiveQuotes symbols={withLeaders(e.tickers.map((t) => t.symbol)).join(",")} session={e.session} enabled={!date}>
         <DoneTodayProvider initial={flags}>
           <BoardProvider e={full} live={!date} {...day} openLots={board?.lots ?? []} closedTrades={board?.closed ?? []} journalAsOf={doc?.as_of ?? null} dayFacts={facts} evalOn={evalSwitch === "log"} guardsOn={guardSwitches?.on ?? []} guardsRead={guardSwitches?.status ?? "missing"}>
-            {/* Top to bottom: what the day allows and the clock, the one name that matters now, the four at a glance, what
+            {/* Top to bottom: the market bar, what the day allows and the clock, the one name that matters now, the four at a glance, what
                 to act on, the cards, the rules strip, then the desk. Cockpit keeps only the rail, the hero and the four
                 ladders (everything else carries data-cockpit-hide). The parts share the page's one live feed and board. */}
             <CockpitShell>
+              {/* The market bar first: what SPY and QQQ are doing, in one glance (facts only, B2). Live editions only. */}
+              {!date ? <LiveMarketBar /> : null}
               <PaneBoundary name="Status rail">
                 <StatusRail day={rail} facts={facts} />
               </PaneBoundary>
