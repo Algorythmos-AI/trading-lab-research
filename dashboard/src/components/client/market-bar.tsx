@@ -62,8 +62,11 @@ function Headline({ state, line }: { state: MarketView["state"]; line: string })
   const h = state === "none" || state === "loading" ? null : HEAD[state];
   const tone: Tone = h?.tone ?? "muted";
   return (
-    <div className="grid content-center gap-1">
-      <p data-market-head className={cn("text-decision inline-flex w-fit items-center gap-2 rounded-md border border-l-[6px] px-2.5 py-0.5 font-semibold whitespace-nowrap", CHIP[tone])}>
+    // On a phone the bar is kept short (about 100 px), so the desk's own pane bar below it stays on the first screen:
+    // the chip, the sentence and the Testing tag share one row, each tile is three tight lines, and the footer's times
+    // are for screen readers only (a reading is never coloured unless it is under 20 s old, so they add nothing there).
+    <div className="grid content-center gap-1 max-md:flex max-md:min-w-0 max-md:items-center max-md:gap-2">
+      <p data-market-head className={cn("text-decision inline-flex w-fit shrink-0 items-center gap-2 rounded-md border border-l-[6px] px-2.5 py-0.5 font-semibold whitespace-nowrap max-md:gap-1.5 max-md:border-l-4 max-md:px-2 max-md:py-0 max-md:text-base", CHIP[tone])}>
         {h ? (
           <span aria-hidden className="text-[0.85em] leading-none">
             {h.glyph}
@@ -71,9 +74,12 @@ function Headline({ state, line }: { state: MarketView["state"]; line: string })
         ) : null}
         {h ? h.word : state === "loading" ? "CHECKING" : "NOT AVAILABLE"}
       </p>
-      <p data-market-line className="text-explain text-muted-foreground truncate">
+      <p data-market-line className="text-explain text-muted-foreground truncate max-md:min-w-0 max-md:flex-1 max-md:text-xs">
         {line}
       </p>
+      <span className="shrink-0 md:hidden">
+        <TestingTag />
+      </span>
     </div>
   );
 }
@@ -87,10 +93,10 @@ function Tile({ symbol, reading }: { symbol: string; reading: IndexReading | nul
   const vwapLine = r && r.vwap !== null ? `${r.side === null ? "VWAP" : r.side === "at" ? "at VWAP" : `${r.side} VWAP`} ${r.vwap.toFixed(2)}` : "VWAP –";
   const crossed = r?.spread.bps === null && (r.spread.why === "crossed" || r.spread.why === "locked");
   return (
-    <div data-index-tile={symbol} data-direction={reading?.direction ?? "none"} className={cn("bg-card min-w-0 rounded-md border border-l-4 px-2.5 py-2", BAR[d?.tone ?? "muted"])}>
-      <p className="flex items-baseline justify-between gap-2 md:justify-start md:gap-4">
+    <div data-index-tile={symbol} data-direction={reading?.direction ?? "none"} className={cn("bg-card min-w-0 rounded-md border border-l-4 px-2.5 py-2 max-md:grid max-md:grid-cols-[auto_1fr_auto] max-md:items-baseline max-md:gap-x-2 max-md:px-2 max-md:py-0.5", BAR[d?.tone ?? "muted"])}>
+      <p className="flex items-baseline justify-between gap-2 max-md:contents md:justify-start md:gap-4">
         <span className="font-mono font-semibold">{symbol}</span>
-        <span data-index-direction className={cn("text-sm font-semibold whitespace-nowrap", TEXT[d?.tone ?? "muted"])}>
+        <span data-index-direction className={cn("text-sm font-semibold whitespace-nowrap max-md:order-3 max-md:text-xs", TEXT[d?.tone ?? "muted"])}>
           {d ? (
             <>
               <span aria-hidden>{d.glyph} </span>
@@ -101,10 +107,10 @@ function Tile({ symbol, reading }: { symbol: string; reading: IndexReading | nul
           )}
         </span>
       </p>
-      <p data-index-price className={cn("text-price font-mono leading-tight tabular-nums", !d && "text-muted-foreground")}>
+      <p data-index-price className={cn("text-price font-mono leading-tight tabular-nums max-md:order-2 max-md:text-base max-md:font-semibold", !d && "text-muted-foreground")}>
         {r?.price != null ? r.price.toFixed(2) : "–"}
       </p>
-      <p data-index-vwap className={cn("truncate text-sm", !side && "text-muted-foreground")}>
+      <p data-index-vwap className={cn("truncate text-sm max-md:order-4 max-md:col-span-3 max-md:text-xs max-md:leading-4", !side && "text-muted-foreground")}>
         {side ? (
           <span aria-hidden className={TEXT[side.tone]}>
             {side.glyph}{" "}
@@ -112,10 +118,10 @@ function Tile({ symbol, reading }: { symbol: string; reading: IndexReading | nul
         ) : null}
         {vwapLine}
       </p>
-      <p data-index-volume className="text-muted-foreground truncate text-sm">
+      <p data-index-volume className="text-muted-foreground truncate text-sm max-md:order-4 max-md:col-span-3 max-md:text-xs max-md:leading-4">
         {r ? volumeWords(r.volume) : "volume –"}
       </p>
-      <p data-index-spread={r ? (r.spread.bps === null ? r.spread.why : "ok") : "none"} className={cn("truncate text-sm", crossed ? "text-bad font-semibold" : "text-muted-foreground")}>
+      <p data-index-spread={r ? (r.spread.bps === null ? r.spread.why : "ok") : "none"} className={cn("truncate text-sm max-md:order-4 max-md:col-span-3 max-md:text-xs max-md:leading-4", crossed ? "text-bad font-semibold" : "text-muted-foreground max-md:hidden")}>
         {r ? spreadWords(r.spread) : "bid–ask –"}
       </p>
     </div>
@@ -128,7 +134,7 @@ export function MarketBar() {
   const clocks = useClocks();
   const v = marketView(feed, shownPerf, clocks);
   return (
-    <section aria-labelledby="market-bar-heading" data-market-bar data-market-read={v.state} className="bg-card grid gap-2 rounded-lg border p-3">
+    <section aria-labelledby="market-bar-heading" data-market-bar data-market-read={v.state} className="bg-card grid gap-2 rounded-lg border p-3 max-md:-mb-2 max-md:gap-1 max-md:px-2 max-md:py-1.5">
       <h2 id="market-bar-heading" className="sr-only">
         Market: SPY and QQQ
       </h2>
@@ -141,7 +147,7 @@ export function MarketBar() {
         </div>
       </div>
       {/* The same words in every state, with dashes until there is an answer, so the line never changes its length much. */}
-      <p data-market-footer className="text-muted-foreground flex flex-wrap items-center gap-y-1 text-xs">
+      <p data-market-footer className="text-muted-foreground flex flex-wrap items-center gap-y-1 text-xs max-md:sr-only">
         <span>SIP · as of {v.footer.asOf ?? "--:--:--"} New York</span>
         <span className="whitespace-pre">{" · "}</span>
         <span data-age-slot>checked {v.footer.checked ?? "–"}</span>
