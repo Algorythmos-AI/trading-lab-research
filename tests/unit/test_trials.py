@@ -32,6 +32,22 @@ def test_every_row_matches_its_decision_record():
         assert status_of(text) == row["status"], f"{row['decision']}: registry says {row['status']}"
 
 
+def test_every_family_row_matches_its_decision_record():
+    """The family rows (C, O, M, F, ...) follow the same rules as `history`: each row's status and total agree with
+    its decision record, and a family's totals never decrease, a withdrawn row neither counting nor setting the order."""
+    families = yaml.safe_load(REGISTRY.read_text())["families"]
+    assert families, "the registry lists no family"
+    for family, rows in families.items():
+        last = 0
+        for row in rows:
+            text = record(row["decision"])
+            assert status_of(text) == row["status"], f"family {family}, {row['decision']}: registry says {row['status']}"
+            assert re.search(rf"(?<!\d){row['total']}(?!\d)", text), f"{row['decision']} never states {row['total']}"
+            if row["status"] != "withdrawn":
+                assert row["total"] >= last, f"family {family} total decreases at {row['decision']}"
+                last = row["total"]
+
+
 def test_spec_round_three_count_matches_the_registry():
     dec10 = next(r for r in trial_history() if r["decision"] == "DEC-0010")
     assert load_spec("SPEC-0001")["evaluation"]["global_trials_after"] == dec10["total"]
