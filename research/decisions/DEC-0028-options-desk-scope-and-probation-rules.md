@@ -101,3 +101,13 @@ A rule is dropped by the `falsified_if` clause of its hypothesis.
 ## What this record does not do
 It runs nothing, changes no code and promotes nothing. The engine's behaviour, the edition sent tonight and
 the page are the same before and after it.
+
+## Note on DEC-0051 (added 2026-11-13)
+
+DEC-0051, proposed on 2026-11-13, amends section 1 once it is accepted. "It never says buy or sell, and nothing in it
+places, stages or suggests an order" stands for everything but DEC-0051's signal words. Those words (CALL, PUT, WAIT,
+NO TRADE) and the contract named beside them are the lab's advisory reading, marked Testing, display only. Nothing
+places, stages, routes or sizes an order, and the owner decides and enters every order by hand. The exact wording is
+in DEC-0051, "Amendments to earlier records". The text above is otherwise unchanged.
+
+No owner trade, P&L, state log or result was viewed for this note.
