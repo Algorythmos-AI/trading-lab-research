@@ -27,7 +27,7 @@ test("the default fixture reads MARKET UP, with both tiles' evidence and the Tes
     await expect(tile(page, s).locator("[data-index-direction]")).toHaveText("▲ UP");
     await expect(tile(page, s).locator("[data-index-vwap]")).toContainText(/above VWAP \d+\.\d\d/);
     await expect(tile(page, s).locator("[data-index-volume]")).toHaveText(/^\d\.\d× normal volume$/);
-    await expect(tile(page, s).locator("[data-index-spread]")).toHaveText(/^\d\.\d bp spread$/);
+    await expect(tile(page, s).locator("[data-index-spread]")).toHaveText(/^bid–ask \d\.\d bp$/);
   }
   await expect(bar(page).locator("[data-market-footer]")).toHaveText("SIP · as of 11:01:00 New York · checked just now · Testing");
   // the bar sits above everything else the live page draws

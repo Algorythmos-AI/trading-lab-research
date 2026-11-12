@@ -116,7 +116,7 @@ function Tile({ symbol, reading }: { symbol: string; reading: IndexReading | nul
         {r ? volumeWords(r.volume) : "volume –"}
       </p>
       <p data-index-spread={r ? (r.spread.bps === null ? r.spread.why : "ok") : "none"} className={cn("truncate text-sm", crossed ? "text-bad font-semibold" : "text-muted-foreground")}>
-        {r ? spreadWords(r.spread) : "spread –"}
+        {r ? spreadWords(r.spread) : "bid–ask –"}
       </p>
     </div>
   );

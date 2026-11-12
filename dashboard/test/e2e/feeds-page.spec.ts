@@ -40,6 +40,10 @@ test("in a session: the board's feed named, the stamps counted, the live rows dr
   await expect(page.locator("[data-board-feed]")).toContainText("IEX — the board is not on SIP yet (DEC-0050)");
   await expect(page.locator("[data-stamp-panel]")).toHaveAttribute("data-stamp-panel", "session");
   await expect(page.locator("[data-stamp-panel]")).toContainText("over 91 minutes since the open");
+  // the keys' entitlement, fixed in fixture mode and dated by the page's own clock
+  await expect(page.locator("[data-entitlement]")).toHaveAttribute("data-entitlement", "full");
+  await expect(page.locator("[data-entitlement]")).toContainText("Alpaca data plan (checked 11:01 NY)");
+  await expect(page.locator("[data-entitlement]")).toContainText("Stock SIP · options OPRA · 10,000 calls a minute");
   // focus + quotes-script: SPY and QQQ, plus AAPL (fixture-script SCRIPT_EXTRA_FOCUS); SPY is not added twice.
   await expect(page.locator("[data-feeds-row]")).toHaveCount(3);
   for (const row of await page.locator("[data-feeds-row]").all()) {

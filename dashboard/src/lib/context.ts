@@ -348,8 +348,9 @@ export function volumeWords(v: VolumeRatio): string {
   return v.why === "closed" ? "volume: market closed" : v.why === "before-0935" ? "volume from 09:35" : `volume: ${whyWords(v.why)}`;
 }
 
-/** The spread in plain words: "0.3 bp spread", "locked", "crossed", or "one-sided". */
+/** The bid–ask gap in plain words: "bid–ask 0.3 bp", "locked", "crossed", or "one-sided". */
 export function spreadWords(s: Spread): string {
-  if (s.bps !== null) return `${s.bps < 10 ? s.bps.toFixed(1) : Math.round(s.bps)} bp spread`;
+  if (s.bps !== null) // "bid–ask", not the other word for it: the classic Options page bans that word, which reads as an option strategy.
+  return `bid–ask ${s.bps < 10 ? s.bps.toFixed(1) : Math.round(s.bps)} bp`;
   return s.why === "one-sided" ? "one-sided quote" : s.why;
 }

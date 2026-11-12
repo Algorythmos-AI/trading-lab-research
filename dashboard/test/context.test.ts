@@ -290,7 +290,7 @@ describe("words", () => {
   it("volume and spread", () => {
     expect(volumeWords({ value: 1.44, sessions: 20 })).toBe("1.4× normal volume");
     expect(volumeWords({ value: null, why: "thin-baseline" })).toBe("volume: too few past sessions");
-    expect(spreadWords({ bps: 0.26 })).toBe("0.3 bp spread");
+    expect(spreadWords({ bps: 0.26 })).toBe("bid–ask 0.3 bp");
     expect(spreadWords({ bps: null, why: "crossed" })).toBe("crossed");
     expect(spreadWords({ bps: null, why: "locked" })).toBe("locked");
   });

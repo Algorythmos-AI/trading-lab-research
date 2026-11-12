@@ -605,4 +605,36 @@ describe("GET /api/health", () => {
     expect(body.snapshot).toBe("ok");
     expect(body.ok).toBe(true);
   });
+
+  it("adds the keys' entitlement after every older field, only when the site has keys, and moves nothing", async () => {
+    const { resetEntitlement } = await import("@/lib/entitlement");
+    resetEntitlement();
+    vi.stubEnv("ALPACA_API_KEY_ID", "test-key-id");
+    vi.stubEnv("ALPACA_API_SECRET_KEY", "test-key-secret");
+    vi.stubEnv("ALPACA_DATA_URL", "https://data.example");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL | Request) => new Response("{}", { status: String(url).includes("/v1beta1/") ? 403 : 200, headers: { "x-ratelimit-limit": "200" } })),
+    );
+    const body = await health();
+    expect(Object.keys(body)).toEqual(["ok", "version", "snapshot_as_of", "snapshot_run_id", "snapshot", "desks", "editions", "entitlement"]);
+    expect(body.entitlement).toEqual({ checked_at: expect.any(String), stock: "sip", option: "refused", calls_per_min: 200 });
+    expect(body.editions).toEqual(NO_EDITIONS);
+    vi.unstubAllGlobals();
+    resetEntitlement();
+  });
+
+  it("does not wait on Alpaca: with a probe that never answers, it answers within the wait and leaves the field out", async () => {
+    const { HEALTH_WAIT_MS, resetEntitlement } = await import("@/lib/entitlement");
+    resetEntitlement();
+    vi.stubEnv("ALPACA_API_KEY_ID", "test-key-id");
+    vi.stubEnv("ALPACA_API_SECRET_KEY", "test-key-secret");
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+    const t0 = performance.now();
+    const body = await health();
+    expect(performance.now() - t0).toBeLessThan(HEALTH_WAIT_MS + 400);
+    expect(Object.keys(body)).toEqual(["ok", "version", "snapshot_as_of", "snapshot_run_id", "snapshot", "desks", "editions"]);
+    vi.unstubAllGlobals();
+    resetEntitlement();
+  });
 });

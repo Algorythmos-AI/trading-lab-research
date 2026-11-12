@@ -4,7 +4,9 @@
 // your own rules, how many contracts fit, the stop to place and the dollars at risk at that stop with fees. The
 // arithmetic is all in lib/ticket.ts. What is typed stays in this browser tab (React state only, never stored, never
 // sent): the option chain is asked for by the name and the live stock price alone, and its 15-minute-old ask is shown
-// for orientation only, never used in a number. Arithmetic on your rules, not advice: nothing here places an order.
+// for orientation only, never used in a number. Once a strike and expiry name a listed contract, its live OPRA quote
+// (when one passes every guard) is shown beside the price as a check, with the round trip's cost: never a sizing
+// input. Arithmetic on your rules, not advice: nothing here places an order.
 import { ChevronRight } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { readQuote } from "@/lib/contract";
@@ -27,6 +29,7 @@ import {
   ticketEstimates,
   usd,
 } from "@/lib/ticket";
+import { chainMatches, judgeQuote, occSymbol, ticketCheck } from "@/lib/option-value";
 import { chainFresh, chainPx } from "@/lib/what-if";
 import { cn } from "@/lib/utils";
 import type { LiveInputs } from "./focus-card-live";
@@ -34,6 +37,7 @@ import { useLadderLive } from "./ladder-live";
 import { rememberTicketPrice } from "./ticket-memo";
 import { openFocusCard } from "./trade-now";
 import { useChain } from "./use-chain";
+import { useContractQuote } from "./use-contract-quote";
 import { useNow, usePerfNow } from "./use-now";
 
 export const OPEN_TICKET_EVENT = "options-open-ticket";
@@ -199,7 +203,7 @@ export function TicketBody({ symbol, plan, live, typed, onType }: TicketProps & 
 
       {size === null ? <LimitTable /> : <SizeBlock size={size} />}
 
-      {size !== null && size.contracts > 0 ? <EstimateBlock symbol={symbol} plan={plan} live={live} typed={typed} onType={onType} paidCents={size.priceCents} contracts={size.contracts} /> : null}
+      {size !== null && size.contracts > 0 ? <EstimateBlock symbol={symbol} plan={plan} live={live} typed={typed} onType={onType} paidCents={size.priceCents} contracts={size.contracts} riskCents={size.riskCents} /> : null}
 
       <p className={SMALL}>
         Your rules worked out, not advice: ${MAX_PREMIUM} premium cap, ${RISK_PER_TRADE} at the stop with fees, stop at −{stopPct}%. Nothing here
@@ -266,6 +270,56 @@ function SizeBlock({ size }: { size: Size }) {
 }
 
 /**
+ * Beside the typed price, once a strike and an expiry name one contract listed in the chain: its live OPRA bid and
+ * ask, a plain warning when the typed price is above the ask or below the bid, and what a round trip at the spread
+ * costs, fees in, against the ticket's planned risk (option-value.ts ticketCheck). Nothing at all unless the quote
+ * passes every guard the manage card's value does (judgeQuote). The typed price stays the only sizing input.
+ */
+function LivePriceCheck({
+  symbol,
+  kind,
+  expiry,
+  strike,
+  listed,
+  paidCents,
+  contracts,
+  riskCents,
+}: {
+  symbol: string;
+  kind: "call" | "put";
+  expiry: string;
+  strike: number | null;
+  listed: boolean;
+  paidCents: number;
+  contracts: number;
+  riskCents: number;
+}) {
+  const perfNow = usePerfNow(1_000);
+  // Only to bound the time since the request was sent, never the session (that is the answer's server time). Rounded
+  // down to the second by useNow, so a second is added: the age may read old, never young.
+  const wall = useNow(1_000);
+  const occ = listed && expiry && strike !== null ? (occSymbol(symbol, expiry, kind, strike) ?? "") : "";
+  const { feed, shownPerf } = useContractQuote(occ, occ !== "");
+  if (!occ) return null;
+  const j = judgeQuote({ feed, occ, perfNow, wallNow: wall === null ? null : wall + 1_000, shownPerf });
+  if (!j.ok) return null;
+  const c = ticketCheck(paidCents, contracts, riskCents, j.q);
+  return (
+    <div className="grid gap-0.5" data-ticket-live>
+      <p className="text-foreground font-mono tabular-nums">{c.line}</p>
+      {c.warn ? (
+        <p className="text-warn font-medium" data-ticket-live-warn>
+          {c.warn}
+        </p>
+      ) : null}
+      <p className={SMALL} data-ticket-live-cost>
+        {c.costLine}
+      </p>
+    </div>
+  );
+}
+
+/**
  * Estimates at the chart stop and T1, shown only when a volatility solves from the typed price at the live stock
  * price, the strike and expiry picked here. The chain gives the lists to pick from and its old ask, labelled; none
  * of its numbers feed an estimate.
@@ -278,7 +332,8 @@ function EstimateBlock({
   onType,
   paidCents,
   contracts,
-}: TicketProps & { typed: TicketTyped; onType: (t: Partial<TicketTyped>) => void; paidCents: number; contracts: number }) {
+  riskCents,
+}: TicketProps & { typed: TicketTyped; onType: (t: Partial<TicketTyped>) => void; paidCents: number; contracts: number; riskCents: number }) {
   const ids = useId();
   const view = useLadderLive(live);
   const spot = view.dot?.kind === "live" ? view.dot.price : null;
@@ -395,6 +450,16 @@ function EstimateBlock({
           </ul>
         </div>
       ) : null}
+      <LivePriceCheck
+        symbol={symbol}
+        kind={plan.side}
+        expiry={expiry}
+        strike={strike}
+        listed={chain ? chainMatches(chain, expiry, plan.side, strike ?? NaN) === 1 : false}
+        paidCents={paidCents}
+        contracts={contracts}
+        riskCents={riskCents}
+      />
       {oldAsk !== null && age !== null ? (
         <p className={SMALL} data-ticket-old-ask>
           Site chain ask {usd(Math.round(oldAsk * 100))} · {age} min ago. Not used here.
