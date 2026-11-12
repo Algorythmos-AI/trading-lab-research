@@ -55,6 +55,22 @@ export async function storedAt(pathname: string): Promise<string | null> {
   }
 }
 
+/**
+ * The store's own metadata for the blob at `pathname`, from one head(): its etag (the one put({ ifMatch }) compares)
+ * and when it was written (uploadedAt, ISO with Z); null when there is none. Both come from the same response, so the
+ * time is that of the very write the etag names: a caller that holds the etag its own put() returned can tell whether
+ * the time is its write's. A missing or invalid time is thrown, never guessed.
+ */
+export async function storedMeta(pathname: string): Promise<{ etag: string; uploadedAt: string } | null> {
+  try {
+    const h = await head(pathname);
+    return { etag: h.etag, uploadedAt: new Date(h.uploadedAt).toISOString() };
+  } catch (e) {
+    if (e instanceof BlobNotFoundError) return null;
+    throw e;
+  }
+}
+
 // The last text read per path on this instance, by its delivery etag, for readTextIfChanged. A warm instance asks
 // the store "changed since?" and gets a bodiless 304 when it has not; a cold one reads it whole. Bounded: a handful
 // of fixed paths only ever enter it.
@@ -95,16 +111,22 @@ export async function readTextIfChanged(pathname: string): Promise<StoredText | 
  * calls we hold an older etag with newer text, so the conditional write fails and is retried. The
  * other order could pair older text with a newer etag and let an older snapshot overwrite a newer one.
  */
-export async function readForUpdate(pathname: string): Promise<StoredText | null> {
+export async function readForUpdate(pathname: string): Promise<(StoredText & { uploadedAt?: string }) | null> {
   let etag: string;
+  let uploadedAt: string | undefined;
   try {
-    etag = (await head(pathname)).etag;
+    const h = await head(pathname);
+    etag = h.etag;
+    // The time of the write that etag names, when the store gives a valid one. Optional: a caller must pair it with
+    // the text only once a write conditioned on this etag has succeeded (the text may be newer than the etag).
+    const at = new Date(h.uploadedAt);
+    uploadedAt = Number.isFinite(at.getTime()) ? at.toISOString() : undefined;
   } catch (e) {
     if (e instanceof BlobNotFoundError) return null;
     throw e;
   }
   const cur = await readText(pathname);
-  return cur ? { text: cur.text, etag } : null;
+  return cur ? { text: cur.text, etag, ...(uploadedAt ? { uploadedAt } : {}) } : null;
 }
 
 export async function writeText(

@@ -9,20 +9,25 @@ import optionsJson from "./fixtures/options.v1.json";
 const blob = vi.hoisted(() => {
   class PreconditionFailed extends Error {}
   const store = new Map<string, { text: string; etag: string }>();
+  /** The store's own time of each path's last write, one second per write, as the real store's uploadedAt. */
+  const uploaded = new Map<string, string>();
   let seq = 0;
   const state = { conflicts: 0 };
   return {
     store,
+    uploaded,
     state,
     PreconditionFailed,
     reset() {
       store.clear();
+      uploaded.clear();
       seq = 0;
       state.conflicts = 0;
     },
     put(pathname: string, text: string) {
       const etag = `"e${++seq}"`;
       store.set(pathname, { text, etag });
+      uploaded.set(pathname, new Date(Date.parse("2026-10-09T21:30:00.000Z") + seq * 1000).toISOString());
       return etag;
     },
   };
@@ -36,6 +41,10 @@ vi.mock("@/lib/blob", () => ({
   PreconditionFailed: blob.PreconditionFailed,
   readText: vi.fn(async (pathname: string) => blob.store.get(pathname) ?? null),
   readForUpdate: vi.fn(async (pathname: string) => blob.store.get(pathname) ?? null),
+  storedMeta: vi.fn(async (pathname: string) => {
+    const b = blob.store.get(pathname);
+    return b ? { etag: b.etag, uploadedAt: blob.uploaded.get(pathname)! } : null;
+  }),
   writeText: vi.fn(async (pathname: string, body: string, opts: { ifMatch?: string | null } = {}) => {
     if (blob.state.conflicts > 0 && pathname === "snapshots/latest.json") {
       blob.state.conflicts--;
@@ -112,10 +121,14 @@ describe("options edition schema", () => {
 });
 
 describe("POST /api/ingest with an options edition", () => {
-  it("stores latest and the per-session copy, touching nothing else", async () => {
+  it("stores latest, the per-session copy and the run's receipt copy, touching nothing else", async () => {
     const res = await handleIngest(post(edition()), NOW);
     expect(res.status).toBe(200);
-    expect([...blob.store.keys()].sort()).toEqual(["options/editions/2026-10-12.json", "options/latest.json"]);
+    expect([...blob.store.keys()].sort()).toEqual([
+      "options/copies/2026-10-12/20261009T213001000Z-options-2026-10-12-20261009T210000.json",
+      "options/editions/2026-10-12.json",
+      "options/latest.json",
+    ]);
   });
 
   it("is a duplicate on the same run_id and 409 when older", async () => {

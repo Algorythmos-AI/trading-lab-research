@@ -97,8 +97,13 @@ export const LEDGER_PATHS = {
   history: "ledger/editions/",
 } as const;
 
-/** The after-close options levels editions, one per session they are built for, kept the same way as the radar's. */
+/**
+ * The after-close options levels editions, one per session they are built for, kept the same way as the radar's.
+ * `copies` also keeps every edition that became latest, each once, with the store's receipt time
+ * (./edition-copy, EXP-0033 `labeller_rules.edition`): `history` holds one file per session that a refresh replaces.
+ */
 export const OPTIONS_PATHS = {
   latest: "options/latest.json",
   history: "options/editions/",
+  copies: "options/copies/",
 } as const;
