@@ -4,7 +4,7 @@ import { RelativeTime } from "@/components/client/relative-time";
 import { Panel } from "@/components/panel";
 import { StatusBadge } from "@/components/status";
 import { describeAge, freshness, OFFLINE_HOURS } from "@/lib/freshness";
-import { rateLimitLine } from "@/lib/desk-guards";
+import { guardSwitchLine, rateLimitLine } from "@/lib/desk-guards";
 import { calendarNotice, evaluateStamped, FEEDS, type FeedView, journalShown, nextDueOf, type StampedInputs, worstOf } from "@/lib/feed-watch";
 import { lastWeekdays } from "@/lib/feeds";
 import { shortDate, sydney, weekDate } from "@/lib/format";
@@ -84,6 +84,8 @@ export interface FeedsInput {
    * null when not read. Below 1,000 the panel says so (desk-guards.ts rateLimitLine); display only.
    */
   dataPlanLimit?: number | null;
+  /** How the server check's newest record read the guards' switches (its `guards`), or null; display only. */
+  guardSwitches?: { switches: unknown; on: unknown } | null;
 }
 
 /** The feed watch rows each card stands for: an alert about any of them that could not be sent is said on the card. */
@@ -276,6 +278,8 @@ export function FeedsPanel(input: FeedsInput) {
   const nowMs = input.now.getTime();
   const outside = calendarNotice(nowMs);
   const limitLine = rateLimitLine(input.dataPlanLimit);
+  const switchLine = guardSwitchLine(input.guardSwitches);
+  const switchBad = input.guardSwitches?.switches === "error" || input.guardSwitches?.switches === "malformed";
   return (
     <Panel
       id="feeds"
@@ -290,8 +294,13 @@ export function FeedsPanel(input: FeedsInput) {
         </p>
       ) : null}
       {limitLine ? (
-        <p data-rate-limit className="border-warn/60 bg-warn-soft mb-3 rounded-lg border p-3 text-sm">
+        <p data-rate-limit className="border-border mb-3 rounded-lg border p-3 text-sm">
           {limitLine}
+        </p>
+      ) : null}
+      {switchLine ? (
+        <p data-guard-switches={switchBad ? "unread" : "read"} className={cn("mb-3 rounded-lg border p-3 text-sm", switchBad ? "border-warn/60 bg-warn-soft" : "border-border")}>
+          {switchLine}
         </p>
       ) : null}
       <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">

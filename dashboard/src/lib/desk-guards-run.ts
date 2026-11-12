@@ -16,8 +16,8 @@ import { fixtureMode } from "./snapshot";
 //    deploy. Behind Vercel Authentication like every page, hardened like /api/desk/eval-status (GET and HEAD only,
 //    cross-site refused, Vercel's protection bypass refused in every documented form, no-store). It writes nothing.
 //  * loadGuardSwitches: the same read for the page's server render.
-//  * loadDataPlanLimit: the snapshot's X-RateLimit-Limit on the server check's newest record (its probe), for the
-//    Operations page's feeds panel. Display only: nothing is sent.
+//  * loadServerCheckFacts: the snapshot's X-RateLimit-Limit (its probe) and the guards' switch read on the server
+//    check's newest record, for the Operations page's feeds panel. Display only: nothing is sent.
 // In fixture mode and anywhere but production none of them touches the store: every guard is off, no limit is read.
 
 const NO_STORE = { "cache-control": "no-store" };
@@ -64,26 +64,40 @@ export async function handleGuards(req: Request, deps: GuardReadDeps = defaultGu
   return req.method === "HEAD" ? new Response(null, { status: res.status, headers: res.headers }) : res;
 }
 
+/** What the Operations page reads off the server check's newest record today. */
+export interface ServerCheckFacts {
+  /** The snapshot's X-RateLimit-Limit (`probe.rate_limit`), or null. */
+  rateLimit: number | null;
+  /** How that run read the guards' switches and which were on (`guards`), or null without a guard log. */
+  guards: { switches: unknown; on: unknown } | null;
+}
+
+const NO_FACTS: ServerCheckFacts = { rateLimit: null, guards: null };
+
 /**
- * The data plan's rate limit as the newest server record today read it (`probe.rate_limit`), or null: outside a
- * session day, the check switched off, no record among the latest slots, no probe on it, or any read failing. One
- * switch read, at most a few head() calls (desk-page-run's lastLoggedSlot) and one record read.
+ * The newest server record today: its data plan limit and its guards' switch read, or nothing: outside a session day,
+ * the check switched off, no record among the latest slots, or any read failing. One switch read, at most a few
+ * head() calls (desk-page-run's lastLoggedSlot) and one record read.
  */
-export async function loadDataPlanLimit(now: number, deps: EvalStatusDeps & { readRecord?(path: string): Promise<string | null> } = defaultEvalStatusDeps()): Promise<number | null> {
-  if (deps.dry) return null;
+export async function loadServerCheckFacts(now: number, deps: EvalStatusDeps & { readRecord?(path: string): Promise<string | null> } = defaultEvalStatusDeps()): Promise<ServerCheckFacts> {
+  if (deps.dry) return NO_FACTS;
   try {
-    if (parseEvalSwitch(await deps.readSwitch()) !== "log") return null;
+    if (parseEvalSwitch(await deps.readSwitch()) !== "log") return NO_FACTS;
     const last = await lastLoggedSlot(deps, now);
     const day = nyClock(new Date(now).toISOString())?.day;
-    if (last === null || !day) return null;
+    if (last === null || !day) return NO_FACTS;
     const read = deps.readRecord ?? (async (p: string) => (await readText(p))?.text ?? null);
     const text = await read(serverLogPath(day, last));
     const rec: unknown = text === null ? null : JSON.parse(text);
-    const probe = rec !== null && typeof rec === "object" ? (rec as { probe?: unknown }).probe : null;
-    const limit = probe !== null && typeof probe === "object" ? (probe as { rate_limit?: unknown }).rate_limit : null;
-    return typeof limit === "number" && Number.isInteger(limit) && limit >= 0 ? limit : null;
+    const obj = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v);
+    if (!obj(rec)) return NO_FACTS;
+    const limit = obj(rec.probe) ? rec.probe.rate_limit : null;
+    return {
+      rateLimit: typeof limit === "number" && Number.isInteger(limit) && limit >= 0 ? limit : null,
+      guards: obj(rec.guards) ? { switches: rec.guards.switches, on: rec.guards.on } : null,
+    };
   } catch (e) {
-    logEvent("desk-guards.rate-limit", { outcome: "error", error: errName(e) });
-    return null;
+    logEvent("desk-guards.facts", { outcome: "error", error: errName(e) });
+    return NO_FACTS;
   }
 }
