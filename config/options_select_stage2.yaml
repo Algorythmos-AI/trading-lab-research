@@ -2,7 +2,7 @@
 # src/wt/options/select_stage2.py, which refuses a file that holds anything it does not implement. Not the Stage 1
 # file (config/options_select.yaml): that file and its params_sha are untouched by Stage 2.
 #
-# Every number here is written in DEC-0046. Changing one is a change to the selection and needs a dated amendment to
+# Every number here is written in DEC-0046 (section 5, or its Amendment 1). Changing one is a change to the selection and needs a dated amendment to
 # DEC-0046 first; nothing here is tuned on results. The output records this file's stage2_params_sha, worked out as
 # Stage 1's params_sha is (wt.options.select.canonical_json): SHA-256 of the parsed content as JSON with keys sorted,
 # separators "," and ":", ASCII only. Comments and layout do not enter it. A whole number written as a float (120.0)
@@ -44,6 +44,11 @@ reserves:                    # "a Stage 1-eligible name ranked 5th or lower whos
   from_rank: 5
   max: 2
   none_text: "No reserve qualifies"
+  not_classified_text: "Reserves not classified: the Stage 2 thresholds are not set"
+
+entitlement:                 # Amendment 1 item 6: established by the fetch's own evidence; the smallest
+  from: fetch_evidence       # X-RateLimit-Limit of the data answers must be at least 1,000 (the approved plan's lapse
+  min_rate_limit: 1000       # rule: "X-RateLimit-Limit under 1,000 is treated as a lapse"); a missing header fails
 
 degraded: more_than_half_not_confirmed   # "When more than half the names are not_confirmed the pass is degraded"
 
@@ -59,7 +64,8 @@ rules:
     checks: [spread_above_limit, gap_at_or_above_fail_limit]
   - status: caution
     checks: [beyond_ceiling_or_floor, gap_at_or_above_caution_limit, relative_volume_at_or_above_limit,
-             earnings_today, macro_event_today, close_adjusted, possibly_halted, earnings_row_unreadable]
+             earnings_today, macro_event_today, close_adjusted, possibly_halted, earnings_row_unreadable,
+             halt_report_stale]
 
 # Names only: the values are not set by DEC-0046 and are never written here.
 thresholds: [spread_limit_bps, gap_fail_atr, gap_caution_atr, relative_volume_limit]

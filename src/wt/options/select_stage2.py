@@ -26,7 +26,7 @@ The rules, in the record's words (DEC-0046 section 5), and where each is impleme
 - G6 `position`: "Pre-market high and low come from the same 5-minute bars, never from the daily bar. ... Position
   is one of: past upper target 1, above the ceiling, between, below the floor, past lower target 1." The ceiling,
   floor and targets come from the card-field code, which is not built: they are read from a Stage 1 row's `card`
-  when present, and position is "not available" (neutral) when not.
+  when present; when not, position reads "not available" and its check is undetermined (Amendment 1 item 11).
 - The status table, "one per name, the first matching rule wins", is `config/options_select_stage2.yaml` `rules`,
   applied by `decide`. A check is True, False or None (not determined); a rule fires on any True; a rule with no
   True and a None makes the status `unclassified`, because the record's first matching rule cannot be known. Every
@@ -34,12 +34,14 @@ The rules, in the record's words (DEC-0046 section 5), and where each is impleme
 - Thresholds: "Stage 2's four thresholds ... are not set by this record". They come in as `Thresholds`; an absent
   one leaves every check that needs it None (`unclassified`), with the measured value reported.
 
-Not set by the record, and read conservatively (see the pull request's report): the age limit of a quote used as a
-midpoint and the freshness of a stream halt state (`Thresholds.quote_max_age_s`, `halt_max_age_s`, absent until an
-amendment); "normally trades pre-market" (every desk name); a split ex-date (the record allows scaling or
-`not_confirmed`: this code gives `not_confirmed`, never scales); a dividend ex-date (the adjustment is undefined:
-the raw close is used and the name is marked `close_adjusted`, a caution); any other corporate action with an
-ex-date on the session (`not_confirmed`); a crossed quote (no midpoint, no spread).
+The points section 5 leaves open are settled by DEC-0046's Amendment 1 (proposed with this code) and implemented
+here: a split ex-date is `not_confirmed` and never scaled; a dividend ex-date uses the raw close and is a
+`close_adjusted` caution; any other action effective on the session is `not_confirmed`; the spread is in basis points
+of the midpoint and a crossed quote has none; every desk name "normally trades pre-market"; entitlement comes from
+the fetch's own evidence (`evidence`); the extra rule 2 reasons and cautions; a macro row of any severity; a zero
+baseline median is "not available"; without card fields the position check is undetermined (`card_fields`); the age
+limit of a quote (`quote_max_age_s`) and the freshness of a halt report (`halt_max_age_s`) are absent until frozen,
+and every use of the quote or the report needs them; a time after `T` is stale.
 """
 from __future__ import annotations
 
@@ -86,7 +88,7 @@ RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("no_longer_qualifies", ("spread_above_limit", "gap_at_or_above_fail_limit")),
     ("caution", ("beyond_ceiling_or_floor", "gap_at_or_above_caution_limit", "relative_volume_at_or_above_limit",
                  "earnings_today", "macro_event_today", "close_adjusted", "possibly_halted",
-                 "earnings_row_unreadable")),
+                 "earnings_row_unreadable", "halt_report_stale")),
 )
 CHECKS = tuple(c for _, codes in RULES for c in codes)
 THRESHOLD_KEYS = ("spread_limit_bps", "gap_fail_atr", "gap_caution_atr", "relative_volume_limit")
@@ -98,7 +100,11 @@ SPLIT_TYPES = ("forward_splits", "reverse_splits")
 DIVIDEND_TYPES = ("cash_dividends",)
 ENTITLEMENT_STATES = ("passed", "failed", "unknown")
 HALT_STATES = ("halted", "not_halted")
-CUT_SHORT = ("request_budget", "time_budget", "rate_limit")
+# What can leave a fetch incomplete (Amendment 1 item 7). The fetcher writes the cause; the scorer adds its own.
+CUT_SHORT = ("auth", "forbidden", "rate_limit", "server_error", "timeout", "transport", "http_error", "bad_answer",
+             "feed_guard", "request_budget", "time_budget", "late")
+SCORER_PROBLEMS = ("incomplete", "early", "late", "answer_not_200", "request_missing")
+MERGER_NAME_TYPES = ("name_changes", "cash_mergers", "stock_mergers", "stock_and_cash_mergers")
 # The requests whose answers are market data and must have named feed=sip. News and corporate actions take no feed.
 DATA_REQUESTS = ("daily_raw", "minute", "premarket", "snapshots")
 OTHER_REQUESTS = ("corporate_actions", "news")
@@ -149,6 +155,8 @@ class Params:
     reserves_from_rank: int
     reserves_max: int
     reserve_none_text: str
+    reserve_not_classified_text: str
+    min_rate_limit: int
 
 
 @dataclass(frozen=True)
@@ -192,7 +200,8 @@ def params_from_mapping(cfg: Any) -> Params:
     """The parameters as parsed from `config/options_select_stage2.yaml`. Raises ParamsError on any key, value or
     rule the code does not implement, so the file and the code cannot drift apart."""
     top = _exactly(cfg, {"version", "passes", "fetch_delay_s", "reference_bar", "premarket", "baseline",
-                         "possibly_halted", "reserves", "degraded", "rules", "thresholds", "missing_numbers"},
+                         "possibly_halted", "reserves", "degraded", "rules", "thresholds", "missing_numbers",
+                         "entitlement"},
                    "the parameters")
     if _int(top["version"], "version") != 1:
         raise ParamsError("version must be 1")
@@ -210,7 +219,10 @@ def params_from_mapping(cfg: Any) -> Params:
     pm = _exactly(top["premarket"], {"from", "bar_seconds"}, "premarket")
     bl = _exactly(top["baseline"], {"sessions", "min_sessions"}, "baseline")
     ph = _exactly(top["possibly_halted"], {"no_trade_s", "normally_trades_premarket"}, "possibly_halted")
-    rs = _exactly(top["reserves"], {"from_rank", "max", "none_text"}, "reserves")
+    rs = _exactly(top["reserves"], {"from_rank", "max", "none_text", "not_classified_text"}, "reserves")
+    en = _exactly(top["entitlement"], {"from", "min_rate_limit"}, "entitlement")
+    if en["from"] != "fetch_evidence":
+        raise ParamsError("entitlement.from must be fetch_evidence: the code implements no other (Amendment 1 item 6)")
     if ph["normally_trades_premarket"] != "all_names":
         raise ParamsError("possibly_halted.normally_trades_premarket must be all_names: the code implements no other")
     if top["degraded"] != "more_than_half_not_confirmed":
@@ -223,8 +235,8 @@ def params_from_mapping(cfg: Any) -> Params:
         raise ParamsError("rules must be exactly the status table the code implements, in its order")
     if top["thresholds"] != list(THRESHOLD_KEYS) or top["missing_numbers"] != list(MISSING_NUMBER_KEYS):
         raise ParamsError("thresholds and missing_numbers must name exactly the keys the code reads, and no value")
-    if not isinstance(rs["none_text"], str) or not rs["none_text"]:
-        raise ParamsError("reserves.none_text must be words")
+    if not all(isinstance(rs[k], str) and rs[k] for k in ("none_text", "not_classified_text")):
+        raise ParamsError("reserves.none_text and reserves.not_classified_text must be words")
     p = Params(
         pass_at=at, publish_by=by,
         fetch_delay_s=_int(top["fetch_delay_s"], "fetch_delay_s"),
@@ -238,6 +250,8 @@ def params_from_mapping(cfg: Any) -> Params:
         reserves_from_rank=_int(rs["from_rank"], "reserves.from_rank"),
         reserves_max=_int(rs["max"], "reserves.max"),
         reserve_none_text=rs["none_text"],
+        reserve_not_classified_text=rs["not_classified_text"],
+        min_rate_limit=_int(en["min_rate_limit"], "entitlement.min_rate_limit"),
     )
     if p.baseline_min > p.baseline_sessions:
         raise ParamsError("baseline.min_sessions cannot exceed baseline.sessions")
@@ -463,6 +477,8 @@ def check_stage1(s1: Any, session: str) -> None:
         raise Stage1Error("not a Stage 1 output of a version this code reads")
     if s1.get("next_session") != session:
         raise Stage1Error(f"the Stage 1 block selects for {s1.get('next_session')}, not {session}")
+    if s1.get("session") != lv.prev_session(session):
+        raise Stage1Error(f"the Stage 1 block scores {s1.get('session')}, not the session before {session}")
     rows = s1.get("names")
     if not isinstance(rows, list) or not all(isinstance(r, Mapping) and isinstance(r.get("symbol"), str)
                                              for r in rows):
@@ -496,7 +512,7 @@ def check_bundle(doc: Any) -> None:
          "session": "YYYY-MM-DD",          the session being confirmed (Stage 1's next_session)
          "pass": "A" | "B",
          "T": "YYYY-MM-DDTHH:MM:SSZ",       the pass's assessment time, UTC
-         "fetched_at": "...Z",              when the fetch began (evidence; at least T + 60 s)
+         "fetched_at": "...Z",              when the fetch ended (at most the pass's publish-by time)
          "stage1_sha": hex, "stage1_doc_sha": hex,   the Stage 1 block the bundle was fetched for
          "names": ["SPY", ...],
          "requests": [{"what": "daily_raw" | "minute" | "premarket" | "snapshots" | "corporate_actions" | "news",
@@ -505,7 +521,8 @@ def check_bundle(doc: Any) -> None:
          "plan_check": {"x_ratelimit_limit": int | null},     as read: the smallest value on any data answer
          "entitlement": {"state": "passed" | "failed" | "unknown", "source": str | null, "checked_at": str | null},
          "halt": {"SYM": {"state": "halted" | "not_halted", "source": str, "as_of": "...Z"}, ...},  absent: unknown
-         "fetch": {"complete": bool, "cut_short": null | "request_budget" | "time_budget" | "rate_limit"},
+         "fetch": {"complete": bool, "cut_short": null | one of CUT_SHORT, "started_at": "...Z" (at least T + 60 s)},
+                                            an incomplete fetch is saved with what it got: every name is not_confirmed
          "data": {"SYM": {
              "daily_raw": [bar, ...],       raw daily bars (adjustment=raw) of the last sessions before the session
              "minute": [bar, ...],          1-minute bars from T - 15 min to T
@@ -546,9 +563,10 @@ def check_bundle(doc: Any) -> None:
     if not isinstance(ent, Mapping) or ent.get("state") not in ENTITLEMENT_STATES:
         raise BundleError("entitlement.state must be passed, failed or unknown")
     fetch = doc["fetch"]
-    if (not isinstance(fetch, Mapping) or not isinstance(fetch.get("complete"), bool)
-            or fetch.get("cut_short") not in (None,) + CUT_SHORT):
-        raise BundleError("fetch must say whether it was complete and what cut it short")
+    if (not isinstance(fetch, Mapping) or set(fetch) != {"complete", "cut_short", "started_at"}
+            or not isinstance(fetch.get("complete"), bool) or fetch.get("cut_short") not in (None,) + CUT_SHORT
+            or parse_ts(fetch.get("started_at")) is None or (fetch["complete"] and fetch["cut_short"] is not None)):
+        raise BundleError("fetch must say when it began, whether it was complete and what cut it short")
     if not isinstance(doc["plan_check"], Mapping) or not isinstance(doc["halt"], Mapping):
         raise BundleError("plan_check and halt must be objects")
     for sym, h in doc["halt"].items():
@@ -604,13 +622,22 @@ class Context:
     T: dt.datetime
     t_hm: tuple[int, int]
     baseline_days: list[str]
-    entitlement: str
+    entitlement: bool
     feed_ok: bool
-    cut_short: str | None
+    fetch_problems: list[str]
     earnings_rows: list[Mapping[str, Any]]
     unreadable_earnings: set[str]
     macro_types: list[str]
     halt: Mapping[str, Any]
+
+
+def on_session(a: Mapping[str, Any], session: str) -> bool:
+    """Whether a corporate action is effective on the session: by its ex-date; a name change or a merger (which have
+    none) by its effective date or its process date. Alpaca's own date filter is on the process date, so the
+    fetcher asks for a window and this decides."""
+    if a.get("type") in MERGER_NAME_TYPES:
+        return session in (a.get("ex_date"), a.get("effective_date"), a.get("process_date"))
+    return a.get("ex_date") == session
 
 
 def _row_card(row: Mapping[str, Any]) -> dict[str, float] | None:
@@ -652,9 +679,9 @@ def assess(sym: str, row: Mapping[str, Any] | None, data: Mapping[str, Any] | No
     T = ctx.T
 
     # rule 2's run-wide checks
-    checks["entitlement_not_passed"] = ctx.entitlement != "passed"
+    checks["entitlement_not_passed"] = not ctx.entitlement
     checks["feed_not_named"] = not ctx.feed_ok
-    checks["fetch_cut_short"] = ctx.cut_short is not None
+    checks["fetch_cut_short"] = bool(ctx.fetch_problems)
     bad: list[str] = []
     if data is None:
         bad.append("no_data")
@@ -672,27 +699,29 @@ def assess(sym: str, row: Mapping[str, Any] | None, data: Mapping[str, Any] | No
     if not isinstance(actions_raw, list) or not all(isinstance(a, Mapping) for a in actions_raw):
         bad.append("corporate_actions")
         actions_raw = []
-    actions = [a for a in actions_raw if a.get("ex_date") == ctx.session]
+    actions = sorted((a for a in actions_raw if on_session(a, ctx.session)), key=_sort_key)
     types = sorted({str(a.get("type")) for a in actions})
-    adjusted = raw_close
+    adjusted: float | None = None
     adjustment = "none"
-    if actions:
-        checks["close_adjusted"] = True
-    for a in actions:
-        t = a.get("type")
-        if t in SPLIT_TYPES:
-            old, new = _num(a.get("old_rate")), _num(a.get("new_rate"))
-            checks["split_ex_date"] = True
-            if old is None or new is None or old <= 0 or new <= 0:
-                bad.append("split_ratio")
-            elif raw_close is not None:
-                adjusted = raw_close * old / new
-            adjustment = "split"
-        elif t in DIVIDEND_TYPES:
-            adjustment = adjustment if adjustment != "none" else "dividend_not_defined"
+    ratio = 1.0
+    splits = [a for a in actions if a.get("type") in SPLIT_TYPES]
+    for a in splits:                                      # two splits on one day multiply
+        old, new = _num(a.get("old_rate")), _num(a.get("new_rate"))
+        if old is None or new is None or old <= 0 or new <= 0:
+            bad.append("split_ratio")
         else:
-            checks["corporate_action_not_handled"] = True
-            adjustment = "not_handled"
+            ratio *= old / new
+    if any(a.get("type") not in SPLIT_TYPES + DIVIDEND_TYPES for a in actions):
+        adjustment = "not_handled"                        # precedence: not handled, then split, then dividend
+        checks["corporate_action_not_handled"] = True
+    elif splits:
+        adjustment = "split"
+        if raw_close is not None and "split_ratio" not in bad:
+            adjusted = raw_close * ratio
+    elif actions:
+        adjustment = "dividend_not_defined"               # Amendment 1 item 2: the raw close, no adjustment
+    checks["split_ex_date"] = bool(splits)
+    checks["close_adjusted"] = bool(actions)
     snap = d.get("snapshot") if data is not None else None
     if snap is not None and not isinstance(snap, Mapping):
         bad.append("snapshot")
@@ -705,6 +734,19 @@ def assess(sym: str, row: Mapping[str, Any] | None, data: Mapping[str, Any] | No
                  "agrees": pc is not None and raw_close is not None and pc == raw_close
                  and pt is not None and last is not None and ny_date(pt) == ny_date(last.start)}
 
+    # the quote and its age: every use of the quote needs it fresh (Amendment 1 items 12, 13)
+    quote = parse_quote(snap.get("latestQuote") if isinstance(snap, Mapping) else None)
+    if quote is None:
+        bad.append("quote")
+        quote = Quote(None, None, None, None, None, "empty")
+    quote_age = _age(quote.t, T)
+    q_fresh: Check = None if th.quote_max_age_s is None else (
+        quote_age is not None and 0 <= quote_age <= th.quote_max_age_s)
+    if q_fresh is None:
+        checks["stale_quote"], needs["stale_quote"] = None, "quote_max_age_s"
+    else:
+        checks["stale_quote"] = not q_fresh
+
     # G2: the reference price
     minute = parse_bars(d.get("minute") if data is not None else [])
     if minute is None:
@@ -712,10 +754,6 @@ def assess(sym: str, row: Mapping[str, Any] | None, data: Mapping[str, Any] | No
         minute = []
     span = dt.timedelta(seconds=p.ref_bar_s)
     finished = [b for b in minute if b.start + span <= T]
-    quote = parse_quote(snap.get("latestQuote") if isinstance(snap, Mapping) else None)
-    if quote is None:
-        bad.append("quote")
-        quote = Quote(None, None, None, None, None, "empty")
     ref: float | None = None
     ref_kind: str | None = None
     bar_end: dt.datetime | None = None
@@ -729,15 +767,12 @@ def assess(sym: str, row: Mapping[str, Any] | None, data: Mapping[str, Any] | No
         if th.spread_limit_bps is None:
             ref_known = False
             needs["no_reference_price"] = "spread_limit_bps"
-        elif spread <= th.spread_limit_bps:
+        elif q_fresh is None:
+            ref_known = False
+            needs["no_reference_price"] = "quote_max_age_s"
+        elif q_fresh and spread <= th.spread_limit_bps:
             ref, ref_kind = quote.mid, "mid"
     checks["no_reference_price"] = None if not ref_known else ref is None
-    quote_age = _age(quote.t, T)
-    if ref_kind == "mid":
-        if th.quote_max_age_s is None:
-            checks["stale_quote"], needs["stale_quote"] = None, "quote_max_age_s"
-        else:
-            checks["stale_quote"] = quote_age is None or quote_age > th.quote_max_age_s
     trade = snap.get("latestTrade") if isinstance(snap, Mapping) else None
     trade_t = parse_ts(trade.get("t")) if isinstance(trade, Mapping) else None
     trade_p = _num(trade.get("p")) if isinstance(trade, Mapping) else None
@@ -746,12 +781,12 @@ def assess(sym: str, row: Mapping[str, Any] | None, data: Mapping[str, Any] | No
     atr14 = None
     shown = row.get("shown") if row is not None else None
     if isinstance(shown, Mapping):
-        a = _num(shown.get("atr14"))
-        atr14 = a if a is not None and a > 0 else None
+        a14 = _num(shown.get("atr14"))
+        atr14 = a14 if a14 is not None and a14 > 0 else None
     checks["stage1_atr_missing"] = atr14 is None
-    base = adjusted
+    base = adjusted if splits else raw_close
     gap_pct = None if ref is None or base is None else ref / base - 1
-    gap_atr = (None if ref is None or base is None or atr14 is None or checks["split_ex_date"]
+    gap_atr = (None if ref is None or base is None or atr14 is None or splits
                else (ref - base) / atr14)              # on a split ex-date ATR14 is in pre-split units: not used
 
     # rule 3
@@ -776,12 +811,16 @@ def assess(sym: str, row: Mapping[str, Any] | None, data: Mapping[str, Any] | No
         bad.append("premarket")
         pm = {}
     windows: dict[str, list[IBar]] = {}
+    dropped: list[str] = []
     for day in [ctx.session] + ctx.baseline_days:
         if day not in pm:
             continue
         got = parse_bars(pm[day])
         if got is None:
-            bad.append(f"premarket:{day}")
+            if day == ctx.session:
+                bad.append("premarket")                       # the session's own bars
+            else:
+                dropped.append(day)                           # an old day's bad bar drops that day only
             continue
         windows[day] = premarket_window(got, day, ctx.t_hm, p)
     today = windows.get(ctx.session)
@@ -798,8 +837,18 @@ def assess(sym: str, row: Mapping[str, Any] | None, data: Mapping[str, Any] | No
     else:
         checks["relative_volume_at_or_above_limit"] = rvol >= th.relative_volume_limit
     card = _row_card(row) if row is not None else None
-    pos = position(ref, card)
-    checks["beyond_ceiling_or_floor"] = pos not in ("between", "not_available")
+    if splits:
+        pos = "not_available"                                 # Amendment 1 item 1
+        checks["beyond_ceiling_or_floor"] = False             # rule 2 has decided
+    elif card is None:
+        pos = "not_available"
+        checks["beyond_ceiling_or_floor"], needs["beyond_ceiling_or_floor"] = None, "card_fields"
+    elif ref is None:
+        pos = "not_available"
+        checks["beyond_ceiling_or_floor"] = None              # only after a rule 2 check has fired
+    else:
+        pos = position(ref, card)
+        checks["beyond_ceiling_or_floor"] = pos not in ("between", "not_available")
     side = "upper" if pos == "past_upper_target1" else "lower" if pos == "past_lower_target1" else None
 
     # halt
@@ -808,17 +857,26 @@ def assess(sym: str, row: Mapping[str, Any] | None, data: Mapping[str, Any] | No
     if isinstance(h, Mapping):
         reported, halt_source = h["state"], h["source"]
         halt_age = _age(parse_ts(h.get("as_of")), T)
-        fresh: Check = None if th.halt_max_age_s is None else (halt_age is not None
-                                                              and halt_age <= th.halt_max_age_s)
+        fresh: Check = None if th.halt_max_age_s is None else (
+            halt_age is not None and 0 <= halt_age <= th.halt_max_age_s)   # a report after T is stale
         if fresh:
             halt_state = reported
         if reported == "halted":
-            checks["halted"] = fresh
             if fresh is None:
-                needs["halted"] = "halt_max_age_s"
+                checks["halted"], needs["halted"] = None, "halt_max_age_s"
+            else:
+                checks["halted"] = fresh
+                checks["halt_report_stale"] = not fresh
     traded = (trade_t is not None and T - dt.timedelta(seconds=p.no_trade_s) <= trade_t <= T) or any(
         b.v > 0 and b.start >= T - dt.timedelta(seconds=p.no_trade_s) for b in finished)
-    possibly = halt_state == "unknown" and not traded and quote.state in ("one_sided", "empty")
+    possibly: Check
+    if halt_state != "unknown" or traded or quote.state not in ("one_sided", "empty"):
+        possibly = False
+    elif q_fresh is None:
+        possibly = None
+        needs["possibly_halted"] = "quote_max_age_s"
+    else:
+        possibly = bool(q_fresh)                              # a stale quote shows nothing about now
     checks["possibly_halted"] = possibly
 
     # events
@@ -854,8 +912,8 @@ def assess(sym: str, row: Mapping[str, Any] | None, data: Mapping[str, Any] | No
         "checks": checks,
         "bad_data": sorted(set(bad)),
         "prior_close": {"raw": raw_close, "date": None if last is None else ny_date(last.start),
-                        "expected_date": ctx.prev, "adjusted": adjusted if adjustment == "split" else None,
-                        "adjustment": adjustment, "close_adjusted": bool(actions),
+                        "expected_date": ctx.prev, "adjusted": adjusted,
+                        "adjustment": adjustment, "close_adjusted": bool(actions), "split_ratio": ratio if splits else None,
                         "corporate_actions": types, "snapshot_cross_check": cross},
         "reference": {"kind": ref_kind, "price": ref, "bar_end": None if bar_end is None else iso(bar_end),
                       "bar_age_s": None if bar_end is None else (T - bar_end).total_seconds()},
@@ -864,13 +922,13 @@ def assess(sym: str, row: Mapping[str, Any] | None, data: Mapping[str, Any] | No
         "last_trade": {"price": trade_p, "age_s": _age(trade_t, T), "evidence_only": True},
         "gap": {"pct": gap_pct, "atr": gap_atr, "atr14": atr14},
         "premarket": {"volume": pm_volume, "high": pm_high, "low": pm_low,
-                      "bars": None if today is None else len(today)},
+                      "bars": None if today is None else len(today), "baseline_days_dropped": sorted(dropped)},
         "relative_volume": {"value": rvol, "available": rvol is not None, "baseline_sessions": len(base_vols),
                             "baseline_median": statistics.median(base_vols) if base_vols else None},
         "position": pos,
         "side_missed": side,
         "halt": {"state": halt_state, "reported": reported, "source": halt_source, "age_s": halt_age,
-                 "possibly_halted": possibly},
+                 "possibly_halted": possibly, "report_stale": checks["halt_report_stale"]},
         "news_count": news_count,
         "events": {"earnings_released": released, "earnings_today": today_e, "macro_today": ctx.macro_types},
     }
@@ -928,18 +986,29 @@ def _events(doc: Mapping[str, Any], names: Sequence[str], session: str) -> tuple
     return good, unreadable, sorted(macro), {"earnings_rows": bad_e, "macro_rows": bad_m}
 
 
-def reserves(stage1: Mapping[str, Any], rows: Mapping[str, Mapping[str, Any]], p: Params) -> list[dict[str, Any]]:
+def reserves(stage1: Mapping[str, Any], rows: Mapping[str, Mapping[str, Any]],
+             p: Params) -> tuple[list[dict[str, Any]], bool]:
     """"A reserve is a Stage 1-eligible name ranked 5th or lower whose Stage 2 status is `confirmed`. Up to two, in
-    Stage 1 rank order ... never among the picks." Nothing is swapped or promoted."""
+    Stage 1 rank order ... never among the picks." Nothing is swapped or promoted. The walk stops at a candidate whose
+    status is `unclassified`: whether it would be a reserve is not known, so the list is reported as not classified
+    (False) rather than letting a later name take its place."""
     picks = set(stage1["picks"])
     cand = []
     for r in stage1["names"]:
         rank = r.get("final_rank")
         if (r.get("eligible") is True and isinstance(rank, int) and not isinstance(rank, bool)
-                and rank >= p.reserves_from_rank and r["symbol"] not in picks
-                and rows.get(r["symbol"], {}).get("status") == "confirmed"):
+                and rank >= p.reserves_from_rank and r["symbol"] not in picks):
             cand.append((rank, r["symbol"]))
-    return [{"symbol": s, "final_rank": k, "changed_since_pass_a": None} for k, s in sorted(cand)[:p.reserves_max]]
+    out: list[dict[str, Any]] = []
+    for k, sym in sorted(cand):
+        if len(out) == p.reserves_max:
+            break
+        status = rows.get(sym, {}).get("status")
+        if status == UNCLASSIFIED:
+            return [], False
+        if status == "confirmed":
+            out.append({"symbol": sym, "final_rank": k, "changed_since_pass_a": None})
+    return out, True
 
 
 def check_pass_a(a: Any, session: str, s1_sha: str, s1_doc: str, T: dt.datetime) -> None:
@@ -989,6 +1058,49 @@ def changes_since(a: Mapping[str, Any], names: Sequence[Mapping[str, Any]],
             "reserves_disappeared": sorted(s for s in was - now if isinstance(s, str))}
 
 
+def evidence(bundle: Mapping[str, Any], session: str, pass_id: str, T: dt.datetime, baseline: Sequence[str],
+             p: Params) -> dict[str, Any]:
+    """What the bundle's own record of its fetch shows, checked rather than trusted (Amendment 1 items 6 and 7).
+
+    - `fetch_problems`: the fetcher's cause when it did not finish (`fetch.cut_short`, or `incomplete`); `early` when
+      the fetch began before T + 60 s; `late` when it ended after the pass's publish-by time; `answer_not_200` when a
+      recorded answer was not 200; `request_missing` when a required request (the daily bars, the 1-minute bars, the
+      pre-market bars of the session and of each baseline session, the snapshots) is not recorded with `feed=sip`.
+    - `entitlement_passed`: every market-data request named `feed=sip`, every answer was 200, every required request
+      is there (so the 1-minute bars and the snapshots, which reach into the last 15 minutes, were answered), every
+      data answer carried `X-RateLimit-Limit` and the smallest is at least the plan's lapse bound; and the bundle's
+      own entitlement says passed, checked between `T` and the end of the fetch. A missing header fails."""
+    reqs = [r for r in bundle["requests"] if isinstance(r, Mapping)]
+    data_reqs = [r for r in reqs if r.get("what") in DATA_REQUESTS]
+    problems: list[str] = []
+    f = bundle["fetch"]
+    if not f["complete"]:
+        problems.append(str(f["cut_short"] or "incomplete"))
+    started, ended = parse_ts(f["started_at"]), parse_ts(bundle["fetched_at"])
+    if started is None or started < T + dt.timedelta(seconds=p.fetch_delay_s):
+        problems.append("early")
+    if ended is None or ended > ny_time(session, p.publish_by[pass_id]) or (started is not None and ended < started):
+        problems.append("late")
+    if any(r.get("status") != 200 for r in reqs):
+        problems.append("answer_not_200")
+    named = {(r.get("what"), r.get("session")) for r in data_reqs if r.get("feed") == FEED and r.get("status") == 200}
+    required: set[tuple[Any, Any]] = {("daily_raw", None), ("minute", None), ("snapshots", None)}
+    required |= {("premarket", d) for d in [session, *baseline]}
+    missing = sorted(f"{w}:{d}" if d else str(w) for w, d in required - named)
+    if missing:
+        problems.append("request_missing")
+    feed_named = bool(data_reqs) and all(r.get("feed") == FEED for r in data_reqs)
+    limits = [r.get("x_ratelimit_limit") for r in data_reqs]
+    limits_ok = bool(limits) and all(isinstance(x, int) and not isinstance(x, bool) for x in limits) and min(
+        int(x) for x in limits if isinstance(x, int)) >= p.min_rate_limit
+    ent = bundle["entitlement"]
+    checked = parse_ts(ent.get("checked_at"))
+    ent_ok = (ent.get("state") == "passed" and checked is not None and ended is not None and T <= checked <= ended)
+    passed = (feed_named and all(r.get("status") == 200 for r in reqs) and not missing and limits_ok and ent_ok)
+    return {"fetch_problems": sorted(set(problems)), "requests_missing": missing, "feed_named": feed_named,
+            "rate_limit_ok": limits_ok, "entitlement_recorded": ent_ok, "entitlement_passed": passed}
+
+
 def confirm(stage1: Any, bundle: Any, pass_id: str, p: Params, th: Thresholds, *, sha: str,
             pass_a: Any = None) -> dict[str, Any]:
     """Stage 2 for one pass. Raises BundleError, Stage1Error, PassAError, or select.CalendarError for a session
@@ -1004,9 +1116,6 @@ def confirm(stage1: Any, bundle: Any, pass_id: str, p: Params, th: Thresholds, *
     T = pass_time(session, pass_id, p)
     if parse_ts(bundle["T"]) != T:
         raise BundleError(f"the bundle's T is not Pass {pass_id}'s time on {session} ({iso(T)})")
-    fetched = parse_ts(bundle["fetched_at"])
-    if fetched is None or fetched < T + dt.timedelta(seconds=p.fetch_delay_s):
-        raise BundleError("the bundle was fetched before T + the fetch delay")
     check_stage1(stage1, session)
     s1_sha, s1_doc = stage1_sha(stage1), stage1_doc_sha(stage1)
     if bundle["stage1_sha"] != s1_sha or bundle["stage1_doc_sha"] != s1_doc:
@@ -1024,12 +1133,11 @@ def confirm(stage1: Any, bundle: Any, pass_id: str, p: Params, th: Thresholds, *
     days = [prev]
     while len(days) < p.baseline_sessions:
         days.append(lv.prev_session(days[-1]))
-    data_reqs = [r for r in bundle["requests"] if r.get("what") in DATA_REQUESTS]
+    ev_ = evidence(bundle, session, pass_id, T, days, p)
     good, unreadable, macro, bad_rows = _events(bundle, names, session)
     ctx = Context(session=session, stage1_session=str(stage1.get("session")), prev=prev, T=T,
-                  t_hm=p.pass_at[pass_id], baseline_days=days, entitlement=bundle["entitlement"]["state"],
-                  feed_ok=bool(data_reqs) and all(r.get("feed") == FEED for r in data_reqs),
-                  cut_short=bundle["fetch"]["cut_short"] or (None if bundle["fetch"]["complete"] else "incomplete"),
+                  t_hm=p.pass_at[pass_id], baseline_days=days, entitlement=ev_["entitlement_passed"],
+                  feed_ok=ev_["feed_named"], fetch_problems=ev_["fetch_problems"],
                   earnings_rows=good, unreadable_earnings=unreadable, macro_types=macro, halt=bundle["halt"])
     rows = {r["symbol"]: r for r in stage1["names"]}
     out_rows: list[dict[str, Any]] = []
@@ -1041,7 +1149,9 @@ def confirm(stage1: Any, bundle: Any, pass_id: str, p: Params, th: Thresholds, *
             errors = True
             out_rows.append(_internal(sym, rows.get(sym), e))
     by = {r["symbol"]: r for r in out_rows}
-    res = reserves(stage1, by, p)
+    res, res_complete = reserves(stage1, by, p)
+    if not all(getattr(th, k) is not None for k in THRESHOLD_KEYS):
+        res, res_complete = [], False                 # reserves are not classified while the thresholds are not set
     changes = None if pass_a is None else changes_since(pass_a, out_rows, res)
     counts = {s: sum(1 for r in out_rows if r["status"] == s) for s in STATUSES + (UNCLASSIFIED,)}
     degraded = counts["not_confirmed"] * 2 > len(out_rows)
@@ -1061,12 +1171,16 @@ def confirm(stage1: Any, bundle: Any, pass_id: str, p: Params, th: Thresholds, *
         "status": "internal_error" if errors else "ok",
         "degraded": degraded,
         "counts": counts,
-        "entitlement": dict(bundle["entitlement"]),
+        "entitlement": {**dict(bundle["entitlement"]), "passed": ev_["entitlement_passed"]},
+        "fetch_problems": ev_["fetch_problems"],
         "plan_check": dict(bundle["plan_check"]),
         "unreadable_event_rows": bad_rows,
         "names": out_rows,
         "reserves": res,
-        "reserve_note": None if res else p.reserve_none_text,
+        "reserve_note": (p.reserve_not_classified_text if not res_complete
+                         else None if res else p.reserve_none_text),
+        "reserves_classified": res_complete,
+        "evidence": ev_,
         "changes_since_pass_a": changes,
     }
 
@@ -1100,6 +1214,11 @@ def write_new(path: Path, text: str) -> None:
         os.link(tmp, path)
     finally:
         os.unlink(tmp)
+    fd_dir = os.open(path.parent, os.O_RDONLY)        # the link itself survives a crash only once the folder is synced
+    try:
+        os.fsync(fd_dir)
+    finally:
+        os.close(fd_dir)
 
 
 # ---------------------------------------------------------------- command line

@@ -56,6 +56,10 @@ def back(day: str, n: int) -> list[str]:
     return out
 
 
+# Card fields as the (not yet built) card code would add them: wide enough that a clean name sits between them.
+CARD_WIDE = {"ceiling": 103.0, "floor": 97.0, "upper_target1": 104.0, "lower_target1": 96.0}
+
+
 def stage1_doc(session: str = S, ranks: dict[str, int] | None = None, eligible: set[str] | None = None,
                picks: list[str] | None = None, atr: float = 2.0) -> dict[str, Any]:
     d = lv.prev_session(session)
@@ -65,7 +69,7 @@ def stage1_doc(session: str = S, ranks: dict[str, int] | None = None, eligible: 
     chosen = picks if picks is not None else [s for s in order if s in elig][:4]
     rows = [{"symbol": s, "data_valid": True, "reason": None, "final_rank": rank[s], "eligible": s in elig,
              "eligibility": "eligible" if s in elig else "earnings_gap", "picked": s in chosen, "cautions": [],
-             "shown": {"atr14": atr, "close": 100.0}} for s in order]
+             "shown": {"atr14": atr, "close": 100.0}, "card": dict(CARD_WIDE)} for s in order]
     return {"schema": sel.OUTPUT_SCHEMA, "version": sel.OUTPUT_VERSION, "session": d, "next_session": session,
             "params_sha": S1_SHA, "picker_ref": "s1-test", "bundle_sha": "1" * 64, "status": "ok",
             "counts": {"names": 12}, "picks": chosen, "selection_note": None, "market_notes": [],
@@ -94,17 +98,19 @@ def name_data(session: str, T: dt.datetime, prior: float = 100.0, ref: float = 1
 
 def bundle_for(stage1: dict[str, Any], pass_id: str = "A", session: str = S) -> dict[str, Any]:
     T = s2.pass_time(session, pass_id, P)
-    reqs = [{"what": w, "session": None, "path": p, "feed": f, "status": 200, "pages": 1,
-             "x_ratelimit_limit": 10000 if f else None}
-            for w, p, f in (("daily_raw", "/v2/stocks/bars", "sip"), ("minute", "/v2/stocks/bars", "sip"),
-                            ("premarket", "/v2/stocks/bars", "sip"), ("snapshots", "/v2/stocks/snapshots", "sip"),
-                            ("corporate_actions", "/v1/corporate-actions", None), ("news", "/v1beta1/news", None))]
+    days = [session] + back(lv.prev_session(session), 20)
+    kinds = ([("daily_raw", None, "/v2/stocks/bars", "sip"), ("minute", None, "/v2/stocks/bars", "sip")]
+             + [("premarket", d, "/v2/stocks/bars", "sip") for d in days]
+             + [("snapshots", None, "/v2/stocks/snapshots", "sip"), ("corporate_actions", None, "/v1/corporate-actions",
+                                                                    None), ("news", None, "/v1beta1/news", None)])
+    reqs = [{"what": w, "session": d, "path": p, "feed": f, "status": 200, "pages": 1,
+             "x_ratelimit_limit": 10000 if f else None} for w, d, p, f in kinds]
     return {"schema": s2.BUNDLE_SCHEMA, "version": s2.BUNDLE_VERSION, "session": session, "pass": pass_id,
-            "T": z(T), "fetched_at": z(T + 61 * SEC), "stage1_sha": s2.stage1_sha(stage1),
+            "T": z(T), "fetched_at": z(T + 90 * SEC), "stage1_sha": s2.stage1_sha(stage1),
             "stage1_doc_sha": s2.stage1_doc_sha(stage1), "names": list(NAMES), "requests": reqs,
             "plan_check": {"x_ratelimit_limit": 10000},
-            "entitlement": {"state": "passed", "source": "synthetic", "checked_at": z(T)},
-            "halt": {}, "fetch": {"complete": True, "cut_short": None},
+            "entitlement": {"state": "passed", "source": "fetch_evidence", "checked_at": z(T + 90 * SEC)},
+            "halt": {}, "fetch": {"complete": True, "cut_short": None, "started_at": z(T + 61 * SEC)},
             "data": {n: name_data(session, T) for n in NAMES}, "earnings_rows": [], "macro_rows": []}
 
 
@@ -268,7 +274,7 @@ def test_a_clean_name_is_confirmed_with_every_value_shown():
     assert r["gap"] == {"pct": pytest.approx(0.005), "atr": pytest.approx(0.25), "atr14": 2.0}
     assert r["premarket"]["volume"] == 58 * 10.0 and r["premarket"]["bars"] == 58       # 04:00 to 08:45 starts
     assert r["relative_volume"]["value"] == 1.0
-    assert r["halt"]["state"] == "unknown" and r["position"] == "not_available" and r["news_count"] == 2
+    assert r["halt"]["state"] == "unknown" and r["position"] == "between" and r["news_count"] == 2
     assert r["last_trade"]["evidence_only"] is True and r["last_trade"]["age_s"] == 10
 
 
@@ -411,11 +417,11 @@ def test_g2_a_midpoint_needs_the_spread_within_the_limit():
 def test_g2_the_midpoints_age_needs_a_number_the_record_does_not_give():
     th = s2.Thresholds(**{**TEST_ONLY.as_dict(), "quote_max_age_s": None})
     r = row(run(lambda st, b: _minute_ending(b, 300), th=th), "AAPL")
-    assert r["reference"]["kind"] == "mid" and r["status"] == "unclassified"
+    assert r["reference"]["kind"] is None and r["status"] == "unclassified" and r["rule"] == 2
     assert r["unclassified_by"] == ["quote_max_age_s"] and r["quote"]["age_s"] == 5
     th2 = s2.Thresholds(**{**TEST_ONLY.as_dict(), "quote_max_age_s": 4.0})
     r = row(run(lambda st, b: _minute_ending(b, 300), th=th2), "AAPL")
-    assert r["status"] == "not_confirmed" and r["reasons"] == ["stale_quote"]
+    assert r["status"] == "not_confirmed" and "stale_quote" in r["reasons"]
 
 
 def test_g2_the_raw_last_trade_is_evidence_only():
@@ -496,22 +502,44 @@ CARD = {"ceiling": 101.0, "floor": 99.0, "upper_target1": 101.5, "lower_target1"
     (98.4, "past_lower_target1", "lower", "caution")])
 def test_g6_position_against_the_cards_levels(price, pos, side, status):
     def mut(st, b):
-        next(r for r in st["names"] if r["symbol"] == "AAPL")["card"] = dict(CARD)
+        next(r for r in st["names"] if r["symbol"] == "AAPL")["card"] = dict(CARD)                 # narrow
         data(b)["minute"][-1]["c"] = price
     r = row(run(mut), "AAPL")
     assert (r["position"], r["side_missed"], r["status"]) == (pos, side, status)
 
 
-def test_g6_without_card_fields_position_is_not_available_never_guessed():
-    r = row(run(lambda st, b: data(b)["minute"][-1].update({"c": 150.0})), "AAPL")
-    assert r["position"] == "not_available" and r["checks"]["beyond_ceiling_or_floor"] is False
+def _no_card(sym: str = "AAPL") -> Mut:
+    def mut(st, b):
+        next(r for r in st["names"] if r["symbol"] == sym).pop("card")
+    return mut
+
+
+def test_g6_without_card_fields_the_position_check_is_undetermined_never_guessed():
+    """Amendment 1 item 11: not neutral; the name is unclassified with the need card_fields."""
+    r = row(run(_no_card()), "AAPL")
+    assert r["position"] == "not_available" and r["checks"]["beyond_ceiling_or_floor"] is None
+    assert (r["status"], r["rule"], r["unclassified_by"]) == ("unclassified", 4, ["card_fields"])
+
+
+def test_g6_a_caution_still_decides_without_card_fields():
+    r = row(run(_both(_no_card(), lambda st, b: b["macro_rows"].append(mr(S)))), "AAPL")
+    assert r["status"] == "caution" and r["cautions"] == ["macro_event_today"]
+
+
+def test_g6_on_a_split_ex_date_position_is_not_available():
+    def mut(st, b):
+        data(b)["corporate_actions"] = [{"type": "forward_splits", "symbol": "AAPL", "ex_date": S, "old_rate": 1,
+                                          "new_rate": 2}]
+    r = row(run(mut), "AAPL")
+    assert r["position"] == "not_available" and r["status"] == "not_confirmed"
 
 
 # ---------------------------------------------------------------- halt
 
 def test_halt_is_unknown_without_a_stream_source():
     r = row(run(), "NVDA")
-    assert r["halt"] == {"state": "unknown", "reported": None, "source": None, "age_s": None, "possibly_halted": False}
+    assert r["halt"] == {"state": "unknown", "reported": None, "source": None, "age_s": None, "possibly_halted": False,
+                        "report_stale": False}
 
 
 def test_possibly_halted_no_trade_in_15_minutes_and_a_one_sided_quote():
@@ -544,8 +572,9 @@ def test_a_fresh_halt_no_longer_qualifies():
 
 
 def test_a_stale_halt_is_unknown_and_its_freshness_needs_a_number_the_record_does_not_give():
-    r = row(run(_halt("halted", 31)), "NVDA")
-    assert r["halt"]["state"] == "unknown" and r["status"] == "confirmed"
+    r = row(run(_halt("halted", 31)), "NVDA")              # 31 s against the test-only 30 s: stale, a caution
+    assert r["halt"]["state"] == "unknown" and r["status"] == "caution" and r["cautions"] == ["halt_report_stale"]
+    assert row(run(_halt("halted", 30)), "NVDA")["status"] == "no_longer_qualifies"          # exactly at the limit
     th = s2.Thresholds(**{**TEST_ONLY.as_dict(), "halt_max_age_s": None})
     r = row(run(_halt("halted", 1), th=th), "NVDA")
     assert r["status"] == "unclassified" and r["unclassified_by"] == ["halt_max_age_s"]
@@ -616,7 +645,8 @@ TABLE = [
     ("rule 2: entitlement", lambda st, b: b["entitlement"].update({"state": "unknown"}), "not_confirmed", 2,
      "entitlement_not_passed"),
     ("rule 2: feed", lambda st, b: b["requests"][0].update({"feed": "iex"}), "not_confirmed", 2, "feed_not_named"),
-    ("rule 2: cut short", lambda st, b: b["fetch"].update({"cut_short": "rate_limit"}), "not_confirmed", 2,
+    ("rule 2: cut short", lambda st, b: b["fetch"].update({"complete": False, "cut_short": "rate_limit"}),
+     "not_confirmed", 2,
      "fetch_cut_short"),
     ("rule 2: no reference", lambda st, b: (data(b, "NVDA").__setitem__("minute", []),
                                             data(b, "NVDA")["snapshot"]["latestQuote"].update({"bs": 0})),
@@ -688,11 +718,17 @@ def test_a_negative_gap_counts_by_its_size():
 def test_without_thresholds_rules_that_need_one_are_unclassified_with_the_measured_value():
     out = run(th=NONE)
     for r in out["names"]:
+        assert r["status"] == "unclassified" and r["rule"] == 2          # the quote's age limit is not set either
+        assert r["unclassified_by"] == ["quote_max_age_s"]
+    out = run(th=s2.Thresholds(quote_max_age_s=30.0))                       # only that one supplied (test-only)
+    for r in out["names"]:
         assert r["status"] == "unclassified" and r["rule"] == 3
         assert r["unclassified_by"] == ["gap_fail_atr", "spread_limit_bps"]
         assert r["gap"]["atr"] == pytest.approx(0.25) and r["quote"]["spread_bps"] == pytest.approx(19.900497512)
         assert r["relative_volume"]["value"] == 1.0
-    assert out["thresholds_set"] is False and out["reserves"] == [] and out["reserve_note"] == "No reserve qualifies"
+    assert out["thresholds_set"] is False and out["reserves"] == []
+    assert out["reserve_note"] == "Reserves not classified: the Stage 2 thresholds are not set"
+    assert out["reserves_classified"] is False
 
 
 def test_without_thresholds_the_rules_that_need_none_still_apply():
@@ -709,7 +745,8 @@ def test_without_thresholds_the_rules_that_need_none_still_apply():
 
 def test_without_thresholds_a_midpoint_reference_is_unclassified():
     r = row(run(lambda st, b: _minute_ending(b, 300), th=NONE), "AAPL")
-    assert r["status"] == "unclassified" and r["rule"] == 2 and r["unclassified_by"] == ["spread_limit_bps"]
+    assert r["status"] == "unclassified" and r["rule"] == 2
+    assert r["unclassified_by"] == ["quote_max_age_s", "spread_limit_bps"]
 
 
 # ---------------------------------------------------------------- degraded
@@ -855,7 +892,8 @@ def test_the_stage1_hash_covers_items_ranking_and_params_sha():
 
 @pytest.mark.parametrize("change,match", [
     (lambda b: b.__setitem__("T", "2026-11-12T13:51:00Z"), "T is not"),
-    (lambda b: b.__setitem__("fetched_at", "2026-11-12T13:50:59Z"), "fetched before"),
+    (lambda b: b["fetch"].update({"cut_short": "rate_limit"}), "fetch must say"),       # complete yet cut short
+    (lambda b: b["fetch"].pop("started_at"), "fetch must say"),
     (lambda b: b.__setitem__("pass", "B"), "for Pass B"),
     (lambda b: b.__setitem__("extra", 1), "exactly the keys"),
     (lambda b: b["data"]["AAPL"].__setitem__("minute", [{"t": "x", "c": float("nan")}]), "NaN"),
@@ -1039,3 +1077,284 @@ def test_the_commands_exit_codes(tmp_path, capsys, case, code):
     assert not out.exists()
     err = capsys.readouterr().err
     assert len(err.strip().splitlines()) == 1 and "Traceback" not in err
+
+
+# ---------------------------------------------------------------- Amendment 1 and the review's probes
+
+def _actions(*acts: dict[str, Any]) -> Mut:
+    def mut(st, b):
+        data(b)["corporate_actions"] = [dict(a) for a in acts]
+    return mut
+
+
+SPLIT_2 = {"type": "forward_splits", "symbol": "AAPL", "ex_date": S, "process_date": "2026-11-11", "old_rate": 1,
+           "new_rate": 2}
+SPLIT_3 = {"type": "forward_splits", "symbol": "AAPL", "ex_date": S, "process_date": "2026-11-11", "old_rate": 1,
+           "new_rate": 3, "id": "b"}
+DIVIDEND = {"type": "cash_dividends", "symbol": "AAPL", "ex_date": S, "process_date": "2026-11-20", "rate": 0.26}
+
+
+def test_a1_item1_a_split_whose_process_date_is_the_day_before_its_ex_date_counts():
+    r = row(run(_actions(SPLIT_2)), "AAPL")
+    assert r["status"] == "not_confirmed" and r["reasons"] == ["split_ex_date"]
+    assert r["gap"]["atr"] is None and r["position"] == "not_available" and r["prior_close"]["adjusted"] == 50.0
+
+
+def test_a1_item1_a_split_processed_on_the_session_but_ex_later_does_not():
+    later = {**SPLIT_2, "ex_date": "2026-11-13", "process_date": S}
+    assert row(run(_actions(later)), "AAPL")["status"] == "confirmed"
+
+
+def test_a1_two_splits_on_one_day_multiply_in_either_order():
+    one = row(run(_actions(SPLIT_2, SPLIT_3)), "AAPL")
+    two = row(run(_actions(SPLIT_3, SPLIT_2)), "AAPL")
+    assert one == two and one["prior_close"]["split_ratio"] == pytest.approx(1 / 6)
+    assert one["prior_close"]["adjusted"] == pytest.approx(100 / 6)
+
+
+def test_a1_item2_a_dividend_uses_the_raw_close():
+    r = row(run(_actions(DIVIDEND)), "AAPL")
+    assert r["status"] == "caution" and r["cautions"] == ["close_adjusted"] and r["prior_close"]["adjusted"] is None
+    assert r["gap"]["atr"] == pytest.approx(0.25)
+
+
+@pytest.mark.parametrize("act", [
+    {"type": "name_changes", "old_symbol": "AAPL", "new_symbol": "AAPX", "process_date": S},
+    {"type": "stock_mergers", "acquiree_symbol": "AAPL", "effective_date": S, "process_date": "2026-11-13"},
+    {"type": "cash_mergers", "acquiree_symbol": "AAPL", "effective_date": "2026-11-10", "process_date": S},
+    {"type": "spin_offs", "source_symbol": "AAPL", "ex_date": S}])
+def test_a1_item3_other_actions_effective_on_the_session_are_not_handled(act):
+    r = row(run(_actions(act)), "AAPL")
+    assert r["status"] == "not_confirmed" and r["reasons"] == ["corporate_action_not_handled"]
+
+
+def test_a1_item3_a_merger_effective_another_day_is_ignored():
+    act = {"type": "stock_mergers", "acquiree_symbol": "AAPL", "effective_date": "2026-11-16",
+           "process_date": "2026-11-16"}
+    assert row(run(_actions(act)), "AAPL")["status"] == "confirmed"
+
+
+def test_a1_precedence_not_handled_over_split_over_dividend_in_both_orders():
+    spin = {"type": "spin_offs", "source_symbol": "AAPL", "ex_date": S}
+    for acts in ((DIVIDEND, SPLIT_2, spin), (spin, SPLIT_2, DIVIDEND)):
+        r = row(run(_actions(*acts)), "AAPL")
+        assert r["prior_close"]["adjustment"] == "not_handled"
+        assert "corporate_action_not_handled" in r["reasons"] and "split_ex_date" in r["reasons"]
+    for acts in ((DIVIDEND, SPLIT_2), (SPLIT_2, DIVIDEND)):
+        assert row(run(_actions(*acts)), "AAPL")["prior_close"]["adjustment"] == "split"
+
+
+def test_a1_item4_spread_in_basis_points_of_the_midpoint():
+    q = s2.parse_quote({"bp": 99.0, "bs": 1, "ap": 101.0, "as": 1, "t": z(T_A())})
+    assert q is not None and q.spread_bps == 200.0 and q.mid == 100.0
+    crossed = s2.parse_quote({"bp": 101.0, "bs": 1, "ap": 99.0, "as": 1, "t": z(T_A())})
+    assert crossed is not None and crossed.state == "crossed" and crossed.spread_bps is None and crossed.mid is None
+    assert s2.parse_quote({"bp": 0, "bs": 1, "ap": 99.0, "as": 1}).state == "one_sided"   # type: ignore[union-attr]
+
+
+def test_a1_item5_every_desk_name_normally_trades_premarket():
+    assert _cfg()["possibly_halted"]["normally_trades_premarket"] == "all_names"
+
+
+def _limit(x: int | None) -> Mut:
+    def mut(st, b):
+        for r in b["requests"]:
+            if r["feed"] == "sip":
+                r["x_ratelimit_limit"] = x
+        b["requests"][3]["x_ratelimit_limit"] = 10000
+    return mut
+
+
+def test_a1_item6_entitlement_needs_a_rate_limit_of_at_least_1000_on_every_data_answer():
+    assert row(run(_limit(1000)), "AAPL")["status"] == "confirmed"                        # exactly at the bound
+    out = run(_limit(999))
+    assert out["evidence"]["rate_limit_ok"] is False and out["degraded"] is True
+    assert row(out, "AAPL")["reasons"] == ["entitlement_not_passed"]
+    out = run(_limit(None))                                                                # a missing header fails
+    assert out["entitlement"]["passed"] is False and row(out, "AAPL")["status"] == "not_confirmed"
+
+
+def test_a1_item6_the_recorded_entitlement_must_be_checked_between_t_and_the_end_of_the_fetch():
+    for at in ("2026-11-12T13:49:59Z", "2026-11-12T13:51:31Z"):
+        out = run(lambda st, b, at=at: b["entitlement"].update({"checked_at": at}))
+        assert out["evidence"]["entitlement_recorded"] is False and out["entitlement"]["passed"] is False
+    assert run(lambda st, b: b["entitlement"].update({"checked_at": "2026-11-12T13:50:00Z"}))["entitlement"][
+        "passed"] is True
+    assert run(lambda st, b: b["entitlement"].update({"state": "failed"}))["entitlement"]["passed"] is False
+
+
+def test_probe_a_403_recorded_in_the_bundle_is_a_cut_short_fetch():
+    out = run(lambda st, b: b["requests"][4].update({"status": 403}))
+    assert "answer_not_200" in out["fetch_problems"] and out["entitlement"]["passed"] is False
+    assert all(r["status"] == "not_confirmed" and "fetch_cut_short" in r["reasons"] for r in out["names"])
+
+
+def test_probe_one_data_request_missing():
+    out = run(lambda st, b: b["requests"].pop(5))                    # one baseline day's pre-market request
+    assert out["fetch_problems"] == ["request_missing"] and len(out["evidence"]["requests_missing"]) == 1
+    assert out["degraded"] is True
+
+
+def test_probe_fetched_at_the_next_day_is_late():
+    out = run(lambda st, b: b.__setitem__("fetched_at", "2026-11-13T13:51:00Z"))
+    assert "late" in out["fetch_problems"] and {r["status"] for r in out["names"]} == {"not_confirmed"}
+
+
+def test_the_fetch_window_boundaries():
+    # began exactly at T + 60 s: fine; one second before: early. Ended exactly at 08:56: fine; one second after: late
+    ok = run(lambda st, b: (b["fetch"].update({"started_at": "2026-11-12T13:51:00Z"}),
+                            b.update({"fetched_at": "2026-11-12T13:56:00Z"}),
+                            b["entitlement"].update({"checked_at": "2026-11-12T13:56:00Z"})))
+    assert ok["fetch_problems"] == [] and row(ok, "AAPL")["status"] == "confirmed"
+    early = run(lambda st, b: b["fetch"].update({"started_at": "2026-11-12T13:50:59Z"}))
+    assert early["fetch_problems"] == ["early"]
+    late = run(lambda st, b: (b.update({"fetched_at": "2026-11-12T13:56:01Z"}),
+                              b["entitlement"].update({"checked_at": "2026-11-12T13:56:01Z"})))
+    assert late["fetch_problems"] == ["late"]
+
+
+def test_a1_item7_an_incomplete_fetch_is_scored_and_degraded():
+    def mut(st, b):
+        b["fetch"].update({"complete": False, "cut_short": "forbidden"})
+        b["requests"][-1]["status"] = 403
+    out = run(mut)
+    assert out["degraded"] is True and "forbidden" in out["fetch_problems"]
+    assert all(r["status"] == "not_confirmed" and "fetch_cut_short" in r["reasons"] for r in out["names"])
+
+
+def test_a1_item8_an_unreadable_earnings_row_and_a_stale_halt_report_are_cautions():
+    assert "earnings_row_unreadable" in s2.RULES[3][1] and "halt_report_stale" in s2.RULES[3][1]
+
+
+def test_a1_item9_a_macro_row_of_any_severity():
+    for sev in ("high", "medium"):
+        assert row(run(lambda st, b, sev=sev: b["macro_rows"].append(mr(S, "x", sev))), "AAPL")["status"] == "caution"
+
+
+def test_a1_item10_a_zero_baseline_median_is_not_available():
+    def mut(st, b):
+        for day in back(lv.prev_session(S), 20):
+            data(b)["premarket"][day] = []
+    r = row(run(mut), "AAPL")
+    assert r["relative_volume"]["available"] is False and r["relative_volume"]["baseline_median"] == 0
+    assert r["status"] == "confirmed"
+
+
+def test_a1_item13_and_probes_the_quote_must_be_fresh_for_every_use():
+    # a quote 72,000 s old beside a fresh bar
+    r = row(run(lambda st, b: data(b)["snapshot"]["latestQuote"].update({"t": z(T_A() - 72_000 * SEC)})), "AAPL")
+    assert r["reference"]["kind"] == "bar" and r["status"] == "not_confirmed" and r["reasons"] == ["stale_quote"]
+    # a quote with no time
+    r = row(run(lambda st, b: data(b)["snapshot"]["latestQuote"].pop("t")), "AAPL")
+    assert r["reasons"] == ["stale_quote"]
+    # a quote five minutes after T
+    r = row(run(lambda st, b: data(b)["snapshot"]["latestQuote"].update({"t": z(T_A() + 300 * SEC)})), "AAPL")
+    assert r["reasons"] == ["stale_quote"] and r["quote"]["age_s"] == -300
+    # exactly at T and exactly at the test-only 30 s limit are fresh; 31 s is stale
+    for age, status in ((0, "confirmed"), (30, "confirmed"), (31, "not_confirmed")):
+        got = row(run(lambda st, b, age=age: data(b)["snapshot"]["latestQuote"].update(
+            {"t": z(T_A() - age * SEC)})), "AAPL")
+        assert got["status"] == status, age
+
+
+def test_probe_a_halt_report_from_the_future_is_stale():
+    def mut(st, b):
+        b["halt"]["NVDA"] = {"state": "halted", "source": "synthetic-stream", "as_of": z(T_A() + 5 * SEC)}
+    r = row(run(mut), "NVDA")
+    assert r["halt"]["state"] == "unknown" and r["status"] == "caution" and r["cautions"] == ["halt_report_stale"]
+
+
+def test_a1_item12_the_halt_heuristic_needs_the_quote_age_limit():
+    def mut(st, b):
+        data(b, "NVDA")["minute"] = []
+        data(b, "NVDA")["snapshot"]["latestTrade"]["t"] = z(T_A() - 20 * MIN)
+        data(b, "NVDA")["snapshot"]["latestQuote"]["as"] = 0
+    th = s2.Thresholds(**{**TEST_ONLY.as_dict(), "quote_max_age_s": None})
+    r = row(run(mut, th=th), "NVDA")
+    assert r["checks"]["possibly_halted"] is None and r["status"] == "not_confirmed"     # no reference decides first
+    assert row(run(mut), "NVDA")["checks"]["possibly_halted"] is True
+
+
+def test_one_bad_bar_on_an_old_baseline_day_drops_that_day_only():
+    days = back(lv.prev_session(S), 20)
+
+    def bad_days(n: int) -> Mut:
+        def mut(st, b):
+            for day in days[:n]:
+                data(b)["premarket"][day][0]["h"] = -1.0
+        return mut
+    r = row(run(bad_days(10)), "AAPL")
+    assert r["status"] == "confirmed" and r["relative_volume"]["baseline_sessions"] == 10
+    assert r["premarket"]["baseline_days_dropped"] == sorted(days[:10]) and r["bad_data"] == []
+    r = row(run(bad_days(11)), "AAPL")
+    assert r["relative_volume"]["available"] is False and r["status"] == "confirmed"
+
+
+def test_a_bad_bar_in_the_sessions_own_premarket_is_bad_data():
+    r = row(run(lambda st, b: data(b)["premarket"][S][0].update({"h": -1.0})), "AAPL")
+    assert r["status"] == "not_confirmed" and r["bad_data"] == ["premarket"]
+
+
+def test_reserves_are_not_classified_while_a_candidate_is_unclassified():
+    out = run(_no_card("NVDA"))                                     # rank 5, the first candidate
+    assert out["reserves"] == [] and out["reserves_classified"] is False
+    out = run(_no_card("PLTR"))                                     # rank 10, after two confirmed reserves
+    assert [x["symbol"] for x in out["reserves"]] == ["NVDA", "AMZN"] and out["reserves_classified"] is True
+
+
+def test_the_stage1_block_must_score_the_session_before():
+    st, b = fresh()
+    st["session"] = "2026-11-10"
+    reseal(st, b)
+    with pytest.raises(s2.Stage1Error, match="session before"):
+        s2.confirm(st, b, "A", P, TEST_ONLY, sha=PSHA)
+
+
+def test_the_output_carries_the_bundle_sha_of_what_it_scored():
+    st, b = fresh()
+    assert s2.confirm(st, b, "A", P, TEST_ONLY, sha=PSHA)["bundle_sha"] == s2.bundle_sha(b)
+
+
+def test_corporate_actions_join_the_shuffle_determinism_test():
+    st, b = fresh()
+    data(b)["corporate_actions"] = [dict(DIVIDEND), dict(SPLIT_2), dict(SPLIT_3)]
+    one = s2.dumps(s2.confirm(st, b, "A", P, TEST_ONLY, sha=PSHA))
+    rnd = random.Random(7)
+    for _ in range(3):
+        sb = _shuffled(b, rnd.randrange(1000))
+        rnd.shuffle(sb["data"]["AAPL"]["corporate_actions"])
+        assert s2.dumps(s2.confirm(st, sb, "A", P, TEST_ONLY, sha=PSHA)) == one
+
+
+# ---------------------------------------------------------------- the status table against the record as amended
+
+ORACLE = [   # DEC-0046 section 5's table with Amendment 1's additions, written out from the record, rule by rule
+    ("no_longer_qualifies", ["halted", "earnings_released"]),
+    ("not_confirmed", ["entitlement_not_passed", "feed_not_named", "no_reference_price", "stale_quote",
+                       "fetch_cut_short", "bad_data", "stale_prior_close", "stage1_atr_missing", "internal_error",
+                       "split_ex_date", "corporate_action_not_handled"]),
+    ("no_longer_qualifies", ["spread_above_limit", "gap_at_or_above_fail_limit"]),
+    ("caution", ["beyond_ceiling_or_floor", "gap_at_or_above_caution_limit", "relative_volume_at_or_above_limit",
+                 "earnings_today", "macro_event_today", "close_adjusted", "possibly_halted", "earnings_row_unreadable",
+                 "halt_report_stale"]),
+]
+
+
+def oracle(v: dict[str, bool | None]) -> str:
+    for status, codes in ORACLE:
+        vals = [v[c] for c in codes]
+        if True in vals:
+            return status
+        if None in vals:
+            return "unclassified"
+    return "confirmed"
+
+
+def test_the_truth_table_matches_the_record_as_amended_over_20000_vectors():
+    assert sorted(c for _, cs in ORACLE for c in cs) == sorted(s2.CHECKS)
+    rnd = random.Random(46)
+    mismatches = 0
+    for _ in range(20_000):
+        v = {c: rnd.choice((True, False, False, False, None)) for c in s2.CHECKS}
+        mismatches += s2.decide(v, {})[0] != oracle(v)
+    assert mismatches == 0
