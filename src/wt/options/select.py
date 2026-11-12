@@ -5,22 +5,26 @@ The scoring core (`score_stage1`, `run_bundle` and everything they call) reads n
 reads no clock: the session date comes in with the bundle. The same bundle and parameters give byte-identical
 output (`dumps`). Only the outer functions touch files: `load_params` reads `config/options_select.yaml`,
 `picker_ref` reads this module's own source and the two it imports, and `main` reads a bundle and writes the
-output. Nothing here fetches bars; a later job saves the bundle this reads.
+output. Nothing here fetches bars; a later job saves the bundle this reads. The bundle's daily bars are
+split-adjusted.
 
 The frozen definitions, in the order the code applies them (DEC-0046 holds the same text):
 
-- Validity, first failing check wins: `bad_bar` (a bar that cannot be read, dates not strictly increasing, or in
-  the last `min_bars` bars a bar without high >= low > 0 and open, close > 0, or a negative volume), `stale_bar`
-  (no bar, or the last bar not dated on the session `D`), `short_history` (fewer than `min_bars` bars),
-  `suspect_split` (a close-to-close ratio of two adjacent bars in the window below the low bound or above the high
-  bound; a ratio equal to a bound is not suspect). The window is the last `min_bars` bars.
+- Validity, first failing check wins, on the window (the last `min_bars` bars):
+  `bad_bar` (a bar that cannot be read; dates not strictly increasing; a bar dated after `D`; in the window a bar
+  without high >= low > 0 and open, close > 0, or a negative volume; a window whose ATR14, ATR5 or ATR20 is zero),
+  `stale_bar` (no bar, or the last bar not dated `D`), `short_history` (fewer than `min_bars` bars),
+  `missing_session` (the window's dates are not the `min_bars` exchange sessions ending at `D`), `suspect_split` (a
+  close-to-close ratio of two adjacent bars in the window below the low bound or above the high bound; a ratio
+  equal to a bound is not suspect; with split-adjusted bars it is a backstop that should never fire).
 - ATR is `levels.atr(window, n)`; `ATR% = ATR14 / close`; `ret(k) = close / close k bars before D - 1`.
 - F1 `abs(ret(20)) / (ATR% * sqrt(20))`; F2 `ATR5 / ATR20`; F3 `-d / ATR14`, `d` the distance from the close to the
-  nearest bound of the nearest merged zone (`levels.levels_for(window, next session)["zones"]`) of weight at least
-  the floor, a zone whose members are all the prior close (`PDC`) left out, `d = 0` inside a zone, no such zone gives
-  `no_zone`; F4 `max(c, 1 - c)` with `c` from `levels.close_strength` of the bar of `D`; F5
+  nearest bound of the nearest zone of weight at least the floor, the zones merged by `levels.merge_zones` from
+  `levels.levels_for(window, next session)["levels"]` without the prior close's own level (`PDC`), `d = 0` inside a
+  zone, no such zone gives `no_zone`; F4 `max(c, 1 - c)` with `c` from `levels.close_strength` of the bar of `D`; F5
   `abs(ret(5) - benchmark ret(5)) / (ATR% * sqrt(5))`, `benchmark_missing` when the benchmark's bars are not valid.
-  A factor that cannot be worked out is never given a value: the name is listed unranked with its reason.
+  A factor that cannot be worked out is never given a value: the name is listed unranked with its reason. A factor
+  or shown value that is not a finite number is a data fault (`bad_bar`).
 - Each factor value is rounded to `rounding_decimals` before ranking. A larger value ranks first; ties share the
   average rank. Every name with all five factors is ranked, whatever its events, so an event never moves another
   name's rank. Score = the sum of the five ranks, lower first; ties go to the smaller F3 distance, then the larger
@@ -56,22 +60,29 @@ OUTPUT_SCHEMA = "wt.options.select/stage1"
 BUNDLE_SCHEMA = "wt.options.select/stage1-bundle"
 OUTPUT_VERSION = 1
 BUNDLE_VERSION = 1
+BUNDLE_ADJUSTMENT = "split"                   # Stage 1's daily bars are split-adjusted (Alpaca `adjustment=split`)
 
 FACTORS = ("F1", "F2", "F3", "F4", "F5")
 # The order the validity checks run in; the first that fails names the reason.
-VALIDITY_CODES = ("bad_bar", "stale_bar", "short_history", "suspect_split")
+VALIDITY_CODES = ("bad_bar", "stale_bar", "short_history", "missing_session", "suspect_split")
 REASON_CODES = VALIDITY_CODES + ("no_zone", "benchmark_missing", "internal_error")
 ELIGIBILITY_CODES = ("earnings_gap",)
 CAUTION_CODES = ("earnings_later", "earnings_date_unknown", "earnings_row_unreadable")
 NOTE_CODES = ("macro_high_next_session", "next_session_half_day")
 TIE_BREAK = ("f3_distance_smaller", "median_dollar_volume_larger", "symbol_a_to_z")
-PRIOR_CLOSE = "PDC"                          # the levels engine's name for the prior close (levels.levels_for)
 _WHEN_ORDER = {"bmo": 0, "during": 1, "amc": 2}
 
 ROOT = Path(__file__).resolve().parents[3]
 CONFIG_PATH = ROOT / "config" / "options_select.yaml"
 # The code the output depends on, as repo paths: the picker_ref is a hash of their tokens.
 PICKER_FILES = ("src/wt/options/levels.py", "src/wt/options/select.py", "src/wt/risk/events.py")
+
+# Exit codes of `main`.
+EXIT_OK = 0                 # the output is written and every name was scored without an internal error
+EXIT_INTERNAL_ERROR = 1     # the output is written and at least one name has `internal_error` (the gate fails)
+EXIT_BUNDLE = 2             # the bundle could not be read or is not in the documented shape: nothing written
+EXIT_PARAMS = 3             # the parameters file could not be read or holds what the code does not implement
+EXIT_WRITE = 4              # the output could not be written
 
 
 class ParamsError(ValueError):
@@ -94,7 +105,7 @@ class Params:
     atr_slow: int
     dollar_volume: int
     zone_weight_floor: int
-    zone_ignore_only: tuple[str, ...]
+    zone_exclude: tuple[str, ...]
     split_low: float
     split_high: float
     decimals: int
@@ -107,6 +118,8 @@ class Params:
     macro_note_severity: str
     trend_averages: tuple[int, ...]
     direction_from_return: int
+    hv_returns: int
+    hv_year_days: int
     no_selection_text: str
 
     def benchmark(self, symbol: str) -> str:
@@ -114,15 +127,17 @@ class Params:
 
 
 def _int(v: Any, what: str, low: int = 1) -> int:
+    """A YAML integer. A float such as 260.0 is refused: it would give another hash for the same value."""
     if isinstance(v, bool) or not isinstance(v, int) or v < low:
-        raise ParamsError(f"{what} must be a whole number of at least {low}")
+        raise ParamsError(f"{what} must be written as a whole number of at least {low}")
     return int(v)
 
 
-def _num(v: Any, what: str) -> float:
-    if isinstance(v, bool) or not isinstance(v, int | float) or not math.isfinite(v) or v <= 0:
-        raise ParamsError(f"{what} must be a positive number")
-    return float(v)
+def _float(v: Any, what: str) -> float:
+    """A YAML float. An integer such as 2 is refused: it would give another hash for the same value as 2.0."""
+    if not isinstance(v, float) or not math.isfinite(v) or v <= 0:
+        raise ParamsError(f"{what} must be written as a positive decimal number (2.0, not 2)")
+    return v
 
 
 def _strs(v: Any, what: str) -> tuple[str, ...]:
@@ -136,75 +151,87 @@ def _same(v: Any, want: tuple[str, ...], what: str) -> None:
         raise ParamsError(f"{what} must be exactly {list(want)}: the code implements those and no other")
 
 
-def params_from_mapping(cfg: Mapping[str, Any]) -> Params:
+def _exactly(node: Any, keys: set[str], what: str) -> Mapping[str, Any]:
+    if not isinstance(node, Mapping) or set(node) != keys:
+        raise ParamsError(f"{what} must hold exactly the keys {sorted(keys)}")
+    return node
+
+
+def params_from_mapping(cfg: Any) -> Params:
     """The parameters as parsed from `config/options_select.yaml`. Raises ParamsError on any key, value or list the
     code does not implement, so the file and the code cannot drift apart."""
-    want = {"version", "history", "lookbacks", "zones", "split_suspect", "rounding_decimals", "benchmark",
-            "tie_break", "pick_count", "index_names", "events", "shown", "reason_codes", "eligibility_codes",
-            "caution_codes", "note_codes", "no_selection_text"}
-    if not isinstance(cfg, Mapping) or set(cfg) != want:
-        raise ParamsError(f"the parameters must hold exactly the keys {sorted(want)}")
-    try:
-        if cfg["version"] != 1:
-            raise ParamsError("version must be 1")
-        lb, zn, sp, bm, evs, sh = (cfg[k] for k in ("lookbacks", "zones", "split_suspect", "benchmark", "events",
-                                                     "shown"))
-        fast_slow = lb["atr_ratio"]
-        if not isinstance(fast_slow, list) or len(fast_slow) != 2:
-            raise ParamsError("lookbacks.atr_ratio must be [fast, slow]")
-        if sp["bound_is_suspect"] is not False:
-            raise ParamsError("split_suspect.bound_is_suspect must be false: a ratio equal to a bound is valid")
-        for k in ("reason_codes", "eligibility_codes", "caution_codes", "note_codes", "tie_break"):
-            _same(cfg[k], {"reason_codes": REASON_CODES, "eligibility_codes": ELIGIBILITY_CODES,
-                           "caution_codes": CAUTION_CODES, "note_codes": NOTE_CODES, "tie_break": TIE_BREAK}[k], k)
-        when = bm["when_name_is"]
-        if not isinstance(when, Mapping) or not all(isinstance(a, str) and isinstance(b, str) for a, b in when.items()):
-            raise ParamsError("benchmark.when_name_is must map a symbol to a symbol")
-        if not isinstance(bm["default"], str) or not isinstance(cfg["no_selection_text"], str):
-            raise ParamsError("benchmark.default and no_selection_text must be words")
-        if evs["macro_note_severity"] not in ("high", "medium"):
-            raise ParamsError("events.macro_note_severity must be a severity the macro file uses")
-        averages = sh["trend_averages"]
-        if not isinstance(averages, list):
-            raise ParamsError("shown.trend_averages must be a list")
-        p = Params(
-            min_bars=_int(cfg["history"]["min_bars"], "history.min_bars"),
-            f1_return=_int(lb["f1_return"], "lookbacks.f1_return"),
-            f5_return=_int(lb["f5_return"], "lookbacks.f5_return"),
-            atr=_int(lb["atr"], "lookbacks.atr"),
-            atr_fast=_int(fast_slow[0], "lookbacks.atr_ratio[0]"),
-            atr_slow=_int(fast_slow[1], "lookbacks.atr_ratio[1]"),
-            dollar_volume=_int(lb["dollar_volume"], "lookbacks.dollar_volume"),
-            zone_weight_floor=_int(zn["weight_floor"], "zones.weight_floor"),
-            zone_ignore_only=_strs(zn["ignore_zone_made_only_of"], "zones.ignore_zone_made_only_of"),
-            split_low=_num(sp["low"], "split_suspect.low"),
-            split_high=_num(sp["high"], "split_suspect.high"),
-            decimals=_int(cfg["rounding_decimals"], "rounding_decimals"),
-            benchmark_default=bm["default"],
-            benchmark_when=dict(when),
-            pick_count=_int(cfg["pick_count"], "pick_count"),
-            index_names=_strs(cfg["index_names"], "index_names"),
-            earnings_later_days=_int(evs["earnings_later_days"], "events.earnings_later_days", 0),
-            earnings_unknown_after_days=_int(evs["earnings_unknown_after_days"], "events.earnings_unknown_after_days"),
-            macro_note_severity=evs["macro_note_severity"],
-            trend_averages=tuple(_int(n, "shown.trend_averages") for n in averages),
-            direction_from_return=_int(sh["direction_from_return"], "shown.direction_from_return"),
-            no_selection_text=cfg["no_selection_text"],
-        )
-    except (KeyError, TypeError) as e:
-        raise ParamsError(f"the parameters are not in the documented shape ({type(e).__name__})") from None
+    top = _exactly(cfg, {"version", "history", "lookbacks", "zones", "split_suspect", "rounding_decimals",
+                         "benchmark", "tie_break", "pick_count", "index_names", "events", "shown", "reason_codes",
+                         "eligibility_codes", "caution_codes", "note_codes", "no_selection_text"}, "the parameters")
+    if _int(top["version"], "version") != 1:
+        raise ParamsError("version must be 1")
+    hist = _exactly(top["history"], {"min_bars"}, "history")
+    lb = _exactly(top["lookbacks"], {"f1_return", "f5_return", "atr", "atr_ratio", "dollar_volume"}, "lookbacks")
+    zn = _exactly(top["zones"], {"weight_floor", "exclude_members"}, "zones")
+    sp = _exactly(top["split_suspect"], {"low", "high", "bound_is_suspect"}, "split_suspect")
+    bm = _exactly(top["benchmark"], {"default", "when_name_is"}, "benchmark")
+    evs = _exactly(top["events"], {"earnings_later_days", "earnings_unknown_after_days", "macro_note_severity"},
+                   "events")
+    sh = _exactly(top["shown"], {"trend_averages", "direction_from_return", "hv_returns", "hv_year_days",
+                                 "hv_stdev"}, "shown")
+    fast_slow = lb["atr_ratio"]
+    if not isinstance(fast_slow, list) or len(fast_slow) != 2:
+        raise ParamsError("lookbacks.atr_ratio must be [fast, slow]")
+    if sp["bound_is_suspect"] is not False:
+        raise ParamsError("split_suspect.bound_is_suspect must be false: a ratio equal to a bound is valid")
+    if sh["hv_stdev"] != "sample":
+        raise ParamsError("shown.hv_stdev must be sample: the code uses the sample standard deviation")
+    for k, want in (("reason_codes", REASON_CODES), ("eligibility_codes", ELIGIBILITY_CODES),
+                    ("caution_codes", CAUTION_CODES), ("note_codes", NOTE_CODES), ("tie_break", TIE_BREAK)):
+        _same(top[k], want, k)
+    when = bm["when_name_is"]
+    if not isinstance(when, Mapping) or not all(isinstance(a, str) and isinstance(b, str) for a, b in when.items()):
+        raise ParamsError("benchmark.when_name_is must map a symbol to a symbol")
+    if not isinstance(bm["default"], str) or not isinstance(top["no_selection_text"], str):
+        raise ParamsError("benchmark.default and no_selection_text must be words")
+    if evs["macro_note_severity"] not in ("high", "medium"):
+        raise ParamsError("events.macro_note_severity must be a severity the macro file uses")
+    if not isinstance(sh["trend_averages"], list):
+        raise ParamsError("shown.trend_averages must be a list")
+    p = Params(
+        min_bars=_int(hist["min_bars"], "history.min_bars"),
+        f1_return=_int(lb["f1_return"], "lookbacks.f1_return"),
+        f5_return=_int(lb["f5_return"], "lookbacks.f5_return"),
+        atr=_int(lb["atr"], "lookbacks.atr"),
+        atr_fast=_int(fast_slow[0], "lookbacks.atr_ratio[0]"),
+        atr_slow=_int(fast_slow[1], "lookbacks.atr_ratio[1]"),
+        dollar_volume=_int(lb["dollar_volume"], "lookbacks.dollar_volume"),
+        zone_weight_floor=_int(zn["weight_floor"], "zones.weight_floor"),
+        zone_exclude=_strs(zn["exclude_members"], "zones.exclude_members"),
+        split_low=_float(sp["low"], "split_suspect.low"),
+        split_high=_float(sp["high"], "split_suspect.high"),
+        decimals=_int(top["rounding_decimals"], "rounding_decimals"),
+        benchmark_default=bm["default"],
+        benchmark_when=dict(when),
+        pick_count=_int(top["pick_count"], "pick_count"),
+        index_names=_strs(top["index_names"], "index_names"),
+        earnings_later_days=_int(evs["earnings_later_days"], "events.earnings_later_days", 0),
+        earnings_unknown_after_days=_int(evs["earnings_unknown_after_days"], "events.earnings_unknown_after_days"),
+        macro_note_severity=evs["macro_note_severity"],
+        trend_averages=tuple(_int(n, "shown.trend_averages") for n in sh["trend_averages"]),
+        direction_from_return=_int(sh["direction_from_return"], "shown.direction_from_return"),
+        hv_returns=_int(sh["hv_returns"], "shown.hv_returns", 2),
+        hv_year_days=_int(sh["hv_year_days"], "shown.hv_year_days"),
+        no_selection_text=top["no_selection_text"],
+    )
     if p.split_low >= p.split_high:
         raise ParamsError("split_suspect.low must be below split_suspect.high")
     longest = max(p.f1_return, p.f5_return, p.atr, p.atr_fast, p.atr_slow, p.dollar_volume, *p.trend_averages,
-                  p.direction_from_return)
+                  p.direction_from_return, p.hv_returns)
     if p.min_bars <= longest:
         raise ParamsError("history.min_bars must exceed every lookback")
     return p
 
 
 def canonical_json(obj: Any) -> str:
-    """The parameters' canonical text: JSON with keys sorted, no spaces (separators `,` and `:`), ASCII only, whole
-    numbers as integers and other numbers as Python's shortest round-trip form (`repr`), no NaN or infinity."""
+    """The canonical text of a parsed document: JSON with keys sorted, no spaces (separators `,` and `:`), ASCII only,
+    no NaN or infinity. A YAML or JSON integer is written as a JSON integer and a float in Python's float repr, so
+    2.0 stays 2.0 and 2 stays 2."""
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False)
 
 
@@ -213,10 +240,20 @@ def params_sha(cfg: Mapping[str, Any]) -> str:
     return hashlib.sha256(canonical_json(cfg).encode("utf-8")).hexdigest()
 
 
+def bundle_sha(doc: Any) -> str:
+    """SHA-256 (hex) of `canonical_json` of the parsed input bundle, encoded as UTF-8: which input an output came from.
+    Key order and spacing in the file do not count; every value does."""
+    return hashlib.sha256(canonical_json(doc).encode("utf-8")).hexdigest()
+
+
 def load_params(path: Path = CONFIG_PATH) -> tuple[Params, str]:
-    """Read and check the parameters file; return the parameters and their `params_sha`."""
+    """Read and check the parameters file; return the parameters and their `params_sha`. Raises ParamsError for a file
+    that cannot be read, is not YAML, or is not in the documented shape."""
     import yaml
-    cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
+    try:
+        cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as e:
+        raise ParamsError(f"cannot read {path.name} ({type(e).__name__})") from None
     return params_from_mapping(cfg), params_sha(cfg)
 
 
@@ -258,17 +295,34 @@ def parse_bars(raw: Any) -> list[lv.Bar] | None:
     return out
 
 
-def validity(bars: list[lv.Bar] | None, session: str, p: Params) -> str | None:
-    """The first validity check that fails (VALIDITY_CODES order), or None when the name is data-valid."""
+def session_window(session: str, n: int) -> list[str]:
+    """The `n` exchange sessions ending at `session`, oldest first, walking back with `levels.prev_session`."""
+    out = [session]
+    while len(out) < n:
+        out.append(lv.prev_session(out[-1]))
+    return out[::-1]
+
+
+def validity(bars: list[lv.Bar] | None, session: str, p: Params, sessions: Sequence[str] | None = None) -> str | None:
+    """The first validity check that fails (VALIDITY_CODES order), or None when the name is data-valid. `sessions` is
+    `session_window(session, p.min_bars)`, passed in so a run works it out once."""
     if bars is None or any(a.d >= b.d for a, b in zip(bars, bars[1:], strict=False)):
+        return "bad_bar"
+    if bars and bars[-1].d > session:
         return "bad_bar"
     window = bars[-p.min_bars:]
     if any(not (b.h >= b.l > 0 and b.o > 0 and b.c > 0 and b.v >= 0) for b in window):
         return "bad_bar"
+    longest_atr = max(p.atr, p.atr_fast, p.atr_slow)
+    if len(window) > longest_atr and any(lv.atr(window, n) <= 0 for n in (p.atr, p.atr_fast, p.atr_slow)):
+        return "bad_bar"                                         # a rangeless window: ATR of zero
     if not bars or bars[-1].d != session:
         return "stale_bar"
     if len(bars) < p.min_bars:
         return "short_history"
+    want = sessions if sessions is not None else session_window(session, p.min_bars)
+    if [b.d for b in window] != list(want):
+        return "missing_session"
     for a, b in zip(window, window[1:], strict=False):
         r = b.c / a.c
         if r < p.split_low or r > p.split_high:
@@ -287,17 +341,64 @@ def ret(window: Sequence[lv.Bar], k: int) -> float:
     return window[-1].c / window[-1 - k].c - 1
 
 
+def atr_pct(window: Sequence[lv.Bar], p: Params) -> float:
+    """ATR14 over the last close."""
+    return lv.atr(list(window), p.atr) / window[-1].c
+
+
+def f1(window: Sequence[lv.Bar], p: Params) -> float:
+    """F1: abs(ret(20)) over ATR% times the square root of 20."""
+    return abs(ret(window, p.f1_return)) / (atr_pct(window, p) * math.sqrt(p.f1_return))
+
+
+def f2(window: Sequence[lv.Bar], p: Params) -> float:
+    """F2: ATR5 over ATR20."""
+    w = list(window)
+    return lv.atr(w, p.atr_fast) / lv.atr(w, p.atr_slow)
+
+
+def f3_zones(levels: Sequence[lv.Level], close: float, p: Params) -> list[lv.Zone]:
+    """F3's zones: the levels engine's merge (`levels.merge_zones`) of the session's levels without the excluded
+    members (the prior close's own level, `PDC`: the close is not support or resistance for itself)."""
+    return lv.merge_zones([x for x in levels if x.name not in p.zone_exclude], close)
+
+
 def zone_distance(zones: Sequence[lv.Zone], close: float, p: Params) -> float | None:
-    """`d` for F3: the distance from `close` to the nearest bound of the nearest zone of weight >= the floor, a zone
-    made only of the ignored members left out; 0 inside a zone; None when no zone qualifies."""
-    ignored = set(p.zone_ignore_only)
+    """`d` for F3: the distance from `close` to the nearest bound of the nearest zone of weight >= the floor; 0 inside
+    a zone (bounds included); None when no zone qualifies."""
     best: float | None = None
     for z in zones:
-        if z["weight"] < p.zone_weight_floor or set(z["members"]) <= ignored:
+        if z["weight"] < p.zone_weight_floor:
             continue
         d = 0.0 if z["lo"] <= close <= z["hi"] else min(abs(close - z["lo"]), abs(close - z["hi"]))
         best = d if best is None else min(best, d)
     return best
+
+
+def f3_distance(window: list[lv.Bar], next_session: str, p: Params) -> float | None:
+    """`d / ATR14` for F3 (F3 is its negative), or None for `no_zone`."""
+    close = window[-1].c
+    zones = f3_zones(lv.levels_for(window, next_session)["levels"], close, p)
+    d = zone_distance(zones, close, p)
+    return None if d is None else d / lv.atr(window, p.atr)
+
+
+def f4(window: Sequence[lv.Bar]) -> float:
+    """F4: max(c, 1 - c), `c` where the close of the last bar sits in its range (0.5 when high equals low)."""
+    c, _ = lv.close_strength(window[-1])
+    return max(c, 1 - c)
+
+
+def f5(window: Sequence[lv.Bar], bench: Sequence[lv.Bar], p: Params) -> float:
+    """F5: abs(ret(5) minus the benchmark's ret(5)) over ATR% times the square root of 5."""
+    return abs(ret(window, p.f5_return) - ret(bench, p.f5_return)) / (atr_pct(window, p) * math.sqrt(p.f5_return))
+
+
+def hv(window: Sequence[lv.Bar], p: Params) -> float:
+    """Shown only: the sample standard deviation of the last `hv_returns` daily log returns, times sqrt(hv_year_days)."""
+    closes = [b.c for b in window[-p.hv_returns - 1:]]
+    logs = [math.log(b / a) for a, b in zip(closes, closes[1:], strict=False)]
+    return statistics.stdev(logs) * math.sqrt(p.hv_year_days)
 
 
 @dataclass
@@ -309,32 +410,35 @@ class Computed:
     shown: dict[str, Any]              # rounded already: shown, never ranked
 
 
+def _finite(x: Any) -> bool:
+    if isinstance(x, dict):
+        return all(_finite(v) for v in x.values())
+    return not isinstance(x, float) or math.isfinite(x)
+
+
 def factors(window: list[lv.Bar], bench: list[lv.Bar] | None, next_session: str, p: Params) -> Computed | str:
-    """The five factors of one data-valid name, or the reason code of the first that cannot be worked out."""
+    """The five factors of one data-valid name, or the reason code of the first that cannot be worked out. A value
+    that is not a finite number is a data fault: `bad_bar`."""
     close = window[-1].c
     a14 = lv.atr(window, p.atr)
-    atr_pct = a14 / close
-    f1 = abs(ret(window, p.f1_return)) / (atr_pct * math.sqrt(p.f1_return))
-    f2 = lv.atr(window, p.atr_fast) / lv.atr(window, p.atr_slow)
-    d = zone_distance(lv.levels_for(window, next_session)["zones"], close, p)
-    if d is None:
+    dist = f3_distance(window, next_session, p)
+    if dist is None:
         return "no_zone"
-    f3 = -d / a14
-    c, _ = lv.close_strength(window[-1])
-    f4 = max(c, 1 - c)
     if bench is None:
         return "benchmark_missing"
-    f5 = abs(ret(window, p.f5_return) - ret(bench, p.f5_return)) / (atr_pct * math.sqrt(p.f5_return))
+    vals = {"F1": f1(window, p), "F2": f2(window, p), "F3": -dist, "F4": f4(window), "F5": f5(window, bench, p)}
     dv = statistics.median(b.c * b.v for b in window[-p.dollar_volume:])
     trend = {}
     for n in p.trend_averages:
         ma = _r(sum(b.c for b in window[-n:]) / n, p)
         trend[f"ma{n}"] = "above" if _r(close, p) > ma else "below" if _r(close, p) < ma else "at"
     rd = _r(ret(window, p.direction_from_return), p)
-    shown = {"atr14": _r(a14, p), "atr_pct": _r(atr_pct, p), "close": _r(close, p), "trend": trend,
+    shown = {"atr14": _r(a14, p), "atr_pct": _r(atr_pct(window, p), p), "close": _r(close, p),
+             f"hv{p.hv_returns}": _r(hv(window, p), p), "trend": trend,
              "direction": "up" if rd > 0 else "down" if rd < 0 else "flat"}
-    vals = {"F1": f1, "F2": f2, "F3": f3, "F4": f4, "F5": f5}
-    return Computed(vals, d / a14, dv, shown)
+    if not (_finite(vals) and _finite(shown) and math.isfinite(dist) and math.isfinite(dv)):
+        return "bad_bar"
+    return Computed(vals, dist, dv, shown)
 
 
 def average_ranks(values: Mapping[str, float]) -> dict[str, float]:
@@ -416,18 +520,20 @@ def read_events(names: Sequence[str], session: str, next_session: str, earnings_
 # ---------------------------------------------------------------- the run
 
 def score_stage1(session: str, names: Sequence[str], bars: Mapping[str, Any], earnings_rows: Sequence[Any],
-                 macro_rows: Sequence[Any], p: Params, *, sha: str, ref: str) -> dict[str, Any]:
+                 macro_rows: Sequence[Any], p: Params, *, sha: str, ref: str,
+                 input_sha: str | None = None) -> dict[str, Any]:
     """Stage 1 for `session` (the finished session D). `bars` maps a name to its bundle bar list. The result is a
-    plain JSON-ready structure; see `dumps` for its text form."""
+    plain JSON-ready structure; see `dumps` for its text form. `input_sha` is the bundle's `bundle_sha`."""
     syms = sorted(set(names))
     nxt = lv.next_session(session)
+    want = session_window(session, p.min_bars)
     windows: dict[str, list[lv.Bar]] = {}
     reason: dict[str, str] = {}
     error: dict[str, str] = {}
     for s in syms:
         try:
             parsed = parse_bars(bars.get(s, []))
-            why = validity(parsed, session, p)
+            why = validity(parsed, session, p, want)
             if why is None and parsed is not None:
                 windows[s] = parsed[-p.min_bars:]
             else:
@@ -454,6 +560,7 @@ def score_stage1(session: str, names: Sequence[str], bars: Mapping[str, Any], ea
     final = {s: i + 1 for i, s in enumerate(order)}
     eligible = [s for s in order if s not in events.gap]
     picks = eligible[:min(p.pick_count, len(eligible))]
+    valid = [s for s in syms if s in windows and reason.get(s) not in VALIDITY_CODES]
 
     rows = []
     for s in order + sorted(set(syms) - set(done)):
@@ -462,7 +569,7 @@ def score_stage1(session: str, names: Sequence[str], bars: Mapping[str, Any], ea
         elig = "earnings_gap" if c is not None and s in events.gap else (why or "eligible")
         rows.append({
             "symbol": s,
-            "data_valid": s in windows,
+            "data_valid": s in valid,
             "reason": why,
             "error_class": error.get(s),
             "benchmark": p.benchmark(s),
@@ -484,8 +591,9 @@ def score_stage1(session: str, names: Sequence[str], bars: Mapping[str, Any], ea
         "next_session": nxt,
         "params_sha": sha,
         "picker_ref": ref,
+        "bundle_sha": input_sha,
         "status": "internal_error" if error else "ok",
-        "counts": {"names": len(syms), "data_valid": len(windows), "ranked": len(done), "eligible": len(eligible),
+        "counts": {"names": len(syms), "data_valid": len(valid), "ranked": len(done), "eligible": len(eligible),
                    "picked": len(picks)},
         "picks": picks,
         "selection_note": None if picks else p.no_selection_text,
@@ -500,6 +608,7 @@ def check_bundle(doc: Any) -> None:
 
         {"schema": "wt.options.select/stage1-bundle", "version": 1,
          "session": "YYYY-MM-DD",                 the finished session D, a session of the calendar
+         "adjustment": "split",                   the daily bars are split-adjusted (Alpaca adjustment=split)
          "names": ["SPY", ...],                   the names to score, distinct, upper case
          "bars": {"SPY": [{"d": "YYYY-MM-DD", "o": 1.0, "h": 1.0, "l": 1.0, "c": 1.0, "v": 0}, ...], ...},
          "earnings_rows": [{...}, ...],           config/events/earnings.csv rows as csv.DictReader gives them
@@ -509,11 +618,13 @@ def check_bundle(doc: Any) -> None:
     that name's `bad_bar`, not a bundle error. Bars are daily, oldest first."""
     if not isinstance(doc, Mapping):
         raise BundleError("the bundle is not an object")
-    want = {"schema", "version", "session", "names", "bars", "earnings_rows", "macro_rows"}
+    want = {"schema", "version", "session", "adjustment", "names", "bars", "earnings_rows", "macro_rows"}
     if set(doc) != want:
         raise BundleError(f"the bundle must hold exactly the keys {sorted(want)}")
-    if doc["schema"] != BUNDLE_SCHEMA or doc["version"] != BUNDLE_VERSION:
+    if doc["schema"] != BUNDLE_SCHEMA or isinstance(doc["version"], bool) or doc["version"] != BUNDLE_VERSION:
         raise BundleError("not a stage 1 bundle of a version this code reads")
+    if doc["adjustment"] != BUNDLE_ADJUSTMENT:
+        raise BundleError("the bundle's bars must be split-adjusted: adjustment must be \"split\"")
     s = doc["session"]
     if ev.exact_date(s) is None or not lv.is_session(s):
         raise BundleError("session is not a session date")
@@ -531,7 +642,7 @@ def run_bundle(doc: Any, p: Params, *, sha: str, ref: str) -> dict[str, Any]:
     """Stage 1 on an input bundle, reading nothing but the bundle."""
     check_bundle(doc)
     return score_stage1(doc["session"], doc["names"], doc["bars"], doc["earnings_rows"], doc["macro_rows"], p,
-                        sha=sha, ref=ref)
+                        sha=sha, ref=ref, input_sha=bundle_sha(doc))
 
 
 def dumps(out: Mapping[str, Any]) -> str:
@@ -540,6 +651,8 @@ def dumps(out: Mapping[str, Any]) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """`stage1 --bundle <file> --out <file> [--params <file>]`. Exit codes: EXIT_OK, EXIT_INTERNAL_ERROR (output
+    written, a name failed), EXIT_BUNDLE, EXIT_PARAMS, EXIT_WRITE; each failure prints one line, never a traceback."""
     ap = argparse.ArgumentParser(prog="python -m wt.options.select", description="Options desk selection (DEC-0046)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     s1 = sub.add_parser("stage1", help="score a saved input bundle after the close")
@@ -549,15 +662,24 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
     try:
         p, sha = load_params(a.params)
+    except ParamsError as e:
+        print(f"stage1: parameters: {e}", file=sys.stderr)
+        return EXIT_PARAMS
+    try:
         doc = json.loads(a.bundle.read_text(encoding="utf-8"))
         out = run_bundle(doc, p, sha=sha, ref=picker_ref())
-    except (OSError, ValueError) as e:
-        print(f"stage1: {type(e).__name__}: {e}", file=sys.stderr)
-        return 2
-    a.out.write_text(dumps(out), encoding="utf-8")
+        text = dumps(out)
+    except (OSError, UnicodeDecodeError, ValueError, RecursionError) as e:
+        print(f"stage1: bundle: {type(e).__name__}: {e}", file=sys.stderr)
+        return EXIT_BUNDLE
+    try:
+        a.out.write_text(text, encoding="utf-8")
+    except OSError as e:
+        print(f"stage1: cannot write the output ({type(e).__name__})", file=sys.stderr)
+        return EXIT_WRITE
     print(f"stage1 {out['session']}: {out['counts']['picked']} picked, {out['counts']['eligible']} eligible, "
           f"{out['counts']['data_valid']} of {out['counts']['names']} valid, status {out['status']}")
-    return 0 if out["status"] == "ok" else 1
+    return EXIT_OK if out["status"] == "ok" else EXIT_INTERNAL_ERROR
 
 
 if __name__ == "__main__":

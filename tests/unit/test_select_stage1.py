@@ -65,7 +65,7 @@ def flat(n: int = 260, last: float | None = None, end: str = D, **kw: Any) -> li
 def bundle(bars: dict[str, Any], earnings: list[dict[str, str]] | None = None,
            macro: list[dict[str, str]] | None = None, session: str = D,
            names: list[str] | None = None) -> dict[str, Any]:
-    return {"schema": sel.BUNDLE_SCHEMA, "version": sel.BUNDLE_VERSION, "session": session,
+    return {"schema": sel.BUNDLE_SCHEMA, "version": sel.BUNDLE_VERSION, "session": session, "adjustment": "split",
             "names": names if names is not None else list(bars), "bars": bars,
             "earnings_rows": earnings or [], "macro_rows": macro or []}
 
@@ -119,26 +119,56 @@ def test_f2_is_atr5_over_atr20():
     assert row(out, "SPY")["factors"]["F2"]["value"] == 1.0          # 2 / 2
 
 
-def test_f3_close_inside_a_zone_is_zero():
-    # Flat at 100: PDC, MA20, MA50 and MA200 are all 100.0 and merge into one zone [100, 100] of weight 1+1+2+3 = 7.
-    # The close (100) is inside it: d = 0, F3 = -0 / ATR14 = 0.
+def test_f3_close_inside_a_zone_of_other_levels_is_zero():
+    # Flat at 100: MA20, MA50 and MA200 are all 100.0 (PDC, also 100.0, is left out) and merge into one zone
+    # [100, 100] of weight 1 + 2 + 3 = 6. The close (100) is inside a zone of other levels: d = 0, F3 = 0.
     out = run(base())
     assert row(out, "SPY")["factors"]["F3"]["value"] == 0.0
     assert row(out, "SPY")["f3_distance_atr"] == 0.0
 
 
-def test_f3_on_the_engine_leaves_out_the_prior_close_zone():
-    # Close 102. The engine's zones (levels_for for 2026-11-12): [99] weight 9 (PWL, PML, 52WL, WTDL), [100.01, 100.1]
-    # weight 6 (MA200, MA50, MA20), [101] weight 6 (PDL, PWH, PMH), [102] weight 1 made only of PDC, [103] weight 5
-    # (PDH, 52WH, WTDH). The PDC zone holds the close but is left out; the nearest qualifying bound is 101 or 103,
-    # d = 1. F3 = -1 / (29/14) = -14/29 = -0.482759.
+def test_f3_on_the_engine_merges_without_the_prior_close():
+    # Close 102. levels_for(window, 2026-11-12) gives PDC = 102, the close itself. Merged without it, F3's zones are:
+    # [99] weight 9 (PWL, PML, 52WL, WTDL), [100.01, 100.1] weight 6 (MA200, MA50, MA20), [101] weight 6 (PDL, PWH,
+    # PMH), [103] weight 5 (PDH, 52WH, WTDH). No zone holds 102; the nearest bounds are 101 and 103: d = 1.
+    # F3 = -1 / (29/14) = -14/29 = -0.482759.
     window = bars_of(flat(last=102.0))
-    zones = lv.levels_for(window, "2026-11-12")["zones"]
-    pdc = [z for z in zones if z["members"] == ["PDC"]]
-    assert len(pdc) == 1 and pdc[0]["lo"] == 102.0 and pdc[0]["weight"] == 1
+    got = lv.levels_for(window, "2026-11-12")
+    assert [x.price for x in got["levels"] if x.name == "PDC"] == [102.0]
+    zones = sel.f3_zones(got["levels"], 102.0, P)
+    assert all("PDC" not in z["members"] for z in zones)
+    assert [(z["lo"], z["hi"], z["weight"]) for z in zones if z["weight"] >= 5] == [
+        (99.0, 99.0, 9), (100.01, 100.1, 6), (101.0, 101.0, 6), (103.0, 103.0, 5)]
     out = run(base(X=flat(last=102.0)))
     assert row(out, "X")["factors"]["F3"]["value"] == -0.482759
     assert row(out, "X")["f3_distance_atr"] == 0.482759
+
+
+def level(name: str, price: float, weight: int) -> lv.Level:
+    return lv.Level(name, price, "test", weight)
+
+
+def test_f3_prior_close_does_not_lift_a_zone_or_set_d_to_zero():
+    # Case 1: PDC 100.0 (w1), PMH 100.2 (w3), PWH 100.6 (w2), close 100.0.
+    #   Without PDC: base 100.2; 100.6 / 100.2 - 1 = 0.40% <= 0.5%, so one zone [100.2, 100.6] of weight 3 + 2 = 5.
+    #   d = 100.2 - 100.0 = 0.2. (With PDC the base would be 100.0, PMH joins it for weight 4, PWH is 0.6% away
+    #   and alone at 2: no zone reaches 5, a false no_zone.)
+    lv1 = [level("PDC", 100.0, 1), level("PMH", 100.2, 3), level("PWH", 100.6, 2)]
+    z1 = sel.f3_zones(lv1, 100.0, P)
+    assert [(z["lo"], z["hi"], z["weight"]) for z in z1] == [(100.2, 100.6, 5)]
+    assert math.isclose(sel.zone_distance(z1, 100.0, P), 0.2)
+    assert sel.zone_distance(lv.merge_zones(lv1, 100.0), 100.0, P) is None        # the old, wrong reading
+    # Case 2: PDC 100.0, MA200 100.3 (w3), PML 100.4 (w3), close 100.0.
+    #   Without PDC: one zone [100.3, 100.4] of weight 6, d = 0.3. (With PDC: [100.0, 100.4] of weight 7, d = 0.)
+    lv2 = [level("PDC", 100.0, 1), level("MA200", 100.3, 3), level("PML", 100.4, 3)]
+    z2 = sel.f3_zones(lv2, 100.0, P)
+    assert [(z["lo"], z["hi"], z["weight"]) for z in z2] == [(100.3, 100.4, 6)]
+    assert math.isclose(sel.zone_distance(z2, 100.0, P), 0.3)
+    assert sel.zone_distance(lv.merge_zones(lv2, 100.0), 100.0, P) == 0.0           # the old, wrong reading
+    # Case 3: the close genuinely inside a zone of other levels: PWL 99.9 (w2), PML 100.2 (w3), close 100.0.
+    #   One zone [99.9, 100.2] of weight 5 holds 100.0: d = 0.
+    z3 = sel.f3_zones([level("PDC", 100.0, 1), level("PWL", 99.9, 2), level("PML", 100.2, 3)], 100.0, P)
+    assert sel.zone_distance(z3, 100.0, P) == 0.0
 
 
 def zone(lo: float, hi: float, weight: int, members: list[str]) -> lv.Zone:
@@ -155,23 +185,21 @@ def test_zone_distance_rules():
     # Weight 4 is under the floor of 5: ignored. Weight exactly 5 qualifies.
     assert sel.zone_distance([zone(101, 101, 4, ["A"])], 102.0, P) is None
     assert sel.zone_distance([zone(101, 101, 5, ["A"])], 102.0, P) == 1.0
-    # A zone made only of the prior close is ignored even at weight 5 (the engine gives PDC weight 1, so this can
-    # only be built by hand); a zone where PDC sits with another level is not "only the prior close".
-    assert sel.zone_distance([zone(102, 102, 5, ["PDC"]), zone(105, 105, 5, ["A"])], 102.0, P) == 3.0
-    assert sel.zone_distance([zone(102, 102, 5, ["PDC", "MA20"])], 102.0, P) == 0.0
     assert sel.zone_distance([], 102.0, P) is None
 
 
+def patch_zones(monkeypatch, close: float, zones: list[lv.Zone]) -> None:
+    """F3's zones replaced by `zones` for the name whose last close is `close`."""
+    real = sel.f3_zones
+
+    def fake(levels: Any, c: float, p: sel.Params) -> list[lv.Zone]:
+        return zones if c == close else real(levels, c, p)
+
+    monkeypatch.setattr(sel, "f3_zones", fake)
+
+
 def test_no_qualifying_zone_gives_no_zone(monkeypatch):
-    real = lv.levels_for
-
-    def no_big_zone(bars: list[lv.Bar], session: str) -> lv.LevelSet:
-        got = real(bars, session)
-        if bars[-1].c == 102.0:
-            got["zones"] = [zone(z["lo"], z["hi"], 4, z["members"]) for z in got["zones"]]
-        return got
-
-    monkeypatch.setattr(lv, "levels_for", no_big_zone)
+    patch_zones(monkeypatch, 102.0, [zone(101.0, 101.0, 4, ["PDL", "PWH"]), zone(103.0, 103.0, 4, ["PDH"])])
     out = run(base(X=flat(last=102.0)))
     x = row(out, "X")
     assert x["reason"] == "no_zone" and x["data_valid"] and x["factors"] is None and x["final_rank"] is None
@@ -181,15 +209,7 @@ def test_no_qualifying_zone_gives_no_zone(monkeypatch):
 
 def test_f3_hand_built_zone(monkeypatch):
     # Close 102, one zone [104, 105] of weight 5: d = 2, F3 = -2 / (29/14) = -28/29 = -0.965517.
-    real = lv.levels_for
-
-    def one_zone(bars: list[lv.Bar], session: str) -> lv.LevelSet:
-        got = real(bars, session)
-        if bars[-1].c == 102.0:
-            got["zones"] = [zone(104.0, 105.0, 5, ["PWH", "PMH"])]
-        return got
-
-    monkeypatch.setattr(lv, "levels_for", one_zone)
+    patch_zones(monkeypatch, 102.0, [zone(104.0, 105.0, 5, ["PWH", "PMH"])])
     assert row(run(base(X=flat(last=102.0))), "X")["factors"]["F3"]["value"] == -0.965517
 
 
@@ -290,6 +310,13 @@ def test_validity_order_first_failing_check_wins():
     assert sel.validity(bars_of(b), D, P) == "bad_bar"
     assert sel.validity(bars_of(flat(259, end=lv.prev_session(D))), D, P) == "stale_bar"
     assert sel.validity(None, D, P) == "bad_bar"
+    short = flat(262)
+    del short[-4], short[-6], short[-8]                              # 259 bars and missing sessions: short first
+    assert sel.validity(bars_of(short), D, P) == "short_history"
+    gap = series([100.0] * 131 + [50.0] * 130)
+    del gap[-4]                                                      # a missing session and a jump: missing first
+    assert sel.validity(bars_of(gap), D, P) == "missing_session"
+    assert sel.VALIDITY_CODES == ("bad_bar", "stale_bar", "short_history", "missing_session", "suspect_split")
 
 
 # ---------------------------------------------------------------- ranking
@@ -471,15 +498,7 @@ def test_the_benchmark_is_used_whatever_its_own_eligibility(monkeypatch):
     out = run(base(A=flat(last=102.0)), earnings=[er("SPY", "2026-11-12", "bmo")])
     assert row(out, "SPY")["eligibility"] == "earnings_gap"
     assert row(out, "A")["factors"]["F5"]["value"] == 0.440428
-    real = lv.levels_for
-
-    def spy_no_zone(bars: list[lv.Bar], session: str) -> lv.LevelSet:
-        got = real(bars, session)
-        if bars[-1].c == 100.0:
-            got["zones"] = []
-        return got
-
-    monkeypatch.setattr(lv, "levels_for", spy_no_zone)
+    patch_zones(monkeypatch, 100.0, [])
     out = run({"SPY": flat(), "QQQ": flat(last=101.0), "A": flat(last=102.0)})
     assert row(out, "SPY")["reason"] == "no_zone"
     assert row(out, "A")["factors"]["F5"]["value"] == 0.440428
@@ -514,7 +533,12 @@ def test_shuffled_input_gives_byte_identical_output():
     b = several()
     rows = [er("B", D, "amc"), er("A", "2026-11-13", "bmo"), er("C", "2026-08-01", "amc")]
     macro = [mr("2026-11-12", "high", "cpi"), mr("2026-11-12", "high", "nfp")]
-    first = sel.dumps(run(b, earnings=rows, macro=macro))
+    # bundle_sha names the input as saved, so a reordered list of names or rows is another input with another
+    # bundle_sha; everything else in the output is byte-identical.
+    def text(out: dict[str, Any]) -> str:
+        return sel.dumps(out | {"bundle_sha": None})
+
+    first = text(run(b, earnings=rows, macro=macro))
     rnd = random.Random(7)
     for _ in range(5):
         keys = list(b)
@@ -522,7 +546,7 @@ def test_shuffled_input_gives_byte_identical_output():
         rows2, macro2 = rows[:], macro[:]
         rnd.shuffle(rows2)
         rnd.shuffle(macro2)
-        again = sel.dumps(run({k: copy.deepcopy(b[k]) for k in keys}, earnings=rows2, macro=macro2))
+        again = text(run({k: copy.deepcopy(b[k]) for k in keys}, earnings=rows2, macro=macro2))
         assert again == first
 
 
@@ -649,6 +673,8 @@ def test_the_golden_bundle_is_the_generator_output():
 
 
 def test_cli_round_trip_matches_the_golden_output(tmp_path):
+    """A regression lock: the golden output was written by this code after the hand-computed tests above passed. It
+    proves the output has not moved, not that the formulas are right; the hand-computed tests do that."""
     out = tmp_path / "out.json"
     assert sel.main(["stage1", "--bundle", str(FIXTURES / "stage1_bundle.json"), "--out", str(out)]) == 0
     got = json.loads(out.read_text())
@@ -744,3 +770,216 @@ def test_math_helpers_match_the_factor_definitions():
     w = bars_of(flat(last=102.0))
     assert math.isclose(sel.ret(w, 20), 0.02) and math.isclose(sel.ret(w, 5), 0.02)
     assert math.isclose(lv.atr(w, 14), 29 / 14)
+
+
+# ---------------------------------------------------------------- the formulas on ramps (each guards a mutant)
+
+def ramp(start: float, step: float, n: int = 260) -> list[lv.Bar]:
+    """close_i = start + step x i, high = close + 1, low = close - 1: every true range is 2, so ATR = 2 at any n."""
+    return bars_of(series([start + step * i for i in range(n)]))
+
+
+def test_f1_on_a_rising_ramp_reads_exactly_20_bars_back():
+    # close_i = 100 + i, i = 0..259: the last close is 359, 20 bars before it 339 (21 before: 338).
+    # ret(20) = 359 / 339 - 1 = 20/339. ATR14 = 2, ATR% = 2/359.
+    # F1 = (20/339) / ((2/359) x sqrt(20)) = 7180 / (678 x 4.472136) = 2.367989.
+    # Reading one bar short (359 / 340 - 1 = 19/340) would give 2.242973.
+    w = ramp(100.0, 1.0)
+    assert math.isclose(sel.ret(w, 20), 20 / 339)
+    assert round(sel.f1(w, P), 6) == 2.367989
+
+
+def test_f1_on_a_falling_ramp_takes_the_absolute_return():
+    # close_i = 400 - i: the last close is 141, 20 bars before it 161. ret(20) = 141/161 - 1 = -20/161.
+    # F1 = abs(-20/161) / ((2/141) x sqrt(20)) = 1.958296; without abs() it would be negative.
+    w = ramp(400.0, -1.0)
+    assert math.isclose(sel.ret(w, 20), -20 / 161)
+    assert round(sel.f1(w, P), 6) == 1.958296
+
+
+def test_f5_with_a_benchmark_moving_the_other_way():
+    # Name falling (close_i = 400 - i): ret(5) = 141 / 146 - 1 = -5/146. Benchmark rising (100 + i): ret(5) =
+    # 359 / 354 - 1 = 5/354. ATR% = 2/141. F5 = abs(-5/146 - 5/354) / ((2/141) x sqrt(5)) = 1.525064.
+    # (Ignoring the benchmark would give 1.079745; without abs() the value would be negative.)
+    name, bench = ramp(400.0, -1.0), ramp(100.0, 1.0)
+    assert math.isclose(sel.ret(name, 5), -5 / 146) and math.isclose(sel.ret(bench, 5), 5 / 354)
+    assert round(sel.f5(name, bench, P), 6) == 1.525064
+
+
+def test_ramp_factors_through_the_run():
+    # The same numbers reach the output when the ramps are scored as names (SPY is the rising ramp).
+    b = {"SPY": series([100.0 + i for i in range(260)]), "QQQ": flat(),
+         "DOWN": series([400.0 - i for i in range(260)])}
+    out = run(b)
+    down = row(out, "DOWN")
+    assert down["reason"] is None
+    assert down["factors"]["F1"]["value"] == 1.958296 and down["factors"]["F5"]["value"] == 1.525064
+    assert down["factors"]["F2"]["value"] == 1.0 and down["factors"]["F4"]["value"] == 0.5
+
+
+def test_f2_and_f4_helpers():
+    # F2 on the ramp: ATR5 = ATR20 = 2, so 1.0. F4 on the ramp's last bar: high 360, low 358, close 359: c = 0.5.
+    w = ramp(100.0, 1.0)
+    assert sel.f2(w, P) == 1.0 and sel.f4(w) == 0.5
+
+
+def test_hv30_is_shown_from_the_sample_standard_deviation_of_log_returns():
+    # The last 31 closes alternate 100, 110, 100, ...: 30 log returns, 15 of +ln(1.1) and 15 of -ln(1.1), mean 0.
+    # Sample variance = 30 x ln(1.1)^2 / 29; hv30 = ln(1.1) x sqrt(30/29) x sqrt(252) = 0.0953102 x 1.017095 x 15.874508
+    # = 1.538867.
+    closes = [100.0] * 229 + [100.0 if i % 2 == 0 else 110.0 for i in range(31)]
+    w = bars_of(series(closes))
+    assert round(sel.hv(w, P), 6) == 1.538867
+    assert row(run(base()), "SPY")["shown"]["hv30"] == 0.0                # flat closes: no movement
+
+
+# ---------------------------------------------------------------- the calendar, the adjustment and data faults
+
+def test_a_missing_session_three_bars_before_d_fails():
+    b = flat(261)
+    del b[-4]                                    # 260 bars remain, but one session three bars before D is gone
+    out = run(base(X=b))
+    assert row(out, "X")["reason"] == "missing_session" and not row(out, "X")["data_valid"]
+
+
+def test_a_saturday_in_place_of_the_friday_fails():
+    b = flat()
+    fridays = [i for i, x in enumerate(b) if dt.date.fromisoformat(x["d"]).weekday() == 4]
+    i = fridays[-1]
+    b[i]["d"] = (dt.date.fromisoformat(b[i]["d"]) + dt.timedelta(days=1)).isoformat()    # the Saturday after
+    out = run(base(X=b))
+    assert row(out, "X")["reason"] == "missing_session"
+
+
+def test_a_benchmark_with_a_missing_session_leaves_its_names_without_a_benchmark():
+    spy = flat(261)
+    del spy[-10]
+    out = run({"SPY": spy, "QQQ": flat(), "A": flat()})
+    assert row(out, "SPY")["reason"] == "missing_session"
+    assert row(out, "A")["reason"] == "benchmark_missing"
+
+
+def test_the_session_window_walks_the_exchange_calendar():
+    w = sel.session_window("2026-11-27", 3)                 # Friday after Thanksgiving
+    assert w == ["2026-11-24", "2026-11-25", "2026-11-27"]
+
+
+def test_a_bar_dated_after_d_is_a_bad_bar_not_stale():
+    b = flat(260, end=lv.next_session(D))                   # the last bar is dated the day after D
+    out = run(base(X=b))
+    assert row(out, "X")["reason"] == "bad_bar"
+
+
+def test_a_rangeless_series_is_a_data_fault():
+    # Open = high = low = close = 100 on every bar: every true range is 0, ATR14 = 0.
+    out = run(base(X=flat(rng=0.0)))
+    assert row(out, "X")["reason"] == "bad_bar" and row(out, "X")["error_class"] is None
+    assert out["status"] == "ok"
+
+
+def test_a_value_that_is_not_finite_is_a_data_fault():
+    # Prices of 1e300 and volume 1e10: close x volume overflows to infinity in the dollar volume.
+    b = series([1e300] * 260, rng=1e298, vol=1e10)
+    out = run(base(X=b))
+    x = row(out, "X")
+    assert x["reason"] == "bad_bar" and not x["data_valid"] and x["factors"] is None
+    sel.dumps(out)                                            # the output is still valid JSON
+
+
+def test_a_bundle_whose_bars_are_not_split_adjusted_is_refused():
+    for adj in ("raw", "all", None):
+        doc = bundle(base()) | {"adjustment": adj}
+        with pytest.raises(sel.BundleError, match="split-adjusted"):
+            sel.check_bundle(doc)
+    doc = bundle(base())
+    del doc["adjustment"]
+    with pytest.raises(sel.BundleError):
+        sel.check_bundle(doc)
+
+
+def test_the_output_names_its_input():
+    doc = bundle(several())
+    out = sel.run_bundle(doc, P, sha=SHA, ref=REF)
+    assert out["bundle_sha"] == sel.bundle_sha(doc) and re.fullmatch(r"[0-9a-f]{64}", out["bundle_sha"])
+    assert sel.bundle_sha(dict(reversed(list(doc.items())))) == out["bundle_sha"]        # key order does not count
+    changed = copy.deepcopy(doc)
+    changed["bars"]["A"][0]["v"] += 1
+    assert sel.bundle_sha(changed) != out["bundle_sha"]
+
+
+# ---------------------------------------------------------------- the parameters' number forms
+
+def test_the_loader_refuses_numbers_written_in_the_other_form():
+    cfg = yaml.safe_load((ROOT / "config" / "options_select.yaml").read_text())
+    for path, value in ((("version",), True), (("history", "min_bars"), 260.0), (("split_suspect", "high"), 2),
+                        (("split_suspect", "low"), True), (("pick_count",), 4.0), (("shown", "hv_stdev"), "population"),
+                        (("zones", "exclude_members"), "PDC")):
+        bad = copy.deepcopy(cfg)
+        node = bad
+        for k in path[:-1]:
+            node = node[k]
+        node[path[-1]] = value
+        with pytest.raises(sel.ParamsError):
+            sel.params_from_mapping(bad)
+
+
+# ---------------------------------------------------------------- what F3 depends on in levels.py, pinned
+
+def _numbers(fn: Any) -> list[Any]:
+    """The numeric constants in a function's body, in source order (docstrings and names left out)."""
+    import inspect
+    tree = ast.parse(inspect.getsource(fn).lstrip())
+    return [n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and type(n.value) in (int, float)]
+
+
+def test_the_levels_numbers_f3_depends_on_are_the_ones_dec_0046_freezes():
+    """A change here moves F3: amend DEC-0046 first, then this test."""
+    import inspect
+    assert inspect.signature(lv.merge_zones).parameters["pct"].default == 0.005
+    assert inspect.signature(lv.supply_demand).parameters["lookback"].default == 120
+    assert inspect.signature(lv.atr).parameters["n"].default == 14
+    assert lv.WEIGHTS == {"day": 1, "week": 2, "month": 3, "52w": 3, "ma": 1, "sd": 2}
+    # Every numeric constant in the three functions' bodies, read from the code (an AST walk, so the order is the
+    # walk's): the merge width, the weights, the windows and the supply/demand cut-offs among them, with the indices
+    # and divisors that go with them. Any edit to one of these numbers fails here.
+    assert _numbers(lv.merge_zones) == [0.005, 2, 5, 0, 1, 1, 1]
+    assert _numbers(lv.supply_demand) == [120, 16, 1.5, 1, 0, 1, 0.75, 4, 0.7, 1, 2, 0.25, 1, 2]
+    assert _numbers(lv.levels_for) == [30, 1, 1, 1, 1, 2, 2, 3, 3, 3, 3, 20, 1, 50, 2, 200, 3, 1, 1, 1, 1, 252, 1, 3,
+                                       0, 1]
+    # The weights each named level carries, read from the engine's output on a synthetic series.
+    got = lv.levels_for(bars_of(flat(last=102.0)), "2026-11-12")
+    weights = {x.name: x.weight for x in got["levels"]}
+    assert weights == {"PDH": 1, "PDL": 1, "PDC": 1, "PWH": 2, "PWL": 2, "WTDH": 1, "WTDL": 1, "PMH": 3, "PML": 3,
+                       "52WH": 3, "52WL": 3, "MA20": 1, "MA50": 2, "MA200": 3}
+    text = RECORD.read_text()
+    for frozen in ("`pct = 0.005`", "a lookback of 120 bars", "1.5 times", "under 0.7 times", "252 bars",
+                   "MA20 1, MA50 2, MA200 3", "PMH, PML 3", "PWH, PWL 2", "starting no earlier than bar 16"):
+        assert frozen in text, frozen
+
+
+# ---------------------------------------------------------------- CLI exit codes
+
+def test_cli_exit_codes_for_params_and_output(tmp_path, capsys):
+    good = tmp_path / "b.json"
+    good.write_text(json.dumps(bundle(base())))
+    bad_yaml = tmp_path / "p.yaml"
+    bad_yaml.write_text("version: [1\n")
+    assert sel.main(["stage1", "--bundle", str(good), "--out", str(tmp_path / "o.json"),
+                     "--params", str(bad_yaml)]) == sel.EXIT_PARAMS
+    shape = tmp_path / "q.yaml"
+    shape.write_text("version: 1\n")
+    assert sel.main(["stage1", "--bundle", str(good), "--out", str(tmp_path / "o.json"),
+                     "--params", str(shape)]) == sel.EXIT_PARAMS
+    assert sel.main(["stage1", "--bundle", str(good), "--out", str(tmp_path / "o.json"),
+                     "--params", str(tmp_path / "none.yaml")]) == sel.EXIT_PARAMS
+    assert sel.main(["stage1", "--bundle", str(good), "--out", str(tmp_path / "no" / "such" / "o.json")]) \
+        == sel.EXIT_WRITE
+    assert sel.main(["stage1", "--bundle", str(tmp_path / "missing.json"), "--out", str(tmp_path / "o.json")]) \
+        == sel.EXIT_BUNDLE
+    notjson = tmp_path / "n.json"
+    notjson.write_text("{")
+    assert sel.main(["stage1", "--bundle", str(notjson), "--out", str(tmp_path / "o.json")]) == sel.EXIT_BUNDLE
+    err = capsys.readouterr().err
+    assert "Traceback" not in err and len(err.strip().splitlines()) == 6
+    assert not (tmp_path / "o.json").exists()
+    assert sel.main(["stage1", "--bundle", str(good), "--out", str(tmp_path / "o.json")]) == sel.EXIT_OK

@@ -1,4 +1,5 @@
 {
+ "bundle_sha": "f34f6ec4f9e763e20e89fe42f6c9584335dfecd4dbac534acce7c33ac2a88fcc",
  "counts": {
   "data_valid": 5,
   "eligible": 3,
@@ -55,6 +56,7 @@
     "atr_pct": 0.020021,
     "close": 233.97,
     "direction": "up",
+    "hv30": 0.278778,
     "trend": {
      "ma20": "below",
      "ma200": "above",
@@ -103,6 +105,7 @@
     "atr_pct": 0.026113,
     "close": 146.45,
     "direction": "down",
+    "hv30": 0.233638,
     "trend": {
      "ma20": "below",
      "ma200": "below",
@@ -151,6 +154,7 @@
     "atr_pct": 0.021904,
     "close": 291.76,
     "direction": "up",
+    "hv30": 0.220499,
     "trend": {
      "ma20": "above",
      "ma200": "above",
@@ -201,6 +205,7 @@
     "atr_pct": 0.022782,
     "close": 233.71,
     "direction": "up",
+    "hv30": 0.210499,
     "trend": {
      "ma20": "above",
      "ma200": "above",
@@ -245,7 +250,7 @@
   }
  ],
  "next_session": "2026-11-12",
- "params_sha": "316cfd1e3d13e53ee21cc23ab2b1199a1cb36a2b52db8f9734981a0a0d32d6ce",
+ "params_sha": "b0c745efd62f1e3a69b54e55a96cb189647e9843ed3d932efe56f9979b1d7c00",
  "picker_ref": "s1-golden",
  "picks": [
   "NVDA",
