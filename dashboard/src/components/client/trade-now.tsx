@@ -1014,14 +1014,25 @@ export function TradeNow() {
       onOpen={openFocusCard}
       retry={<FeedRetry />}
       facts={<FeedFacts where="board" symbols={b.items.map((i) => i.symbol)} />}
-      // Display only: worked out here from the board's day, clock and names, never handed to the board's states.
-      events={b.now === null ? null : <BoardEventsLine events={boardEvents({ session: b.session, now: b.now, names: b.items.map((i) => i.symbol) })} />}
+      events={<BoardEvents where="board" />}
       rowExtra={b.manage.rowExtra}
       after={b.manage.cards}
       doneFor={b.doneFor}
       maskFor={b.maskFor}
     />
   );
+}
+
+/**
+ * The board's event line (BoardEventsLine), drawn in one place at a time: inside the board while it is drawn, and in
+ * the status rail while the board is folded into it (before the open, while connecting, after the close). Display
+ * only: worked out here from the board's day, clock and focus names, never handed to the board's states.
+ */
+export function BoardEvents({ where }: { where: "board" | "rail" }) {
+  const b = useBoard();
+  if (!b || !b.on || b.now === null) return null;
+  if ((where === "rail") !== boardCollapsed(b.mode, b.manage.views.length)) return null;
+  return <BoardEventsLine where={where} events={boardEvents({ session: b.session, now: b.now, names: b.items.map((i) => i.symbol) })} />;
 }
 
 /**

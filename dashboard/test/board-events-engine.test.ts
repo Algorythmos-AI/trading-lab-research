@@ -86,7 +86,7 @@ describe("the event line is outside the engine", () => {
     const files = gen.engineFiles().map((f) => f.replace(/\\/g, "/"));
     expect(files.some((f) => f.endsWith("/src/lib/desk-eval.ts"))).toBe(true);
     expect(files.some((f) => f.endsWith("/src/lib/market-calendar.json"))).toBe(true);
-    for (const mine of ["/src/lib/board-events.ts", "/src/components/board-events.tsx", "/src/components/client/trade-now.tsx"]) {
+    for (const mine of ["/src/lib/board-events.ts", "/src/components/board-events.tsx", "/src/components/client/trade-now.tsx", "/src/components/client/status-rail.tsx"]) {
       expect(files.some((f) => f.endsWith(mine)), mine).toBe(false);
     }
   });
