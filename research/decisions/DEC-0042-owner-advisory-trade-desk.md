@@ -58,16 +58,21 @@ first.
 ## Note on the board's event line (added 2026-11-12; nothing above is changed)
 
 From the release that carries it, the Options page shows one line, in one place at a time, with what the event
-calendar schedules on the board's day: while the Trade now board is folded into the status rail (before the open,
-while connecting, and after the close) the line is in the rail, under its session bar; once the board is drawn (from
-09:35, the first entries, or earlier when a manage card is open, and with live prices off) it is in the board, under
-its header and above its rows. It says: each release the calendar lists for that day with its New York time ("in N
-min" from 30 minutes before it, "now" in its minute, then that it was at that time), and, for each focus name,
-earnings after today's close (with the close's time, 13:00 on a half day), during the session, before today's open,
-after the last session's close, or before the next session's open. A date the calendar does not mark as confirmed is
-shown as expected. When the calendar does not cover the day, has no dates yet for a month's releases, or keeps no
-earnings dates for a focus name, the line says so; it never says that a day has no event. On a day the calendar
-lists nothing for, nothing is drawn.
+calendar schedules on the board's day: in the status rail, under its session bar, while the Trade now board is
+folded into the rail (before the open, while connecting, and after the close) and whenever the cockpit is on (the
+cockpit hides the board, not the rail); otherwise, once the board is drawn (from 09:35, the first entries, or
+earlier when a manage card is open, and with live prices off), in the board, under its header and above its rows. It
+says: each release the calendar lists for that day with its New York time ("in N min" from 30 minutes before it,
+"now" in its minute, then that it was at that time), and, for each focus name, earnings after today's close (with
+the close's time, 13:00 on a half day), during the session, before today's open (as still ahead until 09:30, then as
+out), after the last session's close, or before the next session's open. A date the calendar does not mark as
+confirmed is shown as expected. When the calendar does not cover the day, has no dates yet for a month's releases,
+keeps no earnings dates for a focus name, or lists no upcoming earnings date for a single-stock focus name whose
+last listed date is more than 75 days old (the host's own horizon, `EARNINGS_MAX_AGE_DAYS` in
+`src/wt/risk/events.py`; SPY and QQQ report none), the line says so; it never says that a day has no event. At most
+five items are drawn, the rest counted ("+N more"), and the notes on what the calendar does not cover are folded
+before any event; the whole list is in the line's title and its screen-reader text. On a day the calendar lists
+nothing for, nothing is drawn.
 
 - **Display only.** No state, level, guard, caution or alert changes. The line is not read by the engine, the
   server's evaluation, the shadow comparison or any alert, and adds no ntfy notice. Its files
@@ -77,8 +82,11 @@ lists nothing for, nothing is drawn.
 - **The calendar the repo already keeps.** It reads `dashboard/src/lib/market-calendar.json`, which
   `scripts/build_market_calendar.py` builds from `config/events/macro_events.csv` and `config/events/earnings.csv`.
   That file carries no severity, so the line ranks and filters nothing by one: every release it lists for the day is
-  shown under its own label. The 30 minutes changes the wording only. Where an official release date differs from
-  the repo's copy, the Calendar page may show the official one and says so; the line shows the repo's copy.
+  shown under its own label. It holds only CPI, the jobs report, Fed decisions and minutes, and quad witching
+  among releases, and the desk names' earnings: other releases (PCE, PPI, GDP, retail sales, JOLTS) are not shown,
+  and the line's title and screen-reader text say what it covers. The 30 minutes changes the wording only. Where an
+  official release date differs from the repo's copy, the Calendar page may show the official one and says so; the
+  line shows the repo's copy.
 - **No advice.** The line says what, when and for whom. It does not say what to do and predicts nothing.
 - **What this does not start.** It starts no trial and adds nothing to `config/trial_registry.yaml`. Comparing the
   owner's trades on days with and without such an event is a separate question, with its own hypothesis and
