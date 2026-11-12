@@ -409,3 +409,72 @@ low does not break it), and `picker_ref` changes with any code change.
   range above 1.5 times the ATR14 before it and a close in the top quarter (0.75) above its open (demand) or the
   bottom quarter (0.25) below its open (supply); its base is up to 3 bars just before it with a range under 0.7 times
   that ATR, else the one bar before; a zone is dropped once a later close goes through it; weight 2.
+
+## Amendment 1 (PROPOSED 2026-11-12; it takes effect when the owner merges the pull request that carries it; nothing above is changed except where this amendment says so)
+
+Written before Stage 2 was run on any real data, in the pull request that carries the Stage 2 code, as section 5
+requires ("the choice is made in the Stage 2 pull request's amendment to this record, before it is built"). No
+outcome, P&L, pick, ledger, journal or result was read in writing it, and no Stage 2 status was counted on real
+data. It changes no Stage 1 rule and no value or hash of `config/options_select.yaml` (`params_sha` stays
+`08617613bced71e4c7b7b022ca1cc34070d885d5eae17c438f39e80284e88e23`). It starts no job: no unit, timer or schedule
+runs Stage 2. Stage 2's own numbers from section 5 live in `config/options_select_stage2.yaml`, whose hash each
+output records as `stage2_params_sha`.
+
+Each rule below settles a point section 5 leaves open or does not state. Each is the conservative reading: toward
+`not_confirmed`, a caution, or a mark that cannot pass silently.
+
+1. **Split ex-date on the session.** The name is `not_confirmed` (reason `split_ex_date`). Nothing is scaled; its gap
+   in ATR units is not reported and its position reads "not available". Reason: Stage 1's ATR14 and levels are in
+   pre-split units, and a scaled copy would be a new calculation no saved night has checked.
+2. **Dividend ex-date on the session.** The raw prior close is used and the name carries the caution
+   `close_adjusted`; no adjusted close is computed. Reason: section 5 leaves the dividend adjustment undefined, and a
+   caution shows the day without inventing one.
+3. **Any other corporate action effective on the session** (a name change, a merger, a spin-off, or any type other
+   than a split or a cash dividend, by its ex-date, effective date or process date): `not_confirmed` (reason
+   `corporate_action_not_handled`). Reason: no rule here says how such an action changes the prior close or the
+   levels.
+4. **The spread** is measured in basis points of the midpoint, `(ask - bid) / ((ask + bid) / 2) x 10,000`. A crossed
+   quote (ask below bid) has no midpoint and no spread. A zero price or a zero size on a side makes the quote
+   one-sided. Reason: section 5 names a spread limit without a unit; the plan's L3 note reads a zero side as
+   one-sided, not crossed.
+5. **"Normally trades pre-market"** means every desk name. Reason: all twelve are among the most traded names in the
+   pre-market; the reading lets the "possibly halted" caution apply to any of them, and it never disqualifies.
+6. **Entitlement** is established by the fetch's own evidence, in place of a separate probe. It passes only when every
+   market-data request named `feed=sip`, every answer was 200, the requests that reach inside the last 15 minutes
+   before `T` (the 1-minute bars and the snapshots) were answered, and every data answer carried `X-RateLimit-Limit`
+   with the smallest at least 1,000; otherwise it fails. A missing header is a failure. The 1,000 comes from the
+   approved plan's lapse rule ("`X-RateLimit-Limit` under 1,000 is treated as a lapse"). Reason: the probe section 5
+   refers to is not built, and a lapsed plan shows in exactly these facts.
+7. **Further rule 2 reasons**, each `not_confirmed`:
+   - `bad_data`: one of the session's own bars, the quote, the snapshot or the corporate actions cannot be read;
+   - `stale_prior_close`: no raw daily bar is dated the session before (by the calendar);
+   - `stage1_atr_missing`: the Stage 1 block gives the name no ATR14;
+   - `internal_error`: an unexpected error while the name was checked, given by its class name only;
+   - `fetch_cut_short`, with its cause: the fetch did not finish (a 401, a 403, a rate-limit answer that could not be
+     honoured, a server error, a timeout, the request budget, the time budget, or a fetch that began after the pass's
+     publish-by time). A fetch that does not finish still saves what it fetched, marked incomplete, so the pass is
+     scored, every name is `not_confirmed` and the pass is degraded.
+   Reason: each is data the gap rules cannot be worked out from, and section 5's "data older than the limit" does not
+   name them.
+8. **Further cautions** (rule 4): `earnings_row_unreadable`, an earnings row naming the name that the repository's
+   reader calls malformed; `halt_report_stale`, a "halted" report older than the freshness limit, which is a caution,
+   never silently ignored. Reason: neither may pass as a clean confirmation.
+9. **A macro row of any severity** dated on the session counts as "a macro event today". Reason: section 5 names no
+   severity.
+10. **A relative-volume baseline whose median is zero** reads "not available", a neutral mark. Reason: no ratio can be
+    taken.
+11. **Position without card fields.** While the card code (section 6) does not exist, the "opened beyond the ceiling or
+    floor" check is not neutral: it is undetermined, and the name reads `unclassified` (reason `card_fields`) until
+    the card code exists. Reason: a check that cannot be made must not read as passed.
+12. **Two limits are not set by this amendment.** They join the four thresholds, to be frozen later by a dated
+    amendment from status frequencies, never outcomes: the maximum age of a quote used for the midpoint, the spread
+    test or the halt heuristic (`quote_max_age_s`), and the freshness limit of a halt report (`halt_max_age_s`, moot
+    until a stream source exists). While one is absent, every check that needs it is undetermined. Reason: section 5
+    uses both ("data older than the limit"; "when that state is available and fresh") without giving a number.
+13. **Times after `T` are not "at `T`".** A quote or a halt report stamped after the assessment time is treated as
+    stale. Reason: a pass's statuses must not depend on how late its fetch ran.
+
+While a rule above, or a threshold, leaves a name's deciding check undetermined, that name's status is
+`unclassified`, with the checks and limits that left it open, and every measured value is still reported, so the
+frequencies the thresholds will be frozen from can be counted. Reserves are not classified while the thresholds are
+not set.

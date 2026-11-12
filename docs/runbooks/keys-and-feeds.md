@@ -10,7 +10,8 @@ one the subscription allows": IEX on the free plan, SIP (the consolidated tape) 
 the subscription lapses. A request without a feed would change its data source with the plan, with no code change and
 no record. So every request here names its feed, and these guards fail on one that does not:
 
-- Python, at run time: `wt.data.feeds.require_feed`, called before anything is sent by `AlpacaREST.get` and by the
+- Python, at run time: `wt.data.feeds.require_feed`, called before anything is sent by `AlpacaREST.get` (and
+  `AlpacaREST.get_response`, the one-request form the selection's fetcher uses to read statuses and headers) and by the
   request helper of each module with its own HTTP session: `AlpacaFeeds._get` in `wt.live.runner_o` (a refusal is a
   `TransportError`, a failed data read: a refusal while preparing the levels turns entries off for the day; one on a
   chain, quote or minute-bar read skips that entry or makes the tape read as stalled; exits are managed in every
@@ -63,6 +64,7 @@ without fixing it. Read the records themselves for what they decide.
 | Pipeline check (host) | daily bars; snapshots | sip; iex | literals in `pipeline_check.py` | none | none |
 | Pre-market routine (host, `routine`) | 1-minute bars, news | hybrid: sip to 16 minutes ago, iex after | `HybridFeed` names both; `--feed` overrides | DEC-0023 | none |
 | Forward test (host, `forward`) | daily and 1-minute bars | sip | `AlpacaREST.bars` default argument `feed="sip"` | DEC-0009 | none |
+| Selection bundles (`python -m wt.options.select_fetch`; no job runs it yet) | Stage 1: split-adjusted daily bars. Stage 2: raw daily bars, 1-minute bars, split-adjusted 5-minute bars, snapshots; corporate actions and news (counts only) take no feed | sip | literal in `select_fetch.py` | DEC-0046 | none |
 | Research scripts (hand: `build_pool`, `scan`, `r2_`, `r3_`, `g1_`, `exp*`, `options_replication`, `options_clone_dry_run`) | bars, quotes, trades | sip | literal, or the `bars` default | not reviewed per script here | - |
 | News (`AlpacaREST.news`), option bars (`options_clone_dry_run`) | news; historical option bars | none: these endpoints take no feed | - | - | - |
 
@@ -133,6 +135,7 @@ of 2026-11-12, assuming each answer fits on one page.
 | Site, chain | each viewed name every 30 s; 20 s cache | 2 calls (3 with a held contract), up to 3 pages each | **4 to 6 per name** | 9 pages x 2 = 18 per name |
 | Shadow evaluator (site's pair) | every minute, 13:00 to 21:59 UTC on weekdays | bars 1 + snapshots 1 | **2** | 21 if the bars page to 20 |
 | Feed agreement (hand) | once after a session | 2 feeds x pages | capped at **180** (`ALPACA_CALLS_PER_MIN`) | 180 |
+| Selection fetch (`APCA_API_`; no job runs it yet) | Stage 1 once after the close; Stage 2 Pass A from 08:51 and Pass B from 09:21 ET (T + 60 s) | Stage 1: 1 (daily bars, one page). Each Stage 2 pass: 26 (daily 1, 1-minute 1, pre-market 5-minute 21, snapshots 1, corporate actions 1, news 1) plus 1 per further page | **26** in the minute a pass runs; it joins the shared limiter (`AlpacaREST(shared=True)`) | a pass stops at 100 requests (Stage 1 at 20), each retry counted (a 429 after its `Retry-After` or `X-RateLimit-Reset`; a 5xx or a timeout once); Stage 2 stops 60 s before the pass's publish-by time (08:55, 09:24), Stage 1 after 540 s. A Stage 2 fetch that stops early still saves its bundle, marked incomplete. Corporate actions are asked for by process date, 10 days before to 5 days after the session |
 | Feed comparison sampler (site's pair) | every minute in the regular session, 13:00 to 21:59 UTC on weekdays (`* 13-21 * * 1-5`), runs only from the open to the close | snapshots 1 on iex + snapshots 1 on sip, never cached, never paged; a 400 is asked once more on that feed | **2** (4 at most) | 2 (one run a minute; a second run in the same minute finds the sample and asks nothing) |
 | Feeds page live book (site's pair, `/api/feeds/live`) | while a signed-in Feeds page is open and visible, every 5 s; nothing while hidden | snapshots 1 + 2-minute bars 1 on the board's feed (`ALPACA_FEED`), cached 5 s per instance and name set with one read in flight; bars only after the open, at most 4 pages | **24** | 24 per instance whatever the number of tabs (60 at most if bars page) |
 | Feed comparison report (site's pair) | once a day after close + 20 min (`*/10 20-23 * * 1-5`; later ticks find the report and ask nothing) | 4 reads, N pages each: 2-minute bars per feed, N = 1 (about 4 names x 195 bars = about 800, under `limit=10000`); 1-minute bars per feed, N = 1 (about 4 names x 390 bars = about 1,560, under `limit=10000`; a card of up to 25 names fits in one page) | 4 calls in that one minute, about **0** a minute over the day | 80 (20 pages x 4 reads, `MAX_PAGES`), all under one shared 180-a-minute limiter and one 150 s budget; a build that may heal retries at the next 10-minute tick, until 23:50 UTC |
@@ -141,6 +144,8 @@ Arithmetic for the host's stocks pair (`APCA_API_`):
 
 - 08:00 to 09:30: the routine at most 30 a minute; at about 08:30 runner B arms and reads 14 sigma calls once; at
   08:55 the pipeline check makes 2 or 3. Peak about 44 (30 + 14) in the minute runner B arms, 33 at 08:55.
+  Once the selection's fetch is scheduled, it adds about 26 in the minute after 08:51 and again after 09:21 (59 at
+  08:55 if a Pass A fetch ran into that minute with the routine and the pipeline check), still under both limits.
 - 09:30 to the close: runner B, 9 a minute, plus about 2 from the routine at 11:31. Peak 11.
 - After the close: the forward test, up to 150 a minute, plus the 18:30 pipeline check's few calls.
 
