@@ -116,6 +116,11 @@ const FILES = [
   "../src/lib/owner-labels-store.ts",
   "../src/lib/board-events.ts",
   "../src/components/board-events.tsx",
+  "../src/lib/context.ts",
+  "../src/lib/flow-request.ts",
+  "../src/lib/market-view.ts",
+  "../src/components/client/use-flow.ts",
+  "../src/components/client/market-bar.tsx",
 ];
 
 const BANNED = [

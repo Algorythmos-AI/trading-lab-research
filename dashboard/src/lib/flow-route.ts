@@ -24,7 +24,7 @@ import { UpstreamError, upstreamBody, upstreamStatus } from "./upstream";
 //  * Allowed names only (EXP-0032's blind): the stored edition's focus names when it is today's, plus SPY and QQQ.
 //    Any other symbol refuses the whole request with 400 before anything is fetched or computed. Without `s`, every
 //    allowed name is answered. The refusal never echoes the symbol.
-//  * One snapshots call and one 2-minute bars call (from 09:30 New York, every page, none before the open), both built
+//  * One snapshots call and one 2-minute bars call (from 09:30 New York, every page, none outside the session), both built
 //    by alpacaDataUrl. Its own cache, CACHE_MS per instance, keyed by the sorted names and the New York day, with one
 //    upstream read in flight per key; quote.ts's and bars.ts's caches are never read or written from here.
 //  * The baseline is read from the private store once per instance for the session; a missing one is asked for again
@@ -150,11 +150,15 @@ export function snapshotRow(raw: unknown, day: string): Omit<FlowRow, "bars"> {
 
 const headers = (keys: { id: string; secret: string }) => ({ "APCA-API-KEY-ID": keys.id, "APCA-API-SECRET-KEY": keys.secret, accept: "application/json" });
 
-/** Today's bars per name from one paged read on sip, or null when still paging after MAX_BAR_PAGES. */
+/**
+ * Today's bars per name from one paged read on sip, or null when still paging after MAX_BAR_PAGES. Only inside the
+ * regular session: before the open and from the close (and off session days) no bars call is made and every name
+ * answers no bars, so an answer outside the session costs the snapshots call alone.
+ */
 async function readBars(symbols: string[], day: string, now: Date, keys: { id: string; secret: string }, d: FlowDeps): Promise<Record<string, FlowBar[]> | null> {
   const out: Record<string, FlowBar[]> = Object.fromEntries(symbols.map((s) => [s, []]));
   const s = sessionSlots(day);
-  if (!s || now.getTime() < s.open) return out;
+  if (!s || now.getTime() < s.open || now.getTime() >= s.close) return out;
   let token: string | null = null;
   for (let page = 0; page < MAX_BAR_PAGES; page++) {
     const q: Record<string, string> = { symbols: symbols.join(","), timeframe: "2Min", start: new Date(s.open).toISOString(), feed: "sip", limit: "10000", adjustment: "raw" };
@@ -285,8 +289,21 @@ const FIXTURE_BASE: Readonly<Record<string, number>> = { SPY: 778.55, QQQ: 751.2
 /** A made-up slot volume: high at the open and the close, low at midday. */
 const fixtureSlotVolume = (k: number, i: number) => Math.round(40_000 + 60_000 * ((k - 97) / 97) ** 2 + 1_000 * i);
 
+/** A fixture path's shape: 1 rises, -1 falls (both a wave on a drift), 0 drifts sideways in a narrow band. */
+export type FixtureShape = 1 | -1 | 0;
+
+/** The shape of `sym`'s path under the flags: rising unless `flow-down`, `flow-mixed` (QQQ only) or `flow-range` say not. */
+export function fixtureShape(sym: string, flags: ReadonlySet<VariantFlag>): FixtureShape {
+  if (flags.has("flow-range")) return 0;
+  if (flags.has("flow-down") || (flags.has("flow-mixed") && sym === "QQQ")) return -1;
+  return 1;
+}
+
+/** The fixture path's move from the base at slot k: at FROZEN_NOW a shape of 1 stands 20 bp or more above VWAP. */
+const fixtureMove = (shape: FixtureShape, k: number, i: number) => (shape === 0 ? 0.0004 * Math.sin((k + i) * 1.7) : shape * (0.003 * Math.sin((k + i) / 5) + 0.00009 * k));
+
 /** Fixture bars for one name: every bar of `day` that has started by `now`, the last one still forming. */
-export function fixtureBars(sym: string, i: number, day: string, now: number): FlowBar[] {
+export function fixtureBars(sym: string, i: number, day: string, now: number, shape: FixtureShape = 1): FlowBar[] {
   const s = sessionSlots(day);
   if (!s) return [];
   const base = FIXTURE_BASE[sym] ?? 100 + 10 * i;
@@ -294,7 +311,7 @@ export function fixtureBars(sym: string, i: number, day: string, now: number): F
   let c = base;
   for (let k = 0, at = s.open; at < Math.min(now, s.close); k++, at += SLOT_MS) {
     const o = c;
-    c = Math.round(base * (1 + 0.004 * Math.sin((k + i) / 5)) * 100) / 100;
+    c = Math.round(base * (1 + fixtureMove(shape, k, i)) * 100) / 100;
     const h = Math.round((Math.max(o, c) + 0.05 * (1 + (k % 3))) * 100) / 100;
     const l = Math.round((Math.min(o, c) - 0.05 * (1 + ((k + 1) % 3))) * 100) / 100;
     // Every tenth slot trades twice its usual volume, so a surge shows; the forming bar holds half a bar.
@@ -331,7 +348,7 @@ async function fixtureAnswer(raw: string | null, flags: ReadonlySet<VariantFlag>
   const day = nyNow(new Date(now)).day;
   const names: Record<string, FlowRow> = {};
   symbols.forEach((sym, i) => {
-    const bars = fixtureBars(sym, i, day, now);
+    const bars = fixtureBars(sym, i, day, now, fixtureShape(sym, flags));
     const price = bars.at(-1)?.c ?? FIXTURE_BASE[sym] ?? 100 + 10 * i;
     const crossed = flags.has("flow-crossed") && i === 0;
     names[sym] = {

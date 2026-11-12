@@ -48,6 +48,9 @@ export const VARIANT_COOKIE = "fx";
  * - `flow-off`, `flow-error`, `flow-thin`, `flow-stale`, `flow-crossed`: /api/flow only (flow-route.ts), and nothing
  *   else. `flow-off`: no keys (503). `flow-error`: Alpaca is failing (502). `flow-thin`: the baseline has 9 sessions.
  *   `flow-stale`: the baseline is for another session. `flow-crossed`: the first name's quote is crossed.
+ * - `flow-down`, `flow-mixed`, `flow-range`: /api/flow only, the market bar's other states at FROZEN_NOW. Without them
+ *   SPY and QQQ both rise above VWAP (MARKET UP). `flow-down`: both fall below it. `flow-mixed`: SPY up, QQQ down.
+ *   `flow-range`: both drift sideways around VWAP.
  */
 export const VARIANT_FLAGS = [
   "empty",
@@ -89,6 +92,9 @@ export const VARIANT_FLAGS = [
   "flow-thin",
   "flow-stale",
   "flow-crossed",
+  "flow-down",
+  "flow-mixed",
+  "flow-range",
 ] as const;
 export type VariantFlag = (typeof VARIANT_FLAGS)[number];
 
