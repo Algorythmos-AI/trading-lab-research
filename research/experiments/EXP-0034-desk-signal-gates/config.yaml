@@ -110,7 +110,7 @@ gates:                              # DEC-0051 section 2; a gate whose value is 
     checks:
       premium: "ticket.ts sizeTicket(ask in cents, OWNER_LIMITS).contracts >= 1 (MAX_PREMIUM 200, RISK_PER_TRADE 50, PREMIUM_STOP 0.25 via stopCents, OWNER_FEES 0.55 open + 0.56 close)"
       bid_ask: "ask - bid <= parameters.contract_spread_share_of_stop x PREMIUM_STOP x mid"
-      quote: "two-sided (bid > 0, ask > 0, ask >= bid), checked age <= parameters.contract_quote_max_age_s"
+      quote: "two-sided (bid > 0, ask > 0, ask >= bid), checked age <= parameters.contract_quote_max_age_s, and served time - quote_at <= parameters.contract_quote_stamp_max_age_s"
       volume: "chain.ts volume (the snapshot's daily bar) >= parameters.contract_min_volume"
       delta: "chain.ts delta from the snapshot's greeks; missing, or worked out by the site, fails"
     none_passes: "NO_TRADE; the card names the nearest strike's failed check"
@@ -129,6 +129,7 @@ parameters:                         # NOT FROZEN until DEC-0051 Amendment 1; the
   event_window_after_min: 30        # exempt, as above
   contract_spread_share_of_stop: 0.20
   contract_quote_max_age_s: 10
+  contract_quote_stamp_max_age_s: 60
   contract_min_volume: 100
   freeze_rule: >-
     by Amendment 1, from the dry log over at least 10 full sessions recorded after the three preconditions are in
@@ -143,6 +144,7 @@ parameters:                         # NOT FROZEN until DEC-0051 Amendment 1; the
     shock_range_multiple: [2.0, 6.0, 0.5]
     contract_spread_share_of_stop: [0.05, 0.50, 0.05]
     contract_quote_max_age_s: [2, 30, 1]
+    contract_quote_stamp_max_age_s: [10, 300, 10]
     contract_min_volume: [0, 1000, 50]
 
 log:                                # DEC-0051 section 3
