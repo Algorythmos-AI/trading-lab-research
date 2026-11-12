@@ -28,14 +28,14 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
                  src/wt/options/dryrun.py \
                  src/wt/options/pipeline_check.py src/wt/research/external_posts.py \
                  src/wt/options/shadow.py src/wt/options/arms_verdict.py \
-                 src/wt/owner/positions.py
+                 src/wt/owner/positions.py src/wt/data/feeds.py src/wt/ops/keys_check.py
 JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
 .PHONY: seed-vm help bootstrap research-index lint typecheck restricted test ci hooks status gate deploy rollback migrate-state preflight publish-verify \
         uninstall-agents lease-break \
         watchdog-drill feed-watch-drill feed-agreement feed-agreement-recheck feed-agreement-summary feed-agreement-edition dashboard-deploy vm-deploy \
-        agents-diff install-trading-agents install-dashboard-agent publish schema kill unkill reset-latch evidence visibility
+        agents-diff install-trading-agents install-dashboard-agent publish schema kill unkill reset-latch evidence visibility keys-check
 
 help: ## List the tasks
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/' | sort
@@ -145,6 +145,9 @@ feed-agreement-summary: ## The feed agreement's reading over the sessions run so
 
 feed-agreement-edition: ## On the console Mac, between the close and 21:52 UTC: save that session's options edition: make feed-agreement-edition DAY=YYYY-MM-DD [ENV_FILE=.env]
 	@$(FA_DAY_OK); node --env-file-if-exists="$$ENV_FILE" dashboard/scripts/feed-agreement.mjs --save-edition --day "$$DAY"
+
+keys-check: ## Offline: which Alpaca key names the shell and .env set, and which pair Python tools use (names only, never a value)
+	@$(PY) -m wt.ops.keys_check $${KEYS_ENV_FILE:+--env-file "$$KEYS_ENV_FILE"}
 
 dashboard-deploy: ## OWNER: deploy origin/main's dashboard to production from a clean worktree, stamped with its commit
 	@set -e; git fetch --quiet origin main; sha=$$(git rev-parse origin/main); tmp=$$(mktemp -d); \
