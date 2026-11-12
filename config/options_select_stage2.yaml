@@ -1,0 +1,66 @@
+# Stage 2 of the Options desk's two-stage selection: the numbers and rules DEC-0046 section 5 fixes. Read by
+# src/wt/options/select_stage2.py, which refuses a file that holds anything it does not implement. Not the Stage 1
+# file (config/options_select.yaml): that file and its params_sha are untouched by Stage 2.
+#
+# Every number here is written in DEC-0046. Changing one is a change to the selection and needs a dated amendment to
+# DEC-0046 first; nothing here is tuned on results. The output records this file's stage2_params_sha, worked out as
+# Stage 1's params_sha is (wt.options.select.canonical_json): SHA-256 of the parsed content as JSON with keys sorted,
+# separators "," and ":", ASCII only. Comments and layout do not enter it. A whole number written as a float (120.0)
+# is refused, so one value cannot be written two ways with two hashes.
+#
+# NOT here: the four Stage 2 thresholds (the spread limit, the two gap limits, the relative-volume limit). DEC-0046:
+# "They are frozen by a dated amendment to it, before the gate starts, from how often each status would occur on at
+# least 10 saved sessions of pre-market quotes." Until then they are absent, every rule that needs one reads
+# "unclassified", and the measured values are reported so they can be counted. Two further numbers the record's
+# rules need and do not give (the age limit of a quote used as a midpoint, and how fresh a stream halt state must
+# be) are absent the same way: see `missing_numbers` below.
+version: 1
+
+passes:                      # "Pass A at 08:50 New York, published by 08:56; Pass B at 09:20, published by 09:25"
+  A: {at: "08:50", publish_by: "08:56"}
+  B: {at: "09:20", publish_by: "09:25"}
+
+fetch_delay_s: 60            # "Each pass fetches at T + 60 s"
+
+reference_bar:               # G2: "the close of the last finished 1-minute SIP bar, valid only if that bar ended at
+  seconds: 60                # most 120 s before T"
+  max_age_s: 120
+
+premarket:                   # G4: "the sum of 5-minute bars with start >= 04:00 and end <= T (New York)"
+  from: "04:00"
+  bar_seconds: 300
+
+baseline:                    # G5: "the median of the same window over the previous 20 sessions of the session
+  sessions: 20               # calendar (half days included). Fewer than 10 complete sessions gives 'not available'"
+  min_sessions: 10
+
+possibly_halted:             # "shows no trade in the 15 minutes before T and has a one-sided or empty quote"
+  no_trade_s: 900
+  normally_trades_premarket: all_names   # the record does not define "normally trades pre-market"; the
+                                         # conservative reading takes every desk name as one that does, so the
+                                         # caution can fire on any of them (it never disqualifies)
+
+reserves:                    # "a Stage 1-eligible name ranked 5th or lower whose Stage 2 status is confirmed. Up to two"
+  from_rank: 5
+  max: 2
+  none_text: "No reserve qualifies"
+
+degraded: more_than_half_not_confirmed   # "When more than half the names are not_confirmed the pass is degraded"
+
+# The status table, first matching rule wins, in the record's order. The code implements exactly these checks.
+rules:
+  - status: no_longer_qualifies
+    checks: [halted, earnings_released]
+  - status: not_confirmed
+    checks: [entitlement_not_passed, feed_not_named, fetch_cut_short, bad_data, no_reference_price,
+             stale_prior_close, stale_quote, split_ex_date, corporate_action_not_handled, stage1_atr_missing,
+             internal_error]
+  - status: no_longer_qualifies
+    checks: [spread_above_limit, gap_at_or_above_fail_limit]
+  - status: caution
+    checks: [beyond_ceiling_or_floor, gap_at_or_above_caution_limit, relative_volume_at_or_above_limit,
+             earnings_today, macro_event_today, close_adjusted, possibly_halted, earnings_row_unreadable]
+
+# Names only: the values are not set by DEC-0046 and are never written here.
+thresholds: [spread_limit_bps, gap_fail_atr, gap_caution_atr, relative_volume_limit]
+missing_numbers: [quote_max_age_s, halt_max_age_s]
