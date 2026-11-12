@@ -37,9 +37,9 @@ export interface SignalParams {
   /** Contract: the chain answer's checked age, at most this many seconds. */
   contract_quote_max_age_s: number;
   /**
-   * Contract: the quote's own stamp, at most this many seconds before the answer's server time. CANDIDATE, NOT IN THE
-   * RECORD YET: to be added to DEC-0051 section 2.5 (and EXP-0034's config.yaml) before acceptance. Without it a
-   * quote stamped at 09:31 would still pass at 15:59 on a fresh check.
+   * Contract: the quote's own stamp (chain.ts `at`), at most this many seconds before the answer's `served_at` (else
+   * `as_of`). Candidate, DEC-0051 section 2.5 (second round). Without it a quote stamped at 09:31 would still pass at
+   * 15:59 on a fresh check.
    */
   contract_quote_stamp_max_age_s: number;
   /** Contract: contracts traded today, at least this many. */
