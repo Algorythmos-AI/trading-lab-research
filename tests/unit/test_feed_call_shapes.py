@@ -122,6 +122,20 @@ def _features(sent: Sent) -> None:
     features.last_quotes(_Rest(sent), ["SPY"], DAY)       # type: ignore[arg-type]
 
 
+def _select_fetch(sent: Sent) -> None:
+    from wt.options import select_fetch, select_stage2
+    p, _ = select_stage2.load_params()
+    at = select_stage2.pass_time("2026-11-12", "A", p) + dt.timedelta(seconds=61)
+    stage1 = {"schema": "wt.options.select/stage1", "version": 1, "session": "2026-11-11",
+              "next_session": "2026-11-12", "params_sha": "0" * 64, "picks": ["SPY"],
+              "names": [{"symbol": "SPY"}, {"symbol": "QQQ"}]}
+    select_fetch.fetch_stage2(_rest(sent), stage1, "A", p, earnings_rows=[], macro_rows=[], clock=lambda: at,
+                              sleep=lambda s: None)
+    select_fetch.fetch_stage1(_rest(sent), "2026-11-11", ["SPY", "QQQ"], min_bars=260, earnings_rows=[],
+                              macro_rows=[], clock=lambda: dt.datetime(2026, 11, 12, 1, 0, tzinfo=dt.UTC),
+                              sleep=lambda s: None)
+
+
 def _r3_run(sent: Sent) -> None:                          # scripts/r3_run.py SpreadAt.__call__, as written there
     sent.append(("https://data.alpaca.markets/v2/stocks/quotes",
                  {"symbols": "SPY", "start": "x", "end": "y", "feed": "sip", "limit": 1000}))
@@ -141,6 +155,7 @@ SITES = {
     "src/wt/options/pipeline_check.py": _pipeline_check,
     "src/wt/data/tape.py": _tape,
     "src/wt/scanner/features.py": _features,
+    "src/wt/options/select_fetch.py": _select_fetch,
     "scripts/r3_run.py": _r3_run,
     "scripts/options_clone_dry_run.py": _options_clone_dry_run,
 }
