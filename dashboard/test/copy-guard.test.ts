@@ -68,6 +68,8 @@ const FILES = [
   "../src/lib/desk-run.ts",
   "../src/lib/desk-page-run.ts",
   "../src/lib/desk-shadow.ts",
+  "../src/lib/quote-guards.ts",
+  "../src/lib/desk-guards.ts",
   "../src/components/client/desk-shadow.tsx",
   "../src/lib/desk-shadow-client.ts",
   "../src/app/api/cron/desk/route.ts",
