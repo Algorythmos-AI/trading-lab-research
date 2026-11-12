@@ -85,5 +85,9 @@ export interface CalendarDoc {
      */
     stale_since: Stamp | null;
     rows: number;
+    /**
+     * What this run's read did not cover, said rather than left silent (the Fed: the years it has no panel for yet).
+     */
+    note?: string;
   }[];
 }

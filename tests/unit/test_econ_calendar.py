@@ -35,6 +35,14 @@ def fake_get(fred=FRED, fed=FED, bls=BLS, bea=BEA, down=()):
     return get
 
 
+def drop_panel(page: str, year: int) -> str:
+    """The Fed page without one year's panel (heading and meetings), as when it is taken down."""
+    i = page.index(f">{year} FOMC Meetings<")
+    j = min((page.index(f">{y} FOMC Meetings<") for y in range(2000, 2100)
+             if f">{y} FOMC Meetings<" in page and page.index(f">{y} FOMC Meetings<") > i), default=len(page))
+    return page[:i] + page[j:]
+
+
 def run(tmp_path, get, env=ENV, clock=NOW, dry=True):
     code = ec.run(dry, get=get, env=dict(env), out=tmp_path, clock=clock)
     return code, json.loads((tmp_path / "outbox" / "document.json").read_text())
@@ -199,6 +207,51 @@ def test_a_source_that_goes_down_keeps_its_last_good_rows(tmp_path):
     # Back: fresh again.
     code, doc = run(tmp_path, fake_get(), clock=later + dt.timedelta(days=14))
     assert code == 0 and next(s for s in doc["sources"] if s["id"] == "fed")["stale_since"] is None
+
+
+def fed_status(doc):
+    return next(s for s in doc["sources"] if s["id"] == "fed")
+
+
+def test_with_no_previous_read_a_next_year_panel_not_there_passes_and_says_so(tmp_path):
+    code, doc = run(tmp_path, fake_get(fed=drop_panel(FED, 2027)))
+    assert code == 0
+    fed = fed_status(doc)
+    assert fed["ok"] is True and fed["rows"] == 8
+    assert fed["note"] == "no panel yet for 2027, 2028, 2029: those months are not yet announced, not missing"
+    assert [n["month"] for n in doc["not_announced"] if n["code"] == "fomc_decision"][:2] == ["2027-01", "2027-02"]
+    assert ec.validate(doc) == []
+
+
+def test_a_renamed_next_year_panel_is_not_read_into_this_year(tmp_path):
+    renamed = FED.replace(">2027 FOMC Meetings<", ">2027 FOMC Meetings (tentative)<")
+    code, doc = run(tmp_path, fake_get(fed=renamed))
+    assert code == 0
+    assert sorted(e["date"] for e in doc["events"] if e["code"] == "fomc_decision")[-1] == "2026-12-09"
+    assert "2027" in fed_status(doc)["note"]
+
+
+def test_a_next_year_panel_once_read_cannot_drop_out(tmp_path):
+    assert run(tmp_path, fake_get())[0] == 0                          # 2026 and 2027 read: 16 rows kept as last good
+    later = NOW + dt.timedelta(days=7)
+    for page in (drop_panel(FED, 2027), FED.replace(">2027 FOMC Meetings<", ">2027 FOMC Calendar<")):
+        code, doc = run(tmp_path, fake_get(fed=page), clock=later)
+        assert code == 1
+        fed = fed_status(doc)
+        assert fed["ok"] is False and fed["rows"] == 16 and fed["fetched_at"] == NOW.isoformat() and "note" not in fed
+        assert len([e for e in doc["events"] if e["code"] == "fomc_decision"]) == 16
+
+
+def test_the_current_new_york_years_panel_is_required(tmp_path):
+    # 00:30 on 1 January 2027 in New York: 2027 has begun, and its panel is gone.
+    code, doc = run(tmp_path, fake_get(fed=drop_panel(FED, 2027)), clock=dt.datetime(2027, 1, 1, 5, 30, tzinfo=dt.UTC))
+    assert code == 1 and fed_status(doc)["ok"] is False
+
+
+def test_the_year_turns_in_new_york_not_in_utc(tmp_path):
+    # 04:30 UTC on 1 January 2027 is 23:30 on 31 December 2026 in New York: 2027 has not begun there yet.
+    code, doc = run(tmp_path, fake_get(fed=drop_panel(FED, 2027)), clock=dt.datetime(2027, 1, 1, 4, 30, tzinfo=dt.UTC))
+    assert code == 0 and fed_status(doc)["ok"] is True and "2027" in fed_status(doc)["note"]
 
 
 def test_a_source_whose_future_dates_halve_is_refused(tmp_path):

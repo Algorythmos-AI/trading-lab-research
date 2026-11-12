@@ -89,11 +89,14 @@ _MONTHS = {m: i for i, m in enumerate(
 
 def parse_fed(page: str, years: Iterable[int], required: Iterable[int] | None = None) -> Rows:
     """FOMC decision days from the Fed's calendar page, for `years`. A scheduled meeting's decision is on its last
-    day; an unscheduled meeting or a notation vote is skipped. Fails when a year has fewer than eight meetings.
+    day; an unscheduled meeting or a notation vote is skipped. Fails when a year it reads has other than eight
+    scheduled meetings.
 
     `required`: the years whose panel must be there (all of `years` when None). The page lists about two years, and
     the market calendar reaches further, so a later year with no panel yet gives no rows: its months are then not
-    yet announced, never a failed source."""
+    yet announced, never a failed source. `collect` requires every year that has begun in New York and every year
+    the last good read had rows for, so a panel once seen cannot drop out in silence."""
+    years = list(years)
     must = set(years if required is None else required)
     out: Rows = set()
     for year in years:
@@ -102,7 +105,9 @@ def parse_fed(page: str, years: Iterable[int], required: Iterable[int] | None = 
             if year in must:
                 raise SourceError(f"fed: no {year} panel")
             continue
-        end = re.search(r">\s*\d{4} FOMC Meetings\s*<", page[m.end():])
+        # The panel ends at the next year's heading, however that heading is worded after the year: a renamed one
+        # must not fold the next year's meetings into this one.
+        end = re.search(r">\s*\d{4} FOMC Meetings", page[m.end():])
         panel = page[m.end(): m.end() + end.start()] if end else page[m.end():]
         n = 0
         for month_html, date_html in re.findall(
@@ -118,9 +123,14 @@ def parse_fed(page: str, years: Iterable[int], required: Iterable[int] | None = 
             # "April/May" with "30-1": the decision falls in the last month named.
             out.add(("fomc_decision", dt.date(year, months[-1], days[-1]).isoformat()))
             n += 1
-        if n < 8:
+        if n != 8:
             raise SourceError(f"fed: {n} scheduled meetings in {year}")
     return out
+
+
+def fed_panels(page: str) -> set[int]:
+    """The years the Fed's calendar page has a panel for."""
+    return {int(y) for y in re.findall(r">\s*(\d{4}) FOMC Meetings\s*<", page)}
 
 
 def parse_bls(ics: str) -> Rows:
@@ -310,12 +320,24 @@ def collect(get: Get, env: dict[str, str], state: dict[str, Any], start: str, en
     rows: dict[str, Rows] = {}
     status: list[dict[str, Any]] = []
     problems: list[str] = []
-    years = range(int(start[:4]), int(end[:4]) + 1)
-    # The years that have begun must have a panel; a later one is read when the Fed has published it.
-    begun = [y for y in years if y <= int(today[:4])]
+    years = list(range(int(start[:4]), int(end[:4]) + 1))
+    # Required: every year that has begun in New York (`today` is the New York day), and every year the last good read
+    # had rows for. A later year is read once the Fed publishes it; until then the status row says so.
+    seen = {int(str(d)[:4]) for _, d in (state.get("fed") or {}).get("rows", [])}
+    required = [y for y in years if y <= int(today[:4]) or y in seen]
+    notes: dict[str, str] = {}
+
+    def read_fed_page() -> Rows:
+        page = get(FED_URL, {})
+        got = parse_fed(page, years, required)
+        if later := [y for y in years if y not in fed_panels(page)]:
+            notes["fed"] = (f"no panel yet for {', '.join(map(str, later))}: those months are not yet announced, "
+                            "not missing")
+        return got
+
     readers: dict[str, Callable[[], Rows] | None] = {
         "fred": (lambda: read_fred(get, env["FRED_API_KEY"], start, end)) if env.get("FRED_API_KEY") else None,
-        "fed": lambda: parse_fed(get(FED_URL, {}), years, begun),
+        "fed": read_fed_page,
         # BLS answers only a caller that leaves a contact address (its published policy).
         "bls": (lambda: parse_bls(get(BLS_URL, {}))) if env.get("WT_CONTACT_EMAIL") else None,
         "bea": lambda: parse_bea(get(BEA_URL, {})),
@@ -335,6 +357,8 @@ def collect(get: Get, env: dict[str, str], state: dict[str, Any], start: str, en
         except Exception as e:  # noqa: BLE001 — one source's fault must not stop the others
             fresh, why = None, f"{src}: {e.__class__.__name__}"
         rows[src], st, problem = accept(src, fresh, why, state, today, now)
+        if fresh is not None and src in notes and st["ok"]:
+            st["note"] = notes[src]
         status.append(st)
         if problem:
             problems.append(problem)
