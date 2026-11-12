@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetFeedWarning } from "@/lib/alpaca-feed";
-import { CACHE_MS, handleFeedsLive, liveBar, MAX_NAMES, resetFeedsLiveCache, snapshotRow, type FeedsLiveDeps } from "@/lib/feeds-live-route";
+import { CACHE_MS, handleFeedsLive, liveBar, MAX_NAMES, resetFeedsLiveCache, snapshotQuote, type FeedsLiveDeps } from "@/lib/feeds-live-route";
 import { parseLiveAnswer } from "@/lib/feeds-live";
 import { fetchQuotes, resetQuoteCache } from "@/lib/quote";
 
@@ -59,6 +59,23 @@ describe("the live route's rules", () => {
     expect(f).not.toHaveBeenCalled();
   });
 
+  it("gives HEAD the same refusals as GET, with no body and no upstream read", async () => {
+    const { f } = upstream();
+    const head = (q: string, over: Partial<FeedsLiveDeps> = {}) => handleFeedsLive(req(q, {}, "HEAD"), deps({ fetch: f, ...over }));
+    for (const [q, over, status] of [
+      ["", {}, 400],
+      ["?s=SPY", { env: { ...KEYS_ENV, ALPACA_FEED: "bad" } }, 503],
+      ["?s=SPY", { env: {} }, 503],
+      ["?s=SPY", {}, 200],
+    ] as const) {
+      const r = await head(q, over);
+      expect(r.status).toBe(status);
+      expect(await r.text()).toBe("");
+    }
+    expect((await handleFeedsLive(req("?s=SPY", { "x-vercel-protection-bypass": "x" }, "HEAD"), deps({ fetch: f }))).status).toBe(403);
+    expect(f).not.toHaveBeenCalled();
+  });
+
   it("answers no-store, and refuses a missing or too long list of names", async () => {
     const { f } = upstream();
     expect((await handleFeedsLive(req(""), deps({ fetch: f }))).status).toBe(400);
@@ -103,7 +120,7 @@ describe("what the live route reads and answers", () => {
     const snap = new URL(urls.find((u) => u.includes("/v2/stocks/snapshots"))!);
     expect(snap.origin).toBe("https://data.example");
     expect(snap.searchParams.get("feed")).toBe("sip");
-    expect(snap.searchParams.get("symbols")).toBe("SPY,QQQ");
+    expect(snap.searchParams.get("symbols")).toBe("QQQ,SPY"); // sorted, as the cache key is
     const b = new URL(urls.find((u) => u.includes("/v2/stocks/bars"))!);
     expect(b.searchParams.get("feed")).toBe("sip");
     expect(b.searchParams.get("timeframe")).toBe("2Min");
@@ -117,10 +134,10 @@ describe("what the live route reads and answers", () => {
     const body = await (await handleFeedsLive(req(), deps({ fetch: f }))).json();
     expect(body.feed).toBe("iex");
     expect(body.served_at).toBe(NOW.toISOString());
-    expect(body.rows.SPY.trade).toEqual({ p: 500.12, t: Date.parse("2026-10-12T14:59:58Z") });
+    expect(body.rows.SPY.trade).toBeUndefined(); // the price is the board's own, from /api/quote
     expect(body.rows.SPY.quote).toEqual({ bp: 500.11, bs: 2, ap: 500.13, as: 3, t: Date.parse("2026-10-12T14:59:59Z") });
     expect(body.rows.SPY.bars).toEqual([{ t: OPEN, o: 1, h: 2, l: 0.5, c: 1.5, v: 1000 }]); // the pre-open bar is left out
-    expect(body.rows.QQQ).toEqual({ trade: { p: null, t: null }, quote: { bp: null, bs: null, ap: null, as: null, t: null }, bars: [] });
+    expect(body.rows.QQQ).toEqual({ quote: { bp: null, bs: null, ap: null, as: null, t: null }, bars: [] });
     expect(parseLiveAnswer(body)).not.toBeNull();
   });
 
@@ -130,7 +147,35 @@ describe("what the live route reads and answers", () => {
     expect(urls.filter((u) => u.includes("/v2/stocks/bars"))).toEqual([]);
   });
 
-  it("keeps its own cache for CACHE_MS, keyed by feed", async () => {
+  it("shares one upstream read between concurrent misses, whatever the order of the names", async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((r) => (release = r));
+    const urls: string[] = [];
+    const f = vi.fn<typeof fetch>(async (url) => {
+      urls.push(String(url));
+      await gate;
+      return new Response(JSON.stringify(String(url).includes("/v2/stocks/bars") ? bars : snapshots), { status: 200 });
+    });
+    const d = deps({ fetch: f });
+    const all = Promise.all([handleFeedsLive(req("?s=SPY,QQQ"), d), handleFeedsLive(req("?s=QQQ,SPY"), d), handleFeedsLive(req("?s=SPY,QQQ"), d)]);
+    await new Promise((r) => setTimeout(r, 0));
+    release();
+    const got = await all;
+    expect(got.map((r) => r.status)).toEqual([200, 200, 200]);
+    expect(f).toHaveBeenCalledTimes(2);
+  });
+
+  it("answers bars null for every name when the bars read is still paging (cut short)", async () => {
+    const f = vi.fn<typeof fetch>(async (url) =>
+      new Response(JSON.stringify(String(url).includes("/v2/stocks/bars") ? { ...bars, next_page_token: "more" } : snapshots), { status: 200 }),
+    );
+    const body = await (await handleFeedsLive(req(), deps({ fetch: f }))).json();
+    expect(body.rows.SPY.bars).toBeNull();
+    expect(body.rows.QQQ.bars).toBeNull();
+    expect(body.rows.SPY.quote.bp).toBe(500.11);
+  });
+
+  it("keeps its own cache for CACHE_MS (the 5 s poll), keyed by feed", async () => {
     const { f } = upstream();
     let t = NOW.getTime();
     const d = deps({ fetch: f, now: () => new Date(t) });
@@ -157,23 +202,27 @@ describe("what the live route reads and answers", () => {
     expect(q).toHaveBeenCalledTimes(1);
   });
 
-  it("in fixture mode answers made-up rows with no network, and one stale row with the page's own row-stale switch", async () => {
+  it("in fixture mode answers made-up quotes and bars with no network, on the frozen or after-close clock", async () => {
     const f = vi.fn<typeof fetch>();
-    const res = await handleFeedsLive(req("?s=SPY,QQQ", { cookie: "fx=frozen; fxfeeds=row-stale" }), deps({ fetch: f, fixture: true, env: {} }));
+    const res = await handleFeedsLive(req("?s=SPY,QQQ", { cookie: "fx=frozen" }), deps({ fetch: f, fixture: true, env: {} }));
     expect(res.status).toBe(200);
     const a = parseLiveAnswer(await res.json())!;
     expect(f).not.toHaveBeenCalled();
     const served = Date.parse(a.served_at);
-    expect(served - a.rows.SPY!.trade.t!).toBeLessThan(10_000);
-    expect(served - a.rows.QQQ!.trade.t!).toBeGreaterThan(120_000);
-    expect(a.rows.SPY!.bars.length).toBeGreaterThan(0);
+    expect(served).toBe(Date.parse("2026-10-12T15:01:00Z"));
+    expect(served - a.rows.SPY!.quote.t!).toBeLessThan(10_000);
+    expect(a.rows.SPY!.bars!.length).toBeGreaterThan(0);
+    // The bar that started at 11:00 is still forming at 11:01.
+    expect(a.rows.SPY!.bars!.at(-1)!.t).toBe(Date.parse("2026-10-12T15:00:00Z"));
+    const after = parseLiveAnswer(await (await handleFeedsLive(req("?s=SPY", { cookie: "fxfeeds=after-close" }), deps({ fetch: f, fixture: true, env: {} }))).json())!;
+    expect(after.served_at).toBe("2026-10-12T20:30:00.000Z");
   });
 });
 
 describe("reading Alpaca's answer", () => {
-  it("snapshotRow and liveBar keep numbers and drop everything else to null", () => {
-    expect(snapshotRow(null)).toEqual({ trade: { p: null, t: null }, quote: { bp: null, bs: null, ap: null, as: null, t: null } });
-    expect(snapshotRow({ latestTrade: { p: Number.NaN, t: 5 } }).trade).toEqual({ p: null, t: null });
+  it("snapshotQuote and liveBar keep numbers and drop everything else to null", () => {
+    expect(snapshotQuote(null)).toEqual({ bp: null, bs: null, ap: null, as: null, t: null });
+    expect(snapshotQuote({ latestQuote: { bp: Number.NaN, ap: "1", t: 5 } })).toEqual({ bp: null, bs: null, ap: null, as: null, t: null });
     expect(liveBar({ t: "bad" }, 0, Infinity)).toBeNull();
     expect(liveBar({ t: new Date(OPEN).toISOString(), o: "1" }, OPEN, OPEN + 1)).toEqual({ t: OPEN, o: null, h: null, l: null, c: null, v: null });
     expect(liveBar({ t: new Date(OPEN + 1).toISOString() }, OPEN, OPEN + 1)).toBeNull();

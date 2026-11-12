@@ -41,6 +41,9 @@ export interface ComparedSession {
   tradeAgeP95Iex: Stat;
   /** The sum of prices.not_comparable's counts; null when it is missing or any count is not a whole number. */
   notComparable: number | null;
+  /** signals.status ("ok", "no_edition", "no_bars"), and its why for no_bars: a word, never a slot list. */
+  signalsStatus: string | null;
+  signalsWhy: string | null;
 }
 
 const obj = (v: unknown): Record<string, unknown> | null => (v !== null && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
@@ -48,6 +51,8 @@ const num = (v: unknown): number | null => (typeof v === "number" && Number.isFi
 const count = (v: unknown): number | null => (typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : null);
 const at = (v: unknown, ...path: string[]): unknown => path.reduce<unknown>((o, k) => obj(o)?.[k], v);
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
+/** A status word: lower-case letters and underscores, short; anything else is not shown. */
+const word = (v: unknown): string | null => (typeof v === "string" && /^[a-z_]{1,32}$/.test(v) ? v : null);
 
 /**
  * A stored report (the feed comparison's v1 JSON) read defensively: any field missing or of the wrong type becomes
@@ -82,6 +87,8 @@ export function toComparedSession(report: unknown): ComparedSession | null {
     tradeAgeP95Sip: stat(at(r, "freshness", "sip_trade_age_s", "p95"), at(r, "freshness", "sip_trade_age_s", "n")),
     tradeAgeP95Iex: stat(at(r, "freshness", "iex_trade_age_s", "p95"), at(r, "freshness", "iex_trade_age_s", "n")),
     notComparable,
+    signalsStatus: word(at(r, "signals", "status")),
+    signalsWhy: word(at(r, "signals", "why")),
   };
 }
 
@@ -119,11 +126,11 @@ export function fixtureReports(): unknown[] {
  * strips the replay's per-slot list (DEC-0050 point 5); a store that cannot be read gives no table and never an
  * error page: null, which the page shows as not available. Fixture mode shows two synthetic sessions.
  */
-export async function loadComparedSessions(): Promise<ComparedSession[] | null> {
-  if (fixtureMode()) return comparedRows(fixtureReports());
+export async function loadComparedSessions(): Promise<{ rows: ComparedSession[]; bad: number } | null> {
+  if (fixtureMode()) return { rows: comparedRows(fixtureReports()), bad: 0 };
   try {
-    const { reports } = await readCompareReports(MAX_COMPARED);
-    return comparedRows(reports);
+    const { reports, bad } = await readCompareReports(MAX_COMPARED);
+    return { rows: comparedRows(reports), bad };
   } catch {
     // Not "none yet": the store did not answer, and the page says so.
     return null;
