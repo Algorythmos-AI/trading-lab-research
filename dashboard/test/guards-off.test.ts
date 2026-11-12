@@ -1,8 +1,9 @@
 // The bad-data guards' one promise while they are switched off: nothing changes. Every case of guards-off-cases.ts
-// (each fixture edition, the scripted morning, a session's clock, each fixture quote set and the `quotes-suspect`
-// variant's) is run with every way the switches can be off, and the board's rows, the board as drawn and the server's
-// evaluation with its record's engine fields must hash exactly as the code before the guards made them
-// (guards-off.golden.json, written by guards-off-run.ts on origin/integration 0396e7e).
+// (each fixture edition, the scripted morning, a session's clock and a half day's, each fixture quote set and the
+// `quotes-suspect` variant's) is run with every way the switches can be off, and the board's rows, the board as drawn,
+// the page's other surfaces (the hero, the glance chips and tiles, the status rail, each ladder, the manage card of an
+// open trade) and the server's evaluation with its record's engine fields must hash exactly as the code before the
+// guards made them (guards-off.golden.json, written by guards-off-run.ts on origin/integration 61f46e6).
 import { describe, expect, it } from "vitest";
 import { ALL_OFF, parseGuardSwitches } from "@/lib/desk-guards";
 import type { EvalInput } from "@/lib/desk-eval";
@@ -14,7 +15,7 @@ import { hash, runBoard, runEval, serialise } from "./guards-off-run";
 
 // As the golden run read them: through JSON, so both runs see the same plain data.
 const cases = JSON.parse(JSON.stringify({ board: boardCases(), eval: evalCases() })) as { board: BoardCase[]; eval: EvalCase[] };
-const G = golden as { cases: string; board: Record<string, { rows: string; html: string }>; eval: Record<string, string> };
+const G = golden as { cases: string; board: Record<string, { rows: string; html: string; surfaces: string }>; eval: Record<string, string> };
 
 /** Every way a run or a page holds the switches off. */
 const OFF: [string, readonly GuardReason[] | undefined][] = [
@@ -31,18 +32,19 @@ const evalWith = (input: EvalInput, on: readonly GuardReason[] | undefined): Eva
 
 describe("with every guard switched off", () => {
   it("runs the very cases the pinned hashes were written from", () => {
-    expect(cases.board.length).toBeGreaterThan(600);
-    expect(cases.eval.length).toBeGreaterThan(80);
+    expect(cases.board.length).toBe(735);
+    expect(cases.eval.length).toBe(84);
     expect(hash(serialise(cases))).toBe(G.cases);
     expect(Object.keys(G.board).sort()).toEqual(cases.board.map((c) => c.id).sort());
     expect(Object.keys(G.eval).sort()).toEqual(cases.eval.map((c) => c.id).sort());
   });
 
   for (const [what, on] of OFF) {
-    it(`${what}: the board's rows and the board as drawn are byte-identical to before the guards, for every case`, () => {
+    it(`${what}: the board's rows, the board as drawn and the page's other surfaces are byte-identical to before the guards, for every case`, () => {
       const diff = cases.board.filter((c) => {
         const got = runBoard(boardWith(c.input, on), c.live);
-        return got.rows !== G.board[c.id]!.rows || got.html !== G.board[c.id]!.html;
+        const want = G.board[c.id]!;
+        return got.rows !== want.rows || got.html !== want.html || got.surfaces !== want.surfaces;
       });
       expect(diff.map((c) => c.id)).toEqual([]);
     });

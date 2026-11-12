@@ -1,6 +1,6 @@
 // The inputs the all-switches-off proof runs (guards-off.test.ts): every fixture edition the board can be drawn from
 // (the plain focus card, the partial and the v2 variants), at every step of the scripted morning and at fixed clock
-// times across a session (the opening range, the morning, lunch, the afternoon, after the flat time, after the
+// times across a session and a half day (the opening range, the morning, lunch, the afternoon, after the flat time, after the
 // close), with each quote set the fixture can serve (the plain fixture prices, the ticking ones, the script's) and
 // the same quotes bent by the `quotes-suspect` variant (fixture-suspect.ts), every guard in turn. Plain data, built
 // the same way every run, so its hash is pinned beside the outputs' (guards-off.golden.json).
@@ -36,6 +36,7 @@ const S = BASE.session;
 const ny = (hhmm: string) => Date.parse(`${S}T${hhmm}:00-04:00`);
 /** Fixed clock times across the session, New York (EDT on the fixture's session). */
 const CLOCK = ["09:31", "09:36", "10:30", "11:45", "13:05", "15:20", "15:55", "16:05"];
+const HALF_CLOCK = ["10:30", "12:05", "12:20", "13:05"];
 
 /** The fixture route's own prices (quote-route.ts fixtureQuotes): a fixed share of an ATR above each close. */
 function fixturePrices(e: Options, at: number, tick: boolean): Record<string, LiveQuote> {
@@ -101,6 +102,12 @@ export function boardCases(): BoardCase[] {
           if (!tick) out.push({ id: `${id}/quiet`, live: true, input: { ...common, quotes, trails: {}, serverBars: {}, serverFetchedAt: {}, now: at, receivedAt: at - 60_000 } });
           if (!tick && hhmm === "10:30") out.push({ id: `${id}/not-live`, live: false, input: { ...common, quotes, trails: {}, serverBars: {}, serverFetchedAt: {}, now: at, receivedAt: at - 1_000 } });
         }
+    }
+    // a half day (13:00 close, flat from 12:10): the morning, past the flat time, after the close
+    for (const hhmm of HALF_CLOCK) {
+      const at = ny(hhmm);
+      for (const [qs, quotes] of quoteSets(fixturePrices(e, at, false)))
+        out.push({ id: `${ed}/half/${hhmm}/${qs}`, live: true, input: { ...common, halfDay: true, quotes, trails: {}, serverBars: {}, serverFetchedAt: {}, now: at, receivedAt: at - 1_000 } });
     }
   }
   return out;
