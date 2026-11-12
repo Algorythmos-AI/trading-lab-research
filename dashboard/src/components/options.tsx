@@ -28,6 +28,7 @@ import {
   type Options,
   type OptionsTicker,
   type Rung,
+  builtFromWords,
 } from "@/lib/options";
 import type { OptionsResult } from "@/lib/snapshot";
 import { EXP_0023 } from "@/lib/trade-rules";
@@ -59,7 +60,7 @@ export function EditionPanel({ e, now }: { e: Options; now: Date }) {
   return (
     <Panel
       title={`Levels for ${sessionDay(e.session)}`}
-      means={`Built from the ${sessionDay(e.built_from)} close. Source: ${e.source ?? "not stated"}. Published ${sydney(e.as_of)} Sydney.`}
+      means={`Built from ${builtFromWords(e.built_from)}. Source: ${e.source ?? "not stated"}. Published ${sydney(e.as_of)} Sydney.`}
       icon={CalendarClock}
       action={
         <Badge variant={stale ? "bad" : state === "today" ? "good" : "info"}>

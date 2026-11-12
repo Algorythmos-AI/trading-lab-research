@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { builtFromNotice, builtFromOld, builtFromProblem, MAX_BUILD_GAP_DAYS } from "@/lib/options";
+import { builtFromDay, builtFromNotice, builtFromOld, builtFromProblem, builtFromWords, MAX_BUILD_GAP_DAYS } from "@/lib/options";
 import { addDays, RANGE, sessionOf } from "@/lib/market-calendar";
 import calendar from "@/lib/market-calendar.json";
 import { radarStale } from "@/lib/radar";
@@ -29,11 +29,13 @@ describe("builtFromOld", () => {
     expect(builtFromOld("2026-10-14", "2026-10-08")).toBe(true);
     expect(builtFromOld("2026-10-14", "2026-10-14")).toBe(true);
   });
-  it("says nothing without a build date", () => {
-    expect(builtFromOld("2026-10-14", null)).toBe(false);
-    expect(builtFromOld("2026-10-14", undefined)).toBe(false);
-    expect(builtFromProblem("2026-10-14", null)).toBeNull();
-    expect(builtFromNotice("2026-10-14", undefined)).toBeNull();
+  it("warns without a build date: the host always writes one, so a missing one means something upstream broke", () => {
+    expect(builtFromOld("2026-10-14", null)).toBe(true);
+    expect(builtFromOld("2026-10-14", undefined)).toBe(true);
+    expect(builtFromProblem("2026-10-14", null)).toEqual({ kind: "missing", last: "2026-10-13" });
+    expect(builtFromProblem("2030-03-04", undefined)).toEqual({ kind: "missing", last: null });
+    expect(builtFromProblem("", null)).toEqual({ kind: "missing", last: null });
+    expect(builtFromNotice("2026-10-14", undefined)).toBe("These levels do not say which close they were built from. Check them against your platform before use.");
   });
 
   it("every ordinary weekday pair, and Monday from Friday", () => {
@@ -105,13 +107,16 @@ describe("builtFromOld", () => {
     expect(builtFromProblem("2026-10-12", "2026-10-11")).toEqual({ kind: "not_session", last: "2026-10-09" });
     expect(builtFromProblem("2026-07-06", "2026-07-03")).toEqual({ kind: "not_session", last: "2026-07-02" }); // 4 July observed
     expect(builtFromProblem("2026-06-22", "2026-06-19")).toEqual({ kind: "not_session", last: "2026-06-18" }); // Juneteenth
+    // A weekend before the file is not a session either; a weekday there is just an earlier day.
+    expect(builtFromProblem("2026-01-05", "2025-12-27")).toEqual({ kind: "not_session", last: "2026-01-02" });
+    expect(builtFromProblem("2026-01-05", "2025-12-26")).toEqual({ kind: "earlier", last: "2026-01-02" });
   });
 
   it("an edition for a day the market is closed is old whatever it was built from", () => {
     expect(builtFromProblem("2026-10-10", "2026-10-09")?.kind).toBe("session_closed"); // a Saturday
     expect(builtFromProblem("2026-11-26", "2026-11-25")?.kind).toBe("session_closed"); // Thanksgiving
     expect(builtFromProblem("2026-01-01", "2025-12-31")?.kind).toBe("session_closed"); // the file's first day
-    expect(builtFromOld("2026-11-26", null)).toBe(false);
+    expect(builtFromProblem("2026-11-26", null)?.kind).toBe("missing");
   });
 
   it("the first and last sessions of the calendar, and one step outside each end", () => {
@@ -127,15 +132,33 @@ describe("builtFromOld", () => {
     expect(builtFromProblem("2026-01-05", "2025-12-31")).toEqual({ kind: "earlier", last: first });
     // The first session (its previous one is before the file), the day before the file and the day after it: the
     // calendar cannot say, so the calendar-day rule answers, exactly as before, on every build date around them.
+    // A build date inside the file that is not a session is the one exception: the file can say so.
     for (const session of [first, addDays(RANGE.start, -1), addDays(RANGE.end, 1), "2025-06-02", "2030-03-04"]) {
       for (let i = -3; i <= 12; i++) {
         const from = addDays(session, -i);
+        // The exception: a build date the file covers and says is not a session (only ever a fresh-gap day here).
+        if (from >= RANGE.start && from <= RANGE.end && !isOpen(from) && from < session) {
+          expect(builtFromProblem(session, from)?.kind, `${session} from ${from}`).toBe("not_session");
+          continue;
+        }
         expect(builtFromOld(session, from), `${session} from ${from}`).toBe(calendarDayRule(session, from));
       }
     }
+    // The first session from New Year's Day, a holiday inside the file: the file can say that is not a session.
+    expect(calendarDayRule(first, "2026-01-01")).toBe(false);
+    expect(builtFromProblem(first, "2026-01-01")).toEqual({ kind: "not_session", last: null });
+    // From 31 Dec 2025, its true previous session: fresh, by the fallback.
     expect(builtFromProblem(first, "2025-12-31")).toBeNull();
-    expect(builtFromProblem(first, "2025-12-29")).toBeNull(); // 4 days: the old rule's allowance
-    expect(builtFromProblem(first, "2025-12-28")).toEqual({ kind: "far_back", last: null });
+    // From 30 and 29 Dec 2025 (3 and 4 days): the fallback calls them fresh, though 31 Dec was a session, so the
+    // host's own check (pipeline_check options.built_from, against levels.prev_session) would fail them. The date is
+    // in the past, so no edition can be stamped for it now.
+    expect(builtFromProblem(first, "2025-12-30")).toBeNull();
+    expect(builtFromProblem(first, "2025-12-29")).toBeNull();
+    expect(builtFromProblem(first, "2025-12-28")).toEqual({ kind: "not_session", last: null }); // a Sunday, 5 days
+    expect(builtFromProblem(first, "2025-12-26")).toEqual({ kind: "far_back", last: null });
+    // Past the file's end: from Sunday 30 Dec 2029, inside the file, not a session; from Mon 31 Dec, fresh.
+    expect(builtFromProblem("2030-01-01", "2029-12-30")).toEqual({ kind: "not_session", last: null });
+    expect(builtFromProblem("2030-01-01", "2029-12-31")).toBeNull();
     expect(builtFromProblem("2030-01-02", "2030-01-02")).toEqual({ kind: "same_or_later", last: null });
   });
 
@@ -151,9 +174,7 @@ describe("builtFromOld", () => {
     }
     expect(calendarDayRule("2026-10-14", "2026-13-40")).toBe(false);
     expect(calendarDayRule("2026-10-14", "20261014")).toBe(false);
-    expect(builtFromOld("", null)).toBe(false);
-    expect(builtFromOld("2026-10-14", null)).toBe(false);
-    expect(builtFromOld("2026-10-14", undefined)).toBe(false);
+    expect(builtFromProblem("", null)?.kind).toBe("missing");
   });
 
   it("over every session in the file: its previous session is fresh, and each of the 10 days before that is old", () => {
@@ -179,13 +200,13 @@ describe("builtFromOld", () => {
   it("the page's warning says which kind it is", () => {
     expect(builtFromNotice("2026-10-14", "2026-10-13")).toBeNull();
     expect(builtFromNotice("2026-10-14", "2026-10-09")).toBe(
-      "These levels for Wed 14 Oct were built from the Fri 9 Oct close, but the last close before Wed 14 Oct was Tue 13 Oct. A session's bars are missing, so check them before use.",
+      "These levels for Wed 14 Oct were built from the Fri 9 Oct close, but the last close before Wed 14 Oct was Tue 13 Oct. At least one session's bars are missing, so check them before use.",
     );
     expect(builtFromNotice("2026-10-14", "2026-10-14")).toBe(
-      "These levels for Wed 14 Oct are stamped as built from Wed 14 Oct, which is not before that session. The stamp is wrong, so check them before use.",
+      "These levels for Wed 14 Oct are stamped with Wed 14 Oct, which is not before that session. The stamp is wrong, so check them before use.",
     );
     expect(builtFromNotice("2026-10-12", "2026-10-10")).toBe(
-      "These levels for Mon 12 Oct are stamped as built from Sat 10 Oct, a day the market was closed. The stamp is wrong, so check them before use.",
+      "These levels for Mon 12 Oct are stamped with Sat 10 Oct, which is not a session. The stamp is wrong, so check them before use.",
     );
     expect(builtFromNotice("2026-11-26", "2026-11-25")).toBe(
       "These levels are stamped for Thu 26 Nov, a day the market is closed. The stamp is wrong, so check them before use.",
@@ -193,11 +214,30 @@ describe("builtFromOld", () => {
     expect(builtFromNotice("2026-10-14", "2026-13-40")).toBe(
       "These levels carry a date that cannot be read, so the close they were built from is unknown. Check them before use.",
     );
+    expect(builtFromNotice("2026-10-14", null)).toBe("These levels do not say which close they were built from. Check them against your platform before use.");
     expect(builtFromNotice("2030-03-11", "2030-03-01")).toBe(
       "These levels for Mon 11 Mar were built from the Fri 1 Mar close, more than 4 days earlier. A session's bars may be missing, so check them before use.",
     );
-    // No warning says "a weekend": the old text called every flagged close "more than a weekend earlier".
+    // Two years in one sentence: every date carries its year.
+    expect(builtFromNotice("2026-01-05", "2025-12-27")).toBe(
+      "These levels for Mon 5 Jan 2026 are stamped with Sat 27 Dec 2025, which is not a session. The stamp is wrong, so check them before use.",
+    );
+    expect(builtFromNotice("2026-01-06", "2025-12-31")).toBe(
+      "These levels for Tue 6 Jan 2026 were built from the Wed 31 Dec 2025 close, but the last close before Tue 6 Jan 2026 was Mon 5 Jan 2026. At least one session's bars are missing, so check them before use.",
+    );
+    // No warning says "a weekend", and no day that is not a session is called a close.
     for (const [s, b] of [["2026-10-14", "2026-10-09"], ["2026-10-14", "2026-10-14"], ["2030-03-11", "2030-03-01"]] as const) expect(builtFromNotice(s, b)).not.toMatch(/weekend/);
+    for (const [s, b] of [["2026-10-12", "2026-10-10"], ["2026-01-05", "2025-12-27"], ["2026-01-02", "2026-01-01"], ["2030-03-11", "2030-03-03"]] as const) {
+      expect(builtFromNotice(s, b), `${s} from ${b}`).toMatch(/which is not a session/);
+      expect(builtFromNotice(s, b)).not.toMatch(/close/);
+    }
+  });
+
+  it("the build date in words, for the lines that name it", () => {
+    expect(builtFromWords("2026-10-09")).toBe("the Fri 9 Oct close");
+    expect(builtFromWords(null)).toBe("a close the edition does not name");
+    expect(builtFromWords("2026-13-40")).toBe("a close the edition does not name");
+    expect(builtFromDay(undefined)).toBeNull();
   });
 });
 

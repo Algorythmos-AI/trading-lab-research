@@ -16,11 +16,11 @@ import { OptionsDesk } from "@/components/client/options-desk";
 import { OptionsGlance } from "@/components/client/options-glance";
 import { PaneBoundary } from "@/components/client/pane-boundary";
 import { EditionPicker } from "@/components/radar";
-import { Notice } from "@/components/ui/notice";
+import { OldCloseNotice } from "@/components/old-close-notice";
 import { sydney, weekDate } from "@/lib/format";
 import { hourlyBySymbol } from "@/lib/hourly";
 import { interestBySymbol } from "@/lib/oi";
-import { builtFromNotice, editionState, isDeskView, isHalfDay, mapView, viewForClock, type DeskPane, type Options } from "@/lib/options";
+import { builtFromWords, editionState, isDeskView, isHalfDay, mapView, viewForClock, type DeskPane, type Options } from "@/lib/options";
 import { showReview } from "@/lib/ledger";
 import { withLeaders } from "@/lib/entry-checks";
 import { boardDay } from "@/lib/trade-now";
@@ -39,17 +39,6 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Options" };
 
 const INTRO = "Where each name sits against its support and resistance, rebuilt after every close. Research only; nothing here is an order.";
-
-/** Levels not built from the close just before their session: a pull that missed a session, or a wrong stamp. */
-function OldCloseNotice({ e }: { e: Options }) {
-  const text = builtFromNotice(e.session, e.built_from);
-  if (!text) return null;
-  return (
-    <Notice tone="bad" size="sm" role="alert">
-      {text}
-    </Notice>
-  );
-}
 
 /** The page as it was before the desk: one long column of panels. Kept at ?view=classic for one release. */
 function ClassicOptions({ e, dates, date, now }: { e: Options; dates: string[]; date: string | undefined; now: Date }) {
@@ -258,7 +247,7 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
                 ) : null}
                 <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-xs">
                   <p className="max-w-prose">
-                    Levels for {weekDate(e.session)}, built from the {weekDate(e.built_from)} close. Source: {e.source ?? "not stated"}. Published{" "}
+                    Levels for {weekDate(e.session)}, built from {builtFromWords(e.built_from)}. Source: {e.source ?? "not stated"}. Published{" "}
                     {sydney(e.as_of)} Sydney. Research only; nothing here is an order.
                   </p>
                   <EditionPicker dates={dates} current={e.session} base="/options" />
