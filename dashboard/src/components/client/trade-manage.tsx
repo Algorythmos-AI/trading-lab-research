@@ -39,7 +39,7 @@ import { bellMinute } from "@/lib/contract";
 import { chainFresh, chainPx, chainStamp, contractQuoteTime, entryStopDistance, fromEntryLabel, heldOrAtm, lossFromEntry, type RoomAfterStop, roomAfterStop, stopDistance } from "@/lib/what-if";
 import { checkOptionFill, type FillStop, fillStop, INVITE_LINE, journalDayCache, lossLine, nickelLine, prefillFrom, otherOpenPositions, STOP_OWN_TICK, STOP_PLACED, STOP_REMINDER, stopFromLine, tickLine } from "@/lib/manage-stop";
 import { type DayFacts, journalLive } from "@/lib/session-timeline";
-import { heldContract, heldLines, heldValue, judgeQuote, lotsContract, notAvailable, quoteLine } from "@/lib/option-value";
+import { heldContract, heldTiles, heldValue, judgeQuote, lotsContract, notAvailable, quoteLine, type HeldTiles } from "@/lib/option-value";
 import { usd } from "@/lib/ticket";
 import { ticketPrice } from "./ticket-memo";
 import { TestingTag } from "./trade-now";
@@ -196,7 +196,7 @@ export interface CardHeld {
 }
 
 /** The held contract's live value, or why it is withheld; null when the journal names no one contract (no line at all). */
-type HeldShown = { kind: "ok"; lines: ReturnType<typeof heldLines>; quote: string } | { kind: "withheld"; line: string } | null;
+type HeldShown = { kind: "ok"; tiles: HeldTiles; quote: string } | { kind: "withheld"; line: string } | null;
 
 /**
  * The live value of the one contract a journal position names (option-value.ts): its OCC symbol built from the lots'
@@ -216,7 +216,7 @@ function useHeldValue(v: ManageView, held: CardHeld | undefined, ctx: ChainConte
   if (!r?.ok) return null;
   const j = judgeQuote({ feed, occ, perfNow, wallNow: wall === null ? null : wall + 1_000, shownPerf });
   if (!j.ok) return { kind: "withheld", line: notAvailable(j.why) };
-  return { kind: "ok", lines: heldLines(heldValue(r.held, j.q, held!.journalCurrent)), quote: quoteLine(j.q) };
+  return { kind: "ok", tiles: heldTiles(heldValue(r.held, j.q, held!.journalCurrent)), quote: quoteLine(j.q) };
 }
 
 /**
@@ -236,7 +236,10 @@ export function cardAsksChain(v: ManageView, ctx: ChainContext | undefined, held
   return entryStopDistance(v.side, v.entry, v.m.stop) !== null || (held ? lotsContract(v.symbol, v.side, held.lots).ok : false);
 }
 
-/** The held contract's value block: the value, the P&L (and the total when the journal is current), the stop room, the quote line. */
+/**
+ * The held contract's panel: four figures in the card's own grid (what a contract sells for now, its P&L, the
+ * position's P&L when the journal is current, the bid's room above the −25% stop) and the quote they came from.
+ */
 function HeldBlock({ shown }: { shown: NonNullable<HeldShown> }) {
   if (shown.kind === "withheld")
     return (
@@ -244,21 +247,50 @@ function HeldBlock({ shown }: { shown: NonNullable<HeldShown> }) {
         {shown.line}
       </p>
     );
-  const l = shown.lines;
+  const t = shown.tiles;
+  const text = (x: "good" | "bad" | null) => (x === "good" ? "text-good" : x === "bad" ? "text-bad" : "text-foreground");
+  const arrow = (x: "good" | "bad" | null) => (x === "good" ? "▲" : x === "bad" ? "▼" : "•");
+  // The panel's edge and the headline take the P&L's colour (the position's when shown, else a contract's), so the
+  // answer reads before any figure does; the arrow says the same thing without colour.
+  const lead = t.total !== null ? t.totalTone : t.pnlTone;
+  const edge = lead === "good" ? "border-l-good-fill bg-good-soft" : lead === "bad" ? "border-l-bad-fill bg-bad-soft" : "border-l-border bg-muted/40";
+  const bar = t.roomBand === "hit" ? "bg-bad-fill" : t.roomBand === "near" ? "bg-warn-fill" : "bg-good-fill";
+  const roomText = t.roomBand === "hit" ? "text-bad" : t.roomBand === "near" ? "text-warn" : "text-foreground";
   return (
-    <div data-manage-value="live" className="text-explain grid gap-0.5">
-      <p className="text-foreground font-medium">
-        Live option value: <span className="font-mono tabular-nums">{l.value}</span>
-      </p>
-      <p data-manage-value-pnl className="text-foreground">
-        P&amp;L <span className="font-mono tabular-nums">{l.pnl}</span>
-        {l.total ? <span data-manage-value-total className="font-mono tabular-nums"> · {l.total}</span> : null}
-      </p>
-      {l.stop ? <p data-manage-value-stop className="text-muted-foreground">{l.stop}</p> : null}
+    <section data-manage-value="live" data-manage-value-tone={lead ?? "flat"} aria-label="Your option now" className={cn("grid gap-3 rounded-md border border-l-4 p-3", edge)}>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h4 className="text-explain text-muted-foreground font-semibold tracking-wide uppercase">Your option now</h4>
+        <p data-manage-value-head data-manage-value-total={t.total !== null ? "" : undefined} className={cn("text-price font-mono font-semibold tabular-nums", text(lead))}>
+          <span aria-hidden className="mr-1.5 text-[0.7em]">
+            {arrow(lead)}
+          </span>
+          {t.total ?? t.pnl}
+          <span className="text-muted-foreground ml-2 font-sans text-[0.6875rem] font-normal max-sm:text-xs">{t.total !== null ? t.totalLabel.replace("P&L ", "") : "a contract"} · at the bid, after fees</span>
+        </p>
+      </div>
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
+        <Big label="A contract sells for" value={t.worth} size="live" note={t.worthNote} data="value-worth" />
+        <Big label="P&L a contract" value={`${arrow(t.pnlTone)} ${t.pnl}`} size="live" note="at the bid, after fees" tone={text(t.pnlTone)} data="value-pnl" />
+      </dl>
+      {t.room !== null && t.roomShare !== null ? (
+        <div data-manage-value-stop data-manage-value-band={t.roomBand ?? undefined} className="grid gap-1">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-explain text-muted-foreground font-medium">Bid above the −25% stop</span>
+            <span className={cn("text-live font-mono font-semibold tabular-nums", roomText)}>{t.room}</span>
+          </div>
+          <div className="bg-muted h-2 overflow-hidden rounded-full" role="img" aria-label={t.roomBand === "hit" ? "The bid is at or under the stop" : t.roomBand === "near" ? "The bid is near the stop" : "The bid is clear of the stop"}>
+            <div className={cn("h-full rounded-full", bar)} style={{ width: `${Math.max(4, Math.round(t.roomShare * 100))}%` }} />
+          </div>
+          <div className="text-muted-foreground flex justify-between text-[0.6875rem] max-sm:text-xs">
+            <span>stop {t.stopText}</span>
+            <span>paid {t.paidText} (your journal average)</span>
+          </div>
+        </div>
+      ) : null}
       <p data-manage-value-quote className="text-muted-foreground font-mono text-[0.6875rem] tabular-nums max-sm:text-xs">
-        {shown.quote}
+        Quote {shown.quote} · Webull is the record
       </p>
-    </div>
+    </section>
   );
 }
 
@@ -384,13 +416,14 @@ export function ManageCard({
           />
         ) : null}
       </dl>
+      {value?.kind === "ok" ? <HeldBlock shown={value} /> : null}
       <dl className="grid max-w-2xl grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-4" data-manage-small-grid>
         <Small label="Trail (EMA9)" value={v.m.trail !== null ? v.trailText : "–"} note={v.m.trail !== null ? undefined : v.trailText} data="trail" />
         {counting ? null : <Small label="Not working in" value={v.notWorkingText} data="not-working" />}
         <Small label={`Flat by ${v.flatAt}`} value={v.flatText} data="flat" />
-        <Small label="P&L" value={value?.kind === "ok" ? "at the bid, below" : "see Webull"} data="pnl" />
+        {value?.kind === "ok" ? null : <Small label="P&L" value="see Webull" data="pnl" />}
       </dl>
-      {value ? <HeldBlock shown={value} /> : null}
+      {value?.kind === "withheld" ? <HeldBlock shown={value} /> : null}
       {children}
     </article>
   );

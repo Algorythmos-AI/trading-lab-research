@@ -25,13 +25,18 @@ test("the journal's QQQ call shows its live value at the bid, the total, the sto
   await expect(c).toBeVisible();
   const value = c.locator('[data-manage-value="live"]');
   await expect(value).toBeVisible({ timeout: 15_000 });
-  await expect(value).toContainText(/Live option value: \$[\d,]+\.\d\d a contract at the bid \(\$[\d,]+\.\d\d at the mid\)/);
-  await expect(value.locator("[data-manage-value-pnl]")).toContainText("a contract at the bid, fees in");
+  await expect(value.getByRole("heading", { name: "Your option now" })).toBeVisible();
+  await expect(value.locator('[data-manage-big="value-worth"]')).toContainText(/A contract sells for\s*\$[\d,]+\.\d\d\s*at the bid · \$[\d,]+\.\d\d at the mid/);
+  await expect(value.locator('[data-manage-big="value-pnl"]')).toContainText("at the bid, after fees");
+  await expect(value.locator("[data-manage-value-stop]")).toContainText("stop $0.90");
+  await expect(value.locator("[data-manage-value-stop]")).toContainText("paid $1.20 (your journal average)");
   await expect(value.locator("[data-manage-value-total]")).toContainText("on 2 contracts");
-  await expect(value.locator("[data-manage-value-stop]")).toContainText("above the −25% stop $0.90, from your journal average $1.20");
-  await expect(value.locator("[data-manage-value-quote]")).toContainText(/× .* · spread \$\d+\.\d\d · sample data · checked \d+ s ago/);
+  await expect(value.locator("[data-manage-value-stop]")).toHaveAttribute("data-manage-value-band", "safe");
+  await expect(value).toHaveAttribute("data-manage-value-tone", "good");
+  await expect(value.locator("[data-manage-value-head]")).toContainText("on 2 contracts · at the bid, after fees");
+  await expect(value.locator("[data-manage-value-quote]")).toContainText(/× .* · spread \$\d+\.\d\d · sample data · checked \d+ s ago · Webull is the record/);
   await expect(value.locator("[data-manage-value-quote]")).not.toContainText("OPRA");
-  await expect(c.locator('[data-manage-small="pnl"]')).toContainText("at the bid, below");
+  await expect(c.locator('[data-manage-small="pnl"]')).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
 });
 

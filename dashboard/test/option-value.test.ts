@@ -11,7 +11,7 @@ import {
   FAILED,
   heldContract,
   type HeldLot,
-  heldLines,
+  heldTiles,
   heldValue,
   inOptionSession,
   judgeQuote,
@@ -326,30 +326,44 @@ describe("what the held contracts are worth", () => {
 
   it("gives the position total only while the journal is current", () => {
     expect(heldValue(held, q, false).totalCents).toBeNull();
-    expect(heldLines(heldValue(held, q, false)).total).toBeNull();
-    expect(heldLines(heldValue(held, q, true)).total).toBe("−$33.33 on 3 contracts");
+    expect(heldTiles(heldValue(held, q, false)).total).toBeNull();
+    expect(heldTiles(heldValue(held, q, true))).toMatchObject({ total: "−$33.33", totalLabel: "P&L on 3 contracts", totalTone: "bad" });
   });
 
   it("measures the bid against the −25% stop on the average price paid", () => {
     const stop = fillStop({ priceCents: 130, contracts: 3 }).stopCents;
     expect(heldValue(held, q, true)).toMatchObject({ stopCents: stop, toStopCents: 120 - stop });
-    expect(heldLines(heldValue(held, q, true)).stop).toBe("Bid $0.22 above the −25% stop $0.98, from your journal average $1.30");
+    expect(heldTiles(heldValue(held, q, true))).toMatchObject({ room: "$0.22", roomBad: false, roomNote: "stop $0.98 · from your journal average $1.30" });
     const under = heldValue(held, { ...q, bidCents: 98, askCents: 100, midCents: 99 }, true);
     expect(under.toStopCents).toBe(0);
-    expect(heldLines(under).stop).toBe("Bid at or under the −25% stop $0.98, from your journal average $1.30");
+    expect(heldTiles(under)).toMatchObject({ room: "at the stop", roomBad: true, roomBand: "hit", roomShare: 0 });
   });
 
   it("has no stop line for a fill too cheap for a stop", () => {
     const cheap = (lotsContract("SPY", "call", [lot({ entry: 0.02, qty: 1 })]) as { ok: true; held: Parameters<typeof heldValue>[0] }).held;
     const v = heldValue(cheap, { bidCents: 2, askCents: 3, midCents: 2.5, spreadCents: 1, checkedS: 0, sample: false }, true);
     expect(v.stopCents).toBeNull();
-    expect(heldLines(v).stop).toBeNull();
+    expect(heldTiles(v)).toMatchObject({ room: null, roomShare: null, roomBand: null });
+  });
+
+  it("the card's four figures: bid value, signed P&L with its tone, the total only when the journal is current, the stop room", () => {
+    const up = heldTiles({ valueCents: 15000, midValueCents: 15200, perContractCents: 2889, totalCents: 5778, qty: 2, paidCents: 120, stopCents: 90, toStopCents: 60 });
+    expect(up).toMatchObject({ worth: "$150.00", worthNote: "at the bid · $152.00 at the mid", pnl: "+$28.89", pnlTone: "good", total: "+$57.78", totalLabel: "P&L on 2 contracts", totalTone: "good", room: "$0.60", roomBad: false, roomNote: "stop $0.90 · from your journal average $1.20" });
+    const down = heldTiles({ valueCents: 8000, midValueCents: 8200, perContractCents: -4111, totalCents: null, qty: 1, paidCents: 120, stopCents: 90, toStopCents: 0 });
+    expect(down).toMatchObject({ pnlTone: "bad", total: null, totalTone: null, totalLabel: "P&L on 1 contract", room: "at the stop", roomBad: true });
+    const flat = heldTiles({ valueCents: 12000, midValueCents: 12000, perContractCents: 0, totalCents: 0, qty: 1, paidCents: 120, stopCents: null, toStopCents: null });
+    expect(flat).toMatchObject({ pnl: "$0.00", pnlTone: null, totalTone: null, room: null, roomNote: null, roomBad: false });
+    // the bar: 0 at the stop, 1 at the average paid or above; "near" under half the stop's distance, exactly half is "safe"
+    const at = (toStop: number) => heldTiles({ valueCents: 0, midValueCents: 0, perContractCents: 0, totalCents: null, qty: 1, paidCents: 120, stopCents: 90, toStopCents: toStop });
+    expect(at(14)).toMatchObject({ roomBand: "near" });
+    expect(at(15)).toMatchObject({ roomBand: "safe", roomShare: 0.5 });
+    expect(at(500)).toMatchObject({ roomBand: "safe", roomShare: 1 });
+    expect(at(-5)).toMatchObject({ roomBand: "hit", roomShare: 0 });
   });
 
   it("reads plainly", () => {
-    const l = heldLines(heldValue(held, q, true));
-    expect(l.value).toBe("$120.00 a contract at the bid ($122.50 at the mid)");
-    expect(l.pnl).toBe("−$11.11 a contract at the bid, fees in");
+    const l = heldTiles(heldValue(held, q, true));
+    expect(l).toMatchObject({ worth: "$120.00", worthNote: "at the bid · $122.50 at the mid", pnl: "−$11.11", pnlTone: "bad" });
     expect(quoteLine(q)).toBe("$1.20 × $1.25 · spread $0.05 · OPRA · checked 3 s ago");
     // the fixture's answer is sample data, never OPRA
     expect(quoteLine({ ...q, sample: true })).toBe("$1.20 × $1.25 · spread $0.05 · sample data · checked 3 s ago");

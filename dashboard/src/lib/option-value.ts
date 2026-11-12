@@ -12,7 +12,6 @@ import { readQuote } from "./contract";
 import { fillStop } from "./manage-stop";
 import { nyNow, sessionOf } from "./market-calendar";
 import { OWNER_FEES } from "./owner-positions";
-import { PREMIUM_STOP } from "./premium-stop";
 import { roundTripCents, usd } from "./ticket";
 
 // ---- the contract's symbol ------------------------------------------------------------------------------------------
@@ -367,20 +366,54 @@ export function heldValue(h: Held, q: LiveQuote, journalCurrent: boolean): HeldV
 }
 
 const signedUsd = (c: number) => (c > 0 ? `+${usd(c)}` : usd(c));
-const stopPct = Math.round(PREMIUM_STOP * 100);
 
-/** The value's lines: what a contract is worth (bid, then mid), its P&L, the total when shown, and the room to the stop. */
-export function heldLines(v: HeldValue): { value: string; pnl: string; total: string | null; stop: string | null } {
+/** The value as the card's four figures: what a contract sells for now, its P&L, the position's P&L, the room to the stop. */
+export interface HeldTiles {
+  worth: string;
+  worthNote: string;
+  pnl: string;
+  pnlTone: "good" | "bad" | null;
+  /** The whole position's P&L, only when the journal is current. */
+  total: string | null;
+  totalLabel: string;
+  totalTone: "good" | "bad" | null;
+  /** The bid's room above the premium stop, or "at the stop"; null when the entry has no stop. */
+  room: string | null;
+  roomBad: boolean;
+  roomNote: string | null;
+  /** The bar's two ends: the stop's premium and the average premium paid. */
+  stopText: string | null;
+  paidText: string;
+  /**
+   * Where the bid sits between the stop (0) and the average price paid (1), capped to 0..1; null without a stop. For
+   * the card's bar only: it decides no rule.
+   */
+  roomShare: number | null;
+  /** The bar's colour band: "hit" at or under the stop, "near" with under half the stop's distance left, else "safe". */
+  roomBand: "safe" | "near" | "hit" | null;
+}
+
+const tone = (c: number): "good" | "bad" | null => (c > 0 ? "good" : c < 0 ? "bad" : null);
+
+export function heldTiles(v: HeldValue): HeldTiles {
+  const hasStop = v.stopCents !== null && v.toStopCents !== null;
+  const span = hasStop ? v.paidCents - v.stopCents! : 0;
+  const roomShare = !hasStop ? null : span > 0 ? Math.min(1, Math.max(0, v.toStopCents! / span)) : v.toStopCents! > 0 ? 1 : 0;
   return {
-    value: `${usd(v.valueCents)} a contract at the bid (${usd(v.midValueCents)} at the mid)`,
-    pnl: `${signedUsd(v.perContractCents)} a contract at the bid, fees in`,
-    total: v.totalCents === null ? null : `${signedUsd(v.totalCents)} on ${v.qty} contract${v.qty === 1 ? "" : "s"}`,
-    stop:
-      v.stopCents === null || v.toStopCents === null
-        ? null
-        : v.toStopCents > 0
-          ? `Bid ${usd(v.toStopCents)} above the −${stopPct}% stop ${usd(v.stopCents)}, from your journal average ${usd(v.paidCents)}`
-          : `Bid at or under the −${stopPct}% stop ${usd(v.stopCents)}, from your journal average ${usd(v.paidCents)}`,
+    roomShare,
+    roomBand: roomShare === null ? null : v.toStopCents! <= 0 ? "hit" : roomShare < 0.5 ? "near" : "safe",
+    worth: usd(v.valueCents),
+    worthNote: `at the bid · ${usd(v.midValueCents)} at the mid`,
+    pnl: signedUsd(v.perContractCents),
+    pnlTone: tone(v.perContractCents),
+    total: v.totalCents === null ? null : signedUsd(v.totalCents),
+    totalLabel: `P&L on ${v.qty} contract${v.qty === 1 ? "" : "s"}`,
+    totalTone: v.totalCents === null ? null : tone(v.totalCents),
+    room: !hasStop ? null : v.toStopCents! > 0 ? usd(v.toStopCents!) : "at the stop",
+    roomBad: hasStop && v.toStopCents! <= 0,
+    roomNote: !hasStop ? null : `stop ${usd(v.stopCents!)} · from your journal average ${usd(v.paidCents)}`,
+    stopText: !hasStop ? null : usd(v.stopCents!),
+    paidText: usd(v.paidCents),
   };
 }
 
