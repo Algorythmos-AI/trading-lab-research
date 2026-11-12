@@ -113,6 +113,10 @@ announcement or a source named in the row's `source` (the header of `earnings.cs
 missing one, so never guess). Regenerate the dashboard's calendar (`make schema`, which rewrites
 `dashboard/src/lib/market-calendar.json`) in the same pull request.
 
+The weekly economic calendar (`wt.ops.econ_calendar`) reads FOMC decisions from the Fed's page. When the Fed lists an
+unscheduled, cancelled or conference-call meeting, the Fed source reports not ok and keeps the last good dates until
+the reader (`parse_fed`) is taught the new row; that is by design. The job's log names the year and the row's shape.
+
 Owner note, the end of the exchange calendar: `wt.options.levels.is_session` raises for any date after its
 `CALENDAR_THROUGH` (2029-12-31). NYSE's own page listed 2026 to 2028, so the 2029 rows are marked `expected` in
 `dashboard/src/lib/market-calendar.json`; Alpaca's trading calendar answered only to 2029-12-24, so Christmas 2029

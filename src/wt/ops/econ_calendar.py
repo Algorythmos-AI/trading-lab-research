@@ -100,6 +100,24 @@ def _fed_month(word: str) -> int | None:
     return _MONTHS.get(w) or next((n for name, n in _MONTHS.items() if len(w) >= 3 and name.startswith(w)), None)
 
 
+def _excerpt(text: str) -> str:
+    """At most 40 characters of a cell, letters, digits, spaces and basic punctuation only, for a problem line."""
+    return re.sub(r"[^A-Za-z0-9 .,:;()/*'-]", "", " ".join(text.split()))[:40]
+
+
+def _date_shape(date_txt: str) -> str:
+    """The shape of a meeting's date cell, in words: the reader knows "two-day" (with or without the projections
+    star) and the skipped unscheduled meetings and notation votes; anything else is named for the problem line."""
+    t = " ".join(date_txt.split())
+    if re.fullmatch(r"\d{1,2}-\d{1,2}\*?", t):
+        return "two-day"
+    if re.fullmatch(r"\d{1,2}\*?", t):
+        return "one-day"
+    if "(" in t:
+        return "a day with a note in brackets"
+    return "an unrecognised date"
+
+
 def fed_panels(page: str) -> dict[int, str]:
     """Each year's panel on the Fed's calendar page: the text from its heading to the next heading."""
     heads = list(FED_HEADING.finditer(page))
@@ -128,6 +146,7 @@ def parse_fed(page: str, years: Iterable[int], required: Iterable[int] | None = 
                 raise SourceError(f"fed: no {year} panel")
             continue
         n = 0
+        unusual: list[str] = []
         for month_html, date_html in re.findall(
                 r'fomc-meeting__month[^>]*>(.*?)</div>\s*<div[^>]*fomc-meeting__date[^>]*>(.*?)</div>', panel, re.S):
             month_txt = html.unescape(re.sub(r"<[^>]+>", " ", month_html)).strip().lower()
@@ -138,14 +157,19 @@ def parse_fed(page: str, years: Iterable[int], required: Iterable[int] | None = 
             months = [_fed_month(w) for w in words]
             days = [int(d) for d in re.findall(r"\d{1,2}", date_txt)]
             if not months or None in months or not days:
-                raise SourceError(f"fed: unreadable meeting {month_txt!r} {date_txt!r}")
+                what = "a month cell with a word that is not a month" if words else "a month cell with no month"
+                raise SourceError(f"fed: {year}: unreadable meeting row, {what if days else 'a date cell with no day'}: "
+                                  f'"{_excerpt(month_txt + " " + date_txt)}"')
+            if (shape := _date_shape(date_txt)) != "two-day":
+                unusual.append(f'{shape} "{_excerpt(month_txt + " " + date_txt)}"')
             # Two months named ("Apr/May", "30-1"): the decision falls in the last month named, on the last day.
             last_month = months[-1]
             assert last_month is not None
             out.add(("fomc_decision", dt.date(year, last_month, days[-1]).isoformat()))
             n += 1
         if n != FED_MEETINGS_PER_YEAR:
-            raise SourceError(f"fed: {n} scheduled meetings in {year}")
+            rows = f"; rows of a shape it does not expect: {', '.join(unusual[:3])}" if unusual else ""
+            raise SourceError(f"fed: {n} scheduled meetings in {year}, {FED_MEETINGS_PER_YEAR} expected{rows}")
     return out
 
 
@@ -350,7 +374,9 @@ def collect(get: Get, env: dict[str, str], state: dict[str, Any], start: str, en
         page = get(FED_URL, {})
         got = parse_fed(page, years, required)
         listed = fed_panels(page)
-        kept = {r for r in prev_fed if int(r[1][:4]) < this_year and int(r[1][:4]) not in listed}
+        # Past years the page no longer lists keep their last good rows, within the market range's years only, so rows
+        # from before the range never pile up in the last good state.
+        kept = {r for r in prev_fed if int(r[1][:4]) in years and int(r[1][:4]) < this_year and int(r[1][:4]) not in listed}
         if later := [y for y in years if y >= this_year and y not in listed]:
             notes.append(f"fed: no panel yet for {', '.join(map(str, later))}: not yet announced, not missing")
         return got | kept

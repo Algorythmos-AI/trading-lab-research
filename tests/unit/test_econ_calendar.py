@@ -314,6 +314,58 @@ def test_nine_scheduled_meetings_in_a_year_fail_and_keep_the_last_good_rows(tmp_
     assert fed["ok"] is False and fed["rows"] == 16 and fed["fetched_at"] == NOW.isoformat()
 
 
+def _with_row(page: str, year: int, month: str, date: str) -> str:
+    """The page with one more meeting row at the top of `year`'s panel."""
+    row = f'<div class="fomc-meeting__month"><strong>{month}</strong></div><div class="fomc-meeting__date">{date}</div>'
+    i = page.index(f">{year} FOMC Meetings<") + len(f">{year} FOMC Meetings<")
+    return page[:i] + row + page[i:]
+
+
+@pytest.mark.parametrize(("month", "date", "shape"), [
+    ("August", "3*", "one-day"),
+    ("November", "17-18 (cancelled)", "a day with a note in brackets"),
+    ("October", "15 (conference call)", "a day with a note in brackets"),
+])
+def test_a_row_the_reader_does_not_know_fails_safe_and_says_what_it_is(tmp_path, capsys, month, date, shape):
+    assert run(tmp_path, fake_get())[0] == 0                          # 16 rows kept as last good
+    capsys.readouterr()
+    code, doc = run(tmp_path, fake_get(fed=_with_row(FED, 2026, month, date)), clock=NOW + dt.timedelta(days=7))
+    assert code == 1
+    fed = fed_status(doc)
+    assert fed["ok"] is False and fed["rows"] == 16 and fed["fetched_at"] == NOW.isoformat()
+    assert len([e for e in doc["events"] if e["code"] == "fomc_decision"]) == 16
+    line = next(x for x in capsys.readouterr().err.splitlines() if x.startswith("fed:"))
+    assert line.startswith("fed: fed: 9 scheduled meetings in 2026, 8 expected; rows of a shape it does not expect: ")
+    excerpt = f"{month.lower()} {date}"
+    assert f'{shape} "{excerpt}"' in line and len(excerpt) <= 40
+
+
+def test_a_problem_line_quotes_at_most_forty_plain_characters():
+    long = "<b>Septembre</b> & " + "x" * 80
+    with pytest.raises(ec.SourceError) as e:
+        ec.parse_fed(_panel([(long, "16-17")] + [("July", f"{d}-{d + 1}") for d in range(1, 15, 2)]), [2030])
+    quoted = re.search(r'"(.*)"', str(e.value))
+    assert quoted and len(quoted.group(1)) <= 40 and re.fullmatch(r"[A-Za-z0-9 .,:;()/*'-]*", quoted.group(1))
+    assert "a month cell with a word that is not a month" in str(e.value)
+
+
+def test_rows_before_the_range_never_pile_up_in_the_last_good_state(tmp_path):
+    # The state holds 2024 and 2025 rows (before the range's start, 2026) and the page has dropped its 2025 panel.
+    old = [("fomc_decision", d) for d in REAL_DECISIONS[2025]]
+    state = {"fed": {"fetched_at": NOW.isoformat(), "stale_since": None,
+                     "rows": old + [("fomc_decision", "2024-12-18")] + sorted(ec.parse_fed(FED, [2026, 2027]))}}
+    (tmp_path / "last_good.json").write_text(json.dumps(state))
+    page = drop_panel(FED, 2025)
+    sizes = []
+    for k in range(3):
+        code, doc = run(tmp_path, fake_get(fed=page), clock=NOW + dt.timedelta(days=7 * (k + 1)))
+        assert code == 0 and fed_status(doc)["ok"] is True
+        rows = json.loads((tmp_path / "last_good.json").read_text())["fed"]["rows"]
+        assert all(d >= "2026-01-01" for _, d in rows)
+        sizes.append(len(rows))
+    assert sizes == [16, 16, 16]
+
+
 def test_the_current_new_york_years_panel_is_required(tmp_path):
     # 00:30 on 1 January 2027 in New York: 2027 has begun, and its panel is gone.
     code, doc = run(tmp_path, fake_get(fed=drop_panel(FED, 2027)), clock=dt.datetime(2027, 1, 1, 5, 30, tzinfo=dt.UTC))
