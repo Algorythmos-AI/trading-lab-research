@@ -12,7 +12,8 @@ const SYD = "Australia/Sydney";
 const NY = "America/New_York";
 
 export const RANGE: { start: string; end: string } = data.range;
-/** The years the page can draw: every year the file covers in full. */
+/** The years the page can draw: each year from the file's first day to its last, a year it covers only in part
+ * included (its days past the file's end are drawn as such). The file now covers whole years. */
 export const YEARS: number[] = (() => {
   const out: number[] = [];
   for (let y = Number(RANGE.start.slice(0, 4)); y <= Number(RANGE.end.slice(0, 4)); y++) out.push(y);
@@ -23,11 +24,26 @@ export const OPTIONS_NAMES: string[] = data.options_names;
 const SESSIONS = new Set<string>(data.sessions);
 const HOLIDAYS = new Map<string, string>(data.holidays.map((h) => [h.date, h.name]));
 const HALF_DAYS = new Map<string, { label: string; close: number }>(data.half_days.map((h) => [h.date, { label: h.label, close: hhmm(h.close_et) }]));
-/** Holidays and half days the exchange has not published yet (the file's quality "expected"). */
-const EXPECTED_DAYS = new Set<string>([...data.holidays, ...data.half_days].filter((h) => h.quality === "expected").map((h) => h.date));
-export const isExpectedDay = (day: string): boolean => EXPECTED_DAYS.has(day);
+/** Holidays and half days the exchange has not published yet: "expected" (Alpaca and the rules agree) or "rule"
+ * (past Alpaca's last listed day, the rules alone). */
+const UNPUBLISHED = new Map<string, string>([...data.holidays, ...data.half_days].filter((h) => h.quality !== "confirmed").map((h) => [h.date, h.quality]));
+export const isExpectedDay = (day: string): boolean => UNPUBLISHED.has(day);
+/** The days, rows or not, that rest on the exchange's rules alone: after Alpaca's last listed day. */
+const RULE_ONLY: { from: string; through: string } | null = (() => {
+  const c = data.checked_against.find((x) => x.source === "exchange_calendars XNYS rules only");
+  return c ? { from: c.from, through: c.through } : null;
+})();
+const ALPACA_LAST = data.checked_against.find((x) => x.source === "Alpaca /v2/calendar")?.through ?? null;
+/** What the page calls a day outside the file. */
+export const PAST_END = `past the calendar's end (${shortDayOf(RANGE.end)})`;
+const BEFORE_START = `before the calendar's start (${shortDayOf(RANGE.start)})`;
 const OPEN_MIN = hhmm(data.open_et);
 const CLOSE_MIN = hhmm(data.close_et);
+
+function shortDayOf(day: string): string {
+  const d = new Date(`${day}T12:00:00Z`);
+  return `${d.getUTCDate()} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
 
 function hhmm(s: string): number {
   const [h, m] = s.split(":").map(Number);
@@ -500,6 +516,7 @@ export function yearView(year: number, now: Date, you: ReadonlyMap<string, YourD
     const first = `${key}-01`;
     const cells: (DayCell | null)[] = Array.from({ length: (weekday(first) + 6) % 7 }, () => null);
     const view: MonthView = { key, label: monthName(key), weeks: [], marketDays: 0, started: first <= today, daysTraded: 0, ruleDays: 0, pnl: 0, notes: [] };
+    const outside: string[] = [];
     for (let day = first; day.startsWith(key); day = addDays(day, 1)) {
       const s = sessionOf(day);
       const trading = s.kind === "open" || s.kind === "half";
@@ -524,12 +541,33 @@ export function yearView(year: number, now: Date, you: ReadonlyMap<string, YourD
         if (mine.broke) view.ruleDays++;
       }
       const d = Number(day.slice(8));
-      const expected = EXPECTED_DAYS.has(day) ? " (expected: NYSE has not published this year yet)" : "";
+      const q = UNPUBLISHED.get(day);
+      const expected =
+        q === "rule"
+          ? ` (rule only: after Alpaca's last listed day${ALPACA_LAST ? `, ${shortDayOf(ALPACA_LAST)}` : ""}; NYSE has not published this year yet)`
+          : q
+            ? " (expected: NYSE has not published this year yet)"
+            : "";
       if (s.kind === "closed") view.notes.push(`${d}: ${s.name}, closed${expected}`);
       if (s.kind === "half") view.notes.push(`${d}: ${s.name}, closes 1 pm New York${expected}`);
+      if (s.kind === "out_of_range") {
+        cell.name = day > RANGE.end ? PAST_END : BEFORE_START;
+        outside.push(day);
+      }
       if (cell.clocks) view.notes.push(`${d}: ${cell.clocks.where} clocks go ${cell.clocks.direction}`);
       if (cell.move) view.notes.push(`${d}: the open moves to ${cell.move.to} Sydney (was ${cell.move.from})`);
       cells.push(cell);
+    }
+    if (RULE_ONLY && RULE_ONLY.from.startsWith(key)) {
+      const a = Number(RULE_ONLY.from.slice(8));
+      const b = RULE_ONLY.through.startsWith(key) ? Number(RULE_ONLY.through.slice(8)) : null;
+      view.notes.push(`${a}${b ? `–${b}` : " on"}: by the exchange's rules only, after Alpaca's last listed day${ALPACA_LAST ? ` (${shortDayOf(ALPACA_LAST)})` : ""}`);
+    }
+    // Days outside the file: one line for the run past its end, one for the run before its start.
+    for (const run of [outside.filter((x) => x < RANGE.start), outside.filter((x) => x > RANGE.end)]) {
+      if (!run.length) continue;
+      const [a, b] = [Number(run[0]!.slice(8)), Number(run.at(-1)!.slice(8))];
+      view.notes.push(`${a === b ? a : `${a}–${b}`}: ${run[0]! > RANGE.end ? PAST_END : BEFORE_START}`);
     }
     while (cells.length % 7) cells.push(null);
     for (let i = 0; i < cells.length; i += 7) view.weeks.push(cells.slice(i, i + 7));
@@ -606,7 +644,7 @@ const list = (ds: readonly string[]) => (ds.length ? ds.map(dayWords).join(" and
 /** The minimum a page needs of the published calendar to say how far to trust it. */
 export interface CalendarState {
   as_of: string;
-  sources: readonly { id: string; configured: boolean; ok: boolean; fetched_at: string | null; stale_since: string | null }[];
+  sources: readonly { id: string; configured: boolean; ok: boolean; fetched_at: string | null; stale_since: string | null; note?: string }[];
   disagreements: readonly { code: string; month: string; source: string; dates: readonly string[]; other_source: string; other_dates: readonly string[] }[];
 }
 
@@ -634,6 +672,8 @@ export function releaseNotes(status: "ok" | "missing" | "error", doc: CalendarSt
         text: s.fetched_at ? `${name} could not be read on the last run; its dates from ${dayWords(s.fetched_at.slice(0, 10))} are shown.` : `${name} could not be read, and has never been: its releases are missing.`,
       });
     }
+    // What a good read did not cover, as the job says it (the Fed: the years it has not published yet).
+    if (s.ok && s.note) out.push({ tone: "info", text: `${name}: ${s.note}.` });
   }
   for (const d of doc.disagreements) {
     out.push({ tone: "warn", text: `${SHORT_LABEL[d.code] ?? d.code}, ${monthWords(d.month)}: ${SOURCE_NAME[d.source] ?? d.source} gives ${list(d.dates)}, ${SOURCE_NAME[d.other_source] ?? d.other_source} gives ${list(d.other_dates)}. Check before trading around it.` });

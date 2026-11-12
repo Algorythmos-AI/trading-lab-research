@@ -15,11 +15,12 @@ from dataclasses import dataclass, field
 from typing import Any, TypedDict
 
 # ---------------------------------------------------------------- calendar
-# NYSE full-day closures, 2024 to 2029-12-24. In the cloud project these were checked against two years of IBKR's
+# NYSE full-day closures, 2024 to 2029. In the cloud project these were checked against two years of IBKR's
 # daily bars; that check needs real bars and did not move here. Dates before 2024 are not covered and read as sessions.
 # 2026 on equals the Calendar page's file (dashboard/src/lib/market-calendar.json; tests/unit/test_market_calendar.py
-# ties the two). NYSE's own page lists the holidays through 2028; 2029 rests on the exchange's fixed rules and on
-# Alpaca's calendar, which ends on 2029-12-24, so CALENDAR_THROUGH stops there.
+# ties the two). NYSE's own page lists the holidays through 2028. 2029 rests on the exchange's fixed rules and, to
+# 2029-12-24, on Alpaca's calendar, which lists nothing later: Christmas 2029 and the last four sessions of the year
+# are the rules' alone (the library exchange_calendars XNYS, as pinned in the dev lock).
 HOLIDAYS = {
     # 2024
     "2024-01-01", "2024-01-15", "2024-02-19", "2024-03-29", "2024-05-27", "2024-06-19", "2024-07-04",
@@ -36,15 +37,15 @@ HOLIDAYS = {
     # 2028 (1 January is a Saturday: no New Year's Day holiday is observed)
     "2028-01-17", "2028-02-21", "2028-04-14", "2028-05-29", "2028-06-19", "2028-07-04", "2028-09-04",
     "2028-11-23", "2028-12-25",
-    # 2029, to 24 December (expected: NYSE has not published 2029)
+    # 2029 (expected: NYSE has not published 2029; 25 December by the rules only, after Alpaca's last day)
     "2029-01-01", "2029-01-15", "2029-02-19", "2029-03-30", "2029-05-28", "2029-06-19", "2029-07-04",
-    "2029-09-03", "2029-11-22",
+    "2029-09-03", "2029-11-22", "2029-12-25",
 }
 # 1:00 pm ET closes.
 HALF_DAYS = {"2024-07-03", "2024-11-29", "2024-12-24", "2025-07-03", "2025-11-28", "2025-12-24",
              "2026-11-27", "2026-12-24", "2027-11-26", "2028-07-03", "2028-11-24",
              "2029-07-03", "2029-11-23", "2029-12-24"}
-CALENDAR_THROUGH = "2029-12-24"
+CALENDAR_THROUGH = "2029-12-31"
 
 
 def is_session(d: str) -> bool:

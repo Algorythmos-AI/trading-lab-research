@@ -47,33 +47,58 @@ def test_matches_nyse_published_list():
 def test_every_row_says_whether_nyse_has_published_its_year():
     script = _script()
     assert script.PUBLISHED_THROUGH == f"{NYSE['years'][-1]}-12-31"
+    assert script.ALPACA_THROUGH == ALPACA["answered"]["last"]
     for row in CAL["holidays"] + CAL["half_days"]:
-        assert row["quality"] == ("confirmed" if row["date"][:4] in NYSE["years"] else "expected"), row
+        want = ("confirmed" if row["date"][:4] in NYSE["years"]
+                else "expected" if row["date"] <= script.ALPACA_THROUGH else "rule")
+        assert row["quality"] == want, row
     assert {r["date"] for r in CAL["holidays"] + CAL["half_days"] if r["quality"] == "expected"} == {
         "2029-01-01", "2029-01-15", "2029-02-19", "2029-03-30", "2029-05-28", "2029-06-19", "2029-07-04",
         "2029-09-03", "2029-11-22", "2029-07-03", "2029-11-23", "2029-12-24"}
+    # Only Christmas 2029 is a rule-only row; the four sessions after it carry no row, and the header says so.
+    assert [r["date"] for r in CAL["holidays"] + CAL["half_days"] if r["quality"] == "rule"] == ["2029-12-25"]
     assert CAL["checked_against"] == script.CHECKED_AGAINST
-    assert [c["through"] for c in CAL["checked_against"]] == [script.PUBLISHED_THROUGH, ALPACA["answered"]["last"]]
+    spans = [(c["source"], c["from"], c["through"]) for c in CAL["checked_against"]]
+    assert spans == [("NYSE Holidays and Trading Hours", "2026-01-01", "2028-12-31"),
+                     ("Alpaca /v2/calendar", "2026-01-01", "2029-12-24"),
+                     ("exchange_calendars XNYS rules only", "2029-12-25", CAL["range"]["end"])]
+    assert "2029-12-24" in CAL["checked_against"][2]["note"] and "rule only" in CAL["checked_against"][2]["note"]
 
 
-def test_matches_alpacas_calendar_over_the_whole_range():
-    """The whole file, day by day, against Alpaca's answer (fetched once by hand; nothing calls it at run time)."""
-    assert CAL["range"] == {"start": "2026-01-01", "end": ALPACA["answered"]["last"]}
+def test_matches_alpacas_calendar_as_far_as_it_answered():
+    """The file, day by day, against Alpaca's answer (fetched once by hand; nothing calls it at run time). Only to
+    2029-12-24: Alpaca lists nothing after that day, so the rest of 2029 is checked against the rules below."""
+    last = ALPACA["answered"]["last"]
+    assert CAL["range"] == {"start": "2026-01-01", "end": "2029-12-31"} and last == "2029-12-24"
     assert CAL["sessions"][0] == ALPACA["answered"]["first"]
     closed = set(ALPACA["closed_weekdays"])
     want, day = [], dt.date.fromisoformat(CAL["range"]["start"])
-    while day.isoformat() <= CAL["range"]["end"]:
+    while day.isoformat() <= last:
         if day.weekday() < 5 and day.isoformat() not in closed:
             want.append(day.isoformat())
         day += dt.timedelta(days=1)
-    assert CAL["sessions"] == want
-    assert [h["date"] for h in CAL["holidays"]] == ALPACA["closed_weekdays"]
-    assert {h["date"]: h["close_et"] for h in CAL["half_days"]} == ALPACA["early_closes"]
+    assert [d for d in CAL["sessions"] if d <= last] == want
+    assert [h["date"] for h in CAL["holidays"] if h["date"] <= last] == ALPACA["closed_weekdays"]
+    assert {h["date"]: h["close_et"] for h in CAL["half_days"] if h["date"] <= last} == ALPACA["early_closes"]
     assert [CAL["open_et"]] == ALPACA["open_et"]
     by_year: dict[str, int] = {}
     for d in CAL["sessions"]:
-        by_year[d[:4]] = by_year.get(d[:4], 0) + 1
+        if d <= last:
+            by_year[d[:4]] = by_year.get(d[:4], 0) + 1
     assert by_year == ALPACA["sessions_per_year"]
+
+
+def test_the_days_after_alpacas_last_are_the_librarys_rules():
+    """2029-12-25 to 2029-12-31 rest on the exchange's rules alone, as the pinned exchange_calendars reads them."""
+    xcals = pytest.importorskip("exchange_calendars")
+    cal = xcals.get_calendar("XNYS", start="2029-12-01", end="2029-12-31")
+    rules = [ts.date().isoformat() for ts in cal.sessions if ts.date().isoformat() > "2029-12-24"]
+    assert rules == ["2029-12-26", "2029-12-27", "2029-12-28", "2029-12-31"]
+    assert [d for d in CAL["sessions"] if d > "2029-12-24"] == rules
+    assert [h for h in CAL["holidays"] if h["date"] > "2029-12-24"] == [
+        {"date": "2029-12-25", "name": "Christmas Day", "quality": "rule"}]
+    assert not [h for h in CAL["half_days"] if h["date"] > "2029-12-24"]
+    assert not levels.is_session("2029-12-25") and "2029-12-25" in levels.HOLIDAYS
 
 
 def test_matches_the_options_desk_list():
@@ -143,8 +168,34 @@ def test_session_counts():
     by_year: dict[str, int] = {}
     for d in CAL["sessions"]:
         by_year[d[:4]] = by_year.get(d[:4], 0) + 1
-    # 2029 stops at Monday 24 December: the 26th, 27th, 28th and 31st are past the range.
-    assert by_year == {"2026": 251, "2027": 251, "2028": 251, "2029": 247}
+    assert by_year == {"2026": 251, "2027": 251, "2028": 251, "2029": 251}
+    assert len([d for d in CAL["sessions"] if d.startswith("2029-12")]) == 20
+
+
+def test_an_event_row_after_the_end_fails_the_build(tmp_path, monkeypatch):
+    mod = _script()
+    macro = tmp_path / "macro.csv"
+    macro.write_text("date,time_et,type,severity,policy,source,quality\n"
+                     "2025-06-11,08:30,cpi,high,skip,bls,exact\n2030-01-11,08:30,cpi,high,skip,bls,exact\n")
+    monkeypatch.setattr(mod, "MACRO", macro)
+    with pytest.raises(SystemExit, match="1 rows after the calendar's end 2029-12-31 \\(2030-01-11\\)"):
+        mod.events()
+    earnings = tmp_path / "earnings.csv"
+    earnings.write_text("symbol,date,when,source,quality\nNVDA,2030-02-20,amc,x,expected\n")
+    monkeypatch.setattr(mod, "MACRO", mod.ROOT / "config" / "events" / "macro_events.csv")
+    monkeypatch.setattr(mod, "EARNINGS", earnings)
+    with pytest.raises(SystemExit, match="earnings.csv: 1 rows after"):
+        mod.events()
+
+
+def test_an_event_row_before_the_start_is_history_and_is_left_out():
+    """macro_events.csv keeps the dates the paper runners and the backtests trade around from 2019; the page draws no
+    year before START, so those rows are not in the file (and do not fail the build)."""
+    mod = _script()
+    rows = mod._rows(mod.MACRO)
+    assert any(r["date"] < mod.START for r in rows)
+    assert all(e["date"] >= mod.START for e in CAL["macro"])
+    assert len(CAL["macro"]) == len([r for r in rows if mod.START <= r["date"] <= mod.END])
 
 
 def test_unknown_holiday_name_fails_the_build():

@@ -1,10 +1,10 @@
 // The exchange calendar's 2028 and 2029, as the page and the desk read it (market-calendar.ts over
-// market-calendar.json). 2028 is as NYSE publishes it; 2029 runs to Monday 24 December, where Alpaca's calendar
-// ends, and its rows are marked expected. tests/unit/test_market_calendar.py ties the same file to the Python
+// market-calendar.json). 2028 is as NYSE publishes it; 2029's rows are marked expected (Alpaca and the rules) to
+// Monday 24 December, where Alpaca's calendar ends, and rule (the rules alone) after it. tests/unit/test_market_calendar.py ties the same file to the Python
 // calendar (wt.options.levels) day by day; this file ties the TypeScript reading of it to the file.
 import { describe, expect, it } from "vitest";
 import data from "@/lib/market-calendar.json";
-import { clockSwitches, isExpectedDay, RANGE, sessionMoves, sessionOf, sydneySession, yearView } from "@/lib/market-calendar";
+import { clockSwitches, isExpectedDay, PAST_END, RANGE, releaseNotes, sessionMoves, sessionOf, sydneySession, tradingDaysLeft, yearView } from "@/lib/market-calendar";
 import { nyInstant } from "@/lib/options";
 
 const HOLIDAYS: Record<string, string> = {
@@ -26,6 +26,7 @@ const HOLIDAYS: Record<string, string> = {
   "2029-07-04": "Independence Day",
   "2029-09-03": "Labor Day",
   "2029-11-22": "Thanksgiving Day",
+  "2029-12-25": "Christmas Day",
 };
 const EARLY_CLOSES: Record<string, string> = {
   "2028-07-03": "Day before Independence Day",
@@ -93,7 +94,9 @@ describe("2028 and 2029", () => {
     expect(data.sessions.find((d) => d.startsWith("2028"))).toBe("2028-01-03");
     expect(data.sessions.filter((d) => d.startsWith("2028")).at(-1)).toBe("2028-12-29");
     expect(data.sessions.find((d) => d.startsWith("2029"))).toBe("2029-01-02");
-    expect(data.sessions.at(-1)).toBe("2029-12-24");
+    expect(data.sessions.filter((d) => d > "2029-12-24")).toEqual(["2029-12-26", "2029-12-27", "2029-12-28", "2029-12-31"]);
+    expect(data.sessions.at(-1)).toBe("2029-12-31");
+    expect(data.sessions.filter((d) => d.startsWith("2029")).length).toBe(251);
     expect(sessionOf("2028-02-29").kind).toBe("open");
   });
 
@@ -102,9 +105,35 @@ describe("2028 and 2029", () => {
     expect(notes(2028, 11)).toContain("23: Thanksgiving Day, closed");
     expect(notes(2029, 11)).toContain("22: Thanksgiving Day, closed (expected: NYSE has not published this year yet)");
     expect(notes(2029, 12)).toContain("24: Christmas Eve, closes 1 pm New York (expected: NYSE has not published this year yet)");
-    // Past the file, nothing is said about 25 December 2029, and the days are not counted as market days.
-    expect(notes(2029, 12).some((n) => n.startsWith("25:"))).toBe(false);
-    expect(yearView(2029, new Date("2026-11-12T00:00:00Z"), new Map(), new Map())[11]!.marketDays).toBe(16);
+    // After Alpaca's last listed day the rules alone stand behind the days: the holiday's note and the month say so.
+    expect(notes(2029, 12)).toContain("25: Christmas Day, closed (rule only: after Alpaca's last listed day, 24 Dec 2029; NYSE has not published this year yet)");
+    expect(notes(2029, 12)).toContain("25–31: by the exchange's rules only, after Alpaca's last listed day (24 Dec 2029)");
+    const dec = yearView(2029, new Date("2026-11-12T00:00:00Z"), new Map(), new Map())[11]!;
+    expect(dec.marketDays).toBe(20);
+    expect(dec.weeks.flat().filter((c) => c?.kind === "out_of_range")).toEqual([]);
+    expect(yearView(2029, new Date("2026-11-12T00:00:00Z"), new Map(), new Map()).reduce((n, m) => n + m.marketDays, 0)).toBe(251);
+  });
+
+  it("counts trading days left all through 2029", () => {
+    const ny = (iso: string) => new Date(iso);
+    expect(tradingDaysLeft(ny("2029-01-02T14:00:00Z"))).toBe(251);
+    expect(tradingDaysLeft(ny("2029-07-02T14:00:00Z"))).toBe(127);
+    expect(tradingDaysLeft(ny("2029-12-26T15:00:00Z"))).toBe(4);
+    expect(tradingDaysLeft(ny("2029-12-31T22:00:00Z"))).toBe(0);
+  });
+
+  it("a day past the file is drawn as such, not as a weekend, and says why", () => {
+    expect(PAST_END).toBe("past the calendar's end (31 Dec 2029)");
+    const jan = yearView(2030, new Date("2026-11-12T00:00:00Z"), new Map(), new Map())[0]!;
+    const cells = jan.weeks.flat().filter((c) => c !== null);
+    expect(cells.every((c) => c.kind === "out_of_range" && c.name === PAST_END)).toBe(true);
+    expect(jan.marketDays).toBe(0);
+    expect(jan.notes).toEqual(["1–31: past the calendar's end (31 Dec 2029)"]);
+  });
+
+  it("the economic calendar's note on a year the Fed has not published is shown, not dropped", () => {
+    const doc = { as_of: "2026-11-12T00:00:00Z", disagreements: [], sources: [{ id: "fed", configured: true, ok: true, fetched_at: "2026-11-12T00:00:00Z", stale_since: null, note: "no panel yet for 2028, 2029: those months are not yet announced, not missing" }] };
+    expect(releaseNotes("ok", doc, [], new Date("2026-11-12T01:00:00Z"))).toContainEqual({ tone: "info", text: "Federal Reserve: no panel yet for 2028, 2029: those months are not yet announced, not missing." });
   });
 });
 

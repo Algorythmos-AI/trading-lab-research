@@ -1082,7 +1082,7 @@ describe("the tool's safety (revision 3)", () => {
   it("a day outside the calendar's range gets its own line", async () => {
     const h = harness({ iex: [], sip: [], site: [] });
     expect(await main(["--day", "2025-12-31", "--edition", "/ed.json"], h.deps)).toBe(EXIT.refused);
-    expect(h.printed).toEqual(["refused: 2025-12-31 is outside the exchange calendar's range (2026-01-01 to 2029-12-24)"]);
+    expect(h.printed).toEqual(["refused: 2025-12-31 is outside the exchange calendar's range (2026-01-01 to 2029-12-31)"]);
   });
 
   it("a half day is accepted from 13:20 and refused at 13:19", async () => {

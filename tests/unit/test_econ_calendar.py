@@ -256,4 +256,4 @@ def test_the_trading_calendar_is_never_written(tmp_path):
 
 
 def test_the_range_is_the_market_calendars():
-    assert ec.market_range() == ("2026-01-01", "2029-12-24")
+    assert ec.market_range() == ("2026-01-01", "2029-12-31")

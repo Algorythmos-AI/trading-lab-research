@@ -6,7 +6,9 @@
 // Pure: no I/O, the clock is passed in. Every New York time goes through the exchange calendar (market-calendar.ts)
 // and nyInstant, never a fixed offset: weekends, holidays and half days come from the session list, "the next
 // session" is the next day the market opens, and both clock changes are right for New York and UTC schedules alike.
-// Outside the calendar file's range a weekday schedule is assumed and every result says so.
+// Outside the calendar file's range a weekday schedule is assumed and every result says so, but nothing pages on it:
+// the day may be a holiday the file does not know. The calendar's own end is warned and paged once a day, ahead of
+// time, by the pipeline check's calendar.sessions (wt.options.pipeline_check), not here per feed.
 //
 // This module is outside the shadow evaluator's engine (scripts/gen-engine.mjs walks the imports of desk-eval.ts):
 // it imports from the engine's files, and nothing in the engine imports it.
@@ -527,8 +529,10 @@ export function evaluateDoc(f: DocFeed, read: StampRead | undefined, refusal: Re
   const cur = slots[ci]!;
   const at = { due: cur.due, deadline: cur.deadline, for_session: cur.for_session, next_due: nextDue, age_min: age };
   const assumed = !f.verified || cur.assumed || cur.schedule.verified === false;
-  if (!read) return nothing(f, "unknown", "not-read", { ...at, assumed, episode: `unknown:${cur.day}` });
-  if (read.status === "error") return nothing(f, "unknown", "storage-error", { ...at, assumed, episode: `unknown:${cur.day}` });
+  // Past the calendar's end no incident is opened (no episode): the run may be on a holiday the file does not know.
+  const unknownEpisode = cur.assumed ? null : `unknown:${cur.day}`;
+  if (!read) return nothing(f, "unknown", "not-read", { ...at, assumed, episode: unknownEpisode });
+  if (read.status === "error") return nothing(f, "unknown", "storage-error", { ...at, assumed, episode: unknownEpisode });
 
   // Runs missed in a row, newest first, while each one hands over straight to the next (a run that lapses at the
   // close, like the pre-open refresh, does not carry yesterday's miss into today).
@@ -560,8 +564,9 @@ export function evaluateDoc(f: DocFeed, read: StampRead | undefined, refusal: Re
   const lateMin = firstMissedDeadline === null ? null : Math.max(0, Math.floor((nowMs - firstMissedDeadline) / MIN));
   // A refusal of THIS run's document pages on its own row (refusal-*), so this row stays quiet for this run only:
   // every later run that is missed pages as late in its own right, refusal or not.
-  // Outside the calendar's range a weekday schedule stands in and still pages, saying so; an unverified row never does.
-  const alerting = !refused && f.severity === "alert" && f.verified && m.schedule.verified !== false && misses >= f.misses_to_alert;
+  // Outside the calendar's range a weekday schedule stands in and is shown, saying so, but never pages (the day may be
+  // a holiday the file does not know); an unverified row never pages either.
+  const alerting = !refused && !m.assumed && f.severity === "alert" && f.verified && m.schedule.verified !== false && misses >= f.misses_to_alert;
   return {
     ...nothing(f, state, refused ? "refused" : why, at),
     late_min: lateMin,
@@ -607,7 +612,7 @@ export function evaluateShadow(f: ShadowFeed, read: Read<ShadowRead> | null, now
   if (!w) return nothing(f, "not_expected", "outside-session");
   const assumed = w.assumed || !f.verified;
   if (!read || read.status === "error" || read.status === "unreadable")
-    return nothing(f, "unknown", read ? "storage-error" : "not-read", { for_session: w.day, episode: `unknown:${w.day}`, assumed });
+    return nothing(f, "unknown", read ? "storage-error" : "not-read", { for_session: w.day, episode: w.assumed ? null : `unknown:${w.day}`, assumed });
   if (read.status === "missing" || !read.value.on) return nothing(f, "not_expected", "switch-off", { for_session: w.day, assumed });
   const v = read.value;
   // The first record is written once the first 2-minute bar has settled; a switch turned on later starts its clock.
@@ -625,7 +630,8 @@ export function evaluateShadow(f: ShadowFeed, read: Read<ShadowRead> | null, now
     late_min: Math.floor((nowMs - deadline) / MIN),
     misses: 1,
     episode: w.day,
-    alerting: f.severity === "alert" && f.verified,
+    // Past the calendar's end the session is assumed: shown late, never paged.
+    alerting: f.severity === "alert" && f.verified && !w.assumed,
   };
 }
 

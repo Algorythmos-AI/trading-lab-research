@@ -48,14 +48,15 @@ const trade = (pnl: number, opened: string, closed: string, extra: Partial<Trade
 });
 
 describe("the market days", () => {
-  it("covers 2026 to 24 December 2029, where Alpaca's calendar ends, and nothing past it", () => {
-    expect(RANGE).toEqual({ start: "2026-01-01", end: "2029-12-24" });
+  it("covers 2026 to 2029 and nothing past them", () => {
+    expect(RANGE).toEqual({ start: "2026-01-01", end: "2029-12-31" });
     expect(sessionOf("2025-12-31").kind).toBe("out_of_range");
     expect(sessionOf("2028-01-03")).toEqual({ kind: "open", name: null, open: 570, close: 960 });
     expect(sessionOf("2029-12-24")).toEqual({ kind: "half", name: "Christmas Eve", open: 570, close: 780 });
-    // Christmas Day 2029 is a holiday by every rule, but past the file the page says it does not know.
-    expect(sessionOf("2029-12-25").kind).toBe("out_of_range");
-    expect(sessionOf("2029-12-26").kind).toBe("out_of_range");
+    expect(sessionOf("2029-12-25")).toEqual({ kind: "closed", name: "Christmas Day", open: null, close: null });
+    expect(sessionOf("2029-12-31")).toEqual({ kind: "open", name: null, open: 570, close: 960 });
+    // New Year's Day 2030 is a holiday by every rule, but past the file the page says it does not know.
+    expect(sessionOf("2030-01-01").kind).toBe("out_of_range");
   });
 
   it("names the holidays and the half days", () => {
@@ -90,8 +91,10 @@ describe("trading days left", () => {
     expect(tradingDaysLeft(ny("2026-12-31", "15:00"))).toBe(1);
     expect(tradingDaysLeft(ny("2026-12-31", "16:30"))).toBe(0);
     expect(tradingDaysLeft(ny("2028-12-29", "15:00"))).toBe(1);
-    // 2029 ends past the file (24 December), so no count is given for it rather than a short one.
-    expect(tradingDaysLeft(ny("2029-06-01", "10:00", 4))).toBeNull();
+    expect(tradingDaysLeft(ny("2029-01-02", "09:00"))).toBe(251);
+    expect(tradingDaysLeft(ny("2029-12-24", "12:00"))).toBe(5);
+    expect(tradingDaysLeft(ny("2029-12-31", "15:00"))).toBe(1);
+    expect(tradingDaysLeft(ny("2029-12-31", "16:30"))).toBe(0);
     expect(tradingDaysLeft(ny("2030-01-08", "10:00"))).toBeNull();
   });
 });

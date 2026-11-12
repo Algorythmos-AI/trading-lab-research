@@ -3,18 +3,26 @@
  "generated_with": "exchange-calendars 4.13.2",
  "range": {
   "start": "2026-01-01",
-  "end": "2029-12-24"
+  "end": "2029-12-31"
  },
  "checked_against": [
   {
    "source": "NYSE Holidays and Trading Hours",
    "read_on": "2026-11-12",
+   "from": "2026-01-01",
    "through": "2028-12-31"
   },
   {
    "source": "Alpaca /v2/calendar",
    "read_on": "2026-11-12",
+   "from": "2026-01-01",
    "through": "2029-12-24"
+  },
+  {
+   "source": "exchange_calendars XNYS rules only",
+   "from": "2029-12-25",
+   "through": "2029-12-31",
+   "note": "rule only: after Alpaca's last listed day, 2029-12-24, and not published by NYSE"
   }
  ],
  "open_et": "09:30",
@@ -1019,7 +1027,11 @@
   "2029-12-19",
   "2029-12-20",
   "2029-12-21",
-  "2029-12-24"
+  "2029-12-24",
+  "2029-12-26",
+  "2029-12-27",
+  "2029-12-28",
+  "2029-12-31"
  ],
  "holidays": [
   {
@@ -1211,6 +1223,11 @@
    "date": "2029-11-22",
    "name": "Thanksgiving Day",
    "quality": "expected"
+  },
+  {
+   "date": "2029-12-25",
+   "name": "Christmas Day",
+   "quality": "rule"
   }
  ],
  "half_days": [

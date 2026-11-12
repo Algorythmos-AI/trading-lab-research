@@ -6,10 +6,15 @@ in tests/unit/test_market_calendar.py regenerates it and compares byte for byte,
 published list (tests/fixtures/nyse/published_2026_2028.json) and against Alpaca's trading calendar as fetched once
 by hand (tests/fixtures/alpaca/calendar_2026_2029.json). Needs the dev lock (exchange-calendars).
 
-The range ends on the last day Alpaca's calendar answered, Monday 2029-12-24: its 2029 stops there, so the last four
-sessions of 2029 are left out rather than taken from the library's rules alone. Each holiday and half day carries a
-quality: "confirmed" through PUBLISHED_THROUGH, the end of the last year NYSE's own page lists, and "expected" after
-it (the library's rules and Alpaca agree, but the exchange has not published the year).
+The range ends on 2029-12-31, a whole year. Alpaca's calendar answered only to Monday 2029-12-24 (ALPACA_THROUGH), so
+the days after it (Christmas 2029 and the sessions of the 26th, 27th, 28th and 31st) rest on the library's rules
+alone. Each holiday and half day carries a quality: "confirmed" through PUBLISHED_THROUGH, the end of the last year
+NYSE's own page lists; "expected" after it while Alpaca agrees; and "rule" after ALPACA_THROUGH, where nothing but
+the exchange's fixed rules in the pinned library stands behind the day. `checked_against` says the same per range.
+
+A macro or earnings row after END fails the build: the page would not show it, and a release left out in silence is
+worse than a stopped build. Rows before START are the history the paper runners and the backtests read; the page
+draws no year before START, so they are left out of this file by design.
 
 It also carries, for the same range, the repo's own event calendars as they stand: config/events/macro_events.csv
 (the dates the paper runners trade around), config/events/earnings.csv and the Options desk's names
@@ -27,13 +32,18 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "dashboard" / "src" / "lib" / "market-calendar.json"
-START, END = "2026-01-01", "2029-12-24"
+START, END = "2026-01-01", "2029-12-31"
 # The last day of the last year NYSE publishes (its Holidays and Trading Hours page, read 2026-11-12: 2026 to 2028).
 PUBLISHED_THROUGH = "2028-12-31"
+# The last day Alpaca's /v2/calendar listed when it was fetched by hand (2026-11-12): it lists nothing after it.
+ALPACA_THROUGH = "2029-12-24"
+RULE_FROM = "2029-12-25"
 # What the generated days were checked against, for the reader of the file. The checks themselves are the tests.
 CHECKED_AGAINST = [
-    {"source": "NYSE Holidays and Trading Hours", "read_on": "2026-11-12", "through": PUBLISHED_THROUGH},
-    {"source": "Alpaca /v2/calendar", "read_on": "2026-11-12", "through": END},
+    {"source": "NYSE Holidays and Trading Hours", "read_on": "2026-11-12", "from": START, "through": PUBLISHED_THROUGH},
+    {"source": "Alpaca /v2/calendar", "read_on": "2026-11-12", "from": START, "through": ALPACA_THROUGH},
+    {"source": "exchange_calendars XNYS rules only", "from": RULE_FROM, "through": END,
+     "note": f"rule only: after Alpaca's last listed day, {ALPACA_THROUGH}, and not published by NYSE"},
 ]
 MACRO = ROOT / "config" / "events" / "macro_events.csv"
 EARNINGS = ROOT / "config" / "events" / "earnings.csv"
@@ -79,8 +89,12 @@ def _half_label(raw: str, day: dt.date) -> str:
 
 
 def _quality(day: dt.date) -> str:
-    """Whether NYSE has published the day's year: "confirmed" if it has, else "expected"."""
-    return "confirmed" if day.isoformat() <= PUBLISHED_THROUGH else "expected"
+    """The row's quality: "confirmed" when NYSE has published the day's year, "expected" when only Alpaca and the
+    rules stand behind it, "rule" past ALPACA_THROUGH, where only the rules do."""
+    iso = day.isoformat()
+    if iso <= PUBLISHED_THROUGH:
+        return "confirmed"
+    return "expected" if iso <= ALPACA_THROUGH else "rule"
 
 
 def _rows(path: Path) -> list[dict[str, str]]:
@@ -93,6 +107,11 @@ def events() -> dict[str, Any]:
 
     import yaml
 
+    for path, col in ((MACRO, "date"), (EARNINGS, "date")):
+        late = [r[col] for r in _rows(path) if r[col] > END]
+        if late:
+            raise SystemExit(f"{path.name}: {len(late)} rows after the calendar's end {END} ({', '.join(late[:5])}): "
+                             "extend START, END first")
     macro = []
     for r in _rows(MACRO):
         if START <= r["date"] <= END:
