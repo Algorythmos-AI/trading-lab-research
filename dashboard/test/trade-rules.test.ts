@@ -297,6 +297,13 @@ describe("dayCheck", () => {
     expect(one.line).toMatch(/ 1 position open: its open loss isn't priced here, and rule 7 counts it; check Webull\.$/);
     expect(one.openLine).toBe("1 position open: its open loss isn't priced here, and rule 7 counts it; check Webull.");
     const two = dayCheck(sessionView({ trades: [], open: [lot, { ...lot, strike: 765 }] }, now));
+    // Shares left in the account are not an option trade: alone they raise no caution, and beside an option they are not counted.
+    const share = { symbol: "AAA", kind: "stock" as const, strike: null, expiry: null, side: "long" as const, qty: 10, entry: 5, opened_at: "2026-09-01T14:45:00Z" };
+    const shares = dayCheck(sessionView({ trades: [], open: [share, { ...share, symbol: "BBB", qty: 1 }] }, now));
+    expect(shares.line).not.toMatch(/open loss/);
+    expect(shares.openLine ?? "").toBe("");
+    const mixed = dayCheck(sessionView({ trades: [], open: [lot, share] }, now));
+    expect(mixed.openLine).toBe("1 position open: its open loss isn't priced here, and rule 7 counts it; check Webull.");
     expect(two.line).toMatch(/2 positions open: their open loss isn't priced here, and rule 7 counts it; check Webull\./);
     expect(two).toMatchObject({ status: "clear", used: 2, net: 0 });
     expect(dayCheck(sessionView({ trades: [], open: [] }, now)).openLine).toBe("");
