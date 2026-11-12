@@ -37,6 +37,9 @@ Every difference is a minus b.
 - Switches away from SIP (rollbacks) and back: none (each one gets a dated line here and a dated note on DEC-0050).
 - Entry alerts first switched on in production: not yet (as DEC-0049 point 8 sets it for EXP-0031; the date goes
   here).
+- Signal words (DEC-0051) first shown on the page in production: not yet (DEC-0051 section 5; the date goes here).
+  This is a dated note only, not one of the early ends in `config.yaml`: seeing signals can change which trades the
+  owner takes, and the date lets a reader see it.
 
 ## Verdict
 

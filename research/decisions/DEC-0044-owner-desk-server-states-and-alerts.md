@@ -124,3 +124,16 @@ question in the note above. The text above is otherwise unchanged.
   server ran with different switches, or that the page took while it could not confirm its switches
   (`guards_unsure`), is counted apart in the shadow numbers, not compared. These data guards are
   DEC-0042's; section 4's guards on alerts are not amended.
+
+## Note on DEC-0051 (added 2026-11-13)
+
+DEC-0051, proposed on 2026-11-13, amends section 1 once it is accepted: a signal word and its contract are the lab's
+advisory reading, marked Testing, display only; nothing places, stages, routes or sizes an order, and the owner
+decides and enters every order by hand. The alert word it adds amends DEC-0049 point 6, not section 3 here. Sections
+2 to 6 are not amended: a "signal confirmed" alert is an entry alert under every guard of section 4, counts towards
+its cap of 5, and a break sends at most one alert of either kind; there is still no "ended" message. The signal
+record is written after this record's slot record and is not part of it: the record's bytes, timing and engine label
+are unchanged. The exact wording is in DEC-0051, "Amendments to earlier records". The text above is otherwise
+unchanged.
+
+No owner trade, P&L, state log or result was viewed for this note.
