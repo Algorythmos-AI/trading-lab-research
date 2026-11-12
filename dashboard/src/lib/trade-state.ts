@@ -600,7 +600,7 @@ export function nameState(n: NameInput): NameState {
     // (a stale or missing price says so first) and before the clock gates and every state that could suggest an entry.
     if (n.guardsOn && n.guardsOn.length > 0) {
       const gq = n.guardQuote === undefined ? q : n.guardQuote && n.guardQuote.day === n.session ? n.guardQuote : null;
-      const tripped = activeGuards(quoteGuards(gq), n.guardsOn);
+      const tripped = activeGuards(quoteGuards(gq, { today: n.session, now: t }), n.guardsOn);
       if (tripped.length > 0) return { ...row("paused", guardLine(tripped), null), guards: tripped };
     }
   }

@@ -180,14 +180,14 @@ describe("the server check and the guards' switches", () => {
       v: 1,
       switches: "ok",
       on: ["quote-crossed"],
-      names: SYMS.map((s) => (s === "SPY" ? { symbol: s, would: ["quote-crossed"], paused: "guard" } : { symbol: s, would: [], paused: null })),
+      names: SYMS.map((s) => (s === "SPY" ? { symbol: s, would: ["quote-crossed"], far_from_prior_close: false, paused: "guard" } : { symbol: s, would: [], far_from_prior_close: false, paused: null })),
     });
   });
 });
 
 describe("the observe-mode log", () => {
   it("with every switch off, still records per focus name which guards would have paused it, and pauses nothing", async () => {
-    const f = fakeDeps({ bend: (s, q) => (s === "SPY" ? suspectQuote(q, "bar-high-below-low") : s === "QQQ" ? suspectQuote(q, "price-far-from-prior-close") : q) });
+    const f = fakeDeps({ bend: (s, q) => (s === "SPY" ? suspectQuote(q, "bar-high-below-low") : s === "QQQ" ? suspectQuote(q, "print-far-outside-day-range") : q) });
     f.store.set("desk/eval.json", LOG);
     await runDeskEval(f.deps);
     const r = f.records()[0]![1];
@@ -197,7 +197,8 @@ describe("the observe-mode log", () => {
       on: [],
       names: SYMS.map((s) => ({
         symbol: s,
-        would: s === "SPY" ? ["bar-high-below-low", "bar-open-outside-range"] : s === "QQQ" ? ["price-far-from-prior-close"] : [],
+        would: s === "SPY" ? ["bar-high-below-low", "bar-open-outside-range"] : s === "QQQ" ? ["print-far-outside-day-range"] : [],
+        far_from_prior_close: s === "QQQ",
         paused: null,
       })),
     });
@@ -215,11 +216,19 @@ describe("the observe-mode log", () => {
   it("counts a stale name as paused for no fresh price; another day's snapshot would pause nothing", () => {
     const q: Quote = { price: 100, at: "2026-10-12T14:30:00.000Z", open: 99, high: 101, low: 98, day: S, prev_close: 99, vwap: null };
     const stale = { symbol: "QQQ", state: "paused", guards: undefined } as unknown as NameState;
-    const g = guardLogOf({ status: "ok", on: [] }, ["SPY", "QQQ", "AAPL"], { SPY: { ...suspectQuote(q, "quote-crossed"), day: "2026-10-09" }, QQQ: q }, S, [stale]);
+    const g = guardLogOf({ status: "ok", on: [] }, ["SPY", "QQQ", "AAPL"], { SPY: { ...suspectQuote(q, "quote-crossed"), day: "2026-10-09" }, QQQ: q }, S, [stale], Date.parse(q.at) + 5_000);
     expect(g.names).toEqual([
-      { symbol: "SPY", would: [], paused: null },
-      { symbol: "QQQ", would: [], paused: "stale" },
+      { symbol: "SPY", would: [], far_from_prior_close: false, paused: null },
+      { symbol: "QQQ", would: [], far_from_prior_close: false, paused: "stale" },
     ]);
+  });
+
+  it("records the prior-close fact on its own: a real 30% gap inside the day's range would pause nothing", () => {
+    const q: Quote = { price: 130, at: "2026-10-12T14:30:00.000Z", open: 129.5, high: 131, low: 129, day: S, prev_close: 100, vwap: null, bar_ok: true, prev_bar_ok: true };
+    const g = guardLogOf({ status: "ok", on: [] }, ["SPY"], { SPY: q }, S, [], Date.parse(q.at) + 5_000);
+    expect(g.names).toEqual([{ symbol: "SPY", would: [], far_from_prior_close: true, paused: null }]);
+    const print = guardLogOf({ status: "ok", on: [] }, ["SPY"], { SPY: { ...q, price: 132 } }, S, [], Date.parse(q.at) + 5_000);
+    expect(print.names).toEqual([{ symbol: "SPY", would: ["print-far-outside-day-range"], far_from_prior_close: true, paused: null }]);
   });
 
   it("when the snapshot answered but the bars did not, still counts the names; when the snapshot failed, writes no log", async () => {
@@ -228,7 +237,7 @@ describe("the observe-mode log", () => {
     await runDeskEval(noBars.deps);
     const a = noBars.records()[0]![1];
     expect(a.status).toBe("degraded");
-    expect(a.guards!.names.find((n) => n.symbol === "SPY")).toEqual({ symbol: "SPY", would: ["quote-crossed"], paused: null });
+    expect(a.guards!.names.find((n) => n.symbol === "SPY")).toEqual({ symbol: "SPY", would: ["quote-crossed"], far_from_prior_close: false, paused: null });
     const noSnap = fakeDeps({ fetchSnapshots: () => Promise.reject(new Error("alpaca 500")) });
     noSnap.store.set("desk/eval.json", LOG);
     await runDeskEval(noSnap.deps);

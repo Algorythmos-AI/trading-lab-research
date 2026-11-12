@@ -71,6 +71,11 @@ export interface GuardLogName {
   symbol: string;
   /** The guard reasons that would pause this name, whatever the switches say: its snapshot read this run, today's. */
   would: GuardReason[];
+  /**
+   * The last trade is more than 25% from the prior close, on its own (quote-guards' farFromPriorClose): the bad-print
+   * guard also needs the print outside the day's range, so a real gap shows here and not in `would`.
+   */
+  far_from_prior_close: boolean;
   /** Whether the board's row for the name was paused this slot, and by what: no fresh price, or a switched-on guard. */
   paused: PausedWhy | null;
 }
@@ -98,6 +103,13 @@ export interface GuardCounts {
   /** Per guard, the observations it would have paused; and those any guard would have. */
   would: Record<GuardReason, number>;
   would_any: number;
+  /**
+   * Per guard, the separate runs of consecutive observations it would have paused (a name's observations in slot
+   * order, per feed): many runs for few slots is a guard that would flap between paused and live.
+   */
+  runs: Record<GuardReason, number>;
+  /** Observations more than 25% from the prior close on their own, whether or not outside the day's range. */
+  far_from_prior_close: number;
   /** Observations whose row was paused, by why. */
   paused: Record<PausedWhy, number>;
 }
@@ -130,7 +142,7 @@ export interface GuardSummary {
 const isObj = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v);
 const SYMBOL_RE = /^[A-Z][A-Z0-9.]{0,9}$/;
 const zeroGuards = (): Record<GuardReason, number> => Object.fromEntries(GUARD_REASONS.map((g) => [g, 0])) as Record<GuardReason, number>;
-const emptyCounts = (): GuardCounts => ({ names: 0, would: zeroGuards(), would_any: 0, paused: { stale: 0, guard: 0 } });
+const emptyCounts = (): GuardCounts => ({ names: 0, would: zeroGuards(), would_any: 0, runs: zeroGuards(), far_from_prior_close: 0, paused: { stale: 0, guard: 0 } });
 const emptyGroup = (): GuardFeedGroup => ({
   records: 0,
   switches: { ok: 0, missing: 0, malformed: 0, error: 0, "invalid-record": 0 },
@@ -142,10 +154,12 @@ const emptyGroup = (): GuardFeedGroup => ({
   rate_limit_min: null,
 });
 
-function addName(c: GuardCounts, would: readonly GuardReason[], paused: unknown): void {
+function addName(c: GuardCounts, would: readonly GuardReason[], started: readonly GuardReason[], far: unknown, paused: unknown): void {
   c.names++;
   for (const g of would) c.would[g]++;
+  for (const g of started) c.runs[g]++;
   if (would.length > 0) c.would_any++;
+  if (far === true) c.far_from_prior_close++;
   if (paused === "stale" || paused === "guard") c.paused[paused]++;
 }
 
@@ -156,9 +170,15 @@ function addName(c: GuardCounts, would: readonly GuardReason[], paused: unknown)
  */
 export function summariseGuards(records: readonly unknown[]): GuardSummary {
   const out: GuardSummary = { records: 0, with_guards: 0, without_guards: 0, by_feed: { iex: emptyGroup(), sip: emptyGroup(), unknown: emptyGroup() } };
-  for (const r of records) {
+  // In slot order, so a run of consecutive tripped observations is counted once; a record without a slot goes last.
+  const slotOf = (r: unknown) => (isObj(r) && typeof r.slot_end === "string" ? r.slot_end : "~");
+  const ordered = records.map((r, i) => [r, i] as const).sort((a, b) => (slotOf(a[0]) < slotOf(b[0]) ? -1 : slotOf(a[0]) > slotOf(b[0]) ? 1 : a[1] - b[1]));
+  /** Per feed and name, the guards its previous observation would have paused. */
+  const prev = new Map<string, readonly GuardReason[]>();
+  for (const [r] of ordered) {
     out.records++;
-    const g = out.by_feed[isObj(r) && isDataFeed(r.feed) ? r.feed : "unknown"];
+    const feed = isObj(r) && isDataFeed(r.feed) ? r.feed : "unknown";
+    const g = out.by_feed[feed];
     if (isObj(r)) {
       const n429 = r.http_429;
       if (typeof n429 === "number" && Number.isInteger(n429) && n429 > 0 && n429 <= 2) g.http_429 += n429;
@@ -182,15 +202,37 @@ export function summariseGuards(records: readonly unknown[]): GuardSummary {
       if (!isObj(n) || typeof n.symbol !== "string" || !SYMBOL_RE.test(n.symbol)) continue;
       const would = parseGuardList(n.would);
       if (would === null) continue;
-      addName(g.total, would, n.paused);
-      addName((g.by_symbol[n.symbol] ??= emptyCounts()), would, n.paused);
+      const key = `${feed}|${n.symbol}`;
+      const before = prev.get(key) ?? [];
+      const started = would.filter((w) => !before.includes(w));
+      prev.set(key, would);
+      addName(g.total, would, started, n.far_from_prior_close, n.paused);
+      addName((g.by_symbol[n.symbol] ??= emptyCounts()), would, started, n.far_from_prior_close, n.paused);
     }
   }
   return out;
 }
 
-/** The Operations panel's line for a data plan limit below LOW_RATE_LIMIT, or null. Display only. */
+/**
+ * The Operations panel's line for a data plan limit below LOW_RATE_LIMIT, or null. Display only. Alpaca's free plan
+ * allows 200 calls a minute, so on it this line is expected and not an error; on a paid plan it means the plan lapsed
+ * or the wrong keys are set.
+ */
 export function rateLimitLine(limit: number | null | undefined): string | null {
   if (typeof limit !== "number" || !Number.isInteger(limit) || limit < 0 || limit >= LOW_RATE_LIMIT) return null;
-  return `The data plan's limit reads ${limit.toLocaleString("en-US")}: check the plan and the keys`;
+  return `The data plan's limit reads ${limit.toLocaleString("en-US")} a minute: expected on the free plan; on a paid plan, check the plan and the keys`;
+}
+
+/**
+ * The Operations panel's line for the guards' switches as the server check's newest record read them (its `guards`),
+ * or null when there is nothing to say (no record, or no guard log on it). Display only.
+ */
+export function guardSwitchLine(log: { switches: unknown; on: unknown } | null | undefined): string | null {
+  if (!log || typeof log.switches !== "string") return null;
+  if (log.switches === "malformed" || log.switches === "error") return "The guard switches could not be read: every guard is off";
+  if (log.switches === "missing") return "Bad-data guards: every guard is off (no switches stored)";
+  if (log.switches !== "ok") return null;
+  const on = parseGuardList(log.on);
+  if (on === null) return "The guard switches could not be read: every guard is off";
+  return on.length ? `Bad-data guards switched on: ${on.join(", ")}` : "Bad-data guards: every guard is off";
 }

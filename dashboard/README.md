@@ -458,15 +458,17 @@ prints a secret; it prints only the ntfy topic and how to subscribe to it.
     wins. A hidden page's record goes to `HHMM.page-hidden.json`, so it can never take a visible page's place.
   - `desk/guards.json`, the bad-data guards' switches (`src/lib/quote-guards.ts`, `desk-guards.ts`): exactly
     `{ "v": 1, "on": [...] }` with any of `bar-high-below-low`, `bar-open-outside-range`,
-    `price-far-from-prior-close`, `quote-crossed`; missing, malformed or unreadable is every guard off, so all are off
+    `print-far-outside-day-range` (more than 25% from the prior close AND outside today's day bar), `quote-crossed` (on
+    a fresh quote); missing, malformed or unreadable is every guard off, so all are off
     until the owner writes one on, and `{ "v": 1, "on": [] }` turns them off again. Read every evaluated run, by the
     Options page's render and by the page every minute while its board is live (`GET /api/desk/guards`, hardened like
     `/api/desk/eval-status`, answers `{ on, status }` only); no deploy. A guard that is on and trips reads "paused:
     check your platform" with its reason on the page and on the server alike. After `probe` the server record carries
     `guards` (how the switches read, which were on, and per focus name the guards that would pause it whatever the
-    switches say, and whether its row was paused and why) and `http_429` (the run's 429 answers); a page record names
-    the guards it ran with (`guards`) only when any was on, and the shadow numbers compare a slot only when both
-    sides ran with the same ones. `GET /api/desk/probe` adds their counts per feed (`guards`).
+    switches say, the prior-close fact on its own, and whether its row was paused and why) and `http_429` (the run's 429
+    answers); a page record names the guards it ran with (`guards`) only when any was on, and `guards_unsure` when its
+    last re-read failed after a good one (it keeps the good switches), and the shadow numbers compare a slot only when
+    both sides ran with the same, confirmed switches. Operations shows how the newest record read the switches. `GET /api/desk/probe` adds their counts per feed (`guards`).
 
   What protects each route:
   - `GET /api/cron/desk`: the bearer `CRON_SECRET`, compared in constant time exactly like the watchdog (401

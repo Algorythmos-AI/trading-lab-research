@@ -5,7 +5,7 @@
 // Pure: no I/O.
 import { GUARD_REASONS, type GuardReason, type SnapshotQuoteFields } from "./quote-guards";
 
-type Q = { price: number; open: number | null; high: number | null; low: number | null; prev_close: number | null } & SnapshotQuoteFields;
+type Q = { price: number; at: string; open: number | null; high: number | null; low: number | null; prev_close: number | null } & SnapshotQuoteFields;
 
 const c2 = (v: number) => Math.round(v * 100) / 100;
 
@@ -17,14 +17,15 @@ const c2 = (v: number) => Math.round(v * 100) / 100;
 export function suspectQuote<T extends Q>(q: T, reason: GuardReason): T {
   const low = q.low ?? q.price;
   const high = q.high ?? q.price;
-  const base: T = { ...q, open: q.open ?? q.price, high, low, prev_close: q.prev_close ?? q.price, bar_ok: true, prev_bar_ok: true, bid: c2(q.price - 0.01), ask: c2(q.price + 0.01), bid_size: 100, ask_size: 100 };
+  const base: T = { ...q, open: q.open ?? q.price, high, low, prev_close: q.prev_close ?? q.price, bar_ok: true, prev_bar_ok: true, bid: c2(q.price - 0.01), ask: c2(q.price + 0.01), bid_size: 100, ask_size: 100, quote_at: q.at };
   switch (reason) {
     case "bar-high-below-low":
       return { ...base, high: c2(low - 0.5) };
     case "bar-open-outside-range":
       return { ...base, open: c2(high + 0.5) };
-    case "price-far-from-prior-close":
-      return { ...base, prev_close: c2(q.price / 1.3) };
+    case "print-far-outside-day-range":
+      // a print 30% above the prior close, and above the day's whole range (the bar sits 1% under it)
+      return { ...base, prev_close: c2(q.price / 1.3), open: c2(q.price * 0.99), high: c2(q.price * 0.99), low: c2(q.price * 0.99) };
     case "quote-crossed":
       return { ...base, bid: c2(q.price + 0.02), ask: c2(q.price - 0.02) };
   }

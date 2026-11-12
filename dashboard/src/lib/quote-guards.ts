@@ -1,32 +1,36 @@
 // The board's bad-data guards (the plan's L3): four checks on one name's normalised snapshot quote (quote.ts), each
-// a reason for the board to read "paused: check your platform" instead of a state. Pure and total: no I/O, no clock,
-// nothing here throws.
+// a reason for the board to read "paused: check your platform" instead of a state. Pure and total: no I/O, no clock of
+// its own (the caller passes the session's day and its clock), nothing here throws.
 //
 // The definitions are the log-only snapshot probe's (quote-probe.ts), which imports them from here, so the probe's
 // counts are counts of exactly these checks:
 //  * bar-high-below-low: the day's bar reads a high below its low;
 //  * bar-open-outside-range: the day's bar reads an open below its low or above its high;
-//  * price-far-from-prior-close: the last trade is more than PRIOR_CLOSE_LIMIT (25%) from the prior session's close.
-//    Exactly 25% (within a float's tolerance) is "at-limit", not far: the probe's `at-limit` bucket. A bad-print
-//    guard, not a halt or price-band rule;
-//  * quote-crossed: both sides of the quote are active and the bid is above the ask (quote-shape.ts). A locked quote
-//    (bid = ask) is not crossed; a zero price or size on one side reads one-sided, not crossed.
-// "Last trade outside the day's range" is not a guard: the day's bar leaves out extended-hours and volume-only prints,
-// so that happens in normal trading.
+//  * print-far-outside-day-range: a bad print. The last trade is BOTH more than PRIOR_CLOSE_LIMIT (25%) from the prior
+//    session's close AND outside today's day bar (above its high or below its low), with today's bar and today's trade.
+//    Exactly 25% (within a float's tolerance) is "at-limit", not far: the probe's `at-limit` bucket. Neither condition
+//    alone trips it: a real gap of more than 25% (earnings), or a split day read against an unadjusted prior close,
+//    leaves the price inside the day's own range; and a trade outside the day's range alone happens in normal trading,
+//    since the day's bar leaves out extended-hours and volume-only prints. Not a halt or price-band rule;
+//  * quote-crossed: both sides of the quote are active and the bid is above the ask (quote-shape.ts), on a quote that is
+//    fresh by the trade's own rule (stamped no more than TRADE_STALE_MS before the clock). A locked quote (bid = ask)
+//    is not crossed; a zero price or size on one side reads one-sided, not crossed; a stale or timeless quote never
+//    trips it.
 //
 // A guard needs its inputs present and valid, as the probe reads them; missing or unreadable inputs never trip one.
 // Whether a guard pauses the board is the owner's switch (desk-guards.ts); every switch is off until he turns it on.
+import { TRADE_STALE_MS } from "./entry-checks";
 import { quoteShape } from "./quote-shape";
 
 /** The guard reasons, in the order the board names them. */
-export const GUARD_REASONS = ["bar-high-below-low", "bar-open-outside-range", "price-far-from-prior-close", "quote-crossed"] as const;
+export const GUARD_REASONS = ["bar-high-below-low", "bar-open-outside-range", "print-far-outside-day-range", "quote-crossed"] as const;
 export type GuardReason = (typeof GUARD_REASONS)[number];
 
 /** The page's plain words for each reason, in "Suspect data, <words>: check your platform". */
 export const GUARD_WORDS: Record<GuardReason, string> = {
   "bar-high-below-low": "the day's high reads below its low",
   "bar-open-outside-range": "the day's open reads outside its high and low",
-  "price-far-from-prior-close": "the price is more than 25% from the prior close",
+  "print-far-outside-day-range": "the price is more than 25% from the prior close and outside the day's range",
   "quote-crossed": "the bid is above the ask",
 };
 
@@ -69,6 +73,13 @@ export function barChecks(b: { o: number; h: number; l: number }): { high_below_
   return { high_below_low: b.h < b.l, open_outside: b.o < b.l || b.o > b.h };
 }
 
+/** Where a price sits against a day bar's high and low: above it, below it, or (null) inside it, edges included. */
+export function outsideDayRange(price: number, b: { h: number; l: number }): "above-high" | "below-low" | null {
+  return price > b.h ? "above-high" : price < b.l ? "below-low" : null;
+}
+
+const NY_DAY_FMT = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
+
 /** The move from the prior close against PRIOR_CLOSE_LIMIT: exactly 25% (within a float's tolerance) is "at-limit". */
 export function priorMove(price: number, prior: number): { move: "within" | "at-limit" | "beyond"; bps: number } {
   const dist = Math.abs(price - prior);
@@ -98,6 +109,8 @@ export interface SnapshotQuoteFields {
 
 /** What the guards read of a normalised quote. */
 export interface GuardQuote extends SnapshotQuoteFields {
+  /** The day bar's New York day (quote.ts' `day`). */
+  day?: string | null;
   price: number;
   at: string;
   open: number | null;
@@ -106,25 +119,48 @@ export interface GuardQuote extends SnapshotQuoteFields {
   prev_close: number | null;
 }
 
+/** What a guard reads beside the quote: the session's New York day and the clock (ms) it is judged at. */
+export interface GuardContext {
+  today: string;
+  now: number;
+}
+
+/**
+ * The last trade is more than 25% from the prior close (the prior-close fact alone, recorded in observe mode beside
+ * the guard): a positive price with a trade time from 1970 on, and a readable prior bar (`prev_bar_ok`).
+ */
+export function farFromPriorClose(q: GuardQuote | null | undefined): boolean {
+  if (!q || !isObj(q)) return false;
+  return q.prev_bar_ok === true && isPos(q.prev_close) && isPos(q.price) && readStamp(q.at).state === "ok" && priorMove(q.price, q.prev_close).move === "beyond";
+}
+
 /**
  * The guard reasons that apply to one name's quote, in GUARD_REASONS order; [] for no quote. Each guard reads only
  * inputs the probe would read as present and valid:
  * - the two bar guards need `bar_ok` (the day's bar readable, its prices positive);
- * - the prior-close guard needs a positive price with a trade time from 1970 on, and `prev_bar_ok`;
- * - the crossed-quote guard needs both sides (`bid`, `ask`) as normalise keeps them.
+ * - the bad-print guard needs `farFromPriorClose`, `bar_ok`, the day bar's day and the trade's New York day both
+ *   `ctx.today`, and the price outside the bar's high and low;
+ * - the crossed-quote guard needs both sides (`bid`, `ask`) as normalise keeps them and a `quote_at` no more than
+ *   TRADE_STALE_MS before `ctx.now`.
+ * Without `ctx` the last two cannot trip.
  */
-export function quoteGuards(q: GuardQuote | null | undefined): GuardReason[] {
+export function quoteGuards(q: GuardQuote | null | undefined, ctx: GuardContext | null): GuardReason[] {
   if (!q || !isObj(q)) return [];
   const out: GuardReason[] = [];
-  if (q.bar_ok === true && isPos(q.open) && isPos(q.high) && isPos(q.low)) {
-    const b = barChecks({ o: q.open, h: q.high, l: q.low });
+  const barOk = q.bar_ok === true && isPos(q.open) && isPos(q.high) && isPos(q.low);
+  if (barOk) {
+    const b = barChecks({ o: q.open!, h: q.high!, l: q.low! });
     if (b.high_below_low) out.push("bar-high-below-low");
     if (b.open_outside) out.push("bar-open-outside-range");
   }
-  const tradeAt = readStamp(q.at);
-  if (q.prev_bar_ok === true && isPos(q.prev_close) && isPos(q.price) && tradeAt.state === "ok" && priorMove(q.price, q.prev_close).move === "beyond")
-    out.push("price-far-from-prior-close");
-  if (q.bid !== undefined && q.ask !== undefined && quoteShape(q.bid, q.ask, q.bid_size, q.ask_size).shape === "crossed") out.push("quote-crossed");
+  if (ctx && barOk && q.day === ctx.today && farFromPriorClose(q)) {
+    const t = readStamp(q.at).t!;
+    if (NY_DAY_FMT.format(new Date(t)) === ctx.today && outsideDayRange(q.price, { h: q.high!, l: q.low! }) !== null) out.push("print-far-outside-day-range");
+  }
+  if (ctx && q.bid !== undefined && q.ask !== undefined) {
+    const qt = readStamp(q.quote_at).t;
+    if (qt !== null && ctx.now - qt <= TRADE_STALE_MS && quoteShape(q.bid, q.ask, q.bid_size, q.ask_size).shape === "crossed") out.push("quote-crossed");
+  }
   return out;
 }
 

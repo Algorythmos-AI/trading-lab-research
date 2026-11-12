@@ -24,7 +24,7 @@ import type { JournalDoc } from "./journal";
 import { logEvent } from "./log";
 import { isHalfDay, type Options } from "./options";
 import { alpacaKeys, fetchQuotes, type Quote, type QuoteResponse } from "./quote";
-import { quoteGuards } from "./quote-guards";
+import { farFromPriorClose, quoteGuards } from "./quote-guards";
 import { type ProbeRecord, probeSnapshots, type RawSnapshots } from "./quote-probe";
 import { fixtureMode } from "./snapshot";
 import { CLOSE_GRACE_MS, type NameState, SERVER_SETTLE_MS } from "./trade-state";
@@ -223,16 +223,25 @@ const errName = (e: unknown) => (e instanceof Error ? e.name : "unknown");
 
 /**
  * The observe-mode log of the bad-data guards for one run: per focus name with a snapshot (in the card's order), the
- * guards that would pause it (quote-guards.ts on that snapshot, when it is the slot's day's), whatever the switches
- * say, and whether its row was paused and why. Pure.
+ * guards that would pause it (quote-guards.ts on that snapshot, when it is the slot's day's, judged at `now`, the
+ * evaluation's own instant), whatever the switches say; the prior-close fact on its own (the bad-print guard also needs
+ * the print outside the day's range); and whether its row was paused and why. Pure.
  */
-export function guardLogOf(switches: GuardSwitches, symbols: readonly string[], snapshots: Readonly<Record<string, Quote>>, day: string, states: readonly NameState[]): GuardLog {
+export function guardLogOf(
+  switches: GuardSwitches,
+  symbols: readonly string[],
+  snapshots: Readonly<Record<string, Quote>>,
+  day: string,
+  states: readonly NameState[],
+  now: number,
+): GuardLog {
   const paused = new Map(states.filter((st) => st.state === "paused").map((st) => [st.symbol, st.guards?.length ? ("guard" as const) : ("stale" as const)]));
   const names = symbols
     .filter((sym) => Object.hasOwn(snapshots, sym))
     .map((sym) => {
       const q = snapshots[sym]!;
-      return { symbol: sym, would: q.day === day ? quoteGuards(q) : [], paused: paused.get(sym) ?? null };
+      const today = q.day === day;
+      return { symbol: sym, would: today ? quoteGuards(q, { today: day, now }) : [], far_from_prior_close: today && farFromPriorClose(q), paused: paused.get(sym) ?? null };
     });
   return { v: GUARD_LOG_V, switches: switches.status, on: switches.on, names };
 }
@@ -366,7 +375,7 @@ export async function runDeskEval(deps: DeskRunDeps = defaultDeskRunDeps()): Pro
   let guards: GuardLog | null = null;
   try {
     if (guardInput) {
-      const g = (deps.guardLog ?? guardLogOf)(guardInput.switches, guardInput.symbols, guardInput.snapshots, slot.day, guardInput.states);
+      const g = (deps.guardLog ?? guardLogOf)(guardInput.switches, guardInput.symbols, guardInput.snapshots, slot.day, guardInput.states, slot.end + CLOSE_GRACE_MS);
       JSON.stringify(g);
       guards = g ?? null;
     }

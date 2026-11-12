@@ -16,7 +16,7 @@
 import { isDataFeed } from "./feed-provenance";
 import { addDays, nyNow, sessionOf } from "./market-calendar";
 import { SETS_PRICE, type SetsPrice, setsPrice } from "./quote-conditions";
-import { barChecks, PRESENCE, type Presence, PRIOR_CLOSE_LIMIT, priorMove, readBar, readStamp } from "./quote-guards";
+import { barChecks, outsideDayRange, PRESENCE, type Presence, PRIOR_CLOSE_LIMIT, priorMove, readBar, readStamp } from "./quote-guards";
 import { quoteShape } from "./quote-shape";
 
 // The definitions the board's guards use (quote-guards.ts, quote-shape.ts) are imported, not copied: a bar's and a
@@ -316,13 +316,13 @@ export function probeSnapshot(symbol: string, raw: unknown, now: number): NamePr
   // Yesterday's bar with yesterday's last trade (an illiquid name early in the session, or pre-market) is not a trade
   // outside today's range: it is counted apart, so it cannot inflate the counts the guards are set from.
   else if (daily_day !== "today" || trade_day !== "today") trade_vs_day = "stale-day";
-  else if (price > d.h) {
-    trade_vs_day = "above-high";
-    outside = r1(((price - d.h) / d.h) * 10_000);
-  } else if (price < d.l) {
-    trade_vs_day = "below-low";
-    outside = r1(((d.l - price) / d.l) * 10_000);
-  } else trade_vs_day = "inside";
+  else {
+    // quote-guards' outsideDayRange: the bad-print guard's own test of the same thing.
+    const side = outsideDayRange(price, d);
+    trade_vs_day = side ?? "inside";
+    if (side === "above-high") outside = r1(((price - d.h) / d.h) * 10_000);
+    else if (side === "below-low") outside = r1(((d.l - price) / d.l) * 10_000);
+  }
 
   // The prior session's close.
   const pb = bar(snap.prevDailyBar);

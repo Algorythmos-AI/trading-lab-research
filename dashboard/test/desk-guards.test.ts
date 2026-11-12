@@ -5,8 +5,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FeedsPanel } from "@/components/operations/feeds-panel";
 import { serverLogPath } from "@/lib/desk-eval";
-import { ALL_OFF, DESK_GUARDS_PATH, LOW_RATE_LIMIT, parseGuardAnswer, parseGuardList, parseGuardSwitches, rateLimitLine, summariseGuards } from "@/lib/desk-guards";
-import { defaultGuardReadDeps, handleGuards, loadDataPlanLimit, readGuardSwitches } from "@/lib/desk-guards-run";
+import { ALL_OFF, DESK_GUARDS_PATH, guardSwitchLine, LOW_RATE_LIMIT, parseGuardAnswer, parseGuardList, parseGuardSwitches, rateLimitLine, summariseGuards } from "@/lib/desk-guards";
+import { defaultGuardReadDeps, handleGuards, loadServerCheckFacts, readGuardSwitches } from "@/lib/desk-guards-run";
 import { suspectQuote, suspectReasonFor } from "@/lib/fixture-suspect";
 import { VARIANT_FLAGS } from "@/lib/fixture-variants";
 import { GUARD_REASONS, quoteGuards } from "@/lib/quote-guards";
@@ -131,22 +131,49 @@ describe("summariseGuards", () => {
         { symbol: "QQQ", would: [], paused: "stale" },
       ])),
       rec("iex", log([{ symbol: "SPY", would: ["bar-high-below-low", "bar-open-outside-range"], paused: "guard" }], ["bar-high-below-low"])),
-      rec("sip", log([{ symbol: "SPY", would: ["price-far-from-prior-close"], paused: null }], [], "error")),
+      rec("sip", log([{ symbol: "SPY", would: ["print-far-outside-day-range"], paused: null }], [], "error")),
       rec(undefined, log([{ symbol: "SPY", would: ["quote-crossed"], paused: null }], [], "missing")),
     ]);
     expect(s).toMatchObject({ records: 4, with_guards: 4, without_guards: 0 });
     const iex = s.by_feed.iex;
     expect(iex.records).toBe(2);
     expect(iex.switches).toEqual({ ok: 2, missing: 0, malformed: 0, error: 0, "invalid-record": 0 });
-    expect(iex.on).toEqual({ "bar-high-below-low": 1, "bar-open-outside-range": 0, "price-far-from-prior-close": 0, "quote-crossed": 0 });
-    expect(iex.total).toEqual({ names: 3, would: { "bar-high-below-low": 1, "bar-open-outside-range": 1, "price-far-from-prior-close": 0, "quote-crossed": 1 }, would_any: 2, paused: { stale: 1, guard: 1 } });
+    expect(iex.on).toEqual({ "bar-high-below-low": 1, "bar-open-outside-range": 0, "print-far-outside-day-range": 0, "quote-crossed": 0 });
+    const z = { "bar-high-below-low": 0, "bar-open-outside-range": 0, "print-far-outside-day-range": 0, "quote-crossed": 0 };
+    expect(iex.total).toEqual({
+      names: 3,
+      would: { ...z, "bar-high-below-low": 1, "bar-open-outside-range": 1, "quote-crossed": 1 },
+      would_any: 2,
+      runs: { ...z, "bar-high-below-low": 1, "bar-open-outside-range": 1, "quote-crossed": 1 },
+      far_from_prior_close: 0,
+      paused: { stale: 1, guard: 1 },
+    });
     expect(iex.by_symbol.SPY!.would_any).toBe(2);
-    expect(iex.by_symbol.QQQ).toEqual({ names: 1, would: { "bar-high-below-low": 0, "bar-open-outside-range": 0, "price-far-from-prior-close": 0, "quote-crossed": 0 }, would_any: 0, paused: { stale: 1, guard: 0 } });
-    expect(s.by_feed.sip.total.would["price-far-from-prior-close"]).toBe(1);
+    expect(iex.by_symbol.QQQ).toEqual({ names: 1, would: z, would_any: 0, runs: z, far_from_prior_close: 0, paused: { stale: 1, guard: 0 } });
+    expect(s.by_feed.sip.total.would["print-far-outside-day-range"]).toBe(1);
     expect(s.by_feed.sip.total.would["quote-crossed"]).toBe(0);
     expect(s.by_feed.sip.switches.error).toBe(1);
     expect(s.by_feed.unknown.total.would["quote-crossed"]).toBe(1);
     expect(s.by_feed.unknown.switches.missing).toBe(1);
+  });
+
+  it("counts the far-from-prior-close fact apart, and each separate run of consecutive tripped slots, in slot order", () => {
+    const at = (hhmm: string) => `2026-10-12T${hhmm}:00.000Z`;
+    const n = (would: string[], far = false) => [{ symbol: "SPY", would, far_from_prior_close: far, paused: null }];
+    // given out of order: sorted by slot, SPY's crossed quote trips at 14:30-14:32, clears, trips again at 14:36
+    const s = summariseGuards([
+      rec("iex", log(n(["quote-crossed"])), { slot_end: at("14:36") }),
+      rec("iex", log(n(["quote-crossed"], true)), { slot_end: at("14:30") }),
+      rec("iex", log(n([], true)), { slot_end: at("14:34") }),
+      rec("iex", log(n(["quote-crossed"])), { slot_end: at("14:32") }),
+      // another feed's slot in between does not break or join iex's runs
+      rec("sip", log(n(["quote-crossed"])), { slot_end: at("14:33") }),
+    ]);
+    expect(s.by_feed.iex.total.would["quote-crossed"]).toBe(3);
+    expect(s.by_feed.iex.total.runs["quote-crossed"]).toBe(2);
+    expect(s.by_feed.iex.by_symbol.SPY!.runs["quote-crossed"]).toBe(2);
+    expect(s.by_feed.iex.total.far_from_prior_close).toBe(2);
+    expect(s.by_feed.sip.total.runs["quote-crossed"]).toBe(1);
   });
 
   it("counts the runs' 429 answers and the low rate limits per feed, from every record", () => {
@@ -185,13 +212,14 @@ describe("summariseGuards", () => {
 describe("a low data plan limit", () => {
   it("reads as a line below 1,000, and nothing at or above it", () => {
     expect(LOW_RATE_LIMIT).toBe(1_000);
-    expect(rateLimitLine(200)).toBe("The data plan's limit reads 200: check the plan and the keys");
-    expect(rateLimitLine(999)).toBe("The data plan's limit reads 999: check the plan and the keys");
-    expect(rateLimitLine(0)).toBe("The data plan's limit reads 0: check the plan and the keys");
+    const line = (n: string) => `The data plan's limit reads ${n} a minute: expected on the free plan; on a paid plan, check the plan and the keys`;
+    expect(rateLimitLine(200)).toBe(line("200"));
+    expect(rateLimitLine(999)).toBe(line("999"));
+    expect(rateLimitLine(0)).toBe(line("0"));
     for (const v of [1_000, 10_000, null, undefined, -1, 1.5, Number.NaN]) expect(rateLimitLine(v), String(v)).toBeNull();
   });
 
-  const panel = (dataPlanLimit?: number | null) =>
+  const panel = (dataPlanLimit?: number | null, guardSwitches?: { switches: unknown; on: unknown } | null) =>
     renderToStaticMarkup(
       createElement(FeedsPanel, {
         now: new Date("2026-10-12T15:00:00Z"),
@@ -204,17 +232,34 @@ describe("a low data plan limit", () => {
         optionsDates: [],
         radarDates: [],
         ...(dataPlanLimit === undefined ? {} : { dataPlanLimit }),
+        ...(guardSwitches === undefined ? {} : { guardSwitches }),
       }),
     );
 
   it("shows in the Operations panel's feed section, and only then", () => {
     const low = panel(200).replaceAll("&#x27;", "'");
     expect(low).toContain("data-rate-limit");
-    expect(low).toContain("The data plan's limit reads 200: check the plan and the keys");
+    expect(low).toContain("The data plan's limit reads 200 a minute: expected on the free plan; on a paid plan, check the plan and the keys");
     expect(panel(10_000)).not.toContain("data-rate-limit");
     expect(panel(null)).not.toContain("data-rate-limit");
     // without the prop, the panel is as it was
     expect(panel()).toBe(panel(null));
+  });
+
+  it("says when the guard switches could not be read, and otherwise which guards are on", () => {
+    expect(guardSwitchLine({ switches: "error", on: [] })).toBe("The guard switches could not be read: every guard is off");
+    expect(guardSwitchLine({ switches: "malformed", on: [] })).toBe("The guard switches could not be read: every guard is off");
+    expect(guardSwitchLine({ switches: "ok", on: ["quote-crossed"] })).toBe("Bad-data guards switched on: quote-crossed");
+    expect(guardSwitchLine({ switches: "ok", on: [] })).toBe("Bad-data guards: every guard is off");
+    expect(guardSwitchLine({ switches: "missing", on: [] })).toBe("Bad-data guards: every guard is off (no switches stored)");
+    expect(guardSwitchLine({ switches: "ok", on: ["nope"] })).toBe("The guard switches could not be read: every guard is off");
+    expect(guardSwitchLine(null)).toBeNull();
+    expect(guardSwitchLine({ switches: 5, on: [] })).toBeNull();
+    const bad = panel(null, { switches: "error", on: [] });
+    expect(bad).toContain('data-guard-switches="unread"');
+    expect(bad).toContain("The guard switches could not be read: every guard is off");
+    expect(panel(null, { switches: "ok", on: ["quote-crossed"] })).toContain('data-guard-switches="read"');
+    expect(panel(null, null)).toBe(panel(null));
   });
 
   it("is read from the server check's newest record today, and never outside production or with the check off", async () => {
@@ -222,7 +267,7 @@ describe("a low data plan limit", () => {
     const now = Date.parse(`${day}T10:31:30-04:00`);
     const store = new Map<string, string>([["desk/eval.json", '{"v":1,"eval":"log"}']]);
     const newest = Math.floor((now - 60_000) / 120_000) * 120_000;
-    store.set(serverLogPath(day, newest), JSON.stringify({ v: 1, probe: { v: 1, rate_limit: 200 } }));
+    store.set(serverLogPath(day, newest), JSON.stringify({ v: 1, probe: { v: 1, rate_limit: 200 }, guards: { v: 1, switches: "error", on: [], names: [] } }));
     const deps = {
       now: () => now,
       dry: false,
@@ -230,12 +275,13 @@ describe("a low data plan limit", () => {
       exists: async (p: string) => store.has(p),
       readRecord: async (p: string) => store.get(p) ?? null,
     };
-    expect(await loadDataPlanLimit(now, deps)).toBe(200);
-    expect(await loadDataPlanLimit(now, { ...deps, dry: true })).toBeNull();
-    expect(await loadDataPlanLimit(now, { ...deps, readSwitch: async () => '{"v":1,"eval":"off"}' })).toBeNull();
-    expect(await loadDataPlanLimit(now, { ...deps, readRecord: async () => JSON.stringify({ v: 1, probe: null }) })).toBeNull();
-    expect(await loadDataPlanLimit(now, { ...deps, readRecord: () => Promise.reject(new Error("down")) })).toBeNull();
-    expect(await loadDataPlanLimit(now, { ...deps, exists: async () => false })).toBeNull();
+    const none = { rateLimit: null, guards: null };
+    expect(await loadServerCheckFacts(now, deps)).toEqual({ rateLimit: 200, guards: { switches: "error", on: [] } });
+    expect(await loadServerCheckFacts(now, { ...deps, dry: true })).toEqual(none);
+    expect(await loadServerCheckFacts(now, { ...deps, readSwitch: async () => '{"v":1,"eval":"off"}' })).toEqual(none);
+    expect(await loadServerCheckFacts(now, { ...deps, readRecord: async () => JSON.stringify({ v: 1, probe: null }) })).toEqual(none);
+    expect(await loadServerCheckFacts(now, { ...deps, readRecord: () => Promise.reject(new Error("down")) })).toEqual(none);
+    expect(await loadServerCheckFacts(now, { ...deps, exists: async () => false })).toEqual(none);
   });
 });
 
@@ -247,11 +293,14 @@ describe("the quotes-suspect fixture", () => {
   });
 
   it("trips each guard in turn, the bar's high below its low with its open outside it, each other one alone", () => {
-    expect(quoteGuards(suspectQuote(q, "bar-high-below-low"))).toEqual(["bar-high-below-low", "bar-open-outside-range"]);
-    expect(quoteGuards(suspectQuote(q, "bar-open-outside-range"))).toEqual(["bar-open-outside-range"]);
-    expect(quoteGuards(suspectQuote(q, "price-far-from-prior-close"))).toEqual(["price-far-from-prior-close"]);
-    expect(quoteGuards(suspectQuote(q, "quote-crossed"))).toEqual(["quote-crossed"]);
+    const ctx = { today: "2026-10-12", now: Date.parse(q.at) + 2_000 };
+    expect(quoteGuards(suspectQuote(q, "bar-high-below-low"), ctx)).toEqual(["bar-high-below-low", "bar-open-outside-range"]);
+    expect(quoteGuards(suspectQuote(q, "bar-open-outside-range"), ctx)).toEqual(["bar-open-outside-range"]);
+    expect(quoteGuards(suspectQuote(q, "print-far-outside-day-range"), ctx)).toEqual(["print-far-outside-day-range"]);
+    expect(quoteGuards(suspectQuote(q, "quote-crossed"), ctx)).toEqual(["quote-crossed"]);
     expect([0, 1, 2, 3, 4, 5, -1].map(suspectReasonFor)).toEqual([...GUARD_REASONS, "bar-high-below-low", "bar-open-outside-range", "quote-crossed"]);
+    // healthy as served: nothing trips
+    expect(quoteGuards({ ...suspectQuote(q, "quote-crossed"), bid: 99.99, ask: 100.01 }, ctx)).toEqual([]);
     // the rest of the quote is the fixture's
     expect(suspectQuote(q, "quote-crossed")).toMatchObject({ price: 100, at: q.at, day: q.day, vwap: 99.5 });
   });

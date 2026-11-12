@@ -13,7 +13,8 @@ import { SCRIPT_ANSWER_LAG_MS, SCRIPT_SYMBOLS, scriptBars, scriptQuote, stepInst
 import { focusOptions } from "@/lib/fixture-variants";
 import type { LiveQuote, Options } from "@/lib/options";
 import { normalise } from "@/lib/quote";
-import { activeGuards, GUARD_REASONS, type GuardQuote, type GuardReason, guardLine, PRIOR_CLOSE_LIMIT, priorMove, quoteGuards } from "@/lib/quote-guards";
+import { activeGuards, farFromPriorClose, GUARD_REASONS, type GuardQuote, type GuardReason, guardLine, PRIOR_CLOSE_LIMIT, priorMove, quoteGuards } from "@/lib/quote-guards";
+import { TRADE_STALE_MS } from "@/lib/entry-checks";
 import { type NameFacts, probeSnapshot } from "@/lib/quote-probe";
 import { QUOTE_SHAPES, quoteShape } from "@/lib/quote-shape";
 import { type BoardInput, boardRows, rowView } from "@/lib/trade-now";
@@ -68,10 +69,12 @@ describe("quoteShape", () => {
 
 // ---- the guards on one quote -----------------------------------------------------------------------------------------
 const T = "2026-10-12T14:30:00.000Z";
+const CTX = { today: "2026-10-12", now: Date.parse(T) + 1_000 };
 /** A healthy quote the guards can read in full: nothing trips. */
 const healthy = (over: Partial<GuardQuote> = {}): GuardQuote => ({
   price: 100,
   at: T,
+  day: "2026-10-12",
   open: 99,
   high: 101,
   low: 98,
@@ -82,85 +85,124 @@ const healthy = (over: Partial<GuardQuote> = {}): GuardQuote => ({
   ask: 100.01,
   bid_size: 3,
   ask_size: 2,
+  quote_at: T,
   ...over,
 });
+const g = (q: GuardQuote | null | undefined) => quoteGuards(q, CTX);
 
 describe("quoteGuards", () => {
   it("a healthy quote, no quote at all, and an old quote without the snapshot's fields trip nothing", () => {
-    expect(quoteGuards(healthy())).toEqual([]);
-    expect(quoteGuards(null)).toEqual([]);
-    expect(quoteGuards(undefined)).toEqual([]);
-    expect(quoteGuards({ price: 100, at: T, open: 120, high: 90, low: 95, prev_close: 10 })).toEqual([]);
+    expect(g(healthy())).toEqual([]);
+    expect(g(null)).toEqual([]);
+    expect(g(undefined)).toEqual([]);
+    expect(g({ price: 100, at: T, open: 120, high: 90, low: 95, prev_close: 10 })).toEqual([]);
   });
 
   it("the day bar's high below its low trips it (and so does the open, which cannot be inside such a range)", () => {
-    expect(quoteGuards(healthy({ high: 97.99 }))).toEqual(["bar-high-below-low", "bar-open-outside-range"]);
+    expect(g(healthy({ high: 97.99 }))).toEqual(["bar-high-below-low", "bar-open-outside-range"]);
     // at the boundary: a high equal to the low is not below it
-    expect(quoteGuards(healthy({ open: 98, high: 98, low: 98 }))).toEqual([]);
+    expect(g(healthy({ open: 98, high: 98, low: 98, price: 98 }))).toEqual([]);
   });
 
   it("the day bar's open outside its high and low trips it; on either edge it does not", () => {
-    expect(quoteGuards(healthy({ open: 101.01 }))).toEqual(["bar-open-outside-range"]);
-    expect(quoteGuards(healthy({ open: 97.99 }))).toEqual(["bar-open-outside-range"]);
-    expect(quoteGuards(healthy({ open: 101 }))).toEqual([]);
-    expect(quoteGuards(healthy({ open: 98 }))).toEqual([]);
+    expect(g(healthy({ open: 101.01 }))).toEqual(["bar-open-outside-range"]);
+    expect(g(healthy({ open: 97.99 }))).toEqual(["bar-open-outside-range"]);
+    expect(g(healthy({ open: 101 }))).toEqual([]);
+    expect(g(healthy({ open: 98 }))).toEqual([]);
   });
 
   it("the bar guards need a readable bar: no bar_ok, a missing or non-positive price, nothing trips", () => {
     for (const over of [{ bar_ok: false }, { bar_ok: undefined }, { high: null }, { low: null }, { open: null }, { open: 0 }, { low: -1 }] as Partial<GuardQuote>[]) {
-      expect(quoteGuards(healthy({ high: 97, ...over })), JSON.stringify(over)).toEqual([]);
-      expect(quoteGuards(healthy({ open: 120, ...over })), JSON.stringify(over)).toEqual([]);
+      expect(g(healthy({ high: 97, ...over })), JSON.stringify(over)).toEqual([]);
+      expect(g(healthy({ open: 120, ...over })), JSON.stringify(over)).toEqual([]);
     }
   });
+});
 
-  it("more than 25% from the prior close trips it, either way; exactly 25% is at the limit and does not", () => {
+describe("the bad-print guard: far from the prior close AND outside the day's range", () => {
+  // the day's bar 129 to 131 around a price of 130: a gap, inside the day's own range
+  const day = (price: number, over: Partial<GuardQuote> = {}) => healthy({ price, open: 130, high: 131, low: 129, bid: price - 0.01, ask: price + 0.01, prev_close: 100, ...over });
+
+  it("a real 30% gap inside the day's range does not trip it, though the prior-close fact is set", () => {
+    expect(g(day(130))).toEqual([]);
+    expect(farFromPriorClose(day(130))).toBe(true);
+  });
+
+  it("a split day read against an unadjusted prior close (-75%), inside the day's range, does not trip it", () => {
+    const split = healthy({ price: 25, open: 25.1, high: 25.5, low: 24.8, bid: 24.99, ask: 25.01, prev_close: 100 });
+    expect(g(split)).toEqual([]);
+    expect(farFromPriorClose(split)).toBe(true);
+  });
+
+  it("a single far print above the day's high, or below its low, trips it", () => {
+    expect(g(day(131.5))).toEqual(["print-far-outside-day-range"]);
+    expect(g(healthy({ price: 70, open: 74, high: 76, low: 73, bid: 69.99, ask: 70.01, prev_close: 100 }))).toEqual(["print-far-outside-day-range"]);
+    // on the day's edge is inside
+    expect(g(day(131))).toEqual([]);
+    expect(g(day(129))).toEqual([]);
+  });
+
+  it("exactly 25% from the prior close, even outside the day's range, does not trip it", () => {
     expect(PRIOR_CLOSE_LIMIT).toBe(0.25);
-    const far = (price: number, prev: number) => quoteGuards(healthy({ price, prev_close: prev, open: price, high: price, low: price, bid: price - 0.01, ask: price + 0.01 }));
-    expect(far(125.01, 100)).toEqual(["price-far-from-prior-close"]);
-    expect(far(74.99, 100)).toEqual(["price-far-from-prior-close"]);
-    expect(far(125, 100)).toEqual([]);
-    expect(far(75, 100)).toEqual([]);
-    expect(far(12.75, 10.2)).toEqual([]); // 25% in floating point: at the limit by the probe's own tolerance
+    const q = (price: number, prev: number) => healthy({ price, prev_close: prev, open: price - 1, high: price - 0.5, low: price - 1.5, bid: price - 0.01, ask: price + 0.01 });
+    expect(g(q(125, 100))).toEqual([]);
+    expect(g(q(12.75, 10.2))).toEqual([]); // 25% in floating point: at the limit by the probe's own tolerance
     expect(priorMove(12.75, 10.2).move).toBe("at-limit");
-    expect(far(12.7501, 10.2)).toEqual(["price-far-from-prior-close"]);
-    expect(far(124.99, 100)).toEqual([]);
+    expect(g(q(125.01, 100))).toEqual(["print-far-outside-day-range"]);
+    expect(g(q(124.99, 100))).toEqual([]);
   });
 
-  it("the prior-close guard needs a readable prior bar and trade: without them nothing trips", () => {
-    const base = { price: 200, open: 200, high: 200, low: 200, bid: 199.99, ask: 200.01 };
-    expect(quoteGuards(healthy({ ...base, prev_close: 100 }))).toEqual(["price-far-from-prior-close"]);
+  it("with the day bar missing, unreadable, yesterday's, or the trade from another day, it does not trip", () => {
+    for (const over of [{ bar_ok: false }, { bar_ok: undefined }, { high: null }, { day: "2026-10-09" }, { day: null }, { at: "2026-10-09T19:59:00.000Z" }] as Partial<GuardQuote>[])
+      expect(g(day(131.5, over)), JSON.stringify(over)).toEqual([]);
+    // and without a readable prior bar or trade
     for (const over of [{ prev_bar_ok: false }, { prev_bar_ok: undefined }, { prev_close: null }, { prev_close: 0 }, { at: "nope" }, { at: "0001-01-01T00:00:00Z" }] as Partial<GuardQuote>[])
-      expect(quoteGuards(healthy({ ...base, prev_close: 100, ...over })), JSON.stringify(over)).toEqual([]);
+      expect(g(day(131.5, over)), JSON.stringify(over)).toEqual([]);
+    // and without the session's day
+    expect(quoteGuards(day(131.5), null)).toEqual([]);
+  });
+});
+
+describe("the crossed-quote guard", () => {
+  it("a fresh crossed quote trips it; locked, one-sided, empty or a quote it cannot read does not", () => {
+    expect(g(healthy({ bid: 100.02, ask: 99.98 }))).toEqual(["quote-crossed"]);
+    expect(g(healthy({ bid: 100.02, ask: 99.98, bid_size: undefined, ask_size: undefined }))).toEqual(["quote-crossed"]);
+    expect(g(healthy({ bid: 100, ask: 100 }))).toEqual([]);
+    expect(g(healthy({ bid: 100.02, ask: 99.98, bid_size: 0 }))).toEqual([]);
+    expect(g(healthy({ bid: 100.02, ask: 99.98, ask_size: 0 }))).toEqual([]);
+    expect(g(healthy({ bid: 100.02, ask: 0 }))).toEqual([]);
+    expect(g(healthy({ bid: 0, ask: 0 }))).toEqual([]);
+    expect(g(healthy({ bid: undefined }))).toEqual([]);
+    expect(g(healthy({ ask: undefined }))).toEqual([]);
+    expect(g(healthy({ bid: -1, ask: -2 }))).toEqual([]);
   });
 
-  it("a crossed quote trips it; locked, one-sided, empty or a quote it cannot read does not", () => {
-    expect(quoteGuards(healthy({ bid: 100.02, ask: 99.98 }))).toEqual(["quote-crossed"]);
-    expect(quoteGuards(healthy({ bid: 100.02, ask: 99.98, bid_size: undefined, ask_size: undefined }))).toEqual(["quote-crossed"]);
-    expect(quoteGuards(healthy({ bid: 100, ask: 100 }))).toEqual([]);
-    expect(quoteGuards(healthy({ bid: 100.02, ask: 99.98, bid_size: 0 }))).toEqual([]);
-    expect(quoteGuards(healthy({ bid: 100.02, ask: 99.98, ask_size: 0 }))).toEqual([]);
-    expect(quoteGuards(healthy({ bid: 100.02, ask: 0 }))).toEqual([]);
-    expect(quoteGuards(healthy({ bid: 0, ask: 0 }))).toEqual([]);
-    expect(quoteGuards(healthy({ bid: undefined }))).toEqual([]);
-    expect(quoteGuards(healthy({ ask: undefined }))).toEqual([]);
-    expect(quoteGuards(healthy({ bid: -1, ask: -2 }))).toEqual([]);
+  it("needs the quote fresh by the trade's own rule: a stale or timeless quote never trips it", () => {
+    const crossed = (quote_at: string | undefined) => healthy({ bid: 100.02, ask: 99.98, quote_at });
+    expect(g(crossed(new Date(CTX.now - TRADE_STALE_MS).toISOString()))).toEqual(["quote-crossed"]);
+    expect(g(crossed(new Date(CTX.now - TRADE_STALE_MS - 1).toISOString()))).toEqual([]);
+    expect(g(crossed(undefined))).toEqual([]);
+    expect(g(crossed("nope"))).toEqual([]);
+    expect(quoteGuards(crossed(T), null)).toEqual([]);
   });
+});
 
+describe("the reasons", () => {
   it("names every reason that applies, in the board's order, and its switch decides whether it pauses", () => {
-    const bad = healthy({ high: 97, prev_close: 50, bid: 100.02, ask: 99.98 });
-    expect(quoteGuards(bad)).toEqual(ALL);
-    expect(activeGuards(quoteGuards(bad), [])).toEqual([]);
-    expect(activeGuards(quoteGuards(bad), undefined)).toEqual([]);
-    expect(activeGuards(quoteGuards(bad), null)).toEqual([]);
-    expect(activeGuards(quoteGuards(bad), ["quote-crossed"])).toEqual(["quote-crossed"]);
-    expect(activeGuards(quoteGuards(bad), ["quote-crossed", "bar-high-below-low"])).toEqual(["bar-high-below-low", "quote-crossed"]);
-    expect(activeGuards(quoteGuards(healthy()), ALL)).toEqual([]);
+    const bad = healthy({ high: 97, low: 98, prev_close: 50, bid: 100.02, ask: 99.98 });
+    expect(g(bad)).toEqual(ALL);
+    expect(activeGuards(g(bad), [])).toEqual([]);
+    expect(activeGuards(g(bad), undefined)).toEqual([]);
+    expect(activeGuards(g(bad), null)).toEqual([]);
+    expect(activeGuards(g(bad), ["quote-crossed"])).toEqual(["quote-crossed"]);
+    expect(activeGuards(g(bad), ["quote-crossed", "bar-high-below-low"])).toEqual(["bar-high-below-low", "quote-crossed"]);
+    expect(activeGuards(g(healthy()), ALL)).toEqual([]);
   });
 
   it("says the reason in the page's plain words, after the paused wording the board already uses", () => {
     expect(guardLine(["bar-high-below-low"])).toBe("Suspect data, the day's high reads below its low: check your platform");
     expect(guardLine(["bar-open-outside-range"])).toBe("Suspect data, the day's open reads outside its high and low: check your platform");
-    expect(guardLine(["price-far-from-prior-close"])).toBe("Suspect data, the price is more than 25% from the prior close: check your platform");
+    expect(guardLine(["print-far-outside-day-range"])).toBe("Suspect data, the price is more than 25% from the prior close and outside the day's range: check your platform");
     expect(guardLine(["quote-crossed"])).toBe("Suspect data, the bid is above the ask: check your platform");
     expect(guardLine(["bar-high-below-low", "bar-open-outside-range"])).toBe(
       "Suspect data, the day's high reads below its low and the day's open reads outside its high and low: check your platform",
@@ -230,8 +272,9 @@ function probeReasons(f: NameFacts): GuardReason[] {
   const out: GuardReason[] = [];
   if (f.high_below_low === true) out.push("bar-high-below-low");
   if (f.open_outside === true) out.push("bar-open-outside-range");
-  if (f.prior_move === "beyond") out.push("price-far-from-prior-close");
-  if (f.quote === "crossed") out.push("quote-crossed");
+  if (f.prior_move === "beyond" && (f.trade_vs_day === "above-high" || f.trade_vs_day === "below-low")) out.push("print-far-outside-day-range");
+  // the guard's freshness: the quote stamped no more than TRADE_STALE_MS before the clock (the probe's age, in seconds)
+  if (f.quote === "crossed" && f.quote_age_s !== null && f.quote_age_s * 1000 <= TRADE_STALE_MS) out.push("quote-crossed");
   return out;
 }
 
@@ -309,7 +352,7 @@ describe("the probe and the guards", () => {
       compared++;
       const want = probeReasons(f as NameFacts);
       if (want.length) tripped++;
-      expect(quoteGuards(q), JSON.stringify(raw)).toEqual(want);
+      expect(quoteGuards(q, { today: "2026-10-12", now: NOW }), JSON.stringify(raw)).toEqual(want);
       // and the shape and spread are one definition
       const lq = (raw as { latestQuote?: { bp?: unknown; ap?: unknown; bs?: unknown; as?: unknown } }).latestQuote;
       if (lq && typeof lq === "object" && !Array.isArray(lq)) {
@@ -361,7 +404,7 @@ describe("a guard on the board", () => {
     expect(on.QQQ).toMatchObject({ state: "paused", tone: "neutral", line: "Suspect data, the bid is above the ask: check your platform", guards: ["quote-crossed"], cautions: [], alt: null, plan: null });
     expect(rowView(on.QQQ!)).toEqual({ badge: { word: "PRICES PAUSED", tone: "neutral", side: null, alt: null }, testing: false, headline: "Suspect data, the bid is above the ask: check your platform", grid: null });
     // only the guard that is on pauses: another guard's switch leaves a crossed quote alone
-    expect(boardRows(atStep(3, crossedQQQ, { guards: { on: ["bar-high-below-low", "price-far-from-prior-close"] } }), true)).toEqual(boardRows(atStep(3), true));
+    expect(boardRows(atStep(3, crossedQQQ, { guards: { on: ["bar-high-below-low", "print-far-outside-day-range"] } }), true)).toEqual(boardRows(atStep(3), true));
     // every guard on, healthy quotes: nothing changes
     expect(boardRows(atStep(3, undefined, { guards: { on: ALL } }), true)).toEqual(boardRows(atStep(3), true));
   });
@@ -394,14 +437,14 @@ describe("a guard on the board", () => {
     const at = (hhmm: string) => Date.parse(`${S}T${hhmm}:00-04:00`);
     for (const hhmm of ["09:31", "11:45", "15:20"]) {
       const t = at(hhmm);
-      const quotes = Object.fromEntries(Object.entries(atStep(3).quotes).map(([s, q]) => [s, { ...suspectQuote(q, "quote-crossed"), at: new Date(t - 1_000).toISOString() }]));
+      const quotes = Object.fromEntries(Object.entries(atStep(3).quotes).map(([s, q]) => [s, { ...suspectQuote(q, "quote-crossed"), at: new Date(t - 1_000).toISOString(), quote_at: new Date(t - 1_000).toISOString() }]));
       const rows = boardRows(atStep(3, undefined, { quotes, now: t, receivedAt: t - 500, serverBars: {}, serverFetchedAt: {}, guards: { on: ["quote-crossed"] } }), true);
       expect(rows.map((r) => r.state!.state), hhmm).toEqual(rows.map(() => "paused"));
     }
     // outside the session the stale check does not run, and neither do the guards: the clock's no trade stands
     for (const hhmm of ["09:20", "16:05"]) {
       const t = at(hhmm);
-      const quotes = Object.fromEntries(Object.entries(atStep(3).quotes).map(([s, q]) => [s, { ...suspectQuote(q, "quote-crossed"), at: new Date(t - 1_000).toISOString() }]));
+      const quotes = Object.fromEntries(Object.entries(atStep(3).quotes).map(([s, q]) => [s, { ...suspectQuote(q, "quote-crossed"), at: new Date(t - 1_000).toISOString(), quote_at: new Date(t - 1_000).toISOString() }]));
       const rows = boardRows(atStep(3, undefined, { quotes, now: t, receivedAt: t - 500, serverBars: {}, serverFetchedAt: {}, guards: { on: ALL } }), true);
       expect(rows.every((r) => r.state!.state === "no_trade" && r.state!.guards === undefined), hhmm).toBe(true);
     }
@@ -445,7 +488,7 @@ describe("the page and the server", () => {
       { ...atStep(step), quotes: snapshots, serverBars: settled, serverFetchedAt: Object.fromEntries(ITEMS.map((i) => [i.symbol, end + SERVER_SETTLE_MS])), now, receivedAt: now - 500, ...(on ? { guards: { on } } : {}) },
       true,
     );
-    return { server, page: page.flatMap((r) => stateRows(r.state!)), snapshots };
+    return { server, page: page.flatMap((r) => stateRows(r.state!)), snapshots, now };
   }
 
   it("a tripped guard that is on pauses the name on both; with it off, or untripped, it changes neither", () => {
@@ -461,7 +504,7 @@ describe("the page and the server", () => {
         expect(plainOn.server).toEqual(plain.server);
         expect(plainOn.page).toEqual(plain.page);
         for (const sym of ITEMS.map((i) => i.symbol)) {
-          const trips = activeGuards(quoteGuards(on.snapshots[sym]), [g]).length > 0;
+          const trips = activeGuards(quoteGuards(on.snapshots[sym], { today: S, now: on.now }), [g]).length > 0;
           const srv = on.server.rows.filter((r) => r.symbol === sym).map((r) => r.state);
           const pg = on.page.filter((r) => r.symbol === sym).map((r) => r.state);
           if (trips) {
