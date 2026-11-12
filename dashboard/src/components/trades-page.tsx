@@ -15,6 +15,7 @@ import {
   TodayPanel,
   TradesPanel,
 } from "@/components/journal";
+import Link from "next/link";
 import { PaneBoundary } from "@/components/client/pane-boundary";
 import { Empty } from "@/components/empty";
 import { ClonePanel } from "@/components/options-clone";
@@ -116,7 +117,17 @@ export function JournalBody({ doc: raw, q, now }: { doc: JournalDoc; q: Query; n
   return (
     <>
       <TradesJumpBar links={barLinks(doc, filter, now)} />
-      <TradesGroup group="today" intro="Where you stand right now: the rules and the room left, then this session's trades as they close.">
+      <TradesGroup
+        group="today"
+        intro={
+          <>
+            Where you stand right now: the rules and the room left, then this session&apos;s trades as they close.{" "}
+            <Link href="/review" className="hover:text-foreground underline underline-offset-2">
+              Day review
+            </Link>
+          </>
+        }
+      >
         <PaneBoundary name="Today">
           <TodayGroup doc={doc} now={now} />
         </PaneBoundary>

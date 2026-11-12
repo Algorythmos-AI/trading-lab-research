@@ -265,6 +265,14 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
                 </div>
                 {/* Folded at the bottom: the last scored card's review (outside market hours only), the drawing guide, the
                     9 rules and the research behind them. None is needed to trade. */}
+                {/* Outside market hours, with the last card's review: the owner's own day against his rules. */}
+                {review ? (
+                  <p className="text-xs">
+                    <a className="text-muted-foreground hover:text-foreground underline" href="/review">
+                      Day review: your last day against your rules
+                    </a>
+                  </p>
+                ) : null}
                 {review ? (
                   <details className="rounded-lg border" data-review-fold>
                     <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Yesterday&apos;s review · how the card did</summary>
