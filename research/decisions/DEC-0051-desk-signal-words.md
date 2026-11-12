@@ -78,7 +78,9 @@ state). The first that applies:
    - an input is not usable: the slot's DEC-0044 record has a status other than `ok`, or lists the name in
      `degraded_names`; the edition is missing or for another session; the parameter hash or the signal code's hash in
      force differs from the one Amendment 1 freezes; an answer names a feed other than SIP for the stock or OPRA for
-     the option.
+     the option; or there is no board-feed stamp (DEC-0050 point 4) for the minute the slot's DEC-0044 record was
+     written, or it reads other than `sip`, or SPY did not answer on it (`answered` other than `ok`). Without that
+     stamp the board's state cannot be shown to come from SIP.
 2. **CALL** (call side) or **PUT** (put side) when the side's own state is `enter_zone` for the card's break and
    retest, with neither `brokeEarlier` nor `gap` set, and all four market gates pass, and a contract passes.
    (`trade-state.ts` never gives `enter_zone` with either flag set; the condition is kept so that a later change to
@@ -168,6 +170,11 @@ out ("not available", for any reason) **fails** for the word; section 8 says how
      (*candidate*), and whose own time (`quote_at`) is at most **60 s** (*candidate*) before the chain answer was
      served. The checked age says how recently the chain was fetched; the quote's own time says how old the bid
      and ask in it are. Both must hold: a chain fetched a second ago can still carry a quote from hours earlier.
+     **A quiet contract** (its bid and ask unchanged for longer than the limit, so its quote keeps an older time)
+     fails this check and is "no contract", even when its quote is still the market: the record cannot tell a quote
+     that has not changed from one that has stopped arriving, and it takes the cautious reading. Because a break
+     whose contract check fails is counted, not scored (section 8), this costs confirmed breaks, not the fairness of
+     the comparison. Amendment 1 sets the limit by the freeze rule from how often it fails in the `dry` log.
    - **Volume today** (the snapshot's daily bar, `chain.ts` `volume`) at least **100** contracts (*candidate*).
    - **Delta present from the feed** (`chain.ts` `delta`, from the snapshot's greeks). A missing delta fails, and so
      does any delta the site works out itself.
@@ -302,9 +309,11 @@ on the stock than breaks that reach it while a market gate fails?
      other than `ok`, a parameter-hash, signal-code-hash or feed mismatch), `gate_unavailable` (a market gate that
      could not be read: a thin, stale or missing baseline, a stale quote, a calendar gap, lagging bars);
   2. **a**, confirmed: CALL or PUT;
-  3. counted, not scored: `contract_only` (every market gate passes and only the contract check fails);
-  4. **b**, not confirmed: WAIT or NO TRADE because at least one market gate was read and failed. The report gives
-     b's count split by whether its contract check passed.
+  3. counted, not scored: `contract_failed` (the contract check did not pass, whatever the market gates read);
+  4. **b**, not confirmed: WAIT or NO TRADE because at least one market gate was read and failed, and the contract
+     check passed. So group *b* differs from group *a* in the market gates only: a break that also had no contract
+     inside the owner's rules is not in either group. (Second round, 2026-11-13, the owner's choice: the proposal
+     kept such breaks in *b* and split *b* by contract result in the report.)
 - **The card numbers, frozen here** under DEC-0035 section 3 (not an amendment), from `focus-plan.ts` as it stands:
   `ENTRY_ATR` 0.01, `STOP_ATR` 0.1, `MIN_ROOM_MULTIPLE` 2; the call side's level is the edition's `breakout_above`
   (else `resistance.price`), the put side's `hold_above` (else `support.price`); entry = level ± 0.01 ATR, stop =
@@ -319,7 +328,8 @@ on the stock than breaks that reach it while a market gate fails?
   SHA-256, the same usable rule). Counted, not scored: `bars_incomplete`, and `no_entry_bar` (no bar starts after the
   evaluation time before the close).
 - **A counted session** is one in the window on which at least 90% of the session's expected slots (`expectedSlots`
-  in `desk-eval.ts`) hold a signal record; otherwise it is `log_incomplete`, and its breaks are counted, not scored.
+  in `desk-eval.ts`) hold a signal record and a board-feed stamp reading `sip` that SPY answered; otherwise it is
+  `log_incomplete`, and its breaks are counted, not scored.
   This one definition is used everywhere below.
 - **The measure:** mean R of group *a* minus mean R of group *b*.
 - **Supported** only if the 95% bootstrap range of that difference (5,000 resamples of counted sessions with
@@ -328,11 +338,15 @@ on the stock than breaks that reach it while a market gate fails?
   each half of the window (the counted sessions in date order, the first `floor(n/2)` then the rest; a half with an
   empty group fails).
 - **Preconditions,** each recorded with its commit by a dated line in EXP-0034's `README.md`. Amendment 1 is not
-  written, and the window does not start, before all three are in production or merged:
+  written, and the window does not start, before all four are in production or merged:
   1. the per-slot range baseline in production (the shock gate cannot be read without it);
   2. the read script, merged with synthetic-data tests, including the generator's test vectors;
   3. the outcome code (the bar fetch and join, the usable test, `entry_open`, the exit and R), merged and frozen; a
-     later change other than a defect fix recorded by a dated README note before the read is an early end.
+     later change other than a defect fix recorded by a dated README note before the read is an early end;
+  4. board-feed stamps written in production for every minute of one full regular session, each reading `sip` with
+     SPY answering, and that session sealed. (The owner reported on 2026-11-13 that none had been written since the
+     open on 2026-11-12: the cron fires late in its minute and the writer refuses past second 45. Until that is fixed
+     and a full session is stamped, Amendment 1 is not written and no window starts.)
 - **The window.** It starts at the first regular session that opens after: the preconditions are met, Amendment 1
   is merged and in production, and the switch first reads `log` or `show` in production. Forward only, never
   backfilled. No `dry` session is ever in it.

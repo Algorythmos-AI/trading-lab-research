@@ -32,7 +32,9 @@ signal:                             # DEC-0051 section 1; per focus name of the 
         - >-
           an input is not usable: the slot's DEC-0044 record has a status other than ok or lists the name in
           degraded_names; the edition is missing or for another session; the parameter hash or the signal-code hash
-          differs from Amendment 1's; an answer names a feed other than sip (stock) or opra (option)
+          differs from Amendment 1's; an answer names a feed other than sip (stock) or opra (option); no board-feed
+          stamp for the minute the slot's DEC-0044 record was written, or one reading other than sip, or answered other
+          than ok
     - word: CALL_or_PUT             # CALL on the call side, PUT on the put side
       when: "side state enter_zone, brokeEarlier false, gap false, all four market gates pass, a contract passes"
     - word: WAIT
@@ -132,7 +134,7 @@ parameters:                         # NOT FROZEN until DEC-0051 Amendment 1; the
   contract_quote_stamp_max_age_s: 60
   contract_min_volume: 100
   freeze_rule: >-
-    by Amendment 1, from the dry log over at least 10 full sessions recorded after the three preconditions are in
+    by Amendment 1, from the dry log over at least 10 full sessions recorded after the four preconditions are in
     production: for every focus-name slot, whatever the board's state, the share of slots on which each number's gate
     or check would fail; a candidate is kept unless that share is above 80% or below 5%, and then moves to the grid
     value nearest the candidate whose share lies in [5%, 80%] (the stricter of two equally near); if none does, the
@@ -188,6 +190,7 @@ preconditions:                      # each recorded with its commit by a dated R
   - the per-slot range baseline in production (the shock gate cannot be read without it)
   - the read script merged, with synthetic-data tests including generator_test_vectors
   - the outcome code (bar fetch and join, usable test, entry_open, exit, R) merged and frozen
+  - board-feed stamps written in production for every minute of one full regular session, reading sip with SPY answering, and the session sealed
 
 window:
   start: >-
@@ -195,7 +198,7 @@ window:
     production, and desk/signal.json first reads log or show in production
   backfill: never
   dry_sessions: never in the window
-  counted_session: at least 90% of the session's expectedSlots (desk-eval.ts) hold a signal record; else log_incomplete
+  counted_session: at least 90% of the session's expectedSlots (desk-eval.ts) hold a signal record and a board-feed stamp reading sip that SPY answered; else log_incomplete
   ends_early_on:                    # the last session counted is the last before the change reaches production
     - an amendment to DEC-0035 that changes a card number, or a change to card_numbers below
     - a change to MAX_PREMIUM, RISK_PER_TRADE, PREMIUM_STOP or OWNER_FEES
@@ -218,12 +221,11 @@ unit:
   scoring_slot: its first enter_zone slot; scored once, whatever its word later
   group_order:                      # at the scoring slot, the first that applies
     - {group: not_logged, scored: false, when: the slot has no signal record}
-    - {group: not_usable, scored: false, when: "status other than ok, a parameter-hash, signal-code-hash or feed mismatch"}
+    - {group: not_usable, scored: false, when: "status other than ok, a parameter-hash, signal-code-hash or feed mismatch, or no SIP board-feed stamp for the slot"}
     - {group: gate_unavailable, scored: false, when: "a market gate could not be read (thin, stale or missing baseline, stale quote, calendar gap, lagging)"}
     - {group: a, scored: true, when: word CALL or PUT}
-    - {group: contract_only, scored: false, when: every market gate passes and only the contract check fails}
-    - {group: b, scored: true, when: "word WAIT or NO_TRADE and at least one market gate read and failed"}
-  b_split_reported: by whether its contract check passed
+    - {group: contract_failed, scored: false, when: "the contract check did not pass, whatever the market gates read"}
+    - {group: b, scored: true, when: "word WAIT or NO_TRADE, at least one market gate read and failed, and the contract check passed"}
   also_not_scored: [bars_incomplete, no_entry_bar, every break of a log_incomplete session]
 
 card_numbers:                       # frozen here under DEC-0035 section 3 (not an amendment), from focus-plan.ts

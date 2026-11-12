@@ -12,7 +12,7 @@
   with no outcome read.
 - The expiry rule is the owner's, decided on 2026-11-13: 1 to 5 sessions out, never the same day
   (`parameters.expiry_rule`).
-- Start: the first regular New York session that opens after the three preconditions below, Amendment 1 in
+- Start: the first regular New York session that opens after the four preconditions below, Amendment 1 in
   production and the signal switch first at `log` or `show` in production. Never backfilled.
 - Read: once, at the first of 100 scored confirmed breaks or the close date. Early ends give no verdict.
 
@@ -30,6 +30,8 @@
 - Precondition 1, the per-slot range baseline in production, its commit: not yet.
 - Precondition 2, the read script merged, its commit: not yet.
 - Precondition 3, the outcome code merged and frozen, its commit: not yet.
+- Precondition 4, one full regular session stamped in production (board-feed stamps reading `sip`, sealed): not
+  yet. Reported on 2026-11-13 by the owner: no stamp written since the open on 2026-11-12.
 - Signal switch first at `dry` in production: not yet.
 - Amendment 1 (the frozen numbers, the parameter hash, the signal-code hash) merged, and in production: not yet.
 - Signal switch first at `log` in production (the window's start is the next session to open): not yet.
