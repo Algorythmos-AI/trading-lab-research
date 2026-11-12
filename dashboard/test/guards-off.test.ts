@@ -4,7 +4,7 @@
 // the page's other surfaces (the hero, the glance chips and tiles, the status rail, each ladder, the manage card of an
 // open trade) and the server's evaluation with its record's engine fields must hash exactly as the code before the
 // guards made them (guards-off.golden.json, written by guards-off-run.ts on origin/integration 61f46e6).
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ALL_OFF, parseGuardSwitches } from "@/lib/desk-guards";
 import type { EvalInput } from "@/lib/desk-eval";
 import { GUARD_REASONS, type GuardReason } from "@/lib/quote-guards";
@@ -29,6 +29,10 @@ const OFF: [string, readonly GuardReason[] | undefined][] = [
 
 const boardWith = (input: BoardInput, on: readonly GuardReason[] | undefined): BoardInput => (on === undefined ? input : { ...input, guards: { on } });
 const evalWith = (input: EvalInput, on: readonly GuardReason[] | undefined): EvalInput => (on === undefined ? input : { ...input, guardsOn: on });
+
+// Each case below renders the board and the page's other surfaces for hundreds of inputs: seconds on a laptop, more on
+// the CI runner. The default 5 s is for ordinary tests.
+vi.setConfig({ testTimeout: 120_000 });
 
 describe("with every guard switched off", () => {
   it("runs the very cases the pinned hashes were written from", () => {
