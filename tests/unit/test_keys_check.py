@@ -114,7 +114,7 @@ def test_an_undecodable_file_is_unreadable(tmp_path: Path, capsys: pytest.Captur
 def test_binary_but_decodable_content_does_not_fail(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     (tmp_path / ".env").write_bytes(b"\x00\x01\x02 junk = = \x7f\n" + f"APCA_API_KEY_ID={ID}\n".encode())
     out = _never_fails(capsys, tmp_path, {})
-    assert "(read)" in out
+    assert "(read, with lines that could not be parsed)" in out
     _no_values(out)
 
 
@@ -157,3 +157,17 @@ def test_an_unexpected_failure_still_exits_0(tmp_path: Path, capsys: pytest.Capt
     out = _never_fails(capsys, tmp_path, {})
     assert "could not finish" in out
     _no_values(out)
+
+
+def test_a_malformed_line_is_counted_not_logged(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    import logging
+    _env_file(tmp_path, f'APCA_API_KEY_ID={ID}\n"this is not a statement\nAPCA_API_SECRET_KEY={SECRET}\n= also bad\n')
+    lg = logging.getLogger("dotenv.main")
+    before = (lg.propagate, lg.level, list(lg.handlers))
+    assert kc.main([], environ={}, root=tmp_path) == 0
+    got = capsys.readouterr()
+    assert got.err == ""
+    assert "(read, with lines that could not be parsed)" in got.out
+    assert "line 2" not in got.out and "line 4" not in got.out
+    assert (lg.propagate, lg.level, list(lg.handlers)) == before
+    _no_values(got.out)

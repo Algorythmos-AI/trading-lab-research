@@ -15,6 +15,7 @@ with python-dotenv's own parser, the one `load_dotenv` uses (`export ` prefixes,
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -62,13 +63,40 @@ def read_env_file(label: str, path: Path) -> EnvFile:
             return EnvFile(label, path, "missing")
         if not path.is_file():
             return EnvFile(label, path, "not a file")
-        return EnvFile(label, path, "read", {k: v for k, v in dotenv_values(path).items() if v is not None})
+        values, bad_lines = _parse_quietly(path)
+        return EnvFile(label, path, "read, with lines that could not be parsed" if bad_lines else "read", values)
     except (OSError, UnicodeError, ValueError):
         return EnvFile(label, path, "unreadable")
 
 
+class _Count(logging.Handler):
+    def __init__(self) -> None:
+        super().__init__(logging.DEBUG)
+        self.n = 0
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.n += 1
+
+
+def _parse_quietly(path: Path) -> tuple[dict[str, str], bool]:
+    """dotenv_values, with python-dotenv's own warnings kept off stderr: "could not parse statement starting at line
+    N" is a location inside a secrets file. They are only counted. The logger is restored afterwards."""
+    lg = logging.getLogger("dotenv.main")
+    count = _Count()
+    saved = (lg.propagate, lg.level, lg.handlers[:])
+    lg.handlers, lg.propagate = [count], False
+    lg.setLevel(logging.DEBUG)
+    try:
+        values = {k: v for k, v in dotenv_values(path).items() if v is not None}
+    finally:
+        lg.propagate, lg.handlers = saved[0], saved[2]
+        lg.setLevel(saved[1])
+    return values, count.n > 0
+
+
 STATUS_WORDS = {
     "read": "read",
+    "read, with lines that could not be parsed": "read, with lines that could not be parsed",
     "missing": "not found; Python tools skip it",
     "not a file": "not a regular file; Python tools skip it",
     "unreadable": "exists but cannot be read; a Python tool that loads it fails before it uses any key",
