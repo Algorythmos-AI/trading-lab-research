@@ -9,18 +9,20 @@ import { alpacaDataUrl, feedsFor } from "@/lib/alpaca-data-url";
 // subscription allows, so its data source changes with the plan. Every request URL is built by alpacaDataUrl, which
 // refuses one without a feed; the scan below fails on any data path written anywhere else.
 //
-// Known limits of the scan (what covers each): a URL whose base and path both arrive from outside the file (a
-// parameter with no data-base default, a constant imported under another name) is not seen as a data request; a
-// fetch through a wrapper that takes a finished URL string is checked only where the URL is built. In both cases the
-// URL is still refused at run time if it goes through alpacaDataUrl; one that bypasses the builder entirely and
-// hides both pieces is not caught. Feed removal by string surgery (`.replace(/feed=.../)`) is not followed.
+// Known limits of the scan: a URL whose base and path both arrive from outside the file (a parameter with no
+// data-base default, a constant imported under another name) is not seen as a data request; a base imported under
+// another name is caught only when the piece beside it is a whole path (v2/stocks/..., v1beta1/options/...); an HTTP
+// client the scan does not know by name (anything but fetch..., axios, got, ky, request, get/post) is not checked;
+// feed removal by string surgery (`.replace(/feed=.../)`) and anything dynamic are not followed. A URL built by
+// alpacaDataUrl is refused at run time without a feed; one that bypasses the builder and hides both pieces is not
+// caught at all.
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const BUILDER = "src/lib/alpaca-data-url.ts";
 /** A data path that takes a feed, with or without its leading slash: stock data, and option quotes. */
-const FEED_PATH = /(?:^|\/|\})v2\/stocks\/(?!meta\/|auctions)|(?:^|\/|\})v1beta1\/options\/(?:snapshots|(?:quotes|trades|bars)\/latest)/;
+const FEED_PATH = /(?:^|\/|\})v2\/stocks\/(?!meta\/)|(?:^|\/|\})v1beta1\/options\/(?:snapshots|(?:quotes|trades|bars)\/latest)/;
 /** A piece of one beside a data base ("/stocks/", "stocks/bars", "options/snapshots"). */
-const PIECE = /(?:^|\/)(?:stocks\/(?!meta\/|auctions)|stocks\/?$|options\/(?:snapshots|(?:quotes|trades|bars)\/latest))/;
+const PIECE = /(?:^|\/)(?:stocks\/(?!meta\/)|stocks\/?$|options\/(?:snapshots|(?:quotes|trades|bars)\/latest))/;
 const HOST = "data.alpaca.markets";
 const BASE_NAMES = new Set(["DEFAULT_DATA_URL", "ALPACA_DATA_URL"]);
 
@@ -62,6 +64,8 @@ describe("alpacaDataUrl", () => {
     expect(feedsFor("/v1beta1/news")).toBeNull();
     expect(feedsFor("/v2/stocks/meta/exchanges")).toBeNull();
     expect(feedsFor("/v2/stocks/SPY/snapshot")).toEqual(["iex", "sip"]);
+    expect(feedsFor("/v2/stocks/auctions")).toEqual(["sip"]);
+    expect(() => alpacaDataUrl("https://d.x", "/v2/stocks/auctions", { feed: "iex" })).toThrow(/must name its feed \(sip\)/);
   });
 });
 
@@ -81,7 +85,24 @@ const literalText = (n: ts.Node): string | null => {
 const unwrap = (n: ts.Node): ts.Node => (ts.isParenthesizedExpression(n) || ts.isAsExpression(n) || ts.isSatisfiesExpression(n) || ts.isNonNullExpression(n) ? unwrap(n.expression) : n);
 const callee = (c: ts.CallExpression): string => {
   const e = unwrap(c.expression);
-  return ts.isIdentifier(e) ? e.text : ts.isPropertyAccessExpression(e) ? e.name.text : "";
+  if (ts.isIdentifier(e)) return e.text;
+  if (ts.isPropertyAccessExpression(e)) return e.name.text;
+  if (ts.isElementAccessExpression(e)) return literalText(e.argumentExpression) ?? "";
+  return "";
+};
+/** The object a method is called on (`a` in `a.b(...)` or `a["b"](...)`), or null. */
+const receiver = (c: ts.CallExpression): ts.Node | null => {
+  const e = unwrap(c.expression);
+  return ts.isPropertyAccessExpression(e) || ts.isElementAccessExpression(e) ? e.expression : null;
+};
+/** An HTTP call: fetch-like, or a client the scan knows by name (axios, got, ky, request, get/post on a client). */
+const HTTP_CALLEE = /fetch|^(?:axios|got|ky|request|get|post|put|head)$/i;
+const isHttpCall = (c: ts.CallExpression): boolean => {
+  const name = callee(c);
+  if (name === "alpacaDataUrl") return false;
+  if (HTTP_CALLEE.test(name)) return true;
+  const r = receiver(c);
+  return !!r && ts.isIdentifier(unwrap(r)) && /^(?:axios|got|ky|superagent)$/.test((unwrap(r) as ts.Identifier).text);
 };
 const isBuilderCall = (n: ts.Node): boolean => ts.isCallExpression(unwrap(n)) && callee(unwrap(n) as ts.CallExpression) === "alpacaDataUrl";
 
@@ -136,6 +157,9 @@ function strayDataPaths(file: string, text: string): string[] {
   const pieces = (n: ts.Node): ts.Node[] => {
     const u = unwrap(n);
     if (ts.isBinaryExpression(u) && u.operatorToken.kind === ts.SyntaxKind.PlusToken) return [...pieces(u.left), ...pieces(u.right)];
+    if (ts.isCallExpression(u) && callee(u) === "concat" && receiver(u)) return [...pieces(receiver(u)!), ...u.arguments.flatMap((a) => pieces(a))];
+    if (ts.isCallExpression(u) && callee(u) === "join" && receiver(u) && ts.isArrayLiteralExpression(unwrap(receiver(u)!)))
+      return (unwrap(receiver(u)!) as ts.ArrayLiteralExpression).elements.flatMap((el) => pieces(el));
     if (ts.isTemplateExpression(u)) return [u.head, ...u.templateSpans.flatMap((s) => [s.expression, s.literal])];
     return [u];
   };
@@ -149,7 +173,11 @@ function strayDataPaths(file: string, text: string): string[] {
   const visit = (n: ts.Node): void => {
     const t = literalText(n);
     if (t !== null && FEED_PATH.test(t) && !isBuilderPath(n)) out.push(`${file}: ${t}`);
-    if ((ts.isBinaryExpression(n) && n.operatorToken.kind === ts.SyntaxKind.PlusToken && !(ts.isBinaryExpression(n.parent) && n.parent.operatorToken.kind === ts.SyntaxKind.PlusToken)) || ts.isTemplateExpression(n)) {
+    const chain =
+      (ts.isBinaryExpression(n) && n.operatorToken.kind === ts.SyntaxKind.PlusToken && !(ts.isBinaryExpression(n.parent) && n.parent.operatorToken.kind === ts.SyntaxKind.PlusToken)) ||
+      ts.isTemplateExpression(n) ||
+      (ts.isCallExpression(n) && (callee(n) === "concat" || (callee(n) === "join" && !!receiver(n) && ts.isArrayLiteralExpression(unwrap(receiver(n)!)))));
+    if (chain) {
       if (joinsBase(n) && !FEED_PATH.test(t ?? "")) out.push(`${file}:${line(n)}: a data path joined to a data base`);
     }
     if (ts.isNewExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === "URL" && n.arguments && n.arguments.length >= 2) {
@@ -159,11 +187,11 @@ function strayDataPaths(file: string, text: string): string[] {
     if (ts.isCallExpression(n)) {
       const name = callee(n);
       const target = n.arguments[0];
-      if (/fetch/i.test(name) && name !== "alpacaDataUrl" && target && mentionsBase(target)) {
+      if (isHttpCall(n) && target && mentionsBase(target)) {
         const u = unwrap(target);
         if (!isBuilderCall(u) && !(ts.isIdentifier(u) && built.has(u.text))) out.push(`${file}:${line(n)}: ${name}() to a data base without alpacaDataUrl`);
       }
-      if ((name === "delete" || name === "set") && n.arguments[0] && literalText(n.arguments[0]) === "feed") out.push(`${file}:${line(n)}: .${name}("feed") on a query`);
+      if ((name === "delete" || name === "set" || name === "append") && n.arguments[0] && literalText(n.arguments[0]) === "feed") out.push(`${file}:${line(n)}: .${name}("feed") on a query`);
     }
     if (!ts.isTemplateExpression(n)) ts.forEachChild(n, visit);
     else n.templateSpans.forEach((s) => visit(s.expression));
@@ -210,6 +238,13 @@ describe("every Alpaca data request names its feed (scan)", () => {
     "fetch to the host literal": 'await fetch(`https://data.alpaca.markets${path}`);',
     "a data path nested in a call in the builder's path argument": 'alpacaDataUrl(base, join("/v2/stocks/bars"), q);',
     "a data path in another argument of the builder": 'alpacaDataUrl("/v2/stocks/bars", p, q);',
+    ".concat beside a data base": 'const u = DEFAULT_DATA_URL.concat("/v2/", "stocks/bars"); await fetch(u);',
+    "axios to a data base": 'await axios.get(`${DEFAULT_DATA_URL}${p}`);',
+    "got to a data base": 'await got(process.env.ALPACA_DATA_URL + p);',
+    "request to a data base": 'request({ url: DEFAULT_DATA_URL + p });',
+    'searchParams["delete"]("feed")': 'const u = new URL(alpacaDataUrl(base, "/v2/stocks/bars", q)); u.searchParams["delete"]("feed");',
+    '.append("feed", "")': 'const u = new URL(alpacaDataUrl(base, "/v2/stocks/bars", q)); u.searchParams.append("feed", "");',
+    'an array .join("/") with a data base': 'const u = [DEFAULT_DATA_URL, "v2", "stocks", "bars"].join("/");',
     "feed removed from a built URL": 'const u = new URL(alpacaDataUrl(base, "/v2/stocks/bars", q)); u.searchParams.delete("feed"); u.searchParams.set("feed", "");',
   };
   for (const [name, src] of Object.entries(MISSED))

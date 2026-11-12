@@ -9,15 +9,19 @@
 
 export const STOCK_FEEDS: readonly string[] = ["iex", "sip"];
 export const OPTION_FEEDS: readonly string[] = ["indicative", "opra"];
+/** Alpaca's reference for the stock auctions: "Only `sip` is valid for auctions". */
+export const AUCTION_FEEDS: readonly string[] = ["sip"];
 
-const STOCK_DATA = /^\/v2\/stocks\/(?:(?:bars|trades|quotes)(?:\/latest)?|snapshots|(?!meta\/|auctions)[^/]+\/(?:(?:bars|trades|quotes)(?:\/latest)?|snapshot))\/?$/;
+const AUCTIONS = /^\/v2\/stocks\/(?:[^/]+\/)?auctions\/?$/;
+const STOCK_DATA = /^\/v2\/stocks\/(?:(?:bars|trades|quotes)(?:\/latest)?|snapshots|(?!meta\/)[^/]+\/(?:(?:bars|trades|quotes)(?:\/latest)?|snapshot))\/?$/;
 const OPTION_QUOTES = /^\/v1beta1\/options\/(?:snapshots(?:\/[^/]+)?|(?:quotes|trades|bars)\/latest)\/?$/;
 
 /**
- * Which feeds a data path takes: the stock ones (bars, trades, quotes, snapshots, latest), the option ones (option
+ * Which feeds a data path takes: the stock ones (bars, trades, quotes, snapshots, latest), sip for auctions, the option ones (option
  * snapshots and latest), or null for a path this builder does not serve (metadata, news, option bars).
  */
 export function feedsFor(path: string): readonly string[] | null {
+  if (AUCTIONS.test(path)) return AUCTION_FEEDS;
   if (STOCK_DATA.test(path)) return STOCK_FEEDS;
   if (OPTION_QUOTES.test(path)) return OPTION_FEEDS;
   return null;
