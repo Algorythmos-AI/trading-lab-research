@@ -1,6 +1,7 @@
 // A log-only probe of Alpaca's raw stock snapshots, kept as temporary evidence for the board's bad-data guards: how
-// often a real snapshot shows a shape the guards would pause on (high below low, an open outside the day's range, a
-// last trade outside the day's high and low or far from the prior close, a crossed quote) in normal conditions.
+// often a real snapshot shows a shape the guards (quote-guards.ts) would pause on (high below low, an open outside the
+// day's range, a last trade far from the prior close, a crossed quote) in normal conditions, and, counted apart, a
+// last trade outside the day's high and low, which is not a guard.
 //
 // Pure and total: every input may be missing, null or of the wrong type, and nothing here throws on it; a field it
 // cannot read is reported "absent" or "invalid". It returns enums, booleans, numbers (ages in seconds, which are
@@ -15,6 +16,12 @@
 import { isDataFeed } from "./feed-provenance";
 import { addDays, nyNow, sessionOf } from "./market-calendar";
 import { SETS_PRICE, type SetsPrice, setsPrice } from "./quote-conditions";
+import { barChecks, PRESENCE, type Presence, PRIOR_CLOSE_LIMIT, priorMove, readBar, readStamp } from "./quote-guards";
+import { quoteShape } from "./quote-shape";
+
+// The definitions the board's guards use (quote-guards.ts, quote-shape.ts) are imported, not copied: a bar's and a
+// time's validity, the day bar's two checks, the move from the prior close and the quote's shape.
+export { PRESENCE, type Presence, PRIOR_CLOSE_LIMIT, priorMove };
 
 export const PROBE_V = 1;
 /** One minute bar's length. */
@@ -26,10 +33,6 @@ export const MINUTE_MS = 60_000;
 export const MAX_STAMP_SKEW_MS = 7 * 24 * 60 * 60 * 1000;
 /** The largest time a JavaScript Date holds; a server time beyond it is unusable. */
 export const MAX_TIME_MS = 8.64e15;
-/** The move from the prior close the guard would pause beyond (more than 25%; exactly 25% is "at-limit"). */
-export const PRIOR_CLOSE_LIMIT = 0.25;
-/** A relative tolerance for "exactly at the limit", so a float's last bit cannot move a boundary case. */
-const AT_LIMIT_TOL = 1e-9;
 /** A trade condition or exchange code as stored: 1 or 2 characters of A-Z, 0-9, space or "@". Anything else is dropped. */
 export const CODE_RE = /^[A-Z0-9 @]{1,2}$/;
 /** At most this many condition codes are kept per trade (Alpaca sends a handful). */
@@ -38,8 +41,6 @@ export const MAX_CODES = 8;
 export const MAX_PROBED = 60;
 const SYMBOL_RE = /^[A-Z][A-Z0-9.]{0,9}$/;
 
-export const PRESENCE = ["ok", "absent", "invalid"] as const;
-export type Presence = (typeof PRESENCE)[number];
 export const MINUTE_STATES = ["absent", "invalid", "forming", "finished"] as const;
 export type MinuteState = (typeof MINUTE_STATES)[number];
 /** A New York day against the server's New York day. */
@@ -174,18 +175,7 @@ export const ageSeconds = (ms: number) => Math.floor(ms / 100) / 10;
 const NY_DAY_FMT = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
 const nyDay = (t: number) => NY_DAY_FMT.format(new Date(t));
 
-/**
- * A time as Alpaca sends it: "absent" when missing or null; "invalid" when not a string, unparseable or before 1970
- * (Go's zero time `0001-01-01T00:00:00Z`). Any other parseable time is read, however old: its New York day is a real
- * (if stale) day, as quote.ts' nyDay reads it; only its age is limited (ageOf).
- */
-function stamp(v: unknown): { state: Presence; t: number | null } {
-  if (v === undefined || v === null) return { state: "absent", t: null };
-  if (typeof v !== "string") return { state: "invalid", t: null };
-  const t = Date.parse(v);
-  if (!Number.isFinite(t) || t < 0) return { state: "invalid", t: null };
-  return { state: "ok", t };
-}
+const stamp = readStamp;
 
 /** A usable server time: finite and within what a Date holds; NaN otherwise. */
 const usableNow = (now: unknown): number => (isNum(now) && Math.abs(now) <= MAX_TIME_MS ? now : Number.NaN);
@@ -220,15 +210,7 @@ function codes(v: unknown): { kept: string[]; dropped: number } {
   return { kept, dropped };
 }
 
-type Bar = { t: number; o: number; h: number; l: number; c: number };
-/** A bar is "ok" with a readable start and positive o, h, l, c; "absent" when missing or null; "invalid" otherwise. */
-function bar(v: unknown): { presence: Presence; bar: Bar | null; t: number | null } {
-  if (v === undefined || v === null) return { presence: "absent", bar: null, t: null };
-  if (!isObj(v)) return { presence: "invalid", bar: null, t: null };
-  const s = stamp(v.t);
-  if (s.t === null || !isPos(v.o) || !isPos(v.h) || !isPos(v.l) || !isPos(v.c)) return { presence: "invalid", bar: null, t: s.t };
-  return { presence: "ok", bar: { t: s.t, o: v.o, h: v.h, l: v.l, c: v.c }, t: s.t };
-}
+const bar = readBar;
 
 const isSessionDay = (day: string) => {
   const k = sessionOf(day).kind;
@@ -275,32 +257,16 @@ export function rateHeader(v: unknown): number | null {
   return Number(v.trim());
 }
 
-/** The move from the prior close against PRIOR_CLOSE_LIMIT: exactly 25% (within a float's tolerance) is "at-limit". */
-export function priorMove(price: number, prior: number): { move: Exclude<PriorMove, "unknown">; bps: number } {
-  const dist = Math.abs(price - prior);
-  const limit = prior * PRIOR_CLOSE_LIMIT;
-  const move = Math.abs(dist - limit) <= prior * AT_LIMIT_TOL ? "at-limit" : dist > limit ? "beyond" : "within";
-  return { move, bps: r1((dist / prior) * 10_000) };
-}
-
 function quoteFacts(v: unknown, now: number, aged: Aged[]): Pick<NameFacts, "quote" | "quote_time" | "spread_bps" | "quote_age_s"> {
   if (v === undefined || v === null) return { quote: "absent", quote_time: "absent", spread_bps: null, quote_age_s: null };
   // Not an object at all: the quote and its time are both unreadable.
   if (!isObj(v)) return { quote: "invalid", quote_time: "invalid", spread_bps: null, quote_age_s: null };
   const s = stamp(v.t);
   const base = { quote_time: s.state, quote_age_s: ageOf(s.t, now, "quote", aged) };
-  const { bp, ap, bs, as: asz } = v;
-  // A price of 0 is Alpaca's "no active side"; anything that is not a number of 0 or more is unreadable. A size of 0
-  // (sizes are in shares) is no active side too. A missing size (absent or null) leaves the side to its price; a size
-  // that is sent but is not a number of 0 or more makes the quote unreadable.
-  const sizeOk = (z: unknown) => z === undefined || z === null || (isNum(z) && z >= 0);
-  if (!isNum(bp) || !isNum(ap) || bp < 0 || ap < 0 || !sizeOk(bs) || !sizeOk(asz)) return { quote: "invalid", spread_bps: null, ...base };
-  const bid = bp > 0 && bs !== 0;
-  const ask = ap > 0 && asz !== 0;
-  if (!bid && !ask) return { quote: "empty", spread_bps: null, ...base };
-  if (!bid || !ask) return { quote: "one-sided", spread_bps: null, ...base };
-  const spread = r1(((ap - bp) / ((ap + bp) / 2)) * 10_000);
-  return { quote: bp > ap ? "crossed" : bp === ap ? "locked" : "normal", spread_bps: spread, ...base };
+  // The shape and spread are quote-shape.ts': a price or size of 0 is no active side, a missing size leaves the side to
+  // its price, and anything else that is not a number of 0 or more makes the quote unreadable.
+  const { shape, spread_bps } = quoteShape(v.bp, v.ap, v.bs, v.as);
+  return { quote: shape, spread_bps, ...base };
 }
 
 /**
@@ -387,8 +353,8 @@ export function probeSnapshot(symbol: string, raw: unknown, now: number): NamePr
     daily_day,
     daily_session: sess(db),
     prev_session: sess(pb),
-    high_below_low: d ? d.h < d.l : null,
-    open_outside: d ? d.o < d.l || d.o > d.h : null,
+    high_below_low: d ? barChecks(d).high_below_low : null,
+    open_outside: d ? barChecks(d).open_outside : null,
     trade_vs_day,
     trade_outside_bps: outside,
     prev: pb.presence,
