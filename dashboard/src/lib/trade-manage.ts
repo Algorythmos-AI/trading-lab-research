@@ -195,6 +195,11 @@ export interface OpenTrade {
   hintAt: string | null;
   /** The contract held, when the journal's lot names it (a note's own lot, or the journal trade's first); else null. */
   contract?: { expiry: string; strike: number } | null;
+  /**
+   * The trade's own open lots in the journal (a note's own trade, or the journal trade's group); empty for a note the
+   * journal does not show. The live option value (option-value.ts) is read from these alone.
+   */
+  lots?: readonly Lot[];
 }
 
 /** A lot's contract, when it names both its expiry and its strike. */
@@ -316,6 +321,7 @@ export function openTrades(
       unmatched,
       hintAt: hint?.opened_at ?? null,
       contract: lotContract(t?.lots[0]),
+      lots: t?.lots ?? [],
       entry: { side: n.side, price: n.price, at: n.at, source: "manual" },
     };
   });
@@ -344,6 +350,7 @@ export function openTrades(
         unmatched: false,
         hintAt: null,
         contract: lotContract(g[0]),
+        lots: g,
         entry: { side, price: ref, at, source: "journal" },
       });
     }

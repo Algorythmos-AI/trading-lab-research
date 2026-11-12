@@ -1,5 +1,6 @@
 import "server-only";
 import { readCompareReports } from "./feed-compare-report";
+import { type Entitlement, entitlement, entitlementShort, entitlementWords } from "./entitlement";
 import { type BoardFeedDay, nextOpenAfter, readBoardFeedDay } from "./board-feed-stamp";
 import { bodyHash, type ChainReason, type JudgeStamp, sessionEnds, verifyChain } from "./board-feed-judge";
 import { FEEDS_FX_COOKIE, feedsFixtureClock, parseFeedsFx } from "./feeds-live";
@@ -263,4 +264,35 @@ export async function loadStampPanel(now: Date, read: (day: string) => Promise<B
     previous = { day: prevDay, status: chainStatus(got) };
   }
   return stampPanel(now, today, previous);
+}
+
+// ---- the keys' entitlement --------------------------------------------------------------------------------------------
+
+/** The Feeds page's one row on what the site's keys are entitled to: its label, its words, and whether it warns. */
+export interface EntitlementRow {
+  label: string;
+  text: string;
+  warn: boolean;
+}
+
+const NY_HMS = new Intl.DateTimeFormat("en-GB", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hour12: false });
+
+/** The row from the probe's answer: null is no keys on the site (nothing was asked). */
+export function entitlementRow(e: Entitlement | null): EntitlementRow {
+  if (!e) return { label: "Alpaca data plan", text: "not available: the site has no Alpaca keys", warn: true };
+  const at = Date.parse(e.checked_at);
+  return {
+    label: `Alpaca data plan${Number.isFinite(at) ? ` (checked ${NY_HMS.format(new Date(at))} NY)` : ""}`,
+    text: entitlementWords(e),
+    warn: entitlementShort(e),
+  };
+}
+
+/** The probe for the page (entitlement.ts: at most once per 10 minutes per instance; fixed in fixture mode). Never throws. */
+export async function loadEntitlementRow(now: Date): Promise<EntitlementRow> {
+  try {
+    return entitlementRow(await entitlement({ now }));
+  } catch {
+    return { label: "Alpaca data plan", text: "not available: the check failed", warn: true };
+  }
 }
