@@ -162,10 +162,63 @@ def test_a_missed_case_is_now_caught(case: str) -> None:
     if case == "a later update, pop or del on the same dict":
         assert len(got) == 3
     if case == "two requests in one function, only one names a feed":
-        assert got == ["x.py:4: a data request names no feed (f)"]
+        assert got == ["x.py:4: a data request names no feed (f): name the feed in a dict literal in this call, in a "
+                       "dict assigned in this function, or in the URL's query; or add the site to KNOWN_IMPLICIT "
+                       "with the owner's decision"]
     if case in ("model_validate without a feed, and feed=None",
                 "a path through a module constant and a loop variable"):
         assert len(got) == 2
+
+
+# Further cases from the B9 re-review: each must be caught.
+MISSED_MORE = {
+    "p |= extra": 'def f(s, extra):\n    p = {"feed": "iex"}\n    p |= extra\n    return s.get(f"{DATA}/v2/stocks/bars", p)\n',
+    "a spread after the feed": 'def f(s, extra):\n    return s.get(f"{DATA}/v2/stocks/bars", {"feed": "iex", **extra})\n',
+    'p["feed"] = ""': 'def f(s):\n    p = {"symbols": "SPY"}\n    p["feed"] = ""\n    return s.get(f"{DATA}/v2/stocks/bars", p)\n',
+    "a feed name assigned None": 'def f(s):\n    feed = None\n    return s.get(f"{DATA}/v2/stocks/bars", {"feed": feed})\n',
+    '"{}".format(BASE)': 'def f(s, base):\n    return s.get("{}/v2/stocks/bars".format(base), {"symbols": "SPY"})\n',
+    "headers= does not name the feed": 'def f(s):\n    return s.get(f"{DATA}/v2/stocks/bars", params={"symbols": "SPY"}, headers={"feed": "iex"})\n',
+    "auctions take a feed": 'def f(s):\n    return s.get(f"{DATA}/v2/stocks/auctions", {"symbols": "SPY"})\n',
+}
+
+
+@pytest.mark.parametrize("case", list(MISSED_MORE))
+def test_a_further_case_is_caught(case: str) -> None:
+    assert _scan(MISSED_MORE[case]), case
+
+
+# The re-review's false positives: each must pass clean.
+CLEAN = {
+    "a data URL in a non-request call": """
+def f(url, log):
+    base = urljoin(DATA, "v2/stocks/bars")
+    log.info(f"{DATA}/v2/stocks/bars failed")
+    print("see " + DATA + "/v2/stocks/snapshots")
+    return url.startswith(DATA + "/v2/stocks/"), "/".join([DATA, "v2/stocks/bars"])
+""",
+    "the feed set in the same loop body, before the request": """
+def f(s, pages):
+    for token in pages:
+        p = {"symbols": "SPY", "page_token": token}
+        p["feed"] = "iex"
+        s.get(f"{DATA}/v2/stocks/bars", p)
+""",
+    "the feed set at the top, the request inside a loop and a try": """
+def f(s, pages):
+    p = {"symbols": "SPY"}
+    p["feed"] = "sip"
+    for token in pages:
+        try:
+            s.get(f"{DATA}/v2/stocks/bars", {**p, "page_token": token})
+        except ValueError:
+            pass
+""",
+}
+
+
+@pytest.mark.parametrize("case", list(CLEAN))
+def test_a_false_positive_case_passes(case: str) -> None:
+    assert _scan(CLEAN[case]) == [], case
 
 
 def test_the_scan_passes_requests_that_name_their_feed() -> None:
