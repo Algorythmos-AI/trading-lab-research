@@ -13,6 +13,7 @@
 //    first partial slot). It is sent as hidden, never as states. A slot whose close the page did not render is not
 //    sent at all.
 import { BAR_MS, ENGINE_VERSION, expectedSlots, settledSlotEnd, stateRows, type StateRow } from "./desk-eval";
+import type { GuardReason } from "./quote-guards";
 import { CLOSE_GRACE_MS, type NameState, SERVER_SETTLE_MS } from "./trade-state";
 
 export const STATUS_EVERY_MS = 60_000;
@@ -57,12 +58,16 @@ export interface Tick {
   browserNow: number | null;
   /** The session bars are late or failing: the states use the page's own prices only. */
   barsDelayed: boolean;
+  /** The bad-data guards the states were worked out with (desk-guards.ts); none when missing. */
+  guards?: readonly GuardReason[];
 }
 
 interface Snap {
   rows: StateRow[];
   asOf: number;
   barsDelayed: boolean;
+  /** The guards switched on when the states were taken; sent only when there are any. */
+  guards?: readonly GuardReason[];
 }
 
 const URL_STATUS = "/api/desk/eval-status";
@@ -131,7 +136,7 @@ export class DeskShadowCore {
     // The page's states as of the slot: its first render at or after the slot's close, before the slot settles.
     const closed = Math.floor((t.now - CLOSE_GRACE_MS) / BAR_MS) * BAR_MS;
     if (slots.includes(closed) && !this.snaps.has(closed) && t.now < closed + SERVER_SETTLE_MS)
-      this.snaps.set(closed, { rows: t.states.flatMap(stateRows), asOf: t.now, barsDelayed: t.barsDelayed });
+      this.snaps.set(closed, { rows: t.states.flatMap(stateRows), asOf: t.now, barsDelayed: t.barsDelayed, ...(t.guards?.length ? { guards: [...t.guards] } : {}) });
     const slot = settledSlotEnd(t.now);
     if (!slots.includes(slot) || (this.lastSent !== null && slot <= this.lastSent)) return;
     this.lastSent = slot; // before the request: at most one post per slot, even when it fails
@@ -147,9 +152,19 @@ export class DeskShadowCore {
   }
 }
 
-/** What the page sends for a slot: its states as of the slot and at settle, or hidden. */
+/**
+ * What the page sends for a slot: its states as of the slot and at settle, or hidden. With any bad-data guard switched
+ * on when it took its states, `guards` names them last (with none on, the body is as it was before the guards).
+ */
 export function pageBody(slotEnd: number, snap: Snap | null, statesNow: readonly NameState[]): string {
   const base = { slot_end: new Date(slotEnd).toISOString(), engine: ENGINE_VERSION };
   if (!snap) return JSON.stringify({ ...base, hidden: true });
-  return JSON.stringify({ ...base, as_of: new Date(snap.asOf).toISOString(), bars_delayed: snap.barsDelayed, rows: snap.rows, rows_at_settle: statesNow.flatMap(stateRows) });
+  return JSON.stringify({
+    ...base,
+    as_of: new Date(snap.asOf).toISOString(),
+    bars_delayed: snap.barsDelayed,
+    rows: snap.rows,
+    rows_at_settle: statesNow.flatMap(stateRows),
+    ...(snap.guards?.length ? { guards: snap.guards } : {}),
+  });
 }

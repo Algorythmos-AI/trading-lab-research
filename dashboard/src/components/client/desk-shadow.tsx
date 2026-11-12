@@ -13,6 +13,7 @@ import { BAR_MS, expectedSlots } from "@/lib/desk-eval";
 import { DeskShadowCore, type EvalStatus, STATUS_EVERY_MS } from "@/lib/desk-shadow-client";
 import { newYork } from "@/lib/format";
 import { nyInstant, OPEN_MIN } from "@/lib/options";
+import type { GuardReason } from "@/lib/quote-guards";
 import type { NameState } from "@/lib/trade-state";
 import { SERVER_SETTLE_MS } from "@/lib/trade-state";
 import { useBoard } from "./trade-now";
@@ -75,6 +76,7 @@ export function useDeskShadow({
   now,
   browserNow,
   barsDelayed,
+  guards = [],
 }: {
   enabled: boolean;
   reading: boolean;
@@ -84,6 +86,8 @@ export function useDeskShadow({
   now: number | null;
   browserNow: number | null;
   barsDelayed: boolean;
+  /** The bad-data guards the board's states were worked out with: sent beside them, so a slot is compared only against a server record with the same switches. */
+  guards?: readonly GuardReason[];
 }): void {
   const core = useRef<DeskShadowCore | null>(null);
   const on = enabled && reading;
@@ -108,7 +112,7 @@ export function useDeskShadow({
     };
   }, [on]);
   useEffect(() => {
-    core.current?.tick({ live, session, states, now, browserNow, barsDelayed });
+    core.current?.tick({ live, session, states, now, browserNow, barsDelayed, guards });
   });
 }
 

@@ -47,9 +47,11 @@ import {
   spokenChanges,
 } from "@/lib/trade-now";
 import { pausedAgeS } from "@/lib/level-ladder";
+import type { GuardReason } from "@/lib/quote-guards";
 import { type NameState, type NameStateName, serverNow } from "@/lib/trade-state";
 import { cn } from "@/lib/utils";
 import { useDeskShadow } from "./desk-shadow";
+import { useGuardSwitches } from "./use-guards";
 import { useDone } from "./done-today";
 import { FeedFacts, FeedRetry, useLive } from "./live-layer";
 import { useBars } from "./use-bars";
@@ -500,8 +502,11 @@ export function TradeNowBoard({
   const listed = mode.kind === "live" ? drawn.filter(({ r, extra }) => actionableRow(r) || extra !== null) : drawn;
   // A name paused on its own (the others live) is never "watching": it is named apart, with what to do.
   const shown = new Set(listed.map(({ r }) => r.symbol));
-  const pausedNames = mode.kind === "live" && !paused ? rows.filter((r) => r.state?.state === "paused" && !shown.has(r.symbol)).map((r) => r.symbol) : [];
-  const watching = rows.length - listed.length - pausedNames.length;
+  const pausedRows = mode.kind === "live" && !paused ? rows.filter((r) => r.state?.state === "paused" && !shown.has(r.symbol)) : [];
+  // A name a switched-on bad-data guard paused says why, on a line of its own; the others share the one line.
+  const pausedNames = pausedRows.filter((r) => !r.state?.guards?.length).map((r) => r.symbol);
+  const guarded = pausedRows.filter((r) => r.state?.guards?.length);
+  const watching = rows.length - listed.length - pausedRows.length;
   const status = mode.kind === "live" ? (paused ? "paused" : "live") : mode.kind === "loading" ? "connecting" : mode.kind === "off" ? "off" : "waiting";
   return (
     <section aria-labelledby="trade-now-title" data-trade-now={mode.kind} data-board-status={status} className="bg-card grid gap-2 rounded-lg border px-3 py-2.5">
@@ -562,6 +567,12 @@ export function TradeNowBoard({
           {pausedNames.join(", ")}: prices paused, check your platform
         </p>
       ) : null}
+      {guarded.map((r) => (
+        <p key={r.symbol} data-board-guard={r.symbol} data-board-guards={r.state!.guards!.join(" ")} className="text-warn text-[0.8125rem] font-medium">
+          <Pause aria-hidden className="mr-1 inline size-3.5 align-[-2px]" />
+          {r.symbol}: prices paused. {r.state!.line}
+        </p>
+      ))}
       {mode.kind === "live" && !paused && watching > 0 ? (
         listed.length === 0 ? (
           <p data-board-none className="text-explain font-medium">
@@ -778,6 +789,7 @@ export function boardAlt(r: ReturnType<typeof useBoardRow>): { kind: NonNullable
 const NO_LOTS: readonly Lot[] = [];
 const NO_TRADES: readonly Trade[] = [];
 const NO_ITEMS: NonNullable<Options["focus"]>["items"] = [];
+const NO_GUARDS: readonly GuardReason[] = [];
 
 /**
  * Works the board out once for the page, from the focus card's levels, the live quotes and the session's 2-minute
@@ -793,6 +805,7 @@ export function BoardProvider({
   journalAsOf = null,
   dayFacts = null,
   evalOn = false,
+  guardsOn = NO_GUARDS,
   children,
 }: {
   e: Options;
@@ -812,6 +825,11 @@ export function BoardProvider({
   dayFacts?: DayFacts | null;
   /** The server's shadow check is switched on (desk/eval.json, read by the server render); off by default. */
   evalOn?: boolean;
+  /**
+   * The bad-data guards switched on (desk/guards.json, read by the server render, then again while the board is live:
+   * use-guards.ts). None by default, and with none on the board is exactly as without guards.
+   */
+  guardsOn?: readonly GuardReason[];
   children: React.ReactNode;
 }) {
   const { feed, now: browserNow } = useLive();
@@ -825,6 +843,7 @@ export function BoardProvider({
   const mode: BoardMode = now === null ? { kind: "loading", line: "Connecting to live prices" } : boardMode(e.session, halfDay, feed.status, now);
   const newest = ok ? Math.max(0, ...items.map((i) => Date.parse(feed.quotes[i.symbol]?.at ?? "") || 0)) : 0;
   const bars = useBars(symbols, live && items.length > 0 && (mode.kind === "live" || mode.kind === "opening"), newest > 0 ? Math.floor(newest / 120_000) : null, halfDay);
+  const guards = useGuardSwitches(guardsOn, live && items.length > 0 && (mode.kind === "live" || mode.kind === "opening"));
   // Late or failing bars are not used: the states fall back to the page's own prices, and the header says so.
   const used = barsInUse(bars, browserNow);
   const rows =
@@ -844,6 +863,7 @@ export function BoardProvider({
             receivedAt: answeredAt,
             dayLimitUsed,
             wonToday,
+            ...(guards.length > 0 ? { guards: { on: guards } } : {}),
           },
           mode.kind === "live",
         );
@@ -897,6 +917,7 @@ export function BoardProvider({
     now,
     browserNow,
     barsDelayed: mode.kind === "live" && used.delayed,
+    guards,
   });
   if (settled) {
     // Announces what is new and withdraws, for good, every notice whose state has left the board.

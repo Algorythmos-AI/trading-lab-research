@@ -283,7 +283,11 @@ function Live({ b, row, room }: { b: Board; row: BoardRow; room: string | null }
       </div>
       {paused ? (
         <p role="status" data-hero-stale className="text-live text-foreground font-medium">
-          Prices paused{age !== null ? ` ${age} s` : ""}: no entry is shown on old prices. Check your platform.
+          {s.state === "paused" && s.guards?.length ? (
+            <>Prices paused. {s.line}. No entry is shown on it.</>
+          ) : (
+            <>Prices paused{age !== null ? ` ${age} s` : ""}: no entry is shown on old prices. Check your platform.</>
+          )}
         </p>
       ) : done ? null : (
         <p className="text-base leading-snug font-medium sm:text-lg">{v.headline}</p>
