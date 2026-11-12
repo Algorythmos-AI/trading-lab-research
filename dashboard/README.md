@@ -44,6 +44,14 @@ wt.ops.publish                            POST /api/ingest            (productio
                                             { eval, last_slot_end } only: "Server check paused since HH:MM NY"
                                           GET /api/desk/probe         (the owner, by hand; temporary)
                                             one New York day's snapshot-probe counts from desk/log/YYYY-MM-DD/HHMM.json
+
+                                          GET /api/cron/flow-baseline (Vercel Cron, every 10 min 11-13 UTC Mon-Fri)
+                                            before 09:30 New York: the day's volume baseline from the previous 20
+                                            full sessions' 2-minute SIP bars, create-only, all or nothing
+                                            → private Blob flow/baseline/YYYY-MM-DD.json
+                                          GET /api/flow               (signed in; nothing polls it yet)
+                                            SIP snapshot and today's 2-minute bars with volume, plus that baseline,
+                                            for today's focus names, SPY and QQQ only (any other name: 400)
 ```
 
 - **Contract.** `src/lib/snapshot.schema.json` is generated from the Python allowlist (`make schema`) and is
