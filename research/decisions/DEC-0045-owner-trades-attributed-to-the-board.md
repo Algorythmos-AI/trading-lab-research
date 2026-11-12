@@ -167,3 +167,13 @@ This is honest about what is not new:
   what the board of this record would have shown.
 - The fill time in the journal is the broker's. If it proves to be other than the fill (an M0 question), the labels
   are wrong by that much, and the record is revisited before the first verdict.
+
+## Note on DEC-0049 (added 2026-11-12)
+
+DEC-0049, accepted before any label exists, amends point 3 (the IEX bars are asked for by name, never through
+`ALPACA_FEED`, and each label row stores its feed and fetch time), point 5 (the production `ALPACA_FEED` resolving
+to `sip` ends the window, and the fill-time check must pass before the release that first writes labels, so it gates
+when the window can start), point 7 (a feed-change end closes all three trials inconclusive with no verdict; the
+report also holds the counts of positions per group before and after the alerts date), point 8 (the site may show
+each position's fill-time check, and may not show distance from the entry level or whether a stop price traded) and
+the last consequence (the fill-time check is defined there). The text above is otherwise unchanged.
