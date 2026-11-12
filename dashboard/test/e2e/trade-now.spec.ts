@@ -542,7 +542,11 @@ test("the board names the feed the server reported, says it is fetched every 2 s
   await expect(facts(page).locator('[data-feed-age="checked"]')).toHaveText(/^checked +\d+ s ago$/);
   // the scripted answer comes 3 s after its trade (the page's one-second clock can read up to a second short)
   expect(await ageS(page, "newest")).toBeGreaterThanOrEqual(2);
-  expect(await ageS(page, "oldest")).toBeGreaterThanOrEqual(await ageS(page, "newest"));
+  // both ends read in one look at the page: two looks a tick apart could read the oldest before the newest moved on
+  const [oldest, newest] = await facts(page).evaluate((el) =>
+    ["oldest", "newest"].map((k) => Number(el.querySelector(`[data-age-end="${k}"]`)?.getAttribute("data-age-s"))),
+  );
+  expect(oldest ?? NaN).toBeGreaterThanOrEqual(newest ?? NaN);
   expect(await ageS(page, "checked")).toBeLessThanOrEqual(3);
   // the desk's pill names it too
   await expect(page.getByText(/^Live \d{2}:\d{2} · IEX$/).first()).toBeVisible();
