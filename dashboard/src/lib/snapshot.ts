@@ -16,6 +16,7 @@ import {
 } from "./desk";
 import {
   fixtureCalendar,
+  fixtureOptionLot,
   fixtureOptionsClone,
   fixtureOptionsLive,
   FROZEN_NOW,
@@ -448,7 +449,16 @@ export const loadJournal = cache(async (): Promise<JournalResult> => {
     const flags = await fixtureFlags();
     if (flags.has("empty") || flags.has("error")) return { status: "missing" };
     const mod = await import("../../test/fixtures/journal.v1.json");
-    const doc = (mod.default ?? mod) as unknown as JournalDoc;
+    let doc = (mod.default ?? mod) as unknown as JournalDoc;
+    // `journal-option-lot`: one open QQQ call bought at the scripted morning's second step, read 5 minutes later.
+    if (flags.has("journal-option-lot")) {
+      const opts = await import("../../test/fixtures/options.v1.json");
+      const e = (opts.default ?? opts) as unknown as OptionsEdition;
+      const { stepInstant } = await import("./fixture-script");
+      const at = stepInstant(e.session, 2);
+      const lot = fixtureOptionLot(e, new Date(), at);
+      if (lot) doc = { ...doc, open: [...(doc.open ?? []), lot], as_of: new Date(at + 5 * 60_000).toISOString() };
+    }
     // Under the stood-still clock the journal was read ten minutes earlier, as the live sync would have: a picture
     // shows a current journal, not one stamped days after the clock.
     if (flags.has("journal-poison"))

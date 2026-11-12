@@ -16,8 +16,10 @@ import { ageText } from "@/lib/feed-provenance";
 import {
   type ChainStatus,
   type ComparedSession,
+  type EntitlementRow,
   feedsPageTime,
   loadComparedSessions,
+  loadEntitlementRow,
   loadStampPanel,
   type Stat,
   type StampPanel,
@@ -168,6 +170,19 @@ function StampFacts({ p }: { p: StampPanel }) {
   );
 }
 
+/** What the site's Alpaca keys are entitled to, asked of Alpaca at most every 10 minutes (entitlement.ts). */
+function PlanRow({ r }: { r: EntitlementRow }) {
+  return (
+    <dl
+      data-entitlement={r.warn ? "short" : "full"}
+      className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[max-content_1fr]"
+    >
+      <dt className="text-muted-foreground">{r.label}</dt>
+      <dd className={r.warn ? "text-warn font-medium" : undefined}>{r.text}</dd>
+    </dl>
+  );
+}
+
 const COLUMNS = [
   "Day",
   "Status",
@@ -301,10 +316,11 @@ function nextOpen(now: Date): number | null {
 
 export default async function FeedsPage() {
   const now = await feedsPageTime();
-  const [panel, compared, options] = await Promise.all([
+  const [panel, compared, options, plan] = await Promise.all([
     loadStampPanel(now),
     loadComparedSessions(),
     loadOptions(),
+    loadEntitlementRow(now),
   ]);
   const focus =
     options.status === "ok"
@@ -341,6 +357,7 @@ export default async function FeedsPage() {
                 Option chain feed: not shown here; the contract pane names it
                 with each answer.
               </p>
+              <PlanRow r={plan} />
               <FreshPanel key={panel.at}>
                 <p data-stamp-as-of className="text-muted-foreground text-xs">
                   Stamps as of {NY_TIME.format(new Date(panel.at))} NY (server)

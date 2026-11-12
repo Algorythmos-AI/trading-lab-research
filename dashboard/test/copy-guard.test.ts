@@ -116,6 +116,17 @@ const FILES = [
   "../src/lib/owner-labels-store.ts",
   "../src/lib/board-events.ts",
   "../src/components/board-events.tsx",
+  "../src/lib/context.ts",
+  "../src/lib/flow-request.ts",
+  "../src/lib/market-view.ts",
+  "../src/components/client/use-flow.ts",
+  "../src/components/client/market-bar.tsx",
+  "../src/lib/option-value.ts",
+  "../src/lib/contract-quote.ts",
+  "../src/app/api/contract/route.ts",
+  "../src/components/client/use-contract-quote.ts",
+  "../src/lib/entitlement.ts",
+  "../src/lib/contract-request.ts",
 ];
 
 const BANNED = [
