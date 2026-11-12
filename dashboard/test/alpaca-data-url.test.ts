@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
-import { alpacaDataUrl, feedsFor } from "@/lib/alpaca-data-url";
+import { alpacaDataUrl, alpacaNoFeedUrl, feedsFor, NO_FEED_PATHS } from "@/lib/alpaca-data-url";
 
 // B9 (docs/runbooks/keys-and-feeds.md): an Alpaca market-data request that leaves out `feed` reads whatever the
 // subscription allows, so its data source changes with the plan. Every request URL is built by alpacaDataUrl, which
@@ -69,6 +69,33 @@ describe("alpacaDataUrl", () => {
   });
 });
 
+describe("alpacaNoFeedUrl", () => {
+  it("builds the two no-feed paths with the query in the order given", () => {
+    expect(alpacaNoFeedUrl("https://d.x", "/v1beta1/options/trades", { symbols: "ABC261218C00050000", start: "s", end: "e", limit: "10000", sort: "asc" })).toBe(
+      "https://d.x/v1beta1/options/trades?symbols=ABC261218C00050000&start=s&end=e&limit=10000&sort=asc",
+    );
+    expect(alpacaNoFeedUrl("https://d.x", "/v1beta1/options/bars", { symbols: "X", timeframe: "1Min" })).toBe("https://d.x/v1beta1/options/bars?symbols=X&timeframe=1Min");
+    expect(NO_FEED_PATHS).toEqual(["/v1beta1/options/trades", "/v1beta1/options/bars"]);
+    for (const p of NO_FEED_PATHS) expect(feedsFor(p)).toBeNull();
+  });
+
+  it("refuses a path that takes a feed, including the latest option trades", () => {
+    expect(() => alpacaNoFeedUrl("https://d.x", "/v2/stocks/bars", { symbols: "SPY" })).toThrow(/takes no feed/);
+    expect(() => alpacaNoFeedUrl("https://d.x", "/v1beta1/options/snapshots/SPY", {})).toThrow(/takes no feed/);
+    expect(feedsFor("/v1beta1/options/trades/latest")).toEqual(["indicative", "opra"]);
+    expect(() => alpacaNoFeedUrl("https://d.x", "/v1beta1/options/trades/latest", { symbols: "X" })).toThrow(/takes no feed/);
+  });
+
+  it("refuses an unknown path, and one that is not exact", () => {
+    for (const p of ["/v1beta1/news", "/v1beta1/options/trades/", "v1beta1/options/trades", "/v1beta1/options/trades?x=1", "/v1beta1/options/quotes"])
+      expect(() => alpacaNoFeedUrl("https://d.x", p, {})).toThrow(/takes no feed/);
+  });
+
+  it("refuses a feed parameter, whatever its value", () => {
+    for (const feed of ["opra", "indicative", "iex", ""]) expect(() => alpacaNoFeedUrl("https://d.x", "/v1beta1/options/trades", { symbols: "X", feed })).toThrow(/takes no feed parameter/);
+  });
+});
+
 function sources(dir: string): string[] {
   return readdirSync(join(ROOT, dir), { withFileTypes: true }).flatMap((e) => {
     const p = join(dir, e.name);
@@ -99,12 +126,14 @@ const receiver = (c: ts.CallExpression): ts.Node | null => {
 const HTTP_CALLEE = /fetch|^(?:axios|got|ky|request|get|post|put|head)$/i;
 const isHttpCall = (c: ts.CallExpression): boolean => {
   const name = callee(c);
-  if (name === "alpacaDataUrl") return false;
+  if (BUILDERS.has(name)) return false;
   if (HTTP_CALLEE.test(name)) return true;
   const r = receiver(c);
   return !!r && ts.isIdentifier(unwrap(r)) && /^(?:axios|got|ky|superagent)$/.test((unwrap(r) as ts.Identifier).text);
 };
-const isBuilderCall = (n: ts.Node): boolean => ts.isCallExpression(unwrap(n)) && callee(unwrap(n) as ts.CallExpression) === "alpacaDataUrl";
+/** The builders: alpacaDataUrl for the paths that take a feed, alpacaNoFeedUrl for the two exact paths that take none. */
+const BUILDERS = new Set(["alpacaDataUrl", "alpacaNoFeedUrl"]);
+const isBuilderCall = (n: ts.Node): boolean => ts.isCallExpression(unwrap(n)) && BUILDERS.has(callee(unwrap(n) as ts.CallExpression));
 
 /**
  * Every way `text` may send an Alpaca data request without alpacaDataUrl:
@@ -151,7 +180,7 @@ function strayDataPaths(file: string, text: string): string[] {
     let child: ts.Node = n;
     let p = n.parent;
     while (p && (ts.isParenthesizedExpression(p) || ts.isAsExpression(p))) (child = p), (p = p.parent);
-    return !!p && ts.isCallExpression(p) && callee(p) === "alpacaDataUrl" && p.arguments[1] === child;
+    return !!p && ts.isCallExpression(p) && BUILDERS.has(callee(p)) && p.arguments[1] === child;
   };
   /** The pieces of a `+` chain or a template, as text and nodes. */
   const pieces = (n: ts.Node): ts.Node[] => {
@@ -223,6 +252,8 @@ describe("every Alpaca data request names its feed (scan)", () => {
       'const base = o.baseUrl ?? DEFAULT_DATA_URL; await fetchImpl(alpacaDataUrl(base, "/v2/stocks/bars", q));',
       'await fetch("/api/quote?s=SPY"); await fetch(`${INGEST}/v2/editions`); q.set("page_token", t); m.delete("SPY");',
       'const u = `${DEFAULT_DATA_URL}/v1beta1/news`; const meta = DEFAULT_DATA_URL + "/v2/stocks/meta/exchanges";',
+      'const base = o.baseUrl ?? DEFAULT_DATA_URL; const url = alpacaNoFeedUrl(base, "/v1beta1/options/trades", q); await fetchImpl(url, {});',
+      'await fetch(alpacaNoFeedUrl(DEFAULT_DATA_URL, "/v1beta1/options/bars", q));',
     ];
     for (const g of good) expect(strayDataPaths("y.ts", g), g).toEqual([]);
   });
@@ -246,11 +277,23 @@ describe("every Alpaca data request names its feed (scan)", () => {
     '.append("feed", "")': 'const u = new URL(alpacaDataUrl(base, "/v2/stocks/bars", q)); u.searchParams.append("feed", "");',
     'an array .join("/") with a data base': 'const u = [DEFAULT_DATA_URL, "v2", "stocks", "bars"].join("/");',
     "feed removed from a built URL": 'const u = new URL(alpacaDataUrl(base, "/v2/stocks/bars", q)); u.searchParams.delete("feed"); u.searchParams.set("feed", "");',
+    "option trades by hand to a data base": 'await fetch(`${DEFAULT_DATA_URL}/v1beta1/options/trades?symbols=${s}`);',
+    "option trades by hand through a name": 'const base = process.env.ALPACA_DATA_URL || DEFAULT_DATA_URL; const u = `${base}/v1beta1/options/trades?${p}`; await fetchImpl(u);',
+    "option trades by hand inside a helper call": 'const base = DEFAULT_DATA_URL; await fetchImpl(tradesUrl(base, q, t));',
+    "a feed-taking path handed to the no-feed builder's neighbour argument": 'alpacaNoFeedUrl("/v2/stocks/bars", p, q);',
   };
   for (const [name, src] of Object.entries(MISSED))
     it(`catches: ${name}`, () => {
       expect(strayDataPaths("x.ts", src).length, src).toBeGreaterThan(0);
     });
+  it("would catch the fill-time check's request if it bypassed the builder", () => {
+    const src = readFileSync(join(ROOT, "src/lib/fill-check-fetch.ts"), "utf8");
+    expect(strayDataPaths("fill-check-fetch.ts", src)).toEqual([]);
+    const byHand = src.replace("const url = alpacaNoFeedUrl(base, TRADES_PATH, tradesParams(q, token));", "const url = `${base}/v1beta1/options/trades?${new URLSearchParams(tradesParams(q, token))}`;");
+    expect(byHand).not.toBe(src);
+    expect(strayDataPaths("fill-check-fetch.ts", byHand).length).toBeGreaterThan(0);
+  });
+
   it("would catch the real request sites if they bypassed the builder", () => {
     const bars = readFileSync(join(ROOT, "src/lib/bars.ts"), "utf8").replace('alpacaDataUrl(baseUrl, "/v2/stocks/bars", q)', "`${baseUrl}/v2/stocks/bars?${new URLSearchParams(q)}`");
     expect(strayDataPaths("bars.ts", bars).length).toBeGreaterThan(0);

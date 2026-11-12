@@ -90,6 +90,10 @@ const FILES = [
   "../src/lib/day-review.ts",
   "../src/components/day-review.tsx",
   "../src/app/review/page.tsx",
+  "../src/lib/fill-check.ts",
+  "../src/lib/fill-check-fetch.ts",
+  "../src/lib/fill-check-run.ts",
+  "../src/app/api/desk/fill-check/route.ts",
 ];
 
 const BANNED = [
