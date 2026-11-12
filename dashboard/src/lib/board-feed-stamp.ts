@@ -64,7 +64,7 @@ import { UpstreamError } from "./upstream";
 
 export type StampOutcome =
   | "written"
-  | "sealed"
+  | "manifest-written"
   | "not-production"
   | "closed"
   | "duplicate"
@@ -419,7 +419,7 @@ export async function stampBoardFeed(over: Partial<StampDeps> = {}): Promise<Sta
     if (s.open === null || s.close === null || minute < s.open || minute >= s.close) {
       const seal = dayToSeal(day, minute);
       if (seal === null) return "closed";
-      return await withinLimit(deps, deps.sealTimeoutMs, async (signal) => ((await writeManifest(deps, seal, at, signal)) ? "sealed" : "closed"));
+      return await withinLimit(deps, deps.sealTimeoutMs, async (signal) => ((await writeManifest(deps, seal, at, signal)) ? "manifest-written" : "closed"));
     }
     const deployment = deps.env.VERCEL_DEPLOYMENT_ID || null;
     if (deployment === null && !warnedNoDeployment) {

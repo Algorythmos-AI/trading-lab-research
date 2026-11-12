@@ -439,7 +439,7 @@ describe("stampBoardFeed", () => {
     expect(await stampBoardFeed({ ...f.deps, store: lagging })).toBe("written");
     expect(JSON.parse(f.store.get("desk/feeds/board/2026-11-12/0935.json")!).prev).toBe(bodyHash(f.store.get("desk/feeds/board/2026-11-12/0933.json")!));
     now = AT("2026-11-12T21:02:00Z");
-    expect(await stampBoardFeed(f.deps)).toBe("sealed");
+    expect(await stampBoardFeed(f.deps)).toBe("manifest-written");
     const day = await readBoardFeedDay("2026-11-12", f.reader);
     expect(verifyChain(day.bodies, day.manifest, day.nextOpen!)).toEqual({ ok: true, reason: "ok" });
   });
@@ -464,7 +464,7 @@ describe("stampBoardFeed", () => {
     expect(await stampBoardFeed({ ...f.deps, store: unreadable })).toBe("seal-wait");
     // the next run (here the next morning, before the open) sees a consistent listing and seals
     now = AT("2026-11-13T14:20:00Z");
-    expect(await stampBoardFeed(f.deps)).toBe("sealed");
+    expect(await stampBoardFeed(f.deps)).toBe("manifest-written");
     expect(JSON.parse(f.store.get(key)!)).toMatchObject({ count: 3, last: bodyHash(f.store.get("desk/feeds/board/2026-11-12/1559.json")!) });
     const day = await readBoardFeedDay("2026-11-12", f.reader);
     expect(verifyChain(day.bodies, day.manifest, day.nextOpen!)).toEqual({ ok: true, reason: "ok" });
@@ -586,7 +586,7 @@ describe("stampBoardFeed", () => {
       expect(f.store.has(key)).toBe(false);
     }
     now = AT("2026-11-12T21:02:00Z");
-    expect(await stampBoardFeed(f.deps)).toBe("sealed");
+    expect(await stampBoardFeed(f.deps)).toBe("manifest-written");
     const sealed = f.store.get(key)!;
     expect(JSON.parse(sealed)).toEqual({ v: 1, count: 2, last: bodyHash(f.store.get("desk/feeds/board/2026-11-12/1559.json")!), at: "2026-11-12T21:02:00.000Z" });
     now = AT("2026-11-12T21:30:00Z");
@@ -602,11 +602,11 @@ describe("stampBoardFeed", () => {
     const f = stampDeps({ now: () => AT("2026-11-12T20:59:10Z") });
     await stampBoardFeed(f.deps);
     // no run after the close that day; the next morning's 09:00 run seals it
-    expect(await stampBoardFeed({ ...f.deps, now: () => AT("2026-11-13T14:00:00Z") })).toBe("sealed");
+    expect(await stampBoardFeed({ ...f.deps, now: () => AT("2026-11-13T14:00:00Z") })).toBe("manifest-written");
     expect(JSON.parse(f.store.get("desk/feeds/board/2026-11-12/manifest.json")!)).toMatchObject({ count: 1, at: "2026-11-13T14:00:00.000Z" });
     // a Saturday run seals Friday
     const sat = stampDeps({ now: () => AT("2026-11-14T15:00:00Z") });
-    expect(await stampBoardFeed(sat.deps)).toBe("sealed");
+    expect(await stampBoardFeed(sat.deps)).toBe("manifest-written");
     expect(JSON.parse(sat.store.get("desk/feeds/board/2026-11-13/manifest.json")!)).toMatchObject({ count: 0, last: null });
     // once the next open has passed, the previous day is not sealed any more (in the session the run stamps)
     const g = stampDeps({ now: () => AT("2026-11-13T14:31:00Z") });
@@ -614,7 +614,7 @@ describe("stampBoardFeed", () => {
     expect(g.store.has("desk/feeds/board/2026-11-12/manifest.json")).toBe(false);
     // a half day seals from 13:02
     const half = stampDeps({ now: () => AT("2026-11-27T18:02:00Z") });
-    expect(await stampBoardFeed(half.deps)).toBe("sealed");
+    expect(await stampBoardFeed(half.deps)).toBe("manifest-written");
     expect(half.store.has("desk/feeds/board/2026-11-27/manifest.json")).toBe(true);
   });
 
@@ -717,7 +717,7 @@ describe("stampBoardFeed under store latency", () => {
     const started = Date.now();
     const out = await stampBoardFeed({ env: prod, now: () => AT("2026-11-12T21:02:00Z"), store: slow.store, probe: async () => "ok" });
     const took = Date.now() - started;
-    expect(out).toBe("sealed");
+    expect(out).toBe("manifest-written");
     expect(took).toBeLessThan(5_000); // well inside SEAL_TIMEOUT_MS (20 s): 390 reads in ~16 rounds of 25
     expect(slow.maxInFlight()).toBeLessThanOrEqual(25);
     const m = JSON.parse(slow.base.get("desk/feeds/board/2026-11-12/manifest.json")!);
@@ -732,7 +732,7 @@ describe("stampBoardFeed under store latency", () => {
     expect(await run()).toBe("seal-wait");
     expect(slow.base.has("desk/feeds/board/2026-11-12/manifest.json")).toBe(false);
     slow.setHide(() => false);
-    expect(await run()).toBe("sealed");
+    expect(await run()).toBe("manifest-written");
     expect(JSON.parse(slow.base.get("desk/feeds/board/2026-11-12/manifest.json")!)).toMatchObject({
       count: 390,
       last: bodyHash(slow.base.get("desk/feeds/board/2026-11-12/1559.json")!),
