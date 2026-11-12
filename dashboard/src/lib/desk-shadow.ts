@@ -2,6 +2,7 @@
 // slots the server logged, how often its states match the open page's, and the delay from a bar's end to its
 // evaluation. Pure: the records come in, the numbers go out; nothing here reads the store or draws anything.
 import { expectedSlots, type PageRecord, type ServerRecord, type StateRow } from "./desk-eval";
+import { parseGuardList } from "./desk-guards";
 import type { NameStateName } from "./trade-state";
 
 export type CriticalBucket = "get_ready" | "plan_off" | "missed" | "paused" | "other";
@@ -27,6 +28,13 @@ export interface ShadowSummary {
   noPage: number;
   hiddenOnly: number;
   engineMismatch: number;
+  /**
+   * Of the OK slots with a visible page record of the same engine: those whose bad-data guards switched on differ
+   * between the page and the server (one read the switches before the owner changed them, the other after), or that
+   * the page took while it could not confirm its switches (`guards_unsure`: its last read failed). Not
+   * compared: a guard can pause one and not the other for a reason that is not the data.
+   */
+  guardsMismatch: number;
   /** Of the compared slots, those where every row matches and neither side has a row the other lacks. */
   agreed: number;
   agreedPct: number;
@@ -46,6 +54,13 @@ export interface ShadowSummary {
 }
 
 const key = (r: Pick<StateRow, "symbol" | "side">) => `${r.symbol}|${r.side}`;
+/** The guards switched on as one comparable word: none (or unreadable) is "". */
+const guardsKey = (v: unknown) => (parseGuardList(v) ?? []).join(",");
+/** The guards a server record ran with: its observe-mode log's `on` (desk-run.ts); none on a record without one. */
+const guardsOnServer = (r: ServerRecord): unknown => {
+  const g = (r as { guards?: unknown }).guards;
+  return g !== null && typeof g === "object" ? (g as { on?: unknown }).on : undefined;
+};
 const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 1000) / 10 : 0);
 const BUCKETS: readonly CriticalBucket[] = ["get_ready", "plan_off", "missed", "paused"];
 const noCritical = (): Critical => ({ total: 0, byPage: { get_ready: 0, plan_off: 0, missed: 0, paused: 0, other: 0 } });
@@ -100,6 +115,7 @@ export function shadowSummary(days: readonly string[], server: readonly ServerRe
   let noPage = 0;
   let hiddenOnly = 0;
   let engineMismatch = 0;
+  let guardsMismatch = 0;
   let agreed = 0;
   let rowsCompared = 0;
   let rowsAgreed = 0;
@@ -117,6 +133,10 @@ export function shadowSummary(days: readonly string[], server: readonly ServerRe
     }
     if (p.engine !== s.engine) {
       engineMismatch++;
+      continue;
+    }
+    if (p.guards_unsure === true || guardsKey(guardsOnServer(s)) !== guardsKey(p.guards)) {
+      guardsMismatch++;
       continue;
     }
     compared++;
@@ -160,6 +180,7 @@ export function shadowSummary(days: readonly string[], server: readonly ServerRe
     noPage,
     hiddenOnly,
     engineMismatch,
+    guardsMismatch,
     agreed,
     agreedPct: pct(agreed, compared),
     rowsCompared,

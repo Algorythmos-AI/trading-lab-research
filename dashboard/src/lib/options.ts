@@ -2,6 +2,7 @@
 import { dayIn, NEW_YORK, num, weekDate } from "./format";
 import calendar from "./market-calendar.json";
 import type { OptionsEdition } from "./options.types";
+import type { SnapshotQuoteFields } from "./quote-guards";
 import type { Tone } from "./radar";
 
 export type Options = OptionsEdition;
@@ -291,8 +292,8 @@ export function levelName(code: string): string {
   return LEVEL_NAMES[code] ?? code;
 }
 
-/** A live quote as the page uses it (the /api/quote shape). */
-export interface LiveQuote {
+/** A live quote as the page uses it (the /api/quote shape), with the optional fields the bad-data guards read. */
+export interface LiveQuote extends SnapshotQuoteFields {
   price: number;
   at: string;
   open: number | null;

@@ -28,6 +28,7 @@ import {
 import type { SidePlan } from "./focus-plan";
 import type { Tone } from "./labels";
 import { closeMinute, type LiveQuote, nyClock, nyInstant, OPEN_MIN, type OptionsTicker, type TrailPoint } from "./options";
+import { activeGuards, type GuardReason, guardLine, quoteGuards } from "./quote-guards";
 import { TIME_STOP_MINUTES } from "./trade-rules";
 
 // ---- constants ------------------------------------------------------------------------------------------------------
@@ -423,6 +424,8 @@ export interface NameState {
   put: SideState;
   /** Why the row says no trade, on a no-trade row only: the page tells a closed window from a quiet range by this. */
   why?: NoTradeWhy;
+  /** The bad-data guards that paused the row (quote-guards.ts), on a row a switched-on guard paused only. */
+  guards?: GuardReason[];
 }
 
 /**
@@ -476,6 +479,17 @@ export interface NameInput {
   /** Rule 7 or 8 has ended the day. */
   dayLimitUsed: boolean;
   wonToday: boolean | null;
+  /**
+   * The bad-data guards switched on (desk-guards.ts). Missing or empty: no guard is read at all, and the row is exactly
+   * what it was before the guards existed.
+   */
+  guardsOn?: readonly GuardReason[];
+  /**
+   * The snapshot quote the guards read, when it is not `quote`: the server evaluator's `quote` is built from its bars
+   * (desk-eval's settledQuote), so it passes the snapshot itself, the one the page's quote route also reads. Missing:
+   * `quote` (the page). Null: no snapshot, and no guard can trip.
+   */
+  guardQuote?: LiveQuote | null;
 }
 
 const altLine = (x: AltTrigger) =>
@@ -515,7 +529,7 @@ const dist = (x: SideState) => (x.distAtr !== null ? ` (${x.distAtr.toFixed(1)} 
 
 /**
  * The one row for a focus name. `n.now` is the feed's (server) clock. In order: a stale feed in the session pauses
- * it; before 09:35 (FIRST_ENTRY_MIN), from 11:30 to 13:00 on a full day, from the flat time (15:10, or 50 minutes before a half day's 13:00 close: 12:10) or with the
+ * it, and so does a switched-on bad-data guard that trips (quote-guards.ts); before 09:35 (FIRST_ENTRY_MIN), from 11:30 to 13:00 on a full day, from the flat time (15:10, or 50 minutes before a half day's 13:00 close: 12:10) or with the
  * day's limit used it is no trade; with the price in the
  * middle third of yesterday's range and nothing broken, no trade; otherwise the more urgent side: enter zone, then a
  * live alternative trigger, get ready, watch, plan off and missed.
@@ -581,6 +595,13 @@ export function nameState(n: NameInput): NameState {
       const age = feedAge > FEED_STALE_MS ? feedAge : tradeAge;
       const line = Number.isFinite(age) ? `No new price for ${Math.round(age / 1000)} s: check your platform` : "No price yet: check your platform";
       return row("paused", line, null);
+    }
+    // 1b. a switched-on bad-data guard: a check of the data's validity like the stale one, so it sits with it, after it
+    // (a stale or missing price says so first) and before the clock gates and every state that could suggest an entry.
+    if (n.guardsOn && n.guardsOn.length > 0) {
+      const gq = n.guardQuote === undefined ? q : n.guardQuote && n.guardQuote.day === n.session ? n.guardQuote : null;
+      const tripped = activeGuards(quoteGuards(gq, { today: n.session, now: t }), n.guardsOn);
+      if (tripped.length > 0) return { ...row("paused", guardLine(tripped), null), guards: tripped };
     }
   }
   // 2. the clock and the day's limit

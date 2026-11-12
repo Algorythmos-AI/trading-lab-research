@@ -11,6 +11,7 @@ import { isHalfDay, nyClock, nyInstant, OPEN_MIN, type LiveQuote, type Options }
 import { sessionView, type JournalDoc } from "./journal";
 import { sessionOf } from "./market-calendar";
 import { boardDay, boardMode, type BoardMode, boardRows } from "./trade-now";
+import type { GuardReason } from "./quote-guards";
 import { dayCheck } from "./trade-rules";
 import { BAR_MINUTES, type Bar2, CLOSE_GRACE_MS, type NameState, type NameStateName, SERVER_SETTLE_MS } from "./trade-state";
 
@@ -172,7 +173,7 @@ export interface DayFlags {
   gap: boolean;
   /** A side reads a break the bars could not show the close of (brokeEarlier). */
   broke_earlier: boolean;
-  /** A name is paused: no fresh price. */
+  /** A name is paused: no fresh price (a pause by a switched-on bad-data guard is not counted here). */
   stale: boolean;
 }
 
@@ -210,6 +211,12 @@ export interface EvalInput {
    * and its high and low are used, never its price.
    */
   snapshots: Readonly<Record<string, LiveQuote>>;
+  /**
+   * The bad-data guards switched on (desk-guards.ts), read every run. They read `snapshots`, the quotes the page's
+   * quote route reads, never the quote built from the bars. Missing or empty: the evaluation is exactly as without
+   * guards.
+   */
+  guardsOn?: readonly GuardReason[];
 }
 
 const NO_DAY = (half: boolean, done: boolean): DayFlags => ({
@@ -266,14 +273,24 @@ export function settledQuote(bars: readonly Bar2[], day: string, end: number, sn
  * before the slot settled makes the whole evaluation degraded ("bars-unsettled").
  */
 export function evaluateSlot(input: EvalInput): Evaluation {
+  return evaluateSlotStates(input).evaluation;
+}
+
+/**
+ * evaluateSlot, with the board's own states for the names it evaluated (none when it stopped before the board), for
+ * the run's observe-mode log of the guards: which rows were paused, and by a guard or by no fresh price. The
+ * evaluation is the same object evaluateSlot returns.
+ */
+export function evaluateSlotStates(input: EvalInput): { evaluation: Evaluation; states: NameState[] } {
+  const stopped = (evaluation: Evaluation) => ({ evaluation, states: [] });
   const { slot, edition } = input;
   const halfDay = isHalfDay(edition);
-  if (edition.session !== slot.day) return notEvaluated("wrong-day", null, halfDay, input.done);
+  if (edition.session !== slot.day) return stopped(notEvaluated("wrong-day", null, halfDay, input.done));
   const items = Array.isArray(edition.focus?.items) ? edition.focus.items : [];
-  if (items.length === 0) return notEvaluated("no-focus", null, halfDay, input.done);
-  if (items.some((i) => typeof i.symbol !== "string" || !SYMBOL_RE.test(i.symbol))) return notEvaluated("degraded", "bad-symbol", halfDay, input.done);
+  if (items.length === 0) return stopped(notEvaluated("no-focus", null, halfDay, input.done));
+  if (items.some((i) => typeof i.symbol !== "string" || !SYMBOL_RE.test(i.symbol))) return stopped(notEvaluated("degraded", "bad-symbol", halfDay, input.done));
   const open = nyInstant(slot.day, OPEN_MIN);
-  if (open === null) return notEvaluated("degraded", "edition-error", halfDay, input.done);
+  if (open === null) return stopped(notEvaluated("degraded", "edition-error", halfDay, input.done));
   const settleAt = slot.end + SERVER_SETTLE_MS;
 
   const settled: Record<string, Bar2[]> = {};
@@ -286,7 +303,7 @@ export function evaluateSlot(input: EvalInput): Evaluation {
       continue;
     }
     const at = input.fetchedAt[sym];
-    if (!isNum(at) || at < settleAt) return notEvaluated("degraded", "bars-unsettled", halfDay, input.done, true);
+    if (!isNum(at) || at < settleAt) return stopped(notEvaluated("degraded", "bars-unsettled", halfDay, input.done, true));
     const snap = input.snapshots[sym];
     if (!snap || snap.day !== slot.day) {
       out.set(sym, "snapshot-missing");
@@ -331,6 +348,8 @@ export function evaluateSlot(input: EvalInput): Evaluation {
       receivedAt: now,
       dayLimitUsed: day.dayLimitUsed,
       wonToday: day.wonToday,
+      // The guards read the snapshot itself (the page's quote source), not the quote built from the bars.
+      ...(input.guardsOn && input.guardsOn.length > 0 ? { guards: { on: input.guardsOn, quotes: input.snapshots } } : {}),
     },
     live,
   );
@@ -343,7 +362,7 @@ export function evaluateSlot(input: EvalInput): Evaluation {
   }
   const barEnd = new Date(slot.end).toISOString();
   const degraded = focusSymbols(edition).filter((s) => out.has(s)).map((symbol) => ({ symbol, reason: out.get(symbol)! }));
-  return {
+  const evaluation: Evaluation = {
     status: "ok",
     reason: null,
     board: mode.kind,
@@ -358,9 +377,10 @@ export function evaluateSlot(input: EvalInput): Evaluation {
       half_day: halfDay,
       gap: degraded.some((d) => d.reason !== "snapshot-missing"),
       broke_earlier: states.some((s) => s.call.brokeEarlier || s.put.brokeEarlier),
-      stale: states.some((s) => s.state === "paused"),
+      stale: states.some((s) => s.state === "paused" && !s.guards),
     },
   };
+  return { evaluation, states };
 }
 
 // ---- the record -----------------------------------------------------------------------------------------------------
@@ -433,4 +453,11 @@ export interface PageRecord {
   rows: StateRow[];
   /** The page's states when it sent them, about a minute later, when an alert would arrive. */
   rows_at_settle: StateRow[];
+  /**
+   * The bad-data guards switched on when the page took its states (desk-guards.ts), only when there were any: the
+   * shadow numbers compare a slot only against a server record with the same switches.
+   */
+  guards?: GuardReason[];
+  /** The page held switches it could not confirm (its last read failed after a good one): only when so. */
+  guards_unsure?: true;
 }

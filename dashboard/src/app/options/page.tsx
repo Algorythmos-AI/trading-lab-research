@@ -30,6 +30,7 @@ import { dayJournal } from "@/lib/manage-stop";
 import { dayFacts, railDay, unreadLine, withUnread } from "@/lib/session-timeline";
 import { dayCheck } from "@/lib/trade-rules";
 import { loadFlagsView } from "@/lib/desk-flags-run";
+import { loadGuardSwitches } from "@/lib/desk-guards-run";
 import { loadEvalSwitch } from "@/lib/desk-page-run";
 import { loadPageFeeds } from "@/lib/feed-watch-run";
 import { STRIP_FEED_IDS } from "@/lib/feed-watch";
@@ -94,7 +95,8 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
   // The paper positions are a view of now, so an older edition is drawn without them.
   // The owner's "done for today" flag, read with the page for a live edition (null when it could not be read).
   // The server's shadow check's switch (DEC-0044): off unless the store says "log"; while off the page asks nothing about it.
-  const [result, dates, positions, journal, ledger, flags, evalSwitch] = await Promise.all([loadOptions(date), listOptionsDates(), date ? null : loadOptionsLive(), loadJournal(), date ? null : loadLedger(), date ? null : loadFlagsView(), date ? "off" : loadEvalSwitch()]);
+  // The bad-data guards' switches (desk/guards.json): every guard off unless the store turns it on; none for an older edition.
+  const [result, dates, positions, journal, ledger, flags, evalSwitch, guardSwitches] = await Promise.all([loadOptions(date), listOptionsDates(), date ? null : loadOptionsLive(), loadJournal(), date ? null : loadLedger(), date ? null : loadFlagsView(), date ? "off" : loadEvalSwitch(), date ? null : loadGuardSwitches()]);
   const now = await pageTime();
   const live = positions?.status === "ok" ? positions.doc : null;
   if (result.status !== "ok") {
@@ -154,7 +156,7 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
       <h1 className="sr-only">Options</h1>
       <LiveQuotes symbols={withLeaders(e.tickers.map((t) => t.symbol)).join(",")} session={e.session} enabled={!date}>
         <DoneTodayProvider initial={flags}>
-          <BoardProvider e={full} live={!date} {...day} openLots={board?.lots ?? []} closedTrades={board?.closed ?? []} journalAsOf={doc?.as_of ?? null} dayFacts={facts} evalOn={evalSwitch === "log"}>
+          <BoardProvider e={full} live={!date} {...day} openLots={board?.lots ?? []} closedTrades={board?.closed ?? []} journalAsOf={doc?.as_of ?? null} dayFacts={facts} evalOn={evalSwitch === "log"} guardsOn={guardSwitches?.on ?? []} guardsRead={guardSwitches?.status ?? "missing"}>
             {/* Top to bottom: what the day allows and the clock, the one name that matters now, the four at a glance, what
                 to act on, the cards, the rules strip, then the desk. Cockpit keeps only the rail, the hero and the four
                 ladders (everything else carries data-cockpit-hide). The parts share the page's one live feed and board. */}

@@ -740,6 +740,7 @@ export function useTradeManage(x: TradeManageInput): {
       serverFetchedAt: x.serverFetchedAt[t.symbol] ?? null,
       now: x.now!,
       rowState: rowOf(t.symbol)?.state?.state ?? null,
+      ...(rowOf(t.symbol)?.state?.guards?.length ? { guards: rowOf(t.symbol)!.state!.guards } : {}),
       feed: feed!,
     }),
   );

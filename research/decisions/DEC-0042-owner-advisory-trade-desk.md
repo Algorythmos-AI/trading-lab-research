@@ -93,3 +93,52 @@ nothing for, nothing is drawn.
   experiment written before any such comparison is looked at.
 
 No state log, owner trade or result was viewed for this note.
+
+## Note on the bad-data guards (added 2026-11-12; nothing above is changed)
+
+The desk now carries four data guards (`dashboard/src/lib/quote-guards.ts`). Each checks one focus name's snapshot
+from the board's own feed:
+
+- `bar-high-below-low`: the day's bar reads a high below its low;
+- `bar-open-outside-range`: the day's bar reads an open below its low or above its high;
+- `print-far-outside-day-range`: a bad print. The last trade is more than 25% from the prior session's close (exactly
+  25% is not) and also outside today's day bar (above its high or below its low), with today's bar and today's trade
+  readable. It is not a halt or price-band rule;
+- `quote-crossed`: both sides of the quote are active, the bid is above the ask, and the quote is fresh by the trade's
+  own rule (stamped no more than two minutes before the clock). A locked quote, a zero price or size on one side, or a
+  stale or timeless quote never trips it.
+
+The plan said that a last trade outside the day's range is not a guard on its own, because the day's bar leaves out
+extended-hours and volume-only prints, so that happens in normal trading. That stands. A move of more than 25% from
+the prior close is not a guard on its own either: a real earnings gap, or a split day read against an unadjusted
+prior close, moves that far while the price stays inside the day's own range, and a guard on it alone would pause the
+name all session. Only the two together mark a print that the day's own trading does not support. A guard reads only
+inputs that are present and readable, so missing data never trips one; a missing or old price is already paused by
+the stale check. A missing or unreadable day bar, prior bar or quote pauses nothing.
+
+Each guard is off until the owner switches it on in the site's own store (`desk/guards.json`), which needs no release
+and can be undone. The server check reads the switches every run it evaluates; the open page reads them with the page
+and again each minute while its board is live, and keeps the last good read if a re-read fails. The plan is to switch
+one on only after its counts show how often it would have fired on at least three normal sessions. The server check
+records those counts, whatever the switches say, but only while its own switch (`desk/eval.json`) is on: per name and
+guard, the slots it would have tripped and the separate runs of consecutive tripped slots, and the 25% fact on its own.
+
+When a guard is on and trips, the name reads paused ("prices paused" and "check your platform", with the reason in
+plain words), ahead of the clock gates and every state, so a paused name never shows an entry. The page judges its own
+quote as it polls it, and its record is taken at the slot's close; the server judges the snapshot it reads when it
+runs, a minute or more later. Both use the same definitions on their own data, so they can differ when the data does.
+A guard can also turn a row from live to paused and back from one 2-second poll to the next; the run counts show how
+often each would, and are among the things to look at before switching one on. While a name is paused by a guard its
+level ladder shows no live price or distance, a kept entry notice for it is withdrawn at once, the manage card of an
+open trade on it says "check" with the guard's reason and shows only the plan's own stop and target 1 and the flat
+time (no exit, no moved stop, no trail, no five-minute judgment, no distance), and the board's paused line names the
+guard.
+
+With every guard off nothing on the desk changes. A test holds this byte for byte against the code before the guards
+over 735 board inputs and 84 server slots (the plain, partial and v2 focus editions; every step of the scripted
+morning; clock times across a full session and a half day; the fixture's plain, ticking and scripted prices, and the
+suspect variant with each guard in turn): the board's states, the board as drawn, the hero, the glance chips and
+tiles, the status rail, each level ladder, the manage card of an open trade, and the server's evaluation with its
+record's engine fields. It does not cover a live session's data, which no one has yet seen with a guard on.
+
+No owner trade, P&L, state log or result was viewed for this note.
