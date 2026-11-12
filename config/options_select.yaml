@@ -1,0 +1,55 @@
+# Stage 1 of the Options desk's two-stage selection: the frozen parameters (DEC-0046). Read by
+# src/wt/options/select.py, which refuses a file that holds anything it does not implement.
+#
+# Frozen. Changing any value is a change to the selection and needs a dated amendment to DEC-0046 first; nothing
+# here is tuned on results. DEC-0046 names this file's params_sha, and tests/unit/test_select_stage1.py fails when
+# the two differ. params_sha = SHA-256 (hex) of the parsed content written as JSON with keys sorted, separators
+# "," and ":", ASCII only, whole numbers as integers and other numbers in Python's shortest round-trip form
+# (wt.options.select.canonical_json). Comments and layout do not enter it.
+version: 1
+
+history:
+  min_bars: 260              # at least this many daily bars; the last 260 are the window every check reads
+
+lookbacks:
+  f1_return: 20              # F1: ret(20)
+  f5_return: 5               # F5: ret(5) against the benchmark's ret(5)
+  atr: 14                    # ATR14, ATR% = ATR14 / close (levels.atr)
+  atr_ratio: [5, 20]         # F2: ATR5 / ATR20
+  dollar_volume: 20          # tie-break: the median of close x volume over the last 20 bars
+
+zones:
+  weight_floor: 5            # F3 reads merged zones of at least this weight
+  ignore_zone_made_only_of: [PDC]   # a zone whose members are all the prior close is left out
+
+split_suspect:               # a close-to-close ratio of two adjacent bars below low or above high: suspect_split
+  low: 0.5
+  high: 2.0
+  bound_is_suspect: false    # a ratio of exactly 0.5 or exactly 2.0 is not suspect
+
+rounding_decimals: 6         # every factor value is rounded to this before ranking
+
+benchmark:                   # F5's benchmark
+  default: SPY
+  when_name_is: {SPY: QQQ}
+
+tie_break: [f3_distance_smaller, median_dollar_volume_larger, symbol_a_to_z]
+
+pick_count: 4                # the picks: the first min(4, eligible) eligible names by final rank; never filled
+
+index_names: [SPY, QQQ]      # report no earnings (as config/options_clone.yaml contract.index_names)
+
+events:
+  earnings_later_days: 6     # a report after the next session's close, up to 6 calendar days after it: a caution
+  earnings_unknown_after_days: 75   # no later row and the last row older than this: date unknown, a caution
+  macro_note_severity: high  # a macro row of this severity on the next session: a market-wide note
+
+shown:                       # shown beside the factors, never scored
+  trend_averages: [20, 50, 200]
+  direction_from_return: 20
+
+reason_codes: [bad_bar, stale_bar, short_history, suspect_split, no_zone, benchmark_missing, internal_error]
+eligibility_codes: [earnings_gap]
+caution_codes: [earnings_later, earnings_date_unknown, earnings_row_unreadable]
+note_codes: [macro_high_next_session, next_session_half_day]
+no_selection_text: "No selection tonight: data incomplete"
