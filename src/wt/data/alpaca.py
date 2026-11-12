@@ -15,6 +15,7 @@ import pandas as pd
 import requests
 
 from wt.core.config import env
+from wt.data.feeds import require_feed
 
 DATA = "https://data.alpaca.markets"
 TRADING = "https://paper-api.alpaca.markets"
@@ -83,6 +84,7 @@ class AlpacaREST:
             self.rl = RateLimiter(per_minute)
 
     def get(self, url: str, params: dict | None = None, tries: int = 8) -> dict | list:
+        require_feed(url, params)          # a data request without a feed would follow the subscription (B9)
         for attempt in range(tries):
             self.rl.wait()
             try:

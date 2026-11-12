@@ -1,4 +1,5 @@
 import "server-only";
+import { alpacaDataUrl } from "./alpaca-data-url";
 import { type DataFeed, requireFeed } from "./alpaca-feed";
 import { logEvent } from "./log";
 import type { RawSnapshots } from "./quote-probe";
@@ -135,7 +136,7 @@ export async function fetchQuotes(
     return !hit || hit.feed !== feed || t < hit.at || t - hit.at >= CACHE_MS;
   });
   if (due.length > 0) {
-    const url = `${baseUrl}/v2/stocks/snapshots?symbols=${encodeURIComponent(due.join(","))}&feed=${feed}`;
+    const url = alpacaDataUrl(baseUrl, "/v2/stocks/snapshots", { symbols: due.join(","), feed });
     const res = await fetchImpl(url, {
       headers: { "APCA-API-KEY-ID": keys.id, "APCA-API-SECRET-KEY": keys.secret, accept: "application/json" },
       cache: "no-store",

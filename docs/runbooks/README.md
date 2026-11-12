@@ -23,3 +23,4 @@ One page per incident. Each starts with how you'll notice it.
 | [Cloud routines](cloud-routines.md) | A feed is late, a routine replied in its thread, or you want to know what runs outside the host |
 | [Feed agreement, IEX against SIP](feed-agreement.md) | You want to compare the board on the two stock feeds after a session, or read five sessions together |
 | [Public-repository guards](public-repo-guards.md) | CI fails at "No restricted or runtime paths"; ntfy "Weekly evidence not published" or "Repository is not private"; `make status` says `repo visibility: ...` |
+| [Keys and feeds](keys-and-feeds.md) | The Alpaca plan changed or lapsed, a tool answers 401, or a new market-data request is being added |

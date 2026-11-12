@@ -5,6 +5,7 @@
 //
 // It keeps under ALPACA_CALLS_PER_MIN, waits for Retry-After on a 429, and never goes past its deadline. The keys go
 // only into Alpaca's headers; a key, a page token or a response body is never logged or put in an error.
+import { alpacaDataUrl } from "./alpaca-data-url";
 import { normaliseBar } from "./bars";
 import type { SessionBounds } from "./desk-eval";
 import type { Feed } from "./feed-agreement";
@@ -165,7 +166,7 @@ async function getJson(url: string, feed: Feed, o: FetchSessionOpts): Promise<{ 
 /** One feed's request URL: always naming the feed (Alpaca's default silently becomes IEX without the subscription). */
 export function barsUrl(base: string, feed: Feed, symbols: readonly string[], bounds: SessionBounds, token: string | null): string {
   if (feed !== "iex" && feed !== "sip") throw new Error("a bars request must name its feed");
-  const q = new URLSearchParams({
+  const q: Record<string, string> = {
     symbols: symbols.join(","),
     timeframe: "2Min",
     start: new Date(bounds.open).toISOString(),
@@ -174,9 +175,9 @@ export function barsUrl(base: string, feed: Feed, symbols: readonly string[], bo
     limit: "10000",
     adjustment: "raw",
     sort: "asc",
-  });
-  if (token) q.set("page_token", token);
-  return `${base}/v2/stocks/bars?${q.toString()}`;
+  };
+  if (token) q.page_token = token;
+  return alpacaDataUrl(base, "/v2/stocks/bars", q);
 }
 
 export interface FeedBars {

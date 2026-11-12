@@ -69,7 +69,7 @@ def test_sessions_skip_weekends_and_holidays_and_the_calendar_refuses_what_it_do
     assert lv.next_session("2026-04-02") == "2026-04-06"          # over Good Friday
     assert lv.next_session("2026-12-31") == "2027-01-04"          # over New Year's Day and a weekend
     with pytest.raises(ValueError, match="calendar only covers"):
-        lv.is_session("2028-01-03")
+        lv.is_session("2030-01-01")
     assert all(dt.date.fromisoformat(d).weekday() < 5 for d in lv.HOLIDAYS | lv.HALF_DAYS)
     assert not (lv.HOLIDAYS & lv.HALF_DAYS)
 

@@ -159,7 +159,7 @@ describe("the strip's clock and its failing polls", () => {
   });
 
   it("past the calendar's end the polled chips say their schedule is assumed", () => {
-    const t = Date.parse("2028-01-04T16:00:00Z");
+    const t = Date.parse("2030-01-08T16:00:00Z");
     const chips = stripChips({ stamps, now: t, browserNow: t, prices: { status: "ok", receivedAt: t - 1_000 }, bars: { status: "off", receivedAt: null }, evalStatus: null });
     expect(chips.find((c) => c.id === "prices")).toMatchObject({ state: "on_time", assumed: true });
   });

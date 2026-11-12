@@ -110,7 +110,8 @@ function feedNotices(): Notice[] {
   const views: FeedView[] = [
     ...evaluateStamped(empty, now.getTime()),
     ...evaluateStamped(empty, Date.parse("2026-11-12T20:00:00Z")), // in the session: the server check is late
-    ...evaluateStamped(empty, Date.parse("2028-01-04T23:30:00Z")), // outside the calendar: assumed
+    ...evaluateStamped(empty, Date.parse("2030-01-08T23:30:00Z")), // outside the calendar: assumed
+    ...evaluateStamped(empty, Date.parse("2029-12-31T23:30:00Z")), // the last session: its next one is past the calendar
   ];
   const out: Notice[] = [storeNotice(now)];
   for (const v of views) {

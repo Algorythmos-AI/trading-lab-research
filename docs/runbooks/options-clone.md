@@ -113,12 +113,18 @@ announcement or a source named in the row's `source` (the header of `earnings.cs
 missing one, so never guess). Regenerate the dashboard's calendar (`make schema`, which rewrites
 `dashboard/src/lib/market-calendar.json`) in the same pull request.
 
-Owner note, the end of 2027: `wt.options.levels.is_session` raises for any date after its `CALENDAR_THROUGH`
-(2027-12-31). The first run to fail is the after-close pipeline check on Friday 2027-12-31 at 18:30 New York (it
-asks for the next session); the after-close edition, the clone runner and `wt.options.live` hit the same wall.
-`calendar.sessions` warns from Friday 2027-10-01 (after the close) and pages from Tuesday 2027-11-16. The fix is to
-extend the exchange holiday list (`HOLIDAYS`, `HALF_DAYS`) and `CALENDAR_THROUGH` in `wt.options.levels` once
-NYSE publishes the 2028 holidays.
+Owner note, the end of the exchange calendar: `wt.options.levels.is_session` raises for any date after its
+`CALENDAR_THROUGH` (2029-12-31). NYSE's own page listed 2026 to 2028, so the 2029 rows are marked `expected` in
+`dashboard/src/lib/market-calendar.json`; Alpaca's trading calendar answered only to 2029-12-24, so Christmas 2029
+(`rule`) and the sessions of 26, 27, 28 and 31 December 2029 rest on the exchange's rules alone (`checked_against`
+says so). The first run to fail is the after-close pipeline check on Monday 2029-12-31 at 18:30 New York (it asks for
+the next session); the after-close edition, the clone runner and `wt.options.live` hit the same wall. The first day
+lost is New Year's Day 2030: the dashboard's feed watch takes a weekday past the file as an assumed session, shows it
+as assumed and never pages on it. `calendar.sessions` warns from Tuesday 2029-10-02 (after the close) and pages from
+Friday 2029-11-16, once a New York day. The fix is to extend the exchange holiday list (`HOLIDAYS`, `HALF_DAYS`) and
+`CALENDAR_THROUGH` in `wt.options.levels`, and `START, END` in `scripts/build_market_calendar.py` (then
+`make schema`), once NYSE publishes the next year; the tests in `tests/unit/test_market_calendar.py` tie the two
+lists together day by day.
 
 Owner note: pages raised before this change and still spooled on the host can carry check ids with symbols, and are
 sent when ntfy next accepts them. To look: `grep -l "Pipeline check" /home/wt/trading/var/alerts/spool/*.json`
