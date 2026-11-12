@@ -40,7 +40,8 @@ test("in a session: the board's feed named, the stamps counted, the live rows dr
   await expect(page.locator("[data-board-feed]")).toContainText("IEX — the board is not on SIP yet (DEC-0050)");
   await expect(page.locator("[data-stamp-panel]")).toHaveAttribute("data-stamp-panel", "session");
   await expect(page.locator("[data-stamp-panel]")).toContainText("over 91 minutes since the open");
-  await expect(page.locator("[data-feeds-row]")).toHaveCount(2);
+  // focus + quotes-script: SPY and QQQ, plus AAPL (fixture-script SCRIPT_EXTRA_FOCUS); SPY is not added twice.
+  await expect(page.locator("[data-feeds-row]")).toHaveCount(3);
   for (const row of await page.locator("[data-feeds-row]").all()) {
     await expect(row).toHaveAttribute("data-stale", "false");
     await expect(row).toContainText("IEX price (the board's)");
