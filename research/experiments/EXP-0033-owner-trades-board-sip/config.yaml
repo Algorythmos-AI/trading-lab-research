@@ -144,11 +144,21 @@ labeller_rules:                     # DEC-0050 point 3: settled here at registra
     one label row per buy fill: each distinct (contract key, opened_at) among the long call and put pieces, lots still
     held included; a position (grouping above) takes the row of its first fill, so a later close of an earlier lot
     never moves its t0 or its label
-  row_stores_also: [the caution ids returned at t0 (cautions.counted), the count of unknown checks at t0]
+  row_stores_also:
+    - the caution ids returned at t0 (cautions.counted)
+    - the count of unknown checks at t0
+    - the receipt time of the edition copy used (audit)
+    - the key of the stamp that covered t0, or null (audit)
+  no_record_reasons: >-
+    one stored reason per no_record row, the first that applies in this order: edition_missing (no copy stored for
+    the session), not_a_session (t0 is not inside a regular session of dashboard/src/lib/market-calendar.json),
+    no_edition, half_day_mismatch, feed_unknown, board_off, bars_incomplete (the symbol's or SMH's bars),
+    side_gap, side_broke_earlier
   instants: >-
-    the evaluation grid is every 2-minute bar's end + CLOSE_GRACE_MS, plus 09:35:00, 11:30:00, 13:00:00 and 15:10:00
-    New York (the board's own boundaries, from FIRST_ENTRY_MIN, LUNCH and FLAT_MIN), each read from the bars ended by
-    then; a side state holds from its instant to the next
+    the evaluation grid is every 2-minute bar's end + CLOSE_GRACE_MS, plus the board's own boundaries that fall
+    strictly inside the session: 09:35:00 (FIRST_ENTRY_MIN), 11:30:00 and 13:00:00 (LUNCH) and the session's flat
+    minute (flatMinute: 15:10:00 on a full day, 12:10:00 on a half day), each read from the bars ended by then; on a
+    half day 13:00:00 is the close and is not an instant; a side state holds from its instant to the next
   alt_gate: an alternative counts only while the row's state is neither no_trade nor paused, as the side state is masked
   edition: >-
     each position is labelled against the edition in force at t0: the copy for the session that the store received
@@ -167,7 +177,9 @@ labeller_rules:                     # DEC-0050 point 3: settled here at registra
     verdict (adding later sessions is not a change)
   fetch: >-
     bars are fetched no sooner than 20 minutes after the close, and again at each later session's close + 20 minutes
-    while the fetch fails or its answer does not run through the close for every focus name and SMH; a 2-minute slot
+    while the fetch fails or its answer is not full; an answer is full when every request's last page came back with
+    no next page token and SMH has a bar ending at the session's close (a focus name with no trade in a late slot is
+    still a full answer); a 2-minute slot
     left empty inside a full answer is final (bars_complete handles it per position); a session whose fetch still
     fails, or still does not reach the close, when 5 later sessions have closed ends the window with no verdict
   version: DEC-0045's content hash of the five engine files (labels.engine.files), not the shadow evaluator's label
