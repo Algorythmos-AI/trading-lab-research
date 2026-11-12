@@ -628,10 +628,34 @@ describe("the file's last session and its next session past the file", () => {
   });
 });
 
+describe("before the file's start, a run is matched as it always was", () => {
+  // Sunday 2026-01-04: the walk back over missed runs reaches 2025-12-31 and earlier, before the file starts. The run
+  // of Friday 2025-12-26 must be matched against its weekday-guessed next session (2025-12-29), not the day after it,
+  // so a build for Saturday 2025-12-27 does not satisfy it. The figures are integration's (before #389), recorded by
+  // running its feed-watch.ts on the same inputs.
+  const edition = (session: string, at: string, now: string) => view("options-edition", { "options-edition": ok(session, at) }, now);
+
+  it("gives the same misses and minutes late as integration", () => {
+    expect(edition("2025-12-27", "2025-12-26T22:10:00Z", "2026-01-04T15:00:00Z")).toMatchObject({ state: "late", misses: 5, late_min: 12488, for_session: "2026-01-05" });
+    expect(edition("2025-12-27", "2025-12-26T22:10:00Z", "2026-01-04T23:30:00Z")).toMatchObject({ misses: 5, late_min: 12998 });
+    expect(edition("2025-12-27", "2025-12-26T22:10:00Z", "2026-01-05T23:30:00Z")).toMatchObject({ misses: 6, late_min: 14438, for_session: "2026-01-06" });
+    expect(edition("2025-12-27", "2025-12-26T22:10:00Z", "2026-01-02T23:30:00Z")).toMatchObject({ misses: 5, late_min: 10118 });
+    expect(edition("2025-12-31", "2025-12-30T22:10:00Z", "2026-01-04T15:00:00Z")).toMatchObject({ misses: 2, late_min: 5288 });
+    expect(view("options-edition", { "options-edition": { status: "missing" } }, "2026-01-04T15:00:00Z")).toMatchObject({ misses: 8, late_min: 16808 });
+  });
+
+  it("names no session before the file's start", () => {
+    for (const s of slotsAround(doc("options-edition"), T("2026-01-04T15:00:00Z"))) {
+      if (s.day < "2026-01-01") expect(s.for_session).toBeNull();
+      else expect(s.for_session).toBe(s.match_session);
+    }
+  });
+});
+
 describe("today outside the calendar file", () => {
-  it("the Operations panel says feed alerts for late runs are off, before 2026 and after 2029", () => {
-    expect(calendarNotice(T("2030-01-08T15:00:00Z"))).toBe("Today is outside the session calendar (ends 31 Dec 2029): feed alerts for late runs are off.");
-    expect(calendarNotice(T("2025-12-15T15:00:00Z"))).toBe("Today is outside the session calendar (starts 1 Jan 2026): feed alerts for late runs are off.");
+  it("the Operations panel says which alerts are off, before 2026 and after 2029", () => {
+    expect(calendarNotice(T("2030-01-08T15:00:00Z"))).toBe('Today is outside the session calendar (ends 31 Dec 2029): late and "cannot be checked" alerts are off; refusals still alert.');
+    expect(calendarNotice(T("2025-12-15T15:00:00Z"))).toBe('Today is outside the session calendar (starts 1 Jan 2026): late and "cannot be checked" alerts are off; refusals still alert.');
     expect(calendarNotice(T("2026-11-12T15:00:00Z"))).toBeNull();
     // New York's day decides: 03:00 UTC on 1 January 2030 is still 31 December 2029 there.
     expect(calendarNotice(T("2030-01-01T03:00:00Z"))).toBeNull();
