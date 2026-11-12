@@ -54,3 +54,30 @@ first.
   the pull request that records the verdict.
 - Because the states are computed from IEX last trades in the browser, they can differ from the owner's broker by
   cents and by seconds. The desk is an aid to the owner's own chart, not a substitute for it.
+
+## Note on the board's event line (added 2026-11-12; nothing above is changed)
+
+From the release that carries it, the Trade now board shows one line under its header with what the event calendar
+schedules on the board's day: each release the calendar lists for that day with its New York time ("in N min" from
+30 minutes before it, "now" in its minute, then that it was at that time), and, for each focus name, earnings after
+today's close (with the close's time, 13:00 on a half day), during the session, before today's open, after the last
+session's close, or before the next session's open. A date the calendar does not mark as confirmed is shown as
+expected. When the calendar does not cover the day, has no dates yet for a month's releases, or keeps no earnings
+dates for a focus name, the line says so; it never says that a day has no event. On a day the calendar lists nothing
+for, nothing is drawn.
+
+- **Display only.** No state, level, guard, caution or alert changes. The line is not read by the engine, the
+  server's evaluation, the shadow comparison or any alert, and adds no ntfy notice. Its files
+  (`dashboard/src/lib/board-events.ts`, `dashboard/src/components/board-events.tsx`) are outside the import closure
+  of `desk-eval.ts`, so the engine label stays `e-3f82b5b4b3c0`; a test loads the engine on two calendars, one with
+  releases and earnings on the fixture day and one without, and finds its output identical.
+- **The calendar the repo already keeps.** It reads `dashboard/src/lib/market-calendar.json`, which
+  `scripts/build_market_calendar.py` builds from `config/events/macro_events.csv` and `config/events/earnings.csv`.
+  That file carries no severity, so the line ranks and filters nothing by one: every release it lists for the day is
+  shown under its own label. The 30 minutes changes the wording only.
+- **No advice.** The line says what, when and for whom. It does not say what to do and predicts nothing.
+- **What this does not start.** It starts no trial and adds nothing to `config/trial_registry.yaml`. Comparing the
+  owner's trades on days with and without such an event is a separate question, with its own hypothesis and
+  experiment written before any such comparison is looked at.
+
+No state log, owner trade or result was viewed for this note.
