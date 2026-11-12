@@ -25,19 +25,28 @@ const STYLE: Record<FreshState, { cls: string; Icon: typeof CircleCheck }> = {
   unknown: { cls: "bg-neutral-soft text-neutral border-neutral/25", Icon: CircleDashed },
 };
 
+// The header is one row on a laptop (the browser tests hold it), so every wording here stays about as short as the
+// longest it replaced; the tooltip carries the longer explanation.
 function label(state: FreshState, ageMin: number | null): string {
   switch (state) {
     case "fresh":
       return `Lab host (VM) · ${describeAge(ageMin ?? 0)}`;
     case "late":
-      return `Lab host (VM) late: ${describeAge(ageMin ?? 0)}`;
+      return `Lab host (VM) late · ${shortAge(ageMin ?? 0)}`;
     case "stopped":
-      return `Lab host (VM) stopped: ${describeAge(ageMin ?? 0)}`;
+      return `Lab host (VM) stopped · ${shortAge(ageMin ?? 0)}`;
     case "asleep":
-      return "Lab host (VM) · between sessions (expected)";
+      return "Lab host (VM) · resting";
     default:
       return "Lab host (VM): no data yet";
   }
+}
+
+/** The tooltip: what the pill measures, and for a resting host that the quiet is expected. */
+function hostTitle(state: FreshState, asOf: string | null): string {
+  const what = "Status of the lab host, the cloud VM that runs the lab's jobs, published every few minutes. Not a price.";
+  const rest = state === "asleep" ? " Between sessions now, which is expected." : "";
+  return `${what}${rest}${asOf ? ` Last published ${asOf}.` : ""}`;
 }
 
 /** The phone's word for the pill, or null where the full words are short enough already. */
@@ -90,7 +99,7 @@ export function FreshnessPill({
     <span
       role="status"
       aria-live="polite"
-      title={asOf ? `Status of the lab host, the cloud VM that runs the lab's jobs, published every few minutes (${asOf}). Not a price.` : undefined}
+      title={hostTitle(f.state, asOf)}
       className={cn(PILL, cls)}
     >
       <Icon aria-hidden className="size-3.5 shrink-0" />

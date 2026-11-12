@@ -30,7 +30,7 @@ describe("the header on the closed crypto desk", () => {
   it("leaves the stocks and HFT desks as they were", () => {
     for (const path of ["/", "/hft"]) {
       nav.pathname = path;
-      expect(text(renderToString(createElement(DeskFreshnessPill, { desks })))).toMatch(/^Lab host \(VM\) stopped: /);
+      expect(text(renderToString(createElement(DeskFreshnessPill, { desks })))).toMatch(/^Lab host \(VM\) stopped · /);
       const tabs = renderToString(createElement(NavTabs));
       expect(tabs).toContain('aria-label="Sections"');
       expect(tabs).toContain(`href="${path}"`);
