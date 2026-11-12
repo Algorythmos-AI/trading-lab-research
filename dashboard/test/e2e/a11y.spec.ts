@@ -15,6 +15,7 @@ const PAGES = [
   "/calendar",
   "/calendar?y=2027",
   "/trades",
+  "/review",
   "/strategies",
   "/research",
   "/operations",
