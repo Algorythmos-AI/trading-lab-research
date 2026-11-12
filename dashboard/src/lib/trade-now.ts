@@ -267,13 +267,16 @@ export function boardNotices(book: NoticeBook, session: string, states: readonly
   const shownNew = next.fresh;
   const merged = shownNew.length ? [...shownNew, ...book.kept.filter((k) => !shownNew.some((f) => f.symbol === k.symbol))] : book.kept;
   const gone = new Map(book.gone ?? []);
+  // A name a switched-on bad-data guard has paused: its kept notice may rest on the same suspect data, so it goes at
+  // once, without the keep below. A pause for no fresh price keeps the keep.
+  const guarded = new Set(states.filter((st) => st.state === "paused" && st.guards?.length).map((st) => st.symbol));
   const kept = merged.filter((k) => {
     const key = noticeKey(k) ?? "";
     if (live.has(key)) {
       gone.delete(key);
       return true;
     }
-    if (!timed) return false;
+    if (!timed || guarded.has(k.symbol)) return false;
     const since = gone.get(key) ?? now;
     gone.set(key, since);
     return now - since < WITHDRAW_AFTER_MS;

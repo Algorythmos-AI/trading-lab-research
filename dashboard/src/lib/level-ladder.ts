@@ -368,6 +368,8 @@ export const PAUSED_CAPTION = "Prices paused: static plan";
 export const CONNECTING_CAPTION = "Connecting to live prices";
 export const NO_PRICE_CAPTION = "No price for today yet";
 /** "Prices paused 34 s: static plan", or without the age when it is not known. */
+/** A switched-on bad-data guard paused the name (quote-guards.ts): no dot at the suspect price, no distances from it. */
+export const SUSPECT_CAPTION = "Prices paused, suspect data: static plan";
 export const pausedCaption = (ageS: number | null) => (ageS === null ? PAUSED_CAPTION : `Prices paused ${ageS} s: static plan`);
 
 /** Distance from a price to each trigger, in $ and in 1-day moves (ATRs without a move); past the trigger, in ATRs. */
@@ -420,6 +422,8 @@ export interface LadderLiveInput {
   floor: number | null;
   atr: number | null | undefined;
   move: number | null | undefined;
+  /** The bad-data guards that paused the name's row on the board, when any: read as paused. Missing: as before. */
+  guards?: readonly string[];
 }
 
 /** What the price dot, its label and the distances say. The edition's close is only ever shown before the open. */
@@ -434,6 +438,7 @@ export function ladderLiveView(i: LadderLiveInput): LadderLiveView {
     case "live":
     case "opening": {
       if (!i.fresh || !i.today) return none(pausedCaption(i.ageS));
+      if (i.guards?.length) return none(SUSPECT_CAPTION);
       const p = i.today.price;
       return {
         dot: { kind: "live", price: p, label: `live ${newYork(i.today.at, false)}` },
@@ -502,6 +507,8 @@ export function ladderLiveState(p: {
   floor: number | null;
   atr: number | null | undefined;
   move: number | null | undefined;
+  /** The bad-data guards that paused the name's row on the board (its NameState's `guards`), when any. */
+  guards?: readonly string[];
 }): LadderLiveView {
   const f = p.feed;
   const ok = f.status === "ok";
@@ -533,6 +540,7 @@ export function ladderLiveState(p: {
     floor: p.floor,
     atr: p.atr,
     move: p.move,
+    ...(p.guards?.length ? { guards: p.guards } : {}),
   });
 }
 

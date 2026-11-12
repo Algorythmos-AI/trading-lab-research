@@ -512,6 +512,9 @@ export function TradeNowBoard({
   // A name a switched-on bad-data guard paused says why, on a line of its own; the others share the one line.
   const pausedNames = pausedRows.filter((r) => !r.state?.guards?.length).map((r) => r.symbol);
   const guarded = pausedRows.filter((r) => r.state?.guards?.length);
+  // Every name paused: the board's one line names each guard that paused a name, and the rest as paused for old prices.
+  const allGuarded = paused ? rows.filter((r) => r.state?.state === "paused" && r.state.guards?.length) : [];
+  const allStale = paused ? rows.filter((r) => r.state?.state === "paused" && !r.state.guards?.length).map((r) => r.symbol) : [];
   const watching = rows.length - listed.length - pausedRows.length;
   const status = mode.kind === "live" ? (paused ? "paused" : "live") : mode.kind === "loading" ? "connecting" : mode.kind === "off" ? "off" : "waiting";
   return (
@@ -551,6 +554,11 @@ export function TradeNowBoard({
         <p data-board-line className={cn("text-[0.8125rem]", mode.kind === "off" || mode.kind === "old" ? "text-muted-foreground" : "font-medium")}>
           {mode.line}
         </p>
+      ) : paused && allGuarded.length ? (
+        <p data-board-line data-board-guards={allGuarded.map((r) => r.symbol).join(" ")} className="text-warn text-[0.8125rem] font-medium">
+          Prices paused. {allGuarded.map((r) => `${r.symbol}: ${r.state!.line}.`).join(" ")}
+          {allStale.length ? ` ${allStale.join(", ")}: no entry is shown on old prices. Check your platform.` : ""}
+        </p>
       ) : paused ? (
         <p data-board-line className="text-warn text-[0.8125rem] font-medium">
           Prices paused: no entry is shown on old prices. Check your platform.
@@ -577,7 +585,7 @@ export function TradeNowBoard({
       {guarded.map((r) => (
         <p key={r.symbol} data-board-guard={r.symbol} data-board-guards={r.state!.guards!.join(" ")} className="text-warn text-[0.8125rem] font-medium">
           <Pause aria-hidden className="mr-1 inline size-3.5 align-[-2px]" />
-          {r.symbol}: prices paused. {r.state!.line}
+          {r.symbol}: prices paused. {r.state!.line}.
         </p>
       ))}
       {mode.kind === "live" && !paused && watching > 0 ? (

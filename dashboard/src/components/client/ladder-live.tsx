@@ -48,7 +48,9 @@ export function useLadderLive(
   p: Pick<LadderLiveProps, "symbol" | "session" | "halfDay" | "premarket" | "close" | "closeDate" | "ceiling" | "floor" | "atr" | "move">,
 ): LadderLiveView {
   const { feed, now } = useLive();
-  return ladderLiveState({ ...p, feed, browserNow: now });
+  // A name a switched-on bad-data guard paused on the board reads paused here too: no dot at the suspect price.
+  const guards = useBoardRow(p.symbol)?.row.state?.guards;
+  return ladderLiveState({ ...p, feed, browserNow: now, ...(guards?.length ? { guards } : {}) });
 }
 
 /**

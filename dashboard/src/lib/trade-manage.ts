@@ -8,6 +8,7 @@ import { focusPlan, type SidePlan } from "./focus-plan";
 import type { Lot, Trade } from "./journal";
 import type { Tone } from "./labels";
 import { closeMinute, type LiveQuote, nyClock, nyInstant, OPEN_MIN, type Options, type TrailPoint } from "./options";
+import { type GuardReason, guardLine } from "./quote-guards";
 import { MIN_ROOM_MULTIPLE, TIME_STOP_MINUTES } from "./trade-rules";
 import {
   type AltTrigger,
@@ -520,6 +521,11 @@ export interface ManageInput {
   now: number;
   /** The name's own row state on the board; null without a row. */
   rowState: NameStateName | null;
+  /**
+   * The bad-data guards that paused the name's row (its NameState's `guards`), only when a switched-on guard tripped:
+   * the card then says the data is suspect and shows nothing worked out from it. Missing: the card is as before.
+   */
+  guards?: readonly GuardReason[];
   feed: CardFeed;
 }
 
@@ -542,6 +548,37 @@ export function manageView(t: OpenTrade, x: ManageInput): ManageView {
   const check = t.unmatched || off || paused;
   const line = t.unmatched ? UNMATCHED_LINE : off ? OFF_LINE : paused ? PAUSED_LINE : ownLine;
   const tone: Tone = check ? "warn" : m.tone;
+  // A switched-on bad-data guard paused the row: the price, and everything worked out from it (an exit, a stop moved
+  // to the entry, the trail, the five-minute judgment, a distance), may rest on a bad print. The card says CHECK with
+  // the guard's line and keeps only what does not come from the price: the plan's own stop and target 1, the flat
+  // time and the fill. With the feed off, or a trade not matched, the card says that instead, as before.
+  if (x.guards?.length && !off && !t.unmatched) {
+    const plain = { ...m, line: guardLine(x.guards), tone: "warn" as Tone, stop: t.plan?.stop ?? null, trail: null, notWorkingSecLeft: null };
+    return {
+      id: t.id,
+      key: `${t.symbol}|${t.side}`,
+      symbol: t.symbol,
+      side: t.side,
+      source: t.entry.source,
+      kind: t.kind,
+      action: "check",
+      tone: "warn",
+      line: guardLine(x.guards),
+      m: plain,
+      cardEntry,
+      fillLine: cardEntry ? FILLS_LINE : null,
+      fillNote: cardEntry ? null : FILL_MINUTE,
+      hint: t.hintAt ? { line: hintLine(t.symbol, t.side, t.hintAt), at: t.hintAt } : null,
+      stopAtEntry: false,
+      trailText: "–",
+      notWorkingText: "–",
+      flatText: m.minToFlat === null ? "–" : hoursMin(m.minToFlat),
+      flatAt: hhmm(flatMinute(x.halfDay)),
+      price: null,
+      contract: t.contract ?? null,
+      entry: t.entry.price,
+    };
+  }
   return {
     id: t.id,
     key: `${t.symbol}|${t.side}`,
