@@ -1,6 +1,7 @@
 import "server-only";
 import { listPaths, readText } from "./blob";
 import { presentsBypass } from "./desk-flags-run";
+import { type GuardSummary, summariseGuards } from "./desk-guards";
 import { logEvent } from "./log";
 import { nyClock } from "./options";
 import { type ProbeSummary, summariseProbe } from "./quote-probe";
@@ -8,7 +9,9 @@ import { fixtureMode } from "./snapshot";
 
 // GET /api/desk/probe?day=YYYY-MM-DD: the owner's view of the snapshot probe (quote-probe.ts) for one New York day,
 // read from the server check's own records (desk/log/<day>/HHMM.json, desk-run.ts), as counts per fact, per name
-// and in total. Temporary evidence for the board's bad-data guards. Behind Vercel Authentication like every page,
+// and in total, and the bad-data guards' observe-mode counts beside them (desk-guards.ts summariseGuards: per feed and
+// per guard, how often it would have paused a name; how often a row was paused and why; the runs' 429 answers and low
+// rate limits). Temporary evidence for the board's bad-data guards. Behind Vercel Authentication like every page,
 // hardened like /api/desk/eval-status (GET and HEAD only, cross-site refused, Vercel's protection bypass refused in
 // every documented form, no-store).
 //
@@ -75,6 +78,8 @@ export interface ProbeDay {
   /** True when more records were listed than MAX_RECORDS: the rest were not read. */
   capped: boolean;
   summary: ProbeSummary;
+  /** The guards' observe-mode counts from the same records, per feed, never pooled. */
+  guards: GuardSummary;
 }
 
 /** One day's summary from the store: the server records only, read a few at a time, each failure counted, never thrown. */
@@ -99,7 +104,7 @@ export async function readProbeDay(deps: ProbeReadDeps, day: string): Promise<Pr
       else records.push(r);
     }
   }
-  return { day, listed: paths.length, unreadable, capped: paths.length > take.length, summary: summariseProbe(records) };
+  return { day, listed: paths.length, unreadable, capped: paths.length > take.length, summary: summariseProbe(records), guards: summariseGuards(records) };
 }
 
 /** GET and HEAD /api/desk/probe[?day=YYYY-MM-DD], today's New York day by default. */
@@ -114,7 +119,7 @@ export async function handleProbeSummary(req: Request, deps: ProbeReadDeps = def
   if (day === null) return fail(400, "bad-day");
   // HEAD: the checks above are the whole answer; nothing is listed or read.
   if (req.method === "HEAD") return new Response(null, { status: 200, headers: NO_STORE });
-  if (deps.dry) return json(200, { day, listed: 0, unreadable: 0, capped: false, summary: summariseProbe([]), dry: true });
+  if (deps.dry) return json(200, { day, listed: 0, unreadable: 0, capped: false, summary: summariseProbe([]), guards: summariseGuards([]), dry: true });
   const kept = pastDays.get(day);
   if (kept) return json(200, { ...kept, cached: true });
   let got: ProbeDay;

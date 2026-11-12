@@ -20,6 +20,7 @@ import { SlaPanel } from "@/components/v3/sla";
 import { duration, newYork, num, pct, shortDate, shortSha, sydney, txt } from "@/lib/format";
 import { humanize, jobKey, jobName, jobTone, sortJobKeys } from "@/lib/labels";
 import { loadPageFeeds, loadUnsentFeeds } from "@/lib/feed-watch-run";
+import { loadDataPlanLimit } from "@/lib/desk-guards-run";
 import { JOURNAL_PATHS, LEDGER_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "@/lib/desk";
 import { FEEDS } from "@/lib/feed-watch";
 import { listOptionsDates, listRadarDates, loadJournal, loadLedger, loadOptions, loadOptionsLive, loadRadar, loadSnapshot } from "@/lib/snapshot";
@@ -50,7 +51,7 @@ export default async function OperationsPage() {
     },
     now,
   );
-  const unsent = await loadUnsentFeeds();
+  const [unsent, dataPlanLimit] = await Promise.all([loadUnsentFeeds(), loadDataPlanLimit(now.getTime())]);
   return (
     <>
       <PageHeading
@@ -68,6 +69,7 @@ export default async function OperationsPage() {
         radar={radar}
         optionsDates={optionsDates}
         radarDates={radarDates}
+        dataPlanLimit={dataPlanLimit}
       />
       {result.status !== "ok" ? (
         <NoSnapshot status={result.status} />

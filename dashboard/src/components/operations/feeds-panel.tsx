@@ -4,6 +4,7 @@ import { RelativeTime } from "@/components/client/relative-time";
 import { Panel } from "@/components/panel";
 import { StatusBadge } from "@/components/status";
 import { describeAge, freshness, OFFLINE_HOURS } from "@/lib/freshness";
+import { rateLimitLine } from "@/lib/desk-guards";
 import { calendarNotice, evaluateStamped, FEEDS, type FeedView, journalShown, nextDueOf, type StampedInputs, worstOf } from "@/lib/feed-watch";
 import { lastWeekdays } from "@/lib/feeds";
 import { shortDate, sydney, weekDate } from "@/lib/format";
@@ -78,6 +79,11 @@ export interface FeedsInput {
   unsent?: readonly string[];
   optionsDates: string[];
   radarDates: string[];
+  /**
+   * The data plan's rate limit as the server check's newest record read it (desk-guards-run.ts loadDataPlanLimit), or
+   * null when not read. Below 1,000 the panel says so (desk-guards.ts rateLimitLine); display only.
+   */
+  dataPlanLimit?: number | null;
 }
 
 /** The feed watch rows each card stands for: an alert about any of them that could not be sent is said on the card. */
@@ -269,6 +275,7 @@ export function FeedsPanel(input: FeedsInput) {
   const bad = feeds.filter((f) => f.state === "late" || f.state === "error" || f.state === "failed").length;
   const nowMs = input.now.getTime();
   const outside = calendarNotice(nowMs);
+  const limitLine = rateLimitLine(input.dataPlanLimit);
   return (
     <Panel
       id="feeds"
@@ -280,6 +287,11 @@ export function FeedsPanel(input: FeedsInput) {
       {outside ? (
         <p data-calendar-outside className="border-warn/60 bg-warn-soft mb-3 rounded-lg border p-3 text-sm">
           {outside}
+        </p>
+      ) : null}
+      {limitLine ? (
+        <p data-rate-limit className="border-warn/60 bg-warn-soft mb-3 rounded-lg border p-3 text-sm">
+          {limitLine}
         </p>
       ) : null}
       <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
