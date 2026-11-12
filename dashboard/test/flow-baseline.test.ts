@@ -100,6 +100,10 @@ describe("runFlowBaseline", () => {
     expect(b.names.AAPL).toMatchObject({ n: 20 });
     expect(b.names.AAPL!.slot_median.slice(0, 2)).toEqual([1_000, 1_001]);
     expect(b.names.AAPL!.cum_median[1]).toBe(2_001);
+    // version 2: the per-slot median bar range for DEC-0051's shock gate (the fake bars are 11 high, 9 low)
+    expect(b.v).toBe(2);
+    expect(b.names.AAPL!.range_median).toHaveLength(195);
+    expect(new Set(b.names.AAPL!.range_median)).toEqual(new Set([2]));
   });
 
   it("a stored baseline: one head, nothing asked upstream, nothing written", async () => {

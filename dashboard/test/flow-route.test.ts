@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { nameBaseline, parseBaseline, relativeVolume, slotClock, slotClockFromAsOf, spreadBps } from "@/lib/flow";
 import { baselinePath } from "@/lib/flow-baseline-run";
-import { CACHE_MS, type FlowAnswer, type FlowDeps, handleFlow, MAX_BAR_PAGES, requestedNames, resetFlowCache, BASELINE_RETRY_MS } from "@/lib/flow-route";
+import { CACHE_MS, type FlowAnswer, type FlowDeps, fixtureBaseline, handleFlow, MAX_BAR_PAGES, requestedNames, resetFlowCache, BASELINE_RETRY_MS } from "@/lib/flow-route";
 import { FROZEN_NOW } from "@/lib/fixture-variants";
 import { resetFeedWarning } from "@/lib/alpaca-feed";
 import type { Options } from "@/lib/options";
@@ -140,6 +140,8 @@ describe("the answer", () => {
     expect(body.names.QQQ).toMatchObject({ price: null, bid: null, day_volume: null, bars: [] });
     // the baseline, for the answered names only
     expect(body.baseline).toEqual({ for_session: DAY, sessions: ["2026-11-11"], names: { SPY: BASELINE.names.SPY } });
+    // a version 2 baseline's ranges never reach the browser
+    expect(Object.keys(body.baseline!.names.SPY!)).not.toContain("range_median");
   });
 
   it("reads the bars to the last page, and a read still paging after MAX_BAR_PAGES is null, never part of a day", async () => {
@@ -301,6 +303,16 @@ describe("fixture mode", () => {
     expect(rv.value).not.toBeNull();
     expect(spreadBps(body.names.SPY!.bid, body.names.SPY!.ask).bps).not.toBeNull();
     expect(await read("")).toEqual(body); // deterministic
+  });
+
+  it("the fixture baseline is version 2 with ranges, and the answer the browser gets carries no ranges", async () => {
+    const b = fixtureBaseline(["SPY", "QQQ"], clock.day, new Set())!;
+    expect(b.v).toBe(2);
+    expect(b.names.SPY!.range_median).toHaveLength(195);
+    expect(b.names.SPY!.range_median!.every((x) => x > 0)).toBe(true);
+    expect(parseBaseline(JSON.stringify(b))).toEqual(b);
+    const body = await read("");
+    for (const n of Object.values(body.baseline!.names)) expect(Object.keys(n).sort()).toEqual(["cum_median", "n", "slot_median"]);
   });
 
   it("flow-off is 503, flow-error 502", async () => {

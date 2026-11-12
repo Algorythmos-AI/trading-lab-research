@@ -273,11 +273,18 @@ async function editionFor(now: number, d: FlowDeps): Promise<Options | null> {
   }
 }
 
-/** The baseline restricted to the answered names. */
+/**
+ * The baseline restricted to the answered names, without the per-slot ranges: those are for the server's shock gate
+ * (DEC-0051), and the browser draws nothing from them.
+ */
 function baselineView(b: Baseline | null, symbols: readonly string[]): FlowAnswer["baseline"] {
   if (!b) return null;
   const names: Record<string, NameStats> = {};
-  for (const s of symbols) if (Object.hasOwn(b.names, s)) names[s] = b.names[s]!;
+  for (const s of symbols)
+    if (Object.hasOwn(b.names, s)) {
+      const { slot_median, cum_median, n } = b.names[s]!;
+      names[s] = { slot_median, cum_median, n };
+    }
   return { for_session: b.for_session, sessions: b.sessions, names };
 }
 
@@ -322,7 +329,10 @@ export function fixtureBars(sym: string, i: number, day: string, now: number, sh
   return out;
 }
 
-/** The fixture baseline for `forSession`: 20 sessions, or 9 with `flow-thin`; for the session before with `flow-stale`. */
+/**
+ * The fixture baseline for `forSession` (version 2, with ranges): 20 sessions, or 9 with `flow-thin`; for the session
+ * before with `flow-stale`.
+ */
 export function fixtureBaseline(names: readonly string[], forSession: string, flags: ReadonlySet<VariantFlag>): Baseline | null {
   const target = flags.has("flow-stale") ? (baselineSessions(forSession)?.at(-1) ?? null) : forSession;
   const sessions = target ? baselineSessions(target) : null;
@@ -332,9 +342,11 @@ export function fixtureBaseline(names: readonly string[], forSession: string, fl
   names.forEach((sym, i) => {
     const slot_median = Array.from({ length: FULL_SESSION_SLOTS }, (_, k) => fixtureSlotVolume(k, i));
     let run = 0;
-    stats[sym] = { slot_median, cum_median: slot_median.map((x) => (run += x)), n };
+    // A made-up range per slot, as the volume: wider at the open and the close (version 2, for the shock gate).
+    const range_median = slot_median.map((v) => Math.round(v / 100) / 1_000);
+    stats[sym] = { slot_median, cum_median: slot_median.map((x) => (run += x)), range_median, n };
   });
-  return { v: 1, for_session: target, built_at: `${sessions.at(-1)}T21:00:00.000Z`, feed: "sip", sessions: sessions.slice(-n), built_for: [...names].sort(), names: stats };
+  return { v: 2, for_session: target, built_at: `${sessions.at(-1)}T21:00:00.000Z`, feed: "sip", sessions: sessions.slice(-n), built_for: [...names].sort(), names: stats };
 }
 
 /** The fixture answer: the fixture session at FROZEN_NOW, whatever the server's clock says. No network. */

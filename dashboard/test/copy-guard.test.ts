@@ -127,6 +127,9 @@ const FILES = [
   "../src/components/client/use-contract-quote.ts",
   "../src/lib/entitlement.ts",
   "../src/lib/contract-request.ts",
+  "../src/lib/signal.ts",
+  "../src/lib/signal-params.ts",
+  "../src/lib/contract-pick.ts",
 ];
 
 const BANNED = [
