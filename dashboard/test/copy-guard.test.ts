@@ -100,6 +100,8 @@ const FILES = [
   "../src/lib/owner-labels.ts",
   "../src/lib/owner-labels-fetch.ts",
   "../src/lib/owner-labels-store.ts",
+  "../src/lib/board-events.ts",
+  "../src/components/board-events.tsx",
 ];
 
 const BANNED = [
