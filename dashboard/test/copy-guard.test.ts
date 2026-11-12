@@ -97,6 +97,9 @@ const FILES = [
   "../src/lib/fill-check-fetch.ts",
   "../src/lib/fill-check-run.ts",
   "../src/app/api/desk/fill-check/route.ts",
+  "../src/lib/owner-labels.ts",
+  "../src/lib/owner-labels-fetch.ts",
+  "../src/lib/owner-labels-store.ts",
 ];
 
 const BANNED = [
