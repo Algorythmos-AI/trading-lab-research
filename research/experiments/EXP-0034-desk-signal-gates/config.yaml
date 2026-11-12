@@ -32,9 +32,9 @@ signal:                             # DEC-0051 section 1; per focus name of the 
         - >-
           an input is not usable: the slot's DEC-0044 record has a status other than ok or lists the name in
           degraded_names; the edition is missing or for another session; the parameter hash or the signal-code hash
-          differs from Amendment 1's; an answer names a feed other than sip (stock) or opra (option); no board-feed
-          stamp for the minute the slot's DEC-0044 record was written, or one reading other than sip, or answered other
-          than ok
+          differs from Amendment 1's; an answer names a feed other than sip (stock) or opra (option); no usable
+          board-feed stamp: one reading sip, answered ok, whose at lies in [t0 - 2 min, t0] (t0 the slot's evaluation
+          time; EXP-0033 covered rule 1, EDGE_MS, no bracketing). A stamp reading other than sip is also an early end
     - word: CALL_or_PUT             # CALL on the call side, PUT on the put side
       when: "side state enter_zone, brokeEarlier false, gap false, all four market gates pass, a contract passes"
     - word: WAIT
@@ -112,7 +112,7 @@ gates:                              # DEC-0051 section 2; a gate whose value is 
     checks:
       premium: "ticket.ts sizeTicket(ask in cents, OWNER_LIMITS).contracts >= 1 (MAX_PREMIUM 200, RISK_PER_TRADE 50, PREMIUM_STOP 0.25 via stopCents, OWNER_FEES 0.55 open + 0.56 close)"
       bid_ask: "ask - bid <= parameters.contract_spread_share_of_stop x PREMIUM_STOP x mid"
-      quote: "two-sided (bid > 0, ask > 0, ask >= bid), checked age <= parameters.contract_quote_max_age_s, and served time - quote_at <= parameters.contract_quote_stamp_max_age_s"
+      quote: "two-sided (bid > 0, ask > 0, ask >= bid), checked age <= parameters.contract_quote_max_age_s, and served_at (else as_of) - the contract's chain.ts at <= parameters.contract_quote_stamp_max_age_s; run and stored whatever the market gates read"
       volume: "chain.ts volume (the snapshot's daily bar) >= parameters.contract_min_volume"
       delta: "chain.ts delta from the snapshot's greeks; missing, or worked out by the site, fails"
     none_passes: "NO_TRADE; the card names the nearest strike's failed check"
@@ -167,7 +167,8 @@ log:                                # DEC-0051 section 3
     - the card's level, entry, stop and T1 for the side
     - SPY and QQQ readings with price, VWAP, the five closes, spread and age
     - the stock's bid, ask and age
-    - the named contract's OCC symbol, bid, ask, checked age, delta and day volume; or the nearest strike's failed check
+    - the named contract's OCC symbol, bid, ask, checked age, own quote time, delta and day volume; for every strike considered its quote time and the check it failed; the chain answer's served_at
+    - the key, feed and answered of the board-feed stamp the slot was judged by
     - the baseline's for_session and built_at
     - the parameter hash, the signal-code hash, the feed names each answer gave, the engine label, the evaluation time
     - the key and SHA-256 of the slot's DEC-0044 record
@@ -190,7 +191,7 @@ preconditions:                      # each recorded with its commit by a dated R
   - the per-slot range baseline in production (the shock gate cannot be read without it)
   - the read script merged, with synthetic-data tests including generator_test_vectors
   - the outcome code (bar fetch and join, usable test, entry_open, exit, R) merged and frozen
-  - board-feed stamps written in production for every minute of one full regular session, reading sip with SPY answering, and the session sealed
+  - board-feed stamps written in production for every minute of one full (not half-day) regular session, reading sip with SPY answering, and the session sealed
 
 window:
   start: >-
@@ -198,7 +199,7 @@ window:
     production, and desk/signal.json first reads log or show in production
   backfill: never
   dry_sessions: never in the window
-  counted_session: at least 90% of the session's expectedSlots (desk-eval.ts) hold a signal record and a board-feed stamp reading sip that SPY answered; else log_incomplete
+  counted_session: at least 90% of the session's expectedSlots (desk-eval.ts) hold a signal record and have a usable board-feed stamp (as above); else log_incomplete
   ends_early_on:                    # the last session counted is the last before the change reaches production
     - an amendment to DEC-0035 that changes a card number, or a change to card_numbers below
     - a change to MAX_PREMIUM, RISK_PER_TRADE, PREMIUM_STOP or OWNER_FEES
@@ -207,6 +208,7 @@ window:
     - a change to the signal code's hash, other than a defect fix recorded by a dated README note before the read
     - an edit to a past or the current session's row of market-calendar.json (adding later sessions is not one)
     - a change to a feed (anything but sip for the stock or opra for the option; a DEC-0050 board-feed stamp reading other than sip)
+    - a gap in the board-feed stamps over 10 minutes across which the deployment changed (EXP-0033 hidden_change)
     - a change to the frozen outcome code, other than a defect fix recorded as above
     - a breach of the blinds above, or of the rule that the page shows only the log
   engine_identity_check: >-
@@ -221,11 +223,12 @@ unit:
   scoring_slot: its first enter_zone slot; scored once, whatever its word later
   group_order:                      # at the scoring slot, the first that applies
     - {group: not_logged, scored: false, when: the slot has no signal record}
-    - {group: not_usable, scored: false, when: "status other than ok, a parameter-hash, signal-code-hash or feed mismatch, or no SIP board-feed stamp for the slot"}
+    - {group: not_usable, scored: false, when: "status other than ok, a parameter-hash, signal-code-hash or feed mismatch, or no usable board-feed stamp"}
     - {group: gate_unavailable, scored: false, when: "a market gate could not be read (thin, stale or missing baseline, stale quote, calendar gap, lagging)"}
     - {group: a, scored: true, when: word CALL or PUT}
     - {group: contract_failed, scored: false, when: "the contract check did not pass, whatever the market gates read"}
     - {group: b, scored: true, when: "word WAIT or NO_TRADE, at least one market gate read and failed, and the contract check passed"}
+    - {group: other, scored: false, when: "none of the above (a defect: each count is a README line)"}
   also_not_scored: [bars_incomplete, no_entry_bar, every break of a log_incomplete session]
 
 card_numbers:                       # frozen here under DEC-0035 section 3 (not an amendment), from focus-plan.ts
@@ -257,6 +260,8 @@ outcome:
       - the difference within 09:35-10:00, 10:00-11:30 and 13:00-close
       - SPY and QQQ against the single names
       - group b re-weighted to group a's mix of name x window
+      - contract_failed counts by the contract check that failed and by the market gates that failed
+      - the difference with b as first proposed (every market-gate failure, whatever the contract check read)
     selection_switch: each group's count before and after DEC-0048's switch date (no effect on the verdict)
 
 statistics:

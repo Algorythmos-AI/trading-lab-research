@@ -78,9 +78,11 @@ state). The first that applies:
    - an input is not usable: the slot's DEC-0044 record has a status other than `ok`, or lists the name in
      `degraded_names`; the edition is missing or for another session; the parameter hash or the signal code's hash in
      force differs from the one Amendment 1 freezes; an answer names a feed other than SIP for the stock or OPRA for
-     the option; or there is no board-feed stamp (DEC-0050 point 4) for the minute the slot's DEC-0044 record was
-     written, or it reads other than `sip`, or SPY did not answer on it (`answered` other than `ok`). Without that
-     stamp the board's state cannot be shown to come from SIP.
+     the option; or the slot has no usable board-feed stamp: a board-feed stamp (DEC-0050 point 4) reading `sip`,
+     with SPY answering (`answered` `ok`), whose `at` lies in the two minutes up to the slot's evaluation time t0,
+     both ends included (EXP-0033's covering rule, `EDGE_MS`, without bracketing). Without one the board's state
+     cannot be shown to come from SIP. (A stamp reading other than `sip` is not only this: it ends the window,
+     section 8.)
 2. **CALL** (call side) or **PUT** (put side) when the side's own state is `enter_zone` for the card's break and
    retest, with neither `brokeEarlier` nor `gap` set, and all four market gates pass, and a contract passes.
    (`trade-state.ts` never gives `enter_zone` with either flag set; the condition is kept so that a later change to
@@ -167,14 +169,18 @@ out ("not available", for any reason) **fails** for the word; section 8 says how
    - **Its bid–ask:** `ask − bid` at most **20%** (*candidate*) of the distance from the mid to the premium stop,
      that distance being `PREMIUM_STOP × mid`; so at the candidate, at most 5% of the mid.
    - **A two-sided quote** (bid and ask above zero, ask not below bid) whose checked age is at most **10 s**
-     (*candidate*), and whose own time (`quote_at`) is at most **60 s** (*candidate*) before the chain answer was
-     served. The checked age says how recently the chain was fetched; the quote's own time says how old the bid
-     and ask in it are. Both must hold: a chain fetched a second ago can still carry a quote from hours earlier.
-     **A quiet contract** (its bid and ask unchanged for longer than the limit, so its quote keeps an older time)
-     fails this check and is "no contract", even when its quote is still the market: the record cannot tell a quote
-     that has not changed from one that has stopped arriving, and it takes the cautious reading. Because a break
-     whose contract check fails is counted, not scored (section 8), this costs confirmed breaks, not the fairness of
-     the comparison. Amendment 1 sets the limit by the freeze rule from how often it fails in the `dry` log.
+     (*candidate*), and whose own time (`chain.ts` `at`, the snapshot's `latestQuote.t`) is at most **60 s**
+     (*candidate*) before the answer's `served_at` (else `as_of`). The checked age is the chain's: its newest quote,
+     across all strikes, against when the answer was served (`contract.ts` `chainAge`). The contract's own time is
+     this contract's. Both must hold: a chain whose newest quote is a second old can still carry, for this
+     contract, a quote from hours earlier.
+     **A quiet contract** (its quote, prices and sizes, unchanged for longer than the limit, so it keeps an older
+     time) fails this check and is "no contract", even when its quote is still the market: the record cannot tell a
+     quote that has not changed from one that has stopped arriving, and it takes the cautious reading. A break whose
+     contract check fails is counted, not scored, in either group (section 8). That is not independent of the market
+     gates: a quiet stock makes a quiet option, so this check is likely to take more of *b*'s volume-gate failures
+     than its others. The sensitivity table reports it. Amendment 1 sets the limit by the freeze rule from how often
+     it fails in the `dry` log.
    - **Volume today** (the snapshot's daily bar, `chain.ts` `volume`) at least **100** contracts (*candidate*).
    - **Delta present from the feed** (`chain.ts` `delta`, from the snapshot's greeks). A missing delta fails, and so
      does any delta the site works out itself.
@@ -225,11 +231,13 @@ Amendment 1 (whose heading still reads PROPOSED; it took effect on the merge of 
 - **What each record stores.** Every input that cannot be rebuilt from the settled bars: per side, the word, the
   lifecycle, `brokeAt`, each gate's pass or fail with its value and reason; the card's level, entry, stop and T1 for
   the side; the indexes' readings with the values that produced them (price, VWAP, the five closes, spread, age); the
-  stock's bid, ask and age; the named contract (its OCC symbol), its bid, ask, checked age, delta and day volume, and
-  the nearest strike's failed check when none passes; the baseline's `for_session` and build time; the parameter
-  hash; the signal-code hash; the feed names each answer gave; the engine label; the evaluation time; the key and
-  SHA-256 of the slot's DEC-0044 record. For every side whose word was CALL or PUT earlier in the session, each later
-  record also stores that contract's bid, ask and age (`follow`), up to the session's close.
+  stock's bid, ask and age; the named contract (its OCC symbol), its bid, ask, checked age, own quote time, delta and
+  day volume, and for every strike considered its quote time and the check it failed; the chain answer's
+  `served_at`; the baseline's `for_session` and build time; the parameter hash; the signal-code hash; the feed names
+  each answer gave; the engine label; the evaluation time; the key and SHA-256 of the slot's DEC-0044 record; and
+  the key, `feed` and `answered` of the board-feed stamp the slot was judged by. The contract check is run and
+  stored whatever the market gates read: group *b* needs it. For every side whose word was CALL or PUT earlier in
+  the session, each later record also stores that contract's bid, ask and age (`follow`), up to the session's close.
 - **The page shows only the log.** With the switch at `show`, the page shows a side's word only as the sealed log
   holds it, stamped with the bar time it comes from and its age. A slot with no record reads "not logged", never the
   previous word. A missed tick leaves a gap; nothing is filled in afterwards.
@@ -306,14 +314,18 @@ on the stock than breaks that reach it while a market gate fails?
   later is scored by its first slot's word all the same.
 - **Its group is the word at the scoring slot**, in this order:
   1. counted, not scored: `not_logged` (the slot has no signal record), `not_usable` (an input not usable: a status
-     other than `ok`, a parameter-hash, signal-code-hash or feed mismatch), `gate_unavailable` (a market gate that
-     could not be read: a thin, stale or missing baseline, a stale quote, a calendar gap, lagging bars);
+     other than `ok`, a parameter-hash, signal-code-hash or feed mismatch, or no usable board-feed stamp),
+     `gate_unavailable` (a market gate that could not be read: a thin, stale or missing baseline, a stale quote, a
+     calendar gap, lagging bars);
   2. **a**, confirmed: CALL or PUT;
   3. counted, not scored: `contract_failed` (the contract check did not pass, whatever the market gates read);
   4. **b**, not confirmed: WAIT or NO TRADE because at least one market gate was read and failed, and the contract
-     check passed. So group *b* differs from group *a* in the market gates only: a break that also had no contract
-     inside the owner's rules is not in either group. (Second round, 2026-11-13, the owner's choice: the proposal
-     kept such breaks in *b* and split *b* by contract result in the report.)
+     check passed. So group *b* differs from group *a*, by rule, in the market gates only: a break that also had no
+     contract inside the owner's rules is not in either group. (Second round, 2026-11-13, the owner's choice: the
+     proposal kept such breaks in *b* and split *b* by contract result in the report.)
+  5. counted, not scored: `other`, any break none of the above fits (for example a word of NO TRADE at a clean
+     scoring slot because `brokeEarlier` or `gap` was set). Any count here is written as a defect line in EXP-0034's
+     `README.md`.
 - **The card numbers, frozen here** under DEC-0035 section 3 (not an amendment), from `focus-plan.ts` as it stands:
   `ENTRY_ATR` 0.01, `STOP_ATR` 0.1, `MIN_ROOM_MULTIPLE` 2; the call side's level is the edition's `breakout_above`
   (else `resistance.price`), the put side's `hold_above` (else `support.price`); entry = level ± 0.01 ATR, stop =
@@ -328,7 +340,7 @@ on the stock than breaks that reach it while a market gate fails?
   SHA-256, the same usable rule). Counted, not scored: `bars_incomplete`, and `no_entry_bar` (no bar starts after the
   evaluation time before the close).
 - **A counted session** is one in the window on which at least 90% of the session's expected slots (`expectedSlots`
-  in `desk-eval.ts`) hold a signal record and a board-feed stamp reading `sip` that SPY answered; otherwise it is
+  in `desk-eval.ts`) hold a signal record and have a usable board-feed stamp (section 1); otherwise it is
   `log_incomplete`, and its breaks are counted, not scored.
   This one definition is used everywhere below.
 - **The measure:** mean R of group *a* minus mean R of group *b*.
@@ -343,10 +355,11 @@ on the stock than breaks that reach it while a market gate fails?
   2. the read script, merged with synthetic-data tests, including the generator's test vectors;
   3. the outcome code (the bar fetch and join, the usable test, `entry_open`, the exit and R), merged and frozen; a
      later change other than a defect fix recorded by a dated README note before the read is an early end;
-  4. board-feed stamps written in production for every minute of one full regular session, each reading `sip` with
-     SPY answering, and that session sealed. (The owner reported on 2026-11-13 that none had been written since the
-     open on 2026-11-12: the cron fires late in its minute and the writer refuses past second 45. Until that is fixed
-     and a full session is stamped, Amendment 1 is not written and no window starts.)
+  4. board-feed stamps written in production for every minute of one full (not half-day) regular session, each
+     reading `sip` with SPY answering, and that session sealed. (The owner reported on 2026-11-13 that no stamp had
+     been written since the open on 2026-11-12, and that the cron fires at second 47 to 49 of its minute; the writer
+     writes nothing past second 45 of the minute (`board-feed-stamp.ts`). Until that is fixed and a full session is
+     stamped, Amendment 1 is not written and no window starts.)
 - **The window.** It starts at the first regular session that opens after: the preconditions are met, Amendment 1
   is merged and in production, and the switch first reads `log` or `show` in production. Forward only, never
   backfilled. No `dry` session is ever in it.
@@ -361,8 +374,11 @@ on the stock than breaks that reach it while a market gate fails?
   measures it. A break with no logged exit quote is counted, not valued. Its mean and range are reported; nothing is
   tested on it.
 - **Sensitivity table, report only.** It changes no verdict: the difference within the windows 09:35 to 10:00, 10:00
-  to 11:30 and 13:00 to the close; SPY and QQQ against the single names; and group *b* re-weighted to group *a*'s mix
-  of name and window. Each line gives the estimate and the group sizes; none is tested.
+  to 11:30 and 13:00 to the close; SPY and QQQ against the single names; group *b* re-weighted to group *a*'s mix
+  of name and window; `contract_failed` counts by the contract check that failed and by the market gates that
+  failed; and the difference with *b* as first proposed (every market-gate failure, whatever the contract check
+  read), which also shows what leaving out expensive names and high-IV days did to *b*. Each line gives the estimate
+  and the group sizes; none is tested.
 - **The selection switch (DEC-0048) has no effect on EXP-0034.** The unit is the board's own break on whatever names
   are picked, and the test compares breaks with breaks on the same names. The report gives each group's count before
   and after the switch date. DEC-0048 should say so as DEC-0046 section 6 asks.
@@ -384,6 +400,8 @@ on the stock than breaks that reach it while a market gate fails?
   - an edit to a past or the current session's row of `market-calendar.json` (adding later sessions is not one);
   - a change to a feed: the signal reading anything but SIP for the stock or OPRA for the option, or a board-feed
     stamp (DEC-0050 point 4) reading other than `sip`;
+  - a gap in the board-feed stamps over 10 minutes across which the deployment changed (EXP-0033's
+    `hidden_change`): a change of `ALPACA_FEED` needs a redeploy, so a flip between stamps shows here;
   - a change to the frozen outcome code other than a recorded defect fix;
   - a breach of either blind of section 5, or of section 3's rule that the page shows only the log.
 - **The engine identity check.** Before a release that changes the engine label (DEC-0044's note) reaches production,
@@ -393,6 +411,8 @@ on the stock than breaks that reach it while a market gate fails?
 - **What it cannot show.**
   - R on the stock is not option P&L. A gated break that does better on the stock may still lose on the option, after
     the spread and the fees.
+  - Group *b* is smaller than first proposed, since every break without a contract inside the owner's rules leaves
+    it. That raises the chance of fewer than 30 breaks in a group, which reads as too few to judge.
   - There is no point-in-time history to test on. The levels were built from another provider's bars, the editions
     exist only since 2026-10-09, and the owner has seen rebuilt sessions. So the only evidence is forward and sealed.
   - The labels and the evidence come from one feed, SIP. It says nothing about what the board would have shown on
