@@ -165,7 +165,9 @@ out ("not available", for any reason) **fails** for the word; section 8 says how
    - **Its bid–ask:** `ask − bid` at most **20%** (*candidate*) of the distance from the mid to the premium stop,
      that distance being `PREMIUM_STOP × mid`; so at the candidate, at most 5% of the mid.
    - **A two-sided quote** (bid and ask above zero, ask not below bid) whose checked age is at most **10 s**
-     (*candidate*).
+     (*candidate*), and whose own time (`quote_at`) is at most **60 s** (*candidate*) before the chain answer was
+     served. The checked age says how recently the chain was fetched; the quote's own time says how old the bid
+     and ask in it are. Both must hold: a chain fetched a second ago can still carry a quote from hours earlier.
    - **Volume today** (the snapshot's daily bar, `chain.ts` `volume`) at least **100** contracts (*candidate*).
    - **Delta present from the feed** (`chain.ts` `delta`, from the snapshot's greeks). A missing delta fails, and so
      does any delta the site works out itself.
