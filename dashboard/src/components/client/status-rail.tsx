@@ -21,7 +21,7 @@ import { roomShown } from "@/lib/what-if";
 import { CockpitSwitch } from "./cockpit";
 import { ServerCheckNote } from "./desk-shadow";
 import { DoneControl, DonePill, UncheckedNote, useDone, useDonePolling } from "./done-today";
-import { AlertButtons, AlertMenu, type BoardLogEntry, boardCollapsed, useBoard } from "./trade-now";
+import { AlertButtons, AlertMenu, BoardEvents, type BoardLogEntry, boardCollapsed, useBoard } from "./trade-now";
 
 const DAY_TONE: Record<Tone, string> = {
   good: "border-good-fill/50 bg-good-soft",
@@ -306,6 +306,8 @@ export function StatusRail({ day: server, facts = null }: { day: RailDay | null;
           </span>
         </div>
       ) : null}
+      {/* The board's event line while the board is folded into the rail or the cockpit is on; otherwise the board draws it. */}
+      <BoardEvents where="rail" />
       {withNotes?.usedUp ? (
         <p data-rail-used-up className="text-explain text-bad font-medium">
           {withNotes.usedUp}

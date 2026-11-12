@@ -25,7 +25,9 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { BoardEventsLine } from "@/components/board-events";
 import { StatusBadge } from "@/components/status";
+import { boardEvents } from "@/lib/board-events";
 import { newYork } from "@/lib/format";
 import { isHalfDay, type Options, type OptionsTicker } from "@/lib/options";
 import {
@@ -49,6 +51,7 @@ import {
 import { pausedAgeS } from "@/lib/level-ladder";
 import { type NameState, type NameStateName, serverNow } from "@/lib/trade-state";
 import { cn } from "@/lib/utils";
+import { useCockpit } from "./cockpit-state";
 import { useDeskShadow } from "./desk-shadow";
 import { useDone } from "./done-today";
 import { FeedFacts, FeedRetry, useLive } from "./live-layer";
@@ -467,6 +470,7 @@ export function TradeNowBoard({
   switches,
   retry,
   facts,
+  events,
   rowExtra,
   after,
   doneFor,
@@ -485,6 +489,8 @@ export function TradeNowBoard({
   retry?: React.ReactNode;
   /** Under the header row, outside the retry line, so it is never covered: the feed's name and ages (FeedFacts). */
   facts?: React.ReactNode;
+  /** Under the feed facts: the day's scheduled releases and the focus names' earnings (BoardEventsLine). Display only. */
+  events?: React.ReactNode;
   /** Drawn inside a row (an expanded one under its numbers): the manage card's "I'm in" and its form (trade-manage.tsx). */
   rowExtra?: (row: BoardRow, paused: boolean) => React.ReactNode;
   /** Drawn under the rows, and kept while the live prices are off: the manage cards (trade-manage.tsx). */
@@ -535,6 +541,7 @@ export function TradeNowBoard({
         {retry}
       </div>
       {facts}
+      {events}
       {mode.kind !== "live" ? (
         <p data-board-line className={cn("text-[0.8125rem]", mode.kind === "off" || mode.kind === "old" ? "text-muted-foreground" : "font-medium")}>
           {mode.line}
@@ -1008,12 +1015,33 @@ export function TradeNow() {
       onOpen={openFocusCard}
       retry={<FeedRetry />}
       facts={<FeedFacts where="board" symbols={b.items.map((i) => i.symbol)} />}
+      events={<BoardEvents where="board" />}
       rowExtra={b.manage.rowExtra}
       after={b.manage.cards}
       doneFor={b.doneFor}
       maskFor={b.maskFor}
     />
   );
+}
+
+/**
+ * Where the board's event line goes: the status rail while the board is folded into it (before the open, while
+ * connecting, after the close) or while the cockpit is on (it hides the board, never the rail); the board otherwise.
+ */
+export function eventsPlace(collapsed: boolean, cockpit: boolean): "board" | "rail" {
+  return collapsed || cockpit ? "rail" : "board";
+}
+
+/**
+ * The board's event line (BoardEventsLine), drawn in exactly one place at a time (eventsPlace). Display only: worked
+ * out here from the board's day, clock and focus names, never handed to the board's states.
+ */
+export function BoardEvents({ where }: { where: "board" | "rail" }) {
+  const b = useBoard();
+  const cockpit = useCockpit();
+  if (!b || !b.on || b.now === null) return null;
+  if (eventsPlace(boardCollapsed(b.mode, b.manage.views.length), cockpit) !== where) return null;
+  return <BoardEventsLine where={where} events={boardEvents({ session: b.session, now: b.now, names: b.items.map((i) => i.symbol) })} />;
 }
 
 /**
