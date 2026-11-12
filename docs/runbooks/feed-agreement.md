@@ -358,3 +358,52 @@ pooled comparable and identical counts, the share, the IEX-only and SIP-only eve
 both-lack and one-sided counts and the names without bars; and the reading for the most recent session's label:
 "not enough sessions", "not enough sessions (labels differ)", "equivalent for the board" or "different", by the rule
 above.
+
+## Server comparison (DEC-0050)
+
+DEC-0050 makes SIP the board's feed and keeps IEX as a comparison feed. Two production crons on the dashboard measure
+the two feeds side by side, every session, with no hand step. They are separate from the replay above: they change
+none of its thresholds, its unit or its reading.
+
+- **The sampler**, `/api/cron/feeds` (every minute, `* 13-21 * * 1-5`; it acts only from the open to the close by the
+  exchange calendar, so a half day stops at 13:00). Each minute it sends one `/v2/stocks/snapshots` request on `iex`
+  and then one on `sip`, for the stored edition's focus names plus SPY (SPY alone, logged `spy-only`, when the edition
+  is missing or another day's), each uncached with its own 4 s timeout, never through `fetchQuotes` or its cache. A
+  400 is asked again once without any symbol that is not a ticker (logged `symbol-rejected`). It writes
+  `desk/feeds/compare/<New York day>/<HHMM>.json`, create-only: each request's start, finish and HTTP status, and per
+  symbol and feed only the last trade (price, time), the last quote (bid, bid size, ask, ask size, time), the minute
+  bar and the day's volume, each a number or null, plus which feed the board was set to (`ALPACA_FEED`: `iex`, `sip`
+  or `refused`). Production only; elsewhere it reads and writes nothing.
+- **The report**, `/api/cron/feeds-report` (`*/10 20-23 * * 1-5`). Once the close + 20 minutes has passed and the day
+  has no report, it writes `desk/feeds/compare/<day>/report.json`, create-only, from the day's samples, the session's
+  bars on both feeds (2-minute bars through `fetchSessionBars` for the replay, settled 1-minute bars [open, close) for
+  the bars measures, one call limiter and one time budget for all four reads) and this page's replay (`feedAgreement`)
+  on the edition in force at the open (of `options/editions/<day>.json` and `options/latest.json` whose session is the
+  day, the newest built at or before the open, else the earliest). `signals` and `bars` read `no_edition` when there
+  is none, `no_bars` with its `why` (`no_focus_names`, `sip-plan`, `sip-not-entitled`, `iex-refused`, `no-bars`, `time-budget`, `upstream`)
+  when the bars cannot be had. It never overwrites; a failure that may heal is tried again at the next tick, the 23:50
+  UTC tick builds with `no_bars`, and nothing is built after 23:59 UTC.
+- **The paired rules** (frozen, compare v1; `minuteRule`, `pairOf` and `quotePairOf` in
+  `dashboard/src/lib/feed-compare.ts`):
+  - a minute counts only when both requests answered 2xx and finished at most 2 s apart (`both_failed`, `iex_failed`,
+    `sip_failed`, `apart`);
+  - a **trade pair** needs, for the symbol, both last trades with a time (`missing_symbol`) and a price above zero
+    (`bad_price`), each at most `TRADE_STALE_MS` (120 s) older than its own request's finish (`stale_iex`,
+    `stale_sip`, `stale_both`), and the two trades' times at most 5 s apart (`trades_apart`); the report gives the
+    price difference and the distribution of the two trades' time gap;
+  - a **quote pair** needs both quotes with a time (`missing_quote`) and a bid and an ask above zero (`bad_quote`),
+    each at most 5 s older than its own request's finish (`stale_quote_iex`, `stale_quote_sip`, `stale_quote_both`),
+    and the two at most 5 s apart (`quotes_apart`); the report gives the quote-mid difference beside the trade one;
+  - spreads are measured on quote pairs only (locked and crossed quotes counted, never averaged), and trade ages on
+    counted minutes only, **from each request's start**; a trade dated after the start is clamped to 0 and counted as
+    `clock_skew`. Every distribution carries its `n`;
+  - every other symbol-minute is counted under its reason, never dropped. IEX and SIP are kept apart in every stored
+    object; no measure pools the two feeds' values.
+- The bars measures align the two feeds' settled 1-minute bars on an identical start; a bar on one feed only is a real
+  absence on the other. Volume ratios (SIP over IEX) are taken only where both volumes are above zero.
+- The report is **PRIVATE** (owner login only) and **data quality only**: counts, ages and differences (price, quote,
+  bar, spread, freshness) and the replay's counts. It holds no trade, no P&L and no setup outcome. The replay's
+  per-slot disagreements stay in the stored file; the reader the site uses (`readCompareReports`) drops them, and the
+  site never shows them.
+- The Mac's `make feed-agreement` remains the manual cross-check, run by hand as above; the server report does not
+  replace its reading or its summary.

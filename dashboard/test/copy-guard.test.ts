@@ -103,6 +103,12 @@ const FILES = [
   "../src/app/api/feeds/live/route.ts",
   "../src/components/client/feeds-live.tsx",
   "../src/app/options/feeds/page.tsx",
+  "../src/lib/feed-compare.ts",
+  "../src/lib/feed-compare-sample.ts",
+  "../src/lib/feed-compare-report.ts",
+  "../src/lib/feed-compare-bars.ts",
+  "../src/app/api/cron/feeds/route.ts",
+  "../src/app/api/cron/feeds-report/route.ts",
 ];
 
 const BANNED = [

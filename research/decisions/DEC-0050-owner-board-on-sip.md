@@ -148,3 +148,11 @@
   pass.
 - The owner's labeller (not built yet) reads its feed from the experiment, iex for EXP-0031 and sip for EXP-0033, and
   never from `ALPACA_FEED`.
+
+## Note on the server comparison (added 2026-11-12; nothing above is changed)
+
+From the release that adds it, the IEX/SIP comparison of point 5 runs on the server: a paired sampler once a minute
+in the session and one report a day after the close (`docs/runbooks/feed-agreement.md`, "Server comparison"). It is a
+data-quality measurement only: counts, ages and differences, with no trade, no P&L and no setup outcome. The per-slot
+state list stays in the PRIVATE report file and is never shown on the site. Nothing in it is a trial (DEC-0005): it
+adds none to any family, and no reading of it starts or ends EXP-0033.
