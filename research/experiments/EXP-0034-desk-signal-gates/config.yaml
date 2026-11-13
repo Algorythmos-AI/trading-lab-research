@@ -5,7 +5,7 @@
 # end (no verdict) and a new experiment with new trials; before it, a decision record may amend it, saying that no
 # outcome was viewed to choose the change.
 experiment: EXP-0034
-status: proposed                    # becomes registered when DEC-0051 is accepted; no results file until the read writes it once
+status: registered                  # DEC-0051 accepted on 2026-11-13; no results file until the read writes it once
 decision: DEC-0051
 family: O                           # the options desk's entry rules and their filters; total 36 (config/trial_registry.yaml)
 trials:                             # the difference is a minus b
