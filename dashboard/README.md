@@ -309,6 +309,48 @@ wt.ops.publish                            POST /api/ingest            (productio
 - **Health** (`src/lib/health.ts`) and the top-of-page **summary** sentence (`src/lib/summary.ts`) are pure
   functions of the snapshot and the current time.
 
+## Signal log (DEC-0051)
+
+The desk cron's signal step (`src/lib/signal-run.ts`, the record's shape and reader in `src/lib/signal-record.ts`)
+works out the signal words of DEC-0051 on the server and logs them sealed. It shows nothing on any page and sends no
+alert; nothing in it places, stages or suggests an order.
+
+- **The switch** is `desk/signal.json` in the production Blob store, set by the owner only (nothing in the code
+  writes it): exactly `{"v":1,"signal":"off"}`, `"dry"`, `"log"` or `"show"`. Missing or anything else is off. A
+  change needs no deploy. Unlike `desk/eval.json`, it is read only by a run that can write (the run that has just
+  written the slot's shadow record), not every run: a run with nothing to write has nothing it could change.
+  - `off`: nothing is read, fetched or written.
+  - `dry`: the gate inputs only, for Amendment 1's fail shares: every focus name and side, whatever the board's
+    state, worked out with no break bar, the slot's own last bar's volume, SPY's and QQQ's readings and quotes, and
+    the OPRA quotes of every strike the contract check considered. No word, no lifecycle, no board state, no card;
+    only the key of the session's latest log record before it (`last_log`), so a later `log` record finds its breaks.
+    Outside the window (DEC-0051 section 8).
+  - `log`: the full record of DEC-0051 section 3: per side the board's state, the break, the card's level, entry,
+    stop and T1, every gate with its value and reason, the named contract, the word, its reasons, the test's class
+    and the lifecycle; the session's breaks carried from the latest earlier log record, and `follow` quotes for every
+    break confirmed earlier. Until Amendment 1 freezes the numbers and the code (both `frozen_*_hash` null), every
+    word is NO TRADE (data), and the record says so.
+  - `show`: today the same record as `log`. The page work is a later pull request.
+- **When.** Once per settled slot, only in the run that wrote the slot's shadow record (`desk/eval.json` at `log`),
+  after that write has settled, with its own 5 s budget. A slot it cannot finish inside the budget, or inside the slot,
+  is a gap and is never filled in. A write that fails or misses the budget is a gap too: nothing tries it again. It runs
+  after the cron's answer is sent (`after()`), so it never delays it. Earlier records that cannot be read, a gap
+  since the record the breaks are carried from, or a dry record before it never stop the log: the record is written
+  with `history_usable: false` (no lifecycle, no earlier volume fail, class `not_usable`).
+- **Where.** `desk/signal/<New York date>/<HHMM of the slot's end>.json`, private and create-only. Each record names
+  the slot's shadow record by key and SHA-256, the board-feed stamp it was judged by (a stamp reading `sip` with SPY
+  answering `ok`, whose `at` lies in the two minutes up to the shadow record's `evaluated_at`), the parameter and
+  signal-code hashes, the engine label and the feeds each answer named.
+- **Cost a slot.** Store: the switch, one head, three stamp reads, one listing of the day, usually one or two reads of
+  earlier records (more only when the newest are unreadable), one put. Market data: 10 calls with 4 focus names (the
+  flow read's 2 and 2 chain calls per name), about 20 when some answers page, 57 at the true upper bound
+  (docs/runbooks/keys-and-feeds.md, "Signal log").
+
+- **Checking that a record exists** (signed in to the Vercel dashboard, the project's Storage tab, the production Blob
+  store): browse `desk/signal/<today>/` for the slot's `HHMM.json`, or check the function logs for
+  `"evt":"desk-signal"` lines, whose `outcome` is `written`, `exists`, `off`, `late`, `timeout`,
+  `write-failed`, `write-timeout` or `error`, with counts only (never a symbol, a price or a word).
+
 ## Desks
 
 The site shows three desks. The header's switch moves between them, and each has its own snapshot, its own
