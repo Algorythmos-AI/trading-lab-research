@@ -288,6 +288,47 @@ function baselineView(b: Baseline | null, symbols: readonly string[]): FlowAnswe
   return { for_session: b.for_session, sessions: b.sessions, names };
 }
 
+// ---- the server's own read (DEC-0051) ---------------------------------------------------------------------------------
+
+/** The flow answer as the desk's signal step reads it on the server: the baseline whole, ranges and build time included. */
+export interface ServerFlow extends Omit<FlowAnswer, "baseline"> {
+  baseline: Baseline | null;
+}
+
+/** Why the server's read gave no answer, with no symbol: no keys or data URL, SIP refused by the plan, or names not allowed. */
+export class FlowUnavailable extends Error {
+  constructor(readonly why: "not-configured" | "plan" | "not-allowed") {
+    super(why);
+    this.name = "FlowUnavailable";
+  }
+}
+
+/**
+ * The same answer GET /api/flow gives, read in the server's own process for the desk's signal step (signal-run.ts),
+ * never through HTTP: the same allowed names (the edition's focus names when it is today's, plus SPY and QQQ; any other
+ * refuses before anything is fetched), the same SIP reads, cache and baseline. The edition is the one the desk's run
+ * read, passed in. The baseline is kept whole (the shock gate's ranges, its build time) for the answered names only.
+ * Throws FlowUnavailable, or the upstream error, never a partial answer.
+ */
+export async function serverFlow(symbols: readonly string[], edition: Pick<Options, "session" | "focus"> | null, over: Partial<FlowDeps> = {}): Promise<ServerFlow> {
+  const d = { ...defaultFlowDeps(), ...over };
+  const now = d.now();
+  const day = nyNow(now).day;
+  const allowed = flowNames(edition, day);
+  const names = [...new Set(symbols)].sort();
+  if (names.length === 0 || names.some((s) => !allowed.includes(s))) throw new FlowUnavailable("not-allowed");
+  const keys = alpacaKeys(d.env);
+  if (!keys || alpacaHost(d.baseUrl) === null) throw new FlowUnavailable("not-configured");
+  try {
+    const [body, baseline] = await Promise.all([upstreamFor(`${day}|${names.join(",")}`, names, day, now, keys, d), baselineFor(day, now.getTime(), d)]);
+    const kept = baseline ? Object.fromEntries(names.filter((s) => Object.hasOwn(baseline.names, s)).map((s) => [s, baseline.names[s]!])) : null;
+    return { ...body, baseline: baseline && kept ? { ...baseline, built_for: baseline.built_for.filter((s) => names.includes(s)), names: kept } : null };
+  } catch (e) {
+    if (planRefused("sip", e)) throw new FlowUnavailable("plan");
+    throw e;
+  }
+}
+
 // ---- fixture mode -----------------------------------------------------------------------------------------------------
 
 /** Fixture prices: about the fixture edition's closes, inlined so nothing under test/ is read for them. */

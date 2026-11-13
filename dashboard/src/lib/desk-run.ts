@@ -246,8 +246,30 @@ export function guardLogOf(
   return { v: GUARD_LOG_V, switches: switches.status, on: switches.on, names };
 }
 
-/** One run: idle, off, already logged, or one record written for the last settled slot. */
-export async function runDeskEval(deps: DeskRunDeps = defaultDeskRunDeps()): Promise<DeskRunResult> {
+/**
+ * What a run that wrote its slot's record hands to the signal step after it (DEC-0051 section 3, signal-run.ts): the
+ * record's key, the exact bytes written, the record, the slot, the edition it read and the board's states for the
+ * slot. Handed over only after the write has settled; nothing in it is written back, and the record is not changed.
+ */
+export interface LoggedSlot {
+  path: string;
+  body: string;
+  record: DeskLogRecord;
+  slot: { day: string; end: number };
+  edition: Options | null;
+  states: readonly NameState[];
+}
+
+/**
+ * One run: idle, off, already logged, or one record written for the last settled slot. `onLogged`, when given, is
+ * called once, only by a run that wrote the record, after the write: it gets values the run already holds, so the
+ * record, its bytes and its timing are the same with it or without it.
+ */
+export async function runDeskEval(deps: DeskRunDeps = defaultDeskRunDeps(), onLogged?: (x: LoggedSlot) => void): Promise<DeskRunResult> {
+  return evalOnce(deps, onLogged ?? (() => undefined));
+}
+
+async function evalOnce(deps: DeskRunDeps, onLogged: (x: LoggedSlot) => void): Promise<DeskRunResult> {
   const startedAt = deps.now();
   const at = slotAt(startedAt);
   if (at.kind === "idle") return { ok: true, outcome: "idle", why: at.why };
@@ -286,6 +308,8 @@ export async function runDeskEval(deps: DeskRunDeps = defaultDeskRunDeps()): Pro
   let guardInput: { switches: GuardSwitches; symbols: string[]; snapshots: Record<string, Quote>; states: NameState[] } | null = null;
   /** HTTP 429 answers from the bars and the snapshot reads. */
   let http429 = 0;
+  /** The board's states for the slot, handed to the signal step only (never written here). */
+  let states: NameState[] = [];
   let read: EditionRead | "timeout";
   try {
     read = await within(deps.loadEdition(), TIMEOUT_MS.edition);
@@ -355,6 +379,7 @@ export async function runDeskEval(deps: DeskRunDeps = defaultDeskRunDeps()): Pro
         ...(switches.on.length > 0 ? { guardsOn: switches.on } : {}),
       });
       evaluation = got.evaluation;
+      states = got.states;
       guardInput = { switches, symbols, snapshots: snapGot.ok.quotes, states: got.states };
     }
     // The snapshot answered but the board was not reached (the bars failed): the guards' log still counts the names.
@@ -386,8 +411,9 @@ export async function runDeskEval(deps: DeskRunDeps = defaultDeskRunDeps()): Pro
   // the probe, the guards' log and the 429 count last.
   const record: DeskLogRecord = { ...serverRecord(evaluation, slot, deps.now(), edition), feed: readFeed, probe, guards, http_429: http429 };
   if (deps.dry) return { ok: true, outcome: "dry", slot: hhmm, path, record };
+  const body = JSON.stringify(record);
   try {
-    await within(deps.write(path, JSON.stringify(record)), TIMEOUT_MS.write);
+    await within(deps.write(path, body), TIMEOUT_MS.write);
   } catch (e) {
     if (e instanceof PreconditionFailed) {
       logEvent("desk-eval", { outcome: "already-logged", slot: hhmm });
@@ -397,5 +423,10 @@ export async function runDeskEval(deps: DeskRunDeps = defaultDeskRunDeps()): Pro
     return { ok: false, outcome: "write-failed", slot: hhmm };
   }
   logEvent("desk-eval", { outcome: "logged", slot: hhmm, status: record.status, reason: record.reason, rows: record.rows.length, ms: deps.now() - startedAt });
+  try {
+    onLogged({ path, body, record, slot, edition, states });
+  } catch {
+    // The handover can never change this run's outcome.
+  }
   return { ok: true, outcome: "logged", slot: hhmm, status: record.status, reason: record.reason };
 }
