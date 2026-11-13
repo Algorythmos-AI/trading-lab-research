@@ -15,8 +15,9 @@ import { fixtureMode } from "./snapshot";
 // GET /api/cron/flow-baseline: the day's volume baseline for /api/flow (flow.ts's Baseline), built before the open.
 // On a session day, before 09:30 New York, in production only: when flow/baseline/<session>.json is not in the private
 // store, it reads the 2-minute SIP bars of the previous 20 full sessions for the day's allowed names (flow-route.ts's
-// flowNames, below: the edition's focus names when it is today's, then SPY and QQQ), builds the baseline and writes it,
-// create-only. One bars request per session, every page read (Alpaca may page early whatever `limit` says), on sip
+// flowNames, below: the edition's focus names when it is today's, then SPY and QQQ), builds the baseline (version 2:
+// the per-slot volume medians and, for DEC-0051's shock gate, the per-slot median bar range) and writes it,
+// create-only. A version 1 baseline already stored for the day stays as it is: it parses, with no ranges. One bars request per session, every page read (Alpaca may page early whatever `limit` says), on sip
 // named literally (never ALPACA_FEED), split-adjusted (see fetchSessionBars). It does not use bars.ts or its cache.
 //
 // Idempotent: a stored baseline ends the run after one head(), with nothing asked upstream. Anything short of every

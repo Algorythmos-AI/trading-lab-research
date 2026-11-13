@@ -27,7 +27,11 @@ export const BASELINE_SESSIONS = 20;
 export const MIN_BASELINE_SESSIONS = 10;
 /** The narrowest dead band around VWAP, basis points. */
 export const VWAP_BAND_MIN_BPS = 3;
-export const BASELINE_V = 1;
+/**
+ * The baseline document's version. 2 adds each name's per-slot median bar range (`range_median`), which DEC-0051's
+ * shock gate reads; a stored version 1 still parses and simply has no ranges, so that gate reads "not available".
+ */
+export const BASELINE_V = 2;
 /** On a half day, the last this many slots run into the closing auction and are not compared with ordinary volume. */
 export const HALF_DAY_CLOSE_SLOTS = 5;
 
@@ -51,12 +55,17 @@ export interface FlowBar {
 export interface NameStats {
   slot_median: number[];
   cum_median: number[];
+  /**
+   * The median 2-minute bar range (high − low) per slot, from the same sessions as `slot_median`: version 2 only.
+   * Absent on a version 1 baseline, which then gives no range ratio ("no-range-baseline").
+   */
+  range_median?: number[];
   n: number;
 }
 
 /** flow/baseline/<for_session>.json: built before the open from the previous 20 full sessions' SIP bars. */
 export interface Baseline {
-  v: 1;
+  v: 1 | 2;
   for_session: string;
   built_at: string;
   feed: "sip";
@@ -201,7 +210,9 @@ export function spreadBps(bid: number | null, ask: number | null): Spread {
 export function nameBaseline(b: { for_session: string; names: Readonly<Record<string, NameStats>> } | null | undefined, symbol: string): NameBaseline | null {
   if (!b || !Object.hasOwn(b.names, symbol)) return null;
   const s = b.names[symbol]!;
-  return { for_session: b.for_session, slot_median: s.slot_median, cum_median: s.cum_median, n: s.n };
+  const out: NameBaseline = { for_session: b.for_session, slot_median: s.slot_median, cum_median: s.cum_median, n: s.n };
+  if (s.range_median) out.range_median = s.range_median;
+  return out;
 }
 
 /** The reasons shared by both ratios, in order: the hour, then the baseline. Null when they may go on. */
@@ -254,6 +265,27 @@ export function barSurge(bar: FlowBar | null | undefined, base: NameBaseline | n
   return ratio(bar.v / med, base!.n, "no-baseline");
 }
 
+/** Why a bar's range has no ratio: the volume reasons, or a baseline with no ranges (a version 1 document). */
+export type RangeWhy = FlowWhy | "no-range-baseline";
+export type RangeRatio = { value: number; sessions: number } | { value: null; why: RangeWhy };
+
+/**
+ * One completed bar's range (high − low) ÷ the baseline's median range for its slot. The same reasons as barSurge,
+ * plus "no-range-baseline" when the baseline holds no ranges; a slot median range of zero gives no ratio either.
+ */
+export function barRange(bar: FlowBar | null | undefined, base: NameBaseline | null, clock: SlotClock | null): RangeRatio {
+  const why = gate(base, clock);
+  if (why) return { value: null, why };
+  if (!base!.range_median) return { value: null, why: "no-range-baseline" };
+  const k = bar ? slotIndex(bar.start, clock!) : null;
+  if (!bar || k === null || k >= clock!.completed || !isPos(bar.h) || !isPos(bar.l) || bar.h < bar.l) return { value: null, why: "no-bars" };
+  if (nearHalfDayClose(clock!, k)) return { value: null, why: "half-day-close" };
+  const med = base!.range_median[k];
+  if (!isPos(med)) return { value: null, why: "no-range-baseline" };
+  const value = (bar.h - bar.l) / med;
+  return Number.isFinite(value) ? { value, sessions: base!.n } : { value: null, why: "no-range-baseline" };
+}
+
 // ---- building a baseline --------------------------------------------------------------------------------------------
 
 /**
@@ -281,8 +313,9 @@ function median(xs: number[]): number {
 
 /**
  * The baseline for `forSession` from 2-minute bars keyed by session day, then by name. Each of the previous 20 full
- * sessions is read; a slot with no bar counts as zero volume, and a session with no bar at all for a name is not
- * counted in that name's `n`. Names are every name present under any of those sessions (an empty list counts as
+ * sessions is read; a slot with no bar counts as zero volume and a zero range (high − low), and a session with no bar
+ * at all for a name is not counted in that name's `n`. Ranges are built from the same sessions in the same way as
+ * the volumes (DEC-0051 section 2.4). Names are every name present under any of those sessions (an empty list counts as
  * present with no bars), and `builtFor` when given (a name in it with no bars gets n 0). `built_for` records them.
  * Null when the calendar cannot give the 20 sessions.
  */
@@ -300,22 +333,29 @@ export function buildBaseline(
   const out: Record<string, NameStats> = {};
   for (const sym of [...names].sort()) {
     const perSession: number[][] = [];
+    const perRange: number[][] = [];
     for (const day of sessions) {
       const s = sessionSlots(day, calendar);
       const bars = barsBySessionByName[day]?.[sym];
       if (!s || !bars) continue;
       const vol = new Array<number>(s.slots).fill(0);
+      const rng = new Array<number>(s.slots).fill(0);
       let any = false;
       for (const b of bars) {
         const k = slotIndex(b.start, s);
         if (k === null || !isNum(b.v) || b.v < 0) continue;
         vol[k] = b.v;
+        // A bar whose high and low cannot be read keeps a zero range: never a made-up one.
+        rng[k] = isNum(b.h) && isNum(b.l) && b.h >= b.l ? b.h - b.l : 0;
         any = true;
       }
-      if (any) perSession.push(vol);
+      if (any) {
+        perSession.push(vol);
+        perRange.push(rng);
+      }
     }
     if (perSession.length === 0) {
-      out[sym] = { slot_median: [], cum_median: [], n: 0 };
+      out[sym] = { slot_median: [], cum_median: [], range_median: [], n: 0 };
       continue;
     }
     const cums = perSession.map((vol) => {
@@ -325,11 +365,14 @@ export function buildBaseline(
     const slots = Math.min(...perSession.map((v) => v.length));
     const slot_median: number[] = [];
     const cum_median: number[] = [];
+    const range_median: number[] = [];
     for (let k = 0; k < slots; k++) {
       slot_median.push(median(perSession.map((v) => v[k]!)));
       cum_median.push(median(cums.map((v) => v[k]!)));
+      // Kept to 4 decimals (a hundredth of a cent): the shock gate compares in whole ten-thousandths of a dollar.
+      range_median.push(Math.round(median(perRange.map((v) => v[k]!)) * 10_000) / 10_000);
     }
-    out[sym] = { slot_median, cum_median, n: perSession.length };
+    out[sym] = { slot_median, cum_median, range_median, n: perSession.length };
   }
   return { v: BASELINE_V, for_session: forSession, built_at: builtAt, feed: "sip", sessions, built_for: [...names].sort(), names: out };
 }
@@ -346,7 +389,8 @@ const rising = (xs: readonly number[]) => xs.every((x, i) => i === 0 || x >= xs[
 /**
  * A stored baseline, checked field by field; null when anything is off: another version or feed, a date that is not
  * one, more than BASELINE_SESSIONS sessions, a name that is not a ticker, an `n` above the session count, medians of
- * unequal length, a negative or non-finite value, or a cumulative median that falls.
+ * unequal length, a negative or non-finite value, or a cumulative median that falls. Version 2 needs every name's
+ * `range_median`, as long as its other medians; version 1 may not carry one. Never a version 1 read as having ranges.
  */
 export function parseBaseline(text: string): Baseline | null {
   let v: unknown;
@@ -356,7 +400,7 @@ export function parseBaseline(text: string): Baseline | null {
     return null;
   }
   const b = rec(v);
-  if (!b || b.v !== BASELINE_V || b.feed !== "sip" || !isDay(b.for_session) || typeof b.built_at !== "string") return null;
+  if (!b || (b.v !== 1 && b.v !== 2) || b.feed !== "sip" || !isDay(b.for_session) || typeof b.built_at !== "string") return null;
   if (!Array.isArray(b.sessions) || b.sessions.length > BASELINE_SESSIONS || !b.sessions.every(isDay)) return null;
   if (!Array.isArray(b.built_for) || !b.built_for.every((x) => typeof x === "string" && SYMBOL_RE.test(x))) return null;
   const names = rec(b.names);
@@ -367,9 +411,15 @@ export function parseBaseline(text: string): Baseline | null {
     if (!SYMBOL_RE.test(sym) || !s || !nums(s.slot_median) || !nums(s.cum_median)) return null;
     if (s.slot_median.length !== s.cum_median.length || !rising(s.cum_median)) return null;
     if (!Number.isInteger(s.n) || (s.n as number) < 0 || (s.n as number) > b.sessions.length) return null;
-    out[sym] = { slot_median: s.slot_median, cum_median: s.cum_median, n: s.n as number };
+    if (b.v === 1) {
+      if (Object.hasOwn(s, "range_median")) return null;
+      out[sym] = { slot_median: s.slot_median, cum_median: s.cum_median, n: s.n as number };
+      continue;
+    }
+    if (!nums(s.range_median) || s.range_median.length !== s.slot_median.length) return null;
+    out[sym] = { slot_median: s.slot_median, cum_median: s.cum_median, range_median: s.range_median, n: s.n as number };
   }
-  return { v: BASELINE_V, for_session: b.for_session, built_at: b.built_at, feed: "sip", sessions: b.sessions as string[], built_for: b.built_for as string[], names: out };
+  return { v: b.v, for_session: b.for_session, built_at: b.built_at, feed: "sip", sessions: b.sessions as string[], built_for: b.built_for as string[], names: out };
 }
 
 /** One Alpaca bar as a FlowBar, or null when its start, a price or its volume cannot be read. vw and n may be absent. */

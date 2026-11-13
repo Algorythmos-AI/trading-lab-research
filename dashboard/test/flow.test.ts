@@ -2,6 +2,7 @@
 // Pure: fixed instants, the real exchange calendar unless a case passes its own.
 import { describe, expect, it } from "vitest";
 import {
+  barRange,
   barSurge,
   type Baseline,
   baselineSessions,
@@ -231,6 +232,30 @@ describe("barSurge", () => {
   });
 });
 
+describe("barRange", () => {
+  const clock = slotClock(at(30))!; // 10:00: slots 0 to 13 completed
+  /** base() with every slot's median range 0.5 (the test bars' range is 2: high 101, low 99). */
+  const ranged = (median = 0.5, n = 20, forSession = DAY): NameBaseline => ({ ...base(n, forSession), range_median: Array.from({ length: FULL_SESSION_SLOTS }, () => median) });
+  it("is the completed bar's high − low over its slot's median range", () => {
+    expect(barRange(bar(13, 10), ranged(), clock)).toEqual({ value: 4, sessions: 20 });
+    expect(barRange({ ...bar(13, 10), h: 100, l: 100 }, ranged(), clock)).toEqual({ value: 0, sessions: 20 });
+  });
+  it("no ratio without ranges, with a zero median range, or for a bar that is not a completed one", () => {
+    expect(barRange(bar(13, 10), base(), clock)).toEqual({ value: null, why: "no-range-baseline" });
+    expect(barRange(bar(13, 10), ranged(0), clock)).toEqual({ value: null, why: "no-range-baseline" });
+    expect(barRange(bar(14, 10), ranged(), clock)).toEqual({ value: null, why: "no-bars" });
+    expect(barRange({ ...bar(13, 10), h: 98 }, ranged(), clock)).toEqual({ value: null, why: "no-bars" }); // high under the low
+    expect(barRange(null, ranged(), clock)).toEqual({ value: null, why: "no-bars" });
+  });
+  it("shares barSurge's reasons", () => {
+    expect(barRange(bar(0, 1), ranged(), slotClock(at(4)))).toEqual({ value: null, why: "before-0935" });
+    expect(barRange(bar(0, 1), ranged(0.5, 9), clock)).toEqual({ value: null, why: "thin-baseline" });
+    expect(barRange(bar(0, 1), ranged(0.5, 20, "2026-11-11"), clock)).toEqual({ value: null, why: "stale-baseline" });
+    expect(barRange(bar(0, 1), null, clock)).toEqual({ value: null, why: "no-baseline" });
+    expect(barRange(bar(0, 1), ranged(), null)).toEqual({ value: null, why: "closed" });
+  });
+});
+
 describe("baselineSessions", () => {
   it("the 20 full sessions before a day, oldest first, across the clock change", () => {
     const s = baselineSessions(DAY)!;
@@ -267,7 +292,7 @@ describe("buildBaseline", () => {
       "2026-11-03": { AAA: day("2026-11-03", { 0: 200, 1: 30 }) },
     };
     const b = buildBaseline(input, DAY, MARKET_CALENDAR, "2026-11-12T12:00:00.000Z")!;
-    expect(b).toMatchObject({ v: 1, for_session: DAY, feed: "sip", built_at: "2026-11-12T12:00:00.000Z", sessions });
+    expect(b).toMatchObject({ v: 2, for_session: DAY, feed: "sip", built_at: "2026-11-12T12:00:00.000Z", sessions });
     const a = b.names.AAA!;
     expect(a.n).toBe(3);
     expect(a.slot_median).toHaveLength(195);
@@ -284,10 +309,10 @@ describe("buildBaseline", () => {
     };
     const b = buildBaseline(input, DAY, MARKET_CALENDAR, undefined, ["CCC"])!;
     expect(b.built_for).toEqual(["AAA", "BBB", "CCC"]);
-    expect(b.names.CCC).toEqual({ slot_median: [], cum_median: [], n: 0 });
+    expect(b.names.CCC).toEqual({ slot_median: [], cum_median: [], range_median: [], n: 0 });
     expect(b.names.AAA!.n).toBe(2);
     expect(b.names.AAA!.slot_median[0]).toBe(200);
-    expect(b.names.BBB).toEqual({ slot_median: [], cum_median: [], n: 0 });
+    expect(b.names.BBB).toEqual({ slot_median: [], cum_median: [], range_median: [], n: 0 });
   });
 
   it("reads only the 20 sessions: a half day or a day outside them is ignored", () => {
@@ -302,7 +327,8 @@ describe("buildBaseline", () => {
     const off = (over: object) => parseBaseline(JSON.stringify({ ...b, ...over }));
     const name = (over: object) => off({ names: { AAA: { ...a, ...over } } });
     expect(off({ feed: "iex" })).toBeNull();
-    expect(off({ v: 2 })).toBeNull();
+    expect(off({ v: 3 })).toBeNull();
+    expect(off({ v: 1 })).toBeNull(); // a version 1 document never carries ranges
     expect(off({ for_session: "2026-02-30" })).toBeNull(); // not a date
     expect(off({ sessions: [...b.sessions, "2026-11-12"] })).toBeNull(); // 21 sessions
     expect(off({ built_for: ["aapl"] })).toBeNull();
@@ -310,12 +336,44 @@ describe("buildBaseline", () => {
     expect(off({ names: { "<b>": a } })).toBeNull();
     expect(name({ slot_median: [1, -1], cum_median: [1, 1] })).toBeNull();
     expect(name({ slot_median: [1, 2], cum_median: [1, 3, 4] })).toBeNull(); // unequal lengths
+    expect(name({ range_median: undefined })).toBeNull(); // version 2 needs the ranges
+    expect(name({ range_median: a.range_median!.slice(1) })).toBeNull(); // ranges of another length
+    expect(name({ range_median: [-1, ...a.range_median!.slice(1)] })).toBeNull();
     expect(name({ slot_median: [3, 0], cum_median: [3, 2] })).toBeNull(); // the running total falls
     expect(name({ n: 1.5 })).toBeNull();
     expect(name({ n: 21 })).toBeNull(); // more than the sessions
-    expect(name({ n: 20, slot_median: [1, 0], cum_median: [1, 1] })).not.toBeNull(); // n = sessions.length, flat total
+    expect(name({ n: 20, slot_median: [1, 0], cum_median: [1, 1], range_median: [0, 0] })).not.toBeNull(); // n = sessions.length, flat total
     expect(parseBaseline('{"v":1,"for_session":"2026-11-12","built_at":"x","feed":"sip","sessions":[],"built_for":[],"names":{"A":{"slot_median":[1e999],"cum_median":[1],"n":0}}}')).toBeNull();
     expect(parseBaseline("not json")).toBeNull();
+  });
+
+  it("ranges: the median of high − low per slot, a missing slot as a zero range, from the same sessions", () => {
+    const ranged = (d: string, k: number, h: number, l: number): FlowBar => ({ ...bar(k, 10, 100, openOf(d)), h, l });
+    const input = {
+      "2026-10-30": { AAA: [ranged("2026-10-30", 0, 101, 99), ranged("2026-10-30", 1, 100.5, 100)] },
+      "2026-11-02": { AAA: [ranged("2026-11-02", 0, 104, 100)] }, // slot 1 missing: a zero range
+      "2026-11-03": { AAA: [ranged("2026-11-03", 0, 100.25, 100), ranged("2026-11-03", 1, 102, 100)] },
+    };
+    const a = buildBaseline(input, DAY)!.names.AAA!;
+    expect(a.range_median).toHaveLength(195);
+    expect(a.range_median!.slice(0, 3)).toEqual([2, 0.5, 0]);
+  });
+
+  it("ranges are kept to 4 decimals", () => {
+    const b = buildBaseline({ "2026-11-03": { AAA: [{ ...bar(0, 10, 100, openOf("2026-11-03")), h: 100.123456, l: 100 }] } }, DAY)!;
+    expect(b.names.AAA!.range_median![0]).toBe(0.1235);
+  });
+
+  it("a version 1 baseline still parses, has no ranges, and gives no range ratio, never a pass", () => {
+    const v2 = buildBaseline({ "2026-11-03": { AAA: day("2026-11-03", { 0: 5 }) } }, DAY)!;
+    const noRange: Record<string, unknown> = { ...v2.names.AAA! };
+    delete noRange.range_median;
+    const v1 = parseBaseline(JSON.stringify({ ...v2, v: 1, names: { AAA: noRange } }))!;
+    expect(v1.v).toBe(1);
+    expect(v1.names.AAA!.range_median).toBeUndefined();
+    const clock = slotClock(at(30) + SERVER_SETTLE_MS)!;
+    const nb = { ...nameBaseline(v1, "AAA")!, n: 20 };
+    expect(barRange(bar(10, 100), nb, clock)).toEqual({ value: null, why: "no-range-baseline" });
   });
 
   it("nameBaseline picks one name, or null", () => {
