@@ -30,8 +30,8 @@
 - `context.ts` code pin: 2026-11-13, #422 merged; `dashboard/src/lib/context.ts` at integration
   `c48d3477524131794cbab1fe85cc983134b96579`. The definition copied into `config.yaml` governs.
 - Precondition 1, the per-slot range baseline in production, its commit: not yet.
-- Precondition 2, the read script merged, its commit: not yet.
-- Precondition 3, the outcome code merged and frozen, its commit: not yet.
+- Precondition 2, the read script merged, its commit: 2026-11-13, `8d9bb9aaf83c625e59fde359786bbc6e12033cbf` (#434).
+- Precondition 3, the outcome code merged and frozen, its commit: 2026-11-13, `8d9bb9aaf83c625e59fde359786bbc6e12033cbf` (#434).
 - Precondition 4, one full regular session stamped in production (board-feed stamps reading `sip`, sealed): not
   yet. Reported on 2026-11-13 by the owner: no stamp written since the open on 2026-11-12.
 - Signal switch first at `dry` in production: not yet.
