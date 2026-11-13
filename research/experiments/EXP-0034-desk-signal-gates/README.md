@@ -12,8 +12,10 @@
   with no outcome read.
 - The expiry rule is the owner's, decided on 2026-11-13: 1 to 5 sessions out, never the same day
   (`parameters.expiry_rule`).
-- Start: the first regular New York session that opens after the three preconditions below, Amendment 1 in
-  production and the signal switch first at `log` or `show` in production. Never backfilled.
+- Start: the first counted session that opens after the signal switch first reads `log` in production (allowed only
+  once the four preconditions below are met and Amendment 1 is in production). Its date is written here the same
+  day. Never backfilled. Latest start date 2027-02-28: not started by then, the record lapses with no verdict.
+- Close date: one year after the start date.
 - Read: once, at the first of 100 scored confirmed breaks or the close date. Early ends give no verdict.
 
 ## Trial
@@ -24,15 +26,18 @@
 
 ## Dates and commits (each written by the pull request or note that records it)
 
-- DEC-0051 accepted, and so the close date (one year later): not yet.
+- DEC-0051 accepted: not yet.
 - `context.ts` code pin: 2026-11-13, #422 merged; `dashboard/src/lib/context.ts` at integration
   `c48d3477524131794cbab1fe85cc983134b96579`. The definition copied into `config.yaml` governs.
 - Precondition 1, the per-slot range baseline in production, its commit: not yet.
 - Precondition 2, the read script merged, its commit: not yet.
 - Precondition 3, the outcome code merged and frozen, its commit: not yet.
+- Precondition 4, one full regular session stamped in production (board-feed stamps reading `sip`, sealed): not
+  yet. Reported on 2026-11-13 by the owner: no stamp written since the open on 2026-11-12.
 - Signal switch first at `dry` in production: not yet.
 - Amendment 1 (the frozen numbers, the parameter hash, the signal-code hash) merged, and in production: not yet.
-- Signal switch first at `log` in production (the window's start is the next session to open): not yet.
+- Signal switch first at `log` in production: not yet.
+- Window start date (the first counted session after that), and so the close date one year later: not yet.
 - Signal switch first at `show` in production (signals first on the page; the same date goes into EXP-0033's
   `README.md`): not yet.
 - "Signal confirmed" alert first switched on in production: not yet.
