@@ -53,3 +53,22 @@
   figures only: the counts, the estimate, its range and the verdict.
 - Supported: the tag becomes "Stock test passed (HYP-0059); option result not tested". Anything else withdraws the
   words; the gates stay as plain facts.
+
+## Readings fixed before the outcome code is frozen (2026-11-13)
+
+Where the record leaves a choice open, the read script and the outcome code take these readings, written here before
+any signal, outcome or bar of the window exists.
+
+- Section 8, unit: a break's `brokeAt` is read from the scoring slot's signal record (the DEC-0044 rows carry none).
+- Section 8, unit: a run of consecutive `enter_zone` slots whose first slot has no signal record is one `not_logged` break.
+- Section 8, groups: a signal record that is there but does not parse, or a `dry` record, is `not_usable`.
+- Section 8, groups: a group a or b break whose logged card has no entry, stop or T1 (or entry equal to stop) is `card_missing`, counted, not scored.
+- Section 8, groups: the volume gate reading `not_yet` at the scoring slot is `gate_unavailable`.
+- Section 8, read: the read takes the whole slot holding the 100th scored group-a break; later slots are not taken.
+- Section 8, halves: the halves split all counted sessions in date order, not only those holding a scored break.
+- Section 8, secondary: the option R25 range is reported as its minimum and maximum.
+- Section 8, sensitivity: group b is re-weighted on the (name, window) cells both groups hold, with the share of group a those cells cover.
+- Section 8, outcome: an `entry_open` already at or beyond T1 exits at `entry_open` (`entry_beyond_t1`); one already at or beyond the stop exits at `entry_open` (`entry_beyond_stop`).
+- Section 8, outcome: R is rounded to 2 decimals half away from zero.
+- Section 8, outcome: the entry bar is the first 2-minute bar starting at or after the scoring record's `evaluated_at`.
+- Section 8, early ends: a stamp gap over 10 minutes across a deployment change is judged within a session only, between two known, different deployments; a deploy between sessions is not one (each stamp must still read `sip`).
