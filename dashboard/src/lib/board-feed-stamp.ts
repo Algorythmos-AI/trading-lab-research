@@ -47,9 +47,15 @@ import { UpstreamError } from "./upstream";
 //    prev_mismatch for the day). The walk-back makes that rare (a gap of over 15 minutes and a lagging list together);
 //    it cannot make it impossible. A stamp that is there but cannot be read leaves the minute unstamped.
 //  * Every store call carries an abort signal at the run's deadline (timeoutMs). Just before the write the deadline
-//    and the New York minute are checked again, and the write is not started past second 45 of the minute: past the
-//    deadline, past second 45, or once the clock has moved into another minute, nothing is written ("late"), so a slow
-//    run never writes a stamp at a key its `at` does not belong to.
+//    and the New York minute are checked again, and the write is not started at or past second 57 of the minute: past
+//    the deadline, at or past second 57, or once the clock has moved into another minute, nothing is written ("late"),
+//    so a slow run never writes a stamp at a key its `at` does not belong to. The writer also gives up on the put at the
+//    end of its minute (as at the deadline): a put still open then is aborted and logged "late" (an abort cannot take
+//    back a put the store already accepted; such a stamp's `at` is still in its key's minute and the next minute's
+//    walk-back chains to it). The cutoff was second 45 until 2026-11-12, when the cron was seen to start at second 47
+//    to 50 of every minute (Vercel fires it late in the minute) and every stamp that session was "late". At today's
+//    timing the 3 s deadline, counted from after the SPY read, binds before the cutoff does; the cutoff and the
+//    minute-end abort guard a later drift. Each "late" line says which check refused (`reason`) and at which second.
 //  * Seal: from 2 minutes after a session day's close, and on any later run before the next session's open (pre-open
 //    runs included), the most recent session day still unsealed gets desk/feeds/board/<day>/manifest.json, {v, count,
 //    last, at}: create-only, so written once and never overwritten. It has its own limit (SEAL_TIMEOUT_MS, 20 s). Before
@@ -118,8 +124,9 @@ export const SEAL_TAIL_MIN = 15;
 /** The seal waits this long past the close, so the last minute's stamp has landed. */
 export const SEAL_AFTER_CLOSE_MIN = 2;
 const MINUTE_MS = 60_000;
-/** A stamp's write is not started at or past this second of its minute (New York minutes start on UTC minutes). */
-export const PUT_CUTOFF_MS = 45_000;
+/** A stamp's write is not started at or past this second of its minute (New York minutes start on UTC minutes), and
+ *  the writer gives up on the put at the minute's end. The desk cron starts at about second 47 to 50 of each minute. */
+export const PUT_CUTOFF_MS = 57_000;
 /** How far back the previous stamp is looked for key by key (one head each) before the day is listed. */
 export const PREV_WALK_MIN = 15;
 
@@ -259,10 +266,14 @@ class SealWait extends Error {
   }
 }
 
-/** The run passed its deadline, second 45 of its minute or the next open, or the clock moved into another minute,
- *  before the write: nothing is written. */
+/** The run passed its deadline, second 57 of its minute or the next open, or the clock moved into another minute,
+ *  before the write, or the minute ended with the write still open: the stamp is not counted as written. */
+type LateReason = "deadline" | "cutoff" | "minute" | "minute-end" | "next-open";
 class Late extends Error {
-  constructor() {
+  constructor(
+    readonly reason: LateReason,
+    readonly second: number | null = null,
+  ) {
     super("the stamp's minute or deadline has passed");
     this.name = "Late";
   }
@@ -350,7 +361,7 @@ async function writeManifest(deps: StampDeps, day: string, at: Date, signal: Abo
   }
   const manifest: BoardFeedManifest = { v: 1, count: paths.length, last, at: at.toISOString() };
   const nextOpen = nextOpenAfter(day);
-  if (signal.aborted || nextOpen === null || !(deps.now().getTime() < nextOpen)) throw new Late();
+  if (signal.aborted || nextOpen === null || !(deps.now().getTime() < nextOpen)) throw new Late(signal.aborted ? "deadline" : "next-open");
   try {
     await store.create(key, JSON.stringify(manifest), signal);
   } catch (e) {
@@ -398,7 +409,11 @@ async function withinLimit(
   } catch (e) {
     const outcome: StampOutcome =
       e instanceof PreconditionFailed ? "duplicate" : e instanceof Late ? "late" : e instanceof SealWait ? "seal-wait" : signal.aborted ? "timeout" : "store-failed";
-    logEvent("board-feed.stamp", { outcome, ...(outcome === "store-failed" ? { error: e instanceof Error ? e.name : "unknown" } : {}) });
+    logEvent("board-feed.stamp", {
+      outcome,
+      ...(outcome === "store-failed" ? { error: e instanceof Error ? e.name : "unknown" } : {}),
+      ...(e instanceof Late ? { reason: e.reason, ...(e.second === null ? {} : { second: e.second / 1000 }) } : {}),
+    });
     return outcome;
   } finally {
     clearTimeout(timer);
@@ -443,8 +458,17 @@ export async function stampBoardFeed(over: Partial<StampDeps> = {}): Promise<Sta
       const now = deps.now();
       const still = nyNow(now);
       const second = ((now.getTime() % MINUTE_MS) + MINUTE_MS) % MINUTE_MS;
-      if (signal.aborted || now.getTime() > deadline || second >= PUT_CUTOFF_MS || still.day !== day || still.minute !== minute) throw new Late();
-      await deps.store.create(stampKey(day, minute), JSON.stringify(stamp), signal);
+      if (still.day !== day || still.minute !== minute) throw new Late("minute", second);
+      if (signal.aborted || now.getTime() > deadline) throw new Late("deadline", second);
+      if (second >= PUT_CUTOFF_MS) throw new Late("cutoff", second);
+      // The writer gives up on the put at the end of its minute as well as at the deadline.
+      const minuteEnds = AbortSignal.timeout(MINUTE_MS - second);
+      try {
+        await deps.store.create(stampKey(day, minute), JSON.stringify(stamp), AbortSignal.any([signal, minuteEnds]));
+      } catch (e) {
+        if (minuteEnds.aborted && !signal.aborted && !(e instanceof PreconditionFailed)) throw new Late("minute-end", second);
+        throw e;
+      }
       return "written";
     });
   } catch (e) {
