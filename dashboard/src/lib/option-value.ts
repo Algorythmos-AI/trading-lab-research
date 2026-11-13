@@ -197,8 +197,8 @@ export const tooOld = (s: number) => `the last quote was checked ${s} s ago, ove
 export const tooWide = (pct: number) => `the spread is ${pct}% of the mid, over ${Math.round(MAX_SPREAD_SHARE * 100)}%`;
 
 /** The bid rounded down and the ask rounded up to whole cents (a hair of slack for binary fractions such as 1.15). */
-const bidToCents = (v: number) => Math.floor(v * 100 + 1e-7);
-const askToCents = (v: number) => Math.ceil(v * 100 - 1e-7);
+export const bidToCents = (v: number) => Math.floor(v * 100 + 1e-7);
+export const askToCents = (v: number) => Math.ceil(v * 100 - 1e-7);
 
 /**
  * Whether one contract's quote may be shown as live, and why not. In this order: the route answered; its request was

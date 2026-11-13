@@ -222,3 +222,14 @@ Written before any run of the check. Where point 4 is silent, the code (`dashboa
   "Alpaca's answer incomplete", and that unit is not checked.
 
 No journal, print or result was viewed for this note.
+
+## Note on DEC-0051 (added 2026-11-13)
+
+DEC-0051, proposed on 2026-11-13, amends point 6 once it is accepted: on a "signal confirmed" alert its first item
+reads "the word confirmed and the side (call or put)". Nothing else in point 6 changes: no symbol and no share of the
+day's loss limit go through ntfy, and the new kind joins `NOTICE_KINDS` and the vocabulary of `ntfy-notices.test.ts`
+with no exception. The alert counts towards DEC-0044 section 4's cap of 5, and a break sends at most one alert of
+either kind. The exact wording is in DEC-0051, "Amendments to earlier records". The text above is otherwise
+unchanged.
+
+No owner trade, P&L, label or result was viewed for this note.

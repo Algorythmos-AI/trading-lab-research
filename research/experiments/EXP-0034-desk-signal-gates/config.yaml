@@ -1,0 +1,310 @@
+# EXP-0034: whether the Options desk's signal word (DEC-0051) picks the better of the board's enter-zone breaks, on the
+# stock's R, forward from the switch-on. Design only: no signal, gate value or outcome existed when this was written.
+# Frozen with DEC-0051, except the numbers under `parameters`, which DEC-0051's Amendment 1 freezes once, by the rule
+# DEC-0051 section 2 states, from dry-log frequencies with no outcome read. After the start a changed value is an early
+# end (no verdict) and a new experiment with new trials; before it, a decision record may amend it, saying that no
+# outcome was viewed to choose the change.
+experiment: EXP-0034
+status: registered                  # DEC-0051 accepted on 2026-11-13; no results file until the read writes it once
+decision: DEC-0051
+family: O                           # the options desk's entry rules and their filters; total 36 (config/trial_registry.yaml)
+trials:                             # the difference is a minus b
+  - {hypothesis: HYP-0059, trial: SIG-CONFIRMED, a: call_or_put, b: market_gate_failed, unit: break, role: primary}
+
+code_read:                          # what the definitions describe; pins of unmerged code are written into README.md once merged
+  flow.ts: "dashboard/src/lib/flow.ts at origin/integration 66c5efc8e09fd2289e64bd85c531aa9c6305fae8"
+  context.ts: "as pull request #422 proposes it; not merged; copied below in words and numbers; pinned by a dated README line once merged"
+  engine: "trade-state.ts, trade-now.ts, desk-eval.ts as the board runs them; engine label e-28344e769752 at registration"
+  rules: "dashboard/src/lib/trade-rules.ts, ticket.ts, premium-stop.ts, owner-positions.ts (OWNER_FEES), chain.ts, focus-plan.ts"
+
+signal:                             # DEC-0051 section 1; per focus name of the session's edition and side, per settled slot
+  side_state: >-
+    the state DEC-0044's server record holds for the side (stateRows in desk-eval.ts: the row's no_trade or paused on
+    both sides, otherwise the side's own sideState)
+  order:                            # the first that applies
+    - word: NO_TRADE
+      when:
+        - "side state in [no_trade, watch, plan_off, missed, paused]"
+        - side state get_ready with brokeEarlier or gap
+        - the break bar exists and the volume gate fails (it cannot pass later; the break reads NO_TRADE from then on)
+        - two or more of the four market gates fail
+        - no contract passes the contract check (page reason "no contract inside your rules" when every market gate passes)
+        - >-
+          an input is not usable: the slot's DEC-0044 record has a status other than ok or lists the name in
+          degraded_names; the edition is missing or for another session; the parameter hash or the signal-code hash
+          differs from Amendment 1's; an answer names a feed other than sip (stock) or opra (option); no usable
+          board-feed stamp: one reading sip, answered ok, whose at lies in [t0 - 2 min, t0] (t0 the slot's evaluation
+          time; EXP-0033 covered rule 1, EDGE_MS, no bracketing). A stamp reading other than sip is also an early end
+    - word: CALL_or_PUT             # CALL on the call side, PUT on the put side
+      when: "side state enter_zone, brokeEarlier false, gap false, all four market gates pass, a contract passes"
+    - word: WAIT
+      when: >-
+        side state get_ready; or enter_zone with exactly one of market_direction, stock_bid_ask and shock failing
+        (named on the card); before the break bar exists the volume gate reads not_yet and is not a fail for WAIT
+  never_read: [alt, runner exit line]   # alternatives and the runner plan never produce a signal
+  changes_state: never
+  lifecycle:                        # display only; no test reads it
+    reads: the current slot and the session's own sealed signal records of the same break (name, side, brokeAt)
+    confirmed_earlier: one of those records holds CALL or PUT; a missing record counts as not confirmed
+    order:
+      - {word: invalidated, when: "confirmed_earlier, and side state plan_off or missed, or word NO_TRADE"}
+      - {word: weakening, when: "confirmed_earlier and word WAIT; or word CALL_or_PUT and slots_left <= 2"}
+      - {word: confirmed, when: "word CALL_or_PUT"}
+      - {word: developing, when: "word WAIT"}
+      - {word: none, when: otherwise}
+    slots_left: >-
+      MAX_BARS_TO_RETEST + 1 - k (MAX_BARS_TO_RETEST = 6), k = 2-minute bars from the start of the side's break bar
+      (brokeAt) to the start of the bar forming at the evaluation, as trade-state.ts line 395 counts the window
+  strings_test: DEC-0042 section 3's strings test covers every signal word, lifecycle word and gate reason the page draws
+
+gates:                              # DEC-0051 section 2; a gate whose value is not available fails for the word
+  market_direction:
+    definition:                     # copied from context.ts direction() as #422 proposes it; this copy governs
+      symbols: [SPY, QQQ]
+      vwap: "session VWAP = sum(vw x v) / sum(v) over today's completed 2-minute bars from 09:30; a traded bar without vw makes it null"
+      vwap_side: >-
+        at when |price - vwap| x 10,000 <= band x vwap, band = max(the stock's spread in bp, 3); above or below otherwise
+      blocks: "10-minute block j holds 2-minute slots 5j to 5j + 4; it completes when all five slots have settled (60 s after the bar's end)"
+      block_close: the close of the block's latest bar
+      usable_block: a bar in its last slot and in at least 4 of its 5 slots
+      trend: >-
+        over the five consecutive most recent completed blocks: up when the last close is above the first and at least
+        3 of the 4 steps rise; down mirrored; range otherwise; a flat step is neither
+      direction: "up when vwap_side above and trend up; down when below and down; range otherwise (at is range)"
+      no_direction:                 # the first that applies
+        - closed (outside the regular session)
+        - stale (the answer, or its price's older of trade and quote, more than 20 s old by checked age)
+        - no bars, or no last price
+        - a one-sided or crossed quote (a locked quote is not bad data)
+        - lagging (no bar for the last completed 2-minute slot)
+        - no VWAP
+        - too early (fewer than 5 completed blocks)
+        - lagging (one of the five blocks missing or not usable)
+      numbers: {TREND_CLOSES: 5, TREND_STEPS: 3, BLOCK_SLOTS: 5, BLOCK_MIN_BARS: 4, STALE_MS: 20000, VWAP_BAND_MIN_BPS: 3}
+    call_fails: both read down
+    put_fails: both read up
+    index_name: "for SPY or QQQ the other index alone: call fails when it reads down, put when it reads up"
+    no_direction: fails
+  volume:
+    value: "flow.ts barSurge of the 2-minute bar ending at the side's brokeAt boundary (its volume / the baseline's slot_median for its slot)"
+    passes: value >= parameters.volume_min_ratio
+    not_yet: no break bar yet (not a fail for WAIT)
+    fail_is_final: a read volume fail makes the break NO_TRADE from then on
+    not_available: [closed, before-0935, no-baseline, stale-baseline, thin-baseline (n < 10), half-day-close (last 5 slots), no-bars, slot median 0]
+  stock_bid_ask:
+    value: "flow.ts spreadBps of the name's NBBO: (ask - bid) / mid x 10,000"
+    passes: value <= parameters.stock_spread_max_bps and the quote at most 20 s old by checked age
+    fails: [locked, crossed, one-sided]
+    not_available: [stale]
+  shock:
+    bars: >-
+      none of the last three completed 2-minute bars has high - low above parameters.shock_range_multiple x the
+      20-session median range for its slot (the per-slot range baseline, precondition 1)
+    calendar: >-
+      no release that dashboard/src/lib/market-calendar.json lists for the day with its New York time in
+      [slot end - parameters.event_window_before_min, slot end + parameters.event_window_after_min], and no earnings
+      for the name during the session
+    not_available: [no range baseline, a day or month the calendar does not cover]
+  contract:                         # not one of the four market gates: none passing is NO_TRADE
+    chain: OPRA by name, the side's kind
+    expiry: parameters.expiry_rule
+    strikes: "ticket.ts strikesByDistance order (nearest the stock's price first, the lower of two equally near first, at most 6); the first that passes is named"
+    checks:
+      premium: "ticket.ts sizeTicket(ask in cents, OWNER_LIMITS).contracts >= 1 (MAX_PREMIUM 200, RISK_PER_TRADE 50, PREMIUM_STOP 0.25 via stopCents, OWNER_FEES 0.55 open + 0.56 close)"
+      bid_ask: "ask - bid <= parameters.contract_spread_share_of_stop x PREMIUM_STOP x mid"
+      quote: "two-sided (bid > 0, ask > 0, ask >= bid), checked age <= parameters.contract_quote_max_age_s, and served_at (else as_of) - the contract's chain.ts at <= parameters.contract_quote_stamp_max_age_s; run and stored whatever the market gates read"
+      volume: "chain.ts volume (the snapshot's daily bar) >= parameters.contract_min_volume"
+      delta: "chain.ts delta from the snapshot's greeks; missing, or worked out by the site, fails"
+    none_passes: "NO_TRADE; the card names the nearest strike's failed check"
+  cautions: "the board's entryChecks cautions are shown as reasons against; not gates; change no word"
+
+parameters:                         # NOT FROZEN until DEC-0051 Amendment 1; the plan's candidates of 2026-11-12
+  status: candidate
+  expiry_rule: >-
+    the owner's decision of 2026-11-13 (the one place it lives): the nearest listed expiry from 1 to 5 sessions
+    out;
+    the same day is excluded; none listed in that range is no contract
+  volume_min_ratio: 1.5
+  stock_spread_max_bps: 5
+  shock_range_multiple: 3
+  event_window_before_min: 30       # exempt from the freeze rule: its fail share comes from the release schedule
+  event_window_after_min: 30        # exempt, as above
+  contract_spread_share_of_stop: 0.20
+  contract_quote_max_age_s: 10
+  contract_quote_stamp_max_age_s: 60
+  contract_min_volume: 100
+  freeze_rule: >-
+    by Amendment 1, from the dry log over at least 10 full sessions recorded after the four preconditions are in
+    production: for every focus-name slot, whatever the board's state, the share of slots on which each number's gate
+    or check would fail; a candidate is kept unless that share is above 80% or below 5%, and then moves to the grid
+    value nearest the candidate whose share lies in [5%, 80%] (the stricter of two equally near); if none does, the
+    candidate is kept and the amendment says so; contract checks are counted on the nearest strike of the expiry rule
+  freeze_may_not_use: [board states, brokeAt or any enter-zone conditioning, any bar after the slot, T1, the stop, plan_off, missed, feed-report enter-zone counts, journals, the ledger, the clone]
+  grid:                             # [from, to, step], inclusive
+    volume_min_ratio: [1.0, 3.0, 0.1]
+    stock_spread_max_bps: [1, 20, 1]
+    shock_range_multiple: [2.0, 6.0, 0.5]
+    contract_spread_share_of_stop: [0.05, 0.50, 0.05]
+    contract_quote_max_age_s: [2, 30, 1]
+    contract_quote_stamp_max_age_s: [10, 300, 10]
+    contract_min_volume: [0, 1000, 50]
+
+log:                                # DEC-0051 section 3
+  where: server only, once per settled slot, after the run has written the slot's DEC-0044 server record
+  path: "desk/signal/<New York date>/<HHMM New York>.json in the PRIVATE store"
+  writes: create-only; a second write for a slot is refused; nothing is overwritten
+  dec0044_untouched: >-
+    the DEC-0044 record's bytes, timing and engine label are unchanged: the signal code is outside desk-eval.ts's
+    import closure, and a test proves the DEC-0044 record byte-identical with the signal switch in every mode
+  switch: {path: desk/signal.json, body: '{"v": 1, "signal": "off" | "dry" | "log" | "show"}', parse: as strictly as desk/eval.json, default: "off"}
+  modes:
+    dry: gate inputs only (with the OPRA quotes of the strikes considered and both indexes' quotes); no word; shown nowhere; outside the window
+    log: the full record; shown nowhere
+    show: the full record; the page shows what the log holds
+  time_budget: its own limit inside the run, after the DEC-0044 write; a step that cannot finish writes nothing (a gap)
+  stores:
+    - per side: word, lifecycle, brokeAt, each gate's pass or fail with its value and reason
+    - the card's level, entry, stop and T1 for the side
+    - SPY and QQQ readings with price, VWAP, the five closes, spread and age
+    - the stock's bid, ask and age
+    - the named contract's OCC symbol, bid, ask, checked age, own quote time, delta and day volume; for every strike considered its quote time and the check it failed; the chain answer's served_at
+    - the key, feed and answered of the board-feed stamp the slot was judged by
+    - the baseline's for_session and built_at
+    - the parameter hash, the signal-code hash, the feed names each answer gave, the engine label, the evaluation time
+    - the key and SHA-256 of the slot's DEC-0044 record
+    - "follow: for each side whose word was CALL or PUT earlier in the session, that contract's bid, ask and age, up to the close"
+  gaps: a slot with no record is a gap; the page reads it "not logged"; nothing is filled in afterwards
+  feeds: "stock sip and option opra, asked for by name; never ALPACA_FEED or ALPACA_OPTION_FEED; IEX never enters"
+  class: PRIVATE
+
+blind:                              # DEC-0051 section 5
+  exp_0032: >-
+    until EXP-0032's read, signals, lifecycle words, gate values, outcomes and any replay cover the edition's focus
+    names only; nothing is worked out, logged or shown for any other name; SPY and QQQ as context show direction only
+  exp_0033: >-
+    until EXP-0033's read, no result on the site grouped by signal word, gate, caution or time window, and nothing
+    joins the owner's journal to the signals; the first date the switch reads show in production is a dated line in
+    EXP-0033's README.md (not one of its early ends)
+  own_report: never shown on the site; after both reads (this one and EXP-0033's) SAFE figures only (counts, estimate, range, verdict)
+
+preconditions:                      # each recorded with its commit by a dated README line; before Amendment 1 and the window
+  - the per-slot range baseline in production (the shock gate cannot be read without it)
+  - the read script merged, with synthetic-data tests including generator_test_vectors
+  - the outcome code (bar fetch and join, usable test, entry_open, exit, R) merged and frozen
+  - board-feed stamps written in production for every minute of one full (not half-day) regular session, reading sip with SPY answering, and the session sealed
+
+window:
+  switch_to_log_allowed: only once the four preconditions are met and Amendment 1 is merged and in production
+  start: >-
+    the first counted session that opens after desk/signal.json first reads log in production; its date is the
+    start date, written into README.md the same day
+  latest_start: "2027-02-28"        # not started by then: the record lapses, no verdict, the trial stays counted; a new record is needed
+  backfill: never
+  dry_sessions: never in the window
+  counted_session: at least 90% of the session's expectedSlots (desk-eval.ts) hold a signal record and have a usable board-feed stamp (as above); else log_incomplete
+  ends_early_on:                    # the last session counted is the last before the change reaches production
+    - an amendment to DEC-0035 that changes a card number, or a change to card_numbers below
+    - a change to MAX_PREMIUM, RISK_PER_TRADE, PREMIUM_STOP or OWNER_FEES
+    - an engine change the identity check finds, or an engine-label change shipped without the check
+    - a change to a gate's definition, or to a number Amendment 1 froze (a new parameter hash)
+    - a change to the signal code's hash, other than a defect fix recorded by a dated README note before the read
+    - an edit to a past or the current session's row of market-calendar.json (adding later sessions is not one)
+    - a change to a feed (anything but sip for the stock or opra for the option; a DEC-0050 board-feed stamp reading other than sip)
+    - a gap in the board-feed stamps over 10 minutes across which the deployment changed (EXP-0033 hidden_change)
+    - a change to the frozen outcome code, other than a defect fix recorded as above
+    - a breach of the blinds above, or of the rule that the page shows only the log
+  engine_identity_check: >-
+    before a release that changes the engine label reaches production, every fixture and the last 10 logged sessions
+    run through the old and the new engine; the window ends only if any row's state, brokeAt or card numbers differ;
+    it prints yes or no and counts only; its result is a dated README line
+  early_end_outcome: no verdict is worked out, whatever the counts; the trial stays counted; date and cause in README.md
+  close_date: one year after the start date (same month and day); the last session is the last regular session before it
+
+unit:
+  break: one (session, focus name, side, brokeAt) whose side reads enter_zone in the DEC-0044 log
+  scoring_slot: its first enter_zone slot; scored once, whatever its word later
+  group_order:                      # at the scoring slot, the first that applies
+    - {group: not_logged, scored: false, when: the slot has no signal record}
+    - {group: not_usable, scored: false, when: "status other than ok, a parameter-hash, signal-code-hash or feed mismatch, or no usable board-feed stamp"}
+    - {group: gate_unavailable, scored: false, when: "a market gate could not be read (thin, stale or missing baseline, stale quote, calendar gap, lagging)"}
+    - {group: a, scored: true, when: word CALL or PUT}
+    - {group: contract_failed, scored: false, when: "the contract check did not pass, whatever the market gates read"}
+    - {group: b, scored: true, when: "word WAIT or NO_TRADE, at least one market gate read and failed, and the contract check passed"}
+    - {group: other, scored: false, when: "none of the above (a defect: each count is a README line)"}
+  also_not_scored: [bars_incomplete, no_entry_bar, every break of a log_incomplete session]
+
+card_numbers:                       # frozen here under DEC-0035 section 3 (not an amendment), from focus-plan.ts
+  ENTRY_ATR: 0.01
+  STOP_ATR: 0.1
+  MIN_ROOM_MULTIPLE: 2
+  level: {call: "breakout_above, else resistance.price", put: "hold_above, else support.price"}
+  entry: "round(level + sg x 0.01 x atr, 2)"
+  stop: "round(level - sg x 0.1 x atr, 2)"
+  t1: "round(entry + sg x 2 x |entry - stop|, 2)"
+  sg: {call: 1, put: -1}
+  atr: the edition's atr for the name
+  read_from: the signal record for the side, not the display
+
+outcome:
+  entry_open: the open of the first 2-minute bar that starts at or after the scoring record's evaluation time
+  exit: >-
+    research/experiments/EXP-0032-selection-forward/config.yaml outcome.after_fill (DEC-0047 section 3, exit policy
+    card), unchanged, with the entry_open bar as the fill bar and the frozen T1 and stop
+  r: "round(sg x (exit - entry_open) / |card entry - card stop|, 2)"
+  bars: research/experiments/EXP-0032-selection-forward/config.yaml bars (SIP 1-minute by name, joined into 2-minute, fetched after the close, SHA-256, usable rule)
+  no_entry_bar: no bar starts after the evaluation time before the close; counted, not scored
+  secondary:                        # descriptive only, tested on nothing
+    option_r25: >-
+      for each group a break: in at the named contract's logged ask at the scoring slot, out at its logged bid in the
+      first record at or after the stock exit bar's end (follow), less OWNER_FEES (0.55 open, 0.56 close a contract),
+      as R25 = net / (0.25 x premium cost) (EXP-0033); a break with no logged exit quote is counted, not valued
+    sensitivity:                    # report only; changes no verdict
+      - the difference within 09:35-10:00, 10:00-11:30 and 13:00-close
+      - SPY and QQQ against the single names
+      - group b re-weighted to group a's mix of name x window
+      - contract_failed counts by the contract check that failed and by the market gates that failed
+      - the difference with b as first proposed (every market-gate failure, whatever the contract check read)
+    selection_switch: each group's count before and after DEC-0048's switch date (no effect on the verdict)
+
+statistics:
+  measure: mean R (a) - mean R (b), scored breaks pooled
+  sessions: the counted sessions holding at least one scored break, sorted ascending
+  resample: counted sessions drawn with replacement, index floor(u x n); every scored break of a drawn session comes with it
+  resamples: 5000
+  empty_group: a resample with an empty group is discarded and not counted; drawing continues until 5,000 are kept
+  prng: mulberry32
+  prng_step:
+    - a = (a + 0x6D2B79F5) >>> 0
+    - t = imul(a ^ (a >>> 15), a | 1)
+    - t ^= t + imul(t ^ (t >>> 7), t | 61)
+    - next = (t ^ (t >>> 14)) >>> 0
+  u: next() / 2**32
+  seed: 20261159
+  generator_test_vectors:           # the first three next() values; computed from the step above, not a result
+    "20261159": [552456640, 1000368668, 1413907767]
+  interval: [2.5, 97.5]
+  percentile: >-
+    on the 5,000 sorted differences d: h = (N - 1) x p / 100; q = d[floor(h)] + (h - floor(h)) x
+    (d[floor(h) + 1] - d[floor(h)]) (numpy's linear)
+  halves: the counted sessions in date order, the first floor(n / 2) then the rest; the difference in each; a half with an empty group fails
+  supported: the whole 95% range above 0 and the difference above 0 in each half
+  level: one-sided 2.5%, no correction
+  read: once, at the first of 100 scored breaks in group a or the close date; later breaks not taken
+  too_few: fewer than 30 scored breaks in either group or fewer than 20 counted sessions; an exploratory mark, not proof
+  falsified: the minimums met and the supported condition not met
+  report_also: [point estimate, the range, the difference in each half, group sizes, every counted-not-scored count, the secondary option R25 mean and range, the sensitivity table, counts before and after DEC-0048's switch]
+  computed_by: only the read script
+
+pre_set_action: >-
+  supported: the tag changes from "Testing HYP-0059" to "Stock test passed (HYP-0059); option result not tested", by
+  the pull request that records the verdict; nothing is called proven for options; not supported (falsified, too
+  few, or an early end): the signal words are withdrawn by that pull request and the gates stay on the page as plain
+  facts, each pass or fail with its value
+
+limits:
+  - R on the stock is not option P&L
+  - "no point-in-time history: levels built from another provider's bars, editions only since 2026-10-09, rebuilt sessions seen by the owner; the only evidence is forward and sealed"
+  - labels and evidence are both SIP
+  - the groups are not random; the test asks whether the word picks the better breaks, not why
+
+report: "written once into this folder by the read script; it refuses to overwrite; never shown on the site (blind.own_report)"
