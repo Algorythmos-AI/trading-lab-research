@@ -718,7 +718,7 @@ describe("lifecycle", () => {
 
 // ---- wiring ---------------------------------------------------------------------------------------------------------
 
-describe("the signal is wired to nothing yet", () => {
+describe("the signal is wired to the desk cron's signal step only (stage C2b)", () => {
   const ROOT = fileURLToPath(new URL("..", import.meta.url));
   const files = (dir: string): string[] =>
     readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
@@ -737,20 +737,25 @@ describe("the signal is wired to nothing yet", () => {
     visit(sf);
     return out;
   };
-  const NEW = /(?:^|\/)(?:signal|contract-pick|signal-params|signal-freeze|signal-version\.gen)$/;
+  const NEW = /(?:^|\/)(?:signal|contract-pick|signal-params|signal-freeze|signal-version\.gen|signal-run|signal-record)$/;
   const importsSignal = (f: string) => specifiers(f).some((s) => NEW.test(s));
 
-  it("no file under src/app or src/components imports the signal's modules", () => {
+  it("under src/app only the desk cron imports the signal's modules, and nothing under src/components does", () => {
     const scanned = [...files(join(ROOT, "src/app")), ...files(join(ROOT, "src/components"))];
     expect(scanned.length).toBeGreaterThan(50);
-    expect(scanned.filter(importsSignal).map((f) => relative(ROOT, f))).toEqual([]);
+    expect(scanned.filter(importsSignal).map((f) => relative(ROOT, f))).toEqual(["src/app/api/cron/desk/route.ts"]);
   });
 
-  it("inside src, only the signal's own modules import one another", () => {
-    const users = files(join(ROOT, "src"))
+  it("inside src/lib, only the signal's own modules import one another", () => {
+    const users = files(join(ROOT, "src/lib"))
       .filter(importsSignal)
       .map((f) => relative(ROOT, f))
       .sort();
-    expect(users).toEqual(["src/lib/contract-pick.ts", "src/lib/signal.ts"]);
+    expect(users).toEqual(["src/lib/contract-pick.ts", "src/lib/signal-record.ts", "src/lib/signal-run.ts", "src/lib/signal.ts"]);
+  });
+
+  it("the cron route imports only the step, never the rules", () => {
+    const route = join(ROOT, "src/app/api/cron/desk/route.ts");
+    expect(specifiers(route).filter((s) => NEW.test(s))).toEqual(["@/lib/signal-run"]);
   });
 });
