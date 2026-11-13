@@ -73,6 +73,8 @@ research/      hypotheses/ experiments/ decisions/ active_strategies/ lessons_le
 config/        ranking and catalyst configs, macro-event calendar, dashboard config
 deploy/        host helpers, systemd units and first-boot files (gcp/, oci/), and the jobs' run scripts
 docs/          adr/ · runbooks/ · incidents/ · releases/ (what is deployed where: read the newest record first)
+               A cloud routine reviews the project each weekday after the close (docs/runbooks/cloud-routines.md,
+               "The daily review"): when a fault was found only by hand, add its check there.
 tests/unit/    pytest suite (CI-safe: fixtures and tmp_path only, no network)
 ```
 
