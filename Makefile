@@ -14,6 +14,7 @@ TYPED_MODULES := src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py
                  src/wt/brokers/base.py src/wt/brokers/sim.py src/wt/brokers/alpaca_paper.py src/wt/risk/pretrade.py \
                  src/wt/oms/manager.py src/wt/risk/virtual_account.py src/wt/ops/publish.py src/wt/brokers/alpaca_read.py src/wt/ops/evidence.py src/wt/ops/visibility.py \
                  src/wt/research/manifest.py src/wt/research/method.py src/wt/research/trials.py \
+                 src/wt/research/signal_record.py src/wt/research/exp0034_outcome.py src/wt/research/exp0034_read.py \
                  src/wt/ops/thresholds.py src/wt/analytics/g2.py src/wt/analytics/b_replay.py src/wt/risk/mandate.py src/wt/scanner/explain.py \
                  src/wt/ops/dashguard.py src/wt/ops/drill.py src/wt/brokers/cancel_only.py src/wt/ops/host.py \
                  src/wt/ops/units.py src/wt/ops/hc.py src/wt/ops/econ_calendar.py src/wt/core/ledger.py src/wt/ops/r2.py src/wt/ops/lease.py \
