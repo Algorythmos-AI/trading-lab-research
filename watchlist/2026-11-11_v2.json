@@ -1,0 +1,76 @@
+{
+  "date": "2026-11-11",
+  "top": [
+    {
+      "symbol": "FOSL",
+      "score": 63.488,
+      "subscores": {
+        "catalyst": 0.9,
+        "rvol": 1.0,
+        "float": 0.2,
+        "gap": 0.664,
+        "price": 0.7,
+        "liquidity": 0.32,
+        "spread": 0.224,
+        "float_rotation": 0.044
+      },
+      "features": {
+        "price": 10.3,
+        "gap_pct": 30.87674714104194,
+        "rvol_tod": 262.694,
+        "pm_dollar_vol": 2609568.685,
+        "spread_pct": 0.7759456838021347,
+        "float_shares": 59138052.0
+      },
+      "rank": 1
+    },
+    {
+      "symbol": "RUM",
+      "score": 58.293,
+      "subscores": {
+        "catalyst": 0.9,
+        "rvol": 1.0,
+        "float": 0.0,
+        "gap": 0.116,
+        "price": 1.0,
+        "liquidity": 0.356,
+        "spread": 0.255,
+        "float_rotation": 0.0
+      },
+      "features": {
+        "price": 5.3562,
+        "gap_pct": 4.818003913894331,
+        "rvol_tod": 14.703107871080903,
+        "pm_dollar_vol": 2903251.3756999997,
+        "spread_pct": 0.7448789571694607,
+        "float_shares": null
+      },
+      "rank": 2
+    },
+    {
+      "symbol": "GLXY",
+      "score": 23.981,
+      "subscores": {
+        "catalyst": 0.0,
+        "rvol": 0.509,
+        "float": 0.0,
+        "gap": 0.169,
+        "price": 0.7,
+        "liquidity": 0.631,
+        "spread": 0.008,
+        "float_rotation": 0.0
+      },
+      "features": {
+        "price": 15.11,
+        "gap_pct": 7.087172218284898,
+        "rvol_tod": 3.2297528532574535,
+        "pm_dollar_vol": 6629406.857999999,
+        "spread_pct": 0.9917355371900732,
+        "float_shares": null
+      },
+      "rank": 3
+    }
+  ],
+  "forward": true,
+  "strategy": "watchlist_bull_flag_atr_M1_v2"
+}
