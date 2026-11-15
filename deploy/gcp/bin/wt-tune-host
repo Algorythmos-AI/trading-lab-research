@@ -8,7 +8,6 @@
 #   * packages: gh (the collector's GitHub sources, the evidence PRs), time (/usr/bin/time -v)
 #   * git identity for the job user (deploy tags)
 #   * needrestart: no kernel prompt
-#   * the metadata server blocked for wt and, once it exists, wt-webull (ADR 0011)
 # Refuses while a trading job runs (swap is reset here).
 set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo "run with sudo" >&2; exit 2; }
@@ -43,16 +42,6 @@ for kv in user.name=wt-deploy user.email=wt-deploy@localhost; do
     (( check )) || runuser -u wt -- git -C /home/wt/trading config "$k" "$v"
   fi
 done
-saved=0
-for u in wt wt-webull; do
-  if ! id -u "$u" >/dev/null 2>&1; then echo "skip     metadata block for $u (no such user yet)"; continue; fi
-  meta=(OUTPUT -d 169.254.169.254/32 -p tcp --dport 80 -m owner --uid-owner "$u" -j REJECT)
-  if iptables -C "${meta[@]}" 2>/dev/null; then echo "ok       metadata block for $u"; else
-    echo "add      metadata block for $u"; changed=1
-    (( check )) || { iptables -I "${meta[0]}" 1 "${meta[@]:1}"; saved=1; }
-  fi
-done
-(( saved )) && netfilter-persistent save >/dev/null
 if (( ! check )); then
   if [[ "$zram_before" != "$(cat /etc/systemd/zram-generator.conf)" ]]; then
     swapoff /dev/zram0 2>/dev/null || true

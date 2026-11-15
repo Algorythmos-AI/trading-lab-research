@@ -78,7 +78,7 @@ runcmd:
   # and the Oracle agent still can. Oracle's own InstanceServices chain is left untouched.
   - [iptables, -I, OUTPUT, "1", -d, 169.254.169.254/32, -p, tcp, --dport, "80", -m, owner, --uid-owner, wt, -j, REJECT]
   # The Webull key holder (ADR 0011) is blocked the same way. Its user exists from the first boot so the rule can
-  # name it; wt-set-webull-secret and wt-tune-host add the rule on a host made before this.
+  # name it; wt-set-webull-secret adds the rule on a host made before this.
   - [sh, -c, "id -u wt-webull >/dev/null 2>&1 || useradd --system --gid wt --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin wt-webull"]
   - [iptables, -I, OUTPUT, "1", -d, 169.254.169.254/32, -p, tcp, --dport, "80", -m, owner, --uid-owner, wt-webull, -j, REJECT]
   - [netfilter-persistent, save]

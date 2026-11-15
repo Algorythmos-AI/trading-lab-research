@@ -7,6 +7,7 @@ import email.message
 import http.client
 import io
 import json
+import os
 import re
 import shlex
 import shutil
@@ -419,15 +420,113 @@ def test_the_pull_unit_holds_the_key_alone_and_runs_the_root_owned_copy():
 
 
 def test_the_helpers_check_the_copy_with_the_units_own_interpreter():
-    for name in ("wt-install-units", "wt-set-webull-secret"):
-        sh = (OCI / "bin" / name).read_text()
-        assert f'runuser -u wt-webull -- /usr/bin/python3 -I -S -B -c "{PULL_IMPORT}"' in sh, name
-        assert ".venv" not in sh.replace("PY=.venv/bin/python", "").replace("as_wt .venv/bin/python", ""), name
+    sh = (OCI / "bin" / "wt-set-webull-secret").read_text()
+    assert f'runuser -u wt-webull -- /usr/bin/python3 -I -S -B -c "{PULL_IMPORT}"' in sh and ".venv" not in sh
+    code = (OCI / "bin" / "wt-webull-code").read_text()
+    assert "check=(runuser -u wt-webull -- /usr/bin/python3)" in code
+    assert '"${check[@]}" -I -S -B -c "import sys; sys.path.insert(0, \'$stage\'); from wt.webull.pull import main"' in code
     inst = (OCI / "bin" / "wt-install-units").read_text()
-    assert "status --porcelain -- src/wt/webull deploy/oci" in inst and "runuser -u wt -- git" in inst
-    assert inst.index("status --porcelain") < inst.index("install -m")       # refused before anything is copied
-    assert 'install -m 0644 -o root -g root src/wt/webull/*.py "$stage/wt/webull/"' in inst
-    assert 'mv -T "$opt.link" "$opt"' in inst and "LC_ALL=C sha256sum" in inst
+    assert f'runuser -u wt-webull -- /usr/bin/python3 -I -S -B -c "{PULL_IMPORT}"' in inst
+    assert '/usr/local/bin/wt-webull-code install "$root/src/wt/webull" "$webull_tree"' in inst
+    assert "src/wt/webull/*.py" not in inst and "/opt/wt-webull.d" not in inst     # nothing copied but by the hash
+    assert "--webull-tree" in inst and 'exit "$webull_rc"' in inst
+
+
+CODE = OCI / "bin" / "wt-webull-code"
+
+
+def code_env(tmp_path: Path, check: str | None = None) -> dict[str, str]:
+    return {**os.environ, "WT_WEBULL_CODE_TEST": "1", "WT_WEBULL_OPT": str(tmp_path / "opt"),
+            "WT_WEBULL_CHECK": check or sys.executable}
+
+
+def code(tmp_path: Path, *args: str, check: str | None = None) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(["bash", str(CODE), *args], env=code_env(tmp_path, check), capture_output=True, text=True,
+                          timeout=120)
+
+
+def source(tmp_path: Path, name: str = "src") -> Path:
+    d = tmp_path / name
+    d.mkdir()
+    for f in PKG.glob("*.py"):
+        (d / f.name).write_bytes(f.read_bytes())
+    return d
+
+
+def installed(tmp_path: Path) -> str | None:
+    return treehash.tree_hash(tmp_path / "opt" / "wt" / "webull")
+
+
+def test_the_code_step_installs_only_the_tree_the_owner_names(tmp_path):
+    src = source(tmp_path)
+    good = treehash.tree_hash(src)
+    assert good and code(tmp_path, "hash", str(src)).stdout.strip() == good          # root's hash = treehash
+    r = code(tmp_path, "install", str(src), "0" * 64)
+    assert r.returncode == 3 and installed(tmp_path) is None and "unchanged" in r.stderr
+    r = code(tmp_path, "install", str(src), good)
+    assert r.returncode == 0, r.stderr
+    assert (tmp_path / "opt").is_symlink() and installed(tmp_path) == good
+    assert (tmp_path / "opt" / "wt" / "__init__.py").read_text() == ""
+    assert stat.S_IMODE((tmp_path / "opt" / "wt" / "webull" / "pull.py").stat().st_mode) == 0o644
+    (src / "client.py").write_text((src / "client.py").read_text() + "\n# changed\n")
+    r = code(tmp_path, "install", str(src), good)                           # the checkout changed: refused
+    assert r.returncode == 3 and installed(tmp_path) == good
+    new = treehash.tree_hash(src)
+    assert code(tmp_path, "install", str(src), new).returncode == 0 and installed(tmp_path) == new
+    assert len(list((tmp_path / "opt.d").iterdir())) == 1                   # the old tree is gone
+    assert code(tmp_path, "install", str(src), "not-a-hash").returncode == 2
+
+
+def test_the_code_step_refuses_a_link_and_never_copies_what_it_points_to(tmp_path):
+    secret = tmp_path / "webull.env"
+    secret.write_text("WEBULL_APP_SECRET=the-key\n")
+    src = source(tmp_path)
+    good = treehash.tree_hash(src)
+    assert code(tmp_path, "install", str(src), good).returncode == 0
+    (src / "zz.py").symlink_to(secret)
+    with_link = treehash.tree_hash(src)                                     # what a hash that follows links gives
+    for want in (good, with_link):
+        r = code(tmp_path, "install", str(src), want or "")
+        assert r.returncode == 2 and "link" in r.stderr and installed(tmp_path) == good
+    found = [p for p in (tmp_path / "opt.d").rglob("*") if p.is_file() and "the-key" in p.read_text(errors="ignore")]
+    assert found == []
+    (src / "zz.py").unlink()
+    os.link(src / "pull.py", src / "yy.py")                                 # a hard link is refused too
+    assert code(tmp_path, "install", str(src), treehash.tree_hash(src) or "").returncode == 2
+
+
+def test_the_code_step_runs_the_import_check_on_the_stage_before_the_swap(tmp_path):
+    src = source(tmp_path)
+    good = treehash.tree_hash(src) or ""
+    seen = tmp_path / "seen"
+    fake = tmp_path / "fake-python"
+    fake.write_text(f"#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" >> {seen}\nexit 1\n")
+    fake.chmod(0o755)
+    r = code(tmp_path, "install", str(src), good, check=str(fake))
+    assert r.returncode == 2 and "cannot import" in r.stderr and installed(tmp_path) is None
+    args = seen.read_text().splitlines()
+    assert args[:4] == ["-I", "-S", "-B", "-c"] and "/opt.d/.new." in args[4] and "from wt.webull.pull import main" in args[4]
+    assert code(tmp_path, "install", str(src), good).returncode == 0 and installed(tmp_path) == good
+
+
+def test_the_runbooks_hash_one_liner_matches_root_on_a_real_git_repo(tmp_path):
+    if not (shutil.which("git") and shutil.which("shasum")):
+        pytest.skip("needs git and shasum")
+    text = (ROOT / "docs" / "runbooks" / "webull-readonly.md").read_text()
+    block = text.split("<!-- webull-tree-hash -->", 1)[1].split("```", 2)[1]
+    line = next(x.strip() for x in block.splitlines() if x.strip().startswith("r=~/trading c=origin/main;"))
+    repo = tmp_path / "repo"
+    (repo / "src" / "wt").mkdir(parents=True)
+    shutil.copytree(PKG, repo / "src" / "wt" / "webull", ignore=shutil.ignore_patterns("__pycache__"))
+    (repo / "src" / "wt" / "webull" / "notes.md").write_text("not code")
+    g = ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"]
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run([*g, "add", "-A"], check=True)
+    subprocess.run([*g, "commit", "-qm", "x"], check=True)
+    one = line.replace("r=~/trading c=origin/main;", f"r={shlex.quote(str(repo))} c=HEAD;")
+    mac = subprocess.run(["bash", "-c", one], capture_output=True, text=True, check=True).stdout.strip()
+    root = code(tmp_path, "hash", str(repo / "src" / "wt" / "webull")).stdout.strip()
+    assert mac == root == treehash.tree_hash(PKG) and len(mac) == 64
 
 
 def copy_package(dest: Path) -> Path:
@@ -835,7 +934,7 @@ def test_the_key_holder_is_blocked_from_the_metadata_server_like_wt():
         save = next(i for i, c in enumerate(cmds) if c == "netfilter-persistent save")
         assert made < rules[1] < save, f.name
     rule = "-d 169.254.169.254/32 -p tcp --dport 80 -m owner --uid-owner"
-    for helper in (OCI / "bin" / "wt-set-webull-secret", ROOT / "deploy" / "gcp" / "bin" / "wt-tune-host"):
+    for helper in (OCI / "bin" / "wt-set-webull-secret",):
         sh = helper.read_text()
         assert f"meta=(OUTPUT {rule}" in sh and 'iptables -C "${meta[@]}"' in sh and "netfilter-persistent save" in sh
 

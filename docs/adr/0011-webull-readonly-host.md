@@ -23,12 +23,13 @@
    credential (`LoadCredential=`), never as an environment variable. Its token stays 0600 in `/var/lib/wt-webull`.
    The unit is locked down (no capabilities, a read-only system, no home directories, no access to the shared
    secrets).
-4a. **Code `wt` cannot change.** The pull does not run the checkout. `sudo wt-install-units` copies `src/wt/webull`
-   to `/opt/wt-webull`, root-owned, refusing while that path (or `deploy/oci`) has changes not committed, and prints
-   the copy's tree hash for the owner to compare with the pull request (`python -m wt.webull.treehash`). The unit
-   runs `/usr/bin/python3 -I -S -B` on that copy: no venv, no site-packages, no `PYTHON*` variables; the package
-   imports the standard library only. `src/wt/webull` is an owner path (ADR 0008), so the hourly deploy never
-   changes it unattended, and the publisher pages when the checkout and the copy differ.
+4a. **Code installed only by its hash.** The pull does not run the checkout. The owner computes the tree hash of
+   `src/wt/webull` on the merged commit on their own machine, straight from git, and runs
+   `sudo wt-install-units --webull-tree <hash>`. Root stages a copy (refusing links), hashes the stage with
+   coreutils, checks `wt-webull` can import it, and swaps `/opt/wt-webull` to it only on an exact match; without the
+   hash it leaves the copy alone. The unit runs `/usr/bin/python3 -I -S -B` on that copy: no venv, no
+   site-packages, no `PYTHON*` variables; the package imports the standard library only. `src/wt/webull` is an
+   owner path (ADR 0008), and the publisher pages when the checkout and the copy differ.
 5. **Read and send are split.** The pull job writes what it read, group-readable, to `/var/lib/wt-webull/out`.
    `wt-webull-publish.service` runs as `wt`, holds the dashboard key but not the Webull key, builds the journal
    (`wt.webull.journal`, the same matching as the cloud routine) and sends it with this host's own dashboard key.
@@ -46,21 +47,27 @@ ADR 0010 accepted plaintext secrets on the host because it traded on paper only.
 that **can place real US stock and ETF orders** in the owner's account. What stands between it and an order:
 
 - **Separate user.** The key is readable by root and, through `LoadCredential=`, by the one `wt-webull` process.
-  It is not in `/etc/wt/secrets.env` or `/run/wt-secrets/env`, and the `wt` jobs (which hold paper order code)
-  have it masked (`InaccessiblePaths=`).
-- **A root-owned code copy run isolated** (4a), so neither `wt` nor a merged change can alter the allowlist or read
-  the key from the process without the owner installing it, after comparing the tree hash with the reviewed PR.
+  It is not in `/etc/wt/secrets.env` or `/run/wt-secrets/env`; the `wt` jobs (which hold paper order code) cannot
+  read it (root 0600), and the publisher's unit masks it as well (`InaccessiblePaths=`).
+- **A root-owned code copy, installed only by the owner's hash** (4a), so a bad merge, the hourly deploy or a
+  compromised package in the venv cannot change what runs with the key.
 - **Owner paths.** `src/wt/webull`, `deploy/oci/bin` and `deploy/oci/systemd` are deployed only by the owner.
 - **The allowlist** (2): an order path is refused before anything is signed or sent, and a redirect is never
   followed, so the signed headers never reach another host.
 - **The metadata block.** `wt` and `wt-webull` cannot reach the cloud metadata server (first boot; on an existing
-  host `wt-set-webull-secret` or `wt-tune-host` adds the rule).
+  host `wt-set-webull-secret` adds the rule).
 
-Residual risk: **root on the host** can read the key and run any code with it; so can anyone who controls the
-owner's SSH session or the cloud account's console. A helper script that `wt` changed in the checkout reaches root
-only when the owner runs `sudo wt-install-units`, which now refuses an uncommitted change. The key cannot be
-narrowed: Webull Australia documents no read-only key. Resetting the key in Webull (the runbook's cutover and
-rollback) is the remedy if the host is ever suspected.
+Residual risk and known limits:
+
+- **Root on the host** can read the key and run any code with it; so can anyone who controls the owner's SSH
+  session or the cloud account's console.
+- **A compromised `wt` account is root-equivalent** at the owner's next `sudo wt-install-units`: root installs the
+  units `wt` renders (`var/units`) and the helpers from the checkout (`deploy/oci/bin`, which root runs later, for
+  example `wt-alert`). The controls above defend against a bad merge, an unattended deploy and a compromised
+  package; they do not defend against `wt` itself. A possible follow-up: owner-verified hashes for every file
+  `wt-install-units` installs, as `--webull-tree` does for the Webull code.
+- The key cannot be narrowed: Webull Australia documents no read-only key. Resetting it in Webull (the runbook's
+  cutover and rollback) is the remedy if the host is ever suspected.
 
 ## Consequences
 

@@ -7,6 +7,7 @@ What runs ([ADR 0011](../adr/0011-webull-readonly-host.md)):
 | `wt-webull-pull.timer` | | | every 2 minutes 09:00 to 16:58 New York on weekdays, and 17:40 every day |
 | `wt-webull-pull.service` | `wt-webull` | the Webull key (credential) | runs the root-owned copy in `/opt/wt-webull` with `/usr/bin/python3 -I -S -B`; reads orders, balance, positions into `/var/lib/wt-webull/out` |
 | `wt-webull-publish.service` | `wt` | the dashboard key | builds the journal and, while `var/webull/PUBLISH_ON` exists, sends it to the Trades page; pages on state changes |
+| `wt-dashboard` (existing) | `wt` | | also runs the Webull watch: pages when no good read has come for too long |
 
 The client can only read: an order request is refused before it is sent, and a redirect is never followed. Logs say
 counts and outcomes, nothing else.
@@ -28,10 +29,20 @@ Never run the cloud sync and the host side by side: step 2 stops the cloud for g
    the journal it last sent is now fixed. Keep the page open.
 3. **Put the key on the host and install.** `sudo wt-set-webull-secret`: paste the App Key and the new App Secret
    (nothing shows while typing). It creates `wt-webull`, blocks it from the metadata server, and writes
-   `/etc/wt/webull.env` (root 0600). Then `sudo wt-install-units`. It refuses if `src/wt/webull` or `deploy/oci`
-   differs from the commit; it installs `/opt/wt-webull` and prints `tree sha256 <hash>`. In a checkout of the
-   merged commit on your Mac, `PYTHONPATH=src python3 -m wt.webull.treehash src/wt/webull` must print the same
-   hash. The timer turns on only now that the key file exists and the copy loads as `wt-webull`.
+   `/etc/wt/webull.env` (root 0600). Then, **on your Mac**, take the tree hash of the merged code straight from git
+   (nothing from the repository runs):
+
+   <!-- webull-tree-hash -->
+   ```
+   git -C ~/trading fetch -q origin
+   r=~/trading c=origin/main; git -C "$r" ls-tree --name-only "$c" src/wt/webull/ | grep '\.py$' | LC_ALL=C sort | while read -r f; do printf '%s  %s\n' "$(git -C "$r" show "$c:$f" | shasum -a 256 | cut -d' ' -f1)" "${f##*/}"; done | shasum -a 256 | cut -d' ' -f1
+   ```
+
+   On the host: `sudo wt-install-units --webull-tree <that hash>`. Root stages the checkout's `src/wt/webull`
+   (refusing links), hashes the stage itself, checks `wt-webull` can import it, and installs it in `/opt/wt-webull`
+   only on an exact match; otherwise it says why and leaves the installed copy as it was. Without
+   `--webull-tree` it never touches `/opt/wt-webull`. The timer turns on only once the key file exists and the
+   copy loads.
 4. **First read.** `sudo systemctl start --no-block wt-webull-pull.service`, then approve the sign-in prompt in the
    Webull app within 5 minutes (**Menu > Messages > OpenAPI Notifications**). `journalctl -u wt-webull-pull -f`
    shows `backfill: N days read, complete=...` after about 15 minutes. The history is longer than one run's
@@ -40,8 +51,9 @@ Never run the cloud sync and the host side by side: step 2 stops the cloud for g
 5. **Parity.** `sudo -u wt bash -c 'cd /home/wt/trading && set -a && . /run/wt-secrets/env && set +a && PYTHONPATH=src .venv/bin/python -m wt.webull.publish --parity'`.
    It compares the host's journal with the cloud's last one on the site: the trades (by their own fields, not
    ids), open lots, fills, the last fill and the net of transfers. It prints up to 20 differing trades a side and
-   writes `var/webull/parity.json`. Exit 0 means exact. The account value is shown but not compared: it moves with
-   the market.
+   writes `var/webull/parity.json`. Exit 0 means exact. The trades are the real check: the money total is seeded
+   from the site's own history, so it is not independent, and the account value is shown but not compared (it
+   moves with the market).
 6. **Publish.** If it is exact: `sudo -u wt touch /home/wt/trading/var/webull/PUBLISH_ON`. The next publish (after
    the next pull, or `sudo systemctl start wt-webull-publish.service`) keeps the money seed and sends:
    `journalctl -u wt-webull-publish` shows `money seed kept` and `sent`. Check the Trades page: lifetime result,
@@ -54,15 +66,13 @@ Never run the cloud sync and the host side by side: step 2 stops the cloud for g
 last journal. To take the key off the host as well, see the end of this page.
 
 **The metadata block on an existing host.** cloud-init blocks `wt` and `wt-webull` from the metadata server only on a
-host's first boot. `wt-set-webull-secret` adds the `wt-webull` rule itself; to add or check it by hand:
+host's first boot. `wt-set-webull-secret` adds the `wt-webull` rule itself, idempotently; to check or add it by hand:
 
 ```
 sudo iptables -C OUTPUT -d 169.254.169.254/32 -p tcp --dport 80 -m owner --uid-owner wt-webull -j REJECT \
   || { sudo iptables -I OUTPUT 1 -d 169.254.169.254/32 -p tcp --dport 80 -m owner --uid-owner wt-webull -j REJECT \
        && sudo netfilter-persistent save; }
 ```
-
-(`sudo /home/wt/trading/deploy/gcp/bin/wt-tune-host` does the same for both users, with `--check` to report only.)
 
 ## When it pages
 
@@ -78,7 +88,12 @@ The pull exits 0 when a read fails; the publisher pages once when a state starts
   minutes passed, the job asks again after 6 hours; to ask now, `sudo rm /var/lib/wt-webull/token.json` and start
   it. Until then status.json says `approval` and the journal is not refreshed.
 - **`Webull code not as installed`** (drift): the checkout's `src/wt/webull` and `/opt/wt-webull` differ, or the
-  copy is missing. After a deploy that changed it: `sudo wt-install-units`, and compare the hash with the PR.
+  copy is missing. Take the hash of the merged commit on your Mac (cutover step 3), then
+  `sudo wt-install-units --webull-tree <hash>`. Never install without comparing: that is the whole control.
+- **`Webull journal not sent`**: a send failed, the ingest secrets are missing, or the site's money history could
+  not be carried over (`journalctl -u wt-webull-publish`). It tries again every run.
+- **`Webull reads stopped`**: the dashboard job saw no good read for 30 minutes in the session (26 hours
+  otherwise): the timer is off, the unit's condition failed, or the pull never finishes.
 - **`Webull journal superseded`**: the site holds a journal newer than the host's, so something else writes it.
   Check that the cloud routines are retired (cutover step 7).
 - **`Webull holdings disagree`**: the journal's open lots and Webull's positions have disagreed for 10 minutes.
