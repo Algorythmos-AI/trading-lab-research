@@ -38,6 +38,7 @@ from wt.webull import journal
 
 HEARTBEAT_S = 10 * 60
 REMIND_S = 30 * 60                 # a state still holding this long pages once more
+RECONCILE_GRACE_S = 10 * 60        # a fill the history has not caught up with yet clears within a run or two
 SEED_KEYS = ("as_of", "currency", "account_value", "cash", "positions", "usd_rate", "complete_from", "transfers", "values")
 
 
@@ -287,6 +288,7 @@ def run(src: Path, state: Path, *, read_back: Callable[[], dict[str, Any] | None
     write_json(state / "reconcile.json", {"at": doc["as_of"], "symbols_off": off})
     if off:
         log(f"warn: open lots and Webull's positions disagree on {off} symbol(s)")
+    alarms.set("reconcile", off > 0, now, grace_s=RECONCILE_GRACE_S, n=off)
 
     body = json.dumps(doc, separators=(",", ":")).encode()
     h = digest(doc)

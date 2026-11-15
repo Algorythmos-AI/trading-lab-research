@@ -509,3 +509,46 @@ def test_a_torn_last_balance_line_is_passed_over_and_ended_before_the_next(tmp_p
     path.write_text('{"at": cut')                                           # nothing whole at all: a reading is taken
     assert pull.snapshot(fake, "ACC1", tmp_path, now) is True
     assert json.loads(path.read_text().split("\n")[1])["at"] == "2026-11-16T14:10:00Z"
+
+
+# ---- late fills and the reconcile alarm -----------------------------------------------------------------------------------
+
+def test_an_order_placed_six_days_ago_that_fills_today_is_picked_up(tmp_path, monkeypatch):
+    monkeypatch.setattr(pull, "HISTORY_FROM", dt.date(2026, 11, 1))
+    placed = dt.date(2026, 11, 10)
+    g = group("7", "BUY", 2.5, "2026-11-10T15:00:00Z")
+    g["orders"][0].update(status="SUBMITTED", filled_quantity="0", filled_price=None, filled_time_at=None)
+    g["orders"][0]["legs"][0]["option_expire_date"] = "2026-12-18"
+    fake = FakeClient({placed: [g]})
+    monday = dt.datetime(2026, 11, 16, 15, 0, tzinfo=dt.UTC)               # in the session: today and yesterday only
+    pull.run(fake, tmp_path, monday, clock=lambda: 0.0)                    # type: ignore[arg-type]
+    assert json.loads((tmp_path / "working.json").read_text()) == ["2026-11-10"]
+    assert journal.build(publish.load_groups(tmp_path), monday)["fills"] == 0
+    g["orders"][0].update(status="FILLED", filled_quantity="1", filled_price="2.5", filled_time_at="2026-11-16T15:01:00Z")
+    pull.run(fake, tmp_path, monday + dt.timedelta(minutes=2), clock=lambda: 0.0)  # type: ignore[arg-type]
+    doc = journal.build(publish.load_groups(tmp_path), monday + dt.timedelta(minutes=2))
+    assert doc["fills"] == 1 and doc["open"][0]["opened_at"].startswith("2026-11-16T10:01")
+    assert json.loads((tmp_path / "working.json").read_text()) == []
+    calls = fake.calls
+    pull.run(fake, tmp_path, monday + dt.timedelta(minutes=4), clock=lambda: 0.0)  # type: ignore[arg-type]
+    assert fake.calls - calls == 2                                         # the old day is no longer read
+
+
+def test_a_lasting_disagreement_with_webulls_positions_pages_once(tmp_path):
+    src, state, pages = tmp_path / "out", tmp_path / "var", Pages()
+    write_src(src)
+    (state / "money_seed.json").parent.mkdir(parents=True)
+    (state / "money_seed.json").write_text("{}")
+
+    def at(minute: int, positions: list[dict[str, Any]]) -> list[tuple[str, str, str]]:
+        t = dt.datetime(2026, 11, 13, 21, 0, tzinfo=dt.UTC) + dt.timedelta(minutes=minute)
+        (src / "status.json").write_text(json.dumps({"at": t.isoformat().replace("+00:00", "Z"), "ok": True, "state": "ok"}))
+        (src / "positions.json").write_text(json.dumps({"positions": positions}))
+        before = len(pages.sent)
+        publish.run(src, state, read_back=lambda: None, send=lambda b: (True, "HTTP 200"), pager=pages)
+        return [p for p in pages.sent[before:] if p[1] != "webull:pull"]
+    held = [{"symbol": "TSLA", "instrument_type": "EQUITY", "quantity": "5"}]
+    assert at(0, held) == [] and at(2, held) == []                         # within the grace: a fill catching up
+    assert at(10, held) == [("fire", "webull:reconcile", "Webull holdings disagree")]
+    assert at(12, held) == []
+    assert at(14, []) == [("resolve", "webull:reconcile", "Webull holdings agree again")]

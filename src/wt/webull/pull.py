@@ -7,6 +7,7 @@ and the state directory as $STATE_DIRECTORY (/var/lib/wt-webull). What it writes
 
     out/orders/YYYY-MM-DD.json   the order groups placed that UTC day, as Webull returned them
     out/history.json             how far back the order files are complete: {"from", "through", "complete"}
+    out/working.json             the days whose file holds an order still working when it was last read
     out/account.jsonl            one balance reading per line (AUD and USD rows; no account id)
     out/positions.json           the positions Webull reports now, for the publisher's reconcile
     out/status.json              when this ran and how it ended (below)
@@ -25,6 +26,10 @@ body or a URL); `kind` is "transient" (the network, a timeout, HTTP 5xx or 429: 
 The token (token.json) stays 0600, readable by this user only. Log lines carry counts and outcomes only: no
 symbol, price, account id, key or token. In the session it refreshes today and yesterday; after 16:30 New York it
 refreshes the last four days and has a longer budget for the one-time backfill of the history since HISTORY_FROM.
+Webull files an order under the day it was placed, so a fill days later lands in an old day's file: every run also
+reads again each older day that held a working order when it was last read (working.json), within the same budget.
+The backfill (about 1,100 days at one call a second) is longer than one evening's budget: it keeps its place in
+history.json and goes on from there the next run, so the first one may take two evening runs.
 """
 from __future__ import annotations
 
@@ -48,6 +53,8 @@ PAGE_CAP = 100                             # Webull returns at most 100 order gr
 EXIT_APPROVAL = 3                          # the owner must approve a token in the Webull app (pages through OnFailure)
 STATES = ("ok", "failing", "approval")
 SNAPSHOT_EVERY_S = 25 * 60
+# An order in any other status (submitted, partly filled, pending a cancel ...) may still fill: its day is read again.
+TERMINAL = frozenset({"FILLED", "CANCELLED", "CANCELED", "REJECTED", "EXPIRED", "FAILED"})
 
 
 def log(msg: str) -> None:
@@ -99,7 +106,31 @@ def save_day(c: ReadOnlyClient, aid: str, out: Path, d: dt.date) -> int:
     for g in groups:
         seen[(g.get("client_order_id"),) + tuple(o.get("order_id") for o in g.get("orders") or [])] = g
     write_json(out / "orders" / f"{d.isoformat()}.json", list(seen.values()))
+    mark_working(out, d, any(working(o) for g in seen.values() for o in g.get("orders") or []))
     return len(seen)
+
+
+def working(order: dict[str, Any]) -> bool:
+    status = str(order.get("status") or "").upper()
+    return bool(status) and status not in TERMINAL
+
+
+def working_days(out: Path) -> list[dt.date]:
+    days = read_json(out / "working.json", [])
+    out_: list[dt.date] = []
+    for d in days if isinstance(days, list) else []:
+        try:
+            out_.append(dt.date.fromisoformat(str(d)))
+        except ValueError:
+            continue
+    return sorted(set(out_))
+
+
+def mark_working(out: Path, d: dt.date, on: bool) -> None:
+    days = set(working_days(out))
+    if (d in days) != on:
+        days = days | {d} if on else days - {d}
+        write_json(out / "working.json", sorted(x.isoformat() for x in days))
 
 
 def month_end(d: dt.date) -> dt.date:
@@ -191,6 +222,15 @@ def run(c: ReadOnlyClient, out: Path, now: dt.datetime, clock: Callable[[], floa
     n = 0
     for k in range(refresh):
         n += save_day(c, aid, out, today - dt.timedelta(days=k))
+    older = [d for d in working_days(out) if HISTORY_FROM <= d < today - dt.timedelta(days=refresh - 1)]
+    reread = 0
+    for d in older:                            # oldest first; what the budget leaves is read on the next run
+        if clock() >= started + budget:
+            break
+        save_day(c, aid, out, d)
+        reread += 1
+    if older:
+        log(f"working orders: {reread} of {len(older)} older day(s) read again")
     h = backfill(c, aid, out, today - dt.timedelta(days=refresh - 1), started + budget, clock)
     snap = snapshot(c, aid, out, now)
     pos = c.positions(aid)
