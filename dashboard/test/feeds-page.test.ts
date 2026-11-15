@@ -23,7 +23,7 @@ import {
 import { FEED_STALE_MS } from "@/lib/trade-state";
 import { liveRead, type LiveQuote, type OptionsTicker } from "@/lib/options";
 import edition from "./fixtures/options.v1.json";
-import { chainStatus, comparedRows, fixtureDay, fixtureReports, MAX_COMPARED, previousSessionDay, stampPanel, toComparedSession } from "@/lib/feeds-page";
+import { chainStatus, comparedRows, fixtureDay, fixtureReports, MAX_COMPARED, previousSession, previousSessionDay, stampPanel, toComparedSession } from "@/lib/feeds-page";
 import { nyInstant } from "@/lib/options";
 
 // The Feeds page's pure parts: the stored comparison read defensively (and never with a per-slot field), the live
@@ -296,5 +296,15 @@ describe("the stamp panel", () => {
     const d = fixtureDay("2026-10-09", Infinity, true);
     d.bodies.splice(5, 1);
     expect(chainStatus(d)).toBe("prev_mismatch");
+  });
+
+  it("counts the previous session's stamps against its minutes", () => {
+    const full = previousSession("2026-10-09", fixtureDay("2026-10-09", Infinity, true));
+    expect(full).toMatchObject({ day: "2026-10-09", status: "ok", count: 390, minutes: 390 });
+    const d = fixtureDay("2026-10-09", Infinity, true);
+    d.stamps.splice(0, 3);
+    expect(previousSession("2026-10-09", d)).toMatchObject({ count: 387, minutes: 390 });
+    expect(previousSession("2026-10-09", null)).toMatchObject({ status: "unreadable", count: null, minutes: 390 });
+    expect(previousSession("2026-10-10", null).minutes).toBeNull();
   });
 });

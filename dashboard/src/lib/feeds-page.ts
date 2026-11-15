@@ -161,7 +161,7 @@ export interface StampPanel {
     feeds: Record<string, number>;
   };
   /** The previous session's chain check; null when there is no previous session in the calendar. */
-  previous: { day: string; status: ChainStatus } | null;
+  previous: PreviousSession | null;
 }
 
 /** The session day before `day` within two weeks, or null. */
@@ -175,7 +175,7 @@ export function previousSessionDay(day: string): string | null {
 }
 
 /** The panel from today's stamps (null when unreadable) and the previous session's check, at server time `now`. */
-export function stampPanel(now: Date, today: BoardFeedDay | null, previous: { day: string; status: ChainStatus } | null): StampPanel {
+export function stampPanel(now: Date, today: BoardFeedDay | null, previous: PreviousSession | null): StampPanel {
   const { day, minute } = nyNow(now);
   const s = sessionOf(day);
   const t = now.getTime();
@@ -204,6 +204,27 @@ export function stampPanel(now: Date, today: BoardFeedDay | null, previous: { da
       feeds,
     },
     previous,
+  };
+}
+
+/** The previous session: its chain check, and how many stamps it stored against the minutes it had. */
+export interface PreviousSession {
+  day: string;
+  status: ChainStatus;
+  /** Valid stamps stored for the day; null when the store could not be read. */
+  count: number | null;
+  /** Minutes from the open to the close (one stamp each); null when the calendar has no session that day. */
+  minutes: number | null;
+}
+
+/** The previous session's row from what the store returned (null: unreadable). */
+export function previousSession(day: string, d: BoardFeedDay | null): PreviousSession {
+  const s = sessionOf(day);
+  return {
+    day,
+    status: chainStatus(d),
+    count: d ? d.stamps.length : null,
+    minutes: s.open === null || s.close === null ? null : s.close - s.open,
   };
 }
 
@@ -255,13 +276,12 @@ export async function loadStampPanel(now: Date, read: (day: string) => Promise<B
   const { day } = nyNow(now);
   const prevDay = previousSessionDay(day);
   if (fixtureMode()) {
-    return stampPanel(now, fixtureDay(day, now.getTime(), false), prevDay ? { day: prevDay, status: chainStatus(fixtureDay(prevDay, Infinity, true)) } : null);
+    return stampPanel(now, fixtureDay(day, now.getTime(), false), prevDay ? previousSession(prevDay, fixtureDay(prevDay, Infinity, true)) : null);
   }
   const today = sessionOf(day).open === null ? null : await read(day).catch(() => null);
   let previous: StampPanel["previous"] = null;
   if (prevDay) {
-    const got = await read(prevDay).catch(() => null);
-    previous = { day: prevDay, status: chainStatus(got) };
+    previous = previousSession(prevDay, await read(prevDay).catch(() => null));
   }
   return stampPanel(now, today, previous);
 }
