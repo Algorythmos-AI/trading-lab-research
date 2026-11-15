@@ -14,6 +14,7 @@ import stat
 import subprocess
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 import urllib.response
 from pathlib import Path
@@ -84,7 +85,22 @@ def test_an_order_request_is_refused_before_anything_is_sent(tmp_path, method, p
     assert rec.sent == []
 
 
-def test_the_package_has_no_order_code_and_no_webull_sdk():
+# Modules that open a connection or run a program. The client alone may use urllib's request machinery and
+# http.client's exceptions: every request goes through its one gate. Nothing in the package may import the rest.
+NET = {"socket", "ssl", "http.client", "http.server", "urllib.request", "urllib3", "requests", "httpx", "aiohttp",
+       "subprocess", "multiprocessing", "ctypes", "importlib", "webull"}
+NET_ALLOWED = {("client.py", "urllib.request"), ("client.py", "http.client")}
+CALLS_REFUSED = {"system", "popen", "spawnv", "spawnve", "spawnl", "execv", "execve", "execl", "fork", "__import__"}
+
+
+def imported(n: ast.Import | ast.ImportFrom) -> list[str]:
+    if isinstance(n, ast.Import):
+        return [a.name for a in n.names]
+    mod = n.module or ""
+    return [mod] + [f"{mod}.{a.name}" for a in n.names]
+
+
+def test_the_package_has_no_order_code_no_sdk_and_no_other_way_out():
     for f in sorted(PKG.glob("*.py")):
         tree = ast.parse(f.read_text())
         docs = {id(n.body[0].value) for n in ast.walk(tree)
@@ -94,12 +110,45 @@ def test_the_package_has_no_order_code_and_no_webull_sdk():
             if isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in docs:
                 assert not re.search(r"/(trading|openapi)/\S*" + ORDER_WORDS.pattern, n.value, re.I), (f.name, n.value)
             if isinstance(n, ast.Import | ast.ImportFrom):
-                names = [a.name for a in n.names] + ([n.module] if isinstance(n, ast.ImportFrom) and n.module else [])
-                assert not any(x == "webull" or x.startswith("webull.") for x in names), (f.name, names)
-                assert "requests" not in names or f.name == "publish.py", f.name   # only the publisher posts, to the site
+                for name in imported(n):
+                    hit = {m for m in NET if name == m or name.startswith(m + ".")}
+                    assert not hit or all((f.name, m) in NET_ALLOWED for m in hit), (f.name, name)
+            if isinstance(n, ast.Call):
+                fn = n.func
+                called = fn.attr if isinstance(fn, ast.Attribute) else fn.id if isinstance(fn, ast.Name) else ""
+                assert called not in CALLS_REFUSED, (f.name, called)
     text = (PKG / "client.py").read_text()
     assert text.count("urllib.request.Request(") == 1 and "urlopen(" not in text.replace("def _urlopen(", "")
     assert text.count(".open(req, timeout=timeout)") == 1                 # one way out, through the gate
+
+
+def test_every_path_the_client_names_is_a_literal_on_the_allowlist():
+    tree = ast.parse((PKG / "client.py").read_text())
+    # _read hands its own path parameter to _send: every caller of _read is checked instead.
+    inner = {id(x) for f in ast.walk(tree) if isinstance(f, ast.FunctionDef) and f.name == "_read" for x in ast.walk(f)}
+    used = set()
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr in ("_send", "_read"):
+            if isinstance(n.func.value, ast.Name) and n.func.value.id == "self" and id(n) not in inner:
+                args = n.args if n.func.attr == "_read" else n.args[1:]
+                assert args and isinstance(args[0], ast.Constant) and isinstance(args[0].value, str), ast.unparse(n)
+                method = "GET" if n.func.attr == "_read" else n.args[0].value      # type: ignore[attr-defined]
+                used.add((method, args[0].value))
+    assert used and used <= ALLOWED, used - ALLOWED
+
+
+def test_every_public_read_sends_only_what_the_allowlist_holds(tmp_path):
+    c, rec, _ = make(tmp_path, token={"token": "t", "status": "NORMAL"})
+    t = dt.datetime(2026, 11, 16, tzinfo=dt.UTC)
+    c.accounts(), c.balance("A1"), c.positions("A1"), c.order_history("A1", t, t + dt.timedelta(days=1)), c.open_orders("A1")
+    (tmp_path / "x").mkdir()
+    c2, rec2, _ = make(tmp_path / "x", answers=[(200, {"token": "n", "status": "PENDING"}), (200, {"status": "NORMAL"})])
+    c2.token()
+    seen = {(r.get_method(), urllib.parse.urlsplit(r.full_url).path) for r in rec.sent + rec2.sent}
+    hosts = {urllib.parse.urlsplit(r.full_url).hostname for r in rec.sent + rec2.sent}
+    assert seen <= ALLOWED and len(seen) == 7 and hosts == {wc.PROD_HOST}
+    public = {n for n in dir(ReadOnlyClient) if not n.startswith("_")}
+    assert public == {"accounts", "balance", "positions", "order_history", "open_orders", "token"}
 
 
 def test_only_the_pull_job_and_the_package_use_the_client():
@@ -227,6 +276,17 @@ def test_pull_stops_when_the_budget_is_spent(tmp_path, monkeypatch):
     pull.run(fake, tmp_path, dt.datetime(2026, 11, 16, 15, 0, tzinfo=dt.UTC), clock=clock)  # type: ignore[arg-type]
     h = json.loads((tmp_path / "history.json").read_text())
     assert not h["complete"] and h["through"] < "2026-10-31"
+    # The next runs go on from where it stopped (the full backfill outlasts one evening's budget) until complete.
+    throughs = [h["through"]]
+    for _ in range(40):
+        t[0] = 0.0
+        pull.run(fake, tmp_path, dt.datetime(2026, 11, 16, 15, 0, tzinfo=dt.UTC), clock=clock)  # type: ignore[arg-type]
+        h = json.loads((tmp_path / "history.json").read_text())
+        throughs.append(h["through"])
+        if h["complete"]:
+            break
+    assert h["complete"] and throughs == sorted(throughs) and len(set(throughs)) > 2
+    assert len(json.loads((tmp_path / "orders" / "2026-10-30.json").read_text())) == 1
 
 
 def test_main_needs_a_credential_and_says_nothing_secret(tmp_path, capsys):
@@ -776,3 +836,8 @@ def test_every_helper_makes_etc_wt_the_same_way():
     modes = {n: re.findall(r"install -d -m (\d+) (?:-o root -g wt )?(?:/run/wt-secrets )?/etc/wt\b", (OCI / "bin" / n).read_text())
              for n in ("wt-install-units", "wt-set-webull-secret", "wt-set-secrets", "wt-fetch-secrets")}
     assert all(m == ["0750"] for m in modes.values()), modes
+
+
+def test_every_alarm_has_its_own_words():
+    texts = {publish.page_text(k, e) for k, e in publish.ALARM_KEYS}
+    assert len(texts) == len(publish.ALARM_KEYS) and ("Webull journal alarm", "An alarm of the Webull journal changed.") not in texts
