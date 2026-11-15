@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-12",
+  "top": [
+    {
+      "symbol": "LUNR",
+      "score": 69.32,
+      "subscores": {
+        "catalyst": 0.9,
+        "rvol": 1.0,
+        "float": 0.2,
+        "gap": 0.276,
+        "price": 0.7,
+        "liquidity": 1.0,
+        "spread": 0.632,
+        "float_rotation": 0.328
+      },
+      "features": {
+        "price": 13.62,
+        "gap_pct": 11.822660098522153,
+        "rvol_tod": 15.27541324516698,
+        "pm_dollar_vol": 37443349.2868,
+        "spread_pct": 0.36778227289443866,
+        "float_shares": 84172557.0
+      },
+      "rank": 1
+    }
+  ],
+  "forward": true,
+  "strategy": "watchlist_bull_flag_atr_M1_v2"
+}

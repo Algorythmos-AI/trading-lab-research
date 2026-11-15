@@ -1,0 +1,122 @@
+{
+  "date": "2026-11-13",
+  "top": [
+    {
+      "symbol": "VTSI",
+      "score": 85.119,
+      "subscores": {
+        "catalyst": 0.9,
+        "rvol": 1.0,
+        "float": 0.8,
+        "gap": 0.686,
+        "price": 1.0,
+        "liquidity": 0.473,
+        "spread": 0.711,
+        "float_rotation": 1.0
+      },
+      "features": {
+        "price": 3.46,
+        "gap_pct": 32.061068702290065,
+        "rvol_tod": 1178.291,
+        "pm_dollar_vol": 4127735.8529000003,
+        "spread_pct": 0.289435600578865,
+        "float_shares": 11319624.0
+      },
+      "rank": 1
+    },
+    {
+      "symbol": "FCUV",
+      "score": 69.239,
+      "subscores": {
+        "catalyst": 0.0,
+        "rvol": 1.0,
+        "float": 1.0,
+        "gap": 1.0,
+        "price": 1.0,
+        "liquidity": 1.0,
+        "spread": 0.177,
+        "float_rotation": 1.0
+      },
+      "features": {
+        "price": 6.0901,
+        "gap_pct": 103.00333333333333,
+        "rvol_tod": 34067.693,
+        "pm_dollar_vol": 177277487.97370002,
+        "spread_pct": 0.8230452674897091,
+        "float_shares": 702745.0
+      },
+      "rank": 2
+    },
+    {
+      "symbol": "CNVS",
+      "score": 66.421,
+      "subscores": {
+        "catalyst": 0.9,
+        "rvol": 1.0,
+        "float": 0.5,
+        "gap": 0.367,
+        "price": 1.0,
+        "liquidity": 0.123,
+        "spread": 0.043,
+        "float_rotation": 0.293
+      },
+      "features": {
+        "price": 2.1,
+        "gap_pct": 16.022099447513803,
+        "rvol_tod": 687.199,
+        "pm_dollar_vol": 1447342.8494000002,
+        "spread_pct": 0.9569377990430631,
+        "float_shares": 23417021.0
+      },
+      "rank": 3
+    },
+    {
+      "symbol": "GLND",
+      "score": 47.439,
+      "subscores": {
+        "catalyst": 0.5,
+        "rvol": 0.511,
+        "float": 0.5,
+        "gap": 0.266,
+        "price": 1.0,
+        "liquidity": 0.017,
+        "spread": 0.555,
+        "float_rotation": 0.106
+      },
+      "features": {
+        "price": 2.25,
+        "gap_pct": 11.386138613861396,
+        "rvol_tod": 3.2464524931214034,
+        "pm_dollar_vol": 1053556.6787999999,
+        "spread_pct": 0.44543429844097043,
+        "float_shares": 43730194.0
+      },
+      "rank": 4
+    },
+    {
+      "symbol": "POAS",
+      "score": 44.404,
+      "subscores": {
+        "catalyst": 0.3,
+        "rvol": 0.755,
+        "float": 0.0,
+        "gap": 0.3,
+        "price": 1.0,
+        "liquidity": 1.0,
+        "spread": 0.114,
+        "float_rotation": 0.0
+      },
+      "features": {
+        "price": 3.4,
+        "gap_pct": 12.956810631229242,
+        "rvol_tod": 5.690515825587662,
+        "pm_dollar_vol": 41624485.9164,
+        "spread_pct": 0.8862629246676457,
+        "float_shares": null
+      },
+      "rank": 5
+    }
+  ],
+  "forward": true,
+  "strategy": "watchlist_bull_flag_atr_M1_v2"
+}
