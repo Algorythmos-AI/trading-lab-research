@@ -8,7 +8,11 @@ import http.client
 import io
 import json
 import re
+import shlex
+import shutil
 import stat
+import subprocess
+import sys
 import urllib.error
 import urllib.request
 import urllib.response
@@ -18,7 +22,7 @@ from typing import Any
 import pytest
 
 from wt.webull import client as wc
-from wt.webull import journal, publish, pull
+from wt.webull import journal, publish, pull, treehash
 from wt.webull.client import (ALLOWED, Credentials, NeedsApproval, ReadOnlyClient, StillWaiting, TokenStore, WriteRefused,
                               sign)
 
@@ -303,18 +307,135 @@ def test_reconcile_counts_disagreements_only():
 OCI = ROOT / "deploy" / "oci"
 
 
-def test_the_pull_unit_holds_the_key_alone_and_runs_locked_down():
-    unit = (OCI / "systemd" / "wt-webull-pull.service").read_text()
-    for needle in ("User=wt-webull", "LoadCredential=webull:/etc/wt/webull.env", "StateDirectory=wt-webull",
-                   "UMask=0027", "NoNewPrivileges=yes", "ProtectSystem=strict", "CapabilityBoundingSet=\n",
-                   "InaccessiblePaths=-/run/wt-secrets", "OnFailure=wt-alert@%n.service", "OnSuccess=wt-webull-publish.service",
-                   "-m wt.webull.pull"):
-        assert needle in unit, needle
-    assert "EnvironmentFile" not in unit and "WEBULL_APP" not in unit
-    pub = (OCI / "systemd" / "wt-webull-publish.service").read_text()
-    assert "User=wt\n" in pub and "InaccessiblePaths=-/etc/wt/webull.env" in pub and "LoadCredential" not in pub
+def unit(path: Path) -> dict[str, dict[str, list[str]]]:
+    """A systemd unit as sections of key -> every value given (a key may repeat, as SystemCallFilter does)."""
+    out: dict[str, dict[str, list[str]]] = {}
+    sec = ""
+    for raw in path.read_text().splitlines():
+        line = raw.strip()
+        if not line or line.startswith(("#", ";")):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            sec = line[1:-1]
+            out.setdefault(sec, {})
+            continue
+        k, sep, v = line.partition("=")
+        assert sep and sec, (path.name, raw)
+        out[sec].setdefault(k.strip(), []).append(v.strip())
+    return out
+
+
+PULL_IMPORT = "import sys; sys.path.insert(0, '/opt/wt-webull'); from wt.webull.pull import main"
+
+
+def test_the_pull_unit_holds_the_key_alone_and_runs_the_root_owned_copy():
+    u = unit(OCI / "systemd" / "wt-webull-pull.service")
+    svc = {k: v[-1] for k, v in u["Service"].items()}
+    assert svc["User"] == "wt-webull" and svc["Group"] == "wt" and svc["WorkingDirectory"] == "/opt/wt-webull"
+    assert shlex.split(svc["ExecStart"]) == ["/usr/bin/python3", "-I", "-S", "-B", "-c", PULL_IMPORT + "; sys.exit(main())"]
+    assert svc["LoadCredential"] == "webull:/etc/wt/webull.env" and svc["StateDirectory"] == "wt-webull"
+    for k, v in {"UMask": "0027", "NoNewPrivileges": "yes", "ProtectSystem": "strict", "ProtectHome": "yes",
+                 "CapabilityBoundingSet": "", "AmbientCapabilities": "", "PrivateTmp": "yes"}.items():
+        assert svc[k] == v, k
+    assert "-/run/wt-secrets" in svc["InaccessiblePaths"].split()
+    assert not {"Environment", "EnvironmentFile"} & set(svc)                # no PYTHONPATH, no secrets file
+    assert "/home" not in (OCI / "systemd" / "wt-webull-pull.service").read_text().replace("ProtectHome", "")
+    assert u["Unit"]["OnFailure"] == ["wt-alert@%n.service"] and u["Unit"]["OnSuccess"] == ["wt-webull-publish.service"]
+    assert "WEBULL_APP" not in (OCI / "systemd" / "wt-webull-pull.service").read_text()
+    pub = {k: v[-1] for k, v in unit(OCI / "systemd" / "wt-webull-publish.service")["Service"].items()}
+    assert pub["User"] == "wt" and pub["InaccessiblePaths"] == "-/etc/wt/webull.env" and "LoadCredential" not in pub
+    assert pub["ExecStart"].endswith("-m wt.webull.publish")
     assert "WEBULL" not in (OCI / "bin" / "wt-set-secrets").read_text()            # never among the shared secrets
     assert "WEBULL" not in (OCI / "bin" / "wt-fetch-secrets").read_text()
+    timer = unit(OCI / "systemd" / "wt-webull-pull.timer")
+    assert timer["Timer"]["Unit"] == ["wt-webull-pull.service"]
+
+
+def test_the_helpers_check_the_copy_with_the_units_own_interpreter():
+    for name in ("wt-install-units", "wt-set-webull-secret"):
+        sh = (OCI / "bin" / name).read_text()
+        assert f'runuser -u wt-webull -- /usr/bin/python3 -I -S -B -c "{PULL_IMPORT}"' in sh, name
+        assert ".venv" not in sh.replace("PY=.venv/bin/python", "").replace("as_wt .venv/bin/python", ""), name
+    inst = (OCI / "bin" / "wt-install-units").read_text()
+    assert "status --porcelain -- src/wt/webull deploy/oci" in inst and "runuser -u wt -- git" in inst
+    assert inst.index("status --porcelain") < inst.index("install -m")       # refused before anything is copied
+    assert 'install -m 0644 -o root -g root src/wt/webull/*.py "$stage/wt/webull/"' in inst
+    assert 'mv -T "$opt.link" "$opt"' in inst and "LC_ALL=C sha256sum" in inst
+
+
+def copy_package(dest: Path) -> Path:
+    (dest / "wt" / "webull").mkdir(parents=True)
+    (dest / "wt" / "__init__.py").write_text("")
+    for f in PKG.glob("*.py"):
+        (dest / "wt" / "webull" / f.name).write_bytes(f.read_bytes())
+    return dest
+
+
+def test_the_units_exact_command_runs_the_copy_with_the_standard_library_only(tmp_path):
+    opt = copy_package(tmp_path / "opt")
+    svc = {k: v[-1] for k, v in unit(OCI / "systemd" / "wt-webull-pull.service")["Service"].items()}
+    argv = [sys.executable] + [a.replace("/opt/wt-webull", str(opt)) for a in shlex.split(svc["ExecStart"])[1:]]
+    env = {"PATH": "/usr/bin:/bin", "CREDENTIALS_DIRECTORY": str(tmp_path / "none"), "STATE_DIRECTORY": str(tmp_path),
+           "PYTHONPATH": str(ROOT / "src")}                                  # -I must ignore it
+    r = subprocess.run(argv, cwd=opt, env=env, capture_output=True, text=True, timeout=60)
+    assert r.returncode == 2 and "no usable credential" in r.stdout, r.stderr
+    probe = (PULL_IMPORT.replace("/opt/wt-webull", str(opt)) + "; import wt.webull.client as c; "
+             "print(c.__file__); print(sorted(m for m in sys.modules if m.split('.')[0] not in sys.stdlib_module_names"
+             " and m != '__main__' and not m.startswith('_sysconfigdata')))")
+    r = subprocess.run([sys.executable, "-I", "-S", "-B", "-c", probe], cwd=tmp_path, env=env, capture_output=True,
+                       text=True, timeout=60)
+    assert r.returncode == 0, r.stderr
+    path, mods = r.stdout.splitlines()
+    assert path.startswith(str(opt)) and ast.literal_eval(mods) == ["wt", "wt.webull", "wt.webull.client", "wt.webull.pull"]
+    assert not list(opt.rglob("__pycache__"))                               # -B: nothing written beside the code
+
+
+def test_the_tree_hash_is_stable_order_independent_and_what_coreutils_computes(tmp_path):
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    for name in ("pull.py", "client.py", "__init__.py"):
+        (a / name).write_text(f"# {name}\n")
+    for name in ("__init__.py", "client.py", "pull.py"):
+        (b / name).write_text(f"# {name}\n")
+    (b / "notes.txt").write_text("not code")
+    (b / "__pycache__").mkdir()
+    assert treehash.tree_hash(a) == treehash.tree_hash(b) == treehash.tree_hash(a)
+    (b / "client.py").write_text("# changed\n")
+    assert treehash.tree_hash(a) != treehash.tree_hash(b)
+    assert treehash.tree_hash(tmp_path / "missing") is None and treehash.tree_hash(tmp_path) is None
+    if shutil.which("sha256sum"):
+        cmd = "cd \"$1\" && LC_ALL=C sha256sum -- $(printf '%s\\n' *.py | LC_ALL=C sort) | sha256sum | cut -d' ' -f1"
+        r = subprocess.run(["bash", "-c", cmd, "-", str(PKG)], capture_output=True, text=True, check=True)
+        assert r.stdout.strip() == treehash.tree_hash(PKG)
+
+
+def test_drift_between_the_checkout_and_the_installed_copy_pages_once(tmp_path):
+    src, state, pages = tmp_path / "out", tmp_path / "var", Pages()
+    src.mkdir()
+    (src / "history.json").write_text(json.dumps({"complete": False}))
+    (src / "status.json").write_text(json.dumps({"at": "2026-11-16T22:00:00Z", "ok": True, "state": "ok"}))
+    opt = copy_package(tmp_path / "opt") / "wt" / "webull"
+
+    def go() -> list[tuple[str, str, str]]:
+        before = len(pages.sent)
+        publish.run(src, state, read_back=lambda: None, send=lambda b: (False, ""), pager=pages, installed=opt)
+        return pages.sent[before:]
+    assert go() == [] and json.loads((state / "status.json").read_text())["drift"] is False
+    (opt / "client.py").write_text((opt / "client.py").read_text() + "\n# changed by wt\n")
+    assert go() == [("fire", "webull:drift", "Webull code not as installed")] and go() == []
+    assert json.loads((state / "status.json").read_text())["drift"] is True
+    shutil.rmtree(opt)
+    assert go() == []                                                       # missing is still drift: already paged
+    copy_package(tmp_path / "opt2")
+    publish.run(src, state, read_back=lambda: None, send=lambda b: (False, ""), pager=pages,
+                installed=tmp_path / "opt2" / "wt" / "webull")
+    assert pages.sent[-1] == ("resolve", "webull:drift", "Webull code as installed again")
+
+
+def test_a_release_that_changes_the_webull_package_waits_for_the_owner():
+    from wt.ops import deploy
+    assert "src/wt/webull" in deploy.OWNER_PATHS
 
 
 def test_the_secret_helper_hides_input_and_writes_root_only():

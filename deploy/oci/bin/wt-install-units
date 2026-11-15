@@ -6,7 +6,12 @@
 #   * the static units (deploy/oci/systemd) and the helpers (deploy/oci/bin -> /usr/local/bin), so a changed helper
 #     (wt-deploy itself included) is never left stale;
 #   * the backup and restore-test timers, when the host has a restic repository;
-#   * the Webull read-only timer (ADR 0011), when the owner has put the key on the host (wt-set-webull-secret);
+#   * the Webull key holder's code (ADR 0011): a root-owned copy of src/wt/webull in /opt/wt-webull, which the pull
+#     job runs instead of the checkout. It prints the copy's tree hash: compare it with the pull request's
+#     (python -m wt.webull.treehash on that commit). Refused while src/wt/webull or deploy/oci has changes that are
+#     not committed, so what is installed is what was reviewed;
+#   * the Webull read-only timer, when the owner has put the key on the host (wt-set-webull-secret) and the copy
+#     loads as wt-webull;
 #   * /etc/wt/installed.sha256, the fingerprint of all of it: an unattended deploy compares it with the target
 #     commit's (python -m wt.ops.units fingerprint) and leaves any release that changes it to the owner.
 set -euo pipefail
@@ -15,6 +20,14 @@ root=/home/wt/trading
 as_wt() { runuser -u wt -- env WT_HOST=systemd WT_ENV_FILE=/run/wt-secrets/env PYTHONPATH=src "$@"; }
 cd "$root"
 as_wt make -s gate PY=.venv/bin/python || { echo "deploy gate closed: not installing units now" >&2; exit 2; }
+# As wt: git refuses a repository another user owns. Untracked files count too.
+dirty=$(runuser -u wt -- git -C "$root" status --porcelain -- src/wt/webull deploy/oci) \
+  || { echo "could not read the git status of $root: not installing" >&2; exit 2; }
+if [[ -n "$dirty" ]]; then
+  echo "src/wt/webull or deploy/oci differs from the commit in $root: not installing (ADR 0011)" >&2
+  printf '  %s\n' "$dirty" >&2
+  exit 2
+fi
 rm -rf var/units && as_wt .venv/bin/python -m wt.ops.units render --out var/units --root "$root"
 list=/etc/wt/installed-units.txt
 install -d -m 0755 /etc/wt
@@ -29,6 +42,29 @@ fi
 install -m 0644 var/units/wt-*.service var/units/wt-*.timer /etc/systemd/system/
 install -m 0644 deploy/oci/systemd/* /etc/systemd/system/
 install -m 0755 deploy/oci/bin/* /usr/local/bin/
+
+# The Webull key holder's code: staged root-owned beside the live copy, then swapped in with one rename of the
+# /opt/wt-webull link, so a pull starting meanwhile sees the old copy or the new one, never half of each. The hash
+# is taken with coreutils over the root-owned copy (no code from the checkout runs as root): the same value as
+# wt.webull.treehash.
+opt=/opt/wt-webull
+base=/opt/wt-webull.d
+install -d -m 0755 -o root -g root "$base"
+stage=$(mktemp -d "$base/.new.XXXXXX")
+install -d -m 0755 -o root -g root "$stage/wt" "$stage/wt/webull"
+install -m 0644 -o root -g root /dev/null "$stage/wt/__init__.py"
+install -m 0644 -o root -g root src/wt/webull/*.py "$stage/wt/webull/"
+chmod 0755 "$stage"
+mapfile -t pyfiles < <(cd "$stage/wt/webull" && printf '%s\n' *.py | LC_ALL=C sort)
+tree=$(cd "$stage/wt/webull" && LC_ALL=C sha256sum -- "${pyfiles[@]}" | sha256sum | cut -d' ' -f1)
+if [[ -d "$base/$tree" ]]; then rm -rf "$stage"; else mv -T "$stage" "$base/$tree"; fi
+if [[ -e "$opt" && ! -L "$opt" ]]; then rm -rf "$opt"; fi
+ln -sfn "$base/$tree" "$opt.link" && mv -T "$opt.link" "$opt"
+for d in "$base"/* "$base"/.new.*; do
+  [[ -e "$d" && "$d" != "$base/$tree" ]] && rm -rf "$d"
+done
+echo "Webull key holder code installed in $opt (${#pyfiles[@]} files): tree sha256 $tree"
+echo "  compare: python -m wt.webull.treehash src/wt/webull, on the pull request's commit, must print the same"
 printf '%s\n' "${new[@]}" > "$list"
 systemctl daemon-reload
 systemctl enable chrony-wait.service 2>/dev/null || true      # time-sync.target then really waits for the clock
@@ -38,10 +74,13 @@ if grep -q '^RESTIC_REPOSITORY=' /run/wt-secrets/env 2>/dev/null; then
 else
   echo "no RESTIC_REPOSITORY in the secrets: backup timers left off"
 fi
-if [[ -r /etc/wt/webull.env ]] && id -u wt-webull >/dev/null 2>&1; then
+# The same interpreter and path as the unit's ExecStart (wt-webull-pull.service), importing only.
+if [[ ! -r /etc/wt/webull.env ]] || ! id -u wt-webull >/dev/null 2>&1; then
+  echo "no Webull key on this host (sudo wt-set-webull-secret): Webull timer left off"
+elif (cd / && runuser -u wt-webull -- /usr/bin/python3 -I -S -B -c "import sys; sys.path.insert(0, '/opt/wt-webull'); from wt.webull.pull import main"); then
   systemctl enable --now wt-webull-pull.timer
 else
-  echo "no Webull key on this host (sudo wt-set-webull-secret): Webull timer left off"
+  echo "wt-webull cannot load the code in $opt: Webull timer left off" >&2
 fi
 as_wt .venv/bin/python -m wt.ops.units fingerprint --root "$root" > /etc/wt/installed.sha256
 chmod 0644 /etc/wt/installed.sha256

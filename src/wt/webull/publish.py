@@ -22,7 +22,8 @@ Alarms. The pull job exits 0 when a read fails (status.json says how), so a netw
 minutes through OnFailure. This job, which runs after every pull, pages instead, through wt.ops.alerts (the
 ntfy pages every job uses), and only when a state changes: once when it starts, once more if it still holds after
 REMIND_S, and once when it clears (`step`). The states: the pull failing, the open lots disagreeing with Webull's
-positions for longer than RECONCILE_GRACE_S, and the site refusing this journal as older (another writer). The pull cannot page this way itself: wt.ops.alerts needs the
+positions for longer than RECONCILE_GRACE_S, the site refusing this journal as older (another writer), and drift:
+the key holder's root-owned copy of this package (/opt/wt-webull) not being the checkout's (wt.webull.treehash). The pull cannot page this way itself: wt.ops.alerts needs the
 checkout's environment, which the key holder does not load (ADR 0011).
 
 Log lines carry counts and outcomes only: no symbol, price, balance or key.
@@ -41,11 +42,13 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Protocol
 
-from wt.webull import journal
+from wt.webull import journal, treehash
 
 HEARTBEAT_S = 10 * 60
 PUBLISH_ON = "PUBLISH_ON"          # in the state directory: without it the publisher only says what it would send
 PARITY_ROWS = 20
+OPT_TREE = Path("/opt/wt-webull/wt/webull")     # the copy the pull runs (sudo wt-install-units)
+REPO_TREE = Path(__file__).resolve().parent      # the checkout's, which this job runs
 REMIND_S = 30 * 60                 # a state still holding this long pages once more
 RECONCILE_GRACE_S = 10 * 60        # a fill the history has not caught up with yet clears within a run or two
 SEED_KEYS = ("as_of", "currency", "account_value", "cash", "positions", "usd_rate", "complete_from", "transfers", "values")
@@ -215,12 +218,19 @@ def page_text(key: str, event: str, since: dt.datetime | None = None, kind: obje
         ("superseded", "still"): ("Webull journal still superseded", f"Since {at} the site has refused the host's "
                                   "journal as older, 30 minutes or more."),
         ("superseded", "clear"): ("Webull journal sent again", "The site takes the host's journal again."),
+        ("drift", "start"): ("Webull code not as installed", f"Since {at} the code the Webull key holder runs is not "
+                             "the checkout's, or is missing. Run sudo wt-install-units and compare its tree hash "
+                             "with the pull request."),
+        ("drift", "still"): ("Webull code still not as installed", f"Since {at} the key holder's code has differed "
+                             "from the checkout's, 30 minutes or more. Run sudo wt-install-units."),
+        ("drift", "clear"): ("Webull code as installed again", "The key holder runs the checkout's code again."),
     }
     return texts.get((key, event), ("Webull journal alarm", "An alarm of the Webull journal changed."))
 
 
 ALARM_KEYS = (("pull", "start"), ("pull", "still"), ("pull", "clear"), ("reconcile", "start"), ("reconcile", "still"),
-              ("reconcile", "clear"), ("superseded", "start"), ("superseded", "still"), ("superseded", "clear"))
+              ("reconcile", "clear"), ("superseded", "start"), ("superseded", "still"), ("superseded", "clear"),
+              ("drift", "start"), ("drift", "still"), ("drift", "clear"))
 
 
 def page(pager: Pager, key: str, event: str, since: dt.datetime | None = None, kind: object = None,
@@ -264,12 +274,31 @@ def pull_alarm(alarms: Alarms, status: Mapping[str, Any], now: dt.datetime) -> N
     alarms.set("pull", st == "failing", now, since=since, kind=status.get("kind"))
 
 
+def drift(alarms: Alarms, state: Path, now: dt.datetime, repo: Path, installed: Path) -> bool:
+    """Whether the key holder's copy differs from the checkout's code (or is missing): logged, kept in
+    var/webull/status.json and paged as the "drift" alarm."""
+    mine, theirs = treehash.tree_hash(repo), treehash.tree_hash(installed)
+    off = mine is None or mine != theirs
+    if off:
+        log(f"drift: the key holder's code ({'missing' if theirs is None else theirs[:12]}) is not the checkout's "
+            f"({(mine or 'none')[:12]}); run sudo wt-install-units")
+    write_json(state / "status.json", {"at": now.isoformat(timespec="seconds"), "drift": off, "repo_tree": mine,
+                                       "installed_tree": theirs})
+    alarms.set("drift", off, now)
+    return off
+
+
 def run(src: Path, state: Path, *, read_back: Callable[[], dict[str, Any] | None],
         send: Callable[[bytes], tuple[bool, str]], dry_run: bool = False, fresh_money: bool = False,
-        pager: Pager | None = None, clock: Callable[[], dt.datetime] = lambda: dt.datetime.now(dt.UTC)) -> int:
+        pager: Pager | None = None, clock: Callable[[], dt.datetime] = lambda: dt.datetime.now(dt.UTC),
+        installed: Path | None = None, repo: Path = REPO_TREE) -> int:
+    """One publish. `installed`: the key holder's copy to check for drift (main passes OPT_TREE; None skips it)."""
     alarms = Alarms(state / "alarms.json", pager or Silent())
     status = read_json(src / "status.json", {})
-    pull_alarm(alarms, status, journal._t(status["at"]) if isinstance(status.get("at"), str) else clock())
+    at = journal._t(status["at"]) if isinstance(status.get("at"), str) else clock()
+    pull_alarm(alarms, status, at)
+    if installed is not None:
+        drift(alarms, state, at, repo, installed)
     history = read_json(src / "history.json", {})
     if not history.get("complete"):
         log(f"waiting: the order history is read through {history.get('through') or 'nothing yet'}; not sending")
@@ -457,7 +486,7 @@ def main(argv: list[str] | None = None) -> int:
         return parity(a.src, a.state, read_back=read_back)
     from wt.ops.alerts import Alerts
     return run(a.src, a.state, read_back=read_back, send=send, dry_run=dry_run, fresh_money=a.fresh_money,
-               pager=Alerts())
+               pager=Alerts(), installed=OPT_TREE)
 
 
 if __name__ == "__main__":
