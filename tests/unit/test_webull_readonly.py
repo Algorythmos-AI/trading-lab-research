@@ -412,6 +412,7 @@ def test_the_pull_unit_holds_the_key_alone_and_runs_the_root_owned_copy():
     assert "WEBULL_APP" not in (OCI / "systemd" / "wt-webull-pull.service").read_text()
     pub = {k: v[-1] for k, v in unit(OCI / "systemd" / "wt-webull-publish.service")["Service"].items()}
     assert pub["User"] == "wt" and pub["InaccessiblePaths"] == "-/etc/wt/webull.env" and "LoadCredential" not in pub
+    assert pub["EnvironmentFile"] == "-/run/wt-secrets/env"                 # missing secrets: its alarm, not a failure
     assert pub["ExecStart"].endswith("-m wt.webull.publish")
     assert "WEBULL" not in (OCI / "bin" / "wt-set-secrets").read_text()            # never among the shared secrets
     assert "WEBULL" not in (OCI / "bin" / "wt-fetch-secrets").read_text()
@@ -524,6 +525,9 @@ def test_the_runbooks_hash_one_liner_matches_root_on_a_real_git_repo(tmp_path):
     subprocess.run([*g, "add", "-A"], check=True)
     subprocess.run([*g, "commit", "-qm", "x"], check=True)
     one = line.replace("r=~/trading c=origin/main;", f"r={shlex.quote(str(repo))} c=HEAD;")
+    (repo / "src" / "wt" / "webull" / ".hidden.py").write_text("left out of the copy and the hash")
+    subprocess.run([*g, "add", "-A"], check=True)
+    subprocess.run([*g, "commit", "-qm", "y"], check=True)
     mac = subprocess.run(["bash", "-c", one], capture_output=True, text=True, check=True).stdout.strip()
     root = code(tmp_path, "hash", str(repo / "src" / "wt" / "webull")).stdout.strip()
     assert mac == root == treehash.tree_hash(PKG) and len(mac) == 64
@@ -1051,3 +1055,63 @@ def test_the_dashboard_job_runs_the_watch_and_never_fails_over_it(monkeypatch, c
     ops_publish.webull_watch()
     assert "webull watch: could not run (RuntimeError)" in capsys.readouterr().out
     assert "webull_watch()" in (ROOT / "src" / "wt" / "ops" / "publish.py").read_text()
+
+
+def test_the_stage_is_root_only_until_the_hash_matches_and_root_refuses_test_mode():
+    sh = CODE.read_text()
+    assert 'mkdir -m 0700 "$stage/wt" "$stage/wt/webull"' in sh and "chmod 0600" in sh
+    match = sh.index('if [[ "$got" != "$want" ]]')
+    assert sh.index("chmod 0755") > match and sh.index("chmod 0644") > match
+    assert sh.index("chmod 0755") < sh.index('"${check[@]}" -I -S -B')     # readable for the import check, then swap
+    assert '[[ $EUID -ne 0 ]] || { echo "test mode is refused as root" >&2; exit 2; }' in sh
+
+
+def test_dotfiles_are_neither_copied_nor_hashed(tmp_path):
+    src = source(tmp_path)
+    (src / ".sneaky.py").write_text("print('not reviewed')")
+    want = treehash.tree_hash(src)
+    assert want == treehash.tree_hash(PKG)
+    assert code(tmp_path, "install", str(src), want or "").returncode == 0
+    assert not (tmp_path / "opt" / "wt" / "webull" / ".sneaky.py").exists() and installed(tmp_path) == want
+
+
+def test_a_full_disk_never_fails_the_pull(tmp_path, monkeypatch):
+    real = pull.write_json
+
+    def full(path: Path, data: Any) -> None:
+        if path.name == "status.json":
+            raise OSError(28, "No space left on device")
+        real(path, data)
+    monkeypatch.setattr(pull, "write_json", full)
+    for opener in (Raiser(TimeoutError()), Answer(403, b"{}")):
+        creds = tmp_path / "creds"
+        creds.write_text("WEBULL_APP_KEY=k123\nWEBULL_APP_SECRET=sec789-very-secret\n")
+        TokenStore(tmp_path / "token.json").save({"token": "t", "status": "NORMAL"})
+        monkeypatch.setattr(pull, "ReadOnlyClient", lambda c, t, log, o=opener: ReadOnlyClient(
+            c, t, opener=o, clock=lambda: 1_800_000_000.0, sleep=lambda s: None, log=log))
+        assert pull.main(["--state", str(tmp_path), "--creds", str(creds)]) == 0
+
+
+def test_the_watch_stays_quiet_while_a_token_awaits_approval(tmp_path):
+    key, status, pages = tmp_path / "webull.env", tmp_path / "status.json", Pages()
+    key.write_text("x")
+    tue = dt.datetime(2026, 11, 17, 15, 0, tzinfo=dt.UTC)
+    status.write_text(json.dumps({"state": "approval", "last_ok": (tue - dt.timedelta(hours=3)).isoformat()}))
+    assert publish.watch(pages, tue, state=tmp_path / "var", status_path=status, key=key) is None and pages.sent == []
+
+
+def test_a_day_whose_working_order_vanished_is_read_again_only_a_few_times(tmp_path, capsys):
+    day = dt.date(2026, 11, 10)
+    g = group("7", "BUY", 2.5, "2026-11-10T15:00:00Z")
+    g["orders"][0].update(status="SUBMITTED", filled_quantity="0")
+    fake = FakeClient({day: [g]})
+    pull.save_day(fake, "A", tmp_path, day)                                 # type: ignore[arg-type]
+    assert pull.working_days(tmp_path) == [day]
+    fake.by_day = {}                                                        # Webull stops returning it
+    stats: dict[str, int] = {}
+    for n in range(pull.VANISHED_READS):
+        pull.save_day(fake, "A", tmp_path, day, stats)                      # type: ignore[arg-type]
+        assert (pull.working_days(tmp_path) == [day]) == (n < pull.VANISHED_READS - 1)
+    assert stats["vanished_dropped"] == 1 and json.loads((tmp_path / "vanished.json").read_text()) == {}
+    saved = json.loads((tmp_path / "orders" / "2026-11-10.json").read_text())
+    assert [o["order_id"] for gg in saved for o in gg["orders"]] == ["7"]   # the order itself is kept

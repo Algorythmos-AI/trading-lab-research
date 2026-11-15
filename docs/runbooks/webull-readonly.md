@@ -35,7 +35,7 @@ Never run the cloud sync and the host side by side: step 2 stops the cloud for g
    <!-- webull-tree-hash -->
    ```
    git -C ~/trading fetch -q origin
-   r=~/trading c=origin/main; git -C "$r" ls-tree --name-only "$c" src/wt/webull/ | grep '\.py$' | LC_ALL=C sort | while read -r f; do printf '%s  %s\n' "$(git -C "$r" show "$c:$f" | shasum -a 256 | cut -d' ' -f1)" "${f##*/}"; done | shasum -a 256 | cut -d' ' -f1
+   r=~/trading c=origin/main; git -C "$r" ls-tree --name-only "$c" src/wt/webull/ | grep '/[^./][^/]*\.py$' | LC_ALL=C sort | while read -r f; do printf '%s  %s\n' "$(git -C "$r" show "$c:$f" | shasum -a 256 | cut -d' ' -f1)" "${f##*/}"; done | shasum -a 256 | cut -d' ' -f1
    ```
 
    On the host: `sudo wt-install-units --webull-tree <that hash>`. Root stages the checkout's `src/wt/webull`

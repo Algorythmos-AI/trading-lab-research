@@ -560,6 +560,8 @@ def watch(pager: Pager | None = None, now: dt.datetime | None = None, *, state: 
         pager = Alerts()
     now = now or dt.datetime.now(dt.UTC)
     st = read_json(status_path, {})
+    if isinstance(st, dict) and st.get("state") == "approval":
+        return None                      # one cause, one page: the pull pages the token itself, once per token
     last = st.get("last_ok") if isinstance(st, dict) else None
     try:
         since = journal._t(last) if isinstance(last, str) else dt.datetime.fromtimestamp(key.stat().st_mtime, dt.UTC)

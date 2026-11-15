@@ -15,6 +15,7 @@ check=(runuser -u wt-webull -- /usr/bin/python3)
 owner=(-o root -g root)
 # Test only: tests/unit/test_webull_readonly.py sets WT_WEBULL_CODE_TEST=1 and these. Production sets none.
 if [[ "${WT_WEBULL_CODE_TEST:-}" == "1" ]]; then
+  [[ $EUID -ne 0 ]] || { echo "test mode is refused as root" >&2; exit 2; }
   opt="${WT_WEBULL_OPT:?}"
   read -r -a check <<< "${WT_WEBULL_CHECK:?}"
   owner=()
@@ -49,7 +50,7 @@ want="${3:-}"
 
 # The source: every *.py must be a regular file with one link (a hard link could name a file wt may not read;
 # Ubuntu's fs.protected_hardlinks refuses to make one, this refuses to copy one).
-odd=$(find "$src" -maxdepth 1 -name '*.py' \( ! -type f -o -links +1 \) -print)
+odd=$(find "$src" -maxdepth 1 -name '*.py' ! -name '.*' \( ! -type f -o -links +1 \) -print)
 if [[ -n "$odd" ]]; then
   echo "refused: $src holds a .py that is a link or not a regular file; the installed copy is unchanged" >&2
   printf '  %s\n' "$odd" >&2
@@ -57,18 +58,18 @@ if [[ -n "$odd" ]]; then
 fi
 
 install -d -m 0755 ${owner[@]+"${owner[@]}"} "$base"
-stage=$(mktemp -d "$base/.new.XXXXXX")
+stage=$(mktemp -d "$base/.new.XXXXXX")          # 0700: nobody but root sees it until the hash matches
 trap 'rm -rf "$stage"' EXIT
-mkdir -m 0755 "$stage/wt" "$stage/wt/webull"
+mkdir -m 0700 "$stage/wt" "$stage/wt/webull"
 : > "$stage/wt/__init__.py"
 # -P: a file that turned into a link since the check above is copied as a link, and refused just below.
-find "$src" -maxdepth 1 -name '*.py' -exec cp -P -- {} "$stage/wt/webull/" \;
+# Dotfiles are left out, as the hash leaves them out.
+find "$src" -maxdepth 1 -name '*.py' ! -name '.*' -exec cp -P -- {} "$stage/wt/webull/" \;
 if [[ -n "$(find "$stage" ! -type f ! -type d -print)" ]]; then
   echo "refused: the staged copy holds something other than files and directories; the installed copy is unchanged" >&2
   exit 2
 fi
-find "$stage" -type d -exec chmod 0755 {} +
-find "$stage" -type f -exec chmod 0644 {} +
+find "$stage" -type f -exec chmod 0600 {} +
 if [[ -n "${owner[*]-}" ]]; then chown -R root:root "$stage"; fi
 
 got=$(tree_hash "$stage/wt/webull")
@@ -76,6 +77,9 @@ if [[ "$got" != "$want" ]]; then
   echo "refused: the checkout's src/wt/webull has tree sha256 $got, not the $want you gave; the installed copy is unchanged" >&2
   exit 3
 fi
+# Readable only now, for the import check (as wt-webull) and the unit.
+find "$stage" -type d -exec chmod 0755 {} +
+find "$stage" -type f -exec chmod 0644 {} +
 if ! (cd / && "${check[@]}" -I -S -B -c "import sys; sys.path.insert(0, '$stage'); from wt.webull.pull import main"); then
   echo "refused: wt-webull cannot import the staged copy; the installed copy is unchanged" >&2
   exit 2

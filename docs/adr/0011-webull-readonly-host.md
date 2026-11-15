@@ -49,8 +49,8 @@ that **can place real US stock and ETF orders** in the owner's account. What sta
 - **Separate user.** The key is readable by root and, through `LoadCredential=`, by the one `wt-webull` process.
   It is not in `/etc/wt/secrets.env` or `/run/wt-secrets/env`; the `wt` jobs (which hold paper order code) cannot
   read it (root 0600), and the publisher's unit masks it as well (`InaccessiblePaths=`).
-- **A root-owned code copy, installed only by the owner's hash** (4a), so a bad merge, the hourly deploy or a
-  compromised package in the venv cannot change what runs with the key.
+- **A root-owned code copy, installed only by the owner's hash** (4a), so a bad merge or the hourly deploy cannot
+  change what runs with the key, and code that drifts from the checkout does not go unnoticed.
 - **Owner paths.** `src/wt/webull`, `deploy/oci/bin` and `deploy/oci/systemd` are deployed only by the owner.
 - **The allowlist** (2): an order path is refused before anything is signed or sent, and a redirect is never
   followed, so the signed headers never reach another host.
@@ -61,10 +61,11 @@ Residual risk and known limits:
 
 - **Root on the host** can read the key and run any code with it; so can anyone who controls the owner's SSH
   session or the cloud account's console.
-- **A compromised `wt` account is root-equivalent** at the owner's next `sudo wt-install-units`: root installs the
-  units `wt` renders (`var/units`) and the helpers from the checkout (`deploy/oci/bin`, which root runs later, for
-  example `wt-alert`). The controls above defend against a bad merge, an unattended deploy and a compromised
-  package; they do not defend against `wt` itself. A possible follow-up: owner-verified hashes for every file
+- **A compromised `wt` account, or a compromised package in `wt`'s venv (it runs as `wt`), is root-equivalent** at
+  the owner's next `sudo wt-install-units`: root installs files `wt` controls, the helpers from the checkout
+  (`deploy/oci/bin`, `wt-webull-code` among them, run by root) and the units `wt` renders (`var/units`). The
+  controls above defend against a bad merge and the unattended deploy changing the key holder's code, and against
+  that code drifting unnoticed; they do not defend against `wt` itself or anything running as `wt`. A possible follow-up: owner-verified hashes for every file
   `wt-install-units` installs, as `--webull-tree` does for the Webull code.
 - The key cannot be narrowed: Webull Australia documents no read-only key. Resetting it in Webull (the runbook's
   cutover and rollback) is the remedy if the host is ever suspected.

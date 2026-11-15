@@ -57,6 +57,7 @@ STATES = ("ok", "failing", "approval")
 SNAPSHOT_EVERY_S = 25 * 60
 # An order in any other status (submitted, partly filled, pending a cancel ...) may still fill: its day is read again.
 TERMINAL = frozenset({"FILLED", "CANCELLED", "CANCELED", "REJECTED", "EXPIRED", "FAILED"})
+VANISHED_READS = 3        # a day whose working order Webull stopped returning is read this many more times, then left
 # Statuses seen as working; any other (or none) is still treated by `working`, and counted in status.json.
 KNOWN_WORKING = frozenset({"SUBMITTED", "PENDING", "PARTIAL_FILLED", "PARTIALLY_FILLED", "WORKING", "PENDING_CANCEL",
                            "NEW", "ACCEPTED"})
@@ -114,7 +115,8 @@ def _filled(o: dict[str, Any]) -> float:
 
 def merge_day(old: list[dict[str, Any]], new: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """What a day's file holds after a read: Webull's new answer, except that no order is ever dropped and an order
-    only gains fills. A short or empty answer (a 200 with less in it) must not erase fills already read."""
+    only gains fills. A short or empty answer (a 200 with less in it) must not erase fills already read. By design
+    the other way round too: a fill Webull corrects downwards is never lowered here (fills only grow)."""
     before = {str(o.get("order_id")): o for g in old for o in g.get("orders") or [] if isinstance(o, dict)}
     out: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -137,14 +139,22 @@ def merge_day(old: list[dict[str, Any]], new: list[dict[str, Any]]) -> list[dict
 def save_day(c: ReadOnlyClient, aid: str, out: Path, d: dt.date, stats: dict[str, int] | None = None) -> int:
     path = out / "orders" / f"{d.isoformat()}.json"
     old = read_json(path, [])
-    groups = merge_day([g for g in old if isinstance(g, dict)] if isinstance(old, list) else [],
-                       read_window(c, aid, *utc_day(d)))
+    fresh = read_window(c, aid, *utc_day(d))
+    groups = merge_day([g for g in old if isinstance(g, dict)] if isinstance(old, list) else [], fresh)
     seen: dict[tuple[Any, ...], dict[str, Any]] = {}
     for g in groups:
         seen[(g.get("client_order_id"),) + tuple(o.get("order_id") for o in g.get("orders") or [])] = g
     write_json(path, list(seen.values()))
     orders = [o for g in seen.values() for o in g.get("orders") or []]
-    mark_working(out, d, any(working(o) for o in orders))
+    answered = {str(o.get("order_id")) for g in fresh for o in g.get("orders") or []}
+    if any(working(o) for o in orders if str(o.get("order_id")) in answered):
+        mark_working(out, d, True)
+    elif any(working(o) for o in orders):
+        # Working only in what was kept: Webull no longer returns the order. Read again a few times, then stop.
+        if not mark_vanished(out, d) and stats is not None:
+            stats["vanished_dropped"] = stats.get("vanished_dropped", 0) + 1
+    else:
+        mark_working(out, d, False)
     if stats is not None:
         stats["unknown_status"] = stats.get("unknown_status", 0) + sum(
             1 for o in orders if str(o.get("status") or "").upper() not in TERMINAL | KNOWN_WORKING)
@@ -180,6 +190,23 @@ def mark_working(out: Path, d: dt.date, on: bool) -> None:
     if (d in days) != on:
         days = days | {d} if on else days - {d}
         write_json(out / "working.json", sorted(x.isoformat() for x in days))
+    gone = read_json(out / "vanished.json", {})
+    if isinstance(gone, dict) and d.isoformat() in gone:
+        write_json(out / "vanished.json", {k: v for k, v in gone.items() if k != d.isoformat()})
+
+
+def mark_vanished(out: Path, d: dt.date) -> bool:
+    """One more read of a day whose working order Webull no longer returns. After VANISHED_READS such reads the day
+    leaves working.json (False); until then it stays (True). vanished.json keeps the count."""
+    gone = read_json(out / "vanished.json", {})
+    gone = gone if isinstance(gone, dict) else {}
+    n = int(gone.get(d.isoformat()) or 0) + 1
+    if n >= VANISHED_READS:
+        mark_working(out, d, False)
+        return False
+    mark_working(out, d, True)
+    write_json(out / "vanished.json", {**read_json(out / "vanished.json", {}), d.isoformat(): n})
+    return True
 
 
 def month_end(d: dt.date) -> dt.date:
@@ -281,6 +308,9 @@ def run(c: ReadOnlyClient, out: Path, now: dt.datetime, clock: Callable[[], floa
         reread += 1
     if older:
         log(f"working orders: {reread} of {len(older)} older day(s) read again")
+    if stats.get("vanished_dropped"):
+        log(f"working orders: {stats['vanished_dropped']} day(s) no longer read again: Webull stopped returning "
+            "their working order")
     h = backfill(c, aid, out, today - dt.timedelta(days=refresh - 1), started + budget, clock, stats)
     snap = snapshot(c, aid, out, now)
     pos = c.positions(aid)
@@ -332,14 +362,14 @@ def main(argv: list[str] | None = None) -> int:
         result = run(client, out, now)
     except Transient as e:
         log(f"transient: {e.reason}; the next run reads again")
-        set_status(out, now, "failing", e.reason, "transient")
+        _status_quietly(out, now, "failing", e.reason, "transient")
         return 0
     except StillWaiting as e:            # paged when the token was asked for; every 2 minutes would be noise
         log(f"waiting for the owner: {e}")
-        set_status(out, now, "approval", "approval", "approval")
+        _status_quietly(out, now, "approval", "approval", "approval")
         return 0
     except NeedsApproval as e:
-        prev = set_status(out, now, "approval", "approval", "approval", approval_paged=e.created)
+        prev = _status_quietly(out, now, "approval", "approval", "approval", approval_paged=e.created)
         if e.created and prev.get("state") == "approval" and prev.get("approval_paged") == e.created:
             log(f"still needs the owner: {e}; already paged for this token")
             return 0
@@ -347,21 +377,24 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_APPROVAL
     except WebullError as e:
         log(f"error: {e}")
-        set_status(out, now, "failing", f"HTTP {e.status}{f' {e.code}' if e.code else ''}", "error")
+        _status_quietly(out, now, "failing", f"HTTP {e.status}{f' {e.code}' if e.code else ''}", "error")
         return 0
     except Exception as e:  # noqa: BLE001 - a bug or a changed answer: paged once by state, not every 2 minutes
         log(f"bug: {type(e).__name__}")              # the class only: its text may hold what Webull answered
         _status_quietly(out, now, "failing", type(e).__name__, "bug")
         return 0
-    set_status(out, now, "ok", unknown_status=int(result.get("unknown_status") or 0))
+    _status_quietly(out, now, "ok", unknown_status=int(result.get("unknown_status") or 0))
     return 0
 
 
-def _status_quietly(out: Path, now: dt.datetime, state: str, reason: str, kind: str) -> None:
+def _status_quietly(out: Path, now: dt.datetime, state: str, reason: str = "", kind: str = "",
+                    **extra: Any) -> dict[str, Any]:
+    """set_status that never fails the job: a full disk must not page every run (the watch sees no good read)."""
     try:
-        set_status(out, now, state, reason, kind)
-    except OSError as e:                              # a full disk: the job still ends 0, and the watch sees no read
+        return set_status(out, now, state, reason, kind, **extra)
+    except OSError as e:
         log(f"could not write status.json ({type(e).__name__})")
+        return {}
 
 
 if __name__ == "__main__":
