@@ -1,7 +1,8 @@
 """The options clone's Alpaca PAPER adapter (DEC-0030). Only the clone's runner (wt.live.runner_o) may import it.
 
 Paper only, three ways: the trading client is built with `paper=True`; at construction the paper lock checks the
-endpoint and that the account number is a paper one; before every order it checks the environment again. It can
+environment and the endpoint before the first request, then that the account number is a paper one; before every
+order it checks the environment again. It can
 buy to open and sell to close a single option contract with a limit, market or stop order, cancel an order and read
 orders and option positions. It never closes all positions, exercises, replaces or sends a multi-leg order.
 
@@ -23,7 +24,8 @@ from alpaca.trading.enums import OrderSide, QueryOrderStatus, TimeInForce
 from alpaca.trading.requests import GetOrdersRequest, LimitOrderRequest, MarketOrderRequest, StopOrderRequest
 
 from wt.brokers.base import Broker, BrokerClock, BrokerRejected, DuplicateOrder, TransportError
-from wt.core.safety import assert_paper, assert_paper_env
+from wt.core.safety import (assert_paper_account, assert_paper_endpoint, assert_paper_env, client_base_url,
+                            report_passed)
 from wt.core.types import AccountState, Order, OrderStatus, Position
 
 # The broker's order statuses, as the stock adapter maps them (kept apart so this module never imports it).
@@ -69,9 +71,9 @@ class AlpacaOptionsPaperBroker(Broker):
             kw["allow_redirects"] = False                   # a redirect would carry the key headers elsewhere
             return orig(method, url, **kw)
         self.c._session.request = request                   # type: ignore[method-assign,assignment]
+        host = assert_paper_endpoint(client_base_url(self.c))   # before the first request: env and client URL
         acct: Any = self.c.get_account()
-        base = getattr(self.c._base_url, "value", str(self.c._base_url))
-        assert_paper(str(base), str(acct.account_number))
+        report_passed(host, assert_paper_account(acct.account_number))
         self._level = acct
 
     def options_level(self) -> int | None:

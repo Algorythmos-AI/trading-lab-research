@@ -22,7 +22,8 @@ from alpaca.trading.requests import (GetOrdersRequest, LimitOrderRequest, Market
 
 from wt.brokers.base import Broker, BrokerClock, BrokerRejected, DuplicateOrder, TransportError
 from wt.core.config import env
-from wt.core.safety import assert_paper, assert_paper_env
+from wt.core.safety import (assert_paper_account, assert_paper_endpoint, assert_paper_env, client_base_url,
+                            report_passed)
 from wt.core.types import AccountState, Order, OrderStatus, Position
 
 _MAP = {"new": OrderStatus.ACCEPTED, "accepted": OrderStatus.ACCEPTED, "pending_new": OrderStatus.ACCEPTED,
@@ -53,9 +54,9 @@ class AlpacaPaperBroker(Broker):
             kw.setdefault("timeout", timeout)
             return orig(method, url, **kw)
         self.c._session.request = request                   # type: ignore[method-assign,assignment]
+        host = assert_paper_endpoint(client_base_url(self.c))   # before the first request: env and client URL
         acct: Any = self.c.get_account()
-        base = getattr(self.c._base_url, "value", str(self.c._base_url))
-        assert_paper(str(base), str(acct.account_number))
+        report_passed(host, assert_paper_account(acct.account_number))
 
     @staticmethod
     def _to(o: Any) -> Order:
