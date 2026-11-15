@@ -12,6 +12,13 @@ readings. The first run reads the journal the site shows now (GET /api/editions/
 as the seed (var/webull/money_seed.json); later runs add the host's readings to it. If that read fails, nothing is
 sent and the job fails, so the history is never silently dropped. `--fresh-money` starts without a seed, on purpose.
 
+Alarms. The pull job exits 0 when a read fails (status.json says how), so a network outage does not page every two
+minutes through OnFailure. This job, which runs after every pull, pages instead, through wt.ops.alerts (the
+ntfy pages every job uses), and only when a state changes: once when it starts, once more if it still holds after
+REMIND_S, and once when it clears (`step`). The states: the pull failing, the open lots disagreeing with Webull's
+positions for longer than RECONCILE_GRACE_S. The pull cannot page this way itself: wt.ops.alerts needs the
+checkout's environment, which the key holder does not load (ADR 0011).
+
 Log lines carry counts and outcomes only: no symbol, price, balance or key.
 """
 from __future__ import annotations
@@ -25,11 +32,12 @@ import sys
 from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from wt.webull import journal
 
 HEARTBEAT_S = 10 * 60
+REMIND_S = 30 * 60                 # a state still holding this long pages once more
 SEED_KEYS = ("as_of", "currency", "account_value", "cash", "positions", "usd_rate", "complete_from", "transfers", "values")
 
 
@@ -128,15 +136,132 @@ def digest(doc: Mapping[str, Any]) -> str:
     return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
+# ---- alarms --------------------------------------------------------------------------------------------------------
+
+class Pager(Protocol):
+    """What the alarms need of wt.ops.alerts.Alerts."""
+
+    def fire(self, key: str, title: str, message: str, priority: int = 4, tags: tuple[str, ...] = ()) -> bool: ...
+    def resolve(self, key: str, title: str, message: str, priority: int = 2) -> bool: ...
+    def notify(self, title: str, message: str, priority: int = 3, tags: tuple[str, ...] = ()) -> bool: ...
+
+
+class Silent:
+    """No pages (a test, or a run without the alerts module)."""
+
+    def fire(self, key: str, title: str, message: str, priority: int = 4, tags: tuple[str, ...] = ()) -> bool:
+        return False
+
+    def resolve(self, key: str, title: str, message: str, priority: int = 2) -> bool:
+        return False
+
+    def notify(self, title: str, message: str, priority: int = 3, tags: tuple[str, ...] = ()) -> bool:
+        return False
+
+
+def step(prev: Mapping[str, Any], on: bool, now: dt.datetime, since: dt.datetime | None = None,
+         grace_s: float = 0.0, remind_s: float | None = REMIND_S) -> tuple[dict[str, Any], str | None]:
+    """One alarm's next state and what to page: "start" once it has held `grace_s`, "still" once after `remind_s`,
+    "clear" when it stops after having paged. Nothing else pages, however often it is called."""
+    if not on:
+        return {"on": False}, ("clear" if prev.get("paged") else None)
+    began = since or (journal._t(prev["since"]) if prev.get("on") and prev.get("since") else now)
+    cur = {"on": True, "since": began.isoformat(), "paged": bool(prev.get("on") and prev.get("paged")),
+           "reminded": bool(prev.get("on") and prev.get("reminded"))}
+    held = (now - began).total_seconds()
+    if not cur["paged"]:
+        if held >= grace_s:
+            cur["paged"] = True
+            return cur, "start"
+    elif remind_s is not None and not cur["reminded"] and held >= remind_s:
+        cur["reminded"] = True
+        return cur, "still"
+    return cur, None
+
+
+KINDS = {"transient": "the network or Webull's side", "error": "Webull refused the read"}
+
+
+def page_text(key: str, event: str, since: dt.datetime | None = None, kind: object = None,
+              n: object = None) -> tuple[str, str]:
+    """The title and message of one alarm page: fixed words, and values through wt.ops.alerts' guards only."""
+    from wt.ops import alerts as al
+    at = f"{al.hhmm(since)} UTC" if since else "earlier"
+    why = KINDS.get(al.word(kind, tuple(KINDS), "other"), "see the journal")
+    texts = {
+        ("pull", "start"): ("Webull reads failing", f"The host's Webull read has failed since {at} ({why}). It "
+                            "tries again every run. Check: journalctl -u wt-webull-pull."),
+        ("pull", "still"): ("Webull reads still failing", f"The host's Webull read has failed since {at} ({why}), "
+                            "30 minutes or more. Check: journalctl -u wt-webull-pull."),
+        ("pull", "clear"): ("Webull reads working again", "The host's Webull read works again."),
+        ("reconcile", "start"): ("Webull holdings disagree", f"The journal's open lots and Webull's positions "
+                                 f"disagree on {al.count(n)} holding(s) since {at}. Compare the Trades page with "
+                                 "the app."),
+        ("reconcile", "still"): ("Webull holdings still disagree", f"The journal's open lots and Webull's "
+                                 f"positions have disagreed since {at}, 30 minutes or more."),
+        ("reconcile", "clear"): ("Webull holdings agree again", "The journal's open lots match Webull's positions."),
+    }
+    return texts.get((key, event), ("Webull journal alarm", "An alarm of the Webull journal changed."))
+
+
+ALARM_KEYS = (("pull", "start"), ("pull", "still"), ("pull", "clear"), ("reconcile", "start"), ("reconcile", "still"),
+              ("reconcile", "clear"))
+
+
+def page(pager: Pager, key: str, event: str, since: dt.datetime | None = None, kind: object = None,
+         n: object = None) -> None:
+    title, msg = page_text(key, event, since, kind, n)
+    if event == "start":
+        pager.fire(f"webull:{key}", title, msg)
+    elif event == "still":
+        pager.notify(title, msg, 4)
+    else:
+        pager.resolve(f"webull:{key}", title, msg)
+
+
+class Alarms:
+    """Each alarm's state in var/webull/alarms.json, and the pages `step` asks for."""
+
+    def __init__(self, path: Path, pager: Pager) -> None:
+        self.path, self.pager = path, pager
+        d = read_json(path, {})
+        self.state: dict[str, Any] = d if isinstance(d, dict) else {}
+
+    def set(self, key: str, on: bool, now: dt.datetime, since: dt.datetime | None = None, grace_s: float = 0.0,
+            kind: object = None, n: object = None) -> str | None:
+        prev = self.state.get(key)
+        cur, event = step(prev if isinstance(prev, dict) else {}, on, now, since, grace_s)
+        self.state[key] = cur
+        write_json(self.path, self.state)
+        if event:
+            log(f"alarm: {key} {event}")
+            page(self.pager, key, event, journal._t(cur["since"]) if cur.get("since") else since, kind, n)
+        return event
+
+
+def pull_alarm(alarms: Alarms, status: Mapping[str, Any], now: dt.datetime) -> None:
+    """The pull failing: on while its status says "failing", off when it says "ok". A token waiting for approval
+    is paged by the pull itself (once per token) and leaves this alarm as it was."""
+    st = status.get("state") or ("ok" if status.get("ok") else None)
+    if st not in ("ok", "failing"):
+        return
+    since = journal._t(status["since"]) if st == "failing" and isinstance(status.get("since"), str) else None
+    alarms.set("pull", st == "failing", now, since=since, kind=status.get("kind"))
+
+
 def run(src: Path, state: Path, *, read_back: Callable[[], dict[str, Any] | None],
-        send: Callable[[bytes], tuple[bool, str]], dry_run: bool = False, fresh_money: bool = False) -> int:
+        send: Callable[[bytes], tuple[bool, str]], dry_run: bool = False, fresh_money: bool = False,
+        pager: Pager | None = None, clock: Callable[[], dt.datetime] = lambda: dt.datetime.now(dt.UTC)) -> int:
+    alarms = Alarms(state / "alarms.json", pager or Silent())
+    status = read_json(src / "status.json", {})
+    pull_alarm(alarms, status, journal._t(status["at"]) if isinstance(status.get("at"), str) else clock())
     history = read_json(src / "history.json", {})
     if not history.get("complete"):
         log(f"waiting: the order history is read through {history.get('through') or 'nothing yet'}; not sending")
         return 0
-    status = read_json(src / "status.json", {})
     if not status.get("ok") or not status.get("at"):
-        log(f"not sending: the last read of Webull did not finish ({status.get('why') or 'no status'})")
+        log(f"not sending: the last read of Webull did not finish ({status.get('state') or 'no status'}"
+            f"{', since ' + str(status['since']) if status.get('since') else ''})")
         return 0
     now = journal._t(status["at"])          # the journal is as of the last good read, never of this run's clock
     doc = journal.build(load_groups(src), now)
@@ -203,7 +328,9 @@ def main(argv: list[str] | None = None) -> int:
         from wt.ops.publish import send as post
         return post(body, url or "", secret or "", env.get("VERCEL_AUTOMATION_BYPASS_SECRET"))
 
-    return run(a.src, a.state, read_back=read_back, send=send, dry_run=a.dry_run, fresh_money=a.fresh_money)
+    from wt.ops.alerts import Alerts
+    return run(a.src, a.state, read_back=read_back, send=send, dry_run=a.dry_run, fresh_money=a.fresh_money,
+               pager=Alerts())
 
 
 if __name__ == "__main__":

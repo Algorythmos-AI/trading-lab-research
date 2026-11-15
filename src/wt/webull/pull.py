@@ -9,7 +9,18 @@ and the state directory as $STATE_DIRECTORY (/var/lib/wt-webull). What it writes
     out/history.json             how far back the order files are complete: {"from", "through", "complete"}
     out/account.jsonl            one balance reading per line (AUD and USD rows; no account id)
     out/positions.json           the positions Webull reports now, for the publisher's reconcile
-    out/status.json              when this ran and how it ended
+    out/status.json              when this ran and how it ended (below)
+
+status.json: {"at", "ok", "state", "since", "last_ok", "reason", "kind"}. `state` is "ok", "failing" or "approval";
+`since` is when it entered that state; `reason` is an exception's class name or "HTTP <status>" (never a header, a
+body or a URL); `kind` is "transient" (the network, a timeout, HTTP 5xx or 429: the next read may not meet it) or
+"error" (Webull refused). How it ends, and who pages:
+  * ok, failing: exit 0. The job never pages through OnFailure for these, so a network outage does not page every
+    2 minutes. The publisher (OnSuccess, the next unit) pages once when the state changes, once more if it is still
+    failing after 30 minutes, and once when it works again (wt.webull.publish, "Alarms").
+  * a new token waits for the owner's approval: exit 3 (EXIT_APPROVAL), which pages through OnFailure, once per
+    token asked for. Until it is approved, or 6 hours pass, later runs exit 0 with state "approval".
+  * anything else (a bug): an exception, exit 1, OnFailure.
 
 The token (token.json) stays 0600, readable by this user only. Log lines carry counts and outcomes only: no
 symbol, price, account id, key or token. In the session it refreshes today and yesterday; after 16:30 New York it
@@ -28,12 +39,14 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from wt.webull.client import Credentials, NeedsApproval, ReadOnlyClient, StillWaiting, TokenStore, WebullError
+from wt.webull.client import (Credentials, NeedsApproval, ReadOnlyClient, StillWaiting, TokenStore, Transient,
+                              WebullError)
 
 ET = ZoneInfo("America/New_York")
 HISTORY_FROM = dt.date(2023, 11, 1)        # the account's first order (journal history_from, Nov 2023)
 PAGE_CAP = 100                             # Webull returns at most 100 order groups per call
 EXIT_APPROVAL = 3                          # the owner must approve a token in the Webull app (pages through OnFailure)
+STATES = ("ok", "failing", "approval")
 SNAPSHOT_EVERY_S = 25 * 60
 
 
@@ -172,6 +185,28 @@ def run(c: ReadOnlyClient, out: Path, now: dt.datetime, clock: Callable[[], floa
     return {"groups": n, "complete": h["complete"]}
 
 
+def iso(t: dt.datetime) -> str:
+    return t.isoformat().replace("+00:00", "Z")
+
+
+def set_status(out: Path, now: dt.datetime, state: str, reason: str = "", kind: str = "",
+               **extra: Any) -> dict[str, Any]:
+    """Write status.json for this run and return the previous one. `since` carries over while the state holds."""
+    prev = read_json(out / "status.json", {})
+    prev = prev if isinstance(prev, dict) else {}
+    at = iso(now)
+    same = prev.get("state") == state and isinstance(prev.get("since"), str)
+    doc: dict[str, Any] = {"at": at, "ok": state == "ok", "state": state, "since": prev["since"] if same else at,
+                           "last_ok": at if state == "ok" else prev.get("last_ok")}
+    if reason:
+        doc["reason"], doc["kind"] = reason, kind
+    if state == "approval" and prev.get("state") == "approval" and "approval_paged" in prev:
+        doc["approval_paged"] = prev["approval_paged"]
+    doc.update(extra)
+    write_json(out / "status.json", doc)
+    return prev
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m wt.webull.pull")
     ap.add_argument("--state", type=Path, default=Path(os.environ.get("STATE_DIRECTORY", "/var/lib/wt-webull")))
@@ -189,20 +224,27 @@ def main(argv: list[str] | None = None) -> int:
     client = ReadOnlyClient(creds, TokenStore(a.state / "token.json"), log=log)
     try:
         run(client, out, now)
-        write_json(out / "status.json", {"at": now.isoformat().replace("+00:00", "Z"), "ok": True})
+    except Transient as e:
+        log(f"transient: {e.reason}; the next run reads again")
+        set_status(out, now, "failing", e.reason, "transient")
         return 0
     except StillWaiting as e:            # paged when the token was asked for; every 2 minutes would be noise
         log(f"waiting for the owner: {e}")
-        write_json(out / "status.json", {"at": now.isoformat().replace("+00:00", "Z"), "ok": False, "why": "approval"})
+        set_status(out, now, "approval", "approval", "approval")
         return 0
     except NeedsApproval as e:
+        prev = set_status(out, now, "approval", "approval", "approval", approval_paged=e.created)
+        if e.created and prev.get("state") == "approval" and prev.get("approval_paged") == e.created:
+            log(f"still needs the owner: {e}; already paged for this token")
+            return 0
         log(f"needs the owner: {e}. Open the Webull app: Menu > Messages > OpenAPI Notifications")
-        write_json(out / "status.json", {"at": now.isoformat().replace("+00:00", "Z"), "ok": False, "why": "approval"})
         return EXIT_APPROVAL
     except WebullError as e:
         log(f"error: {e}")
-        write_json(out / "status.json", {"at": now.isoformat().replace("+00:00", "Z"), "ok": False, "why": e.code or str(e.status)})
-        return 1
+        set_status(out, now, "failing", f"HTTP {e.status}{f' {e.code}' if e.code else ''}", "error")
+        return 0
+    set_status(out, now, "ok")
+    return 0
 
 
 if __name__ == "__main__":

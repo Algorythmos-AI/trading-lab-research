@@ -6,7 +6,8 @@ MQTT dependencies. This client is the few read requests the journal needs, signe
   * `_send` refuses any (method, path) not in `ALLOWED` before it builds a request, signs anything or opens a socket.
     The allowlist holds the account, balance, position and order-history reads and the two token calls. Every
     order path (preview, place, replace, cancel) is outside it, as is anything Webull adds later.
-  * Only the two Webull Australia hosts are accepted (production and Webull's public test environment).
+  * Only the two Webull Australia hosts are accepted (production and Webull's public test environment), and a
+    redirect is never followed: it would send the signed headers to wherever it points. A 3xx is an error.
   * Credentials are never logged, never put in an exception and never in a repr. Errors carry the HTTP status and
     Webull's error code only.
 
@@ -18,6 +19,10 @@ SHA-1/MD5 variant; the text, the SDK and our own calls agree on SHA-256.
 Token (2FA): the first call creates a token, which Webull holds PENDING until the owner approves it in the Webull app,
 then NORMAL; it lapses after 15 days without a call. Each creation sends the owner an SMS, so an unattended job may
 create one at most every `TOKEN_RETRY_S`; until it is approved the job exits with `NeedsApproval` and pages.
+
+Failures come in two kinds. `Transient` is trouble the next read may not meet: the network, a timeout, a body that
+is not JSON, HTTP 5xx, HTTP 429 after the retries, or a first 401 that does not name the token (a clock a little off
+makes one). `WebullError` is Webull refusing for a reason that will not pass by itself.
 """
 from __future__ import annotations
 
@@ -25,6 +30,7 @@ import base64
 import datetime as dt
 import hashlib
 import hmac
+import http.client
 import json
 import os
 import time
@@ -73,8 +79,22 @@ class WebullError(RuntimeError):
         self.code = code
 
 
+class Transient(RuntimeError):
+    """Trouble on the way to Webull, or on its side, that the next read may not meet. Carries a short reason (an
+    exception's class name or "HTTP <status>"), never a header, a body or a URL."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(f"transient: {reason}")
+        self.reason = reason
+
+
 class NeedsApproval(RuntimeError):
-    """The token is waiting for the owner's approval in the Webull app (or a new one may not be created yet)."""
+    """The token is waiting for the owner's approval in the Webull app (or a new one may not be created yet).
+    `created` is when that token was asked for: the pull pages once per token, not once per run."""
+
+    def __init__(self, msg: str, created: float = 0.0) -> None:
+        super().__init__(msg)
+        self.created = created
 
 
 class StillWaiting(NeedsApproval):
@@ -125,11 +145,31 @@ def sign(path: str, query: Mapping[str, str], body: str | None, app_key: str, ap
 
 
 Opener = Callable[[urllib.request.Request, float], tuple[int, bytes]]
+# What the network can raise on the way: URLError, TimeoutError and ConnectionError are all OSError (so is an SSL
+# error); http.client raises HTTPException (RemoteDisconnected, IncompleteRead, ...) for a broken answer.
+NETWORK_ERRORS: tuple[type[BaseException], ...] = (OSError, http.client.HTTPException)
 
 
-def _urlopen(req: urllib.request.Request, timeout: float) -> tuple[int, bytes]:
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """A redirect is answered, never followed: following it would resend the signed headers to another host."""
+
+    def redirect_request(self, *args: Any, **kwargs: Any) -> None:
+        return None
+
+
+def build_opener(*handlers: urllib.request.BaseHandler) -> urllib.request.OpenerDirector:
+    """urllib's opener with the redirect handler replaced by one that follows nothing. A 3xx comes back as an
+    HTTPError, so `_urlopen` returns its status."""
+    return urllib.request.build_opener(_NoRedirect, *handlers)
+
+
+_OPENER = build_opener()
+
+
+def _urlopen(req: urllib.request.Request, timeout: float,
+             opener: urllib.request.OpenerDirector | None = None) -> tuple[int, bytes]:
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:      # noqa: S310 (https only, host checked)
+        with (opener or _OPENER).open(req, timeout=timeout) as r:        # https only, host checked, no redirects
             return int(r.status), bytes(r.read())
     except urllib.error.HTTPError as e:
         return int(e.code), e.read()
@@ -190,15 +230,26 @@ class ReadOnlyClient:
                 headers["Content-Type"] = "application/json"
             url = f"https://{self._host}{path}" + (f"?{urllib.parse.urlencode(q)}" if q else "")
             req = urllib.request.Request(url, data=raw.encode() if raw is not None else None, method=method, headers=headers)
-            status, data = self._open(req, TIMEOUT_S)
+            try:
+                status, data = self._open(req, TIMEOUT_S)
+            except NETWORK_ERRORS as e:
+                self._last = self._clock()
+                raise Transient(type(e).__name__) from None      # the class name only: its text can hold the URL
             self._last = self._clock()
             if status == 429 and attempt < 5:
                 self._sleep(3.0 * (attempt + 1))
                 continue
             if 200 <= status < 300:
-                return json.loads(data) if data else None
+                try:
+                    return json.loads(data) if data else None
+                except ValueError as e:                           # JSONDecodeError, or bytes that are not UTF-8
+                    raise Transient(type(e).__name__) from None
+            if 300 <= status < 400:
+                raise WebullError(status, "REDIRECT")
+            if status >= 500 or status == 429:
+                raise Transient(f"HTTP {status}")
             raise WebullError(status, _code(data))
-        raise WebullError(429, "RATE_LIMITED")
+        raise Transient("HTTP 429")                                   # not reached: the last 429 raises above
 
     # ---- token ----------------------------------------------------------------------------------------------------
     def token(self) -> str:
@@ -231,16 +282,30 @@ class ReadOnlyClient:
                 break
             self._sleep(5.0)
         self._tokens.save({**st, "status": "EXPIRED"})
-        raise NeedsApproval("the token was not approved in time")
+        raise NeedsApproval("the token was not approved in time", created=float(st.get("created", 0)))
 
     def _read(self, path: str, query: Mapping[str, str] | None = None) -> Any:
+        """One read with the approved token. Only Webull's answer about the token itself (an error code naming it)
+        marks the token INVALID, so the next run asks for a new one (still at most one in TOKEN_RETRY_S). Any other
+        401 is taken as passing once (a signature off by the clock); a second in a row is an error and then marks
+        the token too, as a 401 always did."""
         tok = self.token()
         try:
-            return self._send("GET", path, query, token=tok)
+            r = self._send("GET", path, query, token=tok)
         except WebullError as e:
-            if e.status == 401 or "TOKEN" in e.code.upper():
-                self._tokens.save({**self._tokens.load(), "status": "INVALID"})
+            st = self._tokens.load()
+            if "TOKEN" in e.code.upper():
+                self._tokens.save({**st, "status": "INVALID"})
+            elif e.status == 401:
+                n = int(st.get("auth_401") or 0)
+                self._tokens.save({**st, "auth_401": n + 1, **({"status": "INVALID"} if n else {})})
+                if n == 0:
+                    raise Transient("HTTP 401") from None
             raise
+        st = self._tokens.load()
+        if st.get("auth_401"):
+            self._tokens.save({k: v for k, v in st.items() if k != "auth_401"})
+        return r
 
     # ---- the reads ------------------------------------------------------------------------------------------------
     def accounts(self) -> list[dict[str, Any]]:

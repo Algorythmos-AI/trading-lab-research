@@ -3,10 +3,15 @@ from __future__ import annotations
 
 import ast
 import datetime as dt
+import email.message
+import http.client
+import io
 import json
 import re
 import stat
+import urllib.error
 import urllib.request
+import urllib.response
 from pathlib import Path
 from typing import Any
 
@@ -89,7 +94,8 @@ def test_the_package_has_no_order_code_and_no_webull_sdk():
                 assert not any(x == "webull" or x.startswith("webull.") for x in names), (f.name, names)
                 assert "requests" not in names or f.name == "publish.py", f.name   # only the publisher posts, to the site
     text = (PKG / "client.py").read_text()
-    assert text.count("urllib.request.Request(") == 1 and text.count("urllib.request.urlopen(") == 1   # one way out, through the gate
+    assert text.count("urllib.request.Request(") == 1 and "urlopen(" not in text.replace("def _urlopen(", "")
+    assert text.count(".open(req, timeout=timeout)") == 1                 # one way out, through the gate
 
 
 def test_only_the_pull_job_and_the_package_use_the_client():
@@ -319,3 +325,170 @@ def test_the_secret_helper_hides_input_and_writes_root_only():
     assert "systemctl start" not in sh.replace("then: sudo systemctl start", "")    # it starts nothing itself
     inst = (OCI / "bin" / "wt-install-units").read_text()
     assert "/etc/wt/webull.env" in inst and "wt-webull-pull.timer" in inst
+
+
+# ---- failures: transient ones exit 0 and page on state changes only ---------------------------------------------------
+
+class Raiser:
+    def __init__(self, exc: BaseException) -> None:
+        self.exc = exc
+
+    def __call__(self, req: urllib.request.Request, timeout: float) -> tuple[int, bytes]:
+        raise self.exc
+
+
+class Answer:
+    def __init__(self, status: int, body: bytes) -> None:
+        self.status, self.body, self.n = status, body, 0
+
+    def __call__(self, req: urllib.request.Request, timeout: float) -> tuple[int, bytes]:
+        self.n += 1
+        return self.status, self.body
+
+
+def run_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, opener: Any,
+             token: dict[str, Any] | None = None, now: float | None = None) -> tuple[int, dict[str, Any]]:
+    creds = tmp_path / "creds"
+    creds.write_text("WEBULL_APP_KEY=k123\nWEBULL_APP_SECRET=sec789-very-secret\n")
+    TokenStore(tmp_path / "token.json").save({"token": "t", "status": "NORMAL"} if token is None else token)
+    clock = [now or 1_800_000_000.0]
+
+    def sleep(x: float) -> None:
+        clock[0] += x
+    monkeypatch.setattr(pull, "ReadOnlyClient", lambda c, t, log: ReadOnlyClient(c, t, opener=opener, clock=lambda: clock[0],
+                                                                      sleep=sleep, log=log))
+    rc = pull.main(["--state", str(tmp_path), "--creds", str(creds)])
+    return rc, json.loads((tmp_path / "out" / "status.json").read_text())
+
+
+@pytest.mark.parametrize("opener,reason", [
+    (Raiser(urllib.error.URLError("name or service not known: api.webull.com.au")), "URLError"),
+    (Raiser(TimeoutError("timed out")), "TimeoutError"),
+    (Raiser(ConnectionResetError(104, "reset")), "ConnectionResetError"),
+    (Raiser(http.client.RemoteDisconnected("closed")), "RemoteDisconnected"),
+    (Raiser(http.client.IncompleteRead(b"x")), "IncompleteRead"),
+    (Answer(200, b"<html>gateway</html>"), "JSONDecodeError"),
+    (Answer(503, b"<html>down</html>"), "HTTP 503"),
+    (Answer(429, b"{}"), "HTTP 429"),
+    (Answer(401, b'{"error_code": "SIGNATURE_INVALID"}'), "HTTP 401"),
+])
+def test_a_transient_failure_exits_0_and_records_the_failing_state(tmp_path, monkeypatch, capsys, opener, reason):
+    rc, st = run_main(tmp_path, monkeypatch, opener)
+    assert rc == 0, "a transient failure must not page through OnFailure"
+    assert st["state"] == "failing" and st["ok"] is False and st["reason"] == reason and st["kind"] == "transient"
+    out = capsys.readouterr().out
+    assert "sec789" not in out and "api.webull.com.au" not in out and "html" not in json.dumps(st) + out
+
+
+def test_a_refusal_is_an_error_state_and_still_exits_0(tmp_path, monkeypatch):
+    rc, st = run_main(tmp_path, monkeypatch, Answer(403, b'{"error_code": "ACCESS_DENIED"}'))
+    assert rc == 0 and st["state"] == "failing" and st["kind"] == "error" and st["reason"] == "HTTP 403 ACCESS_DENIED"
+
+
+def test_the_failing_state_keeps_its_start_and_ok_clears_it(tmp_path, monkeypatch):
+    pull.set_status(tmp_path / "out", dt.datetime(2026, 11, 16, 15, 0, tzinfo=dt.UTC), "failing", "HTTP 503", "transient")
+    st = pull.set_status(tmp_path / "out", dt.datetime(2026, 11, 16, 15, 2, tzinfo=dt.UTC), "failing", "URLError",
+                         "transient")
+    cur = json.loads((tmp_path / "out" / "status.json").read_text())
+    assert st["since"] == cur["since"] == "2026-11-16T15:00:00Z" and cur["at"] == "2026-11-16T15:02:00Z"
+    pull.set_status(tmp_path / "out", dt.datetime(2026, 11, 16, 15, 4, tzinfo=dt.UTC), "ok")
+    cur = json.loads((tmp_path / "out" / "status.json").read_text())
+    assert cur["ok"] and cur["since"] == cur["last_ok"] == "2026-11-16T15:04:00Z" and "reason" not in cur
+
+
+def test_a_token_awaiting_approval_pages_once(tmp_path, monkeypatch):
+    now = 1_800_000_000.0
+    pending = Answer(200, json.dumps({"token": "new", "status": "PENDING"}).encode())
+    rc, st = run_main(tmp_path, monkeypatch, pending, token={}, now=now)
+    assert rc == pull.EXIT_APPROVAL and st["state"] == "approval"           # paged once, through OnFailure
+    rc, st = run_main(tmp_path, monkeypatch, Raiser(AssertionError("no request while waiting")),
+                      token=TokenStore(tmp_path / "token.json").load(), now=now + 300)
+    assert rc == 0 and st["state"] == "approval"                            # StillWaiting: no second page
+    # The same token raised again (a run that resumes the wait) is not paged again either.
+    created = TokenStore(tmp_path / "token.json").load()["created"]
+    rc, st = run_main(tmp_path, monkeypatch, Answer(200, b'{"status": "PENDING"}'),
+                      token={"token": "new", "status": "PENDING", "created": created}, now=created + 10)
+    assert rc == 0 and st["approval_paged"] == created
+
+
+def test_a_redirect_is_never_followed(tmp_path):
+    calls: list[str] = []
+
+    class FakeHTTPS(urllib.request.HTTPSHandler):
+        def https_open(self, req: urllib.request.Request) -> Any:
+            calls.append(req.full_url)
+            h = email.message.Message()
+            h["Location"] = "https://elsewhere.example/collect"
+            r = urllib.response.addinfourl(io.BytesIO(b""), h, req.full_url, 302)
+            r.msg = "Found"
+            return r
+    op = wc.build_opener(FakeHTTPS)
+    assert not any(type(h) is urllib.request.HTTPRedirectHandler for h in op.handlers)
+    assert not any(type(h) is urllib.request.HTTPRedirectHandler for h in wc._OPENER.handlers)
+    c, _rec, _ = make(tmp_path, token={"token": "t", "status": "NORMAL"})
+    c._open = lambda req, timeout: wc._urlopen(req, timeout, opener=op)
+    with pytest.raises(wc.WebullError) as e:
+        c.accounts()
+    assert e.value.status == 302 and e.value.code == "REDIRECT"
+    assert calls == ["https://api.webull.com.au/trading/accounts/list"]       # asked once, the redirect not followed
+
+
+def test_one_401_is_passed_over_and_the_token_kept(tmp_path):
+    c, _rec, store = make(tmp_path, answers=[(401, {"error_code": "SIGNATURE_INVALID"}), (200, [{"account_id": "1"}])],
+                          token={"token": "t", "status": "NORMAL", "created": 1.0})
+    with pytest.raises(wc.Transient):
+        c.accounts()
+    assert store.load()["status"] == "NORMAL" and store.load()["auth_401"] == 1
+    assert c.accounts() == [{"account_id": "1"}]
+    assert "auth_401" not in store.load() and store.load()["status"] == "NORMAL"
+    (tmp_path / "b").mkdir()
+    c2, _r, store2 = make(tmp_path / "b", answers=[(401, {}), (401, {})], token={"token": "t", "status": "NORMAL"})
+    with pytest.raises(wc.Transient):
+        c2.accounts()
+    with pytest.raises(wc.WebullError):                                     # the second in a row: as a 401 always was
+        c2.accounts()
+    assert store2.load()["status"] == "INVALID"
+
+
+# ---- the publisher's alarms ------------------------------------------------------------------------------------------
+
+class Pages:
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, str, str]] = []
+
+    def fire(self, key: str, title: str, message: str, priority: int = 4, tags: tuple[str, ...] = ()) -> bool:
+        self.sent.append(("fire", key, title))
+        return True
+
+    def resolve(self, key: str, title: str, message: str, priority: int = 2) -> bool:
+        self.sent.append(("resolve", key, title))
+        return True
+
+    def notify(self, title: str, message: str, priority: int = 3, tags: tuple[str, ...] = ()) -> bool:
+        self.sent.append(("notify", "", title))
+        return True
+
+
+def test_the_pull_failing_pages_on_state_changes_only(tmp_path):
+    src, state, pages = tmp_path / "out", tmp_path / "var", Pages()
+    src.mkdir()
+    (src / "history.json").write_text(json.dumps({"complete": False}))
+    t0 = dt.datetime(2026, 11, 16, 15, 0, tzinfo=dt.UTC)
+
+    def at(minute: int, st: str) -> list[tuple[str, str, str]]:
+        pull.set_status(src, t0 + dt.timedelta(minutes=minute), st, "URLError" if st == "failing" else "",
+                        "transient" if st == "failing" else "")
+        before = len(pages.sent)
+        assert publish.run(src, state, read_back=lambda: None, send=lambda b: (False, ""), pager=pages) == 0
+        return pages.sent[before:]
+    assert at(0, "ok") == []
+    assert at(2, "failing") == [("fire", "webull:pull", "Webull reads failing")]
+    assert at(4, "failing") == [] and at(20, "failing") == []
+    assert at(31, "failing") == []                                          # 29 minutes since it started
+    assert at(32, "failing") == [("notify", "", "Webull reads still failing")]
+    assert at(50, "failing") == [] and at(120, "failing") == []
+    assert at(122, "ok") == [("resolve", "webull:pull", "Webull reads working again")]
+    assert at(124, "ok") == []
+    pull.set_status(src, t0 + dt.timedelta(minutes=126), "approval", "approval", "approval")
+    publish.run(src, state, read_back=lambda: None, send=lambda b: (False, ""), pager=pages)
+    assert len(pages.sent) == 3                                             # the pull pages approval itself
