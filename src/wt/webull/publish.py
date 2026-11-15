@@ -1,6 +1,11 @@
 """Turn what `pull` read into the Trades page's journal and send it (ADR 0011). Runs as `wt`, never holds the key.
 
     python -m wt.webull.publish [--src DIR] [--state DIR] [--dry-run] [--fresh-money]
+    python -m wt.webull.publish --parity      # compare what the host would send with the journal the site shows
+
+It sends only while var/webull/PUBLISH_ON exists (beside its other state); without it every run is a dry run that
+says what it would send. The file is an operational switch for the cutover, not a security control: any member of
+group `wt` can create it.
 
 It reads the pull job's group-readable files (/var/lib/wt-webull/out), builds the journal with `journal`, and sends it
 with this host's dashboard key (DASHBOARD_KEY_ID) through `wt.ops.publish.send`. It sends when the fills or the money
@@ -9,8 +14,9 @@ complete: a half-read history would show the owner a wrong lifetime result.
 
 The money history (deposits, withdrawals, the daily account value) goes back further than the host's own balance
 readings. The first run reads the journal the site shows now (GET /api/editions/journal) and keeps its `money` block
-as the seed (var/webull/money_seed.json); later runs add the host's readings to it. If that read fails, nothing is
-sent and the job fails, so the history is never silently dropped. `--fresh-money` starts without a seed, on purpose.
+as the seed (var/webull/money_seed.json); later runs add the host's readings to it. The seed is kept only by a run
+that sends: a dry run reads it and lets it go. If that read fails, nothing is sent and the job fails (a dry run
+says so and exits 0), so the history is never silently dropped. `--fresh-money` starts without a seed, on purpose.
 
 Alarms. The pull job exits 0 when a read fails (status.json says how), so a network outage does not page every two
 minutes through OnFailure. This job, which runs after every pull, pages instead, through wt.ops.alerts (the
@@ -24,6 +30,7 @@ Log lines carry counts and outcomes only: no symbol, price, balance or key.
 from __future__ import annotations
 
 import argparse
+import collections
 import datetime as dt
 import hashlib
 import json
@@ -37,6 +44,8 @@ from typing import Any, Protocol
 from wt.webull import journal
 
 HEARTBEAT_S = 10 * 60
+PUBLISH_ON = "PUBLISH_ON"          # in the state directory: without it the publisher only says what it would send
+PARITY_ROWS = 20
 REMIND_S = 30 * 60                 # a state still holding this long pages once more
 RECONCILE_GRACE_S = 10 * 60        # a fill the history has not caught up with yet clears within a run or two
 SEED_KEYS = ("as_of", "currency", "account_value", "cash", "positions", "usd_rate", "complete_from", "transfers", "values")
@@ -280,11 +289,18 @@ def run(src: Path, state: Path, *, read_back: Callable[[], dict[str, Any] | None
         else:
             edition = read_back()
             if edition is None:
+                if dry_run:
+                    log("dry run: could not read the journal the site shows now; nothing sent, no seed kept")
+                    return 0
                 log("stop: could not read the journal the site shows now, so its money history can't be carried over")
                 return 1
             seed = seed_from(edition)
-        write_json(seed_path, seed)
-        log(f"money seed kept: {len(seed.get('values') or [])} daily values, {len(seed.get('transfers') or [])} transfers")
+        n_values, n_transfers = len(seed.get("values") or []), len(seed.get("transfers") or [])
+        if dry_run:
+            log(f"dry run: money seed read, not kept: {n_values} daily values, {n_transfers} transfers")
+        else:
+            write_json(seed_path, seed)
+            log(f"money seed kept: {n_values} daily values, {n_transfers} transfers")
     money = money_from(doc, seed or None, load_readings(src))
     if money:
         doc["money"], doc["schema_version"] = money, 2
@@ -325,6 +341,92 @@ def superseded(detail: str) -> bool:
     return detail.startswith("HTTP 409") and '"duplicate"' not in detail
 
 
+# ---- parity: the host's journal against the site's -------------------------------------------------------------------
+
+Row = tuple[Any, ...]
+
+
+def _utc(s: Any) -> str | None:
+    return journal._t(s).astimezone(dt.UTC).isoformat(timespec="seconds") if isinstance(s, str) and s else None
+
+
+def trade_row(t: Mapping[str, Any]) -> Row:
+    """A trade as parity compares it: its own fields, never its id."""
+    strike = t.get("strike")
+    return (t.get("symbol"), t.get("kind"), None if strike is None else round(float(strike), 4), t.get("expiry"),
+            t.get("side"), round(float(t.get("qty") or 0), 6), _utc(t.get("opened_at")), _utc(t.get("closed_at")),
+            round(float(t.get("pnl") or 0), 2))
+
+
+def last_fill(doc: Mapping[str, Any]) -> str | None:
+    """The newest fill a journal shows: an opening, or a close by an order (an expiry is not a fill)."""
+    times = [_utc(t.get("opened_at")) for t in doc.get("trades") or []]
+    times += [_utc(t.get("closed_at")) for t in doc.get("trades") or [] if t.get("close") == "order"]
+    times += [_utc(o.get("opened_at")) for o in doc.get("open") or []]
+    return max((x for x in times if x), default=None)
+
+
+def money_total(doc: Mapping[str, Any]) -> float | None:
+    """Money in less money out over the whole history (the transfers), the money block's total."""
+    m = doc.get("money")
+    return round(sum(float(t.get("amount") or 0) for t in m.get("transfers") or []), 2) if isinstance(m, dict) else None
+
+
+def compare(host: Mapping[str, Any], site: Mapping[str, Any]) -> dict[str, Any]:
+    mine = collections.Counter(trade_row(t) for t in host.get("trades") or [])
+    theirs = collections.Counter(trade_row(t) for t in site.get("trades") or [])
+    only_host, only_site = sorted((mine - theirs).elements(), key=repr), sorted((theirs - mine).elements(), key=repr)
+    counts = {k: {"host": f(host), "site": f(site)} for k, f in (
+        ("trades", lambda d: len(d.get("trades") or [])), ("open_lots", lambda d: len(d.get("open") or [])),
+        ("fills", lambda d: d.get("fills")), ("last_fill", last_fill), ("money_total", money_total))}
+    exact = not only_host and not only_site and all(v["host"] == v["site"] for v in counts.values())
+    value = {k: (d.get("money") or {}).get("account_value") for k, d in (("host", host), ("site", site))}
+    return {"exact": exact, "counts": counts, "account_value": value, "host_as_of": host.get("as_of"),
+            "site_as_of": site.get("as_of"), "only_host": [list(r) for r in only_host[:PARITY_ROWS]],
+            "only_site": [list(r) for r in only_site[:PARITY_ROWS]], "n_only_host": len(only_host),
+            "n_only_site": len(only_site)}
+
+
+def parity(src: Path, state: Path, *, read_back: Callable[[], dict[str, Any] | None],
+           say: Callable[[str], None] = print) -> int:
+    """Build the journal from the pull's files as a send would, read the site's, and compare them: 0 when they agree
+    exactly, 1 when not, 2 when either side can't be read. Prints counts and the differing trades (this is the
+    owner's terminal, not a job's log) and writes var/webull/parity.json, readable by `wt` only."""
+    history, status = read_json(src / "history.json", {}), read_json(src / "status.json", {})
+    at = status.get("at") if status.get("ok") else status.get("last_ok")
+    if not history.get("complete") or not at:
+        say(f"parity: the pull has not finished the history (read through {history.get('through') or 'nothing'}) "
+            "or has no good read yet")
+        return 2
+    site = read_back()
+    if site is None:
+        say("parity: could not read the journal the site shows now")
+        return 2
+    doc = journal.build(load_groups(src), journal._t(at))
+    seed = read_json(state / "money_seed.json", None)
+    money = money_from(doc, (seed if seed is not None else seed_from(site)) or None, load_readings(src))
+    if money:
+        doc["money"] = money
+    r = compare(doc, site)
+    say(f"parity: the host's journal as of {r['host_as_of']} against the site's as of {r['site_as_of']}")
+    for k, v in r["counts"].items():
+        say(f"  {k:<12} host {v['host']}  site {v['site']}{'' if v['host'] == v['site'] else '  <- differs'}")
+    say(f"  account value host {r['account_value']['host']}  site {r['account_value']['site']} (not compared: it "
+        "moves with the market)")
+    for side in ("host", "site"):
+        if r[f"only_{side}"]:
+            say(f"only on the {side} ({r[f'n_only_{side}']}, up to {PARITY_ROWS} shown): symbol, kind, strike, "
+                "expiry, side, qty, opened, closed, pnl")
+            for row in r[f"only_{side}"]:
+                say("  " + ", ".join("" if x is None else str(x) for x in row))
+    say(f"parity: {'exact' if r['exact'] else 'NOT exact'}")
+    state.mkdir(parents=True, exist_ok=True)
+    fd = os.open(state / "parity.json", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        json.dump({**r, "at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds")}, f, separators=(",", ":"))
+    return 0 if r["exact"] else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     from wt.core.config import STATE_DIR
     ap = argparse.ArgumentParser(prog="python -m wt.webull.publish")
@@ -332,10 +434,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--state", type=Path, default=STATE_DIR / "webull")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--fresh-money", action="store_true", help="start the money history without the site's seed")
+    ap.add_argument("--parity", action="store_true", help="compare with the site's journal; sends nothing")
     a = ap.parse_args(argv)
     env = os.environ
     url, secret = env.get("DASHBOARD_INGEST_URL"), env.get("DASHBOARD_INGEST_SECRET")
-    if not a.dry_run and not (url and secret):
+    dry_run = a.dry_run or not (a.state / PUBLISH_ON).exists()
+    if dry_run and not a.dry_run and not a.parity:
+        log(f"dry run: no {a.state / PUBLISH_ON}, so nothing is sent")
+    if not dry_run and not (url and secret):
         log("stop: DASHBOARD_INGEST_URL or DASHBOARD_INGEST_SECRET is not set")
         return 2
 
@@ -347,8 +453,10 @@ def main(argv: list[str] | None = None) -> int:
         from wt.ops.publish import send as post
         return post(body, url or "", secret or "", env.get("VERCEL_AUTOMATION_BYPASS_SECRET"))
 
+    if a.parity:
+        return parity(a.src, a.state, read_back=read_back)
     from wt.ops.alerts import Alerts
-    return run(a.src, a.state, read_back=read_back, send=send, dry_run=a.dry_run, fresh_money=a.fresh_money,
+    return run(a.src, a.state, read_back=read_back, send=send, dry_run=dry_run, fresh_money=a.fresh_money,
                pager=Alerts())
 
 

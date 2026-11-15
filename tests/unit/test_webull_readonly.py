@@ -567,3 +567,69 @@ def test_a_journal_the_site_refuses_as_older_is_superseded_and_pages(tmp_path):
     assert pages.sent[-1] == ("resolve", "webull:superseded", "Webull journal sent again")
     assert (state / "last_sent.json").exists()
     assert not publish.superseded('HTTP 409: {"status":"duplicate"}') and not publish.superseded("HTTP 200")
+
+
+# ---- the publish gate, the seed, parity and trade ids ---------------------------------------------------------------------
+
+def test_a_dry_run_never_keeps_the_seed_and_a_failed_read_back_does_not_page(tmp_path):
+    src, state = tmp_path / "out", tmp_path / "var"
+    write_src(src)
+    never = lambda b: pytest.fail("a dry run sent")                       # noqa: E731
+    assert publish.run(src, state, read_back=lambda: SEED, send=never, dry_run=True) == 0
+    assert not (state / "money_seed.json").exists()
+    assert publish.run(src, state, read_back=lambda: None, send=never, dry_run=True) == 0
+    assert not (state / "money_seed.json").exists()
+
+
+def main_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path, list[bytes]]:
+    from wt.ops import alerts as al
+    from wt.ops import publish as ops_publish
+    from wt.options import pipeline_check
+    src, state, sent = tmp_path / "out", tmp_path / "var", []
+    write_src(src)
+    monkeypatch.setenv("DASHBOARD_INGEST_URL", "https://site.invalid/api/ingest")
+    monkeypatch.setenv("DASHBOARD_INGEST_SECRET", "s")
+    monkeypatch.setattr(ops_publish, "send", lambda body, *a, **k: (sent.append(body), (True, "HTTP 200"))[1])
+    monkeypatch.setattr(pipeline_check, "read_edition", lambda kind: SEED)
+    monkeypatch.setattr(al, "Alerts", Pages)
+    return src, state, sent
+
+
+def test_the_publisher_sends_only_while_publish_on_exists(tmp_path, monkeypatch):
+    src, state, sent = main_env(tmp_path, monkeypatch)
+    args = ["--src", str(src), "--state", str(state)]
+    assert publish.main(args) == 0 and sent == [] and not (state / "money_seed.json").exists()
+    (state / publish.PUBLISH_ON).touch()
+    assert publish.main(args) == 0 and len(sent) == 1 and (state / "money_seed.json").exists()
+
+
+def test_parity_is_exact_against_the_same_journal_and_lists_a_differing_trade(tmp_path, monkeypatch, capsys):
+    src, state, _sent = main_env(tmp_path, monkeypatch)
+    (src / "orders" / "2026-11-12.json").write_text(json.dumps([group("8", "BUY", 3.0, "2026-11-12T15:00:00Z", "QQQ")]))
+    doc = journal.build(publish.load_groups(src), journal._t("2026-11-13T21:00:00Z"))
+    money = publish.money_from(doc, publish.seed_from(SEED), publish.load_readings(src))
+    site = json.loads(json.dumps({**doc, "money": money}))
+    for t in site["trades"]:
+        t["id"] = "cloud-" + t["id"]                                       # the ids are not compared
+    assert publish.parity(src, state, read_back=lambda: site) == 0
+    assert "parity: exact" in capsys.readouterr().out
+    site["trades"][0]["pnl"] += 1.0
+    assert publish.parity(src, state, read_back=lambda: site) == 1
+    out = capsys.readouterr().out
+    assert "NOT exact" in out and "only on the host (1" in out and "only on the site (1" in out
+    saved = json.loads((state / "parity.json").read_text())
+    assert not saved["exact"] and saved["only_site"][0][-1] == site["trades"][0]["pnl"]
+    assert stat.S_IMODE((state / "parity.json").stat().st_mode) == 0o600
+    assert not (state / "money_seed.json").exists() and "ACC" not in out
+    assert publish.parity(src, state, read_back=lambda: None) == 2
+
+
+def test_trade_ids_do_not_depend_on_the_order_of_the_fills():
+    gs = [group("1", "BUY", 1.0, "2026-10-14T14:00:00Z"), group("2", "BUY", 2.0, "2026-10-14T14:01:00Z"),
+          group("3", "SELL", 1.5, "2026-10-14T14:05:00Z"), group("4", "SELL", 1.7, "2026-10-14T14:06:00Z"),
+          group("5", "BUY", 1.0, "2026-10-13T14:00:00Z", "QQQ")]
+    now = dt.datetime(2026, 10, 15, 12, 0, tzinfo=dt.UTC)
+    a = journal.build(gs, now)["trades"]
+    b = journal.build(list(reversed(gs)) + [gs[2]], now)["trades"]          # reordered, one group read twice
+    assert [(t["id"], t["pnl"]) for t in a] == [(t["id"], t["pnl"]) for t in b]
+    assert len({t["id"] for t in a}) == len(a) == 3
