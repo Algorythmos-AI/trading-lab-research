@@ -767,7 +767,21 @@ def main(argv: list[str] | None = None) -> int:
         if not got:
             print("another publish is still running; not starting a second one")
             return 0
-        return _publish(a)
+        rc = _publish(a)
+    if not a.dry_run:
+        webull_watch()
+    return rc
+
+
+def webull_watch() -> None:
+    """The Webull pull's own watch (ADR 0011): no good read for too long pages once. Here because this job runs
+    every 5 to 15 minutes whatever the pull does. Never fails this job."""
+    try:
+        from wt.webull.publish import watch
+        if event := watch():
+            print(f"webull watch: {event}")
+    except Exception as e:  # noqa: BLE001 - the dashboard must never fail over the Webull watch
+        print(f"webull watch: could not run ({e.__class__.__name__})")
 
 
 def shadow_key_problem(env: dict[str, str] | None = None) -> str | None:

@@ -351,8 +351,13 @@ def test_publish_sends_nothing_without_a_full_history_a_good_read_or_the_seed(tm
     assert publish.run(b / "out", b / "var", read_back=lambda: SEED, send=never) == 0
     c = tmp_path / "c"
     write_src(c / "out")
-    assert publish.run(c / "out", c / "var", read_back=lambda: None, send=never) == 1
-    assert not (c / "var" / "money_seed.json").exists()
+    pages = Pages()
+    assert publish.run(c / "out", c / "var", read_back=lambda: None, send=never, pager=pages) == 0   # paged, not failed
+    assert not (c / "var" / "money_seed.json").exists() and ("fire", "webull:publish", "Webull journal not sent") in pages.sent
+    d = tmp_path / "d"
+    write_src(d / "out")                                                    # the site's journal has no money block
+    assert publish.run(d / "out", d / "var", read_back=lambda: {"trades": []}, send=never, pager=pages) == 0
+    assert not (d / "var" / "money_seed.json").exists()
 
 
 def test_reconcile_counts_disagreements_only():
@@ -889,3 +894,61 @@ def test_a_bug_in_the_pull_is_a_failing_state_with_its_class_name_only(tmp_path,
     rc, st = run_main(tmp_path, monkeypatch, Answer(200, b"[]"))
     assert rc == 0 and st["state"] == "failing" and st["kind"] == "bug" and st["reason"] == "KeyError"
     assert "12345678" not in capsys.readouterr().out + json.dumps(st)
+
+
+def test_a_failed_send_pages_once_and_exits_0(tmp_path):
+    src, state, pages = tmp_path / "out", tmp_path / "var", Pages()
+    write_src(src)
+    for _ in range(3):
+        assert publish.run(src, state, read_back=lambda: SEED, send=lambda b: (False, "HTTP 503: down"), pager=pages) == 0
+    assert [p for p in pages.sent if p[1] == "webull:publish"] == [("fire", "webull:publish", "Webull journal not sent")]
+    assert publish.run(src, state, read_back=lambda: SEED, send=lambda b: (True, "HTTP 200"), pager=pages) == 0
+    assert pages.sent[-1] == ("resolve", "webull:publish", "Webull journal reaches the site again")
+
+
+def test_the_publisher_without_its_secrets_or_with_a_bug_exits_0_and_pages(tmp_path, monkeypatch):
+    src, state, sent = main_env(tmp_path, monkeypatch)
+    (state / "money_seed.json").parent.mkdir(parents=True, exist_ok=True)
+    (state / publish.PUBLISH_ON).touch()
+    monkeypatch.delenv("DASHBOARD_INGEST_SECRET")
+    assert publish.main(["--src", str(src), "--state", str(state)]) == 0 and sent == []
+    alarms = json.loads((state / "alarms.json").read_text())
+    assert alarms["publish"]["on"] and alarms["publish"]["paged"]
+
+    def boom(*_a: Any, **_k: Any) -> int:
+        raise ValueError("a response body")
+    monkeypatch.setattr(publish, "run", boom)
+    (state / "alarms.json").unlink()
+    assert publish.main(["--src", str(src), "--state", str(state)]) == 0
+    assert json.loads((state / "alarms.json").read_text())["publish"]["on"]
+
+
+def test_the_watch_pages_once_when_the_pull_stops_reading(tmp_path):
+    key, status, state, pages = tmp_path / "webull.env", tmp_path / "status.json", tmp_path / "var", Pages()
+    tue = dt.datetime(2026, 11, 17, 15, 0, tzinfo=dt.UTC)                   # 10:00 New York, a session day
+    assert publish.watch(pages, tue, state=state, status_path=status, key=key) is None   # no key: nothing to watch
+    key.write_text("x")
+
+    def at(now: dt.datetime, last_ok: dt.datetime) -> str | None:
+        status.write_text(json.dumps({"state": "ok", "last_ok": last_ok.isoformat()}))
+        return publish.watch(pages, now, state=state, status_path=status, key=key)
+    assert at(tue, tue - dt.timedelta(minutes=20)) is None
+    assert at(tue + dt.timedelta(minutes=15), tue - dt.timedelta(minutes=20)) == "start"
+    assert at(tue + dt.timedelta(minutes=20), tue - dt.timedelta(minutes=20)) is None
+    assert at(tue + dt.timedelta(minutes=25), tue + dt.timedelta(minutes=24)) == "clear"
+    sat = dt.datetime(2026, 11, 21, 15, 0, tzinfo=dt.UTC)                   # outside the session: 26 hours
+    assert at(sat, sat - dt.timedelta(hours=25)) is None and at(sat, sat - dt.timedelta(hours=27)) == "start"
+    assert [p[1] for p in pages.sent] == ["webull:stale"] * 3
+    assert publish.in_session(tue) and not publish.in_session(sat)
+    assert not publish.in_session(dt.datetime(2026, 11, 27, 18, 30, tzinfo=dt.UTC))   # 13:30 on a half day
+
+
+def test_the_dashboard_job_runs_the_watch_and_never_fails_over_it(monkeypatch, capsys):
+    from wt.ops import publish as ops_publish
+
+    def boom() -> str | None:
+        raise RuntimeError("no")
+    monkeypatch.setattr(publish, "watch", boom)
+    ops_publish.webull_watch()
+    assert "webull watch: could not run (RuntimeError)" in capsys.readouterr().out
+    assert "webull_watch()" in (ROOT / "src" / "wt" / "ops" / "publish.py").read_text()
