@@ -58,4 +58,19 @@ describe("SIGNAL_CODE_HASH", () => {
     for (const f of ["signal-freeze.ts", "signal-version.gen.ts", "engine-version.gen.ts"]) expect(files).not.toContain(f);
     expect(gen.signalHash()).toBe(SIGNAL_CODE_HASH);
   });
+
+  // The pin. DEC-0051's Amendment 1 states one signal-code hash beside the `dry` sessions it reads (section 2), so those
+  // sessions must have run that one code: any change that moves the hash fails here, as a visible diff. That is any
+  // change to a file of the import closure, comments included (the generator's scanner can count them), and
+  // market-calendar.json, which is in the closure (adding later sessions moves the hash too). Changing this literal
+  // needs, in the same pull request, a dated line in research/experiments/EXP-0034-desk-signal-gates/README.md
+  // ("Dates and commits") saying what changed and why: a defect fix to the signal code (DEC-0051 section 8's
+  // defect-fix route), or the DEC-0051 amendment that allows it.
+  it("is pinned: a change to the signal's code is a visible diff here", () => {
+    expect(SIGNAL_CODE_HASH).toBe("s-0ec9e5efd1e65790ca5f83e5ba845269ad2c3666b500c631d89f2cb7327f2345");
+  });
+
+  // Once DEC-0051 Amendment 1 sets FROZEN_CODE_HASH (signal-freeze.ts), this becomes a real assertion, and the
+  // "nothing is frozen yet" test above and signal-params.test.ts's "are the candidates, not frozen" change with it.
+  it.todo("after Amendment 1: SIGNAL_CODE_HASH === FROZEN_CODE_HASH");
 });
