@@ -12,16 +12,18 @@ and the state directory as $STATE_DIRECTORY (/var/lib/wt-webull). What it writes
     out/positions.json           the positions Webull reports now, for the publisher's reconcile
     out/status.json              when this ran and how it ended (below)
 
-status.json: {"at", "ok", "state", "since", "last_ok", "reason", "kind"}. `state` is "ok", "failing" or "approval";
-`since` is when it entered that state; `reason` is an exception's class name or "HTTP <status>" (never a header, a
-body or a URL); `kind` is "transient" (the network, a timeout, HTTP 5xx or 429: the next read may not meet it) or
-"error" (Webull refused). How it ends, and who pages:
+status.json: {"at", "ok", "state", "since", "last_ok", "reason", "kind", "unknown_status"}. `state` is "ok",
+"failing" or "approval"; `since` is when it entered that state; `reason` is an exception's class name or
+"HTTP <status>" (never a header, a body or a URL); `kind` is "transient" (the network, a timeout, HTTP 5xx or 429:
+the next read may not meet it), "error" (Webull refused, or no usable credential) or "bug" (anything else); and
+`unknown_status` counts the orders read whose status is none this module knows. How it ends, and who pages:
   * ok, failing: exit 0. The job never pages through OnFailure for these, so a network outage does not page every
     2 minutes. The publisher (OnSuccess, the next unit) pages once when the state changes, once more if it is still
     failing after 30 minutes, and once when it works again (wt.webull.publish, "Alarms").
   * a new token waits for the owner's approval: exit 3 (EXIT_APPROVAL), which pages through OnFailure, once per
     token asked for. Until it is approved, or 6 hours pass, later runs exit 0 with state "approval".
-  * anything else (a bug): an exception, exit 1, OnFailure.
+  * anything else (a bug, a changed answer, a full disk): state "failing", kind "bug", exit 0, paged the same way.
+  A pull that stops running at all is caught by the watch in the dashboard job (wt.webull.publish.watch).
 
 The token (token.json) stays 0600, readable by this user only. Log lines carry counts and outcomes only: no
 symbol, price, account id, key or token. In the session it refreshes today and yesterday; after 16:30 New York it
@@ -55,6 +57,9 @@ STATES = ("ok", "failing", "approval")
 SNAPSHOT_EVERY_S = 25 * 60
 # An order in any other status (submitted, partly filled, pending a cancel ...) may still fill: its day is read again.
 TERMINAL = frozenset({"FILLED", "CANCELLED", "CANCELED", "REJECTED", "EXPIRED", "FAILED"})
+# Statuses seen as working; any other (or none) is still treated by `working`, and counted in status.json.
+KNOWN_WORKING = frozenset({"SUBMITTED", "PENDING", "PARTIAL_FILLED", "PARTIALLY_FILLED", "WORKING", "PENDING_CANCEL",
+                           "NEW", "ACCEPTED"})
 
 
 def log(msg: str) -> None:
@@ -100,19 +105,63 @@ def read_window(c: ReadOnlyClient, aid: str, a: dt.datetime, b: dt.datetime) -> 
     return out
 
 
-def save_day(c: ReadOnlyClient, aid: str, out: Path, d: dt.date) -> int:
-    groups = read_window(c, aid, *utc_day(d))
+def _filled(o: dict[str, Any]) -> float:
+    try:
+        return float(o.get("filled_quantity") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def merge_day(old: list[dict[str, Any]], new: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """What a day's file holds after a read: Webull's new answer, except that no order is ever dropped and an order
+    only gains fills. A short or empty answer (a 200 with less in it) must not erase fills already read."""
+    before = {str(o.get("order_id")): o for g in old for o in g.get("orders") or [] if isinstance(o, dict)}
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for g in new:
+        orders = []
+        for o in g.get("orders") or []:
+            oid = str(o.get("order_id"))
+            prev = before.get(oid)
+            orders.append(prev if prev is not None and _filled(prev) > _filled(o) else o)
+            seen.add(oid)
+        out.append({**g, "orders": orders})
+    for g in old:
+        left = [o for o in g.get("orders") or [] if isinstance(o, dict) and str(o.get("order_id")) not in seen]
+        if left:
+            out.append({**g, "orders": left})
+            seen |= {str(o.get("order_id")) for o in left}
+    return out
+
+
+def save_day(c: ReadOnlyClient, aid: str, out: Path, d: dt.date, stats: dict[str, int] | None = None) -> int:
+    path = out / "orders" / f"{d.isoformat()}.json"
+    old = read_json(path, [])
+    groups = merge_day([g for g in old if isinstance(g, dict)] if isinstance(old, list) else [],
+                       read_window(c, aid, *utc_day(d)))
     seen: dict[tuple[Any, ...], dict[str, Any]] = {}
     for g in groups:
         seen[(g.get("client_order_id"),) + tuple(o.get("order_id") for o in g.get("orders") or [])] = g
-    write_json(out / "orders" / f"{d.isoformat()}.json", list(seen.values()))
-    mark_working(out, d, any(working(o) for g in seen.values() for o in g.get("orders") or []))
+    write_json(path, list(seen.values()))
+    orders = [o for g in seen.values() for o in g.get("orders") or []]
+    mark_working(out, d, any(working(o) for o in orders))
+    if stats is not None:
+        stats["unknown_status"] = stats.get("unknown_status", 0) + sum(
+            1 for o in orders if str(o.get("status") or "").upper() not in TERMINAL | KNOWN_WORKING)
     return len(seen)
 
 
 def working(order: dict[str, Any]) -> bool:
+    """Whether an order may still fill: any status but a final one; with no status, while it has filled less than
+    its quantity (a quantity it does not give: not working, and counted in status.json as an unknown status)."""
     status = str(order.get("status") or "").upper()
-    return bool(status) and status not in TERMINAL
+    if status:
+        return status not in TERMINAL
+    qty = next((order[k] for k in ("total_quantity", "quantity", "qty") if order.get(k) not in (None, "")), None)
+    try:
+        return qty is not None and _filled(order) < float(qty)
+    except (TypeError, ValueError):
+        return False
 
 
 def working_days(out: Path) -> list[dt.date]:
@@ -138,7 +187,7 @@ def month_end(d: dt.date) -> dt.date:
 
 
 def backfill(c: ReadOnlyClient, aid: str, out: Path, upto: dt.date, deadline: float,
-             clock: Callable[[], float]) -> dict[str, Any]:
+             clock: Callable[[], float], stats: dict[str, int] | None = None) -> dict[str, Any]:
     """Fill the order files from HISTORY_FROM up to (not including) `upto`, as far as the budget allows."""
     h = read_json(out / "history.json", {})
     start = dt.date.fromisoformat(h["through"]) + dt.timedelta(days=1) if h.get("through") else HISTORY_FROM
@@ -156,7 +205,7 @@ def backfill(c: ReadOnlyClient, aid: str, out: Path, upto: dt.date, deadline: fl
                 start = nxt
                 continue
         while start < nxt and clock() < deadline:
-            save_day(c, aid, out, start)
+            save_day(c, aid, out, start, stats)
             mark(start)
             days += 1
             start += dt.timedelta(days=1)
@@ -220,24 +269,25 @@ def run(c: ReadOnlyClient, out: Path, now: dt.datetime, clock: Callable[[], floa
     aid = str(accts[0]["account_id"])
     today = now.astimezone(dt.UTC).date()
     n = 0
+    stats: dict[str, int] = {"unknown_status": 0}
     for k in range(refresh):
-        n += save_day(c, aid, out, today - dt.timedelta(days=k))
+        n += save_day(c, aid, out, today - dt.timedelta(days=k), stats)
     older = [d for d in working_days(out) if HISTORY_FROM <= d < today - dt.timedelta(days=refresh - 1)]
     reread = 0
     for d in older:                            # oldest first; what the budget leaves is read on the next run
         if clock() >= started + budget:
             break
-        save_day(c, aid, out, d)
+        save_day(c, aid, out, d, stats)
         reread += 1
     if older:
         log(f"working orders: {reread} of {len(older)} older day(s) read again")
-    h = backfill(c, aid, out, today - dt.timedelta(days=refresh - 1), started + budget, clock)
+    h = backfill(c, aid, out, today - dt.timedelta(days=refresh - 1), started + budget, clock, stats)
     snap = snapshot(c, aid, out, now)
     pos = c.positions(aid)
     write_json(out / "positions.json", {"at": now.isoformat().replace("+00:00", "Z"), "positions": pos})
     log(f"ok: {n} order groups in the last {refresh} days, history complete={h['complete']}, "
         f"snapshot={'taken' if snap else 'skipped'}, {len(pos)} positions")
-    return {"groups": n, "complete": h["complete"]}
+    return {"groups": n, "complete": h["complete"], **stats}
 
 
 def iso(t: dt.datetime) -> str:
@@ -275,10 +325,11 @@ def main(argv: list[str] | None = None) -> int:
         creds = Credentials.from_file(a.creds)
     except (OSError, ValueError) as e:
         log(f"stop: no usable credential ({e.__class__.__name__}); run sudo wt-set-webull-secret")
-        return 2
+        _status_quietly(out, now, "failing", "no usable credential", "error")
+        return 0
     client = ReadOnlyClient(creds, TokenStore(a.state / "token.json"), log=log)
     try:
-        run(client, out, now)
+        result = run(client, out, now)
     except Transient as e:
         log(f"transient: {e.reason}; the next run reads again")
         set_status(out, now, "failing", e.reason, "transient")
@@ -298,8 +349,19 @@ def main(argv: list[str] | None = None) -> int:
         log(f"error: {e}")
         set_status(out, now, "failing", f"HTTP {e.status}{f' {e.code}' if e.code else ''}", "error")
         return 0
-    set_status(out, now, "ok")
+    except Exception as e:  # noqa: BLE001 - a bug or a changed answer: paged once by state, not every 2 minutes
+        log(f"bug: {type(e).__name__}")              # the class only: its text may hold what Webull answered
+        _status_quietly(out, now, "failing", type(e).__name__, "bug")
+        return 0
+    set_status(out, now, "ok", unknown_status=int(result.get("unknown_status") or 0))
     return 0
+
+
+def _status_quietly(out: Path, now: dt.datetime, state: str, reason: str, kind: str) -> None:
+    try:
+        set_status(out, now, state, reason, kind)
+    except OSError as e:                              # a full disk: the job still ends 0, and the watch sees no read
+        log(f"could not write status.json ({type(e).__name__})")
 
 
 if __name__ == "__main__":

@@ -290,8 +290,10 @@ def test_pull_stops_when_the_budget_is_spent(tmp_path, monkeypatch):
 
 
 def test_main_needs_a_credential_and_says_nothing_secret(tmp_path, capsys):
-    assert pull.main(["--state", str(tmp_path), "--creds", str(tmp_path / "missing")]) == 2
+    assert pull.main(["--state", str(tmp_path), "--creds", str(tmp_path / "missing")]) == 0      # paged by state
     assert "wt-set-webull-secret" in capsys.readouterr().out
+    st = json.loads((tmp_path / "out" / "status.json").read_text())
+    assert st["state"] == "failing" and st["kind"] == "error" and st["reason"] == "no usable credential"
 
 
 # ---- the journal and its publisher -----------------------------------------------------------------------------------
@@ -438,7 +440,8 @@ def test_the_units_exact_command_runs_the_copy_with_the_standard_library_only(tm
     env = {"PATH": "/usr/bin:/bin", "CREDENTIALS_DIRECTORY": str(tmp_path / "none"), "STATE_DIRECTORY": str(tmp_path),
            "PYTHONPATH": str(ROOT / "src")}                                  # -I must ignore it
     r = subprocess.run(argv, cwd=opt, env=env, capture_output=True, text=True, timeout=60)
-    assert r.returncode == 2 and "no usable credential" in r.stdout, r.stderr
+    assert r.returncode == 0 and "no usable credential" in r.stdout, r.stderr
+    assert json.loads((tmp_path / "out" / "status.json").read_text())["kind"] == "error"
     probe = (PULL_IMPORT.replace("/opt/wt-webull", str(opt)) + "; import wt.webull.client as c; "
              "print(c.__file__); print(sorted(m for m in sys.modules if m.split('.')[0] not in sys.stdlib_module_names"
              " and m != '__main__' and not m.startswith('_sysconfigdata')))")
@@ -841,3 +844,48 @@ def test_every_helper_makes_etc_wt_the_same_way():
 def test_every_alarm_has_its_own_words():
     texts = {publish.page_text(k, e) for k, e in publish.ALARM_KEYS}
     assert len(texts) == len(publish.ALARM_KEYS) and ("Webull journal alarm", "An alarm of the Webull journal changed.") not in texts
+
+
+# ---- nothing is lost, nothing pages every run --------------------------------------------------------------------------
+
+def test_a_short_or_empty_answer_never_erases_fills_already_read(tmp_path):
+    day = dt.date(2026, 11, 10)
+    filled, other = group("1", "BUY", 1.0, "2026-11-10T15:00:00Z"), group("2", "SELL", 1.2, "2026-11-10T15:05:00Z")
+    fake = FakeClient({day: [filled, other]})
+    pull.save_day(fake, "A", tmp_path, day)                                 # type: ignore[arg-type]
+    fake.by_day = {}
+    pull.save_day(fake, "A", tmp_path, day)                                 # type: ignore[arg-type]
+    saved = json.loads((tmp_path / "orders" / "2026-11-10.json").read_text())
+    assert sorted(o["order_id"] for g in saved for o in g["orders"]) == ["1", "2"]
+    less = json.loads(json.dumps(filled))
+    less["orders"][0].update(filled_quantity="0", status="SUBMITTED")
+    fake.by_day = {day: [less]}
+    pull.save_day(fake, "A", tmp_path, day)                                 # type: ignore[arg-type]
+    saved = json.loads((tmp_path / "orders" / "2026-11-10.json").read_text())
+    assert [o["filled_quantity"] for g in saved for o in g["orders"] if o["order_id"] == "1"] == ["1"]
+    more = json.loads(json.dumps(other))
+    more["orders"][0].update(filled_quantity="2")
+    fake.by_day = {day: [more]}
+    pull.save_day(fake, "A", tmp_path, day)                                 # type: ignore[arg-type]
+    saved = json.loads((tmp_path / "orders" / "2026-11-10.json").read_text())
+    assert {o["order_id"]: o["filled_quantity"] for g in saved for o in g["orders"]} == {"1": "1", "2": "2"}
+
+
+def test_an_order_without_a_status_works_while_it_has_filled_less_than_its_quantity(tmp_path):
+    assert pull.working({"filled_quantity": "1", "total_quantity": "3"})
+    assert not pull.working({"filled_quantity": "3", "quantity": "3"}) and not pull.working({"filled_quantity": "0"})
+    assert pull.working({"status": "SOMETHING_NEW"}) and not pull.working({"status": "filled"})
+    g = group("9", "BUY", 1.0, "2026-11-16T15:00:00Z")
+    g["orders"][0]["status"] = "SOMETHING_NEW"
+    stats: dict[str, int] = {}
+    pull.save_day(FakeClient({dt.date(2026, 11, 16): [g]}), "A", tmp_path, dt.date(2026, 11, 16), stats)  # type: ignore[arg-type]
+    assert stats["unknown_status"] == 1
+
+
+def test_a_bug_in_the_pull_is_a_failing_state_with_its_class_name_only(tmp_path, monkeypatch, capsys):
+    def boom(*_a: Any, **_k: Any) -> Any:
+        raise KeyError("account_id: 12345678 secret-ish response text")
+    monkeypatch.setattr(pull, "run", boom)
+    rc, st = run_main(tmp_path, monkeypatch, Answer(200, b"[]"))
+    assert rc == 0 and st["state"] == "failing" and st["kind"] == "bug" and st["reason"] == "KeyError"
+    assert "12345678" not in capsys.readouterr().out + json.dumps(st)
