@@ -492,3 +492,20 @@ def test_the_pull_failing_pages_on_state_changes_only(tmp_path):
     pull.set_status(src, t0 + dt.timedelta(minutes=126), "approval", "approval", "approval")
     publish.run(src, state, read_back=lambda: None, send=lambda b: (False, ""), pager=pages)
     assert len(pages.sent) == 3                                             # the pull pages approval itself
+
+
+# ---- a torn balance line -----------------------------------------------------------------------------------------------
+
+def test_a_torn_last_balance_line_is_passed_over_and_ended_before_the_next(tmp_path):
+    fake = FakeClient({})
+    path = tmp_path / "account.jsonl"
+    path.write_text('{"at":"2026-11-16T14:00:00Z","cash":1.0,"market_value":0}\n{"at":"2026-11-16T14:3')
+    now = dt.datetime(2026, 11, 16, 14, 10, tzinfo=dt.UTC)
+    assert pull.snapshot(fake, "ACC1", tmp_path, now) is False                # the whole line before it is 10 min old
+    assert pull.snapshot(fake, "ACC1", tmp_path, now + dt.timedelta(minutes=30)) is True
+    lines = path.read_text().split("\n")
+    assert lines[1] == '{"at":"2026-11-16T14:3' and json.loads(lines[2])["at"] == "2026-11-16T14:40:00Z"
+    assert [r["at"] for r in publish.load_readings(tmp_path)] == ["2026-11-16T14:00:00Z", "2026-11-16T14:40:00Z"]
+    path.write_text('{"at": cut')                                           # nothing whole at all: a reading is taken
+    assert pull.snapshot(fake, "ACC1", tmp_path, now) is True
+    assert json.loads(path.read_text().split("\n")[1])["at"] == "2026-11-16T14:10:00Z"

@@ -141,10 +141,8 @@ def backfill(c: ReadOnlyClient, aid: str, out: Path, upto: dt.date, deadline: fl
 def snapshot(c: ReadOnlyClient, aid: str, out: Path, now: dt.datetime) -> bool:
     """One balance reading, at most every SNAPSHOT_EVERY_S. Only the totals and the per-currency rows are kept."""
     path = out / "account.jsonl"
-    last = None
-    if path.exists():
-        lines = path.read_text().splitlines()
-        last = json.loads(lines[-1]) if lines else None
+    data = path.read_bytes() if path.exists() else b""
+    last = last_reading(data)
     if last and (now - dt.datetime.fromisoformat(last["at"].replace("Z", "+00:00"))).total_seconds() < SNAPSHOT_EVERY_S:
         return False
     r = c.balance(aid)
@@ -158,9 +156,26 @@ def snapshot(c: ReadOnlyClient, aid: str, out: Path, now: dt.datetime) -> bool:
            "usd_cash": round(f(by.get("USD", {}).get("cash_balance")), 2),
            "usd_market_value": round(f(by.get("USD", {}).get("market_value")), 2)}
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o640)
-    with os.fdopen(fd, "a") as fh:
-        fh.write(json.dumps(row, separators=(",", ":")) + "\n")
+    with os.fdopen(fd, "a") as fh:            # a torn last line is ended first, so it never swallows this one
+        fh.write(("" if not data or data.endswith(b"\n") else "\n") + json.dumps(row, separators=(",", ":")) + "\n")
     return True
+
+
+def last_reading(data: bytes) -> dict[str, Any] | None:
+    """The newest whole reading in account.jsonl. A line cut short by a crash (the last one, as a rule) is passed
+    over, as wt.core.ledger does: the reading before it counts, and the next append starts on a line of its own."""
+    for line in reversed(data.split(b"\n")):
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(row, dict) and isinstance(row.get("at"), str):
+            try:
+                dt.datetime.fromisoformat(row["at"].replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            return row
+    return None
 
 
 def run(c: ReadOnlyClient, out: Path, now: dt.datetime, clock: Callable[[], float] = time.time) -> dict[str, Any]:
