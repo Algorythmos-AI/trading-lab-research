@@ -5,7 +5,7 @@
 // reader. The record's format is untouched: no id is written anywhere.
 import { describe, expect, it } from "vitest";
 import { decisionId, DecisionIdError, type DecisionIdWhy, decisionIdsOf, parseDecisionId } from "@/lib/decision-id";
-import { expectedSlots, SIDES } from "@/lib/desk-eval";
+import { expectedSlots, SIDES, SYMBOL_RE } from "@/lib/desk-eval";
 import type { LoggedSlot } from "@/lib/desk-run";
 import { focusOptions } from "@/lib/fixture-variants";
 import type { Options } from "@/lib/options";
@@ -101,7 +101,10 @@ describe("decisionId", () => {
       [{ session: "2026-10-11" }, "closed-day"], // Sunday
       [{ session: "2026-11-26" }, "closed-day"], // Thanksgiving
       [{ session: "2025-12-31" }, "closed-day"], // before the calendar
-      [{ session: "2026-02-30" }, "closed-day"],
+      [{ session: "2026-02-30" }, "bad-session"], // not a calendar date
+      [{ session: "2026-13-01" }, "bad-session"],
+      [{ session: "2026-04-31" }, "bad-session"],
+      [{ session: "2027-02-29" }, "bad-session"],
       [{ slotEnd: "2026-10-12T14:30:00Z" }, "bad-slot-end"], // not canonical
       [{ slotEnd: "yesterday" }, "bad-slot-end"],
       [{ slotEnd: Number.NaN }, "bad-slot-end"],
@@ -120,6 +123,23 @@ describe("decisionId", () => {
     ];
     for (const [over, want] of cases) expect([over, why(() => decisionId({ ...ok, ...over } as never))]).toEqual([over, want]);
     expect(decisionId(ok)).toBe("dec-20261012-1030-AAPL-C");
+    // A real leap day is a calendar date and, a Tuesday, a session.
+    expect(decisionId({ ...ok, session: "2028-02-29", slotEnd: "2028-02-29T15:30:00.000Z" })).toBe("dec-20280229-1030-AAPL-C");
+  });
+
+  it("takes exactly the symbols a record may hold (desk-eval.ts SYMBOL_RE), and they round-trip", () => {
+    const ok = ["A", "SPY", "BRK.B", "X1", "A.B.C", "ABCDEFGHIJ", "Z9.9"];
+    for (const symbol of ok) {
+      expect(SYMBOL_RE.test(symbol)).toBe(true);
+      for (const side of SIDES) {
+        const k = { session: "2026-10-12", slotEnd: "2026-10-12T14:30:00.000Z", symbol, side };
+        expect(parseDecisionId(decisionId(k))).toEqual(k);
+      }
+    }
+    for (const symbol of ["1A", ".A", "ABCDEFGHIJK", "Aa"]) {
+      expect(SYMBOL_RE.test(symbol)).toBe(false);
+      expect(why(() => parseDecisionId(`dec-20261012-1030-${symbol}-C`))).toBe("bad-id");
+    }
   });
 
   it("parses only its own form", () => {
@@ -138,7 +158,9 @@ describe("decisionId", () => {
       ["dec-20261012-1600-AAPL-C", "off-slot"],
       ["dec-20261012-2500-AAPL-C", "off-slot"],
       ["dec-20261011-1030-AAPL-C", "closed-day"],
-      ["dec-20261340-1030-AAPL-C", "closed-day"],
+      ["dec-20261340-1030-AAPL-C", "bad-id"], // not a calendar date
+      ["dec-20260230-1030-AAPL-C", "bad-id"],
+      ["dec-20260001-1030-AAPL-C", "bad-id"],
     ];
     for (const [id, want] of bad) expect([id, why(() => parseDecisionId(id as string))]).toEqual([id, want]);
   });
@@ -184,8 +206,8 @@ describe("decisionIdsOf", () => {
       const r = record(mode);
       expect(r.mode).toBe(mode);
       expect(r.focus).toEqual(FOCUS);
-      expect(decisionIdsOf(r)).toEqual(want);
-      expect(decisionIdsOf(r).map(parseDecisionId)).toEqual(FOCUS.flatMap((symbol) => SIDES.map((side) => ({ session: S, slotEnd: r.slot_end, symbol, side }))));
+      expect(decisionIdsOf(r)).toEqual({ ids: want, duplicates: [] });
+      expect(decisionIdsOf(r).ids.map(parseDecisionId)).toEqual(FOCUS.flatMap((symbol) => SIDES.map((side) => ({ session: S, slotEnd: r.slot_end, symbol, side }))));
       expect(want.every((id) => id.slice(4, 17) === pathParts(r.session, r.slot_end))).toBe(true);
       // Derived, never stored: no field of the record holds an id.
       expect(JSON.stringify(r)).not.toContain("dec-2026");
@@ -196,15 +218,29 @@ describe("decisionIdsOf", () => {
     for (const ed of [null, { ...E, session: "2026-10-09" }]) {
       const r = record("log", ed);
       expect(r.names).toEqual([]);
-      expect(decisionIdsOf(r)).toEqual([]);
+      expect(decisionIdsOf(r)).toEqual({ ids: [], duplicates: [] });
     }
   });
 
-  it("refuses a record whose session and slot end make no id, or that lists a name and side twice", () => {
+  it("an edition listing a focus name twice: each id once, in record order, and the repeats listed, not thrown", () => {
+    const items = E.focus!.items;
+    const twice: Options = { ...E, focus: { ...E.focus!, items: [items[0]!, items[1]!, items[0]!, items[2]!, items[1]!] } };
+    for (const mode of ["dry", "log"] as const) {
+      const r = record(mode, twice);
+      // The writer holds the repeated names as the edition gives them (its own order); the ids keep first places.
+      expect([...r.names.map((n) => n.symbol)].sort()).toEqual(["AAPL", "QQQ", "QQQ", "SPY", "SPY"]);
+      expect(decisionIdsOf(r)).toEqual({
+        ids: FOCUS.flatMap((s) => [`dec-20261012-1030-${s}-C`, `dec-20261012-1030-${s}-P`]),
+        duplicates: ["dec-20261012-1030-SPY-C", "dec-20261012-1030-SPY-P", "dec-20261012-1030-QQQ-C", "dec-20261012-1030-QQQ-P"],
+      });
+    }
+  });
+
+  it("refuses a record whose session and slot end make no id", () => {
     const r = record("dry");
     expect(why(() => decisionIdsOf({ ...r, slot_end: "2026-10-12T14:31:00.000Z" }))).toBe("off-slot");
     expect(why(() => decisionIdsOf({ ...r, names: [], slot_end: "2026-10-12T20:00:00.000Z" }))).toBe("off-slot");
     expect(why(() => decisionIdsOf({ ...r, session: "2026-10-11" }))).toBe("closed-day");
-    expect(why(() => decisionIdsOf({ ...r, names: [r.names[0]!, r.names[0]!] }))).toBe("duplicate");
+    expect(why(() => decisionIdsOf({ ...r, session: "2026-02-30" }))).toBe("bad-session");
   });
 });
