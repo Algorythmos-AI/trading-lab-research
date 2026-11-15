@@ -3,20 +3,30 @@ import { verify } from "./hmac";
 import { DEFAULT_KEY_ID, RADAR_KEY_ID, secretFor } from "./ingest";
 import { KEY_ID_RE } from "./ingest-scope";
 import { logEvent } from "./log";
-import { loadOptions, loadRadar } from "./snapshot";
+import { loadJournal, loadOptions, loadRadar } from "./snapshot";
 
 /**
  * GET /api/editions/<kind>, for the trading host's pipeline check (wt.options.pipeline_check): the latest stored
- * radar or options edition, exactly as the site shows it to the owner. Signed like /api/focus: no body, so the
+ * radar or options edition, exactly as the site shows it to the owner. The journal too, so the host's Webull
+ * publisher (wt.webull.publish, ADR 0011) can carry the money history the page already shows when it takes over. Signed like /api/focus: no body, so the
  * method and path stand in for it (`sha256=` + hex(HMAC_SHA256(secret, `${ts}.GET /api/editions/<kind>`))), good for
  * this one path and five minutes. A trading host's key only: the radar's own key may publish, never read back.
  */
-export const EDITION_KINDS = ["radar", "options"] as const;
+export const EDITION_KINDS = ["radar", "options", "journal"] as const;
 export type EditionKind = (typeof EDITION_KINDS)[number];
 export const editionSigned = (kind: EditionKind) => `GET /api/editions/${kind}`;
 
 function json(status: number, body: unknown): Response {
   return Response.json(body, { status, headers: { "cache-control": "no-store" } });
+}
+
+type Loaded = { status: "ok"; edition: unknown } | { status: "missing" } | { status: "error" };
+
+async function load(kind: EditionKind): Promise<Loaded> {
+  if (kind === "radar") return loadRadar();
+  if (kind === "options") return loadOptions();
+  const r = await loadJournal();
+  return r.status === "ok" ? { status: "ok", edition: r.doc } : r;
 }
 
 export async function handleEdition(req: Request, kind: string, now: Date = new Date()): Promise<Response> {
@@ -36,7 +46,7 @@ export async function handleEdition(req: Request, kind: string, now: Date = new 
     ? verify(secret, req.headers.get("x-wt-timestamp"), req.headers.get("x-wt-signature"), editionSigned(kind as EditionKind), now)
     : { ok: false as const, reason: keyId === RADAR_KEY_ID ? "radar-key" : "unknown-key-id" };
   if (!auth.ok) return done(401, "unauthorized", { error: "unauthorized" }, { reason: auth.reason });
-  const r = kind === "radar" ? await loadRadar() : await loadOptions();
+  const r = await load(kind as EditionKind);
   if (r.status === "missing") return done(404, "missing", { error: "no edition" }, { key_id: keyId });
   if (r.status !== "ok") return done(502, "storage-error", { error: "storage unavailable" }, { key_id: keyId });
   return done(200, "ok", { kind, edition: r.edition }, { key_id: keyId });

@@ -31,8 +31,9 @@ copy at once, so the host needs the new pair, and so does every other place that
 5. Update `~/trading/.env` on the Mac if the console uses the same paper account. Updating only the Mac leaves
    the host on the dead pair.
 
-**Broker keys (Webull):** these are not on the host (`wt-set-secrets` has no field for them). Regenerate them in
-Webull's console and update `~/trading/.env`.
+**Broker key (Webull, read only):** it lives on the host in `/etc/wt/webull.env`, apart from the shared secrets
+(`wt-set-secrets` has no field for it). Press **Reset Key** in Webull's API Keys Management, then run
+`sudo wt-set-webull-secret` and approve the new token in the Webull app ([webull-readonly.md](webull-readonly.md)).
 
 **GitHub Actions secrets** (`VERCEL_TOKEN`, …): create a new token with an expiry, then:
 

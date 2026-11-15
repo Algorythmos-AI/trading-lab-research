@@ -1,0 +1,49 @@
+[Unit]
+Description=Trading Lab: read the owner's Webull account, read only (ADR 0011)
+# Runs as its own user. The Webull key reaches this one service only, as a systemd credential: it is never in
+# /run/wt-secrets/env, never in an environment variable, and the wt jobs (which hold order code) cannot read it.
+Wants=network-online.target
+After=network-online.target time-sync.target
+ConditionPathExists=/etc/wt/webull.env
+OnFailure=wt-alert@%n.service
+OnSuccess=wt-webull-publish.service
+
+[Service]
+Type=exec
+User=wt-webull
+Group=wt
+WorkingDirectory=/home/wt/trading
+LoadCredential=webull:/etc/wt/webull.env
+StateDirectory=wt-webull
+StateDirectoryMode=0750
+UMask=0027
+Environment=PYTHONPATH=src
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/home/wt/trading/.venv/bin/python -m wt.webull.pull
+# Exit 3: a new token waits for the owner's approval in the Webull app (paged once through OnFailure).
+RuntimeMaxSec=1500
+MemoryMax=300M
+LimitCORE=0
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=read-only
+InaccessiblePaths=-/run/wt-secrets -/etc/wt/secrets.env
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged
+CapabilityBoundingSet=
+AmbientCapabilities=

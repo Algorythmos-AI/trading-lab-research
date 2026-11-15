@@ -6,6 +6,7 @@
 #   * the static units (deploy/oci/systemd) and the helpers (deploy/oci/bin -> /usr/local/bin), so a changed helper
 #     (wt-deploy itself included) is never left stale;
 #   * the backup and restore-test timers, when the host has a restic repository;
+#   * the Webull read-only timer (ADR 0011), when the owner has put the key on the host (wt-set-webull-secret);
 #   * /etc/wt/installed.sha256, the fingerprint of all of it: an unattended deploy compares it with the target
 #     commit's (python -m wt.ops.units fingerprint) and leaves any release that changes it to the owner.
 set -euo pipefail
@@ -36,6 +37,11 @@ if grep -q '^RESTIC_REPOSITORY=' /run/wt-secrets/env 2>/dev/null; then
   systemctl enable --now wt-backup.timer wt-restore-test.timer
 else
   echo "no RESTIC_REPOSITORY in the secrets: backup timers left off"
+fi
+if [[ -r /etc/wt/webull.env ]] && id -u wt-webull >/dev/null 2>&1; then
+  systemctl enable --now wt-webull-pull.timer
+else
+  echo "no Webull key on this host (sudo wt-set-webull-secret): Webull timer left off"
 fi
 as_wt .venv/bin/python -m wt.ops.units fingerprint --root "$root" > /etc/wt/installed.sha256
 chmod 0644 /etc/wt/installed.sha256
