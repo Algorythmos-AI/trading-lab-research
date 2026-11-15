@@ -16,7 +16,7 @@ Alarms. The pull job exits 0 when a read fails (status.json says how), so a netw
 minutes through OnFailure. This job, which runs after every pull, pages instead, through wt.ops.alerts (the
 ntfy pages every job uses), and only when a state changes: once when it starts, once more if it still holds after
 REMIND_S, and once when it clears (`step`). The states: the pull failing, the open lots disagreeing with Webull's
-positions for longer than RECONCILE_GRACE_S. The pull cannot page this way itself: wt.ops.alerts needs the
+positions for longer than RECONCILE_GRACE_S, and the site refusing this journal as older (another writer). The pull cannot page this way itself: wt.ops.alerts needs the
 checkout's environment, which the key holder does not load (ADR 0011).
 
 Log lines carry counts and outcomes only: no symbol, price, balance or key.
@@ -201,12 +201,17 @@ def page_text(key: str, event: str, since: dt.datetime | None = None, kind: obje
         ("reconcile", "still"): ("Webull holdings still disagree", f"The journal's open lots and Webull's "
                                  f"positions have disagreed since {at}, 30 minutes or more."),
         ("reconcile", "clear"): ("Webull holdings agree again", "The journal's open lots match Webull's positions."),
+        ("superseded", "start"): ("Webull journal superseded", f"Since {at} the site holds a journal newer than the "
+                                  "host's: something else writes it. Check that the cloud routine is retired."),
+        ("superseded", "still"): ("Webull journal still superseded", f"Since {at} the site has refused the host's "
+                                  "journal as older, 30 minutes or more."),
+        ("superseded", "clear"): ("Webull journal sent again", "The site takes the host's journal again."),
     }
     return texts.get((key, event), ("Webull journal alarm", "An alarm of the Webull journal changed."))
 
 
 ALARM_KEYS = (("pull", "start"), ("pull", "still"), ("pull", "clear"), ("reconcile", "start"), ("reconcile", "still"),
-              ("reconcile", "clear"))
+              ("reconcile", "clear"), ("superseded", "start"), ("superseded", "still"), ("superseded", "clear"))
 
 
 def page(pager: Pager, key: str, event: str, since: dt.datetime | None = None, kind: object = None,
@@ -302,10 +307,22 @@ def run(src: Path, state: Path, *, read_back: Callable[[], dict[str, Any] | None
         log(f"dry run: {summary}, {len(body):,} bytes")
         return 0
     ok, detail = send(body)
-    log(f"{'sent' if ok else 'not sent'}: {summary} ({detail})")
+    if ok and superseded(detail):
+        log(f"superseded: the site holds a newer journal than this one ({summary}); not recorded as sent")
+        alarms.set("superseded", True, now)
+        return 0
+    log(f"{'sent' if ok else 'not sent'}: {summary} ({detail.split(':')[0]})")
     if ok:
         write_json(state / "last_sent.json", {"at": doc["as_of"], "hash": h})
+        alarms.set("superseded", False, now)
     return 0 if ok else 1
+
+
+def superseded(detail: str) -> bool:
+    """wt.ops.publish.send counts a 409 as sent. For a desk snapshot that is right; for the journal it means the
+    site already holds one with a later as_of ("older", dashboard/src/lib/ingest.ts storeEdition), which only another
+    writer can have made. The site answers a repeat of the same run_id with 200 "duplicate", so it is not this."""
+    return detail.startswith("HTTP 409") and '"duplicate"' not in detail
 
 
 def main(argv: list[str] | None = None) -> int:

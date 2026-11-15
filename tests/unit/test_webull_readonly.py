@@ -552,3 +552,18 @@ def test_a_lasting_disagreement_with_webulls_positions_pages_once(tmp_path):
     assert at(10, held) == [("fire", "webull:reconcile", "Webull holdings disagree")]
     assert at(12, held) == []
     assert at(14, []) == [("resolve", "webull:reconcile", "Webull holdings agree again")]
+
+
+# ---- two writers ------------------------------------------------------------------------------------------------------
+
+def test_a_journal_the_site_refuses_as_older_is_superseded_and_pages(tmp_path):
+    src, state, pages = tmp_path / "out", tmp_path / "var", Pages()
+    write_src(src)
+    older = (True, 'HTTP 409: {"status":"older","run_id":"webull-20261113T210000Z"}')   # wt.ops.publish.send's answer
+    assert publish.run(src, state, read_back=lambda: SEED, send=lambda b: older, pager=pages) == 0
+    assert ("fire", "webull:superseded", "Webull journal superseded") in pages.sent
+    assert not (state / "last_sent.json").exists()                          # tried again on the next run
+    assert publish.run(src, state, read_back=lambda: SEED, send=lambda b: (True, "HTTP 200"), pager=pages) == 0
+    assert pages.sent[-1] == ("resolve", "webull:superseded", "Webull journal sent again")
+    assert (state / "last_sent.json").exists()
+    assert not publish.superseded('HTTP 409: {"status":"duplicate"}') and not publish.superseded("HTTP 200")
