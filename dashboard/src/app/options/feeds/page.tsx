@@ -147,6 +147,17 @@ function StampFacts({ p }: { p: StampPanel }) {
       v: w.text,
       warn: !w.good,
     });
+    const { count, minutes } = p.previous;
+    rows.push({
+      k: "Previous session stamps",
+      v:
+        count === null
+          ? "not available: the store could not be read"
+          : minutes === null
+            ? `${count} stored`
+            : `${count} of ${minutes} minutes${count >= minutes ? ": every minute" : `: ${minutes - count} missing`}`,
+      warn: count === null || minutes === null || count < minutes,
+    });
   } else
     rows.push({
       k: "Previous session",
