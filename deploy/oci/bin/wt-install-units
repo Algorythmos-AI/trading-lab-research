@@ -30,7 +30,7 @@ if [[ -n "$dirty" ]]; then
 fi
 rm -rf var/units && as_wt .venv/bin/python -m wt.ops.units render --out var/units --root "$root"
 list=/etc/wt/installed-units.txt
-install -d -m 0755 /etc/wt
+install -d -m 0750 -o root -g wt /etc/wt     # as wt-set-secrets and wt-fetch-secrets make it: wt reads installed.sha256
 mapfile -t new < <(cd var/units && ls wt-*.service wt-*.timer)
 if [[ -r "$list" ]]; then
   for u in $(comm -23 <(sort "$list") <(printf '%s\n' "${new[@]}" | sort)); do

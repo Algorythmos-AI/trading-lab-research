@@ -754,3 +754,25 @@ def test_trade_ids_do_not_depend_on_the_order_of_the_fills():
     b = journal.build(list(reversed(gs)) + [gs[2]], now)["trades"]          # reordered, one group read twice
     assert [(t["id"], t["pnl"]) for t in a] == [(t["id"], t["pnl"]) for t in b]
     assert len({t["id"] for t in a}) == len(a) == 3
+
+
+def test_the_key_holder_is_blocked_from_the_metadata_server_like_wt():
+    import yaml
+    for f in (ROOT / "deploy" / "gcp" / "cloud-init.yaml", ROOT / "deploy" / "oci" / "cloud-init.yaml.tftpl"):
+        cmds = [" ".join(c) if isinstance(c, list) else c for c in yaml.safe_load(f.read_text())["runcmd"]]
+        rules = [i for i, c in enumerate(cmds) if "169.254.169.254/32" in c and "REJECT" in c]
+        users = [c.split("--uid-owner ")[1].split()[0] for c in (cmds[i] for i in rules)]
+        assert users == ["wt", "wt-webull"], f.name
+        made = next(i for i, c in enumerate(cmds) if "useradd --system --gid wt" in c and "wt-webull" in c)
+        save = next(i for i, c in enumerate(cmds) if c == "netfilter-persistent save")
+        assert made < rules[1] < save, f.name
+    rule = "-d 169.254.169.254/32 -p tcp --dport 80 -m owner --uid-owner"
+    for helper in (OCI / "bin" / "wt-set-webull-secret", ROOT / "deploy" / "gcp" / "bin" / "wt-tune-host"):
+        sh = helper.read_text()
+        assert f"meta=(OUTPUT {rule}" in sh and 'iptables -C "${meta[@]}"' in sh and "netfilter-persistent save" in sh
+
+
+def test_every_helper_makes_etc_wt_the_same_way():
+    modes = {n: re.findall(r"install -d -m (\d+) (?:-o root -g wt )?(?:/run/wt-secrets )?/etc/wt\b", (OCI / "bin" / n).read_text())
+             for n in ("wt-install-units", "wt-set-webull-secret", "wt-set-secrets", "wt-fetch-secrets")}
+    assert all(m == ["0750"] for m in modes.values()), modes
