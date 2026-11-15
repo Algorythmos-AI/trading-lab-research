@@ -244,7 +244,8 @@ test("the Trades page draws the clone's session, and its bad day, apart from the
   page.on("pageerror", (e) => errors.push(e.message));
   expect((await page.goto("/trades"))?.status()).toBe(200);
   const clone = page.locator("#clone");
-  await expect(clone.getByRole("heading", { name: "The clone" })).toBeVisible();
+  await expect(clone.getByRole("heading", { name: "Options clone (paper)" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Paper account (Alpaca): Options clone" })).toHaveAttribute("data-env", "paper");
   await expect(clone.getByText("2 of 5")).toBeVisible();
   await expect(clone.getByRole("cell", { name: "SPY261012C00581000" })).toBeVisible();
   await expect(clone.getByRole("cell", { name: "+25.5%" })).toBeVisible();

@@ -3,15 +3,21 @@ import { Empty } from "@/components/empty";
 import { Panel } from "@/components/panel";
 import { StatTile, StatTiles } from "@/components/stat-tile";
 import { Badge } from "@/components/ui/badge";
+import { EnvFrame } from "@/components/ui/env-chip";
+import { Money } from "@/components/ui/money";
 import { Notice } from "@/components/ui/notice";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { fracPct, newYork, pct, usd } from "@/lib/format";
+import { fracPct, newYork, pct } from "@/lib/format";
 import type { OptionsClone } from "@/lib/options-clone.types";
 import type { OptionsCloneResult } from "@/lib/snapshot";
 import { cn } from "@/lib/utils";
 
-// "The clone" on the Trades page: the paper bot that trades one same-day call or put at a time by the owner's rules
-// (DEC-0030). Everything here comes from its SAFE document: counts, ids, codes and statistics.
+// "Options clone (paper)" on the Trades page: the paper bot that trades one same-day call or put at a time by the
+// owner's rules (DEC-0030), in the Alpaca paper account. Everything here comes from its SAFE document: counts, ids,
+// codes and statistics. It sits in a paper EnvFrame and its dollars are paper Money: never the owner's Webull money.
+
+/** The panel's title; the Trades page's group heading and jump link say the same (trades-jump-bar.tsx). */
+export const CLONE_TITLE = "Options clone (paper)";
 
 const HYP_LABEL: Record<string, string> = { "HYP-0029": "HYP-0029", "HYP-0030": "HYP-0030", all: "Both", other: "Other" };
 const VERDICT: Record<OptionsClone["setups"][number]["verdict"], { label: string; variant: "neutral" | "bad" | "good" }> = {
@@ -41,17 +47,21 @@ export function ClonePanel({ result }: { result: OptionsCloneResult }) {
     "The paper bot that buys one same-day call or put at a time by your nine rules (DEC-0030), with its own paper money. It never touches your account. Updated after every trade and at the close.";
   if (result.status !== "ok") {
     return (
-      <Panel id="clone" title="The clone" icon={Bot} means={means}>
-        <Empty title={result.status === "missing" ? "No session from the clone yet" : "The clone's document could not be read"}>
-          {result.status === "missing" ? "It appears here once the paper-o runner has armed for a session." : "Storage did not answer; the next update will try again."}
-        </Empty>
-      </Panel>
+      <EnvFrame env="paper" label="Options clone">
+        <Panel id="clone" title={CLONE_TITLE} icon={Bot} means={means}>
+          <Empty title={result.status === "missing" ? "No session from the clone yet" : "The clone's document could not be read"}>
+            {result.status === "missing" ? "It appears here once the paper-o runner has armed for a session." : "Storage did not answer; the next update will try again."}
+          </Empty>
+        </Panel>
+      </EnvFrame>
     );
   }
   return (
-    <Panel id="clone" title="The clone" icon={Bot} means={means}>
-      <CloneBody d={result.doc} />
-    </Panel>
+    <EnvFrame env="paper" label="Options clone">
+      <Panel id="clone" title={CLONE_TITLE} icon={Bot} means={means}>
+        <CloneBody d={result.doc} />
+      </Panel>
+    </EnvFrame>
   );
 }
 
@@ -80,8 +90,13 @@ function CloneBody({ d }: { d: OptionsClone }) {
           label="Day result"
           icon={Wallet}
           tone={pnl > 0 ? "good" : pnl < 0 ? (used >= 0.75 ? "bad" : "warn") : "neutral"}
-          value={usd(pnl)}
-          hint={`Limit −${usd(d.day_pnl.limit_usd)}${pnl < 0 ? ` · ${Math.round(used * 100)}% used` : ""}`}
+          value={<Money env="paper" value={pnl} />}
+          hint={
+            <>
+              Limit <Money env="paper" value={-Math.abs(d.day_pnl.limit_usd)} />
+              {pnl < 0 ? ` · ${Math.round(used * 100)}% used` : ""}
+            </>
+          }
         />
         <StatTile
           label="Entries"
