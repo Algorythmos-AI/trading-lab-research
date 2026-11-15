@@ -7,6 +7,7 @@ import { PaneBoundary } from "@/components/client/pane-boundary";
 import { EvidenceBars, LevelMap, RuleRanges, StructureMap } from "@/components/options-charts";
 import { Panel } from "@/components/panel";
 import { Badge } from "@/components/ui/badge";
+import { EnvFrame } from "@/components/ui/env-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fracPct, num, rMult, shortDate, signed, sydney, weekDate as sessionDay } from "@/lib/format";
 import {
@@ -367,16 +368,28 @@ export function RulesPanel({ e }: { e: Options }) {
   );
 }
 
+/**
+ * The probation rules' replayed trades: a model, not an account. The edition's `paper` rows are each rule's triggers
+ * replayed on hourly bars after the close, with no option prices, so the panel sits in a model frame (lib/env.ts).
+ */
 export function PaperPanel({ e }: { e: Options }) {
+  return (
+    <EnvFrame env="model" label="Rule replay">
+      <RuleReplayPanel e={e} />
+    </EnvFrame>
+  );
+}
+
+function RuleReplayPanel({ e }: { e: Options }) {
   const rows = e.paper ?? [];
   return (
     <Panel
-      title="Paper scorecard"
-      means="Each probation rule's triggers, replayed on hourly bars after the close. Paper only. R is measured on the stock, with no option prices or costs."
+      title="Rule replay (model)"
+      means="Each probation rule's triggers, replayed on hourly bars after the close. A model, not an account: R is measured on the stock, with no option prices or costs."
       icon={ClipboardList}
     >
       {rows.length === 0 ? (
-        <Empty title="No paper trades yet" />
+        <Empty title="No replayed trades yet" />
       ) : (
         <div className="grid gap-3">
           <TradeBars
@@ -387,7 +400,7 @@ export function PaperPanel({ e }: { e: Options }) {
               when: shortDate(p.session),
             }))}
             whenLabel="Session"
-            label="Each paper trade's result in R, in the order logged"
+            label="Each replayed trade's result in R, in the order logged"
           />
           <p className="text-muted-foreground font-mono text-xs">
             {rows.length} trades · total {rMult(rows.reduce((a, p) => a + (p.r ?? 0), 0), 2)} · {rows.filter((p) => (p.r ?? 0) > 0).length} won

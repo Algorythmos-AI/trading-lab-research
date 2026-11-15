@@ -56,7 +56,7 @@ const VIEW_LABEL: Record<DeskView, string> = { brief: "Brief", live: "Live", rev
 const VIEW_HINT: Record<DeskView, string> = {
   brief: "Before the open: where each name closed and what its options cost",
   live: "While the session trades: live prices against the levels",
-  review: "After the close: what the paper rules did",
+  review: "After the close: what the rules on probation did",
 };
 
 const CHIP_DOT: Record<string, string> = { STRONG: "bg-good-fill", MID: "bg-neutral-fill", WEAK: "bg-bad-fill" };
@@ -218,7 +218,7 @@ const COLUMNS: Record<DeskView, Column[]> = {
     },
   ],
   review: [
-    { key: "trades", head: "Paper trades", hint: "Paper trades the probation rules took on this name", width: "md:w-[6.5rem]", sort: (r) => r.paper.n, cell: (r) => num(r.paper.n) },
+    { key: "trades", head: "Probation trades", hint: "Trades the rules on probation took on this name, replayed after the close", width: "md:w-[6.5rem]", sort: (r) => r.paper.n, cell: (r) => num(r.paper.n) },
     { key: "won", head: "Won", hint: "How many of them finished above zero", width: "md:w-[4rem]", sort: (r) => (r.paper.n > 0 ? r.paper.wins : null), cell: (r) => (r.paper.n > 0 ? num(r.paper.wins) : dash) },
     {
       key: "total",

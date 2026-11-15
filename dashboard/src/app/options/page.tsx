@@ -83,7 +83,7 @@ function ClassicOptions({ e, dates, date, now }: { e: Options; dates: string[]; 
           </div>
           <TickerCards e={e} />
           <div data-explain className="contents">
-            <PaneBoundary name="Paper scorecard">
+            <PaneBoundary name="Rule replay (model)">
               <PaperPanel e={e} />
             </PaneBoundary>
             <PaneBoundary name="What the testing found">
@@ -307,14 +307,14 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
                 </details>
                 <details className="rounded-lg border">
                   <summary className="text-muted-foreground cursor-pointer px-4 py-3 text-sm">
-                    <span className="text-foreground font-semibold">Research and evidence</span> · entry rules on probation, paper scorecard, close strength,
+                    <span className="text-foreground font-semibold">Research and evidence</span> · entry rules on probation, the rule replay (model), close strength,
                     what the testing found. Not needed to trade.
                   </summary>
-                  <section aria-label="Evidence and paper record" className="grid gap-5 p-4 pt-0 lg:grid-cols-2">
+                  <section aria-label="Evidence and rule replay" className="grid gap-5 p-4 pt-0 lg:grid-cols-2">
                     <PaneBoundary name="Entry rules">
                       <RulesPanel e={full} />
                     </PaneBoundary>
-                    <PaneBoundary name="Paper scorecard">
+                    <PaneBoundary name="Rule replay (model)">
                       <PaperPanel e={full} />
                     </PaneBoundary>
                     <PaneBoundary name="Close strength vs option price">

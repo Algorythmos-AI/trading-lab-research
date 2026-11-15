@@ -10,7 +10,8 @@ export function Pane({
   ...rest
 }: {
   label: string;
-  title: string;
+  /** The heading: text, or text with an evidence chip (components/ui/env-chip.tsx). */
+  title: React.ReactNode;
   meta?: React.ReactNode;
   children: React.ReactNode;
 } & Omit<React.ComponentProps<"section">, "title" | "children" | "className">) {
