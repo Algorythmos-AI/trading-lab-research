@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sign } from "@/lib/hmac";
 import optionsJson from "./fixtures/options.v1.json";
+import journalJson from "./fixtures/journal.v1.json";
 import radarJson from "./fixtures/radar.v1.json";
 
 // GET /api/editions/<kind>: the trading host's pipeline check reads back the stored radar and options editions.
@@ -47,11 +48,12 @@ beforeEach(() => {
   vi.stubEnv("RADAR_INGEST_SECRET", "test-radar-secret");
   blob.put("radar/latest.json", JSON.stringify(radarJson));
   blob.put("options/latest.json", JSON.stringify(optionsJson));
+  blob.put("journal/latest.json", JSON.stringify(journalJson));
 });
 
 describe("GET /api/editions/<kind>", () => {
-  it("returns the stored radar and options editions to a signed host request", async () => {
-    for (const [kind, fixture] of [["radar", radarJson], ["options", optionsJson]] as const) {
+  it("returns the stored radar, options and journal editions to a signed host request", async () => {
+    for (const [kind, fixture] of [["radar", radarJson], ["options", optionsJson], ["journal", journalJson]] as const) {
       const res = await handleEdition(get(kind), kind, NOW);
       expect(res.status).toBe(200);
       expect(res.headers.get("cache-control")).toBe("no-store");
@@ -78,7 +80,7 @@ describe("GET /api/editions/<kind>", () => {
   });
 
   it("says 404 for an unknown kind or before any edition, 503 with no key configured", async () => {
-    expect((await handleEdition(get("journal"), "journal", NOW)).status).toBe(404);
+    expect((await handleEdition(get("ledger"), "ledger", NOW)).status).toBe(404);
     blob.reset();
     expect((await handleEdition(get("radar"), "radar", NOW)).status).toBe(404);
     vi.stubEnv("DASHBOARD_INGEST_SECRET", "");
