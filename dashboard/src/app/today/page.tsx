@@ -9,6 +9,7 @@ import { NoSnapshot } from "@/components/no-snapshot";
 import { PageHeading } from "@/components/page-heading";
 import { Panel } from "@/components/panel";
 import { StatusBadge } from "@/components/status";
+import { EnvFrame } from "@/components/ui/env-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { duration, newYork, num, rMult, shortDate, sydney } from "@/lib/format";
 import { humanize, jobName, jobTone } from "@/lib/labels";
@@ -30,7 +31,7 @@ export default async function TodayPage() {
     <>
       <PageHeading
         title="Today"
-        intro="Your trading day as it happens: every trade on the New York clock, the day's running result and how much room the day rules leave, then the names to watch. Below, what the paper robots did. Nothing on this page can place an order."
+        intro="Your trading day as it happens: every trade on the New York clock, the day's running result and how much room the day rules leave, then the names to watch. Below, what Robot B did with paper money. Nothing on this page can place an order."
       />
       {journal.status === "ok" ? (
         <PaneBoundary name="Your day">
@@ -47,49 +48,57 @@ export default async function TodayPage() {
       <PaneBoundary name="Next session">
         <NextSessionPanel options={options.status === "ok" ? options.edition : null} radar={radar.status === "ok" ? radar.edition : null} />
       </PaneBoundary>
+      {/* The robot's section: everything in it is the Alpaca paper account (a paper frame), except the forward test,
+          which replays frozen strategies and is a model (a model frame). Never the owner's Webull money. */}
       <h2 className="text-muted-foreground mt-2 flex items-center gap-2 text-sm font-semibold">
         <Bot aria-hidden className="size-4" />
-        The robots, paper money only
+        Robot B (paper)
       </h2>
       {result.status !== "ok" ? (
         <NoSnapshot status={result.status} />
       ) : (
         <>
-          <PaneBoundary name="Now">
-            <NowPanel s={result.snapshot} />
-          </PaneBoundary>
-          <PaneBoundary name="Outcome">
-            <OutcomeOnly s={result.snapshot} />
-          </PaneBoundary>
-          <PaneBoundary name="Scanner funnel">
-            <FunnelFrom s={result.snapshot} />
-          </PaneBoundary>
+          <EnvFrame env="paper" label="Robot B" className="grid gap-5">
+            <PaneBoundary name="Now">
+              <NowPanel s={result.snapshot} />
+            </PaneBoundary>
+            <PaneBoundary name="Outcome">
+              <OutcomeOnly s={result.snapshot} />
+            </PaneBoundary>
+            <PaneBoundary name="Scanner funnel">
+              <FunnelFrom s={result.snapshot} />
+            </PaneBoundary>
+          </EnvFrame>
           <details className="group grid gap-5" data-testid="robot-detail">
             <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-sm font-medium">
-              More from the robots: Paper B&apos;s trades and results, near misses, the session log and the forward test
+              More from Robot B (paper): its trades and results, near misses, the session log, and the forward test (model)
             </summary>
             <div className="mt-5 grid gap-5">
-              <PaneBoundary name="Paper B trading">
-                <TradingDetail s={result.snapshot} />
-              </PaneBoundary>
-              <PaneBoundary name="Why no trade">
-                <WhyFrom s={result.snapshot} />
-              </PaneBoundary>
-              <PaneBoundary name="Near misses">
-                <NearFrom s={result.snapshot} />
-              </PaneBoundary>
-              <PaneBoundary name="Candidates">
-                <CandidatesFrom s={result.snapshot} />
-              </PaneBoundary>
-              <PaneBoundary name="Paper session log">
-                <PaperPanel s={result.snapshot} />
-              </PaneBoundary>
-              <PaneBoundary name="Forward test">
-                <ForwardPanel s={result.snapshot} />
-              </PaneBoundary>
-              <PaneBoundary name="Of record">
-                <OfRecordPanel s={result.snapshot} />
-              </PaneBoundary>
+              <EnvFrame env="paper" label="Robot B, in detail" className="grid gap-5">
+                <PaneBoundary name="Paper B trading">
+                  <TradingDetail s={result.snapshot} />
+                </PaneBoundary>
+                <PaneBoundary name="Why no trade">
+                  <WhyFrom s={result.snapshot} />
+                </PaneBoundary>
+                <PaneBoundary name="Near misses">
+                  <NearFrom s={result.snapshot} />
+                </PaneBoundary>
+                <PaneBoundary name="Candidates">
+                  <CandidatesFrom s={result.snapshot} />
+                </PaneBoundary>
+                <PaneBoundary name="Paper session log">
+                  <PaperPanel s={result.snapshot} />
+                </PaneBoundary>
+              </EnvFrame>
+              <EnvFrame env="model" label="Forward test" className="grid gap-5">
+                <PaneBoundary name="Forward test">
+                  <ForwardPanel s={result.snapshot} />
+                </PaneBoundary>
+                <PaneBoundary name="Of record">
+                  <OfRecordPanel s={result.snapshot} />
+                </PaneBoundary>
+              </EnvFrame>
               <ComingPanel />
             </div>
           </details>
@@ -403,7 +412,7 @@ function PaperPanel({ s }: { s: Snapshot }) {
   const killed = s.kill?.on === true;
   return (
     <Panel
-      title="Paper B session"
+      title="Robot B (paper) session"
       icon={Activity}
       means="The one strategy that runs live against the paper broker: it watches QQQ and would trade QQQM. This is its own log of what it did, newest first."
       action={killed ? <StatusBadge tone="warn" icon={Power}>Kill switch on</StatusBadge> : <StatusBadge tone="good">Entries allowed</StatusBadge>}

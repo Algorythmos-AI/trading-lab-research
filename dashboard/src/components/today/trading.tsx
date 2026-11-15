@@ -3,6 +3,7 @@ import { Empty } from "@/components/empty";
 import { KeyValues } from "@/components/kv";
 import { Panel } from "@/components/panel";
 import { StatusBadge } from "@/components/status";
+import { Money } from "@/components/ui/money";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { newYork, num, rMult, shortDate, signed, sydney, usd } from "@/lib/format";
 import { outcomeLine, reasonLabel, type Trading } from "@/lib/trading";
@@ -12,11 +13,16 @@ import { PositionBar } from "./position-bar";
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
-/** Signed paper dollars: "+US$1.20", "−US$2.00", "US$0.00". */
+/** Signed paper dollars as text, for a chart's tooltip: "+US$1.20", "−US$2.00", "US$0.00". On the page, use `Paper`. */
 export function money(v: number | null | undefined): string {
   if (!isNum(v)) return "—";
   const body = usd(Math.abs(v));
   return Math.abs(v) < 0.005 ? body : `${v > 0 ? "+" : "−"}${body}`;
+}
+
+/** Robot B's dollars on the page: paper Money, signed, which must sit in a paper EnvFrame (app/today/page.tsx). */
+function Paper({ v, signed = true, className }: { v: number | null | undefined; signed?: boolean; className?: string }) {
+  return <Money env="paper" value={v} signed={signed} className={className} />;
 }
 
 const toneOf = (v: number | null | undefined) => (!isNum(v) || Math.abs(v) < 0.005 ? "text-foreground" : v > 0 ? "text-good" : "text-bad");
@@ -35,7 +41,7 @@ export function PnlTiles({ v }: { v: Trading }) {
           <dt className="text-muted-foreground text-xs">{p.label}</dt>
           <dd className="mt-1 flex items-center gap-1.5">
             <Direction v={p.money} />
-            <span className={cn("font-mono text-lg font-semibold tabular-nums", toneOf(p.money))}>{money(p.money)}</span>
+            <Paper v={p.money} className={cn("font-mono text-lg font-semibold", toneOf(p.money))} />
           </dd>
           <dd className="text-muted-foreground mt-0.5 text-xs">
             {rMult(p.r, 2)} · {num(p.trades)} {p.trades === 1 ? "trade" : "trades"}
@@ -53,7 +59,7 @@ export function PnlPanel({ v }: { v: Trading }) {
     <Panel
       title="Profit and loss"
       icon={CircleDollarSign}
-      means="What Paper B's closed paper trades have made or lost, on its US$600 paper ledger. R is the result measured against the amount risked on that trade. Paper money only."
+      means="What Robot B's closed paper trades have made or lost, on its US$600 paper ledger. R is the result measured against the amount risked on that trade. Paper money only."
       action={v.session ? <span className="text-muted-foreground text-xs">Latest session {shortDate(v.session)}</span> : undefined}
     >
       <div className="grid gap-4">
@@ -61,14 +67,30 @@ export function PnlPanel({ v }: { v: Trading }) {
         <KeyValues
           className="sm:grid-cols-4"
           items={[
-            { label: "Ledger now", value: usd(v.equity), mono: true },
+            { label: "Ledger now", value: <Paper v={v.equity} signed={false} />, mono: true },
             { label: "Return since start", value: isNum(v.returnPct) ? `${signed(v.returnPct, 2)}%` : "—", mono: true },
-            { label: "Open position", value: v.position?.state === "in_position" ? money(open) : "None", mono: true },
+            { label: "Open position", value: v.position?.state === "in_position" ? <Paper v={open} /> : "None", mono: true },
             { label: "Closed trades", value: `${num(s.trades)} (${num(s.wins)} won, ${num(s.losses)} lost)` },
             { label: "Win rate", value: isNum(s.winRate) ? `${num(s.winRate, 1)}%` : "—", mono: true },
-            { label: "Average win / loss", value: `${money(s.avgWin)} / ${money(s.avgLoss)}`, mono: true },
-            { label: "Best / worst trade", value: `${money(s.best)} / ${money(s.worst)}`, mono: true },
-            { label: "Largest drawdown", value: money(s.maxDd), mono: true },
+            {
+              label: "Average win / loss",
+              value: (
+                <>
+                  <Paper v={s.avgWin} /> / <Paper v={s.avgLoss} />
+                </>
+              ),
+              mono: true,
+            },
+            {
+              label: "Best / worst trade",
+              value: (
+                <>
+                  <Paper v={s.best} /> / <Paper v={s.worst} />
+                </>
+              ),
+              mono: true,
+            },
+            { label: "Largest drawdown", value: <Paper v={s.maxDd} />, mono: true },
           ]}
         />
         {v.days.filter((d) => isNum(d.r)).length >= 2 ? (
@@ -95,7 +117,7 @@ export function PnlPanel({ v }: { v: Trading }) {
                   <li key={d.date} className="border-border flex items-center gap-1 rounded-md border px-2 py-1 text-xs">
                     <Direction v={d.pnl} />
                     <span className="text-muted-foreground">{shortDate(d.date)}</span>
-                    <span className={cn("font-mono tabular-nums", toneOf(d.pnl))}>{money(d.pnl)}</span>
+                    <Paper v={d.pnl} className={cn("font-mono", toneOf(d.pnl))} />
                   </li>
                 ))}
             </ul>
@@ -110,9 +132,9 @@ export function OutcomePanel({ v, asOf }: { v: Trading; asOf: string | null | un
   const o = outcomeLine(v);
   return (
     <Panel
-      title={v.current || v.session === null ? "Paper B today" : `Paper B, ${shortDate(v.session)}`}
+      title={v.current || v.session === null ? "Robot B (paper) today" : `Robot B (paper), ${shortDate(v.session)}`}
       icon={Crosshair}
-      means="Did Paper B trade in its latest session, and if not, why. It watches QQQ, trades QQQM, and takes at most one trade a day."
+      means="Did Robot B trade in its latest session, and if not, why. It watches QQQ, trades QQQM, and takes at most one trade a day."
       action={<StatusBadge tone={o.tone}>{o.title}</StatusBadge>}
     >
       <div className="grid gap-3">
@@ -148,7 +170,7 @@ function PositionCard({ v, asOf }: { v: Trading; asOf: string | null | undefined
         <span className="text-sm font-medium">
           {filled ? `Holding ${num(p.qty)} ${p.symbol}` : `Buy order waiting: ${num(p.qty)} ${p.symbol} above ${num(p.trigger, 2)}`}
         </span>
-        {filled ? <span className={cn("font-mono text-sm font-semibold tabular-nums", toneOf(p.openPnl))}>{money(p.openPnl)}</span> : null}
+        {filled ? <Paper v={p.openPnl} className={cn("font-mono text-sm font-semibold", toneOf(p.openPnl))} /> : null}
         {filled && isNum(p.openR) ? <span className="text-muted-foreground font-mono text-xs">{rMult(p.openR, 2)}</span> : null}
       </div>
       <PositionBar p={p} asOf={asOf} />
@@ -178,11 +200,11 @@ export function TradesPanel({ v }: { v: Trading }) {
     <Panel
       title="Trades"
       icon={ReceiptText}
-      means="Every closed Paper B trade, newest first: when it bought and sold, at what price, and what it made or lost. Times are New York, with Sydney beside them."
+      means="Every closed Robot B paper trade, newest first: when it bought and sold, at what price, and what it made or lost. Times are New York, with Sydney beside them."
       action={<span className="text-muted-foreground text-xs">{num(v.stats.trades)} closed</span>}
     >
       {v.trades.length === 0 ? (
-        <Empty title="No closed trades yet">The first one appears here the day Paper B takes a trade and closes it.</Empty>
+        <Empty title="No closed trades yet">The first one appears here the day Robot B takes a trade and closes it.</Empty>
       ) : (
         <Table>
           <TableHeader>
@@ -218,7 +240,9 @@ export function TradesPanel({ v }: { v: Trading }) {
                   {t.estimated ? <span className="text-muted-foreground"> est.</span> : null}
                 </TableCell>
                 <TableCell className="text-right font-mono">{num(t.stop, 2)}</TableCell>
-                <TableCell className={cn("text-right font-mono font-medium", toneOf(t.pnl))}>{money(t.pnl)}</TableCell>
+                <TableCell className={cn("text-right font-mono font-medium", toneOf(t.pnl))}>
+                  <Paper v={t.pnl} />
+                </TableCell>
                 <TableCell className={cn("text-right font-mono", toneOf(t.r))}>{rMult(t.r, 2)}</TableCell>
                 <TableCell className="text-sm">{reasonLabel(t.reason)}</TableCell>
               </TableRow>

@@ -150,7 +150,9 @@ test("today draws the session clock and the open paper position", async ({ page 
   // The owner's own day comes first: the journal's latest session, its trades drawn on the clock.
   await expect(page.getByRole("heading", { name: /^Your (day|last session) · / })).toBeVisible();
   await expect(page.getByTestId("trade-clock")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "The robots, paper money only" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Robot B (paper)", exact: true })).toBeVisible();
+  // The robot's panes sit in a paper frame, apart from the owner's own day above them.
+  await expect(page.getByRole("group", { name: "Paper account (Alpaca): Robot B", exact: true })).toHaveAttribute("data-env", "paper");
   const clock = page.getByRole("img", { name: /^The New York day 2026-09-29 from 04:00 to 20:00/ });
   await expect(clock).toBeVisible();
   // Every lane ends in a word, never colour alone: the fixture's routine run failed.
@@ -174,7 +176,7 @@ test("the v3 panels render from the fixture, and the glossary is linked", async 
   await expect(page.getByRole("heading", { name: "Job reliability, 14 days" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Audit trail" })).toBeVisible();
   await page.goto("/strategies");
-  await expect(page.getByRole("heading", { name: "Paper B performance" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Robot B (paper) performance" })).toBeVisible();
   await page.goto("/research");
   await expect(page.getByRole("heading", { name: "Since the last trading day" })).toBeVisible();
   await page.getByRole("link", { name: "Glossary" }).click();
