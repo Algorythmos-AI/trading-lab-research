@@ -18,6 +18,7 @@ import type { Tone } from "@/lib/labels";
 import { type DayFacts, type RailDay, railWithNotes, sessionClock, sessionTimeline, type Timeline } from "@/lib/session-timeline";
 import { cn } from "@/lib/utils";
 import { roomShown } from "@/lib/what-if";
+import { NO_MARKS, withOpenLoss } from "@/lib/held-marks";
 import { CockpitSwitch } from "./cockpit";
 import { ServerCheckNote } from "./desk-shadow";
 import { DoneControl, DonePill, UncheckedNote, useDone, useDonePolling } from "./done-today";
@@ -201,7 +202,9 @@ export function StatusRail({ day: server, facts = null }: { day: RailDay | null;
   // This browser's "I'm in" notes the journal does not show yet add to the count (read after mount, so the server's
   // render and the first one in the browser agree).
   const withNotes = server && facts ? railWithNotes(server, facts, b.manage.provisional) : null;
-  const day = withNotes ?? server;
+  // Rule 7: open losses count too. The open options this page prices at the bid join the closed figure (held-marks.ts).
+  const marks = b.manage.openMarks ?? NO_MARKS;
+  const day = server && facts ? withOpenLoss(withNotes ?? server, facts.net, marks, facts.openLots) : (withNotes ?? server);
   const clock = b.on && b.now !== null && b.mode.kind !== "loading" ? sessionClock(b.session, b.halfDay, b.now) : null;
   // The bar follows the clock's day: today's half day for an older card, the edition's otherwise.
   const t = sessionTimeline(clock?.halfDay ?? b.halfDay, clock?.minute ?? null);

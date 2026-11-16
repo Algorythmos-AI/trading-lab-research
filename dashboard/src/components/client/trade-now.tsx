@@ -61,6 +61,7 @@ import { FeedFacts, FeedRetry, useLive } from "./live-layer";
 import { useBars } from "./use-bars";
 import type { PolledRead } from "@/lib/feed-watch";
 import { useTradeManage } from "./trade-manage";
+import type { ManageNotice } from "@/lib/trade-manage";
 import type { Lot, Trade } from "@/lib/journal";
 import type { DayFacts } from "@/lib/session-timeline";
 
@@ -155,6 +156,16 @@ function beep() {
     osc.stop(ctx.currentTime + 0.18);
   } catch {
     // no sound in this browser
+  }
+}
+
+/** The browser's own notification for a manage card that newly says EXIT. */
+function exitSystemNotice(n: Pick<ManageNotice, "key" | "title" | "line">) {
+  try {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    new Notification(n.title, { body: `${n.line}. Advisory: confirm on your chart.`, tag: `trade-manage-${n.key}` });
+  } catch {
+    // notifications unavailable
   }
 }
 
@@ -994,6 +1005,16 @@ export function BoardProvider({
     barsLoading: bars.status === "loading",
     day: dayFacts,
   });
+
+  // A card that newly says EXIT rings too, with the switches the entries use. Kept when today is marked done: the
+  // manage card's own notices are not entry notices.
+  useEffect(() => {
+    if (manage.exitRing.n === 0) return;
+    if (alerts.sound) beep();
+    if (alerts.notify) manage.exitRing.fresh.forEach(exitSystemNotice);
+    // Only a new ring sounds: a change of the switches alone must not.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manage.exitRing.n]);
 
   const ranked = [...items].sort((a, b) => a.rank - b.rank);
   const managed = new Set(manage.views.map((m) => m.symbol));

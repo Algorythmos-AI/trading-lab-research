@@ -181,7 +181,8 @@ describe("form fields on a phone are 16 px (item 3)", () => {
     const f = formFromRow("QQQ", state, QQQ, Date.parse(`${S}T14:30:00Z`))!;
     const html = renderToStaticMarkup(createElement(ImInForm, { f, live: 750, now: Date.parse(`${S}T14:30:00Z`), session: S, halfDay: false, onSave: () => {}, onCancel: () => {} }));
     const fields = [...html.matchAll(/<(?:input|select|textarea)\b[^>]*class="([^"]*)"/g)].map((m) => m[1]!);
-    expect(fields.length).toBe(4);
+    // the price at the fill, the time, the option fill and its contracts, the strike and its expiry
+    expect(fields.length).toBe(6);
     expect(fields.filter(under16)).toEqual([]);
   });
 
