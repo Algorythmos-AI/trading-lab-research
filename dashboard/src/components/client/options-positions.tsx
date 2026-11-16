@@ -38,7 +38,14 @@ function Line({ r, g, refused = false }: { r: PositionRow; g: PositionGreeks | n
           {g ? (
             <span data-greeks className="font-mono">
               {g.delta !== null ? ` · Δ ${Math.abs(g.delta) < 0.005 ? "0.00" : `${g.delta < 0 ? "−" : ""}${num(Math.abs(g.delta), 2)}`}` : ""}
-              {g.decay !== null && Math.abs(g.decay) >= 0.5 ? ` · ${g.decay < 0 ? "−" : "+"}$${num(Math.abs(g.decay), 0)}${g.toExpiry ? " to expiry" : "/day"}` : ""}
+              {/* What a day of waiting costs, in the paper account's money: the same US$ form as the pane's results. */}
+              {g.decay !== null && Math.abs(g.decay) >= 0.5 ? (
+                <>
+                  {" · "}
+                  <PaperDollars v={g.decay} />
+                  {g.toExpiry ? " to expiry" : "/day"}
+                </>
+              ) : null}
             </span>
           ) : null}
           {g && refused ? <span data-opra-refused> (OPRA refused)</span> : null}
@@ -168,7 +175,7 @@ export function OptionsPositions({
         label="Paper option positions"
         title={
           <>
-            <EnvChip env="paper" /> (manual)
+            <EnvChip env="paper" /> Manual option positions
           </>
         }
         data-positions={rows.length === 0 ? "empty" : age.state}
