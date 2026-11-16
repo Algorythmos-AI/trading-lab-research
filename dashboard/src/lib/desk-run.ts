@@ -43,7 +43,8 @@ import { UpstreamError } from "./upstream";
 //    retry): a no-op success, nothing more read;
 //  * otherwise the edition and the journal (one read each, a bodiless 304 when unchanged on a warm instance), the
 //    done-for-today flag (one read), two upstream calls to Alpaca side by side (the 2-minute bars, and the same
-//    snapshot the page's quote route reads), and one create-only put.
+//    snapshot the page's quote route reads), and one create-only put (read back once only when it failed or timed
+//    out, to see whether it landed late).
 // About 390 runs a session: 390 switch reads and 390 heads, then for about 194 slots four reads (the fourth is the
 // bad-data guards' switches, desk/guards.json, read beside the journal and the done flag), two upstream calls and one
 // put. The snapshot probe (quote-probe.ts) and the guards' observe-mode log add none: they read the snapshot answer
@@ -53,8 +54,10 @@ import { UpstreamError } from "./upstream";
 // degraded record, never guessed. In fixture mode and anywhere but production it never touches the store: the switch
 // reads as off, and a test's injected dry run returns the record it would have written.
 
-/** The most one step may take; the steps together stay under 10 s. */
+/** The most one step may take; the steps together stay under 10 s (with LATE_CHECK_MS, 9.9 s). */
 export const TIMEOUT_MS = { switch: 1_500, exists: 1_500, edition: 1_500, reads: 3_000, barsPage: 2_500, write: 1_500 } as const;
+/** A put that failed or timed out is read back once, within this, to see whether it landed after all. */
+export const LATE_CHECK_MS = 900;
 
 /**
  * What a run writes for its slot: the engine's record (desk-eval.ts serverRecord, whose code the engine label hashes)
@@ -101,6 +104,11 @@ export interface DeskRunDeps {
   exists(path: string): Promise<boolean>;
   /** Create-only: throws PreconditionFailed when the record is already there. Never overwrites. */
   write(path: string, body: string): Promise<void>;
+  /**
+   * The record at `path` as stored, null when there is none: read only after a put that failed or timed out, to tell a
+   * put that landed late (these exact bytes) from one that did not. Missing (a test's deps): such a put is write-failed.
+   */
+  read?: (path: string) => Promise<string | null>;
   loadEdition(): Promise<EditionRead>;
   loadJournal(): Promise<JournalDoc | null>;
   readDone(): Promise<FlagsRead>;
@@ -126,7 +134,7 @@ export type DeskRunResult =
   | { ok: true; outcome: "idle"; why: string }
   | { ok: true; outcome: "off" }
   | { ok: true; outcome: "already-logged"; slot: string }
-  | { ok: true; outcome: "logged"; slot: string; status: ServerRecord["status"]; reason: DegradedWhy | null }
+  | { ok: true; outcome: "logged"; slot: string; status: ServerRecord["status"]; reason: DegradedWhy | null; late?: true }
   | { ok: true; outcome: "dry"; slot: string; path: string; record: DeskLogRecord }
   | { ok: false; outcome: "write-failed"; slot: string };
 
@@ -173,6 +181,7 @@ export function defaultDeskRunDeps(): DeskRunDeps {
       readGuards: async () => null,
       exists: refuse,
       write: refuse,
+      read: refuse,
       loadEdition: refuse,
       loadJournal: refuse,
       readDone: refuse,
@@ -188,6 +197,7 @@ export function defaultDeskRunDeps(): DeskRunDeps {
     write: async (path, body) => {
       await writeText(path, body, { createOnly: true });
     },
+    read: async (path) => (await readText(path))?.text ?? null,
     loadEdition: async () => {
       const r = await readTextIfChanged(OPTIONS_PATHS.latest);
       return r ? parseEdition(r.text) : { status: "missing" };
@@ -264,6 +274,12 @@ export interface LoggedSlot {
  * One run: idle, off, already logged, or one record written for the last settled slot. `onLogged`, when given, is
  * called once, only by a run that wrote the record, after the write: it gets values the run already holds, so the
  * record, its bytes and its timing are the same with it or without it.
+ *
+ * A put that fails or times out may still have landed. It is read back once (deps.read, within LATE_CHECK_MS): holding
+ * exactly this run's bytes, the slot is this run's record, so the run answers "logged" with `late: true` (HTTP 200),
+ * logs outcome "logged-late" and hands over to the signal step as any write would; holding other bytes, another run
+ * wrote it: "already-logged" (200), no hand-over. Otherwise (not there, unreadable, or no `read`): "write-failed" (500),
+ * and a `desk-signal` "no-handover" line names the slot, so the signal record's gap is traceable to it.
  */
 export async function runDeskEval(deps: DeskRunDeps = defaultDeskRunDeps(), onLogged?: (x: LoggedSlot) => void): Promise<DeskRunResult> {
   return evalOnce(deps, onLogged ?? (() => undefined));
@@ -412,6 +428,7 @@ async function evalOnce(deps: DeskRunDeps, onLogged: (x: LoggedSlot) => void): P
   const record: DeskLogRecord = { ...serverRecord(evaluation, slot, deps.now(), edition), feed: readFeed, probe, guards, http_429: http429 };
   if (deps.dry) return { ok: true, outcome: "dry", slot: hhmm, path, record };
   const body = JSON.stringify(record);
+  let late = false;
   try {
     await within(deps.write(path, body), TIMEOUT_MS.write);
   } catch (e) {
@@ -419,14 +436,32 @@ async function evalOnce(deps: DeskRunDeps, onLogged: (x: LoggedSlot) => void): P
       logEvent("desk-eval", { outcome: "already-logged", slot: hhmm });
       return { ok: true, outcome: "already-logged", slot: hhmm };
     }
-    logEvent("desk-eval", { outcome: "write-failed", slot: hhmm, error: errName(e) });
-    return { ok: false, outcome: "write-failed", slot: hhmm };
+    let there: string | null = null;
+    if (deps.read) {
+      try {
+        there = await within(deps.read(path), LATE_CHECK_MS);
+      } catch {
+        there = null;
+      }
+    }
+    if (there === null) {
+      logEvent("desk-eval", { outcome: "write-failed", slot: hhmm, error: errName(e) });
+      logEvent("desk-signal", { outcome: "no-handover", slot: hhmm, why: "dec0044-write-failed" });
+      return { ok: false, outcome: "write-failed", slot: hhmm };
+    }
+    if (there !== body) {
+      logEvent("desk-eval", { outcome: "already-logged", slot: hhmm, landed: "late" });
+      return { ok: true, outcome: "already-logged", slot: hhmm };
+    }
+    late = true;
   }
-  logEvent("desk-eval", { outcome: "logged", slot: hhmm, status: record.status, reason: record.reason, rows: record.rows.length, ms: deps.now() - startedAt });
+  logEvent("desk-eval", { outcome: late ? "logged-late" : "logged", slot: hhmm, status: record.status, reason: record.reason, rows: record.rows.length, ms: deps.now() - startedAt });
   try {
     onLogged({ path, body, record, slot, edition, states });
   } catch {
     // The handover can never change this run's outcome.
   }
-  return { ok: true, outcome: "logged", slot: hhmm, status: record.status, reason: record.reason };
+  return late
+    ? { ok: true, outcome: "logged", slot: hhmm, status: record.status, reason: record.reason, late: true }
+    : { ok: true, outcome: "logged", slot: hhmm, status: record.status, reason: record.reason };
 }

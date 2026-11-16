@@ -47,7 +47,16 @@
 - "Signal confirmed" alert first switched on in production: not yet.
 - DEC-0048's switch date (the report gives group counts before and after it): not yet.
 - Engine identity checks (yes or no, with counts): none.
-- Defect fixes to the outcome or signal code before the read: none.
+- Defect fixes to the outcome or signal code before the read: none to the signal code; `SIGNAL_CODE_HASH` and the
+  DEC-0044 `ENGINE_VERSION` are unchanged.
+- Writer fixes before any `dry` session, 2026-11-16 (`signal-run.ts` and `desk-run.ts`, outside the hashed code), from
+  a pre-dry validation: a run whose reads time out keeps the time to write its record; a signal write or a DEC-0044
+  put that lands after its time limit is read back and counts as written only when the stored bytes are the run's
+  own; a record whose flow answer is from another slot carries "flow is from another slot" in `unusable`; in `log`
+  mode a record-level reason (the session's earlier records or the board-feed stamps not readable) gives the word
+  NO TRADE; the lifecycle counts slots from the slot's end, as the board does; carried breaks keep a fixed key order.
+  The checked age is unchanged: the chain's newest quote against when the answer was served (DEC-0051 section 2,
+  `chainAge`).
 - Early end, with its cause: none.
 
 ## Verdict
