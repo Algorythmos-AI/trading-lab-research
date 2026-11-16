@@ -394,8 +394,21 @@ export function sideState(plan: SidePlan | null, atr: number | null | undefined,
   // setups.retest's window: the bar forming now at most MAX_BARS_TO_RETEST + 1 bars after the break bar
   if ((slotOf(t) - brk.start) / BAR_MS > MAX_BARS_TO_RETEST + 1) return missed("window", brokeAt);
   if (!coveredSince(bars, brk.start)) return out("get_ready", { brokeAt, gap: true });
-  const near = a !== null ? RETEST_ATR * a : null;
-  const touch = near === null ? -1 : after.findIndex((b) => (s > 0 ? b.l - L : L - b.h) <= near);
+  // The touch compared exactly, so a dip of exactly RETEST_ATR ATRs is a touch (a defect fix, 2026-11-16: in floating
+  // point `b.l − L ≤ RETEST_ATR × a` read 100.20 − 100.10 = 0.10000000000000853 > 0.1). When the level, the bar's low
+  // (high, for a put) and RETEST_ATR are each a whole number of ten-thousandths (to within 1e-6 of one, far inside a
+  // double's error at these sizes), the dip is taken in whole ten-thousandths, as signal.ts compares prices, and
+  // RETEST_ATR as a whole number of ten-thousandths of an ATR (0.1 is 1,000): dip ÷ that ≤ ATR, the one division
+  // correctly rounded, is exact on the edge whatever the ATR's decimals. Any input with more decimals keeps the
+  // original floating comparison, so rounding never turns a real miss into a touch.
+  const exact4 = (x: number) => Math.abs(x * 10_000 - Math.round(x * 10_000)) < 1e-6;
+  const units = (x: number) => Math.round(x * 10_000);
+  const touches = (b: Bar2, atr: number) => {
+    const x = s > 0 ? b.l : b.h;
+    if (exact4(L) && exact4(x) && exact4(RETEST_ATR)) return (s > 0 ? units(x) - units(L) : units(L) - units(x)) / units(RETEST_ATR) <= atr;
+    return (s > 0 ? b.l - L : L - b.h) <= RETEST_ATR * atr;
+  };
+  const touch = a === null ? -1 : after.findIndex((b) => touches(b, a));
   if (touch < 0 || price === null) return out("get_ready", { brokeAt });
   if ((price - L) * s >= 0) return out("enter_zone", { brokeAt });
   return out("get_ready", { brokeAt });

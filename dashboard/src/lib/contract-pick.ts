@@ -19,7 +19,7 @@ import type { ChainContract, ChainResponse } from "./chain";
 import { type FlowCalendar, MARKET_CALENDAR } from "./flow";
 import { addDays, nyNow } from "./market-calendar";
 import { askToCents, bidToCents, chainMatches, occSymbol, QUOTE_AHEAD_MS, servedMs } from "./option-value";
-import { failWords, OWNER_LIMITS, sizeTicket, strikesByDistance, usd } from "./ticket";
+import { failWords, OWNER_LIMITS, type Size, sizeTicket, strikesByDistance, usd } from "./ticket";
 import { PREMIUM_STOP } from "./trade-rules";
 import { SIGNAL_PARAMS } from "./signal-params";
 
@@ -156,6 +156,14 @@ export function readContractQuote(
 
 const check = (id: ContractCheckId, pass: boolean, value: number | null, why: string): ContractCheck => ({ id, pass, value, why });
 
+/**
+ * The ticket's sizing at the ask with the owner's limits, or null for a price it cannot take: sizeTicket's own
+ * precondition (a positive safe whole number of cents) is checked here first, so it is never called to throw.
+ */
+function sizeOrNull(askCents: number): Size | null {
+  return Number.isSafeInteger(askCents) && askCents > 0 ? sizeTicket(askCents, OWNER_LIMITS) : null;
+}
+
 /** One strike's contract, every check worked out. */
 function judge(x: PickInput, chain: ChainResponse, expiry: string, strike: number, calendar: FlowCalendar): Candidate {
   const params = SIGNAL_PARAMS;
@@ -182,8 +190,12 @@ function judge(x: PickInput, chain: ChainResponse, expiry: string, strike: numbe
     checks.push(check("premium", false, null, "no usable quote to price it at"));
     checks.push(check("bid_ask", false, null, "no usable quote"));
   } else {
-    const size = sizeTicket(askCents, OWNER_LIMITS);
-    checks.push(check("premium", size.contracts >= 1, askCents, size.contracts >= 1 ? `at the ask ${usd(askCents)}, ${size.contracts} contract${size.contracts === 1 ? "" : "s"} fit your rules` : failWords(size).join(" ")));
+    // An ask the sizing cannot take (not a safe whole number of cents, such as an absurd 1e300, on which sizeTicket
+    // throws) fails this contract's premium check only, so the other strikes are still judged (a defect fix,
+    // 2026-11-16: the throw reached pickContract's catch and named no contract for the whole side).
+    const size = sizeOrNull(askCents);
+    if (size === null) checks.push(check("premium", false, askCents, "the ask cannot be sized: not a usable price in whole cents"));
+    else checks.push(check("premium", size.contracts >= 1, askCents, size.contracts >= 1 ? `at the ask ${usd(askCents)}, ${size.contracts} contract${size.contracts === 1 ? "" : "s"} fit your rules` : failWords(size).join(" ")));
     // ask − bid ≤ share × PREMIUM_STOP × mid, with the mid (bid + ask) ÷ 2, in whole numbers so the edge is exact.
     const share = Math.round(params.contract_spread_share_of_stop * 100);
     const stop = Math.round(PREMIUM_STOP * 100);
