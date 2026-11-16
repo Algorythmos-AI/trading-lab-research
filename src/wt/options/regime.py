@@ -66,9 +66,15 @@ def minute_bars(rows: Sequence[Mapping[str, Any]], session: dt.date) -> list[Bar
     return [out[k] for k in sorted(out)]
 
 
-def resample(minutes: Sequence[Bar], width: int, now: dt.datetime) -> list[Bar]:
+def resample(minutes: Sequence[Bar], width: int, now: dt.datetime,
+             grace: dt.timedelta | None = None) -> list[Bar]:
     """Clock-aligned `width`-minute bars from the open, finished by `now` (a bucket counts once `now` reaches its
-    end). A bucket with no minute in it is left out, as a feed leaves it out."""
+    end). A bucket with no minute in it is left out, as a feed leaves it out.
+
+    With `grace` (the live clone): a bucket whose last minute has not arrived yet counts only once `now` is `grace`
+    past its end, so a minute the feed delivers late is not read as missing and its bucket is not judged on the
+    first minute's close. A minute the feed never sends (IEX leaves out a minute with no trade there) still ends
+    its bucket, `grace` later. Without `grace` (the dry run, whose minutes are all final): as before."""
     if not minutes:
         return []
     open_at = dt.datetime.combine(minutes[0].start.date(), OPEN, NEW_YORK)
@@ -83,6 +89,8 @@ def resample(minutes: Sequence[Bar], width: int, now: dt.datetime) -> list[Bar]:
         if now < end:
             break
         ms = buckets[k]
+        if grace is not None and ms[-1].start < end - dt.timedelta(minutes=1) and now < end + grace:
+            break
         out.append(Bar(start, end, ms[0].o, max(m.h for m in ms), min(m.l for m in ms), ms[-1].c,
                        sum(m.v for m in ms), sum(m.pv for m in ms)))
     return out
