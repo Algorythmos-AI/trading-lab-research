@@ -267,8 +267,8 @@ export function OptionsDetail({
           <summary className="cursor-pointer text-[0.8125rem] font-medium">Rules on this name (research)</summary>
           <p className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">
             {paper.n === 0
-              ? "No paper trades on this name yet."
-              : `${paper.n} paper ${paper.n === 1 ? "trade" : "trades"}, ${paper.wins} won, ${rMult(paper.totalR, 2)} in total. R is measured on the stock.`}
+              ? "The rules on probation have no trades on this name yet."
+              : `${paper.n} ${paper.n === 1 ? "trade" : "trades"} by the rules on probation, ${paper.wins} won, ${rMult(paper.totalR, 2)} in total. R is measured on the stock.`}
           </p>
           <ul className="divide-border/60 mt-1 divide-y">
             {(e.rules ?? []).map((rule) => {

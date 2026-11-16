@@ -60,7 +60,7 @@ export function TradesBody({ result, clone, q, now }: { result: JournalResult; c
       <TradesGroup group="clone" hideHeading intro="The paper bot that trades by your rules with its own paper money, apart from your own account.">
         {/* The clone's own pane, apart from the journal: it draws whether or not the journal is there, and a fault in
             it stays in it. */}
-        <PaneBoundary name="The clone">
+        <PaneBoundary name="Options clone (paper)">
           <ClonePanel result={clone} />
         </PaneBoundary>
         {result.status === "ok" ? <JournalSource doc={readableJournal(result.doc).doc} /> : null}

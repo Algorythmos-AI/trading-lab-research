@@ -41,7 +41,8 @@ export function SiteHeader({ result, crypto, hft, now }: { result: SnapshotResul
           <Mark />
           <div className="min-w-0 leading-tight max-sm:sr-only">
             <p className="truncate text-sm font-semibold">Trading Lab</p>
-            <p className="text-muted-foreground hidden truncate text-xs sm:block">Paper research status, read-only</p>
+            {/* The site shows the owner's real Webull account as well as the paper robots: it is not "paper" as a whole. */}
+            <p className="text-muted-foreground hidden truncate text-xs sm:block">Trading and research status, read-only</p>
           </div>
         </div>
         <div className="flex max-w-full min-w-0 flex-wrap items-center gap-2 max-sm:contents">

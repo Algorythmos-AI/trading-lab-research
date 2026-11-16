@@ -21,7 +21,7 @@ function tone(t: Trigger): string {
  * The probation rules that have triggered in today's session, as the trading host last worked them out. A row
  * opens its name.
  *
- * It says what happened to a paper rule and nothing about what to do: every rule here is on probation, the data
+ * It says what happened to a probation rule and nothing about what to do: every rule here is on probation, the data
  * runs behind the market, and the after-close edition is the record.
  */
 export function OptionsTriggers({
@@ -100,7 +100,7 @@ export function OptionsTriggers({
         </ul>
       )}
       <p className="text-muted-foreground mt-1.5 text-[0.6875rem] max-sm:text-xs">
-        Paper rules on probation, replayed on delayed data: provisional, and not a signal to trade. R is on the stock, before any option cost. The after-close edition is the
+        Rules on probation, replayed on delayed data: provisional, and not a signal to trade. R is on the stock, before any option cost. The after-close edition is the
         record.
       </p>
     </Pane>
@@ -114,7 +114,7 @@ const NOTICES_KEPT = 4;
  * a way to open the name and a way to dismiss it. Triggers that were already there when the page opened are not
  * announced. It sits over the page's corner, so nothing on the desk moves when one arrives.
  *
- * Like the board, it says what happened to a paper rule and nothing about what to do.
+ * Like the board, it says what happened to a probation rule and nothing about what to do.
  */
 export function TriggerNotices({
   session,
@@ -145,7 +145,7 @@ export function TriggerNotices({
       setKept(next.fresh.length > 0 ? [...next.fresh, ...kept] : []);
       if (next.fresh.length > 0) {
         const each = next.fresh.map((t) => `${t.symbol} ${when(t)}, ${t.label}`).join("; ");
-        setSpoken(`${next.fresh.length === 1 ? "A paper rule" : `${next.fresh.length} paper rules`} triggered: ${each}. Provisional, and not a signal to trade.`);
+        setSpoken(`${next.fresh.length === 1 ? "A probation rule" : `${next.fresh.length} probation rules`} triggered: ${each}. Provisional, and not a signal to trade.`);
       }
     }
   }
@@ -164,7 +164,7 @@ export function TriggerNotices({
         <div key={`${t.symbol}:${t.rule}`} data-trigger-notice={t.symbol} className="bg-popover text-popover-foreground pointer-events-auto rounded-md border p-2.5 shadow-md">
           <div className="flex items-start gap-2">
             <p className="min-w-0 flex-1 text-xs">
-              <span className="text-[0.8125rem] font-medium">{t.symbol}</span> <span className="text-muted-foreground">paper rule triggered {when(t)}</span>
+              <span className="text-[0.8125rem] font-medium">{t.symbol}</span> <span className="text-muted-foreground">probation rule triggered {when(t)}</span>
               <span className="mt-0.5 block">{t.label}</span>
               <span className="text-muted-foreground mt-0.5 block text-[0.6875rem] max-sm:text-xs">Provisional, on delayed bars, and not a signal to trade.</span>
             </p>

@@ -7,6 +7,7 @@ import { EnvChip, EnvFrame } from "@/components/ui/env-chip";
 import { Money } from "@/components/ui/money";
 import { ENV_META, ENVS, envMeta, isEnv, UNKNOWN_META, type Env } from "@/lib/env";
 import { DASH, usd } from "@/lib/format";
+import { realUsd } from "@/lib/money-format";
 
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 const render = (el: ReactElement) => renderToStaticMarkup(el);
@@ -132,10 +133,56 @@ describe("Money", () => {
   const shown = (value: number | null | undefined, signed = false, env: Env = "paper") =>
     text(render(createElement(Money, { env, value, signed })));
 
-  it("formats through lib/format.ts's usd", () => {
-    for (const v of [0, 1, 1234.5, -12, 1_000_000.004]) expect(shown(v)).toBe(usd(v));
+  it("formats paper, shadow and model money through lib/format.ts's usd", () => {
+    for (const env of ["paper", "shadow", "model"] as const) {
+      for (const v of [0, 1, 1234.5, -12, 1_000_000.004]) expect(shown(v, false, env)).toBe(usd(v));
+      // `digits` is for real money only: paper always shows cents.
+      expect(text(render(createElement(Money, { env, value: 1234.5, digits: 0 })))).toBe("US$1,234.50");
+    }
     expect(shown(1234.5)).toBe("US$1,234.50");
     expect(shown(-12)).toBe("−US$12.00");
+  });
+
+  it("formats real money through lib/money-format.ts's realUsd, never as paper's US$", () => {
+    const real = (value: number | null | undefined, signed = false, digits?: number) =>
+      text(render(createElement(Money, { env: "real", value, signed, ...(digits === undefined ? {} : { digits }) })));
+    for (const v of [0, 1, 1234.5, -12, 1_000_000.004]) {
+      expect(real(v)).toBe(realUsd(v));
+      expect(real(v, true, 2)).toBe(realUsd(v, { signed: true, digits: 2 }));
+    }
+    expect(real(1234.5)).toBe("$1,235");
+    expect(real(-12)).toBe("−\u2060$12");
+    expect(real(42.1, true)).toBe("+\u2060$42");
+    expect(real(42.1, true, 2)).toBe("+\u2060$42.10");
+    expect(real(0.4, true)).toBe("+⁠$0");
+    expect(real(-0.004, true, 2)).toBe("−⁠$0.00");
+    for (const v of [null, undefined, Number.NaN]) expect(real(v, true)).toBe(DASH);
+    for (const v of [0, 5, -5, 1234.5]) expect(real(v)).not.toContain("US$");
+  });
+
+  it("writes real money exactly as the owner's pages always did: journal.tsx's and your-day.tsx's old usd, value by value", () => {
+    // The two helpers as they stood before B2 (origin/integration d260993), copied here so the pin never moves.
+    const journalUsd = (v: number | null | undefined, digits = 0) => {
+      if (v === null || v === undefined || !Number.isFinite(v)) return "—";
+      const s = Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+      return `${v > 0 ? "+⁠" : v < 0 ? "−⁠" : ""}$${s}`;
+    };
+    const yourDayUsd = (v: number | null | undefined) => {
+      if (v === null || v === undefined || !Number.isFinite(v)) return "—";
+      const s = Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: 0 });
+      return `${v > 0 ? "+⁠" : v < 0 ? "−⁠" : ""}$${s}`;
+    };
+    const TABLE = [0, -0, 0.4, -0.4, 0.5, -0.5, 0.004, -0.004, 0.005, 1, -1, 12.345, -12.345, 1234.5, -1234.5, 99_999.99, 1_000_000.004, -2_500_000, null, undefined, Number.NaN];
+    for (const v of TABLE) {
+      for (const digits of [0, 2]) expect(realUsd(v, { signed: true, digits }), `${v} with ${digits} digits`).toBe(journalUsd(v, digits));
+      expect(realUsd(v, { signed: true }), `${v} on Your day`).toBe(yourDayUsd(v));
+      expect(text(render(createElement(Money, { env: "real", value: v, signed: true }))), `Money ${v}`).toBe(journalUsd(v));
+    }
+    // Spot values, written out.
+    expect(realUsd(0.4, { signed: true })).toBe("+⁠$0");
+    expect(realUsd(-0.4, { signed: true })).toBe("−⁠$0");
+    expect(realUsd(0, { signed: true })).toBe("$0");
+    expect(realUsd(1_000_000.004, { signed: true })).toBe("+⁠$1,000,000");
   });
 
   it("shows a dash for a missing figure", () => {
@@ -156,7 +203,7 @@ describe("Money", () => {
 
   it.each(ENVS)("renders data-money and data-env=%s", (env) => {
     const html = render(createElement(Money, { env, value: 5 }));
-    expect(html).toBe(`<span data-money="" data-env="${env}" class="tabular-nums">US$5.00</span>`);
+    expect(html).toBe(`<span data-money="" data-env="${env}" class="tabular-nums">${env === "real" ? "$5" : "US$5.00"}</span>`);
   });
 
   it("fails closed on a class a cast let through: a dash, marked unknown", () => {

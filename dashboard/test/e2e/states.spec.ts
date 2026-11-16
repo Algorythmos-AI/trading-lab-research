@@ -41,7 +41,7 @@ test("a sparse edition shows dashes, never NaN, and breaks no pane", async ({ pa
   const text = (await page.locator("main").textContent()) ?? "";
   expect(text).not.toMatch(/NaN|undefined|Infinity/);
   await expect(page.locator("[data-pane-error]")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Paper scorecard" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Rule replay (model)" })).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
   expect(errors).toEqual([]);
@@ -77,7 +77,7 @@ test("a corrupt trade journal fails the Overview panes drawn from it and nothing
 test("a corrupt edition fails one pane and leaves every other pane working", async ({ page, context, baseURL }) => {
   await variant(context, baseURL, "poison");
   await page.goto(CLASSIC);
-  const broken = page.locator('[data-pane-error="Paper scorecard"]');
+  const broken = page.locator('[data-pane-error="Rule replay (model)"]');
   await expect(broken).toBeVisible();
   await expect(broken).toContainText("The rest of the page is unaffected");
   await expect(page.locator("[data-pane-error]")).toHaveCount(1);

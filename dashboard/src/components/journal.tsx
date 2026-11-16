@@ -10,6 +10,8 @@ import { packRow, type Piece, pieceText, whenText } from "@/lib/journal-list";
 import { Empty } from "@/components/empty";
 import { Panel } from "@/components/panel";
 import { StatTile, StatTiles } from "@/components/stat-tile";
+import { EnvFrame } from "@/components/ui/env-chip";
+import { Money } from "@/components/ui/money";
 import {
   calendar,
   contractLabel,
@@ -170,14 +172,15 @@ const WHOLE_POSITION = "A trade is a whole position, however many fills it took.
 
 /** The headline, after fees, with the figure before fees beside the net result. `s` and `gross` count the same trades. */
 export function JournalTiles({ s, gross, fees }: { s: Summary; gross: Summary; fees: FeeBasis }) {
+  // The owner's own Webull money: a real (unframed) EnvFrame, so the net result is real Money, never paper.
   return (
-    <div className="grid gap-2">
+    <EnvFrame env="real" chip={false} label="Your record" className="grid gap-2">
       <StatTiles className="lg:grid-cols-4">
         <StatTile
           label={feeLabel("Net result", fees.included)}
           icon={Wallet}
           tone={toneOf(s.net)}
-          value={usd(s.net)}
+          value={<Money env="real" value={s.net} signed />}
           hint={feeHint(`${s.trades.toLocaleString("en-US")} closed trades${fees.included ? "" : ` · before fees ${usd(gross.net)}`}`, fees.included)}
         />
         <StatTile
@@ -213,7 +216,7 @@ export function JournalTiles({ s, gross, fees }: { s: Summary; gross: Summary; f
         />
       </StatTiles>
       <p className="text-muted-foreground text-xs">{feeNote(fees)}</p>
-    </div>
+    </EnvFrame>
   );
 }
 
@@ -383,35 +386,38 @@ export function TodayPanel({ view, asOf, now, market, feesIncluded }: { view: Se
     >
       <div className="grid gap-4">
         <SyncLine asOf={asOf} market={market} ago={ago} />
-        <StatTiles className="lg:grid-cols-4">
-          <StatTile
-            label={feeLabel("Day result", included)}
-            icon={Wallet}
-            tone={toneOf(s.trades ? s.net : null)}
-            value={s.trades ? usd(s.net) : "—"}
-            hint={feeHint(s.trades ? (included ? "Closed trades" : `Closed trades · before fees ${usd(grossNet)}`) : "Closed trades", included)}
-          />
-          <StatTile
-            label="Closed trades"
-            icon={ListOrdered}
-            value={opened.toLocaleString("en-US")}
-            hint={
-              s.trades
-                ? `${opened ? `Opened this session: ${os.wins} won · ${os.losses} lost${os.winRate === null ? "" : ` · ${pct(os.winRate)}`}` : "None opened this session"}${carried ? ` · ${carried} more opened on an earlier day, not counted here` : ""}`
-                : view.isToday
-                  ? "None closed yet today"
-                  : undefined
-            }
-          />
-          <StatTile label="Best and worst" icon={Target} tone={toneOf(s.best?.pnl ?? null)} value={s.best ? usd(s.best.pnl) : "—"} hint={s.worst && s.worst !== s.best ? `${s.worst.pnl < 0 ? "Worst" : "Smallest"} ${usd(s.worst.pnl)}` : undefined} />
-          <StatTile
-            label="Open now"
-            icon={Hourglass}
-            tone={view.open.length ? "warn" : "neutral"}
-            value={view.open.length.toLocaleString("en-US")}
-            hint={view.open.length ? view.open.slice(0, 2).map((l) => `${l.qty.toLocaleString("en-US")} × ${contractLabel(l)}`).join(" · ") + (view.open.length > 2 ? " …" : "") : "Nothing held"}
-          />
-        </StatTiles>
+        {/* The owner's own Webull money: the day result is real Money, in a real (unframed) EnvFrame. */}
+        <EnvFrame env="real" chip={false} label="Today's result">
+          <StatTiles className="lg:grid-cols-4">
+            <StatTile
+              label={feeLabel("Day result", included)}
+              icon={Wallet}
+              tone={toneOf(s.trades ? s.net : null)}
+              value={s.trades ? <Money env="real" value={s.net} signed /> : "—"}
+              hint={feeHint(s.trades ? (included ? "Closed trades" : `Closed trades · before fees ${usd(grossNet)}`) : "Closed trades", included)}
+            />
+            <StatTile
+              label="Closed trades"
+              icon={ListOrdered}
+              value={opened.toLocaleString("en-US")}
+              hint={
+                s.trades
+                  ? `${opened ? `Opened this session: ${os.wins} won · ${os.losses} lost${os.winRate === null ? "" : ` · ${pct(os.winRate)}`}` : "None opened this session"}${carried ? ` · ${carried} more opened on an earlier day, not counted here` : ""}`
+                  : view.isToday
+                    ? "None closed yet today"
+                    : undefined
+              }
+            />
+            <StatTile label="Best and worst" icon={Target} tone={toneOf(s.best?.pnl ?? null)} value={s.best ? usd(s.best.pnl) : "—"} hint={s.worst && s.worst !== s.best ? `${s.worst.pnl < 0 ? "Worst" : "Smallest"} ${usd(s.worst.pnl)}` : undefined} />
+            <StatTile
+              label="Open now"
+              icon={Hourglass}
+              tone={view.open.length ? "warn" : "neutral"}
+              value={view.open.length.toLocaleString("en-US")}
+              hint={view.open.length ? view.open.slice(0, 2).map((l) => `${l.qty.toLocaleString("en-US")} × ${contractLabel(l)}`).join(" · ") + (view.open.length > 2 ? " …" : "") : "Nothing held"}
+            />
+          </StatTiles>
+        </EnvFrame>
         {shown.length ? (
           <ul className="grid" aria-label="Trades closed this session, newest first">
             {shown.map(({ unit: t }) => {
