@@ -36,6 +36,7 @@ import { logEvent } from "./log";
 import type { OptionsClone } from "./options-clone.types";
 import type { OptionsLive } from "./options-live.types";
 import type { OptionsEdition } from "./options.types";
+import { withStoredPremarket } from "./premarket";
 import { radarDates } from "./radar";
 import type { RadarEdition } from "./radar.types";
 import type { Snapshot } from "./types";
@@ -313,9 +314,12 @@ export const loadOptions = cache(
         });
         return { status: "error" };
       }
+      const edition = parsed as OptionsEdition;
       return {
         status: "ok",
-        edition: parsed as OptionsEdition,
+        edition: await withStoredPremarket(edition, readText, (err) =>
+          logEvent("snapshot.read", { outcome: "error", desk: "options-premarket", error: err instanceof Error ? err.name : "unknown" }),
+        ),
         source: "blob",
       };
     } catch (e) {
