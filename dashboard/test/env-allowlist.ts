@@ -14,7 +14,9 @@ export const NON_REAL_FRAMES = {
     { env: "paper", label: "Manual option positions" },
     { env: "model", label: "Rule replay" },
   ],
-  /** /today: Robot B's panes (paper), its detail (paper), and the forward test (a model). */
+  /** / (the Overview): Robot B's one-line result (paper). The scan beside it is counts only, unframed. */
+  overview: [{ env: "paper", label: "Robot B" }],
+  /** /today: Robot B's panes (paper), its detail (paper), and the forward test (a model). The pre-market scan is unframed. */
   today: [
     { env: "paper", label: "Robot B" },
     { env: "paper", label: "Robot B, in detail" },

@@ -1,4 +1,4 @@
-// The evidence-class guard on whole pages (B2): the Options desk, Today, Trades and Risk, server-rendered from the
+// The evidence-class guard on whole pages (B2): the Overview, the Options desk, Today, Trades and Risk, server-rendered from the
 // fixtures (fixture mode, as the browser tests run them). On each page every money figure sits in an EnvFrame of its
 // own class (test/env-guard.ts), and the page shows exactly the non-real frames test/env-allowlist.ts lists for it,
 // so paper, simulated and model numbers can never sit where the owner's real Webull money is read.
@@ -20,6 +20,7 @@ vi.mock("next/navigation", () => ({
 // Anything not served from a fixture reads an empty store, never the network.
 vi.mock("@vercel/blob", async () => (await import("./blob-sdk")).makeFakeBlobSdk());
 
+const { default: OverviewPage } = await import("@/app/page");
 const { default: OptionsPage } = await import("@/app/options/page");
 const { default: TodayPage } = await import("@/app/today/page");
 const { default: TradesPage } = await import("@/app/trades/page");
@@ -34,6 +35,7 @@ beforeEach(() => {
 
 const params = <T extends Record<string, string>>(q: T) => ({ searchParams: Promise.resolve(q) });
 const RENDER: Record<GuardedPage, () => Promise<string>> = {
+  overview: async () => renderToString(await OverviewPage()),
   // The live view: the one that draws the paper positions pane. The rule replay is in the folded research section.
   options: async () => renderToString(await OptionsPage({ searchParams: Promise.resolve({ d: undefined, view: "live", s: undefined, pane: undefined, all: undefined }) })),
   today: async () => renderToString(await TodayPage()),
@@ -59,6 +61,40 @@ function nonRealFrames(html: string): string[] {
   }
   return out;
 }
+const VOID = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"]);
+const TAG = /<!--[\s\S]*?-->|<\/([a-zA-Z][\w:-]*)\s*>|<([a-zA-Z][\w:-]*)((?:[^>"']|"[^"]*"|'[^']*')*)>/g;
+
+/**
+ * The markup with every non-real frame and all it holds taken out: what a reader sees as the owner's own page. The
+ * guard (env-guard.ts) has already checked the markup is well formed, so the frames close where they should.
+ */
+function outsideNonReal(html: string): string {
+  let out = "";
+  let depth = 0;
+  let last = 0;
+  const stack: boolean[] = [];
+  for (const m of html.matchAll(TAG)) {
+    if (depth === 0) out += html.slice(last, m.index);
+    last = m.index + m[0].length;
+    if (m[0].startsWith("<!--")) {
+      if (depth === 0) out += m[0];
+    } else if (m[1] !== undefined) {
+      const frame = stack.pop() ?? false;
+      if (frame) depth -= 1;
+      else if (depth === 0) out += m[0];
+    } else {
+      const env = attr(m[0], "data-env");
+      const frame = /\sdata-env-frame=""/.test(m[0]) && env !== "real";
+      if (depth === 0 && !frame) out += m[0];
+      if (VOID.has(m[2]!.toLowerCase()) || /\/>$/.test(m[0])) continue;
+      stack.push(frame);
+      if (frame) depth += 1;
+    }
+  }
+  return depth === 0 ? out + html.slice(last) : out;
+}
+const otherEnvs = (html: string) => [...html.matchAll(/\sdata-env="([^"]*)"/g)].map((m) => m[1]!).filter((e) => e !== "real");
+
 const listed = (page: GuardedPage) => NON_REAL_FRAMES[page].map((f) => `${f.env}: ${f.label}`);
 const allowed = (page: GuardedPage): Env[] => ["real", ...new Set(NON_REAL_FRAMES[page].map((f) => f.env))];
 const moneyOf = (html: string) => [...html.matchAll(/<span data-money="" data-env="([^"]*)"/g)].map((m) => m[1]!);
@@ -73,11 +109,36 @@ describe.each(Object.keys(RENDER) as GuardedPage[])("the %s page's evidence clas
   it("shows exactly the non-real frames the owner's allowlist names, each once", async () => {
     expect(nonRealFrames(await RENDER[page]()).sort()).toEqual(listed(page).sort());
   });
+
+  it("outside its non-real frames, shows no paper US$ figure and names no class but real", async () => {
+    // A paper figure written as text (format.ts's usd) outside a frame has no data-money for the guard to see: this
+    // reads what is left once the frames are taken out.
+    const rest = outsideNonReal(await RENDER[page]());
+    expect(rest.length).toBeGreaterThan(0);
+    expect(rest.match(/.{0,80}US\$.{0,40}/g) ?? []).toEqual([]);
+    expect(otherEnvs(rest)).toEqual([]);
+  });
+});
+
+describe("taking the non-real frames out", () => {
+  it("leaves what is outside them, and drops what is inside, however deep", () => {
+    const html =
+      '<main><div data-env-frame="" data-env="paper"><p>US$1<br/><span data-money="" data-env="paper">US$2</span></p><img src="x"/></div>' +
+      '<p>US$3 <span data-env="real">$4</span></p><div data-env-frame="" data-env="real"><b>$5</b></div>' +
+      '<div data-env-frame="" data-env="model"><div><div>US$6</div></div></div><i>end</i></main>';
+    const rest = outsideNonReal(html);
+    expect(rest).toBe('<main><p>US$3 <span data-env="real">$4</span></p><div data-env-frame="" data-env="real"><b>$5</b></div><i>end</i></main>');
+    expect(otherEnvs(rest)).toEqual([]);
+    // So a paper figure written outside every frame is caught.
+    expect(rest).toContain("US$3");
+  });
 });
 
 describe("money on the guarded pages", () => {
   it("is drawn through Money where the B2 pages put it: real on Today and Trades, paper wherever a paper frame holds dollars", async () => {
-    const [options, today, trades, risk] = await Promise.all([RENDER.options(), RENDER.today(), RENDER.trades(), RENDER.risk()]);
+    const [overview, options, today, trades, risk] = await Promise.all([RENDER.overview(), RENDER.options(), RENDER.today(), RENDER.trades(), RENDER.risk()]);
+    // Robot B's one-line result.
+    expect(moneyOf(overview)).toEqual(["paper"]);
     // The paper positions' results (three positions and their total).
     expect(moneyOf(options).filter((e) => e === "paper").length).toBeGreaterThanOrEqual(4);
     expect(moneyOf(options)).not.toContain("real");
@@ -92,13 +153,6 @@ describe("money on the guarded pages", () => {
     expect(new Set(moneyOf(risk))).toEqual(new Set(["paper"]));
   });
 
-  it("never shows paper's US$ inside a real figure, nor real's bare $ inside a paper one", async () => {
-    const html = (await Promise.all(Object.values(RENDER).map((r) => r()))).join("");
-    for (const m of html.matchAll(/<span data-money="" data-env="(real|paper)"[^>]*>([^<]*)<\/span>/g)) {
-      if (m[1] === "real") expect(m[2]).not.toContain("US$");
-      else expect(m[2] === "—" || m[2]!.includes("US$")).toBe(true);
-    }
-  });
 });
 
 describe("the B2 wording", () => {
@@ -106,12 +160,24 @@ describe("the B2 wording", () => {
 
   it("names each non-real region by what it is, and no longer calls a rule on probation paper", async () => {
     const options = text(await RENDER.options());
-    expect(options).toContain("PAPER · ALPACA (manual)");
+    expect(options).toContain("PAPER · ALPACA Manual option positions");
     expect(options).toContain("Rule replay (model)");
-    expect(options).not.toMatch(/Paper scorecard|Paper positions|paper rules?\b/);
+    // "Paper" for a rule on probation, in any of the forms it used to take (the panes, the Entry rules key and table,
+    // the rule chart's tooltip and counts). "The paper account" for the Alpaca account itself is right and stays.
+    const probationAsPaper = /Paper scorecard|Paper positions|paper rules?\b|Paper trades|tracked on paper|live paper|paper so far|paper cases|No paper trades|\. Paper [+−-]?\d/i;
+    expect(options).not.toMatch(probationAsPaper);
+    expect(unescape(await RENDER.options())).not.toMatch(probationAsPaper); // titles and tooltips too
     const today = text(await RENDER.today());
     expect(today).toContain("Robot B (paper)");
     expect(today).not.toContain("The robots, paper money only");
+    // The pre-market scan is the routine's dry run, not Robot B's account: outside every paper frame.
+    const todayOwn = text(outsideNonReal(await RENDER.today()));
+    expect(todayOwn).toContain("Pre-market scan");
+    expect(todayOwn).toContain("Candidates");
+    expect(todayOwn).not.toContain("Robot B (paper) session");
+    const overview = text(await RENDER.overview());
+    expect(overview).toContain("Robot B (paper) and the pre-market scan");
+    expect(overview).not.toContain("The robots, paper money only");
     expect(text(await RENDER.trades())).toContain("Options clone (paper)");
     expect(text(await RENDER.risk())).toContain("Robot B (paper)");
   });
@@ -147,6 +213,7 @@ describe("Money in the source", () => {
         "components/client/options-positions.tsx",
         "components/journal.tsx",
         "components/options-clone.tsx",
+        "components/overview/home.tsx",
         "components/today/trading.tsx",
         "components/today/your-day.tsx",
       ].sort(),
