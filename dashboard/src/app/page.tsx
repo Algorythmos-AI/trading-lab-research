@@ -43,7 +43,7 @@ export default async function OverviewPage() {
           <PatternsPanel trades={doc.trades} now={now} />
         </PaneBoundary>
       ) : null}
-      <PaneBoundary name="Paper robots">
+      <PaneBoundary name="Robot B (paper) and the scan">
         <RobotsStrip s={s} />
       </PaneBoundary>
       {health.level !== "red" ? (

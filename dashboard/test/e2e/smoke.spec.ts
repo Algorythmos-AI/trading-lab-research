@@ -196,7 +196,8 @@ test("the Overview leads with the owner's own trading, then the robots and the l
   await expect(page.getByTestId("rule-streak")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Profit and loss" })).toBeVisible();
   await expect(page.getByRole("heading", { name: /^Your patterns in / })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "The robots, paper money only" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Robot B (paper) and the pre-market scan" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Paper account (Alpaca): Robot B", exact: true })).toHaveAttribute("data-env", "paper");
   // The fixture's snapshot is weeks old and the server runs on the real clock: inside a trading window that is RED
   // ("stopped") and the health shows as the banner at the top, otherwise as the line at the foot. Exactly one of them.
   const healthLine = page.getByTestId("health-line");

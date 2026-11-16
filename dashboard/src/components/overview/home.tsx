@@ -18,6 +18,8 @@ import { DAY_LOSS_LIMIT, MAX_TRADES_PER_DAY, TIME_STOP_MINUTES, dayCheck, meterT
 import { outcomeLine, trading } from "@/lib/trading";
 import type { Snapshot } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { EnvFrame } from "@/components/ui/env-chip";
+import { Money } from "@/components/ui/money";
 
 const usd = (v: number | null | undefined, digits = 0) => {
   if (v === null || v === undefined || !Number.isFinite(v)) return "—";
@@ -387,7 +389,11 @@ export function NextSessionPanel({ options, radar }: { options: OptionsEdition |
 
 // ── The robots and the lab ───────────────────────────────────────────────────────────────────────────────────────
 
-/** Paper B and the small-cap scan in one row each: the detail lives on the Today page. */
+/**
+ * Robot B and the small-cap scan in one row each: the detail lives on the Today page. Robot B's cell is the Alpaca paper
+ * account: a paper EnvFrame, its result paper Money (US$), never written like the owner's dollars above it. The scan
+ * is the routine's dry run of gapping stocks: counts only, unframed.
+ */
 export function RobotsStrip({ s }: { s: Snapshot | null }) {
   if (!s) return null;
   const v = trading(s);
@@ -400,18 +406,26 @@ export function RobotsStrip({ s }: { s: Snapshot | null }) {
     <section aria-labelledby="robots-title" className="grid gap-2">
       <h2 id="robots-title" className="text-muted-foreground flex items-center gap-2 text-sm font-semibold">
         <Bot aria-hidden className="size-4" />
-        The robots, paper money only
+        Robot B (paper) and the pre-market scan
       </h2>
       <div className="bg-border grid gap-px overflow-hidden rounded-lg border sm:grid-cols-2">
-        <Link href="/today" className="bg-card hover:bg-muted/40 grid content-start gap-1.5 p-3 transition-colors">
-          <span className="text-muted-foreground text-xs">Paper B · QQQ rule</span>
-          <span className="font-mono text-sm font-semibold">
-            {v.available ? `${usd(v.periods.find((x) => x.key === "total")?.money ?? 0, 2)} · ${v.stats.trades} trade${v.stats.trades === 1 ? "" : "s"}` : "No session yet"}
-          </span>
-          <StatusBadge tone={o.tone} className="justify-self-start">
-            {v.session ? `${shortDay(v.session)}: ${o.title}` : o.title}
-          </StatusBadge>
-        </Link>
+        <EnvFrame env="paper" label="Robot B" className="bg-card grid">
+          <Link href="/today" className="hover:bg-muted/40 grid content-start gap-1.5 p-1 transition-colors">
+            <span className="text-muted-foreground text-xs">Robot B (paper) · QQQ rule</span>
+            <span className="font-mono text-sm font-semibold">
+              {v.available ? (
+                <>
+                  <Money env="paper" value={v.periods.find((x) => x.key === "total")?.money ?? 0} signed /> · {v.stats.trades} trade{v.stats.trades === 1 ? "" : "s"}
+                </>
+              ) : (
+                "No session yet"
+              )}
+            </span>
+            <StatusBadge tone={o.tone} className="justify-self-start">
+              {v.session ? `${shortDay(v.session)}: ${o.title}` : o.title}
+            </StatusBadge>
+          </Link>
+        </EnvFrame>
         <Link href="/today" className="bg-card hover:bg-muted/40 grid content-start gap-1.5 p-3 transition-colors">
           <span className="text-muted-foreground text-xs">Small-cap scan{sc.date ? ` · ${shortDay(sc.date)}` : ""}</span>
           {l ? (
