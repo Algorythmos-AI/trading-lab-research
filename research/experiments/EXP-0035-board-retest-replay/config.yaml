@@ -1,0 +1,51 @@
+# EXP-0035: the Options desk board's break-and-retest ENTERs under two rules, replayed once on sessions already
+# recorded: DEC-0052 section 1 (the clone's retest: touch within 1.0 two-minute ATR, then a confirming close) against
+# the 0.1-daily-ATR touch it replaces. Design only: nothing was replayed when this was written.
+# NOT BLIND: one owner trade under the old rule and the clone's HYP-0029 figures were seen before it was written
+# (DEC-0052, "What has already been seen"); the report says so beside its verdict.
+# Frozen with DEC-0052. Before the run a decision record may amend it, saying what was viewed; after the run a changed
+# value is a new experiment with new trials.
+experiment: EXP-0035
+status: registered_on_acceptance     # a `proposed` row in config/trial_registry.yaml until DEC-0052 is accepted
+decision: DEC-0052
+family: O                            # the options desk's entry rules and their filters; total 37 (config/trial_registry.yaml)
+trials:                              # the difference is a minus b
+  - {hypothesis: HYP-0060, trial: BOARD-RETEST-CONFIRMED, a: confirmed_retest, b: touch_0_1_daily_atr, unit: enter, role: primary}
+
+engines:                             # each rule is replayed by the board's own code at its engine, never a re-implementation
+  b: "trade-state.ts at origin/integration 8cd5ff0d, engine label e-05b589ff4f1c (the board before DEC-0052)"
+  a: "the commit that merges the board's pull request for DEC-0052; its engine label is written into README.md the day it merges"
+  through: "desk-eval.ts evaluateSlotStates, slot by slot, as the DEC-0044 server records are made (settled 2-minute bars, SERVER_SETTLE_MS)"
+
+inputs:
+  sessions: >-
+    every session with a DEC-0044 server record, from the first to the last session before the release that ships
+    DEC-0052 section 1, less the session of the owner trade DEC-0052 names (its date is in the owner's PRIVATE notes,
+    not here); the list is written into README.md before the run
+  names: "the focus names of each session's edition only (DEC-0051 section 5.1)"
+  bars: "SIP 2-minute bars, fetched once for the whole list and saved with a sha256 per session before either engine runs"
+  edition: "options/copies/: the edition each session's board read (the copy that was latest at 09:30 New York)"
+  journal: none                      # the day's limits are left out: both rules are read as if no trade had been taken
+
+outcome:                             # on the stock, from the card (DEC-0035, frozen there and in DEC-0051 section 8)
+  entry: open_of_first_2min_bar_starting_at_or_after_the_enter_slot_evaluation_time
+  card: {ENTRY_ATR: 0.01, STOP_ATR: 0.1, MIN_ROOM_MULTIPLE: 2, call_level: breakout_above_else_resistance, put_level: hold_above_else_support}
+  first_touch_wins: true
+  both_in_one_bar: stop
+  flat: "15:10 New York (12:10 on a half day): neither"
+
+statistics:
+  measure: share_reaching_t1_first
+  counts: [enters, t1_first, stop_first, neither]
+  difference: a_minus_b
+  resamples: 5000
+  resample_unit: session
+  prng: mulberry32
+  seed: 20261160
+  interval: [2.5, 97.5]
+  percentile: numpy_linear
+  too_few: {per_group_enters: 20, sessions: 10}
+
+read: once                           # the replay is run once; a re-run is a new experiment id
+gates: nothing                       # the verdict does not gate DEC-0052 section 1
+lapses: "with no verdict if the board's pull request for DEC-0052 is not merged by 2027-02-28, or the replay cannot be run on both engines from the recorded inputs"

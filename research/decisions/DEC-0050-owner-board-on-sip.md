@@ -156,3 +156,11 @@ in the session and one report a day after the close (`docs/runbooks/feed-agreeme
 data-quality measurement only: counts, ages and differences, with no trade, no P&L and no setup outcome. The per-slot
 state list stays in the PRIVATE report file and is never shown on the site. Nothing in it is a trial (DEC-0005): it
 adds none to any family, and no reading of it starts or ends EXP-0033.
+
+## Note on DEC-0052 (added 2026-11-17)
+
+DEC-0052, proposed on 2026-11-17, amends point 3 once it is accepted: EXP-0031's values carry into EXP-0033 unchanged
+except RETEST_ATR's role as the retest touch, which DEC-0052 section 1 replaces (EXP-0033 config.yaml frozen_numbers,
+amended before its window starts). The text above is otherwise unchanged.
+
+Viewed before this note: one owner trade entered on the board's old retest and its result, the clone's decision lines for that session, and the clone's cumulative HYP-0029 figures (DEC-0052, "What has already been seen").

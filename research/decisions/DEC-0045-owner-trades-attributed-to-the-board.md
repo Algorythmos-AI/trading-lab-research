@@ -177,3 +177,12 @@ when the window can start), point 7 (a feed-change end closes all three trials i
 report also holds the counts of positions per group before and after the alerts date), point 8 (the site may show
 each position's fill-time check, and may not show distance from the entry level or whether a stop price traded) and
 the last consequence (the fill-time check is defined there). The text above is otherwise unchanged.
+
+## Note on DEC-0052 (added 2026-11-17)
+
+DEC-0052, proposed on 2026-11-17, amends section 3 once it is accepted: the frozen RETEST_ATR of 0.1 decides the
+board's retest touch only for sessions recorded under the engine labels before DEC-0052's release; after it the touch
+is DEC-0052 section 1 (the clone's retest), and RETEST_ATR remains the card's stop band only. EXP-0031 is not
+otherwise touched. The text above is otherwise unchanged.
+
+Viewed before this note: one owner trade entered on the board's old retest and its result, the clone's decision lines for that session, and the clone's cumulative HYP-0029 figures (DEC-0052, "What has already been seen").
