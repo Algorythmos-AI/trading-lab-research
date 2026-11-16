@@ -109,6 +109,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"quality: not scored ({doc['quality'].get('error')})")
         return 0
     print(f"quality: {q['verdict']}, {q['entries']} entered, {q['bar_revised']} bars revised, "
+          f"{q['arm_retries']} arm tries{' (gave up)' if q['arm_gave_up'] else ''}, "
           f"{q['feed_unfit']} feed-unfit, {q['log_fault']} log faults, names from {q['names_source']}, "
           f"bars missing {q['bars_missing'] or 'none'} of {q['bars_expected']}")
     for t in doc["quality"]["trades"]:
