@@ -18,7 +18,7 @@ const CELL: Record<CellStatus, { cls: string; Icon: LucideIcon; label: string }>
 
 const SHORT_NAMES: Record<string, string> = {
   routine: "Routine",
-  "paper-b": "Paper B",
+  "paper-b": "Robot B",
   forward: "Forward",
   weekly: "Weekly",
   dashboard: "Dashboard",

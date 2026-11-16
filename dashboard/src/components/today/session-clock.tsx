@@ -27,7 +27,7 @@ const INK: Record<Tone, string> = {
   neutral: "var(--muted-foreground)",
 };
 
-const SHORT: Record<string, string> = { routine: "Routine", "paper-b": "Paper B", forward: "Forward" };
+const SHORT: Record<string, string> = { routine: "Routine", "paper-b": "Robot B", forward: "Forward" };
 
 const X = (m: number) => L + ((Math.max(CLOCK_FROM, Math.min(CLOCK_TO, m)) - CLOCK_FROM) / (CLOCK_TO - CLOCK_FROM)) * (R - L);
 const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
