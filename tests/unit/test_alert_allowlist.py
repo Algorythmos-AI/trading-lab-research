@@ -211,8 +211,8 @@ site(f"{RB}::'paper-b:stop-rule' | f'paper-b stopped by its stop rule ({{page.re
      {"rule": NS(decision=T), "fired": NS(kind=T, detail=T)})
 site("src/wt/live/runner_b.py::run::'paper-b:second-runner' | 'paper-b: a second runner refused to start'", {})
 RO = "src/wt/live/runner_o.py::Runner"
-site(f"{RO}.arm::'broker' | 'Options clone: broker unreachable at arm'", {"e": E})
-site(f"{RO}.arm::'flatten-required' | 'Options clone: a position no plan knows'", {})
+site(f"{RO}.give_up_arm::'arm-broker' | 'Options clone: broker unreachable at arm'", {"e": E})
+site(f"{RO}.connect_at_arm::'flatten-required' | 'Options clone: a position no plan knows'", {})
 site(f"{RO}.arm::'options-level' | 'Options clone: account cannot buy options'", {"level": N})
 site(f"{RO}.arm::'plans-unreadable' | 'Options clone: plan files unreadable'", {"e": E})
 site(f"{RO}.check_feed_fit::'options-clone:feed-unfit' | 'Options clone: feed unfit, entries off'",
@@ -221,7 +221,7 @@ site(f"{RO}.entries::p", {"p": p_obj()})
 site(f"{RO}.exit::'exit-failed' | 'Options clone: an exit has not filled'", {"p": p_obj(), "tries": [T, T]})
 site(f"{RO}.finish::'lot-taken-by-hand' | 'Options clone: a lot was sold by hand'", {"p": p_obj()})
 site(f"{RO}.finish::f'options-clone:exit-{{p.trade_id}}' | 'Options clone exited'", {"p": p_obj(), "rop": N})
-site(f"{RO}.prepare::'levels' | 'Options clone: no levels today'", {"e": E})
+site(f"{RO}.give_up_arm::'levels' | 'Options clone: no levels today'", {"e": E})
 site(f"{RO}.step::'broker unreachable for five minutes with a positi", {})
 site(f"{RO}.step::'broker' | 'Options clone: broker unreachable'", {})
 site(f"{RO}.step::f'options-clone:latched-{{latched}}' | 'Options clone latched'", {"latched": T})
@@ -408,7 +408,7 @@ def test_the_deploy_reasons_a_page_names_match_what_the_code_says():
 
 def test_the_scan_follows_wrappers_to_where_the_text_is_made():
     ids = {s.id for s in SITES_FOUND}
-    assert any("Runner.arm::'broker'" in i for i in ids)                     # runner_o's page()
+    assert any("Runner.give_up_arm::'arm-broker'" in i for i in ids)             # runner_o's page()
     assert any("Context.ensure_pool::'forward:scan-failed'" in i for i in ids)  # the forward test's page()
     assert not any(i.endswith("::page::key | title") for i in ids)            # the wrappers themselves are not sites
 
@@ -547,7 +547,8 @@ RECORDS = [
     ("src/wt/live/runner_b.py", "_session", "'Paper B is SHORT'", "log('short_position'"),
     ("src/wt/live/runner_b.py", "_session", "NOT FLAT at the close", "log('END_OF_DAY_NOT_FLAT', qty=qty, plan="),
     ("src/wt/live/runner_b.py", "_session", "SHORT at the close", "log('END_OF_DAY_NOT_FLAT', qty=qty, short=True"),
-    ("src/wt/live/runner_o.py", "Runner.arm", "broker unreachable at arm", "pg.say(f'broker unreachable at arm"),
+    ("src/wt/live/runner_o.py", "Runner.give_up_arm", "broker unreachable at arm",
+     "pg.say(f'broker unreachable at arm"),
     ("src/wt/live/runner_o.py", "Runner.on_fill", "Options clone entered", "self.write('filled'"),
     ("src/wt/live/runner_o.py", "Runner.finish", "Options clone exited", "book(p"),
     ("src/wt/live/runner_o.py", "Runner.finish", "a lot was sold by hand", "book(p"),

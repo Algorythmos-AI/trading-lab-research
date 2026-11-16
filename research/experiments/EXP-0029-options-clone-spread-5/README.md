@@ -40,3 +40,23 @@
   2026-11-05 to 2026-11-16. Nothing in this fix was chosen from them, and no gate, threshold, window or exit rule changes.
   Trades from the release that carries this fix onward count as before. Whether that release has a `bar_revised`
   line is checked and stated in the report.
+
+## Fidelity fix: a failure at arm is retried until 09:58 (appended 2026-11-17, before the change runs)
+
+- **Defect.** When the broker could not be reached at arm (09:25), or the bars for the day's levels could not be
+  read, the runner turned entries off for the whole session and never tried again. A network error lasting a minute
+  at 09:25 therefore cost the whole day's trades. Nothing in DEC-0030 asks for that: its entry window opens at
+  10:00, and the run would have armed normally a minute later.
+- **Change (code only).** The runner tries again once a minute until 09:58 New York time (two minutes before
+  `day.first_entry`). Exits are managed between tries as before. A retry re-runs only the part that failed:
+  - the broker part reconciles the plans already loaded, then marks the names;
+  - the levels part marks the names again.
+  Plans are never re-read or re-booked. When a try succeeds, it removes only the off-switch that the failure set,
+  and the `arm_retry` line records the number of tries. If the part still fails at 09:58, the runner pages once and
+  entries stay off for the day, as before. An arm that starts after 09:58 (a restart) and fails pages at once with
+  no retry, as before. A failure that is not a network error (unreadable plans, the options
+  level, an orders setting other than paper, a position no plan knows) is not retried.
+  `config/options_clone.yaml` is unchanged, so `control_config_hash` and this experiment's frozen numbers are unchanged.
+- **Expected effect.** On a normal day, none. On a day with a short fault at arm, the clone trades the same window
+  under the same rules instead of taking no entries at all.
+- **Disclosure.** As for the bar fix above. No gate, threshold, window, sizing or exit rule changes.
