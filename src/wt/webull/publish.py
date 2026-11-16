@@ -1,6 +1,11 @@
 """Turn what `pull` read into the Trades page's journal and send it (ADR 0011). Runs as `wt`, never holds the key.
 
     python -m wt.webull.publish [--src DIR] [--state DIR] [--dry-run] [--fresh-money]
+    python -m wt.webull.publish --parity      # compare what the host would send with the journal the site shows
+
+It sends only while var/webull/PUBLISH_ON exists (beside its other state); without it every run is a dry run that
+says what it would send. The file is an operational switch for the cutover, not a security control: any member of
+group `wt` can create it.
 
 It reads the pull job's group-readable files (/var/lib/wt-webull/out), builds the journal with `journal`, and sends it
 with this host's dashboard key (DASHBOARD_KEY_ID) through `wt.ops.publish.send`. It sends when the fills or the money
@@ -9,14 +14,24 @@ complete: a half-read history would show the owner a wrong lifetime result.
 
 The money history (deposits, withdrawals, the daily account value) goes back further than the host's own balance
 readings. The first run reads the journal the site shows now (GET /api/editions/journal) and keeps its `money` block
-as the seed (var/webull/money_seed.json); later runs add the host's readings to it. If that read fails, nothing is
-sent and the job fails, so the history is never silently dropped. `--fresh-money` starts without a seed, on purpose.
+as the seed (var/webull/money_seed.json); later runs add the host's readings to it. The seed is kept only by a run
+that sends: a dry run reads it and lets it go. If that read fails, nothing is sent and the job fails (a dry run
+says so and exits 0), so the history is never silently dropped. `--fresh-money` starts without a seed, on purpose.
+
+Alarms. The pull job exits 0 when a read fails (status.json says how), so a network outage does not page every two
+minutes through OnFailure. This job, which runs after every pull, pages instead, through wt.ops.alerts (the
+ntfy pages every job uses), and only when a state changes: once when it starts, once more if it still holds after
+REMIND_S, and once when it clears (`step`). The states: the pull failing, the open lots disagreeing with Webull's
+positions for longer than RECONCILE_GRACE_S, the site refusing this journal as older (another writer), and drift:
+the key holder's root-owned copy of this package (/opt/wt-webull) not being the checkout's (wt.webull.treehash). The pull cannot page this way itself: wt.ops.alerts needs the
+checkout's environment, which the key holder does not load (ADR 0011).
 
 Log lines carry counts and outcomes only: no symbol, price, balance or key.
 """
 from __future__ import annotations
 
 import argparse
+import collections
 import datetime as dt
 import hashlib
 import json
@@ -25,11 +40,17 @@ import sys
 from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
-from wt.webull import journal
+from wt.webull import journal, treehash
 
 HEARTBEAT_S = 10 * 60
+PUBLISH_ON = "PUBLISH_ON"          # in the state directory: without it the publisher only says what it would send
+PARITY_ROWS = 20
+OPT_TREE = Path("/opt/wt-webull/wt/webull")     # the copy the pull runs (sudo wt-install-units)
+REPO_TREE = Path(__file__).resolve().parent      # the checkout's, which this job runs
+REMIND_S = 30 * 60                 # a state still holding this long pages once more
+RECONCILE_GRACE_S = 10 * 60        # a fill the history has not caught up with yet clears within a run or two
 SEED_KEYS = ("as_of", "currency", "account_value", "cash", "positions", "usd_rate", "complete_from", "transfers", "values")
 
 
@@ -128,18 +149,184 @@ def digest(doc: Mapping[str, Any]) -> str:
     return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
+# ---- alarms --------------------------------------------------------------------------------------------------------
+
+class Pager(Protocol):
+    """What the alarms need of wt.ops.alerts.Alerts."""
+
+    def fire(self, key: str, title: str, message: str, priority: int = 4, tags: tuple[str, ...] = ()) -> bool: ...
+    def resolve(self, key: str, title: str, message: str, priority: int = 2) -> bool: ...
+    def notify(self, title: str, message: str, priority: int = 3, tags: tuple[str, ...] = ()) -> bool: ...
+
+
+class Silent:
+    """No pages (a test, or a run without the alerts module)."""
+
+    def fire(self, key: str, title: str, message: str, priority: int = 4, tags: tuple[str, ...] = ()) -> bool:
+        return False
+
+    def resolve(self, key: str, title: str, message: str, priority: int = 2) -> bool:
+        return False
+
+    def notify(self, title: str, message: str, priority: int = 3, tags: tuple[str, ...] = ()) -> bool:
+        return False
+
+
+def step(prev: Mapping[str, Any], on: bool, now: dt.datetime, since: dt.datetime | None = None,
+         grace_s: float = 0.0, remind_s: float | None = REMIND_S) -> tuple[dict[str, Any], str | None]:
+    """One alarm's next state and what to page: "start" once it has held `grace_s`, "still" once after `remind_s`,
+    "clear" when it stops after having paged. Nothing else pages, however often it is called."""
+    if not on:
+        return {"on": False}, ("clear" if prev.get("paged") else None)
+    began = since or (journal._t(prev["since"]) if prev.get("on") and prev.get("since") else now)
+    cur = {"on": True, "since": began.isoformat(), "paged": bool(prev.get("on") and prev.get("paged")),
+           "reminded": bool(prev.get("on") and prev.get("reminded"))}
+    held = (now - began).total_seconds()
+    if not cur["paged"]:
+        if held >= grace_s:
+            cur["paged"] = True
+            return cur, "start"
+    elif remind_s is not None and not cur["reminded"] and held >= remind_s:
+        cur["reminded"] = True
+        return cur, "still"
+    return cur, None
+
+
+KINDS = {"transient": "the network or Webull's side", "error": "Webull refused the read or no usable key",
+         "bug": "an unexpected error in the job", "seed": "the site's money history could not be carried over",
+         "send": "the site did not take it", "stopped": "no read at all"}
+
+
+def page_text(key: str, event: str, since: dt.datetime | None = None, kind: object = None,
+              n: object = None) -> tuple[str, str]:
+    """The title and message of one alarm page: fixed words, and values through wt.ops.alerts' guards only."""
+    from wt.ops import alerts as al
+    at = f"{al.hhmm(since)} UTC" if since else "earlier"
+    why = KINDS.get(al.word(kind, tuple(KINDS), "other"), "see the journal")
+    texts = {
+        ("pull", "start"): ("Webull reads failing", f"The host's Webull read has failed since {at} ({why}). It "
+                            "tries again every run. Check: journalctl -u wt-webull-pull."),
+        ("pull", "still"): ("Webull reads still failing", f"The host's Webull read has failed since {at} ({why}), "
+                            "30 minutes or more. Check: journalctl -u wt-webull-pull."),
+        ("pull", "clear"): ("Webull reads working again", "The host's Webull read works again."),
+        ("reconcile", "start"): ("Webull holdings disagree", f"The journal's open lots and Webull's positions "
+                                 f"disagree on {al.count(n)} holding(s) since {at}. Compare the Trades page with "
+                                 "the app."),
+        ("reconcile", "still"): ("Webull holdings still disagree", f"The journal's open lots and Webull's "
+                                 f"positions have disagreed since {at}, 30 minutes or more."),
+        ("reconcile", "clear"): ("Webull holdings agree again", "The journal's open lots match Webull's positions."),
+        ("superseded", "start"): ("Webull journal superseded", f"Since {at} the site holds a journal newer than the "
+                                  "host's: something else writes it. Check that the cloud routine is retired."),
+        ("superseded", "still"): ("Webull journal still superseded", f"Since {at} the site has refused the host's "
+                                  "journal as older, 30 minutes or more."),
+        ("superseded", "clear"): ("Webull journal sent again", "The site takes the host's journal again."),
+        ("drift", "start"): ("Webull code not as installed", f"Since {at} the code the Webull key holder runs is not "
+                             "the checkout's, or is missing. Compute the tree hash of the merged commit on your Mac "
+                             "(runbook), then run sudo wt-install-units --webull-tree with that hash."),
+        ("drift", "still"): ("Webull code still not as installed", f"Since {at} the key holder's code has differed "
+                             "from the checkout's, 30 minutes or more. Hash the merged commit on your Mac, then sudo "
+                             "wt-install-units --webull-tree with it."),
+        ("drift", "clear"): ("Webull code as installed again", "The key holder runs the checkout's code again."),
+        ("publish", "start"): ("Webull journal not sent", f"Since {at} the host's journal has not reached the site "
+                               f"({why}). It tries again every run. Check: journalctl -u wt-webull-publish."),
+        ("publish", "still"): ("Webull journal still not sent", f"Since {at} the host's journal has not reached the "
+                               f"site ({why}), 30 minutes or more."),
+        ("publish", "clear"): ("Webull journal reaches the site again", "The host's journal reaches the site again."),
+        ("stale", "start"): ("Webull reads stopped", f"No good Webull read since {at}: the pull has not run, or has "
+                             "not finished. Check: systemctl list-timers wt-webull-pull.timer and journalctl -u "
+                             "wt-webull-pull."),
+        ("stale", "still"): ("Webull reads still stopped", f"Still no good Webull read since {at}."),
+        ("stale", "clear"): ("Webull reads running again", "The host reads Webull again."),
+    }
+    return texts.get((key, event), ("Webull journal alarm", "An alarm of the Webull journal changed."))
+
+
+ALARM_KEYS = (("pull", "start"), ("pull", "still"), ("pull", "clear"), ("reconcile", "start"), ("reconcile", "still"),
+              ("reconcile", "clear"), ("superseded", "start"), ("superseded", "still"), ("superseded", "clear"),
+              ("drift", "start"), ("drift", "still"), ("drift", "clear"), ("publish", "start"), ("publish", "still"),
+              ("publish", "clear"), ("stale", "start"), ("stale", "still"), ("stale", "clear"))
+
+
+def page(pager: Pager, key: str, event: str, since: dt.datetime | None = None, kind: object = None,
+         n: object = None) -> None:
+    title, msg = page_text(key, event, since, kind, n)
+    if event == "start":
+        pager.fire(f"webull:{key}", title, msg)
+    elif event == "still":
+        pager.notify(title, msg, 4)
+    else:
+        pager.resolve(f"webull:{key}", title, msg)
+
+
+class Alarms:
+    """Each alarm's state in var/webull/alarms.json, and the pages `step` asks for."""
+
+    def __init__(self, path: Path, pager: Pager) -> None:
+        self.path, self.pager = path, pager
+        d = read_json(path, {})
+        self.state: dict[str, Any] = d if isinstance(d, dict) else {}
+
+    def set(self, key: str, on: bool, now: dt.datetime, since: dt.datetime | None = None, grace_s: float = 0.0,
+            kind: object = None, n: object = None, remind_s: float = REMIND_S) -> str | None:
+        prev = self.state.get(key)
+        cur, event = step(prev if isinstance(prev, dict) else {}, on, now, since, grace_s, remind_s)
+        self.state[key] = cur
+        write_json(self.path, self.state)
+        if event:
+            log(f"alarm: {key} {event}")
+            page(self.pager, key, event, journal._t(cur["since"]) if cur.get("since") else since, kind, n)
+        return event
+
+
+def pull_alarm(alarms: Alarms, status: Mapping[str, Any], now: dt.datetime) -> None:
+    """The pull failing: on while its status says "failing", off when it says "ok". A token waiting for approval
+    is paged by the pull itself (once per token) and leaves this alarm as it was."""
+    st = status.get("state") or ("ok" if status.get("ok") else None)
+    if st not in ("ok", "failing"):
+        return
+    since = journal._t(status["since"]) if st == "failing" and isinstance(status.get("since"), str) else None
+    alarms.set("pull", st == "failing", now, since=since, kind=status.get("kind"))
+
+
+def drift(alarms: Alarms, state: Path, now: dt.datetime, repo: Path, installed: Path) -> bool:
+    """Whether the key holder's copy differs from the checkout's code (or is missing): logged, kept in
+    var/webull/status.json and paged as the "drift" alarm."""
+    mine, theirs = treehash.tree_hash(repo), treehash.tree_hash(installed)
+    off = mine is None or mine != theirs
+    if off:
+        log(f"drift: the key holder's code ({'missing' if theirs is None else theirs[:12]}) is not the checkout's "
+            f"({(mine or 'none')[:12]}); run sudo wt-install-units")
+    write_json(state / "status.json", {"at": now.isoformat(timespec="seconds"), "drift": off, "repo_tree": mine,
+                                       "installed_tree": theirs})
+    alarms.set("drift", off, now)
+    return off
+
+
 def run(src: Path, state: Path, *, read_back: Callable[[], dict[str, Any] | None],
-        send: Callable[[bytes], tuple[bool, str]], dry_run: bool = False, fresh_money: bool = False) -> int:
+        send: Callable[[bytes], tuple[bool, str]], dry_run: bool = False, fresh_money: bool = False,
+        pager: Pager | None = None, clock: Callable[[], dt.datetime] = lambda: dt.datetime.now(dt.UTC),
+        installed: Path | None = None, repo: Path = REPO_TREE) -> int:
+    """One publish. `installed`: the key holder's copy to check for drift (main passes OPT_TREE; None skips it)."""
+    alarms = Alarms(state / "alarms.json", pager or Silent())
+    status = read_json(src / "status.json", {})
+    at = journal._t(status["at"]) if isinstance(status.get("at"), str) else clock()
+    pull_alarm(alarms, status, at)
+    if installed is not None:
+        drift(alarms, state, at, repo, installed)
     history = read_json(src / "history.json", {})
     if not history.get("complete"):
         log(f"waiting: the order history is read through {history.get('through') or 'nothing yet'}; not sending")
         return 0
-    status = read_json(src / "status.json", {})
     if not status.get("ok") or not status.get("at"):
-        log(f"not sending: the last read of Webull did not finish ({status.get('why') or 'no status'})")
+        log(f"not sending: the last read of Webull did not finish ({status.get('state') or 'no status'}"
+            f"{', since ' + str(status['since']) if status.get('since') else ''})")
         return 0
     now = journal._t(status["at"])          # the journal is as of the last good read, never of this run's clock
     doc = journal.build(load_groups(src), now)
+
+    def failed(kind: str) -> int:
+        alarms.set("publish", True, now, kind=kind)
+        return 0
 
     seed_path = state / "money_seed.json"
     seed = read_json(seed_path, None)
@@ -149,11 +336,24 @@ def run(src: Path, state: Path, *, read_back: Callable[[], dict[str, Any] | None
         else:
             edition = read_back()
             if edition is None:
+                if dry_run:
+                    log("dry run: could not read the journal the site shows now; nothing sent, no seed kept")
+                    return 0
                 log("stop: could not read the journal the site shows now, so its money history can't be carried over")
-                return 1
+                return failed("seed")
             seed = seed_from(edition)
-        write_json(seed_path, seed)
-        log(f"money seed kept: {len(seed.get('values') or [])} daily values, {len(seed.get('transfers') or [])} transfers")
+            if not seed:
+                # The site's journal has no money block: kept as the seed, that would drop the money history for
+                # good. Only --fresh-money starts without one, on purpose.
+                log("stop: the journal the site shows has no money history to carry over; nothing sent, no seed "
+                    "kept (--fresh-money starts without one)")
+                return 0 if dry_run else failed("seed")
+        n_values, n_transfers = len(seed.get("values") or []), len(seed.get("transfers") or [])
+        if dry_run:
+            log(f"dry run: money seed read, not kept: {n_values} daily values, {n_transfers} transfers")
+        else:
+            write_json(seed_path, seed)
+            log(f"money seed kept: {n_values} daily values, {n_transfers} transfers")
     money = money_from(doc, seed or None, load_readings(src))
     if money:
         doc["money"], doc["schema_version"] = money, 2
@@ -162,6 +362,7 @@ def run(src: Path, state: Path, *, read_back: Callable[[], dict[str, Any] | None
     write_json(state / "reconcile.json", {"at": doc["as_of"], "symbols_off": off})
     if off:
         log(f"warn: open lots and Webull's positions disagree on {off} symbol(s)")
+    alarms.set("reconcile", off > 0, now, grace_s=RECONCILE_GRACE_S, n=off)
 
     body = json.dumps(doc, separators=(",", ":")).encode()
     h = digest(doc)
@@ -170,15 +371,121 @@ def run(src: Path, state: Path, *, read_back: Callable[[], dict[str, Any] | None
     summary = f"{len(doc['trades'])} trades from {doc['fills']} fills, {len(doc['open'])} open, {len(doc['gaps'])} gaps"
     if last.get("hash") == h and age is not None and age < HEARTBEAT_S:
         log(f"unchanged: {summary}; sent {int(age)}s ago")
+        alarms.set("publish", False, now)
         return 0
     if dry_run:
         log(f"dry run: {summary}, {len(body):,} bytes")
+        alarms.set("publish", False, now)
         return 0
     ok, detail = send(body)
-    log(f"{'sent' if ok else 'not sent'}: {summary} ({detail})")
-    if ok:
-        write_json(state / "last_sent.json", {"at": doc["as_of"], "hash": h})
-    return 0 if ok else 1
+    if ok and superseded(detail):
+        log(f"superseded: the site holds a newer journal than this one ({summary}); not recorded as sent")
+        alarms.set("superseded", True, now)
+        return 0
+    log(f"{'sent' if ok else 'not sent'}: {summary} ({detail.split(':')[0]})")
+    if not ok:
+        return failed("send")                 # retried next run; paged once, not by OnFailure every run
+    write_json(state / "last_sent.json", {"at": doc["as_of"], "hash": h})
+    alarms.set("superseded", False, now)
+    alarms.set("publish", False, now)
+    return 0
+
+
+def superseded(detail: str) -> bool:
+    """wt.ops.publish.send counts a 409 as sent. For a desk snapshot that is right; for the journal it means the
+    site already holds one with a later as_of ("older", dashboard/src/lib/ingest.ts storeEdition), which only another
+    writer can have made. The site answers a repeat of the same run_id with 200 "duplicate", so it is not this."""
+    return detail.startswith("HTTP 409") and '"duplicate"' not in detail
+
+
+# ---- parity: the host's journal against the site's -------------------------------------------------------------------
+
+Row = tuple[Any, ...]
+
+
+def _utc(s: Any) -> str | None:
+    return journal._t(s).astimezone(dt.UTC).isoformat(timespec="seconds") if isinstance(s, str) and s else None
+
+
+def trade_row(t: Mapping[str, Any]) -> Row:
+    """A trade as parity compares it: its own fields, never its id."""
+    strike = t.get("strike")
+    return (t.get("symbol"), t.get("kind"), None if strike is None else round(float(strike), 4), t.get("expiry"),
+            t.get("side"), round(float(t.get("qty") or 0), 6), _utc(t.get("opened_at")), _utc(t.get("closed_at")),
+            round(float(t.get("pnl") or 0), 2))
+
+
+def last_fill(doc: Mapping[str, Any]) -> str | None:
+    """The newest fill a journal shows: an opening, or a close by an order (an expiry is not a fill)."""
+    times = [_utc(t.get("opened_at")) for t in doc.get("trades") or []]
+    times += [_utc(t.get("closed_at")) for t in doc.get("trades") or [] if t.get("close") == "order"]
+    times += [_utc(o.get("opened_at")) for o in doc.get("open") or []]
+    return max((x for x in times if x), default=None)
+
+
+def money_total(doc: Mapping[str, Any]) -> float | None:
+    """Money in less money out over the whole history (the transfers), the money block's total."""
+    m = doc.get("money")
+    return round(sum(float(t.get("amount") or 0) for t in m.get("transfers") or []), 2) if isinstance(m, dict) else None
+
+
+def compare(host: Mapping[str, Any], site: Mapping[str, Any]) -> dict[str, Any]:
+    mine = collections.Counter(trade_row(t) for t in host.get("trades") or [])
+    theirs = collections.Counter(trade_row(t) for t in site.get("trades") or [])
+    only_host, only_site = sorted((mine - theirs).elements(), key=repr), sorted((theirs - mine).elements(), key=repr)
+    counts = {k: {"host": f(host), "site": f(site)} for k, f in (
+        ("trades", lambda d: len(d.get("trades") or [])), ("open_lots", lambda d: len(d.get("open") or [])),
+        ("fills", lambda d: d.get("fills")), ("last_fill", last_fill), ("money_total", money_total))}
+    exact = not only_host and not only_site and all(v["host"] == v["site"] for v in counts.values())
+    value = {k: (d.get("money") or {}).get("account_value") for k, d in (("host", host), ("site", site))}
+    return {"exact": exact, "counts": counts, "account_value": value, "host_as_of": host.get("as_of"),
+            "site_as_of": site.get("as_of"), "only_host": [list(r) for r in only_host[:PARITY_ROWS]],
+            "only_site": [list(r) for r in only_site[:PARITY_ROWS]], "n_only_host": len(only_host),
+            "n_only_site": len(only_site)}
+
+
+def parity(src: Path, state: Path, *, read_back: Callable[[], dict[str, Any] | None],
+           say: Callable[[str], None] = print) -> int:
+    """Build the journal from the pull's files as a send would, read the site's, and compare them: 0 when they agree
+    exactly, 1 when not, 2 when either side can't be read. Prints counts and the differing trades (this is the
+    owner's terminal, not a job's log) and writes var/webull/parity.json, readable by `wt` only.
+
+    The trades are the real check. The money total is not independent: the host's money history is seeded from the
+    site's own, so it can only show transfers the host found since."""
+    history, status = read_json(src / "history.json", {}), read_json(src / "status.json", {})
+    at = status.get("at") if status.get("ok") else status.get("last_ok")
+    if not history.get("complete") or not at:
+        say(f"parity: the pull has not finished the history (read through {history.get('through') or 'nothing'}) "
+            "or has no good read yet")
+        return 2
+    site = read_back()
+    if site is None:
+        say("parity: could not read the journal the site shows now")
+        return 2
+    doc = journal.build(load_groups(src), journal._t(at))
+    seed = read_json(state / "money_seed.json", None)
+    money = money_from(doc, (seed if seed is not None else seed_from(site)) or None, load_readings(src))
+    if money:
+        doc["money"] = money
+    r = compare(doc, site)
+    say(f"parity: the host's journal as of {r['host_as_of']} against the site's as of {r['site_as_of']}")
+    for k, v in r["counts"].items():
+        say(f"  {k:<12} host {v['host']}  site {v['site']}{'' if v['host'] == v['site'] else '  <- differs'}")
+    say(f"  account value host {r['account_value']['host']}  site {r['account_value']['site']} (not compared: it "
+        "moves with the market)")
+    say("  note: money_total is seeded from the site's own history, so it is not an independent check; the trades are")
+    for side in ("host", "site"):
+        if r[f"only_{side}"]:
+            say(f"only on the {side} ({r[f'n_only_{side}']}, up to {PARITY_ROWS} shown): symbol, kind, strike, "
+                "expiry, side, qty, opened, closed, pnl")
+            for row in r[f"only_{side}"]:
+                say("  " + ", ".join("" if x is None else str(x) for x in row))
+    say(f"parity: {'exact' if r['exact'] else 'NOT exact'}")
+    state.mkdir(parents=True, exist_ok=True)
+    fd = os.open(state / "parity.json", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        json.dump({**r, "at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds")}, f, separators=(",", ":"))
+    return 0 if r["exact"] else 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -188,22 +495,82 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--state", type=Path, default=STATE_DIR / "webull")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--fresh-money", action="store_true", help="start the money history without the site's seed")
+    ap.add_argument("--parity", action="store_true", help="compare with the site's journal; sends nothing")
     a = ap.parse_args(argv)
     env = os.environ
     url, secret = env.get("DASHBOARD_INGEST_URL"), env.get("DASHBOARD_INGEST_SECRET")
-    if not a.dry_run and not (url and secret):
-        log("stop: DASHBOARD_INGEST_URL or DASHBOARD_INGEST_SECRET is not set")
-        return 2
+    dry_run = a.dry_run or not (a.state / PUBLISH_ON).exists()
+    if dry_run and not a.dry_run and not a.parity:
+        log(f"dry run: no {a.state / PUBLISH_ON}, so nothing is sent")
 
     def read_back() -> dict[str, Any] | None:
         from wt.options.pipeline_check import read_edition
         return read_edition("journal")
 
     def send(body: bytes) -> tuple[bool, str]:
+        if not (url and secret):                  # paged once as "not sent", never by OnFailure every run
+            log("not sent: DASHBOARD_INGEST_URL or DASHBOARD_INGEST_SECRET is not set")
+            return False, "not configured"
         from wt.ops.publish import send as post
-        return post(body, url or "", secret or "", env.get("VERCEL_AUTOMATION_BYPASS_SECRET"))
+        return post(body, url, secret, env.get("VERCEL_AUTOMATION_BYPASS_SECRET"))
 
-    return run(a.src, a.state, read_back=read_back, send=send, dry_run=a.dry_run, fresh_money=a.fresh_money)
+    if a.parity:
+        return parity(a.src, a.state, read_back=read_back)
+    from wt.ops.alerts import Alerts
+    pager = Alerts()
+    try:
+        return run(a.src, a.state, read_back=read_back, send=send, dry_run=dry_run, fresh_money=a.fresh_money,
+                   pager=pager, installed=OPT_TREE)
+    except Exception as e:  # noqa: BLE001 - a bug pages once by state, not through OnFailure every two minutes
+        log(f"bug: {type(e).__name__}")
+        Alarms(a.state / "alarms.json", pager).set("publish", True, dt.datetime.now(dt.UTC), kind="bug")
+        return 0
+
+
+# ---- the watch: a pull that stops running at all ---------------------------------------------------------------------
+
+PULL_STATUS = Path("/var/lib/wt-webull/out/status.json")
+WEBULL_KEY = Path("/etc/wt/webull.env")
+STALE_SESSION_S = 30 * 60                 # the pull reads every 2 minutes in the session
+STALE_OTHER_S = 26 * 3600                 # and once each evening otherwise
+
+
+def in_session(now: dt.datetime) -> bool:
+    """The US regular session (09:30 to the close, 13:00 on a half day), by the repository's exchange calendar."""
+    from wt.options import levels
+    et = now.astimezone(journal.ET)
+    day = et.date().isoformat()
+    close = dt.time(13) if day in levels.HALF_DAYS else dt.time(16)
+    return levels.is_session(day) and dt.time(9, 30) <= et.time() < close
+
+
+def watch(pager: Pager | None = None, now: dt.datetime | None = None, *, state: Path | None = None,
+          status_path: Path = PULL_STATUS, key: Path = WEBULL_KEY) -> str | None:
+    """Run by the dashboard job (wt.ops.publish, every 5 to 15 minutes, as wt): pages once when the host holds the
+    key but has had no good Webull read for STALE_SESSION_S in the session, or STALE_OTHER_S otherwise (a timer
+    left off or disabled, a condition that stopped the unit, a pull that never finishes). The publisher cannot see
+    this itself: it runs only after a pull. Returns the event paged, if any."""
+    if not key.exists():
+        return None                                    # no key on this host: nothing should be reading
+    if state is None:
+        from wt.core.config import STATE_DIR
+        state = STATE_DIR / "webull"
+    if pager is None:
+        from wt.ops.alerts import Alerts
+        pager = Alerts()
+    now = now or dt.datetime.now(dt.UTC)
+    st = read_json(status_path, {})
+    if isinstance(st, dict) and st.get("state") == "approval":
+        return None                      # one cause, one page: the pull pages the token itself, once per token
+    last = st.get("last_ok") if isinstance(st, dict) else None
+    try:
+        since = journal._t(last) if isinstance(last, str) else dt.datetime.fromtimestamp(key.stat().st_mtime, dt.UTC)
+    except (OSError, ValueError):
+        since = now
+    limit = STALE_SESSION_S if in_session(now) else STALE_OTHER_S
+    # `since` is the last good read, so the page says it; the reminder comes REMIND_S after the first page.
+    return Alarms(state / "watch.json", pager).set("stale", (now - since).total_seconds() > limit, now, since=since,
+                                                     kind="stopped", remind_s=limit + REMIND_S)
 
 
 if __name__ == "__main__":

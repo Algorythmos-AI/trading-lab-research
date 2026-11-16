@@ -6,18 +6,36 @@
 #   * the static units (deploy/oci/systemd) and the helpers (deploy/oci/bin -> /usr/local/bin), so a changed helper
 #     (wt-deploy itself included) is never left stale;
 #   * the backup and restore-test timers, when the host has a restic repository;
-#   * the Webull read-only timer (ADR 0011), when the owner has put the key on the host (wt-set-webull-secret);
+#   * the Webull key holder's code (ADR 0011), only with --webull-tree <sha256>: the tree hash the owner computed on
+#     their own machine from the merged commit (docs/runbooks/webull-readonly.md). wt-webull-code stages a
+#     root-owned copy of src/wt/webull, refuses links, takes the stage's hash itself, checks wt-webull can import
+#     the stage, and swaps /opt/wt-webull to it only on an exact match. Without the flag /opt/wt-webull is left as
+#     it is (on a first install there is none, and the Webull timer stays off);
+#   * the Webull read-only timer, when the owner has put the key on the host (wt-set-webull-secret) and the copy
+#     loads as wt-webull;
+#   sudo wt-install-units [--webull-tree <sha256>]
 #   * /etc/wt/installed.sha256, the fingerprint of all of it: an unattended deploy compares it with the target
 #     commit's (python -m wt.ops.units fingerprint) and leaves any release that changes it to the owner.
 set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo "run with sudo" >&2; exit 2; }
+webull_tree=""
+case "${1:-}" in
+  "") ;;
+  --webull-tree) webull_tree="${2:?--webull-tree needs the sha256 from the merged commit}" ;;
+  *) echo "usage: sudo wt-install-units [--webull-tree <sha256>]" >&2; exit 2 ;;
+esac
 root=/home/wt/trading
 as_wt() { runuser -u wt -- env WT_HOST=systemd WT_ENV_FILE=/run/wt-secrets/env PYTHONPATH=src "$@"; }
 cd "$root"
 as_wt make -s gate PY=.venv/bin/python || { echo "deploy gate closed: not installing units now" >&2; exit 2; }
+# A courtesy, not a control: wt owns .git, so a clean status proves nothing. The control is --webull-tree.
+if dirty=$(runuser -u wt -- git -C "$root" status --porcelain -- src/wt/webull deploy/oci 2>/dev/null) && [[ -n "$dirty" ]]; then
+  echo "warning: src/wt/webull or deploy/oci in $root differs from its commit:" >&2
+  printf '  %s\n' "$dirty" >&2
+fi
 rm -rf var/units && as_wt .venv/bin/python -m wt.ops.units render --out var/units --root "$root"
 list=/etc/wt/installed-units.txt
-install -d -m 0755 /etc/wt
+install -d -m 0750 -o root -g wt /etc/wt     # as wt-set-secrets and wt-fetch-secrets make it: wt reads installed.sha256
 mapfile -t new < <(cd var/units && ls wt-*.service wt-*.timer)
 if [[ -r "$list" ]]; then
   for u in $(comm -23 <(sort "$list") <(printf '%s\n' "${new[@]}" | sort)); do
@@ -29,6 +47,17 @@ fi
 install -m 0644 var/units/wt-*.service var/units/wt-*.timer /etc/systemd/system/
 install -m 0644 deploy/oci/systemd/* /etc/systemd/system/
 install -m 0755 deploy/oci/bin/* /usr/local/bin/
+
+# The Webull key holder's code: only the tree the owner names (wt-webull-code, just installed with the helpers).
+webull_rc=0
+if [[ -n "$webull_tree" ]]; then
+  /usr/local/bin/wt-webull-code install "$root/src/wt/webull" "$webull_tree" || webull_rc=$?
+elif [[ -d /opt/wt-webull/wt/webull ]]; then
+  echo "Webull key holder code left as installed (tree sha256 $(/usr/local/bin/wt-webull-code hash /opt/wt-webull/wt/webull));"
+  echo "  to change it, hash the merged commit on your Mac (runbook) and run: sudo wt-install-units --webull-tree <sha256>"
+else
+  echo "no Webull key holder code installed: sudo wt-install-units --webull-tree <sha256> (runbook)"
+fi
 printf '%s\n' "${new[@]}" > "$list"
 systemctl daemon-reload
 systemctl enable chrony-wait.service 2>/dev/null || true      # time-sync.target then really waits for the clock
@@ -38,11 +67,15 @@ if grep -q '^RESTIC_REPOSITORY=' /run/wt-secrets/env 2>/dev/null; then
 else
   echo "no RESTIC_REPOSITORY in the secrets: backup timers left off"
 fi
-if [[ -r /etc/wt/webull.env ]] && id -u wt-webull >/dev/null 2>&1; then
+# The same interpreter and path as the unit's ExecStart (wt-webull-pull.service), importing only.
+if [[ ! -r /etc/wt/webull.env ]] || ! id -u wt-webull >/dev/null 2>&1; then
+  echo "no Webull key on this host (sudo wt-set-webull-secret): Webull timer left off"
+elif (cd / && runuser -u wt-webull -- /usr/bin/python3 -I -S -B -c "import sys; sys.path.insert(0, '/opt/wt-webull'); from wt.webull.pull import main"); then
   systemctl enable --now wt-webull-pull.timer
 else
-  echo "no Webull key on this host (sudo wt-set-webull-secret): Webull timer left off"
+  echo "wt-webull cannot load /opt/wt-webull (not installed, or broken): Webull timer left as it was" >&2
 fi
 as_wt .venv/bin/python -m wt.ops.units fingerprint --root "$root" > /etc/wt/installed.sha256
 chmod 0644 /etc/wt/installed.sha256
 systemctl list-timers 'wt-*' --no-pager
+exit "$webull_rc"

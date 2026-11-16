@@ -511,11 +511,12 @@ AUTO_STUCK_H = 12                       # a release waiting longer than this is 
 # Long, heavy jobs: the tests are not run beside them. None since DEC-0036 closed the crypto desk (the challengers
 # and the learning job left the schedule); the check stays for the next such job.
 AUTO_BUSY: tuple[str, ...] = ()
-# What `sudo wt-install-units` installs is made from the first four. The rest is the deploy's own machinery: a
-# release that changes how the host deploys is not let in by the thing it changes.
+# What `sudo wt-install-units` installs is made from the first four, and from src/wt/webull: the Webull key holder
+# runs a root-owned copy of it (ADR 0011), which only the owner's install changes. The rest is the deploy's own
+# machinery: a release that changes how the host deploys is not let in by the thing it changes.
 OWNER_PATHS = ("deploy/oci/bin", "deploy/oci/systemd", "src/wt/ops/schedule.py", "src/wt/ops/units.py",
                "src/wt/ops/deploy.py", "src/wt/ops/jobs.py", "src/wt/ops/ci.py", "src/wt/ops/window.py",
-               "src/wt/ops/locks.py", "src/wt/ops/dashguard.py")
+               "src/wt/ops/locks.py", "src/wt/ops/dashguard.py", "src/wt/webull")
 
 
 def auto_enabled() -> bool:

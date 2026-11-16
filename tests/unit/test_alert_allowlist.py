@@ -158,6 +158,19 @@ def drive_pipeline_check() -> list[tuple[str, str]]:
             for slot in ("pre-open", "after-close", T) for date in ("2026-11-12", T)]
 
 
+def drive_webull_alarms() -> list[tuple[str, str]]:
+    """Every alarm page of the Webull journal publisher, with hostile values where the code takes any."""
+    from wt.webull import publish as wp
+    keys = sorted({k for k, _e in wp.ALARM_KEYS} | {T})
+    out = []
+    for key in keys:
+        for event in ("start", "still", "clear", T):
+            for since in (None, dt.datetime(2026, 11, 16, 15, 4, tzinfo=dt.UTC), T):
+                out.append(alerts.render(*wp.page_text(key, event, since, T, N)))       # type: ignore[arg-type]
+                out.append(alerts.render(*wp.page_text(key, event, None, "transient", 3)))
+    return out
+
+
 # ---- the entries ----------------------------------------------------------------------------------------------------
 
 def p_obj() -> NS:
@@ -270,6 +283,9 @@ for _sid in (f"{VP}::KEY_NOT_PRIVATE | 'Repository is not private'", f"{VP}::KEY
              f"{VP}::KEY_NO_GH | 'gh is installed again'", f"{VP}::KEY_NO_GH | 'gh is not installed on the host'",
              f"{VP}::KEY_UNKNOWN | 'Repository visibility readable again'", f"{VP}::KEY_UNKNOWN | 'Repository visibility unknown'"):
     site(_sid, lambda *_: drive_visibility())
+WB = "src/wt/webull/publish.py::page"
+for _sid in (f"{WB}::f'webull:{{key}}' | title", f"{WB}::f'webull:{{key}}' | title#2", f"{WB}::title | msg"):
+    site(_sid, lambda *_: drive_webull_alarms())
 site("src/wt/options/live.py::announce::f'options:rule:{sym}:{rule}' | 'Options: a probation rule triggered'",
      {"bar": T, "hhmm": alerts.hhmm, "sym": NAMES[0], "rule": T, "labels": {T: T}})
 site("src/wt/options/pipeline_check.py::run::f'pipeline-check:{slot}' | title", lambda *_: drive_pipeline_check())
