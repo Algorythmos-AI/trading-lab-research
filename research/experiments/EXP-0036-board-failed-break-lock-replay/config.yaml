@@ -1,0 +1,59 @@
+# EXP-0036: the Options desk board's break-and-retest ENTERs with and without DEC-0053's lock (after a side's break
+# fails, no ENTER on that side for the rest of the entry window), replayed once on sessions already recorded.
+# Design only: nothing was replayed when this was written.
+# NOT BLIND: one owner trade on a re-armed side, and that session read by DEC-0052's rule, were seen before it was
+# written (DEC-0053, "What has already been seen"); the report says so beside its verdict.
+# Frozen with DEC-0053. Before the run a decision record may amend it, saying what was viewed; after the run a changed
+# value is a new experiment with new trials.
+experiment: EXP-0036
+status: registered_on_acceptance     # a `proposed` row in config/trial_registry.yaml until DEC-0053 is accepted
+decision: DEC-0053
+family: O                            # the options desk's entry rules and their filters; total 38 (config/trial_registry.yaml)
+trials:                              # the difference is a minus b
+  - {hypothesis: HYP-0061, trial: BOARD-FAILED-BREAK-LOCK, a: kept_by_lock, b: removed_by_lock, unit: enter, role: primary}
+
+engines:                             # each is replayed by the board's own code at its engine, never a re-implementation
+  without_lock: "trade-state.ts at the commit that merged the board's pull request for DEC-0052 (eaa2ab52), engine label e-d6053c7fdd0a"
+  with_lock: "the commit that merges the board's pull request for DEC-0053; its engine label is written into README.md the day it merges"
+  check_first: "the with-lock commit's engine files (dashboard/src/lib/trade-state.ts, trade-now.ts, desk-eval.ts) differ from eaa2ab52's by DEC-0053 sections 1 and 2 alone; the run stops if they do not"
+  through: "desk-eval.ts evaluateSlotStates, slot by slot, as the DEC-0044 server records are made (settled 2-minute bars, SERVER_SETTLE_MS)"
+
+inputs:
+  sessions: >-
+    EXP-0035's session list, extended to the last session before the release that ships DEC-0053 section 1, less the
+    session of the owner trade DEC-0052 names, which DEC-0053 names too: one session (its date is in the owner's PRIVATE notes, not here); the
+    list is written into README.md before the run
+  names: "the focus names of each session's edition only (DEC-0051 section 5.1)"
+  bars: "SIP 2-minute bars: EXP-0035's saved files and sha256s where they exist, the rest fetched once and saved with a sha256 per session before either engine runs"
+  edition: "options/copies/: the edition each session's board read (the copy that was latest at 09:30 New York)"
+  journal: none                      # the day's limits are left out: both engines are read as if no trade had been taken
+
+enter: "a (session, symbol, side, brokeAt) whose row (stateRows: the 09:35 start, the lunch block and the flat time apply) first reads enter_zone for a break and retest; the groups are read from evaluateSlotStates' side states, which carry failedAt and lockUnseen"
+groups:
+  kept_by_lock: "ENTERs without the lock whose row also reads enter_zone for that key with the lock"
+  removed_by_lock: "ENTERs without the lock where, at that slot, the side with the lock reads plan_off with a failure time, or watch with a failure time after an ended lock on a break made inside it"
+  removed_unseen: "ENTERs without the lock where the side with the lock reads GET READY with lockUnseen: counted apart, left out of the test"
+  faults: "any other removal, and any ENTER only with the lock: expected 0; counted and reported"
+
+outcome:                             # on the stock, from the card (DEC-0035, frozen there and in DEC-0051 section 8)
+  entry: open_of_first_2min_bar_starting_at_or_after_the_enter_slot_evaluation_time
+  card: {ENTRY_ATR: 0.01, STOP_ATR: 0.1, MIN_ROOM_MULTIPLE: 2, call_level: breakout_above_else_resistance, put_level: hold_above_else_support}
+  first_touch_wins: true
+  both_in_one_bar: stop
+  flat: "15:10 New York (12:10 on a half day): neither"
+
+statistics:
+  measure: share_reaching_t1_first
+  counts: [enters, t1_first, stop_first, neither, removed_unseen, faults]
+  difference: a_minus_b
+  resamples: 5000
+  resample_unit: session
+  prng: mulberry32
+  seed: 20261161
+  interval: [2.5, 97.5]
+  percentile: numpy_linear
+  too_few: {removed_enters: 10, kept_enters: 20, sessions_on_the_list: 10}
+
+read: once                           # the replay is run once; a re-run is a new experiment id
+gates: "nothing by itself: if the whole 95% range of (removed minus kept) lies above 0 with enough data, the owner is told and decides whether to write a further record"
+lapses: "with no verdict if the board's pull request for DEC-0053 is not merged by 2027-02-28, or the replay cannot be run on both engines from the recorded inputs"
