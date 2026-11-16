@@ -6,7 +6,9 @@
 // every key in its place and an undefined value written out, then hashed.
 //
 // It uses only what the code before the guards already had, so the same file was run on the commit before them
-// (origin/integration 61f46e6) to write the pinned hashes in guards-off.golden.json.
+// (origin/integration 61f46e6) to write the pinned hashes in guards-off.golden.json. A change to the board's rule moves
+// them legitimately; they are then rewritten the same way, on 61f46e6 with the rule's diff applied (DEC-0052, 2026-11-17:
+// trade-state.ts, trade-now.ts, entry-checks.ts and fixture-script.ts), never from the guarded code itself.
 import { createHash } from "node:crypto";
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";

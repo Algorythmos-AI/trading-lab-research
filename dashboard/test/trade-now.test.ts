@@ -90,7 +90,7 @@ describe("the scripted morning", () => {
     expect(qqq).toEqual({
       badge: { word: "ENTER ZONE", tone: "good", side: "call", alt: null },
       testing: false,
-      headline: "Retest holding 752.86: call setup ready",
+      headline: "Retest confirmed at 753.19: call setup ready. 753.19 is $0.24 past the card entry; to the stop $1.18, not $0.94",
       grid: { enter: "~752.95", stop: "752.01 or −25%", target: "754.83" },
     });
     expect(spy!.badge).toEqual({ word: "FAILED BREAK", tone: "warn", side: "put", alt: "failed_break" });
@@ -215,7 +215,7 @@ describe("TradeNowBoard", () => {
     expect(html.match(/data-expanded="true"/g)).toHaveLength(2);
     expect(html).toMatch(/data-board-row="QQQ" data-board-state="enter_zone" data-expanded="true"/);
     expect(html).toContain("ENTER ZONE · CALL");
-    expect(html).toContain("Retest holding 752.86: call setup ready");
+    expect(html).toContain("Retest confirmed at 753.19: call setup ready. 753.19 is $0.24 past the card entry; to the stop $1.18, not $0.94");
     expect(html.match(/data-board-grid/g)).toHaveLength(2);
     expect(html).toContain(">Enter</dt>");
     expect(html).toContain(">~752.95</dd>");
@@ -236,7 +236,7 @@ describe("TradeNowBoard", () => {
     expect(html).toContain('data-board-hidden="1"');
     expect(html).toContain("1 more name watching");
     // no sentence is set in the mono font: only prices and the grid's values
-    expect(html).not.toMatch(/font-mono[^"]*">Retest holding/);
+    expect(html).not.toMatch(/font-mono[^"]*">Retest confirmed/);
     // the order: entry, then failed break
     expect(html.indexOf('data-board-row="QQQ"')).toBeLessThan(html.indexOf('data-board-row="SPY"'));
   });

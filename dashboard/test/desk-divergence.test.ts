@@ -22,12 +22,13 @@ const SYMS = E.focus!.items.map((i) => i.symbol);
 const QQQ = focusPlan(E.focus!.items.find((i) => i.symbol === "QQQ")!).call!;
 const L = QQQ.level;
 const T1 = QQQ.target1!;
-/** The slot the cases are read at: QQQ broke at 10:00 to 10:02, dipped to the level 10:02 to 10:04, holds above it. */
+/** The slot the cases are read at: QQQ broke at 10:00 to 10:02, dipped to the level 10:02 to 10:04, and the 10:04 to
+ * 10:06 bar closed above the dip bar's close: the retest confirmed at the slot's close (DEC-0052). */
 const END = ny("10:06:00");
 
 type Over = { qqq?: (t: number, p: number | null) => number | null; extraHigh?: number };
 
-/** One print every 2 s per name. QQQ: under the level, the break, the dip that holds, then above it; `qqq` may bend it. */
+/** One print every 2 s per name. QQQ: under the level, the break, the dip, then above the dip bar's close; `qqq` may bend it. */
 function prints(sym: string, over: Over = {}): TrailPoint[] {
   const close = E.focus!.items.find((i) => i.symbol === sym)!.close!;
   const out: TrailPoint[] = [];
@@ -37,7 +38,7 @@ function prints(sym: string, over: Over = {}): TrailPoint[] {
       if (at < ny("10:00:00")) p = 750;
       else if (at < ny("10:02:00")) p = 750 + ((L + 1.5 - 750) * (at - ny("10:00:00"))) / 118_000;
       else if (at < ny("10:04:00")) p = at < ny("10:03:00") ? L + 0.3 : L + 1;
-      else p = L + 1;
+      else p = L + 1.1;
       p = over.qqq ? over.qqq(at, p) : p;
     }
     if (p !== null) out.push({ at, p: Math.round(p * 100) / 100 });

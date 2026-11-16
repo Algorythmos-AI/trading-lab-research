@@ -72,6 +72,31 @@
     `e-05b589ff4f1c` (of the two, only `trade-state.ts` is in the engine's code). The engine identity check is the
     line above. Comments in `signal.ts` corrected too (the chain's checked age is `contract.ts` `chainAge`; the
     lifecycle is counted at the slot's end + `CLOSE_GRACE_MS`): comments do not move the hash.
+- A rule change to the signal's code before any `dry` session: 2026-11-17, DEC-0052 (accepted by its own pull request,
+  #453), not a defect fix.
+  - **What changed:** the board's break and retest completes as the options clone's retest does: a touch within 1.0
+    two-minute ATR, then a confirming close. ENTER holds for two slots, ended by a run past the confirming close, then
+    reads missed "slot". The card's "Break and hold" wording follows.
+  - **Files:** `trade-state.ts`, `trade-now.ts`, `entry-checks.ts` (`RETEST_WITHIN_ATR`) and `focus-plan.ts`.
+  - **Hashes:** `SIGNAL_CODE_HASH` `s-44709694b261a3bceebdafe21cc15f9f58f49f2359b73122d493d6e54aca1a41` to
+    `s-065118e5ffe27eee3b520c817f045160327c9b6d9c14b4fa1e782cc289cc41e3` (the pin in
+    `dashboard/test/signal-freeze.test.ts` moved with it). DEC-0044 `ENGINE_VERSION` `e-05b589ff4f1c` to
+    `e-d6053c7fdd0a`.
+  - **The identity check on the fixtures: rows differ, as a rule change should.** The old engine (integration
+    8cd5ff0d) and the new one ran on the original fixture inputs, before the fixture morning was moved for the new
+    rule, with rows matched by name.
+    - **Board:** 21 of 2,205 rows differ: QQQ at the scripted step 3, in every edition and quote set.
+    - **Evaluation:** 14 of 420 rows differ: the QQQ call at the step-3 slot.
+    - **What differs:** all are enter_zone → get_ready. No `brokeAt` and no card number differs.
+    - **The fixture morning** was then moved one price (QQQ at 10:26) so the scripted story still has a confirmed
+      retest. On the moved fixture the two engines differ in wording only.
+    - **The re-based check:** `dashboard/test/validation/engine-identity.test.ts` is re-based on `e-d6053c7fdd0a`. It
+      pins 52 of 312 bar states differing over the 15 retest vector sessions, where the new engine matches the
+      clone's first signal and the old one does not.
+  - **Still to run:** the check over the last 10 logged production sessions, before this label reaches production. It
+    is on the host. Its answer and counts are written here; "rows differ" is expected for a rule change.
+  - No `dry` session and no window had started, so it ends nothing. Amendment 1 reads only `dry` sessions recorded
+    under the new hash.
 - Writer fixes before any `dry` session, 2026-11-16 (`signal-run.ts` and `desk-run.ts`, outside the hashed code), from
   a pre-dry validation: a run whose reads time out keeps the time to write its record; a signal write or a DEC-0044
   put that lands after its time limit is read back and counts as written only when the stored bytes are the run's

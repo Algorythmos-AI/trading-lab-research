@@ -20,7 +20,7 @@ import { SIGNAL_PARAMS } from "@/lib/signal-params";
 import type { LogSignalRecord } from "@/lib/signal-record";
 import { buildSignalRecord, HISTORY_UNUSABLE } from "@/lib/signal-run";
 import { doneMask } from "@/lib/trade-now";
-import { type Bar2, type Bars2m, CLOSE_GRACE_MS, sideState } from "@/lib/trade-state";
+import { atr2m, type Bar2, type Bars2m, CLOSE_GRACE_MS, sideState } from "@/lib/trade-state";
 import { AS_OF, chain, DAY, edition, flow, gateInput, iso, NOW, nameState, OPEN, record, row, side, signalInput, SLOT, withAapl, nameBars } from "./harness-scene";
 
 vi.mock("@/lib/signal-freeze", async () => {
@@ -30,66 +30,48 @@ vi.mock("@/lib/signal-freeze", async () => {
 });
 
 // ---- a. the retest touch, on its edge ------------------------------------------------------------------------------
-describe("a. the retest touch at exactly 0.1 ATR (trade-state.ts:398)", () => {
+// DEC-0052: the touch is the clone's (setups.retest): a bar's low (high, for a put) within RETEST_WITHIN_ATR (1.0) of the
+// 2-minute ATR from the level, compared in floating point exactly as the clone writes it, `dip <= 1.0 * atr`. The
+// exact ten-thousandths comparison of the 2026-11-16 defect fix belonged to the old 0.1-daily-ATR touch and is gone with
+// it: rounding where the clone does not would make the board and the clone disagree on the edge. The shared vectors
+// (test/retest-vectors.test.ts, generated from the clone) hold the two to the same bars.
+describe("a. the retest touch at exactly one 2-minute ATR (trade-state.ts, setups.retest)", () => {
   const D = "2026-10-12"; // a Monday on EDT
-  const at = (hhmm: string, sec = 0) => Date.parse(`${D}T${hhmm}:${String(sec).padStart(2, "0")}-04:00`);
-  const bar = (hhmm: string, o: number, h: number, l: number, c: number): Bar2 => ({ start: at(hhmm), end: at(hhmm) + 120_000, o, h, l, c });
+  const at = (min: number) => Date.parse(`${D}T${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}:00-04:00`);
+  const bar = (min: number, o: number, h: number, l: number, c: number): Bar2 => ({ start: at(min), end: at(min) + 120_000, o, h, l, c });
 
-  /** A call break at 10:02 through L, then one retest bar at 10:04 with the given low, closing above L. */
-  function retest(L: number, atr: number, low: number) {
-    const closed = [bar("10:00", L - 0.5, L - 0.1, L - 0.6, L - 0.3), bar("10:02", L - 0.3, L + 0.5, L - 0.3, L + 0.4), bar("10:04", L + 0.4, L + 0.5, low, L + 0.3)];
-    const bars: Bars2m = { closed, partial: null, since: at("10:00"), complete: false, missing: [], gaps: 0 };
-    const now = new Date(at("10:06") + CLOSE_GRACE_MS);
-    const quote = { price: L + 0.3, at: new Date(now.getTime() - 1_000).toISOString(), open: L - 0.5, high: L + 0.5, low: L - 0.6, day: D, prev_close: null, vwap: null } as LiveQuote;
-    const plan: SidePlan = { side: "call", level: L, levelName: "test", entry: L, stop: L - 1, target1: L + 5, target2: null };
-    return sideState(plan, atr, bars, quote, now);
-  }
-
-  it("control: a low clearly inside the band is enter_zone, one clearly outside is get_ready", () => {
-    // Proves the scene reaches the retest branch of trade-state.ts:396-401 at all.
-    expect(retest(100, 1, 100.05).state).toBe("enter_zone");
-    expect(retest(100, 1, 100.2).state).toBe("get_ready");
-  });
-
-  it.each([
-    [100.1, 1.0, 100.2],
-    [100, 0.3, 100.03],
-  ])("fixed 2026-11-16 (pre-dry defect fix): L=%s, ATR=%s, retest low %s (exactly 0.1 ATR away) counts as a touch: enter_zone", (L, atr, low) => {
-    // Was KNOWN OPEN: `b.l - L <= RETEST_ATR * a` in floating point read 0.10000000000000853 > 0.1 (and
-    // 0.030000000000001137 > 0.030000000000000002), so a dip "within 0.1 ATR" on the edge was not a touch. trade-state.ts
-    // now compares the dip in whole ten-thousandths against the ATR exactly.
-    expect(retest(L, atr, low).state).toBe("enter_zone");
-  });
-
-  /** The same scene with every other price a share of the ATR from the line, for either side. */
-  function scaled(kind: "call" | "put", L: number, atr: number, extreme: number) {
+  /**
+   * A break through L at 10:00 after fourteen bars closing at L, a touch bar at 10:02 whose extreme is `dip` from L,
+   * and a bar at 10:04 closing beyond the touch bar's close. Every true range is `atr` (the touch bar's too, for any dip
+   * from 0 to `atr`), so the 2-minute ATR at the confirming close is `atr` itself, exactly when `atr` and L are binary
+   * fractions. A put is the mirror about L.
+   */
+  function retest(kind: "call" | "put", L: number, atr: number, dip: number) {
     const s = kind === "call" ? 1 : -1;
-    const p = (d: number) => Math.round((L + s * d * atr) * 10_000) / 10_000;
-    const closed =
-      kind === "call"
-        ? [bar("10:00", p(-0.5), p(-0.1), p(-0.6), p(-0.3)), bar("10:02", p(-0.3), p(0.5), p(-0.3), p(0.4)), bar("10:04", p(0.4), p(0.5), extreme, p(0.3))]
-        : [bar("10:00", p(-0.5), p(-0.6), p(-0.1), p(-0.3)), bar("10:02", p(-0.3), p(-0.3), p(0.5), p(0.4)), bar("10:04", p(0.4), extreme, p(0.5), p(0.3))];
-    const bars: Bars2m = { closed, partial: null, since: at("10:00"), complete: false, missing: [], gaps: 0 };
-    const now = new Date(at("10:06") + CLOSE_GRACE_MS);
-    const quote = { price: p(0.3), at: new Date(now.getTime() - 1_000).toISOString(), open: p(-0.5), high: Math.max(p(0.5), p(-0.6)), low: Math.min(p(0.5), p(-0.6)), day: D, prev_close: null, vwap: null } as LiveQuote;
+    const p = (d: number) => L + s * d; // d: the distance beyond L
+    const ohlc = (min: number, o: number, far: number, near: number, c: number) => (s > 0 ? bar(min, p(o), p(far), p(near), p(c)) : bar(min, p(o), p(near), p(far), p(c)));
+    const warm = Array.from({ length: 14 }, (_, i) => ohlc(9 * 60 + 32 + 2 * i, -atr, 0, -atr, 0));
+    const closed = [...warm, ohlc(10 * 60, 0, atr, 0, atr), ohlc(10 * 60 + 2, atr, dip + atr, dip, atr), ohlc(10 * 60 + 4, atr, 2 * atr, atr, 1.5 * atr)];
+    const bars: Bars2m = { closed, partial: null, since: at(9 * 60 + 32), complete: false, missing: [], gaps: 0 };
+    const now = new Date(at(10 * 60 + 6) + CLOSE_GRACE_MS);
+    const quote = { price: p(1.5 * atr), at: new Date(now.getTime() - 1_000).toISOString(), open: p(-atr), high: Math.max(p(-atr), p(2 * atr)), low: Math.min(p(-atr), p(2 * atr)), day: D, prev_close: null, vwap: null } as LiveQuote;
     const plan: SidePlan = { side: kind, level: L, levelName: "test", entry: L, stop: p(-1), target1: p(5), target2: null };
-    return sideState(plan, atr, bars, quote, now);
+    return { state: sideState(plan, 4, bars, quote, now, atr2m(closed)), atr: atr2m(closed)! };
   }
 
-  it("a level with more than four decimals keeps the floating comparison: L=2889.68827, low 2890.93428, ATR 12.46 (a dip of 1.24601, over 1.246) is no touch", () => {
-    // Rounding both to ten-thousandths would read 2890.9343 − 2889.6883 = 1.246 exactly: a miss turned into a touch.
-    expect(scaled("call", 2889.68827, 12.46, 2890.93428).state).toBe("get_ready");
-    expect(scaled("put", 2889.68827, 12.46, 2888.44226).state).toBe("get_ready");
+  it("control: a dip clearly inside one 2-minute ATR is enter_zone, one clearly outside is get_ready", () => {
+    // Proves the scene reaches the confirmed retest at all, and that the band is the 2-minute ATR, not 0.1 daily ATR.
+    for (const kind of ["call", "put"] as const) {
+      expect(retest(kind, 100, 0.25, 0.125).state.state).toBe("enter_zone");
+      expect(retest(kind, 100, 0.25, 0.375).state.state).toBe("get_ready");
+    }
   });
 
-  it.each([
-    ["call", 2889.6883, 12.46, 2890.9343],
-    ["put", 2889.6883, 12.46, 2888.4423],
-    ["call", 50.1234, 0.37, 50.1604],
-    ["put", 50.1234, 0.37, 50.0864],
-    ["put", 100.2, 1.0, 100.1],
-  ] as const)("four-decimal boundary: %s, L=%s, ATR=%s, retest extreme %s (exactly 0.1 ATR away) is a touch: enter_zone", (kind, L, atr, extreme) => {
-    expect(scaled(kind, L, atr, extreme).state).toBe("enter_zone");
+  it.each(["call", "put"] as const)("%s: a dip of exactly one 2-minute ATR is a touch (dip <= 1.0 * atr), a hair more is not", (kind) => {
+    const edge = retest(kind, 100, 0.25, 0.25);
+    expect(edge.atr).toBe(0.25);
+    expect(edge.state.state).toBe("enter_zone");
+    expect(retest(kind, 100, 0.25, 0.25 + 2 ** -20).state.state).toBe("get_ready");
   });
 });
 

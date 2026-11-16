@@ -69,8 +69,12 @@ describe("SIGNAL_CODE_HASH", () => {
   // Moved 2026-11-16 from s-0ec9e5efd1e65790ca5f83e5ba845269ad2c3666b500c631d89f2cb7327f2345 by the pre-dry defect
   // fixes (trade-state.ts retest touch, contract-pick.ts absurd ask): EXP-0034 README.md, "Dates and commits", the line
   // "Defect fixes to the outcome or signal code before the read" dated 2026-11-16.
+  // Moved 2026-11-17 from s-44709694b261a3bceebdafe21cc15f9f58f49f2359b73122d493d6e54aca1a41 by DEC-0052 (a rule change,
+  // not a defect fix: the board's break and retest completes as the clone's retest does, trade-state.ts and trade-now.ts,
+  // and the card's "Break and hold" wording, focus-plan.ts, DEC-0052 section 6). DEC-0052 section 4: EXP-0034's
+  // Amendment 1 reads only dry sessions recorded under this hash. EXP-0034 README.md, "Dates and commits", 2026-11-17.
   it("is pinned: a change to the signal's code is a visible diff here", () => {
-    expect(SIGNAL_CODE_HASH).toBe("s-44709694b261a3bceebdafe21cc15f9f58f49f2359b73122d493d6e54aca1a41");
+    expect(SIGNAL_CODE_HASH).toBe("s-065118e5ffe27eee3b520c817f045160327c9b6d9c14b4fa1e782cc289cc41e3");
   });
 
   // Once DEC-0051 Amendment 1 sets FROZEN_CODE_HASH (signal-freeze.ts), this becomes a real assertion, and the
