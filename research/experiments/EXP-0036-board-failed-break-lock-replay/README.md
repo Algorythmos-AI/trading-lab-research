@@ -1,6 +1,6 @@
 # EXP-0036: the board's break-and-retest ENTERs with and without the failed-break lock, replayed once
 
-- Decision: DEC-0053 (proposed 2026-11-17). Trial: HYP-0061 BOARD-FAILED-BREAK-LOCK, family O (total 38 with this
+- Decision: DEC-0053 (accepted 2026-11-17). Trial: HYP-0061 BOARD-FAILED-BREAK-LOCK, family O (total 38 with this
   one).
 - **Design only.** Nothing has been replayed. No count or outcome of either engine on any session exists.
 - **Not blind.** Before this was written, one owner trade on a side the board had re-armed after a failed break, and

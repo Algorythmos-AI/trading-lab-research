@@ -1,10 +1,12 @@
 # DEC-0053: After a side's break fails, the Options desk's board says no ENTER on that side for the rest of the entry window
 
-- **Status: PROPOSED on 2026-11-17.** Accepted by the owner's merge of the pull request that changes this line; until
-  then nothing below is in force.
+- **Status: ACCEPTED on 2026-11-17.** approved_by: owner. Proposed on 2026-11-17 (#458) and accepted by the owner's
+  merge of the pull request that changed this line.
   - **The DEC-0035 point 4 exception was approved by the owner, in chat, on 2026-11-17** (section 6):
     `approved_by: owner`.
-  - That approval covers the exception only. Accepting the record is still the merge.
+  - The owner asked for this accepting change on 2026-11-17. The merge is the acceptance.
+  - Acceptance registers HYP-0061 and EXP-0036 and fixes the definitions below. It changes no code and starts
+    nothing: the board's change is a later pull request.
 - **Not written before every affected result was viewed, and it says so.** What the author had seen is set out under
   "What has already been seen". That is why DEC-0035 point 4's statement cannot be made (section 6). Going ahead is
   the owner's explicit decision, not a rule this record can satisfy on its own.
