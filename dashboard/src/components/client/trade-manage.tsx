@@ -40,7 +40,7 @@ import { chainFresh, chainPx, chainStamp, contractQuoteTime, entryStopDistance, 
 import { checkOptionFill, type FillStop, fillStop, INVITE_LINE, journalDayCache, lossLine, nickelLine, prefillFrom, otherOpenPositions, STOP_OWN_TICK, STOP_PLACED, STOP_REMINDER, stopFromLine, tickLine } from "@/lib/manage-stop";
 import { type DayFacts, journalLive } from "@/lib/session-timeline";
 import { heldContract, type HeldLot, heldTiles, heldValue, type HeldValue, judgeQuote, lotsContract, notAvailable, quoteLine, type HeldTiles } from "@/lib/option-value";
-import { type OpenMarks, openMarks, roomLabel, roomText, stockStopExit, withClosedStopLine, withPremiumStop } from "@/lib/held-marks";
+import { type OpenMarks, openMarks, quoteKey, readThinQuote, roomLabel, roomText, stockStopExit, stopCentsOf, THIN_LINE, withClosedStopLine, withPremiumStop, withThinQuote } from "@/lib/held-marks";
 import { checkContract, contractKey, CONTRACT_PREFIX, type NoteContract, noteHeldLots, parseContracts } from "@/lib/note-contract";
 import { usd } from "@/lib/ticket";
 import { ticketPrice } from "./ticket-memo";
@@ -48,7 +48,7 @@ import { TestingTag } from "./trade-now";
 import { type ChainFeed, useChain } from "./use-chain";
 import { useContractQuote } from "./use-contract-quote";
 import { useNow, usePerfNow } from "./use-now";
-import { forgetValue, fromNoteOf, recordValue, recordWithheld, stopFired, useHeldVersion, valueOf } from "./held-store";
+import { forgetValue, fromNoteOf, recordStopOnly, recordThin, recordValue, recordWithheld, stopFired, thinOf, useHeldVersion, valueOf } from "./held-store";
 
 type Item = NonNullable<Options["focus"]>["items"][number];
 
@@ -265,21 +265,43 @@ function useHeldValue(v: ManageView, held: CardHeld | undefined, ctx: ChainConte
   const j = r?.ok ? judgeQuote({ feed, occ, perfNow, wallNow: wall === null ? null : wall + 1_000, shownPerf }) : null;
   const value = r?.ok && j?.ok ? heldValue(r.held, j.q, held!.journalCurrent) : null;
   // The value goes to the board (held-store.ts), for the −25% stop and the day pill. The stop counts upstream quotes,
-  // not polls: the contract route caches a quote for a few seconds, so two polls can bring the same one. The
-  // fixture's quotes carry a fixed time, so there each poll is its own.
-  const key = feed.status !== "ok" || !occ ? null : feed.answer.fixture ? `fx|${feed.sentPerf}` : `${feed.answer.as_of}|${feed.answer.contracts[occ]?.quote_at ?? ""}`;
+  // not polls: the key is the quote's own time and prices, so a quote the route re-serves from its cache, or another
+  // server instance fetches again, counts once. The fixture's quotes carry a fixed time, so there each poll is its own.
+  const cq = feed.status === "ok" && occ ? feed.answer.contracts[occ] : undefined;
+  const key = feed.status !== "ok" || !occ ? null : feed.answer.fixture ? `fx|${feed.sentPerf}` : quoteKey(cq);
   const day = ctx?.session ?? null;
   const withheld = !!r?.ok && !!j && !j.ok;
+  // A fresh quote withheld from the value (one-sided, a zero bid, crossed, too wide), read against the stop.
+  const stopCents = r?.ok ? stopCentsOf(r.held) : null;
+  const thin = withheld && j && !j.ok ? readThinQuote(j.why, cq?.bid, cq?.ask, stopCents) : null;
+  const thinKind = thin?.kind ?? null;
+  const thinTo = thin && thin.kind !== "thin" ? thin.toStopCents : null;
   const entryAt = held?.entryAt ?? NaN;
   const fromNote = held?.fromNote === true;
+  // The card names a contract but its name's chain is not read (off, failing, or still loading): the stop is not watched.
+  const unwatched = !!named && chain.status !== "ok";
+  // Said at once when the chain is off or failing; while it loads, after a grace (a first load takes a few seconds).
+  const [graceOver, setGraceOver] = useState(false);
+  useEffect(() => {
+    if (!unwatched) return;
+    const t = window.setTimeout(() => setGraceOver(true), UNWATCHED_GRACE_MS);
+    return () => {
+      window.clearTimeout(t);
+      setGraceOver(false);
+    };
+  }, [unwatched]);
+  const unwatchedSaid = unwatched && (chain.status === "error" || chain.status === "off" || graceOver);
   useEffect(() => {
     if (value && key !== null && day && occ) recordValue({ day, id: v.id, occ, entryAt, value, key, fromNote });
-    else if (withheld) recordWithheld(v.id);
-  }, [day, v.id, occ, entryAt, key, value, withheld, fromNote]);
+    else if (thinTo !== null && key !== null && day && occ) recordStopOnly(v.id, fromNote, { day, occ, entryAt, stopCents, toStopCents: thinTo, key });
+    else if (thinKind === "thin") recordThin(v.id, fromNote);
+    else if (withheld || unwatched) recordWithheld(v.id);
+  }, [day, v.id, occ, entryAt, key, value, withheld, unwatched, thinKind, thinTo, stopCents, fromNote]);
   useEffect(() => () => forgetValue(v.id), [v.id]);
   // A contract the trade names that this name's chain does not list (a strike or expiry far from the price): said,
   // never left silent, since its −25% stop cannot be watched here.
   if (named && r && !r.ok && r.why === "not-in-chain") return { kind: "withheld", line: NOT_IN_CHAIN };
+  if (unwatchedSaid) return { kind: "withheld", line: CHAIN_UNREAD };
   if (!r?.ok || !j) return null;
   if (!j.ok) return { kind: "withheld", line: notAvailable(j.why) };
   return { kind: "ok", tiles: heldTiles(value!), value: value!, quote: quoteLine(j.q) };
@@ -288,17 +310,24 @@ function useHeldValue(v: ManageView, held: CardHeld | undefined, ctx: ChainConte
 /** Whether the −25% stop of the contract the card holds has fired for this trade (held-store.ts). */
 function heldStopFired(v: ManageView, held: CardHeld | undefined, ctx: ChainContext | undefined): boolean {
   const lc = held ? lotsContract(v.symbol, v.side, held.lots) : null;
-  return stopFired(ctx?.session ?? null, lc?.ok ? lc.held.occ : null, held?.entryAt ?? NaN);
+  return stopFired(ctx?.session ?? null, lc?.ok ? lc.held.occ : null, held?.entryAt ?? NaN, lc?.ok ? stopCentsOf(lc.held) : null);
 }
+
+/** How long a chain may load before the card says its −25% stop is not watched. */
+const UNWATCHED_GRACE_MS = 15_000;
+
+const CHAIN_UNREAD = "Live option value not available: the option chain is not read here now, so your −25% stop is not watched. Watch it in Webull.";
 
 const NOT_IN_CHAIN ="Live option value not available: your contract is not in the option chain read here. Check its strike and expiry, and watch your −25% stop in Webull.";
 
 /**
- * Whether the card asks for its name's chain: only with a fresh price and the board's clock, never on a CHECK card.
- * One chain feed per card serves the estimate at the stop and the held contract's check alike.
+ * Whether the card asks for its name's chain: only with a fresh price and the board's clock, never on a CHECK card,
+ * except the CHECK a thin option quote puts there (held-marks.ts withThinQuote): that card must keep reading its quote,
+ * or the CHECK would switch off the very feed that clears it. One chain feed per card serves the estimate at the stop
+ * and the held contract's check alike.
  */
 function chainOn(v: ManageView, ctx: ChainContext | undefined): ctx is ChainContext {
-  return !!ctx && v.action !== "check" && v.price !== null && ctx.now !== null;
+  return !!ctx && (v.action !== "check" || v.line === THIN_LINE) && v.price !== null && ctx.now !== null;
 }
 
 /**
@@ -1010,7 +1039,9 @@ export function useTradeManage(x: TradeManageInput): {
   const views = rawViews.map((v, i) => {
     const h = helds[i]!;
     const lc = lotsContract(v.symbol, v.side, h.lots);
-    return withClosedStopLine(withPremiumStop(v, stopFired(today, lc.ok ? lc.held.occ : null, h.entryAt ?? NaN), valueOf(v.id)));
+    const fired = stopFired(today, lc.ok ? lc.held.occ : null, h.entryAt ?? NaN, lc.ok ? stopCentsOf(lc.held) : null);
+    // Fired: EXIT. Not fired, and the contract's quotes too thin to read the stop: CHECK, never a reassuring word.
+    return withClosedStopLine(withPremiumStop(withThinQuote(v, !fired && thinOf(v.id)), fired, valueOf(v.id)));
   });
   const marks = openMarks(views.flatMap((v) => (valueOf(v.id) ? [{ value: valueOf(v.id)!, fromNote: fromNoteOf(v.id) }] : [])));
 
