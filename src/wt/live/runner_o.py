@@ -55,6 +55,10 @@ KILLS = (ROOT / "KILL", OPT / "KILL")
 LOCK = "paper-o-runner"
 ARM_AT = dt.time(9, 25)
 EXPIRY_POLICIES = ("same_day", "nearest")      # config/options_clone.yaml names.expiry (DEC-0034)
+# A 2-minute bar is judged once its second minute is in, or this long after its end when that minute never comes
+# (IEX leaves out a minute with no trade there). A code constant, not a config number: it makes the clone read only
+# finished bars, as DEC-0030 says it does, and leaves config/options_clone.yaml (and EXP-0029's config) as frozen.
+LAST_MINUTE_GRACE = dt.timedelta(seconds=15)
 # The order a refused signal's reason is chosen in: what closes entries for everyone, then the strategy's gates, then
 # the contract. The decision log names the first that failed; `gates` keeps every one.
 REASON_ORDER = ("kill", "latch", "off", "open-position", "loss-pause", "cooldown", "stalled", "event",
@@ -232,6 +236,8 @@ class Name:
     oi: dict[str, float]                        # open interest of the contracts of `expiry`
     expiry: dt.date | None = None               # the expiry it trades today (DEC-0034); None: the session's
     last_bar: str = ""                          # the end (HH:MM) of the last finished bar looked at
+    last_close: float | None = None             # that bar's close when it was looked at (a later change is logged)
+    revised: str = ""                           # the end (HH:MM) of the last bar whose close was logged as revised
     cooldown_until: dt.datetime | None = None
     research: dict[str, float] = field(default_factory=dict)   # DEC-0041 level codes, tagging only (never marks)
 
@@ -580,7 +586,7 @@ class Runner:
             ms = regime.minute_bars(rows.get(root, []), self.day)
             if not ms or now - ms[-1].end > stall:
                 stalled.add(root)
-            two = regime.resample(ms, int(b["minutes"]), now)
+            two = regime.resample(ms, int(b["minutes"]), now, LAST_MINUTE_GRACE)
             bars[root] = two
             t = regime.read(two, int(b["atr_period"]), int(b["ema_fast"]), int(b["ema_slow"]),
                             float(self.cfg["gates"]["shock_bar_atr"]))
@@ -783,6 +789,22 @@ class Runner:
             if queue:
                 self.arms_flush(queue, now, tapes, late)
 
+    def note_revised(self, nm: Name, two: Sequence[regime.Bar]) -> None:
+        """Journal once when the bar last looked at now has another close: the feed changed a bar after the clone
+        judged it. Only the last bar judged and only its close are compared, inside the entry window, so a count of
+        zero means none was seen, not that none happened."""
+        if not nm.last_bar or nm.last_close is None or nm.revised == nm.last_bar:
+            return
+        for b in reversed(two):
+            end = b.end.strftime("%H:%M")
+            if end == nm.last_bar:
+                if b.c != nm.last_close:
+                    nm.revised = end
+                    self.write("bar_revised", root=nm.root, bar=end, judged=nm.last_close, now=b.c)
+                return
+            if end < nm.last_bar:
+                return
+
     def entries(self, now: dt.datetime, bars: Mapping[str, list[regime.Bar]], tapes: Mapping[str, regime.Tape],
                 stalled: set[str], streak: int, last_loss: dt.datetime | None, paused: bool, late: bool,
                 queue: list[ArmsBar]) -> None:
@@ -790,9 +812,11 @@ class Runner:
         instead of written, so every arm's work (and its network calls) runs after every order of this poll."""
         for root, nm in sorted(self.names.items()):
             two = bars.get(root, [])
+            self.note_revised(nm, two)
             if not two or two[-1].end.strftime("%H:%M") == nm.last_bar:
                 continue
             nm.last_bar = two[-1].end.strftime("%H:%M")
+            nm.last_close = two[-1].c
             tape = tapes.get(root)
             rec: dict[str, Any] = {"bar": nm.last_bar, "root": root, "word": tape.word if tape else None}
             blocks = {k: v for k, v in {
