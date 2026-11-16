@@ -164,3 +164,16 @@ except RETEST_ATR's role as the retest touch, which DEC-0052 section 1 replaces 
 amended before its window starts). The text above is otherwise unchanged.
 
 Viewed before this note: one owner trade entered on the board's old retest and its result, the clone's decision lines for that session, and the clone's cumulative HYP-0029 figures (DEC-0052, "What has already been seen").
+
+## Note on DEC-0053 (added 2026-11-17)
+
+DEC-0053, proposed on 2026-11-17, amends point 3 once it is accepted: EXP-0031's values carry into EXP-0033 unchanged
+except as DEC-0052 says and except that FAILED_BREAK_LOCK (rest_of_entry_window) is added. EXP-0033 labels every
+session with one frozen copy and never backfills, so its frozen copy includes the lock only if the lock ships in or
+before the release that first writes EXP-0033's labels; otherwise the lock's release is EXP-0033's
+other_engine_version early end. Its amendment to DEC-0035 lands before EXP-0033's window starts, so it is not point
+4's early end. The text above is otherwise unchanged.
+
+Viewed before this note: the owner trade DEC-0052 names, entered on a side the board had re-armed after a failed break
+at the same level, and its result; that session's 2-minute bars and the board's recorded states; that session read by
+DEC-0052's rule as written; everything DEC-0052 lists as seen (DEC-0053, "What has already been seen").

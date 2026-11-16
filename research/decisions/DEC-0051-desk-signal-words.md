@@ -515,3 +515,19 @@ hash that release produces. The lifecycle will read "invalidated" after each ret
 text above is otherwise unchanged.
 
 Viewed before this note: one owner trade entered on the board's old retest and its result, the clone's decision lines for that session, and the clone's cumulative HYP-0029 figures (DEC-0052, "What has already been seen").
+
+## Note on DEC-0053 (added 2026-11-17)
+
+DEC-0053, proposed on 2026-11-17, changes the board's engine once its release ships: after a side's counted break
+fails (a 2-minute close back through the level), that side reads plan_off and never enter_zone for a break and retest
+until the end of its entry window: until 13:00 for a failing bar ending at or before 13:00 on a full day, otherwise
+until the flat time, and until the flat time on a half day. "Unchanged: the board's states and its engine" above holds
+except for DEC-0052 and DEC-0053. No new state name and no new log field are added; a locked side's brokeAt is the
+counted break whose failure set the lock, so the lifecycle keeps reading "invalidated" for it. The identity check is
+run on that change as written; its answer and counts go in EXP-0034 README.md, and it ends nothing while EXP-0034's
+window has not started. Amendment 1 reads only dry sessions recorded under the signal-code hash that release produces.
+The text above is otherwise unchanged.
+
+Viewed before this note: the owner trade DEC-0052 names, entered on a side the board had re-armed after a failed break
+at the same level, and its result; that session's 2-minute bars and the board's recorded states; that session read by
+DEC-0052's rule as written; everything DEC-0052 lists as seen (DEC-0053, "What has already been seen").

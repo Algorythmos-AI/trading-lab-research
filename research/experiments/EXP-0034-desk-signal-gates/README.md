@@ -143,3 +143,15 @@ session has run. The identity check's answer and counts for that change are writ
 above is otherwise unchanged.
 
 Viewed before this note: one owner trade entered on the board's old retest and its result, the clone's decision lines for that session, and the clone's cumulative HYP-0029 figures (DEC-0052, "What has already been seen").
+
+## Note on DEC-0053 (added 2026-11-17)
+
+DEC-0053, proposed on 2026-11-17, replaces the engine label config.yaml pins (already to be replaced by DEC-0052's)
+with the label of the release that ships its section 1, before this experiment's window starts, once it is accepted.
+The change was chosen because a failed break is a warning about that side, not on any outcome of this experiment, none
+of which exists; no dry session has run. The identity check's answer and counts for that change are written here the
+day it ships. The text above is otherwise unchanged.
+
+Viewed before this note: the owner trade DEC-0052 names, entered on a side the board had re-armed after a failed break
+at the same level, and its result; that session's 2-minute bars and the board's recorded states; that session read by
+DEC-0052's rule as written; everything DEC-0052 lists as seen (DEC-0053, "What has already been seen").

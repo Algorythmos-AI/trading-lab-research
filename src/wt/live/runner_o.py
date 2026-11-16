@@ -441,7 +441,7 @@ class Runner:
         self.write("armed", session=self.session, names=sorted(self.names), off=sorted(self.off),
                    own_account=getattr(self.broker, "own_account", False), options_level=self.options_level,
                    plans_open=[p.trade_id for p in self.plans if p.active],
-                   orders=self.cfg.get("orders"), feed=self.cfg["feeds"]["option"])
+                   orders=self.cfg.get("orders"), feed=getattr(self.feeds, "feed", self.cfg["feeds"]["option"]))
         hc.ping_async("wt-paper-o-armed", "", f"names {len(self.names)}")
         self.publish()
 
@@ -975,7 +975,8 @@ class Runner:
                 finally:
                     self.sending = ""
                 self.write("entry_sent", trade_id=p.trade_id, symbol=p.symbol, setup=p.setup, side=p.side,
-                           level=p.level, limit=p.limit, quoted_ask=p.quoted_ask, quote_age_s=age, state=p.state)
+                           level=p.level, limit=p.limit, quoted_ask=p.quoted_ask, quoted_bid=q.bid, quote_age_s=age,
+                           state=p.state)
                 if p.state == "rejected" and self.oms.refused is not None:   # the guard or the broker said no
                     why = dict(self.oms.refused)
                     by, code = why.pop("by"), why.pop("code")
