@@ -733,7 +733,7 @@ export function OptionsDesk({
             </PaneBoundary>
           ) : null}
           {positions && live && view === "live" ? (
-            <PaneBoundary name="Paper positions">
+            <PaneBoundary name="Manual option positions (paper)">
               <OptionsPositions
                 doc={positions}
                 tickers={e.tickers}

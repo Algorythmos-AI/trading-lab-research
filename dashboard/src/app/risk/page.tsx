@@ -119,7 +119,7 @@ function KillPanel({ s }: { s: Snapshot }) {
     <Panel
       title="Kill switch"
       icon={Power}
-      means="When on, paper B opens no new trades but keeps managing open ones. It is switched on the host, never from this page."
+      means="When on, Robot B (paper) opens no new trades but keeps managing open ones. It is switched on the host, never from this page."
       action={
         k?.on === true ? (
           <StatusBadge tone="warn">On</StatusBadge>

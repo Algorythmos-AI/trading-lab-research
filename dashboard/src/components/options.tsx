@@ -291,8 +291,8 @@ export function RulesPanel({ e }: { e: Options }) {
       title="Entry rules"
       means={
         proven
-          ? "Only proven rules have earned real use. The rest are tracked on paper."
-          : "No rule is proven yet. Every one is tracked on paper until it passes the promotion test, so none of these is a signal to trade."
+          ? "Only proven rules have earned real use. The rest are on probation, tracked by replay."
+          : "No rule is proven yet. Every one is on probation, tracked by replay, until it passes the promotion test, so none of these is a signal to trade."
       }
       icon={FlaskConical}
     >
@@ -304,9 +304,9 @@ export function RulesPanel({ e }: { e: Options }) {
         </li>
         <li className="flex items-center gap-1.5">
           <span className="border-info-fill inline-block size-2.5 rounded-full border-2" />
-          live paper so far
+          on probation so far
         </li>
-        <li>Promotion needs 30 paper cases, a range above zero after costs, both halves of history and 4 weeks live.</li>
+        <li>Promotion needs 30 cases on probation, a range above zero after costs, both halves of history and 4 weeks live.</li>
       </ul>
       <details className="mt-3 text-sm">
         <summary className="text-muted-foreground cursor-pointer text-xs">Show the numbers as a table</summary>
@@ -315,7 +315,7 @@ export function RulesPanel({ e }: { e: Options }) {
           <TableRow>
             <TableHead>Rule</TableHead>
             <TableHead className="text-right">Backtest</TableHead>
-            <TableHead className="text-right">Paper so far</TableHead>
+            <TableHead className="text-right">On probation so far</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
