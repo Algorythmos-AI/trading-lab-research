@@ -6,8 +6,9 @@
 //   0 09:32  the opening range is forming (first entries from 09:35)
 //   1 10:10  QQQ and SPY watch their ceilings; AAPL sits in the middle of yesterday's range
 //   2 10:22:30  QQQ has broken its ceiling and waits for a dip; SPY is above its ceiling with no 2-min close yet
-//   3 10:28:30  QQQ's dip held inside the retest window (enter zone, with SMH below its VWAP against calls); SPY fell
-//               back (plan off, with a live failed break)
+//   3 10:28:30  QQQ's retest confirmed inside the retest window: the 10:24 bar dipped within a 2-minute ATR of the
+//               ceiling and the 10:26 bar closed above its close (enter zone, its first slot, with SMH below its VWAP
+//               against calls; DEC-0052); SPY fell back (plan off, with a live failed break)
 //   4 10:41  QQQ ran past target 1 without you (missed); SPY's failed break has expired. A trade noted at step 3
 //            reads "Target 1 hit: sell half"
 //   5 10:47:30  QQQ has fallen back under the step-3 price: that trade reads "Below the stop: exit"
@@ -45,7 +46,7 @@ const PATHS: Readonly<Record<string, readonly (readonly [number, number])[]>> = 
     [hms(10, 15), 752.6],
     [hms(10, 16), 754.0],
     [hms(10, 22), 754.3],
-    [hms(10, 26), 753.3],
+    [hms(10, 26), 752.95],
     [hms(10, 30), 753.5],
     [hms(10, 36), 754.6],
     [hms(10, 39, 45), 754.8],

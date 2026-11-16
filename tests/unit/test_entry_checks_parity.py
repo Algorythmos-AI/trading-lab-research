@@ -54,6 +54,8 @@ def test_iv_caps_and_times_match_the_tags():
 def test_bar_and_retest_window_match_the_clone():
     assert num("BAR_MINUTES") == float(CFG["bars"]["minutes"])
     assert num("MAX_BARS_TO_RETEST") == float(CFG["setups"]["retest"]["max_bars_to_retest"])
+    # DEC-0052: the board's touch band and its chase limit, in 2-minute ATRs (HYP-0029)
+    assert num("RETEST_WITHIN_ATR") == float(CFG["setups"]["retest"]["retest_within_atr"])
 
 
 def test_shadow_arm_numbers_match():

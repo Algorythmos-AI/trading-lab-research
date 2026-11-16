@@ -1,6 +1,6 @@
 {
- "_": "Hashes of the board, its drawing, the page surfaces drawn from it and the server evaluation, from origin/integration 61f46e6 (engine e-3f82b5b4b3c0), before the bad-data guards: test/guards-off-run.ts over test/guards-off-cases.ts. Written once by that run; never edited by hand.",
- "cases": "245e491c39b519c1",
+ "_": "Hashes of the board, its drawing, the page surfaces drawn from it and the server evaluation, from code with no bad-data guards: origin/integration 61f46e6 (engine e-3f82b5b4b3c0, before the guards), first written by test/guards-off-run.ts over test/guards-off-cases.ts. Rewritten once on 2026-11-17 for DEC-0052 by the same run on 61f46e6 with DEC-0052's rule applied to it (the diff of trade-state.ts, trade-now.ts, entry-checks.ts and fixture-script.ts), still code with no guards; 693 of the 735 board hashes and all 84 evaluation hashes are unchanged. Never edited by hand.",
+ "cases": "d3aed1b3b8b03753",
  "board": {
   "focus/step0/plain": {
    "rows": "680fdbd99c1d2b2f",
@@ -73,74 +73,74 @@
    "surfaces": "ccef1f27b29f47f8"
   },
   "focus/step2/plain": {
-   "rows": "68e65aaec1efeda0",
-   "html": "fd30c7073c07d5d2",
-   "surfaces": "c3236b4f45dfbcb5"
+   "rows": "0ff21f930f4c1641",
+   "html": "4757cc958c18b6bc",
+   "surfaces": "208277802875cf08"
   },
   "focus/step2/fields": {
-   "rows": "68e65aaec1efeda0",
-   "html": "fd30c7073c07d5d2",
-   "surfaces": "c3236b4f45dfbcb5"
+   "rows": "0ff21f930f4c1641",
+   "html": "4757cc958c18b6bc",
+   "surfaces": "208277802875cf08"
   },
   "focus/step2/suspect-bar-high-below-low": {
-   "rows": "68e65aaec1efeda0",
-   "html": "fd30c7073c07d5d2",
-   "surfaces": "c3236b4f45dfbcb5"
+   "rows": "0ff21f930f4c1641",
+   "html": "4757cc958c18b6bc",
+   "surfaces": "208277802875cf08"
   },
   "focus/step2/suspect-bar-open-outside-range": {
-   "rows": "68e65aaec1efeda0",
-   "html": "fd30c7073c07d5d2",
-   "surfaces": "c3236b4f45dfbcb5"
+   "rows": "0ff21f930f4c1641",
+   "html": "4757cc958c18b6bc",
+   "surfaces": "208277802875cf08"
   },
   "focus/step2/suspect-print-far-outside-day-range": {
-   "rows": "429fd74aec6afbd8",
-   "html": "fd30c7073c07d5d2",
-   "surfaces": "c3236b4f45dfbcb5"
+   "rows": "cd2a1f7219d45153",
+   "html": "4757cc958c18b6bc",
+   "surfaces": "208277802875cf08"
   },
   "focus/step2/suspect-quote-crossed": {
-   "rows": "68e65aaec1efeda0",
-   "html": "fd30c7073c07d5d2",
-   "surfaces": "c3236b4f45dfbcb5"
+   "rows": "0ff21f930f4c1641",
+   "html": "4757cc958c18b6bc",
+   "surfaces": "208277802875cf08"
   },
   "focus/step2/suspect-turn": {
-   "rows": "68e65aaec1efeda0",
-   "html": "fd30c7073c07d5d2",
-   "surfaces": "c3236b4f45dfbcb5"
+   "rows": "0ff21f930f4c1641",
+   "html": "4757cc958c18b6bc",
+   "surfaces": "208277802875cf08"
   },
   "focus/step3/plain": {
-   "rows": "96215a3127433c1a",
-   "html": "318c60593c61f845",
-   "surfaces": "eb7d24aaff6c14c2"
+   "rows": "7759c973ddb033c6",
+   "html": "08fc634af3caec76",
+   "surfaces": "4cb917f16edaeab2"
   },
   "focus/step3/fields": {
-   "rows": "96215a3127433c1a",
-   "html": "318c60593c61f845",
-   "surfaces": "eb7d24aaff6c14c2"
+   "rows": "7759c973ddb033c6",
+   "html": "08fc634af3caec76",
+   "surfaces": "4cb917f16edaeab2"
   },
   "focus/step3/suspect-bar-high-below-low": {
-   "rows": "96215a3127433c1a",
-   "html": "318c60593c61f845",
-   "surfaces": "eb7d24aaff6c14c2"
+   "rows": "7759c973ddb033c6",
+   "html": "08fc634af3caec76",
+   "surfaces": "4cb917f16edaeab2"
   },
   "focus/step3/suspect-bar-open-outside-range": {
-   "rows": "96215a3127433c1a",
-   "html": "318c60593c61f845",
-   "surfaces": "eb7d24aaff6c14c2"
+   "rows": "7759c973ddb033c6",
+   "html": "08fc634af3caec76",
+   "surfaces": "4cb917f16edaeab2"
   },
   "focus/step3/suspect-print-far-outside-day-range": {
-   "rows": "1507aa9b6b193c60",
-   "html": "958802253b77b979",
-   "surfaces": "eb7d24aaff6c14c2"
+   "rows": "3d9592c9c9acfa17",
+   "html": "4f2e7e2fa1a5e587",
+   "surfaces": "4cb917f16edaeab2"
   },
   "focus/step3/suspect-quote-crossed": {
-   "rows": "96215a3127433c1a",
-   "html": "318c60593c61f845",
-   "surfaces": "eb7d24aaff6c14c2"
+   "rows": "7759c973ddb033c6",
+   "html": "08fc634af3caec76",
+   "surfaces": "4cb917f16edaeab2"
   },
   "focus/step3/suspect-turn": {
-   "rows": "96215a3127433c1a",
-   "html": "318c60593c61f845",
-   "surfaces": "eb7d24aaff6c14c2"
+   "rows": "7759c973ddb033c6",
+   "html": "08fc634af3caec76",
+   "surfaces": "4cb917f16edaeab2"
   },
   "focus/step4/plain": {
    "rows": "b019bcf404d82611",
@@ -1298,74 +1298,74 @@
    "surfaces": "195b84cb21b08f17"
   },
   "partial/step2/plain": {
-   "rows": "fd2171f1441042ac",
-   "html": "fd30c7073c07d5d2",
-   "surfaces": "850b81c7b49081d2"
+   "rows": "9cdd1a1a82d04f46",
+   "html": "4757cc958c18b6bc",
+   "surfaces": "f1de72435eed1512"
   },
   "partial/step2/fields": {
-   "rows": "fd2171f1441042ac",
-   "html": "fd30c7073c07d5d2",
-   "surfaces": "850b81c7b49081d2"
+   "rows": "9cdd1a1a82d04f46",
+   "html": "4757cc958c18b6bc",
+   "surfaces": "f1de72435eed1512"
   },
   "partial/step2/suspect-bar-high-below-low": {
-   "rows": "fd2171f1441042ac",
-   "html": "fd30c7073c07d5d2",
-   "surfaces": "850b81c7b49081d2"
+   "rows": "9cdd1a1a82d04f46",
+   "html": "4757cc958c18b6bc",
+   "surfaces": "f1de72435eed1512"
   },
   "partial/step2/suspect-bar-open-outside-range": {
-   "rows": "fd2171f1441042ac",
-   "html": "fd30c7073c07d5d2",
-   "surfaces": "850b81c7b49081d2"
+   "rows": "9cdd1a1a82d04f46",
+   "html": "4757cc958c18b6bc",
+   "surfaces": "f1de72435eed1512"
   },
   "partial/step2/suspect-print-far-outside-day-range": {
-   "rows": "db87da344838afc4",
-   "html": "fd30c7073c07d5d2",
-   "surfaces": "850b81c7b49081d2"
+   "rows": "2a7ccfc1d6994d0e",
+   "html": "4757cc958c18b6bc",
+   "surfaces": "f1de72435eed1512"
   },
   "partial/step2/suspect-quote-crossed": {
-   "rows": "fd2171f1441042ac",
-   "html": "fd30c7073c07d5d2",
-   "surfaces": "850b81c7b49081d2"
+   "rows": "9cdd1a1a82d04f46",
+   "html": "4757cc958c18b6bc",
+   "surfaces": "f1de72435eed1512"
   },
   "partial/step2/suspect-turn": {
-   "rows": "fd2171f1441042ac",
-   "html": "fd30c7073c07d5d2",
-   "surfaces": "850b81c7b49081d2"
+   "rows": "9cdd1a1a82d04f46",
+   "html": "4757cc958c18b6bc",
+   "surfaces": "f1de72435eed1512"
   },
   "partial/step3/plain": {
-   "rows": "3634fe1a6a1efd1b",
-   "html": "318c60593c61f845",
-   "surfaces": "e6d54b5db83bbdc4"
+   "rows": "f144f99b2ecee9c5",
+   "html": "08fc634af3caec76",
+   "surfaces": "3d397518f0bbf997"
   },
   "partial/step3/fields": {
-   "rows": "3634fe1a6a1efd1b",
-   "html": "318c60593c61f845",
-   "surfaces": "e6d54b5db83bbdc4"
+   "rows": "f144f99b2ecee9c5",
+   "html": "08fc634af3caec76",
+   "surfaces": "3d397518f0bbf997"
   },
   "partial/step3/suspect-bar-high-below-low": {
-   "rows": "3634fe1a6a1efd1b",
-   "html": "318c60593c61f845",
-   "surfaces": "e6d54b5db83bbdc4"
+   "rows": "f144f99b2ecee9c5",
+   "html": "08fc634af3caec76",
+   "surfaces": "3d397518f0bbf997"
   },
   "partial/step3/suspect-bar-open-outside-range": {
-   "rows": "3634fe1a6a1efd1b",
-   "html": "318c60593c61f845",
-   "surfaces": "e6d54b5db83bbdc4"
+   "rows": "f144f99b2ecee9c5",
+   "html": "08fc634af3caec76",
+   "surfaces": "3d397518f0bbf997"
   },
   "partial/step3/suspect-print-far-outside-day-range": {
-   "rows": "f6fb953f071274fb",
-   "html": "958802253b77b979",
-   "surfaces": "e6d54b5db83bbdc4"
+   "rows": "96468c08c735e4e5",
+   "html": "4f2e7e2fa1a5e587",
+   "surfaces": "3d397518f0bbf997"
   },
   "partial/step3/suspect-quote-crossed": {
-   "rows": "3634fe1a6a1efd1b",
-   "html": "318c60593c61f845",
-   "surfaces": "e6d54b5db83bbdc4"
+   "rows": "f144f99b2ecee9c5",
+   "html": "08fc634af3caec76",
+   "surfaces": "3d397518f0bbf997"
   },
   "partial/step3/suspect-turn": {
-   "rows": "3634fe1a6a1efd1b",
-   "html": "318c60593c61f845",
-   "surfaces": "e6d54b5db83bbdc4"
+   "rows": "f144f99b2ecee9c5",
+   "html": "08fc634af3caec76",
+   "surfaces": "3d397518f0bbf997"
   },
   "partial/step4/plain": {
    "rows": "8d81fa7eced6d024",
@@ -2523,74 +2523,74 @@
    "surfaces": "ccef1f27b29f47f8"
   },
   "v2/step2/plain": {
-   "rows": "68e65aaec1efeda0",
-   "html": "fd30c7073c07d5d2",
-   "surfaces": "c3236b4f45dfbcb5"
+   "rows": "0ff21f930f4c1641",
+   "html": "4757cc958c18b6bc",
+   "surfaces": "208277802875cf08"
   },
   "v2/step2/fields": {
-   "rows": "68e65aaec1efeda0",
-   "html": "fd30c7073c07d5d2",
-   "surfaces": "c3236b4f45dfbcb5"
+   "rows": "0ff21f930f4c1641",
+   "html": "4757cc958c18b6bc",
+   "surfaces": "208277802875cf08"
   },
   "v2/step2/suspect-bar-high-below-low": {
-   "rows": "68e65aaec1efeda0",
-   "html": "fd30c7073c07d5d2",
-   "surfaces": "c3236b4f45dfbcb5"
+   "rows": "0ff21f930f4c1641",
+   "html": "4757cc958c18b6bc",
+   "surfaces": "208277802875cf08"
   },
   "v2/step2/suspect-bar-open-outside-range": {
-   "rows": "68e65aaec1efeda0",
-   "html": "fd30c7073c07d5d2",
-   "surfaces": "c3236b4f45dfbcb5"
+   "rows": "0ff21f930f4c1641",
+   "html": "4757cc958c18b6bc",
+   "surfaces": "208277802875cf08"
   },
   "v2/step2/suspect-print-far-outside-day-range": {
-   "rows": "429fd74aec6afbd8",
-   "html": "fd30c7073c07d5d2",
-   "surfaces": "c3236b4f45dfbcb5"
+   "rows": "cd2a1f7219d45153",
+   "html": "4757cc958c18b6bc",
+   "surfaces": "208277802875cf08"
   },
   "v2/step2/suspect-quote-crossed": {
-   "rows": "68e65aaec1efeda0",
-   "html": "fd30c7073c07d5d2",
-   "surfaces": "c3236b4f45dfbcb5"
+   "rows": "0ff21f930f4c1641",
+   "html": "4757cc958c18b6bc",
+   "surfaces": "208277802875cf08"
   },
   "v2/step2/suspect-turn": {
-   "rows": "68e65aaec1efeda0",
-   "html": "fd30c7073c07d5d2",
-   "surfaces": "c3236b4f45dfbcb5"
+   "rows": "0ff21f930f4c1641",
+   "html": "4757cc958c18b6bc",
+   "surfaces": "208277802875cf08"
   },
   "v2/step3/plain": {
-   "rows": "96215a3127433c1a",
-   "html": "318c60593c61f845",
-   "surfaces": "eb7d24aaff6c14c2"
+   "rows": "7759c973ddb033c6",
+   "html": "08fc634af3caec76",
+   "surfaces": "4cb917f16edaeab2"
   },
   "v2/step3/fields": {
-   "rows": "96215a3127433c1a",
-   "html": "318c60593c61f845",
-   "surfaces": "eb7d24aaff6c14c2"
+   "rows": "7759c973ddb033c6",
+   "html": "08fc634af3caec76",
+   "surfaces": "4cb917f16edaeab2"
   },
   "v2/step3/suspect-bar-high-below-low": {
-   "rows": "96215a3127433c1a",
-   "html": "318c60593c61f845",
-   "surfaces": "eb7d24aaff6c14c2"
+   "rows": "7759c973ddb033c6",
+   "html": "08fc634af3caec76",
+   "surfaces": "4cb917f16edaeab2"
   },
   "v2/step3/suspect-bar-open-outside-range": {
-   "rows": "96215a3127433c1a",
-   "html": "318c60593c61f845",
-   "surfaces": "eb7d24aaff6c14c2"
+   "rows": "7759c973ddb033c6",
+   "html": "08fc634af3caec76",
+   "surfaces": "4cb917f16edaeab2"
   },
   "v2/step3/suspect-print-far-outside-day-range": {
-   "rows": "1507aa9b6b193c60",
-   "html": "958802253b77b979",
-   "surfaces": "eb7d24aaff6c14c2"
+   "rows": "3d9592c9c9acfa17",
+   "html": "4f2e7e2fa1a5e587",
+   "surfaces": "4cb917f16edaeab2"
   },
   "v2/step3/suspect-quote-crossed": {
-   "rows": "96215a3127433c1a",
-   "html": "318c60593c61f845",
-   "surfaces": "eb7d24aaff6c14c2"
+   "rows": "7759c973ddb033c6",
+   "html": "08fc634af3caec76",
+   "surfaces": "4cb917f16edaeab2"
   },
   "v2/step3/suspect-turn": {
-   "rows": "96215a3127433c1a",
-   "html": "318c60593c61f845",
-   "surfaces": "eb7d24aaff6c14c2"
+   "rows": "7759c973ddb033c6",
+   "html": "08fc634af3caec76",
+   "surfaces": "4cb917f16edaeab2"
   },
   "v2/step4/plain": {
    "rows": "b019bcf404d82611",

@@ -4,6 +4,7 @@ import { type LiveQuote, nyClock, type Options, type TrailPoint } from "@/lib/op
 import {
   ALT_LIVE_BARS,
   altAt,
+  atr2m,
   bars2m,
   coveredSince,
   ema,
@@ -16,7 +17,9 @@ import {
   MAX_BARS_TO_RETEST,
   type NameInput,
   nameState,
-  RETEST_ATR,
+  RETEST_ENTER_SLOTS,
+  RETEST_WITHIN_ATR,
+  retestRisk,
   serverNow,
   sideState,
 } from "@/lib/trade-state";
@@ -149,21 +152,41 @@ const A: Spec = ["10:04", 408, 408.5, 407.8, 408.2];
 const B: Spec = ["10:06", 408.2, 411.2, 408.1, 411.0];
 const C: Spec = ["10:08", 411.0, 412.2, 410.9, 412.1];
 const D: Spec = ["10:10", 412.5, 412.9, 412.4, 412.8]; // the break: closes above 412.30, the close before at 412.10
-const E: Spec = ["10:12", 412.8, 412.85, 412.5, 412.7]; // the dip: low 0.20 above the level, within 0.1 ATR (0.40)
+const E: Spec = ["10:12", 412.8, 412.85, 412.5, 412.7]; // the dip: low 0.20 above the level, within 1 two-minute ATR (~0.9)
+const CONF: Spec = ["10:14", 412.7, 412.85, 412.65, 412.8]; // the first close above the dip bar's close (412.70): confirmed
+
+const hm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+const minOf = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3));
+/**
+ * Fourteen quiet bars ending just before `first` (each 0.70 wide, closing at `c`): with them the page has the 15 bars a
+ * 2-minute ATR needs (atr2m, bars.atr_period) by the break, so the retest can be read (DEC-0052).
+ */
+const warm = (first: string, c = 408.2): Spec[] =>
+  Array.from({ length: 14 }, (_, i) => [hm(minOf(first) - 28 + 2 * i), c - 0.2, c + 0.3, c - 0.4, c] as Spec);
+const WARM = warm("10:04");
 
 describe("one name through the session", () => {
   const steps: { name: string; specs: Spec[]; live: number; state: string; tone: string; line: string; side?: string }[] = [
-    { name: "middle", specs: [A], live: 408.4, state: "no_trade", tone: "neutral", line: "In the middle of yesterday's range: wait for 405.10 or 412.30" },
-    { name: "watch", specs: [A, B], live: 411.1, state: "watch", tone: "info", line: "Calls above 412.30 (0.3 ATR) · Puts below 405.10 (1.5 ATR)", side: "call" },
-    { name: "price above", specs: [A, B, C], live: 412.5, state: "get_ready", tone: "warn", line: "Above 412.30: wait for a 2-min close above it", side: "call" },
-    { name: "broke", specs: [A, B, C, D], live: 412.85, state: "get_ready", tone: "warn", line: "Broke above 412.30: wait for a dip that holds it", side: "call" },
+    { name: "middle", specs: [...WARM, A], live: 408.4, state: "no_trade", tone: "neutral", line: "In the middle of yesterday's range: wait for 405.10 or 412.30" },
+    { name: "watch", specs: [...WARM, A, B], live: 411.1, state: "watch", tone: "info", line: "Calls above 412.30 (0.3 ATR) · Puts below 405.10 (1.5 ATR)", side: "call" },
+    { name: "price above", specs: [...WARM, A, B, C], live: 412.5, state: "get_ready", tone: "warn", line: "Above 412.30: wait for a 2-min close above it", side: "call" },
+    { name: "broke", specs: [...WARM, A, B, C, D], live: 412.85, state: "get_ready", tone: "warn", line: "Broke above 412.30: wait for a dip that holds it", side: "call" },
     {
-      name: "dip holds",
-      specs: [A, B, C, D, E],
+      name: "dip touches: wait for the confirming close",
+      specs: [...WARM, A, B, C, D, E],
       live: 412.75,
+      state: "get_ready",
+      tone: "warn",
+      line: "Retest touched: wait for a 2-minute close above 412.70",
+      side: "call",
+    },
+    {
+      name: "retest confirmed",
+      specs: [...WARM, A, B, C, D, E, CONF],
+      live: 412.85,
       state: "enter_zone",
       tone: "good",
-      line: "Retest holding 412.30: call limit ~412.34 · stop 411.90 / −25% · target 413.22",
+      line: "Retest confirmed at 412.80: call limit ~412.34 · stop 411.90 / −25% · target 413.22 · 412.80 is $0.46 past the card entry; to the stop $0.90, not $0.44",
       side: "call",
     },
   ];
@@ -185,11 +208,14 @@ describe("one name through the session", () => {
   });
 
   it("ranks an entry above a watch, and hands back the plan's prices", () => {
-    const enter = nameState(input(scene([A, B, C, D, E], 412.75)));
+    const enter = nameState(input(scene([...WARM, A, B, C, D, E, CONF], 412.85)));
     const watch = nameState(input(scene([A, B], 411.1)));
+    expect(enter.state).toBe("enter_zone");
     expect(enter.rank).toBeLessThan(watch.rank);
+    // the card's numbers are the plan's, whatever the confirming close (DEC-0052: wording only)
     expect(enter.plan).toEqual({ level: 412.3, entry: 412.34, stop: 411.9, target1: 413.22, target2: 416 });
-    expect(RETEST_ATR).toBe(0.1);
+    expect(RETEST_WITHIN_ATR).toBe(1);
+    expect(RETEST_ENTER_SLOTS).toBe(2);
   });
 
   it("past target 1: the call is missed (don't chase), so the row watches the put and says so", () => {
@@ -350,7 +376,7 @@ describe("the clock and the feed", () => {
       ["2026-03-09", "-04:00"],
       ["2026-11-02", "-05:00"],
     ] as const) {
-      const sc = scene([A, B, C, D, E], 412.75, { day, offset });
+      const sc = scene([...WARM, A, B, C, D, E, CONF], 412.85, { day, offset });
       expect(nameState(input(sc)).state).toBe("enter_zone");
       const early = scene([["09:30", 412.5, 412.9, 412.4, 412.8]], 412.85, { day, offset });
       expect(nameState(input(early)).state).toBe("no_trade"); // 09:32 + 5 s New York
@@ -378,18 +404,24 @@ describe("the clock and the feed", () => {
 
   it("never hides the desk's early caution behind the two clone cautions", () => {
     const early = (x: Spec): Spec => [`09:${40 + Number(x[0].slice(3))}`, x[1], x[2], x[3], x[4]];
+    // DEC-0052: a retest cannot confirm before about 10:00 (the 2-minute ATR needs 15 bars), so before 10:00 the
+    // early caution sits on a get ready: the touched retest waiting for its confirming close.
     const s = scene([A, B, C, D, E].map(early), 412.75); // 09:44 to 09:52
     const r = nameState(
       input(s, { receivedAt: s.now.getTime(), wonToday: true, ticker: { ...TICKER, expected_move: { annual_iv: 0.9 } } }),
     );
-    expect(r.state).toBe("enter_zone");
+    expect(r.state).toBe("get_ready");
     expect(r.cautions.map((c) => c.id)).toEqual(["iv", "winner", "before10"]);
     expect(r.moreCautions).toBe(0);
+    // with the bars from 09:30, a confirming close at 09:54 still has no 2-minute ATR (13 bars): no entry before 10:00
+    const from930 = scene([...warm("09:44").slice(-7), ...[A, B, C, D, E, CONF].map(early)], 412.85);
+    expect(from930.bars.complete).toBe(true);
+    expect(nameState(input(from930, { receivedAt: from930.now.getTime() })).state).toBe("get_ready");
   });
 
   it("shows at most two cautions and counts the rest", () => {
     const later = (x: Spec, min: number): Spec => [`${Number(x[0].slice(0, 2)) + 1}:${String(Number(x[0].slice(3)) + min).padStart(2, "0")}`, x[1], x[2], x[3], x[4]];
-    const s = scene([A, B, C, D, E].map((x) => later(x, 10)), 412.75); // 11:14 to 11:22
+    const s = scene([...warm("11:14"), ...[A, B, C, D, E, CONF].map((x) => later(x, 10))], 412.85); // 11:14 to 11:24
     const r = nameState(
       input(s, { receivedAt: s.now.getTime(), wonToday: true, ticker: { ...TICKER, expected_move: { annual_iv: 0.9 } } }),
     );
@@ -492,10 +524,37 @@ function withPoints(sc: ReturnType<typeof scene>, pts: TrailPoint[], q: Partial<
   const quote = { ...sc.quote, ...q };
   return { ...sc, trail, quote, bars: bars2m(trail, quote, sc.now) };
 }
+// With the bars' own 2-minute ATR, as the board passes it (trade-now.ts: atr2m of the merged bars).
 const call = (sc: { bars: ReturnType<typeof bars2m>; quote: LiveQuote; now: Date }, q: Partial<LiveQuote> = {}) =>
-  sideState(PLAN.call, 4, sc.bars, { ...sc.quote, ...q }, sc.now);
-/** Above the level with no dip: the low 0.50 over it, more than 0.1 ATR. */
-const hold = (hhmm: string): Spec => [hhmm, 412.85, 412.95, 412.8, 412.85];
+  sideState(PLAN.call, 4, sc.bars, { ...sc.quote, ...q }, sc.now, atr2m(sc.bars.closed));
+// DEC-0052's scenes: a steady climb whose 2-minute ATR is about 0.20, so the touch band (1 two-minute ATR) is narrow.
+const r2 = (v: number) => Math.round(v * 100) / 100;
+/** Sixteen bars from 09:40 to 10:12, each closing 0.10 higher (to 412.20) and 0.20 wide: a 2-minute ATR of 0.20. */
+const LADDER: Spec[] = Array.from({ length: 16 }, (_, i) => {
+  const c = 410.7 + 0.1 * i;
+  return [hm(9 * 60 + 40 + 2 * i), r2(c - 0.1), r2(c + 0.05), r2(c - 0.15), r2(c)] as Spec;
+});
+/** The break at 10:12: closes 0.20 above the level, the close before at 412.20. */
+const BRK: Spec = ["10:12", 412.2, 412.55, 412.15, 412.5];
+/** Above the level, the low 0.30 over it: more than the 2-minute ATR, so no touch. */
+const holds = (from: string, n: number): Spec[] => Array.from({ length: n }, (_, i) => [hm(minOf(from) + 2 * i), 412.6, 412.7, 412.6, 412.65] as Spec);
+/** The touch: the low 0.05 over the level; it closes at 412.45. */
+const TOUCH = (hhmm: string): Spec => [hhmm, 412.5, 412.55, 412.35, 412.45];
+/** The confirming bar: the first close above the touch bar's close (412.55 > 412.45). */
+const CONFIRM = (hhmm: string): Spec => [hhmm, 412.45, 412.6, 412.45, 412.55];
+/** Above the level, closing under the touch bar's close: no confirmation. */
+const NOCONF = (hhmm: string): Spec => [hhmm, 412.45, 412.5, 412.38, 412.42];
+/** The call's scene mirrored onto the put: 412.30 ↔ 405.10 (the plan is symmetric about 408.70). */
+const mirror = (specs: Spec[]): Spec[] => specs.map(([t, o, h, l, c]) => [t, r2(817.4 - o), r2(817.4 - l), r2(817.4 - h), r2(817.4 - c)]);
+/** The scene `extra` ms later with the price flat at `p` (a print every 30 s), its bars rebuilt and the quote fresh. */
+function later(sc: ReturnType<typeof scene>, extra: number, p: number) {
+  const now = new Date(sc.now.getTime() + extra);
+  const pts: TrailPoint[] = [];
+  for (let at = sc.now.getTime() + 30_000; at < now.getTime() - 2_000; at += 30_000) pts.push({ at, p });
+  const trail = [...sc.trail, ...pts];
+  const quote: LiveQuote = { ...sc.quote, price: p, at: new Date(now.getTime() - 2_000).toISOString(), high: Math.max(sc.quote.high!, p), low: Math.min(sc.quote.low!, p) };
+  return { trail, quote, now, bars: bars2m(trail, quote, now) };
+}
 
 describe("finding 1: target 1 after the dip", () => {
   it("a bar after the dip that reached target 1 makes the side missed, not an entry", () => {
@@ -549,7 +608,8 @@ describe("finding 2: missing 2-minute slots", () => {
     const Y: Spec = ["10:06", 412.1, 412.2, 411.9, 412.0];
     const brk: Spec = ["10:08", 412.1, 412.8, 412.0, 412.7];
     const dip2: Spec = ["10:10", 412.7, 412.8, 412.35, 412.7];
-    expect(call(scene([X, Y, brk, dip2], 412.75), { high: 413.4 }).state).toBe("enter_zone");
+    const conf2: Spec = ["10:12", 412.7, 412.85, 412.65, 412.8]; // confirms the retest (DEC-0052)
+    expect(call(scene([...warm("10:04", 412.0), X, Y, brk, dip2, conf2], 412.85), { high: 413.4 }).state).toBe("enter_zone");
   });
 });
 
@@ -573,19 +633,146 @@ describe("finding 4: the retest window", () => {
   });
 
   it("a touch more than 6 bars after the break is missed: the window passed", () => {
-    const sc = scene([A, B, C, D, hold("10:12"), hold("10:14"), hold("10:16"), hold("10:18"), hold("10:20"), hold("10:22"), ["10:24", 412.8, 412.9, 412.35, 412.75]], 412.8);
+    // the break at 10:12; holds 0.30 over the level (more than the ~0.19 two-minute ATR); the touch at 10:26 is the 7th
+    const late = [...LADDER, BRK, ...holds("10:14", 6), TOUCH("10:26")];
+    expect(call(scene(late, 412.5))).toMatchObject({ state: "missed", missedWhy: "window" });
+    const sc = scene([...late, CONFIRM("10:28")], 412.6);
     expect(call(sc)).toMatchObject({ state: "missed", missedWhy: "window" });
     const r = nameState(input(sc, { put: null }));
     expect(r.line).toBe("Retest window at 412.30 passed: don't chase");
   });
 
-  it("the entry is live from the touch until 6 bars after the break, then missed", () => {
-    const touch6 = [A, B, C, D, hold("10:12"), hold("10:14"), hold("10:16"), hold("10:18"), hold("10:20"), ["10:22", 412.8, 412.9, 412.35, 412.75] as Spec];
-    expect(call(scene(touch6, 412.8)).state).toBe("enter_zone"); // the bar forming is the 7th after the break
-    const kept = [A, B, C, D, E, hold("10:14"), hold("10:16"), hold("10:18"), hold("10:20")];
-    expect(call(scene(kept, 412.8)).state).toBe("enter_zone");
-    expect(call(scene([...kept, hold("10:22")], 412.8)).state).toBe("enter_zone");
-    expect(call(scene([...kept, hold("10:22"), hold("10:24")], 412.8))).toMatchObject({ state: "missed", missedWhy: "window" });
+  it("the touch can come up to 6 bars after the break, and its confirming close on the 7th keeps its two slots", () => {
+    const sixth = [...LADDER, BRK, ...holds("10:14", 5), TOUCH("10:24")];
+    expect(call(scene(sixth, 412.5))).toMatchObject({ state: "get_ready", touchClose: 412.45 });
+    const sc = scene([...sixth, CONFIRM("10:26")], 412.6); // 10:28:05: the slot the 10:28 close opens
+    expect(call(sc)).toMatchObject({ state: "enter_zone", confirmClose: 412.55, confirmAt: nyMs("10:28") });
+    // the second slot (10:30 to 10:32) is past the window's bar forming check, and is still ENTER
+    expect(call(later(sc, nyMs("10:31", S, "-04:00", 59) - sc.now.getTime(), 412.6)).state).toBe("enter_zone");
+    expect(call(later(sc, nyMs("10:32") - sc.now.getTime(), 412.6))).toMatchObject({ state: "missed", missedWhy: "slot" });
+    // while the window's last bar is still forming (its end passed, no later price yet), it is not yet missed
+    const forming = scene([...sixth, CONFIRM("10:26")], 412.6, { nowExtra: -3_000 });
+    expect(forming.bars.partial?.start).toBe(nyMs("10:26"));
+    expect(call({ ...forming, quote: { ...forming.quote, price: 412.55, at: new Date(nyMs("10:27", S, "-04:00", 50)).toISOString() } }).state).toBe("get_ready");
+  });
+});
+
+describe("DEC-0052: the board's break and retest completes as the clone's does", () => {
+  it("a touch that is never confirmed never says enter zone, and says what it waits for", () => {
+    const base = [...LADDER, BRK, TOUCH("10:14")];
+    const states: string[] = [];
+    for (let n = 0; n <= 6; n++) {
+      const sc = scene([...base, ...Array.from({ length: n }, (_, i) => NOCONF(hm(minOf("10:16") + 2 * i)))], 412.45);
+      states.push(call(sc).state);
+      if (n < 6) expect(nameState(input(sc, { put: null })).line).toBe("Retest touched: wait for a 2-minute close above 412.45");
+    }
+    expect(states).not.toContain("enter_zone");
+    expect(states.at(-1)).toBe("missed");
+  });
+
+  it("confirmed: enter zone for exactly two slots from the confirming close, then missed (slot)", () => {
+    const sc = scene([...LADDER, BRK, TOUCH("10:14"), CONFIRM("10:16")], 412.6); // the 10:18 close confirms
+    const at = (hhmm: string, sec = 0) => call(later(sc, nyMs(hhmm, S, "-04:00", sec) - sc.now.getTime(), 412.6));
+    expect(call(sc)).toMatchObject({ state: "enter_zone", touchClose: 412.45, confirmClose: 412.55, confirmAt: nyMs("10:18") });
+    expect(at("10:19", 59).state).toBe("enter_zone");
+    expect(at("10:20").state).toBe("enter_zone");
+    expect(at("10:21", 59).state).toBe("enter_zone");
+    expect(at("10:22")).toMatchObject({ state: "missed", missedWhy: "slot", confirmClose: 412.55 });
+    expect(at("10:26")).toMatchObject({ state: "missed", missedWhy: "slot" });
+    // before the confirming bar is complete it is not an entry
+    const early = scene([...LADDER, BRK, TOUCH("10:14"), CONFIRM("10:16")], 412.6, { nowExtra: -6_000 });
+    expect(call({ ...early, quote: { ...early.quote, at: new Date(nyMs("10:17", S, "-04:00", 59)).toISOString() } }).state).toBe("get_ready");
+    // the row's lines
+    const missed = later(sc, nyMs("10:22") - sc.now.getTime(), 412.6);
+    expect(nameState(input(missed, { put: null })).line).toBe("Retest confirmed at 10:18: missed, don't chase");
+    expect(nameState(input(missed)).line).toMatch(/^Calls: retest confirmed at 10:18, missed, don't chase · Puts below 405\.10 \(\d\.\d ATR\)$/);
+  });
+
+  it("a run past the confirming close by more than one 2-minute ATR is missed (slot) at once, and stays missed", () => {
+    const sc = scene([...LADDER, BRK, TOUCH("10:14"), CONFIRM("10:16")], 412.6);
+    const a2 = atr2m(sc.bars.closed)!; // the ATR at the confirming close: the live print is in the bar forming
+    expect(a2).toBeGreaterThan(0.15);
+    expect(a2).toBeLessThan(0.25);
+    expect(call(sc, { price: 412.55 + a2 - 0.01 }).state).toBe("enter_zone");
+    expect(call(sc, { price: 412.55 + a2 + 0.01 })).toMatchObject({ state: "missed", missedWhy: "slot" });
+    // a print that ran past it in the bar forming stays a chase though the price is back
+    const ran = withPoints(sc, [{ at: nyMs("10:18", S, "-04:00", 4), p: 412.55 + a2 + 0.02 }]);
+    expect(call(ran, { price: 412.6 })).toMatchObject({ state: "missed", missedWhy: "slot" });
+  });
+
+  it("a close back through the level is plan off, before the confirming close or after it", () => {
+    const back = (hhmm: string): Spec => [hhmm, 412.4, 412.45, 412.1, 412.2];
+    expect(call(scene([...LADDER, BRK, TOUCH("10:14"), back("10:16")], 412.2)).state).toBe("plan_off");
+    expect(call(scene([...LADDER, BRK, TOUCH("10:14"), CONFIRM("10:16"), back("10:18")], 412.2)).state).toBe("plan_off");
+  });
+
+  it("with no 2-minute ATR there is no touch: get ready", () => {
+    const specs = [...LADDER, BRK, TOUCH("10:14"), CONFIRM("10:16")];
+    const sc = scene(specs, 412.6);
+    expect(sideState(PLAN.call, 4, sc.bars, sc.quote, sc.now, null)).toMatchObject({ state: "get_ready", brokeAt: nyMs("10:14") });
+    expect(sideState(PLAN.call, 4, sc.bars, sc.quote, sc.now, null).touchClose).toBeUndefined();
+    // fewer than 15 bars: no ATR either, whatever the caller passes
+    const short = scene(specs.slice(-6), 412.6);
+    expect(sideState(PLAN.call, 4, short.bars, short.quote, short.now, 0.2).state).toBe("get_ready");
+  });
+
+  it("the put is the mirror", () => {
+    const sc = scene(mirror([...LADDER, BRK, TOUCH("10:14"), CONFIRM("10:16")]), 817.4 - 412.6);
+    const put = (x: ReturnType<typeof scene>, q: Partial<LiveQuote> = {}) => sideState(PLAN.put, 4, x.bars, { ...x.quote, ...q }, x.now, atr2m(x.bars.closed));
+    expect(put(sc)).toMatchObject({ state: "enter_zone", confirmAt: nyMs("10:18") });
+    const r = nameState(input(sc, { call: null }));
+    expect(r.line).toBe("Retest confirmed at 404.85: put limit ~405.06 · stop 405.50 / −25% · target 404.18 · 404.85 is $0.21 past the card entry; to the stop $0.65, not $0.44");
+    const touched = scene(mirror([...LADDER, BRK, TOUCH("10:14")]), 817.4 - 412.45);
+    expect(nameState(input(touched, { call: null })).line).toBe("Retest touched: wait for a 2-minute close below 404.95");
+    expect(put(later(sc, nyMs("10:22") - sc.now.getTime(), 817.4 - 412.6))).toMatchObject({ state: "missed", missedWhy: "slot" });
+    expect(put(sc, { price: 817.4 - 412.55 - 0.3 })).toMatchObject({ state: "missed", missedWhy: "slot" });
+  });
+
+  it("the break's first confirmation governs: a later one (a larger ATR) neither re-arms ENTER nor moves its close", () => {
+    // retest.vectors.json's two-signal case moved onto this level (+312.30): the clone signals at bars 18 and 21
+    const v: [number, number, number, number][] = [
+      ...Array.from({ length: 15 }, (_, i) => {
+        const c = 98.5 + 0.1 * i;
+        return [c - 0.1, c + 0.05, c - 0.15, c] as [number, number, number, number];
+      }),
+      [99.9, 100.25, 99.85, 100.2],
+      [100.5, 100.65, 100.5, 100.6],
+      [100.6, 100.62, 100.1, 100.3],
+      [100.3, 100.45, 100.28, 100.4],
+      [100.4, 100.5, 100.3, 100.35],
+      [100.35, 100.59, 96.0, 100.3],
+      [100.3, 100.75, 100.25, 100.7],
+    ];
+    const specs: Spec[] = v.map(([o, h, l, c], i) => [hm(9 * 60 + 30 + 2 * i), r2(o + 312.3), r2(h + 312.3), r2(l + 312.3), r2(c + 312.3)]);
+    const read = (i: number) => call(scene(specs.slice(0, i + 1), specs[i]![4]));
+    expect(read(17).state).toBe("get_ready");
+    expect(read(18)).toMatchObject({ state: "enter_zone", confirmClose: 412.7, confirmAt: nyMs("10:08") });
+    expect(read(19)).toMatchObject({ state: "enter_zone", confirmClose: 412.7 });
+    expect(read(20)).toMatchObject({ state: "missed", missedWhy: "slot", confirmClose: 412.7 });
+    // the clone's second signal: the board stays missed, on the first confirmation's close
+    expect(read(21)).toMatchObject({ state: "missed", missedWhy: "slot", confirmClose: 412.7, confirmAt: nyMs("10:08") });
+  });
+
+  it("back at the level in the ENTER slots with no close through it: get ready, the confirmed close kept and named", () => {
+    const sc = scene([...LADDER, BRK, TOUCH("10:14"), CONFIRM("10:16")], 412.3);
+    expect(call(sc)).toMatchObject({ state: "get_ready", confirmClose: 412.55, confirmAt: nyMs("10:18") });
+    expect(nameState(input(sc, { put: null })).line).toBe("Retest confirmed at 412.55: price back at 412.30, wait");
+    // and back above it, still in the slots: ENTER again
+    expect(call(sc, { price: 412.6 }).state).toBe("enter_zone");
+    const put = scene(mirror([...LADDER, BRK, TOUCH("10:14"), CONFIRM("10:16")]), 405.1);
+    expect(sideState(PLAN.put, 4, put.bars, put.quote, put.now, atr2m(put.bars.closed))).toMatchObject({ state: "get_ready", confirmClose: 404.85 });
+    expect(nameState(input(put, { call: null })).line).toBe("Retest confirmed at 404.85: price back at 405.10, wait");
+  });
+
+  it("the risk line: the confirming close against the card's entry and stop, the card's numbers unchanged", () => {
+    expect(retestRisk(412.55, "call", 412.34, 411.9)).toBe("412.55 is $0.21 past the card entry; to the stop $0.65, not $0.44");
+    expect(retestRisk(404.85, "put", 405.06, 405.5)).toBe("404.85 is $0.21 past the card entry; to the stop $0.65, not $0.44");
+    // between the level and the card's entry: short of it, never "past"
+    expect(retestRisk(412.32, "call", 412.34, 411.9)).toBe("412.32 is $0.02 short of the card entry; to the stop $0.42, not $0.44");
+    expect(retestRisk(412.55, "call", null, 411.9)).toBeNull();
+    const r = nameState(input(scene([...LADDER, BRK, TOUCH("10:14"), CONFIRM("10:16")], 412.6), { put: null }));
+    expect(r.line).toBe("Retest confirmed at 412.55: call limit ~412.34 · stop 411.90 / −25% · target 413.22 · 412.55 is $0.21 past the card entry; to the stop $0.65, not $0.44");
+    expect(r.plan).toEqual({ level: 412.3, entry: 412.34, stop: 411.9, target1: 413.22, target2: 416 });
   });
 });
 

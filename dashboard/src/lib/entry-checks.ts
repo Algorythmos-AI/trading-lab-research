@@ -38,6 +38,10 @@ export const BAR_MINUTES = 2;
 /** setups.retest.max_bars_to_retest (HYP-0029): the touch must come within this many bars after the break bar, and
  * the entry by the bar after that (the retest's window, `last - ia <= n_max + 1`). */
 export const MAX_BARS_TO_RETEST = 6;
+/** setups.retest.retest_within_atr (HYP-0029): the touch is a bar whose low (high, for a put) comes within this many
+ * 2-minute ATRs of the level (bars.atr_period on the 2-minute bars). The board's break and retest uses it since
+ * DEC-0052, for the touch and for how far past the confirming close an entry is still not a chase. */
+export const RETEST_WITHIN_ATR = 1.0;
 
 // ---- the desk's own numbers (not the clone's) ----------------------------------------------------------------------
 /** A quote whose last trade is older than this is stale: the row pauses, and the leader check is left out. */
