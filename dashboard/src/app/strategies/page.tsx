@@ -278,9 +278,9 @@ function PaperAccount({ s }: { s: Snapshot }) {
   );
   return (
     <Panel
-      title="Paper B virtual account"
+      title="Robot B virtual account (paper)"
       icon={Wallet}
-      means="A pretend account that sizes paper B's trades as if real money were at stake. Paper money only; nothing here is real."
+      means="A pretend account that sizes Robot B's trades as if real money were at stake. Paper money only; nothing here is real."
       action={
         v?.latched === true ? (
           <StatusBadge tone="bad">Latched</StatusBadge>
@@ -364,7 +364,7 @@ function PaperEvents({ s }: { s: Snapshot }) {
         </ul>
       ) : null}
       {recent.length === 0 ? (
-        <Empty title="No paper events recorded">Events appear once paper B runs.</Empty>
+        <Empty title="No paper events recorded">Events appear once Robot B runs.</Empty>
       ) : (
         <ol className="divide-border grid divide-y">
           {recent.map((e, i) => (

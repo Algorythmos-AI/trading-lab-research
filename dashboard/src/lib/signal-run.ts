@@ -7,7 +7,7 @@ import { type ChainContract, type ChainResponse, fetchChain, type Keep } from ".
 import { chainAge } from "./contract";
 import type { Candidate, ContractPick } from "./contract-pick";
 import { barSurge, type FlowBar, nameBaseline, slotClockFromAsOf } from "./flow";
-import { BAR_MS, ENGINE_VERSION, expectedSlots, focusSymbols, type RowSide, settledSlotEnd, SIDES, SYMBOL_RE } from "./desk-eval";
+import { BAR_MS, ENGINE_VERSION, expectedSlots, focusSymbols, nyHhmm, type RowSide, settledSlotEnd, SIDES, SYMBOL_RE } from "./desk-eval";
 import type { LoggedSlot } from "./desk-run";
 import { focusPlan } from "./focus-plan";
 import { type ServerFlow, serverFlow, FlowUnavailable } from "./flow-route";
@@ -54,7 +54,7 @@ import {
 } from "./signal-record";
 import { SIGNAL_CODE_HASH } from "./signal-version.gen";
 import { fixtureMode } from "./snapshot";
-import type { NameState } from "./trade-state";
+import { CLOSE_GRACE_MS, type NameState } from "./trade-state";
 
 // The signal step of the desk cron (DEC-0051 section 3, stage C2b): once the run has written a slot's DEC-0044 record,
 // and only in that run, this works out the slot's signal record and writes it once, create-only, to
@@ -64,8 +64,12 @@ import type { NameState } from "./trade-state";
 //  * DEC-0044 is untouched: the step starts after the record's write has settled, reads only what the run handed over
 //    (the record's key and exact bytes, the edition, the board's states), and the route ignores what it answers. It
 //    catches every error of its own.
-//  * Its own budget, SIGNAL_BUDGET_MS (DEC-0051 names none, so 5 s): every read has its own limit inside it, and a
-//    record that cannot be written inside it, or inside the slot, is not written at all: a gap, never back-filled.
+//  * Its own budget, SIGNAL_BUDGET_MS (DEC-0051 names none, so 5 s). The write's limit, and a little for building the
+//    record, are reserved from the start: every read gets the lesser of its own limit and what is left before that
+//    reserve, so reads that all time out still leave the write its full limit and a degraded record is written. A
+//    record that cannot be written inside the budget, or inside the slot, is not written at all: a gap, never
+//    back-filled. A write that times out is read back once: the record there with these bytes is "written". That
+//    read-back may run past the budget by up to LATE_CHECK_MS, so the step takes at most about 5.5 s.
 //  * Inputs, all read on the server, never through HTTP: the flow answer (flow-route.ts serverFlow: SIP by name, the
 //    edition's focus names, SPY and QQQ only); one OPRA chain per focus name (chain.ts fetchChain, opra by name, never
 //    ALPACA_OPTION_FEED); the board-feed stamps of the minutes that can lie in [t0 − 2 min, t0], t0 the DEC-0044
@@ -77,12 +81,24 @@ import type { NameState } from "./trade-state";
 //  * Create-only, with its own exists-check. A write that fails or misses the budget is a gap: never tried again.
 //  * The switch is read only by a run that can write (one that has just written the slot's DEC-0044 record), not by
 //    every run: a run with nothing to write has nothing the switch could change.
-//  * Log lines carry counts and outcome words only: never a symbol, a price or a word.
+//  * Log lines carry counts, the slot's HHMM and outcome words only: never a symbol, a price or a word. A run with the
+//    switch off logs "off" once, so a switched-off step is told apart from one that never ran.
 
 /** The step's whole budget: DEC-0051 section 3 gives the step its own limit and names no number, so 5 s. */
 export const SIGNAL_BUDGET_MS = 5_000;
-/** Each part's own limit, inside the budget (they add up to it). */
+/**
+ * Each part's own limit: a maximum, never more than what is left of the budget. They add up to the budget, so a read
+ * gets at most what is left before the write's reserve (BUILD_RESERVE_MS and the write's limit): the reads are cut
+ * first, never the write.
+ */
 export const SIGNAL_TIMEOUT_MS = { switch: 700, inputs: 2_000, chains: 1_300, write: 1_000 } as const;
+/** Kept back from the reads, beside the write's limit, for building and serialising the record. */
+export const BUILD_RESERVE_MS = 200;
+/**
+ * A write that timed out is read back once, within what is left of the budget but never less than this: a step can
+ * take up to SIGNAL_BUDGET_MS + LATE_CHECK_MS, about 5.5 s.
+ */
+export const LATE_CHECK_MS = 500;
 
 export type SignalOutcome =
   | "nothing"
@@ -224,6 +240,8 @@ export interface BuildInput {
   chains: Readonly<Record<string, ChainRead | null>>;
   /** The session's breaks carried from its latest earlier log record, and that record's key. */
   history: History;
+  /** The board-feed stamps could not be read (an error or a timeout, not an empty answer). */
+  stampsFailed?: boolean;
 }
 
 /**
@@ -236,10 +254,17 @@ export interface History {
   breaks: readonly BreakEntry[];
   from: string | null;
   usable: boolean;
+  /** The day's records could not be listed or read (an error or a timeout), as against found absent. */
+  failed?: boolean;
 }
 
 /** The reason a side carries when its slot cannot read the session's earlier records. */
 export const HISTORY_UNUSABLE = "the session's earlier signal records cannot be read in full: no lifecycle and no earlier volume fail";
+/** Record-level reasons (the record's `unusable`): any one makes every side's word NO TRADE, never scored. */
+export const FLOW_OTHER_SLOT = "flow is from another slot";
+export const FLOW_TIME_UNREAD = "the flow answer's time cannot be read";
+export const STAMPS_UNREAD = "the board-feed stamps could not be read";
+export const HISTORY_UNREAD = "the session's earlier signal records could not be listed or read";
 
 const flowInputOf = (f: ServerFlow | null): FlowInput | null =>
   f ? { as_of: f.as_of, feed: f.feed, baseline: f.baseline ? { for_session: f.baseline.for_session, names: f.baseline.names } : null, names: f.names } : null;
@@ -381,6 +406,13 @@ export function buildSignalRecord(x: BuildInput): SignalRecord {
   const focus = edition && edition.session === session ? focusSymbols(edition).filter((s) => SYMBOL_RE.test(s)) : [];
   const flow = flowInputOf(x.flow);
   const asOf = x.flow ? Date.parse(x.flow.as_of) : NaN;
+  // The gates read the flow answer's own clock: an answer whose settled slot is not this record's (a cached answer from
+  // before the settle, or one past the next) gives another slot's gates. They are kept, and the record says so.
+  if (x.flow && !Number.isFinite(asOf)) recordUnusable.push(FLOW_TIME_UNREAD);
+  else if (x.flow && settledSlotEnd(asOf) !== slotEnd) recordUnusable.push(FLOW_OTHER_SLOT);
+  // Reads only a log record's words depend on (the stamp's judgement and the carried breaks); dry gates read neither.
+  if (x.mode === "log" && x.stampsFailed) recordUnusable.push(STAMPS_UNREAD);
+  if (x.mode === "log" && x.history.failed) recordUnusable.push(HISTORY_UNREAD);
   const flowAgeMs = Number.isFinite(asOf) ? Math.max(0, x.evaluatedAt - asOf) : null;
   const items = edition?.focus?.items ?? [];
 
@@ -434,7 +466,12 @@ export function buildSignalRecord(x: BuildInput): SignalRecord {
 
   const earlier = x.history.usable ? sealedOf(session, x.history.breaks) : [];
   const states = new Map<string, NameState>(logged.states.map((s) => [s.symbol, s]));
-  const evaluatedAt = Number.isFinite(asOf) ? asOf : x.evaluatedAt;
+  // The retest window is counted at the slot being recorded, as the board counts it (slot end + CLOSE_GRACE_MS), never
+  // at the flow answer's own time, which can be a slot later.
+  const lifecycleAt = slotEnd + CLOSE_GRACE_MS;
+  // What makes every side of this record not usable beyond signal.ts's own reasons: the session's earlier records not
+  // read in full, and any record-level reason.
+  const extra = [...(x.history.usable ? [] : [HISTORY_UNUSABLE]), ...recordUnusable];
   const stamp = x.stamp.stamp ? { feed: x.stamp.stamp.feed as BoardFeedStamp["feed"], answered: x.stamp.stamp.answered as BoardFeedStamp["answered"] } : null;
   const names = focus.map((symbol) => {
     const st = states.get(symbol) ?? null;
@@ -462,9 +499,13 @@ export function buildSignalRecord(x: BuildInput): SignalRecord {
         });
         if (s) {
           first ??= s.gates;
-          const reasons = unusable({ symbol, side, record: logged.record, state: { slotEnd, rowState: s.rowState }, edition, flow, chain: c?.chain ?? null, stamp });
-          if (!x.history.usable) reasons.push(HISTORY_UNUSABLE);
-          const life = !x.history.usable ? null : lifecycle({ session, symbol, side, brokeAt: s.brokeAt, rowState: s.rowState, word: s.word, slotEnd, evaluatedAt }, earlier);
+          const reasons = [...new Set([...unusable({ symbol, side, record: logged.record, state: { slotEnd, rowState: s.rowState }, edition, flow, chain: c?.chain ?? null, stamp }), ...extra])];
+          // Any reason makes the word NO TRADE (signal.ts signalWord): the word is worked out again with all of them, from
+          // the same gates and state, so a record never stores CALL or PUT beside a reason it is not usable.
+          const volumeFailedEarlier =
+            isNum(s.brokeAt) && earlier.some((r) => r.session === logged.record.session && r.symbol === symbol && r.side === side && r.brokeAt === s.brokeAt && r.slotEnd < slotEnd && r.volumePass === false);
+          const w = extra.length ? signalWord({ side, rowState: s.rowState, sideState: st[side], gates: s.gates, unusable: reasons, volumeFailedEarlier, cautions: st.cautions }) : s;
+          const life = !x.history.usable ? null : lifecycle({ session, symbol, side, brokeAt: s.brokeAt, rowState: s.rowState, word: w.word, slotEnd, evaluatedAt: lifecycleAt }, earlier);
           return {
             side,
             gates: sideGates(s.gates, c?.chain ?? null),
@@ -473,12 +514,12 @@ export function buildSignalRecord(x: BuildInput): SignalRecord {
             broke_earlier: st[side].brokeEarlier,
             gap: st[side].gap,
             card: cardOf(),
-            word: s.word,
+            word: w.word,
             lifecycle: life,
-            scoring: x.history.usable ? s.scoring : "not_usable",
-            missing: s.missing,
-            for: s.for,
-            against: s.against,
+            scoring: w.scoring,
+            missing: w.missing,
+            for: w.for,
+            against: w.against,
             unusable: reasons,
           };
         }
@@ -489,6 +530,7 @@ export function buildSignalRecord(x: BuildInput): SignalRecord {
       first ??= g;
       const reasons = unusable({ symbol, side, record: logged.record, state: { slotEnd, rowState: "no_trade" }, edition, flow, chain: c?.chain ?? null, stamp });
       if (!reasons.includes("the board has no state for this name")) reasons.unshift("the board has no state for this name");
+      for (const r of recordUnusable) if (!reasons.includes(r)) reasons.push(r);
       const w = signalWord({ side, rowState: "no_trade", sideState: { brokeEarlier: false, gap: false }, gates: g, unusable: reasons });
       return {
         side,
@@ -511,7 +553,16 @@ export function buildSignalRecord(x: BuildInput): SignalRecord {
   });
 
   // The session's breaks, this record's included: confirmations and volume fails are kept from their first record.
-  const breaks = x.history.breaks.map((b) => ({ ...b }));
+  // Copied field by field in the record's own order (signal-record.ts BreakEntry), so equal content gives equal bytes
+  // whatever order the carried record's keys came in.
+  const breaks: BreakEntry[] = x.history.breaks.map((b) => ({
+    symbol: b.symbol,
+    side: b.side,
+    broke_at: b.broke_at,
+    confirmed_at: b.confirmed_at,
+    occ: b.occ,
+    volume_failed_at: b.volume_failed_at,
+  }));
   const index = new Map(breaks.map((b, i) => [breakKey(b.symbol, b.side, b.broke_at), i]));
   const slotIso = new Date(slotEnd).toISOString();
   for (const n of names)
@@ -545,6 +596,8 @@ export function buildSignalRecord(x: BuildInput): SignalRecord {
  */
 async function readHistory(deps: SignalDeps, day: string, path: string, slotEnd: number, deadline: number): Promise<History> {
   const none: History = { breaks: [], from: null, usable: false };
+  const failed: History = { ...none, failed: true };
+  let readErr = false;
   let keys: string[];
   try {
     const prefix = signalDayPrefix(day);
@@ -553,7 +606,7 @@ async function readHistory(deps: SignalDeps, day: string, path: string, slotEnd:
       .sort()
       .reverse();
   } catch {
-    return none;
+    return failed;
   }
   // The session's first slot has no earlier record to read: nothing carried, and nothing missing.
   if (keys.length === 0) return { breaks: [], from: null, usable: expectedSlots(day)[0] === slotEnd };
@@ -563,7 +616,8 @@ async function readHistory(deps: SignalDeps, day: string, path: string, slotEnd:
       const text = await within(deps.read(p), deadline - deps.now());
       r = text === null ? null : parseSignalRecord(text);
     } catch (e) {
-      if (e instanceof TimedOut) return none;
+      if (e instanceof TimedOut) return failed;
+      readErr = true;
     }
     if (!r || r.session !== day) continue;
     if (r.mode === "dry") {
@@ -574,48 +628,60 @@ async function readHistory(deps: SignalDeps, day: string, path: string, slotEnd:
         const l = t === null ? null : parseSignalRecord(t);
         return l && l.mode === "log" && l.session === day ? { breaks: l.breaks, from: r.last_log, usable: false } : { breaks: [], from: r.last_log, usable: false };
       } catch {
-        return { breaks: [], from: r.last_log, usable: false };
+        return { breaks: [], from: r.last_log, usable: false, failed: true };
       }
     }
     // Contiguous only when the record carried from is this slot's previous one: any slot between without a log record
     // could have held a confirmation or a volume fail.
     return { breaks: r.breaks, from: p, usable: p === keys[0] && Date.parse(r.slot_end) === slotEnd - BAR_MS };
   }
-  return none;
+  return readErr ? failed : none;
 }
 
 /**
  * The signal step of one cron run, after the DEC-0044 step. `logged` is what that step handed over when it wrote the
- * slot's record (null otherwise: then nothing is read or written). Never throws.
+ * slot's record (null otherwise: then nothing is read or written, and nothing is logged here: DEC-0044's run logs a
+ * slot it could not hand over). Never throws.
+ *
+ * The budget: the write's limit and BUILD_RESERVE_MS are held back from the start, and each read gets the lesser of its
+ * own limit and what is left before that reserve. Reads that all time out are cut short, never the write: the record is
+ * then written degraded (flow_why "timeout", no chains), and only a record that still cannot start its write with its
+ * full limit left inside the budget, or inside the slot, is a gap.
  */
 export async function runSignalStep(logged: LoggedSlot | null, deps: SignalDeps = defaultSignalDeps()): Promise<SignalOutcome> {
   const start = deps.now();
   const deadline = start + (deps.budgetMs ?? SIGNAL_BUDGET_MS);
   const T = { ...SIGNAL_TIMEOUT_MS, ...deps.timeoutsMs };
-  const left = (limit: number) => Math.min(limit, deadline - deps.now());
+  /** A read's limit: its own, or what is left before the write's reserve, the lesser. */
+  const readLeft = (limit: number) => Math.min(limit, deadline - T.write - BUILD_RESERVE_MS - deps.now());
+  let hhmm: string | null = null;
   try {
     const current = settledSlotEnd(start);
     if (!logged) return "nothing";
+    hhmm = nyHhmm(logged.slot.end);
 
     let raw: string | null = null;
     try {
-      raw = await within(deps.readSwitch(), left(T.switch));
+      raw = await within(deps.readSwitch(), readLeft(T.switch));
     } catch (e) {
-      logEvent("desk-signal.switch", { outcome: "read-failed", error: errName(e) });
+      logEvent("desk-signal.switch", { outcome: "read-failed", slot: hhmm, error: errName(e) });
     }
     const sw = parseSignalSwitch(raw);
     const mode = writeMode(sw);
-    if (mode === null || sw === "off") return "off";
+    if (mode === null || sw === "off") {
+      logEvent("desk-signal", { outcome: "off", slot: hhmm });
+      return "off";
+    }
 
     const { slot } = logged;
-    if (slot.end !== current) return done("late", mode, 0, start, deps);
+    if (slot.end !== current) return done("late", mode, 0, start, deps, hhmm);
     const path = signalLogPath(slot.day, slot.end);
     const edition = logged.edition && logged.edition.session === slot.day ? logged.edition : null;
     const focus = edition ? focusSymbols(edition).filter((s) => SYMBOL_RE.test(s)) : [];
     const t0 = Date.parse(logged.record.evaluated_at);
 
     // The inputs side by side, each inside what is left of the inputs' limit.
-    const inputsMs = left(T.inputs);
+    const inputsMs = readLeft(T.inputs);
     const soft = <T,>(p: () => Promise<T>): Promise<{ ok: T } | { err: unknown }> =>
       within(p(), inputsMs).then(
         (ok) => ({ ok }),
@@ -627,11 +693,12 @@ export async function runSignalStep(logged: LoggedSlot | null, deps: SignalDeps 
       focus.length ? soft(() => deps.fetchFlow([...new Set([...focus, "SPY", "QQQ"])], edition!)) : Promise.resolve({ err: new Error("no focus") }),
       readHistory(deps, slot.day, path, slot.end, deps.now() + inputsMs).then((ok) => ({ ok })),
     ]);
-    if ("ok" in there && there.ok) return done("exists", mode, focus.length, start, deps);
-    if (!hist.ok.usable && mode === "log") logEvent("desk-signal.history", { outcome: "not-usable" });
+    if ("ok" in there && there.ok) return done("exists", mode, focus.length, start, deps, hhmm);
+    if (!hist.ok.usable && mode === "log") logEvent("desk-signal.history", { outcome: hist.ok.failed ? "read-failed" : "not-usable", slot: hhmm });
+    if ("err" in stamps) logEvent("desk-signal.stamps", { outcome: stamps.err instanceof TimedOut ? "timeout" : "read-failed", slot: hhmm });
     const flow = "ok" in flowGot ? flowGot.ok : null;
     const flowWhy = "ok" in flowGot ? null : flowGot.err instanceof FlowUnavailable ? flowGot.err.why : flowGot.err instanceof TimedOut ? "timeout" : focus.length ? "failed" : "no focus names";
-    if (!flow && focus.length) logEvent("desk-signal.flow", { outcome: flowWhy });
+    if (!flow && focus.length) logEvent("desk-signal.flow", { outcome: flowWhy, slot: hhmm });
 
     // One OPRA chain per focus name with a price, side by side, quoting a followed contract wherever it sits.
     const keepOf = (sym: string): Keep | null => {
@@ -643,7 +710,7 @@ export async function runSignalStep(logged: LoggedSlot | null, deps: SignalDeps 
       }
       return null;
     };
-    const chainsMs = left(T.chains);
+    const chainsMs = readLeft(T.chains);
     const chains: Record<string, ChainRead | null> = {};
     let chainFails = 0;
     await Promise.all(
@@ -662,7 +729,7 @@ export async function runSignalStep(logged: LoggedSlot | null, deps: SignalDeps 
         }
       }),
     );
-    if (chainFails) logEvent("desk-signal.chain", { outcome: "failed", count: chainFails });
+    if (chainFails) logEvent("desk-signal.chain", { outcome: "failed", count: chainFails, slot: hhmm });
 
     const evaluatedAt = deps.now();
     const record = buildSignalRecord({
@@ -675,32 +742,47 @@ export async function runSignalStep(logged: LoggedSlot | null, deps: SignalDeps 
       flowWhy,
       chains,
       history: hist.ok,
+      stampsFailed: "err" in stamps,
     });
     const body = JSON.stringify(record);
 
     // Inside the slot and the budget, or not at all.
     const now = deps.now();
-    if (settledSlotEnd(now) !== slot.end) return done("late", mode, focus.length, start, deps);
-    if (deadline - now < T.write) return done("timeout", mode, focus.length, start, deps);
-    return await write(deps, path, body, mode, focus.length, start, T.write);
+    if (settledSlotEnd(now) !== slot.end) return done("late", mode, focus.length, start, deps, hhmm);
+    if (deadline - now < T.write) return done("timeout", mode, focus.length, start, deps, hhmm);
+    return await write(deps, path, body, mode, focus.length, start, T.write, deadline, hhmm);
   } catch (e) {
-    logEvent("desk-signal", { outcome: "error", error: errName(e) });
+    logEvent("desk-signal", { outcome: "error", slot: hhmm, error: errName(e) });
     return "error";
   }
 }
 
-/** One create-only put. A failure of any kind is a gap: it is never tried again (DEC-0051 section 3). */
-async function write(deps: SignalDeps, path: string, body: string, mode: "dry" | "log", names: number, start: number, limitMs: number): Promise<SignalOutcome> {
+/**
+ * One create-only put. A failure of any kind is a gap: it is never tried again (DEC-0051 section 3). A put that times
+ * out may still land: the path is read back once (within what is left of the budget, never less than LATE_CHECK_MS),
+ * and the outcome is "written" (logged with `landed: "late"`) only when it holds exactly these bytes, "exists" when it
+ * holds another writer's, and "write-timeout" when it is not there or cannot be read. The log line agrees with the store.
+ */
+async function write(deps: SignalDeps, path: string, body: string, mode: "dry" | "log", names: number, start: number, limitMs: number, deadline: number, hhmm: string): Promise<SignalOutcome> {
   try {
     await within(deps.write(path, body), limitMs);
   } catch (e) {
-    if (e instanceof PreconditionFailed) return done("exists", mode, names, start, deps);
-    return done(e instanceof TimedOut ? "write-timeout" : "write-failed", mode, names, start, deps);
+    if (e instanceof PreconditionFailed) return done("exists", mode, names, start, deps, hhmm);
+    if (!(e instanceof TimedOut)) return done("write-failed", mode, names, start, deps, hhmm);
+    let there: string | null = null;
+    try {
+      there = await within(deps.read(path), Math.max(deadline - deps.now(), LATE_CHECK_MS));
+    } catch {
+      there = null;
+    }
+    if (there === body) return done("written", mode, names, start, deps, hhmm, { landed: "late" });
+    if (there !== null) return done("exists", mode, names, start, deps, hhmm, { landed: "late" });
+    return done("write-timeout", mode, names, start, deps, hhmm);
   }
-  return done("written", mode, names, start, deps);
+  return done("written", mode, names, start, deps, hhmm);
 }
 
-function done(outcome: SignalOutcome, mode: "dry" | "log", names: number, start: number, deps: SignalDeps): SignalOutcome {
-  logEvent("desk-signal", { outcome, mode, names, ms: deps.now() - start });
+function done(outcome: SignalOutcome, mode: "dry" | "log", names: number, start: number, deps: SignalDeps, hhmm: string, extra: Record<string, unknown> = {}): SignalOutcome {
+  logEvent("desk-signal", { outcome, mode, slot: hhmm, names, ms: deps.now() - start, ...extra });
   return outcome;
 }

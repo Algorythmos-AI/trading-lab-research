@@ -3,7 +3,9 @@
 // `quotes-suspect` variant's) is run with every way the switches can be off, and the board's rows, the board as drawn,
 // the page's other surfaces (the hero, the glance chips and tiles, the status rail, each ladder, the manage card of an
 // open trade) and the server's evaluation with its record's engine fields must hash exactly as the code before the
-// guards made them (guards-off.golden.json, written by guards-off-run.ts on origin/integration 61f46e6).
+// guards made them (guards-off.golden.json, written by guards-off-run.ts on origin/integration 61f46e6). DEC-0052
+// changed the board's rule: the hashes were rewritten by the same run on 61f46e6 with that rule applied to it (still
+// code with no guards), so the proof still compares against code that never had them.
 import { describe, expect, it, vi } from "vitest";
 import { ALL_OFF, parseGuardSwitches } from "@/lib/desk-guards";
 import type { EvalInput } from "@/lib/desk-eval";

@@ -29,6 +29,7 @@ import {
   ticketEstimates,
   usd,
 } from "@/lib/ticket";
+import { sameDay } from "@/lib/ticket-same-day";
 import { chainMatches, judgeQuote, occSymbol, ticketCheck } from "@/lib/option-value";
 import { chainFresh, chainPx } from "@/lib/what-if";
 import { cn } from "@/lib/utils";
@@ -203,7 +204,7 @@ export function TicketBody({ symbol, plan, live, typed, onType }: TicketProps & 
 
       {size === null ? <LimitTable /> : <SizeBlock size={size} />}
 
-      {size !== null && size.contracts > 0 ? <EstimateBlock symbol={symbol} plan={plan} live={live} typed={typed} onType={onType} paidCents={size.priceCents} contracts={size.contracts} riskCents={size.riskCents} /> : null}
+      {size !== null && size.contracts > 0 ? <EstimateBlock symbol={symbol} plan={plan} live={live} typed={typed} onType={onType} paidCents={size.priceCents} contracts={size.contracts} riskCents={size.riskCents} stopCents={size.stopCents} /> : null}
 
       <p className={SMALL}>
         Your rules worked out, not advice: ${MAX_PREMIUM} premium cap, ${RISK_PER_TRADE} at the stop with fees, stop at −{stopPct}%. Nothing here
@@ -333,7 +334,8 @@ function EstimateBlock({
   paidCents,
   contracts,
   riskCents,
-}: TicketProps & { typed: TicketTyped; onType: (t: Partial<TicketTyped>) => void; paidCents: number; contracts: number; riskCents: number }) {
+  stopCents,
+}: TicketProps & { typed: TicketTyped; onType: (t: Partial<TicketTyped>) => void; paidCents: number; contracts: number; riskCents: number; stopCents: number }) {
   const ids = useId();
   const view = useLadderLive(live);
   const spot = view.dot?.kind === "live" ? view.dot.price : null;
@@ -369,6 +371,8 @@ function EstimateBlock({
       { key: "t1", label: "At T1", price: plan.target1 },
     ],
   });
+  // A contract that expires today: say so, and which stop fires first, from the typed price only (never a guess).
+  const today = expiry ? sameDay(expiry, now, { priceCents: paidCents, contracts, stopCents, riskCents }, est?.rows.find((r) => r.key === "stop")) : null;
   const quoted = fresh && strike !== null ? listed.find((c) => c.strike === strike) : undefined;
   const q = quoted ? readQuote(quoted) : null;
   const oldAsk = quoted && q && (q.state === "ok" || q.state === "no-bid") && quoted.ask !== null ? quoted.ask : null;
@@ -428,6 +432,25 @@ function EstimateBlock({
         <p className="text-warn text-explain font-medium" data-ticket-expiry-note>
           {pick.note}
         </p>
+      ) : null}
+      {today ? (
+        <div className="border-warn/60 grid gap-1 rounded-md border px-3 py-2" data-ticket-same-day>
+          <p className="text-warn font-semibold">{today.line}</p>
+          {today.compare ? (
+            <p className="text-foreground text-explain" data-ticket-same-day-compare={today.compare.first}>
+              {/* Each amount stays whole on a line: "≈ −$45.11" never splits at its minus sign. */}
+              {today.compare.text.split(/((?:≈ )?−?\$[\d,]+\.\d\d)/).map((part, i) =>
+                i % 2 ? (
+                  <span key={i} className="whitespace-nowrap">
+                    {part}
+                  </span>
+                ) : (
+                  part
+                ),
+              )}
+            </p>
+          ) : null}
+        </div>
       ) : null}
       {strikes.length ? (
         <div className="grid gap-1">

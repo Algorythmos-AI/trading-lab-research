@@ -105,7 +105,8 @@ export interface GateInput {
   /** The flow answer's checked age (flow-request.ts), ms; null when it cannot be judged. */
   flowAgeMs: number | null;
   chain: ChainResponse | null;
-  /** The chain answer's checked age (option-value.ts checkedAgeMs), ms. */
+  /** The chain answer's checked age (DEC-0051 section 2; contract.ts chainAge): the chain's newest quote against when
+   * the answer was served, plus the time since it arrived, ms. */
   chainAgeMs: number | null;
   calendar?: EventCalendar;
   sessions?: FlowCalendar;
@@ -527,7 +528,8 @@ export interface LifecycleInput {
   rowState: NameStateName;
   word: SignalWordName;
   slotEnd: number;
-  /** When the slot was evaluated (the flow answer's `as_of`), ms: the bar forming then counts the retest window. */
+  /** The time the retest window is counted at, ms: the bar forming then counts. The writer passes the slot's end +
+   * CLOSE_GRACE_MS (signal-run.ts), as the board counts it. */
   evaluatedAt: number;
 }
 

@@ -42,7 +42,7 @@ export function KillNotice({ s }: { s: Snapshot }) {
     <section aria-label="Kill switch" className="bg-warn-soft border-warn/35 flex items-start gap-3 rounded-lg border px-4 py-3">
       <Power aria-hidden className={cn("mt-0.5 size-4 shrink-0", TONE_TEXT.warn)} />
       <div className="min-w-0 text-sm">
-        <p className="font-medium">Kill switch is on: paper B will not open new trades.</p>
+        <p className="font-medium">Kill switch is on: Robot B (paper) will not open new trades.</p>
         <p className="text-muted-foreground mt-0.5 text-[0.8125rem]">
           {s.kill.reason ? `${s.kill.reason} ` : ""}
           Since {sydney(s.kill.since)} Sydney. Exits are still managed. Removing the switch is done on the host, not here.

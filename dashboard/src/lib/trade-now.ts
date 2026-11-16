@@ -9,7 +9,7 @@ import { focusPlan, type SidePlan } from "./focus-plan";
 import { sessionView, type JournalDoc } from "./journal";
 import { closeMinute, type LiveQuote, nyClock, OPEN_MIN, type Options, type OptionsTicker, type TrailPoint } from "./options";
 import { DAY_LOSS_LIMIT, dayCheck, MAX_TRADES_PER_DAY, MIN_ROOM_MULTIPLE, PREMIUM_STOP, RISK_PER_TRADE } from "./trade-rules";
-import { type AltTrigger, atr2m, BAR_MINUTES, type Bar2, bars2m, flatMinute, FIRST_ENTRY_MIN, mergeBars, MAX_BARS_TO_RETEST, type NameState, type NameStateName, nameState, SERVER_SETTLE_MS } from "./trade-state";
+import { type AltTrigger, atr2m, BAR_MINUTES, type Bar2, bars2m, flatMinute, FIRST_ENTRY_MIN, mergeBars, MAX_BARS_TO_RETEST, type NameState, type NameStateName, nameState, retestRisk, SERVER_SETTLE_MS } from "./trade-state";
 import { BARS_STALE_MS, type BarsFeed } from "./bars-feed";
 import { LEADERS, type Side } from "./entry-checks";
 import type { GuardReason } from "./quote-guards";
@@ -340,10 +340,14 @@ export function rowView(s: NameState): RowView {
   if (s.state === "paused") return { badge: badge(STATE_WORD.paused, "neutral"), testing: false, headline: plain, grid: null };
   if (s.state === "enter_zone" && s.side && s.plan) {
     const p = s.plan;
+    // DEC-0052: the confirming close, and the risk line against the card's own numbers (which stay as they are)
+    const c = (s.side === "call" ? s.call : s.put)?.confirmClose;
+    const at = c !== undefined ? `at ${p2(c)}` : `${s.side === "call" ? "above" : "below"} ${p.level !== null ? p2(p.level) : "the level"}`;
+    const risk = c !== undefined ? retestRisk(c, s.side, p.entry, p.stop) : null;
     return {
       badge: badge(STATE_WORD.enter_zone, "good", s.side),
       testing: false,
-      headline: `Retest holding ${p.level !== null ? p2(p.level) : "the level"}: ${s.side} setup ready`,
+      headline: `Retest confirmed ${at}: ${s.side} setup ready${risk ? `. ${risk}` : ""}`,
       grid: { enter: p.entry !== null ? `~${p2(p.entry)}` : "–", stop: p.stop !== null ? `${p2(p.stop)} or ${stopShare}` : stopShare, target: p.target1 !== null ? p2(p.target1) : null },
     };
   }

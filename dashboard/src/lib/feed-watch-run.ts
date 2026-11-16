@@ -28,6 +28,9 @@ import { feedVariant } from "./fixture-variants";
 import { type IngestRejectKind, readIngestRejectStatus } from "./ingest-reject";
 import { logEvent } from "./log";
 import { sendNtfy, type Notice } from "./ntfy";
+import type { OptionsEdition } from "./options.types";
+import { withStoredPremarket } from "./premarket";
+import { OPTIONS_PATHS } from "./desk";
 import { fixtureFlags, fixtureMode, type JournalResult, type LedgerResult, type OptionsResult, type RadarResult } from "./snapshot";
 
 // The feed watch's tick (GET /api/cron/watchdog, after the desks' ticks): read every document the feed table names,
@@ -122,6 +125,23 @@ export async function readFeedInputs(deps: FeedWatchDeps, nowMs: number, table: 
   return { docs: Object.fromEntries(docs), refusals: Object.fromEntries(refusals), shadow };
 }
 
+/**
+ * The Options edition as the pages read it (snapshot.ts loadOptions): with its session's kept pre-market check put
+ * back (./premarket), so the pre-open row and the pages agree after a re-run of the evening pick. The text itself
+ * when nothing is put back, when it is not an edition, or when the side file cannot be read.
+ */
+async function withKeptPremarketText(text: string): Promise<string> {
+  let e: unknown;
+  try {
+    e = JSON.parse(text);
+  } catch {
+    return text;
+  }
+  if (e === null || typeof e !== "object" || Array.isArray(e)) return text;
+  const merged = await withStoredPremarket(e as OptionsEdition, readTextIfChanged, (err) => logEvent("feed-watch.read", { outcome: "error", desk: "options-premarket", error: errName(err) }));
+  return merged === e ? text : JSON.stringify(merged);
+}
+
 /** The production reads: the private store and ntfy. */
 export async function readShadowFromStore(nowMs: number): Promise<ShadowRead> {
   const raw = (await readText(DESK_EVAL_PATH))?.text ?? null;
@@ -142,7 +162,10 @@ async function readRefusalFromStore(kind: IngestRejectKind): Promise<RefusalRead
 
 export function blobFeedDeps(): FeedWatchDeps {
   return {
-    readDoc: async (path) => (await readTextIfChanged(path))?.text ?? null,
+    readDoc: async (path) => {
+      const text = (await readTextIfChanged(path))?.text ?? null;
+      return path === OPTIONS_PATHS.latest && text !== null ? withKeptPremarketText(text) : text;
+    },
     readRefusal: readRefusalFromStore,
     readShadow: readShadowFromStore,
     readState: () => readForUpdate(FEED_ALERT_PATH),

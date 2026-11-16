@@ -5,7 +5,7 @@ import { entries, list, type JobResult, type Snapshot } from "./types";
 
 const SHORT: Record<string, string> = {
   routine: "routine",
-  "paper-b": "paper B",
+  "paper-b": "Robot B",
   forward: "forward test",
   weekly: "weekly scorecard",
   dashboard: "dashboard publish",
@@ -21,7 +21,7 @@ function clause(key: string, job: JobResult, s: Snapshot): string | null {
   switch (status) {
     case "ok": {
       if (key === "paper-b") {
-        return `paper B finished normally${s.kill?.on === true ? " with entries paused (kill switch)" : ""}`;
+        return `Robot B finished normally${s.kill?.on === true ? " with entries paused (kill switch)" : ""}`;
       }
       if (key === "forward") {
         const n = s.ops?.forward?.sessions;

@@ -7,6 +7,17 @@ import { KEY_ID_RE, decideScope, parseScopes } from "./ingest-scope";
 import { recordIngestReject, type IngestRejectKind } from "./ingest-reject";
 import { logEvent } from "./log";
 import { parseTime } from "./freshness";
+import type { OptionsEdition } from "./options.types";
+import {
+  focusFrozen,
+  parseStoredPremarket,
+  premarketIsNewer,
+  premarketOf,
+  premarketPath,
+  sameApartFromPremarket,
+  storedPremarketText,
+  within,
+} from "./premarket";
 import {
   contractOf,
   isCalendar,
@@ -313,6 +324,11 @@ interface EditionKind {
   /** `copies`: every edition that became latest is also kept once, with the store's receipt time (writeCopy). */
   paths: { latest: string; history?: string; copies?: string };
   validate: (data: unknown) => { ok: true; runId: string | null; asOf: string | null; date: string } | { ok: false; errors: string[] };
+  /**
+   * The Options edition only (./premarket): its pre-market check is also kept on its own, and from 09:25 New York on
+   * its session it may replace that session's edition only when nothing but its run, time and check differ.
+   */
+  focus?: true;
 }
 
 const RADAR_EDITION: EditionKind = {
@@ -327,6 +343,7 @@ const RADAR_EDITION: EditionKind = {
 const OPTIONS_EDITION: EditionKind = {
   desk: "options",
   paths: OPTIONS_PATHS,
+  focus: true,
   validate: (data) => {
     const r = validateOptionsEdition(data);
     return r.ok ? { ok: true, runId: r.edition.run_id ?? null, asOf: r.edition.as_of ?? null, date: r.edition.session } : r;
@@ -409,6 +426,9 @@ async function storeEdition(kind: EditionKind, text: string, data: unknown, done
     return refuse("invalid", ["/run_id and /as_of must be set; as_of must be a timestamp"], {});
   }
   if (isAheadOfClock(result.asOf, nowMs)) return refuse("ahead-of-clock", [AHEAD_ERROR], { desk });
+  // Before the edition's own write and whatever its answer, so that a check the freeze refuses with its edition is
+  // still kept, and a re-run of the evening pick cannot take it away.
+  if (kind.focus) await keepPremarket(data as OptionsEdition, nowMs);
   try {
     for (let attempt = 0; attempt < 2; attempt++) {
       const current = await readForUpdate(paths.latest);
@@ -425,6 +445,21 @@ async function storeEdition(kind: EditionKind, text: string, data: unknown, done
           // Only a stored document ordered beyond the clock's allowance gives way; every other older edition is refused.
           if (!storedAhead(meta.asOf, nowMs)) return done(409, "older", { status: "older", run_id: runId }, { run_id: runId, desk });
           supersedes = true;
+        }
+      }
+      if (kind.focus && focusFrozen(date, now)) {
+        // The session's edition as the desk opened with it: latest when it is that session's, else the session's own
+        // dated file (latest may hold another session's edition, from a manual send or a backfill).
+        const fromLatest = current ? parsedObject(current.text) : null;
+        const held =
+          fromLatest && fromLatest.session === date
+            ? fromLatest
+            : paths.history
+              ? parsedObject((await readForUpdate(`${paths.history}${date}.json`))?.text ?? "")
+              : null;
+        if (held && held.session === date && !sameApartFromPremarket(held, data)) {
+          await recordIngestReject({ at: now.toISOString(), kind: desk, outcome: "frozen", n_errors: 1 });
+          return done(409, "frozen", { status: "frozen", run_id: runId }, { run_id: runId, desk, session: date });
         }
       }
       // Started beside the write, never awaited before it: whether the edition this write replaces has a copy.
@@ -458,6 +493,56 @@ async function storeEdition(kind: EditionKind, text: string, data: unknown, done
     return done(502, "storage-error", { error: "storage unavailable" }, { error: e instanceof Error ? e.name : "unknown", desk });
   }
   return done(503, "conflict", { status: "conflict", run_id: runId }, { run_id: runId, desk });
+}
+
+function parsedObject(text: string): Record<string, unknown> | null {
+  try {
+    const v: unknown = JSON.parse(text);
+    return v !== null && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Keeps the edition's pre-market check in options/premarket/<session>.json when it is later than the one kept (by
+ * the check's own as_of; one dated ahead of the clock is not kept). Best effort: never throws, each store call is
+ * capped at PREMARKET_IO_MS, one log line per outcome, and it never changes what the ingest answers.
+ */
+async function keepPremarket(e: OptionsEdition, nowMs: number): Promise<void> {
+  const next = premarketOf(e);
+  if (!next) return;
+  if (isAheadOfClock(next.as_of, nowMs)) {
+    logEvent("ingest.premarket", { outcome: "ahead-of-clock", session: next.session });
+    return;
+  }
+  const text = storedPremarketText(next);
+  // Only a check the reader can read back is kept: one it would drop must not replace a good one.
+  if (parseStoredPremarket(text) === null) {
+    logEvent("ingest.premarket", { outcome: "unreadable", session: next.session });
+    return;
+  }
+  const path = premarketPath(next.session);
+  try {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const current = await within(readForUpdate(path));
+      const stored = current ? parseStoredPremarket(current.text) : null;
+      if (current && stored && !premarketIsNewer(next, stored)) {
+        logEvent("ingest.premarket", { outcome: "not-newer", session: next.session });
+        return;
+      }
+      try {
+        await within(writeText(path, text, current ? { ifMatch: current.etag } : { createOnly: true }));
+        logEvent("ingest.premarket", { outcome: "stored", session: next.session, n: next.items.length });
+        return;
+      } catch (err) {
+        if (err instanceof PreconditionFailed && attempt === 0) continue;
+        throw err;
+      }
+    }
+  } catch (err) {
+    logEvent("ingest.premarket", { outcome: "error", session: next.session, error: err instanceof Error ? err.name : "unknown" });
+  }
 }
 
 /**

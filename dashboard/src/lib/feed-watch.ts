@@ -281,7 +281,7 @@ export interface RefusalRead {
   current: boolean;
   /** When it was refused (ISO), or null when none is recorded. */
   at: string | null;
-  outcome: "invalid" | "ahead-of-clock" | null;
+  outcome: "invalid" | "ahead-of-clock" | "frozen" | null;
 }
 
 export interface ShadowRead {
@@ -1135,6 +1135,7 @@ export function unreadableNotice(v: FeedView, runs: number, now: Date, table: re
 const OUTCOME_WORDS: Record<NonNullable<RefusalRead["outcome"]>, string> = {
   invalid: "it did not match its format",
   "ahead-of-clock": "its time was ahead of the clock",
+  frozen: "it would have replaced the session's edition after 09:25 New York with different names, levels or data, so the desk keeps the one it opened with",
 };
 
 export function refusedNotice(v: FeedView, now: Date, table: readonly FeedRow[] = FEEDS): Notice {
