@@ -39,13 +39,16 @@ import { bellMinute } from "@/lib/contract";
 import { chainFresh, chainPx, chainStamp, contractQuoteTime, entryStopDistance, fromEntryLabel, heldOrAtm, lossFromEntry, type RoomAfterStop, roomAfterStop, stopDistance } from "@/lib/what-if";
 import { checkOptionFill, type FillStop, fillStop, INVITE_LINE, journalDayCache, lossLine, nickelLine, prefillFrom, otherOpenPositions, STOP_OWN_TICK, STOP_PLACED, STOP_REMINDER, stopFromLine, tickLine } from "@/lib/manage-stop";
 import { type DayFacts, journalLive } from "@/lib/session-timeline";
-import { heldContract, heldTiles, heldValue, judgeQuote, lotsContract, notAvailable, quoteLine, type HeldTiles } from "@/lib/option-value";
+import { heldContract, type HeldLot, heldTiles, heldValue, type HeldValue, judgeQuote, lotsContract, notAvailable, quoteLine, type HeldTiles } from "@/lib/option-value";
+import { type OpenMarks, openMarks, quoteKey, readThinQuote, roomLabel, roomText, stockStopExit, stopCentsOf, THIN_LINE, withClosedStopLine, withPremiumStop, withThinQuote } from "@/lib/held-marks";
+import { checkContract, contractKey, CONTRACT_PREFIX, type NoteContract, noteHeldLots, parseContracts } from "@/lib/note-contract";
 import { usd } from "@/lib/ticket";
 import { ticketPrice } from "./ticket-memo";
 import { TestingTag } from "./trade-now";
 import { type ChainFeed, useChain } from "./use-chain";
 import { useContractQuote } from "./use-contract-quote";
 import { useNow, usePerfNow } from "./use-now";
+import { forgetValue, fromNoteOf, recordStopOnly, recordThin, recordValue, recordWithheld, stopFired, thinOf, useHeldVersion, valueOf } from "./held-store";
 
 type Item = NonNullable<Options["focus"]>["items"][number];
 
@@ -127,6 +130,48 @@ function useNotes(day: string | null): ManualNote[] {
   return useMemo(() => parseNotes(raw), [raw]);
 }
 
+// ---- the contract a note names, kept beside the notes (note-contract.ts) --------------------------------------------
+const contractFallback = new Map<string, string>();
+
+export function readContracts(day: string): string {
+  try {
+    return window.localStorage.getItem(contractKey(day)) ?? contractFallback.get(day) ?? "";
+  } catch {
+    return contractFallback.get(day) ?? "";
+  }
+}
+
+/** Save the contract a note names (or forget it), and drop every other day's: never older than its session. */
+export function writeContract(day: string, id: string, c: NoteContract | null) {
+  const all = parseContracts(readContracts(day));
+  if (c) all[id] = c;
+  else delete all[id];
+  const raw = JSON.stringify(all);
+  try {
+    const ls = window.localStorage;
+    for (let i = ls.length - 1; i >= 0; i--) {
+      const k = ls.key(i);
+      if (k && k.startsWith(CONTRACT_PREFIX) && k !== contractKey(day)) ls.removeItem(k);
+    }
+    if (Object.keys(all).length) ls.setItem(contractKey(day), raw);
+    else ls.removeItem(contractKey(day));
+    contractFallback.delete(day);
+  } catch {
+    contractFallback.set(day, raw);
+  }
+  for (const k of [...contractFallback.keys()]) if (k !== day) contractFallback.delete(k);
+  window.dispatchEvent(new Event(NOTES_EVENT));
+}
+
+function useContracts(day: string | null): Record<string, NoteContract> {
+  const raw = useSyncExternalStore(
+    subscribeNotes,
+    () => (day ? readContracts(day) : ""),
+    () => "",
+  );
+  return useMemo(() => parseContracts(raw), [raw]);
+}
+
 // ---- the card as drawn ----------------------------------------------------------------------------------------------
 /** One small figure: the trail, the flat-by time. */
 function Small({ label, value, note, tone, data }: { label: string; value: string; note?: string; tone?: string; data?: string }) {
@@ -191,12 +236,16 @@ function OptionAtStop({ v, ctx, feed }: { v: ManageView; ctx: ChainContext; feed
 
 /** The trade's own journal lots, for the live option value, and whether the journal is current enough for a position total. */
 export interface CardHeld {
-  lots: readonly Lot[];
+  lots: readonly HeldLot[];
   journalCurrent: boolean;
+  /** The lot is the note's own (its typed fill and the contract it names), not yet the journal's. */
+  fromNote?: boolean;
+  /** The trade's fill time, ms: a −25% stop that fired before it was an earlier trade's (held-store.ts). */
+  entryAt?: number;
 }
 
 /** The held contract's live value, or why it is withheld; null when the journal names no one contract (no line at all). */
-type HeldShown = { kind: "ok"; tiles: HeldTiles; quote: string } | { kind: "withheld"; line: string } | null;
+type HeldShown = { kind: "ok"; tiles: HeldTiles; value: HeldValue; quote: string } | { kind: "withheld"; line: string } | null;
 
 /**
  * The live value of the one contract a journal position names (option-value.ts): its OCC symbol built from the lots'
@@ -213,18 +262,72 @@ function useHeldValue(v: ManageView, held: CardHeld | undefined, ctx: ChainConte
   const r = named && chain.status === "ok" ? heldContract(v.symbol, v.side, held!.lots, chain.chain) : null;
   const occ = r?.ok ? r.held.occ : "";
   const { feed, shownPerf } = useContractQuote(occ, occ !== "");
-  if (!r?.ok) return null;
-  const j = judgeQuote({ feed, occ, perfNow, wallNow: wall === null ? null : wall + 1_000, shownPerf });
+  const j = r?.ok ? judgeQuote({ feed, occ, perfNow, wallNow: wall === null ? null : wall + 1_000, shownPerf }) : null;
+  const value = r?.ok && j?.ok ? heldValue(r.held, j.q, held!.journalCurrent) : null;
+  // The value goes to the board (held-store.ts), for the −25% stop and the day pill. The stop counts upstream quotes,
+  // not polls: the key is the quote's own time and prices, so a quote the route re-serves from its cache, or another
+  // server instance fetches again, counts once. The fixture's quotes carry a fixed time, so there each poll is its own.
+  const cq = feed.status === "ok" && occ ? feed.answer.contracts[occ] : undefined;
+  const key = feed.status !== "ok" || !occ ? null : feed.answer.fixture ? `fx|${feed.sentPerf}` : quoteKey(cq);
+  const day = ctx?.session ?? null;
+  const withheld = !!r?.ok && !!j && !j.ok;
+  // A fresh quote withheld from the value (one-sided, a zero bid, crossed, too wide), read against the stop.
+  const stopCents = r?.ok ? stopCentsOf(r.held) : null;
+  const thin = withheld && j && !j.ok ? readThinQuote(j.why, cq?.bid, cq?.ask, stopCents) : null;
+  const thinKind = thin?.kind ?? null;
+  const thinTo = thin && thin.kind !== "thin" ? thin.toStopCents : null;
+  const entryAt = held?.entryAt ?? NaN;
+  const fromNote = held?.fromNote === true;
+  // The card names a contract but its name's chain is not read (off, failing, or still loading): the stop is not watched.
+  const unwatched = !!named && chain.status !== "ok";
+  // Said at once when the chain is off or failing; while it loads, after a grace (a first load takes a few seconds).
+  const [graceOver, setGraceOver] = useState(false);
+  useEffect(() => {
+    if (!unwatched) return;
+    const t = window.setTimeout(() => setGraceOver(true), UNWATCHED_GRACE_MS);
+    return () => {
+      window.clearTimeout(t);
+      setGraceOver(false);
+    };
+  }, [unwatched]);
+  const unwatchedSaid = unwatched && (chain.status === "error" || chain.status === "off" || graceOver);
+  useEffect(() => {
+    if (value && key !== null && day && occ) recordValue({ day, id: v.id, occ, entryAt, value, key, fromNote });
+    else if (thinTo !== null && key !== null && day && occ) recordStopOnly(v.id, fromNote, { day, occ, entryAt, stopCents, toStopCents: thinTo, key });
+    else if (thinKind === "thin") recordThin(v.id, fromNote);
+    else if (withheld || unwatched) recordWithheld(v.id);
+  }, [day, v.id, occ, entryAt, key, value, withheld, unwatched, thinKind, thinTo, stopCents, fromNote]);
+  useEffect(() => () => forgetValue(v.id), [v.id]);
+  // A contract the trade names that this name's chain does not list (a strike or expiry far from the price): said,
+  // never left silent, since its −25% stop cannot be watched here.
+  if (named && r && !r.ok && r.why === "not-in-chain") return { kind: "withheld", line: NOT_IN_CHAIN };
+  if (unwatchedSaid) return { kind: "withheld", line: CHAIN_UNREAD };
+  if (!r?.ok || !j) return null;
   if (!j.ok) return { kind: "withheld", line: notAvailable(j.why) };
-  return { kind: "ok", tiles: heldTiles(heldValue(r.held, j.q, held!.journalCurrent)), quote: quoteLine(j.q) };
+  return { kind: "ok", tiles: heldTiles(value!), value: value!, quote: quoteLine(j.q) };
 }
 
+/** Whether the −25% stop of the contract the card holds has fired for this trade (held-store.ts). */
+function heldStopFired(v: ManageView, held: CardHeld | undefined, ctx: ChainContext | undefined): boolean {
+  const lc = held ? lotsContract(v.symbol, v.side, held.lots) : null;
+  return stopFired(ctx?.session ?? null, lc?.ok ? lc.held.occ : null, held?.entryAt ?? NaN, lc?.ok ? stopCentsOf(lc.held) : null);
+}
+
+/** How long a chain may load before the card says its −25% stop is not watched. */
+const UNWATCHED_GRACE_MS = 15_000;
+
+const CHAIN_UNREAD = "Live option value not available: the option chain is not read here now, so your −25% stop is not watched. Watch it in Webull.";
+
+const NOT_IN_CHAIN ="Live option value not available: your contract is not in the option chain read here. Check its strike and expiry, and watch your −25% stop in Webull.";
+
 /**
- * Whether the card asks for its name's chain: only with a fresh price and the board's clock, never on a CHECK card.
- * One chain feed per card serves the estimate at the stop and the held contract's check alike.
+ * Whether the card asks for its name's chain: only with a fresh price and the board's clock, never on a CHECK card,
+ * except the CHECK a thin option quote puts there (held-marks.ts withThinQuote): that card must keep reading its quote,
+ * or the CHECK would switch off the very feed that clears it. One chain feed per card serves the estimate at the stop
+ * and the held contract's check alike.
  */
 function chainOn(v: ManageView, ctx: ChainContext | undefined): ctx is ChainContext {
-  return !!ctx && v.action !== "check" && v.price !== null && ctx.now !== null;
+  return !!ctx && (v.action !== "check" || v.line === THIN_LINE) && v.price !== null && ctx.now !== null;
 }
 
 /**
@@ -240,7 +343,7 @@ export function cardAsksChain(v: ManageView, ctx: ChainContext | undefined, held
  * The held contract's panel: four figures in the card's own grid (what a contract sells for now, its P&L, the
  * position's P&L when the journal is current, the bid's room above the −25% stop) and the quote they came from.
  */
-function HeldBlock({ shown }: { shown: NonNullable<HeldShown> }) {
+function HeldBlock({ shown, hit = false, fromNote = false }: { shown: NonNullable<HeldShown>; hit?: boolean; fromNote?: boolean }) {
   if (shown.kind === "withheld")
     return (
       <p data-manage-value="withheld" className="text-explain text-muted-foreground">
@@ -255,7 +358,7 @@ function HeldBlock({ shown }: { shown: NonNullable<HeldShown> }) {
   const lead = t.total !== null ? t.totalTone : t.pnlTone;
   const edge = lead === "good" ? "border-l-good-fill bg-good-soft" : lead === "bad" ? "border-l-bad-fill bg-bad-soft" : "border-l-border bg-muted/40";
   const bar = t.roomBand === "hit" ? "bg-bad-fill" : t.roomBand === "near" ? "bg-warn-fill" : "bg-good-fill";
-  const roomText = t.roomBand === "hit" ? "text-bad" : t.roomBand === "near" ? "text-warn" : "text-foreground";
+  const roomTone = t.roomBand === "hit" ? "text-bad" : t.roomBand === "near" ? "text-warn" : "text-foreground";
   return (
     <section data-manage-value="live" data-manage-value-tone={lead ?? "flat"} aria-label="Your option now" className={cn("grid gap-3 rounded-md border border-l-4 p-3", edge)}>
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -275,15 +378,17 @@ function HeldBlock({ shown }: { shown: NonNullable<HeldShown> }) {
       {t.room !== null && t.roomShare !== null ? (
         <div data-manage-value-stop data-manage-value-band={t.roomBand ?? undefined} className="grid gap-1">
           <div className="flex items-baseline justify-between gap-3">
-            <span className="text-explain text-muted-foreground font-medium">Bid above the −25% stop</span>
-            <span className={cn("text-live font-mono font-semibold tabular-nums", roomText)}>{t.room}</span>
+            <span data-manage-value-stop-label className={cn("text-explain font-medium", hit ? "text-bad" : "text-muted-foreground")}>
+              {roomLabel(shown.value.toStopCents!, hit)}
+            </span>
+            <span className={cn("text-live font-mono font-semibold tabular-nums", roomTone)}>{roomText(shown.value.toStopCents!)}</span>
           </div>
           <div className="bg-muted h-2 overflow-hidden rounded-full" role="img" aria-label={t.roomBand === "hit" ? "The bid is at or under the stop" : t.roomBand === "near" ? "The bid is near the stop" : "The bid is clear of the stop"}>
             <div className={cn("h-full rounded-full", bar)} style={{ width: `${Math.max(4, Math.round(t.roomShare * 100))}%` }} />
           </div>
           <div className="text-muted-foreground flex justify-between text-[0.6875rem] max-sm:text-xs">
             <span>stop {t.stopText}</span>
-            <span>paid {t.paidText} (your journal average)</span>
+            <span>paid {t.paidText} ({fromNote ? "your noted fill" : "your journal average"})</span>
           </div>
         </div>
       ) : null}
@@ -332,7 +437,10 @@ export function ManageCard({
   // The card's one chain feed, for the estimate at the stop and for the held contract's check: asked for while the
   // card has a fresh price and is not a CHECK, and either has a stop to measure or holds a contract the journal names.
   const asks = cardAsksChain(v, ctx, held);
-  const keep = v.contract ? `${v.contract.expiry}:${v.contract.strike}` : "";
+  // The contract the chain must carry: the journal's, or the one a note names (else a strike or expiry far from the
+  // price would fall outside the chain's window).
+  const own = held?.fromNote ? held.lots[0] : undefined;
+  const keep = v.contract ? `${v.contract.expiry}:${v.contract.strike}` : own?.expiry && own.strike ? `${own.expiry}:${own.strike}` : "";
   const { feed: chain } = useChain(v.symbol, asks ? chainPx(ctx!.close, v.price) : null, asks, keep);
   const value = useHeldValue(v, held, ctx, chain);
   return (
@@ -402,7 +510,14 @@ export function ManageCard({
       <dl className="grid max-w-2xl grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4" data-manage-grid>
         <Big label="Stop" value={v.m.stop !== null ? v.m.stop.toFixed(2) : "–"} size="price" note={v.cardEntry && v.stopAtEntry ? CARD_ENTRY : undefined} data="stop" />
         {dist !== null ? (
-          <Big label={`${v.symbol} to the stop`} value={dist > 0 ? `$${dist.toFixed(2)}` : "at the stop"} size="live" tone={dist > 0 ? undefined : "text-bad"} data="distance" />
+          <Big
+            label={`${v.symbol} to the stop`}
+            value={dist > 0 ? `$${dist.toFixed(2)}` : "at the stop"}
+            size="live"
+            tone={dist > 0 ? undefined : "text-bad"}
+            note={dist > 0 && stockStopExit(v) ? "a close already crossed it" : undefined}
+            data="distance"
+          />
         ) : null}
         {ctx ? <OptionAtStop v={v} ctx={ctx} feed={chain} /> : null}
         {counting ? (
@@ -416,7 +531,7 @@ export function ManageCard({
           />
         ) : null}
       </dl>
-      {value?.kind === "ok" ? <HeldBlock shown={value} /> : null}
+      {value?.kind === "ok" ? <HeldBlock shown={value} hit={heldStopFired(v, held, ctx)} fromNote={held?.fromNote === true} /> : null}
       <dl className="grid max-w-2xl grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-4" data-manage-small-grid>
         <Small label="Trail (EMA9)" value={v.m.trail !== null ? v.trailText : "–"} note={v.m.trail !== null ? undefined : v.trailText} data="trail" />
         {counting ? null : <Small label="Not working in" value={v.notWorkingText} data="not-working" />}
@@ -451,17 +566,20 @@ export function ImInForm({
   session: string;
   halfDay: boolean;
   movedOn?: string | null;
-  onSave: (note: ManualNote) => void;
+  onSave: (note: ManualNote, contract: NoteContract | null) => void;
   onCancel: () => void;
 }) {
   const id = useId();
   const [typed, setTyped] = useState(live !== null ? live.toFixed(2) : "");
+  // The contract, so the card can watch the −25% stop on its own quotes before the journal shows the trade.
+  const [strike, setStrike] = useState("");
+  const [expiry, setExpiry] = useState(session);
   const [time, setTime] = useState(f.time);
   // Opened by a click, so this reads the tab's memory only in the browser: the ticket's price for this name and side.
   const [pre] = useState(() => prefillFrom(ticketPrice(f.symbol, f.side)));
   const [opt, setOpt] = useState(pre?.price ?? "");
   const [count, setCount] = useState(pre?.contracts ?? "");
-  const [error, setError] = useState<{ field: "px" | "at" | "opt" | "n"; text: string } | null>(null);
+  const [error, setError] = useState<{ field: "px" | "at" | "opt" | "n" | "k"; text: string } | null>(null);
   const save = () => {
     const r = checkFill(typed, live);
     if (!r.ok) return setError({ field: "px", text: r.error });
@@ -469,8 +587,10 @@ export function ImInForm({
     if (!t.ok) return setError({ field: "at", text: t.error });
     const o = checkOptionFill(opt, count);
     if (!o.ok) return setError({ field: o.field, text: o.error });
+    const k = checkContract(strike, expiry, session);
+    if (!k.ok) return setError({ field: "k", text: k.error });
     setError(null);
-    onSave(noteFromForm(f, r.price, t.at, o.fill));
+    onSave(noteFromForm(f, r.price, t.at, o.fill), k.contract);
   };
   // On a phone a field is 44 px tall at 16 px, so iOS Safari does not zoom the page into it when it takes the focus
   // (globals.css says the same for every field; the class keeps it true whatever the cascade does). 13 px from sm up.
@@ -532,6 +652,38 @@ export function ImInForm({
           bad={error?.field === "opt" ? "opt" : error?.field === "n" ? "n" : null}
           errId={`${id}-err`}
         />
+        <label className="grid gap-0.5" htmlFor={`${id}-k`}>
+          <span className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">Strike (optional)</span>
+          <input
+            id={`${id}-k`}
+            data-im-in-strike
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            placeholder="102.5"
+            value={strike}
+            aria-invalid={error?.field === "k" ? true : undefined}
+            aria-describedby={error?.field === "k" ? `${id}-err` : undefined}
+            onChange={(ev) => setStrike(ev.target.value)}
+            className={cn("bg-background text-foreground h-11 w-24 rounded-md border px-2 font-mono text-base tabular-nums", error?.field === "k" && "border-bad-fill")}
+          />
+        </label>
+        <label className="grid gap-0.5" htmlFor={`${id}-x`}>
+          <span className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">Expiry (today unless you change it)</span>
+          <input
+            id={`${id}-x`}
+            data-im-in-expiry
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            placeholder={session}
+            value={expiry}
+            aria-invalid={error?.field === "k" ? true : undefined}
+            aria-describedby={error?.field === "k" ? `${id}-err` : undefined}
+            onChange={(ev) => setExpiry(ev.target.value)}
+            className={cn("bg-background text-foreground h-11 w-32 rounded-md border px-2 font-mono text-base tabular-nums", error?.field === "k" && "border-bad-fill")}
+          />
+        </label>
         <span className="flex gap-1.5">
           <button type="submit" className="bg-primary text-primary-foreground rounded px-2.5 py-1 font-medium max-sm:min-h-11 max-sm:px-4 max-sm:text-sm">
             Save note
@@ -557,7 +709,9 @@ export function ImInForm({
           Option fill from your trade ticket in this tab: check it against Webull.
         </p>
       ) : null}
-      <p className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">Your own note in this browser, to manage the trade here. Nothing is sent anywhere.</p>
+      <p className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">
+        Your own note in this browser, to manage the trade here. Nothing is sent anywhere. With the option fill and the strike, the card watches your −25% stop on the contract&apos;s own quotes straight away.
+      </p>
     </form>
   );
 }
@@ -829,10 +983,18 @@ export function useTradeManage(x: TradeManageInput): {
   provisional: number;
   /** The journal can still be judged, re-checked on this browser's clock: the room shows only while it is. */
   journalLive: boolean;
+  /** The open trades this page prices from their contract's own quotes, and their losses at the bid: the day pill adds them. */
+  openMarks: OpenMarks;
+  /** Bumped when a card newly says EXIT, with those notices: the board rings its sound and browser notification. */
+  exitRing: { n: number; fresh: readonly ManageNotice[] };
 } {
   const day = x.now !== null ? (nyClock(new Date(x.now).toISOString())?.day ?? null) : null;
   const today = day === x.session ? day : null;
   const notes = useNotes(today);
+  const contracts = useContracts(today);
+  // The cards' live option values (held-store.ts): the −25% stop and the day pill re-read on every change.
+  useHeldVersion();
+  const [exitRing, setExitRing] = useState<{ n: number; fresh: readonly ManageNotice[] }>({ n: 0, fresh: [] });
   const [form, setForm] = useState<FormCapture | null>(null);
   const [last, setLast] = useState<Record<string, ManageAction>>({});
   const [notices, setNotices] = useState<ManageNotice[]>([]);
@@ -846,7 +1008,7 @@ export function useTradeManage(x: TradeManageInput): {
   if (feed === "live" && !wasLive) setWasLive(true);
   const rowOf = (symbol: string) => x.rows.find((r) => r.symbol === symbol);
   const trades = feed ? journal.openTrades(x.items, x.lots, notes, x.session, x.closed, x.journalAsOf) : NO_TRADES;
-  const views = trades.map((t) =>
+  const rawViews = trades.map((t) =>
     manageView(t, {
       session: x.session,
       halfDay: x.halfDay,
@@ -860,6 +1022,28 @@ export function useTradeManage(x: TradeManageInput): {
       feed: feed!,
     }),
   );
+  // The server judged the journal when it drew the page; this browser checks its age again every half minute.
+  const liveNow = useNow(30_000);
+  const live = journalLive(x.day, liveNow);
+  /** The card's contract lots: the journal's, else the note's own once it names a contract and an option fill. */
+  const heldFor = (t: (typeof trades)[number]): CardHeld => {
+    const entryAt = Date.parse(t.entry.at);
+    if (t.lots?.length || !t.note) return { lots: t.lots ?? [], journalCurrent: live, entryAt };
+    const own = noteHeldLots(t.note, contracts[noteId(t.note)]);
+    return { lots: own, journalCurrent: live, fromNote: own.length > 0, entryAt };
+  };
+  const helds = trades.map(heldFor);
+  // The owner's −25% premium stop laid over each card once it has fired on its contract's own quotes (the position's,
+  // whichever card shows it), and the stock stop's line said as a close (held-marks.ts). The card's own logic is
+  // unchanged underneath.
+  const views = rawViews.map((v, i) => {
+    const h = helds[i]!;
+    const lc = lotsContract(v.symbol, v.side, h.lots);
+    const fired = stopFired(today, lc.ok ? lc.held.occ : null, h.entryAt ?? NaN, lc.ok ? stopCentsOf(lc.held) : null);
+    // Fired: EXIT. Not fired, and the contract's quotes too thin to read the stop: CHECK, never a reassuring word.
+    return withClosedStopLine(withPremiumStop(withThinQuote(v, !fired && thinOf(v.id)), fired, valueOf(v.id)));
+  });
+  const marks = openMarks(views.flatMap((v) => (valueOf(v.id) ? [{ value: valueOf(v.id)!, fromNote: fromNoteOf(v.id) }] : [])));
 
   // The notes the journal has closed out leave this browser (their cards are already gone).
   const retire = today ? journal.retired(notes, x.lots, x.closed, x.session, x.journalAsOf) : NO_NOTES;
@@ -880,6 +1064,8 @@ export function useTradeManage(x: TradeManageInput): {
     if (r.fresh.length) {
       setSeq(seq + 1);
       setNotices(mergeNotices(notices, r.fresh));
+      const exits = r.fresh.filter((n) => n.action === "exit");
+      if (exits.length) setExitRing({ n: exitRing.n + 1, fresh: exits });
     }
   }
 
@@ -895,9 +1081,6 @@ export function useTradeManage(x: TradeManageInput): {
   // The notes the journal shows no fill for yet: the rail adds them to the day's count.
   const match = today ? journal.match(notes, x.closed, x.lots, x.session) : null;
   const provisional = match?.provisional.length ?? 0;
-  // The server judged the journal when it drew the page; this browser checks its age again every half minute.
-  const liveNow = useNow(30_000);
-  const live = journalLive(x.day, liveNow);
   const cardStop = (t: (typeof trades)[number]): CardStop | undefined => {
     const n = t.note;
     if (!n) return undefined;
@@ -921,8 +1104,9 @@ export function useTradeManage(x: TradeManageInput): {
       onAddFill: (fill) => patch(n, { fill }),
     };
   };
-  const add = (note: ManualNote) => {
+  const add = (note: ManualNote, contract: NoteContract | null = null) => {
     save([...notes.filter((n) => noteId(n) !== noteId(note)), note]);
+    if (today) writeContract(today, noteId(note), contract);
     setForm(null);
   };
 
@@ -977,7 +1161,7 @@ export function useTradeManage(x: TradeManageInput): {
             onSetFill={v.source === "journal" && x.now !== null ? () => setForm(formFromTrade(t, x.now!)) : undefined}
             onUseTime={t.note && v.hint ? () => save([...notes.filter((n) => noteId(n) !== noteId(t.note!)), { ...t.note!, at: v.hint!.at }]) : undefined}
             stop={cardStop(t)}
-            held={{ lots: t.lots ?? [], journalCurrent: live }}
+            held={helds[i]}
           >
             {open ? formEl(form, feed === "live" ? (rowOf(v.symbol)?.price ?? null) : null, null) : null}
           </ManageCard>
@@ -1009,5 +1193,5 @@ export function useTradeManage(x: TradeManageInput): {
       ))
     : null;
 
-  return { cards, rowExtra, notices: noticeEls, views, provisional, journalLive: live };
+  return { cards, rowExtra, notices: noticeEls, views, provisional, journalLive: live, openMarks: marks, exitRing };
 }

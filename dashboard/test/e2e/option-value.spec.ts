@@ -52,8 +52,10 @@ test("with the option feed off there is no value, and the reason says so", async
   await open(page, context, baseURL, "frozen.focus.quotes-script.chain-opra.chain-off.journal-option-lot");
   const c = card(page);
   await expect(c).toBeVisible();
-  // chain-off takes the chain away too, so the contract cannot be confirmed: no line at all, never a guess
-  await expect(c.locator("[data-manage-value]")).toHaveCount(0);
+  // chain-off takes the chain away too, so the contract cannot be confirmed: no value, never a guess, and the card
+  // says its −25% stop is not watched here
+  await expect(c.locator('[data-manage-value="live"]')).toHaveCount(0);
+  await expect(c.locator('[data-manage-value="withheld"]')).toContainText("your −25% stop is not watched");
   await expect(c.locator('[data-manage-small="pnl"]')).toContainText("see Webull");
 });
 

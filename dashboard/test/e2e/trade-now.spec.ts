@@ -397,7 +397,8 @@ test("I'm in at the entry opens the manage card, which reads target 1 hit and th
   await expect(page.locator('[data-manage-notice="QQQ"]')).toContainText("QQQ call: SELL HALF");
   await at(context, baseURL, 5);
   await expect(card).toHaveAttribute("data-manage-action", "exit", { timeout: 15_000 });
-  await expect(card.locator("[data-manage-line]")).toContainText("Below the stop 753.43: exit");
+  // the stock stop's exit, said as the 2-minute close it is (held-marks.ts withClosedStopLine)
+  await expect(card.locator("[data-manage-line]")).toContainText("A 2-min close went below the stop 753.43: exit");
   // the note outlives a reload, and Clear ends it
   await page.reload();
   await expect(card).toHaveAttribute("data-manage-action", "exit");

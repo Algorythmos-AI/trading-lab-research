@@ -8,6 +8,7 @@ research prose or secrets belong here (see "Data classes" in `AGENTS.md`).
 
 | Date | Release | `main` after | Record |
 |---|---|---|---|
+| 2026-11-17 | hotfix (#452 and its review fixes), and #446 of 2026-11-15 | pending | [2026-11-17.md](2026-11-17.md) |
 | 2026-11-13 | #423, #426 | `df42889` | [2026-11-13.md](2026-11-13.md) |
 | 2026-11-12 | #383, #394, #408, #415, #419 | `99c6758` | [2026-11-12.md](2026-11-12.md) |
 
