@@ -108,3 +108,13 @@ any signal, outcome or bar of the window exists.
 - Section 8, outcome: R is rounded to 2 decimals half away from zero.
 - Section 8, outcome: the entry bar is the first 2-minute bar starting at or after the scoring record's `evaluated_at`.
 - Section 8, early ends: a stamp gap over 10 minutes across a deployment change is judged within a session only, between two known, different deployments; a deploy between sessions is not one (each stamp must still read `sip`).
+
+## Note on DEC-0052 (added 2026-11-17)
+
+DEC-0052, proposed on 2026-11-17, replaces the engine label config.yaml pins at registration with the label of the
+release that ships its section 1, before this experiment's window starts, once it is accepted. The change was chosen
+for consistency with HYP-0029's registered rule, not on any outcome of this experiment, none of which exists; no dry
+session has run. The identity check's answer and counts for that change are written here the day it ships. The text
+above is otherwise unchanged.
+
+Viewed before this note: one owner trade entered on the board's old retest and its result, the clone's decision lines for that session, and the clone's cumulative HYP-0029 figures (DEC-0052, "What has already been seen").

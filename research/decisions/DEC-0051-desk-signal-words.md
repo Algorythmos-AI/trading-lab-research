@@ -503,3 +503,15 @@ The pull request that accepts it changes, as #412 did for DEC-0047, and nothing 
 - The log holds option quotes that the board's own log does not. It is PRIVATE and stays behind the owner's login.
 - If the test is not supported, the words go and the gates stay as facts. If it is supported, the tag says the stock
   test passed and the option result was not tested; a rule built on the words would need its own record.
+
+## Note on DEC-0052 (added 2026-11-17)
+
+DEC-0052, proposed on 2026-11-17, changes the board's engine once its release ships: a break and retest reaches
+enter_zone only on the two slots after the clone's confirming close (ended early by a run past it), then reads missed ("slot
+passed"). "Unchanged: the board's states and its engine" above holds except for that. The identity check of the
+early-end rules is run on that change as written; its answer and counts go in EXP-0034 README.md, and it ends
+nothing while EXP-0034's window has not started. Amendment 1 reads only dry sessions recorded under the signal-code
+hash that release produces. The lifecycle will read "invalidated" after each retest ENTER's two slots. The
+text above is otherwise unchanged.
+
+Viewed before this note: one owner trade entered on the board's old retest and its result, the clone's decision lines for that session, and the clone's cumulative HYP-0029 figures (DEC-0052, "What has already been seen").
