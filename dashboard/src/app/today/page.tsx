@@ -31,7 +31,7 @@ export default async function TodayPage() {
     <>
       <PageHeading
         title="Today"
-        intro="Your trading day as it happens: every trade on the New York clock, the day's running result and how much room the day rules leave, then the names to watch. Below, what Robot B did with paper money. Nothing on this page can place an order."
+        intro="Your trading day as it happens: every trade on the New York clock, the day's running result and how much room the day rules leave, then the names to watch. Below, what Robot B did with paper money, and the morning's pre-market scan. Nothing on this page can place an order."
       />
       {journal.status === "ok" ? (
         <PaneBoundary name="Your day">
@@ -48,8 +48,9 @@ export default async function TodayPage() {
       <PaneBoundary name="Next session">
         <NextSessionPanel options={options.status === "ok" ? options.edition : null} radar={radar.status === "ok" ? radar.edition : null} />
       </PaneBoundary>
-      {/* The robot's section: everything in it is the Alpaca paper account (a paper frame), except the forward test,
-          which replays frozen strategies and is a model (a model frame). Never the owner's Webull money. */}
+      {/* The robot's section: Robot B's own panes are the Alpaca paper account (paper frames); its forward test replays
+          frozen strategies and is a model (a model frame). Never the owner's Webull money. The pre-market scan below is
+          the routine's dry-run scan of gapping stocks, not the robot's account: counts only, no money, so unframed. */}
       <h2 className="text-muted-foreground mt-2 flex items-center gap-2 text-sm font-semibold">
         <Bot aria-hidden className="size-4" />
         Robot B (paper)
@@ -65,27 +66,15 @@ export default async function TodayPage() {
             <PaneBoundary name="Outcome">
               <OutcomeOnly s={result.snapshot} />
             </PaneBoundary>
-            <PaneBoundary name="Scanner funnel">
-              <FunnelFrom s={result.snapshot} />
-            </PaneBoundary>
           </EnvFrame>
           <details className="group grid gap-5" data-testid="robot-detail">
             <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-sm font-medium">
-              More from Robot B (paper): its trades and results, near misses, the session log, and the forward test (model)
+              More from Robot B (paper): its trades and results, the session log, and the forward test (model)
             </summary>
             <div className="mt-5 grid gap-5">
               <EnvFrame env="paper" label="Robot B, in detail" className="grid gap-5">
                 <PaneBoundary name="Paper B trading">
                   <TradingDetail s={result.snapshot} />
-                </PaneBoundary>
-                <PaneBoundary name="Why no trade">
-                  <WhyFrom s={result.snapshot} />
-                </PaneBoundary>
-                <PaneBoundary name="Near misses">
-                  <NearFrom s={result.snapshot} />
-                </PaneBoundary>
-                <PaneBoundary name="Candidates">
-                  <CandidatesFrom s={result.snapshot} />
                 </PaneBoundary>
                 <PaneBoundary name="Paper session log">
                   <PaperPanel s={result.snapshot} />
@@ -99,6 +88,29 @@ export default async function TodayPage() {
                   <OfRecordPanel s={result.snapshot} />
                 </PaneBoundary>
               </EnvFrame>
+            </div>
+          </details>
+          <h2 className="text-muted-foreground mt-2 flex items-center gap-2 text-sm font-semibold">
+            <Filter aria-hidden className="size-4" />
+            Pre-market scan
+          </h2>
+          <PaneBoundary name="Scanner funnel">
+            <FunnelFrom s={result.snapshot} />
+          </PaneBoundary>
+          <details className="group grid gap-5" data-testid="scan-detail">
+            <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-sm font-medium">
+              More from the scan: why names went no further, near misses and the candidates
+            </summary>
+            <div className="mt-5 grid gap-5">
+              <PaneBoundary name="Why no trade">
+                <WhyFrom s={result.snapshot} />
+              </PaneBoundary>
+              <PaneBoundary name="Near misses">
+                <NearFrom s={result.snapshot} />
+              </PaneBoundary>
+              <PaneBoundary name="Candidates">
+                <CandidatesFrom s={result.snapshot} />
+              </PaneBoundary>
               <ComingPanel />
             </div>
           </details>
@@ -293,7 +305,7 @@ function WhyPanel({ w }: { w: Why | null }) {
           ) : null}
           {w.band.length > 0 ? (
             <p className="text-muted-foreground text-[0.8125rem]">
-              Priced US$2 to US$20: {w.band.map((x) => `${num(x.count)} ${x.label.toLowerCase()}`).join(", ")}. A count beside the scan&apos;s own price
+              Priced $2 to $20 a share: {w.band.map((x) => `${num(x.count)} ${x.label.toLowerCase()}`).join(", ")}. A count beside the scan&apos;s own price
               band; it selects nothing.
             </p>
           ) : null}
@@ -319,7 +331,8 @@ function NearPanel({ n }: { n: Near | null }) {
           <TableHeader>
             <TableRow>
               <TableHead>Ticker</TableHead>
-              <TableHead className="text-right">Price</TableHead>
+              {/* A share price, not money held: written without US$, which on these pages means the paper account. */}
+              <TableHead className="text-right">Share price</TableHead>
               <TableHead>The one filter it failed</TableHead>
             </TableRow>
           </TableHeader>
@@ -327,7 +340,7 @@ function NearPanel({ n }: { n: Near | null }) {
             {n.rows.map((r) => (
               <TableRow key={r.symbol}>
                 <TableCell className="font-mono text-xs">{r.symbol}</TableCell>
-                <TableCell className="text-right font-mono">{r.price === null ? "—" : `US$${num(r.price, 2)}`}</TableCell>
+                <TableCell className="text-right font-mono">{num(r.price, 2)}</TableCell>
                 <TableCell>{r.label}</TableCell>
               </TableRow>
             ))}
