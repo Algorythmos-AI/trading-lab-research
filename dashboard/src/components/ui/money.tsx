@@ -10,8 +10,8 @@ import { cn } from "@/lib/utils";
  *                          otherwise (the way the owner's Webull figures have always been written);
  *   paper, shadow, model   lib/format.ts's `usd` (paper-account money): "US$1,234.50", "−US$12.00", always cents;
  *                          `digits` does not apply.
- * Both give "—" when the figure is missing. `signed` adds "+" to a gain, and a figure that rounds to zero carries no
- * sign. It renders `data-money` and `data-env`, and must sit inside an `EnvFrame` of the same class (the guard,
+ * Both give "—" when the figure is missing, and `signed` adds "+" to a gain. Paper money that rounds to US$0.00 carries
+ * no sign; real money keeps the sign of its value, as the owner's figures always have ("+⁠$0" for 0.4). It renders `data-money` and `data-env`, and must sit inside an `EnvFrame` of the same class (the guard,
  * test/env-guard.ts, checks a rendered tree). A class a cast let through that is not one of the four fails closed: a
  * dash, marked `data-env="unknown"`.
  */

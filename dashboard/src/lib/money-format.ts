@@ -13,14 +13,14 @@ const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFin
 const JOIN = "⁠";
 
 /**
- * Real (Webull) US dollars: "−$40", "$1,234.50" with `digits: 2`, "+$125" with `signed`. A loss always carries "−"; a
- * gain carries "+" only when `signed`. The sign follows what is shown, so a figure that rounds to zero has none. "—"
- * for a missing figure.
+ * Real (Webull) US dollars, exactly as journal.tsx's and your-day.tsx's own `usd` have always written them: with
+ * `signed`, "+⁠$125" for a gain, "−⁠$40" for a loss and "$0" for zero, the sign read from the value itself (so 0.4
+ * shows "+⁠$0", as it always has). Without `signed` a gain has no "+"; a loss keeps its "−". "—" for a missing figure.
+ * test/env.test.ts pins this against the old helpers, value by value.
  */
 export function realUsd(v: number | null | undefined, { digits = 0, signed = false }: { digits?: number; signed?: boolean } = {}): string {
   if (!isNum(v)) return DASH;
   const body = Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
-  if (!/[1-9]/.test(body)) return `$${body}`;
   if (v < 0) return `−${JOIN}$${body}`;
-  return signed ? `+${JOIN}$${body}` : `$${body}`;
+  return signed && v > 0 ? `+${JOIN}$${body}` : `$${body}`;
 }

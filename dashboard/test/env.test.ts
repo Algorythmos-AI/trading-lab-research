@@ -154,10 +154,35 @@ describe("Money", () => {
     expect(real(-12)).toBe("−\u2060$12");
     expect(real(42.1, true)).toBe("+\u2060$42");
     expect(real(42.1, true, 2)).toBe("+\u2060$42.10");
-    expect(real(0.4, true)).toBe("$0");
-    expect(real(-0.004, true, 2)).toBe("$0.00");
+    expect(real(0.4, true)).toBe("+⁠$0");
+    expect(real(-0.004, true, 2)).toBe("−⁠$0.00");
     for (const v of [null, undefined, Number.NaN]) expect(real(v, true)).toBe(DASH);
     for (const v of [0, 5, -5, 1234.5]) expect(real(v)).not.toContain("US$");
+  });
+
+  it("writes real money exactly as the owner's pages always did: journal.tsx's and your-day.tsx's old usd, value by value", () => {
+    // The two helpers as they stood before B2 (origin/integration d260993), copied here so the pin never moves.
+    const journalUsd = (v: number | null | undefined, digits = 0) => {
+      if (v === null || v === undefined || !Number.isFinite(v)) return "—";
+      const s = Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+      return `${v > 0 ? "+⁠" : v < 0 ? "−⁠" : ""}$${s}`;
+    };
+    const yourDayUsd = (v: number | null | undefined) => {
+      if (v === null || v === undefined || !Number.isFinite(v)) return "—";
+      const s = Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: 0 });
+      return `${v > 0 ? "+⁠" : v < 0 ? "−⁠" : ""}$${s}`;
+    };
+    const TABLE = [0, -0, 0.4, -0.4, 0.5, -0.5, 0.004, -0.004, 0.005, 1, -1, 12.345, -12.345, 1234.5, -1234.5, 99_999.99, 1_000_000.004, -2_500_000, null, undefined, Number.NaN];
+    for (const v of TABLE) {
+      for (const digits of [0, 2]) expect(realUsd(v, { signed: true, digits }), `${v} with ${digits} digits`).toBe(journalUsd(v, digits));
+      expect(realUsd(v, { signed: true }), `${v} on Your day`).toBe(yourDayUsd(v));
+      expect(text(render(createElement(Money, { env: "real", value: v, signed: true }))), `Money ${v}`).toBe(journalUsd(v));
+    }
+    // Spot values, written out.
+    expect(realUsd(0.4, { signed: true })).toBe("+⁠$0");
+    expect(realUsd(-0.4, { signed: true })).toBe("−⁠$0");
+    expect(realUsd(0, { signed: true })).toBe("$0");
+    expect(realUsd(1_000_000.004, { signed: true })).toBe("+⁠$1,000,000");
   });
 
   it("shows a dash for a missing figure", () => {
