@@ -4,7 +4,8 @@ Ported from the cloud sync that ran until the host took over (push_journal.py an
 page reads the same before and after the move. Trades are matched first in, first out per contract. A long option
 still held after its expiry counts as expired worthless; an option sold with no buy before it is listed under
 "gaps". Results are before fees (the API carries none). No account number, balance detail or broker order id goes
-into the journal; trade ids are hashes.
+into the journal; a trade's id is a hash of the two order ids that opened and closed it, so it is the same however
+the fills were listed. The page uses ids only to tell trades apart and to break ties when it sorts.
 """
 from __future__ import annotations
 
@@ -66,11 +67,17 @@ def build(groups: Sequence[Mapping[str, Any]], now: dt.datetime) -> dict[str, An
     trades: list[dict[str, Any]] = []
     gaps: list[dict[str, Any]] = []
 
+    ids: collections.Counter[str] = collections.Counter()
+
     def trade(key: Key, lot: list[Any], n: float, exit_p: float, t: dt.datetime, close: str, oid: str) -> dict[str, Any]:
         long_ = lot[0] > 0
         pnl = (exit_p - lot[1]) * n * lot[4] * (1 if long_ else -1)
+        # The id is the pair of orders that opened and closed it (or the expiry): one close meets each lot once, so
+        # the pair is unique, and it never depends on where a fill sat in the input. The counter is a guard only.
+        base = _tid(lot[3], oid, key[3] if close == "expired" else "")
+        ids[base] += 1
         trades.append({
-            "id": _tid(lot[3], oid, n, len(trades)), "symbol": key[0], "kind": key[1],
+            "id": base if ids[base] == 1 else _tid(base, ids[base]), "symbol": key[0], "kind": key[1],
             "strike": key[2], "expiry": key[3], "side": "long" if long_ else "short", "qty": round(n, 6),
             "opened_at": stamp(lot[2]), "closed_at": stamp(t), "entry": round(lot[1], 4), "exit": round(exit_p, 4),
             "multiplier": lot[4], "pnl": round(pnl, 2), "close": close})

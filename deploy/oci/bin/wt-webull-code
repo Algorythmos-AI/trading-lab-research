@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# Root, run by wt-install-units (ADR 0011): install the Webull key holder's code, but only the code the owner
+# names by its tree hash.
+#   wt-webull-code hash <dir>                 # the tree hash of the .py files in <dir> (coreutils only)
+#   wt-webull-code install <src dir> <sha256> # stage <src dir>'s .py files, check them, swap them in on a match
+# install: copies the regular *.py files of <src dir> into a root-owned stage beside /opt/wt-webull without ever
+# following a link, refuses a source or a stage holding anything but regular files and directories, takes the
+# stage's hash itself, checks wt-webull can import the stage with the unit's own interpreter command, and only then
+# swaps /opt/wt-webull to it with one rename. Any refusal leaves the installed copy exactly as it was.
+# Exit: 0 installed (or already installed), 2 refused (bad input, a link, the import check), 3 the hash differs.
+# No code from the checkout runs as root here: the hash is sha256sum's, the import runs as wt-webull.
+set -euo pipefail
+opt=/opt/wt-webull
+check=(runuser -u wt-webull -- /usr/bin/python3)
+owner=(-o root -g root)
+# Test only: tests/unit/test_webull_readonly.py sets WT_WEBULL_CODE_TEST=1 and these. Production sets none.
+if [[ "${WT_WEBULL_CODE_TEST:-}" == "1" ]]; then
+  [[ $EUID -ne 0 ]] || { echo "test mode is refused as root" >&2; exit 2; }
+  opt="${WT_WEBULL_OPT:?}"
+  read -r -a check <<< "${WT_WEBULL_CHECK:?}"
+  owner=()
+  echo "wt-webull-code: test mode ($opt)" >&2
+else
+  [[ $EUID -eq 0 ]] || { echo "run as root (sudo wt-install-units)" >&2; exit 2; }
+fi
+base="$opt.d"
+
+tree_hash() {   # the format of wt.webull.treehash: sha256 of "<sha256>  <name>" lines, sorted by name
+  local dir="$1" f names=()
+  for f in "$dir"/*.py; do
+    if [[ -f "$f" && ! -L "$f" ]]; then names+=("${f##*/}"); fi
+  done
+  (( ${#names[@]} )) || { echo "no .py files in $dir" >&2; return 2; }
+  local sorted=()
+  while IFS= read -r f; do sorted+=("$f"); done < <(printf '%s\n' "${names[@]}" | LC_ALL=C sort)
+  (cd "$dir" && LC_ALL=C sha256sum -- "${sorted[@]}") | sha256sum | cut -d' ' -f1
+}
+
+case "${1:-}" in
+  hash)
+    tree_hash "${2:?usage: wt-webull-code hash <dir>}"
+    exit 0 ;;
+  install) ;;
+  *) echo "usage: wt-webull-code hash <dir> | install <src dir> <sha256>" >&2; exit 2 ;;
+esac
+src="${2:?usage: wt-webull-code install <src dir> <sha256>}"
+want="${3:-}"
+[[ "$want" =~ ^[0-9a-f]{64}$ ]] || { echo "the expected tree hash must be 64 hex digits" >&2; exit 2; }
+[[ -d "$src" && ! -L "$src" ]] || { echo "$src is not a directory" >&2; exit 2; }
+
+# The source: every *.py must be a regular file with one link (a hard link could name a file wt may not read;
+# Ubuntu's fs.protected_hardlinks refuses to make one, this refuses to copy one).
+odd=$(find "$src" -maxdepth 1 -name '*.py' ! -name '.*' \( ! -type f -o -links +1 \) -print)
+if [[ -n "$odd" ]]; then
+  echo "refused: $src holds a .py that is a link or not a regular file; the installed copy is unchanged" >&2
+  printf '  %s\n' "$odd" >&2
+  exit 2
+fi
+
+install -d -m 0755 ${owner[@]+"${owner[@]}"} "$base"
+stage=$(mktemp -d "$base/.new.XXXXXX")          # 0700: nobody but root sees it until the hash matches
+trap 'rm -rf "$stage"' EXIT
+mkdir -m 0700 "$stage/wt" "$stage/wt/webull"
+: > "$stage/wt/__init__.py"
+# -P: a file that turned into a link since the check above is copied as a link, and refused just below.
+# Dotfiles are left out, as the hash leaves them out.
+find "$src" -maxdepth 1 -name '*.py' ! -name '.*' -exec cp -P -- {} "$stage/wt/webull/" \;
+if [[ -n "$(find "$stage" ! -type f ! -type d -print)" ]]; then
+  echo "refused: the staged copy holds something other than files and directories; the installed copy is unchanged" >&2
+  exit 2
+fi
+find "$stage" -type f -exec chmod 0600 {} +
+if [[ -n "${owner[*]-}" ]]; then chown -R root:root "$stage"; fi
+
+got=$(tree_hash "$stage/wt/webull")
+if [[ "$got" != "$want" ]]; then
+  echo "refused: the checkout's src/wt/webull has tree sha256 $got, not the $want you gave; the installed copy is unchanged" >&2
+  exit 3
+fi
+# Readable only now, for the import check (as wt-webull) and the unit.
+find "$stage" -type d -exec chmod 0755 {} +
+find "$stage" -type f -exec chmod 0644 {} +
+if ! (cd / && "${check[@]}" -I -S -B -c "import sys; sys.path.insert(0, '$stage'); from wt.webull.pull import main"); then
+  echo "refused: wt-webull cannot import the staged copy; the installed copy is unchanged" >&2
+  exit 2
+fi
+
+if [[ -d "$base/$got" ]]; then rm -rf "$stage"; else mv "$stage" "$base/$got"; fi
+trap - EXIT
+if [[ -e "$opt" && ! -L "$opt" ]]; then rm -rf "$opt"; fi
+ln -sfn "$base/$got" "$opt.link"
+# One rename of the link (GNU mv -T): a pull starting now sees the old copy or the new one, never half of each.
+if ! mv -T "$opt.link" "$opt" 2>/dev/null; then rm -f "$opt.link"; ln -sfn "$base/$got" "$opt"; fi
+for d in "$base"/* "$base"/.new.*; do
+  if [[ -e "$d" && "$d" != "$base/$got" ]]; then rm -rf "$d"; fi
+done
+echo "Webull key holder code installed in $opt: tree sha256 $got (the hash you gave)"

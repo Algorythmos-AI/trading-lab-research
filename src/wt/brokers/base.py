@@ -1,4 +1,5 @@
-"""Broker interface. Implementations: SimBroker (tests), AlpacaPaperBroker, WebullBroker (G3).
+"""Broker interface. Implementations: SimBroker (tests), AlpacaPaperBroker. (Webull is read only and never an
+execution venue, ADR 0011: it has no broker here.)
 
 Error contract (audit C3/M4): the OMS must be able to tell "the broker says this order does not exist" from "we
 could not reach the broker". Mixing the two made a transport error look like a confirmed cancel, and a failed

@@ -2,6 +2,8 @@
 Description=Trading Lab: read the owner's Webull account, read only (ADR 0011)
 # Runs as its own user. The Webull key reaches this one service only, as a systemd credential: it is never in
 # /run/wt-secrets/env, never in an environment variable, and the wt jobs (which hold order code) cannot read it.
+# The code is the root-owned copy of src/wt/webull in /opt/wt-webull (sudo wt-install-units), run by the system
+# Python with -I -S -B: no checkout, no venv, no site-packages, no PYTHON* variables, nothing `wt` can change.
 Wants=network-online.target
 After=network-online.target time-sync.target
 ConditionPathExists=/etc/wt/webull.env
@@ -12,15 +14,14 @@ OnSuccess=wt-webull-publish.service
 Type=exec
 User=wt-webull
 Group=wt
-WorkingDirectory=/home/wt/trading
+WorkingDirectory=/opt/wt-webull
 LoadCredential=webull:/etc/wt/webull.env
 StateDirectory=wt-webull
 StateDirectoryMode=0750
 UMask=0027
-Environment=PYTHONPATH=src
-Environment=PYTHONDONTWRITEBYTECODE=1
-ExecStart=/home/wt/trading/.venv/bin/python -m wt.webull.pull
-# Exit 3: a new token waits for the owner's approval in the Webull app (paged once through OnFailure).
+ExecStart=/usr/bin/python3 -I -S -B -c "import sys; sys.path.insert(0, '/opt/wt-webull'); from wt.webull.pull import main; sys.exit(main())"
+# Exit 0 also when a read fails (wt-webull-publish pages once per state change); exit 3 when a new token waits for
+# the owner's approval in the Webull app (paged once per token through OnFailure).
 RuntimeMaxSec=1500
 MemoryMax=300M
 LimitCORE=0
@@ -28,7 +29,7 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 PrivateDevices=yes
 ProtectSystem=strict
-ProtectHome=read-only
+ProtectHome=yes
 InaccessiblePaths=-/run/wt-secrets -/etc/wt/secrets.env
 ProtectKernelTunables=yes
 ProtectKernelModules=yes

@@ -49,7 +49,7 @@ gates:
   - {id: G1, name: "Backtest proof of edge", criteria: "CI95 lower bound > 0 at 1.5x costs; DSR > 0.95 over all trials; beats random p < 0.05; PF >= 1.2; profitable in >= 2/3 of years; no month > 25% of profit",
      status: failed, evidence: "DEC-0007, DEC-0009 (75 trials, none pass)", next: "Round 3 under DEC-0010 (in effect 2026-09-29)"}
   - {id: G2, name: "Forward and paper evidence", criteria: "G2a, the desk runs the rule: >= 30 clean sessions, 20 incident-free in a row, >= 90% bar-level agreement. G2b, the rule earns: >= 50 trades (DEC-0023, read per DEC-0037)", status: in_progress, evidence: "Weekly scorecard; DEC-0037"}
-  - {id: G3, name: "Broker acceptance", criteria: "Webull UAT contract suite, production read-only checks, owner canary order", status: not_started}
+  - {id: G3, name: "Broker acceptance", criteria: "Live broker contract suite, production read-only checks, owner canary order (no broker chosen; Webull is read only, ADR 0011)", status: not_started}
   - {id: G4, name: "Live tiny", criteria: "0.5% risk (~US$3), >= 50 live trades, about 3 months", status: not_started}
   - {id: G5, name: "Scale", criteria: "Risk 0.5% -> 0.75% -> 1.0%; capital capped at A$1,000", status: not_started}
 
@@ -107,7 +107,7 @@ capabilities:
   - {name: "Auditability", research: partial, org: partial, note: "Decision records and journals; no hash-chained ledger yet (org M3)"}
   - {name: "Observability", research: partial, org: none, note: "Logs, scorecard, dashboard, Vercel watchdog and healthchecks.io; host pings are dropped until it runs the primary role"}
   - {name: "Human approval mode", research: none, org: none, note: "Not built anywhere yet"}
-  - {name: "Live trading", research: none, org: none, note: "By design: waits for G1-G3. Webull adapter not started"}
+  - {name: "Live trading", research: none, org: none, note: "By design: waits for G1-G3. No live broker adapter (Webull is read only, ADR 0011)"}
   - {name: "CI on every change", research: done, org: partial, note: "Every pull request runs ruff, mypy, pytest, the dashboard checks with e2e and a security scan. Org repo runs security scans only"}
 
 roadmap:
@@ -118,12 +118,12 @@ roadmap:
   - {rank: 5, priority: P2, title: "Pre-register a catalyst classifier v4 (announcements, SPAC commentary, acquirer vs target)", why: "CAT-01 failed at 84%; only a new pre-registered change on a fresh sample can close it", owner: both}
   - {rank: 6, priority: P2, title: "Accumulate G2 evidence: G2a sessions and agreement, G2b trades (DEC-0037)", why: "Gate before any broker work; B stops itself under the DEC-0037 rule", owner: both}
   - {rank: 7, priority: P2, title: "Human-approval mode", why: "Required before live trading; CI and the audit ledger are in place", owner: claude}
-  - {rank: 8, priority: Later, title: "G3 Webull adapter, then G4 live tiny and G5 scale", why: "Only after an edge is proven", owner: both}
+  - {rank: 8, priority: Later, title: "G3 broker acceptance, then G4 live tiny and G5 scale", why: "Only after an edge is proven", owner: both}
 
 # Owner actions that no file or API can detect. Set done: true when finished.
 # private: true keeps an item on the local page and out of the published dashboard (wt.ops.publish).
 manual_actions:
-  - {id: webull-key, title: "Reset the Webull API key", why: "It was exposed in a screenshot", blocks: "G4 live trading", done: false, private: true}
+  - {id: webull-key, title: "Reset the Webull API key", why: "It was exposed in a screenshot", blocks: "The host's Webull read (ADR 0011): reset it at the cutover", done: false, private: true}
   - {id: maintainers-role, title: "Confirm the maintainers team role on the trading repos", why: "Never confirmed after the migration", blocks: "Nothing yet", done: false}
   - {id: utc-offsets, title: "Decide whether to normalise UTC offsets in the public decision logs", why: "The offsets hint at travel", blocks: "Nothing", done: false, private: true}
   - {id: sip-subscription, title: "Decide on a SIP data subscription", why: "Free IEX has no pre-market bars before 08:00 ET (DEC-0001)", blocks: "Better live data", done: false}
