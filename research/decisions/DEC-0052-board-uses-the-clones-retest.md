@@ -129,6 +129,14 @@ After it, the card's stop (DEC-0035) is the stop, as now.
   the window or the plan ends.
 - **The window.** A confirming close inside the clone's window (at most `MAX_BARS_TO_RETEST + 1` bars after the
   break) keeps its two ENTER slots even when the second falls one slot past the window.
+- **One confirmation per break: the first.** The confirming close that governs is the earliest bar at which the
+  clone's rule, read with the 2-minute ATR at that bar, completes.
+  - A later bar that would confirm again, for example after the ATR has grown, neither restarts the two slots nor
+    changes the confirming close. Once they have passed, the side stays MISSED for the rest of that break.
+  - So the board shows at most one ENTER per break where the clone may signal twice; the clone, too, takes one trade
+    at a time.
+- **Back at the level.** If, during the two slots, the live price comes back to the level without a close through it,
+  the side reads GET READY with "Retest confirmed at <close>: price back at <level>, wait".
 
 ### 3. The numbers live where the clone's other numbers do
 
@@ -152,6 +160,10 @@ is a rule change, not a defect fix.
   precedent is its README lines 49-57).
 - **DEC-0051, its lifecycle** (lines 107-108) will read "invalidated" two slots after every CALL or PUT on a retest,
   since ENTER now lasts at most two slots. This is expected, not a fault.
+- **DEC-0051, its "weakening" word** (lines 107-117) still counts the slots left in the 6-bar window from the break, as
+  DEC-0051 defines it. A retest confirmed on the 5th to 7th bar after the break reads "weakening" from its first ENTER
+  slot, and its count of slots left can go below zero. DEC-0051's definition is not changed here. This is expected,
+  not a fault.
 - **EXP-0034:** no dry session has run. Amendment 1 reads only dry sessions recorded under the signal-code hash this
   change produces.
 
