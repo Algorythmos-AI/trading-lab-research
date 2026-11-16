@@ -275,3 +275,15 @@ pull request. The board's change is that later pull request. It cites this recor
   - DEC-0051's lifecycle shows "invalidated" after each retest ENTER's two slots;
   - EXP-0033's `in_zone` narrows;
   - EXP-0034's Amendment 1 reads only sessions under the new signal-code hash.
+
+## Note on DEC-0053 (added 2026-11-17)
+
+DEC-0053, proposed on 2026-11-17, amends section 1 once it is accepted: a retest that completes on a side locked by a
+failed break (DEC-0053 section 1) is not an enter zone, and "everything the enter zone already needs" gains "the side
+not locked by a failed break". The touch, the confirming close, the two ENTER slots and "one confirmation per break"
+are unchanged. The board and the clone then differ on locked sides, a stated departure from "the same rule" above. The
+text above is otherwise unchanged.
+
+Viewed before this note: the owner trade DEC-0052 names, entered on a side the board had re-armed after a failed break
+at the same level, and its result; that session's 2-minute bars and the board's recorded states; that session read by
+DEC-0052's rule as written; everything DEC-0052 lists as seen (DEC-0053, "What has already been seen").
