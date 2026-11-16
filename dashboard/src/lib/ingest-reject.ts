@@ -11,8 +11,12 @@ import { logEvent } from "./log";
 export const INGEST_REJECT_KINDS = ["radar", "options", "ledger", "journal", "options-live", "options-clone", "calendar"] as const;
 export type IngestRejectKind = (typeof INGEST_REJECT_KINDS)[number];
 
-/** The refusals that are recorded: the body's content was not acceptable. A duplicate or an older edition is not one. */
-export const INGEST_REJECT_OUTCOMES = ["invalid", "ahead-of-clock"] as const;
+/**
+ * The refusals that are recorded: the body's content was not acceptable, or ("frozen", the Options edition only) it would
+ * have replaced a session's edition after 09:25 New York with anything other than a later pre-market check
+ * (./premarket). A duplicate or an older edition is not one.
+ */
+export const INGEST_REJECT_OUTCOMES = ["invalid", "ahead-of-clock", "frozen"] as const;
 export type IngestRejectOutcome = (typeof INGEST_REJECT_OUTCOMES)[number];
 
 export interface IngestReject {
@@ -20,7 +24,7 @@ export interface IngestReject {
   at: string;
   kind: IngestRejectKind;
   outcome: IngestRejectOutcome;
-  /** How many validation errors the refusal named (1 for ahead-of-clock). */
+  /** How many validation errors the refusal named (1 for ahead-of-clock and for frozen). */
   n_errors: number;
 }
 
