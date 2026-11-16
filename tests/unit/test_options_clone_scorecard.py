@@ -136,10 +136,14 @@ def test_the_day_counts_refusals_revisions_retries_and_log_faults():
     dec = decisions(BARS, None)
     dec[5]["signals"] = [{"reason": "trend"}, {"reason": "trend"}, {"already": True, "reason": "x"}]
     dec[6]["signals"] = [{"log_fault": "KeyError"}]
-    j = journal()[:2] + [{"event": "bar_revised"}, {"event": "feed_unfit", "why": "q"}]
+    j = journal()[:2] + [{"event": "bar_revised"}, {"event": "feed_unfit", "why": "q"},
+                         {"event": "arm_retry", "tries": 7, "recovered": ["broker"], "still": []}]
     d = scorecard.day_health(j, dec, BARS)
     assert d["refused_for"] == {"trend": 2} and d["log_fault"] == 1
-    assert (d["bar_revised"], d["feed_unfit"]) == (1, 1)
+    assert (d["bar_revised"], d["feed_unfit"], d["arm_retries"], d["arm_gave_up"]) == (1, 1, 7, False)
+    gave = j + [{"event": "arm_retry", "tries": 34, "recovered": [], "still": ["levels"], "gave_up": True}]
+    assert scorecard.day_health(gave, dec, BARS)["arm_gave_up"] is True
+    assert scorecard.day_health(journal()[:2], dec, BARS)["arm_retries"] == 0
 
 
 def test_a_filled_plan_whose_entered_line_was_lost_still_makes_the_day_traded():

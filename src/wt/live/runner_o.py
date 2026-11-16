@@ -1041,6 +1041,8 @@ class Runner:
         elif first == "reach":
             nxt = setups.next_level(sig.side, sig.entry, nm.marks, sig.level.price)
             why = {"distance": None if nxt is None else round(abs(nxt.price - sig.entry), 4), "remaining_move": value}
+            if value is None and not chain_ok:       # no chain, so no volatility, so no reach: the chain is the cause
+                code = "chain-unavailable"
         elif first == "shock":
             why = {"word": value}
         elif first == "contract":

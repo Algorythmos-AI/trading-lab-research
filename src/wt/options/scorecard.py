@@ -11,7 +11,8 @@ the fill, the exit and the return on premium (and in R, against the premium stop
 for that trade (an older row) is None and named under `missing`.
 
 The day's line: entries (from the decision lines, or the session's filled plans when a line was lost to a restart),
-refusals by reason, the journal's counts of `bar_revised` and `feed_unfit`, decision-log faults, the names' source,
+refusals by reason, the journal's counts of `bar_revised` and `feed_unfit`, the arm's retries (`arm_retries`: the
+tries of the last `arm_retry` line, 0 without one; `arm_gave_up`), decision-log faults, the names' source,
 and per name every 2-minute bar of the entry window that has no decision line. The day is `traded`, `quiet` (no entry
 and every bar has a line), `gaps` (a bar has none) or `no-session` (the market was shut). A gap is a bar the clone did
 not judge: the runner was down or the tape stalled, or, rarely, the feed sent no minute at all in those two minutes (a
@@ -153,7 +154,10 @@ def day_health(journal: Sequence[Mapping[str, Any]], decisions: Sequence[Mapping
         "verdict": "traded" if entries else "no-session" if not market_open else
         ("gaps" if gaps or not names else "quiet"),
         "entries": entries, "refused_for": dict(sorted(refused.items())),
-        "bar_revised": _count(journal, "bar_revised"), "feed_unfit": _count(journal, "feed_unfit"), "log_fault": log_faults,
+        "bar_revised": _count(journal, "bar_revised"),
+        "arm_retries": max((int(r.get("tries") or 0) for r in journal if r.get("event") == "arm_retry"), default=0),
+        "arm_gave_up": any(r.get("event") == "arm_retry" and r.get("gave_up") for r in journal),
+        "feed_unfit": _count(journal, "feed_unfit"), "log_fault": log_faults,
         "names_source": str(names_rows[-1].get("source")) if names_rows else None,
         "names": names, "bars_expected": len(bars),
         "bars_missing": {n: len(g) for n, g in gaps.items()},
