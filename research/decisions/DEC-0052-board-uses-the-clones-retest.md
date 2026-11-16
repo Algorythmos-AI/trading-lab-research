@@ -87,8 +87,8 @@ README line 41).
 ### 1. The board's break and retest completes as the clone's does
 
 For a call at the focus card's level L (a put is the mirror), the side is in its enter zone for a break and retest
-only on the slot that the following opens: the settled 2-minute close that completes `wt.options.setups.retest` on the
-board's merged SIP bars at L.
+only from the settled 2-minute close that completes `wt.options.setups.retest` on the
+board's merged SIP bars at L, for the slots section 2 gives.
 
 - **Break** (unchanged): a 2-minute close above L, the close before it at or below L.
 - **Touch** (new): within `MAX_BARS_TO_RETEST` (6) bars after the break bar, a bar's low comes within
@@ -113,9 +113,22 @@ After it, the card's stop (DEC-0035) is the stop, as now.
 
 - **From the touch to the confirming close:** GET READY, with "Retest touched: wait for a 2-minute close above
   <the touch bar's close>" ("below" for a put).
-- **ENTER:** for the one slot that the confirming close opens, as the clone signals on that one bar.
-- **After that slot:** MISSED, with a new reason, "slot passed": "Retest confirmed at <time>: missed, don't chase".
-  This is beside the existing "target" and "window" reasons, until the window or the plan ends.
+- **ENTER:** for the two slots that follow the confirming close: the slot it opens and the next one, about four
+  minutes. The clone signals on one bar, and fills inside it; the owner needs time to read, choose a contract and
+  place it. The owner chose two slots on 2026-11-17.
+  - ENTER ends early once the live price runs more than 1.0 two-minute ATR beyond the confirming close (the same
+    `RETEST_WITHIN_ATR`): past that, entering is chasing.
+- **The risk line.** While ENTER shows, the line adds what entering there means against the card. For example:
+  "Confirmed at 101.40: $0.38 past the card entry; to the stop $1.53, not $1.15".
+  - It gives the confirming close, how far that is past the card's "In ≈" price, and the distance from the
+    confirming close to the card's stop against the card's own entry-to-stop distance.
+  - The card's numbers (entry, stop, target 1) are unchanged. This is wording only (DEC-0035 point 4 exempts
+    presentation). The owner chose it on 2026-11-17, rather than moving the card's entry.
+- **After those slots, or after a run past the confirming close:** MISSED, with a new reason, "slot passed":
+  "Retest confirmed at <time>: missed, don't chase". This is beside the existing "target" and "window" reasons, until
+  the window or the plan ends.
+- **The window.** A confirming close inside the clone's window (at most `MAX_BARS_TO_RETEST + 1` bars after the
+  break) keeps its two ENTER slots even when the second falls one slot past the window.
 
 ### 3. The numbers live where the clone's other numbers do
 
@@ -137,8 +150,8 @@ is a rule change, not a defect fix.
 - **DEC-0051, its identity check** (lines 414-417) is run on this change as written. Its answer ("rows differ"),
   with the counts, goes in EXP-0034's README. It ends nothing, because EXP-0034's window has not started (the
   precedent is its README lines 49-57).
-- **DEC-0051, its lifecycle** (lines 107-108) will read "invalidated" one slot after every CALL or PUT on a retest,
-  since ENTER now lasts one slot. This is expected, not a fault.
+- **DEC-0051, its lifecycle** (lines 107-108) will read "invalidated" two slots after every CALL or PUT on a retest,
+  since ENTER now lasts at most two slots. This is expected, not a fault.
 - **EXP-0034:** no dry session has run. Amendment 1 reads only dry sessions recorded under the signal-code hash this
   change produces.
 
@@ -197,7 +210,7 @@ Point 4 requires a dated amendment to DEC-0035 before a change to the card's tri
     stop band only;
   - its frozen-copy hash is not pinned yet (set in the release that first writes labels, config line 71), so nothing
     else changes;
-  - its `in_zone` label (config line 123) now covers one slot, which narrows what HYP-0056 measures; EXP-0033's README
+  - its `in_zone` label (config line 123) now covers at most two slots, which narrows what HYP-0056 measures; EXP-0033's README
     says so;
   - amended before its window starts, as its lines 5-6 allow.
 - **EXP-0034 config.yaml:**
@@ -235,7 +248,7 @@ pull request. The board's change is that later pull request. It cites this recor
 - the engine table row;
 - the synthetic tests in which the board and `wt.options.setups.retest` agree bar for bar:
   - a touch that is never confirmed is never ENTER;
-  - a confirmed touch is ENTER for one slot, then MISSED;
+  - a confirmed touch is ENTER for two slots (fewer if the price runs 1.0 ATR past the confirming close), then MISSED;
   - a close back through is plan off.
 
 ## Consequences
@@ -247,6 +260,6 @@ pull request. The board's change is that later pull request. It cites this recor
   therefore not always a setup the clone saw, and the clone may refuse one it saw on its other gates.
 - **Records and alerts:**
   - DEC-0044's alerts and shadow events thin out;
-  - DEC-0051's lifecycle shows "invalidated" one slot after each retest ENTER;
+  - DEC-0051's lifecycle shows "invalidated" after each retest ENTER's two slots;
   - EXP-0033's `in_zone` narrows;
   - EXP-0034's Amendment 1 reads only sessions under the new signal-code hash.
