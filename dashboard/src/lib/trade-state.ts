@@ -394,8 +394,15 @@ export function sideState(plan: SidePlan | null, atr: number | null | undefined,
   // setups.retest's window: the bar forming now at most MAX_BARS_TO_RETEST + 1 bars after the break bar
   if ((slotOf(t) - brk.start) / BAR_MS > MAX_BARS_TO_RETEST + 1) return missed("window", brokeAt);
   if (!coveredSince(bars, brk.start)) return out("get_ready", { brokeAt, gap: true });
-  const near = a !== null ? RETEST_ATR * a : null;
-  const touch = near === null ? -1 : after.findIndex((b) => (s > 0 ? b.l - L : L - b.h) <= near);
+  // The touch compared exactly, so a dip of exactly RETEST_ATR ATRs is a touch (a defect fix, 2026-11-16: in floating
+  // point `b.l − L ≤ RETEST_ATR × a` read 100.20 − 100.10 = 0.10000000000000853 > 0.1). The dip is taken in whole
+  // ten-thousandths of a dollar, as signal.ts compares prices: the level and the bars carry at most four decimals, so
+  // that rounding is exact. The ATR is not rounded (it may carry more): dip ÷ (RETEST_ATR × 10,000) ≤ ATR, the one
+  // division correctly rounded, is exact on the edge whatever the ATR's decimals and agrees with the old comparison
+  // everywhere off it.
+  const units = (x: number) => Math.round(x * 10_000);
+  const perAtr = Math.round(RETEST_ATR * 10_000);
+  const touch = a === null ? -1 : after.findIndex((b) => (s > 0 ? units(b.l) - units(L) : units(L) - units(b.h)) / perAtr <= a);
   if (touch < 0 || price === null) return out("get_ready", { brokeAt });
   if ((price - L) * s >= 0) return out("enter_zone", { brokeAt });
   return out("get_ready", { brokeAt });

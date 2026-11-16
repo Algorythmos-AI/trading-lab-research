@@ -51,12 +51,13 @@ describe("a. the retest touch at exactly 0.1 ATR (trade-state.ts:398)", () => {
     expect(retest(100, 1, 100.2).state).toBe("get_ready");
   });
 
-  it.fails.each([
+  it.each([
     [100.1, 1.0, 100.2],
     [100, 0.3, 100.03],
-  ])("KNOWN OPEN: float retest, trade-state.ts:398 (closure; owner-approved defect fix pending): L=%s, ATR=%s, retest low %s (exactly 0.1 ATR away) counts as a touch: enter_zone", (L, atr, low) => {
-    // Proves trade-state.ts:397-398: `b.l - L <= RETEST_ATR * a` in floating point reads 0.10000000000000853 > 0.1
-    // (and 0.030000000000001137 > 0.030000000000000002), so a dip "within 0.1 ATR" on the edge is not a touch.
+  ])("fixed 2026-11-16 (pre-dry defect fix): L=%s, ATR=%s, retest low %s (exactly 0.1 ATR away) counts as a touch: enter_zone", (L, atr, low) => {
+    // Was KNOWN OPEN: `b.l - L <= RETEST_ATR * a` in floating point read 0.10000000000000853 > 0.1 (and
+    // 0.030000000000001137 > 0.030000000000000002), so a dip "within 0.1 ATR" on the edge was not a touch. trade-state.ts
+    // now compares the dip in whole ten-thousandths against the ATR exactly.
     expect(retest(L, atr, low).state).toBe("enter_zone");
   });
 });
@@ -139,9 +140,9 @@ describe("c. the contract's checked age is DEC-0051's: the chain's newest quote 
 
 // ---- d. one absurd candidate ---------------------------------------------------------------------------------------
 describe("d. one absurd candidate does not wipe out the pick", () => {
-  it.fails("KNOWN OPEN: absurd ask wipes pick (closure): the nearest strike's ask is 1e300: it fails, and a good strike further out is still picked", () => {
-    // Proves contract-pick.ts:185 → ticket.ts:145 (sizeTicket throws RangeError on a non-safe-integer price), caught at
-    // contract-pick.ts:244 as "no-chain" for the whole side, discarding every other strike.
+  it("fixed 2026-11-16 (pre-dry defect fix): the nearest strike's ask is 1e300: it fails, and a good strike further out is still picked", () => {
+    // Was KNOWN OPEN: sizeTicket (ticket.ts) throws RangeError on a non-safe-integer price, and the throw was caught by
+    // pickContract as "no-chain" for the whole side. contract-pick.ts now fails that strike's premium check only.
     const control = pickContract({ symbol: "AAPL", kind: "call", spot: 100.2, chain: chain(), checkedAgeMs: 1_000, today: DAY });
     expect(control.picked?.strike).toBe(100);
     const p = pickContract({ symbol: "AAPL", kind: "call", spot: 100.2, chain: chain((c) => (c.kind === "call" && c.strike === 100 ? { ask: 1e300 } : {})), checkedAgeMs: 1_000, today: DAY });
