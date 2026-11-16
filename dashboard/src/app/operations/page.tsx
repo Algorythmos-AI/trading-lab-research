@@ -359,7 +359,7 @@ function DstPanel({ s }: { s: Snapshot }) {
 function LogsPanel({ s }: { s: Snapshot }) {
   const logs: [string, LogInfo | null | undefined][] = [
     ["Pre-market routine", s.ops?.routine?.log],
-    ["Paper B", s.ops?.paper?.log],
+    ["Robot B (paper)", s.ops?.paper?.log],
     ["Forward test", s.ops?.forward?.log],
   ];
   return (

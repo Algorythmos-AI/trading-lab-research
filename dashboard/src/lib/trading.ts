@@ -199,7 +199,7 @@ export type OutcomeTone = "good" | "warn" | "bad" | "info" | "neutral";
 export function outcomeLine(v: Trading): { tone: OutcomeTone; title: string; detail: string } {
   const o = v.outcome ?? "";
   if (!v.available || v.session === null) {
-    return { tone: "neutral", title: "No session recorded yet", detail: "Paper B arms at 08:30 New York on trading days." };
+    return { tone: "neutral", title: "No session recorded yet", detail: "Robot B arms at 08:30 New York on trading days." };
   }
   if (o === "traded") {
     return v.position
@@ -220,7 +220,7 @@ export function outcomeLine(v: Trading): { tone: OutcomeTone; title: string; det
     return { tone: "warn", title: `No trade: blocked (${why})`, detail: "A signal fired, and a safety check stopped the entry." };
   }
   if (!v.ended) {
-    return { tone: "info", title: "Session in progress", detail: "No entry yet. Paper B checks QQQ on each half-hour from 10:00 New York and takes at most one trade a day." };
+    return { tone: "info", title: "Session in progress", detail: "No entry yet. Robot B checks QQQ on each half-hour from 10:00 New York and takes at most one trade a day." };
   }
   return { tone: "neutral", title: "No trade", detail: "The session ended without an entry." };
 }
@@ -231,7 +231,7 @@ export function tradeSentence(s: Snapshot): string | null {
   if (!v.available || !v.current) return null;
   const o = v.outcome ?? "";
   if (o === "traded") return v.position ? "Paper B is in a trade." : "Paper B took a trade today.";
-  if (o === "no_signal") return "Paper B had no signal today.";
+  if (o === "no_signal") return "Robot B had no signal today.";
   if (o === "no_inputs") return "Paper B could not check its signal today: the prices it needs were missing.";
   if (o === "signal_not_acted") return "Paper B had a signal and did not act on it.";
   if (o.startsWith("blocked")) return "Paper B had a signal that a safety check blocked.";
