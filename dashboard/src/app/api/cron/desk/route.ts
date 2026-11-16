@@ -12,8 +12,9 @@ import { runSignalStep } from "@/lib/signal-run";
 // SPY read, then 3 s of store work); its seal, up to 20 s, runs only outside the session, where the run is idle and
 // answers at once, so both stay inside maxDuration.
 // After it, the signal step (DEC-0051, signal-run.ts), under its own switch desk/signal.json: it starts only once the
-// DEC-0044 record's write has settled, runs after the answer is sent, has its own 5 s budget and catches its own
-// errors. In the session the three together stay under about 21 s (5.5 + the evaluator's 10 + 5), inside maxDuration.
+// DEC-0044 record's write has settled, runs after the answer is sent, has its own 5 s budget (up to about 5.5 s with
+// the read-back of a late write) and catches its own errors. In the session the three together stay under about
+// 21 s (the stamp's 5.5 + the evaluator's 9.9, read-back included, + the signal step's 5.5), inside maxDuration.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
