@@ -160,7 +160,7 @@ describe("the B2 wording", () => {
 
   it("names each non-real region by what it is, and no longer calls a rule on probation paper", async () => {
     const options = text(await RENDER.options());
-    expect(options).toContain("PAPER · ALPACA Manual option positions");
+    expect(options).toContain("PAPER · ALPACA Manual and clone positions");
     expect(options).toContain("Rule replay (model)");
     // "Paper" for a rule on probation, in any of the forms it used to take (the panes, the Entry rules key and table,
     // the rule chart's tooltip and counts). "The paper account" for the Alpaca account itself is right and stays.

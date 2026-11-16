@@ -64,8 +64,9 @@ const ROW = "grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-baseline gap-
 
 /**
  * The open option positions of the Alpaca paper account kept for manual option trades, as the trading host last
- * published them. Paper money, never the owner's Webull account: the pane sits in a paper frame (lib/env.ts) and its
- * dollars are paper Money. A position on one of the desk's names opens that name with its contract loaded into the contract pane.
+ * published them. The options clone trades in the same account while it has no key pair of its own (`APCA_CLONE_*`
+ * unset on the host, so it falls back to `APCA_OPTIONS_*`), so the pane is named for both. Paper money, never the
+ * owner's Webull account: the pane sits in a paper frame (lib/env.ts) and its dollars are paper Money. A position on one of the desk's names opens that name with its contract loaded into the contract pane.
  *
  * Read only: the desk shows what is held and never places, changes or closes anything. A document older than a
  * day and a half says nothing about now and is not shown; in session, one that has not been renewed for half an
@@ -170,12 +171,12 @@ export function OptionsPositions({
   const rows = positionRows(doc, new Set(names), clock);
   const total = positionsTotal(rows);
   return (
-    <EnvFrame env="paper" chip={false} label="Manual option positions" className="mx-2 my-1.5">
+    <EnvFrame env="paper" chip={false} label="Manual and clone positions" className="mx-2 my-1.5">
       <Pane
         label="Paper option positions"
         title={
           <>
-            <EnvChip env="paper" /> Manual option positions
+            <EnvChip env="paper" /> Manual and clone positions
           </>
         }
         data-positions={rows.length === 0 ? "empty" : age.state}
@@ -215,7 +216,7 @@ export function OptionsPositions({
           </ul>
         )}
         <p className="text-muted-foreground mt-1.5 text-[0.6875rem] max-sm:text-xs">
-          Paper account, read only. Marks and results are the broker&apos;s. Δ and what a day of waiting costs (to expiry, in a contract&apos;s last day) are estimates from option quotes
+          Paper account, read only. It also holds the options clone&apos;s trades: the clone has no paper account of its own. Marks and results are the broker&apos;s. Δ and what a day of waiting costs (to expiry, in a contract&apos;s last day) are estimates from option quotes
           {(() => {
             const words = feedsWords(Object.values(chains).map((g) => ({ chain: g.chain, ageMin: chainAge(g.chain, g.receivedPerf, perfNow) })));
             // Indicative's words read as they always have; any other feed's are their own sentence.

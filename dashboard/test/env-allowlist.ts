@@ -9,9 +9,10 @@ import type { Env } from "@/lib/env";
 export type NonRealFrame = { env: Exclude<Env, "real">; label: string };
 
 export const NON_REAL_FRAMES = {
-  /** /options (the desk, live view): the hand-traded Alpaca paper account's positions, and the rule replay. */
+  /** /options (the desk, live view): the Alpaca paper account the owner trades by hand, which the options clone
+   * also trades in while it has no account of its own; and the rule replay. */
   options: [
-    { env: "paper", label: "Manual option positions" },
+    { env: "paper", label: "Manual and clone positions" },
     { env: "model", label: "Rule replay" },
   ],
   /** / (the Overview): Robot B's one-line result (paper). The scan beside it is counts only, unframed. */
