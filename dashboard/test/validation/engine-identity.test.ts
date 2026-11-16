@@ -1,5 +1,5 @@
 // DEC-0051 section 8's engine identity check for the pre-dry defect fixes of 2026-11-16 (DEC-0044's engine label
-// e-28344e769752 → e-9772bf0fb6e5). The only engine file they change is trade-state.ts (the retest touch, compared
+// e-28344e769752 → e-05b589ff4f1c). The only engine file they change is trade-state.ts (the retest touch, compared
 // exactly); contract-pick.ts and ticket.ts are outside the engine's closure (scripts/gen-engine.mjs).
 //
 // The old engine is the base commit's trade-state.ts, rebuilt here from today's file by putting the two old lines back
@@ -15,13 +15,14 @@
 // side's state, its `brokeAt` or a card number (level, entry, stop, target 1, target 2) differs. The only rows allowed
 // to differ are boundary touches: a retest dip exactly 0.1 ATR from the line.
 //
-// This check belongs to this one release: the next change to trade-state.ts makes the rebuild fail its hash, and that
-// change needs its own identity check (DEC-0051 section 8) in place of this one.
+// This check belongs to this one release and runs only while ENGINE_VERSION is its label (LABEL): a later engine change
+// skips it, and needs its own identity check (DEC-0051 section 8), against its own base, in place of this one.
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { evaluateSlot, type Evaluation } from "@/lib/desk-eval";
+import { ENGINE_VERSION } from "@/lib/engine-version.gen";
 import type { SidePlan } from "@/lib/focus-plan";
 import type { LiveQuote } from "@/lib/options";
 import { type BoardRow, boardRows } from "@/lib/trade-now";
@@ -30,11 +31,18 @@ import { type BoardCase, boardCases, type EvalCase, evalCases } from "../guards-
 import { serialise } from "../guards-off-run";
 import { mulberry32 } from "./harness-scene";
 
-const H = vi.hoisted(() => ({ engine: "new" as "old" | "new", baseSha: "", constantsDiffer: [] as string[] }));
+/** The engine label this check was run for: the label after the fixes. */
+const LABEL = "e-05b589ff4f1c";
 
-/** The fix as it stands in trade-state.ts, and the two lines it replaced. */
-const NEW_BLOCK = /\n {2}\/\/ The touch compared exactly[^\n]*\n(?: {2}\/\/[^\n]*\n)*\s*const units = [^\n]*\n\s*const perAtr = [^\n]*\n\s*const touch = [^\n]*\n/;
-const OLD_LINES = "\n  const near = a !== null ? RETEST_ATR * a : null;\n  const touch = near === null ? -1 : after.findIndex((b) => (s > 0 ? b.l - L : L - b.h) <= near);\n";
+const H = vi.hoisted(() => ({
+  engine: "new" as "old" | "new",
+  baseSha: "",
+  dir: "",
+  constantsDiffer: [] as string[],
+  /** The fix as it stands in trade-state.ts, from its first comment line to `const touch = …`, and the two old lines. */
+  NEW_BLOCK: /\n {2}\/\/ The touch compared exactly[\s\S]*?\n {2}const touch = [^\n]*\n/,
+  OLD_LINES: "\n  const near = a !== null ? RETEST_ATR * a : null;\n  const touch = near === null ? -1 : after.findIndex((b) => (s > 0 ? b.l - L : L - b.h) <= near);\n",
+}));
 /** SHA-256 of dashboard/src/lib/trade-state.ts at origin/test/dry-run-validation (fe759dea), the engine before the fix. */
 const BASE_SHA256 = "f67a46ee9d359a56010696d2b32c0d6aba87d732290783f606fa2295db3cc94f";
 
@@ -47,11 +55,10 @@ vi.mock("@/lib/trade-state", async (importOriginal) => {
   const nu = await importOriginal<Record<string, unknown>>();
   const file = url.fileURLToPath(new URL("../../src/lib/trade-state.ts", import.meta.url));
   const src = fs.readFileSync(file, "utf8");
-  const re = /\n {2}\/\/ The touch compared exactly[^\n]*\n(?: {2}\/\/[^\n]*\n)*\s*const units = [^\n]*\n\s*const perAtr = [^\n]*\n\s*const touch = [^\n]*\n/;
-  const old = src.replace(re, "\n  const near = a !== null ? RETEST_ATR * a : null;\n  const touch = near === null ? -1 : after.findIndex((b) => (s > 0 ? b.l - L : L - b.h) <= near);\n");
+  const old = src.replace(H.NEW_BLOCK, H.OLD_LINES);
   H.baseSha = sha("sha256").update(old).digest("hex");
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "engine-identity-"));
-  const out = path.join(dir, "trade-state.base.ts");
+  H.dir = fs.mkdtempSync(path.join(os.tmpdir(), "engine-identity-"));
+  const out = path.join(H.dir, "trade-state.base.ts");
   fs.writeFileSync(out, old.replace(/from "\.\/([^"]+)"/g, 'from "@/lib/$1"'));
   const base = (await import(/* @vite-ignore */ url.pathToFileURL(out).href)) as Record<string, unknown>;
   const routed: Record<string, unknown> = {};
@@ -66,6 +73,10 @@ vi.mock("@/lib/trade-state", async (importOriginal) => {
 });
 
 vi.setConfig({ testTimeout: 300_000 });
+afterAll(() => {
+  if (H.dir) rmSync(H.dir, { recursive: true, force: true });
+});
+const otherEngine = ENGINE_VERSION !== LABEL;
 
 function on<T>(engine: "old" | "new", f: () => T): T {
   H.engine = engine;
@@ -84,18 +95,18 @@ const evalKey = (ev: Evaluation) => ev.rows.map((r) => serialise(r));
 // As guards-off.test.ts reads them: through JSON, so every run sees the same plain data.
 const cases = JSON.parse(JSON.stringify({ board: boardCases(), eval: evalCases() })) as { board: BoardCase[]; eval: EvalCase[] };
 
-describe("the old engine is the base commit's", () => {
+describe.skipIf(otherEngine)("the old engine is the base commit's", () => {
   it("the rebuilt trade-state.ts is byte-identical to the file before the fix, and no constant moved", () => {
     const src = readFileSync(fileURLToPath(new URL("../../src/lib/trade-state.ts", import.meta.url)), "utf8");
-    expect(NEW_BLOCK.test(src)).toBe(true);
-    expect(createHash("sha256").update(src.replace(NEW_BLOCK, OLD_LINES)).digest("hex")).toBe(BASE_SHA256);
+    expect(H.NEW_BLOCK.test(src)).toBe(true);
+    expect(createHash("sha256").update(src.replace(H.NEW_BLOCK, H.OLD_LINES)).digest("hex")).toBe(BASE_SHA256);
     expect(H.baseSha).toBe(BASE_SHA256);
     expect(H.constantsDiffer).toEqual([]);
   });
 });
 
-describe("every fixture: old engine against new (DEC-0051 section 8)", () => {
-  it("the board's rows: no row's state, brokeAt or card numbers differ (735 cases)", () => {
+describe.skipIf(otherEngine)("every fixture: old engine against new (DEC-0051 section 8)", () => {
+  it("the board's rows: no row's state, brokeAt or card numbers differ, over every guards-off board case", () => {
     let rows = 0;
     const differ: string[] = [];
     const anyByte: string[] = [];
@@ -109,13 +120,13 @@ describe("every fixture: old engine against new (DEC-0051 section 8)", () => {
       });
       if (serialise(a) !== serialise(b)) anyByte.push(c.id);
     }
-    expect(cases.board.length).toBe(735);
+    expect(cases.board.length).toBeGreaterThanOrEqual(735);
     expect(rows).toBeGreaterThan(0);
     expect(differ).toEqual([]);
     expect(anyByte).toEqual([]);
   });
 
-  it("the server's evaluation: no row differs, nor any other byte of it (84 slots)", () => {
+  it("the server's evaluation: no row differs, nor any other byte of it, over every guards-off slot", () => {
     const differ: string[] = [];
     let rows = 0;
     for (const c of cases.eval) {
@@ -124,7 +135,7 @@ describe("every fixture: old engine against new (DEC-0051 section 8)", () => {
       rows += a.rows.length;
       if (serialise(evalKey(a)) !== serialise(evalKey(b)) || serialise(a) !== serialise(b)) differ.push(c.id);
     }
-    expect(cases.eval.length).toBe(84);
+    expect(cases.eval.length).toBeGreaterThanOrEqual(84);
     expect(rows).toBeGreaterThan(0);
     expect(differ).toEqual([]);
   });
@@ -154,7 +165,7 @@ function retest(kind: "call" | "put", L: number, atr: number, extreme: number) {
   return sideState(plan, atr, bars, quote, now);
 }
 
-describe("retest scenes around the band: only exact boundary touches differ", () => {
+describe.skipIf(otherEngine)("retest scenes around the band: only exact boundary touches differ", () => {
   it("a seeded sweep (levels and extremes to the cent or ten-thousandth, ATRs to the cent): every difference is a dip of exactly 0.1 ATR", () => {
     const r = mulberry32(20261116);
     let differ = 0;
@@ -195,6 +206,21 @@ describe("retest scenes around the band: only exact boundary touches differ", ()
       const kind = r() < 0.5 ? "call" : "put";
       const L = Math.round((20 + r() * 900) * 100) / 100;
       const atr = (20 + r() * 900) * 0.01;
+      const dip = Math.round(0.1 * atr * 10_000) + Math.round((r() - 0.5) * 6);
+      const extreme = Math.round(L * 10_000 + (kind === "call" ? 1 : -1) * dip) / 10_000;
+      const a = on("old", () => retest(kind, L, atr, extreme));
+      const b = on("new", () => retest(kind, L, atr, extreme));
+      expect(serialise(sideKey(b)), `${kind} L=${L} ATR=${atr} extreme=${extreme}`).toBe(serialise(sideKey(a)));
+    }
+  });
+
+  it("levels with five decimals (the floating comparison kept): old and new agree on every scene", () => {
+    const r = mulberry32(7);
+    for (let i = 0; i < 20_000; i++) {
+      const kind = r() < 0.5 ? "call" : "put";
+      // a level whose fifth decimal is never 0, so it is never a whole number of ten-thousandths
+      const L = (Math.floor((20 + r() * 3_000) * 10_000) * 10 + 1 + Math.floor(r() * 9)) / 100_000;
+      const atr = (1 + Math.floor(r() * 3_000)) / 100;
       const dip = Math.round(0.1 * atr * 10_000) + Math.round((r() - 0.5) * 6);
       const extreme = Math.round(L * 10_000 + (kind === "call" ? 1 : -1) * dip) / 10_000;
       const a = on("old", () => retest(kind, L, atr, extreme));

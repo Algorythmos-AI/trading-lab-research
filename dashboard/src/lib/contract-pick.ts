@@ -156,13 +156,12 @@ export function readContractQuote(
 
 const check = (id: ContractCheckId, pass: boolean, value: number | null, why: string): ContractCheck => ({ id, pass, value, why });
 
-/** The ticket's sizing at the ask with the owner's limits, or null when it cannot take the price (it throws). */
+/**
+ * The ticket's sizing at the ask with the owner's limits, or null for a price it cannot take: sizeTicket's own
+ * precondition (a positive safe whole number of cents) is checked here first, so it is never called to throw.
+ */
 function sizeOrNull(askCents: number): Size | null {
-  try {
-    return sizeTicket(askCents, OWNER_LIMITS);
-  } catch {
-    return null;
-  }
+  return Number.isSafeInteger(askCents) && askCents > 0 ? sizeTicket(askCents, OWNER_LIMITS) : null;
 }
 
 /** One strike's contract, every check worked out. */
@@ -191,8 +190,8 @@ function judge(x: PickInput, chain: ChainResponse, expiry: string, strike: numbe
     checks.push(check("premium", false, null, "no usable quote to price it at"));
     checks.push(check("bid_ask", false, null, "no usable quote"));
   } else {
-    // An ask the sizing cannot take (sizeTicket throws on a price that is not a safe whole number of cents, such as an
-    // absurd 1e300) fails this contract's premium check only, so the other strikes are still judged (a defect fix,
+    // An ask the sizing cannot take (not a safe whole number of cents, such as an absurd 1e300, on which sizeTicket
+    // throws) fails this contract's premium check only, so the other strikes are still judged (a defect fix,
     // 2026-11-16: the throw reached pickContract's catch and named no contract for the whole side).
     const size = sizeOrNull(askCents);
     if (size === null) checks.push(check("premium", false, askCents, "the ask cannot be sized: not a usable price in whole cents"));

@@ -70,7 +70,7 @@ describe("SIGNAL_CODE_HASH", () => {
   // fixes (trade-state.ts retest touch, contract-pick.ts absurd ask): EXP-0034 README.md, "Dates and commits", the line
   // "Defect fixes to the outcome or signal code before the read" dated 2026-11-16.
   it("is pinned: a change to the signal's code is a visible diff here", () => {
-    expect(SIGNAL_CODE_HASH).toBe("s-29524dae10a6635542b5645b9bbdbcccb3789ec7b657a58505e0cb29aeae3d90");
+    expect(SIGNAL_CODE_HASH).toBe("s-44709694b261a3bceebdafe21cc15f9f58f49f2359b73122d493d6e54aca1a41");
   });
 
   // Once DEC-0051 Amendment 1 sets FROZEN_CODE_HASH (signal-freeze.ts), this becomes a real assertion, and the

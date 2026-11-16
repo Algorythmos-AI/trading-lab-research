@@ -46,27 +46,30 @@
   `README.md`): not yet.
 - "Signal confirmed" alert first switched on in production: not yet.
 - DEC-0048's switch date (the report gives group counts before and after it): not yet.
-- Engine identity checks (yes or no, with counts): 2026-11-16, `e-28344e769752` to `e-9772bf0fb6e5` (the pre-dry
+- Engine identity checks (yes or no, with counts): 2026-11-16, `e-28344e769752` to `e-05b589ff4f1c` (the pre-dry
   defect fixes below), fixtures only: no, no fixture row differs (735 board cases, 2,205 rows; 84 evaluated slots,
-  420 rows; `dashboard/test/validation/engine-identity.test.ts`, old engine rebuilt byte-identical to the base
-  commit's `trade-state.ts`). The only rows that differ anywhere are boundary touches: 4 of 4 constructed cases;
-  10,039 of 20,388 boundary scenes in a seeded sweep, 0 of its 19,612 other scenes and 0 of 20,000 scenes with
-  many-decimal ATRs; across the whole test suite's 9,963 touch evaluations, 4 differ, each a dip of exactly 0.1 ATR.
-  The last 10 logged sessions: not run (fixtures only; the logged sessions to be run by the owner/host before this
-  label reaches production). No `dry` session and no window had started, so it ends nothing.
+  420 rows; `dashboard/test/validation/engine-identity.test.ts`, the old engine rebuilt byte-identical to the base
+  commit's `trade-state.ts`). In the same test the only rows that differ are boundary touches: 4 of 4 constructed
+  cases; 10,039 of 20,388 boundary scenes in a seeded sweep, 0 of its 19,612 other scenes, 0 of 20,000 scenes with
+  many-decimal ATRs and 0 of 20,000 with five-decimal levels. The other half of the check, the last 10 logged
+  sessions through both engines, is NOT done: the Mac cannot read the production records. DEC-0051 section 8
+  requires it before this label reaches production; the owner or the host runs it. No `dry` session and no window
+  had started, so it ends nothing.
 - Defect fixes to the outcome or signal code before the read: none to the outcome code. To the signal code:
   - 2026-11-16, before any `dry` session, owner-approved (DEC-0051 section 8, precondition 3's defect-fix route), two
     defects found by the pre-dry validation (`dashboard/test/validation/logic-suspects.test.ts` cases a and d):
     (1) `dashboard/src/lib/trade-state.ts` `sideState`, the retest touch: a dip exactly 0.1 ATR from the line was not
-    a touch in floating point (100.20 − 100.10 = 0.10000000000000853 > 0.1); the dip is now taken in whole
-    ten-thousandths of a dollar and compared with the ATR exactly. (2) `dashboard/src/lib/contract-pick.ts` `judge`:
-    an ask the ticket's sizing cannot take (`ticket.ts` `sizeTicket` throws, for example an ask of 1e300) named no
-    contract for the whole side (`no-chain`); it now fails that strike's premium check only and the other strikes are
-    still judged. `ticket.ts` is unchanged. No parameter, threshold, rule or owner rule changed. `SIGNAL_CODE_HASH`
+    a touch in floating point (100.20 − 100.10 = 0.10000000000000853 > 0.1); when the level and the bar's low (high,
+    for a put) are whole ten-thousandths, the dip is now taken in whole ten-thousandths and compared with the ATR
+    exactly; any price with more decimals keeps the original floating comparison. (2)
+    `dashboard/src/lib/contract-pick.ts` `judge`: an ask the ticket's sizing cannot take (not a safe whole number of
+    cents, for example an ask of 1e300, on which `ticket.ts` `sizeTicket` throws) named no contract for the whole side
+    (`no-chain`); it now fails that strike's premium check only and the other strikes are still judged. `ticket.ts`
+    is unchanged. No parameter, threshold, rule or owner rule changed. `SIGNAL_CODE_HASH`
     `s-0ec9e5efd1e65790ca5f83e5ba845269ad2c3666b500c631d89f2cb7327f2345` to
-    `s-29524dae10a6635542b5645b9bbdbcccb3789ec7b657a58505e0cb29aeae3d90` (the pin in
+    `s-44709694b261a3bceebdafe21cc15f9f58f49f2359b73122d493d6e54aca1a41` (the pin in
     `dashboard/test/signal-freeze.test.ts` moved with it); DEC-0044 `ENGINE_VERSION` `e-28344e769752` to
-    `e-9772bf0fb6e5` (of the two, only `trade-state.ts` is in the engine's code). The engine identity check is the
+    `e-05b589ff4f1c` (of the two, only `trade-state.ts` is in the engine's code). The engine identity check is the
     line above. Comments in `signal.ts` corrected too (the chain's checked age is `contract.ts` `chainAge`; the
     lifecycle is counted at the slot's end + `CLOSE_GRACE_MS`): comments do not move the hash.
 - Writer fixes before any `dry` session, 2026-11-16 (`signal-run.ts` and `desk-run.ts`, outside the hashed code), from
