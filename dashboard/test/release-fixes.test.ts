@@ -268,7 +268,7 @@ describe("the Trades page's words", () => {
   });
 
   it("shows the clone's title once: the group heading is for a screen reader only", () => {
-    expect(html).toMatch(/<h2 id="clone-group-title" data-group-heading="hidden" class="[^"]*sr-only[^"]*">The clone<\/h2>/);
+    expect(html).toMatch(/<h2 id="clone-group-title" data-group-heading="hidden" class="[^"]*sr-only[^"]*">Options clone \(paper\)<\/h2>/);
     expect(html).toContain('id="clone"');
   });
 

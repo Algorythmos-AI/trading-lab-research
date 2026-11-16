@@ -7,6 +7,7 @@ import { PaneBoundary } from "@/components/client/pane-boundary";
 import { EvidenceBars, LevelMap, RuleRanges, StructureMap } from "@/components/options-charts";
 import { Panel } from "@/components/panel";
 import { Badge } from "@/components/ui/badge";
+import { EnvFrame } from "@/components/ui/env-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fracPct, num, rMult, shortDate, signed, sydney, weekDate as sessionDay } from "@/lib/format";
 import {
@@ -290,8 +291,8 @@ export function RulesPanel({ e }: { e: Options }) {
       title="Entry rules"
       means={
         proven
-          ? "Only proven rules have earned real use. The rest are tracked on paper."
-          : "No rule is proven yet. Every one is tracked on paper until it passes the promotion test, so none of these is a signal to trade."
+          ? "Only proven rules have earned real use. The rest are on probation, tracked by replay."
+          : "No rule is proven yet. Every one is on probation, tracked by replay, until it passes the promotion test, so none of these is a signal to trade."
       }
       icon={FlaskConical}
     >
@@ -303,9 +304,9 @@ export function RulesPanel({ e }: { e: Options }) {
         </li>
         <li className="flex items-center gap-1.5">
           <span className="border-info-fill inline-block size-2.5 rounded-full border-2" />
-          live paper so far
+          on probation so far
         </li>
-        <li>Promotion needs 30 paper cases, a range above zero after costs, both halves of history and 4 weeks live.</li>
+        <li>Promotion needs 30 cases on probation, a range above zero after costs, both halves of history and 4 weeks live.</li>
       </ul>
       <details className="mt-3 text-sm">
         <summary className="text-muted-foreground cursor-pointer text-xs">Show the numbers as a table</summary>
@@ -314,7 +315,7 @@ export function RulesPanel({ e }: { e: Options }) {
           <TableRow>
             <TableHead>Rule</TableHead>
             <TableHead className="text-right">Backtest</TableHead>
-            <TableHead className="text-right">Paper so far</TableHead>
+            <TableHead className="text-right">On probation so far</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -367,16 +368,28 @@ export function RulesPanel({ e }: { e: Options }) {
   );
 }
 
+/**
+ * The probation rules' replayed trades: a model, not an account. The edition's `paper` rows are each rule's triggers
+ * replayed on hourly bars after the close, with no option prices, so the panel sits in a model frame (lib/env.ts).
+ */
 export function PaperPanel({ e }: { e: Options }) {
+  return (
+    <EnvFrame env="model" label="Rule replay">
+      <RuleReplayPanel e={e} />
+    </EnvFrame>
+  );
+}
+
+function RuleReplayPanel({ e }: { e: Options }) {
   const rows = e.paper ?? [];
   return (
     <Panel
-      title="Paper scorecard"
-      means="Each probation rule's triggers, replayed on hourly bars after the close. Paper only. R is measured on the stock, with no option prices or costs."
+      title="Rule replay (model)"
+      means="Each probation rule's triggers, replayed on hourly bars after the close. A model, not an account: R is measured on the stock, with no option prices or costs."
       icon={ClipboardList}
     >
       {rows.length === 0 ? (
-        <Empty title="No paper trades yet" />
+        <Empty title="No replayed trades yet" />
       ) : (
         <div className="grid gap-3">
           <TradeBars
@@ -387,7 +400,7 @@ export function PaperPanel({ e }: { e: Options }) {
               when: shortDate(p.session),
             }))}
             whenLabel="Session"
-            label="Each paper trade's result in R, in the order logged"
+            label="Each replayed trade's result in R, in the order logged"
           />
           <p className="text-muted-foreground font-mono text-xs">
             {rows.length} trades · total {rMult(rows.reduce((a, p) => a + (p.r ?? 0), 0), 2)} · {rows.filter((p) => (p.r ?? 0) > 0).length} won

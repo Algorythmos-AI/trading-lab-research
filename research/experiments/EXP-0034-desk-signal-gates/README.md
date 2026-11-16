@@ -29,7 +29,11 @@
 - DEC-0051 accepted: 2026-11-13. The close date follows from the window's start date (one year after it).
 - `context.ts` code pin: 2026-11-13, #422 merged; `dashboard/src/lib/context.ts` at integration
   `c48d3477524131794cbab1fe85cc983134b96579`. The definition copied into `config.yaml` governs.
-- Precondition 1, the per-slot range baseline in production, its commit: not yet.
+- Precondition 1, the per-slot range baseline in production, its commit: 2026-11-13,
+  `3658d7d42c5a5f43fc10e6905f2b9786145a2d10` (#428): `flow.ts` `buildBaseline`, `BASELINE_V = 2` with `range_median`,
+  released to `main` in #426 and unchanged through #436. In production: to confirm (written 2026-11-16). It is met on
+  the session of the first stored baseline the owner sees reading `v: 2` with `range_median`; that date is written
+  here, and the `dry` sessions Amendment 1 reads are those after it.
 - Precondition 2, the read script merged, its commit: 2026-11-13, `8d9bb9aaf83c625e59fde359786bbc6e12033cbf` (#434).
 - Precondition 3, the outcome code merged and frozen, its commit: 2026-11-13, `8d9bb9aaf83c625e59fde359786bbc6e12033cbf` (#434).
 - Precondition 4, one full regular session stamped in production (board-feed stamps reading `sip`, sealed): not

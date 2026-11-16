@@ -4,6 +4,8 @@ import Link from "next/link";
 import { Meter } from "@/components/overview/home";
 import { Panel } from "@/components/panel";
 import { StatusBadge, TONE_TEXT } from "@/components/status";
+import { EnvFrame } from "@/components/ui/env-chip";
+import { Money } from "@/components/ui/money";
 import { TradeClock } from "@/components/today/trade-clock";
 import { contractLabel, fmtMinutes, holdMinutes, marketState, nyTime, sessionView, type JournalDoc } from "@/lib/journal";
 import type { Tone } from "@/lib/labels";
@@ -50,14 +52,17 @@ export function YourDay({ doc, now }: { doc: JournalDoc; now: Date }) {
     >
       <div className="grid gap-5">
         <div className="grid grid-cols-2 gap-x-4 gap-y-5 lg:grid-cols-4">
-          <div className="grid content-start gap-1">
+          {/* The owner's own Webull money: the day result is real Money, in a real (unframed) EnvFrame. */}
+          <EnvFrame env="real" chip={false} label="Day result" className="grid content-start gap-1">
             <p className="text-muted-foreground text-xs">Day result</p>
-            <p className={cn("font-mono text-3xl font-semibold tracking-tight", TONE_TEXT[toneOf(s.trades ? s.net : null)])}>{s.trades ? usd(s.net) : "$0"}</p>
+            <p className={cn("font-mono text-3xl font-semibold tracking-tight", TONE_TEXT[toneOf(s.trades ? s.net : null)])}>
+              <Money env="real" value={s.trades ? s.net : 0} signed />
+            </p>
             <p className="text-muted-foreground text-xs">
               {s.trades ? `${s.trades} closed · ${s.wins} won · ${s.losses} lost` : "Nothing closed yet"}
               {view.open.length ? ` · ${view.open.length} open` : ""}
             </p>
-          </div>
+          </EnvFrame>
           <div className="grid content-start gap-1">
             <p className="text-muted-foreground text-xs">Best and worst</p>
             <p className="font-mono text-base font-semibold">

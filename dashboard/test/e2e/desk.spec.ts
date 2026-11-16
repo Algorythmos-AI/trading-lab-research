@@ -100,9 +100,9 @@ test("each view gives the monitor its own columns, and none of them needs sidewa
   await expect(row(page, "SPY")).toContainText("TESTING RESISTANCE");
   expect(await monitorOverflow(page)).toBeLessThanOrEqual(0);
   await desk(page).getByRole("button", { name: "Review", exact: true }).click();
-  await expect(desk(page).getByRole("columnheader", { name: /^Paper trades/ })).toBeVisible();
+  await expect(desk(page).getByRole("columnheader", { name: /^Probation trades/ })).toBeVisible();
   expect(await monitorOverflow(page)).toBeLessThanOrEqual(0);
-  // AAPL took two paper trades in the fixture and won neither.
+  // AAPL took two probation-rule trades in the fixture and won neither.
   await expect(row(page, "AAPL")).toContainText("\u22121.16R");
   await expect(page).toHaveURL(/view=review/);
 });
@@ -247,7 +247,7 @@ test("on a phone the desk shows one pane at a time, and the bar at the bottom sw
   await desk(page).getByRole("button", { name: "Review", exact: true }).click();
   await expect(desk(page)).toHaveAttribute("data-desk-view", "review");
   await expect(monitor).toBeVisible();
-  await expect(desk(page).getByRole("columnheader", { name: /^Paper trades/ })).toBeVisible();
+  await expect(desk(page).getByRole("columnheader", { name: /^Probation trades/ })).toBeVisible();
   await expect(page).not.toHaveURL(/pane=/);
 });
 
@@ -439,11 +439,14 @@ test("the paper positions sit under the list, and opening one prices the contrac
   await expect(positions(page)).toBeVisible();
   await expect(positions(page)).toHaveAttribute("data-positions", "fresh");
   await expect(positions(page).getByRole("listitem")).toHaveCount(3);
+  // The hand-traded Alpaca paper account, framed and named as paper: its dollars are paper money (US$, with cents).
+  await expect(positions(page).getByRole("heading")).toHaveText("PAPER · ALPACA Manual option positions");
+  await expect(page.getByRole("group", { name: "Paper account (Alpaca): Manual option positions" })).toHaveAttribute("data-env", "paper");
   // Two contracts of the SPY call, paid 2.85 and marked 3.10: fifty dollars up. The three together: 12.50 up.
-  await expect(positions(page).getByRole("listitem").filter({ hasText: "SPY" })).toContainText("+$50");
-  await expect(positions(page)).toContainText(/open result \+\$13/);
+  await expect(positions(page).getByRole("listitem").filter({ hasText: "SPY" })).toContainText("+US$50.00");
+  await expect(positions(page)).toContainText(/open result \+US\$12\.50/);
   // A position on one of the desk's names is priced from the option feed: its delta and what a day costs.
-  await expect(positions(page).getByRole("listitem").filter({ hasText: "SPY" }).locator("[data-greeks]")).toContainText(/Δ −?\d\.\d\d · [−+]\$[\d,]+(\/day| to expiry)/);
+  await expect(positions(page).getByRole("listitem").filter({ hasText: "SPY" }).locator("[data-greeks]")).toContainText(/Δ −?\d\.\d\d · [−+]US\$[\d,]+\.\d\d(\/day| to expiry)/);
   // A name the desk does not carry is listed, and has nowhere to open.
   await expect(positions(page).getByRole("listitem").filter({ hasText: "IWM" }).locator("[data-greeks]")).toHaveCount(0);
   await expect(positions(page).getByRole("listitem").filter({ hasText: "IWM" }).getByRole("button")).toHaveCount(0);
@@ -539,13 +542,13 @@ test("the live view lists the rules that have triggered today, and each name's r
   await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
   await expect(notices).toHaveCount(2);
   expect((await rows(page).first().boundingBox())?.y).toBeCloseTo(top!.y, 0);
-  await expect(notices.first()).toContainText("paper rule triggered on the 12:00 ET hourly close");
+  await expect(notices.first()).toContainText("probation rule triggered on the 12:00 ET hourly close");
   await expect(notices.first()).toContainText("not a signal to trade");
-  await expect(page.locator("[data-trigger-notices]").getByRole("status")).toContainText("2 paper rules triggered");
+  await expect(page.locator("[data-trigger-notices]").getByRole("status")).toContainText("2 probation rules triggered");
   await page.getByRole("button", { name: "Dismiss the notice for SPY" }).click();
   await expect(notices).toHaveCount(1);
   // Dismissing does not speak again, and the keyboard is back on the desk.
-  await expect(page.locator("[data-trigger-notices]").getByRole("status")).toContainText("2 paper rules triggered");
+  await expect(page.locator("[data-trigger-notices]").getByRole("status")).toContainText("2 probation rules triggered");
   await expect(page.locator("body")).not.toBeFocused();
   await notices.getByRole("button", { name: `Show ${other}` }).click();
   await expect(detail(page, other!)).toBeVisible();
@@ -689,15 +692,15 @@ test("a sparse edition shows dashes on the desk, never NaN, and no pane breaks",
   expect(errors).toEqual([]);
 });
 
-test("a corrupt paper record breaks the scorecard and nothing else", async ({ page, context, baseURL }) => {
+test("a corrupt rule-replay record breaks the rule replay and nothing else", async ({ page, context, baseURL }) => {
   await variant(context, baseURL, "poison");
   await open(page, "/options?view=review");
   await expect(rows(page)).toHaveCount(10);
   await showPane(page, "SPY");
   await expect(page.locator('[data-desk-detail="SPY"]')).toBeVisible();
-  // The scorecard sits in the folded research section.
+  // The rule replay sits in the folded research section.
   await page.getByText("Research and evidence").click();
-  await expect(page.locator('[data-pane-error="Paper scorecard"]')).toBeVisible();
+  await expect(page.locator('[data-pane-error="Rule replay (model)"]')).toBeVisible();
   await expect(page.locator("[data-pane-error]")).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "Entry rules" })).toBeVisible();
 });
@@ -823,7 +826,7 @@ test("the review says how the in-session rule states compared with the record, o
   await open(page, "/options?view=review");
   await expect(page.locator("[data-agreement]")).toContainText("only in session");
   await expect(page.locator("[data-agreement]")).toContainText("10 names");
-  // A damaged paper record breaks the scorecard and not the desk, here as everywhere.
+  // A damaged rule-replay record breaks the rule replay and not the desk, here as everywhere.
   await variant(context, baseURL, "poison.rules-final");
   await open(page, "/options?view=review");
   await expect(rows(page)).toHaveCount(10);

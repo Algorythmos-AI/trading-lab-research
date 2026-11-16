@@ -1,0 +1,53 @@
+{
+  "date": "2026-11-09",
+  "top": [
+    {
+      "symbol": "DCTH",
+      "score": 64.219,
+      "subscores": {
+        "catalyst": 0.9,
+        "rvol": 1.0,
+        "float": 0.5,
+        "gap": 0.506,
+        "price": 0.7,
+        "liquidity": 0.227,
+        "spread": 0.027,
+        "float_rotation": 0.032
+      },
+      "features": {
+        "price": 18.3313,
+        "gap_pct": 22.781647689216335,
+        "rvol_tod": 110.228,
+        "pm_dollar_vol": 1971468.8703,
+        "spread_pct": 0.9734991887506745,
+        "float_shares": 34698795.0
+      },
+      "rank": 1
+    },
+    {
+      "symbol": "TTD",
+      "score": 62.95,
+      "subscores": {
+        "catalyst": 0.9,
+        "rvol": 0.909,
+        "float": 0.0,
+        "gap": 0.178,
+        "price": 0.7,
+        "liquidity": 1.0,
+        "spread": 0.784,
+        "float_rotation": 0.0
+      },
+      "features": {
+        "price": 13.9,
+        "gap_pct": 7.50193348801238,
+        "rvol_tod": 8.107756898622972,
+        "pm_dollar_vol": 20223626.464100003,
+        "spread_pct": 0.21606049693915116,
+        "float_shares": null
+      },
+      "rank": 2
+    }
+  ],
+  "forward": true,
+  "strategy": "watchlist_bull_flag_atr_M1_v2"
+}

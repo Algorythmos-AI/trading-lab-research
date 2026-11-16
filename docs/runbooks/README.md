@@ -14,6 +14,7 @@ One page per incident. Each starts with how you'll notice it.
 | [Options desk: paper positions](options-positions.md) | The Paper positions pane is absent or says it is old; setting up the second paper account |
 | [The OCI trading host](oci-host.md) | Provisioning, access, rebuild, or the OCI account is lost |
 | [The GCP free-tier host](gcp-host.md) | Provisioning, secrets, or rebuild of the e2-micro host |
+| [Webull, read only](webull-readonly.md) | Moving the Webull key to the host, or the Webull pull job paged |
 | [Dead-man's switches](dead-man-switches.md) | A healthchecks.io page, or setting the checks up |
 | [Backups, anchors, lease](backups-and-lease.md) | "Evidence chain broken", a backup or anchor failed, or "no primary lease" |
 | [Dashboard late or stopped](dashboard-late.md) | ntfy "Dashboard late"; a grey or amber freshness pill |

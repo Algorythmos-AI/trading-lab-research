@@ -26,7 +26,7 @@ export function PerformancePanel({ s }: { s: Snapshot }) {
   return (
     <Panel
       id="performance"
-      title="Paper B performance"
+      title="Robot B (paper) performance"
       icon={ChartSpline}
       means="Closed paper trades in R (1R = the amount risked to the stop). Trades whose exit price had to be estimated are left out. Paper results are evidence for the G2 gate, not a forecast."
     >

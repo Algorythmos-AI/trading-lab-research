@@ -12,16 +12,16 @@ import { useLive } from "./live-layer";
 import { chainPollMs } from "./use-chain";
 import { chainPx } from "@/lib/what-if";
 import { usePerfNow } from "./use-now";
+import { EnvChip, EnvFrame } from "@/components/ui/env-chip";
+import { Money } from "@/components/ui/money";
 import { Notice } from "@/components/ui/notice";
 import { Pane } from "@/components/ui/pane";
 
-/** Dollars for a whole position, signed: "+$125", "−$40". */
-function dollars(v: number | null): string {
-  if (v === null) return "—";
-  const whole = Math.round(v);
-  return `${whole < 0 ? "−" : whole > 0 ? "+" : ""}$${num(Math.abs(whole))}`;
+/** A whole position's result in the paper account, signed: "+US$125.00", "−US$40.00". Paper money, never the owner's. */
+function PaperDollars({ v, className }: { v: number | null; className?: string }) {
+  return <Money env="paper" value={v} signed className={className} />;
 }
-const tone = (v: number | null) => (v === null || Math.round(v) === 0 ? "text-muted-foreground" : v > 0 ? "text-good" : "text-bad");
+const tone = (v: number | null) => (v === null || Math.abs(v) < 0.005 ? "text-muted-foreground" : v > 0 ? "text-good" : "text-bad");
 
 function Line({ r, g, refused = false }: { r: PositionRow; g: PositionGreeks | null; refused?: boolean }) {
   return (
@@ -38,7 +38,14 @@ function Line({ r, g, refused = false }: { r: PositionRow; g: PositionGreeks | n
           {g ? (
             <span data-greeks className="font-mono">
               {g.delta !== null ? ` · Δ ${Math.abs(g.delta) < 0.005 ? "0.00" : `${g.delta < 0 ? "−" : ""}${num(Math.abs(g.delta), 2)}`}` : ""}
-              {g.decay !== null && Math.abs(g.decay) >= 0.5 ? ` · ${g.decay < 0 ? "−" : "+"}$${num(Math.abs(g.decay), 0)}${g.toExpiry ? " to expiry" : "/day"}` : ""}
+              {/* What a day of waiting costs, in the paper account's money: the same US$ form as the pane's results. */}
+              {g.decay !== null && Math.abs(g.decay) >= 0.5 ? (
+                <>
+                  {" · "}
+                  <PaperDollars v={g.decay} />
+                  {g.toExpiry ? " to expiry" : "/day"}
+                </>
+              ) : null}
             </span>
           ) : null}
           {g && refused ? <span data-opra-refused> (OPRA refused)</span> : null}
@@ -48,7 +55,7 @@ function Line({ r, g, refused = false }: { r: PositionRow; g: PositionGreeks | n
         {num(r.price, 2)}
         <span className="text-muted-foreground block text-[0.6875rem] max-sm:text-xs">paid {num(r.avgPrice, 2)}</span>
       </span>
-      <span className={cn("min-w-14 text-right font-mono", tone(r.unrealized))}>{dollars(r.unrealized)}</span>
+      <PaperDollars v={r.unrealized} className={cn("min-w-14 text-right font-mono", tone(r.unrealized))} />
     </>
   );
 }
@@ -56,8 +63,9 @@ function Line({ r, g, refused = false }: { r: PositionRow; g: PositionGreeks | n
 const ROW = "grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-baseline gap-x-3 py-1.5 text-left text-[0.8125rem]";
 
 /**
- * The open option positions of the paper account kept for manual option trades, as the trading host last published
- * them. A position on one of the desk's names opens that name with its contract loaded into the contract pane.
+ * The open option positions of the Alpaca paper account kept for manual option trades, as the trading host last
+ * published them. Paper money, never the owner's Webull account: the pane sits in a paper frame (lib/env.ts) and its
+ * dollars are paper Money. A position on one of the desk's names opens that name with its contract loaded into the contract pane.
  *
  * Read only: the desk shows what is held and never places, changes or closes anything. A document older than a
  * day and a half says nothing about now and is not shown; in session, one that has not been renewed for half an
@@ -162,54 +170,59 @@ export function OptionsPositions({
   const rows = positionRows(doc, new Set(names), clock);
   const total = positionsTotal(rows);
   return (
-    <Pane
-      label="Paper option positions"
-      title="Paper positions"
-      data-positions={rows.length === 0 ? "empty" : age.state}
-      meta={
-        <>
-          {rows.length > 0 && total !== null ? (
-            <>
-              open result <span className={cn("font-mono", tone(total))}>{dollars(total)}</span> ·{" "}
-      
-        </>
+    <EnvFrame env="paper" chip={false} label="Manual option positions" className="mx-2 my-1.5">
+      <Pane
+        label="Paper option positions"
+        title={
+          <>
+            <EnvChip env="paper" /> Manual option positions
+          </>
+        }
+        data-positions={rows.length === 0 ? "empty" : age.state}
+        meta={
+          <>
+            {rows.length > 0 && total !== null ? (
+              <>
+                open result <PaperDollars v={total} className={cn("font-mono", tone(total))} /> ·{" "}
+              </>
             ) : null}
             as of {newYork(doc.as_of, false)} ET
-        </>
-      }
-    >
-      {age.state === "old" ? (
-        <Notice role="status" className="mt-1">
-          These are {num(age.minutes, 0)} minutes old: the host has stopped sending them. Check the broker before relying on them.
-        </Notice>
-      ) : null}
-      {rows.length === 0 ? (
-        <p className="text-muted-foreground mt-1 text-xs">No open option positions in the paper account.</p>
-      ) : (
-        <ul className="divide-border/60 mt-1 divide-y">
-          {rows.map((r, i) => (
-            <li key={`${r.contract}:${i}`}>
-              {r.onDesk && pickFor(r) ? (
-                <button type="button" onClick={() => onOpen(r)} title={`Open ${r.symbol} with this contract in the contract pane`} className={cn(ROW, "hover:bg-muted/60 rounded")}>
-                  <Line r={r} g={greeksOf(r)} refused={chains[r.contract]?.chain.fallback === "opra-refused"} />
-                </button>
-              ) : (
-                <div className={ROW}>
-                  <Line r={r} g={null} />
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-      <p className="text-muted-foreground mt-1.5 text-[0.6875rem] max-sm:text-xs">
-        Paper account, read only. Marks and results are the broker&apos;s. Δ and what a day of waiting costs (to expiry, in a contract&apos;s last day) are estimates from option quotes
-        {(() => {
-          const words = feedsWords(Object.values(chains).map((g) => ({ chain: g.chain, ageMin: chainAge(g.chain, g.receivedPerf, perfNow) })));
-          // Indicative's words read as they always have; any other feed's are their own sentence.
-          return words === INDICATIVE_WORDS ? " 15 minutes behind the market." : `. ${words}.`;
-        })()}
-      </p>
-    </Pane>
+          </>
+        }
+      >
+        {age.state === "old" ? (
+          <Notice role="status" className="mt-1">
+            These are {num(age.minutes, 0)} minutes old: the host has stopped sending them. Check the broker before relying on them.
+          </Notice>
+        ) : null}
+        {rows.length === 0 ? (
+          <p className="text-muted-foreground mt-1 text-xs">No open option positions in the paper account.</p>
+        ) : (
+          <ul className="divide-border/60 mt-1 divide-y">
+            {rows.map((r, i) => (
+              <li key={`${r.contract}:${i}`}>
+                {r.onDesk && pickFor(r) ? (
+                  <button type="button" onClick={() => onOpen(r)} title={`Open ${r.symbol} with this contract in the contract pane`} className={cn(ROW, "hover:bg-muted/60 rounded")}>
+                    <Line r={r} g={greeksOf(r)} refused={chains[r.contract]?.chain.fallback === "opra-refused"} />
+                  </button>
+                ) : (
+                  <div className={ROW}>
+                    <Line r={r} g={null} />
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="text-muted-foreground mt-1.5 text-[0.6875rem] max-sm:text-xs">
+          Paper account, read only. Marks and results are the broker&apos;s. Δ and what a day of waiting costs (to expiry, in a contract&apos;s last day) are estimates from option quotes
+          {(() => {
+            const words = feedsWords(Object.values(chains).map((g) => ({ chain: g.chain, ageMin: chainAge(g.chain, g.receivedPerf, perfNow) })));
+            // Indicative's words read as they always have; any other feed's are their own sentence.
+            return words === INDICATIVE_WORDS ? " 15 minutes behind the market." : `. ${words}.`;
+          })()}
+        </p>
+      </Pane>
+    </EnvFrame>
   );
 }

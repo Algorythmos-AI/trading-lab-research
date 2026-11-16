@@ -1,0 +1,12 @@
+[Unit]
+Description=Read the owner's Webull account every 2 minutes in the US session, and once each evening (backfill)
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 09..16:00/2 America/New_York
+OnCalendar=*-*-* 17:40 America/New_York
+AccuracySec=10s
+Persistent=false
+Unit=wt-webull-pull.service
+
+[Install]
+WantedBy=timers.target

@@ -7,7 +7,7 @@ export const TRADES_GROUPS = {
   today: { id: "today-group", label: "Today" },
   record: { id: "record", label: "The record", short: "Record" },
   history: { id: "history", label: "History" },
-  clone: { id: "clone-group", label: "The clone", short: "Clone" },
+  clone: { id: "clone-group", label: "Options clone (paper)", short: "Clone" }, // options-clone.tsx CLONE_TITLE
 } as const;
 
 /** Panels worth a link of their own, by the id their panel already carries (journal.tsx). */

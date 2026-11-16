@@ -1,0 +1,27 @@
+[Unit]
+Description=Trading Lab: send the Trades page's journal from what wt-webull-pull read (ADR 0011)
+# Started by wt-webull-pull (OnSuccess). Holds the dashboard key, never the Webull key.
+Wants=wt-secrets.service network-online.target
+After=wt-secrets.service network-online.target
+OnFailure=wt-alert@%n.service
+
+[Service]
+Type=exec
+User=wt
+Group=wt
+WorkingDirectory=/home/wt/trading
+# Optional: without the secrets the publisher still runs, raises its "publish" alarm and exits 0.
+EnvironmentFile=-/run/wt-secrets/env
+Environment=WT_ENV_FILE=/run/wt-secrets/env
+Environment=WT_HOST=systemd
+Environment=PYTHONPATH=src
+ExecStart=/home/wt/trading/.venv/bin/python -m wt.webull.publish
+RuntimeMaxSec=300
+MemoryMax=600M
+LimitCORE=0
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=full
+InaccessiblePaths=-/etc/wt/webull.env
+CapabilityBoundingSet=

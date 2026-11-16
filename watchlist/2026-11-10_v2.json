@@ -1,0 +1,99 @@
+{
+  "date": "2026-11-10",
+  "top": [
+    {
+      "symbol": "PXLW",
+      "score": 87.859,
+      "subscores": {
+        "catalyst": 0.8,
+        "rvol": 1.0,
+        "float": 1.0,
+        "gap": 0.691,
+        "price": 1.0,
+        "liquidity": 1.0,
+        "spread": 0.422,
+        "float_rotation": 1.0
+      },
+      "features": {
+        "price": 6.9,
+        "gap_pct": 32.31064237775647,
+        "rvol_tod": 10420.399,
+        "pm_dollar_vol": 68494171.9051,
+        "spread_pct": 0.5780346820809253,
+        "float_shares": 6049393.0
+      },
+      "rank": 1
+    },
+    {
+      "symbol": "PEPG",
+      "score": 86.811,
+      "subscores": {
+        "catalyst": 1.0,
+        "rvol": 1.0,
+        "float": 0.2,
+        "gap": 1.0,
+        "price": 1.0,
+        "liquidity": 1.0,
+        "spread": 0.83,
+        "float_rotation": 1.0
+      },
+      "features": {
+        "price": 5.88,
+        "gap_pct": 146.02510460251045,
+        "rvol_tod": 15142.124852562143,
+        "pm_dollar_vol": 177098348.7063,
+        "spread_pct": 0.1699235344095121,
+        "float_shares": 69259517.0
+      },
+      "rank": 2
+    },
+    {
+      "symbol": "QMCO",
+      "score": 64.636,
+      "subscores": {
+        "catalyst": 0.9,
+        "rvol": 0.928,
+        "float": 0.5,
+        "gap": 0.244,
+        "price": 0.7,
+        "liquidity": 0.367,
+        "spread": 0.5,
+        "float_rotation": 0.038
+      },
+      "features": {
+        "price": 18.76,
+        "gap_pct": 10.417892878163638,
+        "rvol_tod": 8.476058814715554,
+        "pm_dollar_vol": 3004802.6251999997,
+        "spread_pct": null,
+        "float_shares": 39374500.0
+      },
+      "rank": 3
+    },
+    {
+      "symbol": "CISS",
+      "score": 53.268,
+      "subscores": {
+        "catalyst": 0.3,
+        "rvol": 1.0,
+        "float": 0.0,
+        "gap": 0.414,
+        "price": 1.0,
+        "liquidity": 1.0,
+        "spread": 0.518,
+        "float_rotation": 0.0
+      },
+      "features": {
+        "price": 2.07,
+        "gap_pct": 18.285714285714285,
+        "rvol_tod": 208.47256145279687,
+        "pm_dollar_vol": 22484261.373000003,
+        "spread_pct": 0.4819277108433846,
+        "float_shares": null
+      },
+      "rank": 4
+    }
+  ],
+  "forward": true,
+  "strategy": "watchlist_bull_flag_atr_M1_v2"
+}

@@ -536,7 +536,7 @@ function rAxis(rules: OptionsRule[]) {
   return { reach, at: (v: number) => `${((Math.max(-reach, Math.min(reach, v)) + reach) / (2 * reach)) * 100}%` };
 }
 
-/** Promotion needs this many paper cases. */
+/** Promotion needs this many cases on probation. */
 export const PROMOTION_CASES = 30;
 
 /**
@@ -568,7 +568,7 @@ export function RuleRanges({ rules }: { rules: OptionsRule[] }) {
             </div>
             <div
               className="bg-track/60 relative h-7 rounded-sm"
-              title={`Backtest ${signed(b?.avg_r, 3)}R${ranged ? `, 95% range ${signed(b!.ci_lo, 2)} to ${signed(b!.ci_hi, 2)}` : ""}${paperN > 0 ? `. Paper ${signed(r.live?.avg_r, 3)}R, ${r.live?.wins ?? 0} of ${paperN} won` : ". No paper trades yet"}`}
+              title={`Backtest ${signed(b?.avg_r, 3)}R${ranged ? `, 95% range ${signed(b!.ci_lo, 2)} to ${signed(b!.ci_hi, 2)}` : ""}${paperN > 0 ? `. On probation ${signed(r.live?.avg_r, 3)}R, ${r.live?.wins ?? 0} of ${paperN} won` : ". No trades on probation yet"}`}
             >
               <span className="bg-foreground/60 absolute inset-y-0 w-px" style={{ left: "50%" }} />
               {ranged ? (
@@ -595,7 +595,7 @@ export function RuleRanges({ rules }: { rules: OptionsRule[] }) {
                 />
               </span>
               <span className="text-muted-foreground font-mono text-[0.6875rem] max-sm:text-xs">
-                {paperN} of {PROMOTION_CASES} paper cases
+                {paperN} of {PROMOTION_CASES} cases on probation
               </span>
             </div>
           </div>

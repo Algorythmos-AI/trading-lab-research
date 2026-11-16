@@ -9,11 +9,13 @@ import { NoSnapshot } from "@/components/no-snapshot";
 import { PageHeading } from "@/components/page-heading";
 import { Panel } from "@/components/panel";
 import { StatusBadge } from "@/components/status";
+import { EnvFrame } from "@/components/ui/env-chip";
+import { Money } from "@/components/ui/money";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertHistoryPanel } from "@/components/v3/audit";
 import { RiskLimitsPanel } from "@/components/v3/risk-limits";
 import { accountRisk } from "@/lib/account-risk";
-import { newYork, num, shortDate, sydney, txt, usd } from "@/lib/format";
+import { newYork, num, shortDate, sydney, txt } from "@/lib/format";
 import { RED_ALERT_PREFIXES } from "@/lib/health";
 import { activeWindow } from "@/lib/freshness";
 import { moneyView, type JournalDoc } from "@/lib/journal";
@@ -29,7 +31,7 @@ export default async function RiskPage() {
     <>
       <PageHeading
         title="Risk"
-        intro="Your real Webull account first: how much of today's limits you have used, what is open, and how often each limit was broken lately. The paper robot's safety controls are at the bottom. Read only: nothing here can place, block or cancel an order."
+        intro="Your real Webull account first: how much of today's limits you have used, what is open, and how often each limit was broken lately. Robot B's safety controls, in paper money, are at the bottom. Read only: nothing here can place, block or cancel an order."
       />
       {journal.status !== "ok" ? (
         <>
@@ -44,9 +46,12 @@ export default async function RiskPage() {
       {result.status !== "ok" ? (
         <NoSnapshot status={result.status} />
       ) : (
-        <PaneBoundary name="Paper robot">
-          <RobotSection s={result.snapshot} now={now} />
-        </PaneBoundary>
+        // The robot's section is the Alpaca paper account: a paper frame. The owner's own account above stays unframed.
+        <EnvFrame env="paper" label="Robot B">
+          <PaneBoundary name="Robot B (paper)">
+            <RobotSection s={result.snapshot} now={now} />
+          </PaneBoundary>
+        </EnvFrame>
       )}
     </>
   );
@@ -81,7 +86,7 @@ function RobotSection({ s, now }: { s: Snapshot; now: Date }) {
       <summary className="bg-card hover:bg-muted/40 flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border px-4 py-3 shadow-sm [&::-webkit-details-marker]:hidden">
         <Bot aria-hidden className="text-muted-foreground size-5 shrink-0" />
         <span className="grid min-w-0 flex-1 leading-tight">
-          <span className="font-semibold">Paper robot (paper B)</span>
+          <span className="font-semibold">Robot B (paper)</span>
           <span className="text-muted-foreground text-xs">The research robot&apos;s own safety controls, in paper money. They do not touch your Webull account.</span>
         </span>
         <span className="flex flex-wrap gap-1.5">
@@ -114,7 +119,7 @@ function KillPanel({ s }: { s: Snapshot }) {
     <Panel
       title="Kill switch"
       icon={Power}
-      means="When on, paper B opens no new trades but keeps managing open ones. It is switched on the host, never from this page."
+      means="When on, Robot B (paper) opens no new trades but keeps managing open ones. It is switched on the host, never from this page."
       action={
         k?.on === true ? (
           <StatusBadge tone="warn">On</StatusBadge>
@@ -230,7 +235,7 @@ function AccountPanel({ s }: { s: Snapshot }) {
     <Panel
       title="Paper broker account"
       icon={Landmark}
-      means="Paper money: the simulated account at the broker that paper B trades in. None of these amounts are real funds."
+      means="Paper money: the simulated Alpaca account that Robot B trades in. None of these amounts are real funds."
       action={
         <div className="flex flex-wrap justify-end gap-1.5">
           <StatusBadge tone="info">Paper money</StatusBadge>
@@ -248,10 +253,10 @@ function AccountPanel({ s }: { s: Snapshot }) {
           <KeyValues
             className="sm:grid-cols-4"
             items={[
-              { label: "Equity (paper)", value: usd(a.equity) },
-              { label: "Previous close equity", value: usd(a.last_equity) },
-              { label: "Cash (paper)", value: usd(a.cash) },
-              { label: "Buying power (paper)", value: usd(a.buying_power) },
+              { label: "Equity (paper)", value: <Money env="paper" value={a.equity} /> },
+              { label: "Previous close equity", value: <Money env="paper" value={a.last_equity} /> },
+              { label: "Cash (paper)", value: <Money env="paper" value={a.cash} /> },
+              { label: "Buying power (paper)", value: <Money env="paper" value={a.buying_power} /> },
               { label: "Status", value: txt(a.status) },
               { label: "Trading blocked", value: a.trading_blocked === true ? "Yes" : a.trading_blocked === false ? "No" : "—" },
               { label: "Day trades (5 days)", value: num(a.daytrade_count) },
@@ -295,13 +300,15 @@ function AccountPanel({ s }: { s: Snapshot }) {
                         )}
                       </TableCell>
                       <TableCell className="text-right">{num(p.qty, 0)}</TableCell>
-                      <TableCell className="text-right">{usd(p.market_value)}</TableCell>
+                      <TableCell className="text-right">
+                        <Money env="paper" value={p.market_value} />
+                      </TableCell>
                       <TableCell
                         className={
                           typeof p.unrealized_pl === "number" && p.unrealized_pl < 0 ? "text-bad text-right" : "text-right"
                         }
                       >
-                        {usd(p.unrealized_pl)}
+                        <Money env="paper" value={p.unrealized_pl} />
                       </TableCell>
                     </TableRow>
                   ))}
