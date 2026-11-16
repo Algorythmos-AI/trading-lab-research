@@ -455,12 +455,13 @@ export const loadJournal = cache(async (): Promise<JournalResult> => {
     const mod = await import("../../test/fixtures/journal.v1.json");
     let doc = (mod.default ?? mod) as unknown as JournalDoc;
     // `journal-option-lot`: one open QQQ call bought at the scripted morning's second step, read 5 minutes later.
-    if (flags.has("journal-option-lot")) {
+    // `journal-option-stop`: the same call, one contract at $17.00, so the sample bid is under its −25% stop.
+    if (flags.has("journal-option-lot") || flags.has("journal-option-stop")) {
       const opts = await import("../../test/fixtures/options.v1.json");
       const e = (opts.default ?? opts) as unknown as OptionsEdition;
       const { stepInstant } = await import("./fixture-script");
       const at = stepInstant(e.session, 2);
-      const lot = fixtureOptionLot(e, new Date(), at);
+      const lot = fixtureOptionLot(e, new Date(), at, flags.has("journal-option-stop") ? { qty: 1, entry: 17 } : undefined);
       if (lot) doc = { ...doc, open: [...(doc.open ?? []), lot], as_of: new Date(at + 5 * 60_000).toISOString() };
     }
     // Under the stood-still clock the journal was read ten minutes earlier, as the live sync would have: a picture

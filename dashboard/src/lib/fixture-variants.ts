@@ -56,6 +56,8 @@ export const VARIANT_COOKIE = "fx";
  *   contracts at $1.20), on the strike nearest the fixture chain's QQQ price and an expiry three weeks after the
  *   server's day, so the chain lists it exactly once (fixtureOptionLot); the journal reads a few minutes after the
  *   fill. With `chain-opra` and `quotes-script` the manage card shows its live value. Off by default.
+ * - `journal-option-stop`: as `journal-option-lot`, but one contract bought at $17.00, so the fixture's sample bid
+ *   ($12.11) is under its −25% stop ($12.75) and the card's premium stop fires (held-marks.ts). Off by default.
  */
 export const VARIANT_FLAGS = [
   "empty",
@@ -101,6 +103,7 @@ export const VARIANT_FLAGS = [
   "flow-mixed",
   "flow-range",
   "journal-option-lot",
+  "journal-option-stop",
 ] as const;
 export type VariantFlag = (typeof VARIANT_FLAGS)[number];
 
@@ -719,12 +722,12 @@ export function feedVariant(s: StampedInputs, flags: ReadonlySet<VariantFlag>, n
  * its strike step), so it is listed once; its expiry is three weeks after `now`'s New York day, which the chain and
  * the contract route add as the held contract wherever it sits. Null when the edition has no QQQ close.
  */
-export function fixtureOptionLot(e: OptionsEdition, now: Date, openedAt: number): Lot | null {
+export function fixtureOptionLot(e: OptionsEdition, now: Date, openedAt: number, fill: { qty: number; entry: number } = { qty: 2, entry: 1.2 }): Lot | null {
   const t = e.tickers.find((x) => x.symbol === "QQQ");
   const close = t?.last?.close;
   if (typeof close !== "number") return null;
   const spot = Math.round((close + FIXTURE_OFFSET_ATR * (t?.atr14 ?? 0)) * 100) / 100;
   const step = spot < 50 ? 0.5 : spot < 300 ? 1 : 5;
   const strike = Math.round((Math.round(spot / step) * step) * 100) / 100;
-  return { symbol: "QQQ", kind: "call", strike, expiry: addDays(nyNow(now).day, 21), side: "long", qty: 2, entry: 1.2, opened_at: new Date(openedAt).toISOString() };
+  return { symbol: "QQQ", kind: "call", strike, expiry: addDays(nyNow(now).day, 21), side: "long", qty: fill.qty, entry: fill.entry, opened_at: new Date(openedAt).toISOString() };
 }
