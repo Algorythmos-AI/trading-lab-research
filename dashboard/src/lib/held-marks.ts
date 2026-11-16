@@ -1,11 +1,12 @@
-import type { HeldValue } from "./option-value";
+import { fillStop } from "./manage-stop";
+import { askToCents, bidToCents, CROSSED, type Held, type HeldValue, NO_ASK, NO_BID, tooWide, ZERO_BID } from "./option-value";
 import type { RailDay } from "./session-timeline";
 import { usd } from "./ticket";
 import { DAY_LOSS_LIMIT } from "./trade-rules";
 import { type ManageView, PAUSED_LINE } from "./trade-manage";
 
 // The owner's −25% premium stop on the manage card, and the open options' loss in the day pill (rule 7: "Open losses
-// count too"). Owner decisions, 2026-11-17, after a held option fell past −25% while the card said HOLD:
+// count too"). Owner decisions, 2026-11-17:
 //   - the card says EXIT once the held contract's bid is at or under the −25% stop on PREMIUM_CONFIRM fresh OPRA
 //     quotes in a row, and keeps saying it (latched for the session, kept in this browser);
 //   - the day pill and its open-position line count each losing open option at the bid, after fees. Display only:
@@ -36,11 +37,59 @@ export function premiumStep(prev: PremiumStop, toStopCents: number | null): Prem
   return { under, hit: under >= PREMIUM_CONFIRM };
 }
 
-/** "Bid $0.83 under your −25% stop $1.26: exit", or "Bid at your −25% stop $1.26: exit". */
+/** "Bid $0.40 under your −25% stop $3.00: exit", or "Bid at your −25% stop $3.00: exit". */
 export function premiumExitLine(v: Pick<HeldValue, "stopCents" | "toStopCents">): string {
   if (v.stopCents === null || v.toStopCents === null) return "Under your −25% stop: exit";
   if (v.toStopCents === 0) return `Bid at your −25% stop ${usd(v.stopCents)}: exit`;
   return `Bid ${usd(Math.abs(v.toStopCents))} ${v.toStopCents < 0 ? "under" : "above"} your −25% stop ${usd(v.stopCents)}: exit`;
+}
+
+/** The trade's −25% stop, cents a share, as the card's value works it out (heldValue); null for an entry too cheap for one. */
+export function stopCentsOf(h: Pick<Held, "paidCents" | "qty">): number | null {
+  const stop = fillStop({ priceCents: h.paidCents, contracts: h.qty });
+  return stop.noStop ? null : stop.stopCents;
+}
+
+/** The wide-spread reason's fixed start ("the spread is "): a test pins it, so a change of wording fails loudly. */
+export const WIDE_PREFIX = tooWide(0).slice(0, tooWide(0).indexOf("0%"));
+
+/**
+ * A fresh quote withheld from the value (judgeQuote: one-sided, a zero bid, crossed, too wide) read against the stop:
+ * - "under": even the ask is at or under the stop, so the option is worth no more than the stop: it counts, as a
+ *   valued quote under the stop does (a collapsing option is where the stop matters most);
+ * - "above": a real bid above the stop (a buyer at that price): it counts as above, as a valued quote does;
+ * - "thin": the stop sits inside a quote that cannot say which side it is on (no bid, or a bid under the stop with no
+ *   ask or an ask above it; an empty quote, as in a halt; a crossed one): it never fires the stop, it never resets the
+ *   count, and the card says CHECK, never a reassuring word;
+ * - null: withheld for its age, its session or its day, or no stop to read: left as the card already says.
+ */
+export type ThinRead = { kind: "under" | "above"; toStopCents: number } | { kind: "thin" } | null;
+
+export function readThinQuote(why: string, bid: number | null | undefined, ask: number | null | undefined, stopCents: number | null): ThinRead {
+  if (stopCents === null) return null;
+  const crossed = why === CROSSED;
+  if (!crossed && why !== NO_BID && why !== ZERO_BID && why !== NO_ASK && !why.startsWith(WIDE_PREFIX)) return null;
+  const real = (x: number | null | undefined): x is number => typeof x === "number" && Number.isFinite(x) && x > 0;
+  if (!crossed && real(ask) && askToCents(ask) <= stopCents) return { kind: "under", toStopCents: askToCents(ask) - stopCents };
+  if (!crossed && real(bid) && bidToCents(bid) > stopCents) return { kind: "above", toStopCents: bidToCents(bid) - stopCents };
+  return { kind: "thin" };
+}
+
+/** The CHECK a thin quote puts on the card while its stop has not fired. */
+export const THIN_LINE = "Option quotes too thin to read your −25% stop: check Webull";
+
+/** HOLD, TRAIL and SELL HALF become CHECK while the held contract's quotes are too thin to read the stop. */
+export function withThinQuote(v: ManageView, thin: boolean): ManageView {
+  if (!thin || v.action === "exit" || v.action === "check") return v;
+  return { ...v, action: "check", tone: "warn", line: THIN_LINE };
+}
+
+/**
+ * The upstream quote's own identity: its time and prices. A quote the contract route re-serves from its cache, or
+ * another server instance fetches again, has the same key, so it counts once. No quote time: no key, never counted.
+ */
+export function quoteKey(c: { quote_at?: string | null; bid?: number | null; ask?: number | null } | undefined): string | null {
+  return c?.quote_at ? `${c.quote_at}|${c.bid ?? ""}|${c.ask ?? ""}` : null;
 }
 
 /** The bar's figure: "$0.31" above the stop, "at the stop", or "$0.43 under". */

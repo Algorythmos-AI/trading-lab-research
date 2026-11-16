@@ -1,7 +1,8 @@
 // The owner's −25% premium stop on the manage card and the open options' loss in the day pill (held-marks.ts,
 // held-store.ts, note-contract.ts). Synthetic figures throughout: a call bought at $1.60, so its −25% stop is $1.20.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { forgetValue, fromNoteOf, recordValue, recordWithheld, resetHeldStore, stopFired, valueOf } from "@/components/client/held-store";
+import { forgetValue, fromNoteOf, recordStopOnly, recordThin, recordValue, recordWithheld, resetHeldStore, SAME_QUOTE_RECOUNT_MS, stopFired, thinOf, valueOf } from "@/components/client/held-store";
+import { cardAsksChain } from "@/components/client/trade-manage";
 import {
   NO_STOP,
   openMarks,
@@ -11,13 +12,19 @@ import {
   roomLabel,
   roomText,
   stockStopExit,
+  quoteKey,
+  readThinQuote,
+  stopCentsOf,
+  THIN_LINE,
+  WIDE_PREFIX,
   withClosedStopLine,
   withOpenLoss,
   withPremiumStop,
+  withThinQuote,
 } from "@/lib/held-marks";
 import { fillStop } from "@/lib/manage-stop";
 import { checkContract, noteHeldLots, parseContract, parseContracts } from "@/lib/note-contract";
-import { lotsContract, type HeldValue } from "@/lib/option-value";
+import { CROSSED, lotsContract, NO_ASK, NO_BID, NO_QUOTE_TODAY, tooOld, tooWide, ZERO_BID, type HeldValue } from "@/lib/option-value";
 import { railDay } from "@/lib/session-timeline";
 import { manageNotices, type ManageView, OFF_LINE, PAUSED_LINE, UNMATCHED_LINE } from "@/lib/trade-manage";
 import { type Bar2, manage } from "@/lib/trade-state";
@@ -330,6 +337,176 @@ describe("the shared values (held-store.ts)", () => {
     rec(115, "q1");
     rec(114, "q2");
     expect(stopFired(DAY, OCC, FILL)).toBe(true);
+  });
+});
+
+describe("review fixes: a collapsing quote, two trades on one contract, one quote counted once, the day", () => {
+  beforeEach(() => resetHeldStore());
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** A paid-$1.00 trade on the same contract: its stop is $0.75. */
+  const atPaid = (paid: number, bidCents: number): HeldValue => {
+    const stopCents = fillStop({ priceCents: paid, contracts: 1 }).stopCents;
+    return { valueCents: bidCents * 100, midValueCents: bidCents * 100, perContractCents: (bidCents - paid) * 100 - 200, totalCents: null, qty: 1, paidCents: paid, stopCents, toStopCents: bidCents - stopCents };
+  };
+  const recPaid = (paid: number, bidCents: number, key: string, id: string) =>
+    recordValue({ day: DAY, id, occ: OCC, entryAt: FILL, value: atPaid(paid, bidCents), key, fromNote: false });
+
+  it("reads a withheld quote against the stop: under only when even the ask is, above only on a real bid over it, else thin", () => {
+    // stop $1.20
+    expect(readThinQuote(NO_BID, null, 0.35, 120)).toEqual({ kind: "under", toStopCents: -85 }); // collapsed: 0 × 0.35
+    expect(readThinQuote(ZERO_BID, 0, 1.2, 120)).toEqual({ kind: "under", toStopCents: 0 });
+    expect(readThinQuote(tooWide(55), 0.6, 1.1, 120)).toEqual({ kind: "under", toStopCents: -10 });
+    expect(readThinQuote(tooWide(40), 1.3, 2.1, 120)).toEqual({ kind: "above", toStopCents: 10 });
+    expect(readThinQuote(NO_ASK, 1.25, null, 120)).toEqual({ kind: "above", toStopCents: 5 });
+    // the stop inside the quote, an empty quote (a halt), a crossed one: thin, never a fire
+    expect(readThinQuote(tooWide(60), 0.8, 1.6, 120)).toEqual({ kind: "thin" });
+    expect(readThinQuote(NO_ASK, null, null, 120)).toEqual({ kind: "thin" });
+    expect(readThinQuote(NO_ASK, 0, 0, 120)).toEqual({ kind: "thin" });
+    expect(readThinQuote(NO_BID, null, 1.5, 120)).toEqual({ kind: "thin" });
+    expect(readThinQuote(CROSSED, 1.0, 0.9, 120)).toEqual({ kind: "thin" });
+    // not read at all: old, not today's, or no stop
+    expect(readThinQuote(tooOld(40), 0.2, 0.3, 120)).toBeNull();
+    expect(readThinQuote(NO_QUOTE_TODAY, 0.2, 0.3, 120)).toBeNull();
+    expect(readThinQuote(NO_BID, null, 0.3, null)).toBeNull();
+  });
+
+  it("pins the wide reason's wording it reads", () => {
+    expect(WIDE_PREFIX).toBe("the spread is ");
+    expect(tooWide(41).startsWith(WIDE_PREFIX)).toBe(true);
+  });
+
+  it("keys a quote on its own time and prices, never the fetch", () => {
+    const q = { quote_at: "2026-10-12T14:30:01.5Z", bid: 1.1, ask: 1.2 };
+    expect(quoteKey(q)).toBe(quoteKey({ ...q }));
+    expect(quoteKey({ ...q, bid: 1.05 })).not.toBe(quoteKey(q));
+    expect(quoteKey({ bid: 1, ask: 1.1 })).toBeNull();
+    expect(quoteKey(undefined)).toBeNull();
+  });
+
+  it("says CHECK on a thin quote, never over an EXIT or a CHECK", () => {
+    expect(withThinQuote(view("hold", "Hold"), true)).toMatchObject({ action: "check", tone: "warn", line: THIN_LINE });
+    expect(withThinQuote(view("trail", "Trail"), true).action).toBe("check");
+    expect(withThinQuote(view("exit", "Above the stop 101.25: exit", "bad"), true).action).toBe("exit");
+    expect(withThinQuote(view("hold", "Hold"), false).action).toBe("hold");
+  });
+
+  it("keeps the count through thin quotes, and a thin quote never fires or resets it", () => {
+    vi.stubGlobal("window", { localStorage: store().ls });
+    rec(119, "q1");
+    recordThin(CARD, false);
+    expect(thinOf(CARD)).toBe(true);
+    recordThin(CARD, false);
+    expect(stopFired(DAY, OCC, FILL)).toBe(false);
+    rec(118, "q2");
+    expect(thinOf(CARD)).toBe(false);
+    expect(stopFired(DAY, OCC, FILL)).toBe(true);
+  });
+
+  it("works the stop as the card's value does", () => {
+    expect(stopCentsOf({ paidCents: PAID, qty: 1 })).toBe(at(0).stopCents);
+  });
+
+  it("fires on a collapsing option whose quotes are too one-sided to value", () => {
+    vi.stubGlobal("window", { localStorage: store().ls });
+    const stopCents = at(0).stopCents!;
+    rec(130, "q1");
+    recordStopOnly(CARD, false, { day: DAY, occ: OCC, entryAt: FILL, stopCents, toStopCents: 35 - stopCents, key: "q2" });
+    expect(valueOf(CARD)).toBeNull();
+    expect(stopFired(DAY, OCC, FILL, stopCents)).toBe(false);
+    recordStopOnly(CARD, false, { day: DAY, occ: OCC, entryAt: FILL, stopCents, toStopCents: 30 - stopCents, key: "q3" });
+    expect(stopFired(DAY, OCC, FILL, stopCents)).toBe(true);
+  });
+
+  it("keeps two trades' runs apart on one contract, and a fire stands only for a stop at or above its level", () => {
+    const { m, ls } = store();
+    vi.stubGlobal("window", { localStorage: ls });
+    // A paid $1.60 (stop $1.20), B paid $1.00 (stop $0.75); the bid falls to $1.00: under A's stop, above B's.
+    recPaid(160, 110, "q1", "A");
+    recPaid(100, 110, "q1", "B");
+    recPaid(160, 100, "q2", "A");
+    recPaid(100, 100, "q2", "B"); // B's quotes above its own stop never reset A's run
+    expect(stopFired(DAY, OCC, FILL, 120)).toBe(true);
+    expect(stopFired(DAY, OCC, FILL, 75)).toBe(false);
+    // a trade with a higher stop than A's: the bid was at or under it too
+    expect(stopFired(DAY, OCC, FILL, 150)).toBe(true);
+    // the latch keeps the level, through a reload
+    expect(JSON.parse(m.get(`held-stop:${DAY}`)!)).toEqual({ [`${OCC}@120`]: expect.any(Number) });
+    resetHeldStore();
+    expect(stopFired(DAY, OCC, FILL, 120)).toBe(true);
+    expect(stopFired(DAY, OCC, FILL, 75)).toBe(false);
+    // no stop to fire
+    expect(stopFired(DAY, OCC, FILL, null)).toBe(false);
+  });
+
+  it("counts a quote that does not move again after a while: a bid stuck under the stop still confirms it", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-12T14:30:00Z"));
+    vi.stubGlobal("window", { localStorage: store().ls });
+    rec(118, "same");
+    rec(118, "same"); // the route's cache a few polls later: once
+    expect(stopFired(DAY, OCC, FILL)).toBe(false);
+    vi.setSystemTime(new Date(Date.parse("2026-10-12T14:30:00Z") + SAME_QUOTE_RECOUNT_MS));
+    rec(118, "same");
+    expect(stopFired(DAY, OCC, FILL)).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it("keeps a thin CHECK through worse data, and clears it only on a quote that reads the stop or the card going", () => {
+    vi.stubGlobal("window", { localStorage: store().ls });
+    recordThin(CARD, false);
+    recordWithheld(CARD);
+    expect(thinOf(CARD)).toBe(true);
+    recordStopOnly(CARD, false, { day: DAY, occ: OCC, entryAt: FILL, stopCents: 120, toStopCents: 10, key: "a1" });
+    expect(thinOf(CARD)).toBe(false);
+    recordThin(CARD, false);
+    forgetValue(CARD);
+    expect(thinOf(CARD)).toBe(false);
+  });
+
+  it("keeps a quick EXIT when the journal's fill second lands after it, within the note's matching window", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(FILL + 20_000));
+    vi.stubGlobal("window", { localStorage: store().ls });
+    rec(119, "q1");
+    rec(118, "q2");
+    expect(stopFired(DAY, OCC, FILL + 45_000)).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it("keeps a thin CHECK card reading its chain, so the CHECK can clear", () => {
+    const ctx = { close: null, now: FILL, session: DAY, halfDay: false };
+    const lots = [{ occ: OCC }] as never;
+    const base = { ...view("hold", "Hold"), price: 600, entry: 598, m: { stop: 596 } } as unknown as ManageView;
+    expect(cardAsksChain(withThinQuote(base, true), ctx, { lots, journalCurrent: true })).toBe(true);
+    expect(cardAsksChain({ ...base, action: "check", line: PAUSED_LINE } as ManageView, ctx, { lots, journalCurrent: true })).toBe(false);
+  });
+
+  it("keeps the EXIT when the card changes hands and the same trade's stop differs by a cent", () => {
+    vi.stubGlobal("window", { localStorage: store().ls });
+    recPaid(160, 115, "q1", "note"); // the note's typed $1.60: stop $1.20
+    recPaid(160, 114, "q2", "note");
+    expect(stopFired(DAY, OCC, FILL, 120)).toBe(true);
+    // the journal's average $1.58 works out a $1.19 stop: the fire at $1.20 still stands
+    expect(stopFired(DAY, OCC, FILL, 119)).toBe(true);
+    expect(stopFired(DAY, OCC, FILL, 115)).toBe(true);
+    // a trade far under it does not share it
+    expect(stopFired(DAY, OCC, FILL, 100)).toBe(false);
+  });
+
+  it("reads a latch written before levels were kept as standing for every level", () => {
+    const { m, ls } = store();
+    m.set(`held-stop:${DAY}`, JSON.stringify({ [OCC]: FILL + 1000 }));
+    vi.stubGlobal("window", { localStorage: ls });
+    expect(stopFired(DAY, OCC, FILL, 75)).toBe(true);
+  });
+
+  it("never carries a fired stop into the next day, in the page's own memory either", () => {
+    vi.stubGlobal("window", { localStorage: store().ls });
+    rec(119, "q1");
+    rec(118, "q2");
+    expect(stopFired(DAY, OCC, FILL)).toBe(true);
+    expect(stopFired("2026-10-13", OCC, FILL)).toBe(false);
   });
 });
 
