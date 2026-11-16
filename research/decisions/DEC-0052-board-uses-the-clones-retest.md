@@ -1,10 +1,12 @@
 # DEC-0052: The Options desk's board says ENTER on a break and retest only when the options clone's retest completes
 
-- **Status: PROPOSED on 2026-11-17.** Accepted by the owner's merge of the pull request that changes this line; until
-  then nothing below is in force.
+- **Status: ACCEPTED on 2026-11-17.** approved_by: owner. Proposed on 2026-11-17 (#453) and accepted by the owner's
+  merge of the pull request that changed this line.
   - **The DEC-0035 point 4 exception was approved by the owner, in chat, on 2026-11-17** (section 6):
     `approved_by: owner`.
-  - That approval covers the exception only. Accepting the record is still the merge.
+  - The owner asked for this accepting change on 2026-11-17. The merge is the acceptance.
+  - Acceptance registers HYP-0060 and EXP-0035 and fixes the definitions below. It changes no code and starts
+    nothing: the board's change is a later pull request.
 - **Not written before every affected result was viewed, and it says so.** What the author had seen is set out under
   "What has already been seen". In short:
   - one recent owner trade entered on the board, and its result;

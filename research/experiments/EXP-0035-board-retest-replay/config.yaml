@@ -6,7 +6,7 @@
 # Frozen with DEC-0052. Before the run a decision record may amend it, saying what was viewed; after the run a changed
 # value is a new experiment with new trials.
 experiment: EXP-0035
-status: registered_on_acceptance     # a `proposed` row in config/trial_registry.yaml until DEC-0052 is accepted
+status: registered                   # DEC-0052 accepted on 2026-11-17; no results file until the run writes it once
 decision: DEC-0052
 family: O                            # the options desk's entry rules and their filters; total 37 (config/trial_registry.yaml)
 trials:                              # the difference is a minus b
