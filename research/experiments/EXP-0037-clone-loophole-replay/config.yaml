@@ -1,0 +1,37 @@
+# EXP-0037: three of the options clone's rule gaps, each replayed against the frozen clone with its dry run
+# (DEC-0031's engine), on sessions after DEC-0054 is accepted. Design only: nothing has been replayed.
+# BLIND: no session on the list has been looked at when this is frozen (DEC-0054, "What has already been seen").
+# Frozen with DEC-0054. Before the run, a decision record may amend it, saying what was viewed. After the run, a
+# changed value is a new experiment with new trials.
+experiment: EXP-0037
+status: proposed                     # registered when DEC-0054 is accepted; no results file until the run writes it once
+decision: DEC-0054
+family: O                            # 41 with these three (config/trial_registry.yaml), 38 until DEC-0054 is accepted
+trials:                              # each variant against the control alone; never combined
+  - {hypothesis: HYP-0062, trial: CLONE-ROOM-OPEN-SKY, variant: room_open_sky, role: primary}
+  - {hypothesis: HYP-0063, trial: CLONE-RETEST-FREE-CONFIRM, variant: retest_free_confirm, role: primary}
+  - {hypothesis: HYP-0064, trial: CLONE-REJECTION-SPY-TREND, variant: rejection_spy_trend, role: primary}
+
+engine:
+  replay: "wt.options.dryrun at the commit that merges EXP-0037's replay code; each variant is a switch in that code, off for the control"
+  check_first: "with every switch off, the replay of every session on the list gives exactly the trades of wt.options.dryrun at the commit before the switches were added (the same inputs, the same config); the run stops on any difference"
+  control_config: "config/options_clone.yaml as EXP-0029 freezes it (its premium cap and spread cap)"
+
+inputs:
+  sessions: "every session from the first after DEC-0054 is accepted, in order, until 40 sessions or 2027-04-30, whichever comes first; written into README.md as each passes"
+  names: [SPY, QQQ]
+  bars: "DEC-0031 section 1: the consolidated tape's 1-minute stock bars and daily bars, each same-day contract's 1-minute trade bars; fetched once after the last session and saved with a sha256 per session before any config runs"
+  events: "config/events/macro_events.csv and the FOMC rule, as the clone applies them"
+
+management: "DEC-0031 sections 2 to 4, unchanged"
+match_key: [session, root, setup, side, signal_bar]
+groups:
+  added: "trades a variant takes that the control does not"
+  displaced: "trades the control takes that the variant does not (one position at a time): counted and reported, not tested"
+measure: {name: return_on_premium, after: [spread, fees], spreads: [1x, 2x]}
+verdict:
+  supported: "at least 30 added trades in at least 15 sessions, and: the lower end of the 98.33% session-bootstrap range of the added mean at 1x above 0; the added mean at 2x above 0; the variant's total at 1x not below the control's"
+  falsified: "enough trades, and supported does not hold"
+  too_few: "fewer added trades or sessions: an exploratory mark, not proof"
+  bootstrap: {resamples: 5000, unit: session, prng: numpy_pcg64, seeds: {HYP-0062: 20261162, HYP-0063: 20261163, HYP-0064: 20261164}, interval: [0.8333, 99.1667], percentile: numpy_linear}
+reports: [added, displaced, per_setup, per_name, exits_by_reason, figures_of_wt.options.review]
