@@ -27,7 +27,7 @@ TYPED_MODULES := src/wt/webull/__init__.py src/wt/webull/client.py src/wt/webull
                  src/wt/brokers/alpaca_options_paper.py src/wt/oms/options.py src/wt/risk/options_guard.py \
                  src/wt/live/runner_o.py src/wt/options/review.py \
                  src/wt/options/clone_site.py \
-                 src/wt/options/dryrun.py \
+                 src/wt/options/dryrun.py src/wt/options/variants.py src/wt/options/exp0037.py \
                  src/wt/options/pipeline_check.py src/wt/research/external_posts.py \
                  src/wt/options/shadow.py src/wt/options/arms_verdict.py \
                  src/wt/owner/positions.py src/wt/data/feeds.py src/wt/ops/keys_check.py \

@@ -54,6 +54,11 @@ export function deskOfPath(pathname: string): DeskName {
 export const RADAR_PATHS = {
   latest: "radar/latest.json",
   history: "radar/editions/",
+  /**
+   * Every radar edition that became latest, once, keyed by its edition_date, with the store's receipt time
+   * (./edition-copy). Never replaced or deleted: DEC-0055 reads the first edition received before the open from here.
+   */
+  copies: "radar/copies/",
 } as const;
 
 /**
@@ -95,6 +100,15 @@ export const OPTIONS_CLONE_PATHS = {
 export const LEDGER_PATHS = {
   latest: "ledger/latest.json",
   history: "ledger/editions/",
+} as const;
+
+/**
+ * The selection funnel's health documents (stocksdelta/funnel, from trading-options-funnel): one per session, kept
+ * the same way as the ledger's.
+ */
+export const FUNNEL_PATHS = {
+  latest: "funnel/latest.json",
+  history: "funnel/editions/",
 } as const;
 
 /**

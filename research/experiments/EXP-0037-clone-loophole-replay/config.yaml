@@ -4,9 +4,9 @@
 # Frozen with DEC-0054. Before the run, a decision record may amend it, saying what was viewed. After the run, a
 # changed value is a new experiment with new trials.
 experiment: EXP-0037
-status: proposed                     # registered when DEC-0054 is accepted; no results file until the run writes it once
+status: registered                   # DEC-0054 accepted on 2026-11-17; no results file until the run writes it once
 decision: DEC-0054
-family: O                            # 41 with these three (config/trial_registry.yaml), 38 until DEC-0054 is accepted
+family: O                            # 41 with these three (config/trial_registry.yaml)
 trials:                              # each variant against the control alone; never combined
   - {hypothesis: HYP-0062, trial: CLONE-ROOM-OPEN-SKY, variant: room_open_sky, role: primary}
   - {hypothesis: HYP-0063, trial: CLONE-RETEST-FREE-CONFIRM, variant: retest_free_confirm, role: primary}
@@ -14,13 +14,16 @@ trials:                              # each variant against the control alone; n
 
 engine:
   replay: "wt.options.dryrun at the commit that merges EXP-0037's replay code; each variant is a switch in that code, off for the control"
+  runner: "the host job exp0037 (scripts/exp0037_replay.py nightly), which runs the replay once, the evening the list closes, after checking every saved hash again"
+  engine_commit: "af9b3590e638f52b65af5ba7b28bb9723f83a13a (the merge of the replay code, #469); the run stops if wt.options dryrun, variants, setups, regime, session, bs, levels or intraday differ from it on the host, until a decision record names the engine"
+  skipped: "a session the job cannot fetch on 3 evenings is recorded as skipped: listed, never replayed, named in the report"
   check_first: "with every switch off, the replay of every session on the list gives exactly the trades of wt.options.dryrun at the commit before the switches were added (the same inputs, the same config); the run stops on any difference"
   control_config: "config/options_clone.yaml as EXP-0029 freezes it (its premium cap and spread cap)"
 
 inputs:
-  sessions: "every session from the first after DEC-0054 is accepted, in order, until 40 sessions or 2027-04-30, whichever comes first; written into README.md as each passes"
+  sessions: "fixed by rule: every session of the exchange calendar (wt.options.levels.is_session) after the day DEC-0054 is accepted, in order, until 40 sessions or 2027-04-30, whichever comes first (wt.options.exp0037.due); nothing is written by hand"
   names: [SPY, QQQ]
-  bars: "DEC-0031 section 1: the consolidated tape's 1-minute stock bars and daily bars, each same-day contract's 1-minute trade bars; fetched once after the last session and saved with a sha256 per session before any config runs"
+  bars: "DEC-0031 section 1: the consolidated tape's 1-minute stock bars and daily bars, each same-day contract's 1-minute trade bars; fetched by the exp0037 host job the evening each session closes, saved under data/exp0037/<session>/ with a sha256 per session in var/research/exp0037/input_sha256.json, before any config runs"
   events: "config/events/macro_events.csv and the FOMC rule, as the clone applies them"
 
 management: "DEC-0031 sections 2 to 4, unchanged"

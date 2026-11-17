@@ -1,0 +1,7463 @@
+{
+ "source": "focus.py side_plan (the after-close cloud routine's card), sha256 76c3797d8cc584ed",
+ "generator": "trading-options-funnel scripts/gen_plan_vectors.py",
+ "seed": 20261117,
+ "constants": {
+  "ENTRY_ATR": 0.01,
+  "STOP_ATR": 0.1,
+  "ROOM": 2
+ },
+ "vectors": [
+  {
+   "input": {
+    "kind": "call",
+    "level": 100.0,
+    "atr": null,
+    "next": null
+   },
+   "expect": {
+    "entry": null,
+    "stop": null,
+    "t1": null,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 100.0,
+    "atr": 0.0,
+    "next": null
+   },
+   "expect": {
+    "entry": null,
+    "stop": null,
+    "t1": null,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 100.0,
+    "atr": 2.0,
+    "next": null
+   },
+   "expect": {
+    "entry": 100.02,
+    "stop": 99.8,
+    "t1": 100.46,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 100.0,
+    "atr": 2.0,
+    "next": {
+     "price": 100.3,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 100.02,
+    "stop": 99.8,
+    "t1": 100.46,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 100.0,
+    "atr": 2.0,
+    "next": {
+     "price": 105.0,
+     "name": "SUPPLY"
+    }
+   },
+   "expect": {
+    "entry": 100.02,
+    "stop": 99.8,
+    "t1": 100.46,
+    "t2": {
+     "price": 105.0,
+     "name": "SUPPLY"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 755.02,
+    "atr": 17.49,
+    "next": {
+     "price": 767.02,
+     "name": "MA50/PDL"
+    }
+   },
+   "expect": {
+    "entry": 755.19,
+    "stop": 753.27,
+    "t1": 759.03,
+    "t2": {
+     "price": 767.02,
+     "name": "MA50/PDL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 100.0,
+    "atr": null,
+    "next": null
+   },
+   "expect": {
+    "entry": null,
+    "stop": null,
+    "t1": null,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 100.0,
+    "atr": 0.0,
+    "next": null
+   },
+   "expect": {
+    "entry": null,
+    "stop": null,
+    "t1": null,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 100.0,
+    "atr": 2.0,
+    "next": null
+   },
+   "expect": {
+    "entry": 99.98,
+    "stop": 100.2,
+    "t1": 99.54,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 100.0,
+    "atr": 2.0,
+    "next": {
+     "price": 99.7,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 99.98,
+    "stop": 100.2,
+    "t1": 99.54,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 100.0,
+    "atr": 2.0,
+    "next": {
+     "price": 95.0,
+     "name": "SUPPLY"
+    }
+   },
+   "expect": {
+    "entry": 99.98,
+    "stop": 100.2,
+    "t1": 99.54,
+    "t2": {
+     "price": 95.0,
+     "name": "SUPPLY"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 755.02,
+    "atr": 17.49,
+    "next": {
+     "price": 743.02,
+     "name": "MA50/PDL"
+    }
+   },
+   "expect": {
+    "entry": 754.85,
+    "stop": 756.77,
+    "t1": 751.01,
+    "t2": {
+     "price": 743.02,
+     "name": "MA50/PDL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 31.23,
+    "atr": 9.41,
+    "next": {
+     "price": 42.55,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 31.32,
+    "stop": 30.29,
+    "t1": 33.38,
+    "t2": {
+     "price": 42.55,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 74.82,
+    "atr": 35.66,
+    "next": {
+     "price": 34.24,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 74.46,
+    "stop": 78.39,
+    "t1": 66.6,
+    "t2": {
+     "price": 34.24,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1106.21,
+    "atr": 29.39,
+    "next": {
+     "price": 1121.32,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 1106.5,
+    "stop": 1103.27,
+    "t1": 1112.96,
+    "t2": {
+     "price": 1121.32,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 732.36,
+    "atr": 36.57,
+    "next": {
+     "price": 817.61,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 732.73,
+    "stop": 728.7,
+    "t1": 740.79,
+    "t2": {
+     "price": 817.61,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 642.26,
+    "atr": 5.08,
+    "next": {
+     "price": 644.04,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 642.31,
+    "stop": 641.75,
+    "t1": 643.43,
+    "t2": {
+     "price": 644.04,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1176.11,
+    "atr": 39.95,
+    "next": {
+     "price": 1297.77,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 1176.51,
+    "stop": 1172.12,
+    "t1": 1185.29,
+    "t2": {
+     "price": 1297.77,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 364.61,
+    "atr": 3.06,
+    "next": {
+     "price": 375.06,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 364.64,
+    "stop": 364.3,
+    "t1": 365.32,
+    "t2": {
+     "price": 375.06,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 761.39,
+    "atr": 5.71,
+    "next": {
+     "price": 758.79,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 761.33,
+    "stop": 761.96,
+    "t1": 760.07,
+    "t2": {
+     "price": 758.79,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1145.2,
+    "atr": 20.52,
+    "next": {
+     "price": 1128.38,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 1144.99,
+    "stop": 1147.25,
+    "t1": 1140.47,
+    "t2": {
+     "price": 1128.38,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 990.88,
+    "atr": 14.83,
+    "next": null
+   },
+   "expect": {
+    "entry": 991.03,
+    "stop": 989.4,
+    "t1": 994.29,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 800.65,
+    "atr": 16.98,
+    "next": null
+   },
+   "expect": {
+    "entry": 800.48,
+    "stop": 802.35,
+    "t1": 796.74,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 995.91,
+    "atr": 10.39,
+    "next": null
+   },
+   "expect": {
+    "entry": 996.01,
+    "stop": 994.87,
+    "t1": 998.29,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 981.05,
+    "atr": 4.89,
+    "next": {
+     "price": 998.46,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 981.1,
+    "stop": 980.56,
+    "t1": 982.18,
+    "t2": {
+     "price": 998.46,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 399.28,
+    "atr": 29.91,
+    "next": {
+     "price": 437.22,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 399.58,
+    "stop": 396.29,
+    "t1": 406.16,
+    "t2": {
+     "price": 437.22,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1129.53,
+    "atr": 1.99,
+    "next": {
+     "price": 1122.41,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 1129.51,
+    "stop": 1129.73,
+    "t1": 1129.07,
+    "t2": {
+     "price": 1122.41,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 595.03,
+    "atr": 31.93,
+    "next": {
+     "price": 719.11,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 595.35,
+    "stop": 591.84,
+    "t1": 602.37,
+    "t2": {
+     "price": 719.11,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 675.17,
+    "atr": 5.79,
+    "next": {
+     "price": 673.42,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 675.11,
+    "stop": 675.75,
+    "t1": 673.83,
+    "t2": {
+     "price": 673.42,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1020.67,
+    "atr": 17.8,
+    "next": {
+     "price": 960.52,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 1020.49,
+    "stop": 1022.45,
+    "t1": 1016.57,
+    "t2": {
+     "price": 960.52,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 388.0,
+    "atr": 15.71,
+    "next": {
+     "price": 429.36,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 388.16,
+    "stop": 386.43,
+    "t1": 391.62,
+    "t2": {
+     "price": 429.36,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 171.26,
+    "atr": 1.03,
+    "next": {
+     "price": 174.77,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 171.27,
+    "stop": 171.16,
+    "t1": 171.49,
+    "t2": {
+     "price": 174.77,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1027.14,
+    "atr": 31.31,
+    "next": {
+     "price": 996.38,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 1026.83,
+    "stop": 1030.27,
+    "t1": 1019.95,
+    "t2": {
+     "price": 996.38,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1008.2,
+    "atr": 28.32,
+    "next": {
+     "price": 953.21,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 1007.92,
+    "stop": 1011.03,
+    "t1": 1001.7,
+    "t2": {
+     "price": 953.21,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 761.24,
+    "atr": 20.7,
+    "next": {
+     "price": 787.44,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 761.45,
+    "stop": 759.17,
+    "t1": 766.01,
+    "t2": {
+     "price": 787.44,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 304.48,
+    "atr": 26.3,
+    "next": {
+     "price": 326.82,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 304.74,
+    "stop": 301.85,
+    "t1": 310.52,
+    "t2": {
+     "price": 326.82,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 28.74,
+    "atr": 24.32,
+    "next": {
+     "price": 38.37,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 28.98,
+    "stop": 26.31,
+    "t1": 34.32,
+    "t2": {
+     "price": 38.37,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1163.29,
+    "atr": 23.43,
+    "next": null
+   },
+   "expect": {
+    "entry": 1163.06,
+    "stop": 1165.63,
+    "t1": 1157.92,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 967.98,
+    "atr": 39.36,
+    "next": {
+     "price": 927.69,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 967.59,
+    "stop": 971.92,
+    "t1": 958.93,
+    "t2": {
+     "price": 927.69,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1155.77,
+    "atr": 38.43,
+    "next": null
+   },
+   "expect": {
+    "entry": 1155.39,
+    "stop": 1159.61,
+    "t1": 1146.95,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 325.21,
+    "atr": 13.02,
+    "next": {
+     "price": 298.47,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 325.08,
+    "stop": 326.51,
+    "t1": 322.22,
+    "t2": {
+     "price": 298.47,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 106.36,
+    "atr": 20.75,
+    "next": null
+   },
+   "expect": {
+    "entry": 106.57,
+    "stop": 104.28,
+    "t1": 111.15,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 70.91,
+    "atr": 38.99,
+    "next": {
+     "price": -18.5,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 70.52,
+    "stop": 74.81,
+    "t1": 61.94,
+    "t2": {
+     "price": -18.5,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 712.61,
+    "atr": 34.3,
+    "next": {
+     "price": 685.92,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 712.27,
+    "stop": 716.04,
+    "t1": 704.73,
+    "t2": {
+     "price": 685.92,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1150.1,
+    "atr": 13.59,
+    "next": {
+     "price": 1136.27,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 1149.96,
+    "stop": 1151.46,
+    "t1": 1146.96,
+    "t2": {
+     "price": 1136.27,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 382.02,
+    "atr": 19.54,
+    "next": {
+     "price": 363.61,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 381.82,
+    "stop": 383.97,
+    "t1": 377.52,
+    "t2": {
+     "price": 363.61,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 351.87,
+    "atr": 18.0,
+    "next": {
+     "price": 293.59,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 351.69,
+    "stop": 353.67,
+    "t1": 347.73,
+    "t2": {
+     "price": 293.59,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 927.57,
+    "atr": 1.05,
+    "next": {
+     "price": 926.81,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 927.56,
+    "stop": 927.68,
+    "t1": 927.32,
+    "t2": {
+     "price": 926.81,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 11.87,
+    "atr": 29.81,
+    "next": {
+     "price": -86.35,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 11.57,
+    "stop": 14.85,
+    "t1": 5.01,
+    "t2": {
+     "price": -86.35,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 888.04,
+    "atr": 9.4,
+    "next": null
+   },
+   "expect": {
+    "entry": 888.13,
+    "stop": 887.1,
+    "t1": 890.19,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1103.22,
+    "atr": 19.7,
+    "next": null
+   },
+   "expect": {
+    "entry": 1103.02,
+    "stop": 1105.19,
+    "t1": 1098.68,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 635.26,
+    "atr": 4.18,
+    "next": null
+   },
+   "expect": {
+    "entry": 635.3,
+    "stop": 634.84,
+    "t1": 636.22,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 99.92,
+    "atr": 34.72,
+    "next": {
+     "price": 65.08,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 99.57,
+    "stop": 103.39,
+    "t1": 91.93,
+    "t2": {
+     "price": 65.08,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 875.29,
+    "atr": 9.76,
+    "next": {
+     "price": 843.78,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 875.19,
+    "stop": 876.27,
+    "t1": 873.03,
+    "t2": {
+     "price": 843.78,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 321.57,
+    "atr": 24.88,
+    "next": null
+   },
+   "expect": {
+    "entry": 321.82,
+    "stop": 319.08,
+    "t1": 327.3,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 165.99,
+    "atr": 8.2,
+    "next": {
+     "price": 135.01,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 165.91,
+    "stop": 166.81,
+    "t1": 164.11,
+    "t2": {
+     "price": 135.01,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 673.62,
+    "atr": 5.51,
+    "next": {
+     "price": 677.94,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 673.68,
+    "stop": 673.07,
+    "t1": 674.9,
+    "t2": {
+     "price": 677.94,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 585.71,
+    "atr": 31.39,
+    "next": {
+     "price": 566.53,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 585.4,
+    "stop": 588.85,
+    "t1": 578.5,
+    "t2": {
+     "price": 566.53,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 800.07,
+    "atr": 33.18,
+    "next": {
+     "price": 859.54,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 800.4,
+    "stop": 796.75,
+    "t1": 807.7,
+    "t2": {
+     "price": 859.54,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 512.8,
+    "atr": 31.24,
+    "next": {
+     "price": 419.77,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 512.49,
+    "stop": 515.92,
+    "t1": 505.63,
+    "t2": {
+     "price": 419.77,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 306.5,
+    "atr": 32.65,
+    "next": {
+     "price": 387.83,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 306.83,
+    "stop": 303.24,
+    "t1": 314.01,
+    "t2": {
+     "price": 387.83,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1056.18,
+    "atr": 34.24,
+    "next": {
+     "price": 1136.42,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 1056.52,
+    "stop": 1052.76,
+    "t1": 1064.04,
+    "t2": {
+     "price": 1136.42,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 321.26,
+    "atr": 33.43,
+    "next": null
+   },
+   "expect": {
+    "entry": 321.59,
+    "stop": 317.92,
+    "t1": 328.93,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 665.94,
+    "atr": 10.53,
+    "next": {
+     "price": 657.26,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 665.83,
+    "stop": 666.99,
+    "t1": 663.51,
+    "t2": {
+     "price": 657.26,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 520.9,
+    "atr": 36.92,
+    "next": null
+   },
+   "expect": {
+    "entry": 520.53,
+    "stop": 524.59,
+    "t1": 512.41,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 800.45,
+    "atr": 32.71,
+    "next": {
+     "price": 735.84,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 800.12,
+    "stop": 803.72,
+    "t1": 792.92,
+    "t2": {
+     "price": 735.84,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 602.92,
+    "atr": 17.87,
+    "next": {
+     "price": 532.76,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 602.74,
+    "stop": 604.71,
+    "t1": 598.8,
+    "t2": {
+     "price": 532.76,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 125.57,
+    "atr": 20.03,
+    "next": {
+     "price": 58.45,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 125.37,
+    "stop": 127.57,
+    "t1": 120.97,
+    "t2": {
+     "price": 58.45,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 992.03,
+    "atr": 15.2,
+    "next": {
+     "price": 975.99,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 991.88,
+    "stop": 993.55,
+    "t1": 988.54,
+    "t2": {
+     "price": 975.99,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 174.3,
+    "atr": 20.61,
+    "next": null
+   },
+   "expect": {
+    "entry": 174.51,
+    "stop": 172.24,
+    "t1": 179.05,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 988.36,
+    "atr": 6.4,
+    "next": {
+     "price": 971.72,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 988.3,
+    "stop": 989.0,
+    "t1": 986.9,
+    "t2": {
+     "price": 971.72,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 533.08,
+    "atr": 27.67,
+    "next": {
+     "price": 614.88,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 533.36,
+    "stop": 530.31,
+    "t1": 539.46,
+    "t2": {
+     "price": 614.88,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1100.42,
+    "atr": 11.94,
+    "next": {
+     "price": 1073.15,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 1100.3,
+    "stop": 1101.61,
+    "t1": 1097.68,
+    "t2": {
+     "price": 1073.15,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 605.59,
+    "atr": 34.36,
+    "next": {
+     "price": 588.93,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 605.25,
+    "stop": 609.03,
+    "t1": 597.69,
+    "t2": {
+     "price": 588.93,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 969.62,
+    "atr": 27.89,
+    "next": {
+     "price": 990.45,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 969.9,
+    "stop": 966.83,
+    "t1": 976.04,
+    "t2": {
+     "price": 990.45,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1050.98,
+    "atr": 36.65,
+    "next": {
+     "price": 1016.61,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 1050.61,
+    "stop": 1054.64,
+    "t1": 1042.55,
+    "t2": {
+     "price": 1016.61,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1061.46,
+    "atr": 20.51,
+    "next": null
+   },
+   "expect": {
+    "entry": 1061.67,
+    "stop": 1059.41,
+    "t1": 1066.19,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 874.46,
+    "atr": 22.77,
+    "next": {
+     "price": 942.36,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 874.69,
+    "stop": 872.18,
+    "t1": 879.71,
+    "t2": {
+     "price": 942.36,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 815.72,
+    "atr": 39.97,
+    "next": {
+     "price": 698.4,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 815.32,
+    "stop": 819.72,
+    "t1": 806.52,
+    "t2": {
+     "price": 698.4,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 377.02,
+    "atr": 31.08,
+    "next": {
+     "price": 500.22,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 377.33,
+    "stop": 373.91,
+    "t1": 384.17,
+    "t2": {
+     "price": 500.22,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 76.05,
+    "atr": 17.99,
+    "next": null
+   },
+   "expect": {
+    "entry": 75.87,
+    "stop": 77.85,
+    "t1": 71.91,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 108.53,
+    "atr": 33.69,
+    "next": {
+     "price": 153.37,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 108.87,
+    "stop": 105.16,
+    "t1": 116.29,
+    "t2": {
+     "price": 153.37,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1092.95,
+    "atr": 16.38,
+    "next": null
+   },
+   "expect": {
+    "entry": 1092.79,
+    "stop": 1094.59,
+    "t1": 1089.19,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 983.97,
+    "atr": 32.39,
+    "next": {
+     "price": 1080.11,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 984.29,
+    "stop": 980.73,
+    "t1": 991.41,
+    "t2": {
+     "price": 1080.11,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 45.82,
+    "atr": 29.61,
+    "next": {
+     "price": 82.89,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 46.12,
+    "stop": 42.86,
+    "t1": 52.64,
+    "t2": {
+     "price": 82.89,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 614.58,
+    "atr": 18.19,
+    "next": {
+     "price": 549.8,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 614.4,
+    "stop": 616.4,
+    "t1": 610.4,
+    "t2": {
+     "price": 549.8,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 648.14,
+    "atr": 11.52,
+    "next": {
+     "price": 674.36,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 648.26,
+    "stop": 646.99,
+    "t1": 650.8,
+    "t2": {
+     "price": 674.36,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 905.61,
+    "atr": 18.17,
+    "next": {
+     "price": 862.01,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 905.43,
+    "stop": 907.43,
+    "t1": 901.43,
+    "t2": {
+     "price": 862.01,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 600.78,
+    "atr": 22.1,
+    "next": null
+   },
+   "expect": {
+    "entry": 600.56,
+    "stop": 602.99,
+    "t1": 595.7,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 973.66,
+    "atr": 39.86,
+    "next": {
+     "price": 1132.84,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 974.06,
+    "stop": 969.67,
+    "t1": 982.84,
+    "t2": {
+     "price": 1132.84,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 276.35,
+    "atr": 33.55,
+    "next": {
+     "price": 305.23,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 276.69,
+    "stop": 273.0,
+    "t1": 284.07,
+    "t2": {
+     "price": 305.23,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 4.73,
+    "atr": 10.66,
+    "next": {
+     "price": 19.22,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 4.84,
+    "stop": 3.66,
+    "t1": 7.2,
+    "t2": {
+     "price": 19.22,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 804.82,
+    "atr": 12.84,
+    "next": {
+     "price": 760.46,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 804.69,
+    "stop": 806.1,
+    "t1": 801.87,
+    "t2": {
+     "price": 760.46,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 702.7,
+    "atr": 5.19,
+    "next": {
+     "price": 688.7,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 702.65,
+    "stop": 703.22,
+    "t1": 701.51,
+    "t2": {
+     "price": 688.7,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 810.79,
+    "atr": 21.49,
+    "next": null
+   },
+   "expect": {
+    "entry": 810.58,
+    "stop": 812.94,
+    "t1": 805.86,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 77.25,
+    "atr": 12.53,
+    "next": {
+     "price": 86.31,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 77.38,
+    "stop": 76.0,
+    "t1": 80.14,
+    "t2": {
+     "price": 86.31,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 68.16,
+    "atr": 29.17,
+    "next": {
+     "price": 37.94,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 67.87,
+    "stop": 71.08,
+    "t1": 61.45,
+    "t2": {
+     "price": 37.94,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 926.63,
+    "atr": 17.24,
+    "next": {
+     "price": 976.13,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 926.8,
+    "stop": 924.91,
+    "t1": 930.58,
+    "t2": {
+     "price": 976.13,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 640.04,
+    "atr": 3.42,
+    "next": null
+   },
+   "expect": {
+    "entry": 640.07,
+    "stop": 639.7,
+    "t1": 640.81,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 443.87,
+    "atr": 31.68,
+    "next": {
+     "price": 568.63,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 444.19,
+    "stop": 440.7,
+    "t1": 451.17,
+    "t2": {
+     "price": 568.63,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 116.65,
+    "atr": 1.83,
+    "next": {
+     "price": 120.97,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 116.67,
+    "stop": 116.47,
+    "t1": 117.07,
+    "t2": {
+     "price": 120.97,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 989.81,
+    "atr": 5.34,
+    "next": null
+   },
+   "expect": {
+    "entry": 989.76,
+    "stop": 990.34,
+    "t1": 988.6,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 829.12,
+    "atr": 21.57,
+    "next": {
+     "price": 768.8,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 828.9,
+    "stop": 831.28,
+    "t1": 824.14,
+    "t2": {
+     "price": 768.8,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1070.98,
+    "atr": 1.25,
+    "next": {
+     "price": 1066.76,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 1070.97,
+    "stop": 1071.11,
+    "t1": 1070.69,
+    "t2": {
+     "price": 1066.76,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 459.02,
+    "atr": 33.37,
+    "next": {
+     "price": 496.59,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 459.35,
+    "stop": 455.68,
+    "t1": 466.69,
+    "t2": {
+     "price": 496.59,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 46.71,
+    "atr": 20.15,
+    "next": null
+   },
+   "expect": {
+    "entry": 46.91,
+    "stop": 44.7,
+    "t1": 51.33,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 21.8,
+    "atr": 15.41,
+    "next": {
+     "price": 14.56,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 21.65,
+    "stop": 23.34,
+    "t1": 18.27,
+    "t2": {
+     "price": 14.56,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 455.37,
+    "atr": 32.45,
+    "next": null
+   },
+   "expect": {
+    "entry": 455.69,
+    "stop": 452.12,
+    "t1": 462.83,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 758.83,
+    "atr": 7.56,
+    "next": null
+   },
+   "expect": {
+    "entry": 758.75,
+    "stop": 759.59,
+    "t1": 757.07,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 183.65,
+    "atr": 39.44,
+    "next": null
+   },
+   "expect": {
+    "entry": 184.04,
+    "stop": 179.71,
+    "t1": 192.7,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 52.19,
+    "atr": 10.96,
+    "next": null
+   },
+   "expect": {
+    "entry": 52.08,
+    "stop": 53.29,
+    "t1": 49.66,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 843.56,
+    "atr": 3.06,
+    "next": {
+     "price": 842.13,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 843.53,
+    "stop": 843.87,
+    "t1": 842.85,
+    "t2": {
+     "price": 842.13,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1063.83,
+    "atr": 27.72,
+    "next": {
+     "price": 1113.95,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 1064.11,
+    "stop": 1061.06,
+    "t1": 1070.21,
+    "t2": {
+     "price": 1113.95,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 152.81,
+    "atr": 12.51,
+    "next": {
+     "price": 149.04,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 152.68,
+    "stop": 154.06,
+    "t1": 149.92,
+    "t2": {
+     "price": 149.04,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 202.58,
+    "atr": 0.58,
+    "next": {
+     "price": 202.25,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 202.57,
+    "stop": 202.64,
+    "t1": 202.43,
+    "t2": {
+     "price": 202.25,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 940.23,
+    "atr": 12.21,
+    "next": null
+   },
+   "expect": {
+    "entry": 940.11,
+    "stop": 941.45,
+    "t1": 937.43,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1068.4,
+    "atr": 16.53,
+    "next": null
+   },
+   "expect": {
+    "entry": 1068.23,
+    "stop": 1070.05,
+    "t1": 1064.59,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1005.89,
+    "atr": 2.32,
+    "next": null
+   },
+   "expect": {
+    "entry": 1005.91,
+    "stop": 1005.66,
+    "t1": 1006.41,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 420.82,
+    "atr": 27.7,
+    "next": {
+     "price": 356.77,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 420.54,
+    "stop": 423.59,
+    "t1": 414.44,
+    "t2": {
+     "price": 356.77,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 35.43,
+    "atr": 21.26,
+    "next": {
+     "price": 119.89,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 35.64,
+    "stop": 33.3,
+    "t1": 40.32,
+    "t2": {
+     "price": 119.89,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 972.33,
+    "atr": 36.96,
+    "next": {
+     "price": 909.1,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 971.96,
+    "stop": 976.03,
+    "t1": 963.82,
+    "t2": {
+     "price": 909.1,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 793.24,
+    "atr": 19.95,
+    "next": {
+     "price": 789.4,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 793.04,
+    "stop": 795.24,
+    "t1": 788.64,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 320.56,
+    "atr": 39.25,
+    "next": {
+     "price": 443.87,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 320.95,
+    "stop": 316.63,
+    "t1": 329.59,
+    "t2": {
+     "price": 443.87,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 835.0,
+    "atr": 14.34,
+    "next": null
+   },
+   "expect": {
+    "entry": 835.14,
+    "stop": 833.57,
+    "t1": 838.28,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 35.83,
+    "atr": 6.98,
+    "next": {
+     "price": 29.83,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 35.76,
+    "stop": 36.53,
+    "t1": 34.22,
+    "t2": {
+     "price": 29.83,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 225.86,
+    "atr": 6.53,
+    "next": {
+     "price": 217.67,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 225.79,
+    "stop": 226.51,
+    "t1": 224.35,
+    "t2": {
+     "price": 217.67,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 269.56,
+    "atr": 8.21,
+    "next": {
+     "price": 251.06,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 269.48,
+    "stop": 270.38,
+    "t1": 267.68,
+    "t2": {
+     "price": 251.06,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 573.43,
+    "atr": 29.64,
+    "next": null
+   },
+   "expect": {
+    "entry": 573.13,
+    "stop": 576.39,
+    "t1": 566.61,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 64.07,
+    "atr": 9.83,
+    "next": null
+   },
+   "expect": {
+    "entry": 64.17,
+    "stop": 63.09,
+    "t1": 66.33,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 607.39,
+    "atr": 32.99,
+    "next": {
+     "price": 609.71,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 607.72,
+    "stop": 604.09,
+    "t1": 614.98,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 609.0,
+    "atr": 34.34,
+    "next": {
+     "price": 679.45,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 609.34,
+    "stop": 605.57,
+    "t1": 616.88,
+    "t2": {
+     "price": 679.45,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 414.91,
+    "atr": 26.78,
+    "next": null
+   },
+   "expect": {
+    "entry": 415.18,
+    "stop": 412.23,
+    "t1": 421.08,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 109.92,
+    "atr": 16.28,
+    "next": {
+     "price": 126.56,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 110.08,
+    "stop": 108.29,
+    "t1": 113.66,
+    "t2": {
+     "price": 126.56,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 10.38,
+    "atr": 35.07,
+    "next": null
+   },
+   "expect": {
+    "entry": 10.73,
+    "stop": 6.87,
+    "t1": 18.45,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 518.57,
+    "atr": 37.78,
+    "next": {
+     "price": 389.04,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 518.19,
+    "stop": 522.35,
+    "t1": 509.87,
+    "t2": {
+     "price": 389.04,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 447.92,
+    "atr": 1.98,
+    "next": null
+   },
+   "expect": {
+    "entry": 447.9,
+    "stop": 448.12,
+    "t1": 447.46,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 161.79,
+    "atr": 39.39,
+    "next": null
+   },
+   "expect": {
+    "entry": 162.18,
+    "stop": 157.85,
+    "t1": 170.84,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 684.01,
+    "atr": 1.11,
+    "next": {
+     "price": 679.92,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 684.0,
+    "stop": 684.12,
+    "t1": 683.76,
+    "t2": {
+     "price": 679.92,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 539.3,
+    "atr": 31.16,
+    "next": {
+     "price": 619.25,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 539.61,
+    "stop": 536.18,
+    "t1": 546.47,
+    "t2": {
+     "price": 619.25,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1141.33,
+    "atr": 4.32,
+    "next": {
+     "price": 1147.77,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 1141.37,
+    "stop": 1140.9,
+    "t1": 1142.31,
+    "t2": {
+     "price": 1147.77,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 616.88,
+    "atr": 13.12,
+    "next": null
+   },
+   "expect": {
+    "entry": 617.01,
+    "stop": 615.57,
+    "t1": 619.89,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1126.31,
+    "atr": 7.28,
+    "next": null
+   },
+   "expect": {
+    "entry": 1126.38,
+    "stop": 1125.58,
+    "t1": 1127.98,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 943.3,
+    "atr": 16.34,
+    "next": {
+     "price": 930.36,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 943.14,
+    "stop": 944.93,
+    "t1": 939.56,
+    "t2": {
+     "price": 930.36,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 213.51,
+    "atr": 20.34,
+    "next": {
+     "price": 155.08,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 213.31,
+    "stop": 215.54,
+    "t1": 208.85,
+    "t2": {
+     "price": 155.08,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 749.19,
+    "atr": 2.15,
+    "next": {
+     "price": 741.77,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 749.17,
+    "stop": 749.41,
+    "t1": 748.69,
+    "t2": {
+     "price": 741.77,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 108.66,
+    "atr": 39.93,
+    "next": null
+   },
+   "expect": {
+    "entry": 109.06,
+    "stop": 104.67,
+    "t1": 117.84,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 420.86,
+    "atr": 10.72,
+    "next": {
+     "price": 446.12,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 420.97,
+    "stop": 419.79,
+    "t1": 423.33,
+    "t2": {
+     "price": 446.12,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 61.31,
+    "atr": 17.66,
+    "next": {
+     "price": 111.54,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 61.49,
+    "stop": 59.54,
+    "t1": 65.39,
+    "t2": {
+     "price": 111.54,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 793.42,
+    "atr": 38.28,
+    "next": null
+   },
+   "expect": {
+    "entry": 793.8,
+    "stop": 789.59,
+    "t1": 802.22,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1194.92,
+    "atr": 10.45,
+    "next": {
+     "price": 1162.45,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 1194.82,
+    "stop": 1195.97,
+    "t1": 1192.52,
+    "t2": {
+     "price": 1162.45,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 33.33,
+    "atr": 34.97,
+    "next": {
+     "price": 113.93,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 33.68,
+    "stop": 29.83,
+    "t1": 41.38,
+    "t2": {
+     "price": 113.93,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 503.56,
+    "atr": 30.06,
+    "next": null
+   },
+   "expect": {
+    "entry": 503.26,
+    "stop": 506.57,
+    "t1": 496.64,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1135.74,
+    "atr": 13.23,
+    "next": {
+     "price": 1130.18,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 1135.61,
+    "stop": 1137.06,
+    "t1": 1132.71,
+    "t2": {
+     "price": 1130.18,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1016.89,
+    "atr": 29.28,
+    "next": {
+     "price": 985.42,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 1016.6,
+    "stop": 1019.82,
+    "t1": 1010.16,
+    "t2": {
+     "price": 985.42,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 324.44,
+    "atr": 24.01,
+    "next": {
+     "price": 325.16,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 324.68,
+    "stop": 322.04,
+    "t1": 329.96,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 170.87,
+    "atr": 25.58,
+    "next": {
+     "price": 113.54,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 170.61,
+    "stop": 173.43,
+    "t1": 164.97,
+    "t2": {
+     "price": 113.54,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1004.32,
+    "atr": 18.77,
+    "next": {
+     "price": 965.5,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 1004.13,
+    "stop": 1006.2,
+    "t1": 999.99,
+    "t2": {
+     "price": 965.5,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 494.52,
+    "atr": 28.72,
+    "next": {
+     "price": 415.0,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 494.23,
+    "stop": 497.39,
+    "t1": 487.91,
+    "t2": {
+     "price": 415.0,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 234.16,
+    "atr": 33.71,
+    "next": {
+     "price": 163.93,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 233.82,
+    "stop": 237.53,
+    "t1": 226.4,
+    "t2": {
+     "price": 163.93,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 430.83,
+    "atr": 28.02,
+    "next": {
+     "price": 420.63,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 430.55,
+    "stop": 433.63,
+    "t1": 424.39,
+    "t2": {
+     "price": 420.63,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 953.25,
+    "atr": 39.99,
+    "next": {
+     "price": 1044.99,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 953.65,
+    "stop": 949.25,
+    "t1": 962.45,
+    "t2": {
+     "price": 1044.99,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 105.17,
+    "atr": 24.43,
+    "next": {
+     "price": 20.73,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 104.93,
+    "stop": 107.61,
+    "t1": 99.57,
+    "t2": {
+     "price": 20.73,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1057.93,
+    "atr": 35.38,
+    "next": {
+     "price": 1067.92,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 1058.28,
+    "stop": 1054.39,
+    "t1": 1066.06,
+    "t2": {
+     "price": 1067.92,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 810.56,
+    "atr": 26.11,
+    "next": {
+     "price": 820.19,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 810.82,
+    "stop": 807.95,
+    "t1": 816.56,
+    "t2": {
+     "price": 820.19,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 153.68,
+    "atr": 36.75,
+    "next": null
+   },
+   "expect": {
+    "entry": 154.05,
+    "stop": 150.0,
+    "t1": 162.15,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1016.2,
+    "atr": 28.33,
+    "next": null
+   },
+   "expect": {
+    "entry": 1016.48,
+    "stop": 1013.37,
+    "t1": 1022.7,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 765.54,
+    "atr": 1.68,
+    "next": {
+     "price": 768.54,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 765.56,
+    "stop": 765.37,
+    "t1": 765.94,
+    "t2": {
+     "price": 768.54,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 561.58,
+    "atr": 34.38,
+    "next": {
+     "price": 583.39,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 561.92,
+    "stop": 558.14,
+    "t1": 569.48,
+    "t2": {
+     "price": 583.39,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 727.54,
+    "atr": 17.39,
+    "next": {
+     "price": 736.79,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 727.71,
+    "stop": 725.8,
+    "t1": 731.53,
+    "t2": {
+     "price": 736.79,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 737.54,
+    "atr": 30.43,
+    "next": {
+     "price": 655.54,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 737.24,
+    "stop": 740.58,
+    "t1": 730.56,
+    "t2": {
+     "price": 655.54,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 71.53,
+    "atr": 8.23,
+    "next": null
+   },
+   "expect": {
+    "entry": 71.61,
+    "stop": 70.71,
+    "t1": 73.41,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 672.37,
+    "atr": 28.77,
+    "next": {
+     "price": 743.59,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 672.66,
+    "stop": 669.49,
+    "t1": 679.0,
+    "t2": {
+     "price": 743.59,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 559.57,
+    "atr": 36.82,
+    "next": {
+     "price": 497.38,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 559.2,
+    "stop": 563.25,
+    "t1": 551.1,
+    "t2": {
+     "price": 497.38,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1010.69,
+    "atr": 13.22,
+    "next": {
+     "price": 1015.35,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 1010.82,
+    "stop": 1009.37,
+    "t1": 1013.72,
+    "t2": {
+     "price": 1015.35,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 247.07,
+    "atr": 36.14,
+    "next": null
+   },
+   "expect": {
+    "entry": 247.43,
+    "stop": 243.46,
+    "t1": 255.37,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 461.33,
+    "atr": 10.46,
+    "next": {
+     "price": 451.05,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 461.23,
+    "stop": 462.38,
+    "t1": 458.93,
+    "t2": {
+     "price": 451.05,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 764.4,
+    "atr": 35.53,
+    "next": {
+     "price": 779.55,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 764.76,
+    "stop": 760.85,
+    "t1": 772.58,
+    "t2": {
+     "price": 779.55,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 529.0,
+    "atr": 35.04,
+    "next": {
+     "price": 542.76,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 529.35,
+    "stop": 525.5,
+    "t1": 537.05,
+    "t2": {
+     "price": 542.76,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 704.28,
+    "atr": 28.03,
+    "next": {
+     "price": 765.57,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 704.56,
+    "stop": 701.48,
+    "t1": 710.72,
+    "t2": {
+     "price": 765.57,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 782.48,
+    "atr": 11.49,
+    "next": {
+     "price": 754.48,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 782.37,
+    "stop": 783.63,
+    "t1": 779.85,
+    "t2": {
+     "price": 754.48,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 512.38,
+    "atr": 33.37,
+    "next": null
+   },
+   "expect": {
+    "entry": 512.71,
+    "stop": 509.04,
+    "t1": 520.05,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 462.0,
+    "atr": 39.82,
+    "next": {
+     "price": 615.74,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 462.4,
+    "stop": 458.02,
+    "t1": 471.16,
+    "t2": {
+     "price": 615.74,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 723.41,
+    "atr": 37.6,
+    "next": {
+     "price": 813.88,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 723.79,
+    "stop": 719.65,
+    "t1": 732.07,
+    "t2": {
+     "price": 813.88,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 340.54,
+    "atr": 14.39,
+    "next": null
+   },
+   "expect": {
+    "entry": 340.68,
+    "stop": 339.1,
+    "t1": 343.84,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 464.01,
+    "atr": 7.58,
+    "next": null
+   },
+   "expect": {
+    "entry": 463.93,
+    "stop": 464.77,
+    "t1": 462.25,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 921.96,
+    "atr": 25.51,
+    "next": null
+   },
+   "expect": {
+    "entry": 921.7,
+    "stop": 924.51,
+    "t1": 916.08,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 529.39,
+    "atr": 9.57,
+    "next": {
+     "price": 514.81,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 529.29,
+    "stop": 530.35,
+    "t1": 527.17,
+    "t2": {
+     "price": 514.81,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 386.48,
+    "atr": 1.36,
+    "next": null
+   },
+   "expect": {
+    "entry": 386.47,
+    "stop": 386.62,
+    "t1": 386.17,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 593.96,
+    "atr": 1.33,
+    "next": {
+     "price": 590.06,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 593.95,
+    "stop": 594.09,
+    "t1": 593.67,
+    "t2": {
+     "price": 590.06,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 183.13,
+    "atr": 38.27,
+    "next": null
+   },
+   "expect": {
+    "entry": 183.51,
+    "stop": 179.3,
+    "t1": 191.93,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1153.86,
+    "atr": 11.11,
+    "next": null
+   },
+   "expect": {
+    "entry": 1153.97,
+    "stop": 1152.75,
+    "t1": 1156.41,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 558.6,
+    "atr": 11.42,
+    "next": {
+     "price": 572.91,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 558.71,
+    "stop": 557.46,
+    "t1": 561.21,
+    "t2": {
+     "price": 572.91,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 820.4,
+    "atr": 30.33,
+    "next": {
+     "price": 849.08,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 820.7,
+    "stop": 817.37,
+    "t1": 827.36,
+    "t2": {
+     "price": 849.08,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 612.61,
+    "atr": 17.25,
+    "next": {
+     "price": 600.6,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 612.44,
+    "stop": 614.34,
+    "t1": 608.64,
+    "t2": {
+     "price": 600.6,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 296.77,
+    "atr": 33.58,
+    "next": {
+     "price": 283.99,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 296.43,
+    "stop": 300.13,
+    "t1": 289.03,
+    "t2": {
+     "price": 283.99,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 126.68,
+    "atr": 26.07,
+    "next": null
+   },
+   "expect": {
+    "entry": 126.94,
+    "stop": 124.07,
+    "t1": 132.68,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 423.74,
+    "atr": 8.53,
+    "next": {
+     "price": 426.33,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 423.83,
+    "stop": 422.89,
+    "t1": 425.71,
+    "t2": {
+     "price": 426.33,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 72.0,
+    "atr": 23.6,
+    "next": null
+   },
+   "expect": {
+    "entry": 71.76,
+    "stop": 74.36,
+    "t1": 66.56,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1156.87,
+    "atr": 6.55,
+    "next": {
+     "price": 1177.98,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 1156.94,
+    "stop": 1156.21,
+    "t1": 1158.4,
+    "t2": {
+     "price": 1177.98,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 835.13,
+    "atr": 37.9,
+    "next": {
+     "price": 825.56,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 834.75,
+    "stop": 838.92,
+    "t1": 826.41,
+    "t2": {
+     "price": 825.56,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1095.56,
+    "atr": 35.4,
+    "next": null
+   },
+   "expect": {
+    "entry": 1095.21,
+    "stop": 1099.1,
+    "t1": 1087.43,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 955.49,
+    "atr": 12.26,
+    "next": {
+     "price": 969.39,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 955.61,
+    "stop": 954.26,
+    "t1": 958.31,
+    "t2": {
+     "price": 969.39,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 203.55,
+    "atr": 19.98,
+    "next": null
+   },
+   "expect": {
+    "entry": 203.75,
+    "stop": 201.55,
+    "t1": 208.15,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 136.73,
+    "atr": 21.78,
+    "next": {
+     "price": 122.46,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 136.51,
+    "stop": 138.91,
+    "t1": 131.71,
+    "t2": {
+     "price": 122.46,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 757.38,
+    "atr": 14.45,
+    "next": {
+     "price": 776.83,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 757.52,
+    "stop": 755.93,
+    "t1": 760.7,
+    "t2": {
+     "price": 776.83,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 872.86,
+    "atr": 35.96,
+    "next": {
+     "price": 873.55,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 873.22,
+    "stop": 869.26,
+    "t1": 881.14,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 154.63,
+    "atr": 39.35,
+    "next": {
+     "price": 148.75,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 154.24,
+    "stop": 158.56,
+    "t1": 145.6,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 885.82,
+    "atr": 1.21,
+    "next": {
+     "price": 889.73,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 885.83,
+    "stop": 885.7,
+    "t1": 886.09,
+    "t2": {
+     "price": 889.73,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 826.84,
+    "atr": 15.25,
+    "next": {
+     "price": 857.08,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 826.99,
+    "stop": 825.32,
+    "t1": 830.33,
+    "t2": {
+     "price": 857.08,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 986.8,
+    "atr": 10.38,
+    "next": {
+     "price": 1005.68,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 986.9,
+    "stop": 985.76,
+    "t1": 989.18,
+    "t2": {
+     "price": 1005.68,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 828.74,
+    "atr": 34.34,
+    "next": {
+     "price": 935.39,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 829.08,
+    "stop": 825.31,
+    "t1": 836.62,
+    "t2": {
+     "price": 935.39,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 107.59,
+    "atr": 34.1,
+    "next": {
+     "price": -23.62,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 107.25,
+    "stop": 111.0,
+    "t1": 99.75,
+    "t2": {
+     "price": -23.62,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 648.97,
+    "atr": 38.32,
+    "next": null
+   },
+   "expect": {
+    "entry": 649.35,
+    "stop": 645.14,
+    "t1": 657.77,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 563.29,
+    "atr": 5.79,
+    "next": {
+     "price": 551.19,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 563.23,
+    "stop": 563.87,
+    "t1": 561.95,
+    "t2": {
+     "price": 551.19,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 597.45,
+    "atr": 35.53,
+    "next": {
+     "price": 723.14,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 597.81,
+    "stop": 593.9,
+    "t1": 605.63,
+    "t2": {
+     "price": 723.14,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 227.88,
+    "atr": 9.33,
+    "next": {
+     "price": 247.18,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 227.97,
+    "stop": 226.95,
+    "t1": 230.01,
+    "t2": {
+     "price": 247.18,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 354.63,
+    "atr": 21.27,
+    "next": null
+   },
+   "expect": {
+    "entry": 354.84,
+    "stop": 352.5,
+    "t1": 359.52,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 625.51,
+    "atr": 31.05,
+    "next": {
+     "price": 670.62,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 625.82,
+    "stop": 622.4,
+    "t1": 632.66,
+    "t2": {
+     "price": 670.62,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 410.32,
+    "atr": 20.15,
+    "next": {
+     "price": 460.5,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 410.52,
+    "stop": 408.31,
+    "t1": 414.94,
+    "t2": {
+     "price": 460.5,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1157.92,
+    "atr": 30.48,
+    "next": {
+     "price": 1123.23,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 1157.62,
+    "stop": 1160.97,
+    "t1": 1150.92,
+    "t2": {
+     "price": 1123.23,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 198.74,
+    "atr": 1.63,
+    "next": {
+     "price": 192.82,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 198.72,
+    "stop": 198.9,
+    "t1": 198.36,
+    "t2": {
+     "price": 192.82,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 487.6,
+    "atr": 38.26,
+    "next": null
+   },
+   "expect": {
+    "entry": 487.22,
+    "stop": 491.43,
+    "t1": 478.8,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 418.47,
+    "atr": 32.05,
+    "next": {
+     "price": 505.44,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 418.79,
+    "stop": 415.27,
+    "t1": 425.83,
+    "t2": {
+     "price": 505.44,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 843.02,
+    "atr": 37.02,
+    "next": {
+     "price": 933.39,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 843.39,
+    "stop": 839.32,
+    "t1": 851.53,
+    "t2": {
+     "price": 933.39,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 438.71,
+    "atr": 12.2,
+    "next": {
+     "price": 470.8,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 438.83,
+    "stop": 437.49,
+    "t1": 441.51,
+    "t2": {
+     "price": 470.8,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1150.66,
+    "atr": 3.14,
+    "next": {
+     "price": 1157.65,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 1150.69,
+    "stop": 1150.35,
+    "t1": 1151.37,
+    "t2": {
+     "price": 1157.65,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 61.41,
+    "atr": 22.81,
+    "next": {
+     "price": -8.06,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 61.18,
+    "stop": 63.69,
+    "t1": 56.16,
+    "t2": {
+     "price": -8.06,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1005.0,
+    "atr": 18.57,
+    "next": {
+     "price": 942.94,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 1004.81,
+    "stop": 1006.86,
+    "t1": 1000.71,
+    "t2": {
+     "price": 942.94,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 948.62,
+    "atr": 22.08,
+    "next": {
+     "price": 862.47,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 948.4,
+    "stop": 950.83,
+    "t1": 943.54,
+    "t2": {
+     "price": 862.47,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 863.14,
+    "atr": 19.06,
+    "next": {
+     "price": 914.91,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 863.33,
+    "stop": 861.23,
+    "t1": 867.53,
+    "t2": {
+     "price": 914.91,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 63.78,
+    "atr": 8.42,
+    "next": {
+     "price": 66.82,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 63.86,
+    "stop": 62.94,
+    "t1": 65.7,
+    "t2": {
+     "price": 66.82,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 13.35,
+    "atr": 35.19,
+    "next": {
+     "price": 11.47,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 13.0,
+    "stop": 16.87,
+    "t1": 5.26,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 429.78,
+    "atr": 27.18,
+    "next": null
+   },
+   "expect": {
+    "entry": 429.51,
+    "stop": 432.5,
+    "t1": 423.53,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 157.08,
+    "atr": 28.75,
+    "next": null
+   },
+   "expect": {
+    "entry": 156.79,
+    "stop": 159.96,
+    "t1": 150.45,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 35.98,
+    "atr": 10.18,
+    "next": null
+   },
+   "expect": {
+    "entry": 36.08,
+    "stop": 34.96,
+    "t1": 38.32,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 142.82,
+    "atr": 33.32,
+    "next": {
+     "price": 129.95,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 142.49,
+    "stop": 146.15,
+    "t1": 135.17,
+    "t2": {
+     "price": 129.95,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 840.34,
+    "atr": 11.81,
+    "next": {
+     "price": 800.31,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 840.22,
+    "stop": 841.52,
+    "t1": 837.62,
+    "t2": {
+     "price": 800.31,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 181.98,
+    "atr": 23.94,
+    "next": {
+     "price": 275.35,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 182.22,
+    "stop": 179.59,
+    "t1": 187.48,
+    "t2": {
+     "price": 275.35,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 625.49,
+    "atr": 29.74,
+    "next": {
+     "price": 554.23,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 625.19,
+    "stop": 628.46,
+    "t1": 618.65,
+    "t2": {
+     "price": 554.23,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1021.13,
+    "atr": 31.57,
+    "next": {
+     "price": 1055.59,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 1021.45,
+    "stop": 1017.97,
+    "t1": 1028.41,
+    "t2": {
+     "price": 1055.59,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 286.33,
+    "atr": 13.34,
+    "next": {
+     "price": 329.13,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 286.46,
+    "stop": 285.0,
+    "t1": 289.38,
+    "t2": {
+     "price": 329.13,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1185.74,
+    "atr": 8.85,
+    "next": null
+   },
+   "expect": {
+    "entry": 1185.83,
+    "stop": 1184.86,
+    "t1": 1187.77,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 115.38,
+    "atr": 19.34,
+    "next": null
+   },
+   "expect": {
+    "entry": 115.57,
+    "stop": 113.45,
+    "t1": 119.81,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 59.75,
+    "atr": 24.98,
+    "next": null
+   },
+   "expect": {
+    "entry": 60.0,
+    "stop": 57.25,
+    "t1": 65.5,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 771.6,
+    "atr": 31.92,
+    "next": null
+   },
+   "expect": {
+    "entry": 771.92,
+    "stop": 768.41,
+    "t1": 778.94,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 136.67,
+    "atr": 10.24,
+    "next": {
+     "price": 144.11,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 136.77,
+    "stop": 135.65,
+    "t1": 139.01,
+    "t2": {
+     "price": 144.11,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 207.56,
+    "atr": 6.96,
+    "next": null
+   },
+   "expect": {
+    "entry": 207.63,
+    "stop": 206.86,
+    "t1": 209.17,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 718.0,
+    "atr": 29.76,
+    "next": {
+     "price": 749.2,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 718.3,
+    "stop": 715.02,
+    "t1": 724.86,
+    "t2": {
+     "price": 749.2,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 195.0,
+    "atr": 25.76,
+    "next": {
+     "price": 148.02,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 194.74,
+    "stop": 197.58,
+    "t1": 189.06,
+    "t2": {
+     "price": 148.02,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 174.81,
+    "atr": 26.4,
+    "next": {
+     "price": 215.03,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 175.07,
+    "stop": 172.17,
+    "t1": 180.87,
+    "t2": {
+     "price": 215.03,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 194.42,
+    "atr": 6.81,
+    "next": {
+     "price": 207.59,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 194.49,
+    "stop": 193.74,
+    "t1": 195.99,
+    "t2": {
+     "price": 207.59,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1123.74,
+    "atr": 3.27,
+    "next": {
+     "price": 1122.26,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 1123.71,
+    "stop": 1124.07,
+    "t1": 1122.99,
+    "t2": {
+     "price": 1122.26,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 561.47,
+    "atr": 28.85,
+    "next": {
+     "price": 488.37,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 561.18,
+    "stop": 564.36,
+    "t1": 554.82,
+    "t2": {
+     "price": 488.37,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 978.18,
+    "atr": 20.06,
+    "next": {
+     "price": 944.3,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 977.98,
+    "stop": 980.19,
+    "t1": 973.56,
+    "t2": {
+     "price": 944.3,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 879.76,
+    "atr": 10.17,
+    "next": null
+   },
+   "expect": {
+    "entry": 879.86,
+    "stop": 878.74,
+    "t1": 882.1,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1092.57,
+    "atr": 10.67,
+    "next": null
+   },
+   "expect": {
+    "entry": 1092.68,
+    "stop": 1091.5,
+    "t1": 1095.04,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1112.34,
+    "atr": 17.55,
+    "next": null
+   },
+   "expect": {
+    "entry": 1112.52,
+    "stop": 1110.58,
+    "t1": 1116.4,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 799.8,
+    "atr": 33.15,
+    "next": {
+     "price": 848.67,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 800.13,
+    "stop": 796.48,
+    "t1": 807.43,
+    "t2": {
+     "price": 848.67,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1125.2,
+    "atr": 16.75,
+    "next": null
+   },
+   "expect": {
+    "entry": 1125.37,
+    "stop": 1123.53,
+    "t1": 1129.05,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 624.54,
+    "atr": 39.38,
+    "next": {
+     "price": 507.62,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 624.15,
+    "stop": 628.48,
+    "t1": 615.49,
+    "t2": {
+     "price": 507.62,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1111.49,
+    "atr": 20.28,
+    "next": {
+     "price": 1111.88,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 1111.69,
+    "stop": 1109.46,
+    "t1": 1116.15,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 265.77,
+    "atr": 29.86,
+    "next": {
+     "price": 149.18,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 265.47,
+    "stop": 268.76,
+    "t1": 258.89,
+    "t2": {
+     "price": 149.18,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 472.09,
+    "atr": 19.55,
+    "next": {
+     "price": 394.73,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 471.89,
+    "stop": 474.04,
+    "t1": 467.59,
+    "t2": {
+     "price": 394.73,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1056.45,
+    "atr": 25.98,
+    "next": {
+     "price": 1050.88,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 1056.19,
+    "stop": 1059.05,
+    "t1": 1050.47,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 421.12,
+    "atr": 35.65,
+    "next": {
+     "price": 538.98,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 421.48,
+    "stop": 417.56,
+    "t1": 429.32,
+    "t2": {
+     "price": 538.98,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 677.43,
+    "atr": 12.07,
+    "next": null
+   },
+   "expect": {
+    "entry": 677.31,
+    "stop": 678.64,
+    "t1": 674.65,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 481.8,
+    "atr": 32.56,
+    "next": {
+     "price": 491.63,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 482.13,
+    "stop": 478.54,
+    "t1": 489.31,
+    "t2": {
+     "price": 491.63,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1013.77,
+    "atr": 17.55,
+    "next": null
+   },
+   "expect": {
+    "entry": 1013.59,
+    "stop": 1015.52,
+    "t1": 1009.73,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 501.69,
+    "atr": 23.79,
+    "next": null
+   },
+   "expect": {
+    "entry": 501.45,
+    "stop": 504.07,
+    "t1": 496.21,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 50.2,
+    "atr": 8.86,
+    "next": {
+     "price": 57.02,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 50.29,
+    "stop": 49.31,
+    "t1": 52.25,
+    "t2": {
+     "price": 57.02,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1138.82,
+    "atr": 13.12,
+    "next": {
+     "price": 1087.63,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 1138.69,
+    "stop": 1140.13,
+    "t1": 1135.81,
+    "t2": {
+     "price": 1087.63,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 735.44,
+    "atr": 9.16,
+    "next": {
+     "price": 703.84,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 735.35,
+    "stop": 736.36,
+    "t1": 733.33,
+    "t2": {
+     "price": 703.84,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 918.27,
+    "atr": 26.01,
+    "next": {
+     "price": 824.6,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 918.01,
+    "stop": 920.87,
+    "t1": 912.29,
+    "t2": {
+     "price": 824.6,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 468.35,
+    "atr": 34.93,
+    "next": {
+     "price": 544.3,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 468.7,
+    "stop": 464.86,
+    "t1": 476.38,
+    "t2": {
+     "price": 544.3,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 24.86,
+    "atr": 11.92,
+    "next": null
+   },
+   "expect": {
+    "entry": 24.98,
+    "stop": 23.67,
+    "t1": 27.6,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 343.09,
+    "atr": 3.2,
+    "next": {
+     "price": 333.66,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 343.06,
+    "stop": 343.41,
+    "t1": 342.36,
+    "t2": {
+     "price": 333.66,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1074.64,
+    "atr": 28.91,
+    "next": {
+     "price": 1128.92,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 1074.93,
+    "stop": 1071.75,
+    "t1": 1081.29,
+    "t2": {
+     "price": 1128.92,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 597.1,
+    "atr": 25.43,
+    "next": null
+   },
+   "expect": {
+    "entry": 597.35,
+    "stop": 594.56,
+    "t1": 602.93,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 52.38,
+    "atr": 35.78,
+    "next": null
+   },
+   "expect": {
+    "entry": 52.74,
+    "stop": 48.8,
+    "t1": 60.62,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1019.96,
+    "atr": 2.39,
+    "next": {
+     "price": 1017.17,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 1019.94,
+    "stop": 1020.2,
+    "t1": 1019.42,
+    "t2": {
+     "price": 1017.17,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1133.75,
+    "atr": 20.61,
+    "next": {
+     "price": 1104.63,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 1133.54,
+    "stop": 1135.81,
+    "t1": 1129.0,
+    "t2": {
+     "price": 1104.63,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 501.56,
+    "atr": 7.77,
+    "next": {
+     "price": 500.95,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 501.48,
+    "stop": 502.34,
+    "t1": 499.76,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 225.28,
+    "atr": 4.44,
+    "next": {
+     "price": 231.91,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 225.32,
+    "stop": 224.84,
+    "t1": 226.28,
+    "t2": {
+     "price": 231.91,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 14.69,
+    "atr": 3.59,
+    "next": {
+     "price": 12.66,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 14.65,
+    "stop": 15.05,
+    "t1": 13.85,
+    "t2": {
+     "price": 12.66,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 413.86,
+    "atr": 24.66,
+    "next": {
+     "price": 397.91,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 413.61,
+    "stop": 416.33,
+    "t1": 408.17,
+    "t2": {
+     "price": 397.91,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1193.18,
+    "atr": 8.48,
+    "next": {
+     "price": 1181.04,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 1193.1,
+    "stop": 1194.03,
+    "t1": 1191.24,
+    "t2": {
+     "price": 1181.04,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 427.66,
+    "atr": 8.91,
+    "next": {
+     "price": 440.33,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 427.75,
+    "stop": 426.77,
+    "t1": 429.71,
+    "t2": {
+     "price": 440.33,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 832.49,
+    "atr": 8.92,
+    "next": {
+     "price": 811.31,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 832.4,
+    "stop": 833.38,
+    "t1": 830.44,
+    "t2": {
+     "price": 811.31,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 517.68,
+    "atr": 12.9,
+    "next": null
+   },
+   "expect": {
+    "entry": 517.81,
+    "stop": 516.39,
+    "t1": 520.65,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 788.47,
+    "atr": 1.11,
+    "next": null
+   },
+   "expect": {
+    "entry": 788.48,
+    "stop": 788.36,
+    "t1": 788.72,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 2.57,
+    "atr": 13.57,
+    "next": {
+     "price": 34.27,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 2.71,
+    "stop": 1.21,
+    "t1": 5.71,
+    "t2": {
+     "price": 34.27,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 464.91,
+    "atr": 23.96,
+    "next": {
+     "price": 524.12,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 465.15,
+    "stop": 462.51,
+    "t1": 470.43,
+    "t2": {
+     "price": 524.12,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 818.89,
+    "atr": 17.53,
+    "next": null
+   },
+   "expect": {
+    "entry": 819.07,
+    "stop": 817.14,
+    "t1": 822.93,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1161.27,
+    "atr": 32.61,
+    "next": {
+     "price": 1073.5,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 1160.94,
+    "stop": 1164.53,
+    "t1": 1153.76,
+    "t2": {
+     "price": 1073.5,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1090.85,
+    "atr": 22.76,
+    "next": null
+   },
+   "expect": {
+    "entry": 1091.08,
+    "stop": 1088.57,
+    "t1": 1096.1,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1081.6,
+    "atr": 14.46,
+    "next": {
+     "price": 1049.86,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 1081.46,
+    "stop": 1083.05,
+    "t1": 1078.28,
+    "t2": {
+     "price": 1049.86,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1018.52,
+    "atr": 31.85,
+    "next": {
+     "price": 916.64,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 1018.2,
+    "stop": 1021.7,
+    "t1": 1011.2,
+    "t2": {
+     "price": 916.64,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 272.17,
+    "atr": 7.92,
+    "next": null
+   },
+   "expect": {
+    "entry": 272.09,
+    "stop": 272.96,
+    "t1": 270.35,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1113.17,
+    "atr": 0.17,
+    "next": {
+     "price": 1112.75,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 1113.17,
+    "stop": 1113.19,
+    "t1": 1113.13,
+    "t2": {
+     "price": 1112.75,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1147.38,
+    "atr": 34.0,
+    "next": null
+   },
+   "expect": {
+    "entry": 1147.72,
+    "stop": 1143.98,
+    "t1": 1155.2,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 366.67,
+    "atr": 10.84,
+    "next": {
+     "price": 361.8,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 366.56,
+    "stop": 367.75,
+    "t1": 364.18,
+    "t2": {
+     "price": 361.8,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 247.6,
+    "atr": 38.05,
+    "next": {
+     "price": 167.95,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 247.22,
+    "stop": 251.41,
+    "t1": 238.84,
+    "t2": {
+     "price": 167.95,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 76.47,
+    "atr": 5.94,
+    "next": {
+     "price": 93.53,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 76.53,
+    "stop": 75.88,
+    "t1": 77.83,
+    "t2": {
+     "price": 93.53,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1154.42,
+    "atr": 2.65,
+    "next": {
+     "price": 1157.24,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 1154.45,
+    "stop": 1154.15,
+    "t1": 1155.05,
+    "t2": {
+     "price": 1157.24,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 153.1,
+    "atr": 33.16,
+    "next": null
+   },
+   "expect": {
+    "entry": 153.43,
+    "stop": 149.78,
+    "t1": 160.73,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 118.42,
+    "atr": 6.94,
+    "next": {
+     "price": 116.84,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 118.35,
+    "stop": 119.11,
+    "t1": 116.83,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 175.0,
+    "atr": 8.95,
+    "next": {
+     "price": 145.81,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 174.91,
+    "stop": 175.9,
+    "t1": 172.93,
+    "t2": {
+     "price": 145.81,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 765.25,
+    "atr": 18.7,
+    "next": {
+     "price": 824.02,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 765.44,
+    "stop": 763.38,
+    "t1": 769.56,
+    "t2": {
+     "price": 824.02,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 403.74,
+    "atr": 17.68,
+    "next": {
+     "price": 344.81,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 403.56,
+    "stop": 405.51,
+    "t1": 399.66,
+    "t2": {
+     "price": 344.81,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1047.12,
+    "atr": 14.08,
+    "next": null
+   },
+   "expect": {
+    "entry": 1047.26,
+    "stop": 1045.71,
+    "t1": 1050.36,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 569.14,
+    "atr": 10.53,
+    "next": {
+     "price": 540.27,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 569.03,
+    "stop": 570.19,
+    "t1": 566.71,
+    "t2": {
+     "price": 540.27,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 246.16,
+    "atr": 19.03,
+    "next": {
+     "price": 281.4,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 246.35,
+    "stop": 244.26,
+    "t1": 250.53,
+    "t2": {
+     "price": 281.4,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 700.1,
+    "atr": 8.38,
+    "next": {
+     "price": 691.09,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 700.02,
+    "stop": 700.94,
+    "t1": 698.18,
+    "t2": {
+     "price": 691.09,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 741.73,
+    "atr": 37.52,
+    "next": null
+   },
+   "expect": {
+    "entry": 742.11,
+    "stop": 737.98,
+    "t1": 750.37,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 626.63,
+    "atr": 26.3,
+    "next": null
+   },
+   "expect": {
+    "entry": 626.37,
+    "stop": 629.26,
+    "t1": 620.59,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1031.29,
+    "atr": 27.97,
+    "next": null
+   },
+   "expect": {
+    "entry": 1031.01,
+    "stop": 1034.09,
+    "t1": 1024.85,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 190.0,
+    "atr": 0.75,
+    "next": null
+   },
+   "expect": {
+    "entry": 190.01,
+    "stop": 189.93,
+    "t1": 190.17,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 540.66,
+    "atr": 34.3,
+    "next": {
+     "price": 411.71,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 540.32,
+    "stop": 544.09,
+    "t1": 532.78,
+    "t2": {
+     "price": 411.71,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1180.87,
+    "atr": 28.03,
+    "next": {
+     "price": 1199.44,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 1181.15,
+    "stop": 1178.07,
+    "t1": 1187.31,
+    "t2": {
+     "price": 1199.44,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 98.39,
+    "atr": 3.02,
+    "next": {
+     "price": 86.4,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 98.36,
+    "stop": 98.69,
+    "t1": 97.7,
+    "t2": {
+     "price": 86.4,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 649.63,
+    "atr": 26.51,
+    "next": null
+   },
+   "expect": {
+    "entry": 649.36,
+    "stop": 652.28,
+    "t1": 643.52,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1016.8,
+    "atr": 18.9,
+    "next": {
+     "price": 953.4,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 1016.61,
+    "stop": 1018.69,
+    "t1": 1012.45,
+    "t2": {
+     "price": 953.4,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 575.87,
+    "atr": 20.33,
+    "next": {
+     "price": 520.97,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 575.67,
+    "stop": 577.9,
+    "t1": 571.21,
+    "t2": {
+     "price": 520.97,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 982.46,
+    "atr": 24.36,
+    "next": {
+     "price": 1075.18,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 982.7,
+    "stop": 980.02,
+    "t1": 988.06,
+    "t2": {
+     "price": 1075.18,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 180.82,
+    "atr": 10.45,
+    "next": null
+   },
+   "expect": {
+    "entry": 180.72,
+    "stop": 181.86,
+    "t1": 178.44,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 3.0,
+    "atr": 22.37,
+    "next": {
+     "price": -35.63,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 2.78,
+    "stop": 5.24,
+    "t1": -2.14,
+    "t2": {
+     "price": -35.63,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 317.1,
+    "atr": 15.79,
+    "next": {
+     "price": 273.08,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 316.94,
+    "stop": 318.68,
+    "t1": 313.46,
+    "t2": {
+     "price": 273.08,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 845.56,
+    "atr": 18.89,
+    "next": {
+     "price": 782.06,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 845.37,
+    "stop": 847.45,
+    "t1": 841.21,
+    "t2": {
+     "price": 782.06,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1062.93,
+    "atr": 16.45,
+    "next": {
+     "price": 1107.59,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 1063.09,
+    "stop": 1061.29,
+    "t1": 1066.69,
+    "t2": {
+     "price": 1107.59,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 400.43,
+    "atr": 14.7,
+    "next": null
+   },
+   "expect": {
+    "entry": 400.58,
+    "stop": 398.96,
+    "t1": 403.82,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 63.15,
+    "atr": 29.68,
+    "next": {
+     "price": 162.9,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 63.45,
+    "stop": 60.18,
+    "t1": 69.99,
+    "t2": {
+     "price": 162.9,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 72.44,
+    "atr": 17.69,
+    "next": null
+   },
+   "expect": {
+    "entry": 72.62,
+    "stop": 70.67,
+    "t1": 76.52,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 299.89,
+    "atr": 13.49,
+    "next": null
+   },
+   "expect": {
+    "entry": 300.02,
+    "stop": 298.54,
+    "t1": 302.98,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 422.73,
+    "atr": 22.74,
+    "next": {
+     "price": 353.43,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 422.5,
+    "stop": 425.0,
+    "t1": 417.5,
+    "t2": {
+     "price": 353.43,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 705.99,
+    "atr": 3.77,
+    "next": {
+     "price": 693.31,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 705.95,
+    "stop": 706.37,
+    "t1": 705.11,
+    "t2": {
+     "price": 693.31,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 839.09,
+    "atr": 18.85,
+    "next": null
+   },
+   "expect": {
+    "entry": 839.28,
+    "stop": 837.21,
+    "t1": 843.42,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 609.16,
+    "atr": 13.27,
+    "next": {
+     "price": 630.58,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 609.29,
+    "stop": 607.83,
+    "t1": 612.21,
+    "t2": {
+     "price": 630.58,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 398.01,
+    "atr": 28.74,
+    "next": {
+     "price": 507.26,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 398.3,
+    "stop": 395.14,
+    "t1": 404.62,
+    "t2": {
+     "price": 507.26,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 957.55,
+    "atr": 26.93,
+    "next": null
+   },
+   "expect": {
+    "entry": 957.28,
+    "stop": 960.24,
+    "t1": 951.36,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 669.9,
+    "atr": 39.44,
+    "next": null
+   },
+   "expect": {
+    "entry": 670.29,
+    "stop": 665.96,
+    "t1": 678.95,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1133.82,
+    "atr": 25.12,
+    "next": {
+     "price": 1185.98,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 1134.07,
+    "stop": 1131.31,
+    "t1": 1139.59,
+    "t2": {
+     "price": 1185.98,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 713.76,
+    "atr": 31.89,
+    "next": {
+     "price": 783.57,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 714.08,
+    "stop": 710.57,
+    "t1": 721.1,
+    "t2": {
+     "price": 783.57,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 80.73,
+    "atr": 33.49,
+    "next": null
+   },
+   "expect": {
+    "entry": 80.4,
+    "stop": 84.08,
+    "t1": 73.04,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1001.86,
+    "atr": 9.58,
+    "next": {
+     "price": 980.24,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 1001.76,
+    "stop": 1002.82,
+    "t1": 999.64,
+    "t2": {
+     "price": 980.24,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 188.49,
+    "atr": 12.41,
+    "next": {
+     "price": 230.94,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 188.61,
+    "stop": 187.25,
+    "t1": 191.33,
+    "t2": {
+     "price": 230.94,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 612.3,
+    "atr": 32.08,
+    "next": null
+   },
+   "expect": {
+    "entry": 612.62,
+    "stop": 609.09,
+    "t1": 619.68,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 827.22,
+    "atr": 17.61,
+    "next": {
+     "price": 837.12,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 827.4,
+    "stop": 825.46,
+    "t1": 831.28,
+    "t2": {
+     "price": 837.12,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1067.08,
+    "atr": 0.09,
+    "next": {
+     "price": 1067.41,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 1067.08,
+    "stop": 1067.07,
+    "t1": 1067.1,
+    "t2": {
+     "price": 1067.41,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1155.82,
+    "atr": 10.42,
+    "next": null
+   },
+   "expect": {
+    "entry": 1155.92,
+    "stop": 1154.78,
+    "t1": 1158.2,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1088.16,
+    "atr": 27.13,
+    "next": {
+     "price": 1042.22,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 1087.89,
+    "stop": 1090.87,
+    "t1": 1081.93,
+    "t2": {
+     "price": 1042.22,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 932.08,
+    "atr": 23.98,
+    "next": {
+     "price": 903.61,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 931.84,
+    "stop": 934.48,
+    "t1": 926.56,
+    "t2": {
+     "price": 903.61,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 703.24,
+    "atr": 16.13,
+    "next": null
+   },
+   "expect": {
+    "entry": 703.08,
+    "stop": 704.85,
+    "t1": 699.54,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 899.56,
+    "atr": 15.48,
+    "next": null
+   },
+   "expect": {
+    "entry": 899.41,
+    "stop": 901.11,
+    "t1": 896.01,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 314.21,
+    "atr": 30.86,
+    "next": {
+     "price": 412.13,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 314.52,
+    "stop": 311.12,
+    "t1": 321.32,
+    "t2": {
+     "price": 412.13,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 717.58,
+    "atr": 15.15,
+    "next": {
+     "price": 696.06,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 717.43,
+    "stop": 719.1,
+    "t1": 714.09,
+    "t2": {
+     "price": 696.06,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 303.03,
+    "atr": 0.39,
+    "next": null
+   },
+   "expect": {
+    "entry": 303.03,
+    "stop": 303.07,
+    "t1": 302.95,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 432.19,
+    "atr": 33.6,
+    "next": {
+     "price": 458.27,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 432.53,
+    "stop": 428.83,
+    "t1": 439.93,
+    "t2": {
+     "price": 458.27,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 726.13,
+    "atr": 35.44,
+    "next": {
+     "price": 850.4,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 726.48,
+    "stop": 722.59,
+    "t1": 734.26,
+    "t2": {
+     "price": 850.4,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 164.47,
+    "atr": 27.55,
+    "next": {
+     "price": 103.41,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 164.19,
+    "stop": 167.22,
+    "t1": 158.13,
+    "t2": {
+     "price": 103.41,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 543.18,
+    "atr": 21.1,
+    "next": {
+     "price": 535.22,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 542.97,
+    "stop": 545.29,
+    "t1": 538.33,
+    "t2": {
+     "price": 535.22,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 992.7,
+    "atr": 17.7,
+    "next": null
+   },
+   "expect": {
+    "entry": 992.88,
+    "stop": 990.93,
+    "t1": 996.78,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 720.81,
+    "atr": 17.93,
+    "next": {
+     "price": 670.89,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 720.63,
+    "stop": 722.6,
+    "t1": 716.69,
+    "t2": {
+     "price": 670.89,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1198.85,
+    "atr": 10.01,
+    "next": {
+     "price": 1216.25,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 1198.95,
+    "stop": 1197.85,
+    "t1": 1201.15,
+    "t2": {
+     "price": 1216.25,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 781.56,
+    "atr": 18.77,
+    "next": {
+     "price": 827.55,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 781.75,
+    "stop": 779.68,
+    "t1": 785.89,
+    "t2": {
+     "price": 827.55,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 330.72,
+    "atr": 31.02,
+    "next": null
+   },
+   "expect": {
+    "entry": 331.03,
+    "stop": 327.62,
+    "t1": 337.85,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 922.85,
+    "atr": 37.08,
+    "next": null
+   },
+   "expect": {
+    "entry": 923.22,
+    "stop": 919.14,
+    "t1": 931.38,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 416.25,
+    "atr": 32.89,
+    "next": {
+     "price": 391.06,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 415.92,
+    "stop": 419.54,
+    "t1": 408.68,
+    "t2": {
+     "price": 391.06,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 409.27,
+    "atr": 14.78,
+    "next": {
+     "price": 435.3,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 409.42,
+    "stop": 407.79,
+    "t1": 412.68,
+    "t2": {
+     "price": 435.3,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 811.55,
+    "atr": 2.9,
+    "next": {
+     "price": 807.83,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 811.52,
+    "stop": 811.84,
+    "t1": 810.88,
+    "t2": {
+     "price": 807.83,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1038.81,
+    "atr": 23.07,
+    "next": {
+     "price": 1110.66,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 1039.04,
+    "stop": 1036.5,
+    "t1": 1044.12,
+    "t2": {
+     "price": 1110.66,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 465.85,
+    "atr": 38.02,
+    "next": {
+     "price": 518.96,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 466.23,
+    "stop": 462.05,
+    "t1": 474.59,
+    "t2": {
+     "price": 518.96,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1061.56,
+    "atr": 3.18,
+    "next": null
+   },
+   "expect": {
+    "entry": 1061.59,
+    "stop": 1061.24,
+    "t1": 1062.29,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 540.32,
+    "atr": 30.27,
+    "next": null
+   },
+   "expect": {
+    "entry": 540.62,
+    "stop": 537.29,
+    "t1": 547.28,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 158.77,
+    "atr": 21.29,
+    "next": {
+     "price": 123.49,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 158.56,
+    "stop": 160.9,
+    "t1": 153.88,
+    "t2": {
+     "price": 123.49,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 259.8,
+    "atr": 30.96,
+    "next": {
+     "price": 243.14,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 259.49,
+    "stop": 262.9,
+    "t1": 252.67,
+    "t2": {
+     "price": 243.14,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 501.12,
+    "atr": 31.95,
+    "next": {
+     "price": 506.71,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 501.44,
+    "stop": 497.93,
+    "t1": 508.46,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 85.83,
+    "atr": 10.49,
+    "next": {
+     "price": 102.3,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 85.93,
+    "stop": 84.78,
+    "t1": 88.23,
+    "t2": {
+     "price": 102.3,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 982.68,
+    "atr": 16.59,
+    "next": null
+   },
+   "expect": {
+    "entry": 982.85,
+    "stop": 981.02,
+    "t1": 986.51,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 498.37,
+    "atr": 19.68,
+    "next": {
+     "price": 562.59,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 498.57,
+    "stop": 496.4,
+    "t1": 502.91,
+    "t2": {
+     "price": 562.59,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 475.4,
+    "atr": 24.83,
+    "next": {
+     "price": 541.88,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 475.65,
+    "stop": 472.92,
+    "t1": 481.11,
+    "t2": {
+     "price": 541.88,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 642.96,
+    "atr": 1.13,
+    "next": {
+     "price": 645.18,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 642.97,
+    "stop": 642.85,
+    "t1": 643.21,
+    "t2": {
+     "price": 645.18,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1007.55,
+    "atr": 15.8,
+    "next": null
+   },
+   "expect": {
+    "entry": 1007.71,
+    "stop": 1005.97,
+    "t1": 1011.19,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 879.62,
+    "atr": 17.49,
+    "next": {
+     "price": 946.62,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 879.79,
+    "stop": 877.87,
+    "t1": 883.63,
+    "t2": {
+     "price": 946.62,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 173.96,
+    "atr": 39.52,
+    "next": null
+   },
+   "expect": {
+    "entry": 173.56,
+    "stop": 177.91,
+    "t1": 164.86,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 782.97,
+    "atr": 25.97,
+    "next": null
+   },
+   "expect": {
+    "entry": 782.71,
+    "stop": 785.57,
+    "t1": 776.99,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 673.89,
+    "atr": 21.77,
+    "next": {
+     "price": 711.98,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 674.11,
+    "stop": 671.71,
+    "t1": 678.91,
+    "t2": {
+     "price": 711.98,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 964.81,
+    "atr": 31.48,
+    "next": {
+     "price": 1009.68,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 965.12,
+    "stop": 961.66,
+    "t1": 972.04,
+    "t2": {
+     "price": 1009.68,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1153.8,
+    "atr": 38.34,
+    "next": {
+     "price": 1126.03,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 1153.42,
+    "stop": 1157.63,
+    "t1": 1145.0,
+    "t2": {
+     "price": 1126.03,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 465.62,
+    "atr": 0.93,
+    "next": {
+     "price": 468.32,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 465.63,
+    "stop": 465.53,
+    "t1": 465.83,
+    "t2": {
+     "price": 468.32,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 292.78,
+    "atr": 23.83,
+    "next": null
+   },
+   "expect": {
+    "entry": 293.02,
+    "stop": 290.4,
+    "t1": 298.26,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 589.02,
+    "atr": 5.45,
+    "next": {
+     "price": 592.18,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 589.07,
+    "stop": 588.48,
+    "t1": 590.25,
+    "t2": {
+     "price": 592.18,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 379.91,
+    "atr": 30.89,
+    "next": null
+   },
+   "expect": {
+    "entry": 380.22,
+    "stop": 376.82,
+    "t1": 387.02,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 652.59,
+    "atr": 0.17,
+    "next": null
+   },
+   "expect": {
+    "entry": 652.59,
+    "stop": 652.61,
+    "t1": 652.55,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 224.26,
+    "atr": 23.35,
+    "next": {
+     "price": 277.38,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 224.49,
+    "stop": 221.92,
+    "t1": 229.63,
+    "t2": {
+     "price": 277.38,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 238.06,
+    "atr": 31.11,
+    "next": null
+   },
+   "expect": {
+    "entry": 237.75,
+    "stop": 241.17,
+    "t1": 230.91,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 521.76,
+    "atr": 10.45,
+    "next": null
+   },
+   "expect": {
+    "entry": 521.86,
+    "stop": 520.72,
+    "t1": 524.14,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 159.15,
+    "atr": 0.99,
+    "next": {
+     "price": 158.77,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 159.14,
+    "stop": 159.25,
+    "t1": 158.92,
+    "t2": {
+     "price": 158.77,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1195.66,
+    "atr": 17.63,
+    "next": {
+     "price": 1138.8,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 1195.48,
+    "stop": 1197.42,
+    "t1": 1191.6,
+    "t2": {
+     "price": 1138.8,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 964.06,
+    "atr": 6.49,
+    "next": {
+     "price": 971.44,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 964.12,
+    "stop": 963.41,
+    "t1": 965.54,
+    "t2": {
+     "price": 971.44,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1114.54,
+    "atr": 18.11,
+    "next": {
+     "price": 1138.11,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 1114.72,
+    "stop": 1112.73,
+    "t1": 1118.7,
+    "t2": {
+     "price": 1138.11,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1191.5,
+    "atr": 18.41,
+    "next": {
+     "price": 1248.87,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 1191.68,
+    "stop": 1189.66,
+    "t1": 1195.72,
+    "t2": {
+     "price": 1248.87,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 490.21,
+    "atr": 1.7,
+    "next": {
+     "price": 490.63,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 490.23,
+    "stop": 490.04,
+    "t1": 490.61,
+    "t2": {
+     "price": 490.63,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 350.98,
+    "atr": 7.08,
+    "next": null
+   },
+   "expect": {
+    "entry": 350.91,
+    "stop": 351.69,
+    "t1": 349.35,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 798.07,
+    "atr": 30.27,
+    "next": {
+     "price": 693.05,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 797.77,
+    "stop": 801.1,
+    "t1": 791.11,
+    "t2": {
+     "price": 693.05,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 409.92,
+    "atr": 1.88,
+    "next": null
+   },
+   "expect": {
+    "entry": 409.9,
+    "stop": 410.11,
+    "t1": 409.48,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1017.59,
+    "atr": 11.13,
+    "next": {
+     "price": 1038.64,
+     "name": "MA20"
+    }
+   },
+   "expect": {
+    "entry": 1017.7,
+    "stop": 1016.48,
+    "t1": 1020.14,
+    "t2": {
+     "price": 1038.64,
+     "name": "MA20"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1075.68,
+    "atr": 11.79,
+    "next": null
+   },
+   "expect": {
+    "entry": 1075.56,
+    "stop": 1076.86,
+    "t1": 1072.96,
+    "t2": null
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 829.73,
+    "atr": 7.2,
+    "next": {
+     "price": 806.34,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 829.66,
+    "stop": 830.45,
+    "t1": 828.08,
+    "t2": {
+     "price": 806.34,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 1112.93,
+    "atr": 0.78,
+    "next": {
+     "price": 1113.64,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 1112.94,
+    "stop": 1112.85,
+    "t1": 1113.12,
+    "t2": {
+     "price": 1113.64,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 1174.57,
+    "atr": 20.71,
+    "next": {
+     "price": 1093.37,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 1174.36,
+    "stop": 1176.64,
+    "t1": 1169.8,
+    "t2": {
+     "price": 1093.37,
+     "name": "PDH"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "call",
+    "level": 297.67,
+    "atr": 30.42,
+    "next": {
+     "price": 315.42,
+     "name": "PWL"
+    }
+   },
+   "expect": {
+    "entry": 297.97,
+    "stop": 294.63,
+    "t1": 304.65,
+    "t2": {
+     "price": 315.42,
+     "name": "PWL"
+    }
+   }
+  },
+  {
+   "input": {
+    "kind": "put",
+    "level": 8.13,
+    "atr": 24.28,
+    "next": {
+     "price": -52.39,
+     "name": "PDH"
+    }
+   },
+   "expect": {
+    "entry": 7.89,
+    "stop": 10.56,
+    "t1": 2.55,
+    "t2": {
+     "price": -52.39,
+     "name": "PDH"
+    }
+   }
+  }
+ ]
+}

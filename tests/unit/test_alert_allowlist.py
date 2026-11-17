@@ -185,6 +185,24 @@ def site(sid: str, value: Any) -> None:
     S[sid] = value
 
 
+def drive_exp0037(tmp_path, monkeypatch) -> list[tuple[str, str]]:
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("exp0037_replay_alert", ROOT / "scripts" / "exp0037_replay.py")
+    drv = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(drv)
+    sent: list[tuple[str, str]] = []
+
+    class Capture:
+        def once_per_day(self, key, title, message, priority):
+            sent.append((title, message))
+    monkeypatch.setattr(alerts, "Alerts", Capture)
+    drv.page_done(40, ["supported", "falsified", f"{NAMES[0]} at 581.40 /home/wt/x https://h.example " * 20])
+    drv.page_done(10 ** 6, ["too_few"] * 3)
+    return sent
+
+
+site("scripts/exp0037_replay.py::page_done::'exp0037:ran' | 'EXP-0037: the replay has run'",
+     lambda tmp_path, monkeypatch: drive_exp0037(tmp_path, monkeypatch))
 site("scripts/forward_test.py::Context.ensure_pool::'forward:scan-failed' | 'Forward test: the scan had no data'",
      {"d": T, "e": E})
 site("scripts/forward_test.py::Context.ensure_pool::'forward:scan-thin' | 'Forward test: the scan looks thin'",

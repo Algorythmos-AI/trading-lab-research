@@ -1,7 +1,7 @@
 import "server-only";
 import { HISTORY_PREFIX, PreconditionFailed, exists, readForUpdate, storedMeta, writeText } from "./blob";
-import { CALENDAR_PATHS, DESK_PATHS, JOURNAL_PATHS, LEDGER_PATHS, OPTIONS_CLONE_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
-import { editionCopyFor, etagShape, runAndSession } from "./edition-copy";
+import { CALENDAR_PATHS, DESK_PATHS, FUNNEL_PATHS, JOURNAL_PATHS, LEDGER_PATHS, OPTIONS_CLONE_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
+import { editionCopyFor, etagShape, lostMarkerFor, runAndSession } from "./edition-copy";
 import { verify } from "./hmac";
 import { KEY_ID_RE, decideScope, parseScopes } from "./ingest-scope";
 import { recordIngestReject, type IngestRejectKind } from "./ingest-reject";
@@ -22,6 +22,7 @@ import {
   contractOf,
   isCalendar,
   isJournal,
+  isFunnel,
   isLedger,
   isOptions,
   isOptionsClone,
@@ -29,6 +30,7 @@ import {
   isRadar,
   validateCalendar,
   validateJournal,
+  validateFunnel,
   validateLedger,
   validateOptionsClone,
   validateOptionsEdition,
@@ -227,7 +229,7 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
   const scopes = parseScopes(process.env[SCOPES_ENV], [RADAR_KEY_ID]);
   if (!scopes.ok) logEvent("ingest.scopes", { outcome: "malformed", reason: scopes.reason });
   // The desk whose snapshot this body is, by the same routing as below; null for every other document kind.
-  const snapshotOf = isRadar(data) || isOptions(data) || isOptionsLive(data) || isOptionsClone(data) || isCalendar(data) || isJournal(data) || isLedger(data) ? null : contractOf(data).desk;
+  const snapshotOf = isRadar(data) || isOptions(data) || isOptionsLive(data) || isOptionsClone(data) || isCalendar(data) || isJournal(data) || isLedger(data) || isFunnel(data) ? null : contractOf(data).desk;
   const scope = decideScope(scopes, keyId, snapshotOf, process.env.PRIMARY_HOST || DEFAULT_KEY_ID);
   if (!scope.allow && scope.outcome === "key-scope-config") {
     return done(503, "key-scope-config", { error: "ingest is not configured for this key" }, { key_id: keyId });
@@ -240,6 +242,7 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
   if (isRadar(data)) return storeEdition(RADAR_EDITION, text, data, done, now);
   if (isOptions(data)) return storeEdition(OPTIONS_EDITION, text, data, done, now);
   if (isLedger(data)) return storeEdition(LEDGER_EDITION, text, data, done, now);
+  if (isFunnel(data)) return storeEdition(FUNNEL_EDITION, text, data, done, now);
   // The owner's journal is read from their own broker in the research environment, where the radar is built.
   if (isJournal(data)) return storeEdition(JOURNAL, text, data, done, now);
   if (keyId === RADAR_KEY_ID) {
@@ -329,11 +332,14 @@ interface EditionKind {
    * its session it may replace that session's edition only when nothing but its run, time and check differ.
    */
   focus?: true;
+  /** The radar only (DEC-0055): a replaced edition with no copy also gets a lost marker beside the copies. */
+  markLost?: true;
 }
 
 const RADAR_EDITION: EditionKind = {
   desk: "radar",
   paths: RADAR_PATHS,
+  markLost: true,
   validate: (data) => {
     const r = validateRadarEdition(data);
     return r.ok ? { ok: true, runId: r.edition.run_id ?? null, asOf: r.edition.as_of ?? null, date: r.edition.edition_date } : r;
@@ -357,6 +363,16 @@ const LEDGER_EDITION: EditionKind = {
   validate: (data) => {
     const r = validateLedger(data);
     return r.ok ? { ok: true, runId: r.edition.run_id, asOf: r.edition.as_of, date: r.edition.session } : r;
+  },
+};
+
+/** The selection funnel's health: one dated copy per session it chose names for. */
+const FUNNEL_EDITION: EditionKind = {
+  desk: "funnel",
+  paths: FUNNEL_PATHS,
+  validate: (data) => {
+    const r = validateFunnel(data);
+    return r.ok ? { ok: true, runId: r.doc.run_id, asOf: r.doc.as_of, date: r.doc.session } : r;
   },
 };
 
@@ -476,7 +492,10 @@ async function storeEdition(kind: EditionKind, text: string, data: unknown, done
         // Only now that a write conditioned on current.etag has succeeded is current.text known to be that write's
         // text, so only now may the replaced edition be called lost.
         const gone = await lost;
-        if (gone) logEvent("ingest.copy", { outcome: "lost", run_id: gone.runId, session: gone.session });
+        if (gone) {
+          logEvent("ingest.copy", { outcome: "lost", run_id: gone.runId, session: gone.session });
+          if (kind.markLost && current?.uploadedAt) await writeLostMarker(paths.copies, gone.session, current.uploadedAt, gone.runId);
+        }
         // Right after the write, so that latest is least likely to have moved on before its time is read.
         await writeCopy(paths.latest, paths.copies, date, runId, text, written.etag);
       }
@@ -581,6 +600,19 @@ async function writeDated(path: string, text: string, asOf: number, nowMs: numbe
  *    weak), never the values. No copy is made from it; the repair makes one while the edition is still latest.
  *  - "error": the store failed (the head or the put), named by the error's class.
  */
+/** A create-only lost marker (./edition-copy lostMarkerFor); best effort, one `ingest.copy` line, never content. */
+async function writeLostMarker(prefix: string, session: string, uploadedAt: string, runId: string): Promise<void> {
+  const marker = lostMarkerFor(prefix, session, uploadedAt, runId);
+  if (!marker) return;
+  try {
+    await writeText(marker.path, marker.body, { createOnly: true });
+    logEvent("ingest.copy", { outcome: "lost-marked", run_id: runId, session });
+  } catch (e) {
+    if (e instanceof PreconditionFailed) return;
+    logEvent("ingest.copy", { outcome: "error", run_id: runId, session, error: e instanceof Error ? e.name : "unknown" });
+  }
+}
+
 async function writeCopy(latestPath: string, prefix: string, session: string, runId: string, editionText: string, latestEtag: string): Promise<void> {
   let bytes = 0;
   try {

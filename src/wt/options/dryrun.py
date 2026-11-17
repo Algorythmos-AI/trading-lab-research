@@ -4,6 +4,10 @@ Signals come from the clone's own code (`wt.options.regime`, `setups`, `session`
 Prices come from the same-day contract's 1-minute trade bars, with half the assumed spread paid on each side
 (DEC-0029's widths for SPY and QQQ: the larger of $0.02 and 2% of the price, full width), and are managed minute by
 minute in the clone's exit order (DEC-0031, section 3).
+
+EXP-0037 (DEC-0054) adds one switch, `variant`: None is the control, exactly as before; a name from
+`wt.options.variants.VARIANTS` changes the one rule its hypothesis names. Each trade also records its signal bar
+and level, the keys EXP-0037 matches trades by.
 """
 from __future__ import annotations
 
@@ -14,7 +18,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from wt.options import bs, regime, session, setups
+from wt.options import bs, regime, session, setups, variants
 from wt.options.regime import NEW_YORK
 
 
@@ -57,6 +61,8 @@ class Open:
     last: float = 0.0
     missing: int = 0
     pending: str | None = None    # an exit decided now, priced on the next minute
+    signal_bar: str = ""          # the end of the bar that completed the signal, HH:MM (EXP-0037's match key)
+    level: str = ""               # the mark the signal formed at
 
 
 @dataclass
@@ -68,8 +74,11 @@ class Day:
 
 def replay_day(day: dt.date, minutes: Mapping[str, Sequence[regime.Bar]], marks: Mapping[str, Sequence[setups.Mark]],
                option_bars: Callable[[str], Sequence[OBar]], cfg: Mapping[str, Any], risk: Mapping[str, Any],
-               macro: Sequence[Mapping[str, Any]], spread_mult: float = 1.0) -> Day:
-    """One session. `minutes`: each root's regular-hours 1-minute stock bars (SPY included, for the trend gate)."""
+               macro: Sequence[Mapping[str, Any]], spread_mult: float = 1.0, variant: str | None = None) -> Day:
+    """One session. `minutes`: each root's regular-hours 1-minute stock bars (SPY included, for the trend gate).
+    `variant`: None for the control, or one of EXP-0037's (`wt.options.variants`)."""
+    if variant is not None and variant not in variants.VARIANTS:
+        raise ValueError(f"unknown variant {variant!r}")
     ck = session.clock(day.isoformat(), cfg["day"])
     fee = float(cfg["costs"]["fee_per_contract_each_way"])
     b, g, ex, dcfg = cfg["bars"], cfg["gates"], cfg["exits"], cfg["day"]
@@ -80,6 +89,8 @@ def replay_day(day: dt.date, minutes: Mapping[str, Sequence[regime.Bar]], marks:
     cooldown: dict[str, dt.datetime] = {}
     latched = False
     cache: dict[str, dict[dt.datetime, OBar]] = {}
+    carries: dict[str, list[variants.Carry]] = {}     # HYP-0063 only
+    rcfg = cfg["setups"]["retest"]
 
     def bars_of(sym: str) -> dict[dt.datetime, OBar]:
         if sym not in cache:
@@ -95,7 +106,7 @@ def replay_day(day: dt.date, minutes: Mapping[str, Sequence[regime.Bar]], marks:
                            "fill": round(p.fill, 4), "exit_fill": round(price, 4), "exit_reason": why,
                            "best_bid": round(p.best, 4), "pnl": pnl,
                            "rop": round(pnl / (p.fill * 100 + fee), 4), "entered": p.fill_at.strftime("%H:%M"),
-                           "exited": at.strftime("%H:%M")})
+                           "exited": at.strftime("%H:%M"), "signal_bar": p.signal_bar, "level": p.level})
         if pnl < 0:
             streak += 1
             last_loss_at = at
@@ -159,6 +170,7 @@ def replay_day(day: dt.date, minutes: Mapping[str, Sequence[regime.Bar]], marks:
                     pos.pending = "next-level"
             paused = streak >= int(dcfg["loss_pause_after"]) and last_loss_at is not None and \
                 t < last_loss_at + dt.timedelta(minutes=float(dcfg["loss_pause_min"]))
+            evaluated: set[tuple[str, str, float]] = set()    # (root, side, level) of the retests read now
             if (pos is None and not latched and streak < int(dcfg["done_after_losses"]) and not paused
                     and ck.first_entry <= t <= ck.last_entry and entries < int(risk["max_entries_per_day"])):
                 for root in roots:
@@ -174,7 +186,11 @@ def replay_day(day: dt.date, minutes: Mapping[str, Sequence[regime.Bar]], marks:
                     near = setups.near_level(tape.close, marks[root], tape.atr, float(cfg["levels"]["tolerance_atr"]))
                     sigs = setups.retest(two[root], near, tape.atr, cfg["setups"]["retest"]) + \
                         setups.rejection(two[root], near, cfg["setups"]["rejection"])
+                    if variant == "retest_free_confirm":
+                        sigs += _carried(carries, root, two[root], near, tape.atr, rcfg, sigs)
                     for sig in sigs:
+                        if sig.setup == "retest":
+                            evaluated.add((root, sig.side, sig.level.price))
                         out.left_out["signal:" + sig.setup] += 1                 # every signal, kept or not
                         k = nearest_strike(tape.close)
                         sym = occ(root, day, sig.side, k)
@@ -186,8 +202,13 @@ def replay_day(day: dt.date, minutes: Mapping[str, Sequence[regime.Bar]], marks:
                         price = first.vw + half_spread(first.vw, spread_mult)
                         left_min = max((ck.close - t).total_seconds() / 60, 1.0)
                         iv = bs.implied_vol(first.vw, tape.close, k, left_min, "call" if sig.side == "call" else "put")
-                        gates = setups.gate(sig, tape, tapes.get("SPY"), marks[root],
-                                            session.remaining_move(tape.close, iv, t, ck), g)
+                        rem = session.remaining_move(tape.close, iv, t, ck)
+                        gates = setups.gate(sig, tape, tapes.get("SPY"), marks[root], rem, g)
+                        measured: float | None = None
+                        if variant == "room_open_sky":
+                            gates, measured = variants.open_sky(gates, sig, marks[root], rem, g)
+                        elif variant == "rejection_spy_trend":
+                            gates = variants.spy_trend(gates, sig, tape, tapes.get("SPY"))
                         if not gates.ok:
                             out.left_out["gate:" + ",".join(gates.failed)] += 1
                             continue
@@ -196,14 +217,76 @@ def replay_day(day: dt.date, minutes: Mapping[str, Sequence[regime.Bar]], marks:
                             continue
                         nxt = setups.next_level(sig.side, sig.entry, marks[root], sig.level.price)
                         pos = Open(root, sym, sig.side, sig.setup, price, first.start, sig.invalidation,
-                                   nxt.price if nxt else None, best=price, last=price)
+                                   nxt.price if nxt else measured, best=price, last=price,
+                                   signal_bar=sig.bar_end, level=sig.level.name)
                         entries += 1
                         attempts[root] += 1
                         break
+                    if variant == "retest_free_confirm":         # a carry ends once its signal has been read
+                        carries[root] = [c for c in carries.get(root, [])
+                                         if (root, c.side, c.mark.price) not in evaluated]
+            if variant == "retest_free_confirm":
+                in_window = ck.first_entry <= t <= ck.last_entry
+                lasting_all = latched or streak >= int(dcfg["done_after_losses"]) or not in_window \
+                    or entries >= int(risk["max_entries_per_day"])
+                for root in roots:
+                    tape = tapes.get(root)
+                    if tape is None or tape.atr is None or tape.atr <= 0 or not two.get(root):
+                        continue
+                    lasting = lasting_all or attempts[root] >= int(risk["max_attempts_per_name"]) or \
+                        bool(session.event_block(t, root, macro, (), g, cfg["contract"]["index_names"]))
+                    passing = pos is not None or paused or (root in cooldown and t < cooldown[root])
+                    _carry_step(carries, root, two[root], marks[root], tape, cfg, evaluated, lasting, passing)
         t += dt.timedelta(minutes=1)
     if pos is not None:                          # no bar after the flatten: priced at its last minute
         close(pos, pos.last - half_spread(pos.last, spread_mult), "end-of-data", end)
     return out
+
+
+def _carried(carries: dict[str, list[variants.Carry]], root: str, bars: Sequence[regime.Bar],
+             near: Sequence[setups.Mark], a: float, rcfg: Mapping[str, Any],
+             sigs: Sequence[setups.Signal]) -> list[setups.Signal]:
+    """HYP-0063: the carried retests the newest bar completes while the clone can enter. A carry stays on the list
+    until its signal is read (the caller drops it then), so one left unread by an entry at the same close waits. A
+    mark must be near the close, as for any of the control's signals; a dead carry, or one the control's own retest
+    repeats, is dropped, and the control's signal is read."""
+    out: list[setups.Signal] = []
+    keep: list[variants.Carry] = []
+    near_prices = {m.price for m in near}
+    seen = {(x.side, x.level.price) for x in sigs if x.setup == "retest"}
+    for c in carries.get(root, []):
+        state = variants.carry_state(c, bars, rcfg)
+        if state == "dead" or (c.side, c.mark.price) in seen:
+            continue
+        if state == "confirm" and c.mark.price in near_prices:
+            out.append(variants.carried_signal(c, bars, a, rcfg))
+        keep.append(c)
+    carries[root] = keep
+    return out
+
+
+def _carry_step(carries: dict[str, list[variants.Carry]], root: str, bars: Sequence[regime.Bar],
+                marks: Sequence[setups.Mark], tape: regime.Tape, cfg: Mapping[str, Any],
+                evaluated: set[tuple[str, str, float]], lasting: bool, passing: bool) -> None:
+    """HYP-0063, after the boundary's entries: a confirmation met by a lasting block ends its carry; one met only
+    by a passing block waits. Each retest the control did not read because of a passing block becomes a carry."""
+    rcfg = cfg["setups"]["retest"]
+    a = tape.atr or 0.0
+    keep: list[variants.Carry] = []
+    for c in carries.get(root, []):
+        state = variants.carry_state(c, bars, rcfg)
+        if state == "dead" or (state == "confirm" and lasting):
+            continue
+        keep.append(c)
+    if passing and not lasting:
+        near = setups.near_level(tape.close, marks, a, float(cfg["levels"]["tolerance_atr"]))
+        for sig in setups.retest(bars, near, a, rcfg):
+            if (root, sig.side, sig.level.price) in evaluated:
+                continue
+            new = variants.carry_of(root, sig, bars, a, rcfg)
+            if new is not None and not any(x.side == new.side and x.mark.price == new.mark.price for x in keep):
+                keep.append(new)
+    carries[root] = keep
 
 
 def minute_bars_from(rows: Sequence[Mapping[str, Any]], day: dt.date) -> list[regime.Bar]:

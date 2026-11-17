@@ -95,7 +95,8 @@ describe("the scripted morning", () => {
     });
     expect(spy!.badge).toEqual({ word: "FAILED BREAK", tone: "warn", side: "put", alt: "failed_break" });
     expect(spy!.testing).toBe(true);
-    expect(spy!.headline).toBe("Call plan off at 779.40. Put under 779.40, stop above 780.00 (push high).");
+    // DEC-0053: the call is locked by its failed break, and the headline says so beside the alternative
+    expect(spy!.headline).toBe("Call plan off at 779.40. Put under 779.40, stop above 780.00 (push high). Failed at 10:26: no call until 13:00.");
     expect(spy!.grid!.stop).toBe("780.00 or −25%");
     expect(aapl!.badge).toEqual({ word: "NO TRADE", tone: "neutral", side: null, alt: null });
     for (const step of [1, 2, 3, 4])

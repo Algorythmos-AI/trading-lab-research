@@ -96,10 +96,12 @@ export function editionCopyFor(
 /** The run id and session a stored Options edition names, without its values being logged; null fields when absent. */
 export function runAndSession(text: string): { runId: string | null; session: string | null } {
   try {
-    const v = JSON.parse(text) as { run_id?: unknown; session?: unknown };
+    // The Options edition names its date `session`; the radar edition names it `edition_date`.
+    const v = JSON.parse(text) as { run_id?: unknown; session?: unknown; edition_date?: unknown };
+    const day = v.session !== undefined ? v.session : v.edition_date;
     return {
       runId: typeof v.run_id === "string" && v.run_id.length > 0 ? v.run_id : null,
-      session: typeof v.session === "string" && SESSION_RE.test(v.session) ? v.session : null,
+      session: typeof day === "string" && SESSION_RE.test(day) ? day : null,
     };
   } catch {
     return { runId: null, session: null };
@@ -112,4 +114,35 @@ export function etagShape(etag: string | null | undefined): { len: number; quote
   const weak = etag.startsWith("W/");
   const bare = weak ? etag.slice(2) : etag;
   return { len: etag.length, quoted: bare.length >= 2 && bare.startsWith('"') && bare.endsWith('"'), weak };
+}
+
+// A lost copy: an edition that became latest and was replaced before its copy was made (ingest's "lost"). Kept for the
+// radar only (DEC-0055), create-only, beside the copies, so the gap is in the store and not only in a log line:
+//   <prefix><session>/<receipt>-<run>.lost.json  holding schema, version, received_at, session and run_id.
+export const EDITION_LOST_SCHEMA = "stocksdelta/edition-copy-lost";
+
+/** Where the lost marker of `runId`, received at `receivedAt`, for `session` is kept, and its text. */
+export function lostMarkerFor(prefix: string, session: string, uploadedAt: string, runId: string): { path: string; body: string } | null {
+  const receivedAt = receiptIso(uploadedAt);
+  if (receivedAt === null || !SESSION_RE.test(session) || runId.length === 0) return null;
+  const path = editionCopyPath(prefix, session, receivedAt, runId).replace(/\.json$/, ".lost.json");
+  const body = JSON.stringify({ schema: EDITION_LOST_SCHEMA, version: 1, received_at: receivedAt, session, run_id: runId });
+  return { path, body };
+}
+
+/** The lost marker in `text`, or null when it is not one. */
+export function parseLostMarker(text: string): { receivedAt: string; session: string; runId: string } | null {
+  let v: unknown;
+  try {
+    v = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (v === null || typeof v !== "object" || Array.isArray(v)) return null;
+  const r = v as Record<string, unknown>;
+  if (Object.keys(r).sort().join(",") !== "received_at,run_id,schema,session,version") return null;
+  if (r.schema !== EDITION_LOST_SCHEMA || r.version !== 1) return null;
+  if (typeof r.received_at !== "string" || !ISO_MS_Z_RE.test(r.received_at)) return null;
+  if (typeof r.session !== "string" || !SESSION_RE.test(r.session) || typeof r.run_id !== "string" || r.run_id.length === 0) return null;
+  return { receivedAt: r.received_at, session: r.session, runId: r.run_id };
 }

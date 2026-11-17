@@ -1,14 +1,21 @@
 # DEC-0054: Three of the options clone's rule gaps, each replayed against the frozen clone on sessions not yet seen
 
-- **Status: PROPOSED on 2026-11-17.** Drafted at the owner's request ("Yes, draft them", 2026-11-17, after the
-  debrief of #454, #459, #462 and #466). The owner accepts it by merging a pull request that changes this line to
-  ACCEPTED, and by that merge registers HYP-0062, HYP-0063 and HYP-0064 with EXP-0037.
+- **Status: ACCEPTED on 2026-11-17.** approved_by: owner. Drafted at the owner's request ("Yes, draft them",
+  2026-11-17, after the debrief of #454, #459, #462 and #466) and proposed in #467. The replay code merged in #469 and
+  the amendment in #471, both before acceptance. Accepted by the owner's merge of the pull request that changed this
+  line.
+  - The owner asked for this accepting change on 2026-11-17 ("now draft the DEC-0054 acceptance PR"). The merge
+    is the acceptance.
+  - Acceptance registers HYP-0062, HYP-0063 and HYP-0064 with EXP-0037. It changes no code and nothing that
+    trades. Its sessions start on the first session after 2026-11-17, and the host job `exp0037` collects them.
+- **Amended 2026-11-17, before acceptance and before any session on the list:** the session list is fixed by rule
+  instead of being written by hand, and the host job `exp0037` fetches the inputs and runs the replay (section 2).
+  The owner asked for this ("you need to automate it we cant rely on manual commond"). Nothing else changed.
 - **Changes nothing that trades.** The clone keeps every number DEC-0030 and EXP-0029 freeze. Nothing here starts a
   paper experiment. A variant that passes is a reason to write a further record, which would freeze a new config
   and start a new paper experiment with new trials. It is never a reason to change EXP-0029 while it runs.
 - **Registers** three trials in family O: HYP-0062 CLONE-ROOM-OPEN-SKY, HYP-0063 CLONE-RETEST-FREE-CONFIRM and
-  HYP-0064 CLONE-REJECTION-SPY-TREND, replayed by EXP-0037. Family O goes from 38 to **41** when this record is
-  accepted. Until then the registry row is `proposed` and the count in force stays 38.
+  HYP-0064 CLONE-REJECTION-SPY-TREND, replayed by EXP-0037. Family O goes from 38 to **41**.
 - **Experiment:** EXP-0037. **Hypotheses:** HYP-0062, HYP-0063, HYP-0064.
 - **Depends on:** DEC-0030 (the clone and its gates), DEC-0031 (the dry-run replay EXP-0037 reuses), DEC-0040
   (EXP-0029, whose config is the control).
@@ -66,10 +73,20 @@ record is accepted** (section 2). No session it reads has been looked at when th
 
 - **Names, bars, contracts, prices, fees, management and the day's limits:** as DEC-0031 sections 1 to 4. The
   premium cap and spread cap are EXP-0029's (`config/options_clone.yaml`), not DEC-0031's $2.00.
-- **Sessions:** every session from the first session after this record is accepted, in order, until 40 sessions
-  have been replayed or 2027-04-30 has passed, whichever comes first. The list is written into EXP-0037 README.md
-  as the sessions pass, and no session is replayed before it is on the list.
-- **Run once.** The replay runs once, after the last session on the list, on all four configs at the same commit.
+- **Sessions:** fixed by rule, with nothing to write by hand. They are every session of the exchange calendar
+  (`wt.options.levels.is_session`) after the day this record is accepted, in order, until 40 sessions or
+  2027-04-30, whichever comes first (`wt.options.exp0037.due`).
+- **Inputs, as each session passes:** the host job `exp0037` (`scripts/exp0037_replay.py nightly`, 17:15 New York,
+  Monday to Friday) runs the evening each session closes. It fetches that session's inputs into `data/exp0037/`
+  and writes their sha256 to `var/research/exp0037/input_sha256.json`. It replays nothing, and no one reads those
+  inputs. A session it cannot fetch is tried again each evening. After 3 failed evenings it is recorded as
+  skipped: it stays on the list, is never replayed, and the report names it.
+- **Run once,** by the same job, the evening the list closes. It runs all four configs at the same commit, after it
+  checks every saved hash again and runs check_first. The engine is the one that merged EXP-0037's replay code
+  (`af9b3590e638`). If any engine file (`wt.options` dryrun, variants, setups, regime, session, bs, levels and
+  intraday) differs on the host from that commit, the run stops until a decision record names the engine. It writes `result.json` and `report.md` under
+  `var/research/exp0037/` and pages the owner. The result is then committed into EXP-0037 by a pull request, and
+  read as section 4 says.
 
 ### 3. What is compared
 
@@ -111,5 +128,5 @@ record is accepted** (section 2). No session it reads has been looked at when th
 
 ### 6. Trial count
 
-Family O: 38 before this record, **41** with HYP-0062, HYP-0063 and HYP-0064 (`config/trial_registry.yaml`). The
-row is `proposed` until the owner accepts this record.
+Family O: 38 before this record, **41** with HYP-0062, HYP-0063 and HYP-0064 (`config/trial_registry.yaml`, row
+accepted 2026-11-17).

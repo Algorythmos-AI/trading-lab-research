@@ -156,6 +156,12 @@ JOBS: dict[str, Job] = {j.name: j for j in (
         "options_review", deadline_min=10, trading=False, et="Mon..Fri 16:30", desk="options", preflight=False,
         what="Options clone nightly review: the day per name, each setup's figures and verdict so far",
         runtime_max_h=0.5),
+    # EXP-0037 (DEC-0054): each evening, fetch and hash the inputs of the session that closed; the evening its list
+    # closes, run the one replay. Research only: it places no order and reads no account.
+    Job("exp0037", "com.wt.exp0037", 0, 0, ("scripts/exp0037_replay.py", "nightly"), "backtest", "exp0037",
+        deadline_min=45, trading=False, et="Mon..Fri 17:15", desk="options", preflight=False,
+        what="EXP-0037: fetch and hash the session's replay inputs; run the one replay when its list closes",
+        runtime_max_h=1.0),
     # The Calendar page's release dates (wt.ops.econ_calendar): FRED, the Fed, BLS and BEA, read once a week after
     # the weekly scorecard. Display only; it never touches the calendar the runners trade around.
     Job("econ-calendar", "com.wt.econ-calendar", 12, 30, ("-m", "wt.ops.econ_calendar"), "backtest", "econ_calendar",

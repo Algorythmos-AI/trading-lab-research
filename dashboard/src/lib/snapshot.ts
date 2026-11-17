@@ -8,6 +8,7 @@ import {
   CALENDAR_PATHS,
   DESK_PATHS,
   JOURNAL_PATHS,
+  FUNNEL_PATHS,
   LEDGER_PATHS,
   OPTIONS_CLONE_PATHS,
   OPTIONS_LIVE_PATHS,
@@ -31,6 +32,7 @@ import {
 } from "./fixture-variants";
 import type { HftSnapshot } from "./hft.types";
 import type { JournalDoc } from "./journal.types";
+import type { FunnelDoc } from "./funnel.types";
 import type { LedgerEdition } from "./ledger.types";
 import { logEvent } from "./log";
 import type { OptionsClone } from "./options-clone.types";
@@ -615,3 +617,40 @@ export const loadCalendar = cache(async (): Promise<CalendarResult> => {
     return { status: "error" };
   }
 });
+
+export type FunnelResult =
+  | { status: "ok"; doc: FunnelDoc; source: "fixture" | "blob" }
+  | { status: "missing" }
+  | { status: "error" };
+
+/**
+ * The selection funnel's health document (trading-options-funnel): the newest, or the one for `date` (YYYY-MM-DD).
+ * "missing" until the funnel has published.
+ */
+export const loadFunnel = cache(
+  async (date?: string): Promise<FunnelResult> => {
+    if (fixtureMode()) {
+      const flags = await fixtureFlags();
+      if (flags.has("empty")) return { status: "missing" };
+      if (flags.has("error")) return { status: "error" };
+      const mod = await import("../../test/fixtures/funnel.v1.json");
+      const doc = (mod.default ?? mod) as unknown as FunnelDoc;
+      if (date && date !== doc.session) return { status: "missing" };
+      return { status: "ok", doc, source: "fixture" };
+    }
+    const path = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${FUNNEL_PATHS.history}${date}.json` : FUNNEL_PATHS.latest;
+    try {
+      const stored = await readText(path);
+      if (!stored) return { status: "missing" };
+      const parsed: unknown = JSON.parse(stored.text);
+      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+        logEvent("snapshot.read", { outcome: "not-an-object", desk: "funnel" });
+        return { status: "error" };
+      }
+      return { status: "ok", doc: parsed as FunnelDoc, source: "blob" };
+    } catch (e) {
+      logEvent("snapshot.read", { outcome: "error", desk: "funnel", error: e instanceof Error ? e.name : "unknown" });
+      return { status: "error" };
+    }
+  },
+);

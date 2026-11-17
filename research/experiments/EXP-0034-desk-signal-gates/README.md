@@ -97,6 +97,36 @@
     is on the host. Its answer and counts are written here; "rows differ" is expected for a rule change.
   - No `dry` session and no window had started, so it ends nothing. Amendment 1 reads only `dry` sessions recorded
     under the new hash.
+- A rule change to the signal's code before any `dry` session: 2026-11-17, DEC-0053 (accepted by its own pull request,
+  #458), not a defect fix.
+  - **What changed:** after a side's break fails (a completed close back at or through the level), the side is locked
+    for the rest of its entry window: to 13:00 when the failing bar ends at or before 13:00 on a full day, else to the
+    flat time (a half day's flat time on a half day). While locked it reads plan off on the failed break; a break made
+    inside the lock is not counted, and once the lock ends it reads watch until a fresh break. A confirmed retest on
+    bars that do not cover the session from its open reads GET READY ("confirm on your chart"), never ENTER. The row
+    says the lock ("Failed at <time>: no <side> until <time>") beside the other side's line, and the board's drawn
+    headline says it too while an alternative trigger is live.
+  - **Files:** `trade-state.ts`, and `trade-now.ts` (`rowView`'s headline only).
+  - **Hashes:** `SIGNAL_CODE_HASH` `s-065118e5ffe27eee3b520c817f045160327c9b6d9c14b4fa1e782cc289cc41e3` to
+    `s-ed25522ded279c218690d89ce110d996e607624d1ea270abf9377dc062ce9b44` (the pin in
+    `dashboard/test/signal-freeze.test.ts` moved with it). DEC-0044 `ENGINE_VERSION` `e-d6053c7fdd0a` to
+    `e-593cd517f8d5`. `config.yaml`'s `code_read.engine` pin moves to the new label (DEC-0053's amendment to this
+    experiment).
+  - **What was viewed:** what DEC-0053 lists under "What has already been seen": the owner trade DEC-0052 names, that
+    session's 2-minute bars and the board's recorded states, and that session read by DEC-0052's rule. The change was
+    chosen on the setup's logic and that session, not on any outcome of EXP-0034, none of which exists.
+  - **The identity check on the fixtures (DEC-0051's, run as written): no row differs in a state, `brokeAt` or card
+    number.** The old engine (integration 6bee358, `e-d6053c7fdd0a`) and the new one ran on every fixture input.
+    - **Board:** 0 of 2,205 rows differ (735 cases). 63 cases differ in words and display fields only: SPY's failed
+      break at the scripted steps 3 to 5, in every edition and quote set, now worded as its lock (the line and the
+      drawn headline), with `failedAt` and `lockEnd` beside it.
+    - **Evaluation:** 0 of 420 rows differ (84 slots).
+    - **The re-based check:** `dashboard/test/validation/engine-identity.test.ts` is re-based on `e-593cd517f8d5`. It
+      pins 6 of 312 bar states differing over the 15 retest vector sessions, in the two sessions with a failed break;
+      in one of them the lock removes the clone's signal on the re-break (DEC-0053's stated departure from the clone).
+  - **Still to run:** the check over the last 10 logged production sessions, before this label reaches production. It
+    is on the host. Its answer and counts are written here; "rows differ" is expected for a rule change.
+  - No `dry` session and no window had started, so it ends nothing.
 - Writer fixes before any `dry` session, 2026-11-16 (`signal-run.ts` and `desk-run.ts`, outside the hashed code), from
   a pre-dry validation: a run whose reads time out keeps the time to write its record; a signal write or a DEC-0044
   put that lands after its time limit is read back and counts as written only when the stored bytes are the run's

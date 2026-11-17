@@ -95,6 +95,7 @@ const CARD_FEEDS: Record<string, readonly string[]> = {
   focus: ["pre-open", "refusal-options"],
   radar: ["radar", "refusal-radar"],
   ledger: ["ledger-morning", "ledger-afternoon", "refusal-ledger"],
+  funnel: ["funnel", "refusal-funnel"],
   shadow: ["shadow"],
   "options-live": ["refusal-options-live"],
 };
@@ -140,6 +141,7 @@ function buildCards(i: FeedsInput): Feed[] {
   const rState = panelState(rView);
 
   const lView = worstOf([view("ledger-morning"), view("ledger-afternoon")].filter((v): v is FeedView => v !== null));
+  const nView = view("funnel");
   const shadow = view("shadow");
 
   const live = i.optionsLive.status === "ok" ? i.optionsLive.doc : null;
@@ -220,6 +222,19 @@ function buildCards(i: FeedsInput): Feed[] {
       })(),
       schedule: "Saved before the open and scored after the close (assumed 09:11 and 16:21 New York)",
       note: lView?.reason === "refused" ? "The last edition sent was refused at ingest, and nothing newer is stored." : undefined,
+    },
+    {
+      key: "funnel",
+      name: "Selection funnel evidence",
+      href: "#feeds",
+      // Unwatched until the owner adds the seal step: no document yet is "nothing yet", never "late".
+      state: nView && !nView.verified && nView.reason === "no-document" ? "missing" : panelState(nView),
+      asOf: (() => {
+        const st = i.feeds.stamps.funnel;
+        return st?.status === "ok" && st.value.at !== null ? new Date(st.value.at).toISOString() : null;
+      })(),
+      schedule: `Sealed after the evening levels run, by ${sydTime(nView?.next_due ?? null)} Sydney (not yet watched)`,
+      note: nView?.reason === "refused" ? "The last document sent was refused at ingest, and nothing newer is stored." : undefined,
     },
     {
       key: "shadow",

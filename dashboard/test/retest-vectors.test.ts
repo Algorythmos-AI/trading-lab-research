@@ -4,6 +4,8 @@
 // board's sideState is read at every bar's close, on the bars up to it with their own 2-minute ATR (atr2m, as
 // trade-now.ts passes it): its enter zone is exactly the first signal's two slots (that close and the next), never for
 // a case with none, and a later clone signal of the same break reads missed ("slot"): the first governs (DEC-0052).
+// DEC-0053 departs from the clone on purpose: a confirmed retest after a failed break in the same entry window is not
+// an enter zone on the board (the clone has no such lock), so such a case reads plan off at the clone's signal.
 import { describe, expect, it } from "vitest";
 import type { SidePlan } from "@/lib/focus-plan";
 import type { LiveQuote } from "@/lib/options";
@@ -34,6 +36,22 @@ function boardAt(c: Case, i: number) {
   return { state: sideState(plan, 4, bars, quote, now, atr2m(closed)), atr: atr2m(closed) };
 }
 
+/**
+ * DEC-0053, worked out here apart from the board's code: the bar (end, ms) of the first failure of a break before bar
+ * `k`: a close beyond the level, the close before it not beyond, then a later close at or through the level. Every case
+ * is in the morning, so such a failure locks the side to 13:00, past every bar of the case.
+ */
+function failedBefore(c: Case, k: number): number | null {
+  const s = c.side === "call" ? 1 : -1;
+  const beyond = (i: number) => (c.bars[i]![3] - c.level) * s > 0;
+  for (let i = 1; i < k; i++) {
+    if (!beyond(i) || beyond(i - 1)) continue;
+    for (let j = i + 1; j < k; j++) if (!beyond(j)) return OPEN + (j + 1) * BAR_MS;
+    return null;
+  }
+  return null;
+}
+
 describe("the shared retest vectors (DEC-0052)", () => {
   it("use the board's numbers", () => {
     expect(V.retest.max_bars_to_retest).toBe(MAX_BARS_TO_RETEST);
@@ -42,6 +60,10 @@ describe("the shared retest vectors (DEC-0052)", () => {
     expect(V.atr_period).toBe(14); // atr2m's period
     expect(V.cases.length).toBeGreaterThanOrEqual(10);
     expect(V.cases.some((c) => c.expect.signals.length >= 2)).toBe(true);
+    // DEC-0053's departure is exercised: one case's clone signal follows a failed break
+    expect(V.cases.filter((c) => c.expect.confirm !== null && failedBefore(c, c.expect.confirm) !== null).map((c) => c.name)).toEqual([
+      "the first break fails; the second one's retest confirms",
+    ]);
   });
 
   for (const c of V.cases)
@@ -49,6 +71,13 @@ describe("the shared retest vectors (DEC-0052)", () => {
       const read = c.bars.map((_, i) => boardAt(c, i).state);
       const enter = read.flatMap((x, i) => (x.state === "enter_zone" ? [i] : []));
       const k = c.expect.confirm;
+      const failed = k === null ? null : failedBefore(c, k);
+      if (k !== null && failed !== null) {
+        // DEC-0053: the clone signals, the board's side is locked by the earlier failure
+        expect(enter).toEqual([]);
+        expect(read[k]).toMatchObject({ state: "plan_off", failedAt: failed });
+        return;
+      }
       expect(enter).toEqual(k === null ? [] : [k, k + 1].filter((i) => i < c.bars.length));
       // a later clone signal of the same break: missed, the first confirmation's close kept
       for (const later of c.expect.signals.slice(1)) {

@@ -5,7 +5,8 @@
 // open trade) and the server's evaluation with its record's engine fields must hash exactly as the code before the
 // guards made them (guards-off.golden.json, written by guards-off-run.ts on origin/integration 61f46e6). DEC-0052
 // changed the board's rule: the hashes were rewritten by the same run on 61f46e6 with that rule applied to it (still
-// code with no guards), so the proof still compares against code that never had them.
+// code with no guards), so the proof still compares against code that never had them. DEC-0053 (the failed-break lock)
+// rewrote them once more the same way, with its diff of trade-state.ts and trade-now.ts applied on top.
 import { describe, expect, it, vi } from "vitest";
 import { ALL_OFF, parseGuardSwitches } from "@/lib/desk-guards";
 import type { EvalInput } from "@/lib/desk-eval";
