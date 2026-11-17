@@ -50,6 +50,8 @@ import type { GuardReason } from "@/lib/quote-guards";
 import { type NameState, type NameStateName, serverNow } from "@/lib/trade-state";
 import { cn } from "@/lib/utils";
 import { type Notice, ringTag } from "@/lib/alert-notify";
+import { type BoardLogEntry, mergeLogs, parseBoardLog, sameLog, staleLogKeys } from "@/lib/board-log";
+import { ACTION_WORD } from "@/lib/trade-manage";
 import { useAlerts } from "./alert-prefs";
 import { closeEntryNotices, focusPage, ringAlerts, useSoundUnlock } from "./alerts";
 import { useCockpit } from "./cockpit-state";
@@ -512,47 +514,9 @@ function BoardNotices({ notices, onOpen, onDrop, extra }: { notices: NameState[]
 }
 
 // ---- the board, live -----------------------------------------------------------------------------------------------
-/** One line of the "Today" change log: a name's state word changed, at the board's (server) clock. */
-export interface BoardLogEntry {
-  at: number;
-  symbol: string;
-  word: string;
-  side: "call" | "put" | null;
-  tone: RowView["badge"]["tone"];
-}
-/** The log keeps this many lines; the newest first. */
-export const BOARD_LOG_MAX = 30;
+// The "Today" log: its lines, reading, merging and unread rules are lib/board-log.ts.
+export { BOARD_LOG_MAX, type BoardLogEntry, parseBoardLog } from "@/lib/board-log";
 const LOG_KEY = (session: string) => `trade-now-log:${session}`;
-
-// The tones a log line may carry (labels.ts Tone): a line with any other is dropped, never drawn in a guessed colour.
-const LOG_TONES: ReadonlySet<string> = new Set<BoardLogEntry["tone"]>(["good", "warn", "bad", "neutral", "info"]);
-
-/** One saved line, checked field by field: the storage is the browser's, and anything may be in it. */
-function isLogEntry(x: unknown): x is BoardLogEntry {
-  if (!x || typeof x !== "object") return false;
-  const e = x as Record<string, unknown>;
-  return (
-    typeof e.at === "number" &&
-    Number.isFinite(e.at) &&
-    typeof e.symbol === "string" &&
-    typeof e.word === "string" &&
-    (e.side === "call" || e.side === "put" || e.side === null) &&
-    typeof e.tone === "string" &&
-    LOG_TONES.has(e.tone)
-  );
-}
-
-/** The log saved in this browser for the session, if any; [] when storage is off or the text is not a log. */
-export function parseBoardLog(raw: string | null): BoardLogEntry[] {
-  if (!raw) return [];
-  try {
-    const v: unknown = JSON.parse(raw);
-    if (!Array.isArray(v)) return [];
-    return v.filter(isLogEntry).slice(0, BOARD_LOG_MAX);
-  } catch {
-    return [];
-  }
-}
 
 type Item = NonNullable<Options["focus"]>["items"][number];
 
@@ -751,6 +715,9 @@ export function BoardProvider({
     let saved: BoardLogEntry[] = [];
     try {
       saved = parseBoardLog(window.localStorage.getItem(LOG_KEY(e.session)));
+      // Older sessions' logs are of no use here: removed, so the browser's storage never fills up with them.
+      const keys = Array.from({ length: window.localStorage.length }, (_, i) => window.localStorage.key(i) ?? "");
+      for (const k of staleLogKeys(keys, e.session)) window.localStorage.removeItem(k);
     } catch {
       /* storage off: the log starts empty */
     }
@@ -794,15 +761,11 @@ export function BoardProvider({
         const at = now ?? 0; // settled implies the live mode, which has a clock
         const add = changed.map((s): BoardLogEntry => {
           const v = rowView(s);
-          return { at, symbol: s.symbol, word: v.badge.word, side: v.badge.side, tone: v.badge.tone };
+          return { at, symbol: s.symbol, word: v.badge.word, side: v.badge.side, tone: v.badge.tone, kind: "board" };
         });
-        const nextLog = [...add, ...log].slice(0, BOARD_LOG_MAX);
-        setLog(nextLog);
-        try {
-          window.localStorage.setItem(LOG_KEY(e.session), JSON.stringify(nextLog));
-        } catch {
-          /* storage off: the log lives for this page only */
-        }
+        // Worked out while rendering, as the notices are; the same line twice is kept once (mergeLogs), so a render
+        // run twice adds nothing. Saved to the browser by the effect below, never from here.
+        setLog((prev) => mergeLogs(add, prev));
       }
     }
   }
@@ -846,6 +809,51 @@ export function BoardProvider({
     // Only a new ring sounds: a change of the switches alone must not.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manage.exitRing.n]);
+
+  // A manage card's new SELL HALF or EXIT goes in the Today log too (HOLD and TRAIL are not logged: they come and go
+  // with the price), with its trade's side and id, once per ring, worked out while rendering; never without a clock.
+  const [manageLogged, setManageLogged] = useState(0);
+  if (manage.manageRing.n !== manageLogged) {
+    setManageLogged(manage.manageRing.n);
+    const add =
+      now === null
+        ? []
+        : manage.manageRing.fresh
+            .filter((n) => n.action === "exit" || n.action === "sell_half")
+            .map((n): BoardLogEntry => {
+              const side = manage.views.find((v) => v.id === n.key)?.side ?? null;
+              return { at: now, symbol: n.symbol, word: ACTION_WORD[n.action], side, tone: n.tone, kind: "manage", ref: n.key };
+            });
+    // An updater, as the board's lines above: both may land in the same render, and neither may drop the other.
+    if (add.length) setLog((prev) => mergeLogs(add, prev));
+  }
+
+  // The log is kept in this browser for the session: saved after each change, merged with what another tab saved
+  // meanwhile, so two tabs never overwrite each other's lines. The same lines always write the same text, so a save
+  // that changes nothing raises no event in the other tab, and the two never trade saves back and forth.
+  useEffect(() => {
+    if (logFor !== e.session) return;
+    try {
+      const key = LOG_KEY(e.session);
+      const merged = mergeLogs(log, parseBoardLog(window.localStorage.getItem(key)));
+      window.localStorage.setItem(key, JSON.stringify(merged));
+    } catch {
+      /* storage off: the log lives for this page only */
+    }
+  }, [log, logFor, e.session]);
+  useEffect(() => {
+    const key = LOG_KEY(e.session);
+    const onStorage = (ev: StorageEvent) => {
+      if (ev.key !== key) return;
+      const theirs = parseBoardLog(ev.newValue);
+      setLog((mine) => {
+        const merged = mergeLogs(mine, theirs);
+        return sameLog(merged, mine) ? mine : merged;
+      });
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [e.session]);
 
   const ranked = [...items].sort((a, b) => a.rank - b.rank);
   const managed = new Set(manage.views.map((m) => m.symbol));

@@ -652,7 +652,11 @@ describe("the Today log read back from this browser", () => {
       "QQQ",
       [good],
     ]);
-    expect(parseBoardLog(raw)).toEqual([good, { ...good, side: null, tone: "neutral" }]);
+    // read back as one log (lib/board-log mergeLogs): each line once, newest first, ties in a fixed order
+    expect(parseBoardLog(raw)).toEqual([
+      { ...good, side: null, tone: "neutral", kind: "board" },
+      { ...good, kind: "board" },
+    ]);
     expect(parseBoardLog("{not json")).toEqual([]);
     expect(parseBoardLog(JSON.stringify({ at: 1 }))).toEqual([]);
     expect(parseBoardLog(null)).toEqual([]);
