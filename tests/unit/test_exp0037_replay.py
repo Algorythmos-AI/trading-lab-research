@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import datetime as dt
 import importlib.util
+import json
 import random
 import subprocess
 import sys
@@ -255,51 +256,6 @@ def test_the_session_range_is_fixed_by_its_seed():
     assert lo < sum(rop) / len(rop) < hi
 
 
-# ---------------------------------------------------------------- the session list
-DEC_ACCEPTED = "# DEC-0054\n\n- **Status: ACCEPTED on 2026-11-20.** By the owner.\n"
-README = "# EXP-0037\n\n## Sessions\n\nWritten here as each session passes.\n"
-
-
-def test_acceptance_and_the_list_are_read_from_the_records():
-    assert exp0037.accepted_on("- **Status: PROPOSED on 2026-11-17.**") is None
-    assert exp0037.accepted_on(DEC_ACCEPTED) == dt.date(2026, 11, 20)
-    text = README + "- 2026-11-23\n- 2026-11-24\n\n## Later\n- 2026-11-25\n"
-    assert exp0037.listed(text) == [dt.date(2026, 11, 23), dt.date(2026, 11, 24)]
-
-
-def test_due_starts_after_acceptance_skips_non_sessions_and_stops_at_40():
-    weekday = (lambda d: d.weekday() < 5)
-    got = exp0037.due(dt.date(2026, 11, 20), dt.date(2026, 11, 25), weekday, [])
-    assert got == [dt.date(2026, 11, 23), dt.date(2026, 11, 24), dt.date(2026, 11, 25)]
-    full = exp0037.due(dt.date(2026, 11, 20), dt.date(2027, 4, 1), weekday, [])
-    assert len(full) == 40 and exp0037.complete(full, dt.date(2027, 1, 30))
-    assert exp0037.due(dt.date(2026, 11, 20), dt.date(2027, 4, 1), weekday, full) == []
-    late = exp0037.due(dt.date(2027, 4, 20), dt.date(2027, 5, 10), weekday, [])
-    assert late[-1] == dt.date(2027, 4, 30)
-    assert not exp0037.complete(late, dt.date(2027, 4, 30)) and exp0037.complete(late, dt.date(2027, 5, 1))
-    assert not exp0037.complete([], dt.date(2027, 5, 1))
-
-
-def test_add_sessions_writes_nothing_until_accepted_then_appends(tmp_path):
-    drv = _driver()
-    dec, readme = tmp_path / "dec.md", tmp_path / "README.md"
-    readme.write_text(README)
-    dec.write_text("- **Status: PROPOSED on 2026-11-17.**\n")
-    now = dt.datetime(2026, 11, 25, 17, 0, tzinfo=NEW_YORK)
-    assert drv.add_sessions(readme, dec, now) == [] and readme.read_text() == README
-    dec.write_text(DEC_ACCEPTED)
-    new = drv.add_sessions(readme, dec, now)
-    assert new and new[0] > dt.date(2026, 11, 20) and new[-1] <= dt.date(2026, 11, 25)
-    assert exp0037.listed(readme.read_text()) == new
-    assert drv.add_sessions(readme, dec, now) == []                   # idempotent
-
-
-def test_finished_through_waits_for_the_close():
-    drv = _driver()
-    assert drv.finished_through(dt.datetime(2026, 11, 25, 16, 0, tzinfo=NEW_YORK)) == dt.date(2026, 11, 24)
-    assert drv.finished_through(dt.datetime(2026, 11, 25, 16, 20, tzinfo=NEW_YORK)) == dt.date(2026, 11, 25)
-
-
 def test_end_to_end_a_retest_blocked_by_an_open_position_is_taken_on_the_next_confirmation():
     # QQQ and SPY on the same tape and marks: both retests confirm at 10:26; QQQ (first in order) is entered, so
     # SPY's confirmation meets an open position. QQQ's contract hits its target at 10:27, and the 10:28 bar closes
@@ -324,19 +280,194 @@ def test_end_to_end_a_retest_blocked_by_an_open_position_is_taken_on_the_next_co
     assert [t["root"] for t in added] == ["SPY"] and displaced == []
 
 
-def test_run_refuses_until_accepted_closed_up_to_date_and_unrun(tmp_path):
+# ---------------------------------------------------------------- the session list and the host job
+DEC_ACCEPTED = "# DEC-0054\n\n- **Status: ACCEPTED on 2026-11-20.** By the owner.\n"
+
+
+def test_acceptance_is_read_from_the_status_line():
+    assert exp0037.accepted_on("- **Status: PROPOSED on 2026-11-17.**") is None
+    assert exp0037.accepted_on(DEC_ACCEPTED) == dt.date(2026, 11, 20)
+
+
+def test_due_starts_after_acceptance_skips_non_sessions_and_stops_at_40():
+    weekday = (lambda d: d.weekday() < 5)
+    got = exp0037.due(dt.date(2026, 11, 20), dt.date(2026, 11, 25), weekday, [])
+    assert got == [dt.date(2026, 11, 23), dt.date(2026, 11, 24), dt.date(2026, 11, 25)]
+    full = exp0037.due(dt.date(2026, 11, 20), dt.date(2027, 4, 1), weekday, [])
+    assert len(full) == 40 and exp0037.complete(full, dt.date(2027, 1, 30))
+    assert exp0037.due(dt.date(2026, 11, 20), dt.date(2027, 4, 1), weekday, full) == []
+    late = exp0037.due(dt.date(2027, 4, 20), dt.date(2027, 5, 10), weekday, [])
+    assert late[-1] == dt.date(2027, 4, 30)
+    assert not exp0037.complete(late, dt.date(2027, 4, 30)) and exp0037.complete(late, dt.date(2027, 5, 1))
+    assert not exp0037.complete([], dt.date(2027, 5, 1))
+
+
+def test_finished_through_waits_for_the_close():
     drv = _driver()
-    dec, readme = tmp_path / "dec.md", tmp_path / "README.md"
-    dec.write_text("- **Status: PROPOSED on 2026-11-17.**\n")
-    readme.write_text(README)
-    now = dt.datetime(2027, 3, 1, 17, 0, tzinfo=NEW_YORK)
-    assert "not accepted" in drv.refusal(tmp_path, dec, now)
-    dec.write_text(DEC_ACCEPTED)
-    assert "behind" in drv.refusal(tmp_path, dec, now)
-    some = exp0037.due(dt.date(2026, 11, 20), dt.date(2026, 12, 4), drv.is_session, [])
-    readme.write_text(README + "".join(f"- {d}\n" for d in some))
-    assert "behind" in drv.refusal(tmp_path, dec, now)
-    drv.add_sessions(readme, dec, now)
-    assert len(exp0037.listed(readme.read_text())) == 40 and drv.refusal(tmp_path, dec, now) is None
-    (tmp_path / "input_sha256.json").write_text("{}")
-    assert "exists" in drv.refusal(tmp_path, dec, now)
+    assert drv.finished_through(dt.datetime(2026, 11, 25, 16, 0, tzinfo=NEW_YORK)) == dt.date(2026, 11, 24)
+    assert drv.finished_through(dt.datetime(2026, 11, 25, 16, 20, tzinfo=NEW_YORK)) == dt.date(2026, 11, 25)
+
+
+def test_the_host_job_is_scheduled_after_the_close_and_is_research_only():
+    from wt.ops.schedule import JOBS
+    j = JOBS["exp0037"]
+    assert j.et == "Mon..Fri 17:15" and j.command == ("scripts/exp0037_replay.py", "nightly")
+    assert j.mode == "backtest" and not j.trading
+
+
+class FakeData:
+    """Bars for SPY and QQQ on any day asked for; no contract trades. Counts the calls."""
+
+    def __init__(self, empty=False):
+        self.calls = 0
+        self.empty = empty
+
+    def bars(self, symbols, tf, start, end, adjustment=None):
+        import pandas as pd
+        self.calls += 1
+        d = dt.date.fromisoformat(start[:10])
+        rows = []
+        if tf == "1Min" and not self.empty:
+            t0 = dt.datetime.combine(d, dt.time(9, 30), NEW_YORK)
+            for sym, base in (("SPY", 580.0), ("QQQ", 500.0)):
+                for i in range(5):
+                    rows.append({"symbol": sym, "t": pd.Timestamp(t0 + dt.timedelta(minutes=i)).tz_convert("UTC"),
+                                 "o": base, "h": base + 0.5, "l": base - 0.5, "c": base, "v": 100.0, "vw": base})
+        if tf == "1Day":
+            for sym, base in (("SPY", 580.0), ("QQQ", 500.0)):
+                rows.append({"symbol": sym, "t": pd.Timestamp(dt.datetime(2026, 1, 2, tzinfo=dt.UTC)),
+                             "o": base, "h": base + 1, "l": base - 1, "c": base, "v": 1e6, "vw": base})
+        return pd.DataFrame(rows, columns=["symbol", "t", "o", "h", "l", "c", "v", "vw"])
+
+    def get(self, url, params):
+        self.calls += 1
+        return {"bars": {}}
+
+
+def paths(tmp_path, accepted="2027-04-26"):
+    dec = tmp_path / "dec.md"
+    dec.write_text(f"- **Status: ACCEPTED on {accepted}.**\n" if accepted else "- **Status: PROPOSED on 2026-11-17.**\n")
+    return dec, tmp_path / "data", tmp_path / "state"
+
+
+def test_nightly_does_nothing_until_accepted(tmp_path):
+    drv = _driver()
+    dec, cache, out = paths(tmp_path, accepted=None)
+    fake = FakeData()
+    got = drv.nightly(lambda: fake, dt.datetime(2027, 4, 28, 17, 15, tzinfo=NEW_YORK), dec, cache, out)
+    assert got.startswith("waiting") and fake.calls == 0 and not out.exists()
+
+
+def test_nightly_fetches_and_hashes_each_closed_session_once(tmp_path):
+    drv = _driver()
+    dec, cache, out = paths(tmp_path)
+    fake = FakeData()
+    got = drv.nightly(lambda: fake, dt.datetime(2027, 4, 28, 17, 15, tzinfo=NEW_YORK), dec, cache, out)
+    hashes = drv.load_hashes(out)
+    assert sorted(hashes) == ["2027-04-27", "2027-04-28"] and "listed 2" in got
+    assert hashes["2027-04-27"] == drv.session_hash(dt.date(2027, 4, 27), cache)
+    assert not (out / "result.json").exists()
+    calls = fake.calls
+    drv.nightly(lambda: fake, dt.datetime(2027, 4, 28, 17, 30, tzinfo=NEW_YORK), dec, cache, out)
+    assert fake.calls == calls                                         # nothing new: nothing fetched
+    drv.nightly(lambda: fake, dt.datetime(2027, 4, 30, 17, 15, tzinfo=NEW_YORK), dec, cache, out)
+    assert sorted(drv.load_hashes(out)) == ["2027-04-27", "2027-04-28", "2027-04-29", "2027-04-30"]   # caught up
+
+
+def test_a_session_with_no_bars_yet_is_not_saved_and_is_retried(tmp_path):
+    drv = _driver()
+    dec, cache, out = paths(tmp_path)
+    with pytest.raises(RuntimeError):
+        drv.nightly(lambda: FakeData(empty=True), dt.datetime(2027, 4, 27, 17, 15, tzinfo=NEW_YORK), dec, cache, out)
+    assert drv.load_hashes(out) == {} and not drv.fetched(dt.date(2027, 4, 27), cache)
+    drv.nightly(lambda: FakeData(), dt.datetime(2027, 4, 27, 17, 15, tzinfo=NEW_YORK), dec, cache, out)
+    assert list(drv.load_hashes(out)) == ["2027-04-27"]
+
+
+def test_the_evening_the_list_closes_the_replay_runs_once_and_pages(tmp_path, monkeypatch):
+    drv = _driver()
+    dec, cache, out = paths(tmp_path)
+    try:
+        drv.pre_switch_engine()
+    except subprocess.CalledProcessError:
+        pytest.skip("the pre-switch commit is not in this clone's history")
+    paged = []
+    monkeypatch.setattr(drv, "page_done", lambda n, v: paged.append((n, v)))
+    got = drv.nightly(FakeData, dt.datetime(2027, 5, 3, 17, 15, tzinfo=NEW_YORK), dec, cache, out)
+    assert got == "ran: 4 sessions" and paged == [(4, ["too_few"] * 3)]
+    res = json.loads((out / "result.json").read_text())
+    assert res["check_first"] == "passed" and set(res["verdicts"]) == set(variants.VARIANTS)
+    assert (out / "report.md").exists()
+    fake = FakeData()
+    assert drv.nightly(lambda: fake, dt.datetime(2027, 5, 4, 17, 15, tzinfo=NEW_YORK), dec, cache, out).startswith("done")
+    assert fake.calls == 0 and len(paged) == 1                         # run once
+    sys.modules.pop("wt.options._dryrun_pre_switch", None)
+
+
+def test_a_changed_input_stops_the_replay(tmp_path, monkeypatch):
+    drv = _driver()
+    dec, cache, out = paths(tmp_path)
+    drv.nightly(FakeData, dt.datetime(2027, 4, 30, 17, 15, tzinfo=NEW_YORK), dec, cache, out)
+    (cache / "2027-04-28" / "minutes.json").write_text("{}")
+    monkeypatch.setattr(drv, "page_done", lambda n, v: None)
+    with pytest.raises(SystemExit, match="input hash differs"):
+        drv.nightly(FakeData, dt.datetime(2027, 5, 3, 17, 15, tzinfo=NEW_YORK), dec, cache, out)
+    assert not (out / "result.json").exists()
+
+
+def test_one_root_without_bars_is_not_saved(tmp_path):
+    drv = _driver()
+    dec, cache, out = paths(tmp_path)
+
+    class HalfEmpty(FakeData):
+        def bars(self, symbols, tf, start, end, adjustment=None):
+            df = super().bars(symbols, tf, start, end, adjustment)
+            return df[df.symbol != "QQQ"] if tf == "1Min" else df
+    with pytest.raises(RuntimeError, match="fetch failed"):
+        drv.nightly(HalfEmpty, dt.datetime(2027, 4, 27, 17, 15, tzinfo=NEW_YORK), dec, cache, out)
+    assert drv.load_hashes(out) == {}
+
+
+def test_a_session_that_fails_three_evenings_is_skipped_and_the_rest_carry_on(tmp_path, monkeypatch):
+    drv = _driver()
+    dec, cache, out = paths(tmp_path)
+
+    class BadDay(FakeData):
+        def bars(self, symbols, tf, start, end, adjustment=None):
+            if tf == "1Min" and start.startswith("2027-04-27"):
+                return super().bars(symbols, tf, start, end, adjustment).iloc[0:0]
+            return super().bars(symbols, tf, start, end, adjustment)
+    for evening in (28, 29):
+        with pytest.raises(RuntimeError, match="2027-04-27"):
+            drv.nightly(BadDay, dt.datetime(2027, 4, evening, 17, 15, tzinfo=NEW_YORK), dec, cache, out)
+        assert "2027-04-28" in drv.load_hashes(out)                    # the next session is not held up
+    drv.nightly(BadDay, dt.datetime(2027, 4, 30, 17, 15, tzinfo=NEW_YORK), dec, cache, out)
+    assert drv.load_hashes(out)["2027-04-27"] == drv.SKIPPED
+    monkeypatch.setattr(drv, "page_done", lambda n, v: None)
+    try:
+        drv.pre_switch_engine()
+    except subprocess.CalledProcessError:
+        pytest.skip("the pre-switch commit is not in this clone's history")
+    monkeypatch.setattr(drv, "engine_changed", lambda: [])
+    drv.nightly(BadDay, dt.datetime(2027, 5, 3, 17, 15, tzinfo=NEW_YORK), dec, cache, out)
+    res = json.loads((out / "result.json").read_text())
+    assert res["skipped"] == ["2027-04-27"] and "2027-04-27" not in res["sessions"]
+    sys.modules.pop("wt.options._dryrun_pre_switch", None)
+
+
+def test_a_changed_engine_stops_the_replay(tmp_path, monkeypatch):
+    drv = _driver()
+    dec, cache, out = paths(tmp_path)
+    monkeypatch.setattr(drv, "engine_changed", lambda: ["src/wt/options/setups.py"])
+    with pytest.raises(SystemExit, match="engine differs"):
+        drv.nightly(FakeData, dt.datetime(2027, 5, 3, 17, 15, tzinfo=NEW_YORK), dec, cache, out)
+    assert not (out / "result.json").exists()
+
+
+def test_the_engine_files_here_equal_the_merged_replay_code():
+    drv = _driver()
+    try:
+        subprocess.run(["git", "-C", str(ROOT), "cat-file", "-e", drv.ENGINE_COMMIT], check=True, capture_output=True)
+    except subprocess.CalledProcessError:
+        pytest.skip("the engine commit is not in this clone's history")
+    assert drv.engine_changed() == []

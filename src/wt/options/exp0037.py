@@ -27,7 +27,6 @@ LAST_DAY = dt.date(2027, 4, 30)
 ENGINE_KEYS = ("signal_bar", "level")  # keys EXP-0037 added to each trade; the pre-switch engine has neither
 
 _ACCEPTED = re.compile(r"^- \*\*Status: ACCEPTED on (\d{4}-\d{2}-\d{2})", re.M)
-_SESSION = re.compile(r"^- (\d{4}-\d{2}-\d{2})\b")
 
 
 # ---------------------------------------------------------------- the session list
@@ -35,19 +34,6 @@ def accepted_on(decision_md: str) -> dt.date | None:
     """The day DEC-0054 was accepted, from its status line; None while it is not."""
     m = _ACCEPTED.search(decision_md)
     return dt.date.fromisoformat(m.group(1)) if m else None
-
-
-def listed(readme_md: str) -> list[dt.date]:
-    """The sessions written under README.md's `## Sessions` heading (lines `- YYYY-MM-DD`), in order."""
-    out: list[dt.date] = []
-    inside = False
-    for line in readme_md.splitlines():
-        if line.startswith("## "):
-            inside = line.strip() == "## Sessions"
-            continue
-        if inside and (m := _SESSION.match(line)):
-            out.append(dt.date.fromisoformat(m.group(1)))
-    return out
 
 
 def due(accepted: dt.date, finished_through: dt.date, is_session: Callable[[dt.date], bool],
