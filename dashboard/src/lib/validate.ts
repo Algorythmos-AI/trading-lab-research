@@ -361,7 +361,27 @@ export function validateFunnel(data: unknown): FunnelValidationResult {
   const errors = findDenied(data).map((p) => `${p}: key is not allowed to be published`);
   if (!validateFunnelSchema(data)) {
     errors.push(...(validateFunnelSchema.errors ?? []).map(describe));
+  } else {
+    errors.push(...funnelMeaning(data as FunnelDoc));
   }
   if (errors.length > 0) return { ok: false, errors: errors.slice(0, MAX_ERRORS) };
   return { ok: true, doc: data as FunnelDoc };
+}
+
+/** What the schema cannot say: one entry per stage, nothing sealed without evidence, no more kept than judged. */
+function funnelMeaning(doc: FunnelDoc): string[] {
+  const errors: string[] = [];
+  const seen = new Set<string>();
+  doc.stages.forEach((s, i) => {
+    if (seen.has(s.stage)) errors.push(`/stages/${i}/stage: ${s.stage} appears twice`);
+    seen.add(s.stage);
+    if (s.evidence === "missing" && (s.sealed_at !== null || s.names_judged !== null || s.names_kept !== null)) {
+      errors.push(`/stages/${i}: missing evidence cannot carry a seal time or counts`);
+    }
+    if (s.names_judged !== null && s.names_kept !== null && s.names_kept > s.names_judged) {
+      errors.push(`/stages/${i}/names_kept: more names kept than judged`);
+    }
+    if (s.evidence !== "sealed" && s.replay !== "not_run") errors.push(`/stages/${i}/replay: no replay without sealed evidence`);
+  });
+  return errors;
 }

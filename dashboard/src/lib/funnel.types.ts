@@ -9,6 +9,9 @@ export type Count = number | null;
 export interface FunnelDoc {
   schema: "stocksdelta/funnel";
   schema_version: number;
+  /**
+   * funnel-<session>-<first 12 hex of the sha256 of the document's content>: the same evidence gives the same run.
+   */
   run_id: string;
   as_of: Time;
   /**
@@ -21,7 +24,7 @@ export interface FunnelDoc {
   code_commit: string | null;
   /**
    * @minItems 1
-   * @maxItems 6
+   * @maxItems 2
    */
   stages: [Stage, ...Stage[]];
 }
@@ -44,7 +47,15 @@ export interface Stage {
    * @maxItems 20
    */
   flags: {
-    code: string;
+    /**
+     * A record flag of trading-options-funnel (candidates.py). A new flag is added here first.
+     */
+    code:
+      | "iv_row_missing"
+      | "iv_row_unusable"
+      | "option_volume_capped"
+      | "option_volume_defaulted"
+      | "option_volume_not_finite";
     names: number;
   }[];
   /**

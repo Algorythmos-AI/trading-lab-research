@@ -226,8 +226,9 @@ function buildCards(i: FeedsInput): Feed[] {
     {
       key: "funnel",
       name: "Selection funnel evidence",
-      href: "/operations",
-      state: panelState(nView),
+      href: "#feeds",
+      // Unwatched until the owner adds the seal step: no document yet is "nothing yet", never "late".
+      state: nView && !nView.verified && nView.reason === "no-document" ? "missing" : panelState(nView),
       asOf: (() => {
         const st = i.feeds.stamps.funnel;
         return st?.status === "ok" && st.value.at !== null ? new Date(st.value.at).toISOString() : null;

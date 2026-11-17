@@ -1,7 +1,7 @@
 {
   "schema": "stocksdelta/funnel",
   "schema_version": 1,
-  "run_id": "funnel-2026-10-13-1",
+  "run_id": "funnel-2026-10-13-3f9a2c4e1b7d",
   "as_of": "2026-10-12T22:20:05Z",
   "session": "2026-10-13",
   "code_commit": "940e25f0000000000000000000000000000000ab",
@@ -23,7 +23,16 @@
       "corrections": 0,
       "names_judged": 12,
       "names_kept": 4,
-      "flags": [{ "code": "option_volume_defaulted", "names": 1 }, { "code": "iv_row_missing", "names": 1 }],
+      "flags": [
+        {
+          "code": "option_volume_defaulted",
+          "names": 1
+        },
+        {
+          "code": "iv_row_missing",
+          "names": 1
+        }
+      ],
       "replay": "match"
     }
   ]
