@@ -65,6 +65,16 @@
     Section 8 asks for it first. The answers below are as expected, so nothing is undone, but the order was broken.
   - **Inputs check:** the logging engine rebuilt the rows it logged in 514 of 582 slots. 121 slots used the day's
     data limit. The 68 that differ are not explained here; they bound how exactly a replay stands for production.
+    - **Explained (2026-11-17, a later run of the same 3 sessions):**
+      - **65 slots: the day's limit.** Their record says it was used, and every row it holds is no trade. The replay
+        has no journal, so the limit read as not used. With the record's limit applied (the replay tool's fix), they
+        match, and the check rebuilds 579 of 582 slots.
+      - **3 slots: the day's high and low.** The engine takes them from the snapshot read at run time, about 110 s
+        after the slot's end, and the record holds no prices. In 2 of them the next bar had passed target 1 or a new
+        low, so production read missed where the rebuild reads enter_zone. This is the conservative direction the code
+        states, never toward an entry.
+      - **Differing names in slots with the day's limit used, where the board drew no trade:** none, 15 of 48 and 350
+        of 815 for the three changes below. The rest of each answer is unchanged.
   - **The answers and counts are on each change's line below.**
  none to the outcome code. To the signal code:
   - 2026-11-16, before any `dry` session, owner-approved (DEC-0051 section 8, precondition 3's defect-fix route), two
