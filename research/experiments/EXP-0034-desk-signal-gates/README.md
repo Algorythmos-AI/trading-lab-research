@@ -51,11 +51,22 @@
   420 rows; `dashboard/test/validation/engine-identity.test.ts`, the old engine rebuilt byte-identical to the base
   commit's `trade-state.ts`). In the same test the only rows that differ are boundary touches: 4 of 4 constructed
   cases; 10,039 of 20,388 boundary scenes in a seeded sweep, 0 of its 19,612 other scenes, 0 of 20,000 scenes with
-  many-decimal ATRs and 0 of 20,000 with five-decimal levels. The other half of the check, the last 10 logged
-  sessions through both engines, is NOT done: the Mac cannot read the production records. DEC-0051 section 8
-  requires it before this label reaches production; the owner or the host runs it. No `dry` session and no window
+  many-decimal ATRs and 0 of 20,000 with five-decimal levels. The other half of the check, the logged sessions
+  through both engines, was run on 2026-11-17, after this label had reached production (see the line below): no, no
+  row differs (582 slots, 2,304 names, 4,608 evaluation rows). No `dry` session and no window
   had started, so it ends nothing.
-- Defect fixes to the outcome or signal code before the read: none to the outcome code. To the signal code:
+- Engine identity check over the logged production sessions (DEC-0051 section 8), run 2026-11-17 on the Mac with
+  `dashboard/scripts/identity-collect.mjs` and `dashboard/test/validation/engine-identity-sessions.test.ts`, engines
+  pinned by commit, oldest first: `343a032` (`e-28344e769752`), `8cd5ff0d` (`e-05b589ff4f1c`), `eaa2ab52`
+  (`e-d6053c7fdd0a`), `964bfe3` (`e-593cd517f8d5`).
+  - **Sessions:** 3, all the logged production sessions there are (2026-11-12 to 2026-11-16), not the 10 section 8
+    names; 582 slots, none skipped, all logged under `e-28344e769752`.
+  - **Late for two labels:** Release #456 put `e-05b589ff4f1c` and `e-d6053c7fdd0a` into production before this run.
+    Section 8 asks for it first. The answers below are as expected, so nothing is undone, but the order was broken.
+  - **Inputs check:** the logging engine rebuilt the rows it logged in 514 of 582 slots. 121 slots used the day's
+    data limit. The 68 that differ are not explained here; they bound how exactly a replay stands for production.
+  - **The answers and counts are on each change's line below.**
+ none to the outcome code. To the signal code:
   - 2026-11-16, before any `dry` session, owner-approved (DEC-0051 section 8, precondition 3's defect-fix route), two
     defects found by the pre-dry validation (`dashboard/test/validation/logic-suspects.test.ts` cases a and d):
     (1) `dashboard/src/lib/trade-state.ts` `sideState`, the retest touch: a dip exactly 0.1 ATR from the line was not
@@ -93,8 +104,9 @@
     - **The re-based check:** `dashboard/test/validation/engine-identity.test.ts` is re-based on `e-d6053c7fdd0a`. It
       pins 52 of 312 bar states differing over the 15 retest vector sessions, where the new engine matches the
       clone's first signal and the old one does not.
-  - **Still to run:** the check over the last 10 logged production sessions, before this label reaches production. It
-    is on the host. Its answer and counts are written here; "rows differ" is expected for a rule change.
+  - **The identity check on the logged sessions (2026-11-17, after release): yes, rows differ, as expected.** 48 of
+    2,304 names differ, all in a side's state: enter_zone → get_ready 35, enter_zone → missed 13. No `brokeAt`
+    differs; 8 differ in card numbers. 74 of 4,608 evaluation rows differ; the evaluation's status differs in no slot.
   - No `dry` session and no window had started, so it ends nothing. Amendment 1 reads only `dry` sessions recorded
     under the new hash.
 - A rule change to the signal's code before any `dry` session: 2026-11-17, DEC-0053 (accepted by its own pull request,
@@ -124,8 +136,22 @@
     - **The re-based check:** `dashboard/test/validation/engine-identity.test.ts` is re-based on `e-593cd517f8d5`. It
       pins 6 of 312 bar states differing over the 15 retest vector sessions, in the two sessions with a failed break;
       in one of them the lock removes the clone's signal on the re-break (DEC-0053's stated departure from the clone).
-  - **Still to run:** the check over the last 10 logged production sessions, before this label reaches production. It
-    is on the host. Its answer and counts are written here; "rows differ" is expected for a rule change.
+  - **The identity check on the logged sessions (2026-11-17, before release): yes, rows differ.** 815 of 2,304 names
+    differ. 668 differ in a side's state: missed → watch 294, missed → plan_off 200, plan_off → watch 132,
+    get_ready → plan_off 29, enter_zone → plan_off 10, enter_zone → watch 2, get_ready → watch 1. All 815 differ in
+    `brokeAt`, and 333 in card numbers. 1,010 of 4,608 evaluation rows differ; the evaluation's status differs in no
+    slot.
+    - **Traced:** every differing name is one of 6 sides whose break failed (3 sessions). Each difference is the rule
+      as DEC-0053 states it:
+      - while locked, a side reads plan_off and gives the failed break's `brokeAt`;
+      - once the lock ends it reads watch, with no `brokeAt`, until a fresh break;
+      - the name's card follows the side its row now shows.
+    - **What the lock removed:** 10 enter_zone slots inside a lock. The 2 that become watch come after the flat time.
+    - **For the owner:** a break that holds for hours and then closes back counts as failed (one case, failing at
+      14:10, locked to 15:10). Separately, `e-d6053c7fdd0a`, now in production, gave enter_zone in a slot after the
+      flat time in one case. That predates the lock and is not judged here.
+    - **What was viewed:** the board states, levels and times of those 3 sessions under the two engines. No outcome
+      of this experiment was viewed; none exists.
   - No `dry` session and no window had started, so it ends nothing.
 - Writer fixes before any `dry` session, 2026-11-16 (`signal-run.ts` and `desk-run.ts`, outside the hashed code), from
   a pre-dry validation: a run whose reads time out keeps the time to write its record; a signal write or a DEC-0044
