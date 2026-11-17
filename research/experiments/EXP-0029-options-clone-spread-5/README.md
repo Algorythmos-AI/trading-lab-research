@@ -60,3 +60,18 @@
 - **Expected effect.** On a normal day, none. On a day with a short fault at arm, the clone trades the same window
   under the same rules instead of taking no entries at all.
 - **Disclosure.** As for the bar fix above. No gate, threshold, window, sizing or exit rule changes.
+
+## Note: `setups.rejection.confirm_bars` is not read (appended 2026-11-17, records only)
+
+- **What.** `config/options_clone.yaml` sets `setups.rejection.confirm_bars: 1`, but no code reads the key. The
+  rejection setup (`wt.options.setups.rejection`) fixes one confirming bar in code: bar A trades through the strong
+  level, and the next bar, B, must close back on the setup's side of it. The key's value and the code agree, so this
+  experiment trades what DEC-0030 and HYP-0030 describe.
+- **Risk.** Only for a later reader: changing the key alone would change nothing. Any change to the number of
+  confirming bars is a rule change. It needs a decision record that freezes a new config, which then either wires the
+  key into the code or removes it.
+- **Not changed.** The key stays in `config/options_clone.yaml`, so `control_config_hash` and this experiment's frozen
+  numbers are unchanged. `wt.options.setups` is one of EXP-0037's pinned engine files and is not touched.
+- **Disclosure.** Found while reading the code for DEC-0054's section 5 (2026-11-17). The author had seen this
+  experiment's running figures on 2026-11-16 (DEC-0054, "What has already been seen"). This note changes nothing that
+  trades.
