@@ -1002,11 +1002,16 @@ class Runner:
                 streak: int, last_loss: dt.datetime | None) -> dict[str, Any]:
         """The decision log's account of one signal: the contract it would have bought (its expiry and whether its
         greeks were modelled), and when refused, the first gate that refused it (REASON_ORDER) as a code, every gate
-        that refused it, and the numbers against the first. Logging only: nothing here decides anything."""
+        that refused it, and the numbers against the first. When no contract passed, `contract_miss` keeps the refused
+        contract nearest the stock (its reason and the number against that floor) whichever gate refused first, so a
+        signal a strategy gate stopped still shows how far its contract was from tradeable. Logging only: nothing here
+        decides anything."""
         contract = chain.contract_detail(choice.quote) if choice.quote is not None else \
             {k: choice.miss[k] for k in ("expiry", "modelled", "delta")} if choice.miss is not None else \
             {"expiry": (nm.expiry or self.day).isoformat(), "modelled": None, "delta": None}
         out: dict[str, Any] = {"contract": contract, "reason": None, "failed": [], "why": {}}
+        if choice.quote is None and choice.miss is not None:
+            out["contract_miss"] = {**choice.miss, "candidates": sum(choice.reasons.values())}
         failed = [k for k in REASON_ORDER if k in g.checks and not g.checks[k][0]]
         failed += [k for k in g.failed if k not in failed]
         if not failed:

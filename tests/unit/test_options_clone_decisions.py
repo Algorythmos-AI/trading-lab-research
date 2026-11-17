@@ -66,6 +66,28 @@ def test_a_contract_refusal_names_the_nearest_contracts_reason_and_numbers(w):
     assert s["why"]["open_interest"] == 10 and s["why"]["min"] == float(CFG["contract"]["min_open_interest"])
     assert s["why"]["candidates"] > 1
     assert s["contract"]["expiry"] == "2026-10-19" and s["contract"]["modelled"] is False
+    assert s["contract_miss"]["reason"] == "open-interest-below-floor" and s["contract_miss"]["open_interest"] == 10
+
+
+def test_a_contract_miss_is_kept_when_an_earlier_gate_refused_first(w):
+    (w["tmp"] / "KILL").write_text("x")
+    w["m"].oi = 10
+    r = session(w)
+    run_until(r, w["m"], w["b"], at("10:27"))
+    (s,) = signal_row(w)["signals"]
+    assert s["reason"] == "kill" and s["failed"] == ["kill", "contract"] and s["why"] == {}
+    miss = s["contract_miss"]
+    assert miss["reason"] == "open-interest-below-floor" and miss["expiry"] == "2026-10-19"
+    assert miss["open_interest"] == 10 and miss["min"] == float(CFG["contract"]["min_open_interest"])
+    assert miss["candidates"] > 1
+
+
+def test_no_contract_miss_is_logged_when_a_contract_passed(w):
+    (w["tmp"] / "KILL").write_text("x")
+    r = session(w)
+    run_until(r, w["m"], w["b"], at("10:27"))
+    (s,) = signal_row(w)["signals"]
+    assert s["failed"] == ["kill"] and "contract_miss" not in s
 
 
 def test_a_guard_refusal_is_logged_as_entry_refused_with_the_guards_code(w):
@@ -105,7 +127,7 @@ def test_the_published_document_carries_no_reason_contract_or_setup_field(w):
     r.publish()
     last = out.docs[-1]
     assert clone_site.validate(last) == []
-    assert not {"setup", "reason", "why", "modelled", "failed", "refused_for"} & _keys(last)
+    assert not {"setup", "reason", "why", "modelled", "failed", "refused_for", "contract_miss"} & _keys(last)
     body = clone_site.body(last).decode()
     assert "retest" not in body and "rejection" not in body and "open-interest" not in body
     spy = next(g for g in last["gates"] if g["symbol"] == "SPY")
