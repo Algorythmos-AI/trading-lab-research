@@ -9,7 +9,7 @@ import { focusPlan, type SidePlan } from "./focus-plan";
 import { sessionView, type JournalDoc } from "./journal";
 import { closeMinute, type LiveQuote, nyClock, OPEN_MIN, type Options, type OptionsTicker, type TrailPoint } from "./options";
 import { DAY_LOSS_LIMIT, dayCheck, MAX_TRADES_PER_DAY, MIN_ROOM_MULTIPLE, PREMIUM_STOP, RISK_PER_TRADE } from "./trade-rules";
-import { type AltTrigger, atr2m, BAR_MINUTES, type Bar2, bars2m, flatMinute, FIRST_ENTRY_MIN, mergeBars, MAX_BARS_TO_RETEST, type NameState, type NameStateName, nameState, retestRisk, SERVER_SETTLE_MS } from "./trade-state";
+import { type AltTrigger, atr2m, locksOf, BAR_MINUTES, type Bar2, bars2m, flatMinute, FIRST_ENTRY_MIN, mergeBars, MAX_BARS_TO_RETEST, type NameState, type NameStateName, nameState, retestRisk, SERVER_SETTLE_MS } from "./trade-state";
 import { BARS_STALE_MS, type BarsFeed } from "./bars-feed";
 import { LEADERS, type Side } from "./entry-checks";
 import type { GuardReason } from "./quote-guards";
@@ -359,10 +359,12 @@ export function rowView(s: NameState): RowView {
       s.state === "plan_off" && s.side && s.plan?.level != null
         ? `${cap(s.side)} plan off at ${p2(s.plan.level)}.`
         : `${a.kind === "failed_break" ? "Failed break" : "Sweep and reclaim"} at ${p2(a.level)}.`;
+    // DEC-0053: a side locked by a failed break says so here too, beside the alternative's idea
+    const locks = locksOf([s.call, s.put], false);
     return {
       badge: badge(a.kind === "failed_break" ? "FAILED BREAK" : "SWEEP", "warn", a.side, a.kind),
       testing: true,
-      headline: `${lead} ${altIdea(a)}.`,
+      headline: `${lead} ${altIdea(a)}.${locks.length ? ` ${locks.join(". ")}.` : ""}`,
       grid: { enter: `~${p2(a.entry)}`, stop: `${p2(a.stop)} or ${stopShare}`, target: p2(target) },
     };
   }

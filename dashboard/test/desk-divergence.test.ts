@@ -4,7 +4,7 @@
 // Each case says either that the server is never at enter zone where the page as of the slot is not, or that the
 // shadow summary counts the difference as critical.
 import { describe, expect, it } from "vitest";
-import { BAR_MS, ENGINE_VERSION, evaluateSlot, type PageRecord, serverRecord, stateRows } from "@/lib/desk-eval";
+import { BAR_MS, ENGINE_VERSION, evaluateSlot, evaluateSlotStates, type PageRecord, serverRecord, stateRows } from "@/lib/desk-eval";
 import { shadowSummary } from "@/lib/desk-shadow";
 import { focusOptions } from "@/lib/fixture-variants";
 import { focusPlan } from "@/lib/focus-plan";
@@ -165,5 +165,46 @@ describe("where they diverge", () => {
     const r = shadowSummary([S], [server], [page]);
     expect(r.critical).toEqual({ total: 1, byPage: { get_ready: 1, plan_off: 0, missed: 0, paused: 0, other: 0 } });
     expect(r.criticalAtSettle.total).toBe(1);
+  });
+});
+
+// DEC-0053: worked out from the session's bars and the half-day flag alone, so the page and the server agree on the lock.
+describe("the failed-break lock (DEC-0053): the page and the server agree on every slot", () => {
+  /** QQQ breaks the level at 09:50 to 09:52, closes back under it 09:52 to 09:54 (the failure), then the base story:
+   * the re-break at 10:00 and its retest are inside the lock, which runs to 13:00. */
+  const lockOver: Over = { qqq: (t, p) => (t >= ny("09:50:00") && t < ny("09:52:00") ? L + 0.6 : t >= ny("09:52:00") && t < ny("09:54:00") ? L - 0.4 : p) };
+  const serverAtSlot = (end: number, over: Over, bend: (sym: string, b: Bar2[]) => Bar2[] = (_, b) => b) => {
+    const run = end + SERVER_SETTLE_MS + 1_000;
+    const bars: Record<string, Bar2[]> = {};
+    const snapshots: Record<string, LiveQuote> = {};
+    for (const s of SYMS) {
+      const path = prints(s, over);
+      bars[s] = bend(s, barsOf(path, run));
+      snapshots[s] = snapshot(path, run);
+    }
+    return evaluateSlotStates({ slot: { day: S, end }, edition: E, journal: null, done: false, bars, fetchedAt: Object.fromEntries(SYMS.map((s) => [s, run])), snapshots });
+  };
+
+  it("QQQ's call: the same state on the page as of each slot and on the server, plan off on the failed break, never enter zone", () => {
+    const seen: string[] = [];
+    for (let end = ny("09:52:00"); end <= ny("10:20:00"); end += BAR_MS) {
+      const page = pageCall(pageAt(end + CLOSE_GRACE_MS, lockOver));
+      const server = serverAtSlot(end, lockOver);
+      expect(qqqCall(server.evaluation.rows), new Date(end).toISOString()).toBe(page);
+      seen.push(page!);
+      const call = server.states.find((s) => s.symbol === "QQQ")!.call;
+      if (end >= ny("09:54:00")) expect(call).toMatchObject({ state: "plan_off", brokeAt: ny("09:52:00"), failedAt: ny("09:54:00") });
+    }
+    expect(seen).not.toContain("enter_zone");
+    expect(seen.filter((x) => x === "plan_off").length).toBeGreaterThan(10);
+    // without the failure the same slot is the base case's enter zone
+    expect(qqqCall(serverAtSlot(END, {}).evaluation.rows)).toBe("enter_zone");
+  });
+
+  it("the server's bars missing a slot before the break: get ready (lockUnseen), never enter zone, and the name's record kept", () => {
+    const ev = serverAtSlot(END, {}, (s, b) => (s === "QQQ" ? b.filter((x) => x.start !== ny("09:40:00")) : b));
+    expect(ev.evaluation.degraded_names).toEqual([]);
+    expect(qqqCall(ev.evaluation.rows)).toBe("get_ready");
+    expect(ev.states.find((s) => s.symbol === "QQQ")!.call).toMatchObject({ state: "get_ready", lockUnseen: true, gap: false, brokeEarlier: false });
   });
 });

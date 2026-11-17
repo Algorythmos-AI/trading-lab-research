@@ -1,5 +1,5 @@
 {
- "_": "Hashes of the board, its drawing, the page surfaces drawn from it and the server evaluation, from code with no bad-data guards: origin/integration 61f46e6 (engine e-3f82b5b4b3c0, before the guards), first written by test/guards-off-run.ts over test/guards-off-cases.ts. Rewritten once on 2026-11-17 for DEC-0052 by the same run on 61f46e6 with DEC-0052's rule applied to it (the diff of trade-state.ts, trade-now.ts, entry-checks.ts and fixture-script.ts), still code with no guards; 693 of the 735 board hashes and all 84 evaluation hashes are unchanged. Never edited by hand.",
+ "_": "Hashes of the board, its drawing, the page surfaces drawn from it and the server evaluation, from code with no bad-data guards: origin/integration 61f46e6 (engine e-3f82b5b4b3c0, before the guards), first written by test/guards-off-run.ts over test/guards-off-cases.ts. Rewritten once on 2026-11-17 for DEC-0052 by the same run on 61f46e6 with DEC-0052's rule applied to it (the diff of trade-state.ts, trade-now.ts, entry-checks.ts and fixture-script.ts), still code with no guards; 693 of the 735 board hashes and all 84 evaluation hashes are unchanged. Rewritten again on 2026-11-17 for DEC-0053 the same way: 61f46e6 with DEC-0052's rule and then DEC-0053's diff of trade-state.ts and trade-now.ts applied to it (the run first reproduced the DEC-0052 hashes exactly); 672 of the 735 board hashes and all 84 evaluation hashes are unchanged from DEC-0052's, the others only in the words of a locked side's line. Never edited by hand.",
  "cases": "d3aed1b3b8b03753",
  "board": {
   "focus/step0/plain": {
@@ -108,109 +108,109 @@
    "surfaces": "208277802875cf08"
   },
   "focus/step3/plain": {
-   "rows": "7759c973ddb033c6",
-   "html": "08fc634af3caec76",
+   "rows": "f9dcc282baf4393a",
+   "html": "4b05c589d2e4e068",
    "surfaces": "4cb917f16edaeab2"
   },
   "focus/step3/fields": {
-   "rows": "7759c973ddb033c6",
-   "html": "08fc634af3caec76",
+   "rows": "f9dcc282baf4393a",
+   "html": "4b05c589d2e4e068",
    "surfaces": "4cb917f16edaeab2"
   },
   "focus/step3/suspect-bar-high-below-low": {
-   "rows": "7759c973ddb033c6",
-   "html": "08fc634af3caec76",
+   "rows": "f9dcc282baf4393a",
+   "html": "4b05c589d2e4e068",
    "surfaces": "4cb917f16edaeab2"
   },
   "focus/step3/suspect-bar-open-outside-range": {
-   "rows": "7759c973ddb033c6",
-   "html": "08fc634af3caec76",
+   "rows": "f9dcc282baf4393a",
+   "html": "4b05c589d2e4e068",
    "surfaces": "4cb917f16edaeab2"
   },
   "focus/step3/suspect-print-far-outside-day-range": {
-   "rows": "3d9592c9c9acfa17",
-   "html": "4f2e7e2fa1a5e587",
+   "rows": "c949a7344ee81dd6",
+   "html": "f2b5152c74472975",
    "surfaces": "4cb917f16edaeab2"
   },
   "focus/step3/suspect-quote-crossed": {
-   "rows": "7759c973ddb033c6",
-   "html": "08fc634af3caec76",
+   "rows": "f9dcc282baf4393a",
+   "html": "4b05c589d2e4e068",
    "surfaces": "4cb917f16edaeab2"
   },
   "focus/step3/suspect-turn": {
-   "rows": "7759c973ddb033c6",
-   "html": "08fc634af3caec76",
+   "rows": "f9dcc282baf4393a",
+   "html": "4b05c589d2e4e068",
    "surfaces": "4cb917f16edaeab2"
   },
   "focus/step4/plain": {
-   "rows": "b019bcf404d82611",
+   "rows": "9acf851faa32b4f3",
    "html": "1a494182ffa8b649",
-   "surfaces": "d284b02db177e27d"
+   "surfaces": "69be46c736ecdaef"
   },
   "focus/step4/fields": {
-   "rows": "b019bcf404d82611",
+   "rows": "9acf851faa32b4f3",
    "html": "1a494182ffa8b649",
-   "surfaces": "d284b02db177e27d"
+   "surfaces": "69be46c736ecdaef"
   },
   "focus/step4/suspect-bar-high-below-low": {
-   "rows": "b019bcf404d82611",
+   "rows": "9acf851faa32b4f3",
    "html": "1a494182ffa8b649",
-   "surfaces": "d284b02db177e27d"
+   "surfaces": "69be46c736ecdaef"
   },
   "focus/step4/suspect-bar-open-outside-range": {
-   "rows": "b019bcf404d82611",
+   "rows": "9acf851faa32b4f3",
    "html": "1a494182ffa8b649",
-   "surfaces": "d284b02db177e27d"
+   "surfaces": "69be46c736ecdaef"
   },
   "focus/step4/suspect-print-far-outside-day-range": {
-   "rows": "e5006f7fc9a535a4",
+   "rows": "5b6cdf2d9c9ea8b6",
    "html": "1a494182ffa8b649",
-   "surfaces": "0dbb13529de72087"
+   "surfaces": "2257f5a489b91aca"
   },
   "focus/step4/suspect-quote-crossed": {
-   "rows": "b019bcf404d82611",
+   "rows": "9acf851faa32b4f3",
    "html": "1a494182ffa8b649",
-   "surfaces": "d284b02db177e27d"
+   "surfaces": "69be46c736ecdaef"
   },
   "focus/step4/suspect-turn": {
-   "rows": "b019bcf404d82611",
+   "rows": "9acf851faa32b4f3",
    "html": "1a494182ffa8b649",
-   "surfaces": "d284b02db177e27d"
+   "surfaces": "69be46c736ecdaef"
   },
   "focus/step5/plain": {
-   "rows": "2119518d929fa32e",
+   "rows": "3eb370ee3216ef80",
    "html": "ede6622f7e16bab4",
-   "surfaces": "c0aee8934d54cd94"
+   "surfaces": "70d41ee055c14d8e"
   },
   "focus/step5/fields": {
-   "rows": "2119518d929fa32e",
+   "rows": "3eb370ee3216ef80",
    "html": "ede6622f7e16bab4",
-   "surfaces": "c0aee8934d54cd94"
+   "surfaces": "70d41ee055c14d8e"
   },
   "focus/step5/suspect-bar-high-below-low": {
-   "rows": "2119518d929fa32e",
+   "rows": "3eb370ee3216ef80",
    "html": "ede6622f7e16bab4",
-   "surfaces": "c0aee8934d54cd94"
+   "surfaces": "70d41ee055c14d8e"
   },
   "focus/step5/suspect-bar-open-outside-range": {
-   "rows": "2119518d929fa32e",
+   "rows": "3eb370ee3216ef80",
    "html": "ede6622f7e16bab4",
-   "surfaces": "c0aee8934d54cd94"
+   "surfaces": "70d41ee055c14d8e"
   },
   "focus/step5/suspect-print-far-outside-day-range": {
-   "rows": "44487dcd27c58e63",
+   "rows": "3a30811c154a8828",
    "html": "ede6622f7e16bab4",
-   "surfaces": "2e9f8b2546c8a655"
+   "surfaces": "7d27074bd9c58809"
   },
   "focus/step5/suspect-quote-crossed": {
-   "rows": "2119518d929fa32e",
+   "rows": "3eb370ee3216ef80",
    "html": "ede6622f7e16bab4",
-   "surfaces": "c0aee8934d54cd94"
+   "surfaces": "70d41ee055c14d8e"
   },
   "focus/step5/suspect-turn": {
-   "rows": "2119518d929fa32e",
+   "rows": "3eb370ee3216ef80",
    "html": "ede6622f7e16bab4",
-   "surfaces": "c0aee8934d54cd94"
+   "surfaces": "70d41ee055c14d8e"
   },
   "focus/09:31/fixture/plain": {
    "rows": "42d8edfe848968df",
@@ -1333,109 +1333,109 @@
    "surfaces": "f1de72435eed1512"
   },
   "partial/step3/plain": {
-   "rows": "f144f99b2ecee9c5",
-   "html": "08fc634af3caec76",
+   "rows": "bb652ba107842ff4",
+   "html": "4b05c589d2e4e068",
    "surfaces": "3d397518f0bbf997"
   },
   "partial/step3/fields": {
-   "rows": "f144f99b2ecee9c5",
-   "html": "08fc634af3caec76",
+   "rows": "bb652ba107842ff4",
+   "html": "4b05c589d2e4e068",
    "surfaces": "3d397518f0bbf997"
   },
   "partial/step3/suspect-bar-high-below-low": {
-   "rows": "f144f99b2ecee9c5",
-   "html": "08fc634af3caec76",
+   "rows": "bb652ba107842ff4",
+   "html": "4b05c589d2e4e068",
    "surfaces": "3d397518f0bbf997"
   },
   "partial/step3/suspect-bar-open-outside-range": {
-   "rows": "f144f99b2ecee9c5",
-   "html": "08fc634af3caec76",
+   "rows": "bb652ba107842ff4",
+   "html": "4b05c589d2e4e068",
    "surfaces": "3d397518f0bbf997"
   },
   "partial/step3/suspect-print-far-outside-day-range": {
-   "rows": "96468c08c735e4e5",
-   "html": "4f2e7e2fa1a5e587",
+   "rows": "325102763f76334f",
+   "html": "f2b5152c74472975",
    "surfaces": "3d397518f0bbf997"
   },
   "partial/step3/suspect-quote-crossed": {
-   "rows": "f144f99b2ecee9c5",
-   "html": "08fc634af3caec76",
+   "rows": "bb652ba107842ff4",
+   "html": "4b05c589d2e4e068",
    "surfaces": "3d397518f0bbf997"
   },
   "partial/step3/suspect-turn": {
-   "rows": "f144f99b2ecee9c5",
-   "html": "08fc634af3caec76",
+   "rows": "bb652ba107842ff4",
+   "html": "4b05c589d2e4e068",
    "surfaces": "3d397518f0bbf997"
   },
   "partial/step4/plain": {
-   "rows": "8d81fa7eced6d024",
+   "rows": "1f9d57870c548354",
    "html": "1a494182ffa8b649",
-   "surfaces": "c81925a2481232cc"
+   "surfaces": "839bc83450597b03"
   },
   "partial/step4/fields": {
-   "rows": "8d81fa7eced6d024",
+   "rows": "1f9d57870c548354",
    "html": "1a494182ffa8b649",
-   "surfaces": "c81925a2481232cc"
+   "surfaces": "839bc83450597b03"
   },
   "partial/step4/suspect-bar-high-below-low": {
-   "rows": "8d81fa7eced6d024",
+   "rows": "1f9d57870c548354",
    "html": "1a494182ffa8b649",
-   "surfaces": "c81925a2481232cc"
+   "surfaces": "839bc83450597b03"
   },
   "partial/step4/suspect-bar-open-outside-range": {
-   "rows": "8d81fa7eced6d024",
+   "rows": "1f9d57870c548354",
    "html": "1a494182ffa8b649",
-   "surfaces": "c81925a2481232cc"
+   "surfaces": "839bc83450597b03"
   },
   "partial/step4/suspect-print-far-outside-day-range": {
-   "rows": "1e69003483544c6d",
+   "rows": "32a8b2da337813f9",
    "html": "1a494182ffa8b649",
-   "surfaces": "cc26b9a4463abbf7"
+   "surfaces": "2684c9a71612bfd1"
   },
   "partial/step4/suspect-quote-crossed": {
-   "rows": "8d81fa7eced6d024",
+   "rows": "1f9d57870c548354",
    "html": "1a494182ffa8b649",
-   "surfaces": "c81925a2481232cc"
+   "surfaces": "839bc83450597b03"
   },
   "partial/step4/suspect-turn": {
-   "rows": "8d81fa7eced6d024",
+   "rows": "1f9d57870c548354",
    "html": "1a494182ffa8b649",
-   "surfaces": "c81925a2481232cc"
+   "surfaces": "839bc83450597b03"
   },
   "partial/step5/plain": {
-   "rows": "0fc190e203b195cc",
+   "rows": "6cdfd990d86130cd",
    "html": "ede6622f7e16bab4",
-   "surfaces": "af2e80ba90f4dbe9"
+   "surfaces": "ae78f17275b1640f"
   },
   "partial/step5/fields": {
-   "rows": "0fc190e203b195cc",
+   "rows": "6cdfd990d86130cd",
    "html": "ede6622f7e16bab4",
-   "surfaces": "af2e80ba90f4dbe9"
+   "surfaces": "ae78f17275b1640f"
   },
   "partial/step5/suspect-bar-high-below-low": {
-   "rows": "0fc190e203b195cc",
+   "rows": "6cdfd990d86130cd",
    "html": "ede6622f7e16bab4",
-   "surfaces": "af2e80ba90f4dbe9"
+   "surfaces": "ae78f17275b1640f"
   },
   "partial/step5/suspect-bar-open-outside-range": {
-   "rows": "0fc190e203b195cc",
+   "rows": "6cdfd990d86130cd",
    "html": "ede6622f7e16bab4",
-   "surfaces": "af2e80ba90f4dbe9"
+   "surfaces": "ae78f17275b1640f"
   },
   "partial/step5/suspect-print-far-outside-day-range": {
-   "rows": "90248449ee1fa5e5",
+   "rows": "d21c2f219413506c",
    "html": "ede6622f7e16bab4",
-   "surfaces": "57edd69f131b8ca4"
+   "surfaces": "0931b8515e5cea2d"
   },
   "partial/step5/suspect-quote-crossed": {
-   "rows": "0fc190e203b195cc",
+   "rows": "6cdfd990d86130cd",
    "html": "ede6622f7e16bab4",
-   "surfaces": "af2e80ba90f4dbe9"
+   "surfaces": "ae78f17275b1640f"
   },
   "partial/step5/suspect-turn": {
-   "rows": "0fc190e203b195cc",
+   "rows": "6cdfd990d86130cd",
    "html": "ede6622f7e16bab4",
-   "surfaces": "af2e80ba90f4dbe9"
+   "surfaces": "ae78f17275b1640f"
   },
   "partial/09:31/fixture/plain": {
    "rows": "284c3134d614142f",
@@ -2558,109 +2558,109 @@
    "surfaces": "208277802875cf08"
   },
   "v2/step3/plain": {
-   "rows": "7759c973ddb033c6",
-   "html": "08fc634af3caec76",
+   "rows": "f9dcc282baf4393a",
+   "html": "4b05c589d2e4e068",
    "surfaces": "4cb917f16edaeab2"
   },
   "v2/step3/fields": {
-   "rows": "7759c973ddb033c6",
-   "html": "08fc634af3caec76",
+   "rows": "f9dcc282baf4393a",
+   "html": "4b05c589d2e4e068",
    "surfaces": "4cb917f16edaeab2"
   },
   "v2/step3/suspect-bar-high-below-low": {
-   "rows": "7759c973ddb033c6",
-   "html": "08fc634af3caec76",
+   "rows": "f9dcc282baf4393a",
+   "html": "4b05c589d2e4e068",
    "surfaces": "4cb917f16edaeab2"
   },
   "v2/step3/suspect-bar-open-outside-range": {
-   "rows": "7759c973ddb033c6",
-   "html": "08fc634af3caec76",
+   "rows": "f9dcc282baf4393a",
+   "html": "4b05c589d2e4e068",
    "surfaces": "4cb917f16edaeab2"
   },
   "v2/step3/suspect-print-far-outside-day-range": {
-   "rows": "3d9592c9c9acfa17",
-   "html": "4f2e7e2fa1a5e587",
+   "rows": "c949a7344ee81dd6",
+   "html": "f2b5152c74472975",
    "surfaces": "4cb917f16edaeab2"
   },
   "v2/step3/suspect-quote-crossed": {
-   "rows": "7759c973ddb033c6",
-   "html": "08fc634af3caec76",
+   "rows": "f9dcc282baf4393a",
+   "html": "4b05c589d2e4e068",
    "surfaces": "4cb917f16edaeab2"
   },
   "v2/step3/suspect-turn": {
-   "rows": "7759c973ddb033c6",
-   "html": "08fc634af3caec76",
+   "rows": "f9dcc282baf4393a",
+   "html": "4b05c589d2e4e068",
    "surfaces": "4cb917f16edaeab2"
   },
   "v2/step4/plain": {
-   "rows": "b019bcf404d82611",
+   "rows": "9acf851faa32b4f3",
    "html": "1a494182ffa8b649",
-   "surfaces": "d284b02db177e27d"
+   "surfaces": "69be46c736ecdaef"
   },
   "v2/step4/fields": {
-   "rows": "b019bcf404d82611",
+   "rows": "9acf851faa32b4f3",
    "html": "1a494182ffa8b649",
-   "surfaces": "d284b02db177e27d"
+   "surfaces": "69be46c736ecdaef"
   },
   "v2/step4/suspect-bar-high-below-low": {
-   "rows": "b019bcf404d82611",
+   "rows": "9acf851faa32b4f3",
    "html": "1a494182ffa8b649",
-   "surfaces": "d284b02db177e27d"
+   "surfaces": "69be46c736ecdaef"
   },
   "v2/step4/suspect-bar-open-outside-range": {
-   "rows": "b019bcf404d82611",
+   "rows": "9acf851faa32b4f3",
    "html": "1a494182ffa8b649",
-   "surfaces": "d284b02db177e27d"
+   "surfaces": "69be46c736ecdaef"
   },
   "v2/step4/suspect-print-far-outside-day-range": {
-   "rows": "e5006f7fc9a535a4",
+   "rows": "5b6cdf2d9c9ea8b6",
    "html": "1a494182ffa8b649",
-   "surfaces": "0dbb13529de72087"
+   "surfaces": "2257f5a489b91aca"
   },
   "v2/step4/suspect-quote-crossed": {
-   "rows": "b019bcf404d82611",
+   "rows": "9acf851faa32b4f3",
    "html": "1a494182ffa8b649",
-   "surfaces": "d284b02db177e27d"
+   "surfaces": "69be46c736ecdaef"
   },
   "v2/step4/suspect-turn": {
-   "rows": "b019bcf404d82611",
+   "rows": "9acf851faa32b4f3",
    "html": "1a494182ffa8b649",
-   "surfaces": "d284b02db177e27d"
+   "surfaces": "69be46c736ecdaef"
   },
   "v2/step5/plain": {
-   "rows": "2119518d929fa32e",
+   "rows": "3eb370ee3216ef80",
    "html": "ede6622f7e16bab4",
-   "surfaces": "c0aee8934d54cd94"
+   "surfaces": "70d41ee055c14d8e"
   },
   "v2/step5/fields": {
-   "rows": "2119518d929fa32e",
+   "rows": "3eb370ee3216ef80",
    "html": "ede6622f7e16bab4",
-   "surfaces": "c0aee8934d54cd94"
+   "surfaces": "70d41ee055c14d8e"
   },
   "v2/step5/suspect-bar-high-below-low": {
-   "rows": "2119518d929fa32e",
+   "rows": "3eb370ee3216ef80",
    "html": "ede6622f7e16bab4",
-   "surfaces": "c0aee8934d54cd94"
+   "surfaces": "70d41ee055c14d8e"
   },
   "v2/step5/suspect-bar-open-outside-range": {
-   "rows": "2119518d929fa32e",
+   "rows": "3eb370ee3216ef80",
    "html": "ede6622f7e16bab4",
-   "surfaces": "c0aee8934d54cd94"
+   "surfaces": "70d41ee055c14d8e"
   },
   "v2/step5/suspect-print-far-outside-day-range": {
-   "rows": "44487dcd27c58e63",
+   "rows": "3a30811c154a8828",
    "html": "ede6622f7e16bab4",
-   "surfaces": "2e9f8b2546c8a655"
+   "surfaces": "7d27074bd9c58809"
   },
   "v2/step5/suspect-quote-crossed": {
-   "rows": "2119518d929fa32e",
+   "rows": "3eb370ee3216ef80",
    "html": "ede6622f7e16bab4",
-   "surfaces": "c0aee8934d54cd94"
+   "surfaces": "70d41ee055c14d8e"
   },
   "v2/step5/suspect-turn": {
-   "rows": "2119518d929fa32e",
+   "rows": "3eb370ee3216ef80",
    "html": "ede6622f7e16bab4",
-   "surfaces": "c0aee8934d54cd94"
+   "surfaces": "70d41ee055c14d8e"
   },
   "v2/09:31/fixture/plain": {
    "rows": "42d8edfe848968df",

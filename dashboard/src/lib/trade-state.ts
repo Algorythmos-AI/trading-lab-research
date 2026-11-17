@@ -240,6 +240,69 @@ export interface SideState {
   /** DEC-0052, on a confirmed retest only: the confirming bar's close, and its end (ms since the epoch). */
   confirmClose?: number;
   confirmAt?: number;
+  /** DEC-0053, display only: the end (ms) of the bar whose close failed the side's break, on a side locked by it
+   * (`plan_off`) or one whose lock has ended with no fresh break since (`watch`). Never written to a record. */
+  failedAt?: number;
+  /** DEC-0053, display only: when the running lock ends (ms), so a line can say it without the session's half-day flag. */
+  lockEnd?: number;
+  /** DEC-0053, display only: a retest confirmed, but the board's bars do not cover the session from its open, so a
+   * failure may be unseen: get ready, never enter zone. Sets neither `gap` nor `brokeEarlier`. */
+  lockUnseen?: boolean;
+}
+
+/**
+ * DEC-0053: the end (ms) of the lock a failure sets, from the failing bar's end: on a full day 13:00 New York when the
+ * bar ends at or before 13:00 (LUNCH_TO_MIN), else the flat time; on a half day the flat time (flatMinute). Null when
+ * the time cannot be read.
+ */
+export function lockUntil(failedAt: number, halfDay: boolean): number | null {
+  const day = nyClock(new Date(failedAt).toISOString())?.day ?? null;
+  if (day === null) return null;
+  if (!halfDay) {
+    const lunchEnd = nyInstant(day, LUNCH_TO_MIN);
+    if (lunchEnd !== null && failedAt <= lunchEnd) return lunchEnd;
+  }
+  return nyInstant(day, flatMinute(halfDay));
+}
+
+/** A failed break's lock (DEC-0053 section 1): the failed break's end, the failing bar's end and the lock's end. */
+interface Lock {
+  brokeAt: number;
+  failedAt: number;
+  until: number;
+}
+
+/**
+ * DEC-0053 section 1, from the completed bars alone (oldest first). Walks every run of closes beyond the level from
+ * the open. A run is a counted break when its first bar is not the session's first, the close before it is not
+ * beyond and that bar ends exactly at its start (as `sideState`'s `ia`); one whose breaking bar ends at or before the
+ * running lock's end is made inside the lock and is not counted. A counted break's run ended by a close at or through
+ * the level is a failed break, and sets a lock from that bar's end (`lockUntil`). Returns the latest lock, and whether
+ * the last run (the one `sideState` reads) was made inside it.
+ */
+function failedBreakLock(closed: readonly Bar2[], beyond: (x: number) => boolean, halfDay: boolean): { lock: Lock | null; lastInLock: boolean } {
+  let lock: Lock | null = null;
+  let run: { counted: boolean; inLock: boolean; brokeAt: number } | null = null;
+  let lastInLock = false;
+  for (let i = 0; i < closed.length; i++) {
+    const b = closed[i]!;
+    if (beyond(b.c)) {
+      if (run !== null) continue;
+      const p = i > 0 ? closed[i - 1]! : null;
+      const counted: boolean = p !== null && !beyond(p.c) && p.end === b.start;
+      const inLock: boolean = counted && lock !== null && b.end <= lock.until;
+      run = { counted: counted && !inLock, inLock, brokeAt: b.end };
+      lastInLock = inLock;
+      continue;
+    }
+    if (run === null) continue;
+    if (run.counted) {
+      const until = lockUntil(b.end, halfDay);
+      if (until !== null) lock = { brokeAt: run.brokeAt, failedAt: b.end, until };
+    }
+    run = null;
+  }
+  return { lock, lastInLock };
 }
 
 /** Why a side is missed (SideState.missedWhy). */
@@ -340,11 +403,24 @@ export function altAt(level: number, planSide: Side, closed: readonly Bar2[], at
  *   day high when the page's bars before the break do not show it), or the retest's window passed with no confirming
  *   close, or a confirmed retest's slots passed or the price ran past its confirming close (`slot`, for the rest of
  *   that break): don't chase;
- * - plan_off: after the break, a completed bar closes back at or below the level;
- * - watch: none of these.
+ * - plan_off: after the break, a completed bar closes back at or below the level; and (DEC-0053) for the rest of the
+ *   entry window after that failure (`failedBreakLock`: to 13:00 when the failing bar ends by 13:00 on a full day, else
+ *   the flat time), whatever later bars do, on the failed break's `brokeAt` with `failedAt`;
+ * - watch: none of these; or (DEC-0053) a lock has ended and the latest break was made inside it (`failedAt` kept,
+ *   `brokeAt` null), until a fresh break.
+ * DEC-0053: a confirmed retest on bars that do not cover the session from its open is get ready (`lockUnseen`), never
+ * enter zone: a failure may be unseen. `halfDay` sets the lock's end.
  * The clone's invalidation_atr is not read: before an entry any close back through the level is plan off.
  */
-export function sideState(plan: SidePlan | null, atr: number | null | undefined, bars: Bars2m, quote: LiveQuote | null | undefined, now: Date, sweepAtr: number | null = null): SideState {
+export function sideState(
+  plan: SidePlan | null,
+  atr: number | null | undefined,
+  bars: Bars2m,
+  quote: LiveQuote | null | undefined,
+  now: Date,
+  sweepAtr: number | null = null,
+  halfDay = false,
+): SideState {
   const side: Side = plan?.side ?? "call";
   const a = isNum(atr) && atr > 0 ? atr : null;
   const base = { side, brokeEarlier: false, waitingClose: false, gap: false, missedWhy: null, brokeAt: null, alt: null, distAtr: null };
@@ -385,6 +461,12 @@ export function sideState(plan: SidePlan | null, atr: number | null | undefined,
     }
     // the close before is beyond too: the break is earlier (a slot missing between them is read as a gap below)
   }
+  // DEC-0053: a failed break locks the side for the rest of its entry window. While the lock runs the side is plan off
+  // on the failed break, whatever later bars do; once it has ended, a break made inside it is ignored (watch) until a
+  // fresh counted break, which arms as below. The failed break itself, once its lock has ended, reads as before.
+  const { lock, lastInLock } = failedBreakLock(closed, beyond, halfDay);
+  if (lock && t < lock.until) return out("plan_off", { brokeAt: lock.brokeAt, failedAt: lock.failedAt, lockEnd: lock.until });
+  if (lock && lastInLock && ia >= 0) return out("watch", { failedAt: lock.failedAt });
   const dayExtreme = q ? (s > 0 ? q.high : q.low) : null;
   const dayCrossed = isNum(dayExtreme) && beyond(dayExtreme);
   const seen = [...closed, ...(bars.partial ? [bars.partial] : [])];
@@ -453,6 +535,10 @@ export function sideState(plan: SidePlan | null, atr: number | null | undefined,
     if (price === null) return out("get_ready", { brokeAt });
     // back at the level, no close through it yet: still the confirmed retest, wait for the price
     if (!beyond(price)) return out("get_ready", { brokeAt, ...keep });
+    // DEC-0053: without the session from its open a failure may be unseen, so a confirmed retest is never an entry
+    const day = nyClock(now.toISOString())?.day ?? null;
+    const open = day !== null ? nyInstant(day, OPEN_MIN) : null;
+    if (!bars.complete || open === null || !coveredSince(bars, open)) return out("get_ready", { brokeAt, lockUnseen: true, ...keep });
     return out("enter_zone", { brokeAt, ...keep });
   }
   // setups.retest's window: the bar forming now at most MAX_BARS_TO_RETEST + 1 bars after the break bar. The window's
@@ -566,7 +652,29 @@ const altLine = (x: AltTrigger) =>
     ? `Failed break: ${x.side} ${x.side === "put" ? "under" : "over"} ${p2(x.level)}, stop ${x.side === "put" ? "above" : "below"} ${p2(x.stop)} (push ${x.side === "put" ? "high" : "low"}) · testing`
     : `Sweep and reclaim: ${x.side} ${x.side === "call" ? "above" : "below"} ${p2(x.level)}, stop ${x.side === "call" ? "below" : "above"} ${p2(x.stop)} (sweep ${x.side === "call" ? "low" : "high"}) · testing`;
 
-function sideLine(x: SideState, plan: SidePlan): string {
+/** The New York HH:MM of an instant (ms), "?" when it cannot be read. */
+const hhmmAt = (ms: number) => {
+  const c = nyClock(new Date(ms).toISOString());
+  return c ? hhmm(c.minutes) : "?";
+};
+
+/** True when the side is locked by a failed break (DEC-0053): plan off with the failure's time. */
+const isLocked = (x: SideState) => x.state === "plan_off" && x.failedAt !== undefined;
+
+/** DEC-0053 section 2: "Failed at <time>: no <call|put> until <the lock's end>". */
+function lockLine(x: SideState, halfDay: boolean): string {
+  const until = x.lockEnd ?? (x.failedAt !== undefined ? lockUntil(x.failedAt, halfDay) : null);
+  return `Failed at ${x.failedAt !== undefined ? hhmmAt(x.failedAt) : "?"}: no ${x.side} until ${until !== null ? hhmmAt(until) : "?"}`;
+}
+
+/** The locks on a name's sides, the earlier failure first (DEC-0053 section 2). */
+export const locksOf = (sides: readonly SideState[], halfDay: boolean) =>
+  sides
+    .filter(isLocked)
+    .sort((a, b) => a.failedAt! - b.failedAt!)
+    .map((x) => lockLine(x, halfDay));
+
+function sideLine(x: SideState, plan: SidePlan, halfDay = false): string {
   const L = p2(plan.level);
   const up = plan.side === "call";
   const over = up ? "above" : "below";
@@ -581,6 +689,7 @@ function sideLine(x: SideState, plan: SidePlan): string {
       return `Retest confirmed ${c !== undefined ? `at ${p2(c)}` : `${over} ${L}`}: ${plan.side}${limit}${stop}${target}${risk ? ` · ${risk}` : ""}`;
     }
     case "get_ready":
+      if (x.lockUnseen) return `Confirm on your chart: the board has not seen the session from its open${x.confirmClose !== undefined ? ` (retest confirmed at ${p2(x.confirmClose)})` : ""}`;
       if (x.brokeEarlier) return `Broke ${over} ${L} before you opened the page: confirm the hold on your chart`;
       if (x.gap) return `Broke ${over} ${L}, but the page missed prices since: confirm on your chart`;
       if (x.waitingClose) return `${up ? "Above" : "Below"} ${L}: wait for a 2-min close ${over} it`;
@@ -589,6 +698,8 @@ function sideLine(x: SideState, plan: SidePlan): string {
       if (x.brokeAt !== null) return `Broke ${over} ${L}: wait for a dip that holds it`;
       return `Back at ${L}: wait for the 2-min close`;
     case "plan_off":
+      // DEC-0053: a locked side says its lock; an alternative trigger's line comes first
+      if (isLocked(x)) return x.alt ? `${altLine(x.alt)} · ${lockLine(x, halfDay)}` : lockLine(x, halfDay);
       return `${back} ${L}: ${plan.side} plan off${x.alt ? ` · ${altLine(x.alt)}` : ""}`;
     case "missed":
       if (x.missedWhy === "window") return `Retest window at ${L} passed: don't chase`;
@@ -624,11 +735,13 @@ const dist = (x: SideState) => (x.distAtr !== null ? ` (${x.distAtr.toFixed(1)} 
  * it, and so does a switched-on bad-data guard that trips (quote-guards.ts); before 09:35 (FIRST_ENTRY_MIN), from 11:30 to 13:00 on a full day, from the flat time (15:10, or 50 minutes before a half day's 13:00 close: 12:10) or with the
  * day's limit used it is no trade; with the price in the
  * middle third of yesterday's range and nothing broken, no trade; otherwise the more urgent side: enter zone, then a
- * live alternative trigger, get ready, watch, plan off and missed.
+ * live alternative trigger, get ready, watch, plan off and missed. A side locked by a failed break (DEC-0053) is said
+ * on the row whichever side it leads with: "Failed at <time>: no <side> until <time>", the earlier failure first, after
+ * the locked side's alternative trigger when it has one.
  */
 export function nameState(n: NameInput): NameState {
-  const call = sideState(n.call, n.atr, n.bars, n.quote, n.now, n.sweepAtr ?? null);
-  const put = sideState(n.put, n.atr, n.bars, n.quote, n.now, n.sweepAtr ?? null);
+  const call = sideState(n.call, n.atr, n.bars, n.quote, n.now, n.sweepAtr ?? null, n.halfDay);
+  const put = sideState(n.put, n.atr, n.bars, n.quote, n.now, n.sweepAtr ?? null, n.halfDay);
   const plans = { call: n.call, put: n.put };
   const t = n.now.getTime();
   const clock = nyClock(n.now.toISOString());
@@ -718,21 +831,31 @@ export function nameState(n: NameInput): NameState {
   if (sides.length === 0) return row("no_trade", "No plan for this name today", null, 0, "no_plan");
   const pick = [...sides].sort((x, y) => sideRank(x) - sideRank(y) || (x.distAtr ?? Infinity) - (y.distAtr ?? Infinity))[0]!;
   const tenths = pick.distAtr !== null ? Math.min(999, Math.round(pick.distAtr * 10)) : 999;
+  // DEC-0053: a locked side's lock is said on the row whichever side it leads with, the earlier failure first
+  const locks = locksOf(sides, n.halfDay);
   if (pick.state === "watch" && !pick.alt) {
-    const line = sides
-      .filter((x) => x.state === "watch" || x.state === "plan_off" || x.state === "missed")
-      .map((x) => {
-        const plan = plans[x.side]!;
-        const who = plan.side === "call" ? "Calls" : "Puts";
-        if (x.state === "missed" && x.missedWhy === "window") return `${who}: retest window at ${p2(plan.level)} passed, don't chase`;
-        if (x.state === "missed" && x.missedWhy === "slot") return `${who}: retest confirmed at ${confirmHhmm(x)}, missed, don't chase`;
-        if (x.state === "missed") return `${who} past target 1${plan.target1 !== null ? ` (${p2(plan.target1)})` : ""}: don't chase`;
-        return `${sideLine({ ...x, state: "watch", alt: null }, plan)}${dist(x)}`; // a side whose plan is off waits for a new break
-      })
-      .join(" · ");
+    const line = [
+      ...locks,
+      ...sides
+        .filter((x) => !isLocked(x) && (x.state === "watch" || x.state === "plan_off" || x.state === "missed"))
+        .map((x) => {
+          const plan = plans[x.side]!;
+          const who = plan.side === "call" ? "Calls" : "Puts";
+          if (x.state === "missed" && x.missedWhy === "window") return `${who}: retest window at ${p2(plan.level)} passed, don't chase`;
+          if (x.state === "missed" && x.missedWhy === "slot") return `${who}: retest confirmed at ${confirmHhmm(x)}, missed, don't chase`;
+          if (x.state === "missed") return `${who} past target 1${plan.target1 !== null ? ` (${p2(plan.target1)})` : ""}: don't chase`;
+          return `${sideLine({ ...x, state: "watch", alt: null }, plan, n.halfDay)}${dist(x)}`; // a side whose plan is off waits for a new break
+        }),
+    ].join(" · ");
     return row("watch", line, pick, tenths);
   }
-  return row(pick.state, sideLine(pick, plans[pick.side]!), pick, tenths);
+  // a locked side leading the row: its alternative trigger's line (if any), then every lock
+  if (isLocked(pick)) {
+    // DEC-0053 section 2: the lock is said beside the other side's line, never in place of it
+    const others = sides.filter((x) => x !== pick && !isLocked(x) && x.state !== "no_trade").map((x) => `${sideLine(x, plans[x.side]!, n.halfDay)}${dist(x)}`);
+    return row(pick.state, [...(pick.alt ? [altLine(pick.alt)] : []), ...locks, ...others].join(" · "), pick, tenths);
+  }
+  return row(pick.state, [sideLine(pick, plans[pick.side]!, n.halfDay), ...locks].join(" · "), pick, tenths);
 }
 
 // ---- managing an open trade -----------------------------------------------------------------------------------------
