@@ -11,6 +11,7 @@ import { shortDate, sydney, weekDate } from "@/lib/format";
 import type { Tone } from "@/lib/labels";
 import { editionState } from "@/lib/options";
 import type { JournalResult, OptionsLiveResult, OptionsResult, RadarResult, SnapshotResult } from "@/lib/snapshot";
+import { RADAR_DESK_DUE_NY } from "@/lib/radar-desk-slots";
 import { list } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -96,6 +97,7 @@ const CARD_FEEDS: Record<string, readonly string[]> = {
   radar: ["radar", "refusal-radar"],
   ledger: ["ledger-morning", "ledger-afternoon", "refusal-ledger"],
   funnel: ["funnel", "refusal-funnel"],
+  "radar-desk": ["radar-desk", "refusal-radar-desk"],
   shadow: ["shadow"],
   "options-live": ["refusal-options-live"],
 };
@@ -142,6 +144,7 @@ function buildCards(i: FeedsInput): Feed[] {
 
   const lView = worstOf([view("ledger-morning"), view("ledger-afternoon")].filter((v): v is FeedView => v !== null));
   const nView = view("funnel");
+  const dView = view("radar-desk");
   const shadow = view("shadow");
 
   const live = i.optionsLive.status === "ok" ? i.optionsLive.doc : null;
@@ -235,6 +238,19 @@ function buildCards(i: FeedsInput): Feed[] {
       })(),
       schedule: `Sealed after the evening levels run, by ${sydTime(nView?.next_due ?? null)} Sydney (not yet watched)`,
       note: nView?.reason === "refused" ? "The last document sent was refused at ingest, and nothing newer is stored." : undefined,
+    },
+    {
+      key: "radar-desk",
+      name: "Radar desk file",
+      href: "/options",
+      // Unwatched until the owner adds the send to the morning routine: no document yet is "nothing yet", never "late".
+      state: dView && !dView.verified && dView.reason === "no-document" ? "missing" : panelState(dView),
+      asOf: (() => {
+        const st = i.feeds.stamps["radar-desk"];
+        return st?.status === "ok" && st.value.at !== null ? new Date(st.value.at).toISOString() : null;
+      })(),
+      schedule: `Built each morning after the Radar, by ${RADAR_DESK_DUE_NY} New York (not yet watched)`,
+      note: dView?.reason === "refused" ? "The last document sent was refused at ingest, and nothing newer is stored." : undefined,
     },
     {
       key: "shadow",

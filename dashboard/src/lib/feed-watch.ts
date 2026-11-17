@@ -19,8 +19,9 @@
 // What is published from here (the ntfy topic is public): feed names, state words, minutes, New York times and
 // session dates. Never a symbol, a price, a level, an error text, a URL, a host or a commit subject.
 import { BAR_MS, sessionBounds } from "./desk-eval";
-import { FUNNEL_PATHS, JOURNAL_PATHS, LEDGER_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
+import { FUNNEL_PATHS, JOURNAL_PATHS, LEDGER_PATHS, OPTIONS_PATHS, RADAR_DESK_PATHS, RADAR_PATHS } from "./desk";
 import { FUNNEL_SLOT_UTC } from "./funnel-slots";
+import { RADAR_DESK_GRACE_MIN, RADAR_DESK_NY } from "./radar-desk-slots";
 import { DAILY_GRACE_MIN, INTRADAY_MAX_AGE_MIN, JOURNAL_SLOT_UTC, OPTIONS_SLOT_UTC, RADAR_SLOT_UTC } from "./feeds";
 import type { IngestRejectKind } from "./ingest-reject";
 import { addDays, nyNow, RANGE, sessionOf } from "./market-calendar";
@@ -271,6 +272,22 @@ export const FEEDS: readonly FeedRow[] = [
     verified: false,
     misses_to_alert: 2,
   },
+  {
+    // Shown, never paged, until the owner adds the desk file's send to the morning routine (trading-options-funnel)
+    // and a first morning arrives: then set verified to true.
+    type: "doc",
+    id: "radar-desk",
+    name: "Radar desk file",
+    short: "Radar desk",
+    path: RADAR_DESK_PATHS.latest,
+    ingest_kind: "radar-desk",
+    stamp: sessionStamp,
+    want: "this-session",
+    schedules: [{ zone: "America/New_York", times: [RADAR_DESK_NY], grace_min: RADAR_DESK_GRACE_MIN }],
+    severity: "display",
+    verified: false,
+    misses_to_alert: 2,
+  },
   { type: "shadow", id: "shadow", name: "Server check", short: "Server check", grace_min: SHADOW_GRACE_MIN, severity: "alert", verified: true },
   { type: "refusal", id: "refusal-options", name: "Options edition or pre-open refresh", short: "Levels", kind: "options", severity: "alert", verified: true },
   { type: "refusal", id: "refusal-journal", name: "Trade journal", short: "Journal", kind: "journal", severity: "alert", verified: true },
@@ -280,6 +297,7 @@ export const FEEDS: readonly FeedRow[] = [
   { type: "refusal", id: "refusal-options-clone", name: "Options clone", short: "Clone", kind: "options-clone", severity: "display", verified: true },
   { type: "refusal", id: "refusal-calendar", name: "Economic calendar", short: "Calendar", kind: "calendar", severity: "display", verified: true },
   { type: "refusal", id: "refusal-funnel", name: "Selection funnel evidence", short: "Funnel", kind: "funnel", severity: "display", verified: true },
+  { type: "refusal", id: "refusal-radar-desk", name: "Radar desk file", short: "Radar desk", kind: "radar-desk", severity: "display", verified: true },
 ];
 
 /** The feeds the Options page's health strip draws from the server (the prices and the bars are the page's own). */

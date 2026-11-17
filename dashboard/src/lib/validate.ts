@@ -18,6 +18,8 @@ import optionsLiveSchema from "./options-live.schema.json";
 import type { OptionsLive } from "./options-live.types";
 import optionsSchema from "./options.schema.json";
 import type { OptionsEdition } from "./options.types";
+import radarDeskSchema from "./radar-desk.schema.json";
+import type { RadarDeskDoc } from "./radar-desk.types";
 import radarSchema from "./radar.schema.json";
 import type { RadarEdition } from "./radar.types";
 import schema from "./snapshot.schema.json";
@@ -36,6 +38,7 @@ const validateCalendarSchema = ajv.compile<CalendarDoc>(calendarSchema);
 const validateOptionsCloneSchema = ajv.compile<OptionsClone>(optionsCloneSchema);
 const validateLedgerSchema = ajv.compile<LedgerEdition>(ledgerSchema);
 const validateFunnelSchema = ajv.compile<FunnelDoc>(funnelSchema);
+const validateRadarDeskSchema = ajv.compile<RadarDeskDoc>(radarDeskSchema);
 
 export const STOCKS_SCHEMA = "trading-lab/snapshot";
 export const CRYPTO_SCHEMA = "trading-lab/crypto-snapshot";
@@ -103,6 +106,17 @@ export const FUNNEL_SCHEMA = "stocksdelta/funnel";
 /** True when the signed body names the funnel schema. */
 export function isFunnel(data: unknown): boolean {
   return data !== null && typeof data === "object" && (data as { schema?: unknown }).schema === FUNNEL_SCHEMA;
+}
+
+/**
+ * The Radar desk file (trading-options-funnel): per desk name, the Radar's codes and levels beside the desk's, earnings
+ * and flags. Research, like the funnel; display only. PRIVATE: shown behind the owner's login only.
+ */
+export const RADAR_DESK_SCHEMA = "stocksdelta/radar-desk";
+
+/** True when the signed body names the Radar desk schema. */
+export function isRadarDesk(data: unknown): boolean {
+  return data !== null && typeof data === "object" && (data as { schema?: unknown }).schema === RADAR_DESK_SCHEMA;
 }
 
 /** True when the signed body names the options levels schema. */
@@ -382,6 +396,53 @@ function funnelMeaning(doc: FunnelDoc): string[] {
       errors.push(`/stages/${i}/names_kept: more names kept than judged`);
     }
     if (s.evidence !== "present" && s.replay !== "not_run") errors.push(`/stages/${i}/replay: no replay without sealed evidence`);
+  });
+  return errors;
+}
+
+export type RadarDeskValidationResult = { ok: true; doc: RadarDeskDoc } | { ok: false; errors: string[] };
+
+/** A Radar desk file: its own closed schema, the same denylist, then what the schema cannot say. */
+export function validateRadarDesk(data: unknown): RadarDeskValidationResult {
+  if (data === null || typeof data !== "object" || Array.isArray(data)) {
+    return { ok: false, errors: ["/: must be an object"] };
+  }
+  const errors = findDenied(data).map((p) => `${p}: key is not allowed to be published`);
+  if (!validateRadarDeskSchema(data)) {
+    errors.push(...(validateRadarDeskSchema.errors ?? []).map(describe));
+  } else {
+    errors.push(...radarDeskMeaning(data as RadarDeskDoc));
+  }
+  if (errors.length > 0) return { ok: false, errors: errors.slice(0, MAX_ERRORS) };
+  return { ok: true, doc: data as RadarDeskDoc };
+}
+
+/**
+ * What the schema cannot say, each as the desk step builds it (trading-options-funnel desk.py build()): one row per
+ * name, the counts match the rows, a focus flag on every row or on none, and the two Radar flags match the Radar block.
+ */
+function radarDeskMeaning(doc: RadarDeskDoc): string[] {
+  const errors: string[] = [];
+  if (doc.next_session <= doc.session) errors.push("/next_session: must be after the session");
+  const seen = new Set<string>();
+  doc.names.forEach((n, i) => {
+    if (seen.has(n.symbol)) errors.push(`/names/${i}/symbol: appears twice`);
+    seen.add(n.symbol);
+    if ((n.radar === null) !== n.flags.includes("RADAR_NOT_COVERED")) {
+      errors.push(`/names/${i}/flags: RADAR_NOT_COVERED must be set exactly when there is no Radar row`);
+    }
+    if ((n.radar?.risk_tag === true) !== n.flags.includes("RADAR_RISK_TAG")) {
+      errors.push(`/names/${i}/flags: RADAR_RISK_TAG must match the Radar's risk tag`);
+    }
+  });
+  const c = doc.coverage;
+  if (c.desk_names !== doc.names.length) errors.push("/coverage/desk_names: does not match the names");
+  if (c.radar_covered !== doc.names.filter((n) => n.radar !== null).length) errors.push("/coverage/radar_covered: does not match the names");
+  if (c.focus_names === null ? doc.names.some((n) => n.focus !== null) : doc.names.some((n) => n.focus === null)) {
+    errors.push("/names: focus must be null on every name exactly when there is no focus file");
+  }
+  doc.macro_in_hold.forEach((m, i) => {
+    if (m.date < doc.session || m.date > doc.next_session) errors.push(`/macro_in_hold/${i}/date: outside the hold`);
   });
   return errors;
 }
