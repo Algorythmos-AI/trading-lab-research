@@ -17,10 +17,19 @@
 - `wt.options.dryrun.replay_day(..., variant=None)`: None is the control. Each trade now also records
   `signal_bar` and `level`, the match key's last part.
 - `wt.options.exp0037`: the session list, the match, the session bootstrap and the verdict.
-- `scripts/exp0037_replay.py sessions` writes each closed session after acceptance into the list below. It reads
-  no market data. `scripts/exp0037_replay.py run` is the one run. It refuses until DEC-0054 is accepted and the
-  list is closed and up to date, and refuses if a result exists. Before any config runs, it writes each session's
-  input sha256 (the daily bars up to it, its minute bars, its contract files) to `input_sha256.json`.
+- **Nothing is run by hand.** The host job `exp0037` (`wt.ops.schedule`; 17:15 New York, Monday to Friday) runs
+  `scripts/exp0037_replay.py nightly` each weekday evening (amended 2026-11-17, before acceptance):
+  - While DEC-0054 is not accepted, it does nothing.
+  - The list is fixed by rule (`wt.options.exp0037.due`).
+  - Each listed session that has closed is fetched into `data/exp0037/<session>/`, and its sha256 is written to
+    `var/research/exp0037/input_sha256.json`. Nothing is replayed and nothing is read back. A missed evening is
+    caught up by the next one. A session that fails to fetch on 3 evenings is recorded as skipped and never
+    replayed, so it cannot hold up the others.
+  - The run stops if the engine files differ from `af9b3590e638`, the commit that merged this code.
+  - The evening the list closes, it checks every hash again, runs check_first, replays the four configs, writes
+    `result.json` and `report.md` to `var/research/exp0037/` and pages the owner. A pull request then commits them
+    here.
+  - `scripts/exp0037_replay.py status` shows the progress, reading only.
 - **check_first** compares against the engine at `f912d6296aa6`, the commit before the switches. It runs on every
   session at 1x and 2x, with the two added keys set aside, and the run stops on any difference. A unit test does
   the same on the scripted sessions.
@@ -62,4 +71,5 @@ How the code reads the hypotheses' wording, fixed here before any session is see
 
 ## Sessions
 
-Written here as each session passes, before any replay. Empty until DEC-0054 is accepted.
+Fixed by rule, not written by hand: every session of the exchange calendar after the day DEC-0054 is accepted, the
+first 40, none after 2027-04-30. The host job records each session's input hash the evening it closes.
