@@ -98,6 +98,15 @@ export const LEDGER_PATHS = {
 } as const;
 
 /**
+ * The selection funnel's health documents (stocksdelta/funnel, from trading-options-funnel): one per session, kept
+ * the same way as the ledger's.
+ */
+export const FUNNEL_PATHS = {
+  latest: "funnel/latest.json",
+  history: "funnel/editions/",
+} as const;
+
+/**
  * The after-close options levels editions, one per session they are built for, kept the same way as the radar's.
  * `copies` also keeps every edition that became latest, each once, with the store's receipt time
  * (./edition-copy, EXP-0033 `labeller_rules.edition`): `history` holds one file per session that a refresh replaces.

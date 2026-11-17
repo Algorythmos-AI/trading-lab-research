@@ -31,7 +31,7 @@ import { sendNtfy, type Notice } from "./ntfy";
 import type { OptionsEdition } from "./options.types";
 import { withStoredPremarket } from "./premarket";
 import { OPTIONS_PATHS } from "./desk";
-import { fixtureFlags, fixtureMode, type JournalResult, type LedgerResult, type OptionsResult, type RadarResult } from "./snapshot";
+import { fixtureFlags, fixtureMode, type FunnelResult, type JournalResult, type LedgerResult, type OptionsResult, type RadarResult } from "./snapshot";
 
 // The feed watch's tick (GET /api/cron/watchdog, after the desks' ticks): read every document the feed table names,
 // each kind's refusal record and, in the session, the shadow evaluator's switch and newest records; evaluate them
@@ -401,7 +401,7 @@ export async function runFeedDrill(
 
 // ---- the pages ------------------------------------------------------------------------------------------------------
 
-type DocResult = OptionsResult | JournalResult | LedgerResult | RadarResult;
+type DocResult = OptionsResult | JournalResult | LedgerResult | RadarResult | FunnelResult;
 
 /** A page loader's result as the evaluator reads it. A failed read is unknown, never "on time". */
 function fromResult(r: DocResult | null | undefined): Read<unknown> | null {

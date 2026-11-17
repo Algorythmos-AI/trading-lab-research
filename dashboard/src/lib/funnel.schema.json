@@ -1,0 +1,171 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "stocksdelta/funnel",
+  "title": "Selection funnel health (published by trading-options-funnel after each seal)",
+  "description": "Whether each stage of the selection funnel left its evidence for one session: sealed or not, when, how many names it judged and kept, what its records flag, and whether the ported picker reproduces the published picks. Counts, codes, statuses, dates and hashes only: no symbols, prices, scores or outcomes (the blind rule of DEC-0046/DEC-0047 forbids outcomes of names not picked, so the document carries none at all).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "run_id",
+    "as_of",
+    "session",
+    "code_commit",
+    "stages"
+  ],
+  "properties": {
+    "schema": {
+      "const": "stocksdelta/funnel"
+    },
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1
+    },
+    "run_id": {
+      "description": "funnel-<session>-<first 12 hex of the sha256 of the document's content>: the same evidence gives the same run.",
+      "type": "string",
+      "pattern": "^funnel-\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{12}$"
+    },
+    "as_of": {
+      "$ref": "#/definitions/time"
+    },
+    "session": {
+      "description": "The session the funnel chose names for.",
+      "$ref": "#/definitions/date"
+    },
+    "code_commit": {
+      "description": "The trading-options-funnel commit that sealed and checked, with +dirty for uncommitted changes.",
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}(\\+dirty)?$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "stages": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2,
+      "items": {
+        "$ref": "#/definitions/stage"
+      }
+    }
+  },
+  "definitions": {
+    "time": {
+      "type": "string",
+      "maxLength": 40,
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+    },
+    "date": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "count": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 500
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stage",
+        "evidence",
+        "sealed_at",
+        "names_judged",
+        "names_kept",
+        "flags",
+        "replay"
+      ],
+      "properties": {
+        "stage": {
+          "enum": [
+            "radar",
+            "focus_pick"
+          ]
+        },
+        "evidence": {
+          "description": "present: the stage's inputs and output are sealed in trading-options-funnel and verify. missing: nothing sealed for the session. broken: something sealed does not verify.",
+          "enum": [
+            "present",
+            "missing",
+            "broken"
+          ]
+        },
+        "sealed_at": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "corrections": {
+          "description": "How many correction folders follow the first seal.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 98
+        },
+        "names_judged": {
+          "$ref": "#/definitions/count"
+        },
+        "names_kept": {
+          "$ref": "#/definitions/count"
+        },
+        "flags": {
+          "description": "How many names carried each record flag (for example option_volume_defaulted).",
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "names"
+            ],
+            "properties": {
+              "code": {
+                "description": "A record flag of trading-options-funnel (candidates.py). A new flag is added here first.",
+                "enum": [
+                  "iv_row_missing",
+                  "iv_row_unusable",
+                  "option_volume_capped",
+                  "option_volume_defaulted",
+                  "option_volume_not_finite"
+                ]
+              },
+              "names": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 500
+              }
+            }
+          }
+        },
+        "replay": {
+          "description": "match: the ported picker reproduces the sealed picks. mismatch: it does not. not_run: no replay for this stage.",
+          "enum": [
+            "match",
+            "mismatch",
+            "not_run"
+          ]
+        }
+      }
+    }
+  }
+}
