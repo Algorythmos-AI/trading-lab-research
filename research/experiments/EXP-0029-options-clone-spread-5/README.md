@@ -75,3 +75,9 @@
 - **Disclosure.** Found while reading the code for DEC-0054's section 5 (2026-11-17). The author had seen this
   experiment's running figures on 2026-11-16 (DEC-0054, "What has already been seen"). This note changes nothing that
   trades.
+
+## Closed by DEC-0056 (appended 2026-11-17, before the next session)
+
+- The last session is **2026-11-17** (`wt.options.review.SPREAD5_END`): 9 sessions from 2026-11-05. From 2026-11-18
+  the clone has no open-interest floor, and its trades count toward EXP-0039.
+- This experiment cannot reach 20 sessions, so it gives no verdict. It is kept as a record, as EXP-0028 was.

@@ -210,7 +210,8 @@ def test_open_interest_the_late_delta_floor_and_a_held_contract():
     raw = dict([snap(580, 1.10, 1.12, 0.38)])
     qs = chain.parse_snapshots(raw)
     sym = "SPY261019C00580000"
-    assert chain.pick(qs, "SPY", "call", DAY, 580, NOW, C, {sym: 10.0}, set(), False).reasons == {"open-interest-below-floor": 1}
+    oi = {**C, "min_open_interest": 1000}                                   # the floor up to 2026-11-17 (DEC-0056)
+    assert chain.pick(qs, "SPY", "call", DAY, 580, NOW, oi, {sym: 10.0}, set(), False).reasons == {"open-interest-below-floor": 1}
     assert chain.pick(qs, "SPY", "call", DAY, 580, NOW, C, {sym: 5000.0}, set(), True).reasons == {"delta-below-floor": 1}
     assert chain.pick(qs, "SPY", "call", DAY, 580, NOW, C, {sym: 5000.0}, {sym}, False).reasons == {"already-held": 1}
     assert chain.pick(qs, "SPY", "put", DAY, 580, NOW, C, {}, set(), False).reasons == {"no-contract-of-the-expiry": 1}
@@ -315,3 +316,20 @@ def test_a_contract_with_days_left_is_modelled_to_its_own_expiry_close():
     assert got.quote is not None and got.quote.contract.expiry == fri
     none = chain.pick([m], "AMZN", "call", dt.date(2026, 10, 20), 220.0, tue, C, {}, set(), late=False)
     assert none.quote is None and none.reasons == {"no-contract-of-the-expiry": 1}   # only the name's expiry is bought
+
+
+
+def test_no_open_interest_floor_from_dec_0056():
+    """DEC-0056: the frozen config has no open-interest floor, so a contract with none passes on its volume and
+    spread; the volume floor still binds. The floor itself still works when a config sets one (1000 to 2026-11-17)."""
+    assert C["min_open_interest"] == 0
+    raw = dict([snap(580, 1.10, 1.12, 0.52)])
+    sym = "SPY261019C00580000"
+    got = chain.pick(chain.parse_snapshots(raw), "SPY", "call", DAY, 580.0, NOW, C, {}, set(), late=False)
+    assert got.quote is not None and got.quote.contract.symbol == sym and got.reasons == {}
+    got = chain.pick(chain.parse_snapshots(raw), "SPY", "call", DAY, 580.0, NOW, {**C, "min_open_interest": 1000},
+                     {sym: 10.0}, set(), late=False)
+    assert got.quote is None and got.reasons == {"open-interest-below-floor": 1}
+    thin = dict([snap(580, 1.10, 1.12, 0.52, vol=100)])
+    got = chain.pick(chain.parse_snapshots(thin), "SPY", "call", DAY, 580.0, NOW, C, {}, set(), late=False)
+    assert got.quote is None and got.reasons == {"volume-below-floor": 1}
