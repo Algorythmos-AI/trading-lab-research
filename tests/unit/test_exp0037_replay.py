@@ -471,3 +471,10 @@ def test_the_engine_files_here_equal_the_merged_replay_code():
     except subprocess.CalledProcessError:
         pytest.skip("the engine commit is not in this clone's history")
     assert drv.engine_changed() == []
+
+
+def test_the_real_record_is_accepted_and_the_list_starts_after_it():
+    rec = (ROOT / "research" / "decisions" / "DEC-0054-clone-loophole-trials.md").read_text()
+    assert exp0037.accepted_on(rec) == dt.date(2026, 11, 17)
+    drv = _driver()
+    assert drv.the_list(drv.DEC, dt.datetime(2026, 11, 18, 17, 15, tzinfo=NEW_YORK))[1] == [dt.date(2026, 11, 18)]

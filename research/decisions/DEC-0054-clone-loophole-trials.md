@@ -1,8 +1,13 @@
 # DEC-0054: Three of the options clone's rule gaps, each replayed against the frozen clone on sessions not yet seen
 
-- **Status: PROPOSED on 2026-11-17.** Drafted at the owner's request ("Yes, draft them", 2026-11-17, after the
-  debrief of #454, #459, #462 and #466). The owner accepts it by merging a pull request that changes this line to
-  ACCEPTED, and by that merge registers HYP-0062, HYP-0063 and HYP-0064 with EXP-0037.
+- **Status: ACCEPTED on 2026-11-17.** approved_by: owner. Drafted at the owner's request ("Yes, draft them",
+  2026-11-17, after the debrief of #454, #459, #462 and #466) and proposed in #467. The replay code merged in #469 and
+  the amendment in #471, both before acceptance. Accepted by the owner's merge of the pull request that changed this
+  line.
+  - The owner asked for this accepting change on 2026-11-17 ("now draft the DEC-0054 acceptance PR"). The merge
+    is the acceptance.
+  - Acceptance registers HYP-0062, HYP-0063 and HYP-0064 with EXP-0037. It changes no code and nothing that
+    trades. Its sessions start on the first session after 2026-11-17, and the host job `exp0037` collects them.
 - **Amended 2026-11-17, before acceptance and before any session on the list:** the session list is fixed by rule
   instead of being written by hand, and the host job `exp0037` fetches the inputs and runs the replay (section 2).
   The owner asked for this ("you need to automate it we cant rely on manual commond"). Nothing else changed.
@@ -10,8 +15,7 @@
   paper experiment. A variant that passes is a reason to write a further record, which would freeze a new config
   and start a new paper experiment with new trials. It is never a reason to change EXP-0029 while it runs.
 - **Registers** three trials in family O: HYP-0062 CLONE-ROOM-OPEN-SKY, HYP-0063 CLONE-RETEST-FREE-CONFIRM and
-  HYP-0064 CLONE-REJECTION-SPY-TREND, replayed by EXP-0037. Family O goes from 38 to **41** when this record is
-  accepted. Until then the registry row is `proposed` and the count in force stays 38.
+  HYP-0064 CLONE-REJECTION-SPY-TREND, replayed by EXP-0037. Family O goes from 38 to **41**.
 - **Experiment:** EXP-0037. **Hypotheses:** HYP-0062, HYP-0063, HYP-0064.
 - **Depends on:** DEC-0030 (the clone and its gates), DEC-0031 (the dry-run replay EXP-0037 reuses), DEC-0040
   (EXP-0029, whose config is the control).
@@ -124,5 +128,5 @@ record is accepted** (section 2). No session it reads has been looked at when th
 
 ### 6. Trial count
 
-Family O: 38 before this record, **41** with HYP-0062, HYP-0063 and HYP-0064 (`config/trial_registry.yaml`). The
-row is `proposed` until the owner accepts this record.
+Family O: 38 before this record, **41** with HYP-0062, HYP-0063 and HYP-0064 (`config/trial_registry.yaml`, row
+accepted 2026-11-17).

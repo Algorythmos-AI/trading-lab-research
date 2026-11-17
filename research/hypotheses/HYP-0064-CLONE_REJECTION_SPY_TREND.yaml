@@ -1,7 +1,7 @@
 id: HYP-0064
 trial: "CLONE-REJECTION-SPY-TREND"
 family: O                       # the options desk's entry rules and the filters tried on them; total 41 with HYP-0062 to HYP-0064 (DEC-0054)
-status: proposed                # DEC-0054 (PROPOSED 2026-11-17); pre-registered once the owner accepts it. Blind: EXP-0037 replays only sessions after acceptance (DEC-0054, "What has already been seen")
+status: pre-registered          # DEC-0054 (accepted 2026-11-17). Blind: EXP-0037 replays only sessions after acceptance (DEC-0054, "What has already been seen")
 arm: replay                     # the clone's dry run (DEC-0031) on the control and this variant: no order of any kind
 statement: "On the sessions of EXP-0037 (every session after DEC-0054 is accepted, until 40 sessions or 2027-04-30; SPY and QQQ; DEC-0031's bars, contracts, prices, fees and management under EXP-0029's config), the trades this variant adds to the frozen clone have a positive mean return on premium after the spread and fees. The variant: For the rejection setup only, the trend gate reads only SPY: it passes when SPY is not on the far side of its VWAP from the trade (setups.gate's spy_ok), and the name's own side of its VWAP is not read. The retest setup's trend gate is the control's. Every other rule, gate and number is the control's. A trade is added when the variant takes it and the control does not, matched by (session, name, setup, side, signal bar); every retest is read exactly as by the control."
 rule: added_mean_rop            # the mean return on premium of the trades the variant adds, against 0; the variant's total against the control's as a guard
