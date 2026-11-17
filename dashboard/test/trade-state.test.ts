@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { focusPlan, type SidePlan } from "@/lib/focus-plan";
 import { type LiveQuote, nyClock, type Options, type TrailPoint } from "@/lib/options";
+import { rowView } from "@/lib/trade-now";
 import {
   ALT_LIVE_BARS,
   altAt,
@@ -13,6 +14,7 @@ import {
   flatMinute,
   LUNCH_FROM_MIN,
   LUNCH_TO_MIN,
+  lockUntil,
   manage,
   MAX_BARS_TO_RETEST,
   type NameInput,
@@ -21,6 +23,7 @@ import {
   RETEST_WITHIN_ATR,
   retestRisk,
   serverNow,
+  type SideState,
   sideState,
 } from "@/lib/trade-state";
 
@@ -163,7 +166,17 @@ const minOf = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slic
  */
 const warm = (first: string, c = 408.2): Spec[] =>
   Array.from({ length: 14 }, (_, i) => [hm(minOf(first) - 28 + 2 * i), c - 0.2, c + 0.3, c - 0.4, c] as Spec);
-const WARM = warm("10:04");
+/**
+ * Flat bars from 09:30 up to the first of `specs`, at its open: the page then has the session from its open, which a
+ * confirmed retest needs to read enter zone (DEC-0053: otherwise a failure may be unseen, `lockUnseen`). They sit
+ * before the 15 bars any 2-minute ATR here is read on, so they move no ATR.
+ */
+const fromOpen = (specs: Spec[]): Spec[] => {
+  const first = minOf(specs[0]![0]);
+  const o = specs[0]![1];
+  return [...Array.from({ length: (first - (9 * 60 + 30)) / 2 }, (_, i) => [hm(9 * 60 + 30 + 2 * i), o, o, o, o] as Spec), ...specs];
+};
+const WARM = fromOpen(warm("10:04"));
 
 describe("one name through the session", () => {
   const steps: { name: string; specs: Spec[]; live: number; state: string; tone: string; line: string; side?: string }[] = [
@@ -251,7 +264,9 @@ describe("a failed break and a sweep", () => {
     expect(r.state).toBe("plan_off");
     expect(r.tone).toBe("bad");
     expect(r.alt).toEqual({ kind: "failed_break", side: "put", level: 412.3, stop: 412.9, entry: 412.0, at: nyMs("10:12") });
-    expect(r.line).toBe("Fell back below 412.30: call plan off · Failed break: put under 412.30, stop above 412.90 (push high) · testing");
+    // DEC-0053: the failure locks the call until 13:00; the alternative trigger's line comes first, then the lock
+    expect(r.line).toBe("Failed break: put under 412.30, stop above 412.90 (push high) · testing · Failed at 10:14: no call until 13:00 · Puts below 405.10 (1.7 ATR)");
+    expect(r.call).toMatchObject({ state: "plan_off", brokeAt: nyMs("10:12"), failedAt: nyMs("10:14") });
     // ranked above a plain watch
     expect(r.rank).toBeLessThan(nameState(input(scene([A, B], 411.1))).rank);
   });
@@ -262,8 +277,9 @@ describe("a failed break and a sweep", () => {
     const call = sideState(PLAN.call, 4, sc.bars, sc.quote, sc.now);
     expect(call.state).toBe("plan_off");
     expect(call.alt).toBeNull();
-    // the row reads as a watch again: a new close above re-arms the call
-    expect(nameState(input(sc)).line).toBe("Calls above 412.30 (0.1 ATR) · Puts below 405.10 (1.7 ATR)");
+    // DEC-0053: the failure (a bar ending 10:20) locks the call until 13:00, said beside the put's line
+    expect(call).toMatchObject({ brokeAt: nyMs("10:12"), failedAt: nyMs("10:20") });
+    expect(nameState(input(sc)).line).toBe("Failed at 10:20: no call until 13:00 · Puts below 405.10 (1.7 ATR)");
   });
 
   it("a sweep under the floor by 0.25 ATR that closes back above it arms a call below the sweep low", () => {
@@ -421,7 +437,7 @@ describe("the clock and the feed", () => {
 
   it("shows at most two cautions and counts the rest", () => {
     const later = (x: Spec, min: number): Spec => [`${Number(x[0].slice(0, 2)) + 1}:${String(Number(x[0].slice(3)) + min).padStart(2, "0")}`, x[1], x[2], x[3], x[4]];
-    const s = scene([...warm("11:14"), ...[A, B, C, D, E, CONF].map((x) => later(x, 10))], 412.85); // 11:14 to 11:24
+    const s = scene([...fromOpen(warm("11:14")), ...[A, B, C, D, E, CONF].map((x) => later(x, 10))], 412.85); // 11:14 to 11:24
     const r = nameState(
       input(s, { receivedAt: s.now.getTime(), wonToday: true, ticker: { ...TICKER, expected_move: { annual_iv: 0.9 } } }),
     );
@@ -530,10 +546,12 @@ const call = (sc: { bars: ReturnType<typeof bars2m>; quote: LiveQuote; now: Date
 // DEC-0052's scenes: a steady climb whose 2-minute ATR is about 0.20, so the touch band (1 two-minute ATR) is narrow.
 const r2 = (v: number) => Math.round(v * 100) / 100;
 /** Sixteen bars from 09:40 to 10:12, each closing 0.10 higher (to 412.20) and 0.20 wide: a 2-minute ATR of 0.20. */
-const LADDER: Spec[] = Array.from({ length: 16 }, (_, i) => {
-  const c = 410.7 + 0.1 * i;
-  return [hm(9 * 60 + 40 + 2 * i), r2(c - 0.1), r2(c + 0.05), r2(c - 0.15), r2(c)] as Spec;
-});
+const LADDER: Spec[] = fromOpen(
+  Array.from({ length: 16 }, (_, i) => {
+    const c = 410.7 + 0.1 * i;
+    return [hm(9 * 60 + 40 + 2 * i), r2(c - 0.1), r2(c + 0.05), r2(c - 0.15), r2(c)] as Spec;
+  }),
+);
 /** The break at 10:12: closes 0.20 above the level, the close before at 412.20. */
 const BRK: Spec = ["10:12", 412.2, 412.55, 412.15, 412.5];
 /** Above the level, the low 0.30 over it: more than the 2-minute ATR, so no touch. */
@@ -609,7 +627,7 @@ describe("finding 2: missing 2-minute slots", () => {
     const brk: Spec = ["10:08", 412.1, 412.8, 412.0, 412.7];
     const dip2: Spec = ["10:10", 412.7, 412.8, 412.35, 412.7];
     const conf2: Spec = ["10:12", 412.7, 412.85, 412.65, 412.8]; // confirms the retest (DEC-0052)
-    expect(call(scene([...warm("10:04", 412.0), X, Y, brk, dip2, conf2], 412.85), { high: 413.4 }).state).toBe("enter_zone");
+    expect(call(scene([...fromOpen(warm("10:04", 412.0)), X, Y, brk, dip2, conf2], 412.85), { high: 413.4 }).state).toBe("enter_zone");
   });
 });
 
@@ -878,5 +896,248 @@ describe("finding 9: managing on prices after the fill", () => {
     // the trail's first point from 10:23:30 judges it when the page has the trail
     const t = withPoints(not, [{ at: nyMs("10:23", S, "-04:00", 40), p: 412.5 }]);
     expect(manage(fill, PLAN.call, t.bars, t.quote, t.now, false, t.trail).notWorkingSecLeft).toBeNull();
+  });
+});
+
+// ---- DEC-0053: a failed break locks its side for the rest of the entry window ----------------------------------------
+describe("DEC-0053: the failed-break lock", () => {
+  /** A spec moved to another slot. */
+  const at = (hhmm: string, x: Spec): Spec => [hhmm, x[1], x[2], x[3], x[4]];
+  /** A close back under the ceiling: the failure. */
+  const BACK = (hhmm: string): Spec => [hhmm, 412.4, 412.45, 412.1, 412.2];
+  /** Under the ceiling, quiet. */
+  const under = (from: string, to: string, c = 412.0): Spec[] =>
+    Array.from({ length: (minOf(to) - minOf(from)) / 2 }, (_, i) => [hm(minOf(from) + 2 * i), c, c + 0.1, c - 0.1, c] as Spec);
+  /** The steady climb (LADDER's shape, 16 bars) whose last close is 412.20, starting at `from`. */
+  const ladderAt = (from: string): Spec[] =>
+    Array.from({ length: 16 }, (_, i) => {
+      const c = 410.7 + 0.1 * i;
+      return [hm(minOf(from) + 2 * i), r2(c - 0.1), r2(c + 0.05), r2(c - 0.15), r2(c)] as Spec;
+    });
+  /** The call's side state, the half day given. */
+  const callOn = (sc: ReturnType<typeof scene>, halfDay = false, q: Partial<LiveQuote> = {}) =>
+    sideState(PLAN.call, 4, sc.bars, { ...sc.quote, ...q }, sc.now, atr2m(sc.bars.closed), halfDay);
+  /** The scene's states at the close of each of its bars from `from` on. */
+  const walk = (specs: Spec[], from: string, live: (x: Spec) => number, side: (sc: ReturnType<typeof scene>) => SideState = callOn) =>
+    specs.flatMap((x, i) => (minOf(x[0]) >= minOf(from) ? [side(scene(specs.slice(0, i + 1), live(x)))] : []));
+
+  it("the lock's end: 13:00 for a failure ending at or before 13:00 on a full day, else the flat time; a half day's flat time", () => {
+    expect(lockUntil(nyMs("10:16"), false)).toBe(nyMs("13:00"));
+    expect(lockUntil(nyMs("13:00"), false)).toBe(nyMs("13:00"));
+    expect(lockUntil(nyMs("13:02"), false)).toBe(nyMs("15:10"));
+    expect(lockUntil(nyMs("09:34"), false)).toBe(nyMs("13:00")); // before 09:35: the morning is locked too
+    expect(lockUntil(nyMs("10:16"), true)).toBe(nyMs("12:10"));
+    expect(lockUntil(nyMs("12:30"), true)).toBe(nyMs("12:10"));
+    // the same instants either side of a daylight-saving change
+    expect(lockUntil(nyMs("10:16", "2026-11-02", "-05:00"), false)).toBe(nyMs("13:00", "2026-11-02", "-05:00"));
+  });
+
+  it("a break, a failure, a re-break whose retest confirms in the same window: never ENTER; plan off on the failed break", () => {
+    // the failure is the 10:14 bar (ends 10:16); the re-break at 10:16 (ends 10:18), touch 10:18, confirming close 10:20
+    const specs = [...LADDER, BRK, BACK("10:14"), at("10:16", BRK), TOUCH("10:18"), CONFIRM("10:20")];
+    const states = walk(specs, "10:12", (x) => x[4]);
+    expect(states.map((x) => x.state)).toEqual(["get_ready", "plan_off", "plan_off", "plan_off", "plan_off"]);
+    for (const x of states.slice(1)) expect(x).toMatchObject({ brokeAt: nyMs("10:14"), failedAt: nyMs("10:16") });
+    // and on through the ENTER slots DEC-0052 alone would give, with the price held above the level
+    const sc = scene(specs, 412.6);
+    for (const extra of [0, 60_000, 119_000, 120_000, 230_000])
+      expect(callOn(later(sc, extra, 412.6))).toMatchObject({ state: "plan_off", brokeAt: nyMs("10:14"), failedAt: nyMs("10:16") });
+    // the control: the same re-break, touch and confirming close with no earlier break confirm under DEC-0052
+    const control = [...LADDER, at("10:12", [BRK[0], 412.2, 412.3, 412.15, 412.25]), BACK("10:14"), at("10:16", BRK), TOUCH("10:18"), CONFIRM("10:20")];
+    expect(callOn(scene(control, 412.6))).toMatchObject({ state: "enter_zone", brokeAt: nyMs("10:18"), confirmClose: 412.55 });
+    // the row: the lock beside the put's line
+    const r = nameState(input(sc));
+    expect(r.state).toBe("watch");
+    expect(r.line).toMatch(/^Failed at 10:16: no call until 13:00 · Puts below 405\.10 \(\d\.\d ATR\)$/);
+    expect(nameState(input(sc, { put: null })).line).toBe("Failed at 10:16: no call until 13:00");
+  });
+
+  it("a failing bar ending exactly at 13:00 locks until 13:00; one ending at 13:02 locks until the flat time", () => {
+    // the break 12:54, held 12:56, the failing bar 12:58 to 13:00, a re-break 13:00, touch 13:02, confirming close 13:04
+    const at13 = [...under("09:30", "12:22"), ...ladderAt("12:22"), at("12:54", BRK), ...holds("12:56", 1), BACK("12:58"), at("13:00", BRK), TOUCH("13:02"), CONFIRM("13:04")];
+    const done = scene(at13.slice(0, -3), 412.2);
+    expect(callOn(done)).toMatchObject({ state: "plan_off", brokeAt: nyMs("12:56") }); // its lock ended as it began
+    expect(callOn(done).failedAt).toBeUndefined();
+    expect(callOn(scene(at13, 412.6))).toMatchObject({ state: "enter_zone", brokeAt: nyMs("13:02"), confirmClose: 412.55 });
+    // one slot later: the failing bar ends at 13:02, so the side is locked until 15:10
+    const at1302 = [...under("09:30", "12:24"), ...ladderAt("12:24"), at("12:56", BRK), ...holds("12:58", 1), BACK("13:00"), at("13:02", BRK), TOUCH("13:04"), CONFIRM("13:06")];
+    const sc = scene(at1302, 412.6);
+    expect(callOn(sc)).toMatchObject({ state: "plan_off", brokeAt: nyMs("12:58"), failedAt: nyMs("13:02") });
+    expect(nameState(input(sc, { put: null })).line).toBe("Failed at 13:02: no call until 15:10");
+    expect(callOn(later(sc, nyMs("15:09", S, "-04:00", 50) - sc.now.getTime(), 412.6)).state).toBe("plan_off");
+  });
+
+  it("a half day: locked until its flat time, 12:10", () => {
+    const specs = [...LADDER, BRK, BACK("10:14"), at("10:16", BRK), TOUCH("10:18"), CONFIRM("10:20")];
+    const sc = scene(specs, 412.6);
+    expect(callOn(sc, true)).toMatchObject({ state: "plan_off", failedAt: nyMs("10:16") });
+    expect(nameState(input(sc, { put: null, halfDay: true })).line).toBe("Failed at 10:16: no call until 12:10");
+  });
+
+  it("a break made inside the lock, still beyond the level when it ends: watch with the failure's time until a fresh break, which arms", () => {
+    // failed at 10:16; a break inside the lock at 12:50 that holds through 13:00 and on
+    const base = [...LADDER, BRK, BACK("10:14"), ...under("10:16", "12:50"), at("12:50", BRK), ...holds("12:52", 6)];
+    const sc = scene(base, 412.65); // 13:04:05
+    expect(callOn(scene(base.slice(0, -4), 412.65))).toMatchObject({ state: "plan_off", failedAt: nyMs("10:16") }); // 12:56: still locked
+    expect(callOn(sc)).toMatchObject({ state: "watch", brokeAt: null, failedAt: nyMs("10:16") });
+    expect(nameState(input(sc, { put: null })).state).toBe("watch");
+    // whatever the price or the last close: still watch
+    expect(callOn(sc, false, { price: 412.9 })).toMatchObject({ state: "watch", failedAt: nyMs("10:16") });
+    // a close back, then a fresh break after the lock's end: it arms, and its retest confirms
+    const fresh = [...base, BACK("13:04"), at("13:06", BRK)];
+    expect(callOn(scene(fresh, 412.55))).toMatchObject({ state: "get_ready", brokeAt: nyMs("13:08") });
+    expect(callOn(scene(fresh, 412.55)).failedAt).toBeUndefined();
+    expect(callOn(scene([...fresh, TOUCH("13:08"), CONFIRM("13:10")], 412.6))).toMatchObject({ state: "enter_zone", brokeAt: nyMs("13:08") });
+  });
+
+  it("the same with the break made inside the lock already closed back before it ends: watch, not wait-for-a-close", () => {
+    const base = [...LADDER, BRK, BACK("10:14"), ...under("10:16", "12:50"), at("12:50", BRK), BACK("12:52"), ...under("12:54", "13:02", 412.2)];
+    const sc = scene(base, 412.4); // 13:04:05, the price above the level with no close above it
+    expect(callOn(sc)).toMatchObject({ state: "watch", brokeAt: null, failedAt: nyMs("10:16") });
+    // its failure set no lock of its own: a fresh break now arms
+    expect(callOn(scene([...base, at("13:02", BRK)], 412.55))).toMatchObject({ state: "get_ready", brokeAt: nyMs("13:04") });
+  });
+
+  it("a break made just before the lock ends that confirms just after it: no ENTER, watch with the failure's time", () => {
+    // the break 12:56 (ends 12:58, inside the lock), touch 12:58, the confirming close 13:00 to 13:02
+    const specs = [...LADDER, BRK, BACK("10:14"), ...under("10:16", "12:56"), at("12:56", BRK), TOUCH("12:58"), CONFIRM("13:00")];
+    const sc = scene(specs, 412.6);
+    expect(callOn(sc)).toMatchObject({ state: "watch", brokeAt: null, failedAt: nyMs("10:16") });
+    expect(callOn(later(sc, 90_000, 412.6)).state).toBe("watch");
+    // the break bar read at 12:58 (locked), the touch at 13:00 and the confirming close at 13:02 (the lock over): never ENTER
+    expect(walk(specs, "12:56", () => 412.6).map((x) => x.state)).toEqual(["plan_off", "watch", "watch"]);
+  });
+
+  it("a break the board does not count that closes back sets no lock", () => {
+    // the session's first bar opens and closes above the ceiling (brokeEarlier), then a close back under it
+    const early: Spec[] = [["09:30", 412.4, 412.7, 412.35, 412.5], ["09:32", 412.5, 412.6, 412.4, 412.5], ["09:34", 412.4, 412.45, 412.0, 412.1]];
+    expect(callOn(scene(early.slice(0, 2), 412.5))).toMatchObject({ state: "get_ready", brokeEarlier: true });
+    const back = callOn(scene(early, 412.1));
+    expect(back.state).toBe("watch");
+    expect(back.failedAt).toBeUndefined();
+    // a fresh break later that morning arms and confirms as DEC-0052 says
+    const specs = [...early, ...LADDER.slice(3), BRK, TOUCH("10:14"), CONFIRM("10:16")];
+    expect(callOn(scene(specs, 412.6))).toMatchObject({ state: "enter_zone", brokeAt: nyMs("10:14") });
+    // a page opened after the open: a break on its first bar is unknown, and its close back sets no lock either
+    const late: Spec[] = [["11:00", 412.4, 412.6, 412.35, 412.5], ["11:02", 412.5, 412.6, 412.1, 412.2]];
+    expect(callOn(scene(late, 412.2)).failedAt).toBeUndefined();
+    expect(callOn(scene(late, 412.2)).state).not.toBe("plan_off");
+  });
+
+  it("the locked side's alternative trigger is still worked out and shown, its line first", () => {
+    const sc = scene([...LADDER, BRK, BACK("10:14")], 412.2);
+    const x = callOn(sc);
+    expect(x).toMatchObject({ state: "plan_off", failedAt: nyMs("10:16"), alt: { kind: "failed_break", side: "put", level: 412.3 } });
+    const r = nameState(input(sc));
+    expect(r.alt).toEqual(x.alt);
+    expect(r.line).toBe(`Failed break: put under 412.30, stop above ${x.alt!.stop.toFixed(2)} (push high) · testing · Failed at 10:16: no call until 13:00 · Puts below 405.10 (1.8 ATR)`);
+  });
+
+  it("lockEnd is set with failedAt while the lock runs, and absent once it has ended", () => {
+    const locked = callOn(scene([...LADDER, BRK, BACK("10:14")], 412.2));
+    expect(locked).toMatchObject({ state: "plan_off", failedAt: nyMs("10:16"), lockEnd: nyMs("13:00") });
+    expect(callOn(scene([...LADDER, BRK, BACK("10:14")], 412.2), true).lockEnd).toBe(nyMs("12:10"));
+    // after the lock: a break made inside it reads watch, failedAt kept, no lockEnd
+    const base = [...LADDER, BRK, BACK("10:14"), ...under("10:16", "12:50"), at("12:50", BRK), ...holds("12:52", 6)];
+    const after = callOn(scene(base, 412.65));
+    expect(after).toMatchObject({ state: "watch", failedAt: nyMs("10:16") });
+    expect(after.lockEnd).toBeUndefined();
+    // a failure ending exactly at 13:00: its lock is over as it begins, so no lockEnd and no failedAt
+    const at13 = [...under("09:30", "12:22"), ...ladderAt("12:22"), at("12:54", BRK), ...holds("12:56", 1), BACK("12:58")];
+    const done = callOn(scene(at13, 412.2));
+    expect(done.state).toBe("plan_off");
+    expect(done.lockEnd).toBeUndefined();
+    expect(done.failedAt).toBeUndefined();
+    // a fresh break after the lock carries neither
+    const fresh = callOn(scene([...base, BACK("13:04"), at("13:06", BRK)], 412.55));
+    expect(fresh.lockEnd).toBeUndefined();
+  });
+
+  it("the board's drawn headline carries the lock while an alternative trigger is live: the locked side's own, or the other side's sweep", () => {
+    // the call's own failed break, still live: the FAILED BREAK row says the lock after the put idea
+    const own = nameState(input(scene([...LADDER, BRK, BACK("10:14")], 412.2)));
+    const v = rowView(own);
+    expect(v.badge).toMatchObject({ word: "FAILED BREAK", alt: "failed_break", side: "put" });
+    expect(v.headline).toMatch(/^Call plan off at 412\.30\. .*\. Failed at 10:16: no call until 13:00\.$/);
+    // the call locked (its alternative long expired), the put's floor swept and reclaimed: the SWEEP row says the call's lock
+    const down = Array.from({ length: 8 }, (_, i) => [hm(minOf("10:16") + 2 * i), r2(412.0 - 0.8 * i), r2(412.1 - 0.8 * i), r2(411.1 - 0.8 * i), r2(411.2 - 0.8 * i)] as Spec);
+    const sweep = [...LADDER, BRK, BACK("10:14"), ...down, ["10:32", 405.6, 405.7, 405.3, 405.4], ["10:34", 405.4, 405.5, 404.0, 405.3]] as Spec[];
+    const r = nameState(input(scene(sweep, 405.4)));
+    expect(r.call).toMatchObject({ state: "plan_off", failedAt: nyMs("10:16"), alt: null });
+    expect(r.alt).toMatchObject({ kind: "sweep_reclaim", side: "call" });
+    const w = rowView(r);
+    expect(w.badge).toMatchObject({ word: "SWEEP", alt: "sweep_reclaim" });
+    expect(w.headline).toMatch(/^Sweep and reclaim at 405\.10\. .*\. Failed at 10:16: no call until 13:00\.$/);
+    // with no lock, the headline is as before: no lock words
+    const plain = rowView(nameState(input(scene([["10:04", 406, 406.2, 405.6, 405.8], ["10:06", 405.8, 405.9, 404.0, 405.3]], 405.4))));
+    expect(plain.badge.alt).toBe("sweep_reclaim");
+    expect(plain.headline).not.toMatch(/Failed at/);
+  });
+
+  it("a locked side leading the row keeps the other side's line beside the lock: a watch, or a missed", () => {
+    // with its alternative live the locked call leads, and the put's watch line stays
+    const lead = nameState(input(scene([...LADDER, BRK, BACK("10:14")], 412.2)));
+    expect(lead.side).toBe("call");
+    expect(lead.line).toMatch(/ · Failed at 10:16: no call until 13:00 · Puts below 405\.10 \(\d\.\d ATR\)$/);
+    // the put broke the floor and ran past its target 1: missed ranks below the locked call's plan off
+    const down = Array.from({ length: 8 }, (_, i) => [hm(minOf("10:16") + 2 * i), r2(412.0 - 0.8 * i), r2(412.1 - 0.8 * i), r2(411.1 - 0.8 * i), r2(411.2 - 0.8 * i)] as Spec);
+    const ran = [...LADDER, BRK, BACK("10:14"), ...down, ["10:32", 405.4, 405.5, 405.2, 405.3], ["10:34", 405.3, 405.35, 404.8, 404.9], ["10:36", 404.9, 404.95, 404.0, 404.1]] as Spec[];
+    const r = nameState(input(scene(ran, 404.1)));
+    expect(r.put).toMatchObject({ state: "missed", missedWhy: "target" });
+    expect(r).toMatchObject({ state: "plan_off", side: "call" });
+    expect(r.line).toMatch(/^Failed at 10:16: no call until 13:00 · Already past target 1 \(404\.18\): don't chase/);
+  });
+
+  it("both sides locked: both locks on the row, the earlier failure first", () => {
+    // the call fails at 10:16; the price falls to the floor, breaks it at 10:40 and closes back above it at 10:42
+    const down = Array.from({ length: 8 }, (_, i) => [hm(minOf("10:16") + 2 * i), r2(412.0 - 0.8 * i), r2(412.1 - 0.8 * i), r2(411.1 - 0.8 * i), r2(411.2 - 0.8 * i)] as Spec);
+    const specs = [...LADDER, BRK, BACK("10:14"), ...down, ["10:32", 405.6, 405.7, 405.3, 405.4], ["10:34", 405.4, 405.5, 405.2, 405.3], ["10:36", 405.3, 405.35, 404.8, 404.9], ["10:38", 404.9, 405.4, 404.85, 405.3], ...under("10:40", "10:50", 405.6)] as Spec[];
+    const sc = scene(specs, 405.6);
+    const put = sideState(PLAN.put, 4, sc.bars, sc.quote, sc.now, atr2m(sc.bars.closed));
+    expect(put).toMatchObject({ state: "plan_off", brokeAt: nyMs("10:38"), failedAt: nyMs("10:40") });
+    const r = nameState(input(sc));
+    expect(r.state).toBe("plan_off");
+    expect(r.line).toBe("Failed at 10:16: no call until 13:00 · Failed at 10:40: no put until 13:00");
+  });
+
+  it("bars missing from the open: a confirmed retest is get ready with lockUnseen, never ENTER, and no gap", () => {
+    // LADDER without its first bars: the page's bars start at 09:40
+    const specs = [...LADDER.slice(5), BRK, TOUCH("10:14"), CONFIRM("10:16")];
+    const sc = scene(specs, 412.6);
+    expect(sc.bars.complete).toBe(false);
+    const x = callOn(sc);
+    expect(x).toMatchObject({ state: "get_ready", lockUnseen: true, gap: false, brokeEarlier: false, brokeAt: nyMs("10:14"), confirmClose: 412.55 });
+    const r = nameState(input(sc, { put: null }));
+    expect(r.state).toBe("get_ready");
+    // never opens like ENTER's "Retest confirmed at ..."
+    expect(r.line).toBe("Confirm on your chart: the board has not seen the session from its open (retest confirmed at 412.55)");
+    expect(r.line.startsWith("Retest confirmed")).toBe(false);
+    // a slot missing between the open and the break does the same, though the page's bars start at the open
+    const holed = scene([...LADDER.slice(0, 3), ...LADDER.slice(4), BRK, TOUCH("10:14"), CONFIRM("10:16")], 412.6);
+    expect(holed.bars.complete).toBe(true);
+    expect(holed.bars.missing).toEqual([nyMs("09:36")]);
+    expect(callOn(holed)).toMatchObject({ state: "get_ready", lockUnseen: true, gap: false });
+    // with the session seen from its open: ENTER
+    expect(callOn(scene([...LADDER, BRK, TOUCH("10:14"), CONFIRM("10:16")], 412.6)).state).toBe("enter_zone");
+  });
+
+  it("a put: a break, a touch, a close back above, a re-break, a bounce", () => {
+    // the call's scene mirrored onto the floor at 405.10: the break 10:12, a touch from below 10:14, the close back
+    // above 10:16 (the failure, ending 10:18), the re-break 10:18, a bounce toward the floor 10:20
+    const story = [...LADDER, BRK, TOUCH("10:14"), BACK("10:16"), at("10:18", BRK), TOUCH("10:20")];
+    const putOf = (sc: ReturnType<typeof scene>) => sideState(PLAN.put, 4, sc.bars, sc.quote, sc.now, atr2m(sc.bars.closed));
+    const p = (c: number) => r2(817.4 - c);
+    // the bounce is not confirmed by the next close (DEC-0052 alone gives no ENTER), and the lock holds besides
+    const narrow = mirror([...story, NOCONF("10:22")]);
+    expect(walk(narrow, "10:12", (x) => x[4], putOf).map((x) => x.state)).toEqual(["get_ready", "get_ready", "plan_off", "plan_off", "plan_off", "plan_off"]);
+    // the variant where DEC-0052 alone would confirm: the next close is below the bounce bar's close
+    const confirms = mirror([...story, CONFIRM("10:22")]);
+    const sc = scene(confirms, p(412.6));
+    expect(putOf(sc)).toMatchObject({ state: "plan_off", brokeAt: nyMs("10:14"), failedAt: nyMs("10:18") });
+    for (const extra of [60_000, 120_000]) expect(putOf(later(sc, extra, p(412.6))).state).toBe("plan_off");
+    expect(nameState(input(sc, { call: null })).line).toBe("Failed at 10:18: no put until 13:00");
+    // the same re-break with no earlier break: DEC-0052 confirms it
+    const control = mirror([...LADDER, ["10:12", 412.2, 412.3, 412.15, 412.25], ["10:14", 412.25, 412.3, 412.1, 412.2], BACK("10:16"), at("10:18", BRK), TOUCH("10:20"), CONFIRM("10:22")]);
+    expect(putOf(scene(control, p(412.6)))).toMatchObject({ state: "enter_zone", brokeAt: nyMs("10:20") });
   });
 });

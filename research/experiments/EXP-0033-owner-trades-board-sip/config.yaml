@@ -78,7 +78,9 @@ labels:
     ENTRY_ATR: 0.01
     STOP_ATR: 0.1
     MIN_ROOM_MULTIPLE: 2
-    RETEST_ATR: 0.1
+    RETEST_ATR: 0.1                  # DEC-0052, 2026-11-17, before the window: the card's stop band only, no longer the retest touch
+    RETEST_WITHIN_ATR: 1.0           # DEC-0052, 2026-11-17, before the window: the touch, in 2-minute ATRs (the clone's setups.retest)
+    RETEST_CONFIRM: confirming_close  # DEC-0052, 2026-11-17, before the window: the first bar after the touch to close beyond its close; ENTER for two slots
     MAX_BARS_TO_RETEST: 6
     ALT_LIVE_BARS: 3
     ALT_MAX_ATR: 1
@@ -92,6 +94,7 @@ labels:
     IV_CAP_SINGLE: 0.7
     LATE: ["11:00", "14:30"]
     MAX_TRADES_PER_DAY: 5
+    FAILED_BREAK_LOCK: rest_of_entry_window   # DEC-0053, 2026-11-17, before the window: a failed break locks its side to 13:00 or the flat time; in_zone excludes locked sides
   evaluation:
     when: once per 2-minute bar, at now = the bar's end + CLOSE_GRACE_MS, and at the extra instants of labeller_rules
     function: nameState

@@ -41,7 +41,7 @@ describe("a. the retest touch at exactly one 2-minute ATR (trade-state.ts, setup
   const bar = (min: number, o: number, h: number, l: number, c: number): Bar2 => ({ start: at(min), end: at(min) + 120_000, o, h, l, c });
 
   /**
-   * A break through L at 10:00 after fourteen bars closing at L, a touch bar at 10:02 whose extreme is `dip` from L,
+   * A break through L at 10:00 after a 09:30 bar and fourteen bars closing at L, a touch bar at 10:02 whose extreme is `dip` from L,
    * and a bar at 10:04 closing beyond the touch bar's close. Every true range is `atr` (the touch bar's too, for any dip
    * from 0 to `atr`), so the 2-minute ATR at the confirming close is `atr` itself, exactly when `atr` and L are binary
    * fractions. A put is the mirror about L.
@@ -51,8 +51,9 @@ describe("a. the retest touch at exactly one 2-minute ATR (trade-state.ts, setup
     const p = (d: number) => L + s * d; // d: the distance beyond L
     const ohlc = (min: number, o: number, far: number, near: number, c: number) => (s > 0 ? bar(min, p(o), p(far), p(near), p(c)) : bar(min, p(o), p(near), p(far), p(c)));
     const warm = Array.from({ length: 14 }, (_, i) => ohlc(9 * 60 + 32 + 2 * i, -atr, 0, -atr, 0));
-    const closed = [...warm, ohlc(10 * 60, 0, atr, 0, atr), ohlc(10 * 60 + 2, atr, dip + atr, dip, atr), ohlc(10 * 60 + 4, atr, 2 * atr, atr, 1.5 * atr)];
-    const bars: Bars2m = { closed, partial: null, since: at(9 * 60 + 32), complete: false, missing: [], gaps: 0 };
+    // a 09:30 bar first, so the board has the session from its open (DEC-0053's lockUnseen); it moves no ATR read here
+    const closed = [ohlc(9 * 60 + 30, -atr, -atr, -atr, -atr), ...warm, ohlc(10 * 60, 0, atr, 0, atr), ohlc(10 * 60 + 2, atr, dip + atr, dip, atr), ohlc(10 * 60 + 4, atr, 2 * atr, atr, 1.5 * atr)];
+    const bars: Bars2m = { closed, partial: null, since: at(9 * 60 + 30), complete: true, missing: [], gaps: 0 };
     const now = new Date(at(10 * 60 + 6) + CLOSE_GRACE_MS);
     const quote = { price: p(1.5 * atr), at: new Date(now.getTime() - 1_000).toISOString(), open: p(-atr), high: Math.max(p(-atr), p(2 * atr)), low: Math.min(p(-atr), p(2 * atr)), day: D, prev_close: null, vwap: null } as LiveQuote;
     const plan: SidePlan = { side: kind, level: L, levelName: "test", entry: L, stop: p(-1), target1: p(5), target2: null };
