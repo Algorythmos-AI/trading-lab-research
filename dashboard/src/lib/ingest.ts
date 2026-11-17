@@ -1,6 +1,6 @@
 import "server-only";
 import { HISTORY_PREFIX, PreconditionFailed, exists, readForUpdate, storedMeta, writeText } from "./blob";
-import { CALENDAR_PATHS, DESK_PATHS, JOURNAL_PATHS, LEDGER_PATHS, OPTIONS_CLONE_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
+import { CALENDAR_PATHS, DESK_PATHS, FUNNEL_PATHS, JOURNAL_PATHS, LEDGER_PATHS, OPTIONS_CLONE_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
 import { editionCopyFor, etagShape, runAndSession } from "./edition-copy";
 import { verify } from "./hmac";
 import { KEY_ID_RE, decideScope, parseScopes } from "./ingest-scope";
@@ -22,6 +22,7 @@ import {
   contractOf,
   isCalendar,
   isJournal,
+  isFunnel,
   isLedger,
   isOptions,
   isOptionsClone,
@@ -29,6 +30,7 @@ import {
   isRadar,
   validateCalendar,
   validateJournal,
+  validateFunnel,
   validateLedger,
   validateOptionsClone,
   validateOptionsEdition,
@@ -227,7 +229,7 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
   const scopes = parseScopes(process.env[SCOPES_ENV], [RADAR_KEY_ID]);
   if (!scopes.ok) logEvent("ingest.scopes", { outcome: "malformed", reason: scopes.reason });
   // The desk whose snapshot this body is, by the same routing as below; null for every other document kind.
-  const snapshotOf = isRadar(data) || isOptions(data) || isOptionsLive(data) || isOptionsClone(data) || isCalendar(data) || isJournal(data) || isLedger(data) ? null : contractOf(data).desk;
+  const snapshotOf = isRadar(data) || isOptions(data) || isOptionsLive(data) || isOptionsClone(data) || isCalendar(data) || isJournal(data) || isLedger(data) || isFunnel(data) ? null : contractOf(data).desk;
   const scope = decideScope(scopes, keyId, snapshotOf, process.env.PRIMARY_HOST || DEFAULT_KEY_ID);
   if (!scope.allow && scope.outcome === "key-scope-config") {
     return done(503, "key-scope-config", { error: "ingest is not configured for this key" }, { key_id: keyId });
@@ -240,6 +242,7 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
   if (isRadar(data)) return storeEdition(RADAR_EDITION, text, data, done, now);
   if (isOptions(data)) return storeEdition(OPTIONS_EDITION, text, data, done, now);
   if (isLedger(data)) return storeEdition(LEDGER_EDITION, text, data, done, now);
+  if (isFunnel(data)) return storeEdition(FUNNEL_EDITION, text, data, done, now);
   // The owner's journal is read from their own broker in the research environment, where the radar is built.
   if (isJournal(data)) return storeEdition(JOURNAL, text, data, done, now);
   if (keyId === RADAR_KEY_ID) {
@@ -357,6 +360,16 @@ const LEDGER_EDITION: EditionKind = {
   validate: (data) => {
     const r = validateLedger(data);
     return r.ok ? { ok: true, runId: r.edition.run_id, asOf: r.edition.as_of, date: r.edition.session } : r;
+  },
+};
+
+/** The selection funnel's health: one dated copy per session it chose names for. */
+const FUNNEL_EDITION: EditionKind = {
+  desk: "funnel",
+  paths: FUNNEL_PATHS,
+  validate: (data) => {
+    const r = validateFunnel(data);
+    return r.ok ? { ok: true, runId: r.doc.run_id, asOf: r.doc.as_of, date: r.doc.session } : r;
   },
 };
 

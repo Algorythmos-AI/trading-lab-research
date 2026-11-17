@@ -21,9 +21,9 @@ import { duration, newYork, num, pct, shortDate, shortSha, sydney, txt } from "@
 import { humanize, jobKey, jobName, jobTone, sortJobKeys } from "@/lib/labels";
 import { loadPageFeeds, loadUnsentFeeds } from "@/lib/feed-watch-run";
 import { loadServerCheckFacts } from "@/lib/desk-guards-run";
-import { JOURNAL_PATHS, LEDGER_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "@/lib/desk";
+import { FUNNEL_PATHS, JOURNAL_PATHS, LEDGER_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "@/lib/desk";
 import { FEEDS } from "@/lib/feed-watch";
-import { listOptionsDates, listRadarDates, loadJournal, loadLedger, loadOptions, loadOptionsLive, loadRadar, loadSnapshot } from "@/lib/snapshot";
+import { listOptionsDates, listRadarDates, loadFunnel, loadJournal, loadLedger, loadOptions, loadOptionsLive, loadRadar, loadSnapshot } from "@/lib/snapshot";
 import { DISK_FLOOR_GB, DISK_TARGET_GB } from "@/lib/thresholds.gen";
 import { entries, list, type LogInfo, type Snapshot } from "@/lib/types";
 import { sectionState } from "@/lib/v3";
@@ -33,13 +33,14 @@ export const metadata = { title: "Operations" };
 
 export default async function OperationsPage() {
   const now = requestTime();
-  const [result, journal, options, optionsLive, radar, ledger, optionsDates, radarDates] = await Promise.all([
+  const [result, journal, options, optionsLive, radar, ledger, funnel, optionsDates, radarDates] = await Promise.all([
     loadSnapshot(),
     loadJournal(),
     loadOptions(),
     loadOptionsLive(),
     loadRadar(),
     loadLedger(),
+    loadFunnel(),
     listOptionsDates(14),
     listRadarDates(14),
   ]);
@@ -47,7 +48,7 @@ export default async function OperationsPage() {
   const feeds = await loadPageFeeds(
     {
       ids: FEEDS.map((f) => f.id),
-      loaded: { [OPTIONS_PATHS.latest]: options, [JOURNAL_PATHS.latest]: journal, [LEDGER_PATHS.latest]: ledger, [RADAR_PATHS.latest]: radar },
+      loaded: { [OPTIONS_PATHS.latest]: options, [JOURNAL_PATHS.latest]: journal, [LEDGER_PATHS.latest]: ledger, [RADAR_PATHS.latest]: radar, [FUNNEL_PATHS.latest]: funnel },
     },
     now,
   );

@@ -19,7 +19,8 @@
 // What is published from here (the ntfy topic is public): feed names, state words, minutes, New York times and
 // session dates. Never a symbol, a price, a level, an error text, a URL, a host or a commit subject.
 import { BAR_MS, sessionBounds } from "./desk-eval";
-import { JOURNAL_PATHS, LEDGER_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
+import { FUNNEL_PATHS, JOURNAL_PATHS, LEDGER_PATHS, OPTIONS_PATHS, RADAR_PATHS } from "./desk";
+import { FUNNEL_SLOT_UTC } from "./funnel-slots";
 import { DAILY_GRACE_MIN, INTRADAY_MAX_AGE_MIN, JOURNAL_SLOT_UTC, OPTIONS_SLOT_UTC, RADAR_SLOT_UTC } from "./feeds";
 import type { IngestRejectKind } from "./ingest-reject";
 import { addDays, nyNow, RANGE, sessionOf } from "./market-calendar";
@@ -254,6 +255,22 @@ export const FEEDS: readonly FeedRow[] = [
     verified: true,
     misses_to_alert: 1,
   },
+  {
+    // Shown, never paged, until the owner adds the seal step to the after-close routine (trading-options-funnel
+    // docs/routine-steps.md) and a first night arrives: then set verified to true.
+    type: "doc",
+    id: "funnel",
+    name: "Selection funnel evidence",
+    short: "Funnel",
+    path: FUNNEL_PATHS.latest,
+    ingest_kind: "funnel",
+    stamp: sessionStamp,
+    want: "next-session",
+    schedules: [{ zone: "UTC", times: [hhmm(FUNNEL_SLOT_UTC)], grace_min: DAILY_GRACE_MIN }],
+    severity: "display",
+    verified: false,
+    misses_to_alert: 2,
+  },
   { type: "shadow", id: "shadow", name: "Server check", short: "Server check", grace_min: SHADOW_GRACE_MIN, severity: "alert", verified: true },
   { type: "refusal", id: "refusal-options", name: "Options edition or pre-open refresh", short: "Levels", kind: "options", severity: "alert", verified: true },
   { type: "refusal", id: "refusal-journal", name: "Trade journal", short: "Journal", kind: "journal", severity: "alert", verified: true },
@@ -262,6 +279,7 @@ export const FEEDS: readonly FeedRow[] = [
   { type: "refusal", id: "refusal-options-live", name: "Options live data", short: "Live data", kind: "options-live", severity: "display", verified: true },
   { type: "refusal", id: "refusal-options-clone", name: "Options clone", short: "Clone", kind: "options-clone", severity: "display", verified: true },
   { type: "refusal", id: "refusal-calendar", name: "Economic calendar", short: "Calendar", kind: "calendar", severity: "display", verified: true },
+  { type: "refusal", id: "refusal-funnel", name: "Selection funnel evidence", short: "Funnel", kind: "funnel", severity: "display", verified: true },
 ];
 
 /** The feeds the Options page's health strip draws from the server (the prices and the bars are the page's own). */

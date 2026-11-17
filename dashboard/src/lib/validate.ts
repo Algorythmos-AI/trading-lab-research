@@ -6,6 +6,8 @@ import cryptoSchema from "./crypto.schema.json";
 import type { CryptoSnapshot } from "./crypto.types";
 import hftSchema from "./hft.schema.json";
 import type { HftSnapshot } from "./hft.types";
+import funnelSchema from "./funnel.schema.json";
+import type { FunnelDoc } from "./funnel.types";
 import journalSchema from "./journal.schema.json";
 import ledgerSchema from "./ledger.schema.json";
 import type { LedgerEdition } from "./ledger.types";
@@ -33,6 +35,7 @@ const validateJournalSchema = ajv.compile<JournalDoc>(journalSchema);
 const validateCalendarSchema = ajv.compile<CalendarDoc>(calendarSchema);
 const validateOptionsCloneSchema = ajv.compile<OptionsClone>(optionsCloneSchema);
 const validateLedgerSchema = ajv.compile<LedgerEdition>(ledgerSchema);
+const validateFunnelSchema = ajv.compile<FunnelDoc>(funnelSchema);
 
 export const STOCKS_SCHEMA = "trading-lab/snapshot";
 export const CRYPTO_SCHEMA = "trading-lab/crypto-snapshot";
@@ -92,6 +95,14 @@ export const LEDGER_SCHEMA = "stocksdelta/ledger";
 /** True when the signed body names the ledger schema. */
 export function isLedger(data: unknown): boolean {
   return data !== null && typeof data === "object" && (data as { schema?: unknown }).schema === LEDGER_SCHEMA;
+}
+
+/** The selection funnel's health (trading-options-funnel): counts and statuses per stage. Research, like the ledger. */
+export const FUNNEL_SCHEMA = "stocksdelta/funnel";
+
+/** True when the signed body names the funnel schema. */
+export function isFunnel(data: unknown): boolean {
+  return data !== null && typeof data === "object" && (data as { schema?: unknown }).schema === FUNNEL_SCHEMA;
 }
 
 /** True when the signed body names the options levels schema. */
@@ -338,4 +349,19 @@ export function validateLedger(data: unknown): LedgerValidationResult {
   }
   if (errors.length > 0) return { ok: false, errors: errors.slice(0, MAX_ERRORS) };
   return { ok: true, edition: data as LedgerEdition };
+}
+
+export type FunnelValidationResult = { ok: true; doc: FunnelDoc } | { ok: false; errors: string[] };
+
+/** A funnel health document: its own schema, the same denylist. */
+export function validateFunnel(data: unknown): FunnelValidationResult {
+  if (data === null || typeof data !== "object" || Array.isArray(data)) {
+    return { ok: false, errors: ["/: must be an object"] };
+  }
+  const errors = findDenied(data).map((p) => `${p}: key is not allowed to be published`);
+  if (!validateFunnelSchema(data)) {
+    errors.push(...(validateFunnelSchema.errors ?? []).map(describe));
+  }
+  if (errors.length > 0) return { ok: false, errors: errors.slice(0, MAX_ERRORS) };
+  return { ok: true, doc: data as FunnelDoc };
 }

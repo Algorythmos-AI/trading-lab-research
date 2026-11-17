@@ -63,6 +63,9 @@ applies to it, and nothing from `research/`, `knowledge/` or the specs may be pu
 (`stocksdelta/journal`, the same key): the owner's own closed trades, never committed here; its fixture is synthetic.
 So is Card record (`/options/record`, `stocksdelta/ledger`, the same key): how the owner's focus card did, sent by the
 private focus-card-ledger repo after each close; its fixture's prices are synthetic.
+The selection funnel's health (`stocksdelta/funnel`, the same key) is sent by the private trading-options-funnel repo
+after it seals a night's evidence: counts, statuses, dates and hashes only (no symbols, prices, scores or outcomes,
+so the DEC-0046/DEC-0047 blind rule holds); it is shown on the Operations page.
 
 ## Layout
 
