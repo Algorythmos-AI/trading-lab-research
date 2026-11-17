@@ -381,7 +381,7 @@ function funnelMeaning(doc: FunnelDoc): string[] {
     if (s.names_judged !== null && s.names_kept !== null && s.names_kept > s.names_judged) {
       errors.push(`/stages/${i}/names_kept: more names kept than judged`);
     }
-    if (s.evidence !== "sealed" && s.replay !== "not_run") errors.push(`/stages/${i}/replay: no replay without sealed evidence`);
+    if (s.evidence !== "present" && s.replay !== "not_run") errors.push(`/stages/${i}/replay: no replay without sealed evidence`);
   });
   return errors;
 }

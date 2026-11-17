@@ -31,9 +31,9 @@ export interface FunnelDoc {
 export interface Stage {
   stage: "radar" | "focus_pick";
   /**
-   * sealed: the stage's inputs and output are sealed and verify. missing: nothing sealed for the session. broken: something sealed does not verify.
+   * present: the stage's inputs and output are sealed in trading-options-funnel and verify. missing: nothing sealed for the session. broken: something sealed does not verify.
    */
-  evidence: "sealed" | "missing" | "broken";
+  evidence: "present" | "missing" | "broken";
   sealed_at: Time | null;
   /**
    * How many correction folders follow the first seal.

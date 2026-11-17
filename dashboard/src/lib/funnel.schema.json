@@ -98,9 +98,9 @@
           ]
         },
         "evidence": {
-          "description": "sealed: the stage's inputs and output are sealed and verify. missing: nothing sealed for the session. broken: something sealed does not verify.",
+          "description": "present: the stage's inputs and output are sealed in trading-options-funnel and verify. missing: nothing sealed for the session. broken: something sealed does not verify.",
           "enum": [
-            "sealed",
+            "present",
             "missing",
             "broken"
           ]
