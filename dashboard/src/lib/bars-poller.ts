@@ -23,12 +23,14 @@ export interface BarsPollerDeps {
   setTimer: (fn: () => void, ms: number) => number;
   clearTimer: (id: number | undefined) => void;
   onFeed: (feed: BarsFeed) => void;
+  /** Optional: true to keep polling (at the usual interval) while the page is hidden; asked again at each turn. */
+  background?: () => boolean;
   /** For tests: the jitter's random number (lib/backoff.ts). */
   rand?: () => number;
 }
 
 /**
- * Polls every BARS_POLL_MS while visible; a hidden page parks the poll. After a failure it waits 2 s, doubling with
+ * Polls every BARS_POLL_MS while visible; a hidden page parks the poll, unless `background` says to keep going. After a failure it waits 2 s, doubling with
  * each failure in a row up to BARS_RETRY_CAP_MS, and the cap at once after a rate limit (429); the first answer puts
  * it back on its interval. A 503 means not configured: it stops. A failure after good bars keeps them marked `failed`,
  * so the board can stop using them. `kick` fetches now; a kick while a fetch is in flight is not dropped: one more
@@ -60,7 +62,7 @@ export function barsPoller(d: BarsPollerDeps): { start: () => void; stop: () => 
       return;
     }
     d.clearTimer(timer);
-    if (!d.visible()) {
+    if (!d.visible() && !d.background?.()) {
       timer = d.setTimer(() => void load(), BARS_POLL_MS);
       return;
     }

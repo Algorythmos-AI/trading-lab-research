@@ -2,8 +2,6 @@
 
 import {
   Ban,
-  Bell,
-  BellOff,
   ChevronRight,
   CircleCheck,
   CircleDashed,
@@ -18,13 +16,11 @@ import {
   Pause,
   SkipForward,
   TriangleAlert,
-  Volume2,
-  VolumeX,
   X,
   Zap,
 } from "lucide-react";
 import Link from "next/link";
-import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { BoardEventsLine } from "@/components/board-events";
 import { StatusBadge } from "@/components/status";
 import { boardEvents } from "@/lib/board-events";
@@ -53,6 +49,9 @@ import type { SwitchRead } from "@/lib/desk-guards";
 import type { GuardReason } from "@/lib/quote-guards";
 import { type NameState, type NameStateName, serverNow } from "@/lib/trade-state";
 import { cn } from "@/lib/utils";
+import { type Notice, ringTag } from "@/lib/alert-notify";
+import { useAlerts } from "./alert-prefs";
+import { closeEntryNotices, focusPage, ringAlerts, useSoundUnlock } from "./alerts";
 import { useCockpit } from "./cockpit-state";
 import { useDeskShadow } from "./desk-shadow";
 import { useGuardSwitches } from "./use-guards";
@@ -88,208 +87,34 @@ export function openFocusCard(symbol: string) {
   card.focus({ preventScroll: true });
 }
 
-// ---- the owner's alert choices, kept in this browser ---------------------------------------------------------------
-const ALERTS_KEY = "trade-now-alerts";
-const ALERTS_EVENT = "trade-now-alerts";
-type Alerts = { sound: boolean; notify: boolean };
-let alertsFallback = "";
-function readAlerts(): string {
-  try {
-    return window.localStorage.getItem(ALERTS_KEY) ?? alertsFallback;
-  } catch {
-    return alertsFallback;
-  }
-}
-function parseAlerts(raw: string): Alerts {
-  try {
-    const v = JSON.parse(raw) as Partial<Alerts>;
-    return { sound: v.sound === true, notify: v.notify === true };
-  } catch {
-    return { sound: false, notify: false };
-  }
-}
-function writeAlerts(a: Alerts) {
-  alertsFallback = JSON.stringify(a);
-  try {
-    window.localStorage.setItem(ALERTS_KEY, alertsFallback);
-  } catch {
-    // kept in alertsFallback for this page
-  }
-  window.dispatchEvent(new Event(ALERTS_EVENT));
-}
-function subscribeAlerts(onChange: () => void) {
-  window.addEventListener(ALERTS_EVENT, onChange);
-  window.addEventListener("storage", onChange);
-  return () => {
-    window.removeEventListener(ALERTS_EVENT, onChange);
-    window.removeEventListener("storage", onChange);
-  };
-}
-function useAlerts(): Alerts {
-  const raw = useSyncExternalStore(subscribeAlerts, readAlerts, () => "");
-  return parseAlerts(raw);
-}
+// ---- the owner's alerts: alert-prefs.ts (the choices), alerts.tsx (the sound, the notices and the rail's menu) ------
+export { alertMenuKey, alertMenuOutside } from "./alerts";
 
-/** One audio context, made on the owner's click (a browser plays sound only after one). */
-let audio: AudioContext | null = null;
-function unlockSound() {
-  try {
-    const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Ctx) return;
-    audio ??= new Ctx();
-    void audio.resume();
-  } catch {
-    audio = null;
-  }
-}
-function beep() {
-  try {
-    const ctx = audio;
-    if (!ctx) return;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.frequency.value = 880;
-    gain.gain.value = 0.06;
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.18);
-  } catch {
-    // no sound in this browser
-  }
-}
+/** An entry notice's tag: one per name and side, so a newer word replaces it on the screen (lib/alert-notify ringTag). */
+export const entryTag = (s: NameState) => ringTag("entry", s.symbol, rowView(s).badge.side);
 
-/** The browser's own notification for a manage card that newly says EXIT. */
-function exitSystemNotice(n: Pick<ManageNotice, "key" | "title" | "line">) {
-  try {
-    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
-    new Notification(n.title, { body: `${n.line}. Advisory: confirm on your chart.`, tag: `trade-manage-${n.key}` });
-  } catch {
-    // notifications unavailable
-  }
-}
-
-function systemNotice(s: NameState) {
-  try {
-    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+/** A board ring's notices: one per name and side, so a newer word replaces the older one and alerts again. */
+export function entryNotices(fresh: readonly NameState[]): Notice[] {
+  return fresh.map((s) => {
     const v = rowView(s);
-    new Notification(noticeTitle(s), { body: `${v.headline}${v.testing ? " Under test." : ""} Confirm on your chart.`, tag: `trade-now-${s.symbol}` });
-  } catch {
-    // notifications unavailable
-  }
-}
-
-/** The two opt-in switches. Both start off; permission is asked for only on the owner's click. */
-export function AlertButtons({ className }: { className?: string }) {
-  const alerts = useAlerts();
-  const [blocked, setBlocked] = useState(false);
-  const toggleNotify = async () => {
-    if (alerts.notify) return writeAlerts({ ...alerts, notify: false });
-    if (typeof Notification === "undefined") return setBlocked(true);
-    let perm = Notification.permission;
-    if (perm === "default") perm = await Notification.requestPermission();
-    if (perm !== "granted") return setBlocked(true);
-    setBlocked(false);
-    writeAlerts({ ...alerts, notify: true });
-  };
-  // On a phone (the bell's menu) each switch is 44 px tall at 14 px.
-  const btn = "text-muted-foreground hover:text-foreground inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[0.6875rem] whitespace-nowrap aria-pressed:text-foreground aria-pressed:bg-muted max-sm:min-h-11 max-sm:px-3 max-sm:text-sm";
-  return (
-    <span className={cn("flex items-center gap-1.5", className)}>
-      <button
-        type="button"
-        className={btn}
-        aria-pressed={alerts.sound}
-        onClick={() => {
-          if (!alerts.sound) unlockSound();
-          writeAlerts({ ...alerts, sound: !alerts.sound });
-        }}
-      >
-        {alerts.sound ? <Volume2 aria-hidden className="size-3.5" /> : <VolumeX aria-hidden className="size-3.5" />}
-        Sound
-      </button>
-      <button type="button" className={btn} aria-pressed={alerts.notify} onClick={() => void toggleNotify()}>
-        {alerts.notify ? <Bell aria-hidden className="size-3.5" /> : <BellOff aria-hidden className="size-3.5" />}
-        Browser notification
-      </button>
-      {blocked ? <span className="text-warn text-[0.6875rem] max-sm:text-xs">Blocked in this browser</span> : null}
-    </span>
-  );
-}
-
-/**
- * The bell menu's Escape. While the menu is open it claims every Escape, wherever the focus is: it closes the menu (and
- * stops the cockpit from leaving on the same key), so an Escape never leaves the menu open with the cockpit gone. The
- * focus goes back to the bell only when it was in the menu or on the bell, so it is never pulled from elsewhere.
- */
-export function alertMenuKey(key: string, focusInside: boolean): { close: boolean; refocus: boolean } {
-  return key === "Escape" ? { close: true, refocus: focusInside } : { close: false, refocus: false };
-}
-
-/** A pointer down while the menu is open: outside it closes the menu, and the focus goes back to the bell unless the
- * click landed on another control (which takes the focus itself). */
-export function alertMenuOutside(inside: boolean, onControl: boolean): { close: boolean; refocus: boolean } {
-  return inside ? { close: false, refocus: false } : { close: true, refocus: !onControl };
-}
-
-const CONTROL = "a[href], button, input, select, textarea, summary, [tabindex]";
-
-/**
- * On a phone the two switches fold into one bell with a small menu. Opening it moves the focus to its first switch;
- * Esc (wherever the focus is) or a click outside closes it, and gives the focus back to the bell when it was there.
- * The listeners are on only while it is open.
- */
-export function AlertMenu() {
-  const alerts = useAlerts();
-  const [open, setOpen] = useState(false);
-  const box = useRef<HTMLSpanElement>(null);
-  const button = useRef<HTMLButtonElement>(null);
-  const menu = useRef<HTMLSpanElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    menu.current?.querySelector<HTMLButtonElement>("button")?.focus();
-    const onKey = (ev: KeyboardEvent) => {
-      const k = alertMenuKey(ev.key, !!box.current && box.current.contains(document.activeElement));
-      if (!k.close) return;
-      ev.preventDefault(); // this Escape closes the menu only, not the cockpit too
-      setOpen(false);
-      if (k.refocus) button.current?.focus();
+    return {
+      title: noticeTitle(s),
+      body: `${v.headline}${v.testing ? " Under test." : ""} Confirm on your chart.`,
+      tag: entryTag(s),
+      onClick: () => focusPage(() => openFocusCard(s.symbol)),
     };
-    const onDown = (ev: PointerEvent) => {
-      const target = ev.target instanceof Element ? ev.target : null;
-      const r = alertMenuOutside(!!box.current && !!target && box.current.contains(target), !!target?.closest(CONTROL));
-      if (!r.close) return;
-      setOpen(false);
-      if (r.refocus) button.current?.focus();
-    };
-    document.addEventListener("keydown", onKey);
-    document.addEventListener("pointerdown", onDown);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.removeEventListener("pointerdown", onDown);
-    };
-  }, [open]);
-  const on = alerts.sound || alerts.notify;
-  return (
-    <span ref={box} className="relative sm:hidden">
-      <button
-        ref={button}
-        type="button"
-        aria-label="Alerts: sound and browser notification"
-        aria-expanded={open}
-        aria-controls="trade-now-alerts"
-        onClick={() => setOpen((o) => !o)}
-        className="text-muted-foreground hover:text-foreground flex size-11 items-center justify-center rounded-md border"
-      >
-        {on ? <Bell aria-hidden className="size-4" /> : <BellOff aria-hidden className="size-4" />}
-      </button>
-      {open ? (
-        <span ref={menu} id="trade-now-alerts" className="bg-popover absolute top-12 right-0 z-30 rounded-md border p-2 shadow-md">
-          <AlertButtons className="flex-col items-stretch" />
-        </span>
-      ) : null}
-    </span>
-  );
+  });
+}
+
+/** A manage card's ring: an exit stays on screen until dismissed. */
+export function exitNotices(fresh: readonly Pick<ManageNotice, "key" | "symbol" | "title" | "line">[]): Notice[] {
+  return fresh.map((n) => ({
+    title: n.title,
+    body: `${n.line}. Advisory: confirm on your chart.`,
+    tag: ringTag("exit", n.key, null),
+    sticky: true,
+    onClick: () => focusPage(() => openFocusCard(n.symbol)),
+  }));
 }
 
 // ---- the board as drawn --------------------------------------------------------------------------------------------
@@ -872,7 +697,8 @@ export function BoardProvider({
   const answeredAt = ok && Number.isFinite(Date.parse(feed.asOf)) ? Date.parse(feed.asOf) : null;
   const mode: BoardMode = now === null ? { kind: "loading", line: "Connecting to live prices" } : boardMode(e.session, halfDay, feed.status, now);
   const newest = ok ? Math.max(0, ...items.map((i) => Date.parse(feed.quotes[i.symbol]?.at ?? "") || 0)) : 0;
-  const bars = useBars(symbols, live && items.length > 0 && (mode.kind === "live" || mode.kind === "opening"), newest > 0 ? Math.floor(newest / 120_000) : null, halfDay);
+  const alerts = useAlerts();
+  const bars = useBars(symbols, live && items.length > 0 && (mode.kind === "live" || mode.kind === "opening"), newest > 0 ? Math.floor(newest / 120_000) : null, halfDay, alerts.sound || alerts.notify);
   const guardHold = useGuardSwitches(guardsOn, guardsRead, live && items.length > 0 && (mode.kind === "live" || mode.kind === "opening"));
   // Late or failing bars are not used: the states fall back to the page's own prices, and the header says so.
   const used = barsInUse(bars, browserNow);
@@ -907,7 +733,8 @@ export function BoardProvider({
   }
 
   // Notices: states seen once the bars have answered; what was there when the page opened is not announced.
-  const alerts = useAlerts();
+  // With sound chosen, the first click or key on the page turns the audio on (a choice kept from an earlier visit).
+  useSoundUnlock(alerts.sound);
   // The owner marked today done (done-today.tsx): entry notices are neither shown nor rung. The manage card's own
   // notices (SELL HALF, EXIT) are not these and keep working.
   const done = useDone();
@@ -931,8 +758,7 @@ export function BoardProvider({
   }
   useEffect(() => {
     if (ring.n === 0 || done) return;
-    if (alerts.sound) beep();
-    if (alerts.notify) ring.fresh.forEach(systemNotice);
+    ringAlerts(alerts, "entry", entryNotices(ring.fresh));
     // Only a new ring sounds: a change of the switches alone must not.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ring.n]);
@@ -985,6 +811,12 @@ export function BoardProvider({
   // shown: the screen never says "enter" for a state that is not live.
   const liveKeys = new Set(states.map(noticeKey).filter((k): k is string => k !== null));
   const shown = mode.kind === "live" ? book.kept.filter((k) => liveKeys.has(noticeKey(k) ?? "")) : [];
+  // The browser's own entry notices follow the board's: one whose state has left (or every one, once today is marked
+  // done) is taken down, so the screen never keeps saying "enter" for a state that is not live.
+  const liveTags = (done ? [] : shown).map(entryTag).sort().join("|");
+  useEffect(() => {
+    closeEntryNotices(new Set(liveTags ? liveTags.split("|") : []));
+  }, [liveTags]);
   const manage = useTradeManage({
     items,
     session: e.session,
@@ -1010,8 +842,7 @@ export function BoardProvider({
   // manage card's own notices are not entry notices.
   useEffect(() => {
     if (manage.exitRing.n === 0) return;
-    if (alerts.sound) beep();
-    if (alerts.notify) manage.exitRing.fresh.forEach(exitSystemNotice);
+    ringAlerts(alerts, "exit", exitNotices(manage.exitRing.fresh));
     // Only a new ring sounds: a change of the switches alone must not.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manage.exitRing.n]);

@@ -9,16 +9,22 @@ export { BARS_POLL_MS } from "@/lib/bars-poller";
 
 /**
  * Polls /api/bars (same origin, so the page's connect-src 'self' holds) every 30 seconds while the tab is visible,
- * for the session's 2-minute bars since 09:30 (to 13:00 on a half day). A hidden tab parks the poll; coming back
+ * for the session's 2-minute bars since 09:30 (to 13:00 on a half day). A hidden tab parks the poll (unless
+ * `background`: an alert is on, so the board keeps reading); coming back
  * fetches at once. `slot` (the 2-minute slot of the newest quote) fetches again as soon as it moves on, so a bar
  * that has just closed comes from the server and not only from the page's own prices; a kick during a fetch is
  * queued, not dropped. After a failure it tries again in 2 s, doubling up to 30 s. `enabled` false never polls. The
  * poll itself is lib/bars-poller.ts. Research only.
  */
-export function useBars(symbols: string, enabled = true, slot: number | null = null, halfDay = false): BarsFeed {
+export function useBars(symbols: string, enabled = true, slot: number | null = null, halfDay = false, background = false): BarsFeed {
   // Loading until the first answer, however late the board turns the poll on.
   const [feed, setFeed] = useState<BarsFeed>({ status: "loading" });
   const kick = useRef<(() => void) | null>(null);
+  // Read by the poll at each turn, so turning an alert on or off never restarts it.
+  const bg = useRef(background);
+  useEffect(() => {
+    bg.current = background;
+  }, [background]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -27,6 +33,7 @@ export function useBars(symbols: string, enabled = true, slot: number | null = n
       fetch: (input, init) => fetch(input, init),
       now: () => Date.now(),
       visible: () => document.visibilityState === "visible",
+      background: () => bg.current,
       setTimer: (fn, ms) => window.setTimeout(fn, ms),
       clearTimer: (id) => window.clearTimeout(id),
       onFeed: setFeed,

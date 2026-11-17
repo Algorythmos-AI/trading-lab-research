@@ -3,7 +3,7 @@
 // The status rail: one strip under the site header, sticky while the page scrolls, that says where the day stands at a
 // glance. The day's limits ("Clear · 0/5 trades · $0 of $100") and what one more stop would leave, the New York clock with the next boundary ("First
 // entries in 3:12"), the session as a thin bar with its no-entry windows shaded and a "now" tick, the Today log of the
-// board's changes, the Cockpit switch and the alert switches. Before the open the "Trade now" board folds away until
+// board's changes, the Cockpit switch and the Alerts menu (alerts.tsx). Before the open the "Trade now" board folds away until
 // its first entries; its line is then the hero's headline, so the rail does not repeat it, and the rail's countdown
 // carries the board's marks instead. The owner's "Done for today" (done-today.tsx) sits in the button group, and once
 // set takes the day pill's place: "Done for today · set 10:42 NY".
@@ -19,10 +19,11 @@ import { type DayFacts, type RailDay, railWithNotes, sessionClock, sessionTimeli
 import { cn } from "@/lib/utils";
 import { roomShown } from "@/lib/what-if";
 import { NO_MARKS, withOpenLoss } from "@/lib/held-marks";
+import { AlertsMenu } from "./alerts";
 import { CockpitSwitch } from "./cockpit";
 import { ServerCheckNote } from "./desk-shadow";
 import { DoneControl, DonePill, UncheckedNote, useDone, useDonePolling } from "./done-today";
-import { AlertButtons, AlertMenu, BoardEvents, type BoardLogEntry, boardCollapsed, useBoard } from "./trade-now";
+import { BoardEvents, type BoardLogEntry, boardCollapsed, useBoard } from "./trade-now";
 
 const DAY_TONE: Record<Tone, string> = {
   good: "border-good-fill/50 bg-good-soft",
@@ -287,12 +288,7 @@ export function StatusRail({ day: server, facts = null }: { day: RailDay | null;
         <div className="ml-auto flex items-center gap-1.5 max-sm:col-start-2 max-sm:row-start-2">
           {b.on ? <DoneControl className="max-sm:hidden" /> : null}
           {b.on ? <TodayLog log={b.log} /> : null}
-          {switches ? (
-            <>
-              <AlertButtons className="hidden sm:flex" />
-              <AlertMenu />
-            </>
-          ) : null}
+          {switches ? <AlertsMenu /> : null}
           {b.on ? <CockpitSwitch className="max-sm:min-h-11 max-sm:min-w-11 max-sm:justify-center max-sm:px-2" /> : null}
         </div>
       </div>
