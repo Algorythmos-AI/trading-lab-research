@@ -10,6 +10,7 @@ expiring after its session toward `nearest` (HYP-0031), both setups pooled.
 Two windows of rules (DEC-0039): `old` takes sessions up to OLD_RULES_END (the $2.00 cap: EXP-0024, EXP-0026);
 `cap15` takes sessions from CAP15_START (the $15.00 cap: EXP-0028). No trade counts in both.
 DEC-0040 closes `cap15` at CAP15_END and opens `spread5` at SPREAD5_START (the $5.00 spread cap: EXP-0029).
+DEC-0056 closes `spread5` at SPREAD5_END and opens `no_oi` at NO_OI_START (no open-interest floor: EXP-0039).
 """
 from __future__ import annotations
 
@@ -27,12 +28,14 @@ NEAREST = "nearest"
 TRIALS = (*SETUPS, NEAREST)
 OLD_RULES_END, CAP15_START = "2026-10-29", "2026-10-30"
 CAP15_END, SPREAD5_START = "2026-11-04", "2026-11-05"
+SPREAD5_END, NO_OI_START = "2026-11-17", "2026-11-18"
 WINDOWS: dict[str, tuple[str | None, str | None]] = {"old": (None, OLD_RULES_END), "cap15": (CAP15_START, CAP15_END),
-                                                     "spread5": (SPREAD5_START, None)}
+                                                     "spread5": (SPREAD5_START, SPREAD5_END),
+                                                     "no_oi": (NO_OI_START, None)}
 
 
 def in_window(rows: Sequence[Mapping[str, Any]], rules: str) -> list[Mapping[str, Any]]:
-    """The rows whose session falls in the window of `rules` (`old`, `cap15` or `spread5`), ends included."""
+    """The rows whose session falls in the window of `rules` (`old`, `cap15`, `spread5` or `no_oi`), ends included."""
     since, until = WINDOWS[rules]
     return [r for r in rows if (since is None or session_of(r) >= since) and (until is None or session_of(r) <= until)]
 

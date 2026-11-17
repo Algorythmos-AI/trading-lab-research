@@ -8,7 +8,7 @@ import json
 from typing import Any
 
 import pytest
-from test_options_clone_session import CFG, DAY, LIM, at, run_until, world  # noqa: F401
+from test_options_clone_session import CFG, DAY, LIM, OI_CFG, at, run_until, world  # noqa: F401
 
 from wt.brokers.base import BrokerRejected
 from wt.options import chain
@@ -59,11 +59,11 @@ def test_a_contract_with_no_feed_greeks_is_logged_as_modelled_when_entered(w):
 
 def test_a_contract_refusal_names_the_nearest_contracts_reason_and_numbers(w):
     w["m"].oi = 10
-    r = session(w)
+    r = session(w, cfg=OI_CFG)
     run_until(r, w["m"], w["b"], at("10:27"))
     (s,) = signal_row(w)["signals"]
     assert s["reason"] == "open-interest-below-floor" and s["failed"] == ["contract"]
-    assert s["why"]["open_interest"] == 10 and s["why"]["min"] == float(CFG["contract"]["min_open_interest"])
+    assert s["why"]["open_interest"] == 10 and s["why"]["min"] == float(OI_CFG["contract"]["min_open_interest"])
     assert s["why"]["candidates"] > 1
     assert s["contract"]["expiry"] == "2026-10-19" and s["contract"]["modelled"] is False
     assert s["contract_miss"]["reason"] == "open-interest-below-floor" and s["contract_miss"]["open_interest"] == 10
@@ -72,13 +72,13 @@ def test_a_contract_refusal_names_the_nearest_contracts_reason_and_numbers(w):
 def test_a_contract_miss_is_kept_when_an_earlier_gate_refused_first(w):
     (w["tmp"] / "KILL").write_text("x")
     w["m"].oi = 10
-    r = session(w)
+    r = session(w, cfg=OI_CFG)
     run_until(r, w["m"], w["b"], at("10:27"))
     (s,) = signal_row(w)["signals"]
     assert s["reason"] == "kill" and s["failed"] == ["kill", "contract"] and s["why"] == {}
     miss = s["contract_miss"]
     assert miss["reason"] == "open-interest-below-floor" and miss["expiry"] == "2026-10-19"
-    assert miss["open_interest"] == 10 and miss["min"] == float(CFG["contract"]["min_open_interest"])
+    assert miss["open_interest"] == 10 and miss["min"] == float(OI_CFG["contract"]["min_open_interest"])
     assert miss["candidates"] > 1
 
 
@@ -122,7 +122,7 @@ def test_the_published_document_carries_no_reason_contract_or_setup_field(w):
     from wt.options import clone_site
     w["m"].oi = 10
     out = Posted()
-    r = session(w, publisher=out)
+    r = session(w, cfg=OI_CFG, publisher=out)
     run_until(r, w["m"], w["b"], at("10:27"))
     r.publish()
     last = out.docs[-1]
