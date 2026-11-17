@@ -13,6 +13,7 @@ import {
   OPTIONS_CLONE_PATHS,
   OPTIONS_LIVE_PATHS,
   OPTIONS_PATHS,
+  RADAR_DESK_PATHS,
   RADAR_PATHS,
 } from "./desk";
 import {
@@ -40,6 +41,7 @@ import type { OptionsLive } from "./options-live.types";
 import type { OptionsEdition } from "./options.types";
 import { withStoredPremarket } from "./premarket";
 import { radarDates } from "./radar";
+import type { RadarDeskDoc } from "./radar-desk.types";
 import type { RadarEdition } from "./radar.types";
 import type { Snapshot } from "./types";
 
@@ -650,6 +652,43 @@ export const loadFunnel = cache(
       return { status: "ok", doc: parsed as FunnelDoc, source: "blob" };
     } catch (e) {
       logEvent("snapshot.read", { outcome: "error", desk: "funnel", error: e instanceof Error ? e.name : "unknown" });
+      return { status: "error" };
+    }
+  },
+);
+
+export type RadarDeskResult =
+  | { status: "ok"; doc: RadarDeskDoc; source: "fixture" | "blob" }
+  | { status: "missing" }
+  | { status: "error" };
+
+/**
+ * The Radar desk file (trading-options-funnel): the newest, or the one for `date` (YYYY-MM-DD). "missing" until the
+ * desk step has published, or when no file was sent for that session.
+ */
+export const loadRadarDesk = cache(
+  async (date?: string): Promise<RadarDeskResult> => {
+    if (fixtureMode()) {
+      const flags = await fixtureFlags();
+      if (flags.has("empty")) return { status: "missing" };
+      if (flags.has("error")) return { status: "error" };
+      const mod = await import("../../test/fixtures/radar-desk.v1.json");
+      const doc = (mod.default ?? mod) as unknown as RadarDeskDoc;
+      if (date && date !== doc.session) return { status: "missing" };
+      return { status: "ok", doc, source: "fixture" };
+    }
+    const path = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${RADAR_DESK_PATHS.history}${date}.json` : RADAR_DESK_PATHS.latest;
+    try {
+      const stored = await readText(path);
+      if (!stored) return { status: "missing" };
+      const parsed: unknown = JSON.parse(stored.text);
+      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+        logEvent("snapshot.read", { outcome: "not-an-object", desk: "radar-desk" });
+        return { status: "error" };
+      }
+      return { status: "ok", doc: parsed as RadarDeskDoc, source: "blob" };
+    } catch (e) {
+      logEvent("snapshot.read", { outcome: "error", desk: "radar-desk", error: e instanceof Error ? e.name : "unknown" });
       return { status: "error" };
     }
   },

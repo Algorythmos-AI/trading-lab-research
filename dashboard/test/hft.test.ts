@@ -558,6 +558,7 @@ describe("GET /api/health", () => {
     ledger: { status: "missing", accepts: 1, session: null, run_id: null, as_of: null, schema_version: null },
     calendar: { status: "missing", accepts: 1, run_id: null, as_of: null, schema_version: null },
     funnel: { status: "missing", accepts: 1, session: null, run_id: null, as_of: null, schema_version: null },
+    radar_desk: { status: "missing", accepts: 1, session: null, run_id: null, as_of: null, schema_version: null },
   };
 
   beforeEach(() => {

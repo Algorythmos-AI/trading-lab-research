@@ -1,5 +1,5 @@
 // What /api/health says about the research editions on file. Pure: no I/O.
-import type { CalendarResult, FunnelResult, JournalResult, LedgerResult, OptionsCloneResult, OptionsLiveResult, OptionsResult, RadarResult } from "./snapshot";
+import type { CalendarResult, FunnelResult, JournalResult, LedgerResult, OptionsCloneResult, OptionsLiveResult, OptionsResult, RadarDeskResult, RadarResult } from "./snapshot";
 
 /**
  * The newest edition format this build's schema validates. A publisher reads it from /api/health and sends
@@ -15,6 +15,7 @@ export const OPTIONS_CLONE_ACCEPTS = 1;
 export const JOURNAL_ACCEPTS = 2;
 export const LEDGER_ACCEPTS = 1;
 export const FUNNEL_ACCEPTS = 1;
+export const RADAR_DESK_ACCEPTS = 1;
 /** The newest economic calendar format this build validates. */
 export const CALENDAR_ACCEPTS = 1;
 
@@ -124,6 +125,19 @@ export function funnelHealth(r: FunnelResult): EditionHealth & { session: string
   return {
     status: r.status,
     accepts: FUNNEL_ACCEPTS,
+    session: d?.session ?? null,
+    run_id: d?.run_id ?? null,
+    as_of: d?.as_of ?? null,
+    schema_version: d?.schema_version ?? null,
+  };
+}
+
+/** The stored Radar desk file: the session it is for, and the run that built it. No names, flags or coverage. */
+export function radarDeskHealth(r: RadarDeskResult): EditionHealth & { session: string | null } {
+  const d = r.status === "ok" ? r.doc : null;
+  return {
+    status: r.status,
+    accepts: RADAR_DESK_ACCEPTS,
     session: d?.session ?? null,
     run_id: d?.run_id ?? null,
     as_of: d?.as_of ?? null,

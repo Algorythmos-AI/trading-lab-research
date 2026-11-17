@@ -112,6 +112,15 @@ export const FUNNEL_PATHS = {
 } as const;
 
 /**
+ * The Radar desk files (stocksdelta/radar-desk, from trading-options-funnel): one per session, kept the same way as
+ * the funnel's. The Options page reads the session's dated copy, never the latest, so an old file is never today's.
+ */
+export const RADAR_DESK_PATHS = {
+  latest: "radar-desk/latest.json",
+  history: "radar-desk/editions/",
+} as const;
+
+/**
  * The after-close options levels editions, one per session they are built for, kept the same way as the radar's.
  * `copies` also keeps every edition that became latest, each once, with the store's receipt time
  * (./edition-copy, EXP-0033 `labeller_rules.edition`): `history` holds one file per session that a refresh replaces.
