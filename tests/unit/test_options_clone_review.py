@@ -1,6 +1,7 @@
 """The options clone's review and verdict (DEC-0030, section 6)."""
 from __future__ import annotations
 
+import datetime as dt
 import importlib.util
 import json
 from pathlib import Path
@@ -33,6 +34,18 @@ def book(n_days: int, per_day: int, rops: list[float], setup: str = "retest") ->
             out.append(row(d, j + 1, rops[k % len(rops)], setup))
             k += 1
     return out
+
+
+def book_from(first: dt.date, n_days: int, per_day: int, rops: list[float], setup: str = "retest") -> list[dict]:
+    """As `book`, on `n_days` calendar days from `first`: windows that end (DEC-0056) need real dates."""
+    out = book(n_days, per_day, rops, setup)
+    for r in out:
+        d = first + dt.timedelta(days=int(r["trade_id"][8:10]) - 1)
+        r["trade_id"] = f"{d.isoformat()}-O-{r['trade_id'].rsplit('-', 1)[1]}"
+    return out
+
+
+OI_DAY = dt.date(2026, 11, 18)          # the first session of EXP-0039 (DEC-0056)
 
 
 def test_too_few_trades_is_no_verdict():
@@ -95,13 +108,13 @@ def test_the_day_line_counts_refusals_by_their_first_reason():
 def test_the_verdict_is_written_once(tmp_path):
     v = script("options_clone_verdict")
     j = tmp_path / "j.jsonl"
-    j.write_text("\n".join(json.dumps(r) for r in book(10, 1, [0.5])))
+    j.write_text("\n".join(json.dumps(r) for r in book_from(OI_DAY, 10, 1, [0.5])))
     out = tmp_path / "exp"
-    assert v.main(["--journal", str(j), "--out", str(out), "--rules", "spread5"]) == 0 and not out.exists()    # no verdict yet
-    j.write_text("\n".join(json.dumps(r) for r in book(25, 2, [0.5, -0.25, 0.5])))
-    assert v.main(["--journal", str(j), "--out", str(out), "--rules", "spread5"]) == 0
+    assert v.main(["--journal", str(j), "--out", str(out), "--rules", "no_oi"]) == 0 and not out.exists()  # no verdict yet
+    j.write_text("\n".join(json.dumps(r) for r in book_from(OI_DAY, 25, 2, [0.5, -0.25, 0.5])))
+    assert v.main(["--journal", str(j), "--out", str(out), "--rules", "no_oi"]) == 0
     assert "passes" in (out / "report.md").read_text() and json.loads((out / "result.json").read_text())["retest"]
-    assert v.main(["--journal", str(j), "--out", str(out), "--rules", "spread5"]) == 1                         # never written over
+    assert v.main(["--journal", str(j), "--out", str(out), "--rules", "no_oi"]) == 1                     # never written over
 
 
 def test_the_nightly_review_reads_the_journal_and_the_decisions(tmp_path):
@@ -116,6 +129,7 @@ def test_the_nightly_review_reads_the_journal_and_the_decisions(tmp_path):
     assert doc["setups"]["retest"]["trades"] == 0                                # 2 November is under the $15 cap
     assert doc["cap15"]["retest"]["trades"] == 1 and doc["cap15"]["retest"]["verdict"] == "none"
     assert doc["spread5"]["all"]["trades"] == 0                                  # 2 November is before the $5 spread cap
+    assert set(doc["no_oi"]["all"]) == {"trades", "sessions"}                    # EXP-0039: counts only (DEC-0056)
 
 
 def test_a_trade_on_a_later_expiry_counts_toward_hyp_0031_only():
@@ -134,18 +148,19 @@ def test_a_trade_on_a_later_expiry_counts_toward_hyp_0031_only():
 
 def test_the_nearest_trial_has_its_own_report(tmp_path):
     v = script("options_clone_verdict")
-    rows = book(25, 2, [0.5, -0.25, 0.5])
+    rows = book_from(OI_DAY, 25, 2, [0.5, -0.25, 0.5])
     for r in rows:
-        r["symbol"] = f"AMZN26{r['trade_id'][5:7]}{int(r['trade_id'][8:10]) + 1:02d}C00220000"   # the next day's expiry
+        nxt = dt.date.fromisoformat(r["trade_id"][:10]) + dt.timedelta(days=1)
+        r["symbol"] = f"AMZN{nxt:%y%m%d}C00220000"                                  # the next day's expiry
     j = tmp_path / "j.jsonl"
     j.write_text("\n".join(json.dumps(r) for r in rows))
     same_day = tmp_path / "EXP-0024-x"
-    assert v.main(["--journal", str(j), "--out", str(same_day), "--rules", "spread5"]) == 0 and not same_day.exists()   # none are same-day
+    assert v.main(["--journal", str(j), "--out", str(same_day), "--rules", "no_oi"]) == 0 and not same_day.exists()  # none are same-day
     out = tmp_path / "EXP-0026-options-clone-nearest-expiry"
-    assert v.main(["--journal", str(j), "--out", str(out), "--trials", "nearest", "--rules", "spread5"]) == 0
+    assert v.main(["--journal", str(j), "--out", str(out), "--trials", "nearest", "--rules", "no_oi"]) == 0
     text = (out / "report.md").read_text()
     assert text.startswith("# EXP-0026: the options clone on the nearest expiry") and "DEC-0034" in text
-    assert json.loads((out / "result.json").read_text())["nearest"]["trades"] == 42    # 5 to 25 November
+    assert json.loads((out / "result.json").read_text())["nearest"]["trades"] == 50    # 18 November to 12 December
     assert v.main(["--journal", str(j), "--out", str(tmp_path / "y"), "--trials", "weekly"]) == 2
 
 
@@ -180,13 +195,31 @@ def test_the_spread_cap_window_starts_on_5_november():
     assert [r["trade_id"][:10] for r in review.in_window(rows, "spread5")] == ["2026-11-05", "2026-11-06"]
 
 
-def test_the_spread5_report_is_exp_0029(tmp_path):
+def test_the_spread5_window_can_no_longer_reach_a_verdict(tmp_path):
+    """DEC-0056 closes EXP-0029 at 2026-11-17: 13 calendar days from 5 November cannot hold 20 sessions."""
     v = script("options_clone_verdict")
     j = tmp_path / "j.jsonl"
     j.write_text("\n".join(json.dumps(r) for r in book(25, 2, [0.5, -0.25, 0.5])))
     out = tmp_path / "EXP-0029-options-clone-spread-5"
     assert v.main(["--journal", str(j), "--out", str(out), "--rules", "cap15"]) == 0 and not out.exists()   # 8 trades
-    assert v.main(["--journal", str(j), "--out", str(out), "--rules", "spread5"]) == 0
+    assert v.main(["--journal", str(j), "--out", str(out), "--rules", "spread5"]) == 0 and not out.exists()  # 13 sessions
+
+
+def test_the_no_oi_report_is_exp_0039(tmp_path):
+    v = script("options_clone_verdict")
+    j = tmp_path / "j.jsonl"
+    j.write_text("\n".join(json.dumps(r) for r in book(17, 2, [0.5]) + book_from(OI_DAY, 25, 2, [0.5, -0.25, 0.5])))
+    out = tmp_path / "EXP-0039-options-clone-no-oi-floor"
+    assert v.main(["--journal", str(j), "--out", str(out), "--rules", "no_oi"]) == 0
     text = (out / "report.md").read_text()
-    assert text.startswith("# EXP-0029: the options clone under the $5.00 spread cap") and "DEC-0040" in text
-    assert json.loads((out / "result.json").read_text())["all"]["trades"] == 42
+    assert text.startswith("# EXP-0039: the options clone without the open-interest floor")
+    assert "DEC-0056" in text
+    assert json.loads((out / "result.json").read_text())["all"]["trades"] == 50       # none from before 18 November
+
+
+def test_the_open_interest_change_closes_exp_0029_and_opens_its_own_window():
+    """DEC-0056: EXP-0029 (`spread5`) ends with the 2026-11-17 session; from 2026-11-18 trades count toward EXP-0039
+    (`no_oi`) only. No trade counts in both, and the new verdict starts from zero."""
+    rows = [dict(row(2, 1, 0.5), trade_id=f"2026-11-{d:02d}-O-1") for d in (5, 17, 18, 19)]
+    assert [r["trade_id"][:10] for r in review.in_window(rows, "spread5")] == ["2026-11-05", "2026-11-17"]
+    assert [r["trade_id"][:10] for r in review.in_window(rows, "no_oi")] == ["2026-11-18", "2026-11-19"]

@@ -90,7 +90,8 @@ contract:
   min_volume: 500
   min_volume_index: 5000        # SPY and QQQ
   index_names: [SPY, QQQ]
-  min_open_interest: 1000
+  min_open_interest: 0          # DEC-0056 (from 2026-11-18): no open-interest floor; liquidity is judged on the
+                                # session's volume and the spread caps. 1000 up to 2026-11-17
 
 order:
   entry_buffer_pct: 2           # limit = the live ask plus this, never above max_ask

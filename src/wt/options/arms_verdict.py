@@ -7,7 +7,8 @@ the trade id it opened, its tags, the release and the control's config hash) and
 Each trial's unit, all return on premium after $0.03 a contract each way, resampled by session (DEC-0030 section 6):
 
 - a tag trial (NTZ, GAP, LEADER, IVGATE, EARLY): the control's trades of its base setup (`review.trial_of`), in the
-  window of EXP-0029 (`review.in_window(..., "spread5")`), split by the flag. A trade whose flag is None is in
+  window of EXP-0029 (sessions from `review.SPREAD5_START`; DEC-0056 left this open-ended, since the hash rule of
+  point 5 already ends a trial at the first session under another config), split by the flag. A trade whose flag is None is in
   neither group and is counted apart; a trade without the flag (LEADER outside QQQ) is not in the trial. The
   quantity is the difference in means, the rest minus the tagged (EARLY: early minus late). Count: 30 trades in
   each group and 20 sessions.
@@ -104,8 +105,8 @@ def units(trial: Trial, trades: Sequence[Mapping[str, Any]], decisions: Sequence
           shadow: Sequence[Mapping[str, Any]]) -> tuple[list[Unit], int, int]:
     """The trial's units in session order, how many trades were left out with an unknown flag, and how many units
     were left out because the release that wrote them is unknown."""
-    closed = [r for r in review.in_window([r for r in trades if r.get("event") == "trade_closed"], "spread5")
-              if r.get("counts") and _f(r.get("rop")) is not None]
+    closed = [r for r in trades if r.get("event") == "trade_closed" and review.session_of(r) >= review.SPREAD5_START
+              and r.get("counts") and _f(r.get("rop")) is not None]   # open-ended: the hash rule below ends a trial
     mine = {str(r["trade_id"]): r for r in closed
             if review.trial_of(str(r.get("setup")), str(r.get("symbol", "")), review.session_of(r)) == trial.base}
     out: list[Unit] = []

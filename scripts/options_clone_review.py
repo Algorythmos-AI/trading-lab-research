@@ -87,6 +87,9 @@ def build(day: str, journal: Path = JOURNAL, state: Path = OPT, cfg: dict | None
         "setups": review.review(review.in_window(trades, "old")),
         "cap15": review.review(review.in_window(trades, "cap15"), review.TRIALS),
         "spread5": review.review(review.in_window(trades, "spread5"), review.TRIALS),
+        # EXP-0039 (DEC-0056): counts only until its report is written, so no running figure is shown or stored
+        "no_oi": {k: {"trades": f["trades"], "sessions": f["sessions"]}
+                  for k, f in review.review(review.in_window(trades, "no_oi"), review.TRIALS).items()},
     }
 
 
@@ -104,6 +107,8 @@ def main(argv: list[str] | None = None) -> int:
     for s, f in [*doc["setups"].items(), *((f"{w} {k}", v) for w in ("cap15", "spread5") for k, v in doc[w].items())]:
         print(f"{s}: {f['trades']} trades in {f['sessions']} sessions, mean on premium {f.get('mean_rop')}, "
               f"range by session {f.get('ci_session')}, verdict {f['verdict']} ({'; '.join(f['why'])})")
+    for k, f in doc["no_oi"].items():
+        print(f"no_oi {k}: {f['trades']} trades in {f['sessions']} sessions (EXP-0039: counts only until its report)")
     q = doc["quality"]["day"]
     if q is None:
         print(f"quality: not scored ({doc['quality'].get('error')})")

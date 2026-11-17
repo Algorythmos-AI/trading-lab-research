@@ -6,12 +6,14 @@
         --out research/experiments/EXP-0028-...
     python scripts/options_clone_verdict.py --journal <...> --rules spread5 --trials retest,rejection,nearest \
         --out research/experiments/EXP-0029-...
+    python scripts/options_clone_verdict.py --journal <...> --rules no_oi --trials retest,rejection,nearest \
+        --out research/experiments/EXP-0039-...
 
 Writes report.md and result.json only when at least one of the trials has reached 30 trades and 20 sessions, and
 refuses to write over a report that exists: a later look is a new experiment. Counts and statistics only. The default
 trials are the two same-day setups (EXP-0024); `nearest` is HYP-0031's (EXP-0026, DEC-0034). `--rules` picks the
 window (DEC-0039): `old` (the default) counts sessions up to 2026-10-29, `cap15` 2026-10-30 to 2026-11-04 (EXP-0028),
-`spread5` from 2026-11-05 (EXP-0029, DEC-0040).
+`spread5` 2026-11-05 to 2026-11-17 (EXP-0029, DEC-0040), `no_oi` from 2026-11-18 (EXP-0039, DEC-0056).
 """
 from __future__ import annotations
 
@@ -30,8 +32,9 @@ OUT = ROOT / "research" / "experiments" / "EXP-0024-options-clone-forward"
 
 TITLES = {"EXP-0024": "the options clone, forward on paper", "EXP-0026": "the options clone on the nearest expiry",
           "EXP-0028": "the options clone under the $15.00 cap",
-          "EXP-0029": "the options clone under the $5.00 spread cap"}
-DECISIONS = {"EXP-0024": "DEC-0030", "EXP-0026": "DEC-0034", "EXP-0028": "DEC-0039", "EXP-0029": "DEC-0040"}
+          "EXP-0029": "the options clone under the $5.00 spread cap",
+          "EXP-0039": "the options clone without the open-interest floor"}
+DECISIONS = {"EXP-0024": "DEC-0030", "EXP-0026": "DEC-0034", "EXP-0028": "DEC-0039", "EXP-0029": "DEC-0040", "EXP-0039": "DEC-0056"}
 
 
 def render(res: dict, exp: str = "EXP-0024") -> str:
@@ -54,7 +57,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--journal", type=Path, required=True)
     ap.add_argument("--out", type=Path, default=OUT)
-    ap.add_argument("--rules", choices=tuple(review.WINDOWS), default="old", help="which window of rules (DEC-0039, DEC-0040)")
+    ap.add_argument("--rules", choices=tuple(review.WINDOWS), default="old", help="which window of rules (DEC-0039, DEC-0040, DEC-0056)")
     ap.add_argument("--trials", default=",".join(review.SETUPS), help=f"comma-separated, of {review.TRIALS}")
     a = ap.parse_args(argv)
     trials = tuple(t for t in a.trials.split(",") if t)

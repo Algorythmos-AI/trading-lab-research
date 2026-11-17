@@ -23,6 +23,8 @@ from wt.risk.options_guard import Limits
 
 ROOT = Path(__file__).resolve().parents[2]
 CFG = yaml.safe_load((ROOT / "config" / "options_clone.yaml").read_text())
+# DEC-0056 set the frozen floor to 0; tests of the open-interest refusal path set the old floor themselves
+OI_CFG = {**CFG, "contract": {**CFG["contract"], "min_open_interest": 1000}}
 LIM = Limits.from_risk(yaml.safe_load((ROOT / "config" / "risk.yaml").read_text()))
 DAY = dt.date(2026, 10, 19)
 OPEN = dt.datetime.combine(DAY, dt.time(9, 30), NEW_YORK)
@@ -310,7 +312,7 @@ def test_no_entry_under_a_latch(world):
 
 def test_no_entry_without_enough_open_interest(world):
     world["m"].oi = 10
-    r = world["make"]()
+    r = world["make"](OI_CFG)
     world["m"].now = at("09:25")
     r.arm()
     run_until(r, world["m"], world["b"], at("10:27"))
