@@ -4,9 +4,9 @@
 # Frozen with DEC-0054. Before the run, a decision record may amend it, saying what was viewed. After the run, a
 # changed value is a new experiment with new trials.
 experiment: EXP-0037
-status: proposed                     # registered when DEC-0054 is accepted; no results file until the run writes it once
+status: registered                   # DEC-0054 accepted on 2026-11-17; no results file until the run writes it once
 decision: DEC-0054
-family: O                            # 41 with these three (config/trial_registry.yaml), 38 until DEC-0054 is accepted
+family: O                            # 41 with these three (config/trial_registry.yaml)
 trials:                              # each variant against the control alone; never combined
   - {hypothesis: HYP-0062, trial: CLONE-ROOM-OPEN-SKY, variant: room_open_sky, role: primary}
   - {hypothesis: HYP-0063, trial: CLONE-RETEST-FREE-CONFIRM, variant: retest_free_confirm, role: primary}

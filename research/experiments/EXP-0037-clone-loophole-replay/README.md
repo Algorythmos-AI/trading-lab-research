@@ -1,6 +1,6 @@
 # EXP-0037: three of the options clone's rule gaps, replayed against the frozen clone
 
-- Decision: DEC-0054 (**PROPOSED**). Hypotheses: HYP-0062 CLONE-ROOM-OPEN-SKY, HYP-0063 CLONE-RETEST-FREE-CONFIRM,
+- Decision: DEC-0054 (accepted 2026-11-17). Hypotheses: HYP-0062 CLONE-ROOM-OPEN-SKY, HYP-0063 CLONE-RETEST-FREE-CONFIRM,
   HYP-0064 CLONE-REJECTION-SPY-TREND (family O).
 - **Nothing has been replayed.** The replay code is written (section "Replay code" below), before DEC-0054 is
   accepted and so before any session on the list exists.
