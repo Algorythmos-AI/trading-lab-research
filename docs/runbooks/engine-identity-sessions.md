@@ -43,6 +43,14 @@ the quote guards), take the answer from the fixture half or from a review.
 The "inputs check" line says in how many slots the old engine rebuilt the rows it logged. That shows how close the
 rebuilt inputs are to what production read. It is a quality figure, not the answer.
 
+- **The day's limit.** The replay has no journal, so the limit reads as not used. Where the record says it was used
+  (`day.day_limit_used`), the board drew no trade on every row not paused. The inputs check applies that, comparing
+  rows as a set, and gives the in-order count without it beside it.
+- **Read on the pairs' line.** Each pair's names line counts the differing names in those slots apart: the board drew
+  no trade there, whatever the engines' sides say.
+- **What stays unmatched.** The engine also takes the snapshot's day high and low, read at run time, about 110 s after
+  the slot's end. The record holds no prices, so a slot where the next bar set a new extreme cannot be rebuilt.
+
 ## Steps (owner, on the Mac, after the close)
 
 You need Node 22.18 or later, because the collector loads one `.ts` file directly. For 10 sessions the collector makes

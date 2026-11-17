@@ -222,6 +222,19 @@ export function nameKey(s: NameState) {
 }
 export const rowKeys = (ev: Evaluation): string[] => ev.rows.map((r) => `${r.symbol}/${r.side}/${r.state}`);
 
+/**
+ * The rows as production drew them in a slot whose record says the day's limit was used. The replay has no journal, so
+ * the limit reads as not used; on the board it is the row gate after a stale price or a tripped guard (paused) and the
+ * clock (no trade), before either side, so every row not paused is no trade (trade-state.ts nameState, step 2).
+ */
+export function withDayLimit(rows: readonly string[], dayLimitUsed: boolean): string[] {
+  if (!dayLimitUsed) return [...rows];
+  return rows.map((r) => {
+    const i = r.lastIndexOf("/");
+    return r.slice(i + 1) === "paused" ? r : `${r.slice(0, i)}/no_trade`;
+  });
+}
+
 export interface PairCount {
   old: string;
   new: string;
@@ -229,6 +242,8 @@ export interface PairCount {
   names: number;
   /** Names whose state, a side's state or brokeAt, or a card number differs. */
   namesDiffer: number;
+  /** Of those, the names in slots whose record says the day's limit was used: the board drew no trade there. */
+  namesDifferDayLimit: number;
   sideStateDiffer: number;
   brokeAtDiffer: number;
   cardDiffer: number;
@@ -243,11 +258,11 @@ export interface PairCount {
 }
 
 export function emptyPair(oldLabel: string, newLabel: string): PairCount {
-  return { old: oldLabel, new: newLabel, slots: 0, names: 0, namesDiffer: 0, sideStateDiffer: 0, brokeAtDiffer: 0, cardDiffer: 0, rows: 0, rowsDiffer: 0, statusDiffer: 0, transitions: {}, where: [] };
+  return { old: oldLabel, new: newLabel, slots: 0, names: 0, namesDiffer: 0, namesDifferDayLimit: 0, sideStateDiffer: 0, brokeAtDiffer: 0, cardDiffer: 0, rows: 0, rowsDiffer: 0, statusDiffer: 0, transitions: {}, where: [] };
 }
 
-/** Adds one slot's two runs to a pair's counts. */
-export function addSlot(p: PairCount, at: string, a: EngineRun, b: EngineRun): void {
+/** Adds one slot's two runs to a pair's counts; `dayLimitUsed` is the record's (`day.day_limit_used`). */
+export function addSlot(p: PairCount, at: string, a: EngineRun, b: EngineRun, dayLimitUsed = false): void {
   p.slots++;
   if (a.evaluation.status !== b.evaluation.status) p.statusDiffer++;
   // By name and its place among that name's states, so a name listed twice is compared twice, never hidden.
@@ -270,6 +285,7 @@ export function addSlot(p: PairCount, at: string, a: EngineRun, b: EngineRun): v
     const ky = y ? nameKey(y) : null;
     if (JSON.stringify(kx) === JSON.stringify(ky)) continue;
     p.namesDiffer++;
+    if (dayLimitUsed) p.namesDifferDayLimit++;
     p.where.push(`${at}/${sym}`);
     if (JSON.stringify(kx?.plan ?? null) !== JSON.stringify(ky?.plan ?? null)) p.cardDiffer++;
     for (const side of ["call", "put"] as const) {
@@ -309,7 +325,7 @@ export function reportLines(p: PairCount): string[] {
     .map(([k, n]) => `${k}: ${n}`);
   return [
     `${p.old} → ${p.new}: ${differs(p) ? "yes, rows differ" : "no, no row differs"}`,
-    `  slots ${p.slots}; names ${p.names}, of which differ ${p.namesDiffer} (a side's state ${p.sideStateDiffer}, brokeAt ${p.brokeAtDiffer}, card numbers ${p.cardDiffer})`,
+    `  slots ${p.slots}; names ${p.names}, of which differ ${p.namesDiffer} (a side's state ${p.sideStateDiffer}, brokeAt ${p.brokeAtDiffer}, card numbers ${p.cardDiffer}); in slots with the day's limit used, where the board drew no trade: ${p.namesDifferDayLimit}`,
     `  evaluation rows ${p.rows}, of which differ ${p.rowsDiffer}; evaluation status differs in ${p.statusDiffer} slots`,
     ...(t.length ? [`  side state changes: ${t.join("; ")}`] : []),
   ];

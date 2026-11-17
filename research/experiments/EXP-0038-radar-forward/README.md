@@ -30,7 +30,10 @@
 - Dashboard keeps radar edition copies with receipt time, lists them to the research key, listing sealed daily
   (precondition 3): not yet.
 - data branch protected (precondition 4): not yet.
-- Analysis code frozen (precondition 5), its trading-options-funnel commit: not yet.
+- Analysis code frozen (precondition 5), its trading-options-funnel commit: 2026-11-17, `main` at
+  `eaff05f533a55f8745b4bc83b9db53190d4e492c` (Algorythmos-AI/trading-options-funnel#9 and #10). Synthetic-data tests
+  and the generator vectors of `config.yaml` pass in its CI. The read runs only from a checkout at this commit, writes
+  its report once, and a re-run after a crash reads the inputs it saved.
 - DEC-0055 accepted (precondition 6): not yet.
 - First counted session: not yet.
 - Early end, lapse or breach: none.

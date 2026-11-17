@@ -36,6 +36,7 @@ import {
   readBundle,
   reportLines,
   rowKeys,
+  withDayLimit,
 } from "./identity-sessions";
 
 const C = collect as {
@@ -188,6 +189,22 @@ describe("the replay's parts", () => {
     expect(b2.tradeTimeUncertain).toBe(1);
   });
 
+  it("applies the record's day limit as the board does: every row no trade, a paused one kept", () => {
+    const rows = ["ZZZ/call/enter_zone", "ZZZ/put/missed", "YYY/call/paused", "YYY/put/no_trade"];
+    expect(withDayLimit(rows, false)).toEqual(rows);
+    expect(withDayLimit(rows, true)).toEqual(["ZZZ/call/no_trade", "ZZZ/put/no_trade", "YYY/call/paused", "YYY/put/no_trade"]);
+  });
+
+  it("counts the differing names in a slot with the day's limit used apart, and says so", () => {
+    const st = (state: string) => ({ symbol: "ZZZ", state, call: { state, brokeAt: null }, put: null, plan: null }) as unknown as NameState;
+    const run = (s: NameState): EngineRun => ({ evaluation: { status: "ok", rows: [{ symbol: "ZZZ", side: "call", state: s.state, bar_end: "" }] } as never, states: [s] });
+    const p = emptyPair("e-a", "e-b");
+    addSlot(p, "d/1300", run(st("missed")), run(st("watch")), true);
+    addSlot(p, "d/1030", run(st("enter_zone")), run(st("get_ready")));
+    expect(p).toMatchObject({ namesDiffer: 2, namesDifferDayLimit: 1 });
+    expect(reportLines(p)[1]).toContain("in slots with the day's limit used, where the board drew no trade: 1");
+  });
+
   it("compares a name listed twice twice, and rows as a multiset", () => {
     const st = (state: string) => ({ symbol: "ZZZ", state, call: { state, brokeAt: null }, put: null, plan: null }) as unknown as NameState;
     const run = (states: NameState[], rows: string[]): EngineRun => ({ evaluation: { status: "ok", rows: rows.map((s) => ({ symbol: "ZZZ", side: "call", state: s, bar_end: "" })) } as never, states });
@@ -251,7 +268,7 @@ function run(engines: Engine[]): void {
     const whole = engines.length > 2 ? emptyPair(engines[0]!.label, engines[engines.length - 1]!.label) : null;
     const skips: Record<string, number> = {};
     const loggedEngines: Record<string, number> = {};
-    const fidelity = { checked: 0, same: 0 };
+    const fidelity = { checked: 0, same: 0, sameWithoutDayLimit: 0 };
     let replayed = 0;
     let dayLimit = 0;
     let fromProbe = 0;
@@ -272,11 +289,16 @@ function run(engines: Engine[]): void {
         if (built.guardsOn) guardsOn++;
         const at = `${s.day}/${r.name.replace(/\.json$/, "")}`;
         const runs = engines.map((e) => e.evaluateSlotStates(JSON.parse(JSON.stringify(built.input)) as EvalInput));
-        pairs.forEach((p, i) => addSlot(p, at, runs[i]!, runs[i + 1]!));
-        if (whole) addSlot(whole, at, runs[0]!, runs[runs.length - 1]!);
+        pairs.forEach((p, i) => addSlot(p, at, runs[i]!, runs[i + 1]!, built.dayLimitUsed));
+        if (whole) addSlot(whole, at, runs[0]!, runs[runs.length - 1]!, built.dayLimitUsed);
         if (built.engine === engines[0]!.label && built.loggedStatus === "ok") {
           fidelity.checked++;
-          if (JSON.stringify(rowKeys(runs[0]!.evaluation)) === JSON.stringify(built.loggedRows)) fidelity.same++;
+          const rebuilt = rowKeys(runs[0]!.evaluation);
+          // As a multiset, as the pairs compare rows: the board orders its rows by state, so the ungated rebuild can
+          // order the same no-trade rows differently.
+          const set = (xs: readonly string[]) => JSON.stringify([...xs].sort());
+          if (set(withDayLimit(rebuilt, built.dayLimitUsed)) === set(built.loggedRows)) fidelity.same++;
+          if (JSON.stringify(rebuilt) === JSON.stringify(built.loggedRows)) fidelity.sameWithoutDayLimit++;
         }
       }
     }
@@ -287,7 +309,7 @@ function run(engines: Engine[]): void {
       `records written under: ${JSON.stringify(loggedEngines)}`,
       ...pairs.flatMap(reportLines),
       ...(whole ? reportLines(whole) : []),
-      `inputs check: ${engines[0]!.label} rebuilt the rows it logged in ${fidelity.same} of ${fidelity.checked} ok slots it wrote; slots with the day's limit used ${dayLimit}; last trade times from the probe ${fromProbe}, of which either side of the slot's end ${uncertain}`,
+      `inputs check: ${engines[0]!.label} rebuilt the rows it logged in ${fidelity.same} of ${fidelity.checked} ok slots it wrote, with the record's day limit applied, rows as a set (${fidelity.sameWithoutDayLimit} without the limit, in order); slots with the day's limit used ${dayLimit}; last trade times from the probe ${fromProbe}, of which either side of the slot's end ${uncertain}`,
       `not exercised here: the journal's day flags, the bad-data guards' pauses (slots with a guard on: ${guardsOn}), the snapshot's own high and low; the answer counts rows only (not the evaluation's status or degraded names)`,
     ];
     process.stdout.write(`\n${lines.join("\n")}\n\n`);
