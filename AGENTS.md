@@ -66,6 +66,12 @@ private focus-card-ledger repo after each close; its fixture's prices are synthe
 The selection funnel's health (`stocksdelta/funnel`, the same key) is sent by the private trading-options-funnel repo
 after it seals a night's evidence: counts, statuses, dates and hashes only (no symbols, prices, scores or outcomes,
 so the DEC-0046/DEC-0047 blind rule holds); it is shown on the Operations page.
+The Radar desk file (`stocksdelta/radar-desk`, the same key) is PRIVATE, behind the owner's login only, under the same
+rules: sent by trading-options-funnel each morning, it holds, per Options desk name, the Radar's list codes, grades and
+levels beside the desk's, earnings dates and closed flag codes. Codes, numbers and dates only, no free text and no
+outcomes; display only (it changes no pick, board state or checklist). The Options page shows the session's focus names
+only, never set against the other names (DEC-0047 section 8); its feed is on the Operations page. Its fixture's prices
+and dates are synthetic.
 
 ## Layout
 

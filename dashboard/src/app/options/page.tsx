@@ -19,6 +19,7 @@ import { OptionsGlance } from "@/components/client/options-glance";
 import { PaneBoundary } from "@/components/client/pane-boundary";
 import { EditionPicker } from "@/components/radar";
 import { OldCloseNotice } from "@/components/old-close-notice";
+import { RadarDeskPanel } from "@/components/radar-desk-panel";
 import { sydney, weekDate } from "@/lib/format";
 import { hourlyBySymbol } from "@/lib/hourly";
 import { interestBySymbol } from "@/lib/oi";
@@ -34,6 +35,7 @@ import { loadFlagsView } from "@/lib/desk-flags-run";
 import { loadGuardSwitches } from "@/lib/desk-guards-run";
 import { loadEvalSwitch } from "@/lib/desk-page-run";
 import { loadPageFeeds } from "@/lib/feed-watch-run";
+import { loadRadarDeskView } from "@/lib/radar-desk-run";
 import { STRIP_FEED_IDS } from "@/lib/feed-watch";
 import { JOURNAL_PATHS, OPTIONS_PATHS } from "@/lib/desk";
 import { listOptionsDates, loadJournal, loadLedger, loadOptions, loadOptionsLive, pageTime } from "@/lib/snapshot";
@@ -121,10 +123,14 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
     );
   }
   const full = result.edition;
-  // The feed health strip's server-known feeds, from the documents read above (a past edition has no strip).
-  const feeds = date
-    ? null
-    : await loadPageFeeds({ ids: STRIP_FEED_IDS, loaded: { [OPTIONS_PATHS.latest]: result, [JOURNAL_PATHS.latest]: journal } }, now);
+  // The feed health strip's server-known feeds, from the documents read above (a past edition has no strip), and the
+  // Radar desk file for the board's session (display only; a past edition has none either).
+  const [feeds, radarDesk] = date
+    ? [null, null]
+    : await Promise.all([
+        loadPageFeeds({ ids: STRIP_FEED_IDS, loaded: { [OPTIONS_PATHS.latest]: result, [JOURNAL_PATHS.latest]: journal } }, now),
+        loadRadarDeskView(full.session),
+      ]);
   // While trading the desk shows only the focus names; ?all=1 brings back the whole board.
   const showAll = one(sp.all) === "1";
   const e = showAll ? full : focusOnly(full);
@@ -262,6 +268,12 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
                     stale={stale}
                   />
                 </PaneBoundary>
+                {/* Straight under the desk, not above it: on a phone the desk's bottom bar must stay in reach on load. */}
+                {radarDesk ? (
+                  <PaneBoundary name="Radar desk">
+                    <RadarDeskPanel view={radarDesk} />
+                  </PaneBoundary>
+                ) : null}
                 {full.focus?.items.length ? (
                   <p className="text-xs">
                     <a className="text-muted-foreground hover:text-foreground underline" href={showAll ? "/options" : "/options?all=1"}>

@@ -1,0 +1,385 @@
+{
+  "schema": "stocksdelta/radar-desk",
+  "schema_version": 1,
+  "run_id": "5e1b8c0d7a2f4e6b9c3d1a0f8e7b6c5d4a3f2e1d0c9b8a7f6e5d4c3b2a190807",
+  "as_of": "2026-10-12T12:41:07Z",
+  "session": "2026-10-12",
+  "next_session": "2026-10-13",
+  "coverage": {
+    "desk_names": 12,
+    "radar_covered": 11,
+    "focus_names": 4,
+    "radar_calendar_has_earnings": true
+  },
+  "macro_in_hold": [
+    {
+      "date": "2026-10-12",
+      "time_et": "10:00",
+      "type": "ism_services",
+      "severity": "medium"
+    },
+    {
+      "date": "2026-10-13",
+      "time_et": "08:30",
+      "type": "cpi",
+      "severity": "high"
+    }
+  ],
+  "names": [
+    {
+      "symbol": "AAPL",
+      "focus": true,
+      "radar": {
+        "lists": [
+          "daily_radar",
+          "mega_cap_options"
+        ],
+        "evidence_grade": 2,
+        "chart_grade": 3,
+        "risk_tag": false,
+        "support": 241.5,
+        "resistance": 252.0
+      },
+      "desk_levels": {
+        "support": 242.1,
+        "resistance": 251.4,
+        "atr": 4.2
+      },
+      "level_gap_atr": {
+        "support": -0.14,
+        "resistance": 0.14
+      },
+      "earnings": {
+        "next": {
+          "date": "2026-10-29",
+          "when": "amc"
+        },
+        "csv_dates": [],
+        "radar_dates": [],
+        "sources_agree": true
+      },
+      "flags": [
+        "MACRO_HIGH_IN_HOLD"
+      ]
+    },
+    {
+      "symbol": "AMD",
+      "focus": false,
+      "radar": {
+        "lists": [
+          "breakout_watch"
+        ],
+        "evidence_grade": 2,
+        "chart_grade": 3,
+        "risk_tag": false,
+        "support": 160.0,
+        "resistance": 172.5
+      },
+      "desk_levels": null,
+      "level_gap_atr": null,
+      "earnings": {
+        "next": null,
+        "csv_dates": [],
+        "radar_dates": [],
+        "sources_agree": true
+      },
+      "flags": [
+        "MACRO_HIGH_IN_HOLD"
+      ]
+    },
+    {
+      "symbol": "AMZN",
+      "focus": false,
+      "radar": {
+        "lists": [
+          "support_plays"
+        ],
+        "evidence_grade": 1,
+        "chart_grade": 2,
+        "risk_tag": false,
+        "support": 218.0,
+        "resistance": 229.0
+      },
+      "desk_levels": null,
+      "level_gap_atr": null,
+      "earnings": {
+        "next": null,
+        "csv_dates": [],
+        "radar_dates": [],
+        "sources_agree": true
+      },
+      "flags": [
+        "MACRO_HIGH_IN_HOLD"
+      ]
+    },
+    {
+      "symbol": "AVGO",
+      "focus": false,
+      "radar": {
+        "lists": [
+          "mega_cap_options"
+        ],
+        "evidence_grade": 3,
+        "chart_grade": 3,
+        "risk_tag": false,
+        "support": 330.0,
+        "resistance": 351.0
+      },
+      "desk_levels": null,
+      "level_gap_atr": null,
+      "earnings": {
+        "next": null,
+        "csv_dates": [],
+        "radar_dates": [],
+        "sources_agree": true
+      },
+      "flags": [
+        "MACRO_HIGH_IN_HOLD"
+      ]
+    },
+    {
+      "symbol": "CRM",
+      "focus": false,
+      "radar": {
+        "lists": [],
+        "evidence_grade": null,
+        "chart_grade": null,
+        "risk_tag": false,
+        "support": null,
+        "resistance": null
+      },
+      "desk_levels": null,
+      "level_gap_atr": null,
+      "earnings": {
+        "next": null,
+        "csv_dates": [],
+        "radar_dates": [],
+        "sources_agree": true
+      },
+      "flags": [
+        "MACRO_HIGH_IN_HOLD"
+      ]
+    },
+    {
+      "symbol": "GOOGL",
+      "focus": false,
+      "radar": {
+        "lists": [
+          "other"
+        ],
+        "evidence_grade": 2,
+        "chart_grade": null,
+        "risk_tag": false,
+        "support": 240.0,
+        "resistance": null
+      },
+      "desk_levels": null,
+      "level_gap_atr": null,
+      "earnings": {
+        "next": null,
+        "csv_dates": [],
+        "radar_dates": [],
+        "sources_agree": true
+      },
+      "flags": [
+        "MACRO_HIGH_IN_HOLD"
+      ]
+    },
+    {
+      "symbol": "META",
+      "focus": true,
+      "radar": null,
+      "desk_levels": {
+        "support": 702.0,
+        "resistance": 731.5,
+        "atr": 12.4
+      },
+      "level_gap_atr": null,
+      "earnings": {
+        "next": {
+          "date": "2026-10-14",
+          "when": "bmo"
+        },
+        "csv_dates": [
+          "2026-10-14"
+        ],
+        "radar_dates": [],
+        "sources_agree": false
+      },
+      "flags": [
+        "EARNINGS_SOURCES_DISAGREE",
+        "MACRO_HIGH_IN_HOLD",
+        "RADAR_NOT_COVERED"
+      ]
+    },
+    {
+      "symbol": "MSFT",
+      "focus": true,
+      "radar": {
+        "lists": [
+          "mega_cap_options"
+        ],
+        "evidence_grade": 3,
+        "chart_grade": 2,
+        "risk_tag": false,
+        "support": 505.0,
+        "resistance": 522.0
+      },
+      "desk_levels": {
+        "support": 506.2,
+        "resistance": 520.8,
+        "atr": 7.9
+      },
+      "level_gap_atr": {
+        "support": -0.15,
+        "resistance": 0.15
+      },
+      "earnings": {
+        "next": {
+          "date": "2026-10-12",
+          "when": "amc"
+        },
+        "csv_dates": [
+          "2026-10-12"
+        ],
+        "radar_dates": [
+          "2026-10-12"
+        ],
+        "sources_agree": true
+      },
+      "flags": [
+        "EARNINGS_IN_HOLD",
+        "MACRO_HIGH_IN_HOLD"
+      ]
+    },
+    {
+      "symbol": "NFLX",
+      "focus": false,
+      "radar": {
+        "lists": [
+          "daily_radar"
+        ],
+        "evidence_grade": null,
+        "chart_grade": 2,
+        "risk_tag": false,
+        "support": 1180.0,
+        "resistance": 1240.0
+      },
+      "desk_levels": null,
+      "level_gap_atr": null,
+      "earnings": {
+        "next": {
+          "date": "2026-10-15",
+          "when": "amc"
+        },
+        "csv_dates": [
+          "2026-10-15"
+        ],
+        "radar_dates": [
+          "2026-10-15"
+        ],
+        "sources_agree": true
+      },
+      "flags": [
+        "MACRO_HIGH_IN_HOLD"
+      ]
+    },
+    {
+      "symbol": "NVDA",
+      "focus": true,
+      "radar": {
+        "lists": [
+          "breakout_watch",
+          "daily_radar"
+        ],
+        "evidence_grade": 2,
+        "chart_grade": 2,
+        "risk_tag": true,
+        "support": 176.0,
+        "resistance": 190.0
+      },
+      "desk_levels": {
+        "support": 180.4,
+        "resistance": 189.2,
+        "atr": 3.1
+      },
+      "level_gap_atr": {
+        "support": -1.42,
+        "resistance": 0.26
+      },
+      "earnings": {
+        "next": {
+          "date": "2026-11-18",
+          "when": "amc"
+        },
+        "csv_dates": [],
+        "radar_dates": [],
+        "sources_agree": true
+      },
+      "flags": [
+        "MACRO_HIGH_IN_HOLD",
+        "RADAR_RISK_TAG",
+        "LEVELS_DISAGREE"
+      ]
+    },
+    {
+      "symbol": "PLTR",
+      "focus": false,
+      "radar": {
+        "lists": [
+          "institutional_conviction"
+        ],
+        "evidence_grade": 2,
+        "chart_grade": 2,
+        "risk_tag": false,
+        "support": 171.0,
+        "resistance": 188.0
+      },
+      "desk_levels": null,
+      "level_gap_atr": null,
+      "earnings": {
+        "next": null,
+        "csv_dates": [],
+        "radar_dates": [],
+        "sources_agree": true
+      },
+      "flags": [
+        "MACRO_HIGH_IN_HOLD"
+      ]
+    },
+    {
+      "symbol": "TSLA",
+      "focus": false,
+      "radar": {
+        "lists": [
+          "small_cap_momentum"
+        ],
+        "evidence_grade": 1,
+        "chart_grade": 1,
+        "risk_tag": true,
+        "support": 410.0,
+        "resistance": 452.0
+      },
+      "desk_levels": null,
+      "level_gap_atr": null,
+      "earnings": {
+        "next": {
+          "date": "2026-10-12",
+          "when": "bmo"
+        },
+        "csv_dates": [
+          "2026-10-12"
+        ],
+        "radar_dates": [
+          "2026-10-12"
+        ],
+        "sources_agree": true
+      },
+      "flags": [
+        "EARNINGS_BEFORE_OPEN",
+        "MACRO_HIGH_IN_HOLD",
+        "RADAR_RISK_TAG"
+      ]
+    }
+  ]
+}

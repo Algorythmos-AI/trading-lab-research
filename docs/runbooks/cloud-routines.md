@@ -28,6 +28,11 @@ repository, through a seal step the owner adds to the after-close Options routin
 `docs/routine-steps.md`). Until the first night arrives its feed row is shown, unverified, and never pages; it is due
 by 22:30 UTC (`dashboard/src/lib/funnel-slots.ts`).
 
+The Radar desk file (`stocksdelta/radar-desk`) comes from the same repository, built and sealed each morning after the
+Radar's seal step (that repository's `options_funnel.desk`). Its sender is not yet added to a routine: until the first
+morning arrives its feed row is shown, unverified, and never pages; it is due by 09:15 New York on each regular
+session (`dashboard/src/lib/radar-desk-slots.ts`).
+
 Every radar edition that becomes latest is also kept, once and never replaced, under `radar/copies/<edition_date>/`
 with the store's receipt time (`dashboard/src/lib/edition-copy.ts`; the 10-minute watchdog repairs a missing one).
 `GET /api/research/radar-copies?date=YYYY-MM-DD`, signed with the radar key over
@@ -40,7 +45,8 @@ replaced before its copy was made leaves a create-only `.lost.json` marker there
 - **The feed watch** (`dashboard/src/lib/feed-watch.ts`, its table `FEEDS`) holds every routine above that publishes
   a document, with the schedule and zone in this table: the options edition (21:52 UTC), the pre-open refresh
   (08:50 New York, due by 09:05), the journal (the hourly live runs and 21:38 UTC), the radar (11:12 UTC), the two
-  ledger routines (assumed, display only), the funnel's health document (22:30 UTC, unverified, display only) and the
+  ledger routines (assumed, display only), the funnel's health document (22:30 UTC, unverified, display only), the
+  Radar desk file (09:15 New York, unverified, display only) and the
   desk's own shadow evaluator. It is the one source for the
   Operations page's "Your feeds", the Options page's health strip and the feed alerts (`/api/cron/watchdog`, pages
   only with `FEED_WATCH_ALERTS=on`). **A change of a routine's schedule or zone here must change its row there**, in
