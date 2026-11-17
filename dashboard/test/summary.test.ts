@@ -5,7 +5,7 @@ import { cleanSnapshot, fixture } from "./helpers";
 describe("summarize", () => {
   it("describes the fixture night", () => {
     expect(summarize(fixture())).toBe(
-      "Tonight: routine failed (exit 1), paper B finished normally with entries paused (kill switch), forward test recorded 1 session. 4 things need you.",
+      "Tonight: routine failed (exit 1), Robot B finished normally with entries paused (kill switch), forward test recorded 1 session. 4 things need you.",
     );
   });
 
@@ -14,13 +14,13 @@ describe("summarize", () => {
     s.ops!.forward!.sessions = 3;
     s.overview!.needs_you = s.overview!.needs_you!.slice(0, 1);
     expect(summarize(s)).toBe(
-      "Tonight: routine failed (exit 1), paper B finished normally with entries paused (kill switch), forward test recorded 3 sessions. 1 thing needs you.",
+      "Tonight: routine failed (exit 1), Robot B finished normally with entries paused (kill switch), forward test recorded 3 sessions. 1 thing needs you.",
     );
   });
 
   it("reads a quiet night", () => {
     const s = cleanSnapshot();
-    expect(summarize(s)).toBe("Tonight: routine finished normally, paper B finished normally. Nothing needs you.");
+    expect(summarize(s)).toBe("Tonight: routine finished normally, Robot B finished normally. Nothing needs you.");
   });
 
   it("mentions extra jobs only when they went wrong", () => {

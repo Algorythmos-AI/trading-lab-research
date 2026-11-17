@@ -41,7 +41,7 @@ export function PerformancePanel({ s }: { s: Snapshot }) {
             statistics. They are listed in the blotter.
           </Empty>
         ) : (
-          <Empty title="No closed trades yet">Statistics appear after paper B&rsquo;s first closed trade.</Empty>
+          <Empty title="No closed trades yet">Statistics appear after Robot B&rsquo;s first closed trade.</Empty>
         )
       ) : (
         <div className="grid gap-5">

@@ -55,6 +55,14 @@ KILLS = (ROOT / "KILL", OPT / "KILL")
 LOCK = "paper-o-runner"
 ARM_AT = dt.time(9, 25)
 EXPIRY_POLICIES = ("same_day", "nearest")      # config/options_clone.yaml names.expiry (DEC-0034)
+# A 2-minute bar is judged once its second minute is in, or this long after its end when that minute never comes
+# (IEX leaves out a minute with no trade there). A code constant, not a config number: it makes the clone read only
+# finished bars, as DEC-0030 says it does, and leaves config/options_clone.yaml (and EXP-0029's config) as frozen.
+LAST_MINUTE_GRACE = dt.timedelta(seconds=15)
+# A broker or levels failure at arm is tried again this often until this long before `day.first_entry`, then paged
+# (EXP-0029, fidelity fix). Code, not config, for the reason LAST_MINUTE_GRACE is.
+ARM_RETRY_EVERY = dt.timedelta(seconds=60)
+ARM_RETRY_STOP_BEFORE = dt.timedelta(minutes=2)
 # The order a refused signal's reason is chosen in: what closes entries for everyone, then the strategy's gates, then
 # the contract. The decision log names the first that failed; `gates` keeps every one.
 REASON_ORDER = ("kill", "latch", "off", "open-position", "loss-pause", "cooldown", "stalled", "event",
@@ -232,6 +240,8 @@ class Name:
     oi: dict[str, float]                        # open interest of the contracts of `expiry`
     expiry: dt.date | None = None               # the expiry it trades today (DEC-0034); None: the session's
     last_bar: str = ""                          # the end (HH:MM) of the last finished bar looked at
+    last_close: float | None = None             # that bar's close when it was looked at (a later change is logged)
+    revised: str = ""                           # the end (HH:MM) of the last bar whose close was logged as revised
     cooldown_until: dt.datetime | None = None
     research: dict[str, float] = field(default_factory=dict)   # DEC-0041 level codes, tagging only (never marks)
 
@@ -284,6 +294,11 @@ class Runner:
     names_source: str | None = None                       # focus | fallback
     publisher: Any = None                                  # clone_site.Publisher, or None: nothing is published
     doc_fault: str = ""
+    arm_failed: dict[str, Exception] = field(default_factory=dict)   # off key -> the error at arm, retried
+    arm_tries: int = 0
+    next_arm_try: dt.datetime | None = None
+    arm_gave_up: bool = False
+    options_level: int | None = None
 
     def __post_init__(self) -> None:
         self.session = self.day.isoformat()
@@ -390,15 +405,26 @@ class Runner:
             self.off["level"] = f"options level {level}"
             self.page("options-level", "Options clone: account cannot buy options",
                       f"Options level {pg.count(level)}; buying calls and puts needs 2.", 5)
+        self.arm_tries = 1
+        self.next_arm_try = self.now() + ARM_RETRY_EVERY
+        self.options_level = level
+        if self.connect_at_arm():
+            self.finish_arm()
+        if self.arm_failed and self.now() >= self.arm_deadline():    # armed after 09:58: no retry, as before
+            self.give_up_arm()
+        return not self.off
+
+    def connect_at_arm(self) -> bool:
+        """Reconcile the loaded plans with the broker and read its positions. False, with `off["broker"]` set and
+        the failure kept for `retry_arm`, when the broker cannot be reached."""
         try:
             rep = self.oms.reconcile(self.plans)
             self.account_holds = {x.symbol for x in self.broker.positions() if x.qty}
         except TransportError as e:
             self.off["broker"] = "broker unreachable at arm"
+            self.arm_failed["broker"] = e
             # The detail goes to the job's log, never to the page (the topic is public).
             pg.say(f"broker unreachable at arm: {e.__class__.__name__}: {str(e)[:300]}", err=True)
-            self.page("broker", "Options clone: broker unreachable at arm",
-                      f"{pg.exc_name(e)}; entries are off today. The clone's log has the detail.", 4)
             return False
         own = getattr(self.broker, "own_account", False)
         stock = [s for s in self.account_holds if chain.parse_occ(s) is None]
@@ -406,14 +432,70 @@ class Runner:
             self.off["position-at-arm"] = "a position no plan knows"
             self.page("flatten-required", "Options clone: a position no plan knows",
                       "Entries are off today. See docs/runbooks/options-clone.md.", 5)
+        return True
+
+    def finish_arm(self) -> None:
+        """Mark today's names and write the armed line: once, after the broker part of arm has succeeded."""
         self.prepare()
         self.arms_guard("restore", self.arms_restore)
         self.write("armed", session=self.session, names=sorted(self.names), off=sorted(self.off),
-                   own_account=own, options_level=level, plans_open=[p.trade_id for p in self.plans if p.active],
-                   orders=self.cfg.get("orders"), feed=self.cfg["feeds"]["option"])
+                   own_account=getattr(self.broker, "own_account", False), options_level=self.options_level,
+                   plans_open=[p.trade_id for p in self.plans if p.active],
+                   orders=self.cfg.get("orders"), feed=getattr(self.feeds, "feed", self.cfg["feeds"]["option"]))
         hc.ping_async("wt-paper-o-armed", "", f"names {len(self.names)}")
         self.publish()
-        return not self.off
+
+    def arm_deadline(self) -> dt.datetime:
+        return self.ck.first_entry - ARM_RETRY_STOP_BEFORE
+
+    def retry_arm(self, now: dt.datetime) -> None:
+        """Try again what failed at arm (EXP-0029, fidelity fix): once a minute until `arm_deadline`, only the part
+        that failed, never re-reading or re-booking a plan. A success removes only the off-switch the failure set;
+        still failing at the deadline, one page and entries stay off for the day."""
+        if not self.arm_failed or self.arm_gave_up or self.next_arm_try is None or now < self.next_arm_try:
+            return
+        before_failed, before_off = dict(self.arm_failed), dict(self.off)
+        try:
+            self.arm_tries += 1
+            self.next_arm_try = now + ARM_RETRY_EVERY
+            was = sorted(self.arm_failed)
+            if "broker" in self.arm_failed:
+                del self.arm_failed["broker"]
+                self.off.pop("broker", None)
+                if self.connect_at_arm():
+                    self.finish_arm()
+            elif "levels" in self.arm_failed:
+                del self.arm_failed["levels"]
+                self.off.pop("levels", None)
+                self.prepare()
+                self.publish()
+            back = [k for k in was if k not in self.arm_failed]
+            if back:
+                self.write("arm_retry", tries=self.arm_tries, recovered=back, still=sorted(self.arm_failed),
+                           names=sorted(self.names), off=sorted(self.off))
+            if self.arm_failed and now >= self.arm_deadline():
+                self.give_up_arm()
+        except Exception as e:  # noqa: BLE001 — a retry must never cost a poll its exits
+            for k, v in before_failed.items():               # the failure stands: its off-switch stays on
+                self.arm_failed.setdefault(k, v)
+                self.off.setdefault(k, before_off.get(k, "failure at arm"))
+            self.write("arm_retry_fault", error=e.__class__.__name__)
+            self.give_up_arm()
+
+    def give_up_arm(self) -> None:
+        self.arm_gave_up = True
+        self.write("arm_retry", tries=self.arm_tries, recovered=[], still=sorted(self.arm_failed),
+                   names=sorted(self.names), off=sorted(self.off), gave_up=True)
+        if "broker" in self.arm_failed:
+            e = self.arm_failed["broker"]
+            # The detail goes to the job's log, never to the page (the topic is public).
+            pg.say(f"broker unreachable at arm: {e.__class__.__name__}: {str(e)[:300]}", err=True)
+            # Its own key: step's "Three polls in a row" page uses `broker`, and a key still firing sends nothing.
+            self.page("arm-broker", "Options clone: broker unreachable at arm",
+                      f"{pg.exc_name(e)}; entries are off today. The clone's log has the detail.", 4)
+        if "levels" in self.arm_failed:
+            e = self.arm_failed["levels"]
+            self.page("levels", "Options clone: no levels today", pg.exc_name(e), 4)
 
     def expiry_for(self, root: str) -> tuple[dt.date | None, dict[str, float]]:
         """The expiry `root` trades today and its contracts' open interest, or (None, {}) if it has none (DEC-0034).
@@ -452,7 +534,7 @@ class Runner:
             pre = self.feeds.minutes(every, pre_start, min(self.now(), self.ck.open))
         except (TransportError, requests.RequestException) as e:
             self.off["levels"] = "levels unavailable"
-            self.page("levels", "Options clone: no levels today", pg.exc_name(e), 4)
+            self.arm_failed["levels"] = e                        # retried until arm_deadline, paged there
             return
         dropped: dict[str, str] = {}
         ed = self.feeds.edition() if hasattr(self.feeds, "edition") else None
@@ -517,6 +599,7 @@ class Runner:
     # ---- one poll ----------------------------------------------------------------------------
     def step(self) -> None:
         now = self.now()
+        self.retry_arm(now)                                # first: it must run while the broker is still down
         try:
             self.account_holds = {x.symbol for x in self.broker.positions() if x.qty}
             marks = self.broker.marks() if hasattr(self.broker, "marks") else {}
@@ -580,7 +663,7 @@ class Runner:
             ms = regime.minute_bars(rows.get(root, []), self.day)
             if not ms or now - ms[-1].end > stall:
                 stalled.add(root)
-            two = regime.resample(ms, int(b["minutes"]), now)
+            two = regime.resample(ms, int(b["minutes"]), now, LAST_MINUTE_GRACE)
             bars[root] = two
             t = regime.read(two, int(b["atr_period"]), int(b["ema_fast"]), int(b["ema_slow"]),
                             float(self.cfg["gates"]["shock_bar_atr"]))
@@ -783,6 +866,22 @@ class Runner:
             if queue:
                 self.arms_flush(queue, now, tapes, late)
 
+    def note_revised(self, nm: Name, two: Sequence[regime.Bar]) -> None:
+        """Journal once when the bar last looked at now has another close: the feed changed a bar after the clone
+        judged it. Only the last bar judged and only its close are compared, inside the entry window, so a count of
+        zero means none was seen, not that none happened."""
+        if not nm.last_bar or nm.last_close is None or nm.revised == nm.last_bar:
+            return
+        for b in reversed(two):
+            end = b.end.strftime("%H:%M")
+            if end == nm.last_bar:
+                if b.c != nm.last_close:
+                    nm.revised = end
+                    self.write("bar_revised", root=nm.root, bar=end, judged=nm.last_close, now=b.c)
+                return
+            if end < nm.last_bar:
+                return
+
     def entries(self, now: dt.datetime, bars: Mapping[str, list[regime.Bar]], tapes: Mapping[str, regime.Tape],
                 stalled: set[str], streak: int, last_loss: dt.datetime | None, paused: bool, late: bool,
                 queue: list[ArmsBar]) -> None:
@@ -790,9 +889,11 @@ class Runner:
         instead of written, so every arm's work (and its network calls) runs after every order of this poll."""
         for root, nm in sorted(self.names.items()):
             two = bars.get(root, [])
+            self.note_revised(nm, two)
             if not two or two[-1].end.strftime("%H:%M") == nm.last_bar:
                 continue
             nm.last_bar = two[-1].end.strftime("%H:%M")
+            nm.last_close = two[-1].c
             tape = tapes.get(root)
             rec: dict[str, Any] = {"bar": nm.last_bar, "root": root, "word": tape.word if tape else None}
             blocks = {k: v for k, v in {
@@ -874,7 +975,8 @@ class Runner:
                 finally:
                     self.sending = ""
                 self.write("entry_sent", trade_id=p.trade_id, symbol=p.symbol, setup=p.setup, side=p.side,
-                           level=p.level, limit=p.limit, quoted_ask=p.quoted_ask, quote_age_s=age, state=p.state)
+                           level=p.level, limit=p.limit, quoted_ask=p.quoted_ask, quoted_bid=q.bid, quote_age_s=age,
+                           state=p.state)
                 if p.state == "rejected" and self.oms.refused is not None:   # the guard or the broker said no
                     why = dict(self.oms.refused)
                     by, code = why.pop("by"), why.pop("code")
@@ -939,6 +1041,8 @@ class Runner:
         elif first == "reach":
             nxt = setups.next_level(sig.side, sig.entry, nm.marks, sig.level.price)
             why = {"distance": None if nxt is None else round(abs(nxt.price - sig.entry), 4), "remaining_move": value}
+            if value is None and not chain_ok:       # no chain, so no volatility, so no reach: the chain is the cause
+                code = "chain-unavailable"
         elif first == "shock":
             why = {"word": value}
         elif first == "contract":

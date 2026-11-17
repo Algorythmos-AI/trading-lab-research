@@ -134,3 +134,20 @@ def test_a_fault_in_the_decision_log_never_costs_the_entry(w, monkeypatch):
     assert p.state == "open"
     (s,) = signal_row(w)["signals"]
     assert "reason" not in s and s["log_fault"] == "KeyError"
+
+
+def test_a_signal_refused_because_the_chain_could_not_be_read_blames_the_chain_not_reach(w):
+    """No chain, so no volatility, so the reach gate cannot pass: the reason is the chain (logging only, the same
+    refusal as before)."""
+    from wt.brokers.base import TransportError
+    r = session(w)
+
+    def chain_down(root, expiry):
+        raise TransportError("chain answered 503")
+    w["m"].chain = chain_down
+    run_until(r, w["m"], w["b"], at("10:27"))
+    row = signal_row(w)
+    (s,) = row["signals"]
+    assert row["action"] == "signal-refused" and r.today() == []
+    assert s["reason"] == "chain-unavailable" and "reach" in s["failed"] and "contract" in s["failed"]
+    assert s["why"]["remaining_move"] is None

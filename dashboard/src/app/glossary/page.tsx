@@ -15,7 +15,7 @@ const TERMS: { term: string; means: string }[] = [
   { term: "Kill switch", means: "A file on the host that stops new entries. Open trades are still managed and exited. It is never switched from this site." },
   { term: "Refused", means: "A job that stopped itself on purpose because a safety check failed (for example low disk, or code not on main). One alert per day; nothing trades." },
   { term: "Missed", means: "A job that was due on a US trading day and left no record at all. That is the case the dead-man's switches exist to catch." },
-  { term: "G2 gate", means: "The paper-trading evidence step. Paper B must reach set counts of trades, sessions and incident-free days before any real-money step is even discussed." },
+  { term: "G2 gate", means: "The paper-trading evidence step. Robot B (paper) must reach set counts of trades, sessions and incident-free days before any real-money step is even discussed." },
   { term: "Forward test", means: "Signals recorded live each session with no orders sent, so a strategy's rules can be judged on data it never saw." },
   { term: "Snapshot", means: "The status the trading host publishes: every 5 minutes during the US session, every 15 minutes otherwise. This site only shows the latest one; it can't change anything." },
   { term: "Audit trail", means: "One time-ordered record of deploys, kill-switch changes, latch resets, refused or failed jobs, and alerts. The owner's own notes never leave the Mac." },

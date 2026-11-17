@@ -46,8 +46,65 @@
   `README.md`): not yet.
 - "Signal confirmed" alert first switched on in production: not yet.
 - DEC-0048's switch date (the report gives group counts before and after it): not yet.
-- Engine identity checks (yes or no, with counts): none.
-- Defect fixes to the outcome or signal code before the read: none.
+- Engine identity checks (yes or no, with counts): 2026-11-16, `e-28344e769752` to `e-05b589ff4f1c` (the pre-dry
+  defect fixes below), fixtures only: no, no fixture row differs (735 board cases, 2,205 rows; 84 evaluated slots,
+  420 rows; `dashboard/test/validation/engine-identity.test.ts`, the old engine rebuilt byte-identical to the base
+  commit's `trade-state.ts`). In the same test the only rows that differ are boundary touches: 4 of 4 constructed
+  cases; 10,039 of 20,388 boundary scenes in a seeded sweep, 0 of its 19,612 other scenes, 0 of 20,000 scenes with
+  many-decimal ATRs and 0 of 20,000 with five-decimal levels. The other half of the check, the last 10 logged
+  sessions through both engines, is NOT done: the Mac cannot read the production records. DEC-0051 section 8
+  requires it before this label reaches production; the owner or the host runs it. No `dry` session and no window
+  had started, so it ends nothing.
+- Defect fixes to the outcome or signal code before the read: none to the outcome code. To the signal code:
+  - 2026-11-16, before any `dry` session, owner-approved (DEC-0051 section 8, precondition 3's defect-fix route), two
+    defects found by the pre-dry validation (`dashboard/test/validation/logic-suspects.test.ts` cases a and d):
+    (1) `dashboard/src/lib/trade-state.ts` `sideState`, the retest touch: a dip exactly 0.1 ATR from the line was not
+    a touch in floating point (100.20 − 100.10 = 0.10000000000000853 > 0.1); when the level and the bar's low (high,
+    for a put) are whole ten-thousandths, the dip is now taken in whole ten-thousandths and compared with the ATR
+    exactly; any price with more decimals keeps the original floating comparison. (2)
+    `dashboard/src/lib/contract-pick.ts` `judge`: an ask the ticket's sizing cannot take (not a safe whole number of
+    cents, for example an ask of 1e300, on which `ticket.ts` `sizeTicket` throws) named no contract for the whole side
+    (`no-chain`); it now fails that strike's premium check only and the other strikes are still judged. `ticket.ts`
+    is unchanged. No parameter, threshold, rule or owner rule changed. `SIGNAL_CODE_HASH`
+    `s-0ec9e5efd1e65790ca5f83e5ba845269ad2c3666b500c631d89f2cb7327f2345` to
+    `s-44709694b261a3bceebdafe21cc15f9f58f49f2359b73122d493d6e54aca1a41` (the pin in
+    `dashboard/test/signal-freeze.test.ts` moved with it); DEC-0044 `ENGINE_VERSION` `e-28344e769752` to
+    `e-05b589ff4f1c` (of the two, only `trade-state.ts` is in the engine's code). The engine identity check is the
+    line above. Comments in `signal.ts` corrected too (the chain's checked age is `contract.ts` `chainAge`; the
+    lifecycle is counted at the slot's end + `CLOSE_GRACE_MS`): comments do not move the hash.
+- A rule change to the signal's code before any `dry` session: 2026-11-17, DEC-0052 (accepted by its own pull request,
+  #453), not a defect fix.
+  - **What changed:** the board's break and retest completes as the options clone's retest does: a touch within 1.0
+    two-minute ATR, then a confirming close. ENTER holds for two slots, ended by a run past the confirming close, then
+    reads missed "slot". The card's "Break and hold" wording follows.
+  - **Files:** `trade-state.ts`, `trade-now.ts`, `entry-checks.ts` (`RETEST_WITHIN_ATR`) and `focus-plan.ts`.
+  - **Hashes:** `SIGNAL_CODE_HASH` `s-44709694b261a3bceebdafe21cc15f9f58f49f2359b73122d493d6e54aca1a41` to
+    `s-065118e5ffe27eee3b520c817f045160327c9b6d9c14b4fa1e782cc289cc41e3` (the pin in
+    `dashboard/test/signal-freeze.test.ts` moved with it). DEC-0044 `ENGINE_VERSION` `e-05b589ff4f1c` to
+    `e-d6053c7fdd0a`.
+  - **The identity check on the fixtures: rows differ, as a rule change should.** The old engine (integration
+    8cd5ff0d) and the new one ran on the original fixture inputs, before the fixture morning was moved for the new
+    rule, with rows matched by name.
+    - **Board:** 21 of 2,205 rows differ: QQQ at the scripted step 3, in every edition and quote set.
+    - **Evaluation:** 14 of 420 rows differ: the QQQ call at the step-3 slot.
+    - **What differs:** all are enter_zone → get_ready. No `brokeAt` and no card number differs.
+    - **The fixture morning** was then moved one price (QQQ at 10:26) so the scripted story still has a confirmed
+      retest. On the moved fixture the two engines differ in wording only.
+    - **The re-based check:** `dashboard/test/validation/engine-identity.test.ts` is re-based on `e-d6053c7fdd0a`. It
+      pins 52 of 312 bar states differing over the 15 retest vector sessions, where the new engine matches the
+      clone's first signal and the old one does not.
+  - **Still to run:** the check over the last 10 logged production sessions, before this label reaches production. It
+    is on the host. Its answer and counts are written here; "rows differ" is expected for a rule change.
+  - No `dry` session and no window had started, so it ends nothing. Amendment 1 reads only `dry` sessions recorded
+    under the new hash.
+- Writer fixes before any `dry` session, 2026-11-16 (`signal-run.ts` and `desk-run.ts`, outside the hashed code), from
+  a pre-dry validation: a run whose reads time out keeps the time to write its record; a signal write or a DEC-0044
+  put that lands after its time limit is read back and counts as written only when the stored bytes are the run's
+  own; a record whose flow answer is from another slot carries "flow is from another slot" in `unusable`; in `log`
+  mode a record-level reason (the session's earlier records or the board-feed stamps not readable) gives the word
+  NO TRADE; the lifecycle counts slots from the slot's end, as the board does; carried breaks keep a fixed key order.
+  The checked age is unchanged: the chain's newest quote against when the answer was served (DEC-0051 section 2,
+  `chainAge`).
 - Early end, with its cause: none.
 
 ## Verdict
@@ -76,3 +133,25 @@ any signal, outcome or bar of the window exists.
 - Section 8, outcome: R is rounded to 2 decimals half away from zero.
 - Section 8, outcome: the entry bar is the first 2-minute bar starting at or after the scoring record's `evaluated_at`.
 - Section 8, early ends: a stamp gap over 10 minutes across a deployment change is judged within a session only, between two known, different deployments; a deploy between sessions is not one (each stamp must still read `sip`).
+
+## Note on DEC-0052 (added 2026-11-17)
+
+DEC-0052, proposed on 2026-11-17, replaces the engine label config.yaml pins at registration with the label of the
+release that ships its section 1, before this experiment's window starts, once it is accepted. The change was chosen
+for consistency with HYP-0029's registered rule, not on any outcome of this experiment, none of which exists; no dry
+session has run. The identity check's answer and counts for that change are written here the day it ships. The text
+above is otherwise unchanged.
+
+Viewed before this note: one owner trade entered on the board's old retest and its result, the clone's decision lines for that session, and the clone's cumulative HYP-0029 figures (DEC-0052, "What has already been seen").
+
+## Note on DEC-0053 (added 2026-11-17)
+
+DEC-0053, proposed on 2026-11-17, replaces the engine label config.yaml pins (already to be replaced by DEC-0052's)
+with the label of the release that ships its section 1, before this experiment's window starts, once it is accepted.
+The change was chosen because a failed break is a warning about that side, not on any outcome of this experiment, none
+of which exists; no dry session has run. The identity check's answer and counts for that change are written here the
+day it ships. The text above is otherwise unchanged.
+
+Viewed before this note: the owner trade DEC-0052 names, entered on a side the board had re-armed after a failed break
+at the same level, and its result; that session's 2-minute bars and the board's recorded states; that session read by
+DEC-0052's rule as written; everything DEC-0052 lists as seen (DEC-0053, "What has already been seen").

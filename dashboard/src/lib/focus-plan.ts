@@ -59,7 +59,7 @@ export const GLOSSARY: { code: string; words: string }[] = [
   {
     code: "Break and hold",
     words:
-      "a 2-minute candle closes past the level, then the next dip (or bounce) stays on the right side of it",
+      "a 2-minute candle closes past the level, the next dip (or bounce) comes back near it and stays on the right side, then a 2-minute close beyond that dip's close confirms the retest",
   },
 ];
 

@@ -47,3 +47,28 @@ Every difference is a minus b.
   ending, or the close date. It writes its report into this folder and refuses to write over an existing one.
 - Only the verdict script computes group statistics. The site shows its report after the verdict. A pass changes
   nothing on the desk by itself.
+
+## Note on DEC-0052 (added 2026-11-17)
+
+DEC-0052, proposed on 2026-11-17, amends config.yaml frozen_numbers before this experiment's window starts, once it
+is accepted: the retest touch becomes the clone's (RETEST_WITHIN_ATR 1.0 two-minute ATR and a confirming close), and
+RETEST_ATR (0.1) is the card's stop band only. The frozen copy's hash is not pinned yet, so nothing else changes. The
+in_zone label then covers at most two slots after a confirming close, which narrows what HYP-0056 measures. The text above is
+otherwise unchanged.
+
+Viewed before this note: one owner trade entered on the board's old retest and its result, the clone's decision lines for that session, and the clone's cumulative HYP-0029 figures (DEC-0052, "What has already been seen").
+
+## Note on DEC-0053 (added 2026-11-17)
+
+DEC-0053, proposed on 2026-11-17, amends config.yaml frozen_numbers before this experiment's window starts, once it is
+accepted: FAILED_BREAK_LOCK is rest_of_entry_window, that is, after a side's counted break fails (a 2-minute close
+back through the level), that side reads plan_off and never enter_zone for a break and retest until the end of its
+entry window: until 13:00 for a failing bar ending at or before 13:00 on a full day, otherwise until the flat time,
+and until the flat time on a half day. EXP-0033 labels every session with one frozen copy and never backfills, so its
+frozen copy includes the lock only if the lock ships in or before the release that first writes EXP-0033's labels;
+otherwise the lock's release is EXP-0033's other_engine_version early end. The frozen copy's hash is not pinned yet.
+The in_zone label then excludes locked sides. The text above is otherwise unchanged.
+
+Viewed before this note: the owner trade DEC-0052 names, entered on a side the board had re-armed after a failed break
+at the same level, and its result; that session's 2-minute bars and the board's recorded states; that session read by
+DEC-0052's rule as written; everything DEC-0052 lists as seen (DEC-0053, "What has already been seen").

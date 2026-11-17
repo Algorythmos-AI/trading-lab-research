@@ -35,7 +35,7 @@ test("lists only the names worth acting on, most urgent first, and counts the re
   await expect(board(page).locator('[data-expanded="true"]')).toHaveCount(2);
   const entry = rows(page).first();
   await expect(entry).toContainText("ENTER ZONE · CALL");
-  await expect(entry).toContainText("Retest holding 752.86: call setup ready");
+  await expect(entry).toContainText("Retest confirmed at 753.19: call setup ready. 753.19 is $0.24 past the card entry; to the stop $1.18, not $0.94");
   await expect(entry.locator("[data-board-grid]")).toContainText("~752.95");
   await expect(entry).toContainText("Semis against");
   await expect(entry.locator("[data-board-runner]")).not.toHaveAttribute("open", "");

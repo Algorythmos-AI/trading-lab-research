@@ -21,6 +21,7 @@ import {
   levelOf,
   MAX_BARS_TO_RETEST,
   midThird,
+  RETEST_WITHIN_ATR,
   type Side,
   SWEEP_MIN_ATR,
   TRADE_STALE_MS,
@@ -32,11 +33,13 @@ import { activeGuards, type GuardReason, guardLine, quoteGuards } from "./quote-
 import { TIME_STOP_MINUTES } from "./trade-rules";
 
 // ---- constants ------------------------------------------------------------------------------------------------------
-/** The bar the states are read on, in minutes (rule 2's 2-minute close; bars.minutes), and the retest's window. */
-export { BAR_MINUTES, MAX_BARS_TO_RETEST, TRADE_STALE_MS };
+/** The bar the states are read on, in minutes (rule 2's 2-minute close; bars.minutes), the retest's window and its
+ * touch band in 2-minute ATRs (setups.retest, DEC-0052). */
+export { BAR_MINUTES, MAX_BARS_TO_RETEST, RETEST_WITHIN_ATR, TRADE_STALE_MS };
 const BAR_MS = BAR_MINUTES * 60_000;
-/** A dip comes back to the level when its low is within this share of the ATR of it (the focus card's STOP_ATR band). */
-export const RETEST_ATR = 0.1;
+/** DEC-0052: a confirmed retest shows ENTER for this many 2-minute slots from its confirming close (the slot it opens
+ * and the next): the owner's number (2026-11-17), not a clone parameter. */
+export const RETEST_ENTER_SLOTS = 2;
 /** The trail after target 1: the EMA of this many 2-minute closes (bars.ema_fast). */
 export const EMA_FAST = 9;
 /** First entries from 09:35 New York: the owner's rule (DEC-0043). 09:35 to 10:00 carries the desk's own "early"
@@ -224,14 +227,23 @@ export interface SideState {
   waitingClose: boolean;
   /** A 2-minute slot from the break bar to now has no price: no entry is read across it. */
   gap: boolean;
-  /** Why the side is missed: target 1 reached after the break, or the retest's window passed. */
-  missedWhy: "target" | "window" | null;
+  /** Why the side is missed: target 1 reached after the break, the retest's window passed, or a confirmed retest's
+   * ENTER slots passed (or the price ran past its confirming close: DEC-0052). */
+  missedWhy: MissedWhy | null;
   /** The break the state comes from, as the bar's end (ms), when the page saw it. */
   brokeAt: number | null;
   alt: AltTrigger | null;
   /** ATRs from the live price to the level; null without a price or an ATR. */
   distAtr: number | null;
+  /** DEC-0052, only where the line needs it: the retest's touch bar's close (from the touch on). */
+  touchClose?: number;
+  /** DEC-0052, on a confirmed retest only: the confirming bar's close, and its end (ms since the epoch). */
+  confirmClose?: number;
+  confirmAt?: number;
 }
+
+/** Why a side is missed (SideState.missedWhy). */
+export type MissedWhy = "target" | "window" | "slot";
 
 /** The furthest price reached (highest for a call, lowest for a put) over some bars. */
 const reach = (bars: readonly Bar2[], s: 1 | -1) => (bars.length ? (s > 0 ? Math.max(...bars.map((b) => b.h)) : Math.min(...bars.map((b) => b.l))) : null);
@@ -312,15 +324,25 @@ export function altAt(level: number, planSide: Side, closed: readonly Bar2[], at
  *   with no slot between; for the page's first bar, only when the page has the session from its open, against the
  *   open). A close above with no known close before it is a break the page did not see (`brokeEarlier`);
  * - get_ready: the price is above the level with no completed close above yet, or it broke and waits for the dip,
- *   or the page is missing prices since the break (`gap`), or it broke before the page's bars;
- * - enter_zone: after the break, within MAX_BARS_TO_RETEST bars, a bar's low comes within RETEST_ATR ATRs of the
- *   level (or through it) and closes above; it stays while the price is at or above the level, nothing has reached
- *   target 1 since the break, and the bar forming is at most MAX_BARS_TO_RETEST + 1 bars after the break
- *   (setups.retest's window), with every slot since the break seen and a fresh quote;
+ *   or the retest touched and waits for its confirming close (`touchClose`), or the page is missing prices since the
+ *   break (`gap`), or it broke before the page's bars;
+ * - enter_zone (DEC-0052): the clone's retest (wt.options.setups.retest) completed on the page's bars: within
+ *   MAX_BARS_TO_RETEST bars after the break bar, a bar's low comes within RETEST_WITHIN_ATR 2-minute ATRs of the level
+ *   (the touch, the first such bar), and a later bar is the first after it to close above the touch bar's close (the
+ *   confirming bar), at most MAX_BARS_TO_RETEST + 1 bars after the break bar. Each bar is read with the 2-minute ATR
+ *   at its own close (atr2m of the bars up to it: the ATR the clone passes at that bar), and with no 2-minute ATR
+ *   (`sweepAtr` null, or fewer than 15 bars) there is no touch. The break's first confirming bar governs: ENTER lasts
+ *   RETEST_ENTER_SLOTS slots from its close (a later confirmation neither restarts nor extends them), while the price is above the level and has not run more than RETEST_WITHIN_ATR of those ATRs
+ *   past the confirming close, nothing has reached target 1 since the break, every slot since the break is seen and
+ *   the quote is fresh (back at the level with no close through it: get_ready, `confirmClose` kept). A confirming
+ *   close inside the window keeps its slots past the window's end;
  * - missed: target 1 reached at any point after the break (a bar, the bar forming, the live price, or the quote's
- *   day high when the page's bars before the break do not show it), or the retest's window passed: don't chase;
+ *   day high when the page's bars before the break do not show it), or the retest's window passed with no confirming
+ *   close, or a confirmed retest's slots passed or the price ran past its confirming close (`slot`, for the rest of
+ *   that break): don't chase;
  * - plan_off: after the break, a completed bar closes back at or below the level;
  * - watch: none of these.
+ * The clone's invalidation_atr is not read: before an entry any close back through the level is plan off.
  */
 export function sideState(plan: SidePlan | null, atr: number | null | undefined, bars: Bars2m, quote: LiveQuote | null | undefined, now: Date, sweepAtr: number | null = null): SideState {
   const side: Side = plan?.side ?? "call";
@@ -340,7 +362,8 @@ export function sideState(plan: SidePlan | null, atr: number | null | undefined,
   const t1 = plan.target1;
   const pastT1 = (x: number | null | undefined) => isNum(x) && t1 !== null && (x - t1) * s >= 0;
   const out = (state: SideStateName, extra: Partial<SideState> = {}): SideState => ({ ...base, state, level: L, alt, distAtr, ...extra });
-  const missed = (why: "target" | "window", brokeAt: number | null = null, brokeEarlier = false) => out("missed", { missedWhy: why, brokeAt, brokeEarlier });
+  const missed = (why: MissedWhy, brokeAt: number | null = null, brokeEarlier = false, extra: Partial<SideState> = {}) =>
+    out("missed", { missedWhy: why, brokeAt, brokeEarlier, ...extra });
 
   // the most recent break with a known close before it; `unknownAt`: a close beyond whose close before is unknown
   let ia = -1;
@@ -391,13 +414,59 @@ export function sideState(plan: SidePlan | null, atr: number | null | undefined,
     const pre = reach(closed.slice(0, ia), s);
     if (!(pre !== null && (pre - dayExtreme) * s >= 0)) return missed("target", brokeAt);
   }
-  // setups.retest's window: the bar forming now at most MAX_BARS_TO_RETEST + 1 bars after the break bar
-  if ((slotOf(t) - brk.start) / BAR_MS > MAX_BARS_TO_RETEST + 1) return missed("window", brokeAt);
+  // DEC-0052: the clone's retest (setups.retest) on the page's bars. Bar k confirms when, read with the 2-minute ATR at
+  // k's close (atr2m of the bars up to k, as the clone's Tape.atr), the first bar after the break bar to come within
+  // RETEST_WITHIN_ATR of those ATRs of the level is at most MAX_BARS_TO_RETEST bars after it, and k is the first bar
+  // after that touch to close beyond the touch bar's close; k at most MAX_BARS_TO_RETEST + 1 bars after the break bar.
+  // Every close from the break on is beyond the level here (plan off above). The FIRST confirming bar governs the break
+  // (each bar read with its own ATR, so it never moves as bars are added): its two slots, then missed for the rest of the
+  // break, even when a later bar, read with a larger ATR, would confirm again (DEC-0052 section 2).
+  const has2m = isNum(sweepAtr) && sweepAtr > 0;
+  const atrAt = (k: number) => atr2m(closed.slice(0, k + 1));
+  const near = (b: Bar2, a2: number) => (s > 0 ? b.l - L : L - b.h) <= RETEST_WITHIN_ATR * a2;
+  const touchFor = (before: number, a2: number) => {
+    for (let j = ia + 1; j < before; j++) if (near(closed[j]!, a2)) return j - ia <= MAX_BARS_TO_RETEST ? j : -1;
+    return -1;
+  };
+  const awayFrom = (j: number, upTo: number) => {
+    for (let m = j + 1; m <= upTo; m++) if ((closed[m]!.c - closed[j]!.c) * s > 0) return m;
+    return -1;
+  };
+  const last = closed.length - 1;
+  let conf: { k: number; touch: number; a2: number } | null = null;
+  for (let k = ia + 2; has2m && k <= Math.min(last, ia + MAX_BARS_TO_RETEST + 1) && conf === null; k++) {
+    const a2 = atrAt(k);
+    if (a2 === null || !(a2 > 0)) continue;
+    const j = touchFor(k, a2);
+    if (j >= 0 && awayFrom(j, k) === k) conf = { k, touch: j, a2 };
+  }
+  if (conf) {
+    const cb = closed[conf.k]!;
+    const keep: Partial<SideState> = { touchClose: closed[conf.touch]!.c, confirmClose: cb.c, confirmAt: cb.end };
+    // ENTER for the slot the confirming close opens and the next; then missed, don't chase
+    if (t >= cb.end + RETEST_ENTER_SLOTS * BAR_MS) return missed("slot", brokeAt, false, keep);
+    if (!coveredSince(bars, brk.start)) return out("get_ready", { brokeAt, gap: true });
+    // past the confirming close by more than RETEST_WITHIN_ATR of its ATRs at any point since it: a chase
+    const since = [...closed.slice(conf.k + 1), ...(bars.partial && bars.partial.start >= cb.end ? [bars.partial] : [])];
+    const ran = (x: number | null | undefined) => isNum(x) && (x - cb.c) * s > RETEST_WITHIN_ATR * conf.a2;
+    if (ran(reach(since, s)) || ran(price)) return missed("slot", brokeAt, false, keep);
+    if (price === null) return out("get_ready", { brokeAt });
+    // back at the level, no close through it yet: still the confirmed retest, wait for the price
+    if (!beyond(price)) return out("get_ready", { brokeAt, ...keep });
+    return out("enter_zone", { brokeAt, ...keep });
+  }
+  // setups.retest's window: the bar forming now at most MAX_BARS_TO_RETEST + 1 bars after the break bar. The window's
+  // last bar can still confirm while it is the bar forming (its end passed, not yet complete), so it waits for it.
+  const lastWindowBar = brk.start + (MAX_BARS_TO_RETEST + 1) * BAR_MS;
+  const lastStillForming = bars.partial !== null && bars.partial.start >= brk.end && bars.partial.start <= lastWindowBar;
+  if ((slotOf(t) - brk.start) / BAR_MS > MAX_BARS_TO_RETEST + 1 && !lastStillForming) return missed("window", brokeAt);
   if (!coveredSince(bars, brk.start)) return out("get_ready", { brokeAt, gap: true });
-  const near = a !== null ? RETEST_ATR * a : null;
-  const touch = near === null ? -1 : after.findIndex((b) => (s > 0 ? b.l - L : L - b.h) <= near);
-  if (touch < 0 || price === null) return out("get_ready", { brokeAt });
-  if ((price - L) * s >= 0) return out("enter_zone", { brokeAt });
+  // touched with the 2-minute ATR now, not yet confirmed, and the next bar can still confirm it
+  if (has2m && last >= ia + 1 && last + 1 <= ia + MAX_BARS_TO_RETEST + 1) {
+    const a2 = atrAt(last);
+    const j = a2 !== null && a2 > 0 ? touchFor(last + 1, a2) : -1;
+    if (j >= 0 && awayFrom(j, last) < 0) return out("get_ready", { brokeAt, touchClose: closed[j]!.c });
+  }
   return out("get_ready", { brokeAt });
 }
 
@@ -507,23 +576,46 @@ function sideLine(x: SideState, plan: SidePlan): string {
       const limit = plan.entry !== null ? ` limit ~${p2(plan.entry)}` : "";
       const stop = plan.stop !== null ? ` · stop ${p2(plan.stop)} / −25%` : "";
       const target = plan.target1 !== null ? ` · target ${p2(plan.target1)}` : "";
-      return `Retest holding ${L}: ${plan.side}${limit}${stop}${target}`;
+      const c = x.confirmClose;
+      const risk = c !== undefined ? retestRisk(c, plan.side, plan.entry, plan.stop) : null;
+      return `Retest confirmed ${c !== undefined ? `at ${p2(c)}` : `${over} ${L}`}: ${plan.side}${limit}${stop}${target}${risk ? ` · ${risk}` : ""}`;
     }
     case "get_ready":
       if (x.brokeEarlier) return `Broke ${over} ${L} before you opened the page: confirm the hold on your chart`;
       if (x.gap) return `Broke ${over} ${L}, but the page missed prices since: confirm on your chart`;
       if (x.waitingClose) return `${up ? "Above" : "Below"} ${L}: wait for a 2-min close ${over} it`;
+      if (x.confirmClose !== undefined) return `Retest confirmed at ${p2(x.confirmClose)}: price back at ${L}, wait`;
+      if (x.touchClose !== undefined) return `Retest touched: wait for a 2-minute close ${over} ${p2(x.touchClose)}`;
       if (x.brokeAt !== null) return `Broke ${over} ${L}: wait for a dip that holds it`;
       return `Back at ${L}: wait for the 2-min close`;
     case "plan_off":
       return `${back} ${L}: ${plan.side} plan off${x.alt ? ` · ${altLine(x.alt)}` : ""}`;
     case "missed":
       if (x.missedWhy === "window") return `Retest window at ${L} passed: don't chase`;
+      if (x.missedWhy === "slot") return `Retest confirmed at ${confirmHhmm(x)}: missed, don't chase`;
       return plan.target1 !== null ? `Already past target 1 (${p2(plan.target1)}): don't chase` : `Ran ${over} ${L}: don't chase`;
     default:
       return x.alt ? altLine(x.alt) : `${up ? "Calls above" : "Puts below"} ${L}`;
   }
 }
+
+/**
+ * DEC-0052's risk line beside a confirmed retest's ENTER: how far the confirming close is past the card's entry, and
+ * the distance from it to the card's stop against the card's own entry-to-stop distance, to the cent. Wording only:
+ * the card's entry, stop and target 1 are unchanged. Null without the card's entry or stop. A confirming close short
+ * of the card's entry (between the level and it) says "short of", never "past".
+ */
+export function retestRisk(confirmClose: number, side: Side, entry: number | null, stop: number | null): string | null {
+  if (!isNum(confirmClose) || !isNum(entry) || !isNum(stop)) return null;
+  const past = (confirmClose - entry) * (side === "call" ? 1 : -1) >= 0 ? "past" : "short of";
+  return `${p2(confirmClose)} is $${p2(Math.abs(confirmClose - entry))} ${past} the card entry; to the stop $${p2(Math.abs(confirmClose - stop))}, not $${p2(Math.abs(entry - stop))}`;
+}
+
+/** The confirming close's time, HH:MM New York (DEC-0052's missed line). */
+const confirmHhmm = (x: SideState) => {
+  const c = x.confirmAt !== undefined ? nyClock(new Date(x.confirmAt).toISOString()) : null;
+  return c ? hhmm(c.minutes) : "?";
+};
 
 const dist = (x: SideState) => (x.distAtr !== null ? ` (${x.distAtr.toFixed(1)} ATR)` : "");
 
@@ -633,6 +725,7 @@ export function nameState(n: NameInput): NameState {
         const plan = plans[x.side]!;
         const who = plan.side === "call" ? "Calls" : "Puts";
         if (x.state === "missed" && x.missedWhy === "window") return `${who}: retest window at ${p2(plan.level)} passed, don't chase`;
+        if (x.state === "missed" && x.missedWhy === "slot") return `${who}: retest confirmed at ${confirmHhmm(x)}, missed, don't chase`;
         if (x.state === "missed") return `${who} past target 1${plan.target1 !== null ? ` (${p2(plan.target1)})` : ""}: don't chase`;
         return `${sideLine({ ...x, state: "watch", alt: null }, plan)}${dist(x)}`; // a side whose plan is off waits for a new break
       })

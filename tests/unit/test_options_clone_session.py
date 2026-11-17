@@ -680,7 +680,9 @@ def test_broker_unreachable_at_arm_writes_its_detail_to_the_log_before_the_page(
     r.oms.reconcile = reconcile
     r.pager.fire = fire
     assert r.arm() is False
-    (key, msg, log_then), = [s for s in seen if s[0] == "options-clone:broker"]
+    assert not seen                                                 # tried again until 09:58 before any page
+    run_until(r, world["m"], world["b"], at("09:58", 30))
+    (key, msg, log_then), = [s for s in seen if s[0] == "options-clone:arm-broker"]
     assert "broker unreachable at arm: TransportError: paper-api answered 503" in log_then
     assert "TransportError" in msg and "503" not in msg and "SPY" not in msg and "https" not in msg
 
@@ -704,7 +706,8 @@ def test_a_broken_stderr_at_arm_still_sends_the_page(world, monkeypatch):
     r.pager.fire = lambda key, title, msg, prio=4: sent.append(key)
     monkeypatch.setattr(sys, "stderr", Broken())
     assert r.arm() is False
-    assert "options-clone:broker" in sent
+    run_until(r, world["m"], world["b"], at("09:58", 30))
+    assert "options-clone:arm-broker" in sent
 
 
 # ---------------------------------------------------------------- a market-data request refused for naming no feed
@@ -736,19 +739,23 @@ def _real_feeds(monkeypatch: pytest.MonkeyPatch, how: str) -> tuple[runner_o.Alp
 @pytest.mark.parametrize("how", ["refused", "unreachable"])
 def test_a_refused_request_at_arm_turns_entries_off_exactly_as_an_unreachable_feed(world, monkeypatch, capsys, how):
     """The guard raises TransportError("feed-not-named") in AlpacaFeeds._get, the error every caller already handles
-    as a failed data read: here prepare's, so the levels are off for the day, with the same page and journal."""
+    as a failed data read: here prepare's, so the levels are off, tried again until 09:58 (EXP-0029), then paged
+    and off for the day, with the same page and journal."""
     r = world["make"]()
     del r.prepare                                                  # the real one, reading the bars from the feed
     r.feeds, s = _real_feeds(monkeypatch, how)
     world["m"].now = at("09:25")
     assert r.arm() is False
     assert r.off == {"levels": "levels unavailable"} and r.names == {}
-    assert world["pages"] == ["options-clone:levels"]
-    assert world["rows"][0] == {"event": "page", "key": "levels", "title": "Options clone: no levels today"}
-    assert [x["event"] for x in world["rows"]] == ["page", "armed"] and world["rows"][1]["off"] == ["levels"]
+    assert world["pages"] == [] and [x["event"] for x in world["rows"]] == ["armed"]
+    assert world["rows"][0]["off"] == ["levels"]
     run_until(r, world["m"], world["b"], at("10:40"))              # through the signal at 10:26: no entry
     assert r.today() == [] and not any(o.side == "buy" for o in world["b"].orders.values())
-    assert [x["event"] for x in world["rows"]] == ["page", "armed"]
+    assert world["pages"] == ["options-clone:levels"]
+    assert [x["event"] for x in world["rows"]] == ["armed", "arm_retry", "page"]
+    gave = world["rows"][1]
+    assert gave["gave_up"] and gave["still"] == ["levels"] and gave["tries"] >= 30
+    assert world["rows"][2] == {"event": "page", "key": "levels", "title": "Options clone: no levels today"}
     err = capsys.readouterr().err
     assert (s.calls == [] and "a market-data request named no feed" in err) if how == "refused" \
         else (s.calls and "named no feed" not in err)

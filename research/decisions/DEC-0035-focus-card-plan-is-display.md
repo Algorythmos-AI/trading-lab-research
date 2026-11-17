@@ -36,3 +36,30 @@ the owner's own thread already prints.
    **before** the change is merged.
    - The amendment gives the old and new values and the reason.
    - It must say that no result of the owner's trades with the card plan was viewed to choose them.
+
+## Note on DEC-0052 (added 2026-11-17)
+
+DEC-0052, proposed on 2026-11-17, amends point 4 once it is accepted: the card's trigger for a break and retest
+becomes the options clone's retest (a touch within 1.0 two-minute ATR, then a 2-minute close beyond the touch bar's
+close), replacing a touch within 0.1 daily ATR with ENTER while the price is beyond the level. The reason is
+consistency with HYP-0029's registered rule. Point 4's statement that no result of the owner's trades with the card
+plan was viewed to choose it cannot be made, and is not made: the owner approved that exception in chat on
+2026-11-17 (approved_by: owner). ENTRY_ATR, STOP_ATR (0.1), MIN_ROOM_MULTIPLE and the target are unchanged. The text
+above is otherwise unchanged.
+
+Viewed before this note: one owner trade entered on the board's old retest and its result, the clone's decision lines for that session, and the clone's cumulative HYP-0029 figures (DEC-0052, "What has already been seen").
+
+## Note on DEC-0053 (added 2026-11-17)
+
+DEC-0053, proposed on 2026-11-17, amends point 4 once it is accepted: after a side's counted break fails (a 2-minute
+close back through the level), that side reads plan_off and never enter_zone for a break and retest until the end of
+its entry window: until 13:00 for a failing bar ending at or before 13:00 on a full day, otherwise until the flat
+time, and until the flat time on a half day. This replaces DEC-0052's trigger, under which the side was free to arm on
+any new break. The reason is that a failed break is a warning about that side. Point 4's statement that no result of
+the owner's trades with the card plan was viewed to choose it cannot be made, and is not made: the owner approved that
+exception in chat on 2026-11-17 (approved_by: owner). ENTRY_ATR, STOP_ATR (0.1), MIN_ROOM_MULTIPLE and the target are
+unchanged. The text above is otherwise unchanged.
+
+Viewed before this note: the owner trade DEC-0052 names, entered on a side the board had re-armed after a failed break
+at the same level, and its result; that session's 2-minute bars and the board's recorded states; that session read by
+DEC-0052's rule as written; everything DEC-0052 lists as seen (DEC-0053, "What has already been seen").

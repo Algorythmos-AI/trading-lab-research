@@ -65,11 +65,12 @@ const flat = (p: number): OHLC => [p, p, p, p];
 
 /**
  * ABC: flat at 95, levels 100 (call) and 90 (put), ATR 2. The call plan: entry 100.02, stop 99.80, target 1 100.46.
- * The put plan: entry 89.98, stop 90.20, target 1 89.54. From bar `k` (default 15, 10:00 to 10:02) a break above 100,
- * a dip to 100.10 that holds (enter zone), target 1 reached by bar k + 4 (missed), and a close back at 95 (plan off).
- * From bar `kPut` (default 120, 13:30) the mirror below 90.
+ * The put plan: entry 89.98, stop 90.20, target 1 89.54. From bar `k` (default 14, 09:58 to 10:00) a break above 100,
+ * a dip to 100.10 in bar k + 1 (the touch), bar k + 2 closing above the dip bar's close (the retest confirms: enter zone
+ * for two slots, DEC-0052), target 1 reached by bar k + 4 (missed), and a close back at 95 (plan off). From bar `kPut`
+ * (default 119, 13:28) the mirror below 90.
  */
-function abcBars(k = 15, kPut: number | null = 120, day = S, n = 195): LabelBar[] {
+function abcBars(k = 14, kPut: number | null = 119, day = S, n = 195): LabelBar[] {
   const path = new Map<number, OHLC>([
     [k, [95, 100.3, 95, 100.2]],
     [k + 1, [100.2, 100.3, 100.1, 100.25]],
@@ -81,7 +82,7 @@ function abcBars(k = 15, kPut: number | null = 120, day = S, n = 195): LabelBar[
   if (kPut !== null) {
     path.set(kPut, [95, 95, 89.7, 89.8]);
     path.set(kPut + 1, [89.8, 89.9, 89.7, 89.75]);
-    path.set(kPut + 2, [89.75, 89.85, 89.7, 89.8]);
+    path.set(kPut + 2, [89.75, 89.8, 89.65, 89.7]);
     path.set(kPut + 3, [89.8, 89.8, 89.5, 89.8]);
     path.set(kPut + 4, [89.8, 95, 89.8, 95]);
   }
@@ -236,22 +237,23 @@ describe("the replay", () => {
     expect(steps.at(-1)!.until).toBe(Infinity);
   });
 
-  it("gives the call side of ABC: get ready 10:02:05, enter zone 10:04:05 to 10:10:05, missed, then plan off", () => {
+  it("gives the call side of ABC: get ready 10:00:05, enter zone 10:04:05 to 10:08:05 (two slots), missed, then plan off", () => {
     const st = (t: string) => r.names.ABC!.sides.call.find((x) => x.from <= at(t) && at(t) < x.until)!.state;
-    expect(st("10:02:05")).toBe("get_ready");
+    expect(st("10:00:05")).toBe("get_ready");
+    expect(st("10:02:05")).toBe("get_ready"); // touched, waiting for the confirming close
     expect(st("10:04:04")).toBe("get_ready");
     expect(st("10:04:05")).toBe("enter_zone");
-    expect(st("10:10:04")).toBe("enter_zone");
-    expect(st("10:10:05")).toBe("missed");
+    expect(st("10:08:04")).toBe("enter_zone");
+    expect(st("10:08:05")).toBe("missed");
     expect(st("10:12:05")).toBe("plan_off");
   });
 
-  it("gives the put side of ABC enter zone 13:34:05 to 13:38:05", () => {
+  it("gives the put side of ABC enter zone 13:34:05 to 13:36:05 (target 1 in the next slot)", () => {
     const st = (t: string) => r.names.ABC!.sides.put.find((x) => x.from <= at(t) && at(t) < x.until)!.state;
     expect(st("13:32:05")).toBe("get_ready");
     expect(st("13:34:05")).toBe("enter_zone");
-    expect(st("13:38:04")).toBe("enter_zone");
-    expect(st("13:38:05")).toBe("missed");
+    expect(st("13:36:04")).toBe("enter_zone");
+    expect(st("13:36:05")).toBe("missed");
   });
 
   it("reads a side as no_trade while its row is no_trade or paused (before 09:35, lunch, after 15:10)", () => {
@@ -285,13 +287,13 @@ describe("each label on the synthetic session", () => {
     expect(labelAlone("ABC", "call", "10:04:05.000")).toEqual({ label: "in_zone", reason: null });
   });
 
-  it("in_zone at the last instant before until + 60 s (10:11:04.999; until is 10:10:05)", () => {
+  it("in_zone at the last instant before until + 60 s (10:09:04.999; until is 10:08:05)", () => {
     expect(ZONE_EXTEND_MS).toBe(60_000);
-    expect(labelAlone("ABC", "call", "10:11:04.999")).toEqual({ label: "in_zone", reason: null });
+    expect(labelAlone("ABC", "call", "10:09:04.999")).toEqual({ label: "in_zone", reason: null });
   });
 
-  it("not in zone exactly at until + 60 s (10:11:05.000): the side is missed then, so off_plan", () => {
-    expect(labelAlone("ABC", "call", "10:11:05.000")).toEqual({ label: "off_plan", reason: null });
+  it("not in zone exactly at until + 60 s (10:09:05.000): the side is missed then, so off_plan", () => {
+    expect(labelAlone("ABC", "call", "10:09:05.000")).toEqual({ label: "off_plan", reason: null });
   });
 
   it("early in a get_ready interval (10:03:00), and in the grace before the next evaluation (10:04:02)", () => {
@@ -523,21 +525,23 @@ describe("t0 at the edges of the day", () => {
   it("grid consequence: a t0 at 09:35:30 after a breakout in the first minutes is off_plan (no evaluation at 09:35:00)", () => {
     // The session's first bar cannot carry a break (the engine needs the close before it), so the break is in bar 1
     // (09:32 to 09:34) and the dip that holds in bar 2 (09:34 to 09:36). The evaluation at 09:34:05 is before 09:35, so
-    // its row is no_trade, and it holds until 09:36:05: at 09:35:30 the label is off_plan; from 09:36:05, in_zone.
+    // its row is no_trade, and it holds until 09:36:05: at 09:35:30 the label is off_plan; from 09:36:05, early (the dip
+    // touched; DEC-0052's retest cannot confirm before the 2-minute ATR has its 15 bars, about 10:00).
     const bars = { ABC: abcBars(1, null), QQQ: qqqBars(), SMH: smhBars() };
     const times = evaluationTimes(labelSessionBounds(S)!, LIVE, R31);
     expect(times.slice(0, 3)).toEqual([at("09:32:05"), at("09:34:05"), at("09:36:05")]);
     expect(times).not.toContain(at("09:35:00"));
     expect(labelAlone("ABC", "call", "09:35:30", { bars })).toEqual({ label: "off_plan", reason: null });
-    expect(labelAlone("ABC", "call", "09:36:05", { bars })).toEqual({ label: "in_zone", reason: null });
+    expect(labelAlone("ABC", "call", "09:36:05", { bars })).toEqual({ label: "early", reason: null });
   });
 
   it("in lunch on a full day: the same break at 11:40 that is in zone on a half day is off_plan (side_state)", () => {
+    // the retest confirms at the 11:46 close: in zone from 11:46:05 on the half day
     const bars = { ABC: abcBars(65, null), QQQ: qqqBars(), SMH: smhBars() };
-    expect(labelAlone("ABC", "call", "11:45:00", { bars })).toEqual({ label: "off_plan", reason: null });
+    expect(labelAlone("ABC", "call", "11:47:00", { bars })).toEqual({ label: "off_plan", reason: null });
     const half = { ABC: abcBars(65, null, H, 105), QQQ: Array.from({ length: 105 }, (_, i) => bar(i, flat(490), H)), SMH: smhBars(H, 105) };
     expect(labelSessionBounds(H)).toMatchObject({ halfDay: true, close: at("13:00:00", H) });
-    expect(labelAlone("ABC", "call", "11:45:00", { bars: half, edition: edition(H, [ABC_ITEM, QQQ_ITEM], true) }, H)).toEqual({ label: "in_zone", reason: null });
+    expect(labelAlone("ABC", "call", "11:47:00", { bars: half, edition: edition(H, [ABC_ITEM, QQQ_ITEM], true) }, H)).toEqual({ label: "in_zone", reason: null });
   });
 
   it("after 15:10 on a full day, and after 12:10 on a half day: no_trade rows, so off_plan", () => {
@@ -877,8 +881,9 @@ describe("EXP-0033: the extra instants", () => {
   });
 
   it("just after 13:00:00: a break and dip in lunch are in zone from 13:00:00 under EXP-0033, off_plan under EXP-0031", () => {
-    // bar 103 (12:56 to 12:58) breaks 100, bar 104 (12:58 to 13:00) dips to 100.10 and holds
-    const bars = { ABC: abcBars(103, null), QQQ: qqqBars(), SMH: smhBars() };
+    // bar 102 (12:54 to 12:56) breaks 100, bar 103 (12:56 to 12:58) dips to 100.10, and bar 104 (12:58 to 13:00)
+    // closes above the dip bar's close: the retest confirms at 13:00 (DEC-0052)
+    const bars = { ABC: abcBars(102, null), QQQ: qqqBars(), SMH: smhBars() };
     expect(labelUnder(R33, "ABC", "call", "13:00:02", { bars })).toEqual({ label: "in_zone", reason: null });
     expect(labelUnder(R31, "ABC", "call", "13:00:02", { bars })).toEqual({ label: "off_plan", reason: null });
   });
@@ -1133,7 +1138,7 @@ describe("rows wait for a journal read after the close", () => {
   }
   it("on a half day the close is 13:00", () => {
     const half = { ABC: abcBars(65, null, H, 105), QQQ: Array.from({ length: 105 }, (_, i) => bar(i, flat(490), H)), SMH: smhBars(H, 105) };
-    const trH = piece("ABC", "call", "11:45:00", "11:50:00", {}, H);
+    const trH = piece("ABC", "call", "11:47:00", "11:50:00", {}, H); // in zone from the 11:46 confirming close
     const inp = (readAt: string) => input({ session: H, edition: edition(H, [ABC_ITEM, QQQ_ITEM], true), bars: half, barsFeed: "sip", stamps: sipStamps(H), journalReadAt: readAt, journal: { trades: [trH] } });
     expect(libLabelSession(inp(new Date(at("13:20:00", H) - 1).toISOString()), LIVE, R33, META)).toEqual({ state: "retry", why: "journal_not_current" });
     expect(rowsOf(libLabelSession(inp(new Date(at("13:20:00", H)).toISOString()), LIVE, R33, META)).map((r) => r.label)).toEqual(["in_zone"]);
@@ -1236,8 +1241,8 @@ describe("EXP-0033: fills at the extra instants, to the millisecond", () => {
     ["09:35", 1, [["09:34:59.999", "off_plan"], ["09:35:00.000", "early"], ["09:35:00.001", "early"]]],
     // bar 58 breaks: get_ready from 11:28:05 until the 11:30:00 instant (lunch)
     ["11:30", 58, [["11:29:59.999", "early"], ["11:30:00.000", "off_plan"], ["11:30:00.001", "off_plan"]]],
-    // bars 103 and 104 break and hold in lunch: in zone from the 13:00:00 instant
-    ["13:00", 103, [["12:59:59.999", "off_plan"], ["13:00:00.000", "in_zone"], ["13:00:00.001", "in_zone"]]],
+    // bars 102 to 104 break, touch and confirm in lunch: in zone from the 13:00:00 instant
+    ["13:00", 102, [["12:59:59.999", "off_plan"], ["13:00:00.000", "in_zone"], ["13:00:00.001", "in_zone"]]],
     // bar 168 breaks: get_ready from 15:08:05 until the 15:10:00 instant (flat)
     ["15:10", 168, [["15:09:59.999", "early"], ["15:10:00.000", "off_plan"], ["15:10:00.001", "off_plan"]]],
   ];

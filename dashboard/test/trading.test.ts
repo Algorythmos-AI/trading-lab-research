@@ -60,8 +60,8 @@ describe("Paper B's trades and profit and loss", () => {
   it("adds a status sentence to the summary, without money", () => {
     const day = fixture().today!.session!;
     const s = withToday({ outcome: "no_signal", ended: true, position: null }, { market: { ...fixture().market, trading_day_et: day } } as Partial<Snapshot>);
-    expect(tradeSentence(s)).toBe("Paper B had no signal today.");
-    expect(summarize(s)).toContain("Paper B had no signal today.");
+    expect(tradeSentence(s)).toBe("Robot B had no signal today.");
+    expect(summarize(s)).toContain("Robot B had no signal today.");
     expect(summarize(s)).not.toMatch(/US\$/);
   });
 
