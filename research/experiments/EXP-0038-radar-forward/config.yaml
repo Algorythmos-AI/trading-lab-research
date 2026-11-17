@@ -1,0 +1,121 @@
+# EXP-0038: whether the pre-market Radar's listed names beat a fixed fund from the open, forward (DEC-0055).
+# Design only: no session is counted and no statistic of this experiment exists. NOT blind: the Radar's own scorecards
+# were seen before it was written (DEC-0055, "What has already been seen").
+# Frozen with DEC-0055; a changed value is a new experiment and new trials.
+experiment: EXP-0038
+status: registered                  # when DEC-0055 is accepted; no results file until the read writes it once
+decision: DEC-0055
+family: R                           # the Radar's selection; total 3 (config/trial_registry.yaml)
+trials:                             # every difference is a minus b
+  - {hypothesis: HYP-0065, trial: RADAR-DAILY-1D, a: daily_radar_names, b: RSP, window: one_session, role: primary}
+  - {hypothesis: HYP-0066, trial: RADAR-DAILY-5D, a: daily_radar_names, b: RSP, window: five_sessions, role: secondary}
+  - {hypothesis: HYP-0067, trial: RADAR-SMALL-1D, a: small_cap_momentum_names, b: IWM, window: one_session, role: secondary}
+
+preconditions:                      # DEC-0055 section 8; each dated in README.md; all by 2027-02-28 or the registration lapses
+  - 1. Algorythmos-AI/trading-options-funnel is private
+  - 2. the radar seal step runs; each sealed radar folder records the Radar skill bundle's sha256 and holds that day's Nasdaq Trader symbol directory; the first one verifies
+  - 3. the dashboard keeps every stored radar edition as its own copy keyed by edition_date, with receipt time and the run it replaced; a signed read lists a date's copies to the research key; the after-close seal step seals that listing daily as data/radar-receipts/S.json
+  - 4. the data branch of trading-options-funnel refuses deletion and force pushes
+  - 5. the analysis code merged in trading-options-funnel with synthetic-data tests and the generator vectors below; its commit in README.md
+  - 6. DEC-0055 accepted
+lapse_date: "2027-02-28"
+
+sessions:
+  start: the first regular New York session after the date the last precondition is written in README.md
+  backfill: never
+  witness: >-
+    the dashboard's radar edition copies for edition_date S (never replaced or deleted), and their listing (store path,
+    the store's receipt time, sha256 of the stored bytes) sealed every regular session by the after-close routine's
+    seal step as data/radar-receipts/S.json on the protected data branch; at the read the store is listed again and
+    must match the sealed listing exactly
+  scored_edition: >-
+    the copy with the earliest receipt time in the sealed listing that is after the close of the previous regular
+    session (16:00 New York, 13:00 on a half day, by market-calendar.json) and before 09:30 New York on S; copies outside that span are listed as early or received_late, later ones
+    inside it are listed; none of them is scored
+  content: >-
+    read from the dashboard's copy store, its sha256 equal to the listing's; else the sealed radar folder edition.json
+    with that sha256; else content_lost
+  counted_when:                     # decided every day from that day's sealed files; sets the last countable session and the early end
+    - {rule: "a sealed listing for S exists", else: no_listing}
+    - {rule: "it has a scored edition", else: "no_edition, early or received_late"}
+    - {rule: "that day's sealed symbol directory exists and is readable", else: no_directory}
+  analysed_when:                    # checked once, at the read; only takes counted sessions out of the analysis
+    - {rule: "the store's copies for S (paths, receipt times, sha256) are exactly those the sealed listing gives", else: listing_mismatch}
+    - {rule: "the scored edition's content is available with the listing's sha256", else: content_lost}
+  included_when:                    # per trial, among the analysed sessions
+    - the scored edition has the trial's list (else no_list)
+    - at least one scored name on it (else no_names)
+    - the trial's benchmark has a daily bar on S (else no_benchmark)
+  read:
+    last_countable_session: the 120th counted session, or 2027-06-30 if fewer are counted by then
+    when: after the close of the fourth regular session after the last countable session
+    once: true
+    by: >-
+      the coordinator session on the console Mac, running the analysis code at the commit in README.md (it refuses
+      to run if an analysis file differs); the report carries the commit, the command and the SHA-256 of every input
+    crash: >-
+      a run that stops before printing any statistic may be run again, on the same sealed inputs, after a fix with a
+      synthetic test that fails before it, written in a dated README note; this does not end the experiment; never
+      after any statistic was printed
+  max_sessions: 120
+  close_date: "2027-06-30"
+  min_analysed_sessions: 60        # fewer at the read: every trial inconclusive
+  min_included_sessions: 40         # per trial
+  ends_early_on:
+    - a change to the analysis code, except a defect fix with a synthetic test that fails before it and passes after, both in a dated README note before the read, that changes no count already shown
+    - 10 consecutive regular sessions not counted (by counted_when), whatever the reason
+  measured_as_run: >-
+    the routine's own notes and the owner's changes to its rules do not end the experiment; each sealed folder carries
+    the skill bundle's sha256 and the report lists every change of it with dates
+  early_end_outcome: no verdict; the three trials stay counted; inconclusive for the pre-set action
+  breach: EXP-0038's statistics computed or shown before the read makes it unreadable; inconclusive for the pre-set action
+
+unit:
+  lists: {HYP-0065: "DAILY RADAR", HYP-0066: "DAILY RADAR", HYP-0067: "SMALL CAP MOMENTUM"}   # the first list whose name, spaces trimmed, is this (case as written)
+  symbols: "upper-cased, stripped, '/' read as '.', de-duplicated, must match ^[A-Z][A-Z0-9.]{0,9}$ (else unknown_symbol)"
+  symbol_directory: >-
+    Nasdaq Trader nasdaqlisted.txt (Symbol) and otherlisted.txt (ACT Symbol, CQS Symbol), sealed with the edition each
+    session before 09:30 New York; a symbol is found when it equals one of those columns after the same normalisation;
+    Test Issue = Y rows and the creation-time footer ignored
+  taken_out_before_bars:            # for every trial and the whole window, decided from that day's sealed files only
+    desk_name: [SPY, QQQ, AAPL, MSFT, NVDA, AMZN, GOOGL, META, TSLA, PLTR, AVGO, AMD]   # config/options_desk.yaml on 2026-11-17
+    desk_added: a name in config/options_desk.yaml on origin/main at 09:30 New York on S that is not in desk_name
+    desk_proxy: [GOOG]
+    exchange_traded_product: the sealed directory's ETF column is Y (RSP and IWM among them)
+    unknown_symbol: not in the sealed directory, or not a valid symbol
+  counted_not_scored: [no_bars, corporate_action]
+
+outcome:
+  bars: {source: Alpaca, timeframe: 1Day, feed: sip, adjustment: all, prices: "o and c as served, not claimed to be auction prints"}
+  fetched: once, at least 30 minutes after the close of the last session the read uses; saved with SHA-256; never replaced
+  one_session: "c(S) / o(S) - 1; a half day uses its shorter session"
+  five_sessions: "c(S+4) / o(S) - 1; S+4 the fourth regular session after S (dashboard/src/lib/market-calendar.json); a name without a later bar (halted, delisted, merged, acquired) keeps its last close in the window"
+  corporate_actions:
+    source: Alpaca corporate actions for the scored names and the window, fetched and sealed with the bars
+    takes_out: [spin_off]           # ex date in the window
+    keeps: [splits, dividends, mergers, cash_mergers, delistings]   # adjustment=all reflects splits and dividends; the rest keep their last close
+  benchmark: {HYP-0065: RSP, HYP-0066: RSP, HYP-0067: IWM}
+  d_s: the mean of the scored names' returns minus the benchmark's return over the same window, each name weighted equally
+
+statistics:
+  prng: mulberry32                  # the step of EXP-0032's config.yaml
+  u: next() / 2**32
+  seeds: {HYP-0065: 20261155, HYP-0066: 20261156, HYP-0067: 20261157}
+  generator_test_vectors:           # the first three next() values; computed from the step, not a result
+    "20261155": [2187981034, 2314792444, 2933325786]
+    "20261156": [1183055867, 1588269641, 1324635511]
+    "20261157": [4272129800, 3721915241, 504612019]
+  resamples: 5000
+  resample:
+    HYP-0065: "draw n included sessions with replacement, index floor(u x n)"
+    HYP-0067: "draw n included sessions with replacement, index floor(u x n)"
+    HYP-0066: "block starts floor(u x m) over the m counted sessions in date order; 5 consecutive counted sessions per block, wrapping at the end; the included sessions among them kept in the order drawn until n are kept, the last block cut there; the statistic is the mean of those n D_S"
+  percentile: numpy_linear
+  interval: [2.5, 97.5]
+  supported:
+    HYP-0065: the 2.5th percentile of the bootstrap means of D_S above 0, and the mean of D_S above 0 in both halves
+    HYP-0066: Holm-adjusted p (bootstrap means at or below 0, plus 1, over 5,001) at or below 0.025, and both halves above 0
+    HYP-0067: Holm-adjusted p (bootstrap means at or below 0, plus 1, over 5,001) at or below 0.025, and both halves above 0
+  holm: {over: [HYP-0066, HYP-0067], inconclusive_trial_p: 1}
+  halves: included sessions in date order, the first floor(n/2), then the rest
+  also_reported: [point_estimate_and_range, counts_by_reason, scored_names_per_session, name_weighted_check, largest_name_share_of_d_s, skill_bundle_hash_changes]
