@@ -136,10 +136,7 @@ async function repairKind(deps: CopyRepairDeps, budgetMs: number, kind: CopyKind
  */
 export function startOptionsCopyRepair(
   keepAlive: (work: Promise<unknown>) => void,
-  run: () => Promise<unknown> = async () => {
-    await repairOptionsCopy();
-    await repairRadarCopy();
-  },
+  run: () => Promise<unknown> = () => Promise.all([repairOptionsCopy(), repairRadarCopy()]),
 ): void {
   let work: Promise<unknown>;
   try {

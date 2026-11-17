@@ -2,7 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { listPaths, readText } from "./blob";
 import { RADAR_PATHS } from "./desk";
-import { parseEditionCopy } from "./edition-copy";
+import { editionCopyText, parseEditionCopy, parseLostMarker } from "./edition-copy";
 import { verify } from "./hmac";
 import { RADAR_KEY_ID, secretFor } from "./ingest";
 import { logEvent } from "./log";
@@ -20,23 +20,29 @@ export function radarCopiesSigned(date: string): string {
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 /** More copies than this for one date is not a normal day: answered as an error rather than truncated. */
 export const MAX_COPIES = 200;
-const EDITION_MARK = ',"edition":';
 
 export interface RadarCopyRow {
   path: string;
   received_at: string;
   run_id: string;
-  copy_sha256: string;
-  edition_sha256: string;
+  /** True for an edition that became latest and was replaced before its copy was made: no hashes. */
+  lost: boolean;
+  copy_sha256: string | null;
+  edition_sha256: string | null;
 }
 
 const sha256 = (s: string) => createHash("sha256").update(s, "utf8").digest("hex");
 
-/** The edition bytes inside a copy: the envelope is the head, `,"edition":`, the bytes, then one `}`. */
+/**
+ * The edition bytes inside a copy: the envelope is the head editionCopyText writes, `,"edition":`, the bytes, then one
+ * `}`. Null unless the head is exactly that head, so a copy written any other way is never hashed wrongly.
+ */
 export function editionBytes(copyText: string): string | null {
-  const at = copyText.indexOf(EDITION_MARK);
-  if (at < 0 || !copyText.endsWith("}")) return null;
-  return copyText.slice(at + EDITION_MARK.length, -1);
+  const parsed = parseEditionCopy(copyText);
+  if (!parsed) return null;
+  const head = editionCopyText(parsed.receivedAt, parsed.session, parsed.runId, "").slice(0, -1);
+  if (!copyText.startsWith(head) || !copyText.endsWith("}")) return null;
+  return copyText.slice(head.length, -1);
 }
 
 function json(status: number, body: Record<string, unknown>): Response {
@@ -60,7 +66,10 @@ export async function handleRadarCopies(req: Request, now: Date = new Date(), de
     return json(status, body);
   };
   const date = new URL(req.url).searchParams.get("date") ?? "";
-  if (!DATE_RE.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`))) return done(400, "bad-date", { error: "date must be YYYY-MM-DD" });
+  const asDate = new Date(`${date}T00:00:00Z`);
+  if (!DATE_RE.test(date) || Number.isNaN(asDate.getTime()) || asDate.toISOString().slice(0, 10) !== date) {
+    return done(400, "bad-date", { error: "date must be YYYY-MM-DD" });
+  }
   // The research key only: the trading host's keys have no business reading the radar's receipts.
   if (req.headers.get("x-wt-key-id") !== RADAR_KEY_ID) return done(401, "unauthorized", { error: "unauthorized" }, { reason: "key-id" });
   const secret = secretFor(RADAR_KEY_ID);
@@ -83,13 +92,19 @@ export async function handleRadarCopies(req: Request, now: Date = new Date(), de
     } catch (e) {
       return done(502, "storage-error", { error: "storage unavailable" }, { error_class: e instanceof Error ? e.name : "unknown" });
     }
+    if (text !== null && path.endsWith(".lost.json")) {
+      const lost = parseLostMarker(text);
+      if (!lost || lost.session !== date) return done(502, "unreadable-copy", { error: "a stored copy could not be read" }, { n: paths.length });
+      copies.push({ path, received_at: lost.receivedAt, run_id: lost.runId, lost: true, copy_sha256: null, edition_sha256: null });
+      continue;
+    }
     const parsed = text === null ? null : parseEditionCopy(text);
     const bytes = text === null ? null : editionBytes(text);
     // A copy that cannot be read as one is reported as an error, never skipped: a listing must hold every copy.
     if (text === null || !parsed || bytes === null || parsed.session !== date) {
       return done(502, "unreadable-copy", { error: "a stored copy could not be read" }, { n: paths.length });
     }
-    copies.push({ path, received_at: parsed.receivedAt, run_id: parsed.runId, copy_sha256: sha256(text), edition_sha256: sha256(bytes) });
+    copies.push({ path, received_at: parsed.receivedAt, run_id: parsed.runId, lost: false, copy_sha256: sha256(text), edition_sha256: sha256(bytes) });
   }
   return done(200, "ok", { schema: "stocksdelta/radar-copies", version: 1, date, copies }, { n: copies.length });
 }

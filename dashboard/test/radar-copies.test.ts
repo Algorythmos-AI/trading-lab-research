@@ -61,7 +61,7 @@ vi.mock("@/lib/blob", () => ({
 }));
 
 const { handleIngest } = await import("@/lib/ingest");
-const { runAndSession } = await import("@/lib/edition-copy");
+const { runAndSession, lostMarkerFor, parseLostMarker } = await import("@/lib/edition-copy");
 const { repairRadarCopy, repairOptionsCopy, resetCopyRepairMemo } = await import("@/lib/edition-copy-repair");
 const { handleRadarCopies, radarCopiesSigned, editionBytes, MAX_COPIES } = await import("@/lib/radar-copies-route");
 
@@ -152,6 +152,22 @@ describe("radar edition copies", () => {
   });
 });
 
+describe("a radar edition replaced before its copy was made", () => {
+  it("leaves a lost marker beside the copies, so the gap is in the store", async () => {
+    blob.clock.now = "2026-11-18T11:12:40.123Z";
+    const t1 = new Date("2026-11-18T11:12:40Z");
+    expect((await handleIngest(postAt(edition("radar-a", "2026-11-18T11:00:00Z"), t1), t1)).status).toBe(200);
+    const copy = [...blob.store.keys()].find((k) => k.startsWith(`radar/copies/${DATE}/`))!;
+    blob.store.delete(copy);
+    blob.clock.now = "2026-11-18T13:07:10.456Z";
+    const t2 = new Date("2026-11-18T13:07:10Z");
+    expect((await handleIngest(postAt(edition("radar-b", "2026-11-18T13:00:00Z"), t2), t2)).status).toBe(200);
+    const marker = `radar/copies/${DATE}/20261118T111240123Z-radar-a.lost.json`;
+    expect(parseLostMarker(blob.store.get(marker)!.text)).toEqual({ receivedAt: "2026-11-18T11:12:40.123Z", session: DATE, runId: "radar-a" });
+  });
+
+});
+
 describe("GET /api/research/radar-copies", () => {
   const NOW = new Date("2026-11-18T14:31:00Z");
 
@@ -200,8 +216,29 @@ describe("GET /api/research/radar-copies", () => {
     expect((await handleRadarCopies(listing(DATE, NOW), NOW, deps)).status).toBe(502);
   });
 
-  it("finds the edition bytes inside a copy", () => {
-    expect(editionBytes('{"schema":"x","edition":{"a":1}}')).toBe('{"a":1}');
+  it("finds the edition bytes only inside a copy written as the ingest writes it", () => {
+    const head = { schema: "stocksdelta/edition-copy", version: 1, received_at: "2026-11-18T11:12:40.123Z", session: DATE, run_id: "r" };
+    const good = `${JSON.stringify(head).slice(0, -1)},"edition":{"a":1}}`;
+    expect(editionBytes(good)).toBe('{"a":1}');
+    const reordered = `{"run_id":"r","schema":"stocksdelta/edition-copy","version":1,"received_at":"2026-11-18T11:12:40.123Z","session":"${DATE}","edition":{"a":1}}`;
+    expect(editionBytes(reordered)).toBeNull();
     expect(editionBytes('{"schema":"x"}')).toBeNull();
+  });
+
+  it("refuses an impossible date", async () => {
+    expect((await handleRadarCopies(listing("2026-02-31", NOW), NOW)).status).toBe(400);
+  });
+
+  it("lists a lost marker as a lost row, with no hashes", async () => {
+    await ingestTwo();
+    const marker = lostMarkerFor("radar/copies/", DATE, "2026-11-18T12:00:00.000Z", "radar-lost")!;
+    blob.put(marker.path, marker.body);
+    const body = (await (await handleRadarCopies(listing(DATE, NOW), NOW)).json()) as { copies: Record<string, unknown>[] };
+    expect(body.copies.map((c) => [c.run_id, c.lost])).toEqual([
+      ["radar-a", false],
+      ["radar-lost", true],
+      ["radar-b", false],
+    ]);
+    expect(body.copies[1]).toMatchObject({ copy_sha256: null, edition_sha256: null, received_at: "2026-11-18T12:00:00.000Z" });
   });
 });
