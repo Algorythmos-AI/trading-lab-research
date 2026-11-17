@@ -28,6 +28,12 @@ repository, through a seal step the owner adds to the after-close Options routin
 `docs/routine-steps.md`). Until the first night arrives its feed row is shown, unverified, and never pages; it is due
 by 22:30 UTC (`dashboard/src/lib/funnel-slots.ts`).
 
+Every radar edition that becomes latest is also kept, once and never replaced, under `radar/copies/<edition_date>/`
+with the store's receipt time (`dashboard/src/lib/edition-copy.ts`; the 10-minute watchdog repairs a missing one).
+`GET /api/research/radar-copies?date=YYYY-MM-DD`, signed with the radar key over
+`GET /api/research/radar-copies?date=<date>`, lists them (path, receipt time, run, sha256 of the copy and of the
+edition) and nothing of their content: trading-options-funnel seals that listing daily for DEC-0055.
+
 ## What depends on what
 
 - **The feed watch** (`dashboard/src/lib/feed-watch.ts`, its table `FEEDS`) holds every routine above that publishes

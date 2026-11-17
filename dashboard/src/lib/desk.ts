@@ -54,6 +54,11 @@ export function deskOfPath(pathname: string): DeskName {
 export const RADAR_PATHS = {
   latest: "radar/latest.json",
   history: "radar/editions/",
+  /**
+   * Every radar edition that became latest, once, keyed by its edition_date, with the store's receipt time
+   * (./edition-copy). Never replaced or deleted: DEC-0055 reads the first edition received before the open from here.
+   */
+  copies: "radar/copies/",
 } as const;
 
 /**

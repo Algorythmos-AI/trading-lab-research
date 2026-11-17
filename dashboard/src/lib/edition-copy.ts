@@ -96,10 +96,12 @@ export function editionCopyFor(
 /** The run id and session a stored Options edition names, without its values being logged; null fields when absent. */
 export function runAndSession(text: string): { runId: string | null; session: string | null } {
   try {
-    const v = JSON.parse(text) as { run_id?: unknown; session?: unknown };
+    // The Options edition names its date `session`; the radar edition names it `edition_date`.
+    const v = JSON.parse(text) as { run_id?: unknown; session?: unknown; edition_date?: unknown };
+    const day = v.session !== undefined ? v.session : v.edition_date;
     return {
       runId: typeof v.run_id === "string" && v.run_id.length > 0 ? v.run_id : null,
-      session: typeof v.session === "string" && SESSION_RE.test(v.session) ? v.session : null,
+      session: typeof day === "string" && SESSION_RE.test(day) ? day : null,
     };
   } catch {
     return { runId: null, session: null };
