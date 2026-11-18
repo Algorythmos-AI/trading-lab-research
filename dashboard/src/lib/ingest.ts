@@ -1,6 +1,6 @@
 import "server-only";
 import { HISTORY_PREFIX, PreconditionFailed, exists, readForUpdate, storedMeta, writeText } from "./blob";
-import { CALENDAR_PATHS, DESK_PATHS, FUNNEL_PATHS, JOURNAL_PATHS, LEDGER_PATHS, OPTIONS_CLONE_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, PAPER_OPTIONS_PATHS, RADAR_DESK_PATHS, RADAR_PATHS } from "./desk";
+import { CALENDAR_PATHS, DESK_PATHS, FUNNEL_PATHS, JOURNAL_PATHS, LEDGER_PATHS, OPTIONS_CLONE_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, PAPER_OPTIONS_PATHS, RADAR_DESK_PATHS, RADAR_PATHS, RADAR_RUN_PATHS, radarRunPath } from "./desk";
 import { editionCopyFor, etagShape, lostMarkerFor, runAndSession } from "./edition-copy";
 import { verify } from "./hmac";
 import { KEY_ID_RE, decideScope, parseScopes } from "./ingest-scope";
@@ -30,6 +30,7 @@ import {
   isOptionsLive,
   isPaperOptions,
   isRadar,
+  isRadarRun,
   validateCalendar,
   validateJournal,
   validateFunnel,
@@ -40,6 +41,7 @@ import {
   validateOptionsEdition,
   validateOptionsLive,
   validateRadarEdition,
+  validateRadarRun,
 } from "./validate";
 
 export const MAX_BODY_BYTES = 3_500_000;
@@ -233,7 +235,7 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
   const scopes = parseScopes(process.env[SCOPES_ENV], [RADAR_KEY_ID]);
   if (!scopes.ok) logEvent("ingest.scopes", { outcome: "malformed", reason: scopes.reason });
   // The desk whose snapshot this body is, by the same routing as below; null for every other document kind.
-  const snapshotOf = isRadar(data) || isOptions(data) || isOptionsLive(data) || isOptionsClone(data) || isPaperOptions(data) || isCalendar(data) || isJournal(data) || isLedger(data) || isFunnel(data) || isRadarDesk(data) ? null : contractOf(data).desk;
+  const snapshotOf = isRadar(data) || isOptions(data) || isOptionsLive(data) || isOptionsClone(data) || isPaperOptions(data) || isCalendar(data) || isJournal(data) || isLedger(data) || isFunnel(data) || isRadarDesk(data) || isRadarRun(data) ? null : contractOf(data).desk;
   const scope = decideScope(scopes, keyId, snapshotOf, process.env.PRIMARY_HOST || DEFAULT_KEY_ID);
   if (!scope.allow && scope.outcome === "key-scope-config") {
     return done(503, "key-scope-config", { error: "ingest is not configured for this key" }, { key_id: keyId });
@@ -248,6 +250,8 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
   if (isLedger(data)) return storeEdition(LEDGER_EDITION, text, data, done, now);
   if (isFunnel(data)) return storeEdition(FUNNEL_EDITION, text, data, done, now);
   if (isRadarDesk(data)) return storeEdition(RADAR_DESK_EDITION, text, data, done, now);
+  // The run beacon comes from the Radar's own routine, like the edition it reports on.
+  if (isRadarRun(data)) return storeRadarRun(text, data, done, now);
   // The owner's journal is read from their own broker in the research environment, where the radar is built.
   if (isJournal(data)) return storeEdition(JOURNAL, text, data, done, now);
   if (keyId === RADAR_KEY_ID) {
@@ -537,6 +541,61 @@ async function storeEdition(kind: EditionKind, text: string, data: unknown, done
     return done(502, "storage-error", { error: "storage unavailable" }, { error: e instanceof Error ? e.name : "unknown", desk });
   }
   return done(503, "conflict", { status: "conflict", run_id: runId }, { run_id: runId, desk });
+}
+
+/**
+ * A Radar run beacon (stocksdelta/radar-run). Not a storeEdition kind: its slot is named by the validated body (one
+ * file per session and stage, ./desk radarRunPath), and beacons are ordered within that slot only, so a stage's late
+ * "finished" is never refused as older than the next stage's "started". The rules within a slot are the editions':
+ *  - the stored beacon's run_id with its state is a resend ("duplicate"). The state is part of it, so a routine that
+ *    keeps one run_id for a stage's "started" and its end still has the end stored;
+ *  - an earlier as_of is "older" (409). At the very same instant only an end replaces a "started";
+ *  - one dated ahead of the clock is refused, and a stored one ordered ahead gives way ("superseded-ahead").
+ * Then, best effort, the newest beacon of any stage is kept at radar-run/latest.json for /api/health; it never
+ * changes the answer. Display only, so a refusal is logged and not recorded for the feed watch (./ingest-reject).
+ */
+async function storeRadarRun(text: string, data: unknown, done: Done, now: Date): Promise<Response> {
+  const desk = "radar-run";
+  const nowMs = now.getTime();
+  const result = validateRadarRun(data);
+  if (!result.ok) return done(422, "invalid", { error: "invalid", errors: result.errors }, { desk, n_errors: result.errors.length });
+  const { run_id: runId, session, stage, state } = result.doc;
+  const asOf = orderInstant(result.doc.as_of);
+  if (asOf === null) return done(422, "invalid", { error: "invalid", errors: ["/as_of: must be a timestamp"] }, { desk, n_errors: 1 });
+  if (isAheadOfClock(result.doc.as_of, nowMs)) return done(422, "ahead-of-clock", { error: "invalid", errors: [AHEAD_ERROR] }, { desk });
+  const path = radarRunPath(session, stage);
+  const said = { run_id: runId, desk, session, stage, state };
+  try {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const current = await readForUpdate(path);
+      let supersedes = false;
+      if (current) {
+        const held = parsedObject(current.text);
+        const heldAsOf = typeof held?.as_of === "string" ? orderInstant(held.as_of) : null;
+        if (held?.run_id === runId && held.state === state) return done(200, "duplicate", { status: "duplicate", run_id: runId }, said);
+        if (heldAsOf !== null && storedAhead(heldAsOf, nowMs)) supersedes = true;
+        else if (heldAsOf !== null && (asOf < heldAsOf || (asOf === heldAsOf && !(held?.state === "started" && state !== "started")))) {
+          return done(409, "older", { status: "older", run_id: runId }, said);
+        }
+      }
+      try {
+        await writeText(path, text, current ? { ifMatch: current.etag } : { createOnly: true });
+      } catch (e) {
+        if (e instanceof PreconditionFailed && attempt === 0) continue;
+        if (e instanceof PreconditionFailed) return done(503, "conflict", { status: "conflict", run_id: runId }, said);
+        throw e;
+      }
+      try {
+        await writeDated(RADAR_RUN_PATHS.latest, text, asOf, nowMs);
+      } catch (e) {
+        logEvent("ingest.radar-run", { outcome: "latest-error", run_id: runId, error: e instanceof Error ? e.name : "unknown" });
+      }
+      return done(200, supersedes ? "superseded-ahead" : "stored", { status: "stored", run_id: runId }, { ...said, bytes: text.length, attempt });
+    }
+  } catch (e) {
+    return done(502, "storage-error", { error: "storage unavailable" }, { error: e instanceof Error ? e.name : "unknown", desk });
+  }
+  return done(503, "conflict", { status: "conflict", run_id: runId }, said);
 }
 
 function parsedObject(text: string): Record<string, unknown> | null {

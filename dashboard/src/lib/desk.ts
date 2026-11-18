@@ -129,6 +129,21 @@ export const RADAR_DESK_PATHS = {
 } as const;
 
 /**
+ * The Radar run beacons (stocksdelta/radar-run, from the pre-market Radar routine): the newest beacon of each stage
+ * of each session at `<stages><session>/<stage>.json`, so a reader gets every stage of a session with one read per
+ * stage. `latest` holds the newest beacon of any stage, for /api/health alone.
+ */
+export const RADAR_RUN_PATHS = {
+  latest: "radar-run/latest.json",
+  stages: "radar-run/",
+} as const;
+
+/** Where the newest beacon of one stage of one session is kept. Both parts come from a validated beacon. */
+export function radarRunPath(session: string, stage: string): string {
+  return `${RADAR_RUN_PATHS.stages}${session}/${stage}.json`;
+}
+
+/**
  * The after-close options levels editions, one per session they are built for, kept the same way as the radar's.
  * `copies` also keeps every edition that became latest, each once, with the store's receipt time
  * (./edition-copy, EXP-0033 `labeller_rules.edition`): `history` holds one file per session that a refresh replaces.

@@ -560,6 +560,7 @@ describe("GET /api/health", () => {
     funnel: { status: "missing", accepts: 1, session: null, run_id: null, as_of: null, schema_version: null },
     radar_desk: { status: "missing", accepts: 1, session: null, run_id: null, as_of: null, schema_version: null },
     paper_options: { status: "missing", accepts: 1, run_id: null, as_of: null, schema_version: null },
+    radar_run: { status: "missing", accepts: 1, session: null, run_id: null, as_of: null, schema_version: null },
   };
 
   beforeEach(() => {
