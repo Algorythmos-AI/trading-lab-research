@@ -12,6 +12,7 @@ One page per incident. Each starts with how you'll notice it.
 | [Rotate secrets](secret-rotation.md) | A secret may have leaked, or it's the scheduled rotation |
 | [Dashboard deploys and the watchdog drill](dashboard-deploy.md) | A dashboard deploy failed, or you want to prove paging works |
 | [Options desk: paper positions](options-positions.md) | The Paper positions pane is absent or says it is old; setting up the second paper account |
+| [Paper options page: the trade history](paper-options.md) | The Paper page has no history, says it is old, or a total looks wrong; how hand-placed trades are matched |
 | [The OCI trading host](oci-host.md) | Provisioning, access, rebuild, or the OCI account is lost |
 | [The GCP free-tier host](gcp-host.md) | Provisioning, secrets, or rebuild of the e2-micro host |
 | [Webull, read only](webull-readonly.md) | Moving the Webull key to the host, or the Webull pull job paged |
