@@ -1,0 +1,62 @@
+# EXP-0048: Robot B's paper execution against the backtest fill model (DEC-0062 "What follows" 1; DEC-0061 cap C2).
+# A measurement of execution, not of edge. No rule, exit, size, limit, gate, latch or stop line of B changes because
+# of it (DEC-0011 section 3; DEC-0061). Reading it lifts cap C2 only: rows V2 and C1 still bind (DEC-0062).
+experiment: EXP-0048
+status: registered
+decision: DEC-0061
+follows: DEC-0062
+trials: 0                      # no variant is evaluated; the global trial count stays at 87
+question: >
+  How far did B's paper fills sit from the prices the backtest engine books for the same orders, how long did each
+  step take, which execution incidents did the order manager note, what blocked the runner, and how often did the
+  replayed rule agree with the runner, over every armed paper session to the cutoff?
+driver: python scripts/b_exec_audit.py EXP-0048-b-paper-execution-audit --snapshot ~/trading/var/research/EXP-0048/snapshot
+fetch: python scripts/b_exec_audit.py --fetch ~/trading/var/research/EXP-0048/snapshot
+inputs:
+  source: the cloud host's runner records only (docs/runbooks/gcp-host.md); one read-only tar over IAP SSH as wt
+  files: [data/live/journal.jsonl, data/live/plan_*.json, var/forward/replay/*.json]
+  kept: >-
+    outside git (PRIVATE log lines and prices) at ~/trading/var/research/EXP-0048/snapshot; each file's sha256
+    and the journal's line count and head at the cutoff are written into results.json
+cutoff:
+  last_session: "2026-11-18"   # the last completed session before registration; later rows are ignored
+seed: 48
+n_boot: 10000
+reconcile:                     # the run fails (exit 2) unless the snapshot reproduces these exactly
+  trades: 9                    # published: EXP-0042 paper_aggregate.trades_closed, the dashboard stop-rule meter
+  total_R: -3.29               # published: EXP-0042 paper_aggregate.cum_R (to 2 dp)
+  armed_sessions: 36           # the armed rows through 2026-11-18 (schema probe, see README "Before registration")
+fill_model:                    # wt.backtest.engine.simulate, read in R of the paper trade (QQQM prices)
+  slip: 0.022 per QQQ share x the runner's journaled QQQM/QQQ ratio (B's frozen cost, 1c per QQQM share)
+  entry: >-
+    trigger + slip (the max(trigger, bar open) gap term needs a QQQM bar the host does not record, so the
+    entry shortfall is an upper bound against the model)
+  stop: stop - slip (stop-slippage multiplier 1, the recorded default; same gap caveat)
+  target: target (touch fill, the recorded default)
+  flatten: not measurable (needs the QQQM flatten-bar open); counted, never measured
+  estimated_exit_price: excluded from the exit leg and counted
+metrics:
+  shortfall: >-
+    per leg in R (positive = paper did worse than the model), entry also in bps of the trigger; n, mean,
+    median, sd, trade-bootstrap CI95 (n >= 3) and the mean this n can tell from zero at 80 % power
+  latency_s: >-
+    signal bar close -> entry_placed; entry_placed -> entry_filled journaled; flatten time ->
+    trade_closed journaled (each an upper bound: journal times are when the runner saw the event)
+  incidents: >-
+    plan-log notes per registered kind (exit_failed, exit_deferred, exit_unfilled_restopped,
+    exit_cancel_unconfirmed, entry_remainder_canceled, entry_cancel_unconfirmed, stop_resize_deferred,
+    entry_not_at_broker), trades with each; exit_failed messages mapped to [sell_exceeds_available, other]
+  blockers: >-
+    blocked marks and sessions per registered category [plan_not_persisted, account_not_persisted,
+    kill_file, latched, max_1_trade_per_day, exposure_exists, event, stale_signal_data, spread_or_no_quote, other]
+  faults: rows and sessions per registered fault event (wt.research.b_exec_audit.FAULTS), other events counted
+  decision_marks: totals over decision summaries (asked, marks, spread_only_marks, would_signals)
+  replay: >-
+    wt.analytics.b_replay tally of replay_vs_journal and forward_vs_replay, and agreement over the armed
+    sessions; reported only (G2's agreement measure changes only by a decision record)
+outcome_bearing_reads: >
+  The exit-kind trade counts and the exit shortfall by kind are read and reported; the round-trip shortfall in R is
+  a component of the trades' P&L. All are aggregates over 9 trades whose total (-3.29R) is already published and
+  whose rows the /robot-b blotter already shows. No per-trade value, price, R, date or reason is written.
+thresholds: none. No line is set for any metric; the report states what the sample can and cannot detect.
+outputs: [results.json, manifest.json, report.md]
