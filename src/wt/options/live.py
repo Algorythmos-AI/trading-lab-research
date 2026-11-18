@@ -82,6 +82,11 @@ MAX_QTY = 9999
 GET_TIMEOUT_S = (5.0, 10.0)        # connect, read: two reads of three tries each stay far inside the deadline
 ISO_TIME = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})")
 GET_TRIES = 3
+# The activity types asked for: filled orders, option expiries, assignments and exercises. The names are those of the
+# Trading API's own list of allowed values, where an exercise is OPEXC. Its guide's table says OPXRC, which was asked
+# for until 2026-11-18 and is the likely reason every request was refused with HTTP 422 (the reply's text is never
+# read, so the cause is inferred, not seen).
+ACTIVITY_TYPES = "FILL,OPEXP,OPASN,OPEXC"
 PUBLISH_BUDGET_S = 150.0          # under the job's 4-minute deadline (wt.ops.schedule)
 SEND_TRIES = 5
 
@@ -100,6 +105,7 @@ class OptionsAccount:
     def __init__(self, key_id: str, secret: str, session: requests.Session | None = None) -> None:
         self._s = session or requests.Session()
         self._headers = {"APCA-API-KEY-ID": key_id, "APCA-API-SECRET-KEY": secret}
+        self._every_type = False       # set once the account has refused the activity filter (see `activities`)
 
     def _get(self, path: str, params: dict[str, str] | None = None, host: str = PAPER_HOST,
              tries: int = GET_TRIES) -> Any:
@@ -143,10 +149,24 @@ class OptionsAccount:
     def activities(self, after: str, page_token: str | None = None) -> list[Any]:
         """One page of the account's filled orders and option expiries, exercises and assignments from `after` on,
         oldest first (wt.options.paper_manual pages through them). Read only, like every call here."""
-        params = {"activity_types": "FILL,OPEXP,OPASN,OPXRC", "after": after, "direction": "asc", "page_size": "100"}
+        params = {"after": after, "direction": "asc", "page_size": "100"}
         if page_token:
             params["page_token"] = page_token
-        got = self._get("/v2/account/activities", params)
+        path = "/v2/account/activities"
+        if not self._every_type:
+            try:
+                return self._activity_list(self._get(path, {"activity_types": ACTIVITY_TYPES, **params}))
+            except BrokerFault as e:
+                if e.code != "http-422":
+                    raise
+            # Refused as unprocessable: most likely a type name the account does not know, which refuses the whole
+            # request. The same list is asked for without the filter, and the reader keeps the types it knows.
+            self._every_type = True
+            pg.say("options live: the account refused the activity filter; every activity is read instead", err=True)
+        return self._activity_list(self._get(path, params))
+
+    @staticmethod
+    def _activity_list(got: Any) -> list[Any]:
         if not isinstance(got, list):
             raise BrokerFault("activities-not-a-list")
         return got

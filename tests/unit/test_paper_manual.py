@@ -142,6 +142,51 @@ def test_a_run_reads_a_bounded_number_of_pages_and_a_fault_leaves_the_cache_as_i
     assert paper_manual.refresh(Account([[]]), tmp_path / "bad.json", NOW) == []
 
 
+def test_a_refused_activity_filter_is_asked_again_without_it_and_only_that_fault_is() -> None:
+    # 2026-11-18: every request was refused with HTTP 422, so the hand-placed history never arrived. The likely cause
+    # is a type name the account does not know (OPXRC). The names are now the API's own, and a refused filter is
+    # not the end.
+    assert live.ACTIVITY_TYPES == "FILL,OPEXP,OPASN,OPEXC"
+    seen: list[dict[str, str]] = []
+
+    class Resp:
+        def __init__(self, status: int) -> None:
+            self.status_code = status
+
+        def json(self) -> Any:
+            return [fill(1, "buy", 1, 1.0), {"id": "d1", "activity_type": "DIV", "symbol": "SPY", "date": "2026-11-18"}]
+
+    class Session:
+        def __init__(self, refuse: int) -> None:
+            self.refuse = refuse
+
+        def get(self, url: str, **kw: Any) -> Resp:
+            seen.append(dict(kw["params"]))
+            return Resp(self.refuse if "activity_types" in kw["params"] else 200)
+    acct = live.OptionsAccount("k", "s", Session(422))   # type: ignore[arg-type]
+    got = acct.activities("2026-11-01T00:00:00Z")
+    assert ["activity_types" in p for p in seen] == [True, False]
+    assert seen[1] == {"after": "2026-11-01T00:00:00Z", "direction": "asc", "page_size": "100"}
+    # What comes back unfiltered is reduced to the types the reader knows.
+    assert [a["type"] for a in paper_manual.clean(got)] == ["FILL"]
+    # The next page of the same run does not try the refused filter again.
+    acct.activities("2026-11-01T00:00:00Z", "tok")
+    assert seen[2] == {"after": "2026-11-01T00:00:00Z", "direction": "asc", "page_size": "100", "page_token": "tok"}
+    # Any other refusal is the fault it always was: no second request.
+    seen.clear()
+    with pytest.raises(live.BrokerFault, match="http-400"):
+        live.OptionsAccount("k", "s", Session(400)).activities("2026-11-01T00:00:00Z")   # type: ignore[arg-type]
+    assert len(seen) == 1
+    with pytest.raises(live.BrokerFault, match="keys-rejected"):
+        live.OptionsAccount("k", "s", Session(401)).activities("2026-11-01T00:00:00Z")   # type: ignore[arg-type]
+
+
+def test_an_exercise_is_read_under_either_of_its_two_names() -> None:
+    for name in ("OPEXC", "OPXRC"):
+        got = trips([fill(1, "buy", 1, 3.00, symbol=P), event(2, name, symbol=P)])
+        assert got["trades"] == [] and got["gaps"] == [{"date": "2026-11-20", "contract": P}], name
+
+
 def test_the_account_call_is_a_get_on_the_paper_host_for_fills_and_option_events_only() -> None:
     seen: list[dict[str, Any]] = []
 
@@ -157,7 +202,7 @@ def test_the_account_call_is_a_get_on_the_paper_host_for_fills_and_option_events
             return Resp()
     got = live.OptionsAccount("k", "s", Session()).activities("2026-11-01T00:00:00Z", "tok")   # type: ignore[arg-type]
     assert len(got) == 1 and seen[0]["url"] == "https://paper-api.alpaca.markets/v2/account/activities"
-    assert seen[0]["params"] == {"activity_types": "FILL,OPEXP,OPASN,OPXRC", "after": "2026-11-01T00:00:00Z", "direction": "asc",
+    assert seen[0]["params"] == {"activity_types": "FILL,OPEXP,OPASN,OPEXC", "after": "2026-11-01T00:00:00Z", "direction": "asc",
                                  "page_size": "100", "page_token": "tok"}
     assert seen[0]["allow_redirects"] is False
     src = Path(paper_manual.__file__).read_text()

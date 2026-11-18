@@ -386,6 +386,13 @@ export const REASON_LABEL: Record<string, string> = {
   expired: "Left to expire",
   stale: "Stale quote",
   blind: "No quote",
+  chart: "Chart stop",
+  trail: "Trailing stop",
+  "next-level": "Next level reached",
+  "broker-stop": "Broker's stop order",
+  "stock-feed-stalled": "Stock feed stalled",
+  "day-loss": "Day loss limit",
+  operational: "Operational exit",
 };
 
 export const reasonLabel = (code: string | null): string => (code === null ? "Not recorded" : (REASON_LABEL[code] ?? code.replace(/[-_]/g, " ")));
