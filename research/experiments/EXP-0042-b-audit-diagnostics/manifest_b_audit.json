@@ -22,7 +22,7 @@
   "config/risk.yaml": "b5f10616d910ce157b5783765aec313e8232401bffdc0f073fc8763a9ab3ba2b",
   "config/trial_registry.yaml": "43131e575e291328fd41f4ac5f7db60eaa13d94940f4563bdb9be74ff8a79d53"
  },
- "created_utc": "2026-11-18T12:53:13+00:00",
+ "created_utc": "2026-11-18T12:57:23+00:00",
  "data": {
   "bytes": 3960,
   "missing": [],
@@ -86,15 +86,10 @@
   "source": "uv pip freeze"
  },
  "git": {
-  "dirty": true,
-  "dirty_paths": [
-   "scripts/b_audit.py",
-   "src/wt/research/b_audit.py"
-  ],
-  "sha": "254bcd7bc812b26a5834e61f086e3ec2e0c359b6",
-  "untracked_code": [
-   "scripts/robot_b_evidence.py"
-  ]
+  "dirty": false,
+  "dirty_paths": [],
+  "sha": "17e7753952d8dcab678ca5261a6efb0585eacab0",
+  "untracked_code": []
  },
  "lockfile_sha256": {
   "requirements-dev.lock.txt": "c892d70763d3ef35d12815dbf1a72d0c2ceec289f3feabf4ab33f5d752943ae5",
