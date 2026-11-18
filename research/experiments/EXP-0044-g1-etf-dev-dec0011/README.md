@@ -7,4 +7,4 @@
 ## Dates
 
 - Registered: 2026-11-19
-- Run: (after the registering commit)
+- Run: 2026-11-19 from 66041c3e (clean tree; see the manifests). Outcome: DEC-0062.

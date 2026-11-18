@@ -31,3 +31,20 @@ trade history (profit factor 0.90, open window weakest) points the same way.
 
 **Overall:** after 75 trials, nothing passes G1. B/QQQ remains the only candidate with CI>0 in development and a
 positive holdout, but it fails DSR and does not generalise. Next evidence = forward (paper + nightly forward test).
+
+## Corrected data (DEC-0011 re-runs, 2026-11-19, DEC-0062)
+
+B was chosen from trials evaluated partly on contaminated data (DEC-0011 R-C1). Every ETF-track trial R-C1 touched was
+re-run on de-duplicated data (EXP-0043 data-only, EXP-0044 corrected method, EXP-0045 holdout re-score, EXP-0046
+controls, EXP-0047 IWM/DIA). Old and corrected side by side:
+
+| | Recorded | Corrected |
+|---|---|---|
+| B QQQ→QQQM walk-forward | +0.117R (415), DSR 0.707 at 65 trials | +0.113R (417), DSR **0.636 at 87 trials** |
+| B frozen rule, development span | +0.115R (479) | +0.114R (481) |
+| Holdout (consumed; can only demote) | +0.091R (57) | **+0.071R (59)**, CI [−0.128, +0.288] |
+| B via SPY | +0.049R (474) | +0.048R (480) |
+| B on IWM / DIA | −0.034R / +0.028R | −0.032R / +0.032R |
+
+G1 still fails on the DSR alone. Verdict (DEC-0061 row V2, caps C1 and C2): **SUSPEND** research on B v1; paper
+continues unchanged.

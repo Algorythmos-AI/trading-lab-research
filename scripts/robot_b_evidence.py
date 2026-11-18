@@ -35,14 +35,18 @@ TRAIL: list[dict[str, str | None]] = [
     {"id": "DEC-0011", "kind": "decision", "status": "accepted", "date": "2026-10-25"},
     {"id": "DEC-0037", "kind": "decision", "status": "accepted", "date": "2026-10-24"},
     {"id": "EXP-0042", "kind": "experiment", "status": "run", "date": "2026-11-18"},
-    {"id": "DEC-0061", "kind": "decision", "status": "proposed", "date": "2026-11-18"},
+    {"id": "DEC-0061", "kind": "decision", "status": "accepted", "date": "2026-11-19"},
+    {"id": "EXP-0043", "kind": "experiment", "status": "run", "date": "2026-11-19"},
+    {"id": "EXP-0044", "kind": "experiment", "status": "run", "date": "2026-11-19"},
+    {"id": "EXP-0045", "kind": "experiment", "status": "run", "date": "2026-11-19"},
+    {"id": "EXP-0046", "kind": "experiment", "status": "run", "date": "2026-11-19"},
+    {"id": "EXP-0047", "kind": "experiment", "status": "run", "date": "2026-11-19"},
+    {"id": "DEC-0062", "kind": "decision", "status": "accepted", "date": "2026-11-19"},
 ]
-OWED: list[dict[str, str]] = [
-    {"id": "EXP-0043", "status": "not run"}, {"id": "EXP-0044", "status": "not run"},
-    {"id": "EXP-0045", "status": "not run"}, {"id": "EXP-0046", "status": "not run"},
-    {"id": "EXP-0047", "status": "not run"}, {"id": "EXP-0048", "status": "not run"},
-    {"id": "EXP-0049", "status": "not run"},
-]
+OWED: list[dict[str, str]] = [{"id": "EXP-0048", "status": "not run"}, {"id": "EXP-0049", "status": "not run"}]
+RERUNS = ("EXP-0043-g1-etf-dev-dedup", "EXP-0044-g1-etf-dev-dec0011", "EXP-0045-holdout-B-rescore",
+          "EXP-0046-g1-etf-controls-dedup", "EXP-0047-r2-B-iwm-dia-dedup")
+EXPS = ROOT / "research/experiments"
 
 
 def _f(v: Any, digits: int = 4) -> float | None:
@@ -56,32 +60,36 @@ def _ci(v: Any) -> list[float | None]:
 def build() -> dict[str, Any]:
     raw = (EXP / "results.json").read_bytes()
     r = json.loads(raw)
-    fr, wf, ho = r["frozen_rule"], r["walk_forward"], r["reconcile"]["holdout"]
+    fr = r["frozen_rule"]
     trials = global_trial_count()
     years = fr["splits"]["year"]
     exits = fr["splits"]["exit_reason"]
     pw = r["power"]
-    # G1 is gated on the walk-forward out-of-sample series (scripts/g1_eval.py); the random-control p is the recorded
-    # G1 figure for that series (EXP-0005b g1_eval.json). DSR at the registry's count, gate method.
-    g1_rec = json.loads((ROOT / "research/experiments/EXP-0005b-g1-etf-dev-realcost/g1_eval.json").read_text())["B|QQQ"]["stats"]
-    dsr_now = r["dsr"]["walk_forward_trials_registry"]["one_over_n"]
+    # G1 on corrected data: EXP-0044's own gate (g1_eval --method dec0011, B|QQQ, control EXP-0046), DEC-0061/0062.
+    g1 = json.loads((EXPS / "EXP-0044-g1-etf-dev-dec0011/g1_eval_dec0011.json").read_text())["B|QQQ"]
+    gs, gate = g1["stats"], g1["gate"]
     items = [
-        {"id": "ci_lower", "pass": wf["ci95_trade"][0] > 0, "value": _f(wf["ci95_trade"][0]), "line": 0.0},
-        {"id": "dsr", "pass": dsr_now > G1_DSR, "value": _f(dsr_now), "line": G1_DSR},
-        {"id": "profit_factor", "pass": wf["profit_factor"] >= G1_PF, "value": _f(wf["profit_factor"]), "line": G1_PF},
-        {"id": "random_control_p", "pass": g1_rec["random_control_p"] < G1_P, "value": _f(g1_rec["random_control_p"]),
-         "line": G1_P},
-        {"id": "trades", "pass": wf["n"] >= G1_N, "value": wf["n"], "line": G1_N},
+        {"id": "ci_lower", "pass": gate["ci_lower_gt_0"], "value": _f(gs["ci95_expectancy"][0]), "line": 0.0},
+        {"id": "dsr", "pass": gate["dsr_gt_0.95"], "value": _f(gs["dsr_prob"]), "line": G1_DSR},
+        {"id": "profit_factor", "pass": gate["pf_ge_1.2"], "value": _f(gs["profit_factor"]), "line": G1_PF},
+        {"id": "random_control_p", "pass": gate["random_control_p_lt_0.05"], "value": _f(gs["random_control_p"]), "line": G1_P},
+        {"id": "trades", "pass": gate["n_ge_100"], "value": gs["n"], "line": G1_N},
     ]
+    ho = json.loads((EXPS / "EXP-0045-holdout-B-rescore/results.json").read_text())["summary"]
+    done = sum(1 for e in RERUNS if (EXPS / e / "manifest.json").exists())
     return {
         "schema": SCHEMA,
         "source": {"experiment": "EXP-0042", "decision": "DEC-0061", "decision_status": "proposed",
-                   "run_date": "2026-11-18", "results_sha256": hashlib.sha256(raw).hexdigest()},
+                   "run_date": "2026-11-18", "results_sha256": hashlib.sha256(raw).hexdigest(),
+                   "corrected_sha256": {e[:8]: hashlib.sha256((EXPS / e / f).read_bytes()).hexdigest()
+                                        for e, f in (("EXP-0044-g1-etf-dev-dec0011", "g1_eval_dec0011.json"),
+                                                     ("EXP-0045-holdout-B-rescore", "results.json"))}},
         "rule": {"version": "v1", "frozen": True, "record": "DEC-0037", "signal": "QQQ", "orders": "QQQM"},
-        "evidence": {"label": r["evidence_label"], "corrective_reruns_done": 0, "corrective_reruns_owed": 5,
+        "evidence": {"label": "corrected" if done == len(RERUNS) else r["evidence_label"], "corrective_reruns_done": done,
+                     "corrective_reruns_owed": len(RERUNS),
                      "corrupted_trades_found": len(r["unregistered"]["rc1_footprint_trades"]),
                      "trades_reading_corrupted_days": r["unregistered"]["trades_with_first_session_in_prior_14_sessions"]},
-        "verdict": {"provisional": "SUSPEND", "record": "DEC-0061", "status": "proposed"},
+        "verdict": {"word": "SUSPEND", "record": "DEC-0062", "status": "accepted", "row": "V2"},
         "backtest": {"span": ["2019-01-02", "2025-09-25"], "trades": fr["n"], "expectancy_r": _f(fr["expectancy_R"]),
                      "ci95": _ci(fr["ci95_trade"]), "sd_r": _f(fr["sd_R"]), "win_rate": _f(fr["win_rate"]),
                      "profit_factor": _f(fr["profit_factor"]), "max_drawdown_r": _f(fr["max_drawdown_R"]),
@@ -89,11 +97,11 @@ def build() -> dict[str, Any]:
                      "expectancy_without_top10": _f(fr["expectancy_without_top10"]),
                      "years": [{"year": int(y), "trades": v["n"], "expectancy_r": _f(v["expectancy_R"])}
                                for y, v in sorted(years.items())]},
-        "walk_forward": {"trades": wf["n"], "expectancy_r": _f(wf["expectancy_R"]), "ci95": _ci(wf["ci95_trade"])},
+        "walk_forward": {"trades": gs["n"], "expectancy_r": _f(gs["expectancy_R"]), "ci95": _ci(gs["ci95_expectancy"])},
         "holdout": {"span": ["2025-09-26", "2026-09-25"], "trades": ho["n"], "expectancy_r": _f(ho["expectancy_R"]),
                     "ci95": _ci(ho["ci95_expectancy"]), "consumed": True},
         "g1": {"trials": trials, "items": items, "passed": sum(1 for i in items if i["pass"]), "of": len(items),
-               "dsr_at_65": _f(r["dsr"]["walk_forward_trials_65"]["one_over_n"]),
+               "dsr_at_65": _f(r["dsr"]["walk_forward_trials_65"]["one_over_n"]),   # recorded, pre-correction
                "series": "walk_forward"},
         "exits": [{"kind": k, "trades": v["n"], "expectancy_r": _f(v["expectancy_R"])} for k, v in sorted(exits.items())
                   if k in ("eod_flatten", "stop", "target")],

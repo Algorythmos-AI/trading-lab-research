@@ -80,10 +80,10 @@ describe("formatting", () => {
 });
 
 describe("the ladder", () => {
-  it("shows the recorded evidence as failed, paper as in progress, and real money as never", () => {
+  it("shows clean data passed, G1 and the holdout failed, paper in progress, and real money as never", () => {
     const r = ladder(raw, snap());
     const st = Object.fromEntries(r.map((x) => [x.key, x.state]));
-    expect(st).toEqual({ data: "failed", g1: "failed", holdout: "failed", g2a: "pending", g2b: "pending", promotion: "blocked", live: "never" });
+    expect(st).toEqual({ data: "passed", g1: "failed", holdout: "failed", g2a: "pending", g2b: "pending", promotion: "blocked", live: "never" });
   });
   it("passes G2a only with sessions, streak and 90% agreement all met", () => {
     const ok = snap({ g2: { incident_free_streak: 20 } });
@@ -117,9 +117,9 @@ describe("the ladder", () => {
 describe("blockers", () => {
   it("are numeric and name the failed G1 item, the holdout and the paper sample", () => {
     const b = blockers(raw, snap());
-    expect(b[0]).toMatch(/^Evidence is pre-correction: 0 of 5 corrective re-runs done/);
-    expect(b.some((x) => /^G1 · Deflated Sharpe 0\.669 \(needs > 0\.95\)$/.test(x))).toBe(true);
-    expect(b.some((x) => /^Holdout CI \[−0\.122R, \+0\.309R\] includes zero$/.test(x))).toBe(true);
+    expect(b.some((x) => x.startsWith("Evidence is"))).toBe(false); // all five re-runs are done
+    expect(b.some((x) => /^G1 · Deflated Sharpe 0\.636 \(needs > 0\.95\)$/.test(x))).toBe(true);
+    expect(b.some((x) => /^Holdout CI \[−0\.128R, \+0\.288R\] includes zero$/.test(x))).toBe(true);
     expect(b.some((x) => /^Paper has 9 trades; telling the backtest edge from zero needs about 325$/.test(x))).toBe(true);
   });
 });
