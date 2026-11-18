@@ -122,6 +122,20 @@ def test_the_newest_trades_are_kept_when_the_list_is_over_the_cap(tmp_path: Path
     assert [t["trade_id"] for t in doc["clone"]["trades"]] == ["2026-11-18-O-3", "2026-11-18-O-4", "2026-11-18-O-5"]
 
 
+def test_the_clones_old_fills_in_the_hand_account_are_left_out_whatever_its_keys_say(tmp_path: Path) -> None:
+    # 2026-11-18: the clone had traded in the hand-placed account before it had keys of its own, and those trades were
+    # sent a second time as hand-placed, because only a clone still sharing the account was left out.
+    theirs, mine = "SPY261118C00581000", "NVDA261127P00185000"
+    plan(tmp_path / "state", "2026-11-18-O-1", symbol=theirs)
+    acts = [{"id": f"a{n}", "type": "FILL", "at": f"2026-11-18T15:0{n}:00+00:00", "symbol": sym, "side": side, "qty": 1.0, "price": px}
+            for n, (sym, side, px) in enumerate([(theirs, "buy", 2.0), (theirs, "sell", 2.5), (mine, "buy", 1.0), (mine, "sell", 1.5)])]
+    journal = write(tmp_path / "journal.jsonl", [closed("2026-11-18-O-1")])
+    for env in (ENV, {"APCA_OPTIONS_KEY_ID": "k", "APCA_OPTIONS_SECRET_KEY": "x"}, {}):
+        doc = paper_site.build(NOW, "run-1", journal, tmp_path / "state", CFG, env, acts)
+        assert [t["contract"] for t in doc["manual"]["trades"]] == [mine] and doc["manual"]["excluded_clone_fills"] == 2
+        assert paper_site.validate(doc) == []
+
+
 def test_the_account_is_the_clones_own_shared_or_unknown(tmp_path: Path) -> None:
     assert build(tmp_path, [], {"APCA_OPTIONS_KEY_ID": "k", "APCA_OPTIONS_SECRET_KEY": "x"})["clone"]["own_account"] is False
     assert build(tmp_path, [], {})["clone"]["own_account"] is None

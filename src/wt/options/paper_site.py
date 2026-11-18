@@ -290,8 +290,8 @@ def build(now: dt.datetime, run_id: str, journal: Path = JOURNAL, state: Path = 
         "clone": clone_block(jsonl(journal), plans, fee, e),
     }
     if manual is not None:
-        # Only a clone known to share the account has fills in it to leave out.
-        doc["manual"] = paper_manual.block(manual, own_account(e) is False, plans)
+        # The clone's fills are left out whatever its keys say today: it shared this account before it had its own.
+        doc["manual"] = paper_manual.block(manual, plans)
     arms = arms_block(state, fee)
     if arms is not None:
         doc["arms"] = arms
