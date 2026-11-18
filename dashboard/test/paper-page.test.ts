@@ -131,6 +131,20 @@ describe("the filters", () => {
   });
 });
 
+describe("the research arms ended (DEC-0059)", () => {
+  it("says counting ended on 17 Nov 2026 with no verdict, at a glance and in the arms section", () => {
+    const body = text(render({}));
+    expect(body).toContain("Counting ended 17 Nov 2026, no verdict.");
+    expect(body).toContain("Counting ended then with too few sessions; each trial closes on 5 Nov 2027 with no verdict.");
+  });
+
+  it("says the same when the arms block is sent with no trade in it", () => {
+    const body = text(render({}, { result: { status: "ok", doc: paper((d) => { d.arms = []; }), source: "fixture" } }));
+    expect(body).toContain("No research arm trade was counted before 17 Nov 2026");
+    expect(body).toContain("The arms ran beside the clone until 17 Nov 2026");
+  });
+});
+
 describe("what the page does without its documents", () => {
   it("still draws today's clone session and the open positions before any history is sent", () => {
     const body = text(render({}, { result: { status: "missing" }, live: live([{ contract: "NVDA261127P00230000", qty: 1, avg_price: 3.4, price: 2.9, market_value: 290, unrealized_pl: -50 }]) }));
