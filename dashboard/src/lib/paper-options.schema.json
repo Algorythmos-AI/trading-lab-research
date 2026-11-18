@@ -1,0 +1,555 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "stocksdelta/paper-options",
+  "title": "Paper options history (published by the trading host)",
+  "description": "Every closed paper option trade, for the Paper options page (DEC-0057): the options clone's trades from its journal, the hand-placed trades of the manual paper account matched first in, first out, and the research arms' virtual trades. Three sources, never added together. The whole history is in every document, so only the latest is kept. SAFE data only: ids, dates, times, contract symbols, trade prices, results, counts and codes. No balance, no account number, no order id, no free text, no setup name (a trade carries its hypothesis id). Paper only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "run_id",
+    "as_of",
+    "paper",
+    "clone"
+  ],
+  "properties": {
+    "schema": {
+      "const": "stocksdelta/paper-options"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "as_of": {
+      "description": "When the host built it: an ISO time with its zone.",
+      "$ref": "#/definitions/stamp"
+    },
+    "paper": {
+      "description": "Always true: every trade here is paper or simulated.",
+      "const": true
+    },
+    "clone": {
+      "description": "The options clone (DEC-0030): every finished trade in its journal, oldest first.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fee_per_contract",
+        "own_account",
+        "windows",
+        "truncated",
+        "trades"
+      ],
+      "properties": {
+        "fee_per_contract": {
+          "description": "The modelled fee per contract each way, in dollars, already taken off every result.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "own_account": {
+          "description": "True when the clone trades a paper account of its own; false when it shares the manual one. Null when not known.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "windows": {
+          "description": "The rule windows the trades fall in, oldest first: each a code and the first session it covers (null for the first window).",
+          "type": "array",
+          "maxItems": 24,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "from"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/definitions/code"
+              },
+              "from": {
+                "oneOf": [
+                  {
+                    "$ref": "#/definitions/ymd"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "truncated": {
+          "description": "Older trades left out because the list is capped. 0 when the list is whole.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "trades": {
+          "type": "array",
+          "maxItems": 2000,
+          "items": {
+            "$ref": "#/definitions/clone_trade"
+          }
+        }
+      }
+    },
+    "manual": {
+      "description": "The paper account kept for hand-placed option trades: closed round trips matched first in, first out from its filled orders. Null or absent until the host reads that history.",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "history_from",
+            "truncated",
+            "trades"
+          ],
+          "properties": {
+            "history_from": {
+              "description": "The first day the account's history was read from.",
+              "oneOf": [
+                {
+                  "$ref": "#/definitions/ymd"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "truncated": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "excluded_clone_fills": {
+              "description": "Fills left out because they are the clone's own (a shared account only).",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "trades": {
+              "type": "array",
+              "maxItems": 2000,
+              "items": {
+                "$ref": "#/definitions/manual_trade"
+              }
+            },
+            "gaps": {
+              "description": "Closes with no open before them in the history read: counted nowhere, listed so the page can say so.",
+              "type": [
+                "array",
+                "null"
+              ],
+              "maxItems": 200,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "date",
+                  "contract"
+                ],
+                "properties": {
+                  "date": {
+                    "$ref": "#/definitions/ymd"
+                  },
+                  "contract": {
+                    "$ref": "#/definitions/occ"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "arms": {
+      "description": "The research arms' virtual trades (DEC-0041): simulated fills, never orders. One entry per arm, named by its hypothesis id. Null or absent until the host sends them.",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "maxItems": 24,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "hyp",
+              "truncated",
+              "trades"
+            ],
+            "properties": {
+              "hyp": {
+                "$ref": "#/definitions/hyp"
+              },
+              "truncated": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000000
+              },
+              "trades": {
+                "type": "array",
+                "maxItems": 500,
+                "items": {
+                  "$ref": "#/definitions/arm_trade"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "definitions": {
+    "ymd": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "stamp": {
+      "type": "string",
+      "maxLength": 40,
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+    },
+    "code": {
+      "type": "string",
+      "pattern": "^[a-z0-9_-]{1,32}$"
+    },
+    "hyp": {
+      "description": "A hypothesis id, or other.",
+      "type": "string",
+      "pattern": "^(HYP-\\d{4}|other)$"
+    },
+    "occ": {
+      "description": "The OCC symbol: root, yymmdd, C or P, strike in thousandths.",
+      "type": "string",
+      "pattern": "^[A-Z]{1,6}\\d{6}[CP]\\d{8}$"
+    },
+    "price": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100000
+    },
+    "clone_trade": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "trade_id",
+        "session",
+        "hyp",
+        "window",
+        "side",
+        "contract",
+        "qty",
+        "opened_at",
+        "closed_at",
+        "timed_by",
+        "fill",
+        "exit_fill",
+        "exit_reason",
+        "pnl_usd",
+        "rop",
+        "state",
+        "counts"
+      ],
+      "properties": {
+        "trade_id": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}-O-\\d{1,4}$"
+        },
+        "session": {
+          "description": "The New York session it was opened in.",
+          "$ref": "#/definitions/ymd"
+        },
+        "hyp": {
+          "$ref": "#/definitions/hyp"
+        },
+        "window": {
+          "description": "The rule window its session falls in.",
+          "$ref": "#/definitions/code"
+        },
+        "side": {
+          "enum": [
+            "call",
+            "put"
+          ]
+        },
+        "contract": {
+          "$ref": "#/definitions/occ"
+        },
+        "qty": {
+          "description": "Contracts the result is for: the clone's record books one contract a trade.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "opened_at": {
+          "description": "When the entry filled. Null for a trade that never settled a fill.",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/stamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "closed_at": {
+          "description": "When the exit filled. Null for a trade the clone could not settle.",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/stamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "timed_by": {
+          "description": "plan: both times are the fills' own. journal: a time was missing from the trade's plan file, so the journal line's time stands in.",
+          "enum": [
+            "plan",
+            "journal"
+          ]
+        },
+        "fill": {
+          "description": "Paid per share. Null when no fill was settled.",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/price"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "exit_fill": {
+          "description": "Received per share. Null for a trade the clone could not settle.",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/price"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "exit_reason": {
+          "oneOf": [
+            {
+              "$ref": "#/definitions/code"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pnl_usd": {
+          "description": "Result in dollars for one contract, after the modelled fees. Null when either fill is missing.",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "rop": {
+          "description": "Result over the premium paid (0.25 is +25%).",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "quoted_ask": {
+          "description": "The ask when the entry was sent.",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/price"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "quote_age_s": {
+          "description": "How old the quote was when the entry was sent, in seconds.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 86400
+        },
+        "best_bid": {
+          "description": "The highest bid seen while it was held.",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/price"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "worst_bid": {
+          "description": "The lowest bid seen while it was held.",
+          "oneOf": [
+            {
+              "$ref": "#/definitions/price"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state": {
+          "description": "closed, or a state the clone could not settle.",
+          "$ref": "#/definitions/code"
+        },
+        "counts": {
+          "description": "True for a closed trade with both fills, as the clone's own review counts it. False for any other: the page lists it and leaves it out of every total.",
+          "type": "boolean"
+        }
+      }
+    },
+    "manual_trade": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "contract",
+        "side",
+        "qty",
+        "opened_at",
+        "closed_at",
+        "entry",
+        "exit",
+        "pnl_usd",
+        "close"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,80}$"
+        },
+        "contract": {
+          "$ref": "#/definitions/occ"
+        },
+        "side": {
+          "description": "Long: bought first. Short: sold first.",
+          "enum": [
+            "long",
+            "short"
+          ]
+        },
+        "qty": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 100000
+        },
+        "opened_at": {
+          "$ref": "#/definitions/stamp"
+        },
+        "closed_at": {
+          "$ref": "#/definitions/stamp"
+        },
+        "entry": {
+          "$ref": "#/definitions/price"
+        },
+        "exit": {
+          "description": "0 for a contract that expired worthless.",
+          "$ref": "#/definitions/price"
+        },
+        "pnl_usd": {
+          "description": "Result in dollars, before fees (the paper account charges none).",
+          "type": "number"
+        },
+        "close": {
+          "enum": [
+            "order",
+            "expired"
+          ]
+        }
+      }
+    },
+    "arm_trade": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "vid",
+        "session",
+        "side",
+        "contract",
+        "opened_at",
+        "closed_at",
+        "fill",
+        "exit_fill",
+        "exit_reason",
+        "pnl_usd",
+        "rop"
+      ],
+      "properties": {
+        "vid": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,80}$"
+        },
+        "session": {
+          "$ref": "#/definitions/ymd"
+        },
+        "side": {
+          "enum": [
+            "call",
+            "put"
+          ]
+        },
+        "contract": {
+          "$ref": "#/definitions/occ"
+        },
+        "opened_at": {
+          "$ref": "#/definitions/stamp"
+        },
+        "closed_at": {
+          "$ref": "#/definitions/stamp"
+        },
+        "fill": {
+          "$ref": "#/definitions/price"
+        },
+        "exit_fill": {
+          "$ref": "#/definitions/price"
+        },
+        "exit_reason": {
+          "oneOf": [
+            {
+              "$ref": "#/definitions/code"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pnl_usd": {
+          "description": "Simulated result in dollars for one contract, after the modelled fees.",
+          "type": "number"
+        },
+        "rop": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

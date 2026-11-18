@@ -565,12 +565,29 @@ function heat(pnl: number | null, reach: number): string {
   return pnl > 0 ? ["", "bg-good-fill/30", "bg-good-fill/60", "bg-good-fill"][step]! : ["", "bg-bad-fill/30", "bg-bad-fill/60", "bg-bad-fill"][step]!;
 }
 
+/**
+ * The day number's colour on a square. On the strongest green it is black and on the strongest red white: white on
+ * that green is 3.4:1 and black on that red 4.4:1, both under the 4.5:1 small text needs (WCAG 1.4.3).
+ */
+function strong(pnl: number | null, reach: number): string {
+  if (pnl === null || Math.abs(pnl) / reach <= 0.66) return "text-muted-foreground";
+  return pnl > 0 ? "text-black" : "text-white";
+}
+
 export function CalendarPanel({ days, feesIncluded }: { days: DayRow[]; feesIncluded: boolean }) {
-  const months = calendar(days, 6);
-  const reach = Math.max(1, ...days.slice(-130).map((d) => Math.abs(d.pnl)));
   return (
     <Panel id="calendar" title="Trading calendar" icon={CalendarDays} means={`The latest months with trades, Monday to Friday. Green made money that day, red lost it; the stronger the colour, the bigger the day. ${feeWords(feesIncluded)}`}
     >
+      <CalendarGrid days={days} />
+    </Panel>
+  );
+}
+
+/** The calendar itself, without its panel: the latest months with trades, a square a day, coloured by the day's result. */
+export function CalendarGrid({ days, count = 6 }: { days: DayRow[]; count?: number }) {
+  const months = calendar(days, count);
+  const reach = Math.max(1, ...days.slice(-130).map((d) => Math.abs(d.pnl)));
+  return (
       <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
         {months.map((m, i) => (
           // A phone shows the latest three months; the rest would be a long scroll.
@@ -591,7 +608,7 @@ export function CalendarPanel({ days, feesIncluded }: { days: DayRow[]; feesIncl
                     <span
                       key={j}
                       title={c.pnl === null ? `${shortDay(c.day)}: no trades` : `${shortDay(c.day)}: ${usd(c.pnl, 2)} · ${c.trades} trade${c.trades === 1 ? "" : "s"}`}
-                      className={cn("relative flex h-8 items-end justify-end rounded-[3px] px-1 pb-0.5 text-[0.5625rem] max-sm:text-xs", heat(c.pnl, reach), c.pnl !== null && Math.abs(c.pnl) / reach > 0.66 ? "text-white" : "text-muted-foreground")}
+                      className={cn("relative flex h-8 items-end justify-end rounded-[3px] px-1 pb-0.5 text-[0.5625rem] max-sm:text-xs", heat(c.pnl, reach), strong(c.pnl, reach))}
                     >
                       {Number(c.day.slice(8))}
                     </span>
@@ -604,7 +621,6 @@ export function CalendarPanel({ days, feesIncluded }: { days: DayRow[]; feesIncl
           </div>
         ))}
       </div>
-    </Panel>
   );
 }
 
@@ -648,7 +664,8 @@ export function LessonsPanel({ lessons, feesIncluded }: { lessons: Lesson[]; fee
 
 // ── Breakdowns ───────────────────────────────────────────────────────────────────────────────────────────────────
 
-function Breakdown({ title, rows, note }: { title: string; rows: GroupRow[]; note?: string }) {
+/** One cut of the trades: a title, then a bar a group for the dollars it made or lost, with its count and share won. */
+export function Breakdown({ title, rows, note }: { title: string; rows: GroupRow[]; note?: string }) {
   const shown = rows.filter((r) => r.trades > 0);
   return (
     <div className="grid content-start gap-2">

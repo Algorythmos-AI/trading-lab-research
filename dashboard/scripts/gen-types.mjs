@@ -7,6 +7,8 @@
 //                                                                 Python publisher is tested against it)
 //   src/lib/options-clone.schema.json -> src/lib/options-clone.types.ts (root type OptionsClone; owned here; the
 //                                                                 Python publisher is tested against it)
+//   src/lib/paper-options.schema.json -> src/lib/paper-options.types.ts (root type PaperOptions; owned here; the
+//                                                                 Python publisher is tested against it)
 //   src/lib/journal.schema.json  -> src/lib/journal.types.ts    (root type JournalDoc; owned here)
 //   src/lib/calendar.schema.json -> src/lib/calendar.types.ts   (root type CalendarDoc; owned here; the Python
 //                                                                 econ-calendar job is tested against it)
@@ -33,6 +35,7 @@ for (const [file, out, name, options = {}] of [
   ["options.schema.json", "options.types.ts", "OptionsEdition"],
   ["options-live.schema.json", "options-live.types.ts", "OptionsLive"],
   ["options-clone.schema.json", "options-clone.types.ts", "OptionsClone", { maxItems: -1 }],
+  ["paper-options.schema.json", "paper-options.types.ts", "PaperOptions", { maxItems: -1 }],
   ["journal.schema.json", "journal.types.ts", "JournalDoc", { maxItems: -1 }],
   ["calendar.schema.json", "calendar.types.ts", "CalendarDoc", { maxItems: -1 }],
   ["ledger.schema.json", "ledger.types.ts", "LedgerEdition", { maxItems: -1 }],
