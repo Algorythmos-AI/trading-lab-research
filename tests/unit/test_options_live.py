@@ -105,10 +105,13 @@ def _state(tmp_path, monkeypatch):
 def test_the_module_can_only_read_and_only_from_the_paper_host():
     src = inspect.getsource(live)
     assert live.PAPER_HOST == "https://paper-api.alpaca.markets"
+    # One path under /v2/account is read: the list of filled orders and option events (DEC-0057, the Paper options
+    # page's hand-placed trades). The account itself, with its balances, is never asked for.
+    assert src.count('"/v2/account/activities"') == 1
     for word in (".post(", ".put(", ".patch(", ".delete(", "/v2/orders", "/v2/account", "TradingClient", "alpaca.markets"):
-        assert word not in src.replace(live.PAPER_HOST, "").replace(live.DATA_HOST, ""), word
+        assert word not in src.replace(live.PAPER_HOST, "").replace(live.DATA_HOST, "").replace('"/v2/account/activities"', ""), word
     assert "APCA_API_KEY_ID" not in src                    # never strategy B's account
-    assert [n for n in vars(live.OptionsAccount) if not n.startswith("_")] == ["positions", "clock", "closes", "bars", "contracts"]
+    assert [n for n in vars(live.OptionsAccount) if not n.startswith("_")] == ["positions", "activities", "clock", "closes", "bars", "contracts"]
     assert live.DATA_HOST == "https://data.alpaca.markets"
     s = Session(Reply(200, []), Reply(200, CLOCK))
     acct = live.OptionsAccount("k", "s", s)

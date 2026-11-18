@@ -9,7 +9,9 @@ Three sources, never added together:
   `wt.options.review.figures` counts it, so the page's totals and the clone's own document agree.
 - `arms`: the research arms' closed virtual trades (DEC-0041), from `var/options/shadow/<date>.jsonl`, one list per
   hypothesis id. Simulated fills, never orders.
-- `manual`: the hand-placed paper account's closed round trips. Not read here yet: the block is left out.
+- `manual`: the hand-placed paper account's closed round trips, matched first in, first out from that account's
+  activity list (`wt.options.paper_manual`). The list is read by the job that calls this module and handed in;
+  without it the block is left out.
 
 Read only. No broker call, no order path, no import of one. SAFE data only: ids, dates, times, contract symbols, trade
 prices, results, counts and codes. A setup's name never leaves: a trade carries its hypothesis id, and a virtual
@@ -36,7 +38,7 @@ import yaml
 
 from wt.core.config import CONFIG_DIR, DATA_DIR, ROOT, STATE_DIR
 from wt.ops import publish, safeio
-from wt.options import arms_verdict, review
+from wt.options import arms_verdict, paper_manual, review
 
 SCHEMA_ID = "stocksdelta/paper-options"
 SCHEMA_VERSION = 1
@@ -275,14 +277,21 @@ def arms_block(state: Path, fee: float) -> list[dict[str, Any]] | None:
 
 # ---------------------------------------------------------------- the document
 def build(now: dt.datetime, run_id: str, journal: Path = JOURNAL, state: Path = OPT,
-          cfg: Mapping[str, Any] | None = None, env: Mapping[str, str] | None = None) -> dict[str, Any]:
+          cfg: Mapping[str, Any] | None = None, env: Mapping[str, str] | None = None,
+          manual: Sequence[Mapping[str, Any]] | None = None) -> dict[str, Any]:
+    """`manual`: the manual paper account's activities (wt.options.paper_manual.clean), or None to leave them out."""
     cfg = cfg if cfg is not None else yaml.safe_load((CONFIG_DIR / "options_clone.yaml").read_text())
     fee = float(cfg["costs"]["fee_per_contract_each_way"])
+    e = os.environ if env is None else env
+    plans = read_plans(state)
     doc: dict[str, Any] = {
         "schema": SCHEMA_ID, "schema_version": SCHEMA_VERSION, "run_id": run_id,
         "as_of": now.astimezone(dt.UTC).replace(microsecond=0).isoformat(), "paper": True,
-        "clone": clone_block(jsonl(journal), read_plans(state), fee, os.environ if env is None else env),
+        "clone": clone_block(jsonl(journal), plans, fee, e),
     }
+    if manual is not None:
+        # Only a clone known to share the account has fills in it to leave out.
+        doc["manual"] = paper_manual.block(manual, own_account(e) is False, plans)
     arms = arms_block(state, fee)
     if arms is not None:
         doc["arms"] = arms
@@ -339,16 +348,17 @@ def site_accepts(url: str, bypass: str | None, now: dt.datetime, cache: Path) ->
 
 
 def _run(now: dt.datetime, dry_run: bool, env: Mapping[str, str], journal: Path, state: Path, out: Path,
-         cfg: Mapping[str, Any] | None) -> tuple[int, str]:
+         cfg: Mapping[str, Any] | None, manual: Sequence[Mapping[str, Any]] | None = None) -> tuple[int, str]:
     run_id = now.strftime("%Y%m%dT%H%M%SZ") + "-" + hashlib.sha1(os.urandom(8)).hexdigest()[:6]
-    doc = build(now, run_id, journal, state, cfg, env)
+    doc = build(now, run_id, journal, state, cfg, env, manual)
     if bad := validate(doc):
         return 2, "failed schema validation: " + "; ".join(bad)
     data = body(doc)
     out.mkdir(parents=True, exist_ok=True)
     safeio.atomic_write(out / "document.json", data.decode(), out)
     counted = sum(1 for t in doc["clone"]["trades"] if t["counts"])
-    said = f"{len(doc['clone']['trades'])} clone trades ({counted} counted), {len(doc.get('arms') or [])} arms, {len(data)} bytes"
+    hand = f"{len(doc['manual']['trades'])} hand-placed" if "manual" in doc else "no hand-placed history"
+    said = f"{len(doc['clone']['trades'])} clone trades ({counted} counted), {len(doc.get('arms') or [])} arms, {hand}, {len(data)} bytes"
     if dry_run:
         return 0, f"{said}; dry run, not sent"
     if publish.shadow_key_problem(dict(env)) is not None:
@@ -372,11 +382,12 @@ def _run(now: dt.datetime, dry_run: bool, env: Mapping[str, str], journal: Path,
 
 
 def run(now: dt.datetime | None = None, dry_run: bool = False, env: Mapping[str, str] | None = None,
-        journal: Path = JOURNAL, state: Path = OPT, out: Path = OUT, cfg: Mapping[str, Any] | None = None) -> int:
+        journal: Path = JOURNAL, state: Path = OPT, out: Path = OUT, cfg: Mapping[str, Any] | None = None,
+        manual: Sequence[Mapping[str, Any]] | None = None) -> int:
     """Build, check and send. Never raises: 0 sent or rightly not sent, 1 not sent, 2 a fault in the document."""
     try:
         rc, said = _run(now or dt.datetime.now(dt.UTC), dry_run, os.environ if env is None else env, journal, state,
-                        out, cfg)
+                        out, cfg, manual)
     except Exception as e:  # noqa: BLE001 — a fault in this history must never reach the job that calls it
         rc, said = 2, f"fault ({e.__class__.__name__})"
     print(f"paper options history: {said}", file=sys.stderr if rc else sys.stdout)
