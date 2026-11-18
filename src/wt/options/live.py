@@ -547,7 +547,15 @@ def main(argv: list[str] | None = None) -> int:
         if not got:
             print("another options-live publish is still running; not starting a second one")
             return 0
-        return _publish(a)
+        rc = _publish(a)
+        # The paper options history (DEC-0057) rides this job: after the positions, in its own guard, so nothing in
+        # it can delay or fail them. Its own result is in the log line it prints, not in this job's exit code.
+        try:
+            from wt.options import paper_site
+            paper_site.run(dry_run=a.dry_run)
+        except Exception as e:  # noqa: BLE001 — the positions have been sent; this extra must not undo that
+            print(f"paper options history not built ({e.__class__.__name__})", file=sys.stderr)
+        return rc
 
 
 def _failed(detail: str, now: dt.datetime) -> int:
