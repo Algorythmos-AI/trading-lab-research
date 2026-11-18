@@ -52,7 +52,7 @@ for (const theme of ["light", "dark"] as const) {
     await expect(page.locator("[data-board-row]").first()).toHaveAttribute("data-board-state", "get_ready");
     await context.addCookies([{ name: "fxstep", value: "3", url: baseURL! }]);
     await expect(page.locator("[data-board-notice]")).toHaveCount(2, { timeout: 15_000 });
-    await page.getByRole("button", { name: "Alerts: sound and browser notification" }).click();
+    await page.getByRole("button", { name: /^Alerts:/ }).click();
     expect(await scan(page)).toEqual([]);
   });
 

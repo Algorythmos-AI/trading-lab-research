@@ -173,7 +173,7 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
   return (
     <>
       <h1 className="sr-only">Options</h1>
-      <LiveQuotes symbols={withLeaders(e.tickers.map((t) => t.symbol)).join(",")} session={e.session} enabled={!date}>
+      <LiveQuotes symbols={withLeaders(e.tickers.map((t) => t.symbol)).join(",")} session={e.session} enabled={!date} alerts={{ halfDay }}>
         <DoneTodayProvider initial={flags}>
           <BoardProvider e={full} live={!date} {...day} openLots={board?.lots ?? []} closedTrades={board?.closed ?? []} journalAsOf={doc?.as_of ?? null} dayFacts={facts} evalOn={evalSwitch === "log"} guardsOn={guardSwitches?.on ?? []} guardsRead={guardSwitches?.status ?? "missing"}>
             {/* Top to bottom: the market bar, what the day allows and the clock, the one name that matters now, the four at a glance, what

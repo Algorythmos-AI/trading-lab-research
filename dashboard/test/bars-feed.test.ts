@@ -7,7 +7,7 @@ const BODY = { as_of: "2026-10-12T14:20:00.000Z", feed: "iex", bars: { SPY: [{ s
 const ok = () => new Response(JSON.stringify(BODY), { status: 200 });
 
 /** The poller the hook runs, on fake timers and a mocked fetch, with no jitter. */
-function rig(fetchImpl: typeof fetch, visible: () => boolean = () => true) {
+function rig(fetchImpl: typeof fetch, visible: () => boolean = () => true, background?: () => boolean) {
   const feeds: BarsFeed[] = [];
   const p = barsPoller({
     url: barsUrl("SPY", false),
@@ -17,6 +17,7 @@ function rig(fetchImpl: typeof fetch, visible: () => boolean = () => true) {
     setTimer: (fn, ms) => window.setTimeout(fn, ms),
     clearTimer: (id) => window.clearTimeout(id),
     onFeed: (f) => feeds.push(f),
+    background,
     rand: () => 0,
   });
   return { p, feeds, last: () => feeds[feeds.length - 1]! };
@@ -271,6 +272,23 @@ describe("the bars poll's waits after failures", () => {
     p.kick();
     await vi.advanceTimersByTimeAsync(0);
     expect(u.f).toHaveBeenCalledTimes(3);
+    p.stop();
+  });
+});
+
+describe("barsPoller in the background (the board's alerts on)", () => {
+  it("keeps polling every BARS_POLL_MS while hidden when background says so, and parks when it stops", async () => {
+    const f = vi.fn(async () => ok());
+    let bg = true;
+    const { p } = rig(f as unknown as typeof fetch, () => false, () => bg);
+    p.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(f).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(BARS_POLL_MS);
+    expect(f).toHaveBeenCalledTimes(2);
+    bg = false;
+    await vi.advanceTimersByTimeAsync(BARS_POLL_MS * 3);
+    expect(f).toHaveBeenCalledTimes(2);
     p.stop();
   });
 });
