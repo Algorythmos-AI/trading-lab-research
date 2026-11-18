@@ -162,6 +162,19 @@ JOBS: dict[str, Job] = {j.name: j for j in (
         deadline_min=45, trading=False, et="Mon..Fri 17:15", desk="options", preflight=False,
         what="EXP-0037: fetch and hash the session's replay inputs; run the one replay when its list closes",
         runtime_max_h=1.0),
+    # The options lab's tape (DEC-0060): the focus names' OPRA option quotes and SIP stock quotes, 09:30 to the close,
+    # then the day's prints, open interest and the upload. Research only: no order, no account, no trading code
+    # (tests/unit/test_lab_boundary.py). Starts 09:15, waits in-process for the 09:25 focus list; done by close + 110.
+    # Not a trading job; it restarts on a failure and resumes from its own state (wt.ops.units RESTART_JOBS).
+    Job("lab-tape", "com.wt.lab-tape", 0, 0, ("-m", "wt.lab.recorder"), "backtest", "lab_tape", deadline_min=530,
+        trading=False, et="Mon..Fri 09:15", desk="options", preflight=False,
+        what="Options lab tape: the focus names' option and stock quotes to the close, then prints and the upload",
+        runtime_max_h=9.0),
+    # The lab's weekly archive check: re-download random archived parts and compare their sha256. Reads only.
+    Job("lab-archive-check", "com.wt.lab-archive-check", 0, 0, ("-m", "wt.lab.archive", "check"), "backtest",
+        "lab_archive_check", deadline_min=20, trading=False, et="Sat 11:00", desk="options", preflight=False,
+        what="Options lab: re-download random archived tape parts and compare their sha256",
+        runtime_max_h=0.5),
     # The Calendar page's release dates (wt.ops.econ_calendar): FRED, the Fed, BLS and BEA, read once a week after
     # the weekly scorecard. Display only; it never touches the calendar the runners trade around.
     Job("econ-calendar", "com.wt.econ-calendar", 12, 30, ("-m", "wt.ops.econ_calendar"), "backtest", "econ_calendar",
