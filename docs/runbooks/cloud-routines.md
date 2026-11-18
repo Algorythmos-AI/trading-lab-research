@@ -33,6 +33,13 @@ Radar's seal step (that repository's `options_funnel.desk`). Its sender is not y
 morning arrives its feed row is shown, unverified, and never pages; it is due by 09:15 New York on each regular
 session (`dashboard/src/lib/radar-desk-slots.ts`).
 
+The Radar run beacon (`stocksdelta/radar-run`) is a small document the pre-market Radar routine itself sends, with
+the radar key, when a stage of its run (`build`, `send`, `evidence`, `desk`) starts and again when it ends: the
+session, the stage, its state, what started it, the times, an exit code and closed reason codes, and nothing of the
+edition. The site keeps the newest beacon of each stage of each session (`radar-run/<session>/<stage>.json`). It is
+display only for now: no page draws it yet, it has no feed row, it never pages, and a beacon that fails to send
+must never fail the routine. The routine reads `editions.radar_run.accepts` from `/api/health` before it sends.
+
 Every radar edition that becomes latest is also kept, once and never replaced, under `radar/copies/<edition_date>/`
 with the store's receipt time (`dashboard/src/lib/edition-copy.ts`; the 10-minute watchdog repairs a missing one).
 `GET /api/research/radar-copies?date=YYYY-MM-DD`, signed with the radar key over

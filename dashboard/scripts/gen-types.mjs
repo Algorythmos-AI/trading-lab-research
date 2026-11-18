@@ -18,6 +18,8 @@
 //                                                                 trading-options-funnel publisher builds to it)
 //   src/lib/radar-desk.schema.json -> src/lib/radar-desk.types.ts (root type RadarDeskDoc; owned here; the
 //                                                                 trading-options-funnel desk step builds to it)
+//   src/lib/radar-run.schema.json -> src/lib/radar-run.types.ts (root type RadarRunDoc; owned here; the pre-market
+//                                                                 Radar routine's run beacon is built to it)
 //   src/lib/hft.schema.json      -> src/lib/hft.types.ts        (root type HftSnapshot; vendored from hft-lab and
 //                                                                 pinned by hft.contract.lock.json, not by Python)
 // Run with `pnpm gen:types` after `make schema` changes a schema. The output is committed.
@@ -41,6 +43,7 @@ for (const [file, out, name, options = {}] of [
   ["ledger.schema.json", "ledger.types.ts", "LedgerEdition", { maxItems: -1 }],
   ["funnel.schema.json", "funnel.types.ts", "FunnelDoc", { maxItems: -1 }],
   ["radar-desk.schema.json", "radar-desk.types.ts", "RadarDeskDoc", { maxItems: -1 }],
+  ["radar-run.schema.json", "radar-run.types.ts", "RadarRunDoc"],
   // Its lists are capped at 8 to 40 items; without this each would be typed as a union of every tuple length.
   ["hft.schema.json", "hft.types.ts", "HftSnapshot", { maxItems: -1 }],
 ]) {

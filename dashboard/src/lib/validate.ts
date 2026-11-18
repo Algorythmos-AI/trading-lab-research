@@ -22,6 +22,8 @@ import type { PaperOptions } from "./paper-options.types";
 import type { OptionsEdition } from "./options.types";
 import radarDeskSchema from "./radar-desk.schema.json";
 import type { RadarDeskDoc } from "./radar-desk.types";
+import radarRunSchema from "./radar-run.schema.json";
+import type { RadarRunDoc } from "./radar-run.types";
 import radarSchema from "./radar.schema.json";
 import type { RadarEdition } from "./radar.types";
 import schema from "./snapshot.schema.json";
@@ -42,6 +44,7 @@ const validatePaperOptionsSchema = ajv.compile<PaperOptions>(paperOptionsSchema)
 const validateLedgerSchema = ajv.compile<LedgerEdition>(ledgerSchema);
 const validateFunnelSchema = ajv.compile<FunnelDoc>(funnelSchema);
 const validateRadarDeskSchema = ajv.compile<RadarDeskDoc>(radarDeskSchema);
+const validateRadarRunSchema = ajv.compile<RadarRunDoc>(radarRunSchema);
 
 export const STOCKS_SCHEMA = "trading-lab/snapshot";
 export const CRYPTO_SCHEMA = "trading-lab/crypto-snapshot";
@@ -128,6 +131,19 @@ export const RADAR_DESK_SCHEMA = "stocksdelta/radar-desk";
 /** True when the signed body names the Radar desk schema. */
 export function isRadarDesk(data: unknown): boolean {
   return data !== null && typeof data === "object" && (data as { schema?: unknown }).schema === RADAR_DESK_SCHEMA;
+}
+
+/**
+ * The Radar run beacon (the pre-market Radar routine): one stage of one session's run, as it starts and as it ends.
+ * Times, ids and closed codes only; display only.
+ */
+export const RADAR_RUN_SCHEMA = "stocksdelta/radar-run";
+/** The run's stages, in the order the routine runs them. */
+export const RADAR_RUN_STAGES = ["build", "send", "evidence", "desk"] as const;
+
+/** True when the signed body names the Radar run beacon schema. */
+export function isRadarRun(data: unknown): boolean {
+  return data !== null && typeof data === "object" && (data as { schema?: unknown }).schema === RADAR_RUN_SCHEMA;
 }
 
 /** True when the signed body names the options levels schema. */
@@ -441,6 +457,21 @@ export function validateRadarDesk(data: unknown): RadarDeskValidationResult {
   }
   if (errors.length > 0) return { ok: false, errors: errors.slice(0, MAX_ERRORS) };
   return { ok: true, doc: data as RadarDeskDoc };
+}
+
+export type RadarRunValidationResult = { ok: true; doc: RadarRunDoc } | { ok: false; errors: string[] };
+
+/** A Radar run beacon: its own closed schema, the same denylist. */
+export function validateRadarRun(data: unknown): RadarRunValidationResult {
+  if (data === null || typeof data !== "object" || Array.isArray(data)) {
+    return { ok: false, errors: ["/: must be an object"] };
+  }
+  const errors = findDenied(data).map((p) => `${p}: key is not allowed to be published`);
+  if (!validateRadarRunSchema(data)) {
+    errors.push(...(validateRadarRunSchema.errors ?? []).map(describe));
+  }
+  if (errors.length > 0) return { ok: false, errors: errors.slice(0, MAX_ERRORS) };
+  return { ok: true, doc: data as RadarRunDoc };
 }
 
 /**

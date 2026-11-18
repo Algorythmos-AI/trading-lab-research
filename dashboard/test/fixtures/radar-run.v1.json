@@ -1,0 +1,19 @@
+{
+  "schema": "stocksdelta/radar-run",
+  "schema_version": 1,
+  "run_id": "radar-2026-10-12-build-7c41",
+  "as_of": "2026-10-12T11:04:10Z",
+  "session": "2026-10-12",
+  "stage": "build",
+  "state": "finished",
+  "trigger": "scheduled",
+  "started_at": "2026-10-12T10:52:03Z",
+  "ended_at": "2026-10-12T11:04:09Z",
+  "exit_code": 0,
+  "reason": "ok",
+  "checks": {
+    "ibkr": true,
+    "stocklake": true,
+    "skill": true
+  }
+}
