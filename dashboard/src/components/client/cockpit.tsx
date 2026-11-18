@@ -13,6 +13,7 @@
 import { MonitorUp, X } from "lucide-react";
 import { useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { railButton } from "./rail-button";
 import { screenKeeper, type WakeLockApi } from "@/lib/wake-lock";
 import { setCockpit, useCockpit } from "./cockpit-state";
 import { useBoard } from "./trade-now";
@@ -94,11 +95,8 @@ export function CockpitSwitch({ className }: { className?: string }) {
       data-cockpit-switch
       onClick={() => setCockpit(!on)}
       title={on ? "Leave the cockpit (Esc)" : "Full-screen board for a second screen"}
-      className={cn(
-        "hover:text-foreground aria-pressed:bg-foreground aria-pressed:text-background inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2 text-sm font-medium whitespace-nowrap",
-        !on && "text-muted-foreground",
-        className,
-      )}
+      // On, it reads green like a switch that works; off, the plain outline of the rail's other buttons.
+      className={railButton(on ? "good" : "neutral", className)}
     >
       {on ? <X aria-hidden className="size-4" /> : <MonitorUp aria-hidden className="size-4" />}
       {/* An icon on a phone's rail; "Cockpit" is still the button's name. */}

@@ -7,9 +7,12 @@
 // entry prompts only: the manage cards, stops and exits keep working as before.
 import { CircleAlert, CircleCheck, Undo2 } from "lucide-react";
 import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { parseFlagsView, type FlagsView } from "@/lib/desk-flags";
+import { parseFlagsView, type FlagsView, UNDO_MS } from "@/lib/desk-flags";
 import { type Answer, type DoneAction, type DoneRead, DoneSync } from "@/lib/done-sync";
 import { newYork } from "@/lib/format";
+import { DONE_TONE, DONE_WORDS, doneButtonState, undoLeft } from "@/lib/done-view";
+import { railButton } from "./rail-button";
+import { useNow } from "./use-now";
 import { cn } from "@/lib/utils";
 
 export { announceLine, failedLine, NOT_SAVED } from "@/lib/done-sync";
@@ -35,6 +38,8 @@ export interface DoneToday {
   failed: string | null;
   /** Undo shows (the server's window, counted down here). */
   canUndo: boolean;
+  /** Until when Undo shows (this browser's clock, ms), for its countdown; null with none. */
+  undoUntil?: number | null;
   mark: () => Promise<boolean>;
   undo: () => Promise<boolean>;
   clearFailed: () => void;
@@ -112,6 +117,7 @@ export function DoneTodayProvider({ initial, children }: { initial: FlagsView | 
     busy: st.busy,
     failed: st.failed,
     canUndo: done && st.undoUntil !== null,
+    undoUntil: done ? st.undoUntil : null,
     mark: () => sync.send("done"),
     undo: () => sync.send("undo"),
     clearFailed: sync.clearFailed,
@@ -134,8 +140,8 @@ export function DonePill({ className }: { className?: string }) {
   const at = d.read.view.at;
   return (
     // Focusable from script only: where the focus goes when the Undo button it stood on goes away.
-    <p tabIndex={-1} data-rail-done className={cn("text-explain bg-neutral-soft border-neutral-fill/50 inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 font-medium sm:whitespace-nowrap", className)}>
-      <CircleCheck aria-hidden className="text-muted-foreground size-4 shrink-0" />
+    <p tabIndex={-1} data-rail-done data-tone="info" className={cn("text-explain bg-info-soft border-info-fill/60 text-info inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 font-medium sm:whitespace-nowrap", className)}>
+      <CircleCheck aria-hidden className="size-4 shrink-0" />
       <span className="font-semibold">Done for today</span>
       <span className="font-mono tabular-nums">· set {at ? newYork(at, false) : "–"} NY</span>
       {d.stale ? (
@@ -162,16 +168,26 @@ export function UncheckedNote() {
   );
 }
 
-const BUTTON =
-  "inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2 text-sm font-medium whitespace-nowrap max-sm:min-h-11 max-sm:min-w-11 max-sm:justify-center max-sm:px-2 disabled:opacity-60";
+/** The Undo window's ring: a circle that empties as the window runs out. */
+function UndoRing({ share }: { share: number }) {
+  const c = 2 * Math.PI * 6;
+  return (
+    <svg aria-hidden viewBox="0 0 16 16" className="size-4 -rotate-90">
+      <circle cx="8" cy="8" r="6" fill="none" strokeWidth="2" className="stroke-border" />
+      <circle cx="8" cy="8" r="6" fill="none" strokeWidth="2" strokeLinecap="round" className="stroke-info-fill" strokeDasharray={c} strokeDashoffset={c * (1 - share)} />
+    </svg>
+  );
+}
 
 /**
  * The rail's control: "Done for today" (one tap asks, inline), then "Undo" for 60 s once the server has saved it. A
  * failed read shows "Could not check" on the button; a failed write says it did not save. `id` keeps two copies (the
  * phone's and the wider screens') apart.
  */
-export function DoneControl({ id = "done-today-confirm", className }: { id?: string; className?: string }) {
+export function DoneControl({ id = "done-today-confirm", className, limitReached = false }: { id?: string; className?: string; limitReached?: boolean }) {
   const d = useDoneToday();
+  // The countdown's clock: null in the server render and on hydration, so the two never differ.
+  const now = useNow(250);
   const [asking, setAsking] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -218,6 +234,10 @@ export function DoneControl({ id = "done-today-confirm", className }: { id?: str
 
   if (!d) return null;
   const unchecked = d.read.status !== "ok";
+  const state = doneButtonState({ unchecked, failed: !!d.failed, limitReached });
+  // The clock in quarter seconds (null before mount), and the count capped at the window: never "61 s", and at most a
+  // quarter second off the server's own timer.
+  const left = d.canUndo ? undoLeft(d.undoUntil ?? null, now, UNDO_MS) : null;
 
   const onUndo = async () => {
     if (await d.undo()) requestAnimationFrame(() => trigger.current?.focus());
@@ -236,7 +256,7 @@ export function DoneControl({ id = "done-today-confirm", className }: { id?: str
   };
 
   return (
-    <div ref={box} className={cn("relative", className)} data-done-control={d.done ? "done" : unchecked ? "unchecked" : "open"}>
+    <div ref={box} className={cn("relative", className)} data-done-control={d.done ? "done" : unchecked ? "unchecked" : "open"} data-done-state={d.done ? "done" : state}>
       {d.done ? (
         d.canUndo ? (
           <button
@@ -250,14 +270,20 @@ export function DoneControl({ id = "done-today-confirm", className }: { id?: str
               if (ev.relatedTarget !== null) undoFocused.current = false;
             }}
             onClick={() => void onUndo()}
-            className={cn(BUTTON, "text-muted-foreground hover:text-foreground")}
+            className={railButton("info")}
           >
-            <Undo2 aria-hidden className="size-4" />
+            {left ? <UndoRing share={left.share} /> : <Undo2 aria-hidden className="size-4" />}
             <span aria-hidden className="sm:hidden">
               Undo
             </span>
             <span className="max-sm:sr-only">Undo</span>
             <span className="sr-only"> done for today</span>
+            {/* How long Undo stays, counted down; read out only once, by the button's name, not every second. */}
+            {left ? (
+              <span aria-hidden data-undo-left className="font-mono text-xs tabular-nums max-sm:hidden">
+                {left.s} s
+              </span>
+            ) : null}
           </button>
         ) : null
       ) : (
@@ -272,9 +298,15 @@ export function DoneControl({ id = "done-today-confirm", className }: { id?: str
             d.clearFailed();
             setAsking((a) => !a);
           }}
-          className={cn(BUTTON, "text-muted-foreground hover:text-foreground aria-expanded:text-foreground aria-expanded:bg-muted", unchecked && "border-warn-fill/60")}
+          data-done-tone={DONE_TONE[state]}
+          className={railButton(
+            DONE_TONE[state],
+            "aria-expanded:ring-ring/40 aria-expanded:ring-2",
+            // the limit just reached: two slow pulses draw the eye, then it rests (never with reduced motion)
+            state === "limit" && "motion-safe:animate-[pulse_1.2s_ease-in-out_2]",
+          )}
         >
-          {unchecked ? <CircleAlert aria-hidden className="text-warn size-4" /> : <CircleCheck aria-hidden className="size-4" />}
+          {state === "unchecked" || state === "failed" ? <CircleAlert aria-hidden className="size-4" /> : <CircleCheck aria-hidden className="size-4" />}
           {/* On a phone the icon; the words are still the button's name. */}
           {unchecked ? (
             <span className="max-sm:sr-only" data-done-unchecked>
@@ -284,7 +316,7 @@ export function DoneControl({ id = "done-today-confirm", className }: { id?: str
           <span aria-hidden className="sm:hidden">
             Done
           </span>
-          <span className="max-sm:sr-only">Done for today</span>
+          <span className="max-sm:sr-only">{state === "limit" ? DONE_WORDS.limit : state === "failed" ? DONE_WORDS.failed : "Done for today"}</span>
         </button>
       )}
       {asking && !d.done ? (
@@ -297,6 +329,9 @@ export function DoneControl({ id = "done-today-confirm", className }: { id?: str
         >
           {unchecked ? <p className="text-explain text-warn font-medium">{COULD_NOT_CHECK} whether today is marked done.</p> : null}
           <p className="text-explain font-medium">{CONFIRM_LINE}</p>
+          <p data-done-keeps className="text-explain text-muted-foreground">
+            Your open trades&apos; stops, exits and the manage cards keep working.
+          </p>
           {d.failed ? (
             <p role="alert" data-done-failed className="text-explain text-bad font-medium">
               {d.failed}
