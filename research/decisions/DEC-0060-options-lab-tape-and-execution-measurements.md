@@ -77,8 +77,11 @@ value is a new experiment.
 
 - **Hypothetical orders are placed only at sample instants**, where the quote is known exactly, and trade prints are
   read forward from there. A print is never matched to a quote sampled seconds away.
-- **A session counts** when it is a regular session, has a focus list, passes the data checks, and its frozen opening
-  tier-1 set has at least 99% of expected samples. Sessions left out are listed with the reason in every report, so
+- **A session counts** when it is a regular session, has a focus list, passes the data checks, and its opening tier-1
+  set is complete and has at least 99% of expected samples. The opening set is frozen once the first minute of chain
+  reading has finished and every focus name has been selected; a name still missing after five minutes leaves the
+  set incomplete and the session uncounted. Expected samples are the opening set at every tick from the freeze to the
+  close, whether or not the recorder was running, so a stop, an outage or a restart shows as missed coverage. Sessions left out are listed with the reason in every report, so
   fast days that strain the recorder cannot vanish silently.
 - **Read points, not a running view.** Tables are worked out and shown only at 20 and 40 counted sessions, then every
   40. The first five recorded sessions are a shadow period that no table reads.
