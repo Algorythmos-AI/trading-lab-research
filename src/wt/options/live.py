@@ -140,6 +140,17 @@ class OptionsAccount:
             raise BrokerFault("positions-not-a-list")
         return got
 
+    def activities(self, after: str, page_token: str | None = None) -> list[Any]:
+        """One page of the account's filled orders and option expiries, exercises and assignments from `after` on,
+        oldest first (wt.options.paper_manual pages through them). Read only, like every call here."""
+        params = {"activity_types": "FILL,OPEXP,OPASN,OPXRC", "after": after, "direction": "asc", "page_size": "100"}
+        if page_token:
+            params["page_token"] = page_token
+        got = self._get("/v2/account/activities", params)
+        if not isinstance(got, list):
+            raise BrokerFault("activities-not-a-list")
+        return got
+
     def clock(self) -> dict[str, Any]:
         got = self._get("/v2/clock")
         if not isinstance(got, dict):
@@ -552,10 +563,28 @@ def main(argv: list[str] | None = None) -> int:
         # it can delay or fail them. Its own result is in the log line it prints, not in this job's exit code.
         try:
             from wt.options import paper_site
-            paper_site.run(dry_run=a.dry_run)
+            paper_site.run(dry_run=a.dry_run, manual=_manual_history())
         except Exception as e:  # noqa: BLE001 — the positions have been sent; this extra must not undo that
             print(f"paper options history not built ({e.__class__.__name__})", file=sys.stderr)
         return rc
+
+
+def _manual_history(account: OptionsAccount | None = None) -> list[dict[str, Any]] | None:
+    """The manual paper account's activities for the paper options history, or None when they cannot be had: no
+    keys, a broker fault, anything else. The history then goes out without the hand-placed trades."""
+    try:
+        from wt.options import paper_manual
+        if account is None:
+            key_id, secret = os.environ.get(KEY_ID_VAR, "").strip(), os.environ.get(SECRET_VAR, "").strip()
+            if not key_id or not secret:
+                return None
+            account = OptionsAccount(key_id, secret)
+        return paper_manual.refresh(account, OUT / "activities.json", dt.datetime.now(dt.UTC))
+    except BrokerFault as e:
+        print(f"the paper account's activities could not be read ({e.code}): history sent without them", file=sys.stderr)
+    except Exception as e:  # noqa: BLE001
+        print(f"the paper account's activities could not be read ({e.__class__.__name__})", file=sys.stderr)
+    return None
 
 
 def _failed(detail: str, now: dt.datetime) -> int:
