@@ -257,7 +257,7 @@ test("the Today log lists a state change, newest first, and closes on Escape", a
   await expect(rows(page).first()).toHaveAttribute("data-board-state", "get_ready");
   await at(context, baseURL, 3);
   await expect(rows(page).first()).toHaveAttribute("data-board-state", "enter_zone", { timeout: 15_000 });
-  const button = page.getByRole("button", { name: /^Today · \d+$/ });
+  const button = page.getByRole("button", { name: /^Today · \d+/ });
   await button.click();
   const log = page.locator("[data-today-log]");
   await expect(log.locator('[data-log-line="QQQ"]').first()).toContainText(/^10:2\d\s*QQQ\s*ENTER ZONE · CALL$/);

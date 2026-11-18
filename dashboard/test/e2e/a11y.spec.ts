@@ -139,7 +139,7 @@ for (const theme of ["light", "dark"] as const) {
     ]);
     await page.goto("/options");
     await expect(page.locator('[data-now-hero="live"] [data-hero-word="enter_zone"]')).toBeVisible();
-    await page.getByRole("button", { name: /^Today · \d+$/ }).click();
+    await page.getByRole("button", { name: /^Today · \d+/ }).click();
     await expect(page.locator("[data-today-log]")).toBeVisible();
     expect(await scan(page)).toEqual([]);
     await page.keyboard.press("Escape");
