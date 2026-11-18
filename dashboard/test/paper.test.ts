@@ -210,6 +210,10 @@ describe("the rule windows and the other keys", () => {
   it("names a code it knows, and shows one it does not as it is", () => {
     expect(reasonLabel("premium")).toBe("Premium stop (−25%)");
     expect(reasonLabel("some_new-code")).toBe("some new code");
+    // Seen as bare codes on the live page on 2026-11-18: every exit the clone and the arms can record has a name.
+    expect(["chart", "trail", "next-level", "broker-stop", "stock-feed-stalled", "day-loss", "operational"].map(reasonLabel)).toEqual([
+      "Chart stop", "Trailing stop", "Next level reached", "Broker's stop order", "Stock feed stalled", "Day loss limit", "Operational exit",
+    ]);
     expect(reasonLabel(null)).toBe("Not recorded");
     expect(windowLabel("no_oi")).toBe("No open-interest floor");
     expect(windowLabel("next")).toBe("next");

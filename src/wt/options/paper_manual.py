@@ -33,8 +33,9 @@ from zoneinfo import ZoneInfo
 from wt.ops import safeio
 
 NEW_YORK = ZoneInfo("America/New_York")
-TYPES = ("FILL", "OPEXP", "OPASN", "OPXRC")
-EXPIRY, TAKEN = "OPEXP", ("OPASN", "OPXRC")
+# An exercise is OPEXC in the API's list of allowed values and OPXRC in its guide: both are read as one.
+EXPIRY, TAKEN = "OPEXP", ("OPASN", "OPEXC", "OPXRC")
+TYPES = ("FILL", EXPIRY, *TAKEN)
 PAGE_SIZE = 100                   # the account API's maximum without a date
 MAX_PAGES = 20                    # a run reads at most this many pages; the next run carries on from the cache
 FIRST_LOOKBACK_DAYS = 730         # how far back the first read starts
