@@ -150,6 +150,13 @@ wt.ops.publish                            POST /api/ingest            (productio
   table. Read only: it describes what happened and suggests nothing. An edition older than three and a half days
   is shown with a notice. `/api/health` reports it under `editions.journal`. Fixture mode reads the synthetic
   `test/fixtures/journal.v1.json`.
+- **Robot B** (`/robot-b`, DEC-0061): strategy B in one place, paper money only. Two sources: the stocks
+  snapshot (G2, the stop rule, the virtual account, kill switch, latch, the `paper-b` job, performance, blotter,
+  risk limits) and `src/lib/robot-b-evidence.json`, numbers only, which `scripts/robot_b_evidence.py` builds from
+  EXP-0042's results and the trial registry (`--check` in CI keeps it equal to a fresh build). All states are
+  derived in `src/lib/robot-b.ts` (pure, `test/robot-b.test.ts`): the evidence ladder (clean data, G1, holdout, G2a,
+  G2b, promotion, real money never), the numeric blockers, every estimate with its 95% range on one axis, and the
+  trades the paper record would need to tell the edge from zero. No record's prose is shown.
 - **Paper options** (`/paper`, `stocksdelta/paper-options`, schema `src/lib/paper-options.schema.json`;
   `paper-options.types.ts` is generated; DEC-0057): every closed paper option trade, from three sources that are
   shown apart and never added together. The options clone's trades come from its journal, the hand-placed trades

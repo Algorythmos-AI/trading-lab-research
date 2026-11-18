@@ -8,6 +8,7 @@ const PAGES = [
   { path: "/radar", heading: "Radar" },
   { path: "/options", heading: "Options" },
   { path: "/paper", heading: "Paper" },
+  { path: "/robot-b", heading: "Robot B" },
   { path: "/calendar", heading: "Calendar" },
   { path: "/strategies", heading: "Strategies" },
   { path: "/research", heading: "Research" },
