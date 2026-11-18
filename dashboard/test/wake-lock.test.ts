@@ -94,10 +94,59 @@ describe("the cockpit's screen keeper", () => {
     let asked = 0;
     const k = screenKeeper({ request: () => (asked++, refuse ? Promise.reject(new Error("no")) : new Promise<WakeSentinel>(() => undefined)) }, () => true);
     k.take();
-    await Promise.resolve();
-    await Promise.resolve();
+    for (let i = 0; i < 6; i++) await Promise.resolve();
+    expect(asked).toBe(2); // refused, then asked once more by itself, refused again
     refuse = false;
+    k.take(); // the tab shown again later: asked again
+    expect(asked).toBe(3);
+  });
+
+  it("tells its owner what it holds: asking, held, off when let go, refused when the browser says no", async () => {
+    const f = fakeApi();
+    const seen: string[] = [];
+    const k = screenKeeper(f.api, () => true, (st) => seen.push(st));
     k.take();
-    expect(asked).toBe(2);
+    await f.grant();
+    k.drop();
+    expect(seen).toEqual(["asking", "held", "off"]);
+    const refusing = screenKeeper({ request: () => Promise.reject(new Error("battery")) }, () => true, (st) => seen.push(st));
+    refusing.take();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(seen.at(-1)).toBe("refused");
+  });
+
+  it("hears the browser take the lock back by itself", async () => {
+    let onRelease: (() => void) | null = null;
+    const seen: string[] = [];
+    const k = screenKeeper({ request: async () => ({ release: async () => undefined, addEventListener: (_t, fn) => void (onRelease = fn) }) }, () => true, (st) => seen.push(st));
+    k.take();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(k.held()).toBe(true);
+    onRelease!();
+    // taken back with the tab shown: said (amber), and asked once more
+    expect(seen).toContain("refused");
+    expect(seen.at(-1)).toBe("asking");
+  });
+
+  it("says nothing once stopped", async () => {
+    const f = fakeApi();
+    const seen: string[] = [];
+    const k = screenKeeper(f.api, () => true, (st) => seen.push(st));
+    k.take();
+    k.stop();
+    await f.grant();
+    expect(seen).toEqual(["asking"]);
+  });
+
+  it("a refused request is asked once more while the tab is shown, not over and over", async () => {
+    let asks = 0;
+    const seen: string[] = [];
+    const k = screenKeeper({ request: () => (asks++, Promise.reject(new Error("no"))) }, () => true, (st) => seen.push(st));
+    k.take();
+    for (let i = 0; i < 6; i++) await Promise.resolve();
+    expect(asks).toBe(2);
+    expect(seen.at(-1)).toBe("refused");
   });
 });

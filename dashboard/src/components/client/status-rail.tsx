@@ -22,7 +22,7 @@ import { NO_MARKS, withOpenLoss } from "@/lib/held-marks";
 import { BOARD_LOG_MAX, byHour, logKey, logNames, parseSeen, unreadCount, withSeen } from "@/lib/board-log";
 import { AlertsMenu } from "./alerts";
 import { railButton } from "./rail-button";
-import { CockpitSwitch } from "./cockpit";
+import { CockpitSwitch, FullscreenButton } from "./cockpit";
 import { ServerCheckNote } from "./desk-shadow";
 import { DoneControl, DonePill, UncheckedNote, useDone, useDonePolling } from "./done-today";
 import { BoardEvents, type BoardLogEntry, boardCollapsed, useBoard } from "./trade-now";
@@ -407,6 +407,7 @@ export function StatusRail({ day: server, facts = null }: { day: RailDay | null;
           {b.on ? <DoneControl className="max-sm:hidden" limitReached={limitReached} /> : null}
           {b.on ? <TodayLog log={b.log} session={b.session} /> : null}
           {switches ? <AlertsMenu /> : null}
+          {b.on ? <FullscreenButton /> : null}
           {b.on ? <CockpitSwitch className="max-sm:min-h-11 max-sm:min-w-11 max-sm:justify-center max-sm:px-2" /> : null}
         </div>
       </div>

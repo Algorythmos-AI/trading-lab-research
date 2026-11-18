@@ -37,6 +37,7 @@ const FILES = [
   "../src/lib/alert-notify.ts",
   "../src/components/client/rail-button.ts",
   "../src/lib/done-view.ts",
+  "../src/lib/cockpit-keys.ts",
   "../src/lib/board-log.ts",
   "../src/components/client/now-hero.tsx",
   "../src/components/client/focus-glance.tsx",
