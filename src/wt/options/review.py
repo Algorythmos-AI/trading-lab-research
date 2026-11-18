@@ -11,8 +11,7 @@ Two windows of rules (DEC-0039): `old` takes sessions up to OLD_RULES_END (the $
 `cap15` takes sessions from CAP15_START (the $15.00 cap: EXP-0028). No trade counts in both.
 DEC-0040 closes `cap15` at CAP15_END and opens `spread5` at SPREAD5_START (the $5.00 spread cap: EXP-0029).
 DEC-0056 closes `spread5` at SPREAD5_END and opens `no_oi` at NO_OI_START (no open-interest floor: EXP-0039).
-DEC-0058 closes `no_oi` at NO_OI_END and opens `qqq` at QQQ_START (QQQ a standing name: EXP-0040). Its amendment
-put both on 2026-11-18, so `no_oi` holds no session: its end is before its start.
+DEC-0058 closes `no_oi` at NO_OI_END and opens `qqq` at QQQ_START (QQQ a standing name: EXP-0040).
 """
 from __future__ import annotations
 
@@ -31,7 +30,7 @@ TRIALS = (*SETUPS, NEAREST)
 OLD_RULES_END, CAP15_START = "2026-10-29", "2026-10-30"
 CAP15_END, SPREAD5_START = "2026-11-04", "2026-11-05"
 SPREAD5_END, NO_OI_START = "2026-11-17", "2026-11-18"
-NO_OI_END, QQQ_START = "2026-11-17", "2026-11-18"     # DEC-0058, amended 2026-11-18: EXP-0039 holds no session
+NO_OI_END, QQQ_START = "2026-11-18", "2026-11-19"
 WINDOWS: dict[str, tuple[str | None, str | None]] = {"old": (None, OLD_RULES_END), "cap15": (CAP15_START, CAP15_END),
                                                      "spread5": (SPREAD5_START, SPREAD5_END),
                                                      "no_oi": (NO_OI_START, NO_OI_END),

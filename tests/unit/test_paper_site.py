@@ -51,7 +51,7 @@ def test_a_closed_trade_carries_its_fills_times_result_and_ids_and_no_setup_name
                            closed("2026-11-18-O-1")])
     assert paper_site.validate(doc) == []
     (t,) = doc["clone"]["trades"]
-    assert t == {"trade_id": "2026-11-18-O-1", "session": "2026-11-18", "hyp": "HYP-0029", "window": "qqq", "side": "call",
+    assert t == {"trade_id": "2026-11-18-O-1", "session": "2026-11-18", "hyp": "HYP-0029", "window": "no_oi", "side": "call",
                  "contract": "SPY261118C00581000", "qty": 1, "opened_at": "2026-11-18T15:02:11+00:00",
                  "closed_at": "2026-11-18T15:31:40+00:00", "timed_by": "plan", "fill": 2.0, "exit_fill": 2.5, "exit_reason": "target",
                  "pnl_usd": 49.94, "rop": 0.2497, "quoted_ask": 2.0, "quote_age_s": 1.4, "best_bid": 2.8, "worst_bid": 1.9,
@@ -69,14 +69,12 @@ def test_the_hypothesis_follows_the_setup_and_the_expiry_and_the_window_follows_
         plan(tmp_path / "state", r["trade_id"])
     got = {t["trade_id"]: (t["hyp"], t["window"]) for t in build(tmp_path, rows)["clone"]["trades"]}
     assert got == {"2026-10-28-O-1": ("HYP-0029", "old"), "2026-11-03-O-1": ("HYP-0030", "cap15"),
-                   "2026-11-10-O-1": ("HYP-0031", "spread5"), "2026-11-18-O-1": ("other", "qqq")}
+                   "2026-11-10-O-1": ("HYP-0031", "spread5"), "2026-11-18-O-1": ("other", "no_oi")}
     # Every window the review knows, oldest first, so a later rule change needs nothing here.
     sent = build(tmp_path, rows)["clone"]["windows"]
-    # `no_oi` holds no session (DEC-0058, as amended), so it is not sent.
-    assert {w["id"] for w in sent} == set(review.WINDOWS) - {"no_oi"} and [w["id"] for w in sent] == ["old", "cap15", "spread5", "qqq"]
+    assert {w["id"] for w in sent} == set(review.WINDOWS) and [w["id"] for w in sent][:4] == ["old", "cap15", "spread5", "no_oi"]
     assert sent[0]["from"] is None and [w["from"] for w in sent[1:]] == sorted(w["from"] for w in sent[1:])
-    assert all(paper_site.window_of(since) == name for name, (since, until) in review.WINDOWS.items()
-               if since and (until is None or since <= until))
+    assert all(paper_site.window_of(since) == name for name, (since, _until) in review.WINDOWS.items() if since)
 
 
 def test_a_trade_without_its_plan_file_is_timed_from_the_journal_and_says_so(tmp_path: Path) -> None:

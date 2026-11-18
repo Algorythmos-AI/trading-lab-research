@@ -15,8 +15,8 @@ Writes report.md and result.json only when at least one of the trials has reache
 refuses to write over a report that exists: a later look is a new experiment. Counts and statistics only. The default
 trials are the two same-day setups (EXP-0024); `nearest` is HYP-0031's (EXP-0026, DEC-0034). `--rules` picks the
 window (DEC-0039): `old` (the default) counts sessions up to 2026-10-29, `cap15` 2026-10-30 to 2026-11-04 (EXP-0028),
-`spread5` 2026-11-05 to 2026-11-17 (EXP-0029, DEC-0040), `no_oi` no session (EXP-0039, DEC-0056; closed before its first by DEC-0058's
-amendment), `qqq` from 2026-11-18 (EXP-0040, DEC-0058).
+`spread5` 2026-11-05 to 2026-11-17 (EXP-0029, DEC-0040), `no_oi` 2026-11-18 only (EXP-0039, DEC-0056), `qqq` from
+2026-11-19 (EXP-0040, DEC-0058).
 """
 from __future__ import annotations
 
