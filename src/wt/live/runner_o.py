@@ -519,11 +519,14 @@ class Runner:
 
     def prepare(self) -> None:
         """Today's names: the focus names that can be traded today (an expiry under `names.expiry`, readable levels),
-        topped up from `names.top_up` in order until at least `names.min_names` can be traded (DEC-0032, DEC-0034)."""
+        then the standing names (`names.standing`, DEC-0058), topped up from `names.top_up` in order until at least
+        `names.min_names` can be traded (DEC-0032, DEC-0034)."""
         focus, edition = self.feeds.focus()
         cfg_n = self.cfg["names"]
         cap = int(cfg_n["max_names"])
         wanted, source = session.names(focus, edition, self.session, cfg_n["fallback"], cap)
+        standing = [r for r in dict.fromkeys(str(x).upper() for x in cfg_n.get("standing", [])) if r not in wanted]
+        wanted = [*wanted, *standing]                # outside the cap: a standing name never displaces a focus name
         top_up = [r for r in cfg_n.get("top_up", []) if r not in wanted]
         start = dt.datetime.combine(self.day - dt.timedelta(days=420), dt.time(0), dt.UTC)
         end = dt.datetime.combine(self.day, dt.time(0), dt.UTC) - dt.timedelta(seconds=1)
@@ -587,6 +590,7 @@ class Runner:
             source = f"{source}+top-up"
         self.names_source = source
         self.write("names", source=source, names=sorted(self.names), dropped=dropped, topped_up=topped,
+                   standing=[r for r in standing if r in self.names],
                    policy=self.policy, expiries=expiries,
                    level_source=level_source, level_diffs={k: v for k, v in level_diffs.items() if v})
         if not self.names:

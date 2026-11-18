@@ -90,6 +90,9 @@ def build(day: str, journal: Path = JOURNAL, state: Path = OPT, cfg: dict | None
         # EXP-0039 (DEC-0056): counts only until its report is written, so no running figure is shown or stored
         "no_oi": {k: {"trades": f["trades"], "sessions": f["sessions"]}
                   for k, f in review.review(review.in_window(trades, "no_oi"), review.TRIALS).items()},
+        # EXP-0040 (DEC-0058): counts only until its report is written, as EXP-0039
+        "qqq": {k: {"trades": f["trades"], "sessions": f["sessions"]}
+                for k, f in review.review(review.in_window(trades, "qqq"), review.TRIALS).items()},
     }
 
 
@@ -109,6 +112,8 @@ def main(argv: list[str] | None = None) -> int:
               f"range by session {f.get('ci_session')}, verdict {f['verdict']} ({'; '.join(f['why'])})")
     for k, f in doc["no_oi"].items():
         print(f"no_oi {k}: {f['trades']} trades in {f['sessions']} sessions (EXP-0039: counts only until its report)")
+    for k, f in doc["qqq"].items():
+        print(f"qqq {k}: {f['trades']} trades in {f['sessions']} sessions (EXP-0040: counts only until its report)")
     q = doc["quality"]["day"]
     if q is None:
         print(f"quality: not scored ({doc['quality'].get('error')})")

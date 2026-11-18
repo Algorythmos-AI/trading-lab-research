@@ -14,3 +14,9 @@
   rule is unchanged.
 - Trades, ledger, unit, verdict and exclusions: as EXP-0028.
 - A number changed after a result is seen means a new experiment and new trials.
+
+## Closed by DEC-0058 (appended 2026-11-17, before its first session)
+
+- The last session is **2026-11-18** (`wt.options.review.NO_OI_END`). That is one session.
+- From 2026-11-19 the clone trades QQQ every session beside the focus names, and its trades count toward EXP-0040.
+- This experiment cannot reach 20 sessions, so it gives no verdict. It is kept as a record, as EXP-0029 was.

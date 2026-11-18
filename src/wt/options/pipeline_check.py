@@ -152,6 +152,7 @@ def _num(v: Any) -> float | None:
 
 
 TOP_UP = ("SPY", "QQQ")   # config/options_clone.yaml names.top_up (DEC-0032)
+STANDING = ("QQQ",)       # names.standing (DEC-0058): traded every session after the focus names, outside the cap
 INDEX_NAMES = ("SPY", "QQQ")   # config/options_clone.yaml contract.index_names: never skipped for earnings
 MIN_NAMES = 2             # names.min_names: the clone's top-up target. Shared with the clone; not this check's bar
 # focus.tradeable's own bar: how many focus names need a contract the clone may trade. One is a legitimate night (the
@@ -173,11 +174,12 @@ def eligible(options: Mapping[str, Any] | None, target: str, expiries: Mapping[s
              max_names: int = MAX_NAMES, policy: str = EXPIRY) -> set[str]:
     """The names the clone can trade on `target`, chosen as its runner chooses them: `wt.options.session.names` (the
     focus names by rank, upper-cased, de-duplicated, capped at `max_names`, or the fallback without a focus for that
-    session), kept when it has an expiry the policy allows (DEC-0034), then topped up in order from SPY and QQQ to
-    two (DEC-0032).
+    session), then the standing names (DEC-0058), kept when it has an expiry the policy allows (DEC-0034), then topped
+    up in order from SPY and QQQ to two (DEC-0032).
     Only a difference on one of these fails; elsewhere it warns."""
     focus = (options or {}).get("focus") if options else None
     wanted, _ = session.names(focus, (options or {}).get("session"), target, list(TOP_UP), max_names)
+    wanted = [*wanted, *(s for s in STANDING if s not in wanted)]
     out = [s for s in wanted if tradeable(s, target, expiries, policy)]
     for sym in TOP_UP:
         if len(out) >= MIN_NAMES:

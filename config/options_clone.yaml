@@ -24,6 +24,9 @@ names:
   source: focus                 # the after-close edition's "Today's focus" names
   fallback: [SPY, QQQ]          # when there is no focus block, or it is for another session than today
   max_names: 6
+  # DEC-0058 (from 2026-11-19): traded every session beside the focus names, after them and outside `max_names`.
+  # QQQ lists a contract expiring every session and meets the index volume floor. None up to 2026-11-18
+  standing: [QQQ]
   # DEC-0032: after the names without a same-day expiry are dropped, add these in order until at least `min_names`
   # can be traded today (SPY and QQQ list a contract expiring every session).
   top_up: [SPY, QQQ]

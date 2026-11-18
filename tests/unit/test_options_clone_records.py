@@ -34,13 +34,13 @@ def test_the_nearest_expiry_rule_is_recorded_as_one_new_trial_before_its_first_t
     assert "release containing DEC-0034" in h["since"] and "15:10" in h["statement"]
     assert "Written before any paper result of the new trial exists" in rec and "from 14 to **15**" in rec
     assert (ROOT / "research" / "experiments" / "EXP-0026-options-clone-nearest-expiry" / "README.md").exists()
-    assert re.search(r"\*\*Status: ACCEPTED on 2026-10-22\.\*\*", rec) and family_trial_count("O") == 44
+    assert re.search(r"\*\*Status: ACCEPTED on 2026-10-22\.\*\*", rec) and family_trial_count("O") == 47
     assert CONFIG["names"]["expiry"] == "nearest" and CONFIG["names"]["nearest_within_days"] == 7
     assert "same_day_expiry_only" not in CONFIG["names"]
 
 
 def test_the_record_and_the_registry_agree():
-    assert family_trial_count("O") == 44                                     # DEC-0041 added 14 since, DEC-0051 one, DEC-0052 one, DEC-0053 one, DEC-0054 three, DEC-0056 three
+    assert family_trial_count("O") == 47                                     # DEC-0041 added 14 since, DEC-0051 one, DEC-0052 one, DEC-0053 one, DEC-0054 three, DEC-0056 three, DEC-0058 three
     assert re.search(r"from 12 to \*\*14\*\*", DECISION)
     assert re.search(r"\*\*Status: ACCEPTED on 2026-10-18\.\*\*", DECISION)
 
@@ -68,7 +68,7 @@ def test_paper_is_the_only_trading_value_and_size_is_one():
 def test_the_dry_run_is_registered_before_it_runs_and_adds_no_trial():
     rec = (ROOT / "research" / "decisions" / "DEC-0031-options-clone-dry-run.md").read_text()
     assert re.search(r"\*\*Status: ACCEPTED on 2026-10-20\.\*\*", rec) and "no result of it has" in rec
-    assert "family O stays at 14" in rec and family_trial_count("O") == 44    # DEC-0034 added one since; DEC-0041 14; DEC-0051 one, DEC-0052 one, DEC-0053 one, DEC-0054 three, DEC-0056 three
+    assert "family O stays at 14" in rec and family_trial_count("O") == 47    # DEC-0034 added one since; DEC-0041 14; DEC-0051 one, DEC-0052 one, DEC-0053 one, DEC-0054 three, DEC-0056 three, DEC-0058 three
     exp = ROOT / "research" / "experiments" / "EXP-0025-options-clone-dry-run"
     assert (exp / "README.md").exists()
 
@@ -77,13 +77,13 @@ def test_the_tradeable_names_rule_is_recorded_and_configured():
     rec = (ROOT / "research" / "decisions" / "DEC-0032-options-clone-tradeable-names.md").read_text()
     assert re.search(r"\*\*Status: ACCEPTED on 2026-10-20\.\*\*", rec) and "No trial is added" in rec
     assert CONFIG["names"]["top_up"] == ["SPY", "QQQ"] and CONFIG["names"]["min_names"] == 2
-    assert family_trial_count("O") == 44    # DEC-0034 added HYP-0031 since; DEC-0041 14; DEC-0051 one, DEC-0052 one, DEC-0053 one, DEC-0054 three, DEC-0056 three
+    assert family_trial_count("O") == 47    # DEC-0034 added HYP-0031 since; DEC-0041 14; DEC-0051 one, DEC-0052 one, DEC-0053 one, DEC-0054 three, DEC-0056 three, DEC-0058 three
 
 
 def test_the_one_level_source_rule_is_recorded():
     rec = (ROOT / "research" / "decisions" / "DEC-0033-options-clone-one-level-source.md").read_text()
     assert re.search(r"\*\*Status: ACCEPTED on 2026-10-20\.\*\*", rec) and "No trial is added" in rec
-    assert family_trial_count("O") == 44    # DEC-0034 added HYP-0031 since; DEC-0041 14; DEC-0051 one, DEC-0052 one, DEC-0053 one, DEC-0054 three, DEC-0056 three
+    assert family_trial_count("O") == 47    # DEC-0034 added HYP-0031 since; DEC-0041 14; DEC-0051 one, DEC-0052 one, DEC-0053 one, DEC-0054 three, DEC-0056 three, DEC-0058 three
 
 
 def test_the_cap_change_is_recorded_as_three_new_trials_before_its_first_trade():
@@ -92,7 +92,7 @@ def test_the_cap_change_is_recorded_as_three_new_trials_before_its_first_trade()
     assert "Written before any trade under the new cap exists" in rec and "2026-10-30" in rec
     exp = (ROOT / "research" / "experiments" / "EXP-0028-options-clone-cap-15" / "README.md").read_text()
     assert "DEC-0039" in exp and "2026-10-30" in exp and "30 trades and 20 sessions" in exp
-    assert family_trial_count("O") == 44
+    assert family_trial_count("O") == 47
 
 
 def test_the_spread_cap_change_is_recorded_as_three_new_trials_before_its_first_trade():
@@ -111,7 +111,7 @@ ARMS = [h for h in HYPOTHESES if h["evidence"].get("decision") == "DEC-0041"]
 def test_the_research_arms_are_fourteen_new_trials_recorded_before_any_result():
     rec = (ROOT / "research" / "decisions" / "DEC-0041-options-clone-research-arms.md").read_text()
     assert re.search(r"\*\*Status: ACCEPTED on 2026-11-05\.\*\*", rec) and "from 21 to **35**" in rec
-    assert "Written before any affected P&L is viewed" in rec and family_trial_count("O") == 44
+    assert "Written before any affected P&L is viewed" in rec and family_trial_count("O") == 47
     assert [h["id"] for h in ARMS] == [f"HYP-{n:04d}" for n in range(34, 48)]
     assert len({h["trial"] for h in ARMS}) == 14
     exp = ROOT / "research" / "experiments" / "EXP-0030-options-clone-research-arms" / "README.md"
@@ -161,3 +161,16 @@ def test_the_research_arms_block_is_on_and_carries_the_frozen_numbers():
     # the arms never reach the frozen marks
     assert not {"ONH", "ONL", "SWH", "SWL", "EVH", "EVL", "GAPH", "GAPL", "ATH"} & \
         set(CONFIG["levels"]["names"] + CONFIG["levels"]["strong"])
+
+
+def test_the_standing_name_is_recorded_as_three_new_trials_before_its_first_trade():
+    """DEC-0058: QQQ traded every session, written before any session under it; EXP-0039 closes at one session."""
+    rec = (ROOT / "research" / "decisions" / "DEC-0058-clone-qqq-standing-name.md").read_text()
+    assert re.search(r"\*\*Status: ACCEPTED on 2026-11-17 \(New York\)\.\*\*", rec) and "from 44 to **47**" in rec
+    assert "Written before any session under the new rule exists" in rec and "2026-11-19" in rec
+    exp = (ROOT / "research" / "experiments" / "EXP-0040-options-clone-qqq-standing" / "README.md").read_text()
+    assert "DEC-0058" in exp and "2026-11-19" in exp and "30 trades and 20 sessions" in exp
+    old = (ROOT / "research" / "experiments" / "EXP-0039-options-clone-no-oi-floor" / "README.md").read_text()
+    assert "Closed by DEC-0058" in old and "2026-11-18" in old
+    assert CONFIG["names"]["standing"] == ["QQQ"] and "QQQ" in CONFIG["contract"]["index_names"]
+    assert family_trial_count("O") == 47
