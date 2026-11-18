@@ -11,6 +11,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -42,6 +43,11 @@ def paper_aggregate(text: str) -> dict[str, float | int]:
         raise ValueError("the scorecard's paper line was not found")
     return {"sessions_armed": int(armed.group(1)), "trades_closed": int(line.group(1)),
             "mean_R": float(line.group(2)), "cum_R": float(line.group(3))}
+
+
+def first_weekday_of_month(d: dt.date) -> bool:
+    """No earlier weekday in the same month (exchange holidays aside)."""
+    return d.weekday() < 5 and all((d - dt.timedelta(days=k)).weekday() >= 5 for k in range(1, d.day))
 
 
 def _close(name: str, got: float, want: float, tol: float, misses: list[str]) -> None:
@@ -89,6 +95,12 @@ def run() -> dict[str, Any]:
     pick_counts: dict[str, int] = {}
     for _, name in picks:
         pick_counts[name] = pick_counts.get(name, 0) + 1
+
+    # ---- data quality: B's first signal mark is 10:00, so an earlier entry is a data fault (DEC-0011 R-C1 put the
+    # next month's first session at the end of each month file, and B counts bars by position)
+    early = [{"date": t.date.isoformat(), "entry_et": t.entry_et.strftime("%H:%M") if t.entry_et else None,
+              "first_weekday_of_month": first_weekday_of_month(t.date),
+              "R": t.r} for t in frozen if t.entry_et is not None and t.entry_et.time() < dt.time(10, 0)]
 
     # ---- the frozen rule's development record
     dist = ba.distribution(frozen, seed=seed, draws=draws)
@@ -142,6 +154,8 @@ def run() -> dict[str, Any]:
                       "dsr_trials_65": wf_dsr65, "fold_pick_counts": pick_counts, "folds": len(picks)},
                       "frozen_rule_dev_n": len(frozen), "holdout": holdout},
         "walk_forward": wf_d,
+        "data_quality": {"entries_before_1000": early, "unique_trade_dates": len({t.date for t in frozen}),
+                         "note": "one trade per date at most, so day-block and trade bootstrap intervals coincide"},
         "frozen_rule": dist | {"splits": ba.splits(frozen), "exit_quality": ba.exit_quality(frozen),
                                "random_control_p": control_p, "control_draws": len(cm)},
         "runner_parity": {"tradable": ba.distribution(tradable, seed=seed, draws=draws),
@@ -162,8 +176,20 @@ def run() -> dict[str, Any]:
     }
 
 
+def rounded(obj: Any, digits: int = 9) -> Any:
+    """Floats to `digits` significant digits, so the file is identical on macOS and on Linux CI (BLAS and libm differ
+    in the last bits of polyfit, percentiles and moments)."""
+    if isinstance(obj, float):
+        return obj if not math.isfinite(obj) or obj == 0 else float(f"{obj:.{digits}g}")
+    if isinstance(obj, dict):
+        return {str(k): rounded(v, digits) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [rounded(v, digits) for v in obj]
+    return obj
+
+
 def dump(obj: Any) -> str:
-    return json.dumps(obj, indent=1, sort_keys=True, default=str, allow_nan=True) + "\n"
+    return json.dumps(rounded(obj), indent=1, sort_keys=True, default=str, allow_nan=True) + "\n"
 
 
 def main(argv: list[str]) -> int:

@@ -148,3 +148,27 @@ def test_scorecard_paper_line_parses():
     assert cli.paper_aggregate(text) == {"sessions_armed": 33, "trades_closed": 9, "mean_R": -0.365, "cum_R": -3.29}
     with pytest.raises(ValueError):
         cli.paper_aggregate("nothing here")
+
+
+def test_first_weekday_of_month_and_rounding():
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location("b_audit_cli2", Path(__file__).parents[2] / "scripts/b_audit.py")
+    assert spec and spec.loader
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+    assert cli.first_weekday_of_month(dt.date(2024, 4, 1)) and cli.first_weekday_of_month(dt.date(2019, 6, 3))
+    assert not cli.first_weekday_of_month(dt.date(2019, 6, 4))
+    assert cli.rounded({"a": [0.1234567891234, math.inf, 0.0, 3]}) == {"a": [0.123456789, math.inf, 0.0, 3]}
+
+
+def test_committed_results_reproduce():
+    """EXP-0042's committed results.json is exactly what the driver produces from the committed inputs."""
+    import subprocess
+    import sys
+    from pathlib import Path
+    root = Path(__file__).parents[2]
+    if not (root / "research/experiments/EXP-0042-b-audit-diagnostics/results.json").exists():
+        pytest.skip("EXP-0042 has not been run in this checkout")
+    out = subprocess.run([sys.executable, str(root / "scripts/b_audit.py"), "--check"], capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
