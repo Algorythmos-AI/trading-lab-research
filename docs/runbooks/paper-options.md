@@ -37,9 +37,10 @@ hashes. The job's log line carries counts only.
 - An expiry closes what is open in its contract at zero.
 - An exercise or an assignment books no result. The page says how many positions left that way.
 - A symbol that is not a standard option contract is left out.
-- When the clone has no keys of its own (`APCA_CLONE_*` unset) it trades in this same account. Fills on a contract
-  the clone traded that New York day are then left out, and the page says how many. A hand trade on that very
-  contract on the same day is left out with them.
+- While the clone had no keys of its own (`APCA_CLONE_*` unset) it traded in this same account. Fills on a contract
+  the clone traded that New York day are left out, and the page says how many. That holds whichever account the
+  clone uses today, so its old trades here are not shown as hand-placed. A hand trade on that very contract on the
+  same day is left out with them.
 
 The first run reads two years back, at most 20 pages of 100 a run, and carries on at the next run. Later runs ask
 only for what is newer than the cache, with a day's overlap.
@@ -84,7 +85,7 @@ clone and arms blocks only; the hand-placed trades are added by the `options-liv
 | Page: "N rows could not be read and are left out" | a row lacks what a figure needs | compare the row in `var/options/paper_site/document.json` with the journal; the totals leave it out |
 | Page: "... the clone's own document says ... out of step" | the page's clone total and the clone's own total differ over the same number of trades | compare `trade_closed` rows in the journal with the document; do not rely on either total until they agree |
 | Page: "N older trades are left out" | more than 2,000 clone or hand-placed trades | expected past that count; the newest are kept |
-| A hand-placed trade is missing | it is still open, it is a stock trade, or it is on a contract the clone traded that day in a shared account | expected; the last case goes away once the clone has its own keys |
+| A hand-placed trade is missing | it is still open, it is a stock trade, or it is on a contract the clone traded that day | expected; the last case holds even now the clone has its own keys |
 
 A fault in the history never fails the `options-live` job and never delays the positions: they are sent first,
 and the history runs in its own guard. Its own result is only in the log line.

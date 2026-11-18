@@ -594,6 +594,11 @@ function OpenPositions({ live, now }: { live: OptionsLiveResult; now: Date }) {
   );
 }
 
+/** Why fills in the account are missing from this section: the clone bot made them, and they are in its own section. */
+export function cloneFillsLeftOut(n: number): string {
+  return `${count(n, "fill")} in this account ${n === 1 ? "was" : "were"} the clone bot's own, from when it traded here: ${n === 1 ? "it is" : "they are"} left out, and counted in its section above.`;
+}
+
 function ManualSection({ doc, live, filter, now }: { doc: PaperOptions | null; live: OptionsLiveResult; filter: Filter; now: Date }) {
   const env = "paper" as const;
   const whole = doc ? manualBook(doc) : null;
@@ -613,7 +618,10 @@ function ManualSection({ doc, live, filter, now }: { doc: PaperOptions | null; l
           The trading host reads the paper account&apos;s filled orders and matches them into round trips. Until it does, only what is open shows here.
         </Empty>
       ) : !s ? (
-        <Empty title={whole.trades.length === 0 ? "No closed hand-placed trades yet" : "No hand-placed trades in this view"}>{whole.trades.length === 0 ? "A round trip shows here within a few minutes of its close." : "Pick another period, ticker or kind above."}</Empty>
+        <Empty title={whole.trades.length === 0 ? "No closed hand-placed trades yet" : "No hand-placed trades in this view"}>
+          {whole.trades.length === 0 ? "A round trip shows here within a few minutes of its close." : "Pick another period, ticker or kind above."}
+          {whole.trades.length === 0 && excluded > 0 ? ` ${cloneFillsLeftOut(excluded)}` : ""}
+        </Empty>
       ) : (
         <>
           {whole.skipped > 0 ? (
@@ -625,7 +633,7 @@ function ManualSection({ doc, live, filter, now }: { doc: PaperOptions | null; l
           <p className="text-muted-foreground max-w-prose text-xs">
             Before fees: the paper account charges none. Filled orders are matched first in, first out, so one round trip can be several rows; a contract left to expire closes at zero.
             {gaps > 0 ? ` ${count(gaps, "position")} left by exercise or assignment, not a sale: no result is booked for ${gaps === 1 ? "it" : "them"}.` : ""}
-            {excluded > 0 ? ` ${count(excluded, "fill")} of the clone's own in the same account ${excluded === 1 ? "is" : "are"} left out.` : ""}
+            {excluded > 0 ? ` ${cloneFillsLeftOut(excluded)}` : ""}
           </p>
           <Panel id="manual-curve" title="Running total" icon={ChartLine} means="Every closed hand-placed trade added up, day by day. The shaded band is how far the total stood below its best so far.">
             <PnlCurve points={days.map((d) => ({ day: d.day, pnl: d.pnl, cum: d.cum, dd: d.dd, trades: d.trades }))} />

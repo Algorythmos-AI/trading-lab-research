@@ -283,15 +283,15 @@ def build(now: dt.datetime, run_id: str, journal: Path = JOURNAL, state: Path = 
     cfg = cfg if cfg is not None else yaml.safe_load((CONFIG_DIR / "options_clone.yaml").read_text())
     fee = float(cfg["costs"]["fee_per_contract_each_way"])
     e = os.environ if env is None else env
-    plans = read_plans(state)
+    plans, rows = read_plans(state), jsonl(journal)
     doc: dict[str, Any] = {
         "schema": SCHEMA_ID, "schema_version": SCHEMA_VERSION, "run_id": run_id,
         "as_of": now.astimezone(dt.UTC).replace(microsecond=0).isoformat(), "paper": True,
-        "clone": clone_block(jsonl(journal), plans, fee, e),
+        "clone": clone_block(rows, plans, fee, e),
     }
     if manual is not None:
-        # Only a clone known to share the account has fills in it to leave out.
-        doc["manual"] = paper_manual.block(manual, own_account(e) is False, plans)
+        # The clone's fills are left out whatever its keys say today: it shared this account before it had its own.
+        doc["manual"] = paper_manual.block(manual, plans, rows)
     arms = arms_block(state, fee)
     if arms is not None:
         doc["arms"] = arms

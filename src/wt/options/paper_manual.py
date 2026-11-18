@@ -14,9 +14,11 @@ GET (wt.options.live.OptionsAccount), oldest first, a bounded number of pages a 
 a cache file so the next run asks only for what is newer. Read only: nothing here can place, change or cancel an
 order. No account number, balance or order id is kept in what is sent: a trade's id is a hash.
 
-When the clone trades in this same account (it has no keys of its own), its fills are in this list too. They are
-left out by contract and New York day: any fill on a contract the clone traded that day. A hand trade on the very
-same contract the same day would be left out with them; the count left out is sent, so the page can say so.
+While the clone had no keys of its own it traded in this same account, so its fills are in this list too. They are
+left out by contract and New York day: any fill on a contract the clone traded that day. That holds whichever
+account the clone uses today: the keys say where it trades now, not where it traded then (until 2026-11-18 only a
+clone still sharing the account was left out, and the 17 trades it had made here were sent as hand-placed). A hand
+trade on the very same contract the same day is left out with them; the count left out is sent, so the page can say so.
 """
 from __future__ import annotations
 
@@ -154,7 +156,7 @@ def _trade_id(*parts: str) -> str:
 
 def round_trips(activities: Sequence[Mapping[str, Any]], clone_days: Iterable[tuple[str, str]] = ()) -> dict[str, Any]:
     """`activities` (as `clean` gives them, any order) matched into closed trades, oldest close first.
-    `clone_days`: (contract, New York day) pairs the clone traded in this same account; fills on them are left out."""
+    `clone_days`: (contract, New York day) pairs the clone traded; fills on them are left out."""
     skip = set(clone_days)
     lots: dict[str, deque[dict[str, Any]]] = {}
     trades: list[dict[str, Any]] = []
@@ -204,18 +206,23 @@ def round_trips(activities: Sequence[Mapping[str, Any]], clone_days: Iterable[tu
             "trades": trades[left_out:], "gaps": gaps[-MAX_GAPS:], "_other": other}
 
 
-def clone_days(plans: Mapping[str, Mapping[str, Any]]) -> set[tuple[str, str]]:
-    """The (contract, New York day) pairs of the clone's own trades, from its plan files (trade id `<date>-O-<n>`)."""
+def clone_days(plans: Mapping[str, Mapping[str, Any]], journal: Iterable[Mapping[str, Any]] = ()) -> set[tuple[str, str]]:
+    """The (contract, New York day) pairs of the clone's own trades (trade id `<date>-O-<n>`), from its plan files and
+    from its journal's rows: either names the contract, so a trade whose plan file is gone is still known."""
+    named = [(tid, p.get("symbol")) for tid, p in plans.items()]
+    named += [(r.get("trade_id"), r.get("symbol")) for r in journal if isinstance(r, Mapping)]
     out: set[tuple[str, str]] = set()
-    for tid, p in plans.items():
-        symbol = p.get("symbol")
-        if isinstance(symbol, str) and _OCC.match(symbol) and re.match(r"^\d{4}-\d{2}-\d{2}-O-\d+$", tid):
+    for tid, symbol in named:
+        if (isinstance(tid, str) and isinstance(symbol, str) and _OCC.match(symbol)
+                and re.match(r"^\d{4}-\d{2}-\d{2}-O-\d+$", tid)):
             out.add((symbol, tid[:10]))
     return out
 
 
-def block(activities: Sequence[Mapping[str, Any]], shared: bool, plans: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
-    """The document's `manual` block. `shared`: the clone trades in this account too, so its fills are left out."""
-    got = round_trips(activities, clone_days(plans) if shared else ())
+def block(activities: Sequence[Mapping[str, Any]], plans: Mapping[str, Mapping[str, Any]],
+          journal: Iterable[Mapping[str, Any]] = ()) -> dict[str, Any]:
+    """The document's `manual` block. `plans`, `journal`: the clone's plan files and journal rows; fills on a contract
+    and day it traded are left out, whichever account it trades in now."""
+    got = round_trips(activities, clone_days(plans, journal))
     got.pop("_other", None)
     return got
