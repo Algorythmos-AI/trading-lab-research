@@ -35,10 +35,23 @@ const CONFIG: ChartConfig = {
   dd: { label: "Below the earlier high", color: "var(--chart-8)" },
 };
 
-/** The running total of closed trades in dollars, day by day, with the gap down from its earlier high shaded. */
-export function PnlCurve({ points }: { points: PnlPoint[] }) {
+/** A day worth a line of its own on the curve: where a rule changed, say. */
+export interface PnlMark {
+  day: string;
+  label: string;
+}
+
+/**
+ * The running total of closed trades in dollars, day by day, with the gap down from its earlier high shaded. `marks`
+ * draws a dashed vertical line on each of its days that the curve has.
+ */
+export function PnlCurve({ points, marks = [] }: { points: PnlPoint[]; marks?: readonly PnlMark[] }) {
   // `band` spans the running total and the high it stood below (dd is that gap, 0 or negative).
   const data = points.map((p, i) => ({ ...p, i, band: [p.cum, p.cum - p.dd] as [number, number] }));
+  const lines = marks.flatMap((m) => {
+    const i = data.findIndex((d) => d.day === m.day);
+    return i >= 0 ? [{ i, label: m.label }] : [];
+  });
   return (
     <div>
       <ChartContainer config={CONFIG} className="h-64 sm:h-72" aria-label="Running total of closed trades in dollars, by day, with the fall from the earlier high">
@@ -47,6 +60,9 @@ export function PnlCurve({ points }: { points: PnlPoint[] }) {
           <XAxis dataKey="i" type="number" domain={[0, "dataMax"]} tickLine={false} axisLine={false} tickMargin={8} minTickGap={48} tickFormatter={(i: number) => (data[i] ? dayLabel(data[i]!.day) : "")} />
           <YAxis tickLine={false} axisLine={false} width={56} tickFormatter={shortAxis} domain={["auto", "auto"]} />
           <ReferenceLine y={0} strokeWidth={1.5} ifOverflow="extendDomain" />
+          {lines.map((m) => (
+            <ReferenceLine key={m.i} x={m.i} stroke="var(--chart-axis)" strokeDasharray="4 3" label={{ value: m.label, position: "insideTopLeft", fill: "var(--muted-foreground)", fontSize: 10 }} />
+          ))}
           <Tooltip
             cursor={{ stroke: "var(--chart-axis)", strokeWidth: 1 }}
             content={({ active, payload }) => {

@@ -73,6 +73,11 @@ export interface PollDeps {
    * (the timer keeps its turn), outside a run of failures only.
    */
   fresh?: () => boolean;
+  /**
+   * Optional: the wait between fetches while the tab is hidden, or null to fetch nothing then (the default). Asked
+   * again each time, so it can follow a switch (the board's alerts) without restarting the poll.
+   */
+  hiddenMs?: () => number | null;
 }
 
 export interface Poll {
@@ -87,7 +92,8 @@ export interface Poll {
 }
 
 /**
- * Starts the loop. While the tab is hidden it only looks again every `pollMs`, fetching nothing. When the tab becomes
+ * Starts the loop. While the tab is hidden it only looks again every `pollMs`, fetching nothing (or, with `hiddenMs`
+ * giving a number, fetches every that many ms). When the tab becomes
  * visible it fetches at once (the pending timer is dropped, so no second one runs), unless a request is already in
  * flight (that one's answer schedules the next). While it waits after a failure, showing the tab makes one attempt at
  * once, only one for each run of failures however often the tab is flipped; after that the wait stands. A page
@@ -129,7 +135,10 @@ export function startPoll(d: PollDeps): Poll {
   async function tick(): Promise<void> {
     timer = undefined;
     if (stopped || done || inFlight) return;
-    if (d.page.visibilityState !== "visible") return schedule(interval());
+    const hidden = d.page.visibilityState !== "visible";
+    const hiddenWait = hidden ? (d.hiddenMs?.() ?? null) : null;
+    // Hidden: look again later, fetching nothing, unless the caller keeps reading in the background.
+    if (hidden && hiddenWait === null) return schedule(interval());
     inFlight = true;
     if (failures > 0) emit({ failures, at: null, limited });
     let r: PollResult;
@@ -148,15 +157,20 @@ export function startPoll(d: PollDeps): Poll {
     }
     if (r === "ok") {
       healthy();
-      return schedule(interval());
+      // The next wait follows the page as it is now: shown again while this fetch was out means the usual interval.
+      const still = d.page.visibilityState !== "visible" ? (d.hiddenMs?.() ?? null) : null;
+      return schedule(still ?? interval());
     }
     failures++;
     limited = r === "limited";
     const b = typeof d.backoff === "function" ? d.backoff() : d.backoff;
     const wait = limited ? capDelay(d.limitedCapMs !== undefined ? { ...b, capMs: d.limitedCapMs } : b) : retryDelay(failures, b);
-    retryAt = d.now() + wait;
+    // Hidden and reading in the background: never faster than the hidden pace, failures or not.
+    const slowest = d.page.visibilityState !== "visible" ? (d.hiddenMs?.() ?? null) : null;
+    const next = slowest !== null ? Math.max(wait, slowest) : wait;
+    retryAt = d.now() + next;
     emit({ failures, at: retryAt, limited });
-    schedule(wait);
+    schedule(next);
   }
 
   /** Drop the pending timer and fetch now. */

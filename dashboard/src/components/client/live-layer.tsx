@@ -18,7 +18,7 @@ import {
   RotateCw,
   type LucideIcon,
 } from "lucide-react";
-import { createContext, useContext, useSyncExternalStore } from "react";
+import { createContext, useContext, useEffect, useRef, useSyncExternalStore } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ageSeconds, ageStale, ageText, feedAges, feedLabel } from "@/lib/feed-provenance";
@@ -26,6 +26,9 @@ import { newYork, num } from "@/lib/format";
 import { liveRead, sessionShare, TRAIL_MS, type LiveRead, type LiveStateName, type OptionsTicker } from "@/lib/options";
 import { cn } from "@/lib/utils";
 import type { Backoff } from "@/lib/quote-poll";
+import { useAlertsChosen } from "./alert-prefs";
+import { type ClockPhase, sessionClock } from "@/lib/session-timeline";
+import { serverNow } from "@/lib/trade-state";
 import { useNow } from "./use-now";
 import { usePublishPriceStatus } from "./price-status";
 import { POLL_MS, useQuoteFeed, type Feed } from "./use-quotes";
@@ -43,6 +46,9 @@ interface Live {
 /** Exported for the render tests only; the page reads it through useLive. */
 export const LiveContext = createContext<Live>({ feed: { status: "off" }, session: "", now: null, backoff: null, retryNow: () => undefined });
 
+/** The session's phases in which a hidden tab keeps reading for the board's alerts. */
+const IN_SESSION: ReadonlySet<ClockPhase> = new Set<ClockPhase>(["opening", "open", "lunch", "flat"]);
+
 /**
  * One live feed for the whole Options page, so the glance strip, the level maps and the state chips all move on the
  * same 2-second quote. `enabled` false (an old edition) never polls. Read only: it fetches prices, nothing else.
@@ -51,15 +57,29 @@ export function LiveQuotes({
   symbols,
   session,
   enabled,
+  alerts,
   children,
 }: {
   symbols: string;
   session: string;
   enabled: boolean;
+  /** Only on the page with the board: its half day, so the prices keep coming while the tab is hidden, in session. */
+  alerts?: { halfDay: boolean };
   children: React.ReactNode;
 }) {
-  const { feed, backoff, retryNow } = useQuoteFeed(symbols, enabled);
   const now = useNow(1_000);
+  // With an alert on, on the board's page and while the session runs (its opening range to the close, on the feed's
+  // own clock as the board reads it), the prices keep coming, every 10 s, while the tab is hidden: the board's rings
+  // need them. Never overnight, never on another page. Worked out after each answer, and read by the poll at its turn.
+  const chosen = useAlertsChosen();
+  const background = useRef(false);
+  const { feed, backoff, retryNow } = useQuoteFeed(symbols, enabled, background);
+  const ok = feed.status === "ok";
+  const clock = now === null ? null : serverNow(ok ? feed.asOf : null, ok ? feed.receivedAt : null, now).getTime();
+  const want = !!alerts && chosen && enabled && clock !== null && IN_SESSION.has(sessionClock(session, alerts.halfDay, clock).phase);
+  useEffect(() => {
+    background.current = want;
+  }, [want]);
   // The site header shows this poll's freshness in place of the lab's status pill (price-pill.ts). An old edition
   // never polls, so it publishes nothing and the header keeps the lab's pill.
   usePublishPriceStatus(enabled, feed.status, feed.status === "ok" ? feed.source : null, feed.status === "ok" ? feed.receivedAt : null, backoff !== null);

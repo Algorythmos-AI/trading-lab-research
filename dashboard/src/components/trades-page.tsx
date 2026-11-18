@@ -57,7 +57,19 @@ export function TradesBody({ result, clone, q, now }: { result: JournalResult; c
       ) : (
         <JournalBody doc={result.doc} q={q} now={now} />
       )}
-      <TradesGroup group="clone" hideHeading intro="The paper bot that trades by your rules with its own paper money, apart from your own account.">
+      <TradesGroup
+        group="clone"
+        hideHeading
+        intro={
+          <>
+            The paper bot that trades by your rules with its own paper money, apart from your own account. Its whole history, with charts, is on{" "}
+            <Link href="/paper" className="hover:text-foreground underline underline-offset-2">
+              Paper options
+            </Link>
+            .
+          </>
+        }
+      >
         {/* The clone's own pane, apart from the journal: it draws whether or not the journal is there, and a fault in
             it stays in it. */}
         <PaneBoundary name="Options clone (paper)">

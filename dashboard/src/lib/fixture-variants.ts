@@ -9,6 +9,7 @@ import type { Lot } from "./journal.types";
 import { addDays, nyNow } from "./market-calendar";
 import { nyInstant } from "./options";
 import type { OptionsClone } from "./options-clone.types";
+import type { PaperOptions } from "./paper-options.types";
 import type { OptionsLive } from "./options-live.types";
 import type { OptionsEdition } from "./options.types";
 
@@ -34,6 +35,8 @@ export const VARIANT_COOKIE = "fx";
  * - `v2`: the edition in its second format, with the day's context, events and each name's volatility block.
  * - `positions-off`: no options live document has been published. `positions-none`: one has, with nothing open.
  * - `positions-old`: the document is three hours old.
+ * - `paper-off`: the paper options history has not been published. With `partial` it carries the clone's trades
+ *   only (no hand-placed trades, no arms); with `poison` one clone row names a contract that cannot be read.
  * - `clone-off`: the options clone has published nothing. `clone-latched`: its document on a bad day.
  * - `journal-poison`: a stored trade journal with a null trade, as after corruption. The panes drawn from the trades
  *   must fail alone; the rest of each page keeps working.
@@ -85,6 +88,7 @@ export const VARIANT_FLAGS = [
   "hourly-off",
   "clone-off",
   "clone-latched",
+  "paper-off",
   "calendar-off",
   "calendar-stale",
   "calendar-poison",
@@ -652,6 +656,21 @@ export function fixtureOptionsClone(
       },
     ],
   };
+}
+
+/**
+ * The paper options history fixture, as is; with `partial` the clone's trades only, as before the host reads the
+ * manual account and the arms; with `poison` one clone row whose contract cannot be read (the page leaves it out and
+ * says so).
+ */
+export function fixturePaperOptions(d: PaperOptions, flags: ReadonlySet<VariantFlag> = new Set()): PaperOptions {
+  let out = d;
+  if (flags.has("partial")) out = { ...out, manual: null, arms: null };
+  if (flags.has("poison")) {
+    const [first, ...rest] = out.clone.trades;
+    if (first) out = { ...out, clone: { ...out.clone, trades: [{ ...first, contract: "ZZZ269999C00000000" }, ...rest] } };
+  }
+  return out;
 }
 
 /**

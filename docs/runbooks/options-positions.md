@@ -10,8 +10,11 @@ never see that account.
 | `wt.options.live` | the job | reads positions and the market clock (GET only, paper host), signs and sends |
 | `stocksdelta/options-live` | the dashboard | stored latest-only; the pane reads it |
 
-The job is read only. `OptionsAccount` has two methods, `positions` and `clock`, and the host name is a constant.
+The job is read only. Every `OptionsAccount` method is a GET, and the host name is a constant.
 It never places, changes or cancels an order. Only the primary host's document is stored.
+
+After the positions are sent, the same job builds the Paper page's trade history, which reads this account's
+filled orders and option events (`paper-options.md`). A fault there cannot delay or fail the positions.
 
 What is sent: per open option contract, the OCC symbol, the quantity, the average price, the mark, the market
 value and the unrealised result; and the market clock. Never the account number, balances, buying power, stock

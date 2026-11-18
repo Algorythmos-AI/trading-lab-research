@@ -1,3681 +1,3681 @@
 {
- "_": "Hashes of the board, its drawing, the page surfaces drawn from it and the server evaluation, from code with no bad-data guards: origin/integration 61f46e6 (engine e-3f82b5b4b3c0, before the guards), first written by test/guards-off-run.ts over test/guards-off-cases.ts. Rewritten once on 2026-11-17 for DEC-0052 by the same run on 61f46e6 with DEC-0052's rule applied to it (the diff of trade-state.ts, trade-now.ts, entry-checks.ts and fixture-script.ts), still code with no guards; 693 of the 735 board hashes and all 84 evaluation hashes are unchanged. Rewritten again on 2026-11-17 for DEC-0053 the same way: 61f46e6 with DEC-0052's rule and then DEC-0053's diff of trade-state.ts and trade-now.ts applied to it (the run first reproduced the DEC-0052 hashes exactly); 672 of the 735 board hashes and all 84 evaluation hashes are unchanged from DEC-0052's, the others only in the words of a locked side's line. Never edited by hand.",
+ "_": "Hashes of the board, its drawing, the page surfaces drawn from it and the server evaluation, from code with no bad-data guards: origin/integration 61f46e6 (engine e-3f82b5b4b3c0, before the guards), first written by test/guards-off-run.ts over test/guards-off-cases.ts. Rewritten once on 2026-11-17 for DEC-0052 by the same run on 61f46e6 with DEC-0052's rule applied to it (the diff of trade-state.ts, trade-now.ts, entry-checks.ts and fixture-script.ts), still code with no guards; 693 of the 735 board hashes and all 84 evaluation hashes are unchanged. Rewritten again on 2026-11-17 for DEC-0053 the same way: 61f46e6 with DEC-0052's rule and then DEC-0053's diff of trade-state.ts and trade-now.ts applied to it (the run first reproduced the DEC-0052 hashes exactly); 672 of the 735 board hashes and all 84 evaluation hashes are unchanged from DEC-0052's, the others only in the words of a locked side's line. Never edited by hand. Rewritten on 2026-11-18 for the rail's Alerts menu the same way: 61f46e6 with DEC-0052's and DEC-0053's diffs (the run first reproduced the DEC-0053 hashes exactly) and then the alerts change's diff of the status rail, trade-now.tsx and the live polls applied to it; every board-rows, board-drawing and evaluation hash is unchanged, and only the surfaces hashes moved (the status rail draws one Alerts button in place of the two switches). Rewritten again the same way for the Today log (its button carries the new-lines count), with the Alerts diff and then the log's diff applied; still only the surfaces hashes moved. Rewritten again the same way for the rail's colours (Done for today's states and one set of button colours), with the Alerts, Today log and colour diffs applied; still only the surfaces hashes moved. Rewritten again the same way for the cockpit's shortcut and Full screen button (the switch names its C key), with the Alerts, Today log, colour and cockpit diffs applied; still only the surfaces hashes moved.",
  "cases": "d3aed1b3b8b03753",
  "board": {
   "focus/step0/plain": {
    "rows": "680fdbd99c1d2b2f",
    "html": "367bc44c934a3137",
-   "surfaces": "24195a20a5cc62e2"
+   "surfaces": "900c39bb00b89027"
   },
   "focus/step0/fields": {
    "rows": "680fdbd99c1d2b2f",
    "html": "367bc44c934a3137",
-   "surfaces": "24195a20a5cc62e2"
+   "surfaces": "900c39bb00b89027"
   },
   "focus/step0/suspect-bar-high-below-low": {
    "rows": "680fdbd99c1d2b2f",
    "html": "367bc44c934a3137",
-   "surfaces": "24195a20a5cc62e2"
+   "surfaces": "900c39bb00b89027"
   },
   "focus/step0/suspect-bar-open-outside-range": {
    "rows": "680fdbd99c1d2b2f",
    "html": "367bc44c934a3137",
-   "surfaces": "24195a20a5cc62e2"
+   "surfaces": "900c39bb00b89027"
   },
   "focus/step0/suspect-print-far-outside-day-range": {
    "rows": "064a21bc13bdcbdf",
    "html": "367bc44c934a3137",
-   "surfaces": "24195a20a5cc62e2"
+   "surfaces": "900c39bb00b89027"
   },
   "focus/step0/suspect-quote-crossed": {
    "rows": "680fdbd99c1d2b2f",
    "html": "367bc44c934a3137",
-   "surfaces": "24195a20a5cc62e2"
+   "surfaces": "900c39bb00b89027"
   },
   "focus/step0/suspect-turn": {
    "rows": "680fdbd99c1d2b2f",
    "html": "367bc44c934a3137",
-   "surfaces": "24195a20a5cc62e2"
+   "surfaces": "900c39bb00b89027"
   },
   "focus/step1/plain": {
    "rows": "8647f0cb495e45ed",
    "html": "2905c701bd5422d3",
-   "surfaces": "ccef1f27b29f47f8"
+   "surfaces": "39c241da30656a60"
   },
   "focus/step1/fields": {
    "rows": "8647f0cb495e45ed",
    "html": "2905c701bd5422d3",
-   "surfaces": "ccef1f27b29f47f8"
+   "surfaces": "39c241da30656a60"
   },
   "focus/step1/suspect-bar-high-below-low": {
    "rows": "8647f0cb495e45ed",
    "html": "2905c701bd5422d3",
-   "surfaces": "ccef1f27b29f47f8"
+   "surfaces": "39c241da30656a60"
   },
   "focus/step1/suspect-bar-open-outside-range": {
    "rows": "8647f0cb495e45ed",
    "html": "2905c701bd5422d3",
-   "surfaces": "ccef1f27b29f47f8"
+   "surfaces": "39c241da30656a60"
   },
   "focus/step1/suspect-print-far-outside-day-range": {
    "rows": "d90ddb53c478ddff",
    "html": "2905c701bd5422d3",
-   "surfaces": "ccef1f27b29f47f8"
+   "surfaces": "39c241da30656a60"
   },
   "focus/step1/suspect-quote-crossed": {
    "rows": "8647f0cb495e45ed",
    "html": "2905c701bd5422d3",
-   "surfaces": "ccef1f27b29f47f8"
+   "surfaces": "39c241da30656a60"
   },
   "focus/step1/suspect-turn": {
    "rows": "8647f0cb495e45ed",
    "html": "2905c701bd5422d3",
-   "surfaces": "ccef1f27b29f47f8"
+   "surfaces": "39c241da30656a60"
   },
   "focus/step2/plain": {
    "rows": "0ff21f930f4c1641",
    "html": "4757cc958c18b6bc",
-   "surfaces": "208277802875cf08"
+   "surfaces": "37140336c6e80a28"
   },
   "focus/step2/fields": {
    "rows": "0ff21f930f4c1641",
    "html": "4757cc958c18b6bc",
-   "surfaces": "208277802875cf08"
+   "surfaces": "37140336c6e80a28"
   },
   "focus/step2/suspect-bar-high-below-low": {
    "rows": "0ff21f930f4c1641",
    "html": "4757cc958c18b6bc",
-   "surfaces": "208277802875cf08"
+   "surfaces": "37140336c6e80a28"
   },
   "focus/step2/suspect-bar-open-outside-range": {
    "rows": "0ff21f930f4c1641",
    "html": "4757cc958c18b6bc",
-   "surfaces": "208277802875cf08"
+   "surfaces": "37140336c6e80a28"
   },
   "focus/step2/suspect-print-far-outside-day-range": {
    "rows": "cd2a1f7219d45153",
    "html": "4757cc958c18b6bc",
-   "surfaces": "208277802875cf08"
+   "surfaces": "37140336c6e80a28"
   },
   "focus/step2/suspect-quote-crossed": {
    "rows": "0ff21f930f4c1641",
    "html": "4757cc958c18b6bc",
-   "surfaces": "208277802875cf08"
+   "surfaces": "37140336c6e80a28"
   },
   "focus/step2/suspect-turn": {
    "rows": "0ff21f930f4c1641",
    "html": "4757cc958c18b6bc",
-   "surfaces": "208277802875cf08"
+   "surfaces": "37140336c6e80a28"
   },
   "focus/step3/plain": {
    "rows": "f9dcc282baf4393a",
    "html": "4b05c589d2e4e068",
-   "surfaces": "4cb917f16edaeab2"
+   "surfaces": "df318b0df64346e1"
   },
   "focus/step3/fields": {
    "rows": "f9dcc282baf4393a",
    "html": "4b05c589d2e4e068",
-   "surfaces": "4cb917f16edaeab2"
+   "surfaces": "df318b0df64346e1"
   },
   "focus/step3/suspect-bar-high-below-low": {
    "rows": "f9dcc282baf4393a",
    "html": "4b05c589d2e4e068",
-   "surfaces": "4cb917f16edaeab2"
+   "surfaces": "df318b0df64346e1"
   },
   "focus/step3/suspect-bar-open-outside-range": {
    "rows": "f9dcc282baf4393a",
    "html": "4b05c589d2e4e068",
-   "surfaces": "4cb917f16edaeab2"
+   "surfaces": "df318b0df64346e1"
   },
   "focus/step3/suspect-print-far-outside-day-range": {
    "rows": "c949a7344ee81dd6",
    "html": "f2b5152c74472975",
-   "surfaces": "4cb917f16edaeab2"
+   "surfaces": "df318b0df64346e1"
   },
   "focus/step3/suspect-quote-crossed": {
    "rows": "f9dcc282baf4393a",
    "html": "4b05c589d2e4e068",
-   "surfaces": "4cb917f16edaeab2"
+   "surfaces": "df318b0df64346e1"
   },
   "focus/step3/suspect-turn": {
    "rows": "f9dcc282baf4393a",
    "html": "4b05c589d2e4e068",
-   "surfaces": "4cb917f16edaeab2"
+   "surfaces": "df318b0df64346e1"
   },
   "focus/step4/plain": {
    "rows": "9acf851faa32b4f3",
    "html": "1a494182ffa8b649",
-   "surfaces": "69be46c736ecdaef"
+   "surfaces": "33e7eb1505e14663"
   },
   "focus/step4/fields": {
    "rows": "9acf851faa32b4f3",
    "html": "1a494182ffa8b649",
-   "surfaces": "69be46c736ecdaef"
+   "surfaces": "33e7eb1505e14663"
   },
   "focus/step4/suspect-bar-high-below-low": {
    "rows": "9acf851faa32b4f3",
    "html": "1a494182ffa8b649",
-   "surfaces": "69be46c736ecdaef"
+   "surfaces": "33e7eb1505e14663"
   },
   "focus/step4/suspect-bar-open-outside-range": {
    "rows": "9acf851faa32b4f3",
    "html": "1a494182ffa8b649",
-   "surfaces": "69be46c736ecdaef"
+   "surfaces": "33e7eb1505e14663"
   },
   "focus/step4/suspect-print-far-outside-day-range": {
    "rows": "5b6cdf2d9c9ea8b6",
    "html": "1a494182ffa8b649",
-   "surfaces": "2257f5a489b91aca"
+   "surfaces": "064651ac7416a7b5"
   },
   "focus/step4/suspect-quote-crossed": {
    "rows": "9acf851faa32b4f3",
    "html": "1a494182ffa8b649",
-   "surfaces": "69be46c736ecdaef"
+   "surfaces": "33e7eb1505e14663"
   },
   "focus/step4/suspect-turn": {
    "rows": "9acf851faa32b4f3",
    "html": "1a494182ffa8b649",
-   "surfaces": "69be46c736ecdaef"
+   "surfaces": "33e7eb1505e14663"
   },
   "focus/step5/plain": {
    "rows": "3eb370ee3216ef80",
    "html": "ede6622f7e16bab4",
-   "surfaces": "70d41ee055c14d8e"
+   "surfaces": "2f324d141480f03b"
   },
   "focus/step5/fields": {
    "rows": "3eb370ee3216ef80",
    "html": "ede6622f7e16bab4",
-   "surfaces": "70d41ee055c14d8e"
+   "surfaces": "2f324d141480f03b"
   },
   "focus/step5/suspect-bar-high-below-low": {
    "rows": "3eb370ee3216ef80",
    "html": "ede6622f7e16bab4",
-   "surfaces": "70d41ee055c14d8e"
+   "surfaces": "2f324d141480f03b"
   },
   "focus/step5/suspect-bar-open-outside-range": {
    "rows": "3eb370ee3216ef80",
    "html": "ede6622f7e16bab4",
-   "surfaces": "70d41ee055c14d8e"
+   "surfaces": "2f324d141480f03b"
   },
   "focus/step5/suspect-print-far-outside-day-range": {
    "rows": "3a30811c154a8828",
    "html": "ede6622f7e16bab4",
-   "surfaces": "7d27074bd9c58809"
+   "surfaces": "a78a7601a40969f6"
   },
   "focus/step5/suspect-quote-crossed": {
    "rows": "3eb370ee3216ef80",
    "html": "ede6622f7e16bab4",
-   "surfaces": "70d41ee055c14d8e"
+   "surfaces": "2f324d141480f03b"
   },
   "focus/step5/suspect-turn": {
    "rows": "3eb370ee3216ef80",
    "html": "ede6622f7e16bab4",
-   "surfaces": "70d41ee055c14d8e"
+   "surfaces": "2f324d141480f03b"
   },
   "focus/09:31/fixture/plain": {
    "rows": "42d8edfe848968df",
    "html": "05be2e671796d065",
-   "surfaces": "3a1937d941e579ac"
+   "surfaces": "052fd97366104afa"
   },
   "focus/09:31/fixture/plain/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "0e3e504547f442e4",
-   "surfaces": "fa204fc8755455e1"
+   "surfaces": "7879070e49d04bf3"
   },
   "focus/09:31/fixture/fields": {
    "rows": "42d8edfe848968df",
    "html": "05be2e671796d065",
-   "surfaces": "3a1937d941e579ac"
+   "surfaces": "052fd97366104afa"
   },
   "focus/09:31/fixture/fields/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "0e3e504547f442e4",
-   "surfaces": "fa204fc8755455e1"
+   "surfaces": "7879070e49d04bf3"
   },
   "focus/09:31/fixture/suspect-bar-high-below-low": {
    "rows": "42d8edfe848968df",
    "html": "05be2e671796d065",
-   "surfaces": "3a1937d941e579ac"
+   "surfaces": "052fd97366104afa"
   },
   "focus/09:31/fixture/suspect-bar-high-below-low/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "0e3e504547f442e4",
-   "surfaces": "fa204fc8755455e1"
+   "surfaces": "7879070e49d04bf3"
   },
   "focus/09:31/fixture/suspect-bar-open-outside-range": {
    "rows": "42d8edfe848968df",
    "html": "05be2e671796d065",
-   "surfaces": "3a1937d941e579ac"
+   "surfaces": "052fd97366104afa"
   },
   "focus/09:31/fixture/suspect-bar-open-outside-range/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "0e3e504547f442e4",
-   "surfaces": "fa204fc8755455e1"
+   "surfaces": "7879070e49d04bf3"
   },
   "focus/09:31/fixture/suspect-print-far-outside-day-range": {
    "rows": "da00dc02b07e868f",
    "html": "05be2e671796d065",
-   "surfaces": "3a1937d941e579ac"
+   "surfaces": "052fd97366104afa"
   },
   "focus/09:31/fixture/suspect-print-far-outside-day-range/quiet": {
    "rows": "42d41b6db793c2de",
    "html": "0e3e504547f442e4",
-   "surfaces": "fa204fc8755455e1"
+   "surfaces": "7879070e49d04bf3"
   },
   "focus/09:31/fixture/suspect-quote-crossed": {
    "rows": "42d8edfe848968df",
    "html": "05be2e671796d065",
-   "surfaces": "3a1937d941e579ac"
+   "surfaces": "052fd97366104afa"
   },
   "focus/09:31/fixture/suspect-quote-crossed/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "0e3e504547f442e4",
-   "surfaces": "fa204fc8755455e1"
+   "surfaces": "7879070e49d04bf3"
   },
   "focus/09:31/fixture/suspect-turn": {
    "rows": "42d8edfe848968df",
    "html": "05be2e671796d065",
-   "surfaces": "3a1937d941e579ac"
+   "surfaces": "052fd97366104afa"
   },
   "focus/09:31/fixture/suspect-turn/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "0e3e504547f442e4",
-   "surfaces": "fa204fc8755455e1"
+   "surfaces": "7879070e49d04bf3"
   },
   "focus/09:31/tick/plain": {
    "rows": "42d8edfe848968df",
    "html": "05be2e671796d065",
-   "surfaces": "3a1937d941e579ac"
+   "surfaces": "052fd97366104afa"
   },
   "focus/09:31/tick/fields": {
    "rows": "42d8edfe848968df",
    "html": "05be2e671796d065",
-   "surfaces": "3a1937d941e579ac"
+   "surfaces": "052fd97366104afa"
   },
   "focus/09:31/tick/suspect-bar-high-below-low": {
    "rows": "42d8edfe848968df",
    "html": "05be2e671796d065",
-   "surfaces": "3a1937d941e579ac"
+   "surfaces": "052fd97366104afa"
   },
   "focus/09:31/tick/suspect-bar-open-outside-range": {
    "rows": "42d8edfe848968df",
    "html": "05be2e671796d065",
-   "surfaces": "3a1937d941e579ac"
+   "surfaces": "052fd97366104afa"
   },
   "focus/09:31/tick/suspect-print-far-outside-day-range": {
    "rows": "da00dc02b07e868f",
    "html": "05be2e671796d065",
-   "surfaces": "3a1937d941e579ac"
+   "surfaces": "052fd97366104afa"
   },
   "focus/09:31/tick/suspect-quote-crossed": {
    "rows": "42d8edfe848968df",
    "html": "05be2e671796d065",
-   "surfaces": "3a1937d941e579ac"
+   "surfaces": "052fd97366104afa"
   },
   "focus/09:31/tick/suspect-turn": {
    "rows": "42d8edfe848968df",
    "html": "05be2e671796d065",
-   "surfaces": "3a1937d941e579ac"
+   "surfaces": "052fd97366104afa"
   },
   "focus/09:36/fixture/plain": {
    "rows": "41707d4347201308",
    "html": "70aa6f2882e01034",
-   "surfaces": "fd7a318bf1472f7c"
+   "surfaces": "c763f2455367ce22"
   },
   "focus/09:36/fixture/plain/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "fdbb36731159a4d6",
-   "surfaces": "ab50420c3f8d8e9f"
+   "surfaces": "e4618163f9483e62"
   },
   "focus/09:36/fixture/fields": {
    "rows": "41707d4347201308",
    "html": "70aa6f2882e01034",
-   "surfaces": "fd7a318bf1472f7c"
+   "surfaces": "c763f2455367ce22"
   },
   "focus/09:36/fixture/fields/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "fdbb36731159a4d6",
-   "surfaces": "ab50420c3f8d8e9f"
+   "surfaces": "e4618163f9483e62"
   },
   "focus/09:36/fixture/suspect-bar-high-below-low": {
    "rows": "913a54e86ea89401",
    "html": "70aa6f2882e01034",
-   "surfaces": "a46565aabe3ccb04"
+   "surfaces": "03ed35f8a5def7a8"
   },
   "focus/09:36/fixture/suspect-bar-high-below-low/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "fdbb36731159a4d6",
-   "surfaces": "ab50420c3f8d8e9f"
+   "surfaces": "e4618163f9483e62"
   },
   "focus/09:36/fixture/suspect-bar-open-outside-range": {
    "rows": "41707d4347201308",
    "html": "70aa6f2882e01034",
-   "surfaces": "fd7a318bf1472f7c"
+   "surfaces": "c763f2455367ce22"
   },
   "focus/09:36/fixture/suspect-bar-open-outside-range/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "fdbb36731159a4d6",
-   "surfaces": "ab50420c3f8d8e9f"
+   "surfaces": "e4618163f9483e62"
   },
   "focus/09:36/fixture/suspect-print-far-outside-day-range": {
    "rows": "3d2edb46435585c6",
    "html": "70aa6f2882e01034",
-   "surfaces": "a46565aabe3ccb04"
+   "surfaces": "03ed35f8a5def7a8"
   },
   "focus/09:36/fixture/suspect-print-far-outside-day-range/quiet": {
    "rows": "42d41b6db793c2de",
    "html": "fdbb36731159a4d6",
-   "surfaces": "ab50420c3f8d8e9f"
+   "surfaces": "e4618163f9483e62"
   },
   "focus/09:36/fixture/suspect-quote-crossed": {
    "rows": "41707d4347201308",
    "html": "70aa6f2882e01034",
-   "surfaces": "fd7a318bf1472f7c"
+   "surfaces": "c763f2455367ce22"
   },
   "focus/09:36/fixture/suspect-quote-crossed/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "fdbb36731159a4d6",
-   "surfaces": "ab50420c3f8d8e9f"
+   "surfaces": "e4618163f9483e62"
   },
   "focus/09:36/fixture/suspect-turn": {
    "rows": "41707d4347201308",
    "html": "70aa6f2882e01034",
-   "surfaces": "fd7a318bf1472f7c"
+   "surfaces": "c763f2455367ce22"
   },
   "focus/09:36/fixture/suspect-turn/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "fdbb36731159a4d6",
-   "surfaces": "ab50420c3f8d8e9f"
+   "surfaces": "e4618163f9483e62"
   },
   "focus/09:36/tick/plain": {
    "rows": "41707d4347201308",
    "html": "70aa6f2882e01034",
-   "surfaces": "fd7a318bf1472f7c"
+   "surfaces": "c763f2455367ce22"
   },
   "focus/09:36/tick/fields": {
    "rows": "41707d4347201308",
    "html": "70aa6f2882e01034",
-   "surfaces": "fd7a318bf1472f7c"
+   "surfaces": "c763f2455367ce22"
   },
   "focus/09:36/tick/suspect-bar-high-below-low": {
    "rows": "913a54e86ea89401",
    "html": "70aa6f2882e01034",
-   "surfaces": "a46565aabe3ccb04"
+   "surfaces": "03ed35f8a5def7a8"
   },
   "focus/09:36/tick/suspect-bar-open-outside-range": {
    "rows": "41707d4347201308",
    "html": "70aa6f2882e01034",
-   "surfaces": "fd7a318bf1472f7c"
+   "surfaces": "c763f2455367ce22"
   },
   "focus/09:36/tick/suspect-print-far-outside-day-range": {
    "rows": "3d2edb46435585c6",
    "html": "70aa6f2882e01034",
-   "surfaces": "a46565aabe3ccb04"
+   "surfaces": "03ed35f8a5def7a8"
   },
   "focus/09:36/tick/suspect-quote-crossed": {
    "rows": "41707d4347201308",
    "html": "70aa6f2882e01034",
-   "surfaces": "fd7a318bf1472f7c"
+   "surfaces": "c763f2455367ce22"
   },
   "focus/09:36/tick/suspect-turn": {
    "rows": "41707d4347201308",
    "html": "70aa6f2882e01034",
-   "surfaces": "fd7a318bf1472f7c"
+   "surfaces": "c763f2455367ce22"
   },
   "focus/10:30/fixture/plain": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "868bf19f82570560"
+   "surfaces": "ffdda0af3fd47263"
   },
   "focus/10:30/fixture/plain/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "bdd618bfa6911996",
-   "surfaces": "f246a48775ac0818"
+   "surfaces": "c70a86ded4704207"
   },
   "focus/10:30/fixture/plain/not-live": {
    "rows": "b6d522810af4d0ce",
    "html": "2fbe8273112fedf7",
-   "surfaces": "aab7f9ce6b878aea"
+   "surfaces": "a7b6220f79311aee"
   },
   "focus/10:30/fixture/fields": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "868bf19f82570560"
+   "surfaces": "ffdda0af3fd47263"
   },
   "focus/10:30/fixture/fields/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "bdd618bfa6911996",
-   "surfaces": "f246a48775ac0818"
+   "surfaces": "c70a86ded4704207"
   },
   "focus/10:30/fixture/fields/not-live": {
    "rows": "b6d522810af4d0ce",
    "html": "2fbe8273112fedf7",
-   "surfaces": "aab7f9ce6b878aea"
+   "surfaces": "a7b6220f79311aee"
   },
   "focus/10:30/fixture/suspect-bar-high-below-low": {
    "rows": "c8c94fddcf1aee74",
    "html": "4a651ac15e522c59",
-   "surfaces": "5f9e8be1705f8325"
+   "surfaces": "cf4130dbf8859695"
   },
   "focus/10:30/fixture/suspect-bar-high-below-low/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "bdd618bfa6911996",
-   "surfaces": "f246a48775ac0818"
+   "surfaces": "c70a86ded4704207"
   },
   "focus/10:30/fixture/suspect-bar-high-below-low/not-live": {
    "rows": "b6d522810af4d0ce",
    "html": "2fbe8273112fedf7",
-   "surfaces": "aab7f9ce6b878aea"
+   "surfaces": "a7b6220f79311aee"
   },
   "focus/10:30/fixture/suspect-bar-open-outside-range": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "868bf19f82570560"
+   "surfaces": "ffdda0af3fd47263"
   },
   "focus/10:30/fixture/suspect-bar-open-outside-range/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "bdd618bfa6911996",
-   "surfaces": "f246a48775ac0818"
+   "surfaces": "c70a86ded4704207"
   },
   "focus/10:30/fixture/suspect-bar-open-outside-range/not-live": {
    "rows": "b6d522810af4d0ce",
    "html": "2fbe8273112fedf7",
-   "surfaces": "aab7f9ce6b878aea"
+   "surfaces": "a7b6220f79311aee"
   },
   "focus/10:30/fixture/suspect-print-far-outside-day-range": {
    "rows": "d989adda3808e05a",
    "html": "4a651ac15e522c59",
-   "surfaces": "5f9e8be1705f8325"
+   "surfaces": "cf4130dbf8859695"
   },
   "focus/10:30/fixture/suspect-print-far-outside-day-range/quiet": {
    "rows": "42d41b6db793c2de",
    "html": "bdd618bfa6911996",
-   "surfaces": "f246a48775ac0818"
+   "surfaces": "c70a86ded4704207"
   },
   "focus/10:30/fixture/suspect-print-far-outside-day-range/not-live": {
    "rows": "b6d522810af4d0ce",
    "html": "2fbe8273112fedf7",
-   "surfaces": "aab7f9ce6b878aea"
+   "surfaces": "a7b6220f79311aee"
   },
   "focus/10:30/fixture/suspect-quote-crossed": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "868bf19f82570560"
+   "surfaces": "ffdda0af3fd47263"
   },
   "focus/10:30/fixture/suspect-quote-crossed/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "bdd618bfa6911996",
-   "surfaces": "f246a48775ac0818"
+   "surfaces": "c70a86ded4704207"
   },
   "focus/10:30/fixture/suspect-quote-crossed/not-live": {
    "rows": "b6d522810af4d0ce",
    "html": "2fbe8273112fedf7",
-   "surfaces": "aab7f9ce6b878aea"
+   "surfaces": "a7b6220f79311aee"
   },
   "focus/10:30/fixture/suspect-turn": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "868bf19f82570560"
+   "surfaces": "ffdda0af3fd47263"
   },
   "focus/10:30/fixture/suspect-turn/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "bdd618bfa6911996",
-   "surfaces": "f246a48775ac0818"
+   "surfaces": "c70a86ded4704207"
   },
   "focus/10:30/fixture/suspect-turn/not-live": {
    "rows": "b6d522810af4d0ce",
    "html": "2fbe8273112fedf7",
-   "surfaces": "aab7f9ce6b878aea"
+   "surfaces": "a7b6220f79311aee"
   },
   "focus/10:30/tick/plain": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "868bf19f82570560"
+   "surfaces": "ffdda0af3fd47263"
   },
   "focus/10:30/tick/fields": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "868bf19f82570560"
+   "surfaces": "ffdda0af3fd47263"
   },
   "focus/10:30/tick/suspect-bar-high-below-low": {
    "rows": "c8c94fddcf1aee74",
    "html": "4a651ac15e522c59",
-   "surfaces": "5f9e8be1705f8325"
+   "surfaces": "cf4130dbf8859695"
   },
   "focus/10:30/tick/suspect-bar-open-outside-range": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "868bf19f82570560"
+   "surfaces": "ffdda0af3fd47263"
   },
   "focus/10:30/tick/suspect-print-far-outside-day-range": {
    "rows": "d989adda3808e05a",
    "html": "4a651ac15e522c59",
-   "surfaces": "5f9e8be1705f8325"
+   "surfaces": "cf4130dbf8859695"
   },
   "focus/10:30/tick/suspect-quote-crossed": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "868bf19f82570560"
+   "surfaces": "ffdda0af3fd47263"
   },
   "focus/10:30/tick/suspect-turn": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "868bf19f82570560"
+   "surfaces": "ffdda0af3fd47263"
   },
   "focus/11:45/fixture/plain": {
    "rows": "3c70510194b57da0",
    "html": "c28211c0d88a18a8",
-   "surfaces": "9174ebc746162ed4"
+   "surfaces": "478c003d322af807"
   },
   "focus/11:45/fixture/plain/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "d70d29810883cf74",
-   "surfaces": "de1725007a2e0e90"
+   "surfaces": "d8e509cdd2392761"
   },
   "focus/11:45/fixture/fields": {
    "rows": "3c70510194b57da0",
    "html": "c28211c0d88a18a8",
-   "surfaces": "9174ebc746162ed4"
+   "surfaces": "478c003d322af807"
   },
   "focus/11:45/fixture/fields/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "d70d29810883cf74",
-   "surfaces": "de1725007a2e0e90"
+   "surfaces": "d8e509cdd2392761"
   },
   "focus/11:45/fixture/suspect-bar-high-below-low": {
    "rows": "3c70510194b57da0",
    "html": "c28211c0d88a18a8",
-   "surfaces": "9174ebc746162ed4"
+   "surfaces": "478c003d322af807"
   },
   "focus/11:45/fixture/suspect-bar-high-below-low/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "d70d29810883cf74",
-   "surfaces": "de1725007a2e0e90"
+   "surfaces": "d8e509cdd2392761"
   },
   "focus/11:45/fixture/suspect-bar-open-outside-range": {
    "rows": "3c70510194b57da0",
    "html": "c28211c0d88a18a8",
-   "surfaces": "9174ebc746162ed4"
+   "surfaces": "478c003d322af807"
   },
   "focus/11:45/fixture/suspect-bar-open-outside-range/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "d70d29810883cf74",
-   "surfaces": "de1725007a2e0e90"
+   "surfaces": "d8e509cdd2392761"
   },
   "focus/11:45/fixture/suspect-print-far-outside-day-range": {
    "rows": "779b0ec0fae95c93",
    "html": "c28211c0d88a18a8",
-   "surfaces": "9174ebc746162ed4"
+   "surfaces": "478c003d322af807"
   },
   "focus/11:45/fixture/suspect-print-far-outside-day-range/quiet": {
    "rows": "42d41b6db793c2de",
    "html": "d70d29810883cf74",
-   "surfaces": "de1725007a2e0e90"
+   "surfaces": "d8e509cdd2392761"
   },
   "focus/11:45/fixture/suspect-quote-crossed": {
    "rows": "3c70510194b57da0",
    "html": "c28211c0d88a18a8",
-   "surfaces": "9174ebc746162ed4"
+   "surfaces": "478c003d322af807"
   },
   "focus/11:45/fixture/suspect-quote-crossed/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "d70d29810883cf74",
-   "surfaces": "de1725007a2e0e90"
+   "surfaces": "d8e509cdd2392761"
   },
   "focus/11:45/fixture/suspect-turn": {
    "rows": "3c70510194b57da0",
    "html": "c28211c0d88a18a8",
-   "surfaces": "9174ebc746162ed4"
+   "surfaces": "478c003d322af807"
   },
   "focus/11:45/fixture/suspect-turn/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "d70d29810883cf74",
-   "surfaces": "de1725007a2e0e90"
+   "surfaces": "d8e509cdd2392761"
   },
   "focus/11:45/tick/plain": {
    "rows": "3c70510194b57da0",
    "html": "c28211c0d88a18a8",
-   "surfaces": "9174ebc746162ed4"
+   "surfaces": "478c003d322af807"
   },
   "focus/11:45/tick/fields": {
    "rows": "3c70510194b57da0",
    "html": "c28211c0d88a18a8",
-   "surfaces": "9174ebc746162ed4"
+   "surfaces": "478c003d322af807"
   },
   "focus/11:45/tick/suspect-bar-high-below-low": {
    "rows": "3c70510194b57da0",
    "html": "c28211c0d88a18a8",
-   "surfaces": "9174ebc746162ed4"
+   "surfaces": "478c003d322af807"
   },
   "focus/11:45/tick/suspect-bar-open-outside-range": {
    "rows": "3c70510194b57da0",
    "html": "c28211c0d88a18a8",
-   "surfaces": "9174ebc746162ed4"
+   "surfaces": "478c003d322af807"
   },
   "focus/11:45/tick/suspect-print-far-outside-day-range": {
    "rows": "779b0ec0fae95c93",
    "html": "c28211c0d88a18a8",
-   "surfaces": "9174ebc746162ed4"
+   "surfaces": "478c003d322af807"
   },
   "focus/11:45/tick/suspect-quote-crossed": {
    "rows": "3c70510194b57da0",
    "html": "c28211c0d88a18a8",
-   "surfaces": "9174ebc746162ed4"
+   "surfaces": "478c003d322af807"
   },
   "focus/11:45/tick/suspect-turn": {
    "rows": "3c70510194b57da0",
    "html": "c28211c0d88a18a8",
-   "surfaces": "9174ebc746162ed4"
+   "surfaces": "478c003d322af807"
   },
   "focus/13:05/fixture/plain": {
    "rows": "71c00a3b4872ce1d",
    "html": "479b92e0f24c5690",
-   "surfaces": "29ec2b6ef801876c"
+   "surfaces": "9cb30d1af41ca9d4"
   },
   "focus/13:05/fixture/plain/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "5d656d0af28dce9d",
-   "surfaces": "1d93ed9e33a8f2b9"
+   "surfaces": "6915f6f939b588e2"
   },
   "focus/13:05/fixture/fields": {
    "rows": "71c00a3b4872ce1d",
    "html": "479b92e0f24c5690",
-   "surfaces": "29ec2b6ef801876c"
+   "surfaces": "9cb30d1af41ca9d4"
   },
   "focus/13:05/fixture/fields/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "5d656d0af28dce9d",
-   "surfaces": "1d93ed9e33a8f2b9"
+   "surfaces": "6915f6f939b588e2"
   },
   "focus/13:05/fixture/suspect-bar-high-below-low": {
    "rows": "9b88e596291a7400",
    "html": "479b92e0f24c5690",
-   "surfaces": "8cc71eadedf651bc"
+   "surfaces": "5fac959a9979f612"
   },
   "focus/13:05/fixture/suspect-bar-high-below-low/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "5d656d0af28dce9d",
-   "surfaces": "1d93ed9e33a8f2b9"
+   "surfaces": "6915f6f939b588e2"
   },
   "focus/13:05/fixture/suspect-bar-open-outside-range": {
    "rows": "71c00a3b4872ce1d",
    "html": "479b92e0f24c5690",
-   "surfaces": "29ec2b6ef801876c"
+   "surfaces": "9cb30d1af41ca9d4"
   },
   "focus/13:05/fixture/suspect-bar-open-outside-range/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "5d656d0af28dce9d",
-   "surfaces": "1d93ed9e33a8f2b9"
+   "surfaces": "6915f6f939b588e2"
   },
   "focus/13:05/fixture/suspect-print-far-outside-day-range": {
    "rows": "b779e283d43feb0c",
    "html": "479b92e0f24c5690",
-   "surfaces": "8cc71eadedf651bc"
+   "surfaces": "5fac959a9979f612"
   },
   "focus/13:05/fixture/suspect-print-far-outside-day-range/quiet": {
    "rows": "42d41b6db793c2de",
    "html": "5d656d0af28dce9d",
-   "surfaces": "1d93ed9e33a8f2b9"
+   "surfaces": "6915f6f939b588e2"
   },
   "focus/13:05/fixture/suspect-quote-crossed": {
    "rows": "71c00a3b4872ce1d",
    "html": "479b92e0f24c5690",
-   "surfaces": "29ec2b6ef801876c"
+   "surfaces": "9cb30d1af41ca9d4"
   },
   "focus/13:05/fixture/suspect-quote-crossed/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "5d656d0af28dce9d",
-   "surfaces": "1d93ed9e33a8f2b9"
+   "surfaces": "6915f6f939b588e2"
   },
   "focus/13:05/fixture/suspect-turn": {
    "rows": "71c00a3b4872ce1d",
    "html": "479b92e0f24c5690",
-   "surfaces": "29ec2b6ef801876c"
+   "surfaces": "9cb30d1af41ca9d4"
   },
   "focus/13:05/fixture/suspect-turn/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "5d656d0af28dce9d",
-   "surfaces": "1d93ed9e33a8f2b9"
+   "surfaces": "6915f6f939b588e2"
   },
   "focus/13:05/tick/plain": {
    "rows": "71c00a3b4872ce1d",
    "html": "479b92e0f24c5690",
-   "surfaces": "29ec2b6ef801876c"
+   "surfaces": "9cb30d1af41ca9d4"
   },
   "focus/13:05/tick/fields": {
    "rows": "71c00a3b4872ce1d",
    "html": "479b92e0f24c5690",
-   "surfaces": "29ec2b6ef801876c"
+   "surfaces": "9cb30d1af41ca9d4"
   },
   "focus/13:05/tick/suspect-bar-high-below-low": {
    "rows": "9b88e596291a7400",
    "html": "479b92e0f24c5690",
-   "surfaces": "8cc71eadedf651bc"
+   "surfaces": "5fac959a9979f612"
   },
   "focus/13:05/tick/suspect-bar-open-outside-range": {
    "rows": "71c00a3b4872ce1d",
    "html": "479b92e0f24c5690",
-   "surfaces": "29ec2b6ef801876c"
+   "surfaces": "9cb30d1af41ca9d4"
   },
   "focus/13:05/tick/suspect-print-far-outside-day-range": {
    "rows": "b779e283d43feb0c",
    "html": "479b92e0f24c5690",
-   "surfaces": "8cc71eadedf651bc"
+   "surfaces": "5fac959a9979f612"
   },
   "focus/13:05/tick/suspect-quote-crossed": {
    "rows": "71c00a3b4872ce1d",
    "html": "479b92e0f24c5690",
-   "surfaces": "29ec2b6ef801876c"
+   "surfaces": "9cb30d1af41ca9d4"
   },
   "focus/13:05/tick/suspect-turn": {
    "rows": "71c00a3b4872ce1d",
    "html": "479b92e0f24c5690",
-   "surfaces": "29ec2b6ef801876c"
+   "surfaces": "9cb30d1af41ca9d4"
   },
   "focus/15:20/fixture/plain": {
    "rows": "0fc138cba8b9656e",
    "html": "cf106096b09dc964",
-   "surfaces": "c4a569a15832df5b"
+   "surfaces": "7cc91ffa9f176372"
   },
   "focus/15:20/fixture/plain/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "3ca51ac1962ada8a",
-   "surfaces": "605ccd353acb81a9"
+   "surfaces": "8981e3d129c2dd21"
   },
   "focus/15:20/fixture/fields": {
    "rows": "0fc138cba8b9656e",
    "html": "cf106096b09dc964",
-   "surfaces": "c4a569a15832df5b"
+   "surfaces": "7cc91ffa9f176372"
   },
   "focus/15:20/fixture/fields/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "3ca51ac1962ada8a",
-   "surfaces": "605ccd353acb81a9"
+   "surfaces": "8981e3d129c2dd21"
   },
   "focus/15:20/fixture/suspect-bar-high-below-low": {
    "rows": "0fc138cba8b9656e",
    "html": "cf106096b09dc964",
-   "surfaces": "c4a569a15832df5b"
+   "surfaces": "7cc91ffa9f176372"
   },
   "focus/15:20/fixture/suspect-bar-high-below-low/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "3ca51ac1962ada8a",
-   "surfaces": "605ccd353acb81a9"
+   "surfaces": "8981e3d129c2dd21"
   },
   "focus/15:20/fixture/suspect-bar-open-outside-range": {
    "rows": "0fc138cba8b9656e",
    "html": "cf106096b09dc964",
-   "surfaces": "c4a569a15832df5b"
+   "surfaces": "7cc91ffa9f176372"
   },
   "focus/15:20/fixture/suspect-bar-open-outside-range/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "3ca51ac1962ada8a",
-   "surfaces": "605ccd353acb81a9"
+   "surfaces": "8981e3d129c2dd21"
   },
   "focus/15:20/fixture/suspect-print-far-outside-day-range": {
    "rows": "7b4d849a34679092",
    "html": "cf106096b09dc964",
-   "surfaces": "c4a569a15832df5b"
+   "surfaces": "7cc91ffa9f176372"
   },
   "focus/15:20/fixture/suspect-print-far-outside-day-range/quiet": {
    "rows": "42d41b6db793c2de",
    "html": "3ca51ac1962ada8a",
-   "surfaces": "605ccd353acb81a9"
+   "surfaces": "8981e3d129c2dd21"
   },
   "focus/15:20/fixture/suspect-quote-crossed": {
    "rows": "0fc138cba8b9656e",
    "html": "cf106096b09dc964",
-   "surfaces": "c4a569a15832df5b"
+   "surfaces": "7cc91ffa9f176372"
   },
   "focus/15:20/fixture/suspect-quote-crossed/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "3ca51ac1962ada8a",
-   "surfaces": "605ccd353acb81a9"
+   "surfaces": "8981e3d129c2dd21"
   },
   "focus/15:20/fixture/suspect-turn": {
    "rows": "0fc138cba8b9656e",
    "html": "cf106096b09dc964",
-   "surfaces": "c4a569a15832df5b"
+   "surfaces": "7cc91ffa9f176372"
   },
   "focus/15:20/fixture/suspect-turn/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "3ca51ac1962ada8a",
-   "surfaces": "605ccd353acb81a9"
+   "surfaces": "8981e3d129c2dd21"
   },
   "focus/15:20/tick/plain": {
    "rows": "0fc138cba8b9656e",
    "html": "cf106096b09dc964",
-   "surfaces": "c4a569a15832df5b"
+   "surfaces": "7cc91ffa9f176372"
   },
   "focus/15:20/tick/fields": {
    "rows": "0fc138cba8b9656e",
    "html": "cf106096b09dc964",
-   "surfaces": "c4a569a15832df5b"
+   "surfaces": "7cc91ffa9f176372"
   },
   "focus/15:20/tick/suspect-bar-high-below-low": {
    "rows": "0fc138cba8b9656e",
    "html": "cf106096b09dc964",
-   "surfaces": "c4a569a15832df5b"
+   "surfaces": "7cc91ffa9f176372"
   },
   "focus/15:20/tick/suspect-bar-open-outside-range": {
    "rows": "0fc138cba8b9656e",
    "html": "cf106096b09dc964",
-   "surfaces": "c4a569a15832df5b"
+   "surfaces": "7cc91ffa9f176372"
   },
   "focus/15:20/tick/suspect-print-far-outside-day-range": {
    "rows": "7b4d849a34679092",
    "html": "cf106096b09dc964",
-   "surfaces": "c4a569a15832df5b"
+   "surfaces": "7cc91ffa9f176372"
   },
   "focus/15:20/tick/suspect-quote-crossed": {
    "rows": "0fc138cba8b9656e",
    "html": "cf106096b09dc964",
-   "surfaces": "c4a569a15832df5b"
+   "surfaces": "7cc91ffa9f176372"
   },
   "focus/15:20/tick/suspect-turn": {
    "rows": "0fc138cba8b9656e",
    "html": "cf106096b09dc964",
-   "surfaces": "c4a569a15832df5b"
+   "surfaces": "7cc91ffa9f176372"
   },
   "focus/15:55/fixture/plain": {
    "rows": "0fc138cba8b9656e",
    "html": "74571ac589c9fedf",
-   "surfaces": "1800122be1322a26"
+   "surfaces": "856b7fc0e9c0c177"
   },
   "focus/15:55/fixture/plain/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "ea6ab844d382cfd5",
-   "surfaces": "f5f1fc38b53a0807"
+   "surfaces": "9f4fce73036395c3"
   },
   "focus/15:55/fixture/fields": {
    "rows": "0fc138cba8b9656e",
    "html": "74571ac589c9fedf",
-   "surfaces": "1800122be1322a26"
+   "surfaces": "856b7fc0e9c0c177"
   },
   "focus/15:55/fixture/fields/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "ea6ab844d382cfd5",
-   "surfaces": "f5f1fc38b53a0807"
+   "surfaces": "9f4fce73036395c3"
   },
   "focus/15:55/fixture/suspect-bar-high-below-low": {
    "rows": "0fc138cba8b9656e",
    "html": "74571ac589c9fedf",
-   "surfaces": "1800122be1322a26"
+   "surfaces": "856b7fc0e9c0c177"
   },
   "focus/15:55/fixture/suspect-bar-high-below-low/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "ea6ab844d382cfd5",
-   "surfaces": "f5f1fc38b53a0807"
+   "surfaces": "9f4fce73036395c3"
   },
   "focus/15:55/fixture/suspect-bar-open-outside-range": {
    "rows": "0fc138cba8b9656e",
    "html": "74571ac589c9fedf",
-   "surfaces": "1800122be1322a26"
+   "surfaces": "856b7fc0e9c0c177"
   },
   "focus/15:55/fixture/suspect-bar-open-outside-range/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "ea6ab844d382cfd5",
-   "surfaces": "f5f1fc38b53a0807"
+   "surfaces": "9f4fce73036395c3"
   },
   "focus/15:55/fixture/suspect-print-far-outside-day-range": {
    "rows": "7b4d849a34679092",
    "html": "74571ac589c9fedf",
-   "surfaces": "1800122be1322a26"
+   "surfaces": "856b7fc0e9c0c177"
   },
   "focus/15:55/fixture/suspect-print-far-outside-day-range/quiet": {
    "rows": "42d41b6db793c2de",
    "html": "ea6ab844d382cfd5",
-   "surfaces": "f5f1fc38b53a0807"
+   "surfaces": "9f4fce73036395c3"
   },
   "focus/15:55/fixture/suspect-quote-crossed": {
    "rows": "0fc138cba8b9656e",
    "html": "74571ac589c9fedf",
-   "surfaces": "1800122be1322a26"
+   "surfaces": "856b7fc0e9c0c177"
   },
   "focus/15:55/fixture/suspect-quote-crossed/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "ea6ab844d382cfd5",
-   "surfaces": "f5f1fc38b53a0807"
+   "surfaces": "9f4fce73036395c3"
   },
   "focus/15:55/fixture/suspect-turn": {
    "rows": "0fc138cba8b9656e",
    "html": "74571ac589c9fedf",
-   "surfaces": "1800122be1322a26"
+   "surfaces": "856b7fc0e9c0c177"
   },
   "focus/15:55/fixture/suspect-turn/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "ea6ab844d382cfd5",
-   "surfaces": "f5f1fc38b53a0807"
+   "surfaces": "9f4fce73036395c3"
   },
   "focus/15:55/tick/plain": {
    "rows": "0fc138cba8b9656e",
    "html": "74571ac589c9fedf",
-   "surfaces": "1800122be1322a26"
+   "surfaces": "856b7fc0e9c0c177"
   },
   "focus/15:55/tick/fields": {
    "rows": "0fc138cba8b9656e",
    "html": "74571ac589c9fedf",
-   "surfaces": "1800122be1322a26"
+   "surfaces": "856b7fc0e9c0c177"
   },
   "focus/15:55/tick/suspect-bar-high-below-low": {
    "rows": "0fc138cba8b9656e",
    "html": "74571ac589c9fedf",
-   "surfaces": "1800122be1322a26"
+   "surfaces": "856b7fc0e9c0c177"
   },
   "focus/15:55/tick/suspect-bar-open-outside-range": {
    "rows": "0fc138cba8b9656e",
    "html": "74571ac589c9fedf",
-   "surfaces": "1800122be1322a26"
+   "surfaces": "856b7fc0e9c0c177"
   },
   "focus/15:55/tick/suspect-print-far-outside-day-range": {
    "rows": "7b4d849a34679092",
    "html": "74571ac589c9fedf",
-   "surfaces": "1800122be1322a26"
+   "surfaces": "856b7fc0e9c0c177"
   },
   "focus/15:55/tick/suspect-quote-crossed": {
    "rows": "0fc138cba8b9656e",
    "html": "74571ac589c9fedf",
-   "surfaces": "1800122be1322a26"
+   "surfaces": "856b7fc0e9c0c177"
   },
   "focus/15:55/tick/suspect-turn": {
    "rows": "0fc138cba8b9656e",
    "html": "74571ac589c9fedf",
-   "surfaces": "1800122be1322a26"
+   "surfaces": "856b7fc0e9c0c177"
   },
   "focus/16:05/fixture/plain": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "focus/16:05/fixture/plain/quiet": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "focus/16:05/fixture/fields": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "focus/16:05/fixture/fields/quiet": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "focus/16:05/fixture/suspect-bar-high-below-low": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "focus/16:05/fixture/suspect-bar-high-below-low/quiet": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "focus/16:05/fixture/suspect-bar-open-outside-range": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "focus/16:05/fixture/suspect-bar-open-outside-range/quiet": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "focus/16:05/fixture/suspect-print-far-outside-day-range": {
    "rows": "13dc25d6c242f8aa",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "focus/16:05/fixture/suspect-print-far-outside-day-range/quiet": {
    "rows": "13dc25d6c242f8aa",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "focus/16:05/fixture/suspect-quote-crossed": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "focus/16:05/fixture/suspect-quote-crossed/quiet": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "focus/16:05/fixture/suspect-turn": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "focus/16:05/fixture/suspect-turn/quiet": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "focus/16:05/tick/plain": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "focus/16:05/tick/fields": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "focus/16:05/tick/suspect-bar-high-below-low": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "focus/16:05/tick/suspect-bar-open-outside-range": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "focus/16:05/tick/suspect-print-far-outside-day-range": {
    "rows": "13dc25d6c242f8aa",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "focus/16:05/tick/suspect-quote-crossed": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "focus/16:05/tick/suspect-turn": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "focus/half/10:30/plain": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "2a019d5ba051365a"
+   "surfaces": "c6264a89ae207650"
   },
   "focus/half/10:30/fields": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "2a019d5ba051365a"
+   "surfaces": "c6264a89ae207650"
   },
   "focus/half/10:30/suspect-bar-high-below-low": {
    "rows": "c8c94fddcf1aee74",
    "html": "4a651ac15e522c59",
-   "surfaces": "122f159ab230b2fb"
+   "surfaces": "00da453c335e6ac2"
   },
   "focus/half/10:30/suspect-bar-open-outside-range": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "2a019d5ba051365a"
+   "surfaces": "c6264a89ae207650"
   },
   "focus/half/10:30/suspect-print-far-outside-day-range": {
    "rows": "d989adda3808e05a",
    "html": "4a651ac15e522c59",
-   "surfaces": "122f159ab230b2fb"
+   "surfaces": "00da453c335e6ac2"
   },
   "focus/half/10:30/suspect-quote-crossed": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "2a019d5ba051365a"
+   "surfaces": "c6264a89ae207650"
   },
   "focus/half/10:30/suspect-turn": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "2a019d5ba051365a"
+   "surfaces": "c6264a89ae207650"
   },
   "focus/half/12:05/plain": {
    "rows": "005753b7cd1f5ae6",
    "html": "cd9b59719a56088c",
-   "surfaces": "0334556a0eafa6b7"
+   "surfaces": "08f7dbc12daeb028"
   },
   "focus/half/12:05/fields": {
    "rows": "005753b7cd1f5ae6",
    "html": "cd9b59719a56088c",
-   "surfaces": "0334556a0eafa6b7"
+   "surfaces": "08f7dbc12daeb028"
   },
   "focus/half/12:05/suspect-bar-high-below-low": {
    "rows": "c8c94fddcf1aee74",
    "html": "cd9b59719a56088c",
-   "surfaces": "475d36879baff5dd"
+   "surfaces": "21d6fcb658f66116"
   },
   "focus/half/12:05/suspect-bar-open-outside-range": {
    "rows": "005753b7cd1f5ae6",
    "html": "cd9b59719a56088c",
-   "surfaces": "0334556a0eafa6b7"
+   "surfaces": "08f7dbc12daeb028"
   },
   "focus/half/12:05/suspect-print-far-outside-day-range": {
    "rows": "d989adda3808e05a",
    "html": "cd9b59719a56088c",
-   "surfaces": "475d36879baff5dd"
+   "surfaces": "21d6fcb658f66116"
   },
   "focus/half/12:05/suspect-quote-crossed": {
    "rows": "005753b7cd1f5ae6",
    "html": "cd9b59719a56088c",
-   "surfaces": "0334556a0eafa6b7"
+   "surfaces": "08f7dbc12daeb028"
   },
   "focus/half/12:05/suspect-turn": {
    "rows": "005753b7cd1f5ae6",
    "html": "cd9b59719a56088c",
-   "surfaces": "0334556a0eafa6b7"
+   "surfaces": "08f7dbc12daeb028"
   },
   "focus/half/12:20/plain": {
    "rows": "1d80e66565af1ebf",
    "html": "2736d1beb7aa66d0",
-   "surfaces": "d692eb502c6a96d1"
+   "surfaces": "67572f345be3d4d2"
   },
   "focus/half/12:20/fields": {
    "rows": "1d80e66565af1ebf",
    "html": "2736d1beb7aa66d0",
-   "surfaces": "d692eb502c6a96d1"
+   "surfaces": "67572f345be3d4d2"
   },
   "focus/half/12:20/suspect-bar-high-below-low": {
    "rows": "1d80e66565af1ebf",
    "html": "2736d1beb7aa66d0",
-   "surfaces": "d692eb502c6a96d1"
+   "surfaces": "67572f345be3d4d2"
   },
   "focus/half/12:20/suspect-bar-open-outside-range": {
    "rows": "1d80e66565af1ebf",
    "html": "2736d1beb7aa66d0",
-   "surfaces": "d692eb502c6a96d1"
+   "surfaces": "67572f345be3d4d2"
   },
   "focus/half/12:20/suspect-print-far-outside-day-range": {
    "rows": "d8c104d6853cdf8c",
    "html": "2736d1beb7aa66d0",
-   "surfaces": "d692eb502c6a96d1"
+   "surfaces": "67572f345be3d4d2"
   },
   "focus/half/12:20/suspect-quote-crossed": {
    "rows": "1d80e66565af1ebf",
    "html": "2736d1beb7aa66d0",
-   "surfaces": "d692eb502c6a96d1"
+   "surfaces": "67572f345be3d4d2"
   },
   "focus/half/12:20/suspect-turn": {
    "rows": "1d80e66565af1ebf",
    "html": "2736d1beb7aa66d0",
-   "surfaces": "d692eb502c6a96d1"
+   "surfaces": "67572f345be3d4d2"
   },
   "focus/half/13:05/plain": {
    "rows": "d41182e9709a20ec",
    "html": "48a9062229f5d750",
-   "surfaces": "e3dc54a60916271f"
+   "surfaces": "28aaf17b964664d1"
   },
   "focus/half/13:05/fields": {
    "rows": "d41182e9709a20ec",
    "html": "48a9062229f5d750",
-   "surfaces": "e3dc54a60916271f"
+   "surfaces": "28aaf17b964664d1"
   },
   "focus/half/13:05/suspect-bar-high-below-low": {
    "rows": "d41182e9709a20ec",
    "html": "48a9062229f5d750",
-   "surfaces": "e3dc54a60916271f"
+   "surfaces": "28aaf17b964664d1"
   },
   "focus/half/13:05/suspect-bar-open-outside-range": {
    "rows": "d41182e9709a20ec",
    "html": "48a9062229f5d750",
-   "surfaces": "e3dc54a60916271f"
+   "surfaces": "28aaf17b964664d1"
   },
   "focus/half/13:05/suspect-print-far-outside-day-range": {
    "rows": "13dc25d6c242f8aa",
    "html": "48a9062229f5d750",
-   "surfaces": "e3dc54a60916271f"
+   "surfaces": "28aaf17b964664d1"
   },
   "focus/half/13:05/suspect-quote-crossed": {
    "rows": "d41182e9709a20ec",
    "html": "48a9062229f5d750",
-   "surfaces": "e3dc54a60916271f"
+   "surfaces": "28aaf17b964664d1"
   },
   "focus/half/13:05/suspect-turn": {
    "rows": "d41182e9709a20ec",
    "html": "48a9062229f5d750",
-   "surfaces": "e3dc54a60916271f"
+   "surfaces": "28aaf17b964664d1"
   },
   "partial/step0/plain": {
    "rows": "680fdbd99c1d2b2f",
    "html": "367bc44c934a3137",
-   "surfaces": "b85f7c2d0a39394d"
+   "surfaces": "76804506ea817818"
   },
   "partial/step0/fields": {
    "rows": "680fdbd99c1d2b2f",
    "html": "367bc44c934a3137",
-   "surfaces": "b85f7c2d0a39394d"
+   "surfaces": "76804506ea817818"
   },
   "partial/step0/suspect-bar-high-below-low": {
    "rows": "680fdbd99c1d2b2f",
    "html": "367bc44c934a3137",
-   "surfaces": "b85f7c2d0a39394d"
+   "surfaces": "76804506ea817818"
   },
   "partial/step0/suspect-bar-open-outside-range": {
    "rows": "680fdbd99c1d2b2f",
    "html": "367bc44c934a3137",
-   "surfaces": "b85f7c2d0a39394d"
+   "surfaces": "76804506ea817818"
   },
   "partial/step0/suspect-print-far-outside-day-range": {
    "rows": "064a21bc13bdcbdf",
    "html": "367bc44c934a3137",
-   "surfaces": "b85f7c2d0a39394d"
+   "surfaces": "76804506ea817818"
   },
   "partial/step0/suspect-quote-crossed": {
    "rows": "680fdbd99c1d2b2f",
    "html": "367bc44c934a3137",
-   "surfaces": "b85f7c2d0a39394d"
+   "surfaces": "76804506ea817818"
   },
   "partial/step0/suspect-turn": {
    "rows": "680fdbd99c1d2b2f",
    "html": "367bc44c934a3137",
-   "surfaces": "b85f7c2d0a39394d"
+   "surfaces": "76804506ea817818"
   },
   "partial/step1/plain": {
    "rows": "2f07d46387aa68d4",
    "html": "2905c701bd5422d3",
-   "surfaces": "195b84cb21b08f17"
+   "surfaces": "c7d78ba7f8da9a09"
   },
   "partial/step1/fields": {
    "rows": "2f07d46387aa68d4",
    "html": "2905c701bd5422d3",
-   "surfaces": "195b84cb21b08f17"
+   "surfaces": "c7d78ba7f8da9a09"
   },
   "partial/step1/suspect-bar-high-below-low": {
    "rows": "2f07d46387aa68d4",
    "html": "2905c701bd5422d3",
-   "surfaces": "195b84cb21b08f17"
+   "surfaces": "c7d78ba7f8da9a09"
   },
   "partial/step1/suspect-bar-open-outside-range": {
    "rows": "2f07d46387aa68d4",
    "html": "2905c701bd5422d3",
-   "surfaces": "195b84cb21b08f17"
+   "surfaces": "c7d78ba7f8da9a09"
   },
   "partial/step1/suspect-print-far-outside-day-range": {
    "rows": "764aba20a0703d63",
    "html": "2905c701bd5422d3",
-   "surfaces": "195b84cb21b08f17"
+   "surfaces": "c7d78ba7f8da9a09"
   },
   "partial/step1/suspect-quote-crossed": {
    "rows": "2f07d46387aa68d4",
    "html": "2905c701bd5422d3",
-   "surfaces": "195b84cb21b08f17"
+   "surfaces": "c7d78ba7f8da9a09"
   },
   "partial/step1/suspect-turn": {
    "rows": "2f07d46387aa68d4",
    "html": "2905c701bd5422d3",
-   "surfaces": "195b84cb21b08f17"
+   "surfaces": "c7d78ba7f8da9a09"
   },
   "partial/step2/plain": {
    "rows": "9cdd1a1a82d04f46",
    "html": "4757cc958c18b6bc",
-   "surfaces": "f1de72435eed1512"
+   "surfaces": "3eda592bae845841"
   },
   "partial/step2/fields": {
    "rows": "9cdd1a1a82d04f46",
    "html": "4757cc958c18b6bc",
-   "surfaces": "f1de72435eed1512"
+   "surfaces": "3eda592bae845841"
   },
   "partial/step2/suspect-bar-high-below-low": {
    "rows": "9cdd1a1a82d04f46",
    "html": "4757cc958c18b6bc",
-   "surfaces": "f1de72435eed1512"
+   "surfaces": "3eda592bae845841"
   },
   "partial/step2/suspect-bar-open-outside-range": {
    "rows": "9cdd1a1a82d04f46",
    "html": "4757cc958c18b6bc",
-   "surfaces": "f1de72435eed1512"
+   "surfaces": "3eda592bae845841"
   },
   "partial/step2/suspect-print-far-outside-day-range": {
    "rows": "2a7ccfc1d6994d0e",
    "html": "4757cc958c18b6bc",
-   "surfaces": "f1de72435eed1512"
+   "surfaces": "3eda592bae845841"
   },
   "partial/step2/suspect-quote-crossed": {
    "rows": "9cdd1a1a82d04f46",
    "html": "4757cc958c18b6bc",
-   "surfaces": "f1de72435eed1512"
+   "surfaces": "3eda592bae845841"
   },
   "partial/step2/suspect-turn": {
    "rows": "9cdd1a1a82d04f46",
    "html": "4757cc958c18b6bc",
-   "surfaces": "f1de72435eed1512"
+   "surfaces": "3eda592bae845841"
   },
   "partial/step3/plain": {
    "rows": "bb652ba107842ff4",
    "html": "4b05c589d2e4e068",
-   "surfaces": "3d397518f0bbf997"
+   "surfaces": "102be8a20b4af78a"
   },
   "partial/step3/fields": {
    "rows": "bb652ba107842ff4",
    "html": "4b05c589d2e4e068",
-   "surfaces": "3d397518f0bbf997"
+   "surfaces": "102be8a20b4af78a"
   },
   "partial/step3/suspect-bar-high-below-low": {
    "rows": "bb652ba107842ff4",
    "html": "4b05c589d2e4e068",
-   "surfaces": "3d397518f0bbf997"
+   "surfaces": "102be8a20b4af78a"
   },
   "partial/step3/suspect-bar-open-outside-range": {
    "rows": "bb652ba107842ff4",
    "html": "4b05c589d2e4e068",
-   "surfaces": "3d397518f0bbf997"
+   "surfaces": "102be8a20b4af78a"
   },
   "partial/step3/suspect-print-far-outside-day-range": {
    "rows": "325102763f76334f",
    "html": "f2b5152c74472975",
-   "surfaces": "3d397518f0bbf997"
+   "surfaces": "102be8a20b4af78a"
   },
   "partial/step3/suspect-quote-crossed": {
    "rows": "bb652ba107842ff4",
    "html": "4b05c589d2e4e068",
-   "surfaces": "3d397518f0bbf997"
+   "surfaces": "102be8a20b4af78a"
   },
   "partial/step3/suspect-turn": {
    "rows": "bb652ba107842ff4",
    "html": "4b05c589d2e4e068",
-   "surfaces": "3d397518f0bbf997"
+   "surfaces": "102be8a20b4af78a"
   },
   "partial/step4/plain": {
    "rows": "1f9d57870c548354",
    "html": "1a494182ffa8b649",
-   "surfaces": "839bc83450597b03"
+   "surfaces": "213729fa724a3264"
   },
   "partial/step4/fields": {
    "rows": "1f9d57870c548354",
    "html": "1a494182ffa8b649",
-   "surfaces": "839bc83450597b03"
+   "surfaces": "213729fa724a3264"
   },
   "partial/step4/suspect-bar-high-below-low": {
    "rows": "1f9d57870c548354",
    "html": "1a494182ffa8b649",
-   "surfaces": "839bc83450597b03"
+   "surfaces": "213729fa724a3264"
   },
   "partial/step4/suspect-bar-open-outside-range": {
    "rows": "1f9d57870c548354",
    "html": "1a494182ffa8b649",
-   "surfaces": "839bc83450597b03"
+   "surfaces": "213729fa724a3264"
   },
   "partial/step4/suspect-print-far-outside-day-range": {
    "rows": "32a8b2da337813f9",
    "html": "1a494182ffa8b649",
-   "surfaces": "2684c9a71612bfd1"
+   "surfaces": "bc181bc407933104"
   },
   "partial/step4/suspect-quote-crossed": {
    "rows": "1f9d57870c548354",
    "html": "1a494182ffa8b649",
-   "surfaces": "839bc83450597b03"
+   "surfaces": "213729fa724a3264"
   },
   "partial/step4/suspect-turn": {
    "rows": "1f9d57870c548354",
    "html": "1a494182ffa8b649",
-   "surfaces": "839bc83450597b03"
+   "surfaces": "213729fa724a3264"
   },
   "partial/step5/plain": {
    "rows": "6cdfd990d86130cd",
    "html": "ede6622f7e16bab4",
-   "surfaces": "ae78f17275b1640f"
+   "surfaces": "fb7031127fb197d6"
   },
   "partial/step5/fields": {
    "rows": "6cdfd990d86130cd",
    "html": "ede6622f7e16bab4",
-   "surfaces": "ae78f17275b1640f"
+   "surfaces": "fb7031127fb197d6"
   },
   "partial/step5/suspect-bar-high-below-low": {
    "rows": "6cdfd990d86130cd",
    "html": "ede6622f7e16bab4",
-   "surfaces": "ae78f17275b1640f"
+   "surfaces": "fb7031127fb197d6"
   },
   "partial/step5/suspect-bar-open-outside-range": {
    "rows": "6cdfd990d86130cd",
    "html": "ede6622f7e16bab4",
-   "surfaces": "ae78f17275b1640f"
+   "surfaces": "fb7031127fb197d6"
   },
   "partial/step5/suspect-print-far-outside-day-range": {
    "rows": "d21c2f219413506c",
    "html": "ede6622f7e16bab4",
-   "surfaces": "0931b8515e5cea2d"
+   "surfaces": "7af5b07bdbffddc2"
   },
   "partial/step5/suspect-quote-crossed": {
    "rows": "6cdfd990d86130cd",
    "html": "ede6622f7e16bab4",
-   "surfaces": "ae78f17275b1640f"
+   "surfaces": "fb7031127fb197d6"
   },
   "partial/step5/suspect-turn": {
    "rows": "6cdfd990d86130cd",
    "html": "ede6622f7e16bab4",
-   "surfaces": "ae78f17275b1640f"
+   "surfaces": "fb7031127fb197d6"
   },
   "partial/09:31/fixture/plain": {
    "rows": "284c3134d614142f",
    "html": "3fbc874257ae33b1",
-   "surfaces": "3c5f586365b096fb"
+   "surfaces": "592490cacde2d14b"
   },
   "partial/09:31/fixture/plain/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "200b2c105c0718aa",
-   "surfaces": "fa204fc8755455e1"
+   "surfaces": "7879070e49d04bf3"
   },
   "partial/09:31/fixture/fields": {
    "rows": "284c3134d614142f",
    "html": "3fbc874257ae33b1",
-   "surfaces": "3c5f586365b096fb"
+   "surfaces": "592490cacde2d14b"
   },
   "partial/09:31/fixture/fields/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "200b2c105c0718aa",
-   "surfaces": "fa204fc8755455e1"
+   "surfaces": "7879070e49d04bf3"
   },
   "partial/09:31/fixture/suspect-bar-high-below-low": {
    "rows": "284c3134d614142f",
    "html": "3fbc874257ae33b1",
-   "surfaces": "3c5f586365b096fb"
+   "surfaces": "592490cacde2d14b"
   },
   "partial/09:31/fixture/suspect-bar-high-below-low/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "200b2c105c0718aa",
-   "surfaces": "fa204fc8755455e1"
+   "surfaces": "7879070e49d04bf3"
   },
   "partial/09:31/fixture/suspect-bar-open-outside-range": {
    "rows": "284c3134d614142f",
    "html": "3fbc874257ae33b1",
-   "surfaces": "3c5f586365b096fb"
+   "surfaces": "592490cacde2d14b"
   },
   "partial/09:31/fixture/suspect-bar-open-outside-range/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "200b2c105c0718aa",
-   "surfaces": "fa204fc8755455e1"
+   "surfaces": "7879070e49d04bf3"
   },
   "partial/09:31/fixture/suspect-print-far-outside-day-range": {
    "rows": "09fc7be165e06f0d",
    "html": "3fbc874257ae33b1",
-   "surfaces": "3c5f586365b096fb"
+   "surfaces": "592490cacde2d14b"
   },
   "partial/09:31/fixture/suspect-print-far-outside-day-range/quiet": {
    "rows": "6ad3978ce5f52ef2",
    "html": "200b2c105c0718aa",
-   "surfaces": "fa204fc8755455e1"
+   "surfaces": "7879070e49d04bf3"
   },
   "partial/09:31/fixture/suspect-quote-crossed": {
    "rows": "284c3134d614142f",
    "html": "3fbc874257ae33b1",
-   "surfaces": "3c5f586365b096fb"
+   "surfaces": "592490cacde2d14b"
   },
   "partial/09:31/fixture/suspect-quote-crossed/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "200b2c105c0718aa",
-   "surfaces": "fa204fc8755455e1"
+   "surfaces": "7879070e49d04bf3"
   },
   "partial/09:31/fixture/suspect-turn": {
    "rows": "284c3134d614142f",
    "html": "3fbc874257ae33b1",
-   "surfaces": "3c5f586365b096fb"
+   "surfaces": "592490cacde2d14b"
   },
   "partial/09:31/fixture/suspect-turn/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "200b2c105c0718aa",
-   "surfaces": "fa204fc8755455e1"
+   "surfaces": "7879070e49d04bf3"
   },
   "partial/09:31/tick/plain": {
    "rows": "284c3134d614142f",
    "html": "3fbc874257ae33b1",
-   "surfaces": "3c5f586365b096fb"
+   "surfaces": "592490cacde2d14b"
   },
   "partial/09:31/tick/fields": {
    "rows": "284c3134d614142f",
    "html": "3fbc874257ae33b1",
-   "surfaces": "3c5f586365b096fb"
+   "surfaces": "592490cacde2d14b"
   },
   "partial/09:31/tick/suspect-bar-high-below-low": {
    "rows": "284c3134d614142f",
    "html": "3fbc874257ae33b1",
-   "surfaces": "3c5f586365b096fb"
+   "surfaces": "592490cacde2d14b"
   },
   "partial/09:31/tick/suspect-bar-open-outside-range": {
    "rows": "284c3134d614142f",
    "html": "3fbc874257ae33b1",
-   "surfaces": "3c5f586365b096fb"
+   "surfaces": "592490cacde2d14b"
   },
   "partial/09:31/tick/suspect-print-far-outside-day-range": {
    "rows": "09fc7be165e06f0d",
    "html": "3fbc874257ae33b1",
-   "surfaces": "3c5f586365b096fb"
+   "surfaces": "592490cacde2d14b"
   },
   "partial/09:31/tick/suspect-quote-crossed": {
    "rows": "284c3134d614142f",
    "html": "3fbc874257ae33b1",
-   "surfaces": "3c5f586365b096fb"
+   "surfaces": "592490cacde2d14b"
   },
   "partial/09:31/tick/suspect-turn": {
    "rows": "284c3134d614142f",
    "html": "3fbc874257ae33b1",
-   "surfaces": "3c5f586365b096fb"
+   "surfaces": "592490cacde2d14b"
   },
   "partial/09:36/fixture/plain": {
    "rows": "8b753b7a431cc38c",
    "html": "4735491e65af8adb",
-   "surfaces": "68e27c56fecc54f2"
+   "surfaces": "b63497d306abdd88"
   },
   "partial/09:36/fixture/plain/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "fdbb36731159a4d6",
-   "surfaces": "ab50420c3f8d8e9f"
+   "surfaces": "e4618163f9483e62"
   },
   "partial/09:36/fixture/fields": {
    "rows": "8b753b7a431cc38c",
    "html": "4735491e65af8adb",
-   "surfaces": "68e27c56fecc54f2"
+   "surfaces": "b63497d306abdd88"
   },
   "partial/09:36/fixture/fields/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "fdbb36731159a4d6",
-   "surfaces": "ab50420c3f8d8e9f"
+   "surfaces": "e4618163f9483e62"
   },
   "partial/09:36/fixture/suspect-bar-high-below-low": {
    "rows": "8b753b7a431cc38c",
    "html": "4735491e65af8adb",
-   "surfaces": "68e27c56fecc54f2"
+   "surfaces": "b63497d306abdd88"
   },
   "partial/09:36/fixture/suspect-bar-high-below-low/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "fdbb36731159a4d6",
-   "surfaces": "ab50420c3f8d8e9f"
+   "surfaces": "e4618163f9483e62"
   },
   "partial/09:36/fixture/suspect-bar-open-outside-range": {
    "rows": "8b753b7a431cc38c",
    "html": "4735491e65af8adb",
-   "surfaces": "68e27c56fecc54f2"
+   "surfaces": "b63497d306abdd88"
   },
   "partial/09:36/fixture/suspect-bar-open-outside-range/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "fdbb36731159a4d6",
-   "surfaces": "ab50420c3f8d8e9f"
+   "surfaces": "e4618163f9483e62"
   },
   "partial/09:36/fixture/suspect-print-far-outside-day-range": {
    "rows": "5d0b1faf97406021",
    "html": "4735491e65af8adb",
-   "surfaces": "fd853d6596205f41"
+   "surfaces": "013d8c74e941b5d7"
   },
   "partial/09:36/fixture/suspect-print-far-outside-day-range/quiet": {
    "rows": "6ad3978ce5f52ef2",
    "html": "fdbb36731159a4d6",
-   "surfaces": "ab50420c3f8d8e9f"
+   "surfaces": "e4618163f9483e62"
   },
   "partial/09:36/fixture/suspect-quote-crossed": {
    "rows": "8b753b7a431cc38c",
    "html": "4735491e65af8adb",
-   "surfaces": "68e27c56fecc54f2"
+   "surfaces": "b63497d306abdd88"
   },
   "partial/09:36/fixture/suspect-quote-crossed/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "fdbb36731159a4d6",
-   "surfaces": "ab50420c3f8d8e9f"
+   "surfaces": "e4618163f9483e62"
   },
   "partial/09:36/fixture/suspect-turn": {
    "rows": "8b753b7a431cc38c",
    "html": "4735491e65af8adb",
-   "surfaces": "68e27c56fecc54f2"
+   "surfaces": "b63497d306abdd88"
   },
   "partial/09:36/fixture/suspect-turn/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "fdbb36731159a4d6",
-   "surfaces": "ab50420c3f8d8e9f"
+   "surfaces": "e4618163f9483e62"
   },
   "partial/09:36/tick/plain": {
    "rows": "8b753b7a431cc38c",
    "html": "4735491e65af8adb",
-   "surfaces": "68e27c56fecc54f2"
+   "surfaces": "b63497d306abdd88"
   },
   "partial/09:36/tick/fields": {
    "rows": "8b753b7a431cc38c",
    "html": "4735491e65af8adb",
-   "surfaces": "68e27c56fecc54f2"
+   "surfaces": "b63497d306abdd88"
   },
   "partial/09:36/tick/suspect-bar-high-below-low": {
    "rows": "8b753b7a431cc38c",
    "html": "4735491e65af8adb",
-   "surfaces": "68e27c56fecc54f2"
+   "surfaces": "b63497d306abdd88"
   },
   "partial/09:36/tick/suspect-bar-open-outside-range": {
    "rows": "8b753b7a431cc38c",
    "html": "4735491e65af8adb",
-   "surfaces": "68e27c56fecc54f2"
+   "surfaces": "b63497d306abdd88"
   },
   "partial/09:36/tick/suspect-print-far-outside-day-range": {
    "rows": "5d0b1faf97406021",
    "html": "4735491e65af8adb",
-   "surfaces": "fd853d6596205f41"
+   "surfaces": "013d8c74e941b5d7"
   },
   "partial/09:36/tick/suspect-quote-crossed": {
    "rows": "8b753b7a431cc38c",
    "html": "4735491e65af8adb",
-   "surfaces": "68e27c56fecc54f2"
+   "surfaces": "b63497d306abdd88"
   },
   "partial/09:36/tick/suspect-turn": {
    "rows": "8b753b7a431cc38c",
    "html": "4735491e65af8adb",
-   "surfaces": "68e27c56fecc54f2"
+   "surfaces": "b63497d306abdd88"
   },
   "partial/10:30/fixture/plain": {
    "rows": "999469acc7e56994",
    "html": "66e86e270aedbcb2",
-   "surfaces": "cce25d16c4062209"
+   "surfaces": "3876890bcfcfea2c"
   },
   "partial/10:30/fixture/plain/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "bdd618bfa6911996",
-   "surfaces": "f246a48775ac0818"
+   "surfaces": "c70a86ded4704207"
   },
   "partial/10:30/fixture/plain/not-live": {
    "rows": "e7451394403b864a",
    "html": "2fbe8273112fedf7",
-   "surfaces": "b45764e54b88d68f"
+   "surfaces": "44a32d699eeccb00"
   },
   "partial/10:30/fixture/fields": {
    "rows": "999469acc7e56994",
    "html": "66e86e270aedbcb2",
-   "surfaces": "cce25d16c4062209"
+   "surfaces": "3876890bcfcfea2c"
   },
   "partial/10:30/fixture/fields/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "bdd618bfa6911996",
-   "surfaces": "f246a48775ac0818"
+   "surfaces": "c70a86ded4704207"
   },
   "partial/10:30/fixture/fields/not-live": {
    "rows": "e7451394403b864a",
    "html": "2fbe8273112fedf7",
-   "surfaces": "b45764e54b88d68f"
+   "surfaces": "44a32d699eeccb00"
   },
   "partial/10:30/fixture/suspect-bar-high-below-low": {
    "rows": "999469acc7e56994",
    "html": "66e86e270aedbcb2",
-   "surfaces": "cce25d16c4062209"
+   "surfaces": "3876890bcfcfea2c"
   },
   "partial/10:30/fixture/suspect-bar-high-below-low/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "bdd618bfa6911996",
-   "surfaces": "f246a48775ac0818"
+   "surfaces": "c70a86ded4704207"
   },
   "partial/10:30/fixture/suspect-bar-high-below-low/not-live": {
    "rows": "e7451394403b864a",
    "html": "2fbe8273112fedf7",
-   "surfaces": "b45764e54b88d68f"
+   "surfaces": "44a32d699eeccb00"
   },
   "partial/10:30/fixture/suspect-bar-open-outside-range": {
    "rows": "999469acc7e56994",
    "html": "66e86e270aedbcb2",
-   "surfaces": "cce25d16c4062209"
+   "surfaces": "3876890bcfcfea2c"
   },
   "partial/10:30/fixture/suspect-bar-open-outside-range/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "bdd618bfa6911996",
-   "surfaces": "f246a48775ac0818"
+   "surfaces": "c70a86ded4704207"
   },
   "partial/10:30/fixture/suspect-bar-open-outside-range/not-live": {
    "rows": "e7451394403b864a",
    "html": "2fbe8273112fedf7",
-   "surfaces": "b45764e54b88d68f"
+   "surfaces": "44a32d699eeccb00"
   },
   "partial/10:30/fixture/suspect-print-far-outside-day-range": {
    "rows": "fe42cc548fa35d69",
    "html": "66e86e270aedbcb2",
-   "surfaces": "35cf31b70ec93159"
+   "surfaces": "24e8bd36eb753253"
   },
   "partial/10:30/fixture/suspect-print-far-outside-day-range/quiet": {
    "rows": "6ad3978ce5f52ef2",
    "html": "bdd618bfa6911996",
-   "surfaces": "f246a48775ac0818"
+   "surfaces": "c70a86ded4704207"
   },
   "partial/10:30/fixture/suspect-print-far-outside-day-range/not-live": {
    "rows": "e7451394403b864a",
    "html": "2fbe8273112fedf7",
-   "surfaces": "b45764e54b88d68f"
+   "surfaces": "44a32d699eeccb00"
   },
   "partial/10:30/fixture/suspect-quote-crossed": {
    "rows": "999469acc7e56994",
    "html": "66e86e270aedbcb2",
-   "surfaces": "cce25d16c4062209"
+   "surfaces": "3876890bcfcfea2c"
   },
   "partial/10:30/fixture/suspect-quote-crossed/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "bdd618bfa6911996",
-   "surfaces": "f246a48775ac0818"
+   "surfaces": "c70a86ded4704207"
   },
   "partial/10:30/fixture/suspect-quote-crossed/not-live": {
    "rows": "e7451394403b864a",
    "html": "2fbe8273112fedf7",
-   "surfaces": "b45764e54b88d68f"
+   "surfaces": "44a32d699eeccb00"
   },
   "partial/10:30/fixture/suspect-turn": {
    "rows": "999469acc7e56994",
    "html": "66e86e270aedbcb2",
-   "surfaces": "cce25d16c4062209"
+   "surfaces": "3876890bcfcfea2c"
   },
   "partial/10:30/fixture/suspect-turn/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "bdd618bfa6911996",
-   "surfaces": "f246a48775ac0818"
+   "surfaces": "c70a86ded4704207"
   },
   "partial/10:30/fixture/suspect-turn/not-live": {
    "rows": "e7451394403b864a",
    "html": "2fbe8273112fedf7",
-   "surfaces": "b45764e54b88d68f"
+   "surfaces": "44a32d699eeccb00"
   },
   "partial/10:30/tick/plain": {
    "rows": "999469acc7e56994",
    "html": "66e86e270aedbcb2",
-   "surfaces": "cce25d16c4062209"
+   "surfaces": "3876890bcfcfea2c"
   },
   "partial/10:30/tick/fields": {
    "rows": "999469acc7e56994",
    "html": "66e86e270aedbcb2",
-   "surfaces": "cce25d16c4062209"
+   "surfaces": "3876890bcfcfea2c"
   },
   "partial/10:30/tick/suspect-bar-high-below-low": {
    "rows": "999469acc7e56994",
    "html": "66e86e270aedbcb2",
-   "surfaces": "cce25d16c4062209"
+   "surfaces": "3876890bcfcfea2c"
   },
   "partial/10:30/tick/suspect-bar-open-outside-range": {
    "rows": "999469acc7e56994",
    "html": "66e86e270aedbcb2",
-   "surfaces": "cce25d16c4062209"
+   "surfaces": "3876890bcfcfea2c"
   },
   "partial/10:30/tick/suspect-print-far-outside-day-range": {
    "rows": "fe42cc548fa35d69",
    "html": "66e86e270aedbcb2",
-   "surfaces": "35cf31b70ec93159"
+   "surfaces": "24e8bd36eb753253"
   },
   "partial/10:30/tick/suspect-quote-crossed": {
    "rows": "999469acc7e56994",
    "html": "66e86e270aedbcb2",
-   "surfaces": "cce25d16c4062209"
+   "surfaces": "3876890bcfcfea2c"
   },
   "partial/10:30/tick/suspect-turn": {
    "rows": "999469acc7e56994",
    "html": "66e86e270aedbcb2",
-   "surfaces": "cce25d16c4062209"
+   "surfaces": "3876890bcfcfea2c"
   },
   "partial/11:45/fixture/plain": {
    "rows": "a476b2339291522c",
    "html": "c28211c0d88a18a8",
-   "surfaces": "1b160a49b80d95c2"
+   "surfaces": "f2675aae5bf07e68"
   },
   "partial/11:45/fixture/plain/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "d70d29810883cf74",
-   "surfaces": "de1725007a2e0e90"
+   "surfaces": "d8e509cdd2392761"
   },
   "partial/11:45/fixture/fields": {
    "rows": "a476b2339291522c",
    "html": "c28211c0d88a18a8",
-   "surfaces": "1b160a49b80d95c2"
+   "surfaces": "f2675aae5bf07e68"
   },
   "partial/11:45/fixture/fields/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "d70d29810883cf74",
-   "surfaces": "de1725007a2e0e90"
+   "surfaces": "d8e509cdd2392761"
   },
   "partial/11:45/fixture/suspect-bar-high-below-low": {
    "rows": "a476b2339291522c",
    "html": "c28211c0d88a18a8",
-   "surfaces": "1b160a49b80d95c2"
+   "surfaces": "f2675aae5bf07e68"
   },
   "partial/11:45/fixture/suspect-bar-high-below-low/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "d70d29810883cf74",
-   "surfaces": "de1725007a2e0e90"
+   "surfaces": "d8e509cdd2392761"
   },
   "partial/11:45/fixture/suspect-bar-open-outside-range": {
    "rows": "a476b2339291522c",
    "html": "c28211c0d88a18a8",
-   "surfaces": "1b160a49b80d95c2"
+   "surfaces": "f2675aae5bf07e68"
   },
   "partial/11:45/fixture/suspect-bar-open-outside-range/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "d70d29810883cf74",
-   "surfaces": "de1725007a2e0e90"
+   "surfaces": "d8e509cdd2392761"
   },
   "partial/11:45/fixture/suspect-print-far-outside-day-range": {
    "rows": "b5a032832b41df6d",
    "html": "c28211c0d88a18a8",
-   "surfaces": "1b160a49b80d95c2"
+   "surfaces": "f2675aae5bf07e68"
   },
   "partial/11:45/fixture/suspect-print-far-outside-day-range/quiet": {
    "rows": "6ad3978ce5f52ef2",
    "html": "d70d29810883cf74",
-   "surfaces": "de1725007a2e0e90"
+   "surfaces": "d8e509cdd2392761"
   },
   "partial/11:45/fixture/suspect-quote-crossed": {
    "rows": "a476b2339291522c",
    "html": "c28211c0d88a18a8",
-   "surfaces": "1b160a49b80d95c2"
+   "surfaces": "f2675aae5bf07e68"
   },
   "partial/11:45/fixture/suspect-quote-crossed/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "d70d29810883cf74",
-   "surfaces": "de1725007a2e0e90"
+   "surfaces": "d8e509cdd2392761"
   },
   "partial/11:45/fixture/suspect-turn": {
    "rows": "a476b2339291522c",
    "html": "c28211c0d88a18a8",
-   "surfaces": "1b160a49b80d95c2"
+   "surfaces": "f2675aae5bf07e68"
   },
   "partial/11:45/fixture/suspect-turn/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "d70d29810883cf74",
-   "surfaces": "de1725007a2e0e90"
+   "surfaces": "d8e509cdd2392761"
   },
   "partial/11:45/tick/plain": {
    "rows": "a476b2339291522c",
    "html": "c28211c0d88a18a8",
-   "surfaces": "1b160a49b80d95c2"
+   "surfaces": "f2675aae5bf07e68"
   },
   "partial/11:45/tick/fields": {
    "rows": "a476b2339291522c",
    "html": "c28211c0d88a18a8",
-   "surfaces": "1b160a49b80d95c2"
+   "surfaces": "f2675aae5bf07e68"
   },
   "partial/11:45/tick/suspect-bar-high-below-low": {
    "rows": "a476b2339291522c",
    "html": "c28211c0d88a18a8",
-   "surfaces": "1b160a49b80d95c2"
+   "surfaces": "f2675aae5bf07e68"
   },
   "partial/11:45/tick/suspect-bar-open-outside-range": {
    "rows": "a476b2339291522c",
    "html": "c28211c0d88a18a8",
-   "surfaces": "1b160a49b80d95c2"
+   "surfaces": "f2675aae5bf07e68"
   },
   "partial/11:45/tick/suspect-print-far-outside-day-range": {
    "rows": "b5a032832b41df6d",
    "html": "c28211c0d88a18a8",
-   "surfaces": "1b160a49b80d95c2"
+   "surfaces": "f2675aae5bf07e68"
   },
   "partial/11:45/tick/suspect-quote-crossed": {
    "rows": "a476b2339291522c",
    "html": "c28211c0d88a18a8",
-   "surfaces": "1b160a49b80d95c2"
+   "surfaces": "f2675aae5bf07e68"
   },
   "partial/11:45/tick/suspect-turn": {
    "rows": "a476b2339291522c",
    "html": "c28211c0d88a18a8",
-   "surfaces": "1b160a49b80d95c2"
+   "surfaces": "f2675aae5bf07e68"
   },
   "partial/13:05/fixture/plain": {
    "rows": "05ab8405fce6657e",
    "html": "a4208c42eefd9c4c",
-   "surfaces": "1e48cbbc3d515274"
+   "surfaces": "5e5b7c42d478e5f0"
   },
   "partial/13:05/fixture/plain/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "5d656d0af28dce9d",
-   "surfaces": "1d93ed9e33a8f2b9"
+   "surfaces": "6915f6f939b588e2"
   },
   "partial/13:05/fixture/fields": {
    "rows": "05ab8405fce6657e",
    "html": "a4208c42eefd9c4c",
-   "surfaces": "1e48cbbc3d515274"
+   "surfaces": "5e5b7c42d478e5f0"
   },
   "partial/13:05/fixture/fields/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "5d656d0af28dce9d",
-   "surfaces": "1d93ed9e33a8f2b9"
+   "surfaces": "6915f6f939b588e2"
   },
   "partial/13:05/fixture/suspect-bar-high-below-low": {
    "rows": "05ab8405fce6657e",
    "html": "a4208c42eefd9c4c",
-   "surfaces": "1e48cbbc3d515274"
+   "surfaces": "5e5b7c42d478e5f0"
   },
   "partial/13:05/fixture/suspect-bar-high-below-low/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "5d656d0af28dce9d",
-   "surfaces": "1d93ed9e33a8f2b9"
+   "surfaces": "6915f6f939b588e2"
   },
   "partial/13:05/fixture/suspect-bar-open-outside-range": {
    "rows": "05ab8405fce6657e",
    "html": "a4208c42eefd9c4c",
-   "surfaces": "1e48cbbc3d515274"
+   "surfaces": "5e5b7c42d478e5f0"
   },
   "partial/13:05/fixture/suspect-bar-open-outside-range/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "5d656d0af28dce9d",
-   "surfaces": "1d93ed9e33a8f2b9"
+   "surfaces": "6915f6f939b588e2"
   },
   "partial/13:05/fixture/suspect-print-far-outside-day-range": {
    "rows": "e98e5749968dd7f6",
    "html": "a4208c42eefd9c4c",
-   "surfaces": "32f027891715c59c"
+   "surfaces": "3c50b7b3c6bd7685"
   },
   "partial/13:05/fixture/suspect-print-far-outside-day-range/quiet": {
    "rows": "6ad3978ce5f52ef2",
    "html": "5d656d0af28dce9d",
-   "surfaces": "1d93ed9e33a8f2b9"
+   "surfaces": "6915f6f939b588e2"
   },
   "partial/13:05/fixture/suspect-quote-crossed": {
    "rows": "05ab8405fce6657e",
    "html": "a4208c42eefd9c4c",
-   "surfaces": "1e48cbbc3d515274"
+   "surfaces": "5e5b7c42d478e5f0"
   },
   "partial/13:05/fixture/suspect-quote-crossed/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "5d656d0af28dce9d",
-   "surfaces": "1d93ed9e33a8f2b9"
+   "surfaces": "6915f6f939b588e2"
   },
   "partial/13:05/fixture/suspect-turn": {
    "rows": "05ab8405fce6657e",
    "html": "a4208c42eefd9c4c",
-   "surfaces": "1e48cbbc3d515274"
+   "surfaces": "5e5b7c42d478e5f0"
   },
   "partial/13:05/fixture/suspect-turn/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "5d656d0af28dce9d",
-   "surfaces": "1d93ed9e33a8f2b9"
+   "surfaces": "6915f6f939b588e2"
   },
   "partial/13:05/tick/plain": {
    "rows": "05ab8405fce6657e",
    "html": "a4208c42eefd9c4c",
-   "surfaces": "1e48cbbc3d515274"
+   "surfaces": "5e5b7c42d478e5f0"
   },
   "partial/13:05/tick/fields": {
    "rows": "05ab8405fce6657e",
    "html": "a4208c42eefd9c4c",
-   "surfaces": "1e48cbbc3d515274"
+   "surfaces": "5e5b7c42d478e5f0"
   },
   "partial/13:05/tick/suspect-bar-high-below-low": {
    "rows": "05ab8405fce6657e",
    "html": "a4208c42eefd9c4c",
-   "surfaces": "1e48cbbc3d515274"
+   "surfaces": "5e5b7c42d478e5f0"
   },
   "partial/13:05/tick/suspect-bar-open-outside-range": {
    "rows": "05ab8405fce6657e",
    "html": "a4208c42eefd9c4c",
-   "surfaces": "1e48cbbc3d515274"
+   "surfaces": "5e5b7c42d478e5f0"
   },
   "partial/13:05/tick/suspect-print-far-outside-day-range": {
    "rows": "e98e5749968dd7f6",
    "html": "a4208c42eefd9c4c",
-   "surfaces": "32f027891715c59c"
+   "surfaces": "3c50b7b3c6bd7685"
   },
   "partial/13:05/tick/suspect-quote-crossed": {
    "rows": "05ab8405fce6657e",
    "html": "a4208c42eefd9c4c",
-   "surfaces": "1e48cbbc3d515274"
+   "surfaces": "5e5b7c42d478e5f0"
   },
   "partial/13:05/tick/suspect-turn": {
    "rows": "05ab8405fce6657e",
    "html": "a4208c42eefd9c4c",
-   "surfaces": "1e48cbbc3d515274"
+   "surfaces": "5e5b7c42d478e5f0"
   },
   "partial/15:20/fixture/plain": {
    "rows": "176367d99e692287",
    "html": "cf106096b09dc964",
-   "surfaces": "ecd268f8af273b18"
+   "surfaces": "5314b94c93a18af7"
   },
   "partial/15:20/fixture/plain/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "3ca51ac1962ada8a",
-   "surfaces": "605ccd353acb81a9"
+   "surfaces": "8981e3d129c2dd21"
   },
   "partial/15:20/fixture/fields": {
    "rows": "176367d99e692287",
    "html": "cf106096b09dc964",
-   "surfaces": "ecd268f8af273b18"
+   "surfaces": "5314b94c93a18af7"
   },
   "partial/15:20/fixture/fields/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "3ca51ac1962ada8a",
-   "surfaces": "605ccd353acb81a9"
+   "surfaces": "8981e3d129c2dd21"
   },
   "partial/15:20/fixture/suspect-bar-high-below-low": {
    "rows": "176367d99e692287",
    "html": "cf106096b09dc964",
-   "surfaces": "ecd268f8af273b18"
+   "surfaces": "5314b94c93a18af7"
   },
   "partial/15:20/fixture/suspect-bar-high-below-low/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "3ca51ac1962ada8a",
-   "surfaces": "605ccd353acb81a9"
+   "surfaces": "8981e3d129c2dd21"
   },
   "partial/15:20/fixture/suspect-bar-open-outside-range": {
    "rows": "176367d99e692287",
    "html": "cf106096b09dc964",
-   "surfaces": "ecd268f8af273b18"
+   "surfaces": "5314b94c93a18af7"
   },
   "partial/15:20/fixture/suspect-bar-open-outside-range/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "3ca51ac1962ada8a",
-   "surfaces": "605ccd353acb81a9"
+   "surfaces": "8981e3d129c2dd21"
   },
   "partial/15:20/fixture/suspect-print-far-outside-day-range": {
    "rows": "8f7e2af84acd8159",
    "html": "cf106096b09dc964",
-   "surfaces": "ecd268f8af273b18"
+   "surfaces": "5314b94c93a18af7"
   },
   "partial/15:20/fixture/suspect-print-far-outside-day-range/quiet": {
    "rows": "6ad3978ce5f52ef2",
    "html": "3ca51ac1962ada8a",
-   "surfaces": "605ccd353acb81a9"
+   "surfaces": "8981e3d129c2dd21"
   },
   "partial/15:20/fixture/suspect-quote-crossed": {
    "rows": "176367d99e692287",
    "html": "cf106096b09dc964",
-   "surfaces": "ecd268f8af273b18"
+   "surfaces": "5314b94c93a18af7"
   },
   "partial/15:20/fixture/suspect-quote-crossed/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "3ca51ac1962ada8a",
-   "surfaces": "605ccd353acb81a9"
+   "surfaces": "8981e3d129c2dd21"
   },
   "partial/15:20/fixture/suspect-turn": {
    "rows": "176367d99e692287",
    "html": "cf106096b09dc964",
-   "surfaces": "ecd268f8af273b18"
+   "surfaces": "5314b94c93a18af7"
   },
   "partial/15:20/fixture/suspect-turn/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "3ca51ac1962ada8a",
-   "surfaces": "605ccd353acb81a9"
+   "surfaces": "8981e3d129c2dd21"
   },
   "partial/15:20/tick/plain": {
    "rows": "176367d99e692287",
    "html": "cf106096b09dc964",
-   "surfaces": "ecd268f8af273b18"
+   "surfaces": "5314b94c93a18af7"
   },
   "partial/15:20/tick/fields": {
    "rows": "176367d99e692287",
    "html": "cf106096b09dc964",
-   "surfaces": "ecd268f8af273b18"
+   "surfaces": "5314b94c93a18af7"
   },
   "partial/15:20/tick/suspect-bar-high-below-low": {
    "rows": "176367d99e692287",
    "html": "cf106096b09dc964",
-   "surfaces": "ecd268f8af273b18"
+   "surfaces": "5314b94c93a18af7"
   },
   "partial/15:20/tick/suspect-bar-open-outside-range": {
    "rows": "176367d99e692287",
    "html": "cf106096b09dc964",
-   "surfaces": "ecd268f8af273b18"
+   "surfaces": "5314b94c93a18af7"
   },
   "partial/15:20/tick/suspect-print-far-outside-day-range": {
    "rows": "8f7e2af84acd8159",
    "html": "cf106096b09dc964",
-   "surfaces": "ecd268f8af273b18"
+   "surfaces": "5314b94c93a18af7"
   },
   "partial/15:20/tick/suspect-quote-crossed": {
    "rows": "176367d99e692287",
    "html": "cf106096b09dc964",
-   "surfaces": "ecd268f8af273b18"
+   "surfaces": "5314b94c93a18af7"
   },
   "partial/15:20/tick/suspect-turn": {
    "rows": "176367d99e692287",
    "html": "cf106096b09dc964",
-   "surfaces": "ecd268f8af273b18"
+   "surfaces": "5314b94c93a18af7"
   },
   "partial/15:55/fixture/plain": {
    "rows": "176367d99e692287",
    "html": "74571ac589c9fedf",
-   "surfaces": "6f813bc0be7b5a79"
+   "surfaces": "0e47deff2f1f632b"
   },
   "partial/15:55/fixture/plain/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "ea6ab844d382cfd5",
-   "surfaces": "f5f1fc38b53a0807"
+   "surfaces": "9f4fce73036395c3"
   },
   "partial/15:55/fixture/fields": {
    "rows": "176367d99e692287",
    "html": "74571ac589c9fedf",
-   "surfaces": "6f813bc0be7b5a79"
+   "surfaces": "0e47deff2f1f632b"
   },
   "partial/15:55/fixture/fields/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "ea6ab844d382cfd5",
-   "surfaces": "f5f1fc38b53a0807"
+   "surfaces": "9f4fce73036395c3"
   },
   "partial/15:55/fixture/suspect-bar-high-below-low": {
    "rows": "176367d99e692287",
    "html": "74571ac589c9fedf",
-   "surfaces": "6f813bc0be7b5a79"
+   "surfaces": "0e47deff2f1f632b"
   },
   "partial/15:55/fixture/suspect-bar-high-below-low/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "ea6ab844d382cfd5",
-   "surfaces": "f5f1fc38b53a0807"
+   "surfaces": "9f4fce73036395c3"
   },
   "partial/15:55/fixture/suspect-bar-open-outside-range": {
    "rows": "176367d99e692287",
    "html": "74571ac589c9fedf",
-   "surfaces": "6f813bc0be7b5a79"
+   "surfaces": "0e47deff2f1f632b"
   },
   "partial/15:55/fixture/suspect-bar-open-outside-range/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "ea6ab844d382cfd5",
-   "surfaces": "f5f1fc38b53a0807"
+   "surfaces": "9f4fce73036395c3"
   },
   "partial/15:55/fixture/suspect-print-far-outside-day-range": {
    "rows": "8f7e2af84acd8159",
    "html": "74571ac589c9fedf",
-   "surfaces": "6f813bc0be7b5a79"
+   "surfaces": "0e47deff2f1f632b"
   },
   "partial/15:55/fixture/suspect-print-far-outside-day-range/quiet": {
    "rows": "6ad3978ce5f52ef2",
    "html": "ea6ab844d382cfd5",
-   "surfaces": "f5f1fc38b53a0807"
+   "surfaces": "9f4fce73036395c3"
   },
   "partial/15:55/fixture/suspect-quote-crossed": {
    "rows": "176367d99e692287",
    "html": "74571ac589c9fedf",
-   "surfaces": "6f813bc0be7b5a79"
+   "surfaces": "0e47deff2f1f632b"
   },
   "partial/15:55/fixture/suspect-quote-crossed/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "ea6ab844d382cfd5",
-   "surfaces": "f5f1fc38b53a0807"
+   "surfaces": "9f4fce73036395c3"
   },
   "partial/15:55/fixture/suspect-turn": {
    "rows": "176367d99e692287",
    "html": "74571ac589c9fedf",
-   "surfaces": "6f813bc0be7b5a79"
+   "surfaces": "0e47deff2f1f632b"
   },
   "partial/15:55/fixture/suspect-turn/quiet": {
    "rows": "aa5bfcdcd8921aaf",
    "html": "ea6ab844d382cfd5",
-   "surfaces": "f5f1fc38b53a0807"
+   "surfaces": "9f4fce73036395c3"
   },
   "partial/15:55/tick/plain": {
    "rows": "176367d99e692287",
    "html": "74571ac589c9fedf",
-   "surfaces": "6f813bc0be7b5a79"
+   "surfaces": "0e47deff2f1f632b"
   },
   "partial/15:55/tick/fields": {
    "rows": "176367d99e692287",
    "html": "74571ac589c9fedf",
-   "surfaces": "6f813bc0be7b5a79"
+   "surfaces": "0e47deff2f1f632b"
   },
   "partial/15:55/tick/suspect-bar-high-below-low": {
    "rows": "176367d99e692287",
    "html": "74571ac589c9fedf",
-   "surfaces": "6f813bc0be7b5a79"
+   "surfaces": "0e47deff2f1f632b"
   },
   "partial/15:55/tick/suspect-bar-open-outside-range": {
    "rows": "176367d99e692287",
    "html": "74571ac589c9fedf",
-   "surfaces": "6f813bc0be7b5a79"
+   "surfaces": "0e47deff2f1f632b"
   },
   "partial/15:55/tick/suspect-print-far-outside-day-range": {
    "rows": "8f7e2af84acd8159",
    "html": "74571ac589c9fedf",
-   "surfaces": "6f813bc0be7b5a79"
+   "surfaces": "0e47deff2f1f632b"
   },
   "partial/15:55/tick/suspect-quote-crossed": {
    "rows": "176367d99e692287",
    "html": "74571ac589c9fedf",
-   "surfaces": "6f813bc0be7b5a79"
+   "surfaces": "0e47deff2f1f632b"
   },
   "partial/15:55/tick/suspect-turn": {
    "rows": "176367d99e692287",
    "html": "74571ac589c9fedf",
-   "surfaces": "6f813bc0be7b5a79"
+   "surfaces": "0e47deff2f1f632b"
   },
   "partial/16:05/fixture/plain": {
    "rows": "4ac8dbd6b06d617b",
    "html": "811cf56a07686f2e",
-   "surfaces": "2aff2ccbd32e0813"
+   "surfaces": "c34b7d00d0d8bb37"
   },
   "partial/16:05/fixture/plain/quiet": {
    "rows": "4ac8dbd6b06d617b",
    "html": "811cf56a07686f2e",
-   "surfaces": "2aff2ccbd32e0813"
+   "surfaces": "c34b7d00d0d8bb37"
   },
   "partial/16:05/fixture/fields": {
    "rows": "4ac8dbd6b06d617b",
    "html": "811cf56a07686f2e",
-   "surfaces": "2aff2ccbd32e0813"
+   "surfaces": "c34b7d00d0d8bb37"
   },
   "partial/16:05/fixture/fields/quiet": {
    "rows": "4ac8dbd6b06d617b",
    "html": "811cf56a07686f2e",
-   "surfaces": "2aff2ccbd32e0813"
+   "surfaces": "c34b7d00d0d8bb37"
   },
   "partial/16:05/fixture/suspect-bar-high-below-low": {
    "rows": "4ac8dbd6b06d617b",
    "html": "811cf56a07686f2e",
-   "surfaces": "2aff2ccbd32e0813"
+   "surfaces": "c34b7d00d0d8bb37"
   },
   "partial/16:05/fixture/suspect-bar-high-below-low/quiet": {
    "rows": "4ac8dbd6b06d617b",
    "html": "811cf56a07686f2e",
-   "surfaces": "2aff2ccbd32e0813"
+   "surfaces": "c34b7d00d0d8bb37"
   },
   "partial/16:05/fixture/suspect-bar-open-outside-range": {
    "rows": "4ac8dbd6b06d617b",
    "html": "811cf56a07686f2e",
-   "surfaces": "2aff2ccbd32e0813"
+   "surfaces": "c34b7d00d0d8bb37"
   },
   "partial/16:05/fixture/suspect-bar-open-outside-range/quiet": {
    "rows": "4ac8dbd6b06d617b",
    "html": "811cf56a07686f2e",
-   "surfaces": "2aff2ccbd32e0813"
+   "surfaces": "c34b7d00d0d8bb37"
   },
   "partial/16:05/fixture/suspect-print-far-outside-day-range": {
    "rows": "102e7f792a907024",
    "html": "811cf56a07686f2e",
-   "surfaces": "2aff2ccbd32e0813"
+   "surfaces": "c34b7d00d0d8bb37"
   },
   "partial/16:05/fixture/suspect-print-far-outside-day-range/quiet": {
    "rows": "102e7f792a907024",
    "html": "811cf56a07686f2e",
-   "surfaces": "2aff2ccbd32e0813"
+   "surfaces": "c34b7d00d0d8bb37"
   },
   "partial/16:05/fixture/suspect-quote-crossed": {
    "rows": "4ac8dbd6b06d617b",
    "html": "811cf56a07686f2e",
-   "surfaces": "2aff2ccbd32e0813"
+   "surfaces": "c34b7d00d0d8bb37"
   },
   "partial/16:05/fixture/suspect-quote-crossed/quiet": {
    "rows": "4ac8dbd6b06d617b",
    "html": "811cf56a07686f2e",
-   "surfaces": "2aff2ccbd32e0813"
+   "surfaces": "c34b7d00d0d8bb37"
   },
   "partial/16:05/fixture/suspect-turn": {
    "rows": "4ac8dbd6b06d617b",
    "html": "811cf56a07686f2e",
-   "surfaces": "2aff2ccbd32e0813"
+   "surfaces": "c34b7d00d0d8bb37"
   },
   "partial/16:05/fixture/suspect-turn/quiet": {
    "rows": "4ac8dbd6b06d617b",
    "html": "811cf56a07686f2e",
-   "surfaces": "2aff2ccbd32e0813"
+   "surfaces": "c34b7d00d0d8bb37"
   },
   "partial/16:05/tick/plain": {
    "rows": "4ac8dbd6b06d617b",
    "html": "811cf56a07686f2e",
-   "surfaces": "2aff2ccbd32e0813"
+   "surfaces": "c34b7d00d0d8bb37"
   },
   "partial/16:05/tick/fields": {
    "rows": "4ac8dbd6b06d617b",
    "html": "811cf56a07686f2e",
-   "surfaces": "2aff2ccbd32e0813"
+   "surfaces": "c34b7d00d0d8bb37"
   },
   "partial/16:05/tick/suspect-bar-high-below-low": {
    "rows": "4ac8dbd6b06d617b",
    "html": "811cf56a07686f2e",
-   "surfaces": "2aff2ccbd32e0813"
+   "surfaces": "c34b7d00d0d8bb37"
   },
   "partial/16:05/tick/suspect-bar-open-outside-range": {
    "rows": "4ac8dbd6b06d617b",
    "html": "811cf56a07686f2e",
-   "surfaces": "2aff2ccbd32e0813"
+   "surfaces": "c34b7d00d0d8bb37"
   },
   "partial/16:05/tick/suspect-print-far-outside-day-range": {
    "rows": "102e7f792a907024",
    "html": "811cf56a07686f2e",
-   "surfaces": "2aff2ccbd32e0813"
+   "surfaces": "c34b7d00d0d8bb37"
   },
   "partial/16:05/tick/suspect-quote-crossed": {
    "rows": "4ac8dbd6b06d617b",
    "html": "811cf56a07686f2e",
-   "surfaces": "2aff2ccbd32e0813"
+   "surfaces": "c34b7d00d0d8bb37"
   },
   "partial/16:05/tick/suspect-turn": {
    "rows": "4ac8dbd6b06d617b",
    "html": "811cf56a07686f2e",
-   "surfaces": "2aff2ccbd32e0813"
+   "surfaces": "c34b7d00d0d8bb37"
   },
   "partial/half/10:30/plain": {
    "rows": "999469acc7e56994",
    "html": "66e86e270aedbcb2",
-   "surfaces": "e5a7acdad5f8f6f8"
+   "surfaces": "7c64556fb7812740"
   },
   "partial/half/10:30/fields": {
    "rows": "999469acc7e56994",
    "html": "66e86e270aedbcb2",
-   "surfaces": "e5a7acdad5f8f6f8"
+   "surfaces": "7c64556fb7812740"
   },
   "partial/half/10:30/suspect-bar-high-below-low": {
    "rows": "999469acc7e56994",
    "html": "66e86e270aedbcb2",
-   "surfaces": "e5a7acdad5f8f6f8"
+   "surfaces": "7c64556fb7812740"
   },
   "partial/half/10:30/suspect-bar-open-outside-range": {
    "rows": "999469acc7e56994",
    "html": "66e86e270aedbcb2",
-   "surfaces": "e5a7acdad5f8f6f8"
+   "surfaces": "7c64556fb7812740"
   },
   "partial/half/10:30/suspect-print-far-outside-day-range": {
    "rows": "fe42cc548fa35d69",
    "html": "66e86e270aedbcb2",
-   "surfaces": "e89796461b7cd927"
+   "surfaces": "28e7879eb4566490"
   },
   "partial/half/10:30/suspect-quote-crossed": {
    "rows": "999469acc7e56994",
    "html": "66e86e270aedbcb2",
-   "surfaces": "e5a7acdad5f8f6f8"
+   "surfaces": "7c64556fb7812740"
   },
   "partial/half/10:30/suspect-turn": {
    "rows": "999469acc7e56994",
    "html": "66e86e270aedbcb2",
-   "surfaces": "e5a7acdad5f8f6f8"
+   "surfaces": "7c64556fb7812740"
   },
   "partial/half/12:05/plain": {
    "rows": "999469acc7e56994",
    "html": "5298ad932627a64a",
-   "surfaces": "0c512da4f16fbee5"
+   "surfaces": "05b10f3afb754367"
   },
   "partial/half/12:05/fields": {
    "rows": "999469acc7e56994",
    "html": "5298ad932627a64a",
-   "surfaces": "0c512da4f16fbee5"
+   "surfaces": "05b10f3afb754367"
   },
   "partial/half/12:05/suspect-bar-high-below-low": {
    "rows": "999469acc7e56994",
    "html": "5298ad932627a64a",
-   "surfaces": "0c512da4f16fbee5"
+   "surfaces": "05b10f3afb754367"
   },
   "partial/half/12:05/suspect-bar-open-outside-range": {
    "rows": "999469acc7e56994",
    "html": "5298ad932627a64a",
-   "surfaces": "0c512da4f16fbee5"
+   "surfaces": "05b10f3afb754367"
   },
   "partial/half/12:05/suspect-print-far-outside-day-range": {
    "rows": "fe42cc548fa35d69",
    "html": "5298ad932627a64a",
-   "surfaces": "0b35d1a0dadb5b32"
+   "surfaces": "f22566a7b2592902"
   },
   "partial/half/12:05/suspect-quote-crossed": {
    "rows": "999469acc7e56994",
    "html": "5298ad932627a64a",
-   "surfaces": "0c512da4f16fbee5"
+   "surfaces": "05b10f3afb754367"
   },
   "partial/half/12:05/suspect-turn": {
    "rows": "999469acc7e56994",
    "html": "5298ad932627a64a",
-   "surfaces": "0c512da4f16fbee5"
+   "surfaces": "05b10f3afb754367"
   },
   "partial/half/12:20/plain": {
    "rows": "c909f8d73a0d7b01",
    "html": "2736d1beb7aa66d0",
-   "surfaces": "1aa8dd1521f3c7a8"
+   "surfaces": "7b1c56ce59dcda1b"
   },
   "partial/half/12:20/fields": {
    "rows": "c909f8d73a0d7b01",
    "html": "2736d1beb7aa66d0",
-   "surfaces": "1aa8dd1521f3c7a8"
+   "surfaces": "7b1c56ce59dcda1b"
   },
   "partial/half/12:20/suspect-bar-high-below-low": {
    "rows": "c909f8d73a0d7b01",
    "html": "2736d1beb7aa66d0",
-   "surfaces": "1aa8dd1521f3c7a8"
+   "surfaces": "7b1c56ce59dcda1b"
   },
   "partial/half/12:20/suspect-bar-open-outside-range": {
    "rows": "c909f8d73a0d7b01",
    "html": "2736d1beb7aa66d0",
-   "surfaces": "1aa8dd1521f3c7a8"
+   "surfaces": "7b1c56ce59dcda1b"
   },
   "partial/half/12:20/suspect-print-far-outside-day-range": {
    "rows": "6b4e29d2bf13aa53",
    "html": "2736d1beb7aa66d0",
-   "surfaces": "1aa8dd1521f3c7a8"
+   "surfaces": "7b1c56ce59dcda1b"
   },
   "partial/half/12:20/suspect-quote-crossed": {
    "rows": "c909f8d73a0d7b01",
    "html": "2736d1beb7aa66d0",
-   "surfaces": "1aa8dd1521f3c7a8"
+   "surfaces": "7b1c56ce59dcda1b"
   },
   "partial/half/12:20/suspect-turn": {
    "rows": "c909f8d73a0d7b01",
    "html": "2736d1beb7aa66d0",
-   "surfaces": "1aa8dd1521f3c7a8"
+   "surfaces": "7b1c56ce59dcda1b"
   },
   "partial/half/13:05/plain": {
    "rows": "4ac8dbd6b06d617b",
    "html": "ba23994e8a3d9c31",
-   "surfaces": "a0b88ff62a77de1b"
+   "surfaces": "b4c967b34ee342bc"
   },
   "partial/half/13:05/fields": {
    "rows": "4ac8dbd6b06d617b",
    "html": "ba23994e8a3d9c31",
-   "surfaces": "a0b88ff62a77de1b"
+   "surfaces": "b4c967b34ee342bc"
   },
   "partial/half/13:05/suspect-bar-high-below-low": {
    "rows": "4ac8dbd6b06d617b",
    "html": "ba23994e8a3d9c31",
-   "surfaces": "a0b88ff62a77de1b"
+   "surfaces": "b4c967b34ee342bc"
   },
   "partial/half/13:05/suspect-bar-open-outside-range": {
    "rows": "4ac8dbd6b06d617b",
    "html": "ba23994e8a3d9c31",
-   "surfaces": "a0b88ff62a77de1b"
+   "surfaces": "b4c967b34ee342bc"
   },
   "partial/half/13:05/suspect-print-far-outside-day-range": {
    "rows": "102e7f792a907024",
    "html": "ba23994e8a3d9c31",
-   "surfaces": "a0b88ff62a77de1b"
+   "surfaces": "b4c967b34ee342bc"
   },
   "partial/half/13:05/suspect-quote-crossed": {
    "rows": "4ac8dbd6b06d617b",
    "html": "ba23994e8a3d9c31",
-   "surfaces": "a0b88ff62a77de1b"
+   "surfaces": "b4c967b34ee342bc"
   },
   "partial/half/13:05/suspect-turn": {
    "rows": "4ac8dbd6b06d617b",
    "html": "ba23994e8a3d9c31",
-   "surfaces": "a0b88ff62a77de1b"
+   "surfaces": "b4c967b34ee342bc"
   },
   "v2/step0/plain": {
    "rows": "680fdbd99c1d2b2f",
    "html": "367bc44c934a3137",
-   "surfaces": "24195a20a5cc62e2"
+   "surfaces": "900c39bb00b89027"
   },
   "v2/step0/fields": {
    "rows": "680fdbd99c1d2b2f",
    "html": "367bc44c934a3137",
-   "surfaces": "24195a20a5cc62e2"
+   "surfaces": "900c39bb00b89027"
   },
   "v2/step0/suspect-bar-high-below-low": {
    "rows": "680fdbd99c1d2b2f",
    "html": "367bc44c934a3137",
-   "surfaces": "24195a20a5cc62e2"
+   "surfaces": "900c39bb00b89027"
   },
   "v2/step0/suspect-bar-open-outside-range": {
    "rows": "680fdbd99c1d2b2f",
    "html": "367bc44c934a3137",
-   "surfaces": "24195a20a5cc62e2"
+   "surfaces": "900c39bb00b89027"
   },
   "v2/step0/suspect-print-far-outside-day-range": {
    "rows": "064a21bc13bdcbdf",
    "html": "367bc44c934a3137",
-   "surfaces": "24195a20a5cc62e2"
+   "surfaces": "900c39bb00b89027"
   },
   "v2/step0/suspect-quote-crossed": {
    "rows": "680fdbd99c1d2b2f",
    "html": "367bc44c934a3137",
-   "surfaces": "24195a20a5cc62e2"
+   "surfaces": "900c39bb00b89027"
   },
   "v2/step0/suspect-turn": {
    "rows": "680fdbd99c1d2b2f",
    "html": "367bc44c934a3137",
-   "surfaces": "24195a20a5cc62e2"
+   "surfaces": "900c39bb00b89027"
   },
   "v2/step1/plain": {
    "rows": "8647f0cb495e45ed",
    "html": "2905c701bd5422d3",
-   "surfaces": "ccef1f27b29f47f8"
+   "surfaces": "39c241da30656a60"
   },
   "v2/step1/fields": {
    "rows": "8647f0cb495e45ed",
    "html": "2905c701bd5422d3",
-   "surfaces": "ccef1f27b29f47f8"
+   "surfaces": "39c241da30656a60"
   },
   "v2/step1/suspect-bar-high-below-low": {
    "rows": "8647f0cb495e45ed",
    "html": "2905c701bd5422d3",
-   "surfaces": "ccef1f27b29f47f8"
+   "surfaces": "39c241da30656a60"
   },
   "v2/step1/suspect-bar-open-outside-range": {
    "rows": "8647f0cb495e45ed",
    "html": "2905c701bd5422d3",
-   "surfaces": "ccef1f27b29f47f8"
+   "surfaces": "39c241da30656a60"
   },
   "v2/step1/suspect-print-far-outside-day-range": {
    "rows": "d90ddb53c478ddff",
    "html": "2905c701bd5422d3",
-   "surfaces": "ccef1f27b29f47f8"
+   "surfaces": "39c241da30656a60"
   },
   "v2/step1/suspect-quote-crossed": {
    "rows": "8647f0cb495e45ed",
    "html": "2905c701bd5422d3",
-   "surfaces": "ccef1f27b29f47f8"
+   "surfaces": "39c241da30656a60"
   },
   "v2/step1/suspect-turn": {
    "rows": "8647f0cb495e45ed",
    "html": "2905c701bd5422d3",
-   "surfaces": "ccef1f27b29f47f8"
+   "surfaces": "39c241da30656a60"
   },
   "v2/step2/plain": {
    "rows": "0ff21f930f4c1641",
    "html": "4757cc958c18b6bc",
-   "surfaces": "208277802875cf08"
+   "surfaces": "37140336c6e80a28"
   },
   "v2/step2/fields": {
    "rows": "0ff21f930f4c1641",
    "html": "4757cc958c18b6bc",
-   "surfaces": "208277802875cf08"
+   "surfaces": "37140336c6e80a28"
   },
   "v2/step2/suspect-bar-high-below-low": {
    "rows": "0ff21f930f4c1641",
    "html": "4757cc958c18b6bc",
-   "surfaces": "208277802875cf08"
+   "surfaces": "37140336c6e80a28"
   },
   "v2/step2/suspect-bar-open-outside-range": {
    "rows": "0ff21f930f4c1641",
    "html": "4757cc958c18b6bc",
-   "surfaces": "208277802875cf08"
+   "surfaces": "37140336c6e80a28"
   },
   "v2/step2/suspect-print-far-outside-day-range": {
    "rows": "cd2a1f7219d45153",
    "html": "4757cc958c18b6bc",
-   "surfaces": "208277802875cf08"
+   "surfaces": "37140336c6e80a28"
   },
   "v2/step2/suspect-quote-crossed": {
    "rows": "0ff21f930f4c1641",
    "html": "4757cc958c18b6bc",
-   "surfaces": "208277802875cf08"
+   "surfaces": "37140336c6e80a28"
   },
   "v2/step2/suspect-turn": {
    "rows": "0ff21f930f4c1641",
    "html": "4757cc958c18b6bc",
-   "surfaces": "208277802875cf08"
+   "surfaces": "37140336c6e80a28"
   },
   "v2/step3/plain": {
    "rows": "f9dcc282baf4393a",
    "html": "4b05c589d2e4e068",
-   "surfaces": "4cb917f16edaeab2"
+   "surfaces": "df318b0df64346e1"
   },
   "v2/step3/fields": {
    "rows": "f9dcc282baf4393a",
    "html": "4b05c589d2e4e068",
-   "surfaces": "4cb917f16edaeab2"
+   "surfaces": "df318b0df64346e1"
   },
   "v2/step3/suspect-bar-high-below-low": {
    "rows": "f9dcc282baf4393a",
    "html": "4b05c589d2e4e068",
-   "surfaces": "4cb917f16edaeab2"
+   "surfaces": "df318b0df64346e1"
   },
   "v2/step3/suspect-bar-open-outside-range": {
    "rows": "f9dcc282baf4393a",
    "html": "4b05c589d2e4e068",
-   "surfaces": "4cb917f16edaeab2"
+   "surfaces": "df318b0df64346e1"
   },
   "v2/step3/suspect-print-far-outside-day-range": {
    "rows": "c949a7344ee81dd6",
    "html": "f2b5152c74472975",
-   "surfaces": "4cb917f16edaeab2"
+   "surfaces": "df318b0df64346e1"
   },
   "v2/step3/suspect-quote-crossed": {
    "rows": "f9dcc282baf4393a",
    "html": "4b05c589d2e4e068",
-   "surfaces": "4cb917f16edaeab2"
+   "surfaces": "df318b0df64346e1"
   },
   "v2/step3/suspect-turn": {
    "rows": "f9dcc282baf4393a",
    "html": "4b05c589d2e4e068",
-   "surfaces": "4cb917f16edaeab2"
+   "surfaces": "df318b0df64346e1"
   },
   "v2/step4/plain": {
    "rows": "9acf851faa32b4f3",
    "html": "1a494182ffa8b649",
-   "surfaces": "69be46c736ecdaef"
+   "surfaces": "33e7eb1505e14663"
   },
   "v2/step4/fields": {
    "rows": "9acf851faa32b4f3",
    "html": "1a494182ffa8b649",
-   "surfaces": "69be46c736ecdaef"
+   "surfaces": "33e7eb1505e14663"
   },
   "v2/step4/suspect-bar-high-below-low": {
    "rows": "9acf851faa32b4f3",
    "html": "1a494182ffa8b649",
-   "surfaces": "69be46c736ecdaef"
+   "surfaces": "33e7eb1505e14663"
   },
   "v2/step4/suspect-bar-open-outside-range": {
    "rows": "9acf851faa32b4f3",
    "html": "1a494182ffa8b649",
-   "surfaces": "69be46c736ecdaef"
+   "surfaces": "33e7eb1505e14663"
   },
   "v2/step4/suspect-print-far-outside-day-range": {
    "rows": "5b6cdf2d9c9ea8b6",
    "html": "1a494182ffa8b649",
-   "surfaces": "2257f5a489b91aca"
+   "surfaces": "064651ac7416a7b5"
   },
   "v2/step4/suspect-quote-crossed": {
    "rows": "9acf851faa32b4f3",
    "html": "1a494182ffa8b649",
-   "surfaces": "69be46c736ecdaef"
+   "surfaces": "33e7eb1505e14663"
   },
   "v2/step4/suspect-turn": {
    "rows": "9acf851faa32b4f3",
    "html": "1a494182ffa8b649",
-   "surfaces": "69be46c736ecdaef"
+   "surfaces": "33e7eb1505e14663"
   },
   "v2/step5/plain": {
    "rows": "3eb370ee3216ef80",
    "html": "ede6622f7e16bab4",
-   "surfaces": "70d41ee055c14d8e"
+   "surfaces": "2f324d141480f03b"
   },
   "v2/step5/fields": {
    "rows": "3eb370ee3216ef80",
    "html": "ede6622f7e16bab4",
-   "surfaces": "70d41ee055c14d8e"
+   "surfaces": "2f324d141480f03b"
   },
   "v2/step5/suspect-bar-high-below-low": {
    "rows": "3eb370ee3216ef80",
    "html": "ede6622f7e16bab4",
-   "surfaces": "70d41ee055c14d8e"
+   "surfaces": "2f324d141480f03b"
   },
   "v2/step5/suspect-bar-open-outside-range": {
    "rows": "3eb370ee3216ef80",
    "html": "ede6622f7e16bab4",
-   "surfaces": "70d41ee055c14d8e"
+   "surfaces": "2f324d141480f03b"
   },
   "v2/step5/suspect-print-far-outside-day-range": {
    "rows": "3a30811c154a8828",
    "html": "ede6622f7e16bab4",
-   "surfaces": "7d27074bd9c58809"
+   "surfaces": "a78a7601a40969f6"
   },
   "v2/step5/suspect-quote-crossed": {
    "rows": "3eb370ee3216ef80",
    "html": "ede6622f7e16bab4",
-   "surfaces": "70d41ee055c14d8e"
+   "surfaces": "2f324d141480f03b"
   },
   "v2/step5/suspect-turn": {
    "rows": "3eb370ee3216ef80",
    "html": "ede6622f7e16bab4",
-   "surfaces": "70d41ee055c14d8e"
+   "surfaces": "2f324d141480f03b"
   },
   "v2/09:31/fixture/plain": {
    "rows": "42d8edfe848968df",
    "html": "05be2e671796d065",
-   "surfaces": "3a1937d941e579ac"
+   "surfaces": "052fd97366104afa"
   },
   "v2/09:31/fixture/plain/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "0e3e504547f442e4",
-   "surfaces": "fa204fc8755455e1"
+   "surfaces": "7879070e49d04bf3"
   },
   "v2/09:31/fixture/fields": {
    "rows": "42d8edfe848968df",
    "html": "05be2e671796d065",
-   "surfaces": "3a1937d941e579ac"
+   "surfaces": "052fd97366104afa"
   },
   "v2/09:31/fixture/fields/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "0e3e504547f442e4",
-   "surfaces": "fa204fc8755455e1"
+   "surfaces": "7879070e49d04bf3"
   },
   "v2/09:31/fixture/suspect-bar-high-below-low": {
    "rows": "42d8edfe848968df",
    "html": "05be2e671796d065",
-   "surfaces": "3a1937d941e579ac"
+   "surfaces": "052fd97366104afa"
   },
   "v2/09:31/fixture/suspect-bar-high-below-low/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "0e3e504547f442e4",
-   "surfaces": "fa204fc8755455e1"
+   "surfaces": "7879070e49d04bf3"
   },
   "v2/09:31/fixture/suspect-bar-open-outside-range": {
    "rows": "42d8edfe848968df",
    "html": "05be2e671796d065",
-   "surfaces": "3a1937d941e579ac"
+   "surfaces": "052fd97366104afa"
   },
   "v2/09:31/fixture/suspect-bar-open-outside-range/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "0e3e504547f442e4",
-   "surfaces": "fa204fc8755455e1"
+   "surfaces": "7879070e49d04bf3"
   },
   "v2/09:31/fixture/suspect-print-far-outside-day-range": {
    "rows": "da00dc02b07e868f",
    "html": "05be2e671796d065",
-   "surfaces": "3a1937d941e579ac"
+   "surfaces": "052fd97366104afa"
   },
   "v2/09:31/fixture/suspect-print-far-outside-day-range/quiet": {
    "rows": "42d41b6db793c2de",
    "html": "0e3e504547f442e4",
-   "surfaces": "fa204fc8755455e1"
+   "surfaces": "7879070e49d04bf3"
   },
   "v2/09:31/fixture/suspect-quote-crossed": {
    "rows": "42d8edfe848968df",
    "html": "05be2e671796d065",
-   "surfaces": "3a1937d941e579ac"
+   "surfaces": "052fd97366104afa"
   },
   "v2/09:31/fixture/suspect-quote-crossed/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "0e3e504547f442e4",
-   "surfaces": "fa204fc8755455e1"
+   "surfaces": "7879070e49d04bf3"
   },
   "v2/09:31/fixture/suspect-turn": {
    "rows": "42d8edfe848968df",
    "html": "05be2e671796d065",
-   "surfaces": "3a1937d941e579ac"
+   "surfaces": "052fd97366104afa"
   },
   "v2/09:31/fixture/suspect-turn/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "0e3e504547f442e4",
-   "surfaces": "fa204fc8755455e1"
+   "surfaces": "7879070e49d04bf3"
   },
   "v2/09:31/tick/plain": {
    "rows": "42d8edfe848968df",
    "html": "05be2e671796d065",
-   "surfaces": "3a1937d941e579ac"
+   "surfaces": "052fd97366104afa"
   },
   "v2/09:31/tick/fields": {
    "rows": "42d8edfe848968df",
    "html": "05be2e671796d065",
-   "surfaces": "3a1937d941e579ac"
+   "surfaces": "052fd97366104afa"
   },
   "v2/09:31/tick/suspect-bar-high-below-low": {
    "rows": "42d8edfe848968df",
    "html": "05be2e671796d065",
-   "surfaces": "3a1937d941e579ac"
+   "surfaces": "052fd97366104afa"
   },
   "v2/09:31/tick/suspect-bar-open-outside-range": {
    "rows": "42d8edfe848968df",
    "html": "05be2e671796d065",
-   "surfaces": "3a1937d941e579ac"
+   "surfaces": "052fd97366104afa"
   },
   "v2/09:31/tick/suspect-print-far-outside-day-range": {
    "rows": "da00dc02b07e868f",
    "html": "05be2e671796d065",
-   "surfaces": "3a1937d941e579ac"
+   "surfaces": "052fd97366104afa"
   },
   "v2/09:31/tick/suspect-quote-crossed": {
    "rows": "42d8edfe848968df",
    "html": "05be2e671796d065",
-   "surfaces": "3a1937d941e579ac"
+   "surfaces": "052fd97366104afa"
   },
   "v2/09:31/tick/suspect-turn": {
    "rows": "42d8edfe848968df",
    "html": "05be2e671796d065",
-   "surfaces": "3a1937d941e579ac"
+   "surfaces": "052fd97366104afa"
   },
   "v2/09:36/fixture/plain": {
    "rows": "41707d4347201308",
    "html": "70aa6f2882e01034",
-   "surfaces": "fd7a318bf1472f7c"
+   "surfaces": "c763f2455367ce22"
   },
   "v2/09:36/fixture/plain/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "fdbb36731159a4d6",
-   "surfaces": "ab50420c3f8d8e9f"
+   "surfaces": "e4618163f9483e62"
   },
   "v2/09:36/fixture/fields": {
    "rows": "41707d4347201308",
    "html": "70aa6f2882e01034",
-   "surfaces": "fd7a318bf1472f7c"
+   "surfaces": "c763f2455367ce22"
   },
   "v2/09:36/fixture/fields/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "fdbb36731159a4d6",
-   "surfaces": "ab50420c3f8d8e9f"
+   "surfaces": "e4618163f9483e62"
   },
   "v2/09:36/fixture/suspect-bar-high-below-low": {
    "rows": "913a54e86ea89401",
    "html": "70aa6f2882e01034",
-   "surfaces": "a46565aabe3ccb04"
+   "surfaces": "03ed35f8a5def7a8"
   },
   "v2/09:36/fixture/suspect-bar-high-below-low/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "fdbb36731159a4d6",
-   "surfaces": "ab50420c3f8d8e9f"
+   "surfaces": "e4618163f9483e62"
   },
   "v2/09:36/fixture/suspect-bar-open-outside-range": {
    "rows": "41707d4347201308",
    "html": "70aa6f2882e01034",
-   "surfaces": "fd7a318bf1472f7c"
+   "surfaces": "c763f2455367ce22"
   },
   "v2/09:36/fixture/suspect-bar-open-outside-range/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "fdbb36731159a4d6",
-   "surfaces": "ab50420c3f8d8e9f"
+   "surfaces": "e4618163f9483e62"
   },
   "v2/09:36/fixture/suspect-print-far-outside-day-range": {
    "rows": "3d2edb46435585c6",
    "html": "70aa6f2882e01034",
-   "surfaces": "a46565aabe3ccb04"
+   "surfaces": "03ed35f8a5def7a8"
   },
   "v2/09:36/fixture/suspect-print-far-outside-day-range/quiet": {
    "rows": "42d41b6db793c2de",
    "html": "fdbb36731159a4d6",
-   "surfaces": "ab50420c3f8d8e9f"
+   "surfaces": "e4618163f9483e62"
   },
   "v2/09:36/fixture/suspect-quote-crossed": {
    "rows": "41707d4347201308",
    "html": "70aa6f2882e01034",
-   "surfaces": "fd7a318bf1472f7c"
+   "surfaces": "c763f2455367ce22"
   },
   "v2/09:36/fixture/suspect-quote-crossed/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "fdbb36731159a4d6",
-   "surfaces": "ab50420c3f8d8e9f"
+   "surfaces": "e4618163f9483e62"
   },
   "v2/09:36/fixture/suspect-turn": {
    "rows": "41707d4347201308",
    "html": "70aa6f2882e01034",
-   "surfaces": "fd7a318bf1472f7c"
+   "surfaces": "c763f2455367ce22"
   },
   "v2/09:36/fixture/suspect-turn/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "fdbb36731159a4d6",
-   "surfaces": "ab50420c3f8d8e9f"
+   "surfaces": "e4618163f9483e62"
   },
   "v2/09:36/tick/plain": {
    "rows": "41707d4347201308",
    "html": "70aa6f2882e01034",
-   "surfaces": "fd7a318bf1472f7c"
+   "surfaces": "c763f2455367ce22"
   },
   "v2/09:36/tick/fields": {
    "rows": "41707d4347201308",
    "html": "70aa6f2882e01034",
-   "surfaces": "fd7a318bf1472f7c"
+   "surfaces": "c763f2455367ce22"
   },
   "v2/09:36/tick/suspect-bar-high-below-low": {
    "rows": "913a54e86ea89401",
    "html": "70aa6f2882e01034",
-   "surfaces": "a46565aabe3ccb04"
+   "surfaces": "03ed35f8a5def7a8"
   },
   "v2/09:36/tick/suspect-bar-open-outside-range": {
    "rows": "41707d4347201308",
    "html": "70aa6f2882e01034",
-   "surfaces": "fd7a318bf1472f7c"
+   "surfaces": "c763f2455367ce22"
   },
   "v2/09:36/tick/suspect-print-far-outside-day-range": {
    "rows": "3d2edb46435585c6",
    "html": "70aa6f2882e01034",
-   "surfaces": "a46565aabe3ccb04"
+   "surfaces": "03ed35f8a5def7a8"
   },
   "v2/09:36/tick/suspect-quote-crossed": {
    "rows": "41707d4347201308",
    "html": "70aa6f2882e01034",
-   "surfaces": "fd7a318bf1472f7c"
+   "surfaces": "c763f2455367ce22"
   },
   "v2/09:36/tick/suspect-turn": {
    "rows": "41707d4347201308",
    "html": "70aa6f2882e01034",
-   "surfaces": "fd7a318bf1472f7c"
+   "surfaces": "c763f2455367ce22"
   },
   "v2/10:30/fixture/plain": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "868bf19f82570560"
+   "surfaces": "ffdda0af3fd47263"
   },
   "v2/10:30/fixture/plain/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "bdd618bfa6911996",
-   "surfaces": "f246a48775ac0818"
+   "surfaces": "c70a86ded4704207"
   },
   "v2/10:30/fixture/plain/not-live": {
    "rows": "b6d522810af4d0ce",
    "html": "2fbe8273112fedf7",
-   "surfaces": "aab7f9ce6b878aea"
+   "surfaces": "a7b6220f79311aee"
   },
   "v2/10:30/fixture/fields": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "868bf19f82570560"
+   "surfaces": "ffdda0af3fd47263"
   },
   "v2/10:30/fixture/fields/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "bdd618bfa6911996",
-   "surfaces": "f246a48775ac0818"
+   "surfaces": "c70a86ded4704207"
   },
   "v2/10:30/fixture/fields/not-live": {
    "rows": "b6d522810af4d0ce",
    "html": "2fbe8273112fedf7",
-   "surfaces": "aab7f9ce6b878aea"
+   "surfaces": "a7b6220f79311aee"
   },
   "v2/10:30/fixture/suspect-bar-high-below-low": {
    "rows": "c8c94fddcf1aee74",
    "html": "4a651ac15e522c59",
-   "surfaces": "5f9e8be1705f8325"
+   "surfaces": "cf4130dbf8859695"
   },
   "v2/10:30/fixture/suspect-bar-high-below-low/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "bdd618bfa6911996",
-   "surfaces": "f246a48775ac0818"
+   "surfaces": "c70a86ded4704207"
   },
   "v2/10:30/fixture/suspect-bar-high-below-low/not-live": {
    "rows": "b6d522810af4d0ce",
    "html": "2fbe8273112fedf7",
-   "surfaces": "aab7f9ce6b878aea"
+   "surfaces": "a7b6220f79311aee"
   },
   "v2/10:30/fixture/suspect-bar-open-outside-range": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "868bf19f82570560"
+   "surfaces": "ffdda0af3fd47263"
   },
   "v2/10:30/fixture/suspect-bar-open-outside-range/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "bdd618bfa6911996",
-   "surfaces": "f246a48775ac0818"
+   "surfaces": "c70a86ded4704207"
   },
   "v2/10:30/fixture/suspect-bar-open-outside-range/not-live": {
    "rows": "b6d522810af4d0ce",
    "html": "2fbe8273112fedf7",
-   "surfaces": "aab7f9ce6b878aea"
+   "surfaces": "a7b6220f79311aee"
   },
   "v2/10:30/fixture/suspect-print-far-outside-day-range": {
    "rows": "d989adda3808e05a",
    "html": "4a651ac15e522c59",
-   "surfaces": "5f9e8be1705f8325"
+   "surfaces": "cf4130dbf8859695"
   },
   "v2/10:30/fixture/suspect-print-far-outside-day-range/quiet": {
    "rows": "42d41b6db793c2de",
    "html": "bdd618bfa6911996",
-   "surfaces": "f246a48775ac0818"
+   "surfaces": "c70a86ded4704207"
   },
   "v2/10:30/fixture/suspect-print-far-outside-day-range/not-live": {
    "rows": "b6d522810af4d0ce",
    "html": "2fbe8273112fedf7",
-   "surfaces": "aab7f9ce6b878aea"
+   "surfaces": "a7b6220f79311aee"
   },
   "v2/10:30/fixture/suspect-quote-crossed": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "868bf19f82570560"
+   "surfaces": "ffdda0af3fd47263"
   },
   "v2/10:30/fixture/suspect-quote-crossed/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "bdd618bfa6911996",
-   "surfaces": "f246a48775ac0818"
+   "surfaces": "c70a86ded4704207"
   },
   "v2/10:30/fixture/suspect-quote-crossed/not-live": {
    "rows": "b6d522810af4d0ce",
    "html": "2fbe8273112fedf7",
-   "surfaces": "aab7f9ce6b878aea"
+   "surfaces": "a7b6220f79311aee"
   },
   "v2/10:30/fixture/suspect-turn": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "868bf19f82570560"
+   "surfaces": "ffdda0af3fd47263"
   },
   "v2/10:30/fixture/suspect-turn/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "bdd618bfa6911996",
-   "surfaces": "f246a48775ac0818"
+   "surfaces": "c70a86ded4704207"
   },
   "v2/10:30/fixture/suspect-turn/not-live": {
    "rows": "b6d522810af4d0ce",
    "html": "2fbe8273112fedf7",
-   "surfaces": "aab7f9ce6b878aea"
+   "surfaces": "a7b6220f79311aee"
   },
   "v2/10:30/tick/plain": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "868bf19f82570560"
+   "surfaces": "ffdda0af3fd47263"
   },
   "v2/10:30/tick/fields": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "868bf19f82570560"
+   "surfaces": "ffdda0af3fd47263"
   },
   "v2/10:30/tick/suspect-bar-high-below-low": {
    "rows": "c8c94fddcf1aee74",
    "html": "4a651ac15e522c59",
-   "surfaces": "5f9e8be1705f8325"
+   "surfaces": "cf4130dbf8859695"
   },
   "v2/10:30/tick/suspect-bar-open-outside-range": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "868bf19f82570560"
+   "surfaces": "ffdda0af3fd47263"
   },
   "v2/10:30/tick/suspect-print-far-outside-day-range": {
    "rows": "d989adda3808e05a",
    "html": "4a651ac15e522c59",
-   "surfaces": "5f9e8be1705f8325"
+   "surfaces": "cf4130dbf8859695"
   },
   "v2/10:30/tick/suspect-quote-crossed": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "868bf19f82570560"
+   "surfaces": "ffdda0af3fd47263"
   },
   "v2/10:30/tick/suspect-turn": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "868bf19f82570560"
+   "surfaces": "ffdda0af3fd47263"
   },
   "v2/11:45/fixture/plain": {
    "rows": "3c70510194b57da0",
    "html": "c28211c0d88a18a8",
-   "surfaces": "9174ebc746162ed4"
+   "surfaces": "478c003d322af807"
   },
   "v2/11:45/fixture/plain/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "d70d29810883cf74",
-   "surfaces": "de1725007a2e0e90"
+   "surfaces": "d8e509cdd2392761"
   },
   "v2/11:45/fixture/fields": {
    "rows": "3c70510194b57da0",
    "html": "c28211c0d88a18a8",
-   "surfaces": "9174ebc746162ed4"
+   "surfaces": "478c003d322af807"
   },
   "v2/11:45/fixture/fields/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "d70d29810883cf74",
-   "surfaces": "de1725007a2e0e90"
+   "surfaces": "d8e509cdd2392761"
   },
   "v2/11:45/fixture/suspect-bar-high-below-low": {
    "rows": "3c70510194b57da0",
    "html": "c28211c0d88a18a8",
-   "surfaces": "9174ebc746162ed4"
+   "surfaces": "478c003d322af807"
   },
   "v2/11:45/fixture/suspect-bar-high-below-low/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "d70d29810883cf74",
-   "surfaces": "de1725007a2e0e90"
+   "surfaces": "d8e509cdd2392761"
   },
   "v2/11:45/fixture/suspect-bar-open-outside-range": {
    "rows": "3c70510194b57da0",
    "html": "c28211c0d88a18a8",
-   "surfaces": "9174ebc746162ed4"
+   "surfaces": "478c003d322af807"
   },
   "v2/11:45/fixture/suspect-bar-open-outside-range/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "d70d29810883cf74",
-   "surfaces": "de1725007a2e0e90"
+   "surfaces": "d8e509cdd2392761"
   },
   "v2/11:45/fixture/suspect-print-far-outside-day-range": {
    "rows": "779b0ec0fae95c93",
    "html": "c28211c0d88a18a8",
-   "surfaces": "9174ebc746162ed4"
+   "surfaces": "478c003d322af807"
   },
   "v2/11:45/fixture/suspect-print-far-outside-day-range/quiet": {
    "rows": "42d41b6db793c2de",
    "html": "d70d29810883cf74",
-   "surfaces": "de1725007a2e0e90"
+   "surfaces": "d8e509cdd2392761"
   },
   "v2/11:45/fixture/suspect-quote-crossed": {
    "rows": "3c70510194b57da0",
    "html": "c28211c0d88a18a8",
-   "surfaces": "9174ebc746162ed4"
+   "surfaces": "478c003d322af807"
   },
   "v2/11:45/fixture/suspect-quote-crossed/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "d70d29810883cf74",
-   "surfaces": "de1725007a2e0e90"
+   "surfaces": "d8e509cdd2392761"
   },
   "v2/11:45/fixture/suspect-turn": {
    "rows": "3c70510194b57da0",
    "html": "c28211c0d88a18a8",
-   "surfaces": "9174ebc746162ed4"
+   "surfaces": "478c003d322af807"
   },
   "v2/11:45/fixture/suspect-turn/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "d70d29810883cf74",
-   "surfaces": "de1725007a2e0e90"
+   "surfaces": "d8e509cdd2392761"
   },
   "v2/11:45/tick/plain": {
    "rows": "3c70510194b57da0",
    "html": "c28211c0d88a18a8",
-   "surfaces": "9174ebc746162ed4"
+   "surfaces": "478c003d322af807"
   },
   "v2/11:45/tick/fields": {
    "rows": "3c70510194b57da0",
    "html": "c28211c0d88a18a8",
-   "surfaces": "9174ebc746162ed4"
+   "surfaces": "478c003d322af807"
   },
   "v2/11:45/tick/suspect-bar-high-below-low": {
    "rows": "3c70510194b57da0",
    "html": "c28211c0d88a18a8",
-   "surfaces": "9174ebc746162ed4"
+   "surfaces": "478c003d322af807"
   },
   "v2/11:45/tick/suspect-bar-open-outside-range": {
    "rows": "3c70510194b57da0",
    "html": "c28211c0d88a18a8",
-   "surfaces": "9174ebc746162ed4"
+   "surfaces": "478c003d322af807"
   },
   "v2/11:45/tick/suspect-print-far-outside-day-range": {
    "rows": "779b0ec0fae95c93",
    "html": "c28211c0d88a18a8",
-   "surfaces": "9174ebc746162ed4"
+   "surfaces": "478c003d322af807"
   },
   "v2/11:45/tick/suspect-quote-crossed": {
    "rows": "3c70510194b57da0",
    "html": "c28211c0d88a18a8",
-   "surfaces": "9174ebc746162ed4"
+   "surfaces": "478c003d322af807"
   },
   "v2/11:45/tick/suspect-turn": {
    "rows": "3c70510194b57da0",
    "html": "c28211c0d88a18a8",
-   "surfaces": "9174ebc746162ed4"
+   "surfaces": "478c003d322af807"
   },
   "v2/13:05/fixture/plain": {
    "rows": "71c00a3b4872ce1d",
    "html": "479b92e0f24c5690",
-   "surfaces": "29ec2b6ef801876c"
+   "surfaces": "9cb30d1af41ca9d4"
   },
   "v2/13:05/fixture/plain/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "5d656d0af28dce9d",
-   "surfaces": "1d93ed9e33a8f2b9"
+   "surfaces": "6915f6f939b588e2"
   },
   "v2/13:05/fixture/fields": {
    "rows": "71c00a3b4872ce1d",
    "html": "479b92e0f24c5690",
-   "surfaces": "29ec2b6ef801876c"
+   "surfaces": "9cb30d1af41ca9d4"
   },
   "v2/13:05/fixture/fields/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "5d656d0af28dce9d",
-   "surfaces": "1d93ed9e33a8f2b9"
+   "surfaces": "6915f6f939b588e2"
   },
   "v2/13:05/fixture/suspect-bar-high-below-low": {
    "rows": "9b88e596291a7400",
    "html": "479b92e0f24c5690",
-   "surfaces": "8cc71eadedf651bc"
+   "surfaces": "5fac959a9979f612"
   },
   "v2/13:05/fixture/suspect-bar-high-below-low/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "5d656d0af28dce9d",
-   "surfaces": "1d93ed9e33a8f2b9"
+   "surfaces": "6915f6f939b588e2"
   },
   "v2/13:05/fixture/suspect-bar-open-outside-range": {
    "rows": "71c00a3b4872ce1d",
    "html": "479b92e0f24c5690",
-   "surfaces": "29ec2b6ef801876c"
+   "surfaces": "9cb30d1af41ca9d4"
   },
   "v2/13:05/fixture/suspect-bar-open-outside-range/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "5d656d0af28dce9d",
-   "surfaces": "1d93ed9e33a8f2b9"
+   "surfaces": "6915f6f939b588e2"
   },
   "v2/13:05/fixture/suspect-print-far-outside-day-range": {
    "rows": "b779e283d43feb0c",
    "html": "479b92e0f24c5690",
-   "surfaces": "8cc71eadedf651bc"
+   "surfaces": "5fac959a9979f612"
   },
   "v2/13:05/fixture/suspect-print-far-outside-day-range/quiet": {
    "rows": "42d41b6db793c2de",
    "html": "5d656d0af28dce9d",
-   "surfaces": "1d93ed9e33a8f2b9"
+   "surfaces": "6915f6f939b588e2"
   },
   "v2/13:05/fixture/suspect-quote-crossed": {
    "rows": "71c00a3b4872ce1d",
    "html": "479b92e0f24c5690",
-   "surfaces": "29ec2b6ef801876c"
+   "surfaces": "9cb30d1af41ca9d4"
   },
   "v2/13:05/fixture/suspect-quote-crossed/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "5d656d0af28dce9d",
-   "surfaces": "1d93ed9e33a8f2b9"
+   "surfaces": "6915f6f939b588e2"
   },
   "v2/13:05/fixture/suspect-turn": {
    "rows": "71c00a3b4872ce1d",
    "html": "479b92e0f24c5690",
-   "surfaces": "29ec2b6ef801876c"
+   "surfaces": "9cb30d1af41ca9d4"
   },
   "v2/13:05/fixture/suspect-turn/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "5d656d0af28dce9d",
-   "surfaces": "1d93ed9e33a8f2b9"
+   "surfaces": "6915f6f939b588e2"
   },
   "v2/13:05/tick/plain": {
    "rows": "71c00a3b4872ce1d",
    "html": "479b92e0f24c5690",
-   "surfaces": "29ec2b6ef801876c"
+   "surfaces": "9cb30d1af41ca9d4"
   },
   "v2/13:05/tick/fields": {
    "rows": "71c00a3b4872ce1d",
    "html": "479b92e0f24c5690",
-   "surfaces": "29ec2b6ef801876c"
+   "surfaces": "9cb30d1af41ca9d4"
   },
   "v2/13:05/tick/suspect-bar-high-below-low": {
    "rows": "9b88e596291a7400",
    "html": "479b92e0f24c5690",
-   "surfaces": "8cc71eadedf651bc"
+   "surfaces": "5fac959a9979f612"
   },
   "v2/13:05/tick/suspect-bar-open-outside-range": {
    "rows": "71c00a3b4872ce1d",
    "html": "479b92e0f24c5690",
-   "surfaces": "29ec2b6ef801876c"
+   "surfaces": "9cb30d1af41ca9d4"
   },
   "v2/13:05/tick/suspect-print-far-outside-day-range": {
    "rows": "b779e283d43feb0c",
    "html": "479b92e0f24c5690",
-   "surfaces": "8cc71eadedf651bc"
+   "surfaces": "5fac959a9979f612"
   },
   "v2/13:05/tick/suspect-quote-crossed": {
    "rows": "71c00a3b4872ce1d",
    "html": "479b92e0f24c5690",
-   "surfaces": "29ec2b6ef801876c"
+   "surfaces": "9cb30d1af41ca9d4"
   },
   "v2/13:05/tick/suspect-turn": {
    "rows": "71c00a3b4872ce1d",
    "html": "479b92e0f24c5690",
-   "surfaces": "29ec2b6ef801876c"
+   "surfaces": "9cb30d1af41ca9d4"
   },
   "v2/15:20/fixture/plain": {
    "rows": "0fc138cba8b9656e",
    "html": "cf106096b09dc964",
-   "surfaces": "c4a569a15832df5b"
+   "surfaces": "7cc91ffa9f176372"
   },
   "v2/15:20/fixture/plain/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "3ca51ac1962ada8a",
-   "surfaces": "605ccd353acb81a9"
+   "surfaces": "8981e3d129c2dd21"
   },
   "v2/15:20/fixture/fields": {
    "rows": "0fc138cba8b9656e",
    "html": "cf106096b09dc964",
-   "surfaces": "c4a569a15832df5b"
+   "surfaces": "7cc91ffa9f176372"
   },
   "v2/15:20/fixture/fields/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "3ca51ac1962ada8a",
-   "surfaces": "605ccd353acb81a9"
+   "surfaces": "8981e3d129c2dd21"
   },
   "v2/15:20/fixture/suspect-bar-high-below-low": {
    "rows": "0fc138cba8b9656e",
    "html": "cf106096b09dc964",
-   "surfaces": "c4a569a15832df5b"
+   "surfaces": "7cc91ffa9f176372"
   },
   "v2/15:20/fixture/suspect-bar-high-below-low/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "3ca51ac1962ada8a",
-   "surfaces": "605ccd353acb81a9"
+   "surfaces": "8981e3d129c2dd21"
   },
   "v2/15:20/fixture/suspect-bar-open-outside-range": {
    "rows": "0fc138cba8b9656e",
    "html": "cf106096b09dc964",
-   "surfaces": "c4a569a15832df5b"
+   "surfaces": "7cc91ffa9f176372"
   },
   "v2/15:20/fixture/suspect-bar-open-outside-range/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "3ca51ac1962ada8a",
-   "surfaces": "605ccd353acb81a9"
+   "surfaces": "8981e3d129c2dd21"
   },
   "v2/15:20/fixture/suspect-print-far-outside-day-range": {
    "rows": "7b4d849a34679092",
    "html": "cf106096b09dc964",
-   "surfaces": "c4a569a15832df5b"
+   "surfaces": "7cc91ffa9f176372"
   },
   "v2/15:20/fixture/suspect-print-far-outside-day-range/quiet": {
    "rows": "42d41b6db793c2de",
    "html": "3ca51ac1962ada8a",
-   "surfaces": "605ccd353acb81a9"
+   "surfaces": "8981e3d129c2dd21"
   },
   "v2/15:20/fixture/suspect-quote-crossed": {
    "rows": "0fc138cba8b9656e",
    "html": "cf106096b09dc964",
-   "surfaces": "c4a569a15832df5b"
+   "surfaces": "7cc91ffa9f176372"
   },
   "v2/15:20/fixture/suspect-quote-crossed/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "3ca51ac1962ada8a",
-   "surfaces": "605ccd353acb81a9"
+   "surfaces": "8981e3d129c2dd21"
   },
   "v2/15:20/fixture/suspect-turn": {
    "rows": "0fc138cba8b9656e",
    "html": "cf106096b09dc964",
-   "surfaces": "c4a569a15832df5b"
+   "surfaces": "7cc91ffa9f176372"
   },
   "v2/15:20/fixture/suspect-turn/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "3ca51ac1962ada8a",
-   "surfaces": "605ccd353acb81a9"
+   "surfaces": "8981e3d129c2dd21"
   },
   "v2/15:20/tick/plain": {
    "rows": "0fc138cba8b9656e",
    "html": "cf106096b09dc964",
-   "surfaces": "c4a569a15832df5b"
+   "surfaces": "7cc91ffa9f176372"
   },
   "v2/15:20/tick/fields": {
    "rows": "0fc138cba8b9656e",
    "html": "cf106096b09dc964",
-   "surfaces": "c4a569a15832df5b"
+   "surfaces": "7cc91ffa9f176372"
   },
   "v2/15:20/tick/suspect-bar-high-below-low": {
    "rows": "0fc138cba8b9656e",
    "html": "cf106096b09dc964",
-   "surfaces": "c4a569a15832df5b"
+   "surfaces": "7cc91ffa9f176372"
   },
   "v2/15:20/tick/suspect-bar-open-outside-range": {
    "rows": "0fc138cba8b9656e",
    "html": "cf106096b09dc964",
-   "surfaces": "c4a569a15832df5b"
+   "surfaces": "7cc91ffa9f176372"
   },
   "v2/15:20/tick/suspect-print-far-outside-day-range": {
    "rows": "7b4d849a34679092",
    "html": "cf106096b09dc964",
-   "surfaces": "c4a569a15832df5b"
+   "surfaces": "7cc91ffa9f176372"
   },
   "v2/15:20/tick/suspect-quote-crossed": {
    "rows": "0fc138cba8b9656e",
    "html": "cf106096b09dc964",
-   "surfaces": "c4a569a15832df5b"
+   "surfaces": "7cc91ffa9f176372"
   },
   "v2/15:20/tick/suspect-turn": {
    "rows": "0fc138cba8b9656e",
    "html": "cf106096b09dc964",
-   "surfaces": "c4a569a15832df5b"
+   "surfaces": "7cc91ffa9f176372"
   },
   "v2/15:55/fixture/plain": {
    "rows": "0fc138cba8b9656e",
    "html": "74571ac589c9fedf",
-   "surfaces": "1800122be1322a26"
+   "surfaces": "856b7fc0e9c0c177"
   },
   "v2/15:55/fixture/plain/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "ea6ab844d382cfd5",
-   "surfaces": "f5f1fc38b53a0807"
+   "surfaces": "9f4fce73036395c3"
   },
   "v2/15:55/fixture/fields": {
    "rows": "0fc138cba8b9656e",
    "html": "74571ac589c9fedf",
-   "surfaces": "1800122be1322a26"
+   "surfaces": "856b7fc0e9c0c177"
   },
   "v2/15:55/fixture/fields/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "ea6ab844d382cfd5",
-   "surfaces": "f5f1fc38b53a0807"
+   "surfaces": "9f4fce73036395c3"
   },
   "v2/15:55/fixture/suspect-bar-high-below-low": {
    "rows": "0fc138cba8b9656e",
    "html": "74571ac589c9fedf",
-   "surfaces": "1800122be1322a26"
+   "surfaces": "856b7fc0e9c0c177"
   },
   "v2/15:55/fixture/suspect-bar-high-below-low/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "ea6ab844d382cfd5",
-   "surfaces": "f5f1fc38b53a0807"
+   "surfaces": "9f4fce73036395c3"
   },
   "v2/15:55/fixture/suspect-bar-open-outside-range": {
    "rows": "0fc138cba8b9656e",
    "html": "74571ac589c9fedf",
-   "surfaces": "1800122be1322a26"
+   "surfaces": "856b7fc0e9c0c177"
   },
   "v2/15:55/fixture/suspect-bar-open-outside-range/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "ea6ab844d382cfd5",
-   "surfaces": "f5f1fc38b53a0807"
+   "surfaces": "9f4fce73036395c3"
   },
   "v2/15:55/fixture/suspect-print-far-outside-day-range": {
    "rows": "7b4d849a34679092",
    "html": "74571ac589c9fedf",
-   "surfaces": "1800122be1322a26"
+   "surfaces": "856b7fc0e9c0c177"
   },
   "v2/15:55/fixture/suspect-print-far-outside-day-range/quiet": {
    "rows": "42d41b6db793c2de",
    "html": "ea6ab844d382cfd5",
-   "surfaces": "f5f1fc38b53a0807"
+   "surfaces": "9f4fce73036395c3"
   },
   "v2/15:55/fixture/suspect-quote-crossed": {
    "rows": "0fc138cba8b9656e",
    "html": "74571ac589c9fedf",
-   "surfaces": "1800122be1322a26"
+   "surfaces": "856b7fc0e9c0c177"
   },
   "v2/15:55/fixture/suspect-quote-crossed/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "ea6ab844d382cfd5",
-   "surfaces": "f5f1fc38b53a0807"
+   "surfaces": "9f4fce73036395c3"
   },
   "v2/15:55/fixture/suspect-turn": {
    "rows": "0fc138cba8b9656e",
    "html": "74571ac589c9fedf",
-   "surfaces": "1800122be1322a26"
+   "surfaces": "856b7fc0e9c0c177"
   },
   "v2/15:55/fixture/suspect-turn/quiet": {
    "rows": "4a2e4539d862cd94",
    "html": "ea6ab844d382cfd5",
-   "surfaces": "f5f1fc38b53a0807"
+   "surfaces": "9f4fce73036395c3"
   },
   "v2/15:55/tick/plain": {
    "rows": "0fc138cba8b9656e",
    "html": "74571ac589c9fedf",
-   "surfaces": "1800122be1322a26"
+   "surfaces": "856b7fc0e9c0c177"
   },
   "v2/15:55/tick/fields": {
    "rows": "0fc138cba8b9656e",
    "html": "74571ac589c9fedf",
-   "surfaces": "1800122be1322a26"
+   "surfaces": "856b7fc0e9c0c177"
   },
   "v2/15:55/tick/suspect-bar-high-below-low": {
    "rows": "0fc138cba8b9656e",
    "html": "74571ac589c9fedf",
-   "surfaces": "1800122be1322a26"
+   "surfaces": "856b7fc0e9c0c177"
   },
   "v2/15:55/tick/suspect-bar-open-outside-range": {
    "rows": "0fc138cba8b9656e",
    "html": "74571ac589c9fedf",
-   "surfaces": "1800122be1322a26"
+   "surfaces": "856b7fc0e9c0c177"
   },
   "v2/15:55/tick/suspect-print-far-outside-day-range": {
    "rows": "7b4d849a34679092",
    "html": "74571ac589c9fedf",
-   "surfaces": "1800122be1322a26"
+   "surfaces": "856b7fc0e9c0c177"
   },
   "v2/15:55/tick/suspect-quote-crossed": {
    "rows": "0fc138cba8b9656e",
    "html": "74571ac589c9fedf",
-   "surfaces": "1800122be1322a26"
+   "surfaces": "856b7fc0e9c0c177"
   },
   "v2/15:55/tick/suspect-turn": {
    "rows": "0fc138cba8b9656e",
    "html": "74571ac589c9fedf",
-   "surfaces": "1800122be1322a26"
+   "surfaces": "856b7fc0e9c0c177"
   },
   "v2/16:05/fixture/plain": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "v2/16:05/fixture/plain/quiet": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "v2/16:05/fixture/fields": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "v2/16:05/fixture/fields/quiet": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "v2/16:05/fixture/suspect-bar-high-below-low": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "v2/16:05/fixture/suspect-bar-high-below-low/quiet": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "v2/16:05/fixture/suspect-bar-open-outside-range": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "v2/16:05/fixture/suspect-bar-open-outside-range/quiet": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "v2/16:05/fixture/suspect-print-far-outside-day-range": {
    "rows": "13dc25d6c242f8aa",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "v2/16:05/fixture/suspect-print-far-outside-day-range/quiet": {
    "rows": "13dc25d6c242f8aa",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "v2/16:05/fixture/suspect-quote-crossed": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "v2/16:05/fixture/suspect-quote-crossed/quiet": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "v2/16:05/fixture/suspect-turn": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "v2/16:05/fixture/suspect-turn/quiet": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "v2/16:05/tick/plain": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "v2/16:05/tick/fields": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "v2/16:05/tick/suspect-bar-high-below-low": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "v2/16:05/tick/suspect-bar-open-outside-range": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "v2/16:05/tick/suspect-print-far-outside-day-range": {
    "rows": "13dc25d6c242f8aa",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "v2/16:05/tick/suspect-quote-crossed": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "v2/16:05/tick/suspect-turn": {
    "rows": "d41182e9709a20ec",
    "html": "e73ec5d663b2f7b3",
-   "surfaces": "f13f4cbadd511713"
+   "surfaces": "75fff98dccf8e9ac"
   },
   "v2/half/10:30/plain": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "2a019d5ba051365a"
+   "surfaces": "c6264a89ae207650"
   },
   "v2/half/10:30/fields": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "2a019d5ba051365a"
+   "surfaces": "c6264a89ae207650"
   },
   "v2/half/10:30/suspect-bar-high-below-low": {
    "rows": "c8c94fddcf1aee74",
    "html": "4a651ac15e522c59",
-   "surfaces": "122f159ab230b2fb"
+   "surfaces": "00da453c335e6ac2"
   },
   "v2/half/10:30/suspect-bar-open-outside-range": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "2a019d5ba051365a"
+   "surfaces": "c6264a89ae207650"
   },
   "v2/half/10:30/suspect-print-far-outside-day-range": {
    "rows": "d989adda3808e05a",
    "html": "4a651ac15e522c59",
-   "surfaces": "122f159ab230b2fb"
+   "surfaces": "00da453c335e6ac2"
   },
   "v2/half/10:30/suspect-quote-crossed": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "2a019d5ba051365a"
+   "surfaces": "c6264a89ae207650"
   },
   "v2/half/10:30/suspect-turn": {
    "rows": "005753b7cd1f5ae6",
    "html": "4a651ac15e522c59",
-   "surfaces": "2a019d5ba051365a"
+   "surfaces": "c6264a89ae207650"
   },
   "v2/half/12:05/plain": {
    "rows": "005753b7cd1f5ae6",
    "html": "cd9b59719a56088c",
-   "surfaces": "0334556a0eafa6b7"
+   "surfaces": "08f7dbc12daeb028"
   },
   "v2/half/12:05/fields": {
    "rows": "005753b7cd1f5ae6",
    "html": "cd9b59719a56088c",
-   "surfaces": "0334556a0eafa6b7"
+   "surfaces": "08f7dbc12daeb028"
   },
   "v2/half/12:05/suspect-bar-high-below-low": {
    "rows": "c8c94fddcf1aee74",
    "html": "cd9b59719a56088c",
-   "surfaces": "475d36879baff5dd"
+   "surfaces": "21d6fcb658f66116"
   },
   "v2/half/12:05/suspect-bar-open-outside-range": {
    "rows": "005753b7cd1f5ae6",
    "html": "cd9b59719a56088c",
-   "surfaces": "0334556a0eafa6b7"
+   "surfaces": "08f7dbc12daeb028"
   },
   "v2/half/12:05/suspect-print-far-outside-day-range": {
    "rows": "d989adda3808e05a",
    "html": "cd9b59719a56088c",
-   "surfaces": "475d36879baff5dd"
+   "surfaces": "21d6fcb658f66116"
   },
   "v2/half/12:05/suspect-quote-crossed": {
    "rows": "005753b7cd1f5ae6",
    "html": "cd9b59719a56088c",
-   "surfaces": "0334556a0eafa6b7"
+   "surfaces": "08f7dbc12daeb028"
   },
   "v2/half/12:05/suspect-turn": {
    "rows": "005753b7cd1f5ae6",
    "html": "cd9b59719a56088c",
-   "surfaces": "0334556a0eafa6b7"
+   "surfaces": "08f7dbc12daeb028"
   },
   "v2/half/12:20/plain": {
    "rows": "1d80e66565af1ebf",
    "html": "2736d1beb7aa66d0",
-   "surfaces": "d692eb502c6a96d1"
+   "surfaces": "67572f345be3d4d2"
   },
   "v2/half/12:20/fields": {
    "rows": "1d80e66565af1ebf",
    "html": "2736d1beb7aa66d0",
-   "surfaces": "d692eb502c6a96d1"
+   "surfaces": "67572f345be3d4d2"
   },
   "v2/half/12:20/suspect-bar-high-below-low": {
    "rows": "1d80e66565af1ebf",
    "html": "2736d1beb7aa66d0",
-   "surfaces": "d692eb502c6a96d1"
+   "surfaces": "67572f345be3d4d2"
   },
   "v2/half/12:20/suspect-bar-open-outside-range": {
    "rows": "1d80e66565af1ebf",
    "html": "2736d1beb7aa66d0",
-   "surfaces": "d692eb502c6a96d1"
+   "surfaces": "67572f345be3d4d2"
   },
   "v2/half/12:20/suspect-print-far-outside-day-range": {
    "rows": "d8c104d6853cdf8c",
    "html": "2736d1beb7aa66d0",
-   "surfaces": "d692eb502c6a96d1"
+   "surfaces": "67572f345be3d4d2"
   },
   "v2/half/12:20/suspect-quote-crossed": {
    "rows": "1d80e66565af1ebf",
    "html": "2736d1beb7aa66d0",
-   "surfaces": "d692eb502c6a96d1"
+   "surfaces": "67572f345be3d4d2"
   },
   "v2/half/12:20/suspect-turn": {
    "rows": "1d80e66565af1ebf",
    "html": "2736d1beb7aa66d0",
-   "surfaces": "d692eb502c6a96d1"
+   "surfaces": "67572f345be3d4d2"
   },
   "v2/half/13:05/plain": {
    "rows": "d41182e9709a20ec",
    "html": "48a9062229f5d750",
-   "surfaces": "e3dc54a60916271f"
+   "surfaces": "28aaf17b964664d1"
   },
   "v2/half/13:05/fields": {
    "rows": "d41182e9709a20ec",
    "html": "48a9062229f5d750",
-   "surfaces": "e3dc54a60916271f"
+   "surfaces": "28aaf17b964664d1"
   },
   "v2/half/13:05/suspect-bar-high-below-low": {
    "rows": "d41182e9709a20ec",
    "html": "48a9062229f5d750",
-   "surfaces": "e3dc54a60916271f"
+   "surfaces": "28aaf17b964664d1"
   },
   "v2/half/13:05/suspect-bar-open-outside-range": {
    "rows": "d41182e9709a20ec",
    "html": "48a9062229f5d750",
-   "surfaces": "e3dc54a60916271f"
+   "surfaces": "28aaf17b964664d1"
   },
   "v2/half/13:05/suspect-print-far-outside-day-range": {
    "rows": "13dc25d6c242f8aa",
    "html": "48a9062229f5d750",
-   "surfaces": "e3dc54a60916271f"
+   "surfaces": "28aaf17b964664d1"
   },
   "v2/half/13:05/suspect-quote-crossed": {
    "rows": "d41182e9709a20ec",
    "html": "48a9062229f5d750",
-   "surfaces": "e3dc54a60916271f"
+   "surfaces": "28aaf17b964664d1"
   },
   "v2/half/13:05/suspect-turn": {
    "rows": "d41182e9709a20ec",
    "html": "48a9062229f5d750",
-   "surfaces": "e3dc54a60916271f"
+   "surfaces": "28aaf17b964664d1"
   }
  },
  "eval": {

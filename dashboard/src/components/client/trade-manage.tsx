@@ -987,6 +987,8 @@ export function useTradeManage(x: TradeManageInput): {
   openMarks: OpenMarks;
   /** Bumped when a card newly says EXIT, with those notices: the board rings its sound and browser notification. */
   exitRing: { n: number; fresh: readonly ManageNotice[] };
+  /** Every new word of a card (SELL HALF, EXIT, ...), for the Today log: `n` counts the rings. */
+  manageRing: { n: number; fresh: readonly ManageNotice[] };
 } {
   const day = x.now !== null ? (nyClock(new Date(x.now).toISOString())?.day ?? null) : null;
   const today = day === x.session ? day : null;
@@ -995,6 +997,7 @@ export function useTradeManage(x: TradeManageInput): {
   // The cards' live option values (held-store.ts): the −25% stop and the day pill re-read on every change.
   useHeldVersion();
   const [exitRing, setExitRing] = useState<{ n: number; fresh: readonly ManageNotice[] }>({ n: 0, fresh: [] });
+  const [manageRing, setManageRing] = useState<{ n: number; fresh: readonly ManageNotice[] }>({ n: 0, fresh: [] });
   const [form, setForm] = useState<FormCapture | null>(null);
   const [last, setLast] = useState<Record<string, ManageAction>>({});
   const [notices, setNotices] = useState<ManageNotice[]>([]);
@@ -1066,6 +1069,7 @@ export function useTradeManage(x: TradeManageInput): {
       setNotices(mergeNotices(notices, r.fresh));
       const exits = r.fresh.filter((n) => n.action === "exit");
       if (exits.length) setExitRing({ n: exitRing.n + 1, fresh: exits });
+      setManageRing({ n: manageRing.n + 1, fresh: r.fresh });
     }
   }
 
@@ -1193,5 +1197,5 @@ export function useTradeManage(x: TradeManageInput): {
       ))
     : null;
 
-  return { cards, rowExtra, notices: noticeEls, views, provisional, journalLive: live, openMarks: marks, exitRing };
+  return { cards, rowExtra, notices: noticeEls, views, provisional, journalLive: live, openMarks: marks, exitRing, manageRing };
 }

@@ -925,6 +925,7 @@ const RUNBOOKS: { file: string; when: string }[] = [
   { file: "latch-reset", when: "p5 “loss limit latched”; entries stay off" },
   { file: "kill-and-flatten", when: "you want the paper robot to stop now" },
   { file: "options-positions", when: "the Options page's paper positions are missing or old" },
+  { file: "paper-options", when: "the Paper page has no history, says it is old, or a total looks wrong" },
   { file: "dashboard-late", when: "“Dashboard late”, a grey or amber freshness pill" },
   { file: "rollback", when: "the next night's jobs fail after a deploy" },
   { file: "disk-full", when: "p3 “refused to run: free disk”" },

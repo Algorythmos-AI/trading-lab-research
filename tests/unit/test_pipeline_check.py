@@ -121,8 +121,8 @@ def test_a_difference_outside_todays_names_warns_and_a_stale_radar_skips_its_clo
 
 def test_only_names_the_clone_can_trade_today_can_fail():
     o = options()                                                 # focus AMZN (no same-day expiry) and SPY
-    assert pc.eligible(o, TARGET, EXP, policy="same_day") == {"SPY", "QQQ"}   # DEC-0032: AMZN dropped, QQQ added
-    assert pc.eligible(o, TARGET, EXP) == {"AMZN", "SPY"}         # DEC-0034: AMZN trades its nearest expiry
+    assert pc.eligible(o, TARGET, EXP, policy="same_day") == {"SPY", "QQQ"}   # DEC-0032: AMZN dropped; QQQ standing
+    assert pc.eligible(o, TARGET, EXP) == {"AMZN", "SPY", "QQQ"}  # DEC-0034: AMZN its nearest expiry; DEC-0058: QQQ
     o["tickers"][1]["levels"][0]["price"] += 0.30                 # AMZN, a name the clone trades today
     got = run(options=o)
     assert not got["options.levels.AMZN"].ok and got["options.levels.AMZN"].severity == "fail"
@@ -140,6 +140,17 @@ def test_the_check_tops_up_exactly_as_the_clone_does():
     assert list(pc.TOP_UP) == cfg["top_up"] == cfg["fallback"] and pc.MIN_NAMES == cfg["min_names"]
     assert pc.MAX_NAMES == cfg["max_names"]
     assert pc.EXPIRY == cfg["expiry"] and pc.WITHIN_DAYS == cfg["nearest_within_days"]
+    assert list(pc.STANDING) == cfg["standing"]                                  # DEC-0058
+
+
+def test_a_standing_name_is_eligible_beside_the_focus_names_and_outside_the_cap():
+    """DEC-0058: QQQ is traded every session after the focus names, so the check judges it as the clone trades it."""
+    many = [{"symbol": s, "rank": i + 1} for i, s in enumerate(("A", "B", "C", "D", "E", "F"))]
+    o = options()
+    o["focus"]["items"] = many
+    exp = {**EXP, **{s: [TARGET] for s in ("A", "B", "C", "D", "E", "F", "QQQ")}}
+    assert pc.eligible(o, TARGET, exp) == {"A", "B", "C", "D", "E", "F", "QQQ"}            # six focus names, then QQQ
+    assert "QQQ" not in pc.eligible(o, TARGET, {k: v for k, v in exp.items() if k != "QQQ"})  # no expiry: not traded
 
 
 def test_eligibility_ranks_dedupes_and_caps_like_the_runner():
@@ -1213,3 +1224,37 @@ def test_a_refused_data_request_with_the_listings_answered_judges_and_pages_as_a
     assert alerts.sent == rejected_alerts.sent and key == "pipeline-check:pre-open" and prio == 4
     assert "data.reachable: 1 failed" in message
     assert "pipeline check: a market-data request named no feed" in capsys.readouterr().err
+
+
+def test_a_vendor_sized_difference_warns_and_one_that_moves_a_setup_fails():
+    """Two vendors' prints differ by cents (2026-11-17: IBKR edition against Alpaca SIP, 1-21 cents on most names).
+    Past the dollar tolerance but within VENDOR_ATR of the edition's ATR14 it warns; past that it fails, as before.
+    SPY and AMZN are both names the clone may trade here, so either would fail without an ATR."""
+    o = options()
+    for t in o["tickers"]:
+        t["atr14"] = 2.0                                         # 0.25 ATR = $0.50
+    o["tickers"][0]["levels"][0]["price"] += 0.30                # SPY PDH 30 cents off: a vendor difference
+    o["tickers"][1]["last"]["close"] += 0.10                     # AMZN close 10 cents off
+    got = run(options=o)
+    assert not got["options.levels.SPY"].ok and got["options.levels.SPY"].severity == "warn"
+    assert "vendor difference" in got["options.levels.SPY"].detail and "PDH" in got["options.levels.SPY"].detail
+    assert not got["options.close.AMZN"].ok and got["options.close.AMZN"].severity == "warn"
+    assert [c.id for c in got.values() if not c.ok and c.severity == "fail"] == []
+    o["tickers"][0]["levels"][0]["price"] += 0.40                # now 70 cents: past 0.25 ATR, it can move a setup
+    o["tickers"][1]["last"]["close"] += 0.50
+    got = run(options=o)
+    assert got["options.levels.SPY"].severity == "fail" and "vendor" not in got["options.levels.SPY"].detail
+    assert got["options.close.AMZN"].severity == "fail"
+
+
+def test_a_missing_level_or_a_missing_atr_still_fails():
+    o = options()
+    o["tickers"][0]["atr14"] = 2.0
+    o["tickers"][0]["levels"] = [x for x in o["tickers"][0]["levels"] if x["name"] != "PDH"]
+    got = run(options=o)
+    assert got["options.levels.SPY"].severity == "fail"          # a level the edition lacks is never a vendor difference
+    o = options()
+    o["tickers"][0]["atr14"] = "n/a"
+    o["tickers"][0]["levels"][0]["price"] += 0.30
+    got = run(options=o)
+    assert got["options.levels.SPY"].severity == "fail"          # no usable ATR: the dollar tolerance decides

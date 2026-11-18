@@ -127,11 +127,11 @@ test("on a phone the alert switches sit behind one bell", async ({ page, context
   test.skip(!isMobile, "the phone's layout");
   await at(context, baseURL, 3);
   await page.goto("/options");
-  const bell = page.getByRole("button", { name: "Alerts: sound and browser notification" });
+  const bell = page.getByRole("button", { name: /^Alerts:/ });
   await expect(bell).toHaveAttribute("aria-expanded", "false");
   await bell.click();
   await expect(bell).toHaveAttribute("aria-expanded", "true");
-  await expect(page.locator("#trade-now-alerts").getByRole("button", { name: "Sound" })).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator("#trade-now-alerts").getByRole("button", { name: "Sound", exact: true })).toHaveAttribute("aria-pressed", "false");
   await page.keyboard.press("Escape");
   await expect(bell).toHaveAttribute("aria-expanded", "false");
   await expect(bell).toBeFocused();
@@ -257,7 +257,7 @@ test("the Today log lists a state change, newest first, and closes on Escape", a
   await expect(rows(page).first()).toHaveAttribute("data-board-state", "get_ready");
   await at(context, baseURL, 3);
   await expect(rows(page).first()).toHaveAttribute("data-board-state", "enter_zone", { timeout: 15_000 });
-  const button = page.getByRole("button", { name: /^Today · \d+$/ });
+  const button = page.getByRole("button", { name: /^Today · \d+/ });
   await button.click();
   const log = page.locator("[data-today-log]");
   await expect(log.locator('[data-log-line="QQQ"]').first()).toContainText(/^10:2\d\s*QQQ\s*ENTER ZONE · CALL$/);

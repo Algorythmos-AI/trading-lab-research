@@ -3,7 +3,7 @@
 // The status rail: one strip under the site header, sticky while the page scrolls, that says where the day stands at a
 // glance. The day's limits ("Clear · 0/5 trades · $0 of $100") and what one more stop would leave, the New York clock with the next boundary ("First
 // entries in 3:12"), the session as a thin bar with its no-entry windows shaded and a "now" tick, the Today log of the
-// board's changes, the Cockpit switch and the alert switches. Before the open the "Trade now" board folds away until
+// board's changes, the Cockpit switch and the Alerts menu (alerts.tsx). Before the open the "Trade now" board folds away until
 // its first entries; its line is then the hero's headline, so the rail does not repeat it, and the rail's countdown
 // carries the board's marks instead. The owner's "Done for today" (done-today.tsx) sits in the button group, and once
 // set takes the day pill's place: "Done for today · set 10:42 NY".
@@ -11,7 +11,7 @@
 // Every time is New York, on the board's (server) clock. Nothing is read from the clock or from storage in the server
 // render. Read only: nothing here places an order; the one thing it writes is the owner's own done-for-today flag.
 import { History, Clock } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { TONE_TEXT } from "@/components/status";
 import { newYork } from "@/lib/format";
 import type { Tone } from "@/lib/labels";
@@ -19,10 +19,13 @@ import { type DayFacts, type RailDay, railWithNotes, sessionClock, sessionTimeli
 import { cn } from "@/lib/utils";
 import { roomShown } from "@/lib/what-if";
 import { NO_MARKS, withOpenLoss } from "@/lib/held-marks";
-import { CockpitSwitch } from "./cockpit";
+import { BOARD_LOG_MAX, byHour, logKey, logNames, parseSeen, unreadCount, withSeen } from "@/lib/board-log";
+import { AlertsMenu } from "./alerts";
+import { railButton } from "./rail-button";
+import { CockpitSwitch, FullscreenButton } from "./cockpit";
 import { ServerCheckNote } from "./desk-shadow";
 import { DoneControl, DonePill, UncheckedNote, useDone, useDonePolling } from "./done-today";
-import { AlertButtons, AlertMenu, BoardEvents, type BoardLogEntry, boardCollapsed, useBoard } from "./trade-now";
+import { BoardEvents, type BoardLogEntry, boardCollapsed, useBoard } from "./trade-now";
 
 const DAY_TONE: Record<Tone, string> = {
   good: "border-good-fill/50 bg-good-soft",
@@ -90,25 +93,90 @@ export function logLine(e: BoardLogEntry): string {
   return `${newYork(new Date(e.at).toISOString(), false)} ${e.symbol} ${e.word}${e.side ? ` · ${e.side.toUpperCase()}` : ""}`;
 }
 
+// ---- the Today log ----------------------------------------------------------------------------------------------------
+const SEEN_KEY = (session: string) => `trade-now-log-seen:${session}`;
+const SEEN_EVENT = "trade-now-log-seen";
+function subscribeSeen(fn: () => void) {
+  window.addEventListener(SEEN_EVENT, fn);
+  window.addEventListener("storage", fn);
+  return () => {
+    window.removeEventListener(SEEN_EVENT, fn);
+    window.removeEventListener("storage", fn);
+  };
+}
+/** The lines seen in the open log this session, in this browser; none in the server render. */
+function useSeen(session: string): Set<string> {
+  const raw = useSyncExternalStore(
+    subscribeSeen,
+    () => {
+      try {
+        return window.localStorage.getItem(SEEN_KEY(session)) ?? "";
+      } catch {
+        return "";
+      }
+    },
+    () => "",
+  );
+  return parseSeen(raw);
+}
+function markSeen(session: string, keys: readonly string[]) {
+  try {
+    window.localStorage.setItem(SEEN_KEY(session), JSON.stringify(keys));
+  } catch {
+    // storage off: every line stays new on this page
+  }
+  window.dispatchEvent(new Event(SEEN_EVENT));
+}
+
+/** A line's colour bar, by its tone. */
+const BAR: Record<Tone, string> = {
+  good: "border-l-good-fill",
+  warn: "border-l-warn-fill",
+  bad: "border-l-bad-fill",
+  info: "border-l-info-fill",
+  neutral: "border-l-neutral-fill",
+};
+const SIDE_CHIP = { call: "bg-good-soft text-good", put: "bg-bad-soft text-bad" } as const;
+const hourOf = (at: number) => `${newYork(new Date(at).toISOString(), false).slice(0, 2)}:00`;
+
 /**
- * "Today · N": a button that opens the board's change log, newest first. Esc (with the focus in it) or a click
- * outside closes it and gives the focus back to the button.
+ * "Today · N": a button that opens the board's change log, newest first, grouped by the New York hour, with a filter by
+ * name. Lines the owner has not seen yet are counted on the button ("3 new") until the log is opened. Esc (with the
+ * focus in it) or a click outside closes it and gives the focus back to the button.
  */
-export function TodayLog({ log }: { log: readonly BoardLogEntry[] }) {
+export function TodayLog({ log, session }: { log: readonly BoardLogEntry[]; session: string }) {
   const [open, setOpen] = useState(false);
+  const [only, setOnly] = useState<string | null>(null);
   const box = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
+  const close = () => {
+    setOpen(false);
+    setOnly(null); // opened again, it shows every name
+  };
+  const seen = useSeen(session);
+  const unread = unreadCount(log, seen);
+  const names = logNames(log);
+  const filter = only !== null && names.includes(only) ? only : null;
+  const shown = filter ? log.filter((e) => e.symbol === filter) : log;
+  // Open, the lines on show are read (only those: a name filtered out keeps its new lines), also as more arrive.
+  const shownKeys = shown.map(logKey).join(",");
+  useEffect(() => {
+    if (!open) return;
+    const next = withSeen(seen, shown, log);
+    if (next.length !== seen.size || next.some((k) => !seen.has(k))) markSeen(session, next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, shownKeys, session]);
   useEffect(() => {
     if (!open) return;
     const onKey = (ev: KeyboardEvent) => {
-      if (ev.key !== "Escape") return;
+      if (ev.key !== "Escape" || ev.defaultPrevented) return;
       ev.preventDefault(); // this Escape closes the log only, not the cockpit too
-      setOpen(false);
+      close();
       button.current?.focus();
     };
     const onDown = (ev: PointerEvent) => {
       if (ev.target instanceof Node && box.current?.contains(ev.target)) return;
-      setOpen(false);
+      close();
     };
     document.addEventListener("keydown", onKey);
     document.addEventListener("pointerdown", onDown);
@@ -117,16 +185,18 @@ export function TodayLog({ log }: { log: readonly BoardLogEntry[] }) {
       document.removeEventListener("pointerdown", onDown);
     };
   }, [open]);
+  const fresh = !open && unread > 0;
   return (
-    <div ref={box} className="relative">
+    <div ref={box} className="relative max-sm:static">
       <button
         ref={button}
         type="button"
         aria-expanded={open}
         aria-controls="today-log"
         data-today-log-button
-        onClick={() => setOpen((o) => !o)}
-        className="text-muted-foreground hover:text-foreground aria-expanded:text-foreground aria-expanded:bg-muted inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2 text-sm font-medium whitespace-nowrap max-sm:min-h-11 max-sm:min-w-11 max-sm:justify-center max-sm:px-2"
+        data-today-unread={unread}
+        onClick={() => (open ? close() : setOpen(true))}
+        className={railButton(fresh ? "info" : "neutral", "aria-expanded:text-foreground aria-expanded:bg-muted")}
       >
         <History aria-hidden className="size-4" />
         {/* On a phone the icon and the count; "Today" is still the button's name. */}
@@ -134,26 +204,68 @@ export function TodayLog({ log }: { log: readonly BoardLogEntry[] }) {
           <span className="max-sm:sr-only">Today · </span>
           {log.length}
         </span>
+        {fresh ? (
+          <span data-today-new className="bg-background text-info border-info-fill/70 rounded-full border px-1.5 text-[0.6875rem] leading-4 font-semibold max-sm:absolute max-sm:-top-1.5 max-sm:-right-1.5">
+            {unread}
+            <span className="max-sm:sr-only"> new</span>
+          </span>
+        ) : null}
       </button>
       {open ? (
-        <div id="today-log" data-today-log={log.length} role="region" aria-label="Today's state changes, newest first" className="bg-popover text-popover-foreground absolute top-10 right-0 z-40 max-sm:top-12 w-72 max-w-[calc(100vw-2rem)] rounded-md border p-2 shadow-md">
-          {log.length ? (
-            <ol className="grid max-h-80 gap-0.5 overflow-y-auto">
-              {log.map((e, i) => (
-                <li key={`${e.at}-${e.symbol}-${i}`} data-log-line={e.symbol} className="text-explain flex gap-2 font-mono tabular-nums">
-                  <span className="text-muted-foreground">{newYork(new Date(e.at).toISOString(), false)}</span>
-                  <span className="font-semibold">{e.symbol}</span>
-                  <span className={cn("font-sans font-semibold", TONE_TEXT[e.tone])}>
-                    {e.word}
-                    {e.side ? ` · ${e.side.toUpperCase()}` : ""}
-                  </span>
-                </li>
+        <div
+          id="today-log"
+          data-today-log={log.length}
+          role="region"
+          aria-label="Today's state changes, newest first"
+          // On a phone it hangs from the whole rail, inside the 16 px gutters, as the alerts menu does.
+          className="bg-popover text-popover-foreground absolute top-10 right-0 z-40 w-80 max-w-[calc(100vw-2rem)] rounded-md border p-2 shadow-md max-sm:inset-x-4 max-sm:top-full max-sm:mt-1 max-sm:w-auto max-sm:max-w-none"
+        >
+          {names.length > 1 ? (
+            <div role="group" aria-label="Show the changes of" className="mb-1.5 flex flex-wrap gap-1 border-b pb-1.5">
+              {[null, ...names].map((n) => (
+                <button
+                  key={n ?? "all"}
+                  type="button"
+                  aria-pressed={filter === n}
+                  data-log-filter={n ?? "all"}
+                  onClick={() => setOnly(n)}
+                  className="hover:bg-muted aria-pressed:bg-foreground aria-pressed:text-background min-h-7 rounded border px-2 font-mono text-xs font-semibold max-sm:min-h-11 max-sm:px-3 max-sm:text-sm"
+                >
+                  {n ?? "All"}
+                </button>
               ))}
-            </ol>
+            </div>
+          ) : null}
+          {shown.length ? (
+            <div className="grid max-h-96 gap-1.5 overflow-y-auto">
+              {byHour(shown, hourOf).map((g) => (
+                <div key={g.hour} role="group" aria-label={`${g.hour} New York`}>
+                  <h3 className="text-muted-foreground px-1 font-mono text-[0.6875rem] font-semibold tabular-nums">{g.hour}</h3>
+                  <ol className="grid gap-0.5">
+                    {g.lines.map((e) => (
+                      <li
+                        key={logKey(e)}
+                        data-log-line={e.symbol}
+                        data-log-kind={e.kind}
+                        className={cn("text-explain bg-muted/40 flex items-center gap-2 rounded-r border-l-4 py-0.5 pr-1 pl-2 font-mono tabular-nums", BAR[e.tone])}
+                      >
+                        <span className="text-muted-foreground">{newYork(new Date(e.at).toISOString(), false)}</span>
+                        <span className="font-semibold">{e.symbol}</span>
+                        <span className={cn("font-sans font-semibold", TONE_TEXT[e.tone])}>{e.word}</span>
+                        {/* Read as "ENTER ZONE · CALL" (logLine's words); the side is drawn as its own tinted chip. */}
+                        {e.side ? <span className="sr-only"> · </span> : null}
+                        {e.side ? <span className={cn("rounded px-1 font-sans text-[0.6875rem] font-semibold", SIDE_CHIP[e.side])}>{e.side.toUpperCase()}</span> : null}
+                        {e.kind === "manage" ? <span className="text-muted-foreground ml-auto font-sans text-[0.6875rem]">your trade</span> : null}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              ))}
+            </div>
           ) : (
             <p className="text-explain text-muted-foreground p-1">No state changes yet this session.</p>
           )}
-          <p className="text-muted-foreground mt-1.5 border-t px-1 pt-1.5 text-xs">New York times. Kept in this browser for the session.</p>
+          <p className="text-muted-foreground mt-1.5 border-t px-1 pt-1.5 text-xs">New York times. Kept in this browser for the session, the last {BOARD_LOG_MAX}.</p>
         </div>
       ) : null}
     </div>
@@ -195,6 +307,8 @@ function useRailTop(): number {
 export function StatusRail({ day: server, facts = null }: { day: RailDay | null; facts?: DayFacts | null }) {
   const b = useBoard();
   const top = useRailTop();
+  // The session the day went over in (see limitReached below): kept for the session, set while rendering.
+  const [overFor, setOverFor] = useState<string | null>(null);
   const done = useDone();
   // Both devices keep reading the flag while the live board is drawn; with prices off or an older card, once is enough.
   useDonePolling(!!b && b.on && b.mode.kind !== "off" && b.mode.kind !== "old");
@@ -215,6 +329,11 @@ export function StatusRail({ day: server, facts = null }: { day: RailDay | null;
   // Never beside notes the journal does not show yet, nor once the journal has gone stale in this browser: a reason instead.
   const shownRoom = roomShown(server?.room ?? null, b.manage.views.length, b.manage.provisional, b.manage.journalLive);
   const switches = b.on && b.mode.kind !== "old" && b.mode.kind !== "off";
+  // The day pill is red (trades used up, the loss limit with what is open, or a rule broken): Done for today asks, in
+  // amber. Once asked it keeps asking for the session, so an open loss priced near the limit never makes it flicker.
+  const over = day?.tone === "bad";
+  const limitReached = over || overFor === b.session;
+  if (over && overFor !== b.session) setOverFor(b.session);
   const nyNow = b.now !== null ? newYork(new Date(b.now).toISOString(), false) : "–";
   // On a phone the clock's time moves to the fills-read line, when there is one.
   const merged = Boolean(facts?.readLine);
@@ -283,16 +402,12 @@ export function StatusRail({ day: server, facts = null }: { day: RailDay | null;
         {/* The server's shadow check, only when it has stopped logging: nothing at all otherwise, so no row on a phone. */}
         {b.on ? <ServerCheckNote /> : null}
         {/* On a phone the Done control ends the countdown's row, so the day pill and the three buttons keep theirs. */}
-        {b.on ? <DoneControl id="done-today-confirm-phone" className="sm:hidden max-sm:col-start-2 max-sm:justify-self-end" /> : null}
+        {b.on ? <DoneControl id="done-today-confirm-phone" className="sm:hidden max-sm:col-start-2 max-sm:justify-self-end" limitReached={limitReached} /> : null}
         <div className="ml-auto flex items-center gap-1.5 max-sm:col-start-2 max-sm:row-start-2">
-          {b.on ? <DoneControl className="max-sm:hidden" /> : null}
-          {b.on ? <TodayLog log={b.log} /> : null}
-          {switches ? (
-            <>
-              <AlertButtons className="hidden sm:flex" />
-              <AlertMenu />
-            </>
-          ) : null}
+          {b.on ? <DoneControl className="max-sm:hidden" limitReached={limitReached} /> : null}
+          {b.on ? <TodayLog log={b.log} session={b.session} /> : null}
+          {switches ? <AlertsMenu /> : null}
+          {b.on ? <FullscreenButton /> : null}
           {b.on ? <CockpitSwitch className="max-sm:min-h-11 max-sm:min-w-11 max-sm:justify-center max-sm:px-2" /> : null}
         </div>
       </div>

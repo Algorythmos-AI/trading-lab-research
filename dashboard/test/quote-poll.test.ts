@@ -4,7 +4,7 @@ import { type Backoff, MANUAL_GAP_MS, type PollResult, startPoll, statusResult }
 const CAP = 30_000;
 
 /** The loop on fake timers: each request waits for the test to answer it. Jitter is fixed at none unless asked. */
-function setup(o: { rand?: () => number; fresh?: () => boolean } = {}) {
+function setup(o: { rand?: () => number; fresh?: () => boolean; hiddenMs?: () => number | null } = {}) {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-10-12T15:00:00Z"));
   const listeners = new Set<() => void>();
@@ -41,6 +41,7 @@ function setup(o: { rand?: () => number; fresh?: () => boolean } = {}) {
     backoff: { capMs: CAP, rand: o.rand ?? (() => 0) },
     onBackoff: (b) => backoffs.push(b),
     fresh: o.fresh,
+    hiddenMs: o.hiddenMs,
   });
   const show = (state: string) => {
     page.visibilityState = state;
@@ -489,5 +490,50 @@ describe("statusResult", () => {
     expect(statusResult(429)).toBe("limited");
     for (const s of [400, 401, 403, 404, 500, 502, 504, 301, 199]) expect(statusResult(s)).toBe("error");
     for (const s of [200, 204, 299]) expect(statusResult(s)).toBe("ok");
+  });
+});
+
+describe("startPoll in the background (the board's alerts on)", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("keeps fetching every hiddenMs while hidden, and goes back to the usual interval when shown", async () => {
+    let bg: number | null = 10_000;
+    const t = setup({ hiddenMs: () => bg });
+    await t.answer();
+    t.show("hidden");
+    await vi.advanceTimersByTimeAsync(2_000); // the turn already set keeps its 2 s
+    expect(t.calls()).toBe(2);
+    await t.answer();
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(t.calls()).toBe(2); // hidden: the next wait is 10 s, not 2 s
+    await vi.advanceTimersByTimeAsync(1);
+    expect(t.calls()).toBe(3);
+    await t.answer();
+    // the alert turned off while hidden: the next turn fetches nothing
+    bg = null;
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(t.calls()).toBe(3);
+    t.show("visible");
+    expect(t.calls()).toBe(4); // shown again: at once
+    t.stop();
+  });
+
+  it("without hiddenMs a hidden tab fetches nothing, as before", async () => {
+    const t = setup();
+    await t.answer();
+    t.show("hidden");
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(t.calls()).toBe(1);
+    t.stop();
+  });
+
+  it("failures while hidden still back off, never faster than the doubling wait", async () => {
+    const t = setup({ hiddenMs: () => 10_000 });
+    await t.answer();
+    t.show("hidden");
+    await vi.advanceTimersByTimeAsync(2_000);
+    await t.answer("error");
+    expect(t.backoffs.at(-1)).toMatchObject({ failures: 1 });
+    t.stop();
   });
 });

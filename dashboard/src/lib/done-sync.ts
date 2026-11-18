@@ -60,6 +60,8 @@ export class DoneSync {
   private listeners = new Set<() => void>();
   private timer: ReturnType<typeof setTimeout> | null = null;
   private armedFor: number | null = null;
+  /** The action whose last write failed, while its failure is shown. */
+  private failedFor: DoneAction | null = null;
   state: DoneState;
 
   constructor(
@@ -98,6 +100,7 @@ export class DoneSync {
   }
 
   clearFailed = (): void => {
+    this.failedFor = null;
     if (this.state.failed !== null) this.set({ failed: null });
   };
 
@@ -128,11 +131,15 @@ export class DoneSync {
 
   private take(view: FlagsView): void {
     const line = announceLine(this.state.read, { status: "ok", view });
+    // A failed tap whose result a later read now shows (the other device did it) is no longer a failure to show.
+    const settled = this.failedFor !== null && (this.failedFor === "done" ? view.done : !view.done);
+    if (settled) this.failedFor = null;
     this.set({
       read: { status: "ok", view },
       stale: false,
       undoUntil: view.canUndo ? this.deps.now() + view.undoLeftS * 1000 : null,
       ...(line ? { spoken: line } : {}),
+      ...(settled ? { failed: null } : {}),
     });
   }
 
@@ -159,6 +166,7 @@ export class DoneSync {
   async send(action: DoneAction): Promise<boolean> {
     if (this.writing) return false;
     this.writing = true;
+    this.failedFor = null;
     this.lastWrite = ++this.seq;
     this.set({ busy: true, failed: null });
     const a = await this.deps.post(action);
@@ -183,6 +191,7 @@ export class DoneSync {
       return true;
     }
     if (truth) this.take(truth);
+    this.failedFor = action;
     this.set({ busy: false, failed: failedLine(a.ok ? null : a.reason) });
     return false;
   }

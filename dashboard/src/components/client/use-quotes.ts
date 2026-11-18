@@ -8,6 +8,8 @@ import { type Backoff, type Poll, type PollResult, startPoll, statusResult } fro
 export const POLL_MS = 2_000;
 /** The longest wait after failures in a row (2, 4, 8, 16 s, then this). */
 export const QUOTES_RETRY_CAP_MS = 30_000;
+/** While the tab is hidden and an alert is on: a fetch every this long, well inside the board's 20 s stale limit. */
+export const HIDDEN_POLL_MS = 10_000;
 
 export type Feed =
   | { status: "loading" }
@@ -37,13 +39,14 @@ export interface QuoteFeed {
 }
 
 /**
- * Polls /api/quote (same origin, so the page's connect-src 'self' holds) every 2 seconds while the tab is visible,
+ * Polls /api/quote (same origin, so the page's connect-src 'self' holds) every 2 seconds while the tab is visible
+ * (and, while `background.current` is true, every 10 s while it is hidden, so the board's alerts can still ring),
  * and at once when it is shown again (lib/quote-poll.ts: one request at a time). After a failure it tries again in
  * 2 s, then 4, 8, 16 and at most 30 s while the failures go on, and at the 30 s straight away when upstream asks it to
  * slow down (429); the first answer puts it back on 2 seconds. `enabled` false (an old edition) never polls.
  * Research only.
  */
-export function useQuoteFeed(symbols: string, enabled = true): QuoteFeed {
+export function useQuoteFeed(symbols: string, enabled = true, background?: { readonly current: boolean }): QuoteFeed {
   const [feed, setFeed] = useState<Feed>({ status: enabled ? "loading" : "off" });
   const [backoff, setBackoff] = useState<Backoff | null>(null);
   const poll = useRef<Poll | null>(null);
@@ -95,6 +98,8 @@ export function useQuoteFeed(symbols: string, enabled = true): QuoteFeed {
       pollMs: POLL_MS,
       backoff: { capMs: QUOTES_RETRY_CAP_MS },
       onBackoff: setBackoff,
+      // Read by the poll at each turn, so turning an alert on or off never restarts it.
+      hiddenMs: () => (background?.current ? HIDDEN_POLL_MS : null),
     });
     poll.current = p;
     return () => {
