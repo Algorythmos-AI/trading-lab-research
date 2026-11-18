@@ -41,9 +41,10 @@ TRAIL: list[dict[str, str | None]] = [
     {"id": "EXP-0045", "kind": "experiment", "status": "run", "date": "2026-11-19"},
     {"id": "EXP-0046", "kind": "experiment", "status": "run", "date": "2026-11-19"},
     {"id": "EXP-0047", "kind": "experiment", "status": "run", "date": "2026-11-19"},
+    {"id": "EXP-0048", "kind": "experiment", "status": "run", "date": "2026-11-19"},
     {"id": "DEC-0062", "kind": "decision", "status": "accepted", "date": "2026-11-19"},
 ]
-OWED: list[dict[str, str]] = [{"id": "EXP-0048", "status": "not run"}, {"id": "EXP-0049", "status": "not run"}]
+OWED: list[dict[str, str]] = [{"id": "EXP-0049", "status": "not run"}]
 RERUNS = ("EXP-0043-g1-etf-dev-dedup", "EXP-0044-g1-etf-dev-dec0011", "EXP-0045-holdout-B-rescore",
           "EXP-0046-g1-etf-controls-dedup", "EXP-0047-r2-B-iwm-dia-dedup")
 EXPS = ROOT / "research/experiments"
