@@ -1,7 +1,7 @@
 # DEC-0061: Robot B audit outcome, and the verdict rules fixed before the corrective re-runs
 
-- **Status: PROPOSED.** Asked for by the owner on 2026-11-18 (the Robot B improvement mandate). A later pull request
-  that changes this line to ACCEPTED accepts it; the re-runs in section 3 are registered only after that.
+- **Status: ACCEPTED on 2026-11-19.** The owner accepted it in chat on 2026-11-19 ("accept DEC-0061 and start the
+  re-runs"), after #510 merged. The re-runs in section 3 are registered after this line, in the same pull request.
 - **Amends nothing.** No rule, exit, size, limit, gate, latch or stop line of B changes; no file the runner reads is
   edited. B v1 stays frozen (`research/active_strategies/B_intraday_momentum_qqqm.yaml`) and keeps paper trading.
 - **Depends on:** DEC-0007 (G1), DEC-0011 (R-C1 and the owed re-runs), DEC-0023 and DEC-0037 (G2, stop rule).
