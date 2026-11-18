@@ -47,11 +47,22 @@ MEMORY: dict[str, tuple[str | None, str, str | None]] = {
     "dashboard": (None, "1G", "256M"),
     "options-live": (None, "512M", "128M"),
     "deploy-notify": (None, "256M", "64M"),
+    "lab-tape": ("768M", "1G", "0"),
+    "lab-archive-check": (None, "512M", "0"),
 }
 
 
+# Non-trading clock-time jobs that restart on a failure: the lab's recorder keeps its state and resumes, and a session
+# it misses is lost for good (DEC-0060). Bounded like the trading jobs: 3 starts in 6 h.
+RESTART_JOBS = frozenset({"lab-tape"})
+
+# CPU and memory caps for the lab's recorder, which runs beside the paper runners all session: it yields the CPU
+# (Nice, CPUWeight, CPUQuota), the disk (IOWeight) and, under memory pressure, is the first thing the kernel kills.
+LAB_CAPS = ("CPUQuota=70%", "CPUWeight=20", "IOWeight=20", "Nice=10", "OOMScoreAdjust=500")
+
+
 def service(job: Job, root: Path, user: str = USER) -> str:
-    restart = "on-failure" if job.trading else "no"            # the dashboard just runs again in 15 minutes
+    restart = "on-failure" if job.trading or job.name in RESTART_JOBS else "no"    # the dashboard just runs again
     lines = [
         "[Unit]",
         f"Description=Trading Lab {job.name}: {job.what}",
@@ -87,6 +98,8 @@ def service(job: Job, root: Path, user: str = USER) -> str:
     ]
     if job.name in ("paper-b", "paper-o"):
         lines.append("OOMScoreAdjust=-500")                    # the last thing the kernel should kill
+    if job.name == "lab-tape":
+        lines += list(LAB_CAPS)
     if job.name in MEMORY:
         high, cap, swap = MEMORY[job.name]
         lines += [f"MemoryHigh={high}"] if high else []
