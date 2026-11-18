@@ -16,6 +16,16 @@ from wt.data.etf_minutes import load  # noqa: E402
 from wt.signals import setups  # noqa: E402
 
 DEV_END = pd.Timestamp("2025-09-25").date()
+EXP_ID = sys.argv[1] if len(sys.argv) > 1 else "EXP-0006-g1-etf-controls"
+if EXP_ID[:8] not in ("EXP-0006",):                      # a later re-run (DEC-0011) must be registered and clean
+    from wt.core.config import ROOT
+    from wt.research.manifest import assert_clean_for_preregistered_run
+    _out = ROOT / "research/experiments" / EXP_ID
+    if not (_out / "config.yaml").exists():
+        raise SystemExit(f"{EXP_ID} is not registered (no config.yaml): register it before it runs")
+    if (_out / "results.json").exists():
+        raise SystemExit(f"{EXP_ID} has results already: experiments are append-only")
+    assert_clean_for_preregistered_run()
 results = {}
 for sym in ("SPY", "QQQ"):
     df = load(sym)
@@ -40,4 +50,8 @@ for sym in ("SPY", "QQQ"):
         results[f"{fam}|{sym}|control"] = {"control_means": means,
                                            "trades": [{"R": m, "date": "2020-01-02"} for m in means]}
         print(fam, sym, "control mean of means", round(np.mean(means), 4), "95th pct", round(np.percentile(means, 95), 4), flush=True)
-save_experiment(sys.argv[1] if len(sys.argv) > 1 else "EXP-0006-g1-etf-controls", [], {"n_trials": 0, "results": results})
+save_experiment(EXP_ID, [], {"n_trials": 0, "results": results})
+if EXP_ID[:8] != "EXP-0006":
+    from wt.data.etf_minutes import OUT as ETF_DIR
+    from wt.research.manifest import write_manifest
+    write_manifest(ROOT / "research/experiments" / EXP_ID, {"exp": EXP_ID, "seeds": 200}, [ETF_DIR])

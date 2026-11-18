@@ -1,0 +1,15 @@
+# EXP-0046: data-only re-run of EXP-0006b, the ETF random-entry controls (DEC-0011 section 2, fourth item; DEC-0061 3.1).
+experiment: EXP-0046
+status: registered
+decision: DEC-0061
+carries_out: DEC-0011 section 2 (data-only re-run of EXP-0006/0006b)
+trials: 0                         # a correction of existing trials (DEC-0011 section 5); the global count stays at 87
+baseline: EXP-0006b-g1-etf-controls-realcost
+change: only the data: duplicated (symbol, t) rows removed by wt.data.etf_minutes.load
+driver: python scripts/g1_etf_control.py EXP-0046-g1-etf-controls-dedup
+data: data/minute_etf (SPY, QQQ), snapshot hash in manifest.json
+span: [2019-01-02, 2025-09-25]
+seeds: 200 per family and symbol
+outputs: [config.json, results.json, manifest.json]
+feeds: EXP-0044's random-control p (DEC-0061 section 2 inputs), and EXP-0043's
+report: control means side by side with EXP-0006b's
