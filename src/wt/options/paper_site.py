@@ -144,7 +144,8 @@ def window_of(session: str) -> str:
 
 def windows() -> list[dict[str, Any]]:
     """The rule windows, oldest first: each a code and the first session it covers."""
-    rows = [{"id": _code(name) or "other", "from": since} for name, (since, _until) in review.WINDOWS.items()]
+    rows = [{"id": _code(name) or "other", "from": since} for name, (since, until) in review.WINDOWS.items()
+            if since is None or until is None or since <= until]          # `no_oi` holds no session (DEC-0058)
     return sorted(rows, key=lambda w: w["from"] or "")
 
 

@@ -20,3 +20,9 @@
 - The last session is **2026-11-18** (`wt.options.review.NO_OI_END`). That is one session.
 - From 2026-11-19 the clone trades QQQ every session beside the focus names, and its trades count toward EXP-0040.
 - This experiment cannot reach 20 sessions, so it gives no verdict. It is kept as a record, as EXP-0029 was.
+
+## Amended by DEC-0058 (appended 2026-11-18, before any trade of that session was viewed)
+
+- **No session ran under this experiment.** DEC-0056's rule and DEC-0058's reached the host before the same session,
+  2026-11-18, which counts toward EXP-0040. `wt.options.review.NO_OI_END` is now 2026-11-17, before `NO_OI_START`.
+- It gives no verdict and holds no trade. It is kept as a record.

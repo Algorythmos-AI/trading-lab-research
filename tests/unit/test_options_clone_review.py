@@ -45,8 +45,8 @@ def book_from(first: dt.date, n_days: int, per_day: int, rops: list[float], setu
     return out
 
 
-OI_DAY = dt.date(2026, 11, 18)          # the first session of EXP-0039 (DEC-0056), and its last (DEC-0058)
-QQQ_DAY = dt.date(2026, 11, 19)         # the first session of EXP-0040 (DEC-0058)
+OI_DAY = dt.date(2026, 11, 18)          # EXP-0039's planned first session (DEC-0056); none ran under it (DEC-0058)
+QQQ_DAY = dt.date(2026, 11, 18)         # the first session of EXP-0040 (DEC-0058, as amended)
 
 
 def test_too_few_trades_is_no_verdict():
@@ -208,24 +208,25 @@ def test_the_spread5_window_can_no_longer_reach_a_verdict(tmp_path):
 
 
 def test_the_no_oi_window_can_no_longer_reach_a_verdict(tmp_path):
-    """DEC-0058 closes EXP-0039 at 2026-11-18: one session cannot hold 20."""
+    """DEC-0058, as amended, closes EXP-0039 before its first session: no trade falls in it."""
     v = script("options_clone_verdict")
     j = tmp_path / "j.jsonl"
     j.write_text("\n".join(json.dumps(r) for r in book_from(OI_DAY, 25, 2, [0.5, -0.25, 0.5])))
     out = tmp_path / "EXP-0039-options-clone-no-oi-floor"
-    assert v.main(["--journal", str(j), "--out", str(out), "--rules", "no_oi"]) == 0 and not out.exists()   # 1 session
+    assert v.main(["--journal", str(j), "--out", str(out), "--rules", "no_oi"]) == 0 and not out.exists()   # no session
+    assert review.in_window(book_from(OI_DAY, 25, 2, [0.5]), "no_oi") == []
 
 
 def test_the_qqq_report_is_exp_0040(tmp_path):
     v = script("options_clone_verdict")
     j = tmp_path / "j.jsonl"
-    rows = book(17, 2, [0.5]) + book_from(OI_DAY, 1, 2, [0.5]) + book_from(QQQ_DAY, 25, 2, [0.5, -0.25, 0.5])
+    rows = book(17, 2, [0.5]) + book_from(QQQ_DAY, 25, 2, [0.5, -0.25, 0.5])
     j.write_text("\n".join(json.dumps(r) for r in rows))
     out = tmp_path / "EXP-0040-options-clone-qqq-standing"
     assert v.main(["--journal", str(j), "--out", str(out), "--rules", "qqq"]) == 0
     text = (out / "report.md").read_text()
     assert text.startswith("# EXP-0040: the options clone with QQQ as a standing name") and "DEC-0058" in text
-    assert json.loads((out / "result.json").read_text())["all"]["trades"] == 50       # none from before 19 November
+    assert json.loads((out / "result.json").read_text())["all"]["trades"] == 50       # none from before 18 November
 
 
 def test_the_open_interest_change_closes_exp_0029_and_opens_its_own_window():
@@ -233,12 +234,20 @@ def test_the_open_interest_change_closes_exp_0029_and_opens_its_own_window():
     (`no_oi`) only. No trade counts in both, and the new verdict starts from zero."""
     rows = [dict(row(2, 1, 0.5), trade_id=f"2026-11-{d:02d}-O-1") for d in (5, 17, 18, 19)]
     assert [r["trade_id"][:10] for r in review.in_window(rows, "spread5")] == ["2026-11-05", "2026-11-17"]
-    assert [r["trade_id"][:10] for r in review.in_window(rows, "no_oi")] == ["2026-11-18"]     # closed by DEC-0058
+    assert [r["trade_id"][:10] for r in review.in_window(rows, "no_oi")] == []     # closed by DEC-0058, as amended
 
 
 def test_the_standing_name_change_closes_exp_0039_and_opens_its_own_window():
-    """DEC-0058: EXP-0039 (`no_oi`) ends with the 2026-11-18 session; from 2026-11-19 trades count toward EXP-0040
-    (`qqq`) only. No trade counts in both, and the new verdict starts from zero."""
+    """DEC-0058, as amended: the rule reached the host before the 2026-11-18 session, so EXP-0039 (`no_oi`) holds no
+    session and from 2026-11-18 trades count toward EXP-0040 (`qqq`) only. No trade counts in both."""
     rows = [dict(row(2, 1, 0.5), trade_id=f"2026-11-{d:02d}-O-1") for d in (17, 18, 19, 20)]
-    assert [r["trade_id"][:10] for r in review.in_window(rows, "no_oi")] == ["2026-11-18"]
-    assert [r["trade_id"][:10] for r in review.in_window(rows, "qqq")] == ["2026-11-19", "2026-11-20"]
+    assert [r["trade_id"][:10] for r in review.in_window(rows, "no_oi")] == []
+    assert [r["trade_id"][:10] for r in review.in_window(rows, "qqq")] == ["2026-11-18", "2026-11-19", "2026-11-20"]
+
+
+def test_each_session_falls_in_exactly_one_window():
+    """2026-11-17 is EXP-0029's last session and 2026-11-18 EXP-0040's first; the empty `no_oi` window takes neither."""
+    for day, want in (("2026-11-04", "cap15"), ("2026-11-05", "spread5"), ("2026-11-17", "spread5"),
+                      ("2026-11-18", "qqq"), ("2026-11-19", "qqq")):
+        got = [w for w in review.WINDOWS if review.in_window([{"trade_id": f"{day}-O-1"}], w)]
+        assert got == [want], day
