@@ -75,8 +75,8 @@ listings:
 |---|---|
 | `data.reachable` | the daily bars or the option listings gave no usable answer: for the bars, no connection, a timeout, a dropped body or a 5xx/429 still failing after one retry (3 seconds later, or a 429's Retry-After up to 10 seconds), any other HTTP error or an unreadable body (not retried); for the listings, two names in a row failing that way, or no name answering at all. The checks that need them then warn "not verified". One name's own listing error, a lasting one included, is not this: it warns `options.listing.<SYM>` ("not verified") and the other names are checked as usual. Bar pages are followed to the end (at most 30) |
 | `options.session`, `options.built_from` | the edition is not for the coming session, or not built from the last close |
-| `options.close.<SYM>` | the edition's close is more than $0.02 from the tape's |
-| `options.levels.<SYM>` | PDH, PDL, PWH, PWL, PMH, PML, MA20 or MA50 is more than $0.05 from the same level recomputed |
+| `options.close.<SYM>` | the edition's close is more than $0.02 from the tape's and more than 0.25 of its ATR14 (between the two: a warning, two vendors' prints) |
+| `options.levels.<SYM>` | PDH, PDL, PWH, PWL, PMH, PML, MA20 or MA50 is more than $0.05 from the same level recomputed and more than 0.25 of its ATR14, or missing (between the two: a warning) |
 | `radar.date`, `radar.fresh` (before the open) | the radar is not for today, or is more than 6 hours old |
 | `radar.close.<SYM>` (before the open) | the radar's price is more than $0.02 from the last close |
 | `calendar.macro.<type>` (both runs) | the last row of a recurring type in `config/events/macro_events.csv` (cpi, nfp, fomc_decision, fomc_minutes, quad_witching) is fewer than 35 days after the session, or the type has no row; it warns from 45 days. 35 leaves a week before the paper runner refuses to arm (it needs a row 30 days ahead). `fomc_emergency` is never required |
