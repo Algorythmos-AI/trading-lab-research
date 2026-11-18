@@ -80,6 +80,9 @@ Over the same sessions the clone filled 18 entries on 11 of the 21 sessions. On 
      2026-11-19. The owner chose this reading in chat.
    - From 2026-11-19 every session counts toward EXP-0040, whether or not QQQ is also a focus name that day. An empty
      `standing` on a later session never moves the start again.
+   - Disclosure: after this amendment was written, at 11:06 New York on 2026-11-18, the author's supervision check
+     printed that session's one closing line (trade 2026-11-18-O-1), its outcome included. The dates above were fixed
+     before that trade existed.
 8. **EXP-0039 closes at 2026-11-18** with one session (`wt.options.review.NO_OI_END`).
    - Its trades never count toward EXP-0040.
    - It cannot reach 20 sessions, so it gives no verdict. It is kept as a record, as EXP-0029 was.
