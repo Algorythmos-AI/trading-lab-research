@@ -8,7 +8,7 @@ export PYTHONPATH := src
 export PYTHONDONTWRITEBYTECODE := 1
 
 # Modules held to `mypy --strict`. New safety and ops modules join this list in the PR that adds them.
-TYPED_MODULES := src/wt/lab/__init__.py src/wt/lab/focus.py src/wt/lab/tiers.py src/wt/lab/probe.py src/wt/webull/__init__.py src/wt/webull/client.py src/wt/webull/pull.py src/wt/webull/journal.py src/wt/webull/publish.py src/wt/webull/treehash.py \
+TYPED_MODULES := src/wt/lab/__init__.py src/wt/lab/focus.py src/wt/lab/tiers.py src/wt/lab/probe.py src/wt/lab/tape.py src/wt/lab/manifest.py src/wt/lab/recorder.py src/wt/lab/archive.py src/wt/lab/afterclose.py src/wt/webull/__init__.py src/wt/webull/client.py src/wt/webull/pull.py src/wt/webull/journal.py src/wt/webull/publish.py src/wt/webull/treehash.py \
                  src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py src/wt/ops/window.py \
                  src/wt/ops/heartbeat.py src/wt/ops/preflight.py src/wt/ops/jobs.py src/wt/ops/migrate.py \
                  src/wt/ops/agents.py src/wt/ops/deploy.py src/wt/ops/ci.py src/wt/risk/stop_rule.py src/wt/core/safety.py src/wt/core/ids.py \
