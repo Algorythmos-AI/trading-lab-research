@@ -130,7 +130,7 @@ def test_cost_slope():
 
 def test_exit_quality():
     q = ba.exit_quality(trades([2, -1, 0.5], mfe=[2.1, 1.2, 1.0]))
-    assert q["share_reaching_target_mfe"] == pytest.approx(1 / 3)
+    assert q["share_reaching_2R_mfe"] == pytest.approx(1 / 3)
     assert q["share_of_losers_that_were_1R_up"] == 1.0
     assert q["mean_R_over_mfe_of_winners"] == pytest.approx((2 / 2.1 + 0.5) / 2)
     assert ba.exit_quality(trades([1])) == {"n_with_mfe": 0}
@@ -150,16 +150,92 @@ def test_scorecard_paper_line_parses():
         cli.paper_aggregate("nothing here")
 
 
-def test_first_weekday_of_month_and_rounding():
+def _cli():
     import importlib.util
     from pathlib import Path
     spec = importlib.util.spec_from_file_location("b_audit_cli2", Path(__file__).parents[2] / "scripts/b_audit.py")
     assert spec and spec.loader
     cli = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cli)
-    assert cli.first_weekday_of_month(dt.date(2024, 4, 1)) and cli.first_weekday_of_month(dt.date(2019, 6, 3))
-    assert not cli.first_weekday_of_month(dt.date(2019, 6, 4))
+    return cli
+
+
+def test_rounding_and_trading_calendar():
+    cli = _cli()
     assert cli.rounded({"a": [0.1234567891234, math.inf, 0.0, 3]}) == {"a": [0.123456789, math.inf, 0.0, 3]}
+    sessions = cli.xnys_sessions(dt.date(2019, 11, 1), dt.date(2020, 1, 31))
+    firsts = cli.first_sessions(sessions)
+    assert dt.date(2020, 1, 2) in firsts and dt.date(2020, 1, 1) not in sessions      # New Year's Day is a holiday
+    assert sessions[dt.date(2019, 11, 29)] == dt.time(13, 0)                          # the day after Thanksgiving
+
+
+def test_runner_constants_match_the_runner_source():
+    import re
+    from pathlib import Path
+    src = (Path(__file__).parents[2] / "src/wt/live/runner_b.py").read_text()
+    flat = re.search(r"flatten_dt, market_dt, verify_dt = \(close_dt - dt\.timedelta\(minutes=m\) for m in \((\d+),", src)
+    entry = re.search(r"now < flatten_dt - dt\.timedelta\(minutes=(\d+)\)", src)
+    assert flat and entry
+    assert int(flat.group(1)) == ba.FLATTEN_BEFORE_CLOSE_MIN and int(entry.group(1)) == ba.NO_ENTRY_BEFORE_FLATTEN_MIN
+    assert ba.entry_cutoff() == dt.time(15, 30) and ba.entry_cutoff(dt.time(13, 0)) == dt.time(12, 30)
+    half = trades([1], start=dt.date(2019, 11, 29), entry="12:30")[0]
+    assert ba.runner_can_trade(half, dt.time(13, 0)) is False and ba.runner_can_trade(half) is True
+
+
+def test_rc1_footprint():
+    assert ba.rc1_footprint(trades([1], entry="09:45")[0])
+    assert ba.rc1_footprint(trades([1], entry="11:15")[0]) and ba.rc1_footprint(trades([1], entry="12:45")[0])
+    assert not ba.rc1_footprint(trades([1], entry="10:00")[0]) and not ba.rc1_footprint(trades([1], entry="11:31")[0])
+
+
+def test_walk_forward_ties_and_the_20_trade_minimum():
+    start = dt.date(2019, 1, 2)
+    a = trades([0.2] * 19, start=start)                     # 19 fit trades: never eligible
+    b = trades([0.1] * 30, start=start)
+    c = trades([0.1] * 30, start=start)                     # ties b: the first in input order wins
+    _, picks = ba.walk_forward({"a": a, "b": b, "c": c}, start, dt.date(2020, 3, 31))
+    assert picks == [("2020-01-01", "b")]
+
+
+def test_pbo_near_one_when_the_in_sample_winner_is_a_mirage():
+    rng = np.random.default_rng(5)
+    m = rng.normal(0, 0.1, (640, 6))
+    # config 0 is excellent in the first half of every block and bad in the second: chosen in sample, loses out of it
+    for blk in range(16):
+        m[blk * 40: blk * 40 + 20, 0] += 1.0
+        m[blk * 40 + 20: blk * 40 + 40, 0] -= 1.0
+    res = ba.pbo_cscv(m, 16)
+    assert sum(res["is_best_counts"]) == res["splits"]
+    assert 0.0 <= res["pbo"] <= 1.0
+
+
+def test_dsr_with_trial_variance_and_sharpe_variance():
+    rng = np.random.default_rng(9)
+    v = {"x": trades(rng.normal(0.1, 1, 300)), "y": trades(rng.normal(-0.1, 1, 300)), "z": trades(rng.normal(0.0, 1, 300))}
+    sv = ba.sharpe_variance(v)
+    assert sv > 0
+    assert ba.dsr(v["x"], 10, sv) <= ba.dsr(v["x"], 10, 1e-6) + 1e-12 or sv < 1 / 300
+    assert ba.sharpe_variance({"x": v["x"]}) == 0.0
+
+
+def test_cost_slope_rising_has_no_break_even():
+    assert ba.cost_slope({1.0: 0.1, 2.0: 0.2})["break_even_multiple"] is None
+
+
+def test_sprt_expected_lengths_closed_form():
+    d = ba.sprt_design(0.05, 0.8, 0.05, 0.20)
+    a, b = math.log(0.8 / 0.05), math.log(0.2 / 0.95)
+    k = 0.05 ** 2 / (2 * 0.64)
+    assert d["expected_trades_if_no_edge"] == pytest.approx(((0.95 * b) + 0.05 * a) / -k)
+    assert d["expected_trades_if_edge"] == pytest.approx((0.2 * b + 0.8 * a) / k)
+
+
+def test_reconcile_failure_exits_2(monkeypatch):
+    cli = _cli()
+    def boom():
+        raise cli.ReconcileError("walk-forward n: recomputed 1, recorded 2")
+    monkeypatch.setattr(cli, "run", boom)
+    assert cli.main([]) == 2
 
 
 def test_committed_results_reproduce():

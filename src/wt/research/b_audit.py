@@ -26,8 +26,11 @@ from scipy import stats as st
 from wt.backtest.stats import bootstrap_ci, deflated_sharpe_prob
 
 ET = ZoneInfo("America/New_York")
-LAST_RUNNER_ENTRY = dt.time(15, 30)     # runner_b.py: entries only while now < flatten (15:50) - 20 min on full days
-EULER_GAMMA = 0.5772156649
+# runner_b.py: flatten_dt = close - 10 min; entries only while now < flatten_dt - 20 min (tests/unit/test_b_audit.py
+# reads both numbers from the runner's source so a change there fails here).
+FLATTEN_BEFORE_CLOSE_MIN = 10
+NO_ENTRY_BEFORE_FLATTEN_MIN = 20
+FULL_DAY_CLOSE = dt.time(16, 0)
 
 
 @dataclass(frozen=True)
@@ -156,12 +159,25 @@ def entry_mark(t: Trade) -> str | None:
     return f"{t.entry_et.hour:02d}:{0 if t.entry_et.minute < 30 else 30:02d}"
 
 
-def runner_can_trade(t: Trade) -> bool | None:
-    """False when the entry filled at or after 15:30 New York: the runner places no entry then on a full day.
-    Half days (earlier cutoff) are not identified here; the report says so."""
+def entry_cutoff(close: dt.time = FULL_DAY_CLOSE) -> dt.time:
+    """The runner's last entry instant for a session closing at `close` (15:30 on a full day, 12:30 on a half day)."""
+    c = dt.datetime.combine(dt.date(2000, 1, 3), close)
+    return (c - dt.timedelta(minutes=FLATTEN_BEFORE_CLOSE_MIN + NO_ENTRY_BEFORE_FLATTEN_MIN)).time()
+
+
+def runner_can_trade(t: Trade, close: dt.time = FULL_DAY_CLOSE) -> bool | None:
+    """False when the entry filled at or after the runner's entry cutoff for that session (New York time)."""
     if t.entry_et is None:
         return None
-    return t.entry_et.time() < LAST_RUNNER_ENTRY
+    return t.entry_et.time() < entry_cutoff(close)
+
+
+def rc1_footprint(t: Trade) -> bool:
+    """An entry B's clean bars cannot produce: before the first 10:00 mark, or filled at :15 or :45 (half a mark out of
+    step, which is what a month file holding the next month's first session does to positional bar counting)."""
+    if t.entry_et is None:
+        return False
+    return t.entry_et.time() < dt.time(10, 0) or t.entry_et.minute in (15, 45)
 
 
 def splits(trades: Sequence[Trade]) -> dict[str, dict[str, dict[str, float | int]]]:
@@ -183,7 +199,7 @@ def exit_quality(trades: Sequence[Trade], target_r: float = 2.0) -> dict[str, fl
     winners = [t for t in with_mfe if t.r > 0 and t.mfe_r and t.mfe_r > 0]
     return {
         "n_with_mfe": len(with_mfe),
-        "share_reaching_target_mfe": float(np.mean([(t.mfe_r or 0) >= target_r for t in with_mfe])),
+        "share_reaching_2R_mfe": float(np.mean([(t.mfe_r or 0) >= target_r for t in with_mfe])),
         "mean_mfe_R_of_losers": float(np.mean([t.mfe_r for t in losers])) if losers else None,
         "share_of_losers_that_were_1R_up": float(np.mean([(t.mfe_r or 0) >= 1.0 for t in losers])) if losers else None,
         "mean_R_over_mfe_of_winners": float(np.mean([t.r / (t.mfe_r or 1) for t in winners])) if winners else None,
@@ -240,12 +256,14 @@ def pbo_cscv(m: np.ndarray, blocks: int = 16) -> dict[str, Any]:
     parts = [m[i * size:(i + 1) * size] for i in range(blocks)]
     logits = []
     degradation = []
+    picks = np.zeros(n_cfg, dtype=int)
     for ins in itertools.combinations(range(blocks), blocks // 2):
         is_set = set(ins)
         is_rows = np.vstack([parts[i] for i in range(blocks) if i in is_set])
         oos_rows = np.vstack([parts[i] for i in range(blocks) if i not in is_set])
         is_perf, oos_perf = is_rows.mean(axis=0), oos_rows.mean(axis=0)
         best = int(np.argmax(is_perf))
+        picks[best] += 1
         rank = float(st.rankdata(oos_perf, method="average")[best])      # 1 = worst out of sample
         omega = rank / (n_cfg + 1)
         logits.append(math.log(omega / (1 - omega)))
@@ -256,7 +274,8 @@ def pbo_cscv(m: np.ndarray, blocks: int = 16) -> dict[str, Any]:
     return {"pbo": float((lam <= 0).mean()), "splits": len(lam), "configs": n_cfg, "rows_used": size * blocks,
             "rows_dropped": t_rows - size * blocks, "median_logit": float(np.median(lam)),
             "oos_mean_of_is_best": float(oos_best.mean()), "is_mean_of_is_best": float(is_best.mean()),
-            "oos_on_is_slope": slope, "share_is_best_loses_oos": float((oos_best <= 0).mean())}
+            "oos_on_is_slope": slope, "share_is_best_loses_oos": float((oos_best <= 0).mean()),
+            "is_best_counts": [int(x) for x in picks]}
 
 
 # ---------------------------------------------------------------- what the paper record can show

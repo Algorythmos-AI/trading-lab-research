@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -45,9 +46,21 @@ def paper_aggregate(text: str) -> dict[str, float | int]:
             "mean_R": float(line.group(2)), "cum_R": float(line.group(3))}
 
 
-def first_weekday_of_month(d: dt.date) -> bool:
-    """No earlier weekday in the same month (exchange holidays aside)."""
-    return d.weekday() < 5 and all((d - dt.timedelta(days=k)).weekday() >= 5 for k in range(1, d.day))
+def xnys_sessions(start: dt.date, end: dt.date) -> dict[dt.date, dt.time]:
+    """NYSE sessions and their closing time in New York (exchange_calendars XNYS, as build_market_calendar.py uses)."""
+    import exchange_calendars as xcals
+    cal = xcals.get_calendar("XNYS")
+    out = {}
+    for s in cal.sessions_in_range(start.isoformat(), end.isoformat()):
+        out[s.date()] = cal.session_close(s).tz_convert(ba.ET).time()
+    return out
+
+
+def first_sessions(sessions: dict[dt.date, dt.time]) -> set[dt.date]:
+    firsts: dict[tuple[int, int], dt.date] = {}
+    for d in sorted(sessions):
+        firsts.setdefault((d.year, d.month), d)
+    return set(firsts.values())
 
 
 def _close(name: str, got: float, want: float, tol: float, misses: list[str]) -> None:
@@ -96,16 +109,21 @@ def run() -> dict[str, Any]:
     for _, name in picks:
         pick_counts[name] = pick_counts.get(name, 0) + 1
 
-    # ---- data quality: B's first signal mark is 10:00, so an earlier entry is a data fault (DEC-0011 R-C1 put the
-    # next month's first session at the end of each month file, and B counts bars by position)
-    early = [{"date": t.date.isoformat(), "entry_et": t.entry_et.strftime("%H:%M") if t.entry_et else None,
-              "first_weekday_of_month": first_weekday_of_month(t.date),
-              "R": t.r} for t in frozen if t.entry_et is not None and t.entry_et.time() < dt.time(10, 0)]
+    # ---- data quality (added after the first run, on review; reported under "unregistered")
+    sessions = xnys_sessions(start - dt.timedelta(days=40), end)
+    firsts = first_sessions(sessions)
+    order = sorted(sessions)
+    pos = {d: i for i, d in enumerate(order)}
+    on_first = [t for t in frozen if t.date in firsts]
+    in_sigma = [t for t in frozen if t.date in pos and any(order[j] in firsts for j in range(max(0, pos[t.date] - 14), pos[t.date]))]
+    footprint = [t for t in frozen if ba.rc1_footprint(t)]
+    early_close = [t for t in frozen if sessions.get(t.date, ba.FULL_DAY_CLOSE) != ba.FULL_DAY_CLOSE]
 
     # ---- the frozen rule's development record
     dist = ba.distribution(frozen, seed=seed, draws=draws)
-    tradable = [t for t in frozen if ba.runner_can_trade(t)]
-    untradable = [t for t in frozen if ba.runner_can_trade(t) is False]
+    close_of = {t.date: sessions.get(t.date, ba.FULL_DAY_CLOSE) for t in frozen}
+    tradable = [t for t in frozen if ba.runner_can_trade(t, close_of[t.date])]
+    untradable = [t for t in frozen if ba.runner_can_trade(t, close_of[t.date]) is False]
     sr_var = ba.sharpe_variance(configs)
     trials_at = {"65": int(rec["walk_forward"]["dsr_trials"]), "registry": registry_trials}
     dsr_tab = {f"{who}_trials_{k}": {"trials": n, "one_over_n": ba.dsr(t, n), "across_dev_variants": ba.dsr(t, n, sr_var)}
@@ -124,7 +142,6 @@ def run() -> dict[str, Any]:
     traded = json.loads(paths["cost_stress_traded"].read_text())
     traded_pts = {float(k.rsplit("x", 1)[1]): float(v[1]) for k, v in traded.items() if k.startswith("QQQ ")}
 
-    import numpy as np  # local: only the control comparison needs it here
     cm = np.array([x for k, c in controls.items() if k.startswith(cfg["family_prefix"]) for x in c["control_means"]])
     control_p = float((1 + (cm >= dist["expectancy_R"]).sum()) / (1 + len(cm))) if len(cm) else None
 
@@ -146,6 +163,24 @@ def run() -> dict[str, Any]:
     sprt = ba.sprt_design(edge / 2, sd, float(sp["alpha"]), float(sp["beta"]), float(sp["h0_mean_R"]))
     sprt["no_edge_boundary_at_trades"] = {str(n): ba.sprt_lower_at(sprt, n) for n in (10, 20, 30, 50, 100)}
 
+    from scipy import stats as st
+    lo_n, hi_n = st.chi2.ppf(0.025, 2 * paper["trades_closed"]) / 2, st.chi2.ppf(0.975, 2 * paper["trades_closed"] + 2) / 2
+    sr_need = next((x / 1000 for x in range(100, 1000)
+                    if ba.deflated_sharpe_prob(x / 1000, dist["n"], registry_trials, dist["skew"], dist["kurtosis"]) > 0.95), None)
+    n_need = next((n for n in range(dist["n"], 20001, 10)
+                   if ba.deflated_sharpe_prob(dist["per_trade_sharpe"], n, registry_trials, dist["skew"], dist["kurtosis"]) > 0.95), None)
+    unregistered = {
+        "note": "added after the first run on adversarial review; descriptive; not part of the registered metrics",
+        "unique_trade_dates": len({t.date for t in frozen}),
+        "rc1_footprint_trades": [{"date": t.date.isoformat(), "entry_et": t.entry_et.strftime("%H:%M") if t.entry_et else None,
+                                  "R": t.r} for t in footprint],
+        "trades_on_first_session_of_month": {"n": len(on_first), "sum_R": float(sum(t.r for t in on_first))},
+        "trades_with_first_session_in_prior_14_sessions": len(in_sigma),
+        "trades_on_early_close_days": len(early_close),
+        "paper_trades_per_session_95": [lo_n / paper["sessions_armed"], hi_n / paper["sessions_armed"]],
+        "dsr_095_needs": {"per_trade_sharpe_at_n": sr_need, "trades_at_sharpe": n_need, "trials": registry_trials},
+        "pbo_is_best_counts": dict(zip(names, pbo_all["is_best_counts"], strict=True)),
+    }
     return {
         "experiment": cfg["experiment"], "evidence_label": cfg["evidence_label"], "trials_added": 0,
         "inputs_sha256": {k: sha256(p) for k, p in sorted(paths.items())},
@@ -154,8 +189,7 @@ def run() -> dict[str, Any]:
                       "dsr_trials_65": wf_dsr65, "fold_pick_counts": pick_counts, "folds": len(picks)},
                       "frozen_rule_dev_n": len(frozen), "holdout": holdout},
         "walk_forward": wf_d,
-        "data_quality": {"entries_before_1000": early, "unique_trade_dates": len({t.date for t in frozen}),
-                         "note": "one trade per date at most, so day-block and trade bootstrap intervals coincide"},
+        "unregistered": unregistered,
         "frozen_rule": dist | {"splits": ba.splits(frozen), "exit_quality": ba.exit_quality(frozen),
                                "random_control_p": control_p, "control_draws": len(cm)},
         "runner_parity": {"tradable": ba.distribution(tradable, seed=seed, draws=draws),

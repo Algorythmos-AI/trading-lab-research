@@ -24,4 +24,4 @@
 ## Dates
 
 - Registered: 2026-11-18
-- First run: (after the registering commit)
+- First run: 2026-11-18, after the registering commit 9d5f393; results committed with the driver amendment noted in report.md
