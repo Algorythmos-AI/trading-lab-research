@@ -59,6 +59,20 @@ export function RobotBBody({ s, e, now }: { s: Snapshot | null; e: Evidence | nu
   );
 }
 
+/** A meter only when there is a number to show: a role="meter" with no value fails the accessibility scan and says
+ * nothing, so a missing figure is written out instead. */
+function SafeMeter(props: React.ComponentProps<typeof Meter>) {
+  const { value, max, label } = props;
+  const ok = typeof value === "number" && Number.isFinite(value) && typeof max === "number" && Number.isFinite(max) && max > 0;
+  if (ok) return <Meter {...props} />;
+  return (
+    <div className="flex items-baseline justify-between gap-3 text-[0.8125rem]">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="text-muted-foreground">not in this snapshot</span>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------- identity
 
 function IdentityStrip({ p, e }: { p: PaperNow; e: Evidence | null }) {
@@ -253,7 +267,7 @@ function PaperMeters({ e, s, p }: { e: Evidence | null; s: Snapshot | null; p: P
     >
       <div className="grid gap-4">
         {p.stopLine !== null ? (
-          <Meter
+          <SafeMeter
             label={`Stop line used (${rSigned(p.cumR, 2)} of ${rSigned(p.stopLine, 2)})`}
             value={used}
             max={1}
@@ -263,24 +277,24 @@ function PaperMeters({ e, s, p }: { e: Evidence | null; s: Snapshot | null; p: P
         ) : (
           <p className="text-muted-foreground text-sm">Stop rule: not in this snapshot.</p>
         )}
-        <Meter
+        <SafeMeter
           label="Clean sessions (G2a)"
           value={g?.sessions}
           max={g?.sessions_needed}
           tone="info"
           valueText={`${num(g?.sessions)} of ${num(g?.sessions_needed)}`}
         />
-        <Meter
+        <SafeMeter
           label="Incident-free in a row (G2a)"
           value={g?.incident_free_streak}
           max={g?.incident_free_needed}
           tone="info"
           valueText={`${num(g?.incident_free_streak)} of ${num(g?.incident_free_needed)}`}
         />
-        <Meter label="Trades (G2b)" value={g?.trades} max={g?.trades_needed} tone="info" valueText={`${num(g?.trades)} of ${num(g?.trades_needed)}`} />
+        <SafeMeter label="Trades (G2b)" value={g?.trades} max={g?.trades_needed} tone="info" valueText={`${num(g?.trades)} of ${num(g?.trades_needed)}`} />
         {e && needed ? (
           <>
-            <Meter
+            <SafeMeter
               label="Trades for a statistical answer"
               value={p.trades}
               max={needed}
@@ -385,7 +399,7 @@ function ExitsPanel({ e }: { e: Evidence }) {
     >
       <div className="grid gap-3">
         {e.exits.map((x) => (
-          <Meter
+          <SafeMeter
             key={x.kind}
             label={`${EXIT_WORD[x.kind] ?? x.kind} · average ${rSigned(x.expectancy_r)}`}
             value={x.trades}
