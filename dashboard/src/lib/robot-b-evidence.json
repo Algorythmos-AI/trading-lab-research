@@ -133,10 +133,6 @@
  },
  "owed": [
   {
-   "id": "EXP-0048",
-   "status": "not run"
-  },
-  {
    "id": "EXP-0049",
    "status": "not run"
   }
@@ -259,6 +255,12 @@
   {
    "date": "2026-11-19",
    "id": "EXP-0047",
+   "kind": "experiment",
+   "status": "run"
+  },
+  {
+   "date": "2026-11-19",
+   "id": "EXP-0048",
    "kind": "experiment",
    "status": "run"
   },
