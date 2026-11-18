@@ -235,18 +235,31 @@ def arm_hyp(arm: Any, setup: Any) -> str | None:
     return None
 
 
+ARMS_LAST_SESSION = review.SPREAD5_END
+
+
+def _stamped(r: Mapping[str, Any]) -> bool:
+    """Written by a known release (DEC-0041 point 5): `release_commit` gives `unknown` when it cannot tell."""
+    rel = r.get("release")
+    return isinstance(rel, str) and rel not in ("", "unknown")
+
+
 def arms_block(state: Path, fee: float) -> list[dict[str, Any]] | None:
-    """Each arm's closed virtual trades, oldest first, by hypothesis id; None when no shadow file exists."""
+    """Each arm's closed virtual trades, oldest first, by hypothesis id; None when no shadow file exists.
+
+    DEC-0059 point 2: only trades stamped by a known release, of sessions up to `review.SPREAD5_END` (2026-11-17), the
+    last session under EXP-0029's config, which DEC-0041 point 5 makes the end of every arm. One fixed date for every
+    arm; anything booked after it belongs to no trial and is never shown."""
     root = state / "shadow"
     files = sorted(root.glob("*.jsonl")) if root.exists() else []
     if not files:
         return None
     last: dict[str, Mapping[str, Any]] = {}
     for f in files:
-        if not _DATE.match(f.stem):
+        if not _DATE.match(f.stem) or f.stem > ARMS_LAST_SESSION:
             continue
         for r in jsonl(f):
-            if isinstance(r.get("vid"), str) and r.get("event") == "closed":
+            if isinstance(r.get("vid"), str) and r.get("event") == "closed" and _stamped(r):
                 last[f"{f.stem}|{r['vid']}"] = {**r, "_session": f.stem}
     by_hyp: dict[str, list[dict[str, Any]]] = {}
     for key in sorted(last):

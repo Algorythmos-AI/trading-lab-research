@@ -189,6 +189,24 @@ def test_the_arms_closed_virtual_trades_go_out_by_hypothesis_with_hashed_ids(tmp
     assert all(x["vid"].startswith("2026-11-12-V") for a in doc["arms"] for x in a["trades"])
 
 
+def test_the_arms_show_only_stamped_trades_up_to_the_last_counted_session(tmp_path: Path) -> None:
+    """DEC-0059 point 2: one fixed cut for every arm (2026-11-17), and only rows a known release wrote."""
+    assert paper_site.ARMS_LAST_SESSION == review.SPREAD5_END == "2026-11-17"
+    shadow = tmp_path / "state" / "shadow"
+    for day in ("2026-11-06", "2026-11-17", "2026-11-18", "2026-11-19"):
+        write(shadow / f"{day}.jsonl", [virtual(f"{day}-trap-SPY-10:42-call-x", "trap", "trap", ts=f"{day}T16:00:00+00:00",
+                                                filled_at=f"{day}T15:00:00+00:00", exit_at=f"{day}T15:40:00+00:00")])
+    write(shadow / "2026-11-10.jsonl", [virtual("2026-11-10-trap-a", "trap", "trap", release="unknown"),
+                                        virtual("2026-11-10-trap-b", "trap", "trap", release=None)])
+    doc = build(tmp_path, [])
+    assert paper_site.validate(doc) == []
+    assert [(a["hyp"], [t["session"] for t in a["trades"]]) for a in doc["arms"]] == [("HYP-0046", ["2026-11-06", "2026-11-17"])]
+    for day in ("2026-11-06", "2026-11-17"):
+        (shadow / f"{day}.jsonl").unlink()
+    (shadow / "2026-11-10.jsonl").unlink()
+    assert build(tmp_path, [])["arms"] == []                     # only later sessions: the block is sent, empty
+
+
 def test_every_document_the_builder_can_make_passes_the_dashboards_schema_and_a_fault_in_it_is_caught(tmp_path: Path) -> None:
     doc = build(tmp_path, [closed("2026-11-18-O-1")])
     assert paper_site.validate(doc) == []

@@ -21,7 +21,7 @@ They show whether or not the history has been sent.
 | Block | From | Notes |
 |---|---|---|
 | `clone` | `data/live/options_journal.jsonl` (`trade_closed`, the last row of a trade id) and `var/options/plans/plan_*.json` | A trade counts as the nightly review counts it: closed, with both fills and a result. An unsettled trade is sent and listed on the page, in no total |
-| `arms` | `var/options/shadow/<date>.jsonl`, closed virtual trades | Grouped by hypothesis id. Simulated fills, never orders |
+| `arms` | `var/options/shadow/<date>.jsonl`, closed virtual trades | Grouped by hypothesis id. Simulated fills, never orders. Only sessions up to 2026-11-17 and rows a known release wrote (DEC-0059); booking is off since then |
 | `manual` | the manual paper account: filled orders, option expiries, exercises and assignments | One GET path, `/v2/account/activities`, on the paper host. Kept in `var/options-live/activities.json` |
 
 It is read only. Nothing here places, changes or cancels an order, and the clone's runner is not touched.
