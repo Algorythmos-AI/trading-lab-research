@@ -509,11 +509,26 @@ def _sigterm(signum: int, frame: object) -> None:
     TERM.set()
 
 
+RECORD = ROOT / "research" / "decisions" / "DEC-0060-options-lab-tape-and-execution-measurements.md"
+
+
+def accepted(path: Path = RECORD) -> bool:
+    """DEC-0060 says recording starts only after the record is accepted (its "Order of the work" 5): its status line
+    must read ACCEPTED. Until the acceptance pull request reaches the host, the job records nothing."""
+    try:
+        return "**Status: ACCEPTED" in path.read_text()
+    except OSError:
+        return False
+
+
 def main(argv: Sequence[str] | None = None, clock: Clock | None = None, get: Get | None = None,
-         env: Mapping[str, str] | None = None, inline_minute: bool = False) -> int:
+         env: Mapping[str, str] | None = None, inline_minute: bool = False, record: Path = RECORD) -> int:
     e = dict(os.environ) if env is None else dict(env)
     ck = clock or WallClock()
     today = ck.now().astimezone(NY).date()
+    if not accepted(record):
+        print(f"{today}: DEC-0060 is not accepted yet; nothing recorded")
+        return 0
     if today.isoformat() not in tiers.sessions():
         print(f"{today}: not a session")
         return 0

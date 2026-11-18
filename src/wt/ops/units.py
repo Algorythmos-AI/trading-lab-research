@@ -87,7 +87,8 @@ def service(job: Job, root: Path, user: str = USER) -> str:
         f"ExecStart={root / PY} -m wt.ops.jobs run {job.name}",
         f"Restart={restart}",
         "RestartSec=60",
-        "RestartPreventExitStatus=124",
+        # 124: a deadline kill. The lab's recorder adds 2 (no keys), which no restart can fix.
+        f"RestartPreventExitStatus=124{' 2' if job.name in RESTART_JOBS else ''}",
         f"RuntimeMaxSec={int(job.runtime_max_h * 3600)}",
         "KillMode=mixed",
         "TimeoutStopSec=60",

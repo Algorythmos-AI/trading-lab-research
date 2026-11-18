@@ -300,7 +300,9 @@ def run_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, f: focus.Focus | N
     monkeypatch.setattr(recorder.shutil, "disk_usage", lambda p: type("U", (), {"free": 40e9})())
     monkeypatch.setattr(recorder, "rss_mb", lambda: 100.0)
     env = {**ENV, "WT_LAB_TAPE": str(tmp_path / "tape")}
-    rc = recorder.main(clock=clock, get=api or Alpaca(clock), env=env, inline_minute=True)
+    rec_file = tmp_path / "DEC-0060.md"
+    rec_file.write_text("- **Status: ACCEPTED on 2026-11-20 (New York).**")
+    rc = recorder.main(clock=clock, get=api or Alpaca(clock), env=env, inline_minute=True, record=rec_file)
     return rc, tmp_path / "tape" / clock.t.astimezone(recorder.NY).date().isoformat()
 
 
@@ -404,3 +406,15 @@ def test_sigterm_stops_at_the_next_check_and_writes_no_manifest(tmp_path: Path) 
     rec.run(START, START + dt.timedelta(minutes=2))
     assert rec.stopped == "sigterm" and rec.counts["ticks_run"] < 24
     assert (rec.folder / recorder.STATE).exists() and not (rec.folder / manifest.NAME).exists()
+
+
+def test_nothing_is_recorded_until_dec_0060_is_accepted(tmp_path: Path, capsys: Any) -> None:
+    proposed = tmp_path / "DEC-0060.md"
+    proposed.write_text("- **Status: PROPOSED.** The owner approved the plan")
+    clock = Clock(START - dt.timedelta(minutes=10))
+    api = Alpaca(clock)
+    rc = recorder.main(clock=clock, get=api, env={**ENV, "WT_LAB_TAPE": str(tmp_path / "tape")}, record=proposed)
+    assert rc == 0 and api.calls == [] and not (tmp_path / "tape").exists()
+    assert "not accepted" in capsys.readouterr().out
+    assert recorder.accepted(tmp_path / "missing.md") is False
+    assert recorder.accepted() is False                       # the record in this repository is still PROPOSED

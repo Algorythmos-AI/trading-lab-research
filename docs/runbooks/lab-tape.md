@@ -47,7 +47,9 @@ The tape is PRIVATE: it never goes into the repository, the dashboard or a log. 
    `pair_used`; default `APCA_CLONE`) and `WT_LAB_RATE_LIMIT` (the probe's measured limit; the recorder uses 40% of it).
 4. **Install the units** after the release that carries the job: `sudo wt-install-units`. Then
    `systemctl list-timers 'wt-lab-*'` shows `wt-lab-tape.timer` (weekdays 09:15) and `wt-lab-archive-check.timer`.
-5. **Accept DEC-0060** by its status-line pull request before the first recorded session.
+5. **Accept DEC-0060** by its status-line pull request. Until that change reaches the host, the job starts each
+   weekday, sees the record still PROPOSED, logs "DEC-0060 is not accepted yet; nothing recorded" and ends: the
+   units can be installed safely before the probe and the bucket exist.
 
 ## Checking a session
 
@@ -68,7 +70,8 @@ normal day), `restarts`, `rows` and `after_close`. `upload.json` beside it means
 | A folder with `state.json` and no manifest after the close | The job was stopped and did not restart. `sudo systemctl start wt-lab-tape` writes the manifest with what it has (it resumes, finds the close past, finishes) |
 | `upload.json` missing a day later | The next session's run uploads it. If it keeps failing, check the bucket token: `python -m wt.lab.archive upload` prints why |
 | The weekly check reports a bad object | An archived part differs from its receipt: keep the local copy if it is still there and investigate before anything is deleted |
-| A recording must stop now | `touch var/lab/OFF` (as `wt`), or `sudo systemctl stop wt-lab-tape`. Neither touches the paper runners |
+| A recording must stop now | Prefer `sudo -u wt touch /home/wt/trading/var/lab/OFF`: it stops within 5 s, writes the manifest and exits cleanly. `sudo systemctl stop wt-lab-tape` also works but pages "stopped by the system" and leaves the session to resume on the next start. Neither touches the paper runners |
+| A deploy refused with "still running: lab-tape" | The recorder holds its job lock until its upload ends (by close + 110 min, inside the gate's blackout). A refusal after 18:00 means it overran: read its log; the hourly deploy tries again |
 
 ## Safety, in one place
 
@@ -76,4 +79,7 @@ normal day), `restarts`, `rows` and `after_close`. `upload.json` beside it means
   pressure it yields and is the first thing killed; the paper runners keep `-500`.
 - Requests stay under 40% of the measured limit and back off for a minute when Alpaca reports less than 30% left.
 - It stops itself under 17 GB free disk, over 700 MB memory, on the off switch, or after 20 bad ticks in a row.
-- A failure pages as the job `lab-tape`; it never sets `KILL` and never stops a trading job.
+- A failure pages as the job `lab-tape`; it never sets `KILL` and never stops a trading job. After a crash systemd
+  restarts it (60 s later, at most two restarts in 6 hours, as the timer's own start counts too); it resumes from its
+  state. "No keys" (exit 2) is never restarted.
+- The job belongs to the options desk: if that desk is ever marked as moved, the job records nothing.
