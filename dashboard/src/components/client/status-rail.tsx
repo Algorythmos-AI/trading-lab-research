@@ -21,6 +21,7 @@ import { roomShown } from "@/lib/what-if";
 import { NO_MARKS, withOpenLoss } from "@/lib/held-marks";
 import { BOARD_LOG_MAX, byHour, logKey, logNames, parseSeen, unreadCount, withSeen } from "@/lib/board-log";
 import { AlertsMenu } from "./alerts";
+import { railButton } from "./rail-button";
 import { CockpitSwitch } from "./cockpit";
 import { ServerCheckNote } from "./desk-shadow";
 import { DoneControl, DonePill, UncheckedNote, useDone, useDonePolling } from "./done-today";
@@ -195,10 +196,7 @@ export function TodayLog({ log, session }: { log: readonly BoardLogEntry[]; sess
         data-today-log-button
         data-today-unread={unread}
         onClick={() => (open ? close() : setOpen(true))}
-        className={cn(
-          "hover:text-foreground aria-expanded:text-foreground aria-expanded:bg-muted relative inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2 text-sm font-medium whitespace-nowrap max-sm:min-h-11 max-sm:min-w-11 max-sm:justify-center max-sm:px-2",
-          fresh ? "border-info-fill/60 bg-info-soft text-info" : "text-muted-foreground",
-        )}
+        className={railButton(fresh ? "info" : "neutral", "aria-expanded:text-foreground aria-expanded:bg-muted")}
       >
         <History aria-hidden className="size-4" />
         {/* On a phone the icon and the count; "Today" is still the button's name. */}
@@ -309,6 +307,8 @@ function useRailTop(): number {
 export function StatusRail({ day: server, facts = null }: { day: RailDay | null; facts?: DayFacts | null }) {
   const b = useBoard();
   const top = useRailTop();
+  // The session the day went over in (see limitReached below): kept for the session, set while rendering.
+  const [overFor, setOverFor] = useState<string | null>(null);
   const done = useDone();
   // Both devices keep reading the flag while the live board is drawn; with prices off or an older card, once is enough.
   useDonePolling(!!b && b.on && b.mode.kind !== "off" && b.mode.kind !== "old");
@@ -329,6 +329,11 @@ export function StatusRail({ day: server, facts = null }: { day: RailDay | null;
   // Never beside notes the journal does not show yet, nor once the journal has gone stale in this browser: a reason instead.
   const shownRoom = roomShown(server?.room ?? null, b.manage.views.length, b.manage.provisional, b.manage.journalLive);
   const switches = b.on && b.mode.kind !== "old" && b.mode.kind !== "off";
+  // The day pill is red (trades used up, the loss limit with what is open, or a rule broken): Done for today asks, in
+  // amber. Once asked it keeps asking for the session, so an open loss priced near the limit never makes it flicker.
+  const over = day?.tone === "bad";
+  const limitReached = over || overFor === b.session;
+  if (over && overFor !== b.session) setOverFor(b.session);
   const nyNow = b.now !== null ? newYork(new Date(b.now).toISOString(), false) : "–";
   // On a phone the clock's time moves to the fills-read line, when there is one.
   const merged = Boolean(facts?.readLine);
@@ -397,9 +402,9 @@ export function StatusRail({ day: server, facts = null }: { day: RailDay | null;
         {/* The server's shadow check, only when it has stopped logging: nothing at all otherwise, so no row on a phone. */}
         {b.on ? <ServerCheckNote /> : null}
         {/* On a phone the Done control ends the countdown's row, so the day pill and the three buttons keep theirs. */}
-        {b.on ? <DoneControl id="done-today-confirm-phone" className="sm:hidden max-sm:col-start-2 max-sm:justify-self-end" /> : null}
+        {b.on ? <DoneControl id="done-today-confirm-phone" className="sm:hidden max-sm:col-start-2 max-sm:justify-self-end" limitReached={limitReached} /> : null}
         <div className="ml-auto flex items-center gap-1.5 max-sm:col-start-2 max-sm:row-start-2">
-          {b.on ? <DoneControl className="max-sm:hidden" /> : null}
+          {b.on ? <DoneControl className="max-sm:hidden" limitReached={limitReached} /> : null}
           {b.on ? <TodayLog log={b.log} session={b.session} /> : null}
           {switches ? <AlertsMenu /> : null}
           {b.on ? <CockpitSwitch className="max-sm:min-h-11 max-sm:min-w-11 max-sm:justify-center max-sm:px-2" /> : null}

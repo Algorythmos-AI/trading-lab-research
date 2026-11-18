@@ -18,6 +18,7 @@ import { type AlertTone, type AlertVolume, soundEngine, type SoundEngine, type S
 import { cn } from "@/lib/utils";
 import { type Alerts, useAlerts, writeAlerts } from "./alert-prefs";
 import { useDone } from "./done-today";
+import { railButton } from "./rail-button";
 
 // ---- the one sound engine and the notification API, for this page --------------------------------------------------
 let engine: SoundEngine | null = null;
@@ -184,11 +185,6 @@ export function alertsLabel(chosen: { sound: boolean; notify: boolean }, s: Soun
   return `Alerts: ${parts.join(", ")}`;
 }
 
-const TONE_CLASS: Record<AlertsTone, string> = {
-  good: "border-good-fill/60 bg-good-soft text-good",
-  warn: "border-warn-fill/70 bg-warn-soft text-warn",
-  neutral: "text-muted-foreground hover:text-foreground",
-};
 const STATUS_CLASS = (bad: boolean, good: boolean) => (bad ? "text-warn" : good ? "text-good" : "text-muted-foreground");
 
 /**
@@ -380,10 +376,7 @@ export function AlertsMenu({ className }: { className?: string }) {
         onClick={() => setOpen((o) => !o)}
         // The icon and the dots change the moment sound turns on, which can be in the middle of a tap: they take no
         // pointer events, so the tap always lands on the button itself and is never lost with a swapped icon.
-        className={cn(
-          "[&_*]:pointer-events-none aria-expanded:ring-ring/40 relative inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2 text-sm font-medium whitespace-nowrap aria-expanded:ring-2 max-sm:size-11 max-sm:justify-center max-sm:px-0",
-          TONE_CLASS[tone],
-        )}
+        className={railButton(tone, "[&_*]:pointer-events-none aria-expanded:ring-ring/40 aria-expanded:ring-2 max-sm:size-11 max-sm:px-0")}
       >
         <Icon aria-hidden className={cn("size-4", tone === "warn" && "motion-safe:animate-pulse")} />
         <span aria-hidden className="max-sm:hidden">

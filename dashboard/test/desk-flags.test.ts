@@ -799,6 +799,19 @@ describe("DoneSync", () => {
   });
   afterEach(() => vi.useRealTimers());
 
+  it("a failed mark clears once a later read finds the day done (the other device marked it)", async () => {
+    let view: typeof OPEN | ReturnType<typeof DONE> = OPEN;
+    const sync = new DoneSync(OPEN, { get: async () => ({ ok: true, view }), post: async () => ({ ok: false, reason: null }), now: () => Date.now() });
+    expect(await sync.send("done")).toBe(false);
+    expect(sync.getState().failed).toBe(NOT_SAVED);
+    await sync.reread(); // still open: the failure stays
+    expect(sync.getState().failed).toBe(NOT_SAVED);
+    view = DONE(); // the phone marked it
+    await sync.reread();
+    expect(sync.done).toBe(true);
+    expect(sync.getState().failed).toBeNull();
+  });
+
   it("a read that began before a write and answers after it is dropped", async () => {
     const gets = [pending(), pending()];
     let g = 0;
