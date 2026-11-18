@@ -117,7 +117,7 @@
           ],
           "properties": {
             "history_from": {
-              "description": "The first day the account's history was read from.",
+              "description": "The day of the first activity read from the account.",
               "oneOf": [
                 {
                   "$ref": "#/definitions/ymd"
@@ -149,7 +149,7 @@
               }
             },
             "gaps": {
-              "description": "Closes with no open before them in the history read: counted nowhere, listed so the page can say so.",
+              "description": "Contracts that were exercised or assigned: what was open in them left the account by that event, not by a sale, so no result is booked for it. Listed so the page can say so.",
               "type": [
                 "array",
                 "null"

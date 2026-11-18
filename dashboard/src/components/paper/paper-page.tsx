@@ -624,7 +624,7 @@ function ManualSection({ doc, live, filter, now }: { doc: PaperOptions | null; l
           <Tiles env={env} s={s} />
           <p className="text-muted-foreground max-w-prose text-xs">
             Before fees: the paper account charges none. Filled orders are matched first in, first out, so one round trip can be several rows; a contract left to expire closes at zero.
-            {gaps > 0 ? ` ${count(gaps, "close")} had no open before ${gaps === 1 ? "it" : "them"} in the history read and ${gaps === 1 ? "is" : "are"} counted nowhere.` : ""}
+            {gaps > 0 ? ` ${count(gaps, "position")} left by exercise or assignment, not a sale: no result is booked for ${gaps === 1 ? "it" : "them"}.` : ""}
             {excluded > 0 ? ` ${count(excluded, "fill")} of the clone's own in the same account ${excluded === 1 ? "is" : "are"} left out.` : ""}
           </p>
           <Panel id="manual-curve" title="Running total" icon={ChartLine} means="Every closed hand-placed trade added up, day by day. The shaded band is how far the total stood below its best so far.">

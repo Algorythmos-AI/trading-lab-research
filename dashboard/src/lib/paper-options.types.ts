@@ -63,7 +63,7 @@ export interface PaperOptions {
    */
   manual?: null | {
     /**
-     * The first day the account's history was read from.
+     * The day of the first activity read from the account.
      */
     history_from: Ymd | null;
     truncated: number;
@@ -76,7 +76,7 @@ export interface PaperOptions {
      */
     trades: ManualTrade[];
     /**
-     * Closes with no open before them in the history read: counted nowhere, listed so the page can say so.
+     * Contracts that were exercised or assigned: what was open in them left the account by that event, not by a sale, so no result is booked for it. Listed so the page can say so.
      *
      * @maxItems 200
      */
