@@ -27,7 +27,11 @@ counting:
   shadow_sessions: 5
   session_counts_when:
     - a regular New York session with a focus list for it
-    - opening tier-1 set (frozen at the first sample) has >= 0.99 of expected samples
+    - the opening tier-1 set is complete (every focus name selected) and has >= 0.99 of expected samples
+  opening_set: >-
+    frozen once the recorder's first minute of chain reading has finished and every focus name has been selected;
+    if a name is still missing five minutes after the run starts, frozen without it and the session does not count
+  expected_samples: the opening set at every 5-second tick after the freeze up to the close, run or not (a stop, an outage or a restart is missed coverage)
     - clock offset <= 250 ms and crossed quotes <= 0.5% of tier-1 rows
   excluded_sessions: listed with their reason in every report
   read_points_counted_sessions: [20, 40, then every 40]

@@ -34,10 +34,25 @@ RULES = Rules()
 
 
 @lru_cache(maxsize=1)
+def _calendar(path: Path = CALENDAR) -> dict[str, object]:
+    data = json.loads(path.read_text())
+    return data if isinstance(data, dict) else {}
+
+
 def sessions(path: Path = CALENDAR) -> tuple[str, ...]:
     """The regular New York sessions, oldest first, from the dashboard's market calendar."""
-    data = json.loads(path.read_text())
-    return tuple(sorted(str(s) for s in data["sessions"]))
+    days = _calendar(path).get("sessions")
+    return tuple(sorted(str(s) for s in days)) if isinstance(days, list) else ()
+
+
+def close_time(day: dt.date, path: Path = CALENDAR) -> dt.time:
+    """16:00 New York, or the half day's close the calendar gives."""
+    halves = _calendar(path).get("half_days")
+    for h in halves if isinstance(halves, list) else []:
+        if isinstance(h, dict) and h.get("date") == day.isoformat() and isinstance(h.get("close_et"), str):
+            hh, mm = h["close_et"].split(":")
+            return dt.time(int(hh), int(mm))
+    return dt.time(16, 0)
 
 
 def sessions_to_expiry(today: dt.date, expiry: dt.date, cal: Sequence[str] | None = None) -> int | None:
