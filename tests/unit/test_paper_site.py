@@ -134,6 +134,10 @@ def test_the_clones_old_fills_in_the_hand_account_are_left_out_whatever_its_keys
         doc = paper_site.build(NOW, "run-1", journal, tmp_path / "state", CFG, env, acts)
         assert [t["contract"] for t in doc["manual"]["trades"]] == [mine] and doc["manual"]["excluded_clone_fills"] == 2
         assert paper_site.validate(doc) == []
+    # A trade whose plan file is gone is still the clone's: its journal row names the contract.
+    (tmp_path / "state" / "plans" / "plan_2026-11-18-O-1.json").unlink()
+    doc = paper_site.build(NOW, "run-1", journal, tmp_path / "state", CFG, ENV, acts)
+    assert [t["contract"] for t in doc["manual"]["trades"]] == [mine] and doc["manual"]["excluded_clone_fills"] == 2
 
 
 def test_the_account_is_the_clones_own_shared_or_unknown(tmp_path: Path) -> None:

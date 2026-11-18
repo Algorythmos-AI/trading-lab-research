@@ -89,6 +89,7 @@ def test_the_clones_fills_are_left_out_by_contract_and_day() -> None:
     got = paper_manual.block(paper_manual.clean(raw), plans)
     assert got["excluded_clone_fills"] == 2 and [(t["contract"], t["pnl_usd"]) for t in got["trades"]] == [(P, 50.0), (C, 10.0)]
     assert "_other" not in got
+    assert paper_manual.clone_days({}, [{"trade_id": "2026-11-19-O-1", "symbol": C}, {"trade_id": "2026-11-19-O-2"}, "junk"]) == {(C, "2026-11-19")}
     none = paper_manual.block(paper_manual.clean(raw), {})
     assert none["excluded_clone_fills"] == 0 and len(none["trades"]) == 3
 

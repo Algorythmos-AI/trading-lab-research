@@ -159,6 +159,15 @@ describe("what the page does without its documents", () => {
     assertOnlyEnvs(html, ["paper", "shadow"]);
   });
 
+  it("says why the hand-placed section is empty when every fill in the account was the clone's", () => {
+    const d = paper();
+    d.manual = { ...d.manual!, trades: [], gaps: [], excluded_clone_fills: 34 };
+    const body = text(frame(render({}, { result: { status: "ok", doc: d, source: "fixture" } }), PAPER_FRAMES.manual));
+    expect(body).toContain("No closed hand-placed trades yet");
+    expect(body).toContain("34 fills in this account were the clone bot's own, from when it traded here: they are left out");
+    expect(body).not.toContain("Net result");
+  });
+
   it("leaves out a row it cannot read and says how many, with every other figure standing", () => {
     const d = paper();
     const html = render({}, { result: { status: "ok", doc: fixturePaperOptions(paper(), new Set(["poison"])), source: "fixture" } });
