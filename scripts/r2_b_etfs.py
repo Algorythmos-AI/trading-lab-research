@@ -1,4 +1,6 @@
-"""HYP-0009 (EXP-0012): frozen B rules on IWM and DIA, dev span, 1c slippage on the traded ETF itself."""
+"""HYP-0009 (EXP-0012): frozen B rules on IWM and DIA, dev span, 1c slippage on the traded ETF itself.
+
+`python scripts/r2_b_etfs.py EXP-ID` writes to another, registered experiment (the DEC-0011 data-only re-run)."""
 from __future__ import annotations
 
 import json
@@ -17,7 +19,14 @@ from wt.data.etf_minutes import load  # noqa: E402
 from wt.signals import setups  # noqa: E402
 
 DEV_END = pd.Timestamp("2025-09-25").date()
-OUT = ROOT / "research/experiments/EXP-0012-r2-B-iwm-dia"
+OUT = ROOT / "research/experiments" / (sys.argv[1] if len(sys.argv) > 1 else "EXP-0012-r2-B-iwm-dia")
+if len(sys.argv) > 1:
+    if not (OUT / "config.yaml").exists():
+        raise SystemExit(f"{OUT.name} is not registered (no config.yaml): register it before it runs")
+    if (OUT / "results.json").exists():
+        raise SystemExit(f"{OUT.name} has results already: experiments are append-only")
+    from wt.research.manifest import assert_clean_for_preregistered_run
+    assert_clean_for_preregistered_run()
 res = {}
 for sym in ("IWM", "DIA"):
     df = load(sym)
@@ -49,3 +58,7 @@ for sym in ("IWM", "DIA"):
     print(sym, {k: s[k] for k in ("n", "expectancy_R", "win_rate", "profit_factor", "ci95_expectancy", "years_profitable")})
 OUT.mkdir(parents=True, exist_ok=True)
 (OUT / "results.json").write_text(json.dumps({"n_trials": 2, "results": res}, indent=1, default=str))
+if len(sys.argv) > 1:
+    from wt.data.etf_minutes import OUT as ETF_DIR
+    from wt.research.manifest import write_manifest
+    write_manifest(OUT, {"exp": OUT.name, "symbols": ["IWM", "DIA"]}, [ETF_DIR.parent / "minute_etf2"])

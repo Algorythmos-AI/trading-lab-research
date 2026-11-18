@@ -35,3 +35,5 @@ node_modules/
 *.tsbuildinfo
 # a symlink to a shared install, when the disk is short (a real folder is already ignored by node_modules/)
 dashboard/node_modules
+research/experiments/EXP-0043-g1-etf-dev-dedup/results.json
+research/experiments/EXP-0044-g1-etf-dev-dec0011/results.json

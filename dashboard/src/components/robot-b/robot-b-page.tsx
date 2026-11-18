@@ -99,7 +99,7 @@ function IdentityStrip({ p, e }: { p: PaperNow; e: Evidence | null }) {
       </StatusBadge>
       {e ? (
         <StatusBadge tone="bad" className="whitespace-normal">
-          Provisional verdict {e.verdict.provisional} · {e.verdict.record} ({e.verdict.status})
+          Verdict {e.verdict.word} · {e.verdict.record} ({e.verdict.status})
         </StatusBadge>
       ) : null}
       <span className={cn("ml-auto text-xs", stale ? "text-warn font-medium" : "text-muted-foreground")}>
@@ -336,7 +336,7 @@ function BacktestPanel({ e }: { e: Evidence }) {
       title="The backtest, as recorded"
       icon={FlaskConical}
       means={`The frozen rule over ${b.span[0]} to ${b.span[1]}, in sample: its exit was chosen on this same data. Recorded before the data fix, so every number here may still move.`}
-      action={<StatusBadge tone="warn">{e.evidence.label}</StatusBadge>}
+      action={<StatusBadge tone="warn">pre-correction</StatusBadge>}
     >
       <KeyValues
         items={[

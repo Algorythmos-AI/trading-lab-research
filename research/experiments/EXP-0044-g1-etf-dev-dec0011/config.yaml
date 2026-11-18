@@ -1,0 +1,16 @@
+# EXP-0044: corrected-methodology re-run of EXP-0005b (DEC-0011 section 2, second item; DEC-0061 3.1).
+# Its G1 gate is the input of DEC-0061 section 2: the verdict is read from g1_eval_dec0011.json -> B|QQQ -> gate, stats.
+experiment: EXP-0044
+status: registered
+decision: DEC-0061
+carries_out: DEC-0011 section 2 (corrected-methodology re-run of EXP-0005b)
+trials: 0
+baseline: EXP-0005b-g1-etf-dev-realcost
+change: de-duplicated data and method dec0011 (trade-through targets, stop-slippage stress, day-block CI95, DSR at the
+  registry's global trial count)
+driver: python scripts/g1_etf.py EXP-0044-g1-etf-dev-dec0011 --method dec0011
+evaluation: python scripts/g1_eval.py EXP-0044-g1-etf-dev-dec0011 EXP-0046-g1-etf-controls-dedup --method dec0011
+data: data/minute_etf, snapshot hash in manifest.json
+span: [2019-01-02, 2025-09-25]
+verdict_input: {file: g1_eval_dec0011.json, family: B|QQQ, keys: [gate, stats]}
+outputs: [config.json, results.json, manifest.json, g1_eval_dec0011.json, g1_report_dec0011.md, manifest_g1_eval_dec0011.json]

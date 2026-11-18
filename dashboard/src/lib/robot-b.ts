@@ -11,10 +11,10 @@ export type Tone = "good" | "warn" | "bad" | "info" | "neutral";
 
 export interface Evidence {
   schema: number;
-  source: { experiment: string; decision: string; decision_status: string; run_date: string; results_sha256: string };
+  source: { experiment: string; decision: string; decision_status: string; run_date: string; results_sha256: string; corrected_sha256?: Record<string, string> };
   rule: { version: string; frozen: boolean; record: string; signal: string; orders: string };
   evidence: { label: string; corrective_reruns_done: number; corrective_reruns_owed: number; corrupted_trades_found: number; trades_reading_corrupted_days: number };
-  verdict: { provisional: string; record: string; status: string };
+  verdict: { word: string; record: string; status: string; row?: string };
   backtest: {
     span: string[];
     trades: number;
@@ -151,7 +151,11 @@ export function ladder(e: Evidence | null, s: Snapshot | null): Rung[] {
       key: "data",
       name: "Clean data",
       state: corrected === null ? "pending" : corrected ? "passed" : "failed",
-      detail: e ? `${e.evidence.corrective_reruns_done} of ${e.evidence.corrective_reruns_owed} corrective re-runs done · ${e.evidence.corrupted_trades_found} impossible entries · ${e.evidence.trades_reading_corrupted_days} trades read a corrupted day` : "Evidence file missing",
+      detail: e
+        ? corrected
+          ? `${e.evidence.corrective_reruns_done} of ${e.evidence.corrective_reruns_owed} corrective re-runs done · ${e.evidence.corrupted_trades_found} impossible entries removed`
+          : `${e.evidence.corrective_reruns_done} of ${e.evidence.corrective_reruns_owed} corrective re-runs done · ${e.evidence.corrupted_trades_found} impossible entries · ${e.evidence.trades_reading_corrupted_days} trades read a corrupted day`
+        : "Evidence file missing",
       record: "DEC-0011",
     },
     {
@@ -302,9 +306,9 @@ export interface Estimate {
 export function estimates(e: Evidence | null, p: PaperNow): Estimate[] {
   const out: Estimate[] = [];
   if (e) {
-    out.push({ key: "backtest", label: "Backtest (in sample)", trades: e.backtest.trades, mean: e.backtest.expectancy_r, lo: e.backtest.ci95[0] ?? null, hi: e.backtest.ci95[1] ?? null });
-    out.push({ key: "walk_forward", label: "Walk-forward (G1, out of sample)", trades: e.walk_forward.trades, mean: e.walk_forward.expectancy_r, lo: e.walk_forward.ci95[0] ?? null, hi: e.walk_forward.ci95[1] ?? null });
-    out.push({ key: "holdout", label: "Holdout", trades: e.holdout.trades, mean: e.holdout.expectancy_r, lo: e.holdout.ci95[0] ?? null, hi: e.holdout.ci95[1] ?? null });
+    out.push({ key: "backtest", label: "Backtest (in sample, pre-correction)", trades: e.backtest.trades, mean: e.backtest.expectancy_r, lo: e.backtest.ci95[0] ?? null, hi: e.backtest.ci95[1] ?? null });
+    out.push({ key: "walk_forward", label: "Walk-forward (G1, corrected)", trades: e.walk_forward.trades, mean: e.walk_forward.expectancy_r, lo: e.walk_forward.ci95[0] ?? null, hi: e.walk_forward.ci95[1] ?? null });
+    out.push({ key: "holdout", label: "Holdout (re-scored)", trades: e.holdout.trades, mean: e.holdout.expectancy_r, lo: e.holdout.ci95[0] ?? null, hi: e.holdout.ci95[1] ?? null });
   }
   if (p.trades && p.meanR !== null) {
     // A normal-approximation interval using the backtest's spread: paper has too few trades to estimate its own.

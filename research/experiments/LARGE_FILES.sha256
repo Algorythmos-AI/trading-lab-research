@@ -1,2 +1,4 @@
-# sha256 of experiment artefacts kept out of git (> 10 MB). Verify: shasum -a 256 -c research/experiments/LARGE_FILES.sha256
+# sha256 of experiment artefacts kept out of git (> 10 MB, and since 2026-11-19 any result over the 500 KB pre-commit limit). Verify: shasum -a 256 -c research/experiments/LARGE_FILES.sha256. Copies: the owner's ~/trading checkout.
 a9f920affab5e905ddb5115199de0dc3ea185279faacc2a9412e892267410dd5  research/experiments/EXP-0007-g1-liquid-dev/results.json
+8a9bab091a8fd52968ba868d88b01bff6bda776c0ae779b35bcad742ec122bfe  research/experiments/EXP-0043-g1-etf-dev-dedup/results.json
+03d640d172e239a8d4a17a826a8670fcc9e593d11791a68daa35def543ec71f9  research/experiments/EXP-0044-g1-etf-dev-dec0011/results.json
