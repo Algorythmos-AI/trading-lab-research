@@ -47,6 +47,12 @@ OUT = STATE_DIR / "pipeline-check"
 LEVEL_NAMES = ("PDH", "PDL", "PWH", "PWL", "PMH", "PML", "MA20", "MA50")
 CLOSE_TOL = 0.02          # dollars: the same close on two feeds
 LEVEL_TOL = 0.05          # dollars: the same level computed twice
+# Two vendors' prints of one session differ (odd lots, late reports, the last trade against the official close):
+# on 2026-11-17 the edition (IBKR) and the tape (Alpaca SIP) differed by 1-21 cents on most closes and levels, and
+# by $2.26 on one name where the tape carried a single outlier print. A difference past the dollar tolerances but
+# within this share of the edition's own ATR14 is reported as a warning; past it, it can move a setup, and the
+# check fails as before. With no usable ATR14 the dollar tolerances alone decide, as before.
+VENDOR_ATR = 0.25
 PREMARKET_DRIFT_PCT = 0.5  # a pre-market price older than this far from now is reported as moved
 RADAR_MAX_AGE_H = 6.0
 DATA = "https://data.alpaca.markets"
@@ -71,6 +77,14 @@ FAMILIES = ("data.reachable", "data.snapshot",
             "calendar.macro", "calendar.earnings", "calendar.sessions")
 SLOTS = ("pre-open", "after-close")
 CALENDAR_FAMILIES = ("calendar.macro", "calendar.earnings", "calendar.sessions")   # paged on their own key
+
+
+def vendor_grade(worst: float | None, atr: float | None, severity: str, detail: str) -> tuple[str, str]:
+    """The severity of an edition-vs-tape difference past the dollar tolerance, and its detail: a warning when it is
+    within VENDOR_ATR of the edition's ATR14 (two vendors' prints), else `severity` as before."""
+    if worst is not None and atr is not None and worst <= VENDOR_ATR * atr:
+        return "warn", f"{detail} (within {VENDOR_ATR} ATR: a vendor difference)"
+    return severity, detail
 
 
 def family(check_id: str) -> str:
@@ -266,19 +280,33 @@ def assess(slot: str, now: dt.datetime, radar: Mapping[str, Any] | None, options
                     why += "; the wait for it was cut short by the time budget"
                 add(f"options.tape.{sym}", False, f"no clean tape through {prev}: {why}", "warn")
                 continue
+            atr = _num(t.get("atr14"))
+            atr = atr if atr is not None and atr > 0 else None
+
             close = _num((t.get("last") or {}).get("close"))
             tape_close = loaded.bars[-1].c
-            add(f"options.close.{sym}", close is not None and abs(close - tape_close) <= CLOSE_TOL,
-                f"edition {close} vs tape {round(tape_close, 2)}", sev(sym))
+            gap = None if close is None else abs(close - tape_close)
+            what = f"edition {close} vs tape {round(tape_close, 2)}"
+            if gap is not None and gap <= CLOSE_TOL:
+                add(f"options.close.{sym}", True, what, sev(sym))
+            else:
+                level, why = vendor_grade(gap, atr, sev(sym), what)
+                add(f"options.close.{sym}", False, why, level)
             try:
                 mine = {x.name: x.price for x in lv.levels_for(loaded.bars, target)["levels"]}
             except ValueError as e:
                 add(f"options.levels.{sym}", False, f"levels not computable: {e}", "warn")
                 continue
             theirs = {str(x.get("name")): _num(x.get("price")) for x in t.get("levels") or [] if isinstance(x, Mapping)}
-            off = [f"{n} {theirs.get(n)} vs {round(mine[n], 2)}" for n in LEVEL_NAMES
+            off = [n for n in LEVEL_NAMES
                    if n in mine and (theirs.get(n) is None or abs((theirs.get(n) or 0) - mine[n]) > LEVEL_TOL)]
-            add(f"options.levels.{sym}", not off, "; ".join(off) or "all levels agree", sev(sym))
+            what = "; ".join(f"{n} {theirs.get(n)} vs {round(mine[n], 2)}" for n in off)
+            if not off:
+                add(f"options.levels.{sym}", True, "all levels agree", sev(sym))
+            else:
+                gaps = [None if theirs.get(n) is None else abs((theirs.get(n) or 0) - mine[n]) for n in off]
+                level, why = vendor_grade(None if None in gaps else max(g for g in gaps if g is not None), atr, sev(sym), what)
+                add(f"options.levels.{sym}", False, why, level)
         # ---- its focus names
         focus = options.get("focus")
         focus = focus if isinstance(focus, Mapping) else {}

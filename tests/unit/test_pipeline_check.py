@@ -1213,3 +1213,37 @@ def test_a_refused_data_request_with_the_listings_answered_judges_and_pages_as_a
     assert alerts.sent == rejected_alerts.sent and key == "pipeline-check:pre-open" and prio == 4
     assert "data.reachable: 1 failed" in message
     assert "pipeline check: a market-data request named no feed" in capsys.readouterr().err
+
+
+def test_a_vendor_sized_difference_warns_and_one_that_moves_a_setup_fails():
+    """Two vendors' prints differ by cents (2026-11-17: IBKR edition against Alpaca SIP, 1-21 cents on most names).
+    Past the dollar tolerance but within VENDOR_ATR of the edition's ATR14 it warns; past that it fails, as before.
+    SPY and AMZN are both names the clone may trade here, so either would fail without an ATR."""
+    o = options()
+    for t in o["tickers"]:
+        t["atr14"] = 2.0                                         # 0.25 ATR = $0.50
+    o["tickers"][0]["levels"][0]["price"] += 0.30                # SPY PDH 30 cents off: a vendor difference
+    o["tickers"][1]["last"]["close"] += 0.10                     # AMZN close 10 cents off
+    got = run(options=o)
+    assert not got["options.levels.SPY"].ok and got["options.levels.SPY"].severity == "warn"
+    assert "vendor difference" in got["options.levels.SPY"].detail and "PDH" in got["options.levels.SPY"].detail
+    assert not got["options.close.AMZN"].ok and got["options.close.AMZN"].severity == "warn"
+    assert [c.id for c in got.values() if not c.ok and c.severity == "fail"] == []
+    o["tickers"][0]["levels"][0]["price"] += 0.40                # now 70 cents: past 0.25 ATR, it can move a setup
+    o["tickers"][1]["last"]["close"] += 0.50
+    got = run(options=o)
+    assert got["options.levels.SPY"].severity == "fail" and "vendor" not in got["options.levels.SPY"].detail
+    assert got["options.close.AMZN"].severity == "fail"
+
+
+def test_a_missing_level_or_a_missing_atr_still_fails():
+    o = options()
+    o["tickers"][0]["atr14"] = 2.0
+    o["tickers"][0]["levels"] = [x for x in o["tickers"][0]["levels"] if x["name"] != "PDH"]
+    got = run(options=o)
+    assert got["options.levels.SPY"].severity == "fail"          # a level the edition lacks is never a vendor difference
+    o = options()
+    o["tickers"][0]["atr14"] = "n/a"
+    o["tickers"][0]["levels"][0]["price"] += 0.30
+    got = run(options=o)
+    assert got["options.levels.SPY"].severity == "fail"          # no usable ATR: the dollar tolerance decides
