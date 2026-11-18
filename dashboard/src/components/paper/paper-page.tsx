@@ -148,7 +148,7 @@ export function PaperBody({ result, clone, live, q, now }: { result: PaperOption
           <ManualSection doc={doc} live={live} filter={filter} now={now} />
         </PaneBoundary>
       </Group>
-      <Group group="arms" intro="Variations of the clone's rules, run beside it as simulated trades. No order is ever sent for them; each is a hypothesis of its own.">
+      <Group group="arms" intro="Variations of the clone's rules, run beside it as simulated trades until 17 Nov 2026. Counting ended then with too few sessions; each trial closes on 5 Nov 2027 with no verdict. No order was ever sent for them.">
         <PaneBoundary name="Research arms">
           <ArmsSection doc={doc} filter={filter} now={now} />
         </PaneBoundary>
@@ -317,7 +317,7 @@ function Top({ doc, filter, now }: { doc: PaperOptions; filter: Filter; now: Dat
           ) : (
             <p className="text-muted-foreground text-xs">{arms ? "No simulated trades in this view." : "The arms' simulated trades are not being sent yet."}</p>
           )}
-          <p className="text-muted-foreground text-[0.6875rem] leading-snug max-sm:text-xs">Simulated, one contract each; each arm is its own trial and they are not added up.</p>
+          <p className="text-muted-foreground text-[0.6875rem] leading-snug max-sm:text-xs">Simulated, one contract each; not added up. Counting ended 17 Nov 2026, no verdict.</p>
         </EnvFrame>
       </div>
       <Filters filter={filter} symbols={symbols.sort()} />
@@ -682,8 +682,8 @@ function ArmsSection({ doc, filter, now }: { doc: PaperOptions | null; filter: F
   if (!arms || arms.length === 0) {
     return (
       <EnvFrame env="shadow" label={PAPER_FRAMES.arms}>
-        <Empty icon={Inbox} title={arms ? "No research arm has a simulated trade yet" : "The arms' simulated trades are not being sent yet"}>
-          Each arm runs beside the clone and books a simulated fill where its own rule would have traded.
+        <Empty icon={Inbox} title={arms ? "No research arm trade was counted before 17 Nov 2026" : "The arms' simulated trades are not being sent yet"}>
+          The arms ran beside the clone until 17 Nov 2026, booking a simulated fill where their own rule would have traded.
         </Empty>
       </EnvFrame>
     );
