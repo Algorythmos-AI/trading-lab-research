@@ -128,8 +128,10 @@ costs:
 # writes no tag and books no virtual trade. On: each signal's decision line gains an `arms` object (the tag arms) and
 # wt.options.shadow books virtual trades in var/options/shadow/<date>.jsonl (the shadow arms). Every number below is
 # frozen by its hypothesis; turning the block on is the owner's step and starts each arm's window (never backfilled).
+# DEC-0059: off since every arm ended at the 2026-11-17 session (DEC-0056 point 6). The other keys stay: the
+# dashboard's entry-check vectors read `tags`.
 research_arms:
-  enabled: true
+  enabled: false
   tags:
     iv_cap_index: 0.35          # HYP-0040/41: chain.Quote.iv of the contract bought, SPY and QQQ
     iv_cap_single: 0.70         # every other name
