@@ -73,6 +73,13 @@ Over the same sessions the clone filled 18 entries on 11 of the 21 sessions. On 
      `NO_OI_END` and `QQQ_START` to the first session that ran with `names.standing`. The `names` journal line
      shows which session that was, under `standing`.
    - That amendment is written before that session's trades are viewed.
+   - **Amended 2026-11-18 (New York), before any 2026-11-18 trade was viewed: the dates stand.** The release landed
+     early: the host deployed it at 00:47 New York on 2026-11-18, before that session's arm. But QQQ was a focus name
+     that day, so the 2026-11-18 `names` line shows `standing: []`, and the session's names and gates are the same
+     under DEC-0056 alone. 2026-11-18 stays EXP-0039's one session: `NO_OI_END` stays 2026-11-18 and `QQQ_START`
+     2026-11-19. The owner chose this reading in chat.
+   - From 2026-11-19 every session counts toward EXP-0040, whether or not QQQ is also a focus name that day. An empty
+     `standing` on a later session never moves the start again.
 8. **EXP-0039 closes at 2026-11-18** with one session (`wt.options.review.NO_OI_END`).
    - Its trades never count toward EXP-0040.
    - It cannot reach 20 sessions, so it gives no verdict. It is kept as a record, as EXP-0029 was.
