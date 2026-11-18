@@ -23,9 +23,3 @@
   Every other rule is unchanged.
 - **Trades, ledger, unit, verdict and exclusions:** as EXP-0028.
 - A number changed after a result is seen means a new experiment and new trials.
-
-## Amended by DEC-0058 (appended 2026-11-18, before any trade of that session was viewed)
-
-- **Start: 2026-11-18** (`wt.options.review.QQQ_START`), not 2026-11-19. The rule reached the host before that
-  session; DEC-0058's amendment gives the evidence.
-- Trades up to 2026-11-17 stay in EXP-0029 and earlier. Every other line above is unchanged.

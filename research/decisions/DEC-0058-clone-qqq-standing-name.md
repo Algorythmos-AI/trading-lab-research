@@ -124,26 +124,6 @@ What the author did not see:
 
 No backtest or replay of this rule was run.
 
-## Amendment (2026-11-18, New York, before any trade of that session was viewed)
-
-Point 7's condition did not hold. The release carrying this record reached the host before the 2026-11-18 session,
-not after it, so the first session that ran with `names.standing` is **Wednesday 2026-11-18**.
-
-- **Evidence:**
-  - The host's deploy record `var/deploy/20261118T054701Z.json` (00:47 New York) moved the working tree to `e7ad6a4e`,
-    which contains this record's commit. The next deploy (`20261118T094707Z`, 04:47) kept it.
-  - At the 09:25 arm the host's `config/options_clone.yaml` held `standing: [QQQ]`, and the `names` journal line had a
-    `standing` key.
-  - That key is empty for 2026-11-18 because QQQ was already a focus name that day; it was traded once, as point 1
-    says. The `names` line alone therefore does not show the date, and the deploy record does.
-- **Moved, as point 7 provides:** `NO_OI_END` to 2026-11-17 and `QQQ_START` to 2026-11-18 (`wt.options.review`).
-- **Point 8 changes with it.** EXP-0039 holds **no session**, not one. DEC-0056's rule and this one reached the host
-  before the same session, so no session ran under DEC-0056 alone. Its window ends before it starts, and the Paper
-  page no longer lists it. The owner accepted one session; zero follows from the same release order.
-- **Unchanged:** every rule in the Decision, the trial count (family O 47) and EXP-0040's verdict test.
-- **Seen of 2026-11-18 before this amendment:** the units' state and the paper check at 09:02, the pre-open pipeline
-  check's counts, and the `names` and `armed` lines at 09:25. No decision line, entry, fill or trade of that session.
-
 ## Not changed
 
 - The owner's own trade rules on the dashboard.
