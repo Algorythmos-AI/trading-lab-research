@@ -94,6 +94,14 @@ export const OPTIONS_CLONE_PATHS = {
 } as const;
 
 /**
+ * The paper options history (DEC-0057): every closed paper option trade, for the Paper options page. Latest only:
+ * each document is rebuilt from the host's own records and carries the whole history.
+ */
+export const PAPER_OPTIONS_PATHS = {
+  latest: "paper-options/latest.json",
+} as const;
+
+/**
  * The focus card ledger's editions (stocksdelta/ledger): how the Top 4 Focus Card did, one per session it scored,
  * kept the same way as the radar's. Each carries the running record too, so the latest alone draws Card record.
  */

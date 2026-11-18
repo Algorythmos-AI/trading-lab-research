@@ -25,6 +25,7 @@ const { default: OptionsPage } = await import("@/app/options/page");
 const { default: TodayPage } = await import("@/app/today/page");
 const { default: TradesPage } = await import("@/app/trades/page");
 const { default: RiskPage } = await import("@/app/risk/page");
+const { default: PaperPage } = await import("@/app/paper/page");
 
 beforeEach(() => {
   vi.unstubAllEnvs();
@@ -41,6 +42,7 @@ const RENDER: Record<GuardedPage, () => Promise<string>> = {
   today: async () => renderToString(await TodayPage()),
   trades: async () => renderToString(await TradesPage(params({}))),
   risk: async () => renderToString(await RiskPage()),
+  paper: async () => renderToString(await PaperPage(params({}))),
 };
 
 const unescape = (s: string) => s.replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
@@ -201,6 +203,7 @@ describe("Money in the source", () => {
   /** Files that draw Money for a frame drawn by the page that holds them: the frame is named here. */
   const FRAMED_BY = {
     "components/today/trading.tsx": "app/today/page.tsx",
+    "components/paper/dollars.tsx": "components/paper/paper-page.tsx",
   } as Record<string, string>;
   const uses = files(SRC)
     .map((p) => ({ rel: p.slice(SRC.length + 1), text: readFileSync(p, "utf8") }))
@@ -214,6 +217,7 @@ describe("Money in the source", () => {
         "components/journal.tsx",
         "components/options-clone.tsx",
         "components/overview/home.tsx",
+        "components/paper/dollars.tsx",
         "components/today/trading.tsx",
         "components/today/your-day.tsx",
       ].sort(),

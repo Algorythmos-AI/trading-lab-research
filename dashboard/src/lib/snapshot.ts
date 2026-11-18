@@ -13,6 +13,7 @@ import {
   OPTIONS_CLONE_PATHS,
   OPTIONS_LIVE_PATHS,
   OPTIONS_PATHS,
+  PAPER_OPTIONS_PATHS,
   RADAR_DESK_PATHS,
   RADAR_PATHS,
 } from "./desk";
@@ -21,6 +22,7 @@ import {
   fixtureOptionLot,
   fixtureOptionsClone,
   fixtureOptionsLive,
+  fixturePaperOptions,
   FROZEN_NOW,
   parseFlags,
   partialOptions,
@@ -39,6 +41,7 @@ import { logEvent } from "./log";
 import type { OptionsClone } from "./options-clone.types";
 import type { OptionsLive } from "./options-live.types";
 import type { OptionsEdition } from "./options.types";
+import type { PaperOptions } from "./paper-options.types";
 import { withStoredPremarket } from "./premarket";
 import { radarDates } from "./radar";
 import type { RadarDeskDoc } from "./radar-desk.types";
@@ -442,6 +445,35 @@ export const loadOptionsClone = cache(async (): Promise<OptionsCloneResult> => {
       desk: "options-clone",
       error: e instanceof Error ? e.name : "unknown",
     });
+    return { status: "error" };
+  }
+});
+
+export type PaperOptionsResult =
+  | { status: "ok"; doc: PaperOptions; source: "fixture" | "blob" }
+  | { status: "missing" }
+  | { status: "error" };
+
+/** The paper options history (DEC-0057). "missing" until the trading host has published it once. */
+export const loadPaperOptions = cache(async (): Promise<PaperOptionsResult> => {
+  if (fixtureMode()) {
+    const flags = await fixtureFlags();
+    if (flags.has("paper-off") || flags.has("empty")) return { status: "missing" };
+    if (flags.has("error")) return { status: "error" };
+    const mod = await import("../../test/fixtures/paper-options.v1.json");
+    return { status: "ok", doc: fixturePaperOptions((mod.default ?? mod) as unknown as PaperOptions, flags), source: "fixture" };
+  }
+  try {
+    const stored = await readText(PAPER_OPTIONS_PATHS.latest);
+    if (!stored) return { status: "missing" };
+    const parsed: unknown = JSON.parse(stored.text);
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      logEvent("snapshot.read", { outcome: "not-an-object", desk: "paper-options" });
+      return { status: "error" };
+    }
+    return { status: "ok", doc: parsed as PaperOptions, source: "blob" };
+  } catch (e) {
+    logEvent("snapshot.read", { outcome: "error", desk: "paper-options", error: e instanceof Error ? e.name : "unknown" });
     return { status: "error" };
   }
 });

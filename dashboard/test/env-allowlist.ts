@@ -24,6 +24,21 @@ export const NON_REAL_FRAMES = {
   ],
   /** /trades: the options clone (paper). */
   trades: [{ env: "paper", label: "Options clone" }],
+  /**
+   * /paper (DEC-0057): three sources, each with a card at the top and a section below, and no real money anywhere.
+   * The options clone (paper): its glance card, today's session (the same panel as on /trades) and its history. The
+   * hand-placed paper account (paper): its glance card, then its open positions and closed trades. The research
+   * arms' simulated trades (shadow): their glance card and their section.
+   */
+  paper: [
+    { env: "paper", label: "Options clone at a glance" },
+    { env: "paper", label: "Options clone" },
+    { env: "paper", label: "Options clone history" },
+    { env: "paper", label: "Manual option trades at a glance" },
+    { env: "paper", label: "Manual option trades" },
+    { env: "shadow", label: "Research arms at a glance" },
+    { env: "shadow", label: "Research arms" },
+  ],
   /** /risk: Robot B's safety controls and its paper broker account (paper). */
   risk: [{ env: "paper", label: "Robot B" }],
 } as const satisfies Record<string, readonly NonRealFrame[]>;

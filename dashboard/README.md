@@ -150,6 +150,28 @@ wt.ops.publish                            POST /api/ingest            (productio
   table. Read only: it describes what happened and suggests nothing. An edition older than three and a half days
   is shown with a notice. `/api/health` reports it under `editions.journal`. Fixture mode reads the synthetic
   `test/fixtures/journal.v1.json`.
+- **Paper options** (`/paper`, `stocksdelta/paper-options`, schema `src/lib/paper-options.schema.json`;
+  `paper-options.types.ts` is generated; DEC-0057): every closed paper option trade, from three sources that are
+  shown apart and never added together. The options clone's trades come from its journal, the hand-placed trades
+  from the manual paper account's filled orders matched first in, first out, and the research arms' from their
+  simulated book. The trading host builds the document from its own records and sends it with its own key through
+  the same signed `POST /api/ingest`; the `radar` key is refused. A trade is an id, a contract symbol, times, prices,
+  its result in dollars and on the premium, a hypothesis id and codes; a setup name, a balance, an account number or
+  an order id refuses the whole document. Only the latest is kept (`paper-options/latest.json`): each document
+  carries the whole history. `manual` and `arms` are optional, so the host can send the clone alone. The page
+  (`src/app/paper/page.tsx`, `src/components/paper/paper-page.tsx`) reads each row into the journal's `Trade` shape
+  (`src/lib/paper.ts`, pure and unit-tested) and reuses the Trades page's arithmetic (`src/lib/journal.ts`) and
+  charts. It filters by period, kind and ticker through the URL and shows, for each source, a glance card, tiles,
+  the running total with its drawdown (and a line where the clone's rules changed), days against the clone's loss
+  limit, months, a calendar, each trade in R, how the results are spread, a rolling 20-trade view, breakdowns
+  (ticker, call or put, how it ended, hypothesis, rule window, hour, weekday, hold time, expiry, premium), how the
+  fills compared with the quotes, and every trade in a sortable table. Today's clone session is the same panel as
+  on Trades (`stocksdelta/options-clone`), and what is open in the manual account comes from
+  `stocksdelta/options-live`. A clone trade its own record does not count is listed and kept out of every figure; a
+  row that cannot be read is left out and counted; the page's clone total is checked against the clone's own
+  document when both count the same trades. Every dollar is paper or simulated and sits in a frame of its class
+  (`test/env-allowlist.ts`). Read only. `/api/health` reports it under `editions.paper_options`. Fixture mode reads
+  the synthetic `test/fixtures/paper-options.v1.json` (`fx=paper-off`, `partial`, `poison`).
 - **Calendar** (`/calendar`, `src/app/calendar/page.tsx`, the grid in `src/components/client/calendar-year.tsx`, all
   arithmetic in `src/lib/market-calendar.ts`, pure and unit-tested): the US market year, 2026 and 2027 (`?y=`), Monday
   to Friday with weekends narrow. Open days, holidays and 1 pm closes come from `src/lib/market-calendar.json`, which
