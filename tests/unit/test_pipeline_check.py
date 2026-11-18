@@ -121,8 +121,8 @@ def test_a_difference_outside_todays_names_warns_and_a_stale_radar_skips_its_clo
 
 def test_only_names_the_clone_can_trade_today_can_fail():
     o = options()                                                 # focus AMZN (no same-day expiry) and SPY
-    assert pc.eligible(o, TARGET, EXP, policy="same_day") == {"SPY", "QQQ"}   # DEC-0032: AMZN dropped, QQQ added
-    assert pc.eligible(o, TARGET, EXP) == {"AMZN", "SPY"}         # DEC-0034: AMZN trades its nearest expiry
+    assert pc.eligible(o, TARGET, EXP, policy="same_day") == {"SPY", "QQQ"}   # DEC-0032: AMZN dropped; QQQ standing
+    assert pc.eligible(o, TARGET, EXP) == {"AMZN", "SPY", "QQQ"}  # DEC-0034: AMZN its nearest expiry; DEC-0058: QQQ
     o["tickers"][1]["levels"][0]["price"] += 0.30                 # AMZN, a name the clone trades today
     got = run(options=o)
     assert not got["options.levels.AMZN"].ok and got["options.levels.AMZN"].severity == "fail"
@@ -140,6 +140,17 @@ def test_the_check_tops_up_exactly_as_the_clone_does():
     assert list(pc.TOP_UP) == cfg["top_up"] == cfg["fallback"] and pc.MIN_NAMES == cfg["min_names"]
     assert pc.MAX_NAMES == cfg["max_names"]
     assert pc.EXPIRY == cfg["expiry"] and pc.WITHIN_DAYS == cfg["nearest_within_days"]
+    assert list(pc.STANDING) == cfg["standing"]                                  # DEC-0058
+
+
+def test_a_standing_name_is_eligible_beside_the_focus_names_and_outside_the_cap():
+    """DEC-0058: QQQ is traded every session after the focus names, so the check judges it as the clone trades it."""
+    many = [{"symbol": s, "rank": i + 1} for i, s in enumerate(("A", "B", "C", "D", "E", "F"))]
+    o = options()
+    o["focus"]["items"] = many
+    exp = {**EXP, **{s: [TARGET] for s in ("A", "B", "C", "D", "E", "F", "QQQ")}}
+    assert pc.eligible(o, TARGET, exp) == {"A", "B", "C", "D", "E", "F", "QQQ"}            # six focus names, then QQQ
+    assert "QQQ" not in pc.eligible(o, TARGET, {k: v for k, v in exp.items() if k != "QQQ"})  # no expiry: not traded
 
 
 def test_eligibility_ranks_dedupes_and_caps_like_the_runner():

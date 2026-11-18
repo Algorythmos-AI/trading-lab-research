@@ -30,6 +30,8 @@ DAY = dt.date(2026, 10, 19)
 OPEN = dt.datetime.combine(DAY, dt.time(9, 30), NEW_YORK)
 L, NEXT = 581.0, 584.0
 SAME_DAY = {**CFG, "names": {**CFG["names"], "expiry": "same_day"}}        # the DEC-0032 rule (DEC-0034's other policy)
+# DEC-0058 made QQQ a standing name; tests of the focus and top-up rules alone set none
+NO_STANDING = {**CFG, "names": {**CFG["names"], "standing": []}}
 
 
 def at(hhmm: str, s: int = 0) -> dt.datetime:
@@ -490,7 +492,7 @@ def test_focus_names_without_a_same_day_expiry_are_topped_up_with_spy_and_qqq(wo
     m.contracts = lambda root, expiry, last=None: {f"{root}261019C00580000": 5000.0} if root in ("SPY", "QQQ") else {}
     focus = {"items": [{"symbol": s, "rank": i + 1, "bias": "range"} for i, s in enumerate(("AMZN", "TSLA", "META", "SPY"))]}
     m.focus = lambda: (focus, "2026-10-19")
-    r = world["make"](SAME_DAY)
+    r = world["make"]({**SAME_DAY, "names": {**SAME_DAY["names"], "standing": []}})
     del r.prepare
     m.now = at("09:25")
     r.arm()
@@ -512,11 +514,79 @@ def test_no_top_up_when_enough_focus_names_trade(world):
     m.contracts = lambda root, expiry, last=None: {f"{root}261019C00580000": 5000.0}
     focus = {"items": [{"symbol": "AMZN", "rank": 1, "bias": "range"}, {"symbol": "META", "rank": 2, "bias": "range"}]}
     m.focus = lambda: (focus, "2026-10-19")
-    r = world["make"]()
+    r = world["make"](NO_STANDING)
     del r.prepare
     m.now = at("09:25")
     r.arm()
     assert sorted(r.names) == ["AMZN", "META"] and r.names_source == "focus"
+
+
+def _eighty_daily_bars() -> list[dict]:
+    days, d = [], "2026-10-16"
+    for _ in range(80):
+        days.append(d)
+        d = lv.prev_session(d)
+    days.reverse()
+    return [{"t": f"{x}T04:00:00Z", "o": 570 + i * 0.1, "h": 571 + i * 0.1, "l": 569 + i * 0.1, "c": 570.5 + i * 0.1,
+             "v": 1e6} for i, x in enumerate(days)]
+
+
+def test_qqq_is_traded_every_session_beside_the_focus_names(world):
+    """DEC-0058: the standing name comes after the focus names, is not a top-up, and is journaled as standing."""
+    rows = _eighty_daily_bars()
+    m = world["m"]
+    m.daily = lambda symbols, start, end: {s: rows for s in symbols}
+    m.contracts = lambda root, expiry, last=None: {f"{root}261019C00580000": 5000.0}
+    focus = {"items": [{"symbol": "AMZN", "rank": 1, "bias": "range"}, {"symbol": "META", "rank": 2, "bias": "range"}]}
+    m.focus = lambda: (focus, "2026-10-19")
+    assert CFG["names"]["standing"] == ["QQQ"]
+    r = world["make"]()
+    del r.prepare
+    m.now = at("09:25")
+    r.arm()
+    assert sorted(r.names) == ["AMZN", "META", "QQQ"] and r.names_source == "focus"
+    (n,) = events(world["rows"], "names")
+    assert n["standing"] == ["QQQ"] and n["topped_up"] == []
+
+
+def test_a_standing_name_never_displaces_a_focus_name_and_is_never_doubled(world):
+    rows = _eighty_daily_bars()
+    m = world["m"]
+    m.daily = lambda symbols, start, end: {s: rows for s in symbols}
+    m.contracts = lambda root, expiry, last=None: {f"{root}261019C00580000": 5000.0}
+    six = ("AMZN", "META", "TSLA", "NVDA", "AMD", "QQQ")                 # QQQ already a focus name
+    m.focus = lambda: ({"items": [{"symbol": x, "rank": i + 1, "bias": "range"} for i, x in enumerate(six)]}, "2026-10-19")
+    r = world["make"]()
+    del r.prepare
+    m.now = at("09:25")
+    r.arm()
+    assert sorted(r.names) == sorted(six)
+    (n,) = events(world["rows"], "names")
+    assert n["standing"] == []                                         # it came in as a focus name
+    full = ("AMZN", "META", "TSLA", "NVDA", "AMD", "AAPL")              # max_names focus names: QQQ is added beyond them
+    world["rows"].clear()
+    m.focus = lambda: ({"items": [{"symbol": x, "rank": i + 1, "bias": "range"} for i, x in enumerate(full)]}, "2026-10-19")
+    r = world["make"]()
+    del r.prepare
+    m.now = at("09:25")
+    r.arm()
+    assert sorted(r.names) == sorted((*full, "QQQ"))
+
+
+def test_a_standing_name_without_an_expiry_is_dropped_like_any_other(world):
+    rows = _eighty_daily_bars()
+    m = world["m"]
+    m.daily = lambda symbols, start, end: {s: rows for s in symbols}
+    m.contracts = lambda root, expiry, last=None: {} if root == "QQQ" else {f"{root}261019C00580000": 5000.0}
+    focus = {"items": [{"symbol": "AMZN", "rank": 1, "bias": "range"}, {"symbol": "META", "rank": 2, "bias": "range"}]}
+    m.focus = lambda: (focus, "2026-10-19")
+    r = world["make"]()
+    del r.prepare
+    m.now = at("09:25")
+    r.arm()
+    assert sorted(r.names) == ["AMZN", "META"]
+    (n,) = events(world["rows"], "names")
+    assert "QQQ" in n["dropped"] and n["standing"] == []
 
 
 def _edition_rows():
@@ -606,7 +676,7 @@ def test_on_a_tuesday_the_focus_names_without_a_same_day_expiry_trade_their_frid
     focus = {"items": [{"symbol": s, "rank": i + 1, "bias": "range"} for i, s in enumerate(("AMZN", "TSLA", "META", "SPY"))]}
     m.focus = lambda: (focus, "2026-10-20")
     m.now = dt.datetime.combine(tue, dt.time(9, 25), NEW_YORK)
-    r = Runner(tue, CFG, LIM, m, world["b"], lambda: m.now, lambda s: None, type("P", (), {"fire": lambda *a: None})(),
+    r = Runner(tue, NO_STANDING, LIM, m, world["b"], lambda: m.now, lambda s: None, type("P", (), {"fire": lambda *a: None})(),
                write=lambda event, **kw: world["rows"].append({"event": event, **kw}) or True,
                state=world["tmp"] / "options", kills=(world["tmp"] / "KILL",))
     r.prepare()
@@ -629,7 +699,7 @@ def test_a_name_with_no_expiry_inside_the_window_is_still_dropped_and_topped_up(
     m.contracts = lambda root, expiry, last=None: {f"{root}261019C00580000": 5000.0} if root in ("SPY", "QQQ") else {}
     focus = {"items": [{"symbol": "AMZN", "rank": 1}, {"symbol": "SPY", "rank": 2}]}
     m.focus = lambda: (focus, "2026-10-19")
-    r = world["make"]()
+    r = world["make"](NO_STANDING)
     del r.prepare
     m.now = at("09:25")
     r.arm()
