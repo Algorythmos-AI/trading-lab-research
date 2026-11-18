@@ -41,6 +41,8 @@ export const NON_REAL_FRAMES = {
   ],
   /** /risk: Robot B's safety controls and its paper broker account (paper). */
   risk: [{ env: "paper", label: "Robot B" }],
+  /** /robot-b (DEC-0061): Robot B's own page, all of it paper (the desk) or research numbers about the same paper robot. */
+  "robot-b": [{ env: "paper", label: "Robot B" }],
 } as const satisfies Record<string, readonly NonRealFrame[]>;
 
 export type GuardedPage = keyof typeof NON_REAL_FRAMES;

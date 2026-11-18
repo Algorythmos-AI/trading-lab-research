@@ -26,6 +26,7 @@ const { default: TodayPage } = await import("@/app/today/page");
 const { default: TradesPage } = await import("@/app/trades/page");
 const { default: RiskPage } = await import("@/app/risk/page");
 const { default: PaperPage } = await import("@/app/paper/page");
+const { default: RobotBPage } = await import("@/app/robot-b/page");
 
 beforeEach(() => {
   vi.unstubAllEnvs();
@@ -43,6 +44,7 @@ const RENDER: Record<GuardedPage, () => Promise<string>> = {
   trades: async () => renderToString(await TradesPage(params({}))),
   risk: async () => renderToString(await RiskPage()),
   paper: async () => renderToString(await PaperPage(params({}))),
+  "robot-b": async () => renderToString(await RobotBPage()),
 };
 
 const unescape = (s: string) => s.replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
