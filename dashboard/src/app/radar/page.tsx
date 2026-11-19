@@ -30,6 +30,7 @@ import {
 } from "@/lib/radar-brief";
 import type { OptionsEdition } from "@/lib/options.types";
 import type { Trade } from "@/lib/journal";
+import { loadRadarPipeline } from "@/lib/radar-pipeline-run";
 import { listRadarDates, loadJournal, loadOptions, loadRadar, pageTime } from "@/lib/snapshot";
 
 export const dynamic = "force-dynamic";
@@ -39,10 +40,13 @@ export default async function RadarPage({ searchParams }: { searchParams: Promis
   const raw = (await searchParams).d;
   const date = typeof raw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : undefined;
   const [result, dates, now, journal] = await Promise.all([loadRadar(date), listRadarDates(), pageTime(), loadJournal()]);
+  // One small summary the 10-minute cron writes; with none, the card draws the schedule alone.
+  const pipeline = await loadRadarPipeline(now);
   if (result.status !== "ok") {
     return (
       <>
         <PageHeading title="Radar" intro="Your pre-market brief: the day, where SPY opens against your levels, and the names you trade." />
+        <RadarSchedulePanel file={pipeline.file} now={pipeline.now} />
         <NoRadar status={result.status} date={date} />
       </>
     );
@@ -59,7 +63,7 @@ export default async function RadarPage({ searchParams }: { searchParams: Promis
         title="Radar"
         intro="Your pre-market brief: the day, where SPY opens against your levels, and the names you trade. Research only; nothing here is an order."
       />
-      <RadarSchedulePanel latest={dates[0] ?? r.edition_date} now={now} />
+      <RadarSchedulePanel file={pipeline.file} now={pipeline.now} />
       <EditionPicker dates={dates} current={r.edition_date} />
       {!date && radarStale(r.edition_date, now) ? (
         <Notice tone="bad" size="sm" role="alert">

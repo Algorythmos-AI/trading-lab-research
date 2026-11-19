@@ -4,6 +4,7 @@ import { runCronTicks } from "@/lib/cron-watchdog";
 import { startOptionsCopyRepair } from "@/lib/edition-copy-repair";
 import { runFeedWatch } from "@/lib/feed-watch-run";
 import { logEvent } from "@/lib/log";
+import { startRadarPipelineRefresh } from "@/lib/radar-pipeline-run";
 import { DESK_DEPS, runDeskWatchdog, runWatchdog, type AddedDesk } from "@/lib/watchdog-run";
 
 export const runtime = "nodejs";
@@ -22,6 +23,8 @@ export async function GET(req: Request): Promise<Response> {
   // the reply waits for all of them up to the cap, and `after` keeps any still running alive past the reply.
   // Beside the ticks, never awaited by them or by the reply (edition-copy-repair.ts): the Options edition's copy.
   startOptionsCopyRepair((work) => after(work));
+  // The same way, the Radar page's pipeline summary (radar-pipeline-run.ts).
+  startRadarPipelineRefresh((work) => after(work));
   const { stocks, desks, feeds } = await runCronTicks({
     stocks: () => runWatchdog(),
     desks: (Object.keys(DESK_DEPS) as AddedDesk[]).map((desk) => [desk, () => runDeskWatchdog(desk)] as const),

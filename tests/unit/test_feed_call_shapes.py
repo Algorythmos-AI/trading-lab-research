@@ -247,7 +247,7 @@ D, P = DATA, "https://paper-api.alpaca.markets"
 # (module, driver, the URL of every request sent, in order). The params are compared whole with the unguarded run.
 OWN_SESSIONS = {
     "src/wt/live/runner_o.py": (runner_o, _clone_helper, 2 * [
-        f"{D}/v2/stocks/bars", f"{D}/v2/stocks/bars",                          # minutes, page 1 and 2 (iex)
+        f"{D}/v2/stocks/bars", f"{D}/v2/stocks/bars",                          # minutes, page 1 and 2 (sip)
         f"{D}/v2/stocks/bars", f"{D}/v2/stocks/bars",                          # daily (sip)
         f"{D}/v1beta1/options/snapshots/SPY", f"{D}/v1beta1/options/snapshots/SPY",   # chain (the option feed)
         f"{D}/v1beta1/options/snapshots", f"{D}/v1beta1/options/snapshots",    # quotes (the option feed)
@@ -255,14 +255,14 @@ OWN_SESSIONS = {
         f"{P}/v2/options/contracts", f"{P}/v2/options/contracts"]),            # a range of expiries
     "src/wt/options/live.py": (live, _options_live_helper, [
         f"{P}/v2/positions", f"{P}/v2/clock",                                  # paper host, no params
-        f"{D}/v2/stocks/snapshots",                                            # closes (iex)
+        f"{D}/v2/stocks/snapshots",                                            # closes (sip)
         f"{D}/v2/stocks/bars", f"{D}/v2/stocks/bars",                          # daily bars, two pages (sip)
         f"{D}/v2/stocks/bars", f"{D}/v2/stocks/bars",                          # half-hour bars, two pages (sip)
         f"{P}/v2/options/contracts", f"{P}/v2/options/contracts"]),            # listings, two pages
     "src/wt/options/pipeline_check.py": (pipeline_check, _pipeline_check_helper, [
         f"{D}/v2/stocks/bars", f"{D}/v2/stocks/bars", f"{D}/v2/stocks/bars",   # bars: a blip, its retry, page 2 (sip)
         f"{P}/v2/options/contracts", f"{P}/v2/options/contracts",              # one listing per name
-        f"{D}/v2/stocks/snapshots"]),                                          # the snapshot (iex)
+        f"{D}/v2/stocks/snapshots"]),                                          # the snapshot (sip)
 }
 
 
@@ -295,3 +295,21 @@ def test_the_clones_committed_option_feed_is_exactly_one_the_guard_accepts() -> 
     session (the clone is not changed to tidy the value: that would be a new behaviour in a live job)."""
     cfg = yaml.safe_load((Path(__file__).resolve().parents[2] / "config" / "options_clone.yaml").read_text())
     assert str(cfg["feeds"]["option"]) in OPTION_FEEDS
+
+
+def test_robot_b_reads_its_bars_and_quotes_from_the_consolidated_tape() -> None:
+    """DEC-0064 point 8: both of B's live requests name sip, and its armed line can say so."""
+    from wt.live import runner_b
+    sent: Sent = []
+    _runner_b(sent)
+    assert [p["feed"] for _, p in sent] == ["sip", "sip"] and runner_b.STOCK_FEED == "sip"
+    assert [u.rsplit("/v2/stocks/", 1)[1] for u, _ in sent] == ["bars", "quotes/latest"]
+
+
+def test_paper_positions_and_the_pipeline_check_read_their_snapshots_from_the_consolidated_tape() -> None:
+    """DEC-0064 point 10: no stock request of either module names another feed than sip."""
+    for drive in (_options_live, _pipeline_check):
+        sent: Sent = []
+        drive(sent)
+        stock = [(u, p) for u, p in sent if "/v2/stocks/" in u]
+        assert stock and all(dict(p)["feed"] == "sip" for _, p in stock), [dict(p).get("feed") for _, p in stock]

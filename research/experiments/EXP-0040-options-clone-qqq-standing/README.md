@@ -23,3 +23,6 @@
   Every other rule is unchanged.
 - **Trades, ledger, unit, verdict and exclusions:** as EXP-0028.
 - A number changed after a result is seen means a new experiment and new trials.
+- **Closed by DEC-0064** at the session before the clone's first session on SIP stock bars (the cutover session,
+  DEC-0064 point 6). A dated note in DEC-0064 gives the date. With fewer than 20 sessions it gives no verdict and is
+  kept as a record.

@@ -852,3 +852,127 @@ def test_a_refused_request_with_a_trade_open_still_manages_the_exit_exactly_as_a
     err = capsys.readouterr().err
     assert (s.calls == [] and "a market-data request named no feed" in err) if how == "refused" \
         else (s.calls and "named no feed" not in err)
+
+
+# ---------------------------------------------------------------- DEC-0064: the consolidated tape only
+class _Sent:
+    def __init__(self) -> None:
+        self.params: list[dict[str, str]] = []
+
+    def get(self, url, params=None, **kw):
+        self.params.append(dict(params or {}))
+
+        class R:
+            status_code = 200
+
+            @staticmethod
+            def json():
+                return {"bars": {}}
+        return R()
+
+
+def test_the_clone_reads_its_stock_bars_from_the_consolidated_tape_and_accepts_no_other_feed():
+    """DEC-0064 point 3: the minute bars name `sip`; a runner built for any other stock feed refuses to start; the
+    committed config names sip and opra."""
+    sent = _Sent()
+    f = runner_o.AlpacaFeeds("k", "s", "opra", sent)                # type: ignore[arg-type]
+    f.minutes(["SPY", "QQQ"], at("04:00"), at("09:30"))
+    assert [p["feed"] for p in sent.params] == ["sip"] and f.stock_feed == "sip"
+    for other in ("iex", "delayed_sip", "", "SIP"):
+        with pytest.raises(ValueError, match="DEC-0064"):
+            runner_o.AlpacaFeeds("k", "s", "opra", sent, stock_feed=other)   # type: ignore[arg-type]
+    assert len(sent.params) == 1                                    # nothing was asked on another feed
+    feeds = yaml.safe_load((Path(runner_o.ROOT) / "config" / "options_clone.yaml").read_text())["feeds"]
+    assert feeds["stock"] == "sip" and feeds["option"] == "opra" and feeds["bar_settle_s"] == 0
+
+
+def _premarket_rows() -> list[dict[str, Any]]:
+    def row(hhmm: str, h: float, low: float) -> dict[str, Any]:
+        return {"t": at(hhmm).astimezone(dt.UTC).isoformat().replace("+00:00", "Z"), "o": low, "h": h, "l": low,
+                "c": h, "v": 100}
+    return [row("04:10", 579.5, 577.25), row("07:42", 579.0, 576.4), row("09:29", 583.75, 579.0)]
+
+
+def test_the_premarket_range_is_read_again_after_the_open_and_is_final(world):
+    """DEC-0064 point 3: the clone arms at 09:25 with the range so far; after 09:30 it reads 04:00 to 09:30 once and
+    replaces both marks. The other marks are untouched, and the read happens once."""
+    m, calls = world["m"], []
+    rth = m.minutes
+
+    def minutes(symbols, start, end):
+        if start.astimezone(NEW_YORK).time() == dt.time(4, 0):
+            calls.append((start, end))
+            return {s: _premarket_rows() for s in symbols}
+        return rth(symbols, start, end)
+
+    m.minutes = minutes
+    r = world["make"]()
+    m.now = at("09:25")
+    assert r.arm()
+    r.names["SPY"].marks += [Mark("PMKH", 579.9), Mark("PMKL", 578.8)]      # what the 09:25 read had seen
+    run_until(r, m, world["b"], at("09:30"))
+    assert not r.pm_final and not calls                                     # not before the open's own wait
+    run_until(r, m, world["b"], at("09:31"))
+    marks = {x.name: x.price for x in r.names["SPY"].marks}
+    assert r.pm_final and len(calls) == 1 and calls[0] == (at("04:00"), OPEN)
+    assert marks["PMKH"] == 583.75 and marks["PMKL"] == 576.4 and marks["PDH"] == L and marks["PDL"] == 576.0
+    assert [x.price for x in r.names["SPY"].marks] == sorted(x.price for x in r.names["SPY"].marks)
+    (line,) = events(world["rows"], "premarket")
+    assert line["window"] == "04:00-09:30" and line["high_low"] == {"SPY": [583.75, 576.4]} and line["minutes"] == {"SPY": 3}
+    run_until(r, m, world["b"], at("09:40"))
+    assert len(calls) == 1 and len(events(world["rows"], "premarket")) == 1
+
+
+def test_a_name_with_no_premarket_bar_loses_both_marks_and_the_journal_says_so(world):
+    r = world["make"]()                                   # the scripted market has no bar before the open
+    world["m"].now = at("09:25")
+    assert r.arm()
+    r.names["SPY"].marks += [Mark("PMKH", 579.9), Mark("PMKL", 578.8)]
+    run_until(r, world["m"], world["b"], at("09:31"))
+    assert r.pm_final and {x.name for x in r.names["SPY"].marks} == {"PDL", "PDH", "PWH"}
+    (line,) = events(world["rows"], "premarket")
+    assert line["high_low"] == {"SPY": None} and line["minutes"] == {"SPY": 0}
+
+
+def test_no_entry_is_looked_for_until_the_premarket_range_has_been_read(world):
+    """DEC-0064 points 2 and 3: a failed read is a failed data read. It is tried again every poll, nothing asks another
+    feed, the retest that would have been entered at 10:26 is not, one page goes out, and exits are not touched. Once
+    the read succeeds, entries are looked for again."""
+    from wt.brokers.base import TransportError
+    m, down = world["m"], [True]
+    rth = m.minutes
+
+    def minutes(symbols, start, end):
+        if start.astimezone(NEW_YORK).time() == dt.time(4, 0):
+            if down[0]:
+                raise TransportError("http-403")
+            return {s: _premarket_rows() for s in symbols}
+        return rth(symbols, start, end)
+
+    m.minutes = minutes
+    r = world["make"]()
+    m.now = at("09:25")
+    assert r.arm()
+    run_until(r, m, world["b"], at("10:30"))
+    assert not r.pm_final and not r.today()
+    assert len(events(world["rows"], "premarket_unavailable")) == 1 and world["pages"].count("options-clone:premarket-unavailable") == 1
+    assert not [o for o in world["b"].orders.values() if o.side == "buy"]
+    down[0] = False
+    run_until(r, m, world["b"], at("10:31"))
+    assert r.pm_final and len(events(world["rows"], "premarket")) == 1
+
+
+def test_a_settle_delay_holds_back_only_the_newest_minute(world):
+    """DEC-0064 point 7: with `feeds.bar_settle_s` set, a minute bar is used only that long after its minute ends.
+    At 0, the committed value, nothing is held back."""
+    m = world["m"]
+    r = world["make"]()
+    m.now = at("09:25")
+    assert r.arm()
+    m.now = at("09:40", 5)
+    r.cfg = {**r.cfg, "feeds": {**r.cfg["feeds"], "bar_settle_s": 0}}
+    all_bars, _, _ = r.read_tape(m.now)
+    r.cfg = {**r.cfg, "feeds": {**r.cfg["feeds"], "bar_settle_s": 10}}
+    held, _, _ = r.read_tape(m.now)
+    assert all_bars["SPY"][-1].end == at("09:40") and held["SPY"][-1].end == at("09:38")
+

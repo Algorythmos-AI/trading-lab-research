@@ -138,6 +138,12 @@ const FILES = [
   "../src/lib/signal.ts",
   "../src/lib/signal-params.ts",
   "../src/lib/contract-pick.ts",
+  "../src/lib/radar-pipeline.ts",
+  "../src/lib/radar-pipeline-slots.ts",
+  "../src/lib/radar-pipeline-run.ts",
+  "../src/lib/radar-pipeline-fixture.ts",
+  "../src/components/client/radar-pipeline.tsx",
+  "../src/components/radar-schedule.tsx",
 ];
 
 const BANNED = [

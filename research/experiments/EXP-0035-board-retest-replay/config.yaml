@@ -5,6 +5,8 @@
 # (DEC-0052, "What has already been seen"); the report says so beside its verdict.
 # Frozen with DEC-0052. Before the run a decision record may amend it, saying what was viewed; after the run a changed
 # value is a new experiment with new trials.
+# Amended by DEC-0065 (accepted 2026-11-19), before the run: a fixed session list through 2027-01-29 (the old list
+# ended at the release and held 2 sessions against a need for 10). Nothing else changes.
 experiment: EXP-0035
 status: registered                   # DEC-0052 accepted on 2026-11-17; no results file until the run writes it once
 decision: DEC-0052
@@ -19,9 +21,11 @@ engines:                             # each rule is replayed by the board's own 
 
 inputs:
   sessions: >-
-    every session with a DEC-0044 server record, from the first to the last session before the release that ships
-    DEC-0052 section 1, less the session of the owner trade DEC-0052 names (its date is in the owner's PRIVATE notes,
-    not here); the list is written into README.md before the run
+    every session with a DEC-0044 server record from 2026-11-12 through 2027-01-29 (New York dates, half days
+    included), less the session of the owner trade DEC-0052 names (its date is in the owner's PRIVATE notes, not here).
+    Both engines run every session on the list, whichever engine production ran that day. Run once, after the
+    2027-01-29 session is sealed; one states-only interim count of group sizes is allowed on or after 2026-12-17
+    (DEC-0065 section 1). The list is written into README.md before the run
   names: "the focus names of each session's edition only (DEC-0051 section 5.1)"
   bars: "SIP 2-minute bars, fetched once for the whole list and saved with a sha256 per session before either engine runs"
   edition: "options/copies/: the edition each session's board read (the copy that was latest at 09:30 New York)"

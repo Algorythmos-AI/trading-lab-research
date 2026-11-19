@@ -2,7 +2,8 @@
 
 Usage:
   python scripts/b_audit.py            run and write research/experiments/EXP-0042-b-audit-diagnostics/results.json
-  python scripts/b_audit.py --check    fail if the committed results.json differs from a fresh run (byte for byte)
+  python scripts/b_audit.py --check    fail if the committed results.json differs from a fresh run (byte for byte,
+                                       except inputs_sha256.trial_registry: see check_results)
 
 The run fails (exit 2) when a recorded figure named under `reconcile` in config.yaml does not reproduce.
 """
@@ -226,18 +227,48 @@ def dump(obj: Any) -> str:
     return json.dumps(rounded(obj), indent=1, sort_keys=True, default=str, allow_nan=True) + "\n"
 
 
+REGISTRY_HASH_KEY = "trial_registry"
+
+
+def check_results(committed: str, fresh: dict[str, Any]) -> tuple[bool, bool]:
+    """(matches, registry_hash_waived). The committed file must equal dump(fresh) byte for byte, with one exception:
+    inputs_sha256.trial_registry, the hash of the whole config/trial_registry.yaml, may differ. The audit reads only the
+    global `history` rows (global_trial_count, trial_history), so a row added to any `families` list, or a comment,
+    changes that hash and nothing the audit computes. Everything the registry feeds stays in the byte comparison: the
+    `registry` block (global_trials, rows) and every DSR figure computed from global_trials, so a new history row or a
+    changed global count still fails. The waiver is applied by putting the committed hash into the fresh result and
+    comparing bytes again, so formatting and rounding stay checked."""
+    out = dump(fresh)
+    if committed == out:
+        return True, False
+    try:
+        old = json.loads(committed)["inputs_sha256"][REGISTRY_HASH_KEY]
+    except (ValueError, KeyError, TypeError):
+        return False, False
+    if not isinstance(old, str) or old == fresh["inputs_sha256"].get(REGISTRY_HASH_KEY):
+        return False, False
+    patched = fresh | {"inputs_sha256": fresh["inputs_sha256"] | {REGISTRY_HASH_KEY: old}}
+    return (committed == dump(patched)), True
+
+
 def main(argv: list[str]) -> int:
     try:
-        out = dump(run())
+        res = run()
+        out = dump(res)
     except ReconcileError as e:
         print(f"RECONCILE FAILED: {e}", file=sys.stderr)
         return 2
     target = EXP / "results.json"
     if "--check" in argv:
-        if not target.exists() or target.read_text() != out:
+        ok, waived = check_results(target.read_text(), res) if target.exists() else (False, False)
+        if not ok:
             print("results.json is missing or differs from a fresh run", file=sys.stderr)
             return 1
-        print("results.json matches a fresh run")
+        if waived:
+            print("results.json matches a fresh run (trial_registry file hash differs; registry block and figures "
+                  "match)")
+        else:
+            print("results.json matches a fresh run")
         return 0
     target.write_text(out)
     from wt.research.manifest import write_manifest

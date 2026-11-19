@@ -17,6 +17,17 @@
   - Before the run, the session list, the bars' sha256s and the with-lock engine's label are written below.
   - Lapses with no verdict if that pull request is not merged by 2027-02-28.
 
+## Amended by DEC-0065 (accepted 2026-11-19), before the run
+
+- **Sessions:** every session with a DEC-0044 server record from 2026-11-12 **through 2027-01-29**, the owner-trade
+  session excluded, in place of the list that ended at the release (2 sessions against a need for 10). Both engines run
+  every session on it.
+- **Run:** once, after the 2027-01-29 session is sealed, in place of "once, after the release". The lapse date is
+  unchanged.
+- **Interim:** one states-only count of group sizes is allowed on or after 2026-12-17, written as a dated line here.
+  It reads no outcome and changes nothing.
+- **Secondary trial:** HYP-0068 (BOARD-LOCK-SLOW-FAILURE): the removed ENTERs whose lock a slow failure set (more than `FAIL_WITHIN_BARS` = 3 bars after the break) against the kept ones, with the removed ENTERs by half (by 13:00, or after) reported beside it. Seen first, with no outcome: the group sizes on the five logged sessions (DEC-0065, "What has already been seen").
+
 ## Before the run (to be filled in, in order)
 
 - With-lock engine's label and commit:
