@@ -12,6 +12,16 @@
   - Before the run, the session list, the bars' sha256s and engine a's label are written below.
   - Lapses with no verdict if that pull request is not merged by 2027-02-28.
 
+## Amended by DEC-0065 (proposed 2026-11-19), before the run
+
+- **Sessions:** every session with a DEC-0044 server record from 2026-11-12 **through 2027-01-29**, the owner-trade
+  session excluded, in place of the list that ended at the release (2 sessions against a need for 10). Both engines run
+  every session on it.
+- **Run:** once, after the 2027-01-29 session is sealed, in place of "once, after the release". The lapse date is
+  unchanged.
+- **Interim:** one states-only count of group sizes is allowed on or after 2026-12-17, written as a dated line here.
+  It reads no outcome and changes nothing.
+
 ## Before the run (to be filled in, in order)
 
 - Engine a's label and commit:

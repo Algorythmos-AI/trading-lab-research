@@ -264,3 +264,10 @@ It changes no code. The board's change is a later pull request. It cites this re
 - **The board and the clone differ** on locked sides: the clone may trade a re-break the board does not show.
 - **Records and alerts:** DEC-0044's alerts and shadow events thin out a little more; EXP-0033's `in_zone` narrows;
   EXP-0034 reads only dry sessions recorded under the signal-code hash this change produces.
+
+## Note on DEC-0065 (added 2026-11-19)
+
+DEC-0065, proposed on 2026-11-19, amends EXP-0036 before its run, once it is accepted. The session list becomes every
+session with a DEC-0044 server record from 2026-11-12 through 2027-01-29, the owner-trade session excluded. The old
+list ended at the release and held 2 sessions against a need for 10. The replay runs once, after the 2027-01-29
+session is sealed. It also adds HYP-0068, a secondary trial splitting the lock's removed ENTERs by how fast the break failed. Section 1 of this record is unchanged. The text above is otherwise unchanged.
