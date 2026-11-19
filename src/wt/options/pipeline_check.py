@@ -723,7 +723,7 @@ def fetch_snapshot(symbols: Sequence[str], get: Get = requests.get, sleep: Sleep
                    budget: Budget | None = None) -> dict[str, float] | None:
     """The latest trade price per symbol, or None when the snapshot gave no usable answer."""
     try:
-        j = _alpaca_get(f"{DATA}/v2/stocks/snapshots", {"symbols": ",".join(symbols), "feed": "iex"}, get, sleep, budget)
+        j = _alpaca_get(f"{DATA}/v2/stocks/snapshots", {"symbols": ",".join(symbols), "feed": "sip"}, get, sleep, budget)
         live: dict[str, float] = {}
         for s, snap in j.items():
             p = _num(((snap or {}).get("latestTrade") or {}).get("p"))

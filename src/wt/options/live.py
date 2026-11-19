@@ -179,7 +179,7 @@ class OptionsAccount:
 
     def closes(self, symbols: list[str]) -> dict[str, float]:
         """Each stock's last daily close, for the names that have one."""
-        got = self._get("/v2/stocks/snapshots", {"symbols": ",".join(symbols), "feed": "iex"}, DATA_HOST, tries=1)
+        got = self._get("/v2/stocks/snapshots", {"symbols": ",".join(symbols), "feed": "sip"}, DATA_HOST, tries=1)
         out: dict[str, float] = {}
         for sym, snap in (got.items() if isinstance(got, dict) else ()):
             bars = [snap.get(k) for k in ("dailyBar", "prevDailyBar")] if isinstance(snap, dict) else []
