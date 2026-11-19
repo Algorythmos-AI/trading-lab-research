@@ -129,9 +129,17 @@ class ReplayREST:
         return pd.DataFrame({"date": days, "open": [self.sessions[d][0] for d in days],
                              "close": [self.sessions[d][1] for d in days]})
 
-    def bars(self, symbols: list[str] | str, tf: str, start: Any, end: Any, feed: str | None = None) -> pd.DataFrame:
-        """Historical bars for a closed window (the prior sessions a runner reads at arming). Never past the clock."""
-        if tf != "1Min":
+    def assets(self, status: str) -> list[dict[str, Any]]:
+        """Every symbol on the tape, as an active tradable asset."""
+        return [{"symbol": s, "tradable": True, "status": status} for s in sorted(self.tape.bars)]
+
+    def bars(self, symbols: list[str] | str, tf: str, start: Any, end: Any, feed: str | None = None,
+             adjustment: str = "raw") -> pd.DataFrame:
+        """Historical bars for a closed window (the prior sessions a runner reads at arming). Never past the clock.
+        "1Day" bars are the tape's regular-session minutes summed by day, for whole sessions before today only: a
+        day that is still trading has no daily bar here. The tape is on one share basis, so `adjustment` is accepted
+        and changes nothing."""
+        if tf not in ("1Min", "1Day"):
             raise ValueError(f"the replay tape holds 1-minute bars only, not {tf!r}")
         require_feed("https://data.alpaca.markets/v2/stocks/bars", {"feed": feed} if feed else {})
         syms = [symbols] if isinstance(symbols, str) else list(symbols)
@@ -139,10 +147,50 @@ class ReplayREST:
         out = []
         for sym in syms:
             df = self.tape.closed_bars(sym, start, until)
+            if tf == "1Day":
+                df = self._daily(df)
             if len(syms) > 1:
                 df = df.assign(symbol=sym)
             out.append(df)
         return pd.concat(out, ignore_index=True) if out else pd.DataFrame()
+
+    def _daily(self, minutes: pd.DataFrame) -> pd.DataFrame:
+        today = self.clock.now().astimezone(ET).date()
+        rows = []
+        if len(minutes):
+            local = minutes.t.dt.tz_convert(ET)
+            for day, g in minutes.groupby(local.dt.date):
+                o, c = self._bounds(day) if day in self.sessions else (None, None)
+                if o is None or day >= today:
+                    continue
+                g = g[(g.t >= _utc(o)) & (g.t < _utc(c))]
+                if len(g):
+                    rows.append({"t": _utc(dt.datetime.combine(day, dt.time(0), tzinfo=ET)), "o": float(g.o.iloc[0]),
+                                 "h": float(g.h.max()), "l": float(g.l.min()), "c": float(g.c.iloc[-1]),
+                                 "v": float(g.v.sum())})
+        return pd.DataFrame(rows, columns=["t", "o", "h", "l", "c", "v"])
+
+    def _bounds(self, day: dt.date) -> tuple[dt.datetime, dt.datetime]:
+        o, c = self.sessions[day]
+        return (dt.datetime.combine(day, dt.time.fromisoformat(o), tzinfo=ET),
+                dt.datetime.combine(day, dt.time.fromisoformat(c), tzinfo=ET))
+
+    def _snapshot(self, sym: str, now: dt.datetime) -> dict[str, Any] | None:
+        """What the feed's snapshot would say at `now`, from bars whose minute has ended: today's session so far as
+        the daily bar, and the last closed bar's close as the last trade. Before the first closed bar of the day
+        there is no bar of today, and the symbol is left out (the real feed shows the previous day's bar then)."""
+        day = now.astimezone(ET).date()
+        if day not in self.sessions:
+            return None
+        o, c = self._bounds(day)
+        df = self.tape.closed_bars(sym, o, min(_utc(now), _utc(c)))
+        if not len(df):
+            return None
+        last = df.iloc[-1]
+        return {"dailyBar": {"t": _utc(dt.datetime.combine(day, dt.time(0), tzinfo=ET)).isoformat(),
+                             "o": float(df.o.iloc[0]), "h": float(df.h.max()), "l": float(df.l.min()),
+                             "c": float(last.c), "v": float(df.v.sum())},
+                "latestTrade": {"t": (pd.Timestamp(last.t) + MINUTE).isoformat(), "p": float(last.c)}}
 
     def get(self, url: str, params: Mapping[str, Any]) -> dict[str, Any]:
         require_feed(url, params)
@@ -156,6 +204,9 @@ class ReplayREST:
                 if q is not None:
                     quotes[sym] = {"bp": q[0], "ap": q[1], "t": q[2].isoformat()}
             return {"quotes": quotes}
+        if url.endswith("/v2/stocks/snapshots"):
+            snaps = {sym: self._snapshot(sym, now) for sym in syms}
+            return {sym: s for sym, s in snaps.items() if s is not None}
         if url.endswith("/v2/stocks/bars"):
             if params.get("timeframe") != "1Min":
                 raise ValueError("the replay tape holds 1-minute bars only")
