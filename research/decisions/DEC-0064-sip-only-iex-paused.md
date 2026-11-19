@@ -96,6 +96,12 @@ on 32.
    - If at least 95% of bars are final at 3 seconds, nothing changes.
    - Otherwise `feeds.bar_settle_s` is set to the smallest polled offset at which at least 99% are final, by a
      dated note here before the clone's pull request merges.
+   - **Dated note, 2026-11-18 23:35 New York (2026-11-19 04:35 UTC), before any session on SIP.** The owner asked in
+     chat for the release to go out before the 2026-11-19 open, and merged the clone's pull request (#535) before the
+     measurement could run. So the measurement does not gate that merge. `feeds.bar_settle_s` stays 0 for the first
+     SIP sessions. The measurement still runs as described, on the first session it can, and the same 95% and 99%
+     rule then sets `feeds.bar_settle_s` by a further dated note here. A change of that value after sessions on SIP
+     exist is disclosed in EXP-0050, and the sessions before it are reported apart.
 8. **Robot B reads SIP:** its signal bars and its latest quotes. This is the owner's instruction, not a response to
    any corrected result (DEC-0011 section 3 forbids changing B for one).
    - No entry, exit, size or limit of B changes. The 0.10% spread limit is the same number, read on the
