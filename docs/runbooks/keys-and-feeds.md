@@ -199,4 +199,4 @@ That pair is shared with whatever else uses it.
 
 | Checked on | `ALPACA_FEED` on the site | `var/options/switches/opra` on the host | By |
 |---|---|---|---|
-| (not yet checked) | | | |
+| 2026-11-18 (New York) | sip: every board stamp of the session reads sip (Feeds page) | present | read-only check for DEC-0064 |
