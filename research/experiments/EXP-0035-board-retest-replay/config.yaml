@@ -5,7 +5,7 @@
 # (DEC-0052, "What has already been seen"); the report says so beside its verdict.
 # Frozen with DEC-0052. Before the run a decision record may amend it, saying what was viewed; after the run a changed
 # value is a new experiment with new trials.
-# Amended by DEC-0065 (proposed 2026-11-19), before the run: a fixed session list through 2027-01-29 (the old list
+# Amended by DEC-0065 (accepted 2026-11-19), before the run: a fixed session list through 2027-01-29 (the old list
 # ended at the release and held 2 sessions against a need for 10). Nothing else changes.
 experiment: EXP-0035
 status: registered                   # DEC-0052 accepted on 2026-11-17; no results file until the run writes it once

@@ -5,7 +5,7 @@
 # written (DEC-0053, "What has already been seen"); the report says so beside its verdict.
 # Frozen with DEC-0053. Before the run a decision record may amend it, saying what was viewed; after the run a changed
 # value is a new experiment with new trials.
-# Amended by DEC-0065 (proposed 2026-11-19), before the run: a fixed session list through 2027-01-29 (the old list
+# Amended by DEC-0065 (accepted 2026-11-19), before the run: a fixed session list through 2027-01-29 (the old list
 # ended at the release and held 2 sessions against a need for 10), and a secondary trial, HYP-0068, splitting the
 # removed ENTERs by how fast the break failed. Seen first, with no outcome: the group sizes on the five logged sessions
 # (DEC-0065, "What has already been seen").
