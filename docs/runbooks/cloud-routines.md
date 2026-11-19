@@ -1,6 +1,6 @@
 # Cloud routines
 
-Seven scheduled Claude routines feed the dashboard, the release flow and the weekly report. They run in Claude's cloud, not on the host
+Ten scheduled Claude routines feed the dashboard, the release flow and the weekly report. They run in Claude's cloud, not on the host
 and not from this repository's code (except where noted), so `systemctl` and the deploy gate know nothing about them.
 Each posts into its own thread on claude.ai. Each replies only when something needs the owner; a normal run updates
 its status line and stays quiet.
@@ -9,7 +9,9 @@ its status line and stays quiet.
 |---|---|---|---|---|
 | Options levels, after close | `trig_01EUa31y41kKS4WuJqBXJwWN` | 21:52 UTC, Mon–Fri | Pulls IBKR daily and hourly bars and the volatility snapshot for the ten names, builds the levels, picks the next session's four focus names, posts the focus card, then runs the shadow step | The options edition (`/api/ingest`, `trading-lab/options`) |
 | Options focus, pre-open | `trig_01WyzH7k8xAUgj8RZsakUDW7` | 08:50 New York, Mon–Fri | Prices the focus names before the open and republishes the focus block; posts the pre-open card | The edition's focus block |
-| Radar edition | `trig_01B1TN3d4x7dZ3Wxad2LmYgb` | 11:12 UTC, Mon–Fri | Sends the newest radar outbox file; retries once if the radar run is late | The radar edition |
+| Radar build | `trig_01PW2UvCBejb4UxCEB58PEVp` | 05:30 New York, Mon–Fri | Builds the pre-market radar edition and leaves it in the outbox; the run beacon (below) is its to send when a stage starts and ends | The radar outbox file; run beacons |
+| Radar catch-up | `trig_015qsK3nrRQgscNZh6strL4F` | After the build, Mon–Fri (its times are not recorded here) | Stops at once when the day's edition is already stored; otherwise does the build's work | The radar outbox file, when the build left none |
+| Radar edition | `trig_01B1TN3d4x7dZ3Wxad2LmYgb` | 11:12 UTC, Mon–Fri | Sends the newest radar outbox file; if the radar run is late it retries every 20 minutes until 13:45 UTC | The radar edition |
 | Webull trades, live | `trig_01Et86JsFLYn7j7kbBt1dGUm` | :24 every hour 09:24–15:24 New York, Mon–Fri | Each run reads the owner's Webull AU history every 2 minutes for an hour (stops at 16:20) and publishes on change and at least every 30 minutes | The trade journal |
 | Webull trades, after close | `trig_012wh4n2yJT7B4Agy12u7yoF` | 21:38 UTC, Mon–Fri | One full read after the close | The trade journal |
 | Release PR | `trig_01Dbj8zTA2HTq2Uzf9ziRzdj` | 16:20 New York, Mon–Fri | Opens or refreshes the `integration` → `main` release PR and drives its CI; never merges | A pull request |
@@ -37,8 +39,16 @@ The Radar run beacon (`stocksdelta/radar-run`) is a small document the pre-marke
 the radar key, when a stage of its run (`build`, `send`, `evidence`, `desk`) starts and again when it ends: the
 session, the stage, its state, what started it, the times, an exit code and closed reason codes, and nothing of the
 edition. The site keeps the newest beacon of each stage of each session (`radar-run/<session>/<stage>.json`). It is
-display only for now: no page draws it yet, it has no feed row, it never pages, and a beacon that fails to send
-must never fail the routine. The routine reads `editions.radar_run.accepts` from `/api/health` before it sends.
+display only: the Radar page's pipeline card draws it (below), it has no feed row, it never pages, and a beacon that
+fails to send must never fail the routine. The routine reads `editions.radar_run.accepts` from `/api/health` before it sends.
+
+The Radar page (`/radar`) leads with the pipeline of the session in view, read from one summary the dashboard's
+10-minute cron writes (`ops/radar-pipeline.json`, `dashboard/src/lib/radar-pipeline-run.ts`): the levels and focus
+pick the session day before (16:52 New York), the build (05:30), the edition stored (about 05:45; the store's own
+receipt time of its first copy), the evidence kept and the desk file, the pre-open prices (08:50), the card saved
+(09:11) and the open (09:30). A session with no run beacon says "no build record"; the page never fills one in. Its
+badge is "On time" only for an edition stored by the feed watch's radar deadline (11:12 UTC plus 60 minutes), says
+"Built by hand" whenever a person started the run, and "No session today" on a weekend or a market holiday.
 
 Every radar edition that becomes latest is also kept, once and never replaced, under `radar/copies/<edition_date>/`
 with the store's receipt time (`dashboard/src/lib/edition-copy.ts`; the 10-minute watchdog repairs a missing one).
