@@ -13,7 +13,7 @@ TYPED_MODULES := src/wt/research/b_audit.py src/wt/research/b_exec_audit.py src/
                  src/wt/ops/heartbeat.py src/wt/ops/preflight.py src/wt/ops/jobs.py src/wt/ops/migrate.py \
                  src/wt/ops/agents.py src/wt/ops/deploy.py src/wt/ops/ci.py src/wt/risk/stop_rule.py src/wt/core/safety.py src/wt/core/ids.py \
                  src/wt/brokers/base.py src/wt/brokers/sim.py src/wt/brokers/alpaca_paper.py src/wt/risk/pretrade.py \
-                 src/wt/oms/manager.py src/wt/risk/virtual_account.py src/wt/ops/publish.py src/wt/brokers/alpaca_read.py src/wt/ops/evidence.py src/wt/ops/visibility.py \
+                 src/wt/oms/manager.py src/wt/oms/multi.py src/wt/risk/virtual_account.py src/wt/ops/publish.py src/wt/brokers/alpaca_read.py src/wt/ops/evidence.py src/wt/ops/visibility.py \
                  src/wt/research/manifest.py src/wt/research/method.py src/wt/research/trials.py \
                  src/wt/research/signal_record.py src/wt/research/exp0034_outcome.py src/wt/research/exp0034_read.py \
                  src/wt/ops/thresholds.py src/wt/analytics/g2.py src/wt/analytics/b_replay.py src/wt/risk/mandate.py src/wt/scanner/explain.py \
