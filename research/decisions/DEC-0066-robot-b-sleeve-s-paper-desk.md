@@ -1,9 +1,9 @@
 # DEC-0066: Robot B, sleeve S: a paper book for the round-3 stock rules
 
-- **Status: PROPOSED on 2026-11-19.** Drafted from a plan the owner approved in chat on 2026-11-19 ("Robot B
-  evolves: an order-capable stock desk (sleeve S)"). It takes effect when a pull request changes this line to
-  ACCEPTED and the owner merges it. Until then no code may send a sleeve-S order: `wt.live.runner_s` reads this
-  line and refuses entries while it does not say ACCEPTED.
+- **Status: ACCEPTED on 2026-11-20** by the owner, in chat ("i accept it"), after reading the state of section 5
+  set out in the note of 2026-11-20 below. PROPOSED on 2026-11-19 from a plan the owner approved in chat that day
+  ("Robot B evolves: an order-capable stock desk (sleeve S)"). It takes effect when the pull request that changes
+  this line is merged. `wt.live.runner_s` reads this line and refuses entries while it does not say ACCEPTED.
 - **Amends:** DEC-0023 section 1 item 3 ("No stocks code books a simulated order") and section 5 ("No desk-wide
   limit ... is added by this record"), for sleeve S only. Everything else in DEC-0023 stands: the forward ledger
   stays the book of record for the ten round-3 trials, and its views, counts and sealed shadow outcomes are
@@ -185,3 +185,41 @@ objection to any of them is a change to make before acceptance.
    (`scripts/s_parity.py`, after the counts-only pass). Item 4 is met on constructed sessions only
    (`tests/unit/test_runner_s.py`); replays of real recorded sessions, reported for their mechanics and never
    their R, are still owed.
+
+### 2026-11-20: acceptance, the state of section 5, and one amendment
+
+The owner accepted this record on 2026-11-20, including the numbers the note of 2026-11-19 proposed (the
+10-second quote age, the QQQ book's loss latches not applying to sleeve S, the handling of positions the desk did
+not open, and what the first slice leaves out).
+
+**Section 5 at acceptance.**
+
+1. Item 1: met by this change.
+2. Item 2: met for signals, orders and fills. On ten sessions fixed by date (2026-11-05 to 2026-11-18) the replay
+   harness led the unchanged `runner_b` to the same signal bar, the same orders and the same fills as the live
+   runner had journaled, on all ten. Exits rest on two trades: one the same, one different, and the different one
+   is the live runner's own defect of that date, since fixed by DEC-0063 (on the recorded tape the target was never
+   reached). The record is `section5_item2_harness_vs_sleeve_q.json` in EXP-0051's folder.
+3. Item 3, the CI half: met. The runner and the batch simulation take the same trade on the same fixture days
+   (`tests/unit/test_runner_s.py`).
+4. Item 4: met on constructed sessions. A replay of ten real recorded sessions of the forward period, reported
+   as counts only, was still running at acceptance.
+
+**Amendment to section 5, item 3 (the real-session half).** As written it asks for a parity run on real
+development-span sessions. That contradicts this record's own rule that HYP-0069 and HYP-0070 read no development
+data, which is why they sit outside the global trial count. The real-session half is therefore replaced by: the
+live code is replayed on real recorded sessions of the forward period (from 2026-09-28), chosen by date and never
+by outcome, and reported for its mechanics only (counts of scans, signals, orders, fills and exit classes; never R,
+a price or equity). Nothing of sleeve S is run on the development span or the holdout span without a record first.
+
+**What acceptance does and does not start.**
+
+- The owner asked for the order path to be proven on sleeve S's paper account. That is a smoke test of the order
+  manager against the broker (one share, bought and sold at once, or a resting order placed and cancelled), made
+  outside `runner_s`. It is not a trade of either trial: it is not journaled in sleeve S's journal, not booked in
+  its virtual account, and never counted in EXP-0051.
+- The first live paper session of `runner_s` is not run until item 4's real-session replay has reported and its
+  counts are in EXP-0051's folder. EXP-0051 counts trades from that first session on.
+- Sleeve S's paper account is its own (its number ends `HJU0…` on the owner's login). Its key pair is on the
+  owner's console machine only. The host has neither the keys nor a job, and under systemd the runner manages exits
+  only: a host session waits for the release that adds the job, its lease and its pages.
