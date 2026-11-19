@@ -251,8 +251,32 @@ def test_an_order_that_gapped_over_its_collar_is_cancelled_and_ends_the_name(env
     flat_and_clean(b)
 
 
+def second_flush(start_px: float) -> list[tuple]:
+    """Another oversold flush, as the first: three big red five-minute buckets, then a small one at the new low."""
+    rows, px = [], start_px
+    for _ in range(15):
+        rows.append((px, px + 0.02, px - 0.62, px - 0.60, 40_000))
+        px -= 0.60
+    for _ in range(5):
+        rows.append((px, px + 0.01, px - 0.07, px - 0.06, 40_000))
+        px -= 0.06
+    return rows + [(px, px + 0.05, px - 0.02, px + 0.02, 30_000)] * 10
+
+
+# 10:50 gaps over the collar (no fill); flat to 12:39, long enough for the bands to close up again; a second
+# signal forms when the 12:59 bar closes
+TWO_SIGNALS = GAPPED + [(41.30, 41.32, 41.28, 41.30, 20_000)] * 109 + second_flush(41.30)
+
+
+def test_the_tape_with_two_signals_would_trade_the_second_if_the_name_were_fresh(env):
+    tape = tape_of({"ABC": day_rows(TWO_SIGNALS)})
+    session(tape, start=(10, 54))                                      # a first start after the unfilled attempt
+    j = journal(env)
+    assert len(events(j, "entry_placed")) == 1 and events(j, "entry_placed")[0]["signal_t"].startswith("2024-03-01 17:59")
+
+
 def test_an_unfilled_attempt_stays_spent_across_a_restart(env):
-    tape = tape_of({"ABC": day_rows(GAPPED)})
+    tape = tape_of({"ABC": day_rows(TWO_SIGNALS)})
     clock = ReplayClock(at(9, 25), crash_at=at(10, 53))
     b = BarFillBroker(clock, tape, SESSIONS)
     with pytest.raises(ReplayCrash):
@@ -260,18 +284,29 @@ def test_an_unfilled_attempt_stays_spent_across_a_restart(env):
                      sleep_fn=clock.sleep, account_number="PA3SLEEVES", q_account=lambda: "PA3SLEEVEQ", environ=KEYS)
     session(tape, start=(10, 54), broker=b)
     j = journal(env)
-    assert len(events(j, "entry_placed")) == 1 and len(events(j, "universe")) == 2      # it rejoined, already spent
+    assert len(events(j, "universe")) == 2                             # it rejoined after the restart ...
+    assert len(events(j, "entry_placed")) == 1                         # ... already spent: the 12:59 signal is not traded
+    assert events(j, "entry_placed")[0]["signal_t"].startswith("2024-03-01 15:49")
+    assert not events(j, "entry_not_placed")                          # and not merely refused by the broker as a duplicate
     flat_and_clean(b)
 
 
-def test_a_second_name_signalling_while_one_is_in_play_is_blocked_not_missed(env):
-    b = session(tape_of({"ABC": day_rows(TO_TARGET), "XYZ": day_rows(TO_TARGET)}))
+HOLDS = [FILL, *UP]                                                    # in the position all day: no target, no stop
+LATER = flat(10, 50.0, v=20_000, spread=0.05)                          # the same flush, ten minutes later
+
+
+def test_a_signal_forming_while_another_name_is_in_play_is_blocked_not_missed(env):
+    xyz = LATER + flush_rows() + [(40.75, 40.90, 40.70, 40.80, 30_000)] * 20
+    last = xyz[-1][3]
+    xyz = xyz + [(last, last + 0.02, last - 0.02, last, 20_000)] * (390 - len(xyz))
+    b = session(tape_of({"ABC": day_rows(HOLDS), "XYZ": xyz}))
     j = journal(env)
     assert one(j, "entry_placed")["symbol"] == "ABC"
     blocked = one(j, "signal_blocked")
     assert blocked["symbol"] == "XYZ" and blocked["blockers"] == ["exposure_exists"]
+    assert blocked["signal_t"].startswith("2024-03-01 15:59") and "name_done" not in blocked
     assert not events(j, "signal_missed")
-    assert {b.orders[c].symbol for c in b.placed} == {"ABC"}
+    assert one(j, "trade_closed")["reason"] == "eod_flatten"
     flat_and_clean(b)
 
 

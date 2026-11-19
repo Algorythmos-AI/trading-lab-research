@@ -182,4 +182,6 @@ objection to any of them is a change to make before acceptance.
    only; its journal is the only record of a fault.
 7. **Still owed from section 5.** Item 2 (the replay harness against sleeve Q's forward-ledger rows on recent
    real sessions; it has been checked on constructed sessions only) and the real-session half of item 3
-   (`scripts/s_parity.py`, after the counts-only pass). Item 4 is met in replay by `tests/unit/test_runner_s.py`.
+   (`scripts/s_parity.py`, after the counts-only pass). Item 4 is met on constructed sessions only
+   (`tests/unit/test_runner_s.py`); replays of real recorded sessions, reported for their mechanics and never
+   their R, are still owed.
