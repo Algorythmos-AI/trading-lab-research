@@ -605,13 +605,23 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                 allow({pos.symbol})
                 log("short_position", symbol=pos.symbol, qty=pos.qty, cancelled=oms.cancel_resting(pos.symbol))
 
+    def reconcile(event: str) -> None:
+        """Reconcile every active plan. The order manager protects one plan per call and cancels this strategy's
+        orders in any symbol outside `managed`, so each call is given every active plan's symbol: a call made for
+        one plan must never cancel another plan's stop or entry as a stray. What a call says about a position
+        another plan owns is dropped; that plan's own call speaks for it."""
+        active = [p for p in [plan, *held] if p is not None and p.active]
+        managed = {p.symbol for p in active}
+        for p in active:
+            others = managed - {p.symbol}
+            acts = [x for x in oms.reconcile(managed, {}, plan=p)
+                    if not any(f"position {sym} " in x for sym in others)]
+            if acts:
+                log(event, actions=acts)
+
     try:
         sweep_positions()
-        for p in [plan, *held]:
-            if p is not None:
-                acts = oms.reconcile({p.symbol}, {}, plan=p)
-                if acts:
-                    log("reconcile_startup", actions=acts)
+        reconcile("reconcile_startup")
     except Exception as e:  # noqa: BLE001
         log("startup_reconcile_error", error=repr(e)[:300])
 
@@ -880,9 +890,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                 if p is None or not p.active:
                     continue
                 oms.sync(p)
-                acts = oms.reconcile({p.symbol}, {}, plan=p)
-                if acts:
-                    log("reconcile", actions=acts)
+            reconcile("reconcile")
             # ---- positions no plan of today opened: out at once (retried every 5 minutes). Its own block: a
             # fault here must never cost the day's plan its exit management. ----
             try:

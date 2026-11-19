@@ -516,3 +516,30 @@ def test_an_entry_resumed_without_its_staged_terms_is_cancelled(env):
     j = journal(env)
     assert events(j, "entry_cancelled")[-1]["why"] == "staged_unreadable" and not events(j, "entry_filled")
     flat_and_clean(b)
+
+
+
+def test_two_positions_at_once_never_cancel_each_others_orders(env):
+    tape = tape_of({"ABC": day_rows(HOLDS), "XYZ": QUIET_DAY})
+    del tape.quotes["XYZ"]                     # no quote: the adopted position's market exit does not fill at once,
+    clock = ReplayClock(at(9, 25))             # so it stays on the book, stopped, beside the day's own plan
+    b = BarFillBroker(clock, tape, SESSIONS)
+    from wt.core.types import Position
+    seen = []
+
+    def appear(now, broker):
+        if now >= at(11, 0) and not seen:
+            seen.append(now)
+            broker.pos["XYZ"] = Position("XYZ", 5, 50.0)               # a position nobody planned, mid-session
+
+    session(tape, broker=b, hook=appear)
+    j = journal(env)
+    assert one(j, "adopted_orphan")["symbol"] == "XYZ"
+    acts = [a for r in events(j, "reconcile") for a in r["actions"]]
+    assert not [a for a in acts if "stray" in a or "UNKNOWN" in a], acts[:4]
+    abc_stops = [c for c in b.placed if b.orders[c].symbol == "ABC" and b.orders[c].type == "stop"]
+    assert len(abc_stops) == 1                                         # the plan's stop rested untouched all day
+    assert one(j, "trade_closed")["symbol"] == "ABC" and one(j, "trade_closed")["reason"] == "eod_flatten"
+    assert [(p.symbol, p.qty) for p in b.positions()] == [("XYZ", 5)]
+    assert [o.type for o in b.own_sells("XYZ")] == ["stop"]            # still protected after the close
+    assert events(j, "END_OF_DAY_NOT_FLAT")[-1]["symbol"] == "XYZ"
