@@ -242,6 +242,7 @@ site(f"{RO}.finish::f'options-clone:exit-{{p.trade_id}}' | 'Options clone exited
 site(f"{RO}.give_up_arm::'levels' | 'Options clone: no levels today'", {"e": E})
 site(f"{RO}.step::'broker unreachable for five minutes with a positi", {})
 site(f"{RO}.step::'broker' | 'Options clone: broker unreachable'", {})
+site(f"{RO}.step::'premarket-unavailable' | 'Options clone: pre-market levels unavailable'", {})
 site(f"{RO}.step::f'options-clone:latched-{{latched}}' | 'Options clone latched'", {"latched": T})
 site(f"{RO}.step::f'{{pg.count(len(held))}} position still open at {{pg", {"held": [T], "self": NS(ck=NS(critical=T))})
 site(f"{RO}.step::p | now", {"p": p_obj()})

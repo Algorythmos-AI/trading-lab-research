@@ -247,7 +247,7 @@ D, P = DATA, "https://paper-api.alpaca.markets"
 # (module, driver, the URL of every request sent, in order). The params are compared whole with the unguarded run.
 OWN_SESSIONS = {
     "src/wt/live/runner_o.py": (runner_o, _clone_helper, 2 * [
-        f"{D}/v2/stocks/bars", f"{D}/v2/stocks/bars",                          # minutes, page 1 and 2 (iex)
+        f"{D}/v2/stocks/bars", f"{D}/v2/stocks/bars",                          # minutes, page 1 and 2 (sip)
         f"{D}/v2/stocks/bars", f"{D}/v2/stocks/bars",                          # daily (sip)
         f"{D}/v1beta1/options/snapshots/SPY", f"{D}/v1beta1/options/snapshots/SPY",   # chain (the option feed)
         f"{D}/v1beta1/options/snapshots", f"{D}/v1beta1/options/snapshots",    # quotes (the option feed)
