@@ -1,7 +1,8 @@
 # DEC-0063: Robot B's target exit waits for the bid and sells at the target
 
-- **Status:** PROPOSED on 2026-11-19. It takes effect when the owner merges hotfix PR
-  `hotfix/b-target-exit-bid` into `main` and the change deploys.
+- **Status:** ACCEPTED, in effect since 2026-11-19. The owner merged hotfix PR #518 into `main` (f4b4ef48) and
+  deployed it to the host on 2026-11-19 at 03:44 UTC: 9a6baef4 to ded833b4, deploy record
+  `var/deploy/20261119T034404Z.json`, rollback tag `runtime-20261119-1`.
 - **Evidence:** EXP-0048 (paper execution audit, report section 1).
 - **Kind:** an execution fix in the paper runner, so that live exits match the fill model the evidence was costed
   with. It changes no rule of B: the signal, entry, stop, 2R target, size, limits, gates, latch, stop line and
@@ -32,8 +33,9 @@ An exit that does not fill within the order manager's timeout is cancelled and t
 
 ## What it means for the record
 
-- **Paper trades.** Trades before and after the deploy differ in how the target exit executes. The deploy date is
-  recorded here once known, and readers of the paper sample (G2b, the stop line) note it. No paper trade is
+- **Paper trades.** Trades before and after the deploy differ in how the target exit executes. The new exit
+  applies from the 2026-11-19 session: the deploy landed after the 2026-11-18 close and before that session's
+  runner started. Readers of the paper sample (G2b, the stop line) note it. No paper trade is
   re-scored or removed. The −3.29R to 2026-11-18 stands as booked.
 - **Conservatism.** The new exit is slightly stricter than the backtest's touch fill: the backtest fills on a trade
   price at the target, while the runner now needs the bid there. It can miss a target the backtest would have
