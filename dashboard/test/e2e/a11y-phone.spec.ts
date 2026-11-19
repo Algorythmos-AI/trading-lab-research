@@ -32,6 +32,19 @@ for (const theme of ["light", "dark"] as const) {
     expect(await scan(page)).toEqual([]);
   });
 
+  for (const flag of ["frozen", "frozen.radar-refused"]) {
+    test(`the Radar page's pipeline passes the accessibility scan on a phone in ${theme} under ${flag}`, async ({ page, context, baseURL }) => {
+      await useTheme(context, theme);
+      await context.addCookies([{ name: "fx", value: flag, url: baseURL! }]);
+      await page.goto("/radar");
+      expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(theme === "dark");
+      await expect(page.getByRole("list", { name: /^The Radar pipeline for / }).getByRole("listitem")).toHaveCount(7);
+      // Seven stages fit a phone's width: the page does not scroll sideways.
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+      expect(await scan(page)).toEqual([]);
+    });
+  }
+
   test(`the Day review passes the accessibility scan on a phone in ${theme}`, async ({ page, context }) => {
     await useTheme(context, theme);
     await page.goto("/review");
