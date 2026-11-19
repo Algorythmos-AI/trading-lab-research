@@ -154,15 +154,20 @@ def test_a_stop_inside_the_entry_bars_range_fills_on_the_entry_bar():
     assert b.fills[-1].rule == "stop_on_entry_bar"
 
 
-def test_the_stop_goes_before_the_target_when_one_bar_touches_both():
+@pytest.mark.parametrize("first", ["stop", "target"])
+def test_the_stop_goes_before_the_target_when_one_bar_touches_both(first):
+    # Whichever order was placed first: the ranking, not the order of arrival, puts the stop ahead on the bar.
     clock, _, b = rig([("09:30", 10.00, 10.03, 9.99, 10.02, 5000), ("09:31", 10.02, 10.50, 9.75, 10.00, 5000)])
     b.place(buy_stop_limit())
     clock.sleep(60)
-    b.place(Order("s1", "ABC", "sell", 10, "stop", stop_price=9.80, tif="gtc"))
-    b.place(Order("t1", "ABC", "sell", 10, "limit", limit_price=10.40))
+    stop = Order("s1", "ABC", "sell", 10, "stop", stop_price=9.80, tif="gtc")
+    target = Order("t1", "ABC", "sell", 10, "limit", limit_price=10.40)
+    for o in ((stop, target) if first == "stop" else (target, stop)):
+        b.place(o)
     clock.sleep(60)
     assert b.get_order("s1").status is OrderStatus.FILLED
     assert b.get_order("t1").filled_qty == 0 and b.pos["ABC"].qty == 0   # the target never sells a flat book short
+    assert [f.rule for f in b.fills][-1] == "stop"
 
 
 @pytest.mark.parametrize("mode, high, filled", [("touch", 10.40, True), ("through", 10.40, False),
