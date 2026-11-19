@@ -429,4 +429,4 @@ def test_nothing_is_recorded_until_dec_0060_is_accepted(tmp_path: Path, capsys: 
     assert rc == 0 and api.calls == [] and not (tmp_path / "tape").exists()
     assert "not accepted" in capsys.readouterr().out
     assert recorder.accepted(tmp_path / "missing.md") is False
-    assert recorder.accepted() is False                       # the record in this repository is still PROPOSED
+    assert recorder.accepted() is True                        # the owner accepted DEC-0060 on 2026-11-19
