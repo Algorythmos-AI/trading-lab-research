@@ -69,6 +69,17 @@ owner approved this repair on 2026-11-19.
 | `trig_01DC6cnD86K6UnuiJTmCTTBX` (late pass) | `c4604d5ba4f351dbbcb088c654958d2e057486b293a18f1ba2d3759db775365c` |
 | `trig_01B1TN3d4x7dZ3Wxad2LmYgb` (send, unchanged) | `fd5f6e7214b38a8777d17580359eabf358ea8286a096a58c3a0c0290e45560c2` |
 
+**2026-11-19, later the same day, still before the build for session 2026-11-19 fired.** The build and catch-up
+prompts gained one rule: a ping to the outside alarm that is blocked or fails is skipped and never stops a run. A
+read-only test had shown the permission check refusing such a ping. Nothing else in either prompt changed. A read-only
+alarm, `trig_017rvGF2Bh77bxogHs7So2RV` (09:35 New York), pages the owner when a session's evidence is missing; it
+writes nothing.
+
+| Routine | Prompt sha256 from this change |
+|---|---|
+| `trig_01PW2UvCBejb4UxCEB58PEVp` (build) | `f3b07073c315d9b4e20c46b3b3d45daf531586dc6f40dedf170714ec391b3e3a` |
+| `trig_015qsK3nrRQgscNZh6strL4F` (catch-up) | `7f5212176a00dee795f23313d167cac7491f8b76dc15aff40eab87374a2f64e4` |
+
 ## Results
 
 None. Written once, by the read.
