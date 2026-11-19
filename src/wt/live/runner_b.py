@@ -381,6 +381,21 @@ def run(day: dt.date | None = None, poll_s: float = 20.0, broker: Any = None, re
 DECISION_CAP = 40               # decision events per session beyond the would-be signals themselves
 
 
+def target_exit_limit(q: tuple[float, float, Any] | None, target: float) -> float | None:
+    """The sell limit for B's target exit, or None while the exit must wait (DEC-0063).
+
+    The exit waits until the bid itself is at or above the target, and sells with a limit at the target, so it can
+    never fill below it. It used to fire on the mid and sell at the bid less a cent: an IEX quote with a wide spread
+    put the mid over the target while the bid sat far under it, and both paper target exits to 2026-11-18 were booked
+    about 1.8R below the target (EXP-0048). A missing, zero or crossed quote waits."""
+    if not q:
+        return None
+    bid, ask = float(q[0]), float(q[1])
+    if bid <= 0 or ask < bid or bid < target:
+        return None
+    return round(target, 2)
+
+
 def minute_grid(closed: pd.DataFrame, open_dt: dt.datetime) -> pd.DataFrame:
     """The session's closed bars on a full one-minute grid from the open to the newest bar.
 
@@ -802,8 +817,8 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                         oms.exit_now(plan, round(q[0] - 0.02, 2), reason="eod_flatten")
                     else:
                         oms.exit_now(plan, None, reason="eod_flatten", market=True)
-                elif last_mid and last_mid >= plan.target and q:
-                    oms.exit_now(plan, round(q[0] - 0.01, 2), reason="target")
+                elif (tgt_px := target_exit_limit(q, plan.target)) is not None:
+                    oms.exit_now(plan, tgt_px, reason="target")
                 books.close(plan, oms, day, nxt, persist)
             if now >= market_dt:
                 qty = oms._stable_position(TRADE)
