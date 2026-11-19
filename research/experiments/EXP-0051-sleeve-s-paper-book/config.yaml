@@ -1,0 +1,35 @@
+# EXP-0051: Robot B sleeve S, the paper book for the round-3 stock rules (DEC-0066).
+# A forward paper experiment: no development-span or holdout data is read to produce its result.
+experiment: EXP-0051
+status: registered              # runs from the first session after DEC-0066 is ACCEPTED; no order before that
+decision: DEC-0066
+hypotheses: [HYP-0069, HYP-0070]
+trials: 2                       # family S (DEC-0066); the global count stays at 87: no development data is read
+question: >
+  Does the desk find, decide, order, protect, exit and record as SPEC-0001's rules say, what do its paper fills
+  cost against the quotes at the time, and what is the mean R of the book (HYP-0069) and of the reversal rule on
+  a causal universe (HYP-0070)?
+driver: python -m wt.live.runner_s            # one process per session, job paper-s
+book:
+  virtual_equity_usd: 600
+  risk_pct_per_trade: 1.0
+  settlement: T+1
+  day_stop: {consecutive_losers: 3, realised_R: -2.0}
+  hard_limits: config/risk.yaml S   # DEC-0066 section 3
+stop_rule: {cum_r_max_loss: -6.0, review_at_trades: 30, stop_date: "2027-03-31"}   # DEC-0066 section 4
+inputs:
+  journal: data/live/smallcap_journal.jsonl   # PRIVATE; on the host, never in git
+  forward_ledger: var/forward/forward_trades.jsonl   # for the paper-versus-forward agreement counts
+  market_data: Alpaca, SIP named on every stock request (DEC-0064); news by id, time and category only
+measures:
+  primary: mean R per closed trade, 95% bootstrap interval, sessions resampled (HYP-0069, HYP-0070)
+  execution:
+    - fill minus trigger, and fill against the NBBO journaled at the decision, in cents and in R
+    - signals blocked, by blocker (spread, quote age, no print, collar, day stop, cash)
+    - sessions armed, sessions with a valid setup, sessions with an order, sessions with a fill
+  agreement: >-
+    per trial, the trades sleeve S and the forward test both took in the same name on the same session: counts,
+    and the difference in entry, exit and R
+before_first_order: DEC-0066 section 5
+reports:
+  never: [a setup name, a headline, a catalyst category]   # AGENTS.md data classes; trials are named by id
