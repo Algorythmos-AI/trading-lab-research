@@ -1,0 +1,273 @@
+{
+ "what": "DEC-0066 section 5 item 2: wt.live.replay driving the unchanged wt.live.runner_b on recorded consolidated-tape data, beside what the live sleeve Q runner journaled and what the forward test recorded, for ten sessions fixed by date before any of those rows was read",
+ "driver": "scripts/replay_check_b.py",
+ "run_on": "2026-11-19",
+ "code": "origin/integration at 07924561 plus this pull request",
+ "sessions": [
+  "2026-11-05",
+  "2026-11-06",
+  "2026-11-09",
+  "2026-11-10",
+  "2026-11-11",
+  "2026-11-12",
+  "2026-11-13",
+  "2026-11-16",
+  "2026-11-17",
+  "2026-11-18"
+ ],
+ "data": "1-minute SIP bars for QQQ and QQQM; NBBO as of every 20 seconds on the two sessions with a signal (QQQM all session, QQQ around each half-hour mark)",
+ "reports": "statuses, bar indexes and exit classes only: no R, no price, no profit",
+ "tally": {
+  "vs_live_runner": {
+   "signal": {
+    "same": 10
+   },
+   "orders_and_fills": {
+    "same": 10
+   },
+   "exit": {
+    "different": 1,
+    "same": 1
+   }
+  },
+  "vs_forward_test": {
+   "signal": {
+    "same": 10
+   },
+   "trade": {
+    "same": 9,
+    "different": 1
+   },
+   "exit": {
+    "same": 1
+   }
+  }
+ },
+ "differences": [
+  {
+   "session": "2026-11-09",
+   "against": "live_runner",
+   "what": "exit: the live runner journaled a target exit, the replay ended at the end of the day",
+   "cause": "on the recorded consolidated tape no QQQM bar, bid or mid reached the 2R target after the entry (0 of 1080 recorded quotes). The live runner of that date fired its target on the mid of a wide quote, the defect DEC-0063 fixed after EXP-0048. The replay runs today's rule, and agrees with the forward test, which also ended the day without a target"
+  },
+  {
+   "session": "2026-11-11",
+   "against": "forward_test",
+   "what": "trade: the forward test booked no trade, the replay (and the live runner) traded",
+   "cause": "the forward test simulates QQQ itself with US$6 at risk; that day the signal's risk per share was above US$6, so its size was zero shares. The runner trades QQQM, at a fraction of the price, and sized two shares. A property of the forward test's sizing, not of the harness: on the recorded QQQ bars the trigger was reached by 87 later bars with no gap over the collar"
+  }
+ ],
+ "reading": "On all ten sessions the harness led the unchanged runner to the same signal bar, the same orders and the same fills as the live runner had on the day. The one exit that differs is the live runner's own corrected defect. Item 2 is met for signals, orders and fills; for exits it rests on two trades",
+ "by_session": {
+  "2026-11-05": {
+   "replay": {
+    "signal_bar": null,
+    "entry_placed": false,
+    "filled": false,
+    "exit": null,
+    "flat": true,
+    "errors": 0
+   },
+   "live_runner": {
+    "signal_bar": null,
+    "entry_placed": false,
+    "filled": false,
+    "exit": null
+   },
+   "forward_test": {
+    "signal_bar": null,
+    "traded": false,
+    "exit": null
+   }
+  },
+  "2026-11-06": {
+   "replay": {
+    "signal_bar": null,
+    "entry_placed": false,
+    "filled": false,
+    "exit": null,
+    "flat": true,
+    "errors": 0
+   },
+   "live_runner": {
+    "signal_bar": null,
+    "entry_placed": false,
+    "filled": false,
+    "exit": null
+   },
+   "forward_test": {
+    "signal_bar": null,
+    "traded": false,
+    "exit": null
+   }
+  },
+  "2026-11-09": {
+   "replay": {
+    "signal_bar": 29,
+    "entry_placed": true,
+    "filled": true,
+    "exit": "end_of_day",
+    "flat": true,
+    "errors": 0
+   },
+   "live_runner": {
+    "signal_bar": 29,
+    "entry_placed": true,
+    "filled": true,
+    "exit": "target"
+   },
+   "forward_test": {
+    "signal_bar": 29,
+    "traded": true,
+    "exit": "end_of_day"
+   }
+  },
+  "2026-11-10": {
+   "replay": {
+    "signal_bar": null,
+    "entry_placed": false,
+    "filled": false,
+    "exit": null,
+    "flat": true,
+    "errors": 0
+   },
+   "live_runner": {
+    "signal_bar": null,
+    "entry_placed": false,
+    "filled": false,
+    "exit": null
+   },
+   "forward_test": {
+    "signal_bar": null,
+    "traded": false,
+    "exit": null
+   }
+  },
+  "2026-11-11": {
+   "replay": {
+    "signal_bar": 179,
+    "entry_placed": true,
+    "filled": true,
+    "exit": "end_of_day",
+    "flat": true,
+    "errors": 0
+   },
+   "live_runner": {
+    "signal_bar": 179,
+    "entry_placed": true,
+    "filled": true,
+    "exit": "end_of_day"
+   },
+   "forward_test": {
+    "signal_bar": 179,
+    "traded": false,
+    "exit": null
+   }
+  },
+  "2026-11-12": {
+   "replay": {
+    "signal_bar": null,
+    "entry_placed": false,
+    "filled": false,
+    "exit": null,
+    "flat": true,
+    "errors": 0
+   },
+   "live_runner": {
+    "signal_bar": null,
+    "entry_placed": false,
+    "filled": false,
+    "exit": null
+   },
+   "forward_test": {
+    "signal_bar": null,
+    "traded": false,
+    "exit": null
+   }
+  },
+  "2026-11-13": {
+   "replay": {
+    "signal_bar": null,
+    "entry_placed": false,
+    "filled": false,
+    "exit": null,
+    "flat": true,
+    "errors": 0
+   },
+   "live_runner": {
+    "signal_bar": null,
+    "entry_placed": false,
+    "filled": false,
+    "exit": null
+   },
+   "forward_test": {
+    "signal_bar": null,
+    "traded": false,
+    "exit": null
+   }
+  },
+  "2026-11-16": {
+   "replay": {
+    "signal_bar": null,
+    "entry_placed": false,
+    "filled": false,
+    "exit": null,
+    "flat": true,
+    "errors": 0
+   },
+   "live_runner": {
+    "signal_bar": null,
+    "entry_placed": false,
+    "filled": false,
+    "exit": null
+   },
+   "forward_test": {
+    "signal_bar": null,
+    "traded": false,
+    "exit": null
+   }
+  },
+  "2026-11-17": {
+   "replay": {
+    "signal_bar": null,
+    "entry_placed": false,
+    "filled": false,
+    "exit": null,
+    "flat": true,
+    "errors": 0
+   },
+   "live_runner": {
+    "signal_bar": null,
+    "entry_placed": false,
+    "filled": false,
+    "exit": null
+   },
+   "forward_test": {
+    "signal_bar": null,
+    "traded": false,
+    "exit": null
+   }
+  },
+  "2026-11-18": {
+   "replay": {
+    "signal_bar": null,
+    "entry_placed": false,
+    "filled": false,
+    "exit": null,
+    "flat": true,
+    "errors": 0
+   },
+   "live_runner": {
+    "signal_bar": null,
+    "entry_placed": false,
+    "filled": false,
+    "exit": null
+   },
+   "forward_test": {
+    "signal_bar": null,
+    "traded": false,
+    "exit": null
+   }
+  }
+ }
+}

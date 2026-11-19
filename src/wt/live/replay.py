@@ -55,12 +55,15 @@ def _utc(t: Any) -> pd.Timestamp:
 @dataclass
 class Tape:
     """One or more sessions of recorded data. bars[symbol]: columns t (bar start, UTC), o, h, l, c, v, one row per
-    minute that printed. quotes[symbol]: columns t (UTC), bp, ap; optional."""
+    minute that printed. quotes[symbol]: columns t (UTC), bp, ap; optional. daily[symbol]: recorded daily bars
+    (t = the session's date at midnight New York, as UTC; o, h, l, c, v); optional, and when a symbol has them
+    they are served instead of sums of its minutes, so a tape need not hold a month of minutes for a 20-day average."""
     bars: dict[str, pd.DataFrame]
     quotes: dict[str, pd.DataFrame] = field(default_factory=dict)
+    daily: dict[str, pd.DataFrame] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        for book in (self.bars, self.quotes):
+        for book in (self.bars, self.quotes, self.daily):
             for sym, df in list(book.items()):
                 d = df.copy()
                 d["t"] = pd.to_datetime(d["t"], utc=True)
@@ -146,13 +149,22 @@ class ReplayREST:
         until = min(_utc(end) + MINUTE, _utc(self.clock.now()))
         out = []
         for sym in syms:
-            df = self.tape.closed_bars(sym, start, until)
-            if tf == "1Day":
-                df = self._daily(df)
+            if tf == "1Day" and sym in self.tape.daily:
+                df = self._recorded_daily(sym, start, end)
+            else:
+                df = self.tape.closed_bars(sym, start, until)
+                if tf == "1Day":
+                    df = self._daily(df)
             if len(syms) > 1:
                 df = df.assign(symbol=sym)
             out.append(df)
         return pd.concat(out, ignore_index=True) if out else pd.DataFrame()
+
+    def _recorded_daily(self, sym: str, start: Any, end: Any) -> pd.DataFrame:
+        """Recorded daily bars inside [start, end] for sessions before today: today's bar is not known yet."""
+        d = self.tape.daily[sym]
+        today = _utc(dt.datetime.combine(self.clock.now().astimezone(ET).date(), dt.time(0), tzinfo=ET))
+        return d[(d.t >= _utc(start)) & (d.t <= _utc(end)) & (d.t < today)].reset_index(drop=True)
 
     def _daily(self, minutes: pd.DataFrame) -> pd.DataFrame:
         today = self.clock.now().astimezone(ET).date()

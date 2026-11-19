@@ -268,3 +268,15 @@ def test_a_replayed_crash_is_not_an_ordinary_exception():
             clock.sleep(120)
         except Exception:                                               # a runner's blanket handler must not catch it
             pytest.fail("the crash was swallowed")
+
+
+def test_recorded_daily_bars_are_served_for_past_sessions_only():
+    prior = DAY - dt.timedelta(days=1)
+    midnight = lambda d: dt.datetime.combine(d, dt.time(0), tzinfo=ET).astimezone(dt.UTC)   # noqa: E731
+    daily = pd.DataFrame([{"t": midnight(prior), "o": 9.0, "h": 9.5, "l": 8.9, "c": 9.4, "v": 1_000_000.0},
+                          {"t": midnight(DAY), "o": 10.0, "h": 10.5, "l": 9.9, "c": 10.2, "v": 2_000_000.0}])
+    tape = Tape({"ABC": bars([("09:30", 10.0, 10.1, 9.9, 10.0, 500)])}, {}, {"ABC": daily})
+    clock = ReplayClock(at(15, 0))
+    rest = ReplayREST(clock, tape, {prior: ("09:30", "16:00"), DAY: ("09:30", "16:00")})
+    got = rest.bars(["ABC"], "1Day", midnight(prior - dt.timedelta(days=30)), midnight(DAY), feed="sip")
+    assert list(got.v) == [1_000_000.0]                                 # today's daily bar is not known at 15:00
