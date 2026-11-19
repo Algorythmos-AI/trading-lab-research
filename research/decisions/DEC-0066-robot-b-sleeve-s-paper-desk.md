@@ -153,3 +153,35 @@ before the decision time. The journal stores a headline's id, time and category,
 3. An acceptance pull request for this record, opened when item 2's first slice has passed section 5.
 4. Owner steps: accept this record; create the sleeve-S paper account, funded above US$25,000 so the broker's
    day-trade rule cannot block an exit, and store its keys; install the `paper-s` unit after its release.
+
+## Notes
+
+### 2026-11-19: what the first slice's runner fixes that this record left open (proposed with the record)
+
+Written with the pull request that adds `wt.live.runner_s`. These take effect when this record is accepted; an
+objection to any of them is a change to make before acceptance.
+
+1. **Quote age.** Section 3 says quote age blocks an entry and gives no number. Proposed: a quote older than
+   **10 seconds** at the decision blocks it (`S.max_quote_age_s` in `config/risk.yaml`). No quote at all fails the
+   spread must, as SPEC-0001 says.
+2. **No print.** Section 3 treats a name with no print as halted. In the runner that is the rule that a signal is
+   acted on only when it forms on the newest closed minute bar, and that bar is the minute that has just ended.
+   A signal found on an older bar is journaled as missed and never traded.
+3. **The QQQ book's loss latches do not apply to sleeve S.** `wt.risk.virtual_account` latches the QQQ book at
+   −2% on a day, −4% in a week and −10% from its high-water mark. Sleeve S uses the same account class for its
+   US$600 and T+1 cash with those three switched off: its limits are the day stop of section 3 and the stop rule
+   of section 4, which is what this record lists. At 1% risk a trade, the day stop (−2R) and the QQQ book's daily
+   latch would fall at the same loss, but the latch needs the owner to clear it and the day stop ends with the day.
+4. **Attempts.** As in the batch run: two filled entries per name per day; a signal refused for its spread or its
+   collar, or an order that does not fill, ends the name for the day.
+5. **Positions the desk did not open.** A long position on sleeve S's account with no plan is adopted, protected
+   by a stop 1% under its average price and sold at once. One larger than section 3's hard caps cannot be sold
+   by this desk's orders: it is journaled and left for the owner. A short is never covered automatically.
+6. **Not in the first slice.** Phone pages, the host job and its lease, and the desk's entry in the backup and
+   status tables. Until they exist the runner refuses entries under systemd and runs from a console checkout
+   only; its journal is the only record of a fault.
+7. **Still owed from section 5.** Item 2 (the replay harness against sleeve Q's forward-ledger rows on recent
+   real sessions; it has been checked on constructed sessions only) and the real-session half of item 3
+   (`scripts/s_parity.py`, after the counts-only pass). Item 4 is met on constructed sessions only
+   (`tests/unit/test_runner_s.py`); replays of real recorded sessions, reported for their mechanics and never
+   their R, are still owed.

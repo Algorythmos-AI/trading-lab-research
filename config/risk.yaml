@@ -18,6 +18,24 @@ B:
     review_at_trades: 30        # at this many trades, stop if the bootstrap CI95 upper bound of E[R] is below zero
     stop_date: 2027-01-30       # whatever the count is by then
 
+# Robot B's sleeve S, the stock desk's paper book (DEC-0066 section 3). Read by wt.live.runner_s on its own paper
+# account. The session's allowlist is built at run time from the day's scan, so the list here is empty.
+S:
+  allowlist: []
+  max_qty: 600
+  max_notional: 700            # US$, per order
+  max_entries_per_day: 6
+  max_orders_per_day: 60
+  # Blocking for sleeve S (DEC-0066 section 3 says quote age blocks; the number is proposed by the note of
+  # 2026-11-19 in that record and takes effect with it).
+  max_quote_age_s: 10
+  # The stop rule (DEC-0066 section 4), on sleeve S's own journal.
+  stop_rule:
+    decision: DEC-0066
+    cum_r_max_loss: -6.0
+    review_at_trades: 30
+    stop_date: 2027-03-31
+
 # The crypto desk's keys (C, CT, CD, CH) left with its code (DEC-0036); git history keeps them.
 
 # The options clone (DEC-0030), read by wt.risk.options_guard. Amounts are US$ on the paper account. One contract,

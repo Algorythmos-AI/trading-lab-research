@@ -45,8 +45,13 @@ def _status(e: APIError) -> int | None:
 class AlpacaPaperBroker(Broker):
     name = "alpaca_paper"
 
-    def __init__(self, timeout: tuple[float, float] = TIMEOUT) -> None:
-        self.c = TradingClient(env("APCA_API_KEY_ID"), env("APCA_API_SECRET_KEY"), paper=True)
+    def __init__(self, timeout: tuple[float, float] = TIMEOUT, key_id: str | None = None,
+                 secret: str | None = None) -> None:
+        """key_id and secret: another paper account's key pair (sleeve S, DEC-0066). Both or neither; the default is
+        the QQQ rule's account, as before. The paper checks below apply to either."""
+        if (key_id is None) != (secret is None):
+            raise ValueError("a paper key id and its secret go together")
+        self.c = TradingClient(key_id or env("APCA_API_KEY_ID"), secret or env("APCA_API_SECRET_KEY"), paper=True)
         self.c._retry = 0                                   # single try; the OMS resolves by id
         orig = self.c._session.request
 
@@ -57,6 +62,7 @@ class AlpacaPaperBroker(Broker):
         host = assert_paper_endpoint(client_base_url(self.c))   # before the first request: env and client URL
         acct: Any = self.c.get_account()
         report_passed(host, assert_paper_account(acct.account_number))
+        self.account_number = str(acct.account_number)
 
     @staticmethod
     def _to(o: Any) -> Order:

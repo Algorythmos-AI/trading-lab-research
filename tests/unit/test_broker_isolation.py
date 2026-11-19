@@ -9,7 +9,7 @@ from wt.brokers.cancel_only import CancelOnlyClient, connect
 from wt.ops import deploy
 
 ROOT = Path(__file__).resolve().parents[2]
-PAPER_BROKER_OK = {"src/wt/live/runner_b.py", "src/wt/brokers/cancel_only.py", "src/wt/brokers/alpaca_paper.py"}
+PAPER_BROKER_OK = {"src/wt/live/runner_b.py", "src/wt/live/runner_s.py", "src/wt/brokers/cancel_only.py", "src/wt/brokers/alpaca_paper.py"}
 # The options clone (DEC-0030) has its own adapter; only its runner may hold it.
 OPTIONS_BROKER_OK = {"src/wt/live/runner_o.py", "src/wt/brokers/alpaca_options_paper.py"}
 TRADING_SDK_OK = {"src/wt/brokers/alpaca_paper.py", "src/wt/brokers/alpaca_read.py",   # alpaca_read: account reads

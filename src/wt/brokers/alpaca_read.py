@@ -44,6 +44,11 @@ class AccountReader:
             self._paper_account = True
         return a
 
+    def account_number(self) -> str | None:
+        """The paper account's number, for a runner that must prove it is on a different account (DEC-0066)."""
+        n = getattr(self._account(), "account_number", None)
+        return str(n) if n else None
+
     def positions(self) -> list[tuple[str, int]]:
         """(symbol, signed quantity): short is negative."""
         if not self._paper_account:
