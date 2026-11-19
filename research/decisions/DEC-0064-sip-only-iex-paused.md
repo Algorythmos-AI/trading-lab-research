@@ -8,10 +8,11 @@
   - The merge of the pull request that carries this line accepts it.
 - **Written before any session on the new feed exists.** What the author had seen is listed in "Disclosure".
 - **Amends:**
-  - DEC-0030 and DEC-0031 in the clone's stock feed only (DEC-0031 describes it as IEX; no record fixed it);
-  - DEC-0033 in the pre-market high and low only (point 3);
+  - DEC-0030 in the clone's stock feed and in the window of its pre-market high and low (point 3). DEC-0031
+    describes the feed as IEX; no record fixed it. DEC-0033 (the day, week and month levels) is unchanged;
   - DEC-0023 in the routine's live feed (point 9);
-  - DEC-0037 in the feed of Robot B's signal bars, and DEC-0024 in the feed of its latest quotes (point 8);
+  - DEC-0037 in the feed of Robot B's signal bars (point 8). DEC-0024 describes B's quote as an IEX quote; that
+    description changes with it;
   - DEC-0050 in one line: IEX no longer runs beside SIP for comparison (point 10).
 - **Depends on:** DEC-0003, DEC-0005, DEC-0011, DEC-0028, DEC-0030 to DEC-0034, DEC-0039, DEC-0040, DEC-0050,
   DEC-0056, DEC-0058.
@@ -65,8 +66,8 @@ on 32.
    the key, which it ignored until now, and accepts only `sip`).
    - This moves the 2-minute bars, VWAP, ATR, the 9 EMA and SPY's trend read.
    - **The pre-market high and low are those of 04:00 to 09:30 New York on SIP 1-minute bars.** The clone arms at
-     about 09:25, so it reads the range again at or after 09:30:00, before the first signal bar is judged. That
-     second read is final for the day.
+     about 09:25, so it reads the range again after 09:30:00, no sooner than the offset at which it reads any
+     minute bar (point 7), and before the first signal bar is judged. That second read is final for the day.
    - A failed read of the range is handled as a failed levels read is today. An empty answer leaves the name
      without pre-market marks, as today, and the journal says so.
    - Daily levels are unchanged (the edition's, or SIP daily bars: DEC-0033).
@@ -89,14 +90,16 @@ on 32.
 7. **When the clone reads a bar.** The clone reads a minute bar about 3 seconds after the minute ends. On one
    session, read only, SIP bars of SPY, QQQ, TSLA and NVDA are polled at 1, 2, 3, 5, 8, 15, 30 and 75 seconds after
    each of 20 minutes from 09:35. A bar is final at an offset when its open, high, low and close equal the
-   75-second answer.
+   75-second answer. A poll sent more than half a second late is left out.
    - If at least 95% of bars are final at 3 seconds, nothing changes.
    - Otherwise `feeds.bar_settle_s` is set to the smallest polled offset at which at least 99% are final, by a
      dated note here before the clone's pull request merges.
 8. **Robot B reads SIP:** its signal bars and its latest quotes. This is the owner's instruction, not a response to
    any corrected result (DEC-0011 section 3 forbids changing B for one).
-   - No entry, exit, size or limit of B changes. The stop rule of DEC-0037 and its latch are never reset by this
-     record, and keep counting across the switch.
+   - No entry, exit, size or limit of B changes. The 0.10% spread limit is the same number, read on the
+     consolidated quote, which is usually tighter than IEX's: B may pass that gate more often.
+   - The stop rule of DEC-0037 and its latch are never reset by this record, and keep counting across the switch.
+     B's paper record is not restarted; it is split at the cutover.
    - B's runner logs its feed. Every evaluation of B's paper record (the scorecard, G2, an audit) reports sessions
      before and after its cutover apart and never pools them.
    - B's verdict (DEC-0062, SUSPEND) stands.
