@@ -89,6 +89,14 @@ on 32.
      section 6. `wt.options.review` reports the window apart (`sip`); its start date is set by a dated note here,
      written before that session's trades are viewed.
    - IEX and SIP sessions are never pooled, in any report.
+   - **Dated note, 2026-11-19 10:05 New York, the cutover, written before any trade of that session was viewed.**
+     The release reached the host before the 2026-11-19 arm (commit 1b81134). The clone's `armed` line of 2026-11-19
+     names `stock_feed: sip` and its `premarket` line counts 261 to 330 minutes a name; Robot B's `armed` line of
+     that day names `stock_feed: sip` too. **The cutover session is 2026-11-19, for the clone and for Robot B.**
+     - EXP-0040 was to start on 2026-11-19 (DEC-0058), so it closes with no session. EXP-0050 starts 2026-11-19.
+     - `wt.options.review`'s window `qqq` starts on 2026-11-19, so it holds exactly EXP-0050's sessions. It is
+       read as EXP-0050's window; no date in the code changes, and renaming it `sip` changes no number.
+     - The author read the `armed` and `premarket` lines only: names, feeds and minute counts.
 7. **When the clone reads a bar.** The clone reads a minute bar about 3 seconds after the minute ends. On one
    session, read only, SIP bars of SPY, QQQ, TSLA and NVDA are polled at 1, 2, 3, 5, 8, 15, 30 and 75 seconds after
    each of 20 minutes from 09:35. A bar is final at an offset when its open, high, low and close equal the
@@ -102,6 +110,11 @@ on 32.
      SIP sessions. The measurement still runs as described, on the first session it can, and the same 95% and 99%
      rule then sets `feeds.bar_settle_s` by a further dated note here. A change of that value after sessions on SIP
      exist is disclosed in EXP-0050, and the sessions before it are reported apart.
+   - **Dated note, 2026-11-19 10:05 New York, the measurement.** Run from the console Mac on 2026-11-19, bars of
+     09:35 to 09:54. Of 160 polls, 10 got no answer and none was sent late. Final at 3 seconds: 62 of 64 bars judged
+     (96.9%); at 1, 2, 5, 8 and 15 seconds 96.9% to 97.2%; at 30 seconds 64 of 64. That is at least 95% at 3 seconds,
+     so nothing changes: `feeds.bar_settle_s` stays 0. Two bars were revised between 15 and 30 seconds after their
+     minute; the clone logs a bar whose close changes after it was read (`revised`).
 8. **Robot B reads SIP:** its signal bars and its latest quotes. This is the owner's instruction, not a response to
    any corrected result (DEC-0011 section 3 forbids changing B for one).
    - No entry, exit, size or limit of B changes. The 0.10% spread limit is the same number, read on the
