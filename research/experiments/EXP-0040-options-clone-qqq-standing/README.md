@@ -26,3 +26,5 @@
 - **Closed by DEC-0064** at the session before the clone's first session on SIP stock bars (the cutover session,
   DEC-0064 point 6). A dated note in DEC-0064 gives the date. With fewer than 20 sessions it gives no verdict and is
   kept as a record.
+- **Closed with no session (appended 2026-11-19).** The clone's first session on SIP was 2026-11-19, the day this
+  experiment was to start, so every session from then on belongs to EXP-0050 (DEC-0064's dated note).
