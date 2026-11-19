@@ -16,7 +16,8 @@ so a hand-run tool that names another real feed is not refused. A feed may be in
 pairs, or a query string, as `requests` accepts) or in the URL's query; if both name one, they must agree.
 
 `require_feed` raises FeedNotNamed and nothing else: input it cannot read is refused when the URL is a data request
-and passed through untouched otherwise.
+and passed through untouched otherwise. FeedPaused is a FeedNotNamed: a stock request that names a feed in
+PAUSED_STOCK_FEEDS (DEC-0064) is refused the same way, and no caller falls back to another feed.
 
 The modules that call Alpaca with their own HTTP session call it in their request helpers (wt.live.runner_o
 AlpacaFeeds._get, wt.options.live OptionsAccount._get, wt.options.pipeline_check _alpaca_get), each turning a refusal
@@ -40,6 +41,17 @@ _OPTION_QUOTES = re.compile(r"^/v1beta1/options/(?:snapshots(?:/[^/]+)?|(?:quote
 
 class FeedNotNamed(ValueError):
     """A market-data request that does not name one of its path's feeds."""
+
+
+# DEC-0064: a stock feed listed here is paused. A request that names it is refused before it is sent, like one that
+# names no feed, and nothing asks another feed instead. Empty until every consumer reads SIP (the record's order of
+# work); the way back is to empty it again.
+PAUSED_STOCK_FEEDS: tuple[str, ...] = ()
+
+
+class FeedPaused(FeedNotNamed):
+    """A stock-data request that names a paused feed. A FeedNotNamed, so every caller that turns a refusal into its
+    own failed data read already handles it."""
 
 
 def _text(v: object) -> str | None:
@@ -127,3 +139,7 @@ def require_feed(url: object, params: object) -> None:
     plain = [str.__str__(v) if isinstance(v, str) else v for v in named]     # a str Enum by its value
     if not plain or any(v not in feeds for v in plain) or len({v for v in plain if isinstance(v, str)}) > 1:
         raise FeedNotNamed(f"an Alpaca data request must name its feed ({' or '.join(feeds)}): {path}")
+    if feeds is not OPTION_FEEDS:
+        paused = sorted({v for v in plain if isinstance(v, str)} & set(PAUSED_STOCK_FEEDS))
+        if paused:
+            raise FeedPaused(f"the {paused[0]} stock feed is paused (DEC-0064): {path}")
