@@ -289,7 +289,7 @@ class BarFillBroker(SimBroker):
                 held = self.pos[sym].qty if sym in self.pos else 0
                 if o.type == "market" and t >= self.placed_at[o.client_order_id]:
                     self._fill(o, t, float(bar.o) - self.slip, left, "market", bar)
-                elif o.type in ("stop", "stop_limit", bar) and o.stop_price is not None and float(bar.l) <= o.stop_price:
+                elif o.type in ("stop", "stop_limit") and o.stop_price is not None and float(bar.l) <= o.stop_price:
                     self._fill(o, t, min(o.stop_price, float(bar.o)) - self.slip, left, "stop", bar)
                 elif o.type == "limit" and o.limit_price is not None and held > 0 and \
                         float(bar.h) >= o.limit_price + (self.tick if self.through else 0.0) - 1e-9:
@@ -303,7 +303,7 @@ class BarFillBroker(SimBroker):
             elif o.type == "limit" and o.limit_price is not None:
                 if float(bar.l) <= o.limit_price and qty >= 1:
                     self._fill(o, t, min(o.limit_price, float(bar.o)), qty, "limit", bar)
-            elif o.type in ("stop", "stop_limit", bar) and o.stop_price is not None:
+            elif o.type in ("stop", "stop_limit") and o.stop_price is not None:
                 limit = o.limit_price if o.type == "stop_limit" and o.limit_price is not None else float("inf")
                 cid = o.client_order_id
                 if cid in self._triggered:                     # resting as a limit after an earlier trigger
