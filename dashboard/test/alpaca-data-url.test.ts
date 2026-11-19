@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
-import { alpacaDataUrl, alpacaNoFeedUrl, feedsFor, NO_FEED_PATHS } from "@/lib/alpaca-data-url";
+import { alpacaDataUrl, alpacaNoFeedUrl, feedsFor, NO_FEED_PATHS, PAUSED_STOCK_FEEDS } from "@/lib/alpaca-data-url";
 
 // B9 (docs/runbooks/keys-and-feeds.md): an Alpaca market-data request that leaves out `feed` reads whatever the
 // subscription allows, so its data source changes with the plan. Every request URL is built by alpacaDataUrl, which
@@ -34,6 +34,17 @@ const BASE_NAMES = new Set(["DEFAULT_DATA_URL", "ALPACA_DATA_URL"]);
 const KNOWN_IMPLICIT: readonly string[] = [];
 
 describe("alpacaDataUrl", () => {
+  it("refuses a paused stock feed, and only on stock paths (DEC-0064)", () => {
+    expect(PAUSED_STOCK_FEEDS).toEqual([]); // empty until every consumer reads SIP
+    const b = "https://data.example";
+    for (const path of ["/v2/stocks/bars", "/v2/stocks/snapshots", "/v2/stocks/quotes/latest", "/v2/stocks/SPY/snapshot"]) {
+      expect(() => alpacaDataUrl(b, path, { symbols: "SPY", feed: "iex" }, ["iex"])).toThrow("iex stock feed is paused");
+      expect(alpacaDataUrl(b, path, { symbols: "SPY", feed: "sip" }, ["iex"])).toContain("feed=sip");
+    }
+    expect(alpacaDataUrl(b, "/v1beta1/options/snapshots/SPY", { feed: "opra" }, ["iex"])).toContain("feed=opra");
+    expect(alpacaDataUrl(b, "/v2/stocks/bars", { symbols: "SPY", feed: "iex" })).toContain("feed=iex");
+  });
+
   it("builds the URL with the query in the order given", () => {
     expect(alpacaDataUrl("https://data.example", "/v2/stocks/snapshots", { symbols: "SPY,QQQ", feed: "iex" })).toBe(
       "https://data.example/v2/stocks/snapshots?symbols=SPY%2CQQQ&feed=iex",

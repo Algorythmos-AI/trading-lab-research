@@ -27,7 +27,8 @@ from alpaca.data.enums import DataFeed
 from feed_scan import scan
 from wt.data import alpaca as alpaca_data
 from wt.data.alpaca import AlpacaREST, HybridFeed, RateLimiter
-from wt.data.feeds import FeedNotNamed, feeds_for, require_feed
+from wt.data import feeds as feeds_mod
+from wt.data.feeds import FeedNotNamed, FeedPaused, feeds_for, require_feed
 
 ROOT = Path(__file__).resolve().parents[2]
 SCAN = ("src", "scripts", "deploy")
@@ -286,6 +287,35 @@ def test_require_feed() -> None:
                         (f"{d}/v2/stocks/auctions", {"feed": "iex"})):
         with pytest.raises(FeedNotNamed, match="must name its feed"):
             require_feed(url, params)
+
+
+def test_no_feed_is_paused_until_every_consumer_has_moved() -> None:
+    """DEC-0064's order of work: the list is empty until the last pull request switches the pause on."""
+    assert feeds_mod.PAUSED_STOCK_FEEDS == ()
+    require_feed(f"{alpaca_data.DATA}/v2/stocks/bars", {"feed": "iex"})
+
+
+@pytest.mark.parametrize("params", [{"feed": "iex"}, [("symbols", "SPY"), ("feed", "iex")], "symbols=SPY&feed=iex",
+                                    {b"feed": b"iex"}, {"feed": ["iex"]}, {"feed": DataFeed.IEX}, None])
+def test_a_paused_stock_feed_is_refused_before_sending(monkeypatch: pytest.MonkeyPatch, params: object) -> None:
+    """DEC-0064 point 2: a request that names a paused feed is refused in whatever shape it names it, as a
+    FeedNotNamed, so each caller's failed-read path takes it. SIP, the option feeds and no-feed paths still pass."""
+    monkeypatch.setattr(feeds_mod, "PAUSED_STOCK_FEEDS", ("iex",))
+    d = alpaca_data.DATA
+    for path in ("/v2/stocks/bars", "/v2/stocks/quotes/latest", "/v2/stocks/snapshots", "/v2/stocks/SPY/snapshot"):
+        url = f"{d}{path}" + ("?feed=iex" if params is None else "")
+        with pytest.raises(FeedPaused, match="iex stock feed is paused"):
+            require_feed(url, params)
+        with pytest.raises(FeedNotNamed):
+            require_feed(url, params)
+    require_feed(f"{d}/v2/stocks/bars", {"feed": "sip"})
+    require_feed(f"{d}/v2/stocks/auctions", {"feed": "sip"})
+    require_feed(f"{d}/v1beta1/options/snapshots/SPY", {"feed": "opra"})
+    require_feed(f"{d}/v1beta1/options/snapshots/SPY", {"feed": "indicative"})
+    require_feed(f"{d}/v1beta1/options/bars", {"symbols": "X"})
+    require_feed("https://api.alpaca.markets/v2/account", None)
+    with pytest.raises(FeedNotNamed, match="must name its feed"):           # still the plain refusal, not a pause
+        require_feed(f"{d}/v2/stocks/bars", {"symbols": "SPY"})
 
 
 @pytest.mark.parametrize("params", [[("symbols", "SPY"), ("feed", "iex")], (("feed", "sip"),),

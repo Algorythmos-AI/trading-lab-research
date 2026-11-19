@@ -11,6 +11,11 @@
 
 export const STOCK_FEEDS: readonly string[] = ["iex", "sip"];
 export const OPTION_FEEDS: readonly string[] = ["indicative", "opra"];
+/**
+ * DEC-0064: a stock feed listed here is paused. A URL that names it is never built, and nothing asks another feed
+ * instead. Empty until every consumer reads SIP (the record's order of work); the way back is to empty it again.
+ */
+export const PAUSED_STOCK_FEEDS: readonly string[] = [];
 /** Alpaca's reference for the stock auctions: "Only `sip` is valid for auctions". */
 export const AUCTION_FEEDS: readonly string[] = ["sip"];
 
@@ -32,12 +37,20 @@ export function feedsFor(path: string): readonly string[] | null {
 /**
  * `${base}${path}?${query}` for an Alpaca market-data request. Throws when the path is not one that takes a feed, or
  * when `params.feed` is missing or not one of that path's feeds: a request is never sent on Alpaca's default.
+ * Throws too when the path is a stock path and `params.feed` is a paused feed (`paused`, PAUSED_STOCK_FEEDS unless a
+ * test passes its own).
  */
-export function alpacaDataUrl(base: string, path: string, params: Readonly<Record<string, string>>): string {
+export function alpacaDataUrl(
+  base: string,
+  path: string,
+  params: Readonly<Record<string, string>>,
+  paused: readonly string[] = PAUSED_STOCK_FEEDS,
+): string {
   const feeds = feedsFor(path);
   if (feeds === null) throw new Error(`not an Alpaca market-data path that takes a feed: ${path}`);
   const feed = params.feed;
   if (typeof feed !== "string" || !feeds.includes(feed)) throw new Error(`an Alpaca data request must name its feed (${feeds.join(" or ")})`);
+  if (feeds !== OPTION_FEEDS && paused.includes(feed)) throw new Error(`the ${feed} stock feed is paused (DEC-0064)`);
   return `${base}${path}?${new URLSearchParams(params).toString()}`;
 }
 
